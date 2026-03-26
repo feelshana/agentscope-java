@@ -15,22 +15,16 @@
  */
 package io.agentscope.examples.dataanalysis.service;
 
-import io.agentscope.core.ReActAgent;
 import io.agentscope.core.agent.Event;
 import io.agentscope.core.agent.EventType;
 import io.agentscope.core.agent.StreamOptions;
-import io.agentscope.core.formatter.openai.OpenAIChatFormatter;
-import io.agentscope.core.memory.InMemoryMemory;
 import io.agentscope.core.message.GenerateReason;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.TextBlock;
-import io.agentscope.core.model.OpenAIChatModel;
-import io.agentscope.core.plan.PlanNotebook;
-import io.agentscope.core.tool.Toolkit;
 import io.agentscope.examples.dataanalysis.client.DataApiClient;
-import io.agentscope.examples.dataanalysis.tool.DataAnalysisTool;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
@@ -42,16 +36,15 @@ import reactor.core.scheduler.Schedulers;
 /**
  * Core service that manages the data analysis ReActAgent lifecycle.
  *
- * <p>The agent follows a ReAct loop:
- *
+ * <p>Delegates to {@link SessionAgentManager} for per-session Agent isolation.
+ * Each chat invocation:
  * <ol>
- *   <li>Receive user question.
- *   <li>Call {@code list_datasets} to understand available data sources.
- *   <li>Create a plan (via PlanNotebook) and decompose into sub-tasks.
- *   <li>Execute each sub-task by calling {@code query_dataset(datasetId, question)}.
- *   <li>Analyze the returned data – if the result satisfies the user's requirement, immediately
- *       call {@code finish_plan} and produce the final answer. Otherwise, add more sub-tasks to
- *       cover missing data.
+ *   <li>Ensures session exists in DB.</li>
+ *   <li>Gets or creates the per-session Agent (with historical context pre-loaded).</li>
+ *   <li>Saves the user message to DB.</li>
+ *   <li>Streams the Agent response.</li>
+ *   <li>Saves the complete assistant response to DB (fire-and-forget).</li>
+ *   <li>Checks if history needs summarization (async).</li>
  * </ol>
  */
 @Service
@@ -94,7 +87,20 @@ public class DataAnalysisAgentService implements InitializingBean {
                  - If NO: mark sub-task as done, then proceed to the next sub-task.
 
             4. **Generate the final answer**: Once all necessary data is collected, synthesize a clear, structured answer in Chinese.
-               The final answer MUST be wrapped in a `<report>` block using simple inline-styled HTML for mobile display.
+               Your output MUST follow this two-part format, in this exact order:
+
+               **Part 1 – Plain-text conclusion (for memory / multi-turn context)**
+               Write a concise, structured Chinese summary WITHOUT any HTML tags. This part is what
+               the model should use as memory in future turns. Example:
+
+               核心结论：XXX指标同比增长20%，主要驱动因素为YYY。
+               - 数据点A：具体数值及说明
+               - 数据点B：具体数值及说明
+               - 数据点C：具体数值及说明
+
+               **Part 2 – Visual report (for frontend rendering only)**
+               Immediately after the plain-text conclusion, append ONE `<report>` block with inline-styled HTML.
+               The `<report>` block is for display only – do NOT reference it in future turns.
                Structure the report as follows (use ONLY these tags, no external CSS/JS):
 
                <report>
@@ -112,7 +118,10 @@ public class DataAnalysisAgentService implements InitializingBean {
                - `<p>` for body text; use `<strong>` for key metrics inline
                - Do NOT use `<div>`, `<span>`, `<table>`, classes, or external resources
                - Keep inline styles minimal and consistent with the examples above
-               - The `<report>` block replaces plain text output – do NOT output both
+
+               **Multi-turn memory rule**: In subsequent turns, when recalling previous answers,
+               refer ONLY to the plain-text conclusion part. Ignore any `<report>` or `<chart>` blocks
+               in history – they are display artifacts, not data.
 
             ## Chart Output Rules
             When the data is suitable for visualization (comparisons, trends, proportions, rankings), append ONE chart block at the end of your answer using this exact format:
@@ -145,6 +154,8 @@ public class DataAnalysisAgentService implements InitializingBean {
 
     private final DataApiClient dataApiClient;
     private final AnalysisPlanService analysisPlanService;
+    private final SessionAgentManager sessionAgentManager;
+    private final ChatSessionService chatSessionService;
 
     @Value("${openai.api-key:#{null}}")
     private String apiKeyFromConfig;
@@ -152,106 +163,98 @@ public class DataAnalysisAgentService implements InitializingBean {
     @Value("${openai.base-url:#{null}}")
     private String baseUrlFromConfig;
 
-    private ReActAgent agent;
-    private InMemoryMemory memory;
-
     public DataAnalysisAgentService(
-            DataApiClient dataApiClient, AnalysisPlanService analysisPlanService) {
+            DataApiClient dataApiClient,
+            AnalysisPlanService analysisPlanService,
+            SessionAgentManager sessionAgentManager,
+            ChatSessionService chatSessionService) {
         this.dataApiClient = dataApiClient;
         this.analysisPlanService = analysisPlanService;
+        this.sessionAgentManager = sessionAgentManager;
+        this.chatSessionService = chatSessionService;
     }
 
     @Override
     public void afterPropertiesSet() {
         String apiKey = resolveApiKey();
-        initializeAgent(apiKey);
-        log.info("DataAnalysisAgentService initialized successfully");
-    }
-
-    private String resolveApiKey() {
-        // Priority: config file > environment variable
-        if (apiKeyFromConfig != null && !apiKeyFromConfig.isBlank()) {
-            return apiKeyFromConfig;
-        }
-        String envKey = System.getenv("OPENAI_API_KEY");
-        if (envKey != null && !envKey.isBlank()) {
-            return envKey;
-        }
-        throw new IllegalStateException(
-                "OpenAI API key is required. Set 'openai.api-key' in application.yml"
-                        + " or the OPENAI_API_KEY environment variable.");
-    }
-
-    private String resolveBaseUrl() {
-        // Priority: config file > environment variable
-        if (baseUrlFromConfig != null && !baseUrlFromConfig.isBlank()) {
-            return baseUrlFromConfig;
-        }
-        String envUrl = System.getenv("OPENAI_BASE_URL");
-        if (envUrl != null && !envUrl.isBlank()) {
-            return envUrl;
-        }
-        // Default to official OpenAI endpoint
-        return null;
-    }
-
-    private void initializeAgent(String apiKey) {
-        memory = new InMemoryMemory();
-
-        Toolkit toolkit = new Toolkit();
-        toolkit.registerTool(new DataAnalysisTool(dataApiClient));
-
-        PlanNotebook planNotebook = PlanNotebook.builder().build();
-        analysisPlanService.setPlanNotebook(planNotebook);
-        planNotebook.addChangeHook(
-                "planBroadcast", (notebook, plan) -> analysisPlanService.broadcastPlanChange());
-
         String baseUrl = resolveBaseUrl();
-        OpenAIChatModel.Builder modelBuilder =
-                OpenAIChatModel.builder().apiKey(apiKey).modelName("deepseek-chat").stream(true)
-                        .formatter(new OpenAIChatFormatter());
-        if (baseUrl != null) {
-            modelBuilder.baseUrl(baseUrl);
-        }
-
-        agent =
-                ReActAgent.builder()
-                        .name("DataAnalysisAgent")
-                        .sysPrompt(SYSTEM_PROMPT)
-                        .model(modelBuilder.build())
-                        .memory(memory)
-                        .toolkit(toolkit)
-                        .planNotebook(planNotebook)
-                        .maxIters(40)
-                        .build();
+        sessionAgentManager.configure(apiKey, baseUrl, SYSTEM_PROMPT);
+        log.info("DataAnalysisAgentService initialized");
     }
 
     /**
-     * Send a user message to the agent and receive a streaming response.
+     * Send a user message to the session's agent and receive a streaming response.
      *
-     * @param message the user's question or analysis request
+     * @param sessionId the chat session identifier
+     * @param message   the user's question
+     * @param userName  the user identifier (from URL param, used for session isolation)
      * @return Flux of streaming text chunks (SSE-friendly)
      */
-    public Flux<String> chat(String message) {
+    public Flux<String> chat(String sessionId, String message, String userName) {
+        // Synchronous DB operations before streaming starts
+        chatSessionService.ensureSession(sessionId, userName);
+        chatSessionService.saveUserMessage(sessionId, message);
+        SessionAgentManager.SessionEntry entry = sessionAgentManager.getOrCreate(sessionId);
+
+        AtomicReference<StringBuilder> replyBuf = new AtomicReference<>(new StringBuilder());
+
         Msg userMsg =
                 Msg.builder()
                         .role(MsgRole.USER)
                         .content(TextBlock.builder().text(message).build())
                         .build();
 
-        return agent.stream(userMsg, buildStreamOptions())
+        return entry.agent.stream(userMsg, buildStreamOptions())
                 .subscribeOn(Schedulers.boundedElastic())
-                .map(this::eventToString)
-                .filter(text -> !text.isEmpty());
+                .map(
+                        event -> {
+                            String chunk = eventToString(event);
+                            if (!chunk.isEmpty() && !"[STOPPED]".equals(chunk)) {
+                                replyBuf.get().append(chunk);
+                            }
+                            return chunk;
+                        })
+                .filter(text -> !text.isEmpty())
+                .doOnComplete(
+                        () -> {
+                            String fullReply = replyBuf.get().toString();
+                            if (!fullReply.isBlank()) {
+                                // Fire-and-forget: save to DB and trigger async compression
+                                chatSessionService.saveAssistantMessage(sessionId, fullReply);
+                                chatSessionService.maybeCompressAsync(sessionId);
+                            }
+                        })
+                .doOnError(
+                        err ->
+                                log.error(
+                                        "Chat stream error for session {}: {}",
+                                        sessionId,
+                                        err.getMessage()));
     }
 
-    /** Reset the agent – clears memory and re-creates a fresh agent instance. */
-    public void reset() {
-        log.info("Resetting DataAnalysisAgent");
-        String apiKey = resolveApiKey();
-        initializeAgent(apiKey);
+    /**
+     * Reset a specific session: evict from memory.
+     */
+    public void reset(String sessionId) {
+        log.info("Resetting session: {}", sessionId);
+        sessionAgentManager.evict(sessionId);
         analysisPlanService.broadcastPlanChange();
-        log.info("DataAnalysisAgent reset complete");
+    }
+
+    private String resolveApiKey() {
+        if (apiKeyFromConfig != null && !apiKeyFromConfig.isBlank()) return apiKeyFromConfig;
+        String envKey = System.getenv("OPENAI_API_KEY");
+        if (envKey != null && !envKey.isBlank()) return envKey;
+        throw new IllegalStateException(
+                "OpenAI API key is required. Set 'openai.api-key' in application.yml"
+                        + " or the OPENAI_API_KEY environment variable.");
+    }
+
+    private String resolveBaseUrl() {
+        if (baseUrlFromConfig != null && !baseUrlFromConfig.isBlank()) return baseUrlFromConfig;
+        String envUrl = System.getenv("OPENAI_BASE_URL");
+        if (envUrl != null && !envUrl.isBlank()) return envUrl;
+        return null;
     }
 
     private StreamOptions buildStreamOptions() {
@@ -269,9 +272,7 @@ public class DataAnalysisAgentService implements InitializingBean {
             }
             return "";
         }
-        if (event.isLast()) {
-            return "";
-        }
+        if (event.isLast()) return "";
         List<TextBlock> blocks = event.getMessage().getContentBlocks(TextBlock.class);
         return blocks.isEmpty() ? "" : blocks.get(0).getText();
     }

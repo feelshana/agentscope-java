@@ -554,6 +554,119 @@
         .plan-drawer {
             padding-bottom: var(--safe-bottom);
         }
+
+        /* ══════════ History Sidebar ══════════ */
+        .history-overlay {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.40);
+            z-index: 200;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.28s ease;
+        }
+        .history-overlay.active { opacity: 1; pointer-events: auto; }
+
+        .history-sidebar {
+            position: fixed;
+            top: 0; left: 0; bottom: 0;
+            width: min(320px, 85vw);
+            background: var(--white);
+            z-index: 201;
+            display: flex; flex-direction: column;
+            transform: translateX(-100%);
+            transition: transform 0.3s cubic-bezier(0.32,0.72,0,1);
+            box-shadow: 4px 0 24px rgba(0,0,0,0.12);
+        }
+        .history-sidebar.open { transform: translateX(0); }
+
+        .history-header {
+            padding: 16px 14px;
+            padding-top: calc(16px + env(safe-area-inset-top, 0px));
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+            flex-shrink: 0;
+        }
+        .history-header-title { font-size: 0.9rem; font-weight: 700; color: var(--text); }
+        .history-close-btn {
+            width: 28px; height: 28px; border-radius: 50%;
+            background: var(--bg); border: none;
+            color: var(--text-sub); font-size: 1rem;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+        }
+        .history-close-btn:active { background: var(--border); }
+
+        .history-new-btn {
+            margin: 12px 14px;
+            padding: 10px 14px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: #fff; border: none; border-radius: var(--radius-md);
+            font-size: 0.86rem; font-weight: 600; font-family: inherit;
+            cursor: pointer; display: flex; align-items: center; gap: 8px;
+            box-shadow: 0 2px 8px rgba(37,99,235,0.25);
+            transition: opacity 0.2s;
+            -webkit-appearance: none;
+        }
+        .history-new-btn:active { opacity: 0.85; }
+
+        .history-list {
+            flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+            padding: 0 8px 12px;
+        }
+
+        .history-day-label {
+            font-size: 0.68rem; font-weight: 700; color: var(--text-hint);
+            text-transform: uppercase; letter-spacing: 0.06em;
+            padding: 10px 8px 4px;
+        }
+
+        .history-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 10px;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: background 0.15s;
+            position: relative;
+        }
+        .history-item:active, .history-item.active {
+            background: var(--primary-light);
+        }
+        .history-item-icon {
+            font-size: 1rem; flex-shrink: 0;
+        }
+        .history-item-body { flex: 1; min-width: 0; }
+        .history-item-title {
+            font-size: 0.84rem; font-weight: 500; color: var(--text);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .history-item.active .history-item-title { color: var(--primary); font-weight: 600; }
+        .history-item-meta {
+            font-size: 0.68rem; color: var(--text-hint); margin-top: 2px;
+        }
+        .history-item-del {
+            opacity: 0; width: 22px; height: 22px; flex-shrink: 0;
+            border-radius: 50%; background: transparent; border: none;
+            color: var(--text-hint); font-size: 0.8rem;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: opacity 0.15s, background 0.15s;
+        }
+        .history-item:hover .history-item-del { opacity: 1; }
+        .history-item-del:active { background: #fce8e6; color: #d93025; }
+
+        .history-empty {
+            text-align: center; padding: 36px 20px;
+            color: var(--text-hint); font-size: 0.8rem; line-height: 1.7;
+        }
+
+        /* history button in header */
+        .history-btn {
+            padding: 5px 12px;
+            background: rgba(255,255,255,0.12);
+            border: 1px solid rgba(255,255,255,0.25);
+            border-radius: 20px; color: rgba(255,255,255,0.92); font-size: 0.76rem;
+            cursor: pointer; transition: background 0.2s; letter-spacing: 0.02em;
+            -webkit-appearance: none; font-family: inherit;
+        }
+        .history-btn:active { background: rgba(255,255,255,0.24); }
     </style>
 </head>
 <body>
@@ -565,7 +678,8 @@
         <h1><svg style="vertical-align:-2px" width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="24" height="24" rx="6" fill="rgba(255,255,255,0.18)"/><path d="M6 17l3.5-6 3 3.5 2.5-5L18 17" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="7" r="2" fill="#fff" fill-opacity="0.9"/></svg>
             <span>红海App智能助手</span></h1>
         <div class="header-right">
-            <button class="reset-btn" onclick="resetAll()">🔄 重置</button>
+            <button class="history-btn" onclick="openHistorySidebar()">📋 历史</button>
+            <button class="reset-btn" onclick="resetAll()">🔄 新对话</button>
             <div class="status-badge">
                 <span class="status-dot" id="statusDot"></span>
                 <span id="statusText">连接中…</span>
@@ -603,6 +717,24 @@
     </div>
 
 </div><!-- /app-shell -->
+
+<!-- History Sidebar Overlay -->
+<div class="history-overlay" id="historyOverlay" onclick="closeHistorySidebar()"></div>
+
+<!-- History Sidebar -->
+<div class="history-sidebar" id="historySidebar">
+    <div class="history-header">
+        <span class="history-header-title">💬 历史对话</span>
+        <button class="history-close-btn" onclick="closeHistorySidebar()">✕</button>
+    </div>
+    <button class="history-new-btn" onclick="startNewSession(); closeHistorySidebar();">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+        新建对话
+    </button>
+    <div class="history-list" id="historyList">
+        <div class="history-empty">暂无历史对话<br>开始提问后会自动保存</div>
+    </div>
+</div>
 
 <!-- Drawer overlay -->
 <div class="drawer-overlay" id="drawerOverlay" onclick="collapseDrawer()"></div>
@@ -648,16 +780,135 @@
     let selectedDataset = null;
     let planEventSource = null;
     let isProcessing = false;
-    let drawerOpen = false;      // true = fully expanded
-    let hasPlan = false;         // true = plan exists
-    let userCollapsed = false;   // true = user manually closed, skip auto-expand
-    let planPending = false;     // true = message sent, waiting for first plan push
+    let drawerOpen = false;
+    let hasPlan = false;
+    let userCollapsed = false;
+    let planPending = false;
+
+    // ─── User identity from URL param ───
+    const urlParams = new URLSearchParams(window.location.search);
+    const currentUserName = urlParams.get('userName') || '';
+
+    // ─── Session management ───
+    let currentSessionId = generateUUID();
+
+    function generateUUID() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+            const r = Math.random() * 16 | 0;
+            return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+        });
+    }
 
     /* ═══════════════════════ Init ═══════════════════════ */
     document.addEventListener('DOMContentLoaded', () => {
         connectPlanStream();
         fetchCurrentPlan();
     });
+
+    /* ═══════════════════════ History Sidebar ═══════════════════════ */
+    function openHistorySidebar() {
+        loadSessionHistory();
+        document.getElementById('historySidebar').classList.add('open');
+        document.getElementById('historyOverlay').classList.add('active');
+    }
+
+    function closeHistorySidebar() {
+        document.getElementById('historySidebar').classList.remove('open');
+        document.getElementById('historyOverlay').classList.remove('active');
+    }
+
+    async function loadSessionHistory() {
+        try {
+            const sessions = await fetch('/api/sessions?userName=' + encodeURIComponent(currentUserName)).then(r => r.json());
+            renderHistoryList(sessions);
+        } catch(e) {
+            document.getElementById('historyList').innerHTML =
+                '<div class="history-empty">加载失败，请重试</div>';
+        }
+    }
+
+    function renderHistoryList(sessions) {
+        const container = document.getElementById('historyList');
+        if (!sessions || sessions.length === 0) {
+            container.innerHTML = '<div class="history-empty">暂无历史对话<br>开始提问后会自动保存</div>';
+            return;
+        }
+        const today = new Date().toISOString().split('T')[0];
+        const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+        const groups = {};
+        sessions.forEach(s => {
+            const date = s.updatedAt ? s.updatedAt.split(' ')[0] : '更早';
+            if (!groups[date]) groups[date] = [];
+            groups[date].push(s);
+        });
+        let html = '';
+        Object.entries(groups).forEach(([date, items]) => {
+            let label = date === today ? '今天' : date === yesterday ? '昨天' : date;
+            html += `<div class="history-day-label">${label}</div>`;
+            items.forEach(s => {
+                const isActive = s.id === currentSessionId ? ' active' : '';
+                html += `<div class="history-item${isActive}" onclick="switchSession('${s.id}', this)">
+                    <span class="history-item-icon">💬</span>
+                    <div class="history-item-body">
+                        <div class="history-item-title">${escapeHtml(s.title || '新对话')}</div>
+                        <div class="history-item-meta">${s.messageCount || 0}条消息 &middot; ${s.updatedAt || ''}</div>
+                    </div>
+                    <button class="history-item-del" onclick="deleteSession(event,'${s.id}')" title="删除">✕</button>
+                </div>`;
+            });
+        });
+        container.innerHTML = html;
+    }
+
+    async function switchSession(sessionId, el) {
+        if (sessionId === currentSessionId) { closeHistorySidebar(); return; }
+        currentSessionId = sessionId;
+        closeHistorySidebar();
+        clearChatUI();
+        renderPlan(null);
+        setDrawerHasPlan(false);
+        setProcessing(false);
+        // Load historical messages from backend into UI
+        try {
+            const messages = await fetch('/api/sessions/' + sessionId + '/messages').then(r => r.json());
+            if (Array.isArray(messages) && messages.length > 0) {
+                messages.forEach(msg => {
+                    const msgEl = appendMessage(msg.role === 'user' ? 'user' : 'assistant', '');
+                    finalizeMessage(msgEl, msg.content);
+                });
+            }
+        } catch(e) {
+            appendMessage('assistant', '历史对话加载失败，可直接继续提问');
+        }
+    }
+
+    function startNewSession() {
+        currentSessionId = generateUUID();
+        clearChatUI();
+        renderPlan(null);
+        setDrawerHasPlan(false);
+        setProcessing(false);
+    }
+
+    async function deleteSession(event, sessionId) {
+        event.stopPropagation();
+        if (!confirm('确定删除这个对话记录？')) return;
+        try {
+            await fetch('/api/sessions/' + sessionId, { method: 'DELETE' });
+            if (sessionId === currentSessionId) startNewSession();
+            await loadSessionHistory();
+        } catch(e) { alert('删除失败'); }
+    }
+
+    function clearChatUI() {
+        document.getElementById('chatMessages').innerHTML = `
+            <div class="message assistant">
+                <span class="message-label">助手</span>
+                <div class="message-content">你好！我是红海App智能助手，可以帮你分析业务数据，给出洞察结论。
+
+点击下方问题快速开始：<div class="suggestions-wrap"><button class="suggestion-btn" onclick="sendSuggestion(this)">🌐 和世频道社区化发展的怎么样，创作者活跃不？</button><button class="suggestion-btn" onclick="sendSuggestion(this)">🎯 各产品的考核指标完成情况怎么样？</button><button class="suggestion-btn" onclick="sendSuggestion(this)">👥 和世频道社区内容创作者规模有多大？</button><button class="suggestion-btn" onclick="sendSuggestion(this)">🎥 各类型内容的播放量分布是什么情况？</button></div></div>
+            </div>`;
+    }
 
     // Sync chat input bottom padding with drawer state
     function syncDrawerPadding() {
@@ -748,7 +999,7 @@
         showPlanPending();
 
         const typingEl = appendTyping();
-        const url = '/api/chat?message=' + encodeURIComponent(fullMessage);
+        const url = '/api/chat?message=' + encodeURIComponent(fullMessage) + '&sessionId=' + encodeURIComponent(currentSessionId) + '&userName=' + encodeURIComponent(currentUserName);
         const eventSource = new EventSource(url);
         let assistantText = '';
         let assistantEl = null;
@@ -1205,18 +1456,13 @@
 
     /* ═══════════════════════ Reset ═══════════════════════ */
     async function resetAll() {
-        if (!confirm('确定要重置智能体并清空所有对话和计划吗？')) return;
+        if (!confirm('确定开始新对话吗？（当前对话不会删除，可从历史中找到）')) return;
+        startNewSession();
         try {
-            await fetch('/api/reset', { method: 'POST' });
-            document.getElementById('chatMessages').innerHTML = `
-                <div class="message assistant">
-                    <span class="message-label">助手</span>
-                    <div class="message-content">已重置。请选择数据集并输入新的分析问题。</div>
-                </div>`;
-            renderPlan(null);
-            setDrawerHasPlan(false);
-            setProcessing(false);
-        } catch (e) { alert('重置失败：' + e.message); }
+            await fetch('/api/reset?sessionId=' + encodeURIComponent(currentSessionId), { method: 'POST' });
+        } catch (e) {}
+        renderPlan(null);
+        setDrawerHasPlan(false);
     }
 
     /* ═══════════════════════ Connection ═══════════════════════ */

@@ -31,6 +31,35 @@ data:
 spring:
   codec:
     max-in-memory-size: 10MB
+  # JDBC datasource
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DB:data_analysis}?useUnicode=true&characterEncoding=UTF-8&createDatabaseIfNotExist=true&serverTimezone=Asia/Shanghai
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:123456}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+  # Flyway – disabled here; migration is triggered manually in MybatisConfig
+  flyway:
+    enabled: false
+
+# MyBatis-Plus configuration
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+  global-config:
+    db-config:
+      id-type: assign_uuid
+
+# Chat session memory settings
+chat:
+  session:
+    # Max token count before triggering summary compression (approx chars / 4)
+    max-history-tokens: 8000
+    # How many recent messages to keep verbatim after compression
+    keep-recent-messages: 6
 
 logging:
   level:

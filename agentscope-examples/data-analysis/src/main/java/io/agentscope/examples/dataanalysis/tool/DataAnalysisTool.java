@@ -93,9 +93,17 @@ public class DataAnalysisTool {
                             + " whether it satisfies the user's requirement, and decide if"
                             + " further queries are needed.")
     public Mono<String> queryDataset(
-            @ToolParam(name = "dataset_id", description = "The ID of the dataset to query, obtained from list_datasets tool")
+            @ToolParam(
+                            name = "dataset_id",
+                            description =
+                                    "The ID of the dataset to query, obtained from list_datasets"
+                                            + " tool")
                     String datasetId,
-            @ToolParam(name = "question", description = "The specific question or analysis request to query from this dataset")
+            @ToolParam(
+                            name = "question",
+                            description =
+                                    "The specific question or analysis request to query from this"
+                                            + " dataset")
                     String question) {
         log.info("[query_dataset] datasetId={}, question={}", datasetId, question);
         return dataApiClient
@@ -114,7 +122,12 @@ public class DataAnalysisTool {
         }
         return "Available datasets:\n"
                 + datasets.stream()
-                        .map(ds -> "  - ID: " + ds.getId() + "\n    Description: " + ds.getDescription())
+                        .map(
+                                ds ->
+                                        "  - ID: "
+                                                + ds.getId()
+                                                + "\n    Description: "
+                                                + ds.getDescription())
                         .collect(Collectors.joining("\n"));
     }
 }

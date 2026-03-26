@@ -67,7 +67,8 @@ public class AnalysisPlanService {
             response = new PlanResponse();
         }
         planSink.tryEmitNext(response);
-        log.debug("Plan broadcast: {}", response.getName() != null ? response.getName() : "(empty)");
+        log.debug(
+                "Plan broadcast: {}", response.getName() != null ? response.getName() : "(empty)");
     }
 
     /**
