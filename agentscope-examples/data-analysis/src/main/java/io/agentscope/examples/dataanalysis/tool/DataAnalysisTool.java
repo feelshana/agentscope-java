@@ -67,6 +67,7 @@ public class DataAnalysisTool {
         log.info("[list_datasets] Fetching available datasets");
         return dataApiClient
                 .listDatasets()
+                .doOnNext(dataApiClient::registerDatasets)
                 .map(this::formatDatasetList)
                 .doOnNext(result -> log.debug("[list_datasets] Result: {}", result))
                 .onErrorResume(

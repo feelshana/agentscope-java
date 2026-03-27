@@ -28,11 +28,20 @@ public class DatasetInfo {
     @JsonProperty("description")
     private String description;
 
+    @JsonProperty("agentId")
+    private String agentId;
+
     public DatasetInfo() {}
 
     public DatasetInfo(String id, String description) {
         this.id = id;
         this.description = description;
+    }
+
+    public DatasetInfo(String id, String description, String agentId) {
+        this.id = id;
+        this.description = description;
+        this.agentId = agentId;
     }
 
     public String getId() {
@@ -51,8 +60,16 @@ public class DatasetInfo {
         this.description = description;
     }
 
+    public String getAgentId() {
+        return agentId;
+    }
+
+    public void setAgentId(String agentId) {
+        this.agentId = agentId;
+    }
+
     @Override
     public String toString() {
-        return "DatasetInfo{id='" + id + "', description='" + description + "'}";
+        return "DatasetInfo{id='" + id + "', description='" + description + "', agentId='" + agentId + "'}";
     }
 }

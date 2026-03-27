@@ -17,11 +17,17 @@ package io.agentscope.examples.dataanalysis.client;
 
 import io.agentscope.examples.dataanalysis.dto.DatasetInfo;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
@@ -45,12 +51,31 @@ public class DataApiClient {
     private static final Logger log = LoggerFactory.getLogger(DataApiClient.class);
 
     private final WebClient webClient;
+    private final WebClient nlpWebClient;
     private final boolean mockEnabled;
+
+    /** 配置文件中配置的 agentId 列表（逗号分隔），用于非 mock 模式下获取数据集列表 */
+    private final List<String> nlpAgentIds;
+
+    /** datasetId → agentId，由 listDatasets 调用后注册 */
+    private final Map<String, String> datasetAgentIdMap = new ConcurrentHashMap<>();
+
+    /** datasetId → chatId，每个数据集维护一个独立的会话 */
+    private final Map<String, String> datasetChatIdMap = new ConcurrentHashMap<>();
 
     public DataApiClient(
             @Value("${data.api.base-url:http://localhost:9090}") String baseUrl,
-            @Value("${data.api.mock:true}") boolean mockEnabled) {
+            @Value("${data.api.mock:true}") boolean mockEnabled,
+            @Value("${data.api.nlp-base-url:http://localhost:9080}") String nlpBaseUrl,
+            @Value("${data.api.nlp-authorization:}") String nlpAuthorization,
+            @Value("${data.api.nlp-agent-ids:}") String nlpAgentIdsStr) {
         this.mockEnabled = mockEnabled;
+        this.nlpAgentIds = nlpAgentIdsStr.isBlank()
+                ? new ArrayList<>()
+                : Arrays.stream(nlpAgentIdsStr.split(","))
+                        .map(String::trim)
+                        .filter(s -> !s.isBlank())
+                        .collect(Collectors.toList());
         this.webClient =
                 WebClient.builder()
                         .baseUrl(baseUrl)
@@ -60,11 +85,29 @@ public class DataApiClient {
                                                 .defaultCodecs()
                                                 .maxInMemorySize(10 * 1024 * 1024))
                         .build();
-        log.info("DataApiClient initialized, baseUrl={}, mock={}", baseUrl, mockEnabled);
+        this.nlpWebClient =
+                WebClient.builder()
+                        .baseUrl(nlpBaseUrl)
+                        .defaultHeader("authorization", nlpAuthorization)
+                        .codecs(
+                                configurer ->
+                                        configurer
+                                                .defaultCodecs()
+                                                .maxInMemorySize(10 * 1024 * 1024))
+                        .build();
+        log.info(
+                "DataApiClient initialized, baseUrl={}, nlpBaseUrl={}, mock={}, agentIds={}",
+                baseUrl,
+                nlpBaseUrl,
+                mockEnabled,
+                nlpAgentIds);
     }
 
     /**
      * Retrieve the list of available datasets.
+     *
+     * <p>When mock is disabled, calls SuperSonic's {@code getRedSeaDataSetInfo} API
+     * with the configured agentId list to get real dataset metadata.
      *
      * @return Mono wrapping the list of DatasetInfo
      */
@@ -72,22 +115,76 @@ public class DataApiClient {
         if (mockEnabled) {
             return mockListDatasets();
         }
-        return webClient
+        return fetchDatasetsFromNlp();
+    }
+
+    /**
+     * Call {@code GET /api/chat/agent/getRedSeaDataSetInfo} to fetch real dataset metadata.
+     *
+     * <p>The response is a JSON-wrapped list of AgentDataSetInfoDTO objects, each containing:
+     * <ul>
+     *   <li>{@code agentId} - the SuperSonic agent id</li>
+     *   <li>{@code agentName} - the agent name, used as dataset display name</li>
+     *   <li>{@code dataSetInfo} - semantic description of the dataset (dimensions, metrics, etc.)</li>
+     * </ul>
+     * Each item is converted to a {@link DatasetInfo} with:
+     * id = "ds_" + agentId, description = agentName + "\n" + dataSetInfo, agentId = agentId.
+     */
+    private Mono<List<DatasetInfo>> fetchDatasetsFromNlp() {
+        if (nlpAgentIds.isEmpty()) {
+            log.warn("[fetchDatasetsFromNlp] nlp-agent-ids is empty, returning empty dataset list");
+            return Mono.just(new ArrayList<>());
+        }
+        String agentIdsParam = String.join(",", nlpAgentIds);
+        log.info("[fetchDatasetsFromNlp] Fetching datasets for agentIds={}", agentIdsParam);
+        return nlpWebClient
                 .get()
-                .uri("/datasets")
+                .uri(uriBuilder -> uriBuilder
+                        .path("/api/chat/agent/getRedSeaDataSetInfo")
+                        .queryParam("agentIds", agentIdsParam)
+                        .build())
                 .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<List<DatasetInfo>>() {})
+                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
                 .timeout(Duration.ofSeconds(30))
-                .doOnError(e -> log.error("Failed to list datasets", e))
-                .onErrorResume(
-                        e ->
-                                Mono.error(
-                                        new RuntimeException(
-                                                "Failed to list datasets: " + e.getMessage(), e)));
+                .map(body -> {
+                    Object data = body.get("data");
+                    if (!(data instanceof List<?>)) {
+                        log.warn("[fetchDatasetsFromNlp] Unexpected response structure: {}", body);
+                        return new ArrayList<DatasetInfo>();
+                    }
+                    List<?> items = (List<?>) data;
+                    List<DatasetInfo> result = new ArrayList<>();
+                    for (Object item : items) {
+                        if (!(item instanceof Map<?, ?> itemMap)) {
+                            continue;
+                        }
+                        Object agentId = itemMap.get("agentId");
+                        Object agentName = itemMap.get("agentName");
+                        Object dataSetInfo = itemMap.get("dataSetInfo");
+                        if (agentId == null) {
+                            continue;
+                        }
+                        String id = "ds_" + agentId;
+                        String description = (agentName != null ? agentName.toString() : "")
+                                + (dataSetInfo != null ? "\n" + dataSetInfo.toString() : "");
+                        result.add(new DatasetInfo(id, description, agentId.toString()));
+                        log.debug("[fetchDatasetsFromNlp] Loaded dataset: id={}, agentId={}, name={}",
+                                id, agentId, agentName);
+                    }
+                    log.info("[fetchDatasetsFromNlp] Loaded {} datasets", result.size());
+                    return result;
+                })
+                .onErrorResume(e -> {
+                    log.error("[fetchDatasetsFromNlp] Failed to fetch datasets, fallback to empty list", e);
+                    return Mono.just(new ArrayList<>());
+                });
     }
 
     /**
      * Query a specific dataset.
+     *
+     * <p>When mock is disabled, calls the NLP intelligent query service
+     * ({@code POST /api/chat/query/parseAndExecute}) with the agentId registered for the dataset.
      *
      * @param datasetId the ID of the dataset to query
      * @param question the question or query string
@@ -97,6 +194,182 @@ public class DataApiClient {
         if (mockEnabled) {
             return mockQueryDataset(datasetId, question);
         }
+        String agentId = datasetAgentIdMap.get(datasetId);
+        if (agentId == null) {
+            log.warn("[queryDataset] No agentId registered for datasetId={}, falling back to legacy API", datasetId);
+            return queryDatasetLegacy(datasetId, question);
+        }
+        return getOrCreateChatId(datasetId)
+                .flatMap(chatId -> queryByNlp(agentId, chatId, question))
+                .switchIfEmpty(Mono.fromSupplier(() -> {
+                    log.warn("[queryDataset] queryByNlp returned empty Mono, datasetId={}", datasetId);
+                    return "Query returned no result.";
+                }))
+                .doOnError(e -> log.error("[queryDataset] Failed, datasetId={}, question={}", datasetId, question, e))
+                .onErrorResume(e -> Mono.just("Query failed: " + e.getMessage()));
+    }
+
+    /**
+     * Register agentId mapping from a list of datasets.
+     * Called after listDatasets() to record datasetId → agentId.
+     *
+     * @param datasets the dataset list returned by listDatasets
+     */
+    public void registerDatasets(List<DatasetInfo> datasets) {
+        if (datasets == null) {
+            return;
+        }
+        for (DatasetInfo ds : datasets) {
+            if (ds.getAgentId() != null && !ds.getAgentId().isBlank()) {
+                datasetAgentIdMap.put(ds.getId(), ds.getAgentId());
+                log.debug("[registerDatasets] Registered agentId={} for datasetId={}", ds.getAgentId(), ds.getId());
+            }
+        }
+    }
+
+    /**
+     * Reset chat session for all datasets. Used when agent is reset.
+     */
+    public void resetChatSessions() {
+        datasetChatIdMap.clear();
+        log.info("[resetChatSessions] All chat sessions cleared");
+    }
+
+    // ==================== Private: NLP Service ====================
+
+    /**
+     * Get existing chatId for the dataset, or create a new one via
+     * {@code POST /api/chat/manage/save}.
+     */
+    private Mono<String> getOrCreateChatId(String datasetId) {
+        String existingChatId = datasetChatIdMap.get(datasetId);
+        if (existingChatId != null) {
+            log.debug("[getOrCreateChatId] Reusing chatId={} for datasetId={}", existingChatId, datasetId);
+            return Mono.just(existingChatId);
+        }
+        String agentId = datasetAgentIdMap.get(datasetId);
+        return createChat(agentId)
+                .doOnNext(chatId -> {
+                    datasetChatIdMap.put(datasetId, chatId);
+                    log.info("[getOrCreateChatId] Created chatId={} for datasetId={}", chatId, datasetId);
+                });
+    }
+
+    /**
+     * Call {@code POST /api/chat/manage/save} to create a new chat session.
+     * Parameters are passed as RequestParam (form style): chatName and agentId.
+     * The response body is a plain Long (chatId).
+     *
+     * @param agentId the agentId to associate with this chat session
+     */
+    private Mono<String> createChat(String agentId) {
+        log.debug("[createChat] Creating new chat session, agentId={}", agentId);
+        return nlpWebClient
+                .post()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/api/chat/manage/save")
+                        .queryParam("chatName", "新问答对话")
+                        .queryParam("agentId", agentId)
+                        .build())
+                .retrieve()
+                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                .timeout(Duration.ofSeconds(10))
+                .map(body -> {
+                    Object data = body.get("data");
+                    if (data == null) {
+                        throw new RuntimeException("Received null data from /api/chat/manage/save, body=" + body);
+                    }
+                    return data.toString();
+                })
+                .doOnNext(chatId -> log.debug("[createChat] Got chatId={}", chatId))
+                .doOnError(e -> log.error("[createChat] Failed to create chat session, agentId={}", agentId, e));
+    }
+
+    /**
+     * Call {@code POST /api/chat/query/parseAndExecute} and extract the result following the rules:
+     * <ol>
+     *   <li>If {@code queryResults} is empty, the query produced no data rows:
+     *     <ul>
+     *       <li>If {@code errorMsg} is non-blank → return the error message so the agent can
+     *           adjust the question accordingly.</li>
+     *       <li>If {@code errorMsg} is blank → return the {@code textResult} (which may contain
+     *           an explanation) so the agent can adjust the question accordingly.</li>
+     *     </ul>
+     *   </li>
+     *   <li>If {@code queryResults} is non-empty, the query succeeded → return {@code textResult}.</li>
+     * </ol>
+     *
+     * @param agentId   the agent responsible for this dataset
+     * @param chatId    the current chat session id
+     * @param question  the natural-language question
+     * @return a string the calling agent can use to either present results or reformulate the question
+     */
+    private Mono<String> queryByNlp(String agentId, String chatId, String question) {
+        Map<String, Object> requestBody = Map.of(
+                "agentId", Long.parseLong(agentId),
+                "chatId", Long.parseLong(chatId),
+                "queryText", question);
+        log.info("[queryByNlp] agentId={}, chatId={}, question={}", agentId, chatId, question);
+        return nlpWebClient
+                .post()
+                .uri("/api/chat/query/parseAndExecute")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(requestBody)
+                .retrieve()
+                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                .timeout(Duration.ofSeconds(60))
+                .switchIfEmpty(Mono.fromSupplier(() -> {
+                    log.warn("[queryByNlp] parseAndExecute returned empty body, agentId={}, question={}", agentId, question);
+                    return Map.<String, Object>of();
+                }))
+                .map(body -> {
+                    Object data = body.get("data");
+                    if (!(data instanceof Map<?, ?> dataMap)) {
+                        log.warn("[queryByNlp] Unexpected response structure: {}", body);
+                        return "No result returned from query service.";
+                    }
+
+                    // Check whether the query returned any data rows.
+                    // queryResults is List<Map<String,Object>> per QueryResult definition.
+                    Object queryResults = dataMap.get("queryResults");
+                    boolean queryResultsEmpty = (queryResults == null)
+                            || (queryResults instanceof java.util.List<?> list && list.isEmpty());
+
+                    if (queryResultsEmpty) {
+                        // No data rows returned – inspect errorMsg first
+                        Object errorMsg = dataMap.get("errorMsg");
+                        if (errorMsg != null && !errorMsg.toString().isBlank()) {
+                            log.warn("[queryByNlp] queryResults is empty and errorMsg is present: {}", errorMsg);
+                            return "查询执行出错，请根据以下错误信息调整问题后重试：" + errorMsg;
+                        }
+
+                        // errorMsg is absent – use textResult as the hint
+                        Object textResult = dataMap.get("textResult");
+                        String textResultStr = (textResult != null) ? textResult.toString() : "";
+                        log.warn("[queryByNlp] queryResults is empty, no errorMsg, textResult={}", textResultStr);
+                        if (!textResultStr.isBlank()) {
+                            return "查询未返回数据，请根据以下提示调整问题后重试：" + textResultStr;
+                        }
+                        return "查询未返回任何数据，请尝试调整问题后重试。";
+                    }
+
+                    // queryResults is non-empty – return textResult as the final answer
+                    Object textResult = dataMap.get("textResult");
+                    if (textResult != null && !textResult.toString().isBlank()) {
+                        log.debug("[queryByNlp] textResult length={}", textResult.toString().length());
+                        return textResult.toString();
+                    }
+                    // textResult missing but results exist – fall back to raw data for the agent
+                    log.warn("[queryByNlp] queryResults non-empty but textResult is blank, returning raw queryResults");
+                    return queryResults.toString();
+                })
+                .doOnError(e -> log.error("[queryByNlp] Failed, agentId={}, question={}", agentId, question, e));
+    }
+
+    /**
+     * Legacy query via the original REST API (fallback when agentId is not registered).
+     */
+    private Mono<String> queryDatasetLegacy(String datasetId, String question) {
         return webClient
                 .get()
                 .uri(
@@ -112,7 +385,7 @@ public class DataApiClient {
                 .doOnError(
                         e ->
                                 log.error(
-                                        "Failed to query dataset={}, question={}",
+                                        "[queryDatasetLegacy] Failed, dataset={}, question={}",
                                         datasetId,
                                         question,
                                         e))
@@ -128,7 +401,8 @@ public class DataApiClient {
                         new DatasetInfo(
                                 "ds_dau_index",
                                 "咪咕视频APP日指数，基于高质量日活跃样本用户计算的活跃指数，用于反映核心活跃用户的变化趋势。"
-                                        + "包含每日活跃指数值、环比变化率、同比变化率。"),
+                                        + "包含每日活跃指数值、环比变化率、同比变化率。",
+                                "84"),
                         new DatasetInfo(
                                 "ds_community",
                                 "咪咕视频APP社区化相关指标，包含："
@@ -139,7 +413,8 @@ public class DataApiClient {
                                         + "B级及以上创作者规模、"
                                         + "B级及以上创作者日人均涨粉数、"
                                         + "社区内容日总赞数量、"
-                                        + "B级及以上创作者TOP1视频点赞量。"),
+                                        + "B级及以上创作者TOP1视频点赞量。",
+                                "86"),
                         new DatasetInfo(
                                 "ds_kpi",
                                 "##咪咕各产品的考核指标情况"
@@ -147,12 +422,14 @@ public class DataApiClient {
                                         + "### 示例数据：\n"
                                         + "#### 全量, RFE高价值活跃规模, 20260318, 45911864, 3.808E+7, 20.57, 45377751, 1.18\n"
                                         + "#### 元宇宙, AI数智人使用用户, 20260318, 1963914, 5000000, 39.28, 1353245, 45.13\n"
-                                        + "#### 咪咕视频, AI+咪咕视频自研产品使用用户数, 20260318, 3721628, 6000000, 62.03, 2792373, 33.28\n"),
+                                        + "#### 咪咕视频, AI+咪咕视频自研产品使用用户数, 20260318, 3721628, 6000000, 62.03, 2792373, 33.28\n",
+                                "85"),
                         new DatasetInfo(
                                 "ds_content_play",
                                 "内容播放情况，包含咪咕视频各类型的内容播放数据，"
                                         + "分类：动漫、少儿、电视剧、电影、纪实、体育、综艺、总榜。"
-                                        + "包含热门内容名称、热门内容热度指数、热度排名。")));
+                                        + "包含热门内容名称、热门内容热度指数、热度排名。",
+                                "87")));
     }
 
     private Mono<String> mockQueryDataset(String datasetId, String question) {
