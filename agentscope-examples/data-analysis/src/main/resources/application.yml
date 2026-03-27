@@ -23,14 +23,23 @@ openai:
 # External data API configuration
 data:
   api:
-    # Base URL of the external data service
+    # Base URL of the external data service (legacy fallback)
     base-url: ${DATA_API_BASE_URL:http://localhost:9090}
     # Set to true to use built-in mock responses (no real API needed)
-    mock: ${DATA_API_MOCK:true}
-
+    mock: ${DATA_API_MOCK:false}
+    # Base URL of the NLP intelligent query service (SuperSonic)
+    nlp-base-url: ${DATA_API_NLP_BASE_URL:http://localhost:9080}
+    # Authorization header value for the NLP intelligent query service
+    nlp-authorization: ${DATA_API_NLP_AUTHORIZATION:eyJhbGciOiJIUzUxMiJ9.eyJ0b2tlbl91c2VyX2VtYWlsIjoiYWRtaW5AeHguY29tIiwidG9rZW5fdXNlcl9pZCI6MSwidG9rZW5fdXNlcl9kaXNwbGF5X25hbWUiOiJhZG1pbiIsInRva2VuX2NyZWF0ZV90aW1lIjoxNzc0NDkzNTM5ODA1LCJ0b2tlbl9pc19hZG1pbiI6MSwidG9rZW5fdXNlcl9uYW1lIjoiYWRtaW4iLCJ0b2tlbl91c2VyX3Bhc3N3b3JkIjoiYzNWd1pYSnpiMjVwWTBCaWFXTnZiZGt0SkpZV3c2QTNyRW1CVVB6Ym4vNkROZVluRCt5M21Bd0RLRU1TM0tWVCIsInN1YiI6ImFkbWluIiwiZXhwIjoxNzc0NTY1NTM5fQ.BldDbgrCLjWj6I1wx5ctDtR2_gRh3C9zrSoTAMXvvX1SiQQVeQPb7FTCs7_pY1UNEL_x5lXWCjnCkwACwQXl4Q}
+    # 对应4个数据集的agentId，逗号分隔，可随时修改
+    nlp-agent-ids: 84,85,86,87
 spring:
   codec:
     max-in-memory-size: 10MB
+
+agent:
+  # 当前使用的系统提示词文件名，文件须放在 resources/prompts/ 目录下
+  system-prompt-file: prompt-V4.txt
 
 logging:
   level:
