@@ -48,9 +48,11 @@ public class DefaultPlanToHint implements PlanToHint {
                     + "- Present the plan and confirm with user before execution\n"
                     + "- If user's request already implies execution intent (e.g., \"execute\","
                     + " \"execute the plan\"), proceed directly without asking\n"
-                    + "- Otherwise, ask: \"Should I proceed with this plan?\"\n"
+                    + "- Otherwise, ask: \"Should I proceed with this plan?\" and append the"
+                    + " exact token [CONFIRM_PLAN] at the very end of your reply (on its own line,"
+                    + " no other text after it). This token is a UI signal – do NOT explain it.\n"
                     + "- Start execution only after user confirms (e.g., \"yes\", \"go ahead\","
-                    + " \"proceed\", \"do it\")\n"
+                    + " \"proceed\", \"do it\", \"执行\")\n"
                     + "- If user says anything else (questions, modifications, unrelated topics),"
                     + " respond accordingly but DO NOT start execution\n";
 
