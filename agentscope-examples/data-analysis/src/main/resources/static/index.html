@@ -553,32 +553,6 @@
         .subtask-desc { font-size: 0.72rem; color: var(--text-sub); }
         .subtask-outcome { font-size: 0.72rem; color: #34d399; margin-top: 3px; font-style: italic; }
 
-        /* ══════════ Confirm Plan Actions ══════════ */
-        .confirm-actions {
-            display: flex; gap: 10px; margin-top: 12px;
-        }
-        .confirm-btn {
-            flex: 1; padding: 10px 0;
-            border-radius: var(--radius-md);
-            font-size: 0.88rem; font-weight: 600;
-            cursor: pointer; border: none;
-            font-family: inherit; transition: all 0.18s;
-            -webkit-appearance: none;
-        }
-        .confirm-btn.confirm-yes {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-            color: #fff;
-            box-shadow: 0 3px 12px var(--primary-glow);
-        }
-        .confirm-btn.confirm-yes:active { opacity: 0.85; transform: scale(0.97); }
-        .confirm-btn.confirm-no {
-            background: var(--surface2);
-            color: var(--text-sub);
-            border: 1px solid var(--border);
-        }
-        .confirm-btn.confirm-no:active { background: var(--surface3); }
-        .confirm-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
-
         /* ══════════ Chart ══════════ */
         .chart-wrapper {
             margin-top: 8px;
@@ -1109,18 +1083,6 @@
         document.getElementById('chatInput').value = text;
         sendMessage();
     }
-
-    // Called when user clicks 执行 / 不执行 confirm buttons
-    function sendConfirm(btn, text) {
-        // Disable both buttons in the same confirm-actions container
-        const actions = btn.closest('.confirm-actions');
-        if (actions) {
-            actions.querySelectorAll('.confirm-btn').forEach(b => b.disabled = true);
-        }
-        document.getElementById('chatInput').value = text;
-        sendMessage();
-    }
-
     function handleInputKey(e) {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
@@ -1242,17 +1204,14 @@
     function finalizeMessage(el, fullText) {
         const chartRegex  = /<chart>\s*([\s\S]*?)\s*<\/chart>/i;
         const reportRegex = /<report>\s*([\s\S]*?)\s*<\/report>/i;
-        const confirmRegex = /\[CONFIRM_PLAN\]/;
 
-        const hasConfirm = confirmRegex.test(fullText);
         const chartMatch  = fullText.match(chartRegex);
         const reportMatch = fullText.match(reportRegex);
 
-        // Strip all special tokens/blocks from plain text
+        // Strip both special blocks from plain text
         let textPart = fullText
             .replace(chartRegex, '')
             .replace(reportRegex, '')
-            .replace(confirmRegex, '')
             .trim();
 
         let chartHtml = '';
@@ -1277,18 +1236,6 @@
         } else {
             content.textContent = textPart || fullText;
         }
-
-        // Render confirm-plan action buttons
-        if (hasConfirm) {
-            const actionsDiv = document.createElement('div');
-            actionsDiv.className = 'confirm-actions';
-            actionsDiv.innerHTML = `
-                <button class="confirm-btn confirm-yes" onclick="sendConfirm(this, '\u6267\u884c')">\u2705 \u6267\u884c\u8ba1\u5212</button>
-                <button class="confirm-btn confirm-no"  onclick="sendConfirm(this, '\u4e0d\u6267\u884c')">\u274c \u4e0d\u6267\u884c</button>
-            `;
-            content.appendChild(actionsDiv);
-        }
-
         document.getElementById('chatMessages').scrollTop = 99999;
     }
 
