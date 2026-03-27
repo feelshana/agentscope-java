@@ -15,6 +15,7 @@
  */
 package io.agentscope.examples.dataanalysis;
 
+import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
@@ -29,6 +30,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * <p>Then open http://localhost:8081 in a browser.
  */
 @SpringBootApplication
+@MapperScan("io.agentscope.examples.dataanalysis.mapper")
 public class DataAnalysisApplication {
 
     public static void main(String[] args) {
