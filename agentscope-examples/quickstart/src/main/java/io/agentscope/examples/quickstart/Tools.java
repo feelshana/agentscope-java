@@ -2,9 +2,8 @@ package io.agentscope.examples.quickstart;
 
 import io.agentscope.core.tool.Tool;
 import io.agentscope.core.tool.ToolParam;
-import reactor.core.publisher.Mono;
-
 import java.time.LocalDate;
+import reactor.core.publisher.Mono;
 
 public class Tools {
     @Tool(description = "获取指定城市的天气")
