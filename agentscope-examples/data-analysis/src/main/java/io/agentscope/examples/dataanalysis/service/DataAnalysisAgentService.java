@@ -114,12 +114,12 @@ public class DataAnalysisAgentService implements InitializingBean {
      *
      * @param sessionId the chat session identifier
      * @param message   the user's question
-     * @param userName  the user identifier (from URL param, used for session isolation)
+     * @param account  the user identifier (from URL param, used for session isolation)
      * @return Flux of streaming text chunks (SSE-friendly)
      */
-    public Flux<String> chat(String sessionId, String message, String userName) {
+    public Flux<String> chat(String sessionId, String message, String account) {
         // Synchronous DB operations before streaming starts
-        chatSessionService.ensureSession(sessionId, userName);
+        chatSessionService.ensureSession(sessionId, account);
         chatSessionService.saveUserMessage(sessionId, message);
         SessionAgentManager.SessionEntry entry = sessionAgentManager.getOrCreate(sessionId);
 

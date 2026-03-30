@@ -793,11 +793,8 @@
                     </div>
                     <hr class="welcome-divider">
                     <div class="welcome-suggest-label">快速开始 · 点击直接提问</div>
-                    <div class="welcome-suggest-list">
-                        <button class="suggestion-btn" onclick="sendSuggestion(this)">🌐 咪咕视频社区化发展的怎么样，创作者活跃不？</button>
-                        <button class="suggestion-btn" onclick="sendSuggestion(this)">🎯 各产品的考核指标完成情况怎么样？</button>
-                        <button class="suggestion-btn" onclick="sendSuggestion(this)">👥 咪咕视频社区内容创作者规模有多大？</button>
-                        <button class="suggestion-btn" onclick="sendSuggestion(this)">🎬 各类型内容的播放量分布是什么情况？</button>
+                    <div class="welcome-suggest-list" id="staticSuggestList">
+                        <!-- 推荐问题由 loadSuggestedQuestions() 动态渲染 -->
                     </div>
                 </div>
             </div>
@@ -908,9 +905,26 @@
     }
 
     /* ═══════════════════════ Init ═══════════════════════ */
+    // Cache suggested questions loaded from backend
+    let suggestedQuestions = [];
+
+    async function loadSuggestedQuestions() {
+        try {
+            const res = await fetch('/api/suggested-questions');
+            if (res.ok) {
+                suggestedQuestions = await res.json();
+            }
+        } catch (e) {
+            console.warn('Failed to load suggested questions', e);
+        }
+        // Refresh the welcome screen with the loaded questions
+        clearChatUI();
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         connectPlanStream();
         fetchCurrentPlan();
+        loadSuggestedQuestions();
     });
 
     /* ═══════════════════════ History Sidebar ═══════════════════════ */
@@ -1018,6 +1032,11 @@
     }
 
     function clearChatUI() {
+        const btnHtml = suggestedQuestions.length > 0
+            ? suggestedQuestions.map(q =>
+                `<button class="suggestion-btn" onclick="sendSuggestion(this)">${escapeHtml(q)}</button>`
+              ).join('')
+            : '';
         document.getElementById('chatMessages').innerHTML = `
             <div class="message assistant">
                 <div class="welcome-card">
@@ -1038,14 +1057,12 @@
                     </div>
                     <hr class="welcome-divider">
                     <div class="welcome-suggest-label">快速开始 · 点击直接提问</div>
-                    <div class="welcome-suggest-list">
-                        <button class="suggestion-btn" onclick="sendSuggestion(this)">🌐 和世频道社区化发展的怎么样，创作者活跃不？</button>
-                        <button class="suggestion-btn" onclick="sendSuggestion(this)">🎯 各产品的考核指标完成情况怎么样？</button>
-                        <button class="suggestion-btn" onclick="sendSuggestion(this)">👥 和世频道社区内容创作者规模有多大？</button>
-                        <button class="suggestion-btn" onclick="sendSuggestion(this)">🎥 各类型内容的播放量分布是什么情况？</button>
-                    </div>
+                    <div class="welcome-suggest-list">${btnHtml}</div>
                 </div>
             </div>`;
+        // Also sync the static welcome card on the page (if visible before JS runs)
+        const staticList = document.getElementById('staticSuggestList');
+        if (staticList) staticList.innerHTML = btnHtml;
     }
 
     // Sync chat input bottom padding with drawer state

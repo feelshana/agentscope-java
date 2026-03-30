@@ -131,8 +131,8 @@ public class DataAnalysisController {
     public Flux<String> chat(
             @RequestParam String message,
             @RequestParam String sessionId,
-            @RequestParam(defaultValue = "") String userName) {
-        return agentService.chat(sessionId, message, userName);
+            @RequestParam(defaultValue = "") String account) {
+        return agentService.chat(sessionId, message, account);
     }
 
     /**
