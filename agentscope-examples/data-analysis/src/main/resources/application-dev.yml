@@ -30,5 +30,5 @@ spring:
 
 logging:
   level:
-    io.agentscope: DEBUG
+    io.agentscope: INFO
     io.agentscope.examples.dataanalysis: DEBUG
