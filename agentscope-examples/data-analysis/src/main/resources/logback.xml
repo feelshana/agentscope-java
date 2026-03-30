@@ -37,6 +37,6 @@
         <appender-ref ref="FILE"/>
     </root>
 
-    <logger name="io.agentscope" level="DEBUG"/>
-    <logger name="io.agentscope.examples.dataanalysis" level="DEBUG"/>
+    <logger name="io.agentscope" level="INFO"/>
+    <logger name="io.agentscope.examples.dataanalysis" level="INFO"/>
 </configuration>

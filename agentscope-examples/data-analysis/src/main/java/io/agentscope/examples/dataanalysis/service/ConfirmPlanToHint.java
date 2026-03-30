@@ -57,12 +57,13 @@ public class ConfirmPlanToHint implements PlanToHint {
         // so the frontend can detect it and render the action buttons.
         if (planNotebook.isNeedUserConfirm() && hint.contains(CONFIRMATION_PHRASE)) {
             // Insert instruction before the closing </system-hint> tag
-            String instruction = "- UI signal: append the exact token "
-                    + CONFIRM_TOKEN
-                    + " on its own line at the very end of your reply (no text after it)."
-                    + " This token is for frontend rendering – do NOT explain it to the user.\n";
-            hint = hint.replace("</system-hint>",
-                    instruction + "</system-hint>");
+            String instruction =
+                    "- UI signal: append the exact token "
+                            + CONFIRM_TOKEN
+                            + " on its own line at the very end of your reply (no text after it)."
+                            + " This token is for frontend rendering – do NOT explain it to the"
+                            + " user.\n";
+            hint = hint.replace("</system-hint>", instruction + "</system-hint>");
         }
         return hint;
     }
