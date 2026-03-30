@@ -52,10 +52,17 @@ public class ConfirmPlanToHint implements PlanToHint {
         if (hint == null) {
             return null;
         }
-        // Append the UI marker only when the hint contains the confirmation rule,
-        // i.e. the LLM will be instructed to ask the user before executing.
+        // When the hint instructs the LLM to wait for user confirmation,
+        // also tell the LLM to append [CONFIRM_PLAN] at the very end of its reply
+        // so the frontend can detect it and render the action buttons.
         if (planNotebook.isNeedUserConfirm() && hint.contains(CONFIRMATION_PHRASE)) {
-            hint = hint + "\n" + CONFIRM_TOKEN;
+            // Insert instruction before the closing </system-hint> tag
+            String instruction = "- UI signal: append the exact token "
+                    + CONFIRM_TOKEN
+                    + " on its own line at the very end of your reply (no text after it)."
+                    + " This token is for frontend rendering – do NOT explain it to the user.\n";
+            hint = hint.replace("</system-hint>",
+                    instruction + "</system-hint>");
         }
         return hint;
     }
