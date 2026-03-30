@@ -32,6 +32,9 @@ public class PlanResponse {
     private String createdAt;
     private List<SubTaskResponse> subtasks;
 
+    /** True when the plan was just created and all subtasks are still TODO – frontend shows confirm buttons. */
+    private boolean needConfirm;
+
     public PlanResponse() {
         this.subtasks = new ArrayList<>();
     }
@@ -112,5 +115,13 @@ public class PlanResponse {
 
     public void setSubtasks(List<SubTaskResponse> subtasks) {
         this.subtasks = subtasks;
+    }
+
+    public boolean isNeedConfirm() {
+        return needConfirm;
+    }
+
+    public void setNeedConfirm(boolean needConfirm) {
+        this.needConfirm = needConfirm;
     }
 }

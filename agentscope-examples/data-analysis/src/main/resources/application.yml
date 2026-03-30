@@ -43,6 +43,10 @@ chat:
     # How many recent messages to keep verbatim after compression
     keep-recent-messages: 6
 
+logging:
+  level:
+    io.agentscope: INFO
+    io.agentscope.examples.dataanalysis: INFO
 agent:
   # 当前使用的系统提示词文件名，文件须放在 resources/prompts/ 目录下
   system-prompt-file: prompt-V4.txt
