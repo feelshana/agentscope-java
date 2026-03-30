@@ -1121,6 +1121,9 @@
             actions.querySelectorAll('.confirm-btn').forEach(b => b.disabled = true);
         }
 
+        // Notify backend to suppress further needConfirm=true broadcasts for this plan
+        fetch('/api/plan/confirm', { method: 'POST' }).catch(() => {});
+
         document.getElementById('chatInput').value = text;
         sendMessage(true);  // fromConfirm=true: skip confirmDecided reset
     }
@@ -1286,7 +1289,8 @@
 
         // Render confirm-plan action buttons (fallback: triggered by LLM token)
         // Primary injection happens via plan SSE (renderPlan); this is the backup path.
-        if (hasConfirm && !content.querySelector('.confirm-actions')) {
+        // Skip if user already made a decision (confirmDecided) to avoid re-injection.
+        if (hasConfirm && !confirmDecided && !content.querySelector('.confirm-actions')) {
             const actionsDiv = document.createElement('div');
             actionsDiv.className = 'confirm-actions';
             actionsDiv.innerHTML = `
