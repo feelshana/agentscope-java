@@ -68,6 +68,7 @@ public class DataApiClient {
             @Value("${data.api.mock:true}") boolean mockEnabled,
             @Value("${data.api.nlp-base-url:http://localhost:9080}") String nlpBaseUrl,
             @Value("${data.api.nlp-authorization:}") String nlpAuthorization,
+            @Value("${data.api.nlp-app-key:}") String nlpAppKey,
             @Value("${data.api.nlp-agent-ids:}") String nlpAgentIdsStr) {
         this.mockEnabled = mockEnabled;
         this.nlpAgentIds = nlpAgentIdsStr.isBlank()
@@ -89,6 +90,7 @@ public class DataApiClient {
                 WebClient.builder()
                         .baseUrl(nlpBaseUrl)
                         .defaultHeader("authorization", nlpAuthorization)
+                        .defaultHeader("App-Key", nlpAppKey)
                         .codecs(
                                 configurer ->
                                         configurer
@@ -115,7 +117,18 @@ public class DataApiClient {
         if (mockEnabled) {
             return mockListDatasets();
         }
-        return fetchDatasetsFromNlp();
+        return fetchDatasetsFromNlp()
+                .flatMap(datasets -> {
+                    if (datasets.isEmpty()) {
+                        log.warn("[listDatasets] fetchDatasetsFromNlp returned empty list, falling back to mock datasets");
+                        return mockListDatasets();
+                    }
+                    return Mono.just(datasets);
+                })
+                .onErrorResume(e -> {
+                    log.error("[listDatasets] fetchDatasetsFromNlp failed, falling back to mock datasets", e);
+                    return mockListDatasets();
+                });
     }
 
     /**
@@ -159,15 +172,16 @@ public class DataApiClient {
                             continue;
                         }
                         Object agentId = itemMap.get("agentId");
+                        Object description = itemMap.get("description");
                         Object agentName = itemMap.get("agentName");
                         Object dataSetInfo = itemMap.get("dataSetInfo");
                         if (agentId == null) {
                             continue;
                         }
                         String id = "ds_" + agentId;
-                        String description = (agentName != null ? agentName.toString() : "")
-                                + (dataSetInfo != null ? "\n" + dataSetInfo.toString() : "");
-                        result.add(new DatasetInfo(id, description, agentId.toString()));
+                        String dataSetInfoStr = (description != null ? description : "")
+                                + (dataSetInfo != null ? "\n" + dataSetInfo : "");
+                        result.add(new DatasetInfo(id, agentName.toString(), dataSetInfoStr, agentId.toString()));
                         log.debug("[fetchDatasetsFromNlp] Loaded dataset: id={}, agentId={}, name={}",
                                 id, agentId, agentName);
                     }
@@ -175,7 +189,7 @@ public class DataApiClient {
                     return result;
                 })
                 .onErrorResume(e -> {
-                    log.error("[fetchDatasetsFromNlp] Failed to fetch datasets, fallback to empty list", e);
+                    log.error("[fetchDatasetsFromNlp] Failed to fetch datasets from NLP service", e);
                     return Mono.just(new ArrayList<>());
                 });
     }
@@ -400,11 +414,13 @@ public class DataApiClient {
                 List.of(
                         new DatasetInfo(
                                 "ds_dau_index",
+                                "咪咕视频APP日指数",
                                 "咪咕视频APP日指数，基于高质量日活跃样本用户计算的活跃指数，用于反映核心活跃用户的变化趋势。"
                                         + "包含每日活跃指数值、环比变化率、同比变化率。",
                                 "84"),
                         new DatasetInfo(
                                 "ds_community",
+                                "社区化咪咕号专项运营数据报表",
                                 "咪咕视频APP社区化相关指标，包含："
                                         + "社区场景月累计活跃用户规模、"
                                         + "社区化日活跃用户规模、"
@@ -417,6 +433,7 @@ public class DataApiClient {
                                 "86"),
                         new DatasetInfo(
                                 "ds_kpi",
+                                "2025关键考核指标日表",
                                 "##咪咕各产品的考核指标情况### 元数据（字段顺序）：产品名称, 指标名称, 日期, 指标值, 目标值, 完成进度, 上月同期值,"
                                     + " 环比上月变化情况\n"
                                     + "### 示例数据：\n"
@@ -429,6 +446,7 @@ public class DataApiClient {
                                 "85"),
                         new DatasetInfo(
                                 "ds_content_play",
+                                "驾驶舱热门内容日榜",
                                 "内容播放情况，包含咪咕视频各类型的内容播放数据，"
                                         + "分类：动漫、少儿、电视剧、电影、纪实、体育、综艺、总榜。"
                                         + "包含热门内容名称、热门内容热度指数、热度排名。",

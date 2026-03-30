@@ -25,6 +25,9 @@ public class DatasetInfo {
     @JsonProperty("id")
     private String id;
 
+    @JsonProperty("name")
+    private String name;
+
     @JsonProperty("description")
     private String description;
 
@@ -38,8 +41,9 @@ public class DatasetInfo {
         this.description = description;
     }
 
-    public DatasetInfo(String id, String description, String agentId) {
+    public DatasetInfo(String id, String name, String description, String agentId) {
         this.id = id;
+        this.name = name;
         this.description = description;
         this.agentId = agentId;
     }
@@ -50,6 +54,14 @@ public class DatasetInfo {
 
     public void setId(String id) {
         this.id = id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
     }
 
     public String getDescription() {

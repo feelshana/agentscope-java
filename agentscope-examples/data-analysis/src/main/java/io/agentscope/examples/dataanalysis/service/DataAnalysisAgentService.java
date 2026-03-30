@@ -73,9 +73,6 @@ public class DataAnalysisAgentService implements InitializingBean {
     @Value("${agent.system-prompt-file:prompt-V3.txt}")
     private String systemPromptFile;
 
-    private ReActAgent agent;
-    private InMemoryMemory memory;
-
     public DataAnalysisAgentService(
             DataApiClient dataApiClient,
             AnalysisPlanService analysisPlanService,
@@ -91,7 +88,7 @@ public class DataAnalysisAgentService implements InitializingBean {
     public void afterPropertiesSet() {
         String apiKey = resolveApiKey();
         String baseUrl = resolveBaseUrl();
-        sessionAgentManager.configure(apiKey, baseUrl, systemPromptFile);
+        sessionAgentManager.configure(apiKey, baseUrl, loadSystemPrompt());
         log.info("DataAnalysisAgentService initialized");
     }
 
@@ -172,18 +169,26 @@ public class DataAnalysisAgentService implements InitializingBean {
     }
 
     private String resolveApiKey() {
-        if (apiKeyFromConfig != null && !apiKeyFromConfig.isBlank()) return apiKeyFromConfig;
+        if (apiKeyFromConfig != null && !apiKeyFromConfig.isBlank()) {
+            return apiKeyFromConfig;
+        }
         String envKey = System.getenv("OPENAI_API_KEY");
-        if (envKey != null && !envKey.isBlank()) return envKey;
+        if (envKey != null && !envKey.isBlank()) {
+            return envKey;
+        }
         throw new IllegalStateException(
                 "OpenAI API key is required. Set 'openai.api-key' in application.yml"
                         + " or the OPENAI_API_KEY environment variable.");
     }
 
     private String resolveBaseUrl() {
-        if (baseUrlFromConfig != null && !baseUrlFromConfig.isBlank()) return baseUrlFromConfig;
+        if (baseUrlFromConfig != null && !baseUrlFromConfig.isBlank()) {
+            return baseUrlFromConfig;
+        }
         String envUrl = System.getenv("OPENAI_BASE_URL");
-        if (envUrl != null && !envUrl.isBlank()) return envUrl;
+        if (envUrl != null && !envUrl.isBlank()) {
+            return envUrl;
+        }
         return null;
     }
 
@@ -202,7 +207,9 @@ public class DataAnalysisAgentService implements InitializingBean {
             }
             return "";
         }
-        if (event.isLast()) return "";
+        if (event.isLast()) {
+            return "";
+        }
         List<TextBlock> blocks = event.getMessage().getContentBlocks(TextBlock.class);
         return blocks.isEmpty() ? "" : blocks.get(0).getText();
     }

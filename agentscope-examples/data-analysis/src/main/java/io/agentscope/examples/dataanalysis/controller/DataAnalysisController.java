@@ -23,6 +23,7 @@ import io.agentscope.examples.dataanalysis.dto.SessionHistoryResponse;
 import io.agentscope.examples.dataanalysis.service.AnalysisPlanService;
 import io.agentscope.examples.dataanalysis.service.ChatSessionService;
 import io.agentscope.examples.dataanalysis.service.DataAnalysisAgentService;
+import io.agentscope.examples.dataanalysis.service.SuggestedQuestionService;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.MediaType;
@@ -59,16 +60,28 @@ public class DataAnalysisController {
     private final AnalysisPlanService planService;
     private final DataApiClient dataApiClient;
     private final ChatSessionService chatSessionService;
+    private final SuggestedQuestionService suggestedQuestionService;
 
     public DataAnalysisController(
             DataAnalysisAgentService agentService,
             AnalysisPlanService planService,
             DataApiClient dataApiClient,
-            ChatSessionService chatSessionService) {
+            ChatSessionService chatSessionService,
+            SuggestedQuestionService suggestedQuestionService) {
         this.agentService = agentService;
         this.planService = planService;
         this.dataApiClient = dataApiClient;
         this.chatSessionService = chatSessionService;
+        this.suggestedQuestionService = suggestedQuestionService;
+    }
+
+    /**
+     * Returns the list of enabled suggested questions from the database.
+     * Questions can be updated directly in DB and take effect immediately without redeployment.
+     */
+    @GetMapping("/suggested-questions")
+    public List<String> listSuggestedQuestions() {
+        return suggestedQuestionService.listEnabledQuestions();
     }
 
     /**

@@ -690,12 +690,7 @@
     <!-- Chat area -->
     <div class="chat-area">
         <div class="chat-messages" id="chatMessages">
-            <div class="message assistant">
-                <span class="message-label">助手</span>
-                <div class="message-content">你好！我是红海App智能助手，可以帮你分析业务数据，给出洞察结论。
-
-点击下方问题快速开始：<div class="suggestions-wrap"><button class="suggestion-btn" onclick="sendSuggestion(this)">🌐 咪咕视频社区化发展的怎么样，创作者活跃不？</button><button class="suggestion-btn" onclick="sendSuggestion(this)">🎯 各产品的考核指标完成情况怎么样？</button><button class="suggestion-btn" onclick="sendSuggestion(this)">👥 咪咕视频社区内容创作者规模有多大？</button><button class="suggestion-btn" onclick="sendSuggestion(this)">🎬 各类型内容的播放量分布是什么情况？</button></div></div>
-            </div>
+            <!-- Welcome message is rendered dynamically by loadSuggestedQuestions() on page load -->
         </div>
 
         <div class="chat-input-container" id="chatInputContainer">
@@ -800,9 +795,26 @@
     }
 
     /* ═══════════════════════ Init ═══════════════════════ */
+    // Cache suggested questions loaded from backend
+    let suggestedQuestions = [];
+
+    async function loadSuggestedQuestions() {
+        try {
+            const res = await fetch('/api/suggested-questions');
+            if (res.ok) {
+                suggestedQuestions = await res.json();
+            }
+        } catch (e) {
+            console.warn('Failed to load suggested questions, using empty list', e);
+        }
+        // Refresh the welcome screen with the loaded questions
+        clearChatUI();
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         connectPlanStream();
         fetchCurrentPlan();
+        loadSuggestedQuestions();
     });
 
     /* ═══════════════════════ History Sidebar ═══════════════════════ */
@@ -901,12 +913,18 @@
     }
 
     function clearChatUI() {
+        const btnHtml = suggestedQuestions.length > 0
+            ? suggestedQuestions.map(q =>
+                `<button class="suggestion-btn" onclick="sendSuggestion(this)">${escapeHtml(q)}</button>`
+              ).join('')
+            : '';
+        const suggestionsHtml = btnHtml
+            ? `\n点击下方问题快速开始：<div class="suggestions-wrap">${btnHtml}</div>`
+            : '';
         document.getElementById('chatMessages').innerHTML = `
             <div class="message assistant">
                 <span class="message-label">助手</span>
-                <div class="message-content">你好！我是红海App智能助手，可以帮你分析业务数据，给出洞察结论。
-
-点击下方问题快速开始：<div class="suggestions-wrap"><button class="suggestion-btn" onclick="sendSuggestion(this)">🌐 和世频道社区化发展的怎么样，创作者活跃不？</button><button class="suggestion-btn" onclick="sendSuggestion(this)">🎯 各产品的考核指标完成情况怎么样？</button><button class="suggestion-btn" onclick="sendSuggestion(this)">👥 和世频道社区内容创作者规模有多大？</button><button class="suggestion-btn" onclick="sendSuggestion(this)">🎥 各类型内容的播放量分布是什么情况？</button></div></div>
+                <div class="message-content">你好！我是红海App智能助手，可以帮你分析业务数据，给出洞察结论。${suggestionsHtml}</div>
             </div>`;
     }
 

@@ -127,6 +127,8 @@ public class DataAnalysisTool {
                                 ds ->
                                         "  - ID: "
                                                 + ds.getId()
+                                                + "\n    Name: "
+                                                + ds.getName()
                                                 + "\n    Description: "
                                                 + ds.getDescription())
                         .collect(Collectors.joining("\n"));
