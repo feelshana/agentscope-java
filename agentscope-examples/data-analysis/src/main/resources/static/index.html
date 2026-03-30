@@ -894,6 +894,7 @@
     let hasPlan = false;
     let userCollapsed = false;
     let planPending = false;
+    let confirmDecided = false;  // true after user clicks 执行/不执行; prevents re-injection
 
     // ─── User identity from URL param ───
     const urlParams = new URLSearchParams(window.location.search);
@@ -1113,7 +1114,8 @@
     }
     // Called when user clicks 执行 / 不执行 confirm buttons
     function sendConfirm(btn, text) {
-        // Disable both buttons in the same confirm-actions container
+        // Disable both buttons and mark decision taken (prevents re-injection on next plan SSE)
+        confirmDecided = true;
         const actions = btn.closest('.confirm-actions');
         if (actions) {
             actions.querySelectorAll('.confirm-btn').forEach(b => b.disabled = true);
@@ -1146,6 +1148,7 @@
         input.value = '';
         input.style.height = 'auto';
         setProcessing(true);
+        confirmDecided = false;  // reset on each new conversation turn
         // Show plan-generating state immediately (before plan SSE arrives)
         planPending = true;
         showPlanPending();
@@ -1535,7 +1538,7 @@
         // When the plan is freshly created (all subtasks TODO) and confirmation is needed,
         // inject the action buttons into the last assistant bubble.
         const needConfirm = plan.needConfirm === true;
-        if (needConfirm) {
+        if (needConfirm && !confirmDecided) {
             const msgs = document.getElementById('chatMessages');
             // Find the last assistant message bubble
             const allBubbles = msgs ? msgs.querySelectorAll('.message.assistant .message-content') : [];
