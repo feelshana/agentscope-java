@@ -60,15 +60,29 @@ public class AnalysisPlanService {
 
     /**
      * Push the latest plan state to all SSE subscribers.
+     * Sets needConfirm=true when the plan was just created (all subtasks TODO,
+     * none in_progress/done) so the frontend can render confirm buttons without
+     * relying on the LLM outputting a special token.
      */
     public void broadcastPlanChange() {
         PlanResponse response = getCurrentPlan();
         if (response == null) {
             response = new PlanResponse();
+        } else {
+            // Detect "plan just created, waiting for user confirmation" state
+            boolean allTodo =
+                    response.getSubtasks() != null
+                            && !response.getSubtasks().isEmpty()
+                            && response.getSubtasks().stream()
+                                    .allMatch(s -> "todo".equals(s.getState()));
+            boolean notebookNeedsConfirm = planNotebook != null && planNotebook.isNeedUserConfirm();
+            response.setNeedConfirm(allTodo && notebookNeedsConfirm);
         }
         planSink.tryEmitNext(response);
         log.debug(
-                "Plan broadcast: {}", response.getName() != null ? response.getName() : "(empty)");
+                "Plan broadcast: {}, needConfirm={}",
+                response.getName() != null ? response.getName() : "(empty)",
+                response.isNeedConfirm());
     }
 
     /**

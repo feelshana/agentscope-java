@@ -1376,13 +1376,14 @@
             content.textContent = textPart || fullText;
         }
 
-        // Render confirm-plan action buttons
-        if (hasConfirm) {
+        // Render confirm-plan action buttons (fallback: triggered by LLM token)
+        // Primary injection happens via plan SSE (renderPlan); this is the backup path.
+        if (hasConfirm && !content.querySelector('.confirm-actions')) {
             const actionsDiv = document.createElement('div');
             actionsDiv.className = 'confirm-actions';
             actionsDiv.innerHTML = `
-                <button class="confirm-btn confirm-yes" onclick="sendConfirm(this, '执行')">✅ 执行计划</button>
-                <button class="confirm-btn confirm-no"  onclick="sendConfirm(this, '不执行')">❌ 不执行</button>
+                <button class="confirm-btn confirm-yes" onclick="sendConfirm(this, '\u6267\u884c')">✅ 执行计划</button>
+                <button class="confirm-btn confirm-no"  onclick="sendConfirm(this, '\u4e0d\u6267\u884c')">❌ 不执行</button>
             `;
             content.appendChild(actionsDiv);
         }
@@ -1624,6 +1625,27 @@
         if (planPending && total > 0) {
             planPending = false;
             setPlanGenerating(false);
+        }
+
+        // ── Confirm buttons: injected by plan SSE, not by LLM token (reliable) ──
+        // When the plan is freshly created (all subtasks TODO) and confirmation is needed,
+        // inject the action buttons into the last assistant bubble.
+        const needConfirm = plan.needConfirm === true;
+        if (needConfirm) {
+            const msgs = document.getElementById('chatMessages');
+            // Find the last assistant message bubble
+            const allBubbles = msgs ? msgs.querySelectorAll('.message.assistant .message-content') : [];
+            const lastBubble = allBubbles.length > 0 ? allBubbles[allBubbles.length - 1] : null;
+            if (lastBubble && !lastBubble.querySelector('.confirm-actions')) {
+                const actionsDiv = document.createElement('div');
+                actionsDiv.className = 'confirm-actions';
+                actionsDiv.innerHTML = `
+                    <button class="confirm-btn confirm-yes" onclick="sendConfirm(this, '\u6267\u884c')">✅ 执行计划</button>
+                    <button class="confirm-btn confirm-no"  onclick="sendConfirm(this, '\u4e0d\u6267\u884c')">❌ 不执行</button>
+                `;
+                lastBubble.appendChild(actionsDiv);
+                if (msgs) msgs.scrollTop = 99999;
+            }
         }
 
         // ── Hint strip ──
