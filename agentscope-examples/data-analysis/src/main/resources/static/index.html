@@ -579,6 +579,31 @@
         .confirm-btn.confirm-no:active { background: var(--surface3); }
         .confirm-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 
+        /* Decline hint card – shown when user clicks 不执行 */
+        .decline-hint {
+            margin-top: 10px;
+            padding: 12px 14px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-left: 3px solid var(--primary);
+            border-radius: var(--radius-md);
+            font-size: 0.82rem; line-height: 1.7; color: var(--text-sub);
+        }
+        .decline-hint strong { color: var(--text); font-weight: 600; }
+        .decline-hint-actions {
+            display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;
+        }
+        .decline-hint-btn {
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.78rem; font-weight: 600;
+            cursor: pointer; border: 1px solid var(--border-active);
+            background: var(--primary-light); color: var(--primary-dark);
+            font-family: inherit; transition: all 0.15s;
+            -webkit-appearance: none;
+        }
+        .decline-hint-btn:active { background: var(--primary); color: #fff; }
+
         /* ══════════ Chart ══════════ */
         .chart-wrapper {
             margin-top: 8px;
@@ -1116,8 +1141,44 @@
         if (actions) {
             actions.querySelectorAll('.confirm-btn').forEach(b => b.disabled = true);
         }
+
+        if (text === '不执行') {
+            // Show an inline guidance card instead of sending the message immediately
+            const content = btn.closest('.message-content');
+            if (content && !content.querySelector('.decline-hint')) {
+                const hint = document.createElement('div');
+                hint.className = 'decline-hint';
+                hint.innerHTML = `
+                    <strong>好的，已取消执行。</strong><br>
+                    如果对计划不满意，可以告诉我需要调整的地方；也可以直接提一个新问题，我会重新为你规划。
+                    <div class="decline-hint-actions">
+                        <button class="decline-hint-btn" onclick="declineAdjust(this, '我想调整计划：')">✏️ 调整计划</button>
+                        <button class="decline-hint-btn" onclick="declineAdjust(this, '')">💬 重新提问</button>
+                    </div>
+                `;
+                content.appendChild(hint);
+                document.getElementById('chatMessages').scrollTop = 99999;
+            }
+            return;
+        }
+
         document.getElementById('chatInput').value = text;
         sendMessage();
+    }
+
+    // Called when user clicks an action inside the decline-hint card
+    function declineAdjust(btn, prefill) {
+        // Remove the hint card
+        const hintEl = btn.closest('.decline-hint');
+        if (hintEl) hintEl.remove();
+        // Pre-fill input and focus
+        const input = document.getElementById('chatInput');
+        input.value = prefill;
+        input.focus();
+        // Move cursor to end
+        const len = input.value.length;
+        input.setSelectionRange(len, len);
+        autoResize(input);
     }
 
     function handleInputKey(e) {
