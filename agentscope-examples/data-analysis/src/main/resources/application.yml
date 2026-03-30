@@ -12,44 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-server:
-  port: 8081
-
-# OpenAI API configuration (can also be set via OPENAI_API_KEY / OPENAI_BASE_URL environment variables)
-openai:
-  api-key: ${OPENAI_API_KEY:}
-  base-url: ${OPENAI_BASE_URL:}
-
-# External data API configuration
-data:
-  api:
-    # Base URL of the external data service (legacy fallback)
-    base-url: ${DATA_API_BASE_URL:http://localhost:9090}
-    # Set to true to use built-in mock responses (no real API needed)
-    mock: ${DATA_API_MOCK:false}
-    # Base URL of the NLP intelligent query service (SuperSonic)
-    nlp-base-url: ${DATA_API_NLP_BASE_URL:http://localhost:9080}
-    # Authorization header value for the NLP intelligent query service
-    nlp-authorization: ${DATA_API_NLP_AUTHORIZATION:eyJhbGciOiJIUzUxMiJ9.eyJ0b2tlbl91c2VyX2VtYWlsIjoiIiwidG9rZW5fdXNlcl9pZCI6MTUsInRva2VuX3VzZXJfZGlzcGxheV9uYW1lIjoiZGF0YUFuYWx5c2lzIiwidG9rZW5fY3JlYXRlX3RpbWUiOjE3NzQ4NDczODYxODksInRva2VuX3VzZXJfbmFtZSI6ImRhdGFBbmFseXNpcyIsInRva2VuX3VzZXJfcGFzc3dvcmQiOiJjM1Z3WlhKemIyNXBZMEJpYVdOdmJTQzRaSlR3c3ZjSktydjZKNmRQK0NOVzdTMi9TUHIrOHVrUXo3YnM5bU9zIiwic3ViIjoiZGF0YUFuYWx5c2lzIiwiZXhwIjoxMTc3NDg0NzM4Nn0.8SYbGsfNQnlJbfPzVUBavVr9pOuUqo3wwZsvBFhcEUcnQ2ys2ezIetRgqnQnEpK73ESL-vlHs4fFH_iRp9yRjg}
-    # App-Key header value for the NLP intelligent query service
-    nlp-app-key: ${DATA_API_NLP_APP_KEY:SysDbToken:dataAnalysis}
-    # 对应4个数据集的agentId，逗号分隔，可随时修改
-    nlp-agent-ids: 84,85,86,87
+# Active profile: dev（本地开发）or prod（线上生产）
+# 线上部署时通过启动参数覆盖：java -jar xxx.jar --spring.profiles.active=prod
 spring:
+  profiles:
+    active: dev
   codec:
     max-in-memory-size: 10MB
-  # JDBC datasource
-  datasource:
-    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DB:data_analysis}?useUnicode=true&characterEncoding=UTF-8&createDatabaseIfNotExist=true&serverTimezone=Asia/Shanghai
-    username: ${MYSQL_USER:root}
-    password: ${MYSQL_PASSWORD:1234}
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    hikari:
-      maximum-pool-size: 20
-      minimum-idle: 5
   # Flyway – disabled here; migration is triggered manually in MybatisConfig
   flyway:
     enabled: false
+
+server:
+  port: 7081
 
 # MyBatis-Plus configuration
 mybatis-plus:
@@ -71,8 +46,3 @@ chat:
 agent:
   # 当前使用的系统提示词文件名，文件须放在 resources/prompts/ 目录下
   system-prompt-file: prompt-V4.txt
-
-logging:
-  level:
-    io.agentscope: DEBUG
-    io.agentscope.examples.dataanalysis: INFO
