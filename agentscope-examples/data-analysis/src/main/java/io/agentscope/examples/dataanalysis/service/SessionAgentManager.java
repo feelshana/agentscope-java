@@ -74,7 +74,9 @@ public class SessionAgentManager {
         OpenAIChatModel.Builder builder =
                 OpenAIChatModel.builder().apiKey(apiKey).modelName("deepseek-chat").stream(false)
                         .formatter(new OpenAIChatFormatter());
-        if (baseUrl != null) builder.baseUrl(baseUrl);
+        if (baseUrl != null) {
+            builder.baseUrl(baseUrl);
+        }
         chatSessionService.setSummaryModel(builder.build());
     }
 
@@ -136,7 +138,9 @@ public class SessionAgentManager {
         OpenAIChatModel.Builder modelBuilder =
                 OpenAIChatModel.builder().apiKey(apiKey).modelName("deepseek-chat").stream(true)
                         .formatter(new OpenAIChatFormatter());
-        if (baseUrl != null) modelBuilder.baseUrl(baseUrl);
+        if (baseUrl != null) {
+            modelBuilder.baseUrl(baseUrl);
+        }
 
         ReActAgent agent =
                 ReActAgent.builder()

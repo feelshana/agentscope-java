@@ -30,7 +30,9 @@ data:
     # Base URL of the NLP intelligent query service (SuperSonic)
     nlp-base-url: ${DATA_API_NLP_BASE_URL:http://localhost:9080}
     # Authorization header value for the NLP intelligent query service
-    nlp-authorization: ${DATA_API_NLP_AUTHORIZATION:eyJhbGciOiJIUzUxMiJ9.eyJ0b2tlbl91c2VyX2VtYWlsIjoiYWRtaW5AeHguY29tIiwidG9rZW5fdXNlcl9pZCI6MSwidG9rZW5fdXNlcl9kaXNwbGF5X25hbWUiOiJhZG1pbiIsInRva2VuX2NyZWF0ZV90aW1lIjoxNzc0NDkzNTM5ODA1LCJ0b2tlbl9pc19hZG1pbiI6MSwidG9rZW5fdXNlcl9uYW1lIjoiYWRtaW4iLCJ0b2tlbl91c2VyX3Bhc3N3b3JkIjoiYzNWd1pYSnpiMjVwWTBCaWFXTnZiZGt0SkpZV3c2QTNyRW1CVVB6Ym4vNkROZVluRCt5M21Bd0RLRU1TM0tWVCIsInN1YiI6ImFkbWluIiwiZXhwIjoxNzc0NTY1NTM5fQ.BldDbgrCLjWj6I1wx5ctDtR2_gRh3C9zrSoTAMXvvX1SiQQVeQPb7FTCs7_pY1UNEL_x5lXWCjnCkwACwQXl4Q}
+    nlp-authorization: ${DATA_API_NLP_AUTHORIZATION:eyJhbGciOiJIUzUxMiJ9.eyJ0b2tlbl91c2VyX2VtYWlsIjoiIiwidG9rZW5fdXNlcl9pZCI6MTUsInRva2VuX3VzZXJfZGlzcGxheV9uYW1lIjoiZGF0YUFuYWx5c2lzIiwidG9rZW5fY3JlYXRlX3RpbWUiOjE3NzQ4NDczODYxODksInRva2VuX3VzZXJfbmFtZSI6ImRhdGFBbmFseXNpcyIsInRva2VuX3VzZXJfcGFzc3dvcmQiOiJjM1Z3WlhKemIyNXBZMEJpYVdOdmJTQzRaSlR3c3ZjSktydjZKNmRQK0NOVzdTMi9TUHIrOHVrUXo3YnM5bU9zIiwic3ViIjoiZGF0YUFuYWx5c2lzIiwiZXhwIjoxMTc3NDg0NzM4Nn0.8SYbGsfNQnlJbfPzVUBavVr9pOuUqo3wwZsvBFhcEUcnQ2ys2ezIetRgqnQnEpK73ESL-vlHs4fFH_iRp9yRjg}
+    # App-Key header value for the NLP intelligent query service
+    nlp-app-key: ${DATA_API_NLP_APP_KEY:SysDbToken:dataAnalysis}
     # 对应4个数据集的agentId，逗号分隔，可随时修改
     nlp-agent-ids: 84,85,86,87
 spring:
@@ -40,7 +42,7 @@ spring:
   datasource:
     url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DB:data_analysis}?useUnicode=true&characterEncoding=UTF-8&createDatabaseIfNotExist=true&serverTimezone=Asia/Shanghai
     username: ${MYSQL_USER:root}
-    password: ${MYSQL_PASSWORD:123456}
+    password: ${MYSQL_PASSWORD:1234}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       maximum-pool-size: 20
