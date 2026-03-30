@@ -1122,7 +1122,7 @@
         }
 
         document.getElementById('chatInput').value = text;
-        sendMessage();
+        sendMessage(true);  // fromConfirm=true: skip confirmDecided reset
     }
 
     function handleInputKey(e) {
@@ -1137,7 +1137,7 @@
         el.style.height = Math.min(el.scrollHeight, 110) + 'px';
     }
 
-    async function sendMessage() {
+    async function sendMessage(fromConfirm) {
         const input = document.getElementById('chatInput');
         const message = input.value.trim();
         if (!message || isProcessing) return;
@@ -1148,7 +1148,8 @@
         input.value = '';
         input.style.height = 'auto';
         setProcessing(true);
-        confirmDecided = false;  // reset on each new conversation turn
+        // Only reset confirmDecided when user sends a fresh message (not from confirm buttons)
+        if (!fromConfirm) confirmDecided = false;
         // Show plan-generating state immediately (before plan SSE arrives)
         planPending = true;
         showPlanPending();
