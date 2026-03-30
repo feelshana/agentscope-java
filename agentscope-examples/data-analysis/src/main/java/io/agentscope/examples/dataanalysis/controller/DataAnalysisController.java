@@ -149,6 +149,16 @@ public class DataAnalysisController {
     }
 
     /**
+     * Called when user clicks 执行 or 不执行 on the confirm buttons.
+     * Tells the backend to suppress further needConfirm=true broadcasts for this plan.
+     */
+    @PostMapping("/plan/confirm")
+    public Map<String, String> confirmPlan() {
+        planService.markUserConfirmed();
+        return Map.of("status", "ok");
+    }
+
+    /**
      * Health check endpoint.
      */
     @GetMapping("/health")
