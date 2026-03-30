@@ -23,13 +23,10 @@ import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.TextBlock;
 import io.agentscope.examples.dataanalysis.client.DataApiClient;
-import io.agentscope.examples.dataanalysis.tool.DataAnalysisTool;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
@@ -103,7 +100,8 @@ public class DataAnalysisAgentService implements InitializingBean {
             return StreamUtils.copyToString(resource.getInputStream(), StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new IllegalStateException(
-                    "无法加载系统提示词文件: " + path
+                    "无法加载系统提示词文件: "
+                            + path
                             + "，请检查 agent.system-prompt-file 配置及 resources/prompts/ 目录",
                     e);
         }

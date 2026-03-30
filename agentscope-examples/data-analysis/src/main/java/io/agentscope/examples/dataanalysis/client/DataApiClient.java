@@ -71,12 +71,13 @@ public class DataApiClient {
             @Value("${data.api.nlp-app-key:}") String nlpAppKey,
             @Value("${data.api.nlp-agent-ids:}") String nlpAgentIdsStr) {
         this.mockEnabled = mockEnabled;
-        this.nlpAgentIds = nlpAgentIdsStr.isBlank()
-                ? new ArrayList<>()
-                : Arrays.stream(nlpAgentIdsStr.split(","))
-                        .map(String::trim)
-                        .filter(s -> !s.isBlank())
-                        .collect(Collectors.toList());
+        this.nlpAgentIds =
+                nlpAgentIdsStr.isBlank()
+                        ? new ArrayList<>()
+                        : Arrays.stream(nlpAgentIdsStr.split(","))
+                                .map(String::trim)
+                                .filter(s -> !s.isBlank())
+                                .collect(Collectors.toList());
         this.webClient =
                 WebClient.builder()
                         .baseUrl(baseUrl)
@@ -118,17 +119,24 @@ public class DataApiClient {
             return mockListDatasets();
         }
         return fetchDatasetsFromNlp()
-                .flatMap(datasets -> {
-                    if (datasets.isEmpty()) {
-                        log.warn("[listDatasets] fetchDatasetsFromNlp returned empty list, falling back to mock datasets");
-                        return mockListDatasets();
-                    }
-                    return Mono.just(datasets);
-                })
-                .onErrorResume(e -> {
-                    log.error("[listDatasets] fetchDatasetsFromNlp failed, falling back to mock datasets", e);
-                    return mockListDatasets();
-                });
+                .flatMap(
+                        datasets -> {
+                            if (datasets.isEmpty()) {
+                                log.warn(
+                                        "[listDatasets] fetchDatasetsFromNlp returned empty list,"
+                                                + " falling back to mock datasets");
+                                return mockListDatasets();
+                            }
+                            return Mono.just(datasets);
+                        })
+                .onErrorResume(
+                        e -> {
+                            log.error(
+                                    "[listDatasets] fetchDatasetsFromNlp failed, falling back to"
+                                            + " mock datasets",
+                                    e);
+                            return mockListDatasets();
+                        });
     }
 
     /**
@@ -152,46 +160,65 @@ public class DataApiClient {
         log.info("[fetchDatasetsFromNlp] Fetching datasets for agentIds={}", agentIdsParam);
         return nlpWebClient
                 .get()
-                .uri(uriBuilder -> uriBuilder
-                        .path("/api/chat/agent/getRedSeaDataSetInfo")
-                        .queryParam("agentIds", agentIdsParam)
-                        .build())
+                .uri(
+                        uriBuilder ->
+                                uriBuilder
+                                        .path("/api/chat/agent/getRedSeaDataSetInfo")
+                                        .queryParam("agentIds", agentIdsParam)
+                                        .build())
                 .retrieve()
                 .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
                 .timeout(Duration.ofSeconds(30))
-                .map(body -> {
-                    Object data = body.get("data");
-                    if (!(data instanceof List<?>)) {
-                        log.warn("[fetchDatasetsFromNlp] Unexpected response structure: {}", body);
-                        return new ArrayList<DatasetInfo>();
-                    }
-                    List<?> items = (List<?>) data;
-                    List<DatasetInfo> result = new ArrayList<>();
-                    for (Object item : items) {
-                        if (!(item instanceof Map<?, ?> itemMap)) {
-                            continue;
-                        }
-                        Object agentId = itemMap.get("agentId");
-                        Object description = itemMap.get("description");
-                        Object agentName = itemMap.get("agentName");
-                        Object dataSetInfo = itemMap.get("dataSetInfo");
-                        if (agentId == null) {
-                            continue;
-                        }
-                        String id = "ds_" + agentId;
-                        String dataSetInfoStr = (description != null ? description : "")
-                                + (dataSetInfo != null ? "\n" + dataSetInfo : "");
-                        result.add(new DatasetInfo(id, agentName.toString(), dataSetInfoStr, agentId.toString()));
-                        log.debug("[fetchDatasetsFromNlp] Loaded dataset: id={}, agentId={}, name={}",
-                                id, agentId, agentName);
-                    }
-                    log.info("[fetchDatasetsFromNlp] Loaded {} datasets", result.size());
-                    return result;
-                })
-                .onErrorResume(e -> {
-                    log.error("[fetchDatasetsFromNlp] Failed to fetch datasets from NLP service", e);
-                    return Mono.just(new ArrayList<>());
-                });
+                .map(
+                        body -> {
+                            Object data = body.get("data");
+                            if (!(data instanceof List<?>)) {
+                                log.warn(
+                                        "[fetchDatasetsFromNlp] Unexpected response structure: {}",
+                                        body);
+                                return new ArrayList<DatasetInfo>();
+                            }
+                            List<?> items = (List<?>) data;
+                            List<DatasetInfo> result = new ArrayList<>();
+                            for (Object item : items) {
+                                if (!(item instanceof Map<?, ?> itemMap)) {
+                                    continue;
+                                }
+                                Object agentId = itemMap.get("agentId");
+                                Object description = itemMap.get("description");
+                                Object agentName = itemMap.get("agentName");
+                                Object dataSetInfo = itemMap.get("dataSetInfo");
+                                if (agentId == null) {
+                                    continue;
+                                }
+                                String id = "ds_" + agentId;
+                                String dataSetInfoStr =
+                                        (description != null ? description : "")
+                                                + (dataSetInfo != null ? "\n" + dataSetInfo : "");
+                                result.add(
+                                        new DatasetInfo(
+                                                id,
+                                                agentName.toString(),
+                                                dataSetInfoStr,
+                                                agentId.toString()));
+                                log.debug(
+                                        "[fetchDatasetsFromNlp] Loaded dataset: id={}, agentId={},"
+                                                + " name={}",
+                                        id,
+                                        agentId,
+                                        agentName);
+                            }
+                            log.info("[fetchDatasetsFromNlp] Loaded {} datasets", result.size());
+                            return result;
+                        })
+                .onErrorResume(
+                        e -> {
+                            log.error(
+                                    "[fetchDatasetsFromNlp] Failed to fetch datasets from NLP"
+                                            + " service",
+                                    e);
+                            return Mono.just(new ArrayList<>());
+                        });
     }
 
     /**
@@ -210,16 +237,30 @@ public class DataApiClient {
         }
         String agentId = datasetAgentIdMap.get(datasetId);
         if (agentId == null) {
-            log.warn("[queryDataset] No agentId registered for datasetId={}, falling back to legacy API", datasetId);
+            log.warn(
+                    "[queryDataset] No agentId registered for datasetId={}, falling back to legacy"
+                            + " API",
+                    datasetId);
             return queryDatasetLegacy(datasetId, question);
         }
         return getOrCreateChatId(datasetId)
                 .flatMap(chatId -> queryByNlp(agentId, chatId, question))
-                .switchIfEmpty(Mono.fromSupplier(() -> {
-                    log.warn("[queryDataset] queryByNlp returned empty Mono, datasetId={}", datasetId);
-                    return "Query returned no result.";
-                }))
-                .doOnError(e -> log.error("[queryDataset] Failed, datasetId={}, question={}", datasetId, question, e))
+                .switchIfEmpty(
+                        Mono.fromSupplier(
+                                () -> {
+                                    log.warn(
+                                            "[queryDataset] queryByNlp returned empty Mono,"
+                                                    + " datasetId={}",
+                                            datasetId);
+                                    return "Query returned no result.";
+                                }))
+                .doOnError(
+                        e ->
+                                log.error(
+                                        "[queryDataset] Failed, datasetId={}, question={}",
+                                        datasetId,
+                                        question,
+                                        e))
                 .onErrorResume(e -> Mono.just("Query failed: " + e.getMessage()));
     }
 
@@ -236,7 +277,10 @@ public class DataApiClient {
         for (DatasetInfo ds : datasets) {
             if (ds.getAgentId() != null && !ds.getAgentId().isBlank()) {
                 datasetAgentIdMap.put(ds.getId(), ds.getAgentId());
-                log.debug("[registerDatasets] Registered agentId={} for datasetId={}", ds.getAgentId(), ds.getId());
+                log.debug(
+                        "[registerDatasets] Registered agentId={} for datasetId={}",
+                        ds.getAgentId(),
+                        ds.getId());
             }
         }
     }
@@ -258,15 +302,22 @@ public class DataApiClient {
     private Mono<String> getOrCreateChatId(String datasetId) {
         String existingChatId = datasetChatIdMap.get(datasetId);
         if (existingChatId != null) {
-            log.debug("[getOrCreateChatId] Reusing chatId={} for datasetId={}", existingChatId, datasetId);
+            log.debug(
+                    "[getOrCreateChatId] Reusing chatId={} for datasetId={}",
+                    existingChatId,
+                    datasetId);
             return Mono.just(existingChatId);
         }
         String agentId = datasetAgentIdMap.get(datasetId);
         return createChat(agentId)
-                .doOnNext(chatId -> {
-                    datasetChatIdMap.put(datasetId, chatId);
-                    log.info("[getOrCreateChatId] Created chatId={} for datasetId={}", chatId, datasetId);
-                });
+                .doOnNext(
+                        chatId -> {
+                            datasetChatIdMap.put(datasetId, chatId);
+                            log.info(
+                                    "[getOrCreateChatId] Created chatId={} for datasetId={}",
+                                    chatId,
+                                    datasetId);
+                        });
     }
 
     /**
@@ -280,23 +331,33 @@ public class DataApiClient {
         log.debug("[createChat] Creating new chat session, agentId={}", agentId);
         return nlpWebClient
                 .post()
-                .uri(uriBuilder -> uriBuilder
-                        .path("/api/chat/manage/save")
-                        .queryParam("chatName", "新问答对话")
-                        .queryParam("agentId", agentId)
-                        .build())
+                .uri(
+                        uriBuilder ->
+                                uriBuilder
+                                        .path("/api/chat/manage/save")
+                                        .queryParam("chatName", "新问答对话")
+                                        .queryParam("agentId", agentId)
+                                        .build())
                 .retrieve()
                 .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
                 .timeout(Duration.ofSeconds(10))
-                .map(body -> {
-                    Object data = body.get("data");
-                    if (data == null) {
-                        throw new RuntimeException("Received null data from /api/chat/manage/save, body=" + body);
-                    }
-                    return data.toString();
-                })
+                .map(
+                        body -> {
+                            Object data = body.get("data");
+                            if (data == null) {
+                                throw new RuntimeException(
+                                        "Received null data from /api/chat/manage/save, body="
+                                                + body);
+                            }
+                            return data.toString();
+                        })
                 .doOnNext(chatId -> log.debug("[createChat] Got chatId={}", chatId))
-                .doOnError(e -> log.error("[createChat] Failed to create chat session, agentId={}", agentId, e));
+                .doOnError(
+                        e ->
+                                log.error(
+                                        "[createChat] Failed to create chat session, agentId={}",
+                                        agentId,
+                                        e));
     }
 
     /**
@@ -319,10 +380,11 @@ public class DataApiClient {
      * @return a string the calling agent can use to either present results or reformulate the question
      */
     private Mono<String> queryByNlp(String agentId, String chatId, String question) {
-        Map<String, Object> requestBody = Map.of(
-                "agentId", Long.parseLong(agentId),
-                "chatId", Long.parseLong(chatId),
-                "queryText", question);
+        Map<String, Object> requestBody =
+                Map.of(
+                        "agentId", Long.parseLong(agentId),
+                        "chatId", Long.parseLong(chatId),
+                        "queryText", question);
         log.info("[queryByNlp] agentId={}, chatId={}, question={}", agentId, chatId, question);
         return nlpWebClient
                 .post()
@@ -332,52 +394,79 @@ public class DataApiClient {
                 .retrieve()
                 .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
                 .timeout(Duration.ofSeconds(60))
-                .switchIfEmpty(Mono.fromSupplier(() -> {
-                    log.warn("[queryByNlp] parseAndExecute returned empty body, agentId={}, question={}", agentId, question);
-                    return Map.<String, Object>of();
-                }))
-                .map(body -> {
-                    Object data = body.get("data");
-                    if (!(data instanceof Map<?, ?> dataMap)) {
-                        log.warn("[queryByNlp] Unexpected response structure: {}", body);
-                        return "No result returned from query service.";
-                    }
+                .switchIfEmpty(
+                        Mono.fromSupplier(
+                                () -> {
+                                    log.warn(
+                                            "[queryByNlp] parseAndExecute returned empty body,"
+                                                    + " agentId={}, question={}",
+                                            agentId,
+                                            question);
+                                    return Map.<String, Object>of();
+                                }))
+                .map(
+                        body -> {
+                            Object data = body.get("data");
+                            if (!(data instanceof Map<?, ?> dataMap)) {
+                                log.warn("[queryByNlp] Unexpected response structure: {}", body);
+                                return "No result returned from query service.";
+                            }
 
-                    // Check whether the query returned any data rows.
-                    // queryResults is List<Map<String,Object>> per QueryResult definition.
-                    Object queryResults = dataMap.get("queryResults");
-                    boolean queryResultsEmpty = (queryResults == null)
-                            || (queryResults instanceof java.util.List<?> list && list.isEmpty());
+                            // Check whether the query returned any data rows.
+                            // queryResults is List<Map<String,Object>> per QueryResult definition.
+                            Object queryResults = dataMap.get("queryResults");
+                            boolean queryResultsEmpty =
+                                    (queryResults == null)
+                                            || (queryResults instanceof java.util.List<?> list
+                                                    && list.isEmpty());
 
-                    if (queryResultsEmpty) {
-                        // No data rows returned – inspect errorMsg first
-                        Object errorMsg = dataMap.get("errorMsg");
-                        if (errorMsg != null && !errorMsg.toString().isBlank()) {
-                            log.warn("[queryByNlp] queryResults is empty and errorMsg is present: {}", errorMsg);
-                            return "查询执行出错，请根据以下错误信息调整问题后重试：" + errorMsg;
-                        }
+                            if (queryResultsEmpty) {
+                                // No data rows returned – inspect errorMsg first
+                                Object errorMsg = dataMap.get("errorMsg");
+                                if (errorMsg != null && !errorMsg.toString().isBlank()) {
+                                    log.warn(
+                                            "[queryByNlp] queryResults is empty and errorMsg is"
+                                                    + " present: {}",
+                                            errorMsg);
+                                    return "查询执行出错，请根据以下错误信息调整问题后重试：" + errorMsg;
+                                }
 
-                        // errorMsg is absent – use textResult as the hint
-                        Object textResult = dataMap.get("textResult");
-                        String textResultStr = (textResult != null) ? textResult.toString() : "";
-                        log.warn("[queryByNlp] queryResults is empty, no errorMsg, textResult={}", textResultStr);
-                        if (!textResultStr.isBlank()) {
-                            return "查询未返回数据，请根据以下提示调整问题后重试：" + textResultStr;
-                        }
-                        return "查询未返回任何数据，请尝试调整问题后重试。";
-                    }
+                                // errorMsg is absent – use textResult as the hint
+                                Object textResult = dataMap.get("textResult");
+                                String textResultStr =
+                                        (textResult != null) ? textResult.toString() : "";
+                                log.warn(
+                                        "[queryByNlp] queryResults is empty, no errorMsg,"
+                                                + " textResult={}",
+                                        textResultStr);
+                                if (!textResultStr.isBlank()) {
+                                    return "查询未返回数据，请根据以下提示调整问题后重试：" + textResultStr;
+                                }
+                                return "查询未返回任何数据，请尝试调整问题后重试。";
+                            }
 
-                    // queryResults is non-empty – return textResult as the final answer
-                    Object textResult = dataMap.get("textResult");
-                    if (textResult != null && !textResult.toString().isBlank()) {
-                        log.debug("[queryByNlp] textResult length={}", textResult.toString().length());
-                        return textResult.toString();
-                    }
-                    // textResult missing but results exist – fall back to raw data for the agent
-                    log.warn("[queryByNlp] queryResults non-empty but textResult is blank, returning raw queryResults");
-                    return queryResults.toString();
-                })
-                .doOnError(e -> log.error("[queryByNlp] Failed, agentId={}, question={}", agentId, question, e));
+                            // queryResults is non-empty – return textResult as the final answer
+                            Object textResult = dataMap.get("textResult");
+                            if (textResult != null && !textResult.toString().isBlank()) {
+                                log.debug(
+                                        "[queryByNlp] textResult length={}",
+                                        textResult.toString().length());
+                                return textResult.toString();
+                            }
+                            // textResult missing but results exist – fall back to raw data for the
+                            // agent
+                            log.warn(
+                                    "[queryByNlp] queryResults non-empty but textResult is blank,"
+                                            + " returning raw queryResults");
+                            return queryResults.toString();
+                        })
+                .doOnError(
+                        e ->
+                                log.error(
+                                        "[queryByNlp] Failed, agentId={}, question={}",
+                                        agentId,
+                                        question,
+                                        e));
     }
 
     /**

@@ -82,6 +82,12 @@ public class DatasetInfo {
 
     @Override
     public String toString() {
-        return "DatasetInfo{id='" + id + "', description='" + description + "', agentId='" + agentId + "'}";
+        return "DatasetInfo{id='"
+                + id
+                + "', description='"
+                + description
+                + "', agentId='"
+                + agentId
+                + "'}";
     }
 }
