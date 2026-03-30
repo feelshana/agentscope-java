@@ -147,10 +147,11 @@
         }
         .welcome-avatar {
             width: 46px; height: 46px; flex-shrink: 0;
-            background: linear-gradient(135deg, #4f6ef7 0%, #3451d1 100%);
+            background: #fff;
             border-radius: 14px;
             display: flex; align-items: center; justify-content: center;
-            box-shadow: 0 4px 14px rgba(79,110,247,0.35);
+            box-shadow: 0 4px 14px rgba(79,110,247,0.2);
+            border: 1px solid rgba(79,110,247,0.12);
         }
         .welcome-banner-text { flex: 1; min-width: 0; padding-top: 2px; }
         .welcome-banner-title {
@@ -555,22 +556,23 @@
 
         /* ══════════ Confirm Plan Actions ══════════ */
         .confirm-actions {
-            display: flex; gap: 10px; margin-top: 12px;
+            display: flex; flex-direction: column; gap: 8px; margin-top: 14px;
         }
         .confirm-btn {
-            flex: 1; padding: 10px 0;
+            width: 100%; padding: 13px 0;
             border-radius: var(--radius-md);
-            font-size: 0.88rem; font-weight: 600;
+            font-size: 1rem; font-weight: 600;
             cursor: pointer; border: none;
             font-family: inherit; transition: all 0.18s;
             -webkit-appearance: none;
+            display: flex; align-items: center; justify-content: center; gap: 7px;
         }
         .confirm-btn.confirm-yes {
             background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
             color: #fff;
-            box-shadow: 0 3px 12px var(--primary-glow);
+            box-shadow: 0 4px 14px var(--primary-glow);
         }
-        .confirm-btn.confirm-yes:active { opacity: 0.85; transform: scale(0.97); }
+        .confirm-btn.confirm-yes:active { opacity: 0.85; transform: scale(0.98); }
         .confirm-btn.confirm-no {
             background: var(--surface2);
             color: var(--text-sub);
@@ -578,6 +580,7 @@
         }
         .confirm-btn.confirm-no:active { background: var(--surface3); }
         .confirm-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
 
         /* ══════════ Chart ══════════ */
         .chart-wrapper {
@@ -756,7 +759,7 @@
     <div class="header">
         <h1>
             <div class="header-logo">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 17l3.5-6 3 3.5 2.5-5L18 17" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="7" r="2" fill="#fff"/></svg>
+                <svg width="18" height="18" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><defs><linearGradient x1="50%" y1="76.9577359%" x2="31.5960253%" y2="0%" id="lg1"><stop stop-color="#2E58F7" offset="0%"></stop><stop stop-color="#00CBFC" offset="100%"></stop></linearGradient></defs><g stroke="none" stroke-width="1" fill="none" fill-rule="evenodd"><rect stroke="#FFFFFF" fill="#FFFFFF" x="0.5" y="0.5" width="21" height="21" rx="4"></rect><g transform="translate(5, 3)" fill="url(#lg1)"><path d="M1,5.96733911 L4.99803067,9.49317142 L4.7053422,13.8950576 L3.21049157,14.7972052 C2.98746288,14.9255039 2.73408116,15 2.48069944,15 C2.22731772,15 1.97261632,14.9351608 1.74034972,14.7972052 C1.28332302,14.5220301 1.00118988,14.0131305 1,13.4617944 L1,5.96733911 Z M9.06715829,4.73782976 L12.2596503,6.6647187 C12.7162652,6.94063005 13,7.44830686 13,8.00012956 C13,8.55195227 12.7162652,9.06100861 12.26097,9.33691996 L6.34815097,12.9037135 L6.59139638,9.24400805 L9.06715829,4.73782976 Z M3.21049157,1.20305396 L7.70296295,3.91449084 L5.62743719,7.69252048 L1.0252031,3.6343975 L1,3.66532747 L1,2.53846475 C1.00225816,1.98906035 1.28343214,1.48223378 1.73847879,1.20732922 C2.19352544,0.932424663 2.75399068,0.930796866 3.21049157,1.20305396 Z"></path></g></g></svg>
             </div>
             <span>红海App智能助手</span>
         </h1>
@@ -778,7 +781,7 @@
                 <div class="welcome-card">
                     <div class="welcome-banner">
                         <div class="welcome-avatar">
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6 17l3.5-6 3 3.5 2.5-5L18 17" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="7" r="2" fill="#fff"/></svg>
+                            <svg width="26" height="26" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><defs><linearGradient x1="50%" y1="76.9577359%" x2="31.5960253%" y2="0%" id="lg2"><stop stop-color="#2E58F7" offset="0%"></stop><stop stop-color="#00CBFC" offset="100%"></stop></linearGradient></defs><g stroke="none" stroke-width="1" fill="none" fill-rule="evenodd"><rect stroke="#FFFFFF" fill="#FFFFFF" x="0.5" y="0.5" width="21" height="21" rx="4"></rect><g transform="translate(5, 3)" fill="url(#lg2)"><path d="M1,5.96733911 L4.99803067,9.49317142 L4.7053422,13.8950576 L3.21049157,14.7972052 C2.98746288,14.9255039 2.73408116,15 2.48069944,15 C2.22731772,15 1.97261632,14.9351608 1.74034972,14.7972052 C1.28332302,14.5220301 1.00118988,14.0131305 1,13.4617944 L1,5.96733911 Z M9.06715829,4.73782976 L12.2596503,6.6647187 C12.7162652,6.94063005 13,7.44830686 13,8.00012956 C13,8.55195227 12.7162652,9.06100861 12.26097,9.33691996 L6.34815097,12.9037135 L6.59139638,9.24400805 L9.06715829,4.73782976 Z M3.21049157,1.20305396 L7.70296295,3.91449084 L5.62743719,7.69252048 L1.0252031,3.6343975 L1,3.66532747 L1,2.53846475 C1.00225816,1.98906035 1.28343214,1.48223378 1.73847879,1.20732922 C2.19352544,0.932424663 2.75399068,0.930796866 3.21049157,1.20305396 Z"></path></g></g></svg>
                         </div>
                         <div class="welcome-banner-text">
                             <div class="welcome-banner-title">你好！有什么可以帮你？</div>
@@ -889,6 +892,7 @@
     let hasPlan = false;
     let userCollapsed = false;
     let planPending = false;
+    let confirmDecided = false;  // true after user clicks 执行/不执行; prevents re-injection
 
     // ─── User identity from URL param ───
     const urlParams = new URLSearchParams(window.location.search);
@@ -1042,7 +1046,7 @@
                 <div class="welcome-card">
                     <div class="welcome-banner">
                         <div class="welcome-avatar">
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6 17l3.5-6 3 3.5 2.5-5L18 17" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="7" r="2" fill="#fff"/></svg>
+                            <svg width="26" height="26" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><defs><linearGradient x1="50%" y1="76.9577359%" x2="31.5960253%" y2="0%" id="lg2"><stop stop-color="#2E58F7" offset="0%"></stop><stop stop-color="#00CBFC" offset="100%"></stop></linearGradient></defs><g stroke="none" stroke-width="1" fill="none" fill-rule="evenodd"><rect stroke="#FFFFFF" fill="#FFFFFF" x="0.5" y="0.5" width="21" height="21" rx="4"></rect><g transform="translate(5, 3)" fill="url(#lg2)"><path d="M1,5.96733911 L4.99803067,9.49317142 L4.7053422,13.8950576 L3.21049157,14.7972052 C2.98746288,14.9255039 2.73408116,15 2.48069944,15 C2.22731772,15 1.97261632,14.9351608 1.74034972,14.7972052 C1.28332302,14.5220301 1.00118988,14.0131305 1,13.4617944 L1,5.96733911 Z M9.06715829,4.73782976 L12.2596503,6.6647187 C12.7162652,6.94063005 13,7.44830686 13,8.00012956 C13,8.55195227 12.7162652,9.06100861 12.26097,9.33691996 L6.34815097,12.9037135 L6.59139638,9.24400805 L9.06715829,4.73782976 Z M3.21049157,1.20305396 L7.70296295,3.91449084 L5.62743719,7.69252048 L1.0252031,3.6343975 L1,3.66532747 L1,2.53846475 C1.00225816,1.98906035 1.28343214,1.48223378 1.73847879,1.20732922 C2.19352544,0.932424663 2.75399068,0.930796866 3.21049157,1.20305396 Z"></path></g></g></svg>
                         </div>
                         <div class="welcome-banner-text">
                             <div class="welcome-banner-title">你好！有什么可以帮你？</div>
@@ -1128,13 +1132,18 @@
     }
     // Called when user clicks 执行 / 不执行 confirm buttons
     function sendConfirm(btn, text) {
-        // Disable both buttons in the same confirm-actions container
+        // Disable both buttons and mark decision taken (prevents re-injection on next plan SSE)
+        confirmDecided = true;
         const actions = btn.closest('.confirm-actions');
         if (actions) {
             actions.querySelectorAll('.confirm-btn').forEach(b => b.disabled = true);
         }
+
+        // Notify backend to suppress further needConfirm=true broadcasts for this plan
+        fetch('/api/plan/confirm', { method: 'POST' }).catch(() => {});
+
         document.getElementById('chatInput').value = text;
-        sendMessage();
+        sendMessage(true);  // fromConfirm=true: skip confirmDecided reset
     }
 
     function handleInputKey(e) {
@@ -1149,7 +1158,7 @@
         el.style.height = Math.min(el.scrollHeight, 110) + 'px';
     }
 
-    async function sendMessage() {
+    async function sendMessage(fromConfirm) {
         const input = document.getElementById('chatInput');
         const message = input.value.trim();
         if (!message || isProcessing) return;
@@ -1160,6 +1169,8 @@
         input.value = '';
         input.style.height = 'auto';
         setProcessing(true);
+        // Only reset confirmDecided when user sends a fresh message (not from confirm buttons)
+        if (!fromConfirm) confirmDecided = false;
         // Show plan-generating state immediately (before plan SSE arrives)
         planPending = true;
         showPlanPending();
@@ -1294,13 +1305,15 @@
             content.textContent = textPart || fullText;
         }
 
-        // Render confirm-plan action buttons
-        if (hasConfirm) {
+        // Render confirm-plan action buttons (fallback: triggered by LLM token)
+        // Primary injection happens via plan SSE (renderPlan); this is the backup path.
+        // Skip if user already made a decision (confirmDecided) to avoid re-injection.
+        if (hasConfirm && !confirmDecided && !content.querySelector('.confirm-actions')) {
             const actionsDiv = document.createElement('div');
             actionsDiv.className = 'confirm-actions';
             actionsDiv.innerHTML = `
-                <button class="confirm-btn confirm-yes" onclick="sendConfirm(this, '执行')">✅ 执行计划</button>
-                <button class="confirm-btn confirm-no"  onclick="sendConfirm(this, '不执行')">❌ 不执行</button>
+                <button class="confirm-btn confirm-yes" onclick="sendConfirm(this, '\u6267\u884c')">✅ 执行计划</button>
+                <button class="confirm-btn confirm-no"  onclick="sendConfirm(this, '\u4e0d\u6267\u884c')">❌ 不执行</button>
             `;
             content.appendChild(actionsDiv);
         }
@@ -1542,6 +1555,27 @@
         if (planPending && total > 0) {
             planPending = false;
             setPlanGenerating(false);
+        }
+
+        // ── Confirm buttons: injected by plan SSE, not by LLM token (reliable) ──
+        // When the plan is freshly created (all subtasks TODO) and confirmation is needed,
+        // inject the action buttons into the last assistant bubble.
+        const needConfirm = plan.needConfirm === true;
+        if (needConfirm && !confirmDecided) {
+            const msgs = document.getElementById('chatMessages');
+            // Find the last assistant message bubble
+            const allBubbles = msgs ? msgs.querySelectorAll('.message.assistant .message-content') : [];
+            const lastBubble = allBubbles.length > 0 ? allBubbles[allBubbles.length - 1] : null;
+            if (lastBubble && !lastBubble.querySelector('.confirm-actions')) {
+                const actionsDiv = document.createElement('div');
+                actionsDiv.className = 'confirm-actions';
+                actionsDiv.innerHTML = `
+                    <button class="confirm-btn confirm-yes" onclick="sendConfirm(this, '\u6267\u884c')">✅ 执行计划</button>
+                    <button class="confirm-btn confirm-no"  onclick="sendConfirm(this, '\u4e0d\u6267\u884c')">❌ 不执行</button>
+                `;
+                lastBubble.appendChild(actionsDiv);
+                if (msgs) msgs.scrollTop = 99999;
+            }
         }
 
         // ── Hint strip ──

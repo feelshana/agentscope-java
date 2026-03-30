@@ -128,9 +128,8 @@ public class SessionAgentManager {
         Toolkit toolkit = new Toolkit();
         toolkit.registerTool(new DataAnalysisTool(dataApiClient));
 
-        PlanNotebook planNotebook = PlanNotebook.builder()
-                .planToHint(new ConfirmPlanToHint())
-                .build();
+        PlanNotebook planNotebook =
+                PlanNotebook.builder().planToHint(new ConfirmPlanToHint()).build();
         // Broadcast plan changes through the global analysisPlanService (for SSE stream)
         planNotebook.addChangeHook(
                 "planBroadcast", (nb, plan) -> analysisPlanService.broadcastPlanChange());
