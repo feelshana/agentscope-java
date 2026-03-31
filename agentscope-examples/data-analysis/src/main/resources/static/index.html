@@ -131,6 +131,20 @@
         }
         .header-icon-btn:active { background: rgba(255,255,255,0.28); border-color: rgba(255,255,255,0.5); }
         .header-icon-btn svg { width: 18px; height: 18px; }
+        /* 历史对话按钮：带文字，更醒目 */
+        .header-history-btn {
+            height: 36px; padding: 0 12px; gap: 6px;
+            background: rgba(255,255,255,0.18);
+            border: 1px solid rgba(255,255,255,0.38);
+            border-radius: 10px; color: rgba(255,255,255,0.95);
+            cursor: pointer; transition: all 0.2s;
+            display: flex; align-items: center; justify-content: center;
+            -webkit-appearance: none; font-family: inherit;
+            backdrop-filter: blur(4px);
+            font-size: 0.82rem; font-weight: 600; white-space: nowrap;
+        }
+        .header-history-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+        .header-history-btn:active { background: rgba(255,255,255,0.32); border-color: rgba(255,255,255,0.6); }
         /* Remove old text-button styles */
         .history-btn, .reset-btn, .status-badge { display: none !important; }
 
@@ -892,8 +906,9 @@
             <button class="header-icon-btn" onclick="resetAll()" title="新建对话">
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
             </button>
-            <button class="header-icon-btn" onclick="openHistorySidebar()" title="历史对话">
+            <button class="header-history-btn" onclick="openHistorySidebar()" title="历史对话">
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v5l3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                历史对话
             </button>
         </div>
     </div>
@@ -1037,6 +1052,7 @@
     let userCollapsed = false;
     let planPending = false;
     let confirmDecided = false;  // true after user clicks 执行/不执行; prevents re-injection
+    let confirmExecuted = false; // true only when user clicks 执行（not 不执行）; gates drawer auto-expand
 
     // ─── User identity from URL param ───
     const urlParams = new URLSearchParams(window.location.search);
@@ -1315,6 +1331,8 @@
         if (hintEl)    { hintEl.className = 'drawer-hint'; const _t = hintEl.querySelector('#drawerHintText'); if (_t) _t.textContent = '📋 任务计划已生成，点击查看'; }
         if (progressWrap) { progressWrap.style.display = 'none'; }
         planPending = false;
+        confirmDecided = false;
+        confirmExecuted = false;
         setDrawerHasPlan(false);
         setProcessing(false);
     }
@@ -1436,6 +1454,8 @@
     function sendConfirm(btn, text) {
         // Disable both buttons and mark decision taken (prevents re-injection on next plan SSE)
         confirmDecided = true;
+        // 只有点「执行」才允许面板在子任务开始时自动展开
+        confirmExecuted = (text === '执行');
         const actions = btn.closest('.confirm-actions');
         if (actions) {
             actions.querySelectorAll('.confirm-btn').forEach(b => b.disabled = true);
@@ -1915,11 +1935,18 @@
         // ── Show drawer ──
         setDrawerHasPlan(true);
         // 展开策略：
-        // · needConfirm=true（计划完整生成，等待用户确认）→ 不弹出，静默显示 hint strip，让用户看气泡按钮
+        // · needConfirm=true（计划完整生成，等待用户确认）→ 强制收起面板（无论当前是否展开），让用户看气泡按钮
         // · allDone（所有子任务完成）→ 若面板展开则静默收起，用户回到主界面等待分析报告
-        // · 子任务执行中 → 正常展开（用户已确认，userCollapsed 已被重置）
+        // · 子任务执行中 → 仅当用户已点「执行」（confirmExecuted=true）且未手动收起时才展开
         // · 用户手动收起过（userCollapsed=true）→ 不强制展开
-        if (allDone) {
+        if (needConfirm) {
+            // 强制收起，不受 drawerOpen 状态限制
+            drawerOpen = false;
+            const _d = document.getElementById('planDrawer');
+            if (_d) _d.classList.remove('expanded');
+            document.getElementById('drawerOverlay').classList.remove('active');
+            syncDrawerPadding();
+        } else if (allDone) {
             // 静默收起（不设 userCollapsed），hint strip 变绿提示完成，用户可随时点开查看
             if (drawerOpen) {
                 drawerOpen = false;
@@ -1928,9 +1955,7 @@
                 document.getElementById('drawerOverlay').classList.remove('active');
                 syncDrawerPadding();
             }
-        } else if (needConfirm) {
-            // 不展开，只让 hint strip 出现，等用户点击「执行」后再展开
-        } else if (!drawerOpen && !userCollapsed) {
+        } else if (!drawerOpen && !userCollapsed && confirmExecuted) {
             expandDrawer();
         }
 
