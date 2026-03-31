@@ -46,7 +46,7 @@
             --bubble-ai-bg: #ffffff;
             /* Sizes */
             --drawer-handle-h: 52px;
-            --drawer-hint-h: 48px;
+            --drawer-hint-h: 40px;
             --safe-bottom: env(safe-area-inset-bottom, 0px);
             --radius-lg: 18px;
             --radius-md: 12px;
@@ -384,58 +384,57 @@
         }
         .plan-drawer.expanded { transform: translateY(0); }
 
-        /* ══════════ Bottom Drawer hint strip ══════════ */
         .drawer-hint {
-            height: 48px;
+            height: var(--drawer-hint-h);
             flex-shrink: 0;
             display: flex; align-items: center; justify-content: center;
-            gap: 8px;
+            gap: 7px;
             cursor: pointer; user-select: none;
-            font-size: 0.85rem; font-weight: 700;
+            font-size: 0.78rem; font-weight: 600;
             border-radius: 20px 20px 0 0;
-            transition: background 0.3s, border-color 0.3s, color 0.3s;
-            background: linear-gradient(90deg, rgba(79,110,247,0.1), rgba(129,140,248,0.06));
-            border-top: 2px solid rgba(79,110,247,0.3);
+            transition: all 0.4s ease;
+            background: linear-gradient(90deg, rgba(99,102,241,0.07), rgba(129,140,248,0.04));
+            border-top: 1px solid rgba(99,102,241,0.2);
             color: var(--primary);
-            letter-spacing: 0.01em;
+            letter-spacing: 0.02em;
+            position: relative;
         }
-        .drawer-hint:active { filter: brightness(0.93); }
+        .drawer-hint:active { filter: brightness(1.2); }
+        /* 向上箭头：展开提示 */
+        .drawer-hint-arrow {
+            display: flex; align-items: center; justify-content: center;
+            width: 18px; height: 18px; flex-shrink: 0;
+            opacity: 0.7;
+            transition: transform 0.25s ease;
+        }
+        .drawer-hint-arrow svg { width: 14px; height: 14px; }
+        /* 收起时 drawer-handle 的「收起」按钮提示文字颜色淡化 */
+        .drawer-handle-collapse-tip {
+            font-size: 0.68rem; color: var(--text-hint); margin-left: 4px; font-weight: 400;
+        }
 
         .drawer-hint.hint-running {
-            background: linear-gradient(90deg, rgba(251,146,60,0.18), rgba(251,191,36,0.10));
-            border-top: 2px solid rgba(251,146,60,0.7);
-            color: #ea7a14;
-            animation: hintStripBlink 1s ease-in-out infinite;
+            background: linear-gradient(90deg, rgba(251,146,60,0.12), rgba(251,191,36,0.08));
+            border-top-color: rgba(251,146,60,0.4);
+            color: #fb923c;
+            animation: hintStripBlink 1.2s ease-in-out infinite;
         }
         @keyframes hintStripBlink {
             0%,100% { opacity: 1; }
-            50%      { opacity: 0.55; }
+            50%      { opacity: 0.5; }
         }
         .drawer-hint.hint-done {
-            background: linear-gradient(90deg, rgba(16,185,129,0.15), rgba(52,211,153,0.08));
-            border-top: 2px solid rgba(16,185,129,0.6);
-            color: #0d9e6a;
+            background: linear-gradient(90deg, rgba(52,211,153,0.1), rgba(16,185,129,0.06));
+            border-top-color: rgba(52,211,153,0.4);
+            color: #34d399;
             animation: none;
         }
         .drawer-hint.hint-generating {
-            background: linear-gradient(90deg, rgba(99,102,241,0.12), rgba(129,140,248,0.07));
-            border-top: 2px solid rgba(99,102,241,0.5);
+            background: linear-gradient(90deg, rgba(99,102,241,0.08), rgba(129,140,248,0.05));
+            border-top-color: var(--border-active);
             color: var(--primary);
-            animation: hintStripBlink 1.1s ease-in-out infinite;
+            animation: hintStripBlink 1s ease-in-out infinite;
         }
-
-        .drawer-hint-dot {
-            width: 6px; height: 6px; border-radius: 50%;
-            background: currentColor;
-            animation: hintDotPulse 1.6s ease-in-out infinite;
-        }
-        .hint-done .drawer-hint-dot { animation: none; }
-        .hint-running .drawer-hint-dot { animation: none; }
-        @keyframes hintDotPulse {
-            0%,100% { opacity: 1; transform: scale(1); }
-            50%      { opacity: 0.2; transform: scale(0.55); }
-        }
-
         .plan-generating-wrap {
             display: flex; flex-direction: column; align-items: center;
             justify-content: center; gap: 14px;
@@ -450,6 +449,16 @@
             animation: spinLoader 0.8s linear infinite;
         }
         .plan-generating-wrap p { line-height: 1.6; text-align: center; }
+        .drawer-hint-dot {
+            width: 5px; height: 5px; border-radius: 50%;
+            background: currentColor;
+            animation: hintDotPulse 1.6s ease-in-out infinite;
+        }
+        .hint-running .drawer-hint-dot, .hint-done .drawer-hint-dot { animation: none; }
+        @keyframes hintDotPulse {
+            0%,100% { opacity: 1; transform: scale(1); }
+            50%      { opacity: 0.25; transform: scale(0.6); }
+        }
 
         .drawer-handle {
             height: var(--drawer-handle-h);
@@ -499,19 +508,18 @@
         }
 
         .plan-done-banner {
-            display: flex; align-items: center; gap: 10px;
-            background: linear-gradient(90deg, rgba(16,185,129,0.12), rgba(52,211,153,0.06));
-            border: 1.5px solid rgba(16,185,129,0.35);
+            display: flex; align-items: center; gap: 8px;
+            background: rgba(52,211,153,0.08);
+            border: 1px solid rgba(52,211,153,0.2);
             border-radius: var(--radius-md);
-            padding: 13px 16px; margin-bottom: 12px;
-            font-size: 0.9rem; font-weight: 700; color: #0d9e6a;
+            padding: 10px 14px; margin-bottom: 10px;
+            font-size: 0.83rem; font-weight: 600; color: #34d399;
         }
         .plan-done-check {
             display: flex; align-items: center; justify-content: center;
-            width: 24px; height: 24px; flex-shrink: 0;
-            background: #10b981; color: #ffffff;
-            border-radius: 50%; font-size: 0.8rem;
-            box-shadow: 0 2px 8px rgba(16,185,129,0.4);
+            width: 20px; height: 20px; flex-shrink: 0;
+            background: #34d399; color: #ffffff;
+            border-radius: 50%; font-size: 0.72rem;
         }
 
         .empty-plan { text-align: center; padding: 36px 20px; color: var(--text-hint); }
@@ -519,80 +527,68 @@
         .empty-plan p { font-size: 0.8rem; line-height: 1.7; }
 
         .plan-card {
-            background: var(--surface);
-            border-radius: 12px;
-            padding: 14px 16px; margin-bottom: 14px;
-            border: 1.5px solid rgba(79,110,247,0.15);
-            box-shadow: 0 2px 10px rgba(79,110,247,0.07);
+            background: var(--surface2);
+            border-radius: 10px;
+            padding: 12px 14px; margin-bottom: 12px;
+            border: 1px solid var(--border);
         }
-        .plan-card-title { font-weight: 700; color: var(--text); margin-bottom: 5px; font-size: 0.95rem; }
-        .plan-card-desc { font-size: 0.78rem; color: var(--text-sub); margin-bottom: 10px; line-height: 1.5; }
+        .plan-card-title { font-weight: 600; color: var(--text); margin-bottom: 4px; font-size: 0.88rem; }
+        .plan-card-desc { font-size: 0.76rem; color: var(--text-sub); margin-bottom: 8px; }
         .plan-badge {
-            display: inline-block; padding: 3px 10px;
-            border-radius: 10px; font-size: 0.7rem; font-weight: 700;
+            display: inline-block; padding: 2px 9px;
+            border-radius: 10px; font-size: 0.67rem; font-weight: 600;
         }
-        .plan-badge.todo { background: rgba(0,0,0,0.05); color: var(--text-sub); }
-        .plan-badge.in_progress { background: rgba(99,102,241,0.12); color: var(--primary); }
-        .plan-badge.done { background: rgba(16,185,129,0.13); color: #0d9e6a; }
+        .plan-badge.todo { background: rgba(0,0,0,0.04); color: var(--text-sub); }
+        .plan-badge.in_progress { background: rgba(99,102,241,0.1); color: var(--primary); }
+        .plan-badge.done { background: rgba(52,211,153,0.12); color: #34d399; }
         .plan-badge.abandoned { background: rgba(248,113,113,0.12); color: #f87171; }
 
-        .progress-bar-wrap { background: rgba(79,110,247,0.1); border-radius: 4px; height: 6px; margin: 12px 0 4px; overflow: hidden; }
+        .progress-bar-wrap { background: var(--border); border-radius: 2px; height: 4px; margin: 10px 0 3px; }
         .progress-bar-fill {
-            height: 100%; border-radius: 4px;
-            background: linear-gradient(90deg, #4f6ef7, #34d399);
+            height: 100%; border-radius: 2px;
+            background: linear-gradient(90deg, var(--primary), #818cf8);
             transition: width 0.5s ease;
         }
-        .progress-text { font-size: 0.72rem; color: var(--text-sub); text-align: right; font-weight: 600; }
+        .progress-text { font-size: 0.7rem; color: var(--text-hint); text-align: right; }
 
         .subtasks-label {
-            font-size: 0.7rem; font-weight: 800; color: var(--text-hint);
-            text-transform: uppercase; letter-spacing: 0.1em;
-            margin-bottom: 10px;
+            font-size: 0.67rem; font-weight: 700; color: var(--text-hint);
+            text-transform: uppercase; letter-spacing: 0.08em;
+            margin-bottom: 8px;
         }
         .subtask-item {
             background: var(--surface);
-            border-radius: 10px; padding: 12px 14px; margin-bottom: 9px;
-            border: 1.5px solid var(--border);
-            display: flex; align-items: flex-start; gap: 11px;
-            transition: border-color 0.2s, box-shadow 0.2s;
-        }
-        .subtask-item.state-in_progress {
-            border-color: rgba(99,102,241,0.4);
-            background: rgba(99,102,241,0.03);
-            box-shadow: 0 2px 10px rgba(99,102,241,0.1);
-        }
-        .subtask-item.state-done {
-            border-color: rgba(16,185,129,0.25);
-            background: rgba(16,185,129,0.03);
+            border-radius: 8px; padding: 10px 12px; margin-bottom: 7px;
+            border: 1px solid var(--border);
+            display: flex; align-items: flex-start; gap: 9px;
         }
         .subtask-num {
-            width: 22px; height: 22px; flex-shrink: 0;
+            width: 20px; height: 20px; flex-shrink: 0;
             display: flex; align-items: center; justify-content: center;
-            font-size: 0.68rem; font-weight: 800;
-            background: var(--surface2); color: var(--text-sub); border-radius: 6px;
+            font-size: 0.66rem; font-weight: 700;
+            background: var(--surface2); color: var(--text-sub); border-radius: 4px;
             border: 1px solid var(--border);
         }
         .subtask-icon {
-            width: 22px; height: 22px; flex-shrink: 0;
+            width: 20px; height: 20px; flex-shrink: 0;
             display: flex; align-items: center; justify-content: center;
-            border-radius: 50%; font-size: 0.78rem;
+            border-radius: 50%; font-size: 0.76rem;
         }
-        .subtask-icon.todo { background: rgba(0,0,0,0.05); color: var(--text-hint); }
-        .subtask-icon.in_progress { background: rgba(99,102,241,0.15); position: relative; overflow: visible; }
-        .subtask-icon.done { background: rgba(16,185,129,0.15); color: #10b981; font-size: 0.85rem; }
+        .subtask-icon.todo { background: rgba(0,0,0,0.04); color: var(--text-hint); }
+        .subtask-icon.in_progress { background: rgba(99,102,241,0.1); position: relative; overflow: visible; }
+        .subtask-icon.done { background: rgba(52,211,153,0.12); color: #34d399; }
         .subtask-icon.abandoned { background: rgba(248,113,113,0.1); color: #f87171; }
         .subtask-icon.in_progress::after {
-            content: ''; position: absolute; inset: -4px; border-radius: 50%;
-            border: 2.5px solid transparent;
+            content: ''; position: absolute; inset: -3px; border-radius: 50%;
+            border: 2px solid transparent;
             border-top-color: var(--primary); border-right-color: var(--primary);
-            animation: spinLoader 0.75s linear infinite;
+            animation: spinLoader 0.8s linear infinite;
         }
         @keyframes spinLoader { to { transform: rotate(360deg); } }
         .subtask-body { flex: 1; min-width: 0; }
-        .subtask-name { font-weight: 600; color: var(--text); font-size: 0.87rem; margin-bottom: 3px; line-height: 1.4; }
-        .subtask-name.running { color: var(--primary); }
-        .subtask-desc { font-size: 0.74rem; color: var(--text-sub); line-height: 1.5; }
-        .subtask-outcome { font-size: 0.74rem; color: #10b981; margin-top: 4px; font-weight: 500; }
+        .subtask-name { font-weight: 500; color: var(--text); font-size: 0.83rem; margin-bottom: 2px; }
+        .subtask-desc { font-size: 0.72rem; color: var(--text-sub); }
+        .subtask-outcome { font-size: 0.72rem; color: #34d399; margin-top: 3px; font-style: italic; }
 
         /* ══════════ Confirm Plan Actions ══════════ */
         .confirm-actions {
@@ -890,16 +886,20 @@
 
     <!-- Hint strip (visible when has-plan & not expanded) -->
     <div class="drawer-hint" id="drawerHint" onclick="expandDrawer()">
+        <span class="drawer-hint-arrow" id="drawerHintArrow">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 15l6-6 6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
         <span class="drawer-hint-dot"></span>
-        📋 任务计划已生成，点击查看
+        <span id="drawerHintText">📋 任务计划已生成，点击查看</span>
         <span class="drawer-hint-dot"></span>
     </div>
 
     <!-- Full handle (visible when expanded) -->
-    <div class="drawer-handle" id="drawerHandle" onclick="collapseDrawer()" style="cursor:pointer">
+    <div class="drawer-handle" id="drawerHandle" onclick="collapseDrawer()" style="cursor:pointer" title="点击收起面板">
         <div class="drawer-handle-left">
             <span class="drawer-icon">📋</span>
             <span class="drawer-title">任务计划面板</span>
+            <span class="drawer-handle-collapse-tip">（点击收起）</span>
         </div>
         <div class="drawer-progress-wrap" id="drawerProgressWrap" style="display:none">
             <div class="drawer-progress-bar">
@@ -1060,7 +1060,7 @@
         const progressWrap = document.getElementById('drawerProgressWrap');
         if (emptyEl)   { emptyEl.style.display = 'block'; }
         if (contentEl) { contentEl.style.display = 'none'; contentEl.innerHTML = ''; }
-        if (hintEl)    { hintEl.className = 'drawer-hint'; hintEl.innerHTML = '<span class="drawer-hint-dot"></span> 📋 任务计划已生成，点击查看 <span class="drawer-hint-dot"></span>'; }
+        if (hintEl)    { hintEl.className = 'drawer-hint'; const _t = hintEl.querySelector('#drawerHintText'); if (_t) _t.textContent = '📋 任务计划已生成，点击查看'; }
         if (progressWrap) { progressWrap.style.display = 'none'; }
         planPending = false;
         setDrawerHasPlan(false);
@@ -1117,7 +1117,7 @@
         const inputContainer = document.getElementById('chatInputContainer');
         if (!inputContainer) return;
         if (hasPlan && !drawerOpen) {
-            // hint strip visible: --drawer-hint-h = 48px
+            // hint strip visible: --drawer-hint-h = 40px
             inputContainer.style.paddingBottom = 'calc(10px + var(--drawer-hint-h) + var(--safe-bottom))';
         } else {
             inputContainer.style.paddingBottom = 'calc(10px + var(--safe-bottom))';
@@ -1184,6 +1184,9 @@
 
         // Notify backend to suppress further needConfirm=true broadcasts for this plan
         fetch('/api/plan/confirm', { method: 'POST' }).catch(() => {});
+
+        // 重置 userCollapsed，后续子任务开始执行时面板可自动展开
+        userCollapsed = false;
 
         document.getElementById('chatInput').value = text;
         sendMessage(true);  // fromConfirm=true: skip confirmDecided reset
@@ -1536,7 +1539,8 @@
 
         hintEl.classList.add('hint-generating');
         hintEl.classList.remove('hint-running', 'hint-done');
-        hintEl.innerHTML = `<span class="drawer-hint-dot"></span> 🔄 正在生成任务计划… <span class="drawer-hint-dot"></span>`;
+        const _hintTxtPending = hintEl.querySelector('#drawerHintText');
+        if (_hintTxtPending) _hintTxtPending.textContent = '🔄 正在生成任务计划…';
 
         emptyEl.style.display = 'none';
         contentEl.style.display = 'block';
@@ -1625,19 +1629,30 @@
         hintEl.classList.toggle('hint-generating', planPending && total === 0);
         hintEl.classList.toggle('hint-running',    isRunning && !allDone && !planPending);
         hintEl.classList.toggle('hint-done',       allDone);
+        const hintTextEl = document.getElementById('drawerHintText');
         if (allDone) {
-            hintEl.innerHTML = `<span class="drawer-hint-dot"></span> ✅ 任务查询已完成，点击查看 <span class="drawer-hint-dot"></span>`;
+            if (hintTextEl) hintTextEl.textContent = '✅ 任务查询已完成，点击查看';
         } else if (planPending && total === 0) {
-            hintEl.innerHTML = `<span class="drawer-hint-dot"></span> 🔄 正在生成任务计划… <span class="drawer-hint-dot"></span>`;
+            if (hintTextEl) hintTextEl.textContent = '🔄 正在生成任务计划…';
         } else if (isRunning) {
-            hintEl.innerHTML = `<span class="drawer-hint-dot"></span> ⚙️ 子任务执行中（${doneCount}/${total}） <span class="drawer-hint-dot"></span>`;
+            if (hintTextEl) hintTextEl.textContent = `⚙️ 子任务执行中（${doneCount}/${total}）`;
         } else {
-            hintEl.innerHTML = `<span class="drawer-hint-dot"></span> 📋 任务计划已生成，点击查看 <span class="drawer-hint-dot"></span>`;
+            if (hintTextEl) hintTextEl.textContent = '📋 任务计划已生成，点击查看';
         }
 
         // ── Show drawer ──
         setDrawerHasPlan(true);
-        if (!drawerOpen && !userCollapsed) expandDrawer();
+        // needConfirm=true: 面板生成后自动收起，让用户看到聊天区的执行/不执行按钮
+        // 用 silent collapse（不设置 userCollapsed），确保后续子任务开始后面板能正常展开
+        if (needConfirm) {
+            drawerOpen = false;
+            const _d = document.getElementById('planDrawer');
+            _d.classList.remove('expanded');
+            document.getElementById('drawerOverlay').classList.remove('active');
+            syncDrawerPadding();
+        } else if (!drawerOpen && !userCollapsed) {
+            expandDrawer();
+        }
 
         // ── Body content ──
         emptyEl.style.display = 'none';
@@ -1678,13 +1693,11 @@
             html += `<div class="subtasks-label">子任务 (${total})</div>`;
             subtasks.forEach((st, i) => {
                 const icon = stateIcon(st.state);
-                const stateClass = st.state ? `state-${st.state}` : '';
-                const nameRunning = st.state === 'in_progress' ? ' running' : '';
-                html += `<div class="subtask-item ${stateClass}">
+                html += `<div class="subtask-item">
                     <div class="subtask-num">${i+1}</div>
                     <div class="subtask-icon ${st.state||'todo'}">${icon}</div>
                     <div class="subtask-body">
-                        <div class="subtask-name${nameRunning}">${escapeHtml(st.name||'')}</div>
+                        <div class="subtask-name">${escapeHtml(st.name||'')}</div>
                         ${st.description?`<div class="subtask-desc">${escapeHtml(st.description)}</div>`:''}
                         ${st.outcome?`<div class="subtask-outcome">✓ ${escapeHtml(st.outcome)}</div>`:''}
                     </div>
