@@ -1930,21 +1930,19 @@
         // ── Show drawer ──
         setDrawerHasPlan(true);
         // 展开策略：
-        // · needConfirm=true（计划完整生成，等待用户确认）→ 不弹出，静默显示 hint strip，让用户看气泡按钮
+        // · needConfirm=true（计划完整生成，等待用户确认）→ 强制收起面板（无论当前是否展开），让用户看气泡按钮
         // · allDone（所有子任务完成）→ 若面板展开则静默收起，用户回到主界面等待分析报告
         // · 子任务执行中 → 正常展开（用户已确认，userCollapsed 已被重置）
         // · 用户手动收起过（userCollapsed=true）→ 不强制展开
-        if (allDone) {
+        if (needConfirm) {
+            // 强制收起，不受 drawerOpen 状态限制
+            drawerOpen = false;
+            const _d = document.getElementById('planDrawer');
+            if (_d) _d.classList.remove('expanded');
+            document.getElementById('drawerOverlay').classList.remove('active');
+            syncDrawerPadding();
+        } else if (allDone) {
             // 静默收起（不设 userCollapsed），hint strip 变绿提示完成，用户可随时点开查看
-            if (drawerOpen) {
-                drawerOpen = false;
-                const _d = document.getElementById('planDrawer');
-                if (_d) _d.classList.remove('expanded');
-                document.getElementById('drawerOverlay').classList.remove('active');
-                syncDrawerPadding();
-            }
-        } else if (needConfirm) {
-            // 计划生成完毕等待确认：主动收起面板，让用户聚焦气泡里的执行/不执行按钮
             if (drawerOpen) {
                 drawerOpen = false;
                 const _d = document.getElementById('planDrawer');
