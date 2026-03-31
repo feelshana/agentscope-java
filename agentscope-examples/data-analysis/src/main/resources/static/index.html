@@ -379,6 +379,56 @@
             background: #fff;
         }
         .chat-textarea::placeholder { color: var(--text-hint); }
+        /* ══════════ Voice input button ══════════ */
+        .voice-btn {
+            width: 44px; height: 44px; flex-shrink: 0;
+            background: var(--surface2);
+            border: 1.5px solid rgba(79,110,247,0.18);
+            border-radius: 14px;
+            color: var(--text-sub);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            transition: all 0.18s;
+            -webkit-appearance: none;
+            touch-action: none;       /* 防止长按触发页面滚动 */
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .voice-btn svg { width: 20px; height: 20px; flex-shrink: 0; }
+        .voice-btn:active, .voice-btn.recording {
+            background: rgba(239,68,68,0.1);
+            border-color: rgba(239,68,68,0.5);
+            color: #ef4444;
+        }
+        /* 录音时麦克风图标脉动 */
+        .voice-btn.recording svg {
+            animation: voicePulse 0.8s ease-in-out infinite;
+        }
+        @keyframes voicePulse {
+            0%,100% { transform: scale(1);   opacity: 1; }
+            50%      { transform: scale(1.25); opacity: 0.7; }
+        }
+        /* 录音状态提示条 */
+        .voice-toast {
+            position: fixed;
+            bottom: 90px; left: 50%; transform: translateX(-50%) translateY(20px);
+            background: rgba(30,30,30,0.82);
+            color: #fff;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 0.82rem;
+            white-space: nowrap;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s, transform 0.2s;
+            z-index: 200;
+            backdrop-filter: blur(6px);
+        }
+        .voice-toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
         .send-btn {
             width: 44px; height: 44px; flex-shrink: 0;
             background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
@@ -888,6 +938,18 @@
                     onkeydown="handleInputKey(event)"
                     oninput="autoResize(this)"
                 ></textarea>
+                <!-- 语音输入按钮：长按录音，松开转文字 -->
+                <button class="voice-btn" id="voiceBtn" title="长按语音输入"
+                    onmousedown="voiceStart(event)" onmouseup="voiceStop(event)" onmouseleave="voiceStop(event)"
+                    ontouchstart="voiceStart(event)" ontouchend="voiceStop(event)" ontouchcancel="voiceStop(event)">
+                    <!-- 麦克风图标 -->
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="9" y="2" width="6" height="12" rx="3" stroke="currentColor" stroke-width="1.8"/>
+                        <path d="M5 10a7 7 0 0014 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                        <line x1="12" y1="17" x2="12" y2="21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                        <line x1="9" y1="21" x2="15" y2="21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                    </svg>
+                </button>
                 <button class="send-btn" id="sendBtn" onclick="sendMessage()" title="发送">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 2L15 22l-4-9-9-4 20-7z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </button>
@@ -897,6 +959,9 @@
     </div>
 
 </div><!-- /app-shell -->
+
+<!-- 语音输入提示 toast -->
+<div class="voice-toast" id="voiceToast">🎙️ 正在识别，松开完成…</div>
 
 <!-- History Sidebar Overlay -->
 <div class="history-overlay" id="historyOverlay" onclick="closeHistorySidebar()"></div>
@@ -985,6 +1050,113 @@
             const r = Math.random() * 16 | 0;
             return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
         });
+    }
+
+    /* ═══════════════════════ Voice Input (Web Speech API) ═══════════════════════ */
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let voiceRecognition = null;
+    let voiceActive = false;
+    let voiceToastTimer = null;
+
+    function initVoiceRecognition() {
+        if (!SpeechRecognition) return null;
+        const r = new SpeechRecognition();
+        r.lang = 'zh-CN';
+        r.interimResults = true;   // 实时显示中间结果
+        r.maxAlternatives = 1;
+        r.continuous = false;
+
+        r.onresult = (e) => {
+            let interim = '', final = '';
+            for (let i = e.resultIndex; i < e.results.length; i++) {
+                const t = e.results[i][0].transcript;
+                if (e.results[i].isFinal) final += t;
+                else interim += t;
+            }
+            const input = document.getElementById('chatInput');
+            // 实时回显到输入框（interim 用括号标注）
+            const base = input.dataset.voiceBase || '';
+            input.value = base + (final || interim);
+            if (final) input.dataset.voiceBase = base + final;
+            autoResize(input);
+        };
+
+        r.onerror = (e) => {
+            if (e.error === 'not-allowed') {
+                showVoiceToast('⚠️ 请允许麦克风权限', 2000);
+            } else if (e.error !== 'aborted') {
+                showVoiceToast('识别失败，请重试', 1500);
+            }
+            voiceEnd();
+        };
+
+        r.onend = () => {
+            voiceEnd();
+        };
+        return r;
+    }
+
+    function voiceStart(e) {
+        e.preventDefault();
+        if (isProcessing) return;
+        if (!SpeechRecognition) {
+            showVoiceToast('⚠️ 当前浏览器不支持语音输入', 2000);
+            return;
+        }
+        if (voiceActive) return;
+        voiceActive = true;
+
+        const btn = document.getElementById('voiceBtn');
+        btn.classList.add('recording');
+
+        // 清空上次 base，保留已有文字（追加模式）
+        const input = document.getElementById('chatInput');
+        input.dataset.voiceBase = input.value;
+
+        voiceRecognition = initVoiceRecognition();
+        try {
+            voiceRecognition.start();
+        } catch(err) {
+            voiceEnd();
+            return;
+        }
+        showVoiceToast('🎙️ 正在聆听…松开完成', 0);
+    }
+
+    function voiceStop(e) {
+        if (e) e.preventDefault();
+        if (!voiceActive) return;
+        if (voiceRecognition) {
+            try { voiceRecognition.stop(); } catch(_) {}
+        }
+        // onend 回调里会调 voiceEnd
+    }
+
+    function voiceEnd() {
+        voiceActive = false;
+        const btn = document.getElementById('voiceBtn');
+        if (btn) btn.classList.remove('recording');
+        hideVoiceToast();
+        // 清理 base 标记
+        const input = document.getElementById('chatInput');
+        if (input) delete input.dataset.voiceBase;
+    }
+
+    function showVoiceToast(msg, duration) {
+        const toast = document.getElementById('voiceToast');
+        if (!toast) return;
+        toast.textContent = msg;
+        toast.classList.add('show');
+        clearTimeout(voiceToastTimer);
+        if (duration > 0) {
+            voiceToastTimer = setTimeout(hideVoiceToast, duration);
+        }
+    }
+
+    function hideVoiceToast() {
+        const toast = document.getElementById('voiceToast');
+        if (toast) toast.classList.remove('show');
+        clearTimeout(voiceToastTimer);
     }
 
     /* ═══════════════════════ Init ═══════════════════════ */
