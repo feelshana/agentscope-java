@@ -199,7 +199,7 @@ public class DataAnalysisController {
     @PostMapping(path = "/asr", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Mono<Map<String, String>> asr(
             @RequestPart("audio") FilePart file,
-            @RequestParam(defaultValue = "opus") String format) {
+            @RequestParam(defaultValue = "pcm") String format) {
         return DataBufferUtils.join(file.content())
                 .flatMap(
                         dataBuffer -> {
