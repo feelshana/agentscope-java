@@ -1642,7 +1642,7 @@
         // ── Show drawer ──
         setDrawerHasPlan(true);
         // 展开策略：
-        // · needConfirm=true（计划完整生成，等待用户确认）→ 弹出面板让用户查看，然后静默收起，让气泡按钮可见
+        // · needConfirm=true（计划完整生成，等待用户确认）→ 不弹出，静默显示 hint strip，让用户看气泡按钮
         // · allDone（所有子任务完成）→ 若面板展开则静默收起，用户回到主界面等待分析报告
         // · 子任务执行中 → 正常展开（用户已确认，userCollapsed 已被重置）
         // · 用户手动收起过（userCollapsed=true）→ 不强制展开
@@ -1656,16 +1656,7 @@
                 syncDrawerPadding();
             }
         } else if (needConfirm) {
-            // 先弹出一下让用户看到任务计划，再静默收起让气泡按钮可见
-            if (!drawerOpen) expandDrawer();
-            // 短暂展示后收起（silent，不设 userCollapsed）
-            setTimeout(() => {
-                drawerOpen = false;
-                const _d = document.getElementById('planDrawer');
-                if (_d) _d.classList.remove('expanded');
-                document.getElementById('drawerOverlay').classList.remove('active');
-                syncDrawerPadding();
-            }, 800);
+            // 不展开，只让 hint strip 出现，等用户点击「执行」后再展开
         } else if (!drawerOpen && !userCollapsed) {
             expandDrawer();
         }
