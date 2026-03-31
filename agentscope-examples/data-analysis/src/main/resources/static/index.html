@@ -1040,7 +1040,7 @@
 
     // ─── User identity from URL param ───
     const urlParams = new URLSearchParams(window.location.search);
-    const currentUserName = urlParams.get('userName') || '';
+    const currentUserName = urlParams.get('account') || urlParams.get('userName') || '';
 
     // ─── Session management ───
     let currentSessionId = generateUUID();
@@ -1480,7 +1480,7 @@
         planPending = true;
 
         const typingEl = appendTyping();
-        const url = '/api/chat?message=' + encodeURIComponent(fullMessage) + '&sessionId=' + encodeURIComponent(currentSessionId) + '&userName=' + encodeURIComponent(currentUserName);
+        const url = '/api/chat?message=' + encodeURIComponent(fullMessage) + '&sessionId=' + encodeURIComponent(currentSessionId) + '&account=' + encodeURIComponent(currentUserName);
         const eventSource = new EventSource(url);
         let assistantText = '';
         let assistantEl = null;
