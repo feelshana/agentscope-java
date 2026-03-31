@@ -1929,7 +1929,14 @@
                 syncDrawerPadding();
             }
         } else if (needConfirm) {
-            // 不展开，只让 hint strip 出现，等用户点击「执行」后再展开
+            // 计划生成完毕等待确认：主动收起面板，让用户聚焦气泡里的执行/不执行按钮
+            if (drawerOpen) {
+                drawerOpen = false;
+                const _d = document.getElementById('planDrawer');
+                if (_d) _d.classList.remove('expanded');
+                document.getElementById('drawerOverlay').classList.remove('active');
+                syncDrawerPadding();
+            }
         } else if (!drawerOpen && !userCollapsed) {
             expandDrawer();
         }
