@@ -22,6 +22,14 @@ spring:
   # Flyway – disabled here; migration is triggered manually in MybatisConfig
   flyway:
     enabled: false
+  web:
+    resources:
+      cache:
+        # 开发/生产环境均禁用静态资源缓存，确保 index.html 每次都能拉到最新版本
+        period: 0
+        cachecontrol:
+          no-cache: true
+          no-store: true
 
 server:
   port: 7081
