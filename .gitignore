@@ -51,6 +51,10 @@ CLAUDE.md
 ##Log
 logs/
 
+## Local dev config with secrets (never commit)
+**/application-dev.yml
+**/application-local.yml
+
 ## boba-tea-shop example
 **/boba-tea-shop/supervisor-agent/**/static/
 **/boba-tea-shop/**/node_modules/
