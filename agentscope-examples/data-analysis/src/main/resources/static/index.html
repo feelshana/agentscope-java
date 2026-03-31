@@ -1052,6 +1052,7 @@
     let userCollapsed = false;
     let planPending = false;
     let confirmDecided = false;  // true after user clicks 执行/不执行; prevents re-injection
+    let confirmExecuted = false; // true only when user clicks 执行（not 不执行）; gates drawer auto-expand
 
     // ─── User identity from URL param ───
     const urlParams = new URLSearchParams(window.location.search);
@@ -1330,6 +1331,8 @@
         if (hintEl)    { hintEl.className = 'drawer-hint'; const _t = hintEl.querySelector('#drawerHintText'); if (_t) _t.textContent = '📋 任务计划已生成，点击查看'; }
         if (progressWrap) { progressWrap.style.display = 'none'; }
         planPending = false;
+        confirmDecided = false;
+        confirmExecuted = false;
         setDrawerHasPlan(false);
         setProcessing(false);
     }
@@ -1451,6 +1454,8 @@
     function sendConfirm(btn, text) {
         // Disable both buttons and mark decision taken (prevents re-injection on next plan SSE)
         confirmDecided = true;
+        // 只有点「执行」才允许面板在子任务开始时自动展开
+        confirmExecuted = (text === '执行');
         const actions = btn.closest('.confirm-actions');
         if (actions) {
             actions.querySelectorAll('.confirm-btn').forEach(b => b.disabled = true);
@@ -1932,7 +1937,7 @@
         // 展开策略：
         // · needConfirm=true（计划完整生成，等待用户确认）→ 强制收起面板（无论当前是否展开），让用户看气泡按钮
         // · allDone（所有子任务完成）→ 若面板展开则静默收起，用户回到主界面等待分析报告
-        // · 子任务执行中 → 正常展开（用户已确认，userCollapsed 已被重置）
+        // · 子任务执行中 → 仅当用户已点「执行」（confirmExecuted=true）且未手动收起时才展开
         // · 用户手动收起过（userCollapsed=true）→ 不强制展开
         if (needConfirm) {
             // 强制收起，不受 drawerOpen 状态限制
@@ -1950,7 +1955,7 @@
                 document.getElementById('drawerOverlay').classList.remove('active');
                 syncDrawerPadding();
             }
-        } else if (!drawerOpen && !userCollapsed) {
+        } else if (!drawerOpen && !userCollapsed && confirmExecuted) {
             expandDrawer();
         }
 
