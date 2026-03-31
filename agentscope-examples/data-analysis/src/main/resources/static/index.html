@@ -1052,94 +1052,106 @@
         });
     }
 
-    /* ═══════════════════════ Voice Input (Web Speech API) ═══════════════════════ */
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    let voiceRecognition = null;
+    /* ═══════════════════════ Voice Input (MediaRecorder → Aliyun NLS ASR) ═══════════════════════ */
+    let mediaRecorder = null;
+    let voiceChunks = [];
     let voiceActive = false;
     let voiceToastTimer = null;
+    let voiceStream = null;  // keep reference to stop mic track
 
-    function initVoiceRecognition() {
-        if (!SpeechRecognition) return null;
-        const r = new SpeechRecognition();
-        r.lang = 'zh-CN';
-        r.interimResults = true;   // 实时显示中间结果
-        r.maxAlternatives = 1;
-        r.continuous = false;
-
-        r.onresult = (e) => {
-            let interim = '', final = '';
-            for (let i = e.resultIndex; i < e.results.length; i++) {
-                const t = e.results[i][0].transcript;
-                if (e.results[i].isFinal) final += t;
-                else interim += t;
-            }
-            const input = document.getElementById('chatInput');
-            // 实时回显到输入框（interim 用括号标注）
-            const base = input.dataset.voiceBase || '';
-            input.value = base + (final || interim);
-            if (final) input.dataset.voiceBase = base + final;
-            autoResize(input);
-        };
-
-        r.onerror = (e) => {
-            if (e.error === 'not-allowed') {
-                showVoiceToast('⚠️ 请允许麦克风权限', 2000);
-            } else if (e.error !== 'aborted') {
-                showVoiceToast('识别失败，请重试', 1500);
-            }
-            voiceEnd();
-        };
-
-        r.onend = () => {
-            voiceEnd();
-        };
-        return r;
-    }
-
-    function voiceStart(e) {
+    async function voiceStart(e) {
         e.preventDefault();
         if (isProcessing) return;
-        if (!SpeechRecognition) {
-            showVoiceToast('⚠️ 当前浏览器不支持语音输入', 2000);
+        if (voiceActive) return;
+
+        // Request microphone permission
+        let stream;
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch (err) {
+            showVoiceToast('⚠️ 请允许麦克风权限', 2500);
             return;
         }
-        if (voiceActive) return;
+
         voiceActive = true;
+        voiceStream = stream;
+        voiceChunks = [];
 
         const btn = document.getElementById('voiceBtn');
         btn.classList.add('recording');
-
-        // 清空上次 base，保留已有文字（追加模式）
-        const input = document.getElementById('chatInput');
-        input.dataset.voiceBase = input.value;
-
-        voiceRecognition = initVoiceRecognition();
-        try {
-            voiceRecognition.start();
-        } catch(err) {
-            voiceEnd();
-            return;
-        }
         showVoiceToast('🎙️ 正在聆听…松开完成', 0);
+
+        // Prefer opus in WebM; fall back to whatever the browser supports
+        const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+            ? 'audio/webm;codecs=opus'
+            : (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')
+                ? 'audio/ogg;codecs=opus'
+                : '');
+        const options = mimeType ? { mimeType } : {};
+        mediaRecorder = new MediaRecorder(stream, options);
+
+        mediaRecorder.ondataavailable = (evt) => {
+            if (evt.data && evt.data.size > 0) voiceChunks.push(evt.data);
+        };
+
+        mediaRecorder.onstop = async () => {
+            // Stop mic tracks
+            if (voiceStream) {
+                voiceStream.getTracks().forEach(t => t.stop());
+                voiceStream = null;
+            }
+            voiceEnd(false);  // remove recording style, keep toast while recognising
+
+            if (voiceChunks.length === 0) { hideVoiceToast(); return; }
+
+            showVoiceToast('⏳ 识别中…', 0);
+
+            const blob = new Blob(voiceChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+            voiceChunks = [];
+
+            // Derive format hint for NLS API from MIME type
+            const fmt = blob.type.includes('ogg') ? 'ogg'
+                      : blob.type.includes('mp4') ? 'aac'
+                      : 'opus';  // webm+opus → use opus
+
+            const formData = new FormData();
+            formData.append('audio', blob, 'voice.' + fmt);
+            formData.append('format', fmt);
+
+            try {
+                const res = await fetch('/api/asr', { method: 'POST', body: formData });
+                const json = await res.json();
+                if (json.error) {
+                    showVoiceToast('❌ 识别失败：' + json.error, 2500);
+                } else if (json.text && json.text.trim()) {
+                    const input = document.getElementById('chatInput');
+                    input.value = (input.value || '') + json.text.trim();
+                    autoResize(input);
+                    hideVoiceToast();
+                } else {
+                    showVoiceToast('未识别到语音，请重试', 2000);
+                }
+            } catch (err) {
+                showVoiceToast('❌ 网络错误，请重试', 2000);
+            }
+        };
+
+        mediaRecorder.start();
     }
 
     function voiceStop(e) {
         if (e) e.preventDefault();
         if (!voiceActive) return;
-        if (voiceRecognition) {
-            try { voiceRecognition.stop(); } catch(_) {}
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+            mediaRecorder.stop();  // triggers onstop → sends to backend
         }
-        // onend 回调里会调 voiceEnd
     }
 
-    function voiceEnd() {
+    function voiceEnd(clearToast = true) {
         voiceActive = false;
         const btn = document.getElementById('voiceBtn');
         if (btn) btn.classList.remove('recording');
-        hideVoiceToast();
-        // 清理 base 标记
-        const input = document.getElementById('chatInput');
-        if (input) delete input.dataset.voiceBase;
+        if (clearToast) hideVoiceToast();
     }
 
     function showVoiceToast(msg, duration) {

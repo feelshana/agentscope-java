@@ -21,18 +21,22 @@ import io.agentscope.examples.dataanalysis.dto.DatasetInfo;
 import io.agentscope.examples.dataanalysis.dto.PlanResponse;
 import io.agentscope.examples.dataanalysis.dto.SessionHistoryResponse;
 import io.agentscope.examples.dataanalysis.service.AnalysisPlanService;
+import io.agentscope.examples.dataanalysis.service.AsrService;
 import io.agentscope.examples.dataanalysis.service.ChatSessionService;
 import io.agentscope.examples.dataanalysis.service.DataAnalysisAgentService;
 import io.agentscope.examples.dataanalysis.service.SuggestedQuestionService;
 import java.util.List;
 import java.util.Map;
+import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.MediaType;
+import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -61,18 +65,21 @@ public class DataAnalysisController {
     private final DataApiClient dataApiClient;
     private final ChatSessionService chatSessionService;
     private final SuggestedQuestionService suggestedQuestionService;
+    private final AsrService asrService;
 
     public DataAnalysisController(
             DataAnalysisAgentService agentService,
             AnalysisPlanService planService,
             DataApiClient dataApiClient,
             ChatSessionService chatSessionService,
-            SuggestedQuestionService suggestedQuestionService) {
+            SuggestedQuestionService suggestedQuestionService,
+            AsrService asrService) {
         this.agentService = agentService;
         this.planService = planService;
         this.dataApiClient = dataApiClient;
         this.chatSessionService = chatSessionService;
         this.suggestedQuestionService = suggestedQuestionService;
+        this.asrService = asrService;
     }
 
     /**
@@ -177,5 +184,37 @@ public class DataAnalysisController {
     @GetMapping("/health")
     public String health() {
         return "OK";
+    }
+
+    /**
+     * Speech-to-text: accepts a multipart audio file and returns the recognised text.
+     *
+     * <p>The browser sends "audio/webm;codecs=opus" (Chrome/Edge default from MediaRecorder).
+     * We pass format=opus to Alibaba Cloud NLS which accepts OGG-OPUS.
+     *
+     * @param file   uploaded audio file part named "audio"
+     * @param format audio format hint, defaults to "opus"
+     * @return JSON map with key "text"
+     */
+    @PostMapping(path = "/asr", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Mono<Map<String, String>> asr(
+            @RequestPart("audio") FilePart file,
+            @RequestParam(defaultValue = "opus") String format) {
+        return DataBufferUtils.join(file.content())
+                .flatMap(dataBuffer -> {
+                    byte[] bytes = new byte[dataBuffer.readableByteCount()];
+                    dataBuffer.read(bytes);
+                    DataBufferUtils.release(dataBuffer);
+                    try {
+                        String text = asrService.recognize(bytes, format);
+                        return Mono.just(Map.of("text", text));
+                    } catch (Exception e) {
+                        return Mono.error(e);
+                    }
+                })
+                .onErrorResume(e -> {
+                    String msg = e.getMessage() != null ? e.getMessage() : "ASR failed";
+                    return Mono.just(Map.of("error", msg));
+                });
     }
 }
