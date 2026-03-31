@@ -17,7 +17,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>红海App智能助手</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -929,6 +929,9 @@
         connectPlanStream();
         fetchCurrentPlan();
         loadSuggestedQuestions();
+        syncDrawerPadding();
+        // iOS: re-sync when keyboard is dismissed (viewport resize)
+        window.addEventListener('resize', syncDrawerPadding);
     });
 
     /* ═══════════════════════ History Sidebar ═══════════════════════ */
@@ -1074,8 +1077,8 @@
         const inputContainer = document.getElementById('chatInputContainer');
         if (!inputContainer) return;
         if (hasPlan && !drawerOpen) {
-            // hint strip visible
-            inputContainer.style.paddingBottom = 'calc(10px + 36px + var(--safe-bottom))';
+            // hint strip visible: --drawer-hint-h = 40px
+            inputContainer.style.paddingBottom = 'calc(10px + var(--drawer-hint-h) + var(--safe-bottom))';
         } else {
             inputContainer.style.paddingBottom = 'calc(10px + var(--safe-bottom))';
         }
