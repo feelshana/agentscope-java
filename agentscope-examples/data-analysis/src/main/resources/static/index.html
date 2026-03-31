@@ -68,7 +68,13 @@
         /* ══════════ Layout shell ══════════ */
         .app-shell {
             display: flex; flex-direction: column;
-            height: 100%; position: relative; overflow: hidden;
+            /* Use dvh (dynamic viewport height) on modern browsers to exclude browser chrome;
+               fall back to --app-height set by JS, then 100% */
+            height: var(--app-height, 100dvh);
+            position: relative; overflow: hidden;
+        }
+        @supports not (height: 100dvh) {
+            .app-shell { height: var(--app-height, 100vh); }
         }
 
         /* ══════════ Header ══════════ */
@@ -186,6 +192,25 @@
         .welcome-suggest-list {
             padding: 0 12px 12px;
             display: flex; flex-direction: column; gap: 7px;
+        }
+
+        /* ── Compact welcome card on short screens ── */
+        @media (max-height: 720px) {
+            .welcome-banner { padding: 14px 14px 12px; gap: 10px; }
+            .welcome-avatar { width: 38px; height: 38px; border-radius: 11px; }
+            .welcome-avatar svg { width: 22px; height: 22px; }
+            .welcome-banner-title { font-size: 0.9rem; margin-bottom: 3px; }
+            .welcome-banner-sub { font-size: 0.74rem; }
+            .welcome-chips { padding: 8px 14px 2px; gap: 5px; }
+            .welcome-chip { padding: 3px 8px; font-size: 0.68rem; }
+            .welcome-suggest-label { padding: 8px 14px 4px; font-size: 0.65rem; }
+            .welcome-suggest-list { padding: 0 10px 10px; gap: 5px; }
+            .suggestion-btn { padding: 9px 12px; font-size: 0.8rem; }
+        }
+        @media (max-height: 620px) {
+            .welcome-chips { display: none; }
+            .welcome-divider { margin: 6px 14px 0; }
+            .welcome-banner { padding: 10px 14px 10px; }
         }
 
         /* ══════════ Quick suggestions ══════════ */
@@ -926,6 +951,14 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+        // Fix mobile viewport height: browsers may include/exclude address bar in 100vh.
+        // We set --app-height from window.innerHeight which always reflects the actual visible area.
+        function setAppHeight() {
+            document.documentElement.style.setProperty('--app-height', window.innerHeight + 'px');
+        }
+        setAppHeight();
+        window.addEventListener('resize', setAppHeight);
+
         connectPlanStream();
         fetchCurrentPlan();
         loadSuggestedQuestions();
