@@ -1217,9 +1217,8 @@
         setProcessing(true);
         // Only reset confirmDecided when user sends a fresh message (not from confirm buttons)
         if (!fromConfirm) confirmDecided = false;
-        // Show plan-generating state immediately (before plan SSE arrives)
+        // Mark that a plan may arrive (for clearPlanPendingIfNeeded), but do NOT show drawer yet
         planPending = true;
-        showPlanPending();
 
         const typingEl = appendTyping();
         const url = '/api/chat?message=' + encodeURIComponent(fullMessage) + '&sessionId=' + encodeURIComponent(currentSessionId) + '&userName=' + encodeURIComponent(currentUserName);
@@ -1531,6 +1530,7 @@
     /* ═══════════════════════ Plan render ═══════════════════════ */
 
     // Show pending state immediately after sendMessage (before any plan SSE arrives)
+    // NOTE: No longer called directly – drawer is only shown when plan data arrives.
     function showPlanPending() {
         const hintEl    = document.getElementById('drawerHint');
         const emptyEl   = document.getElementById('emptyPlan');
@@ -1551,8 +1551,7 @@
                 <p>智能体正在分析数据集<br>并生成任务计划，请稍候…</p>
             </div>`;
 
-        setDrawerHasPlan(true);
-        if (!drawerOpen && !userCollapsed) expandDrawer();
+        // 不再主动展开面板：setDrawerHasPlan / expandDrawer 由 renderPlan 控制
         setPlanGenerating(true);
     }
 
@@ -1642,14 +1641,21 @@
 
         // ── Show drawer ──
         setDrawerHasPlan(true);
-        // needConfirm=true: 面板生成后自动收起，让用户看到聊天区的执行/不执行按钮
-        // 用 silent collapse（不设置 userCollapsed），确保后续子任务开始后面板能正常展开
+        // 展开策略：
+        // · needConfirm=true（计划完整生成，等待用户确认）→ 弹出面板让用户查看，然后静默收起，让气泡按钮可见
+        // · 子任务执行中 / 完成后 → 正常展开（用户已确认，userCollapsed 已被重置）
+        // · 用户手动收起过（userCollapsed=true）→ 不强制展开
         if (needConfirm) {
-            drawerOpen = false;
-            const _d = document.getElementById('planDrawer');
-            _d.classList.remove('expanded');
-            document.getElementById('drawerOverlay').classList.remove('active');
-            syncDrawerPadding();
+            // 先弹出一下让用户看到任务计划，再静默收起让气泡按钮可见
+            if (!drawerOpen) expandDrawer();
+            // 短暂展示后收起（silent，不设 userCollapsed）
+            setTimeout(() => {
+                drawerOpen = false;
+                const _d = document.getElementById('planDrawer');
+                if (_d) _d.classList.remove('expanded');
+                document.getElementById('drawerOverlay').classList.remove('active');
+                syncDrawerPadding();
+            }, 800);
         } else if (!drawerOpen && !userCollapsed) {
             expandDrawer();
         }
