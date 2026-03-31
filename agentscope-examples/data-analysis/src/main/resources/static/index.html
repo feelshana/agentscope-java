@@ -1609,7 +1609,7 @@
         hintEl.classList.toggle('hint-running',    isRunning && !allDone && !planPending);
         hintEl.classList.toggle('hint-done',       allDone);
         if (allDone) {
-            hintEl.innerHTML = `<span class="drawer-hint-dot"></span> ✅ 全部 ${total} 个任务已完成 <span class="drawer-hint-dot"></span>`;
+            hintEl.innerHTML = `<span class="drawer-hint-dot"></span> ✅ 任务查询已完成，点击查看 <span class="drawer-hint-dot"></span>`;
         } else if (planPending && total === 0) {
             hintEl.innerHTML = `<span class="drawer-hint-dot"></span> 🔄 正在生成任务计划… <span class="drawer-hint-dot"></span>`;
         } else if (isRunning) {
