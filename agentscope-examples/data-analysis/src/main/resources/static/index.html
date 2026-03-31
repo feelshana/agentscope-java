@@ -211,6 +211,43 @@
             .welcome-banner { padding: 10px 14px 10px; }
         }
 
+        /* ══════════ Post-report suggestions ══════════ */
+        /* 出现在分析报告气泡下方，紧凑横向滚动，不抢占报告视野 */
+        .post-report-sugg {
+            margin-top: 10px;
+            display: flex; flex-direction: column; gap: 6px;
+        }
+        .post-report-sugg-label {
+            font-size: 0.62rem; font-weight: 700; color: var(--text-hint);
+            letter-spacing: 0.08em; text-transform: uppercase;
+            padding: 0 2px;
+        }
+        .post-report-sugg-scroll {
+            display: flex; gap: 7px;
+            overflow-x: auto; -webkit-overflow-scrolling: touch;
+            padding-bottom: 4px;
+            scrollbar-width: none;
+        }
+        .post-report-sugg-scroll::-webkit-scrollbar { display: none; }
+        .post-report-sugg-chip {
+            display: inline-flex; align-items: center; white-space: nowrap;
+            padding: 6px 12px;
+            background: var(--surface2);
+            border: 1px solid rgba(79,110,247,0.18);
+            border-radius: 20px;
+            font-size: 0.78rem; font-weight: 500; color: var(--primary-dark);
+            cursor: pointer; flex-shrink: 0;
+            transition: all 0.16s;
+            font-family: inherit;
+            -webkit-appearance: none;
+            box-shadow: 0 1px 4px rgba(79,110,247,0.07);
+        }
+        .post-report-sugg-chip:active {
+            background: var(--primary-light);
+            border-color: var(--border-active);
+            transform: scale(0.96);
+        }
+
         /* ══════════ Quick suggestions ══════════ */
         .suggestions-wrap {
             display: flex; flex-direction: column; gap: 8px;
@@ -1173,6 +1210,13 @@
         document.getElementById('chatInput').value = text;
         sendMessage();
     }
+    // Post-report inline chip: send full text as-is
+    function sendSuggestionText(btn) {
+        if (isProcessing) return;
+        const text = btn.textContent.trim();
+        document.getElementById('chatInput').value = text;
+        sendMessage();
+    }
     // Called when user clicks 执行 / 不执行 confirm buttons
     function sendConfirm(btn, text) {
         // Disable both buttons and mark decision taken (prevents re-injection on next plan SSE)
@@ -1346,6 +1390,19 @@
             content.classList.add('has-chart');
             const textHtml = textPart ? `<div class="text-part">${escapeHtml(textPart)}</div>` : '';
             content.innerHTML = textHtml + reportHtml + chartHtml;
+
+            // 在分析报告下方追加推荐问题横向滚动栏
+            if (suggestedQuestions.length > 0) {
+                const chips = suggestedQuestions.map(q =>
+                    `<button class="post-report-sugg-chip" onclick="sendSuggestionText(this)">${escapeHtml(q)}</button>`
+                ).join('');
+                const suggDiv = document.createElement('div');
+                suggDiv.className = 'post-report-sugg';
+                suggDiv.innerHTML = `
+                    <div class="post-report-sugg-label">继续提问</div>
+                    <div class="post-report-sugg-scroll">${chips}</div>`;
+                content.appendChild(suggDiv);
+            }
         } else {
             content.textContent = textPart || fullText;
         }
