@@ -1575,7 +1575,7 @@
         const total     = subtasks.length;
         const pct       = total > 0 ? Math.round(doneCount / total * 100) : 0;
         const isRunning = subtasks.some(s => s.state === 'in_progress');
-        const allDone   = total > 0 && doneCount === total && plan.state === 'done';
+        const allDone   = total > 0 && doneCount === total;
 
         // Once real subtasks arrive, clear the pending flag
         if (planPending && total > 0) {
