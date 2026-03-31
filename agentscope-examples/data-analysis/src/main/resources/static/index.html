@@ -212,10 +212,11 @@
         }
 
         /* ══════════ Post-report suggestions ══════════ */
-        /* 出现在分析报告气泡下方，紧凑横向滚动，不抢占报告视野 */
+        /* 出现在助手消息气泡下方（.message.assistant 内），紧凑横向滚动，不抢占报告视野 */
         .post-report-sugg {
-            margin-top: 10px;
-            display: flex; flex-direction: column; gap: 6px;
+            margin-top: 8px;
+            display: flex; flex-direction: column; gap: 5px;
+            width: 100%;
         }
         .post-report-sugg-label {
             font-size: 0.62rem; font-weight: 700; color: var(--text-hint);
@@ -1390,19 +1391,6 @@
             content.classList.add('has-chart');
             const textHtml = textPart ? `<div class="text-part">${escapeHtml(textPart)}</div>` : '';
             content.innerHTML = textHtml + reportHtml + chartHtml;
-
-            // 在分析报告下方追加推荐问题横向滚动栏
-            if (suggestedQuestions.length > 0) {
-                const chips = suggestedQuestions.map(q =>
-                    `<button class="post-report-sugg-chip" onclick="sendSuggestionText(this)">${escapeHtml(q)}</button>`
-                ).join('');
-                const suggDiv = document.createElement('div');
-                suggDiv.className = 'post-report-sugg';
-                suggDiv.innerHTML = `
-                    <div class="post-report-sugg-label">继续提问</div>
-                    <div class="post-report-sugg-scroll">${chips}</div>`;
-                content.appendChild(suggDiv);
-            }
         } else {
             content.textContent = textPart || fullText;
         }
@@ -1418,6 +1406,20 @@
                 <button class="confirm-btn confirm-no"  onclick="sendConfirm(this, '\u4e0d\u6267\u884c')">❌ 不执行</button>
             `;
             content.appendChild(actionsDiv);
+        }
+
+        // 在消息气泡下方追加推荐问题（仅非确认类回复）
+        // 插入到 el（.message.assistant）内部、消息气泡之后，避免撑高内容区
+        if (!hasConfirm && suggestedQuestions.length > 0 && !el.querySelector('.post-report-sugg')) {
+            const chips = suggestedQuestions.map(q =>
+                `<button class="post-report-sugg-chip" onclick="sendSuggestionText(this)">${escapeHtml(q)}</button>`
+            ).join('');
+            const suggDiv = document.createElement('div');
+            suggDiv.className = 'post-report-sugg';
+            suggDiv.innerHTML = `
+                <div class="post-report-sugg-label">继续提问</div>
+                <div class="post-report-sugg-scroll">${chips}</div>`;
+            el.appendChild(suggDiv);
         }
 
         document.getElementById('chatMessages').scrollTop = 99999;
