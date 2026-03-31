@@ -131,6 +131,20 @@
         }
         .header-icon-btn:active { background: rgba(255,255,255,0.28); border-color: rgba(255,255,255,0.5); }
         .header-icon-btn svg { width: 18px; height: 18px; }
+        /* 历史对话按钮：带文字，更醒目 */
+        .header-history-btn {
+            height: 36px; padding: 0 12px; gap: 6px;
+            background: rgba(255,255,255,0.18);
+            border: 1px solid rgba(255,255,255,0.38);
+            border-radius: 10px; color: rgba(255,255,255,0.95);
+            cursor: pointer; transition: all 0.2s;
+            display: flex; align-items: center; justify-content: center;
+            -webkit-appearance: none; font-family: inherit;
+            backdrop-filter: blur(4px);
+            font-size: 0.82rem; font-weight: 600; white-space: nowrap;
+        }
+        .header-history-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+        .header-history-btn:active { background: rgba(255,255,255,0.32); border-color: rgba(255,255,255,0.6); }
         /* Remove old text-button styles */
         .history-btn, .reset-btn, .status-badge { display: none !important; }
 
@@ -892,8 +906,9 @@
             <button class="header-icon-btn" onclick="resetAll()" title="新建对话">
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
             </button>
-            <button class="header-icon-btn" onclick="openHistorySidebar()" title="历史对话">
+            <button class="header-history-btn" onclick="openHistorySidebar()" title="历史对话">
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v5l3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                历史对话
             </button>
         </div>
     </div>
