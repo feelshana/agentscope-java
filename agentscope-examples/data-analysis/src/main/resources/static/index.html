@@ -931,8 +931,6 @@
                         <span class="welcome-chip">📊 数据分析</span>
                         <span class="welcome-chip">🎯 指标追踪</span>
                         <span class="welcome-chip">💡 智能洞察</span>
-                        <span class="welcome-chip">📈 趋势预测</span>
-
                     </div>
                     <hr class="welcome-divider">
                     <div class="welcome-suggest-label">快速开始 · 点击直接提问</div>
@@ -1042,6 +1040,17 @@
 </div>
 
 <script>
+    /* ─── Base path auto-detection (supports local dev and nginx sub-path proxy) ───
+     * 本地直接访问时 pathname='/'，BASE_PATH=''，请求路径为 /api/xxx
+     * nginx 代理时 pathname='/dify/dataAnalyse/'，BASE_PATH='/dify/dataAnalyse'，请求路径为 /dify/dataAnalyse/api/xxx
+     */
+    const BASE_PATH = (() => {
+        const p = window.location.pathname;
+        // 去掉末尾的 index.html 或 /，保留目录前缀
+        const dir = p.replace(/\/index\.html$/, '').replace(/\/$/, '');
+        return dir || '';
+    })();
+
     /* ═══════════════════════ State ═══════════════════════ */
     let datasets = [];
     let selectedDataset = null;
@@ -1170,7 +1179,7 @@
         formData.append('audio', pcmBlob, 'voice.pcm');
         formData.append('format', 'pcm');
 
-        fetch('/api/asr', { method: 'POST', body: formData })
+        fetch(BASE_PATH + '/api/asr', { method: 'POST', body: formData })
             .then(r => r.json())
             .then(json => {
                 if (json.error) {
@@ -1223,7 +1232,7 @@
 
     async function loadSuggestedQuestions() {
         try {
-            const res = await fetch('/api/suggested-questions');
+            const res = await fetch(BASE_PATH + '/api/suggested-questions');
             if (res.ok) {
                 suggestedQuestions = await res.json();
             }
@@ -1255,7 +1264,7 @@
 
     async function loadSessionHistory() {
         try {
-            const sessions = await fetch('/api/sessions?userName=' + encodeURIComponent(currentUserName)).then(r => r.json());
+            const sessions = await fetch(BASE_PATH + '/api/sessions?userName=' + encodeURIComponent(currentUserName)).then(r => r.json());
             renderHistoryList(sessions);
         } catch(e) {
             document.getElementById('historyList').innerHTML =
@@ -1306,7 +1315,7 @@
         setProcessing(false);
         // Load historical messages from backend into UI
         try {
-            const messages = await fetch('/api/sessions/' + sessionId + '/messages').then(r => r.json());
+            const messages = await fetch(BASE_PATH + '/api/sessions/' + sessionId + '/messages').then(r => r.json());
             if (Array.isArray(messages) && messages.length > 0) {
                 messages.forEach(msg => {
                     const msgEl = appendMessage(msg.role === 'user' ? 'user' : 'assistant', '');
@@ -1341,7 +1350,7 @@
         event.stopPropagation();
         if (!confirm('确定删除这个对话记录？')) return;
         try {
-            await fetch('/api/sessions/' + sessionId, { method: 'DELETE' });
+            await fetch(BASE_PATH + '/api/sessions/' + sessionId, { method: 'DELETE' });
             if (sessionId === currentSessionId) startNewSession();
             await loadSessionHistory();
         } catch(e) { alert('删除失败'); }
@@ -1369,7 +1378,6 @@
                         <span class="welcome-chip">📊 数据分析</span>
                         <span class="welcome-chip">🎯 指标追踪</span>
                         <span class="welcome-chip">💡 智能洞察</span>
-                        <span class="welcome-chip">📈 趋势预测</span>
 
                     </div>
                     <hr class="welcome-divider">
@@ -1430,7 +1438,7 @@
     /* ═══════════════════════ Datasets (background, for agent context) ═══════════════════════ */
     async function loadDatasets() {
         try {
-            const res = await fetch('/api/datasets');
+            const res = await fetch(BASE_PATH + '/api/datasets');
             datasets = await res.json();
         } catch (e) {}
     }
@@ -1462,7 +1470,7 @@
         }
 
         // Notify backend to suppress further needConfirm=true broadcasts for this plan
-        fetch('/api/plan/confirm', { method: 'POST' }).catch(() => {});
+        fetch(BASE_PATH + '/api/plan/confirm', { method: 'POST' }).catch(() => {});
 
         // 重置 userCollapsed，后续子任务开始执行时面板可自动展开
         userCollapsed = false;
@@ -1500,7 +1508,7 @@
         planPending = true;
 
         const typingEl = appendTyping();
-        const url = '/api/chat?message=' + encodeURIComponent(fullMessage) + '&sessionId=' + encodeURIComponent(currentSessionId) + '&account=' + encodeURIComponent(currentUserName);
+        const url = BASE_PATH + '/api/chat?message=' + encodeURIComponent(fullMessage) + '&sessionId=' + encodeURIComponent(currentSessionId) + '&account=' + encodeURIComponent(currentUserName);
         const eventSource = new EventSource(url);
         let assistantText = '';
         let assistantEl = null;
@@ -1534,11 +1542,23 @@
                     .replace(/<chart>[\s\S]*/i, '')
                     .trim();
                 const content = assistantEl.querySelector('.message-content');
+                // Render the conclusion text (before <report>) as markdown-formatted text,
+                // then append a loading spinner for the report section.
+                const textNode = beforeTag
+                    ? `<div class="text-part" id="msgTextPart">${escapeHtml(beforeTag)}</div>`
+                    : '';
                 content.innerHTML =
-                    (beforeTag ? `<span>${escapeHtml(beforeTag)}</span>` : '') +
+                    textNode +
                     `<div class="loading-indicator" id="msgLoadingIndicator">
                         <div class="loading-spinner"></div>生成分析报告中…
                     </div>`;
+                // Scroll to show the conclusion text (not the bottom)
+                const textPartEl = content.querySelector('#msgTextPart');
+                if (textPartEl) {
+                    textPartEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                } else {
+                    document.getElementById('chatMessages').scrollTop = 99999;
+                }
                 return;
             }
 
@@ -1625,6 +1645,16 @@
             content.classList.add('has-chart');
             const textHtml = textPart ? `<div class="text-part">${escapeHtml(textPart)}</div>` : '';
             content.innerHTML = textHtml + reportHtml + chartHtml;
+            // Scroll to the start of the report block (not the very bottom),
+            // so the user sees the beginning of the report right after the conclusion.
+            requestAnimationFrame(() => {
+                const reportBlock = content.querySelector('.report-block, .chart-wrapper');
+                if (reportBlock) {
+                    reportBlock.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                } else {
+                    document.getElementById('chatMessages').scrollTop = 99999;
+                }
+            });
         } else {
             content.textContent = textPart || fullText;
         }
@@ -1656,7 +1686,11 @@
             el.appendChild(suggDiv);
         }
 
-        document.getElementById('chatMessages').scrollTop = 99999;
+        // Scroll to bottom only when there is no report/chart block;
+        // report/chart scrolling is handled above with scrollIntoView.
+        if (!reportHtml && !chartHtml) {
+            document.getElementById('chatMessages').scrollTop = 99999;
+        }
     }
 
     function appendTyping() {
@@ -1810,14 +1844,14 @@
     /* ═══════════════════════ Plan SSE ═══════════════════════ */
     function connectPlanStream() {
         if (planEventSource) planEventSource.close();
-        planEventSource = new EventSource('/api/plan/stream');
+        planEventSource = new EventSource(BASE_PATH + '/api/plan/stream');
         planEventSource.onmessage = (e) => { try { renderPlan(JSON.parse(e.data)); } catch(_) {} };
         planEventSource.onopen = () => updateConnStatus(true);
         planEventSource.onerror = () => { updateConnStatus(false); setTimeout(connectPlanStream, 3000); };
     }
 
     async function fetchCurrentPlan() {
-        try { renderPlan(await (await fetch('/api/plan')).json()); } catch(_) {}
+        try { renderPlan(await (await fetch(BASE_PATH + '/api/plan')).json()); } catch(_) {}
     }
 
     /* ═══════════════════════ Plan render ═══════════════════════ */
@@ -2036,7 +2070,7 @@
     async function resetAll() {
         startNewSession();
         try {
-            await fetch('/api/reset?sessionId=' + encodeURIComponent(currentSessionId), { method: 'POST' });
+            await fetch(BASE_PATH + '/api/reset?sessionId=' + encodeURIComponent(currentSessionId), { method: 'POST' });
         } catch (e) {}
     }
 
