@@ -84,7 +84,7 @@ public class AsrService {
                 + "&enable_punctuation_prediction=true"
                 + "&enable_inverse_text_normalization=true";
 
-        log.debug("Calling NLS ASR, format={}, bytes={}", format, audioBytes.length);
+        log.info("Calling NLS ASR, format={}, bytes={}", format, audioBytes.length);
 
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
         conn.setRequestMethod("POST");
@@ -111,7 +111,7 @@ public class AsrService {
             while ((line = br.readLine()) != null) sb.append(line);
         }
         String body = sb.toString();
-        log.debug("NLS ASR response status={}, body={}", status, body);
+        log.info("NLS ASR response status={}, body={}", status, body);
 
         if (status != 200) {
             throw new RuntimeException("NLS ASR failed, status=" + status + ", body=" + body);

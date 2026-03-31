@@ -1052,11 +1052,10 @@
         });
     }
 
-    /* ═══════════════════════ Voice Input (AudioContext PCM → WAV → Aliyun NLS) ═══════════════════════ */
+    /* ═══════════════════════ Voice Input (AudioContext PCM → Aliyun NLS) ═══════════════════════ */
     /*
-     * MediaRecorder 输出 WebM/OGG 容器，阿里云 NLS 不支持。
-     * 改用 AudioContext + ScriptProcessorNode 采集原始 PCM（16kHz/16bit/mono），
-     * 前端封装 WAV 文件直接上传，NLS format=wav，所有平台兼容。
+     * 采集原始 PCM（16kHz/16bit/mono），直接上传裸 PCM 二进制。
+     * NLS format=pcm&sample_rate=16000，这是阿里云最稳定支持的格式，无任何容器开销。
      */
     let voiceAudioCtx    = null;
     let voiceProcessor   = null;
@@ -1090,17 +1089,15 @@
         document.getElementById('voiceBtn').classList.add('recording');
         showVoiceToast('🎙️ 正在聆听…松开完成', 0);
 
-        // AudioContext 可能以系统采样率（如 44100/48000）运行，稍后重采样到 16kHz
+        // AudioContext 可能以系统采样率（如 44100/48000）运行，停止时统一重采样到 16kHz
         voiceAudioCtx  = new (window.AudioContext || window.webkitAudioContext)();
         voiceSource    = voiceAudioCtx.createMediaStreamSource(stream);
 
         // ScriptProcessorNode：每次回调拿到一帧 PCM Float32
-        const bufSize  = 4096;
-        voiceProcessor = voiceAudioCtx.createScriptProcessor(bufSize, 1, 1);
+        voiceProcessor = voiceAudioCtx.createScriptProcessor(4096, 1, 1);
         voiceProcessor.onaudioprocess = (ev) => {
-            // 拷贝当前帧数据（不拷贝会在回调结束后被回收）
             const f32 = ev.inputBuffer.getChannelData(0);
-            voicePcmF32.push(new Float32Array(f32));
+            voicePcmF32.push(new Float32Array(f32));  // 必须拷贝，否则回调后被回收
         };
 
         voiceSource.connect(voiceProcessor);
@@ -1128,25 +1125,29 @@
 
         if (frames.length === 0) { hideVoiceToast(); return; }
 
-        // 合并所有帧
+        // ── 1. 合并所有帧 ──
         const totalLen = frames.reduce((s, f) => s + f.length, 0);
         const merged   = new Float32Array(totalLen);
-        let offset = 0;
-        frames.forEach(f => { merged.set(f, offset); offset += f.length; });
+        let off = 0;
+        frames.forEach(f => { merged.set(f, off); off += f.length; });
 
-        // 线性重采样到 16kHz
-        const pcm16k = resampleLinear(merged, srcRate, VOICE_TARGET_RATE);
+        // ── 2. 线性重采样到 16kHz ──
+        const pcm16k = voiceResample(merged, srcRate, VOICE_TARGET_RATE);
 
-        // Float32 → Int16 PCM
-        const pcmInt16 = float32ToInt16(pcm16k);
+        // ── 3. Float32 → Int16 PCM（裸 PCM，不加 WAV 头）──
+        const pcmInt16 = new Int16Array(pcm16k.length);
+        for (let i = 0; i < pcm16k.length; i++) {
+            const s = Math.max(-1, Math.min(1, pcm16k[i]));
+            pcmInt16[i] = s < 0 ? Math.round(s * 32768) : Math.round(s * 32767);
+        }
 
-        // 封装 WAV
-        const wavBlob = encodeWav(pcmInt16, VOICE_TARGET_RATE);
+        // ── 4. 上传裸 PCM，format=pcm ──
+        const pcmBlob = new Blob([pcmInt16.buffer], { type: 'application/octet-stream' });
+        console.log('[ASR] pcm bytes:', pcmBlob.size, 'srcRate:', srcRate, 'samples:', pcmInt16.length);
 
-        // 上传到后端
         const formData = new FormData();
-        formData.append('audio', wavBlob, 'voice.wav');
-        formData.append('format', 'wav');
+        formData.append('audio', pcmBlob, 'voice.pcm');
+        formData.append('format', 'pcm');
 
         fetch('/api/asr', { method: 'POST', body: formData })
             .then(r => r.json())
@@ -1165,56 +1166,19 @@
             .catch(() => showVoiceToast('❌ 网络错误，请重试', 2000));
     }
 
-    /* ── 线性重采样（Float32Array） ── */
-    function resampleLinear(src, srcRate, dstRate) {
+    /* ── 线性重采样 ── */
+    function voiceResample(src, srcRate, dstRate) {
         if (srcRate === dstRate) return src;
-        const ratio   = srcRate / dstRate;
-        const dstLen  = Math.round(src.length / ratio);
-        const dst     = new Float32Array(dstLen);
+        const ratio  = srcRate / dstRate;
+        const dstLen = Math.round(src.length / ratio);
+        const dst    = new Float32Array(dstLen);
         for (let i = 0; i < dstLen; i++) {
             const pos  = i * ratio;
             const idx  = Math.floor(pos);
             const frac = pos - idx;
-            const a    = src[idx]     || 0;
-            const b    = src[idx + 1] || 0;
-            dst[i] = a + frac * (b - a);
+            dst[i]     = (src[idx] || 0) + frac * ((src[idx + 1] || 0) - (src[idx] || 0));
         }
         return dst;
-    }
-
-    /* ── Float32 [-1,1] → Int16 PCM ── */
-    function float32ToInt16(f32) {
-        const int16 = new Int16Array(f32.length);
-        for (let i = 0; i < f32.length; i++) {
-            const s = Math.max(-1, Math.min(1, f32[i]));
-            int16[i] = s < 0 ? s * 32768 : s * 32767;
-        }
-        return int16;
-    }
-
-    /* ── 封装 WAV（PCM 16bit mono） ── */
-    function encodeWav(int16, sampleRate) {
-        const byteRate    = sampleRate * 2;   // 16bit / 8 * 1ch
-        const dataBytes   = int16.length * 2;
-        const buffer      = new ArrayBuffer(44 + dataBytes);
-        const view        = new DataView(buffer);
-        const writeStr    = (off, str) => { for (let i = 0; i < str.length; i++) view.setUint8(off + i, str.charCodeAt(i)); };
-        writeStr(0,  'RIFF');
-        view.setUint32(4,  36 + dataBytes, true);
-        writeStr(8,  'WAVE');
-        writeStr(12, 'fmt ');
-        view.setUint32(16, 16,         true);   // chunk size
-        view.setUint16(20, 1,          true);   // PCM
-        view.setUint16(22, 1,          true);   // mono
-        view.setUint32(24, sampleRate, true);
-        view.setUint32(28, byteRate,   true);
-        view.setUint16(32, 2,          true);   // block align
-        view.setUint16(34, 16,         true);   // bits per sample
-        writeStr(36, 'data');
-        view.setUint32(40, dataBytes,  true);
-        const dst = new Int16Array(buffer, 44);
-        dst.set(int16);
-        return new Blob([buffer], { type: 'audio/wav' });
     }
 
     function showVoiceToast(msg, duration) {
