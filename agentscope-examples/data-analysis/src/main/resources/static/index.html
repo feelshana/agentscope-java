@@ -1086,6 +1086,11 @@
         voiceStream   = stream;
         voicePcmF32   = [];
 
+        // 每次新录音开始，清空输入框（新语音覆盖旧语音，参考微信行为）
+        const input = document.getElementById('chatInput');
+        input.value = '';
+        autoResize(input);
+
         document.getElementById('voiceBtn').classList.add('recording');
         showVoiceToast('🎙️ 正在聆听…松开完成', 0);
 
