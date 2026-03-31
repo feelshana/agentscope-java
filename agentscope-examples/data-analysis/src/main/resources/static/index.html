@@ -443,6 +443,48 @@
             transform: translateX(-50%) translateY(0);
         }
 
+        /* ── 麦克风权限引导弹框 ── */
+        .mic-perm-dialog {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.55);
+            z-index: 300;
+            display: flex; align-items: center; justify-content: center;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.2s;
+            backdrop-filter: blur(4px);
+        }
+        .mic-perm-dialog.active { opacity: 1; pointer-events: auto; }
+        .mic-perm-box {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 28px 24px 20px;
+            max-width: 320px; width: 88%;
+            display: flex; flex-direction: column; align-items: center;
+            gap: 12px;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+        }
+        .mic-perm-icon { font-size: 2.2rem; line-height: 1; }
+        .mic-perm-title {
+            font-size: 1rem; font-weight: 700;
+            color: var(--text); text-align: center;
+        }
+        .mic-perm-text {
+            font-size: 0.84rem; color: var(--text-sub);
+            text-align: left; line-height: 1.7;
+            width: 100%;
+        }
+        .mic-perm-btn {
+            margin-top: 4px;
+            width: 100%; padding: 11px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: #fff; border: none; border-radius: 12px;
+            font-size: 0.92rem; font-weight: 600;
+            cursor: pointer; font-family: inherit;
+            -webkit-appearance: none;
+        }
+        .mic-perm-btn:active { opacity: 0.85; }
+
         .send-btn {
             width: 44px; height: 44px; flex-shrink: 0;
             background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
@@ -978,6 +1020,16 @@
 <!-- 语音输入提示 toast -->
 <div class="voice-toast" id="voiceToast">🎙️ 正在识别，松开完成…</div>
 
+<!-- 麦克风权限引导弹框 -->
+<div class="mic-perm-dialog" id="micPermDialog" onclick="hideVoiceMicDialog()">
+    <div class="mic-perm-box" onclick="event.stopPropagation()">
+        <div class="mic-perm-icon">🎙️</div>
+        <div class="mic-perm-title">无法使用麦克风</div>
+        <div class="mic-perm-text" id="micPermText"></div>
+        <button class="mic-perm-btn" onclick="hideVoiceMicDialog()">我知道了</button>
+    </div>
+</div>
+
 <!-- History Sidebar Overlay -->
 <div class="history-overlay" id="historyOverlay" onclick="closeHistorySidebar()"></div>
 
@@ -1088,13 +1140,31 @@
         if (isProcessing) return;
         if (voiceActive) return;
 
+        // 检查安全上下文：http（非 localhost）下 mediaDevices 不可用
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            const isHttp = location.protocol === 'http:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1';
+            if (isHttp) {
+                showVoiceMicDialog('当前页面使用 HTTP 加载，浏览器禁止在非安全环境使用麦克风。\n请联系管理员改用 HTTPS 访问。');
+            } else {
+                showVoiceMicDialog('您的浏览器不支持麦克风功能，请更换浏览器后重试。');
+            }
+            return;
+        }
+
         let stream;
         try {
             stream = await navigator.mediaDevices.getUserMedia({
                 audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }
             });
         } catch (err) {
-            showVoiceToast('⚠️ 请允许麦克风权限', 2500);
+            const name = err && err.name;
+            if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+                showVoiceMicDialog('麦克风权限被拒绝。\n\n请按以下步骤开启：\n• iOS：设置 → Safari/App → 麦克风 → 允许\n• Android：设置 → 应用 → 浏览器 → 权限 → 麦克风 → 允许\n\n开启后请刷新页面重试。');
+            } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+                showVoiceMicDialog('未检测到麦克风设备，请确认设备已连接。');
+            } else {
+                showVoiceToast('⚠️ 麦克风启动失败，请重试', 2500);
+            }
             return;
         }
 
@@ -1215,6 +1285,20 @@
         const toast = document.getElementById('voiceToast');
         if (toast) toast.classList.remove('show');
         clearTimeout(voiceToastTimer);
+    }
+
+    function showVoiceMicDialog(msg) {
+        const overlay = document.getElementById('micPermDialog');
+        const text    = document.getElementById('micPermText');
+        if (!overlay || !text) return;
+        // 换行符转 <br>
+        text.innerHTML = msg.replace(/\n/g, '<br>');
+        overlay.classList.add('active');
+    }
+
+    function hideVoiceMicDialog() {
+        const overlay = document.getElementById('micPermDialog');
+        if (overlay) overlay.classList.remove('active');
     }
 
     /* ═══════════════════════ Init ═══════════════════════ */
