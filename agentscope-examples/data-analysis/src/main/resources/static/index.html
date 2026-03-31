@@ -58,7 +58,7 @@
         }
 
         html, body {
-            height: 100%; overflow: hidden;
+            height: 100%; max-height: 100%; overflow: hidden;
             font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Noto Sans SC', 'Helvetica Neue', sans-serif;
             background: var(--bg);
             color: var(--text);
@@ -68,13 +68,11 @@
         /* ══════════ Layout shell ══════════ */
         .app-shell {
             display: flex; flex-direction: column;
-            /* Use dvh (dynamic viewport height) on modern browsers to exclude browser chrome;
-               fall back to --app-height set by JS, then 100% */
+            /* --app-height is set by JS to window.innerHeight (excludes browser chrome on mobile).
+               100dvh as native fallback; 100vh as last resort */
             height: var(--app-height, 100dvh);
+            max-height: var(--app-height, 100dvh);
             position: relative; overflow: hidden;
-        }
-        @supports not (height: 100dvh) {
-            .app-shell { height: var(--app-height, 100vh); }
         }
 
         /* ══════════ Header ══════════ */
@@ -817,7 +815,7 @@
                         <span class="welcome-chip">📊 数据分析</span>
                         <span class="welcome-chip">🎯 指标追踪</span>
                         <span class="welcome-chip">💡 智能洞察</span>
-                        <span class="welcome-chip">📈 趋势预测</span>
+
                     </div>
                     <hr class="welcome-divider">
                     <div class="welcome-suggest-label">快速开始 · 点击直接提问</div>
@@ -951,13 +949,18 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-        // Fix mobile viewport height: browsers may include/exclude address bar in 100vh.
-        // We set --app-height from window.innerHeight which always reflects the actual visible area.
+        // Fix mobile viewport height: window.innerHeight / 100vh may include browser chrome.
+        // visualViewport.height is the most accurate on mobile (excludes address bar & keyboard).
         function setAppHeight() {
-            document.documentElement.style.setProperty('--app-height', window.innerHeight + 'px');
+            const h = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
+            document.documentElement.style.setProperty('--app-height', Math.round(h) + 'px');
         }
         setAppHeight();
-        window.addEventListener('resize', setAppHeight);
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', setAppHeight);
+        } else {
+            window.addEventListener('resize', setAppHeight);
+        }
 
         connectPlanStream();
         fetchCurrentPlan();
@@ -1093,7 +1096,7 @@
                         <span class="welcome-chip">📊 数据分析</span>
                         <span class="welcome-chip">🎯 指标追踪</span>
                         <span class="welcome-chip">💡 智能洞察</span>
-                        <span class="welcome-chip">📈 趋势预测</span>
+
                     </div>
                     <hr class="welcome-divider">
                     <div class="welcome-suggest-label">快速开始 · 点击直接提问</div>
