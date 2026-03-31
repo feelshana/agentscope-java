@@ -474,6 +474,17 @@
             text-align: left; line-height: 1.7;
             width: 100%;
         }
+        .mic-perm-text code {
+            display: inline-block;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 2px 8px;
+            font-family: monospace;
+            font-size: 0.82rem;
+            color: var(--primary);
+            word-break: break-all;
+        }
         .mic-perm-btn {
             margin-top: 4px;
             width: 100%; padding: 11px;
@@ -1159,7 +1170,13 @@
         } catch (err) {
             const name = err && err.name;
             if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
-                showVoiceMicDialog('麦克风权限被拒绝。\n\n请按以下步骤开启：\n• iOS：设置 → Safari/App → 麦克风 → 允许\n• Android：设置 → 应用 → 浏览器 → 权限 → 麦克风 → 允许\n\n开启后请刷新页面重试。');
+                // 判断是否在 iframe 内且可能是 Permissions Policy 拦截
+                const inIframe = window.self !== window.top;
+                if (inIframe) {
+                    showVoiceMicDialog('麦克风被页面策略拦截。\n\n当前页面以 iframe 方式嵌入，需要在 iframe 标签上添加麦克风授权：\n\n<code>allow="microphone"</code>\n\n请联系技术人员在宿主页面的 &lt;iframe&gt; 标签中加上该属性后重试。');
+                } else {
+                    showVoiceMicDialog('麦克风权限被拒绝。\n\n请按以下步骤开启：\n• iOS：设置 → Safari/App → 麦克风 → 允许\n• Android：设置 → 应用 → 浏览器 → 权限 → 麦克风 → 允许\n\n开启后请刷新页面重试。');
+                }
             } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
                 showVoiceMicDialog('未检测到麦克风设备，请确认设备已连接。');
             } else {
