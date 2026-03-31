@@ -168,7 +168,7 @@ public class DataApiClient {
                                         .build())
                 .retrieve()
                 .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
-                .timeout(Duration.ofSeconds(30))
+                .timeout(Duration.ofSeconds(60))
                 .map(
                         body -> {
                             Object data = body.get("data");
@@ -393,7 +393,7 @@ public class DataApiClient {
                 .bodyValue(requestBody)
                 .retrieve()
                 .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
-                .timeout(Duration.ofSeconds(60))
+                .timeout(Duration.ofSeconds(180))
                 .switchIfEmpty(
                         Mono.fromSupplier(
                                 () -> {

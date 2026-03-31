@@ -55,6 +55,8 @@ public class ConfirmPlanToHint implements PlanToHint {
         // When the hint instructs the LLM to wait for user confirmation,
         // also tell the LLM to append [CONFIRM_PLAN] at the very end of its reply
         // so the frontend can detect it and render the action buttons.
+        // Replace English confirmation question with Chinese
+        hint = hint.replace("Should I proceed with this plan?", "是否继续执行此计划？");
         if (planNotebook.isNeedUserConfirm() && hint.contains(CONFIRMATION_PHRASE)) {
             // Insert instruction before the closing </system-hint> tag
             String instruction =
