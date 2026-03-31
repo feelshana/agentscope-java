@@ -70,19 +70,21 @@ public class AsrService {
      */
     public String recognize(byte[] audioBytes, String format) throws Exception {
         if (appKey == null || appKey.isEmpty()) {
-            throw new IllegalStateException(
-                    "aliyun.nls.app-key is not configured");
+            throw new IllegalStateException("aliyun.nls.app-key is not configured");
         }
 
         String token = tokenService.getToken();
 
         // Build URL with query params
-        String url = asrUrl
-                + "?appkey=" + appKey
-                + "&format=" + format
-                + "&sample_rate=16000"
-                + "&enable_punctuation_prediction=true"
-                + "&enable_inverse_text_normalization=true";
+        String url =
+                asrUrl
+                        + "?appkey="
+                        + appKey
+                        + "&format="
+                        + format
+                        + "&sample_rate=16000"
+                        + "&enable_punctuation_prediction=true"
+                        + "&enable_inverse_text_normalization=true";
 
         log.info("Calling NLS ASR, format={}, bytes={}", format, audioBytes.length);
 
@@ -100,13 +102,12 @@ public class AsrService {
         }
 
         int status = conn.getResponseCode();
-        InputStream is = (status >= 200 && status < 300)
-                ? conn.getInputStream()
-                : conn.getErrorStream();
+        InputStream is =
+                (status >= 200 && status < 300) ? conn.getInputStream() : conn.getErrorStream();
 
         StringBuilder sb = new StringBuilder();
-        try (BufferedReader br = new BufferedReader(
-                new InputStreamReader(is, StandardCharsets.UTF_8))) {
+        try (BufferedReader br =
+                new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
             String line;
             while ((line = br.readLine()) != null) sb.append(line);
         }

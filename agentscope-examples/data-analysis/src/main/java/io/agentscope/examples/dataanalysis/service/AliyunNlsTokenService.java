@@ -78,8 +78,10 @@ public class AliyunNlsTokenService {
     // ─────────────────────────── internal ───────────────────────────
 
     private void refreshToken() throws Exception {
-        if (accessKeyId == null || accessKeyId.isEmpty()
-                || accessKeySecret == null || accessKeySecret.isEmpty()) {
+        if (accessKeyId == null
+                || accessKeyId.isEmpty()
+                || accessKeySecret == null
+                || accessKeySecret.isEmpty()) {
             throw new IllegalStateException(
                     "aliyun.nls.access-key-id / access-key-secret are not configured");
         }
@@ -111,14 +113,16 @@ public class AliyunNlsTokenService {
 
         int code = conn.getResponseCode();
         StringBuilder sb = new StringBuilder();
-        try (BufferedReader br = new BufferedReader(
-                new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+        try (BufferedReader br =
+                new BufferedReader(
+                        new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
             while ((line = br.readLine()) != null) sb.append(line);
         }
         String body = sb.toString();
         if (code != 200) {
-            throw new RuntimeException("NLS Token request failed, status=" + code + ", body=" + body);
+            throw new RuntimeException(
+                    "NLS Token request failed, status=" + code + ", body=" + body);
         }
 
         ObjectMapper mapper = new ObjectMapper();
@@ -142,11 +146,13 @@ public class AliyunNlsTokenService {
         StringBuilder canonicalized = new StringBuilder();
         for (String key : keys) {
             if (canonicalized.length() > 0) canonicalized.append('&');
-            canonicalized.append(percentEncode(key))
+            canonicalized
+                    .append(percentEncode(key))
                     .append('=')
                     .append(percentEncode(params.get(key)));
         }
-        String stringToSign = "GET&" + percentEncode("/") + "&" + percentEncode(canonicalized.toString());
+        String stringToSign =
+                "GET&" + percentEncode("/") + "&" + percentEncode(canonicalized.toString());
         Mac mac = Mac.getInstance("HmacSHA1");
         mac.init(new SecretKeySpec((secret + "&").getBytes(StandardCharsets.UTF_8), "HmacSHA1"));
         byte[] hmac = mac.doFinal(stringToSign.getBytes(StandardCharsets.UTF_8));
@@ -166,10 +172,11 @@ public class AliyunNlsTokenService {
 
     private static String buildQueryString(Map<String, String> params) {
         StringBuilder sb = new StringBuilder();
-        params.forEach((k, v) -> {
-            if (sb.length() > 0) sb.append('&');
-            sb.append(percentEncode(k)).append('=').append(percentEncode(v));
-        });
+        params.forEach(
+                (k, v) -> {
+                    if (sb.length() > 0) sb.append('&');
+                    sb.append(percentEncode(k)).append('=').append(percentEncode(v));
+                });
         return sb.toString();
     }
 

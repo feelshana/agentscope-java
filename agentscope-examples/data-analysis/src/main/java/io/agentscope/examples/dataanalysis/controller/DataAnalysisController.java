@@ -201,20 +201,22 @@ public class DataAnalysisController {
             @RequestPart("audio") FilePart file,
             @RequestParam(defaultValue = "opus") String format) {
         return DataBufferUtils.join(file.content())
-                .flatMap(dataBuffer -> {
-                    byte[] bytes = new byte[dataBuffer.readableByteCount()];
-                    dataBuffer.read(bytes);
-                    DataBufferUtils.release(dataBuffer);
-                    try {
-                        String text = asrService.recognize(bytes, format);
-                        return Mono.just(Map.of("text", text));
-                    } catch (Exception e) {
-                        return Mono.error(e);
-                    }
-                })
-                .onErrorResume(e -> {
-                    String msg = e.getMessage() != null ? e.getMessage() : "ASR failed";
-                    return Mono.just(Map.of("error", msg));
-                });
+                .flatMap(
+                        dataBuffer -> {
+                            byte[] bytes = new byte[dataBuffer.readableByteCount()];
+                            dataBuffer.read(bytes);
+                            DataBufferUtils.release(dataBuffer);
+                            try {
+                                String text = asrService.recognize(bytes, format);
+                                return Mono.just(Map.of("text", text));
+                            } catch (Exception e) {
+                                return Mono.error(e);
+                            }
+                        })
+                .onErrorResume(
+                        e -> {
+                            String msg = e.getMessage() != null ? e.getMessage() : "ASR failed";
+                            return Mono.just(Map.of("error", msg));
+                        });
     }
 }
