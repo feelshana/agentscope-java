@@ -57,6 +57,17 @@ public class ConfirmPlanToHint implements PlanToHint {
         // so the frontend can detect it and render the action buttons.
         // Replace English confirmation question with Chinese
         hint = hint.replace("Should I proceed with this plan?", "是否继续执行此计划？");
+
+        // Remove the "implied-intent bypass" clause that allows the LLM to skip
+        // confirmation when the user's message contains words like "execute".
+        // In this UI, confirmation is ALWAYS done via the ✅/❌ buttons – the LLM
+        // must never self-authorize execution based on message content alone.
+        hint =
+                hint.replace(
+                        "- If user's request already implies execution intent (e.g., \"execute\","
+                                + " \"execute the plan\"), proceed directly without asking\n",
+                        "");
+
         if (planNotebook.isNeedUserConfirm() && hint.contains(CONFIRMATION_PHRASE)) {
             // Insert instruction before the closing </system-hint> tag
             String instruction =
@@ -64,7 +75,11 @@ public class ConfirmPlanToHint implements PlanToHint {
                             + CONFIRM_TOKEN
                             + " on its own line at the very end of your reply (no text after it)."
                             + " This token is for frontend rendering – do NOT explain it to the"
-                            + " user.\n";
+                            + " user.\n"
+                            + "- CRITICAL: You MUST wait for the user to click the confirmation"
+                            + " button. Do NOT start execution based on any previous message or"
+                            + " implied intent. Only the explicit '执行' response from the UI"
+                            + " button authorizes execution.\n";
             hint = hint.replace("</system-hint>", instruction + "</system-hint>");
         }
         return hint;
