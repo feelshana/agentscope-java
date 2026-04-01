@@ -642,31 +642,64 @@
         .subtask-outcome { font-size: 0.72rem; color: #34d399; margin-top: 3px; font-style: italic; }
 
         /* ══════════ Confirm Plan Actions ══════════ */
+        /* Wrapping card that separates the confirm area from plain assistant text */
+        .confirm-actions-wrap {
+            margin-top: 12px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-top: 2px solid var(--primary);
+            border-radius: var(--radius-md);
+            padding: 14px 14px 12px;
+            display: flex; flex-direction: column; gap: 8px;
+        }
+        /* Small label row at the top of the card */
+        .confirm-actions-label {
+            display: flex; align-items: center; gap: 6px;
+            font-size: 0.72rem; font-weight: 600;
+            color: var(--primary);
+            letter-spacing: 0.02em;
+            margin-bottom: 2px;
+        }
+        .confirm-actions-label-icon {
+            width: 14px; height: 14px; flex-shrink: 0;
+        }
         .confirm-actions {
-            display: flex; flex-direction: column; gap: 8px; margin-top: 14px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
         }
         .confirm-btn {
-            width: 100%; padding: 13px 0;
-            border-radius: var(--radius-md);
-            font-size: 1rem; font-weight: 600;
+            /* min 44px tap-target per Apple HIG */
+            min-height: 44px;
+            padding: 0 12px;
+            border-radius: var(--radius-sm);
+            font-size: 0.95rem; font-weight: 600;
             cursor: pointer; border: none;
-            font-family: inherit; transition: all 0.18s;
+            font-family: inherit;
+            transition: opacity 0.15s, transform 0.12s;
             -webkit-appearance: none;
-            display: flex; align-items: center; justify-content: center; gap: 7px;
+            display: flex; align-items: center; justify-content: center; gap: 5px;
+            white-space: nowrap;
+            /* Prevent iOS long-press highlight */
+            -webkit-touch-callout: none;
+            user-select: none;
         }
         .confirm-btn.confirm-yes {
             background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
             color: #fff;
-            box-shadow: 0 4px 14px var(--primary-glow);
+            box-shadow: 0 3px 10px var(--primary-glow);
         }
-        .confirm-btn.confirm-yes:active { opacity: 0.85; transform: scale(0.98); }
+        .confirm-btn.confirm-yes:active { opacity: 0.82; transform: scale(0.97); }
         .confirm-btn.confirm-no {
-            background: var(--surface2);
+            background: var(--surface);
             color: var(--text-sub);
-            border: 1px solid var(--border);
+            border: 1.5px solid var(--border);
         }
-        .confirm-btn.confirm-no:active { background: var(--surface3); }
-        .confirm-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+        .confirm-btn.confirm-no:active { background: var(--surface3); transform: scale(0.97); }
+        .confirm-btn:disabled {
+            opacity: 0.38; cursor: not-allowed; transform: none;
+            box-shadow: none;
+        }
 
 
         /* ══════════ Chart ══════════ */
@@ -676,6 +709,12 @@
             border: 1px solid var(--border);
             border-radius: var(--radius-md); padding: 14px;
             overflow: hidden; box-shadow: var(--shadow-sm);
+            /* Fade-in so the chart doesn't hard-pop into view */
+            animation: chartFadeIn 0.4s ease both;
+        }
+        @keyframes chartFadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to   { opacity: 1; transform: translateY(0); }
         }
         .chart-title { font-size: 0.82rem; font-weight: 600; color: var(--text); margin-bottom: 10px; text-align: center; }
         .chart-wrapper svg { width: 100%; height: auto; display: block; }
@@ -1302,6 +1341,9 @@
         let finalized = false;
         let inSpecialBlock = false;  // true once <report> or <chart> tag detected
         let inReportStream = false;   // true when streaming report content (not chart)
+        // Set to true after query_dataset completes so normal-text streaming shows a
+        // "generating chart…" pre-indicator before the <chart> tag actually arrives.
+        let pendingChartLoading = false;
 
         // Detect user scroll: if user scrolls up (away from bottom), stop auto-scroll
         const chatMsgsEl = document.getElementById('chatMessages');
@@ -1356,11 +1398,36 @@
             const chunk = event.data;
             if (chunk === '[STOPPED]') { eventSource.close(); doFinalize(); return; }
 
+            // ── Tool progress markers: update status line in bubble, never accumulate in text ──
+            if (/^\[TOOL:[^\]]+\]$/.test(chunk)) {
+                const toolName = chunk.slice(6, -1);
+                const label = toolName === 'list_datasets'  ? '⚙️ 正在发现可用数据集…'
+                            : toolName === 'query_dataset'  ? '📊 数据查询完成，正在分析…'
+                            : `⚙️ 工具执行中（${toolName}）…`;
+                // After query_dataset finishes, the LLM will emit conclusion text then
+                // a <chart> block. Flag this so we can show a chart pre-loading indicator.
+                if (toolName === 'query_dataset') pendingChartLoading = true;
+                // Ensure bubble exists
+                if (!assistantEl) { removeTyping(typingEl); assistantEl = appendMessage('assistant', ''); }
+                const content = assistantEl.querySelector('.message-content');
+                let statusEl = content.querySelector('#toolStatusLine');
+                if (!statusEl) {
+                    statusEl = document.createElement('div');
+                    statusEl.id = 'toolStatusLine';
+                    statusEl.style.cssText = 'font-size:0.8rem;color:var(--text-hint);margin:4px 0 2px;display:flex;align-items:center;gap:6px;';
+                    content.appendChild(statusEl);
+                }
+                statusEl.textContent = label;
+                if (!streamingUserScrolledUp) document.getElementById('chatMessages').scrollTop = 99999;
+                return;
+            }
+
             assistantText += chunk;
 
             // Once we see a special-block opening tag, switch to streaming report / loading
             if (!inSpecialBlock && /<report>|<chart>/i.test(assistantText)) {
                 inSpecialBlock = true;
+                pendingChartLoading = false; // chart block has arrived; no longer "pending"
                 // Determine if this is a report block (stream it) or chart block (show spinner)
                 inReportStream = /<report>/i.test(assistantText);
                 // Ensure we have a bubble
@@ -1370,6 +1437,12 @@
                     .replace(/<chart>[\s\S]*/i, '')
                     .trim();
                 const content = assistantEl.querySelector('.message-content');
+                // Remove tool status line (replaced by report loading indicator)
+                const _statusEl = content.querySelector('#toolStatusLine');
+                if (_statusEl) _statusEl.remove();
+                // Remove pre-chart loading bar if it was shown during normal streaming
+                const _preChartEl = content.querySelector('#preChartLoadingBar');
+                if (_preChartEl) _preChartEl.remove();
                 const textNode = beforeTag
                     ? `<div class="text-part" id="msgTextPart">${escapeHtml(beforeTag)}</div>`
                     : '';
@@ -1379,13 +1452,8 @@
                         `<div class="loading-indicator" id="msgLoadingIndicator">
                             <div class="loading-spinner"></div>生成分析报告中…
                         </div>`;
-                    // Scroll to show the conclusion text
-                    const textPartEl = content.querySelector('#msgTextPart');
-                    if (textPartEl) {
-                        textPartEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    } else {
-                        document.getElementById('chatMessages').scrollTop = 99999;
-                    }
+                    // Keep scroll at bottom – smooth scroll to conclusion text is disorienting
+                    if (!streamingUserScrolledUp) document.getElementById('chatMessages').scrollTop = 99999;
                     // Immediately try to render any report content already buffered
                     const reportInner = assistantText.match(/<report>([\s\S]*)/i);
                     if (reportInner && reportInner[1].trim()) {
@@ -1394,17 +1462,13 @@
                         renderReportStream(rawSoFar);
                     }
                 } else {
-                    // Chart block: keep spinner as before
+                    // Chart block: show spinner; the loading text will be updated in real time
+                    // (per-chunk KB counter) by the inSpecialBlock branch below.
                     content.innerHTML = textNode +
                         `<div class="loading-indicator" id="msgLoadingIndicator">
-                            <div class="loading-spinner"></div>生成分析报告中…
+                            <div class="loading-spinner"></div><span id="chartLoadingText">正在生成图表…</span>
                         </div>`;
-                    const textPartEl = content.querySelector('#msgTextPart');
-                    if (textPartEl) {
-                        textPartEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    } else {
-                        document.getElementById('chatMessages').scrollTop = 99999;
-                    }
+                    if (!streamingUserScrolledUp) document.getElementById('chatMessages').scrollTop = 99999;
                 }
                 return;
             }
@@ -1418,14 +1482,55 @@
                         const rawSoFar = reportInner[1].replace(/<\/report>[\s\S]*/i, '');
                         if (rawSoFar.trim()) renderReportStream(rawSoFar);
                     }
+                } else {
+                    // Chart JSON accumulating: update the loading text with received byte count
+                    // so the user sees progress rather than a frozen spinner.
+                    const chartInner = assistantText.match(/<chart>([\s\S]*)/i);
+                    if (chartInner) {
+                        const received = chartInner[1].replace(/<\/chart>[\s\S]*/i, '').length;
+                        const kb = (received / 1024).toFixed(1);
+                        const el = document.getElementById('chartLoadingText');
+                        if (el) el.textContent = `正在生成图表… (${kb}KB)`;
+                    }
                 }
-                // Chart blocks continue to accumulate silently
                 return;
             }
 
             // Normal streaming: show plain text
             if (!assistantEl) { removeTyping(typingEl); assistantEl = appendMessage('assistant', ''); }
+            // Remove tool status line once real text arrives
+            const statusLineEl = assistantEl.querySelector('#toolStatusLine');
+            if (statusLineEl) statusLineEl.remove();
             updateLastMessage(assistantEl, assistantText);
+
+            // If query_dataset already finished and the LLM is now outputting conclusion text,
+            // show a "generating chart…" bar at the bottom of the bubble so the user knows
+            // a chart is coming. This prevents the chart from hard-popping in with no warning.
+            if (pendingChartLoading && assistantEl) {
+                const content = assistantEl.querySelector('.message-content');
+                if (content && !content.querySelector('#preChartLoadingBar')) {
+                    const bar = document.createElement('div');
+                    bar.id = 'preChartLoadingBar';
+                    bar.style.cssText =
+                        'display:flex;align-items:center;gap:8px;margin-top:8px;'
+                        + 'padding:8px 12px;background:var(--surface2);border:1px solid var(--border);'
+                        + 'border-radius:var(--radius-sm);font-size:0.78rem;color:var(--text-hint);';
+                    bar.innerHTML =
+                        '<div style="width:12px;height:12px;flex-shrink:0;border:2px solid var(--border);'
+                        + 'border-top-color:var(--primary);border-radius:50%;'
+                        + 'animation:spinLoader 0.7s linear infinite;"></div>'
+                        + '<span id="preChartText">📊 正在生成图表…</span>';
+                    content.appendChild(bar);
+                    // Animate dots
+                    let _preDots = 0;
+                    window._preChartTimer = setInterval(() => {
+                        const el = document.getElementById('preChartText');
+                        if (!el) { clearInterval(window._preChartTimer); return; }
+                        _preDots = (_preDots + 1) % 4;
+                        el.textContent = '📊 正在生成图表' + '．'.repeat(_preDots);
+                    }, 400);
+                }
+            }
         };
 
         eventSource.onerror = () => {
@@ -1503,18 +1608,53 @@
         const content = el.querySelector('.message-content');
 
         if (reportHtml || chartHtml) {
+            // Clear chart loading timers if running
+            if (window._chartLoadingTimer) { clearInterval(window._chartLoadingTimer); window._chartLoadingTimer = null; }
+            if (window._preChartTimer) { clearInterval(window._preChartTimer); window._preChartTimer = null; }
             content.classList.add('has-chart');
-            const textHtml = textPart ? `<div class="text-part">${escapeHtml(textPart)}</div>` : '';
-            content.innerHTML = textHtml + reportHtml + chartHtml;
-            // Scroll to the start of the report block (not the very bottom),
-            // so the user sees the beginning of the report right after the conclusion.
-            requestAnimationFrame(() => {
-                const reportBlock = content.querySelector('.report-block, .chart-wrapper');
-                if (reportBlock) {
-                    reportBlock.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                } else {
-                    document.getElementById('chatMessages').scrollTop = 99999;
+
+            // ── Surgical DOM update: avoid full innerHTML replace so CSS animations fire ──
+            // 1. Remove the loading indicator (spinner shown while chart JSON was buffering)
+            const loadingEl = content.querySelector('#msgLoadingIndicator');
+            if (loadingEl) loadingEl.remove();
+            // Remove any pre-chart bar that may still be in the DOM
+            const preChartEl = content.querySelector('#preChartLoadingBar');
+            if (preChartEl) preChartEl.remove();
+
+            // 2. Ensure the text-part div is present (it might not exist yet if LLM had no
+            //    preamble text before the <chart>/<report> tag).
+            if (textPart) {
+                let textPartEl = content.querySelector('.text-part');
+                if (!textPartEl) {
+                    textPartEl = document.createElement('div');
+                    textPartEl.className = 'text-part';
+                    content.prepend(textPartEl);
                 }
+                textPartEl.textContent = textPart;
+            }
+
+            // 3. Append report block (replace existing streaming block if present)
+            if (reportHtml) {
+                const existingReport = content.querySelector('.report-block');
+                if (existingReport) existingReport.remove();
+                const reportEl = document.createElement('div');
+                reportEl.innerHTML = reportHtml;
+                content.appendChild(reportEl.firstElementChild);
+            }
+
+            // 4. Append chart wrapper as a NEW element so the CSS fade-in animation triggers.
+            //    Using innerHTML on a temp div then moving the child preserves animation.
+            if (chartHtml) {
+                const tmp = document.createElement('div');
+                tmp.innerHTML = chartHtml;
+                const chartEl = tmp.firstElementChild;
+                content.appendChild(chartEl);
+                // Force a reflow so the animation restart is guaranteed
+                void chartEl.offsetWidth;
+            }
+
+            requestAnimationFrame(() => {
+                document.getElementById('chatMessages').scrollTop = 99999;
             });
         } else {
             content.textContent = textPart || fullText;
@@ -1524,13 +1664,21 @@
         // Primary injection happens via plan SSE (renderPlan); this is the backup path.
         // Skip if user already made a decision (confirmDecided) to avoid re-injection.
         if (hasConfirm && !confirmDecided && !content.querySelector('.confirm-actions')) {
-            const actionsDiv = document.createElement('div');
-            actionsDiv.className = 'confirm-actions';
-            actionsDiv.innerHTML = `
-                <button class="confirm-btn confirm-yes" onclick="sendConfirm(this, '\u6267\u884c')">✅ 执行计划</button>
-                <button class="confirm-btn confirm-no"  onclick="sendConfirm(this, '\u4e0d\u6267\u884c')">❌ 不执行</button>
-            `;
-            content.appendChild(actionsDiv);
+            const wrapDiv = document.createElement('div');
+            wrapDiv.className = 'confirm-actions-wrap';
+            wrapDiv.innerHTML = `
+                <div class="confirm-actions-label">
+                    <svg class="confirm-actions-label-icon" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.4"/>
+                        <path d="M8 5v3.5L10 10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                    </svg>
+                    计划已就绪，请确认是否执行
+                </div>
+                <div class="confirm-actions">
+                    <button class="confirm-btn confirm-yes" onclick="sendConfirm(this, '\u6267\u884c')">✅ 执行计划</button>
+                    <button class="confirm-btn confirm-no"  onclick="sendConfirm(this, '\u4e0d\u6267\u884c')">❌ 不执行</button>
+                </div>`;
+            content.appendChild(wrapDiv);
         }
 
         // 在消息气泡下方追加推荐问题（仅非确认类回复）
@@ -1593,8 +1741,12 @@
 
     function buildBarChart(def) {
         const data = def.data;
-        const W = 460, H = 200;
-        const padL = 50, padR = 16, padT = 10, padB = 50;
+        const W = 460;
+        const padL = 50, padR = 16, padT = 10;
+        // Dynamic bottom padding: longer labels need more space for rotated text
+        const maxLabelLen = Math.max(...data.map(d => String(d.label||'').length));
+        const padB = maxLabelLen > 6 ? 70 : 54;
+        const H = 200 + (padB - 50);  // grow height to fit labels
         const chartW = W - padL - padR, chartH = H - padT - padB;
         const maxVal = Math.max(...data.map(d => d.value));
         const barW = Math.min(chartW / data.length * 0.6, 40);
@@ -1611,10 +1763,15 @@
             const barH = (d.value / maxVal) * chartH;
             const x = padL + gap * i + gap / 2 - barW / 2;
             const y = padT + chartH - barH;
-            const sl = String(d.label||''); const sl2 = sl.length>5?sl.slice(0,4)+'…':sl;
+            const cx = padL + gap * i + gap / 2;  // center x of bar
+            const labelY = padT + chartH + 6;      // start of rotated label baseline
+            // Truncate at 10 chars to prevent extreme overflow
+            const sl = String(d.label||'');
+            const sl2 = sl.length > 10 ? sl.slice(0, 9) + '…' : sl;
             bars += `<rect x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${color}" rx="3"/>`;
             bars += `<text x="${x+barW/2}" y="${y-4}" text-anchor="middle" font-size="10" fill="#5f6368">${fmtNum(d.value)}</text>`;
-            bars += `<text x="${x+barW/2}" y="${H-padB+16}" text-anchor="middle" font-size="10" fill="#5f6368">${escapeHtml(sl2)}</text>`;
+            // Rotate label -40° around its anchor point to avoid overlap
+            bars += `<text x="${cx}" y="${labelY}" text-anchor="end" font-size="10" fill="#5f6368" transform="rotate(-40,${cx},${labelY})">${escapeHtml(sl2)}</text>`;
         });
         const axes = `<line x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT+chartH}" stroke="#bdbdbd" stroke-width="1"/>
             <line x1="${padL}" y1="${padT+chartH}" x2="${W-padR}" y2="${padT+chartH}" stroke="#bdbdbd" stroke-width="1"/>`;
@@ -1624,8 +1781,12 @@
 
     function buildLineChart(def) {
         const data = def.data;
-        const W = 460, H = 200;
-        const padL = 50, padR = 16, padT = 10, padB = 50;
+        const W = 460;
+        const padL = 50, padR = 16, padT = 10;
+        // Dynamic bottom padding for rotated labels
+        const maxLabelLen = Math.max(...data.map(d => String(d.label||'').length));
+        const padB = maxLabelLen > 6 ? 70 : 54;
+        const H = 200 + (padB - 50);
         const chartW = W - padL - padR, chartH = H - padT - padB;
         const maxVal = Math.max(...data.map(d => d.value));
         const minVal = Math.min(0, Math.min(...data.map(d => d.value)));
@@ -1650,10 +1811,13 @@
         }
         let circles = '';
         pts.forEach(p => {
-            const sl = String(p.d.label||''); const sl2 = sl.length>5?sl.slice(0,4)+'…':sl;
+            const labelY = padT + chartH + 6;
+            const sl = String(p.d.label||'');
+            const sl2 = sl.length > 10 ? sl.slice(0, 9) + '…' : sl;
             circles += `<circle cx="${p.x}" cy="${p.y}" r="4" fill="${color}" stroke="white" stroke-width="1.5"/>`;
             circles += `<text x="${p.x}" y="${p.y-8}" text-anchor="middle" font-size="10" fill="#5f6368">${fmtNum(p.d.value)}</text>`;
-            circles += `<text x="${p.x}" y="${H-padB+16}" text-anchor="middle" font-size="10" fill="#5f6368">${escapeHtml(sl2)}</text>`;
+            // Rotate label -40° to prevent overlap
+            circles += `<text x="${p.x}" y="${labelY}" text-anchor="end" font-size="10" fill="#5f6368" transform="rotate(-40,${p.x},${labelY})">${escapeHtml(sl2)}</text>`;
         });
         const axes = `<line x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT+chartH}" stroke="#bdbdbd" stroke-width="1"/>
             <line x1="${padL}" y1="${padT+chartH}" x2="${W-padR}" y2="${padT+chartH}" stroke="#bdbdbd" stroke-width="1"/>`;
@@ -1801,13 +1965,21 @@
             const allBubbles = msgs ? msgs.querySelectorAll('.message.assistant .message-content') : [];
             const lastBubble = allBubbles.length > 0 ? allBubbles[allBubbles.length - 1] : null;
             if (lastBubble && !lastBubble.querySelector('.confirm-actions')) {
-                const actionsDiv = document.createElement('div');
-                actionsDiv.className = 'confirm-actions';
-                actionsDiv.innerHTML = `
-                    <button class="confirm-btn confirm-yes" onclick="sendConfirm(this, '\u6267\u884c')">✅ 执行计划</button>
-                    <button class="confirm-btn confirm-no"  onclick="sendConfirm(this, '\u4e0d\u6267\u884c')">❌ 不执行</button>
-                `;
-                lastBubble.appendChild(actionsDiv);
+                const wrapDiv = document.createElement('div');
+                wrapDiv.className = 'confirm-actions-wrap';
+                wrapDiv.innerHTML = `
+                    <div class="confirm-actions-label">
+                        <svg class="confirm-actions-label-icon" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.4"/>
+                            <path d="M8 5v3.5L10 10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                        </svg>
+                        计划已就绪，请确认是否执行
+                    </div>
+                    <div class="confirm-actions">
+                        <button class="confirm-btn confirm-yes" onclick="sendConfirm(this, '\u6267\u884c')">✅ 执行计划</button>
+                        <button class="confirm-btn confirm-no"  onclick="sendConfirm(this, '\u4e0d\u6267\u884c')">❌ 不执行</button>
+                    </div>`;
+                lastBubble.appendChild(wrapDiv);
                 if (msgs) msgs.scrollTop = 99999;
             }
         }

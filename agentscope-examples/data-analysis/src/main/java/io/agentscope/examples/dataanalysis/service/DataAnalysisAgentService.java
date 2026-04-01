@@ -134,7 +134,11 @@ public class DataAnalysisAgentService implements InitializingBean {
                 .map(
                         event -> {
                             String chunk = eventToString(event);
-                            if (!chunk.isEmpty() && !"[STOPPED]".equals(chunk)) {
+                            // Tool progress markers ([TOOL:xxx]) are streamed to frontend
+                            // for real-time status display, but must NOT be saved to DB.
+                            if (!chunk.isEmpty()
+                                    && !"[STOPPED]".equals(chunk)
+                                    && !chunk.startsWith("[TOOL:")) {
                                 replyBuf.get().append(chunk);
                             }
                             return chunk;
@@ -202,6 +206,21 @@ public class DataAnalysisAgentService implements InitializingBean {
             Msg msg = event.getMessage();
             if (msg != null && msg.getGenerateReason() == GenerateReason.ACTING_STOP_REQUESTED) {
                 return "[STOPPED]";
+            }
+            return "";
+        }
+        // For tool result events (isLast=true marks completion), emit a progress marker
+        // so the frontend can show a real-time status line instead of a blank loading indicator.
+        // The marker format is [TOOL:<toolName>] and is intentionally excluded from DB persistence.
+        if (event.getType() == EventType.TOOL_RESULT && event.isLast()) {
+            List<io.agentscope.core.message.ToolResultBlock> toolBlocks =
+                    event.getMessage()
+                            .getContentBlocks(io.agentscope.core.message.ToolResultBlock.class);
+            if (!toolBlocks.isEmpty()) {
+                String toolName = toolBlocks.get(0).getName();
+                if (toolName != null && !toolName.isBlank()) {
+                    return "[TOOL:" + toolName + "]";
+                }
             }
             return "";
         }
