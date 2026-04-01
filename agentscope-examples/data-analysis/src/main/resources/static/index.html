@@ -239,13 +239,11 @@
         }
         .post-report-sugg-scroll {
             display: flex; gap: 7px;
-            overflow-x: auto; -webkit-overflow-scrolling: touch;
+            flex-wrap: wrap;
             padding-bottom: 4px;
-            scrollbar-width: none;
         }
-        .post-report-sugg-scroll::-webkit-scrollbar { display: none; }
         .post-report-sugg-chip {
-            display: inline-flex; align-items: center; white-space: nowrap;
+            display: inline-flex; align-items: center; white-space: normal; word-break: break-all;
             padding: 6px 12px;
             background: var(--surface2);
             border: 1px solid rgba(79,110,247,0.18);
@@ -393,6 +391,55 @@
             background: #fff;
         }
         .chat-textarea::placeholder { color: var(--text-hint); }
+        /* ══════════ Voice input button ══════════ */
+        .voice-btn {
+            width: 44px; height: 44px; flex-shrink: 0;
+            background: var(--surface2);
+            border: 1.5px solid rgba(79,110,247,0.18);
+            border-radius: 14px;
+            color: var(--text-sub);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            transition: all 0.18s;
+            -webkit-appearance: none;
+            touch-action: none;       /* 防止长按触发页面滚动 */
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .voice-btn svg { width: 20px; height: 20px; flex-shrink: 0; }
+        .voice-btn:active, .voice-btn.recording {
+            background: rgba(239,68,68,0.1);
+            border-color: rgba(239,68,68,0.5);
+            color: #ef4444;
+        }
+        /* 录音时麦克风图标脉动 */
+        .voice-btn.recording svg {
+            animation: voicePulse 0.8s ease-in-out infinite;
+        }
+        @keyframes voicePulse {
+            0%,100% { transform: scale(1);   opacity: 1; }
+            50%      { transform: scale(1.25); opacity: 0.7; }
+        }
+        /* 录音状态提示条 */
+        .voice-toast {
+            position: fixed;
+            bottom: 90px; left: 50%; transform: translateX(-50%) translateY(20px);
+            background: rgba(30,30,30,0.82);
+            color: #fff;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 0.82rem;
+            white-space: nowrap;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s, transform 0.2s;
+            z-index: 200;
+            backdrop-filter: blur(6px);
+        }
+        .voice-toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
 
         .send-btn {
             width: 44px; height: 44px; flex-shrink: 0;
@@ -882,8 +929,6 @@
                         <span class="welcome-chip">📊 数据分析</span>
                         <span class="welcome-chip">🎯 指标追踪</span>
                         <span class="welcome-chip">💡 智能洞察</span>
-                        <span class="welcome-chip">📈 趋势预测</span>
-
                     </div>
                     <hr class="welcome-divider">
                     <div class="welcome-suggest-label">快速开始 · 点击直接提问</div>
@@ -904,6 +949,18 @@
                     onkeydown="handleInputKey(event)"
                     oninput="autoResize(this)"
                 ></textarea>
+                <!-- 语音输入按钮：长按录音，松开转文字 -->
+                <button class="voice-btn" id="voiceBtn" title="长按语音输入"
+                    onmousedown="voiceStart(event)" onmouseup="voiceStop(event)" onmouseleave="voiceStop(event)"
+                    ontouchstart="voiceStart(event)" ontouchend="voiceStop(event)" ontouchcancel="voiceStop(event)">
+                    <!-- 麦克风图标 -->
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="9" y="2" width="6" height="12" rx="3" stroke="currentColor" stroke-width="1.8"/>
+                        <path d="M5 10a7 7 0 0014 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                        <line x1="12" y1="17" x2="12" y2="21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                        <line x1="9" y1="21" x2="15" y2="21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                    </svg>
+                </button>
                 <button class="send-btn" id="sendBtn" onclick="sendMessage()" title="发送">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 2L15 22l-4-9-9-4 20-7z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </button>
@@ -913,6 +970,9 @@
     </div>
 
 </div><!-- /app-shell -->
+
+<!-- 语音输入提示 toast -->
+<div class="voice-toast" id="voiceToast">🎙️ 正在识别，松开完成…</div>
 
 <!-- History Sidebar Overlay -->
 <div class="history-overlay" id="historyOverlay" onclick="closeHistorySidebar()"></div>
@@ -978,6 +1038,17 @@
 </div>
 
 <script>
+    /* ─── Base path auto-detection (supports local dev and nginx sub-path proxy) ───
+     * 本地直接访问时 pathname='/'，BASE_PATH=''，请求路径为 /api/xxx
+     * nginx 代理时 pathname='/dify/dataAnalyse/'，BASE_PATH='/dify/dataAnalyse'，请求路径为 /dify/dataAnalyse/api/xxx
+     */
+    const BASE_PATH = (() => {
+        const p = window.location.pathname;
+        // 去掉末尾的 index.html 或 /，保留目录前缀
+        const dir = p.replace(/\/index\.html$/, '').replace(/\/$/, '');
+        return dir || '';
+    })();
+
     /* ═══════════════════════ State ═══════════════════════ */
     let datasets = [];
     let selectedDataset = null;
@@ -989,10 +1060,11 @@
     let planPending = false;
     let confirmDecided = false;  // true after user clicks 执行/不执行; prevents re-injection
     let confirmExecuted = false; // true only when user clicks 执行（not 不执行）; gates drawer auto-expand
+    let streamingUserScrolledUp = false; // true when user scrolls up during streaming, disables auto-scroll
 
     // ─── User identity from URL param ───
     const urlParams = new URLSearchParams(window.location.search);
-    const currentUserName = urlParams.get('userName') || '';
+    const currentUserName = urlParams.get('account') || urlParams.get('userName') || '';
 
     // ─── Session management ───
     let currentSessionId = generateUUID();
@@ -1004,13 +1076,162 @@
         });
     }
 
+    /* ═══════════════════════ Voice Input (AudioContext PCM → Aliyun NLS) ═══════════════════════ */
+    /*
+     * 采集原始 PCM（16kHz/16bit/mono），直接上传裸 PCM 二进制。
+     * NLS format=pcm&sample_rate=16000，这是阿里云最稳定支持的格式，无任何容器开销。
+     */
+    let voiceAudioCtx    = null;
+    let voiceProcessor   = null;
+    let voiceSource      = null;
+    let voicePcmF32      = [];   // Float32Array 列表（录音过程中积累）
+    let voiceActive      = false;
+    let voiceToastTimer  = null;
+    let voiceStream      = null;
+
+    const VOICE_TARGET_RATE = 16000;  // NLS 要求 16kHz
+
+    async function voiceStart(e) {
+        e.preventDefault();
+        if (isProcessing) return;
+        if (voiceActive) return;
+
+        let stream;
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({
+                audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }
+            });
+        } catch (err) {
+            showVoiceToast('⚠️ 请允许麦克风权限', 2500);
+            return;
+        }
+
+        voiceActive   = true;
+        voiceStream   = stream;
+        voicePcmF32   = [];
+
+        // 每次新录音开始，清空输入框（新语音覆盖旧语音，参考微信行为）
+        const input = document.getElementById('chatInput');
+        input.value = '';
+        autoResize(input);
+
+        document.getElementById('voiceBtn').classList.add('recording');
+        showVoiceToast('🎙️ 正在聆听…松开完成', 0);
+
+        // AudioContext 可能以系统采样率（如 44100/48000）运行，停止时统一重采样到 16kHz
+        voiceAudioCtx  = new (window.AudioContext || window.webkitAudioContext)();
+        voiceSource    = voiceAudioCtx.createMediaStreamSource(stream);
+
+        // ScriptProcessorNode：每次回调拿到一帧 PCM Float32
+        voiceProcessor = voiceAudioCtx.createScriptProcessor(4096, 1, 1);
+        voiceProcessor.onaudioprocess = (ev) => {
+            const f32 = ev.inputBuffer.getChannelData(0);
+            voicePcmF32.push(new Float32Array(f32));  // 必须拷贝，否则回调后被回收
+        };
+
+        voiceSource.connect(voiceProcessor);
+        voiceProcessor.connect(voiceAudioCtx.destination);
+    }
+
+    function voiceStop(e) {
+        if (e) e.preventDefault();
+        if (!voiceActive) return;
+        voiceActive = false;
+
+        document.getElementById('voiceBtn').classList.remove('recording');
+        showVoiceToast('⏳ 识别中…', 0);
+
+        // 断开录音管线
+        if (voiceProcessor) { voiceProcessor.disconnect(); voiceProcessor = null; }
+        if (voiceSource)    { voiceSource.disconnect();    voiceSource    = null; }
+        if (voiceStream)    { voiceStream.getTracks().forEach(t => t.stop()); voiceStream = null; }
+
+        const srcRate = voiceAudioCtx ? voiceAudioCtx.sampleRate : 44100;
+        if (voiceAudioCtx) { voiceAudioCtx.close(); voiceAudioCtx = null; }
+
+        const frames = voicePcmF32;
+        voicePcmF32 = [];
+
+        if (frames.length === 0) { hideVoiceToast(); return; }
+
+        // ── 1. 合并所有帧 ──
+        const totalLen = frames.reduce((s, f) => s + f.length, 0);
+        const merged   = new Float32Array(totalLen);
+        let off = 0;
+        frames.forEach(f => { merged.set(f, off); off += f.length; });
+
+        // ── 2. 线性重采样到 16kHz ──
+        const pcm16k = voiceResample(merged, srcRate, VOICE_TARGET_RATE);
+
+        // ── 3. Float32 → Int16 PCM（裸 PCM，不加 WAV 头）──
+        const pcmInt16 = new Int16Array(pcm16k.length);
+        for (let i = 0; i < pcm16k.length; i++) {
+            const s = Math.max(-1, Math.min(1, pcm16k[i]));
+            pcmInt16[i] = s < 0 ? Math.round(s * 32768) : Math.round(s * 32767);
+        }
+
+        // ── 4. 上传裸 PCM，format=pcm ──
+        const pcmBlob = new Blob([pcmInt16.buffer], { type: 'application/octet-stream' });
+        console.log('[ASR] pcm bytes:', pcmBlob.size, 'srcRate:', srcRate, 'samples:', pcmInt16.length);
+
+        const formData = new FormData();
+        formData.append('audio', pcmBlob, 'voice.pcm');
+        formData.append('format', 'pcm');
+
+        fetch(BASE_PATH + '/api/asr', { method: 'POST', body: formData })
+            .then(r => r.json())
+            .then(json => {
+                if (json.error) {
+                    showVoiceToast('❌ 识别失败：' + json.error, 2500);
+                } else if (json.text && json.text.trim()) {
+                    const input = document.getElementById('chatInput');
+                    input.value = (input.value || '') + json.text.trim();
+                    autoResize(input);
+                    hideVoiceToast();
+                } else {
+                    showVoiceToast('未识别到语音，请重试', 2000);
+                }
+            })
+            .catch(() => showVoiceToast('❌ 网络错误，请重试', 2000));
+    }
+
+    /* ── 线性重采样 ── */
+    function voiceResample(src, srcRate, dstRate) {
+        if (srcRate === dstRate) return src;
+        const ratio  = srcRate / dstRate;
+        const dstLen = Math.round(src.length / ratio);
+        const dst    = new Float32Array(dstLen);
+        for (let i = 0; i < dstLen; i++) {
+            const pos  = i * ratio;
+            const idx  = Math.floor(pos);
+            const frac = pos - idx;
+            dst[i]     = (src[idx] || 0) + frac * ((src[idx + 1] || 0) - (src[idx] || 0));
+        }
+        return dst;
+    }
+
+    function showVoiceToast(msg, duration) {
+        const toast = document.getElementById('voiceToast');
+        if (!toast) return;
+        toast.textContent = msg;
+        toast.classList.add('show');
+        clearTimeout(voiceToastTimer);
+        if (duration > 0) voiceToastTimer = setTimeout(hideVoiceToast, duration);
+    }
+
+    function hideVoiceToast() {
+        const toast = document.getElementById('voiceToast');
+        if (toast) toast.classList.remove('show');
+        clearTimeout(voiceToastTimer);
+    }
+
     /* ═══════════════════════ Init ═══════════════════════ */
     // Cache suggested questions loaded from backend
     let suggestedQuestions = [];
 
     async function loadSuggestedQuestions() {
         try {
-            const res = await fetch('/api/suggested-questions');
+            const res = await fetch(BASE_PATH + '/api/suggested-questions');
             if (res.ok) {
                 suggestedQuestions = await res.json();
             }
@@ -1042,7 +1263,7 @@
 
     async function loadSessionHistory() {
         try {
-            const sessions = await fetch('/api/sessions?userName=' + encodeURIComponent(currentUserName)).then(r => r.json());
+            const sessions = await fetch(BASE_PATH + '/api/sessions?userName=' + encodeURIComponent(currentUserName)).then(r => r.json());
             renderHistoryList(sessions);
         } catch(e) {
             document.getElementById('historyList').innerHTML =
@@ -1093,7 +1314,7 @@
         setProcessing(false);
         // Load historical messages from backend into UI
         try {
-            const messages = await fetch('/api/sessions/' + sessionId + '/messages').then(r => r.json());
+            const messages = await fetch(BASE_PATH + '/api/sessions/' + sessionId + '/messages').then(r => r.json());
             if (Array.isArray(messages) && messages.length > 0) {
                 messages.forEach(msg => {
                     const msgEl = appendMessage(msg.role === 'user' ? 'user' : 'assistant', '');
@@ -1128,7 +1349,7 @@
         event.stopPropagation();
         if (!confirm('确定删除这个对话记录？')) return;
         try {
-            await fetch('/api/sessions/' + sessionId, { method: 'DELETE' });
+            await fetch(BASE_PATH + '/api/sessions/' + sessionId, { method: 'DELETE' });
             if (sessionId === currentSessionId) startNewSession();
             await loadSessionHistory();
         } catch(e) { alert('删除失败'); }
@@ -1156,7 +1377,6 @@
                         <span class="welcome-chip">📊 数据分析</span>
                         <span class="welcome-chip">🎯 指标追踪</span>
                         <span class="welcome-chip">💡 智能洞察</span>
-                        <span class="welcome-chip">📈 趋势预测</span>
 
                     </div>
                     <hr class="welcome-divider">
@@ -1217,7 +1437,7 @@
     /* ═══════════════════════ Datasets (background, for agent context) ═══════════════════════ */
     async function loadDatasets() {
         try {
-            const res = await fetch('/api/datasets');
+            const res = await fetch(BASE_PATH + '/api/datasets');
             datasets = await res.json();
         } catch (e) {}
     }
@@ -1249,7 +1469,7 @@
         }
 
         // Notify backend to suppress further needConfirm=true broadcasts for this plan
-        fetch('/api/plan/confirm', { method: 'POST' }).catch(() => {});
+        fetch(BASE_PATH + '/api/plan/confirm', { method: 'POST' }).catch(() => {});
 
         // 重置 userCollapsed，后续子任务开始执行时面板可自动展开
         userCollapsed = false;
@@ -1281,22 +1501,33 @@
         input.value = '';
         input.style.height = 'auto';
         setProcessing(true);
+        streamingUserScrolledUp = false;  // reset auto-scroll lock for new message
         // Only reset confirmDecided when user sends a fresh message (not from confirm buttons)
         if (!fromConfirm) confirmDecided = false;
         // Mark that a plan may arrive (for clearPlanPendingIfNeeded), but do NOT show drawer yet
         planPending = true;
 
         const typingEl = appendTyping();
-        const url = '/api/chat?message=' + encodeURIComponent(fullMessage) + '&sessionId=' + encodeURIComponent(currentSessionId) + '&userName=' + encodeURIComponent(currentUserName);
+        const url = BASE_PATH + '/api/chat?message=' + encodeURIComponent(fullMessage) + '&sessionId=' + encodeURIComponent(currentSessionId) + '&account=' + encodeURIComponent(currentUserName);
         const eventSource = new EventSource(url);
         let assistantText = '';
         let assistantEl = null;
         let finalized = false;
         let inSpecialBlock = false;  // true once <report> or <chart> tag detected
+        let inReportStream = false;   // true when streaming report content (not chart)
+
+        // Detect user scroll: if user scrolls up (away from bottom), stop auto-scroll
+        const chatMsgsEl = document.getElementById('chatMessages');
+        function onUserScroll() {
+            const atBottom = chatMsgsEl.scrollHeight - chatMsgsEl.scrollTop - chatMsgsEl.clientHeight < 60;
+            streamingUserScrolledUp = !atBottom;
+        }
+        chatMsgsEl.addEventListener('scroll', onUserScroll, { passive: true });
 
         function doFinalize() {
             if (finalized) return;
             finalized = true;
+            chatMsgsEl.removeEventListener('scroll', onUserScroll);
             removeTyping(typingEl);
             if (assistantEl) finalizeMessage(assistantEl, assistantText);
             // If LLM answered directly (no plan was ever pushed), clear pending state
@@ -1305,31 +1536,105 @@
             setProcessing(false);
         }
 
+        // Sanitise and render report HTML incrementally (same rules as finalizeMessage)
+        function renderReportStream(rawContent) {
+            const content = assistantEl.querySelector('.message-content');
+            if (!content) return;
+            let reportBlock = content.querySelector('#streamingReportBlock');
+            if (!reportBlock) {
+                // Remove loading indicator and create report block
+                const loadingEl = content.querySelector('#msgLoadingIndicator');
+                if (loadingEl) loadingEl.remove();
+                reportBlock = document.createElement('div');
+                reportBlock.className = 'report-block';
+                reportBlock.id = 'streamingReportBlock';
+                content.classList.add('has-chart');
+                content.appendChild(reportBlock);
+                // Scroll to the report block start
+                requestAnimationFrame(() => {
+                    reportBlock.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+            }
+            // Sanitise: only allow h3/h4/p/strong/br tags
+            const allowed = rawContent.replace(/<(?!\/?(?:h3|h4|p|strong|br)(\s[^>]*)?\s*\/?)[^>]+>/gi, '');
+            reportBlock.innerHTML = allowed;
+            // Auto-scroll to bottom only if user hasn't scrolled up
+            if (!streamingUserScrolledUp) {
+                const chatMessages = document.getElementById('chatMessages');
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+        }
+
         eventSource.onmessage = (event) => {
             const chunk = event.data;
             if (chunk === '[STOPPED]') { eventSource.close(); doFinalize(); return; }
 
             assistantText += chunk;
 
-            // Once we see a special-block opening tag, switch to loading indicator
+            // Once we see a special-block opening tag, switch to streaming report / loading
             if (!inSpecialBlock && /<report>|<chart>/i.test(assistantText)) {
                 inSpecialBlock = true;
-                // Ensure we have a bubble to put the loading indicator in
+                // Determine if this is a report block (stream it) or chart block (show spinner)
+                inReportStream = /<report>/i.test(assistantText);
+                // Ensure we have a bubble
                 if (!assistantEl) { removeTyping(typingEl); assistantEl = appendMessage('assistant', ''); }
                 const beforeTag = assistantText
                     .replace(/<report>[\s\S]*/i, '')
                     .replace(/<chart>[\s\S]*/i, '')
                     .trim();
                 const content = assistantEl.querySelector('.message-content');
-                content.innerHTML =
-                    (beforeTag ? `<span>${escapeHtml(beforeTag)}</span>` : '') +
-                    `<div class="loading-indicator" id="msgLoadingIndicator">
-                        <div class="loading-spinner"></div>生成分析报告中…
-                    </div>`;
+                const textNode = beforeTag
+                    ? `<div class="text-part" id="msgTextPart">${escapeHtml(beforeTag)}</div>`
+                    : '';
+                if (inReportStream) {
+                    // Start with text part only; report block will be created on first content chunk
+                    content.innerHTML = textNode +
+                        `<div class="loading-indicator" id="msgLoadingIndicator">
+                            <div class="loading-spinner"></div>生成分析报告中…
+                        </div>`;
+                    // Scroll to show the conclusion text
+                    const textPartEl = content.querySelector('#msgTextPart');
+                    if (textPartEl) {
+                        textPartEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    } else {
+                        document.getElementById('chatMessages').scrollTop = 99999;
+                    }
+                    // Immediately try to render any report content already buffered
+                    const reportInner = assistantText.match(/<report>([\s\S]*)/i);
+                    if (reportInner && reportInner[1].trim()) {
+                        // Strip closing tag if already present
+                        const rawSoFar = reportInner[1].replace(/<\/report>[\s\S]*/i, '');
+                        renderReportStream(rawSoFar);
+                    }
+                } else {
+                    // Chart block: keep spinner as before
+                    content.innerHTML = textNode +
+                        `<div class="loading-indicator" id="msgLoadingIndicator">
+                            <div class="loading-spinner"></div>生成分析报告中…
+                        </div>`;
+                    const textPartEl = content.querySelector('#msgTextPart');
+                    if (textPartEl) {
+                        textPartEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    } else {
+                        document.getElementById('chatMessages').scrollTop = 99999;
+                    }
+                }
                 return;
             }
 
-            if (inSpecialBlock) return;  // accumulate silently, no display update
+            if (inSpecialBlock) {
+                // For report blocks: stream the inner content in real time
+                if (inReportStream) {
+                    const reportInner = assistantText.match(/<report>([\s\S]*)/i);
+                    if (reportInner) {
+                        // Strip closing tag if already received
+                        const rawSoFar = reportInner[1].replace(/<\/report>[\s\S]*/i, '');
+                        if (rawSoFar.trim()) renderReportStream(rawSoFar);
+                    }
+                }
+                // Chart blocks continue to accumulate silently
+                return;
+            }
 
             // Normal streaming: show plain text
             if (!assistantEl) { removeTyping(typingEl); assistantEl = appendMessage('assistant', ''); }
@@ -1374,7 +1679,9 @@
 
     function updateLastMessage(el, text) {
         el.querySelector('.message-content').textContent = text;
-        document.getElementById('chatMessages').scrollTop = 99999;
+        if (!streamingUserScrolledUp) {
+            document.getElementById('chatMessages').scrollTop = 99999;
+        }
     }
 
     function finalizeMessage(el, fullText) {
@@ -1412,6 +1719,16 @@
             content.classList.add('has-chart');
             const textHtml = textPart ? `<div class="text-part">${escapeHtml(textPart)}</div>` : '';
             content.innerHTML = textHtml + reportHtml + chartHtml;
+            // Scroll to the start of the report block (not the very bottom),
+            // so the user sees the beginning of the report right after the conclusion.
+            requestAnimationFrame(() => {
+                const reportBlock = content.querySelector('.report-block, .chart-wrapper');
+                if (reportBlock) {
+                    reportBlock.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                } else {
+                    document.getElementById('chatMessages').scrollTop = 99999;
+                }
+            });
         } else {
             content.textContent = textPart || fullText;
         }
@@ -1443,7 +1760,11 @@
             el.appendChild(suggDiv);
         }
 
-        document.getElementById('chatMessages').scrollTop = 99999;
+        // Scroll to bottom only when there is no report/chart block;
+        // report/chart scrolling is handled above with scrollIntoView.
+        if (!reportHtml && !chartHtml) {
+            document.getElementById('chatMessages').scrollTop = 99999;
+        }
     }
 
     function appendTyping() {
@@ -1597,14 +1918,14 @@
     /* ═══════════════════════ Plan SSE ═══════════════════════ */
     function connectPlanStream() {
         if (planEventSource) planEventSource.close();
-        planEventSource = new EventSource('/api/plan/stream');
+        planEventSource = new EventSource(BASE_PATH + '/api/plan/stream');
         planEventSource.onmessage = (e) => { try { renderPlan(JSON.parse(e.data)); } catch(_) {} };
         planEventSource.onopen = () => updateConnStatus(true);
         planEventSource.onerror = () => { updateConnStatus(false); setTimeout(connectPlanStream, 3000); };
     }
 
     async function fetchCurrentPlan() {
-        try { renderPlan(await (await fetch('/api/plan')).json()); } catch(_) {}
+        try { renderPlan(await (await fetch(BASE_PATH + '/api/plan')).json()); } catch(_) {}
     }
 
     /* ═══════════════════════ Plan render ═══════════════════════ */
@@ -1823,7 +2144,7 @@
     async function resetAll() {
         startNewSession();
         try {
-            await fetch('/api/reset?sessionId=' + encodeURIComponent(currentSessionId), { method: 'POST' });
+            await fetch(BASE_PATH + '/api/reset?sessionId=' + encodeURIComponent(currentSessionId), { method: 'POST' });
         } catch (e) {}
     }
 
