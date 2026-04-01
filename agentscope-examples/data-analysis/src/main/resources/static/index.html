@@ -239,13 +239,11 @@
         }
         .post-report-sugg-scroll {
             display: flex; gap: 7px;
-            overflow-x: auto; -webkit-overflow-scrolling: touch;
+            flex-wrap: wrap;
             padding-bottom: 4px;
-            scrollbar-width: none;
         }
-        .post-report-sugg-scroll::-webkit-scrollbar { display: none; }
         .post-report-sugg-chip {
-            display: inline-flex; align-items: center; white-space: nowrap;
+            display: inline-flex; align-items: center; white-space: normal; word-break: break-all;
             padding: 6px 12px;
             background: var(--surface2);
             border: 1px solid rgba(79,110,247,0.18);
@@ -984,8 +982,6 @@
                         <span class="welcome-chip">📊 数据分析</span>
                         <span class="welcome-chip">🎯 指标追踪</span>
                         <span class="welcome-chip">💡 智能洞察</span>
-                        <span class="welcome-chip">📈 趋势预测</span>
-
                     </div>
                     <hr class="welcome-divider">
                     <div class="welcome-suggest-label">快速开始 · 点击直接提问</div>
@@ -1105,6 +1101,17 @@
 </div>
 
 <script>
+    /* ─── Base path auto-detection (supports local dev and nginx sub-path proxy) ───
+     * 本地直接访问时 pathname='/'，BASE_PATH=''，请求路径为 /api/xxx
+     * nginx 代理时 pathname='/dify/dataAnalyse/'，BASE_PATH='/dify/dataAnalyse'，请求路径为 /dify/dataAnalyse/api/xxx
+     */
+    const BASE_PATH = (() => {
+        const p = window.location.pathname;
+        // 去掉末尾的 index.html 或 /，保留目录前缀
+        const dir = p.replace(/\/index\.html$/, '').replace(/\/$/, '');
+        return dir || '';
+    })();
+
     /* ═══════════════════════ State ═══════════════════════ */
     let datasets = [];
     let selectedDataset = null;
@@ -1116,10 +1123,11 @@
     let planPending = false;
     let confirmDecided = false;  // true after user clicks 执行/不执行; prevents re-injection
     let confirmExecuted = false; // true only when user clicks 执行（not 不执行）; gates drawer auto-expand
+    let streamingUserScrolledUp = false; // true when user scrolls up during streaming, disables auto-scroll
 
     // ─── User identity from URL param ───
     const urlParams = new URLSearchParams(window.location.search);
-    const currentUserName = urlParams.get('userName') || '';
+    const currentUserName = urlParams.get('account') || urlParams.get('userName') || '';
 
     // ─── Session management ───
     let currentSessionId = generateUUID();
@@ -1257,7 +1265,7 @@
         formData.append('audio', pcmBlob, 'voice.pcm');
         formData.append('format', 'pcm');
 
-        fetch('/api/asr', { method: 'POST', body: formData })
+        fetch(BASE_PATH + '/api/asr', { method: 'POST', body: formData })
             .then(r => r.json())
             .then(json => {
                 if (json.error) {
@@ -1324,7 +1332,7 @@
 
     async function loadSuggestedQuestions() {
         try {
-            const res = await fetch('/api/suggested-questions');
+            const res = await fetch(BASE_PATH + '/api/suggested-questions');
             if (res.ok) {
                 suggestedQuestions = await res.json();
             }
@@ -1356,7 +1364,7 @@
 
     async function loadSessionHistory() {
         try {
-            const sessions = await fetch('/api/sessions?userName=' + encodeURIComponent(currentUserName)).then(r => r.json());
+            const sessions = await fetch(BASE_PATH + '/api/sessions?userName=' + encodeURIComponent(currentUserName)).then(r => r.json());
             renderHistoryList(sessions);
         } catch(e) {
             document.getElementById('historyList').innerHTML =
@@ -1407,7 +1415,7 @@
         setProcessing(false);
         // Load historical messages from backend into UI
         try {
-            const messages = await fetch('/api/sessions/' + sessionId + '/messages').then(r => r.json());
+            const messages = await fetch(BASE_PATH + '/api/sessions/' + sessionId + '/messages').then(r => r.json());
             if (Array.isArray(messages) && messages.length > 0) {
                 messages.forEach(msg => {
                     const msgEl = appendMessage(msg.role === 'user' ? 'user' : 'assistant', '');
@@ -1442,7 +1450,7 @@
         event.stopPropagation();
         if (!confirm('确定删除这个对话记录？')) return;
         try {
-            await fetch('/api/sessions/' + sessionId, { method: 'DELETE' });
+            await fetch(BASE_PATH + '/api/sessions/' + sessionId, { method: 'DELETE' });
             if (sessionId === currentSessionId) startNewSession();
             await loadSessionHistory();
         } catch(e) { alert('删除失败'); }
@@ -1470,7 +1478,6 @@
                         <span class="welcome-chip">📊 数据分析</span>
                         <span class="welcome-chip">🎯 指标追踪</span>
                         <span class="welcome-chip">💡 智能洞察</span>
-                        <span class="welcome-chip">📈 趋势预测</span>
 
                     </div>
                     <hr class="welcome-divider">
@@ -1531,7 +1538,7 @@
     /* ═══════════════════════ Datasets (background, for agent context) ═══════════════════════ */
     async function loadDatasets() {
         try {
-            const res = await fetch('/api/datasets');
+            const res = await fetch(BASE_PATH + '/api/datasets');
             datasets = await res.json();
         } catch (e) {}
     }
@@ -1563,7 +1570,7 @@
         }
 
         // Notify backend to suppress further needConfirm=true broadcasts for this plan
-        fetch('/api/plan/confirm', { method: 'POST' }).catch(() => {});
+        fetch(BASE_PATH + '/api/plan/confirm', { method: 'POST' }).catch(() => {});
 
         // 重置 userCollapsed，后续子任务开始执行时面板可自动展开
         userCollapsed = false;
@@ -1595,22 +1602,33 @@
         input.value = '';
         input.style.height = 'auto';
         setProcessing(true);
+        streamingUserScrolledUp = false;  // reset auto-scroll lock for new message
         // Only reset confirmDecided when user sends a fresh message (not from confirm buttons)
         if (!fromConfirm) confirmDecided = false;
         // Mark that a plan may arrive (for clearPlanPendingIfNeeded), but do NOT show drawer yet
         planPending = true;
 
         const typingEl = appendTyping();
-        const url = '/api/chat?message=' + encodeURIComponent(fullMessage) + '&sessionId=' + encodeURIComponent(currentSessionId) + '&userName=' + encodeURIComponent(currentUserName);
+        const url = BASE_PATH + '/api/chat?message=' + encodeURIComponent(fullMessage) + '&sessionId=' + encodeURIComponent(currentSessionId) + '&account=' + encodeURIComponent(currentUserName);
         const eventSource = new EventSource(url);
         let assistantText = '';
         let assistantEl = null;
         let finalized = false;
         let inSpecialBlock = false;  // true once <report> or <chart> tag detected
+        let inReportStream = false;   // true when streaming report content (not chart)
+
+        // Detect user scroll: if user scrolls up (away from bottom), stop auto-scroll
+        const chatMsgsEl = document.getElementById('chatMessages');
+        function onUserScroll() {
+            const atBottom = chatMsgsEl.scrollHeight - chatMsgsEl.scrollTop - chatMsgsEl.clientHeight < 60;
+            streamingUserScrolledUp = !atBottom;
+        }
+        chatMsgsEl.addEventListener('scroll', onUserScroll, { passive: true });
 
         function doFinalize() {
             if (finalized) return;
             finalized = true;
+            chatMsgsEl.removeEventListener('scroll', onUserScroll);
             removeTyping(typingEl);
             if (assistantEl) finalizeMessage(assistantEl, assistantText);
             // If LLM answered directly (no plan was ever pushed), clear pending state
@@ -1619,31 +1637,105 @@
             setProcessing(false);
         }
 
+        // Sanitise and render report HTML incrementally (same rules as finalizeMessage)
+        function renderReportStream(rawContent) {
+            const content = assistantEl.querySelector('.message-content');
+            if (!content) return;
+            let reportBlock = content.querySelector('#streamingReportBlock');
+            if (!reportBlock) {
+                // Remove loading indicator and create report block
+                const loadingEl = content.querySelector('#msgLoadingIndicator');
+                if (loadingEl) loadingEl.remove();
+                reportBlock = document.createElement('div');
+                reportBlock.className = 'report-block';
+                reportBlock.id = 'streamingReportBlock';
+                content.classList.add('has-chart');
+                content.appendChild(reportBlock);
+                // Scroll to the report block start
+                requestAnimationFrame(() => {
+                    reportBlock.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+            }
+            // Sanitise: only allow h3/h4/p/strong/br tags
+            const allowed = rawContent.replace(/<(?!\/?(?:h3|h4|p|strong|br)(\s[^>]*)?\s*\/?)[^>]+>/gi, '');
+            reportBlock.innerHTML = allowed;
+            // Auto-scroll to bottom only if user hasn't scrolled up
+            if (!streamingUserScrolledUp) {
+                const chatMessages = document.getElementById('chatMessages');
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+        }
+
         eventSource.onmessage = (event) => {
             const chunk = event.data;
             if (chunk === '[STOPPED]') { eventSource.close(); doFinalize(); return; }
 
             assistantText += chunk;
 
-            // Once we see a special-block opening tag, switch to loading indicator
+            // Once we see a special-block opening tag, switch to streaming report / loading
             if (!inSpecialBlock && /<report>|<chart>/i.test(assistantText)) {
                 inSpecialBlock = true;
-                // Ensure we have a bubble to put the loading indicator in
+                // Determine if this is a report block (stream it) or chart block (show spinner)
+                inReportStream = /<report>/i.test(assistantText);
+                // Ensure we have a bubble
                 if (!assistantEl) { removeTyping(typingEl); assistantEl = appendMessage('assistant', ''); }
                 const beforeTag = assistantText
                     .replace(/<report>[\s\S]*/i, '')
                     .replace(/<chart>[\s\S]*/i, '')
                     .trim();
                 const content = assistantEl.querySelector('.message-content');
-                content.innerHTML =
-                    (beforeTag ? `<span>${escapeHtml(beforeTag)}</span>` : '') +
-                    `<div class="loading-indicator" id="msgLoadingIndicator">
-                        <div class="loading-spinner"></div>生成分析报告中…
-                    </div>`;
+                const textNode = beforeTag
+                    ? `<div class="text-part" id="msgTextPart">${escapeHtml(beforeTag)}</div>`
+                    : '';
+                if (inReportStream) {
+                    // Start with text part only; report block will be created on first content chunk
+                    content.innerHTML = textNode +
+                        `<div class="loading-indicator" id="msgLoadingIndicator">
+                            <div class="loading-spinner"></div>生成分析报告中…
+                        </div>`;
+                    // Scroll to show the conclusion text
+                    const textPartEl = content.querySelector('#msgTextPart');
+                    if (textPartEl) {
+                        textPartEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    } else {
+                        document.getElementById('chatMessages').scrollTop = 99999;
+                    }
+                    // Immediately try to render any report content already buffered
+                    const reportInner = assistantText.match(/<report>([\s\S]*)/i);
+                    if (reportInner && reportInner[1].trim()) {
+                        // Strip closing tag if already present
+                        const rawSoFar = reportInner[1].replace(/<\/report>[\s\S]*/i, '');
+                        renderReportStream(rawSoFar);
+                    }
+                } else {
+                    // Chart block: keep spinner as before
+                    content.innerHTML = textNode +
+                        `<div class="loading-indicator" id="msgLoadingIndicator">
+                            <div class="loading-spinner"></div>生成分析报告中…
+                        </div>`;
+                    const textPartEl = content.querySelector('#msgTextPart');
+                    if (textPartEl) {
+                        textPartEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    } else {
+                        document.getElementById('chatMessages').scrollTop = 99999;
+                    }
+                }
                 return;
             }
 
-            if (inSpecialBlock) return;  // accumulate silently, no display update
+            if (inSpecialBlock) {
+                // For report blocks: stream the inner content in real time
+                if (inReportStream) {
+                    const reportInner = assistantText.match(/<report>([\s\S]*)/i);
+                    if (reportInner) {
+                        // Strip closing tag if already received
+                        const rawSoFar = reportInner[1].replace(/<\/report>[\s\S]*/i, '');
+                        if (rawSoFar.trim()) renderReportStream(rawSoFar);
+                    }
+                }
+                // Chart blocks continue to accumulate silently
+                return;
+            }
 
             // Normal streaming: show plain text
             if (!assistantEl) { removeTyping(typingEl); assistantEl = appendMessage('assistant', ''); }
@@ -1688,7 +1780,9 @@
 
     function updateLastMessage(el, text) {
         el.querySelector('.message-content').textContent = text;
-        document.getElementById('chatMessages').scrollTop = 99999;
+        if (!streamingUserScrolledUp) {
+            document.getElementById('chatMessages').scrollTop = 99999;
+        }
     }
 
     function finalizeMessage(el, fullText) {
@@ -1726,6 +1820,16 @@
             content.classList.add('has-chart');
             const textHtml = textPart ? `<div class="text-part">${escapeHtml(textPart)}</div>` : '';
             content.innerHTML = textHtml + reportHtml + chartHtml;
+            // Scroll to the start of the report block (not the very bottom),
+            // so the user sees the beginning of the report right after the conclusion.
+            requestAnimationFrame(() => {
+                const reportBlock = content.querySelector('.report-block, .chart-wrapper');
+                if (reportBlock) {
+                    reportBlock.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                } else {
+                    document.getElementById('chatMessages').scrollTop = 99999;
+                }
+            });
         } else {
             content.textContent = textPart || fullText;
         }
@@ -1757,7 +1861,11 @@
             el.appendChild(suggDiv);
         }
 
-        document.getElementById('chatMessages').scrollTop = 99999;
+        // Scroll to bottom only when there is no report/chart block;
+        // report/chart scrolling is handled above with scrollIntoView.
+        if (!reportHtml && !chartHtml) {
+            document.getElementById('chatMessages').scrollTop = 99999;
+        }
     }
 
     function appendTyping() {
@@ -1911,14 +2019,14 @@
     /* ═══════════════════════ Plan SSE ═══════════════════════ */
     function connectPlanStream() {
         if (planEventSource) planEventSource.close();
-        planEventSource = new EventSource('/api/plan/stream');
+        planEventSource = new EventSource(BASE_PATH + '/api/plan/stream');
         planEventSource.onmessage = (e) => { try { renderPlan(JSON.parse(e.data)); } catch(_) {} };
         planEventSource.onopen = () => updateConnStatus(true);
         planEventSource.onerror = () => { updateConnStatus(false); setTimeout(connectPlanStream, 3000); };
     }
 
     async function fetchCurrentPlan() {
-        try { renderPlan(await (await fetch('/api/plan')).json()); } catch(_) {}
+        try { renderPlan(await (await fetch(BASE_PATH + '/api/plan')).json()); } catch(_) {}
     }
 
     /* ═══════════════════════ Plan render ═══════════════════════ */
@@ -2137,7 +2245,7 @@
     async function resetAll() {
         startNewSession();
         try {
-            await fetch('/api/reset?sessionId=' + encodeURIComponent(currentSessionId), { method: 'POST' });
+            await fetch(BASE_PATH + '/api/reset?sessionId=' + encodeURIComponent(currentSessionId), { method: 'POST' });
         } catch (e) {}
     }
 
