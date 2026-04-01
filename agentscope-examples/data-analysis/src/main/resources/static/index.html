@@ -1153,9 +1153,7 @@
                 showVoiceMicDialog(msg);
                 return;
             }
-            stream = await navigator.mediaDevices.getUserMedia({
-                audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }
-            });
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         } catch (err) {
             const name  = (err && err.name)    || 'UnknownError';
             const msg2  = (err && err.message) || '';
