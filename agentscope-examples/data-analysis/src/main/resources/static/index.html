@@ -239,13 +239,11 @@
         }
         .post-report-sugg-scroll {
             display: flex; gap: 7px;
-            overflow-x: auto; -webkit-overflow-scrolling: touch;
+            flex-wrap: wrap;
             padding-bottom: 4px;
-            scrollbar-width: none;
         }
-        .post-report-sugg-scroll::-webkit-scrollbar { display: none; }
         .post-report-sugg-chip {
-            display: inline-flex; align-items: center; white-space: nowrap;
+            display: inline-flex; align-items: center; white-space: normal; word-break: break-all;
             padding: 6px 12px;
             background: var(--surface2);
             border: 1px solid rgba(79,110,247,0.18);
@@ -1062,6 +1060,7 @@
     let planPending = false;
     let confirmDecided = false;  // true after user clicks 执行/不执行; prevents re-injection
     let confirmExecuted = false; // true only when user clicks 执行（not 不执行）; gates drawer auto-expand
+    let streamingUserScrolledUp = false; // true when user scrolls up during streaming, disables auto-scroll
 
     // ─── User identity from URL param ───
     const urlParams = new URLSearchParams(window.location.search);
@@ -1502,6 +1501,7 @@
         input.value = '';
         input.style.height = 'auto';
         setProcessing(true);
+        streamingUserScrolledUp = false;  // reset auto-scroll lock for new message
         // Only reset confirmDecided when user sends a fresh message (not from confirm buttons)
         if (!fromConfirm) confirmDecided = false;
         // Mark that a plan may arrive (for clearPlanPendingIfNeeded), but do NOT show drawer yet
@@ -1514,10 +1514,20 @@
         let assistantEl = null;
         let finalized = false;
         let inSpecialBlock = false;  // true once <report> or <chart> tag detected
+        let inReportStream = false;   // true when streaming report content (not chart)
+
+        // Detect user scroll: if user scrolls up (away from bottom), stop auto-scroll
+        const chatMsgsEl = document.getElementById('chatMessages');
+        function onUserScroll() {
+            const atBottom = chatMsgsEl.scrollHeight - chatMsgsEl.scrollTop - chatMsgsEl.clientHeight < 60;
+            streamingUserScrolledUp = !atBottom;
+        }
+        chatMsgsEl.addEventListener('scroll', onUserScroll, { passive: true });
 
         function doFinalize() {
             if (finalized) return;
             finalized = true;
+            chatMsgsEl.removeEventListener('scroll', onUserScroll);
             removeTyping(typingEl);
             if (assistantEl) finalizeMessage(assistantEl, assistantText);
             // If LLM answered directly (no plan was ever pushed), clear pending state
@@ -1526,43 +1536,105 @@
             setProcessing(false);
         }
 
+        // Sanitise and render report HTML incrementally (same rules as finalizeMessage)
+        function renderReportStream(rawContent) {
+            const content = assistantEl.querySelector('.message-content');
+            if (!content) return;
+            let reportBlock = content.querySelector('#streamingReportBlock');
+            if (!reportBlock) {
+                // Remove loading indicator and create report block
+                const loadingEl = content.querySelector('#msgLoadingIndicator');
+                if (loadingEl) loadingEl.remove();
+                reportBlock = document.createElement('div');
+                reportBlock.className = 'report-block';
+                reportBlock.id = 'streamingReportBlock';
+                content.classList.add('has-chart');
+                content.appendChild(reportBlock);
+                // Scroll to the report block start
+                requestAnimationFrame(() => {
+                    reportBlock.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+            }
+            // Sanitise: only allow h3/h4/p/strong/br tags
+            const allowed = rawContent.replace(/<(?!\/?(?:h3|h4|p|strong|br)(\s[^>]*)?\s*\/?)[^>]+>/gi, '');
+            reportBlock.innerHTML = allowed;
+            // Auto-scroll to bottom only if user hasn't scrolled up
+            if (!streamingUserScrolledUp) {
+                const chatMessages = document.getElementById('chatMessages');
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+        }
+
         eventSource.onmessage = (event) => {
             const chunk = event.data;
             if (chunk === '[STOPPED]') { eventSource.close(); doFinalize(); return; }
 
             assistantText += chunk;
 
-            // Once we see a special-block opening tag, switch to loading indicator
+            // Once we see a special-block opening tag, switch to streaming report / loading
             if (!inSpecialBlock && /<report>|<chart>/i.test(assistantText)) {
                 inSpecialBlock = true;
-                // Ensure we have a bubble to put the loading indicator in
+                // Determine if this is a report block (stream it) or chart block (show spinner)
+                inReportStream = /<report>/i.test(assistantText);
+                // Ensure we have a bubble
                 if (!assistantEl) { removeTyping(typingEl); assistantEl = appendMessage('assistant', ''); }
                 const beforeTag = assistantText
                     .replace(/<report>[\s\S]*/i, '')
                     .replace(/<chart>[\s\S]*/i, '')
                     .trim();
                 const content = assistantEl.querySelector('.message-content');
-                // Render the conclusion text (before <report>) as markdown-formatted text,
-                // then append a loading spinner for the report section.
                 const textNode = beforeTag
                     ? `<div class="text-part" id="msgTextPart">${escapeHtml(beforeTag)}</div>`
                     : '';
-                content.innerHTML =
-                    textNode +
-                    `<div class="loading-indicator" id="msgLoadingIndicator">
-                        <div class="loading-spinner"></div>生成分析报告中…
-                    </div>`;
-                // Scroll to show the conclusion text (not the bottom)
-                const textPartEl = content.querySelector('#msgTextPart');
-                if (textPartEl) {
-                    textPartEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                if (inReportStream) {
+                    // Start with text part only; report block will be created on first content chunk
+                    content.innerHTML = textNode +
+                        `<div class="loading-indicator" id="msgLoadingIndicator">
+                            <div class="loading-spinner"></div>生成分析报告中…
+                        </div>`;
+                    // Scroll to show the conclusion text
+                    const textPartEl = content.querySelector('#msgTextPart');
+                    if (textPartEl) {
+                        textPartEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    } else {
+                        document.getElementById('chatMessages').scrollTop = 99999;
+                    }
+                    // Immediately try to render any report content already buffered
+                    const reportInner = assistantText.match(/<report>([\s\S]*)/i);
+                    if (reportInner && reportInner[1].trim()) {
+                        // Strip closing tag if already present
+                        const rawSoFar = reportInner[1].replace(/<\/report>[\s\S]*/i, '');
+                        renderReportStream(rawSoFar);
+                    }
                 } else {
-                    document.getElementById('chatMessages').scrollTop = 99999;
+                    // Chart block: keep spinner as before
+                    content.innerHTML = textNode +
+                        `<div class="loading-indicator" id="msgLoadingIndicator">
+                            <div class="loading-spinner"></div>生成分析报告中…
+                        </div>`;
+                    const textPartEl = content.querySelector('#msgTextPart');
+                    if (textPartEl) {
+                        textPartEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    } else {
+                        document.getElementById('chatMessages').scrollTop = 99999;
+                    }
                 }
                 return;
             }
 
-            if (inSpecialBlock) return;  // accumulate silently, no display update
+            if (inSpecialBlock) {
+                // For report blocks: stream the inner content in real time
+                if (inReportStream) {
+                    const reportInner = assistantText.match(/<report>([\s\S]*)/i);
+                    if (reportInner) {
+                        // Strip closing tag if already received
+                        const rawSoFar = reportInner[1].replace(/<\/report>[\s\S]*/i, '');
+                        if (rawSoFar.trim()) renderReportStream(rawSoFar);
+                    }
+                }
+                // Chart blocks continue to accumulate silently
+                return;
+            }
 
             // Normal streaming: show plain text
             if (!assistantEl) { removeTyping(typingEl); assistantEl = appendMessage('assistant', ''); }
@@ -1607,7 +1679,9 @@
 
     function updateLastMessage(el, text) {
         el.querySelector('.message-content').textContent = text;
-        document.getElementById('chatMessages').scrollTop = 99999;
+        if (!streamingUserScrolledUp) {
+            document.getElementById('chatMessages').scrollTop = 99999;
+        }
     }
 
     function finalizeMessage(el, fullText) {

@@ -192,9 +192,10 @@ public class ChatSessionService {
 
     /**
      * Save an assistant message.
-     * Strips {@code <report>} and {@code <chart>} HTML blocks before persisting so that
-     * history replay only contains plain-text conclusions, not rendering markup.
-     * The full content (including HTML) remains in the Agent's in-memory context for the
+     * Strips {@code <chart>} HTML blocks before persisting so that
+     * history replay does not contain chart rendering markup.
+     * {@code <report>} blocks and plain-text conclusions are preserved as-is.
+     * The full content remains in the Agent's in-memory context for the
      * current session, enabling style-edit follow-ups without DB overhead.
      */
     @Transactional
@@ -206,16 +207,17 @@ public class ChatSessionService {
     }
 
     /**
-     * Remove {@code <report>...</report>} and {@code <chart>...</chart>} blocks from the
-     * assistant reply, leaving only the plain-text conclusion part.
+     * Remove only {@code <chart>...</chart>} blocks from the assistant reply before persisting.
+     * {@code <report>} blocks and all other content are preserved.
+     * Trailing/leading blank lines are also collapsed to avoid excessive whitespace.
      * Uses a simple regex so there is no external dependency.
      */
     private static String stripDisplayBlocks(String content) {
         if (content == null) return "";
-        // Remove <report>...</report> blocks (DOTALL so newlines are matched)
-        String result = content.replaceAll("(?si)<report[^>]*>.*?</report>", "");
-        // Remove <chart>...</chart> blocks
-        result = result.replaceAll("(?si)<chart[^>]*>.*?</chart>", "");
+        // Remove <chart>...</chart> blocks only (DOTALL so newlines are matched)
+        String result = content.replaceAll("(?si)<chart[^>]*>.*?</chart>", "");
+        // Collapse 3+ consecutive newlines into at most 2, then strip leading/trailing whitespace
+        result = result.replaceAll("\\n{3,}", "\n\n");
         return result.strip();
     }
 
