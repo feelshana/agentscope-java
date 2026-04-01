@@ -391,55 +391,6 @@
             background: #fff;
         }
         .chat-textarea::placeholder { color: var(--text-hint); }
-        /* ══════════ Voice input button ══════════ */
-        .voice-btn {
-            width: 44px; height: 44px; flex-shrink: 0;
-            background: var(--surface2);
-            border: 1.5px solid rgba(79,110,247,0.18);
-            border-radius: 14px;
-            color: var(--text-sub);
-            display: flex; align-items: center; justify-content: center;
-            cursor: pointer;
-            transition: all 0.18s;
-            -webkit-appearance: none;
-            touch-action: none;       /* 防止长按触发页面滚动 */
-            user-select: none;
-            -webkit-user-select: none;
-        }
-        .voice-btn svg { width: 20px; height: 20px; flex-shrink: 0; }
-        .voice-btn:active, .voice-btn.recording {
-            background: rgba(239,68,68,0.1);
-            border-color: rgba(239,68,68,0.5);
-            color: #ef4444;
-        }
-        /* 录音时麦克风图标脉动 */
-        .voice-btn.recording svg {
-            animation: voicePulse 0.8s ease-in-out infinite;
-        }
-        @keyframes voicePulse {
-            0%,100% { transform: scale(1);   opacity: 1; }
-            50%      { transform: scale(1.25); opacity: 0.7; }
-        }
-        /* 录音状态提示条 */
-        .voice-toast {
-            position: fixed;
-            bottom: 90px; left: 50%; transform: translateX(-50%) translateY(20px);
-            background: rgba(30,30,30,0.82);
-            color: #fff;
-            padding: 8px 20px;
-            border-radius: 20px;
-            font-size: 0.82rem;
-            white-space: nowrap;
-            pointer-events: none;
-            opacity: 0;
-            transition: opacity 0.2s, transform 0.2s;
-            z-index: 200;
-            backdrop-filter: blur(6px);
-        }
-        .voice-toast.show {
-            opacity: 1;
-            transform: translateX(-50%) translateY(0);
-        }
 
         .send-btn {
             width: 44px; height: 44px; flex-shrink: 0;
@@ -949,18 +900,6 @@
                     onkeydown="handleInputKey(event)"
                     oninput="autoResize(this)"
                 ></textarea>
-                <!-- 语音输入按钮：长按录音，松开转文字 -->
-                <button class="voice-btn" id="voiceBtn" title="长按语音输入"
-                    onmousedown="voiceStart(event)" onmouseup="voiceStop(event)" onmouseleave="voiceStop(event)"
-                    ontouchstart="voiceStart(event)" ontouchend="voiceStop(event)" ontouchcancel="voiceStop(event)">
-                    <!-- 麦克风图标 -->
-                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <rect x="9" y="2" width="6" height="12" rx="3" stroke="currentColor" stroke-width="1.8"/>
-                        <path d="M5 10a7 7 0 0014 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                        <line x1="12" y1="17" x2="12" y2="21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                        <line x1="9" y1="21" x2="15" y2="21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                    </svg>
-                </button>
                 <button class="send-btn" id="sendBtn" onclick="sendMessage()" title="发送">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 2L15 22l-4-9-9-4 20-7z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </button>
@@ -970,9 +909,6 @@
     </div>
 
 </div><!-- /app-shell -->
-
-<!-- 语音输入提示 toast -->
-<div class="voice-toast" id="voiceToast">🎙️ 正在识别，松开完成…</div>
 
 <!-- History Sidebar Overlay -->
 <div class="history-overlay" id="historyOverlay" onclick="closeHistorySidebar()"></div>
@@ -1074,155 +1010,6 @@
             const r = Math.random() * 16 | 0;
             return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
         });
-    }
-
-    /* ═══════════════════════ Voice Input (AudioContext PCM → Aliyun NLS) ═══════════════════════ */
-    /*
-     * 采集原始 PCM（16kHz/16bit/mono），直接上传裸 PCM 二进制。
-     * NLS format=pcm&sample_rate=16000，这是阿里云最稳定支持的格式，无任何容器开销。
-     */
-    let voiceAudioCtx    = null;
-    let voiceProcessor   = null;
-    let voiceSource      = null;
-    let voicePcmF32      = [];   // Float32Array 列表（录音过程中积累）
-    let voiceActive      = false;
-    let voiceToastTimer  = null;
-    let voiceStream      = null;
-
-    const VOICE_TARGET_RATE = 16000;  // NLS 要求 16kHz
-
-    async function voiceStart(e) {
-        e.preventDefault();
-        if (isProcessing) return;
-        if (voiceActive) return;
-
-        let stream;
-        try {
-            stream = await navigator.mediaDevices.getUserMedia({
-                audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }
-            });
-        } catch (err) {
-            showVoiceToast('⚠️ 请允许麦克风权限', 2500);
-            return;
-        }
-
-        voiceActive   = true;
-        voiceStream   = stream;
-        voicePcmF32   = [];
-
-        // 每次新录音开始，清空输入框（新语音覆盖旧语音，参考微信行为）
-        const input = document.getElementById('chatInput');
-        input.value = '';
-        autoResize(input);
-
-        document.getElementById('voiceBtn').classList.add('recording');
-        showVoiceToast('🎙️ 正在聆听…松开完成', 0);
-
-        // AudioContext 可能以系统采样率（如 44100/48000）运行，停止时统一重采样到 16kHz
-        voiceAudioCtx  = new (window.AudioContext || window.webkitAudioContext)();
-        voiceSource    = voiceAudioCtx.createMediaStreamSource(stream);
-
-        // ScriptProcessorNode：每次回调拿到一帧 PCM Float32
-        voiceProcessor = voiceAudioCtx.createScriptProcessor(4096, 1, 1);
-        voiceProcessor.onaudioprocess = (ev) => {
-            const f32 = ev.inputBuffer.getChannelData(0);
-            voicePcmF32.push(new Float32Array(f32));  // 必须拷贝，否则回调后被回收
-        };
-
-        voiceSource.connect(voiceProcessor);
-        voiceProcessor.connect(voiceAudioCtx.destination);
-    }
-
-    function voiceStop(e) {
-        if (e) e.preventDefault();
-        if (!voiceActive) return;
-        voiceActive = false;
-
-        document.getElementById('voiceBtn').classList.remove('recording');
-        showVoiceToast('⏳ 识别中…', 0);
-
-        // 断开录音管线
-        if (voiceProcessor) { voiceProcessor.disconnect(); voiceProcessor = null; }
-        if (voiceSource)    { voiceSource.disconnect();    voiceSource    = null; }
-        if (voiceStream)    { voiceStream.getTracks().forEach(t => t.stop()); voiceStream = null; }
-
-        const srcRate = voiceAudioCtx ? voiceAudioCtx.sampleRate : 44100;
-        if (voiceAudioCtx) { voiceAudioCtx.close(); voiceAudioCtx = null; }
-
-        const frames = voicePcmF32;
-        voicePcmF32 = [];
-
-        if (frames.length === 0) { hideVoiceToast(); return; }
-
-        // ── 1. 合并所有帧 ──
-        const totalLen = frames.reduce((s, f) => s + f.length, 0);
-        const merged   = new Float32Array(totalLen);
-        let off = 0;
-        frames.forEach(f => { merged.set(f, off); off += f.length; });
-
-        // ── 2. 线性重采样到 16kHz ──
-        const pcm16k = voiceResample(merged, srcRate, VOICE_TARGET_RATE);
-
-        // ── 3. Float32 → Int16 PCM（裸 PCM，不加 WAV 头）──
-        const pcmInt16 = new Int16Array(pcm16k.length);
-        for (let i = 0; i < pcm16k.length; i++) {
-            const s = Math.max(-1, Math.min(1, pcm16k[i]));
-            pcmInt16[i] = s < 0 ? Math.round(s * 32768) : Math.round(s * 32767);
-        }
-
-        // ── 4. 上传裸 PCM，format=pcm ──
-        const pcmBlob = new Blob([pcmInt16.buffer], { type: 'application/octet-stream' });
-        console.log('[ASR] pcm bytes:', pcmBlob.size, 'srcRate:', srcRate, 'samples:', pcmInt16.length);
-
-        const formData = new FormData();
-        formData.append('audio', pcmBlob, 'voice.pcm');
-        formData.append('format', 'pcm');
-
-        fetch(BASE_PATH + '/api/asr', { method: 'POST', body: formData })
-            .then(r => r.json())
-            .then(json => {
-                if (json.error) {
-                    showVoiceToast('❌ 识别失败：' + json.error, 2500);
-                } else if (json.text && json.text.trim()) {
-                    const input = document.getElementById('chatInput');
-                    input.value = (input.value || '') + json.text.trim();
-                    autoResize(input);
-                    hideVoiceToast();
-                } else {
-                    showVoiceToast('未识别到语音，请重试', 2000);
-                }
-            })
-            .catch(() => showVoiceToast('❌ 网络错误，请重试', 2000));
-    }
-
-    /* ── 线性重采样 ── */
-    function voiceResample(src, srcRate, dstRate) {
-        if (srcRate === dstRate) return src;
-        const ratio  = srcRate / dstRate;
-        const dstLen = Math.round(src.length / ratio);
-        const dst    = new Float32Array(dstLen);
-        for (let i = 0; i < dstLen; i++) {
-            const pos  = i * ratio;
-            const idx  = Math.floor(pos);
-            const frac = pos - idx;
-            dst[i]     = (src[idx] || 0) + frac * ((src[idx + 1] || 0) - (src[idx] || 0));
-        }
-        return dst;
-    }
-
-    function showVoiceToast(msg, duration) {
-        const toast = document.getElementById('voiceToast');
-        if (!toast) return;
-        toast.textContent = msg;
-        toast.classList.add('show');
-        clearTimeout(voiceToastTimer);
-        if (duration > 0) voiceToastTimer = setTimeout(hideVoiceToast, duration);
-    }
-
-    function hideVoiceToast() {
-        const toast = document.getElementById('voiceToast');
-        if (toast) toast.classList.remove('show');
-        clearTimeout(voiceToastTimer);
     }
 
     /* ═══════════════════════ Init ═══════════════════════ */
