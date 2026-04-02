@@ -60,7 +60,7 @@ public class DataAnalysisTool {
     @Tool(
             name = "list_datasets",
             description =
-                    "List all available data datasets. Returns a list containing dataset ID and"
+                    "List all available data datasets. Returns a list containing dataset Name and"
                             + " description for each dataset. Call this tool first to understand"
                             + " which datasets are available before querying.")
     public Mono<String> listDatasets() {
@@ -88,7 +88,7 @@ public class DataAnalysisTool {
     @Tool(
             name = "query_dataset",
             description =
-                    "Query a specific dataset by dataset ID and a question. The result contains"
+                    "Query a specific dataset by dataset Name and a question. The result contains"
                             + " the data for analysis. If the result is empty or null, it means"
                             + " no matching data was found. Analyze the result to determine"
                             + " whether it satisfies the user's requirement, and decide if"
@@ -97,7 +97,7 @@ public class DataAnalysisTool {
             @ToolParam(
                             name = "dataset_id",
                             description =
-                                    "The ID of the dataset to query, obtained from list_datasets"
+                                    "The Name of the dataset to query, obtained from list_datasets"
                                             + " tool")
                     String datasetId,
             @ToolParam(
@@ -125,9 +125,7 @@ public class DataAnalysisTool {
                 + datasets.stream()
                         .map(
                                 ds ->
-                                        "  - ID: "
-                                                + ds.getId()
-                                                + "\n    Name: "
+                                        "  - Name: "
                                                 + ds.getName()
                                                 + "\n    Description: "
                                                 + ds.getDescription())
