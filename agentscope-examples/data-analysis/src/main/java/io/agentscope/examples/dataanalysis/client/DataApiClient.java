@@ -57,10 +57,10 @@ public class DataApiClient {
     /** 配置文件中配置的 agentId 列表（逗号分隔），用于非 mock 模式下获取数据集列表 */
     private final List<String> nlpAgentIds;
 
-    /** datasetId → agentId，由 listDatasets 调用后注册 */
+    /** datasetName → agentId，由 listDatasets 调用后注册 */
     private final Map<String, String> datasetAgentIdMap = new ConcurrentHashMap<>();
 
-    /** datasetId → chatId，每个数据集维护一个独立的会话 */
+    /** datasetName → chatId，每个数据集维护一个独立的会话 */
     private final Map<String, String> datasetChatIdMap = new ConcurrentHashMap<>();
 
     public DataApiClient(
@@ -238,8 +238,8 @@ public class DataApiClient {
         String agentId = datasetAgentIdMap.get(datasetId);
         if (agentId == null) {
             log.warn(
-                    "[queryDataset] No agentId registered for datasetId={}, falling back to legacy"
-                            + " API",
+                    "[queryDataset] No agentId registered for datasetName={}, falling back to"
+                            + " legacy API",
                     datasetId);
             return queryDatasetLegacy(datasetId, question);
         }
@@ -276,11 +276,15 @@ public class DataApiClient {
         }
         for (DatasetInfo ds : datasets) {
             if (ds.getAgentId() != null && !ds.getAgentId().isBlank()) {
-                datasetAgentIdMap.put(ds.getId(), ds.getAgentId());
+                String key =
+                        (ds.getName() != null && !ds.getName().isBlank())
+                                ? ds.getName()
+                                : ds.getId();
+                datasetAgentIdMap.put(key, ds.getAgentId());
                 log.debug(
-                        "[registerDatasets] Registered agentId={} for datasetId={}",
+                        "[registerDatasets] Registered agentId={} for datasetName={}",
                         ds.getAgentId(),
-                        ds.getId());
+                        key);
             }
         }
     }
@@ -303,7 +307,7 @@ public class DataApiClient {
         String existingChatId = datasetChatIdMap.get(datasetId);
         if (existingChatId != null) {
             log.debug(
-                    "[getOrCreateChatId] Reusing chatId={} for datasetId={}",
+                    "[getOrCreateChatId] Reusing chatId={} for datasetName={}",
                     existingChatId,
                     datasetId);
             return Mono.just(existingChatId);
@@ -314,7 +318,7 @@ public class DataApiClient {
                         chatId -> {
                             datasetChatIdMap.put(datasetId, chatId);
                             log.info(
-                                    "[getOrCreateChatId] Created chatId={} for datasetId={}",
+                                    "[getOrCreateChatId] Created chatId={} for datasetName={}",
                                     chatId,
                                     datasetId);
                         });
