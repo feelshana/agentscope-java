@@ -17,6 +17,7 @@ package io.agentscope.examples.dataanalysis.service;
 
 import io.agentscope.core.plan.PlanNotebook;
 import io.agentscope.examples.dataanalysis.dto.PlanResponse;
+import java.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -56,15 +57,19 @@ public class AnalysisPlanService {
 
     /**
      * SSE stream – sends the current plan state immediately, then pushes each subsequent update.
+     * A heartbeat (empty PlanResponse) is sent every 25 seconds to keep the connection alive
+     * and prevent idle timeout disconnections.
      */
     public Flux<PlanResponse> getPlanStream() {
+        Flux<PlanResponse> heartbeat =
+                Flux.interval(Duration.ofSeconds(25)).map(tick -> new PlanResponse());
         return Flux.concat(
                 Mono.fromCallable(
                         () -> {
                             PlanResponse current = getCurrentPlan();
                             return current != null ? current : new PlanResponse();
                         }),
-                planSink.asFlux());
+                Flux.merge(planSink.asFlux(), heartbeat));
     }
 
     /**
