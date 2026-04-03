@@ -25,15 +25,23 @@ import io.agentscope.examples.dataanalysis.service.AsrService;
 import io.agentscope.examples.dataanalysis.service.ChatSessionService;
 import io.agentscope.examples.dataanalysis.service.DataAnalysisAgentService;
 import io.agentscope.examples.dataanalysis.service.SuggestedQuestionService;
+import io.agentscope.examples.dataanalysis.util.ReportTemplateUtil;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import org.springframework.core.io.buffer.DataBufferUtils;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.codec.multipart.FilePart;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
@@ -66,6 +74,7 @@ public class DataAnalysisController {
     private final ChatSessionService chatSessionService;
     private final SuggestedQuestionService suggestedQuestionService;
     private final AsrService asrService;
+    private final ReportTemplateUtil reportTemplateUtil;
 
     public DataAnalysisController(
             DataAnalysisAgentService agentService,
@@ -73,13 +82,15 @@ public class DataAnalysisController {
             DataApiClient dataApiClient,
             ChatSessionService chatSessionService,
             SuggestedQuestionService suggestedQuestionService,
-            AsrService asrService) {
+            AsrService asrService,
+            ReportTemplateUtil reportTemplateUtil) {
         this.agentService = agentService;
         this.planService = planService;
         this.dataApiClient = dataApiClient;
         this.chatSessionService = chatSessionService;
         this.suggestedQuestionService = suggestedQuestionService;
         this.asrService = asrService;
+        this.reportTemplateUtil = reportTemplateUtil;
     }
 
     /**
@@ -184,6 +195,66 @@ public class DataAnalysisController {
     @GetMapping("/health")
     public String health() {
         return "OK";
+    }
+
+    /**
+     * Downloads an HTML report generated from markdown content.
+     * The markdown content is converted to a standalone HTML document with embedded styles.
+     *
+     * @param content The markdown content to convert
+     * @return ResponseEntity containing the HTML file as bytes
+     */
+    @PostMapping(path = "/reports/html", consumes = MediaType.TEXT_PLAIN_VALUE)
+    public ResponseEntity<byte[]> downloadHtmlReport(@RequestBody String content) {
+        try {
+            if (!StringUtils.hasText(content)) {
+                return ResponseEntity.badRequest().build();
+            }
+
+            String htmlContent = reportTemplateUtil.generateHtmlReport(content);
+            String timestamp =
+                    LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+            String filename = "report_" + timestamp + ".html";
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(new MediaType("text", "html", StandardCharsets.UTF_8));
+            headers.setContentDispositionFormData("attachment", filename);
+
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(htmlContent.getBytes(StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    /**
+     * Downloads a markdown report.
+     *
+     * @param content The markdown content
+     * @return ResponseEntity containing the markdown file as bytes
+     */
+    @PostMapping(path = "/reports/markdown", consumes = MediaType.TEXT_PLAIN_VALUE)
+    public ResponseEntity<byte[]> downloadMarkdownReport(@RequestBody String content) {
+        try {
+            if (!StringUtils.hasText(content)) {
+                return ResponseEntity.badRequest().build();
+            }
+
+            String timestamp =
+                    LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+            String filename = "report_" + timestamp + ".md";
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(new MediaType("text", "markdown", StandardCharsets.UTF_8));
+            headers.setContentDispositionFormData("attachment", filename);
+
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(content.getBytes(StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().build();
+        }
     }
 
     /**
