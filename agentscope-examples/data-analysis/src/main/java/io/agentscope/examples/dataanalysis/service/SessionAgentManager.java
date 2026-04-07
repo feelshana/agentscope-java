@@ -158,6 +158,7 @@ public class SessionAgentManager {
                         .toolkit(toolkit)
                         .planNotebook(planNotebook)
                         .maxIters(40)
+                        .hook(new ContextTrimHook()) // priority=10: trim first
                         .hook(confirmPlanToHint) // priority=50: runs before planHintHook(100)
                         .hook(new ChatLogHook(sessionId))
                         .hook(new LlmDbHook(sessionId, llmInteractionLogService))
