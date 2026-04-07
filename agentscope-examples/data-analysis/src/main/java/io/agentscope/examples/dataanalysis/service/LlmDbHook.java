@@ -257,9 +257,11 @@ public class LlmDbHook implements Hook {
             if (MsgRole.USER.equals(msg.getRole())) {
                 List<TextBlock> textBlocks = msg.getContentBlocks(TextBlock.class);
                 if (!textBlocks.isEmpty()) {
-                    String raw = textBlocks.stream().map(TextBlock::getText).reduce("", String::concat);
+                    String raw =
+                            textBlocks.stream().map(TextBlock::getText).reduce("", String::concat);
                     // Strip injected system-hint blocks, keep only the user's original text
-                    String cleaned = raw.replaceAll("(?s)<system-hint>.*?</system-hint>", "").strip();
+                    String cleaned =
+                            raw.replaceAll("(?s)<system-hint>.*?</system-hint>", "").strip();
                     return cleaned.isEmpty() ? null : cleaned;
                 }
             }
