@@ -23,7 +23,6 @@ import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.TextBlock;
 import io.agentscope.core.message.ToolResultBlock;
-import io.agentscope.core.message.ToolUseBlock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -73,8 +72,8 @@ public class ContextTrimHook implements Hook {
      * Short confirmation/rejection keywords that do NOT count as real question rounds.
      * Compared case-insensitively after stripping whitespace.
      */
-    private static final Set<String> CONFIRMATION_KEYWORDS = Set.of(
-            "执行", "不执行", "确认", "取消", "算了", "放弃", "好的", "ok", "yes", "no");
+    private static final Set<String> CONFIRMATION_KEYWORDS =
+            Set.of("执行", "不执行", "确认", "取消", "算了", "放弃", "好的", "ok", "yes", "no");
 
     @Override
     public int priority() {
@@ -125,7 +124,8 @@ public class ContextTrimHook implements Hook {
 
         if (firstKeptIndex > 0) {
             log.debug(
-                    "ContextTrimHook: dropping {} old round(s), keeping {}/{} (real-question limit={})",
+                    "ContextTrimHook: dropping {} old round(s), keeping {}/{} (real-question"
+                            + " limit={})",
                     firstKeptIndex,
                     rounds.size() - firstKeptIndex,
                     rounds.size(),
@@ -191,9 +191,10 @@ public class ContextTrimHook implements Hook {
             return false;
         }
         // Extract raw USER text
-        String raw = firstMsg.getContentBlocks(TextBlock.class).stream()
-                .map(TextBlock::getText)
-                .reduce("", String::concat);
+        String raw =
+                firstMsg.getContentBlocks(TextBlock.class).stream()
+                        .map(TextBlock::getText)
+                        .reduce("", String::concat);
         // Strip system-hint blocks
         String cleaned = raw.replaceAll("(?s)<system-hint>.*?</system-hint>", "").strip();
         if (cleaned.isEmpty()) {
@@ -231,8 +232,7 @@ public class ContextTrimHook implements Hook {
      * Other content blocks and non-TOOL messages are returned unchanged.
      */
     private Msg truncateToolResults(Msg msg) {
-        if (!MsgRole.TOOL.equals(msg.getRole())
-                && !msg.hasContentBlocks(ToolResultBlock.class)) {
+        if (!MsgRole.TOOL.equals(msg.getRole()) && !msg.hasContentBlocks(ToolResultBlock.class)) {
             return msg;
         }
 
@@ -277,8 +277,11 @@ public class ContextTrimHook implements Hook {
             if (ob instanceof TextBlock tb) {
                 String text = tb.getText();
                 if (text != null && text.length() > TOOL_RESULT_MAX_CHARS) {
-                    String truncated = text.substring(0, TOOL_RESULT_MAX_CHARS)
-                            + "...[已截断，共" + text.length() + "字符]";
+                    String truncated =
+                            text.substring(0, TOOL_RESULT_MAX_CHARS)
+                                    + "...[已截断，共"
+                                    + text.length()
+                                    + "字符]";
                     newOutput.add(TextBlock.builder().text(truncated).build());
                     modified = true;
                 } else {
