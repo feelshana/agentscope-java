@@ -388,7 +388,8 @@ public class DataApiClient {
                 Map.of(
                         "agentId", Long.parseLong(agentId),
                         "chatId", Long.parseLong(chatId),
-                        "queryText", question);
+                        "queryText", question,
+                        "queryType", "simple");
         log.info("[queryByNlp] agentId={}, chatId={}, question={}", agentId, chatId, question);
         return nlpWebClient
                 .post()
