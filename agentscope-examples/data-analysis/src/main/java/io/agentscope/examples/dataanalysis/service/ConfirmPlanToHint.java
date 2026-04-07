@@ -15,10 +15,17 @@
  */
 package io.agentscope.examples.dataanalysis.service;
 
+import io.agentscope.core.hook.Hook;
+import io.agentscope.core.hook.HookEvent;
+import io.agentscope.core.hook.PreReasoningEvent;
+import io.agentscope.core.message.MsgRole;
+import io.agentscope.core.message.ToolResultBlock;
 import io.agentscope.core.plan.PlanNotebook;
 import io.agentscope.core.plan.hint.DefaultPlanToHint;
 import io.agentscope.core.plan.hint.PlanToHint;
 import io.agentscope.core.plan.model.Plan;
+import io.agentscope.core.plan.model.PlanState;
+import reactor.core.publisher.Mono;
 
 /**
  * A PlanToHint decorator for the data-analysis example that appends a
@@ -31,8 +38,13 @@ import io.agentscope.core.plan.model.Plan;
  *
  * <p>This class delegates all hint generation to {@link DefaultPlanToHint} and
  * only post-processes the result, so the core library remains untouched.
+ *
+ * <p>Additionally, when the user declines to execute a plan (i.e. the plan is
+ * finished with state {@code abandoned}), this class suppresses the next
+ * "no plan" system-hint so the LLM is not prompted to create a new plan
+ * immediately after the user's rejection.
  */
-public class ConfirmPlanToHint implements PlanToHint {
+public class ConfirmPlanToHint implements PlanToHint, Hook {
 
     /** The token the frontend watches for. */
     public static final String CONFIRM_TOKEN = "[CONFIRM_PLAN]";
@@ -46,8 +58,119 @@ public class ConfirmPlanToHint implements PlanToHint {
 
     private final DefaultPlanToHint delegate = new DefaultPlanToHint();
 
+    /**
+     * Tracks whether at least one tool result has appeared in the LLM context.
+     *
+     * <p>Updated in {@link #onEvent} before each reasoning step. When this is
+     * {@code false} (i.e. the very first iteration, before any tool has been
+     * called), the "no plan" system-hint is suppressed so the LLM is not
+     * prompted to create a plan before it has had a chance to call
+     * {@code list_datasets}.
+     */
+    private volatile boolean hasToolResult = false;
+
+    /**
+     * Set to true after a plan is finished with state ABANDONED.
+     * The next call to generateHint(null, ...) will return null (suppress
+     * the "no plan" hint) and then reset this flag.
+     */
+    private volatile boolean lastPlanWasAbandoned = false;
+
+    /**
+     * Holds a reference to the last non-null Plan object seen by the change-hook.
+     *
+     * <p>When {@code finishPlan} is called, it mutates the Plan object's state
+     * (e.g. to ABANDONED) and <em>then</em> sets {@code currentPlan = null} before
+     * firing the hooks.  Because we still hold a reference here, we can read the
+     * final state of the plan even after {@code currentPlan} has been cleared.
+     */
+    private volatile Plan lastSeenPlan = null;
+
+    /**
+     * Register a change-hook on the given PlanNotebook so we can automatically
+     * detect when a plan is finished as ABANDONED.
+     *
+     * <p>Strategy: {@code finishPlan} mutates the Plan object's state to ABANDONED
+     * and <em>then</em> sets {@code currentPlan = null} before triggering hooks.
+     * By caching the Plan reference every time the hook fires with a non-null plan,
+     * we retain access to the (now-mutated) Plan object when the hook fires next
+     * with {@code plan == null}, allowing us to read its final state.
+     *
+     * <p>Call this once, right after constructing the PlanNotebook.
+     */
+    public void registerWith(PlanNotebook planNotebook) {
+        planNotebook.addChangeHook(
+                "confirmPlanToHint_abandonedDetector",
+                (nb, plan) -> {
+                    if (plan != null) {
+                        // Keep a reference to the live Plan object.
+                        // finishPlan will mutate its state before clearing currentPlan.
+                        lastSeenPlan = plan;
+                    } else {
+                        // plan became null: finishPlan was just called.
+                        // The Plan object referenced by lastSeenPlan already has its
+                        // final state (DONE or ABANDONED) set by finishPlan.
+                        if (lastSeenPlan != null
+                                && PlanState.ABANDONED.equals(lastSeenPlan.getState())) {
+                            lastPlanWasAbandoned = true;
+                        }
+                        lastSeenPlan = null;
+                    }
+                });
+    }
+
+    /**
+     * Hook callback: runs before every reasoning step.
+     *
+     * <p>Scans the incoming message list for any TOOL-role message containing a
+     * {@link ToolResultBlock}.  Once found, {@code hasToolResult} is set to
+     * {@code true} for the remainder of the session, meaning the LLM has
+     * already performed at least one tool call and is ready for plan-related hints.
+     *
+     * <p>This hook must execute <em>before</em> the plan-hint hook so that the
+     * flag is up-to-date when {@link #generateHint} is called.  Register this
+     * instance with a priority lower than 100 (the default) — e.g. 50.
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T extends HookEvent> Mono<T> onEvent(T event) {
+        if (!hasToolResult && event instanceof PreReasoningEvent pre) {
+            boolean found =
+                    pre.getInputMessages().stream()
+                            .filter(m -> MsgRole.TOOL.equals(m.getRole()))
+                            .anyMatch(m -> !m.getContentBlocks(ToolResultBlock.class).isEmpty());
+            if (found) {
+                hasToolResult = true;
+            }
+        }
+        return Mono.just(event);
+    }
+
+    /** Execute before the default plan-hint hook (priority 100). */
+    @Override
+    public int priority() {
+        return 50;
+    }
+
     @Override
     public String generateHint(Plan plan, PlanNotebook planNotebook) {
+        // ── First-iteration guard ────────────────────────────────────────────
+        // Suppress the "no plan" hint on the very first iteration (before any
+        // tool has been called). This prevents the LLM from being prompted to
+        // create a plan before it has had a chance to call list_datasets.
+        if (plan == null && !hasToolResult) {
+            return null;
+        }
+        // ── Abandoned-plan guard ─────────────────────────────────────────────
+        // If the previous plan was abandoned and there is now no active plan,
+        // suppress the default "no plan" hint to prevent the LLM from
+        // immediately creating a new plan after the user's rejection.
+        if (plan == null && lastPlanWasAbandoned) {
+            lastPlanWasAbandoned = false; // consume the flag
+            return null;
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
         String hint = delegate.generateHint(plan, planNotebook);
         if (hint == null) {
             return null;

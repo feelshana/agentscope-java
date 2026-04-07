@@ -1658,8 +1658,15 @@
             actions.querySelectorAll('.confirm-btn').forEach(b => b.disabled = true);
         }
 
-        // Notify backend to suppress further needConfirm=true broadcasts for this plan
-        fetch(BASE_PATH + '/api/plan/confirm', { method: 'POST' }).catch(() => {});
+        if (text === '不执行') {
+            // 「不执行」：先让后端立即 abandon 当前计划（清空 PlanNotebook.currentPlan），
+            // 防止 LLM 在后续轮次中收到残留计划的 system-hint。
+            // 同时调 /api/plan/confirm 抑制 needConfirm 广播（兜底）。
+            fetch(BASE_PATH + '/api/plan/abandon', { method: 'POST' }).catch(() => {});
+        } else {
+            // Notify backend to suppress further needConfirm=true broadcasts for this plan
+            fetch(BASE_PATH + '/api/plan/confirm', { method: 'POST' }).catch(() => {});
+        }
 
         // 重置 userCollapsed，后续子任务开始执行时面板可自动展开
         userCollapsed = false;
