@@ -190,6 +190,20 @@ public class DataAnalysisController {
     }
 
     /**
+     * Called when user clicks the "不执行" (decline) button.
+     *
+     * <p>Immediately abandons the current plan so the PlanNotebook clears
+     * {@code currentPlan}, preventing subsequent LLM iterations from receiving
+     * a stale plan hint. This is a backend-guaranteed abort – the LLM still
+     * receives the user’s "\u4e0d\u6267\u884c" message and can reply gracefully, but no
+     * longer sees a current plan in the system-hint.
+     */
+    @PostMapping("/plan/abandon")
+    public Mono<Map<String, String>> abandonPlan() {
+        return planService.abandonPlan().thenReturn(Map.of("status", "ok"));
+    }
+
+    /**
      * Health check endpoint.
      */
     @GetMapping("/health")
