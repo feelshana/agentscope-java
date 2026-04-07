@@ -1709,6 +1709,56 @@
         // "generating chart…" pre-indicator before the <chart> tag actually arrives.
         let pendingChartLoading = false;
 
+        // ── Query-waiting indicator ──────────────────────────────────────────────────
+        // When the LLM finishes emitting "Now I will query…" text and falls silent
+        // while waiting for query_dataset to return, we show a waiting card after a
+        // short debounce so the user isn't left staring at a frozen screen.
+        let queryWaitDebounce = null;  // setTimeout handle (2-sec debounce)
+        let queryWaitTimer   = null;   // setInterval handle (elapsed counter in card)
+        let queryWaitEl      = null;   // DOM reference to the waiting card element
+        let queryWaitSecs    = 0;      // seconds elapsed since card appeared
+        let queryWaitActive  = false;  // true while card is visible
+
+        function showQueryWaitCard() {
+            if (queryWaitActive || !assistantEl) return;
+            queryWaitActive = true;
+            queryWaitSecs = 0;
+            const content = assistantEl.querySelector('.message-content');
+            if (!content) return;
+            // Remove any stale card first
+            const old = content.querySelector('#queryWaitCard');
+            if (old) old.remove();
+            const card = document.createElement('div');
+            card.id = 'queryWaitCard';
+            card.style.cssText =
+                'display:flex;align-items:center;gap:10px;margin-top:8px;'
+                + 'padding:9px 14px;background:var(--surface2);border:1px solid var(--border);'
+                + 'border-radius:var(--radius-sm);font-size:0.8rem;color:var(--text-hint);';
+            card.innerHTML =
+                '<div style="width:13px;height:13px;flex-shrink:0;border:2px solid var(--border);'
+                + 'border-top-color:var(--primary);border-radius:50%;'
+                + 'animation:spinLoader 0.7s linear infinite;"></div>'
+                + '<span id="queryWaitText">🔍 正在向数据服务查询，请稍等… 00:00</span>';
+            content.appendChild(card);
+            queryWaitEl = card;
+            if (!streamingUserScrolledUp) document.getElementById('chatMessages').scrollTop = 99999;
+            // Tick every second to update elapsed time
+            queryWaitTimer = setInterval(() => {
+                queryWaitSecs++;
+                const m = String(Math.floor(queryWaitSecs / 60)).padStart(2, '0');
+                const s = String(queryWaitSecs % 60).padStart(2, '0');
+                const el = document.getElementById('queryWaitText');
+                if (el) el.textContent = `🔍 正在向数据服务查询，请稍等… ${m}:${s}`;
+            }, 1000);
+        }
+
+        function clearQueryWaitCard() {
+            if (queryWaitDebounce) { clearTimeout(queryWaitDebounce); queryWaitDebounce = null; }
+            if (queryWaitTimer)    { clearInterval(queryWaitTimer);   queryWaitTimer = null; }
+            if (queryWaitEl) { queryWaitEl.remove(); queryWaitEl = null; }
+            queryWaitActive = false;
+        }
+
         // Detect user scroll: if user scrolls up (away from bottom), stop auto-scroll
         const chatMsgsEl = document.getElementById('chatMessages');
         function onUserScroll() {
@@ -1721,6 +1771,8 @@
             if (finalized) return;
             finalized = true;
             chatMsgsEl.removeEventListener('scroll', onUserScroll);
+            // Clean up query-wait timers to prevent memory leaks
+            clearQueryWaitCard();
             removeTyping(typingEl);
             if (assistantEl) finalizeMessage(assistantEl, assistantText);
             // If LLM answered directly (no plan was ever pushed), clear pending state
@@ -1773,6 +1825,8 @@
                 const label = toolName === 'list_datasets'  ? '⚙️ 正在发现可用数据集…'
                             : toolName === 'query_dataset'  ? '📊 数据查询完成，正在分析…'
                             : `⚙️ 工具执行中（${toolName}）…`;
+                // Any tool completing means we're no longer silently waiting – clear wait card.
+                clearQueryWaitCard();
                 // After query_dataset finishes, the LLM will emit conclusion text then
                 // a <chart> block. Flag this so we can show a chart pre-loading indicator.
                 if (toolName === 'query_dataset') pendingChartLoading = true;
@@ -1878,7 +1932,20 @@
             // Remove tool status line once real text arrives
             const statusLineEl = assistantEl.querySelector('#toolStatusLine');
             if (statusLineEl) statusLineEl.remove();
+            // Clear any active query-wait card since real text is arriving
+            clearQueryWaitCard();
             updateLastMessage(assistantEl, assistantText);
+
+            // ── Start debounce: if text stream goes silent for 2s and we're not inside a
+            // special block, assume the LLM has called query_dataset and is waiting.
+            // Reset the debounce on every text chunk so it only fires when truly silent.
+            if (!inSpecialBlock && !pendingChartLoading) {
+                if (queryWaitDebounce) clearTimeout(queryWaitDebounce);
+                queryWaitDebounce = setTimeout(() => {
+                    queryWaitDebounce = null;
+                    showQueryWaitCard();
+                }, 2000);
+            }
 
             // If query_dataset already finished and the LLM is now outputting conclusion text,
             // show a "generating chart…" bar at the bottom of the bubble so the user knows
