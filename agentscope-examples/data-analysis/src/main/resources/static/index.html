@@ -789,9 +789,16 @@
             border: 1px solid var(--border);
             padding: 13px 16px;
             border-radius: var(--radius-lg); border-bottom-left-radius: 5px;
-            white-space: pre-wrap; word-break: break-word;
+            word-break: break-word;
             font-size: 0.9rem; line-height: 1.75;
             box-shadow: var(--shadow-sm);
+        }
+        .message.assistant .message-content.has-chart .text-part p { margin: 0 0 8px; }
+        .message.assistant .message-content.has-chart .text-part p:last-child { margin-bottom: 0; }
+        .message.assistant .message-content.has-chart .text-part strong {
+            font-weight: 600;
+            background: linear-gradient(180deg, transparent 60%, rgba(79,110,247,0.12) 60%);
+            padding: 0 2px;
         }
         /* 表格样式 */
         .data-table-container {
@@ -902,14 +909,15 @@
             margin-right: 6px; vertical-align: middle;
         }
         
-        /* 表格 – GitHub 风格 */
+        /* 表格 – GitHub 风格，用外层容器处理横向滚动，避免 display:block 破坏列宽对齐 */
+        .report-block .table-wrapper {
+            width: 100%; overflow-x: auto; margin: 12px 0;
+        }
         .report-block table {
             width: 100%; border-collapse: collapse;
-            margin: 12px 0; font-size: 0.82rem;
-            display: block; overflow-x: auto;
+            font-size: 0.82rem;
+            table-layout: auto;
         }
-        .report-block thead { display: table-header-group; }
-        .report-block tbody { display: table-row-group; }
         .report-block tr { border-top: 1px solid #c6cbd1; }
         .report-block tr:nth-child(2n) { background-color: #f6f8fa; }
         .report-block th, .report-block td {
@@ -917,7 +925,7 @@
         }
         .report-block th {
             background-color: #f6f8fa; font-weight: 600; color: #1f2933;
-            text-align: left;
+            text-align: left; white-space: nowrap;
         }
         .report-block td { color: #24292e; }
         
@@ -1741,19 +1749,12 @@
                     reportBlock.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 });
             }
-            // 修复 Markdown 标题格式：将 `#标题` 替换为 `# 标题`
-            let fixedContent = rawContent.replace(/^(#{1,6})([^#\s])/gm, '$1 $2');
-            // 修复 Markdown 标题格式：将 `#  标题`（多个空格）替换为 `# 标题`
-            fixedContent = fixedContent.replace(/^(#{1,6})\s{2,}/gm, '$1 ');
-            // 流式期间：用 marked 实时渲染 Markdown，让用户看到格式化效果；降级到 <pre> 展示
-            if (typeof marked !== 'undefined') {
-                try {
-                    reportBlock.innerHTML = marked.parse(fixedContent);
-                } catch(e) {
-                    reportBlock.innerHTML = `<pre style="white-space:pre-wrap;word-break:break-word;font-family:inherit;font-size:0.85rem;line-height:1.7;color:var(--text-sub);background:transparent;padding:0;margin:0;">${escapeHtml(fixedContent)}</pre>`;
-                }
+            // 流式期间：用统一的 renderMarkdown 渲染（含标题修复 + **中文：** 修复）
+            if (typeof renderMarkdown !== 'undefined') {
+                reportBlock.innerHTML = renderMarkdown(rawContent);
+                if (typeof wrapTables !== 'undefined') wrapTables(reportBlock);
             } else {
-                reportBlock.innerHTML = `<pre style="white-space:pre-wrap;word-break:break-word;font-family:inherit;font-size:0.85rem;line-height:1.7;color:var(--text-sub);background:transparent;padding:0;margin:0;">${escapeHtml(fixedContent)}</pre>`;
+                reportBlock.innerHTML = `<pre style="white-space:pre-wrap;word-break:break-word;font-family:inherit;font-size:0.85rem;line-height:1.7;color:var(--text-sub);background:transparent;padding:0;margin:0;">${escapeHtml(rawContent)}</pre>`;
             }
             // Auto-scroll to bottom only if user hasn't scrolled up
             if (!streamingUserScrolledUp) {
@@ -1814,13 +1815,11 @@
                 // 渲染 <report> 之前的普通文本（如果有 Markdown 格式也一并渲染）
                 let textNode = '';
                 if (beforeTag) {
-                    // 过滤裸露的图表 JSON 和修复 Markdown 标题格式
+                    // 过滤裸露的图表 JSON，然后用统一的 renderMarkdown 渲染
                     const looseChartJsonRegex = /\{[\s]*"type"[\s]*:[\s]*"(bar|line|pie)"[\s]*,[\s]*"title"[\s]*:[\s]*"[^"]*"[\s]*,[\s]*"data"[\s]*:[\s]*\[[\s\S]*?\][\s]*\}/gi;
                     let filteredBefore = beforeTag.replace(looseChartJsonRegex, '').trim();
-                    filteredBefore = filteredBefore.replace(/^(#{1,6})([^#\s])/gm, '$1 $2');
-                    filteredBefore = filteredBefore.replace(/^(#{1,6})\s{2,}/gm, '$1 ');
-                    const parsedBefore = (typeof marked !== 'undefined')
-                        ? marked.parse(filteredBefore)
+                    const parsedBefore = (typeof renderMarkdown !== 'undefined')
+                        ? renderMarkdown(filteredBefore)
                         : escapeHtml(filteredBefore);
                     textNode = `<div class="text-part" id="msgTextPart">${parsedBefore}</div>`;
                 }
@@ -1951,17 +1950,11 @@
         const content = el.querySelector('.message-content');
         // 过滤掉裸露的图表 JSON（LLM 有时会在 <report> 之前输出 JSON）
         const looseChartJsonRegex = /\{[\s]*"type"[\s]*:[\s]*"(bar|line|pie)"[\s]*,[\s]*"title"[\s]*:[\s]*"[^"]*"[\s]*,[\s]*"data"[\s]*:[\s]*\[[\s\S]*?\][\s]*\}/gi;
-        let filteredText = text.replace(looseChartJsonRegex, '').trim();
-        // 修复 Markdown 标题格式
-        filteredText = filteredText.replace(/^(#{1,6})([^#\s])/gm, '$1 $2');
-        filteredText = filteredText.replace(/^(#{1,6})\s{2,}/gm, '$1 ');
-        // 使用 marked 渲染 Markdown，纯文本 fallback
-        if (typeof marked !== 'undefined') {
-            try {
-                content.innerHTML = marked.parse(filteredText);
-            } catch(e) {
-                content.textContent = filteredText;
-            }
+        const filteredText = text.replace(looseChartJsonRegex, '').trim();
+        // 使用统一的 renderMarkdown 渲染（含标题修复 + **中文：** 修复）
+        if (typeof renderMarkdown !== 'undefined') {
+            content.innerHTML = renderMarkdown(filteredText);
+            if (typeof wrapTables !== 'undefined') wrapTables(content);
         } else {
             content.textContent = filteredText;
         }
@@ -1989,14 +1982,8 @@
             .trim();
 
         // 移除不在 <chart> 标签内的裸露图表 JSON（LLM 有时会把 JSON 输出在错误的位置）
-        // 匹配类似 {"type":"bar","title":...,"data":[...]} 的 JSON
         const looseChartJsonRegex = /\{[\s]*"type"[\s]*:[\s]*"(bar|line|pie)"[\s]*,[\s]*"title"[\s]*:[\s]*"[^"]*"[\s]*,[\s]*"data"[\s]*:[\s]*\[[\s\S]*?\][\s]*\}/gi;
         textPart = textPart.replace(looseChartJsonRegex, '').trim();
-
-        // 修复 Markdown 标题格式：将 `#标题` 替换为 `# 标题`
-        textPart = textPart.replace(/^(#{1,6})([^#\s])/gm, '$1 $2');
-        // 修复 Markdown 标题格式：将 `#  标题`（多个空格）替换为 `# 标题`
-        textPart = textPart.replace(/^(#{1,6})\s{2,}/gm, '$1 ');
 
         let chartHtml = '';
         if (chartMatch) {
@@ -2007,20 +1994,11 @@
         let reportRawContent = '';
         if (reportMatch) {
             let raw = reportMatch[1].trim();
-            // 修复 Markdown 标题格式：将 `#标题` 替换为 `# 标题`
-            raw = raw.replace(/^(#{1,6})([^#\s])/gm, '$1 $2');
-            // 修复 Markdown 标题格式：将 `#  标题`（多个空格）替换为 `# 标题`
-            raw = raw.replace(/^(#{1,6})\s{2,}/gm, '$1 ');
             reportRawContent = raw; // 保存原始 Markdown 内容用于下载
-            // 用 marked.js 将 Markdown 转为 HTML
-            let parsedHtml = '';
-            try {
-                parsedHtml = typeof marked !== 'undefined'
-                    ? marked.parse(raw)
-                    : `<pre style="white-space:pre-wrap">${escapeHtml(raw)}</pre>`;
-            } catch(e) {
-                parsedHtml = `<pre style="white-space:pre-wrap">${escapeHtml(raw)}</pre>`;
-            }
+            // 用统一的 renderMarkdown（含标题修复 + **中文：** 修复）转为 HTML
+            const parsedHtml = (typeof renderMarkdown !== 'undefined')
+                ? renderMarkdown(raw)
+                : `<pre style="white-space:pre-wrap">${escapeHtml(raw)}</pre>`;
             const reportId = 'report_' + Math.random().toString(36).substr(2, 9);
             const downloadBtnsHtml = `
                 <div class="report-actions">
@@ -2061,13 +2039,10 @@
                     textPartEl.className = 'text-part';
                     content.prepend(textPartEl);
                 }
-                // 使用 marked 渲染 Markdown 格式的普通文本
-                if (typeof marked !== 'undefined') {
-                    try {
-                        textPartEl.innerHTML = marked.parse(textPart);
-                    } catch(e) {
-                        textPartEl.textContent = textPart;
-                    }
+                // 使用 renderMarkdown 渲染 Markdown 格式的普通文本
+                if (typeof renderMarkdown !== 'undefined') {
+                    textPartEl.innerHTML = renderMarkdown(textPart);
+                    if (typeof wrapTables !== 'undefined') wrapTables(textPartEl);
                 } else {
                     textPartEl.textContent = textPart;
                 }
@@ -2083,6 +2058,8 @@
                 // 设置原始内容到data属性
                 reportBlock.dataset.rawContent = reportRawContent;
                 content.appendChild(reportBlock);
+                // 把 report 块内所有 table 包上 table-wrapper，解决列宽不一致
+                if (typeof wrapTables !== 'undefined') wrapTables(reportBlock);
                 
                 // 为下载按钮添加事件监听
                 reportBlock.querySelectorAll('.report-download-btn').forEach(btn => {
@@ -2118,12 +2095,9 @@
         } else {
             // 没有报告/图表时，也用 marked 渲染 Markdown
             const textToRender = textPart || fullText;
-            if (typeof marked !== 'undefined') {
-                try {
-                    content.innerHTML = marked.parse(textToRender);
-                } catch(e) {
-                    content.textContent = textToRender;
-                }
+            if (typeof renderMarkdown !== 'undefined') {
+                content.innerHTML = renderMarkdown(textToRender);
+                if (typeof wrapTables !== 'undefined') wrapTables(content);
             } else {
                 content.textContent = textToRender;
             }
@@ -2213,6 +2187,44 @@
     if (typeof marked !== 'undefined') {
         marked.setOptions({ gfm: true, breaks: true });
         console.log('[DEBUG] marked.js 加载成功，版本:', marked.version || 'unknown');
+
+        /**
+         * 统一的 Markdown 预处理 + 渲染函数（全局使用，替代直接调用 marked.parse）
+         * 修复 marked 对以下模式的解析问题：
+         * 1. **中文标签：** 后紧跟内容时（如 **核心结论：** 文字），marked 有时不能识别为粗体
+         * 2. 标题格式修复（#标题 → # 标题）
+         */
+        window.renderMarkdown = function(raw) {
+            if (!raw) return '';
+            let md = raw;
+            // 修复 Markdown 标题格式：将 `#标题` 替换为 `# 标题`
+            md = md.replace(/^(#{1,6})([^#\s])/gm, '$1 $2');
+            md = md.replace(/^(#{1,6})\s{2,}/gm, '$1 ');
+            // 修复 **中文内容：** 后紧跟文字时 marked 不能识别的问题：
+            // 将 `**text：**文字` 或 `**text:** 文字`（冒号全/半角，后无空格）补上空格
+            md = md.replace(/(\*\*[^*]+[：:]\*\*)([^\s*])/g, '$1 $2');
+            try {
+                return marked.parse(md);
+            } catch(e) {
+                return '<pre style="white-space:pre-wrap;word-break:break-word">' + escapeHtml(md) + '</pre>';
+            }
+        };
+
+        /**
+         * 将容器元素内所有裸露的 <table> 包裹进 <div class="table-wrapper">
+         * 解决 display:table 下表头与内容列宽不对齐的问题。
+         * 在每次 innerHTML 赋值后调用。
+         */
+        window.wrapTables = function(el) {
+            if (!el) return;
+            el.querySelectorAll('table').forEach(table => {
+                if (table.parentElement && table.parentElement.classList.contains('table-wrapper')) return;
+                const wrapper = document.createElement('div');
+                wrapper.className = 'table-wrapper';
+                table.parentNode.insertBefore(wrapper, table);
+                wrapper.appendChild(table);
+            });
+        };
     } else {
         console.error('[DEBUG] marked.js 加载失败！请检查网络或文件路径');
         // 显示警告提示
