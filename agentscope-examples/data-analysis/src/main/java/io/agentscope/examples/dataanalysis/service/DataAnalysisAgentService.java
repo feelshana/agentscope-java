@@ -118,8 +118,12 @@ public class DataAnalysisAgentService implements InitializingBean {
     public Flux<String> chat(String sessionId, String message, String account) {
         // Synchronous DB operations before streaming starts
         chatSessionService.ensureSession(sessionId, account);
-        chatSessionService.saveUserMessage(sessionId, message);
+        // getOrCreate BEFORE saveUserMessage: if the session is not yet in memory,
+        // preloadHistory reads from DB. Saving the user message first would cause
+        // it to be loaded into memory AND then added again by agent.stream(), resulting
+        // in the message appearing twice in the LLM context.
         SessionAgentManager.SessionEntry entry = sessionAgentManager.getOrCreate(sessionId);
+        chatSessionService.saveUserMessage(sessionId, message);
 
         AtomicReference<StringBuilder> replyBuf = new AtomicReference<>(new StringBuilder());
 
