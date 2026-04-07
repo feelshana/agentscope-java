@@ -143,6 +143,27 @@ public class AnalysisPlanService {
     }
 
     /**
+     * Called when the user clicks "不执行" (decline execution).
+     *
+     * <p>Immediately finishes the current plan as ABANDONED so the PlanNotebook
+     * clears {@code currentPlan}. This prevents subsequent LLM iterations from
+     * receiving a stale "current plan" system-hint that would prompt them to
+     * confirm or execute the old plan again.
+     *
+     * <p>Also marks the user as having confirmed (suppresses further needConfirm
+     * broadcasts) so the UI confirm buttons do not reappear.
+     *
+     * @return Mono that completes after the plan has been abandoned
+     */
+    public Mono<Void> abandonPlan() {
+        markUserConfirmed();
+        if (planNotebook == null || planNotebook.getCurrentPlan() == null) {
+            return Mono.empty();
+        }
+        return planNotebook.finishPlan("abandoned", "User declined execution via UI button").then();
+    }
+
+    /**
      * Snapshot of the current plan state.
      */
     public PlanResponse getCurrentPlan() {

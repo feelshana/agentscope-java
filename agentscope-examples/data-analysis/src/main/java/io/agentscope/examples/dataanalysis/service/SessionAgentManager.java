@@ -52,6 +52,7 @@ public class SessionAgentManager {
     private final DataApiClient dataApiClient;
     private final AnalysisPlanService analysisPlanService;
     private final ChatSessionService chatSessionService;
+    private final LlmInteractionLogService llmInteractionLogService;
 
     private String apiKey;
     private String baseUrl;
@@ -60,10 +61,12 @@ public class SessionAgentManager {
     public SessionAgentManager(
             DataApiClient dataApiClient,
             AnalysisPlanService analysisPlanService,
-            ChatSessionService chatSessionService) {
+            ChatSessionService chatSessionService,
+            LlmInteractionLogService llmInteractionLogService) {
         this.dataApiClient = dataApiClient;
         this.analysisPlanService = analysisPlanService;
         this.chatSessionService = chatSessionService;
+        this.llmInteractionLogService = llmInteractionLogService;
     }
 
     public void configure(String apiKey, String baseUrl, String sysPrompt) {
@@ -128,8 +131,11 @@ public class SessionAgentManager {
         Toolkit toolkit = new Toolkit();
         toolkit.registerTool(new DataAnalysisTool(dataApiClient));
 
-        PlanNotebook planNotebook =
-                PlanNotebook.builder().planToHint(new ConfirmPlanToHint()).build();
+        ConfirmPlanToHint confirmPlanToHint = new ConfirmPlanToHint();
+        PlanNotebook planNotebook = PlanNotebook.builder().planToHint(confirmPlanToHint).build();
+        // Register the abandoned-plan detector so ConfirmPlanToHint can suppress
+        // the "no plan" hint after the user declines to execute a plan.
+        confirmPlanToHint.registerWith(planNotebook);
         // Broadcast plan changes through the global analysisPlanService (for SSE stream)
         planNotebook.addChangeHook(
                 "planBroadcast", (nb, plan) -> analysisPlanService.broadcastPlanChange());
@@ -152,6 +158,9 @@ public class SessionAgentManager {
                         .toolkit(toolkit)
                         .planNotebook(planNotebook)
                         .maxIters(40)
+                        .hook(confirmPlanToHint) // priority=50: runs before planHintHook(100)
+                        .hook(new ChatLogHook(sessionId))
+                        .hook(new LlmDbHook(sessionId, llmInteractionLogService))
                         .build();
 
         return new SessionEntry(agent, memory, planNotebook);

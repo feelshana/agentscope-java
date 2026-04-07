@@ -18,6 +18,7 @@ package io.agentscope.examples.dataanalysis;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableAsync;
 
 /**
  * Data Analysis Agent – Spring Boot entry point.
@@ -31,6 +32,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  */
 @SpringBootApplication
 @MapperScan("io.agentscope.examples.dataanalysis.mapper")
+@EnableAsync
 public class DataAnalysisApplication {
 
     public static void main(String[] args) {
