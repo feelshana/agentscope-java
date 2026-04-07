@@ -1808,9 +1808,56 @@
                     reportBlock.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 });
             }
-            // 流式期间：用统一的 renderMarkdown 渲染（含标题修复 + **中文：** 修复）
+            // ── 流式期间：对未完成的表格做截断处理，避免 marked 把不完整的表格行渲染成
+            // 乱文本后又被下一个 chunk 的 innerHTML 全量替换，导致移动端视觉闪烁。
+            // 策略：找到末尾不完整的表格块（有 | 行但还没有结束），将其从 Markdown 中
+            // 截去，让前面已完成部分稳定渲染，不完整部分用透明 pre 占位。
+            function splitAtIncompleteTable(md) {
+                const lines = md.split('\n');
+                // 从末尾往前找第一个非表格行的位置，以此确定"尾部表格块"的起始行
+                let tableStart = -1;
+                for (let i = lines.length - 1; i >= 0; i--) {
+                    const trimmed = lines[i].trim();
+                    if (trimmed.startsWith('|') || trimmed === '') {
+                        // 空行或表格行，继续往前
+                        if (trimmed.startsWith('|')) tableStart = i;
+                    } else {
+                        break;
+                    }
+                }
+                if (tableStart === -1) return { stable: md, pending: '' };
+                // 找到了尾部表格块的起始行；检查该表格块是否完整
+                // 判断"完整"：表格块中有分隔行（|---|---| 形式）且分隔行之后还有数据行
+                const tableLines = lines.slice(tableStart);
+                const hasSeparator = tableLines.some(l => /^\|[\s\-:|]+\|/.test(l.trim()));
+                const dataRowsAfterSep = (() => {
+                    let seenSep = false;
+                    return tableLines.filter(l => {
+                        const t = l.trim();
+                        if (!seenSep && /^\|[\s\-:|]+\|/.test(t)) { seenSep = true; return false; }
+                        return seenSep && t.startsWith('|');
+                    }).length;
+                })();
+                // 如果表格没有分隔行，或分隔行后数据行为0，视为不完整
+                if (!hasSeparator || dataRowsAfterSep === 0) {
+                    const stable = lines.slice(0, tableStart).join('\n');
+                    const pending = tableLines.join('\n');
+                    return { stable, pending };
+                }
+                return { stable: md, pending: '' };
+            }
+
             if (typeof renderMarkdown !== 'undefined') {
-                reportBlock.innerHTML = renderMarkdown(rawContent);
+                const { stable, pending } = splitAtIncompleteTable(rawContent);
+                let html = renderMarkdown(stable);
+                // 不完整的表格部分用半透明 pre 原样展示（颜色淡化暗示"还在加载"）
+                if (pending) {
+                    html += `<pre id="streamingTablePending" style="white-space:pre-wrap;word-break:break-word;`
+                        + `font-family:inherit;font-size:0.82rem;line-height:1.6;`
+                        + `color:var(--text-hint);opacity:0.6;background:transparent;`
+                        + `padding:4px 0;margin:4px 0 0;">${escapeHtml(pending)}</pre>`;
+                }
+                reportBlock.innerHTML = html;
                 if (typeof wrapTables !== 'undefined') wrapTables(reportBlock);
             } else {
                 reportBlock.innerHTML = `<pre style="white-space:pre-wrap;word-break:break-word;font-family:inherit;font-size:0.85rem;line-height:1.7;color:var(--text-sub);background:transparent;padding:0;margin:0;">${escapeHtml(rawContent)}</pre>`;
