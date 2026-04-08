@@ -386,10 +386,14 @@ public class DataApiClient {
     private Mono<String> queryByNlp(String agentId, String chatId, String question) {
         Map<String, Object> requestBody =
                 Map.of(
-                        "agentId", Long.parseLong(agentId),
-                        "chatId", Long.parseLong(chatId),
-                        "queryText", question,
-                        "queryType", "simple");
+                        "agentId",
+                        Long.parseLong(agentId),
+                        "chatId",
+                        Long.parseLong(chatId),
+                        "queryText",
+                        question,
+                        "queryType",
+                        "super_simple");
         log.info("[queryByNlp] agentId={}, chatId={}, question={}", agentId, chatId, question);
         return nlpWebClient
                 .post()
