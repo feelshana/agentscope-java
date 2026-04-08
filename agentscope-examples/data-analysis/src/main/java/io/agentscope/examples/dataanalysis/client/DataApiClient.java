@@ -393,7 +393,7 @@ public class DataApiClient {
                         "queryText",
                         question,
                         "queryType",
-                        "super_simple");
+                        "simple");
         log.info("[queryByNlp] agentId={}, chatId={}, question={}", agentId, chatId, question);
         return nlpWebClient
                 .post()
