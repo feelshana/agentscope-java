@@ -48,10 +48,10 @@
             --primary-glow: rgba(79,110,247,0.22);
             --accent: #06b6d4;
             /* Surfaces */
-            --bg: #f0f4ff;
+            --bg: #eef1fb;
             --surface: #ffffff;
-            --surface2: #f5f7ff;
-            --surface3: #e8eeff;
+            --surface2: #f4f6fe;
+            --surface3: #e6eaff;
             /* Border */
             --border: rgba(79,110,247,0.12);
             --border-active: rgba(79,110,247,0.5);
@@ -66,13 +66,13 @@
             --drawer-handle-h: 52px;
             --drawer-hint-h: 40px;
             --safe-bottom: env(safe-area-inset-bottom, 0px);
-            --radius-lg: 18px;
-            --radius-md: 12px;
-            --radius-sm: 8px;
+            --radius-lg: 20px;
+            --radius-md: 14px;
+            --radius-sm: 10px;
             /* Shadows */
-            --shadow-sm: 0 2px 12px rgba(79,110,247,0.10);
-            --shadow-md: 0 8px 32px rgba(79,110,247,0.15);
-            --shadow-header: 0 2px 16px rgba(79,110,247,0.18);
+            --shadow-sm: 0 2px 14px rgba(79,110,247,0.10);
+            --shadow-md: 0 8px 32px rgba(79,110,247,0.16);
+            --shadow-header: 0 2px 20px rgba(79,110,247,0.22);
         }
 
         html, body {
@@ -95,7 +95,7 @@
 
         /* ══════════ Header ══════════ */
         .header {
-            background: linear-gradient(135deg, #4f6ef7 0%, #3d5ce8 50%, #2e4fd4 100%);
+            background: linear-gradient(135deg, #5875f8 0%, #4264f5 40%, #2e4fd4 100%);
             color: #fff;
             padding: 13px 16px;
             padding-top: calc(13px + env(safe-area-inset-top, 0px));
@@ -103,7 +103,7 @@
             flex-shrink: 0;
             z-index: 10;
             position: relative;
-            box-shadow: var(--shadow-header);
+            box-shadow: 0 3px 24px rgba(52,81,209,0.30);
         }
         .header::before {
             content: '';
@@ -169,10 +169,10 @@
         /* ══════════ Welcome card ══════════ */
         .welcome-card {
             width: 100%;
-            background: var(--surface);
+            background: linear-gradient(160deg, #ffffff 0%, #f8faff 100%);
             border-radius: var(--radius-lg); border-bottom-left-radius: 5px;
             border: 1px solid rgba(79,110,247,0.12);
-            box-shadow: 0 2px 12px rgba(79,110,247,0.08);
+            box-shadow: 0 4px 20px rgba(79,110,247,0.09), 0 1px 4px rgba(79,110,247,0.05);
             overflow: hidden;
         }
         .welcome-banner {
@@ -182,12 +182,12 @@
             border-bottom: 1px solid var(--border);
         }
         .welcome-avatar {
-            width: 46px; height: 46px; flex-shrink: 0;
-            background: #fff;
-            border-radius: 14px;
+            width: 48px; height: 48px; flex-shrink: 0;
+            background: linear-gradient(135deg, #eef1ff 0%, #dde4ff 100%);
+            border-radius: 16px;
             display: flex; align-items: center; justify-content: center;
-            box-shadow: 0 4px 14px rgba(79,110,247,0.2);
-            border: 1px solid rgba(79,110,247,0.12);
+            box-shadow: 0 4px 16px rgba(79,110,247,0.22), 0 1px 4px rgba(79,110,247,0.12);
+            border: 1px solid rgba(79,110,247,0.15);
         }
         .welcome-banner-text { flex: 1; min-width: 0; padding-top: 2px; }
         .welcome-banner-title {
@@ -287,8 +287,8 @@
         .suggestion-btn {
             display: flex; align-items: center; gap: 10px;
             width: 100%; text-align: left;
-            background: linear-gradient(135deg, rgba(79,110,247,0.05) 0%, rgba(79,110,247,0.02) 100%);
-            border: 1px solid rgba(79,110,247,0.15);
+            background: linear-gradient(135deg, rgba(79,110,247,0.06) 0%, rgba(79,110,247,0.02) 100%);
+            border: 1px solid rgba(79,110,247,0.14);
             border-radius: var(--radius-md);
             padding: 11px 14px;
             font-size: 0.85rem; color: var(--primary-dark);
@@ -296,7 +296,7 @@
             cursor: pointer; font-weight: 500;
             transition: all 0.18s;
             -webkit-appearance: none;
-            box-shadow: 0 1px 6px rgba(79,110,247,0.07);
+            box-shadow: 0 1px 6px rgba(79,110,247,0.06);
         }
         .suggestion-btn:active {
             background: var(--primary-light);
@@ -334,14 +334,14 @@
         }
         .message.assistant .message-content {
             width: 100%;
-            padding: 13px 16px;
+            padding: 14px 16px;
             border-radius: var(--radius-lg); border-bottom-left-radius: 5px;
-            background: var(--bubble-ai-bg);
+            background: linear-gradient(160deg, #ffffff 0%, #f8faff 100%);
             color: var(--text);
             line-height: 1.75; white-space: pre-wrap; word-break: break-word;
             font-size: 0.9rem;
-            border: 1px solid rgba(79,110,247,0.1);
-            box-shadow: 0 2px 12px rgba(79,110,247,0.08);
+            border: 1px solid rgba(79,110,247,0.10);
+            box-shadow: 0 3px 16px rgba(79,110,247,0.09), 0 1px 3px rgba(79,110,247,0.05);
         }
 
         .loading-indicator {
@@ -384,10 +384,10 @@
         .chat-input-container {
             padding: 10px 14px;
             padding-bottom: calc(10px + var(--safe-bottom));
-            border-top: 1px solid rgba(79,110,247,0.1);
-            background: #ffffff;
+            border-top: 1px solid rgba(79,110,247,0.09);
+            background: linear-gradient(180deg, #f8faff 0%, #ffffff 100%);
             flex-shrink: 0;
-            box-shadow: 0 -3px 16px rgba(79,110,247,0.08);
+            box-shadow: 0 -4px 20px rgba(79,110,247,0.07);
         }
         .chat-input-row { display: flex; gap: 9px; align-items: flex-end; }
         .chat-textarea {
@@ -395,13 +395,14 @@
             padding: 11px 16px;
             border: 1.5px solid rgba(79,110,247,0.15);
             border-radius: 22px;
-            background: var(--surface2);
+            background: #ffffff;
             font-size: 1rem;
             resize: none; min-height: 44px; max-height: 110px;
             outline: none; line-height: 1.5;
             transition: border-color 0.2s, box-shadow 0.2s;
             font-family: inherit;
             -webkit-appearance: none; color: var(--text);
+            box-shadow: 0 1px 6px rgba(79,110,247,0.06);
         }
         .chat-textarea:focus {
             border-color: var(--border-active);
@@ -411,16 +412,16 @@
         .chat-textarea::placeholder { color: var(--text-hint); }
 
         .send-btn {
-            width: 44px; height: 44px; flex-shrink: 0;
+            width: 46px; height: 46px; flex-shrink: 0;
             background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-            color: #fff; border: none; border-radius: 14px;
+            color: #fff; border: none; border-radius: 16px;
             font-size: 1rem; cursor: pointer;
             display: flex; align-items: center; justify-content: center;
             transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
-            box-shadow: 0 4px 16px var(--primary-glow);
+            box-shadow: 0 4px 18px var(--primary-glow), 0 1px 4px rgba(52,81,209,0.2);
             -webkit-appearance: none;
         }
-        .send-btn:active { opacity: 0.85; transform: scale(0.92); }
+        .send-btn:active { opacity: 0.85; transform: scale(0.90); }
         .send-btn:disabled { opacity: 0.3; cursor: not-allowed; box-shadow: none; }
         .hint-text { font-size: 0.68rem; color: var(--text-hint); margin-top: 5px; text-align: center; }
 
@@ -696,10 +697,12 @@
         }
         /* 标签行 */
         .confirm-actions-label {
-            display: flex; align-items: center; gap: 8px;
+            display: flex; align-items: center; justify-content: center; gap: 6px;
             font-size: 0.79rem; font-weight: 600;
             color: #4f6ef7;
             letter-spacing: 0.025em;
+            text-align: center;
+            white-space: nowrap;
         }
         .confirm-actions-label-icon {
             width: 15px; height: 15px; flex-shrink: 0; opacity: 0.9;
@@ -766,46 +769,61 @@
 
         /* ══════════ Chart ══════════ */
         .chart-wrapper {
-            margin-top: 8px;
-            background: var(--surface2);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-md); padding: 14px;
-            overflow: hidden; box-shadow: var(--shadow-sm);
+            margin-top: 10px;
+            background: linear-gradient(160deg, #ffffff 0%, #f8faff 100%);
+            border: 1px solid rgba(79,110,247,0.14);
+            border-radius: var(--radius-md); padding: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(79,110,247,0.10), 0 1px 4px rgba(79,110,247,0.06);
+            position: relative;
             /* Fade-in so the chart doesn't hard-pop into view */
             animation: chartFadeIn 0.4s ease both;
         }
+        /* 顶部装饰彩条 */
+        .chart-wrapper::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #4f6ef7 0%, #818cf8 55%, #06b6d4 100%);
+            border-radius: var(--radius-md) var(--radius-md) 0 0;
+        }
         @keyframes chartFadeIn {
-            from { opacity: 0; transform: translateY(8px); }
+            from { opacity: 0; transform: translateY(10px); }
             to   { opacity: 1; transform: translateY(0); }
         }
         .chart-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 10px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid var(--border);
+            margin-bottom: 12px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(79,110,247,0.08);
         }
-        .chart-title { font-size: 0.82rem; font-weight: 600; color: var(--text); }
+        .chart-title { 
+            font-size: 0.85rem; font-weight: 700; color: var(--text);
+            letter-spacing: 0.01em;
+        }
         .chart-toolbar {
             display: flex;
-            gap: 4px;
+            gap: 5px;
         }
         .chart-tool-btn {
             width: 32px;
             height: 32px;
-            border: 1px solid var(--border);
-            background: var(--surface);
-            border-radius: 6px;
+            border: 1px solid rgba(79,110,247,0.15);
+            background: var(--surface2);
+            border-radius: 8px;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: all 0.15s;
+            transition: all 0.18s;
             color: var(--text-sub);
         }
         .chart-tool-btn:hover {
             background: var(--surface3);
+            border-color: rgba(79,110,247,0.3);
         }
         .chart-tool-btn.active {
             background: var(--primary-light);
@@ -879,48 +897,60 @@
         /* ══════════ Report block ══════════ */
         /* ══════════ Report Block – GitHub-style Markdown ══════════ */
         .report-block {
-            background: var(--surface);
-            border: 1px solid var(--border);
+            background: linear-gradient(170deg, #ffffff 0%, #f9fbff 100%);
+            border: 1px solid rgba(79,110,247,0.13);
             border-radius: var(--radius-md);
-            padding: 20px 20px 16px;
+            padding: 22px 20px 18px 24px;
             font-size: 0.88rem;
-            line-height: 1.7;
+            line-height: 1.75;
             color: #1f2933;
             word-break: break-word;
-            box-shadow: var(--shadow-sm);
-            margin-top: 4px;
+            box-shadow: 0 4px 24px rgba(79,110,247,0.09), 0 1px 4px rgba(79,110,247,0.05);
+            margin-top: 6px;
+            position: relative;
+            overflow: hidden;
+        }
+        /* 左侧装饰蓝边 */
+        .report-block::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            width: 4px;
+            background: linear-gradient(180deg, #4f6ef7 0%, #06b6d4 100%);
+            border-radius: 4px 0 0 4px;
         }
         
         /* 标题 – 仿 GitHub 风格 */
         .report-block h1 {
-            font-size: 1.6em; font-weight: 600; color: #1f2933;
-            margin: 0 0 16px; padding-bottom: 0.3em;
-            border-bottom: 1px solid #eaecef;
+            font-size: 1.5em; font-weight: 700; color: #1a2340;
+            margin: 0 0 16px; padding-bottom: 0.35em;
+            border-bottom: 2px solid rgba(79,110,247,0.18);
             line-height: 1.25;
         }
         .report-block h2 {
-            font-size: 1.35em; font-weight: 600; color: #1f2933;
-            margin: 24px 0 12px; padding-bottom: 0.3em;
-            border-bottom: 1px solid #eaecef;
+            font-size: 1.2em; font-weight: 700; color: #1f2933;
+            margin: 22px 0 10px; padding-bottom: 0.28em;
+            border-bottom: 1px solid rgba(79,110,247,0.12);
             line-height: 1.25;
+            display: flex; align-items: center; gap: 6px;
         }
         .report-block h3 {
-            font-size: 1.15em; font-weight: 600; color: #1f2933;
-            margin: 20px 0 10px;
+            font-size: 1.05em; font-weight: 600; color: #2d3a52;
+            margin: 18px 0 8px;
             line-height: 1.25;
         }
         .report-block h4 {
-            font-size: 1em; font-weight: 600; color: #1f2933;
-            margin: 16px 0 8px;
+            font-size: 0.95em; font-weight: 600; color: #3b4a66;
+            margin: 14px 0 6px;
             line-height: 1.25;
         }
         .report-block h5 {
-            font-size: 0.875em; font-weight: 600; color: #1f2933;
-            margin: 14px 0 6px;
+            font-size: 0.875em; font-weight: 600; color: #4a5568;
+            margin: 12px 0 4px;
         }
         .report-block h6 {
             font-size: 0.85em; font-weight: 600; color: #6a737d;
-            margin: 12px 0 6px;
+            margin: 10px 0 4px;
         }
         
         /* 段落 */
@@ -956,19 +986,22 @@
         /* 表格 – GitHub 风格，用外层容器处理横向滚动，避免 display:block 破坏列宽对齐 */
         .report-block .table-wrapper {
             width: 100%; overflow-x: auto; margin: 12px 0;
+            border-radius: 8px;
+            box-shadow: 0 1px 6px rgba(79,110,247,0.07);
         }
         .report-block table {
             width: 100%; border-collapse: collapse;
             font-size: 0.82rem;
             table-layout: auto;
         }
-        .report-block tr { border-top: 1px solid #c6cbd1; }
-        .report-block tr:nth-child(2n) { background-color: #f6f8fa; }
+        .report-block tr { border-top: 1px solid #dee2ee; }
+        .report-block tr:nth-child(2n) { background-color: #f5f7ff; }
         .report-block th, .report-block td {
-            padding: 6px 12px; border: 1px solid #dfe2e5;
+            padding: 8px 12px; border: 1px solid #dee2ee;
         }
         .report-block th {
-            background-color: #f6f8fa; font-weight: 600; color: #1f2933;
+            background: linear-gradient(135deg, #eef1ff 0%, #e6eaff 100%);
+            font-weight: 700; color: #2d3a8c;
             text-align: left; white-space: nowrap;
         }
         .report-block td { color: #24292e; }
@@ -1833,11 +1866,14 @@
         }
 
         // Sanitise and render report HTML incrementally (same rules as finalizeMessage)
+        // ── 增量渲染策略：避免每次 chunk 全量 innerHTML 替换导致移动端回流闪烁 ──
+        // 关键数据：上一次已稳定渲染的 Markdown 长度，只有超过该长度才触发 DOM 更新
+        let _streamLastStableLen = 0;
+
         function renderReportStream(rawContent) {
             const content = assistantEl.querySelector('.message-content');
             if (!content) return;
             let reportBlock = content.querySelector('#streamingReportBlock');
-            // 流式期间用原始 Markdown 文本展示（有打字机效果），doFinalize 后统一用 marked 渲染
             if (!reportBlock) {
                 // Remove loading indicator and create report block
                 const loadingEl = content.querySelector('#msgLoadingIndicator');
@@ -1847,31 +1883,25 @@
                 reportBlock.id = 'streamingReportBlock';
                 content.classList.add('has-chart');
                 content.appendChild(reportBlock);
-                // Scroll to the report block start
+                _streamLastStableLen = 0;
                 requestAnimationFrame(() => {
                     reportBlock.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 });
             }
-            // ── 流式期间：对未完成的表格做截断处理，避免 marked 把不完整的表格行渲染成
-            // 乱文本后又被下一个 chunk 的 innerHTML 全量替换，导致移动端视觉闪烁。
-            // 策略：找到末尾不完整的表格块（有 | 行但还没有结束），将其从 Markdown 中
-            // 截去，让前面已完成部分稳定渲染，不完整部分用透明 pre 占位。
+
+            // ── 找到稳定可渲染部分（排除末尾不完整的表格/标题）──────────────────────
             function splitAtIncompleteTable(md) {
                 const lines = md.split('\n');
-                // 从末尾往前找第一个非表格行的位置，以此确定"尾部表格块"的起始行
                 let tableStart = -1;
                 for (let i = lines.length - 1; i >= 0; i--) {
                     const trimmed = lines[i].trim();
                     if (trimmed.startsWith('|') || trimmed === '') {
-                        // 空行或表格行，继续往前
                         if (trimmed.startsWith('|')) tableStart = i;
                     } else {
                         break;
                     }
                 }
                 if (tableStart === -1) return { stable: md, pending: '' };
-                // 找到了尾部表格块的起始行；检查该表格块是否完整
-                // 判断"完整"：表格块中有分隔行（|---|---| 形式）且分隔行之后还有数据行
                 const tableLines = lines.slice(tableStart);
                 const hasSeparator = tableLines.some(l => /^\|[\s\-:|]+\|/.test(l.trim()));
                 const dataRowsAfterSep = (() => {
@@ -1882,29 +1912,61 @@
                         return seenSep && t.startsWith('|');
                     }).length;
                 })();
-                // 如果表格没有分隔行，或分隔行后数据行为0，视为不完整
                 if (!hasSeparator || dataRowsAfterSep === 0) {
-                    const stable = lines.slice(0, tableStart).join('\n');
-                    const pending = tableLines.join('\n');
-                    return { stable, pending };
+                    return { stable: lines.slice(0, tableStart).join('\n'), pending: tableLines.join('\n') };
                 }
                 return { stable: md, pending: '' };
             }
 
             if (typeof renderMarkdown !== 'undefined') {
                 const { stable, pending } = splitAtIncompleteTable(rawContent);
-                let html = renderMarkdown(stable);
-                // 不完整的表格部分用半透明 pre 原样展示（颜色淡化暗示"还在加载"）
-                if (pending) {
-                    html += `<pre id="streamingTablePending" style="white-space:pre-wrap;word-break:break-word;`
-                        + `font-family:inherit;font-size:0.82rem;line-height:1.6;`
-                        + `color:var(--text-hint);opacity:0.6;background:transparent;`
-                        + `padding:4px 0;margin:4px 0 0;">${escapeHtml(pending)}</pre>`;
+
+                // ── 只有稳定内容有新增时才刷新主体，避免高频无效 DOM 写入 ──
+                if (stable.length > _streamLastStableLen) {
+                    _streamLastStableLen = stable.length;
+                    const stableHtml = renderMarkdown(stable);
+                    // 用一个"稳定区"子节点，只更新它而非整个 reportBlock
+                    let stableNode = reportBlock.querySelector('#reportStableZone');
+                    if (!stableNode) {
+                        stableNode = document.createElement('div');
+                        stableNode.id = 'reportStableZone';
+                        // 清空旧内容，保留 pending pre（若有）
+                        const oldPre = reportBlock.querySelector('#streamingTablePending');
+                        reportBlock.innerHTML = '';
+                        reportBlock.appendChild(stableNode);
+                        if (oldPre) reportBlock.appendChild(oldPre);
+                    }
+                    stableNode.innerHTML = stableHtml;
+                    if (typeof wrapTables !== 'undefined') wrapTables(stableNode);
                 }
-                reportBlock.innerHTML = html;
-                if (typeof wrapTables !== 'undefined') wrapTables(reportBlock);
+
+                // ── 更新/移除 pending 占位 pre（不影响稳定区） ──
+                let pendingEl = reportBlock.querySelector('#streamingTablePending');
+                if (pending) {
+                    if (!pendingEl) {
+                        pendingEl = document.createElement('pre');
+                        pendingEl.id = 'streamingTablePending';
+                        pendingEl.style.cssText =
+                            'white-space:pre-wrap;word-break:break-word;'
+                            + 'font-family:inherit;font-size:0.82rem;line-height:1.6;'
+                            + 'color:var(--text-hint);opacity:0.55;background:transparent;'
+                            + 'padding:4px 0;margin:4px 0 0;';
+                        reportBlock.appendChild(pendingEl);
+                    }
+                    pendingEl.textContent = pending;
+                } else if (pendingEl) {
+                    pendingEl.remove();
+                }
             } else {
-                reportBlock.innerHTML = `<pre style="white-space:pre-wrap;word-break:break-word;font-family:inherit;font-size:0.85rem;line-height:1.7;color:var(--text-sub);background:transparent;padding:0;margin:0;">${escapeHtml(rawContent)}</pre>`;
+                // marked 未加载时降级展示
+                let rawEl = reportBlock.querySelector('#reportStableZone');
+                if (!rawEl) {
+                    rawEl = document.createElement('pre');
+                    rawEl.id = 'reportStableZone';
+                    rawEl.style.cssText = 'white-space:pre-wrap;word-break:break-word;font-family:inherit;font-size:0.85rem;line-height:1.7;color:var(--text-sub);background:transparent;padding:0;margin:0;';
+                    reportBlock.appendChild(rawEl);
+                }
+                rawEl.textContent = rawContent;
             }
             // Auto-scroll to bottom only if user hasn't scrolled up
             if (!streamingUserScrolledUp) {
@@ -2531,6 +2593,16 @@
             chartInstances.get(chartId).dispose();
         }
         
+        // 根据数据量动态调整图表高度
+        const dataCount = (def.data || []).length;
+        const useZoom = dataCount > 15 && def.type !== 'pie';
+        const dynamicH = def.type === 'pie'
+            ? 320
+            : useZoom
+                ? Math.max(320, Math.min(460, 300 + Math.max(0, dataCount - 15) * 4))
+                : Math.max(280, Math.min(420, 260 + Math.max(0, dataCount - 6) * 8));
+        chartEl.style.height = dynamicH + 'px';
+        
         // 创建新实例
         const chart = echarts.init(chartEl);
         chartInstances.set(chartId, chart);
@@ -2572,13 +2644,28 @@
     // 构建柱状图配置
     function buildBarOption(def) {
         const data = def.data || [];
-        const needsRotate = data.length > 6 || data.some(d => d.label && d.label.length > 4);
-        return {
+        const count = data.length;
+        // 数据量阈值：超过此值启用 dataZoom 滑块
+        const ZOOM_THRESHOLD = 15;
+        const useZoom = count > ZOOM_THRESHOLD;
+        // 初始视窗显示条数（滑块初始范围）
+        const windowSize = Math.min(count, ZOOM_THRESHOLD);
+        const startPct = useZoom ? Math.max(0, Math.round((count - windowSize) / count * 100)) : 0;
+
+        // 标签旋转：数据多或标签长时旋转，useZoom 模式下标签在视窗内可全显示
+        const needsRotate = count > 6 || data.some(d => d.label && d.label.length > 4);
+        const bottomPad = useZoom ? 60 : (needsRotate ? 90 : 55);
+
+        // interval: zoom 模式下全显 (0)，否则按容量抽稀
+        const maxLabels = 8;
+        const interval = useZoom ? 0 : (count <= maxLabels ? 0 : Math.ceil(count / maxLabels) - 1);
+
+        const option = {
             title: { 
                 text: def.title || '', 
                 left: 'center', 
                 top: 10, 
-                textStyle: { fontSize: 15, fontWeight: 600, color: '#1f2937' }
+                textStyle: { fontSize: 14, fontWeight: 600, color: '#1f2937' }
             },
             tooltip: { 
                 trigger: 'axis', 
@@ -2591,18 +2678,20 @@
             grid: { 
                 left: '3%', 
                 right: '4%', 
-                top: 80, 
-                bottom: needsRotate ? 80 : 50, 
+                top: 60, 
+                bottom: bottomPad, 
                 containLabel: true 
             },
             xAxis: {
                 type: 'category',
                 data: data.map(d => d.label),
                 axisLabel: { 
-                    rotate: needsRotate ? 45 : 0, 
+                    rotate: needsRotate ? 40 : 0, 
                     fontSize: 11,
                     color: '#4b5563',
-                    interval: 0
+                    interval: interval,
+                    overflow: 'truncate',
+                    width: needsRotate ? 70 : undefined
                 },
                 axisLine: { lineStyle: { color: '#e5e7eb' } }
             },
@@ -2620,13 +2709,13 @@
                 name: def.seriesName || '数值',
                 type: 'bar',
                 data: data.map(d => d.value),
-                barWidth: '50%',
+                barMaxWidth: 40,
                 itemStyle: { 
                     color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
                         { offset: 0, color: '#4f6ef7' },
                         { offset: 1, color: '#3451d1' }
                     ]),
-                    borderRadius: [6, 6, 0, 0] 
+                    borderRadius: [5, 5, 0, 0] 
                 },
                 emphasis: { 
                     itemStyle: { 
@@ -2637,7 +2726,7 @@
                     } 
                 },
                 label: {
-                    show: data.length <= 12,
+                    show: count <= 10,
                     position: 'top',
                     fontSize: 10,
                     color: '#4b5563',
@@ -2645,18 +2734,50 @@
                 }
             }]
         };
+        // 数据量大时加 dataZoom 滑动条，让用户可以滑动查看全部数据
+        if (useZoom) {
+            option.dataZoom = [
+                {
+                    type: 'slider',
+                    xAxisIndex: 0,
+                    start: startPct,
+                    end: 100,
+                    height: 20,
+                    bottom: 8,
+                    borderColor: 'rgba(79,110,247,0.2)',
+                    fillerColor: 'rgba(79,110,247,0.12)',
+                    handleStyle: { color: '#4f6ef7', borderColor: '#4f6ef7' },
+                    textStyle: { color: '#9ba3c4', fontSize: 10 },
+                    moveHandleSize: 6
+                },
+                { type: 'inside', xAxisIndex: 0 }
+            ];
+        }
+        return option;
     }
 
     // 构建折线图配置
     function buildLineOption(def) {
         const data = def.data || [];
-        const needsRotate = data.length > 6 || data.some(d => d.label && d.label.length > 4);
-        return {
+        const count = data.length;
+        const ZOOM_THRESHOLD = 15;
+        const useZoom = count > ZOOM_THRESHOLD;
+        const windowSize = Math.min(count, ZOOM_THRESHOLD);
+        const startPct = useZoom ? Math.max(0, Math.round((count - windowSize) / count * 100)) : 0;
+
+        const needsRotate = count > 6 || data.some(d => d.label && d.label.length > 4);
+        const bottomPad = useZoom ? 60 : (needsRotate ? 90 : 55);
+        const maxLabels = 8;
+        const interval = useZoom ? 0 : (count <= maxLabels ? 0 : Math.ceil(count / maxLabels) - 1);
+        // 数据点多时缩小圆点，避免密集
+        const symbolSize = count > 20 ? 4 : (count > 10 ? 6 : 8);
+
+        const option = {
             title: { 
                 text: def.title || '', 
                 left: 'center', 
                 top: 10, 
-                textStyle: { fontSize: 15, fontWeight: 600, color: '#1f2937' }
+                textStyle: { fontSize: 14, fontWeight: 600, color: '#1f2937' }
             },
             tooltip: { 
                 trigger: 'axis',
@@ -2668,8 +2789,8 @@
             grid: { 
                 left: '3%', 
                 right: '4%', 
-                top: 80, 
-                bottom: needsRotate ? 80 : 50, 
+                top: 60, 
+                bottom: bottomPad, 
                 containLabel: true 
             },
             xAxis: {
@@ -2677,10 +2798,12 @@
                 data: data.map(d => d.label),
                 boundaryGap: false,
                 axisLabel: { 
-                    rotate: needsRotate ? 45 : 0, 
+                    rotate: needsRotate ? 40 : 0, 
                     fontSize: 11,
                     color: '#4b5563',
-                    interval: 0
+                    interval: interval,
+                    overflow: 'truncate',
+                    width: needsRotate ? 70 : undefined
                 },
                 axisLine: { lineStyle: { color: '#e5e7eb' } }
             },
@@ -2700,13 +2823,13 @@
                 data: data.map(d => d.value),
                 smooth: true,
                 symbol: 'circle',
-                symbolSize: 8,
+                symbolSize: symbolSize,
                 lineStyle: { 
                     color: '#4f6ef7', 
-                    width: 3,
+                    width: count > 20 ? 2 : 3,
                     shadowColor: 'rgba(79, 110, 247, 0.3)',
-                    shadowBlur: 10,
-                    shadowOffsetY: 5
+                    shadowBlur: 8,
+                    shadowOffsetY: 4
                 },
                 itemStyle: { 
                     color: '#4f6ef7',
@@ -2715,12 +2838,12 @@
                 },
                 areaStyle: { 
                     color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                        { offset: 0, color: 'rgba(79, 110, 247, 0.25)' },
-                        { offset: 1, color: 'rgba(79, 110, 247, 0.02)' }
+                        { offset: 0, color: 'rgba(79, 110, 247, 0.22)' },
+                        { offset: 1, color: 'rgba(79, 110, 247, 0.01)' }
                     ])
                 },
                 label: {
-                    show: data.length <= 12,
+                    show: count <= 10,
                     position: 'top',
                     fontSize: 10,
                     color: '#4b5563',
@@ -2728,6 +2851,25 @@
                 }
             }]
         };
+        if (useZoom) {
+            option.dataZoom = [
+                {
+                    type: 'slider',
+                    xAxisIndex: 0,
+                    start: startPct,
+                    end: 100,
+                    height: 20,
+                    bottom: 8,
+                    borderColor: 'rgba(79,110,247,0.2)',
+                    fillerColor: 'rgba(79,110,247,0.12)',
+                    handleStyle: { color: '#4f6ef7', borderColor: '#4f6ef7' },
+                    textStyle: { color: '#9ba3c4', fontSize: 10 },
+                    moveHandleSize: 6
+                },
+                { type: 'inside', xAxisIndex: 0 }
+            ];
+        }
+        return option;
     }
 
     // 构建饼图配置
