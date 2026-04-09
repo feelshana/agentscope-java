@@ -1877,6 +1877,8 @@
             chatMsgsEl.removeEventListener('scroll', onUserScroll);
             // Clean up query-wait timers to prevent memory leaks
             clearQueryWaitCard();
+            // 清除图表等待提示卡的计时器（finalizeMessage 会移除 DOM，这里只需停计时器）
+            if (window._chartWaitTimer) { clearInterval(window._chartWaitTimer); window._chartWaitTimer = null; }
             removeTyping(typingEl);
             if (assistantEl) finalizeMessage(assistantEl, assistantText);
             // If LLM answered directly (no plan was ever pushed), clear pending state
@@ -1939,7 +1941,12 @@
             }
 
             if (typeof renderMarkdown !== 'undefined') {
-                const { stable, pending } = splitAtIncompleteTable(rawContent);
+                // ── 过滤末尾可能尚未完整的 XML/HTML 标签片段 ──
+                // LLM 流式输出时 </report> 可能分多个 chunk 到达，
+                // 中间状态可能是: "</" 或 "</r" 或 "</re" 或 "</rep" 或 "</repo" 等。
+                // 过滤这些未完成的标签，防止它们被 markdown 渲染为普通文本展示给用户。
+                const cleanContent = rawContent.replace(/<\/?[a-zA-Z]{0,20}\s*$/, '');
+                const { stable, pending } = splitAtIncompleteTable(cleanContent);
 
                 // ── 只有稳定内容有新增时才刷新主体，避免高频无效 DOM 写入 ──
                 if (stable.length > _streamLastStableLen) {
@@ -2092,19 +2099,121 @@
                 if (inReportStream) {
                     const reportInner = assistantText.match(/<report>([\s\S]*)/i);
                     if (reportInner) {
+                        // 检测 </report> 闭合标签是否已到达
+                        const reportClosed = /<\/report>/i.test(reportInner[1]);
                         // Strip closing tag if already received
                         const rawSoFar = reportInner[1].replace(/<\/report>[\s\S]*/i, '');
                         if (rawSoFar.trim()) renderReportStream(rawSoFar);
-                    }
+
+                        // ── 报告内容已全部输出，等待 <chart> 段到来 ──
+                        // 当 </report> 闭合标签到达时，将 inReportStream 切换为 false，
+                        // 并在 report block 底部显示“正在绘制图表…”等待提示，
+                        // 防止 </report 标签文字被展示给用户。
+                        if (reportClosed && inReportStream) {
+                            inReportStream = false;
+                            // 立刻清除所有展示中的 pending 占位元素（可能包含 </report 片段）
+                            if (assistantEl) {
+                                const _content = assistantEl.querySelector('.message-content');
+                                const _reportBlock = _content && _content.querySelector('#streamingReportBlock');
+                                if (_reportBlock) {
+                                    const _pendingEl = _reportBlock.querySelector('#streamingTablePending');
+                                    if (_pendingEl) _pendingEl.remove();
+                                    // 清空节流缓存，防止节流 timer 再次展示旧内容
+                                    _streamPendingStable = '';
+                                    if (_streamThrottleTimer) { clearTimeout(_streamThrottleTimer); _streamThrottleTimer = null; }
+
+                                    if (!_reportBlock.querySelector('#chartWaitingCard')) {
+                                        const waitCard = document.createElement('div');
+                                        waitCard.id = 'chartWaitingCard';
+                                        waitCard.style.cssText =
+                                            'display:flex;align-items:center;gap:10px;'
+                                            + 'margin-top:16px;padding:12px 16px;'
+                                            + 'background:linear-gradient(135deg,rgba(79,110,247,0.06) 0%,rgba(6,182,212,0.05) 100%);'
+                                            + 'border:1px solid rgba(79,110,247,0.18);border-radius:10px;'
+                                            + 'font-size:0.82rem;color:var(--primary);';
+                                        waitCard.innerHTML =
+                                            // 旋转加载圈
+                                            '<div style="width:16px;height:16px;flex-shrink:0;border:2.5px solid rgba(79,110,247,0.2);'
+                                            + 'border-top-color:#4f6ef7;border-radius:50%;'
+                                            + 'animation:spinLoader 0.7s linear infinite;"></div>'
+                                            // 图表 emoji + 文字
+                                            + '<span id="chartWaitingText" style="font-weight:500;">&#x1F4CA; 正在绘制图表，请稍候…</span>';
+                                        _reportBlock.appendChild(waitCard);
+                                        // 动态点动画
+                                        let _wDots = 0;
+                                        window._chartWaitTimer = setInterval(() => {
+                                            const el = document.getElementById('chartWaitingText');
+                                            if (!el) { clearInterval(window._chartWaitTimer); return; }
+                                            _wDots = (_wDots + 1) % 4;
+                                            el.innerHTML = '&#x1F4CA; 正在绘制图表' + '．'.repeat(_wDots);
+                                        }, 400);
+                                        if (!streamingUserScrolledUp) {
+                                            requestAnimationFrame(() => {
+                                                document.getElementById('chatMessages').scrollTop = 99999;
+                                            });
+                                        }
+                                    } // end if !chartWaitingCard
+                                } // end if _reportBlock
+                            } // end if assistantEl
+                        } // end if reportClosed
+                    } // end if reportInner
                 } else {
                     // Chart JSON accumulating: update the loading text with received byte count
                     // so the user sees progress rather than a frozen spinner.
+                    // 如果是由 report 切换过来的（inReportStream 已变 false），
+                    // chartLoadingText 不存在，此时只需更新已有的等待卡文字即可。
                     const chartInner = assistantText.match(/<chart>([\s\S]*)/i);
                     if (chartInner) {
                         const received = chartInner[1].replace(/<\/chart>[\s\S]*/i, '').length;
                         const kb = (received / 1024).toFixed(1);
-                        const el = document.getElementById('chartLoadingText');
-                        if (el) el.textContent = `正在生成图表… (${kb}KB)`;
+                        // 先尝试更新原有的 chartLoadingText（纯 chart 模式）
+                        const loadingTxt = document.getElementById('chartLoadingText');
+                        if (loadingTxt) {
+                            loadingTxt.textContent = `正在生成图表… (${kb}KB)`;
+                        } else {
+                            // report+chart 组合模式：先检查是否需要补插等待卡（如果 reportClosed 时等待卡没有成功插入）
+                            if (assistantEl && !document.getElementById('chartWaitingCard')) {
+                                const _c = assistantEl.querySelector('.message-content');
+                                const _rb = _c && (_c.querySelector('#streamingReportBlock') || _c.querySelector('.report-block'));
+                                if (_rb) {
+                                    const _pendingEl2 = _rb.querySelector('#streamingTablePending');
+                                    if (_pendingEl2) _pendingEl2.remove();
+                                    const waitCard = document.createElement('div');
+                                    waitCard.id = 'chartWaitingCard';
+                                    waitCard.style.cssText =
+                                        'display:flex;align-items:center;gap:10px;'
+                                        + 'margin-top:16px;padding:12px 16px;'
+                                        + 'background:linear-gradient(135deg,rgba(79,110,247,0.06) 0%,rgba(6,182,212,0.05) 100%);'
+                                        + 'border:1px solid rgba(79,110,247,0.18);border-radius:10px;'
+                                        + 'font-size:0.82rem;color:var(--primary);';
+                                    waitCard.innerHTML =
+                                        '<div style="width:16px;height:16px;flex-shrink:0;border:2.5px solid rgba(79,110,247,0.2);'
+                                        + 'border-top-color:#4f6ef7;border-radius:50%;'
+                                        + 'animation:spinLoader 0.7s linear infinite;"></div>'
+                                        + `<span id="chartWaitingText" style="font-weight:500;">&#x1F4CA; 正在绘制图表${received > 0 ? ' (' + kb + 'KB)' : '，请稍候…'}</span>`;
+                                    _rb.appendChild(waitCard);
+                                    if (!window._chartWaitTimer) {
+                                        let _wDots = 0;
+                                        window._chartWaitTimer = setInterval(() => {
+                                            const el2 = document.getElementById('chartWaitingText');
+                                            if (!el2) { clearInterval(window._chartWaitTimer); return; }
+                                            const kb2 = chartInner ? (chartInner[1].replace(/<\/chart>[\s\S]*/i, '').length / 1024).toFixed(1) : '0.0';
+                                            el2.innerHTML = `&#x1F4CA; 正在绘制图表 (${kb2}KB)`;
+                                        }, 400);
+                                    }
+                                    if (!streamingUserScrolledUp) {
+                                        requestAnimationFrame(() => {
+                                            document.getElementById('chatMessages').scrollTop = 99999;
+                                        });
+                                    }
+                                }
+                            }
+                            // 更新已有的等待卡文字
+                            const waitTxt = document.getElementById('chartWaitingText');
+                            if (waitTxt && received > 0) {
+                                waitTxt.innerHTML = `&#x1F4CA; 正在绘制图表 (${kb}KB)`;
+                            }
+                        }
                     }
                 }
                 return;
@@ -2270,6 +2379,10 @@
             // Clear chart loading timers if running
             if (window._chartLoadingTimer) { clearInterval(window._chartLoadingTimer); window._chartLoadingTimer = null; }
             if (window._preChartTimer) { clearInterval(window._preChartTimer); window._preChartTimer = null; }
+            if (window._chartWaitTimer) { clearInterval(window._chartWaitTimer); window._chartWaitTimer = null; }
+            // 移除 report 内的图表等待提示卡（如果有）
+            const _chartWaitCard = content.querySelector('#chartWaitingCard');
+            if (_chartWaitCard) _chartWaitCard.remove();
             content.classList.add('has-chart');
 
             // ── Surgical DOM update: avoid full innerHTML replace so CSS animations fire ──
