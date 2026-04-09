@@ -63,13 +63,17 @@ public class DataApiClient {
     /** datasetName → chatId，每个数据集维护一个独立的会话 */
     private final Map<String, String> datasetChatIdMap = new ConcurrentHashMap<>();
 
+    /** NLP 查询接口的 queryType，可在配置文件中修改（如 super_simple / plain 等） */
+    private final String nlpQueryType;
+
     public DataApiClient(
             @Value("${data.api.base-url:http://localhost:9090}") String baseUrl,
             @Value("${data.api.mock:true}") boolean mockEnabled,
             @Value("${data.api.nlp-base-url:http://localhost:9080}") String nlpBaseUrl,
             @Value("${data.api.nlp-authorization:}") String nlpAuthorization,
             @Value("${data.api.nlp-app-key:}") String nlpAppKey,
-            @Value("${data.api.nlp-agent-ids:}") String nlpAgentIdsStr) {
+            @Value("${data.api.nlp-agent-ids:}") String nlpAgentIdsStr,
+            @Value("${data.api.nlp-query-type:super_simple}") String nlpQueryType) {
         this.mockEnabled = mockEnabled;
         this.nlpAgentIds =
                 nlpAgentIdsStr.isBlank()
@@ -78,6 +82,7 @@ public class DataApiClient {
                                 .map(String::trim)
                                 .filter(s -> !s.isBlank())
                                 .collect(Collectors.toList());
+        this.nlpQueryType = nlpQueryType;
         this.webClient =
                 WebClient.builder()
                         .baseUrl(baseUrl)
@@ -393,8 +398,13 @@ public class DataApiClient {
                         "queryText",
                         question,
                         "queryType",
-                        "simple");
-        log.info("[queryByNlp] agentId={}, chatId={}, question={}", agentId, chatId, question);
+                        this.nlpQueryType);
+        log.info(
+                "[queryByNlp] agentId={}, chatId={}, question={}, queryType={}",
+                agentId,
+                chatId,
+                question,
+                this.nlpQueryType);
         return nlpWebClient
                 .post()
                 .uri("/api/chat/query/parseAndExecute")
