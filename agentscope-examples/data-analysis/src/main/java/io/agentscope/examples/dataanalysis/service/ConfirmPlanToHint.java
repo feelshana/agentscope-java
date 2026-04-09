@@ -77,6 +77,14 @@ public class ConfirmPlanToHint implements PlanToHint, Hook {
     private volatile boolean lastPlanWasAbandoned = false;
 
     /**
+     * Set to true after a plan is finished with state DONE.
+     * The next call to generateHint(null, ...) will return null (suppress
+     * the "no plan" hint) so the LLM is free to generate the final report
+     * without being prompted to create a new plan immediately.
+     */
+    private volatile boolean lastPlanWasDone = false;
+
+    /**
      * Holds a reference to the last non-null Plan object seen by the change-hook.
      *
      * <p>When {@code finishPlan} is called, it mutates the Plan object's state
@@ -110,9 +118,12 @@ public class ConfirmPlanToHint implements PlanToHint, Hook {
                         // plan became null: finishPlan was just called.
                         // The Plan object referenced by lastSeenPlan already has its
                         // final state (DONE or ABANDONED) set by finishPlan.
-                        if (lastSeenPlan != null
-                                && PlanState.ABANDONED.equals(lastSeenPlan.getState())) {
-                            lastPlanWasAbandoned = true;
+                        if (lastSeenPlan != null) {
+                            if (PlanState.ABANDONED.equals(lastSeenPlan.getState())) {
+                                lastPlanWasAbandoned = true;
+                            } else if (PlanState.DONE.equals(lastSeenPlan.getState())) {
+                                lastPlanWasDone = true;
+                            }
                         }
                         lastSeenPlan = null;
                     }
@@ -167,6 +178,15 @@ public class ConfirmPlanToHint implements PlanToHint, Hook {
         // immediately creating a new plan after the user's rejection.
         if (plan == null && lastPlanWasAbandoned) {
             lastPlanWasAbandoned = false; // consume the flag
+            return null;
+        }
+        // ── Done-plan guard ──────────────────────────────────────────────────
+        // If the previous plan finished normally (DONE) and there is now no
+        // active plan, suppress the "no plan" hint so the LLM can freely
+        // generate the final analysis report without being pushed to create
+        // another plan immediately.
+        if (plan == null && lastPlanWasDone) {
+            lastPlanWasDone = false; // consume the flag
             return null;
         }
         // ─────────────────────────────────────────────────────────────────────
