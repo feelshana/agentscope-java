@@ -28,18 +28,9 @@ import reactor.core.publisher.Mono;
 /**
  * Tools exposed to the ReActAgent for data analysis.
  *
- * <p>Two tools are registered:
- * <ul>
- *   <li>{@code list_datasets} - retrieves available datasets with their descriptions</li>
- *   <li>{@code query_dataset} - queries a specific dataset with a natural-language question</li>
- * </ul>
- *
- * <p>The agent uses these tools to:
- * <ol>
- *   <li>Discover which datasets are available.</li>
- *   <li>Break the user's question into sub-tasks, each targeting one dataset.</li>
- *   <li>Evaluate query results and decide whether to stop or continue querying.</li>
- * </ol>
+ * <p>Only {@code query_dataset} is registered as an agent tool. The dataset catalogue is
+ * pre-loaded into the system prompt at session creation time, so {@code list_datasets} is
+ * intentionally NOT exposed to the LLM – calling it at runtime is unnecessary and wastes tokens.
  */
 public class DataAnalysisTool {
 
@@ -52,18 +43,11 @@ public class DataAnalysisTool {
     }
 
     /**
-     * List all available datasets with their IDs and descriptions.
-     * Call this first to understand which datasets can be queried.
+     * List all available datasets — used internally for session initialisation only.
+     * NOT annotated with {@code @Tool}: invisible to the LLM, cannot be called at runtime.
      *
-     * @return a formatted list of dataset IDs and their descriptions
+     * @return a formatted list of dataset names and descriptions
      */
-    @Tool(
-            name = "list_datasets",
-            description =
-                    "List all available data datasets. Returns a list containing dataset Name and"
-                            + " description for each dataset. The dataset list is already provided"
-                            + " in the system prompt – only call this tool if you believe the list"
-                            + " may be stale or incomplete.")
     public Mono<String> listDatasets() {
         log.info("[list_datasets] Fetching available datasets");
         return dataApiClient
@@ -98,8 +82,8 @@ public class DataAnalysisTool {
             @ToolParam(
                             name = "dataset_id",
                             description =
-                                    "The Name of the dataset to query, obtained from list_datasets"
-                                            + " tool")
+                                    "The Name of the dataset to query. Available dataset names are"
+                                            + " listed in the system prompt.")
                     String datasetId,
             @ToolParam(
                             name = "question",
