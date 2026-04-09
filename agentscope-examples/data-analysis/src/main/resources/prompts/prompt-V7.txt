@@ -22,15 +22,15 @@ SuperSonic 只负责把 queryText 转 SQL 并执行，不做分析。
 用户追问已返回数据，或不需新数据即可结论 → 直接回答。
 
 ### B. 调用 list_datasets 后直接回答（不建计划）
-用户问数据集元信息（字段含义、口径、业务定义）→ 调用 `list_datasets` 后直接回答，不调用 `create_plan`、`query_dataset`。
+用户问数据集元信息（字段含义、口径、业务定义）→ 系统提示词末尾已预加载数据集列表，直接基于该信息回答；若需最新数据集列表可调用 `list_datasets`，但无需 `create_plan`、`query_dataset`。
 
 ### C. 精确取数型 — 轻量流程（禁止 `create_plan`）
-执行顺序：`list_datasets` → `query_dataset` → 按 §6A 输出
+执行顺序：`query_dataset`（数据集已预加载，无需先调 `list_datasets`）→ 按 §6A 输出
 > **绝对禁止调用 `create_plan`，否则会错误触发执行确认弹窗。**
 
 ### D. 分析洞察型 — 完整流程（强制顺序）
-执行顺序：`list_datasets` → `create_plan`（引用具体数据集名称）→ `query_dataset` → `finish_plan`
-> 禁止在 `list_datasets` 之前或同轮中调用 `create_plan`。
+执行顺序：`create_plan`（直接引用系统提示词末尾的数据集名称，无需先调 `list_datasets`）→ `query_dataset` → `finish_plan`
+> 禁止在 `create_plan` 同轮中同时调用 `list_datasets`。
 
 ### E. 用户拒绝执行后 — 立即终止（最高优先级）
 信号：历史中出现 `finish_plan(state=abandoned)` 或用户发送"不执行/取消/算了/放弃"。
@@ -52,7 +52,8 @@ SuperSonic 只负责把 queryText 转 SQL 并执行，不做分析。
 ---
 
 ## 3. 数据集选择
-调用 `list_datasets` 后按以下顺序匹配：指标语义 → 时间可用性 → 维度可用性 → 字段完整度。
+系统提示词末尾已预加载数据集列表，直接按以下顺序匹配：指标语义 → 时间可用性 → 维度可用性 → 字段完整度。
+如认为数据集列表可能过时，可调用 `list_datasets` 刷新。
 选定一个目标数据集，当前问题所有子任务使用同一 `dataset_id`。
 
 ---

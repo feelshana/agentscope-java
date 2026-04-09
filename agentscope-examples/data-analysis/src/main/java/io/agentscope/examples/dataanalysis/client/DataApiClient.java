@@ -15,6 +15,8 @@
  */
 package io.agentscope.examples.dataanalysis.client;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agentscope.examples.dataanalysis.dto.DatasetInfo;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -49,6 +51,8 @@ import reactor.core.publisher.Mono;
 public class DataApiClient {
 
     private static final Logger log = LoggerFactory.getLogger(DataApiClient.class);
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final WebClient webClient;
     private final WebClient nlpWebClient;
@@ -380,7 +384,9 @@ public class DataApiClient {
      *           an explanation) so the agent can adjust the question accordingly.</li>
      *     </ul>
      *   </li>
-     *   <li>If {@code queryResults} is non-empty, the query succeeded → return {@code textResult}.</li>
+     *   <li>If {@code queryResults} is non-empty, the query succeeded → convert the row list to
+     *       a compact CSV-like table (one header line + value-only data lines) to reduce LLM
+     *       token consumption compared with repeating JSON keys on every row.</li>
      * </ol>
      *
      * @param agentId   the agent responsible for this dataset
@@ -464,20 +470,26 @@ public class DataApiClient {
                                 return "查询未返回任何数据，请尝试调整问题后重试。";
                             }
 
-                            // queryResults is non-empty – return textResult as the final answer
-                            Object textResult = dataMap.get("textResult");
-                            if (textResult != null && !textResult.toString().isBlank()) {
+                            // queryResults is non-empty – convert to compact table format
+                            // (one header row + value-only data rows) to minimise token usage.
+                            // Each repeated key in JSON would waste tokens; CSV-like format
+                            // carries column names only once.
+                            if (queryResults instanceof List<?> rows) {
+                                String table = toCompactTable(rows);
                                 log.debug(
-                                        "[queryByNlp] textResult length={}",
-                                        textResult.toString().length());
-                                return textResult.toString();
+                                        "[queryByNlp] compact table length={}", table.length());
+                                return table;
                             }
-                            // textResult missing but results exist – fall back to raw data for the
-                            // agent
-                            log.warn(
-                                    "[queryByNlp] queryResults non-empty but textResult is blank,"
-                                            + " returning raw queryResults");
-                            return queryResults.toString();
+                            // Unexpected type – fall back to JSON
+                            try {
+                                return OBJECT_MAPPER.writeValueAsString(queryResults);
+                            } catch (JsonProcessingException e) {
+                                log.warn(
+                                        "[queryByNlp] Failed to serialize queryResults,"
+                                                + " returning toString()",
+                                        e);
+                                return queryResults.toString();
+                            }
                         })
                 .doOnError(
                         e ->
@@ -486,6 +498,56 @@ public class DataApiClient {
                                         agentId,
                                         question,
                                         e));
+    }
+
+    /**
+     * Convert a {@code List<Map<String,Object>>} (database result rows) to a compact
+     * column-header + value-only table format, minimising LLM token consumption.
+     *
+     * <p>Output example:
+     * <pre>
+     * 日期,指标名称,指标值
+     * 20260402,B级及以上创作者TOP1视频点赞量,221.0
+     * 20260402,B级及以上创作者二台直播日均互动量次,624146.5
+     * </pre>
+     *
+     * <p>Column order is determined by the key insertion order of the first row.
+     * If the list is empty or contains non-Map entries, an empty string is returned.
+     */
+    @SuppressWarnings("unchecked")
+    private String toCompactTable(List<?> rows) {
+        if (rows == null || rows.isEmpty()) {
+            return "";
+        }
+        // Collect column names from the first row
+        Object firstRaw = rows.get(0);
+        if (!(firstRaw instanceof Map<?, ?> firstRow)) {
+            // Rows are not maps – cannot build header; fall back to toString
+            return rows.toString();
+        }
+        List<String> headers = new ArrayList<>(((Map<String, Object>) firstRow).keySet());
+        StringBuilder sb = new StringBuilder();
+        // Header line
+        sb.append(String.join(",", headers));
+        // Data lines
+        for (Object rawRow : rows) {
+            sb.append('\n');
+            if (rawRow instanceof Map<?, ?> row) {
+                Map<String, Object> typedRow = (Map<String, Object>) row;
+                for (int i = 0; i < headers.size(); i++) {
+                    if (i > 0) sb.append(',');
+                    Object val = typedRow.get(headers.get(i));
+                    // Wrap values containing commas or newlines in double-quotes
+                    String strVal = val == null ? "" : val.toString();
+                    if (strVal.contains(",") || strVal.contains("\n") || strVal.contains("\"")) {
+                        sb.append('"').append(strVal.replace("\"", "\"\"")).append('"');
+                    } else {
+                        sb.append(strVal);
+                    }
+                }
+            }
+        }
+        return sb.toString();
     }
 
     /**

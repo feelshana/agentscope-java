@@ -61,8 +61,9 @@ public class DataAnalysisTool {
             name = "list_datasets",
             description =
                     "List all available data datasets. Returns a list containing dataset Name and"
-                            + " description for each dataset. Call this tool first to understand"
-                            + " which datasets are available before querying.")
+                            + " description for each dataset. The dataset list is already provided"
+                            + " in the system prompt – only call this tool if you believe the list"
+                            + " may be stale or incomplete.")
     public Mono<String> listDatasets() {
         log.info("[list_datasets] Fetching available datasets");
         return dataApiClient
@@ -109,12 +110,53 @@ public class DataAnalysisTool {
         log.info("[query_dataset] datasetId={}, question={}", datasetId, question);
         return dataApiClient
                 .queryDataset(datasetId, question)
+                .map(this::stripMetadata)
                 .doOnNext(result -> log.debug("[query_dataset] Result length={}", result.length()))
                 .onErrorResume(
                         e -> {
                             log.error("[query_dataset] Error querying dataset={}", datasetId, e);
                             return Mono.just("Error querying dataset: " + e.getMessage());
                         });
+    }
+
+    /**
+     * Strip metadata-only fields from the query result to reduce token usage.
+     *
+     * <p>When the upstream service returns a JSON object containing a {@code "fields"} key
+     * (column schema information) alongside the actual {@code "result"} data, the fields
+     * declaration is redundant for the LLM – the data rows already carry that information.
+     * This method removes {@code "fields"} from the top-level JSON object so only the
+     * raw data rows are forwarded to the model.
+     *
+     * <p>If the result is not valid JSON or does not contain {@code "fields"}, it is
+     * returned unchanged.
+     */
+    private String stripMetadata(String result) {
+        if (result == null || result.isBlank()) {
+            return result;
+        }
+        String trimmed = result.strip();
+        if (!trimmed.startsWith("{")) {
+            // Not a JSON object (plain text from textResult); return as-is.
+            return result;
+        }
+        try {
+            // Remove the "fields": [...] entry using a simple regex to avoid pulling in a
+            // full JSON library dependency. The pattern matches:
+            //   "fields"  : [  ...  ] ,?   (with optional trailing comma)
+            // We handle both compact and pretty-printed forms.
+            String stripped =
+                    trimmed.replaceAll(
+                            "(?s)\\s*\"fields\"\\s*:\\s*\\[.*?\\]\\s*,?", "");
+            if (!stripped.equals(trimmed)) {
+                log.debug("[query_dataset] Stripped 'fields' metadata from result");
+            }
+            return stripped;
+        } catch (Exception e) {
+            // Safety net: if regex fails for any reason, return original
+            log.warn("[query_dataset] stripMetadata failed, returning original result", e);
+            return result;
+        }
     }
 
     private String formatDatasetList(List<DatasetInfo> datasets) {
