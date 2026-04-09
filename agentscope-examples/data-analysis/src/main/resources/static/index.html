@@ -2457,12 +2457,20 @@
             });
         } else {
             // 没有报告/图表时，也用 marked 渲染 Markdown
+            // ⚠️ innerHTML 全量替换前，先把 SSE 已注入的确认按钮保存下来，替换后再追回。
+            // 否则 renderPlan(needConfirm=true) 先注入按钮，finalizeMessage 替换 innerHTML 清空
+            // 后再次注入，导致确认按钮闪烁出现两次。
+            const existingConfirmWrap = content.querySelector('.confirm-actions-wrap');
             const textToRender = textPart || fullText;
             if (typeof renderMarkdown !== 'undefined') {
                 content.innerHTML = renderMarkdown(textToRender);
                 if (typeof wrapTables !== 'undefined') wrapTables(content);
             } else {
                 content.textContent = textToRender;
+            }
+            // 把之前保存的确认按钮追回（如果 SSE 已注入过）
+            if (existingConfirmWrap) {
+                content.appendChild(existingConfirmWrap);
             }
         }
 
