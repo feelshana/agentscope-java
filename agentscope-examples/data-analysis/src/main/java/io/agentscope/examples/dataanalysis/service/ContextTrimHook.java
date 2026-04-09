@@ -45,7 +45,7 @@ import reactor.core.publisher.Mono;
  *       always retained in the context window so the LLM sees the full conversation flow.
  *       The SYSTEM message at the head is always preserved.
  *   <li><b>Tool-result truncation</b>: For rounds that are NOT the most recent round, any TOOL
- *       message whose text output exceeds {@value #TOOL_RESULT_MAX_CHARS} characters is truncated
+ *       message whose text output exceeds {@value #DEFAULT_TOOL_RESULT_MAX_CHARS} characters is truncated
  *       to that limit with a {@code [已截断]} suffix.
  * </ol>
  *
@@ -63,10 +63,28 @@ public class ContextTrimHook implements Hook {
     static final int MAX_REAL_QUESTION_ROUNDS = 5;
 
     /**
-     * Maximum characters kept in a tool-result text block for non-latest rounds.
-     * Content beyond this limit is replaced with a truncation notice.
+     * Maximum characters kept in a {@code query_dataset} tool-result for non-latest rounds.
+     * We keep more of this result so the LLM can reuse raw query data when answering
+     * follow-up questions without re-querying the data source.
      */
-    static final int TOOL_RESULT_MAX_CHARS = 500;
+    static final int QUERY_DATASET_RESULT_MAX_CHARS = 5000;
+
+    /**
+     * Maximum number of historical rounds whose {@code query_dataset} result is kept at full
+     * length ({@value #QUERY_DATASET_RESULT_MAX_CHARS} chars). Older rounds beyond this limit
+     * are truncated to {@value #DEFAULT_TOOL_RESULT_MAX_CHARS} chars like other tools.
+     */
+    static final int QUERY_DATASET_KEEP_ROUNDS = 5;
+
+    /**
+     * Maximum characters kept in a tool-result text block for non-latest rounds
+     * (applies to all tools except the most recent {@value #QUERY_DATASET_KEEP_ROUNDS}
+     * rounds of {@code query_dataset}).
+     */
+    static final int DEFAULT_TOOL_RESULT_MAX_CHARS = 500;
+
+    /** Tool name for the dataset query tool (used for differential truncation). */
+    private static final String QUERY_DATASET_TOOL = "query_dataset";
 
     /**
      * Short confirmation/rejection keywords that do NOT count as real question rounds.
@@ -134,15 +152,36 @@ public class ContextTrimHook implements Hook {
 
         List<List<Msg>> keptRounds = rounds.subList(firstKeptIndex, rounds.size());
 
-        // Truncate tool results in all rounds except the last one
+        // Truncate tool results in all rounds except the last one.
+        // query_dataset results in the most recent QUERY_DATASET_KEEP_ROUNDS rounds are kept
+        // at a higher char limit so the LLM can reuse raw data for follow-up questions.
         List<Msg> result = new ArrayList<>();
         if (systemMsg != null) {
             result.add(systemMsg);
         }
+        // Count how many rounds (from newest) still have full query_dataset results.
+        // We scan kept rounds from the end; the first QUERY_DATASET_KEEP_ROUNDS non-latest
+        // rounds get the higher limit.
+        int queryDatasetFullRoundsRemaining = QUERY_DATASET_KEEP_ROUNDS;
+        // Build the per-round truncation flag array (index = position in keptRounds).
+        // true  => use QUERY_DATASET_RESULT_MAX_CHARS for query_dataset blocks
+        // false => use DEFAULT_TOOL_RESULT_MAX_CHARS for all tool blocks
+        boolean[] useFullQueryLimit = new boolean[keptRounds.size()];
+        for (int i = keptRounds.size() - 2; i >= 0; i--) { // skip last (latest) round
+            if (queryDatasetFullRoundsRemaining > 0) {
+                useFullQueryLimit[i] = true;
+                queryDatasetFullRoundsRemaining--;
+            }
+        }
+
         for (int i = 0; i < keptRounds.size(); i++) {
             boolean isLatestRound = (i == keptRounds.size() - 1);
             for (Msg msg : keptRounds.get(i)) {
-                result.add(isLatestRound ? msg : truncateToolResults(msg));
+                if (isLatestRound) {
+                    result.add(msg);
+                } else {
+                    result.add(truncateToolResults(msg, useFullQueryLimit[i]));
+                }
             }
         }
         return result;
@@ -228,10 +267,15 @@ public class ContextTrimHook implements Hook {
 
     /**
      * Return a (possibly new) Msg where every ToolResultBlock whose text output exceeds
-     * {@value #TOOL_RESULT_MAX_CHARS} characters is replaced with a truncated version.
-     * Other content blocks and non-TOOL messages are returned unchanged.
+     * the applicable limit is replaced with a truncated version.
+     *
+     * @param msg              the message to truncate
+     * @param useFullQueryLimit when {@code true}, {@code query_dataset} results are kept up to
+     *                          {@value #QUERY_DATASET_RESULT_MAX_CHARS} chars; all other tools
+     *                          (and {@code query_dataset} when {@code false}) are truncated to
+     *                          {@value #DEFAULT_TOOL_RESULT_MAX_CHARS} chars.
      */
-    private Msg truncateToolResults(Msg msg) {
+    private Msg truncateToolResults(Msg msg, boolean useFullQueryLimit) {
         if (!MsgRole.TOOL.equals(msg.getRole()) && !msg.hasContentBlocks(ToolResultBlock.class)) {
             return msg;
         }
@@ -241,7 +285,7 @@ public class ContextTrimHook implements Hook {
 
         for (ContentBlock block : msg.getContent()) {
             if (block instanceof ToolResultBlock trb) {
-                ToolResultBlock trimmed = truncateToolResultBlock(trb);
+                ToolResultBlock trimmed = truncateToolResultBlock(trb, useFullQueryLimit);
                 newContent.add(trimmed);
                 if (trimmed != trb) {
                     modified = true;
@@ -266,9 +310,19 @@ public class ContextTrimHook implements Hook {
     }
 
     /**
-     * Truncate the text output of a single ToolResultBlock if it exceeds the limit.
+     * Truncate the text output of a single ToolResultBlock.
+     *
+     * <p>When {@code useFullQueryLimit} is {@code true} and the tool name is
+     * {@value #QUERY_DATASET_TOOL}, the limit is {@value #QUERY_DATASET_RESULT_MAX_CHARS};
+     * otherwise {@value #DEFAULT_TOOL_RESULT_MAX_CHARS} is applied.
      */
-    private ToolResultBlock truncateToolResultBlock(ToolResultBlock trb) {
+    private ToolResultBlock truncateToolResultBlock(ToolResultBlock trb, boolean useFullQueryLimit) {
+        boolean isQueryDataset = QUERY_DATASET_TOOL.equals(trb.getName());
+        int maxChars =
+                (useFullQueryLimit && isQueryDataset)
+                        ? QUERY_DATASET_RESULT_MAX_CHARS
+                        : DEFAULT_TOOL_RESULT_MAX_CHARS;
+
         List<ContentBlock> output = trb.getOutput();
         boolean modified = false;
         List<ContentBlock> newOutput = new ArrayList<>();
@@ -276,9 +330,9 @@ public class ContextTrimHook implements Hook {
         for (ContentBlock ob : output) {
             if (ob instanceof TextBlock tb) {
                 String text = tb.getText();
-                if (text != null && text.length() > TOOL_RESULT_MAX_CHARS) {
+                if (text != null && text.length() > maxChars) {
                     String truncated =
-                            text.substring(0, TOOL_RESULT_MAX_CHARS)
+                            text.substring(0, maxChars)
                                     + "...[已截断，共"
                                     + text.length()
                                     + "字符]";

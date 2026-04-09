@@ -23,10 +23,12 @@ import io.agentscope.core.model.OpenAIChatModel;
 import io.agentscope.core.plan.PlanNotebook;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.examples.dataanalysis.client.DataApiClient;
+import io.agentscope.examples.dataanalysis.dto.DatasetInfo;
 import io.agentscope.examples.dataanalysis.tool.DataAnalysisTool;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -128,6 +130,13 @@ public class SessionAgentManager {
     private SessionEntry createEntry(String sessionId) {
         InMemoryMemory memory = new InMemoryMemory();
 
+        // Pre-load the dataset list once per session and register agentId mappings.
+        // The formatted list is appended to the system prompt so the LLM knows all
+        // available datasets without needing to call list_datasets on every question.
+        List<DatasetInfo> datasets = fetchDatasetsForSession();
+        dataApiClient.registerDatasets(datasets);
+        String effectiveSysPrompt = buildSysPromptWithDatasets(sysPrompt, datasets);
+
         Toolkit toolkit = new Toolkit();
         toolkit.registerTool(new DataAnalysisTool(dataApiClient));
 
@@ -152,7 +161,7 @@ public class SessionAgentManager {
         ReActAgent agent =
                 ReActAgent.builder()
                         .name("DataAnalysisAgent-" + sessionId)
-                        .sysPrompt(sysPrompt)
+                        .sysPrompt(effectiveSysPrompt)
                         .model(modelBuilder.build())
                         .memory(memory)
                         .toolkit(toolkit)
@@ -165,6 +174,56 @@ public class SessionAgentManager {
                         .build();
 
         return new SessionEntry(agent, memory, planNotebook);
+    }
+
+    /**
+     * Fetch datasets from the API; fall back to an empty list on error so the session
+     * can still be created (LLM will call list_datasets at runtime as a fallback).
+     */
+    private List<DatasetInfo> fetchDatasetsForSession() {
+        try {
+            List<DatasetInfo> datasets = dataApiClient.listDatasets().block();
+            if (datasets != null && !datasets.isEmpty()) {
+                log.info("Pre-loaded {} dataset(s) into session sysPrompt", datasets.size());
+                return datasets;
+            }
+        } catch (Exception e) {
+            log.warn("Failed to pre-load datasets for session sysPrompt, LLM will call"
+                    + " list_datasets at runtime", e);
+        }
+        return List.of();
+    }
+
+    /**
+     * Append a concise dataset catalogue to the system prompt so the LLM does not need
+     * to call {@code list_datasets} on every question.
+     *
+     * <p>Format appended:
+     * <pre>
+     * ---
+     * ## Available Datasets (pre-loaded, no need to call list_datasets)
+     *   - Name: ds_kpi
+     *     Description: ...
+     *   ...
+     * </pre>
+     */
+    private String buildSysPromptWithDatasets(String baseSysPrompt, List<DatasetInfo> datasets) {
+        if (datasets == null || datasets.isEmpty()) {
+            return baseSysPrompt;
+        }
+        String catalogue =
+                datasets.stream()
+                        .map(
+                                ds ->
+                                        "  - Name: "
+                                                + ds.getName()
+                                                + "\n    Description: "
+                                                + ds.getDescription())
+                        .collect(Collectors.joining("\n"));
+        return baseSysPrompt
+                + "\n\n---\n"
+                + "## Available Datasets (pre-loaded — no need to call list_datasets)\n"
+                + catalogue;
     }
 
     /**
