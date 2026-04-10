@@ -131,6 +131,17 @@ public class ChatSessionService {
     }
 
     /**
+     * Get the userName for a session.
+     *
+     * @param sessionId the chat session ID
+     * @return the userName, or empty string if not found
+     */
+    public String getUserName(String sessionId) {
+        ChatSession session = sessionMapper.selectById(sessionId);
+        return session != null ? session.getUserName() : "";
+    }
+
+    /**
      * Load all messages for a session as Msg list (for Agent context injection).
      * If the session history is summarized, a leading system message with summary is prepended.
      */
