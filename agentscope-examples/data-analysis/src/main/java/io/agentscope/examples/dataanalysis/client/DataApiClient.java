@@ -118,8 +118,8 @@ public class DataApiClient {
     /**
      * Retrieve the list of available datasets.
      *
-     * <p>When mock is disabled, calls SuperSonic's {@code getRedSeaDataSetInfo} API
-     * with the configured agentId list to get real dataset metadata.
+     * <p>When mock is disabled, calls SuperSonic's {@code getRedSeaDataSetInfo} API with the
+     * configured agentId list to get real dataset metadata.
      *
      * @return Mono wrapping the list of DatasetInfo
      */
@@ -157,16 +157,21 @@ public class DataApiClient {
     public String getAgentId(String datasetId) {
         return datasetAgentIdMap.get(datasetId);
     }
-    
+
     /**
      * Call {@code GET /api/chat/agent/getRedSeaDataSetInfo?queryType=brief} to fetch the brief
      * dataset catalogue (name + description only, without dimension/metric detail).
      *
-     * <p>The {@code queryType=brief} parameter tells SuperSonic to omit {@code dataSetInfo},
-     * keeping the system-prompt injection lightweight.
+     * <p>The response is a JSON-wrapped list of AgentDataSetInfoDTO objects, each containing:
      *
-     * <p>Each item is converted to a {@link DatasetInfo} with:
-     * id = "ds_" + agentId, name = agentName, description = description, agentId = agentId.
+     * <ul>
+     *   <li>{@code agentId} - the SuperSonic agent id
+     *   <li>{@code agentName} - the agent name, used as dataset display name
+     *   <li>{@code dataSetInfo} - semantic description of the dataset (dimensions, metrics, etc.)
+     * </ul>
+     *
+     * Each item is converted to a {@link DatasetInfo} with: id = "ds_" + agentId, description =
+     * agentName + "\n" + dataSetInfo, agentId = agentId.
      */
     private Mono<List<DatasetInfo>> fetchDatasetsFromNlp() {
         if (nlpAgentIds.isEmpty()) {
@@ -235,7 +240,7 @@ public class DataApiClient {
                             return Mono.just(new ArrayList<>());
                         });
     }
-    
+
     /**
      * Fetch detailed metadata for one or more datasets including dimensions, metrics, and terms.
      *
@@ -301,49 +306,49 @@ public class DataApiClient {
     /**
      * Query a specific dataset.
      *
-     * <p>When mock is disabled, calls the NLP intelligent query service
-     * ({@code POST /api/chat/query/parseAndExecute}) with the agentId registered for the dataset.
+     * <p>When mock is disabled, calls the NLP intelligent query service ({@code POST
+     * /api/chat/query/parseAndExecute}) with the agentId registered for the dataset.
      *
-     * @param datasetId the ID of the dataset to query
+     * @param dataSetName the ID of the dataset to query
      * @param question the question or query string
      * @return Mono wrapping the query result as a String
      */
-    public Mono<String> queryDataset(String datasetId, String question) {
+    public Mono<String> queryDataset(String dataSetName, String question) {
         if (mockEnabled) {
-            return mockQueryDataset(datasetId, question);
+            return mockQueryDataset(dataSetName, question);
         }
-        String agentId = datasetAgentIdMap.get(datasetId);
+        String agentId = datasetAgentIdMap.get(dataSetName);
         if (agentId == null) {
             log.warn(
                     "[queryDataset] No agentId registered for datasetName={}, falling back to"
                             + " legacy API",
-                    datasetId);
-            return queryDatasetLegacy(datasetId, question);
+                    dataSetName);
+            return queryDatasetLegacy(dataSetName, question);
         }
-        return getOrCreateChatId(datasetId)
+        return getOrCreateChatId(dataSetName)
                 .flatMap(chatId -> queryByNlp(agentId, chatId, question))
                 .switchIfEmpty(
                         Mono.fromSupplier(
                                 () -> {
                                     log.warn(
                                             "[queryDataset] queryByNlp returned empty Mono,"
-                                                    + " datasetId={}",
-                                            datasetId);
+                                                    + " dataSetName={}",
+                                            dataSetName);
                                     return "Query returned no result.";
                                 }))
                 .doOnError(
                         e ->
                                 log.error(
                                         "[queryDataset] Failed, datasetId={}, question={}",
-                                        datasetId,
+                                        dataSetName,
                                         question,
                                         e))
                 .onErrorResume(e -> Mono.just("Query failed: " + e.getMessage()));
     }
 
     /**
-     * Register agentId mapping from a list of datasets.
-     * Called after listDatasets() to record datasetId → agentId.
+     * Register agentId mapping from a list of datasets. Called after listDatasets() to record
+     * datasetId → agentId.
      *
      * @param datasets the dataset list returned by listDatasets
      */
@@ -366,9 +371,7 @@ public class DataApiClient {
         }
     }
 
-    /**
-     * Reset chat session for all datasets. Used when agent is reset.
-     */
+    /** Reset chat session for all datasets. Used when agent is reset. */
     public void resetChatSessions() {
         datasetChatIdMap.clear();
         log.info("[resetChatSessions] All chat sessions cleared");
@@ -377,8 +380,8 @@ public class DataApiClient {
     // ==================== Private: NLP Service ====================
 
     /**
-     * Get existing chatId for the dataset, or create a new one via
-     * {@code POST /api/chat/manage/save}.
+     * Get existing chatId for the dataset, or create a new one via {@code POST
+     * /api/chat/manage/save}.
      */
     private Mono<String> getOrCreateChatId(String datasetId) {
         String existingChatId = datasetChatIdMap.get(datasetId);
@@ -402,9 +405,9 @@ public class DataApiClient {
     }
 
     /**
-     * Call {@code POST /api/chat/manage/save} to create a new chat session.
-     * Parameters are passed as RequestParam (form style): chatName and agentId.
-     * The response body is a plain Long (chatId).
+     * Call {@code POST /api/chat/manage/save} to create a new chat session. Parameters are passed
+     * as RequestParam (form style): chatName and agentId. The response body is a plain Long
+     * (chatId).
      *
      * @param agentId the agentId to associate with this chat session
      */
@@ -443,24 +446,25 @@ public class DataApiClient {
 
     /**
      * Call {@code POST /api/chat/query/parseAndExecute} and extract the result following the rules:
+     *
      * <ol>
      *   <li>If {@code queryResults} is empty, the query produced no data rows:
-     *     <ul>
-     *       <li>If {@code errorMsg} is non-blank → return the error message so the agent can
-     *           adjust the question accordingly.</li>
-     *       <li>If {@code errorMsg} is blank → return the {@code textResult} (which may contain
-     *           an explanation) so the agent can adjust the question accordingly.</li>
-     *     </ul>
-     *   </li>
-     *   <li>If {@code queryResults} is non-empty, the query succeeded → convert the row list to
-     *       a compact CSV-like table (one header line + value-only data lines) to reduce LLM
-     *       token consumption compared with repeating JSON keys on every row.</li>
+     *       <ul>
+     *         <li>If {@code errorMsg} is non-blank → return the error message so the agent can
+     *             adjust the question accordingly.
+     *         <li>If {@code errorMsg} is blank → return the {@code textResult} (which may contain
+     *             an explanation) so the agent can adjust the question accordingly.
+     *       </ul>
+     *   <li>If {@code queryResults} is non-empty, the query succeeded → convert the row list to a
+     *       compact CSV-like table (one header line + value-only data lines) to reduce LLM token
+     *       consumption compared with repeating JSON keys on every row.
      * </ol>
      *
-     * @param agentId   the agent responsible for this dataset
-     * @param chatId    the current chat session id
-     * @param question  the natural-language question
-     * @return a string the calling agent can use to either present results or reformulate the question
+     * @param agentId the agent responsible for this dataset
+     * @param chatId the current chat session id
+     * @param question the natural-language question
+     * @return a string the calling agent can use to either present results or reformulate the
+     *     question
      */
     private Mono<String> queryByNlp(String agentId, String chatId, String question) {
         Map<String, Object> requestBody =
@@ -568,18 +572,19 @@ public class DataApiClient {
     }
 
     /**
-     * Convert a {@code List<Map<String,Object>>} (database result rows) to a compact
-     * column-header + value-only table format, minimising LLM token consumption.
+     * Convert a {@code List<Map<String,Object>>} (database result rows) to a compact column-header
+     * + value-only table format, minimising LLM token consumption.
      *
      * <p>Output example:
+     *
      * <pre>
      * 日期,指标名称,指标值
      * 20260402,B级及以上创作者TOP1视频点赞量,221.0
      * 20260402,B级及以上创作者二台直播日均互动量次,624146.5
      * </pre>
      *
-     * <p>Column order is determined by the key insertion order of the first row.
-     * If the list is empty or contains non-Map entries, an empty string is returned.
+     * <p>Column order is determined by the key insertion order of the first row. If the list is
+     * empty or contains non-Map entries, an empty string is returned.
      */
     @SuppressWarnings("unchecked")
     private String toCompactTable(List<?> rows) {
@@ -617,9 +622,7 @@ public class DataApiClient {
         return sb.toString();
     }
 
-    /**
-     * Legacy query via the original REST API (fallback when agentId is not registered).
-     */
+    /** Legacy query via the original REST API (fallback when agentId is not registered). */
     private Mono<String> queryDatasetLegacy(String datasetId, String question) {
         return webClient
                 .get()
@@ -650,13 +653,13 @@ public class DataApiClient {
         return Mono.just(
                 List.of(
                         new DatasetInfo(
-                                "ds_dau_index",
+                                "咪咕视频APP日指数",
                                 "咪咕视频APP日指数",
                                 "咪咕视频APP日指数，基于高质量日活跃样本用户计算的活跃指数，用于反映核心活跃用户的变化趋势。"
                                         + "包含每日活跃指数值、环比变化率、同比变化率。",
                                 "84"),
                         new DatasetInfo(
-                                "ds_community",
+                                "社区化咪咕号专项运营数据报表",
                                 "社区化咪咕号专项运营数据报表",
                                 "咪咕视频APP社区化相关指标，包含："
                                         + "社区场景月累计活跃用户规模、"
@@ -690,21 +693,21 @@ public class DataApiClient {
                                 "87")));
     }
 
-    private Mono<String> mockQueryDataset(String datasetId, String question) {
-        log.debug("Using mock query, datasetId={}, question={}", datasetId, question);
+    private Mono<String> mockQueryDataset(String dataSetName, String question) {
+        log.debug("Using mock query, dataSetName={}, question={}", dataSetName, question);
         String lowerQuestion = question.toLowerCase();
 
-        return switch (datasetId) {
-            case "ds_dau_index" -> Mono.just(buildDauIndexMockResponse(lowerQuestion));
-            case "ds_community" -> Mono.just(buildCommunityMockResponse(lowerQuestion));
-            case "ds_kpi" -> Mono.just(buildKpiMockResponse(lowerQuestion));
-            case "ds_content_play" -> Mono.just(buildContentPlayMockResponse(lowerQuestion));
+        return switch (dataSetName) {
+            case "咪咕视频APP日指数" -> Mono.just(buildDauIndexMockResponse(lowerQuestion));
+            case "社区化咪咕号专项运营数据报表" -> Mono.just(buildCommunityMockResponse(lowerQuestion));
+            case "2025关键考核指标日表" -> Mono.just(buildKpiMockResponse(lowerQuestion));
+            case "驾驶舱热门内容日榜" -> Mono.just(buildContentPlayMockResponse(lowerQuestion));
             default ->
                     Mono.just(
                             "Dataset '"
-                                    + datasetId
-                                    + "' not found. Available datasets: ds_dau_index, ds_community,"
-                                    + " ds_kpi, ds_content_play");
+                                    + dataSetName
+                                    + "' not found. Available datasets: 咪咕视频APP日指数, 社区化咪咕号专项运营数据报表,"
+                                    + " 2025关键考核指标日表, 驾驶舱热门内容日榜");
         };
     }
 
@@ -820,82 +823,61 @@ public class DataApiClient {
     }
 
     private String buildKpiMockResponse(String question) {
+        // CSV格式输出：产品名称,指标名称,日期,指标值,目标值,完成进度,上月同期值,环比上月变化情况
+        // 列顺序必须与元数据定义一致（8个字段）
+
         // 咪咕视频相关指标
         if (question.contains("视频")
                 || question.contains("video")
                 || question.contains("ai+")
                 || question.contains("自研")) {
             return """
-            {
-              "dataset": "ds_kpi",
-              "query": "咪咕视频考核指标完成情况",
-              "fields": ["product_type","index_name","period_id","index_value","target_value","progress_value","lastmonth_value","lastmonth_rate"],
-              "result": [
-                {"product_type":"咪咕视频","index_name":"AI+咪咕视频自研产品使用用户数",  "period_id":"20260318","index_value":3721628, "target_value":6000000,"progress_value":62.03,"lastmonth_value":2792373,"lastmonth_rate":33.28},
-                {"product_type":"咪咕视频","index_name":"视频月活跃用户规模(MAU)",         "period_id":"20260318","index_value":91200000,"target_value":85000000,"progress_value":107.29,"lastmonth_value":87600000,"lastmonth_rate":4.11},
-                {"product_type":"咪咕视频","index_name":"视频日活跃用户规模(DAU)",         "period_id":"20260318","index_value":17650000,"target_value":18000000,"progress_value":98.06,"lastmonth_value":16900000,"lastmonth_rate":4.44},
-                {"product_type":"咪咕视频","index_name":"付费会员数",                       "period_id":"20260318","index_value":11340000,"target_value":12000000,"progress_value":94.50,"lastmonth_value":11100000,"lastmonth_rate":2.16},
-                {"product_type":"咪咕视频","index_name":"人均日使用时长(分钟)",             "period_id":"20260318","index_value":46.8,    "target_value":42,      "progress_value":111.43,"lastmonth_value":44.2,    "lastmonth_rate":5.88}
-              ]
-            }\
+            产品名称,指标名称,日期,指标值,目标值,完成进度,上月同期值,环比上月变化情况
+            咪咕视频,AI+咪咕视频自研产品使用用户数,20260318,3721628,6000000,62.03,2792373,33.28
+            咪咕视频,视频月活跃用户规模(MAU),20260318,91200000,85000000,107.29,87600000,4.11
+            咪咕视频,视频日活跃用户规模(DAU),20260318,17650000,18000000,98.06,16900000,4.44
+            咪咕视频,付费会员数,20260318,11340000,12000000,94.50,11100000,2.16
+            咪咕视频,人均日使用时长(分钟),20260318,46.8,42,111.43,44.2,5.88
             """;
         }
         // 咪咕音乐相关指标
         if (question.contains("音乐") || question.contains("music")) {
             return """
-            {
-              "dataset": "ds_kpi",
-              "query": "咪咕音乐考核指标完成情况",
-              "fields": ["product_type","index_name","period_id","index_value","target_value","progress_value","lastmonth_value","lastmonth_rate"],
-              "result": [
-                {"product_type":"咪咕音乐","index_name":"音乐月活跃用户规模(MAU)",  "period_id":"20260318","index_value":63800000,"target_value":60000000,"progress_value":106.33,"lastmonth_value":61200000,"lastmonth_rate":4.25},
-                {"product_type":"咪咕音乐","index_name":"付费会员数",              "period_id":"20260318","index_value":7920000, "target_value":8000000, "progress_value":99.00, "lastmonth_value":7750000, "lastmonth_rate":2.19},
-                {"product_type":"咪咕音乐","index_name":"人均日播放曲目数",        "period_id":"20260318","index_value":13.5,    "target_value":12,      "progress_value":112.50,"lastmonth_value":12.8,    "lastmonth_rate":5.47},
-                {"product_type":"咪咕音乐","index_name":"AI音乐创作工具使用用户数","period_id":"20260318","index_value":2180000, "target_value":3000000, "progress_value":72.67, "lastmonth_value":1650000, "lastmonth_rate":32.12}
-              ]
-            }\
+            产品名称,指标名称,日期,指标值,目标值,完成进度,上月同期值,环比上月变化情况
+            咪咕音乐,音乐月活跃用户规模(MAU),20260318,63800000,60000000,106.33,61200000,4.25
+            咪咕音乐,付费会员数,20260318,7920000,8000000,99.00,7750000,2.19
+            咪咕音乐,人均日播放曲目数,20260318,13.5,12,112.50,12.8,5.47
+            咪咕音乐,AI音乐创作工具使用用户数,20260318,2180000,3000000,72.67,1650000,32.12
             """;
         }
         // 元宇宙 / AI数智人相关指标
         if (question.contains("元宇宙") || question.contains("数智人") || question.contains("ai")) {
             return """
-            {
-              "dataset": "ds_kpi",
-              "query": "元宇宙/AI考核指标完成情况",
-              "fields": ["product_type","index_name","period_id","index_value","target_value","progress_value","lastmonth_value","lastmonth_rate"],
-              "result": [
-                {"product_type":"元宇宙","index_name":"AI数智人使用用户",        "period_id":"20260318","index_value":1963914,"target_value":5000000,"progress_value":39.28,"lastmonth_value":1353245,"lastmonth_rate":45.13},
-                {"product_type":"元宇宙","index_name":"元宇宙月活跃用户规模",    "period_id":"20260318","index_value":820000, "target_value":2000000,"progress_value":41.00,"lastmonth_value":610000, "lastmonth_rate":34.43},
-                {"product_type":"元宇宙","index_name":"虚拟形象创建数",          "period_id":"20260318","index_value":345000, "target_value":600000, "progress_value":57.50,"lastmonth_value":268000, "lastmonth_rate":28.73},
-                {"product_type":"元宇宙","index_name":"元宇宙内容消费用户规模",  "period_id":"20260318","index_value":1240000,"target_value":2500000,"progress_value":49.60,"lastmonth_value":980000, "lastmonth_rate":26.53}
-              ]
-            }\
+            产品名称,指标名称,日期,指标值,目标值,完成进度,上月同期值,环比上月变化情况
+            元宇宙,AI数智人使用用户,20260318,1963914,5000000,39.28,1353245,45.13
+            元宇宙,元宇宙月活跃用户规模,20260318,820000,2000000,41.00,610000,34.43
+            元宇宙,虚拟形象创建数,20260318,345000,600000,57.50,268000,28.73
+            元宇宙,元宇宙内容消费用户规模,20260318,1240000,2500000,49.60,980000,26.53
             """;
         }
         // 全量/集团考核汇总（默认兜底）
         return """
-        {
-          "dataset": "ds_kpi",
-          "query": "咪咕旗下各产品考核指标全量汇总",
-          "fields": ["product_type","index_name","period_id","index_value","target_value","progress_value","lastmonth_value","lastmonth_rate"],
-          "result": [
-            {"product_type":"全量",    "index_name":"RFE高价值活跃规模",            "period_id":"20260318","index_value":45911864,"target_value":38080000,"progress_value":120.57,"lastmonth_value":45377751,"lastmonth_rate":1.18},
-            {"product_type":"全量",    "index_name":"集团考核月活跃用户(MAU)",       "period_id":"20260318","index_value":198500000,"target_value":195000000,"progress_value":101.79,"lastmonth_value":192300000,"lastmonth_rate":3.22},
-            {"product_type":"咪咕视频","index_name":"AI+咪咕视频自研产品使用用户数","period_id":"20260318","index_value":3721628, "target_value":6000000, "progress_value":62.03, "lastmonth_value":2792373, "lastmonth_rate":33.28},
-            {"product_type":"咪咕视频","index_name":"视频月活跃用户规模(MAU)",       "period_id":"20260318","index_value":91200000,"target_value":85000000,"progress_value":107.29,"lastmonth_value":87600000,"lastmonth_rate":4.11},
-            {"product_type":"咪咕视频","index_name":"付费会员数",                   "period_id":"20260318","index_value":11340000,"target_value":12000000,"progress_value":94.50, "lastmonth_value":11100000,"lastmonth_rate":2.16},
-            {"product_type":"咪咕音乐","index_name":"音乐月活跃用户规模(MAU)",       "period_id":"20260318","index_value":63800000,"target_value":60000000,"progress_value":106.33,"lastmonth_value":61200000,"lastmonth_rate":4.25},
-            {"product_type":"咪咕音乐","index_name":"付费会员数",                   "period_id":"20260318","index_value":7920000, "target_value":8000000, "progress_value":99.00, "lastmonth_value":7750000, "lastmonth_rate":2.19},
-            {"product_type":"咪咕音乐","index_name":"AI音乐创作工具使用用户数",     "period_id":"20260318","index_value":2180000, "target_value":3000000, "progress_value":72.67, "lastmonth_value":1650000, "lastmonth_rate":32.12},
-            {"product_type":"咪咕阅读","index_name":"阅读月活跃用户规模(MAU)",       "period_id":"20260318","index_value":28400000,"target_value":30000000,"progress_value":94.67, "lastmonth_value":27100000,"lastmonth_rate":4.80},
-            {"product_type":"咪咕阅读","index_name":"付费会员数",                   "period_id":"20260318","index_value":3860000, "target_value":4200000, "progress_value":91.90, "lastmonth_value":3720000, "lastmonth_rate":3.76},
-            {"product_type":"咪咕阅读","index_name":"日均阅读时长(分钟)",           "period_id":"20260318","index_value":38.2,    "target_value":35,      "progress_value":109.14,"lastmonth_value":36.5,    "lastmonth_rate":4.66},
-            {"product_type":"咪咕游戏","index_name":"游戏月活跃用户规模(MAU)",       "period_id":"20260318","index_value":14100000,"target_value":18000000,"progress_value":78.33, "lastmonth_value":13800000,"lastmonth_rate":2.17},
-            {"product_type":"咪咕游戏","index_name":"游戏付费用户数",               "period_id":"20260318","index_value":1820000, "target_value":2500000, "progress_value":72.80, "lastmonth_value":1710000, "lastmonth_rate":6.43},
-            {"product_type":"元宇宙",  "index_name":"AI数智人使用用户",             "period_id":"20260318","index_value":1963914, "target_value":5000000, "progress_value":39.28, "lastmonth_value":1353245, "lastmonth_rate":45.13},
-            {"product_type":"元宇宙",  "index_name":"元宇宙月活跃用户规模",         "period_id":"20260318","index_value":820000,  "target_value":2000000, "progress_value":41.00, "lastmonth_value":610000,  "lastmonth_rate":34.43}
-          ]
-        }\
+        产品名称,指标名称,日期,指标值,目标值,完成进度,上月同期值,环比上月变化情况
+        全量,RFE高价值活跃规模,20260318,45911864,38080000,120.57,45377751,1.18
+        全量,集团考核月活跃用户(MAU),20260318,198500000,195000000,101.79,192300000,3.22
+        咪咕视频,AI+咪咕视频自研产品使用用户数,20260318,3721628,6000000,62.03,2792373,33.28
+        咪咕视频,视频月活跃用户规模(MAU),20260318,91200000,85000000,107.29,87600000,4.11
+        咪咕视频,付费会员数,20260318,11340000,12000000,94.50,11100000,2.16
+        咪咕音乐,音乐月活跃用户规模(MAU),20260318,63800000,60000000,106.33,61200000,4.25
+        咪咕音乐,付费会员数,20260318,7920000,8000000,99.00,7750000,2.19
+        咪咕音乐,AI音乐创作工具使用用户数,20260318,2180000,3000000,72.67,1650000,32.12
+        咪咕阅读,阅读月活跃用户规模(MAU),20260318,28400000,30000000,94.67,27100000,4.80
+        咪咕阅读,付费会员数,20260318,3860000,4200000,91.90,3720000,3.76
+        咪咕阅读,日均阅读时长(分钟),20260318,38.2,35,109.14,36.5,4.66
+        云游戏,云游戏月活跃用户规模(MAU),20260318,14100000,18000000,78.33,13800000,2.17
+        云游戏,云游戏付费用户数,20260318,1820000,2500000,72.80,1710000,6.43
+        元宇宙,AI数智人使用用户,20260318,1963914,5000000,39.28,1353245,45.13
+        元宇宙,元宇宙月活跃用户规模,20260318,820000,2000000,41.00,610000,34.43
         """;
     }
 

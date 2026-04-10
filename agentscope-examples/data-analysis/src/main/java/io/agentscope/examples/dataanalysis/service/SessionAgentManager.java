@@ -53,6 +53,7 @@ public class SessionAgentManager {
     private final AnalysisPlanService analysisPlanService;
     private final ChatSessionService chatSessionService;
     private final LlmInteractionLogService llmInteractionLogService;
+    private final QueryResultCacheService queryResultCacheService;
 
     private String apiKey;
     private String baseUrl;
@@ -62,11 +63,13 @@ public class SessionAgentManager {
             DataApiClient dataApiClient,
             AnalysisPlanService analysisPlanService,
             ChatSessionService chatSessionService,
-            LlmInteractionLogService llmInteractionLogService) {
+            LlmInteractionLogService llmInteractionLogService,
+            QueryResultCacheService queryResultCacheService) {
         this.dataApiClient = dataApiClient;
         this.analysisPlanService = analysisPlanService;
         this.chatSessionService = chatSessionService;
         this.llmInteractionLogService = llmInteractionLogService;
+        this.queryResultCacheService = queryResultCacheService;
     }
 
     public void configure(String apiKey, String baseUrl, String sysPrompt) {
@@ -94,7 +97,9 @@ public class SessionAgentManager {
         }
         // New in-memory entry; load historical messages from DB if session exists
         List<Msg> historyMsgs = chatSessionService.loadSessionMessages(sessionId);
-        SessionEntry entry = createEntry(sessionId);
+        // Get userName from session for data isolation
+        String userName = chatSessionService.getUserName(sessionId);
+        SessionEntry entry = createEntry(sessionId, userName);
         if (!historyMsgs.isEmpty()) {
             log.info(
                     "Resuming session {} with {} historical messages",
@@ -125,11 +130,12 @@ public class SessionAgentManager {
 
     // ─────────────────── Internal helpers ───────────────────
 
-    private SessionEntry createEntry(String sessionId) {
+    private SessionEntry createEntry(String sessionId, String userName) {
         InMemoryMemory memory = new InMemoryMemory();
 
         Toolkit toolkit = new Toolkit();
-        toolkit.registerTool(new DataAnalysisTool(dataApiClient));
+        toolkit.registerTool(
+                new DataAnalysisTool(dataApiClient, sessionId, userName, queryResultCacheService));
 
         ConfirmPlanToHint confirmPlanToHint = new ConfirmPlanToHint();
         PlanNotebook planNotebook = PlanNotebook.builder().planToHint(confirmPlanToHint).build();
@@ -153,7 +159,8 @@ public class SessionAgentManager {
         // and caches the enriched sysPrompt for the lifetime of the session.
         // This avoids calling .block() in a Reactor NIO thread during session creation.
         DatasetInjectionHook datasetInjectionHook =
-                new DatasetInjectionHook(dataApiClient, sysPrompt);
+                new DatasetInjectionHook(
+                        dataApiClient, sysPrompt, sessionId, userName, queryResultCacheService);
 
         ReActAgent agent =
                 ReActAgent.builder()
@@ -165,6 +172,8 @@ public class SessionAgentManager {
                         .planNotebook(planNotebook)
                         .maxIters(40)
                         .hook(new ContextTrimHook()) // priority=10: trim first
+                        .hook(new ToolResultLifecycleHook()) // priority=15: manage tool_result
+                        // lifecycle
                         .hook(datasetInjectionHook) // priority=20: inject dataset catalogue
                         .hook(confirmPlanToHint) // priority=50: runs before planHintHook(100)
                         .hook(new ChatLogHook(sessionId))

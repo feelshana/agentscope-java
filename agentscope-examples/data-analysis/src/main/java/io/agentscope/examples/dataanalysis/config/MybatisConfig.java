@@ -42,11 +42,15 @@ public class MybatisConfig {
      */
     @Bean(initMethod = "migrate")
     public Flyway flyway(DataSource dataSource) {
-        return Flyway.configure()
-                .dataSource(dataSource)
-                .locations("classpath:db/migration")
-                .baselineOnMigrate(true)
-                .load();
+        Flyway flyway =
+                Flyway.configure()
+                        .dataSource(dataSource)
+                        .locations("classpath:db/migration")
+                        .baselineOnMigrate(true)
+                        .load();
+        // Repair checksum mismatches before migrate (e.g., when migration script is modified)
+        flyway.repair();
+        return flyway;
     }
 
     /**
