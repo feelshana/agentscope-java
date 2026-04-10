@@ -129,9 +129,7 @@ public class DataAnalysisTool {
             // full JSON library dependency. The pattern matches:
             //   "fields"  : [  ...  ] ,?   (with optional trailing comma)
             // We handle both compact and pretty-printed forms.
-            String stripped =
-                    trimmed.replaceAll(
-                            "(?s)\\s*\"fields\"\\s*:\\s*\\[.*?\\]\\s*,?", "");
+            String stripped = trimmed.replaceAll("(?s)\\s*\"fields\"\\s*:\\s*\\[.*?\\]\\s*,?", "");
             if (!stripped.equals(trimmed)) {
                 log.debug("[query_dataset] Stripped 'fields' metadata from result");
             }
