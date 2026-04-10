@@ -149,16 +149,24 @@ public class DataApiClient {
     }
 
     /**
-     * Call {@code GET /api/chat/agent/getRedSeaDataSetInfo} to fetch real dataset metadata.
+     * Look up the SuperSonic agentId for the given dataset ID.
      *
-     * <p>The response is a JSON-wrapped list of AgentDataSetInfoDTO objects, each containing:
-     * <ul>
-     *   <li>{@code agentId} - the SuperSonic agent id</li>
-     *   <li>{@code agentName} - the agent name, used as dataset display name</li>
-     *   <li>{@code dataSetInfo} - semantic description of the dataset (dimensions, metrics, etc.)</li>
-     * </ul>
-     * Each item is converted to a {@link DatasetInfo} with:
-     * id = "ds_" + agentId, description = agentName + "\n" + dataSetInfo, agentId = agentId.
+     * @param datasetId e.g. "ds_123"
+     * @return agentId string, or {@code null} if not registered
+     */
+    public String getAgentId(String datasetId) {
+        return datasetAgentIdMap.get(datasetId);
+    }
+    
+    /**
+     * Call {@code GET /api/chat/agent/getRedSeaDataSetInfo?queryType=brief} to fetch the brief
+     * dataset catalogue (name + description only, without dimension/metric detail).
+     *
+     * <p>The {@code queryType=brief} parameter tells SuperSonic to omit {@code dataSetInfo},
+     * keeping the system-prompt injection lightweight.
+     *
+     * <p>Each item is converted to a {@link DatasetInfo} with:
+     * id = "ds_" + agentId, name = agentName, description = description, agentId = agentId.
      */
     private Mono<List<DatasetInfo>> fetchDatasetsFromNlp() {
         if (nlpAgentIds.isEmpty()) {
@@ -166,7 +174,7 @@ public class DataApiClient {
             return Mono.just(new ArrayList<>());
         }
         String agentIdsParam = String.join(",", nlpAgentIds);
-        log.info("[fetchDatasetsFromNlp] Fetching datasets for agentIds={}", agentIdsParam);
+        log.info("[fetchDatasetsFromNlp] Fetching brief catalogue for agentIds={}", agentIdsParam);
         return nlpWebClient
                 .get()
                 .uri(
@@ -174,6 +182,7 @@ public class DataApiClient {
                                 uriBuilder
                                         .path("/api/chat/agent/getRedSeaDataSetInfo")
                                         .queryParam("agentIds", agentIdsParam)
+                                        .queryParam("queryType", "brief")
                                         .build())
                 .retrieve()
                 .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
@@ -196,22 +205,19 @@ public class DataApiClient {
                                 Object agentId = itemMap.get("agentId");
                                 Object description = itemMap.get("description");
                                 Object agentName = itemMap.get("agentName");
-                                Object dataSetInfo = itemMap.get("dataSetInfo");
                                 if (agentId == null) {
                                     continue;
                                 }
                                 String id = "ds_" + agentId;
-                                String dataSetInfoStr =
-                                        (description != null ? description : "")
-                                                + (dataSetInfo != null ? "\n" + dataSetInfo : "");
+                                String descStr = description != null ? description.toString() : "";
                                 result.add(
                                         new DatasetInfo(
                                                 id,
-                                                agentName.toString(),
-                                                dataSetInfoStr,
+                                                agentName != null ? agentName.toString() : id,
+                                                descStr,
                                                 agentId.toString()));
                                 log.debug(
-                                        "[fetchDatasetsFromNlp] Loaded dataset: id={}, agentId={},"
+                                        "[fetchDatasetsFromNlp] Loaded dataset: id={}, agentId={}."
                                                 + " name={}",
                                         id,
                                         agentId,
@@ -227,6 +233,68 @@ public class DataApiClient {
                                             + " service",
                                     e);
                             return Mono.just(new ArrayList<>());
+                        });
+    }
+    
+    /**
+     * Fetch detailed metadata for one or more datasets including dimensions, metrics, and terms.
+     *
+     * <p>Calls {@code GET /api/chat/agent/getRedSeaDataSetInfo?agentIds=X,Y&queryType=detail}.
+     * The {@code queryType=detail} parameter instructs SuperSonic to include the full
+     * {@code dataSetInfo} payload (dimensions, metrics, dimension-values, terms, etc.).
+     *
+     * @param agentIds one or more SuperSonic agent IDs to query (comma-separated)
+     * @return a formatted string containing the detail of each dataset
+     */
+    public Mono<String> fetchDatasetDetail(String agentIds) {
+        log.info("[fetchDatasetDetail] Fetching detail for agentIds={}", agentIds);
+        return nlpWebClient
+                .get()
+                .uri(
+                        uriBuilder ->
+                                uriBuilder
+                                        .path("/api/chat/agent/getRedSeaDataSetInfo")
+                                        .queryParam("agentIds", agentIds)
+                                        .queryParam("queryType", "detail")
+                                        .build())
+                .retrieve()
+                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                .timeout(Duration.ofSeconds(30))
+                .map(
+                        body -> {
+                            Object data = body.get("data");
+                            if (!(data instanceof List<?> items) || items.isEmpty()) {
+                                return "No detail found for agentIds=" + agentIds;
+                            }
+                            StringBuilder sb = new StringBuilder();
+                            for (Object item : items) {
+                                if (!(item instanceof Map<?, ?> itemMap)) {
+                                    continue;
+                                }
+                                Object agentName = itemMap.get("agentName");
+                                Object dataSetInfo = itemMap.get("dataSetInfo");
+                                if (sb.length() > 0) {
+                                    sb.append("\n\n---\n");
+                                }
+                                sb.append("Dataset: ").append(agentName);
+                                if (dataSetInfo != null) {
+                                    sb.append("\n").append(dataSetInfo);
+                                }
+                            }
+                            String result = sb.toString();
+                            log.debug(
+                                    "[fetchDatasetDetail] Result length={}", result.length());
+                            return result.isEmpty()
+                                    ? "No detail found for agentIds=" + agentIds
+                                    : result;
+                        })
+                .onErrorResume(
+                        e -> {
+                            log.error(
+                                    "[fetchDatasetDetail] Failed for agentIds={}",
+                                    agentIds,
+                                    e);
+                            return Mono.just("Failed to fetch dataset detail: " + e.getMessage());
                         });
     }
 

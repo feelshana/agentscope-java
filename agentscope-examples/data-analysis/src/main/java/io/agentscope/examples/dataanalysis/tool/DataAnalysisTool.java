@@ -63,6 +63,78 @@ public class DataAnalysisTool {
     }
 
     /**
+     * Get detailed metadata for one or more datasets, including dimensions, metrics,
+     * dimension-values, and semantic terms.
+     *
+     * <p>Only call this when the basic dataset info in the system prompt is not sufficient
+     * to construct an accurate query (e.g., the exact field name or dimension value is unknown).
+     * Do NOT call this for every query — use it only when necessary to avoid wasting tokens.
+     *
+     * @param datasetIds comma-separated dataset IDs, e.g. "ds_1" or "ds_1,ds_2"
+     * @return detailed metadata string for each requested dataset
+     */
+    @Tool(
+            name = "get_dataset_detail",
+            description =
+                    "Get detailed metadata (dimensions, metrics, dimension-values, date ranges,"
+                            + " terms) for one or more datasets. All metadata is in Chinese"
+                            + " (e.g. dimension names, metric names, dimension values, terms)."
+                            + " Use this only when the basic dataset info in the system prompt is"
+                            + " insufficient — for example when you need exact dimension names,"
+                            + " metric names, or dimension values to construct an accurate query."
+                            + " Do NOT call this for every query. Pass one or more dataset names"
+                            + " separated by commas.")
+    public Mono<String> getDatasetDetail(
+            @ToolParam(
+                            name = "dataset_ids",
+                            description =
+                                    "One or more dataset names from the system prompt,"
+                                            + " comma-separated. Use the exact Name value as shown"
+                                            + " in the system prompt."
+                                            + " Example: \"考核指标日表\" or \"考核指标日表,付费数据集\"")
+                    String datasetIds) {
+        log.info("[get_dataset_detail] datasetIds={}", datasetIds);
+        // Convert dataset Names to agentIds, skipping unknown ones.
+        String agentIds =
+                java.util.Arrays.stream(datasetIds.split(","))
+                        .map(String::trim)
+                        .filter(id -> !id.isBlank())
+                        .map(
+                                id -> {
+                                    String agentId = dataApiClient.getAgentId(id);
+                                    if (agentId == null) {
+                                        log.warn(
+                                                "[get_dataset_detail] Unknown datasetId={}, skipping",
+                                                id);
+                                    }
+                                    return agentId;
+                                })
+                        .filter(java.util.Objects::nonNull)
+                        .collect(Collectors.joining(","));
+        if (agentIds.isBlank()) {
+            return Mono.just(
+                    "None of the requested dataset names are registered: "
+                            + datasetIds
+                            + ". Available dataset names are listed in the system prompt.");
+        }
+        return dataApiClient
+                .fetchDatasetDetail(agentIds)
+                .doOnNext(
+                        result ->
+                                log.debug(
+                                        "[get_dataset_detail] Result length={}",
+                                        result.length()))
+                .onErrorResume(
+                        e -> {
+                            log.error(
+                                    "[get_dataset_detail] Error for datasetIds={}",
+                                    datasetIds,
+                                    e);
+                            return Mono.just("Error fetching dataset detail: " + e.getMessage());
+                        });
+    }
+
+    /**
      * Query a specific dataset using a natural-language question.
      * Use the dataset ID obtained from list_datasets.
      *
