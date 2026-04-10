@@ -19,6 +19,7 @@ import io.agentscope.core.tool.Tool;
 import io.agentscope.core.tool.ToolParam;
 import io.agentscope.examples.dataanalysis.client.DataApiClient;
 import io.agentscope.examples.dataanalysis.dto.DatasetInfo;
+import io.agentscope.examples.dataanalysis.service.QueryResultCacheService;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -28,23 +29,35 @@ import reactor.core.publisher.Mono;
 /**
  * Tools exposed to the ReActAgent for data analysis.
  *
- * <p>Only {@code query_dataset} is registered as an agent tool. The dataset catalogue is
- * pre-loaded into the system prompt at session creation time, so {@code list_datasets} is
- * intentionally NOT exposed to the LLM – calling it at runtime is unnecessary and wastes tokens.
+ * <p>Only {@code query_dataset} is registered as an agent tool. The dataset catalogue is pre-loaded
+ * into the system prompt at session creation time, so {@code list_datasets} is intentionally NOT
+ * exposed to the LLM – calling it at runtime is unnecessary and wastes tokens.
+ *
+ * <p>All query results are cached in the database for troubleshooting.
  */
 public class DataAnalysisTool {
 
     private static final Logger log = LoggerFactory.getLogger(DataAnalysisTool.class);
 
     private final DataApiClient dataApiClient;
+    private final String sessionId;
+    private final String userName;
+    private final QueryResultCacheService cacheService;
 
-    public DataAnalysisTool(DataApiClient dataApiClient) {
+    public DataAnalysisTool(
+            DataApiClient dataApiClient,
+            String sessionId,
+            String userName,
+            QueryResultCacheService cacheService) {
         this.dataApiClient = dataApiClient;
+        this.sessionId = sessionId;
+        this.userName = userName;
+        this.cacheService = cacheService;
     }
 
     /**
-     * List all available datasets — used internally for session initialisation only.
-     * NOT annotated with {@code @Tool}: invisible to the LLM, cannot be called at runtime.
+     * List all available datasets — used internally for session initialisation only. NOT annotated
+     * with {@code @Tool}: invisible to the LLM, cannot be called at runtime.
      *
      * @return a formatted list of dataset names and descriptions
      */
@@ -63,57 +76,89 @@ public class DataAnalysisTool {
     }
 
     /**
-     * Query a specific dataset using a natural-language question.
-     * Use the dataset ID obtained from list_datasets.
+     * Query a specific dataset using a natural-language question. Use the dataset ID obtained from
+     * list_datasets.
      *
      * @param datasetId the ID of the dataset to query (obtained from list_datasets)
-     * @param question  the specific question or analysis request for this dataset
+     * @param question the specific question or analysis request for this dataset
      * @return the query result data as a JSON string, or an error message if not found
      */
     @Tool(
             name = "query_dataset",
             description =
                     "Query a specific dataset by dataset Name and a question. The result contains"
-                            + " the data for analysis. If the result is empty or null, it means"
-                            + " no matching data was found. Analyze the result to determine"
-                            + " whether it satisfies the user's requirement, and decide if"
-                            + " further queries are needed.")
+                        + " the data for analysis. If the result is empty or null, it means no"
+                        + " matching data was found. Analyze the result to determine whether it"
+                        + " satisfies the user's requirement, and decide if further queries are"
+                        + " needed. **IMPORTANT**: Before calling this tool, traverse ALL"
+                        + " tool_result in the conversation history (not just the most recent one)"
+                        + " to see if existing data can be reused. Skip results showing '[历史数据已过期]'"
+                        + " or '[数据无效或为空]'.")
     public Mono<String> queryDataset(
             @ToolParam(
-                            name = "dataset_id",
+                            name = "dataset_name",
                             description =
                                     "The Name of the dataset to query. Available dataset names are"
                                             + " listed in the system prompt.")
-                    String datasetId,
+                    String dataSetName,
             @ToolParam(
                             name = "question",
                             description =
                                     "The specific question or analysis request to query from this"
                                             + " dataset")
                     String question) {
-        log.info("[query_dataset] datasetId={}, question={}", datasetId, question);
+        log.info("[query_dataset] dataset_name={}, question={}", dataSetName, question);
         return dataApiClient
-                .queryDataset(datasetId, question)
+                .queryDataset(dataSetName, question)
                 .map(this::stripMetadata)
-                .doOnNext(result -> log.debug("[query_dataset] Result length={}", result.length()))
+                .doOnNext(
+                        result -> {
+                            log.debug("[query_dataset] Result length={}", result.length());
+                            // Cache all query results for troubleshooting
+                            cacheQueryResult(dataSetName, question, result);
+                        })
                 .onErrorResume(
                         e -> {
-                            log.error("[query_dataset] Error querying dataset={}", datasetId, e);
-                            return Mono.just("Error querying dataset: " + e.getMessage());
+                            log.error("[query_dataset] Error querying dataset={}", dataSetName, e);
+                            String errorMsg = "Error querying dataset: " + e.getMessage();
+                            // Cache error result for troubleshooting
+                            cacheQueryResult(dataSetName, question, errorMsg);
+                            return Mono.just(errorMsg);
                         });
+    }
+
+    /**
+     * Cache the query result for troubleshooting.
+     * Stores all results including empty results and errors.
+     */
+    private void cacheQueryResult(String datasetId, String question, String result) {
+        if (cacheService == null || sessionId == null) {
+            log.debug("[query_dataset] Cache service not available, skipping cache");
+            return;
+        }
+        try {
+            cacheService.storeQueryResult(sessionId, datasetId, question, result, userName);
+            log.info(
+                    "[query_dataset] Cached result for session={}, dataset={}, user={}",
+                    sessionId,
+                    datasetId,
+                    userName);
+        } catch (Exception e) {
+            log.warn("[query_dataset] Failed to cache query result", e);
+        }
     }
 
     /**
      * Strip metadata-only fields from the query result to reduce token usage.
      *
-     * <p>When the upstream service returns a JSON object containing a {@code "fields"} key
-     * (column schema information) alongside the actual {@code "result"} data, the fields
-     * declaration is redundant for the LLM – the data rows already carry that information.
-     * This method removes {@code "fields"} from the top-level JSON object so only the
-     * raw data rows are forwarded to the model.
+     * <p>When the upstream service returns a JSON object containing a {@code "fields"} key (column
+     * schema information) alongside the actual {@code "result"} data, the fields declaration is
+     * redundant for the LLM – the data rows already carry that information. This method removes
+     * {@code "fields"} from the top-level JSON object so only the raw data rows are forwarded to
+     * the model.
      *
-     * <p>If the result is not valid JSON or does not contain {@code "fields"}, it is
-     * returned unchanged.
+     * <p>If the result is not valid JSON or does not contain {@code "fields"}, it is returned
+     * unchanged.
      */
     private String stripMetadata(String result) {
         if (result == null || result.isBlank()) {
