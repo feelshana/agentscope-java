@@ -925,7 +925,8 @@
             position: relative;
             overflow: hidden;
             /* 隔离重绘范围，防止移动端流式输出时整个气泡闪烁 */
-            contain: layout style;
+            /* layout paint: 隔离重绘(paint)，比 layout style 多一层绘制层隔离，移动端 WebView 效果更好 */
+            contain: layout paint;
             will-change: contents;
             -webkit-transform: translateZ(0);
             transform: translateZ(0);
@@ -1879,6 +1880,11 @@
             clearQueryWaitCard();
             // 清除图表等待提示卡的计时器（finalizeMessage 会移除 DOM，这里只需停计时器）
             if (window._chartWaitTimer) { clearInterval(window._chartWaitTimer); window._chartWaitTimer = null; }
+            // 取消尚未执行的滚动 rAF
+            if (_scrollRafId) { cancelAnimationFrame(_scrollRafId); _scrollRafId = null; }
+            // 重置流式渲染状态变量
+            _streamLastStableLen = 0;
+            _streamLastTableCount = 0;
             removeTyping(typingEl);
             if (assistantEl) finalizeMessage(assistantEl, assistantText);
             // If LLM answered directly (no plan was ever pushed), clear pending state
@@ -1891,6 +1897,13 @@
         // ── 增量渲染策略：避免每次 chunk 全量 innerHTML 替换导致移动端回流闪烁 ──
         // 关键数据：上一次已稳定渲染的 Markdown 长度，只有超过该长度才触发 DOM 更新
         let _streamLastStableLen = 0;
+        // 表格冻结：记录上一次渲染的表格数量，流式期间表格还在增长时冻结 DOM，避免滚动条闪现/消失导致 reflow
+        let _streamLastTableCount = 0;
+        // 滚动 rAF 节流标志：每帧最多触发一次滚动，防止高频 scrollTop 操作加重移动端图层合成开销
+        let _scrollRafId = null;
+        // 节流计时器：防止 reportClosed 时节流 timer 再次展示旧内容
+        let _streamPendingStable = '';
+        let _streamThrottleTimer = null;
 
         function renderReportStream(rawContent) {
             const content = assistantEl.querySelector('.message-content');
@@ -1952,22 +1965,39 @@
                 if (stable.length > _streamLastStableLen) {
                     _streamLastStableLen = stable.length;
                     const stableHtml = renderMarkdown(stable);
-                    // 用一个"稳定区"子节点，只更新它而非整个 reportBlock
-                    let stableNode = reportBlock.querySelector('#reportStableZone');
-                    if (!stableNode) {
-                        stableNode = document.createElement('div');
-                        stableNode.id = 'reportStableZone';
-                        // contain:strict 让此区域变成独立绘制层，innerHTML 更新不影响外部气泡
-                        // contain:layout paint 隔离重绘但不脱离文档流尺寸计算（不加 size，避免气泡高度折叠为0）
-                        stableNode.style.cssText = 'contain:layout paint;will-change:contents;-webkit-transform:translateZ(0);transform:translateZ(0);';
-                        // 清空旧内容，保留 pending pre（若有）
-                        const oldPre = reportBlock.querySelector('#streamingTablePending');
-                        reportBlock.innerHTML = '';
-                        reportBlock.appendChild(stableNode);
-                        if (oldPre) reportBlock.appendChild(oldPre);
+                
+                    // ── 表格冻结机制：计算本次 stableHtml 里的表格数量 ──
+                    // 如果表格数比上次多（表格还在流式增长），则跳过本次 innerHTML 更新。
+                    // 原因：表格行数增加时宽度就会变，导致滚动条闪现／消失 → reflow → 闪烁。
+                    // 等到表格行数稳定（不再增加）后才做一次性渲染，大幅减少闪烁次数。
+                    const curTableCount = (stableHtml.match(/<table/g) || []).length;
+                    const tableGrowing = curTableCount > _streamLastTableCount;
+                    _streamLastTableCount = curTableCount;
+                
+                    if (!tableGrowing) {
+                        // 表格已稳定（数量未增加）→ 可以安全更新 DOM
+                        let stableNode = reportBlock.querySelector('#reportStableZone');
+                        if (!stableNode) {
+                            stableNode = document.createElement('div');
+                            stableNode.id = 'reportStableZone';
+                            // contain:layout paint 隔离重绘但不脱离文档流尺寸计算（不加 size，避免气泡高度塔陷为0）
+                            stableNode.style.cssText = 'contain:layout paint;will-change:contents;-webkit-transform:translateZ(0);transform:translateZ(0);';
+                            const oldPre = reportBlock.querySelector('#streamingTablePending');
+                            reportBlock.innerHTML = '';
+                            reportBlock.appendChild(stableNode);
+                            if (oldPre) reportBlock.appendChild(oldPre);
+                        }
+                        stableNode.innerHTML = stableHtml;
+                        if (typeof wrapTables !== 'undefined') {
+                            wrapTables(stableNode);
+                            // ── 流式期间给所有 table-wrapper 加 overflow-x:hidden ──
+                            // 锁定滚动条隐藏，彻底消除宽表格导致的滚动条闪现/消失 reflow
+                            // doFinalize 里会恢复为 overflow-x:auto
+                            stableNode.querySelectorAll('.table-wrapper').forEach(tw => {
+                                tw.style.overflowX = 'hidden';
+                            });
+                        }
                     }
-                    stableNode.innerHTML = stableHtml;
-                    if (typeof wrapTables !== 'undefined') wrapTables(stableNode);
                 }
 
                 // ── 更新/移除 pending 占位 pre（不影响稳定区） ──
@@ -1998,10 +2028,12 @@
                 }
                 rawEl.textContent = rawContent;
             }
-            // Auto-scroll to bottom only if user hasn't scrolled up
-            if (!streamingUserScrolledUp) {
-                const chatMessages = document.getElementById('chatMessages');
-                chatMessages.scrollTop = chatMessages.scrollHeight;
+            // ── rAF 节流滚动：每帧最多触发一次，防止高频 scrollTop 操作加重移动端 WebView 图层合成开销 ──
+            if (!streamingUserScrolledUp && !_scrollRafId) {
+                _scrollRafId = requestAnimationFrame(() => {
+                    _scrollRafId = null;
+                    document.getElementById('chatMessages').scrollTop = 99999;
+                });
             }
         }
 
@@ -2145,7 +2177,7 @@
                                             const el = document.getElementById('chartWaitingText');
                                             if (!el) { clearInterval(window._chartWaitTimer); return; }
                                             _wDots = (_wDots + 1) % 4;
-                                            el.innerHTML = '&#x1F4CA; 正在绘制图表' + '．'.repeat(_wDots);
+                                            el.innerHTML = '&#x1F4CA; 正在绘制图表，请稍候' + '．'.repeat(_wDots);
                                         }, 400);
                                         if (!streamingUserScrolledUp) {
                                             requestAnimationFrame(() => {
@@ -2190,7 +2222,7 @@
                                         '<div style="width:16px;height:16px;flex-shrink:0;border:2.5px solid rgba(79,110,247,0.2);'
                                         + 'border-top-color:#4f6ef7;border-radius:50%;'
                                         + 'animation:spinLoader 0.7s linear infinite;"></div>'
-                                        + `<span id="chartWaitingText" style="font-weight:500;">&#x1F4CA; 正在绘制图表${received > 0 ? ' (' + kb + 'KB)' : '，请稍候…'}</span>`;
+                                        + '<span id="chartWaitingText" style="font-weight:500;">&#x1F4CA; 正在绘制图表，请稍候…</span>';
                                     _rb.appendChild(waitCard);
                                     if (!window._chartWaitTimer) {
                                         let _wDots = 0;
@@ -2198,7 +2230,7 @@
                                             const el2 = document.getElementById('chartWaitingText');
                                             if (!el2) { clearInterval(window._chartWaitTimer); return; }
                                             const kb2 = chartInner ? (chartInner[1].replace(/<\/chart>[\s\S]*/i, '').length / 1024).toFixed(1) : '0.0';
-                                            el2.innerHTML = `&#x1F4CA; 正在绘制图表 (${kb2}KB)`;
+                                            el2.innerHTML = '&#x1F4CA; 正在绘制图表，请稍候…';
                                         }, 400);
                                     }
                                     if (!streamingUserScrolledUp) {
@@ -2211,7 +2243,7 @@
                             // 更新已有的等待卡文字
                             const waitTxt = document.getElementById('chartWaitingText');
                             if (waitTxt && received > 0) {
-                                waitTxt.innerHTML = `&#x1F4CA; 正在绘制图表 (${kb}KB)`;
+                                waitTxt.innerHTML = '&#x1F4CA; 正在绘制图表，请稍候…';
                             }
                         }
                     }
@@ -2423,6 +2455,10 @@
                 content.appendChild(reportBlock);
                 // 把 report 块内所有 table 包上 table-wrapper，解决列宽不一致
                 if (typeof wrapTables !== 'undefined') wrapTables(reportBlock);
+                // 流式期间 overflow-x 被锁定为 hidden，此处恢复为 auto，让宽表格可以左右滚动
+                reportBlock.querySelectorAll('.table-wrapper').forEach(tw => {
+                    tw.style.overflowX = 'auto';
+                });
                 
                 // 为下载按钮添加事件监听
                 reportBlock.querySelectorAll('.report-download-btn').forEach(btn => {
