@@ -316,7 +316,8 @@ public class ContextTrimHook implements Hook {
      * {@value #QUERY_DATASET_TOOL}, the limit is {@value #QUERY_DATASET_RESULT_MAX_CHARS};
      * otherwise {@value #DEFAULT_TOOL_RESULT_MAX_CHARS} is applied.
      */
-    private ToolResultBlock truncateToolResultBlock(ToolResultBlock trb, boolean useFullQueryLimit) {
+    private ToolResultBlock truncateToolResultBlock(
+            ToolResultBlock trb, boolean useFullQueryLimit) {
         boolean isQueryDataset = QUERY_DATASET_TOOL.equals(trb.getName());
         int maxChars =
                 (useFullQueryLimit && isQueryDataset)
@@ -332,10 +333,7 @@ public class ContextTrimHook implements Hook {
                 String text = tb.getText();
                 if (text != null && text.length() > maxChars) {
                     String truncated =
-                            text.substring(0, maxChars)
-                                    + "...[已截断，共"
-                                    + text.length()
-                                    + "字符]";
+                            text.substring(0, maxChars) + "...[已截断，共" + text.length() + "字符]";
                     newOutput.add(TextBlock.builder().text(truncated).build());
                     modified = true;
                 } else {

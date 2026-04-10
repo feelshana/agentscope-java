@@ -476,8 +476,7 @@ public class DataApiClient {
                             // carries column names only once.
                             if (queryResults instanceof List<?> rows) {
                                 String table = toCompactTable(rows);
-                                log.debug(
-                                        "[queryByNlp] compact table length={}", table.length());
+                                log.debug("[queryByNlp] compact table length={}", table.length());
                                 return table;
                             }
                             // Unexpected type – fall back to JSON
