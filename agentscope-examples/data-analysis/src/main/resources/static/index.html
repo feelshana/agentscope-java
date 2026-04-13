@@ -1497,6 +1497,13 @@
     let confirmExecuted = false; // true only when user clicks 执行（not 不执行）; gates drawer auto-expand
     let streamingUserScrolledUp = false; // true when user scrolls up during streaming, disables auto-scroll
 
+    // ─── Streaming state for visibility handling ───
+    // When app goes to background on mobile, SSE connection may be interrupted.
+    // We track the current EventSource and streaming state to handle recovery.
+    let currentEventSource = null;
+    let streamingContext = null;  // { messageDiv, assistantText, finalized, ... }
+    let visibilityHiddenTime = null;  // timestamp when page became hidden
+
     // ─── User identity from URL param ───
     const urlParams = new URLSearchParams(window.location.search);
     const currentUserName = urlParams.get('account') || urlParams.get('userName') || '';
@@ -1533,6 +1540,53 @@
         fetchCurrentPlan();
         loadSuggestedQuestions();
         syncDrawerPadding();
+    });
+
+    // ─── Visibility change handler for mobile SSE recovery ───
+    // When app switches to background on mobile, SSE connection may be interrupted.
+    // We delay the error handling to give the connection a chance to recover when app returns.
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+            // Page going to background - record timestamp
+            visibilityHiddenTime = Date.now();
+            console.log('[Visibility] Page hidden at', visibilityHiddenTime);
+        } else if (document.visibilityState === 'visible') {
+            // Page coming back to foreground
+            const hiddenDuration = visibilityHiddenTime ? Date.now() - visibilityHiddenTime : 0;
+            console.log('[Visibility] Page visible again, was hidden for', hiddenDuration, 'ms');
+            visibilityHiddenTime = null;
+
+            // If we have an active streaming connection that may have been interrupted,
+            // check its state and show a notification if needed
+            if (currentEventSource && streamingContext && !streamingContext.finalized) {
+                const readyState = currentEventSource.readyState;
+                console.log('[Visibility] EventSource readyState:', readyState,
+                    '(0=CONNECTING, 1=OPEN, 2=CLOSED)');
+
+                if (readyState === EventSource.CLOSED) {
+                    // Connection was closed while in background
+                    // Show a notification to user that they may need to retry
+                    if (streamingContext.assistantEl) {
+                        const content = streamingContext.assistantEl.querySelector('.message-content');
+                        if (content && !content.querySelector('#visibilityNotice')) {
+                            const notice = document.createElement('div');
+                            notice.id = 'visibilityNotice';
+                            notice.style.cssText =
+                                'margin-top:12px;padding:10px 14px;background:#fff3cd;border:1px solid #ffc107;'
+                                + 'border-radius:8px;font-size:0.82rem;color:#856404;';
+                            notice.innerHTML =
+                                '⚠️ 页面曾在后台运行，连接可能已中断。如结果不完整，请重新提问。';
+                            content.appendChild(notice);
+                        }
+                    }
+                    // Finalize the current state
+                    if (streamingContext.doFinalize) {
+                        streamingContext.doFinalize();
+                    }
+                }
+                // If CONNECTING or OPEN, the connection survived - continue normally
+            }
+        }
     });
 
     /* ═══════════════════════ History Sidebar ═══════════════════════ */
@@ -1805,6 +1859,8 @@
         const typingEl = appendTyping();
         const url = BASE_PATH + '/api/chat?message=' + encodeURIComponent(fullMessage) + '&sessionId=' + encodeURIComponent(currentSessionId) + '&account=' + encodeURIComponent(currentUserName);
         const eventSource = new EventSource(url);
+        // Track current EventSource for visibility handling
+        currentEventSource = eventSource;
         let assistantText = '';
         let assistantEl = null;
         let finalized = false;
@@ -1813,6 +1869,16 @@
         // Set to true after query_dataset completes so normal-text streaming shows a
         // "generating chart…" pre-indicator before the <chart> tag actually arrives.
         let pendingChartLoading = false;
+
+        // Initialize streaming context for visibility handling
+        // This object is updated throughout the streaming process
+        streamingContext = {
+            eventSource: eventSource,
+            assistantEl: null,
+            assistantText: '',
+            finalized: false,
+            doFinalize: null  // will be set after doFinalize is defined
+        };
 
         // ── Query-waiting indicator ──────────────────────────────────────────────────
         // When the LLM finishes emitting "Now I will query…" text and falls silent
@@ -1875,6 +1941,13 @@
         function doFinalize() {
             if (finalized) return;
             finalized = true;
+            // Clean up global streaming state
+            if (currentEventSource === eventSource) {
+                currentEventSource = null;
+            }
+            if (streamingContext && streamingContext.eventSource === eventSource) {
+                streamingContext.finalized = true;
+            }
             chatMsgsEl.removeEventListener('scroll', onUserScroll);
             // Clean up query-wait timers to prevent memory leaks
             clearQueryWaitCard();
@@ -1892,6 +1965,9 @@
             clearPlanPendingIfNeeded();
             setProcessing(false);
         }
+
+        // Set doFinalize reference in streamingContext for visibility handler
+        streamingContext.doFinalize = doFinalize;
 
         // Sanitise and render report HTML incrementally (same rules as finalizeMessage)
         // ── 增量渲染策略：避免每次 chunk 全量 innerHTML 替换导致移动端回流闪烁 ──
@@ -2041,6 +2117,12 @@
             const chunk = event.data;
             if (chunk === '[STOPPED]') { eventSource.close(); doFinalize(); return; }
 
+            // Update streaming context for visibility handler
+            if (streamingContext) {
+                streamingContext.assistantEl = assistantEl;
+                streamingContext.assistantText = assistantText;
+            }
+
             // ── Tool progress markers: update status line in bubble, never accumulate in text ──
             if (/^\[TOOL:[^\]]+\]$/.test(chunk)) {
                 const toolName = chunk.slice(6, -1);
@@ -2054,6 +2136,8 @@
                 if (toolName === 'query_dataset') pendingChartLoading = true;
                 // Ensure bubble exists
                 if (!assistantEl) { removeTyping(typingEl); assistantEl = appendMessage('assistant', ''); }
+                // Update streaming context
+                if (streamingContext) streamingContext.assistantEl = assistantEl;
                 const content = assistantEl.querySelector('.message-content');
                 let statusEl = content.querySelector('#toolStatusLine');
                 if (!statusEl) {
@@ -2069,6 +2153,11 @@
 
             assistantText += chunk;
 
+            // Update streaming context for visibility handler
+            if (streamingContext) {
+                streamingContext.assistantText = assistantText;
+            }
+
             // Once we see a special-block opening tag, switch to streaming report / loading
             if (!inSpecialBlock && /<report>|<chart>/i.test(assistantText)) {
                 inSpecialBlock = true;
@@ -2077,6 +2166,8 @@
                 inReportStream = /<report>/i.test(assistantText);
                 // Ensure we have a bubble
                 if (!assistantEl) { removeTyping(typingEl); assistantEl = appendMessage('assistant', ''); }
+                // Update streaming context
+                if (streamingContext) streamingContext.assistantEl = assistantEl;
                 const beforeTag = assistantText
                     .replace(/<report>[\s\S]*/i, '')
                     .replace(/<chart>[\s\S]*/i, '')
@@ -2253,6 +2344,8 @@
 
             // Normal streaming: show plain text
             if (!assistantEl) { removeTyping(typingEl); assistantEl = appendMessage('assistant', ''); }
+            // Update streaming context
+            if (streamingContext) streamingContext.assistantEl = assistantEl;
             // Remove tool status line once real text arrives
             const statusLineEl = assistantEl.querySelector('#toolStatusLine');
             if (statusLineEl) statusLineEl.remove();
@@ -2302,6 +2395,16 @@
         };
 
         eventSource.onerror = () => {
+            // When app is in background on mobile, SSE connection may be interrupted.
+            // If page is hidden, don't close immediately - let visibility handler deal with it.
+            if (document.visibilityState === 'hidden') {
+                console.log('[SSE] onerror while page hidden - deferring close');
+                // The visibilitychange handler will check the connection state
+                // when the page becomes visible again and handle recovery.
+                return;
+            }
+            // Page is visible - this is a real error
+            console.log('[SSE] onerror while page visible - closing connection');
             eventSource.close();
             if (!assistantEl && assistantText === '') {
                 removeTyping(typingEl);
