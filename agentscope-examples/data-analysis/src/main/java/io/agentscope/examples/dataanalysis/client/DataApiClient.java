@@ -287,18 +287,14 @@ public class DataApiClient {
                                 }
                             }
                             String result = sb.toString();
-                            log.debug(
-                                    "[fetchDatasetDetail] Result length={}", result.length());
+                            log.debug("[fetchDatasetDetail] Result length={}", result.length());
                             return result.isEmpty()
                                     ? "No detail found for agentIds=" + agentIds
                                     : result;
                         })
                 .onErrorResume(
                         e -> {
-                            log.error(
-                                    "[fetchDatasetDetail] Failed for agentIds={}",
-                                    agentIds,
-                                    e);
+                            log.error("[fetchDatasetDetail] Failed for agentIds={}", agentIds, e);
                             return Mono.just("Failed to fetch dataset detail: " + e.getMessage());
                         });
     }
