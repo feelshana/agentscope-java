@@ -117,7 +117,8 @@ public class DataAnalysisTool {
                                     String agentId = dataApiClient.getAgentId(id);
                                     if (agentId == null) {
                                         log.warn(
-                                                "[get_dataset_detail] Unknown datasetId={}, skipping",
+                                                "[get_dataset_detail] Unknown datasetId={},"
+                                                        + " skipping",
                                                 id);
                                     }
                                     return agentId;
@@ -134,15 +135,11 @@ public class DataAnalysisTool {
                 .fetchDatasetDetail(agentIds)
                 .doOnNext(
                         result ->
-                                log.debug(
-                                        "[get_dataset_detail] Result length={}",
-                                        result.length()))
+                                log.debug("[get_dataset_detail] Result length={}", result.length()))
                 .onErrorResume(
                         e -> {
                             log.error(
-                                    "[get_dataset_detail] Error for datasetIds={}",
-                                    datasetIds,
-                                    e);
+                                    "[get_dataset_detail] Error for datasetIds={}", datasetIds, e);
                             return Mono.just("Error fetching dataset detail: " + e.getMessage());
                         });
     }
@@ -151,7 +148,7 @@ public class DataAnalysisTool {
      * Query a specific dataset using a natural-language question. Use the dataset ID obtained from
      * list_datasets.
      *
-     * @param datasetId the ID of the dataset to query (obtained from list_datasets)
+     * @param dataSetName the ID of the dataset to query (obtained from list_datasets)
      * @param question the specific question or analysis request for this dataset
      * @return the query result data as a JSON string, or an error message if not found
      */
