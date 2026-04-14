@@ -62,4 +62,10 @@ public interface ChatSessionMapper extends BaseMapper<ChatSession> {
             "UPDATE chat_session SET is_summarized = 1, summary_text = #{summaryText},"
                     + " updated_at = NOW(3) WHERE id = #{id}")
     int updateSummary(@Param("id") String id, @Param("summaryText") String summaryText);
+
+    /**
+     * Touch session updated_at timestamp.
+     */
+    @Update("UPDATE chat_session SET updated_at = NOW(3) WHERE id = #{id}")
+    int touchUpdatedAt(@Param("id") String id);
 }

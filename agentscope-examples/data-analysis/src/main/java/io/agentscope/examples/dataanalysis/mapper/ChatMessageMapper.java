@@ -22,6 +22,7 @@ import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 /**
  * MyBatis-Plus Mapper for ChatMessage.
@@ -56,4 +57,16 @@ public interface ChatMessageMapper extends BaseMapper<ChatMessage> {
      */
     @Delete("DELETE FROM chat_message WHERE session_id = #{sessionId}")
     int deleteBySessionId(@Param("sessionId") String sessionId);
+
+    /**
+     * Find latest message in a session.
+     */
+    @Select("SELECT * FROM chat_message WHERE session_id = #{sessionId} ORDER BY id DESC LIMIT 1")
+    ChatMessage findLatestBySessionId(@Param("sessionId") String sessionId);
+
+    /**
+     * Update message content by id (for streaming incremental persistence).
+     */
+    @Update("UPDATE chat_message SET content = #{content} WHERE id = #{id}")
+    int updateContentById(@Param("id") Long id, @Param("content") String content);
 }

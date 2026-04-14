@@ -215,6 +215,35 @@ public class ChatSessionService {
         ChatMessage msg = new ChatMessage(sessionId, "assistant", textOnly);
         messageMapper.insert(msg);
         incrementMessageCount(sessionId);
+        sessionMapper.touchUpdatedAt(sessionId);
+    }
+
+    /**
+     * Create a draft assistant message row at the beginning of streaming.
+     * The row will be updated incrementally while the model is generating.
+     *
+     * @return inserted message id
+     */
+    @Transactional
+    public Long beginAssistantDraft(String sessionId) {
+        ChatMessage msg = new ChatMessage(sessionId, "assistant", "");
+        messageMapper.insert(msg);
+        incrementMessageCount(sessionId);
+        sessionMapper.touchUpdatedAt(sessionId);
+        return msg.getId();
+    }
+
+    /**
+     * Incrementally update a draft assistant message by id.
+     */
+    @Transactional
+    public void updateAssistantDraft(Long messageId, String content, String sessionId) {
+        if (messageId == null) {
+            return;
+        }
+        String textOnly = stripDisplayBlocks(content);
+        messageMapper.updateContentById(messageId, textOnly);
+        sessionMapper.touchUpdatedAt(sessionId);
     }
 
     /**
@@ -225,8 +254,10 @@ public class ChatSessionService {
      */
     private static String stripDisplayBlocks(String content) {
         if (content == null) return "";
-        // Remove <chart>...</chart> blocks only (DOTALL so newlines are matched)
+        // Remove complete <chart>...</chart> blocks (DOTALL so newlines are matched)
         String result = content.replaceAll("(?si)<chart[^>]*>.*?</chart>", "");
+        // If chart tag has started but not closed yet (streaming middle state), cut that tail.
+        result = result.replaceAll("(?si)<chart[^>]*>.*$", "");
         // Collapse 3+ consecutive newlines into at most 2, then strip leading/trailing whitespace
         result = result.replaceAll("\\n{3,}", "\n\n");
         return result.strip();

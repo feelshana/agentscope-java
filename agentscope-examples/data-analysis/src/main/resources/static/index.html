@@ -1501,8 +1501,10 @@
     // When app goes to background on mobile, SSE connection may be interrupted.
     // We track the current EventSource and streaming state to handle recovery.
     let currentEventSource = null;
+    let currentResumeEventSource = null;
     let streamingContext = null;  // { messageDiv, assistantText, finalized, ... }
     let visibilityHiddenTime = null;  // timestamp when page became hidden
+
 
     // ─── User identity from URL param ───
     const urlParams = new URLSearchParams(window.location.search);
@@ -1564,26 +1566,14 @@
                     '(0=CONNECTING, 1=OPEN, 2=CLOSED)');
 
                 if (readyState === EventSource.CLOSED) {
-                    // Connection was closed while in background
-                    // Show a notification to user that they may need to retry
-                    if (streamingContext.assistantEl) {
-                        const content = streamingContext.assistantEl.querySelector('.message-content');
-                        if (content && !content.querySelector('#visibilityNotice')) {
-                            const notice = document.createElement('div');
-                            notice.id = 'visibilityNotice';
-                            notice.style.cssText =
-                                'margin-top:12px;padding:10px 14px;background:#fff3cd;border:1px solid #ffc107;'
-                                + 'border-radius:8px;font-size:0.82rem;color:#856404;';
-                            notice.innerHTML =
-                                '⚠️ 页面曾在后台运行，连接可能已中断。如结果不完整，请重新提问。';
-                            content.appendChild(notice);
-                        }
-                    }
-                    // Finalize the current state
+                    // Connection closed while in background: finalize current UI state,
+                    // then try to resume from backend active stream.
                     if (streamingContext.doFinalize) {
                         streamingContext.doFinalize();
                     }
+                    tryResumeSessionStream(currentSessionId);
                 }
+
                 // If CONNECTING or OPEN, the connection survived - continue normally
             }
         }
@@ -1663,14 +1653,68 @@
                 // 历史消息渲染完后初始化所有ECharts图表
                 requestAnimationFrame(() => initAllCharts());
             }
+            // 尝试恢复该会话正在进行中的后端流式输出
+            tryResumeSessionStream(sessionId);
         } catch(e) {
             appendMessage('assistant', '历史对话加载失败，可直接继续提问');
         }
     }
 
+    // When user re-enters a session (especially in mobile WebView),
+    // re-subscribe to backend active stream and keep appending output.
+    function tryResumeSessionStream(sessionId) {
+        if (!sessionId) return;
+        if (currentResumeEventSource) {
+            currentResumeEventSource.close();
+            currentResumeEventSource = null;
+        }
+
+        const url = BASE_PATH + '/api/chat/resume?sessionId=' + encodeURIComponent(sessionId);
+        const es = new EventSource(url);
+        currentResumeEventSource = es;
+
+        let resumedText = '';
+        let resumedAssistantEl = null;
+        let gotAnyChunk = false;
+
+        es.onmessage = (event) => {
+            const chunk = event.data;
+            if (chunk === '[STOPPED]') return;
+            if (/^\[TOOL:[^\]]+\]$/.test(chunk)) return;
+
+            gotAnyChunk = true;
+            resumedText += chunk;
+
+            if (!resumedAssistantEl) {
+                const messagesEl = document.getElementById('chatMessages');
+                const assistantNodes = messagesEl.querySelectorAll('.message.assistant');
+                resumedAssistantEl = assistantNodes.length
+                    ? assistantNodes[assistantNodes.length - 1]
+                    : appendMessage('assistant', '');
+            }
+            updateLastMessage(resumedAssistantEl, resumedText);
+        };
+
+        es.onerror = () => {
+            es.close();
+            if (currentResumeEventSource === es) {
+                currentResumeEventSource = null;
+            }
+            if (gotAnyChunk && resumedAssistantEl) {
+                finalizeMessage(resumedAssistantEl, resumedText);
+            }
+        };
+    }
+
     function startNewSession() {
+
+        if (currentResumeEventSource) {
+            currentResumeEventSource.close();
+            currentResumeEventSource = null;
+        }
         currentSessionId = generateUUID();
         clearChatUI();
+
         // 强制清空任务计划面板内容
         const emptyEl   = document.getElementById('emptyPlan');
         const contentEl = document.getElementById('planContent');
@@ -1844,7 +1888,13 @@
         const message = input.value.trim();
         if (!message || isProcessing) return;
 
+        if (currentResumeEventSource) {
+            currentResumeEventSource.close();
+            currentResumeEventSource = null;
+        }
+
         let fullMessage = message;
+
 
         appendMessage('user', message);
         input.value = '';
@@ -1857,8 +1907,13 @@
         planPending = true;
 
         const typingEl = appendTyping();
-        const url = BASE_PATH + '/api/chat?message=' + encodeURIComponent(fullMessage) + '&sessionId=' + encodeURIComponent(currentSessionId) + '&account=' + encodeURIComponent(currentUserName);
+        const requestId = generateUUID();
+        const url = BASE_PATH + '/api/chat?message=' + encodeURIComponent(fullMessage)
+            + '&sessionId=' + encodeURIComponent(currentSessionId)
+            + '&requestId=' + encodeURIComponent(requestId)
+            + '&account=' + encodeURIComponent(currentUserName);
         const eventSource = new EventSource(url);
+
         // Track current EventSource for visibility handling
         currentEventSource = eventSource;
         let assistantText = '';
@@ -2398,11 +2453,13 @@
             // When app is in background on mobile, SSE connection may be interrupted.
             // If page is hidden, don't close immediately - let visibility handler deal with it.
             if (document.visibilityState === 'hidden') {
-                console.log('[SSE] onerror while page hidden - deferring close');
-                // The visibilitychange handler will check the connection state
-                // when the page becomes visible again and handle recovery.
+                console.log('[SSE] onerror while page hidden - close source and wait resume');
+                // Important: EventSource may auto-reconnect and re-hit /api/chat,
+                // causing duplicate user turns. Close explicitly and recover via /api/chat/resume.
+                eventSource.close();
                 return;
             }
+
             // Page is visible - this is a real error
             console.log('[SSE] onerror while page visible - closing connection');
             eventSource.close();
