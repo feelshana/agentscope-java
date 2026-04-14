@@ -1,0 +1,56 @@
+# Copyright 2024-2026 the original author or authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Active profile: dev（本地开发）or prod（线上生产）
+spring:
+  profiles:
+    active: dev
+  codec:
+    max-in-memory-size: 10MB
+  flyway:
+    enabled: false
+  web:
+    resources:
+      cache:
+        period: 0
+        cachecontrol:
+          no-cache: true
+          no-store: true
+
+server:
+  port: 7082
+
+# MyBatis-Plus configuration
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+  global-config:
+    db-config:
+      id-type: assign_uuid
+
+# Chat session memory settings
+chat:
+  session:
+    max-history-tokens: 8000
+    keep-recent-messages: 6
+
+logging:
+  level:
+    io.agentscope: INFO
+    io.agentscope.examples.chatbi: INFO
+
+agent:
+  # 当前使用的系统提示词文件名，文件须放在 resources/prompts/ 目录下
+  system-prompt-file: chatbi-system-prompt.txt
