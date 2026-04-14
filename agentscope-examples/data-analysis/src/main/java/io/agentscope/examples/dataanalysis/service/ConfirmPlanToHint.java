@@ -18,6 +18,7 @@ package io.agentscope.examples.dataanalysis.service;
 import io.agentscope.core.hook.Hook;
 import io.agentscope.core.hook.HookEvent;
 import io.agentscope.core.hook.PreReasoningEvent;
+import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.ToolResultBlock;
 import io.agentscope.core.plan.PlanNotebook;
@@ -78,11 +79,50 @@ public class ConfirmPlanToHint implements PlanToHint, Hook {
 
     /**
      * Set to true after a plan is finished with state DONE.
-     * The next call to generateHint(null, ...) will return null (suppress
-     * the "no plan" hint) so the LLM is free to generate the final report
-     * without being prompted to create a new plan immediately.
+     * Suppresses all "no plan" hints until the next genuine user message arrives,
+     * so the LLM can freely generate the final report (and call any follow-up
+     * tools like load_skill_through_path) without being pushed to create a new plan.
+     *
+     * <p>Unlike lastPlanWasAbandoned, this flag is NOT consumed on first use.
+     * It is reset only when a new user message is detected in onEvent(), ensuring
+     * that multi-iteration tool calls (e.g. load_skill_through_path after finish_plan)
+     * are all covered by the suppression window.
      */
     private volatile boolean lastPlanWasDone = false;
+
+    /**
+     * Tracks the last user message content seen, used to detect a new user turn
+     * and reset the lastPlanWasDone suppression window.
+     */
+    private volatile String lastSeenUserContent = null;
+
+    /**
+     * Set to true when the most recent tool_result came from a skill auxiliary tool
+     * (e.g. load_skill_through_path). In that case, the plan state has not changed,
+     * so we suppress the redundant plan hint for this reasoning round.
+     * Reset to false after generateHint() consumes it once.
+     */
+    private volatile boolean lastToolWasSkillLoad = false;
+
+    /**
+     * Prefix that identifies built-in skill tools registered by SkillBox.
+     * Any tool whose name starts with this prefix is considered a skill auxiliary tool.
+     */
+    private static final String SKILL_TOOL_NAME = "load_skill_through_path";
+
+    /**
+     * Custom NO_PLAN hint for follow-up questions after a plan was done.
+     * Instead of aggressively pushing the LLM to create a plan, this version
+     * provides clear guidance on when to create a plan vs. respond directly.
+     */
+    private static final String FOLLOW_UP_NO_PLAN_HINT =
+            "<system-hint>For the user's query:\n"
+                + "- If it requires NEW data queries (e.g. \"analyze xxx trend\", \"compare xxx\"),"
+                + " create a plan by calling 'create_plan'.\n"
+                + "- If it only adjusts PREVIOUS results or asks for clarification (e.g. \"change"
+                + " chart to pie\", \"explain this number\", \"what does XX mean\"), respond"
+                + " directly WITHOUT creating a plan.\n"
+                + "When in doubt, prefer direct response over plan creation.</system-hint>";
 
     /**
      * Holds a reference to the last non-null Plan object seen by the change-hook.
@@ -145,13 +185,62 @@ public class ConfirmPlanToHint implements PlanToHint, Hook {
     @Override
     @SuppressWarnings("unchecked")
     public <T extends HookEvent> Mono<T> onEvent(T event) {
-        if (!hasToolResult && event instanceof PreReasoningEvent pre) {
-            boolean found =
-                    pre.getInputMessages().stream()
-                            .filter(m -> MsgRole.TOOL.equals(m.getRole()))
-                            .anyMatch(m -> !m.getContentBlocks(ToolResultBlock.class).isEmpty());
-            if (found) {
-                hasToolResult = true;
+        if (event instanceof PreReasoningEvent pre) {
+            // ── hasToolResult tracking ───────────────────────────────────────
+            if (!hasToolResult) {
+                boolean found =
+                        pre.getInputMessages().stream()
+                                .filter(m -> MsgRole.TOOL.equals(m.getRole()))
+                                .anyMatch(
+                                        m -> !m.getContentBlocks(ToolResultBlock.class).isEmpty());
+                if (found) {
+                    hasToolResult = true;
+                }
+            }
+            // ── Skill-load tool detection ────────────────────────────────────
+            // If the most recent tool_result comes from a skill auxiliary tool
+            // (e.g. load_skill_through_path), the plan state has not changed.
+            // Mark the flag so generateHint() can suppress the redundant hint
+            // for this round, regardless of which skill was loaded.
+            var msgs = pre.getInputMessages();
+            lastToolWasSkillLoad = false;
+            for (int i = msgs.size() - 1; i >= 0; i--) {
+                Msg m = msgs.get(i);
+                if (MsgRole.TOOL.equals(m.getRole())) {
+                    boolean isSkillTool =
+                            m.getContentBlocks(ToolResultBlock.class).stream()
+                                    .anyMatch(
+                                            r ->
+                                                    r.getName() != null
+                                                            && r.getName().equals(SKILL_TOOL_NAME));
+                    if (isSkillTool) {
+                        lastToolWasSkillLoad = true;
+                    }
+                    break;
+                }
+            }
+            // ── New user turn detection ──────────────────────────────────────
+            // When a new genuine user message arrives (not a system-hint injected
+            // by PlanNotebook), reset the lastPlanWasDone suppression window so
+            // the next conversation turn can get plan hints normally.
+            if (lastPlanWasDone) {
+                // Find the last user-role message in the input
+                for (int i = msgs.size() - 1; i >= 0; i--) {
+                    Msg m = msgs.get(i);
+                    if (MsgRole.USER.equals(m.getRole())) {
+                        String content = m.getContent() != null ? m.getContent().toString() : "";
+                        // A system-hint message contains <system-hint> tag; skip it
+                        if (!content.contains("<system-hint>")) {
+                            // If this user message differs from the last seen one,
+                            // it means a new user turn has started → reset the window
+                            if (!content.equals(lastSeenUserContent)) {
+                                lastSeenUserContent = content;
+                                lastPlanWasDone = false;
+                            }
+                        }
+                        break;
+                    }
+                }
             }
         }
         return Mono.just(event);
@@ -165,10 +254,19 @@ public class ConfirmPlanToHint implements PlanToHint, Hook {
 
     @Override
     public String generateHint(Plan plan, PlanNotebook planNotebook) {
+        // ── Skill-load guard ─────────────────────────────────────────────────
+        // If the last tool_result was from a skill auxiliary tool (e.g. any skill
+        // loaded via load_skill_through_path), the plan state has not changed at
+        // all — suppress the hint for this round to avoid redundant system-hints.
+        // Consume the flag immediately so subsequent rounds are unaffected.
+        if (lastToolWasSkillLoad) {
+            lastToolWasSkillLoad = false;
+            return null;
+        }
         // ── First-iteration guard ────────────────────────────────────────────
         // Suppress the "no plan" hint on the very first iteration (before any
         // tool has been called). This prevents the LLM from being prompted to
-        // create a plan before it has had a chance to call list_datasets.
+        // create a plan before it has had a chance to process the user's query.
         if (plan == null && !hasToolResult) {
             return null;
         }
@@ -180,14 +278,16 @@ public class ConfirmPlanToHint implements PlanToHint, Hook {
             lastPlanWasAbandoned = false; // consume the flag
             return null;
         }
-        // ── Done-plan guard ──────────────────────────────────────────────────
-        // If the previous plan finished normally (DONE) and there is now no
-        // active plan, suppress the "no plan" hint so the LLM can freely
-        // generate the final analysis report without being pushed to create
-        // another plan immediately.
-        if (plan == null && lastPlanWasDone) {
-            lastPlanWasDone = false; // consume the flag
-            return null;
+        // ── Has-tool-result guard ────────────────────────────────────────────
+        // If there's no plan but at least one tool has been called, the LLM
+        // is already processing the user's query (e.g. query_dataset for precise
+        // data fetching, get_dataset_detail for metadata, or a follow-up after
+        // a completed plan). Return a gentle hint instead of the aggressive
+        // NO_PLAN to let the LLM decide whether a new plan is needed.
+        // Note: lastPlanWasDone is implicitly covered here because it implies
+        // hasToolResult == true (a plan was executed before being done).
+        if (plan == null && hasToolResult) {
+            return FOLLOW_UP_NO_PLAN_HINT;
         }
         // ─────────────────────────────────────────────────────────────────────
 
