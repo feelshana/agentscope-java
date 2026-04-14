@@ -149,8 +149,20 @@ public class DataAnalysisController {
     public Flux<String> chat(
             @RequestParam String message,
             @RequestParam String sessionId,
+            @RequestParam String requestId,
             @RequestParam(defaultValue = "") String account) {
-        return agentService.chat(sessionId, message, account);
+        return agentService.chat(sessionId, message, account, requestId);
+    }
+
+    /**
+     * Resume an active chat stream for a session.
+     *
+     * <p>Used by mobile/webview recovery: when user returns to the page, frontend can re-subscribe
+     * and continue receiving chunks of the still-running backend generation.
+     */
+    @GetMapping(path = "/chat/resume", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<String> resumeChat(@RequestParam String sessionId) {
+        return agentService.resume(sessionId);
     }
 
     /**

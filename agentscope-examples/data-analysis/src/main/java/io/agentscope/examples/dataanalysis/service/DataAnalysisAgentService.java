@@ -26,6 +26,7 @@ import io.agentscope.examples.dataanalysis.client.DataApiClient;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,31 +36,35 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StreamUtils;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Sinks;
 import reactor.core.scheduler.Schedulers;
 
 /**
  * Core service that manages the data analysis ReActAgent lifecycle.
  *
  * <p>Delegates to {@link SessionAgentManager} for per-session Agent isolation.
- * Each chat invocation:
- * <ol>
- *   <li>Ensures session exists in DB.</li>
- *   <li>Gets or creates the per-session Agent (with historical context pre-loaded).</li>
- *   <li>Saves the user message to DB.</li>
- *   <li>Streams the Agent response.</li>
- *   <li>Saves the complete assistant response to DB (fire-and-forget).</li>
- *   <li>Checks if history needs summarization (async).</li>
- * </ol>
  */
 @Service
 public class DataAnalysisAgentService implements InitializingBean {
 
     private static final Logger log = LoggerFactory.getLogger(DataAnalysisAgentService.class);
 
+    /** Incremental DB flush threshold for assistant draft content. */
+    private static final int DRAFT_FLUSH_CHARS = 120;
+
+    /** Max interval (ms) between draft flushes. */
+    private static final long DRAFT_FLUSH_INTERVAL_MS = 1200L;
+
     private final DataApiClient dataApiClient;
     private final AnalysisPlanService analysisPlanService;
     private final SessionAgentManager sessionAgentManager;
     private final ChatSessionService chatSessionService;
+
+    /** sessionId -> active generating turn (decoupled from frontend SSE lifecycle). */
+    private final ConcurrentHashMap<String, ActiveTurn> activeTurns = new ConcurrentHashMap<>();
+
+    /** sessionId -> last completed requestId (for short-window deduplication). */
+    private final ConcurrentHashMap<String, String> completedRequestIds = new ConcurrentHashMap<>();
 
     @Value("${openai.api-key:#{null}}")
     private String apiKeyFromConfig;
@@ -108,24 +113,38 @@ public class DataAnalysisAgentService implements InitializingBean {
     }
 
     /**
-     * Send a user message to the session's agent and receive a streaming response.
+     * Send a user message and return stream chunks.
      *
-     * @param sessionId the chat session identifier
-     * @param message   the user's question
-     * @param account  the user identifier (from URL param, used for session isolation)
-     * @return Flux of streaming text chunks (SSE-friendly)
+     * <p>Important: model generation is executed in a backend-owned subscription (decoupled
+     * from the frontend SSE connection). So even if the mobile WebView/background kills the
+     * client connection, backend generation and DB incremental persistence continue.
      */
-    public Flux<String> chat(String sessionId, String message, String account) {
-        // Synchronous DB operations before streaming starts
+    public Flux<String> chat(String sessionId, String message, String account, String requestId) {
+        String normalizedRequestId =
+                (requestId == null || requestId.isBlank()) ? "req-unknown" : requestId.trim();
+
+        // Idempotency: if the same request is already running (typically EventSource reconnect),
+        // return existing stream and do NOT save user message or start generation again.
+        ActiveTurn existing = activeTurns.get(sessionId);
+        if (existing != null && normalizedRequestId.equals(existing.requestId)) {
+            return existing.chunkSink.asFlux();
+        }
+
+        // If same request has completed very recently, do not execute it again.
+        String completedRequestId = completedRequestIds.get(sessionId);
+        if (normalizedRequestId.equals(completedRequestId)) {
+            log.info(
+                    "Duplicate completed request ignored: sessionId={}, requestId={}",
+                    sessionId,
+                    normalizedRequestId);
+            return Flux.empty();
+        }
+
+        // Synchronous DB operations before generation starts
         chatSessionService.ensureSession(sessionId, account);
-        // getOrCreate BEFORE saveUserMessage: if the session is not yet in memory,
-        // preloadHistory reads from DB. Saving the user message first would cause
-        // it to be loaded into memory AND then added again by agent.stream(), resulting
-        // in the message appearing twice in the LLM context.
+        // getOrCreate BEFORE saveUserMessage: avoid duplicate context injection for new sessions
         SessionAgentManager.SessionEntry entry = sessionAgentManager.getOrCreate(sessionId);
         chatSessionService.saveUserMessage(sessionId, message);
-
-        AtomicReference<StringBuilder> replyBuf = new AtomicReference<>(new StringBuilder());
 
         Msg userMsg =
                 Msg.builder()
@@ -133,45 +152,103 @@ public class DataAnalysisAgentService implements InitializingBean {
                         .content(TextBlock.builder().text(message).build())
                         .build();
 
-        return entry.agent.stream(userMsg, buildStreamOptions())
-                .subscribeOn(Schedulers.boundedElastic())
-                .map(
-                        event -> {
-                            String chunk = eventToString(event);
-                            // Tool progress markers ([TOOL:xxx]) are streamed to frontend
-                            // for real-time status display, but must NOT be saved to DB.
-                            if (!chunk.isEmpty()
-                                    && !"[STOPPED]".equals(chunk)
-                                    && !chunk.startsWith("[TOOL:")) {
-                                replyBuf.get().append(chunk);
-                            }
-                            return chunk;
-                        })
-                .filter(text -> !text.isEmpty())
-                .doOnComplete(
-                        () -> {
-                            String fullReply = replyBuf.get().toString();
-                            if (!fullReply.isBlank()) {
-                                // Fire-and-forget: save to DB and trigger async compression
-                                chatSessionService.saveAssistantMessage(sessionId, fullReply);
-                                chatSessionService.maybeCompressAsync(sessionId);
-                            }
-                        })
-                .doOnError(
-                        err ->
-                                log.error(
-                                        "Chat stream error for session {}: {}",
-                                        sessionId,
-                                        err.getMessage()));
+        ActiveTurn turn = new ActiveTurn(sessionId, normalizedRequestId);
+        ActiveTurn previous = activeTurns.put(sessionId, turn);
+        if (previous != null) {
+            previous.completeSink();
+        }
+
+        startGeneration(entry, userMsg, turn);
+        return turn.chunkSink.asFlux();
     }
 
     /**
-     * Reset a specific session: evict from memory.
+     * Resume active stream for a session.
+     *
+     * <p>Uses replay sink, so late subscribers can receive chunks already generated in this turn.
+     */
+    public Flux<String> resume(String sessionId) {
+        ActiveTurn turn = activeTurns.get(sessionId);
+        return turn == null ? Flux.empty() : turn.chunkSink.asFlux();
+    }
+
+    /**
+     * Reset a specific session: evict from memory and stop active stream if exists.
      */
     public void reset(String sessionId) {
         log.info("Resetting session: {}", sessionId);
         sessionAgentManager.evict(sessionId);
+        ActiveTurn turn = activeTurns.remove(sessionId);
+        if (turn != null) {
+            turn.completeSink();
+        }
+        completedRequestIds.remove(sessionId);
         analysisPlanService.broadcastPlanChange();
+    }
+
+    private void startGeneration(
+            SessionAgentManager.SessionEntry entry, Msg userMsg, ActiveTurn turn) {
+        Flux<String> source =
+                entry.agent.stream(userMsg, buildStreamOptions())
+                        .subscribeOn(Schedulers.boundedElastic())
+                        .map(this::eventToString)
+                        .filter(text -> !text.isEmpty());
+
+        source.subscribe(
+                chunk -> handleChunk(turn, chunk),
+                err -> handleError(turn, err),
+                () -> handleComplete(turn));
+    }
+
+    private void handleChunk(ActiveTurn turn, String chunk) {
+        turn.chunkSink.tryEmitNext(chunk);
+
+        if (!"[STOPPED]".equals(chunk) && !chunk.startsWith("[TOOL:")) {
+            turn.replyBuf.append(chunk);
+            flushDraftIfNeeded(turn, false);
+        }
+    }
+
+    private void handleError(ActiveTurn turn, Throwable err) {
+        log.error("Chat stream error for session {}: {}", turn.sessionId, err.getMessage());
+        flushDraftIfNeeded(turn, true);
+        completedRequestIds.put(turn.sessionId, turn.requestId);
+        turn.completeSink();
+        activeTurns.remove(turn.sessionId, turn);
+    }
+
+    private void handleComplete(ActiveTurn turn) {
+        flushDraftIfNeeded(turn, true);
+        if (!turn.replyBuf.isEmpty()) {
+            chatSessionService.maybeCompressAsync(turn.sessionId);
+        }
+        completedRequestIds.put(turn.sessionId, turn.requestId);
+        turn.completeSink();
+        activeTurns.remove(turn.sessionId, turn);
+    }
+
+    private void flushDraftIfNeeded(ActiveTurn turn, boolean force) {
+        int len = turn.replyBuf.length();
+        if (len <= 0) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (!force
+                && len - turn.lastPersistedLen < DRAFT_FLUSH_CHARS
+                && now - turn.lastPersistedAt < DRAFT_FLUSH_INTERVAL_MS) {
+            return;
+        }
+
+        Long messageId = turn.draftMessageId.get();
+        if (messageId == null) {
+            messageId = chatSessionService.beginAssistantDraft(turn.sessionId);
+            turn.draftMessageId.set(messageId);
+        }
+
+        chatSessionService.updateAssistantDraft(
+                messageId, turn.replyBuf.toString(), turn.sessionId);
+        turn.lastPersistedLen = len;
+        turn.lastPersistedAt = now;
     }
 
     private String resolveApiKey() {
@@ -233,5 +310,25 @@ public class DataAnalysisAgentService implements InitializingBean {
         }
         List<TextBlock> blocks = event.getMessage().getContentBlocks(TextBlock.class);
         return blocks.isEmpty() ? "" : blocks.get(0).getText();
+    }
+
+    /** Per-session active generation state. */
+    private static final class ActiveTurn {
+        private final String sessionId;
+        private final String requestId;
+        private final Sinks.Many<String> chunkSink = Sinks.many().replay().all();
+        private final StringBuilder replyBuf = new StringBuilder();
+        private final AtomicReference<Long> draftMessageId = new AtomicReference<>();
+        private volatile int lastPersistedLen = 0;
+        private volatile long lastPersistedAt = 0L;
+
+        private ActiveTurn(String sessionId, String requestId) {
+            this.sessionId = sessionId;
+            this.requestId = requestId;
+        }
+
+        private void completeSink() {
+            chunkSink.tryEmitComplete();
+        }
     }
 }
