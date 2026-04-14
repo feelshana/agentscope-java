@@ -2768,7 +2768,16 @@
     const chartInstances = new Map();
 
     function buildChartHtml(def) {
-        if (!def || !Array.isArray(def.data) || def.data.length === 0) return '';
+        if (!def) return '';
+        const type = (def.type || 'bar').toLowerCase();
+        const isMultiSeries = ['multi_line', 'multi_bar', 'dual_axes'].includes(type);
+        // 单系列：需要 data 数组；多系列：需要 categories 或 series
+        if (isMultiSeries) {
+            const hasSeries = Array.isArray(def.series) && def.series.length > 0;
+            if (!hasSeries) return '';
+        } else {
+            if (!Array.isArray(def.data) || def.data.length === 0) return '';
+        }
         const chartId = 'echarts_' + Math.random().toString(36).substr(2, 9);
         const tableId = 'table_' + Math.random().toString(36).substr(2, 9);
         
@@ -2836,29 +2845,44 @@
         }
     }
 
-    // 构建数据表格HTML
+    // 构建数据表格HTML（支持单系列和多系列）
     function buildDataTable(def) {
-        if (!def || !Array.isArray(def.data) || def.data.length === 0) return '';
-        
-        // 获取所有列名
-        const columns = ['label', 'value', ...(def.series ? Object.keys(def.series) : [])];
-        
-        let html = '<table class="data-table"><thead><tr>';
-        html += '<th>序号</th>';
-        html += '<th>类别</th>';
-        html += '<th>数值</th>';
-        html += '</tr></thead><tbody>';
-        
-        def.data.forEach((item, idx) => {
-            html += `<tr>`;
-            html += `<td>${idx + 1}</td>`;
-            html += `<td>${escapeHtml(String(item.label || ''))}</td>`;
-            html += `<td>${fmtNum(item.value)}</td>`;
-            html += `</tr>`;
-        });
-        
-        html += '</tbody></table>';
-        return html;
+        if (!def) return '';
+        const type = (def.type || 'bar').toLowerCase();
+        const isMultiSeries = ['multi_line', 'multi_bar', 'dual_axes'].includes(type);
+
+        if (isMultiSeries) {
+            // 多系列格式：categories + series[]
+            const categories = def.categories || [];
+            const series = def.series || [];
+            if (categories.length === 0 && series.length === 0) return '';
+
+            let html = '<table class="data-table"><thead><tr>';
+            html += '<th>序号</th><th>类别</th>';
+            series.forEach(s => { html += `<th>${escapeHtml(s.name || '')}</th>`; });
+            html += '</tr></thead><tbody>';
+            categories.forEach((cat, idx) => {
+                html += `<tr><td>${idx + 1}</td><td>${escapeHtml(String(cat))}</td>`;
+                series.forEach(s => {
+                    const val = s.data && s.data[idx] !== undefined ? s.data[idx] : '-';
+                    html += `<td>${typeof val === 'number' ? fmtNum(val) : val}</td>`;
+                });
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
+            return html;
+        } else {
+            // 单系列格式：data[{label, value}]
+            if (!Array.isArray(def.data) || def.data.length === 0) return '';
+            let html = '<table class="data-table"><thead><tr>';
+            html += '<th>序号</th><th>类别</th><th>数值</th>';
+            html += '</tr></thead><tbody>';
+            def.data.forEach((item, idx) => {
+                html += `<tr><td>${idx + 1}</td><td>${escapeHtml(String(item.label || ''))}</td><td>${fmtNum(item.value)}</td></tr>`;
+            });
+            html += '</tbody></table>';
+            return html;
+        }
     }
 
     // 使用ECharts渲染图表
@@ -2904,6 +2928,15 @@
         switch (chartType) {
             case 'line':
                 option = buildLineOption(def);
+                break;
+            case 'multi_line':
+                option = buildMultiLineOption(def);
+                break;
+            case 'multi_bar':
+                option = buildMultiBarOption(def);
+                break;
+            case 'dual_axes':
+                option = buildDualAxesOption(def);
                 break;
             case 'pie':
                 option = buildPieOption(def);
@@ -3223,6 +3256,164 @@
                 }))
             }]
         };
+    }
+
+    // 构建多系列折线图配置（multi_line）
+    function buildMultiLineOption(def) {
+        const categories = def.categories || [];
+        const series = def.series || [];
+        const count = categories.length;
+        const ZOOM_THRESHOLD = 15;
+        const useZoom = count > ZOOM_THRESHOLD;
+        const windowSize = Math.min(count, ZOOM_THRESHOLD);
+        const startPct = useZoom ? Math.max(0, Math.round((count - windowSize) / count * 100)) : 0;
+        const needsRotate = count > 6 || categories.some(l => l && String(l).length > 4);
+        const bottomPad = useZoom ? 60 : (needsRotate ? 90 : 55);
+        const interval = useZoom ? 0 : (count <= 8 ? 0 : Math.ceil(count / 8) - 1);
+
+        const option = {
+            title: { text: def.title || '', left: 'center', top: 10, textStyle: { fontSize: 14, fontWeight: 600, color: '#1f2937' } },
+            tooltip: { trigger: 'axis' },
+            legend: { top: 35, type: 'scroll', textStyle: { fontSize: 11, color: '#4b5563' } },
+            grid: { left: '3%', right: '4%', top: 70, bottom: bottomPad, containLabel: true },
+            xAxis: {
+                type: 'category',
+                data: categories,
+                boundaryGap: false,
+                axisLabel: { rotate: needsRotate ? 40 : 0, fontSize: 11, color: '#4b5563', interval, overflow: 'truncate', width: needsRotate ? 70 : undefined },
+                axisLine: { lineStyle: { color: '#e5e7eb' } }
+            },
+            yAxis: {
+                type: 'value',
+                axisLabel: { color: '#6b7280', formatter: val => formatNumber(val) },
+                splitLine: { lineStyle: { color: '#f3f4f6', type: 'dashed' } }
+            },
+            series: series.map((s, i) => ({
+                name: s.name,
+                type: 'line',
+                data: s.data,
+                smooth: true,
+                symbol: 'circle',
+                symbolSize: count > 20 ? 4 : 6,
+                lineStyle: { color: CHART_COLORS[i % CHART_COLORS.length], width: 2 },
+                itemStyle: { color: CHART_COLORS[i % CHART_COLORS.length], borderWidth: 2, borderColor: '#fff' }
+            }))
+        };
+        if (useZoom) {
+            option.dataZoom = [
+                { type: 'slider', xAxisIndex: 0, start: startPct, end: 100, height: 20, bottom: 8, borderColor: 'rgba(79,110,247,0.2)', fillerColor: 'rgba(79,110,247,0.12)', handleStyle: { color: '#4f6ef7' }, textStyle: { color: '#9ba3c4', fontSize: 10 } },
+                { type: 'inside', xAxisIndex: 0 }
+            ];
+        }
+        return option;
+    }
+
+    // 构建多系列柱状图配置（multi_bar）
+    function buildMultiBarOption(def) {
+        const categories = def.categories || [];
+        const series = def.series || [];
+        const count = categories.length;
+        const ZOOM_THRESHOLD = 12;
+        const useZoom = count > ZOOM_THRESHOLD;
+        const windowSize = Math.min(count, ZOOM_THRESHOLD);
+        const startPct = useZoom ? Math.max(0, Math.round((count - windowSize) / count * 100)) : 0;
+        const needsRotate = count > 5 || categories.some(l => l && String(l).length > 4);
+        const bottomPad = useZoom ? 60 : (needsRotate ? 90 : 55);
+        const interval = useZoom ? 0 : (count <= 8 ? 0 : Math.ceil(count / 8) - 1);
+
+        const option = {
+            title: { text: def.title || '', left: 'center', top: 10, textStyle: { fontSize: 14, fontWeight: 600, color: '#1f2937' } },
+            tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+            legend: { top: 35, type: 'scroll', textStyle: { fontSize: 11, color: '#4b5563' } },
+            grid: { left: '3%', right: '4%', top: 70, bottom: bottomPad, containLabel: true },
+            xAxis: {
+                type: 'category',
+                data: categories,
+                axisLabel: { rotate: needsRotate ? 40 : 0, fontSize: 11, color: '#4b5563', interval, overflow: 'truncate', width: needsRotate ? 70 : undefined },
+                axisLine: { lineStyle: { color: '#e5e7eb' } }
+            },
+            yAxis: {
+                type: 'value',
+                axisLabel: { color: '#6b7280', formatter: val => formatNumber(val) },
+                splitLine: { lineStyle: { color: '#f3f4f6', type: 'dashed' } }
+            },
+            series: series.map((s, i) => ({
+                name: s.name,
+                type: 'bar',
+                data: s.data,
+                barMaxWidth: 30,
+                itemStyle: { color: CHART_COLORS[i % CHART_COLORS.length], borderRadius: [4, 4, 0, 0] },
+                label: { show: count <= 8, position: 'top', fontSize: 10, color: '#4b5563', formatter: p => formatNumber(p.value) }
+            }))
+        };
+        if (useZoom) {
+            option.dataZoom = [
+                { type: 'slider', xAxisIndex: 0, start: startPct, end: 100, height: 20, bottom: 8, borderColor: 'rgba(79,110,247,0.2)', fillerColor: 'rgba(79,110,247,0.12)', handleStyle: { color: '#4f6ef7' }, textStyle: { color: '#9ba3c4', fontSize: 10 } },
+                { type: 'inside', xAxisIndex: 0 }
+            ];
+        }
+        return option;
+    }
+
+    // 构建双轴图配置（dual_axes）
+    function buildDualAxesOption(def) {
+        const categories = def.categories || [];
+        const series = def.series || [];
+        const yAxisDef = def.yAxis || [{}, {}];
+        const count = categories.length;
+        const ZOOM_THRESHOLD = 15;
+        const useZoom = count > ZOOM_THRESHOLD;
+        const windowSize = Math.min(count, ZOOM_THRESHOLD);
+        const startPct = useZoom ? Math.max(0, Math.round((count - windowSize) / count * 100)) : 0;
+        const needsRotate = count > 6 || categories.some(l => l && String(l).length > 4);
+        const bottomPad = useZoom ? 60 : (needsRotate ? 90 : 55);
+        const interval = useZoom ? 0 : (count <= 8 ? 0 : Math.ceil(count / 8) - 1);
+
+        const option = {
+            title: { text: def.title || '', left: 'center', top: 10, textStyle: { fontSize: 14, fontWeight: 600, color: '#1f2937' } },
+            tooltip: { trigger: 'axis' },
+            legend: { top: 35, type: 'scroll', textStyle: { fontSize: 11, color: '#4b5563' } },
+            grid: { left: '3%', right: '6%', top: 70, bottom: bottomPad, containLabel: true },
+            xAxis: {
+                type: 'category',
+                data: categories,
+                axisLabel: { rotate: needsRotate ? 40 : 0, fontSize: 11, color: '#4b5563', interval, overflow: 'truncate', width: needsRotate ? 70 : undefined },
+                axisLine: { lineStyle: { color: '#e5e7eb' } }
+            },
+            yAxis: [
+                {
+                    type: 'value',
+                    name: (yAxisDef[0] && yAxisDef[0].name) || '',
+                    nameTextStyle: { color: '#6b7280', padding: [0, 0, 0, 40] },
+                    axisLabel: { color: '#6b7280', formatter: val => formatNumber(val) },
+                    splitLine: { lineStyle: { color: '#f3f4f6', type: 'dashed' } }
+                },
+                {
+                    type: 'value',
+                    name: (yAxisDef[1] && yAxisDef[1].name) || '',
+                    nameTextStyle: { color: '#6b7280', padding: [0, 40, 0, 0] },
+                    axisLine: { show: true, lineStyle: { color: '#e5e7eb' } },
+                    axisLabel: { color: '#6b7280', formatter: val => formatNumber(val) },
+                    splitLine: { show: false }
+                }
+            ],
+            series: series.map((s, i) => {
+                const yIdx = s.yAxisIndex !== undefined ? s.yAxisIndex : i;
+                const color = CHART_COLORS[i % CHART_COLORS.length];
+                if ((s.type || 'bar') === 'bar') {
+                    return { name: s.name, type: 'bar', yAxisIndex: yIdx, data: s.data, barMaxWidth: 35, itemStyle: { color, borderRadius: [4, 4, 0, 0] } };
+                } else {
+                    return { name: s.name, type: 'line', yAxisIndex: yIdx, data: s.data, smooth: true, symbol: 'circle', symbolSize: 6, lineStyle: { color, width: 2 }, itemStyle: { color } };
+                }
+            })
+        };
+        if (useZoom) {
+            option.dataZoom = [
+                { type: 'slider', xAxisIndex: 0, start: startPct, end: 100, height: 20, bottom: 8, borderColor: 'rgba(79,110,247,0.2)', fillerColor: 'rgba(79,110,247,0.12)', handleStyle: { color: '#4f6ef7' }, textStyle: { color: '#9ba3c4', fontSize: 10 } },
+                { type: 'inside', xAxisIndex: 0 }
+            ];
+        }
+        return option;
     }
 
     // 初始化页面中的所有图表
