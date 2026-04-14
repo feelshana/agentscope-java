@@ -116,16 +116,16 @@ public class SessionAgentManager {
      */
     public void evict(String sessionId) {
         agents.remove(sessionId);
+        analysisPlanService.clearSession(sessionId);
         log.info("Session evicted from memory: {}", sessionId);
     }
 
     /**
      * Get the current PlanNotebook for a session (for SSE plan stream).
-     * Falls back to the global analysisPlanService notebook if session not loaded.
      */
     public PlanNotebook getPlanNotebook(String sessionId) {
         SessionEntry entry = agents.get(sessionId);
-        return entry != null ? entry.planNotebook : analysisPlanService.getPlanNotebook();
+        return entry != null ? entry.planNotebook : analysisPlanService.getPlanNotebook(sessionId);
     }
 
     // ─────────────────── Internal helpers ───────────────────
@@ -142,11 +142,11 @@ public class SessionAgentManager {
         // Register the abandoned-plan detector so ConfirmPlanToHint can suppress
         // the "no plan" hint after the user declines to execute a plan.
         confirmPlanToHint.registerWith(planNotebook);
-        // Broadcast plan changes through the global analysisPlanService (for SSE stream)
+        // Broadcast plan changes by session (for SSE stream)
         planNotebook.addChangeHook(
-                "planBroadcast", (nb, plan) -> analysisPlanService.broadcastPlanChange());
-        // Keep local reference updated
-        analysisPlanService.setPlanNotebook(planNotebook);
+                "planBroadcast", (nb, plan) -> analysisPlanService.broadcastPlanChange(sessionId));
+        // Keep session-scoped reference updated
+        analysisPlanService.registerPlanNotebook(sessionId, planNotebook);
 
         OpenAIChatModel.Builder modelBuilder =
                 OpenAIChatModel.builder().apiKey(apiKey).modelName("deepseek-chat").stream(true)
