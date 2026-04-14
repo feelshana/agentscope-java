@@ -21,9 +21,13 @@ import io.agentscope.core.memory.InMemoryMemory;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.model.OpenAIChatModel;
 import io.agentscope.core.plan.PlanNotebook;
+import io.agentscope.core.skill.AgentSkill;
+import io.agentscope.core.skill.SkillBox;
+import io.agentscope.core.skill.repository.ClasspathSkillRepository;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.examples.dataanalysis.client.DataApiClient;
 import io.agentscope.examples.dataanalysis.tool.DataAnalysisTool;
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -137,6 +141,22 @@ public class SessionAgentManager {
         toolkit.registerTool(
                 new DataAnalysisTool(dataApiClient, sessionId, userName, queryResultCacheService));
 
+        // Initialize SkillBox and load classpath skills (e.g., echarts-chart)
+        SkillBox skillBox = new SkillBox(toolkit);
+        try (ClasspathSkillRepository repo = new ClasspathSkillRepository("skills")) {
+            List<AgentSkill> skills = repo.getAllSkills();
+            skills.forEach(
+                    skill -> {
+                        skillBox.registration().skill(skill).apply();
+                        log.info("Loaded skill: {}", skill.getSkillId());
+                    });
+            skillBox.registerSkillLoadTool();
+        } catch (IOException e) {
+            log.warn(
+                    "Failed to load classpath skills, continuing without skills: {}",
+                    e.getMessage());
+        }
+
         ConfirmPlanToHint confirmPlanToHint = new ConfirmPlanToHint();
         PlanNotebook planNotebook = PlanNotebook.builder().planToHint(confirmPlanToHint).build();
         // Register the abandoned-plan detector so ConfirmPlanToHint can suppress
@@ -169,6 +189,7 @@ public class SessionAgentManager {
                         .model(modelBuilder.build())
                         .memory(memory)
                         .toolkit(toolkit)
+                        .skillBox(skillBox)
                         .planNotebook(planNotebook)
                         .maxIters(40)
                         .hook(new ContextTrimHook()) // priority=10: trim first
