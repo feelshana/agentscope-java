@@ -1,0 +1,533 @@
+<!--
+  ~ Copyright 2024-2026 the original author or authors.
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~     http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+-->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>ChatBI 智能数据助手</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        :root {
+            --primary: #4f6ef7;
+            --primary-dark: #3451d1;
+            --primary-light: rgba(79,110,247,0.09);
+            --bg: #eef1fb;
+            --surface: #ffffff;
+            --surface2: #f4f6fe;
+            --border: rgba(79,110,247,0.12);
+            --text: #1b2040;
+            --text-sub: #5c6484;
+            --text-hint: #9ba3c4;
+            --radius-lg: 20px;
+            --radius-md: 14px;
+            --radius-sm: 10px;
+            --shadow-sm: 0 2px 14px rgba(79,110,247,0.10);
+            --shadow-md: 0 8px 32px rgba(79,110,247,0.16);
+        }
+        html, body { height: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif; background: var(--bg); color: var(--text); }
+
+        /* ── Layout ── */
+        .app-shell { position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; overflow: hidden; }
+
+        /* ── Header ── */
+        .header { background: linear-gradient(135deg, #5875f8 0%, #4264f5 40%, #2e4fd4 100%); color: #fff; padding: 13px 16px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; box-shadow: 0 3px 24px rgba(52,81,209,0.30); }
+        .header h1 { font-size: 1rem; font-weight: 700; }
+        .header-right { display: flex; gap: 8px; }
+        .header-btn { background: rgba(255,255,255,0.15); border: none; color: #fff; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 0.82rem; transition: background 0.2s; }
+        .header-btn:hover { background: rgba(255,255,255,0.25); }
+
+        /* ── Main area ── */
+        .main { flex: 1; display: flex; overflow: hidden; }
+
+        /* ── Sidebar ── */
+        .sidebar { width: 240px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+        .sidebar-header { padding: 12px; border-bottom: 1px solid var(--border); }
+        .new-chat-btn { width: 100%; background: var(--primary); color: #fff; border: none; padding: 9px 12px; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.88rem; font-weight: 600; transition: background 0.2s; }
+        .new-chat-btn:hover { background: var(--primary-dark); }
+        .session-list { flex: 1; overflow-y: auto; padding: 8px; }
+        .session-item { padding: 9px 10px; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.83rem; color: var(--text-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: background 0.15s; display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }
+        .session-item:hover, .session-item.active { background: var(--primary-light); color: var(--primary); }
+        .session-del { opacity: 0; background: none; border: none; color: #e05; cursor: pointer; font-size: 0.78rem; padding: 2px 5px; border-radius: 4px; }
+        .session-item:hover .session-del { opacity: 1; }
+
+        /* ── Chat area ── */
+        .chat-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+        .message { display: flex; gap: 10px; max-width: 90%; }
+        .message.user { align-self: flex-end; flex-direction: row-reverse; }
+        .avatar { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.78rem; font-weight: 700; flex-shrink: 0; }
+        .avatar.ai { background: linear-gradient(135deg, #4f6ef7, #06b6d4); color: #fff; }
+        .avatar.user { background: var(--primary-dark); color: #fff; }
+        .bubble { background: var(--surface); border-radius: var(--radius-md); padding: 10px 14px; font-size: 0.9rem; line-height: 1.6; box-shadow: var(--shadow-sm); max-width: 100%; word-break: break-word; }
+        .message.user .bubble { background: linear-gradient(135deg, #4f6ef7 0%, #3451d1 100%); color: #fff; }
+        .bubble pre { background: #1e2235; color: #e8e8e8; padding: 10px; border-radius: 8px; overflow-x: auto; font-size: 0.82rem; margin: 6px 0; }
+        .bubble code { font-family: 'JetBrains Mono', 'Courier New', monospace; }
+        .bubble table { border-collapse: collapse; width: 100%; font-size: 0.83rem; margin: 8px 0; }
+        .bubble th, .bubble td { border: 1px solid var(--border); padding: 5px 8px; text-align: left; }
+        .bubble th { background: var(--surface2); font-weight: 600; }
+        .tool-indicator { font-size: 0.78rem; color: var(--primary); background: var(--primary-light); padding: 3px 8px; border-radius: 4px; display: inline-block; margin-bottom: 4px; }
+        .typing-dots { display: flex; gap: 4px; padding: 4px 0; }
+        .typing-dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--primary); animation: pulse 1.2s infinite; }
+        .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes pulse { 0%,80%,100% { opacity: 0.2; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1); } }
+
+        /* ── Input area ── */
+        .input-area { padding: 12px 16px; background: var(--surface); border-top: 1px solid var(--border); }
+        .context-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+        .ctx-tag { font-size: 0.75rem; background: var(--primary-light); color: var(--primary); padding: 3px 8px; border-radius: 4px; display: flex; align-items: center; gap: 4px; }
+        .ctx-tag button { background: none; border: none; color: var(--primary); cursor: pointer; font-size: 0.75rem; padding: 0; }
+        .input-row { display: flex; gap: 8px; align-items: flex-end; }
+        .input-box { flex: 1; border: 1.5px solid var(--border); border-radius: var(--radius-md); padding: 10px 14px; font-size: 0.92rem; font-family: inherit; resize: none; min-height: 42px; max-height: 120px; outline: none; transition: border-color 0.2s; background: var(--surface); }
+        .input-box:focus { border-color: var(--primary); }
+        .send-btn { background: var(--primary); color: #fff; border: none; border-radius: var(--radius-md); padding: 10px 18px; cursor: pointer; font-size: 0.9rem; font-weight: 600; height: 42px; transition: background 0.2s; flex-shrink: 0; }
+        .send-btn:hover:not(:disabled) { background: var(--primary-dark); }
+        .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .interpret-btn { background: linear-gradient(135deg, #06b6d4, #0891b2); color: #fff; border: none; border-radius: var(--radius-md); padding: 10px 14px; cursor: pointer; font-size: 0.82rem; font-weight: 600; height: 42px; transition: opacity 0.2s; flex-shrink: 0; }
+        .interpret-btn:hover:not(:disabled) { opacity: 0.85; }
+        .interpret-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* ── Config panel ── */
+        .config-panel { position: fixed; top: 0; right: 0; bottom: 0; width: 320px; background: var(--surface); box-shadow: var(--shadow-md); transform: translateX(100%); transition: transform 0.3s ease; z-index: 100; display: flex; flex-direction: column; }
+        .config-panel.open { transform: translateX(0); }
+        .config-panel-header { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        .config-panel-header h3 { font-size: 0.95rem; font-weight: 700; }
+        .close-config { background: none; border: none; cursor: pointer; font-size: 1.2rem; color: var(--text-sub); }
+        .config-body { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+        .config-group label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-sub); margin-bottom: 4px; }
+        .config-input { width: 100%; border: 1.5px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 0.85rem; font-family: inherit; outline: none; transition: border-color 0.2s; }
+        .config-input:focus { border-color: var(--primary); }
+        .config-save-btn { margin: 0 14px 14px; background: var(--primary); color: #fff; border: none; border-radius: var(--radius-sm); padding: 10px; cursor: pointer; font-size: 0.9rem; font-weight: 600; }
+
+        /* ── Overlay ── */
+        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.2); z-index: 99; display: none; }
+        .overlay.visible { display: block; }
+
+        /* ── Scrollbar ── */
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-thumb { background: rgba(79,110,247,0.2); border-radius: 10px; }
+
+        /* ── Mobile sidebar toggle ── */
+        .sidebar-toggle { display: none; background: none; border: none; color: #fff; font-size: 1.3rem; cursor: pointer; }
+        @media (max-width: 640px) {
+            .sidebar { position: fixed; left: 0; top: 0; bottom: 0; z-index: 50; transform: translateX(-100%); transition: transform 0.3s ease; }
+            .sidebar.open { transform: translateX(0); }
+            .sidebar-toggle { display: block; }
+        }
+    </style>
+</head>
+<body>
+<div class="overlay" id="overlay" onclick="closeSidebar(); closeConfig();"></div>
+
+<div class="app-shell">
+    <!-- Header -->
+    <header class="header">
+        <div style="display:flex;align-items:center;gap:10px;">
+            <button class="sidebar-toggle" onclick="toggleSidebar()">☰</button>
+            <h1>🤖 ChatBI 智能数据助手</h1>
+        </div>
+        <div class="header-right">
+            <button class="header-btn" onclick="openConfig()">⚙ 配置</button>
+            <button class="header-btn" onclick="newChat()">＋ 新对话</button>
+        </div>
+    </header>
+
+    <div class="main">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <button class="new-chat-btn" onclick="newChat()">＋ 新对话</button>
+            </div>
+            <div class="session-list" id="sessionList"></div>
+        </aside>
+
+        <!-- Chat area -->
+        <div class="chat-area">
+            <div class="messages" id="messages"></div>
+            <div class="input-area">
+                <!-- Context tags (report/dashboard context) -->
+                <div class="context-bar" id="contextBar"></div>
+                <div class="input-row">
+                    <textarea class="input-box" id="inputBox" placeholder="请输入您的问题…" rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+                    <button class="interpret-btn" id="interpretBtn" onclick="interpretData()" title="解读当前图表数据">📊 解读</button>
+                    <button class="send-btn" id="sendBtn" onclick="sendMessage()">发送</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Config panel -->
+<div class="config-panel" id="configPanel">
+    <div class="config-panel-header">
+        <h3>⚙ ChatBI 配置</h3>
+        <button class="close-config" onclick="closeConfig()">✕</button>
+    </div>
+    <div class="config-body">
+        <div class="config-group">
+            <label>用户名 (userName)</label>
+            <input class="config-input" id="cfgUserName" placeholder="your-name" />
+        </div>
+        <div class="config-group">
+            <label>SuperSonic Agent ID</label>
+            <input class="config-input" id="cfgAgentId" placeholder="例如: 12" />
+        </div>
+        <div class="config-group">
+            <label>SuperSonic Token</label>
+            <input class="config-input" id="cfgToken" placeholder="Bearer xxxxx" />
+        </div>
+        <div class="config-group">
+            <label>报表 ID (reportId，可选)</label>
+            <input class="config-input" id="cfgReportId" placeholder="" />
+        </div>
+        <div class="config-group">
+            <label>报表名称 (reportName，可选)</label>
+            <input class="config-input" id="cfgReportName" placeholder="" />
+        </div>
+        <div class="config-group">
+            <label>仪表盘 ID (dashboardId，可选)</label>
+            <input class="config-input" id="cfgDashboardId" placeholder="" />
+        </div>
+        <div class="config-group">
+            <label>仪表盘名称 (dashboardName，可选)</label>
+            <input class="config-input" id="cfgDashboardName" placeholder="" />
+        </div>
+        <div class="config-group">
+            <label>项目 ID (projectId，可选)</label>
+            <input class="config-input" id="cfgProjectId" placeholder="" />
+        </div>
+        <div class="config-group">
+            <label>图表数据 (param，JSON，用于解读)</label>
+            <textarea class="config-input" id="cfgParam" rows="4" placeholder='{"labels":[],"data":[]}'></textarea>
+        </div>
+    </div>
+    <button class="config-save-btn" onclick="saveConfig()">保存配置</button>
+</div>
+
+<script>
+// ─── State ───
+let sessionId = generateId();
+let userName = '';
+let agentId = '';
+let supersonicToken = '';
+let reportId = '';
+let reportName = '';
+let dashboardId = '';
+let dashboardName = '';
+let projectId = '';
+let chartParam = '';
+let isStreaming = false;
+let currentAiBubble = null;
+let currentAiText = '';
+
+// ─── Init ───
+loadConfig();
+loadSessions();
+renderContextBar();
+
+// ─── Config ───
+function loadConfig() {
+    const saved = JSON.parse(localStorage.getItem('chatbi_config') || '{}');
+    userName = saved.userName || '';
+    agentId = saved.agentId || '';
+    supersonicToken = saved.supersonicToken || '';
+    reportId = saved.reportId || '';
+    reportName = saved.reportName || '';
+    dashboardId = saved.dashboardId || '';
+    dashboardName = saved.dashboardName || '';
+    projectId = saved.projectId || '';
+    chartParam = saved.chartParam || '';
+}
+
+function openConfig() {
+    document.getElementById('cfgUserName').value = userName;
+    document.getElementById('cfgAgentId').value = agentId;
+    document.getElementById('cfgToken').value = supersonicToken;
+    document.getElementById('cfgReportId').value = reportId;
+    document.getElementById('cfgReportName').value = reportName;
+    document.getElementById('cfgDashboardId').value = dashboardId;
+    document.getElementById('cfgDashboardName').value = dashboardName;
+    document.getElementById('cfgProjectId').value = projectId;
+    document.getElementById('cfgParam').value = chartParam;
+    document.getElementById('configPanel').classList.add('open');
+    document.getElementById('overlay').classList.add('visible');
+}
+
+function closeConfig() {
+    document.getElementById('configPanel').classList.remove('open');
+    document.getElementById('overlay').classList.remove('visible');
+}
+
+function saveConfig() {
+    userName = document.getElementById('cfgUserName').value.trim();
+    agentId = document.getElementById('cfgAgentId').value.trim();
+    supersonicToken = document.getElementById('cfgToken').value.trim();
+    reportId = document.getElementById('cfgReportId').value.trim();
+    reportName = document.getElementById('cfgReportName').value.trim();
+    dashboardId = document.getElementById('cfgDashboardId').value.trim();
+    dashboardName = document.getElementById('cfgDashboardName').value.trim();
+    projectId = document.getElementById('cfgProjectId').value.trim();
+    chartParam = document.getElementById('cfgParam').value.trim();
+    localStorage.setItem('chatbi_config', JSON.stringify({ userName, agentId, supersonicToken, reportId, reportName, dashboardId, dashboardName, projectId, chartParam }));
+    renderContextBar();
+    closeConfig();
+}
+
+// ─── Context bar ───
+function renderContextBar() {
+    const bar = document.getElementById('contextBar');
+    bar.innerHTML = '';
+    if (reportName) bar.innerHTML += `<span class="ctx-tag">📋 ${reportName}</span>`;
+    if (dashboardName) bar.innerHTML += `<span class="ctx-tag">📊 ${dashboardName}</span>`;
+    if (agentId) bar.innerHTML += `<span class="ctx-tag">🤖 AgentID: ${agentId}</span>`;
+    document.getElementById('interpretBtn').disabled = !chartParam;
+}
+
+// ─── Sessions ───
+function loadSessions() {
+    const u = userName || '';
+    fetch(`/api/chatbi/sessions?userName=${encodeURIComponent(u)}`)
+        .then(r => r.json())
+        .then(renderSessionList)
+        .catch(() => {});
+}
+
+function renderSessionList(sessions) {
+    const list = document.getElementById('sessionList');
+    list.innerHTML = '';
+    sessions.forEach(s => {
+        const item = document.createElement('div');
+        item.className = 'session-item' + (s.id === sessionId ? ' active' : '');
+        item.dataset.id = s.id;
+        item.innerHTML = `<span style="flex:1;overflow:hidden;text-overflow:ellipsis;">${escHtml(s.title || '新对话')}</span>
+            <button class="session-del" onclick="deleteSession(event,'${s.id}')">✕</button>`;
+        item.addEventListener('click', () => switchSession(s.id));
+        list.appendChild(item);
+    });
+}
+
+function switchSession(id) {
+    if (isStreaming) return;
+    sessionId = id;
+    document.querySelectorAll('.session-item').forEach(el => el.classList.toggle('active', el.dataset.id === id));
+    document.getElementById('messages').innerHTML = '';
+    fetch(`/api/chatbi/sessions/${id}/messages`)
+        .then(r => r.json())
+        .then(msgs => msgs.forEach(m => addMessage(m.role === 'user' ? 'user' : 'ai', m.content)))
+        .catch(() => {});
+    closeSidebar();
+}
+
+function newChat() {
+    if (isStreaming) return;
+    sessionId = generateId();
+    document.getElementById('messages').innerHTML = '';
+    document.querySelectorAll('.session-item').forEach(el => el.classList.remove('active'));
+    closeSidebar();
+}
+
+function deleteSession(e, id) {
+    e.stopPropagation();
+    if (!confirm('确认删除该对话？')) return;
+    fetch(`/api/chatbi/sessions/${id}`, { method: 'DELETE' })
+        .then(() => {
+            if (id === sessionId) newChat();
+            loadSessions();
+        });
+}
+
+// ─── Sidebar (mobile) ───
+function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('open');
+    document.getElementById('overlay').classList.toggle('visible');
+}
+function closeSidebar() {
+    document.getElementById('sidebar').classList.remove('open');
+    if (!document.getElementById('configPanel').classList.contains('open')) {
+        document.getElementById('overlay').classList.remove('visible');
+    }
+}
+
+// ─── Chat ───
+function handleKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+
+function autoResize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+function sendMessage() {
+    const box = document.getElementById('inputBox');
+    const text = box.value.trim();
+    if (!text || isStreaming) return;
+    box.value = '';
+    box.style.height = '';
+    doChat(text);
+}
+
+function interpretData() {
+    if (!chartParam || isStreaming) return;
+    doChat('请解读当前数据');
+}
+
+function doChat(message) {
+    isStreaming = true;
+    document.getElementById('sendBtn').disabled = true;
+    document.getElementById('interpretBtn').disabled = true;
+
+    addMessage('user', message);
+
+    // Create AI bubble with typing indicator
+    currentAiText = '';
+    const aiMsg = document.createElement('div');
+    aiMsg.className = 'message';
+    aiMsg.innerHTML = `<div class="avatar ai">AI</div><div class="bubble" id="streaming-bubble"><div class="typing-dots"><span></span><span></span><span></span></div></div>`;
+    document.getElementById('messages').appendChild(aiMsg);
+    scrollToBottom();
+    currentAiBubble = aiMsg.querySelector('#streaming-bubble');
+
+    const body = {
+        sessionId, message, userName, agentId,
+        supersonicToken, reportId, reportName,
+        dashboardId, dashboardName, projectId,
+        param: chartParam
+    };
+
+    fetch('/api/chatbi/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+        body: JSON.stringify(body)
+    }).then(resp => {
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        function readChunk() {
+            reader.read().then(({ done, value }) => {
+                if (done) { finishStream(); return; }
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop();
+                lines.forEach(line => {
+                    if (line.startsWith('data:')) {
+                        const chunk = line.slice(5);
+                        handleChunk(chunk);
+                    }
+                });
+                readChunk();
+            }).catch(() => finishStream());
+        }
+        readChunk();
+    }).catch(err => {
+        if (currentAiBubble) currentAiBubble.innerHTML = `<span style="color:#e05">请求失败: ${err.message}</span>`;
+        finishStream();
+    });
+}
+
+function handleChunk(chunk) {
+    if (!currentAiBubble) return;
+    if (chunk === '[STOPPED]') { finishStream(); return; }
+    if (chunk.startsWith('[TOOL:')) {
+        const toolName = chunk.slice(6, -1);
+        const ind = document.createElement('div');
+        ind.className = 'tool-indicator';
+        ind.textContent = `🔧 ${toolName}`;
+        currentAiBubble.innerHTML = '';
+        currentAiBubble.appendChild(ind);
+        return;
+    }
+    currentAiText += chunk;
+    currentAiBubble.innerHTML = renderMarkdown(currentAiText);
+    scrollToBottom();
+}
+
+function finishStream() {
+    isStreaming = false;
+    document.getElementById('sendBtn').disabled = false;
+    document.getElementById('interpretBtn').disabled = !chartParam;
+    if (currentAiBubble && currentAiText) {
+        currentAiBubble.innerHTML = renderMarkdown(currentAiText);
+    }
+    currentAiBubble = null;
+    currentAiText = '';
+    scrollToBottom();
+    loadSessions();
+}
+
+// ─── Messages ───
+function addMessage(role, content) {
+    const isUser = role === 'user';
+    const div = document.createElement('div');
+    div.className = 'message' + (isUser ? ' user' : '');
+    div.innerHTML = `<div class="avatar ${isUser ? 'user' : 'ai'}">${isUser ? 'U' : 'AI'}</div>
+        <div class="bubble">${isUser ? escHtml(content) : renderMarkdown(content)}</div>`;
+    document.getElementById('messages').appendChild(div);
+    scrollToBottom();
+}
+
+function scrollToBottom() {
+    const msgs = document.getElementById('messages');
+    msgs.scrollTop = msgs.scrollHeight;
+}
+
+// ─── Markdown rendering (simple) ───
+function renderMarkdown(text) {
+    if (!text) return '';
+    // Code blocks
+    text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) =>
+        `<pre><code>${escHtml(code.trim())}</code></pre>`);
+    // Inline code
+    text = text.replace(/`([^`]+)`/g, (_, c) => `<code>${escHtml(c)}</code>`);
+    // Bold
+    text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    // Italic
+    text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    // Headers
+    text = text.replace(/^### (.+)$/gm, '<h4 style="margin:6px 0 3px;font-size:0.92rem;">$1</h4>');
+    text = text.replace(/^## (.+)$/gm, '<h3 style="margin:8px 0 4px;font-size:0.98rem;">$1</h3>');
+    text = text.replace(/^# (.+)$/gm, '<h2 style="margin:10px 0 5px;">$1</h2>');
+    // Tables (simple)
+    text = text.replace(/(\|.+\|\n)+/g, m => {
+        const rows = m.trim().split('\n').filter(r => !/^\|[-:| ]+\|$/.test(r));
+        if (rows.length < 1) return m;
+        const header = rows[0].split('|').filter(c => c.trim()).map(c => `<th>${c.trim()}</th>`).join('');
+        const body = rows.slice(1).map(r =>
+            '<tr>' + r.split('|').filter(c => c.trim()).map(c => `<td>${c.trim()}</td>`).join('') + '</tr>'
+        ).join('');
+        return `<table><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table>`;
+    });
+    // List
+    text = text.replace(/^[\*\-] (.+)$/gm, '<li>$1</li>');
+    text = text.replace(/(<li>[\s\S]*?<\/li>)/g, '<ul style="padding-left:18px;margin:4px 0;">$1</ul>');
+    // Line breaks
+    text = text.replace(/\n\n/g, '<br><br>');
+    text = text.replace(/\n/g, '<br>');
+    return text;
+}
+
+// ─── Utilities ───
+function generateId() {
+    return 'sess-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+}
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
