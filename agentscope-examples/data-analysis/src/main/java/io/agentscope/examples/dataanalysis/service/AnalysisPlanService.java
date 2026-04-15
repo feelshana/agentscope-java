@@ -162,6 +162,14 @@ public class AnalysisPlanService {
     public Mono<Void> abandonPlan(String sessionId) {
         SessionPlanState state = getOrCreateState(sessionId);
         markUserConfirmed(sessionId);
+
+        // Frontend should clear panel on explicit decline instead of replaying stale plan snapshot.
+        state.lastRenderablePlan = null;
+        PlanResponse abandonedSignal = new PlanResponse();
+        abandonedSignal.setState("abandoned");
+        abandonedSignal.setNeedConfirm(false);
+        state.planSink.tryEmitNext(abandonedSignal);
+
         if (state.planNotebook == null || state.planNotebook.getCurrentPlan() == null) {
             return Mono.empty();
         }
@@ -202,7 +210,16 @@ public class AnalysisPlanService {
         }
 
         String text = assistantReply.toLowerCase();
-        boolean hasReport = text.contains("<report>") || text.contains("</report>");
+        boolean hasReportTag = text.contains("<report>") || text.contains("</report>");
+        boolean hasReportKeyword =
+                text.contains("分析报告")
+                        || text.contains("报告如下")
+                        || text.contains("结论")
+                        || text.contains("总结")
+                        || text.contains("report");
+        boolean hasReportLikeStructure =
+                text.contains("###") || text.contains("|---") || text.contains("```mermaid");
+        boolean hasReport = hasReportTag || (hasReportKeyword && hasReportLikeStructure);
         if (!hasReport) {
             return;
         }
@@ -231,6 +248,14 @@ public class AnalysisPlanService {
             }
         }
 
+        PlanResponse finalSnapshot = PlanResponse.fromPlan(current);
+        if (finalSnapshot != null) {
+            finalSnapshot.setState("done");
+            finalSnapshot.setNeedConfirm(false);
+            state.lastRenderablePlan = clonePlanResponse(finalSnapshot);
+            state.planSink.tryEmitNext(finalSnapshot);
+        }
+
         try {
             notebook.finishPlan("done", "报告已输出，系统自动完成计划收尾").block();
         } catch (Exception e) {
@@ -241,6 +266,9 @@ public class AnalysisPlanService {
             return;
         }
 
+        if (state.lastRenderablePlan != null) {
+            state.planSink.tryEmitNext(clonePlanResponse(state.lastRenderablePlan));
+        }
         log.info("Plan reconciled on turn completion: session={}", normalizeSessionId(sessionId));
         broadcastPlanChange(sessionId);
     }
