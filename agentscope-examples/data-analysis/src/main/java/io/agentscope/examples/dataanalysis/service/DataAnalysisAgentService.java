@@ -165,11 +165,88 @@ public class DataAnalysisAgentService implements InitializingBean {
     /**
      * Resume active stream for a session.
      *
-     * <p>Uses replay sink, so late subscribers can receive chunks already generated in this turn.
+     * <p>Strategy:
+     * <ol>
+     *   <li>Check memory {@code activeTurns} first — stream still running, replay from sink.</li>
+     *   <li>Fall back to DB: if latest assistant message has {@code streaming_status = RUNNING},
+     *       the server may have restarted and lost the in-memory sink. Return empty so the
+     *       frontend falls back to loading history via {@code /api/chat/history}.</li>
+     *   <li>No RUNNING message → stream already completed, return empty.</li>
+     * </ol>
      */
     public Flux<String> resume(String sessionId) {
+        // 1. In-memory hot sink: stream is still running.
+        //    Return SNAPSHOT frame (full content so far) followed by live incremental chunks.
+        //    This mirrors DeepSeek's resume_stream design:
+        //      - First frame: "[SNAPSHOT]<all text generated so far>"
+        //      - Subsequent frames: incremental chunks as they arrive
+        //    Frontend replaces existing bubble content with SNAPSHOT, then appends new chunks.
         ActiveTurn turn = activeTurns.get(sessionId);
-        return turn == null ? Flux.empty() : turn.chunkSink.asFlux();
+        if (turn != null) {
+            log.info(
+                    "[Resume] Found active turn for session {}, sending SNAPSHOT + live",
+                    sessionId);
+            // Capture current buffer snapshot and chunk count atomically (best-effort)
+            String snapshot = turn.replyBuf.toString();
+            long chunkCountAtSnapshot = turn.chunkCount.get();
+            Flux<String> snapshotFrame = Flux.just("[SNAPSHOT]" + snapshot);
+            // Live flux: skip chunks already replayed in the snapshot, only send new ones
+            Flux<String> liveFlux = turn.chunkSink.asFlux().skip(chunkCountAtSnapshot);
+            return snapshotFrame.concatWith(liveFlux);
+        }
+        // 2. No in-memory turn — check DB for RUNNING status
+        //    (covers server-restart scenario or stream that completed just after activeTurns
+        // removal)
+        io.agentscope.examples.dataanalysis.entity.ChatMessage running =
+                chatSessionService.findRunningMessage(sessionId);
+        if (running != null) {
+            // Stream was RUNNING in DB but in-memory sink is gone (e.g. server restart).
+            // Push a SNAPSHOT of whatever was persisted, then mark COMPLETED.
+            log.warn(
+                    "[Resume] RUNNING message found in DB but no active sink for session {};"
+                            + " pushing DB snapshot and marking COMPLETED",
+                    sessionId);
+            chatSessionService.completeAssistantDraft(
+                    running.getId(), running.getContent(), sessionId);
+            String dbContent = running.getContent();
+            if (dbContent != null && !dbContent.isBlank()) {
+                return Flux.just("[SNAPSHOT]" + dbContent);
+            }
+        }
+        // 3. Stream already COMPLETED (active turn cleaned up after stream finished).
+        //    Push the persisted content as a snapshot so the frontend can render
+        //    the final state (including [CONFIRM_PLAN] buttons etc.).
+        io.agentscope.examples.dataanalysis.entity.ChatMessage completed =
+                chatSessionService.findLatestCompletedAssistantMessage(sessionId);
+        if (completed != null) {
+            String dbContent = completed.getContent();
+            if (dbContent != null && !dbContent.isBlank()) {
+                log.info(
+                        "[Resume] Stream already COMPLETED for session {}; pushing persisted"
+                                + " snapshot (len={})",
+                        sessionId,
+                        dbContent.length());
+                return Flux.just("[SNAPSHOT]" + dbContent);
+            }
+        }
+        return Flux.empty();
+    }
+
+    /**
+     * Get the streaming status for a session.
+     *
+     * @return RUNNING if stream is in progress, DONE if completed, NONE if session not found
+     */
+    public String getStreamingStatus(String sessionId) {
+        ActiveTurn turn = activeTurns.get(sessionId);
+        if (turn != null) {
+            return "RUNNING";
+        }
+        // Check if session exists in database
+        if (chatSessionService.sessionExists(sessionId)) {
+            return "DONE";
+        }
+        return "NONE";
     }
 
     /**
@@ -202,6 +279,7 @@ public class DataAnalysisAgentService implements InitializingBean {
 
     private void handleChunk(ActiveTurn turn, String chunk) {
         turn.chunkSink.tryEmitNext(chunk);
+        turn.chunkCount.incrementAndGet();
 
         if (!"[STOPPED]".equals(chunk) && !chunk.startsWith("[TOOL:")) {
             turn.replyBuf.append(chunk);
@@ -211,14 +289,27 @@ public class DataAnalysisAgentService implements InitializingBean {
 
     private void handleError(ActiveTurn turn, Throwable err) {
         log.error("Chat stream error for session {}: {}", turn.sessionId, err.getMessage());
-        flushDraftIfNeeded(turn, true);
+        // Finalize the draft message with COMPLETED status (error is also a terminal state)
+        Long messageId = turn.draftMessageId.get();
+        if (messageId != null) {
+            chatSessionService.completeAssistantDraft(
+                    messageId, turn.replyBuf.toString(), turn.sessionId);
+        }
         completedRequestIds.put(turn.sessionId, turn.requestId);
         turn.completeSink();
         activeTurns.remove(turn.sessionId, turn);
     }
 
     private void handleComplete(ActiveTurn turn) {
-        flushDraftIfNeeded(turn, true);
+        // Persist final content and mark COMPLETED atomically
+        Long messageId = turn.draftMessageId.get();
+        if (messageId != null) {
+            chatSessionService.completeAssistantDraft(
+                    messageId, turn.replyBuf.toString(), turn.sessionId);
+        } else if (!turn.replyBuf.isEmpty()) {
+            // Edge case: no draft row yet (very short reply that never triggered flush)
+            chatSessionService.saveAssistantMessage(turn.sessionId, turn.replyBuf.toString());
+        }
         String assistantReply = turn.replyBuf.toString();
         if (!assistantReply.isEmpty()) {
             chatSessionService.maybeCompressAsync(turn.sessionId);
@@ -243,7 +334,8 @@ public class DataAnalysisAgentService implements InitializingBean {
 
         Long messageId = turn.draftMessageId.get();
         if (messageId == null) {
-            messageId = chatSessionService.beginAssistantDraft(turn.sessionId);
+            // First flush: create draft row with RUNNING status
+            messageId = chatSessionService.beginAssistantDraft(turn.sessionId, turn.requestId);
             turn.draftMessageId.set(messageId);
         }
 
@@ -323,6 +415,10 @@ public class DataAnalysisAgentService implements InitializingBean {
         private final AtomicReference<Long> draftMessageId = new AtomicReference<>();
         private volatile int lastPersistedLen = 0;
         private volatile long lastPersistedAt = 0L;
+
+        /** Total number of chunks emitted to chunkSink so far (including control markers). */
+        private final java.util.concurrent.atomic.AtomicInteger chunkCount =
+                new java.util.concurrent.atomic.AtomicInteger(0);
 
         private ActiveTurn(String sessionId, String requestId) {
             this.sessionId = sessionId;

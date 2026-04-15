@@ -1504,14 +1504,133 @@
     let currentResumeEventSource = null;
     let streamingContext = null;  // { messageDiv, assistantText, finalized, ... }
     let visibilityHiddenTime = null;  // timestamp when page became hidden
+    // Resume 流的状态快照，供多次切换时复用（避免每次重连都从空白开始）
+    let resumeSnapshot = null;  // { text: string, el: HTMLElement }
 
 
     // ─── User identity from URL param ───
     const urlParams = new URLSearchParams(window.location.search);
     const currentUserName = urlParams.get('account') || urlParams.get('userName') || '';
 
-    // ─── Session management ───
-    let currentSessionId = generateUUID();
+    // ─── Session management with localStorage persistence ───
+    // Key format: dataAnalysis_activeSession_<userName>
+    // Value: JSON { sessionId, lastActiveAt, lastHiddenAt, hasActiveStream }
+    // Recovery logic: only restore if lastHiddenAt is within 10 minutes (user briefly left)
+    const SESSION_STORAGE_KEY = 'dataAnalysis_activeSession_' + currentUserName;
+    const SESSION_RECOVERY_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
+
+    // Check if localStorage is available (handles iOS private mode)
+    function isLocalStorageAvailable() {
+        try {
+            const test = '__storage_test__';
+            localStorage.setItem(test, test);
+            localStorage.removeItem(test);
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    // Get storage instance (localStorage preferred, sessionStorage fallback)
+    function getStorage() {
+        if (isLocalStorageAvailable()) {
+            return localStorage;
+        }
+        console.warn('[Session] localStorage not available, using sessionStorage');
+        return sessionStorage;
+    }
+
+    // Get or create sessionId with localStorage persistence
+    // Recovery logic: only restore if user left within threshold time (briefly left)
+    function getOrCreateSessionId() {
+        const storage = getStorage();
+        const stored = storage.getItem(SESSION_STORAGE_KEY);
+
+        if (stored) {
+            try {
+                const data = JSON.parse(stored);
+                // Key: check lastHiddenAt to determine if user briefly left
+                // Only restore session if user left within threshold time
+                if (data.sessionId && data.lastHiddenAt) {
+                    const thresholdAgo = Date.now() - SESSION_RECOVERY_THRESHOLD_MS;
+                    if (data.lastHiddenAt > thresholdAgo) {
+                        console.log('[Session] Restored sessionId (user briefly left):', data.sessionId);
+                        return data.sessionId;
+                    } else {
+                        console.log('[Session] Previous session expired (left too long ago)');
+                    }
+                }
+            } catch (e) {
+                console.warn('[Session] Failed to parse stored session:', e);
+            }
+        }
+
+        // Create new session
+        const newId = generateUUID();
+        console.log('[Session] Created new sessionId:', newId);
+        persistActiveSession(newId, false);
+        return newId;
+    }
+
+    // Persist session info to storage
+    function persistActiveSession(sessionId, hasActiveStream) {
+        const storage = getStorage();
+        // Preserve lastHiddenAt if exists
+        let lastHiddenAt = null;
+        const stored = storage.getItem(SESSION_STORAGE_KEY);
+        if (stored) {
+            try {
+                const data = JSON.parse(stored);
+                lastHiddenAt = data.lastHiddenAt;
+            } catch (e) {}
+        }
+        const data = {
+            sessionId: sessionId,
+            lastActiveAt: Date.now(),
+            lastHiddenAt: lastHiddenAt,
+            hasActiveStream: hasActiveStream
+        };
+        storage.setItem(SESSION_STORAGE_KEY, JSON.stringify(data));
+    }
+
+    // Clear session from storage (when user explicitly starts new session)
+    function clearActiveSession() {
+        const storage = getStorage();
+        storage.removeItem(SESSION_STORAGE_KEY);
+    }
+
+    // Update session activity timestamp
+    function touchSessionActivity() {
+        const storage = getStorage();
+        const stored = storage.getItem(SESSION_STORAGE_KEY);
+        if (stored) {
+            try {
+                const data = JSON.parse(stored);
+                data.lastActiveAt = Date.now();
+                storage.setItem(SESSION_STORAGE_KEY, JSON.stringify(data));
+            } catch (e) {
+                // ignore
+            }
+        }
+    }
+
+    // Record when user leaves (goes to background) - used for recovery decision
+    function recordUserLeft() {
+        const storage = getStorage();
+        const stored = storage.getItem(SESSION_STORAGE_KEY);
+        if (stored) {
+            try {
+                const data = JSON.parse(stored);
+                data.lastHiddenAt = Date.now();
+                storage.setItem(SESSION_STORAGE_KEY, JSON.stringify(data));
+                console.log('[Session] Recorded user left at:', data.lastHiddenAt);
+            } catch (e) {
+                // ignore
+            }
+        }
+    }
+
+    let currentSessionId = getOrCreateSessionId();
 
     function generateUUID() {
         return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -1537,45 +1656,117 @@
         clearChatUI();
     }
 
+    // Check streaming status on page load and resume if needed (critical for mobile WebView recovery)
+    async function checkAndResumeOnPageLoad() {
+        if (!currentSessionId) return;
+
+        try {
+            const res = await fetch(BASE_PATH + '/api/streaming-status/' + encodeURIComponent(currentSessionId));
+            if (res.ok) {
+                const data = await res.json();
+                console.log('[Session] Streaming status:', data.status);
+
+                if (data.status === 'RUNNING') {
+                    // Session has active stream, try to resume
+                    console.log('[Session] Resuming active stream...');
+                    persistActiveSession(currentSessionId, true);
+                    tryResumeSessionStream(currentSessionId, true);
+                } else if (data.status === 'DONE') {
+                    // Session exists but no active stream, load history
+                    console.log('[Session] Loading historical messages...');
+                    await loadSessionHistoryOnResume(currentSessionId);
+                    persistActiveSession(currentSessionId, false);
+                } else {
+                    // Session not found in backend, will create new on first message
+                    console.log('[Session] Session not found, will create new on first message');
+                }
+            }
+        } catch (e) {
+            console.warn('[Session] Failed to check streaming status:', e);
+        }
+    }
+
+    // Load session history when resuming a completed session
+    async function loadSessionHistoryOnResume(sessionId) {
+        try {
+            const messages = await fetch(BASE_PATH + '/api/sessions/' + sessionId + '/messages').then(r => r.json());
+            if (Array.isArray(messages) && messages.length > 0) {
+                // 找到最后一条 assistant 消息的索引，只有它才注入推荐问题
+                let lastAssistantIdx = -1;
+                for (let i = messages.length - 1; i >= 0; i--) {
+                    if (messages[i].role !== 'user') { lastAssistantIdx = i; break; }
+                }
+                messages.forEach((msg, idx) => {
+                    const msgEl = appendMessage(msg.role === 'user' ? 'user' : 'assistant', '');
+                    finalizeMessage(msgEl, msg.content, idx === lastAssistantIdx);
+                });
+                requestAnimationFrame(() => initAllCharts());
+            }
+        } catch (e) {
+            console.warn('[Session] Failed to load history:', e);
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         connectPlanStream();
         fetchCurrentPlan();
         loadSuggestedQuestions();
         syncDrawerPadding();
+        // Check and resume on page load (critical for mobile WebView recovery)
+        checkAndResumeOnPageLoad();
     });
 
     // ─── Visibility change handler for mobile SSE recovery ───
-    // When app switches to background on mobile, SSE connection may be interrupted.
-    // We delay the error handling to give the connection a chance to recover when app returns.
+    // DeepSeek-style: rely solely on localStorage hasActiveStream flag.
+    // Memory variables (currentEventSource, streamingContext, etc.) are fragile;
+    // localStorage survives background/foreground cycles reliably.
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') {
-            // Page going to background - record timestamp
             visibilityHiddenTime = Date.now();
             console.log('[Visibility] Page hidden at', visibilityHiddenTime);
+            recordUserLeft();
+            // Do NOT close connections here: closing triggers onerror which may fire
+            // before visibilityState is fully updated, causing doFinalize() to run
+            // and clearing hasActiveStream=false prematurely.
+            // Let onerror's own 'hidden' branch handle cleanup, and
+            // let the visible branch close connections before resuming.
         } else if (document.visibilityState === 'visible') {
-            // Page coming back to foreground
             const hiddenDuration = visibilityHiddenTime ? Date.now() - visibilityHiddenTime : 0;
             console.log('[Visibility] Page visible again, was hidden for', hiddenDuration, 'ms');
             visibilityHiddenTime = null;
 
-            // If we have an active streaming connection that may have been interrupted,
-            // check its state and show a notification if needed
-            if (currentEventSource && streamingContext && !streamingContext.finalized) {
-                const readyState = currentEventSource.readyState;
-                console.log('[Visibility] EventSource readyState:', readyState,
-                    '(0=CONNECTING, 1=OPEN, 2=CLOSED)');
+            // DeepSeek approach: only check localStorage hasActiveStream.
+            // If true, call resume regardless of in-memory state.
+            const storage = getStorage();
+            const stored = storage.getItem(SESSION_STORAGE_KEY);
+            if (!stored) return;
+            let data;
+            try { data = JSON.parse(stored); } catch (e) { return; }
 
-                if (readyState === EventSource.CLOSED) {
-                    // Connection closed while in background: finalize current UI state,
-                    // then try to resume from backend active stream.
-                    if (streamingContext.doFinalize) {
-                        streamingContext.doFinalize();
-                    }
-                    tryResumeSessionStream(currentSessionId);
-                }
-
-                // If CONNECTING or OPEN, the connection survived - continue normally
+            if (!data.hasActiveStream) {
+                console.log('[Visibility] No active stream in localStorage, nothing to resume');
+                return;
             }
+
+            console.log('[Visibility] hasActiveStream=true, triggering resume...');
+
+            // Mark streamingContext finalized FIRST, so that any onerror triggered
+            // by closing the EventSource below won't run doFinalize() again and
+            // won't clear hasActiveStream.
+            if (streamingContext && !streamingContext.finalized) {
+                streamingContext.finalized = true;
+                if (streamingContext.clearTimers) streamingContext.clearTimers();
+            }
+            // Close any lingering connections before resuming
+            if (currentEventSource) {
+                currentEventSource.close();
+                currentEventSource = null;
+            }
+
+            // Use resumeSnapshot if available (avoids blank flash before SNAPSHOT frame arrives)
+            const savedText = resumeSnapshot ? resumeSnapshot.text : '';
+            const savedEl   = resumeSnapshot ? resumeSnapshot.el   : null;
+            tryResumeSessionStream(currentSessionId, true, savedText, savedEl);
         }
     });
 
@@ -1648,15 +1839,22 @@
         try {
             const messages = await fetch(BASE_PATH + '/api/sessions/' + sessionId + '/messages').then(r => r.json());
             if (Array.isArray(messages) && messages.length > 0) {
-                messages.forEach(msg => {
+                // 找到最后一条 assistant 消息索引，只有它才注入推荐问题（流式恢复后会追加，此处跳过）
+                let lastAssistantIdx = -1;
+                for (let i = messages.length - 1; i >= 0; i--) {
+                    if (messages[i].role !== 'user') { lastAssistantIdx = i; break; }
+                }
+                messages.forEach((msg, idx) => {
                     const msgEl = appendMessage(msg.role === 'user' ? 'user' : 'assistant', '');
-                    finalizeMessage(msgEl, msg.content);
+                    // 历史查看时最后一条也暂不注入推荐问题，等 tryResumeSessionStream 判断是否有在进行的流
+                    finalizeMessage(msgEl, msg.content, false);
                 });
                 // 历史消息渲染完后初始化所有ECharts图表
                 requestAnimationFrame(() => initAllCharts());
             }
             // 尝试恢复该会话正在进行中的后端流式输出
-            tryResumeSessionStream(sessionId);
+            // tryResumeSessionStream 内部在流真正结束时（onerror+gotAnyChunk 或 [DONE]）才注入推荐问题
+            tryResumeSessionStream(sessionId, true);
         } catch(e) {
             appendMessage('assistant', '历史对话加载失败，可直接继续提问');
         }
@@ -1664,8 +1862,10 @@
 
     // When user re-enters a session (especially in mobile WebView),
     // re-subscribe to backend active stream and keep appending output.
-    function tryResumeSessionStream(sessionId) {
+    function tryResumeSessionStream(sessionId, showSuggAfterFinish, initialText, initialEl, retryCount) {
         if (!sessionId) return;
+        const MAX_RESUME_RETRIES = 6;  // max re-connect attempts when stream not finished
+        const _retryCount = retryCount || 0;
         if (currentResumeEventSource) {
             currentResumeEventSource.close();
             currentResumeEventSource = null;
@@ -1675,18 +1875,48 @@
         const es = new EventSource(url);
         currentResumeEventSource = es;
 
-        let resumedText = '';
-        let resumedAssistantEl = null;
+        // DeepSeek-style resume:
+        //   First frame: "[SNAPSHOT]<full text so far>" → replace bubble content entirely
+        //   Subsequent frames: incremental chunks → append
+        // initialEl: reuse existing bubble element to avoid creating a new one
+        let resumedText = initialText || '';
+        let resumedAssistantEl = initialEl || null;
         let gotAnyChunk = false;
+        let snapshotReceived = false;
+        let streamNaturallyEnded = false; // true when [STOPPED] received = stream finished cleanly
+        // If backend has no stream (immediate onerror, no chunks), and showSuggAfterFinish=true,
+        // inject suggestion chips onto the last message
+        let needInjectSuggOnNoStream = !!showSuggAfterFinish;
+
+        // ── scroll control: support user scrolling up to pause auto-scroll during resume ──
+        let resumeUserScrolledUp = false;
+        const resumeChatMsgsEl = document.getElementById('chatMessages');
+        let _resumeUserIsTouching = false;
+        function onResumeTouchStart() { _resumeUserIsTouching = true; }
+        function onResumeTouchEnd() {
+            _resumeUserIsTouching = false;
+            const atBottom = resumeChatMsgsEl.scrollHeight - resumeChatMsgsEl.scrollTop - resumeChatMsgsEl.clientHeight < 80;
+            if (atBottom) { resumeUserScrolledUp = false; streamingUserScrolledUp = false; }
+        }
+        function onResumeScroll() {
+            if (!_resumeUserIsTouching) return;
+            const atBottom = resumeChatMsgsEl.scrollHeight - resumeChatMsgsEl.scrollTop - resumeChatMsgsEl.clientHeight < 80;
+            resumeUserScrolledUp = !atBottom;
+            streamingUserScrolledUp = resumeUserScrolledUp;
+        }
+        resumeChatMsgsEl.addEventListener('touchstart', onResumeTouchStart, { passive: true });
+        resumeChatMsgsEl.addEventListener('touchend',   onResumeTouchEnd,   { passive: true });
+        resumeChatMsgsEl.addEventListener('scroll',     onResumeScroll,     { passive: true });
 
         es.onmessage = (event) => {
             const chunk = event.data;
-            if (chunk === '[STOPPED]') return;
+            if (chunk === '[STOPPED]') {
+                streamNaturallyEnded = true;
+                return;
+            }
             if (/^\[TOOL:[^\]]+\]$/.test(chunk)) return;
 
-            gotAnyChunk = true;
-            resumedText += chunk;
-
+            // Ensure bubble element exists
             if (!resumedAssistantEl) {
                 const messagesEl = document.getElementById('chatMessages');
                 const assistantNodes = messagesEl.querySelectorAll('.message.assistant');
@@ -1694,16 +1924,110 @@
                     ? assistantNodes[assistantNodes.length - 1]
                     : appendMessage('assistant', '');
             }
+
+            // DeepSeek-style: first frame may be [SNAPSHOT]...
+            if (!snapshotReceived && chunk.startsWith('[SNAPSHOT]')) {
+                snapshotReceived = true;
+                gotAnyChunk = true;
+                needInjectSuggOnNoStream = false;
+                resumedText = chunk.substring('[SNAPSHOT]'.length);
+                // Replace bubble content entirely with snapshot
+                updateLastMessage(resumedAssistantEl, resumedText);
+                resumeSnapshot = { text: resumedText, el: resumedAssistantEl };
+                return;
+            }
+
+            // Normal incremental chunk
+            needInjectSuggOnNoStream = false;
+            gotAnyChunk = true;
+            resumedText += chunk;
+            // Update realtime snapshot for re-reconnect
+            resumeSnapshot = { text: resumedText, el: resumedAssistantEl };
             updateLastMessage(resumedAssistantEl, resumedText);
         };
 
         es.onerror = () => {
+            // Always close to prevent EventSource auto-reconnect loop
             es.close();
+            resumeChatMsgsEl.removeEventListener('touchstart', onResumeTouchStart);
+            resumeChatMsgsEl.removeEventListener('touchend',   onResumeTouchEnd);
+            resumeChatMsgsEl.removeEventListener('scroll',     onResumeScroll);
+            streamingUserScrolledUp = false;
             if (currentResumeEventSource === es) {
                 currentResumeEventSource = null;
             }
+            // If page is hidden AND stream did not finish cleanly, this is a background
+            // disconnect — do NOT finalize. Keep resumeSnapshot and hasActiveStream so
+            // visibility handler can re-resume.
+            if (document.visibilityState === 'hidden' && !streamNaturallyEnded) {
+                console.log('[Resume SSE] onerror while hidden (stream not finished) - keeping snapshot for re-resume');
+                return;
+            }
+            // If stream did not finish cleanly AND page is visible, the SSE connection
+            // dropped mid-stream (common on mobile). Re-connect automatically up to MAX_RESUME_RETRIES.
+            if (!streamNaturallyEnded && _retryCount < MAX_RESUME_RETRIES) {
+                const delay = Math.min(1000 * (_retryCount + 1), 4000); // 1s, 2s, 3s, 4s, 4s…
+                console.log('[Resume SSE] connection dropped (stream not finished), retry', _retryCount + 1, '/', MAX_RESUME_RETRIES, 'in', delay, 'ms');
+                // Show a non-blocking hint card so user knows backend is still running
+                if (resumedAssistantEl) {
+                    const _cnt = resumedAssistantEl.querySelector('.message-content');
+                    if (_cnt && !_cnt.querySelector('#resumeRetryCard')) {
+                        const _rc = document.createElement('div');
+                        _rc.id = 'resumeRetryCard';
+                        _rc.style.cssText =
+                            'display:flex;align-items:center;gap:8px;margin-top:8px;'
+                            + 'padding:8px 12px;background:var(--surface2);border:1px solid var(--border);'
+                            + 'border-radius:var(--radius-sm);font-size:0.78rem;color:var(--text-hint);';
+                        _rc.innerHTML =
+                            '<div style="width:12px;height:12px;flex-shrink:0;border:2px solid var(--border);'
+                            + 'border-top-color:var(--primary);border-radius:50%;'
+                            + 'animation:spinLoader 0.7s linear infinite;"></div>'
+                            + '<span>&#x23F3; 后台仍在执行中，正在重新连接…</span>';
+                        _cnt.appendChild(_rc);
+                    }
+                }
+                setTimeout(() => {
+                    if (!streamNaturallyEnded) {
+                        tryResumeSessionStream(sessionId, showSuggAfterFinish,
+                            resumedText, resumedAssistantEl, _retryCount + 1);
+                    }
+                }, delay);
+                return;
+            }
             if (gotAnyChunk && resumedAssistantEl) {
-                finalizeMessage(resumedAssistantEl, resumedText);
+                // Stream truly ended — clear snapshot, mark done, finalize
+                resumeSnapshot = null;
+                persistActiveSession(currentSessionId, false);
+                planPending = false;
+                clearPlanPendingIfNeeded();
+                setProcessing(false);
+                finalizeMessage(resumedAssistantEl, resumedText, true);
+            } else if (!gotAnyChunk && needInjectSuggOnNoStream) {
+                // Backend had no stream at all — clear snapshot, mark done, inject suggestions
+                resumeSnapshot = null;
+                persistActiveSession(currentSessionId, false);
+                planPending = false;
+                clearPlanPendingIfNeeded();
+                setProcessing(false);
+                const messagesEl = document.getElementById('chatMessages');
+                const assistantNodes = messagesEl.querySelectorAll('.message.assistant');
+                if (assistantNodes.length > 0) {
+                    const lastAssistantEl = assistantNodes[assistantNodes.length - 1];
+                    if (!lastAssistantEl.querySelector('.post-report-sugg') && suggestedQuestions.length > 0) {
+                        const hasConfirmBtn = lastAssistantEl.querySelector('.confirm-actions');
+                        if (!hasConfirmBtn) {
+                            const chips = suggestedQuestions.map(q =>
+                                `<button class="post-report-sugg-chip" onclick="sendSuggestionText(this)">${escapeHtml(q)}</button>`
+                            ).join('');
+                            const suggDiv = document.createElement('div');
+                            suggDiv.className = 'post-report-sugg';
+                            suggDiv.innerHTML = `
+                                <div class="post-report-sugg-label">继续提问</div>
+                                <div class="post-report-sugg-scroll">${chips}</div>`;
+                            lastAssistantEl.appendChild(suggDiv);
+                        }
+                    }
+                }
             }
         };
     }
@@ -1729,7 +2053,12 @@
             currentResumeEventSource.close();
             currentResumeEventSource = null;
         }
+
+        // Clear storage and generate new sessionId
+        clearActiveSession();
         currentSessionId = generateUUID();
+        persistActiveSession(currentSessionId, false);
+
         connectPlanStream();
         fetchCurrentPlan();
         clearChatUI();
@@ -1906,6 +2235,10 @@
         const message = input.value.trim();
         if (!message || isProcessing) return;
 
+        // Update session activity timestamp and mark as having active stream
+        touchSessionActivity();
+        persistActiveSession(currentSessionId, true);
+
         if (currentResumeEventSource) {
             currentResumeEventSource.close();
             currentResumeEventSource = null;
@@ -2004,16 +2337,33 @@
         }
 
         // Detect user scroll: if user scrolls up (away from bottom), stop auto-scroll
+        // 移动端使用 touchstart/touchend 而非 scroll 事件，避免 JS 自动滚动触发的事件覆盖用户意图
         const chatMsgsEl = document.getElementById('chatMessages');
+        let _userIsTouching = false;
+        function onTouchStart() {
+            _userIsTouching = true;
+        }
+        function onTouchEnd() {
+            _userIsTouching = false;
+            // 触摸结束时判断是否在底部，如果已回到底部则恢复自动滚动
+            const atBottom = chatMsgsEl.scrollHeight - chatMsgsEl.scrollTop - chatMsgsEl.clientHeight < 80;
+            if (atBottom) streamingUserScrolledUp = false;
+        }
         function onUserScroll() {
-            const atBottom = chatMsgsEl.scrollHeight - chatMsgsEl.scrollTop - chatMsgsEl.clientHeight < 60;
+            // 只有用户主动触摸时的 scroll 才有效，JS 触发的 scrollTop 变化不处理
+            if (!_userIsTouching) return;
+            const atBottom = chatMsgsEl.scrollHeight - chatMsgsEl.scrollTop - chatMsgsEl.clientHeight < 80;
             streamingUserScrolledUp = !atBottom;
         }
-        chatMsgsEl.addEventListener('scroll', onUserScroll, { passive: true });
+        chatMsgsEl.addEventListener('touchstart', onTouchStart, { passive: true });
+        chatMsgsEl.addEventListener('touchend',   onTouchEnd,   { passive: true });
+        chatMsgsEl.addEventListener('scroll',     onUserScroll, { passive: true });
 
         function doFinalize() {
             if (finalized) return;
             finalized = true;
+            // Mark session as no longer having active stream
+            persistActiveSession(currentSessionId, false);
             // Clean up global streaming state
             if (currentEventSource === eventSource) {
                 currentEventSource = null;
@@ -2021,7 +2371,9 @@
             if (streamingContext && streamingContext.eventSource === eventSource) {
                 streamingContext.finalized = true;
             }
-            chatMsgsEl.removeEventListener('scroll', onUserScroll);
+            chatMsgsEl.removeEventListener('touchstart', onTouchStart);
+            chatMsgsEl.removeEventListener('touchend',   onTouchEnd);
+            chatMsgsEl.removeEventListener('scroll',     onUserScroll);
             // Clean up query-wait timers to prevent memory leaks
             clearQueryWaitCard();
             // 清除图表等待提示卡的计时器（finalizeMessage 会移除 DOM，这里只需停计时器）
@@ -2032,7 +2384,7 @@
             _streamLastStableLen = 0;
             _streamLastTableCount = 0;
             removeTyping(typingEl);
-            if (assistantEl) finalizeMessage(assistantEl, assistantText);
+            if (assistantEl) finalizeMessage(assistantEl, assistantText, true);
             // If LLM answered directly (no plan was ever pushed), clear pending state
             planPending = false;
             clearPlanPendingIfNeeded();
@@ -2041,6 +2393,8 @@
 
         // Set doFinalize reference in streamingContext for visibility handler
         streamingContext.doFinalize = doFinalize;
+        // clearTimers: minimal cleanup for visibility-change abort (without finalizeMessage)
+        streamingContext.clearTimers = () => clearQueryWaitCard();
 
         // Sanitise and render report HTML incrementally (same rules as finalizeMessage)
         // ── 增量渲染策略：避免每次 chunk 全量 innerHTML 替换导致移动端回流闪烁 ──
@@ -2256,7 +2610,8 @@
                 let textNode = '';
                 if (beforeTag) {
                     // 过滤裸露的图表 JSON，然后用统一的 renderMarkdown 渲染
-                    const looseChartJsonRegex = /\{[\s]*"type"[\s]*:[\s]*"(bar|line|pie)"[\s]*,[\s]*"title"[\s]*:[\s]*"[^"]*"[\s]*,[\s]*"data"[\s]*:[\s]*\[[\s\S]*?\][\s]*\}/gi;
+                    // 匹配单系列（data）和多系列（series/categories）两种格式
+                    const looseChartJsonRegex = /\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*"type"\s*:\s*"(?:bar|line|pie|multi_line|multi_bar|dual_axes)"(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}/gi;
                     let filteredBefore = beforeTag.replace(looseChartJsonRegex, '').trim();
                     const parsedBefore = (typeof renderMarkdown !== 'undefined')
                         ? renderMarkdown(filteredBefore)
@@ -2467,6 +2822,12 @@
             }
         };
 
+        const checkDone = setInterval(() => {
+            if (eventSource.readyState === EventSource.CLOSED) {
+                clearInterval(checkDone); doFinalize();
+            }
+        }, 300);
+
         eventSource.onerror = () => {
             // When app is in background on mobile, SSE connection may be interrupted.
             // If page is hidden, don't close immediately - let visibility handler deal with it.
@@ -2475,12 +2836,16 @@
                 // Important: EventSource may auto-reconnect and re-hit /api/chat,
                 // causing duplicate user turns. Close explicitly and recover via /api/chat/resume.
                 eventSource.close();
+                // 停止 checkDone 定时器，防止它检测到 CLOSED 后触发 doFinalize()
+                // （doFinalize 会把 streamingContext.finalized=true，导致切回来时走错误分支）
+                clearInterval(checkDone);
                 return;
             }
 
             // Page is visible - this is a real error
             console.log('[SSE] onerror while page visible - closing connection');
             eventSource.close();
+            clearInterval(checkDone);
             if (!assistantEl && assistantText === '') {
                 removeTyping(typingEl);
                 appendMessage('assistant', '（请求出错，请重试）');
@@ -2489,12 +2854,6 @@
                 doFinalize();
             }
         };
-
-        const checkDone = setInterval(() => {
-            if (eventSource.readyState === EventSource.CLOSED) {
-                clearInterval(checkDone); doFinalize();
-            }
-        }, 300);
     }
 
     function setProcessing(flag) {
@@ -2517,24 +2876,34 @@
 
     function updateLastMessage(el, text) {
         const content = el.querySelector('.message-content');
-        // 过滤掉裸露的图表 JSON（LLM 有时会在 <report> 之前输出 JSON）
-        const looseChartJsonRegex = /\{[\s]*"type"[\s]*:[\s]*"(bar|line|pie)"[\s]*,[\s]*"title"[\s]*:[\s]*"[^"]*"[\s]*,[\s]*"data"[\s]*:[\s]*\[[\s\S]*?\][\s]*\}/gi;
-        const filteredText = text.replace(looseChartJsonRegex, '').trim();
-        // 使用统一的 renderMarkdown 渲染（含标题修复 + **中文：** 修复）
+        // If the snapshot contains a <report> block (e.g. from DB COMPLETED resume),
+        // strip it entirely here: finalizeMessage will render it properly as a card.
+        // Also strip complete or incomplete <chart> blocks.
+        let displayText = text
+            .replace(/<report[^>]*>[\s\S]*?<\/report>/gi, '')
+            .replace(/<report[^>]*>[\s\S]*/gi, '')  // incomplete report tag tail
+            .replace(/<chart[^>]*>[\s\S]*?<\/chart>/gi, '')
+            .replace(/<chart[^>]*>[\s\S]*/gi, '')   // incomplete chart tag tail
+            .trim();
+        // \u8fc7\u6ee4\u6389\u88f8\u9732\u7684\u56fe\u8868 JSON\uff08LLM \u6709\u65f6\u4f1a\u5728 <report> \u4e4b\u524d\u8f93\u51fa JSON\uff09
+        // \u5339\u914d\u5355\u7cfb\u5217\uff08data\uff09\u548c\u591a\u7cfb\u5217\uff08series/categories\uff09\u4e24\u79cd\u683c\u5f0f
+        const looseChartJsonRegex = /\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*"type"\s*:\s*"(?:bar|line|pie|multi_line|multi_bar|dual_axes)"(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}/gi;
+        const filteredText = displayText.replace(looseChartJsonRegex, '').trim();
+        // \u4f7f\u7528\u7edf\u4e00\u7684 renderMarkdown \u6e32\u67d3\uff08\u542b\u6807\u9898\u4fee\u590d + **\u4e2d\u6587\uff1a** \u4fee\u590d\uff09
         if (typeof renderMarkdown !== 'undefined') {
             content.innerHTML = renderMarkdown(filteredText);
             if (typeof wrapTables !== 'undefined') wrapTables(content);
         } else {
             content.textContent = filteredText;
         }
-        // 高亮单独一行的纯数字粗体（精确取数型结果）
+        // \u9ad8\u4eae\u5355\u72ec\u4e00\u884c\u7684\u7eaf\u6570\u5b57\u7c97\u4f53\uff08\u7cbe\u786e\u53d6\u6570\u578b\u7ed3\u679c\uff09
         highlightSingleNumber(content);
         if (!streamingUserScrolledUp) {
             document.getElementById('chatMessages').scrollTop = 99999;
         }
     }
 
-    function finalizeMessage(el, fullText) {
+    function finalizeMessage(el, fullText, isLastMessage) {
         const chartRegex   = /<chart>\s*([\s\S]*?)\s*<\/chart>/i;
         const reportRegex  = /<report>\s*([\s\S]*?)\s*<\/report>/i;
         const confirmRegex = /\[CONFIRM_PLAN\]/;
@@ -2551,7 +2920,8 @@
             .trim();
 
         // 移除不在 <chart> 标签内的裸露图表 JSON（LLM 有时会把 JSON 输出在错误的位置）
-        const looseChartJsonRegex = /\{[\s]*"type"[\s]*:[\s]*"(bar|line|pie)"[\s]*,[\s]*"title"[\s]*:[\s]*"[^"]*"[\s]*,[\s]*"data"[\s]*:[\s]*\[[\s\S]*?\][\s]*\}/gi;
+        // 匹配单系列（data）和多系列（series/categories）两种格式
+        const looseChartJsonRegex = /\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*"type"\s*:\s*"(?:bar|line|pie|multi_line|multi_bar|dual_axes)"(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}/gi;
         textPart = textPart.replace(looseChartJsonRegex, '').trim();
 
         let chartHtml = '';
@@ -2590,9 +2960,11 @@
             if (window._chartLoadingTimer) { clearInterval(window._chartLoadingTimer); window._chartLoadingTimer = null; }
             if (window._preChartTimer) { clearInterval(window._preChartTimer); window._preChartTimer = null; }
             if (window._chartWaitTimer) { clearInterval(window._chartWaitTimer); window._chartWaitTimer = null; }
-            // 移除 report 内的图表等待提示卡（如果有）
+            // 移除 report 内的图表等待提示卡和重连提示卡（如果有）
             const _chartWaitCard = content.querySelector('#chartWaitingCard');
             if (_chartWaitCard) _chartWaitCard.remove();
+            const _resumeRetryCard = content.querySelector('#resumeRetryCard');
+            if (_resumeRetryCard) _resumeRetryCard.remove();
             content.classList.add('has-chart');
 
             // ── Surgical DOM update: avoid full innerHTML replace so CSS animations fire ──
@@ -2674,6 +3046,10 @@
             // ⚠️ innerHTML 全量替换前，先把 SSE 已注入的确认按钮保存下来，替换后再追回。
             // 否则 renderPlan(needConfirm=true) 先注入按钮，finalizeMessage 替换 innerHTML 清空
             // 后再次注入，导致确认按钮闪烁出现两次。
+            // Clear any residual chart loading timers/cards (may linger after resume)
+            if (window._chartLoadingTimer) { clearInterval(window._chartLoadingTimer); window._chartLoadingTimer = null; }
+            if (window._preChartTimer) { clearInterval(window._preChartTimer); window._preChartTimer = null; }
+            if (window._chartWaitTimer) { clearInterval(window._chartWaitTimer); window._chartWaitTimer = null; }
             const existingConfirmWrap = content.querySelector('.confirm-actions-wrap');
             const textToRender = textPart || fullText;
             if (typeof renderMarkdown !== 'undefined') {
@@ -2723,9 +3099,11 @@
             content.appendChild(wrapDiv);
         }
 
-        // 在消息气泡下方追加推荐问题（仅非确认类回复）
+        // 在消息气泡下方追加推荐问题（仅非确认类回复、且是最后一条消息）
         // 插入到 el（.message.assistant）内部、消息气泡之后，避免撑高内容区
-        if (!hasConfirm && suggestedQuestions.length > 0 && !el.querySelector('.post-report-sugg')) {
+        if (!hasConfirm && isLastMessage && suggestedQuestions.length > 0) {
+            // 先移除页面内所有旧的推荐问题块，确保全局只有当前气泡保留一份
+            document.querySelectorAll('.post-report-sugg').forEach(old => old.remove());
             const chips = suggestedQuestions.map(q =>
                 `<button class="post-report-sugg-chip" onclick="sendSuggestionText(this)">${escapeHtml(q)}</button>`
             ).join('');

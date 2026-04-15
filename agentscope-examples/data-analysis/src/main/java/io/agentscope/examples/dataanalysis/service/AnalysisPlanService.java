@@ -76,6 +76,10 @@ public class AnalysisPlanService {
         return Flux.concat(
                 Mono.fromCallable(
                         () -> {
+                            // Prefer lastRenderablePlan: it captures the final state even after
+                            // finish_plan clears currentPlan (e.g. stream completed in background).
+                            PlanResponse snap = state.lastRenderablePlan;
+                            if (snap != null) return snap;
                             PlanResponse current = getCurrentPlan(sessionId);
                             return current != null ? current : new PlanResponse();
                         }),
@@ -308,8 +312,9 @@ public class AnalysisPlanService {
     }
 
     private static final class SessionPlanState {
-        private final Sinks.Many<PlanResponse> planSink =
-                Sinks.many().multicast().onBackpressureBuffer();
+        // replay(1): new subscribers (e.g. after mobile background reconnect) immediately
+        // receive the latest plan state instead of waiting for the next broadcast.
+        private final Sinks.Many<PlanResponse> planSink = Sinks.many().replay().limit(1);
         private volatile PlanNotebook planNotebook;
         private volatile boolean confirmedByUser = false;
         private volatile String lastConfirmedPlanName = null;
