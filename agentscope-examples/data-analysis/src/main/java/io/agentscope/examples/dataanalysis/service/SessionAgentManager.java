@@ -165,8 +165,9 @@ public class SessionAgentManager {
         // Broadcast plan changes by session (for SSE stream)
         planNotebook.addChangeHook(
                 "planBroadcast", (nb, plan) -> analysisPlanService.broadcastPlanChange(sessionId));
-        // Keep session-scoped reference updated
-        analysisPlanService.registerPlanNotebook(sessionId, planNotebook);
+        // Keep session-scoped reference updated (including ConfirmPlanToHint for user
+        // confirmation tracking)
+        analysisPlanService.registerPlanNotebook(sessionId, planNotebook, confirmPlanToHint);
 
         OpenAIChatModel.Builder modelBuilder =
                 OpenAIChatModel.builder().apiKey(apiKey).modelName("deepseek-chat").stream(true)

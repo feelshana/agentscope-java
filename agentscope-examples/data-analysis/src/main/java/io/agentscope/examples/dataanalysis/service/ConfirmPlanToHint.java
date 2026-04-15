@@ -135,6 +135,22 @@ public class ConfirmPlanToHint implements PlanToHint, Hook {
     private volatile Plan lastSeenPlan = null;
 
     /**
+     * Set to true when the user clicks the "执行" (Execute) button in the UI.
+     * When true, confirmation-related hints should be suppressed because the user
+     * has already approved execution.
+     *
+     * <p>This is reset to false when a new plan is created (detected via change-hook).
+     */
+    private volatile boolean userConfirmed = false;
+
+    /**
+     * Name of the plan that the user has confirmed. Used to detect if a new plan
+     * was created after confirmation (in which case we need to ask for confirmation
+     * again).
+     */
+    private volatile String confirmedPlanName = null;
+
+    /**
      * Register a change-hook on the given PlanNotebook so we can automatically
      * detect when a plan is finished as ABANDONED.
      *
@@ -154,6 +170,14 @@ public class ConfirmPlanToHint implements PlanToHint, Hook {
                         // Keep a reference to the live Plan object.
                         // finishPlan will mutate its state before clearing currentPlan.
                         lastSeenPlan = plan;
+
+                        // Detect if a NEW plan was created (user needs to confirm again)
+                        // This happens when the plan name changes
+                        String currentPlanName = plan.getName();
+                        if (currentPlanName != null && !currentPlanName.equals(confirmedPlanName)) {
+                            // New plan created, reset confirmation state
+                            userConfirmed = false;
+                        }
                     } else {
                         // plan became null: finishPlan was just called.
                         // The Plan object referenced by lastSeenPlan already has its
@@ -166,8 +190,22 @@ public class ConfirmPlanToHint implements PlanToHint, Hook {
                             }
                         }
                         lastSeenPlan = null;
+                        // Also reset confirmation state when plan finishes
+                        userConfirmed = false;
+                        confirmedPlanName = null;
                     }
                 });
+    }
+
+    /**
+     * Called by AnalysisPlanService when the user clicks "执行" (Execute) button.
+     * This suppresses confirmation-related hints for subsequent reasoning rounds.
+     *
+     * @param planName the name of the plan being confirmed
+     */
+    public void setUserConfirmed(String planName) {
+        this.userConfirmed = true;
+        this.confirmedPlanName = planName;
     }
 
     /**
@@ -310,6 +348,67 @@ public class ConfirmPlanToHint implements PlanToHint, Hook {
                         "- If user's request already implies execution intent (e.g., \"execute\","
                                 + " \"execute the plan\"), proceed directly without asking\n",
                         "");
+
+        // ── User has already confirmed execution ──────────────────────────────
+        // If the user clicked "执行" button, remove all confirmation-related hints
+        // and instructions about what to do when user declines.
+        if (userConfirmed) {
+            // Remove the entire RULE_WAIT_FOR_CONFIRMATION block
+            // This block starts with "⚠️ WAIT FOR USER CONFIRMATION:" and ends
+            // before the next rule or the closing tag
+            hint = hint.replaceAll("⚠️ WAIT FOR USER CONFIRMATION:\\n(-[^\\n]*\\n?)*", "");
+
+            // Remove AT_THE_BEGINNING options about user declining/unrelated tasks
+            // In confirmed mode, just tell LLM to start executing
+            hint =
+                    hint.replace(
+                            "- If the user asks you to do something unrelated to the plan,"
+                                + " prioritize the completion of user's query first, and then"
+                                + " return to the plan afterward.\n"
+                                + "- If the user no longer wants to perform the current plan,"
+                                + " confirm with the user and call the 'finish_plan' function.\n",
+                            "- Start executing the first subtask by calling 'update_subtask_state'"
+                                    + " with subtask_idx=0 and state='in_progress'.\n");
+
+            // Clean up any remaining confirmation-related instructions we added earlier
+            hint =
+                    hint.replace(
+                            "- If the user clicks '不执行' (Do Not Execute) button, call 'finish_plan'"
+                                + " directly to terminate the plan – do NOT ask for confirmation or"
+                                + " continue with other tasks.\n",
+                            "");
+            hint =
+                    hint.replace(
+                            "- If user clicks '不执行' (Do Not Execute) button, call 'finish_plan'"
+                                    + " directly to terminate the plan\n",
+                            "");
+
+            return hint;
+        }
+
+        // ── Fix AT_THE_BEGINNING for UI confirmation mode ─────────────────────
+        // In this UI, "不执行" button click should directly call finish_plan,
+        // not "complete user's query first and return to plan".
+        hint =
+                hint.replace(
+                        "- If the user asks you to do something unrelated to the plan, prioritize"
+                            + " the completion of user's query first, and then return to the plan"
+                            + " afterward.\n"
+                            + "- If the user no longer wants to perform the current plan, confirm"
+                            + " with the user and call the 'finish_plan' function.\n",
+                        "- If the user clicks '不执行' (Do Not Execute) button, call 'finish_plan'"
+                                + " directly to terminate the plan – do NOT ask for confirmation or"
+                                + " continue with other tasks.\n");
+
+        // ── Fix RULE_WAIT_FOR_CONFIRMATION for UI confirmation mode ───────────
+        // In this UI, "不执行" button click should directly call finish_plan,
+        // not just "respond accordingly but DO NOT start execution".
+        hint =
+                hint.replace(
+                        "- If user says anything else (questions, modifications, unrelated topics),"
+                                + " respond accordingly but DO NOT start execution\n",
+                        "- If user clicks '不执行' (Do Not Execute) button, call 'finish_plan'"
+                                + " directly to terminate the plan\n");
 
         if (planNotebook.isNeedUserConfirm() && hint.contains(CONFIRMATION_PHRASE)) {
             // Insert instruction before the closing </system-hint> tag

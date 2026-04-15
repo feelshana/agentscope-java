@@ -50,8 +50,21 @@ public class AnalysisPlanService {
     }
 
     public void registerPlanNotebook(String sessionId, PlanNotebook planNotebook) {
+        registerPlanNotebook(sessionId, planNotebook, null);
+    }
+
+    /**
+     * Register a PlanNotebook and its associated ConfirmPlanToHint for a session.
+     *
+     * @param sessionId the session ID
+     * @param planNotebook the PlanNotebook instance
+     * @param confirmPlanToHint the ConfirmPlanToHint instance (may be null for non-UI sessions)
+     */
+    public void registerPlanNotebook(
+            String sessionId, PlanNotebook planNotebook, ConfirmPlanToHint confirmPlanToHint) {
         SessionPlanState state = getOrCreateState(sessionId);
         state.planNotebook = planNotebook;
+        state.confirmPlanToHint = confirmPlanToHint;
         state.confirmedByUser = false;
         state.lastConfirmedPlanName = null;
     }
@@ -150,7 +163,12 @@ public class AnalysisPlanService {
         SessionPlanState state = getOrCreateState(sessionId);
         state.confirmedByUser = true;
         if (state.planNotebook != null && state.planNotebook.getCurrentPlan() != null) {
-            state.lastConfirmedPlanName = state.planNotebook.getCurrentPlan().getName();
+            String planName = state.planNotebook.getCurrentPlan().getName();
+            state.lastConfirmedPlanName = planName;
+            // Also notify ConfirmPlanToHint so it can suppress confirmation hints
+            if (state.confirmPlanToHint != null) {
+                state.confirmPlanToHint.setUserConfirmed(planName);
+            }
         }
     }
 
@@ -311,6 +329,7 @@ public class AnalysisPlanService {
         private final Sinks.Many<PlanResponse> planSink =
                 Sinks.many().multicast().onBackpressureBuffer();
         private volatile PlanNotebook planNotebook;
+        private volatile ConfirmPlanToHint confirmPlanToHint;
         private volatile boolean confirmedByUser = false;
         private volatile String lastConfirmedPlanName = null;
         private volatile PlanResponse lastRenderablePlan;
