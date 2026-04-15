@@ -1642,6 +1642,8 @@
         renderPlan(null);
         setDrawerHasPlan(false);
         setProcessing(false);
+        connectPlanStream();
+        await fetchCurrentPlan();
         // Load historical messages from backend into UI
         try {
             const messages = await fetch(BASE_PATH + '/api/sessions/' + sessionId + '/messages').then(r => r.json());
@@ -1713,6 +1715,8 @@
             currentResumeEventSource = null;
         }
         currentSessionId = generateUUID();
+        connectPlanStream();
+        fetchCurrentPlan();
         clearChatUI();
 
         // 强制清空任务计划面板内容
@@ -1858,10 +1862,16 @@
             // 「不执行」：先让后端立即 abandon 当前计划（清空 PlanNotebook.currentPlan），
             // 防止 LLM 在后续轮次中收到残留计划的 system-hint。
             // 同时调 /api/plan/confirm 抑制 needConfirm 广播（兜底）。
-            fetch(BASE_PATH + '/api/plan/abandon', { method: 'POST' }).catch(() => {});
+            fetch(
+                BASE_PATH + '/api/plan/abandon?sessionId=' + encodeURIComponent(currentSessionId),
+                { method: 'POST' }
+            ).catch(() => {});
         } else {
             // Notify backend to suppress further needConfirm=true broadcasts for this plan
-            fetch(BASE_PATH + '/api/plan/confirm', { method: 'POST' }).catch(() => {});
+            fetch(
+                BASE_PATH + '/api/plan/confirm?sessionId=' + encodeURIComponent(currentSessionId),
+                { method: 'POST' }
+            ).catch(() => {});
         }
 
         // 重置 userCollapsed，后续子任务开始执行时面板可自动展开
@@ -3527,14 +3537,16 @@
     /* ═══════════════════════ Plan SSE ═══════════════════════ */
     function connectPlanStream() {
         if (planEventSource) planEventSource.close();
-        planEventSource = new EventSource(BASE_PATH + '/api/plan/stream');
+        const url = BASE_PATH + '/api/plan/stream?sessionId=' + encodeURIComponent(currentSessionId);
+        planEventSource = new EventSource(url);
         planEventSource.onmessage = (e) => { try { renderPlan(JSON.parse(e.data)); } catch(_) {} };
         planEventSource.onopen = () => updateConnStatus(true);
         planEventSource.onerror = () => { updateConnStatus(false); setTimeout(connectPlanStream, 3000); };
     }
 
     async function fetchCurrentPlan() {
-        try { renderPlan(await (await fetch(BASE_PATH + '/api/plan')).json()); } catch(_) {}
+        const url = BASE_PATH + '/api/plan?sessionId=' + encodeURIComponent(currentSessionId);
+        try { renderPlan(await (await fetch(url)).json()); } catch(_) {}
     }
 
     /* ═══════════════════════ Plan render ═══════════════════════ */

@@ -169,16 +169,16 @@ public class DataAnalysisController {
      * SSE stream for plan state changes.
      */
     @GetMapping(path = "/plan/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<PlanResponse> planStream() {
-        return planService.getPlanStream();
+    public Flux<PlanResponse> planStream(@RequestParam String sessionId) {
+        return planService.getPlanStream(sessionId);
     }
 
     /**
      * Snapshot of the current plan.
      */
     @GetMapping("/plan")
-    public PlanResponse currentPlan() {
-        PlanResponse plan = planService.getCurrentPlan();
+    public PlanResponse currentPlan(@RequestParam String sessionId) {
+        PlanResponse plan = planService.getCurrentPlan(sessionId);
         return plan != null ? plan : new PlanResponse();
     }
 
@@ -196,8 +196,8 @@ public class DataAnalysisController {
      * Tells the backend to suppress further needConfirm=true broadcasts for this plan.
      */
     @PostMapping("/plan/confirm")
-    public Map<String, String> confirmPlan() {
-        planService.markUserConfirmed();
+    public Map<String, String> confirmPlan(@RequestParam String sessionId) {
+        planService.markUserConfirmed(sessionId);
         return Map.of("status", "ok");
     }
 
@@ -211,8 +211,8 @@ public class DataAnalysisController {
      * longer sees a current plan in the system-hint.
      */
     @PostMapping("/plan/abandon")
-    public Mono<Map<String, String>> abandonPlan() {
-        return planService.abandonPlan().thenReturn(Map.of("status", "ok"));
+    public Mono<Map<String, String>> abandonPlan(@RequestParam String sessionId) {
+        return planService.abandonPlan(sessionId).thenReturn(Map.of("status", "ok"));
     }
 
     /**

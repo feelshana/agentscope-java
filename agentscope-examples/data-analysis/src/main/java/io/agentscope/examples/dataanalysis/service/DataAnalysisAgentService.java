@@ -183,7 +183,7 @@ public class DataAnalysisAgentService implements InitializingBean {
             turn.completeSink();
         }
         completedRequestIds.remove(sessionId);
-        analysisPlanService.broadcastPlanChange();
+        analysisPlanService.broadcastPlanChange(sessionId);
     }
 
     private void startGeneration(
@@ -219,8 +219,10 @@ public class DataAnalysisAgentService implements InitializingBean {
 
     private void handleComplete(ActiveTurn turn) {
         flushDraftIfNeeded(turn, true);
-        if (!turn.replyBuf.isEmpty()) {
+        String assistantReply = turn.replyBuf.toString();
+        if (!assistantReply.isEmpty()) {
             chatSessionService.maybeCompressAsync(turn.sessionId);
+            analysisPlanService.reconcilePlanAfterTurnComplete(turn.sessionId, assistantReply);
         }
         completedRequestIds.put(turn.sessionId, turn.requestId);
         turn.completeSink();
