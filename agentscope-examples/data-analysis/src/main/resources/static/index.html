@@ -1708,6 +1708,21 @@
         };
     }
 
+    function clearPlanPanelUI() {
+        const emptyEl   = document.getElementById('emptyPlan');
+        const contentEl = document.getElementById('planContent');
+        const hintEl    = document.getElementById('drawerHint');
+        const progressWrap = document.getElementById('drawerProgressWrap');
+        if (emptyEl)   { emptyEl.style.display = 'block'; }
+        if (contentEl) { contentEl.style.display = 'none'; contentEl.innerHTML = ''; }
+        if (hintEl)    { hintEl.className = 'drawer-hint'; const _t = hintEl.querySelector('#drawerHintText'); if (_t) _t.textContent = '📋 任务计划已生成，点击查看'; }
+        if (progressWrap) { progressWrap.style.display = 'none'; }
+        planPending = false;
+        confirmExecuted = false;
+        setPlanGenerating(false);
+        setDrawerHasPlan(false);
+    }
+
     function startNewSession() {
 
         if (currentResumeEventSource) {
@@ -1720,20 +1735,11 @@
         clearChatUI();
 
         // 强制清空任务计划面板内容
-        const emptyEl   = document.getElementById('emptyPlan');
-        const contentEl = document.getElementById('planContent');
-        const hintEl    = document.getElementById('drawerHint');
-        const progressWrap = document.getElementById('drawerProgressWrap');
-        if (emptyEl)   { emptyEl.style.display = 'block'; }
-        if (contentEl) { contentEl.style.display = 'none'; contentEl.innerHTML = ''; }
-        if (hintEl)    { hintEl.className = 'drawer-hint'; const _t = hintEl.querySelector('#drawerHintText'); if (_t) _t.textContent = '📋 任务计划已生成，点击查看'; }
-        if (progressWrap) { progressWrap.style.display = 'none'; }
-        planPending = false;
+        clearPlanPanelUI();
         confirmDecided = false;
-        confirmExecuted = false;
-        setDrawerHasPlan(false);
         setProcessing(false);
     }
+
 
     async function deleteSession(event, sessionId) {
         event.stopPropagation();
@@ -1862,7 +1868,9 @@
             // 「不执行」：先让后端立即 abandon 当前计划（清空 PlanNotebook.currentPlan），
             // 防止 LLM 在后续轮次中收到残留计划的 system-hint。
             // 同时调 /api/plan/confirm 抑制 needConfirm 广播（兜底）。
+            clearPlanPanelUI();
             fetch(
+
                 BASE_PATH + '/api/plan/abandon?sessionId=' + encodeURIComponent(currentSessionId),
                 { method: 'POST' }
             ).catch(() => {});
@@ -3602,6 +3610,11 @@
         const progressText = document.getElementById('drawerProgressText');
         const hintEl       = document.getElementById('drawerHint');
 
+        if (plan && plan.state === 'abandoned' && !plan.name) {
+            clearPlanPanelUI();
+            return;
+        }
+
         if (!plan || !plan.name) {
             // Backend pushed empty/null plan – keep existing content intact
             if (!hasPlan) {
@@ -3611,6 +3624,7 @@
             }
             return;
         }
+
 
         const subtasks  = plan.subtasks || [];
         const doneCount = subtasks.filter(s => s.state === 'done').length;
