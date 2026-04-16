@@ -65,44 +65,8 @@ public interface ChatMessageMapper extends BaseMapper<ChatMessage> {
     ChatMessage findLatestBySessionId(@Param("sessionId") String sessionId);
 
     /**
-     * Find the latest COMPLETED assistant message for a session.
-     * Used by resume() to recover content when the stream has already finished.
-     */
-    @Select(
-            "SELECT * FROM chat_message WHERE session_id = #{sessionId}"
-                    + " AND role = 'assistant' AND streaming_status = 'COMPLETED'"
-                    + " ORDER BY id DESC LIMIT 1")
-    ChatMessage findLatestCompletedAssistantBySessionId(@Param("sessionId") String sessionId);
-
-    /**
      * Update message content by id (for streaming incremental persistence).
      */
     @Update("UPDATE chat_message SET content = #{content} WHERE id = #{id}")
     int updateContentById(@Param("id") Long id, @Param("content") String content);
-
-    /**
-     * Update streaming status for an assistant message.
-     * Called when stream starts (RUNNING) and when it completes or errors (COMPLETED).
-     */
-    @Update("UPDATE chat_message SET streaming_status = #{status} WHERE id = #{id}")
-    int updateStreamingStatusById(@Param("id") Long id, @Param("status") String status);
-
-    /**
-     * Update both content and streaming status atomically (used on stream completion).
-     */
-    @Update(
-            "UPDATE chat_message SET content = #{content}, streaming_status = #{status}"
-                    + " WHERE id = #{id}")
-    int updateContentAndStatusById(
-            @Param("id") Long id, @Param("content") String content, @Param("status") String status);
-
-    /**
-     * Find the latest assistant message with RUNNING status for a session.
-     * Used by /api/chat/resume to check if a stream is still in progress.
-     */
-    @Select(
-            "SELECT * FROM chat_message WHERE session_id = #{sessionId}"
-                    + " AND role = 'assistant' AND streaming_status = 'RUNNING'"
-                    + " ORDER BY id DESC LIMIT 1")
-    ChatMessage findRunningBySessionId(@Param("sessionId") String sessionId);
 }

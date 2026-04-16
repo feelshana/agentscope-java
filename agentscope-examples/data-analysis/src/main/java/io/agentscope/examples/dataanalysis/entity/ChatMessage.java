@@ -41,21 +41,6 @@ public class ChatMessage {
     @TableField("created_at")
     private LocalDateTime createdAt;
 
-    /**
-     * Streaming status for assistant messages: RUNNING / COMPLETED / null.
-     * RUNNING: model is still generating; COMPLETED: generation finished normally or with error.
-     * null: historical / user messages.
-     */
-    @TableField("streaming_status")
-    private String streamingStatus;
-
-    /**
-     * Unique streaming ID matching the /api/chat requestId.
-     * Used by /api/chat/resume to locate the hot sink.
-     */
-    @TableField("streaming_id")
-    private String streamingId;
-
     public ChatMessage() {}
 
     public ChatMessage(String sessionId, String role, String content) {
@@ -103,21 +88,5 @@ public class ChatMessage {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
-    }
-
-    public String getStreamingStatus() {
-        return streamingStatus;
-    }
-
-    public void setStreamingStatus(String streamingStatus) {
-        this.streamingStatus = streamingStatus;
-    }
-
-    public String getStreamingId() {
-        return streamingId;
-    }
-
-    public void setStreamingId(String streamingId) {
-        this.streamingId = streamingId;
     }
 }
