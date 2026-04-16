@@ -135,8 +135,7 @@ public class SessionAgentManager {
 
         ConfirmPlanToHint confirmPlanToHint = new ConfirmPlanToHint();
         PlanNotebook planNotebook = PlanNotebook.builder().planToHint(confirmPlanToHint).build();
-        // Register the abandoned-plan detector so ConfirmPlanToHint can suppress
-        // the "no plan" hint after the user declines to execute a plan.
+        // Register change-hook so ConfirmPlanToHint can track plan lifecycle
         confirmPlanToHint.registerWith(planNotebook);
         // Broadcast plan changes by session (for SSE stream)
         planNotebook.addChangeHook(
@@ -172,7 +171,6 @@ public class SessionAgentManager {
                         .hook(new ToolResultLifecycleHook()) // priority=15: manage tool_result
                         // lifecycle
                         .hook(datasetInjectionHook) // priority=20: inject dataset catalogue
-                        .hook(confirmPlanToHint) // priority=50: runs before planHintHook(100)
                         .hook(new ChatLogHook(sessionId))
                         .hook(new LlmDbHook(sessionId, llmInteractionLogService))
                         .build();
