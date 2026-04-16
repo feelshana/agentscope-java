@@ -142,6 +142,16 @@ public class ChatSessionService {
     }
 
     /**
+     * Check if a session exists in the database.
+     *
+     * @param sessionId the chat session ID
+     * @return true if session exists, false otherwise
+     */
+    public boolean sessionExists(String sessionId) {
+        return sessionMapper.selectById(sessionId) != null;
+    }
+
+    /**
      * Load all messages for a session as Msg list (for Agent context injection).
      * If the session history is summarized, a leading system message with summary is prepended.
      */
@@ -220,17 +230,56 @@ public class ChatSessionService {
 
     /**
      * Create a draft assistant message row at the beginning of streaming.
+     * Sets {@code streaming_status = RUNNING} and records the requestId as {@code streaming_id}.
      * The row will be updated incrementally while the model is generating.
      *
+     * @param sessionId  the session
+     * @param requestId  unique request/streaming ID from /api/chat
      * @return inserted message id
      */
     @Transactional
-    public Long beginAssistantDraft(String sessionId) {
+    public Long beginAssistantDraft(String sessionId, String requestId) {
         ChatMessage msg = new ChatMessage(sessionId, "assistant", "");
+        msg.setStreamingStatus("RUNNING");
+        msg.setStreamingId(requestId);
         messageMapper.insert(msg);
         incrementMessageCount(sessionId);
         sessionMapper.touchUpdatedAt(sessionId);
         return msg.getId();
+    }
+
+    /**
+     * Mark a streaming assistant message as completed and persist final content.
+     * Sets {@code streaming_status = COMPLETED}.
+     *
+     * @param messageId the draft message id
+     * @param content   final assistant reply content
+     * @param sessionId the session
+     */
+    @Transactional
+    public void completeAssistantDraft(Long messageId, String content, String sessionId) {
+        if (messageId == null) {
+            return;
+        }
+        String textOnly = stripDisplayBlocks(content);
+        messageMapper.updateContentAndStatusById(messageId, textOnly, "COMPLETED");
+        sessionMapper.touchUpdatedAt(sessionId);
+    }
+
+    /**
+     * Find the latest RUNNING assistant message for a session.
+     * Returns null if no streaming message is found (stream already completed).
+     */
+    public ChatMessage findRunningMessage(String sessionId) {
+        return messageMapper.findRunningBySessionId(sessionId);
+    }
+
+    /**
+     * Find the latest COMPLETED assistant message for a session.
+     * Used by resume() to push a snapshot when the stream has already finished.
+     */
+    public ChatMessage findLatestCompletedAssistantMessage(String sessionId) {
+        return messageMapper.findLatestCompletedAssistantBySessionId(sessionId);
     }
 
     /**
@@ -258,6 +307,8 @@ public class ChatSessionService {
         String result = content.replaceAll("(?si)<chart[^>]*>.*?</chart>", "");
         // If chart tag has started but not closed yet (streaming middle state), cut that tail.
         result = result.replaceAll("(?si)<chart[^>]*>.*$", "");
+        // Remove [TOOL:xxx] control markers emitted by the streaming pipeline
+        result = result.replaceAll("\\[TOOL:[^\\]]*\\]", "");
         // Collapse 3+ consecutive newlines into at most 2, then strip leading/trailing whitespace
         result = result.replaceAll("\\n{3,}", "\n\n");
         return result.strip();
