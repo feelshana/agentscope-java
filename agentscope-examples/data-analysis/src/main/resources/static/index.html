@@ -1839,22 +1839,52 @@
         try {
             const messages = await fetch(BASE_PATH + '/api/sessions/' + sessionId + '/messages').then(r => r.json());
             if (Array.isArray(messages) && messages.length > 0) {
-                // 找到最后一条 assistant 消息索引，只有它才注入推荐问题（流式恢复后会追加，此处跳过）
                 let lastAssistantIdx = -1;
                 for (let i = messages.length - 1; i >= 0; i--) {
                     if (messages[i].role !== 'user') { lastAssistantIdx = i; break; }
                 }
                 messages.forEach((msg, idx) => {
                     const msgEl = appendMessage(msg.role === 'user' ? 'user' : 'assistant', '');
-                    // 历史查看时最后一条也暂不注入推荐问题，等 tryResumeSessionStream 判断是否有在进行的流
                     finalizeMessage(msgEl, msg.content, false);
                 });
-                // 历史消息渲染完后初始化所有ECharts图表
                 requestAnimationFrame(() => initAllCharts());
             }
-            // 尝试恢复该会话正在进行中的后端流式输出
-            // tryResumeSessionStream 内部在流真正结束时（onerror+gotAnyChunk 或 [DONE]）才注入推荐问题
-            tryResumeSessionStream(sessionId, true);
+
+            // Check streaming status: only call tryResumeSessionStream if backend stream is RUNNING.
+            // When DONE/NONE, history is already correctly rendered above; just inject suggestions.
+            try {
+                const statusRes = await fetch(BASE_PATH + '/api/streaming-status/' + encodeURIComponent(sessionId));
+                const statusData = statusRes.ok ? await statusRes.json() : { status: 'NONE' };
+                if (statusData.status === 'RUNNING') {
+                    // Active stream — resume and let it finalize (injects suggestions on end)
+                    persistActiveSession(sessionId, true);
+                    tryResumeSessionStream(sessionId, true);
+                } else {
+                    // Session complete — history already rendered. Just inject suggestions onto last msg.
+                    const messagesEl = document.getElementById('chatMessages');
+                    const assistantNodes = messagesEl.querySelectorAll('.message.assistant');
+                    if (assistantNodes.length > 0) {
+                        const lastEl = assistantNodes[assistantNodes.length - 1];
+                        if (!lastEl.querySelector('.post-report-sugg') && suggestedQuestions.length > 0) {
+                            const hasConfirmBtn = lastEl.querySelector('.confirm-actions');
+                            if (!hasConfirmBtn) {
+                                const chips = suggestedQuestions.map(q =>
+                                    `<button class="post-report-sugg-chip" onclick="sendSuggestionText(this)">${escapeHtml(q)}</button>`
+                                ).join('');
+                                const suggDiv = document.createElement('div');
+                                suggDiv.className = 'post-report-sugg';
+                                suggDiv.innerHTML = `
+                                    <div class="post-report-sugg-label">继续提问</div>
+                                    <div class="post-report-sugg-scroll">${chips}</div>`;
+                                lastEl.appendChild(suggDiv);
+                            }
+                        }
+                    }
+                }
+            } catch(_) {
+                // Fallback: if status check fails, try resume (safe, SNAPSHOT only re-renders)
+                tryResumeSessionStream(sessionId, true);
+            }
         } catch(e) {
             appendMessage('assistant', '历史对话加载失败，可直接继续提问');
         }
@@ -2974,6 +3004,22 @@
             // Remove any pre-chart bar that may still be in the DOM
             const preChartEl = content.querySelector('#preChartLoadingBar');
             if (preChartEl) preChartEl.remove();
+
+            // 1b. If content has no .text-part yet, it means updateLastMessage wrote raw HTML
+            //     directly into content.innerHTML (streaming path). We must clear that stale
+            //     content now, otherwise the report/chart text will be duplicated.
+            if (!content.querySelector('.text-part')) {
+                // Preserve special child nodes that may have been injected via SSE
+                const toKeep = [
+                    content.querySelector('.confirm-actions-wrap'),
+                    content.querySelector('#resumeRetryCard'),
+                    content.querySelector('#chartWaitingCard'),
+                    content.querySelector('.report-block'),
+                    content.querySelector('.chart-wrapper'),
+                ].filter(Boolean);
+                content.innerHTML = '';
+                toKeep.forEach(n => content.appendChild(n));
+            }
 
             // 2. Ensure the text-part div is present (it might not exist yet if LLM had no
             //    preamble text before the <chart>/<report> tag).
