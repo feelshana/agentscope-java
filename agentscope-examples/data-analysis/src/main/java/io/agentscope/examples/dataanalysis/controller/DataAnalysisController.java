@@ -166,20 +166,6 @@ public class DataAnalysisController {
     }
 
     /**
-     * Query the streaming status for a session.
-     *
-     * <p>Used by mobile/webview recovery to determine whether to resume an active stream
-     * or load historical messages from database.
-     *
-     * @return RUNNING if stream is in progress, DONE if completed, NONE if session not found
-     */
-    @GetMapping("/streaming-status/{sessionId}")
-    public Map<String, String> streamingStatus(@PathVariable String sessionId) {
-        String status = agentService.getStreamingStatus(sessionId);
-        return Map.of("status", status, "sessionId", sessionId);
-    }
-
-    /**
      * SSE stream for plan state changes.
      */
     @GetMapping(path = "/plan/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)

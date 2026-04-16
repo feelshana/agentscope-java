@@ -89,10 +89,6 @@ public class AnalysisPlanService {
         return Flux.concat(
                 Mono.fromCallable(
                         () -> {
-                            // Prefer lastRenderablePlan: it captures the final state even after
-                            // finish_plan clears currentPlan (e.g. stream completed in background).
-                            PlanResponse snap = state.lastRenderablePlan;
-                            if (snap != null) return snap;
                             PlanResponse current = getCurrentPlan(sessionId);
                             return current != null ? current : new PlanResponse();
                         }),
@@ -184,14 +180,6 @@ public class AnalysisPlanService {
     public Mono<Void> abandonPlan(String sessionId) {
         SessionPlanState state = getOrCreateState(sessionId);
         markUserConfirmed(sessionId);
-
-        // Frontend should clear panel on explicit decline instead of replaying stale plan snapshot.
-        state.lastRenderablePlan = null;
-        PlanResponse abandonedSignal = new PlanResponse();
-        abandonedSignal.setState("abandoned");
-        abandonedSignal.setNeedConfirm(false);
-        state.planSink.tryEmitNext(abandonedSignal);
-
         if (state.planNotebook == null || state.planNotebook.getCurrentPlan() == null) {
             return Mono.empty();
         }
@@ -232,16 +220,7 @@ public class AnalysisPlanService {
         }
 
         String text = assistantReply.toLowerCase();
-        boolean hasReportTag = text.contains("<report>") || text.contains("</report>");
-        boolean hasReportKeyword =
-                text.contains("分析报告")
-                        || text.contains("报告如下")
-                        || text.contains("结论")
-                        || text.contains("总结")
-                        || text.contains("report");
-        boolean hasReportLikeStructure =
-                text.contains("###") || text.contains("|---") || text.contains("```mermaid");
-        boolean hasReport = hasReportTag || (hasReportKeyword && hasReportLikeStructure);
+        boolean hasReport = text.contains("<report>") || text.contains("</report>");
         if (!hasReport) {
             return;
         }
@@ -270,14 +249,6 @@ public class AnalysisPlanService {
             }
         }
 
-        PlanResponse finalSnapshot = PlanResponse.fromPlan(current);
-        if (finalSnapshot != null) {
-            finalSnapshot.setState("done");
-            finalSnapshot.setNeedConfirm(false);
-            state.lastRenderablePlan = clonePlanResponse(finalSnapshot);
-            state.planSink.tryEmitNext(finalSnapshot);
-        }
-
         try {
             notebook.finishPlan("done", "报告已输出，系统自动完成计划收尾").block();
         } catch (Exception e) {
@@ -288,9 +259,6 @@ public class AnalysisPlanService {
             return;
         }
 
-        if (state.lastRenderablePlan != null) {
-            state.planSink.tryEmitNext(clonePlanResponse(state.lastRenderablePlan));
-        }
         log.info("Plan reconciled on turn completion: session={}", normalizeSessionId(sessionId));
         broadcastPlanChange(sessionId);
     }
@@ -330,9 +298,8 @@ public class AnalysisPlanService {
     }
 
     private static final class SessionPlanState {
-        // replay(1): new subscribers (e.g. after mobile background reconnect) immediately
-        // receive the latest plan state instead of waiting for the next broadcast.
-        private final Sinks.Many<PlanResponse> planSink = Sinks.many().replay().limit(1);
+        private final Sinks.Many<PlanResponse> planSink =
+                Sinks.many().multicast().onBackpressureBuffer();
         private volatile PlanNotebook planNotebook;
         private volatile ConfirmPlanToHint confirmPlanToHint;
         private volatile boolean confirmedByUser = false;
