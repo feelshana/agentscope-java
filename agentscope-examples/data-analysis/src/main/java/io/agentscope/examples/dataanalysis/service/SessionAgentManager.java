@@ -21,13 +21,9 @@ import io.agentscope.core.memory.InMemoryMemory;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.model.OpenAIChatModel;
 import io.agentscope.core.plan.PlanNotebook;
-import io.agentscope.core.skill.AgentSkill;
-import io.agentscope.core.skill.SkillBox;
-import io.agentscope.core.skill.repository.ClasspathSkillRepository;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.examples.dataanalysis.client.DataApiClient;
 import io.agentscope.examples.dataanalysis.tool.DataAnalysisTool;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -39,11 +35,11 @@ import org.springframework.stereotype.Component;
  * Manages per-session (Agent + Memory + PlanNotebook) instances.
  *
  * <p>Each chat session gets its own isolated Agent so conversations don't pollute each other.
- * Agents are kept in an in-memory map; their conversation state is persisted externally via
- * {@link ChatSessionService}.
+ * Agents are kept in an in-memory map; their conversation state is persisted externally via {@link
+ * ChatSessionService}.
  *
- * <p>On session resume, the historical messages are loaded from DB and pre-loaded into the
- * Agent's InMemoryMemory before processing the new user message.
+ * <p>On session resume, the historical messages are loaded from DB and pre-loaded into the Agent's
+ * InMemoryMemory before processing the new user message.
  */
 @Component
 public class SessionAgentManager {
@@ -91,9 +87,9 @@ public class SessionAgentManager {
     }
 
     /**
-     * Get or create an Agent session entry (synchronous).
-     * On first access (new session), creates a fresh Agent.
-     * On resume (session exists in DB but not in memory map), loads history and pre-warms.
+     * Get or create an Agent session entry (synchronous). On first access (new session), creates a
+     * fresh Agent. On resume (session exists in DB but not in memory map), loads history and
+     * pre-warms.
      */
     public SessionEntry getOrCreate(String sessionId) {
         if (agents.containsKey(sessionId)) {
@@ -115,18 +111,14 @@ public class SessionAgentManager {
         return entry;
     }
 
-    /**
-     * Remove a session from the in-memory map (called on reset).
-     */
+    /** Remove a session from the in-memory map (called on reset). */
     public void evict(String sessionId) {
         agents.remove(sessionId);
         analysisPlanService.clearSession(sessionId);
         log.info("Session evicted from memory: {}", sessionId);
     }
 
-    /**
-     * Get the current PlanNotebook for a session (for SSE plan stream).
-     */
+    /** Get the current PlanNotebook for a session (for SSE plan stream). */
     public PlanNotebook getPlanNotebook(String sessionId) {
         SessionEntry entry = agents.get(sessionId);
         return entry != null ? entry.planNotebook : analysisPlanService.getPlanNotebook(sessionId);
@@ -140,22 +132,6 @@ public class SessionAgentManager {
         Toolkit toolkit = new Toolkit();
         toolkit.registerTool(
                 new DataAnalysisTool(dataApiClient, sessionId, userName, queryResultCacheService));
-
-        // Initialize SkillBox and load classpath skills (e.g., echarts-chart)
-        SkillBox skillBox = new SkillBox(toolkit);
-        try (ClasspathSkillRepository repo = new ClasspathSkillRepository("skills")) {
-            List<AgentSkill> skills = repo.getAllSkills();
-            skills.forEach(
-                    skill -> {
-                        skillBox.registration().skill(skill).apply();
-                        log.info("Loaded skill: {}", skill.getSkillId());
-                    });
-            skillBox.registerSkillLoadTool();
-        } catch (IOException e) {
-            log.warn(
-                    "Failed to load classpath skills, continuing without skills: {}",
-                    e.getMessage());
-        }
 
         ConfirmPlanToHint confirmPlanToHint = new ConfirmPlanToHint();
         PlanNotebook planNotebook = PlanNotebook.builder().planToHint(confirmPlanToHint).build();
@@ -190,7 +166,6 @@ public class SessionAgentManager {
                         .model(modelBuilder.build())
                         .memory(memory)
                         .toolkit(toolkit)
-                        .skillBox(skillBox)
                         .planNotebook(planNotebook)
                         .maxIters(40)
                         .hook(new ContextTrimHook()) // priority=10: trim first
@@ -205,9 +180,7 @@ public class SessionAgentManager {
         return new SessionEntry(agent, memory, planNotebook);
     }
 
-    /**
-     * Pre-load historical Msg list into the Agent's InMemoryMemory so the LLM sees the context.
-     */
+    /** Pre-load historical Msg list into the Agent's InMemoryMemory so the LLM sees the context. */
     private void preloadHistory(SessionEntry entry, List<Msg> historyMsgs) {
         for (Msg msg : historyMsgs) {
             entry.memory.addMessage(msg);
@@ -216,9 +189,7 @@ public class SessionAgentManager {
 
     // ─────────────────── Session entry ───────────────────
 
-    /**
-     * Holds the trio of Agent, Memory, and PlanNotebook for one session.
-     */
+    /** Holds the trio of Agent, Memory, and PlanNotebook for one session. */
     public static class SessionEntry {
         public final ReActAgent agent;
         public final InMemoryMemory memory;

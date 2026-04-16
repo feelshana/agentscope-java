@@ -79,12 +79,23 @@ public class ContextTrimHook implements Hook {
     /**
      * Maximum characters kept in a tool-result text block for non-latest rounds
      * (applies to all tools except the most recent {@value #QUERY_DATASET_KEEP_ROUNDS}
-     * rounds of {@code query_dataset}).
+     * rounds of {@code query_dataset} and {@code get_dataset_detail}).
      */
     static final int DEFAULT_TOOL_RESULT_MAX_CHARS = 500;
 
+    /**
+     * Maximum characters kept in a {@code get_dataset_detail} tool-result for non-latest rounds.
+     * Dataset field definitions and dimension enumerations are critical for the LLM to decide
+     * whether to reuse historical data or re-call the tool; 500 chars is too small and causes
+     * redundant calls across conversation turns.
+     */
+    static final int GET_DATASET_DETAIL_RESULT_MAX_CHARS = 2000;
+
     /** Tool name for the dataset query tool (used for differential truncation). */
     private static final String QUERY_DATASET_TOOL = "query_dataset";
+
+    /** Tool name for the dataset detail tool (used for differential truncation). */
+    private static final String GET_DATASET_DETAIL_TOOL = "get_dataset_detail";
 
     /**
      * Short confirmation/rejection keywords that do NOT count as real question rounds.
@@ -312,17 +323,25 @@ public class ContextTrimHook implements Hook {
     /**
      * Truncate the text output of a single ToolResultBlock.
      *
-     * <p>When {@code useFullQueryLimit} is {@code true} and the tool name is
-     * {@value #QUERY_DATASET_TOOL}, the limit is {@value #QUERY_DATASET_RESULT_MAX_CHARS};
-     * otherwise {@value #DEFAULT_TOOL_RESULT_MAX_CHARS} is applied.
+     * <p>Three-tier limits apply:
+     * <ul>
+     *   <li>{@code query_dataset} (recent rounds): {@value #QUERY_DATASET_RESULT_MAX_CHARS} chars
+     *   <li>{@code get_dataset_detail}: {@value #GET_DATASET_DETAIL_RESULT_MAX_CHARS} chars
+     *   <li>all other tools: {@value #DEFAULT_TOOL_RESULT_MAX_CHARS} chars
+     * </ul>
      */
     private ToolResultBlock truncateToolResultBlock(
             ToolResultBlock trb, boolean useFullQueryLimit) {
         boolean isQueryDataset = QUERY_DATASET_TOOL.equals(trb.getName());
-        int maxChars =
-                (useFullQueryLimit && isQueryDataset)
-                        ? QUERY_DATASET_RESULT_MAX_CHARS
-                        : DEFAULT_TOOL_RESULT_MAX_CHARS;
+        boolean isDatasetDetail = GET_DATASET_DETAIL_TOOL.equals(trb.getName());
+        int maxChars;
+        if (useFullQueryLimit && isQueryDataset) {
+            maxChars = QUERY_DATASET_RESULT_MAX_CHARS;
+        } else if (isDatasetDetail) {
+            maxChars = GET_DATASET_DETAIL_RESULT_MAX_CHARS;
+        } else {
+            maxChars = DEFAULT_TOOL_RESULT_MAX_CHARS;
+        }
 
         List<ContentBlock> output = trb.getOutput();
         boolean modified = false;
