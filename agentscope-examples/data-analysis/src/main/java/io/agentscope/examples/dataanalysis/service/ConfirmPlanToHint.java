@@ -23,7 +23,7 @@ import io.agentscope.core.plan.model.Plan;
 /**
  * A PlanToHint decorator for the data-analysis example.
  *
- * <h3>Design principle: trust the system prompt</h3>
+ * <h2>Design principle: trust the system prompt</h2>
  *
  * <p>When {@code plan == null} (no active plan), this class returns {@code null} unconditionally —
  * <b>no system-hint is injected at all</b>. The system prompt (prompt-V8.txt §2) already provides
