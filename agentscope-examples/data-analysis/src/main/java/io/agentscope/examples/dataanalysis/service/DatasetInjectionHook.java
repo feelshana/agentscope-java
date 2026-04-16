@@ -179,6 +179,35 @@ public class DatasetInjectionHook implements Hook {
     }
 
     /**
+     * ECharts chart generation specification embedded into every system prompt.
+     *
+     * <p>Previously loaded on-demand via {@code load_skill_through_path}, which wasted one LLM
+     * reasoning round per report and caused the skill result to be truncated in history (default
+     * 500-char limit). Embedding it statically ensures the LLM always has the full spec without
+     * any tool call overhead.
+     */
+    private static final String ECHARTS_SKILL_SPEC =
+            "\n\n"
+                + "---\n"
+                + "## 图表生成规范（ECharts）\n\n"
+                + "在 `<chart>` 标签内输出合法 JSON，前端自动渲染。`<chart>` 紧跟在 `</report>` 之后，内部只写"
+                + " JSON，不用代码块包裹；每次最多一个图表；仅1个数据点时不输出图表；data 数组必须包含查询结果的**全部**数据行，严禁抽样。\n\n"
+                + "**图表类型选择：**\n"
+                + "| 场景 | type |\n"
+                + "|------|------|\n"
+                + "| 单指标时间趋势 | `line` |\n"
+                + "| 多指标时间趋势对比 | `multi_line` |\n"
+                + "| 单指标分类对比/排名 | `bar` |\n"
+                + "| 多指标分类对比 | `multi_bar` |\n"
+                + "| 占比构成 | `pie` |\n"
+                + "| 两量纲差异大的指标 | `dual_axes` |\n\n"
+                + "**JSON 格式：**\n"
+                + "- `line`/`bar`/`pie`：`{\"type\":\"line\",\"title\":\"标题\",\"data\":[{\"label\":\"3-25\",\"value\":1200}]}`\n"
+                + "- `multi_line`/`multi_bar`：`{\"type\":\"multi_line\",\"title\":\"标题\",\"categories\":[\"3-25\"],\"series\":[{\"name\":\"指标A\",\"data\":[1200]}]}`\n"
+                + "- `dual_axes`：series 每项需含 `\"type\":\"bar\"|\"line\"` 和 `\"yAxisIndex\":0|1`，另需"
+                + " `\"yAxis\":[{\"name\":\"左轴\"},{\"name\":\"右轴\"}]`\n";
+
+    /**
      * Append the dataset catalogue and historical query cache to the base system prompt.
      *
      * <p>Includes a brief note about data granularity to help the LLM understand
@@ -189,6 +218,7 @@ public class DatasetInjectionHook implements Hook {
      */
     private String buildSysPrompt(List<DatasetInfo> datasets, List<QueryResultCache> historyCache) {
         StringBuilder sb = new StringBuilder(baseSysPrompt);
+        sb.append(ECHARTS_SKILL_SPEC);
 
         // --- Available Datasets section ---
         if (datasets != null && !datasets.isEmpty()) {
