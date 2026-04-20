@@ -17,6 +17,8 @@ package io.agentscope.examples.chatbi.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -45,83 +47,99 @@ public class ConfluenceApiClient {
 
     private final WebClient webClient;
     private final int searchLimit;
+    private final boolean mockEnabled;
+
+    // Loaded once at startup from classpath:json/confluence_search.json
+    private final String mockSearchResult;
+
+    // Loaded once at startup from classpath:json/confluence_get_page.json
+    // Key: pageId, Value: parsed page content string
+    private final JsonNode mockPageData;
 
     public ConfluenceApiClient(
             @Value("${confluence.api.base-url:http://localhost:8001}") String baseUrl,
             @Value("${confluence.api.api-key:}") String apiKey,
-            @Value("${confluence.api.search-limit:8}") int searchLimit) {
+            @Value("${confluence.api.search-limit:8}") int searchLimit,
+            @Value("${confluence.api.mock:false}") boolean mockEnabled) {
         this.searchLimit = searchLimit;
+        this.mockEnabled = mockEnabled;
+        this.mockSearchResult = loadMockSearchResult();
+        this.mockPageData = loadMockPageData();
         this.webClient =
                 WebClient.builder()
                         .baseUrl(baseUrl)
                         .defaultHeader("authorization", "Bearer " + apiKey)
                         .codecs(cfg -> cfg.defaultCodecs().maxInMemorySize(10 * 1024 * 1024))
                         .build();
+        if (mockEnabled) {
+            log.warn("[Confluence] Mock mode enabled, data from classpath:json/confluence_search.json & confluence_get_page.json");
+        }
     }
 
-    /**
-     * Search the knowledge base and return the top relevant page contents.
-     *
-     * <p>Process: search → LLM-like relevance filter (done by caller/tool) → fetch full pages.
-     * This method does search + fetch all returned pages in parallel.
-     *
-     * @param query search query text
-     * @return concatenated page contents (markdown-friendly)
-     */
-    public Mono<String> searchAndFetch(String query) {
-        return search(query)
-                .flatMap(
-                        ids -> {
-                            if (ids.isEmpty()) {
-                                return Mono.just("未找到相关知识库内容。");
-                            }
-                            // Fetch all relevant pages in parallel
-                            List<Mono<String>> fetchMonos = new ArrayList<>();
-                            for (String id : ids) {
-                                fetchMonos.add(fetchPage(id));
-                            }
-                            return Flux.merge(fetchMonos)
-                                    .filter(content -> content != null && !content.isBlank())
-                                    .collectList()
-                                    .map(pages -> String.join("\n\n---\n\n", pages));
-                        })
-                .onErrorResume(
-                        e -> {
-                            log.error("[Confluence] searchAndFetch error: {}", e.getMessage());
-                            return Mono.just("知识库检索异常：" + e.getMessage());
-                        });
-    }
+
+
 
     /**
-     * Full-text search in Confluence, returns a list of relevant page IDs.
+     * Full-text search in Confluence, returns the raw JSON response body.
+     *
+     * <p>Used by GuAgent to let LLM filter results before fetching page details.
+     * <p>When {@code confluence.api.mock=true}, returns data from classpath:json/confluence_search.json.
+     * <p>The response format is {@code {"success":true,"data":"[...]"}} and
+     * this method extracts the inner data array string.
      */
-    public Mono<List<String>> search(String query) {
+    public Mono<String> searchRaw(String query) {
+        if (mockEnabled) {
+            log.info("[Confluence] Mock searchRaw query={}", query);
+            return Mono.just(mockSearchResult);
+        }
         String body = "{\"query\": \"" + escapeJson(query) + "\", \"limit\": " + searchLimit + "}";
         return webClient
                 .post()
                 .uri("/api/confluence/search")
                 .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer pDBP9RmQJe7")
                 .bodyValue(body)
                 .retrieve()
                 .bodyToMono(String.class)
                 .timeout(Duration.ofSeconds(20))
-                .map(this::extractPageIds)
+                .map(this::extractDataField)
                 .onErrorResume(
                         e -> {
                             log.error("[Confluence] search error: {}", e.getMessage());
-                            return Mono.just(new ArrayList<>());
+                            return Mono.just("[]");
                         });
     }
 
     /**
      * Fetch full page content by page ID.
+     * <p>When {@code confluence.api.mock=true}, looks up pageId in classpath:json/confluence_get_page.json.
+     * File format: {@code {"pageId": {"status_code":200,"body":"{\"success\":true,\"data\":\"{...}\"}"}}}
      */
     public Mono<String> fetchPage(String pageId) {
+        if (mockEnabled) {
+            log.info("[Confluence] Mock fetchPage pageId={}", pageId);
+            if (mockPageData != null && mockPageData.has(pageId)) {
+                try {
+                    // Parse: pageEntry["body"] -> {"success":true,"data":"{...}"} -> data content string
+                    String bodyStr = mockPageData.path(pageId).path("body").asText();
+                    JsonNode bodyNode = JSON.readTree(bodyStr);
+                    String data = bodyNode.path("data").asText();
+                    if (data != null && !data.isBlank()) {
+                        return Mono.just(data);
+                    }
+                } catch (Exception e) {
+                    log.warn("[Confluence] Failed to parse mock page {}: {}", pageId, e.getMessage());
+                }
+            }
+            log.warn("[Confluence] Mock page not found for pageId={}", pageId);
+            return Mono.just("[页面 " + pageId + " 暂无 mock 数据]");
+        }
         String body = "{\"page_id\": \"" + pageId + "\"}";
         return webClient
                 .post()
                 .uri("/api/confluence/get_page")
                 .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer pDBP9RmQJe7")
                 .bodyValue(body)
                 .retrieve()
                 .bodyToMono(String.class)
@@ -130,6 +148,75 @@ public class ConfluenceApiClient {
     }
 
     // ─────────────────── Private helpers ───────────────────
+
+    /**
+     * Load and parse mock page data from classpath:json/confluence_get_page.json at startup.
+     * File format: {@code {"pageId": {"status_code":200,"body":"..."},  ...}}
+     * Returns the root JsonNode (map of pageId -> entry), or null on failure.
+     */
+    private JsonNode loadMockPageData() {
+        try (InputStream is =
+                getClass().getClassLoader().getResourceAsStream("json/confluence_get_page.json")) {
+            if (is == null) {
+                log.warn("[Confluence] Mock file not found: json/confluence_get_page.json");
+                return null;
+            }
+            String fileContent = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            JsonNode root = JSON.readTree(fileContent);
+            log.info("[Confluence] Loaded mock page data from confluence_get_page.json ({} pages)", root.size());
+            return root;
+        } catch (Exception e) {
+            log.error("[Confluence] Failed to load mock page file: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Load and parse mock search result from classpath:json/confluence_search.json.
+     * File format: {@code {"status_code":200,"body":"{\"success\":true,\"data\":\"[...]\"}"}}
+     * Returns the innermost data array string.
+     */
+    private String loadMockSearchResult() {
+        try (InputStream is =
+                getClass().getClassLoader().getResourceAsStream("json/confluence_search.json")) {
+            if (is == null) {
+                log.warn("[Confluence] Mock file not found: json/confluence_search.json");
+                return "[]";
+            }
+            String fileContent = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            // Parse outer wrapper: {"status_code":200,"body":"..."}
+            JsonNode outer = JSON.readTree(fileContent);
+            String bodyStr = outer.path("body").asText();
+            // Parse body: {"success":true,"data":"[...]"}
+            JsonNode body = JSON.readTree(bodyStr);
+            String data = body.path("data").asText();
+            if (data != null && !data.isBlank()) {
+                log.info("[Confluence] Loaded mock search result from confluence_search.json");
+                return data;
+            }
+            return "[]";
+        } catch (Exception e) {
+            log.error("[Confluence] Failed to load mock file: {}", e.getMessage());
+            return "[]";
+        }
+    }
+    private String extractDataField(String responseBody) {
+        try {
+            JsonNode root = JSON.readTree(responseBody);
+            // Handle {"success":true,"data":"[...]"} wrapper
+            if (root.has("data")) {
+                String data = root.path("data").asText();
+                if (data != null && !data.isBlank()) {
+                    return data;
+                }
+            }
+            // Fallback: return raw body if already an array
+            return responseBody;
+        } catch (Exception e) {
+            log.warn("[Confluence] Failed to extract data field: {}", e.getMessage());
+            return responseBody;
+        }
+    }
 
     private List<String> extractPageIds(String body) {
         List<String> ids = new ArrayList<>();

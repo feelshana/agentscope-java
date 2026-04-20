@@ -1,0 +1,20 @@
+{
+  "status_code": 200,
+  "body": "{\"success\":true,\"message\":\"ok\",\"query_id\":\"14752274-4146-4097-9e46-30060bfe3960\",\"processing_time\":1.317,\"project_id\":\"1304\",\"effective_scope\":\"project\",\"intent_enum\":\"TABLE_UPDATE_ELEMENTS\",\"template_id\":\"T-01\",\"total_count\":1,\"resolved_entities\":[{\"raw_name\":\"mgwh_rd_dwm.dwm_video_use_d\",\"resolved_name\":\"cluster3:mgwh_rd_dwm.dwm_video_use_d\",\"cluster\":\"cluster3\",\"full_name\":\"mgwh_rd_dwm.dwm_video_use_d\",\"entity_type\":\"table\",\"score\":1.0,\"entity_id\":null}],\"results\":[{\"human_readable\":\"运算元素[dwm_video_use_d] 写入表[mgwh_rd_dwm.dwm_video_use_d]，所属工作流: dwm_video_use_d\",\"nodes\":[],\"edges\":[{\"rel_type\":\"WRITES_TABLE\",\"source_lines\":null,\"key_snippet\":null,\"confidence\":0.95,\"parsed_at\":null,\"via_ce_id\":null,\"via_ce_name\":null,\"code_path\":\"/data/nfs/scripts/1304/dwm_video_use_d.sh\"}],\"context_tags\":[]}],\"cypher_used\":\"MATCH (ce:ComputeElement {cluster: $cluster, is_active: true})-[r:WRITES_TABLE]->(t:Table {cluster: $cluster, full_name: $table_name})\\nOPTIONAL MATCH (w:Workflow {is_active: true})-[:CONTAINS]->(ce)\\nRETURN ce.id AS ce_id, ce.name AS ce_name, ce.code_path AS code_path,\\n       collect(DISTINCT w.name) AS in_workflows,\\n       r.source_lines AS source_lines, r.key_snippet AS key_snippet,\\n       r.confidence AS confidence, r.parsed_at AS parsed_at\\nLIMIT 50\",\"candidates\":null,\"final_prompt\":\"### 角色\\n你是红海数据平台的数据血缘分析助手，帮助数据开发和运维人员理解数据流向、任务依赖和影响范围。\\n\\n### 任务\\n根据下方提供的血缘信息，用清晰易懂的方式回答用户问题。\\n\\n### 回答规范\\n\\n**内容原则：**\\n1. 所有结论必须来自已提供的血缘信息，不得凭借其他知识推断或编造\\n2. 直接回答用户问题，不要提及数据来源方式（如\\\"根据提供的数据\\\"、\\\"从查询结果来看\\\"等）\\n3. 使用业务语言，禁止出现以下系统内部概念：JSON、context、parse_status、job_type、code_path、key_snippet 等\\n4. 若信息不足以支撑结论，如实说明并建议用户确认实体名称是否正确\\n5. 若显示\\\"被多个项目共享使用\\\"，正常列出所有写入方的运算元素和工作流名称，并在结尾附带说明该表被多个项目共享使用\\n6. 上下文中节点已按语义标注：称为\\\"运算元素\\\"的仍叫\\\"运算元素\\\"，称为\\\"调度过程节点\\\"的仍叫\\\"调度过程节点\\\"，不得混用两种术语\\n\\n**回答结构（按顺序）：**\\n1. **直接回答**：先用简洁的文字回答核心问题（如列出表名、工作流名等）\\n2. **补充说明**：如有必要，补充关键细节（如执行依赖关系、代码文件位置等）\\n3. **可视化图表**（放在回答最后）：用 Mermaid 图直观展示数据流向或依赖关系\\n\\n**禁止事项：**\\n- 不要向用户展示内部解析状态（如\\\"泛型任务\\\"、\\\"血缘已解析\\\"、\\\"no_lineage\\\"等）\\n- 不要在回答中提及\\\"根据当前提供的数据\\\"、\\\"context 数据\\\"等措辞\\n- 不要展示原始数据结构或字段名\\n\\n### Mermaid 图规范\\n\\n用 Mermaid 图表将血缘关系可视化，放在回答的**最后**。\\n\\n**节点形状：**\\n- 工作流：矩形 `W[\\\"工作流名\\\"]`\\n- 运算元素：圆角矩形 `CE(\\\"运算元素名\\\")`\\n- 表：数据库形状 `T[(\\\"db.table\\\")]`\\n\\n**边标签：**`-->|写入|`、`-->|读取|`、`-->|包含|`、`-->|依赖|`、`-->|衍生|`\\n\\n**工作流内 DAG 图（重要）：**\\n当展示工作流包含的运算元素时，必须体现运算元素之间的执行依赖关系，构成有向无环图（DAG）：\\n- 如果有执行依赖信息（A → B 表示 A 先执行，B 后执行），用 `-->|依赖|` 连线\\n- 没有依赖关系的运算元素并行排列\\n- 使用 `graph LR` 从左到右展示执行顺序\\n\\n示例（工作流内 DAG）：\\n```mermaid\\ngraph LR\\n    CE1(\\\"上游任务A\\\") -->|依赖| CE3(\\\"下游任务C\\\")\\n    CE2(\\\"上游任务B\\\") -->|依赖| CE3\\n    CE3 -->|依赖| CE4(\\\"最终任务D\\\")\\n```\\n\\n示例（表血缘）：\\n```mermaid\\ngraph LR\\n    T1[(\\\"db.source_table_1\\\")] -->|衍生| T3[(\\\"db.target_table\\\")]\\n    T2[(\\\"db.source_table_2\\\")] -->|衍生| T3\\n```\\n\\n**注意事项：**\\n- 节点名含特殊字符（`.`、`-`、空格）时用双引号包裹\\n- 同一节点在多条关系中只声明一次 ID，后续复用\\n- 节点数量超过 20 个时，只展示核心链路，避免图表过于复杂\\n- 若上下文包含\\\"结果超过 20 个节点\\\"的裁剪提示，必须先在正文说明已裁剪；若提示中明确指示\\\"请仅用文字说明，不要画 Mermaid 图\\\"，则不得画图，仅做文字总结\\n- 只有能构成清晰核心链路时才画 Mermaid；信息语义混杂或已裁剪时允许只做文字总结，不强行画图\\n- 若数据无法构成图（如只有一个节点），省略 Mermaid 块，直接用文字描述\\n\\n---\\n<context>\\n1. 运算元素[dwm_video_use_d] 写入表[mgwh_rd_dwm.dwm_video_use_d]，所属工作流: dwm_video_use_d\\n</context>\\n\\n---\\n### 历史对话记录：1752577975344.result\\n\"}",
+  "headers": {
+    "date": "Tue, 14 Apr 2026 06:29:27 GMT",
+    "server": "uvicorn",
+    "content-length": "5083",
+    "content-type": "application/json",
+    "access-control-allow-origin": "*",
+    "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "access-control-allow-headers": "Content-Type, Authorization, X-Requested-With",
+    "access-control-max-age": "86400",
+    "x-process-time": "1.3304626941680908",
+    "x-request-id": "5c999028-d82e-49e2-800d-52bdb78f53ff",
+    "cache-status": "35992dba30c3;detail=mismatch",
+    "via": "1.1 35992dba30c3 (squid/6.10)",
+    "connection": "keep-alive"
+  },
+  "files": []
+}

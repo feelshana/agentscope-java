@@ -16,39 +16,54 @@
 package io.agentscope.examples.chatbi.service;
 
 import io.agentscope.core.ReActAgent;
+import io.agentscope.core.agent.StreamOptions;
+import io.agentscope.core.agent.EventType;
 import io.agentscope.core.formatter.openai.OpenAIChatFormatter;
 import io.agentscope.core.memory.InMemoryMemory;
 import io.agentscope.core.message.Msg;
+import io.agentscope.core.model.ExecutionConfig;
+import io.agentscope.core.model.GenerateOptions;
 import io.agentscope.core.model.OpenAIChatModel;
 import io.agentscope.core.tool.Toolkit;
-import io.agentscope.examples.chatbi.client.ConfluenceApiClient;
-import io.agentscope.examples.chatbi.client.SupersonicApiClient;
+import io.agentscope.core.tool.subagent.SubAgentConfig;
+import io.agentscope.core.tool.subagent.SubAgentTool;
+import io.agentscope.examples.chatbi.agent.AgentContext;
+import io.agentscope.examples.chatbi.agent.ChatAgentFactory;
+import io.agentscope.examples.chatbi.agent.DataLineageAgentFactory;
+import io.agentscope.examples.chatbi.agent.DataQueryAgentFactory;
+import io.agentscope.examples.chatbi.agent.GuAgentFactory;
+import io.agentscope.examples.chatbi.agent.KnowledgeAgentFactory;
+import io.agentscope.examples.chatbi.agent.ReportQueryAgentFactory;
+import io.agentscope.examples.chatbi.agent.ReportScheduleAgentFactory;
 import io.agentscope.examples.chatbi.dto.ChatRequest;
-import io.agentscope.examples.chatbi.tool.DataInterpretTool;
-import io.agentscope.examples.chatbi.tool.DataLineageTool;
-import io.agentscope.examples.chatbi.tool.DataQueryTool;
-import io.agentscope.examples.chatbi.tool.KnowledgeSearchTool;
-import io.agentscope.examples.chatbi.tool.ReportQueryTool;
-import io.agentscope.examples.chatbi.tool.ReportScheduleTool;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
- * Manages per-session (Agent + Memory) instances for ChatBI.
+ * Manages per-session RouterAgent + sub-Agent instances for ChatBI.
  *
- * <p>Each chat session gets its own isolated Agent. The Agent is created with all 6 tools
- * registered and per-session context (agentId, supersonicToken, reportId, etc.) injected
- * into the tool instances at creation time.
+ * <p>Architecture: RouterAgent (main) + 6 specialised sub-Agents registered as SubAgentTools.
  *
- * <p>On session resume, the historical messages are loaded from DB and pre-loaded into the
- * Agent's InMemoryMemory before processing the new user message.
+ * <ul>
+ *   <li><b>DataQueryAgent</b> (da): mirrors data-analysis logic — PlanNotebook + DataQueryAgentTool
+ *       (get_dataset_detail, query_dataset) + DataInterpretTool + DataQueryDatasetInjectionHook.
+ *   <li><b>KnowledgeAgent</b> (in/bu): KnowledgeSearchTool via Confluence.
+ *   <li><b>GuAgent</b> (gu): ConfluenceSearchTool + ConfluenceFilterHook + ConfluenceGetPageTool.
+ *   <li><b>ReportQueryAgent</b> (re): ReportQueryTool via SuperSonic.
+ *   <li><b>DataLineageAgent</b> (dl): DataLineageTool via SuperSonic.
+ *   <li><b>ReportScheduleAgent</b> (cs): ReportScheduleTool via SuperSonic.
+ *   <li><b>ChatAgent</b> (ot): no tools, plain LLM chat.
+ * </ul>
  *
- * <p>When a new request arrives for an existing session with different context parameters
- * (e.g. a different reportId), the session's tools are refreshed by re-creating the Agent entry.
+ * <p>RouterAgent holds the session memory and QueryRewriteHook. Sub-Agents are created fresh
+ * for each session and registered into the RouterAgent's toolkit as SubAgentTools with
+ * {@code forwardEvents=true} so their streaming output is forwarded to the frontend SSE.
  */
 @Component
 public class SessionAgentManager {
@@ -57,33 +72,85 @@ public class SessionAgentManager {
 
     private final Map<String, SessionEntry> agents = new ConcurrentHashMap<>();
 
-    private final SupersonicApiClient supersonicClient;
-    private final ConfluenceApiClient confluenceClient;
     private final ChatSessionService chatSessionService;
+
+    // Sub-agent factories (injected)
+    private final DataQueryAgentFactory dataQueryAgentFactory;
+    private final KnowledgeAgentFactory knowledgeAgentFactory;
+    private final GuAgentFactory guAgentFactory;
+    private final ReportQueryAgentFactory reportQueryAgentFactory;
+    private final DataLineageAgentFactory dataLineageAgentFactory;
+    private final ReportScheduleAgentFactory reportScheduleAgentFactory;
+    private final ChatAgentFactory chatAgentFactory;
 
     // Configured at startup by ChatBiAgentService
     private String apiKey;
     private String baseUrl;
-    private String sysPrompt;
+    private String routerSysPrompt;
     private String rewritePrompt;
 
+    // Sub-agent prompts (stored for diagnostic logging)
+    private String dataQuerySysPrompt;
+    private String knowledgeSysPrompt;
+    private String guSysPrompt;
+    private String reportQuerySysPrompt;
+    private String reportScheduleSysPrompt;
+    private String chatSysPrompt;
+
     public SessionAgentManager(
-            SupersonicApiClient supersonicClient,
-            ConfluenceApiClient confluenceClient,
-            ChatSessionService chatSessionService) {
-        this.supersonicClient = supersonicClient;
-        this.confluenceClient = confluenceClient;
+            ChatSessionService chatSessionService,
+            DataQueryAgentFactory dataQueryAgentFactory,
+            KnowledgeAgentFactory knowledgeAgentFactory,
+            GuAgentFactory guAgentFactory,
+            ReportQueryAgentFactory reportQueryAgentFactory,
+            DataLineageAgentFactory dataLineageAgentFactory,
+            ReportScheduleAgentFactory reportScheduleAgentFactory,
+            ChatAgentFactory chatAgentFactory) {
         this.chatSessionService = chatSessionService;
+        this.dataQueryAgentFactory = dataQueryAgentFactory;
+        this.knowledgeAgentFactory = knowledgeAgentFactory;
+        this.guAgentFactory = guAgentFactory;
+        this.reportQueryAgentFactory = reportQueryAgentFactory;
+        this.dataLineageAgentFactory = dataLineageAgentFactory;
+        this.reportScheduleAgentFactory = reportScheduleAgentFactory;
+        this.chatAgentFactory = chatAgentFactory;
     }
 
-    /** Called by ChatBiAgentService after Spring context is ready with LLM config. */
-    public void configure(String apiKey, String baseUrl, String sysPrompt, String rewritePrompt) {
+    /** Called by ChatBiAgentService after Spring context is ready with LLM config and prompts. */
+    public void configure(
+            String apiKey,
+            String baseUrl,
+            String routerSysPrompt,
+            String dataQuerySysPrompt,
+            String knowledgeSysPrompt,
+            String guSysPrompt,
+            String reportQuerySysPrompt,
+            String dataLineageSysPrompt,
+            String reportScheduleSysPrompt,
+            String chatSysPrompt,
+            String rewritePrompt) {
         this.apiKey = apiKey;
         this.baseUrl = baseUrl;
-        this.sysPrompt = sysPrompt;
+        this.routerSysPrompt = routerSysPrompt;
         this.rewritePrompt = rewritePrompt;
 
-        // Provide summary model to session service for context compression
+        // Store prompts locally for diagnostic logging in createEntry()
+        this.dataQuerySysPrompt = dataQuerySysPrompt;
+        this.knowledgeSysPrompt = knowledgeSysPrompt;
+        this.guSysPrompt = guSysPrompt;
+        this.reportQuerySysPrompt = reportQuerySysPrompt;
+        this.reportScheduleSysPrompt = reportScheduleSysPrompt;
+        this.chatSysPrompt = chatSysPrompt;
+
+        // Configure sub-agent factories with their prompts
+        dataQueryAgentFactory.setSysPrompt(dataQuerySysPrompt);
+        knowledgeAgentFactory.setSysPrompt(knowledgeSysPrompt);
+        guAgentFactory.setSysPrompt(guSysPrompt);
+        reportQueryAgentFactory.setSysPrompt(reportQuerySysPrompt);
+        // dataLineageAgentFactory does NOT use sysPrompt (uses final_prompt from tool result)
+        reportScheduleAgentFactory.setSysPrompt(reportScheduleSysPrompt);
+        chatAgentFactory.setSysPrompt(chatSysPrompt);
+
         OpenAIChatModel.Builder summaryBuilder =
                 OpenAIChatModel.builder().apiKey(apiKey).modelName("deepseek-chat").stream(false)
                         .formatter(new OpenAIChatFormatter());
@@ -94,11 +161,26 @@ public class SessionAgentManager {
     }
 
     /**
-     * Get or create an Agent session entry.
-     *
-     * <p>If a session entry already exists in memory, it is returned as-is (tools retain the
-     * context from when they were first created for this session). If not, a new Agent is
-     * created with the current request's context injected into all tools.
+     * Kept for backward compatibility with ChatBiAgentService.configure(4-arg).
+     * Routes to the new 11-arg configure with default sub-agent prompt values.
+     */
+    public void configure(String apiKey, String baseUrl, String sysPrompt, String rewritePrompt) {
+        configure(
+                apiKey,
+                baseUrl,
+                sysPrompt,           // routerSysPrompt
+                sysPrompt,           // dataQuerySysPrompt (overridden by service if files exist)
+                sysPrompt,           // knowledgeSysPrompt
+                sysPrompt,           // guSysPrompt
+                sysPrompt,           // reportQuerySysPrompt
+                sysPrompt,           // dataLineageSysPrompt
+                sysPrompt,           // reportScheduleSysPrompt
+                sysPrompt,           // chatSysPrompt
+                rewritePrompt);
+    }
+
+    /**
+     * Get or create a RouterAgent session entry.
      */
     public SessionEntry getOrCreate(String sessionId, ChatRequest req) {
         if (agents.containsKey(sessionId)) {
@@ -117,9 +199,7 @@ public class SessionAgentManager {
         return entry;
     }
 
-    /**
-     * Remove a session from the in-memory map (called on reset or eviction).
-     */
+    /** Remove a session from the in-memory map. */
     public void evict(String sessionId) {
         agents.remove(sessionId);
         log.info("ChatBI session evicted from memory: {}", sessionId);
@@ -128,61 +208,178 @@ public class SessionAgentManager {
     // ─────────────────── Internal helpers ───────────────────
 
     private SessionEntry createEntry(String sessionId, ChatRequest req) {
-        InMemoryMemory memory = new InMemoryMemory();
+        InMemoryMemory routerMemory = new InMemoryMemory();
 
-        // Extract per-session context from request
-        String agentId = req.getAgentId();
-        String supersonicToken = req.getSupersonicToken();
-        String reportId = req.getReportId();
-        String dashboardId = req.getDashboardId();
-        String chartParam = req.getParam();
+        // 自定义超时：120秒，不重试（减少长时间阻塞）
+        ExecutionConfig modelExecConfig =
+                ExecutionConfig.builder()
+                        .timeout(Duration.ofSeconds(120))
+                        .maxAttempts(1)
+                        .build();
+        GenerateOptions rewriteExecOptions =
+                GenerateOptions.builder().executionConfig(modelExecConfig).build();
+        GenerateOptions streamExecOptions =
+                GenerateOptions.builder().executionConfig(modelExecConfig).build();
 
-        // Register all 6 tools with per-session context
-        Toolkit toolkit = new Toolkit();
-        toolkit.registerTool(new DataQueryTool(supersonicClient, agentId, supersonicToken));
-        toolkit.registerTool(new KnowledgeSearchTool(confluenceClient));
-        toolkit.registerTool(new ReportQueryTool(supersonicClient, agentId, supersonicToken));
-        toolkit.registerTool(new DataInterpretTool(chartParam));
-        toolkit.registerTool(new DataLineageTool(supersonicClient, supersonicToken));
-        toolkit.registerTool(
-                new ReportScheduleTool(supersonicClient, reportId, dashboardId, supersonicToken));
-
-        // Build non-streaming model for QueryRewriteHook
+        // ── Build streaming model for QueryRewriteHook (streaming to avoid long blocking) ──
         OpenAIChatModel.Builder rewriteModelBuilder =
-                OpenAIChatModel.builder().apiKey(apiKey).modelName("deepseek-chat").stream(false)
+                OpenAIChatModel.builder().apiKey(apiKey).modelName("qwen3.6-plus").stream(true)
+                        .generateOptions(rewriteExecOptions)
                         .formatter(new OpenAIChatFormatter());
         if (baseUrl != null) {
             rewriteModelBuilder.baseUrl(baseUrl);
         }
         OpenAIChatModel rewriteModel = rewriteModelBuilder.build();
 
-        // Build streaming model for main ReActAgent
-        OpenAIChatModel.Builder modelBuilder =
-                OpenAIChatModel.builder().apiKey(apiKey).modelName("deepseek-chat").stream(true)
+        // ── Build streaming model (shared across all agents) ──
+        OpenAIChatModel.Builder streamModelBuilder =
+                OpenAIChatModel.builder().apiKey(apiKey).modelName("qwen3.6-plus").stream(true)
+                        .generateOptions(streamExecOptions)
                         .formatter(new OpenAIChatFormatter());
         if (baseUrl != null) {
-            modelBuilder.baseUrl(baseUrl);
+            streamModelBuilder.baseUrl(baseUrl);
         }
+        OpenAIChatModel streamModel = streamModelBuilder.build();
 
-        ReActAgent agent =
+        // ── Build AgentContext for factories ──
+        AgentContext ctx = new AgentContext(
+                sessionId,
+                streamModel,
+                rewriteModel,
+                req.getSupersonicToken(),
+                req.getAgentId(),
+                req.getReportId(),
+                req.getDashboardId(),
+                req.getParam(),
+                req.getProjectId());
+
+        // ─────────────────────────────────────────────────────
+        // Create sub-Agents via factories
+        // ─────────────────────────────────────────────────────
+        ReActAgent dataQueryAgent = dataQueryAgentFactory.create(ctx);
+        ReActAgent knowledgeAgent = knowledgeAgentFactory.create(ctx);
+        ReActAgent guAgent = guAgentFactory.create(ctx);
+        ReActAgent reportQueryAgent = reportQueryAgentFactory.create(ctx);
+        ReActAgent dataLineageAgent = dataLineageAgentFactory.create(ctx);
+        ReActAgent reportScheduleAgent = reportScheduleAgentFactory.create(ctx);
+        ReActAgent chatAgent = chatAgentFactory.create(ctx);
+
+        // ─────────────────────────────────────────────────────
+        // RouterAgent — registers all sub-Agents as SubAgentTools
+        // ─────────────────────────────────────────────────────
+        SubAgentConfig forwardConfig =
+                SubAgentConfig.builder()
+                        .forwardEvents(true)
+                        .streamOptions(
+                                StreamOptions.builder()
+                                        .eventTypes(
+                                                EventType.REASONING,
+                                                EventType.TOOL_RESULT,
+                                                EventType.AGENT_RESULT)
+                                        .incremental(true)
+                                        .build())
+                        .build();
+
+        final ReActAgent finalDataQueryAgent = dataQueryAgent;
+        final ReActAgent finalKnowledgeAgent = knowledgeAgent;
+        final ReActAgent finalGuAgent = guAgent;
+        final ReActAgent finalReportQueryAgent = reportQueryAgent;
+        final ReActAgent finalDataLineageAgent = dataLineageAgent;
+        final ReActAgent finalReportScheduleAgent = reportScheduleAgent;
+        final ReActAgent finalChatAgent = chatAgent;
+
+        Toolkit routerToolkit = new Toolkit();
+        routerToolkit.registerTool(
+                new SubAgentTool(
+                        () -> finalDataQueryAgent,
+                        SubAgentConfig.builder()
+                                .toolName("call_data_query_agent")
+                                .description(
+                                        "调用问数Agent处理da意图：获取具体数据指标、数据解读分析、"
+                                                + "数据归因。支持精确取数和深度分析两种模式。")
+                                .forwardEvents(true)
+                                .streamOptions(forwardConfig.getStreamOptions())
+                                .build()));
+        routerToolkit.registerTool(
+                new SubAgentTool(
+                        () -> finalKnowledgeAgent,
+                        SubAgentConfig.builder()
+                                .toolName("call_knowledge_agent")
+                                .description(
+                                        "调用知识库Agent处理in/bu意图：指标口径定义、业务知识和系统知识检索。")
+                                .forwardEvents(true)
+                                .streamOptions(forwardConfig.getStreamOptions())
+                                .build()));
+        routerToolkit.registerTool(
+                new SubAgentTool(
+                        () -> finalGuAgent,
+                        SubAgentConfig.builder()
+                                .toolName("call_gu_agent")
+                                .description(
+                                        "调用工具使用Agent处理gu意图：大数据平台/红海分析云BI工具使用方法、权限申请、报表订阅等操作类问题。")
+                                .forwardEvents(true)
+                                .streamOptions(forwardConfig.getStreamOptions())
+                                .build()));
+        routerToolkit.registerTool(
+                new SubAgentTool(
+                        () -> finalReportQueryAgent,
+                        SubAgentConfig.builder()
+                                .toolName("call_report_query_agent")
+                                .description(
+                                        "调用报表Agent处理re意图：根据用户需求推荐合适的报表、仪表盘或大屏。")
+                                .forwardEvents(true)
+                                .streamOptions(forwardConfig.getStreamOptions())
+                                .build()));
+        routerToolkit.registerTool(
+                new SubAgentTool(
+                        () -> finalDataLineageAgent,
+                        SubAgentConfig.builder()
+                                .toolName("call_data_lineage_agent")
+                                .description(
+                                        "调用血缘Agent处理dl意图：查询数据血缘、上下游表依赖、工作流依赖关系。")
+                                .forwardEvents(true)
+                                .streamOptions(forwardConfig.getStreamOptions())
+                                .build()));
+        routerToolkit.registerTool(
+                new SubAgentTool(
+                        () -> finalReportScheduleAgent,
+                        SubAgentConfig.builder()
+                                .toolName("call_report_schedule_agent")
+                                .description(
+                                        "调用出数Agent处理cs意图：查询报表或仪表盘的数据刷新时间、出数时间点。")
+                                .forwardEvents(true)
+                                .streamOptions(forwardConfig.getStreamOptions())
+                                .build()));
+        routerToolkit.registerTool(
+                new SubAgentTool(
+                        () -> finalChatAgent,
+                        SubAgentConfig.builder()
+                                .toolName("call_chat_agent")
+                                .description(
+                                        "调用闲聊Agent处理ot意图：日常对话、通识问答，无需查询任何数据。")
+                                .forwardEvents(true)
+                                .streamOptions(forwardConfig.getStreamOptions())
+                                .build()));
+
+        ReActAgent routerAgent =
                 ReActAgent.builder()
-                        .name("ChatBiAgent-" + sessionId)
-                        .sysPrompt(sysPrompt)
-                        .model(modelBuilder.build())
-                        .memory(memory)
-                        .toolkit(toolkit)
-                        .maxIters(20)
+                        .name("RouterAgent-" + sessionId)
+                        .sysPrompt(routerSysPrompt)
+                        .model(streamModel)
+                        .memory(routerMemory)
+                        .toolkit(routerToolkit)
+                        .maxIters(5)  // Router only needs 1 routing decision
                         .hook(new QueryRewriteHook(rewriteModel, rewritePrompt)) // priority=5
-                        .hook(new ContextTrimHook()) // priority=10
-                        .hook(new ChatLogHook(sessionId)) // priority=900
+                        .hook(new ContextTrimHook())    // priority=10
+                        .hook(new ChatLogHook(sessionId, null, routerSysPrompt)) // priority=900
                         .build();
 
         log.info(
-                "Created ChatBI agent for session={}, agentId={}, reportId={}",
+                "Created ChatBI RouterAgent+6 sub-Agents for session={}, agentId={}, reportId={}",
                 sessionId,
-                agentId,
-                reportId);
-        return new SessionEntry(agent, memory);
+                req.getAgentId(),
+                req.getReportId());
+        return new SessionEntry(routerAgent, routerMemory);
     }
 
     private void preloadHistory(SessionEntry entry, List<Msg> historyMsgs) {
@@ -193,9 +390,7 @@ public class SessionAgentManager {
 
     // ─────────────────── Session entry ───────────────────
 
-    /**
-     * Holds the Agent + Memory for one session.
-     */
+    /** Holds the RouterAgent + Memory for one session. */
     public static class SessionEntry {
         public final ReActAgent agent;
         public final InMemoryMemory memory;

@@ -26,6 +26,7 @@ import io.agentscope.core.model.ChatResponse;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -35,7 +36,7 @@ import reactor.core.publisher.Mono;
  *
  * <p>When the user's question depends on conversation history (e.g. "再查一下昨天的" when
  * the previous turn discussed a specific report), this hook rewrites the latest USER
- * message to a self-contained question using a non-streaming LLM call. This mirrors the
+ * message to a self-contained question using a streaming LLM call. This mirrors the
  * "正在查看历史对话" node in the original ChatBI.yml workflow.
  *
  * <p>Runs at {@code priority=5} (before {@link ContextTrimHook} at priority=10),
@@ -47,12 +48,19 @@ import reactor.core.publisher.Mono;
  *   <li>The model or the rewrite prompt is not configured</li>
  *   <li>The LLM rewrite call fails (original message is preserved)</li>
  * </ul>
+ *
+ * <p><b>Error handling:</b>
+ * <ul>
+ *   <li>Timeout: logs warning, uses original question</li>
+ *   <li>Interruption: logs warning, uses original question</li>
+ *   <li>Other errors: logs warning with message, uses original question</li>
+ * </ul>
  */
 public class QueryRewriteHook implements Hook {
 
     private static final Logger log = LoggerFactory.getLogger(QueryRewriteHook.class);
 
-    /** Non-streaming LLM model used for rewriting (lightweight, fast). */
+    /** Streaming LLM model used for rewriting (avoids long blocking on non-streaming calls). */
     private final ChatModelBase rewriteModel;
 
     /** System prompt for the rewrite call (loaded from query-rewrite-prompt.txt). */
@@ -62,7 +70,7 @@ public class QueryRewriteHook implements Hook {
     private static final int MAX_HISTORY_TURNS = 5;
 
     /** Max timeout in seconds for the rewrite LLM call. */
-    private static final int REWRITE_TIMEOUT_SECONDS = 15;
+    private static final int REWRITE_TIMEOUT_SECONDS = 150;
 
     public QueryRewriteHook(ChatModelBase rewriteModel, String rewriteSystemPrompt) {
         this.rewriteModel = rewriteModel;
@@ -164,9 +172,15 @@ public class QueryRewriteHook implements Hook {
                         })
                 .onErrorResume(
                         e -> {
-                            log.warn(
-                                    "[QueryRewriteHook] Rewrite failed, using original: {}",
-                                    e.getMessage());
+                            if (e instanceof TimeoutException) {
+                                log.warn("[QueryRewriteHook] Rewrite timeout after {}s, using original question",
+                                        REWRITE_TIMEOUT_SECONDS);
+                            } else if (isInterrupted(e)) {
+                                log.warn("[QueryRewriteHook] Rewrite interrupted, using original question");
+                            } else {
+                                log.warn("[QueryRewriteHook] Rewrite failed, using original: {}",
+                                        e.getMessage());
+                            }
                             return Mono.just(event);
                         })
                 .map(e -> (T) e);
@@ -241,5 +255,17 @@ public class QueryRewriteHook implements Hook {
             }
         }
         return sb.toString().strip();
+    }
+
+    /** Check if the error is caused by thread interruption. */
+    private static boolean isInterrupted(Throwable err) {
+        Throwable cause = err;
+        while (cause != null) {
+            if (cause instanceof InterruptedException) return true;
+            String msg = cause.getMessage();
+            if (msg != null && msg.toLowerCase().contains("interrupted")) return true;
+            cause = cause.getCause();
+        }
+        return false;
     }
 }

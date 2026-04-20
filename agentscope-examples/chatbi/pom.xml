@@ -85,6 +85,10 @@
             <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
             <version>3.5.11</version>
         </dependency>
+        <dependency>
+            <groupId>io.agentscope</groupId>
+            <artifactId>agentscope-extensions-rag-dify</artifactId>
+        </dependency>
 
         <!-- Flyway for schema migration -->
         <dependency>

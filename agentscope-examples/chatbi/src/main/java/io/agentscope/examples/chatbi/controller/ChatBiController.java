@@ -17,12 +17,15 @@ package io.agentscope.examples.chatbi.controller;
 
 import io.agentscope.examples.chatbi.dto.ChatMessageDto;
 import io.agentscope.examples.chatbi.dto.ChatRequest;
+import io.agentscope.examples.chatbi.dto.PlanResponse;
 import io.agentscope.examples.chatbi.dto.SessionHistoryResponse;
 import io.agentscope.examples.chatbi.service.ChatBiAgentService;
+import io.agentscope.examples.chatbi.service.ChatBiPlanService;
 import io.agentscope.examples.chatbi.service.ChatSessionService;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.MediaType;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -32,6 +35,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 /**
  * REST + SSE controller for the ChatBI agent.
@@ -44,6 +48,10 @@ import reactor.core.publisher.Flux;
  *   <li>{@code DELETE /api/chatbi/sessions/{id}}        – delete a session</li>
  *   <li>{@code POST /api/chatbi/reset}                  – reset session agent</li>
  *   <li>{@code GET  /api/chatbi/health}                 – health check</li>
+ *   <li>{@code GET  /api/chatbi/plan/{sessionId}/stream} – stream plan updates (SSE)</li>
+ *   <li>{@code GET  /api/chatbi/plan/{sessionId}}       – current plan snapshot</li>
+ *   <li>{@code POST /api/chatbi/plan/{sessionId}/confirm} – user confirms plan execution</li>
+ *   <li>{@code POST /api/chatbi/plan/{sessionId}/abandon} – user declines plan execution</li>
  * </ul>
  */
 @RestController
@@ -52,11 +60,15 @@ public class ChatBiController {
 
     private final ChatBiAgentService agentService;
     private final ChatSessionService chatSessionService;
+    private final ChatBiPlanService planService;
 
     public ChatBiController(
-            ChatBiAgentService agentService, ChatSessionService chatSessionService) {
+            ChatBiAgentService agentService,
+            ChatSessionService chatSessionService,
+            ChatBiPlanService planService) {
         this.agentService = agentService;
         this.chatSessionService = chatSessionService;
+        this.planService = planService;
     }
 
     /**
@@ -69,8 +81,8 @@ public class ChatBiController {
      * @return SSE stream of text chunks
      */
     @PostMapping(path = "/chat", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<String> chat(@RequestBody ChatRequest req) {
-        return agentService.chat(req);
+    public Flux<ServerSentEvent<Map<String, String>>> chat(@RequestBody ChatRequest req) {
+        return agentService.chat(req).map(this::toSseEvent);
     }
 
     /**
@@ -115,5 +127,74 @@ public class ChatBiController {
     @GetMapping("/health")
     public String health() {
         return "OK";
+    }
+
+    // ─────────────────── Plan Management APIs ───────────────────
+
+    /**
+     * SSE stream for plan state changes for a specific session.
+     */
+    @GetMapping(path = "/plan/{sessionId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<PlanResponse> planStream(@PathVariable String sessionId) {
+        return planService.getPlanStream(sessionId);
+    }
+
+    /**
+     * Snapshot of the current plan for a specific session.
+     */
+    @GetMapping("/plan/{sessionId}")
+    public PlanResponse getPlan(@PathVariable String sessionId) {
+        PlanResponse plan = planService.getCurrentPlan(sessionId);
+        return plan != null ? plan : new PlanResponse();
+    }
+
+    /**
+     * User confirms plan execution.
+     *
+     * <p>Tells the backend to suppress further needConfirm=true broadcasts for this plan.
+     */
+    @PostMapping("/plan/{sessionId}/confirm")
+    public Map<String, String> confirmPlan(@PathVariable String sessionId) {
+        planService.markUserConfirmed(sessionId);
+        return Map.of("status", "ok");
+    }
+
+    /**
+     * User declines plan execution (clicks "不执行").
+     *
+     * <p>Immediately abandons the current plan so the PlanNotebook clears
+     * {@code currentPlan}. This prevents subsequent LLM iterations from
+     * receiving a stale "current plan" system-hint.
+     */
+    @PostMapping("/plan/{sessionId}/abandon")
+    public Mono<Map<String, String>> abandonPlan(@PathVariable String sessionId) {
+        return planService.abandonPlan(sessionId).thenReturn(Map.of("status", "ok"));
+    }
+
+    private ServerSentEvent<Map<String, String>> toSseEvent(String chunk) {
+        if ("[STOPPED]".equals(chunk)) {
+            return ServerSentEvent.<Map<String, String>>builder()
+                    .event("done")
+                    .data(Map.of("type", "done"))
+                    .build();
+        }
+        if (chunk != null && chunk.startsWith("[TOOL:") && chunk.endsWith("]")) {
+            String toolName = chunk.substring(6, chunk.length() - 1);
+            return ServerSentEvent.<Map<String, String>>builder()
+                    .event("tool")
+                    .data(Map.of("type", "tool", "content", toolName))
+                    .build();
+        }
+        if (chunk != null && chunk.startsWith("[THINKING]")) {
+            String thinking = chunk.substring(10);
+            return ServerSentEvent.<Map<String, String>>builder()
+                    .event("thinking")
+                    .data(Map.of("type", "thinking", "content", thinking))
+                    .build();
+        }
+        return ServerSentEvent.<Map<String, String>>builder()
+                .event("chunk")
+                .data(Map.of("type", "chunk", "content", chunk == null ? "" : chunk))
+                .build();
     }
 }

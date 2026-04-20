@@ -68,9 +68,9 @@ public class ReportQueryTool {
                                     "The topic, metric or data area the user wants to find reports"
                                             + " for. E.g., '用户活跃度', '订单量', '流量分析'")
                     String topic) {
-        log.info("[recommend_reports] topic={}", topic);
+        log.info("[recommend_reports] topic={}, agentId={}", topic, agentId);
         return supersonicClient
-                .listDatasets(agentId, supersonicToken)
+                .listDatasets(agentId)
                 .map(datasets -> filterAndFormatReports(datasets, topic))
                 .onErrorResume(
                         e -> {

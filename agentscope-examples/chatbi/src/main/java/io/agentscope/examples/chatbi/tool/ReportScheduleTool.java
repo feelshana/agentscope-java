@@ -17,7 +17,7 @@ package io.agentscope.examples.chatbi.tool;
 
 import io.agentscope.core.tool.Tool;
 import io.agentscope.core.tool.ToolParam;
-import io.agentscope.examples.chatbi.client.SupersonicApiClient;
+import io.agentscope.examples.chatbi.client.ReportScheduleApiClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -33,7 +33,7 @@ public class ReportScheduleTool {
 
     private static final Logger log = LoggerFactory.getLogger(ReportScheduleTool.class);
 
-    private final SupersonicApiClient supersonicClient;
+    private final ReportScheduleApiClient scheduleClient;
 
     /** Per-session context: reportId and dashboardId from the original request. */
     private final String reportId;
@@ -42,11 +42,11 @@ public class ReportScheduleTool {
     private final String supersonicToken;
 
     public ReportScheduleTool(
-            SupersonicApiClient supersonicClient,
+            ReportScheduleApiClient scheduleClient,
             String reportId,
             String dashboardId,
             String supersonicToken) {
-        this.supersonicClient = supersonicClient;
+        this.scheduleClient = scheduleClient;
         this.reportId = reportId;
         this.dashboardId = dashboardId;
         this.supersonicToken = supersonicToken;
@@ -78,7 +78,7 @@ public class ReportScheduleTool {
                 reportName,
                 reportId,
                 dashboardId);
-        return supersonicClient
+        return scheduleClient
                 .queryReportSchedule(reportId, dashboardId, supersonicToken)
                 .doOnNext(r -> log.debug("[query_report_schedule] result={}", r))
                 .onErrorResume(

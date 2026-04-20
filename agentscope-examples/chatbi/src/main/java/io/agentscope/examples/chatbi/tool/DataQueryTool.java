@@ -39,17 +39,11 @@ public class DataQueryTool {
     private static final Logger log = LoggerFactory.getLogger(DataQueryTool.class);
 
     private final SupersonicApiClient supersonicClient;
-
-    /** Per-request context: agentId and supersonicToken injected at session creation. */
     private final String agentId;
 
-    private final String supersonicToken;
-
-    public DataQueryTool(
-            SupersonicApiClient supersonicClient, String agentId, String supersonicToken) {
+    public DataQueryTool(SupersonicApiClient supersonicClient, String agentId) {
         this.supersonicClient = supersonicClient;
         this.agentId = agentId;
-        this.supersonicToken = supersonicToken;
     }
 
     /**
@@ -65,7 +59,7 @@ public class DataQueryTool {
     public Mono<String> listDatasets() {
         log.info("[list_datasets] Fetching available datasets, agentId={}", agentId);
         return supersonicClient
-                .listDatasets(agentId, supersonicToken)
+                .listDatasets(agentId)
                 .map(this::formatDatasetList)
                 .onErrorResume(
                         e -> {
@@ -98,12 +92,8 @@ public class DataQueryTool {
                             description = "The specific natural-language question to query")
                     String question) {
         log.info("[query_dataset] datasetId={}, question={}", datasetId, question);
-        String resolvedAgentId = supersonicClient.getAgentIdForDataset(datasetId);
-        if (resolvedAgentId == null) {
-            resolvedAgentId = agentId;
-        }
         return supersonicClient
-                .queryDataset(resolvedAgentId, question, supersonicToken)
+                .queryDataset(datasetId, question)
                 .doOnNext(r -> log.debug("[query_dataset] result length={}", r.length()))
                 .onErrorResume(
                         e -> {

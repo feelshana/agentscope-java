@@ -1,34 +1,27 @@
-<!--
-  ~ Copyright 2024-2026 the original author or authors.
-  ~
-  ~ Licensed under the Apache License, Version 2.0 (the "License");
-  ~ you may not use this file except in compliance with the License.
-  ~ You may obtain a copy of the License at
-  ~
-  ~     http://www.apache.org/licenses/LICENSE-2.0
-  ~
-  ~ Unless required by applicable law or agreed to in writing, software
-  ~ distributed under the License is distributed on an "AS IS" BASIS,
-  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  ~ See the License for the specific language governing permissions and
-  ~ limitations under the License.
--->
+
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>ChatBI 智能数据助手</title>
+    <script src="echarts.min.js"></script>
+    <script src="marked.min.js?v=2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         :root {
             --primary: #4f6ef7;
+            --primary: #4f6ef7;
             --primary-dark: #3451d1;
             --primary-light: rgba(79,110,247,0.09);
+            --primary-glow: rgba(79,110,247,0.22);
+            --accent: #06b6d4;
             --bg: #eef1fb;
             --surface: #ffffff;
             --surface2: #f4f6fe;
             --border: rgba(79,110,247,0.12);
+            --border-active: rgba(79,110,247,0.5);
             --text: #1b2040;
             --text-sub: #5c6484;
             --text-hint: #9ba3c4;
@@ -38,17 +31,31 @@
             --shadow-sm: 0 2px 14px rgba(79,110,247,0.10);
             --shadow-md: 0 8px 32px rgba(79,110,247,0.16);
         }
-        html, body { height: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif; background: var(--bg); color: var(--text); }
+        html, body {
+            height: 100%; overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Noto Sans SC', 'Helvetica Neue', sans-serif;
+            background: var(--bg); color: var(--text);
+            -webkit-font-smoothing: antialiased;
+        }
 
         /* ── Layout ── */
         .app-shell { position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; overflow: hidden; }
 
         /* ── Header ── */
-        .header { background: linear-gradient(135deg, #5875f8 0%, #4264f5 40%, #2e4fd4 100%); color: #fff; padding: 13px 16px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; box-shadow: 0 3px 24px rgba(52,81,209,0.30); }
-        .header h1 { font-size: 1rem; font-weight: 700; }
+        .header {
+            background: linear-gradient(135deg, #5875f8 0%, #4264f5 40%, #2e4fd4 100%);
+            color: #fff; padding: 13px 16px;
+            display: flex; align-items: center; justify-content: space-between;
+            flex-shrink: 0; box-shadow: 0 3px 24px rgba(52,81,209,0.30); z-index: 10;
+        }
+        .header h1 { font-size: 1rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
         .header-right { display: flex; gap: 8px; }
-        .header-btn { background: rgba(255,255,255,0.15); border: none; color: #fff; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 0.82rem; transition: background 0.2s; }
-        .header-btn:hover { background: rgba(255,255,255,0.25); }
+        .header-btn {
+            background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25);
+            color: #fff; padding: 6px 12px; border-radius: 8px; cursor: pointer;
+            font-size: 0.82rem; transition: background 0.2s;
+        }
+        .header-btn:hover { background: rgba(255,255,255,0.28); }
 
         /* ── Main area ── */
         .main { flex: 1; display: flex; overflow: hidden; }
@@ -56,53 +63,229 @@
         /* ── Sidebar ── */
         .sidebar { width: 240px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
         .sidebar-header { padding: 12px; border-bottom: 1px solid var(--border); }
-        .new-chat-btn { width: 100%; background: var(--primary); color: #fff; border: none; padding: 9px 12px; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.88rem; font-weight: 600; transition: background 0.2s; }
+        .new-chat-btn {
+            width: 100%; background: var(--primary); color: #fff; border: none;
+            padding: 9px 12px; border-radius: var(--radius-sm); cursor: pointer;
+            font-size: 0.88rem; font-weight: 600; transition: background 0.2s;
+        }
         .new-chat-btn:hover { background: var(--primary-dark); }
         .session-list { flex: 1; overflow-y: auto; padding: 8px; }
-        .session-item { padding: 9px 10px; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.83rem; color: var(--text-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: background 0.15s; display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }
+        .session-item {
+            padding: 9px 10px; border-radius: var(--radius-sm); cursor: pointer;
+            font-size: 0.83rem; color: var(--text-sub); white-space: nowrap;
+            overflow: hidden; text-overflow: ellipsis; transition: background 0.15s;
+            display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;
+        }
         .session-item:hover, .session-item.active { background: var(--primary-light); color: var(--primary); }
         .session-del { opacity: 0; background: none; border: none; color: #e05; cursor: pointer; font-size: 0.78rem; padding: 2px 5px; border-radius: 4px; }
         .session-item:hover .session-del { opacity: 1; }
 
         /* ── Chat area ── */
-        .chat-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-        .messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-        .message { display: flex; gap: 10px; max-width: 90%; }
-        .message.user { align-self: flex-end; flex-direction: row-reverse; }
-        .avatar { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.78rem; font-weight: 700; flex-shrink: 0; }
-        .avatar.ai { background: linear-gradient(135deg, #4f6ef7, #06b6d4); color: #fff; }
-        .avatar.user { background: var(--primary-dark); color: #fff; }
-        .bubble { background: var(--surface); border-radius: var(--radius-md); padding: 10px 14px; font-size: 0.9rem; line-height: 1.6; box-shadow: var(--shadow-sm); max-width: 100%; word-break: break-word; }
-        .message.user .bubble { background: linear-gradient(135deg, #4f6ef7 0%, #3451d1 100%); color: #fff; }
-        .bubble pre { background: #1e2235; color: #e8e8e8; padding: 10px; border-radius: 8px; overflow-x: auto; font-size: 0.82rem; margin: 6px 0; }
-        .bubble code { font-family: 'JetBrains Mono', 'Courier New', monospace; }
-        .bubble table { border-collapse: collapse; width: 100%; font-size: 0.83rem; margin: 8px 0; }
-        .bubble th, .bubble td { border: 1px solid var(--border); padding: 5px 8px; text-align: left; }
-        .bubble th { background: var(--surface2); font-weight: 600; }
-        .tool-indicator { font-size: 0.78rem; color: var(--primary); background: var(--primary-light); padding: 3px 8px; border-radius: 4px; display: inline-block; margin-bottom: 4px; }
-        .typing-dots { display: flex; gap: 4px; padding: 4px 0; }
-        .typing-dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--primary); animation: pulse 1.2s infinite; }
-        .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
-        .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
-        @keyframes pulse { 0%,80%,100% { opacity: 0.2; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1); } }
+        .chat-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
+        .messages { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px 14px; display: flex; flex-direction: column; gap: 14px; }
+        .message { display: flex; flex-direction: column; }
+        .message.user { align-items: flex-end; }
+        .message.assistant { align-items: flex-start; }
+        .message-label { font-size: 0.62rem; color: var(--text-hint); margin-bottom: 5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+
+        /* User bubble */
+        .message.user .message-content {
+            max-width: 78%; padding: 11px 16px;
+            border-radius: var(--radius-lg); border-bottom-right-radius: 5px;
+            background: linear-gradient(135deg, #4f6ef7 0%, #3451d1 100%);
+            color: #fff; line-height: 1.65; word-break: break-word; font-size: 0.9rem;
+            box-shadow: 0 4px 16px rgba(79,110,247,0.30); white-space: pre-wrap;
+        }
+
+        /* AI bubble */
+        .message.assistant .message-content {
+            width: 100%; padding: 16px 18px;
+            border-radius: var(--radius-lg); border-bottom-left-radius: 5px;
+            background: linear-gradient(160deg, #ffffff 0%, #f8faff 100%);
+            color: var(--text); word-break: break-word; font-size: 0.9rem;
+            border: 1px solid rgba(79,110,247,0.10);
+            box-shadow: 0 3px 16px rgba(79,110,247,0.09), 0 1px 3px rgba(79,110,247,0.05);
+        }
+
+        /* ── Markdown styles ── */
+        .md-body { line-height: 1.8; }
+        .md-body h1, .md-body h2, .md-body h3, .md-body h4, .md-body h5, .md-body h6 {
+            font-weight: 700; color: var(--text); margin: 14px 0 8px; line-height: 1.35;
+        }
+        .md-body h1 { font-size: 1.15rem; border-bottom: 2px solid rgba(79,110,247,0.18); padding-bottom: 6px; margin-top: 6px; }
+        .md-body h2 { font-size: 1.02rem; border-bottom: 1px solid rgba(79,110,247,0.12); padding-bottom: 4px; }
+        .md-body h3 { font-size: 0.96rem; }
+        .md-body h4 { font-size: 0.9rem; color: var(--text-sub); }
+        .md-body p { margin: 6px 0; }
+        .md-body ul, .md-body ol { padding-left: 20px; margin: 6px 0; }
+        .md-body li { margin: 3px 0; line-height: 1.7; }
+        .md-body strong { font-weight: 700; color: #1a1f3d; }
+        .md-body em { font-style: italic; color: var(--text-sub); }
+        .md-body a {
+            color: var(--primary); text-decoration: none;
+            border-bottom: 1px solid rgba(79,110,247,0.35);
+            transition: border-color 0.2s, color 0.2s;
+            word-break: break-all;
+        }
+        .md-body a:hover { color: var(--primary-dark); border-bottom-color: var(--primary-dark); }
+        .md-body blockquote {
+            margin: 10px 0; padding: 10px 14px;
+            border-left: 3px solid var(--primary);
+            background: var(--primary-light); border-radius: 0 8px 8px 0;
+            color: var(--text-sub); font-size: 0.88rem;
+        }
+        .md-body hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+        /* Inline code */
+        .md-body code {
+            background: #eef1fb; color: #3451d1; border-radius: 4px;
+            padding: 1px 6px;
+            font-family: 'JetBrains Mono', 'Cascadia Code', 'Courier New', monospace;
+            font-size: 0.83em;
+        }
+        /* Code block */
+        .md-body pre {
+            background: #1e2235; border-radius: 10px;
+            padding: 14px 16px; overflow-x: auto; margin: 10px 0;
+            box-shadow: inset 0 2px 8px rgba(0,0,0,0.25);
+        }
+        .md-body pre code {
+            background: transparent; color: #e2e8f5; padding: 0;
+            font-size: 0.83rem; line-height: 1.7;
+        }
+        /* Table */
+        .md-body table {
+            border-collapse: collapse; width: 100%; font-size: 0.85rem;
+            margin: 10px 0; border-radius: 8px; overflow: hidden;
+            box-shadow: 0 1px 6px rgba(79,110,247,0.08);
+        }
+        .md-body th {
+            background: linear-gradient(135deg, #4f6ef7 0%, #3a5bd9 100%);
+            color: #fff; font-weight: 600; padding: 9px 12px; text-align: left;
+        }
+        .md-body td { padding: 8px 12px; border-bottom: 1px solid rgba(79,110,247,0.08); background: #fff; }
+        .md-body tr:nth-child(even) td { background: #f6f8ff; }
+        .md-body tr:last-child td { border-bottom: none; }
+        .md-body tr:hover td { background: rgba(79,110,247,0.04); }
+        /* Image */
+        .md-body img { max-width: 100%; border-radius: 8px; margin: 6px 0; box-shadow: var(--shadow-sm); }
+
+        /* ── ECharts container ── */
+        .chart-container {
+            width: 100%; height: 320px; margin: 12px 0;
+            border-radius: 12px; background: #fff;
+            border: 1px solid rgba(79,110,247,0.10);
+            box-shadow: 0 2px 12px rgba(79,110,247,0.08);
+        }
+
+        /* ── Mermaid diagram container ── */
+        .mermaid-container {
+            margin: 12px 0; padding: 16px;
+            border-radius: 12px; background: #fff;
+            border: 1px solid rgba(79,110,247,0.10);
+            box-shadow: 0 2px 12px rgba(79,110,247,0.08);
+            overflow-x: auto; text-align: center;
+        }
+        .mermaid-container svg { max-width: 100%; height: auto; }
+
+        /* ── Typing indicator ── */
+        .typing-indicator {
+            display: inline-flex; gap: 5px; align-items: center;
+            padding: 12px 16px; background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg); border-bottom-left-radius: 5px;
+            box-shadow: var(--shadow-sm);
+        }
+        .typing-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--primary); animation: typingBounce 1.2s infinite; }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typingBounce { 0%,60%,100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-6px); opacity: 1; } }
+
+        /* ── Tool indicator ── */
+        .tool-indicator {
+            display: inline-flex; align-items: center; gap: 6px;
+            font-size: 0.76rem; color: var(--primary);
+            background: var(--primary-light); padding: 4px 10px;
+            border-radius: 6px; margin-bottom: 8px;
+            border: 1px solid rgba(79,110,247,0.15);
+        }
+
+        /* ── Tool waiting indicator (with dots animation) ── */
+        .tool-indicator.waiting::after {
+            content: '';
+            display: inline-block;
+            width: 14px; height: 14px;
+            border: 2px solid var(--primary);
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Thinking block (collapsible) ── */
+        .thinking-block {
+            background: #f8f9fc; border: 1px solid rgba(79,110,247,0.12);
+            border-radius: 8px; margin: 8px 0; overflow: hidden;
+        }
+        .thinking-header {
+            display: flex; align-items: center; gap: 6px; padding: 8px 12px;
+            font-size: 0.78rem; color: var(--text-sub); cursor: pointer;
+            background: rgba(79,110,247,0.04);
+            user-select: none;
+        }
+        .thinking-header:hover { background: rgba(79,110,247,0.08); }
+        .thinking-header::before { content: '🤔'; }
+        .thinking-header .arrow { margin-left: auto; transition: transform 0.2s; }
+        .thinking-block.collapsed .thinking-header .arrow { transform: rotate(-90deg); }
+        .thinking-content {
+            padding: 10px 12px; font-size: 0.85rem; color: var(--text-sub);
+            border-top: 1px solid rgba(79,110,247,0.08); line-height: 1.6;
+        }
+        .thinking-block.collapsed .thinking-content { display: none; }
 
         /* ── Input area ── */
-        .input-area { padding: 12px 16px; background: var(--surface); border-top: 1px solid var(--border); }
+        .input-area {
+            padding: 10px 14px;
+            background: linear-gradient(180deg, #f8faff 0%, #ffffff 100%);
+            border-top: 1px solid rgba(79,110,247,0.09);
+            box-shadow: 0 -4px 20px rgba(79,110,247,0.07);
+        }
         .context-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
-        .ctx-tag { font-size: 0.75rem; background: var(--primary-light); color: var(--primary); padding: 3px 8px; border-radius: 4px; display: flex; align-items: center; gap: 4px; }
-        .ctx-tag button { background: none; border: none; color: var(--primary); cursor: pointer; font-size: 0.75rem; padding: 0; }
+        .ctx-tag { font-size: 0.75rem; background: var(--primary-light); color: var(--primary); padding: 3px 8px; border-radius: 4px; }
         .input-row { display: flex; gap: 8px; align-items: flex-end; }
-        .input-box { flex: 1; border: 1.5px solid var(--border); border-radius: var(--radius-md); padding: 10px 14px; font-size: 0.92rem; font-family: inherit; resize: none; min-height: 42px; max-height: 120px; outline: none; transition: border-color 0.2s; background: var(--surface); }
-        .input-box:focus { border-color: var(--primary); }
-        .send-btn { background: var(--primary); color: #fff; border: none; border-radius: var(--radius-md); padding: 10px 18px; cursor: pointer; font-size: 0.9rem; font-weight: 600; height: 42px; transition: background 0.2s; flex-shrink: 0; }
-        .send-btn:hover:not(:disabled) { background: var(--primary-dark); }
-        .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .interpret-btn { background: linear-gradient(135deg, #06b6d4, #0891b2); color: #fff; border: none; border-radius: var(--radius-md); padding: 10px 14px; cursor: pointer; font-size: 0.82rem; font-weight: 600; height: 42px; transition: opacity 0.2s; flex-shrink: 0; }
+        .input-box {
+            flex: 1; border: 1.5px solid rgba(79,110,247,0.15); border-radius: 22px;
+            padding: 10px 16px; font-size: 0.95rem; font-family: inherit;
+            resize: none; min-height: 44px; max-height: 120px; outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            background: #fff; box-shadow: 0 1px 6px rgba(79,110,247,0.06);
+        }
+        .input-box:focus { border-color: var(--border-active); box-shadow: 0 0 0 3px rgba(79,110,247,0.1); }
+        .input-box::placeholder { color: var(--text-hint); }
+        .send-btn {
+            width: 46px; height: 46px; flex-shrink: 0;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: #fff; border: none; border-radius: 16px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: opacity 0.2s, transform 0.15s;
+            box-shadow: 0 4px 18px var(--primary-glow);
+        }
+        .send-btn:active { opacity: 0.85; transform: scale(0.90); }
+        .send-btn:disabled { opacity: 0.35; cursor: not-allowed; box-shadow: none; }
+        .interpret-btn {
+            background: linear-gradient(135deg, #06b6d4, #0891b2); color: #fff;
+            border: none; border-radius: 14px; padding: 0 14px; cursor: pointer;
+            font-size: 0.82rem; font-weight: 600; height: 46px; transition: opacity 0.2s; flex-shrink: 0;
+        }
         .interpret-btn:hover:not(:disabled) { opacity: 0.85; }
-        .interpret-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .interpret-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
         /* ── Config panel ── */
-        .config-panel { position: fixed; top: 0; right: 0; bottom: 0; width: 320px; background: var(--surface); box-shadow: var(--shadow-md); transform: translateX(100%); transition: transform 0.3s ease; z-index: 100; display: flex; flex-direction: column; }
+        .config-panel {
+            position: fixed; top: 0; right: 0; bottom: 0; width: 320px;
+            background: var(--surface); box-shadow: var(--shadow-md);
+            transform: translateX(100%); transition: transform 0.3s ease;
+            z-index: 100; display: flex; flex-direction: column;
+        }
         .config-panel.open { transform: translateX(0); }
         .config-panel-header { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
         .config-panel-header h3 { font-size: 0.95rem; font-weight: 700; }
@@ -114,14 +297,105 @@
         .config-save-btn { margin: 0 14px 14px; background: var(--primary); color: #fff; border: none; border-radius: var(--radius-sm); padding: 10px; cursor: pointer; font-size: 0.9rem; font-weight: 600; }
 
         /* ── Overlay ── */
-        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.2); z-index: 99; display: none; }
+        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.25); z-index: 99; display: none; }
         .overlay.visible { display: block; }
 
         /* ── Scrollbar ── */
         ::-webkit-scrollbar { width: 5px; }
         ::-webkit-scrollbar-thumb { background: rgba(79,110,247,0.2); border-radius: 10px; }
 
-        /* ── Mobile sidebar toggle ── */
+        /* ── Plan confirm overlay ── */
+        .plan-confirm-overlay {
+            position: absolute; bottom: 0; left: 0; right: 0;
+            background: linear-gradient(180deg, rgba(238,241,251,0) 0%, rgba(238,241,251,0.96) 18%, #eef1fb 100%);
+            padding: 24px 20px 14px;
+            display: flex; flex-direction: column; align-items: center; gap: 10px;
+            z-index: 5;
+            animation: slideUp 0.25s ease;
+        }
+        @keyframes slideUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+        .plan-confirm-title {
+            font-size: 0.82rem; font-weight: 600; color: var(--text-sub);
+            background: rgba(79,110,247,0.08); padding: 5px 12px;
+            border-radius: 20px; border: 1px solid rgba(79,110,247,0.15);
+        }
+        .plan-confirm-btns { display: flex; gap: 10px; width: 100%; max-width: 420px; }
+        .plan-confirm-btn {
+            flex: 1; padding: 11px 0; border: none; border-radius: 12px;
+            font-size: 0.9rem; font-weight: 600; cursor: pointer;
+            transition: opacity 0.2s, transform 0.15s;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+        }
+        .plan-confirm-btn.execute {
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+            color: #fff; box-shadow: 0 3px 14px rgba(34,197,94,0.35);
+        }
+        .plan-confirm-btn.abandon {
+            background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+            color: #fff; box-shadow: 0 3px 14px rgba(249,115,22,0.30);
+        }
+        .plan-confirm-btn:active { transform: scale(0.96); }
+        .plan-confirm-btn:hover:not(:disabled) { opacity: 0.88; }
+        .plan-confirm-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* ── Task board (collapsible panel above input) ── */
+        .task-board {
+            border-top: 1px solid rgba(79,110,247,0.10);
+            background: var(--surface);
+            flex-shrink: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+            max-height: 0;
+        }
+        .task-board.expanded { max-height: 220px; }
+        .task-board-header {
+            display: flex; align-items: center; gap: 6px;
+            padding: 6px 14px; cursor: pointer;
+            font-size: 0.78rem; font-weight: 600; color: var(--text-sub);
+            background: var(--surface2);
+            border-bottom: 1px solid rgba(79,110,247,0.08);
+            user-select: none;
+            transition: background 0.15s;
+        }
+        .task-board-header:hover { background: var(--primary-light); color: var(--primary); }
+        .task-board-toggle { margin-left: auto; font-size: 0.72rem; transition: transform 0.25s; }
+        .task-board.expanded .task-board-toggle { transform: rotate(180deg); }
+        .task-board-badge {
+            background: var(--primary); color: #fff;
+            border-radius: 10px; padding: 1px 7px; font-size: 0.7rem;
+        }
+        .task-board-body {
+            overflow-y: auto; max-height: 170px; padding: 8px 14px 10px;
+            display: flex; flex-direction: column; gap: 5px;
+        }
+        .task-item {
+            display: flex; align-items: center; gap: 8px;
+            padding: 6px 10px; border-radius: 8px;
+            font-size: 0.82rem; background: var(--surface2);
+            border: 1px solid transparent;
+        }
+        .task-item.todo { border-color: rgba(79,110,247,0.1); color: var(--text-sub); }
+        .task-item.in_progress {
+            border-color: rgba(79,110,247,0.3);
+            background: rgba(79,110,247,0.06); color: var(--primary); font-weight: 600;
+        }
+        .task-item.done {
+            border-color: rgba(34,197,94,0.2);
+            background: rgba(34,197,94,0.05); color: #15803d;
+        }
+        .task-item.failed {
+            border-color: rgba(239,68,68,0.2);
+            background: rgba(239,68,68,0.05); color: #dc2626;
+        }
+        .task-item.abandoned { color: #9ca3af; }
+        .task-icon { font-size: 0.85rem; flex-shrink: 0; }
+        .task-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .task-state-label { font-size: 0.7rem; opacity: 0.75; flex-shrink: 0; }
+        .task-board-plan-name {
+            font-size: 0.75rem; color: var(--text-hint); padding: 4px 10px 2px;
+        }
+
+        /* ── Mobile ── */
         .sidebar-toggle { display: none; background: none; border: none; color: #fff; font-size: 1.3rem; cursor: pointer; }
         @media (max-width: 640px) {
             .sidebar { position: fixed; left: 0; top: 0; bottom: 0; z-index: 50; transform: translateX(-100%); transition: transform 0.3s ease; }
@@ -156,15 +430,39 @@
         </aside>
 
         <!-- Chat area -->
-        <div class="chat-area">
+        <div class="chat-area" style="position:relative;">
             <div class="messages" id="messages"></div>
+            <!-- Plan confirm overlay (shown above input when plan needs confirmation) -->
+            <div class="plan-confirm-overlay" id="planConfirmOverlay" style="display:none;">
+                <div class="plan-confirm-title" id="planConfirmTitle">📋 AI 已生成执行计划，是否确认执行？</div>
+                <div class="plan-confirm-btns">
+                    <button class="plan-confirm-btn execute" id="planExecuteBtn" onclick="executePlan(this)">✅ 确认执行</button>
+                    <button class="plan-confirm-btn abandon" id="planAbandonBtn" onclick="abandonPlan(this)">❌ 不执行</button>
+                </div>
+            </div>
+            <!-- Task board (collapsible, above input) -->
+            <div class="task-board" id="taskBoard">
+                <div class="task-board-header" onclick="toggleTaskBoard()">
+                    <span>📋</span>
+                    <span id="taskBoardTitle">执行计划</span>
+                    <span class="task-board-badge" id="taskBoardBadge" style="display:none;"></span>
+                    <span class="task-board-toggle">▲</span>
+                </div>
+                <div class="task-board-body" id="taskBoardBody"></div>
+            </div>
             <div class="input-area">
-                <!-- Context tags (report/dashboard context) -->
                 <div class="context-bar" id="contextBar"></div>
                 <div class="input-row">
-                    <textarea class="input-box" id="inputBox" placeholder="请输入您的问题…" rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+                    <textarea class="input-box" id="inputBox" placeholder="请输入您的问题…" rows="1"
+                              onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
                     <button class="interpret-btn" id="interpretBtn" onclick="interpretData()" title="解读当前图表数据">📊 解读</button>
-                    <button class="send-btn" id="sendBtn" onclick="sendMessage()">发送</button>
+                    <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+                             stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="22" y1="2" x2="11" y2="13"/>
+                            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                        </svg>
+                    </button>
                 </div>
             </div>
         </div>
@@ -178,38 +476,14 @@
         <button class="close-config" onclick="closeConfig()">✕</button>
     </div>
     <div class="config-body">
-        <div class="config-group">
-            <label>用户名 (userName)</label>
-            <input class="config-input" id="cfgUserName" placeholder="your-name" />
-        </div>
-        <div class="config-group">
-            <label>SuperSonic Agent ID</label>
-            <input class="config-input" id="cfgAgentId" placeholder="例如: 12" />
-        </div>
-        <div class="config-group">
-            <label>SuperSonic Token</label>
-            <input class="config-input" id="cfgToken" placeholder="Bearer xxxxx" />
-        </div>
-        <div class="config-group">
-            <label>报表 ID (reportId，可选)</label>
-            <input class="config-input" id="cfgReportId" placeholder="" />
-        </div>
-        <div class="config-group">
-            <label>报表名称 (reportName，可选)</label>
-            <input class="config-input" id="cfgReportName" placeholder="" />
-        </div>
-        <div class="config-group">
-            <label>仪表盘 ID (dashboardId，可选)</label>
-            <input class="config-input" id="cfgDashboardId" placeholder="" />
-        </div>
-        <div class="config-group">
-            <label>仪表盘名称 (dashboardName，可选)</label>
-            <input class="config-input" id="cfgDashboardName" placeholder="" />
-        </div>
-        <div class="config-group">
-            <label>项目 ID (projectId，可选)</label>
-            <input class="config-input" id="cfgProjectId" placeholder="" />
-        </div>
+        <div class="config-group"><label>用户名 (userName)</label><input class="config-input" id="cfgUserName" placeholder="your-name"/></div>
+        <div class="config-group"><label>SuperSonic Agent ID</label><input class="config-input" id="cfgAgentId" placeholder="例如: 12"/></div>
+        <div class="config-group"><label>SuperSonic Token</label><input class="config-input" id="cfgToken" placeholder="Bearer xxxxx"/></div>
+        <div class="config-group"><label>报表 ID (reportId，可选)</label><input class="config-input" id="cfgReportId" placeholder=""/></div>
+        <div class="config-group"><label>报表名称 (reportName，可选)</label><input class="config-input" id="cfgReportName" placeholder=""/></div>
+        <div class="config-group"><label>仪表盘 ID (dashboardId，可选)</label><input class="config-input" id="cfgDashboardId" placeholder=""/></div>
+        <div class="config-group"><label>仪表盘名称 (dashboardName，可选)</label><input class="config-input" id="cfgDashboardName" placeholder=""/></div>
+        <div class="config-group"><label>项目 ID (projectId，可选)</label><input class="config-input" id="cfgProjectId" placeholder=""/></div>
         <div class="config-group">
             <label>图表数据 (param，JSON，用于解读)</label>
             <textarea class="config-input" id="cfgParam" rows="4" placeholder='{"labels":[],"data":[]}'></textarea>
@@ -219,59 +493,129 @@
 </div>
 
 <script>
+// ─── Init marked.js ───
+if (typeof marked !== 'undefined') {
+    marked.setOptions({ breaks: true, gfm: true });
+}
+
+// ─── Init mermaid.js ───
+if (typeof mermaid !== 'undefined') {
+    mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
+}
+
+// ─── Preprocess markdown text before parsing ──
+function preprocessMarkdown(text) {
+    if (!text) return text;
+    // Ensure standalone hr lines (--- or more) have surrounding newlines without breaking table separators
+    text = text.replace(/(^|)(-{3,})( |$)/g, '---');
+    // Ensure heading markers are preceded by a newline to avoid text###heading runs
+    text = text.replace(/([^\n#])(#{1,6} )/g, '$1\n$2');
+    return text;
+}
+
 // ─── State ───
 let sessionId = generateId();
-let userName = '';
-let agentId = '';
-let supersonicToken = '';
-let reportId = '';
-let reportName = '';
-let dashboardId = '';
-let dashboardName = '';
-let projectId = '';
+let userName = '', agentId = '', supersonicToken = '';
+let reportId = '', reportName = '', dashboardId = '', dashboardName = '', projectId = '';
 let chartParam = '';
 let isStreaming = false;
 let currentAiBubble = null;
-let currentAiText = '';
+let currentAiText = '';       // accumulated main reply text (no thinking)
+let currentThinkingText = ''; // accumulated thinking/reasoning text
+let executedTools = [];       // list of tool names that have been called
+let lastEventType = null;     // type of most recent SSE payload (for showing waiting state)
+let chartCounter = 0;
+
+// Plan confirm state
+let planConfirmBubble = null;  // the AI bubble that contains the confirm bar (legacy, kept for compat)
+let planEventSource = null;    // SSE connection for plan updates
+let taskBoardExpanded = false; // task board collapsed by default
 
 // ─── Init ───
 loadConfig();
 loadSessions();
 renderContextBar();
+// Start plan SSE on page load so we never miss updates
+subscribePlanStream();
+
+// ─── Test mode (?test=1): render mock data without calling backend ───
+if (new URLSearchParams(location.search).get('test') === '1') {
+    const lines = [
+        '申请报表权限主要分为**确认归属**、**提交工单**和**准备材料**三个环节。请根据您的具体需求（是看红海BI报表，还是申请分析云账号/项目）参考以下流程：',
+        '',
+        '### \uD83D\uDD0D 第一步：确认报表归属',
+        '权限由各租户项目自行管理，请先确认您要看的报表属于哪个项目：',
+        '*   **已知项目**：直接联系该报表所属项目的**项目负责人**，告知其为您开通。',
+        '*   **不清楚归属**：通过系统首页的**数据字典**或**数据资产**工具搜索报表名称，查找对应项目和负责人。',
+        '',
+        '---',
+        '',
+        '### \uD83D\uDCDD 第二步：提交工单（SPMS系统）',
+        '根据您的实际需求，点击对应链接填写工单：',
+        '',
+        '#### \uD83C\uDD70\uFE0F 申请红海BI报表权限',
+        '\uD83D\uDD17 [文化报表权限申请工单](https://example.com/a)',
+        '*   **注意**：报表名称必须**准确填写**。若数量较多，建议整理成Excel附件上传。',
+        '',
+        '#### \uD83C\uDD71\uFE0F 申请分析云账号或项目权限',
+        '\uD83D\uDD17 [分析云账号与项目权限申请工单](https://example.com/b)',
+        '*   **无账号**：需填写希望申请的**租户项目准确名称**。角色若选"仅查看报表"则免技术考试。',
+        '*   **已有账号**：直接在工单中补充申请新项目权限即可。',
+        '',
+        '#### \uD83C\uDD8E 申请指标使用权限',
+        '*   若报表内指标呈**灰色**无法选中，说明暂无使用权，需联系**报表配置人/创建人**申请。',
+        '',
+        '---',
+        '',
+        '### \uD83D\uDCCE 第三步：准备附件与考试',
+        '提交工单前，请务必准备好以下材料：',
+        '',
+        '1.  **\uD83D\uDCC4 安全承诺书**（必填）',
+        '    *   下载[员工版本承诺书](https://example.com/doc)签字扫描。',
+        '    *   命名格式：`网络与信息安全责任承诺书+姓名+xx自有/合作伙伴.pdf`。',
+        '2.  **\uD83C\uDF93 考试截图**',
+        '    *   **数据安全考试**（必考）：扫码考试，**90分及格**。',
+        '    *   **技术考试**：若申请角色为"仅查看报表"则**免考**。',
+        '    *   将分数截图上传并命名。',
+        '',
+        '---',
+        '',
+        '### \uD83D\uDCA1 温馨提示',
+        '*   申请通过后，请前往**数据门户**查看报表。',
+        '*   **务必确保申请工单中的手机号准确**，因为下载报表文件时需要短信验证码解压。',
+        '',
+        '> \uD83D\uDCD6 **更多详情参考**：',
+        '> *   [步骤1：申请报表/仪表盘权限](https://example.com/step1)',
+        '> *   [1、文化报表权限申请](https://example.com/step2)',
+        '> *   [2、分析云账号与项目权限申请](https://example.com/step3)'
+    ];
+    addMessage('user', '怎么申请报表权限', false);
+    addMessage('assistant', lines.join('\n'), true);
+}
 
 // ─── Config ───
 function loadConfig() {
     const saved = JSON.parse(localStorage.getItem('chatbi_config') || '{}');
-    userName = saved.userName || '';
-    agentId = saved.agentId || '';
+    userName = saved.userName || ''; agentId = saved.agentId || '';
     supersonicToken = saved.supersonicToken || '';
-    reportId = saved.reportId || '';
-    reportName = saved.reportName || '';
-    dashboardId = saved.dashboardId || '';
-    dashboardName = saved.dashboardName || '';
-    projectId = saved.projectId || '';
-    chartParam = saved.chartParam || '';
+    reportId = saved.reportId || ''; reportName = saved.reportName || '';
+    dashboardId = saved.dashboardId || ''; dashboardName = saved.dashboardName || '';
+    projectId = saved.projectId || ''; chartParam = saved.chartParam || '';
 }
-
 function openConfig() {
-    document.getElementById('cfgUserName').value = userName;
-    document.getElementById('cfgAgentId').value = agentId;
-    document.getElementById('cfgToken').value = supersonicToken;
-    document.getElementById('cfgReportId').value = reportId;
-    document.getElementById('cfgReportName').value = reportName;
-    document.getElementById('cfgDashboardId').value = dashboardId;
-    document.getElementById('cfgDashboardName').value = dashboardName;
-    document.getElementById('cfgProjectId').value = projectId;
+    ['cfgUserName','cfgAgentId','cfgToken','cfgReportId','cfgReportName','cfgDashboardId','cfgDashboardName','cfgProjectId'].forEach(id => {
+        const key = id.replace('cfg','').replace(/^\w/, c => c.toLowerCase());
+        const map = { userName, agentId, token: supersonicToken, reportId, reportName, dashboardId, dashboardName, projectId };
+        document.getElementById(id).value = map[key] || '';
+    });
     document.getElementById('cfgParam').value = chartParam;
     document.getElementById('configPanel').classList.add('open');
     document.getElementById('overlay').classList.add('visible');
 }
-
 function closeConfig() {
     document.getElementById('configPanel').classList.remove('open');
     document.getElementById('overlay').classList.remove('visible');
 }
-
 function saveConfig() {
     userName = document.getElementById('cfgUserName').value.trim();
     agentId = document.getElementById('cfgAgentId').value.trim();
@@ -291,192 +635,703 @@ function saveConfig() {
 function renderContextBar() {
     const bar = document.getElementById('contextBar');
     bar.innerHTML = '';
-    if (reportName) bar.innerHTML += `<span class="ctx-tag">📋 ${reportName}</span>`;
-    if (dashboardName) bar.innerHTML += `<span class="ctx-tag">📊 ${dashboardName}</span>`;
-    if (agentId) bar.innerHTML += `<span class="ctx-tag">🤖 AgentID: ${agentId}</span>`;
+    if (reportName) bar.innerHTML += `<span class="ctx-tag">📋 ${escHtml(reportName)}</span>`;
+    if (dashboardName) bar.innerHTML += `<span class="ctx-tag">📊 ${escHtml(dashboardName)}</span>`;
+    if (agentId) bar.innerHTML += `<span class="ctx-tag">🤖 AgentID: ${escHtml(agentId)}</span>`;
     document.getElementById('interpretBtn').disabled = !chartParam;
 }
 
 // ─── Sessions ───
 function loadSessions() {
-    const u = userName || '';
-    fetch(`/api/chatbi/sessions?userName=${encodeURIComponent(u)}`)
-        .then(r => r.json())
-        .then(renderSessionList)
-        .catch(() => {});
+    fetch(`/api/chatbi/sessions?userName=${encodeURIComponent(userName || '')}`)
+        .then(r => r.json()).then(renderSessionList).catch(() => {});
 }
-
 function renderSessionList(sessions) {
     const list = document.getElementById('sessionList');
     list.innerHTML = '';
-    sessions.forEach(s => {
+    (sessions || []).forEach(s => {
         const item = document.createElement('div');
-        item.className = 'session-item' + (s.id === sessionId ? ' active' : '');
-        item.dataset.id = s.id;
+        item.className = 'session-item' + (s.sessionId === sessionId ? ' active' : '');
+        item.dataset.id = s.sessionId;
         item.innerHTML = `<span style="flex:1;overflow:hidden;text-overflow:ellipsis;">${escHtml(s.title || '新对话')}</span>
-            <button class="session-del" onclick="deleteSession(event,'${s.id}')">✕</button>`;
-        item.addEventListener('click', () => switchSession(s.id));
+            <button class="session-del" onclick="deleteSession(event,'${s.sessionId}')">✕</button>`;
+        item.addEventListener('click', () => switchSession(s.sessionId));
         list.appendChild(item);
     });
 }
-
 function switchSession(id) {
     if (isStreaming) return;
     sessionId = id;
     document.querySelectorAll('.session-item').forEach(el => el.classList.toggle('active', el.dataset.id === id));
     document.getElementById('messages').innerHTML = '';
+    hidePlanConfirmOverlay();
+    clearTaskBoard();
+    planConfirmBubble = null;
+    // Re-subscribe SSE for the new session
+    subscribePlanStream();
     fetch(`/api/chatbi/sessions/${id}/messages`)
         .then(r => r.json())
-        .then(msgs => msgs.forEach(m => addMessage(m.role === 'user' ? 'user' : 'ai', m.content)))
+        .then(msgs => (msgs || []).forEach(m => addMessage(m.role === 'user' ? 'user' : 'assistant', m.content, true)))
         .catch(() => {});
     closeSidebar();
 }
-
 function newChat() {
     if (isStreaming) return;
     sessionId = generateId();
     document.getElementById('messages').innerHTML = '';
     document.querySelectorAll('.session-item').forEach(el => el.classList.remove('active'));
+    hidePlanConfirmOverlay();
+    clearTaskBoard();
+    planConfirmBubble = null;
+    // Re-subscribe SSE for the new session
+    subscribePlanStream();
     closeSidebar();
 }
-
 function deleteSession(e, id) {
     e.stopPropagation();
     if (!confirm('确认删除该对话？')) return;
     fetch(`/api/chatbi/sessions/${id}`, { method: 'DELETE' })
-        .then(() => {
-            if (id === sessionId) newChat();
-            loadSessions();
-        });
+        .then(() => { if (id === sessionId) newChat(); loadSessions(); });
 }
 
-// ─── Sidebar (mobile) ───
+// ─── Sidebar ───
 function toggleSidebar() {
     document.getElementById('sidebar').classList.toggle('open');
     document.getElementById('overlay').classList.toggle('visible');
 }
 function closeSidebar() {
     document.getElementById('sidebar').classList.remove('open');
-    if (!document.getElementById('configPanel').classList.contains('open')) {
+    if (!document.getElementById('configPanel').classList.contains('open'))
         document.getElementById('overlay').classList.remove('visible');
-    }
 }
 
 // ─── Chat ───
-function handleKey(e) {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-}
-
-function autoResize(el) {
-    el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
-}
-
+function handleKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }
+function autoResize(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 120) + 'px'; }
 function sendMessage() {
     const box = document.getElementById('inputBox');
     const text = box.value.trim();
     if (!text || isStreaming) return;
-    box.value = '';
-    box.style.height = '';
+    box.value = ''; box.style.height = '';
     doChat(text);
 }
-
-function interpretData() {
-    if (!chartParam || isStreaming) return;
-    doChat('请解读当前数据');
-}
+function interpretData() { if (!chartParam || isStreaming) return; doChat('请解读当前数据'); }
 
 function doChat(message) {
     isStreaming = true;
     document.getElementById('sendBtn').disabled = true;
     document.getElementById('interpretBtn').disabled = true;
+    addMessage('user', message, false);
 
-    addMessage('user', message);
-
-    // Create AI bubble with typing indicator
     currentAiText = '';
-    const aiMsg = document.createElement('div');
-    aiMsg.className = 'message';
-    aiMsg.innerHTML = `<div class="avatar ai">AI</div><div class="bubble" id="streaming-bubble"><div class="typing-dots"><span></span><span></span><span></span></div></div>`;
-    document.getElementById('messages').appendChild(aiMsg);
+    currentThinkingText = '';
+    executedTools = [];
+    lastEventType = null;
+    // Hide confirm overlay when a new message is sent
+    hidePlanConfirmOverlay();
+    planConfirmBubble = null;
+
+    const aiRow = document.createElement('div');
+    aiRow.className = 'message assistant';
+    aiRow.innerHTML = '<div class="message-label">AI</div><div class="message-content"><div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>';
+    document.getElementById('messages').appendChild(aiRow);
     scrollToBottom();
-    currentAiBubble = aiMsg.querySelector('#streaming-bubble');
+    currentAiBubble = aiRow.querySelector('.message-content');
 
-    const body = {
-        sessionId, message, userName, agentId,
-        supersonicToken, reportId, reportName,
-        dashboardId, dashboardName, projectId,
-        param: chartParam
-    };
-
+    const body = { sessionId, message, userName, agentId, supersonicToken, reportId, reportName, dashboardId, dashboardName, projectId, param: chartParam };
     fetch('/api/chatbi/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
         body: JSON.stringify(body)
     }).then(resp => {
+        if (!resp.ok || !resp.body) throw new Error(`HTTP ${resp.status}`);
         const reader = resp.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
-
         function readChunk() {
             reader.read().then(({ done, value }) => {
-                if (done) { finishStream(); return; }
+                if (done) {
+                    if (buffer.trim()) buffer = parseSseBuffer(buffer, true);
+                    finishStream();
+                    return;
+                }
                 buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
-                buffer = lines.pop();
-                lines.forEach(line => {
-                    if (line.startsWith('data:')) {
-                        const chunk = line.slice(5);
-                        handleChunk(chunk);
-                    }
-                });
+                buffer = parseSseBuffer(buffer, false);
                 readChunk();
             }).catch(() => finishStream());
         }
         readChunk();
     }).catch(err => {
-        if (currentAiBubble) currentAiBubble.innerHTML = `<span style="color:#e05">请求失败: ${err.message}</span>`;
+        if (currentAiBubble) currentAiBubble.innerHTML = `<span style="color:#e05">请求失败: ${escHtml(err.message)}</span>`;
         finishStream();
     });
 }
 
-function handleChunk(chunk) {
-    if (!currentAiBubble) return;
-    if (chunk === '[STOPPED]') { finishStream(); return; }
-    if (chunk.startsWith('[TOOL:')) {
-        const toolName = chunk.slice(6, -1);
-        const ind = document.createElement('div');
-        ind.className = 'tool-indicator';
-        ind.textContent = `🔧 ${toolName}`;
-        currentAiBubble.innerHTML = '';
-        currentAiBubble.appendChild(ind);
+function parseSseBuffer(buffer, flushAll) {
+    const normalized = buffer.replace(/\r\n/g, '\n');
+    const frames = flushAll ? [normalized] : normalized.split('\n\n');
+    const remainder = flushAll ? '' : frames.pop();
+    frames.forEach(frame => handleSseFrame(frame));
+    return remainder;
+}
+
+function handleSseFrame(frame) {
+    if (!frame || !frame.trim()) return;
+    let eventType = null;
+    const dataLines = [];
+    frame.split('\n').forEach(line => {
+        if (line.startsWith('event:')) {
+            eventType = line.slice(6).trim();
+        } else if (line.startsWith('data:')) {
+            dataLines.push(line.slice(5).replace(/^ /, ''));
+        }
+    });
+    const data = dataLines.join('\n');
+    // Map SSE event type to payload type directly (backend sends event:done / event:tool / event:thinking / event:chunk)
+    if (eventType === 'done') { handleChunk('[STOPPED]'); return; }
+    if (eventType === 'tool' && data) {
+        try {
+            const p = JSON.parse(data);
+            handleChunk('[TOOL:' + (p.content || '') + ']');
+        } catch(_) { handleChunk('[TOOL:' + data + ']'); }
         return;
     }
-    currentAiText += chunk;
-    currentAiBubble.innerHTML = renderMarkdown(currentAiText);
+    if (eventType === 'thinking' && data) {
+        try {
+            const p = JSON.parse(data);
+            handleChunk('[THINKING]' + (p.content || ''));
+        } catch(_) { handleChunk('[THINKING]' + data); }
+        return;
+    }
+    if (eventType === 'chunk' && data) {
+        try {
+            const p = JSON.parse(data);
+            handleChunk(p.content || '');
+        } catch(_) { handleChunk(data); }
+        return;
+    }
+    // Fallback: no event type, treat data as plain chunk
+    if (data) handleChunk(data);
+}
+
+function handleChunk(chunk) {
+    if (!currentAiBubble) return;
+    const payload = parseChunkPayload(chunk);
+    if (payload.type === 'done') { finishStream(); return; }
+    if (payload.type === 'tool') {
+        const toolName = payload.content || '';
+        executedTools.push(toolName);
+        lastEventType = 'tool';
+        renderAiBubbleWithThinking(currentAiBubble, currentAiText, currentThinkingText, false);
+        scrollToBottom();
+        return;
+    }
+    // Only actual reply content (not thinking) clears the waiting state
+    if (payload.type === 'chunk') {
+        lastEventType = 'chunk';
+    }
+    if (payload.type === 'thinking') {
+        currentThinkingText += payload.content || '';
+        renderAiBubbleWithThinking(currentAiBubble, currentAiText, currentThinkingText, false);
+        scrollToBottom();
+        return;
+    }
+    currentAiText += payload.content || '';
+    renderAiBubbleWithThinking(currentAiBubble, currentAiText, currentThinkingText, false);
     scrollToBottom();
+}
+
+function parseChunkPayload(chunk) {
+    if (chunk === '[STOPPED]') return { type: 'done', content: '' };
+    if (chunk.startsWith('[TOOL:') && chunk.endsWith(']')) {
+        return { type: 'tool', content: chunk.slice(6, -1) };
+    }
+    // Detect thinking content marked by backend
+    if (chunk.startsWith('[THINKING]')) {
+        return { type: 'thinking', content: chunk.slice(10) };
+    }
+    try {
+        const payload = JSON.parse(chunk);
+        if (payload && typeof payload === 'object' && payload.type) {
+            return { type: payload.type, content: payload.content || '' };
+        }
+    } catch (e) {
+        // Fall back to plain text chunks for compatibility with legacy responses.
+    }
+    return { type: 'chunk', content: chunk };
 }
 
 function finishStream() {
     isStreaming = false;
+    lastEventType = null;
     document.getElementById('sendBtn').disabled = false;
     document.getElementById('interpretBtn').disabled = !chartParam;
-    if (currentAiBubble && currentAiText) {
-        currentAiBubble.innerHTML = renderMarkdown(currentAiText);
-    }
+    if (currentAiBubble && (currentAiText || currentThinkingText))
+        renderAiBubbleWithThinking(currentAiBubble, currentAiText, currentThinkingText, true);
     currentAiBubble = null;
     currentAiText = '';
+    currentThinkingText = '';
+    executedTools = [];
+    lastEventType = null;
     scrollToBottom();
     loadSessions();
 }
 
-// ─── Messages ───
-function addMessage(role, content) {
+// ─── Plan confirm & task board management ───
+
+/** Subscribe to plan SSE stream for current session */
+function subscribePlanStream() {
+    closePlanEventSource();
+    const es = new EventSource(`/api/chatbi/plan/${sessionId}/stream`);
+    planEventSource = es;
+    es.onmessage = function(e) {
+        try {
+            const plan = JSON.parse(e.data);
+            handlePlanUpdate(plan);
+        } catch(_) {}
+    };
+    es.onerror = function() {
+        // Retry after 3s on error (session may not have a plan yet)
+        closePlanEventSource();
+        setTimeout(() => { if (!planEventSource) subscribePlanStream(); }, 3000);
+    };
+}
+
+/** Close existing plan SSE connection */
+function closePlanEventSource() {
+    if (planEventSource) {
+        planEventSource.close();
+        planEventSource = null;
+    }
+}
+
+/** Handle plan state update from SSE */
+function handlePlanUpdate(plan) {
+    // Update task board regardless of confirm state
+    updateTaskBoard(plan);
+
+    if (!plan || !plan.subtasks || plan.subtasks.length === 0) {
+        hidePlanConfirmOverlay();
+        return;
+    }
+    if (plan.needConfirm) {
+        showPlanConfirmOverlay(plan);
+    } else {
+        hidePlanConfirmOverlay();
+    }
+}
+
+/** Show the floating confirm overlay */
+function showPlanConfirmOverlay(plan) {
+    const overlay = document.getElementById('planConfirmOverlay');
+    const title = document.getElementById('planConfirmTitle');
+    if (!overlay) return;
+    const planName = plan.name ? `「${plan.name}」` : '执行计划';
+    title.textContent = `📋 AI 已生成${planName}，是否确认执行？`;
+    document.getElementById('planExecuteBtn').disabled = false;
+    document.getElementById('planAbandonBtn').disabled = false;
+    overlay.style.display = 'flex';
+    // Auto-expand task board so user can see the plan
+    expandTaskBoard();
+    scrollToBottom();
+}
+
+/** Hide the confirm overlay */
+function hidePlanConfirmOverlay() {
+    const overlay = document.getElementById('planConfirmOverlay');
+    if (overlay) overlay.style.display = 'none';
+}
+
+/** Update task board with current plan */
+function updateTaskBoard(plan) {
+    const board = document.getElementById('taskBoard');
+    const body = document.getElementById('taskBoardBody');
+    const badge = document.getElementById('taskBoardBadge');
+    const titleEl = document.getElementById('taskBoardTitle');
+    if (!board || !body) return;
+
+    if (!plan || !plan.subtasks || plan.subtasks.length === 0) {
+        // No active plan — do NOT clear board, keep last known state visible
+        return;
+    }
+
+    // Update title
+    titleEl.textContent = plan.name ? `计划：${plan.name}` : '执行计划';
+
+    // Count states
+    const total = plan.subtasks.length;
+    const done = plan.subtasks.filter(t => t.state === 'done').length;
+    const inProg = plan.subtasks.filter(t => t.state === 'in_progress').length;
+    const allDone = done === total;
+
+    // Badge shows done/total
+    badge.textContent = `${done}/${total}`;
+    badge.style.display = '';
+    badge.style.background = allDone ? '#16a34a' : (inProg > 0 ? 'var(--primary)' : '#9ba3c4');
+
+    // Render task items
+    const stateIcon = { todo: '⏳', in_progress: '▶️', done: '✅', failed: '❌', abandoned: '🚫' };
+    const stateLabel = { todo: '待执行', in_progress: '执行中', done: '完成', failed: '失败', abandoned: '已放弃' };
+    body.innerHTML = plan.subtasks.map(t => {
+        const st = t.state || 'todo';
+        return `<div class="task-item ${st}">`
+            + `<span class="task-icon">${stateIcon[st] || '⏳'}</span>`
+            + `<span class="task-name" title="${escHtml(t.name || '')}">${escHtml(t.name || '子任务')}</span>`
+            + `<span class="task-state-label">${stateLabel[st] || st}</span>`
+            + `</div>`;
+    }).join('');
+
+    // Only auto-expand when there are active/pending tasks; do not force-expand if user collapsed it
+    const hasActiveTask = inProg > 0 || plan.needConfirm;
+    if (hasActiveTask) {
+        expandTaskBoard();
+    } else if (!taskBoardExpanded) {
+        // keep collapsed if user already collapsed
+    }
+}
+
+/** Expand task board */
+function expandTaskBoard() {
+    const board = document.getElementById('taskBoard');
+    if (board && !board.classList.contains('expanded')) {
+        board.classList.add('expanded');
+        taskBoardExpanded = true;
+    }
+}
+
+/** Toggle task board open/closed — only hides panel, does NOT clear data */
+function toggleTaskBoard() {
+    const board = document.getElementById('taskBoard');
+    if (!board) return;
+    const isNowExpanded = board.classList.contains('expanded');
+    board.classList.toggle('expanded', !isNowExpanded);
+    taskBoardExpanded = !isNowExpanded;
+}
+
+/** Clear task board (on new chat / session switch) */
+function clearTaskBoard() {
+    const body = document.getElementById('taskBoardBody');
+    const badge = document.getElementById('taskBoardBadge');
+    const titleEl = document.getElementById('taskBoardTitle');
+    const board = document.getElementById('taskBoard');
+    if (body) body.innerHTML = '';
+    if (badge) { badge.style.display = 'none'; }
+    if (titleEl) titleEl.textContent = '执行计划';
+    if (board) board.classList.remove('expanded');
+    taskBoardExpanded = false;
+}
+
+/** User clicks ✅ execute
+ *
+ * Strategy: call /confirm (marks plan confirmed in backend), then send '执行'
+ * ONLY to the DataQueryAgent sub-session via the existing SSE chat stream.
+ * We do NOT call doChat() here because that would route through RouterAgent
+ * and create a new redundant AI response bubble.
+ * Instead, we inject '执行' directly into the current streaming session.
+ */
+function executePlan(btn) {
+    document.getElementById('planExecuteBtn').disabled = true;
+    document.getElementById('planAbandonBtn').disabled = true;
+    fetch(`/api/chatbi/plan/${sessionId}/confirm`, { method: 'POST' })
+        .then(() => {
+            hidePlanConfirmOverlay();
+            planConfirmBubble = null;
+            // Send a silent '执行' message that continues the current agent conversation
+            // without creating a new user/AI bubble pair in the UI
+            sendSilentMessage('执行');
+        })
+        .catch(() => {
+            document.getElementById('planExecuteBtn').disabled = false;
+            document.getElementById('planAbandonBtn').disabled = false;
+        });
+}
+
+/** User clicks ❌ abandon */
+function abandonPlan(btn) {
+    document.getElementById('planExecuteBtn').disabled = true;
+    document.getElementById('planAbandonBtn').disabled = true;
+    fetch(`/api/chatbi/plan/${sessionId}/abandon`, { method: 'POST' })
+        .then(() => {
+            hidePlanConfirmOverlay();
+            planConfirmBubble = null;
+            // Send silent '不执行' — collapses task board after response
+            sendSilentMessage('不执行');
+        })
+        .catch(() => {
+            document.getElementById('planExecuteBtn').disabled = false;
+            document.getElementById('planAbandonBtn').disabled = false;
+        });
+}
+
+/**
+ * Send a message to the backend without creating a new user bubble.
+ * The AI response appends to the existing current AI bubble (or creates
+ * a minimal one if none is active).
+ * Used for plan confirm/abandon flow where we don't want extra UI noise.
+ */
+function sendSilentMessage(message) {
+    if (isStreaming) return;
+    isStreaming = true;
+    document.getElementById('sendBtn').disabled = true;
+    document.getElementById('interpretBtn').disabled = true;
+
+    currentAiText = '';
+    currentThinkingText = '';
+    executedTools = [];
+    lastEventType = null;
+
+    // Reuse or create an AI bubble for the streamed response
+    let aiRow = document.querySelector('.message.assistant:last-child');
+    if (!aiRow) {
+        aiRow = document.createElement('div');
+        aiRow.className = 'message assistant';
+        aiRow.innerHTML = '<div class="message-label">AI</div><div class="message-content"></div>';
+        document.getElementById('messages').appendChild(aiRow);
+    }
+    // Add typing indicator to existing bubble
+    const mc = aiRow.querySelector('.message-content');
+    mc.innerHTML += '<div class="typing-indicator" id="silentTyping"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>';
+    currentAiBubble = mc;
+    scrollToBottom();
+
+    const body = { sessionId, message, userName, agentId, supersonicToken, reportId, reportName, dashboardId, dashboardName, projectId, param: chartParam };
+    fetch('/api/chatbi/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+        body: JSON.stringify(body)
+    }).then(resp => {
+        if (!resp.ok || !resp.body) throw new Error(`HTTP ${resp.status}`);
+        // Remove typing indicator once stream starts
+        const typingEl = document.getElementById('silentTyping');
+        if (typingEl) typingEl.remove();
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        function readChunk() {
+            reader.read().then(({ done, value }) => {
+                if (done) {
+                    if (buffer.trim()) buffer = parseSseBuffer(buffer, true);
+                    finishStream();
+                    return;
+                }
+                buffer += decoder.decode(value, { stream: true });
+                buffer = parseSseBuffer(buffer, false);
+                readChunk();
+            }).catch(() => finishStream());
+        }
+        readChunk();
+    }).catch(err => {
+        const typingEl = document.getElementById('silentTyping');
+        if (typingEl) typingEl.remove();
+        finishStream();
+    });
+}
+
+/** Get the last assistant message bubble (legacy helper) */
+function getLastAiBubble() {
+    const msgs = document.querySelectorAll('.message.assistant .message-content');
+    return msgs.length ? msgs[msgs.length - 1] : null;
+}
+
+// ─── marked.js 已在顶部完成初始化 ───
+
+// ─── Extract and separate thinking blocks from text ───
+function extractThinkingBlocks(text) {
+    const thinking = [];
+    const mainText = text.replace(/\[THINKING_BLOCK\]([\s\S]*?)\[\/THINKING_BLOCK\]/g, (_, content) => {
+        thinking.push(content);
+        return '';
+    }).trim();
+    return { mainText, thinking };
+}
+
+// ─── Toggle thinking block visibility ───
+function toggleThinking(el) {
+    const block = el.closest('.thinking-block');
+    if (block) block.classList.toggle('collapsed');
+}
+
+// Build HTML for thinking blocks
+function buildThinkingHtml(thinkingText) {
+    if (!thinkingText) return '';
+    const previewLen = 60;
+    const preview = thinkingText.replace(/\n/g, ' ').slice(0, previewLen) + (thinkingText.length > previewLen ? '…' : '');
+    return `<div class="thinking-block collapsed">`
+        + `<div class="thinking-header" onclick="toggleThinking(this)"><span>${escHtml(preview)}</span><span class="arrow">▼</span></div>`
+        + `<div class="thinking-content">${escHtml(thinkingText)}</div>`
+        + `</div>`;
+}
+
+// Build HTML for main markdown text
+function buildMarkdownHtml(text) {
+    if (!text) return '';
+    const processed = preprocessMarkdown(text);
+    let mdHtml;
+    if (typeof marked !== 'undefined' && typeof marked.parse === 'function') {
+        try {
+            mdHtml = marked.parse(processed, { gfm: true, breaks: true });
+            if (typeof mdHtml !== 'string') mdHtml = simpleMarkdown(processed);
+        } catch(e) {
+            console.warn('marked.parse error:', e);
+            mdHtml = simpleMarkdown(processed);
+        }
+    } else {
+        mdHtml = simpleMarkdown(processed);
+    }
+    return '<div class="md-body">' + mdHtml + '</div>';
+}
+
+// ─── Render AI bubble (with separate thinking content) ───
+// mainText: the actual reply, thinkingText: reasoning_content
+function renderAiBubbleWithThinking(container, mainText, thinkingText, final) {
+    if (!mainText && !thinkingText && !executedTools.length) return;
+    let html = '';
+    // Render completed tool call indicators
+    executedTools.forEach(function(toolName) {
+        html += '<div class="tool-indicator">🔧 ' + escHtml(toolName) + '</div>';
+    });
+    // Show "正在执行" when the most recent event was a tool call
+    if (lastEventType === 'tool') {
+        html += '<div class="tool-indicator waiting">正在执行</div>';
+    }
+    if (thinkingText) html += buildThinkingHtml(thinkingText);
+    if (mainText) html += buildMarkdownHtml(mainText);
+    container.innerHTML = html;
+    if (final) renderCharts(container);
+}
+
+// ─── Render AI bubble (legacy: text only, used for history messages) ───
+function renderAiBubble(container, text, final) {
+    if (!text) return;
+    const toolInd = container.querySelector('.tool-indicator');
+    const html = buildMarkdownHtml(text);
+    container.innerHTML = (toolInd ? toolInd.outerHTML : '') + html;
+    if (final) renderCharts(container);
+}
+
+// ─── ECharts rendering ───
+function renderCharts(container) {
+    // 1. 处理 <chart> 标签格式（简化格式自动转 ECharts option）
+    if (typeof echarts !== 'undefined') {
+        container.innerHTML = container.innerHTML.replace(/<chart>\s*([\s\S]*?)\s*<\/chart>/gi, (match, jsonStr) => {
+            try {
+                const data = JSON.parse(jsonStr);
+                const option = convertSimpleChartToECharts(data);
+                return '<pre><code>' + JSON.stringify(option, null, 0) + '</code></pre>';
+            } catch (e) { return match; }
+        });
+
+        // 2. 渲染 ECharts option JSON（来自代码块）
+        container.querySelectorAll('pre code').forEach(codeEl => {
+            const raw = codeEl.textContent.trim();
+            if (!raw.startsWith('{')) return;
+            try {
+                const option = JSON.parse(raw);
+                if (!option.series && !option.xAxis && !option.legend) return;
+                const wrapper = document.createElement('div');
+                wrapper.className = 'chart-container';
+                wrapper.id = 'chart-' + (++chartCounter);
+                codeEl.closest('pre').replaceWith(wrapper);
+                if (!option.color) option.color = ['#4f6ef7','#06b6d4','#34d399','#fb923c','#f472b6','#a78bfa','#fbbf24'];
+                const chart = echarts.init(wrapper);
+                chart.setOption(option);
+                window.addEventListener('resize', () => chart.resize());
+            } catch (e) { /* not echarts JSON */ }
+        });
+    }
+
+    // 3. 渲染 Mermaid 图表（来自 ```mermaid 代码块）
+    if (typeof mermaid !== 'undefined') {
+        container.querySelectorAll('pre code.language-mermaid, pre code[class*="mermaid"]').forEach(codeEl => {
+            renderMermaidBlock(codeEl.textContent.trim(), codeEl.closest('pre'));
+        });
+        // Also handle unclassed code blocks that look like mermaid
+        container.querySelectorAll('pre code:not([class])').forEach(codeEl => {
+            const raw = codeEl.textContent.trim();
+            if (/^(graph|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|journey|pie|gitGraph|flowchart)/i.test(raw)) {
+                renderMermaidBlock(raw, codeEl.closest('pre'));
+            }
+        });
+    }
+}
+
+function renderMermaidBlock(code, preEl) {
+    try {
+        const id = 'mermaid-' + (++chartCounter);
+        const wrapper = document.createElement('div');
+        wrapper.className = 'mermaid-container';
+        mermaid.render(id, code).then(({ svg }) => {
+            wrapper.innerHTML = svg;
+        }).catch(err => {
+            console.warn('[Mermaid] render error:', err);
+            // fallback: show as code block
+        });
+        preEl.replaceWith(wrapper);
+    } catch(e) {
+        console.warn('[Mermaid] init error:', e);
+    }
+}
+
+// 将简化图表格式转换为 ECharts option
+function convertSimpleChartToECharts(data) {
+    const type = data.type || 'bar';
+    const title = data.title || '';
+    const items = data.data || [];
+    
+    const labels = items.map(d => d.label || d.name || '');
+    const values = items.map(d => d.value || 0);
+    
+    if (type === 'pie') {
+        return {
+            title: { text: title, left: 'center' },
+            tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+            legend: { orient: 'vertical', left: 'left', top: 'middle' },
+            series: [{
+                name: title,
+                type: 'pie',
+                radius: ['40%', '70%'],
+                label: { show: true, formatter: '{b}: {d}%' },
+                data: items.map(d => ({ value: d.value, name: d.label || d.name }))
+            }]
+        };
+    } else if (type === 'line') {
+        return {
+            title: { text: title, left: 'center' },
+            tooltip: { trigger: 'axis' },
+            xAxis: { type: 'category', data: labels },
+            yAxis: { type: 'value' },
+            series: [{ name: title, type: 'line', smooth: true, data: values }]
+        };
+    } else {
+        // bar (default)
+        return {
+            title: { text: title, left: 'center' },
+            tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+            grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+            xAxis: { type: 'category', data: labels, axisLabel: { rotate: labels.length > 5 ? 30 : 0 } },
+            yAxis: { type: 'value' },
+            series: [{ name: title, type: 'bar', data: values }]
+        };
+    }
+}
+
+// ─── Add message ───
+function addMessage(role, content, rendered) {
     const isUser = role === 'user';
     const div = document.createElement('div');
-    div.className = 'message' + (isUser ? ' user' : '');
-    div.innerHTML = `<div class="avatar ${isUser ? 'user' : 'ai'}">${isUser ? 'U' : 'AI'}</div>
-        <div class="bubble">${isUser ? escHtml(content) : renderMarkdown(content)}</div>`;
+    div.className = 'message ' + (isUser ? 'user' : 'assistant');
+    if (isUser) {
+        div.innerHTML = `<div class="message-label">You</div><div class="message-content">${escHtml(content)}</div>`;
+    } else {
+        const label = document.createElement('div');
+        label.className = 'message-label';
+        label.textContent = 'AI';
+        const mc = document.createElement('div');
+        mc.className = 'message-content';
+        div.appendChild(label);
+        div.appendChild(mc);
+        renderAiBubble(mc, content, true);
+    }
     document.getElementById('messages').appendChild(div);
     scrollToBottom();
 }
@@ -486,48 +1341,41 @@ function scrollToBottom() {
     msgs.scrollTop = msgs.scrollHeight;
 }
 
-// ─── Markdown rendering (simple) ───
-function renderMarkdown(text) {
+// ─── Fallback markdown ───
+function simpleMarkdown(text) {
     if (!text) return '';
-    // Code blocks
-    text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) =>
-        `<pre><code>${escHtml(code.trim())}</code></pre>`);
-    // Inline code
+    // 代码块（优先处理，避免内部内容被其他规则误替换）
+    text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, l, c) => `<pre><code>${escHtml(c.trim())}</code></pre>`);
     text = text.replace(/`([^`]+)`/g, (_, c) => `<code>${escHtml(c)}</code>`);
-    // Bold
+    // 粗体 / 斜体
     text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    // Italic
     text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
-    // Headers
-    text = text.replace(/^### (.+)$/gm, '<h4 style="margin:6px 0 3px;font-size:0.92rem;">$1</h4>');
-    text = text.replace(/^## (.+)$/gm, '<h3 style="margin:8px 0 4px;font-size:0.98rem;">$1</h3>');
-    text = text.replace(/^# (.+)$/gm, '<h2 style="margin:10px 0 5px;">$1</h2>');
-    // Tables (simple)
+    // 标题（从多级到少级，避免 ### 被 # 规则误匹配；支持 h1-h6）
+    text = text.replace(/^#{6} (.+)$/gm, '<h6>$1</h6>');
+    text = text.replace(/^#{5} (.+)$/gm, '<h5>$1</h5>');
+    text = text.replace(/^#{4} (.+)$/gm, '<h4>$1</h4>');
+    text = text.replace(/^#{3} (.+)$/gm, '<h3>$1</h3>');
+    text = text.replace(/^#{2} (.+)$/gm, '<h2>$1</h2>');
+    text = text.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+    // 分隔线
+    text = text.replace(/^---+$/gm, '<hr>');
+    // 表格
     text = text.replace(/(\|.+\|\n)+/g, m => {
         const rows = m.trim().split('\n').filter(r => !/^\|[-:| ]+\|$/.test(r));
-        if (rows.length < 1) return m;
-        const header = rows[0].split('|').filter(c => c.trim()).map(c => `<th>${c.trim()}</th>`).join('');
-        const body = rows.slice(1).map(r =>
-            '<tr>' + r.split('|').filter(c => c.trim()).map(c => `<td>${c.trim()}</td>`).join('') + '</tr>'
-        ).join('');
-        return `<table><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table>`;
+        if (!rows.length) return m;
+        const hdr = rows[0].split('|').filter(c => c.trim()).map(c => `<th>${c.trim()}</th>`).join('');
+        const body = rows.slice(1).map(r => '<tr>' + r.split('|').filter(c => c.trim()).map(c => `<td>${c.trim()}</td>`).join('') + '</tr>').join('');
+        return `<table><thead><tr>${hdr}</tr></thead><tbody>${body}</tbody></table>`;
     });
-    // List
-    text = text.replace(/^[\*\-] (.+)$/gm, '<li>$1</li>');
-    text = text.replace(/(<li>[\s\S]*?<\/li>)/g, '<ul style="padding-left:18px;margin:4px 0;">$1</ul>');
-    // Line breaks
-    text = text.replace(/\n\n/g, '<br><br>');
-    text = text.replace(/\n/g, '<br>');
+    // 列表
+    text = text.replace(/^[\*\-] (.+)$/gm, '<li>$1</li>').replace(/(<li>[\s\S]*?<\/li>)/g, '<ul>$1</ul>');
+    text = text.replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>');
     return text;
 }
 
 // ─── Utilities ───
-function generateId() {
-    return 'sess-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
-}
-function escHtml(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
+function generateId() { return 'sess-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8); }
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 </script>
 </body>
 </html>

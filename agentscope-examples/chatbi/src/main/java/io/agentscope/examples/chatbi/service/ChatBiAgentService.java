@@ -22,11 +22,14 @@ import io.agentscope.core.message.GenerateReason;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.TextBlock;
+import io.agentscope.core.message.ThinkingBlock;
 import io.agentscope.core.message.ToolResultBlock;
+import io.agentscope.core.model.ModelException;
 import io.agentscope.examples.chatbi.dto.ChatRequest;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,23 +42,23 @@ import reactor.core.publisher.Flux;
 import reactor.core.scheduler.Schedulers;
 
 /**
- * Core service that manages the ChatBI ReActAgent lifecycle.
+ * Core service that manages the ChatBI multi-Agent lifecycle.
  *
- * <p>Delegates to {@link SessionAgentManager} for per-session Agent isolation.
+ * <p>Architecture: RouterAgent + 6 specialised sub-Agents.
+ * Delegates to {@link SessionAgentManager} for per-session Agent isolation.
  *
  * <p>Each chat invocation:
  * <ol>
  *   <li>Ensures session exists in DB.</li>
- *   <li>Gets or creates the per-session Agent (with historical context pre-loaded).</li>
+ *   <li>Gets or creates the per-session RouterAgent (with historical context pre-loaded).</li>
  *   <li>Saves the user message to DB.</li>
- *   <li>Streams the Agent response (SSE-friendly).</li>
+ *   <li>Streams the RouterAgent response (SSE-friendly).</li>
  *   <li>Saves the complete assistant response to DB (fire-and-forget).</li>
  *   <li>Checks if history needs summarization (async).</li>
  * </ol>
  *
- * <p>The Agent is driven by a single ReAct loop with 6 registered tools covering all
- * 8 intents (da/re/in/gu/bu/cs/dl/ot). Intent routing is done by the LLM itself based
- * on the System Prompt rules, rather than hard-coded if-else branches.
+ * <p>Intent routing is done by the RouterAgent LLM based on the router system prompt rules.
+ * Each sub-Agent handles its specific domain with dedicated tools.
  */
 @Service
 public class ChatBiAgentService implements InitializingBean {
@@ -64,6 +67,7 @@ public class ChatBiAgentService implements InitializingBean {
 
     private final SessionAgentManager sessionAgentManager;
     private final ChatSessionService chatSessionService;
+    private final ChatBiPlanService planService;
 
     @Value("${openai.api-key:#{null}}")
     private String apiKeyFromConfig;
@@ -71,27 +75,70 @@ public class ChatBiAgentService implements InitializingBean {
     @Value("${openai.base-url:#{null}}")
     private String baseUrlFromConfig;
 
-    @Value("${agent.system-prompt-file:chatbi-system-prompt.txt}")
+    @Value("${agent.system-prompt-file:router-system-prompt.txt}")
     private String systemPromptFile;
+
+    @Value("${agent.data-query-prompt-file:data-query-agent-prompt.txt}")
+    private String dataQueryPromptFile;
+
+    @Value("${agent.knowledge-prompt-file:knowledge-agent-prompt.txt}")
+    private String knowledgePromptFile;
+
+    @Value("${agent.gu-prompt-file:gu-agent-prompt.txt}")
+    private String guPromptFile;
+
+    @Value("${agent.report-query-prompt-file:report-query-agent-prompt.txt}")
+    private String reportQueryPromptFile;
+
+    @Value("${agent.data-lineage-prompt-file:data-lineage-agent-prompt.txt}")
+    private String dataLineagePromptFile;
+
+    @Value("${agent.report-schedule-prompt-file:report-schedule-agent-prompt.txt}")
+    private String reportSchedulePromptFile;
+
+    @Value("${agent.chat-prompt-file:chat-agent-prompt.txt}")
+    private String chatPromptFile;
 
     @Value("${agent.query-rewrite-prompt-file:query-rewrite-prompt.txt}")
     private String queryRewritePromptFile;
 
     public ChatBiAgentService(
-            SessionAgentManager sessionAgentManager, ChatSessionService chatSessionService) {
+            SessionAgentManager sessionAgentManager,
+            ChatSessionService chatSessionService,
+            ChatBiPlanService planService) {
         this.sessionAgentManager = sessionAgentManager;
         this.chatSessionService = chatSessionService;
+        this.planService = planService;
     }
 
     @Override
     public void afterPropertiesSet() {
         String apiKey = resolveApiKey();
         String baseUrl = resolveBaseUrl();
-        String sysPrompt = loadPromptFile(systemPromptFile);
+
+        String routerPrompt = loadPromptFile(systemPromptFile);
+        String dataQueryPrompt = loadPromptFileSafe(dataQueryPromptFile, routerPrompt);
+        String knowledgePrompt = loadPromptFileSafe(knowledgePromptFile, routerPrompt);
+        String guPrompt = loadPromptFileSafe(guPromptFile, knowledgePrompt);
+        String reportQueryPrompt = loadPromptFileSafe(reportQueryPromptFile, routerPrompt);
+        String dataLineagePrompt = loadPromptFileSafe(dataLineagePromptFile, routerPrompt);
+        String reportSchedulePrompt = loadPromptFileSafe(reportSchedulePromptFile, routerPrompt);
+        String chatPrompt = loadPromptFileSafe(chatPromptFile, routerPrompt);
         String rewritePrompt = loadPromptFile(queryRewritePromptFile);
-        sessionAgentManager.configure(apiKey, baseUrl, sysPrompt, rewritePrompt);
+        sessionAgentManager.configure(
+                apiKey,
+                baseUrl,
+                routerPrompt,
+                dataQueryPrompt,
+                knowledgePrompt,
+                guPrompt,
+                reportQueryPrompt,
+                dataLineagePrompt,
+                reportSchedulePrompt,
+                chatPrompt,
+                rewritePrompt);
         log.info(
-                "ChatBiAgentService initialized, systemPromptFile={}, rewritePromptFile={}",
+                "ChatBiAgentService initialized, routerPromptFile={}, rewritePromptFile={}",
                 systemPromptFile,
                 queryRewritePromptFile);
     }
@@ -132,16 +179,42 @@ public class ChatBiAgentService implements InitializingBean {
                 .map(
                         event -> {
                             String chunk = eventToString(event);
-                            // Tool progress markers ([TOOL:xxx]) are streamed for real-time display
-                            // but are NOT included in the saved assistant reply
+                            // Tool progress markers ([TOOL:xxx]) and thinking content ([THINKING]...)
+                            // are streamed for real-time display but NOT included in the saved assistant reply
                             if (!chunk.isEmpty()
                                     && !"[STOPPED]".equals(chunk)
-                                    && !chunk.startsWith("[TOOL:")) {
+                                    && !chunk.startsWith("[TOOL:")
+                                    && !chunk.startsWith("[THINKING]")) {
                                 replyBuf.get().append(chunk);
                             }
                             return chunk;
                         })
                 .filter(text -> !text.isEmpty())
+                .onErrorResume(
+                        err -> {
+                            String errMsg;
+                            if (ChatBiAgentService.isClientDisconnected(err)) {
+                                // SSE 客户端主动断开（刷新/切页），静默丢弃，不推送错误
+                                log.debug(
+                                        "ChatBI stream cancelled by client for session {}",
+                                        sessionId);
+                                return Flux.empty();
+                            } else if (ChatBiAgentService.isInterrupted(err)) {
+                                errMsg = "⚠️ 请求被中断，请重新发送消息。";
+                            } else if (err instanceof ModelException
+                                    && err.getMessage() != null
+                                    && err.getMessage().contains("timeout")) {
+                                errMsg = "⚠️ 请求超时，当前AI服务响应较慢，请稍后重试。";
+                            } else {
+                                errMsg = "⚠️ 响应异常：" + err.getMessage();
+                            }
+                            log.error(
+                                    "ChatBI stream error for session {}: {}",
+                                    sessionId,
+                                    err.getMessage(),
+                                    err);
+                            return Flux.just(errMsg);
+                        })
                 .doOnComplete(
                         () -> {
                             String fullReply = replyBuf.get().toString();
@@ -149,13 +222,7 @@ public class ChatBiAgentService implements InitializingBean {
                                 chatSessionService.saveAssistantMessage(sessionId, fullReply);
                                 chatSessionService.maybeCompressAsync(sessionId);
                             }
-                        })
-                .doOnError(
-                        err ->
-                                log.error(
-                                        "ChatBI stream error for session {}: {}",
-                                        sessionId,
-                                        err.getMessage()));
+                        });
     }
 
     /**
@@ -165,6 +232,7 @@ public class ChatBiAgentService implements InitializingBean {
     public void reset(String sessionId) {
         log.info("Resetting ChatBI session: {}", sessionId);
         sessionAgentManager.evict(sessionId);
+        planService.unregisterPlanNotebook(sessionId);
     }
 
     // ─────────────────── Private helpers ───────────────────
@@ -177,6 +245,25 @@ public class ChatBiAgentService implements InitializingBean {
         } catch (IOException e) {
             throw new IllegalStateException(
                     "无法加载提示词文件: " + path + "，请检查配置及 resources/prompts/ 目录", e);
+        }
+    }
+
+    /**
+     * Load a prompt file; if not found, fall back to {@code fallback} silently.
+     * Sub-Agent prompt files are optional — a missing file falls back to the router prompt.
+     */
+    private String loadPromptFileSafe(String fileName, String fallback) {
+        String path = "prompts/" + fileName;
+        try {
+            ClassPathResource resource = new ClassPathResource(path);
+            if (!resource.exists()) {
+                log.warn("Sub-agent prompt file not found: {}, using fallback prompt", path);
+                return fallback;
+            }
+            return StreamUtils.copyToString(resource.getInputStream(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            log.warn("Failed to load sub-agent prompt file: {}, using fallback", path);
+            return fallback;
         }
     }
 
@@ -234,7 +321,70 @@ public class ChatBiAgentService implements InitializingBean {
         if (event.isLast()) {
             return "";
         }
-        List<TextBlock> blocks = event.getMessage().getContentBlocks(TextBlock.class);
-        return blocks.isEmpty() ? "" : blocks.get(0).getText();
+        // Extract thinking content from ThinkingBlock (reasoning_content)
+        // Mark with [THINKING] prefix for frontend to distinguish from regular text
+        List<ThinkingBlock> thinkingBlocks = event.getMessage().getContentBlocks(ThinkingBlock.class);
+        if (!thinkingBlocks.isEmpty()) {
+            String thinking = thinkingBlocks.get(0).getThinking();
+            if (thinking != null && !thinking.isBlank()) {
+                return "[THINKING]" + thinking;
+            }
+            return "";
+        }
+        // Extract text content from TextBlock (primary output content)
+        List<TextBlock> textBlocks = event.getMessage().getContentBlocks(TextBlock.class);
+        if (!textBlocks.isEmpty()) {
+            return textBlocks.get(0).getText();
+        }
+        return "";
+    }
+
+    /**
+     * Returns true when the error is caused by the SSE client disconnecting
+     * (browser refresh / tab close).  In this case the Reactor pipeline is
+     * cancelled and we should silently discard the error rather than pushing
+     * an error chunk back into the already-closed stream.
+     */
+    private static boolean isClientDisconnected(Throwable err) {
+        if (err instanceof CancellationException) {
+            return true;
+        }
+        // Reactor wraps client-disconnect as a reactor.core.publisher.Operators$CancelException
+        // or a plain RuntimeException whose message mentions "cancel".
+        String msg = err.getMessage();
+        if (msg != null) {
+            String lower = msg.toLowerCase();
+            if (lower.contains("cancel") || lower.contains("connection reset")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Returns true when the error is caused by an {@link InterruptedException} being
+     * propagated up through the JDK HTTP transport.
+     *
+     * <p>This typically happens when:
+     * <ul>
+     *   <li>The 120-second {@link io.agentscope.core.model.ExecutionConfig} timeout fires
+     *       and Reactor cancels the subscription, interrupting the blocking JDK send call.</li>
+     *   <li>A concurrent task executing the HTTP request is cancelled externally.</li>
+     * </ul>
+     */
+    private static boolean isInterrupted(Throwable err) {
+        Throwable cause = err;
+        while (cause != null) {
+            if (cause instanceof InterruptedException) {
+                return true;
+            }
+            // ModelException / HttpTransportException message heuristic
+            String msg = cause.getMessage();
+            if (msg != null && msg.toLowerCase().contains("interrupted")) {
+                return true;
+            }
+            cause = cause.getCause();
+        }
+        return false;
     }
 }
