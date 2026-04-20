@@ -265,7 +265,7 @@ public class JdkHttpTransport implements HttpTransport {
                 .filter(line -> line.startsWith(SSE_DATA_PREFIX))
                 .map(line -> line.substring(SSE_DATA_PREFIX.length()).trim())
                 .takeWhile(data -> !SSE_DONE_MARKER.equals(data))
-//                .doOnNext(data -> log.debug("Received SSE data chunk"))
+                .doOnNext(data -> log.debug("Received SSE data chunk"))
                 .filter(data -> !data.isEmpty());
     }
 
