@@ -146,10 +146,11 @@ public class OpenAIChatFormatter extends OpenAIBaseFormatter {
 
                 OpenAIToolFunction function = functionBuilder.build();
                 openAITools.add(OpenAITool.function(function));
-                log.debug(
-                        "Converted tool to OpenAI format: {} (strict: {})",
-                        toolSchema.getName(),
-                        supportsStrict() ? toolSchema.getStrict() : "not supported");
+                //                log.debug(
+                //                        "Converted tool to OpenAI format: {} (strict: {})",
+                //                        toolSchema.getName(),
+                //                        supportsStrict() ? toolSchema.getStrict() : "not
+                // supported");
             }
         } catch (Exception e) {
             log.error("Failed to convert tools to OpenAI format: {}", e.getMessage(), e);

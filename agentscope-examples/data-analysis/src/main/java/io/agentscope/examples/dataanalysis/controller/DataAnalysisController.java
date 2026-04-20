@@ -24,11 +24,15 @@ import io.agentscope.examples.dataanalysis.service.AnalysisPlanService;
 import io.agentscope.examples.dataanalysis.service.AsrService;
 import io.agentscope.examples.dataanalysis.service.ChatSessionService;
 import io.agentscope.examples.dataanalysis.service.DataAnalysisAgentService;
+import io.agentscope.examples.dataanalysis.service.DatasetCatalogueService;
 import io.agentscope.examples.dataanalysis.service.SuggestedQuestionService;
+import io.agentscope.examples.dataanalysis.stream.SessionStreamState;
+import io.agentscope.examples.dataanalysis.stream.StreamStatus;
 import io.agentscope.examples.dataanalysis.util.ReportTemplateUtil;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.core.io.buffer.DataBufferUtils;
@@ -75,6 +79,7 @@ public class DataAnalysisController {
     private final SuggestedQuestionService suggestedQuestionService;
     private final AsrService asrService;
     private final ReportTemplateUtil reportTemplateUtil;
+    private final DatasetCatalogueService datasetCatalogueService;
 
     public DataAnalysisController(
             DataAnalysisAgentService agentService,
@@ -83,7 +88,8 @@ public class DataAnalysisController {
             ChatSessionService chatSessionService,
             SuggestedQuestionService suggestedQuestionService,
             AsrService asrService,
-            ReportTemplateUtil reportTemplateUtil) {
+            ReportTemplateUtil reportTemplateUtil,
+            DatasetCatalogueService datasetCatalogueService) {
         this.agentService = agentService;
         this.planService = planService;
         this.dataApiClient = dataApiClient;
@@ -91,6 +97,7 @@ public class DataAnalysisController {
         this.suggestedQuestionService = suggestedQuestionService;
         this.asrService = asrService;
         this.reportTemplateUtil = reportTemplateUtil;
+        this.datasetCatalogueService = datasetCatalogueService;
     }
 
     /**
@@ -151,7 +158,8 @@ public class DataAnalysisController {
             @RequestParam String sessionId,
             @RequestParam String requestId,
             @RequestParam(defaultValue = "") String account) {
-        return agentService.chat(sessionId, message, account, requestId);
+        long startTimeMs = System.currentTimeMillis();
+        return agentService.chat(sessionId, message, account, requestId, startTimeMs);
     }
 
     /**
@@ -159,10 +167,47 @@ public class DataAnalysisController {
      *
      * <p>Used by mobile/webview recovery: when user returns to the page, frontend can re-subscribe
      * and continue receiving chunks of the still-running backend generation.
+     *
+     * @param sessionId the session ID
+     * @param fromSeq optional last received sequence number; if provided, historical chunks
+     *                after this seq will be replayed first
+     * @return SSE stream of JSON-encoded StreamChunk objects
      */
     @GetMapping(path = "/chat/resume", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<String> resumeChat(@RequestParam String sessionId) {
-        return agentService.resume(sessionId);
+    public Flux<String> resumeChat(
+            @RequestParam String sessionId, @RequestParam(required = false) Integer fromSeq) {
+        return agentService.resume(sessionId, fromSeq);
+    }
+
+    /**
+     * Get the current stream status for a session.
+     *
+     * <p>Used by frontend to determine if there's an active or recently completed stream
+     * that can be resumed.
+     *
+     * @param sessionId the session ID
+     * @return status information including whether the stream is running, completed, etc.
+     */
+    @GetMapping("/sessions/{sessionId}/stream-status")
+    public Map<String, Object> getStreamStatus(@PathVariable String sessionId) {
+        SessionStreamState state = agentService.getStreamState(sessionId);
+        Map<String, Object> result = new HashMap<>();
+
+        if (state == null) {
+            result.put("status", StreamStatus.IDLE.name());
+            result.put("chunkCount", 0);
+        } else {
+            result.put("status", state.getStatus().name());
+            result.put("requestId", state.getRequestId());
+            result.put("chunkCount", state.getChunkCount());
+            result.put("startedAt", state.getStartedAt());
+            result.put("updatedAt", state.getUpdatedAt());
+            if (state.getMessageId() != null) {
+                result.put("messageId", state.getMessageId());
+            }
+        }
+
+        return result;
     }
 
     /**
@@ -192,35 +237,20 @@ public class DataAnalysisController {
     }
 
     /**
-     * Called when user clicks 执行 or 不执行 on the confirm buttons.
-     * Tells the backend to suppress further needConfirm=true broadcasts for this plan.
-     */
-    @PostMapping("/plan/confirm")
-    public Map<String, String> confirmPlan(@RequestParam String sessionId) {
-        planService.markUserConfirmed(sessionId);
-        return Map.of("status", "ok");
-    }
-
-    /**
-     * Called when user clicks the "不执行" (decline) button.
-     *
-     * <p>Immediately abandons the current plan so the PlanNotebook clears
-     * {@code currentPlan}, preventing subsequent LLM iterations from receiving
-     * a stale plan hint. This is a backend-guaranteed abort – the LLM still
-     * receives the user’s "\u4e0d\u6267\u884c" message and can reply gracefully, but no
-     * longer sees a current plan in the system-hint.
-     */
-    @PostMapping("/plan/abandon")
-    public Mono<Map<String, String>> abandonPlan(@RequestParam String sessionId) {
-        return planService.abandonPlan(sessionId).thenReturn(Map.of("status", "ok"));
-    }
-
-    /**
      * Health check endpoint.
      */
     @GetMapping("/health")
     public String health() {
         return "OK";
+    }
+
+    /**
+     * Returns diagnostic info about the dataset catalogue cache.
+     * Useful for verifying that a brief refresh has taken effect without restarting.
+     */
+    @GetMapping("/datasets/catalogue-status")
+    public Map<String, String> catalogueStatus() {
+        return Map.of("status", "ok", "diagnostics", datasetCatalogueService.getDiagnostics());
     }
 
     /**

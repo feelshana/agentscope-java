@@ -15,6 +15,8 @@
  */
 package io.agentscope.examples.dataanalysis.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agentscope.core.agent.Event;
 import io.agentscope.core.agent.EventType;
 import io.agentscope.core.agent.StreamOptions;
@@ -23,6 +25,12 @@ import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.TextBlock;
 import io.agentscope.examples.dataanalysis.client.DataApiClient;
+import io.agentscope.examples.dataanalysis.stream.SessionStreamState;
+import io.agentscope.examples.dataanalysis.stream.StreamChunk;
+import io.agentscope.examples.dataanalysis.stream.StreamChunkType;
+import io.agentscope.examples.dataanalysis.stream.StreamStateManager;
+import io.agentscope.examples.dataanalysis.stream.StreamStatus;
+import io.agentscope.examples.dataanalysis.util.PerformanceMonitor;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -59,6 +67,8 @@ public class DataAnalysisAgentService implements InitializingBean {
     private final AnalysisPlanService analysisPlanService;
     private final SessionAgentManager sessionAgentManager;
     private final ChatSessionService chatSessionService;
+    private final StreamStateManager streamStateManager;
+    private final ObjectMapper objectMapper;
 
     /** sessionId -> active generating turn (decoupled from frontend SSE lifecycle). */
     private final ConcurrentHashMap<String, ActiveTurn> activeTurns = new ConcurrentHashMap<>();
@@ -79,11 +89,14 @@ public class DataAnalysisAgentService implements InitializingBean {
             DataApiClient dataApiClient,
             AnalysisPlanService analysisPlanService,
             SessionAgentManager sessionAgentManager,
-            ChatSessionService chatSessionService) {
+            ChatSessionService chatSessionService,
+            StreamStateManager streamStateManager) {
         this.dataApiClient = dataApiClient;
         this.analysisPlanService = analysisPlanService;
         this.sessionAgentManager = sessionAgentManager;
         this.chatSessionService = chatSessionService;
+        this.streamStateManager = streamStateManager;
+        this.objectMapper = new ObjectMapper();
     }
 
     @Override
@@ -118,8 +131,11 @@ public class DataAnalysisAgentService implements InitializingBean {
      * <p>Important: model generation is executed in a backend-owned subscription (decoupled
      * from the frontend SSE connection). So even if the mobile WebView/background kills the
      * client connection, backend generation and DB incremental persistence continue.
+     *
+     * @param startTimeMs epoch-millisecond timestamp recorded at the HTTP request entry point
      */
-    public Flux<String> chat(String sessionId, String message, String account, String requestId) {
+    public Flux<String> chat(
+            String sessionId, String message, String account, String requestId, long startTimeMs) {
         String normalizedRequestId =
                 (requestId == null || requestId.isBlank()) ? "req-unknown" : requestId.trim();
 
@@ -152,24 +168,98 @@ public class DataAnalysisAgentService implements InitializingBean {
                         .content(TextBlock.builder().text(message).build())
                         .build();
 
-        ActiveTurn turn = new ActiveTurn(sessionId, normalizedRequestId);
+        ActiveTurn turn = new ActiveTurn(sessionId, normalizedRequestId, startTimeMs);
         ActiveTurn previous = activeTurns.put(sessionId, turn);
         if (previous != null) {
             previous.completeSink();
         }
 
+        // Start tracking in streamStateManager for resume/replay
+        streamStateManager.startTurn(sessionId, normalizedRequestId);
+
+        PerformanceMonitor.logLatency(sessionId, "request_received", startTimeMs);
         startGeneration(entry, userMsg, turn);
         return turn.chunkSink.asFlux();
     }
 
     /**
-     * Resume active stream for a session.
+     * Send a user message and return stream chunks (legacy overload without startTimeMs).
+     */
+    public Flux<String> chat(String sessionId, String message, String account, String requestId) {
+        return chat(sessionId, message, account, requestId, System.currentTimeMillis());
+    }
+
+    /**
+     * Resume active stream for a session, optionally from a specific sequence number.
+     *
+     * <p>If fromSeq is provided, historical chunks after that seq will be replayed first,
+     * then live streaming will continue if the turn is still running.
+     *
+     * @param sessionId the session ID
+     * @param fromSeq the last sequence number the client received (will replay from seq+1)
+     * @return flux of JSON-encoded StreamChunk objects
+     */
+    public Flux<String> resume(String sessionId, Integer fromSeq) {
+        // If there's an active turn, subscribe to its live stream
+        ActiveTurn turn = activeTurns.get(sessionId);
+
+        // Get the stream state for historical replay
+        SessionStreamState state = streamStateManager.get(sessionId);
+
+        if (state == null) {
+            return Flux.empty();
+        }
+
+        // Build the resume stream
+        Flux<String> historyFlux = Flux.empty();
+        Flux<String> liveFlux = Flux.empty();
+
+        // Historical replay: chunks after fromSeq
+        // fromSeq=-1 means client has received nothing, replay all chunks from the beginning
+        // fromSeq>=0 means replay chunks after that sequence number
+        if (fromSeq != null && fromSeq >= -1) {
+            List<StreamChunk> historyChunks = state.getChunksAfter(fromSeq);
+            if (!historyChunks.isEmpty()) {
+                historyFlux =
+                        Flux.fromIterable(historyChunks)
+                                .map(
+                                        chunk -> {
+                                            chunk.markAsHistory();
+                                            return toJson(chunk);
+                                        });
+            }
+        }
+
+        // Live stream: if turn is still running
+        if (turn != null && state.getStatus() == StreamStatus.RUNNING) {
+            liveFlux = turn.chunkSink.asFlux();
+        }
+
+        // Combine: history first, then live
+        return Flux.concat(historyFlux, liveFlux);
+    }
+
+    /**
+     * Resume active stream for a session (legacy, no fromSeq).
      *
      * <p>Uses replay sink, so late subscribers can receive chunks already generated in this turn.
      */
     public Flux<String> resume(String sessionId) {
-        ActiveTurn turn = activeTurns.get(sessionId);
-        return turn == null ? Flux.empty() : turn.chunkSink.asFlux();
+        return resume(sessionId, null);
+    }
+
+    /**
+     * Get the stream status for a session.
+     */
+    public StreamStatus getStreamStatus(String sessionId) {
+        return streamStateManager.getStatus(sessionId);
+    }
+
+    /**
+     * Get the stream state for a session (for status API).
+     */
+    public SessionStreamState getStreamState(String sessionId) {
+        return streamStateManager.get(sessionId);
     }
 
     /**
@@ -183,6 +273,7 @@ public class DataAnalysisAgentService implements InitializingBean {
             turn.completeSink();
         }
         completedRequestIds.remove(sessionId);
+        streamStateManager.reset(sessionId);
         analysisPlanService.broadcastPlanChange(sessionId);
     }
 
@@ -201,9 +292,35 @@ public class DataAnalysisAgentService implements InitializingBean {
     }
 
     private void handleChunk(ActiveTurn turn, String chunk) {
-        turn.chunkSink.tryEmitNext(chunk);
+        // Determine chunk type
+        StreamChunkType type = StreamChunkType.TEXT;
+        if ("[STOPPED]".equals(chunk)) {
+            type = StreamChunkType.TEXT; // Will be filtered out by replyBuf logic
+        } else if (chunk.startsWith("[TOOL:")) {
+            type = StreamChunkType.TOOL_STATUS;
+        }
 
-        if (!"[STOPPED]".equals(chunk) && !chunk.startsWith("[TOOL:")) {
+        // Record first-token latency on the very first TEXT chunk
+        if (type == StreamChunkType.TEXT
+                && !"[STOPPED]".equals(chunk)
+                && turn.firstChunkTimeMs == 0L) {
+            turn.firstChunkTimeMs = System.currentTimeMillis();
+            PerformanceMonitor.logLatency(turn.sessionId, "first_token", turn.startTimeMs);
+        }
+
+        // Get next sequence number from stream state
+        SessionStreamState state = streamStateManager.get(turn.sessionId);
+        int seq = state != null ? state.getNextSeq() : 0;
+
+        // Create and store the chunk
+        StreamChunk streamChunk = new StreamChunk(seq, chunk, type, System.currentTimeMillis());
+        streamStateManager.addChunk(turn.sessionId, streamChunk);
+
+        // Push to SSE sink as JSON
+        turn.chunkSink.tryEmitNext(toJson(streamChunk));
+
+        // Accumulate text for DB persistence (exclude tool status markers)
+        if (type == StreamChunkType.TEXT && !"[STOPPED]".equals(chunk)) {
             turn.replyBuf.append(chunk);
             flushDraftIfNeeded(turn, false);
         }
@@ -212,6 +329,17 @@ public class DataAnalysisAgentService implements InitializingBean {
     private void handleError(ActiveTurn turn, Throwable err) {
         log.error("Chat stream error for session {}: {}", turn.sessionId, err.getMessage());
         flushDraftIfNeeded(turn, true);
+
+        // Add error chunk to stream state
+        SessionStreamState state = streamStateManager.get(turn.sessionId);
+        if (state != null) {
+            int seq = state.getNextSeq();
+            StreamChunk errorChunk = StreamChunk.error(seq, err.getMessage());
+            streamStateManager.addChunk(turn.sessionId, errorChunk);
+            turn.chunkSink.tryEmitNext(toJson(errorChunk));
+        }
+
+        streamStateManager.failTurn(turn.sessionId);
         completedRequestIds.put(turn.sessionId, turn.requestId);
         turn.completeSink();
         activeTurns.remove(turn.sessionId, turn);
@@ -224,9 +352,33 @@ public class DataAnalysisAgentService implements InitializingBean {
             chatSessionService.maybeCompressAsync(turn.sessionId);
             analysisPlanService.reconcilePlanAfterTurnComplete(turn.sessionId, assistantReply);
         }
+
+        // Add done chunk to stream state
+        SessionStreamState state = streamStateManager.get(turn.sessionId);
+        if (state != null) {
+            int seq = state.getNextSeq();
+            StreamChunk doneChunk = StreamChunk.done(seq);
+            streamStateManager.addChunk(turn.sessionId, doneChunk);
+            turn.chunkSink.tryEmitNext(toJson(doneChunk));
+        }
+
+        PerformanceMonitor.logComplete(turn.sessionId, turn.startTimeMs);
+        streamStateManager.completeTurn(turn.sessionId);
         completedRequestIds.put(turn.sessionId, turn.requestId);
         turn.completeSink();
         activeTurns.remove(turn.sessionId, turn);
+    }
+
+    /**
+     * Converts a StreamChunk to JSON string for SSE transmission.
+     */
+    private String toJson(StreamChunk chunk) {
+        try {
+            return objectMapper.writeValueAsString(chunk);
+        } catch (JsonProcessingException e) {
+            log.error("Failed to serialize StreamChunk: {}", e.getMessage());
+            return "{\"seq\":" + chunk.getSeq() + ",\"content\":\"\",\"type\":\"ERROR\"}";
+        }
     }
 
     private void flushDraftIfNeeded(ActiveTurn turn, boolean force) {
@@ -318,15 +470,20 @@ public class DataAnalysisAgentService implements InitializingBean {
     private static final class ActiveTurn {
         private final String sessionId;
         private final String requestId;
+        private final long startTimeMs;
         private final Sinks.Many<String> chunkSink = Sinks.many().replay().all();
         private final StringBuilder replyBuf = new StringBuilder();
         private final AtomicReference<Long> draftMessageId = new AtomicReference<>();
         private volatile int lastPersistedLen = 0;
         private volatile long lastPersistedAt = 0L;
 
-        private ActiveTurn(String sessionId, String requestId) {
+        /** Records the time of the very first chunk (for first-token latency). */
+        private volatile long firstChunkTimeMs = 0L;
+
+        private ActiveTurn(String sessionId, String requestId, long startTimeMs) {
             this.sessionId = sessionId;
             this.requestId = requestId;
+            this.startTimeMs = startTimeMs;
         }
 
         private void completeSink() {

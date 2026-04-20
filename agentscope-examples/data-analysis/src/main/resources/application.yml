@@ -57,7 +57,20 @@ logging:
     io.agentscope.examples.dataanalysis: INFO
 agent:
   # 当前使用的系统提示词文件名，文件须放在 resources/prompts/ 目录下
-  system-prompt-file: prompt-V8.txt
+  system-prompt-file: prompt-V10.txt
+
+# 数据集目录缓存配置
+dataset:
+  catalogue:
+    # detail 信息文件路径（classpath 相对路径），作为初始兜底内容打包在 JAR 内
+    detail-file: prompts/dataset-detail.txt
+    # detail 外部文件路径（磁盘绝对路径或相对于工作目录的路径）
+    # 启动时优先从此文件读取，API 刷新后也写回此文件，保证重启后能获取最新内容
+    # 线上部署建议设为 JAR 外的绝对路径，如：/opt/app/prompts/dataset-detail.txt
+    # 留空则自动从 detail-file 推导（开发环境用 classpath 路径，JAR 环境用 ./prompts/dataset-detail.txt）
+    detail-file-path:
+    # 是否将 detail 内容注入到系统提示词（维度、指标、维度值定义）
+    include-detail: true
 
 # 阿里云 NLS 一句话识别配置
 # 请在 application-dev.yml（或环境变量）中填写真实值

@@ -660,128 +660,6 @@
         .subtask-desc { font-size: 0.72rem; color: var(--text-sub); }
         .subtask-outcome { font-size: 0.72rem; color: #34d399; margin-top: 3px; font-style: italic; }
 
-        /* ══════════ Confirm Plan Actions ══════════ */
-        @keyframes confirmFadeIn {
-            from { opacity: 0; transform: translateY(8px); }
-            to   { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes confirmShimmer {
-            0%   { left: -80%; }
-            100% { left: 130%; }
-        }
-        @keyframes iconPulse {
-            0%, 100% { box-shadow: 0 3px 12px rgba(79,110,247,0.38); }
-            50%       { box-shadow: 0 4px 20px rgba(79,110,247,0.65); }
-        }
-        /* 卡片：融入气泡，去掉强烈的阴影层次，改为轻量内嵌感 */
-        .confirm-actions-wrap {
-            margin-top: 14px;
-            position: relative;
-            background: linear-gradient(155deg, #f4f6ff 0%, #eef1ff 100%);
-            border: 1px solid rgba(79,110,247,0.18);
-            border-radius: 16px;
-            padding: 16px 16px 14px;
-            display: flex; flex-direction: column; gap: 14px;
-            box-shadow: 0 2px 12px rgba(79,110,247,0.10), inset 0 1px 0 rgba(255,255,255,0.85);
-            overflow: hidden;
-            animation: confirmFadeIn 0.3s ease both;
-        }
-        /* 顶部渐变线（细腻） */
-        .confirm-actions-wrap::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0;
-            height: 3px;
-            background: linear-gradient(90deg, #4f6ef7 0%, #818cf8 60%, #06b6d4 100%);
-            border-radius: 16px 16px 0 0;
-        }
-        .confirm-actions-wrap::after { display: none; }
-        /* 标签区：水平居中，图标+文字紧凑排列 */
-        .confirm-actions-label {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            text-align: left;
-        }
-        /* 图标圆形容器：适中大小 */
-        .confirm-actions-label-icon-wrap {
-            flex-shrink: 0;
-            width: 34px; height: 34px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #4f6ef7 0%, #6366f1 100%);
-            display: flex; align-items: center; justify-content: center;
-            animation: iconPulse 2.5s ease-in-out infinite;
-        }
-        .confirm-actions-label-icon {
-            width: 18px; height: 18px; flex-shrink: 0;
-            color: #fff;
-        }
-        /* 标题文字区 */
-        .confirm-actions-label-text {
-            display: flex; flex-direction: column; gap: 1px;
-        }
-        .confirm-actions-label-title {
-            font-size: 0.88rem; font-weight: 700;
-            color: #2a3a9a;
-            letter-spacing: 0.015em;
-            line-height: 1.3;
-        }
-        .confirm-actions-label-sub {
-            font-size: 0.69rem; color: #7b84c4; font-weight: 400;
-        }
-        /* 按钮行：两个按钮等宽 */
-        .confirm-actions {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-        }
-        .confirm-btn {
-            min-height: 46px;
-            padding: 0 12px;
-            border-radius: 12px;
-            font-size: 0.88rem; font-weight: 700;
-            cursor: pointer; border: none;
-            font-family: inherit;
-            transition: transform 0.14s ease, box-shadow 0.14s ease;
-            -webkit-appearance: none;
-            display: flex; align-items: center; justify-content: center; gap: 6px;
-            white-space: nowrap;
-            -webkit-touch-callout: none;
-            user-select: none;
-            position: relative; overflow: hidden;
-            letter-spacing: 0.02em;
-        }
-        /* 立即执行：主色按钮 + 光泽流动 */
-        .confirm-btn.confirm-yes {
-            background: linear-gradient(125deg, #4f6ef7 0%, #3d5be0 100%);
-            color: #fff;
-            box-shadow: 0 4px 16px rgba(79,110,247,0.40), inset 0 1px 0 rgba(255,255,255,0.18);
-        }
-        .confirm-btn.confirm-yes::before {
-            content: '';
-            position: absolute;
-            top: 0; left: -80%;
-            width: 50%; height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
-            transform: skewX(-20deg);
-            animation: confirmShimmer 3s ease-in-out 0.8s infinite;
-        }
-        .confirm-btn.confirm-yes:active { transform: scale(0.97); box-shadow: 0 2px 8px rgba(79,110,247,0.28); }
-        /* 暂不执行：同色系描边，与主按钮协调 */
-        .confirm-btn.confirm-no {
-            background: rgba(255,255,255,0.6);
-            color: #5a67ba;
-            border: 1.5px solid rgba(79,110,247,0.25);
-            font-weight: 600;
-        }
-        .confirm-btn.confirm-no:active { transform: scale(0.97); background: rgba(79,110,247,0.06); }
-        .confirm-btn:disabled {
-            opacity: 0.3; cursor: not-allowed; transform: none !important; box-shadow: none; animation: none;
-        }
-        .confirm-btn:disabled::before { animation: none; }
-
-
         /* ══════════ Chart ══════════ */
         .chart-wrapper {
             margin-top: 10px;
@@ -1493,8 +1371,6 @@
     let hasPlan = false;
     let userCollapsed = false;
     let planPending = false;
-    let confirmDecided = false;  // true after user clicks 执行/不执行; prevents re-injection
-    let confirmExecuted = false; // true only when user clicks 执行（not 不执行）; gates drawer auto-expand
     let streamingUserScrolledUp = false; // true when user scrolls up during streaming, disables auto-scroll
 
     // ─── Streaming state for visibility handling ───
@@ -1502,8 +1378,17 @@
     // We track the current EventSource and streaming state to handle recovery.
     let currentEventSource = null;
     let currentResumeEventSource = null;
-    let streamingContext = null;  // { messageDiv, assistantText, finalized, ... }
+    let streamingContext = null;  // { assistantEl, assistantText, finalized, doFinalize }
     let visibilityHiddenTime = null;  // timestamp when page became hidden
+
+    // ─── Stream sequence tracking for resume/replay ───
+    // Each chunk now has a sequence number for ordered replay and deduplication
+    let lastReceivedSeq = -1;  // last received chunk sequence number for current turn
+    let currentRequestId = '';  // current turn's request ID
+
+    // ─── Snapshot saved when page goes to background ───
+    // Preserved even after streamingContext is finalized by checkDone
+    let backgroundSnapshot = null;  // { assistantEl, assistantText, sessionId, lastSeq }
 
 
     // ─── User identity from URL param ───
@@ -1549,35 +1434,146 @@
     // We delay the error handling to give the connection a chance to recover when app returns.
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') {
-            // Page going to background - record timestamp
+            // Page going to background - record timestamp and save snapshot
             visibilityHiddenTime = Date.now();
             console.log('[Visibility] Page hidden at', visibilityHiddenTime);
+            // Save background snapshot: capture current assistantText + seq NOW.
+            // Save even if streamingContext.finalized is true – checkDone race condition:
+            // checkDone's 300ms timer may fire and call doFinalize (setting finalized=true)
+            // just before visibilitychange fires, but the turn is still running on the backend.
+            if (isProcessing || (streamingContext && streamingContext.assistantEl)) {
+                // Always refresh the snapshot so lastSeq and assistantText stay in sync.
+                // Previously we only saved once per session, but that caused stale seqs when
+                // the user switches background multiple times during a single response.
+                backgroundSnapshot = {
+                    sessionId: currentSessionId,
+                    lastSeq: lastReceivedSeq,
+                    assistantText: (streamingContext && streamingContext.assistantText) || '',
+                    assistantEl: (streamingContext && streamingContext.assistantEl) || null,
+                    savedAt: Date.now()
+                };
+                console.log('[Visibility] Saved backgroundSnapshot, lastSeq=' + backgroundSnapshot.lastSeq
+                    + ', textLen=' + backgroundSnapshot.assistantText.length);
+                // Immediately close the current SSE connection to stop DOM updates in background.
+                // Backend will continue generating; we resume via /api/chat/resume on return.
+                if (currentEventSource && currentEventSource.readyState !== EventSource.CLOSED) {
+                    console.log('[Visibility] Closing EventSource to stop background DOM updates');
+                    currentEventSource.close();
+                }
+            }
+            // Persist to localStorage for cross-refresh recovery
+            saveStreamState();
         } else if (document.visibilityState === 'visible') {
             // Page coming back to foreground
             const hiddenDuration = visibilityHiddenTime ? Date.now() - visibilityHiddenTime : 0;
             console.log('[Visibility] Page visible again, was hidden for', hiddenDuration, 'ms');
             visibilityHiddenTime = null;
 
-            // If we have an active streaming connection that may have been interrupted,
-            // check its state and show a notification if needed
-            if (currentEventSource && streamingContext && !streamingContext.finalized) {
-                const readyState = currentEventSource.readyState;
-                console.log('[Visibility] EventSource readyState:', readyState,
-                    '(0=CONNECTING, 1=OPEN, 2=CLOSED)');
-
-                if (readyState === EventSource.CLOSED) {
-                    // Connection closed while in background: finalize current UI state,
-                    // then try to resume from backend active stream.
-                    if (streamingContext.doFinalize) {
-                        streamingContext.doFinalize();
-                    }
-                    tryResumeSessionStream(currentSessionId);
-                }
-
-                // If CONNECTING or OPEN, the connection survived - continue normally
-            }
+            // Check stream status and resume if needed
+            checkAndResumeStream();
         }
     });
+
+    // ─── Stream state persistence (localStorage) ───
+    function saveStreamState() {
+        if (!currentSessionId) return;
+        try {
+            localStorage.setItem('streamState', JSON.stringify({
+                sessionId: currentSessionId,
+                requestId: currentRequestId,
+                lastReceivedSeq: lastReceivedSeq,
+                lastUpdatedAt: Date.now()
+            }));
+        } catch (e) {
+            console.warn('[StreamState] Failed to save state:', e);
+        }
+    }
+
+    function loadStreamState() {
+        try {
+            const state = localStorage.getItem('streamState');
+            return state ? JSON.parse(state) : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function clearStreamState() {
+        try {
+            localStorage.removeItem('streamState');
+        } catch (e) {}
+        backgroundSnapshot = null;
+    }
+
+    // ─── Check and resume stream on visibility change ───
+    async function checkAndResumeStream() {
+        // Only attempt resume if there's something to resume
+        // Case 1: Active EventSource that's now closed (disconnected in background)
+        // Case 2: backgroundSnapshot saved before checkDone cleared streamingContext
+        // Case 3: isProcessing still true (stream not yet finalized)
+        const hasActiveStream = (currentEventSource && currentEventSource.readyState === EventSource.CLOSED
+                                 && streamingContext && !streamingContext.finalized);
+        const hasSnapshot = backgroundSnapshot && backgroundSnapshot.sessionId === currentSessionId;
+        const isStillProcessing = isProcessing;
+
+        console.log('[Visibility] checkAndResumeStream: hasActiveStream=' + hasActiveStream
+            + ', hasSnapshot=' + hasSnapshot + ', isProcessing=' + isStillProcessing);
+
+        if (hasActiveStream || hasSnapshot || isStillProcessing) {
+            // Mark any active EventSource as finalized so checkDone won't interfere
+            if (streamingContext && !streamingContext.finalized) {
+                streamingContext.finalized = true;
+            }
+            await checkStreamStatusAndResume(currentSessionId);
+        }
+        // else: no stream was running, nothing to do
+    }
+
+    // ─── Check backend stream status and resume if needed ───
+    async function checkStreamStatusAndResume(sessionId) {
+        if (!sessionId) return;
+
+        try {
+            const response = await fetch(BASE_PATH + '/api/sessions/' + sessionId + '/stream-status');
+            const status = await response.json();
+
+            const totalChunks = status.chunkCount || 0;
+            // Always use the latest lastReceivedSeq as the authoritative cursor.
+            // backgroundSnapshot.lastSeq may be stale (saved on first background-switch) while
+            // lastReceivedSeq is updated on every received chunk (including during resume).
+            const clientSeq = lastReceivedSeq;
+
+            console.log('[StreamStatus] status=' + status.status
+                + ', chunkCount=' + totalChunks
+                + ', clientSeq=' + clientSeq);
+
+            if (status.status === 'RUNNING') {
+                // Turn still running - resume and receive remaining chunks
+                console.log('[StreamStatus] Stream RUNNING, resuming from seq=' + clientSeq);
+                resumeStream(sessionId, clientSeq);
+            } else if (status.status === 'COMPLETED') {
+                if (clientSeq < totalChunks - 1) {
+                    // Completed but client missed some chunks
+                    console.log('[StreamStatus] Stream COMPLETED, missed chunks, resuming from seq=' + clientSeq);
+                    resumeStream(sessionId, clientSeq);
+                } else {
+                    console.log('[StreamStatus] All chunks received (clientSeq=' + clientSeq + ', total=' + totalChunks + '), nothing to resume');
+                    // Ensure processing is cleared
+                    if (isProcessing) setProcessing(false);
+                    backgroundSnapshot = null;
+                }
+            } else {
+                // IDLE or FAILED - no stream to resume
+                console.log('[StreamStatus] Status=' + status.status + ', no resume needed');
+                if (isProcessing) setProcessing(false);
+                backgroundSnapshot = null;
+            }
+        } catch (e) {
+            console.warn('[StreamStatus] Failed to check status:', e);
+            if (isProcessing) setProcessing(false);
+            backgroundSnapshot = null;
+        }
+    }
 
     /* ═══════════════════════ History Sidebar ═══════════════════════ */
     function openHistorySidebar() {
@@ -1664,48 +1660,202 @@
 
     // When user re-enters a session (especially in mobile WebView),
     // re-subscribe to backend active stream and keep appending output.
-    function tryResumeSessionStream(sessionId) {
+    // When called after page returns to foreground, it will reuse the existing assistant bubble
+    // and append new chunks to the already-received text.
+    function resumeStream(sessionId, fromSeq) {
         if (!sessionId) return;
         if (currentResumeEventSource) {
             currentResumeEventSource.close();
             currentResumeEventSource = null;
         }
 
-        const url = BASE_PATH + '/api/chat/resume?sessionId=' + encodeURIComponent(sessionId);
+        // Always send fromSeq to backend (even -1, meaning "give me everything")
+        const seqParam = (fromSeq !== null && fromSeq !== undefined) ? fromSeq : -1;
+        const url = BASE_PATH + '/api/chat/resume?sessionId=' + encodeURIComponent(sessionId)
+            + '&fromSeq=' + seqParam;
+
+        console.log('[Resume] Starting resume: sessionId=' + sessionId + ', fromSeq=' + seqParam);
+
         const es = new EventSource(url);
         currentResumeEventSource = es;
 
-        let resumedText = '';
-        let resumedAssistantEl = null;
+        // Use backgroundSnapshot (saved when page went hidden) as the base text.
+        // Prefer streamingContext.assistantText if still available (more up-to-date than snapshot),
+        // since snapshot was taken at visibilitychange time and context may have been updated.
+        const snap = backgroundSnapshot && backgroundSnapshot.sessionId === sessionId ? backgroundSnapshot : null;
+
+        // Determine the base text that has already been rendered into the bubble.
+        // Priority: live streamingContext (if not finalized) > snapshot.
+        // NOTE: streamingContext.finalized is set to true by checkAndResumeStream before calling
+        // resumeStream, so we always fall through to snap here in practice. That is intentional:
+        // snap.assistantText and snap.lastSeq were saved together at visibilitychange time and are
+        // guaranteed to be consistent with each other. Using them as the starting point and
+        // appending chunks after snap.lastSeq (= seqParam) yields the correct full text.
+        const baseTextSource = (streamingContext && !streamingContext.finalized && streamingContext.assistantText)
+            ? streamingContext.assistantText
+            : (snap ? snap.assistantText : '');
+        // resumedText starts from the base text already on-screen, then backend chunks
+        // (seq > fromSeq) are appended to produce the full text without gaps.
+        let resumedText = (seqParam >= 0) ? baseTextSource : '';
+
+        // For the DOM element: prefer streamingContext.assistantEl, then snapshot, then null (will find/create later)
+        const baseElSource = (streamingContext && !streamingContext.finalized && streamingContext.assistantEl)
+            ? streamingContext.assistantEl
+            : (snap ? snap.assistantEl : null);
+        // Only reuse the existing bubble when doing incremental resume (seqParam >= 0).
+        // BUT: if the bubble already has a fully-rendered report block, don't reuse it –
+        // the original doFinalize already completed successfully; touching it again would
+        // produce duplicate content (one inside + one outside the bubble).
+        let _candidateEl = (seqParam >= 0) ? baseElSource : null;
+        if (_candidateEl) {
+            const _mc = _candidateEl.querySelector('.message-content');
+            if (_mc && (_mc.querySelector('.report-block') || _mc.querySelector('#streamingReportBlock'))) {
+                // Fully rendered – don't touch this bubble; resume will create a new one if needed
+                _candidateEl = null;
+                resumedText = ''; // discard stale baseText; we'll rebuild from full history chunks
+            }
+        }
+        let resumedAssistantEl = _candidateEl;
         let gotAnyChunk = false;
+        let resumeFinalized = false;
+
+        // Ensure UI is in "processing" state while resuming
+        if (!isProcessing) setProcessing(true);
+
+        // Remove any stale typing indicator
+        const existingTyping = document.querySelectorAll('.typing-indicator');
+        existingTyping.forEach(el => { const m = el.closest('.message'); if (m) m.remove(); });
+
+        // Show a "resuming" indicator inside the existing bubble (problem 4: no loading icon)
+        if (resumedAssistantEl) {
+            const msgContent = resumedAssistantEl.querySelector('.message-content');
+            if (msgContent && !msgContent.querySelector('#resumeWaitCard')) {
+                const resumeCard = document.createElement('div');
+                resumeCard.id = 'resumeWaitCard';
+                resumeCard.style.cssText =
+                    'display:flex;align-items:center;gap:8px;margin-top:8px;'
+                    + 'padding:8px 12px;background:var(--surface2);border:1px solid var(--border);'
+                    + 'border-radius:var(--radius-sm);font-size:0.8rem;color:var(--text-hint);';
+                resumeCard.innerHTML =
+                    '<div style="width:13px;height:13px;flex-shrink:0;border:2px solid var(--border);'
+                    + 'border-top-color:var(--primary);border-radius:50%;'
+                    + 'animation:spinLoader 0.7s linear infinite;"></div>'
+                    + '<span>正在恢复输出，请稍候…</span>';
+                msgContent.appendChild(resumeCard);
+            }
+        }
+
+        console.log('[Resume] Base text length=' + resumedText.length
+            + ', hasAssistantEl=' + !!resumedAssistantEl);
+
+        function doResumeFinalize() {
+            if (resumeFinalized) return;
+            resumeFinalized = true;
+            // Clear the background snapshot - we're done
+            backgroundSnapshot = null;
+            // Mark original streamingContext as done
+            if (streamingContext) streamingContext.finalized = true;
+            // Remove the resume-wait indicator if still visible
+            const _rwc = document.getElementById('resumeWaitCard');
+            if (_rwc) _rwc.remove();
+            // Finalize the bubble
+            if (resumedText) {
+                if (!resumedAssistantEl) {
+                    // No reusable bubble (either we skipped a fully-rendered one, or there was
+                    // never one). Find the last assistant bubble or create a fresh one.
+                    const _msgs = document.getElementById('chatMessages');
+                    const _nodes = _msgs ? _msgs.querySelectorAll('.message.assistant') : [];
+                    const _lastEl = _nodes.length ? _nodes[_nodes.length - 1] : null;
+                    const _lastMc = _lastEl ? _lastEl.querySelector('.message-content') : null;
+                    const _alreadyRendered = _lastMc && (_lastMc.querySelector('.report-block') || _lastMc.querySelector('#streamingReportBlock'));
+                    if (_lastEl && !_alreadyRendered) {
+                        resumedAssistantEl = _lastEl;
+                    } else {
+                        resumedAssistantEl = appendMessage('assistant', '');
+                    }
+                }
+                finalizeMessage(resumedAssistantEl, resumedText);
+            }
+            planPending = false;
+            clearPlanPendingIfNeeded();
+            setProcessing(false);
+            clearStreamState();
+            currentResumeEventSource = null;
+        }
 
         es.onmessage = (event) => {
-            const chunk = event.data;
-            if (chunk === '[STOPPED]') return;
-            if (/^\[TOOL:[^\]]+\]$/.test(chunk)) return;
-
-            gotAnyChunk = true;
-            resumedText += chunk;
-
-            if (!resumedAssistantEl) {
-                const messagesEl = document.getElementById('chatMessages');
-                const assistantNodes = messagesEl.querySelectorAll('.message.assistant');
-                resumedAssistantEl = assistantNodes.length
-                    ? assistantNodes[assistantNodes.length - 1]
-                    : appendMessage('assistant', '');
+            let chunk;
+            try {
+                chunk = JSON.parse(event.data);
+            } catch (e) {
+                console.warn('[Resume] Failed to parse chunk:', event.data);
+                return;
             }
-            updateLastMessage(resumedAssistantEl, resumedText);
+
+            // Dedup: skip already-received chunks
+            if (chunk.seq !== undefined && chunk.seq <= lastReceivedSeq) {
+                return;
+            }
+            if (chunk.seq !== undefined) lastReceivedSeq = chunk.seq;
+
+            if (chunk.type === 'DONE') {
+                es.close();
+                doResumeFinalize();
+                return;
+            }
+            if (chunk.type === 'ERROR') {
+                console.error('[Resume] Error chunk:', chunk.content);
+                es.close();
+                doResumeFinalize();
+                return;
+            }
+            // Skip non-text chunks (TOOL_STATUS / PLAN_UPDATE not rendered during resume)
+            if (chunk.type === 'TOOL_STATUS' || chunk.type === 'PLAN_UPDATE') return;
+
+            // TEXT chunk
+            if (chunk.type === 'TEXT' && chunk.content) {
+                // Remove the resume-wait card on first actual chunk
+                if (!gotAnyChunk) {
+                    const _rwc2 = document.getElementById('resumeWaitCard');
+                    if (_rwc2) _rwc2.remove();
+                }
+                gotAnyChunk = true;
+                resumedText += chunk.content;
+                // Keep streamingContext in sync so that if the user switches to background
+                // again mid-resume, the next snapshot captures the latest text and seq.
+                if (streamingContext) streamingContext.assistantText = resumedText;
+
+                if (!resumedAssistantEl) {
+                    // Find last assistant bubble or create one
+                    const messagesEl = document.getElementById('chatMessages');
+                    const nodes = messagesEl.querySelectorAll('.message.assistant');
+                    resumedAssistantEl = nodes.length
+                        ? nodes[nodes.length - 1]
+                        : appendMessage('assistant', '');
+                }
+                updateLastMessage(resumedAssistantEl, resumedText);
+                if (!streamingUserScrolledUp) {
+                    document.getElementById('chatMessages').scrollTop = 99999;
+                }
+            }
         };
 
         es.onerror = () => {
             es.close();
-            if (currentResumeEventSource === es) {
-                currentResumeEventSource = null;
-            }
-            if (gotAnyChunk && resumedAssistantEl) {
-                finalizeMessage(resumedAssistantEl, resumedText);
+            if (currentResumeEventSource === es) currentResumeEventSource = null;
+            if (gotAnyChunk) {
+                doResumeFinalize();
+            } else {
+                console.warn('[Resume] onerror with no chunks received');
+                backgroundSnapshot = null;
+                setProcessing(false);
             }
         };
+    }
+
+    // Legacy function name for backward compatibility
+    function tryResumeSessionStream(sessionId) {
+        resumeStream(sessionId, lastReceivedSeq);
     }
 
     function clearPlanPanelUI() {
@@ -1718,7 +1868,6 @@
         if (hintEl)    { hintEl.className = 'drawer-hint'; const _t = hintEl.querySelector('#drawerHintText'); if (_t) _t.textContent = '📋 任务计划已生成，点击查看'; }
         if (progressWrap) { progressWrap.style.display = 'none'; }
         planPending = false;
-        confirmExecuted = false;
         setPlanGenerating(false);
         setDrawerHasPlan(false);
     }
@@ -1736,7 +1885,6 @@
 
         // 强制清空任务计划面板内容
         clearPlanPanelUI();
-        confirmDecided = false;
         setProcessing(false);
     }
 
@@ -1852,41 +2000,6 @@
         document.getElementById('chatInput').value = text;
         sendMessage();
     }
-    // Called when user clicks 执行 / 不执行 confirm buttons
-    function sendConfirm(btn, text) {
-        // Disable both buttons and mark decision taken (prevents re-injection on next plan SSE)
-        confirmDecided = true;
-        // 只有点「执行」才允许面板在子任务开始时自动展开
-        confirmExecuted = (text === '执行');
-        const actions = btn.closest('.confirm-actions');
-        if (actions) {
-            actions.querySelectorAll('.confirm-btn').forEach(b => b.disabled = true);
-        }
-
-        if (text === '不执行') {
-            // 「不执行」：先让后端立即 abandon 当前计划（清空 PlanNotebook.currentPlan），
-            // 防止 LLM 在后续轮次中收到残留计划的 system-hint。
-            // 同时调 /api/plan/confirm 抑制 needConfirm 广播（兜底）。
-            clearPlanPanelUI();
-            fetch(
-                BASE_PATH + '/api/plan/abandon?sessionId=' + encodeURIComponent(currentSessionId),
-                { method: 'POST' }
-            ).catch(() => {});
-        } else {
-            // Notify backend to suppress further needConfirm=true broadcasts for this plan
-            fetch(
-                BASE_PATH + '/api/plan/confirm?sessionId=' + encodeURIComponent(currentSessionId),
-                { method: 'POST' }
-            ).catch(() => {});
-        }
-
-        // 重置 userCollapsed，后续子任务开始执行时面板可自动展开
-        userCollapsed = false;
-
-        document.getElementById('chatInput').value = text;
-        sendMessage(true);  // fromConfirm=true: skip confirmDecided reset
-    }
-
     function handleInputKey(e) {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
@@ -1899,7 +2012,7 @@
         el.style.height = Math.min(el.scrollHeight, 110) + 'px';
     }
 
-    async function sendMessage(fromConfirm) {
+    async function sendMessage() {
         const input = document.getElementById('chatInput');
         const message = input.value.trim();
         if (!message || isProcessing) return;
@@ -1917,13 +2030,16 @@
         input.style.height = 'auto';
         setProcessing(true);
         streamingUserScrolledUp = false;  // reset auto-scroll lock for new message
-        // Only reset confirmDecided when user sends a fresh message (not from confirm buttons)
-        if (!fromConfirm) confirmDecided = false;
         // Mark that a plan may arrive (for clearPlanPendingIfNeeded), but do NOT show drawer yet
         planPending = true;
 
         const typingEl = appendTyping();
         const requestId = generateUUID();
+        
+        // Reset sequence tracking for new turn
+        lastReceivedSeq = -1;
+        currentRequestId = requestId;
+        
         const url = BASE_PATH + '/api/chat?message=' + encodeURIComponent(fullMessage)
             + '&sessionId=' + encodeURIComponent(currentSessionId)
             + '&requestId=' + encodeURIComponent(requestId)
@@ -1980,7 +2096,7 @@
                 '<div style="width:13px;height:13px;flex-shrink:0;border:2px solid var(--border);'
                 + 'border-top-color:var(--primary);border-radius:50%;'
                 + 'animation:spinLoader 0.7s linear infinite;"></div>'
-                + '<span id="queryWaitText">🔍 正在向数据服务查询，请稍等… 00:00</span>';
+                + '<span id="queryWaitText">🤔 正在思考… 00:00</span>';
             content.appendChild(card);
             queryWaitEl = card;
             if (!streamingUserScrolledUp) document.getElementById('chatMessages').scrollTop = 99999;
@@ -1990,7 +2106,7 @@
                 const m = String(Math.floor(queryWaitSecs / 60)).padStart(2, '0');
                 const s = String(queryWaitSecs % 60).padStart(2, '0');
                 const el = document.getElementById('queryWaitText');
-                if (el) el.textContent = `🔍 正在向数据服务查询，请稍等… ${m}:${s}`;
+                if (el) el.textContent = `🤔 正在思考… ${m}:${s}`;
             }, 1000);
         }
 
@@ -2185,41 +2301,80 @@
         }
 
         eventSource.onmessage = (event) => {
-            const chunk = event.data;
+            // ── Parse JSON chunk (new format with seq, type, content) ──
+            let chunkData;
+            try {
+                chunkData = JSON.parse(event.data);
+            } catch (e) {
+                console.warn('[Stream] Failed to parse chunk:', event.data);
+                return;
+            }
+
+            // Update sequence tracking
+            if (chunkData.seq !== undefined) {
+                lastReceivedSeq = chunkData.seq;
+            }
+
+            // Handle different chunk types
+            if (chunkData.type === 'DONE') {
+                eventSource.close();
+                doFinalize();
+                clearStreamState();
+                return;
+            }
+
+            if (chunkData.type === 'ERROR') {
+                console.error('[Stream] Error:', chunkData.content);
+                eventSource.close();
+                doFinalize();
+                return;
+            }
+
+            // Skip non-TEXT types for text accumulation
+            if (chunkData.type !== 'TEXT') {
+                // TOOL_STATUS and PLAN_UPDATE are handled separately
+                if (chunkData.type === 'TOOL_STATUS') {
+                    // Handle tool status marker — show context-aware status message
+                    const content = chunkData.content || '';
+                    if (/^\[TOOL:[^\]]+\]$/.test(content)) {
+                        const toolName = content.slice(6, -1);
+                        const label = toolName === 'create_plan'       ? '📝 正在创建分析任务…'
+                                    : toolName === 'query_dataset'     ? '📊 正在向数据服务查询…'
+                                    : toolName === 'finish_subtask'    ? '✅ 数据查询完成，正在整理…'
+                                    : toolName === 'finish_plan'       ? '✅ 分析计划执行完成'
+                                    : toolName === 'update_subtask_state' ? '🔄 更新任务状态…'
+                                    : toolName === 'view_subtasks'     ? '📋 查看子任务…'
+                                    : toolName === 'get_subtask_count' ? '📋 确认任务数量…'
+                                    : toolName === 'list_datasets'     ? '⚙️ 正在发现可用数据集…'
+                                    : `⚙️ ${toolName}…`;
+                        clearQueryWaitCard();
+                        if (toolName === 'query_dataset') pendingChartLoading = true;
+                        if (!assistantEl) { removeTyping(typingEl); assistantEl = appendMessage('assistant', ''); }
+                        if (streamingContext) streamingContext.assistantEl = assistantEl;
+                        const msgContent = assistantEl.querySelector('.message-content');
+                        let statusEl = msgContent.querySelector('#toolStatusLine');
+                        if (!statusEl) {
+                            statusEl = document.createElement('div');
+                            statusEl.id = 'toolStatusLine';
+                            statusEl.style.cssText = 'font-size:0.8rem;color:var(--text-hint);margin:4px 0 2px;display:flex;align-items:center;gap:6px;';
+                            msgContent.appendChild(statusEl);
+                        }
+                        statusEl.textContent = label;
+                        if (!streamingUserScrolledUp) document.getElementById('chatMessages').scrollTop = 99999;
+                    }
+                    return;
+                }
+                return;
+            }
+
+            // Extract actual text content from TEXT chunk
+            const chunk = chunkData.content || '';
             if (chunk === '[STOPPED]') { eventSource.close(); doFinalize(); return; }
 
             // Update streaming context for visibility handler
             if (streamingContext) {
                 streamingContext.assistantEl = assistantEl;
                 streamingContext.assistantText = assistantText;
-            }
-
-            // ── Tool progress markers: update status line in bubble, never accumulate in text ──
-            if (/^\[TOOL:[^\]]+\]$/.test(chunk)) {
-                const toolName = chunk.slice(6, -1);
-                const label = toolName === 'list_datasets'  ? '⚙️ 正在发现可用数据集…'
-                            : toolName === 'query_dataset'  ? '📊 数据查询完成，正在分析…'
-                            : `⚙️ 工具执行中（${toolName}）…`;
-                // Any tool completing means we're no longer silently waiting – clear wait card.
-                clearQueryWaitCard();
-                // After query_dataset finishes, the LLM will emit conclusion text then
-                // a <chart> block. Flag this so we can show a chart pre-loading indicator.
-                if (toolName === 'query_dataset') pendingChartLoading = true;
-                // Ensure bubble exists
-                if (!assistantEl) { removeTyping(typingEl); assistantEl = appendMessage('assistant', ''); }
-                // Update streaming context
-                if (streamingContext) streamingContext.assistantEl = assistantEl;
-                const content = assistantEl.querySelector('.message-content');
-                let statusEl = content.querySelector('#toolStatusLine');
-                if (!statusEl) {
-                    statusEl = document.createElement('div');
-                    statusEl.id = 'toolStatusLine';
-                    statusEl.style.cssText = 'font-size:0.8rem;color:var(--text-hint);margin:4px 0 2px;display:flex;align-items:center;gap:6px;';
-                    content.appendChild(statusEl);
-                }
-                statusEl.textContent = label;
-                if (!streamingUserScrolledUp) document.getElementById('chatMessages').scrollTop = 99999;
-                return;
             }
 
             assistantText += chunk;
@@ -2470,6 +2625,8 @@
             // If page is hidden, don't close immediately - let visibility handler deal with it.
             if (document.visibilityState === 'hidden') {
                 console.log('[SSE] onerror while page hidden - close source and wait resume');
+                // Save current stream state so we can resume after returning to foreground
+                saveStreamState();
                 // Important: EventSource may auto-reconnect and re-hit /api/chat,
                 // causing duplicate user turns. Close explicitly and recover via /api/chat/resume.
                 eventSource.close();
@@ -2490,7 +2647,14 @@
 
         const checkDone = setInterval(() => {
             if (eventSource.readyState === EventSource.CLOSED) {
-                clearInterval(checkDone); doFinalize();
+                clearInterval(checkDone);
+                // Only finalize if stream is not being recovered in background
+                if (!finalized && document.visibilityState === 'visible') {
+                    doFinalize();
+                } else if (!finalized && document.visibilityState === 'hidden') {
+                    // Page is hidden - save state and wait for visibility change to resume
+                    saveStreamState();
+                }
             }
         }, 300);
     }
@@ -2535,9 +2699,7 @@
     function finalizeMessage(el, fullText) {
         const chartRegex   = /<chart>\s*([\s\S]*?)\s*<\/chart>/i;
         const reportRegex  = /<report>\s*([\s\S]*?)\s*<\/report>/i;
-        const confirmRegex = /\[CONFIRM_PLAN\]/;
 
-        const hasConfirm  = confirmRegex.test(fullText);
         const chartMatch  = fullText.match(chartRegex);
         const reportMatch = fullText.match(reportRegex);
 
@@ -2545,7 +2707,6 @@
         let textPart = fullText
             .replace(chartRegex, '')
             .replace(reportRegex, '')
-            .replace(confirmRegex, '')
             .trim();
 
         // 移除不在 <chart> 标签内的裸露图表 JSON（LLM 有时会把 JSON 输出在错误的位置）
@@ -2606,6 +2767,20 @@
             if (textPart) {
                 let textPartEl = content.querySelector('.text-part');
                 if (!textPartEl) {
+                    // Remove any raw streaming text nodes left by updateLastMessage
+                    // (they are direct child nodes NOT wrapped in .text-part / .report-block etc.)
+                    Array.from(content.childNodes).forEach(node => {
+                        const skipIds = ['msgLoadingIndicator', 'preChartLoadingBar', 'chartWaitingCard', 'queryWaitCard'];
+                        if (node.nodeType === Node.TEXT_NODE) {
+                            node.remove();
+                        } else if (node.nodeType === Node.ELEMENT_NODE
+                                && !node.classList.contains('text-part')
+                                && !node.classList.contains('report-block')
+                                && !node.classList.contains('chart-wrapper')
+                                && !skipIds.includes(node.id)) {
+                            node.remove();
+                        }
+                    });
                     textPartEl = document.createElement('div');
                     textPartEl.className = 'text-part';
                     content.prepend(textPartEl);
@@ -2668,11 +2843,7 @@
                 document.getElementById('chatMessages').scrollTop = 99999;
             });
         } else {
-            // 没有报告/图表时，也用 marked 渲染 Markdown
-            // ⚠️ innerHTML 全量替换前，先把 SSE 已注入的确认按钮保存下来，替换后再追回。
-            // 否则 renderPlan(needConfirm=true) 先注入按钮，finalizeMessage 替换 innerHTML 清空
-            // 后再次注入，导致确认按钮闪烁出现两次。
-            const existingConfirmWrap = content.querySelector('.confirm-actions-wrap');
+            // 没有报告/图表时，用 marked 渲染 Markdown
             const textToRender = textPart || fullText;
             if (typeof renderMarkdown !== 'undefined') {
                 content.innerHTML = renderMarkdown(textToRender);
@@ -2680,51 +2851,14 @@
             } else {
                 content.textContent = textToRender;
             }
-            // 把之前保存的确认按钮追回（如果 SSE 已注入过）
-            if (existingConfirmWrap) {
-                content.appendChild(existingConfirmWrap);
-            }
         }
 
         // 高亮单独一行的纯数字粗体（精确取数型结果）
         highlightSingleNumber(content);
 
-        // Render confirm-plan action buttons (fallback: triggered by LLM token)
-        // Primary injection happens via plan SSE (renderPlan); this is the backup path.
-        // Skip if user already made a decision (confirmDecided) to avoid re-injection.
-                // Also skip if SSE already injected (check .confirm-actions-wrap, not .confirm-actions)
-        if (hasConfirm && !confirmDecided && !content.querySelector('.confirm-actions-wrap')) {
-            const wrapDiv = document.createElement('div');
-            wrapDiv.className = 'confirm-actions-wrap';
-            wrapDiv.innerHTML = `
-                <div class="confirm-actions-label">
-                    <div class="confirm-actions-label-icon-wrap">
-                        <svg class="confirm-actions-label-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M12 2C12 2 8 6.5 8 13a4 4 0 0 0 8 0c0-6.5-4-11-4-11z" fill="rgba(255,255,255,0.95)" stroke="rgba(255,255,255,0.6)" stroke-width="0.5"/>
-                            <path d="M9 13.5c-.8.6-2 1-2.5 2.5" stroke="rgba(255,255,255,0.8)" stroke-width="1.4" stroke-linecap="round"/>
-                            <path d="M15 13.5c.8.6 2 1 2.5 2.5" stroke="rgba(255,255,255,0.8)" stroke-width="1.4" stroke-linecap="round"/>
-                            <circle cx="12" cy="13" r="1.8" fill="rgba(79,110,247,0.9)"/>
-                            <path d="M10.5 19.5l1.5 2.5 1.5-2.5" stroke="rgba(255,255,255,0.8)" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                    </div>
-                    <div class="confirm-actions-label-text">
-                        <span class="confirm-actions-label-title">计划已就绪</span>
-                        <span class="confirm-actions-label-sub">请确认是否开始执行分析</span>
-                    </div>
-                </div>
-                <div class="confirm-actions">
-                    <button class="confirm-btn confirm-yes" onclick="sendConfirm(this, '\u6267\u884c')">
-                        <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M3 7.5l3.5 3.5L12 4" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                        立即执行
-                    </button>
-                    <button class="confirm-btn confirm-no" onclick="sendConfirm(this, '\u4e0d\u6267\u884c')">暂不执行</button>
-                </div>`;
-            content.appendChild(wrapDiv);
-        }
-
-        // 在消息气泡下方追加推荐问题（仅非确认类回复）
+        // 在消息气泡下方追加推荐问题
         // 插入到 el（.message.assistant）内部、消息气泡之后，避免撑高内容区
-        if (!hasConfirm && suggestedQuestions.length > 0 && !el.querySelector('.post-report-sugg')) {
+        if (suggestedQuestions.length > 0 && !el.querySelector('.post-report-sugg')) {
             const chips = suggestedQuestions.map(q =>
                 `<button class="post-report-sugg-chip" onclick="sendSuggestionText(this)">${escapeHtml(q)}</button>`
             ).join('');
@@ -2780,7 +2914,7 @@
 
     // 初始化 marked.js：开启 GFM（表格/任务列表等）和换行符支持
     if (typeof marked !== 'undefined') {
-        marked.setOptions({ gfm: true, breaks: true });
+        marked.setOptions({ gfm: true, breaks: true, headerIds: false, mangle: false });
         console.log('[DEBUG] marked.js 加载成功，版本:', marked.version || 'unknown');
 
         /**
@@ -3022,8 +3156,11 @@
         
         chart.setOption(option);
         
-        // 响应窗口大小变化
+        // Respond to window resize – remove previous handler first to avoid accumulation
+        const prevResizeHandler = chartEl._resizeHandler;
+        if (prevResizeHandler) window.removeEventListener('resize', prevResizeHandler);
         const resizeHandler = () => chart.resize();
+        chartEl._resizeHandler = resizeHandler;
         window.addEventListener('resize', resizeHandler);
     }
 
@@ -3544,11 +3681,19 @@
     /* ═══════════════════════ Plan SSE ═══════════════════════ */
     function connectPlanStream() {
         if (planEventSource) planEventSource.close();
-        const url = BASE_PATH + '/api/plan/stream?sessionId=' + encodeURIComponent(currentSessionId);
+        const sessionIdForStream = currentSessionId;  // capture at connect time
+        const url = BASE_PATH + '/api/plan/stream?sessionId=' + encodeURIComponent(sessionIdForStream);
         planEventSource = new EventSource(url);
         planEventSource.onmessage = (e) => { try { renderPlan(JSON.parse(e.data)); } catch(_) {} };
         planEventSource.onopen = () => updateConnStatus(true);
-        planEventSource.onerror = () => { updateConnStatus(false); setTimeout(connectPlanStream, 3000); };
+        planEventSource.onerror = () => {
+            updateConnStatus(false);
+            // Only reconnect if this EventSource still belongs to the current session
+            // (prevents stale onerror from a closed stream triggering reconnect to old session)
+            if (sessionIdForStream === currentSessionId) {
+                setTimeout(connectPlanStream, 3000);
+            }
+        };
     }
 
     async function fetchCurrentPlan() {
@@ -3637,11 +3782,6 @@
             setPlanGenerating(false);
         }
 
-        // ── Confirm buttons: injected by finalizeMessage when LLM outputs [CONFIRM_PLAN] token ──
-        // Do NOT inject here via SSE, otherwise the button appears before LLM outputs any text.
-        // The SSE-driven needConfirm flag is only used to control the drawer collapse behavior.
-        const needConfirm = plan.needConfirm === true;
-
         // ── Hint strip ──
         hintEl.classList.toggle('hint-generating', planPending && total === 0);
         hintEl.classList.toggle('hint-running',    isRunning && !allDone && !planPending);
@@ -3660,18 +3800,10 @@
         // ── Show drawer ──
         setDrawerHasPlan(true);
         // 展开策略：
-        // · needConfirm=true（计划完整生成，等待用户确认）→ 强制收起面板（无论当前是否展开），让用户看气泡按钮
         // · allDone（所有子任务完成）→ 若面板展开则静默收起，用户回到主界面等待分析报告
-        // · 子任务执行中 → 仅当用户已点「执行」（confirmExecuted=true）且未手动收起时才展开
+        // · 子任务执行中 → 未手动收起时自动展开
         // · 用户手动收起过（userCollapsed=true）→ 不强制展开
-        if (needConfirm) {
-            // 强制收起，不受 drawerOpen 状态限制
-            drawerOpen = false;
-            const _d = document.getElementById('planDrawer');
-            if (_d) _d.classList.remove('expanded');
-            document.getElementById('drawerOverlay').classList.remove('active');
-            syncDrawerPadding();
-        } else if (allDone) {
+        if (allDone) {
             // 静默收起（不设 userCollapsed），hint strip 变绿提示完成，用户可随时点开查看
             if (drawerOpen) {
                 drawerOpen = false;
@@ -3680,7 +3812,7 @@
                 document.getElementById('drawerOverlay').classList.remove('active');
                 syncDrawerPadding();
             }
-        } else if (!drawerOpen && !userCollapsed && confirmExecuted) {
+        } else if (!drawerOpen && !userCollapsed) {
             expandDrawer();
         }
 
@@ -3759,9 +3891,11 @@
 
     /* ═══════════════════════ Reset ═══════════════════════ */
     async function resetAll() {
+        // Capture the old sessionId BEFORE startNewSession() changes currentSessionId
+        const oldSessionId = currentSessionId;
         startNewSession();
         try {
-            await fetch(BASE_PATH + '/api/reset?sessionId=' + encodeURIComponent(currentSessionId), { method: 'POST' });
+            await fetch(BASE_PATH + '/api/reset?sessionId=' + encodeURIComponent(oldSessionId), { method: 'POST' });
         } catch (e) {}
     }
 

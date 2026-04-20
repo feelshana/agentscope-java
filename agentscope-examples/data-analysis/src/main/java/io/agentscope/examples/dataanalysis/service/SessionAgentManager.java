@@ -21,6 +21,7 @@ import io.agentscope.core.memory.InMemoryMemory;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.model.OpenAIChatModel;
 import io.agentscope.core.plan.PlanNotebook;
+import io.agentscope.core.plan.hint.DefaultPlanToHint;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.examples.dataanalysis.client.DataApiClient;
 import io.agentscope.examples.dataanalysis.tool.DataAnalysisTool;
@@ -54,6 +55,7 @@ public class SessionAgentManager {
     private final ChatSessionService chatSessionService;
     private final LlmInteractionLogService llmInteractionLogService;
     private final QueryResultCacheService queryResultCacheService;
+    private final DatasetCatalogueService datasetCatalogueService;
 
     private String apiKey;
     private String baseUrl;
@@ -64,12 +66,14 @@ public class SessionAgentManager {
             AnalysisPlanService analysisPlanService,
             ChatSessionService chatSessionService,
             LlmInteractionLogService llmInteractionLogService,
-            QueryResultCacheService queryResultCacheService) {
+            QueryResultCacheService queryResultCacheService,
+            DatasetCatalogueService datasetCatalogueService) {
         this.dataApiClient = dataApiClient;
         this.analysisPlanService = analysisPlanService;
         this.chatSessionService = chatSessionService;
         this.llmInteractionLogService = llmInteractionLogService;
         this.queryResultCacheService = queryResultCacheService;
+        this.datasetCatalogueService = datasetCatalogueService;
     }
 
     public void configure(String apiKey, String baseUrl, String sysPrompt) {
@@ -95,6 +99,10 @@ public class SessionAgentManager {
         if (agents.containsKey(sessionId)) {
             return agents.get(sessionId);
         }
+        // Trigger async brief refresh so this new session picks up the latest
+        // dataset metadata from the NLP service (non-blocking, ~800ms in background).
+        datasetCatalogueService.triggerSessionRefresh();
+
         // New in-memory entry; load historical messages from DB if session exists
         List<Msg> historyMsgs = chatSessionService.loadSessionMessages(sessionId);
         // Get userName from session for data isolation
@@ -133,16 +141,14 @@ public class SessionAgentManager {
         toolkit.registerTool(
                 new DataAnalysisTool(dataApiClient, sessionId, userName, queryResultCacheService));
 
-        ConfirmPlanToHint confirmPlanToHint = new ConfirmPlanToHint();
-        PlanNotebook planNotebook = PlanNotebook.builder().planToHint(confirmPlanToHint).build();
-        // Register change-hook so ConfirmPlanToHint can track plan lifecycle
-        confirmPlanToHint.registerWith(planNotebook);
+        DefaultPlanToHint defaultPlanToHint = new DefaultPlanToHint();
+        PlanNotebook planNotebook =
+                PlanNotebook.builder().planToHint(defaultPlanToHint).needUserConfirm(false).build();
         // Broadcast plan changes by session (for SSE stream)
         planNotebook.addChangeHook(
                 "planBroadcast", (nb, plan) -> analysisPlanService.broadcastPlanChange(sessionId));
-        // Keep session-scoped reference updated (including ConfirmPlanToHint for user
-        // confirmation tracking)
-        analysisPlanService.registerPlanNotebook(sessionId, planNotebook, confirmPlanToHint);
+        // Register PlanNotebook in AnalysisPlanService for SSE stream management
+        analysisPlanService.registerPlanNotebook(sessionId, planNotebook);
 
         OpenAIChatModel.Builder modelBuilder =
                 OpenAIChatModel.builder().apiKey(apiKey).modelName("deepseek-chat").stream(true)
@@ -151,12 +157,12 @@ public class SessionAgentManager {
             modelBuilder.baseUrl(baseUrl);
         }
 
-        // DatasetInjectionHook fetches datasets reactively on the first reasoning call
-        // and caches the enriched sysPrompt for the lifetime of the session.
-        // This avoids calling .block() in a Reactor NIO thread during session creation.
+        // DatasetInjectionHook reads from DatasetCatalogueService (in-memory, zero I/O)
+        // instead of fetching from the NLP service on each first reasoning call.
+        // It detects catalogue changes via a version counter.
         DatasetInjectionHook datasetInjectionHook =
                 new DatasetInjectionHook(
-                        dataApiClient, sysPrompt, sessionId, userName, queryResultCacheService);
+                        datasetCatalogueService, sysPrompt, sessionId, queryResultCacheService);
 
         ReActAgent agent =
                 ReActAgent.builder()

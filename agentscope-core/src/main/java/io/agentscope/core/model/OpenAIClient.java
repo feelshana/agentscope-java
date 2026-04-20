@@ -396,7 +396,7 @@ public class OpenAIClient {
             request.setStream(true);
 
             String requestBody = JsonUtils.getJsonCodec().toJson(request);
-            log.debug("OpenAI streaming request to {}: {}", url, requestBody);
+            // log.debug("OpenAI streaming request to {}: {}", url, requestBody);
 
             HttpRequest httpRequest =
                     HttpRequest.builder()

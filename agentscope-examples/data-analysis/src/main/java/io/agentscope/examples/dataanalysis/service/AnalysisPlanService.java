@@ -54,19 +54,15 @@ public class AnalysisPlanService {
     }
 
     /**
-     * Register a PlanNotebook and its associated ConfirmPlanToHint for a session.
+     * Register a PlanNotebook for a session.
      *
      * @param sessionId the session ID
      * @param planNotebook the PlanNotebook instance
-     * @param confirmPlanToHint the ConfirmPlanToHint instance (may be null for non-UI sessions)
+     * @param unused reserved for future use (kept for backward compatibility, ignored)
      */
-    public void registerPlanNotebook(
-            String sessionId, PlanNotebook planNotebook, ConfirmPlanToHint confirmPlanToHint) {
+    public void registerPlanNotebook(String sessionId, PlanNotebook planNotebook, Object unused) {
         SessionPlanState state = getOrCreateState(sessionId);
         state.planNotebook = planNotebook;
-        state.confirmPlanToHint = confirmPlanToHint;
-        state.confirmedByUser = false;
-        state.lastConfirmedPlanName = null;
     }
 
     public PlanNotebook getPlanNotebook(String sessionId) {
@@ -106,86 +102,21 @@ public class AnalysisPlanService {
 
         if (response == null) {
             // PlanNotebook 在 finish_plan 后会清空 currentPlan。
-            // 若前端因后台切换丢了“完成态”SSE，则这里回放最近一次可渲染快照，
+            // 若前端因后台切换丢了"完成态"SSE，则这里回放最近一次可渲染快照，
             // 避免 UI 长期卡在旧的 in_progress。
             response = clonePlanResponse(state.lastRenderablePlan);
             if (response == null) {
                 response = new PlanResponse();
             }
         } else {
-            boolean allTodo =
-                    response.getSubtasks() != null
-                            && !response.getSubtasks().isEmpty()
-                            && response.getSubtasks().stream()
-                                    .allMatch(s -> "todo".equals(s.getState()));
-            boolean notebookNeedsConfirm =
-                    state.planNotebook != null && state.planNotebook.isNeedUserConfirm();
-
-            String planName = response.getName();
-            if (planName != null && !planName.equals(state.lastConfirmedPlanName)) {
-                state.confirmedByUser = false;
-            }
-
-            boolean anyStarted =
-                    response.getSubtasks() != null
-                            && response.getSubtasks().stream()
-                                    .anyMatch(
-                                            s ->
-                                                    "in_progress".equals(s.getState())
-                                                            || "done".equals(s.getState()));
-            if (anyStarted) {
-                state.confirmedByUser = true;
-                state.lastConfirmedPlanName = planName;
-            }
-
-            boolean shouldShowConfirm = allTodo && notebookNeedsConfirm && !state.confirmedByUser;
-            if (shouldShowConfirm) {
-                state.lastConfirmedPlanName = planName;
-            }
-            response.setNeedConfirm(shouldShowConfirm);
             state.lastRenderablePlan = clonePlanResponse(response);
         }
 
         state.planSink.tryEmitNext(response);
         log.debug(
-                "Plan broadcast: session={}, plan={}, needConfirm={}, confirmedByUser={}",
+                "Plan broadcast: session={}, plan={}",
                 normalizeSessionId(sessionId),
-                response.getName() != null ? response.getName() : "(empty)",
-                response.isNeedConfirm(),
-                state.confirmedByUser);
-    }
-
-    /**
-     * Called when the user explicitly confirms or declines plan execution.
-     * Suppresses needConfirm for the current plan in this session going forward.
-     */
-    public void markUserConfirmed(String sessionId) {
-        SessionPlanState state = getOrCreateState(sessionId);
-        state.confirmedByUser = true;
-        if (state.planNotebook != null && state.planNotebook.getCurrentPlan() != null) {
-            String planName = state.planNotebook.getCurrentPlan().getName();
-            state.lastConfirmedPlanName = planName;
-            // Also notify ConfirmPlanToHint so it can suppress confirmation hints
-            if (state.confirmPlanToHint != null) {
-                state.confirmPlanToHint.setUserConfirmed(planName);
-            }
-        }
-    }
-
-    /**
-     * Called when the user clicks "不执行" (decline execution).
-     *
-     * @return Mono that completes after the plan has been abandoned
-     */
-    public Mono<Void> abandonPlan(String sessionId) {
-        SessionPlanState state = getOrCreateState(sessionId);
-        markUserConfirmed(sessionId);
-        if (state.planNotebook == null || state.planNotebook.getCurrentPlan() == null) {
-            return Mono.empty();
-        }
-        return state.planNotebook
-                .finishPlan("abandoned", "User declined execution via UI button")
-                .then();
+                response.getName() != null ? response.getName() : "(empty)");
     }
 
     /**
@@ -301,9 +232,6 @@ public class AnalysisPlanService {
         private final Sinks.Many<PlanResponse> planSink =
                 Sinks.many().multicast().onBackpressureBuffer();
         private volatile PlanNotebook planNotebook;
-        private volatile ConfirmPlanToHint confirmPlanToHint;
-        private volatile boolean confirmedByUser = false;
-        private volatile String lastConfirmedPlanName = null;
         private volatile PlanResponse lastRenderablePlan;
     }
 }

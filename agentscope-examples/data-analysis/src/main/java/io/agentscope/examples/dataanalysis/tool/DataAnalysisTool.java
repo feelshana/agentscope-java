@@ -20,6 +20,7 @@ import io.agentscope.core.tool.ToolParam;
 import io.agentscope.examples.dataanalysis.client.DataApiClient;
 import io.agentscope.examples.dataanalysis.dto.DatasetInfo;
 import io.agentscope.examples.dataanalysis.service.QueryResultCacheService;
+import io.agentscope.examples.dataanalysis.util.PerformanceMonitor;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -177,12 +178,15 @@ public class DataAnalysisTool {
                                             + " dataset")
                     String question) {
         log.info("[query_dataset] dataset_name={}, question={}", dataSetName, question);
+        long startTimeMs = System.currentTimeMillis();
         return dataApiClient
                 .queryDataset(dataSetName, question)
                 .map(this::stripMetadata)
                 .doOnNext(
                         result -> {
                             log.debug("[query_dataset] Result length={}", result.length());
+                            PerformanceMonitor.logToolCall(
+                                    sessionId, "query_dataset", startTimeMs, result.length());
                             // Cache all query results for troubleshooting
                             cacheQueryResult(dataSetName, question, result);
                         })
@@ -190,6 +194,8 @@ public class DataAnalysisTool {
                         e -> {
                             log.error("[query_dataset] Error querying dataset={}", dataSetName, e);
                             String errorMsg = "Error querying dataset: " + e.getMessage();
+                            PerformanceMonitor.logToolCall(
+                                    sessionId, "query_dataset", startTimeMs, errorMsg.length());
                             // Cache error result for troubleshooting
                             cacheQueryResult(dataSetName, question, errorMsg);
                             return Mono.just(errorMsg);

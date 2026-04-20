@@ -439,7 +439,8 @@ public class OpenAIResponseParser {
                     // Parse tool calls (in streaming, these come incrementally)
                     List<OpenAIToolCall> toolCalls = delta.getToolCalls();
                     if (toolCalls != null && !toolCalls.isEmpty()) {
-                        log.debug("Streaming tool calls detected: {}", toolCalls.size());
+                        //                        log.debug("Streaming tool calls detected: {}",
+                        // toolCalls.size());
 
                         for (OpenAIToolCall toolCall : toolCalls) {
                             if (toolCall.getFunction() != null) {
@@ -471,13 +472,16 @@ public class OpenAIResponseParser {
                                         arguments = "";
                                     }
 
-                                    log.debug(
-                                            "Streaming tool call chunk: id={}, name={},"
-                                                    + " arguments={}, signature={}",
-                                            toolCallId,
-                                            toolName,
-                                            arguments,
-                                            thoughtSignature != null ? "present" : "null");
+                                    //                                    log.debug(
+                                    //                                            "Streaming tool
+                                    // call chunk: id={}, name={},"
+                                    //                                                    + "
+                                    // arguments={}, signature={}",
+                                    //                                            toolCallId,
+                                    //                                            toolName,
+                                    //                                            arguments,
+                                    //                                            thoughtSignature
+                                    // != null ? "present" : "null");
 
                                     // For streaming, we get partial tool calls that need to be
                                     // accumulated
@@ -545,10 +549,13 @@ public class OpenAIResponseParser {
                                                         .metadata(metadata)
                                                         .build());
                                         if (!arguments.isEmpty()) {
-                                            log.debug(
-                                                    "Added argument fragment: {}",
-                                                    arguments.substring(
-                                                            0, Math.min(30, arguments.length())));
+                                            //                                            log.debug(
+                                            //
+                                            // "Added argument fragment: {}",
+                                            //
+                                            // arguments.substring(
+                                            //
+                                            //      0, Math.min(30, arguments.length())));
                                         }
                                         if (thoughtSignature != null) {
                                             log.debug("Added thought signature fragment");

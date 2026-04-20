@@ -64,9 +64,6 @@ public class DataApiClient {
     /** datasetName → agentId，由 listDatasets 调用后注册 */
     private final Map<String, String> datasetAgentIdMap = new ConcurrentHashMap<>();
 
-    /** datasetName → chatId，每个数据集维护一个独立的会话 */
-    private final Map<String, String> datasetChatIdMap = new ConcurrentHashMap<>();
-
     /** NLP 查询接口的 queryType，可在配置文件中修改（如 super_simple / plain 等） */
     private final String nlpQueryType;
 
@@ -321,8 +318,7 @@ public class DataApiClient {
                     dataSetName);
             return queryDatasetLegacy(dataSetName, question);
         }
-        return getOrCreateChatId(dataSetName)
-                .flatMap(chatId -> queryByNlp(agentId, chatId, question))
+        return queryByNlp(agentId, question)
                 .switchIfEmpty(
                         Mono.fromSupplier(
                                 () -> {
@@ -367,81 +363,14 @@ public class DataApiClient {
         }
     }
 
-    /** Reset chat session for all datasets. Used when agent is reset. */
-    public void resetChatSessions() {
-        datasetChatIdMap.clear();
-        log.info("[resetChatSessions] All chat sessions cleared");
-    }
-
     // ==================== Private: NLP Service ====================
 
     /**
-     * Get existing chatId for the dataset, or create a new one via {@code POST
-     * /api/chat/manage/save}.
-     */
-    private Mono<String> getOrCreateChatId(String datasetId) {
-        String existingChatId = datasetChatIdMap.get(datasetId);
-        if (existingChatId != null) {
-            log.debug(
-                    "[getOrCreateChatId] Reusing chatId={} for datasetName={}",
-                    existingChatId,
-                    datasetId);
-            return Mono.just(existingChatId);
-        }
-        String agentId = datasetAgentIdMap.get(datasetId);
-        return createChat(agentId)
-                .doOnNext(
-                        chatId -> {
-                            datasetChatIdMap.put(datasetId, chatId);
-                            log.info(
-                                    "[getOrCreateChatId] Created chatId={} for datasetName={}",
-                                    chatId,
-                                    datasetId);
-                        });
-    }
-
-    /**
-     * Call {@code POST /api/chat/manage/save} to create a new chat session. Parameters are passed
-     * as RequestParam (form style): chatName and agentId. The response body is a plain Long
-     * (chatId).
+     * Call {@code POST /api/chat/query/parseAndExecute} and extract the result.
      *
-     * @param agentId the agentId to associate with this chat session
-     */
-    private Mono<String> createChat(String agentId) {
-        log.debug("[createChat] Creating new chat session, agentId={}", agentId);
-        return nlpWebClient
-                .post()
-                .uri(
-                        uriBuilder ->
-                                uriBuilder
-                                        .path("/api/chat/manage/save")
-                                        .queryParam("chatName", "新问答对话")
-                                        .queryParam("agentId", agentId)
-                                        .build())
-                .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
-                .timeout(Duration.ofSeconds(10))
-                .map(
-                        body -> {
-                            Object data = body.get("data");
-                            if (data == null) {
-                                throw new RuntimeException(
-                                        "Received null data from /api/chat/manage/save, body="
-                                                + body);
-                            }
-                            return data.toString();
-                        })
-                .doOnNext(chatId -> log.debug("[createChat] Got chatId={}", chatId))
-                .doOnError(
-                        e ->
-                                log.error(
-                                        "[createChat] Failed to create chat session, agentId={}",
-                                        agentId,
-                                        e));
-    }
-
-    /**
-     * Call {@code POST /api/chat/query/parseAndExecute} and extract the result following the rules:
+     * <p>In {@code super_simple} queryType, the external NLP service does not require a chatId,
+     * so the chatId field is set to 0 (ignored by the service). This eliminates the need for
+     * the pre-creation of chat sessions via {@code /api/chat/manage/save}.
      *
      * <ol>
      *   <li>If {@code queryResults} is empty, the query produced no data rows:
@@ -457,26 +386,24 @@ public class DataApiClient {
      * </ol>
      *
      * @param agentId the agent responsible for this dataset
-     * @param chatId the current chat session id
      * @param question the natural-language question
      * @return a string the calling agent can use to either present results or reformulate the
      *     question
      */
-    private Mono<String> queryByNlp(String agentId, String chatId, String question) {
+    private Mono<String> queryByNlp(String agentId, String question) {
         Map<String, Object> requestBody =
                 Map.of(
                         "agentId",
                         Long.parseLong(agentId),
                         "chatId",
-                        Long.parseLong(chatId),
+                        0L,
                         "queryText",
                         question,
                         "queryType",
                         this.nlpQueryType);
         log.info(
-                "[queryByNlp] agentId={}, chatId={}, question={}, queryType={}",
+                "[queryByNlp] agentId={}, question={}, queryType={}",
                 agentId,
-                chatId,
                 question,
                 this.nlpQueryType);
         return nlpWebClient
