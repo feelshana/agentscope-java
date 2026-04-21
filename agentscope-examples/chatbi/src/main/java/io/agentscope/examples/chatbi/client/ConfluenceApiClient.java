@@ -17,11 +17,13 @@ package io.agentscope.examples.chatbi.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -48,11 +50,6 @@ public class ConfluenceApiClient {
     private final WebClient webClient;
     private final int searchLimit;
     private final boolean mockEnabled;
-
-    // Loaded once at startup from classpath:json/confluence_search.json
-    private final String mockSearchResult;
-
-    // Loaded once at startup from classpath:json/confluence_get_page.json
     // Key: pageId, Value: parsed page content string
     private final JsonNode mockPageData;
 
@@ -63,7 +60,6 @@ public class ConfluenceApiClient {
             @Value("${confluence.api.mock:false}") boolean mockEnabled) {
         this.searchLimit = searchLimit;
         this.mockEnabled = mockEnabled;
-        this.mockSearchResult = loadMockSearchResult();
         this.mockPageData = loadMockPageData();
         this.webClient =
                 WebClient.builder()
@@ -77,8 +73,6 @@ public class ConfluenceApiClient {
     }
 
 
-
-
     /**
      * Full-text search in Confluence, returns the raw JSON response body.
      *
@@ -90,7 +84,7 @@ public class ConfluenceApiClient {
     public Mono<String> searchRaw(String query) {
         if (mockEnabled) {
             log.info("[Confluence] Mock searchRaw query={}", query);
-            return Mono.just(mockSearchResult);
+            return Mono.just(loadMockSearchResult(query));
         }
         String body = "{\"query\": \"" + escapeJson(query) + "\", \"limit\": " + searchLimit + "}";
         return webClient
@@ -156,7 +150,7 @@ public class ConfluenceApiClient {
      */
     private JsonNode loadMockPageData() {
         try (InputStream is =
-                getClass().getClassLoader().getResourceAsStream("json/confluence_get_page.json")) {
+                     getClass().getClassLoader().getResourceAsStream("json/confluence_get_page.json")) {
             if (is == null) {
                 log.warn("[Confluence] Mock file not found: json/confluence_get_page.json");
                 return null;
@@ -176,9 +170,9 @@ public class ConfluenceApiClient {
      * File format: {@code {"status_code":200,"body":"{\"success\":true,\"data\":\"[...]\"}"}}
      * Returns the innermost data array string.
      */
-    private String loadMockSearchResult() {
+    private String loadMockSearchResult(String query) {
         try (InputStream is =
-                getClass().getClassLoader().getResourceAsStream("json/confluence_search.json")) {
+                     getClass().getClassLoader().getResourceAsStream("json/confluence_search.json")) {
             if (is == null) {
                 log.warn("[Confluence] Mock file not found: json/confluence_search.json");
                 return "[]";
@@ -186,7 +180,13 @@ public class ConfluenceApiClient {
             String fileContent = new String(is.readAllBytes(), StandardCharsets.UTF_8);
             // Parse outer wrapper: {"status_code":200,"body":"..."}
             JsonNode outer = JSON.readTree(fileContent);
-            String bodyStr = outer.path("body").asText();
+            JsonNode resoponse;
+            if (query.contains("权限")){
+                resoponse = outer.get("怎么申请权限");
+            }else {
+                resoponse = outer.get("自助取数任务如何提交");
+            }
+            String bodyStr = resoponse.path("body").asText();
             // Parse body: {"success":true,"data":"[...]"}
             JsonNode body = JSON.readTree(bodyStr);
             String data = body.path("data").asText();
@@ -200,6 +200,7 @@ public class ConfluenceApiClient {
             return "[]";
         }
     }
+
     private String extractDataField(String responseBody) {
         try {
             JsonNode root = JSON.readTree(responseBody);

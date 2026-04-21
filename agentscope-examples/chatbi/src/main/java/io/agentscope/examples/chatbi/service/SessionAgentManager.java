@@ -369,6 +369,7 @@ public class SessionAgentManager {
                         .memory(routerMemory)
                         .toolkit(routerToolkit)
                         .maxIters(5)  // Router only needs 1 routing decision
+                        .hook(new SubAgentCompleteHook()) // Stop iteration after sub-agent completes
                         .hook(new QueryRewriteHook(rewriteModel, rewritePrompt)) // priority=5
                         .hook(new ContextTrimHook())    // priority=10
                         .hook(new ChatLogHook(sessionId, null, routerSysPrompt)) // priority=900

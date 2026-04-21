@@ -26,6 +26,7 @@ import io.agentscope.core.model.ChatResponse;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -70,7 +71,23 @@ public class QueryRewriteHook implements Hook {
     private static final int MAX_HISTORY_TURNS = 5;
 
     /** Max timeout in seconds for the rewrite LLM call. */
-    private static final int REWRITE_TIMEOUT_SECONDS = 150;
+    private static final int REWRITE_TIMEOUT_SECONDS = 30;
+
+    /**
+     * Minimum question length (chars) for applying the independent-question heuristic.
+     * Short questions (e.g. "它多少钱") are more likely to contain implicit references.
+     */
+    private static final int MIN_LENGTH_FOR_HEURISTIC = 8;
+
+    /**
+     * Reference / anaphora keywords that indicate the question depends on conversation history.
+     * If the current question contains ANY of these, we always attempt rewriting.
+     */
+    private static final Set<String> REFERENCE_KEYWORDS = Set.of(
+            "它", "他", "她", "这个", "那个", "这些", "那些", "这里", "那里",
+            "上面", "上述", "前面", "之前", "刚才", "刚刚",
+            "再", "继续", "同样", "类似", "一样", "呢", "呢？",
+            "该", "此", "其", "其中", "相同");
 
     public QueryRewriteHook(ChatModelBase rewriteModel, String rewriteSystemPrompt) {
         this.rewriteModel = rewriteModel;
@@ -111,6 +128,14 @@ public class QueryRewriteHook implements Hook {
         boolean hasHistory = hasConversationHistory(messages, lastUserIdx);
         if (!hasHistory) {
             log.debug("[QueryRewriteHook] First turn, skipping rewrite.");
+            return Mono.just(event);
+        }
+
+        // Fast-path: if the question looks self-contained (no reference keywords and long enough),
+        // skip the LLM rewrite call entirely to save latency.
+        if (isLikelyIndependent(currentQuestion)) {
+            log.debug("[QueryRewriteHook] Question looks independent, skipping rewrite: '{}'",
+                    currentQuestion.length() > 30 ? currentQuestion.substring(0, 30) + "..." : currentQuestion);
             return Mono.just(event);
         }
 
@@ -195,6 +220,23 @@ public class QueryRewriteHook implements Hook {
             }
         }
         return -1;
+    }
+
+    /**
+     * Returns true when the question is likely self-contained and does NOT need rewriting.
+     * Heuristic: no reference keywords present AND question is long enough to be independent.
+     */
+    private static boolean isLikelyIndependent(String question) {
+        if (question.length() < MIN_LENGTH_FOR_HEURISTIC) {
+            // Short questions are more likely to be implicit references
+            return false;
+        }
+        for (String keyword : REFERENCE_KEYWORDS) {
+            if (question.contains(keyword)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private boolean hasConversationHistory(List<Msg> messages, int lastUserIdx) {

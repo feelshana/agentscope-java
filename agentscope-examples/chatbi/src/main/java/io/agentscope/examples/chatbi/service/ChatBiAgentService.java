@@ -28,6 +28,8 @@ import io.agentscope.core.model.ModelException;
 import io.agentscope.examples.chatbi.dto.ChatRequest;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.atomic.AtomicReference;
@@ -176,18 +178,30 @@ public class ChatBiAgentService implements InitializingBean {
 
         return entry.agent.stream(userMsg, buildStreamOptions())
                 .subscribeOn(Schedulers.boundedElastic())
-                .map(
+                .flatMap(
                         event -> {
+                            // Sub-agent final answer: split into small chunks for typewriter effect
+                            if (isSubAgentFinalAnswerEvent(event)) {
+                                String fullText = extractSubAgentText(event);
+                                if (fullText == null || fullText.isBlank()) {
+                                    return Flux.empty();
+                                }
+                                replyBuf.get().append(fullText);
+                                // Chunk the full text into segments (≈4 chars each) with a tiny delay
+                                List<String> chunks = splitIntoChunks(fullText, 4);
+                                return Flux.fromIterable(chunks)
+                                        .delayElements(Duration.ofMillis(15));
+                            }
+                            // Normal event: convert to string and pass through
                             String chunk = eventToString(event);
                             // Tool progress markers ([TOOL:xxx]) and thinking content ([THINKING]...)
                             // are streamed for real-time display but NOT included in the saved assistant reply
                             if (!chunk.isEmpty()
-                                    && !"[STOPPED]".equals(chunk)
                                     && !chunk.startsWith("[TOOL:")
                                     && !chunk.startsWith("[THINKING]")) {
                                 replyBuf.get().append(chunk);
                             }
-                            return chunk;
+                            return Flux.just(chunk);
                         })
                 .filter(text -> !text.isEmpty())
                 .onErrorResume(
@@ -300,10 +314,9 @@ public class ChatBiAgentService implements InitializingBean {
 
     private String eventToString(Event event) {
         if (event.getType() == EventType.AGENT_RESULT) {
-            Msg msg = event.getMessage();
-            if (msg != null && msg.getGenerateReason() == GenerateReason.ACTING_STOP_REQUESTED) {
-                return "[STOPPED]";
-            }
+            // Sub-agent final answer events are handled by the flatMap in chat() before
+            // reaching here (isSubAgentFinalAnswerEvent check). For all other AGENT_RESULT
+            // events (normal finish or HITL stop), return empty string.
             return "";
         }
         // Tool result completion: emit progress marker for frontend real-time display
@@ -337,6 +350,61 @@ public class ChatBiAgentService implements InitializingBean {
             return textBlocks.get(0).getText();
         }
         return "";
+    }
+
+    /**
+     * Returns true when the AGENT_RESULT event carries a sub-agent final answer
+     * (i.e. the stop was triggered by {@link SubAgentCompleteHook}).
+     */
+    private static boolean isSubAgentFinalAnswerEvent(Event event) {
+        if (event.getType() != EventType.AGENT_RESULT) return false;
+        Msg msg = event.getMessage();
+        if (msg == null) return false;
+        if (msg.getGenerateReason() != GenerateReason.ACTING_STOP_REQUESTED) return false;
+        return Boolean.TRUE.equals(
+                msg.getMetadata().get(SubAgentCompleteHook.METADATA_SUB_AGENT_FINAL_ANSWER));
+    }
+
+    /**
+     * Extracts the plain text from the sub-agent's ToolResultBlock,
+     * stripping the "session_id: xxx\n\n" prefix injected by SubAgentTool.buildResult().
+     */
+    private static String extractSubAgentText(Event event) {
+        Msg msg = event.getMessage();
+        if (msg == null) return null;
+        List<ToolResultBlock> blocks = msg.getContentBlocks(ToolResultBlock.class);
+        if (blocks.isEmpty()) return null;
+        String toolText = blocks.get(0).getOutput().stream()
+                .filter(b -> b instanceof TextBlock)
+                .map(b -> ((TextBlock) b).getText())
+                .reduce("", String::concat);
+        if (toolText == null || toolText.isBlank()) return null;
+        int contentStart = toolText.indexOf("\n\n");
+        return contentStart >= 0 ? toolText.substring(contentStart + 2) : toolText;
+    }
+
+    /**
+     * Splits a string into chunks of at most {@code chunkSize} Unicode code-points each.
+     * Iterates over chars directly (handling surrogate pairs) to avoid allocating a full int[] array.
+     */
+    private static List<String> splitIntoChunks(String text, int chunkSize) {
+        List<String> result = new ArrayList<>();
+        int len = text.length();
+        StringBuilder sb = new StringBuilder(chunkSize * 2);
+        int cpCount = 0;
+        for (int i = 0; i < len; ) {
+            int cp = text.codePointAt(i);
+            sb.appendCodePoint(cp);
+            cpCount++;
+            i += Character.charCount(cp);
+            if (cpCount >= chunkSize) {
+                result.add(sb.toString());
+                sb.setLength(0);
+                cpCount = 0;
+            }
+        }
+        if (sb.length() > 0) result.add(sb.toString());
+        return result;
     }
 
     /**
