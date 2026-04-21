@@ -105,7 +105,7 @@ public class StreamStateManager {
     public StreamChunk addChunk(String sessionId, StreamChunk chunk) {
         SessionStreamState state = states.get(sessionId);
         if (state == null) {
-            log.warn("No stream state found for session={}", sessionId);
+            log.debug("No stream state found for session={}", sessionId);
             return null;
         }
         return state.addChunk(chunk);

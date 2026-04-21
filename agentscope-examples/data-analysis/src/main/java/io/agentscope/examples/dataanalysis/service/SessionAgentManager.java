@@ -23,6 +23,7 @@ import io.agentscope.core.model.OpenAIChatModel;
 import io.agentscope.core.plan.PlanNotebook;
 import io.agentscope.core.plan.hint.DefaultPlanToHint;
 import io.agentscope.core.tool.Toolkit;
+import io.agentscope.core.tool.ToolkitConfig;
 import io.agentscope.examples.dataanalysis.client.DataApiClient;
 import io.agentscope.examples.dataanalysis.tool.DataAnalysisTool;
 import java.util.List;
@@ -137,7 +138,9 @@ public class SessionAgentManager {
     private SessionEntry createEntry(String sessionId, String userName) {
         InMemoryMemory memory = new InMemoryMemory();
 
-        Toolkit toolkit = new Toolkit();
+        // Enable parallel tool execution: when the LLM outputs multiple query_dataset calls
+        // in a single turn, they will be executed concurrently instead of sequentially.
+        Toolkit toolkit = new Toolkit(ToolkitConfig.builder().parallel(true).build());
         toolkit.registerTool(
                 new DataAnalysisTool(dataApiClient, sessionId, userName, queryResultCacheService));
 

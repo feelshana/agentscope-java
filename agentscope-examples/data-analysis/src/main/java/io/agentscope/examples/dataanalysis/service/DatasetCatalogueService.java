@@ -437,6 +437,10 @@ public class DatasetCatalogueService implements InitializingBean {
         if (includeDetail && detailFileContent != null && !detailFileContent.isBlank()) {
             sb.append("\n\n---\n")
                     .append("## Dataset Field Details (维度、指标、维度值定义)\n")
+                    .append("**⚠️ 使用说明**：以下详情仅供字段查阅，制定分析计划时请遵守：\n")
+                    .append("1. 严格根据用户问题中提到的指标/维度判断最相关的数据集，**不要因为多个数据集都包含相似字段就同时查询**；\n")
+                    .append("2. 优先选择 **1 个**最匹配的数据集；仅当用户问题明确涉及多个数据集的对比分析时，才创建多数据集子任务；\n")
+                    .append("3. 有疑问时选字段覆盖度最高的那一个，而非全部都查。\n\n")
                     .append(detailFileContent);
         }
 

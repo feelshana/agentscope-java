@@ -94,7 +94,7 @@ SuperSonic 只负责把 queryText 转 SQL 并执行，不做分析。
 - 禁止调用 `create_plan`
 
 #### D. 精确取数型 — 轻量流程
-执行顺序：`get_dataset_detail`（若无历史详情）→ `query_dataset` → 按 §6A 输出
+执行顺序：`get_dataset_detail`（若无历史详情）→ `query_dataset` → 按 6A 输出
 > **绝对禁止调用 `create_plan`，否则会错误触发执行确认弹窗。**
 
 #### E. 分析洞察型 — 完整流程

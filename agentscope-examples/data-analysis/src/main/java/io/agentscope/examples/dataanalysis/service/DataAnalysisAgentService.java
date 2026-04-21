@@ -296,7 +296,9 @@ public class DataAnalysisAgentService implements InitializingBean {
         StreamChunkType type = StreamChunkType.TEXT;
         if ("[STOPPED]".equals(chunk)) {
             type = StreamChunkType.TEXT; // Will be filtered out by replyBuf logic
-        } else if (chunk.startsWith("[TOOL:")) {
+        } else if (chunk.startsWith("[TOOL:")
+                || chunk.startsWith("[TOOL_START:")
+                || chunk.startsWith("[TOOL_END:")) {
             type = StreamChunkType.TOOL_STATUS;
         }
 

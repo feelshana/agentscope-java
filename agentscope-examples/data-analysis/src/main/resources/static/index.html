@@ -655,6 +655,10 @@
             animation: spinLoader 0.8s linear infinite;
         }
         @keyframes spinLoader { to { transform: rotate(360deg); } }
+        @keyframes waitIconPulse {
+            0%,100% { opacity: 1; transform: scale(1) rotate(0deg); }
+            50%      { opacity: 0.5; transform: scale(0.82) rotate(18deg); }
+        }
         .subtask-body { flex: 1; min-width: 0; }
         .subtask-name { font-weight: 500; color: var(--text); font-size: 0.83rem; margin-bottom: 2px; }
         .subtask-desc { font-size: 0.72rem; color: var(--text-sub); }
@@ -2080,34 +2084,54 @@
         function showQueryWaitCard() {
             if (queryWaitActive || !assistantEl) return;
             queryWaitActive = true;
-            queryWaitSecs = 0;
             const content = assistantEl.querySelector('.message-content');
             if (!content) return;
-            // Remove any stale card first
             const old = content.querySelector('#queryWaitCard');
             if (old) old.remove();
+
+            // Detect whether subtasks are currently running to choose appropriate text/icon
+            const _hasPlanRunning = document.getElementById('drawerHint')
+                && document.getElementById('drawerHint').classList.contains('hint-running');
+
             const card = document.createElement('div');
             card.id = 'queryWaitCard';
             card.style.cssText =
-                'display:flex;align-items:center;gap:10px;margin-top:8px;'
-                + 'padding:9px 14px;background:var(--surface2);border:1px solid var(--border);'
-                + 'border-radius:var(--radius-sm);font-size:0.8rem;color:var(--text-hint);';
-            card.innerHTML =
-                '<div style="width:13px;height:13px;flex-shrink:0;border:2px solid var(--border);'
-                + 'border-top-color:var(--primary);border-radius:50%;'
-                + 'animation:spinLoader 0.7s linear infinite;"></div>'
-                + '<span id="queryWaitText">🤔 正在思考… 00:00</span>';
+                'display:inline-flex;align-items:center;gap:7px;margin-top:6px;'
+                + 'padding:7px 14px;background:var(--surface2);border:1px solid var(--border);'
+                + 'border-radius:20px;font-size:0.8rem;color:var(--text-sub);';
+
+            const dots =
+                '<span style="display:inline-flex;gap:3px;align-items:center;margin-left:1px;">'
+                + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite;"></span>'
+                + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite 0.2s;"></span>'
+                + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite 0.4s;"></span>'
+                + '</span>';
+
+            if (_hasPlanRunning) {
+                // Sub-task query in progress — show "querying" hint
+                card.innerHTML =
+                    '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;animation:waitIconPulse 1.8s ease-in-out infinite;">'
+                    + '<circle cx="11" cy="11" r="7" stroke="#f97316" stroke-width="2"/>'
+                    + '<path d="M20 20l-3-3" stroke="#f97316" stroke-width="2" stroke-linecap="round"/>'
+                    + '<path d="M11 8v3l2 2" stroke="#f97316" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>'
+                    + '</svg>'
+                    + '<span>正在努力查询中，请稍等</span>'
+                    + dots;
+            } else {
+                // LLM reasoning pause — show "thinking" hint
+                card.innerHTML =
+                    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;animation:waitIconPulse 1.8s ease-in-out infinite;">'
+                    + '<path d="M12 2l2.09 6.26L20 10l-5.91 1.74L12 18l-2.09-6.26L4 10l5.91-1.74L12 2z" fill="#f97316" opacity="0.9"/>'
+                    + '<path d="M19 15l1.09 3.26L23 19l-2.91.74L19 23l-1.09-3.26L15 19l2.91-.74L19 15z" fill="#f97316" opacity="0.7"/>'
+                    + '<path d="M5 3l.73 2.27L8 6l-2.27.73L5 9l-.73-2.27L2 6l2.27-.73L5 3z" fill="#f97316" opacity="0.55"/>'
+                    + '</svg>'
+                    + '<span>正在思考，请稍等</span>'
+                    + dots;
+            }
+
             content.appendChild(card);
             queryWaitEl = card;
             if (!streamingUserScrolledUp) document.getElementById('chatMessages').scrollTop = 99999;
-            // Tick every second to update elapsed time
-            queryWaitTimer = setInterval(() => {
-                queryWaitSecs++;
-                const m = String(Math.floor(queryWaitSecs / 60)).padStart(2, '0');
-                const s = String(queryWaitSecs % 60).padStart(2, '0');
-                const el = document.getElementById('queryWaitText');
-                if (el) el.textContent = `🤔 正在思考… ${m}:${s}`;
-            }, 1000);
         }
 
         function clearQueryWaitCard() {
@@ -2336,19 +2360,41 @@
                 if (chunkData.type === 'TOOL_STATUS') {
                     // Handle tool status marker — show context-aware status message
                     const content = chunkData.content || '';
-                    if (/^\[TOOL:[^\]]+\]$/.test(content)) {
-                        const toolName = content.slice(6, -1);
-                        const label = toolName === 'create_plan'       ? '📝 正在创建分析任务…'
-                                    : toolName === 'query_dataset'     ? '📊 正在向数据服务查询…'
-                                    : toolName === 'finish_subtask'    ? '✅ 数据查询完成，正在整理…'
-                                    : toolName === 'finish_plan'       ? '✅ 分析计划执行完成'
-                                    : toolName === 'update_subtask_state' ? '🔄 更新任务状态…'
-                                    : toolName === 'view_subtasks'     ? '📋 查看子任务…'
-                                    : toolName === 'get_subtask_count' ? '📋 确认任务数量…'
-                                    : toolName === 'list_datasets'     ? '⚙️ 正在发现可用数据集…'
-                                    : `⚙️ ${toolName}…`;
+                    // Support both old [TOOL:xxx] and new [TOOL_START:xxx] / [TOOL_END:xxx]
+                    const oldMatch  = content.match(/^\[TOOL:([^\]]+)\]$/);
+                    const startMatch = content.match(/^\[TOOL_START:([^\]]+)\]$/);
+                    const endMatch  = content.match(/^\[TOOL_END:([^\]]+)\]$/);
+                    const toolName = (oldMatch || startMatch || endMatch)?.[1] || null;
+
+                    if (toolName) {
+                        const isEnd = !!endMatch;
+
+                        // Build human-readable label with SVG icon
+                        const svgQuery  = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;"><circle cx="11" cy="11" r="7" stroke="var(--primary)" stroke-width="2"/><path d="M20 20l-3-3" stroke="var(--primary)" stroke-width="2" stroke-linecap="round"/></svg>';
+                        const svgPlan   = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" stroke="var(--primary)" stroke-width="2" stroke-linecap="round"/><rect x="9" y="3" width="6" height="4" rx="1" stroke="var(--primary)" stroke-width="2"/></svg>';
+                        const svgCheck  = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;"><path d="M5 13l4 4L19 7" stroke="var(--primary)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+                        const svgGear   = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;"><circle cx="12" cy="12" r="3" stroke="var(--primary)" stroke-width="2"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="var(--primary)" stroke-width="2" stroke-linecap="round"/></svg>';
+
+                        const labelMap = {
+                            'create_plan':          [svgPlan,  '正在创建分析任务'],
+                            'query_dataset':        [svgQuery, isEnd ? '数据查询完成，准备生成' : '正在向数据服务查询'],
+                            'finish_subtask':       [svgCheck, '数据查询完成，正在整理'],
+                            'finish_plan':          [svgCheck, '分析计划执行完成'],
+                            'update_subtask_state': [svgGear,  '更新任务状态'],
+                            'view_subtasks':        [svgPlan,  '查看子任务'],
+                            'get_subtask_count':    [svgPlan,  '确认任务数量'],
+                            'list_datasets':        [svgGear,  '正在发现可用数据集'],
+                        };
+                        const [icon, text] = labelMap[toolName] || [svgGear, toolName];
+                        const dots = isEnd ? '' :
+                            '<span style="display:inline-flex;gap:3px;align-items:center;margin-left:1px;">'
+                            + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite;"></span>'
+                            + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite 0.2s;"></span>'
+                            + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite 0.4s;"></span>'
+                            + '</span>';
+
                         clearQueryWaitCard();
-                        if (toolName === 'query_dataset') pendingChartLoading = true;
+                        if (toolName === 'query_dataset' && !isEnd) pendingChartLoading = true;
                         if (!assistantEl) { removeTyping(typingEl); assistantEl = appendMessage('assistant', ''); }
                         if (streamingContext) streamingContext.assistantEl = assistantEl;
                         const msgContent = assistantEl.querySelector('.message-content');
@@ -2356,10 +2402,17 @@
                         if (!statusEl) {
                             statusEl = document.createElement('div');
                             statusEl.id = 'toolStatusLine';
-                            statusEl.style.cssText = 'font-size:0.8rem;color:var(--text-hint);margin:4px 0 2px;display:flex;align-items:center;gap:6px;';
+                            statusEl.style.cssText =
+                                'display:inline-flex;align-items:center;gap:7px;margin-top:6px;'
+                                + 'padding:7px 14px;background:var(--surface2);border:1px solid var(--border);'
+                                + 'border-radius:20px;font-size:0.8rem;color:var(--text-sub);';
                             msgContent.appendChild(statusEl);
                         }
-                        statusEl.textContent = label;
+                        statusEl.innerHTML = icon + '<span>' + text + '</span>' + dots;
+                        // Remove the status line once a tool END is received (real content follows soon)
+                        if (isEnd) {
+                            setTimeout(() => { if (statusEl.parentNode) statusEl.remove(); }, 600);
+                        }
                         if (!streamingUserScrolledUp) document.getElementById('chatMessages').scrollTop = 99999;
                     }
                     return;
@@ -2419,8 +2472,10 @@
                 if (inReportStream) {
                     // Start with text part only; report block will be created on first content chunk
                     content.innerHTML = textNode +
-                        `<div class="loading-indicator" id="msgLoadingIndicator">
-                            <div class="loading-spinner"></div>生成分析报告中…
+                        `<div style="display:inline-flex;align-items:center;gap:7px;margin-top:6px;padding:7px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;font-size:0.8rem;color:var(--text-sub);" id="msgLoadingIndicator">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" stroke="var(--primary)" stroke-width="2" stroke-linecap="round"/><rect x="9" y="3" width="6" height="4" rx="1" stroke="var(--primary)" stroke-width="2"/><path d="M9 12h6M9 16h4" stroke="var(--primary)" stroke-width="1.5" stroke-linecap="round"/></svg>
+                            <span>生成分析报告中</span>
+                            <span style="display:inline-flex;gap:3px;align-items:center;"><span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite;"></span><span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite 0.2s;"></span><span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite 0.4s;"></span></span>
                         </div>`;
                     // Keep scroll at bottom – smooth scroll to conclusion text is disorienting
                     if (!streamingUserScrolledUp) document.getElementById('chatMessages').scrollTop = 99999;
@@ -2432,11 +2487,12 @@
                         renderReportStream(rawSoFar);
                     }
                 } else {
-                    // Chart block: show spinner; the loading text will be updated in real time
-                    // (per-chunk KB counter) by the inSpecialBlock branch below.
+                    // Chart block: show spinner; replaced when chart actually streams in.
                     content.innerHTML = textNode +
-                        `<div class="loading-indicator" id="msgLoadingIndicator">
-                            <div class="loading-spinner"></div><span id="chartLoadingText">正在生成图表…</span>
+                        `<div style="display:inline-flex;align-items:center;gap:7px;margin-top:6px;padding:7px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;font-size:0.8rem;color:var(--text-sub);" id="msgLoadingIndicator">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;"><rect x="3" y="12" width="4" height="9" rx="1" fill="var(--primary)" opacity="0.9"/><rect x="10" y="7" width="4" height="14" rx="1" fill="var(--primary)" opacity="0.7"/><rect x="17" y="3" width="4" height="18" rx="1" fill="var(--primary)" opacity="0.5"/></svg>
+                            <span id="chartLoadingText">正在生成图表</span>
+                            <span style="display:inline-flex;gap:3px;align-items:center;"><span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite;"></span><span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite 0.2s;"></span><span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite 0.4s;"></span></span>
                         </div>`;
                     if (!streamingUserScrolledUp) document.getElementById('chatMessages').scrollTop = 99999;
                 }
@@ -2475,27 +2531,23 @@
                                         const waitCard = document.createElement('div');
                                         waitCard.id = 'chartWaitingCard';
                                         waitCard.style.cssText =
-                                            'display:flex;align-items:center;gap:10px;'
-                                            + 'margin-top:16px;padding:12px 16px;'
-                                            + 'background:linear-gradient(135deg,rgba(79,110,247,0.06) 0%,rgba(6,182,212,0.05) 100%);'
-                                            + 'border:1px solid rgba(79,110,247,0.18);border-radius:10px;'
-                                            + 'font-size:0.82rem;color:var(--primary);';
+                                            'display:inline-flex;align-items:center;gap:7px;'
+                                            + 'margin-top:12px;padding:7px 14px;'
+                                            + 'background:var(--surface2);border:1px solid var(--border);'
+                                            + 'border-radius:20px;font-size:0.8rem;color:var(--text-sub);';
                                         waitCard.innerHTML =
-                                            // 旋转加载圈
-                                            '<div style="width:16px;height:16px;flex-shrink:0;border:2.5px solid rgba(79,110,247,0.2);'
-                                            + 'border-top-color:#4f6ef7;border-radius:50%;'
-                                            + 'animation:spinLoader 0.7s linear infinite;"></div>'
-                                            // 图表 emoji + 文字
-                                            + '<span id="chartWaitingText" style="font-weight:500;">&#x1F4CA; 正在绘制图表，请稍候…</span>';
+                                            '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;">'
+                                            + '<rect x="3" y="12" width="4" height="9" rx="1" fill="var(--primary)" opacity="0.9"/>'
+                                            + '<rect x="10" y="7" width="4" height="14" rx="1" fill="var(--primary)" opacity="0.7"/>'
+                                            + '<rect x="17" y="3" width="4" height="18" rx="1" fill="var(--primary)" opacity="0.5"/>'
+                                            + '</svg>'
+                                            + '<span id="chartWaitingText">正在绘制图表</span>'
+                                            + '<span style="display:inline-flex;gap:3px;align-items:center;">'
+                                            + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite;"></span>'
+                                            + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite 0.2s;"></span>'
+                                            + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite 0.4s;"></span>'
+                                            + '</span>';
                                         _reportBlock.appendChild(waitCard);
-                                        // 动态点动画
-                                        let _wDots = 0;
-                                        window._chartWaitTimer = setInterval(() => {
-                                            const el = document.getElementById('chartWaitingText');
-                                            if (!el) { clearInterval(window._chartWaitTimer); return; }
-                                            _wDots = (_wDots + 1) % 4;
-                                            el.innerHTML = '&#x1F4CA; 正在绘制图表，请稍候' + '．'.repeat(_wDots);
-                                        }, 400);
                                         if (!streamingUserScrolledUp) {
                                             requestAnimationFrame(() => {
                                                 document.getElementById('chatMessages').scrollTop = 99999;
@@ -2530,26 +2582,23 @@
                                     const waitCard = document.createElement('div');
                                     waitCard.id = 'chartWaitingCard';
                                     waitCard.style.cssText =
-                                        'display:flex;align-items:center;gap:10px;'
-                                        + 'margin-top:16px;padding:12px 16px;'
-                                        + 'background:linear-gradient(135deg,rgba(79,110,247,0.06) 0%,rgba(6,182,212,0.05) 100%);'
-                                        + 'border:1px solid rgba(79,110,247,0.18);border-radius:10px;'
-                                        + 'font-size:0.82rem;color:var(--primary);';
+                                        'display:inline-flex;align-items:center;gap:7px;'
+                                        + 'margin-top:12px;padding:7px 14px;'
+                                        + 'background:var(--surface2);border:1px solid var(--border);'
+                                        + 'border-radius:20px;font-size:0.8rem;color:var(--text-sub);';
                                     waitCard.innerHTML =
-                                        '<div style="width:16px;height:16px;flex-shrink:0;border:2.5px solid rgba(79,110,247,0.2);'
-                                        + 'border-top-color:#4f6ef7;border-radius:50%;'
-                                        + 'animation:spinLoader 0.7s linear infinite;"></div>'
-                                        + '<span id="chartWaitingText" style="font-weight:500;">&#x1F4CA; 正在绘制图表，请稍候…</span>';
+                                        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;">'
+                                        + '<rect x="3" y="12" width="4" height="9" rx="1" fill="var(--primary)" opacity="0.9"/>'
+                                        + '<rect x="10" y="7" width="4" height="14" rx="1" fill="var(--primary)" opacity="0.7"/>'
+                                        + '<rect x="17" y="3" width="4" height="18" rx="1" fill="var(--primary)" opacity="0.5"/>'
+                                        + '</svg>'
+                                        + '<span id="chartWaitingText">正在绘制图表</span>'
+                                        + '<span style="display:inline-flex;gap:3px;align-items:center;">'
+                                        + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite;"></span>'
+                                        + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite 0.2s;"></span>'
+                                        + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite 0.4s;"></span>'
+                                        + '</span>';
                                     _rb.appendChild(waitCard);
-                                    if (!window._chartWaitTimer) {
-                                        let _wDots = 0;
-                                        window._chartWaitTimer = setInterval(() => {
-                                            const el2 = document.getElementById('chartWaitingText');
-                                            if (!el2) { clearInterval(window._chartWaitTimer); return; }
-                                            const kb2 = chartInner ? (chartInner[1].replace(/<\/chart>[\s\S]*/i, '').length / 1024).toFixed(1) : '0.0';
-                                            el2.innerHTML = '&#x1F4CA; 正在绘制图表，请稍候…';
-                                        }, 400);
-                                    }
                                     if (!streamingUserScrolledUp) {
                                         requestAnimationFrame(() => {
                                             document.getElementById('chatMessages').scrollTop = 99999;
@@ -2579,43 +2628,52 @@
             clearQueryWaitCard();
             updateLastMessage(assistantEl, assistantText);
 
-            // ── Start debounce: if text stream goes silent for 2s and we're not inside a
-            // special block, assume the LLM has called query_dataset and is waiting.
-            // Reset the debounce on every text chunk so it only fires when truly silent.
-            if (!inSpecialBlock && !pendingChartLoading) {
-                if (queryWaitDebounce) clearTimeout(queryWaitDebounce);
-                queryWaitDebounce = setTimeout(() => {
-                    queryWaitDebounce = null;
-                    showQueryWaitCard();
-                }, 2000);
+            // ── Start debounce: if text stream goes silent and we're not inside a
+            // special block, show a wait hint.
+            // When subtasks are running, use a shorter 1s debounce and allow it even if
+            // pendingChartLoading is true (chart won't appear immediately after subtask queries).
+            // Otherwise use 2s debounce and only when not already expecting a chart.
+            if (!inSpecialBlock) {
+                const _planRunning = document.getElementById('drawerHint')
+                    && document.getElementById('drawerHint').classList.contains('hint-running');
+                const _debounceMs = _planRunning ? 1000 : 2000;
+                if (_planRunning || !pendingChartLoading) {
+                    if (queryWaitDebounce) clearTimeout(queryWaitDebounce);
+                    queryWaitDebounce = setTimeout(() => {
+                        queryWaitDebounce = null;
+                        showQueryWaitCard();
+                    }, _debounceMs);
+                }
             }
 
             // If query_dataset already finished and the LLM is now outputting conclusion text,
-            // show a "generating chart…" bar at the bottom of the bubble so the user knows
-            // a chart is coming. This prevents the chart from hard-popping in with no warning.
-            if (pendingChartLoading && assistantEl) {
+            // show a "generating chart…" bar ONLY when there is no active plan running.
+            // When subtasks are running, the bottom hint strip already shows progress;
+            // showing "generating chart" here would be misleading and redundant.
+            const _hasPlanRunning = document.getElementById('drawerHint')
+                && document.getElementById('drawerHint').classList.contains('hint-running');
+            if (pendingChartLoading && assistantEl && !_hasPlanRunning) {
                 const content = assistantEl.querySelector('.message-content');
                 if (content && !content.querySelector('#preChartLoadingBar')) {
                     const bar = document.createElement('div');
                     bar.id = 'preChartLoadingBar';
                     bar.style.cssText =
-                        'display:flex;align-items:center;gap:8px;margin-top:8px;'
-                        + 'padding:8px 12px;background:var(--surface2);border:1px solid var(--border);'
-                        + 'border-radius:var(--radius-sm);font-size:0.78rem;color:var(--text-hint);';
+                        'display:inline-flex;align-items:center;gap:7px;margin-top:6px;'
+                        + 'padding:7px 14px;background:var(--surface2);border:1px solid var(--border);'
+                        + 'border-radius:20px;font-size:0.8rem;color:var(--text-sub);';
                     bar.innerHTML =
-                        '<div style="width:12px;height:12px;flex-shrink:0;border:2px solid var(--border);'
-                        + 'border-top-color:var(--primary);border-radius:50%;'
-                        + 'animation:spinLoader 0.7s linear infinite;"></div>'
-                        + '<span id="preChartText">📊 正在生成图表…</span>';
+                        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;">'
+                        + '<rect x="3" y="12" width="4" height="9" rx="1" fill="var(--primary)" opacity="0.9"/>'
+                        + '<rect x="10" y="7" width="4" height="14" rx="1" fill="var(--primary)" opacity="0.7"/>'
+                        + '<rect x="17" y="3" width="4" height="18" rx="1" fill="var(--primary)" opacity="0.5"/>'
+                        + '</svg>'
+                        + '<span id="preChartText">正在生成图表</span>'
+                        + '<span style="display:inline-flex;gap:3px;align-items:center;">'
+                        + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite;"></span>'
+                        + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite 0.2s;"></span>'
+                        + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite 0.4s;"></span>'
+                        + '</span>';
                     content.appendChild(bar);
-                    // Animate dots
-                    let _preDots = 0;
-                    window._preChartTimer = setInterval(() => {
-                        const el = document.getElementById('preChartText');
-                        if (!el) { clearInterval(window._preChartTimer); return; }
-                        _preDots = (_preDots + 1) % 4;
-                        el.textContent = '📊 正在生成图表' + '．'.repeat(_preDots);
-                    }, 400);
                 }
             }
         };
@@ -3793,6 +3851,9 @@
             if (hintTextEl) hintTextEl.textContent = '🔄 正在生成任务计划…';
         } else if (isRunning) {
             if (hintTextEl) hintTextEl.textContent = `⚙️ 子任务执行中（${doneCount}/${total}）`;
+            // Remove any "generating chart" bar that may have appeared before subtasks started
+            const _preChartBar = document.querySelector('#preChartLoadingBar');
+            if (_preChartBar) _preChartBar.remove();
         } else {
             if (hintTextEl) hintTextEl.textContent = '📋 任务计划已生成，点击查看';
         }
