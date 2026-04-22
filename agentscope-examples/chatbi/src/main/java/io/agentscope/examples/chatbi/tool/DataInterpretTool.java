@@ -17,66 +17,63 @@ package io.agentscope.examples.chatbi.tool;
 
 import io.agentscope.core.tool.Tool;
 import io.agentscope.core.tool.ToolParam;
+import io.agentscope.examples.chatbi.client.ReportDataApiClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 /**
- * Tool for data interpretation (数据解读), a sub-type of the {@code da} intent.
+ * Tools for data interpretation — a sub-type of the {@code da} intent.
  *
- * <p>When the user says "请解读当前数据" or "帮我分析这份数据", the frontend passes the
- * chart/table data as a {@code param} JSON string in the request. This tool formats
- * that raw data into a structured context for the LLM to produce analytical insights.
+ * <p>Provides two ways to get data for interpretation:
+ * <ul>
+ *   <li>{@link #interpretChartData} — uses chart data passed from the frontend via {@code param}</li>
+ *   <li>{@link #queryReportData} — fetches raw data from the report API using {@code reportId}</li>
+ * </ul>
  *
- * <p>Unlike {@code DataQueryTool} which fetches new data from SuperSonic, this tool
- * operates on data that is already present in the frontend and passed via the request.
+ * <p>Unlike {@code DataQueryAgentTool} which queries SuperSonic datasets, these tools
+ * operate on data that is already rendered in the frontend or associated with a report.
  */
 public class DataInterpretTool {
 
     private static final Logger log = LoggerFactory.getLogger(DataInterpretTool.class);
 
-    /** Per-session chart data injected at session creation (from request.param). */
     private final String chartParam;
+    private final String reportId;
+    private final String easyBiSession;
+    private final ReportDataApiClient reportDataClient;
 
-    public DataInterpretTool(String chartParam) {
+    public DataInterpretTool(String chartParam, String reportId, String easyBiSession, ReportDataApiClient reportDataClient) {
         this.chartParam = chartParam;
+        this.reportId = reportId;
+        this.easyBiSession = easyBiSession;
+        this.reportDataClient = reportDataClient;
     }
 
+
     /**
-     * Interpret chart or table data that is currently displayed on the frontend.
-     * Wraps the raw data and user's analysis focus into a structured prompt context.
+     * Fetch raw data for a report via the getPureData4ChatBI endpoint.
+     * Use this when the user asks to interpret the current report's data
+     * and a reportId is available from context.
      *
-     * @param analysisAngle specific angle or question the user wants analyzed
-     * @return formatted data context for LLM interpretation
+     * @return the report's raw data as JSON, or an error message if reportId is unavailable
      */
     @Tool(
-            name = "interpret_chart_data",
+            name = "query_report_data",
             description =
-                    "Interpret and analyze chart/table data that the user is currently viewing. Use"
-                        + " this tool when the user says '请解读当前数据', '帮我分析这份数据', '这个数据说明了什么', or"
-                        + " similar requests to analyze displayed data. The tool returns the raw"
-                        + " data in a structured format for you to analyze.")
-    public Mono<String> interpretChartData(
-            @ToolParam(
-                            name = "analysis_angle",
-                            description =
-                                    "The specific aspect or angle the user wants analyzed. "
-                                            + "E.g., '趋势分析', '异常点', '同比变化', '整体表现'. "
-                                            + "If the user did not specify, use '整体数据解读'.")
-                    String analysisAngle) {
-        log.info("[interpret_chart_data] analysisAngle={}", analysisAngle);
-        if (chartParam == null || chartParam.isBlank()) {
-            return Mono.just("未获取到当前图表数据，请确认前端已正确传递 param 参数。");
+                    "Fetch raw data for the report the user is currently viewing. "
+                            + "Use this when the user says '解读当前数据', '解读当前报表数据', "
+                            + "'分析三月数据' or similar requests to analyze report data. "
+                            + "The tool calls the report data API and returns the raw data "
+                            + "in a structured format for interpretation. "
+                            + "Call this tool BEFORE analyzing the data.")
+    public Mono<String> queryReportData() {
+        log.info("[query_report_data] reportId={}", reportId);
+        if (reportId == null || reportId.isBlank()) {
+            return Mono.just(
+                    "未提供报表ID（reportId），无法查询报表数据。"
+                            + "请确认用户正在查看某张报表，或让前端传递 reportId 参数。");
         }
-        String context =
-                "【当前图表/数据内容】\n"
-                        + chartParam
-                        + "\n\n"
-                        + "【分析角度】\n"
-                        + analysisAngle
-                        + "\n\n"
-                        + "请根据以上数据内容，从指定角度进行深度分析和解读，"
-                        + "识别趋势、异常、关键指标变化，并给出业务洞察和建议。";
-        return Mono.just(context);
+        return reportDataClient.getReportData(reportId, easyBiSession,chartParam);
     }
 }

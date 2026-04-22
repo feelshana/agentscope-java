@@ -48,6 +48,8 @@ public class ChatRequest {
     /** SuperSonic auth token, passed per-request from frontend. */
     private String supersonicToken;
 
+    private String easyBiSession;
+
     /**
      * Chart/table data payload for "请解读当前数据" requests.
      * Contains the frontend's current chart data as JSON string.
@@ -142,5 +144,13 @@ public class ChatRequest {
 
     public void setParam(String param) {
         this.param = param;
+    }
+
+    public String getEasyBiSession() {
+        return easyBiSession;
+    }
+
+    public void setEasyBiSession(String easyBiSession) {
+        this.easyBiSession = easyBiSession;
     }
 }

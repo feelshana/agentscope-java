@@ -530,6 +530,7 @@ let chartCounter = 0;
 let planConfirmBubble = null;  // the AI bubble that contains the confirm bar (legacy, kept for compat)
 let planEventSource = null;    // SSE connection for plan updates
 let taskBoardExpanded = false; // task board collapsed by default
+let cachedPlanName = '';       // cached plan name, survives heartbeat messages that don't carry it
 
 // ─── Init ───
 loadConfig();
@@ -667,6 +668,7 @@ function switchSession(id) {
     hidePlanConfirmOverlay();
     clearTaskBoard();
     planConfirmBubble = null;
+    cachedPlanName = '';
     // Re-subscribe SSE for the new session
     subscribePlanStream();
     fetch(`/api/chatbi/sessions/${id}/messages`)
@@ -683,6 +685,7 @@ function newChat() {
     hidePlanConfirmOverlay();
     clearTaskBoard();
     planConfirmBubble = null;
+    cachedPlanName = '';
     // Re-subscribe SSE for the new session
     subscribePlanStream();
     closeSidebar();
@@ -910,6 +913,12 @@ function handlePlanUpdate(plan) {
     // Update task board regardless of confirm state
     updateTaskBoard(plan);
 
+    // Heartbeat may send an empty plan (no subtasks) while still waiting for user
+    if (plan && plan.waitingForUser) {
+        showPlanConfirmOverlay(plan);
+        return;
+    }
+
     if (!plan || !plan.subtasks || plan.subtasks.length === 0) {
         hidePlanConfirmOverlay();
         return;
@@ -926,11 +935,14 @@ function showPlanConfirmOverlay(plan) {
     const overlay = document.getElementById('planConfirmOverlay');
     const title = document.getElementById('planConfirmTitle');
     if (!overlay) return;
-    const planName = plan.name ? `「${plan.name}」` : '执行计划';
+    // Plan may be empty (heartbeat) while waitingForUser=true — use cached name or fallback
+    const planName = plan.name ? `「${plan.name}」` : (cachedPlanName ? `「${cachedPlanName}」` : '执行计划');
     title.textContent = `📋 AI 已生成${planName}，是否确认执行？`;
     document.getElementById('planExecuteBtn').disabled = false;
     document.getElementById('planAbandonBtn').disabled = false;
     overlay.style.display = 'flex';
+    // Cache plan name for heartbeat messages that don't carry it
+    if (plan.name) cachedPlanName = plan.name;
     // Auto-expand task board so user can see the plan
     expandTaskBoard();
     scrollToBottom();

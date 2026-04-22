@@ -43,6 +43,9 @@ public class ChatBiPlanService {
     private final Map<String, Boolean> confirmedByUser = new ConcurrentHashMap<>();
     private final Map<String, String> lastConfirmedPlanName = new ConcurrentHashMap<>();
 
+    /** Tracks whether execution is paused waiting for user confirmation. */
+    private final Map<String, Boolean> waitingForUser = new ConcurrentHashMap<>();
+
     /**
      * Register a PlanNotebook for a session.
      */
@@ -51,6 +54,7 @@ public class ChatBiPlanService {
         planSinks.put(sessionId, Sinks.many().multicast().onBackpressureBuffer());
         confirmedByUser.put(sessionId, false);
         lastConfirmedPlanName.put(sessionId, ""); // ConcurrentHashMap does not allow null values
+        waitingForUser.put(sessionId, false);
         log.info("Registered PlanNotebook for session={}", sessionId);
     }
 
@@ -65,6 +69,7 @@ public class ChatBiPlanService {
         }
         confirmedByUser.remove(sessionId);
         lastConfirmedPlanName.remove(sessionId);
+        waitingForUser.remove(sessionId);
         log.info("Unregistered PlanNotebook for session={}", sessionId);
     }
 
@@ -83,8 +88,17 @@ public class ChatBiPlanService {
         if (sink == null) {
             return Flux.empty();
         }
+        // Heartbeat carries the current waiting-for-user state so the frontend
+        // always knows whether to show the waiting indicator.
         Flux<PlanResponse> heartbeat =
-                Flux.interval(Duration.ofSeconds(25)).map(tick -> new PlanResponse());
+                Flux.interval(Duration.ofSeconds(25))
+                        .map(
+                                tick -> {
+                                    PlanResponse hb = new PlanResponse();
+                                    hb.setWaitingForUser(
+                                            waitingForUser.getOrDefault(sessionId, false));
+                                    return hb;
+                                });
         return Flux.concat(
                 Mono.fromCallable(
                         () -> {
@@ -140,15 +154,20 @@ public class ChatBiPlanService {
             boolean shouldShowConfirm = allTodo && notebookNeedsConfirm && !confirmed;
             if (shouldShowConfirm) {
                 lastConfirmedPlanName.put(sessionId, planName != null ? planName : "");
+                waitingForUser.put(sessionId, true);
+            } else if (anyStarted || planName == null || planName.isBlank()) {
+                waitingForUser.put(sessionId, false);
             }
             response.setNeedConfirm(shouldShowConfirm);
+            response.setWaitingForUser(waitingForUser.getOrDefault(sessionId, false));
         }
         sink.tryEmitNext(response);
         log.debug(
-                "Plan broadcast for session={}: {}, needConfirm={}",
+                "Plan broadcast for session={}: {}, needConfirm={}, waitingForUser={}",
                 sessionId,
                 response.getName() != null ? response.getName() : "(empty)",
-                response.isNeedConfirm());
+                response.isNeedConfirm(),
+                response.isWaitingForUser());
     }
 
     /**
@@ -156,6 +175,7 @@ public class ChatBiPlanService {
      */
     public void markUserConfirmed(String sessionId) {
         confirmedByUser.put(sessionId, true);
+        waitingForUser.put(sessionId, false);
         PlanNotebook planNotebook = planNotebooks.get(sessionId);
         if (planNotebook != null && planNotebook.getCurrentPlan() != null) {
             String planName = planNotebook.getCurrentPlan().getName();

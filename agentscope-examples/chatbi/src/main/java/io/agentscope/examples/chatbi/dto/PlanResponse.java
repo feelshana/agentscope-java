@@ -35,6 +35,9 @@ public class PlanResponse {
     /** True when the plan was just created and all subtasks are still TODO – frontend shows confirm buttons. */
     private boolean needConfirm;
 
+    /** True when execution is paused waiting for user confirmation. */
+    private boolean waitingForUser;
+
     public PlanResponse() {
         this.subtasks = new ArrayList<>();
     }
@@ -123,5 +126,13 @@ public class PlanResponse {
 
     public void setNeedConfirm(boolean needConfirm) {
         this.needConfirm = needConfirm;
+    }
+
+    public boolean isWaitingForUser() {
+        return waitingForUser;
+    }
+
+    public void setWaitingForUser(boolean waitingForUser) {
+        this.waitingForUser = waitingForUser;
     }
 }

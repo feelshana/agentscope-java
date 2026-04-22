@@ -19,6 +19,7 @@ import io.agentscope.core.ReActAgent;
 import io.agentscope.core.memory.InMemoryMemory;
 import io.agentscope.core.plan.PlanNotebook;
 import io.agentscope.core.tool.Toolkit;
+import io.agentscope.examples.chatbi.client.ReportDataApiClient;
 import io.agentscope.examples.chatbi.client.SupersonicApiClient;
 import io.agentscope.examples.chatbi.service.ChatBiPlanService;
 import io.agentscope.examples.chatbi.service.ChatLogHook;
@@ -43,14 +44,18 @@ public class DataQueryAgentFactory implements SubAgentFactory {
 
     private final SupersonicApiClient supersonicClient;
     private final ChatBiPlanService planService;
+    private final ReportDataApiClient reportDataClient;
 
     private String sysPrompt;
 
     @Autowired
     public DataQueryAgentFactory(
-            SupersonicApiClient supersonicClient, ChatBiPlanService planService) {
+            SupersonicApiClient supersonicClient,
+            ChatBiPlanService planService,
+            ReportDataApiClient reportDataClient) {
         this.supersonicClient = supersonicClient;
         this.planService = planService;
+        this.reportDataClient = reportDataClient;
     }
 
     /** Called by {@code SessionAgentManager.configure()} after prompts are loaded. */
@@ -62,7 +67,9 @@ public class DataQueryAgentFactory implements SubAgentFactory {
     public ReActAgent create(AgentContext ctx) {
         DataQueryAgentTool dataQueryAgentTool =
                 new DataQueryAgentTool(supersonicClient, ctx.agentId());
-        DataInterpretTool dataInterpretTool = new DataInterpretTool(ctx.chartParam());
+        DataInterpretTool dataInterpretTool =
+                new DataInterpretTool(
+                        ctx.chartParam(), ctx.reportId(), ctx.easyBiSession(), reportDataClient);
 
         Toolkit toolkit = new Toolkit();
         toolkit.registerTool(dataQueryAgentTool);

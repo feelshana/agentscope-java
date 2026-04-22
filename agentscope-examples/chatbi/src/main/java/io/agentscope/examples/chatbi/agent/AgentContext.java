@@ -33,6 +33,7 @@ import io.agentscope.core.model.OpenAIChatModel;
  * @param dashboardId     Dashboard ID from the original chat request (used by ReportScheduleAgent).
  * @param chartParam      Chart/visualization param from the original chat request (used by DataInterpretTool).
  * @param projectId       Project / tenant ID from the original chat request (used by DataLineageTool).
+ * @param easyBiSession   EasyBi session ID from the original chat request (used by DataLineageTool).
  */
 public record AgentContext(
         String sessionId,
@@ -43,4 +44,5 @@ public record AgentContext(
         String reportId,
         String dashboardId,
         String chartParam,
-        String projectId) {}
+        String projectId,
+        String easyBiSession) {}

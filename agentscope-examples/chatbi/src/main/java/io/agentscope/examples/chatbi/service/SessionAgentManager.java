@@ -248,7 +248,8 @@ public class SessionAgentManager {
                         req.getReportId(),
                         req.getDashboardId(),
                         req.getParam(),
-                        req.getProjectId());
+                        req.getProjectId(),
+                        req.getEasyBiSession());
 
         // ─────────────────────────────────────────────────────
         // Create sub-Agents via factories
