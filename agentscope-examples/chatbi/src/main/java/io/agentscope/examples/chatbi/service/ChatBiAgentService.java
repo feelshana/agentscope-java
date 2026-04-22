@@ -187,15 +187,18 @@ public class ChatBiAgentService implements InitializingBean {
                                     return Flux.empty();
                                 }
                                 replyBuf.get().append(fullText);
-                                // Chunk the full text into segments (≈4 chars each) with a tiny delay
+                                // Chunk the full text into segments (≈4 chars each) with a tiny
+                                // delay
                                 List<String> chunks = splitIntoChunks(fullText, 4);
                                 return Flux.fromIterable(chunks)
                                         .delayElements(Duration.ofMillis(15));
                             }
                             // Normal event: convert to string and pass through
                             String chunk = eventToString(event);
-                            // Tool progress markers ([TOOL:xxx]) and thinking content ([THINKING]...)
-                            // are streamed for real-time display but NOT included in the saved assistant reply
+                            // Tool progress markers ([TOOL:xxx]) and thinking content
+                            // ([THINKING]...)
+                            // are streamed for real-time display but NOT included in the saved
+                            // assistant reply
                             if (!chunk.isEmpty()
                                     && !chunk.startsWith("[TOOL:")
                                     && !chunk.startsWith("[THINKING]")) {
@@ -336,7 +339,8 @@ public class ChatBiAgentService implements InitializingBean {
         }
         // Extract thinking content from ThinkingBlock (reasoning_content)
         // Mark with [THINKING] prefix for frontend to distinguish from regular text
-        List<ThinkingBlock> thinkingBlocks = event.getMessage().getContentBlocks(ThinkingBlock.class);
+        List<ThinkingBlock> thinkingBlocks =
+                event.getMessage().getContentBlocks(ThinkingBlock.class);
         if (!thinkingBlocks.isEmpty()) {
             String thinking = thinkingBlocks.get(0).getThinking();
             if (thinking != null && !thinking.isBlank()) {
@@ -374,10 +378,11 @@ public class ChatBiAgentService implements InitializingBean {
         if (msg == null) return null;
         List<ToolResultBlock> blocks = msg.getContentBlocks(ToolResultBlock.class);
         if (blocks.isEmpty()) return null;
-        String toolText = blocks.get(0).getOutput().stream()
-                .filter(b -> b instanceof TextBlock)
-                .map(b -> ((TextBlock) b).getText())
-                .reduce("", String::concat);
+        String toolText =
+                blocks.get(0).getOutput().stream()
+                        .filter(b -> b instanceof TextBlock)
+                        .map(b -> ((TextBlock) b).getText())
+                        .reduce("", String::concat);
         if (toolText == null || toolText.isBlank()) return null;
         int contentStart = toolText.indexOf("\n\n");
         return contentStart >= 0 ? toolText.substring(contentStart + 2) : toolText;

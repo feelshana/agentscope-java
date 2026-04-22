@@ -1,6 +1,5 @@
 package io.agentscope.examples.chatbi.config;
 
-
 import io.agentscope.core.rag.integration.dify.DifyKnowledge;
 import io.agentscope.core.rag.integration.dify.DifyRAGConfig;
 import io.agentscope.core.rag.integration.dify.RetrievalMode;
@@ -35,24 +34,21 @@ public class DifyCustomRAGConfig {
 
     @Bean
     public DifyKnowledge knowledge() {
-        DifyRAGConfig config = DifyRAGConfig.builder()
-                .apiBaseUrl(apiBaseUrl)
-                .apiKey(apiKey)
-                .datasetId(datasetId)
-                .retrievalMode(RetrievalMode.fromValue(retrievalMode))
-                .scoreThreshold(scoreThreshold)
-                .topK(topK)
-                .weights(weights)
-                .build();
-        return DifyKnowledge.builder()
-                .config(config).build();
+        DifyRAGConfig config =
+                DifyRAGConfig.builder()
+                        .apiBaseUrl(apiBaseUrl)
+                        .apiKey(apiKey)
+                        .datasetId(datasetId)
+                        .retrievalMode(RetrievalMode.fromValue(retrievalMode))
+                        .scoreThreshold(scoreThreshold)
+                        .topK(topK)
+                        .weights(weights)
+                        .build();
+        return DifyKnowledge.builder().config(config).build();
     }
 
     @Bean
     public RetrieveConfig retrieveConfig() {
-        return RetrieveConfig.builder()
-                .limit(topK)
-                .scoreThreshold(scoreThreshold)
-                .build();
+        return RetrieveConfig.builder().limit(topK).scoreThreshold(scoreThreshold).build();
     }
 }

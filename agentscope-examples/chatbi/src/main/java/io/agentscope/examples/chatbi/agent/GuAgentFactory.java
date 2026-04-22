@@ -20,6 +20,8 @@ import io.agentscope.core.memory.InMemoryMemory;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.examples.chatbi.client.ConfluenceApiClient;
 import io.agentscope.examples.chatbi.service.ChatLogHook;
+import io.agentscope.examples.chatbi.service.ContextTrimHook;
+import io.agentscope.examples.chatbi.service.PerfTimingHook;
 import io.agentscope.examples.chatbi.tool.ConfluenceFilterTool;
 import io.agentscope.examples.chatbi.tool.ConfluenceTool;
 import org.springframework.stereotype.Component;
@@ -53,17 +55,19 @@ public class GuAgentFactory implements SubAgentFactory {
 
         return ReActAgent.builder()
                 .name("GuAgent")
-                .description(
-                        "处理工具使用意图(gu)：大数据平台/红海分析云BI工具的使用方法、权限申请、报表订阅等操作类问题。")
+                .description("处理工具使用意图(gu)：大数据平台/红海分析云BI工具的使用方法、权限申请、报表订阅等操作类问题。")
                 .sysPrompt(sysPrompt)
                 .model(ctx.streamModel())
                 .memory(new InMemoryMemory())
                 .toolkit(toolkit)
-                .maxIters(10)
-                .hook(new ChatLogHook(
-                        ctx.sessionId() + "-gu",
-                        "【GuAgent】-> 处理工具使用意图(gu)：大数据平台/红海分析云BI工具的使用方法、权限申请、报表订阅等",
-                        sysPrompt))
+                .maxIters(5)
+                .hook(new ContextTrimHook()) // trim growing conversation memory
+                .hook(
+                        new ChatLogHook(
+                                ctx.sessionId() + "-gu",
+                                "【GuAgent】-> 处理工具使用意图(gu)：大数据平台/红海分析云BI工具的使用方法、权限申请、报表订阅等",
+                                sysPrompt))
+                .hook(new PerfTimingHook(ctx.sessionId() + "-gu", "GuAgent"))
                 .build();
     }
 }

@@ -50,7 +50,7 @@ public class ChatBiPlanService {
         planNotebooks.put(sessionId, planNotebook);
         planSinks.put(sessionId, Sinks.many().multicast().onBackpressureBuffer());
         confirmedByUser.put(sessionId, false);
-        lastConfirmedPlanName.put(sessionId, "");  // ConcurrentHashMap does not allow null values
+        lastConfirmedPlanName.put(sessionId, ""); // ConcurrentHashMap does not allow null values
         log.info("Registered PlanNotebook for session={}", sessionId);
     }
 

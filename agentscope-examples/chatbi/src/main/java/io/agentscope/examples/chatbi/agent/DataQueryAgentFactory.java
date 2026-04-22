@@ -25,6 +25,7 @@ import io.agentscope.examples.chatbi.service.ChatLogHook;
 import io.agentscope.examples.chatbi.service.ConfirmPlanToHint;
 import io.agentscope.examples.chatbi.service.ContextTrimHook;
 import io.agentscope.examples.chatbi.service.DataQueryDatasetInjectionHook;
+import io.agentscope.examples.chatbi.service.PerfTimingHook;
 import io.agentscope.examples.chatbi.tool.DataInterpretTool;
 import io.agentscope.examples.chatbi.tool.DataQueryAgentTool;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,7 +47,8 @@ public class DataQueryAgentFactory implements SubAgentFactory {
     private String sysPrompt;
 
     @Autowired
-    public DataQueryAgentFactory(SupersonicApiClient supersonicClient, ChatBiPlanService planService) {
+    public DataQueryAgentFactory(
+            SupersonicApiClient supersonicClient, ChatBiPlanService planService) {
         this.supersonicClient = supersonicClient;
         this.planService = planService;
     }
@@ -58,7 +60,8 @@ public class DataQueryAgentFactory implements SubAgentFactory {
 
     @Override
     public ReActAgent create(AgentContext ctx) {
-        DataQueryAgentTool dataQueryAgentTool = new DataQueryAgentTool(supersonicClient, ctx.agentId());
+        DataQueryAgentTool dataQueryAgentTool =
+                new DataQueryAgentTool(supersonicClient, ctx.agentId());
         DataInterpretTool dataInterpretTool = new DataInterpretTool(ctx.chartParam());
 
         Toolkit toolkit = new Toolkit();
@@ -67,10 +70,8 @@ public class DataQueryAgentFactory implements SubAgentFactory {
 
         // Configure PlanNotebook with user confirmation support
         ConfirmPlanToHint confirmPlanToHint = new ConfirmPlanToHint();
-        PlanNotebook planNotebook = PlanNotebook.builder()
-                .planToHint(confirmPlanToHint)
-                .needUserConfirm(true)
-                .build();
+        PlanNotebook planNotebook =
+                PlanNotebook.builder().planToHint(confirmPlanToHint).needUserConfirm(true).build();
         // Register the abandoned-plan detector
         confirmPlanToHint.registerWith(planNotebook);
 
@@ -78,17 +79,14 @@ public class DataQueryAgentFactory implements SubAgentFactory {
         planService.registerPlanNotebook(ctx.sessionId(), planNotebook);
         // Add change hook to broadcast plan changes
         planNotebook.addChangeHook(
-                "planBroadcast",
-                (nb, plan) -> planService.broadcastPlanChange(ctx.sessionId()));
+                "planBroadcast", (nb, plan) -> planService.broadcastPlanChange(ctx.sessionId()));
 
         DataQueryDatasetInjectionHook datasetInjectionHook =
                 new DataQueryDatasetInjectionHook(supersonicClient, sysPrompt, ctx.agentId());
 
         return ReActAgent.builder()
                 .name("DataQueryAgent")
-                .description(
-                        "处理问数(da)意图：生成查询计划、查询数据集、返回数据结果和数据解读。"
-                                + "支持精确取数、分析洞察和图表数据解读三种子类型。")
+                .description("处理问数(da)意图：生成查询计划、查询数据集、返回数据结果和数据解读。" + "支持精确取数、分析洞察和图表数据解读三种子类型。")
                 .sysPrompt(sysPrompt)
                 .model(ctx.streamModel())
                 .memory(new InMemoryMemory())
@@ -98,10 +96,12 @@ public class DataQueryAgentFactory implements SubAgentFactory {
                 .hook(new ContextTrimHook())
                 .hook(datasetInjectionHook)
                 .hook(confirmPlanToHint) // priority=50: runs before planHintHook(100)
-                .hook(new ChatLogHook(
-                        ctx.sessionId() + "-da",
-                        "【DataQueryAgent】-> 处理问数(da)意图：生成查询计划、查询数据集、返回数据结果和数据解读",
-                        sysPrompt))
+                .hook(
+                        new ChatLogHook(
+                                ctx.sessionId() + "-da",
+                                "【DataQueryAgent】-> 处理问数(da)意图：生成查询计划、查询数据集、返回数据结果和数据解读",
+                                sysPrompt))
+                .hook(new PerfTimingHook(ctx.sessionId() + "-da", "DataQueryAgent"))
                 .build();
     }
 }

@@ -18,6 +18,7 @@ package io.agentscope.examples.chatbi.agent;
 import io.agentscope.core.ReActAgent;
 import io.agentscope.core.memory.InMemoryMemory;
 import io.agentscope.examples.chatbi.service.ChatLogHook;
+import io.agentscope.examples.chatbi.service.PerfTimingHook;
 import org.springframework.stereotype.Component;
 
 /**
@@ -44,10 +45,12 @@ public class ChatAgentFactory implements SubAgentFactory {
                 .model(ctx.streamModel())
                 .memory(new InMemoryMemory())
                 .maxIters(3)
-                .hook(new ChatLogHook(
-                        ctx.sessionId() + "-ot",
-                        "【ChatAgent】-> 处理闲聊/无关意图(ot)：日常对话、通识问答，直接自然语言回复",
-                        sysPrompt))
+                .hook(
+                        new ChatLogHook(
+                                ctx.sessionId() + "-ot",
+                                "【ChatAgent】-> 处理闲聊/无关意图(ot)：日常对话、通识问答，直接自然语言回复",
+                                sysPrompt))
+                .hook(new PerfTimingHook(ctx.sessionId() + "-ot", "ChatAgent"))
                 .build();
     }
 }

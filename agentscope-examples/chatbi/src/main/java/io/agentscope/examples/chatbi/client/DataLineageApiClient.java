@@ -18,7 +18,6 @@ package io.agentscope.examples.chatbi.client;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -69,8 +68,8 @@ public class DataLineageApiClient {
 
     /** Fallback message when the lineage API is unreachable or returns invalid data. */
     static final String ERROR_MSG =
-            "你是红海chatBI问答小助手，你当前遇到了网络问题，请直接回复用户：" +
-            "抱歉，我遇到了一个网络问题，暂时无法处理您的请求。请稍后再试，或联系分析云团队获取帮助。感谢您的理解！";
+            "你是红海chatBI问答小助手，你当前遇到了网络问题，请直接回复用户："
+                    + "抱歉，我遇到了一个网络问题，暂时无法处理您的请求。请稍后再试，或联系分析云团队获取帮助。感谢您的理解！";
 
     private final WebClient webClient;
     private final String apiKey;
@@ -82,12 +81,15 @@ public class DataLineageApiClient {
             @Value("${data.lineage.api.timeout-seconds:60}") int timeoutSeconds) {
         this.apiKey = apiKey;
         this.timeoutSeconds = timeoutSeconds;
-        this.webClient = WebClient.builder()
-                .baseUrl(baseUrl)
-                .codecs(cfg -> cfg.defaultCodecs().maxInMemorySize(10 * 1024 * 1024))
-                .build();
-        log.info("DataLineageApiClient initialized, baseUrl={}, timeoutSeconds={}",
-                baseUrl, timeoutSeconds);
+        this.webClient =
+                WebClient.builder()
+                        .baseUrl(baseUrl)
+                        .codecs(cfg -> cfg.defaultCodecs().maxInMemorySize(10 * 1024 * 1024))
+                        .build();
+        log.info(
+                "DataLineageApiClient initialized, baseUrl={}, timeoutSeconds={}",
+                baseUrl,
+                timeoutSeconds);
     }
 
     /**
@@ -112,11 +114,13 @@ public class DataLineageApiClient {
         if (memory != null && !memory.isBlank()) {
             body.put("memory", memory);
         }
-        log.info("[DataLineageApiClient] queryLineage query={}, projectId={}, memoryLen={}",
-                query, projectId, memory == null ? 0 : memory.length());
+        log.info(
+                "[DataLineageApiClient] queryLineage query={}, projectId={}, memoryLen={}",
+                query,
+                projectId,
+                memory == null ? 0 : memory.length());
 
-
-        if (true){
+        if (true) {
             return Mono.just(loadMockSearchResult());
         }
 
@@ -130,11 +134,14 @@ public class DataLineageApiClient {
                 .bodyToMono(String.class)
                 .timeout(Duration.ofSeconds(timeoutSeconds))
                 .map(this::extractFinalPrompt)
-                .onErrorResume(e -> {
-                    log.error("[DataLineageApiClient] queryLineage error query={}: {}",
-                            query, e.getMessage());
-                    return Mono.just(ERROR_MSG);
-                });
+                .onErrorResume(
+                        e -> {
+                            log.error(
+                                    "[DataLineageApiClient] queryLineage error query={}: {}",
+                                    query,
+                                    e.getMessage());
+                            return Mono.just(ERROR_MSG);
+                        });
     }
 
     /**
@@ -152,13 +159,16 @@ public class DataLineageApiClient {
             Map<String, Object> parsed = JSON.readValue(responseBody, MAP_TYPE);
             Object fp = parsed.get("final_prompt");
             if (fp instanceof String finalPrompt && !finalPrompt.isBlank()) {
-                log.debug("[DataLineageApiClient] Extracted final_prompt length={}",
+                log.debug(
+                        "[DataLineageApiClient] Extracted final_prompt length={}",
                         finalPrompt.length());
                 return finalPrompt.strip();
             }
-            log.warn("[DataLineageApiClient] final_prompt missing or blank, snippet={}",
+            log.warn(
+                    "[DataLineageApiClient] final_prompt missing or blank, snippet={}",
                     responseBody.length() > 200
-                            ? responseBody.substring(0, 200) + "..." : responseBody);
+                            ? responseBody.substring(0, 200) + "..."
+                            : responseBody);
             return ERROR_MSG;
         } catch (Exception e) {
             log.error("[DataLineageApiClient] Failed to parse response: {}", e.getMessage());
@@ -166,10 +176,9 @@ public class DataLineageApiClient {
         }
     }
 
-
     private String loadMockSearchResult() {
         try (InputStream is =
-                     getClass().getClassLoader().getResourceAsStream("json/data_lineage.json")) {
+                getClass().getClassLoader().getResourceAsStream("json/data_lineage.json")) {
             if (is == null) {
                 log.warn("[DataLineage] Mock file not found: json/data_lineage.json");
                 return "[]";

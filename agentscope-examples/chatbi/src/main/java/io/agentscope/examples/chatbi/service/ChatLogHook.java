@@ -104,12 +104,14 @@ public class ChatLogHook implements Hook {
         if (iter == 0) {
             String agentName = extractAgentName(sessionId);
             if (agentDescription != null && !agentDescription.isBlank()) {
-                log.info("[AgentEnter] session={} agent={} -> {}",
-                        sessionId, agentName, agentDescription);
+                log.info(
+                        "[AgentEnter] session={} agent={} -> {}",
+                        sessionId,
+                        agentName,
+                        agentDescription);
             }
             if (sysPrompt != null && !sysPrompt.isBlank()) {
-                log.info("[SysPrompt] session={} agent={}\n{}",
-                        sessionId, agentName, sysPrompt);
+                log.info("[SysPrompt] session={} agent={}\n{}", sessionId, agentName, sysPrompt);
             }
         }
         StringBuilder sb = new StringBuilder();
@@ -197,8 +199,11 @@ public class ChatLogHook implements Hook {
                 String intentAgent = u.getName();
                 Object queryObj = u.getInput() == null ? null : u.getInput().get("query");
                 String query = queryObj == null ? "(no query param)" : queryObj.toString();
-                log.info("[RouterAgent] session={} intent_route={} query={}",
-                        sessionId, intentAgent, truncate(query));
+                log.info(
+                        "[RouterAgent] session={} intent_route={} query={}",
+                        sessionId,
+                        intentAgent,
+                        truncate(query));
             }
         }
 

@@ -18,9 +18,7 @@ package io.agentscope.examples.chatbi.client;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-
 import java.time.Duration;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -60,11 +58,12 @@ public class KnowledgeSearchClient {
             @Value("${knowledge.search.top-n:10}") int defaultTopN) {
         this.apiKey = apiKey;
         this.defaultTopN = defaultTopN;
-        this.webClient = WebClient.builder()
-                .baseUrl(baseUrl)
-                .defaultHeader("Authorization", "Bearer " + apiKey)
-                .codecs(cfg -> cfg.defaultCodecs().maxInMemorySize(10 * 1024 * 1024))
-                .build();
+        this.webClient =
+                WebClient.builder()
+                        .baseUrl(baseUrl)
+                        .defaultHeader("Authorization", "Bearer " + apiKey)
+                        .codecs(cfg -> cfg.defaultCodecs().maxInMemorySize(10 * 1024 * 1024))
+                        .build();
     }
 
     /**
@@ -96,12 +95,13 @@ public class KnowledgeSearchClient {
      * @param memoryJson    conversation history as JSON string (optional, can be null)
      * @return the {@code final_prompt} extracted from the response, or an error message
      */
-    public Mono<String> queryDocRepo(String query,
-                                     String questionType,
-                                     String projectId,
-                                     String reportName,
-                                     String dashboardName,
-                                     String memoryJson) {
+    public Mono<String> queryDocRepo(
+            String query,
+            String questionType,
+            String projectId,
+            String reportName,
+            String dashboardName,
+            String memoryJson) {
         ObjectNode body = JSON.createObjectNode();
         body.put("query", query);
         body.put("project_id", projectId != null ? projectId : "");
@@ -140,11 +140,14 @@ public class KnowledgeSearchClient {
                 .timeout(Duration.ofSeconds(30))
                 .retryWhen(Retry.backoff(2, Duration.ofMillis(100)))
                 .map(this::extractFinalPrompt)
-                .onErrorResume(e -> {
-                    log.error("[KnowledgeSearch] request error at {}: {}", uri, e.getMessage());
-                    return Mono.just(buildErrorResult(
-                            "抱歉，我暂时无法为您查询到相关知识，请稍后再试。"));
-                });
+                .onErrorResume(
+                        e -> {
+                            log.error(
+                                    "[KnowledgeSearch] request error at {}: {}",
+                                    uri,
+                                    e.getMessage());
+                            return Mono.just(buildErrorResult("抱歉，我暂时无法为您查询到相关知识，请稍后再试。"));
+                        });
     }
 
     /**
@@ -178,7 +181,9 @@ public class KnowledgeSearchClient {
                 }
             }
             // Fallback: return the entire response if it looks like a text result
-            return responseBody.length() > 2000 ? responseBody.substring(0, 2000) + "..." : responseBody;
+            return responseBody.length() > 2000
+                    ? responseBody.substring(0, 2000) + "..."
+                    : responseBody;
         } catch (Exception e) {
             log.warn("[KnowledgeSearch] Failed to extract final_prompt: {}", e.getMessage());
             return responseBody;

@@ -105,7 +105,8 @@ public class DataLineageMemoryService {
     @Transactional
     public void saveAssistantMessage(String sessionId, String assistantAnswer) {
         appendMessage(sessionId, "assistant", assistantAnswer);
-        log.debug("[DataLineageMemoryService] Appended assistant message for session={}", sessionId);
+        log.debug(
+                "[DataLineageMemoryService] Appended assistant message for session={}", sessionId);
     }
 
     // ─────────────────── Private helpers ───────────────────
@@ -141,8 +142,10 @@ public class DataLineageMemoryService {
         try {
             newContent = JSON.writeValueAsString(messages);
         } catch (JsonProcessingException e) {
-            log.error("[DataLineageMemoryService] Failed to serialize messages for session={}: {}",
-                    sessionId, e.getMessage());
+            log.error(
+                    "[DataLineageMemoryService] Failed to serialize messages for session={}: {}",
+                    sessionId,
+                    e.getMessage());
             return;
         }
 
@@ -167,8 +170,10 @@ public class DataLineageMemoryService {
         try {
             return JSON.readValue(content, LIST_TYPE);
         } catch (JsonProcessingException e) {
-            log.warn("[DataLineageMemoryService] Corrupted content for session={}, resetting: {}",
-                    sessionId, e.getMessage());
+            log.warn(
+                    "[DataLineageMemoryService] Corrupted content for session={}, resetting: {}",
+                    sessionId,
+                    e.getMessage());
             return new ArrayList<>();
         }
     }

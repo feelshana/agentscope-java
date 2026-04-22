@@ -22,6 +22,7 @@ import io.agentscope.examples.chatbi.client.DataLineageApiClient;
 import io.agentscope.examples.chatbi.service.ChatLogHook;
 import io.agentscope.examples.chatbi.service.DataLineageMemoryService;
 import io.agentscope.examples.chatbi.service.DataLineageRoundSaveHook;
+import io.agentscope.examples.chatbi.service.PerfTimingHook;
 import io.agentscope.examples.chatbi.tool.DataLineageTool;
 import org.springframework.stereotype.Component;
 
@@ -47,8 +48,7 @@ public class DataLineageAgentFactory implements SubAgentFactory {
     private final DataLineageMemoryService memoryService;
 
     public DataLineageAgentFactory(
-            DataLineageApiClient lineageClient,
-            DataLineageMemoryService memoryService) {
+            DataLineageApiClient lineageClient, DataLineageMemoryService memoryService) {
         this.lineageClient = lineageClient;
         this.memoryService = memoryService;
     }
@@ -56,11 +56,9 @@ public class DataLineageAgentFactory implements SubAgentFactory {
     @Override
     public ReActAgent create(AgentContext ctx) {
         Toolkit toolkit = new Toolkit();
-        toolkit.registerTool(new DataLineageTool(
-                lineageClient,
-                ctx.projectId(),
-                ctx.sessionId(),
-                memoryService));
+        toolkit.registerTool(
+                new DataLineageTool(
+                        lineageClient, ctx.projectId(), ctx.sessionId(), memoryService));
 
         return ReActAgent.builder()
                 .name("DataLineageAgent")
@@ -70,10 +68,12 @@ public class DataLineageAgentFactory implements SubAgentFactory {
                 .memory(new InMemoryMemory())
                 .toolkit(toolkit)
                 .maxIters(5)
-                .hook(new ChatLogHook(
-                        ctx.sessionId() + "-dl",
-                        "【DataLineageAgent】-> 处理数据血缘意图(dl)：查询数据血缘、上下游表依赖关系、工作流和运算元素依赖"))
+                .hook(
+                        new ChatLogHook(
+                                ctx.sessionId() + "-dl",
+                                "【DataLineageAgent】-> 处理数据血缘意图(dl)：查询数据血缘、上下游表依赖关系、工作流和运算元素依赖"))
                 .hook(new DataLineageRoundSaveHook(ctx.sessionId(), memoryService))
+                .hook(new PerfTimingHook(ctx.sessionId() + "-dl", "DataLineageAgent"))
                 .build();
     }
 }

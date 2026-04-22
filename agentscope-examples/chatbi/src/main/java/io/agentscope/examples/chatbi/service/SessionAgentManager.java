@@ -16,8 +16,8 @@
 package io.agentscope.examples.chatbi.service;
 
 import io.agentscope.core.ReActAgent;
-import io.agentscope.core.agent.StreamOptions;
 import io.agentscope.core.agent.EventType;
+import io.agentscope.core.agent.StreamOptions;
 import io.agentscope.core.formatter.openai.OpenAIChatFormatter;
 import io.agentscope.core.memory.InMemoryMemory;
 import io.agentscope.core.message.Msg;
@@ -40,7 +40,6 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -168,14 +167,14 @@ public class SessionAgentManager {
         configure(
                 apiKey,
                 baseUrl,
-                sysPrompt,           // routerSysPrompt
-                sysPrompt,           // dataQuerySysPrompt (overridden by service if files exist)
-                sysPrompt,           // knowledgeSysPrompt
-                sysPrompt,           // guSysPrompt
-                sysPrompt,           // reportQuerySysPrompt
-                sysPrompt,           // dataLineageSysPrompt
-                sysPrompt,           // reportScheduleSysPrompt
-                sysPrompt,           // chatSysPrompt
+                sysPrompt, // routerSysPrompt
+                sysPrompt, // dataQuerySysPrompt (overridden by service if files exist)
+                sysPrompt, // knowledgeSysPrompt
+                sysPrompt, // guSysPrompt
+                sysPrompt, // reportQuerySysPrompt
+                sysPrompt, // dataLineageSysPrompt
+                sysPrompt, // reportScheduleSysPrompt
+                sysPrompt, // chatSysPrompt
                 rewritePrompt);
     }
 
@@ -212,10 +211,7 @@ public class SessionAgentManager {
 
         // 自定义超时：120秒，不重试（减少长时间阻塞）
         ExecutionConfig modelExecConfig =
-                ExecutionConfig.builder()
-                        .timeout(Duration.ofSeconds(120))
-                        .maxAttempts(1)
-                        .build();
+                ExecutionConfig.builder().timeout(Duration.ofSeconds(120)).maxAttempts(1).build();
         GenerateOptions rewriteExecOptions =
                 GenerateOptions.builder().executionConfig(modelExecConfig).build();
         GenerateOptions streamExecOptions =
@@ -223,7 +219,7 @@ public class SessionAgentManager {
 
         // ── Build streaming model for QueryRewriteHook (streaming to avoid long blocking) ──
         OpenAIChatModel.Builder rewriteModelBuilder =
-                OpenAIChatModel.builder().apiKey(apiKey).modelName("qwen3.6-plus").stream(true)
+                OpenAIChatModel.builder().apiKey(apiKey).modelName("glm-5").stream(true)
                         .generateOptions(rewriteExecOptions)
                         .formatter(new OpenAIChatFormatter());
         if (baseUrl != null) {
@@ -233,7 +229,7 @@ public class SessionAgentManager {
 
         // ── Build streaming model (shared across all agents) ──
         OpenAIChatModel.Builder streamModelBuilder =
-                OpenAIChatModel.builder().apiKey(apiKey).modelName("qwen3.6-plus").stream(true)
+                OpenAIChatModel.builder().apiKey(apiKey).modelName("glm-5").stream(true)
                         .generateOptions(streamExecOptions)
                         .formatter(new OpenAIChatFormatter());
         if (baseUrl != null) {
@@ -242,16 +238,17 @@ public class SessionAgentManager {
         OpenAIChatModel streamModel = streamModelBuilder.build();
 
         // ── Build AgentContext for factories ──
-        AgentContext ctx = new AgentContext(
-                sessionId,
-                streamModel,
-                rewriteModel,
-                req.getSupersonicToken(),
-                req.getAgentId(),
-                req.getReportId(),
-                req.getDashboardId(),
-                req.getParam(),
-                req.getProjectId());
+        AgentContext ctx =
+                new AgentContext(
+                        sessionId,
+                        streamModel,
+                        rewriteModel,
+                        req.getSupersonicToken(),
+                        req.getAgentId(),
+                        req.getReportId(),
+                        req.getDashboardId(),
+                        req.getParam(),
+                        req.getProjectId());
 
         // ─────────────────────────────────────────────────────
         // Create sub-Agents via factories
@@ -305,8 +302,7 @@ public class SessionAgentManager {
                         () -> finalKnowledgeAgent,
                         SubAgentConfig.builder()
                                 .toolName("call_knowledge_agent")
-                                .description(
-                                        "调用知识库Agent处理in/bu意图：指标口径定义、业务知识和系统知识检索。")
+                                .description("调用知识库Agent处理in/bu意图：指标口径定义、业务知识和系统知识检索。")
                                 .forwardEvents(true)
                                 .streamOptions(forwardConfig.getStreamOptions())
                                 .build()));
@@ -325,8 +321,7 @@ public class SessionAgentManager {
                         () -> finalReportQueryAgent,
                         SubAgentConfig.builder()
                                 .toolName("call_report_query_agent")
-                                .description(
-                                        "调用报表Agent处理re意图：根据用户需求推荐合适的报表、仪表盘或大屏。")
+                                .description("调用报表Agent处理re意图：根据用户需求推荐合适的报表、仪表盘或大屏。")
                                 .forwardEvents(true)
                                 .streamOptions(forwardConfig.getStreamOptions())
                                 .build()));
@@ -335,8 +330,7 @@ public class SessionAgentManager {
                         () -> finalDataLineageAgent,
                         SubAgentConfig.builder()
                                 .toolName("call_data_lineage_agent")
-                                .description(
-                                        "调用血缘Agent处理dl意图：查询数据血缘、上下游表依赖、工作流依赖关系。")
+                                .description("调用血缘Agent处理dl意图：查询数据血缘、上下游表依赖、工作流依赖关系。")
                                 .forwardEvents(true)
                                 .streamOptions(forwardConfig.getStreamOptions())
                                 .build()));
@@ -345,8 +339,7 @@ public class SessionAgentManager {
                         () -> finalReportScheduleAgent,
                         SubAgentConfig.builder()
                                 .toolName("call_report_schedule_agent")
-                                .description(
-                                        "调用出数Agent处理cs意图：查询报表或仪表盘的数据刷新时间、出数时间点。")
+                                .description("调用出数Agent处理cs意图：查询报表或仪表盘的数据刷新时间、出数时间点。")
                                 .forwardEvents(true)
                                 .streamOptions(forwardConfig.getStreamOptions())
                                 .build()));
@@ -355,8 +348,7 @@ public class SessionAgentManager {
                         () -> finalChatAgent,
                         SubAgentConfig.builder()
                                 .toolName("call_chat_agent")
-                                .description(
-                                        "调用闲聊Agent处理ot意图：日常对话、通识问答，无需查询任何数据。")
+                                .description("调用闲聊Agent处理ot意图：日常对话、通识问答，无需查询任何数据。")
                                 .forwardEvents(true)
                                 .streamOptions(forwardConfig.getStreamOptions())
                                 .build()));
@@ -368,11 +360,13 @@ public class SessionAgentManager {
                         .model(streamModel)
                         .memory(routerMemory)
                         .toolkit(routerToolkit)
-                        .maxIters(5)  // Router only needs 1 routing decision
-                        .hook(new SubAgentCompleteHook()) // Stop iteration after sub-agent completes
+                        .maxIters(5) // Router only needs 1 routing decision
+                        .hook(new SubAgentCompleteHook()) // Stop iteration after sub-agent
+                        // completes
                         .hook(new QueryRewriteHook(rewriteModel, rewritePrompt)) // priority=5
-                        .hook(new ContextTrimHook())    // priority=10
+                        .hook(new ContextTrimHook()) // priority=10
                         .hook(new ChatLogHook(sessionId, null, routerSysPrompt)) // priority=900
+                        .hook(new PerfTimingHook(sessionId, "RouterAgent")) // priority=950
                         .build();
 
         log.info(

@@ -19,13 +19,12 @@ import io.agentscope.core.hook.Hook;
 import io.agentscope.core.hook.HookEvent;
 import io.agentscope.core.hook.PostActingEvent;
 import io.agentscope.core.message.Msg;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import reactor.core.publisher.Mono;
-
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;
 
 /**
  * Hook that stops RouterAgent iteration after sub-agent tool calls complete.
@@ -54,14 +53,14 @@ public class SubAgentCompleteHook implements Hook {
      * These are tools that return complete answers and don't require further processing.
      * Note: call_data_query_agent is NOT included because it may need plan confirmation.
      */
-    private static final Set<String> SUB_AGENT_TOOLS = Set.of(
-            "call_gu_agent",
-            "call_knowledge_agent",
-            "call_chat_agent",
-            "call_report_query_agent",
-            "call_report_schedule_agent",
-            "call_data_lineage_agent"
-    );
+    private static final Set<String> SUB_AGENT_TOOLS =
+            Set.of(
+                    "call_gu_agent",
+                    "call_knowledge_agent",
+                    "call_chat_agent",
+                    "call_report_query_agent",
+                    "call_report_schedule_agent",
+                    "call_data_lineage_agent");
 
     @Override
     public int priority() {
@@ -75,7 +74,8 @@ public class SubAgentCompleteHook implements Hook {
             String toolName = postActing.getToolUse().getName();
 
             if (SUB_AGENT_TOOLS.contains(toolName)) {
-                log.info("SubAgentCompleteHook: Stopping RouterAgent iteration after {} completes",
+                log.info(
+                        "SubAgentCompleteHook: Stopping RouterAgent iteration after {} completes",
                         toolName);
 
                 // Mark the toolResultMsg with a special metadata flag so that

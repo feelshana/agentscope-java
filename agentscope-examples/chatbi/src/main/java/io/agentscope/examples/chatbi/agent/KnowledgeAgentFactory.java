@@ -22,6 +22,7 @@ import io.agentscope.core.rag.model.RetrieveConfig;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.examples.chatbi.client.KnowledgeSearchClient;
 import io.agentscope.examples.chatbi.service.ChatLogHook;
+import io.agentscope.examples.chatbi.service.PerfTimingHook;
 import io.agentscope.examples.chatbi.tool.KnowledgeSearchTool;
 import org.springframework.stereotype.Component;
 
@@ -68,10 +69,12 @@ public class KnowledgeAgentFactory implements SubAgentFactory {
                 .retrieveConfig(retrieveConfig)
                 .toolkit(toolkit)
                 .maxIters(5)
-                .hook(new ChatLogHook(
-                        ctx.sessionId() + "-kb",
-                        "【KnowledgeAgent】-> 处理知识类意图(in/bu)：检索指标口径定义、业务知识和系统知识",
-                        sysPrompt))
+                .hook(
+                        new ChatLogHook(
+                                ctx.sessionId() + "-kb",
+                                "【KnowledgeAgent】-> 处理知识类意图(in/bu)：检索指标口径定义、业务知识和系统知识",
+                                sysPrompt))
+                .hook(new PerfTimingHook(ctx.sessionId() + "-kb", "KnowledgeAgent"))
                 .build();
     }
 }

@@ -20,6 +20,7 @@ import io.agentscope.core.memory.InMemoryMemory;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.examples.chatbi.client.ReportScheduleApiClient;
 import io.agentscope.examples.chatbi.service.ChatLogHook;
+import io.agentscope.examples.chatbi.service.PerfTimingHook;
 import io.agentscope.examples.chatbi.tool.ReportScheduleTool;
 import org.springframework.stereotype.Component;
 
@@ -46,8 +47,12 @@ public class ReportScheduleAgentFactory implements SubAgentFactory {
     @Override
     public ReActAgent create(AgentContext ctx) {
         Toolkit toolkit = new Toolkit();
-        toolkit.registerTool(new ReportScheduleTool(
-                reportScheduleApiClient, ctx.reportId(), ctx.dashboardId(), ctx.supersonicToken()));
+        toolkit.registerTool(
+                new ReportScheduleTool(
+                        reportScheduleApiClient,
+                        ctx.reportId(),
+                        ctx.dashboardId(),
+                        ctx.supersonicToken()));
 
         return ReActAgent.builder()
                 .name("ReportScheduleAgent")
@@ -57,10 +62,12 @@ public class ReportScheduleAgentFactory implements SubAgentFactory {
                 .memory(new InMemoryMemory())
                 .toolkit(toolkit)
                 .maxIters(5)
-                .hook(new ChatLogHook(
-                        ctx.sessionId() + "-cs",
-                        "【ReportScheduleAgent】-> 处理出数时间意图(cs)：查询报表或仪表盘的数据刷新时间、出数时间点",
-                        sysPrompt))
+                .hook(
+                        new ChatLogHook(
+                                ctx.sessionId() + "-cs",
+                                "【ReportScheduleAgent】-> 处理出数时间意图(cs)：查询报表或仪表盘的数据刷新时间、出数时间点",
+                                sysPrompt))
+                .hook(new PerfTimingHook(ctx.sessionId() + "-cs", "ReportScheduleAgent"))
                 .build();
     }
 }

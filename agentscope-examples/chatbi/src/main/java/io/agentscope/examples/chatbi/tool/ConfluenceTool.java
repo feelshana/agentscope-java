@@ -54,9 +54,10 @@ public class ConfluenceTool {
     @Tool(
             name = "search_confluence",
             description =
-                    "Search the Confluence knowledge base and return raw search results. "
-                            + "The result is a JSON array containing page objects with 'id', 'title', and 'content.value' fields. "
-                            + "Use this tool first to find relevant documentation pages.")
+                    "Search the Confluence knowledge base and return raw search results. The result"
+                            + " is a JSON array containing page objects with 'id', 'title', and"
+                            + " 'content.value' fields. Use this tool first to find relevant"
+                            + " documentation pages.")
     public Mono<String> search(
             @ToolParam(
                             name = "query",
@@ -82,14 +83,15 @@ public class ConfluenceTool {
     @Tool(
             name = "get_confluence_page",
             description =
-                    "Fetch the full content of Confluence page(s) by page ID. "
-                            + "Accepts a single page ID or comma-separated multiple IDs. "
-                            + "Use this tool after filtering search results to get detailed page content.")
+                    "Fetch the full content of Confluence page(s) by page ID. Accepts a single page"
+                            + " ID or comma-separated multiple IDs. Use this tool after filtering"
+                            + " search results to get detailed page content.")
     public Mono<String> getPage(
             @ToolParam(
                             name = "page_ids",
                             description =
-                                    "A single page ID or comma-separated multiple page IDs, e.g., '463681344' or '463681344,463693554'")
+                                    "A single page ID or comma-separated multiple page IDs, e.g.,"
+                                            + " '463681344' or '463681344,463693554'")
                     String pageIds) {
         log.info("[get_confluence_page] pageIds={}", pageIds);
 

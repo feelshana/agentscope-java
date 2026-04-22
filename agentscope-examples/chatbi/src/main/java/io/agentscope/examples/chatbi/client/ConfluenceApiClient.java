@@ -17,19 +17,16 @@ package io.agentscope.examples.chatbi.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
@@ -68,10 +65,11 @@ public class ConfluenceApiClient {
                         .codecs(cfg -> cfg.defaultCodecs().maxInMemorySize(10 * 1024 * 1024))
                         .build();
         if (mockEnabled) {
-            log.warn("[Confluence] Mock mode enabled, data from classpath:json/confluence_search.json & confluence_get_page.json");
+            log.warn(
+                    "[Confluence] Mock mode enabled, data from"
+                            + " classpath:json/confluence_search.json & confluence_get_page.json");
         }
     }
-
 
     /**
      * Full-text search in Confluence, returns the raw JSON response body.
@@ -114,7 +112,8 @@ public class ConfluenceApiClient {
             log.info("[Confluence] Mock fetchPage pageId={}", pageId);
             if (mockPageData != null && mockPageData.has(pageId)) {
                 try {
-                    // Parse: pageEntry["body"] -> {"success":true,"data":"{...}"} -> data content string
+                    // Parse: pageEntry["body"] -> {"success":true,"data":"{...}"} -> data content
+                    // string
                     String bodyStr = mockPageData.path(pageId).path("body").asText();
                     JsonNode bodyNode = JSON.readTree(bodyStr);
                     String data = bodyNode.path("data").asText();
@@ -122,7 +121,10 @@ public class ConfluenceApiClient {
                         return Mono.just(data);
                     }
                 } catch (Exception e) {
-                    log.warn("[Confluence] Failed to parse mock page {}: {}", pageId, e.getMessage());
+                    log.warn(
+                            "[Confluence] Failed to parse mock page {}: {}",
+                            pageId,
+                            e.getMessage());
                 }
             }
             log.warn("[Confluence] Mock page not found for pageId={}", pageId);
@@ -150,14 +152,16 @@ public class ConfluenceApiClient {
      */
     private JsonNode loadMockPageData() {
         try (InputStream is =
-                     getClass().getClassLoader().getResourceAsStream("json/confluence_get_page.json")) {
+                getClass().getClassLoader().getResourceAsStream("json/confluence_get_page.json")) {
             if (is == null) {
                 log.warn("[Confluence] Mock file not found: json/confluence_get_page.json");
                 return null;
             }
             String fileContent = new String(is.readAllBytes(), StandardCharsets.UTF_8);
             JsonNode root = JSON.readTree(fileContent);
-            log.info("[Confluence] Loaded mock page data from confluence_get_page.json ({} pages)", root.size());
+            log.info(
+                    "[Confluence] Loaded mock page data from confluence_get_page.json ({} pages)",
+                    root.size());
             return root;
         } catch (Exception e) {
             log.error("[Confluence] Failed to load mock page file: {}", e.getMessage());
@@ -172,7 +176,7 @@ public class ConfluenceApiClient {
      */
     private String loadMockSearchResult(String query) {
         try (InputStream is =
-                     getClass().getClassLoader().getResourceAsStream("json/confluence_search.json")) {
+                getClass().getClassLoader().getResourceAsStream("json/confluence_search.json")) {
             if (is == null) {
                 log.warn("[Confluence] Mock file not found: json/confluence_search.json");
                 return "[]";
@@ -181,9 +185,9 @@ public class ConfluenceApiClient {
             // Parse outer wrapper: {"status_code":200,"body":"..."}
             JsonNode outer = JSON.readTree(fileContent);
             JsonNode resoponse;
-            if (query.contains("权限")){
+            if (query.contains("权限")) {
                 resoponse = outer.get("怎么申请权限");
-            }else {
+            } else {
                 resoponse = outer.get("自助取数任务如何提交");
             }
             String bodyStr = resoponse.path("body").asText();

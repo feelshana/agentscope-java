@@ -52,8 +52,25 @@
     <logger name="io.agentscope" level="INFO"/>
     <logger name="io.agentscope.examples.chatbi" level="INFO"/>
 
+    <!-- Dedicated appender for performance timing logs -->
+    <appender name="PERF" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${project.basedir:-agentscope-examples/chatbi}/logs/chatbi-perf.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${project.basedir:-agentscope-examples/chatbi}/logs/chatbi-perf.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>7</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %msg%n</pattern>
+        </encoder>
+    </appender>
+
     <!-- Route chat message list logs exclusively to chatbi-chat.log -->
     <logger name="chat.llm.messages" level="DEBUG" additivity="false">
         <appender-ref ref="CHAT"/>
+    </logger>
+
+    <!-- Route performance timing logs exclusively to chatbi-perf.log -->
+    <logger name="perf.timing" level="INFO" additivity="false">
+        <appender-ref ref="PERF"/>
     </logger>
 </configuration>

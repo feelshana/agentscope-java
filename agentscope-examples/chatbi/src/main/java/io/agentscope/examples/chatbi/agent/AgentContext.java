@@ -34,8 +34,13 @@ import io.agentscope.core.model.OpenAIChatModel;
  * @param chartParam      Chart/visualization param from the original chat request (used by DataInterpretTool).
  * @param projectId       Project / tenant ID from the original chat request (used by DataLineageTool).
  */
-public record AgentContext(String sessionId, OpenAIChatModel streamModel, OpenAIChatModel rewriteModel,
-                           String supersonicToken, String agentId, String reportId, String dashboardId,
-                           String chartParam, String projectId) {
-
-}
+public record AgentContext(
+        String sessionId,
+        OpenAIChatModel streamModel,
+        OpenAIChatModel rewriteModel,
+        String supersonicToken,
+        String agentId,
+        String reportId,
+        String dashboardId,
+        String chartParam,
+        String projectId) {}

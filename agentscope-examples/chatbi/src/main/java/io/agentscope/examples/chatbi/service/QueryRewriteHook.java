@@ -83,11 +83,10 @@ public class QueryRewriteHook implements Hook {
      * Reference / anaphora keywords that indicate the question depends on conversation history.
      * If the current question contains ANY of these, we always attempt rewriting.
      */
-    private static final Set<String> REFERENCE_KEYWORDS = Set.of(
-            "它", "他", "她", "这个", "那个", "这些", "那些", "这里", "那里",
-            "上面", "上述", "前面", "之前", "刚才", "刚刚",
-            "再", "继续", "同样", "类似", "一样", "呢", "呢？",
-            "该", "此", "其", "其中", "相同");
+    private static final Set<String> REFERENCE_KEYWORDS =
+            Set.of(
+                    "它", "他", "她", "这个", "那个", "这些", "那些", "这里", "那里", "上面", "上述", "前面", "之前", "刚才",
+                    "刚刚", "再", "继续", "同样", "类似", "一样", "呢", "呢？", "该", "此", "其", "其中", "相同");
 
     public QueryRewriteHook(ChatModelBase rewriteModel, String rewriteSystemPrompt) {
         this.rewriteModel = rewriteModel;
@@ -134,8 +133,11 @@ public class QueryRewriteHook implements Hook {
         // Fast-path: if the question looks self-contained (no reference keywords and long enough),
         // skip the LLM rewrite call entirely to save latency.
         if (isLikelyIndependent(currentQuestion)) {
-            log.debug("[QueryRewriteHook] Question looks independent, skipping rewrite: '{}'",
-                    currentQuestion.length() > 30 ? currentQuestion.substring(0, 30) + "..." : currentQuestion);
+            log.debug(
+                    "[QueryRewriteHook] Question looks independent, skipping rewrite: '{}'",
+                    currentQuestion.length() > 30
+                            ? currentQuestion.substring(0, 30) + "..."
+                            : currentQuestion);
             return Mono.just(event);
         }
 
@@ -198,12 +200,17 @@ public class QueryRewriteHook implements Hook {
                 .onErrorResume(
                         e -> {
                             if (e instanceof TimeoutException) {
-                                log.warn("[QueryRewriteHook] Rewrite timeout after {}s, using original question",
+                                log.warn(
+                                        "[QueryRewriteHook] Rewrite timeout after {}s, using"
+                                                + " original question",
                                         REWRITE_TIMEOUT_SECONDS);
                             } else if (isInterrupted(e)) {
-                                log.warn("[QueryRewriteHook] Rewrite interrupted, using original question");
+                                log.warn(
+                                        "[QueryRewriteHook] Rewrite interrupted, using original"
+                                                + " question");
                             } else {
-                                log.warn("[QueryRewriteHook] Rewrite failed, using original: {}",
+                                log.warn(
+                                        "[QueryRewriteHook] Rewrite failed, using original: {}",
                                         e.getMessage());
                             }
                             return Mono.just(event);

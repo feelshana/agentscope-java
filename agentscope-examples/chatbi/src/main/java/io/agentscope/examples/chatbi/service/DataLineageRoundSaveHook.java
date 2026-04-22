@@ -65,19 +65,24 @@ public class DataLineageRoundSaveHook implements Hook {
             if (msg != null && MsgRole.ASSISTANT.equals(msg.getRole())) {
                 // Only save when the assistant produces a pure text answer (no tool_use),
                 // which indicates the final answer round.
-                boolean hasToolUse = !msg.getContentBlocks(
-                        io.agentscope.core.message.ToolUseBlock.class).isEmpty();
+                boolean hasToolUse =
+                        !msg.getContentBlocks(io.agentscope.core.message.ToolUseBlock.class)
+                                .isEmpty();
                 if (!hasToolUse) {
                     List<TextBlock> textBlocks = msg.getContentBlocks(TextBlock.class);
-                    String answer = textBlocks.stream()
-                            .map(TextBlock::getText)
-                            .collect(Collectors.joining());
+                    String answer =
+                            textBlocks.stream()
+                                    .map(TextBlock::getText)
+                                    .collect(Collectors.joining());
                     if (!answer.isBlank()) {
                         try {
                             memoryService.saveAssistantMessage(sessionId, answer);
                         } catch (Exception e) {
-                            log.warn("[DataLineageRoundSaveHook] Failed to save assistant message"
-                                    + " for session={}: {}", sessionId, e.getMessage());
+                            log.warn(
+                                    "[DataLineageRoundSaveHook] Failed to save assistant message"
+                                            + " for session={}: {}",
+                                    sessionId,
+                                    e.getMessage());
                         }
                     }
                 }

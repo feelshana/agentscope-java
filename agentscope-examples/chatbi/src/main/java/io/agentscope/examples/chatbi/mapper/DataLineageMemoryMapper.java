@@ -37,7 +37,8 @@ public interface DataLineageMemoryMapper extends BaseMapper<DataLineageMemory> {
     /**
      * Update the content (JSON array) for an existing session row.
      */
-    @Update("UPDATE data_lineage_memory SET content = #{content}, updated_at = NOW(3) "
-            + "WHERE session_id = #{sessionId}")
+    @Update(
+            "UPDATE data_lineage_memory SET content = #{content}, updated_at = NOW(3) "
+                    + "WHERE session_id = #{sessionId}")
     int updateContent(@Param("sessionId") String sessionId, @Param("content") String content);
 }

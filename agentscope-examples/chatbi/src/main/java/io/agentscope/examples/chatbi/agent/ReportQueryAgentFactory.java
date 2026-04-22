@@ -20,6 +20,7 @@ import io.agentscope.core.memory.InMemoryMemory;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.examples.chatbi.client.SupersonicApiClient;
 import io.agentscope.examples.chatbi.service.ChatLogHook;
+import io.agentscope.examples.chatbi.service.PerfTimingHook;
 import io.agentscope.examples.chatbi.tool.ReportQueryTool;
 import org.springframework.stereotype.Component;
 
@@ -46,7 +47,8 @@ public class ReportQueryAgentFactory implements SubAgentFactory {
     @Override
     public ReActAgent create(AgentContext ctx) {
         Toolkit toolkit = new Toolkit();
-        toolkit.registerTool(new ReportQueryTool(supersonicClient, ctx.agentId(), ctx.supersonicToken()));
+        toolkit.registerTool(
+                new ReportQueryTool(supersonicClient, ctx.agentId(), ctx.supersonicToken()));
 
         return ReActAgent.builder()
                 .name("ReportQueryAgent")
@@ -56,10 +58,12 @@ public class ReportQueryAgentFactory implements SubAgentFactory {
                 .memory(new InMemoryMemory())
                 .toolkit(toolkit)
                 .maxIters(5)
-                .hook(new ChatLogHook(
-                        ctx.sessionId() + "-re",
-                        "【ReportQueryAgent】-> 处理报表推荐意图(re)：根据用户需求推荐合适的报表、仪表盘或大屏",
-                        sysPrompt))
+                .hook(
+                        new ChatLogHook(
+                                ctx.sessionId() + "-re",
+                                "【ReportQueryAgent】-> 处理报表推荐意图(re)：根据用户需求推荐合适的报表、仪表盘或大屏",
+                                sysPrompt))
+                .hook(new PerfTimingHook(ctx.sessionId() + "-re", "ReportQueryAgent"))
                 .build();
     }
 }

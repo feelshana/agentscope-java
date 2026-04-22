@@ -50,8 +50,7 @@ public class ReportScheduleApiClient {
     private final int timeoutSeconds;
 
     public ReportScheduleApiClient(
-            @Value("${report.schedule.api.base-url:http://localhost:9080}")
-                    String baseUrl,
+            @Value("${report.schedule.api.base-url:http://localhost:9080}") String baseUrl,
             @Value("${report.schedule.api.timeout-seconds:15}") int timeoutSeconds) {
         this.timeoutSeconds = timeoutSeconds;
         this.webClient =
@@ -82,8 +81,7 @@ public class ReportScheduleApiClient {
             log.warn("[ReportScheduleApiClient] No reportId or dashboardId provided");
             return Mono.just("未提供报表ID或仪表盘ID，无法查询出数时间。");
         }
-        log.debug(
-                "[ReportScheduleApiClient] queryReportSchedule id={}", id);
+        log.debug("[ReportScheduleApiClient] queryReportSchedule id={}", id);
         return webClient
                 .get()
                 .uri(

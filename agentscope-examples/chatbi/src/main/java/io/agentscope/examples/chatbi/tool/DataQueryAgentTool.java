@@ -70,9 +70,7 @@ public class DataQueryAgentTool {
                                         ds ->
                                                 supersonicClient.registerDataset(
                                                         ds.getName(), ds.getAgentId())))
-                .doOnNext(
-                        result ->
-                                log.debug("[list_datasets] Got {} datasets", result.size()))
+                .doOnNext(result -> log.debug("[list_datasets] Got {} datasets", result.size()))
                 .onErrorResume(
                         e -> {
                             log.error("[list_datasets] Error fetching datasets", e);
@@ -141,8 +139,7 @@ public class DataQueryAgentTool {
                 .fetchDatasetDetail(resolvedAgentIds)
                 .doOnNext(
                         result ->
-                                log.debug(
-                                        "[get_dataset_detail] Result length={}", result.length()))
+                                log.debug("[get_dataset_detail] Result length={}", result.length()))
                 .onErrorResume(
                         e -> {
                             log.error(
@@ -177,7 +174,7 @@ public class DataQueryAgentTool {
                             name = "dataset_name",
                             description =
                                     "The Name of the dataset to query. Available dataset names are"
-                                            + " listed in the system prompt. Use the exact Name value.")
+                                        + " listed in the system prompt. Use the exact Name value.")
                     String datasetName,
             @ToolParam(
                             name = "question",
@@ -189,13 +186,10 @@ public class DataQueryAgentTool {
         return supersonicClient
                 .queryDataset(datasetName, question)
                 .map(this::stripMetadata)
-                .doOnNext(
-                        result ->
-                                log.debug("[query_dataset] Result length={}", result.length()))
+                .doOnNext(result -> log.debug("[query_dataset] Result length={}", result.length()))
                 .onErrorResume(
                         e -> {
-                            log.error(
-                                    "[query_dataset] Error querying dataset={}", datasetName, e);
+                            log.error("[query_dataset] Error querying dataset={}", datasetName, e);
                             return Mono.just("Error querying dataset: " + e.getMessage());
                         });
     }

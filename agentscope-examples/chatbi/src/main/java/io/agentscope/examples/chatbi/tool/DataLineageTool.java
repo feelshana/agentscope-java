@@ -85,7 +85,8 @@ public class DataLineageTool {
 
         return lineageClient
                 .queryLineage(query, projectId, memory)
-                .doOnNext(fp -> log.debug("[query_data_lineage] final_prompt length={}", fp.length()))
+                .doOnNext(
+                        fp -> log.debug("[query_data_lineage] final_prompt length={}", fp.length()))
                 .onErrorResume(
                         e -> {
                             log.error("[query_data_lineage] Error: {}", e.getMessage());

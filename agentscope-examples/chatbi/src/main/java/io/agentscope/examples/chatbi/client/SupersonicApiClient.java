@@ -20,11 +20,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agentscope.examples.chatbi.dto.DatasetInfo;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -62,8 +60,6 @@ public class SupersonicApiClient {
     /** NLP queryType sent in parseAndExecute requests (e.g. "super_simple", "RULE", "LLMTEXT") */
     private final String nlpQueryType;
 
-
-
     /** datasetName → agentId for multi-agent routing */
     private final Map<String, String> datasetAgentIdMap = new ConcurrentHashMap<>();
 
@@ -87,7 +83,6 @@ public class SupersonicApiClient {
                 mockEnabled,
                 nlpQueryType);
     }
-
 
     private Mono<List<DatasetInfo>> mockListDatasets() {
         log.debug("Using mock dataset list");
@@ -116,14 +111,14 @@ public class SupersonicApiClient {
                                 "ds_kpi",
                                 "2025关键考核指标日表",
                                 "##xx各产品的考核指标情况### 元数据（字段顺序）：产品名称, 指标名称, 日期, 指标值, 目标值, 完成进度, 上月同期值,"
-                                        + " 环比上月变化情况\n"
-                                        + "### 示例数据：\n"
-                                        + "#### 全量, RFE高价值活跃规模, 20260318, 45911864, 3.808E+7, 20.57,"
-                                        + " 45377751, 1.18\n"
-                                        + "#### 元宇宙, AI数智人使用用户, 20260318, 1963914, 5000000, 39.28,"
-                                        + " 1353245, 45.13\n"
-                                        + "#### xx视频, AI+xx视频自研产品使用用户数, 20260318, 3721628, 6000000,"
-                                        + " 62.03, 2792373, 33.28\n",
+                                    + " 环比上月变化情况\n"
+                                    + "### 示例数据：\n"
+                                    + "#### 全量, RFE高价值活跃规模, 20260318, 45911864, 3.808E+7, 20.57,"
+                                    + " 45377751, 1.18\n"
+                                    + "#### 元宇宙, AI数智人使用用户, 20260318, 1963914, 5000000, 39.28,"
+                                    + " 1353245, 45.13\n"
+                                    + "#### xx视频, AI+xx视频自研产品使用用户数, 20260318, 3721628, 6000000,"
+                                    + " 62.03, 2792373, 33.28\n",
                                 "85"),
                         new DatasetInfo(
                                 "ds_content_play",
@@ -152,8 +147,8 @@ public class SupersonicApiClient {
                         datasets -> {
                             if (datasets.isEmpty()) {
                                 log.warn(
-                                        "[listDatasets] fetchDatasetInfoByAgentIds returned empty list,"
-                                                + " falling back to mock datasets");
+                                        "[listDatasets] fetchDatasetInfoByAgentIds returned empty"
+                                                + " list, falling back to mock datasets");
                                 return mockListDatasets();
                             }
                             return Mono.just(datasets);
@@ -161,18 +156,13 @@ public class SupersonicApiClient {
                 .onErrorResume(
                         e -> {
                             log.error(
-                                    "[listDatasets] fetchDatasetInfoByAgentIds failed, falling back to"
-                                            + " mock datasets",
+                                    "[listDatasets] fetchDatasetInfoByAgentIds failed, falling back"
+                                            + " to mock datasets",
                                     e);
                             return mockListDatasets();
                         });
     }
 
-
-
-    
-
-    
     /**
      * Fetch dataset info for given agentIds.
      *
@@ -197,7 +187,8 @@ public class SupersonicApiClient {
                             Object data = body.get("data");
                             if (!(data instanceof List<?>)) {
                                 log.warn(
-                                        "[fetchDatasetInfoByAgentIds] Unexpected response structure: {}",
+                                        "[fetchDatasetInfoByAgentIds] Unexpected response"
+                                                + " structure: {}",
                                         body);
                                 return new ArrayList<DatasetInfo>();
                             }
@@ -222,13 +213,15 @@ public class SupersonicApiClient {
                                                 descStr,
                                                 resultAgentId.toString()));
                                 log.debug(
-                                        "[fetchDatasetInfoByAgentIds] Loaded dataset: id={}, agentId={}"
-                                                + " name={}",
+                                        "[fetchDatasetInfoByAgentIds] Loaded dataset: id={},"
+                                                + " agentId={} name={}",
                                         id,
                                         resultAgentId,
                                         agentName);
                             }
-                            log.info("[fetchDatasetInfoByAgentIds] Loaded {} datasets", result.size());
+                            log.info(
+                                    "[fetchDatasetInfoByAgentIds] Loaded {} datasets",
+                                    result.size());
                             return result;
                         })
                 .onErrorResume(
@@ -240,7 +233,6 @@ public class SupersonicApiClient {
                             return Mono.just(new ArrayList<>());
                         });
     }
-
 
     /**
      * Query a specific dataset using a natural-language question.
@@ -284,12 +276,14 @@ public class SupersonicApiClient {
                                     return "Query returned no result.";
                                 }))
                 .doOnError(
-                        e -> log.error(
-                                "[queryDataset] Failed, datasetName={}, question={}",
-                                datasetName, question, e))
+                        e ->
+                                log.error(
+                                        "[queryDataset] Failed, datasetName={}, question={}",
+                                        datasetName,
+                                        question,
+                                        e))
                 .onErrorResume(e -> Mono.just("Query failed: " + e.getMessage()));
     }
-
 
     // ==================== Private: NLP Service ====================
 
@@ -351,9 +345,11 @@ public class SupersonicApiClient {
                         })
                 .doOnNext(chatId -> log.debug("[createChat] Got chatId={}", chatId))
                 .doOnError(
-                        e -> log.error(
-                                "[createChat] Failed to create chat session, agentId={}",
-                                agentId, e));
+                        e ->
+                                log.error(
+                                        "[createChat] Failed to create chat session, agentId={}",
+                                        agentId,
+                                        e));
     }
 
     /**
@@ -373,13 +369,20 @@ public class SupersonicApiClient {
     private Mono<String> queryByNlp(String agentId, String chatId, String question) {
         Map<String, Object> requestBody =
                 Map.of(
-                        "agentId", Long.parseLong(agentId),
-                        "chatId",  Long.parseLong(chatId),
-                        "queryText", question,
-                        "queryType", this.nlpQueryType);
+                        "agentId",
+                        Long.parseLong(agentId),
+                        "chatId",
+                        Long.parseLong(chatId),
+                        "queryText",
+                        question,
+                        "queryType",
+                        this.nlpQueryType);
         log.info(
                 "[queryByNlp] agentId={}, chatId={}, question={}, queryType={}",
-                agentId, chatId, question, this.nlpQueryType);
+                agentId,
+                chatId,
+                question,
+                this.nlpQueryType);
         return webClient
                 .post()
                 .uri("/api/chat/query/parseAndExecute")
@@ -394,7 +397,8 @@ public class SupersonicApiClient {
                                     log.warn(
                                             "[queryByNlp] parseAndExecute returned empty body,"
                                                     + " agentId={}, question={}",
-                                            agentId, question);
+                                            agentId,
+                                            question);
                                     return Map.<String, Object>of();
                                 }))
                 .map(
@@ -450,9 +454,12 @@ public class SupersonicApiClient {
                             }
                         })
                 .doOnError(
-                        e -> log.error(
-                                "[queryByNlp] Failed, agentId={}, question={}",
-                                agentId, question, e));
+                        e ->
+                                log.error(
+                                        "[queryByNlp] Failed, agentId={}, question={}",
+                                        agentId,
+                                        question,
+                                        e));
     }
 
     /**
@@ -476,8 +483,7 @@ public class SupersonicApiClient {
         if (!(firstRaw instanceof Map<?, ?> firstRow)) {
             return rows.toString();
         }
-        List<String> headers = new ArrayList<>(
-                ((Map<String, Object>) firstRow).keySet());
+        List<String> headers = new ArrayList<>(((Map<String, Object>) firstRow).keySet());
         StringBuilder sb = new StringBuilder();
         sb.append(String.join(",", headers));
         for (Object rawRow : rows) {
@@ -488,11 +494,8 @@ public class SupersonicApiClient {
                     if (i > 0) sb.append(',');
                     Object val = typedRow.get(headers.get(i));
                     String strVal = val == null ? "" : val.toString();
-                    if (strVal.contains(",") || strVal.contains("\n")
-                            || strVal.contains("\"")) {
-                        sb.append('"')
-                                .append(strVal.replace("\"", "\"\""))
-                                .append('"');
+                    if (strVal.contains(",") || strVal.contains("\n") || strVal.contains("\"")) {
+                        sb.append('"').append(strVal.replace("\"", "\"\"")).append('"');
                     } else {
                         sb.append(strVal);
                     }
@@ -516,15 +519,19 @@ public class SupersonicApiClient {
      * @param authorization SuperSonic auth token
      * @return extracted {@code final_prompt} value, or a fallback error message
      */
-    public Mono<String> queryLineage(String query, String projectId, String memory, String authorization) {
+    public Mono<String> queryLineage(
+            String query, String projectId, String memory, String authorization) {
         Map<String, Object> body = new java.util.LinkedHashMap<>();
         body.put("query", query);
         body.put("project_id", projectId);
         if (memory != null && !memory.isBlank()) {
             body.put("memory", memory);
         }
-        log.info("[queryLineage] query={}, projectId={}, memoryLen={}",
-                query, projectId, memory == null ? 0 : memory.length());
+        log.info(
+                "[queryLineage] query={}, projectId={}, memoryLen={}",
+                query,
+                projectId,
+                memory == null ? 0 : memory.length());
         return webClient
                 .post()
                 .uri("/api/data/lineage")
@@ -537,8 +544,10 @@ public class SupersonicApiClient {
                 .map(this::extractFinalPrompt)
                 .onErrorResume(
                         e -> {
-                            log.error("[SuperSonic] queryLineage error query={}: {}",
-                                    query, e.getMessage());
+                            log.error(
+                                    "[SuperSonic] queryLineage error query={}: {}",
+                                    query,
+                                    e.getMessage());
                             return Mono.just(LINEAGE_ERROR_MSG);
                         });
     }
@@ -567,16 +576,21 @@ public class SupersonicApiClient {
             return LINEAGE_ERROR_MSG;
         }
         try {
-            Map<String, Object> parsed = JSON.readValue(responseBody,
-                    new com.fasterxml.jackson.core.type.TypeReference<>() {
-                    });
+            Map<String, Object> parsed =
+                    JSON.readValue(
+                            responseBody, new com.fasterxml.jackson.core.type.TypeReference<>() {});
             Object fp = parsed.get("final_prompt");
             if (fp instanceof String finalPrompt && !finalPrompt.isBlank()) {
-                log.debug("[extractFinalPrompt] Extracted final_prompt length={}", finalPrompt.length());
+                log.debug(
+                        "[extractFinalPrompt] Extracted final_prompt length={}",
+                        finalPrompt.length());
                 return finalPrompt.strip();
             }
-            log.warn("[extractFinalPrompt] final_prompt missing or blank, body snippet={}",
-                    responseBody.length() > 200 ? responseBody.substring(0, 200) + "..." : responseBody);
+            log.warn(
+                    "[extractFinalPrompt] final_prompt missing or blank, body snippet={}",
+                    responseBody.length() > 200
+                            ? responseBody.substring(0, 200) + "..."
+                            : responseBody);
             return LINEAGE_ERROR_MSG;
         } catch (Exception e) {
             log.error("[extractFinalPrompt] Failed to parse lineage response: {}", e.getMessage());

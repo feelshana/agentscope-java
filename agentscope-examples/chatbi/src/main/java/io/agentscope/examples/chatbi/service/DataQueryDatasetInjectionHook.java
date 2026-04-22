@@ -44,8 +44,7 @@ import reactor.core.publisher.Mono;
  */
 public class DataQueryDatasetInjectionHook implements Hook {
 
-    private static final Logger log =
-            LoggerFactory.getLogger(DataQueryDatasetInjectionHook.class);
+    private static final Logger log = LoggerFactory.getLogger(DataQueryDatasetInjectionHook.class);
 
     static final int PRIORITY = 20;
 
@@ -98,7 +97,7 @@ public class DataQueryDatasetInjectionHook implements Hook {
                             log.info(
                                     "[DataQueryDatasetInjectionHook] Initialized DataQueryAgent"
                                             + " system prompt with dataset catalogue, agentId={}",
-                                            agentId);
+                                    agentId);
                         })
                 .map(
                         sysPrompt -> {
@@ -149,9 +148,7 @@ public class DataQueryDatasetInjectionHook implements Hook {
                                                     + "\n    Description: "
                                                     + ds.getDescription())
                             .collect(Collectors.joining("\n"));
-            sb.append("\n\n---\n")
-                    .append("## Available Datasets (pre-loaded)\n")
-                    .append(catalogue);
+            sb.append("\n\n---\n").append("## Available Datasets (pre-loaded)\n").append(catalogue);
         }
 
         return sb.toString();
