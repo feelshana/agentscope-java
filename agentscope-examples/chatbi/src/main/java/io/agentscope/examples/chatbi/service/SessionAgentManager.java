@@ -85,6 +85,7 @@ public class SessionAgentManager {
     // Configured at startup by ChatBiAgentService
     private String apiKey;
     private String baseUrl;
+    private String modelName;
     private String routerSysPrompt;
     private String rewritePrompt;
 
@@ -119,6 +120,7 @@ public class SessionAgentManager {
     public void configure(
             String apiKey,
             String baseUrl,
+            String modelName,
             String routerSysPrompt,
             String dataQuerySysPrompt,
             String knowledgeSysPrompt,
@@ -130,6 +132,7 @@ public class SessionAgentManager {
             String rewritePrompt) {
         this.apiKey = apiKey;
         this.baseUrl = baseUrl;
+        this.modelName = modelName;
         this.routerSysPrompt = routerSysPrompt;
         this.rewritePrompt = rewritePrompt;
 
@@ -151,7 +154,7 @@ public class SessionAgentManager {
         chatAgentFactory.setSysPrompt(chatSysPrompt);
 
         OpenAIChatModel.Builder summaryBuilder =
-                OpenAIChatModel.builder().apiKey(apiKey).modelName("deepseek-chat").stream(false)
+                OpenAIChatModel.builder().apiKey(apiKey).modelName(modelName).stream(false)
                         .formatter(new OpenAIChatFormatter());
         if (baseUrl != null) {
             summaryBuilder.baseUrl(baseUrl);
@@ -160,13 +163,19 @@ public class SessionAgentManager {
     }
 
     /**
-     * Kept for backward compatibility with ChatBiAgentService.configure(4-arg).
-     * Routes to the new 11-arg configure with default sub-agent prompt values.
+     * Kept for backward compatibility.
+     * Routes to the main configure with default sub-agent prompt values.
      */
-    public void configure(String apiKey, String baseUrl, String sysPrompt, String rewritePrompt) {
+    public void configure(
+            String apiKey,
+            String baseUrl,
+            String modelName,
+            String sysPrompt,
+            String rewritePrompt) {
         configure(
                 apiKey,
                 baseUrl,
+                modelName,
                 sysPrompt, // routerSysPrompt
                 sysPrompt, // dataQuerySysPrompt (overridden by service if files exist)
                 sysPrompt, // knowledgeSysPrompt
@@ -219,7 +228,7 @@ public class SessionAgentManager {
 
         // ── Build streaming model for QueryRewriteHook (streaming to avoid long blocking) ──
         OpenAIChatModel.Builder rewriteModelBuilder =
-                OpenAIChatModel.builder().apiKey(apiKey).modelName("glm-5").stream(true)
+                OpenAIChatModel.builder().apiKey(apiKey).modelName(modelName).stream(true)
                         .generateOptions(rewriteExecOptions)
                         .formatter(new OpenAIChatFormatter());
         if (baseUrl != null) {
@@ -229,7 +238,7 @@ public class SessionAgentManager {
 
         // ── Build streaming model (shared across all agents) ──
         OpenAIChatModel.Builder streamModelBuilder =
-                OpenAIChatModel.builder().apiKey(apiKey).modelName("qwen3.6-plus").stream(true)
+                OpenAIChatModel.builder().apiKey(apiKey).modelName(modelName).stream(true)
                         .generateOptions(streamExecOptions)
                         .formatter(new OpenAIChatFormatter());
         if (baseUrl != null) {
@@ -237,7 +246,7 @@ public class SessionAgentManager {
         }
         OpenAIChatModel streamModel = streamModelBuilder.build();
 
-        // ── Build RouterAgent model (same as sub-agents: glm-5 streaming) ──
+        // ── Build RouterAgent model (same as sub-agents) ──
 
         // ── Build AgentContext for factories ──
         AgentContext ctx =

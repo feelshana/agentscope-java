@@ -77,6 +77,9 @@ public class ChatBiAgentService implements InitializingBean {
     @Value("${openai.base-url:#{null}}")
     private String baseUrlFromConfig;
 
+    @Value("${openai.model:#{null}}")
+    private String modelNameFromConfig;
+
     @Value("${agent.system-prompt-file:router-system-prompt.txt}")
     private String systemPromptFile;
 
@@ -117,6 +120,7 @@ public class ChatBiAgentService implements InitializingBean {
     public void afterPropertiesSet() {
         String apiKey = resolveApiKey();
         String baseUrl = resolveBaseUrl();
+        String modelName = resolveModelName();
 
         String routerPrompt = loadPromptFile(systemPromptFile);
         String dataQueryPrompt = loadPromptFileSafe(dataQueryPromptFile, routerPrompt);
@@ -130,6 +134,7 @@ public class ChatBiAgentService implements InitializingBean {
         sessionAgentManager.configure(
                 apiKey,
                 baseUrl,
+                modelName,
                 routerPrompt,
                 dataQueryPrompt,
                 knowledgePrompt,
@@ -304,6 +309,17 @@ public class ChatBiAgentService implements InitializingBean {
         String envUrl = System.getenv("OPENAI_BASE_URL");
         if (envUrl != null && !envUrl.isBlank()) {
             return envUrl;
+        }
+        return null;
+    }
+
+    private String resolveModelName() {
+        if (modelNameFromConfig != null && !modelNameFromConfig.isBlank()) {
+            return modelNameFromConfig;
+        }
+        String envModel = System.getenv("OPENAI_MODEL");
+        if (envModel != null && !envModel.isBlank()) {
+            return envModel;
         }
         return null;
     }

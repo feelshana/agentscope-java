@@ -50,11 +50,17 @@ public class SubAgentCompleteHook implements Hook {
 
     /**
      * Set of sub-agent tool names that should trigger immediate completion.
-     * These are tools that return complete answers and don't require further processing.
-     * Note: call_data_query_agent is NOT included because it may need plan confirmation.
+     * When any of these tools finishes, RouterAgent stops and forwards the result directly
+     * to the frontend without an extra LLM summarization call.
+     *
+     * <p>Includes {@code call_data_query_agent}: when the sub-agent's response contains
+     * {@code [CONFIRM_PLAN]}, the marker is forwarded as-is so the frontend can render
+     * confirm/decline buttons. When the user confirms, the RouterAgent re-dispatches to
+     * this tool per the router system prompt §3.
      */
     private static final Set<String> SUB_AGENT_TOOLS =
             Set.of(
+                    "call_data_query_agent",
                     "call_gu_agent",
                     "call_knowledge_agent",
                     "call_chat_agent",
@@ -68,7 +74,6 @@ public class SubAgentCompleteHook implements Hook {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public <T extends HookEvent> Mono<T> onEvent(T event) {
         if (event instanceof PostActingEvent postActing) {
             String toolName = postActing.getToolUse().getName();

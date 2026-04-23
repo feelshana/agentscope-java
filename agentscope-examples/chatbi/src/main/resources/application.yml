@@ -50,7 +50,3 @@ logging:
   level:
     io.agentscope: INFO
     io.agentscope.examples.chatbi: INFO
-
-agent:
-  # 当前使用的系统提示词文件名，文件须放在 resources/prompts/ 目录下
-  system-prompt-file: router-system-prompt.txt
