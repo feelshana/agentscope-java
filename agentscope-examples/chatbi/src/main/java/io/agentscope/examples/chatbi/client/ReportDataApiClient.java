@@ -138,14 +138,19 @@ public class ReportDataApiClient {
                 return "[]";
             }
             String fileContent = new String(is.readAllBytes(), StandardCharsets.UTF_8);
-            // Parse outer wrapper: {"status_code":200,"body":"..."}
             JsonNode outer = JSON.readTree(fileContent);
-            JsonNode jsonNode = outer.get(reportId);
-            JsonNode body = jsonNode.path("body");
-            String data = body.path("data").asText();
-            if (data != null && !data.isBlank()) {
+            JsonNode reportNode = outer.get(reportId);
+            if (reportNode == null) {
+                log.warn("[report_search] No mock data for reportId: {}", reportId);
+                return "[]";
+            }
+            String bodyStr = reportNode.path("body").asText();
+            JsonNode body = JSON.readTree(bodyStr);
+            JsonNode data = body.path("data");
+
+            if (!data.isMissingNode()) {
                 log.info("[report_search] Loaded mock search result from report_search.json");
-                return data;
+                return data.toString();
             }
             return "[]";
         } catch (Exception e) {
