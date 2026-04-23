@@ -16,7 +16,6 @@
 package io.agentscope.examples.chatbi.tool;
 
 import io.agentscope.core.tool.Tool;
-import io.agentscope.core.tool.ToolParam;
 import io.agentscope.examples.chatbi.client.ReportDataApiClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,8 +26,7 @@ import reactor.core.publisher.Mono;
  *
  * <p>Provides two ways to get data for interpretation:
  * <ul>
- *   <li>{@link #interpretChartData} — uses chart data passed from the frontend via {@code param}</li>
- *   <li>{@link #queryReportData} — fetches raw data from the report API using {@code reportId}</li>
+ *   <li>{@link #interpretChartData} — fetches raw data from the report API using {@code reportId @chartParam}</li>
  * </ul>
  *
  * <p>Unlike {@code DataQueryAgentTool} which queries SuperSonic datasets, these tools
@@ -43,13 +41,16 @@ public class DataInterpretTool {
     private final String easyBiSession;
     private final ReportDataApiClient reportDataClient;
 
-    public DataInterpretTool(String chartParam, String reportId, String easyBiSession, ReportDataApiClient reportDataClient) {
+    public DataInterpretTool(
+            String chartParam,
+            String reportId,
+            String easyBiSession,
+            ReportDataApiClient reportDataClient) {
         this.chartParam = chartParam;
         this.reportId = reportId;
         this.easyBiSession = easyBiSession;
         this.reportDataClient = reportDataClient;
     }
-
 
     /**
      * Fetch raw data for a report via the getPureData4ChatBI endpoint.
@@ -59,7 +60,7 @@ public class DataInterpretTool {
      * @return the report's raw data as JSON, or an error message if reportId is unavailable
      */
     @Tool(
-            name = "query_report_data",
+            name = "interpret_chart_data",
             description =
                     "Fetch raw data for the report the user is currently viewing. "
                             + "Use this when the user says '解读当前数据', '解读当前报表数据', "
@@ -67,13 +68,8 @@ public class DataInterpretTool {
                             + "The tool calls the report data API and returns the raw data "
                             + "in a structured format for interpretation. "
                             + "Call this tool BEFORE analyzing the data.")
-    public Mono<String> queryReportData() {
-        log.info("[query_report_data] reportId={}", reportId);
-        if (reportId == null || reportId.isBlank()) {
-            return Mono.just(
-                    "未提供报表ID（reportId），无法查询报表数据。"
-                            + "请确认用户正在查看某张报表，或让前端传递 reportId 参数。");
-        }
-        return reportDataClient.getReportData(reportId, easyBiSession,chartParam);
+    public Mono<String> interpretChartData() {
+        log.info("[interpret_chart_data] reportId={}", reportId);
+        return reportDataClient.interpretChartData(reportId, easyBiSession, chartParam);
     }
 }

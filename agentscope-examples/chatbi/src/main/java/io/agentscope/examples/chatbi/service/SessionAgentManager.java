@@ -229,13 +229,15 @@ public class SessionAgentManager {
 
         // ── Build streaming model (shared across all agents) ──
         OpenAIChatModel.Builder streamModelBuilder =
-                OpenAIChatModel.builder().apiKey(apiKey).modelName("glm-5").stream(true)
+                OpenAIChatModel.builder().apiKey(apiKey).modelName("qwen3.6-plus").stream(true)
                         .generateOptions(streamExecOptions)
                         .formatter(new OpenAIChatFormatter());
         if (baseUrl != null) {
             streamModelBuilder.baseUrl(baseUrl);
         }
         OpenAIChatModel streamModel = streamModelBuilder.build();
+
+        // ── Build RouterAgent model (same as sub-agents: glm-5 streaming) ──
 
         // ── Build AgentContext for factories ──
         AgentContext ctx =

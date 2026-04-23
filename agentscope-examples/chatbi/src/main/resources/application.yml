@@ -53,4 +53,4 @@ logging:
 
 agent:
   # 当前使用的系统提示词文件名，文件须放在 resources/prompts/ 目录下
-  system-prompt-file: chatbi-system-prompt.txt
+  system-prompt-file: router-system-prompt.txt

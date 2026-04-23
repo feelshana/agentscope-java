@@ -15,6 +15,10 @@
  */
 package io.agentscope.examples.chatbi.client;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,14 +49,17 @@ import reactor.core.publisher.Mono;
 public class ReportDataApiClient {
 
     private static final Logger log = LoggerFactory.getLogger(ReportDataApiClient.class);
-
+    private static final ObjectMapper JSON = new ObjectMapper();
     private final WebClient webClient;
     private final int timeoutSeconds;
+    private final boolean mockEnabled;
 
     public ReportDataApiClient(
             @Value("${report.data.api.base-url:http://10.194.142.14:7999}") String baseUrl,
-            @Value("${report.data.api.timeout-seconds:15}") int timeoutSeconds) {
+            @Value("${report.data.api.timeout-seconds:15}") int timeoutSeconds,
+            @Value("${report.data.api.mock-enabled:true}") boolean mockEnabled) {
         this.timeoutSeconds = timeoutSeconds;
+        this.mockEnabled = mockEnabled;
         this.webClient =
                 WebClient.builder()
                         .baseUrl(baseUrl)
@@ -80,7 +87,12 @@ public class ReportDataApiClient {
      * @param chatParms     chart data JSON string from frontend (request body)
      * @return raw report data as JSON string, or an error message
      */
-    public Mono<String> getReportData(String reportId, String easyBiSession, String chatParms) {
+    public Mono<String> interpretChartData(
+            String reportId, String easyBiSession, String chatParms) {
+        if (mockEnabled) {
+            return Mono.just(loadMockSearchResult(reportId));
+        }
+
         if (reportId == null || reportId.isBlank()) {
             log.warn("[ReportDataApiClient] No reportId provided");
             return Mono.just("未提供报表ID，无法查询报表数据。");
@@ -116,5 +128,29 @@ public class ReportDataApiClient {
                                     e.getMessage());
                             return Mono.just("查询报表数据接口异常：" + e.getMessage());
                         });
+    }
+
+    private String loadMockSearchResult(String reportId) {
+        try (InputStream is =
+                getClass().getClassLoader().getResourceAsStream("json/report_search.json")) {
+            if (is == null) {
+                log.warn("[report_search] Mock file not found: json/report_search.json");
+                return "[]";
+            }
+            String fileContent = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            // Parse outer wrapper: {"status_code":200,"body":"..."}
+            JsonNode outer = JSON.readTree(fileContent);
+            JsonNode jsonNode = outer.get(reportId);
+            JsonNode body = jsonNode.path("body");
+            String data = body.path("data").asText();
+            if (data != null && !data.isBlank()) {
+                log.info("[report_search] Loaded mock search result from report_search.json");
+                return data;
+            }
+            return "[]";
+        } catch (Exception e) {
+            log.error("[report_search] Failed to load mock file: {}", e.getMessage());
+            return "[]";
+        }
     }
 }
