@@ -395,6 +395,24 @@
             font-size: 0.75rem; color: var(--text-hint); padding: 4px 10px 2px;
         }
 
+        /* ── Suggestion chips (REFINE_SUGGESTION) ── */
+        .suggestion-chips {
+            display: flex; flex-wrap: wrap; gap: 8px;
+            padding: 10px 0 2px; border-top: 1px solid rgba(79,110,247,0.08);
+            margin-top: 6px;
+        }
+        .suggestion-chip {
+            background: var(--surface2); border: 1.5px solid rgba(79,110,247,0.15);
+            color: var(--primary); padding: 6px 14px; border-radius: 20px;
+            font-size: 0.82rem; cursor: pointer; transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .suggestion-chip:hover {
+            background: var(--primary-light); border-color: var(--primary);
+            box-shadow: 0 2px 8px rgba(79,110,247,0.12);
+        }
+        .suggestion-chip:active { transform: scale(0.96); }
+
         /* ── Mobile ── */
         .sidebar-toggle { display: none; background: none; border: none; color: #fff; font-size: 1.3rem; cursor: pointer; }
         @media (max-width: 640px) {
@@ -1163,6 +1181,30 @@ function toggleThinking(el) {
     if (block) block.classList.toggle('collapsed');
 }
 
+// Build HTML for suggestion chips from [REFINE_SUGGESTION:例如"A"|例如"B"|例如"C"]
+function buildSuggestionChips(raw) {
+    return raw.split('|').map(function(item) {
+        var trimmed = item.trim();
+        // Remove "例如" prefix for display
+        var display = trimmed.replace(/^例如["'"]?/, '').replace(/["'"]$/, '');
+        // The full text sent when clicked includes the 例如 prefix
+        var sendText = trimmed;
+        return '<button class="suggestion-chip" onclick="sendSuggestion(this, \''
+            + escHtml(sendText).replace(/'/g, '\\\'') + '\')">'
+            + escHtml(display) + '</button>';
+    }).join('');
+}
+
+// Send a suggestion as a new user message
+function sendSuggestion(el, text) {
+    if (isStreaming) return;
+    // Remove the chips container after click
+    var container = el.closest('.suggestion-chips');
+    if (container) container.remove();
+    document.getElementById('inputBox').value = text;
+    sendMessage();
+}
+
 // Build HTML for thinking blocks
 function buildThinkingHtml(thinkingText) {
     if (!thinkingText) return '';
@@ -1197,6 +1239,14 @@ function buildMarkdownHtml(text) {
 // mainText: the actual reply, thinkingText: reasoning_content
 function renderAiBubbleWithThinking(container, mainText, thinkingText, final) {
     if (!mainText && !thinkingText && !executedTools.length) return;
+    // Extract [REFINE_SUGGESTION:...] from mainText (keep it for rendering, strip from markdown)
+    var suggestionHtml = '';
+    var cleanText = mainText;
+    var refineMatch = mainText.match(/\[REFINE_SUGGESTION:([^\]]+)\]/);
+    if (refineMatch) {
+        suggestionHtml = buildSuggestionChips(refineMatch[1]);
+        cleanText = mainText.replace(/\[REFINE_SUGGESTION:[^\]]+\]/, '').trim();
+    }
     let html = '';
     // Render completed tool call indicators
     executedTools.forEach(function(toolName) {
@@ -1207,7 +1257,8 @@ function renderAiBubbleWithThinking(container, mainText, thinkingText, final) {
         html += '<div class="tool-indicator waiting">正在执行</div>';
     }
     if (thinkingText) html += buildThinkingHtml(thinkingText);
-    if (mainText) html += buildMarkdownHtml(mainText);
+    if (cleanText) html += buildMarkdownHtml(cleanText);
+    if (suggestionHtml) html += '<div class="suggestion-chips">' + suggestionHtml + '</div>';
     container.innerHTML = html;
     if (final) renderCharts(container);
 }
@@ -1215,9 +1266,18 @@ function renderAiBubbleWithThinking(container, mainText, thinkingText, final) {
 // ─── Render AI bubble (legacy: text only, used for history messages) ───
 function renderAiBubble(container, text, final) {
     if (!text) return;
+    // Extract [REFINE_SUGGESTION:...] from text
+    var suggestionHtml = '';
+    var cleanText = text;
+    var refineMatch = text.match(/\[REFINE_SUGGESTION:([^\]]+)\]/);
+    if (refineMatch) {
+        suggestionHtml = buildSuggestionChips(refineMatch[1]);
+        cleanText = text.replace(/\[REFINE_SUGGESTION:[^\]]+\]/, '').trim();
+    }
     const toolInd = container.querySelector('.tool-indicator');
-    const html = buildMarkdownHtml(text);
-    container.innerHTML = (toolInd ? toolInd.outerHTML : '') + html;
+    let html = (toolInd ? toolInd.outerHTML : '') + buildMarkdownHtml(cleanText);
+    if (suggestionHtml) html += '<div class="suggestion-chips">' + suggestionHtml + '</div>';
+    container.innerHTML = html;
     if (final) renderCharts(container);
 }
 

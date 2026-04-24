@@ -17,10 +17,8 @@ package io.agentscope.examples.chatbi.tool;
 
 import io.agentscope.core.tool.Tool;
 import io.agentscope.core.tool.ToolParam;
-import io.agentscope.examples.chatbi.client.SupersonicApiClient;
-import io.agentscope.examples.chatbi.dto.DatasetInfo;
-import java.util.List;
-import java.util.stream.Collectors;
+import io.agentscope.examples.chatbi.client.ReportSearchApiClient;
+import io.agentscope.examples.chatbi.service.SubAgentMemoryService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -28,31 +26,45 @@ import reactor.core.publisher.Mono;
 /**
  * Tool for recommending reports and dashboards (re intent).
  *
- * <p>When users ask "which report shows X" or "recommend a dashboard for Y",
- * this tool searches available datasets/reports via SuperSonic and returns
- * relevant report names and descriptions.
+ * <p>Calls the dedicated report search API to find relevant reports,
+ * dashboards, or data screens based on the user's natural-language query.
+ *
+ * <p>The user question is persisted by {@link SubAgentUserMessageHook} at agent entry;
+ * the assistant answer is saved by {@link RoundSaveHook}.
  */
 public class ReportQueryTool {
 
     private static final Logger log = LoggerFactory.getLogger(ReportQueryTool.class);
 
-    private final SupersonicApiClient supersonicClient;
-    private final String agentId;
-    private final String supersonicToken;
+    private static final String TYPE_RE = "re";
+
+    private final ReportSearchApiClient searchClient;
+    private final String projectId;
+    private final String reportName;
+    private final String dashboardName;
+    private final String sessionId;
+    private final SubAgentMemoryService memoryService;
 
     public ReportQueryTool(
-            SupersonicApiClient supersonicClient, String agentId, String supersonicToken) {
-        this.supersonicClient = supersonicClient;
-        this.agentId = agentId;
-        this.supersonicToken = supersonicToken;
+            ReportSearchApiClient searchClient,
+            String projectId,
+            String reportName,
+            String dashboardName,
+            String sessionId,
+            SubAgentMemoryService memoryService) {
+        this.searchClient = searchClient;
+        this.projectId = projectId;
+        this.reportName = reportName;
+        this.dashboardName = dashboardName;
+        this.sessionId = sessionId;
+        this.memoryService = memoryService;
     }
 
     /**
      * Recommend reports or dashboards that match the user's need.
-     * Lists available datasets and returns those relevant to the query topic.
      *
-     * @param topic the topic or metric the user wants to see in a report
-     * @return list of recommended reports with names and descriptions
+     * @param query the user's question or topic for report recommendation
+     * @return list of recommended reports with names and descriptions from the search API
      */
     @Tool(
             name = "recommend_reports",
@@ -63,38 +75,22 @@ public class ReportQueryTool {
                         + " a list of matching report/dataset names with descriptions.")
     public Mono<String> recommendReports(
             @ToolParam(
-                            name = "topic",
+                            name = "query",
                             description =
-                                    "The topic, metric or data area the user wants to find reports"
-                                            + " for. E.g., '用户活跃度', '订单量', '流量分析'")
-                    String topic) {
-        log.info("[recommend_reports] topic={}, agentId={}", topic, agentId);
-        return supersonicClient
-                .listDatasets(agentId)
-                .map(datasets -> filterAndFormatReports(datasets, topic))
+                                    "The user's question or topic describing what reports or"
+                                            + " dashboards they need. E.g., '用户活跃度报表', '订单分析仪表盘'")
+                    String query) {
+        log.info("[recommend_reports] sessionId={}, query={}", sessionId, query);
+
+        // Load previous report query rounds for this session as memory
+        String memory = memoryService.loadMemoryJson(sessionId, TYPE_RE);
+
+        return searchClient
+                .searchReports(query, projectId, reportName, dashboardName, memory, 10)
                 .onErrorResume(
                         e -> {
                             log.error("[recommend_reports] Error: {}", e.getMessage());
                             return Mono.just("报表推荐接口异常：" + e.getMessage());
                         });
-    }
-
-    private String filterAndFormatReports(List<DatasetInfo> datasets, String topic) {
-        if (datasets == null || datasets.isEmpty()) {
-            return "暂无可用的报表/数据集信息。";
-        }
-        // Return all datasets; the LLM will decide which are relevant to the topic
-        String list =
-                datasets.stream()
-                        .map(
-                                ds ->
-                                        "  - 名称: "
-                                                + ds.getName()
-                                                + (ds.getDescription() != null
-                                                                && !ds.getDescription().isBlank()
-                                                        ? "\n    描述: " + ds.getDescription()
-                                                        : ""))
-                        .collect(Collectors.joining("\n"));
-        return "可用报表/数据集列表（请根据用户问题 '" + topic + "' 从以下列表中推荐最相关的报表）：\n" + list;
     }
 }

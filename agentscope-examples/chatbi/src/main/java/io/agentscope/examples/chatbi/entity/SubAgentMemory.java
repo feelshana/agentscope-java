@@ -22,10 +22,10 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import java.time.LocalDateTime;
 
 /**
- * Stores the full conversation history for a DataLineageAgent session.
+ * Stores the full conversation history for a sub-agent session.
  *
- * <p>One row per {@code sessionId}. The {@code content} field holds the entire
- * conversation as a JSON array string, e.g.:
+ * <p>One row per {@code sessionId} + {@code type} combination.
+ * The {@code content} field holds the entire conversation as a JSON array string, e.g.:
  * <pre>
  * [
  *   {"role":"user",   "text":"...", "time":"2026-04-14T06:29:30.936811"},
@@ -33,15 +33,22 @@ import java.time.LocalDateTime;
  * ]
  * </pre>
  * Each new round appends two more entries (user + assistant) to this array.
+ *
+ * <p>The {@code type} field distinguishes different sub-agent memories:
+ * "dl" for DataLineageAgent, "re" for ReportQueryAgent.
  */
-@TableName("data_lineage_memory")
-public class DataLineageMemory {
+@TableName("sub_agent_memory")
+public class SubAgentMemory {
 
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
 
     @TableField("session_id")
     private String sessionId;
+
+    /** Intent type: "dl" for lineage, "re" for report query. */
+    @TableField("type")
+    private String type;
 
     /** Full conversation JSON array string (appended each round). */
     private String content;
@@ -52,10 +59,11 @@ public class DataLineageMemory {
     @TableField("updated_at")
     private LocalDateTime updatedAt;
 
-    public DataLineageMemory() {}
+    public SubAgentMemory() {}
 
-    public DataLineageMemory(String sessionId, String content) {
+    public SubAgentMemory(String sessionId, String type, String content) {
         this.sessionId = sessionId;
+        this.type = type;
         this.content = content;
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
@@ -75,6 +83,14 @@ public class DataLineageMemory {
 
     public void setSessionId(String sessionId) {
         this.sessionId = sessionId;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
     }
 
     public String getContent() {

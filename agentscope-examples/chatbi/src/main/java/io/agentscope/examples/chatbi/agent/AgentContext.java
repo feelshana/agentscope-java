@@ -30,7 +30,9 @@ import io.agentscope.core.model.OpenAIChatModel;
  * @param supersonicToken SuperSonic auth token from the original chat request.
  * @param agentId         SuperSonic agent ID from the original chat request.
  * @param reportId        Report ID from the original chat request (used by ReportScheduleAgent).
+ * @param reportName      Report name from the original chat request (used by ReportSearchApiClient).
  * @param dashboardId     Dashboard ID from the original chat request (used by ReportScheduleAgent).
+ * @param dashboardName   Dashboard name from the original chat request (used by ReportSearchApiClient).
  * @param chartParam      Chart/visualization param from the original chat request (used by DataInterpretTool).
  * @param projectId       Project / tenant ID from the original chat request (used by DataLineageTool).
  * @param easyBiSession   EasyBi session ID from the original chat request (used by DataLineageTool).
@@ -42,7 +44,9 @@ public record AgentContext(
         String supersonicToken,
         String agentId,
         String reportId,
+        String reportName,
         String dashboardId,
+        String dashboardName,
         String chartParam,
         String projectId,
         String easyBiSession) {}

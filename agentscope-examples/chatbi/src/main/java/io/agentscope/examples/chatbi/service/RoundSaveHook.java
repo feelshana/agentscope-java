@@ -28,27 +28,29 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 /**
- * Hook that saves the {@code DataLineageAgent}'s final assistant answer to the database.
+ * Hook that saves the agent's final assistant answer to the database.
  *
- * <p>Works in tandem with {@link DataLineageTool}: the tool saves the user question;
- * this hook saves the LLM's final answer.  Together they maintain the per-session
- * lineage conversation memory stored under {@code "<sessionId>-dl"}.
+ * <p>Works in tandem with {@link SubAgentUserMessageHook}: the hook saves the user
+ * question at agent entry; this hook saves the LLM's final answer. Together they
+ * maintain the per-session conversation memory stored under the given type.
  *
  * <p>Only the last reasoning iteration (i.e. the final agent answer without any
  * {@code tool_use} blocks) is persisted.
  */
-public class DataLineageRoundSaveHook implements Hook {
+public class RoundSaveHook implements Hook {
 
-    private static final Logger log = LoggerFactory.getLogger(DataLineageRoundSaveHook.class);
+    private static final Logger log = LoggerFactory.getLogger(RoundSaveHook.class);
 
     /** Lower priority number = runs earlier; 950 ensures it runs after ChatLogHook (900). */
     private static final int PRIORITY = 950;
 
     private final String sessionId;
-    private final DataLineageMemoryService memoryService;
+    private final String type;
+    private final SubAgentMemoryService memoryService;
 
-    public DataLineageRoundSaveHook(String sessionId, DataLineageMemoryService memoryService) {
+    public RoundSaveHook(String sessionId, String type, SubAgentMemoryService memoryService) {
         this.sessionId = sessionId;
+        this.type = type;
         this.memoryService = memoryService;
     }
 
@@ -76,12 +78,13 @@ public class DataLineageRoundSaveHook implements Hook {
                                     .collect(Collectors.joining());
                     if (!answer.isBlank()) {
                         try {
-                            memoryService.saveAssistantMessage(sessionId, answer);
+                            memoryService.saveAssistantMessage(sessionId, type, answer);
                         } catch (Exception e) {
                             log.warn(
-                                    "[DataLineageRoundSaveHook] Failed to save assistant message"
-                                            + " for session={}: {}",
+                                    "[RoundSaveHook] Failed to save assistant message"
+                                            + " for session={}, type={}: {}",
                                     sessionId,
+                                    type,
                                     e.getMessage());
                         }
                     }

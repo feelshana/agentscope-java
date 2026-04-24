@@ -257,7 +257,9 @@ public class SessionAgentManager {
                         req.getSupersonicToken(),
                         req.getAgentId(),
                         req.getReportId(),
+                        req.getReportName(),
                         req.getDashboardId(),
+                        req.getDashboardName(),
                         req.getParam(),
                         req.getProjectId(),
                         req.getEasyBiSession());

@@ -18,7 +18,7 @@ package io.agentscope.examples.chatbi.tool;
 import io.agentscope.core.tool.Tool;
 import io.agentscope.core.tool.ToolParam;
 import io.agentscope.examples.chatbi.client.DataLineageApiClient;
-import io.agentscope.examples.chatbi.service.DataLineageMemoryService;
+import io.agentscope.examples.chatbi.service.SubAgentMemoryService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -31,23 +31,26 @@ import reactor.core.publisher.Mono;
  * The client extracts {@code final_prompt} from the API response and returns it
  * directly to the LLM.
  *
- * <p>The user question is persisted immediately via {@link DataLineageMemoryService};
- * the assistant answer is saved by {@link io.agentscope.examples.chatbi.service.DataLineageRoundSaveHook}.
+ * <p>The user question is persisted by {@link SubAgentUserMessageHook} at agent entry;
+ * the assistant answer is saved by {@link io.agentscope.examples.chatbi.service.RoundSaveHook}.
+ * Memory records are tagged with type "dl".
  */
 public class DataLineageTool {
 
     private static final Logger log = LoggerFactory.getLogger(DataLineageTool.class);
 
+    private static final String TYPE_DL = "dl";
+
     private final DataLineageApiClient lineageClient;
     private final String projectId;
     private final String sessionId;
-    private final DataLineageMemoryService memoryService;
+    private final SubAgentMemoryService memoryService;
 
     public DataLineageTool(
             DataLineageApiClient lineageClient,
             String projectId,
             String sessionId,
-            DataLineageMemoryService memoryService) {
+            SubAgentMemoryService memoryService) {
         this.lineageClient = lineageClient;
         this.projectId = projectId;
         this.sessionId = sessionId;
@@ -78,10 +81,7 @@ public class DataLineageTool {
         log.info("[query_data_lineage] sessionId={}, query={}", sessionId, query);
 
         // Load previous lineage rounds for this session as memory
-        String memory = memoryService.loadMemoryJson(sessionId);
-
-        // Persist the user question immediately (assistant answer saved by hook)
-        memoryService.saveUserMessage(sessionId, query);
+        String memory = memoryService.loadMemoryJson(sessionId, TYPE_DL);
 
         return lineageClient
                 .queryLineage(query, projectId, memory)

@@ -36,7 +36,7 @@ import reactor.core.publisher.Mono;
 /**
  * Tool that filters Confluence search results using an LLM.
  *
- * <p>Takes the raw JSON search result from {@link ConfluenceSearchTool} and uses an LLM
+ * <p>Takes the raw JSON search result from {@link ConfluenceTool} and uses an LLM
  * to select the most relevant page IDs (up to 7). The LLM prompt instructs it to return
  * comma-separated page IDs.
  *

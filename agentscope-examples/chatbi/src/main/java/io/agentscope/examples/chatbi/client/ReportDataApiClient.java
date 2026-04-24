@@ -132,9 +132,11 @@ public class ReportDataApiClient {
 
     private String loadMockSearchResult(String reportId) {
         try (InputStream is =
-                getClass().getClassLoader().getResourceAsStream("json/report_search.json")) {
+                getClass()
+                        .getClassLoader()
+                        .getResourceAsStream("json/report_Interpretation.json")) {
             if (is == null) {
-                log.warn("[report_search] Mock file not found: json/report_search.json");
+                log.warn("[report_search] Mock file not found: json/report_Interpretation.json");
                 return "[]";
             }
             String fileContent = new String(is.readAllBytes(), StandardCharsets.UTF_8);
@@ -149,7 +151,9 @@ public class ReportDataApiClient {
             JsonNode data = body.path("data");
 
             if (!data.isMissingNode()) {
-                log.info("[report_search] Loaded mock search result from report_search.json");
+                log.info(
+                        "[report_search] Loaded mock search result from"
+                                + " report_Interpretation.json");
                 return data.toString();
             }
             return "[]";

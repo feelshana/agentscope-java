@@ -20,9 +20,10 @@ import io.agentscope.core.memory.InMemoryMemory;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.examples.chatbi.client.DataLineageApiClient;
 import io.agentscope.examples.chatbi.service.ChatLogHook;
-import io.agentscope.examples.chatbi.service.DataLineageMemoryService;
-import io.agentscope.examples.chatbi.service.DataLineageRoundSaveHook;
 import io.agentscope.examples.chatbi.service.PerfTimingHook;
+import io.agentscope.examples.chatbi.service.RoundSaveHook;
+import io.agentscope.examples.chatbi.service.SubAgentMemoryService;
+import io.agentscope.examples.chatbi.service.SubAgentUserMessageHook;
 import io.agentscope.examples.chatbi.tool.DataLineageTool;
 import org.springframework.stereotype.Component;
 
@@ -37,18 +38,20 @@ import org.springframework.stereotype.Component;
  * response, which the LLM then uses to generate its final answer.
  *
  * <p>Each round's user question and assistant answer are persisted to the database via
- * {@link DataLineageMemoryService} and {@link DataLineageRoundSaveHook} respectively.
+ * {@link SubAgentMemoryService} and {@link RoundSaveHook} with type "dl".
  * On subsequent calls within the same session, the history is passed as the
  * {@code memory} parameter to the lineage API.
  */
 @Component
 public class DataLineageAgentFactory implements SubAgentFactory {
 
+    private static final String TYPE_DL = "dl";
+
     private final DataLineageApiClient lineageClient;
-    private final DataLineageMemoryService memoryService;
+    private final SubAgentMemoryService memoryService;
 
     public DataLineageAgentFactory(
-            DataLineageApiClient lineageClient, DataLineageMemoryService memoryService) {
+            DataLineageApiClient lineageClient, SubAgentMemoryService memoryService) {
         this.lineageClient = lineageClient;
         this.memoryService = memoryService;
     }
@@ -68,11 +71,12 @@ public class DataLineageAgentFactory implements SubAgentFactory {
                 .memory(new InMemoryMemory())
                 .toolkit(toolkit)
                 .maxIters(5)
+                .hook(new SubAgentUserMessageHook(ctx.sessionId(), TYPE_DL, memoryService))
                 .hook(
                         new ChatLogHook(
                                 ctx.sessionId() + "-dl",
                                 "【DataLineageAgent】-> 处理数据血缘意图(dl)：查询数据血缘、上下游表依赖关系、工作流和运算元素依赖"))
-                .hook(new DataLineageRoundSaveHook(ctx.sessionId(), memoryService))
+                .hook(new RoundSaveHook(ctx.sessionId(), TYPE_DL, memoryService))
                 .hook(new PerfTimingHook(ctx.sessionId() + "-dl", "DataLineageAgent"))
                 .build();
     }

@@ -16,29 +16,35 @@
 package io.agentscope.examples.chatbi.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import io.agentscope.examples.chatbi.entity.DataLineageMemory;
+import io.agentscope.examples.chatbi.entity.SubAgentMemory;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 /**
- * MyBatis-Plus Mapper for {@link DataLineageMemory}.
+ * MyBatis-Plus Mapper for {@link SubAgentMemory}.
  */
 @Mapper
-public interface DataLineageMemoryMapper extends BaseMapper<DataLineageMemory> {
+public interface SubAgentMemoryMapper extends BaseMapper<SubAgentMemory> {
 
     /**
-     * Find by session ID.
+     * Find by session ID and type.
      */
-    @Select("SELECT * FROM data_lineage_memory WHERE session_id = #{sessionId} LIMIT 1")
-    DataLineageMemory findBySessionId(@Param("sessionId") String sessionId);
+    @Select(
+            "SELECT * FROM sub_agent_memory WHERE session_id = #{sessionId} AND type = #{type}"
+                    + " LIMIT 1")
+    SubAgentMemory findBySessionIdAndType(
+            @Param("sessionId") String sessionId, @Param("type") String type);
 
     /**
      * Update the content (JSON array) for an existing session row.
      */
     @Update(
-            "UPDATE data_lineage_memory SET content = #{content}, updated_at = NOW(3) "
-                    + "WHERE session_id = #{sessionId}")
-    int updateContent(@Param("sessionId") String sessionId, @Param("content") String content);
+            "UPDATE sub_agent_memory SET content = #{content}, updated_at = NOW(3) "
+                    + "WHERE session_id = #{sessionId} AND type = #{type}")
+    int updateContent(
+            @Param("sessionId") String sessionId,
+            @Param("type") String type,
+            @Param("content") String content);
 }
