@@ -26,7 +26,6 @@ import io.agentscope.core.model.ChatResponse;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.TimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -73,21 +72,6 @@ public class QueryRewriteHook implements Hook {
     /** Max timeout in seconds for the rewrite LLM call. */
     private static final int REWRITE_TIMEOUT_SECONDS = 30;
 
-    /**
-     * Minimum question length (chars) for applying the independent-question heuristic.
-     * Short questions (e.g. "它多少钱") are more likely to contain implicit references.
-     */
-    private static final int MIN_LENGTH_FOR_HEURISTIC = 8;
-
-    /**
-     * Reference / anaphora keywords that indicate the question depends on conversation history.
-     * If the current question contains ANY of these, we always attempt rewriting.
-     */
-    private static final Set<String> REFERENCE_KEYWORDS =
-            Set.of(
-                    "它", "他", "她", "这个", "那个", "这些", "那些", "这里", "那里", "上面", "上述", "前面", "之前", "刚才",
-                    "刚刚", "再", "继续", "同样", "类似", "一样", "呢", "呢？", "该", "此", "其", "其中", "相同");
-
     public QueryRewriteHook(ChatModelBase rewriteModel, String rewriteSystemPrompt) {
         this.rewriteModel = rewriteModel;
         this.rewriteSystemPrompt = rewriteSystemPrompt;
@@ -130,16 +114,15 @@ public class QueryRewriteHook implements Hook {
             return Mono.just(event);
         }
 
-        // Fast-path: if the question looks self-contained (no reference keywords and long enough),
-        // skip the LLM rewrite call entirely to save latency.
-        if (isLikelyIndependent(currentQuestion)) {
-            log.debug(
-                    "[QueryRewriteHook] Question looks independent, skipping rewrite: '{}'",
-                    currentQuestion.length() > 30
-                            ? currentQuestion.substring(0, 30) + "..."
-                            : currentQuestion);
-            return Mono.just(event);
-        }
+        // Always delegate to the LLM for semantic judgment on whether rewriting is needed.
+        // No length-based or keyword-based heuristics — the LLM examines history context
+        // to determine if the question depends on prior turns or is already self-contained.
+        // The rewrite prompt instructs: "仅在存在明确指代歧义时才重写，否则原样输出".
+        log.debug(
+                "[QueryRewriteHook] Delegating rewrite judgment to LLM: '{}'",
+                currentQuestion.length() > 30
+                        ? currentQuestion.substring(0, 30) + "..."
+                        : currentQuestion);
 
         // Build the rewrite prompt with condensed history
         String historyText = buildHistoryText(messages, lastUserIdx);
@@ -229,23 +212,6 @@ public class QueryRewriteHook implements Hook {
         return -1;
     }
 
-    /**
-     * Returns true when the question is likely self-contained and does NOT need rewriting.
-     * Heuristic: no reference keywords present AND question is long enough to be independent.
-     */
-    private static boolean isLikelyIndependent(String question) {
-        if (question.length() < MIN_LENGTH_FOR_HEURISTIC) {
-            // Short questions are more likely to be implicit references
-            return false;
-        }
-        for (String keyword : REFERENCE_KEYWORDS) {
-            if (question.contains(keyword)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     private boolean hasConversationHistory(List<Msg> messages, int lastUserIdx) {
         // Check if there's at least one previous USER message (i.e., prior turns exist)
         for (int i = lastUserIdx - 1; i >= 0; i--) {
@@ -264,19 +230,53 @@ public class QueryRewriteHook implements Hook {
         return raw.replaceAll("(?s)<system-hint>.*?</system-hint>", "").strip();
     }
 
+    /** Known system prompt injection markers that should be filtered from history. */
+    private static final String[] SYSTEM_PROMPT_MARKERS = {
+        "你是ChatBI路由助手", "你是 ChatBI 路由助手", "## 0. 角色定位", "## 1. 意图", "RouterAgent",
+    };
+
+    /**
+     * Maximum reasonable length for a single USER message in history.
+     * If a message exceeds this, it likely contains injected system prompt text.
+     */
+    private static final int MAX_USER_MSG_LENGTH = 500;
+
     /**
      * Build a condensed history text (last N user/assistant pairs before the current question).
+     * Filters out messages that contain injected Router system prompt text to prevent
+     * the Rewrite LLM from receiving thousands of characters of irrelevant noise.
      */
     private String buildHistoryText(List<Msg> messages, int lastUserIdx) {
         StringBuilder sb = new StringBuilder();
         int turnCount = 0;
-        // Scan backwards from just before lastUserIdx, collect user+assistant turns
         List<String> turns = new ArrayList<>();
         for (int i = lastUserIdx - 1; i >= 0 && turnCount < MAX_HISTORY_TURNS; i--) {
             Msg msg = messages.get(i);
             if (msg.getRole() == null) continue;
             String text = extractText(msg);
             if (text == null || text.isBlank()) continue;
+
+            // Filter out USER messages that contain injected system prompt
+            if (MsgRole.USER.equals(msg.getRole())) {
+                if (containsSystemPromptMarker(text)) {
+                    log.debug(
+                            "[QueryRewriteHook] Filtering history message at index {} "
+                                    + "(contains system prompt, length={})",
+                            i,
+                            text.length());
+                    continue;
+                }
+                // Truncate overly long USER messages (likely system prompt injection)
+                if (text.length() > MAX_USER_MSG_LENGTH) {
+                    log.debug(
+                            "[QueryRewriteHook] Truncating history message at index {} "
+                                    + "(length={})",
+                            i,
+                            text.length());
+                    text = text.substring(0, MAX_USER_MSG_LENGTH) + "...[已截断]";
+                }
+            }
+
             String role = MsgRole.USER.equals(msg.getRole()) ? "用户" : "助手";
             turns.add(0, role + ": " + text);
             if (MsgRole.USER.equals(msg.getRole())) {
@@ -287,9 +287,39 @@ public class QueryRewriteHook implements Hook {
         return sb.toString().strip();
     }
 
+    /** Check if a message text contains known system prompt injection markers. */
+    private static boolean containsSystemPromptMarker(String text) {
+        for (String marker : SYSTEM_PROMPT_MARKERS) {
+            if (text.contains(marker)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private String buildRewriteUserPrompt(String historyText, String currentQuestion) {
         return "历史对话：\n" + historyText + "\n\n" + "当前用户问题：\n" + currentQuestion;
     }
+
+    /**
+     * Common analysis prefixes that the rewrite LLM may prepend despite prompt instructions.
+     * These are stripped as a defense-in-depth measure to ensure only the rewritten question
+     * is returned.
+     */
+    private static final String[] ANALYSIS_PREFIXES = {
+        "用户问题本身可以独立成立",
+        "无需补全",
+        "直接原样输出",
+        "问题本身可以独立成立",
+        "当前问题已清晰",
+        "问题已明确",
+        "输出：",
+        "重写：",
+        "答案：",
+        "分析：",
+        "判断：",
+        "结论：",
+    };
 
     private String extractRewrittenQuestion(List<ChatResponse> responses) {
         if (responses == null || responses.isEmpty()) return null;
@@ -303,7 +333,49 @@ public class QueryRewriteHook implements Hook {
                         .forEach(sb::append);
             }
         }
-        return sb.toString().strip();
+        String raw = sb.toString().strip();
+
+        // Strip analysis prefixes that the LLM may prepend
+        for (String prefix : ANALYSIS_PREFIXES) {
+            if (raw.startsWith(prefix)) {
+                raw = raw.substring(prefix.length());
+                break;
+            }
+        }
+
+        // After stripping prefix, skip common separator patterns:
+        // "\n\n输出：", "。\n", "。\n\n", etc. — take the last non-empty line
+        // that doesn't look like meta-commentary
+        String[] lines = raw.split("\n");
+        String result = raw;
+        for (int i = lines.length - 1; i >= 0; i--) {
+            String line = lines[i].strip();
+            if (line.isBlank()) continue;
+            // Skip lines that are meta-commentary
+            if (line.contains("可以独立成立")
+                    || line.contains("无需补全")
+                    || line.contains("直接原样输出")
+                    || line.startsWith("输出")
+                    || line.startsWith("重写")
+                    || line.startsWith("分析")
+                    || line.startsWith("判断")) {
+                continue;
+            }
+            result = line;
+            break;
+        }
+
+        // If the result still contains the original question after some noise, try to extract it
+        // e.g. "...\n\n指标有哪些" → "指标有哪些"
+        if (result.contains("\n\n")) {
+            String[] parts = result.split("\n\n", 2);
+            String lastPart = parts[parts.length - 1].strip();
+            if (!lastPart.isBlank()) {
+                result = lastPart;
+            }
+        }
+
+        return result.strip();
     }
 
     /** Check if the error is caused by thread interruption. */
