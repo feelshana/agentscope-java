@@ -85,6 +85,9 @@ public class DataAnalysisAgentService implements InitializingBean {
     @Value("${openai.model-name:deepseek-chat}")
     private String modelNameFromConfig;
 
+    @Value("${openai.thinking-enabled:true}")
+    private boolean thinkingEnabled;
+
     @Value("${agent.system-prompt-file:prompt-V3.txt}")
     private String systemPromptFile;
 
@@ -106,7 +109,7 @@ public class DataAnalysisAgentService implements InitializingBean {
     public void afterPropertiesSet() {
         String apiKey = resolveApiKey();
         String baseUrl = resolveBaseUrl();
-        sessionAgentManager.configure(apiKey, baseUrl, modelNameFromConfig, loadSystemPrompt());
+        sessionAgentManager.configure(apiKey, baseUrl, modelNameFromConfig, thinkingEnabled, loadSystemPrompt());
         log.info("DataAnalysisAgentService initialized");
     }
 
@@ -299,7 +302,9 @@ public class DataAnalysisAgentService implements InitializingBean {
         StreamChunkType type = StreamChunkType.TEXT;
         if ("[STOPPED]".equals(chunk)) {
             type = StreamChunkType.TEXT; // Will be filtered out by replyBuf logic
-        } else if (chunk.startsWith("[TOOL:") || chunk.startsWith("[TOOL_START:") || chunk.startsWith("[TOOL_END:")) {
+        } else if (chunk.startsWith("[TOOL:")
+                || chunk.startsWith("[TOOL_START:")
+                || chunk.startsWith("[TOOL_END:")) {
             type = StreamChunkType.TOOL_STATUS;
         }
 

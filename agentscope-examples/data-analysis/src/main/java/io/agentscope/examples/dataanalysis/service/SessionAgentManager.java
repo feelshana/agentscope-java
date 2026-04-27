@@ -19,6 +19,7 @@ import io.agentscope.core.ReActAgent;
 import io.agentscope.core.formatter.openai.OpenAIChatFormatter;
 import io.agentscope.core.memory.InMemoryMemory;
 import io.agentscope.core.message.Msg;
+import io.agentscope.core.model.GenerateOptions;
 import io.agentscope.core.model.OpenAIChatModel;
 import io.agentscope.core.plan.PlanNotebook;
 import io.agentscope.core.plan.hint.DefaultPlanToHint;
@@ -61,6 +62,7 @@ public class SessionAgentManager {
     private String apiKey;
     private String baseUrl;
     private String modelName;
+    private boolean thinkingEnabled;
     private String sysPrompt;
 
     public SessionAgentManager(
@@ -78,15 +80,22 @@ public class SessionAgentManager {
         this.datasetCatalogueService = datasetCatalogueService;
     }
 
-    public void configure(String apiKey, String baseUrl, String modelName, String sysPrompt) {
+    public void configure(
+            String apiKey,
+            String baseUrl,
+            String modelName,
+            boolean thinkingEnabled,
+            String sysPrompt) {
         this.apiKey = apiKey;
         this.baseUrl = baseUrl;
         this.modelName = modelName;
+        this.thinkingEnabled = thinkingEnabled;
         this.sysPrompt = sysPrompt;
         // Create a non-streaming model for summarization
         OpenAIChatModel.Builder builder =
                 OpenAIChatModel.builder().apiKey(apiKey).modelName(modelName).stream(false)
-                        .formatter(new OpenAIChatFormatter());
+                        .formatter(new OpenAIChatFormatter())
+                        .generateOptions(buildThinkingOptions(thinkingEnabled));
         if (baseUrl != null) {
             builder.baseUrl(baseUrl);
         }
@@ -137,6 +146,18 @@ public class SessionAgentManager {
 
     // ─────────────────── Internal helpers ───────────────────
 
+    /**
+     * Builds GenerateOptions with thinking mode configured.
+     * Passes {@code thinking: {type: enabled/disabled}} via additionalBodyParam.
+     */
+    private static GenerateOptions buildThinkingOptions(boolean enabled) {
+        String thinkingType = enabled ? "enabled" : "disabled";
+        return GenerateOptions.builder()
+                .additionalBodyParam(
+                        "thinking", java.util.Map.of("type", thinkingType))
+                .build();
+    }
+
     private SessionEntry createEntry(String sessionId, String userName) {
         InMemoryMemory memory = new InMemoryMemory();
 
@@ -157,7 +178,8 @@ public class SessionAgentManager {
 
         OpenAIChatModel.Builder modelBuilder =
                 OpenAIChatModel.builder().apiKey(apiKey).modelName(modelName).stream(true)
-                        .formatter(new OpenAIChatFormatter());
+                        .formatter(new OpenAIChatFormatter())
+                        .generateOptions(buildThinkingOptions(thinkingEnabled));
         if (baseUrl != null) {
             modelBuilder.baseUrl(baseUrl);
         }
