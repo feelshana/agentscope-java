@@ -60,6 +60,7 @@ public class SessionAgentManager {
 
     private String apiKey;
     private String baseUrl;
+    private String modelName;
     private String sysPrompt;
 
     public SessionAgentManager(
@@ -77,13 +78,14 @@ public class SessionAgentManager {
         this.datasetCatalogueService = datasetCatalogueService;
     }
 
-    public void configure(String apiKey, String baseUrl, String sysPrompt) {
+    public void configure(String apiKey, String baseUrl, String modelName, String sysPrompt) {
         this.apiKey = apiKey;
         this.baseUrl = baseUrl;
+        this.modelName = modelName;
         this.sysPrompt = sysPrompt;
         // Create a non-streaming model for summarization
         OpenAIChatModel.Builder builder =
-                OpenAIChatModel.builder().apiKey(apiKey).modelName("deepseek-chat").stream(false)
+                OpenAIChatModel.builder().apiKey(apiKey).modelName(modelName).stream(false)
                         .formatter(new OpenAIChatFormatter());
         if (baseUrl != null) {
             builder.baseUrl(baseUrl);
@@ -154,7 +156,7 @@ public class SessionAgentManager {
         analysisPlanService.registerPlanNotebook(sessionId, planNotebook);
 
         OpenAIChatModel.Builder modelBuilder =
-                OpenAIChatModel.builder().apiKey(apiKey).modelName("deepseek-chat").stream(true)
+                OpenAIChatModel.builder().apiKey(apiKey).modelName(modelName).stream(true)
                         .formatter(new OpenAIChatFormatter());
         if (baseUrl != null) {
             modelBuilder.baseUrl(baseUrl);
