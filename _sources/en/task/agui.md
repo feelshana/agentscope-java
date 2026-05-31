@@ -22,16 +22,39 @@ AG-UI is a frontend-backend communication protocol for exposing agents to web fr
 
 ### 2. Register Agent
 
+#### 2.1. Use customizer to register agent
 ```java
 @Configuration
 public class AgentConfiguration {
 
-    @Autowired
-    public void configureAgents(AguiAgentRegistry registry) {
-        registry.registerFactory("default", this::createAgent);
+    @Bean
+    public AguiAgentRegistryCustomizer aguiAgentRegistryCustomizer() {
+        return registry -> registry.registerFactory("default", this::createAgent);
     }
 
     private Agent createAgent() {
+        return ReActAgent.builder()
+                .name("Assistant")
+                .sysPrompt("You are a helpful assistant.")
+                .model(DashScopeChatModel.builder()
+                        .apiKey(System.getenv("DASHSCOPE_API_KEY"))
+                        .modelName("qwen3-max")
+                        .stream(true)
+                        .build())
+                .memory(new InMemoryMemory())
+                .build();
+    }
+}
+```
+
+#### 2.2. Annotation-process to register agent
+```java
+@Configuration
+public class AgentConfiguration {
+
+    @Bean
+    @AguiAgentId("default")
+    public Agent agent() {
         return ReActAgent.builder()
                 .name("Assistant")
                 .sysPrompt("You are a helpful assistant.")
@@ -126,11 +149,11 @@ function App() {
 
 ## Example Project
 
-See complete example at [agentscope-examples/agui](https://github.com/agentscope-ai/agentscope-java/tree/main/agentscope-examples/agui):
+See complete example at [agentscope-examples/integration/agui](https://github.com/agentscope-ai/agentscope-java/tree/main/agentscope-examples/integration/agui):
 
 ```bash
 export DASHSCOPE_API_KEY=your-key
-cd agentscope-examples/agui
+cd agentscope-examples/integration/agui
 mvn spring-boot:run
 ```
 

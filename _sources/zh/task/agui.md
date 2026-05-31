@@ -22,16 +22,39 @@ AG-UI 是一个前后端通信协议，用于将智能体暴露给 Web 前端。
 
 ### 2. 注册智能体
 
+#### 2.1. 使用自定义器注册智能体
 ```java
 @Configuration
 public class AgentConfiguration {
 
-    @Autowired
-    public void configureAgents(AguiAgentRegistry registry) {
-        registry.registerFactory("default", this::createAgent);
+    @Bean
+    public AguiAgentRegistryCustomizer aguiAgentRegistryCustomizer() {
+        return registry -> registry.registerFactory("default", this::createAgent);
     }
 
     private Agent createAgent() {
+        return ReActAgent.builder()
+                .name("Assistant")
+                .sysPrompt("你是一个有帮助的助手。")
+                .model(DashScopeChatModel.builder()
+                        .apiKey(System.getenv("DASHSCOPE_API_KEY"))
+                        .modelName("qwen3-max")
+                        .stream(true)
+                        .build())
+                .memory(new InMemoryMemory())
+                .build();
+    }
+}
+```
+
+#### 2.2. 注解驱动注册智能体
+```java
+@Configuration
+public class AgentConfiguration {
+
+    @Bean
+    @AguiAgentId("default")
+    public Agent agent() {
         return ReActAgent.builder()
                 .name("Assistant")
                 .sysPrompt("你是一个有帮助的助手。")
@@ -126,11 +149,11 @@ function App() {
 
 ## 示例项目
 
-完整示例见 [agentscope-examples/agui](https://github.com/agentscope-ai/agentscope-java/tree/main/agentscope-examples/agui)：
+完整示例见 [agentscope-examples/integration/agui](https://github.com/agentscope-ai/agentscope-java/tree/main/agentscope-examples/integration/agui)：
 
 ```bash
 export DASHSCOPE_API_KEY=your-key
-cd agentscope-examples/agui
+cd agentscope-examples/integration/agui
 mvn spring-boot:run
 ```
 
