@@ -68,9 +68,9 @@ dataset:
     # 启动时优先从此文件读取，API 刷新后也写回此文件，保证重启后能获取最新内容
     # 线上部署建议设为 JAR 外的绝对路径，如：/opt/app/prompts/dataset-detail.txt
     # 留空则自动从 detail-file 推导（开发环境用 classpath 路径，JAR 环境用 ./prompts/dataset-detail.txt）
-    detail-file-path:
+    detail-file-path: /data/app/dataAnalysis/data-analysis-1.0.10-SNAPSHOT/conf/prompts/dataset-detail.txt
     # 是否将 detail 内容注入到系统提示词（维度、指标、维度值定义）
-    include-detail: true
+    include-detail: false
 
 # 阿里云 NLS 一句话识别配置
 # 请在 application-dev.yml（或环境变量）中填写真实值

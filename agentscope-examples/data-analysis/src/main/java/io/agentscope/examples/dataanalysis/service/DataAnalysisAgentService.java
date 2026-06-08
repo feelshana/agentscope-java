@@ -109,7 +109,8 @@ public class DataAnalysisAgentService implements InitializingBean {
     public void afterPropertiesSet() {
         String apiKey = resolveApiKey();
         String baseUrl = resolveBaseUrl();
-        sessionAgentManager.configure(apiKey, baseUrl, modelNameFromConfig, thinkingEnabled, loadSystemPrompt());
+        sessionAgentManager.configure(
+                apiKey, baseUrl, modelNameFromConfig, thinkingEnabled, loadSystemPrompt());
         log.info("DataAnalysisAgentService initialized");
     }
 

@@ -153,8 +153,7 @@ public class SessionAgentManager {
     private static GenerateOptions buildThinkingOptions(boolean enabled) {
         String thinkingType = enabled ? "enabled" : "disabled";
         return GenerateOptions.builder()
-                .additionalBodyParam(
-                        "thinking", java.util.Map.of("type", thinkingType))
+                .additionalBodyParam("thinking", java.util.Map.of("type", thinkingType))
                 .build();
     }
 
