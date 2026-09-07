@@ -105,4 +105,32 @@ public final class MessageMetadataKeys {
      * }</pre>
      */
     public static final String STRUCTURED_OUTPUT = "_structured_output";
+
+    /**
+     * Metadata key to explicitly mark a message for prompt caching or non-caching.
+     *
+     * <p>When set to {@code true}, the formatter adds <code>cache_control:
+     * {"type": "ephemeral"}</code> to this message during formatting, unless the message already
+     * carries a custom <code>cache_control</code> value (e.g. with additional attributes such as
+     * <code>ttl</code>), in which case it is left untouched. When set to {@code false}, the
+     * message is explicitly excluded from caching: no <code>cache_control</code> is emitted for it,
+     * and the automatic cache control strategy configured via
+     * {@link io.agentscope.core.model.GenerateOptions#getCacheControl()} skips it.
+     *
+     * <p>Explicitly marked messages (either {@code true} or {@code false}) take priority over the
+     * automatic strategy — they will not be overwritten.
+     *
+     * <p><b>Type:</b> Boolean
+     * <p><b>Example:</b>
+     * <pre>{@code
+     * Map<String, Object> metadata = new HashMap<>();
+     * metadata.put(MessageMetadataKeys.CACHE_CONTROL, true);
+     * Msg msg = Msg.builder()
+     *     .role(MsgRole.USER)
+     *     .textContent("Important context to cache...")
+     *     .metadata(metadata)
+     *     .build();
+     * }</pre>
+     */
+    public static final String CACHE_CONTROL = "_cache_control";
 }

@@ -17,15 +17,32 @@ package io.agentscope.core.skill;
 
 import io.agentscope.core.hook.Hook;
 import io.agentscope.core.hook.HookEvent;
-import io.agentscope.core.hook.PreReasoningEvent;
-import io.agentscope.core.message.Msg;
-import io.agentscope.core.message.MsgRole;
-import io.agentscope.core.message.TextBlock;
-import java.util.ArrayList;
-import java.util.List;
+import io.agentscope.core.hook.PreCallEvent;
 import reactor.core.publisher.Mono;
 
+/**
+ * Injects the skill catalog prompt into the unified system message on {@link PreCallEvent} via
+ * {@link PreCallEvent#appendSystemContent(String)}.
+ *
+ * <p>Uses priority {@link #SKILL_HOOK_PRIORITY} so that, in typical {@code HarnessAgent} wiring,
+ * this hook runs after {@code SubagentsHook} (80) and before {@code WorkspaceContextHook} (900),
+ * yielding append order: base prompt → subagents → skills → workspace context.
+ *
+ * <p>The skill prompt is appended to the transient system message and is never stored in
+ * the agent's persistent {@code Memory}.
+ *
+ * @deprecated since 2.0.0. The skill package and the hook system are removed; manage markdown
+ *     skill catalogs in application code or via {@code MiddlewareBase}.
+ */
+@Deprecated(since = "2.0.0")
 public class SkillHook implements Hook {
+
+    /**
+     * Runs after subagent prompt injection and before workspace context injection in the default
+     * harness hook chain.
+     */
+    public static final int SKILL_HOOK_PRIORITY = 85;
+
     private final SkillBox skillBox;
 
     public SkillHook(SkillBox skillBox) {
@@ -34,30 +51,17 @@ public class SkillHook implements Hook {
 
     @Override
     public <T extends HookEvent> Mono<T> onEvent(T event) {
-        // Inject skill prompts
-        if (event instanceof PreReasoningEvent preReasoningEvent) {
+        if (event instanceof PreCallEvent preCallEvent) {
             String skillPrompt = skillBox.getSkillPrompt();
             if (skillPrompt != null && !skillPrompt.isEmpty()) {
-                List<Msg> inputMessages =
-                        new ArrayList<>(preReasoningEvent.getInputMessages().size() + 1);
-                inputMessages.add(
-                        Msg.builder()
-                                .role(MsgRole.SYSTEM)
-                                .content(TextBlock.builder().text(skillPrompt).build())
-                                .build());
-                inputMessages.addAll(preReasoningEvent.getInputMessages());
-                preReasoningEvent.setInputMessages(inputMessages);
+                preCallEvent.appendSystemContent(skillPrompt);
             }
-            return Mono.just(event);
         }
-
         return Mono.just(event);
     }
 
     @Override
     public int priority() {
-        // High priority (55) to ensure skills system prompt is added early
-        // before other hooks that might depend on skill system prompt
-        return 55;
+        return SKILL_HOOK_PRIORITY;
     }
 }

@@ -23,6 +23,7 @@ import io.agentscope.core.message.ContentBlock;
 import io.agentscope.core.message.TextBlock;
 import io.agentscope.core.message.ToolResultBlock;
 import io.agentscope.core.message.ToolUseBlock;
+import io.agentscope.core.model.ToolSchema;
 import io.agentscope.core.tool.test.SampleTools;
 import io.agentscope.core.tool.test.ToolTestUtils;
 import io.agentscope.core.util.JsonUtils;
@@ -124,6 +125,180 @@ class ToolExecutorTest {
                 "Error: Tool execution failed: Tool error: test failure",
                 content,
                 "Error message should be wrapped by executor");
+    }
+
+    @Test
+    @DisplayName("Should convert empty tool publishers to error responses")
+    void shouldReturnErrorWhenToolCompletesEmpty() {
+        toolkit.registerTool(
+                new AgentTool() {
+                    @Override
+                    public String getName() {
+                        return "empty_tool";
+                    }
+
+                    @Override
+                    public String getDescription() {
+                        return "Tool that completes without a result";
+                    }
+
+                    @Override
+                    public Map<String, Object> getParameters() {
+                        return Map.of("type", "object", "properties", Map.of());
+                    }
+
+                    @Override
+                    public Mono<ToolResultBlock> callAsync(ToolCallParam param) {
+                        return Mono.empty();
+                    }
+                });
+
+        Map<String, Object> emptyInput = Map.of();
+        ToolUseBlock emptyCall =
+                ToolUseBlock.builder()
+                        .id("call-empty")
+                        .name("empty_tool")
+                        .input(emptyInput)
+                        .content(JsonUtils.getJsonCodec().toJson(emptyInput))
+                        .build();
+
+        List<ToolResultBlock> responses =
+                toolkit.callTools(List.of(emptyCall), null, null, null).block(TIMEOUT);
+
+        assertNotNull(responses, "Executor should return an error response");
+        assertEquals(1, responses.size(), "Empty completion should still yield one response");
+        assertEquals("call-empty", responses.get(0).getId(), "Response should keep tool call id");
+        assertEquals("empty_tool", responses.get(0).getName(), "Response should keep tool name");
+        assertEquals(
+                "Error: Tool execution failed: Tool completed without returning a result",
+                extractFirstText(responses.get(0)));
+    }
+
+    @Test
+    @DisplayName("Should return suspended result for external tools")
+    void shouldReturnSuspendedResultForExternalTools() {
+        toolkit.registerSchema(
+                ToolSchema.builder()
+                        .name("external_api")
+                        .description("Execute API outside the agent runtime")
+                        .parameters(
+                                Map.of(
+                                        "type",
+                                        "object",
+                                        "properties",
+                                        Map.of("endpoint", Map.of("type", "string"))))
+                        .build());
+
+        Map<String, Object> input = Map.of("endpoint", "/users");
+        ToolUseBlock externalCall =
+                ToolUseBlock.builder()
+                        .id("call-external")
+                        .name("external_api")
+                        .input(input)
+                        .content(JsonUtils.getJsonCodec().toJson(input))
+                        .build();
+
+        List<ToolResultBlock> responses =
+                toolkit.callTools(List.of(externalCall), null, null, null).block(TIMEOUT);
+
+        assertNotNull(responses, "Executor should return a suspended response");
+        assertEquals(1, responses.size(), "Single external call should yield one response");
+
+        ToolResultBlock response = responses.get(0);
+        assertEquals("call-external", response.getId(), "Response should keep tool call id");
+        assertEquals("external_api", response.getName(), "Response should keep tool name");
+        assertTrue(response.isSuspended(), "External tool should surface as suspended");
+        assertEquals("[Awaiting external execution]", extractFirstText(response));
+    }
+
+    @Test
+    @DisplayName("Should validate external tool input before suspension")
+    void shouldValidateExternalToolInputBeforeSuspension() {
+        toolkit.registerSchema(
+                ToolSchema.builder()
+                        .name("external_api")
+                        .description("Execute API outside the agent runtime")
+                        .parameters(
+                                Map.of(
+                                        "type",
+                                        "object",
+                                        "properties",
+                                        Map.of("endpoint", Map.of("type", "string")),
+                                        "required",
+                                        List.of("endpoint")))
+                        .build());
+
+        Map<String, Object> input = Map.of("endpoint", 42);
+        ToolUseBlock invalidExternalCall =
+                ToolUseBlock.builder()
+                        .id("call-invalid-external")
+                        .name("external_api")
+                        .input(input)
+                        .content(JsonUtils.getJsonCodec().toJson(input))
+                        .build();
+
+        List<ToolResultBlock> responses =
+                toolkit.callTools(List.of(invalidExternalCall), null, null, null).block(TIMEOUT);
+
+        assertNotNull(responses, "Executor should return a validation response");
+        assertEquals(1, responses.size(), "Single external call should yield one response");
+
+        ToolResultBlock response = responses.get(0);
+        assertEquals(
+                "call-invalid-external", response.getId(), "Response should keep tool call id");
+        assertEquals("external_api", response.getName(), "Response should keep tool name");
+        assertTrue(!response.isSuspended(), "Invalid external input must not suspend");
+
+        String errorText = extractFirstText(response);
+        assertTrue(
+                errorText.startsWith("Error: Parameter validation failed for tool 'external_api'"),
+                "External tool should fail validation before suspension: " + errorText);
+    }
+
+    @Test
+    @DisplayName("Should reject inactive grouped external tools before suspension")
+    void shouldRejectInactiveGroupedExternalToolsBeforeSuspension() {
+        toolkit.createToolGroup("inactiveExternal", "Inactive external tools", false);
+        toolkit.registration()
+                .agentTool(
+                        new SchemaOnlyTool(
+                                ToolSchema.builder()
+                                        .name("external_inactive")
+                                        .description("Inactive external API")
+                                        .parameters(
+                                                Map.of(
+                                                        "type",
+                                                        "object",
+                                                        "properties",
+                                                        Map.of(
+                                                                "endpoint",
+                                                                Map.of("type", "string"))))
+                                        .build()))
+                .group("inactiveExternal")
+                .apply();
+
+        Map<String, Object> input = Map.of("endpoint", "/users");
+        ToolUseBlock externalCall =
+                ToolUseBlock.builder()
+                        .id("call-inactive-external")
+                        .name("external_inactive")
+                        .input(input)
+                        .content(JsonUtils.getJsonCodec().toJson(input))
+                        .build();
+
+        List<ToolResultBlock> responses =
+                toolkit.callTools(List.of(externalCall), null, null, null).block(TIMEOUT);
+
+        assertNotNull(responses, "Executor should return an authorization response");
+        assertEquals(1, responses.size(), "Single external call should yield one response");
+
+        ToolResultBlock response = responses.get(0);
+        assertEquals("call-inactive-external", response.getId(), "Response should keep call id");
+        assertEquals("external_inactive", response.getName(), "Response should keep tool name");
+        assertTrue(!response.isSuspended(), "Inactive external tool must not suspend");
+        assertEquals(
+                "Error: Unauthorized tool call: 'external_inactive' is not available",
+                extractFirstText(response));
     }
 
     @Test
@@ -269,6 +444,141 @@ class ToolExecutorTest {
         // and two should succeed (one flaky_tool + one add)
         assertEquals(1, errorCount, "Exactly one call should fail");
         assertEquals(2, successCount, "Exactly two calls should succeed");
+    }
+
+    @Test
+    @DisplayName("Should apply preset parameters after explicit ToolCallParam input")
+    void shouldApplyPresetParametersAfterExplicitInput() {
+        class OverrideTool {
+            @Tool(description = "Test preset precedence with explicit ToolCallParam input")
+            public ToolResultBlock testOverride(
+                    @ToolParam(name = "param1") String param1,
+                    @ToolParam(name = "param2") String param2) {
+                return ToolResultBlock.text(
+                        String.format("param1: %s, param2: %s", param1, param2));
+            }
+        }
+
+        toolkit.registration()
+                .tool(new OverrideTool())
+                .presetParameters(
+                        Map.of(
+                                "testOverride",
+                                Map.of("param1", "preset_value1", "param2", "preset_value2")))
+                .apply();
+
+        Map<String, Object> explicitInput = Map.of("param1", "agent_value1");
+        ToolUseBlock toolCall =
+                ToolUseBlock.builder()
+                        .id("call-override")
+                        .name("testOverride")
+                        .input(Map.of())
+                        .content("{}")
+                        .build();
+
+        ToolResultBlock result =
+                toolkit.callTool(
+                                ToolCallParam.builder()
+                                        .toolUseBlock(toolCall)
+                                        .input(explicitInput)
+                                        .build())
+                        .block(TIMEOUT);
+
+        assertNotNull(result, "Result should not be null");
+        String resultText = extractFirstText(result);
+        assertTrue(
+                resultText.contains("param1: preset_value1"),
+                "Preset value should override explicit ToolCallParam input");
+        assertTrue(resultText.contains("param2: preset_value2"), "Preset value should be used");
+    }
+
+    @Test
+    @DisplayName("Should use only preset parameters when both input sources are absent")
+    void shouldUseOnlyPresetParametersWhenInputsAbsent() {
+        class PresetOnlyTool {
+            @Tool(description = "Test preset usage when no explicit inputs are present")
+            public ToolResultBlock presetOnly(@ToolParam(name = "param1") String param1) {
+                return ToolResultBlock.text("param1: " + param1);
+            }
+        }
+
+        toolkit.registration()
+                .tool(new PresetOnlyTool())
+                .presetParameters(Map.of("presetOnly", Map.of("param1", "preset_value1")))
+                .apply();
+
+        ToolUseBlock toolCall =
+                ToolUseBlock.builder()
+                        .id("call-preset-only")
+                        .name("presetOnly")
+                        .content("{}")
+                        .build();
+
+        ToolResultBlock result =
+                toolkit.callTool(ToolCallParam.builder().toolUseBlock(toolCall).build())
+                        .block(TIMEOUT);
+
+        assertNotNull(result, "Result should not be null");
+        assertEquals("param1: preset_value1", extractFirstText(result));
+    }
+
+    @Test
+    @DisplayName("Should execute without preset parameters when registration metadata is absent")
+    void shouldExecuteWhenRegisteredMetadataIsAbsent() {
+        AgentTool echoTool =
+                new AgentTool() {
+                    @Override
+                    public String getName() {
+                        return "metadata_gap_tool";
+                    }
+
+                    @Override
+                    public String getDescription() {
+                        return "Tool for simulating a metadata lookup gap";
+                    }
+
+                    @Override
+                    public Map<String, Object> getParameters() {
+                        return Map.of("type", "object", "properties", Map.of());
+                    }
+
+                    @Override
+                    public Mono<ToolResultBlock> callAsync(ToolCallParam param) {
+                        return Mono.just(
+                                ToolResultBlock.text("value: " + param.getInput().get("value")));
+                    }
+                };
+
+        ToolRegistry registryWithMetadataGap =
+                new ToolRegistry() {
+                    @Override
+                    RegisteredToolFunction getRegisteredTool(String name) {
+                        return null;
+                    }
+                };
+        registryWithMetadataGap.registerTool(
+                echoTool.getName(), echoTool, new RegisteredToolFunction(echoTool, null, null));
+        ToolExecutor executor =
+                new ToolExecutor(
+                        toolkit,
+                        registryWithMetadataGap,
+                        new ToolGroupManager(),
+                        ToolkitConfig.defaultConfig());
+        Map<String, Object> input = Map.of("value", "caller_value");
+        ToolUseBlock toolCall =
+                ToolUseBlock.builder()
+                        .id("call-metadata-gap")
+                        .name(echoTool.getName())
+                        .input(input)
+                        .content(JsonUtils.getJsonCodec().toJson(input))
+                        .build();
+
+        ToolResultBlock result =
+                executor.execute(ToolCallParam.builder().toolUseBlock(toolCall).build())
+                        .block(TIMEOUT);
+
+        assertNotNull(result, "Result should not be null");
+        assertEquals("value: caller_value", extractFirstText(result));
     }
 
     @Test

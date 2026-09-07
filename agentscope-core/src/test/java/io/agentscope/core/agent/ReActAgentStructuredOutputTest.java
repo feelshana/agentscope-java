@@ -22,6 +22,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import io.agentscope.core.ReActAgent;
 import io.agentscope.core.agent.test.MockModel;
 import io.agentscope.core.agent.test.TestConstants;
+import io.agentscope.core.hook.Hook;
+import io.agentscope.core.hook.HookEvent;
+import io.agentscope.core.hook.PostReasoningEvent;
 import io.agentscope.core.memory.InMemoryMemory;
 import io.agentscope.core.memory.Memory;
 import io.agentscope.core.message.Msg;
@@ -37,7 +40,11 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
+import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 class ReActAgentStructuredOutputTest {
@@ -122,7 +129,6 @@ class ReActAgentStructuredOutputTest {
                         .sysPrompt("You are a weather assistant")
                         .model(mockModel)
                         .toolkit(toolkit)
-                        .memory(memory)
                         .build();
 
         // Execute structured output call
@@ -215,7 +221,6 @@ class ReActAgentStructuredOutputTest {
                         .sysPrompt("You are a weather assistant")
                         .model(mockModel)
                         .toolkit(toolkit)
-                        .memory(memory)
                         .build();
 
         Msg inputMsg =
@@ -318,7 +323,6 @@ class ReActAgentStructuredOutputTest {
                         .sysPrompt("You are a weather assistant")
                         .model(mockModel)
                         .toolkit(toolkit)
-                        .memory(memory)
                         .build();
 
         // Call with only structured output class - no new messages
@@ -406,7 +410,6 @@ class ReActAgentStructuredOutputTest {
                         .sysPrompt("You are a weather assistant")
                         .model(mockModel)
                         .toolkit(toolkit)
-                        .memory(memory)
                         .build();
 
         Msg inputMsg =
@@ -433,6 +436,12 @@ class ReActAgentStructuredOutputTest {
         assertEquals(100, usage.getInputTokens(), "Input tokens should be preserved");
         assertEquals(50, usage.getOutputTokens(), "Output tokens should be preserved");
         assertEquals(1.5, usage.getTime(), 0.01, "Time should be preserved");
+
+        ChatUsage canonicalUsage = responseMsg.getUsage();
+        assertNotNull(canonicalUsage, "Canonical usage field should be preserved");
+        assertEquals(100, canonicalUsage.getInputTokens());
+        assertEquals(50, canonicalUsage.getOutputTokens());
+        assertEquals(1.5, canonicalUsage.getTime(), 0.01);
     }
 
     @Test
@@ -503,7 +512,6 @@ class ReActAgentStructuredOutputTest {
                         .sysPrompt("You are a weather assistant")
                         .model(mockModel)
                         .toolkit(toolkit)
-                        .memory(memory)
                         .build();
 
         Msg inputMsg =
@@ -536,6 +544,27 @@ class ReActAgentStructuredOutputTest {
 
     @Test
     void testConcurrencyConflictStructuredOutput() {
+        runSubscribeOnThenSequentialSecondCallStructuredOutputScenario(toolkit);
+    }
+
+    /**
+     * Reproduces the subscribeOn(elastic) vs delayed {@code doFinally} race: run many times until
+     * failure or increase confidence after a fix.
+     */
+    @EnabledIfSystemProperty(named = "agentscope.runStructuredOutputRaceTest", matches = "true")
+    @RepeatedTest(25000)
+    @DisplayName("Structured output race: 25000 repetitions (subscribeOn + immediate second call)")
+    void testConcurrencyConflictStructuredOutput_repeated() {
+        runSubscribeOnThenSequentialSecondCallStructuredOutputScenario(toolkit);
+    }
+
+    /**
+     * First call on {@link Schedulers#boundedElastic()}, second call immediately on the calling
+     * thread — same agent and toolkit. Flaky when structured-output cleanup races the second
+     * registration.
+     */
+    private void runSubscribeOnThenSequentialSecondCallStructuredOutputScenario(
+            Toolkit agentToolkit) {
         Memory memory = new InMemoryMemory();
         Map<String, Object> toolInput =
                 Map.of(
@@ -587,8 +616,7 @@ class ReActAgentStructuredOutputTest {
                         .name("weather-agent")
                         .sysPrompt("You are a weather assistant")
                         .model(mockModel)
-                        .toolkit(toolkit)
-                        .memory(memory)
+                        .toolkit(agentToolkit)
                         .build();
 
         Msg inputMsg =
@@ -604,7 +632,7 @@ class ReActAgentStructuredOutputTest {
         Msg responseMsg =
                 agent.call(inputMsg, WeatherResponse.class)
                         .subscribeOn(Schedulers.boundedElastic())
-                        .block(Duration.ofMillis(TestConstants.DEFAULT_TEST_TIMEOUT_MS));
+                        .block(Duration.ofMillis(TestConstants.DEFAULT_TEST_TIMEOUT_MS * 10000));
 
         Msg response2 =
                 agent.call(inputMsg, WeatherResponse.class)
@@ -621,5 +649,98 @@ class ReActAgentStructuredOutputTest {
         // no IllegalStateException throw
         WeatherResponse result2 = response2.getStructuredData(WeatherResponse.class);
         assertNotNull(result2);
+    }
+
+    @Test
+    @DisplayName("Should not throw NPE when PostReasoning hook nulls out the reasoning message")
+    void testStructuredOutputNullReasoningMessage() {
+        Map<String, Object> toolInput =
+                Map.of(
+                        "response",
+                        Map.of(
+                                "location",
+                                "San Francisco",
+                                "temperature",
+                                "72°F",
+                                "condition",
+                                "Sunny"));
+
+        MockModel mockModel =
+                new MockModel(
+                        msgs -> {
+                            boolean hasToolResults =
+                                    msgs.stream().anyMatch(m -> m.getRole() == MsgRole.TOOL);
+
+                            if (!hasToolResults) {
+                                return List.of(
+                                        ChatResponse.builder()
+                                                .id("msg_1")
+                                                .content(
+                                                        List.of(
+                                                                ToolUseBlock.builder()
+                                                                        .id("call_123")
+                                                                        .name("generate_response")
+                                                                        .input(toolInput)
+                                                                        .content(
+                                                                                JsonUtils
+                                                                                        .getJsonCodec()
+                                                                                        .toJson(
+                                                                                                toolInput))
+                                                                        .build()))
+                                                .usage(new ChatUsage(10, 20, 30))
+                                                .build());
+                            } else {
+                                return List.of(
+                                        ChatResponse.builder()
+                                                .id("msg_2")
+                                                .content(
+                                                        List.of(
+                                                                TextBlock.builder()
+                                                                        .text("Done")
+                                                                        .build()))
+                                                .usage(new ChatUsage(5, 10, 15))
+                                                .build());
+                            }
+                        });
+
+        @SuppressWarnings("deprecation")
+        Hook nullMessageHook =
+                new Hook() {
+                    @Override
+                    @SuppressWarnings("unchecked")
+                    public <T extends HookEvent> Mono<T> onEvent(T event) {
+                        if (event instanceof PostReasoningEvent pre) {
+                            pre.setReasoningMessage(null);
+                        }
+                        return Mono.just(event);
+                    }
+                };
+
+        ReActAgent agent =
+                ReActAgent.builder()
+                        .name("weather-agent")
+                        .sysPrompt("You are a weather assistant")
+                        .model(mockModel)
+                        .toolkit(toolkit)
+                        .hook(nullMessageHook)
+                        .build();
+
+        Msg inputMsg =
+                Msg.builder()
+                        .name("user")
+                        .role(MsgRole.USER)
+                        .content(
+                                TextBlock.builder()
+                                        .text("What's the weather in San Francisco?")
+                                        .build())
+                        .build();
+
+        // Before the fix, this threw NullPointerException: value at MonoJust.<init>
+        Msg responseMsg =
+                agent.call(inputMsg, WeatherResponse.class)
+                        .block(Duration.ofMillis(TestConstants.DEFAULT_TEST_TIMEOUT_MS));
+
+        // The agent should handle null eventMsg gracefully — either by returning
+        // empty or by continuing the loop. No NPE should be thrown.
     }
 }

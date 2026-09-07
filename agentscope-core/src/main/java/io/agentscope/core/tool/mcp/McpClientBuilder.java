@@ -17,6 +17,7 @@ package io.agentscope.core.tool.mcp;
 
 import static io.agentscope.core.Version.VERSION;
 
+import io.agentscope.core.Version;
 import io.modelcontextprotocol.client.McpAsyncClient;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
@@ -24,9 +25,14 @@ import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
 import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
+import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSchema.ElicitRequest;
+import io.modelcontextprotocol.spec.McpSchema.ElicitResult;
+import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
@@ -35,10 +41,13 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import reactor.core.publisher.Mono;
 
@@ -47,33 +56,40 @@ import reactor.core.publisher.Mono;
  *
  * <p>Supports three transport types:
  * <ul>
- *   <li>StdIO - for local process communication</li>
- *   <li>SSE - for HTTP Server-Sent Events (stateful)</li>
- *   <li>StreamableHTTP - for HTTP streaming (stateless)</li>
+ * <li>StdIO - for local process communication</li>
+ * <li>SSE - for HTTP Server-Sent Events (stateful)</li>
+ * <li>StreamableHTTP - for HTTP streaming (stateless)</li>
  * </ul>
  *
  * <p>Example usage:
  * <pre>{@code
  * // StdIO transport
  * McpClientWrapper client = McpClientBuilder.create("git-mcp")
- *     .stdioTransport("python", "-m", "mcp_server_git")
- *     .buildAsync()
- *     .block();
+ *         .stdioTransport("python", "-m", "mcp_server_git")
+ *         .buildAsync()
+ *         .block();
  *
  * // SSE transport with headers and query parameters
  * McpClientWrapper client = McpClientBuilder.create("remote-mcp")
- *     .sseTransport("https://mcp.example.com/sse")
- *     .header("Authorization", "Bearer " + token)
- *     .queryParam("queryKey", "queryValue")
- *     .timeout(Duration.ofSeconds(60))
- *     .buildAsync()
- *     .block();
+ *         .sseTransport("https://mcp.example.com/sse")
+ *         .header("Authorization", "Bearer " + token)
+ *         .queryParam("queryKey", "queryValue")
+ *         .timeout(Duration.ofSeconds(60))
+ *         .buildAsync()
+ *         .block();
  *
  * // HTTP transport with multiple query parameters
  * McpClientWrapper client = McpClientBuilder.create("http-mcp")
- *     .streamableHttpTransport("https://mcp.example.com/http")
- *     .queryParams(Map.of("token", "abc123", "env", "prod"))
- *     .buildSync();
+ *         .streamableHttpTransport("https://mcp.example.com/http")
+ *         .queryParams(Map.of("token", "abc123", "env", "prod"))
+ *         .buildSync();
+ *
+ * // StdIO transport with custom protocol versions
+ * McpClientWrapper client = McpClientBuilder.create("mcp")
+ *         .stdioTransport("python", "server.py")
+ *         .protocolVersions("2024-11-05", "2025-03-26")
+ *         .buildAsync()
+ *         .block();
  * }</pre>
  */
 public class McpClientBuilder {
@@ -85,6 +101,9 @@ public class McpClientBuilder {
     private TransportConfig transportConfig;
     private Duration requestTimeout = DEFAULT_REQUEST_TIMEOUT;
     private Duration initializationTimeout = DEFAULT_INIT_TIMEOUT;
+    private Function<ElicitRequest, Mono<ElicitResult>> asyncElicitationHandler;
+    private Function<ElicitRequest, ElicitResult> syncElicitationHandler;
+    private List<String> protocolVersions;
 
     private McpClientBuilder(String name) {
         this.name = name;
@@ -107,7 +126,7 @@ public class McpClientBuilder {
      * Configures StdIO transport for local process communication.
      *
      * @param command the executable command
-     * @param args command arguments
+     * @param args    command arguments
      * @return this builder
      */
     public McpClientBuilder stdioTransport(String command, String... args) {
@@ -119,8 +138,8 @@ public class McpClientBuilder {
      * Configures StdIO transport with environment variables.
      *
      * @param command the executable command
-     * @param args command arguments list
-     * @param env environment variables
+     * @param args    command arguments list
+     * @param env     environment variables
      * @return this builder
      */
     public McpClientBuilder stdioTransport(
@@ -147,11 +166,11 @@ public class McpClientBuilder {
      * <p>Example usage for HTTP/2:
      * <pre>{@code
      * McpClientWrapper client = McpClientBuilder.create("mcp")
-     *     .sseTransport("https://example.com/sse")
+     *         .sseTransport("https://example.com/sse")
      *     .customizeSseClient(clientBuilder ->
      *         clientBuilder.version(java.net.http.HttpClient.Version.HTTP_2))
-     *     .buildAsync()
-     *     .block();
+     *         .buildAsync()
+     *         .block();
      * }</pre>
      *
      * @param customizer consumer to customize the HttpClient.Builder
@@ -176,17 +195,21 @@ public class McpClientBuilder {
     }
 
     /**
-     * Customizes the HTTP client for StreamableHTTP transport (only applicable after calling streamableHttpTransport).
-     * This allows advanced HTTP client configuration like HTTP/2, custom timeouts, SSL settings, etc.
+     * Customizes the HTTP client for StreamableHTTP transport (only applicable
+     * after calling streamableHttpTransport).
+     * This allows advanced HTTP client configuration like HTTP/2, custom timeouts,
+     * SSL settings, etc.
      *
-     * <p>Example usage for HTTP/2:
+     * <p>
+     * Example usage for HTTP/2:
+     *
      * <pre>{@code
      * McpClientWrapper client = McpClientBuilder.create("mcp")
-     *     .streamableHttpTransport("https://example.com/http")
-     *     .customizeStreamableHttpClient(clientBuilder ->
-     *         clientBuilder.version(java.net.http.HttpClient.Version.HTTP_2))
-     *     .buildAsync()
-     *     .block();
+     *         .streamableHttpTransport("https://example.com/http")
+     *         .customizeStreamableHttpClient(
+     *                 clientBuilder -> clientBuilder.version(java.net.http.HttpClient.Version.HTTP_2))
+     *         .buildAsync()
+     *         .block();
      * }</pre>
      *
      * @param customizer consumer to customize the HttpClient.Builder
@@ -200,9 +223,56 @@ public class McpClientBuilder {
     }
 
     /**
+     * Registers a per-request HTTP customizer for dynamic request modification
+     * (only applicable for HTTP transports: SSE and StreamableHTTP).
+     *
+     * <p>Unlike {@link #header(String, String)} which sets static headers at build time,
+     * this customizer is invoked for <strong>every</strong> HTTP request, enabling
+     * dynamic token injection for OAuth/STS scenarios where credentials expire.
+     *
+     * <p>This method delegates directly to the MCP SDK's
+     * {@code httpRequestCustomizer(McpSyncHttpClientRequestCustomizer)} API, which
+     * provides the HTTP method, endpoint URI, request body, and transport context
+     * for each request.
+     *
+     * <p>Example usage with dynamic OAuth token:
+     * <pre>{@code
+     * McpClientWrapper client = McpClientBuilder.create("mcp-server")
+     *         .streamableHttpTransport("https://mcp.example.com/http")
+     *         .httpRequestCustomizer((builder, method, uri, body, ctx) -> {
+     *             String token = tokenService.getToken();
+     *             builder.header("Authorization", "Bearer " + token);
+     *         })
+     *         .buildSync();
+     * }</pre>
+     *
+     * <p>Example with SSE transport:
+     * <pre>{@code
+     * McpClientWrapper client = McpClientBuilder.create("mcp-server")
+     *         .sseTransport("https://mcp.example.com/sse")
+     *         .httpRequestCustomizer((builder, method, uri, body, ctx) -> {
+     *             builder.header("Authorization", "Bearer " + tokenProvider.getToken());
+     *             builder.header("X-Request-Id", UUID.randomUUID().toString());
+     *         })
+     *         .buildAsync()
+     *         .block();
+     * }</pre>
+     *
+     * @param customizer per-request customizer invoked before each HTTP request
+     * @return this builder
+     * @since 2.0.0
+     */
+    public McpClientBuilder httpRequestCustomizer(McpSyncHttpClientRequestCustomizer customizer) {
+        if (transportConfig instanceof HttpTransportConfig) {
+            ((HttpTransportConfig) transportConfig).setHttpRequestCustomizer(customizer);
+        }
+        return this;
+    }
+
+    /**
      * Adds an HTTP header (only applicable for HTTP transports).
      *
-     * @param key header name
+     * @param key   header name
      * @param value header value
      * @return this builder
      */
@@ -229,11 +299,12 @@ public class McpClientBuilder {
     /**
      * Adds a query parameter to the URL (only applicable for HTTP transports).
      *
-     * <p>Query parameters added via this method will be merged with any existing
+     * <p>
+     * Query parameters added via this method will be merged with any existing
      * query parameters in the URL. If the same parameter key exists in both the URL
      * and the added parameters, the added parameter will take precedence.
      *
-     * @param key query parameter name
+     * @param key   query parameter name
      * @param value query parameter value
      * @return this builder
      */
@@ -247,7 +318,8 @@ public class McpClientBuilder {
     /**
      * Sets multiple query parameters (only applicable for HTTP transports).
      *
-     * <p>This method replaces any previously added query parameters.
+     * <p>
+     * This method replaces any previously added query parameters.
      * Query parameters in the original URL are still preserved and merged.
      *
      * @param queryParams map of query parameter name-value pairs
@@ -283,6 +355,113 @@ public class McpClientBuilder {
     }
 
     /**
+     * Sets the MCP protocol versions that the client supports.
+     *
+     * <p>By default, the client only supports "2024-11-05". If the MCP server responds
+     * with a different protocol version during initialization (e.g., "2025-03-26"),
+     * the connection will fail with "Unsupported protocol version".
+     *
+     * <p>Use this method to declare support for additional protocol versions:
+     * <pre>{@code
+     * McpClientWrapper client = McpClientBuilder.create("server")
+     *         .stdioTransport("python", "server.py")
+     *         .protocolVersions("2024-11-05", "2025-03-26")
+     *         .buildAsync()
+     *         .block();
+     * }</pre>
+     *
+     * @param versions one or more protocol version strings (e.g., "2024-11-05", "2025-03-26")
+     * @return this builder
+     * @throws IllegalArgumentException if no versions are provided
+     */
+    public McpClientBuilder protocolVersions(String... versions) {
+        if (versions == null || versions.length == 0) {
+            throw new IllegalArgumentException("At least one protocol version must be specified");
+        }
+        List<String> filtered =
+                Arrays.stream(versions).filter(Objects::nonNull).collect(Collectors.toList());
+        if (filtered.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "At least one non-null protocol version must be specified");
+        }
+        this.protocolVersions = Collections.unmodifiableList(filtered);
+        return this;
+    }
+
+    /**
+     * Registers an asynchronous elicitation handler for processing elicit requests
+     * from the server.
+     *
+     * <p>
+     * When an elicitation handler is registered, the client will automatically
+     * enable
+     * the elicitation capability in ClientCapabilities.
+     *
+     * <p>
+     * This method is for use with {@link #buildAsync()}. The handler returns a
+     * {@link Mono}
+     * for asynchronous processing.
+     *
+     * <p>
+     * Example usage:
+     *
+     * <pre>{@code
+     * McpClientWrapper client = McpClientBuilder.create("mcp")
+     *     .stdioTransport("python", "-m", "mcp_server")
+     *     .asyncElicitation(request -> {
+     *         // Handle elicitation request asynchronously
+     *         return Mono.just(ElicitResult.builder()...build());
+     *     })
+     *     .buildAsync()
+     *     .block();
+     * }
+     * </pre>
+     *
+     * @param handler function to handle elicit requests asynchronously
+     * @return this builder
+     */
+    public McpClientBuilder asyncElicitation(Function<ElicitRequest, Mono<ElicitResult>> handler) {
+        this.asyncElicitationHandler = handler;
+        return this;
+    }
+
+    /**
+     * Registers a synchronous elicitation handler for processing elicit requests
+     * from the server.
+     *
+     * <p>
+     * When an elicitation handler is registered, the client will automatically
+     * enable
+     * the elicitation capability in ClientCapabilities.
+     *
+     * <p>
+     * This method is for use with {@link #buildSync()}. The handler returns an
+     * {@link ElicitResult}
+     * directly for synchronous processing.
+     *
+     * <p>
+     * Example usage:
+     *
+     * <pre>{@code
+     * McpClientWrapper client = McpClientBuilder.create("mcp")
+     *     .stdioTransport("python", "-m", "mcp_server")
+     *     .syncElicitation(request -> {
+     *         // Handle elicitation request synchronously
+     *         return ElicitResult.builder()...build();
+     *     })
+     *     .buildSync();
+     * }
+     * </pre>
+     *
+     * @param handler function to handle elicit requests synchronously
+     * @return this builder
+     */
+    public McpClientBuilder syncElicitation(Function<ElicitRequest, ElicitResult> handler) {
+        this.syncElicitationHandler = handler;
+        return this;
+    }
+
+    /**
      * Builds an asynchronous MCP client wrapper.
      *
      * @return Mono emitting the async client wrapper
@@ -296,20 +475,30 @@ public class McpClientBuilder {
                 () -> {
                     McpClientTransport transport = transportConfig.createTransport();
 
+                    if (protocolVersions != null) {
+                        transport =
+                                new ProtocolVersionOverrideTransport(transport, protocolVersions);
+                    }
+
                     McpSchema.Implementation clientInfo =
                             new McpSchema.Implementation(
                                     "agentscope-java", "AgentScope Java Framework", VERSION);
 
                     McpSchema.ClientCapabilities clientCapabilities =
-                            McpSchema.ClientCapabilities.builder().build();
+                            buildCapabilities(asyncElicitationHandler != null);
 
-                    McpAsyncClient mcpClient =
+                    var clientBuilder =
                             McpClient.async(transport)
                                     .requestTimeout(requestTimeout)
                                     .initializationTimeout(initializationTimeout)
                                     .clientInfo(clientInfo)
-                                    .capabilities(clientCapabilities)
-                                    .build();
+                                    .capabilities(clientCapabilities);
+
+                    if (asyncElicitationHandler != null) {
+                        clientBuilder = clientBuilder.elicitation(asyncElicitationHandler);
+                    }
+
+                    McpAsyncClient mcpClient = clientBuilder.build();
 
                     return new McpAsyncClientWrapper(name, mcpClient);
                 });
@@ -327,28 +516,109 @@ public class McpClientBuilder {
 
         McpClientTransport transport = transportConfig.createTransport();
 
+        if (protocolVersions != null) {
+            transport = new ProtocolVersionOverrideTransport(transport, protocolVersions);
+        }
+
         McpSchema.Implementation clientInfo =
                 new McpSchema.Implementation(
-                        "agentscope-java", "AgentScope Java Framework", "1.0.10-SNAPSHOT");
+                        "agentscope-java", "AgentScope Java Framework", Version.VERSION);
 
         McpSchema.ClientCapabilities clientCapabilities =
-                McpSchema.ClientCapabilities.builder().build();
+                buildCapabilities(syncElicitationHandler != null);
 
-        McpSyncClient mcpClient =
+        var clientBuilder =
                 McpClient.sync(transport)
                         .requestTimeout(requestTimeout)
                         .initializationTimeout(initializationTimeout)
                         .clientInfo(clientInfo)
-                        .capabilities(clientCapabilities)
-                        .build();
+                        .capabilities(clientCapabilities);
+
+        if (syncElicitationHandler != null) {
+            clientBuilder = clientBuilder.elicitation(syncElicitationHandler);
+        }
+
+        McpSyncClient mcpClient = clientBuilder.build();
 
         return new McpSyncClientWrapper(name, mcpClient);
+    }
+
+    /**
+     * Builds client capabilities
+     * @param withElicitation whether to include elicitation capability
+     * @return client capabilities
+     */
+    private McpSchema.ClientCapabilities buildCapabilities(boolean withElicitation) {
+        McpSchema.ClientCapabilities.Builder capabilitiesBuilder =
+                McpSchema.ClientCapabilities.builder();
+        if (withElicitation) {
+            capabilitiesBuilder.elicitation();
+        }
+        return capabilitiesBuilder.build();
     }
 
     // ==================== Internal Transport Configuration Classes ====================
 
     private interface TransportConfig {
         McpClientTransport createTransport();
+    }
+
+    /**
+     * A transport decorator that overrides the protocol versions reported to the MCP client.
+     *
+     * <p>The MCP Java SDK's {@code LifecycleInitializer} performs a strict check:
+     * the server's protocol version must be contained in the client's supported versions list.
+     * By default, transports only report support for "2024-11-05", causing connections to fail
+     * with servers that respond with newer versions (e.g., "2025-03-26").
+     *
+     * <p>This decorator wraps any {@link McpClientTransport} and overrides
+     * {@link #protocolVersions()} to return a user-specified list, while delegating
+     * all other operations to the underlying transport.
+     */
+    private static class ProtocolVersionOverrideTransport implements McpClientTransport {
+
+        private final McpClientTransport delegate;
+        private final List<String> versions;
+
+        ProtocolVersionOverrideTransport(McpClientTransport delegate, List<String> versions) {
+            this.delegate = delegate;
+            this.versions = versions;
+        }
+
+        @Override
+        public List<String> protocolVersions() {
+            return versions;
+        }
+
+        @Override
+        public Mono<Void> connect(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
+            return delegate.connect(handler);
+        }
+
+        @Override
+        public void setExceptionHandler(Consumer<Throwable> handler) {
+            delegate.setExceptionHandler(handler);
+        }
+
+        @Override
+        public Mono<Void> closeGracefully() {
+            return delegate.closeGracefully();
+        }
+
+        @Override
+        public void close() {
+            delegate.close();
+        }
+
+        @Override
+        public Mono<Void> sendMessage(JSONRPCMessage message) {
+            return delegate.sendMessage(message);
+        }
+
+        @Override
+        public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
+            return delegate.unmarshalFrom(data, typeRef);
+        }
     }
 
     private static class StdioTransportConfig implements TransportConfig {
@@ -387,6 +657,7 @@ public class McpClientBuilder {
         protected final String url;
         protected Map<String, String> headers = new HashMap<>();
         protected Map<String, String> queryParams = new HashMap<>();
+        protected McpSyncHttpClientRequestCustomizer httpRequestCustomizer;
 
         protected HttpTransportConfig(String url) {
             this.url = url;
@@ -417,9 +688,15 @@ public class McpClientBuilder {
             this.queryParams = new HashMap<>(queryParams);
         }
 
+        public void setHttpRequestCustomizer(McpSyncHttpClientRequestCustomizer customizer) {
+            this.httpRequestCustomizer = customizer;
+        }
+
         /**
-         * Extracts the endpoint path from URL, merging with additional query parameters.
-         * Query parameters from the original URL are merged with additionally configured parameters.
+         * Extracts the endpoint path from URL, merging with additional query
+         * parameters.
+         * Query parameters from the original URL are merged with additionally
+         * configured parameters.
          * Additional parameters take precedence over URL parameters with the same key.
          *
          * @return endpoint path with query parameters (e.g., "/api/sse?token=abc")
@@ -519,6 +796,11 @@ public class McpClientBuilder {
                         });
             }
 
+            // Apply per-request HTTP customizer for dynamic token injection, etc.
+            if (httpRequestCustomizer != null) {
+                clientTransportBuilder.httpRequestCustomizer(httpRequestCustomizer);
+            }
+
             return clientTransportBuilder.build();
         }
     }
@@ -558,6 +840,11 @@ public class McpClientBuilder {
                         requestBuilder -> {
                             headers.forEach(requestBuilder::header);
                         });
+            }
+
+            // Apply per-request HTTP customizer for dynamic token injection, etc.
+            if (httpRequestCustomizer != null) {
+                clientTransportBuilder.httpRequestCustomizer(httpRequestCustomizer);
             }
 
             return clientTransportBuilder.build();

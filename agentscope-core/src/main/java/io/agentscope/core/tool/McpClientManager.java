@@ -167,6 +167,11 @@ class McpClientManager {
                                             ? presetParametersMapping.get(mcpTool.name())
                                             : null;
 
+                            boolean readOnly =
+                                    mcpTool.annotations() != null
+                                            && Boolean.TRUE.equals(
+                                                    mcpTool.annotations().readOnlyHint());
+
                             McpTool agentTool =
                                     new McpTool(
                                             mcpTool.name(),
@@ -178,7 +183,15 @@ class McpClientManager {
                                                     toolPresetParams != null
                                                             ? toolPresetParams.keySet()
                                                             : Collections.emptySet()),
-                                            mcpClientWrapper);
+                                            mcpTool.outputSchema() != null
+                                                    ? new ConcurrentHashMap<>(
+                                                            mcpTool.outputSchema())
+                                                    : null,
+                                            mcpClientWrapper,
+                                            /* presetArguments handled upstream by
+                                             * RegisteredToolFunction */ null,
+                                            mcpClientWrapper.getName(),
+                                            readOnly);
 
                             // Register with group, MCP client name, and preset parameters via
                             // callback

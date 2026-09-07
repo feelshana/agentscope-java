@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 import okhttp3.ConnectionPool;
@@ -105,6 +106,9 @@ public class OkHttpTransport implements HttpTransport {
                 new OkHttpClient.Builder()
                         .connectTimeout(
                                 config.getConnectTimeout().toMillis(), TimeUnit.MILLISECONDS)
+                        // OkHttp readTimeout is a socket-read idle timeout. It remains suitable
+                        // for streaming reads and is distinct from JDK streaming response/idle
+                        // timeouts in HttpTransportConfig.
                         .readTimeout(config.getReadTimeout().toMillis(), TimeUnit.MILLISECONDS)
                         .writeTimeout(config.getWriteTimeout().toMillis(), TimeUnit.MILLISECONDS)
                         .connectionPool(
@@ -162,7 +166,7 @@ public class OkHttpTransport implements HttpTransport {
      *
      * @return the SSL socket factory
      */
-    private static javax.net.ssl.SSLSocketFactory createTrustAllSslSocketFactory() {
+    private static SSLSocketFactory createTrustAllSslSocketFactory() {
         try {
             SSLContext sslContext = SSLContext.getInstance("TLS");
             sslContext.init(
@@ -303,7 +307,7 @@ public class OkHttpTransport implements HttpTransport {
                                 closeQuietly(response);
                             }
                         })
-                .subscribeOn(Schedulers.boundedElastic());
+                .subscribeOn(Schedulers.boundedElastic(), false);
     }
 
     @Override

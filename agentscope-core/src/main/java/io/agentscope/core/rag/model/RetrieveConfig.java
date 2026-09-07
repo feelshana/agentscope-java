@@ -24,7 +24,11 @@ import java.util.List;
  * <p>This class uses the builder pattern to configure retrieval parameters such as
  * the maximum number of results, the minimum similarity score threshold, and optional
  * conversation history for context-aware retrieval.
+ *
+ * @deprecated since 2.0.0. The rag package is removed; integrate retrieval at the application
+ *     layer.
  */
+@Deprecated(forRemoval = true, since = "2.0.0")
 public class RetrieveConfig {
 
     private final int limit;
@@ -76,6 +80,19 @@ public class RetrieveConfig {
      */
     public List<Msg> getConversationHistory() {
         return conversationHistory;
+    }
+
+    /**
+     * Mutate the current instance to a new builder.
+     *
+     * @return a new builder with the same values of this instance
+     */
+    public Builder mutate() {
+        return new Builder()
+                .limit(this.limit)
+                .scoreThreshold(this.scoreThreshold)
+                .vectorName(this.vectorName)
+                .conversationHistory(this.conversationHistory);
     }
 
     /**

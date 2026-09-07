@@ -32,20 +32,25 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <spring-boot.version>4.0.2</spring-boot.version>
+        <spring-boot.version>4.0.3</spring-boot.version>
         <maven.deploy.skip>false</maven.deploy.skip>
     </properties>
 
     <modules>
         <module>agentscope-spring-boot-starter</module>
+        <module>agentscope-openai-spring-boot-starter</module>
+        <module>agentscope-dashscope-spring-boot-starter</module>
+        <module>agentscope-gemini-spring-boot-starter</module>
+        <module>agentscope-anthropic-spring-boot-starter</module>
+        <module>agentscope-ollama-spring-boot-starter</module>
         <module>agentscope-a2a-spring-boot-starter</module>
         <module>agentscope-agui-spring-boot-starter</module>
         <module>agentscope-chat-completions-web-starter</module>
         <module>agentscope-nacos-spring-boot-starter</module>
+        <module>agentscope-admin-spring-boot-starter</module>
     </modules>
 
     <dependencyManagement>
-
         <dependencies>
             <dependency>
                 <groupId>org.springframework.boot</groupId>
@@ -55,7 +60,28 @@
                 <scope>import</scope>
             </dependency>
         </dependencies>
-
     </dependencyManagement>
 
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>${maven-compiler-plugin.version}</version>
+                <configuration>
+                    <release>${java.version}</release>
+                    <compilerArgs>
+                        <compilerArg>-parameters</compilerArg>
+                    </compilerArgs>
+                    <debug>true</debug>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.springframework.boot</groupId>
+                            <artifactId>spring-boot-configuration-processor</artifactId>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>

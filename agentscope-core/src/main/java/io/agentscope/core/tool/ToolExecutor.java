@@ -19,9 +19,11 @@ import io.agentscope.core.agent.Agent;
 import io.agentscope.core.message.ToolResultBlock;
 import io.agentscope.core.message.ToolUseBlock;
 import io.agentscope.core.model.ExecutionConfig;
+import io.agentscope.core.shutdown.GracefulShutdownManager;
 import io.agentscope.core.tracing.TracerRegistry;
 import io.agentscope.core.util.ExceptionUtils;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -62,7 +64,8 @@ class ToolExecutor {
     private final ToolGroupManager groupManager;
     private final ToolkitConfig config;
     private final ExecutorService executorService;
-    private BiConsumer<ToolUseBlock, ToolResultBlock> chunkCallback;
+    private BiConsumer<ToolUseBlock, ToolResultBlock> userChunkCallback;
+    private BiConsumer<ToolUseBlock, ToolResultBlock> internalChunkCallback;
 
     /**
      * Create a tool executor with Reactor Schedulers (recommended).
@@ -92,10 +95,65 @@ class ToolExecutor {
     }
 
     /**
-     * Set chunk callback for streaming tool responses.
+     * Set the user-defined chunk callback for streaming tool responses.
      */
     void setChunkCallback(BiConsumer<ToolUseBlock, ToolResultBlock> callback) {
-        this.chunkCallback = callback;
+        this.userChunkCallback = callback;
+    }
+
+    /**
+     * Set the framework-internal chunk callback used by ReActAgent hooks.
+     */
+    void setInternalChunkCallback(BiConsumer<ToolUseBlock, ToolResultBlock> callback) {
+        this.internalChunkCallback = callback;
+    }
+
+    /**
+     * Get the user-defined chunk callback.
+     * Used by Toolkit.copy() to preserve user callbacks during deep copy.
+     */
+    BiConsumer<ToolUseBlock, ToolResultBlock> getChunkCallback() {
+        return this.userChunkCallback;
+    }
+
+    /**
+     * Combine the user-defined and internal chunk callbacks.
+     */
+    private BiConsumer<ToolUseBlock, ToolResultBlock> getEffectiveChunkCallback() {
+        if (internalChunkCallback == null) {
+            return userChunkCallback != null
+                    ? (toolUse, chunk) ->
+                            invokeChunkCallback("user", userChunkCallback, toolUse, chunk)
+                    : null;
+        }
+        if (userChunkCallback == null) {
+            return (toolUse, chunk) ->
+                    invokeChunkCallback("internal", internalChunkCallback, toolUse, chunk);
+        }
+        return (toolUse, chunk) -> {
+            invokeChunkCallback("internal", internalChunkCallback, toolUse, chunk);
+            invokeChunkCallback("user", userChunkCallback, toolUse, chunk);
+        };
+    }
+
+    /**
+     * Invoke a chunk callback without allowing it to block other callbacks.
+     */
+    private void invokeChunkCallback(
+            String callbackType,
+            BiConsumer<ToolUseBlock, ToolResultBlock> callback,
+            ToolUseBlock toolUse,
+            ToolResultBlock chunk) {
+        try {
+            callback.accept(toolUse, chunk);
+        } catch (Exception e) {
+            logger.warn(
+                    "Chunk callback '{}' failed for tool '{}': {}",
+                    callbackType,
+                    toolUse.getName(),
+                    e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName(),
+                    e);
+        }
     }
 
     // ==================== Single Tool Execution ====================
@@ -154,23 +212,45 @@ class ToolExecutor {
             return Mono.just(ToolResultBlock.error(errorMsg));
         }
 
-        // Merge context
-        ToolExecutionContext toolkitContext = config.getDefaultContext();
-        ToolExecutionContext finalContext =
-                ToolExecutionContext.merge(param.getContext(), toolkitContext);
+        // External tool short-circuit: once availability and schema are validated, surface the call
+        // without preset injection or local invocation. SchemaOnlyTool and any
+        // @Tool(externalTool=true) method end up here.
+        if (tool instanceof ToolBase tb && tb.isExternalTool()) {
+            return Mono.just(ToolResultBlock.suspended(toolCall));
+        }
+
+        // Merge runtime context: param-level > toolkit default
+        io.agentscope.core.agent.RuntimeContext runtimeContext = param.getRuntimeContext();
+        @SuppressWarnings("deprecation")
+        ToolExecutionContext toolkitDefault = config.getDefaultContext();
+        if (runtimeContext == null && toolkitDefault != null) {
+            runtimeContext =
+                    io.agentscope.core.agent.RuntimeContext.builder()
+                            .toolExecutionContext(toolkitDefault)
+                            .build();
+        } else if (runtimeContext != null && toolkitDefault != null) {
+            ToolExecutionContext merged =
+                    ToolExecutionContext.merge(
+                            runtimeContext.asToolExecutionContext(), toolkitDefault);
+            runtimeContext =
+                    io.agentscope.core.agent.RuntimeContext.builder(runtimeContext)
+                            .toolExecutionContext(merged)
+                            .build();
+        }
 
         // Create emitter for streaming
-        ToolEmitter toolEmitter = new DefaultToolEmitter(toolCall, chunkCallback);
+        ToolEmitter toolEmitter = new DefaultToolEmitter(toolCall, getEffectiveChunkCallback());
 
-        // Merge preset parameters with input
+        // Merge input with preset parameters. Preset values win so framework-controlled
+        // parameters remain immutable from the caller/LLM perspective.
         Map<String, Object> mergedInput = new HashMap<>();
+        if (!param.getInput().isEmpty()) {
+            mergedInput.putAll(param.getInput());
+        } else if (!toolCall.getInput().isEmpty()) {
+            mergedInput.putAll(toolCall.getInput());
+        }
         if (registered != null) {
             mergedInput.putAll(registered.getPresetParameters());
-        }
-        if (param.getInput() != null && !param.getInput().isEmpty()) {
-            mergedInput.putAll(param.getInput());
-        } else if (toolCall.getInput() != null) {
-            mergedInput.putAll(toolCall.getInput());
         }
 
         // Build final execution param
@@ -179,7 +259,7 @@ class ToolExecutor {
                         .toolUseBlock(toolCall)
                         .input(mergedInput)
                         .agent(param.getAgent())
-                        .context(finalContext)
+                        .runtimeContext(runtimeContext)
                         .emitter(toolEmitter)
                         .build();
 
@@ -202,7 +282,12 @@ class ToolExecutor {
                                             : e.getClass().getSimpleName();
                             return Mono.just(
                                     ToolResultBlock.error("Tool execution failed: " + errorMsg));
-                        });
+                        })
+                .switchIfEmpty(
+                        Mono.just(
+                                ToolResultBlock.error(
+                                        "Tool execution failed: Tool completed without returning a"
+                                                + " result")));
     }
 
     // ==================== Batch Tool Execution ====================
@@ -214,7 +299,7 @@ class ToolExecutor {
      * @param parallel Whether to execute in parallel
      * @param executionConfig Execution configuration
      * @param agent The agent making the calls (may be null)
-     * @param agentContext The agent-level context (may be null)
+     * @param agentRuntimeContext The agent-level runtime context (may be null)
      * @return Mono containing list of results
      */
     Mono<List<ToolResultBlock>> executeAll(
@@ -222,27 +307,65 @@ class ToolExecutor {
             boolean parallel,
             ExecutionConfig executionConfig,
             Agent agent,
-            ToolExecutionContext agentContext) {
+            io.agentscope.core.agent.RuntimeContext agentRuntimeContext) {
         if (toolCalls == null || toolCalls.isEmpty()) {
             return Mono.just(List.of());
         }
 
         logger.debug("Executing {} tool calls (parallel={})", toolCalls.size(), parallel);
 
-        // Map each tool call to an execution Mono
-        List<Mono<ToolResultBlock>> monos =
-                toolCalls.stream()
-                        .map(
-                                toolCall ->
-                                        executeWithInfrastructure(
-                                                toolCall, executionConfig, agent, agentContext))
-                        .toList();
-
-        // Parallel or sequential execution
-        if (parallel) {
-            return Flux.mergeSequential(monos).collectList();
+        // Sequential mode: nothing to partition, run in declared order.
+        if (!parallel) {
+            List<Mono<ToolResultBlock>> monos =
+                    toolCalls.stream()
+                            .map(
+                                    toolCall ->
+                                            executeWithInfrastructure(
+                                                    toolCall,
+                                                    executionConfig,
+                                                    agent,
+                                                    agentRuntimeContext))
+                            .toList();
+            return Flux.concat(monos).collectList();
         }
-        return Flux.concat(monos).collectList();
+
+        // Parallel mode with concurrency-safe partitioning: contiguous runs of safe tools execute
+        // concurrently (output order preserved via mergeSequential); unsafe tools (or unknown
+        // legacy AgentTools we cannot inspect) form their own serial slots so two invocations
+        // that share state never overlap.
+        List<Flux<ToolResultBlock>> chunks = new ArrayList<>();
+        List<Mono<ToolResultBlock>> safeBatch = new ArrayList<>();
+        for (ToolUseBlock toolCall : toolCalls) {
+            Mono<ToolResultBlock> mono =
+                    executeWithInfrastructure(
+                            toolCall, executionConfig, agent, agentRuntimeContext);
+            if (isConcurrencySafe(toolCall)) {
+                safeBatch.add(mono);
+            } else {
+                if (!safeBatch.isEmpty()) {
+                    chunks.add(Flux.mergeSequential(safeBatch));
+                    safeBatch = new ArrayList<>();
+                }
+                chunks.add(mono.flux());
+            }
+        }
+        if (!safeBatch.isEmpty()) {
+            chunks.add(Flux.mergeSequential(safeBatch));
+        }
+        return Flux.concat(chunks).collectList();
+    }
+
+    /**
+     * Whether the tool backing {@code toolCall} can run in parallel with itself. Defaults to
+     * {@code true} for legacy {@link AgentTool} instances that do not extend {@link ToolBase}, so
+     * existing tools keep their pre-2.0 concurrent behaviour.
+     */
+    private boolean isConcurrencySafe(ToolUseBlock toolCall) {
+        AgentTool tool = toolRegistry.getTool(toolCall.getName());
+        if (tool instanceof ToolBase tb) {
+            return tb.isConcurrencySafe();
+        }
+        return true;
     }
 
     /**
@@ -252,13 +375,13 @@ class ToolExecutor {
             ToolUseBlock toolCall,
             ExecutionConfig executionConfig,
             Agent agent,
-            ToolExecutionContext agentContext) {
+            io.agentscope.core.agent.RuntimeContext agentRuntimeContext) {
         // Build tool call parameter
         ToolCallParam param =
                 ToolCallParam.builder()
                         .toolUseBlock(toolCall)
                         .agent(agent)
-                        .context(agentContext)
+                        .runtimeContext(agentRuntimeContext)
                         .build();
 
         // Get core execution
@@ -268,6 +391,7 @@ class ToolExecutor {
         execution = applyScheduling(execution);
         execution = applyTimeout(execution, executionConfig, toolCall);
         execution = applyRetry(execution, executionConfig, toolCall);
+        execution = applyShutdownGuard(execution);
 
         // Add tool metadata and error handling
         return execution
@@ -277,7 +401,8 @@ class ToolExecutor {
                             logger.warn("Tool call failed: {}", toolCall.getName(), e);
                             String errorMsg = ExceptionUtils.getErrorMessage(e);
                             return Mono.just(
-                                    ToolResultBlock.error("Tool execution failed: " + errorMsg));
+                                    ToolResultBlock.error("Tool execution failed: " + errorMsg)
+                                            .withIdAndName(toolCall.getId(), toolCall.getName()));
                         });
     }
 
@@ -328,7 +453,10 @@ class ToolExecutor {
                         .doBeforeRetry(
                                 signal ->
                                         logger.warn(
-                                                "Retrying tool call (attempt {}/{}) due to: {}",
+                                                "Retrying tool call '{}' (attempt {}/{}) due to:"
+                                                    + " {}. The previous attempt is cancelled and"
+                                                    + " may still be consuming resources.",
+                                                toolCall.getName(),
                                                 signal.totalRetriesInARow() + 1,
                                                 maxAttempts - 1,
                                                 signal.failure().getMessage(),
@@ -340,5 +468,22 @@ class ToolExecutor {
                 toolCall.getName());
 
         return execution.retryWhen(retrySpec);
+    }
+
+    /**
+     * Race tool execution against the global shutdown timeout signal.
+     * When the signal fires, the tool Mono is cancelled and an error is emitted,
+     * which flows through {@code onErrorResume} into a normal {@code ToolResultBlock.error}.
+     */
+    private Mono<ToolResultBlock> applyShutdownGuard(Mono<ToolResultBlock> execution) {
+        Mono<ToolResultBlock> shutdownGuard =
+                GracefulShutdownManager.getInstance()
+                        .getShutdownTimeoutSignal()
+                        .then(
+                                Mono.error(
+                                        new RuntimeException(
+                                                "Tool execution timeout due to system graceful"
+                                                        + " shutdown.")));
+        return Mono.firstWithSignal(execution, shutdownGuard);
     }
 }

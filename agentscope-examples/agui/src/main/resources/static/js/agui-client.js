@@ -71,6 +71,7 @@ class AguiClient {
      * @param {Array} [input.context] - Optional context
      * @param {Object} [input.state] - Optional state
      * @param {Object} [input.forwardedProps] - Optional forwarded properties
+     * @param {Array} [input.resume] - Optional AG-UI interrupt resume entries
      * @param {Object} callbacks - Event callbacks
      * @param {Function} [callbacks.onReasoningMessageStart] - Called when reasoning message starts
      * @param {Function} [callbacks.onReasoningContent] - Called with reasoning content delta
@@ -205,7 +206,7 @@ class AguiClient {
                     break;
 
                 case 'RUN_FINISHED':
-                    callbacks.onRunFinished?.(event.threadId, event.runId);
+                    callbacks.onRunFinished?.(event.threadId, event.runId, event);
                     break;
 
                 case 'TEXT_MESSAGE_START':
@@ -252,6 +253,10 @@ class AguiClient {
                     callbacks.onToolCallEnd?.(event.toolCallId);
                     break;
 
+                case 'TOOL_CALL_RESULT':
+                    callbacks.onToolCallResult?.(event.toolCallId, event.content, event.messageId);
+                    break;
+
                 case 'STATE_SNAPSHOT':
                     callbacks.onStateSnapshot?.(event.snapshot);
                     break;
@@ -268,6 +273,10 @@ class AguiClient {
                     }
                     break;
 
+                case 'CUSTOM':
+                    callbacks.onCustomEvent?.(event);
+                    break;
+
                 default:
                     console.log('Unknown event type:', type, event);
             }
@@ -281,4 +290,3 @@ class AguiClient {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = { AguiClient };
 }
-

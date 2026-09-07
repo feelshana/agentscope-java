@@ -17,6 +17,7 @@ package io.agentscope.core.rag;
 
 import io.agentscope.core.ReActAgent;
 import io.agentscope.core.agent.Agent;
+import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.rag.model.Document;
 import io.agentscope.core.rag.model.RetrieveConfig;
@@ -37,7 +38,7 @@ import java.util.List;
  * <p>Example usage:
  * <pre>{@code
  * KnowledgeBase knowledgeBase = new SimpleKnowledge(embeddingModel, vectorStore);
- * KnowledgeRetrievalTools tools = new KnowledgeRetrievalTools(knowledgeBase);
+ * KnowledgeRetrievalTools tools = new KnowledgeRetrievalTools(knowledgeBase, RetrieveConfig.builder().build());
  *
  * Toolkit toolkit = new Toolkit();
  * toolkit.registerObject(tools);
@@ -48,22 +49,49 @@ import java.util.List;
  *     .toolkit(toolkit)
  *     .build();
  * }</pre>
+ *
+ * @deprecated since 2.0.0. The rag package is removed; integrate retrieval at the application
+ *     layer.
  */
+@Deprecated(forRemoval = true, since = "2.0.0")
 public class KnowledgeRetrievalTools {
 
     private final Knowledge knowledge;
 
+    private final RetrieveConfig defaultConfig;
+
     /**
-     * Creates a new KnowledgeRetrievalTools instance.
+     * Creates a new KnowledgeRetrievalTools instance with default configuration.
+     *
+     * <p>Default configuration:
+     * <ul>
+     *   <li>Limit: 5 documents</li>
+     *   <li>Score threshold: 0.5</li>
+     * </ul>
      *
      * @param knowledge the knowledge base to retrieve from
      * @throws IllegalArgumentException if knowledgeBase is null
      */
     public KnowledgeRetrievalTools(Knowledge knowledge) {
+        this(knowledge, RetrieveConfig.builder().build());
+    }
+
+    /**
+     * Creates a new KnowledgeRetrievalTools instance.
+     *
+     * @param knowledge     the knowledge base to retrieve from
+     * @param defaultConfig the default retrieval configuration
+     * @throws IllegalArgumentException if knowledgeBase is null
+     */
+    public KnowledgeRetrievalTools(Knowledge knowledge, RetrieveConfig defaultConfig) {
         if (knowledge == null) {
             throw new IllegalArgumentException("Knowledge base cannot be null");
         }
+        if (defaultConfig == null) {
+            throw new IllegalArgumentException("Retrieve config cannot be null");
+        }
         this.knowledge = knowledge;
+        this.defaultConfig = defaultConfig;
     }
 
     /**
@@ -106,24 +134,28 @@ public class KnowledgeRetrievalTools {
                             description = "Maximum number of documents to retrieve (default: 5)",
                             required = false)
                     Integer limit,
-            Agent agent) {
+            Agent agent,
+            RuntimeContext ctx) {
 
         // Set default value
         if (limit == null) {
             limit = 5;
         }
 
-        // Extract conversation history from agent if available
+        // Extract conversation history from the call-scoped state if available
         List<Msg> conversationHistory = null;
-        if (agent instanceof ReActAgent reActAgent) {
-            conversationHistory = reActAgent.getMemory().getMessages();
+        if (agent instanceof ReActAgent) {
+            var state = RuntimeContext.resolveAgentState(ctx, agent);
+            if (state != null) {
+                conversationHistory = state.getContext();
+            }
         }
 
         // Build retrieval config with conversation history
         RetrieveConfig config =
-                RetrieveConfig.builder()
+                this.defaultConfig
+                        .mutate()
                         .limit(limit)
-                        .scoreThreshold(0.5)
                         .conversationHistory(conversationHistory)
                         .build();
 
@@ -171,5 +203,14 @@ public class KnowledgeRetrievalTools {
      */
     public Knowledge getKnowledgeBase() {
         return knowledge;
+    }
+
+    /**
+     * Gets the default retrieval configuration.
+     *
+     * @return the default config
+     */
+    public RetrieveConfig getDefaultConfig() {
+        return defaultConfig;
     }
 }

@@ -31,6 +31,7 @@
             --accent-green: #9ece6a;
             --accent-orange: #ff9e64;
             --accent-red: #f7768e;
+            --accent-cyan: #00BCD4;
             --border-color: #414868;
         }
 
@@ -135,6 +136,13 @@
             border-left: 3px solid var(--accent-red);
         }
 
+        .message.custom {
+            background: rgba(0, 188, 212, 0.08);
+            border-left: 3px solid var(--accent-cyan);
+            margin: 0 60px 16px 60px;
+            font-size: 0.85rem;
+        }
+
         .message-role {
             font-size: 0.75rem;
             text-transform: uppercase;
@@ -147,6 +155,7 @@
         .message.assistant .message-role { color: var(--accent-blue); }
         .message.tool .message-role { color: var(--accent-orange); }
         .message.reasoning .message-role { color: var(--accent-green); }
+        .message.custom .message-role { color: var(--accent-cyan); }
 
         .message-content {
             white-space: pre-wrap;
@@ -278,6 +287,43 @@
         .status-dot.disconnected {
             background: var(--accent-red);
         }
+
+        .demo-actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+
+        .demo-actions button, .approval-actions button {
+            padding: 8px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-family: inherit;
+            cursor: pointer;
+        }
+
+        .demo-actions button:hover, .approval-actions button:hover {
+            border-color: var(--accent-blue);
+        }
+
+        .approval-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .approval-actions .approve {
+            border-color: var(--accent-green);
+            color: var(--accent-green);
+        }
+
+        .approval-actions .reject {
+            border-color: var(--accent-red);
+            color: var(--accent-red);
+        }
     </style>
 </head>
 <body>
@@ -290,6 +336,10 @@
         <div class="status">
             <div class="status-dot" id="status-dot"></div>
             <span id="status-text">Ready</span>
+        </div>
+
+        <div class="demo-actions">
+            <button id="approval-demo-btn">HITL 审批演示（点击测试）</button>
         </div>
 
         <div id="messages"></div>
@@ -313,6 +363,7 @@
         const input = document.getElementById('input');
         const sendBtn = document.getElementById('send-btn');
         const stopBtn = document.getElementById('stop-btn');
+        const approvalDemoBtn = document.getElementById('approval-demo-btn');
         const messages = document.getElementById('messages');
         const statusDot = document.getElementById('status-dot');
         const statusText = document.getElementById('status-text');
@@ -320,6 +371,27 @@
         let threadId = 'thread-' + Date.now();
         let messageHistory = [];
         let isRunning = false;
+        let activeToolCalls = new Map();
+        let pendingApprovalToolCall = null;
+
+        const frontendTools = [{
+            name: 'request_approval',
+            description: 'Ask the user to approve or reject an action before continuing. Always call this tool when the user asks for the approval demo.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    action: {
+                        type: 'string',
+                        description: 'The action that needs user approval.'
+                    },
+                    reason: {
+                        type: 'string',
+                        description: 'Why the action needs approval.'
+                    }
+                },
+                required: ['action']
+            }
+        }];
 
         function setStatus(status, text) {
             statusDot.className = 'status-dot' + (status === 'error' ? ' disconnected' : '');
@@ -327,6 +399,7 @@
         }
 
         let currentAssistantDiv = null;
+        let currentReasoningDiv = null;
 
         function appendMessage(role, content, append = false) {
             if (append && role === 'assistant' && currentAssistantDiv) {
@@ -381,35 +454,134 @@
             return div.innerHTML;
         }
 
-        async function sendMessage() {
-            const text = input.value.trim();
-            if (!text || isRunning) return;
+        function formatCustomEvent(event) {
+            if (event.name === 'token_usage') {
+                const delta = event.value?.delta || {};
+                const cumulative = event.value?.cumulative || {};
+                return [
+                    'Token usage',
+                    `delta: input=${delta.inputTokens ?? 0}, output=${delta.outputTokens ?? 0}, total=${delta.totalTokens ?? 0}`,
+                    `cumulative: input=${cumulative.inputTokens ?? 0}, output=${cumulative.outputTokens ?? 0}, total=${cumulative.totalTokens ?? 0}`
+                ].join('\n');
+            }
 
-            input.value = '';
+            return `${event.name}\n${JSON.stringify(event.value ?? {}, null, 2)}`;
+        }
+
+        function parseToolArgs(rawArgs) {
+            if (!rawArgs) return {};
+            try {
+                return JSON.parse(rawArgs);
+            } catch (error) {
+                return { raw: rawArgs };
+            }
+        }
+
+        function isFrontendTool(name) {
+            return frontendTools.some(tool => tool.name === name);
+        }
+
+        function appendApprovalDialog(toolCall) {
+            const args = parseToolArgs(toolCall.args);
+            const div = document.createElement('div');
+            div.className = 'message tool';
+            div.innerHTML = `
+                <div class="message-role">approval required</div>
+                <div class="message-content">${escapeHtml([
+                    `toolCallId: ${toolCall.toolCallId}`,
+                    `tool: ${toolCall.name || 'request_approval'}`,
+                    `action: ${args.action || '(not provided)'}`,
+                    args.reason ? `reason: ${args.reason}` : null
+                ].filter(Boolean).join('\n'))}</div>
+                <div class="approval-actions">
+                    <button class="approve" type="button">Approve</button>
+                    <button class="reject" type="button">Reject</button>
+                </div>
+            `;
+            div.querySelector('.approve').addEventListener('click', () => resolveApproval(true, div));
+            div.querySelector('.reject').addEventListener('click', () => resolveApproval(false, div));
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        async function resolveApproval(approved, dialog) {
+            if (!pendingApprovalToolCall || isRunning) return;
+
+            const toolCall = pendingApprovalToolCall;
+            const args = parseToolArgs(toolCall.args);
+            const payload = {
+                approved,
+                action: args.action || null,
+                reason: approved ? 'Approved in the AG-UI example dialog.' : 'Rejected in the AG-UI example dialog.'
+            };
+
+            dialog.querySelectorAll('button').forEach(button => button.disabled = true);
+            const actions = dialog.querySelector('.approval-actions');
+            if (actions) {
+                actions.remove();
+            }
+            appendMessage('tool', `${approved ? 'Approved' : 'Rejected'} request_approval\n${JSON.stringify(payload)}`);
+
+            // Frontend tools no longer emit interrupts; the result is fed back as a
+            // tool-role message whose toolCallId matches the assistant's tool call.
+            const toolCallEntry = {
+                id: toolCall.toolCallId,
+                type: 'function',
+                function: { name: toolCall.name || 'request_approval', arguments: toolCall.args || '{}' }
+            };
+            const lastMsg = messageHistory[messageHistory.length - 1];
+            if (lastMsg && lastMsg.role === 'assistant') {
+                lastMsg.toolCalls = [...(lastMsg.toolCalls || []), toolCallEntry];
+            } else {
+                messageHistory.push({
+                    id: 'msg-assistant-tc-' + toolCall.toolCallId,
+                    role: 'assistant',
+                    toolCalls: [toolCallEntry]
+                });
+            }
+            messageHistory.push({
+                id: 'msg-toolresult-' + toolCall.toolCallId,
+                role: 'tool',
+                toolCallId: toolCall.toolCallId,
+                content: JSON.stringify(payload)
+            });
+
+            pendingApprovalToolCall = null;
+            activeToolCalls.delete(toolCall.toolCallId);
+
+            await runAgent(messageHistory);
+        }
+
+        function handleRunFinished() {
+            if (pendingApprovalToolCall) {
+                setStatus('waiting', 'Awaiting approval');
+                appendApprovalDialog(pendingApprovalToolCall);
+                return;
+            }
+            setStatus('ready', 'Ready');
+        }
+
+        async function runAgent(messagesForServer) {
             isRunning = true;
             sendBtn.style.display = 'none';
             stopBtn.style.display = 'inline-block';
+            approvalDemoBtn.disabled = true;
             setStatus('running', 'Running...');
-
-            // Add user message
-            appendMessage('user', text);
-            messageHistory.push({ id: 'msg-' + Date.now(), role: 'user', content: text });
-
-            // Show typing indicator
             showTypingIndicator();
 
             let assistantContent = '';
             let currentMessageId = null;
             let reasoningContent = '';
-            let currentReasoningMessageId = null;
-            let currentReasoningDiv = null;
 
             try {
-                await client.run({
+                const runInput = {
                     threadId: threadId,
                     runId: 'run-' + Date.now(),
-                    messages: messageHistory
-                }, {
+                    messages: messagesForServer,
+                    tools: frontendTools
+                };
+
+                await client.run(runInput, {
                     onRunStarted: () => {
                         console.log('Run started');
                         currentAssistantDiv = null;
@@ -419,7 +591,6 @@
                     onReasoningMessageStart: (messageId, role) => {
                         console.log('Reasoning message start:', messageId, role);
                         hideTypingIndicator();
-                        currentReasoningMessageId = messageId;
                         reasoningContent = '';
                         currentReasoningDiv = null;
                     },
@@ -467,29 +638,51 @@
                     onToolCallStart: (toolCallId, toolName) => {
                         hideTypingIndicator();
                         currentAssistantDiv = null;
-                        appendMessage('tool', `🔧 Calling tool: ${toolName}`);
+                        activeToolCalls.set(toolCallId, { name: toolName, args: '' });
+                        appendMessage('tool', `Calling tool: ${toolName}`);
+                    },
+                    onToolCallArgs: (toolCallId, delta) => {
+                        const toolCall = activeToolCalls.get(toolCallId) || { name: 'unknown', args: '' };
+                        toolCall.args += delta || '';
+                        activeToolCalls.set(toolCallId, toolCall);
                     },
                     onToolCallEnd: (toolCallId) => {
-                        // Tool call completed
+                        const toolCall = activeToolCalls.get(toolCallId);
+                        if (toolCall?.args) {
+                            appendMessage('tool', `Tool arguments for ${toolCall.name}\n${toolCall.args}`);
+                        }
+                        if (toolCall && isFrontendTool(toolCall.name)) {
+                            pendingApprovalToolCall = {
+                                toolCallId: toolCallId,
+                                name: toolCall.name,
+                                args: toolCall.args || ''
+                            };
+                        }
+                    },
+                    onToolCallResult: (toolCallId, content) => {
+                        hideTypingIndicator();
+                        appendMessage('tool', `Tool result for ${toolCallId}\n${content || '(empty)'}`);
                     },
                     onError: (error) => {
                         hideTypingIndicator();
                         appendMessage('error', `Error: ${error}`);
                     },
+                    onCustomEvent: (event) => {
+                        hideTypingIndicator();
+                        appendMessage('custom', formatCustomEvent(event));
+                    },
                     onRunFinished: () => {
                         console.log('Run finished');
                         hideTypingIndicator();
-                        setStatus('ready', 'Ready');
+                        handleRunFinished();
                     }
                 });
             } catch (error) {
                 console.error('Error during agent run:', error);
                 hideTypingIndicator();
 
-                // Check if this was a user-initiated abort
                 if (error.name === 'AbortError') {
                     console.log('Run was stopped by user');
-                    // Save whatever content we received before stopping
                     if (assistantContent) {
                         messageHistory.push({
                             id: currentMessageId || 'msg-stopped-' + Date.now(),
@@ -507,6 +700,7 @@
                 isRunning = false;
                 sendBtn.style.display = 'inline-block';
                 stopBtn.style.display = 'none';
+                approvalDemoBtn.disabled = false;
                 hideTypingIndicator();
                 currentAssistantDiv = null;
                 currentReasoningDiv = null;
@@ -515,6 +709,17 @@
                     setStatus('ready', 'Ready');
                 }
             }
+        }
+
+        async function sendMessage() {
+            const text = input.value.trim();
+            if (!text || isRunning) return;
+
+            input.value = '';
+            appendMessage('user', text);
+            const userMessage = { id: 'msg-' + Date.now(), role: 'user', content: text };
+            messageHistory.push(userMessage);
+            await runAgent(messageHistory);
         }
 
         // Stop button handler
@@ -526,6 +731,12 @@
             }
         }
 
+        function startApprovalDemo() {
+            if (isRunning) return;
+            input.value = 'Run the approval demo. Call request_approval for deleting demo-file.txt, then continue after the user decision.';
+            sendMessage();
+        }
+
         // Event listeners
         input.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') sendMessage();
@@ -533,10 +744,10 @@
 
         sendBtn.addEventListener('click', sendMessage);
         stopBtn.addEventListener('click', stopGeneration);
+        approvalDemoBtn.addEventListener('click', startApprovalDemo);
 
         // Focus input on load
         input.focus();
     </script>
 </body>
 </html>
-

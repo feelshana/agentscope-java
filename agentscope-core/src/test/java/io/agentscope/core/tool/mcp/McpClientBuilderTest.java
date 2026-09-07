@@ -21,7 +21,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.agentscope.core.Version;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
@@ -380,7 +383,7 @@ class McpClientBuilderTest {
     void testSseTransport_WithCompleteConfiguration() {
         Map<String, String> headers = new HashMap<>();
         headers.put("Authorization", "Bearer token");
-        headers.put("X-Client-Version", "1.0.10-SNAPSHOT");
+        headers.put("X-Client-Version", Version.VERSION);
 
         McpClientBuilder builder =
                 McpClientBuilder.create("full-sse-client")
@@ -452,8 +455,10 @@ class McpClientBuilderTest {
     // ==================== extractEndpoint Tests ====================
 
     /**
-     * Helper method to invoke the extractEndpoint method in HttpTransportConfig using reflection.
-     * Creates a builder with the specified URL and query params, then extracts the endpoint.
+     * Helper method to invoke the extractEndpoint method in HttpTransportConfig
+     * using reflection.
+     * Creates a builder with the specified URL and query params, then extracts the
+     * endpoint.
      */
     private String invokeExtractEndpoint(String url, Map<String, String> queryParams)
             throws Exception {
@@ -465,8 +470,7 @@ class McpClientBuilderTest {
             }
         }
 
-        java.lang.reflect.Field transportConfigField =
-                McpClientBuilder.class.getDeclaredField("transportConfig");
+        Field transportConfigField = McpClientBuilder.class.getDeclaredField("transportConfig");
         transportConfigField.setAccessible(true);
         Object transportConfig = transportConfigField.get(builder);
 
@@ -673,7 +677,8 @@ class McpClientBuilderTest {
         assertNotNull(wrapper);
     }
 
-    // ==================== extractEndpoint with Query Params Tests ====================
+    // ==================== extractEndpoint with Query Params Tests
+    // ====================
 
     @Test
     void testExtractEndpoint_NoAdditionalParams() throws Exception {
@@ -820,7 +825,8 @@ class McpClientBuilderTest {
         McpClientBuilder builder =
                 McpClientBuilder.create("client").stdioTransport("python", "server.py");
 
-        // Should not throw because the method simply returns without calling addQueryParam
+        // Should not throw because the method simply returns without calling
+        // addQueryParam
         assertNotNull(builder.queryParam(null, "value"));
         assertNotNull(builder.queryParam("key", null));
     }
@@ -831,7 +837,8 @@ class McpClientBuilderTest {
         McpClientBuilder builder =
                 McpClientBuilder.create("client").stdioTransport("python", "server.py");
 
-        // Should not throw because the method simply returns without calling setQueryParams
+        // Should not throw because the method simply returns without calling
+        // setQueryParams
         assertNotNull(builder.queryParams(null));
     }
 
@@ -873,12 +880,12 @@ class McpClientBuilderTest {
                 assertThrows(
                         Exception.class,
                         () -> {
-                            java.lang.reflect.Field transportConfigField =
+                            Field transportConfigField =
                                     McpClientBuilder.class.getDeclaredField("transportConfig");
                             transportConfigField.setAccessible(true);
                             Object transportConfig = transportConfigField.get(builder);
 
-                            java.lang.reflect.Method method =
+                            Method method =
                                     transportConfig
                                             .getClass()
                                             .getSuperclass()
@@ -993,8 +1000,7 @@ class McpClientBuilderTest {
                         .customizeSseClient(
                                 clientBuilder -> {
                                     // Second customization should also be applied
-                                    clientBuilder.followRedirects(
-                                            java.net.http.HttpClient.Redirect.NORMAL);
+                                    clientBuilder.followRedirects(HttpClient.Redirect.NORMAL);
                                 })
                         .header("Authorization", "Bearer token")
                         .queryParam("tenant", "test");
@@ -1005,7 +1011,8 @@ class McpClientBuilderTest {
 
     @Test
     void testCustomizeSseClient_OnStdioTransport_ShouldBeIgnored() {
-        // Customizing SSE client on stdio transport should not cause errors (just ignored)
+        // Customizing SSE client on stdio transport should not cause errors (just
+        // ignored)
         McpClientBuilder builder =
                 McpClientBuilder.create("stdio-client")
                         .stdioTransport("python", "-m", "mcp_server_time")
@@ -1020,7 +1027,8 @@ class McpClientBuilderTest {
 
     @Test
     void testCustomizeSseClient_OnStreamableHttpTransport_ShouldBeIgnored() {
-        // Customizing SSE client on streamable http transport should not cause errors (just
+        // Customizing SSE client on streamable http transport should not cause errors
+        // (just
         // ignored)
         McpClientBuilder builder =
                 McpClientBuilder.create("http-client")
@@ -1061,8 +1069,7 @@ class McpClientBuilderTest {
                                 })
                         .customizeStreamableHttpClient(
                                 clientBuilder -> {
-                                    clientBuilder.followRedirects(
-                                            java.net.http.HttpClient.Redirect.ALWAYS);
+                                    clientBuilder.followRedirects(HttpClient.Redirect.ALWAYS);
                                 })
                         .header("X-API-Key", "secret")
                         .queryParam("version", "v1");
@@ -1073,7 +1080,8 @@ class McpClientBuilderTest {
 
     @Test
     void testCustomizeStreamableHttpClient_OnStdioTransport_ShouldBeIgnored() {
-        // Customizing streamable http client on stdio transport should not cause errors (just
+        // Customizing streamable http client on stdio transport should not cause errors
+        // (just
         // ignored)
         McpClientBuilder builder =
                 McpClientBuilder.create("stdio-client")
@@ -1089,7 +1097,8 @@ class McpClientBuilderTest {
 
     @Test
     void testCustomizeStreamableHttpClient_OnSseTransport_ShouldBeIgnored() {
-        // Customizing streamable http client on SSE transport should not cause errors (just
+        // Customizing streamable http client on SSE transport should not cause errors
+        // (just
         // ignored)
         McpClientBuilder builder =
                 McpClientBuilder.create("sse-client")
@@ -1110,7 +1119,7 @@ class McpClientBuilderTest {
                         .sseTransport("https://mcp.example.com/sse")
                         .customizeSseClient(
                                 clientBuilder -> {
-                                    clientBuilder.version(java.net.http.HttpClient.Version.HTTP_2);
+                                    clientBuilder.version(HttpClient.Version.HTTP_2);
                                 });
 
         McpClientWrapper wrapper = builder.buildAsync().block();
@@ -1124,7 +1133,7 @@ class McpClientBuilderTest {
                         .streamableHttpTransport("https://mcp.example.com/http")
                         .customizeStreamableHttpClient(
                                 clientBuilder -> {
-                                    clientBuilder.version(java.net.http.HttpClient.Version.HTTP_2);
+                                    clientBuilder.version(HttpClient.Version.HTTP_2);
                                 });
 
         McpClientWrapper wrapper = builder.buildSync();
@@ -1135,7 +1144,7 @@ class McpClientBuilderTest {
     void testCompleteConfiguration_WithClientCustomization() {
         Map<String, String> headers = new HashMap<>();
         headers.put("Authorization", "Bearer token123");
-        headers.put("X-Client-Version", "1.0.10-SNAPSHOT");
+        headers.put("X-Client-Version", Version.VERSION);
 
         Map<String, String> queryParams = new HashMap<>();
         queryParams.put("tenant", "acme");
@@ -1147,10 +1156,9 @@ class McpClientBuilderTest {
                         .customizeSseClient(
                                 clientBuilder -> {
                                     clientBuilder
-                                            .version(java.net.http.HttpClient.Version.HTTP_2)
+                                            .version(HttpClient.Version.HTTP_2)
                                             .connectTimeout(Duration.ofSeconds(10))
-                                            .followRedirects(
-                                                    java.net.http.HttpClient.Redirect.NORMAL);
+                                            .followRedirects(HttpClient.Redirect.NORMAL);
                                 })
                         .headers(headers)
                         .queryParams(queryParams)
@@ -1171,7 +1179,7 @@ class McpClientBuilderTest {
                                 clientBuilder -> {
                                     clientBuilder
                                             .connectTimeout(Duration.ofSeconds(15))
-                                            .version(java.net.http.HttpClient.Version.HTTP_1_1);
+                                            .version(HttpClient.Version.HTTP_1_1);
                                 })
                         .header("Authorization", "Bearer secret-token")
                         .header("X-Request-ID", "req-12345")
@@ -1184,5 +1192,388 @@ class McpClientBuilderTest {
         assertNotNull(wrapper);
         assertEquals("all-features-client", wrapper.getName());
         assertFalse(wrapper.isInitialized());
+    }
+
+    // ==================== Elicitation Tests ====================
+
+    @Test
+    void testAsyncElicitation_WithHandler() {
+        // Test that asyncElicitation method can be called and builder is returned
+        McpClientBuilder builder =
+                McpClientBuilder.create("async-elicit-client")
+                        .stdioTransport("echo", "test")
+                        .asyncElicitation(request -> reactor.core.publisher.Mono.empty());
+
+        assertNotNull(builder);
+        McpClientWrapper wrapper = builder.buildAsync().block();
+        assertNotNull(wrapper);
+        assertTrue(wrapper instanceof McpAsyncClientWrapper);
+    }
+
+    @Test
+    void testSyncElicitation_WithHandler() {
+        // Test that syncElicitation method can be called and builder is returned
+        McpClientBuilder builder =
+                McpClientBuilder.create("sync-elicit-client")
+                        .stdioTransport("echo", "test")
+                        .syncElicitation(request -> null);
+
+        assertNotNull(builder);
+        McpClientWrapper wrapper = builder.buildSync();
+        assertNotNull(wrapper);
+        assertTrue(wrapper instanceof McpSyncClientWrapper);
+    }
+
+    @Test
+    void testAsyncElicitation_WithoutHandler() {
+        // Test that building without elicitation handler works normally
+        McpClientBuilder builder =
+                McpClientBuilder.create("no-elicit-async").stdioTransport("echo", "test");
+
+        McpClientWrapper wrapper = builder.buildAsync().block();
+        assertNotNull(wrapper);
+        assertTrue(wrapper instanceof McpAsyncClientWrapper);
+    }
+
+    @Test
+    void testSyncElicitation_WithoutHandler() {
+        // Test that building without elicitation handler works normally
+        McpClientBuilder builder =
+                McpClientBuilder.create("no-elicit-sync").stdioTransport("echo", "test");
+
+        McpClientWrapper wrapper = builder.buildSync();
+        assertNotNull(wrapper);
+        assertTrue(wrapper instanceof McpSyncClientWrapper);
+    }
+
+    @Test
+    void testAsyncElicitation_FluentApi() {
+        // Test fluent API with asyncElicitation
+        McpClientBuilder builder =
+                McpClientBuilder.create("fluent-async-elicit")
+                        .sseTransport("https://mcp.example.com/sse")
+                        .header("Authorization", "Bearer token")
+                        .asyncElicitation(request -> reactor.core.publisher.Mono.empty())
+                        .timeout(Duration.ofSeconds(60));
+
+        assertNotNull(builder);
+        McpClientWrapper wrapper = builder.buildAsync().block();
+        assertNotNull(wrapper);
+    }
+
+    @Test
+    void testSyncElicitation_FluentApi() {
+        // Test fluent API with syncElicitation
+        McpClientBuilder builder =
+                McpClientBuilder.create("fluent-sync-elicit")
+                        .streamableHttpTransport("https://mcp.example.com/http")
+                        .queryParam("token", "abc123")
+                        .syncElicitation(request -> null)
+                        .timeout(Duration.ofSeconds(90));
+
+        assertNotNull(builder);
+        McpClientWrapper wrapper = builder.buildSync();
+        assertNotNull(wrapper);
+    }
+
+    @Test
+    void testElicitation_BothHandlersSet() {
+        // Test that setting both handlers doesn't cause issues
+        // Only the appropriate one will be used based on build method
+        McpClientBuilder builder =
+                McpClientBuilder.create("both-handlers")
+                        .stdioTransport("echo", "test")
+                        .asyncElicitation(request -> reactor.core.publisher.Mono.empty())
+                        .syncElicitation(request -> null);
+
+        // Build async - should use async handler
+        McpClientWrapper asyncWrapper = builder.buildAsync().block();
+        assertNotNull(asyncWrapper);
+        assertTrue(asyncWrapper instanceof McpAsyncClientWrapper);
+
+        // Build sync - should use sync handler
+        McpClientWrapper syncWrapper = builder.buildSync();
+        assertNotNull(syncWrapper);
+        assertTrue(syncWrapper instanceof McpSyncClientWrapper);
+    }
+
+    // ==================== HttpRequestCustomizer Tests ====================
+
+    @Test
+    void testHttpRequestCustomizer_OnSseTransport() {
+        McpClientBuilder builder =
+                McpClientBuilder.create("http-customizer-sse")
+                        .sseTransport("https://mcp.example.com/sse")
+                        .httpRequestCustomizer(
+                                (builder1, method, uri, body, ctx) -> {
+                                    builder1.header("Authorization", "Bearer dynamic-token");
+                                });
+
+        McpClientWrapper wrapper = builder.buildAsync().block();
+        assertNotNull(wrapper);
+        assertEquals("http-customizer-sse", wrapper.getName());
+    }
+
+    @Test
+    void testHttpRequestCustomizer_OnStreamableHttpTransport() {
+        McpClientBuilder builder =
+                McpClientBuilder.create("http-customizer-streamable")
+                        .streamableHttpTransport("https://mcp.example.com/http")
+                        .httpRequestCustomizer(
+                                (builder1, method, uri, body, ctx) -> {
+                                    builder1.header("X-Custom", "custom-value");
+                                    builder1.header("Authorization", "Bearer token");
+                                });
+
+        McpClientWrapper wrapper = builder.buildSync();
+        assertNotNull(wrapper);
+        assertEquals("http-customizer-streamable", wrapper.getName());
+    }
+
+    @Test
+    void testHttpRequestCustomizer_OnStdioTransport_ShouldBeIgnored() {
+        // httpRequestCustomizer on stdio transport should not cause errors (just ignored)
+        McpClientBuilder builder =
+                McpClientBuilder.create("customizer-stdio")
+                        .stdioTransport("python", "-m", "mcp_server_time")
+                        .httpRequestCustomizer(
+                                (builder1, method, uri, body, ctx) -> {
+                                    builder1.header("Authorization", "Bearer token");
+                                });
+
+        McpClientWrapper wrapper = builder.buildAsync().block();
+        assertNotNull(wrapper);
+    }
+
+    @Test
+    void testHttpRequestCustomizer_CombinedWithHeaders() {
+        McpClientBuilder builder =
+                McpClientBuilder.create("customizer-combined")
+                        .sseTransport("https://mcp.example.com/sse")
+                        .header("X-Static-Header", "static-value")
+                        .httpRequestCustomizer(
+                                (builder1, method, uri, body, ctx) -> {
+                                    builder1.header("X-Dynamic-Header", "dynamic-value");
+                                });
+
+        McpClientWrapper wrapper = builder.buildAsync().block();
+        assertNotNull(wrapper);
+        assertEquals("customizer-combined", wrapper.getName());
+    }
+
+    @Test
+    void testHttpRequestCustomizer_CombinedWithAllFeatures() {
+        McpClientBuilder builder =
+                McpClientBuilder.create("customizer-all-features")
+                        .streamableHttpTransport("https://mcp.example.com/http")
+                        .header("X-Static", "static-value")
+                        .queryParam("env", "prod")
+                        .httpRequestCustomizer(
+                                (builder1, method, uri, body, ctx) -> {
+                                    builder1.header("Authorization", "Bearer dynamic");
+                                    builder1.header("X-Trace-Id", "trace-123");
+                                })
+                        .timeout(Duration.ofSeconds(60));
+
+        McpClientWrapper wrapper = builder.buildSync();
+        assertNotNull(wrapper);
+        assertEquals("customizer-all-features", wrapper.getName());
+    }
+
+    @Test
+    void testHttpRequestCustomizer_FluentApiWithBothTransports() {
+        // Test that httpRequestCustomizer works with SSE and then buildAsync
+        McpClientBuilder builder =
+                McpClientBuilder.create("fluent-customizer")
+                        .sseTransport("https://mcp.example.com/sse")
+                        .httpRequestCustomizer(
+                                (builder1, method, uri, body, ctx) -> {
+                                    // No-op customizer, just verify builder works
+                                });
+
+        assertNotNull(builder);
+        McpClientWrapper wrapper = builder.buildAsync().block();
+        assertNotNull(wrapper);
+    }
+
+    @Test
+    void testHttpRequestCustomizer_MultipleCalls_LastOneWins() {
+        // Multiple calls should overwrite the previous customizer
+        McpClientBuilder builder =
+                McpClientBuilder.create("multi-customizer")
+                        .sseTransport("https://mcp.example.com/sse")
+                        .httpRequestCustomizer(
+                                (builder1, method, uri, body, ctx) -> {
+                                    builder1.header("First", "first-value");
+                                })
+                        .httpRequestCustomizer(
+                                (builder1, method, uri, body, ctx) -> {
+                                    builder1.header("Second", "second-value");
+                                });
+
+        McpClientWrapper wrapper = builder.buildAsync().block();
+        assertNotNull(wrapper);
+    }
+
+    @Test
+    void testHttpRequestCustomizer_WithNullCustomizer() {
+        // Setting null customizer should be allowed (just means no customizer)
+        McpClientBuilder builder =
+                McpClientBuilder.create("null-customizer")
+                        .sseTransport("https://mcp.example.com/sse")
+                        .httpRequestCustomizer(null);
+
+        McpClientWrapper wrapper = builder.buildAsync().block();
+        assertNotNull(wrapper);
+    }
+
+    // ==================== Protocol Versions Tests ====================
+
+    @Test
+    void testProtocolVersions_SingleVersion() {
+        McpClientBuilder builder =
+                McpClientBuilder.create("pv-client")
+                        .stdioTransport("echo", "test")
+                        .protocolVersions("2025-03-26");
+
+        assertNotNull(builder);
+    }
+
+    @Test
+    void testProtocolVersions_MultipleVersions() {
+        McpClientBuilder builder =
+                McpClientBuilder.create("pv-client")
+                        .stdioTransport("echo", "test")
+                        .protocolVersions("2024-11-05", "2025-03-26", "2025-06-18");
+
+        assertNotNull(builder);
+    }
+
+    @Test
+    void testProtocolVersions_NullThrows() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        McpClientBuilder.create("pv-client")
+                                .stdioTransport("echo", "test")
+                                .protocolVersions((String[]) null));
+    }
+
+    @Test
+    void testProtocolVersions_EmptyThrows() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        McpClientBuilder.create("pv-client")
+                                .stdioTransport("echo", "test")
+                                .protocolVersions());
+    }
+
+    @Test
+    void testProtocolVersions_BuildAsyncWithVersions() {
+        McpClientBuilder builder =
+                McpClientBuilder.create("pv-async")
+                        .stdioTransport("echo", "test")
+                        .protocolVersions("2024-11-05", "2025-03-26");
+
+        McpClientWrapper wrapper = builder.buildAsync().block();
+        assertNotNull(wrapper);
+        assertTrue(wrapper instanceof McpAsyncClientWrapper);
+    }
+
+    @Test
+    void testProtocolVersions_BuildSyncWithVersions() {
+        McpClientBuilder builder =
+                McpClientBuilder.create("pv-sync")
+                        .stdioTransport("echo", "test")
+                        .protocolVersions("2024-11-05", "2025-03-26");
+
+        McpClientWrapper wrapper = builder.buildSync();
+        assertNotNull(wrapper);
+        assertTrue(wrapper instanceof McpSyncClientWrapper);
+    }
+
+    @Test
+    void testProtocolVersions_WithSseTransport() {
+        McpClientBuilder builder =
+                McpClientBuilder.create("pv-sse")
+                        .sseTransport("https://mcp.example.com/sse")
+                        .protocolVersions("2024-11-05", "2025-03-26");
+
+        assertNotNull(builder);
+    }
+
+    @Test
+    void testProtocolVersions_WithStreamableHttpTransport() {
+        McpClientBuilder builder =
+                McpClientBuilder.create("pv-http")
+                        .streamableHttpTransport("https://mcp.example.com/http")
+                        .protocolVersions("2024-11-05", "2025-03-26");
+
+        assertNotNull(builder);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void testProtocolVersions_OverrideTransportIsApplied() throws Exception {
+        // Verify that when protocolVersions is set, the transport is wrapped
+        McpClientBuilder builder =
+                McpClientBuilder.create("pv-verify")
+                        .stdioTransport("echo", "test")
+                        .protocolVersions("2024-11-05", "2025-03-26");
+
+        // Use reflection to access the protocolVersions field
+        Field pvField = McpClientBuilder.class.getDeclaredField("protocolVersions");
+        pvField.setAccessible(true);
+        List<String> versions = (List<String>) pvField.get(builder);
+
+        assertNotNull(versions);
+        assertEquals(2, versions.size());
+        assertEquals("2024-11-05", versions.get(0));
+        assertEquals("2025-03-26", versions.get(1));
+    }
+
+    @Test
+    void testProtocolVersions_WithoutSettingUsesDefault() throws Exception {
+        // Verify that when protocolVersions is NOT set, the field remains null
+        McpClientBuilder builder =
+                McpClientBuilder.create("pv-default").stdioTransport("echo", "test");
+
+        Field pvField = McpClientBuilder.class.getDeclaredField("protocolVersions");
+        pvField.setAccessible(true);
+        Object versions = pvField.get(builder);
+
+        // Should be null, meaning the transport's default protocolVersions() is used
+        assertEquals(null, versions);
+    }
+
+    @Test
+    void testProtocolVersions_NullElementsAreFiltered() throws Exception {
+        // Verify that null elements in the varargs are silently filtered out
+        McpClientBuilder builder =
+                McpClientBuilder.create("pv-null-filter")
+                        .stdioTransport("echo", "test")
+                        .protocolVersions("2024-11-05", null, "2025-03-26");
+
+        Field pvField = McpClientBuilder.class.getDeclaredField("protocolVersions");
+        pvField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        List<String> versions = (List<String>) pvField.get(builder);
+
+        assertNotNull(versions);
+        assertEquals(2, versions.size());
+        assertEquals("2024-11-05", versions.get(0));
+        assertEquals("2025-03-26", versions.get(1));
+    }
+
+    @Test
+    void testProtocolVersions_AllNullElementsThrows() {
+        // Verify that passing only null elements throws
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        McpClientBuilder.create("pv-all-null")
+                                .stdioTransport("echo", "test")
+                                .protocolVersions(null, null));
     }
 }

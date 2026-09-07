@@ -20,6 +20,12 @@ server:
 spring:
   main:
     banner-mode: off
+  web:
+    resources:
+      cache:
+        period: 0
+      chain:
+        cache: false
 
 # AG-UI Configuration
 agentscope:
@@ -31,6 +37,7 @@ agentscope:
     run-timeout: 10m
     emit-state-events: true
     emit-tool-call-args: true
+    emit-token-usage: true
     default-agent-id: default
     # Agent ID routing configuration
     # Agent ID can be passed via:
@@ -44,11 +51,10 @@ agentscope:
     server-side-memory: true
     max-thread-sessions: 1000
     session-timeout-minutes: 30
-    enable-reasoning: false
+    enable-reasoning: true
 
 # Logging
 logging:
   level:
     root: INFO
     io.agentscope: DEBUG
-

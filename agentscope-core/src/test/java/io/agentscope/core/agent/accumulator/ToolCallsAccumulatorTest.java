@@ -323,4 +323,154 @@ class ToolCallsAccumulatorTest {
         List<ToolUseBlock> allCalls = accumulator.getAllAccumulatedToolCalls();
         assertEquals(2, allCalls.size());
     }
+
+    @Test
+    @DisplayName("Should produce valid JSON content when streaming is interrupted mid-arguments")
+    void testInterruptedStreamingProducesValidJsonContent() {
+        // Simulate streaming that gets interrupted mid-arguments:
+        // Model was outputting {"query": "hello wor... but got cut off
+        ToolUseBlock chunk1 =
+                ToolUseBlock.builder()
+                        .id("call_1")
+                        .name("search")
+                        .content("{\"query\": \"hello wor")
+                        .build();
+
+        accumulator.add(chunk1);
+
+        List<ToolUseBlock> result = accumulator.buildAllToolCalls();
+        assertEquals(1, result.size());
+
+        ToolUseBlock toolCall = result.get(0);
+        // Content should fall back to "{}" since the raw content is invalid JSON
+        assertEquals("{}", toolCall.getContent());
+        // Input should be empty since parsing failed
+        assertTrue(toolCall.getInput().isEmpty());
+    }
+
+    @Test
+    @DisplayName("Should produce valid JSON content when multiple chunks are interrupted")
+    void testInterruptedMultiChunkStreamingProducesValidJsonContent() {
+        // First chunk starts the arguments
+        ToolUseBlock chunk1 =
+                ToolUseBlock.builder()
+                        .id("call_1")
+                        .name("get_weather")
+                        .content("{\"city\":")
+                        .build();
+
+        // Second chunk is a partial value — streaming interrupted here
+        ToolUseBlock chunk2 =
+                ToolUseBlock.builder().id("call_1").name("__fragment__").content("\"Bei").build();
+
+        accumulator.add(chunk1);
+        accumulator.add(chunk2);
+
+        List<ToolUseBlock> result = accumulator.buildAllToolCalls();
+        assertEquals(1, result.size());
+
+        ToolUseBlock toolCall = result.get(0);
+        assertEquals("{}", toolCall.getContent());
+        assertTrue(toolCall.getInput().isEmpty());
+    }
+
+    @Test
+    @DisplayName("Should handle non-object JSON content like arrays or null")
+    void testNonObjectJsonContentFallsBackToEmpty() {
+        ToolUseBlock chunk =
+                ToolUseBlock.builder().id("call_1").name("tool").content("[1, 2, 3]").build();
+
+        accumulator.add(chunk);
+
+        List<ToolUseBlock> result = accumulator.buildAllToolCalls();
+        assertEquals(1, result.size());
+        // Arrays are not valid JSON objects for tool call arguments
+        assertEquals("{}", result.get(0).getContent());
+    }
+
+    @Test
+    @DisplayName("Should preserve valid content even when input was populated via merge")
+    void testValidContentPreservedWithMergedInput() {
+        // First chunk: input populated via parsed args
+        Map<String, Object> args = new HashMap<>();
+        args.put("city", "Tokyo");
+        ToolUseBlock chunk1 =
+                ToolUseBlock.builder()
+                        .id("call_1")
+                        .name("weather")
+                        .input(args)
+                        .content("{\"city\": \"Tokyo\"}")
+                        .build();
+
+        accumulator.add(chunk1);
+
+        List<ToolUseBlock> result = accumulator.buildAllToolCalls();
+        assertEquals(1, result.size());
+
+        ToolUseBlock toolCall = result.get(0);
+        // Valid JSON content should be preserved
+        assertEquals("{\"city\": \"Tokyo\"}", toolCall.getContent());
+        assertEquals("Tokyo", toolCall.getInput().get("city"));
+    }
+
+    @Test
+    @DisplayName(
+            "Should repair null input values from complete raw JSON (#768 HTML streaming case)")
+    void testRepairNullInputValuesFromCompleteRawContent() {
+        // Early chunk: keys present but values null (partial/early parse of incomplete JSON)
+        Map<String, Object> partialArgs = new HashMap<>();
+        partialArgs.put("file_path", null);
+        partialArgs.put("content", null);
+
+        String html =
+                "<html>\n  <body class=\"main\">\n    <p>Hello \"world\"</p>\n  </body>\n</html>";
+        String completeJson =
+                "{\"file_path\":\"index.html\",\"content\":"
+                        + io.agentscope.core.util.JsonUtils.getJsonCodec().toJson(html)
+                        + "}";
+
+        ToolUseBlock chunk1 =
+                ToolUseBlock.builder()
+                        .id("call_html")
+                        .name("write_text_file")
+                        .input(partialArgs)
+                        .content(completeJson)
+                        .build();
+
+        accumulator.add(chunk1);
+
+        List<ToolUseBlock> result = accumulator.buildAllToolCalls();
+        assertEquals(1, result.size());
+        ToolUseBlock toolCall = result.get(0);
+
+        assertEquals("index.html", toolCall.getInput().get("file_path"));
+        assertEquals(html, toolCall.getInput().get("content"));
+    }
+
+    @Test
+    @DisplayName("Should not let null input from later chunks overwrite earlier non-null values")
+    void testNullInputDoesNotOverwriteNonNullArgs() {
+        Map<String, Object> goodArgs = new HashMap<>();
+        goodArgs.put("file_path", "a.md");
+        goodArgs.put("content", "hello");
+
+        Map<String, Object> nullArgs = new HashMap<>();
+        nullArgs.put("file_path", null);
+        nullArgs.put("content", null);
+
+        accumulator.add(
+                ToolUseBlock.builder()
+                        .id("call_1")
+                        .name("write_text_file")
+                        .input(goodArgs)
+                        .content("{\"file_path\":\"a.md\",\"content\":\"hello\"}")
+                        .build());
+        accumulator.add(
+                ToolUseBlock.builder().id("call_1").name("__fragment__").input(nullArgs).build());
+
+        List<ToolUseBlock> result = accumulator.buildAllToolCalls();
+        assertEquals(1, result.size());
+        assertEquals("a.md", result.get(0).getInput().get("file_path"));
+        assertEquals("hello", result.get(0).getInput().get("content"));
+    }
 }

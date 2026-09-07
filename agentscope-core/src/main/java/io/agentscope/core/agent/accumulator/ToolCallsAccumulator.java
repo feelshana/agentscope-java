@@ -67,9 +67,16 @@ public class ToolCallsAccumulator implements ContentAccumulator<ToolUseBlock> {
                 this.name = block.getName();
             }
 
-            // Merge parameters
+            // Merge parameters. Skip null values so a partial/null map from an early
+            // stream chunk cannot wipe previously accumulated non-null arguments.
             if (block.getInput() != null) {
-                this.args.putAll(block.getInput());
+                for (Map.Entry<String, Object> entry : block.getInput().entrySet()) {
+                    if (entry.getValue() != null) {
+                        this.args.put(entry.getKey(), entry.getValue());
+                    } else if (!this.args.containsKey(entry.getKey())) {
+                        this.args.put(entry.getKey(), null);
+                    }
+                }
             }
 
             // Accumulate raw content (for parsing complete JSON)
@@ -87,25 +94,47 @@ public class ToolCallsAccumulator implements ContentAccumulator<ToolUseBlock> {
             Map<String, Object> finalArgs = new HashMap<>(args);
             String rawContentStr = this.rawContent.toString();
 
-            // If no parsed arguments but has raw JSON content, try to parse
-            if (finalArgs.isEmpty() && rawContentStr.length() > 0) {
+            // Always attempt to parse the fully accumulated raw JSON. Early stream chunks may
+            // look like complete objects ({...}) but still contain null/incomplete values;
+            // the final raw content is the source of truth for missing or null keys.
+            if (!rawContentStr.isEmpty()) {
                 try {
                     @SuppressWarnings("unchecked")
                     Map<String, Object> parsed =
                             JsonUtils.getJsonCodec().fromJson(rawContentStr, Map.class);
                     if (parsed != null) {
-                        finalArgs.putAll(parsed);
+                        for (Map.Entry<String, Object> entry : parsed.entrySet()) {
+                            if (entry.getValue() == null) {
+                                continue;
+                            }
+                            Object existing = finalArgs.get(entry.getKey());
+                            if (existing == null || !finalArgs.containsKey(entry.getKey())) {
+                                finalArgs.put(entry.getKey(), entry.getValue());
+                            }
+                        }
                     }
                 } catch (Exception ignored) {
-                    // Parsing failed, keep empty args
+                    // Parsing failed, keep previously merged args
                 }
+            }
+
+            // Always validate rawContent is a legal JSON object before using it
+            // as content. This prevents persisting malformed JSON fragments
+            // (e.g. when streaming was interrupted mid-arguments).
+            String contentStr;
+            if (rawContentStr.isEmpty()) {
+                contentStr = "{}";
+            } else if (JsonUtils.isValidJsonObject(rawContentStr)) {
+                contentStr = rawContentStr;
+            } else {
+                contentStr = "{}";
             }
 
             return ToolUseBlock.builder()
                     .id(toolId != null ? toolId : generateId())
                     .name(name)
                     .input(finalArgs)
-                    .content(rawContentStr.isEmpty() ? "{}" : rawContentStr)
+                    .content(contentStr)
                     .metadata(metadata.isEmpty() ? null : metadata)
                     .build();
         }

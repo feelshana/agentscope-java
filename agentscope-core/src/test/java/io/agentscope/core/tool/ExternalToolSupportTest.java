@@ -18,9 +18,11 @@ package io.agentscope.core.tool;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.agentscope.core.message.ToolResultBlock;
+import io.agentscope.core.message.ToolUseBlock;
 import io.agentscope.core.model.ToolSchema;
 import java.util.List;
 import java.util.Map;
@@ -161,6 +163,41 @@ class ExternalToolSupportTest {
     }
 
     @Test
+    @DisplayName("Should preserve strict when registering external schema")
+    void testExternalSchemaStrictPreserved() {
+        ToolSchema strictSchema =
+                ToolSchema.builder()
+                        .name("strict_tool")
+                        .description("Strict external tool")
+                        .parameters(Map.of("type", "object"))
+                        .strict(true)
+                        .build();
+
+        toolkit.registerSchema(strictSchema);
+
+        List<ToolSchema> schemas = toolkit.getToolSchemas();
+        assertEquals(1, schemas.size());
+        assertEquals(Boolean.TRUE, schemas.get(0).getStrict());
+    }
+
+    @Test
+    @DisplayName("Should keep strict as null when schema strict is not set")
+    void testExternalSchemaStrictNullPreserved() {
+        ToolSchema schema =
+                ToolSchema.builder()
+                        .name("null_strict_tool")
+                        .description("Null strict external tool")
+                        .parameters(Map.of("type", "object"))
+                        .build();
+
+        toolkit.registerSchema(schema);
+
+        List<ToolSchema> schemas = toolkit.getToolSchemas();
+        assertEquals(1, schemas.size());
+        assertNull(schemas.get(0).getStrict());
+    }
+
+    @Test
     @DisplayName("Should handle null schemas list gracefully")
     void testRegisterSchemasNull() {
         // Should not throw
@@ -199,11 +236,99 @@ class ExternalToolSupportTest {
         assertEquals(2, schemas.size());
     }
 
+    @Test
+    @DisplayName("Should produce suspended result when executing SchemaOnlyTool via Toolkit")
+    void testSchemaOnlyToolExecutionReturnsSuspended() {
+        ToolSchema schema =
+                ToolSchema.builder()
+                        .name("db_query")
+                        .description("Query database")
+                        .parameters(
+                                Map.of(
+                                        "type",
+                                        "object",
+                                        "properties",
+                                        Map.of("sql", Map.of("type", "string")),
+                                        "required",
+                                        List.of("sql")))
+                        .build();
+        toolkit.registerSchema(schema);
+
+        Map<String, Object> input = Map.of("sql", "SELECT 1");
+        ToolUseBlock toolCall =
+                ToolUseBlock.builder()
+                        .id("call-ext-1")
+                        .name("db_query")
+                        .input(input)
+                        .content(io.agentscope.core.util.JsonUtils.getJsonCodec().toJson(input))
+                        .build();
+
+        List<ToolResultBlock> results =
+                toolkit.callTools(List.of(toolCall), null, null, null)
+                        .block(java.time.Duration.ofSeconds(3));
+
+        assertNotNull(results);
+        assertEquals(1, results.size());
+        assertTrue(results.get(0).isSuspended(), "External tool result should be suspended");
+        assertEquals("call-ext-1", results.get(0).getId());
+        assertEquals("db_query", results.get(0).getName());
+    }
+
+    @Test
+    @DisplayName(
+            "Should produce suspended result when executing @Tool(externalTool=true) via Toolkit")
+    void testAnnotationExternalToolExecutionReturnsSuspended() {
+        toolkit.registerTool(new AnnotationExternalToolExample());
+
+        Map<String, Object> input = Map.of("endpoint", "/api/test");
+        ToolUseBlock toolCall =
+                ToolUseBlock.builder()
+                        .id("call-ext-2")
+                        .name("call_api")
+                        .input(input)
+                        .content(io.agentscope.core.util.JsonUtils.getJsonCodec().toJson(input))
+                        .build();
+
+        List<ToolResultBlock> results =
+                toolkit.callTools(List.of(toolCall), null, null, null)
+                        .block(java.time.Duration.ofSeconds(3));
+
+        assertNotNull(results);
+        assertEquals(1, results.size());
+        assertTrue(results.get(0).isSuspended(), "External tool result should be suspended");
+        assertEquals("call-ext-2", results.get(0).getId());
+    }
+
+    static class AnnotationExternalToolExample {
+        @Tool(name = "call_api", description = "Call external API", externalTool = true)
+        public String callApi(@ToolParam(name = "endpoint") String endpoint) {
+            throw new AssertionError("External tool body should never be invoked");
+        }
+    }
+
     /** Sample internal tool for testing. */
     static class InternalToolExample {
         @Tool(name = "calculator", description = "Calculate expression")
         public String calculate(@ToolParam(name = "expression") String expression) {
             return "result";
         }
+    }
+
+    static class StrictInternalToolExample {
+        @Tool(name = "strict_calculator", description = "Calculate expression", strict = true)
+        public String calculate(@ToolParam(name = "expression") String expression) {
+            return "result";
+        }
+    }
+
+    @Test
+    @DisplayName("Should propagate strict from @Tool annotation")
+    void testAnnotationStrictPropagation() {
+        toolkit.registerTool(new StrictInternalToolExample());
+
+        List<ToolSchema> schemas = toolkit.getToolSchemas();
+        assertEquals(1, schemas.size());
+        assertEquals("strict_calculator", schemas.get(0).getName());
+        assertEquals(Boolean.TRUE, schemas.get(0).getStrict());
     }
 }

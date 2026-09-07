@@ -32,21 +32,12 @@
     <name>AgentScope Java - Examples</name>
 
     <modules>
-        <module>quickstart</module>
-        <module>advanced</module>
-        <module>micronaut</module>
-        <module>quarkus</module>
-        <module>plan-notebook</module>
+        <module>documentation</module>
         <module>agui</module>
-        <module>werewolf</module>
-        <module>werewolf-hitl</module>
-        <module>model-request-compression</module>
-        <module>boba-tea-shop</module>
-        <module>chat-completions-web</module>
-        <module>hitl-chat</module>
-        <module>a2a</module>
-        <module>chat-tts</module>
-        <module>data-analysis</module>
+        <module>agents/agentscope-paw</module>
+        <module>agents/agentscope-dataagent</module>
+        <module>agents/agentscope-codingagent</module>
+        <module>agentscope-copilotkit</module>
     </modules>
 
     <properties>
@@ -54,8 +45,8 @@
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.deploy.skip>true</maven.deploy.skip>
-        <spring.boot.version>4.0.2</spring.boot.version>
-        <micronaut.version>4.10.7</micronaut.version>
+        <spring.boot.version>4.0.4</spring.boot.version>
+        <micronaut.version>4.10.13</micronaut.version>
     </properties>
 
 </project>

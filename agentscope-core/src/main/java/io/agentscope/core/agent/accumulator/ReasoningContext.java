@@ -15,10 +15,10 @@
  */
 package io.agentscope.core.agent.accumulator;
 
+import io.agentscope.core.message.AssistantMessage;
 import io.agentscope.core.message.ContentBlock;
 import io.agentscope.core.message.MessageMetadataKeys;
 import io.agentscope.core.message.Msg;
-import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.TextBlock;
 import io.agentscope.core.message.ThinkingBlock;
 import io.agentscope.core.message.ToolUseBlock;
@@ -55,7 +55,12 @@ public class ReasoningContext {
     // ChatUsage
     private int inputTokens = 0;
     private int outputTokens = 0;
+    private int cachedTokens = 0;
     private double time = 0;
+
+    // Provider-specific response metadata to propagate to the final message
+    // (e.g. openai.reasoning.encrypted_content for reasoning replay)
+    private final Map<String, Object> responseMetadata = new HashMap<>();
 
     public ReasoningContext(String agentName) {
         this.agentName = agentName;
@@ -83,7 +88,13 @@ public class ReasoningContext {
         if (usage != null) {
             inputTokens = usage.getInputTokens();
             outputTokens = usage.getOutputTokens();
+            cachedTokens = usage.getCachedTokens();
             time = usage.getTime();
+        }
+
+        // Propagate provider-specific metadata
+        if (chunk.getMetadata() != null && !chunk.getMetadata().isEmpty()) {
+            responseMetadata.putAll(chunk.getMetadata());
         }
 
         List<Msg> streamingMsgs = new ArrayList<>();
@@ -164,24 +175,26 @@ public class ReasoningContext {
             return null;
         }
 
-        // Build metadata with accumulated ChatUsage
-        Map<String, Object> metadata = new HashMap<>();
+        // Build metadata: start with propagated response metadata, then add ChatUsage
+        Map<String, Object> metadata = new HashMap<>(responseMetadata);
+        ChatUsage chatUsage = null;
         if (inputTokens > 0 || outputTokens > 0 || time > 0) {
-            ChatUsage chatUsage =
+            chatUsage =
                     ChatUsage.builder()
                             .inputTokens(inputTokens)
                             .outputTokens(outputTokens)
+                            .cachedTokens(cachedTokens)
                             .time(time)
                             .build();
             metadata.put(MessageMetadataKeys.CHAT_USAGE, chatUsage);
         }
 
-        return Msg.builder()
+        return AssistantMessage.builder()
                 .id(messageId)
                 .name(agentName)
-                .role(MsgRole.ASSISTANT)
                 .content(blocks)
                 .metadata(metadata)
+                .usage(chatUsage)
                 .build();
     }
 
@@ -190,12 +203,7 @@ public class ReasoningContext {
      * @hidden
      */
     private Msg buildChunkMsg(ContentBlock block) {
-        return Msg.builder()
-                .id(messageId)
-                .name(agentName)
-                .role(MsgRole.ASSISTANT)
-                .content(block)
-                .build();
+        return AssistantMessage.builder().id(messageId).name(agentName).content(block).build();
     }
 
     /**
@@ -241,6 +249,16 @@ public class ReasoningContext {
     }
 
     /**
+     * Replace accumulated text after {@code onModelCall} middleware transforms text delta events.
+     *
+     * @hidden
+     * @param text text reconstructed from the transformed event stream
+     */
+    public void replaceAccumulatedText(String text) {
+        textAcc.replace(text);
+    }
+
+    /**
      * Get the accumulated thinking content.
      *
      * @hidden
@@ -270,5 +288,22 @@ public class ReasoningContext {
      */
     public List<ToolUseBlock> getAllAccumulatedToolCalls() {
         return toolCallsAcc.getAllAccumulatedToolCalls();
+    }
+
+    /**
+     * Get the accumulated ChatUsage.
+     *
+     * @return ChatUsage with accumulated tokens, or null if no usage data
+     */
+    public ChatUsage getChatUsage() {
+        if (inputTokens > 0 || outputTokens > 0 || time > 0) {
+            return ChatUsage.builder()
+                    .inputTokens(inputTokens)
+                    .outputTokens(outputTokens)
+                    .cachedTokens(cachedTokens)
+                    .time(time)
+                    .build();
+        }
+        return null;
     }
 }

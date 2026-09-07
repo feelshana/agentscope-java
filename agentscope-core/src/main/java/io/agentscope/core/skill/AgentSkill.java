@@ -16,10 +16,13 @@
 
 package io.agentscope.core.skill;
 
+import java.nio.file.Path;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -60,13 +63,21 @@ import java.util.Set;
  *
  * @see io.agentscope.core.skill.util.SkillUtil
  * @see io.agentscope.core.skill.util.MarkdownSkillParser
+ * Manage markdown skill catalogs in application code.
  */
 public class AgentSkill {
-    private final String name;
-    private final String description;
+    private final Map<String, Object> metadata;
     private final String skillContent;
     private final Map<String, String> resources;
     private final String source;
+
+    /**
+     * Optional absolute path to the skill's on-disk source directory. When present, the prompt
+     * provider can emit a {@code <files-root>} per skill so the LLM can shell-execute scripts
+     * directly without going through {@code uploadSkillFiles}; the load tool can also use it as
+     * a disk-fallback when an in-memory resource is missing.
+     */
+    private final Path originDir;
 
     /**
      * Creates an AgentSkill with explicit parameters.
@@ -104,19 +115,61 @@ public class AgentSkill {
             String skillContent,
             Map<String, String> resources,
             String source) {
-        if (name == null || name.isEmpty() || description == null || description.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "The skill must have `name` and `description` fields.");
-        }
+        this(createMetadata(name, description), skillContent, resources, source);
+    }
+
+    /**
+     * Creates an AgentSkill with explicit metadata.
+     *
+     * <p>The metadata must include non-empty string values for {@code name} and
+     * {@code description}. The metadata map is copied and stored as immutable.
+     *
+     * @param metadata Skill metadata including required {@code name} and {@code description}
+     * @param skillContent The skill implementation or instructions (must not be null or empty)
+     * @param resources Supporting resources referenced by the skill (can be null)
+     * @param source Source identifier for the skill (null defaults to "custom")
+     * @throws IllegalArgumentException if metadata is invalid or skillContent is null or empty
+     */
+    public AgentSkill(
+            Map<String, Object> metadata,
+            String skillContent,
+            Map<String, String> resources,
+            String source) {
+        this(metadata, skillContent, resources, source, null);
+    }
+
+    /**
+     * Creates an AgentSkill with explicit metadata and an on-disk origin directory.
+     *
+     * @param metadata Skill metadata including required {@code name} and {@code description}
+     * @param skillContent The skill implementation or instructions (must not be null or empty)
+     * @param resources Supporting resources referenced by the skill (can be null)
+     * @param source Source identifier for the skill (null defaults to "custom")
+     * @param originDir Absolute path to the skill's source directory, or {@code null} if not
+     *                  filesystem-backed (e.g. classpath / remote / synthetic). Stored as-is.
+     * @throws IllegalArgumentException if metadata is invalid or skillContent is null or empty
+     */
+    public AgentSkill(
+            Map<String, Object> metadata,
+            String skillContent,
+            Map<String, String> resources,
+            String source,
+            Path originDir) {
+        String name = getRequiredMetadataString(metadata, "name");
+        String description = getRequiredMetadataString(metadata, "description");
         if (skillContent == null || skillContent.isEmpty()) {
             throw new IllegalArgumentException("The skill must have content");
         }
 
-        this.name = name;
-        this.description = description;
+        LinkedHashMap<String, Object> metadataCopy = new LinkedHashMap<>(metadata);
+        metadataCopy.put("name", name);
+        metadataCopy.put("description", description);
+
+        this.metadata = Collections.unmodifiableMap(metadataCopy);
         this.skillContent = skillContent;
         this.resources = resources != null ? new HashMap<>(resources) : new HashMap<>();
         this.source = source != null ? source : "custom";
+        this.originDir = originDir;
     }
 
     /**
@@ -125,7 +178,7 @@ public class AgentSkill {
      * @return The skill name (never null)
      */
     public String getName() {
-        return name;
+        return (String) metadata.get("name");
     }
 
     /**
@@ -134,7 +187,26 @@ public class AgentSkill {
      * @return The skill description (never null)
      */
     public String getDescription() {
-        return description;
+        return (String) metadata.get("description");
+    }
+
+    /**
+     * Gets the skill metadata.
+     *
+     * @return The immutable metadata map (never null, may be empty except required fields)
+     */
+    public Map<String, Object> getMetadata() {
+        return metadata;
+    }
+
+    /**
+     * Gets a metadata value by key.
+     *
+     * @param key The metadata key
+     * @return The metadata value, or null if not found
+     */
+    public Object getMetadataValue(String key) {
+        return metadata.get(key);
     }
 
     /**
@@ -193,7 +265,18 @@ public class AgentSkill {
      * @return Unique skill identifier (never null)
      */
     public String getSkillId() {
-        return name + "_" + source;
+        return getName() + "_" + source;
+    }
+
+    /**
+     * Returns the absolute path to this skill's on-disk source directory, when available. Used
+     * by the prompt provider to emit per-skill {@code <files-root>} entries and by the load tool
+     * as a disk-fallback when an in-memory resource is missing.
+     *
+     * @return the origin directory, empty when the skill is not filesystem-backed
+     */
+    public Optional<Path> getOriginDir() {
+        return Optional.ofNullable(originDir);
     }
 
     /**
@@ -224,9 +307,9 @@ public class AgentSkill {
     @Override
     public String toString() {
         return "AgentSkill{name='"
-                + name
+                + getName()
                 + "', description='"
-                + description
+                + getDescription()
                 + "', source='"
                 + source
                 + "'}";
@@ -256,16 +339,17 @@ public class AgentSkill {
      * }</pre>
      */
     public static class Builder {
-        private String name;
-        private String description;
+        private Map<String, Object> metadata;
         private String skillContent;
         private Map<String, String> resources;
         private String source;
+        private Path originDir;
 
         /**
          * Creates an empty builder.
          */
         private Builder() {
+            this.metadata = new LinkedHashMap<>();
             this.resources = new HashMap<>();
         }
 
@@ -275,11 +359,11 @@ public class AgentSkill {
          * @param baseSkill The skill to copy values from
          */
         private Builder(AgentSkill baseSkill) {
-            this.name = baseSkill.name;
-            this.description = baseSkill.description;
+            this.metadata = new LinkedHashMap<>(baseSkill.metadata);
             this.skillContent = baseSkill.skillContent;
             this.resources = new HashMap<>(baseSkill.resources);
             this.source = baseSkill.source;
+            this.originDir = baseSkill.originDir;
         }
 
         /**
@@ -289,7 +373,7 @@ public class AgentSkill {
          * @return This builder
          */
         public Builder name(String name) {
-            this.name = name;
+            this.metadata.put("name", name);
             return this;
         }
 
@@ -300,7 +384,42 @@ public class AgentSkill {
          * @return This builder
          */
         public Builder description(String description) {
-            this.description = description;
+            this.metadata.put("description", description);
+            return this;
+        }
+
+        /**
+         * Replaces all metadata with a new map.
+         *
+         * @param metadata The new metadata map
+         * @return This builder
+         */
+        public Builder metadata(Map<String, Object> metadata) {
+            this.metadata =
+                    metadata != null ? new LinkedHashMap<>(metadata) : new LinkedHashMap<>();
+            return this;
+        }
+
+        /**
+         * Adds or updates a single metadata entry.
+         *
+         * @param key The metadata key
+         * @param value The metadata value
+         * @return This builder
+         */
+        public Builder putMetadata(String key, Object value) {
+            this.metadata.put(key, value);
+            return this;
+        }
+
+        /**
+         * Removes a metadata entry.
+         *
+         * @param key The metadata key to remove
+         * @return This builder
+         */
+        public Builder removeMetadata(String key) {
+            this.metadata.remove(key);
             return this;
         }
 
@@ -371,13 +490,47 @@ public class AgentSkill {
         }
 
         /**
+         * Sets the on-disk origin directory for this skill. Repositories that materialise a
+         * skill from a local directory should call this so the prompt provider can emit a
+         * {@code <files-root>} and the load tool can fall back to disk reads.
+         *
+         * @param originDir absolute path to the skill's source directory, or {@code null}
+         * @return This builder
+         */
+        public Builder originDir(Path originDir) {
+            this.originDir = originDir;
+            return this;
+        }
+
+        /**
          * Builds the AgentSkill instance.
          *
          * @return A new AgentSkill instance
          * @throws IllegalArgumentException if required fields are missing
          */
         public AgentSkill build() {
-            return new AgentSkill(name, description, skillContent, resources, source);
+            return new AgentSkill(metadata, skillContent, resources, source, originDir);
         }
+    }
+
+    private static Map<String, Object> createMetadata(String name, String description) {
+        LinkedHashMap<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("name", name);
+        metadata.put("description", description);
+        return metadata;
+    }
+
+    private static String getRequiredMetadataString(Map<String, Object> metadata, String key) {
+        if (metadata == null) {
+            throw new IllegalArgumentException(
+                    "The skill must have `name` and `description` fields.");
+        }
+
+        Object value = metadata.get(key);
+        if (!(value instanceof String stringValue) || stringValue.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "The skill must have `name` and `description` fields.");
+        }
+        return stringValue;
     }
 }

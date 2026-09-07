@@ -23,6 +23,7 @@ import io.agentscope.core.a2a.server.executor.AgentExecuteProperties;
 import io.agentscope.core.a2a.server.executor.runner.AgentRunner;
 import io.agentscope.core.a2a.server.executor.runner.ReActAgentWithBuilderRunner;
 import io.agentscope.core.a2a.server.registry.AgentRegistry;
+import io.agentscope.core.a2a.server.transport.CustomTransportProperties;
 import io.agentscope.core.a2a.server.transport.DeploymentProperties;
 import io.agentscope.spring.boot.AgentscopeAutoConfiguration;
 import io.agentscope.spring.boot.a2a.controller.A2aJsonRpcController;
@@ -31,6 +32,7 @@ import io.agentscope.spring.boot.a2a.listener.ServerReadyListener;
 import io.agentscope.spring.boot.a2a.properties.A2aAgentCardProperties;
 import io.agentscope.spring.boot.a2a.properties.A2aCommonProperties;
 import io.agentscope.spring.boot.a2a.properties.Constants;
+import io.agentscope.spring.boot.a2a.properties.JSONRPCProperties;
 import io.agentscope.spring.boot.a2a.runner.ReActAgentWithStarterRunner;
 import java.util.List;
 import org.springframework.beans.factory.ObjectProvider;
@@ -51,8 +53,12 @@ import org.springframework.core.env.Environment;
  * {@link ConditionalOnWebApplication}.
  */
 @AutoConfiguration(after = AgentscopeAutoConfiguration.class)
-@EnableConfigurationProperties({A2aCommonProperties.class, A2aAgentCardProperties.class})
-@ConditionalOnClass(AgentScopeA2aServer.class)
+@EnableConfigurationProperties({
+    A2aCommonProperties.class,
+    A2aAgentCardProperties.class,
+    JSONRPCProperties.class
+})
+@ConditionalOnClass({AgentScopeA2aServer.class})
 @ConditionalOnWebApplication
 @ConditionalOnProperty(
         prefix = Constants.A2A_SERVER_PREFIX,
@@ -82,11 +88,22 @@ public class AgentscopeA2aAutoConfiguration {
             A2aAgentCardProperties agentCardProperties,
             A2aCommonProperties commonProperties,
             Environment environment,
-            List<AgentRegistry> agentRegistries) {
+            List<AgentRegistry> agentRegistries,
+            List<CustomTransportProperties> transportProperties) {
         AgentScopeA2aServer.Builder builder = AgentScopeA2aServer.builder(agentRunner);
-        builder.agentCard(buildConfigurableAgentCard(agentCardProperties));
-        builder.deploymentProperties(buildDeploymentProperties(environment));
+        ConfigurableAgentCard configurableAgentCard =
+                buildConfigurableAgentCard(agentCardProperties);
+        DeploymentProperties deploymentProperties = buildDeploymentProperties(environment);
+        builder.agentCard(configurableAgentCard);
+        builder.deploymentProperties(deploymentProperties);
         builder.agentExecuteProperties(buildAgentExecuteProperties(commonProperties));
+        transportProperties.stream()
+                .filter(CustomTransportProperties::isEnabled)
+                .forEach(
+                        each -> {
+                            each.setDeploymentProperties(deploymentProperties);
+                            builder.withTransport(each.toTransportProperties());
+                        });
         agentRegistries.forEach(builder::withAgentRegistry);
         return builder.build();
     }
@@ -143,9 +160,14 @@ public class AgentscopeA2aAutoConfiguration {
                 environment.getProperty(Constants.DEFAULT_SERVER_EXPORT_PORT, Integer.class, 8080);
         String defaultServerExportAddress =
                 environment.getProperty(Constants.DEFAULT_SERVER_EXPORT_ADDRESS);
+        String defaultServerExportContextPath =
+                environment.getProperty(Constants.DEFAULT_SERVER_EXPORT_CONTEXT_PATH);
         result.port(defaultServerExportPort);
         if (null != defaultServerExportAddress) {
             result.host(defaultServerExportAddress);
+        }
+        if (null != defaultServerExportContextPath) {
+            result.path(defaultServerExportContextPath);
         }
         return result.build();
     }

@@ -15,6 +15,9 @@
  */
 package io.agentscope.core.formatter;
 
+import io.agentscope.core.message.Base64Source;
+import io.agentscope.core.message.Source;
+import io.agentscope.core.message.URLSource;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
@@ -27,6 +30,7 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Base64;
 import java.util.List;
 import javax.imageio.ImageIO;
@@ -58,7 +62,7 @@ public class MediaUtils {
 
     /**
      * Check if a URL is a local file path (not a URL with protocol scheme).
-     * Returns true for paths without http://, https://, ftp://, or file:// prefixes.
+     * Returns true for paths without http://, https://, ftp://, file:// or oss:// prefixes.
      * Used to distinguish local files from remote URLs for different processing paths.
      *
      * @param url The URL or file path to check
@@ -277,6 +281,41 @@ public class MediaUtils {
     }
 
     /**
+     * Resolve the MIME type from a {@link Source}.
+     *
+     * <p>Resolution order:
+     * <ol>
+     *   <li>{@link Base64Source#getMediaType()} — always explicit</li>
+     *   <li>{@link URLSource#getMimeType()} — caller-supplied hint for extension-less URLs</li>
+     *   <li>{@link #determineMediaType(String)} — extension-based inference</li>
+     * </ol>
+     *
+     * @param source the source to resolve MIME type from
+     * @return MIME type string (e.g. "image/jpeg")
+     * @throws IllegalArgumentException if the type cannot be determined or source type is unknown
+     */
+    public static String resolveMimeType(Source source) {
+        if (source instanceof Base64Source b64) {
+            return b64.getMediaType();
+        }
+        if (source instanceof URLSource urlSource) {
+            String hint = urlSource.getMimeType();
+            if (hint != null && !hint.isBlank()) {
+                return hint;
+            }
+            String inferred = determineMediaType(urlSource.getUrl());
+            if (!"application/octet-stream".equals(inferred)) {
+                return inferred;
+            }
+            throw new IllegalArgumentException(
+                    "Cannot determine MIME type for URL '"
+                            + urlSource.getUrl()
+                            + "'; set URLSource.mimeType explicitly");
+        }
+        throw new IllegalArgumentException("Unsupported source type: " + source.getClass());
+    }
+
+    /**
      * Validate that an image file has a supported extension.
      */
     public static void validateImageExtension(String url) {
@@ -349,14 +388,34 @@ public class MediaUtils {
      * Extract file extension from path or URL.
      */
     public static String getExtension(String path) {
-        if (path == null) {
+        if (path == null || path.isBlank()) {
             return "";
         }
-        int dotIndex = path.lastIndexOf('.');
-        int slashIndex = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
-        // Ensure the dot is after the last slash (not part of directory name)
-        if (dotIndex > slashIndex && dotIndex < path.length() - 1) {
-            return path.substring(dotIndex + 1);
+
+        Path fileNamePath;
+        try {
+            if (isLocalFile(path)) {
+                // treat as file
+                fileNamePath = Paths.get(path).normalize().getFileName();
+            } else {
+                // treat as url
+                URI uri = URI.create(path).normalize();
+                fileNamePath = Paths.get(uri.getPath()).getFileName();
+            }
+        } catch (Exception e) {
+            log.warn("Invalid path: {}", path, e);
+            return "";
+        }
+
+        if (fileNamePath == null) {
+            return "";
+        }
+
+        String fileName = fileNamePath.toString();
+        int dotIndex = fileName.lastIndexOf('.');
+        // Ensure the dot exists and is not the last character
+        if (dotIndex != -1 && dotIndex < fileName.length() - 1) {
+            return fileName.substring(dotIndex + 1);
         }
         return "";
     }

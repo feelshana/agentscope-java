@@ -16,28 +16,23 @@
 package io.agentscope.core.skill;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.agentscope.core.agent.Agent;
 import io.agentscope.core.agent.AgentBase;
-import io.agentscope.core.agent.StructuredOutputHook;
 import io.agentscope.core.hook.Hook;
 import io.agentscope.core.hook.HookEvent;
-import io.agentscope.core.hook.PreReasoningEvent;
+import io.agentscope.core.hook.PreCallEvent;
 import io.agentscope.core.interruption.InterruptContext;
-import io.agentscope.core.message.MessageMetadataKeys;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.TextBlock;
 import io.agentscope.core.message.ToolUseBlock;
-import io.agentscope.core.model.GenerateOptions;
-import io.agentscope.core.model.StructuredOutputReminder;
-import io.agentscope.core.model.ToolChoice;
 import io.agentscope.core.tool.ToolCallParam;
 import io.agentscope.core.tool.Toolkit;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,8 +45,7 @@ import reactor.core.publisher.Mono;
  * Unit tests for SkillHook.
  *
  * <p>
- * These tests verify that SkillHook correctly injects skill prompts during
- * PreReasoningEvent.
+ * These tests verify that SkillHook correctly injects skill prompts during {@link PreCallEvent}.
  */
 @Tag("unit")
 class SkillHookTest {
@@ -83,7 +77,7 @@ class SkillHookTest {
         // Verify skill is now active
         assertTrue(skillBox.isSkillActive(skill.getSkillId()), "Skill should be active");
 
-        // Create PreReasoningEvent with one user message
+        // Create PreCallEvent with one user message
         List<Msg> messages = new ArrayList<>();
         messages.add(
                 Msg.builder()
@@ -91,23 +85,19 @@ class SkillHookTest {
                         .content(TextBlock.builder().text("User query").build())
                         .build());
 
-        PreReasoningEvent event =
-                new PreReasoningEvent(
-                        testAgent, "test-model", GenerateOptions.builder().build(), messages);
+        PreCallEvent event = new PreCallEvent(testAgent, messages);
 
         // Act: Process event through hook
-        PreReasoningEvent result = skillHook.onEvent(event).block();
+        PreCallEvent result = skillHook.onEvent(event).block();
 
-        // Assert: Skill prompt should be injected
+        // Assert: Skill prompt should be injected into systemMsg, not inputMessages
         assertNotNull(result, "Event should be processed");
-        assertEquals(2, result.getInputMessages().size(), "Should add skill prompt message");
-        assertEquals(
-                MsgRole.SYSTEM,
-                result.getInputMessages().get(0).getRole(),
-                "Skill prompt should be SYSTEM message");
+        assertEquals(1, result.getInputMessages().size(), "Should not add SYSTEM to inputMessages");
+        assertNotNull(result.getSystemMessage(), "systemMsg should be set by SkillHook");
+        assertEquals(MsgRole.SYSTEM, result.getSystemMessage().getRole());
         assertTrue(
-                result.getInputMessages().get(0).getContent().toString().contains("test_skill"),
-                "Skill prompt should contain skill information");
+                result.getSystemMessage().getTextContent().contains("test_skill"),
+                "systemMsg should contain skill information");
     }
 
     /**
@@ -122,13 +112,13 @@ class SkillHookTest {
                                                 .id("test-call")
                                                 .name("load_skill_through_path")
                                                 .input(
-                                                        java.util.Map.of(
+                                                        Map.of(
                                                                 "skillId",
                                                                 skillId,
                                                                 "path",
                                                                 "SKILL.md"))
                                                 .build())
-                                .input(java.util.Map.of("skillId", skillId, "path", "SKILL.md"))
+                                .input(Map.of("skillId", skillId, "path", "SKILL.md"))
                                 .build())
                 .block();
     }
@@ -149,23 +139,16 @@ class SkillHookTest {
                         .content(TextBlock.builder().text("User query").build())
                         .build());
 
-        PreReasoningEvent event =
-                new PreReasoningEvent(
-                        testAgent, "test-model", GenerateOptions.builder().build(), messages);
+        PreCallEvent event = new PreCallEvent(testAgent, messages);
 
         // Act: Process event through hook
-        PreReasoningEvent result = skillHook.onEvent(event).block();
+        PreCallEvent result = skillHook.onEvent(event).block();
 
-        // Assert: Skill prompt should be added for registered skills
+        // Assert: Skill prompt should be in systemMsg, not inputMessages
         assertNotNull(result, "Event should be processed");
-        assertEquals(
-                2,
-                result.getInputMessages().size(),
-                "Should add skill prompt for registered skills");
-        assertEquals(
-                MsgRole.SYSTEM,
-                result.getInputMessages().get(0).getRole(),
-                "Skill prompt should be SYSTEM message");
+        assertEquals(1, result.getInputMessages().size(), "Should not add SYSTEM to inputMessages");
+        assertNotNull(result.getSystemMessage(), "systemMsg should be set for registered skills");
+        assertEquals(MsgRole.SYSTEM, result.getSystemMessage().getRole());
     }
 
     @Test
@@ -179,12 +162,10 @@ class SkillHookTest {
                         .content(TextBlock.builder().text("User query").build())
                         .build());
 
-        PreReasoningEvent event =
-                new PreReasoningEvent(
-                        testAgent, "test-model", GenerateOptions.builder().build(), messages);
+        PreCallEvent event = new PreCallEvent(testAgent, messages);
 
         // Act: Process event through hook
-        PreReasoningEvent result = skillHook.onEvent(event).block();
+        PreCallEvent result = skillHook.onEvent(event).block();
 
         // Assert: Should handle gracefully without adding prompt
         assertNotNull(result, "Event should be processed");
@@ -194,56 +175,10 @@ class SkillHookTest {
     @Test
     @DisplayName("Should return correct hook priority")
     void testHookPriority() {
-        assertEquals(55, skillHook.priority(), "Skill hook should have priority (55)");
-    }
-
-    @Test
-    @DisplayName("[ISSUE#719]: Should append skill prompt after structured output reminder")
-    void testSkillPromptAppendedAfterStructuredOutputReminder() {
-        AgentSkill skill = new AgentSkill("test_skill", "Test Skill", "# Test Content", null);
-        skillBox.registerSkill(skill);
-
-        Msg userMsg =
-                Msg.builder()
-                        .role(MsgRole.USER)
-                        .content(TextBlock.builder().text("User query").build())
-                        .build();
-
-        Msg reminderMsg =
-                Msg.builder()
-                        .role(MsgRole.USER)
-                        .content(TextBlock.builder().text("Reminder").build())
-                        .metadata(
-                                Map.of(
-                                        MessageMetadataKeys.STRUCTURED_OUTPUT_REMINDER,
-                                        true,
-                                        MessageMetadataKeys.STRUCTURED_OUTPUT_REMINDER_TYPE,
-                                        StructuredOutputReminder.TOOL_CHOICE.toString()))
-                        .build();
-
-        List<Msg> messages = new ArrayList<>();
-        messages.add(userMsg);
-        messages.add(reminderMsg);
-
-        PreReasoningEvent event =
-                new PreReasoningEvent(
-                        testAgent, "test-model", GenerateOptions.builder().build(), messages);
-
-        // Simulate AgentBase hook execution (SkillHook priority 55 > StructuredOutputHook
-        // priority 50)
-        List<Hook> hooks = new ArrayList<>();
-        hooks.add(skillHook);
-        hooks.add(new StructuredOutputHook(StructuredOutputReminder.TOOL_CHOICE, null, null));
-
-        PreReasoningEvent result = notifyHooks(event, hooks).block();
-
-        assertNotNull(result);
-        assertInstanceOf(
-                ToolChoice.Specific.class, result.getEffectiveGenerateOptions().getToolChoice());
         assertEquals(
-                "generate_response",
-                ((ToolChoice.Specific) result.getEffectiveGenerateOptions().getToolChoice())
-                        .toolName());
+                SkillHook.SKILL_HOOK_PRIORITY,
+                skillHook.priority(),
+                "Skill hook should use SKILL_HOOK_PRIORITY");
     }
 
     @Test
@@ -254,62 +189,112 @@ class SkillHookTest {
         skillBox.registerSkill(skill);
         activateSkill(skill.getSkillId());
 
-        // Create PreReasoningEvent with multiple messages
+        // Create PreCallEvent with multiple messages (no existing SYSTEM message)
         List<Msg> messages =
-                List.of(
-                        Msg.builder()
-                                .role(MsgRole.SYSTEM)
-                                .content(TextBlock.builder().text("System instruction").build())
-                                .build(),
-                        Msg.builder()
-                                .role(MsgRole.USER)
-                                .content(TextBlock.builder().text("User query").build())
-                                .build(),
-                        Msg.builder()
-                                .role(MsgRole.ASSISTANT)
-                                .content(TextBlock.builder().text("Assistant response").build())
-                                .build());
+                new ArrayList<>(
+                        List.of(
+                                Msg.builder()
+                                        .role(MsgRole.USER)
+                                        .content(TextBlock.builder().text("User query").build())
+                                        .build(),
+                                Msg.builder()
+                                        .role(MsgRole.ASSISTANT)
+                                        .content(
+                                                TextBlock.builder()
+                                                        .text("Assistant response")
+                                                        .build())
+                                        .build()));
 
-        PreReasoningEvent event =
-                new PreReasoningEvent(
-                        testAgent, "test-model", GenerateOptions.builder().build(), messages);
+        PreCallEvent event = new PreCallEvent(testAgent, messages);
 
         // Act: Process event through hook
-        PreReasoningEvent result = skillHook.onEvent(event).block();
+        PreCallEvent result = skillHook.onEvent(event).block();
 
-        // Assert: Skill prompt should be injected at the FIRST position
+        // Assert: Skill prompt should be in systemMsg; inputMessages unchanged
         assertNotNull(result, "Event should be processed");
-        assertEquals(4, result.getInputMessages().size(), "Should add skill prompt message");
-
-        // Verify the first message is the skill prompt (SYSTEM role)
-        Msg firstMsg = result.getInputMessages().get(0);
         assertEquals(
-                MsgRole.SYSTEM,
-                firstMsg.getRole(),
-                "First message should be SYSTEM message with skill prompt");
+                2,
+                result.getInputMessages().size(),
+                "inputMessages should not gain a SYSTEM entry");
+        assertNotNull(result.getSystemMessage(), "systemMsg should be set");
         assertTrue(
-                firstMsg.getContent().toString().contains("test_skill"),
-                "First message should contain skill information");
+                result.getSystemMessage().getTextContent().contains("test_skill"),
+                "systemMsg should contain skill information");
 
-        // Verify original messages are preserved in order after skill prompt
-        assertEquals(
-                "System instruction",
-                result.getInputMessages().get(1).getTextContent(),
-                "Second message should be original system instruction");
+        // Verify original messages are preserved in order
         assertEquals(
                 "User query",
-                result.getInputMessages().get(2).getTextContent(),
-                "Third message should be original user query");
+                result.getInputMessages().get(0).getTextContent(),
+                "First message should be original user query");
         assertEquals(
                 "Assistant response",
-                result.getInputMessages().get(3).getTextContent(),
-                "Fourth message should be original assistant response");
+                result.getInputMessages().get(1).getTextContent(),
+                "Second message should be original assistant response");
+    }
+
+    @Test
+    @DisplayName(
+            "[ISSUE#845] should merge skill prompt into existing system message instead of adding a"
+                    + " second one")
+    void testMergeSkillPromptIntoExistingSystemMessage() {
+        // Arrange: Register and activate a skill
+        AgentSkill skill = new AgentSkill("test_skill", "Test Skill", "# Test Content", null);
+        skillBox.registerSkill(skill);
+        activateSkill(skill.getSkillId());
+
+        // Create PreCallEvent with an existing SYSTEM message
+        List<Msg> messages =
+                new ArrayList<>(
+                        List.of(
+                                Msg.builder()
+                                        .role(MsgRole.SYSTEM)
+                                        .content(
+                                                TextBlock.builder()
+                                                        .text("System instruction")
+                                                        .build())
+                                        .build(),
+                                Msg.builder()
+                                        .role(MsgRole.USER)
+                                        .content(TextBlock.builder().text("User query").build())
+                                        .build(),
+                                Msg.builder()
+                                        .role(MsgRole.ASSISTANT)
+                                        .content(
+                                                TextBlock.builder()
+                                                        .text("Assistant response")
+                                                        .build())
+                                        .build()));
+
+        PreCallEvent event = new PreCallEvent(testAgent, messages);
+
+        // Act: Process event through hook
+        PreCallEvent result = skillHook.onEvent(event).block();
+
+        // Assert: SkillHook uses systemMsg API now; inputMessages are NOT modified.
+        // The pre-existing SYSTEM message in inputMessages stays there (it's in the caller's list),
+        // and the skill prompt is appended to event.getSystemMessage().
+        assertNotNull(result, "Event should be processed");
+
+        // inputMessages still has 3 items (unchanged by SkillHook)
+        assertEquals(
+                3, result.getInputMessages().size(), "SkillHook should not modify inputMessages");
+
+        // systemMsg should contain the skill prompt
+        assertNotNull(result.getSystemMessage(), "systemMsg should be set by SkillHook");
+        assertEquals(MsgRole.SYSTEM, result.getSystemMessage().getRole());
+        assertTrue(
+                result.getSystemMessage().getTextContent().contains("test_skill"),
+                "systemMsg should contain skill information");
+
+        // Verify original messages are preserved in order
+        assertEquals("User query", result.getInputMessages().get(1).getTextContent());
+        assertEquals("Assistant response", result.getInputMessages().get(2).getTextContent());
     }
 
     private <T extends HookEvent> Mono<T> notifyHooks(T event, List<Hook> hooks) {
         Mono<T> result = Mono.just(event);
         List<Hook> sortedHooks =
-                hooks.stream().sorted(java.util.Comparator.comparingInt(Hook::priority)).toList();
+                hooks.stream().sorted(Comparator.comparingInt(Hook::priority)).toList();
         for (Hook hook : sortedHooks) {
             result = result.flatMap(hook::onEvent);
         }

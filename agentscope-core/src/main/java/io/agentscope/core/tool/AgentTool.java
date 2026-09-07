@@ -75,6 +75,44 @@ public interface AgentTool {
     Map<String, Object> getParameters();
 
     /**
+     * Gets strict mode configuration for this tool schema.
+     *
+     * <p>When strict mode is enabled, compatible model providers are expected to enforce stricter
+     * adherence to the tool parameter schema. Returning {@code null} means no explicit strict mode
+     * preference is provided.
+     *
+     * @return strict mode value ({@code true}/{@code false}) or {@code null} when unspecified
+     */
+    default Boolean getStrict() {
+        return null;
+    }
+
+    /**
+     * Gets the optional output schema for this tool in JSON Schema format.
+     *
+     * <p>Most tools do not expose a structured output schema to models, so the default
+     * implementation returns {@code null}. MCP tools can override this to surface the
+     * server-provided {@code outputSchema} definition.
+     *
+     * @return Map representing the JSON Schema for tool outputs, or null if unsupported
+     */
+    default Map<String, Object> getOutputSchema() {
+        return null;
+    }
+
+    /**
+     * Returns whether this tool performs only read operations and never mutates state.
+     *
+     * <p>Read-only tools are automatically permitted in restricted execution modes such as
+     * Plan Mode, where write operations require explicit approval.
+     *
+     * @return {@code true} if the tool is read-only; {@code false} by default
+     */
+    default boolean isReadOnly() {
+        return false;
+    }
+
+    /**
      * Execute the tool with the given parameters (asynchronous).
      *
      * <p>This method accepts a {@link ToolCallParam} object containing all necessary context for

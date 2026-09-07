@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import reactor.core.publisher.Mono;
 
 class HigressMcpClientWrapperTest {
@@ -153,7 +154,7 @@ class HigressMcpClientWrapperTest {
         McpSchema.CallToolResult callToolResult =
                 new McpSchema.CallToolResult(Collections.emptyList(), false, structuredContent);
 
-        when(mockDelegateClient.callTool(eq("x_higress_tool_search"), any()))
+        when(mockDelegateClient.callTool(eq("x_higress_tool_search"), any(), any()))
                 .thenReturn(Mono.just(callToolResult));
 
         HigressMcpClientWrapper wrapper = createWrapper(true, "test query", 5);
@@ -163,7 +164,7 @@ class HigressMcpClientWrapperTest {
         assertEquals(1, result.size());
         assertEquals("searched_tool", result.get(0).name());
 
-        verify(mockDelegateClient, times(1)).callTool(eq("x_higress_tool_search"), any());
+        verify(mockDelegateClient, times(1)).callTool(eq("x_higress_tool_search"), any(), any());
         verify(mockDelegateClient, never()).listTools();
     }
 
@@ -172,7 +173,7 @@ class HigressMcpClientWrapperTest {
         McpSchema.CallToolResult errorResult =
                 new McpSchema.CallToolResult(Collections.emptyList(), true, null);
 
-        when(mockDelegateClient.callTool(eq("x_higress_tool_search"), any()))
+        when(mockDelegateClient.callTool(eq("x_higress_tool_search"), any(), any()))
                 .thenReturn(Mono.just(errorResult));
 
         HigressMcpClientWrapper wrapper = createWrapper(true, "test query", 5);
@@ -187,7 +188,7 @@ class HigressMcpClientWrapperTest {
         McpSchema.CallToolResult expectedResult =
                 new McpSchema.CallToolResult(List.of(content), false, null);
 
-        when(mockDelegateClient.callTool(eq("my_tool"), eq(args)))
+        when(mockDelegateClient.callTool(eq("my_tool"), eq(args), any()))
                 .thenReturn(Mono.just(expectedResult));
 
         HigressMcpClientWrapper wrapper = createWrapper(false, null, 10);
@@ -195,7 +196,7 @@ class HigressMcpClientWrapperTest {
 
         assertNotNull(result);
         assertFalse(result.isError());
-        verify(mockDelegateClient, times(1)).callTool("my_tool", args);
+        verify(mockDelegateClient, times(1)).callTool(eq("my_tool"), eq(args), any());
     }
 
     @Test
@@ -204,7 +205,7 @@ class HigressMcpClientWrapperTest {
         McpSchema.CallToolResult errorResult =
                 new McpSchema.CallToolResult(Collections.emptyList(), true, null);
 
-        when(mockDelegateClient.callTool(eq("my_tool"), eq(args)))
+        when(mockDelegateClient.callTool(eq("my_tool"), eq(args), any()))
                 .thenReturn(Mono.just(errorResult));
 
         HigressMcpClientWrapper wrapper = createWrapper(false, null, 10);
@@ -212,6 +213,7 @@ class HigressMcpClientWrapperTest {
 
         assertNotNull(result);
         assertTrue(result.isError());
+        verify(mockDelegateClient, times(1)).callTool(eq("my_tool"), eq(args), any());
     }
 
     @Test
@@ -233,7 +235,7 @@ class HigressMcpClientWrapperTest {
         McpSchema.CallToolResult callToolResult =
                 new McpSchema.CallToolResult(Collections.emptyList(), false, structuredContent);
 
-        when(mockDelegateClient.callTool(eq("x_higress_tool_search"), any()))
+        when(mockDelegateClient.callTool(eq("x_higress_tool_search"), any(), any()))
                 .thenReturn(Mono.just(callToolResult));
 
         HigressMcpClientWrapper wrapper = createWrapper(false, null, 10);
@@ -251,7 +253,7 @@ class HigressMcpClientWrapperTest {
         McpSchema.CallToolResult callToolResult =
                 new McpSchema.CallToolResult(Collections.emptyList(), false, structuredContent);
 
-        when(mockDelegateClient.callTool(eq("x_higress_tool_search"), any()))
+        when(mockDelegateClient.callTool(eq("x_higress_tool_search"), any(), any()))
                 .thenAnswer(
                         invocation -> {
                             @SuppressWarnings("unchecked")
@@ -287,7 +289,7 @@ class HigressMcpClientWrapperTest {
         when(mockDelegateClient.initialize()).thenReturn(Mono.empty());
         RuntimeException error = new RuntimeException("Close failed");
         // Mockito will throw the error when close() is called
-        org.mockito.Mockito.doThrow(error).when(mockDelegateClient).close();
+        Mockito.doThrow(error).when(mockDelegateClient).close();
 
         HigressMcpClientWrapper wrapper = createWrapper(false, null, 10);
         wrapper.initialize().block();
@@ -309,7 +311,7 @@ class HigressMcpClientWrapperTest {
         McpSchema.CallToolResult callToolResult =
                 new McpSchema.CallToolResult(Collections.emptyList(), false, structuredContent);
 
-        when(mockDelegateClient.callTool(eq("x_higress_tool_search"), any()))
+        when(mockDelegateClient.callTool(eq("x_higress_tool_search"), any(), any()))
                 .thenReturn(Mono.just(callToolResult));
 
         HigressMcpClientWrapper wrapper = createWrapper(true, "query", 5);
@@ -358,7 +360,7 @@ class HigressMcpClientWrapperTest {
         McpSchema.CallToolResult callToolResult =
                 new McpSchema.CallToolResult(Collections.emptyList(), false, structuredContent);
 
-        when(mockDelegateClient.callTool(eq("x_higress_tool_search"), any()))
+        when(mockDelegateClient.callTool(eq("x_higress_tool_search"), any(), any()))
                 .thenReturn(Mono.just(callToolResult));
 
         HigressMcpClientWrapper wrapper = createWrapper(true, "weather", 5);
@@ -388,7 +390,7 @@ class HigressMcpClientWrapperTest {
         McpSchema.CallToolResult callToolResult =
                 new McpSchema.CallToolResult(Collections.emptyList(), false, structuredContent);
 
-        when(mockDelegateClient.callTool(eq("x_higress_tool_search"), any()))
+        when(mockDelegateClient.callTool(eq("x_higress_tool_search"), any(), any()))
                 .thenReturn(Mono.just(callToolResult));
 
         HigressMcpClientWrapper wrapper = createWrapper(true, "simple", 5);
@@ -417,7 +419,7 @@ class HigressMcpClientWrapperTest {
         McpSchema.CallToolResult callToolResult =
                 new McpSchema.CallToolResult(Collections.emptyList(), false, structuredContent);
 
-        when(mockDelegateClient.callTool(eq("x_higress_tool_search"), any()))
+        when(mockDelegateClient.callTool(eq("x_higress_tool_search"), any(), any()))
                 .thenReturn(Mono.just(callToolResult));
 
         HigressMcpClientWrapper wrapper = createWrapper(true, "no params", 5);

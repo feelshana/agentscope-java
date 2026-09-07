@@ -21,10 +21,15 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.agentscope.core.skill.AgentSkill;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -131,9 +136,9 @@ class FileSystemSkillRepositoryTest {
     // ==================== getSource Tests ====================
 
     @Test
-    @DisplayName("Should return default source with format: filesystem:parent_child")
+    @DisplayName("Should return default source with format: filesystem-parent_child")
     void testGetSource_DefaultSource() {
-        assertTrue(repository.getSource().matches("filesystem:[^_]+_skills"));
+        assertTrue(repository.getSource().matches("filesystem-[^_]+_skills"));
     }
 
     @Test
@@ -148,7 +153,7 @@ class FileSystemSkillRepositoryTest {
     @DisplayName("Should use default source when null")
     void testGetSource_Null() {
         FileSystemSkillRepository repo = new FileSystemSkillRepository(skillsBaseDir, true, null);
-        assertTrue(repo.getSource().startsWith("filesystem:"));
+        assertTrue(repo.getSource().startsWith("filesystem-"));
     }
 
     // ==================== buildDefaultSourceSuffix Tests ====================
@@ -158,7 +163,7 @@ class FileSystemSkillRepositoryTest {
     void testBuildSourceSuffix_TwoLevels() throws IOException {
         Path dir = tempDir.resolve("parent").resolve("child");
         Files.createDirectories(dir);
-        assertEquals("filesystem:parent_child", new FileSystemSkillRepository(dir).getSource());
+        assertEquals("filesystem-parent_child", new FileSystemSkillRepository(dir).getSource());
     }
 
     @Test
@@ -166,7 +171,7 @@ class FileSystemSkillRepositoryTest {
     void testBuildSourceSuffix_DeepPath() throws IOException {
         Path dir = tempDir.resolve("a/b/c/d");
         Files.createDirectories(dir);
-        assertEquals("filesystem:c_d", new FileSystemSkillRepository(dir).getSource());
+        assertEquals("filesystem-c_d", new FileSystemSkillRepository(dir).getSource());
     }
 
     @Test
@@ -175,7 +180,7 @@ class FileSystemSkillRepositoryTest {
         Path dir = tempDir.resolve("my-project").resolve("skills_v1.0");
         Files.createDirectories(dir);
         assertEquals(
-                "filesystem:my-project_skills_v1.0",
+                "filesystem-my-project_skills_v1.0",
                 new FileSystemSkillRepository(dir).getSource());
     }
 
@@ -224,6 +229,129 @@ class FileSystemSkillRepositoryTest {
     void testDelete_ReadOnly() {
         repository.setWriteable(false);
         assertFalse(repository.delete("test-skill"));
+    }
+
+    // ==================== Save Tests ====================
+
+    @Test
+    @DisplayName("Should save a new skill successfully")
+    void testSave_NewSkill() {
+        AgentSkill skill = new AgentSkill("new-skill", "New Skill", "New skill content", null);
+
+        assertTrue(repository.save(List.of(skill), false));
+        assertTrue(repository.skillExists("new-skill"));
+
+        AgentSkill loaded = repository.getSkill("new-skill");
+        assertNotNull(loaded);
+        assertEquals("new-skill", loaded.getName());
+        assertEquals("New Skill", loaded.getDescription());
+        assertTrue(loaded.getSkillContent().contains("New skill content"));
+    }
+
+    @Test
+    @DisplayName("Should save skill with resources")
+    void testSave_WithResources() {
+        Map<String, String> resources =
+                Map.of(
+                        "references/guide.md", "# Guide\nSome guide content",
+                        "config.json", "{\"key\": \"value\"}");
+        AgentSkill skill =
+                new AgentSkill(
+                        "resource-skill", "Resource Skill", "Skill with resources", resources);
+
+        assertTrue(repository.save(List.of(skill), false));
+
+        AgentSkill loaded = repository.getSkill("resource-skill");
+        assertNotNull(loaded);
+        assertTrue(loaded.getResources().containsKey("references/guide.md"));
+        assertTrue(loaded.getResources().containsKey("config.json"));
+        assertEquals("{\"key\": \"value\"}", loaded.getResources().get("config.json"));
+    }
+
+    @Test
+    @DisplayName("Should round trip full metadata through filesystem repository")
+    void testSave_RoundTripFullMetadata() {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("name", "repo-metadata-skill");
+        metadata.put("description", "Repository Metadata Skill");
+        metadata.put("homepage", "https://example.com/repo");
+        metadata.put(
+                "metadata",
+                Map.of(
+                        "clawdbot",
+                        Map.of("emoji", "📋", "requires", Map.of("env", List.of("API_KEY")))));
+        AgentSkill skill = new AgentSkill(metadata, "Repository content", null, null);
+
+        assertTrue(repository.save(List.of(skill), false));
+
+        AgentSkill loaded = repository.getSkill("repo-metadata-skill");
+        assertEquals(List.copyOf(metadata.keySet()), List.copyOf(loaded.getMetadata().keySet()));
+        assertEquals("https://example.com/repo", loaded.getMetadataValue("homepage"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> loadedMetadata =
+                (Map<String, Object>) loaded.getMetadataValue("metadata");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> clawdbot = (Map<String, Object>) loadedMetadata.get("clawdbot");
+
+        assertEquals("📋", clawdbot.get("emoji"));
+        assertEquals(Map.of("env", List.of("API_KEY")), clawdbot.get("requires"));
+    }
+
+    @Test
+    @DisplayName("Should fail to save existing skill without force")
+    void testSave_ExistingWithoutForce() {
+        AgentSkill skill = new AgentSkill("test-skill", "Updated", "Updated content", null);
+
+        assertFalse(repository.save(List.of(skill), false));
+    }
+
+    @Test
+    @DisplayName("Should overwrite existing skill with force")
+    void testSave_ExistingWithForce() {
+        AgentSkill skill = new AgentSkill("test-skill", "Updated Skill", "Updated content", null);
+
+        assertTrue(repository.save(List.of(skill), true));
+
+        AgentSkill loaded = repository.getSkill("test-skill");
+        assertNotNull(loaded);
+        assertEquals("Updated Skill", loaded.getDescription());
+        assertTrue(loaded.getSkillContent().contains("Updated content"));
+    }
+
+    @Test
+    @DisplayName("Should return false when saving null list")
+    void testSave_NullList() {
+        assertFalse(repository.save(null, false));
+    }
+
+    @Test
+    @DisplayName("Should return false when saving empty list")
+    void testSave_EmptyList() {
+        assertFalse(repository.save(Collections.emptyList(), false));
+    }
+
+    @Test
+    @DisplayName("Should save multiple skills at once")
+    void testSave_MultipleSkills() {
+        AgentSkill skill1 = new AgentSkill("multi-skill-1", "Multi 1", "Content 1", null);
+        AgentSkill skill2 = new AgentSkill("multi-skill-2", "Multi 2", "Content 2", null);
+
+        assertTrue(repository.save(List.of(skill1, skill2), false));
+        assertTrue(repository.skillExists("multi-skill-1"));
+        assertTrue(repository.skillExists("multi-skill-2"));
+    }
+
+    @Test
+    @DisplayName("Saved skill source should not contain colon to avoid Windows path issues")
+    void testSave_SourceHasNoColon() {
+        AgentSkill skill = new AgentSkill("colon-test-skill", "Colon Test", "Content", null);
+
+        assertTrue(repository.save(List.of(skill), false));
+
+        String source = repository.getSource();
+        assertFalse(source.contains(":"), "Source '" + source + "' should not contain colon");
+        assertTrue(source.startsWith("filesystem-"));
     }
 
     private void createSampleSkill(String name, String description, String content)

@@ -27,19 +27,26 @@ target/
 build/
 !**/src/main/**/build/
 !**/src/test/**/build/
-
 ### VS Code ###
 .vscode/
 .claude/
-
+.codex
+.cursor
 ### Mac OS ###
 .DS_Store
 
 .flattened-pom.xml
 **/dependency-reduced-pom.xml
 
+### Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+
 ### Docs
 docs/_build
+.venv/
 
 
 # vibe coding
@@ -47,20 +54,50 @@ docs/_build
 openspec
 AGENTS.md
 CLAUDE.md
+.omc/
+.qoder/
+.cursor/
 
 ##Log
 logs/
 
-## Local dev config with secrets (never commit)
-**/application-dev.yml
-**/application-local.yml
-
-## boba-tea-shop example
+## Frontend (all frontend/ directories across examples and extensions)
+# Dependencies
+**/frontend/node_modules/
+# Build output
+**/frontend/dist/
+**/frontend/build/
+**/frontend/.output/
+# Vite / bundler caches
+**/frontend/.vite/
+**/frontend/.cache/
+**/frontend/.parcel-cache/
+# Type-check / tsc output
+**/frontend/*.tsbuildinfo
+# Env files (may contain secrets)
+**/frontend/.env.local
+**/frontend/.env.*.local
+# Coverage
+**/frontend/coverage/
+# Storybook
+**/frontend/storybook-static/
+# boba-tea-shop: generated static assets served by the supervisor-agent
 **/boba-tea-shop/supervisor-agent/**/static/
-**/boba-tea-shop/**/node_modules/
-**/boba-tea-shop/**/dist/
 
+##agentscope
+.agentscope/
 
-# Secrets & prod config
-**/application-prod.yml
-**/application-local.yml
+## harness db
+**/*.db
+
+.dev-stack/
+
+# aistio local build artifacts
+agentscope-service/aistio/bin/
+agentscope-service/aistio/aistiod
+agentscope-service/aistio/aistiod.exe
+agentscope-service/aistio/*.test
+agentscope-service/aistio/cover.out
+agentscope-service/aistio/coverage.*
+agentscope-service/aistio/.idea/
+agentscope-service/.dev-stack/

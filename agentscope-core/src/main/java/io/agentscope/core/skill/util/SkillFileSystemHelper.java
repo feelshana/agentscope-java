@@ -21,13 +21,13 @@ import io.agentscope.core.skill.util.MarkdownSkillParser.ParsedMarkdown;
 import java.io.IOException;
 import java.nio.charset.MalformedInputException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -41,6 +41,7 @@ import org.slf4j.LoggerFactory;
  * <p>This class provides reusable operations for loading, listing, saving, and
  * deleting skills on the file system. It is designed to be shared by multiple
  * repositories such as file system and Git based repositories.
+ *
  */
 public final class SkillFileSystemHelper {
 
@@ -70,14 +71,30 @@ public final class SkillFileSystemHelper {
     }
 
     /**
+     * Loads a skill from a specific directory, eagerly reading every non-hidden file in the
+     * skill tree into memory. Equivalent to {@link #loadSkillFromDirectory(Path, String, boolean)
+     * loadSkillFromDirectory(skillDir, source, true)}.
+     */
+    public static AgentSkill loadSkillFromDirectory(Path skillDir, String source) {
+        return loadSkillFromDirectory(skillDir, source, true);
+    }
+
+    /**
      * Loads a skill from a specific directory.
+     *
+     * <p>The returned skill always carries an absolute {@code originDir} matching {@code skillDir},
+     * so callers (prompt provider, load tool) can address files on disk without a second copy.
      *
      * @param skillDir The directory containing SKILL.md
      * @param source The source identifier for the created skill
-     * @return The loaded AgentSkill
+     * @param includeResources when {@code true}, all non-hidden files under {@code skillDir} are
+     *     pre-loaded into the skill's in-memory resource map (legacy behavior). When {@code false},
+     *     only SKILL.md is read; callers fall back to disk through {@code originDir} on demand.
+     * @return The loaded AgentSkill (with {@code originDir} populated)
      * @throws IllegalArgumentException if SKILL.md is missing or invalid
      */
-    public static AgentSkill loadSkillFromDirectory(Path skillDir, String source) {
+    public static AgentSkill loadSkillFromDirectory(
+            Path skillDir, String source, boolean includeResources) {
         if (!Files.exists(skillDir)) {
             throw new IllegalArgumentException("Skill directory does not exist: " + skillDir);
         }
@@ -94,8 +111,10 @@ public final class SkillFileSystemHelper {
 
         try {
             String skillMdContent = Files.readString(skillFile, StandardCharsets.UTF_8);
-            Map<String, String> resources = loadResources(skillDir, skillFile);
-            return SkillUtil.createFrom(skillMdContent, resources, source);
+            Map<String, String> resources =
+                    includeResources ? loadResources(skillDir, skillFile) : null;
+            AgentSkill base = SkillUtil.createFrom(skillMdContent, resources, source);
+            return base.toBuilder().originDir(skillDir.toAbsolutePath().normalize()).build();
         } catch (IOException e) {
             throw new RuntimeException("Failed to load skill from: " + skillDir, e);
         }
@@ -127,13 +146,25 @@ public final class SkillFileSystemHelper {
     }
 
     /**
+     * Retrieves all skills from the base directory with resources pre-loaded into memory.
+     * Equivalent to {@link #getAllSkills(Path, String, boolean) getAllSkills(baseDir, source,
+     * true)}.
+     */
+    public static List<AgentSkill> getAllSkills(Path baseDir, String source) {
+        return getAllSkills(baseDir, source, true);
+    }
+
+    /**
      * Retrieves all skills from the base directory.
      *
      * @param baseDir The base directory containing skill folders
      * @param source The source identifier for created skills
+     * @param includeResources when {@code false}, each skill's resource map is left empty and
+     *     callers must rely on the skill's {@code originDir} for disk-side reads
      * @return A list of skills
      */
-    public static List<AgentSkill> getAllSkills(Path baseDir, String source) {
+    public static List<AgentSkill> getAllSkills(
+            Path baseDir, String source, boolean includeResources) {
         List<AgentSkill> skills = new ArrayList<>();
 
         try (Stream<Path> subdirs = Files.list(baseDir)) {
@@ -142,7 +173,9 @@ public final class SkillFileSystemHelper {
                             dir -> {
                                 if (hasSkillFile(dir)) {
                                     try {
-                                        skills.add(loadSkillFromDirectory(dir, source));
+                                        skills.add(
+                                                loadSkillFromDirectory(
+                                                        dir, source, includeResources));
                                     } catch (Exception e) {
                                         logger.warn(
                                                 "Failed to load skill from '{}': {}",
@@ -172,6 +205,8 @@ public final class SkillFileSystemHelper {
             return false;
         }
 
+        int size = skills.size();
+        int saveCount = 0;
         try {
             for (AgentSkill skill : skills) {
                 String skillName = skill.getName();
@@ -181,7 +216,7 @@ public final class SkillFileSystemHelper {
                     if (!force) {
                         logger.info(
                                 "Skill directory already exists and force=false: {}", skillName);
-                        return false;
+                        continue; // Skip to the next skill if force=false
                     } else {
                         logger.info("Overwriting existing skill directory: {}", skillName);
                         deleteDirectory(skillDir);
@@ -190,12 +225,8 @@ public final class SkillFileSystemHelper {
 
                 Files.createDirectories(skillDir);
 
-                Map<String, String> metadata = new LinkedHashMap<>();
-                metadata.put("name", skill.getName());
-                metadata.put("description", skill.getDescription());
-
                 String skillMdContent =
-                        MarkdownSkillParser.generate(metadata, skill.getSkillContent());
+                        MarkdownSkillParser.generate(skill.getMetadata(), skill.getSkillContent());
 
                 Path skillFile = skillDir.resolve(SKILL_FILE_NAME);
                 Files.writeString(skillFile, skillMdContent, StandardCharsets.UTF_8);
@@ -214,10 +245,15 @@ public final class SkillFileSystemHelper {
                     }
                 }
 
+                saveCount++;
                 logger.info("Successfully saved skill: {}", skillName);
             }
+            boolean allSaved = (size == saveCount);
+            if (!allSaved) {
+                logger.warn("Not all skills were saved. Saved {} of {}", saveCount, size);
+            }
 
-            return true;
+            return allSaved;
         } catch (IOException e) {
             logger.error("Failed to save skills", e);
             throw new RuntimeException("Failed to save skills", e);
@@ -353,34 +389,70 @@ public final class SkillFileSystemHelper {
         return hook;
     }
 
-    private static Map<String, String> loadResources(Path skillDir, Path skillFile)
-            throws IOException {
+    private static Map<String, String> loadResources(Path skillDir, Path skillFile) {
         Map<String, String> resources = new HashMap<>();
-        try (Stream<Path> paths = Files.walk(skillDir)) {
-            paths.filter(Files::isRegularFile)
-                    .filter(p -> !p.equals(skillFile))
-                    .forEach(
-                            p -> {
-                                String relativePath =
-                                        skillDir.relativize(p).toString().replace('\\', '/');
-                                try {
-                                    String content = Files.readString(p, StandardCharsets.UTF_8);
-                                    resources.put(relativePath, content);
-                                } catch (MalformedInputException e) {
-                                    try {
-                                        byte[] bytes = Files.readAllBytes(p);
-                                        String base64 = Base64.getEncoder().encodeToString(bytes);
-                                        resources.put(relativePath, "base64:" + base64);
-                                    } catch (IOException ex) {
-                                        logger.warn(
-                                                "Failed to read binary resource file: {}", p, ex);
-                                    }
-                                } catch (IOException e) {
-                                    logger.warn("Failed to read resource file: {}", p, e);
-                                }
-                            });
-        }
+        // Recursive traversal starting from the root directory
+        collectResources(skillDir, skillDir, skillFile, resources);
         return resources;
+    }
+
+    private static void collectResources(
+            Path currentDir, Path skillDir, Path skillFile, Map<String, String> resources) {
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(currentDir)) {
+            for (Path entry : stream) {
+                if (Files.isDirectory(entry)) {
+                    if (!entry.getFileName().toString().startsWith(".")) {
+                        collectResources(entry, skillDir, skillFile, resources);
+                    }
+                } else {
+                    if (isValidResource(entry, skillFile)) {
+                        readAndPutResource(entry, skillDir, resources);
+                    }
+                }
+            }
+        } catch (IOException e) {
+            logger.warn("Failed to open directory: {}", currentDir, e);
+        }
+    }
+
+    private static void readAndPutResource(
+            Path file, Path skillDir, Map<String, String> resources) {
+        String relativePath = skillDir.relativize(file).toString().replace('\\', '/');
+        try {
+            String content = Files.readString(file, StandardCharsets.UTF_8);
+            resources.put(relativePath, content);
+        } catch (MalformedInputException e) {
+            try {
+                byte[] bytes = Files.readAllBytes(file);
+                String base64 = Base64.getEncoder().encodeToString(bytes);
+                resources.put(relativePath, "base64:" + base64);
+            } catch (IOException ex) {
+                logger.warn("Failed to read binary resource file: {}", file, ex);
+            }
+        } catch (IOException e) {
+            logger.warn("Failed to read resource file: {}", file, e);
+        }
+    }
+
+    private static boolean isValidResource(Path file, Path skillFile) {
+        if (file.equals(skillFile)) {
+            return false;
+        }
+
+        if (!Files.isRegularFile(file) || !Files.isReadable(file)) {
+            return false;
+        }
+
+        if (file.getFileName().toString().startsWith(".")) {
+            return false;
+        }
+
+        try {
+            return !Files.isHidden(file);
+        } catch (IOException e) {
+            logger.warn("Failed to check attributes for file: {}", file, e);
+            return true;
+        }
     }
 
     private static Optional<Path> findSkillDirectoryByName(Path baseDir, String skillName) {
@@ -407,8 +479,9 @@ public final class SkillFileSystemHelper {
         try {
             String skillMdContent = Files.readString(skillFile, StandardCharsets.UTF_8);
             ParsedMarkdown parsed = MarkdownSkillParser.parse(skillMdContent);
-            Map<String, String> metadata = parsed.getMetadata();
-            String name = metadata.get("name");
+            Map<String, Object> metadata = parsed.getMetadata();
+            Object nameObject = metadata.get("name");
+            String name = nameObject != null ? String.valueOf(nameObject) : null;
             if (name == null || name.isEmpty()) {
                 logger.warn("Missing skill name in SKILL.md: {}", skillFile);
                 return Optional.empty();
