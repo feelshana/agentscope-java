@@ -114,11 +114,22 @@ dataagent 跑在 **HarnessAgent + `SandboxFilesystem`** 之上，sandbox 生命�
 
 ### 1. 配置模型
 
+dataagent 默认对接任意 OpenAI 兼容端点 —— 通过环境变量设置 key（以及非
+OpenAI 官方时的 base URL）：
+
 ```bash
-export DASHSCOPE_API_KEY=sk-...
+# OpenAI 官方
+export OPENAI_API_KEY=sk-...
+
+# 任意 OpenAI 兼容服务（DeepSeek、vLLM、one-api、DashScope compatible-mode 等）
+export OPENAI_API_KEY=sk-...
+export OPENAI_BASE_URL=https://api.deepseek.com/v1
+export OPENAI_MODEL_NAME=deepseek-chat   # 可选，默认 gpt-4o
 ```
 
-或者提供你自己的 `Model` Spring Bean 切到其他 provider。
+同时设置时，`DATAAGENT_OPENAI_*` 前缀的变量优先于裸的 `OPENAI_*`。
+也可以退回 DashScope：设置 `DASHSCOPE_API_KEY=sk-...` 即可；或者提供你自己的
+`Model` Spring Bean 切到其他 provider。
 
 ### 2.（可选）启用 Redis 做分布式部署
 
@@ -193,7 +204,11 @@ java -jar target/agentscope-dataagent-*-exec.jar
 | `dataagent.jwt.secret` | 开发占位 | JWT 签名密钥（>= 32 字符）。**非 `dev` Profile 下若仍是默认值会拒绝启动**。 |
 | `dataagent.workspace` | `$CWD`（仅开发态） | agent 运行时状态的工作目录（与配置无关 —— 配置在 `~/.agentscope/dataagent/agentscope.json`）。**非 `dev` Profile 下必填**，留空就启动失败。 |
 | `dataagent.workspace-store.local.max-file-size-mb` | `10` | `RemoteFilesystem` 本地后端的单文件上限。 |
-| `dataagent.dashscope.api-key` | _空_ | DashScope API key（无 `Model` Bean 时回落到这里）。 |
+| `dataagent.openai.api-key` | _空_ | OpenAI 兼容 API key（主模型）。环境变量：`DATAAGENT_OPENAI_API_KEY` 或 `OPENAI_API_KEY`。设置后优先于 DashScope。 |
+| `dataagent.openai.base-url` | _空（用 OpenAI 官方）_ | 任意 OpenAI 兼容端点的 base URL（DeepSeek、vLLM、one-api、DashScope compatible-mode 等），尾部 `/v1` 可写可不写。环境变量：`DATAAGENT_OPENAI_BASE_URL` 或 `OPENAI_BASE_URL`。 |
+| `dataagent.openai.model-name` | `gpt-4o` | OpenAI 兼容模型 id。环境变量：`DATAAGENT_OPENAI_MODEL_NAME` 或 `OPENAI_MODEL_NAME`。 |
+| `dataagent.openai.stream` | `true` | 是否以 SSE 流式输出。 |
+| `dataagent.dashscope.api-key` | _空_ | DashScope API key（未配置 OpenAI key 时的回落）。环境变量：`DASHSCOPE_API_KEY`。 |
 | `dataagent.dashscope.model-name` | `qwen-max` | DashScope 模型 id。 |
 | `dataagent.agent.name` | `data-agent` | 自动生成 `~/.agentscope/dataagent/agentscope.json` 时的 agent 名 |
 | `dataagent.agent.sys-prompt` | _（内置）_ | 自动生成 `agentscope.json` 时的系统提示 |

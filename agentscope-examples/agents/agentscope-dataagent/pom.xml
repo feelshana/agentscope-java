@@ -56,6 +56,12 @@
             <artifactId>agentscope-extensions-model-dashscope</artifactId>
         </dependency>
 
+        <!-- OpenAI-compatible model (primary model wiring in DataAgentConfig) -->
+        <dependency>
+            <groupId>io.agentscope</groupId>
+            <artifactId>agentscope-extensions-model-openai</artifactId>
+        </dependency>
+
         <!-- IM channel implementations -->
         <dependency>
             <groupId>io.agentscope</groupId>

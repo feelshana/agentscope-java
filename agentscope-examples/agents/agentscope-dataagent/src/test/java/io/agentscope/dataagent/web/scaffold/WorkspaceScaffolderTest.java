@@ -45,6 +45,12 @@ class WorkspaceScaffolderTest {
         String toolsJson = Files.readString(tmp.resolve("tools.json"));
         assertThat(toolsJson).contains("\"allow\"");
         assertThat(toolsJson).contains("read_file");
+
+        // The runtime skill loader requires name + description front matter on every SKILL.md.
+        String exampleSkill = Files.readString(tmp.resolve("skills/example-skill/SKILL.md"));
+        assertThat(exampleSkill).startsWith("---");
+        assertThat(exampleSkill).contains("name: example-skill");
+        assertThat(exampleSkill).contains("description:");
     }
 
     @Test

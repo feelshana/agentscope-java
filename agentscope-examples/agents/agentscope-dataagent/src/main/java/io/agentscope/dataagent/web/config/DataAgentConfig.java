@@ -29,6 +29,7 @@ import io.agentscope.dataagent.web.toolbus.ToolEventBus;
 import io.agentscope.dataagent.web.toolbus.ToolNotificationMiddleware;
 import io.agentscope.dataagent.web.workspace.UserSandboxRegistry;
 import io.agentscope.extensions.model.dashscope.DashScopeChatModel;
+import io.agentscope.extensions.model.openai.OpenAIChatModel;
 import io.agentscope.harness.agent.IsolationScope;
 import io.agentscope.harness.agent.gateway.channel.ChannelConfig;
 import io.agentscope.harness.agent.gateway.channel.DmScope;
@@ -80,10 +81,13 @@ import org.springframework.context.annotation.Configuration;
  * <ol>
  *   <li>If a {@link Model} Spring Bean is already present (provided by another
  *       {@code @Configuration}), it is used as-is.
+ *   <li>Otherwise, if {@code dataagent.openai.api-key} is set, an {@link OpenAIChatModel} is
+ *       created automatically — point {@code dataagent.openai.base-url} at any
+ *       OpenAI-compatible endpoint (DeepSeek, vLLM, one-api, DashScope compatible-mode, ...).
  *   <li>Otherwise, if {@code dataagent.dashscope.api-key} is set, a {@link DashScopeChatModel} is
  *       created automatically.
- *   <li>If neither is available, the app starts without a model (agent calls will fail until one
- *       is configured).
+ *   <li>If none of the above is available, the app starts without a model (agent calls will fail
+ *       until one is configured).
  * </ol>
  *
  * <p>Note: model wiring uses <em>method-parameter</em> injection in {@code @Bean} methods (not
@@ -100,6 +104,18 @@ public class DataAgentConfig {
 
     private static final Logger log = LoggerFactory.getLogger(DataAgentConfig.class);
 
+    @Value("${dataagent.openai.api-key:}")
+    private String openaiApiKey;
+
+    @Value("${dataagent.openai.base-url:}")
+    private String openaiBaseUrl;
+
+    @Value("${dataagent.openai.model-name:gpt-4o}")
+    private String openaiModelName;
+
+    @Value("${dataagent.openai.stream:true}")
+    private boolean openaiStream;
+
     @Value("${dataagent.dashscope.api-key:}")
     private String dashscopeApiKey;
 
@@ -110,8 +126,9 @@ public class DataAgentConfig {
     private boolean dashscopeStream;
 
     @Value(
-            "${dataagent.agent.sys-prompt:You are a Data Agent built with AgentScope."
-                    + " You help users explore, analyse, visualise and report on data.}")
+            "${dataagent.agent.sys-prompt:你是一个基于 AgentScope 构建的数据分析智能体"
+                    + "（Data Agent），帮助用户探查、分析、可视化和汇报数据。"
+                    + " 所有说明性与数据解释性文字一律使用简体中文。}")
     private String agentSysPrompt;
 
     @Value("${dataagent.agent.name:data-agent}")
@@ -121,21 +138,48 @@ public class DataAgentConfig {
     private String workspaceDir;
 
     // -----------------------------------------------------------------
-    //  Model bean — only created when an api-key is set AND no other
-    //  Model bean is already present in the context. Skipped when the
-    //  property is blank so Optional<Model> injection sites receive
-    //  Optional.empty().
+    //  Model bean — OpenAI-compatible first, DashScope fallback. Only
+    //  created when the matching api-key is set AND no other Model bean is
+    //  already present in the context. Both are skipped when the property is
+    //  blank so Optional<Model> injection sites receive Optional.empty().
     // -----------------------------------------------------------------
 
     /**
-     * Creates a {@link DashScopeChatModel} bean when {@code dataagent.dashscope.api-key} is
-     * configured and no other {@link Model} bean is present. Skipped entirely when the property is
-     * blank so that {@code Optional<Model>} injection sites receive {@code Optional.empty()}
-     * instead of a null-valued bean.
+     * Creates an {@link OpenAIChatModel} bean when {@code dataagent.openai.api-key} is configured
+     * and no other {@link Model} bean is present. Works with any OpenAI-compatible endpoint —
+     * set {@code dataagent.openai.base-url} to point at compatible gateways (DeepSeek, vLLM,
+     * one-api, DashScope compatible-mode, ...); a trailing {@code /v1} in the base URL is
+     * handled by the client. Blank base URL falls back to the official OpenAI endpoint.
      */
     @Bean
     @ConditionalOnMissingBean(Model.class)
-    @ConditionalOnExpression("'${dataagent.dashscope.api-key:}' != ''")
+    @ConditionalOnExpression("'${dataagent.openai.api-key:}' != ''")
+    public Model openaiModel() {
+        String baseUrl =
+                openaiBaseUrl != null && !openaiBaseUrl.isBlank() ? openaiBaseUrl.trim() : null;
+        log.info(
+                "Building OpenAIChatModel: model={}, baseUrl={}",
+                openaiModelName,
+                baseUrl != null ? baseUrl : "https://api.openai.com (default)");
+        return OpenAIChatModel.builder()
+                .apiKey(openaiApiKey)
+                .baseUrl(baseUrl)
+                .modelName(openaiModelName)
+                .stream(openaiStream)
+                .build();
+    }
+
+    /**
+     * Fallback when no OpenAI key is configured: creates a {@link DashScopeChatModel} bean when
+     * {@code dataagent.dashscope.api-key} is set and no other {@link Model} bean is present
+     * (including {@link #openaiModel()}). Skipped entirely when the property is blank so that
+     * {@code Optional<Model>} injection sites receive {@code Optional.empty()} instead of a
+     * null-valued bean.
+     */
+    @Bean
+    @ConditionalOnMissingBean(Model.class)
+    @ConditionalOnExpression(
+            "'${dataagent.openai.api-key:}' == '' && '${dataagent.dashscope.api-key:}' != ''")
     public Model dashscopeModel() {
         log.info("Building DashScopeChatModel: model={}", dashscopeModelName);
         return DashScopeChatModel.builder()
@@ -200,9 +244,10 @@ public class DataAgentConfig {
             builder.model(modelOpt.get());
         } else {
             log.warn(
-                    "No model configured. Set dataagent.dashscope.api-key in application.yml or"
-                            + " provide a Model bean. Agent calls will fail until a model is"
-                            + " available.");
+                    "No model configured. Set dataagent.openai.api-key (env"
+                            + " DATAAGENT_OPENAI_API_KEY or OPENAI_API_KEY) or"
+                            + " dataagent.dashscope.api-key in application.yml, or provide a Model"
+                            + " bean. Agent calls will fail until a model is available.");
         }
 
         // AgentStateStore backend selection is independent of the workspace filesystem now that
@@ -411,7 +456,7 @@ public class DataAgentConfig {
                   "agents": {
                     "data-agent": {
                       "name": "Data Agent",
-                      "description": "Tenant-isolated data-analysis assistant. Connects to internal SQL sources, drafts queries, validates results, and renders charts.",
+                      "description": "租户隔离的数据分析助手。连接内部 SQL 数据源，起草查询，校验结果并渲染图表。",
                       "maxIters": 20
                     }
                   },

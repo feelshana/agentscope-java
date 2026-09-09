@@ -161,11 +161,23 @@ agent.
 
 ### 1. Configure a model
 
+dataagent talks to any OpenAI-compatible endpoint by default — set the key
+(and, for non-OpenAI providers, the base URL) via environment variables:
+
 ```bash
-export DASHSCOPE_API_KEY=sk-...
+# Official OpenAI
+export OPENAI_API_KEY=sk-...
+
+# Any OpenAI-compatible provider (DeepSeek, vLLM, one-api, DashScope compatible-mode, ...)
+export OPENAI_API_KEY=sk-...
+export OPENAI_BASE_URL=https://api.deepseek.com/v1
+export OPENAI_MODEL_NAME=deepseek-chat   # optional, default gpt-4o
 ```
 
-Or provide your own `Model` Spring bean to use a different provider.
+A `DATAAGENT_OPENAI_*` prefix takes precedence over the plain `OPENAI_*`
+vars when both are set. Alternatively, fall back to DashScope by setting
+`DASHSCOPE_API_KEY=sk-...`, or provide your own `Model` Spring bean to use a
+different provider.
 
 ### 2. (Optional) Enable Redis for distributed deployment
 
@@ -247,7 +259,11 @@ accounts: `bob` / `bob` and `alice` / `alice`. The first user with
 | `dataagent.jwt.secret` | dev placeholder | JWT signing secret (>= 32 chars). **Refuses to boot in non-`dev` profiles when left at the default.** |
 | `dataagent.workspace` | `$CWD` *(dev only)* | Working directory for agent runtime state (not config — config lives at `~/.agentscope/dataagent/agentscope.json`). **Required** in non-`dev` profiles — startup fails if blank. |
 | `dataagent.workspace-store.local.max-file-size-mb` | `10` | Per-file cap for the `RemoteFilesystem` local store. |
-| `dataagent.dashscope.api-key` | _(empty)_ | DashScope API key (fallback when no `Model` bean is registered). |
+| `dataagent.openai.api-key` | _(empty)_ | OpenAI-compatible API key (primary model). Env: `DATAAGENT_OPENAI_API_KEY` or `OPENAI_API_KEY`. When set, takes precedence over DashScope. |
+| `dataagent.openai.base-url` | _(empty → official OpenAI)_ | Base URL of any OpenAI-compatible endpoint (DeepSeek, vLLM, one-api, DashScope compatible-mode, ...). Trailing `/v1` is optional. Env: `DATAAGENT_OPENAI_BASE_URL` or `OPENAI_BASE_URL`. |
+| `dataagent.openai.model-name` | `gpt-4o` | OpenAI-compatible model id. Env: `DATAAGENT_OPENAI_MODEL_NAME` or `OPENAI_MODEL_NAME`. |
+| `dataagent.openai.stream` | `true` | Stream chat completions over SSE. |
+| `dataagent.dashscope.api-key` | _(empty)_ | DashScope API key (fallback when no OpenAI key is set). Env: `DASHSCOPE_API_KEY`. |
 | `dataagent.dashscope.model-name` | `qwen-max` | DashScope model id. |
 | `dataagent.agent.name` | `data-agent` | Used when auto-generating `~/.agentscope/dataagent/agentscope.json`. |
 | `dataagent.agent.sys-prompt` | _(built-in)_ | Used when auto-generating `~/.agentscope/dataagent/agentscope.json`. |
