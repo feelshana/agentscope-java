@@ -28,9 +28,9 @@ import java.util.Optional;
  * operators can swap real implementations without touching this class.
  *
  * <p>The bundled {@link JdbcSqlConnector} serves sources with {@code kind: jdbc} (the default
- * H2 deployment seeds a {@code demo-db} source with the {@code demo_orders} table); other source
- * kinds fall through to a clear error string so the agent surfaces the limitation rather than
- * hallucinating query results.
+ * deployment registers a {@code test-data} MySQL source with the tenant analytics tables); other
+ * source kinds fall through to a clear error string so the agent surfaces the limitation rather
+ * than hallucinating query results.
  *
  * <p>Registered onto the main {@code data-agent} at startup; user-custom agents may opt in by
  * listing the tools in their workspace {@code tools.json}.

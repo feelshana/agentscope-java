@@ -33,10 +33,10 @@ class DataAgentToolkitTest {
 
     @BeforeAll
     static void setUp() throws Exception {
-        DemoOrdersFixture.seedDemoOrders();
+        TenantTablesFixture.seedTenantTables();
         toolkit =
                 new DataAgentToolkit(
-                        new InMemoryDataSourceRegistry(List.of(DemoOrdersFixture.demoSource())),
+                        new InMemoryDataSourceRegistry(List.of(TenantTablesFixture.demoSource())),
                         new JdbcSqlConnector(),
                         new StubChartRenderer());
     }
@@ -45,7 +45,7 @@ class DataAgentToolkitTest {
     void listsConfiguredSources() {
         assertThat(toolkit.listDataSources())
                 .contains("demo-db | jdbc | Demo analytics DB")
-                .contains("demo_orders")
+                .contains("tenant_storage_utilization")
                 .contains("(demo,h2)");
     }
 
@@ -62,12 +62,13 @@ class DataAgentToolkitTest {
 
     @Test
     void describesTableForKnownSource() {
-        assertThat(toolkit.describeTable("demo-db", "demo_orders")).contains("600 rows");
+        assertThat(toolkit.describeTable("demo-db", "tenant_storage_utilization"))
+                .contains("30 rows");
     }
 
     @Test
     void describeTableRejectsUnknownSource() {
-        assertThat(toolkit.describeTable("nope", "demo_orders"))
+        assertThat(toolkit.describeTable("nope", "tenant_storage_utilization"))
                 .isEqualTo("error: unknown source_id 'nope'");
     }
 
@@ -89,19 +90,27 @@ class DataAgentToolkitTest {
     void runsSqlPreview() {
         String out =
                 toolkit.runSqlPreview(
-                        "demo-db", "SELECT COUNT(*) AS orders FROM demo_orders", null, null);
+                        "demo-db",
+                        "SELECT COUNT(*) AS cnt FROM tenant_storage_utilization",
+                        null,
+                        null);
 
         assertThat(out).doesNotStartWith("error");
-        assertThat(out).contains("| 600 |");
+        assertThat(out).contains("| 30 |");
     }
 
     @Test
     void runSqlPreviewRejectsNonSelect() {
-        assertThat(toolkit.runSqlPreview("demo-db", "DELETE FROM demo_orders", null, null))
+        assertThat(
+                        toolkit.runSqlPreview(
+                                "demo-db", "DELETE FROM tenant_storage_utilization", null, null))
                 .isEqualTo("error: only SELECT / WITH statements are allowed");
         assertThat(
                         toolkit.runSqlPreview(
-                                "demo-db", "INSERT INTO demo_orders VALUES (1)", null, null))
+                                "demo-db",
+                                "INSERT INTO tenant_storage_utilization VALUES (1)",
+                                null,
+                                null))
                 .isEqualTo("error: only SELECT / WITH statements are allowed");
     }
 
