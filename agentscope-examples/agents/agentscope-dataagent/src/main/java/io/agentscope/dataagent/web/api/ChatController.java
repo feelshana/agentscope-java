@@ -17,6 +17,8 @@ package io.agentscope.dataagent.web.api;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.agentscope.core.event.AgentEvent;
+import io.agentscope.core.event.TextBlockDeltaEvent;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.dataagent.runtime.DataAgentBootstrap;
@@ -25,8 +27,6 @@ import io.agentscope.dataagent.runtime.session.SessionEntry;
 import io.agentscope.dataagent.runtime.session.SessionKind;
 import io.agentscope.dataagent.web.audit.ActivityEvent;
 import io.agentscope.dataagent.web.audit.AgentActivityStore;
-import io.agentscope.dataagent.web.binding.UserBinding;
-import io.agentscope.dataagent.web.binding.UserBindingStore;
 import io.agentscope.dataagent.web.catalog.AgentCatalogService;
 import io.agentscope.dataagent.web.catalog.AgentDefinition;
 import io.agentscope.dataagent.web.identity.IdentityLinkStore;
@@ -39,7 +39,6 @@ import io.agentscope.harness.agent.gateway.channel.InboundMessage;
 import io.agentscope.harness.agent.gateway.channel.Peer;
 import io.agentscope.harness.agent.gateway.channel.chatui.ChatUiChannel;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -90,7 +89,6 @@ public class ChatController {
     private final ToolEventBus toolEventBus;
     private final AgentAccessGuard guard;
     private final AgentActivityStore activity;
-    private final UserBindingStore userBindings;
 
     /**
      * AgentStateStore keys for which we have already recorded a RUN_SESSION event. Each (userId, agentId)
@@ -107,8 +105,7 @@ public class ChatController {
             UsageStore usageStore,
             ToolEventBus toolEventBus,
             AgentAccessGuard guard,
-            AgentActivityStore activity,
-            UserBindingStore userBindings) {
+            AgentActivityStore activity) {
         this.chatUiChannel = chatUiChannel;
         this.sessionAgentManager = builderBootstrap.gateway().sessionAgentManager();
         this.catalogService = catalogService;
@@ -117,7 +114,6 @@ public class ChatController {
         this.toolEventBus = toolEventBus;
         this.guard = guard;
         this.activity = activity;
-        this.userBindings = userBindings;
     }
 
     /**
@@ -143,10 +139,12 @@ public class ChatController {
      * SSE streaming endpoint. Emits, in order:
      *
      * <ul>
-     *   <li>{@code tool_call} — for each tool the agent invokes (real time)
-     *   <li>{@code tool_result} — currently inferred by the bus implementation
-     *   <li>{@code token} — the full reply text (currently emitted as a single chunk)
-     *   <li>{@code done} — end of run, optionally carrying the resolved {@code sessionKey}
+     *   <li>{@code tool_call} — for each tool the agent invokes (real time, via {@link
+     *       ToolEventBus})
+     *   <li>{@code tool_result} — when the tool finishes executing
+     *   <li>{@code token} — text deltas streamed incrementally from the model (one chunk per
+     *       {@link TextBlockDeltaEvent})
+     *   <li>{@code done} — end of run, carrying the resolved {@code sessionKey}
      *   <li>{@code error} — terminates the run on failure
      * </ul>
      *
@@ -182,41 +180,41 @@ public class ChatController {
                     sse("done", doneFrame));
         }
 
-        // Subscribe to tool events. The bus filters by the *real* sessionKey, but on the first
-        // turn the session has not yet been registered — fall back to a gateKey-resolved lookup
-        // each time an event arrives so we pick up the sessionKey as soon as the gateway creates
-        // it.
+        // Subscribe to tool events. The middleware publishes with the *runtime* session id,
+        // which only exists once the gateway has dispatched this turn — so match lazily per
+        // event against the conversation's gate key. Subscribing once up-front (by the
+        // pre-resolved session key) would silently drop every event on the first turn, and
+        // the runtime id differs from the storage session key anyway.
         String gateKey = resolveGateKey(userId, agentId, resolvedConversationId);
-        String existingSessionKey = findSessionKeyByGate(userId, gateKey);
         Sinks.One<Boolean> done = Sinks.one();
         Flux<ServerSentEvent<String>> toolEvents =
-                existingSessionKey != null
-                        ? toolEventBus
-                                .subscribe(existingSessionKey)
-                                .takeUntilOther(done.asMono().timeout(Duration.ofMinutes(10)))
-                                .map(this::toToolFrame)
-                                .onErrorResume(ex -> Flux.empty())
-                        : Flux.empty();
+                toolEventBus
+                        .events()
+                        .filter(e -> isEventForConversation(userId, gateKey, e))
+                        .takeUntilOther(done.asMono().timeout(Duration.ofMinutes(10)))
+                        .map(this::toToolFrame)
+                        .onErrorResume(ex -> Flux.empty());
 
-        Mono<Flux<ServerSentEvent<String>>> agentCall =
-                executeChat(userId, agentId, req.message(), resolvedConversationId)
+        Map<String, Object> doneFrame = new LinkedHashMap<>();
+        doneFrame.put("type", "done");
+        // Always echo the conversationId, NOT the storage key — otherwise the FE would persist
+        // the storage key and use it as the next turn's conversationId, splintering the session.
+        doneFrame.put("sessionKey", resolvedConversationId);
+
+        Flux<ServerSentEvent<String>> agentEvents =
+                executeChatStream(userId, agentId, req.message(), resolvedConversationId)
+                        .filter(event -> event instanceof TextBlockDeltaEvent)
                         .map(
-                                reply -> {
-                                    String text =
-                                            reply.getTextContent() != null
-                                                    ? reply.getTextContent()
-                                                    : "";
-                                    done.tryEmitValue(true);
-                                    Map<String, Object> doneFrame = new LinkedHashMap<>();
-                                    doneFrame.put("type", "done");
-                                    // Always echo the conversationId, NOT the storage key —
-                                    // otherwise the FE would persist the storage key and use it
-                                    // as the next turn's conversationId, splintering the session.
-                                    doneFrame.put("sessionKey", resolvedConversationId);
-                                    return Flux.just(
-                                            sse("token", Map.of("type", "token", "data", text)),
-                                            sse("done", doneFrame));
-                                })
+                                event ->
+                                        sse(
+                                                "token",
+                                                Map.of(
+                                                        "type",
+                                                        "token",
+                                                        "data",
+                                                        ((TextBlockDeltaEvent) event).getDelta())))
+                        .concatWith(Flux.just(sse("done", doneFrame)))
+                        .doOnComplete(() -> done.tryEmitValue(true))
                         .onErrorResume(
                                 ex -> {
                                     log.warn(
@@ -225,18 +223,17 @@ public class ChatController {
                                             agentId,
                                             ex.getMessage());
                                     done.tryEmitValue(false);
-                                    return Mono.just(
-                                            Flux.just(
-                                                    sse(
+                                    return Flux.just(
+                                            sse(
+                                                    "error",
+                                                    Map.of(
+                                                            "type",
                                                             "error",
-                                                            Map.of(
-                                                                    "type",
-                                                                    "error",
-                                                                    "error",
-                                                                    ex.getMessage()))));
+                                                            "error",
+                                                            ex.getMessage())));
                                 });
 
-        return Flux.merge(toolEvents, Flux.from(agentCall.flatMapMany(f -> f)));
+        return Flux.merge(toolEvents, agentEvents);
     }
 
     /**
@@ -309,15 +306,26 @@ public class ChatController {
         data.put("type", isResult ? "tool_result" : "tool_call");
         data.put("toolName", e.toolName());
         if (e.data() != null) {
-            String payload;
-            try {
-                payload = MAPPER.writeValueAsString(e.data());
-            } catch (JsonProcessingException ex) {
-                payload = String.valueOf(e.data());
+            if (isResult && isPlainResult(e.data())) {
+                // Unwrap the single "result" key so toolResult carries plain text — the same
+                // shape SessionTurnParser restores from session history, so the frontend needs
+                // no special-casing for live vs. restored tool blocks.
+                data.put("toolResult", e.data().get("result"));
+            } else {
+                String payload;
+                try {
+                    payload = MAPPER.writeValueAsString(e.data());
+                } catch (JsonProcessingException ex) {
+                    payload = String.valueOf(e.data());
+                }
+                data.put(isResult ? "toolResult" : "toolInput", payload);
             }
-            data.put(isResult ? "toolResult" : "toolInput", payload);
         }
         return sse(isResult ? "tool_result" : "tool_call", data);
+    }
+
+    private static boolean isPlainResult(Map<String, Object> data) {
+        return data.size() == 1 && data.get("result") instanceof String;
     }
 
     /**
@@ -391,6 +399,31 @@ public class ChatController {
             return e.sessionKey();
         }
         return null;
+    }
+
+    /**
+     * Lazily checks whether a tool event belongs to the conversation this stream serves.
+     *
+     * <p>{@link ToolNotificationMiddleware} publishes with {@code RuntimeContext#getSessionId()}
+     * — the short {@code main-…} runtime id — while the storage layer keys sessions by the full
+     * {@code agent:…:main:…} key, so the event key is matched against either form of the session
+     * resolved through the conversation's gate key. Matching per event (rather than once
+     * up-front) also covers the first turn, where the gateway creates the session mid-flight.
+     */
+    private boolean isEventForConversation(
+            String userId, String gateKey, ToolEventBus.ToolEvent e) {
+        if (gateKey == null || e.sessionKey() == null) {
+            return false;
+        }
+        for (SessionEntry s : sessionAgentManager.allSessions()) {
+            if (s.kind() != SessionKind.MAIN) continue;
+            if (!Objects.equals(gateKey, s.gateKey())) continue;
+            if (userId != null && !Objects.equals(userId, s.userId())) continue;
+            if (e.sessionKey().equals(s.sessionKey()) || e.sessionKey().equals(s.sessionId())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -492,44 +525,20 @@ public class ChatController {
     private record CommandResult(String message, String newSessionKey) {}
 
     /**
-     * Builds the inbound message list for a chat turn, applying stored {@link UserBinding}
-     * preferences that can be honoured at the dispatch entry point.
-     *
-     * <p>Currently only {@code language} is wired - it is injected as a {@link MsgRole#SYSTEM}
-     * instruction so the agent actually replies in the requested language. The remaining fields
-     * ({@code enabledSkills}, {@code sessionScope}) require deeper, architecturally-scoped hooks
-     * and are intentionally left as follow-ups:
-     *
-     * <ul>
-     *   <li>{@code enabledSkills} filters the skills loaded by the agent, which happens at agent
-     *       construction time (see {@code DataAgentBootstrap} / {@code SkillRepositorySupport}),
-     *       not at the dispatch entry point.
-     *   <li>{@code sessionScope} overrides per-session key derivation performed by the
-     *       {@code ChannelRouter}, which is outside this controller's responsibility.
-     * </ul>
+     * Builds the inbound message list for a chat turn. Deliberately a plain {@link MsgRole#USER}
+     * wrapper: the framework's {@code PreCallEvent} validation rejects SYSTEM messages injected
+     * into {@code inputMessages}, so per-turn instruction injection is not allowed here. Language
+     * and other behavioural policies live in the agent's own prompt material (AGENTS.md, skills,
+     * sub-agent definitions) instead of being smuggled through the chat turn.
      */
-    static List<Msg> shapeInboundMessages(
-            List<UserBinding> preferences, String channelId, String message) {
-        UserBinding pref =
-                preferences.stream()
-                        .filter(b -> channelId.equals(b.channelId()))
-                        .findFirst()
-                        .orElse(null);
-        List<Msg> msgs = new ArrayList<>();
-        if (pref != null && pref.language() != null) {
-            msgs.add(
-                    Msg.builder()
-                            .role(MsgRole.SYSTEM)
-                            .textContent("Reply to the user in " + pref.language() + ".")
-                            .build());
-        }
-        msgs.add(Msg.builder().role(MsgRole.USER).textContent(message).build());
-        return msgs;
+    static List<Msg> shapeInboundMessages(String message) {
+        return List.of(Msg.builder().role(MsgRole.USER).textContent(message).build());
     }
 
     /**
-     * Core dispatch logic. Always routes through {@link ChatUiChannel#dispatch} so that the
-     * {@link io.agentscope.harness.agent.gateway.channel.ChannelRouter} runs uniformly — including for
+     * Builds the {@link InboundMessage} shared by both the synchronous and streaming dispatch
+     * paths. Always routes through {@link ChatUiChannel} so that the {@link
+     * io.agentscope.harness.agent.gateway.channel.ChannelRouter} runs uniformly — including for
      * the path-mapped Web UI calls. The URL-supplied {@code agentId} is passed as
      * {@link InboundMessage#preferredAgentId()} so it short-circuits the binding-tier evaluation
      * (the user explicitly picked this agent) while still letting the router derive sessionScope
@@ -538,35 +547,58 @@ public class ChatController {
      * <p>When {@code agentId} is blank (defensive — controller always supplies one), falls back to
      * pure binding-driven routing: the chatui channel's default agent or matching binding wins.
      */
+    private InboundMessage buildInbound(
+            String userId, String agentId, String message, String conversationId) {
+        List<Msg> msgs = shapeInboundMessages(message);
+        if (agentId == null || agentId.isBlank()) {
+            return InboundMessage.dm(ChatUiChannel.CHANNEL_ID, userId, List.copyOf(msgs));
+        }
+        String gatewayAgentId = catalogService.resolveGatewayAgentId(userId, agentId);
+        return InboundMessage.builder(
+                        ChatUiChannel.CHANNEL_ID, Peer.direct(userId), List.copyOf(msgs))
+                .preferredAgentId(gatewayAgentId)
+                .accountId(conversationId)
+                .build();
+    }
+
+    /**
+     * Synchronous dispatch — returns the final reply as a single {@link Msg}. Used by the
+     * {@link #send} endpoint which does not need incremental text streaming.
+     */
     private Mono<Msg> executeChat(
             String userId, String agentId, String message, String conversationId) {
         long startMs = System.currentTimeMillis();
-
-        List<Msg> msgs =
-                shapeInboundMessages(userBindings.list(userId), ChatUiChannel.CHANNEL_ID, message);
-
-        InboundMessage inbound;
-        if (agentId == null || agentId.isBlank()) {
-            // No agent override and no conversation scoping — pure binding-driven routing.
-            inbound = InboundMessage.dm(ChatUiChannel.CHANNEL_ID, userId, List.copyOf(msgs));
-        } else {
-            String gatewayAgentId = catalogService.resolveGatewayAgentId(userId, agentId);
-            inbound =
-                    InboundMessage.builder(
-                                    ChatUiChannel.CHANNEL_ID,
-                                    Peer.direct(userId),
-                                    List.copyOf(msgs))
-                            .preferredAgentId(gatewayAgentId)
-                            .accountId(conversationId)
-                            .build();
-        }
-        Mono<Msg> call = chatUiChannel.dispatch(inbound);
-
+        InboundMessage inbound = buildInbound(userId, agentId, message, conversationId);
         final String recordedAgentId = agentId != null ? agentId : "(default)";
-        return call.doOnSuccess(
-                reply ->
-                        usageStore.record(
-                                userId, recordedAgentId, System.currentTimeMillis() - startMs));
+        return chatUiChannel
+                .dispatch(inbound)
+                .doOnSuccess(
+                        reply ->
+                                usageStore.record(
+                                        userId,
+                                        recordedAgentId,
+                                        System.currentTimeMillis() - startMs));
+    }
+
+    /**
+     * Streaming dispatch — returns fine-grained {@link AgentEvent}s (including
+     * {@link TextBlockDeltaEvent} for incremental text) from
+     * {@link ChatUiChannel#dispatchStream}. Used by the {@link #stream} SSE endpoint so the
+     * frontend can render tokens as they arrive from the model.
+     */
+    private Flux<AgentEvent> executeChatStream(
+            String userId, String agentId, String message, String conversationId) {
+        long startMs = System.currentTimeMillis();
+        InboundMessage inbound = buildInbound(userId, agentId, message, conversationId);
+        final String recordedAgentId = agentId != null ? agentId : "(default)";
+        return chatUiChannel
+                .dispatchStream(inbound)
+                .doOnComplete(
+                        () ->
+                                usageStore.record(
+                                        userId,
+                                        recordedAgentId,
+                                        System.currentTimeMillis() - startMs));
     }
 
     private ServerSentEvent<String> sse(String eventType, Object data) {

@@ -47,6 +47,15 @@ public class ToolEventBus {
     }
 
     /**
+     * Returns the unfiltered event stream. Callers that cannot know the session key up-front
+     * (e.g. before the gateway has registered the session on the first turn) can filter
+     * lazily per event instead of committing to a key at subscription time.
+     */
+    public Flux<ToolEvent> events() {
+        return sink.asFlux();
+    }
+
+    /**
      * A single tool-call or tool-result event.
      *
      * @param sessionKey the session key that produced this event
@@ -61,6 +70,20 @@ public class ToolEventBus {
         public static ToolEvent toolCall(
                 String sessionKey, String toolName, Map<String, Object> input) {
             return new ToolEvent(sessionKey, "TOOL_CALL", toolName, input);
+        }
+
+        /**
+         * Result event. {@code data} carries the single key {@code "result"} whose value is the
+         * tool's text output; {@link io.agentscope.dataagent.web.api.ChatController} unwraps it
+         * so the SSE {@code tool_result} frame carries plain text, matching the shape restored
+         * from session history.
+         */
+        public static ToolEvent toolResult(String sessionKey, String toolName, String result) {
+            return new ToolEvent(
+                    sessionKey,
+                    "TOOL_RESULT",
+                    toolName,
+                    Map.of("result", result != null ? result : ""));
         }
     }
 }

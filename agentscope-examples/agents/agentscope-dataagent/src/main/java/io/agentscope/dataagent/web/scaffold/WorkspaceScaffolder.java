@@ -65,36 +65,26 @@ public final class WorkspaceScaffolder {
     private static String agentsMd(String displayName, String sysPrompt) {
         String name = (displayName == null || displayName.isBlank()) ? "agent" : displayName;
         String prompt =
-                (sysPrompt == null || sysPrompt.isBlank())
-                        ? "You are a helpful assistant."
-                        : sysPrompt.trim();
+                (sysPrompt == null || sysPrompt.isBlank()) ? "你是一个乐于助人的智能体助手。" : sysPrompt.trim();
         return """
         # %s
 
         %s
 
-        ## How this folder works
+        ## 这个目录如何工作
 
-        This folder *is* the agent. Anything you put here is picked up at runtime — there is
-        no separate config to keep in sync.
+        这个目录*就是*智能体本身。你放在这里的任何内容都会在运行时被自动加载——没有需要单独同步的配置。
 
-        - **`AGENTS.md`** — this file. Edit the system prompt and behavioral rules in
-          place; they are loaded on the next session.
-        - **`tools.json`** — declare which built-in tools the agent may call. See the
-          generated file for the available tool ids and an `allow` / `deny` example.
-        - **`skills/`** — each subfolder is a skill: a Markdown playbook the agent can
-          invoke by name. A starter `example-skill/SKILL.md` is included.
-        - **`subagents/`** — sub-agent definitions for delegated work. See
-          `subagents/README.md`.
-        - **`memory/`** — long-term memory store managed by the runtime; you usually do
-          not edit it by hand.
+        - **`AGENTS.md`** —— 本文件。直接在此编辑系统提示词与行为规则；下一次会话即生效。
+        - **`tools.json`** —— 声明该智能体可调用的内建工具。可查看生成文件中可用的工具 id 及 `allow` / `deny` 示例。
+        - **`skills/`** —— 每个子目录是一个技能：智能体可按名称调用的 Markdown 操作手册。内置了入门示例 `example-skill/SKILL.md`。
+        - **`subagents/`** —— 用于委派工作的子代理定义。见 `subagents/README.md`。
+        - **`memory/`** —— 由运行时管理的长期记忆存储；通常无需手工编辑。
 
-        ## Authoring tips
+        ## 撰写建议
 
-        - Keep this prompt focused on *what the agent does* and *how it should behave*.
-          Push examples, schemas, and one-shot instructions into skills.
-        - When you change tools or skills, current sessions keep their old wiring until
-          reset; new sessions pick up the change immediately.
+        - 让本提示词聚焦于*智能体做什么*与*该如何表现*。示例、schema、一次性指令放进技能里。
+        - 修改工具或技能后，进行中的会话保留旧配置直到重置；新会话立即使用新配置。
         """
                 .formatted(name, prompt);
     }
@@ -119,49 +109,49 @@ public final class WorkspaceScaffolder {
 
     private static String exampleSkillMd() {
         return """
-        # Example Skill
+        ---
+        name: example-skill
+        description: 入门技能模板。在正式依赖它之前，请把正文替换为你自己的操作手册；这个示例只是为了演示 workspace 的目录结构。
+        ---
 
-        A skill is a named playbook the agent can invoke by referring to this file. The
-        folder name (`example-skill`) is the skill id.
+        # 示例技能
 
-        ## When to use
+        技能是一段可被智能体按名称调用的操作手册。目录名（`example-skill`）就是技能 id。
 
-        Describe the situations in which the agent should reach for this skill. Be
-        concrete — the runtime feeds this section back to the agent when it is selecting
-        between skills.
+        ## 何时使用
 
-        ## Steps
+        描述智能体应当使用该技能的场景。要写得具体——运行时会在智能体挑选技能时把这一节反馈给它。
 
-        1. State the inputs the skill needs.
-        2. Describe the work — what files to read, what to write, what to summarize.
-        3. State the expected output format.
+        ## 步骤
 
-        Delete this file once you have authored your own skills.
+        1. 说明该技能需要的输入。
+        2. 描述要做的工作——读哪些文件、写哪些内容、总结什么。
+        3. 说明期望的输出格式。
+
+        编写完你自己的技能后请删除本文件。
         """;
     }
 
     private static String subagentsReadme() {
         return """
-        # Subagents
+        # 子代理（Subagents）
 
-        Each `*.md` file in this directory defines a subagent the parent agent may
-        delegate to. The file name (without extension) is the subagent id; the front
-        matter declares its system prompt and tool allowlist.
+        本目录中每个 `*.md` 文件定义一个可供父智能体委派任务的子代理。文件名（不含扩展名）
+        就是子代理 id；frontmatter 声明其系统提示词与工具白名单。
 
-        Example skeleton:
+        示例骨架：
 
         ```markdown
         ---
         name: researcher
-        description: Investigates a question and returns a written summary.
+        description: 针对一个问题开展调查并返回书面总结。
         tools: [read_file, grep_files, glob_files]
         ---
 
-        You are a research specialist. Stay focused on the task you receive; do not
-        edit files directly.
+        你是一名调研专员。专注于收到的任务本身；不要直接编辑文件。
         ```
 
-        Delete this README once you have added real subagents.
+        添加真实子代理后请删除本 README。
         """;
     }
 }

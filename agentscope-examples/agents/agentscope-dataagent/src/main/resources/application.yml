@@ -89,7 +89,20 @@ dataagent:
     local:
       max-file-size-mb: 10
 
-  # ---- DashScope model (used when no Model Spring bean is present) ----
+  # ---- OpenAI-compatible model (primary; used when api-key is set) ----
+  # Works with any OpenAI-compatible endpoint: OpenAI, DeepSeek, vLLM, one-api,
+  # DashScope compatible-mode, ... Set the key via env var DATAAGENT_OPENAI_API_KEY
+  # (or the conventional OPENAI_API_KEY) and, for compatible endpoints,
+  # DATAAGENT_OPENAI_BASE_URL (or OPENAI_BASE_URL). The base URL may or may not
+  # include a trailing /v1 — the client normalises the path. Leave base-url
+  # blank to target the official OpenAI endpoint.
+  openai:
+    api-key: ${DATAAGENT_OPENAI_API_KEY:${OPENAI_API_KEY:}}
+    base-url: ${DATAAGENT_OPENAI_BASE_URL:${OPENAI_BASE_URL:}}
+    model-name: ${DATAAGENT_OPENAI_MODEL_NAME:${OPENAI_MODEL_NAME:gpt-4o}}
+    stream: true
+
+  # ---- DashScope model (fallback when no OpenAI key is configured) ----
   # Set DASHSCOPE_API_KEY env var or override api-key below.
   dashscope:
     api-key: ${DASHSCOPE_API_KEY:}
@@ -100,9 +113,10 @@ dataagent:
   agent:
     name: ${DATAAGENT_AGENT_NAME:data-agent}
     sys-prompt: >
-      You are a Data Agent built with AgentScope. You help users explore,
-      analyse, visualise and report on data. Prefer registered skills and
-      sub-agents over ad-hoc reasoning; always cite the data source you used.
+      你是一个基于 AgentScope 构建的数据分析智能体（Data Agent），帮助用户探查、
+      分析、可视化和汇报数据。优先使用已注册的技能（skills）与子代理（sub-agents），
+      而不是即兴推理；始终注明所使用的数据来源。所有说明性与数据解释性文字一律
+      使用简体中文。
 
   # ---- Channels (side-tool adapters) ----
   # ChatUI is always-on and serves the primary web UX. DingTalk and the

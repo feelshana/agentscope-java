@@ -3,6 +3,9 @@ import { useSearchParams } from 'react-router-dom';
 import { currentSession, stream } from '../api/chat';
 import { TurnEntry, turns as fetchTurns } from '../api/sessions';
 import ToolCallBlock from './ToolCallBlock';
+import ChartBlock from './ChartBlock';
+import Markdown from './Markdown';
+import { extractVegaSpec } from '../utils/charts';
 
 type Role = 'user' | 'assistant' | 'system';
 
@@ -70,6 +73,14 @@ const nextId = () => `m${Date.now().toString(36)}-${counter++}`;
 const STORAGE_PREFIX = 'claw_chat_session:';
 const storageKey = (agentId: string) => `${STORAGE_PREFIX}${agentId}`;
 
+/** Tool names that should never be shown in the UI (framework plumbing, not user-facing). */
+const HIDDEN_TOOL_PATTERNS = ['load_skill_through_path'];
+
+function isHiddenTool(name: string): boolean {
+  const lower = name.toLowerCase();
+  return HIDDEN_TOOL_PATTERNS.some(p => lower.includes(p.toLowerCase()));
+}
+
 function turnsToMessages(turns: TurnEntry[]): Message[] {
   const out: Message[] = [];
   for (const t of turns) {
@@ -79,6 +90,8 @@ function turnsToMessages(turns: TurnEntry[]): Message[] {
     } else if (role === 'ASSISTANT') {
       out.push({ id: t.id, role: 'assistant', text: t.content ?? '', tools: [] });
     } else if (role === 'TOOL') {
+      // Skip framework-internal tools that should not appear in the UI.
+      if (t.toolName && isHiddenTool(t.toolName)) continue;
       const last = out.length > 0 ? out[out.length - 1] : null;
       const tool: ToolEntry = {
         id: t.id,
@@ -187,6 +200,8 @@ export default function ChatPanel({ agentId, onSessionUpdate }: ChatPanelProps) 
           const chunk = evt.data ?? '';
           setMessages(prev => prev.map(m => m.id === replyMsg.id ? { ...m, text: m.text + chunk } : m));
         } else if (evt.type === 'tool_call') {
+          // Skip framework-internal tools that should not appear in the UI.
+          if (evt.toolName && isHiddenTool(evt.toolName)) continue;
           const entry: ToolEntry = {
             id: `${evt.toolName ?? 'tool'}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
             name: evt.toolName ?? 'tool',
@@ -194,6 +209,8 @@ export default function ChatPanel({ agentId, onSessionUpdate }: ChatPanelProps) 
           };
           setMessages(prev => prev.map(m => m.id === replyMsg.id ? { ...m, tools: [...m.tools, entry] } : m));
         } else if (evt.type === 'tool_result') {
+          // Skip results for hidden tools.
+          if (evt.toolName && isHiddenTool(evt.toolName)) continue;
           setMessages(prev => prev.map(m => {
             if (m.id !== replyMsg.id) return m;
             const tools = [...m.tools];
@@ -261,20 +278,51 @@ export default function ChatPanel({ agentId, onSessionUpdate }: ChatPanelProps) 
           <div key={m.id} style={{
             ...S.bubble,
             ...(m.role === 'user' ? S.user : m.role === 'system' ? S.system : S.assistant),
+            // Markdown manages its own whitespace; pre-wrap would double-space it.
+            ...(m.role === 'assistant' ? { whiteSpace: 'normal' } : {}),
           }}>
             {m.tools.length > 0 && (
               <div style={{ marginBottom: m.text ? 10 : 0 }}>
-                {m.tools.map(t => (
-                  <ToolCallBlock
-                    key={t.id}
-                    toolName={t.name}
-                    toolCallId={t.id}
-                    result={t.result}
-                  />
-                ))}
+                {m.tools.filter(t => !isHiddenTool(t.name)).map(t => {
+                  const isChartTool = t.name.toLowerCase().includes('render_chart');
+                  const spec = extractVegaSpec(t.name, t.input);
+                  // Remount when the result arrives so defaultOpen=false takes effect
+                  // (React keeps the old component's state when the key is stable).
+                  const key = t.id + (t.result ? '-done' : '');
+                  return (
+                    <React.Fragment key={key}>
+                      <ToolCallBlock
+                        toolName={t.name}
+                        toolCallId={t.id}
+                        input={t.input}
+                        result={t.result}
+                        defaultOpen={!t.result}
+                      />
+                      {isChartTool && !spec && (
+                        <div style={{
+                          background: '#fffbeb',
+                          border: '1px solid #fcd34d',
+                          borderRadius: 9,
+                          margin: '0.5rem 0',
+                          padding: '0.6rem 0.9rem',
+                          color: '#92400e',
+                          fontSize: '0.8rem',
+                        }}>
+                          chart spec could not be parsed from the tool input — expand the tool
+                          block above to inspect the raw arguments
+                        </div>
+                      )}
+                      {spec && <ChartBlock spec={spec} />}
+                    </React.Fragment>
+                  );
+                })}
               </div>
             )}
-            {m.text || (m.pending ? <span style={{ color: '#94a3b8' }}>…</span> : null)}
+            {m.role === 'assistant'
+              ? (m.text
+                  ? <Markdown>{m.text}</Markdown>
+                  : (m.pending ? <span style={{ color: '#94a3b8' }}>…</span> : null))
+              : m.text}
           </div>
         ))}
       </div>

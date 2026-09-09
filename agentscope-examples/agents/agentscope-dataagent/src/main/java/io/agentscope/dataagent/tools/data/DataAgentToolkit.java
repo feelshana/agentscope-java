@@ -24,14 +24,13 @@ import java.util.Optional;
 /**
  * Agent-facing toolkit for data-analysis primitives: list configured sources, describe a table,
  * preview a SQL query, render a chart. Stateless singleton; backing connectors are resolved
- * through a {@link DataSourceRegistry} and {@link ChartRenderer} so operators can swap in real
- * implementations without touching this class.
+ * through a {@link DataSourceRegistry}, {@link SqlConnector} and {@link ChartRenderer} so
+ * operators can swap real implementations without touching this class.
  *
- * <p>v1 ships the slots but only the {@code list_data_sources} method has a real implementation —
- * {@code describe_table} and {@code run_sql_preview} return a clear "not implemented" string so
- * the agent can surface the limitation to the user rather than hallucinate query results.
- * Concrete JDBC / BigQuery / Hologres connectors land in {@code agentscope-extensions/} in a
- * follow-up.
+ * <p>The bundled {@link JdbcSqlConnector} serves sources with {@code kind: jdbc} (the default
+ * H2 deployment seeds a {@code demo-db} source with the {@code demo_orders} table); other source
+ * kinds fall through to a clear error string so the agent surfaces the limitation rather than
+ * hallucinating query results.
  *
  * <p>Registered onto the main {@code data-agent} at startup; user-custom agents may opt in by
  * listing the tools in their workspace {@code tools.json}.
@@ -39,10 +38,13 @@ import java.util.Optional;
 public final class DataAgentToolkit {
 
     private final DataSourceRegistry registry;
+    private final SqlConnector sqlConnector;
     private final ChartRenderer chartRenderer;
 
-    public DataAgentToolkit(DataSourceRegistry registry, ChartRenderer chartRenderer) {
+    public DataAgentToolkit(
+            DataSourceRegistry registry, SqlConnector sqlConnector, ChartRenderer chartRenderer) {
         this.registry = Objects.requireNonNull(registry, "registry");
+        this.sqlConnector = Objects.requireNonNull(sqlConnector, "sqlConnector");
         this.chartRenderer = Objects.requireNonNull(chartRenderer, "chartRenderer");
     }
 
@@ -79,10 +81,9 @@ public final class DataAgentToolkit {
             name = "describe_table",
             description =
                     """
-                    Return the column schema and a short row sample for a table in a configured \
-                    data source. Use after list_data_sources to confirm the columns you intend \
-                    to project / filter / group by. Returns 'not implemented' in v1 — the slot is \
-                    reserved for a connector module.\
+                    Return the column schema, total row count, and a short sample for a table in \
+                    a configured data source. Use after list_data_sources to confirm the columns \
+                    you intend to project / filter / group by before writing the query.\
                     """)
     public String describeTable(
             @ToolParam(name = "source_id", description = "Data source id from list_data_sources")
@@ -98,7 +99,10 @@ public final class DataAgentToolkit {
         if (table == null || table.isBlank()) {
             return "error: table must not be blank";
         }
-        return "not implemented: describe_table requires a connector module (see DataAgent docs)";
+        if (!sqlConnector.supports(ds.get())) {
+            return "error: no SQL connector available for source kind '" + ds.get().kind() + "'";
+        }
+        return sqlConnector.describeTable(ds.get(), table);
     }
 
     @Tool(
@@ -106,14 +110,24 @@ public final class DataAgentToolkit {
             description =
                     """
                     Execute a read-only SQL query against a configured data source and return the \
-                    first N rows as a small markdown table. Only SELECT statements are accepted; \
-                    the connector enforces a row cap. Returns 'not implemented' in v1 — the slot \
-                    is reserved for a connector module.\
+                    first N rows as a markdown report (default 20, hard cap 100). The report \
+                    includes the natural-language question being answered, the SQL statement, and \
+                    the result table — making every invocation self-documenting for the user. Only \
+                    SELECT / WITH statements are accepted. Run describe_table first to confirm \
+                    column names, then validate your query here before reporting numbers.\
                     """)
     public String runSqlPreview(
             @ToolParam(name = "source_id", description = "Data source id from list_data_sources")
                     String sourceId,
             @ToolParam(name = "sql", description = "SELECT-only SQL statement") String sql,
+            @ToolParam(
+                            name = "question",
+                            description =
+                                    "Natural-language question being answered by this query"
+                                            + " (in Chinese); displayed above the SQL and result"
+                                            + " table so the tool block is self-documenting",
+                            required = false)
+                    String question,
             @ToolParam(
                             name = "row_limit",
                             description = "Max rows to return; the connector enforces a hard cap",
@@ -130,7 +144,10 @@ public final class DataAgentToolkit {
         if (!trimmed.startsWith("select") && !trimmed.startsWith("with")) {
             return "error: only SELECT / WITH statements are allowed";
         }
-        return "not implemented: run_sql_preview requires a connector module (see DataAgent docs)";
+        if (!sqlConnector.supports(ds.get())) {
+            return "error: no SQL connector available for source kind '" + ds.get().kind() + "'";
+        }
+        return sqlConnector.runSqlPreview(ds.get(), sql, question, rowLimit != null ? rowLimit : 0);
     }
 
     @Tool(

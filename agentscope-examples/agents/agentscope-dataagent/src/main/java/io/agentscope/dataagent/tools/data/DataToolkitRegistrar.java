@@ -38,14 +38,17 @@ public class DataToolkitRegistrar {
 
     private final DataAgentBootstrap bootstrap;
     private final DataSourceRegistry registry;
+    private final SqlConnector sqlConnector;
     private final ChartRenderer chartRenderer;
 
     public DataToolkitRegistrar(
             DataAgentBootstrap bootstrap,
             DataSourceRegistry registry,
+            SqlConnector sqlConnector,
             ChartRenderer chartRenderer) {
         this.bootstrap = bootstrap;
         this.registry = registry;
+        this.sqlConnector = sqlConnector;
         this.chartRenderer = chartRenderer;
     }
 
@@ -65,7 +68,7 @@ public class DataToolkitRegistrar {
         try {
             main.getDelegate()
                     .getToolkit()
-                    .registerTool(new DataAgentToolkit(registry, chartRenderer));
+                    .registerTool(new DataAgentToolkit(registry, sqlConnector, chartRenderer));
             log.info("Registered DataAgent toolkit onto main agent '{}'", main.getName());
         } catch (RuntimeException e) {
             log.warn("Failed to register DataAgent toolkit onto main agent: {}", e.getMessage());

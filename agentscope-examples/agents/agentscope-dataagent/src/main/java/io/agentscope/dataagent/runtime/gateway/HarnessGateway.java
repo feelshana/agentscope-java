@@ -16,6 +16,7 @@
 package io.agentscope.dataagent.runtime.gateway;
 
 import io.agentscope.core.agent.RuntimeContext;
+import io.agentscope.core.event.AgentEvent;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.dataagent.runtime.session.PendingCompletion;
@@ -38,6 +39,7 @@ import io.agentscope.harness.agent.gateway.MsgContext;
 import io.agentscope.harness.agent.gateway.SessionTurnGate;
 import io.agentscope.harness.agent.gateway.TurnBusyException;
 import io.agentscope.harness.agent.gateway.TurnLease;
+import io.agentscope.harness.agent.gateway.channel.InboundMessage;
 import io.agentscope.harness.agent.gateway.channel.OutboundAddress;
 import io.agentscope.harness.agent.sandbox.Sandbox;
 import io.agentscope.harness.agent.sandbox.SandboxContext;
@@ -48,6 +50,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -316,6 +319,55 @@ public final class HarnessGateway implements Gateway {
                 rtcBuilder, ctx.userId(), resolveSandboxAgentId(requestedAgentId, ha));
         RuntimeContext runtimeContext = rtcBuilder.build();
         return withGatedTurn(gateKey, () -> ha.call(messages, runtimeContext));
+    }
+
+    /**
+     * Streaming variant of {@link #run}. Mirrors the same session resolution and turn-gating logic
+     * but calls {@link HarnessAgent#streamEvents} instead of {@link HarnessAgent#call}, emitting
+     * fine-grained {@link AgentEvent}s (text deltas, tool-call events, etc.) instead of a single
+     * blocking reply.
+     */
+    @Override
+    public Flux<AgentEvent> runStream(
+            MsgContext context,
+            List<Msg> messages,
+            OutboundAddress outboundAddress,
+            RuntimeContext callerContext,
+            InboundMessage inboundMessage) {
+        MsgContext ctx = context != null ? context : MsgContext.defaultContext();
+        String gateKey = ctx.canonicalKey();
+
+        String requestedAgentId = ctx.extra() != null ? (String) ctx.extra().get("agentId") : null;
+        HarnessAgent ha = resolveAgent(requestedAgentId);
+        if (ha == null) {
+            return Flux.error(
+                    new IllegalStateException(
+                            "HarnessGateway.bindMainAgent must be called before runStream(...)"));
+        }
+
+        String sessionKey = resolveOrCreateMainSession(gateKey, ha, ctx.userId(), requestedAgentId);
+        String sessionId =
+                sessionAgentManager
+                        .viewSession(sessionKey)
+                        .map(SessionView::sessionId)
+                        .orElse(sessionKey);
+
+        if (outboundAddress != null) {
+            lastRouteBySessionKey.put(sessionKey, outboundAddress);
+        }
+
+        RuntimeContext.Builder rtcBuilder =
+                RuntimeContext.builder()
+                        .sessionId(sessionId)
+                        .put("msgContext", ctx)
+                        .put("sessionKey", sessionKey);
+        if (ctx.userId() != null) {
+            rtcBuilder.userId(ctx.userId());
+        }
+        attachUserSandboxContext(
+                rtcBuilder, ctx.userId(), resolveSandboxAgentId(requestedAgentId, ha));
+        RuntimeContext runtimeContext = rtcBuilder.build();
+        return withGatedStream(gateKey, () -> ha.streamEvents(messages, runtimeContext));
     }
 
     /**
@@ -588,6 +640,30 @@ public final class HarnessGateway implements Gateway {
                                 return Mono.error(new IllegalStateException(e));
                             }
                             return turn.get();
+                        })
+                .doFinally(
+                        sig -> {
+                            TurnLease lease = leaseRef.get();
+                            if (lease != null) {
+                                lease.close();
+                            }
+                        })
+                .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    private Flux<AgentEvent> withGatedStream(String gateKey, Supplier<Flux<AgentEvent>> stream) {
+        AtomicReference<TurnLease> leaseRef = new AtomicReference<>();
+        return Flux.defer(
+                        () -> {
+                            try {
+                                leaseRef.set(sessionTurnGate.acquire(gateKey));
+                            } catch (TurnBusyException e) {
+                                return Flux.empty();
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                                return Flux.error(new IllegalStateException(e));
+                            }
+                            return stream.get();
                         })
                 .doFinally(
                         sig -> {
