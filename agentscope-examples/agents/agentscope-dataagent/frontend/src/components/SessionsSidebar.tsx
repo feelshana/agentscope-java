@@ -18,6 +18,13 @@ const UTILITY_ITEMS: UtilityItem[] = [
   { label: 'Usage', path: '/usage', icon: '📈' },
 ];
 
+/** TC-style primary navigation: conversations, knowledge bases, semantic settings. */
+const NAV_ITEMS: UtilityItem[] = [
+  { label: '对话', path: '/chat', icon: '💬' },
+  { label: '知识库', path: '/configure/datasets', icon: '📚' },
+  { label: '语义配置', path: '/configure/semantic', icon: '⚙️' },
+];
+
 function decodeJwt(token: string): Record<string, unknown> {
   try { return JSON.parse(atob(token.split('.')[1])); } catch { return {}; }
 }
@@ -152,6 +159,53 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
         <button onClick={handleNewChat} style={S.newBtn}>
           <span style={{ fontSize: '1rem' }}>＋</span> 新建对话
         </button>
+      </div>
+
+      <div
+        style={{
+          padding: '8px 10px',
+          borderBottom: '1px solid #f1f5f9',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2,
+          flexShrink: 0,
+        }}
+      >
+        {NAV_ITEMS.map(item => {
+          const active =
+            item.path === '/chat'
+              ? location.pathname === '/chat'
+              : location.pathname.startsWith(item.path);
+          return (
+            <button
+              key={item.path}
+              onClick={() => navigate(item.path)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '8px 12px',
+                borderRadius: 8,
+                cursor: 'pointer',
+                border: 'none',
+                background: active ? '#eef2ff' : 'transparent',
+                color: active ? '#3730a3' : '#334155',
+                fontWeight: active ? 600 : 500,
+                fontSize: '0.88rem',
+                textAlign: 'left' as const,
+              }}
+              onMouseEnter={e => {
+                if (!active) e.currentTarget.style.background = '#f8fafc';
+              }}
+              onMouseLeave={e => {
+                if (!active) e.currentTarget.style.background = 'transparent';
+              }}
+            >
+              <span style={{ fontSize: '0.95rem' }}>{item.icon}</span>
+              {item.label}
+            </button>
+          );
+        })}
       </div>
 
       <div style={S.scroll}>

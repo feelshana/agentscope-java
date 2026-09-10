@@ -365,6 +365,42 @@ public class SessionAgentManager {
     }
 
     /**
+     * Restores a MAIN session entry for an existing on-disk transcript (e.g. after a restart when
+     * the session index lost the entry). The sessionId must match the transcript file name base
+     * ({@code main-<uuid>}) so turn reads resolve to the right file.
+     */
+    public SessionEntry registerRestoredMainSession(
+            String agentId,
+            String userId,
+            String sessionId,
+            String gateKey,
+            String sessionFilePath,
+            long lastActivityMs) {
+        Objects.requireNonNull(agentId, "agentId");
+        String sessionKey = "agent:" + agentId + ":main:" + sessionId;
+        SessionEntry entry =
+                new SessionEntry(
+                        sessionKey,
+                        agentId,
+                        sessionId,
+                        null,
+                        SessionKind.MAIN,
+                        null,
+                        0,
+                        lastActivityMs,
+                        lastActivityMs,
+                        sessionFilePath,
+                        null,
+                        gateKey,
+                        userId);
+        sessionsByKey.put(sessionKey, entry);
+        if (sessionStore != null) {
+            sessionStore.save(entry);
+        }
+        return entry;
+    }
+
+    /**
      * Registers a new MAIN session, optionally recording the {@code gateKey} for gateway routing
      * persistence and {@code userId} for HarnessAgent namespace isolation.
      */

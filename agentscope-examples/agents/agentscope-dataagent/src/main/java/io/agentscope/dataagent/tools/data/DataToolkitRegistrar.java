@@ -15,7 +15,9 @@
  */
 package io.agentscope.dataagent.tools.data;
 
+import io.agentscope.dataagent.dataset.DatasetContextProvider;
 import io.agentscope.dataagent.runtime.DataAgentBootstrap;
+import io.agentscope.dataagent.web.persistence.jpa.ChartOptionRepository;
 import io.agentscope.harness.agent.HarnessAgent;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
@@ -39,17 +41,20 @@ public class DataToolkitRegistrar {
     private final DataAgentBootstrap bootstrap;
     private final DataSourceRegistry registry;
     private final SqlConnector sqlConnector;
-    private final ChartRenderer chartRenderer;
+    private final DatasetContextProvider contextProvider;
+    private final ChartOptionRepository chartOptions;
 
     public DataToolkitRegistrar(
             DataAgentBootstrap bootstrap,
             DataSourceRegistry registry,
             SqlConnector sqlConnector,
-            ChartRenderer chartRenderer) {
+            DatasetContextProvider contextProvider,
+            ChartOptionRepository chartOptions) {
         this.bootstrap = bootstrap;
         this.registry = registry;
         this.sqlConnector = sqlConnector;
-        this.chartRenderer = chartRenderer;
+        this.contextProvider = contextProvider;
+        this.chartOptions = chartOptions;
     }
 
     @PostConstruct
@@ -68,7 +73,9 @@ public class DataToolkitRegistrar {
         try {
             main.getDelegate()
                     .getToolkit()
-                    .registerTool(new DataAgentToolkit(registry, sqlConnector, chartRenderer));
+                    .registerTool(
+                            new DataAgentToolkit(
+                                    registry, sqlConnector, contextProvider, chartOptions));
             log.info("Registered DataAgent toolkit onto main agent '{}'", main.getName());
         } catch (RuntimeException e) {
             log.warn("Failed to register DataAgent toolkit onto main agent: {}", e.getMessage());

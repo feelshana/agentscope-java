@@ -16,30 +16,29 @@
 package io.agentscope.dataagent.tools.data;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 /**
- * Default {@link DataSourceRegistry} backed by an in-memory {@link LinkedHashMap}. Seeded once at
- * construction; operators can replace the bean with a JPA- or Nacos-backed implementation. The
- * collection is unmodifiable after construction — call sites that need to add entries dynamically
- * should provide a richer implementation rather than mutating this one.
+ * Default {@link DataSourceRegistry} backed by a thread-safe in-memory map. Seeded at construction
+ * (e.g. the embedded-H2 {@code demo-db}) and mutable afterwards: {@link #add(DataSource)} / {@link
+ * #remove(String)} let the dataset ingestion flow register user-uploaded sources at runtime while
+ * agents concurrently read via {@link #list()} / {@link #findById(String)}. Operators needing
+ * durable registration can still replace the bean with a JPA- or Nacos-backed implementation.
  */
 public final class InMemoryDataSourceRegistry implements DataSourceRegistry {
 
-    private final Map<String, DataSource> byId;
+    private final ConcurrentMap<String, DataSource> byId = new ConcurrentHashMap<>();
 
     public InMemoryDataSourceRegistry(List<DataSource> seed) {
         Objects.requireNonNull(seed, "seed");
-        Map<String, DataSource> m = new LinkedHashMap<>();
         for (DataSource ds : seed) {
             if (ds == null) continue;
-            m.put(ds.id(), ds);
+            byId.put(ds.id(), ds);
         }
-        this.byId = Map.copyOf(m);
     }
 
     @Override
@@ -51,5 +50,17 @@ public final class InMemoryDataSourceRegistry implements DataSourceRegistry {
     public Optional<DataSource> findById(String id) {
         if (id == null || id.isBlank()) return Optional.empty();
         return Optional.ofNullable(byId.get(id));
+    }
+
+    /** Registers or replaces a data source; visible to agents on the next read. */
+    public void add(DataSource dataSource) {
+        Objects.requireNonNull(dataSource, "dataSource");
+        byId.put(dataSource.id(), dataSource);
+    }
+
+    /** Removes a data source by id; no-op when absent. */
+    public void remove(String id) {
+        if (id == null || id.isBlank()) return;
+        byId.remove(id);
     }
 }

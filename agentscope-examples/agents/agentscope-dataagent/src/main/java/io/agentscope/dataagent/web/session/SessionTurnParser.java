@@ -59,14 +59,45 @@ public final class SessionTurnParser {
             try {
                 JsonNode node = MAPPER.readTree(line);
                 String type = text(node, "type");
-                if (!"message".equals(type)) continue;
-
                 String id = text(node, "id");
                 String parentId = text(node, "parentId");
-                String role = text(node, "role");
-                String content = text(node, "content");
                 double ts = node.path("timestamp").asDouble(0);
                 long timestampMs = (long) (ts * 1000);
+
+                // Harness writes tool invocations as type=tool_use / type=tool_result lines
+                // (no role field; payload in name/input/output). Map them to TOOL turns so the
+                // UI can rebuild tool blocks and charts from history.
+                if ("tool_use".equals(type)) {
+                    turns.add(
+                            new TurnEntry(
+                                    id,
+                                    parentId,
+                                    "TOOL",
+                                    null,
+                                    timestampMs,
+                                    text(node, "name"),
+                                    node.has("input") ? node.get("input").toString() : null,
+                                    null));
+                    continue;
+                }
+                if ("tool_result".equals(type)) {
+                    turns.add(
+                            new TurnEntry(
+                                    id,
+                                    parentId,
+                                    "TOOL",
+                                    null,
+                                    timestampMs,
+                                    text(node, "name"),
+                                    null,
+                                    node.has("output") ? node.get("output").toString() : null));
+                    continue;
+                }
+
+                if (!"message".equals(type)) continue;
+
+                String role = text(node, "role");
+                String content = text(node, "content");
 
                 String toolName = text(node, "toolName");
                 String toolInput = node.has("toolInput") ? node.get("toolInput").toString() : null;

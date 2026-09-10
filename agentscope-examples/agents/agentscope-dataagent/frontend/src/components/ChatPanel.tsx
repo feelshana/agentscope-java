@@ -4,8 +4,11 @@ import { currentSession, stream } from '../api/chat';
 import { TurnEntry, turns as fetchTurns } from '../api/sessions';
 import ToolCallBlock from './ToolCallBlock';
 import ChartBlock from './ChartBlock';
+import EChartsBlock, { ChartPayload } from './EChartsBlock';
+import CitationPanel, { DatasetRef } from './CitationPanel';
 import Markdown from './Markdown';
 import { extractVegaSpec } from '../utils/charts';
+import { listDatasets } from '../api/datasets';
 
 type Role = 'user' | 'assistant' | 'system';
 
@@ -81,29 +84,53 @@ function isHiddenTool(name: string): boolean {
   return HIDDEN_TOOL_PATTERNS.some(p => lower.includes(p.toLowerCase()));
 }
 
+/** Extract the server-built chart payload (chartId or inline option) from a render_chart result. */
+function chartPayloadFromTool(t: ToolEntry): ChartPayload | null {
+  const raw = t.result ?? t.input;
+  if (!raw) return null;
+  try {
+    let v: unknown = JSON.parse(raw);
+    if (typeof v === 'string') v = JSON.parse(v);
+    const obj = v as ChartPayload;
+    if (obj && obj.chart === 'echarts' && (obj.option || obj.chartId)) return obj;
+  } catch {
+    /* not a chart payload */
+  }
+  return null;
+}
+
 function turnsToMessages(turns: TurnEntry[]): Message[] {
   const out: Message[] = [];
+  let cur: Message | null = null;
   for (const t of turns) {
     const role = String(t.role).toUpperCase();
     if (role === 'USER') {
       out.push({ id: t.id, role: 'user', text: t.content ?? '', tools: [] });
-    } else if (role === 'ASSISTANT') {
-      out.push({ id: t.id, role: 'assistant', text: t.content ?? '', tools: [] });
+      cur = null;
     } else if (role === 'TOOL') {
-      // Skip framework-internal tools that should not appear in the UI.
       if (t.toolName && isHiddenTool(t.toolName)) continue;
-      const last = out.length > 0 ? out[out.length - 1] : null;
-      const tool: ToolEntry = {
-        id: t.id,
-        name: t.toolName ?? 'tool',
-        input: t.toolInput ?? undefined,
-        result: t.toolResult ?? undefined,
-      };
-      if (last && last.role === 'assistant') {
-        last.tools = [...last.tools, tool];
-      } else {
-        out.push({ id: `${t.id}-host`, role: 'assistant', text: '', tools: [tool] });
+      if (!cur) {
+        cur = { id: `${t.id}-host`, role: 'assistant', text: '', tools: [] };
+        out.push(cur);
       }
+      cur.tools = [
+        ...cur.tools,
+        {
+          id: t.id,
+          name: t.toolName ?? 'tool',
+          input: t.toolInput ?? undefined,
+          result: t.toolResult ?? undefined,
+        },
+      ];
+    } else if (role === 'ASSISTANT') {
+      // One bubble per turn: intermediate reasoning texts are superseded by later
+      // assistant texts, so only the final reply text survives — matching the live view.
+      if (!cur) {
+        cur = { id: t.id, role: 'assistant', text: '', tools: [] };
+        out.push(cur);
+      }
+      cur.id = t.id;
+      cur.text = t.content ?? '';
     }
   }
   return out;
@@ -122,8 +149,24 @@ export default function ChatPanel({ agentId, onSessionUpdate }: ChatPanelProps) 
   const [busy, setBusy] = useState(false);
   const [restoring, setRestoring] = useState(true);
   const [sessionKey, setSessionKey] = useState<string | null>(null);
+  const [datasetMap, setDatasetMap] = useState<Record<string, DatasetRef>>({});
   const threadRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    listDatasets()
+      .then(list => {
+        if (cancelled) return;
+        const map: Record<string, DatasetRef> = {};
+        for (const d of list) map[d.id] = { name: d.name, tableName: d.tableName };
+        setDatasetMap(map);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const persistSession = useCallback((key: string | null) => {
     if (key) {
@@ -195,7 +238,10 @@ export default function ChatPanel({ agentId, onSessionUpdate }: ChatPanelProps) 
     setMessages(prev => [...prev, userMsg, replyMsg]);
 
     try {
-      for await (const evt of stream(agentId, { message: text, sessionKey: sessionKey ?? undefined })) {
+      for await (const evt of stream(agentId, {
+        message: text,
+        sessionKey: sessionKey ?? undefined,
+      })) {
         if (evt.type === 'token') {
           const chunk = evt.data ?? '';
           setMessages(prev => prev.map(m => m.id === replyMsg.id ? { ...m, text: m.text + chunk } : m));
@@ -285,7 +331,8 @@ export default function ChatPanel({ agentId, onSessionUpdate }: ChatPanelProps) 
               <div style={{ marginBottom: m.text ? 10 : 0 }}>
                 {m.tools.filter(t => !isHiddenTool(t.name)).map(t => {
                   const isChartTool = t.name.toLowerCase().includes('render_chart');
-                  const spec = extractVegaSpec(t.name, t.input);
+                  const chartPayload = isChartTool ? chartPayloadFromTool(t) : null;
+                  const spec = !chartPayload ? extractVegaSpec(t.name, t.input) : null;
                   // Remount when the result arrives so defaultOpen=false takes effect
                   // (React keeps the old component's state when the key is stable).
                   const key = t.id + (t.result ? '-done' : '');
@@ -298,7 +345,7 @@ export default function ChatPanel({ agentId, onSessionUpdate }: ChatPanelProps) 
                         result={t.result}
                         defaultOpen={!t.result}
                       />
-                      {isChartTool && !spec && (
+                      {isChartTool && !chartPayload && !spec && (
                         <div style={{
                           background: '#fffbeb',
                           border: '1px solid #fcd34d',
@@ -308,15 +355,19 @@ export default function ChatPanel({ agentId, onSessionUpdate }: ChatPanelProps) 
                           color: '#92400e',
                           fontSize: '0.8rem',
                         }}>
-                          chart spec could not be parsed from the tool input — expand the tool
-                          block above to inspect the raw arguments
+                          chart payload could not be parsed — expand the tool block above to
+                          inspect the raw arguments
                         </div>
                       )}
-                      {spec && <ChartBlock spec={spec} />}
+                      {chartPayload && <EChartsBlock payload={chartPayload} />}
+                      {!chartPayload && spec && <ChartBlock spec={spec} />}
                     </React.Fragment>
                   );
                 })}
               </div>
+            )}
+            {m.role === 'assistant' && m.tools.length > 0 && (
+              <CitationPanel tools={m.tools} datasetMap={datasetMap} />
             )}
             {m.role === 'assistant'
               ? (m.text
