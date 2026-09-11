@@ -33,6 +33,7 @@ import io.agentscope.dataagent.web.audit.AgentActivityStore;
 import io.agentscope.dataagent.web.catalog.AgentCatalogService;
 import io.agentscope.dataagent.web.catalog.AgentDefinition;
 import io.agentscope.dataagent.web.identity.IdentityLinkStore;
+import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
 import io.agentscope.dataagent.web.share.AgentAccessGuard;
 import io.agentscope.dataagent.web.share.AgentAclService.Tier;
 import io.agentscope.dataagent.web.toolbus.ToolEventBus;
@@ -100,6 +101,7 @@ public class ChatController {
     private final AgentAccessGuard guard;
     private final AgentActivityStore activity;
     private final ObjectProvider<Model> modelProvider;
+    private final ConversationScopeRegistry conversationScopes;
 
     /**
      * AgentStateStore keys for which we have already recorded a RUN_SESSION event. Each (userId, agentId)
@@ -117,7 +119,8 @@ public class ChatController {
             ToolEventBus toolEventBus,
             AgentAccessGuard guard,
             AgentActivityStore activity,
-            ObjectProvider<Model> modelProvider) {
+            ObjectProvider<Model> modelProvider,
+            ConversationScopeRegistry conversationScopes) {
         this.chatUiChannel = chatUiChannel;
         this.sessionAgentManager = builderBootstrap.gateway().sessionAgentManager();
         this.catalogService = catalogService;
@@ -127,6 +130,7 @@ public class ChatController {
         this.guard = guard;
         this.activity = activity;
         this.modelProvider = modelProvider;
+        this.conversationScopes = conversationScopes;
     }
 
     /**
@@ -136,7 +140,7 @@ public class ChatController {
      * ChatGPT-style sessions for the same (userId, agentId) pair. {@code null}/blank requests collapse
      * to the legacy single-session behaviour by deferring to the gateway's deterministic key.
      */
-    public record ChatRequest(String message, String sessionKey) {}
+    public record ChatRequest(String message, String sessionKey, java.util.List<String> groupIds) {}
 
     /** Response for the synchronous endpoint. */
     public record ChatResponse(String reply, String sessionKey) {}
@@ -218,7 +222,12 @@ public class ChatController {
         doneFrame.put("sessionKey", resolvedConversationId);
 
         Flux<ServerSentEvent<String>> agentEvents =
-                executeChatStream(userId, agentId, req.message(), resolvedConversationId)
+                executeChatStream(
+                                userId,
+                                agentId,
+                                req.message(),
+                                resolvedConversationId,
+                                req.groupIds())
                         .filter(event -> event instanceof TextBlockDeltaEvent)
                         .map(
                                 event ->
@@ -306,7 +315,7 @@ public class ChatController {
                                     ? cmd.newSessionKey
                                     : resolvedConversationId));
         }
-        return executeChat(userId, agentId, req.message(), resolvedConversationId)
+        return executeChat(userId, agentId, req.message(), resolvedConversationId, req.groupIds())
                 .map(
                         reply -> {
                             String text =
@@ -568,12 +577,17 @@ public class ChatController {
      * pure binding-driven routing: the chatui channel's default agent or matching binding wins.
      */
     private InboundMessage buildInbound(
-            String userId, String agentId, String message, String conversationId) {
+            String userId,
+            String agentId,
+            String message,
+            String conversationId,
+            java.util.List<String> groupIds) {
         List<Msg> msgs = shapeInboundMessages(message);
+        conversationScopes.put(conversationId, groupIds);
         RuntimeContext runtimeContext =
                 RuntimeContext.builder()
                         .userId(userId)
-                        .put(DatasetScope.class, new DatasetScope(userId))
+                        .put(DatasetScope.class, new DatasetScope(userId, groupIds))
                         .build();
         if (agentId == null || agentId.isBlank()) {
             return InboundMessage.dm(ChatUiChannel.CHANNEL_ID, userId, List.copyOf(msgs))
@@ -593,9 +607,13 @@ public class ChatController {
      * {@link #send} endpoint which does not need incremental text streaming.
      */
     private Mono<Msg> executeChat(
-            String userId, String agentId, String message, String conversationId) {
+            String userId,
+            String agentId,
+            String message,
+            String conversationId,
+            java.util.List<String> groupIds) {
         long startMs = System.currentTimeMillis();
-        InboundMessage inbound = buildInbound(userId, agentId, message, conversationId);
+        InboundMessage inbound = buildInbound(userId, agentId, message, conversationId, groupIds);
         final String recordedAgentId = agentId != null ? agentId : "(default)";
         return chatUiChannel
                 .dispatch(inbound)
@@ -614,9 +632,13 @@ public class ChatController {
      * frontend can render tokens as they arrive from the model.
      */
     private Flux<AgentEvent> executeChatStream(
-            String userId, String agentId, String message, String conversationId) {
+            String userId,
+            String agentId,
+            String message,
+            String conversationId,
+            java.util.List<String> groupIds) {
         long startMs = System.currentTimeMillis();
-        InboundMessage inbound = buildInbound(userId, agentId, message, conversationId);
+        InboundMessage inbound = buildInbound(userId, agentId, message, conversationId, groupIds);
         final String recordedAgentId = agentId != null ? agentId : "(default)";
         return chatUiChannel
                 .dispatchStream(inbound)

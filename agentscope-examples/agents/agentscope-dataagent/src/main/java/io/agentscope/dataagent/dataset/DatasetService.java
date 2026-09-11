@@ -495,6 +495,10 @@ public class DatasetService implements DatasetContextProvider {
         }
         properties.put("ownerId", e.getOwnerId());
         properties.put("tableName", e.getTableName());
+        properties.put("datasetId", e.getId());
+        if (e.getGroupId() != null) {
+            properties.put("groupId", e.getGroupId());
+        }
         StringBuilder desc = new StringBuilder();
         desc.append(
                 (e.getDescription() == null || e.getDescription().isBlank())
@@ -594,14 +598,26 @@ public class DatasetService implements DatasetContextProvider {
 
     @Override
     public String relationsFor(String ownerId, String table) {
+        return relationsFor(ownerId, table, null);
+    }
+
+    @Override
+    public String relationsFor(String ownerId, String table, java.util.List<String> onlyGroups) {
         if (table == null || table.isBlank()) {
             return "";
         }
+        java.util.Set<String> want =
+                onlyGroups == null || onlyGroups.isEmpty()
+                        ? null
+                        : new java.util.HashSet<>(onlyGroups);
         List<DatasetEntity> mine = repository.findByOwnerIdOrderByCreatedAtDesc(ownerId);
         Map<String, DatasetEntity> byId = new HashMap<>();
         Set<String> matchIds = new HashSet<>();
         Set<String> groupIds = new HashSet<>();
         for (DatasetEntity d : mine) {
+            if (want != null && (d.getGroupId() == null || !want.contains(d.getGroupId()))) {
+                continue;
+            }
             byId.put(d.getId(), d);
             if (d.getGroupId() != null) {
                 groupIds.add(d.getGroupId());
@@ -617,6 +633,9 @@ public class DatasetService implements DatasetContextProvider {
         }
         StringBuilder sb = new StringBuilder();
         for (String gid : groupIds) {
+            if (want != null && !want.contains(gid)) {
+                continue;
+            }
             for (DatasetRelationEntity r : relationRepository.findByGroupId(gid)) {
                 boolean touches =
                         matchIds.contains(r.getSourceDatasetId())
@@ -691,11 +710,23 @@ public class DatasetService implements DatasetContextProvider {
 
     @Override
     public String relationshipsText(String ownerId) {
+        return relationshipsText(ownerId, null);
+    }
+
+    @Override
+    public String relationshipsText(String ownerId, java.util.List<String> onlyGroups) {
         if (ownerId == null) {
             return "";
         }
+        java.util.Set<String> want =
+                onlyGroups == null || onlyGroups.isEmpty()
+                        ? null
+                        : new java.util.HashSet<>(onlyGroups);
         StringBuilder sb = new StringBuilder();
         for (DatasetGroupEntity g : groupRepository.findByOwnerIdOrderByCreatedAtDesc(ownerId)) {
+            if (want != null && !want.contains(g.getId())) {
+                continue;
+            }
             String content = knowledgeText(g.getId());
             if (content != null && !content.isBlank()) {
                 if (sb.length() > 0) {

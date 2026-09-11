@@ -234,7 +234,9 @@ class DataAgentToolkitTest {
                         List.of(
                                 List.of("2026-09-01", "10"),
                                 List.of("2026-09-02", "12"),
-                                List.of("2026-09-03", "11")));
+                                List.of("2026-09-03", "11")),
+                        null,
+                        null);
 
         assertThat(out).contains("\"chart\":\"echarts\"");
         assertThat(out).contains("\"chartType\":\"line\"");
@@ -242,8 +244,21 @@ class DataAgentToolkitTest {
     }
 
     @Test
+    void renderChartAppliesTargetMarkLine() {
+        String out =
+                toolkit.renderChart(
+                        "活跃用户趋势",
+                        List.of("dt", "cnt"),
+                        List.of(List.of("2026-09-01", "10"), List.of("2026-09-02", "12")),
+                        "20",
+                        "日均目标");
+        assertThat(out).contains("markLine");
+        assertThat(out).contains("日均目标");
+    }
+
+    @Test
     void renderChartRejectsUnchartableData() {
-        assertThat(toolkit.renderChart("q", List.of("a"), List.of(List.of("x"))))
+        assertThat(toolkit.renderChart("q", List.of("a"), List.of(List.of("x")), null, null))
                 .startsWith("error:");
     }
 }

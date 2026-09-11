@@ -60,6 +60,52 @@ public final class ChartBuilder {
 
     private ChartBuilder() {}
 
+    /**
+     * Overlays a dashed red horizontal reference line (ECharts {@code markLine}) on every line/bar
+     * series of a built option, mirroring TC's KPI target line on trend charts (e.g. 日均2000万).
+     */
+    @SuppressWarnings("unchecked")
+    public static void applyMarkLine(Map<String, Object> option, double value, String label) {
+        if (option == null) {
+            return;
+        }
+        Object seriesObj = option.get("series");
+        List<Map<String, Object>> seriesList = new ArrayList<>();
+        if (seriesObj instanceof List<?> l) {
+            for (Object o : l) {
+                if (o instanceof Map<?, ?> m) {
+                    seriesList.add((Map<String, Object>) m);
+                }
+            }
+        } else if (seriesObj instanceof Map<?, ?> m) {
+            seriesList.add((Map<String, Object>) m);
+        }
+        Map<String, Object> markLine = new LinkedHashMap<>();
+        markLine.put("silent", true);
+        markLine.put("symbol", "none");
+        markLine.put("lineStyle", Map.of("type", "dashed", "color", "#e5484d", "width", 1.5));
+        markLine.put(
+                "label",
+                Map.of(
+                        "show",
+                        true,
+                        "position",
+                        "insideEndTop",
+                        "formatter",
+                        label == null || label.isBlank() ? "目标" : label,
+                        "color",
+                        "#e5484d",
+                        "fontSize",
+                        10));
+        markLine.put("data", List.of(Map.of("yAxis", value)));
+        for (Map<String, Object> s : seriesList) {
+            Object type = s.get("type");
+            if ("line".equals(type) || "bar".equals(type)) {
+                s.put("markLine", markLine);
+            }
+        }
+    }
+
     public static BuiltChart build(List<String> columns, List<List<String>> rows, String question) {
         if (columns == null || rows == null || columns.isEmpty() || rows.isEmpty()) {
             return null;

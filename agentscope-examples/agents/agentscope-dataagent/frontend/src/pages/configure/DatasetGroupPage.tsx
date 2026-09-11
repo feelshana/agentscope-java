@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import BackToChatHeader from '../../components/BackToChatHeader';
-import GraphView from '../../components/GraphView';
+import KnowledgeGraphView from '../../components/KnowledgeGraphView';
 import SchemaTreeView from '../../components/SchemaTreeView';
 import AssociateTablesModal from '../../components/AssociateTablesModal';
 import {
@@ -429,7 +429,7 @@ export default function DatasetGroupPage() {
           </>
         )}
 
-        {activeTab === 'graph' && <GraphView groupId={groupId} />}
+        {activeTab === 'graph' && <KnowledgeGraphView groupId={groupId} />}
 
         {activeTab === 'tree' && <SchemaTreeView datasets={detail?.datasets ?? []} />}
       </div>

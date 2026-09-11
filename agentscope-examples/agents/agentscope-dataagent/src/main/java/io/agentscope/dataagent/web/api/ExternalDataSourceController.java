@@ -23,7 +23,6 @@ import io.agentscope.dataagent.web.persistence.jpa.ExternalDataSourceRepository;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
-import java.util.regex.Pattern;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -46,8 +45,6 @@ import reactor.core.scheduler.Schedulers;
 @RestController
 @RequestMapping("/api/datasources")
 public class ExternalDataSourceController {
-
-    private static final Pattern NAME = Pattern.compile("^[A-Za-z0-9_]{1,64}$");
 
     public record DataSourceVO(
             String id,
@@ -233,9 +230,10 @@ public class ExternalDataSourceController {
     }
 
     private static void validate(DataSourceRequest req) {
-        if (req.name() == null || !NAME.matcher(req.name().trim()).matches()) {
+        String name = req.name() == null ? "" : req.name().trim();
+        if (name.isEmpty() || name.length() > 64) {
             throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, "name must be 1-64 chars of letters/digits/underscore");
+                    HttpStatus.BAD_REQUEST, "name must be 1-64 characters");
         }
         if (req.jdbcUrl() == null || !req.jdbcUrl().trim().startsWith("jdbc:")) {
             throw new ResponseStatusException(

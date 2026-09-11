@@ -22,8 +22,10 @@ import io.agentscope.core.tool.Tool;
 import io.agentscope.core.tool.ToolParam;
 import io.agentscope.dataagent.dataset.DatasetContextProvider;
 import io.agentscope.dataagent.dataset.DatasetScope;
+import io.agentscope.dataagent.dataset.KnowledgeGraphService;
 import io.agentscope.dataagent.web.persistence.jpa.ChartOptionEntity;
 import io.agentscope.dataagent.web.persistence.jpa.ChartOptionRepository;
+import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -60,16 +62,18 @@ public final class DataAgentToolkit {
     private final SqlConnector sqlConnector;
     private final DatasetContextProvider contextProvider;
     private final ChartOptionRepository chartOptions;
+    private final KnowledgeGraphService knowledgeGraph;
+    private final ConversationScopeRegistry conversationScopes;
 
     public DataAgentToolkit(DataSourceRegistry registry, SqlConnector sqlConnector) {
-        this(registry, sqlConnector, null, null);
+        this(registry, sqlConnector, null, null, null, null);
     }
 
     public DataAgentToolkit(
             DataSourceRegistry registry,
             SqlConnector sqlConnector,
             DatasetContextProvider contextProvider) {
-        this(registry, sqlConnector, contextProvider, null);
+        this(registry, sqlConnector, contextProvider, null, null, null);
     }
 
     public DataAgentToolkit(
@@ -77,10 +81,31 @@ public final class DataAgentToolkit {
             SqlConnector sqlConnector,
             DatasetContextProvider contextProvider,
             ChartOptionRepository chartOptions) {
+        this(registry, sqlConnector, contextProvider, chartOptions, null, null);
+    }
+
+    public DataAgentToolkit(
+            DataSourceRegistry registry,
+            SqlConnector sqlConnector,
+            DatasetContextProvider contextProvider,
+            ChartOptionRepository chartOptions,
+            KnowledgeGraphService knowledgeGraph) {
+        this(registry, sqlConnector, contextProvider, chartOptions, knowledgeGraph, null);
+    }
+
+    public DataAgentToolkit(
+            DataSourceRegistry registry,
+            SqlConnector sqlConnector,
+            DatasetContextProvider contextProvider,
+            ChartOptionRepository chartOptions,
+            KnowledgeGraphService knowledgeGraph,
+            ConversationScopeRegistry conversationScopes) {
         this.registry = Objects.requireNonNull(registry, "registry");
         this.sqlConnector = Objects.requireNonNull(sqlConnector, "sqlConnector");
         this.contextProvider = contextProvider;
         this.chartOptions = chartOptions;
+        this.knowledgeGraph = knowledgeGraph;
+        this.conversationScopes = conversationScopes;
     }
 
     @Tool(
@@ -126,7 +151,7 @@ public final class DataAgentToolkit {
         }
         String out = sb.toString().stripTrailing();
         if (scope != null && contextProvider != null) {
-            String rel = contextProvider.relationshipsText(scope.ownerId());
+            String rel = contextProvider.relationshipsText(scope.ownerId(), scope.groupIds());
             if (rel != null && !rel.isBlank()) {
                 out = out + "\n\n## 数据集关系说明（用户提供）\n" + rel;
             }
@@ -144,13 +169,25 @@ public final class DataAgentToolkit {
      * only userId/sessionId (no typed attributes), so fall back to {@code rc.getUserId()}.
      */
     private DatasetScope effectiveScope(DatasetScope scope, RuntimeContext rc) {
+        DatasetScope base = null;
         if (scope != null && scope.ownerId() != null) {
-            return scope;
+            base = scope;
+        } else if (rc != null && rc.getUserId() != null && !rc.getUserId().isBlank()) {
+            base = new DatasetScope(rc.getUserId());
         }
-        if (rc != null && rc.getUserId() != null && !rc.getUserId().isBlank()) {
-            return new DatasetScope(rc.getUserId());
+        if (base == null) {
+            return null;
         }
-        return null;
+        if (!base.hasGroupFilter()
+                && conversationScopes != null
+                && rc != null
+                && rc.getSessionId() != null) {
+            java.util.List<String> groups = conversationScopes.get(rc.getSessionId());
+            if (groups != null && !groups.isEmpty()) {
+                return new DatasetScope(base.ownerId(), groups);
+            }
+        }
+        return base;
     }
 
     /**
@@ -164,6 +201,16 @@ public final class DataAgentToolkit {
         List<DataSource> all = registry.list();
         if (scope == null) {
             return all.stream().filter(this::isGlobal).toList();
+        }
+        if (scope.hasGroupFilter()) {
+            // TC-style narrowed scope: only datasets inside the selected knowledge bases.
+            java.util.Set<String> groups = new java.util.HashSet<>(scope.groupIds());
+            return all.stream()
+                    .filter(
+                            ds ->
+                                    ds.properties() != null
+                                            && groups.contains(ds.properties().get("groupId")))
+                    .toList();
         }
         return all.stream().filter(ds -> isGlobal(ds) || isMine(ds, scope)).toList();
     }
@@ -307,7 +354,9 @@ public final class DataAgentToolkit {
             return "error: table must not be blank";
         }
         String rel =
-                contextProvider == null ? "" : contextProvider.relationsFor(eff.ownerId(), table);
+                contextProvider == null
+                        ? ""
+                        : contextProvider.relationsFor(eff.ownerId(), table, eff.groupIds());
         if (rel == null || rel.isBlank()) {
             return "no relations found for table '"
                     + table
@@ -315,6 +364,68 @@ public final class DataAgentToolkit {
                     + " describe_table for shared columns, or ask the user to document relations.";
         }
         return rel;
+    }
+
+    @Tool(
+            name = "lookup_semantic",
+            description =
+                    """
+                    Resolve a business term or metric (e.g. '流失率', 'GMV', '高价值客户') against the \
+                    knowledge-base semantic graph. Returns the matched entity(ies) with their \
+                    dependent fields resolved to table.column, calculation caliber (计算口径), \
+                    granularity/range/example facts, and cross-table JOIN hints. Call this BEFORE \
+                    writing SQL whenever the question uses business jargon or a named metric, so \
+                    you query the exact columns and caliber instead of guessing.\
+                    """)
+    public String lookupSemantic(
+            DatasetScope scope,
+            RuntimeContext rc,
+            @ToolParam(name = "term", description = "Business term or metric name to resolve")
+                    String term) {
+        DatasetScope eff = effectiveScope(scope, rc);
+        if (eff == null) {
+            return "error: no tenant context available";
+        }
+        if (term == null || term.isBlank()) {
+            return "error: term must not be blank";
+        }
+        if (knowledgeGraph == null) {
+            return "knowledge graph not available";
+        }
+        String ctx = knowledgeGraph.semanticContext(eff.ownerId(), term, eff.groupIds());
+        if (ctx == null || ctx.isBlank()) {
+            return "no semantic match for '"
+                    + term
+                    + "'. Fall back to list_data_sources + describe_table, or ask the user for the"
+                    + " definition.";
+        }
+        return ctx;
+    }
+
+    @Tool(
+            name = "read_knowledge",
+            description =
+                    """
+                    Read the knowledge-base business document(s) for the current conversation's \
+                    selected knowledge bases: calculation caliber (计算口径), KPI/考核 target \
+                    values, business terms and inter-table relation notes that the user uploaded. \
+                    Call this BEFORE answering any question about business definitions, targets, \
+                    or caliber, and BEFORE concluding that such definitions do not exist.\
+                    """)
+    public String readKnowledge(DatasetScope scope, RuntimeContext rc) {
+        DatasetScope eff = effectiveScope(scope, rc);
+        if (eff == null) {
+            return "error: no tenant context available";
+        }
+        if (contextProvider == null) {
+            return "no knowledge available";
+        }
+        String text = contextProvider.relationshipsText(eff.ownerId(), eff.groupIds());
+        if (text == null || text.isBlank()) {
+            return "no knowledge document in the selected knowledge base(s). Ask the user to"
+                    + " upload one (KB → 知识文档) or provide the definition directly.";
+        }
+        return text;
     }
 
     @Tool(
@@ -340,10 +451,31 @@ public final class DataAgentToolkit {
                             name = "rows",
                             description =
                                     "Result rows; each row is a list of cell values as strings")
-                    List<List<String>> rows) {
+                    List<List<String>> rows,
+            @ToolParam(
+                            name = "mark_line_value",
+                            description =
+                                    "Optional KPI target/reference value to draw as a dashed red"
+                                            + " horizontal line (e.g. 20000000 from the knowledge"
+                                            + " doc). Omit when there is no target.",
+                            required = false)
+                    String markLineValue,
+            @ToolParam(
+                            name = "mark_line_label",
+                            description = "Optional label for the reference line, e.g. 日均目标2000万",
+                            required = false)
+                    String markLineLabel) {
         ChartBuilder.BuiltChart chart = ChartBuilder.build(columns, rows, question);
         if (chart == null) {
             return "error: data is not chartable (need >=1 numeric column and >1 row)";
+        }
+        if (markLineValue != null && !markLineValue.isBlank()) {
+            try {
+                double v = Double.parseDouble(markLineValue.trim().replace(",", ""));
+                ChartBuilder.applyMarkLine(chart.option(), v, markLineLabel);
+            } catch (NumberFormatException e) {
+                // ignore unparsable target; chart still renders without the line
+            }
         }
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("chart", "echarts");

@@ -19,6 +19,16 @@ package io.agentscope.dataagent.dataset;
  * Per-request tenant identity carried in the agent {@code RuntimeContext} and auto-injected into
  * data-tool methods. Users do not pick datasets up front: the agent lists everything this owner
  * may see (via {@code list_data_sources}) and chooses, so the scope only needs to pin {@code
- * ownerId} for isolation.
+ * ownerId} for isolation. {@code groupIds} optionally narrows the visible datasets to one or more
+ * knowledge bases (TC-style "answer within selected KBs"); null/empty means all of the owner's KBs.
  */
-public record DatasetScope(String ownerId) {}
+public record DatasetScope(String ownerId, java.util.List<String> groupIds) {
+
+    public DatasetScope(String ownerId) {
+        this(ownerId, null);
+    }
+
+    public boolean hasGroupFilter() {
+        return groupIds != null && !groupIds.isEmpty();
+    }
+}

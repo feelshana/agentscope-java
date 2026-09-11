@@ -3,6 +3,7 @@ import { getToken } from './auth';
 export interface ChatRequest {
   message: string;
   sessionKey?: string;
+  groupIds?: string[];
 }
 
 export interface ChatEvent {

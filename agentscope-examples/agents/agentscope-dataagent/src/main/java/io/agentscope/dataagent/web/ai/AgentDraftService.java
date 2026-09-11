@@ -59,6 +59,9 @@ public class AgentDraftService {
                     + " {name,content}). User description: {{DESCRIPTION}}. Output JSON only.";
     private static final Duration CALL_TIMEOUT = Duration.ofSeconds(60);
 
+    /** Longer budget for generic blocking chats (e.g. graph extraction) that return large JSON. */
+    private static final Duration CHAT_TIMEOUT = Duration.ofSeconds(180);
+
     private final Model model;
     private final ObjectMapper mapper = new ObjectMapper();
     private final String promptTemplate;
@@ -117,7 +120,7 @@ public class AgentDraftService {
                         .content(TextBlock.builder().text(prompt).build())
                         .build();
 
-        return Mono.fromCallable(() -> callModelBlocking(userMsg))
+        return Mono.fromCallable(() -> callModelBlocking(userMsg, CALL_TIMEOUT))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(this::parseDraft);
     }
@@ -126,10 +129,10 @@ public class AgentDraftService {
      * Subscribes to the model's streaming response and concatenates every emitted text block into a
      * single string. Blocks the caller until the stream completes or the timeout elapses.
      */
-    private String callModelBlocking(Msg userMsg) {
+    private String callModelBlocking(Msg userMsg, Duration timeout) {
         try {
             List<ChatResponse> responses =
-                    model.stream(List.of(userMsg), null, null).collectList().block(CALL_TIMEOUT);
+                    model.stream(List.of(userMsg), null, null).collectList().block(timeout);
             if (responses == null || responses.isEmpty()) {
                 throw new ResponseStatusException(
                         HttpStatus.BAD_GATEWAY, "Model returned no response");
@@ -201,5 +204,45 @@ public class AgentDraftService {
             }
         }
         return trimmed;
+    }
+
+    /** True when a chat {@link Model} bean is configured (i.e. AI features are usable). */
+    public boolean modelAvailable() {
+        return model != null;
+    }
+
+    /**
+     * Sends a single user prompt to the configured model and returns the concatenated text reply.
+     * Blocks the calling thread; intended to be run on a bounded-elastic scheduler. Throws 503 when
+     * no model is configured and 502 on empty/failed model responses.
+     */
+    public String chatBlocking(String prompt) {
+        if (model == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE, "AI not available — configure a model");
+        }
+        Msg userMsg =
+                Msg.builder()
+                        .role(MsgRole.USER)
+                        .content(TextBlock.builder().text(prompt).build())
+                        .build();
+        return callModelBlocking(userMsg, CHAT_TIMEOUT);
+    }
+
+    /**
+     * Returns the outermost JSON object embedded in a raw model reply (strips code fences and
+     * surrounding prose). Throws 502 when no JSON object can be located.
+     */
+    public String extractJsonObject(String raw) {
+        String stripped = stripCodeFence(raw).trim();
+        int firstBrace = stripped.indexOf('{');
+        int lastBrace = stripped.lastIndexOf('}');
+        if (firstBrace < 0 || lastBrace <= firstBrace) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "Model returned non-JSON output: "
+                            + (raw.length() > 500 ? raw.substring(0, 500) + "..." : raw));
+        }
+        return stripped.substring(firstBrace, lastBrace + 1);
     }
 }

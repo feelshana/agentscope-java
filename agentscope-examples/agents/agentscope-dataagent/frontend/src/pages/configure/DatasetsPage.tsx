@@ -200,6 +200,23 @@ export default function DatasetsPage() {
               <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a', flex: 1 }}>
                 {g.name}
               </span>
+              <button
+                title="基于该知识库问答"
+                style={{
+                  background: '#fff',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 6,
+                  padding: '2px 8px',
+                  fontSize: '0.78rem',
+                  cursor: 'pointer',
+                }}
+                onClick={ev => {
+                  ev.stopPropagation();
+                  navigate(`/chat?groups=${encodeURIComponent(g.id)}`);
+                }}
+              >
+                💬 问答
+              </button>
               <button style={dangerStyle} onClick={ev => handleDelete(g.id, ev)} disabled={busy}>
                 删除
               </button>

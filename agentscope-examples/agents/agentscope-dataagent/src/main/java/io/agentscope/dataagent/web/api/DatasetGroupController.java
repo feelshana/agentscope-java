@@ -19,6 +19,7 @@ import io.agentscope.dataagent.dataset.DatasetException;
 import io.agentscope.dataagent.dataset.DatasetGroupService;
 import io.agentscope.dataagent.dataset.DatasetService;
 import io.agentscope.dataagent.dataset.GraphDto;
+import io.agentscope.dataagent.dataset.KnowledgeGraphService;
 import io.agentscope.dataagent.dataset.SchemaRelationInferrer;
 import io.agentscope.dataagent.dataset.parser.DocxDescriptionExtractor;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity;
@@ -62,10 +63,15 @@ public class DatasetGroupController {
 
     private final DatasetGroupService groupService;
     private final DatasetService datasetService;
+    private final KnowledgeGraphService knowledgeGraphService;
 
-    public DatasetGroupController(DatasetGroupService groupService, DatasetService datasetService) {
+    public DatasetGroupController(
+            DatasetGroupService groupService,
+            DatasetService datasetService,
+            KnowledgeGraphService knowledgeGraphService) {
         this.groupService = groupService;
         this.datasetService = datasetService;
+        this.knowledgeGraphService = knowledgeGraphService;
     }
 
     public record GroupVO(
@@ -152,6 +158,12 @@ public class DatasetGroupController {
                                                     String text =
                                                             extractText(file.filename(), bytes);
                                                     datasetService.saveKnowledge(id, text);
+                                                    try {
+                                                        knowledgeGraphService.triggerBuild(
+                                                                userId, id, true, null);
+                                                    } catch (RuntimeException ignore) {
+                                                        // already running or no model configured
+                                                    }
                                                     return Map.of("content", text);
                                                 })
                                         .subscribeOn(Schedulers.boundedElastic()))

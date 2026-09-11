@@ -26,6 +26,9 @@ public interface DatasetContextProvider {
     /** Free-text relationship/knowledge note for the owner, or empty when none was uploaded. */
     String relationshipsText(String ownerId);
 
+    /** Same as {@link #relationshipsText(String)} but limited to the given knowledge-base ids. */
+    String relationshipsText(String ownerId, java.util.List<String> onlyGroups);
+
     /** Global business-term dictionary text (term → explanation/synonyms), or empty. */
     String semanticTermsText();
 
@@ -34,4 +37,7 @@ public interface DatasetContextProvider {
      * owner, as human-readable lines plus suggested JOIN fragments; empty when none.
      */
     String relationsFor(String ownerId, String table);
+
+    /** Same as {@link #relationsFor(String, String)} but limited to the given knowledge-base ids. */
+    String relationsFor(String ownerId, String table, java.util.List<String> onlyGroups);
 }

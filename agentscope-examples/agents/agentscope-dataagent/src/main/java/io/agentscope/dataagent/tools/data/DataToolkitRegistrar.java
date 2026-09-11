@@ -16,8 +16,10 @@
 package io.agentscope.dataagent.tools.data;
 
 import io.agentscope.dataagent.dataset.DatasetContextProvider;
+import io.agentscope.dataagent.dataset.KnowledgeGraphService;
 import io.agentscope.dataagent.runtime.DataAgentBootstrap;
 import io.agentscope.dataagent.web.persistence.jpa.ChartOptionRepository;
+import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
 import io.agentscope.harness.agent.HarnessAgent;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
@@ -43,18 +45,24 @@ public class DataToolkitRegistrar {
     private final SqlConnector sqlConnector;
     private final DatasetContextProvider contextProvider;
     private final ChartOptionRepository chartOptions;
+    private final KnowledgeGraphService knowledgeGraph;
+    private final ConversationScopeRegistry conversationScopes;
 
     public DataToolkitRegistrar(
             DataAgentBootstrap bootstrap,
             DataSourceRegistry registry,
             SqlConnector sqlConnector,
             DatasetContextProvider contextProvider,
-            ChartOptionRepository chartOptions) {
+            ChartOptionRepository chartOptions,
+            KnowledgeGraphService knowledgeGraph,
+            ConversationScopeRegistry conversationScopes) {
         this.bootstrap = bootstrap;
         this.registry = registry;
         this.sqlConnector = sqlConnector;
         this.contextProvider = contextProvider;
         this.chartOptions = chartOptions;
+        this.knowledgeGraph = knowledgeGraph;
+        this.conversationScopes = conversationScopes;
     }
 
     @PostConstruct
@@ -75,7 +83,12 @@ public class DataToolkitRegistrar {
                     .getToolkit()
                     .registerTool(
                             new DataAgentToolkit(
-                                    registry, sqlConnector, contextProvider, chartOptions));
+                                    registry,
+                                    sqlConnector,
+                                    contextProvider,
+                                    chartOptions,
+                                    knowledgeGraph,
+                                    conversationScopes));
             log.info("Registered DataAgent toolkit onto main agent '{}'", main.getName());
         } catch (RuntimeException e) {
             log.warn("Failed to register DataAgent toolkit onto main agent: {}", e.getMessage());
