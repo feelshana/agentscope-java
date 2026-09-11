@@ -31,6 +31,7 @@ import io.agentscope.harness.agent.workspace.WorkspaceManager;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -122,6 +123,7 @@ public class SessionController {
                                         e.sessionId(),
                                         e.agentId(),
                                         extractConversationId(e.gateKey()),
+                                        firstUserTitle(agentId, e),
                                         e.label(),
                                         e.lastActivityMs(),
                                         preview,
@@ -175,8 +177,36 @@ public class SessionController {
         return Mono.fromRunnable(
                 () -> {
                     SessionEntry entry = requireOwnedSession(agentId, key, userId);
+                    deleteTranscriptFiles(entry);
                     sessionAgentManager.removeSession(entry.sessionKey());
                 });
+    }
+
+    /**
+     * Removes a session's on-disk transcripts. Without this the boot-time {@link
+     * SessionIndexReconciler} would re-register any leftover {@code .log.jsonl} and deleted
+     * conversations would come back after a restart.
+     */
+    private void deleteTranscriptFiles(SessionEntry entry) {
+        String path = entry.sessionFilePath();
+        if (path == null || path.isBlank()) {
+            return;
+        }
+        try {
+            Path transcript = Paths.get(path);
+            Files.deleteIfExists(transcript);
+            String name = transcript.getFileName().toString();
+            if (name.endsWith(".log.jsonl")) {
+                Files.deleteIfExists(
+                        transcript.resolveSibling(
+                                name.substring(0, name.length() - ".log".length())));
+            }
+        } catch (Exception e) {
+            log.warn(
+                    "Failed to delete transcript for session {}: {}",
+                    entry.sessionKey(),
+                    e.getMessage());
+        }
     }
 
     // -----------------------------------------------------------------
@@ -289,6 +319,32 @@ public class SessionController {
                     String trimmed = t.content().trim();
                     return trimmed.length() > 200 ? trimmed.substring(0, 200) + "…" : trimmed;
                 }
+            }
+        } catch (Exception ignored) {
+            // fall through
+        }
+        return null;
+    }
+
+    /**
+     * The first USER message of a session, truncated — used as the sidebar conversation title so
+     * history entries read like the question that started them instead of an opaque session id.
+     */
+    private String firstUserTitle(String agentId, SessionEntry entry) {
+        try {
+            String content = readSessionLogContent(agentId, entry);
+            if (content == null || content.isEmpty()) {
+                return null;
+            }
+            for (SessionTurnParser.TurnEntry t : SessionTurnParser.parse(content)) {
+                if (!"USER".equalsIgnoreCase(t.role())) {
+                    continue;
+                }
+                if (t.content() == null || t.content().isBlank()) {
+                    continue;
+                }
+                String trimmed = t.content().trim().replaceAll("\\s+", " ");
+                return trimmed.length() > 40 ? trimmed.substring(0, 40) + "…" : trimmed;
             }
         } catch (Exception ignored) {
             // fall through
@@ -480,6 +536,7 @@ public class SessionController {
             String sessionId,
             String agentId,
             String conversationId,
+            String title,
             String label,
             long lastActivityMs,
             String lastMessage,

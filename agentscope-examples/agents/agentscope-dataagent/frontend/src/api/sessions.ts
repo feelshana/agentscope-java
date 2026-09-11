@@ -17,6 +17,8 @@ export interface InboxEntry {
    * (which the backend will also accept on session-management endpoints).
    */
   conversationId: string | null;
+  /** First user question of the conversation, used as the sidebar title. */
+  title: string | null;
   label: string | null;
   lastActivityMs: number;
   lastMessage: string | null;
