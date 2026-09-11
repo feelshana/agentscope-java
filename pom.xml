@@ -61,7 +61,6 @@
         <module>agentscope-examples</module>
         <module>agentscope-dependencies-bom</module>
         <module>agentscope-distribution</module>
-        <module>data-agent</module>
     </modules>
 
     <description>AgentScope Java: Agent-Oriented Programming for Building LLM Applications</description>

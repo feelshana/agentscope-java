@@ -17,10 +17,13 @@ package io.agentscope.dataagent.web.api;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.AgentEvent;
 import io.agentscope.core.event.TextBlockDeltaEvent;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
+import io.agentscope.core.model.Model;
+import io.agentscope.dataagent.dataset.DatasetScope;
 import io.agentscope.dataagent.runtime.DataAgentBootstrap;
 import io.agentscope.dataagent.runtime.session.SessionAgentManager;
 import io.agentscope.dataagent.runtime.session.SessionEntry;
@@ -30,6 +33,7 @@ import io.agentscope.dataagent.web.audit.AgentActivityStore;
 import io.agentscope.dataagent.web.catalog.AgentCatalogService;
 import io.agentscope.dataagent.web.catalog.AgentDefinition;
 import io.agentscope.dataagent.web.identity.IdentityLinkStore;
+import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
 import io.agentscope.dataagent.web.share.AgentAccessGuard;
 import io.agentscope.dataagent.web.share.AgentAclService.Tier;
 import io.agentscope.dataagent.web.toolbus.ToolEventBus;
@@ -48,6 +52,8 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.security.core.Authentication;
@@ -57,6 +63,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
@@ -81,6 +88,10 @@ public class ChatController {
     private static final Logger log = LoggerFactory.getLogger(ChatController.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+    private static final String NO_MODEL_MESSAGE =
+            "未配置模型 API key：请设置环境变量 DASHSCOPE_API_KEY（或 DATAAGENT_OPENAI_API_KEY /"
+                    + " dataagent.openai.api-key）后重启应用，再发起问数";
+
     private final ChatUiChannel chatUiChannel;
     private final SessionAgentManager sessionAgentManager;
     private final AgentCatalogService catalogService;
@@ -89,6 +100,8 @@ public class ChatController {
     private final ToolEventBus toolEventBus;
     private final AgentAccessGuard guard;
     private final AgentActivityStore activity;
+    private final ObjectProvider<Model> modelProvider;
+    private final ConversationScopeRegistry conversationScopes;
 
     /**
      * AgentStateStore keys for which we have already recorded a RUN_SESSION event. Each (userId, agentId)
@@ -105,7 +118,9 @@ public class ChatController {
             UsageStore usageStore,
             ToolEventBus toolEventBus,
             AgentAccessGuard guard,
-            AgentActivityStore activity) {
+            AgentActivityStore activity,
+            ObjectProvider<Model> modelProvider,
+            ConversationScopeRegistry conversationScopes) {
         this.chatUiChannel = chatUiChannel;
         this.sessionAgentManager = builderBootstrap.gateway().sessionAgentManager();
         this.catalogService = catalogService;
@@ -114,6 +129,8 @@ public class ChatController {
         this.toolEventBus = toolEventBus;
         this.guard = guard;
         this.activity = activity;
+        this.modelProvider = modelProvider;
+        this.conversationScopes = conversationScopes;
     }
 
     /**
@@ -123,7 +140,7 @@ public class ChatController {
      * ChatGPT-style sessions for the same (userId, agentId) pair. {@code null}/blank requests collapse
      * to the legacy single-session behaviour by deferring to the gateway's deterministic key.
      */
-    public record ChatRequest(String message, String sessionKey) {}
+    public record ChatRequest(String message, String sessionKey, java.util.List<String> groupIds) {}
 
     /** Response for the synchronous endpoint. */
     public record ChatResponse(String reply, String sessionKey) {}
@@ -156,6 +173,9 @@ public class ChatController {
             @PathVariable String agentId, @RequestBody ChatRequest req, Authentication auth) {
         String userId = (String) auth.getPrincipal();
         AgentDefinition def = guard.require(userId, agentId, Tier.RUN);
+        if (modelProvider.getIfAvailable() == null) {
+            return Flux.just(sse("error", Map.of("type", "error", "error", NO_MODEL_MESSAGE)));
+        }
         // If the caller did not pin a conversation, mint one server-side so the gateKey stays
         // stable across turns and the FE can persist the URL session.
         String conversationId = normalizedConversationId(req.sessionKey());
@@ -202,7 +222,12 @@ public class ChatController {
         doneFrame.put("sessionKey", resolvedConversationId);
 
         Flux<ServerSentEvent<String>> agentEvents =
-                executeChatStream(userId, agentId, req.message(), resolvedConversationId)
+                executeChatStream(
+                                userId,
+                                agentId,
+                                req.message(),
+                                resolvedConversationId,
+                                req.groupIds())
                         .filter(event -> event instanceof TextBlockDeltaEvent)
                         .map(
                                 event ->
@@ -270,6 +295,10 @@ public class ChatController {
             @PathVariable String agentId, @RequestBody ChatRequest req, Authentication auth) {
         String userId = (String) auth.getPrincipal();
         AgentDefinition def = guard.require(userId, agentId, Tier.RUN);
+        if (modelProvider.getIfAvailable() == null) {
+            return Mono.error(
+                    new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, NO_MODEL_MESSAGE));
+        }
         String conversationId = normalizedConversationId(req.sessionKey());
         if (conversationId == null) {
             conversationId = UUID.randomUUID().toString();
@@ -286,7 +315,7 @@ public class ChatController {
                                     ? cmd.newSessionKey
                                     : resolvedConversationId));
         }
-        return executeChat(userId, agentId, req.message(), resolvedConversationId)
+        return executeChat(userId, agentId, req.message(), resolvedConversationId, req.groupIds())
                 .map(
                         reply -> {
                             String text =
@@ -548,16 +577,28 @@ public class ChatController {
      * pure binding-driven routing: the chatui channel's default agent or matching binding wins.
      */
     private InboundMessage buildInbound(
-            String userId, String agentId, String message, String conversationId) {
+            String userId,
+            String agentId,
+            String message,
+            String conversationId,
+            java.util.List<String> groupIds) {
         List<Msg> msgs = shapeInboundMessages(message);
+        conversationScopes.put(conversationId, groupIds);
+        RuntimeContext runtimeContext =
+                RuntimeContext.builder()
+                        .userId(userId)
+                        .put(DatasetScope.class, new DatasetScope(userId, groupIds))
+                        .build();
         if (agentId == null || agentId.isBlank()) {
-            return InboundMessage.dm(ChatUiChannel.CHANNEL_ID, userId, List.copyOf(msgs));
+            return InboundMessage.dm(ChatUiChannel.CHANNEL_ID, userId, List.copyOf(msgs))
+                    .withRuntimeContext(runtimeContext);
         }
         String gatewayAgentId = catalogService.resolveGatewayAgentId(userId, agentId);
         return InboundMessage.builder(
                         ChatUiChannel.CHANNEL_ID, Peer.direct(userId), List.copyOf(msgs))
                 .preferredAgentId(gatewayAgentId)
                 .accountId(conversationId)
+                .runtimeContext(runtimeContext)
                 .build();
     }
 
@@ -566,9 +607,13 @@ public class ChatController {
      * {@link #send} endpoint which does not need incremental text streaming.
      */
     private Mono<Msg> executeChat(
-            String userId, String agentId, String message, String conversationId) {
+            String userId,
+            String agentId,
+            String message,
+            String conversationId,
+            java.util.List<String> groupIds) {
         long startMs = System.currentTimeMillis();
-        InboundMessage inbound = buildInbound(userId, agentId, message, conversationId);
+        InboundMessage inbound = buildInbound(userId, agentId, message, conversationId, groupIds);
         final String recordedAgentId = agentId != null ? agentId : "(default)";
         return chatUiChannel
                 .dispatch(inbound)
@@ -587,9 +632,13 @@ public class ChatController {
      * frontend can render tokens as they arrive from the model.
      */
     private Flux<AgentEvent> executeChatStream(
-            String userId, String agentId, String message, String conversationId) {
+            String userId,
+            String agentId,
+            String message,
+            String conversationId,
+            java.util.List<String> groupIds) {
         long startMs = System.currentTimeMillis();
-        InboundMessage inbound = buildInbound(userId, agentId, message, conversationId);
+        InboundMessage inbound = buildInbound(userId, agentId, message, conversationId, groupIds);
         final String recordedAgentId = agentId != null ? agentId : "(default)";
         return chatUiChannel
                 .dispatchStream(inbound)

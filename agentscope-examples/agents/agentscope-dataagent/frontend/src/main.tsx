@@ -12,6 +12,10 @@ import SkillsPage from './pages/configure/SkillsPage';
 import SubagentsPage from './pages/configure/SubagentsPage';
 import ChannelsPage from './pages/configure/ChannelsPage';
 import ToolsPage from './pages/configure/ToolsPage';
+import DatasetsPage from './pages/configure/DatasetsPage';
+import DatasetGroupPage from './pages/configure/DatasetGroupPage';
+import DatasetDetailPage from './pages/configure/DatasetDetailPage';
+import SemanticConfigPage from './pages/configure/SemanticConfigPage';
 import SettingsPage from './pages/configure/SettingsPage';
 
 import ProfilePage from './pages/ProfilePage';
@@ -79,6 +83,14 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="/configure/subagents" element={<EditTierGate><SubagentsPage /></EditTierGate>} />
           <Route path="/configure/channels"  element={<EditTierGate><ChannelsPage /></EditTierGate>} />
           <Route path="/configure/tools"     element={<EditTierGate><ToolsPage /></EditTierGate>} />
+          {/* Datasets are per-user data, not agent config — no EDIT-tier gate. */}
+          <Route path="/configure/datasets"  element={<DatasetsPage />} />
+          <Route path="/configure/datasets/:groupId" element={<DatasetGroupPage />} />
+          <Route path="/configure/semantic"  element={<SemanticConfigPage />} />
+          <Route
+            path="/configure/datasets/:groupId/table/:datasetId"
+            element={<DatasetDetailPage />}
+          />
           <Route path="/configure/settings"  element={<EditTierGate><SettingsPage /></EditTierGate>} />
 
           {/* User utility pages */}

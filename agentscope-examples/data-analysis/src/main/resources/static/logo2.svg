@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="22px" height="22px" viewBox="0 0 22 22" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>logo2</title>
+    <defs>
+        <linearGradient x1="50%" y1="76.9577359%" x2="31.5960253%" y2="0%" id="linearGradient-1">
+            <stop stop-color="#2E58F7" offset="0%"></stop>
+            <stop stop-color="#00CBFC" offset="100%"></stop>
+        </linearGradient>
+    </defs>
+    <g id="页面-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="2-・-Small" transform="translate(-558, -553)">
+            <g id="logo2" transform="translate(558, 553)">
+                <rect id="矩形" stroke="#FFFFFF" fill="#FFFFFF" x="0.5" y="0.5" width="21" height="21" rx="4"></rect>
+                <g transform="translate(5, 3)" fill="url(#linearGradient-1)" id="形状">
+                    <path d="M1,5.96733911 L4.99803067,9.49317142 L4.7053422,13.8950576 L3.21049157,14.7972052 C2.98746288,14.9255039 2.73408116,15 2.48069944,15 C2.22731772,15 1.97261632,14.9351608 1.74034972,14.7972052 C1.28332302,14.5220301 1.00118988,14.0131305 1,13.4617944 L1,5.96733911 Z M9.06715829,4.73782976 L12.2596503,6.6647187 C12.7162652,6.94063005 13,7.44830686 13,8.00012956 C13,8.55195227 12.7162652,9.06100861 12.26097,9.33691996 L6.34815097,12.9037135 L6.59139638,9.24400805 L9.06715829,4.73782976 Z M3.21049157,1.20305396 L7.70296295,3.91449084 L5.62743719,7.69252048 L1.0252031,3.6343975 L1,3.66532747 L1,2.53846475 C1.00225816,1.98906035 1.28343214,1.48223378 1.73847879,1.20732922 C2.19352544,0.932424663 2.75399068,0.930796866 3.21049157,1.20305396 Z"></path>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>

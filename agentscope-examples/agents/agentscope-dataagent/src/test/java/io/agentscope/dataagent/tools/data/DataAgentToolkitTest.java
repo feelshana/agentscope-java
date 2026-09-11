@@ -17,6 +17,8 @@ package io.agentscope.dataagent.tools.data;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.agentscope.core.agent.RuntimeContext;
+import io.agentscope.dataagent.dataset.DatasetScope;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeAll;
@@ -25,9 +27,14 @@ import org.junit.jupiter.api.Test;
 /**
  * Verifies the four agent-facing tools of {@link DataAgentToolkit} against a real H2 connection
  * (no Spring context): the happy path for each tool plus the guard rails — unknown source ids,
- * the SELECT/WITH gate, and unsupported source kinds.
+ * the SELECT/WITH gate, unsupported source kinds, per-user dataset scoping, and cross-tenant
+ * table-reference rejection. The injected {@link RuntimeContext} is {@code null} here (unit level);
+ * owner resolution then relies on the typed {@link DatasetScope}.
  */
 class DataAgentToolkitTest {
+
+    private static final DatasetScope SCOPE = new DatasetScope("tester");
+    private static final RuntimeContext RC = null;
 
     private static DataAgentToolkit toolkit;
 
@@ -37,13 +44,12 @@ class DataAgentToolkitTest {
         toolkit =
                 new DataAgentToolkit(
                         new InMemoryDataSourceRegistry(List.of(TenantTablesFixture.demoSource())),
-                        new JdbcSqlConnector(),
-                        new StubChartRenderer());
+                        new JdbcSqlConnector());
     }
 
     @Test
     void listsConfiguredSources() {
-        assertThat(toolkit.listDataSources())
+        assertThat(toolkit.listDataSources(SCOPE, RC))
                 .contains("demo-db | jdbc | Demo analytics DB")
                 .contains("tenant_storage_utilization")
                 .contains("(demo,h2)");
@@ -53,23 +59,21 @@ class DataAgentToolkitTest {
     void listsNoSourcesGracefully() {
         DataAgentToolkit empty =
                 new DataAgentToolkit(
-                        new InMemoryDataSourceRegistry(List.of()),
-                        new JdbcSqlConnector(),
-                        new StubChartRenderer());
+                        new InMemoryDataSourceRegistry(List.of()), new JdbcSqlConnector());
 
-        assertThat(empty.listDataSources()).startsWith("none:");
+        assertThat(empty.listDataSources(SCOPE, RC)).startsWith("none:");
     }
 
     @Test
     void describesTableForKnownSource() {
-        assertThat(toolkit.describeTable("demo-db", "tenant_storage_utilization"))
+        assertThat(toolkit.describeTable(SCOPE, RC, "demo-db", "tenant_storage_utilization"))
                 .contains("30 rows");
     }
 
     @Test
     void describeTableRejectsUnknownSource() {
-        assertThat(toolkit.describeTable("nope", "tenant_storage_utilization"))
-                .isEqualTo("error: unknown source_id 'nope'");
+        assertThat(toolkit.describeTable(SCOPE, RC, "nope", "tenant_storage_utilization"))
+                .isEqualTo("error: unknown or not permitted source_id 'nope'");
     }
 
     @Test
@@ -79,10 +83,9 @@ class DataAgentToolkitTest {
         DataAgentToolkit httpOnly =
                 new DataAgentToolkit(
                         new InMemoryDataSourceRegistry(List.of(httpSource)),
-                        new JdbcSqlConnector(),
-                        new StubChartRenderer());
+                        new JdbcSqlConnector());
 
-        assertThat(httpOnly.describeTable("api", "orders"))
+        assertThat(httpOnly.describeTable(SCOPE, RC, "api", "orders"))
                 .isEqualTo("error: no SQL connector available for source kind 'http'");
     }
 
@@ -90,8 +93,10 @@ class DataAgentToolkitTest {
     void runsSqlPreview() {
         String out =
                 toolkit.runSqlPreview(
+                        SCOPE,
+                        RC,
                         "demo-db",
-                        "SELECT COUNT(*) AS cnt FROM tenant_storage_utilization",
+                        "SELECT COUNT(*) AS n FROM tenant_storage_utilization",
                         null,
                         null);
 
@@ -103,12 +108,19 @@ class DataAgentToolkitTest {
     void runSqlPreviewRejectsNonSelect() {
         assertThat(
                         toolkit.runSqlPreview(
-                                "demo-db", "DELETE FROM tenant_storage_utilization", null, null))
+                                SCOPE,
+                                RC,
+                                "demo-db",
+                                "DELETE FROM tenant_storage_utilization",
+                                null,
+                                null))
                 .isEqualTo("error: only SELECT / WITH statements are allowed");
         assertThat(
                         toolkit.runSqlPreview(
+                                SCOPE,
+                                RC,
                                 "demo-db",
-                                "INSERT INTO tenant_storage_utilization VALUES (1)",
+                                "INSERT INTO project_info VALUES (1,'x','y')",
                                 null,
                                 null))
                 .isEqualTo("error: only SELECT / WITH statements are allowed");
@@ -116,20 +128,137 @@ class DataAgentToolkitTest {
 
     @Test
     void runSqlPreviewRejectsUnknownSource() {
-        assertThat(toolkit.runSqlPreview("nope", "SELECT 1", null, null))
-                .isEqualTo("error: unknown source_id 'nope'");
+        assertThat(toolkit.runSqlPreview(SCOPE, RC, "nope", "SELECT 1", null, null))
+                .isEqualTo("error: unknown or not permitted source_id 'nope'");
     }
 
     @Test
-    void renderChartEchoesStubStatus() {
-        String out = toolkit.renderChart("bar", "{\"mark\":\"bar\",\"data\":{\"values\":[]}}");
+    void scopesUserDatasetsToOwner() {
+        DataSource mine =
+                new DataSource(
+                        "ds1",
+                        "Mine",
+                        null,
+                        "jdbc",
+                        null,
+                        List.of("user-dataset"),
+                        Map.of("jdbcUrl", "jdbc:h2:mem:unused", "ownerId", "bob"));
+        DataAgentToolkit scoped =
+                new DataAgentToolkit(
+                        new InMemoryDataSourceRegistry(
+                                List.of(mine, TenantTablesFixture.demoSource())),
+                        new JdbcSqlConnector());
 
-        assertThat(out).contains("ok: chart spec accepted");
-        assertThat(out).contains("type=bar");
+        assertThat(scoped.listDataSources(new DatasetScope("bob"), RC)).contains("ds1");
+        assertThat(scoped.listDataSources(new DatasetScope("alice"), RC)).doesNotContain("ds1");
+        // No scope and no RuntimeContext userId (non-chat channel) exposes globals only.
+        assertThat(scoped.listDataSources(null, RC)).doesNotContain("ds1").contains("demo-db");
     }
 
     @Test
-    void renderChartRejectsEmptySpec() {
-        assertThat(toolkit.renderChart("bar", " ")).isEqualTo("error: vega-lite spec is empty");
+    void fallsBackToRuntimeContextUserIdWhenTypedScopeAbsent() {
+        DataSource mine =
+                new DataSource(
+                        "ds1",
+                        "Mine",
+                        null,
+                        "jdbc",
+                        null,
+                        List.of("user-dataset"),
+                        Map.of("jdbcUrl", "jdbc:h2:mem:unused", "ownerId", "bob"));
+        DataAgentToolkit scoped =
+                new DataAgentToolkit(
+                        new InMemoryDataSourceRegistry(
+                                List.of(mine, TenantTablesFixture.demoSource())),
+                        new JdbcSqlConnector());
+        RuntimeContext baked = RuntimeContext.builder().userId("bob").sessionId("s").build();
+
+        // Harness out-of-band tool execution supplies a baked context (userId only, no typed
+        // attributes); the toolkit must still resolve the owner from it.
+        assertThat(scoped.listDataSources(null, baked)).contains("ds1");
+    }
+
+    @Test
+    void blocksCrossTenantTableReference() {
+        DataSource mine =
+                new DataSource(
+                        "ds1",
+                        "Mine",
+                        null,
+                        "jdbc",
+                        null,
+                        List.of("user-dataset"),
+                        Map.of(
+                                "jdbcUrl", "jdbc:mysql://127.0.0.1:3306/data_agent",
+                                "username", "u",
+                                "password", "p",
+                                "ownerId", "bob",
+                                "tableName", "ds_bob0000_11111111_orders"));
+        DataAgentToolkit tk =
+                new DataAgentToolkit(
+                        new InMemoryDataSourceRegistry(List.of(mine)), new JdbcSqlConnector());
+        DatasetScope bob = new DatasetScope("bob");
+
+        assertThat(
+                        tk.runSqlPreview(
+                                bob,
+                                RC,
+                                "ds1",
+                                "SELECT * FROM ds_alice00_22222222_orders",
+                                null,
+                                null))
+                .isEqualTo(
+                        "error: query references a dataset table you do not own:"
+                                + " ds_alice00_22222222_orders");
+        // Own table passes the guard; any failure afterwards is a connection error, not the guard.
+        assertThat(
+                        tk.runSqlPreview(
+                                bob,
+                                RC,
+                                "ds1",
+                                "SELECT * FROM ds_bob0000_11111111_orders",
+                                null,
+                                null))
+                .doesNotStartWith("error: query references a dataset table you do not own");
+        // Non-ds_ tables (shared analytics content) are not affected by the guard.
+        assertThat(tk.runSqlPreview(bob, RC, "ds1", "SELECT * FROM project_info", null, null))
+                .doesNotStartWith("error: query references a dataset table you do not own");
+    }
+
+    @Test
+    void renderChartBuildsDeterministicOption() {
+        String out =
+                toolkit.renderChart(
+                        "分析下云南省 30 天走势",
+                        List.of("dt", "cnt"),
+                        List.of(
+                                List.of("2026-09-01", "10"),
+                                List.of("2026-09-02", "12"),
+                                List.of("2026-09-03", "11")),
+                        null,
+                        null);
+
+        assertThat(out).contains("\"chart\":\"echarts\"");
+        assertThat(out).contains("\"chartType\":\"line\"");
+        assertThat(out).contains("\"series\"");
+    }
+
+    @Test
+    void renderChartAppliesTargetMarkLine() {
+        String out =
+                toolkit.renderChart(
+                        "活跃用户趋势",
+                        List.of("dt", "cnt"),
+                        List.of(List.of("2026-09-01", "10"), List.of("2026-09-02", "12")),
+                        "20",
+                        "日均目标");
+        assertThat(out).contains("markLine");
+        assertThat(out).contains("日均目标");
+    }
+
+    @Test
+    void renderChartRejectsUnchartableData() {
+        assertThat(toolkit.renderChart("q", List.of("a"), List.of(List.of("x")), null, null))
+                .startsWith("error:");
     }
 }

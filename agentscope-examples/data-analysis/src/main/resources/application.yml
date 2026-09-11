@@ -1,0 +1,88 @@
+# Copyright 2024-2026 the original author or authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Active profile: dev（本地开发）or prod（线上生产）
+# 线上部署时通过启动参数覆盖：java -jar xxx.jar --spring.profiles.active=prod
+spring:
+  profiles:
+    active: dev
+  codec:
+    max-in-memory-size: 10MB
+  # Flyway – disabled here; migration is triggered manually in MybatisConfig
+  flyway:
+    enabled: false
+  # 禁用静态资源缓存，开发期间强制每次从磁盘读取（生产可删除此段）
+  web:
+    resources:
+      cache:
+        period: 0
+        cachecontrol:
+          no-cache: true
+          no-store: true
+
+server:
+  port: 7081
+
+# MyBatis-Plus configuration
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+  global-config:
+    db-config:
+      id-type: assign_uuid
+
+# Chat session memory settings
+chat:
+  session:
+    # Max token count before triggering summary compression (approx chars / 4)
+    max-history-tokens: 8000
+    # How many recent messages to keep verbatim after compression
+    keep-recent-messages: 6
+
+logging:
+  level:
+    io.agentscope: INFO
+    io.agentscope.examples.dataanalysis: INFO
+agent:
+  # 当前使用的系统提示词文件名，文件须放在 resources/prompts/ 目录下
+  system-prompt-file: prompt-V10.txt
+
+# 数据集目录缓存配置
+dataset:
+  catalogue:
+    # detail 信息文件路径（classpath 相对路径），作为初始兜底内容打包在 JAR 内
+    detail-file: prompts/dataset-detail.txt
+    # detail 外部文件路径（磁盘绝对路径或相对于工作目录的路径）
+    # 启动时优先从此文件读取，API 刷新后也写回此文件，保证重启后能获取最新内容
+    # 线上部署建议设为 JAR 外的绝对路径，如：/opt/app/prompts/dataset-detail.txt
+    # 留空则自动从 detail-file 推导（开发环境用 classpath 路径，JAR 环境用 ./prompts/dataset-detail.txt）
+    detail-file-path: /data/app/dataAnalysis/data-analysis-1.0.10-SNAPSHOT/conf/prompts/dataset-detail.txt
+    # 是否将 detail 内容注入到系统提示词（维度、指标、维度值定义）
+    include-detail: false
+
+# 阿里云 NLS 一句话识别配置
+# 请在 application-dev.yml（或环境变量）中填写真实值
+aliyun:
+  nls:
+    # 控制台 -> 智能语音交互 -> 项目管理 -> Appkey
+    app-key: ${ALIYUN_NLS_APP_KEY:}
+    # RAM 账号的 AccessKey ID
+    access-key-id: ${ALIYUN_AK_ID:}
+    # RAM 账号的 AccessKey Secret
+    access-key-secret: ${ALIYUN_AK_SECRET:}
+    # NLS Token 服务地址（固定）
+    token-url: https://nls-meta.cn-shanghai.aliyuncs.com/
+    # 一句话识别地址
+    asr-url: https://nls-gateway-cn-shanghai.aliyuncs.com/stream/v1/asr

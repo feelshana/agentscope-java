@@ -111,6 +111,12 @@
             <version>3.47.2.0</version>
         </dependency>
 
+        <!-- Apache POI: parse uploaded .xlsx datasets and .docx descriptions (version managed by BOM) -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+        </dependency>
+
         <!-- Spring Boot WebFlux (reactive HTTP + SSE) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

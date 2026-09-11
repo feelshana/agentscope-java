@@ -1,0 +1,3969 @@
+<!--
+  ~ Copyright 2024-2026 the original author or authors.
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~     http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+-->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>红海App智能助手</title>
+    <!-- ECharts 图表库（本地，避免CDN网络依赖） -->
+    <script src="echarts.min.js"></script>
+    <!-- Marked.js Markdown 解析库（本地，避免CDN网络依赖） -->
+    <script src="marked.min.js"></script>
+    <!-- 调试：立即检查 marked 是否加载成功 -->
+    <script>
+        window.addEventListener('load', function() {
+            if (typeof marked === 'undefined') {
+                alert('严重错误：marked.js 未能加载！请检查控制台网络请求。');
+                console.error('[CRITICAL] marked.js failed to load. Check if marked.min.js exists and is accessible.');
+            } else {
+                console.log('[OK] marked.js loaded successfully, version:', marked.version);
+                // 测试解析
+                const testResult = marked.parse('# Test\n**bold**');
+                console.log('[TEST] marked.parse test result:', testResult.substring(0, 50));
+            }
+        });
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        :root {
+            /* Brand */
+            --primary: #4f6ef7;
+            --primary-dark: #3451d1;
+            --primary-light: rgba(79,110,247,0.09);
+            --primary-glow: rgba(79,110,247,0.22);
+            --accent: #06b6d4;
+            /* Surfaces */
+            --bg: #eef1fb;
+            --surface: #ffffff;
+            --surface2: #f4f6fe;
+            --surface3: #e6eaff;
+            /* Border */
+            --border: rgba(79,110,247,0.12);
+            --border-active: rgba(79,110,247,0.5);
+            /* Text */
+            --text: #1b2040;
+            --text-sub: #5c6484;
+            --text-hint: #9ba3c4;
+            /* Bubbles */
+            --bubble-user-bg: linear-gradient(135deg, #4f6ef7 0%, #3451d1 100%);
+            --bubble-ai-bg: #ffffff;
+            /* Sizes */
+            --drawer-handle-h: 52px;
+            --drawer-hint-h: 40px;
+            --safe-bottom: env(safe-area-inset-bottom, 0px);
+            --radius-lg: 20px;
+            --radius-md: 14px;
+            --radius-sm: 10px;
+            /* Shadows */
+            --shadow-sm: 0 2px 14px rgba(79,110,247,0.10);
+            --shadow-md: 0 8px 32px rgba(79,110,247,0.16);
+            --shadow-header: 0 2px 20px rgba(79,110,247,0.22);
+        }
+
+        html, body {
+            height: 100%; overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Noto Sans SC', 'Helvetica Neue', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ══════════ Layout shell ══════════ */
+        /* Use position:fixed inset:0 — the most reliable way to fill the visible viewport
+           on all mobile browsers regardless of address bar / DevTools quirks. */
+        .app-shell {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: flex; flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* ══════════ Header ══════════ */
+        .header {
+            background: linear-gradient(135deg, #5875f8 0%, #4264f5 40%, #2e4fd4 100%);
+            color: #fff;
+            padding: 13px 16px;
+            padding-top: calc(13px + env(safe-area-inset-top, 0px));
+            display: flex; align-items: center; justify-content: space-between;
+            flex-shrink: 0;
+            z-index: 10;
+            position: relative;
+            box-shadow: 0 3px 24px rgba(52,81,209,0.30);
+        }
+        .header::before {
+            content: '';
+            position: absolute; inset: 0;
+            background: url("data:image/svg+xml,%3Csvg width='120' height='56' viewBox='0 0 120 56' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='100' cy='10' r='40' fill='rgba(255,255,255,0.04)'/%3E%3Ccircle cx='10' cy='50' r='30' fill='rgba(255,255,255,0.03)'/%3E%3C/svg%3E") no-repeat right top;
+            pointer-events: none;
+        }
+        .header::after {
+            content: '';
+            position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+            background: rgba(255,255,255,0.2);
+        }
+        .header h1 {
+            font-size: 0.97rem; font-weight: 700; letter-spacing: 0.02em;
+            display: flex; align-items: center; gap: 10px;
+            color: #ffffff;
+        }
+        .header-logo {
+            width: 30px; height: 30px; flex-shrink: 0;
+            background: rgba(255,255,255,0.2);
+            border-radius: 9px;
+            display: flex; align-items: center; justify-content: center;
+            border: 1px solid rgba(255,255,255,0.3);
+            backdrop-filter: blur(4px);
+        }
+        .header-right { display: flex; align-items: center; gap: 8px; }
+        .status-dot {
+            width: 7px; height: 7px; border-radius: 50%;
+            background: #6ee7b7;
+            box-shadow: 0 0 0 2px rgba(110,231,183,0.3);
+            transition: all 0.3s; flex-shrink: 0;
+        }
+        .status-dot.disconnected { background: #fca5a5; box-shadow: 0 0 0 2px rgba(252,165,165,0.3); }
+        .header-icon-btn {
+            width: 36px; height: 36px;
+            background: rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.25);
+            border-radius: 10px; color: rgba(255,255,255,0.9);
+            cursor: pointer; transition: all 0.2s;
+            display: flex; align-items: center; justify-content: center;
+            -webkit-appearance: none; font-family: inherit;
+            backdrop-filter: blur(4px);
+        }
+        .header-icon-btn:active { background: rgba(255,255,255,0.28); border-color: rgba(255,255,255,0.5); }
+        .header-icon-btn svg { width: 18px; height: 18px; }
+        /* 历史对话按钮：带文字，更醒目 */
+        .header-history-btn {
+            height: 36px; padding: 0 12px; gap: 6px;
+            background: rgba(255,255,255,0.18);
+            border: 1px solid rgba(255,255,255,0.38);
+            border-radius: 10px; color: rgba(255,255,255,0.95);
+            cursor: pointer; transition: all 0.2s;
+            display: flex; align-items: center; justify-content: center;
+            -webkit-appearance: none; font-family: inherit;
+            backdrop-filter: blur(4px);
+            font-size: 0.82rem; font-weight: 600; white-space: nowrap;
+        }
+        .header-history-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+        .header-history-btn:active { background: rgba(255,255,255,0.32); border-color: rgba(255,255,255,0.6); }
+        /* Remove old text-button styles */
+        .history-btn, .reset-btn, .status-badge { display: none !important; }
+
+        /* ══════════ Welcome card ══════════ */
+        .welcome-card {
+            width: 100%;
+            background: linear-gradient(160deg, #ffffff 0%, #f8faff 100%);
+            border-radius: var(--radius-lg); border-bottom-left-radius: 5px;
+            border: 1px solid rgba(79,110,247,0.12);
+            box-shadow: 0 4px 20px rgba(79,110,247,0.09), 0 1px 4px rgba(79,110,247,0.05);
+            overflow: hidden;
+        }
+        .welcome-banner {
+            background: var(--surface);
+            padding: 20px 18px 16px;
+            display: flex; align-items: flex-start; gap: 14px;
+            border-bottom: 1px solid var(--border);
+        }
+        .welcome-avatar {
+            width: 48px; height: 48px; flex-shrink: 0;
+            background: linear-gradient(135deg, #eef1ff 0%, #dde4ff 100%);
+            border-radius: 16px;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 4px 16px rgba(79,110,247,0.22), 0 1px 4px rgba(79,110,247,0.12);
+            border: 1px solid rgba(79,110,247,0.15);
+        }
+        .welcome-banner-text { flex: 1; min-width: 0; padding-top: 2px; }
+        .welcome-banner-title {
+            font-size: 1rem; font-weight: 700; color: var(--text);
+            margin-bottom: 5px; line-height: 1.3;
+        }
+        .welcome-banner-sub {
+            font-size: 0.78rem; color: var(--text-sub);
+            line-height: 1.6;
+        }
+        .welcome-chips {
+            display: flex; flex-wrap: wrap; gap: 6px;
+            padding: 12px 16px 4px;
+        }
+        .welcome-chip {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 4px 10px;
+            background: var(--primary-light);
+            border: 1px solid rgba(79,110,247,0.15);
+            border-radius: 20px;
+            font-size: 0.72rem; font-weight: 600; color: var(--primary-dark);
+        }
+        .welcome-divider {
+            margin: 10px 16px 0;
+            border: none; border-top: 1px solid var(--border);
+        }
+        .welcome-suggest-label {
+            padding: 10px 16px 6px;
+            font-size: 0.68rem; font-weight: 700; color: var(--text-hint);
+            letter-spacing: 0.08em; text-transform: uppercase;
+        }
+        .welcome-suggest-list {
+            padding: 0 12px 12px;
+            display: flex; flex-direction: column; gap: 7px;
+        }
+
+        /* ── Compact welcome card on short screens ── */
+        @media (max-height: 720px) {
+            .welcome-banner { padding: 14px 14px 12px; gap: 10px; }
+            .welcome-avatar { width: 38px; height: 38px; border-radius: 11px; }
+            .welcome-avatar svg { width: 22px; height: 22px; }
+            .welcome-banner-title { font-size: 0.9rem; margin-bottom: 3px; }
+            .welcome-banner-sub { font-size: 0.74rem; }
+            .welcome-chips { padding: 8px 14px 2px; gap: 5px; }
+            .welcome-chip { padding: 3px 8px; font-size: 0.68rem; }
+            .welcome-suggest-label { padding: 8px 14px 4px; font-size: 0.65rem; }
+            .welcome-suggest-list { padding: 0 10px 10px; gap: 5px; }
+            .suggestion-btn { padding: 9px 12px; font-size: 0.8rem; }
+        }
+        @media (max-height: 620px) {
+            .welcome-chips { display: none; }
+            .welcome-divider { margin: 6px 14px 0; }
+            .welcome-banner { padding: 10px 14px 10px; }
+        }
+
+        /* ══════════ Post-report suggestions ══════════ */
+        /* 出现在助手消息气泡下方（.message.assistant 内），紧凑横向滚动，不抢占报告视野 */
+        .post-report-sugg {
+            margin-top: 8px;
+            display: flex; flex-direction: column; gap: 5px;
+            width: 100%;
+        }
+        .post-report-sugg-label {
+            font-size: 0.62rem; font-weight: 700; color: var(--text-hint);
+            letter-spacing: 0.08em; text-transform: uppercase;
+            padding: 0 2px;
+        }
+        .post-report-sugg-scroll {
+            display: flex; gap: 7px;
+            flex-wrap: wrap;
+            padding-bottom: 4px;
+        }
+        .post-report-sugg-chip {
+            display: inline-flex; align-items: center; white-space: normal; word-break: break-all;
+            padding: 6px 12px;
+            background: var(--surface2);
+            border: 1px solid rgba(79,110,247,0.18);
+            border-radius: 20px;
+            font-size: 0.78rem; font-weight: 500; color: var(--primary-dark);
+            cursor: pointer; flex-shrink: 0;
+            transition: all 0.16s;
+            font-family: inherit;
+            -webkit-appearance: none;
+            box-shadow: 0 1px 4px rgba(79,110,247,0.07);
+        }
+        .post-report-sugg-chip:active {
+            background: var(--primary-light);
+            border-color: var(--border-active);
+            transform: scale(0.96);
+        }
+
+        /* ══════════ Quick suggestions ══════════ */
+        .suggestions-wrap {
+            display: flex; flex-direction: column; gap: 8px;
+            margin-top: 14px;
+        }
+        .suggestion-btn {
+            display: flex; align-items: center; gap: 10px;
+            width: 100%; text-align: left;
+            background: linear-gradient(135deg, rgba(79,110,247,0.06) 0%, rgba(79,110,247,0.02) 100%);
+            border: 1px solid rgba(79,110,247,0.14);
+            border-radius: var(--radius-md);
+            padding: 11px 14px;
+            font-size: 0.85rem; color: var(--primary-dark);
+            font-family: inherit; line-height: 1.4;
+            cursor: pointer; font-weight: 500;
+            transition: all 0.18s;
+            -webkit-appearance: none;
+            box-shadow: 0 1px 6px rgba(79,110,247,0.06);
+        }
+        .suggestion-btn:active {
+            background: var(--primary-light);
+            border-color: var(--border-active);
+            transform: scale(0.98);
+        }
+
+        /* ══════════ Chat area ══════════ */
+        .chat-area {
+            flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden;
+            position: relative;
+            background: var(--bg);
+        }
+        .chat-messages {
+            flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+            padding: 16px 14px 14px;
+            display: flex; flex-direction: column; gap: 16px;
+        }
+        .message { display: flex; flex-direction: column; }
+        .message.user { align-items: flex-end; }
+        .message.assistant { align-items: flex-start; }
+        .message-label {
+            font-size: 0.62rem; color: var(--text-hint); margin-bottom: 5px;
+            font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+        }
+        .message.user .message-content {
+            max-width: 80%;
+            padding: 11px 16px;
+            border-radius: var(--radius-lg); border-bottom-right-radius: 5px;
+            background: var(--bubble-user-bg);
+            color: #fff;
+            line-height: 1.6; white-space: pre-wrap; word-break: break-word;
+            font-size: 0.9rem;
+            box-shadow: 0 4px 16px rgba(79,110,247,0.3);
+        }
+        .message.assistant .message-content {
+            width: 100%;
+            padding: 14px 16px;
+            border-radius: var(--radius-lg); border-bottom-left-radius: 5px;
+            background: linear-gradient(160deg, #ffffff 0%, #f8faff 100%);
+            color: var(--text);
+            line-height: 1.75; white-space: pre-wrap; word-break: break-word;
+            font-size: 0.9rem;
+            border: 1px solid rgba(79,110,247,0.10);
+            box-shadow: 0 3px 16px rgba(79,110,247,0.09), 0 1px 3px rgba(79,110,247,0.05);
+        }
+
+        .loading-indicator {
+            display: inline-flex; gap: 8px; align-items: center;
+            padding: 10px 16px;
+            background: var(--bubble-ai-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg); border-bottom-left-radius: 5px;
+            color: var(--text-sub); font-size: 0.82rem;
+            box-shadow: var(--shadow-sm);
+        }
+        .loading-spinner {
+            width: 15px; height: 15px; flex-shrink: 0;
+            border: 2px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spinLoader 0.7s linear infinite;
+        }
+        .typing-indicator {
+            display: inline-flex; gap: 5px; align-items: center;
+            padding: 12px 16px;
+            background: var(--bubble-ai-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg); border-bottom-left-radius: 5px;
+            box-shadow: var(--shadow-sm);
+        }
+        .typing-dot {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: var(--primary);
+            animation: typingBounce 1.2s infinite;
+        }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typingBounce {
+            0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+            30% { transform: translateY(-6px); opacity: 1; }
+        }
+
+        /* chat input */
+        .chat-input-container {
+            padding: 10px 14px;
+            padding-bottom: calc(10px + var(--safe-bottom));
+            border-top: 1px solid rgba(79,110,247,0.09);
+            background: linear-gradient(180deg, #f8faff 0%, #ffffff 100%);
+            flex-shrink: 0;
+            box-shadow: 0 -4px 20px rgba(79,110,247,0.07);
+        }
+        .chat-input-row { display: flex; gap: 9px; align-items: flex-end; }
+        .chat-textarea {
+            flex: 1;
+            padding: 11px 16px;
+            border: 1.5px solid rgba(79,110,247,0.15);
+            border-radius: 22px;
+            background: #ffffff;
+            font-size: 1rem;
+            resize: none; min-height: 44px; max-height: 110px;
+            outline: none; line-height: 1.5;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            font-family: inherit;
+            -webkit-appearance: none; color: var(--text);
+            box-shadow: 0 1px 6px rgba(79,110,247,0.06);
+        }
+        .chat-textarea:focus {
+            border-color: var(--border-active);
+            box-shadow: 0 0 0 3px rgba(79,110,247,0.1);
+            background: #fff;
+        }
+        .chat-textarea::placeholder { color: var(--text-hint); }
+
+        .send-btn {
+            width: 46px; height: 46px; flex-shrink: 0;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: #fff; border: none; border-radius: 16px;
+            font-size: 1rem; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+            box-shadow: 0 4px 18px var(--primary-glow), 0 1px 4px rgba(52,81,209,0.2);
+            -webkit-appearance: none;
+        }
+        .send-btn:active { opacity: 0.85; transform: scale(0.90); }
+        .send-btn:disabled { opacity: 0.3; cursor: not-allowed; box-shadow: none; }
+        .hint-text { font-size: 0.68rem; color: var(--text-hint); margin-top: 5px; text-align: center; }
+
+        /* ══════════ Bottom Drawer ══════════ */
+        .drawer-overlay {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.55);
+            z-index: 98;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        .drawer-overlay.active { opacity: 1; pointer-events: auto; }
+
+        .plan-drawer {
+            position: fixed;
+            left: 0; right: 0; bottom: 0;
+            z-index: 99;
+            background: var(--surface);
+            border-radius: 20px 20px 0 0;
+            border-top: 1px solid var(--border);
+            box-shadow: 0 -4px 24px rgba(99,102,241,0.12);
+            display: flex; flex-direction: column;
+            transform: translateY(100%);
+            transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+            max-height: 80vh;
+            padding-bottom: var(--safe-bottom);
+        }
+        .plan-drawer.has-plan {
+            transform: translateY(calc(100% - var(--drawer-hint-h)));
+        }
+        .plan-drawer.expanded { transform: translateY(0); }
+
+        .drawer-hint {
+            height: var(--drawer-hint-h);
+            flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            gap: 7px;
+            cursor: pointer; user-select: none;
+            font-size: 0.78rem; font-weight: 600;
+            border-radius: 20px 20px 0 0;
+            transition: all 0.4s ease;
+            background: linear-gradient(90deg, rgba(99,102,241,0.07), rgba(129,140,248,0.04));
+            border-top: 1px solid rgba(99,102,241,0.2);
+            color: var(--primary);
+            letter-spacing: 0.02em;
+            position: relative;
+        }
+        .drawer-hint:active { filter: brightness(1.2); }
+        /* 向上箭头：展开提示 */
+        .drawer-hint-arrow {
+            display: flex; align-items: center; justify-content: center;
+            width: 18px; height: 18px; flex-shrink: 0;
+            opacity: 0.7;
+            transition: transform 0.25s ease;
+        }
+        .drawer-hint-arrow svg { width: 14px; height: 14px; }
+        /* 收起时 drawer-handle 的「收起」按钮提示文字颜色淡化 */
+        .drawer-handle-collapse-tip {
+            font-size: 0.68rem; color: var(--text-hint); margin-left: 4px; font-weight: 400;
+        }
+
+        .drawer-hint.hint-running {
+            background: linear-gradient(90deg, rgba(251,146,60,0.12), rgba(251,191,36,0.08));
+            border-top-color: rgba(251,146,60,0.4);
+            color: #fb923c;
+            animation: hintStripBlink 1.2s ease-in-out infinite;
+        }
+        @keyframes hintStripBlink {
+            0%,100% { opacity: 1; }
+            50%      { opacity: 0.5; }
+        }
+        .drawer-hint.hint-done {
+            background: linear-gradient(90deg, rgba(52,211,153,0.1), rgba(16,185,129,0.06));
+            border-top-color: rgba(52,211,153,0.4);
+            color: #34d399;
+            animation: none;
+        }
+        .drawer-hint.hint-generating {
+            background: linear-gradient(90deg, rgba(99,102,241,0.08), rgba(129,140,248,0.05));
+            border-top-color: var(--border-active);
+            color: var(--primary);
+            animation: hintStripBlink 1s ease-in-out infinite;
+        }
+        .plan-generating-wrap {
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; gap: 14px;
+            padding: 40px 20px;
+            color: var(--text-sub); font-size: 0.84rem;
+        }
+        .plan-generating-spinner {
+            width: 34px; height: 34px;
+            border: 3px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spinLoader 0.8s linear infinite;
+        }
+        .plan-generating-wrap p { line-height: 1.6; text-align: center; }
+        .drawer-hint-dot {
+            width: 5px; height: 5px; border-radius: 50%;
+            background: currentColor;
+            animation: hintDotPulse 1.6s ease-in-out infinite;
+        }
+        .hint-running .drawer-hint-dot, .hint-done .drawer-hint-dot { animation: none; }
+        @keyframes hintDotPulse {
+            0%,100% { opacity: 1; transform: scale(1); }
+            50%      { opacity: 0.25; transform: scale(0.6); }
+        }
+
+        .drawer-handle {
+            height: var(--drawer-handle-h);
+            flex-shrink: 0;
+            padding: 0 16px;
+            display: flex; align-items: center; justify-content: space-between;
+            user-select: none;
+            border-bottom: 1px solid var(--border);
+        }
+        .drawer-handle-left { display: flex; align-items: center; gap: 10px; }
+        .drawer-pill {
+            width: 36px; height: 4px; border-radius: 2px;
+            background: var(--border);
+            position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+        }
+        .drawer-icon { font-size: 1.05rem; }
+        .drawer-title { font-size: 0.88rem; font-weight: 600; color: var(--text); }
+        .drawer-progress-wrap { display: flex; align-items: center; gap: 8px; }
+        .drawer-progress-bar {
+            width: 80px; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden;
+        }
+        .drawer-progress-fill {
+            height: 100%; border-radius: 2px;
+            background: linear-gradient(90deg, var(--primary), #818cf8);
+            transition: width 0.5s ease;
+        }
+        .drawer-progress-text { font-size: 0.73rem; color: var(--text-sub); white-space: nowrap; }
+        .drawer-close-btn {
+            display: flex; align-items: center; gap: 4px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            background: var(--surface2); border: 1px solid var(--border);
+            color: var(--text-sub); font-size: 0.72rem; font-weight: 600;
+            cursor: pointer; flex-shrink: 0;
+            letter-spacing: 0.02em;
+            transition: all 0.18s;
+            font-family: inherit;
+            -webkit-appearance: none;
+        }
+        .drawer-close-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
+        .drawer-close-btn:active { background: var(--primary-light); color: var(--primary); border-color: var(--border-active); }
+
+        .drawer-body {
+            flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+            padding: 14px 14px 14px;
+            display: flex; flex-direction: column; gap: 0;
+        }
+
+        .plan-done-banner {
+            display: flex; align-items: center; gap: 8px;
+            background: rgba(52,211,153,0.08);
+            border: 1px solid rgba(52,211,153,0.2);
+            border-radius: var(--radius-md);
+            padding: 10px 14px; margin-bottom: 10px;
+            font-size: 0.83rem; font-weight: 600; color: #34d399;
+        }
+        .plan-done-check {
+            display: flex; align-items: center; justify-content: center;
+            width: 20px; height: 20px; flex-shrink: 0;
+            background: #34d399; color: #ffffff;
+            border-radius: 50%; font-size: 0.72rem;
+        }
+
+        .empty-plan { text-align: center; padding: 36px 20px; color: var(--text-hint); }
+        .empty-plan-icon { font-size: 2rem; margin-bottom: 10px; opacity: 0.5; }
+        .empty-plan p { font-size: 0.8rem; line-height: 1.7; }
+
+        .plan-card {
+            background: var(--surface2);
+            border-radius: 10px;
+            padding: 12px 14px; margin-bottom: 12px;
+            border: 1px solid var(--border);
+        }
+        .plan-card-title { font-weight: 600; color: var(--text); margin-bottom: 4px; font-size: 0.88rem; }
+        .plan-card-desc { font-size: 0.76rem; color: var(--text-sub); margin-bottom: 8px; }
+        .plan-badge {
+            display: inline-block; padding: 2px 9px;
+            border-radius: 10px; font-size: 0.67rem; font-weight: 600;
+        }
+        .plan-badge.todo { background: rgba(0,0,0,0.04); color: var(--text-sub); }
+        .plan-badge.in_progress { background: rgba(99,102,241,0.1); color: var(--primary); }
+        .plan-badge.done { background: rgba(52,211,153,0.12); color: #34d399; }
+        .plan-badge.abandoned { background: rgba(248,113,113,0.12); color: #f87171; }
+
+        .progress-bar-wrap { background: var(--border); border-radius: 2px; height: 4px; margin: 10px 0 3px; }
+        .progress-bar-fill {
+            height: 100%; border-radius: 2px;
+            background: linear-gradient(90deg, var(--primary), #818cf8);
+            transition: width 0.5s ease;
+        }
+        .progress-text { font-size: 0.7rem; color: var(--text-hint); text-align: right; }
+
+        .subtasks-label {
+            font-size: 0.67rem; font-weight: 700; color: var(--text-hint);
+            text-transform: uppercase; letter-spacing: 0.08em;
+            margin-bottom: 8px;
+        }
+        .subtask-item {
+            background: var(--surface);
+            border-radius: 8px; padding: 10px 12px; margin-bottom: 7px;
+            border: 1px solid var(--border);
+            display: flex; align-items: flex-start; gap: 9px;
+        }
+        .subtask-num {
+            width: 20px; height: 20px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.66rem; font-weight: 700;
+            background: var(--surface2); color: var(--text-sub); border-radius: 4px;
+            border: 1px solid var(--border);
+        }
+        .subtask-icon {
+            width: 20px; height: 20px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 50%; font-size: 0.76rem;
+        }
+        .subtask-icon.todo { background: rgba(0,0,0,0.04); color: var(--text-hint); }
+        .subtask-icon.in_progress { background: rgba(99,102,241,0.1); position: relative; overflow: visible; }
+        .subtask-icon.done { background: rgba(52,211,153,0.12); color: #34d399; }
+        .subtask-icon.abandoned { background: rgba(248,113,113,0.1); color: #f87171; }
+        .subtask-icon.in_progress::after {
+            content: ''; position: absolute; inset: -3px; border-radius: 50%;
+            border: 2px solid transparent;
+            border-top-color: var(--primary); border-right-color: var(--primary);
+            animation: spinLoader 0.8s linear infinite;
+        }
+        @keyframes spinLoader { to { transform: rotate(360deg); } }
+        @keyframes waitIconPulse {
+            0%,100% { opacity: 1; transform: scale(1) rotate(0deg); }
+            50%      { opacity: 0.5; transform: scale(0.82) rotate(18deg); }
+        }
+        .subtask-body { flex: 1; min-width: 0; }
+        .subtask-name { font-weight: 500; color: var(--text); font-size: 0.83rem; margin-bottom: 2px; }
+        .subtask-desc { font-size: 0.72rem; color: var(--text-sub); }
+        .subtask-outcome { font-size: 0.72rem; color: #34d399; margin-top: 3px; font-style: italic; }
+
+        /* ══════════ Chart ══════════ */
+        .chart-wrapper {
+            margin-top: 10px;
+            background: linear-gradient(160deg, #ffffff 0%, #f8faff 100%);
+            border: 1px solid rgba(79,110,247,0.14);
+            border-radius: var(--radius-md); padding: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(79,110,247,0.10), 0 1px 4px rgba(79,110,247,0.06);
+            position: relative;
+            /* Fade-in so the chart doesn't hard-pop into view */
+            animation: chartFadeIn 0.4s ease both;
+        }
+        /* 顶部装饰彩条 */
+        .chart-wrapper::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #4f6ef7 0%, #818cf8 55%, #06b6d4 100%);
+            border-radius: var(--radius-md) var(--radius-md) 0 0;
+        }
+        @keyframes chartFadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(79,110,247,0.08);
+        }
+        .chart-title { 
+            font-size: 0.85rem; font-weight: 700; color: var(--text);
+            letter-spacing: 0.01em;
+        }
+        .chart-toolbar {
+            display: flex;
+            gap: 5px;
+        }
+        .chart-tool-btn {
+            width: 32px;
+            height: 32px;
+            border: 1px solid rgba(79,110,247,0.15);
+            background: var(--surface2);
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.18s;
+            color: var(--text-sub);
+        }
+        .chart-tool-btn:hover {
+            background: var(--surface3);
+            border-color: rgba(79,110,247,0.3);
+        }
+        .chart-tool-btn.active {
+            background: var(--primary-light);
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+        .chart-tool-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+        .chart-container {
+            width: 100%;
+            height: 300px;
+        }
+        .chart-wrapper svg { width: 100%; height: auto; display: block; }
+        .chart-legend { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; justify-content: center; }
+        .legend-item { display: flex; align-items: center; gap: 4px; font-size: 0.7rem; color: var(--text-sub); }
+        .legend-dot { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
+        .message.assistant .message-content.has-chart {
+            background: transparent; padding: 0; border-radius: 0;
+            border: none; box-shadow: none; width: 100%;
+        }
+        .message.assistant .message-content.has-chart .text-part {
+            background: var(--bubble-ai-bg);
+            border: 1px solid var(--border);
+            padding: 13px 16px;
+            border-radius: var(--radius-lg); border-bottom-left-radius: 5px;
+            word-break: break-word;
+            font-size: 0.9rem; line-height: 1.75;
+            box-shadow: var(--shadow-sm);
+        }
+        .message.assistant .message-content.has-chart .text-part p { margin: 0 0 8px; }
+        .message.assistant .message-content.has-chart .text-part p:last-child { margin-bottom: 0; }
+        .message.assistant .message-content.has-chart .text-part strong {
+            font-weight: 600;
+            background: linear-gradient(180deg, transparent 60%, rgba(79,110,247,0.12) 60%);
+            padding: 0 2px;
+        }
+        /* 表格样式 */
+        .data-table-container {
+            max-height: 400px;
+            overflow: auto;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+        }
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.78rem;
+        }
+        .data-table th {
+            background: var(--surface3);
+            padding: 10px 12px;
+            text-align: left;
+            font-weight: 600;
+            color: var(--text);
+            border-bottom: 2px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+        .data-table td {
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-sub);
+        }
+        .data-table tr:hover td {
+            background: var(--primary-light);
+        }
+
+        /* ══════════ Report block ══════════ */
+        /* ══════════ Report Block – GitHub-style Markdown ══════════ */
+        .report-block {
+            background: linear-gradient(170deg, #ffffff 0%, #f9fbff 100%);
+            border: 1px solid rgba(79,110,247,0.13);
+            border-radius: var(--radius-md);
+            padding: 22px 20px 18px 24px;
+            font-size: 0.88rem;
+            line-height: 1.75;
+            color: #1f2933;
+            word-break: break-word;
+            box-shadow: 0 4px 24px rgba(79,110,247,0.09), 0 1px 4px rgba(79,110,247,0.05);
+            margin-top: 6px;
+            position: relative;
+            overflow: hidden;
+            /* 隔离重绘范围，防止移动端流式输出时整个气泡闪烁 */
+            /* layout paint: 隔离重绘(paint)，比 layout style 多一层绘制层隔离，移动端 WebView 效果更好 */
+            contain: layout paint;
+            will-change: contents;
+            -webkit-transform: translateZ(0);
+            transform: translateZ(0);
+        }
+        /* 左侧装饰蓝边 */
+        .report-block::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            width: 4px;
+            background: linear-gradient(180deg, #4f6ef7 0%, #06b6d4 100%);
+            border-radius: 4px 0 0 4px;
+        }
+        
+        /* 标题 – 仿 GitHub 风格 */
+        .report-block h1 {
+            font-size: 1.5em; font-weight: 700; color: #1a2340;
+            margin: 0 0 16px; padding-bottom: 0.35em;
+            border-bottom: 2px solid rgba(79,110,247,0.18);
+            line-height: 1.25;
+        }
+        .report-block h2 {
+            font-size: 1.2em; font-weight: 700; color: #1f2933;
+            margin: 22px 0 10px; padding-bottom: 0.28em;
+            border-bottom: 1px solid rgba(79,110,247,0.12);
+            line-height: 1.25;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .report-block h3 {
+            font-size: 1.05em; font-weight: 600; color: #2d3a52;
+            margin: 18px 0 8px;
+            line-height: 1.25;
+        }
+        .report-block h4 {
+            font-size: 0.95em; font-weight: 600; color: #3b4a66;
+            margin: 14px 0 6px;
+            line-height: 1.25;
+        }
+        .report-block h5 {
+            font-size: 0.875em; font-weight: 600; color: #4a5568;
+            margin: 12px 0 4px;
+        }
+        .report-block h6 {
+            font-size: 0.85em; font-weight: 600; color: #6a737d;
+            margin: 10px 0 4px;
+        }
+        
+        /* 段落 */
+        .report-block p {
+            margin: 0 0 12px; color: #24292e; line-height: 1.7;
+        }
+        .report-block p:last-child { margin-bottom: 0; }
+        
+        /* 强调 – 彩色高亮 */
+        .report-block strong { 
+            color: #1f2933; font-weight: 600; 
+            background: linear-gradient(180deg, transparent 60%, rgba(79,110,247,0.15) 60%);
+            padding: 0 2px;
+        }
+        .report-block em { font-style: italic; color: #6a737d; }
+        .report-block del { text-decoration: line-through; color: #6a737d; }
+        
+        /* 列表 – 更紧凑 */
+        .report-block ul, .report-block ol {
+            margin: 8px 0 12px; padding-left: 1.6em;
+        }
+        .report-block li {
+            margin-bottom: 4px; color: #24292e; line-height: 1.7;
+        }
+        .report-block li > p { margin-top: 8px; margin-bottom: 8px; }
+        .report-block li + li { margin-top: 2px; }
+        
+        /* 任务列表 */
+        .report-block input[type="checkbox"] {
+            margin-right: 6px; vertical-align: middle;
+        }
+        
+        /* 表格 – GitHub 风格，用外层容器处理横向滚动，避免 display:block 破坏列宽对齐 */
+        .report-block .table-wrapper {
+            width: 100%; overflow-x: auto; margin: 12px 0;
+            border-radius: 8px;
+            box-shadow: 0 1px 6px rgba(79,110,247,0.07);
+        }
+        .report-block table {
+            width: 100%; border-collapse: collapse;
+            font-size: 0.82rem;
+            table-layout: auto;
+        }
+        .report-block tr { border-top: 1px solid #dee2ee; }
+        .report-block tr:nth-child(2n) { background-color: #f5f7ff; }
+        .report-block th, .report-block td {
+            padding: 8px 12px; border: 1px solid #dee2ee;
+        }
+        .report-block th {
+            background: linear-gradient(135deg, #eef1ff 0%, #e6eaff 100%);
+            font-weight: 700; color: #2d3a8c;
+            text-align: left; white-space: nowrap;
+        }
+        .report-block td { color: #24292e; }
+        
+        /* 行内代码 – 粉色高亮 */
+        .report-block code {
+            background: #f6f8fa; color: #e83e8c;
+            padding: 2px 6px; border-radius: 3px; font-size: 85%;
+            font-family: 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', monospace;
+            border: 1px solid #e1e4e8;
+        }
+        
+        /* 代码块 – 带标题栏 */
+        .report-block pre {
+            background: #f6f8fa; color: #24292e;
+            padding: 14px 16px; border-radius: 6px;
+            overflow-x: auto; margin: 12px 0;
+            font-size: 0.8rem; line-height: 1.6;
+            border: 1px solid #e1e4e8;
+        }
+        .report-block pre code {
+            background: transparent; color: inherit;
+            padding: 0; font-size: inherit; border: none;
+        }
+        
+        /* 引用块 – 灰色边框 */
+        .report-block blockquote {
+            border-left: 0.25em solid #dfe2e5;
+            margin: 12px 0; padding: 0 1em;
+            color: #6a737d;
+        }
+        .report-block blockquote > :first-child { margin-top: 0; }
+        .report-block blockquote > :last-child { margin-bottom: 0; }
+        
+        /* 分隔线 */
+        .report-block hr {
+            height: 0; margin: 20px 0;
+            border: 0; border-top: 1px dashed #e1e4e8;
+            background: transparent;
+        }
+        
+        /* 链接 */
+        .report-block a {
+            color: #0366d6; text-decoration: none;
+        }
+        .report-block a:hover { text-decoration: underline; }
+        
+        /* 图片 */
+        .report-block img {
+            max-width: 100%; height: auto;
+            margin: 12px 0; border-style: none;
+        }
+        /* 报告下载按钮区域 */
+        .report-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 14px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border);
+            justify-content: flex-end;
+        }
+        .report-download-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 14px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text-sub);
+            transition: all 0.15s;
+            font-family: inherit;
+        }
+        .report-download-btn:hover {
+            background: var(--surface3);
+        }
+        .report-download-btn.primary {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: #fff;
+            border: none;
+        }
+        .report-download-btn.primary:hover {
+            opacity: 0.9;
+        }
+        .report-download-btn svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        /* ══════════ Message Content Markdown Styles ══════════ */
+        .message-content {
+            line-height: 1.7;
+        }
+        .message-content h1 {
+            font-size: 1.3em; font-weight: 600;
+            margin: 16px 0 10px; padding-bottom: 0.3em;
+            border-bottom: 1px solid var(--border);
+        }
+        .message-content h2 {
+            font-size: 1.15em; font-weight: 600;
+            margin: 14px 0 8px; padding-bottom: 0.2em;
+            border-bottom: 1px solid var(--border);
+        }
+        .message-content h3 {
+            font-size: 1em; font-weight: 600;
+            margin: 12px 0 6px;
+        }
+        .message-content h4 {
+            font-size: 0.95em; font-weight: 600;
+            margin: 10px 0 4px;
+            color: var(--text-sub);
+        }
+        .message-content p {
+            margin: 0 0 10px;
+        }
+        .message-content strong {
+            font-weight: 600;
+            background: linear-gradient(180deg, transparent 60%, rgba(79,110,247,0.12) 60%);
+            padding: 0 2px;
+        }
+        /* 单数据展示样式：纯数字粗体单独一行且放大 */
+        .message-content p.single-number {
+            text-align: center;
+            margin: 16px 0;
+        }
+        .message-content p.single-number > strong:only-child {
+            font-size: 2em;
+            font-weight: 700;
+            color: var(--primary);
+            background: none;
+            padding: 0;
+        }
+        .message-content em {
+            font-style: italic;
+            color: var(--text-sub);
+        }
+        .message-content code {
+            background: var(--surface3);
+            color: var(--primary-dark);
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 0.85em;
+            font-family: 'Menlo', 'Monaco', monospace;
+        }
+        .message-content pre {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 12px 14px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 10px 0;
+            font-size: 0.8rem;
+        }
+        .message-content pre code {
+            background: transparent;
+            color: inherit;
+            padding: 0;
+        }
+        .message-content ul, .message-content ol {
+            margin: 8px 0 10px;
+            padding-left: 1.5em;
+        }
+        .message-content li {
+            margin-bottom: 4px;
+        }
+        .message-content blockquote {
+            border-left: 3px solid var(--primary);
+            margin: 8px 0;
+            padding: 4px 12px;
+            background: var(--primary-light);
+            border-radius: 0 4px 4px 0;
+        }
+        .message-content hr {
+            border: none;
+            border-top: 1px dashed var(--border);
+            margin: 14px 0;
+        }
+        .message-content a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+        .message-content a:hover {
+            text-decoration: underline;
+        }
+        .message-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+            font-size: 0.85rem;
+        }
+        .message-content th, .message-content td {
+            padding: 6px 10px;
+            border: 1px solid var(--border);
+            text-align: left;
+        }
+        .message-content th {
+            background: var(--surface3);
+            font-weight: 600;
+        }
+
+        ::-webkit-scrollbar { width: 3px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.2); border-radius: 2px; }
+
+        /* ══════════ History Sidebar – RIGHT side ══════════ */
+        .history-overlay {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.55);
+            z-index: 200;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.28s ease;
+        }
+        .history-overlay.active { opacity: 1; pointer-events: auto; }
+
+        .history-sidebar {
+            position: fixed;
+            top: 0; right: 0; bottom: 0;
+            width: min(320px, 88vw);
+            background: var(--surface);
+            border-left: 1px solid var(--border);
+            z-index: 201;
+            display: flex; flex-direction: column;
+            transform: translateX(100%);
+            transition: transform 0.3s cubic-bezier(0.32,0.72,0,1);
+            box-shadow: -4px 0 24px rgba(99,102,241,0.12);
+        }
+        .history-sidebar.open { transform: translateX(0); }
+
+        .history-header {
+            padding: 14px 16px;
+            padding-top: calc(14px + env(safe-area-inset-top, 0px));
+            border-bottom: 1px solid rgba(79,110,247,0.1);
+            display: flex; align-items: center; justify-content: space-between;
+            flex-shrink: 0;
+            background: linear-gradient(135deg, #4f6ef7 0%, #3451d1 100%);
+        }
+        .history-header-title {
+            font-size: 0.88rem; font-weight: 700; color: #ffffff;
+            letter-spacing: 0.02em;
+        }
+        .history-close-btn {
+            width: 30px; height: 30px; border-radius: 9px;
+            background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25);
+            color: rgba(255,255,255,0.9); font-size: 0.9rem;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .history-close-btn:active { background: rgba(255,255,255,0.28); }
+
+        /* New session button embedded in sidebar */
+        .history-new-btn {
+            margin: 12px 14px 8px;
+            padding: 11px 16px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: #fff; border: none; border-radius: var(--radius-md);
+            font-size: 0.86rem; font-weight: 600; font-family: inherit;
+            cursor: pointer; display: flex; align-items: center; gap: 9px;
+            box-shadow: 0 4px 16px var(--primary-glow);
+            transition: opacity 0.2s, transform 0.15s;
+            -webkit-appearance: none;
+        }
+        .history-new-btn:active { opacity: 0.85; transform: scale(0.97); }
+
+        .history-divider {
+            height: 1px; margin: 0 14px 6px;
+            background: var(--border);
+        }
+
+        .history-list {
+            flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+            padding: 0 8px 16px;
+        }
+        .history-day-label {
+            font-size: 0.65rem; font-weight: 700; color: var(--text-hint);
+            text-transform: uppercase; letter-spacing: 0.08em;
+            padding: 10px 8px 4px;
+        }
+        .history-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 10px;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: background 0.15s;
+            position: relative;
+        }
+        .history-item:active { background: var(--primary-light); }
+        .history-item.active { background: var(--primary-light); border: 1px solid var(--border-active); }
+        .history-item-icon { font-size: 0.95rem; flex-shrink: 0; opacity: 0.6; }
+        .history-item-body { flex: 1; min-width: 0; }
+        .history-item-title {
+            font-size: 0.83rem; font-weight: 500; color: var(--text);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .history-item.active .history-item-title { color: var(--primary); font-weight: 600; }
+        .history-item-meta { font-size: 0.66rem; color: var(--text-hint); margin-top: 2px; }
+        .history-item-del {
+            opacity: 0; width: 24px; height: 24px; flex-shrink: 0;
+            border-radius: 7px; background: transparent; border: none;
+            color: var(--text-hint); font-size: 0.8rem;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: all 0.15s;
+        }
+        .history-item:hover .history-item-del,
+        .history-item:active .history-item-del { opacity: 1; }
+        .history-item-del:active { background: rgba(248,113,113,0.15); color: #f87171; }
+        .history-empty {
+            text-align: center; padding: 40px 20px;
+            color: var(--text-hint); font-size: 0.8rem; line-height: 1.7;
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-shell">
+
+    <!-- Header -->
+    <div class="header">
+        <h1>
+            <div class="header-logo">
+                <svg width="18" height="18" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><defs><linearGradient x1="50%" y1="76.9577359%" x2="31.5960253%" y2="0%" id="lg1"><stop stop-color="#2E58F7" offset="0%"></stop><stop stop-color="#00CBFC" offset="100%"></stop></linearGradient></defs><g stroke="none" stroke-width="1" fill="none" fill-rule="evenodd"><rect stroke="#FFFFFF" fill="#FFFFFF" x="0.5" y="0.5" width="21" height="21" rx="4"></rect><g transform="translate(5, 3)" fill="url(#lg1)"><path d="M1,5.96733911 L4.99803067,9.49317142 L4.7053422,13.8950576 L3.21049157,14.7972052 C2.98746288,14.9255039 2.73408116,15 2.48069944,15 C2.22731772,15 1.97261632,14.9351608 1.74034972,14.7972052 C1.28332302,14.5220301 1.00118988,14.0131305 1,13.4617944 L1,5.96733911 Z M9.06715829,4.73782976 L12.2596503,6.6647187 C12.7162652,6.94063005 13,7.44830686 13,8.00012956 C13,8.55195227 12.7162652,9.06100861 12.26097,9.33691996 L6.34815097,12.9037135 L6.59139638,9.24400805 L9.06715829,4.73782976 Z M3.21049157,1.20305396 L7.70296295,3.91449084 L5.62743719,7.69252048 L1.0252031,3.6343975 L1,3.66532747 L1,2.53846475 C1.00225816,1.98906035 1.28343214,1.48223378 1.73847879,1.20732922 C2.19352544,0.932424663 2.75399068,0.930796866 3.21049157,1.20305396 Z"></path></g></g></svg>
+            </div>
+            <span>红海App智能助手</span>
+        </h1>
+        <div class="header-right">
+            <div class="status-dot" id="statusDot"></div>
+            <button class="header-icon-btn" onclick="resetAll()" title="新建对话">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+            </button>
+            <button class="header-history-btn" onclick="openHistorySidebar()" title="历史对话">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v5l3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                历史对话
+            </button>
+        </div>
+    </div>
+
+    <!-- Chat area -->
+    <div class="chat-area">
+        <div class="chat-messages" id="chatMessages">
+            <div class="message assistant">
+                <div class="welcome-card">
+                    <div class="welcome-banner">
+                        <div class="welcome-avatar">
+                            <svg width="26" height="26" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><defs><linearGradient x1="50%" y1="76.9577359%" x2="31.5960253%" y2="0%" id="lg2"><stop stop-color="#2E58F7" offset="0%"></stop><stop stop-color="#00CBFC" offset="100%"></stop></linearGradient></defs><g stroke="none" stroke-width="1" fill="none" fill-rule="evenodd"><rect stroke="#FFFFFF" fill="#FFFFFF" x="0.5" y="0.5" width="21" height="21" rx="4"></rect><g transform="translate(5, 3)" fill="url(#lg2)"><path d="M1,5.96733911 L4.99803067,9.49317142 L4.7053422,13.8950576 L3.21049157,14.7972052 C2.98746288,14.9255039 2.73408116,15 2.48069944,15 C2.22731772,15 1.97261632,14.9351608 1.74034972,14.7972052 C1.28332302,14.5220301 1.00118988,14.0131305 1,13.4617944 L1,5.96733911 Z M9.06715829,4.73782976 L12.2596503,6.6647187 C12.7162652,6.94063005 13,7.44830686 13,8.00012956 C13,8.55195227 12.7162652,9.06100861 12.26097,9.33691996 L6.34815097,12.9037135 L6.59139638,9.24400805 L9.06715829,4.73782976 Z M3.21049157,1.20305396 L7.70296295,3.91449084 L5.62743719,7.69252048 L1.0252031,3.6343975 L1,3.66532747 L1,2.53846475 C1.00225816,1.98906035 1.28343214,1.48223378 1.73847879,1.20732922 C2.19352544,0.932424663 2.75399068,0.930796866 3.21049157,1.20305396 Z"></path></g></g></svg>
+                        </div>
+                        <div class="welcome-banner-text">
+                            <div class="welcome-banner-title">你好！有什么可以帮你？</div>
+                            <div class="welcome-banner-sub">专注业务数据分析，快速洞察关键指标与趋势</div>
+                        </div>
+                    </div>
+                    <div class="welcome-chips">
+                        <span class="welcome-chip">📊 数据分析</span>
+                        <span class="welcome-chip">🎯 指标追踪</span>
+                        <span class="welcome-chip">💡 智能洞察</span>
+                    </div>
+                    <hr class="welcome-divider">
+                    <div class="welcome-suggest-label">快速开始 · 点击直接提问</div>
+                    <div class="welcome-suggest-list" id="staticSuggestList">
+                        <!-- 推荐问题由 loadSuggestedQuestions() 动态渲染 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="chat-input-container" id="chatInputContainer">
+            <div class="chat-input-row">
+                <textarea
+                    class="chat-textarea"
+                    id="chatInput"
+                    placeholder="输入分析问题…"
+                    rows="1"
+                    onkeydown="handleInputKey(event)"
+                    oninput="autoResize(this)"
+                ></textarea>
+                <button class="send-btn" id="sendBtn" onclick="sendMessage()" title="发送">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 2L15 22l-4-9-9-4 20-7z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+            </div>
+            <p class="hint-text" id="hintText">输入问题或点击上方推荐</p>
+        </div>
+    </div>
+
+</div><!-- /app-shell -->
+
+<!-- History Sidebar Overlay -->
+<div class="history-overlay" id="historyOverlay" onclick="closeHistorySidebar()"></div>
+
+<!-- History Sidebar -->
+<div class="history-sidebar" id="historySidebar">
+    <div class="history-header">
+        <span class="history-header-title">💬 历史对话</span>
+        <button class="history-close-btn" onclick="closeHistorySidebar()">✕</button>
+    </div>
+    <button class="history-new-btn" onclick="startNewSession(); closeHistorySidebar();">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+        新建对话
+    </button>
+    <div class="history-list" id="historyList">
+        <div class="history-empty">暂无历史对话<br>开始提问后会自动保存</div>
+    </div>
+</div>
+
+<!-- Drawer overlay -->
+<div class="drawer-overlay" id="drawerOverlay" onclick="collapseDrawer()"></div>
+
+<!-- Bottom drawer: task plan -->
+<div class="plan-drawer" id="planDrawer">
+
+    <!-- Hint strip (visible when has-plan & not expanded) -->
+    <div class="drawer-hint" id="drawerHint" onclick="expandDrawer()">
+        <span class="drawer-hint-arrow" id="drawerHintArrow">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 15l6-6 6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <span class="drawer-hint-dot"></span>
+        <span id="drawerHintText">📋 任务计划已生成，点击查看</span>
+        <span class="drawer-hint-dot"></span>
+    </div>
+
+    <!-- Full handle (visible when expanded) -->
+    <div class="drawer-handle" id="drawerHandle" onclick="collapseDrawer()" style="cursor:pointer" title="点击收起面板">
+        <div class="drawer-handle-left">
+            <span class="drawer-icon">📋</span>
+            <span class="drawer-title">任务计划面板</span>
+            <span class="drawer-handle-collapse-tip">（点击收起）</span>
+        </div>
+        <div class="drawer-progress-wrap" id="drawerProgressWrap" style="display:none">
+            <div class="drawer-progress-bar">
+                <div class="drawer-progress-fill" id="drawerProgressFill" style="width:0%"></div>
+            </div>
+            <span class="drawer-progress-text" id="drawerProgressText">0/0</span>
+        </div>
+        <button class="drawer-close-btn" onclick="event.stopPropagation();collapseDrawer()" title="收起面板">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18 9l-6 6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            收起
+        </button>
+    </div>
+
+    <!-- Scrollable body -->
+    <div class="drawer-body" id="drawerBody">
+        <div class="empty-plan" id="emptyPlan">
+            <div class="empty-plan-icon">📋</div>
+            <p>提交问题后，智能体将自动创建分析计划<br>并在此实时展示任务进度</p>
+        </div>
+        <div id="planContent" style="display:none"></div>
+    </div>
+</div>
+
+<script>
+    /* ─── Base path auto-detection (supports local dev and nginx sub-path proxy) ───
+     * 本地直接访问时 pathname='/'，BASE_PATH=''，请求路径为 /api/xxx
+     * nginx 代理时 pathname='/dify/dataAnalyse/'，BASE_PATH='/dify/dataAnalyse'，请求路径为 /dify/dataAnalyse/api/xxx
+     */
+    const BASE_PATH = (() => {
+        const p = window.location.pathname;
+        // 去掉末尾的 index.html 或 /，保留目录前缀
+        const dir = p.replace(/\/index\.html$/, '').replace(/\/$/, '');
+        return dir || '';
+    })();
+
+    /* ═══════════════════════ State ═══════════════════════ */
+    let datasets = [];
+    let selectedDataset = null;
+    let planEventSource = null;
+    let isProcessing = false;
+    let drawerOpen = false;
+    let hasPlan = false;
+    let userCollapsed = false;
+    let planPending = false;
+    let streamingUserScrolledUp = false; // true when user scrolls up during streaming, disables auto-scroll
+
+    // ─── Streaming state for visibility handling ───
+    // When app goes to background on mobile, SSE connection may be interrupted.
+    // We track the current EventSource and streaming state to handle recovery.
+    let currentEventSource = null;
+    let currentResumeEventSource = null;
+    let streamingContext = null;  // { assistantEl, assistantText, finalized, doFinalize }
+    let visibilityHiddenTime = null;  // timestamp when page became hidden
+
+    // ─── Stream sequence tracking for resume/replay ───
+    // Each chunk now has a sequence number for ordered replay and deduplication
+    let lastReceivedSeq = -1;  // last received chunk sequence number for current turn
+    let currentRequestId = '';  // current turn's request ID
+
+    // ─── Snapshot saved when page goes to background ───
+    // Preserved even after streamingContext is finalized by checkDone
+    let backgroundSnapshot = null;  // { assistantEl, assistantText, sessionId, lastSeq }
+
+
+    // ─── User identity from URL param ───
+    const urlParams = new URLSearchParams(window.location.search);
+    const currentUserName = urlParams.get('account') || urlParams.get('userName') || '';
+
+    // ─── Session management ───
+    let currentSessionId = generateUUID();
+
+    function generateUUID() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+            const r = Math.random() * 16 | 0;
+            return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+        });
+    }
+
+    /* ═══════════════════════ Init ═══════════════════════ */
+    // Cache suggested questions loaded from backend
+    let suggestedQuestions = [];
+
+    async function loadSuggestedQuestions() {
+        try {
+            const res = await fetch(BASE_PATH + '/api/suggested-questions');
+            if (res.ok) {
+                suggestedQuestions = await res.json();
+            }
+        } catch (e) {
+            console.warn('Failed to load suggested questions', e);
+        }
+        // Refresh the welcome screen with the loaded questions
+        clearChatUI();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        connectPlanStream();
+        fetchCurrentPlan();
+        loadSuggestedQuestions();
+        syncDrawerPadding();
+    });
+
+    // ─── Visibility change handler for mobile SSE recovery ───
+    // When app switches to background on mobile, SSE connection may be interrupted.
+    // We delay the error handling to give the connection a chance to recover when app returns.
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+            // Page going to background - record timestamp and save snapshot
+            visibilityHiddenTime = Date.now();
+            console.log('[Visibility] Page hidden at', visibilityHiddenTime);
+            // Save background snapshot: capture current assistantText + seq NOW.
+            // Save even if streamingContext.finalized is true – checkDone race condition:
+            // checkDone's 300ms timer may fire and call doFinalize (setting finalized=true)
+            // just before visibilitychange fires, but the turn is still running on the backend.
+            if (isProcessing || (streamingContext && streamingContext.assistantEl)) {
+                // Always refresh the snapshot so lastSeq and assistantText stay in sync.
+                // Previously we only saved once per session, but that caused stale seqs when
+                // the user switches background multiple times during a single response.
+                backgroundSnapshot = {
+                    sessionId: currentSessionId,
+                    lastSeq: lastReceivedSeq,
+                    assistantText: (streamingContext && streamingContext.assistantText) || '',
+                    assistantEl: (streamingContext && streamingContext.assistantEl) || null,
+                    savedAt: Date.now()
+                };
+                console.log('[Visibility] Saved backgroundSnapshot, lastSeq=' + backgroundSnapshot.lastSeq
+                    + ', textLen=' + backgroundSnapshot.assistantText.length);
+                // Immediately close the current SSE connection to stop DOM updates in background.
+                // Backend will continue generating; we resume via /api/chat/resume on return.
+                if (currentEventSource && currentEventSource.readyState !== EventSource.CLOSED) {
+                    console.log('[Visibility] Closing EventSource to stop background DOM updates');
+                    currentEventSource.close();
+                }
+            }
+            // Persist to localStorage for cross-refresh recovery
+            saveStreamState();
+        } else if (document.visibilityState === 'visible') {
+            // Page coming back to foreground
+            const hiddenDuration = visibilityHiddenTime ? Date.now() - visibilityHiddenTime : 0;
+            console.log('[Visibility] Page visible again, was hidden for', hiddenDuration, 'ms');
+            visibilityHiddenTime = null;
+
+            // Check stream status and resume if needed
+            checkAndResumeStream();
+        }
+    });
+
+    // ─── Stream state persistence (localStorage) ───
+    function saveStreamState() {
+        if (!currentSessionId) return;
+        try {
+            localStorage.setItem('streamState', JSON.stringify({
+                sessionId: currentSessionId,
+                requestId: currentRequestId,
+                lastReceivedSeq: lastReceivedSeq,
+                lastUpdatedAt: Date.now()
+            }));
+        } catch (e) {
+            console.warn('[StreamState] Failed to save state:', e);
+        }
+    }
+
+    function loadStreamState() {
+        try {
+            const state = localStorage.getItem('streamState');
+            return state ? JSON.parse(state) : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function clearStreamState() {
+        try {
+            localStorage.removeItem('streamState');
+        } catch (e) {}
+        backgroundSnapshot = null;
+    }
+
+    // ─── Check and resume stream on visibility change ───
+    async function checkAndResumeStream() {
+        // Only attempt resume if there's something to resume
+        // Case 1: Active EventSource that's now closed (disconnected in background)
+        // Case 2: backgroundSnapshot saved before checkDone cleared streamingContext
+        // Case 3: isProcessing still true (stream not yet finalized)
+        const hasActiveStream = (currentEventSource && currentEventSource.readyState === EventSource.CLOSED
+                                 && streamingContext && !streamingContext.finalized);
+        const hasSnapshot = backgroundSnapshot && backgroundSnapshot.sessionId === currentSessionId;
+        const isStillProcessing = isProcessing;
+
+        console.log('[Visibility] checkAndResumeStream: hasActiveStream=' + hasActiveStream
+            + ', hasSnapshot=' + hasSnapshot + ', isProcessing=' + isStillProcessing);
+
+        if (hasActiveStream || hasSnapshot || isStillProcessing) {
+            // Mark any active EventSource as finalized so checkDone won't interfere
+            if (streamingContext && !streamingContext.finalized) {
+                streamingContext.finalized = true;
+            }
+            await checkStreamStatusAndResume(currentSessionId);
+        }
+        // else: no stream was running, nothing to do
+    }
+
+    // ─── Check backend stream status and resume if needed ───
+    async function checkStreamStatusAndResume(sessionId) {
+        if (!sessionId) return;
+
+        try {
+            const response = await fetch(BASE_PATH + '/api/sessions/' + sessionId + '/stream-status');
+            const status = await response.json();
+
+            const totalChunks = status.chunkCount || 0;
+            // Always use the latest lastReceivedSeq as the authoritative cursor.
+            // backgroundSnapshot.lastSeq may be stale (saved on first background-switch) while
+            // lastReceivedSeq is updated on every received chunk (including during resume).
+            const clientSeq = lastReceivedSeq;
+
+            console.log('[StreamStatus] status=' + status.status
+                + ', chunkCount=' + totalChunks
+                + ', clientSeq=' + clientSeq);
+
+            if (status.status === 'RUNNING') {
+                // Turn still running - resume and receive remaining chunks
+                console.log('[StreamStatus] Stream RUNNING, resuming from seq=' + clientSeq);
+                resumeStream(sessionId, clientSeq);
+            } else if (status.status === 'COMPLETED') {
+                if (clientSeq < totalChunks - 1) {
+                    // Completed but client missed some chunks
+                    console.log('[StreamStatus] Stream COMPLETED, missed chunks, resuming from seq=' + clientSeq);
+                    resumeStream(sessionId, clientSeq);
+                } else {
+                    console.log('[StreamStatus] All chunks received (clientSeq=' + clientSeq + ', total=' + totalChunks + '), nothing to resume');
+                    // Ensure processing is cleared
+                    if (isProcessing) setProcessing(false);
+                    backgroundSnapshot = null;
+                }
+            } else {
+                // IDLE or FAILED - no stream to resume
+                console.log('[StreamStatus] Status=' + status.status + ', no resume needed');
+                if (isProcessing) setProcessing(false);
+                backgroundSnapshot = null;
+            }
+        } catch (e) {
+            console.warn('[StreamStatus] Failed to check status:', e);
+            if (isProcessing) setProcessing(false);
+            backgroundSnapshot = null;
+        }
+    }
+
+    /* ═══════════════════════ History Sidebar ═══════════════════════ */
+    function openHistorySidebar() {
+        loadSessionHistory();
+        document.getElementById('historySidebar').classList.add('open');
+        document.getElementById('historyOverlay').classList.add('active');
+    }
+
+    function closeHistorySidebar() {
+        document.getElementById('historySidebar').classList.remove('open');
+        document.getElementById('historyOverlay').classList.remove('active');
+    }
+
+    async function loadSessionHistory() {
+        try {
+            const sessions = await fetch(BASE_PATH + '/api/sessions?userName=' + encodeURIComponent(currentUserName)).then(r => r.json());
+            renderHistoryList(sessions);
+        } catch(e) {
+            document.getElementById('historyList').innerHTML =
+                '<div class="history-empty">加载失败，请重试</div>';
+        }
+    }
+
+    function renderHistoryList(sessions) {
+        const container = document.getElementById('historyList');
+        if (!sessions || sessions.length === 0) {
+            container.innerHTML = '<div class="history-empty">暂无历史对话<br>开始提问后会自动保存</div>';
+            return;
+        }
+        const today = new Date().toISOString().split('T')[0];
+        const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+        const groups = {};
+        sessions.forEach(s => {
+            const date = s.updatedAt ? s.updatedAt.split(' ')[0] : '更早';
+            if (!groups[date]) groups[date] = [];
+            groups[date].push(s);
+        });
+        let html = '';
+        Object.entries(groups).forEach(([date, items]) => {
+            let label = date === today ? '今天' : date === yesterday ? '昨天' : date;
+            html += `<div class="history-day-label">${label}</div>`;
+            items.forEach(s => {
+                const isActive = s.id === currentSessionId ? ' active' : '';
+                html += `<div class="history-item${isActive}" onclick="switchSession('${s.id}', this)">
+                    <span class="history-item-icon">💬</span>
+                    <div class="history-item-body">
+                        <div class="history-item-title">${escapeHtml(s.title || '新对话')}</div>
+                        <div class="history-item-meta">${s.messageCount || 0}条消息 &middot; ${s.updatedAt || ''}</div>
+                    </div>
+                    <button class="history-item-del" onclick="deleteSession(event,'${s.id}')" title="删除">✕</button>
+                </div>`;
+            });
+        });
+        container.innerHTML = html;
+    }
+
+    async function switchSession(sessionId, el) {
+        if (sessionId === currentSessionId) { closeHistorySidebar(); return; }
+        currentSessionId = sessionId;
+        closeHistorySidebar();
+        clearChatUI();
+        renderPlan(null);
+        setDrawerHasPlan(false);
+        setProcessing(false);
+        connectPlanStream();
+        await fetchCurrentPlan();
+        // Load historical messages from backend into UI
+        try {
+            const messages = await fetch(BASE_PATH + '/api/sessions/' + sessionId + '/messages').then(r => r.json());
+            if (Array.isArray(messages) && messages.length > 0) {
+                messages.forEach(msg => {
+                    const msgEl = appendMessage(msg.role === 'user' ? 'user' : 'assistant', '');
+                    finalizeMessage(msgEl, msg.content);
+                });
+                // 历史消息渲染完后初始化所有ECharts图表
+                requestAnimationFrame(() => initAllCharts());
+            }
+            // 尝试恢复该会话正在进行中的后端流式输出
+            tryResumeSessionStream(sessionId);
+        } catch(e) {
+            appendMessage('assistant', '历史对话加载失败，可直接继续提问');
+        }
+    }
+
+    // When user re-enters a session (especially in mobile WebView),
+    // re-subscribe to backend active stream and keep appending output.
+    // When called after page returns to foreground, it will reuse the existing assistant bubble
+    // and append new chunks to the already-received text.
+    function resumeStream(sessionId, fromSeq) {
+        if (!sessionId) return;
+        if (currentResumeEventSource) {
+            currentResumeEventSource.close();
+            currentResumeEventSource = null;
+        }
+
+        // Always send fromSeq to backend (even -1, meaning "give me everything")
+        const seqParam = (fromSeq !== null && fromSeq !== undefined) ? fromSeq : -1;
+        const url = BASE_PATH + '/api/chat/resume?sessionId=' + encodeURIComponent(sessionId)
+            + '&fromSeq=' + seqParam;
+
+        console.log('[Resume] Starting resume: sessionId=' + sessionId + ', fromSeq=' + seqParam);
+
+        const es = new EventSource(url);
+        currentResumeEventSource = es;
+
+        // Use backgroundSnapshot (saved when page went hidden) as the base text.
+        // Prefer streamingContext.assistantText if still available (more up-to-date than snapshot),
+        // since snapshot was taken at visibilitychange time and context may have been updated.
+        const snap = backgroundSnapshot && backgroundSnapshot.sessionId === sessionId ? backgroundSnapshot : null;
+
+        // Determine the base text that has already been rendered into the bubble.
+        // Priority: live streamingContext (if not finalized) > snapshot.
+        // NOTE: streamingContext.finalized is set to true by checkAndResumeStream before calling
+        // resumeStream, so we always fall through to snap here in practice. That is intentional:
+        // snap.assistantText and snap.lastSeq were saved together at visibilitychange time and are
+        // guaranteed to be consistent with each other. Using them as the starting point and
+        // appending chunks after snap.lastSeq (= seqParam) yields the correct full text.
+        const baseTextSource = (streamingContext && !streamingContext.finalized && streamingContext.assistantText)
+            ? streamingContext.assistantText
+            : (snap ? snap.assistantText : '');
+        // resumedText starts from the base text already on-screen, then backend chunks
+        // (seq > fromSeq) are appended to produce the full text without gaps.
+        let resumedText = (seqParam >= 0) ? baseTextSource : '';
+
+        // For the DOM element: prefer streamingContext.assistantEl, then snapshot, then null (will find/create later)
+        const baseElSource = (streamingContext && !streamingContext.finalized && streamingContext.assistantEl)
+            ? streamingContext.assistantEl
+            : (snap ? snap.assistantEl : null);
+        // Only reuse the existing bubble when doing incremental resume (seqParam >= 0).
+        // BUT: if the bubble already has a fully-rendered report block, don't reuse it –
+        // the original doFinalize already completed successfully; touching it again would
+        // produce duplicate content (one inside + one outside the bubble).
+        let _candidateEl = (seqParam >= 0) ? baseElSource : null;
+        if (_candidateEl) {
+            const _mc = _candidateEl.querySelector('.message-content');
+            if (_mc && (_mc.querySelector('.report-block') || _mc.querySelector('#streamingReportBlock'))) {
+                // Fully rendered – don't touch this bubble; resume will create a new one if needed
+                _candidateEl = null;
+                resumedText = ''; // discard stale baseText; we'll rebuild from full history chunks
+            }
+        }
+        let resumedAssistantEl = _candidateEl;
+        let gotAnyChunk = false;
+        let resumeFinalized = false;
+
+        // Ensure UI is in "processing" state while resuming
+        if (!isProcessing) setProcessing(true);
+
+        // Remove any stale typing indicator
+        const existingTyping = document.querySelectorAll('.typing-indicator');
+        existingTyping.forEach(el => { const m = el.closest('.message'); if (m) m.remove(); });
+
+        // Show a "resuming" indicator inside the existing bubble (problem 4: no loading icon)
+        if (resumedAssistantEl) {
+            const msgContent = resumedAssistantEl.querySelector('.message-content');
+            if (msgContent && !msgContent.querySelector('#resumeWaitCard')) {
+                const resumeCard = document.createElement('div');
+                resumeCard.id = 'resumeWaitCard';
+                resumeCard.style.cssText =
+                    'display:flex;align-items:center;gap:8px;margin-top:8px;'
+                    + 'padding:8px 12px;background:var(--surface2);border:1px solid var(--border);'
+                    + 'border-radius:var(--radius-sm);font-size:0.8rem;color:var(--text-hint);';
+                resumeCard.innerHTML =
+                    '<div style="width:13px;height:13px;flex-shrink:0;border:2px solid var(--border);'
+                    + 'border-top-color:var(--primary);border-radius:50%;'
+                    + 'animation:spinLoader 0.7s linear infinite;"></div>'
+                    + '<span>正在恢复输出，请稍候…</span>';
+                msgContent.appendChild(resumeCard);
+            }
+        }
+
+        console.log('[Resume] Base text length=' + resumedText.length
+            + ', hasAssistantEl=' + !!resumedAssistantEl);
+
+        function doResumeFinalize() {
+            if (resumeFinalized) return;
+            resumeFinalized = true;
+            // Clear the background snapshot - we're done
+            backgroundSnapshot = null;
+            // Mark original streamingContext as done
+            if (streamingContext) streamingContext.finalized = true;
+            // Remove the resume-wait indicator if still visible
+            const _rwc = document.getElementById('resumeWaitCard');
+            if (_rwc) _rwc.remove();
+            // Finalize the bubble
+            if (resumedText) {
+                if (!resumedAssistantEl) {
+                    // No reusable bubble (either we skipped a fully-rendered one, or there was
+                    // never one). Find the last assistant bubble or create a fresh one.
+                    const _msgs = document.getElementById('chatMessages');
+                    const _nodes = _msgs ? _msgs.querySelectorAll('.message.assistant') : [];
+                    const _lastEl = _nodes.length ? _nodes[_nodes.length - 1] : null;
+                    const _lastMc = _lastEl ? _lastEl.querySelector('.message-content') : null;
+                    const _alreadyRendered = _lastMc && (_lastMc.querySelector('.report-block') || _lastMc.querySelector('#streamingReportBlock'));
+                    if (_lastEl && !_alreadyRendered) {
+                        resumedAssistantEl = _lastEl;
+                    } else {
+                        resumedAssistantEl = appendMessage('assistant', '');
+                    }
+                }
+                finalizeMessage(resumedAssistantEl, resumedText);
+            }
+            planPending = false;
+            clearPlanPendingIfNeeded();
+            setProcessing(false);
+            clearStreamState();
+            currentResumeEventSource = null;
+        }
+
+        es.onmessage = (event) => {
+            let chunk;
+            try {
+                chunk = JSON.parse(event.data);
+            } catch (e) {
+                console.warn('[Resume] Failed to parse chunk:', event.data);
+                return;
+            }
+
+            // Dedup: skip already-received chunks
+            if (chunk.seq !== undefined && chunk.seq <= lastReceivedSeq) {
+                return;
+            }
+            if (chunk.seq !== undefined) lastReceivedSeq = chunk.seq;
+
+            if (chunk.type === 'DONE') {
+                es.close();
+                doResumeFinalize();
+                return;
+            }
+            if (chunk.type === 'ERROR') {
+                console.error('[Resume] Error chunk:', chunk.content);
+                es.close();
+                doResumeFinalize();
+                return;
+            }
+            // Skip non-text chunks (TOOL_STATUS / PLAN_UPDATE not rendered during resume)
+            if (chunk.type === 'TOOL_STATUS' || chunk.type === 'PLAN_UPDATE') return;
+
+            // TEXT chunk
+            if (chunk.type === 'TEXT' && chunk.content) {
+                // Remove the resume-wait card on first actual chunk
+                if (!gotAnyChunk) {
+                    const _rwc2 = document.getElementById('resumeWaitCard');
+                    if (_rwc2) _rwc2.remove();
+                }
+                gotAnyChunk = true;
+                resumedText += chunk.content;
+                // Keep streamingContext in sync so that if the user switches to background
+                // again mid-resume, the next snapshot captures the latest text and seq.
+                if (streamingContext) streamingContext.assistantText = resumedText;
+
+                if (!resumedAssistantEl) {
+                    // Find last assistant bubble or create one
+                    const messagesEl = document.getElementById('chatMessages');
+                    const nodes = messagesEl.querySelectorAll('.message.assistant');
+                    resumedAssistantEl = nodes.length
+                        ? nodes[nodes.length - 1]
+                        : appendMessage('assistant', '');
+                }
+                updateLastMessage(resumedAssistantEl, resumedText);
+                if (!streamingUserScrolledUp) {
+                    document.getElementById('chatMessages').scrollTop = 99999;
+                }
+            }
+        };
+
+        es.onerror = () => {
+            es.close();
+            if (currentResumeEventSource === es) currentResumeEventSource = null;
+            if (gotAnyChunk) {
+                doResumeFinalize();
+            } else {
+                console.warn('[Resume] onerror with no chunks received');
+                backgroundSnapshot = null;
+                setProcessing(false);
+            }
+        };
+    }
+
+    // Legacy function name for backward compatibility
+    function tryResumeSessionStream(sessionId) {
+        resumeStream(sessionId, lastReceivedSeq);
+    }
+
+    function clearPlanPanelUI() {
+        const emptyEl   = document.getElementById('emptyPlan');
+        const contentEl = document.getElementById('planContent');
+        const hintEl    = document.getElementById('drawerHint');
+        const progressWrap = document.getElementById('drawerProgressWrap');
+        if (emptyEl)   { emptyEl.style.display = 'block'; }
+        if (contentEl) { contentEl.style.display = 'none'; contentEl.innerHTML = ''; }
+        if (hintEl)    { hintEl.className = 'drawer-hint'; const _t = hintEl.querySelector('#drawerHintText'); if (_t) _t.textContent = '📋 任务计划已生成，点击查看'; }
+        if (progressWrap) { progressWrap.style.display = 'none'; }
+        planPending = false;
+        setPlanGenerating(false);
+        setDrawerHasPlan(false);
+    }
+
+    function startNewSession() {
+
+        if (currentResumeEventSource) {
+            currentResumeEventSource.close();
+            currentResumeEventSource = null;
+        }
+        currentSessionId = generateUUID();
+        connectPlanStream();
+        fetchCurrentPlan();
+        clearChatUI();
+
+        // 强制清空任务计划面板内容
+        clearPlanPanelUI();
+        setProcessing(false);
+    }
+
+    async function deleteSession(event, sessionId) {
+        event.stopPropagation();
+        if (!confirm('确定删除这个对话记录？')) return;
+        try {
+            await fetch(BASE_PATH + '/api/sessions/' + sessionId, { method: 'DELETE' });
+            if (sessionId === currentSessionId) startNewSession();
+            await loadSessionHistory();
+        } catch(e) { alert('删除失败'); }
+    }
+
+    function clearChatUI() {
+        const btnHtml = suggestedQuestions.length > 0
+            ? suggestedQuestions.map(q =>
+                `<button class="suggestion-btn" onclick="sendSuggestion(this)">${escapeHtml(q)}</button>`
+              ).join('')
+            : '';
+        document.getElementById('chatMessages').innerHTML = `
+            <div class="message assistant">
+                <div class="welcome-card">
+                    <div class="welcome-banner">
+                        <div class="welcome-avatar">
+                            <svg width="26" height="26" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><defs><linearGradient x1="50%" y1="76.9577359%" x2="31.5960253%" y2="0%" id="lg2"><stop stop-color="#2E58F7" offset="0%"></stop><stop stop-color="#00CBFC" offset="100%"></stop></linearGradient></defs><g stroke="none" stroke-width="1" fill="none" fill-rule="evenodd"><rect stroke="#FFFFFF" fill="#FFFFFF" x="0.5" y="0.5" width="21" height="21" rx="4"></rect><g transform="translate(5, 3)" fill="url(#lg2)"><path d="M1,5.96733911 L4.99803067,9.49317142 L4.7053422,13.8950576 L3.21049157,14.7972052 C2.98746288,14.9255039 2.73408116,15 2.48069944,15 C2.22731772,15 1.97261632,14.9351608 1.74034972,14.7972052 C1.28332302,14.5220301 1.00118988,14.0131305 1,13.4617944 L1,5.96733911 Z M9.06715829,4.73782976 L12.2596503,6.6647187 C12.7162652,6.94063005 13,7.44830686 13,8.00012956 C13,8.55195227 12.7162652,9.06100861 12.26097,9.33691996 L6.34815097,12.9037135 L6.59139638,9.24400805 L9.06715829,4.73782976 Z M3.21049157,1.20305396 L7.70296295,3.91449084 L5.62743719,7.69252048 L1.0252031,3.6343975 L1,3.66532747 L1,2.53846475 C1.00225816,1.98906035 1.28343214,1.48223378 1.73847879,1.20732922 C2.19352544,0.932424663 2.75399068,0.930796866 3.21049157,1.20305396 Z"></path></g></g></svg>
+                        </div>
+                        <div class="welcome-banner-text">
+                            <div class="welcome-banner-title">你好！有什么可以帮你？</div>
+                            <div class="welcome-banner-sub">专注业务数据分析，快速洞察关键指标与趋势</div>
+                        </div>
+                    </div>
+                    <div class="welcome-chips">
+                        <span class="welcome-chip">📊 数据分析</span>
+                        <span class="welcome-chip">🎯 指标追踪</span>
+                        <span class="welcome-chip">💡 智能洞察</span>
+
+                    </div>
+                    <hr class="welcome-divider">
+                    <div class="welcome-suggest-label">快速开始 · 点击直接提问</div>
+                    <div class="welcome-suggest-list">${btnHtml}</div>
+                </div>
+            </div>`;
+        // Also sync the static welcome card on the page (if visible before JS runs)
+        const staticList = document.getElementById('staticSuggestList');
+        if (staticList) staticList.innerHTML = btnHtml;
+    }
+
+    // Sync chat input bottom padding with drawer state
+    function syncDrawerPadding() {
+        const inputContainer = document.getElementById('chatInputContainer');
+        if (!inputContainer) return;
+        if (hasPlan && !drawerOpen) {
+            // hint strip visible: --drawer-hint-h = 40px
+            inputContainer.style.paddingBottom = 'calc(10px + var(--drawer-hint-h) + var(--safe-bottom))';
+        } else {
+            inputContainer.style.paddingBottom = 'calc(10px + var(--safe-bottom))';
+        }
+    }
+
+    /* ═══════════════════════ Drawer ═══════════════════════ */
+    function expandDrawer() {
+        drawerOpen = true;
+        userCollapsed = false;
+        const drawer = document.getElementById('planDrawer');
+        drawer.classList.add('expanded');
+        document.getElementById('drawerOverlay').classList.add('active');
+        syncDrawerPadding();
+    }
+
+    function collapseDrawer() {
+        drawerOpen = false;
+        userCollapsed = true;   // remember: user explicitly closed
+        const drawer = document.getElementById('planDrawer');
+        drawer.classList.remove('expanded');
+        document.getElementById('drawerOverlay').classList.remove('active');
+        syncDrawerPadding();
+    }
+
+    function setDrawerHasPlan(has) {
+        hasPlan = has;
+        const drawer = document.getElementById('planDrawer');
+        if (has) {
+            drawer.classList.add('has-plan');
+        } else {
+            drawer.classList.remove('has-plan', 'expanded');
+            document.getElementById('drawerOverlay').classList.remove('active');
+            drawerOpen = false;
+            userCollapsed = false;
+        }
+        syncDrawerPadding();
+    }
+
+    /* ═══════════════════════ Datasets (background, for agent context) ═══════════════════════ */
+    async function loadDatasets() {
+        try {
+            const res = await fetch(BASE_PATH + '/api/datasets');
+            datasets = await res.json();
+        } catch (e) {}
+    }
+
+    /* ═══════════════════════ Chat ═══════════════════════ */
+    // Click a suggestion chip: fill & send immediately
+    function sendSuggestion(btn) {
+        if (isProcessing) return;
+        const text = btn.textContent.replace(/^[\p{Emoji}\s]+/u, '').trim();
+        document.getElementById('chatInput').value = text;
+        sendMessage();
+    }
+    // Post-report inline chip: send full text as-is
+    function sendSuggestionText(btn) {
+        if (isProcessing) return;
+        const text = btn.textContent.trim();
+        document.getElementById('chatInput').value = text;
+        sendMessage();
+    }
+    function handleInputKey(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    }
+
+    function autoResize(el) {
+        el.style.height = 'auto';
+        el.style.height = Math.min(el.scrollHeight, 110) + 'px';
+    }
+
+    async function sendMessage() {
+        const input = document.getElementById('chatInput');
+        const message = input.value.trim();
+        if (!message || isProcessing) return;
+
+        if (currentResumeEventSource) {
+            currentResumeEventSource.close();
+            currentResumeEventSource = null;
+        }
+
+        let fullMessage = message;
+
+
+        appendMessage('user', message);
+        input.value = '';
+        input.style.height = 'auto';
+        setProcessing(true);
+        streamingUserScrolledUp = false;  // reset auto-scroll lock for new message
+        // Mark that a plan may arrive (for clearPlanPendingIfNeeded), but do NOT show drawer yet
+        planPending = true;
+
+        const typingEl = appendTyping();
+        const requestId = generateUUID();
+        
+        // Reset sequence tracking for new turn
+        lastReceivedSeq = -1;
+        currentRequestId = requestId;
+        
+        const url = BASE_PATH + '/api/chat?message=' + encodeURIComponent(fullMessage)
+            + '&sessionId=' + encodeURIComponent(currentSessionId)
+            + '&requestId=' + encodeURIComponent(requestId)
+            + '&account=' + encodeURIComponent(currentUserName);
+        const eventSource = new EventSource(url);
+
+        // Track current EventSource for visibility handling
+        currentEventSource = eventSource;
+        let assistantText = '';
+        let assistantEl = null;
+        let finalized = false;
+        let inSpecialBlock = false;  // true once <report> or <chart> tag detected
+        let inReportStream = false;   // true when streaming report content (not chart)
+        // Set to true after query_dataset completes so normal-text streaming shows a
+        // "generating chart…" pre-indicator before the <chart> tag actually arrives.
+        let pendingChartLoading = false;
+
+        // Initialize streaming context for visibility handling
+        // This object is updated throughout the streaming process
+        streamingContext = {
+            eventSource: eventSource,
+            assistantEl: null,
+            assistantText: '',
+            finalized: false,
+            doFinalize: null  // will be set after doFinalize is defined
+        };
+
+        // ── Query-waiting indicator ──────────────────────────────────────────────────
+        // When the LLM finishes emitting "Now I will query…" text and falls silent
+        // while waiting for query_dataset to return, we show a waiting card after a
+        // short debounce so the user isn't left staring at a frozen screen.
+        let queryWaitDebounce = null;  // setTimeout handle (2-sec debounce)
+        let queryWaitTimer   = null;   // setInterval handle (elapsed counter in card)
+        let queryWaitEl      = null;   // DOM reference to the waiting card element
+        let queryWaitSecs    = 0;      // seconds elapsed since card appeared
+        let queryWaitActive  = false;  // true while card is visible
+
+        function showQueryWaitCard() {
+            if (queryWaitActive || !assistantEl) return;
+            queryWaitActive = true;
+            const content = assistantEl.querySelector('.message-content');
+            if (!content) return;
+            const old = content.querySelector('#queryWaitCard');
+            if (old) old.remove();
+
+            // Detect whether subtasks are currently running to choose appropriate text/icon
+            const _hasPlanRunning = document.getElementById('drawerHint')
+                && document.getElementById('drawerHint').classList.contains('hint-running');
+
+            const card = document.createElement('div');
+            card.id = 'queryWaitCard';
+            card.style.cssText =
+                'display:inline-flex;align-items:center;gap:7px;margin-top:6px;'
+                + 'padding:7px 14px;background:var(--surface2);border:1px solid var(--border);'
+                + 'border-radius:20px;font-size:0.8rem;color:var(--text-sub);';
+
+            const dots =
+                '<span style="display:inline-flex;gap:3px;align-items:center;margin-left:1px;">'
+                + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite;"></span>'
+                + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite 0.2s;"></span>'
+                + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite 0.4s;"></span>'
+                + '</span>';
+
+            if (_hasPlanRunning) {
+                // Sub-task query in progress — show "querying" hint
+                card.innerHTML =
+                    '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;animation:waitIconPulse 1.8s ease-in-out infinite;">'
+                    + '<circle cx="11" cy="11" r="7" stroke="#f97316" stroke-width="2"/>'
+                    + '<path d="M20 20l-3-3" stroke="#f97316" stroke-width="2" stroke-linecap="round"/>'
+                    + '<path d="M11 8v3l2 2" stroke="#f97316" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>'
+                    + '</svg>'
+                    + '<span>正在努力查询中，请稍等</span>'
+                    + dots;
+            } else {
+                // LLM reasoning pause — show "thinking" hint
+                card.innerHTML =
+                    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;animation:waitIconPulse 1.8s ease-in-out infinite;">'
+                    + '<path d="M12 2l2.09 6.26L20 10l-5.91 1.74L12 18l-2.09-6.26L4 10l5.91-1.74L12 2z" fill="#f97316" opacity="0.9"/>'
+                    + '<path d="M19 15l1.09 3.26L23 19l-2.91.74L19 23l-1.09-3.26L15 19l2.91-.74L19 15z" fill="#f97316" opacity="0.7"/>'
+                    + '<path d="M5 3l.73 2.27L8 6l-2.27.73L5 9l-.73-2.27L2 6l2.27-.73L5 3z" fill="#f97316" opacity="0.55"/>'
+                    + '</svg>'
+                    + '<span>正在思考，请稍等</span>'
+                    + dots;
+            }
+
+            content.appendChild(card);
+            queryWaitEl = card;
+            if (!streamingUserScrolledUp) document.getElementById('chatMessages').scrollTop = 99999;
+        }
+
+        function clearQueryWaitCard() {
+            if (queryWaitDebounce) { clearTimeout(queryWaitDebounce); queryWaitDebounce = null; }
+            if (queryWaitTimer)    { clearInterval(queryWaitTimer);   queryWaitTimer = null; }
+            if (queryWaitEl) { queryWaitEl.remove(); queryWaitEl = null; }
+            queryWaitActive = false;
+        }
+
+        // Detect user scroll: if user scrolls up (away from bottom), stop auto-scroll
+        const chatMsgsEl = document.getElementById('chatMessages');
+        function onUserScroll() {
+            const atBottom = chatMsgsEl.scrollHeight - chatMsgsEl.scrollTop - chatMsgsEl.clientHeight < 60;
+            streamingUserScrolledUp = !atBottom;
+        }
+        chatMsgsEl.addEventListener('scroll', onUserScroll, { passive: true });
+
+        function doFinalize() {
+            if (finalized) return;
+            finalized = true;
+            // Clean up global streaming state
+            if (currentEventSource === eventSource) {
+                currentEventSource = null;
+            }
+            if (streamingContext && streamingContext.eventSource === eventSource) {
+                streamingContext.finalized = true;
+            }
+            chatMsgsEl.removeEventListener('scroll', onUserScroll);
+            // Clean up query-wait timers to prevent memory leaks
+            clearQueryWaitCard();
+            // 清除图表等待提示卡的计时器（finalizeMessage 会移除 DOM，这里只需停计时器）
+            if (window._chartWaitTimer) { clearInterval(window._chartWaitTimer); window._chartWaitTimer = null; }
+            // 取消尚未执行的滚动 rAF
+            if (_scrollRafId) { cancelAnimationFrame(_scrollRafId); _scrollRafId = null; }
+            // 重置流式渲染状态变量
+            _streamLastStableLen = 0;
+            _streamLastTableCount = 0;
+            removeTyping(typingEl);
+            if (assistantEl) finalizeMessage(assistantEl, assistantText);
+            // If LLM answered directly (no plan was ever pushed), clear pending state
+            planPending = false;
+            clearPlanPendingIfNeeded();
+            setProcessing(false);
+        }
+
+        // Set doFinalize reference in streamingContext for visibility handler
+        streamingContext.doFinalize = doFinalize;
+
+        // Sanitise and render report HTML incrementally (same rules as finalizeMessage)
+        // ── 增量渲染策略：避免每次 chunk 全量 innerHTML 替换导致移动端回流闪烁 ──
+        // 关键数据：上一次已稳定渲染的 Markdown 长度，只有超过该长度才触发 DOM 更新
+        let _streamLastStableLen = 0;
+        // 表格冻结：记录上一次渲染的表格数量，流式期间表格还在增长时冻结 DOM，避免滚动条闪现/消失导致 reflow
+        let _streamLastTableCount = 0;
+        // 滚动 rAF 节流标志：每帧最多触发一次滚动，防止高频 scrollTop 操作加重移动端图层合成开销
+        let _scrollRafId = null;
+        // 节流计时器：防止 reportClosed 时节流 timer 再次展示旧内容
+        let _streamPendingStable = '';
+        let _streamThrottleTimer = null;
+
+        function renderReportStream(rawContent) {
+            const content = assistantEl.querySelector('.message-content');
+            if (!content) return;
+            let reportBlock = content.querySelector('#streamingReportBlock');
+            if (!reportBlock) {
+                // Remove loading indicator and create report block
+                const loadingEl = content.querySelector('#msgLoadingIndicator');
+                if (loadingEl) loadingEl.remove();
+                reportBlock = document.createElement('div');
+                reportBlock.className = 'report-block report-block-streaming';
+                reportBlock.id = 'streamingReportBlock';
+                content.classList.add('has-chart');
+                content.appendChild(reportBlock);
+                _streamLastStableLen = 0;
+                requestAnimationFrame(() => {
+                    reportBlock.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+            }
+
+            // ── 找到稳定可渲染部分（排除末尾不完整的表格/标题）──────────────────────
+            function splitAtIncompleteTable(md) {
+                const lines = md.split('\n');
+                let tableStart = -1;
+                for (let i = lines.length - 1; i >= 0; i--) {
+                    const trimmed = lines[i].trim();
+                    if (trimmed.startsWith('|') || trimmed === '') {
+                        if (trimmed.startsWith('|')) tableStart = i;
+                    } else {
+                        break;
+                    }
+                }
+                if (tableStart === -1) return { stable: md, pending: '' };
+                const tableLines = lines.slice(tableStart);
+                const hasSeparator = tableLines.some(l => /^\|[\s\-:|]+\|/.test(l.trim()));
+                const dataRowsAfterSep = (() => {
+                    let seenSep = false;
+                    return tableLines.filter(l => {
+                        const t = l.trim();
+                        if (!seenSep && /^\|[\s\-:|]+\|/.test(t)) { seenSep = true; return false; }
+                        return seenSep && t.startsWith('|');
+                    }).length;
+                })();
+                if (!hasSeparator || dataRowsAfterSep === 0) {
+                    return { stable: lines.slice(0, tableStart).join('\n'), pending: tableLines.join('\n') };
+                }
+                return { stable: md, pending: '' };
+            }
+
+            if (typeof renderMarkdown !== 'undefined') {
+                // ── 过滤末尾可能尚未完整的 XML/HTML 标签片段 ──
+                // LLM 流式输出时 </report> 可能分多个 chunk 到达，
+                // 中间状态可能是: "</" 或 "</r" 或 "</re" 或 "</rep" 或 "</repo" 等。
+                // 过滤这些未完成的标签，防止它们被 markdown 渲染为普通文本展示给用户。
+                const cleanContent = rawContent.replace(/<\/?[a-zA-Z]{0,20}\s*$/, '');
+                const { stable, pending } = splitAtIncompleteTable(cleanContent);
+
+                // ── 只有稳定内容有新增时才刷新主体，避免高频无效 DOM 写入 ──
+                if (stable.length > _streamLastStableLen) {
+                    _streamLastStableLen = stable.length;
+                    const stableHtml = renderMarkdown(stable);
+                
+                    // ── 表格冻结机制：计算本次 stableHtml 里的表格数量 ──
+                    // 如果表格数比上次多（表格还在流式增长），则跳过本次 innerHTML 更新。
+                    // 原因：表格行数增加时宽度就会变，导致滚动条闪现／消失 → reflow → 闪烁。
+                    // 等到表格行数稳定（不再增加）后才做一次性渲染，大幅减少闪烁次数。
+                    const curTableCount = (stableHtml.match(/<table/g) || []).length;
+                    const tableGrowing = curTableCount > _streamLastTableCount;
+                    _streamLastTableCount = curTableCount;
+                
+                    if (!tableGrowing) {
+                        // 表格已稳定（数量未增加）→ 可以安全更新 DOM
+                        let stableNode = reportBlock.querySelector('#reportStableZone');
+                        if (!stableNode) {
+                            stableNode = document.createElement('div');
+                            stableNode.id = 'reportStableZone';
+                            // contain:layout paint 隔离重绘但不脱离文档流尺寸计算（不加 size，避免气泡高度塔陷为0）
+                            stableNode.style.cssText = 'contain:layout paint;will-change:contents;-webkit-transform:translateZ(0);transform:translateZ(0);';
+                            const oldPre = reportBlock.querySelector('#streamingTablePending');
+                            reportBlock.innerHTML = '';
+                            reportBlock.appendChild(stableNode);
+                            if (oldPre) reportBlock.appendChild(oldPre);
+                        }
+                        stableNode.innerHTML = stableHtml;
+                        if (typeof wrapTables !== 'undefined') {
+                            wrapTables(stableNode);
+                            // ── 流式期间给所有 table-wrapper 加 overflow-x:hidden ──
+                            // 锁定滚动条隐藏，彻底消除宽表格导致的滚动条闪现/消失 reflow
+                            // doFinalize 里会恢复为 overflow-x:auto
+                            stableNode.querySelectorAll('.table-wrapper').forEach(tw => {
+                                tw.style.overflowX = 'hidden';
+                            });
+                        }
+                    }
+                }
+
+                // ── 更新/移除 pending 占位 pre（不影响稳定区） ──
+                let pendingEl = reportBlock.querySelector('#streamingTablePending');
+                if (pending) {
+                    if (!pendingEl) {
+                        pendingEl = document.createElement('pre');
+                        pendingEl.id = 'streamingTablePending';
+                        pendingEl.style.cssText =
+                            'white-space:pre-wrap;word-break:break-word;'
+                            + 'font-family:inherit;font-size:0.82rem;line-height:1.6;'
+                            + 'color:var(--text-hint);opacity:0.55;background:transparent;'
+                            + 'padding:4px 0;margin:4px 0 0;';
+                        reportBlock.appendChild(pendingEl);
+                    }
+                    pendingEl.textContent = pending;
+                } else if (pendingEl) {
+                    pendingEl.remove();
+                }
+            } else {
+                // marked 未加载时降级展示
+                let rawEl = reportBlock.querySelector('#reportStableZone');
+                if (!rawEl) {
+                    rawEl = document.createElement('pre');
+                    rawEl.id = 'reportStableZone';
+                    rawEl.style.cssText = 'white-space:pre-wrap;word-break:break-word;font-family:inherit;font-size:0.85rem;line-height:1.7;color:var(--text-sub);background:transparent;padding:0;margin:0;';
+                    reportBlock.appendChild(rawEl);
+                }
+                rawEl.textContent = rawContent;
+            }
+            // ── rAF 节流滚动：每帧最多触发一次，防止高频 scrollTop 操作加重移动端 WebView 图层合成开销 ──
+            if (!streamingUserScrolledUp && !_scrollRafId) {
+                _scrollRafId = requestAnimationFrame(() => {
+                    _scrollRafId = null;
+                    document.getElementById('chatMessages').scrollTop = 99999;
+                });
+            }
+        }
+
+        eventSource.onmessage = (event) => {
+            // ── Parse JSON chunk (new format with seq, type, content) ──
+            let chunkData;
+            try {
+                chunkData = JSON.parse(event.data);
+            } catch (e) {
+                console.warn('[Stream] Failed to parse chunk:', event.data);
+                return;
+            }
+
+            // Update sequence tracking
+            if (chunkData.seq !== undefined) {
+                lastReceivedSeq = chunkData.seq;
+            }
+
+            // Handle different chunk types
+            if (chunkData.type === 'DONE') {
+                eventSource.close();
+                doFinalize();
+                clearStreamState();
+                return;
+            }
+
+            if (chunkData.type === 'ERROR') {
+                console.error('[Stream] Error:', chunkData.content);
+                eventSource.close();
+                doFinalize();
+                return;
+            }
+
+            // Skip non-TEXT types for text accumulation
+            if (chunkData.type !== 'TEXT') {
+                // TOOL_STATUS and PLAN_UPDATE are handled separately
+                if (chunkData.type === 'TOOL_STATUS') {
+                    // Handle tool status marker — show context-aware status message
+                    const content = chunkData.content || '';
+                    // Support both old [TOOL:xxx] and new [TOOL_START:xxx] / [TOOL_END:xxx]
+                    const oldMatch  = content.match(/^\[TOOL:([^\]]+)\]$/);
+                    const startMatch = content.match(/^\[TOOL_START:([^\]]+)\]$/);
+                    const endMatch  = content.match(/^\[TOOL_END:([^\]]+)\]$/);
+                    const toolName = (oldMatch || startMatch || endMatch)?.[1] || null;
+
+                    if (toolName) {
+                        const isEnd = !!endMatch;
+
+                        // Build human-readable label with SVG icon
+                        const svgQuery  = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;"><circle cx="11" cy="11" r="7" stroke="var(--primary)" stroke-width="2"/><path d="M20 20l-3-3" stroke="var(--primary)" stroke-width="2" stroke-linecap="round"/></svg>';
+                        const svgPlan   = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" stroke="var(--primary)" stroke-width="2" stroke-linecap="round"/><rect x="9" y="3" width="6" height="4" rx="1" stroke="var(--primary)" stroke-width="2"/></svg>';
+                        const svgCheck  = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;"><path d="M5 13l4 4L19 7" stroke="var(--primary)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+                        const svgGear   = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;"><circle cx="12" cy="12" r="3" stroke="var(--primary)" stroke-width="2"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="var(--primary)" stroke-width="2" stroke-linecap="round"/></svg>';
+
+                        const labelMap = {
+                            'create_plan':          [svgPlan,  '正在创建分析任务'],
+                            'query_dataset':        [svgQuery, isEnd ? '数据查询完成，准备生成' : '正在向数据服务查询'],
+                            'finish_subtask':       [svgCheck, '数据查询完成，正在整理'],
+                            'finish_plan':          [svgCheck, '分析计划执行完成'],
+                            'update_subtask_state': [svgGear,  '更新任务状态'],
+                            'view_subtasks':        [svgPlan,  '查看子任务'],
+                            'get_subtask_count':    [svgPlan,  '确认任务数量'],
+                            'list_datasets':        [svgGear,  '正在发现可用数据集'],
+                        };
+                        const [icon, text] = labelMap[toolName] || [svgGear, toolName];
+                        const dots = isEnd ? '' :
+                            '<span style="display:inline-flex;gap:3px;align-items:center;margin-left:1px;">'
+                            + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite;"></span>'
+                            + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite 0.2s;"></span>'
+                            + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite 0.4s;"></span>'
+                            + '</span>';
+
+                        clearQueryWaitCard();
+                        if (toolName === 'query_dataset' && !isEnd) pendingChartLoading = true;
+                        if (!assistantEl) { removeTyping(typingEl); assistantEl = appendMessage('assistant', ''); }
+                        if (streamingContext) streamingContext.assistantEl = assistantEl;
+                        const msgContent = assistantEl.querySelector('.message-content');
+                        let statusEl = msgContent.querySelector('#toolStatusLine');
+                        if (!statusEl) {
+                            statusEl = document.createElement('div');
+                            statusEl.id = 'toolStatusLine';
+                            statusEl.style.cssText =
+                                'display:inline-flex;align-items:center;gap:7px;margin-top:6px;'
+                                + 'padding:7px 14px;background:var(--surface2);border:1px solid var(--border);'
+                                + 'border-radius:20px;font-size:0.8rem;color:var(--text-sub);';
+                            msgContent.appendChild(statusEl);
+                        }
+                        statusEl.innerHTML = icon + '<span>' + text + '</span>' + dots;
+                        // Remove the status line once a tool END is received (real content follows soon)
+                        if (isEnd) {
+                            setTimeout(() => { if (statusEl.parentNode) statusEl.remove(); }, 600);
+                        }
+                        if (!streamingUserScrolledUp) document.getElementById('chatMessages').scrollTop = 99999;
+                    }
+                    return;
+                }
+                return;
+            }
+
+            // Extract actual text content from TEXT chunk
+            const chunk = chunkData.content || '';
+            if (chunk === '[STOPPED]') { eventSource.close(); doFinalize(); return; }
+
+            // Update streaming context for visibility handler
+            if (streamingContext) {
+                streamingContext.assistantEl = assistantEl;
+                streamingContext.assistantText = assistantText;
+            }
+
+            assistantText += chunk;
+
+            // Update streaming context for visibility handler
+            if (streamingContext) {
+                streamingContext.assistantText = assistantText;
+            }
+
+            // Once we see a special-block opening tag, switch to streaming report / loading
+            if (!inSpecialBlock && /<report>|<chart>/i.test(assistantText)) {
+                inSpecialBlock = true;
+                pendingChartLoading = false; // chart block has arrived; no longer "pending"
+                // Determine if this is a report block (stream it) or chart block (show spinner)
+                inReportStream = /<report>/i.test(assistantText);
+                // Ensure we have a bubble
+                if (!assistantEl) { removeTyping(typingEl); assistantEl = appendMessage('assistant', ''); }
+                // Update streaming context
+                if (streamingContext) streamingContext.assistantEl = assistantEl;
+                const beforeTag = assistantText
+                    .replace(/<report>[\s\S]*/i, '')
+                    .replace(/<chart>[\s\S]*/i, '')
+                    .trim();
+                const content = assistantEl.querySelector('.message-content');
+                // Remove tool status line (replaced by report loading indicator)
+                const _statusEl = content.querySelector('#toolStatusLine');
+                if (_statusEl) _statusEl.remove();
+                // Remove pre-chart loading bar if it was shown during normal streaming
+                const _preChartEl = content.querySelector('#preChartLoadingBar');
+                if (_preChartEl) _preChartEl.remove();
+                // 渲染 <report> 之前的普通文本（如果有 Markdown 格式也一并渲染）
+                let textNode = '';
+                if (beforeTag) {
+                    // 过滤裸露的图表 JSON，然后用统一的 renderMarkdown 渲染
+                    const looseChartJsonRegex = /\{[\s]*"type"[\s]*:[\s]*"(bar|line|pie)"[\s]*,[\s]*"title"[\s]*:[\s]*"[^"]*"[\s]*,[\s]*"data"[\s]*:[\s]*\[[\s\S]*?\][\s]*\}/gi;
+                    let filteredBefore = beforeTag.replace(looseChartJsonRegex, '').trim();
+                    const parsedBefore = (typeof renderMarkdown !== 'undefined')
+                        ? renderMarkdown(filteredBefore)
+                        : escapeHtml(filteredBefore);
+                    textNode = `<div class="text-part" id="msgTextPart">${parsedBefore}</div>`;
+                }
+                if (inReportStream) {
+                    // Start with text part only; report block will be created on first content chunk
+                    content.innerHTML = textNode +
+                        `<div style="display:inline-flex;align-items:center;gap:7px;margin-top:6px;padding:7px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;font-size:0.8rem;color:var(--text-sub);" id="msgLoadingIndicator">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" stroke="var(--primary)" stroke-width="2" stroke-linecap="round"/><rect x="9" y="3" width="6" height="4" rx="1" stroke="var(--primary)" stroke-width="2"/><path d="M9 12h6M9 16h4" stroke="var(--primary)" stroke-width="1.5" stroke-linecap="round"/></svg>
+                            <span>生成分析报告中</span>
+                            <span style="display:inline-flex;gap:3px;align-items:center;"><span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite;"></span><span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite 0.2s;"></span><span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite 0.4s;"></span></span>
+                        </div>`;
+                    // Keep scroll at bottom – smooth scroll to conclusion text is disorienting
+                    if (!streamingUserScrolledUp) document.getElementById('chatMessages').scrollTop = 99999;
+                    // Immediately try to render any report content already buffered
+                    const reportInner = assistantText.match(/<report>([\s\S]*)/i);
+                    if (reportInner && reportInner[1].trim()) {
+                        // Strip closing tag if already present
+                        const rawSoFar = reportInner[1].replace(/<\/report>[\s\S]*/i, '');
+                        renderReportStream(rawSoFar);
+                    }
+                } else {
+                    // Chart block: show spinner; replaced when chart actually streams in.
+                    content.innerHTML = textNode +
+                        `<div style="display:inline-flex;align-items:center;gap:7px;margin-top:6px;padding:7px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;font-size:0.8rem;color:var(--text-sub);" id="msgLoadingIndicator">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;"><rect x="3" y="12" width="4" height="9" rx="1" fill="var(--primary)" opacity="0.9"/><rect x="10" y="7" width="4" height="14" rx="1" fill="var(--primary)" opacity="0.7"/><rect x="17" y="3" width="4" height="18" rx="1" fill="var(--primary)" opacity="0.5"/></svg>
+                            <span id="chartLoadingText">正在生成图表</span>
+                            <span style="display:inline-flex;gap:3px;align-items:center;"><span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite;"></span><span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite 0.2s;"></span><span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite 0.4s;"></span></span>
+                        </div>`;
+                    if (!streamingUserScrolledUp) document.getElementById('chatMessages').scrollTop = 99999;
+                }
+                return;
+            }
+
+            if (inSpecialBlock) {
+                // For report blocks: stream the inner content in real time
+                if (inReportStream) {
+                    const reportInner = assistantText.match(/<report>([\s\S]*)/i);
+                    if (reportInner) {
+                        // 检测 </report> 闭合标签是否已到达
+                        const reportClosed = /<\/report>/i.test(reportInner[1]);
+                        // Strip closing tag if already received
+                        const rawSoFar = reportInner[1].replace(/<\/report>[\s\S]*/i, '');
+                        if (rawSoFar.trim()) renderReportStream(rawSoFar);
+
+                        // ── 报告内容已全部输出，等待 <chart> 段到来 ──
+                        // 当 </report> 闭合标签到达时，将 inReportStream 切换为 false，
+                        // 并在 report block 底部显示“正在绘制图表…”等待提示，
+                        // 防止 </report 标签文字被展示给用户。
+                        if (reportClosed && inReportStream) {
+                            inReportStream = false;
+                            // 立刻清除所有展示中的 pending 占位元素（可能包含 </report 片段）
+                            if (assistantEl) {
+                                const _content = assistantEl.querySelector('.message-content');
+                                const _reportBlock = _content && _content.querySelector('#streamingReportBlock');
+                                if (_reportBlock) {
+                                    const _pendingEl = _reportBlock.querySelector('#streamingTablePending');
+                                    if (_pendingEl) _pendingEl.remove();
+                                    // 清空节流缓存，防止节流 timer 再次展示旧内容
+                                    _streamPendingStable = '';
+                                    if (_streamThrottleTimer) { clearTimeout(_streamThrottleTimer); _streamThrottleTimer = null; }
+
+                                    if (!_reportBlock.querySelector('#chartWaitingCard')) {
+                                        const waitCard = document.createElement('div');
+                                        waitCard.id = 'chartWaitingCard';
+                                        waitCard.style.cssText =
+                                            'display:inline-flex;align-items:center;gap:7px;'
+                                            + 'margin-top:12px;padding:7px 14px;'
+                                            + 'background:var(--surface2);border:1px solid var(--border);'
+                                            + 'border-radius:20px;font-size:0.8rem;color:var(--text-sub);';
+                                        waitCard.innerHTML =
+                                            '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;">'
+                                            + '<rect x="3" y="12" width="4" height="9" rx="1" fill="var(--primary)" opacity="0.9"/>'
+                                            + '<rect x="10" y="7" width="4" height="14" rx="1" fill="var(--primary)" opacity="0.7"/>'
+                                            + '<rect x="17" y="3" width="4" height="18" rx="1" fill="var(--primary)" opacity="0.5"/>'
+                                            + '</svg>'
+                                            + '<span id="chartWaitingText">正在绘制图表</span>'
+                                            + '<span style="display:inline-flex;gap:3px;align-items:center;">'
+                                            + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite;"></span>'
+                                            + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite 0.2s;"></span>'
+                                            + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite 0.4s;"></span>'
+                                            + '</span>';
+                                        _reportBlock.appendChild(waitCard);
+                                        if (!streamingUserScrolledUp) {
+                                            requestAnimationFrame(() => {
+                                                document.getElementById('chatMessages').scrollTop = 99999;
+                                            });
+                                        }
+                                    } // end if !chartWaitingCard
+                                } // end if _reportBlock
+                            } // end if assistantEl
+                        } // end if reportClosed
+                    } // end if reportInner
+                } else {
+                    // Chart JSON accumulating: update the loading text with received byte count
+                    // so the user sees progress rather than a frozen spinner.
+                    // 如果是由 report 切换过来的（inReportStream 已变 false），
+                    // chartLoadingText 不存在，此时只需更新已有的等待卡文字即可。
+                    const chartInner = assistantText.match(/<chart>([\s\S]*)/i);
+                    if (chartInner) {
+                        const received = chartInner[1].replace(/<\/chart>[\s\S]*/i, '').length;
+                        const kb = (received / 1024).toFixed(1);
+                        // 先尝试更新原有的 chartLoadingText（纯 chart 模式）
+                        const loadingTxt = document.getElementById('chartLoadingText');
+                        if (loadingTxt) {
+                            loadingTxt.textContent = `正在生成图表… (${kb}KB)`;
+                        } else {
+                            // report+chart 组合模式：先检查是否需要补插等待卡（如果 reportClosed 时等待卡没有成功插入）
+                            if (assistantEl && !document.getElementById('chartWaitingCard')) {
+                                const _c = assistantEl.querySelector('.message-content');
+                                const _rb = _c && (_c.querySelector('#streamingReportBlock') || _c.querySelector('.report-block'));
+                                if (_rb) {
+                                    const _pendingEl2 = _rb.querySelector('#streamingTablePending');
+                                    if (_pendingEl2) _pendingEl2.remove();
+                                    const waitCard = document.createElement('div');
+                                    waitCard.id = 'chartWaitingCard';
+                                    waitCard.style.cssText =
+                                        'display:inline-flex;align-items:center;gap:7px;'
+                                        + 'margin-top:12px;padding:7px 14px;'
+                                        + 'background:var(--surface2);border:1px solid var(--border);'
+                                        + 'border-radius:20px;font-size:0.8rem;color:var(--text-sub);';
+                                    waitCard.innerHTML =
+                                        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;">'
+                                        + '<rect x="3" y="12" width="4" height="9" rx="1" fill="var(--primary)" opacity="0.9"/>'
+                                        + '<rect x="10" y="7" width="4" height="14" rx="1" fill="var(--primary)" opacity="0.7"/>'
+                                        + '<rect x="17" y="3" width="4" height="18" rx="1" fill="var(--primary)" opacity="0.5"/>'
+                                        + '</svg>'
+                                        + '<span id="chartWaitingText">正在绘制图表</span>'
+                                        + '<span style="display:inline-flex;gap:3px;align-items:center;">'
+                                        + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite;"></span>'
+                                        + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite 0.2s;"></span>'
+                                        + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite 0.4s;"></span>'
+                                        + '</span>';
+                                    _rb.appendChild(waitCard);
+                                    if (!streamingUserScrolledUp) {
+                                        requestAnimationFrame(() => {
+                                            document.getElementById('chatMessages').scrollTop = 99999;
+                                        });
+                                    }
+                                }
+                            }
+                            // 更新已有的等待卡文字
+                            const waitTxt = document.getElementById('chartWaitingText');
+                            if (waitTxt && received > 0) {
+                                waitTxt.innerHTML = '&#x1F4CA; 正在绘制图表，请稍候…';
+                            }
+                        }
+                    }
+                }
+                return;
+            }
+
+            // Normal streaming: show plain text
+            if (!assistantEl) { removeTyping(typingEl); assistantEl = appendMessage('assistant', ''); }
+            // Update streaming context
+            if (streamingContext) streamingContext.assistantEl = assistantEl;
+            // Remove tool status line once real text arrives
+            const statusLineEl = assistantEl.querySelector('#toolStatusLine');
+            if (statusLineEl) statusLineEl.remove();
+            // Clear any active query-wait card since real text is arriving
+            clearQueryWaitCard();
+            updateLastMessage(assistantEl, assistantText);
+
+            // ── Start debounce: if text stream goes silent and we're not inside a
+            // special block, show a wait hint.
+            // When subtasks are running, use a shorter 1s debounce and allow it even if
+            // pendingChartLoading is true (chart won't appear immediately after subtask queries).
+            // Otherwise use 2s debounce and only when not already expecting a chart.
+            if (!inSpecialBlock) {
+                const _planRunning = document.getElementById('drawerHint')
+                    && document.getElementById('drawerHint').classList.contains('hint-running');
+                const _debounceMs = _planRunning ? 1000 : 2000;
+                if (_planRunning || !pendingChartLoading) {
+                    if (queryWaitDebounce) clearTimeout(queryWaitDebounce);
+                    queryWaitDebounce = setTimeout(() => {
+                        queryWaitDebounce = null;
+                        showQueryWaitCard();
+                    }, _debounceMs);
+                }
+            }
+
+            // If query_dataset already finished and the LLM is now outputting conclusion text,
+            // show a "generating chart…" bar ONLY when there is no active plan running.
+            // When subtasks are running, the bottom hint strip already shows progress;
+            // showing "generating chart" here would be misleading and redundant.
+            const _hasPlanRunning = document.getElementById('drawerHint')
+                && document.getElementById('drawerHint').classList.contains('hint-running');
+            if (pendingChartLoading && assistantEl && !_hasPlanRunning) {
+                const content = assistantEl.querySelector('.message-content');
+                if (content && !content.querySelector('#preChartLoadingBar')) {
+                    const bar = document.createElement('div');
+                    bar.id = 'preChartLoadingBar';
+                    bar.style.cssText =
+                        'display:inline-flex;align-items:center;gap:7px;margin-top:6px;'
+                        + 'padding:7px 14px;background:var(--surface2);border:1px solid var(--border);'
+                        + 'border-radius:20px;font-size:0.8rem;color:var(--text-sub);';
+                    bar.innerHTML =
+                        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;">'
+                        + '<rect x="3" y="12" width="4" height="9" rx="1" fill="var(--primary)" opacity="0.9"/>'
+                        + '<rect x="10" y="7" width="4" height="14" rx="1" fill="var(--primary)" opacity="0.7"/>'
+                        + '<rect x="17" y="3" width="4" height="18" rx="1" fill="var(--primary)" opacity="0.5"/>'
+                        + '</svg>'
+                        + '<span id="preChartText">正在生成图表</span>'
+                        + '<span style="display:inline-flex;gap:3px;align-items:center;">'
+                        + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite;"></span>'
+                        + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite 0.2s;"></span>'
+                        + '<span style="width:4px;height:4px;border-radius:50%;background:var(--primary);opacity:0.7;display:inline-block;animation:typingBounce 1.2s infinite 0.4s;"></span>'
+                        + '</span>';
+                    content.appendChild(bar);
+                }
+            }
+        };
+
+        eventSource.onerror = () => {
+            // When app is in background on mobile, SSE connection may be interrupted.
+            // If page is hidden, don't close immediately - let visibility handler deal with it.
+            if (document.visibilityState === 'hidden') {
+                console.log('[SSE] onerror while page hidden - close source and wait resume');
+                // Save current stream state so we can resume after returning to foreground
+                saveStreamState();
+                // Important: EventSource may auto-reconnect and re-hit /api/chat,
+                // causing duplicate user turns. Close explicitly and recover via /api/chat/resume.
+                eventSource.close();
+                return;
+            }
+
+            // Page is visible - this is a real error
+            console.log('[SSE] onerror while page visible - closing connection');
+            eventSource.close();
+            if (!assistantEl && assistantText === '') {
+                removeTyping(typingEl);
+                appendMessage('assistant', '（请求出错，请重试）');
+                setProcessing(false);
+            } else {
+                doFinalize();
+            }
+        };
+
+        const checkDone = setInterval(() => {
+            if (eventSource.readyState === EventSource.CLOSED) {
+                clearInterval(checkDone);
+                // Only finalize if stream is not being recovered in background
+                if (!finalized && document.visibilityState === 'visible') {
+                    doFinalize();
+                } else if (!finalized && document.visibilityState === 'hidden') {
+                    // Page is hidden - save state and wait for visibility change to resume
+                    saveStreamState();
+                }
+            }
+        }, 300);
+    }
+
+    function setProcessing(flag) {
+        isProcessing = flag;
+        document.getElementById('sendBtn').disabled = flag;
+        document.getElementById('chatInput').disabled = flag;
+    }
+
+    /* ═══════════════════════ Message helpers ═══════════════════════ */
+    function appendMessage(role, text) {
+        const container = document.getElementById('chatMessages');
+        const div = document.createElement('div');
+        div.className = 'message ' + role;
+        const label = role === 'user' ? '你' : '助手';
+        div.innerHTML = `<span class="message-label">${label}</span><div class="message-content">${escapeHtml(text)}</div>`;
+        container.appendChild(div);
+        container.scrollTop = container.scrollHeight;
+        return div;
+    }
+
+    function updateLastMessage(el, text) {
+        const content = el.querySelector('.message-content');
+        // 过滤掉裸露的图表 JSON（LLM 有时会在 <report> 之前输出 JSON）
+        const looseChartJsonRegex = /\{[\s]*"type"[\s]*:[\s]*"(bar|line|pie)"[\s]*,[\s]*"title"[\s]*:[\s]*"[^"]*"[\s]*,[\s]*"data"[\s]*:[\s]*\[[\s\S]*?\][\s]*\}/gi;
+        const filteredText = text.replace(looseChartJsonRegex, '').trim();
+        // 使用统一的 renderMarkdown 渲染（含标题修复 + **中文：** 修复）
+        if (typeof renderMarkdown !== 'undefined') {
+            content.innerHTML = renderMarkdown(filteredText);
+            if (typeof wrapTables !== 'undefined') wrapTables(content);
+        } else {
+            content.textContent = filteredText;
+        }
+        // 高亮单独一行的纯数字粗体（精确取数型结果）
+        highlightSingleNumber(content);
+        if (!streamingUserScrolledUp) {
+            document.getElementById('chatMessages').scrollTop = 99999;
+        }
+    }
+
+    function finalizeMessage(el, fullText) {
+        const chartRegex   = /<chart>\s*([\s\S]*?)\s*<\/chart>/i;
+        const reportRegex  = /<report>\s*([\s\S]*?)\s*<\/report>/i;
+
+        const chartMatch  = fullText.match(chartRegex);
+        const reportMatch = fullText.match(reportRegex);
+
+        // Strip all special tokens/blocks from plain text
+        let textPart = fullText
+            .replace(chartRegex, '')
+            .replace(reportRegex, '')
+            .trim();
+
+        // 移除不在 <chart> 标签内的裸露图表 JSON（LLM 有时会把 JSON 输出在错误的位置）
+        const looseChartJsonRegex = /\{[\s]*"type"[\s]*:[\s]*"(bar|line|pie)"[\s]*,[\s]*"title"[\s]*:[\s]*"[^"]*"[\s]*,[\s]*"data"[\s]*:[\s]*\[[\s\S]*?\][\s]*\}/gi;
+        textPart = textPart.replace(looseChartJsonRegex, '').trim();
+
+        let chartHtml = '';
+        if (chartMatch) {
+            try { chartHtml = buildChartHtml(JSON.parse(chartMatch[1].trim())); } catch (e) {}
+        }
+
+        let reportHtml = '';
+        let reportRawContent = '';
+        if (reportMatch) {
+            let raw = reportMatch[1].trim();
+            reportRawContent = raw; // 保存原始 Markdown 内容用于下载
+            // 用统一的 renderMarkdown（含标题修复 + **中文：** 修复）转为 HTML
+            const parsedHtml = (typeof renderMarkdown !== 'undefined')
+                ? renderMarkdown(raw)
+                : `<pre style="white-space:pre-wrap">${escapeHtml(raw)}</pre>`;
+            const reportId = 'report_' + Math.random().toString(36).substr(2, 9);
+            const downloadBtnsHtml = `
+                <div class="report-actions">
+                    <button class="report-download-btn" data-report-id="${reportId}">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        Markdown
+                    </button>
+                    <button class="report-download-btn primary" data-report-id="${reportId}">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        HTML报告
+                    </button>
+                </div>`;
+            reportHtml = `<div class="report-block" id="${reportId}" data-raw-content="">${parsedHtml}${downloadBtnsHtml}</div>`;
+        }
+
+        const content = el.querySelector('.message-content');
+
+        if (reportHtml || chartHtml) {
+            // Clear chart loading timers if running
+            if (window._chartLoadingTimer) { clearInterval(window._chartLoadingTimer); window._chartLoadingTimer = null; }
+            if (window._preChartTimer) { clearInterval(window._preChartTimer); window._preChartTimer = null; }
+            if (window._chartWaitTimer) { clearInterval(window._chartWaitTimer); window._chartWaitTimer = null; }
+            // 移除 report 内的图表等待提示卡（如果有）
+            const _chartWaitCard = content.querySelector('#chartWaitingCard');
+            if (_chartWaitCard) _chartWaitCard.remove();
+            content.classList.add('has-chart');
+
+            // ── Surgical DOM update: avoid full innerHTML replace so CSS animations fire ──
+            // 1. Remove the loading indicator (spinner shown while chart JSON was buffering)
+            const loadingEl = content.querySelector('#msgLoadingIndicator');
+            if (loadingEl) loadingEl.remove();
+            // Remove any pre-chart bar that may still be in the DOM
+            const preChartEl = content.querySelector('#preChartLoadingBar');
+            if (preChartEl) preChartEl.remove();
+
+            // 2. Ensure the text-part div is present (it might not exist yet if LLM had no
+            //    preamble text before the <chart>/<report> tag).
+            if (textPart) {
+                let textPartEl = content.querySelector('.text-part');
+                if (!textPartEl) {
+                    // Remove any raw streaming text nodes left by updateLastMessage
+                    // (they are direct child nodes NOT wrapped in .text-part / .report-block etc.)
+                    Array.from(content.childNodes).forEach(node => {
+                        const skipIds = ['msgLoadingIndicator', 'preChartLoadingBar', 'chartWaitingCard', 'queryWaitCard'];
+                        if (node.nodeType === Node.TEXT_NODE) {
+                            node.remove();
+                        } else if (node.nodeType === Node.ELEMENT_NODE
+                                && !node.classList.contains('text-part')
+                                && !node.classList.contains('report-block')
+                                && !node.classList.contains('chart-wrapper')
+                                && !skipIds.includes(node.id)) {
+                            node.remove();
+                        }
+                    });
+                    textPartEl = document.createElement('div');
+                    textPartEl.className = 'text-part';
+                    content.prepend(textPartEl);
+                }
+                // 使用 renderMarkdown 渲染 Markdown 格式的普通文本
+                if (typeof renderMarkdown !== 'undefined') {
+                    textPartEl.innerHTML = renderMarkdown(textPart);
+                    if (typeof wrapTables !== 'undefined') wrapTables(textPartEl);
+                } else {
+                    textPartEl.textContent = textPart;
+                }
+            }
+
+            // 3. Append report block (replace existing streaming block if present)
+            if (reportHtml) {
+                const existingReport = content.querySelector('.report-block');
+                if (existingReport) existingReport.remove();
+                const reportEl = document.createElement('div');
+                reportEl.innerHTML = reportHtml;
+                const reportBlock = reportEl.firstElementChild;
+                // 设置原始内容到data属性
+                reportBlock.dataset.rawContent = reportRawContent;
+                content.appendChild(reportBlock);
+                // 把 report 块内所有 table 包上 table-wrapper，解决列宽不一致
+                if (typeof wrapTables !== 'undefined') wrapTables(reportBlock);
+                // 流式期间 overflow-x 被锁定为 hidden，此处恢复为 auto，让宽表格可以左右滚动
+                reportBlock.querySelectorAll('.table-wrapper').forEach(tw => {
+                    tw.style.overflowX = 'auto';
+                });
+                
+                // 为下载按钮添加事件监听
+                reportBlock.querySelectorAll('.report-download-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const rawContent = this.closest('.report-block').dataset.rawContent;
+                        if (this.classList.contains('primary')) {
+                            downloadHtmlReport(rawContent);
+                        } else {
+                            downloadMarkdownReport(rawContent);
+                        }
+                    });
+                });
+            }
+
+            // 4. Append chart wrapper as a NEW element so the CSS fade-in animation triggers.
+            //    Using innerHTML on a temp div then moving the child preserves animation.
+            if (chartHtml) {
+                const tmp = document.createElement('div');
+                tmp.innerHTML = chartHtml;
+                const chartEl = tmp.firstElementChild;
+                content.appendChild(chartEl);
+                // Force a reflow so the animation restart is guaranteed
+                void chartEl.offsetWidth;
+                // 初始化ECharts图表
+                requestAnimationFrame(() => {
+                    initAllCharts();
+                });
+            }
+
+            requestAnimationFrame(() => {
+                document.getElementById('chatMessages').scrollTop = 99999;
+            });
+        } else {
+            // 没有报告/图表时，用 marked 渲染 Markdown
+            const textToRender = textPart || fullText;
+            if (typeof renderMarkdown !== 'undefined') {
+                content.innerHTML = renderMarkdown(textToRender);
+                if (typeof wrapTables !== 'undefined') wrapTables(content);
+            } else {
+                content.textContent = textToRender;
+            }
+        }
+
+        // 高亮单独一行的纯数字粗体（精确取数型结果）
+        highlightSingleNumber(content);
+
+        // 在消息气泡下方追加推荐问题
+        // 插入到 el（.message.assistant）内部、消息气泡之后，避免撑高内容区
+        if (suggestedQuestions.length > 0 && !el.querySelector('.post-report-sugg')) {
+            const chips = suggestedQuestions.map(q =>
+                `<button class="post-report-sugg-chip" onclick="sendSuggestionText(this)">${escapeHtml(q)}</button>`
+            ).join('');
+            const suggDiv = document.createElement('div');
+            suggDiv.className = 'post-report-sugg';
+            suggDiv.innerHTML = `
+                <div class="post-report-sugg-label">继续提问</div>
+                <div class="post-report-sugg-scroll">${chips}</div>`;
+            el.appendChild(suggDiv);
+        }
+
+        // Scroll to bottom only when there is no report/chart block;
+        // report/chart scrolling is handled above with scrollIntoView.
+        if (!reportHtml && !chartHtml) {
+            document.getElementById('chatMessages').scrollTop = 99999;
+        }
+    }
+
+    function appendTyping() {
+        const container = document.getElementById('chatMessages');
+        const div = document.createElement('div');
+        div.className = 'message assistant';
+        div.innerHTML = `<span class="message-label">助手</span>
+            <div class="typing-indicator">
+                <span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>
+            </div>`;
+        container.appendChild(div);
+        container.scrollTop = container.scrollHeight;
+        return div;
+    }
+
+    function removeTyping(el) { if (el && el.parentNode) el.parentNode.removeChild(el); }
+    function escapeHtml(t) { return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    // 高亮单独一行的纯数字粗体（精确取数型结果）
+    // 匹配模式：<p><strong>数字</strong></p>，其中数字只包含数字、逗号、小数点、百分号、空格
+    function highlightSingleNumber(contentEl) {
+        if (!contentEl) return;
+        const paragraphs = contentEl.querySelectorAll('p');
+        paragraphs.forEach(p => {
+            const strong = p.querySelector('strong');
+            // 确保 p 标签内只有一个 strong 子元素，且没有其他文本节点
+            if (strong && p.children.length === 1 && p.childNodes.length === 1) {
+                const text = strong.textContent.trim();
+                // 检查是否为纯数字格式（允许逗号、小数点、百分号、空格）
+                // 例如：168,613,795 或 85.6% 或 1,234.56
+                if (/^[\d,\.\s%]+$/.test(text) && /\d/.test(text)) {
+                    p.classList.add('single-number');
+                }
+            }
+        });
+    }
+
+    // 初始化 marked.js：开启 GFM（表格/任务列表等）和换行符支持
+    if (typeof marked !== 'undefined') {
+        marked.setOptions({ gfm: true, breaks: true, headerIds: false, mangle: false });
+        console.log('[DEBUG] marked.js 加载成功，版本:', marked.version || 'unknown');
+
+        /**
+         * 统一的 Markdown 预处理 + 渲染函数（全局使用，替代直接调用 marked.parse）
+         * 修复 marked 对以下模式的解析问题：
+         * 1. **中文标签：** 后紧跟内容时（如 **核心结论：** 文字），marked 有时不能识别为粗体
+         * 2. 标题格式修复（#标题 → # 标题）
+         */
+        window.renderMarkdown = function(raw) {
+            if (!raw) return '';
+            let md = raw;
+            // 修复 Markdown 标题格式：将 `#标题` 替换为 `# 标题`
+            md = md.replace(/^(#{1,6})([^#\s])/gm, '$1 $2');
+            md = md.replace(/^(#{1,6})\s{2,}/gm, '$1 ');
+            // 修复 **中文内容：** 后紧跟文字时 marked 不能识别的问题：
+            // 将 `**text：**文字` 或 `**text:** 文字`（冒号全/半角，后无空格）补上空格
+            md = md.replace(/(\*\*[^*]+[：:]\*\*)([^\s*])/g, '$1 $2');
+            try {
+                return marked.parse(md);
+            } catch(e) {
+                return '<pre style="white-space:pre-wrap;word-break:break-word">' + escapeHtml(md) + '</pre>';
+            }
+        };
+
+        /**
+         * 将容器元素内所有裸露的 <table> 包裹进 <div class="table-wrapper">
+         * 解决 display:table 下表头与内容列宽不对齐的问题。
+         * 在每次 innerHTML 赋值后调用。
+         */
+        window.wrapTables = function(el) {
+            if (!el) return;
+            el.querySelectorAll('table').forEach(table => {
+                if (table.parentElement && table.parentElement.classList.contains('table-wrapper')) return;
+                const wrapper = document.createElement('div');
+                wrapper.className = 'table-wrapper';
+                table.parentNode.insertBefore(wrapper, table);
+                wrapper.appendChild(table);
+            });
+        };
+    } else {
+        console.error('[DEBUG] marked.js 加载失败！请检查网络或文件路径');
+        // 显示警告提示
+        window.addEventListener('load', function() {
+            const warning = document.createElement('div');
+            warning.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#ff4444;color:#fff;padding:10px;text-align:center;z-index:9999;font-size:14px;';
+            warning.textContent = '警告：Markdown 解析库加载失败，报告将无法正确显示格式';
+            document.body.appendChild(warning);
+            setTimeout(() => warning.remove(), 5000);
+        });
+    }
+
+    /* ═══════════════════════ ECharts Engine ═══════════════════════ */
+    const CHART_COLORS = [
+        '#1a73e8','#ea4335','#fbbc04','#34a853','#9c27b0',
+        '#ff6d00','#00bcd4','#795548','#607d8b','#e91e63'
+    ];
+
+    // 存储图表实例的映射表，用于切换图表/表格时销毁旧实例
+    const chartInstances = new Map();
+
+    function buildChartHtml(def) {
+        if (!def) return '';
+        const type = (def.type || 'bar').toLowerCase();
+        const isMultiSeries = ['multi_line', 'multi_bar', 'dual_axes'].includes(type);
+        // 单系列：需要 data 数组；多系列：需要 categories 或 series
+        if (isMultiSeries) {
+            const hasSeries = Array.isArray(def.series) && def.series.length > 0;
+            if (!hasSeries) return '';
+        } else {
+            if (!Array.isArray(def.data) || def.data.length === 0) return '';
+        }
+        const chartId = 'echarts_' + Math.random().toString(36).substr(2, 9);
+        const tableId = 'table_' + Math.random().toString(36).substr(2, 9);
+        
+        // 构建工具栏HTML
+        const toolbarHtml = `
+            <div class="chart-toolbar">
+                <button class="chart-tool-btn active" onclick="switchToChart('${chartId}', '${tableId}', this)" title="图表视图">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                </button>
+                <button class="chart-tool-btn" onclick="switchToTable('${chartId}', '${tableId}', this)" title="表格视图">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>
+                </button>
+            </div>`;
+        
+        // 构建ECharts图表容器（JSON存入双引号属性，对"转义为&quot;以防止属性值截断）
+        const safeJson = JSON.stringify(def).replace(/"/g, '&quot;');
+        const chartHtml = `<div class="chart-container" id="${chartId}" data-chart-def="${safeJson}"></div>`;
+        // 构建表格容器（默认隐藏）
+        const tableHtml = `<div class="data-table-container" id="${tableId}" style="display:none;">${buildDataTable(def)}</div>`;
+        
+        return `<div class="chart-wrapper">
+            <div class="chart-header">
+                <div class="chart-title">${escapeHtml(def.title || '数据可视化')}</div>
+                ${toolbarHtml}
+            </div>
+            ${chartHtml}${tableHtml}</div>`;
+    }
+
+    // 切换到图表视图
+    function switchToChart(chartId, tableId, btn) {
+        const chartEl = document.getElementById(chartId);
+        const tableEl = document.getElementById(tableId);
+        if (!chartEl || !tableEl) return;
+        
+        chartEl.style.display = 'block';
+        tableEl.style.display = 'none';
+        
+        // 更新按钮状态
+        const toolbar = btn.closest('.chart-toolbar');
+        toolbar.querySelectorAll('.chart-tool-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        
+        // 重新渲染图表
+        renderEChart(chartId);
+    }
+
+    // 切换到表格视图
+    function switchToTable(chartId, tableId, btn) {
+        const chartEl = document.getElementById(chartId);
+        const tableEl = document.getElementById(tableId);
+        if (!chartEl || !tableEl) return;
+        
+        chartEl.style.display = 'none';
+        tableEl.style.display = 'block';
+        
+        // 更新按钮状态
+        const toolbar = btn.closest('.chart-toolbar');
+        toolbar.querySelectorAll('.chart-tool-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        
+        // 销毁图表实例以节省内存
+        if (chartInstances.has(chartId)) {
+            chartInstances.get(chartId).dispose();
+            chartInstances.delete(chartId);
+        }
+    }
+
+    // 构建数据表格HTML（支持单系列和多系列）
+    function buildDataTable(def) {
+        if (!def) return '';
+        const type = (def.type || 'bar').toLowerCase();
+        const isMultiSeries = ['multi_line', 'multi_bar', 'dual_axes'].includes(type);
+
+        if (isMultiSeries) {
+            // 多系列格式：categories + series[]
+            const categories = def.categories || [];
+            const series = def.series || [];
+            if (categories.length === 0 && series.length === 0) return '';
+
+            let html = '<table class="data-table"><thead><tr>';
+            html += '<th>序号</th><th>类别</th>';
+            series.forEach(s => { html += `<th>${escapeHtml(s.name || '')}</th>`; });
+            html += '</tr></thead><tbody>';
+            categories.forEach((cat, idx) => {
+                html += `<tr><td>${idx + 1}</td><td>${escapeHtml(String(cat))}</td>`;
+                series.forEach(s => {
+                    const val = s.data && s.data[idx] !== undefined ? s.data[idx] : '-';
+                    html += `<td>${typeof val === 'number' ? fmtNum(val) : val}</td>`;
+                });
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
+            return html;
+        } else {
+            // 单系列格式：data[{label, value}]
+            if (!Array.isArray(def.data) || def.data.length === 0) return '';
+            let html = '<table class="data-table"><thead><tr>';
+            html += '<th>序号</th><th>类别</th><th>数值</th>';
+            html += '</tr></thead><tbody>';
+            def.data.forEach((item, idx) => {
+                html += `<tr><td>${idx + 1}</td><td>${escapeHtml(String(item.label || ''))}</td><td>${fmtNum(item.value)}</td></tr>`;
+            });
+            html += '</tbody></table>';
+            return html;
+        }
+    }
+
+    // 使用ECharts渲染图表
+    function renderEChart(chartId) {
+        const chartEl = document.getElementById(chartId);
+        if (!chartEl) return;
+        
+        // 获取图表定义数据
+        const defAttr = chartEl.getAttribute('data-chart-def');
+        if (!defAttr) return;
+        
+        let def;
+        try {
+            // getAttribute 会自动解码 HTML 实体（&quot; -> "），直接 parse 即可
+            def = JSON.parse(defAttr);
+        } catch(e) {
+            console.error('解析图表数据失败:', e);
+            return;
+        }
+        
+        // 销毁旧实例
+        if (chartInstances.has(chartId)) {
+            chartInstances.get(chartId).dispose();
+        }
+        
+        // 根据数据量动态调整图表高度
+        const dataCount = (def.data || []).length;
+        const useZoom = dataCount > 15 && def.type !== 'pie';
+        const dynamicH = def.type === 'pie'
+            ? 320
+            : useZoom
+                ? Math.max(320, Math.min(460, 300 + Math.max(0, dataCount - 15) * 4))
+                : Math.max(280, Math.min(420, 260 + Math.max(0, dataCount - 6) * 8));
+        chartEl.style.height = dynamicH + 'px';
+        
+        // 创建新实例
+        const chart = echarts.init(chartEl);
+        chartInstances.set(chartId, chart);
+        
+        const chartType = (def.type || 'bar').toLowerCase();
+        let option;
+        
+        switch (chartType) {
+            case 'line':
+                option = buildLineOption(def);
+                break;
+            case 'multi_line':
+                option = buildMultiLineOption(def);
+                break;
+            case 'multi_bar':
+                option = buildMultiBarOption(def);
+                break;
+            case 'dual_axes':
+                option = buildDualAxesOption(def);
+                break;
+            case 'pie':
+                option = buildPieOption(def);
+                break;
+            case 'bar':
+            default:
+                option = buildBarOption(def);
+        }
+        
+        chart.setOption(option);
+        
+        // Respond to window resize – remove previous handler first to avoid accumulation
+        const prevResizeHandler = chartEl._resizeHandler;
+        if (prevResizeHandler) window.removeEventListener('resize', prevResizeHandler);
+        const resizeHandler = () => chart.resize();
+        chartEl._resizeHandler = resizeHandler;
+        window.addEventListener('resize', resizeHandler);
+    }
+
+    // 格式化数字（千位分隔符）
+    function formatNumber(num) {
+        if (num === null || num === undefined) return '-';
+        const n = Number(num);
+        if (isNaN(n)) return String(num);
+        // 大数字简化
+        if (Math.abs(n) >= 1e8) return (n / 1e8).toFixed(1) + '亿';
+        if (Math.abs(n) >= 1e4) return (n / 1e4).toFixed(1) + '万';
+        // 千位分隔符
+        return n.toLocaleString('zh-CN');
+    }
+
+    // 构建柱状图配置
+    function buildBarOption(def) {
+        const data = def.data || [];
+        const count = data.length;
+        // 数据量阈值：超过此值启用 dataZoom 滑块
+        const ZOOM_THRESHOLD = 15;
+        const useZoom = count > ZOOM_THRESHOLD;
+        // 初始视窗显示条数（滑块初始范围）
+        const windowSize = Math.min(count, ZOOM_THRESHOLD);
+        const startPct = useZoom ? Math.max(0, Math.round((count - windowSize) / count * 100)) : 0;
+
+        // 标签旋转：数据多或标签长时旋转，useZoom 模式下标签在视窗内可全显示
+        const needsRotate = count > 6 || data.some(d => d.label && d.label.length > 4);
+        const bottomPad = useZoom ? 60 : (needsRotate ? 90 : 55);
+
+        // interval: zoom 模式下全显 (0)，否则按容量抽稀
+        const maxLabels = 8;
+        const interval = useZoom ? 0 : (count <= maxLabels ? 0 : Math.ceil(count / maxLabels) - 1);
+
+        const option = {
+            title: { 
+                text: def.title || '', 
+                left: 'center', 
+                top: 10, 
+                textStyle: { fontSize: 14, fontWeight: 600, color: '#1f2937' }
+            },
+            tooltip: { 
+                trigger: 'axis', 
+                axisPointer: { type: 'shadow' },
+                formatter: params => {
+                    const p = params[0];
+                    return `${p.name}<br/>${p.marker} ${p.seriesName || '数值'}: <b>${formatNumber(p.value)}</b>`;
+                }
+            },
+            grid: { 
+                left: '3%', 
+                right: '4%', 
+                top: 60, 
+                bottom: bottomPad, 
+                containLabel: true 
+            },
+            xAxis: {
+                type: 'category',
+                data: data.map(d => d.label),
+                axisLabel: { 
+                    rotate: needsRotate ? 40 : 0, 
+                    fontSize: 11,
+                    color: '#4b5563',
+                    interval: interval,
+                    overflow: 'truncate',
+                    width: needsRotate ? 70 : undefined
+                },
+                axisLine: { lineStyle: { color: '#e5e7eb' } }
+            },
+            yAxis: { 
+                type: 'value', 
+                name: def.yLabel || '',
+                nameTextStyle: { color: '#6b7280', padding: [0, 0, 0, 40] },
+                axisLabel: { 
+                    color: '#6b7280',
+                    formatter: val => formatNumber(val)
+                },
+                splitLine: { lineStyle: { color: '#f3f4f6', type: 'dashed' } }
+            },
+            series: [{
+                name: def.seriesName || '数值',
+                type: 'bar',
+                data: data.map(d => d.value),
+                barMaxWidth: 40,
+                itemStyle: { 
+                    color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                        { offset: 0, color: '#4f6ef7' },
+                        { offset: 1, color: '#3451d1' }
+                    ]),
+                    borderRadius: [5, 5, 0, 0] 
+                },
+                emphasis: { 
+                    itemStyle: { 
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            { offset: 0, color: '#3451d1' },
+                            { offset: 1, color: '#1e3a8a' }
+                        ])
+                    } 
+                },
+                label: {
+                    show: count <= 10,
+                    position: 'top',
+                    fontSize: 10,
+                    color: '#4b5563',
+                    formatter: p => formatNumber(p.value)
+                }
+            }]
+        };
+        // 数据量大时加 dataZoom 滑动条，让用户可以滑动查看全部数据
+        if (useZoom) {
+            option.dataZoom = [
+                {
+                    type: 'slider',
+                    xAxisIndex: 0,
+                    start: startPct,
+                    end: 100,
+                    height: 20,
+                    bottom: 8,
+                    borderColor: 'rgba(79,110,247,0.2)',
+                    fillerColor: 'rgba(79,110,247,0.12)',
+                    handleStyle: { color: '#4f6ef7', borderColor: '#4f6ef7' },
+                    textStyle: { color: '#9ba3c4', fontSize: 10 },
+                    moveHandleSize: 6
+                },
+                { type: 'inside', xAxisIndex: 0 }
+            ];
+        }
+        return option;
+    }
+
+    // 构建折线图配置
+    function buildLineOption(def) {
+        const data = def.data || [];
+        const count = data.length;
+        const ZOOM_THRESHOLD = 15;
+        const useZoom = count > ZOOM_THRESHOLD;
+        const windowSize = Math.min(count, ZOOM_THRESHOLD);
+        const startPct = useZoom ? Math.max(0, Math.round((count - windowSize) / count * 100)) : 0;
+
+        const needsRotate = count > 6 || data.some(d => d.label && d.label.length > 4);
+        const bottomPad = useZoom ? 60 : (needsRotate ? 90 : 55);
+        const maxLabels = 8;
+        const interval = useZoom ? 0 : (count <= maxLabels ? 0 : Math.ceil(count / maxLabels) - 1);
+        // 数据点多时缩小圆点，避免密集
+        const symbolSize = count > 20 ? 4 : (count > 10 ? 6 : 8);
+
+        const option = {
+            title: { 
+                text: def.title || '', 
+                left: 'center', 
+                top: 10, 
+                textStyle: { fontSize: 14, fontWeight: 600, color: '#1f2937' }
+            },
+            tooltip: { 
+                trigger: 'axis',
+                formatter: params => {
+                    const p = params[0];
+                    return `${p.name}<br/>${p.marker} ${p.seriesName || '数值'}: <b>${formatNumber(p.value)}</b>`;
+                }
+            },
+            grid: { 
+                left: '3%', 
+                right: '4%', 
+                top: 60, 
+                bottom: bottomPad, 
+                containLabel: true 
+            },
+            xAxis: {
+                type: 'category',
+                data: data.map(d => d.label),
+                boundaryGap: false,
+                axisLabel: { 
+                    rotate: needsRotate ? 40 : 0, 
+                    fontSize: 11,
+                    color: '#4b5563',
+                    interval: interval,
+                    overflow: 'truncate',
+                    width: needsRotate ? 70 : undefined
+                },
+                axisLine: { lineStyle: { color: '#e5e7eb' } }
+            },
+            yAxis: { 
+                type: 'value', 
+                name: def.yLabel || '',
+                nameTextStyle: { color: '#6b7280', padding: [0, 0, 0, 40] },
+                axisLabel: { 
+                    color: '#6b7280',
+                    formatter: val => formatNumber(val)
+                },
+                splitLine: { lineStyle: { color: '#f3f4f6', type: 'dashed' } }
+            },
+            series: [{
+                name: def.seriesName || '数值',
+                type: 'line',
+                data: data.map(d => d.value),
+                smooth: true,
+                symbol: 'circle',
+                symbolSize: symbolSize,
+                lineStyle: { 
+                    color: '#4f6ef7', 
+                    width: count > 20 ? 2 : 3,
+                    shadowColor: 'rgba(79, 110, 247, 0.3)',
+                    shadowBlur: 8,
+                    shadowOffsetY: 4
+                },
+                itemStyle: { 
+                    color: '#4f6ef7',
+                    borderWidth: 2,
+                    borderColor: '#fff'
+                },
+                areaStyle: { 
+                    color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                        { offset: 0, color: 'rgba(79, 110, 247, 0.22)' },
+                        { offset: 1, color: 'rgba(79, 110, 247, 0.01)' }
+                    ])
+                },
+                label: {
+                    show: count <= 10,
+                    position: 'top',
+                    fontSize: 10,
+                    color: '#4b5563',
+                    formatter: p => formatNumber(p.value)
+                }
+            }]
+        };
+        if (useZoom) {
+            option.dataZoom = [
+                {
+                    type: 'slider',
+                    xAxisIndex: 0,
+                    start: startPct,
+                    end: 100,
+                    height: 20,
+                    bottom: 8,
+                    borderColor: 'rgba(79,110,247,0.2)',
+                    fillerColor: 'rgba(79,110,247,0.12)',
+                    handleStyle: { color: '#4f6ef7', borderColor: '#4f6ef7' },
+                    textStyle: { color: '#9ba3c4', fontSize: 10 },
+                    moveHandleSize: 6
+                },
+                { type: 'inside', xAxisIndex: 0 }
+            ];
+        }
+        return option;
+    }
+
+    // 构建饼图配置
+    function buildPieOption(def) {
+        const data = def.data || [];
+        const hasManyItems = data.length > 6;
+        return {
+            title: { 
+                text: def.title || '', 
+                left: 'center', 
+                top: 10, 
+                textStyle: { fontSize: 15, fontWeight: 600, color: '#1f2937' }
+            },
+            tooltip: { 
+                trigger: 'item', 
+                formatter: params => {
+                    return `${params.name}<br/>${params.marker} 数值: <b>${formatNumber(params.value)}</b> (${params.percent}%)`;
+                }
+            },
+            legend: { 
+                orient: 'horizontal', 
+                bottom: 10, 
+                type: hasManyItems ? 'scroll' : 'plain',
+                itemWidth: 12, 
+                itemHeight: 12, 
+                textStyle: { fontSize: 11, color: '#4b5563' },
+                pageIconColor: '#4f6ef7',
+                pageTextStyle: { color: '#4b5563' }
+            },
+            grid: { top: 80, containLabel: true },
+            series: [{
+                type: 'pie',
+                radius: hasManyItems ? ['30%', '50%'] : ['40%', '60%'],
+                center: ['50%', '48%'],
+                avoidLabelOverlap: true,
+                itemStyle: { 
+                    borderRadius: 6, 
+                    borderColor: '#fff', 
+                    borderWidth: 2 
+                },
+                label: { 
+                    show: !hasManyItems,
+                    fontSize: 11,
+                    color: '#4b5563',
+                    formatter: '{b}: {d}%'
+                },
+                emphasis: { 
+                    label: { show: true, fontSize: 12, fontWeight: 'bold' },
+                    itemStyle: {
+                        shadowBlur: 10,
+                        shadowOffsetX: 0,
+                        shadowColor: 'rgba(0, 0, 0, 0.2)'
+                    }
+                },
+                labelLine: { show: !hasManyItems, length: 10, length2: 10 },
+                data: data.map((d, i) => ({
+                    name: d.label,
+                    value: d.value,
+                    itemStyle: { color: CHART_COLORS[i % CHART_COLORS.length] }
+                }))
+            }]
+        };
+    }
+
+    // 构建多系列折线图配置（multi_line）
+    function buildMultiLineOption(def) {
+        const categories = def.categories || [];
+        const series = def.series || [];
+        const count = categories.length;
+        const ZOOM_THRESHOLD = 15;
+        const useZoom = count > ZOOM_THRESHOLD;
+        const windowSize = Math.min(count, ZOOM_THRESHOLD);
+        const startPct = useZoom ? Math.max(0, Math.round((count - windowSize) / count * 100)) : 0;
+        const needsRotate = count > 6 || categories.some(l => l && String(l).length > 4);
+        const bottomPad = useZoom ? 60 : (needsRotate ? 90 : 55);
+        const interval = useZoom ? 0 : (count <= 8 ? 0 : Math.ceil(count / 8) - 1);
+
+        const option = {
+            title: { text: def.title || '', left: 'center', top: 10, textStyle: { fontSize: 14, fontWeight: 600, color: '#1f2937' } },
+            tooltip: { trigger: 'axis' },
+            legend: { top: 35, type: 'scroll', textStyle: { fontSize: 11, color: '#4b5563' } },
+            grid: { left: '3%', right: '4%', top: 70, bottom: bottomPad, containLabel: true },
+            xAxis: {
+                type: 'category',
+                data: categories,
+                boundaryGap: false,
+                axisLabel: { rotate: needsRotate ? 40 : 0, fontSize: 11, color: '#4b5563', interval, overflow: 'truncate', width: needsRotate ? 70 : undefined },
+                axisLine: { lineStyle: { color: '#e5e7eb' } }
+            },
+            yAxis: {
+                type: 'value',
+                axisLabel: { color: '#6b7280', formatter: val => formatNumber(val) },
+                splitLine: { lineStyle: { color: '#f3f4f6', type: 'dashed' } }
+            },
+            series: series.map((s, i) => ({
+                name: s.name,
+                type: 'line',
+                data: s.data,
+                smooth: true,
+                symbol: 'circle',
+                symbolSize: count > 20 ? 4 : 6,
+                lineStyle: { color: CHART_COLORS[i % CHART_COLORS.length], width: 2 },
+                itemStyle: { color: CHART_COLORS[i % CHART_COLORS.length], borderWidth: 2, borderColor: '#fff' }
+            }))
+        };
+        if (useZoom) {
+            option.dataZoom = [
+                { type: 'slider', xAxisIndex: 0, start: startPct, end: 100, height: 20, bottom: 8, borderColor: 'rgba(79,110,247,0.2)', fillerColor: 'rgba(79,110,247,0.12)', handleStyle: { color: '#4f6ef7' }, textStyle: { color: '#9ba3c4', fontSize: 10 } },
+                { type: 'inside', xAxisIndex: 0 }
+            ];
+        }
+        return option;
+    }
+
+    // 构建多系列柱状图配置（multi_bar）
+    function buildMultiBarOption(def) {
+        const categories = def.categories || [];
+        const series = def.series || [];
+        const count = categories.length;
+        const ZOOM_THRESHOLD = 12;
+        const useZoom = count > ZOOM_THRESHOLD;
+        const windowSize = Math.min(count, ZOOM_THRESHOLD);
+        const startPct = useZoom ? Math.max(0, Math.round((count - windowSize) / count * 100)) : 0;
+        const needsRotate = count > 5 || categories.some(l => l && String(l).length > 4);
+        const bottomPad = useZoom ? 60 : (needsRotate ? 90 : 55);
+        const interval = useZoom ? 0 : (count <= 8 ? 0 : Math.ceil(count / 8) - 1);
+
+        const option = {
+            title: { text: def.title || '', left: 'center', top: 10, textStyle: { fontSize: 14, fontWeight: 600, color: '#1f2937' } },
+            tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+            legend: { top: 35, type: 'scroll', textStyle: { fontSize: 11, color: '#4b5563' } },
+            grid: { left: '3%', right: '4%', top: 70, bottom: bottomPad, containLabel: true },
+            xAxis: {
+                type: 'category',
+                data: categories,
+                axisLabel: { rotate: needsRotate ? 40 : 0, fontSize: 11, color: '#4b5563', interval, overflow: 'truncate', width: needsRotate ? 70 : undefined },
+                axisLine: { lineStyle: { color: '#e5e7eb' } }
+            },
+            yAxis: {
+                type: 'value',
+                axisLabel: { color: '#6b7280', formatter: val => formatNumber(val) },
+                splitLine: { lineStyle: { color: '#f3f4f6', type: 'dashed' } }
+            },
+            series: series.map((s, i) => ({
+                name: s.name,
+                type: 'bar',
+                data: s.data,
+                barMaxWidth: 30,
+                itemStyle: { color: CHART_COLORS[i % CHART_COLORS.length], borderRadius: [4, 4, 0, 0] },
+                label: { show: count <= 8, position: 'top', fontSize: 10, color: '#4b5563', formatter: p => formatNumber(p.value) }
+            }))
+        };
+        if (useZoom) {
+            option.dataZoom = [
+                { type: 'slider', xAxisIndex: 0, start: startPct, end: 100, height: 20, bottom: 8, borderColor: 'rgba(79,110,247,0.2)', fillerColor: 'rgba(79,110,247,0.12)', handleStyle: { color: '#4f6ef7' }, textStyle: { color: '#9ba3c4', fontSize: 10 } },
+                { type: 'inside', xAxisIndex: 0 }
+            ];
+        }
+        return option;
+    }
+
+    // 构建双轴图配置（dual_axes）
+    function buildDualAxesOption(def) {
+        const categories = def.categories || [];
+        const series = def.series || [];
+        const yAxisDef = def.yAxis || [{}, {}];
+        const count = categories.length;
+        const ZOOM_THRESHOLD = 15;
+        const useZoom = count > ZOOM_THRESHOLD;
+        const windowSize = Math.min(count, ZOOM_THRESHOLD);
+        const startPct = useZoom ? Math.max(0, Math.round((count - windowSize) / count * 100)) : 0;
+        const needsRotate = count > 6 || categories.some(l => l && String(l).length > 4);
+        const bottomPad = useZoom ? 60 : (needsRotate ? 90 : 55);
+        const interval = useZoom ? 0 : (count <= 8 ? 0 : Math.ceil(count / 8) - 1);
+
+        const option = {
+            title: { text: def.title || '', left: 'center', top: 10, textStyle: { fontSize: 14, fontWeight: 600, color: '#1f2937' } },
+            tooltip: { trigger: 'axis' },
+            legend: { top: 35, type: 'scroll', textStyle: { fontSize: 11, color: '#4b5563' } },
+            grid: { left: '3%', right: '6%', top: 70, bottom: bottomPad, containLabel: true },
+            xAxis: {
+                type: 'category',
+                data: categories,
+                axisLabel: { rotate: needsRotate ? 40 : 0, fontSize: 11, color: '#4b5563', interval, overflow: 'truncate', width: needsRotate ? 70 : undefined },
+                axisLine: { lineStyle: { color: '#e5e7eb' } }
+            },
+            yAxis: [
+                {
+                    type: 'value',
+                    name: (yAxisDef[0] && yAxisDef[0].name) || '',
+                    nameTextStyle: { color: '#6b7280', padding: [0, 0, 0, 40] },
+                    axisLabel: { color: '#6b7280', formatter: val => formatNumber(val) },
+                    splitLine: { lineStyle: { color: '#f3f4f6', type: 'dashed' } }
+                },
+                {
+                    type: 'value',
+                    name: (yAxisDef[1] && yAxisDef[1].name) || '',
+                    nameTextStyle: { color: '#6b7280', padding: [0, 40, 0, 0] },
+                    axisLine: { show: true, lineStyle: { color: '#e5e7eb' } },
+                    axisLabel: { color: '#6b7280', formatter: val => formatNumber(val) },
+                    splitLine: { show: false }
+                }
+            ],
+            series: series.map((s, i) => {
+                const yIdx = s.yAxisIndex !== undefined ? s.yAxisIndex : i;
+                const color = CHART_COLORS[i % CHART_COLORS.length];
+                if ((s.type || 'bar') === 'bar') {
+                    return { name: s.name, type: 'bar', yAxisIndex: yIdx, data: s.data, barMaxWidth: 35, itemStyle: { color, borderRadius: [4, 4, 0, 0] } };
+                } else {
+                    return { name: s.name, type: 'line', yAxisIndex: yIdx, data: s.data, smooth: true, symbol: 'circle', symbolSize: 6, lineStyle: { color, width: 2 }, itemStyle: { color } };
+                }
+            })
+        };
+        if (useZoom) {
+            option.dataZoom = [
+                { type: 'slider', xAxisIndex: 0, start: startPct, end: 100, height: 20, bottom: 8, borderColor: 'rgba(79,110,247,0.2)', fillerColor: 'rgba(79,110,247,0.12)', handleStyle: { color: '#4f6ef7' }, textStyle: { color: '#9ba3c4', fontSize: 10 } },
+                { type: 'inside', xAxisIndex: 0 }
+            ];
+        }
+        return option;
+    }
+
+    // 初始化页面中的所有图表
+    function initAllCharts() {
+        document.querySelectorAll('.chart-container[data-chart-def]').forEach(el => {
+            renderEChart(el.id);
+        });
+    }
+
+    // 下载HTML报告
+    async function downloadHtmlReport(content) {
+        try {
+            const response = await fetch(BASE_PATH + '/api/reports/html', {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: content
+            });
+            
+            if (!response.ok) throw new Error('下载失败');
+            
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `report_${new Date().getTime()}.html`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            console.error('下载HTML报告失败:', e);
+            alert('下载失败，请重试');
+        }
+    }
+
+    // 下载Markdown报告
+    function downloadMarkdownReport(content) {
+        const blob = new Blob([content], { type: 'text/markdown' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `report_${new Date().getTime()}.md`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    // 简化版数字格式化（用于表格等场景）
+    function fmtNum(n) {
+        return formatNumber(n);
+    }
+
+    /* ═══════════════════════ Plan SSE ═══════════════════════ */
+    function connectPlanStream() {
+        if (planEventSource) planEventSource.close();
+        const sessionIdForStream = currentSessionId;  // capture at connect time
+        const url = BASE_PATH + '/api/plan/stream?sessionId=' + encodeURIComponent(sessionIdForStream);
+        planEventSource = new EventSource(url);
+        planEventSource.onmessage = (e) => { try { renderPlan(JSON.parse(e.data)); } catch(_) {} };
+        planEventSource.onopen = () => updateConnStatus(true);
+        planEventSource.onerror = () => {
+            updateConnStatus(false);
+            // Only reconnect if this EventSource still belongs to the current session
+            // (prevents stale onerror from a closed stream triggering reconnect to old session)
+            if (sessionIdForStream === currentSessionId) {
+                setTimeout(connectPlanStream, 3000);
+            }
+        };
+    }
+
+    async function fetchCurrentPlan() {
+        const url = BASE_PATH + '/api/plan?sessionId=' + encodeURIComponent(currentSessionId);
+        try { renderPlan(await (await fetch(url)).json()); } catch(_) {}
+    }
+
+    /* ═══════════════════════ Plan render ═══════════════════════ */
+
+    // Show pending state immediately after sendMessage (before any plan SSE arrives)
+    // NOTE: No longer called directly – drawer is only shown when plan data arrives.
+    function showPlanPending() {
+        const hintEl    = document.getElementById('drawerHint');
+        const emptyEl   = document.getElementById('emptyPlan');
+        const contentEl = document.getElementById('planContent');
+        const progressWrap = document.getElementById('drawerProgressWrap');
+
+        hintEl.classList.add('hint-generating');
+        hintEl.classList.remove('hint-running', 'hint-done');
+        const _hintTxtPending = hintEl.querySelector('#drawerHintText');
+        if (_hintTxtPending) _hintTxtPending.textContent = '🔄 正在生成任务计划…';
+
+        emptyEl.style.display = 'none';
+        contentEl.style.display = 'block';
+        progressWrap.style.display = 'none';
+        contentEl.innerHTML = `
+            <div class="plan-generating-wrap">
+                <div class="plan-generating-spinner"></div>
+                <p>智能体正在分析数据集<br>并生成任务计划，请稍候…</p>
+            </div>`;
+
+        // 不再主动展开面板：setDrawerHasPlan / expandDrawer 由 renderPlan 控制
+        setPlanGenerating(true);
+    }
+
+    // Called when doFinalize fires and no plan was ever pushed (Case A: direct answer)
+    function clearPlanPendingIfNeeded() {
+        if (!planPending) return;
+        planPending = false;
+        setPlanGenerating(false);
+        // Restore drawer to previous state (empty or existing plan)
+        if (!hasPlan) {
+            const emptyEl   = document.getElementById('emptyPlan');
+            const contentEl = document.getElementById('planContent');
+            const hintEl    = document.getElementById('drawerHint');
+            hintEl.classList.remove('hint-generating', 'hint-running', 'hint-done');
+            emptyEl.style.display = 'block';
+            contentEl.style.display = 'none';
+            setDrawerHasPlan(false);
+        }
+    }
+
+    function renderPlan(plan) {
+        const emptyEl      = document.getElementById('emptyPlan');
+        const contentEl    = document.getElementById('planContent');
+        const progressWrap = document.getElementById('drawerProgressWrap');
+        const progressFill = document.getElementById('drawerProgressFill');
+        const progressText = document.getElementById('drawerProgressText');
+        const hintEl       = document.getElementById('drawerHint');
+
+                if (plan && plan.state === 'abandoned' && !plan.name) {
+                    clearPlanPanelUI();
+                    return;
+                }
+        
+                if (!plan || !plan.name) {
+            // Backend pushed empty/null plan – keep existing content intact
+            if (!hasPlan) {
+                emptyEl.style.display = 'block';
+                contentEl.style.display = 'none';
+                progressWrap.style.display = 'none';
+            }
+            return;
+        }
+
+        const subtasks  = plan.subtasks || [];
+        const doneCount = subtasks.filter(s => s.state === 'done').length;
+        const total     = subtasks.length;
+        const pct       = total > 0 ? Math.round(doneCount / total * 100) : 0;
+        const isRunning = subtasks.some(s => s.state === 'in_progress');
+        const allDone   = total > 0 && doneCount === total;
+
+        // Once real subtasks arrive, clear the pending flag
+        if (planPending && total > 0) {
+            planPending = false;
+            setPlanGenerating(false);
+        }
+
+        // ── Hint strip ──
+        hintEl.classList.toggle('hint-generating', planPending && total === 0);
+        hintEl.classList.toggle('hint-running',    isRunning && !allDone && !planPending);
+        hintEl.classList.toggle('hint-done',       allDone);
+        const hintTextEl = document.getElementById('drawerHintText');
+        if (allDone) {
+            if (hintTextEl) hintTextEl.textContent = '✅ 任务查询已完成，点击查看';
+        } else if (planPending && total === 0) {
+            if (hintTextEl) hintTextEl.textContent = '🔄 正在生成任务计划…';
+        } else if (isRunning) {
+            if (hintTextEl) hintTextEl.textContent = `⚙️ 子任务执行中（${doneCount}/${total}）`;
+            // Remove any "generating chart" bar that may have appeared before subtasks started
+            const _preChartBar = document.querySelector('#preChartLoadingBar');
+            if (_preChartBar) _preChartBar.remove();
+        } else {
+            if (hintTextEl) hintTextEl.textContent = '📋 任务计划已生成，点击查看';
+        }
+
+        // ── Show drawer ──
+        setDrawerHasPlan(true);
+        // 展开策略：
+        // · allDone（所有子任务完成）→ 若面板展开则静默收起，用户回到主界面等待分析报告
+        // · 子任务执行中 → 未手动收起时自动展开
+        // · 用户手动收起过（userCollapsed=true）→ 不强制展开
+        if (allDone) {
+            // 静默收起（不设 userCollapsed），hint strip 变绿提示完成，用户可随时点开查看
+            if (drawerOpen) {
+                drawerOpen = false;
+                const _d = document.getElementById('planDrawer');
+                if (_d) _d.classList.remove('expanded');
+                document.getElementById('drawerOverlay').classList.remove('active');
+                syncDrawerPadding();
+            }
+        } else if (!drawerOpen && !userCollapsed) {
+            expandDrawer();
+        }
+
+        // ── Body content ──
+        emptyEl.style.display = 'none';
+        contentEl.style.display = 'block';
+
+        if (planPending && total === 0) {
+            // Still generating – keep spinner
+            progressWrap.style.display = 'none';
+            contentEl.innerHTML = `
+                <div class="plan-generating-wrap">
+                    <div class="plan-generating-spinner"></div>
+                    <p>智能体正在分析数据集<br>并生成任务计划，请稍候…</p>
+                </div>`;
+            return;
+        }
+
+        // ── Progress bar ──
+        progressWrap.style.display = 'flex';
+        progressFill.style.width = pct + '%';
+        progressText.textContent = `${doneCount}/${total}`;
+
+        // ── Plan card with done banner ──
+        let html = `<div class="plan-card">
+            <div class="plan-card-title">${escapeHtml(plan.name||'')}</div>
+            ${plan.description ? `<div class="plan-card-desc">${escapeHtml(plan.description)}</div>` : ''}
+            <span class="plan-badge ${plan.state||'todo'}">${stateLabel(plan.state)}</span>
+            ${total>0 ? `<div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:${pct}%"></div></div><div class="progress-text">${pct}%</div>` : ''}
+        </div>`;
+
+        if (allDone) {
+            html += `<div class="plan-done-banner">
+                <span class="plan-done-check">✔</span>
+                全部 ${total} 个子任务已完成
+            </div>`;
+        }
+
+        if (subtasks.length > 0) {
+            html += `<div class="subtasks-label">子任务 (${total})</div>`;
+            subtasks.forEach((st, i) => {
+                const icon = stateIcon(st.state);
+                html += `<div class="subtask-item">
+                    <div class="subtask-num">${i+1}</div>
+                    <div class="subtask-icon ${st.state||'todo'}">${icon}</div>
+                    <div class="subtask-body">
+                        <div class="subtask-name">${escapeHtml(st.name||'')}</div>
+                        ${st.description?`<div class="subtask-desc">${escapeHtml(st.description)}</div>`:''}
+                        ${st.outcome?`<div class="subtask-outcome">✓ ${escapeHtml(st.outcome)}</div>`:''}
+                    </div>
+                </div>`;
+            });
+        }
+        contentEl.innerHTML = html;
+    }
+
+    function stateLabel(s) {
+        return {todo:'待开始',in_progress:'进行中',done:'已完成',abandoned:'已放弃'}[s]||s||'';
+    }
+    function stateIcon(s) {
+        return {todo:'○', in_progress:'', done:'✓', abandoned:'✕'}[s] || '○';
+    }
+
+    // Disable/enable input area during plan generation (separate from chat processing)
+    let planGenerating = false;
+    function setPlanGenerating(flag) {
+        planGenerating = flag;
+        // Only disable if not already controlled by isProcessing
+        if (!isProcessing) {
+            document.getElementById('sendBtn').disabled = flag;
+            document.getElementById('chatInput').disabled = flag;
+            document.getElementById('hintText').textContent =
+                flag ? '正在生成任务计划，请稍候…' : '输入问题或点击上方推荐';
+        }
+    }
+
+    /* ═══════════════════════ Reset ═══════════════════════ */
+    async function resetAll() {
+        // Capture the old sessionId BEFORE startNewSession() changes currentSessionId
+        const oldSessionId = currentSessionId;
+        startNewSession();
+        try {
+            await fetch(BASE_PATH + '/api/reset?sessionId=' + encodeURIComponent(oldSessionId), { method: 'POST' });
+        } catch (e) {}
+    }
+
+    /* ═══════════════════════ Connection ═══════════════════════ */
+    function updateConnStatus(ok) {
+        document.getElementById('statusDot').className = 'status-dot' + (ok ? '' : ' disconnected');
+    }
+</script>
+</body>
+</html>

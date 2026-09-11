@@ -101,3 +101,11 @@ agentscope-service/aistio/cover.out
 agentscope-service/aistio/coverage.*
 agentscope-service/aistio/.idea/
 agentscope-service/.dev-stack/
+/agentscope-examples/data-analysis/src/main/resources/application-prod.yml
+/agentscope-examples/data-analysis/src/main/resources/application-dev.yml
+/dataset-detail.txt
+/agentscope-examples/data-analysis/DEVELOPMENT_DOC.md
+/agentscope-examples/data-analysis/showcase.html
+/agentscope-examples/data-analysis/src/main/resources/主流程.md
+/agentscope-examples/data-analysis/开发文档-数据分析Agent实施方案.md
+/agentscope-examples/data-analysis/src/main/resources/项目文档.md
