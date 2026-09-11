@@ -1,65 +1,44 @@
 ---
 name: chart-rendering
-description: Visualise the result of an analysis as a chart (line, bar, area, scatter, etc.). Use when the user asks to "plot...", "chart...", "show me the trend of...", "visualise...", or when a numerical result has more than ~10 rows and would be easier to read as a picture. Produces an image file plus the script that generated it.
+description: 将查询结果快速可视化为常规图表（折线图、柱状图、饼图、散点图），直接渲染在聊天界面中。当用户要一张简单图表、不需要数据标签或达成率等复杂标注时使用。通过 render_chart 工具在会话中生成内嵌 ECharts 图表。
 ---
 
-# Chart Rendering Skill
+# 图表渲染技能
 
-Repeatable SOP for turning a result set into a chart that actually communicates
-the point.
+把查询结果快速转化为一张内嵌图表的标准化流程。
 
-## Steps
+服务端根据列结构与问题**确定性生成** ECharts 图表——你只负责传数据，不负责（也不能）构造图表配置。
 
-1. **Match chart type to question.** Decide *before* drawing:
+## 何时使用
 
-   | Question shape | Chart |
-   |----------------|-------|
-   | "How does X change over time?" | Line (single series) or multi-line |
-   | "Composition / share of total" | Stacked bar, or 100% stacked area |
-   | "Comparison across a small set of categories" | Bar (horizontal if labels are long) |
-   | "Relationship between two numeric variables" | Scatter |
-   | "Distribution of a single variable" | Histogram or box plot |
-   | "Cumulative total" | Area |
+- 用户要一张常规图表：折线 / 柱状 / 水平条 / 饼 / 散点。
+- 图上不需要逐点数据标签、达成率计算、参考线文字标注、多子图——有这些诉求时改用 [[python-analysis]] 技能（run_python）。
 
-   If none fit, ask the user which view they want — do not default to "any chart
-   will do".
+## 步骤
 
-2. **Prepare the data.** The query result from the [[sql-analysis]] Skill should
-   already be tidy (one row per data point, one column per dimension). If not,
-   reshape first using pandas (`pivot`, `melt`, `groupby`). Save the cleaned
-   frame to `knowledge/cache/<topic>.csv` so it can be re-rendered.
+1. **先用 SQL 拿到聚合好的数据**（[[sql-analysis]] 技能）：每个数据点一行、维度列 + 度量列，几十个点以内。如果预览被截断或仍是原始明细，改写 SQL 加上正确的 `GROUP BY` 重新执行，不要用残缺数据画图。
 
-3. **Render with matplotlib.** Write the script to a file under
-   `scratch/charts/<topic>.py` and execute it via `shell_run`. Conventions:
-   - **Title** — one sentence answering the question (not "Untitled chart").
-   - **Axes** — label both, include units (`Active users (count)`,
-     `Date (UTC)`).
-   - **Legend** — include only if there is more than one series.
-   - **Colours** — use the matplotlib default palette unless the user has a
-     stated brand colour in `knowledge/style.md`.
-   - **Output** — save as PNG (`bbox_inches='tight'`, `dpi=150`) under
-     `knowledge/charts/<topic>.png`.
+2. **调用 `render_chart(question, columns, rows[, mark_line_value, mark_line_label])`：**
+   - `question`：用户的原始问题——标题与图表类型由它推断，写清楚才能选对图。
+   - `columns`：查询结果的列名列表，按顺序。
+   - `rows`：查询结果的行数据，每行是字符串单元格列表。直接传最后一次 `run_sql_preview` 的结果。
+   - `mark_line_value` / `mark_line_label`：可选。KPI 目标值画红色虚线参考线（如从 `read_knowledge` 查到的"日均目标 20000000"）。没有目标就省略。
 
-4. **Show and explain.** In the assistant reply, link the saved image with a
-   markdown image embed (`![title](knowledge/charts/<topic>.png)`) and write
-   **2–3 sentences interpreting it** — what the chart shows, the one thing the
-   user should take away, and any caveat (incomplete latest data point,
-   outliers excluded, etc.).
+   不要自己加工数据、不要自己构造 option——服务端从数据形态和问题确定性构建完整 ECharts 配置。
 
-5. **Keep the script reproducible.** The chart file is the artefact; the script
-   under `scratch/charts/<topic>.py` is the source of truth. If the user asks
-   for a tweak ("can we use a log y-axis?"), edit the script and re-run — do
-   not regenerate from scratch.
+3. **解读。** 图表渲染后，用 **2-3 句话解读**——它展示了什么、用户最该关注的一个要点、任何注意事项（最新数据点不完整、已剔除退款订单等）。没有解读的图表等于没有回答。
 
-## Anti-patterns
+4. **保持可复现。** 用户提出微调（"改成按月汇总"、"只看华东"）时，改写 SQL 重新取数并再次调用 `render_chart`——不要从头重做整个分析。
 
-- ❌ Pie charts with > 5 slices.
-- ❌ Charting raw counts when proportions are what the user actually asked.
-- ❌ A chart whose axes have no labels or unit.
-- ❌ Embedding the image without 2 sentences of interpretation.
+## 反模式
 
-## When to delegate
+- ❌ 自己构造 ECharts option 或图表 spec——服务端确定性生成，传原始数据即可。
+- ❌ 把成百上千行原始明细塞进 `rows`——先在 SQL 里聚合。
+- ❌ 需要数据标签、达成率、统计摘要还用本技能——那是 [[python-analysis]]（run_python）的场景。
+- ❌ 坐标轴含义在 `question` 里说不清，导致图表类型推断错误。
+- ❌ 调用 `render_chart` 却不写 2 句解读。
+- ❌ 声称图表"已保存为文件"——它是原地渲染的，没有东西落盘。
 
-If the user wants a multi-chart dashboard with narrative around it (e.g. "build
-me a weekly product health deck"), **spawn the `report-writer` sub-agent** —
-this Skill is for individual charts.
+## 何时委托
+
+如果用户想要带叙述文字的多图仪表盘（例如"给我做一份每周产品健康简报"），**派生 `report-writer` 子代理**——本技能只负责单张图表。

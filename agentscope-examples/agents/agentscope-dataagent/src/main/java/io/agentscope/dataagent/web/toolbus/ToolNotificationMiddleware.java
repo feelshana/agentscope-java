@@ -106,10 +106,13 @@ public class ToolNotificationMiddleware implements MiddlewareBase {
                                     bus.publish(
                                             ToolEventBus.ToolEvent.toolResult(
                                                     sessionKey, end.getToolCallName(), text));
-                                    log.debug(
-                                            "Published TOOL_RESULT event: session={}, tool={}",
+                                    log.info(
+                                            "Published TOOL_RESULT: session={}, tool={}, len={},"
+                                                    + " preview=[{}]",
                                             sessionKey,
-                                            end.getToolCallName());
+                                            end.getToolCallName(),
+                                            text.length(),
+                                            text.substring(0, Math.min(text.length(), 300)));
                                 } catch (Exception e) {
                                     log.debug(
                                             "Failed to publish tool result event for {}: {}",

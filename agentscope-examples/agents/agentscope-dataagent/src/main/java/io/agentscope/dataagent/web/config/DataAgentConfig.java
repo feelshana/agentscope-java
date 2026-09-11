@@ -34,6 +34,7 @@ import io.agentscope.harness.agent.IsolationScope;
 import io.agentscope.harness.agent.gateway.channel.ChannelConfig;
 import io.agentscope.harness.agent.gateway.channel.DmScope;
 import io.agentscope.harness.agent.gateway.channel.chatui.ChatUiChannel;
+import io.agentscope.harness.agent.memory.compaction.ToolResultEvictionConfig;
 import io.agentscope.harness.agent.sandbox.SandboxClient;
 import io.agentscope.harness.agent.sandbox.impl.docker.DockerFilesystemSpec;
 import io.agentscope.harness.agent.sandbox.impl.docker.DockerSandboxClientOptions;
@@ -41,7 +42,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.HashSet;
 import java.util.Optional;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -136,6 +139,14 @@ public class DataAgentConfig {
 
     @Value("${dataagent.workspace:}")
     private String workspaceDir;
+
+    /**
+     * Docker image for the agent-runtime sandbox filesystem spec. Mirrors {@code
+     * DataAgentWorkspaceConfig#sandboxImage} so the spec-default acquire path and the
+     * {@code UserSandboxRegistry} external-sandbox path (Priority-1) start the same image.
+     */
+    @Value("${dataagent.sandbox.image:agentscope/dataagent-sandbox:latest}")
+    private String sandboxImage;
 
     // -----------------------------------------------------------------
     //  Model bean — OpenAI-compatible first, DashScope fallback. Only
@@ -270,10 +281,25 @@ public class DataAgentConfig {
                 b -> {
                     b.middleware(new ToolNotificationMiddleware(toolEventBus));
                     b.stateStore(stateStore);
-                    b.filesystem(
-                            new DockerFilesystemSpec()
-                                    .client(sandboxClient)
-                                    .isolationScope(IsolationScope.USER));
+                    DockerFilesystemSpec spec = new DockerFilesystemSpec().client(sandboxClient);
+                    if (sandboxImage != null && !sandboxImage.isBlank()) {
+                        spec.image(sandboxImage.trim());
+                    }
+                    // isolationScope() returns the supertype; chain it last.
+                    b.filesystem(spec.isolationScope(IsolationScope.USER));
+
+                    // Exclude run_python from eviction: even with path-based
+                    // artifact references the result is small, but as a safety
+                    // net we prevent eviction unconditionally so the full tool
+                    // result (stdout + artifact metadata + file paths) always
+                    // survives in session history for the frontend to parse.
+                    Set<String> excludedTools =
+                            new HashSet<>(ToolResultEvictionConfig.DEFAULT_EXCLUDED_TOOLS);
+                    excludedTools.add("run_python");
+                    b.toolResultEviction(
+                            ToolResultEvictionConfig.builder()
+                                    .excludedToolNames(excludedTools)
+                                    .build());
                 });
 
         DataAgentBootstrap bootstrap = builder.build();

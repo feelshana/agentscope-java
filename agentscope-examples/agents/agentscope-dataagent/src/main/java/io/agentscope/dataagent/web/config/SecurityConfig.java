@@ -110,10 +110,19 @@ public class SecurityConfig {
         @Override
         public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
             String header = exchange.getRequest().getHeaders().getFirst("Authorization");
-            if (header == null || !header.startsWith("Bearer ")) {
+            String token = null;
+            if (header != null && header.startsWith("Bearer ")) {
+                token = header.substring(7);
+            } else {
+                // Fallback: read token from query parameter (for <img src> etc.)
+                String qp = exchange.getRequest().getQueryParams().getFirst("token");
+                if (qp != null && !qp.isBlank()) {
+                    token = qp;
+                }
+            }
+            if (token == null) {
                 return chain.filter(exchange);
             }
-            String token = header.substring(7);
             try {
                 Claims claims = jwtService.parse(token);
                 String userId = jwtService.extractUserId(claims);

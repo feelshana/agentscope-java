@@ -134,12 +134,14 @@ public final class SharedSandboxFilesystem extends BaseSandboxFilesystem {
         List<FileDownloadResponse> results = new ArrayList<>(paths.size());
         for (String path : paths) {
             try {
-                String cmd = "base64 " + shellSingleQuote(path);
+                // Use -w 0 to prevent line wrapping (GNU coreutils & BusyBox)
+                String cmd = "base64 -w 0 " + shellSingleQuote(path);
                 ExecResult r = sandbox.exec(runtimeContext, cmd, null);
                 if (r.ok()) {
+                    // Strip all whitespace chars before base64 decoding
+                    String b64 = r.stdout().replaceAll("\\s", "");
                     byte[] decoded =
-                            Base64.getDecoder()
-                                    .decode(r.stdout().trim().getBytes(StandardCharsets.UTF_8));
+                            Base64.getDecoder().decode(b64.getBytes(StandardCharsets.UTF_8));
                     results.add(FileDownloadResponse.success(path, decoded));
                 } else {
                     results.add(FileDownloadResponse.fail(path, r.combinedOutput()));

@@ -1,6 +1,18 @@
-import React from 'react';
-import ReactMarkdown from 'react-markdown';
+import React, { useState } from 'react';
+import ReactMarkdown, { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { ACTIVE_AGENT_ID } from '../api/activeAgent';
+import { getToken } from '../api/auth';
+
+/** Rewrite /workspace/… image src to the workspace binary API URL (with auth token). */
+function rewriteImgSrc(src: string): string {
+  if (src.startsWith('/workspace/')) {
+    const base = `/api/agents/${ACTIVE_AGENT_ID}/workspace/file/binary?path=${encodeURIComponent(src)}`;
+    const token = getToken();
+    return token ? `${base}&token=${encodeURIComponent(token)}` : base;
+  }
+  return src;
+}
 
 /**
  * Styles for rendered markdown inside chat bubbles. Kept light-themed on
@@ -63,14 +75,55 @@ const MD_STYLE = `
 .claw-md img { max-width: 100%; }
 `;
 
-/** Renders markdown text (GFM tables/strikethrough included) for assistant replies. */
+/** Renders markdown text (GFM tables/strikethrough included) for assistant replies.
+ *  Rewrites /workspace/ image paths to the binary API and supports click-to-zoom. */
 export default function Markdown({ children }: { children: string }) {
+  const [lightbox, setLightbox] = useState<string | null>(null);
+
+  const components: Components = {
+    img: ({ src, alt }) => {
+      const url = rewriteImgSrc(src ?? '');
+      return (
+        <img
+          src={url}
+          alt={alt ?? ''}
+          style={{ maxWidth: '100%', cursor: 'zoom-in', borderRadius: 6 }}
+          onClick={() => setLightbox(url)}
+          onError={(e) => {
+            const img = e.currentTarget;
+            // Hide broken images gracefully
+            img.style.opacity = '0.3';
+            img.style.border = '1px dashed #cbd5e1';
+            img.title = `Image not found: ${alt || src}`;
+          }}
+        />
+      );
+    },
+  };
+
   return (
     <>
       <style>{MD_STYLE}</style>
       <div className="claw-md">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{children}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{children}</ReactMarkdown>
       </div>
+      {lightbox && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            background: 'rgba(0,0,0,0.75)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center',
+            cursor: 'zoom-out', padding: 24,
+          }}
+          onClick={() => setLightbox(null)}
+        >
+          <img
+            src={lightbox}
+            alt=""
+            style={{ maxWidth: '92vw', maxHeight: '92vh', borderRadius: 8, boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}
+          />
+        </div>
+      )}
     </>
   );
 }

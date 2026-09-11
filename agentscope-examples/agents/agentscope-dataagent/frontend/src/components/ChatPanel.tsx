@@ -6,6 +6,7 @@ import ToolCallBlock from './ToolCallBlock';
 import ChartBlock from './ChartBlock';
 import EChartsBlock, { ChartPayload } from './EChartsBlock';
 import CitationPanel, { DatasetRef } from './CitationPanel';
+import PythonCodeBlock from './PythonCodeBlock';
 import Markdown from './Markdown';
 import { extractVegaSpec } from '../utils/charts';
 import { listDatasets, listGroups, DatasetGroup } from '../api/datasets';
@@ -84,6 +85,17 @@ function isHiddenTool(name: string): boolean {
   return HIDDEN_TOOL_PATTERNS.some(p => lower.includes(p.toLowerCase()));
 }
 
+/** Extracts the `code` field from a JSON-encoded run_python tool input string. */
+function extractPythonCode(input?: string): string | null {
+  if (!input) return null;
+  try {
+    const parsed = JSON.parse(input);
+    return typeof parsed.code === 'string' ? parsed.code : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Extract the server-built chart payload (chartId or inline option) from a render_chart result. */
 function chartPayloadFromTool(t: ToolEntry): ChartPayload | null {
   const raw = t.result ?? t.input;
@@ -109,6 +121,10 @@ function turnsToMessages(turns: TurnEntry[]): Message[] {
       cur = null;
     } else if (role === 'TOOL') {
       if (t.toolName && isHiddenTool(t.toolName)) continue;
+      if (t.toolName === 'run_python' && t.toolResult) {
+        const isEvicted = t.toolResult.includes('Tool output was too large');
+        console.log(`[turnsToMessages] loaded run_python result: len=${t.toolResult.length}, evicted=${isEvicted}, preview=[${t.toolResult.substring(0, 300)}]`);
+      }
       if (!cur) {
         cur = { id: `${t.id}-host`, role: 'assistant', text: '', tools: [] };
         out.push(cur);
@@ -269,6 +285,8 @@ export default function ChatPanel({ agentId, onSessionUpdate }: ChatPanelProps) 
         } else if (evt.type === 'tool_result') {
           // Skip results for hidden tools.
           if (evt.toolName && isHiddenTool(evt.toolName)) continue;
+          const trLen = evt.toolResult ? evt.toolResult.length : 0;
+          console.log(`[ChatPanel] tool_result: ${evt.toolName}, len=${trLen}, preview=[${evt.toolResult?.substring(0, 300)}]`);
           setMessages(prev => prev.map(m => {
             if (m.id !== replyMsg.id) return m;
             const tools = [...m.tools];
@@ -343,11 +361,36 @@ export default function ChatPanel({ agentId, onSessionUpdate }: ChatPanelProps) 
               <div style={{ marginBottom: m.text ? 10 : 0 }}>
                 {m.tools.filter(t => !isHiddenTool(t.name)).map(t => {
                   const isChartTool = t.name.toLowerCase().includes('render_chart');
+                  const isPythonTool = t.name.toLowerCase() === 'run_python';
                   const chartPayload = isChartTool ? chartPayloadFromTool(t) : null;
                   const spec = !chartPayload ? extractVegaSpec(t.name, t.input) : null;
                   // Remount when the result arrives so defaultOpen=false takes effect
                   // (React keeps the old component's state when the key is stable).
                   const key = t.id + (t.result ? '-done' : '');
+
+                  // Python tool: collapsed raw tool block + expanded code/artifact view.
+                  if (isPythonTool) {
+                    const pyCode = extractPythonCode(t.input);
+                    return (
+                      <React.Fragment key={key}>
+                        <ToolCallBlock
+                          toolName={t.name}
+                          toolCallId={t.id}
+                          input={t.input}
+                          result={t.result}
+                          defaultOpen={false}
+                        />
+                        {pyCode && (
+                          <PythonCodeBlock
+                            code={pyCode}
+                            result={t.result}
+                            defaultOpen={true}
+                          />
+                        )}
+                      </React.Fragment>
+                    );
+                  }
+
                   return (
                     <React.Fragment key={key}>
                       <ToolCallBlock

@@ -79,6 +79,20 @@ dataagent:
   # this directory.
   workspace: ${DATAAGENT_WORKSPACE:}
 
+  # ---- Per-user Docker sandbox ----
+  # Image used for every (userId, agentId) container. The agent's run_python
+  # tool executes pandas/matplotlib/scipy code inside these containers, which
+  # run with --network=none, so the analysis stack must be baked into the
+  # image. Build the default tag once (from the module directory):
+  #   docker build -f docker/sandbox.Dockerfile -t agentscope/dataagent-sandbox:latest .
+  # Override (env DATAAGENT_SANDBOX_IMAGE) to point at any image that ships
+  # Python 3 + the analysis stack and runs as root.
+  sandbox:
+    image: ${DATAAGENT_SANDBOX_IMAGE:agentscope/dataagent-sandbox:latest}
+    # How long an idle container stays alive before being evicted.
+    idle-ttl-min: 15
+    eviction-poll-sec: 60
+
   # ---- Workspace storage topology (multi-tenant filesystem) ----
   # DataAgent runs every HarnessAgent on a CompositeFilesystem: a read-only
   # LocalFilesystem over `${dataagent.workspace}/.agentscope/workspace`
@@ -162,7 +176,7 @@ dataagent:
     datasource:
       url: ${DATAAGENT_DATASET_DB_URL:jdbc:mysql://localhost:3306/data_agent?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
       username: ${DATAAGENT_DATASET_DB_USER:root}
-      password: ${DATAAGENT_DATASET_DB_PASSWORD:1234}
+      password: ${DATAAGENT_DATASET_DB_PASSWORD:123456}
 
   # ---- Optional pre-seeded analytics MySQL (tenant_storage_utilization / project_info) ----
   # Disabled by default so it never collides with the dataset store; enable and point it at the
@@ -171,7 +185,7 @@ dataagent:
     enabled: ${DATAAGENT_ANALYTICS_ENABLED:false}
     url: ${DATAAGENT_ANALYTICS_DB_URL:jdbc:mysql://127.0.0.1:3306/data_agent?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
     username: ${DATAAGENT_ANALYTICS_DB_USER:root}
-    password: ${DATAAGENT_ANALYTICS_DB_PASSWORD:1234}
+    password: ${DATAAGENT_ANALYTICS_DB_PASSWORD:123456}
 
   # ---- Expose the platform metadata DB (H2) as a queryable source? Off by default. ----
   expose-app-db: ${DATAAGENT_EXPOSE_APP_DB:false}

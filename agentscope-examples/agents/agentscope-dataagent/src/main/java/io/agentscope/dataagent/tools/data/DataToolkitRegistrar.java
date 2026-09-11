@@ -21,6 +21,7 @@ import io.agentscope.dataagent.runtime.DataAgentBootstrap;
 import io.agentscope.dataagent.web.persistence.jpa.ChartOptionRepository;
 import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
 import io.agentscope.harness.agent.HarnessAgent;
+import io.agentscope.harness.agent.filesystem.sandbox.SandboxBackedFilesystem;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,6 +35,12 @@ import org.springframework.stereotype.Component;
  * <p>Mirrors {@code ContributionToolRegistrar}: runs after {@link DataAgentBootstrap} has built
  * every agent, fails soft on errors so a missing tool slot does not stop the application from
  * booting.
+ *
+ * <p>Also registers {@link RunPythonTool} so the agent can execute Python data-analysis code in
+ * the per-call Docker sandbox. A standalone {@link SandboxBackedFilesystem} proxy suffices here:
+ * the live sandbox for a call is bound on the invocation's {@code RuntimeContext} by {@code
+ * SandboxLifecycleMiddleware#acquireForCall}, and every tool invocation receives that same
+ * context, so the proxy does not need to be the agent's own filesystem instance.
  */
 @Component
 public class DataToolkitRegistrar {
@@ -90,6 +97,13 @@ public class DataToolkitRegistrar {
                                     knowledgeGraph,
                                     conversationScopes));
             log.info("Registered DataAgent toolkit onto main agent '{}'", main.getName());
+
+            // Register the Python sandbox-execution tool. See the class javadoc for why a
+            // standalone proxy (instead of the agent's own filesystem instance) is sufficient.
+            main.getDelegate()
+                    .getToolkit()
+                    .registerTool(new RunPythonTool(new SandboxBackedFilesystem()));
+            log.info("Registered RunPythonTool onto main agent '{}'", main.getName());
         } catch (RuntimeException e) {
             log.warn("Failed to register DataAgent toolkit onto main agent: {}", e.getMessage());
         }

@@ -74,6 +74,7 @@ public final class UserSandboxRegistry {
     private final SandboxClient<DockerSandboxClientOptions> client;
     private final Path hostWorkspaceRoot;
     private final Duration idleTtl;
+    private final DockerSandboxClientOptions optionsTemplate;
     private final ConcurrentHashMap<Key, Entry> entries = new ConcurrentHashMap<>();
     private final ScheduledExecutorService evictor;
 
@@ -92,9 +93,29 @@ public final class UserSandboxRegistry {
             Path hostWorkspaceRoot,
             Duration idleTtl,
             Duration evictionPollInterval) {
+        this(client, hostWorkspaceRoot, idleTtl, evictionPollInterval, null);
+    }
+
+    /**
+     * Same as {@link #UserSandboxRegistry(SandboxClient, Path, Duration, Duration)} but with an
+     * explicit options template used for every container this registry creates. Pass {@code null}
+     * to keep the client-side defaults (image {@code ubuntu:22.04}); pass a template carrying the
+     * {@code dataagent.sandbox.image} so the Python analysis toolchain is available inside the
+     * sandbox. The template is only read (never mutated) at container-creation time, so a shared
+     * instance is safe under concurrent {@link #borrow} calls.
+     *
+     * @param optionsTemplate options template applied to every created sandbox; may be {@code null}
+     */
+    public UserSandboxRegistry(
+            SandboxClient<DockerSandboxClientOptions> client,
+            Path hostWorkspaceRoot,
+            Duration idleTtl,
+            Duration evictionPollInterval,
+            DockerSandboxClientOptions optionsTemplate) {
         this.client = Objects.requireNonNull(client, "client");
         this.hostWorkspaceRoot = hostWorkspaceRoot;
         this.idleTtl = Objects.requireNonNull(idleTtl, "idleTtl");
+        this.optionsTemplate = optionsTemplate;
         long pollMs =
                 Math.max(
                         1_000L,
@@ -229,7 +250,8 @@ public final class UserSandboxRegistry {
     }
 
     private Sandbox createAndStart(Key key) {
-        DockerSandboxClientOptions options = new DockerSandboxClientOptions();
+        DockerSandboxClientOptions options =
+                optionsTemplate != null ? optionsTemplate : new DockerSandboxClientOptions();
         WorkspaceSpec ws = buildWorkspaceSpec(key);
         Sandbox sandbox = client.create(ws, new NoopSnapshotSpec(), options);
         try {

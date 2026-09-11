@@ -59,6 +59,17 @@ public class DataAgentWorkspaceConfig {
     private long evictionPollSeconds;
 
     /**
+     * Docker image for every per-user sandbox container. Defaults to the project-built analysis
+     * image (see {@code docker/sandbox.Dockerfile}: Python 3 + pandas/matplotlib/scipy + CJK
+     * fonts) so the agent's {@code run_python} tool works out of the box. Build it once with
+     * {@code docker build -f docker/sandbox.Dockerfile -t agentscope/dataagent-sandbox:latest .}
+     * from the module directory, or point this property at any image whose default user is root
+     * and which ships the Python analysis stack.
+     */
+    @Value("${dataagent.sandbox.image:agentscope/dataagent-sandbox:latest}")
+    private String sandboxImage;
+
+    /**
      * Same property {@code DataAgentConfig} reads for {@code cwd}. Resolved independently here so
      * {@link #userSandboxRegistry} does not have to inject {@code DataAgentBootstrap} — the
      * bootstrap itself depends on this registry, which would form a cycle.
@@ -83,12 +94,19 @@ public class DataAgentWorkspaceConfig {
         Path sharedRoot = resolveCwd().resolve("shared");
         Duration idleTtl = Duration.ofMinutes(idleTtlMinutes);
         Duration evictionPoll = Duration.ofSeconds(evictionPollSeconds);
+        DockerSandboxClientOptions optionsTemplate = new DockerSandboxClientOptions();
+        if (sandboxImage != null && !sandboxImage.isBlank()) {
+            optionsTemplate.image(sandboxImage.trim());
+        }
         log.info(
-                "DataAgent sandbox registry: hostWorkspaceRoot={}, idleTtl={}, evictionPoll={}",
+                "DataAgent sandbox registry: hostWorkspaceRoot={}, idleTtl={}, evictionPoll={},"
+                        + " image={}",
                 sharedRoot,
                 idleTtl,
-                evictionPoll);
-        return new UserSandboxRegistry(sandboxClient, sharedRoot, idleTtl, evictionPoll);
+                evictionPoll,
+                optionsTemplate.getImage());
+        return new UserSandboxRegistry(
+                sandboxClient, sharedRoot, idleTtl, evictionPoll, optionsTemplate);
     }
 
     private Path resolveCwd() {

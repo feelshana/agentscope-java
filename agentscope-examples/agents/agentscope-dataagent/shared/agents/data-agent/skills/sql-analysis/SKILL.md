@@ -1,74 +1,68 @@
 ---
 name: sql-analysis
-description: Answer a quantitative business question by writing a SQL query against the data warehouse, validating it, and presenting the result. Use when the user asks "how many...", "what's the trend of...", "compare X vs Y over...", "what's our top N...", or anything that resolves to a query against tabular data. Produces a small result table plus the underlying query.
+description: 通过针对已配置数据源编写 SQL 查询、校验后呈现结果，来回答定量业务问题。当用户问"有多少…"、"…的趋势是什么"、"对比 X 和 Y 在…期间的表现"、"排前 N 的…是什么"，或任何归结为对表格数据做查询的问题时使用。产出一张小型结果表加上底层查询语句。
 ---
 
-# SQL Analysis Skill
+# SQL 分析技能
 
-Repeatable SOP for turning a business question into a verifiable SQL answer.
+把业务问题转化为可验证的 SQL 答案的标准化流程。
 
-## Steps
+## 步骤
 
-1. **Restate the question as a metric.** In one sentence, write:
-   *"<metric> by <grouping> over <time window>, filtered by <filter>"*.
-   If any of those four (metric / grouping / window / filter) is missing or
-   ambiguous, ask **one** clarifying question and stop. Do not guess.
+1. **先把问题重述为一个指标。** 用一句话写出：
+   *"按 <分组维度> 统计 <时间窗口> 内、经 <筛选条件> 过滤的 <指标>"*。
+   如果这四个要素（指标 / 分组 / 窗口 / 筛选）有任何一项缺失或含糊，**只问一个**澄清问题然后停下。不要靠猜。
 
-2. **Locate the source.** Decide where the data lives:
-   - Look in `knowledge/` first for any schema notes, data-dictionary entries,
-     or prior query examples uploaded by the user.
-   - If the right table is not obvious, **delegate to the `data-explorer`
-     sub-agent** with the metric definition as the prompt — its job is to
-     identify the canonical source.
+2. **定位数据源。** 确定数据在哪里：
+   - 先调用 `list_data_sources`，从实际返回中选择数据源——绝不凭空猜 `source_id`。
+   - 用该 `source_id` 和候选表调用 `describe_table`，在写 SQL **之前**确认确切的列名、类型和行数。
+   - 查看 `knowledge/` 目录中的 schema 笔记或历史查询示例。
+   - 如果仍然无法确定该用哪张表，**委托 `data-explorer` 子代理**，把指标定义作为提示词传给它。
 
-3. **Draft the query.** Write the SQL in a fenced ```sql``` block. Conventions:
-   - Always include the time window in a `WHERE` clause — never query the
-     full history "just in case".
-   - Always `SELECT` an explicit column list — never `SELECT *` in an answer.
-   - Use CTEs (`WITH x AS (...)`) over nested subqueries for anything beyond
-     two levels of nesting.
-   - Comment any non-obvious filter (`-- excludes internal test accounts`).
+3. **起草查询。** 在 ```sql``` 代码块中写 SQL。约定：
+   - 总是在 `WHERE` 子句中限定时间窗口——绝不"以防万一"地查询全部历史。
+   - 总是 `SELECT` 明确的列清单——回答中绝不用 `SELECT *`。
+   - 在 SQL 中完成聚合（`SUM` / `COUNT` / `GROUP BY`），保证预览结果保持小体积。
+   - 超过两层嵌套时用 CTE（`WITH x AS (...)`）替代嵌套子查询。
+   - 给不明显的筛选条件加注释（`-- 已剔除退款订单`）。
 
-4. **Validate before reporting.** Run the query and check:
-   - Row count is in the ballpark you expected (1 row, 10 rows, ~30 daily
-     buckets, etc.). A surprising row count is almost always a bug — investigate.
-   - No `NULL`s in the grouping column unless that is the intended cohort.
-   - At least one numeric sanity check: a known total, a known reference value,
-     or a min/max range that matches reality.
-   - If anything looks off, **do not report the number** — fix the query first.
+4. **先执行校验，再汇报。** 通过 `run_sql_preview(source_id, sql, question, row_limit)` 执行——只允许 SELECT / WITH 语句。`question` 参数（用中文）描述你正在回答的问题，会显示在结果表格之前，让用户展开工具块就能看到"问了什么、查了什么、得到什么"。它返回的 markdown 报告包含查询问题、SQL 语句和结果表格（默认 20 行，上限 100）。然后检查：
+   - 行数在预期范围内（1 行、10 行、约 30 个按日分桶等）。行数出乎意料几乎总是 bug——要排查。
+   - 分组列没有 `NULL`，除非那就是预期的分组。
+   - 至少做一项数值合理性校验：一个已知总量、一个已知参照值、或与事实相符的最小 / 最大区间。
+   - 任何一项不对劲，**都不要汇报数字**——先修正查询。
 
-5. **Write the report.** Use this exact structure:
+5. **撰写报告。** 使用这个固定结构：
 
    ```
-   ## Answer
-   <one-sentence direct answer with the headline number(s)>
+   ## 答案
+   <一句话直接给出答案和关键数字>
 
-   ## Result
-   <small markdown table — at most ~15 rows; for longer results, summarise
-   and offer to render a chart or attach the full CSV>
+   ## 结果
+   <小型 markdown 表格——最多约 15 行；更长的结果先汇总，并提供渲染图表或附加完整 CSV 的选项>
 
-   ## Query
+   ## 查询
    ```sql
-   <the exact query you ran>
+   <你通过 run_sql_preview 执行的确切查询>
    ```
 
-   ## Sources & validation
-   - **Table(s):** `schema.table_name` (row count, freshness if known)
-   - **Validation:** <which sanity checks you ran and the result>
-   - **Caveats:** <known data quality issues, missing dates, etc.>
-   ```
+   ## 数据来源与校验
+   - **数据表：** `table_name`（describe_table 查到的行数）
+   - **校验：** <做了哪些合理性检查及结果>
+   - **注意事项：** <已知数据质量问题、缺失日期等>
+   ````
 
-## Anti-patterns
+   撰写完文字报告不代表分析结束。若原始问题含视觉分析语义——趋势/走势、对比、构成、分布、考核指标完成情况——**不要止步于表格**：数字核对无误后，继续用 [[python-analysis]] 技能（run_python：考核达成/多指标对比/需要标注）或 [[chart-rendering]] 技能（render_chart：简单图）把结果升级为图表交付。用户问"完成得怎么样"，一张带目标参考线的图比纯文字更有说服力；不需要用户明确提出画图要求，由问题性质判定。
 
-- ❌ Reporting a number without the query that produced it.
-- ❌ Using `LIMIT N` to "make the output fit" without explaining what got cut.
-- ❌ Reading a single row and reporting it as a trend.
-- ❌ Inventing a table or column name. If unsure, delegate to `data-explorer`.
+## 反模式
 
-## When to delegate
+- ❌ 汇报一个数字却不给出产生它的查询。
+- ❌ 用 `LIMIT N` 让"输出能装下"却不说明截掉了什么。
+- ❌ 只读一行数据就当作趋势汇报。
+- ❌ 凭空编造表、列或 `source_id`。不确定时先调用 `list_data_sources` / `describe_table`，或委托 `data-explorer`。
+- ❌ 问题含趋势/对比/考核语义却只交文字表格——查完数应主动升级可视化，不等用户提示。
 
-- The user's question requires probing several candidate tables / sources
-  before any query can be written → **spawn `data-explorer`**.
-- The user wants a polished written deliverable summarising several analyses
-  (e.g. "weekly health report") → **spawn `report-writer`** after you have
-  the underlying numbers ready.
+## 何时委托
+
+- 用户的问题需要先探查多个候选表 / 数据源才能写查询 → **派生 `data-explorer`**。
+- 用户要一份汇总多项分析、成文的正式交付物（如"每周健康报告"）→ 数字备齐后**派生 `report-writer`**。

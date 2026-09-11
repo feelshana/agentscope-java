@@ -20,6 +20,7 @@ import io.agentscope.harness.agent.filesystem.AbstractFilesystem;
 import io.agentscope.harness.agent.filesystem.model.ExecuteResponse;
 import io.agentscope.harness.agent.filesystem.model.FileDownloadResponse;
 import io.agentscope.harness.agent.filesystem.model.FileUploadResponse;
+import io.agentscope.harness.agent.filesystem.model.WriteResult;
 import io.agentscope.harness.agent.sandbox.ExecResult;
 import io.agentscope.harness.agent.sandbox.Sandbox;
 import io.agentscope.harness.agent.sandbox.SandboxAcquireResult;
@@ -32,6 +33,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
@@ -94,6 +96,56 @@ public class SandboxBackedFilesystem extends BaseSandboxFilesystem implements Sa
     @Override
     public String id() {
         return fsId;
+    }
+
+    /**
+     * Writes a file directly via {@link #uploadFiles}, bypassing the shell-based
+     * existence/mkdir check in {@link BaseSandboxFilesystem#write} which relies on
+     * {@code sh -c} features that can be unreliable across minimal container images.
+     *
+     * <p>Relative paths are first resolved to absolute paths under the sandbox workspace
+     * root. The method then tries native {@link SandboxFileTransfer} upload (which creates
+     * parent directories automatically), falling back to the tar-archive hydrate path.
+     */
+    @Override
+    public WriteResult write(RuntimeContext runtimeContext, String filePath, String content) {
+        AbstractFilesystem.validatePath(filePath);
+        Sandbox active = requireSandbox(runtimeContext);
+
+        // Resolve relative paths to absolute under the workspace root.
+        if (!filePath.startsWith("/")) {
+            try {
+                filePath = resolveWorkspaceRoot(active) + "/" + filePath;
+            } catch (IOException e) {
+                return WriteResult.fail(
+                        "Failed to resolve workspace root for relative path: " + e.getMessage());
+            }
+        }
+
+        byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
+
+        // Prefer native file transfer when available (auto-creates parent directories).
+        if (active instanceof SandboxFileTransfer transfer
+                && transfer.supportsFileTransfer(filePath)) {
+            try {
+                transfer.uploadFile(filePath, bytes);
+                return WriteResult.ok(filePath);
+            } catch (Exception e) {
+                log.warn("[sandbox-fs] native write failed for path: {}", filePath, e);
+                return WriteResult.fail(
+                        "Failed to write file '" + filePath + "': " + e.getMessage());
+            }
+        }
+
+        // Fall back to uploadFiles (archive hydrate path — also creates directories).
+        List<FileUploadResponse> responses =
+                uploadFiles(runtimeContext, List.of(Map.entry(filePath, bytes)));
+        if (responses.isEmpty() || !responses.get(0).isSuccess()) {
+            String err =
+                    responses.isEmpty() ? "upload returned no response" : responses.get(0).error();
+            return WriteResult.fail("Failed to write file '" + filePath + "': " + err);
+        }
+        return WriteResult.ok(filePath);
     }
 
     @Override

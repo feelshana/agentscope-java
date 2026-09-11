@@ -90,7 +90,7 @@ public final class SessionTurnParser {
                                     timestampMs,
                                     text(node, "name"),
                                     null,
-                                    node.has("output") ? node.get("output").toString() : null));
+                                    node.has("output") ? node.get("output").asText() : null));
                     continue;
                 }
 
@@ -101,8 +101,7 @@ public final class SessionTurnParser {
 
                 String toolName = text(node, "toolName");
                 String toolInput = node.has("toolInput") ? node.get("toolInput").toString() : null;
-                String toolResult =
-                        node.has("toolResult") ? node.get("toolResult").toString() : null;
+                String toolResult = node.has("toolResult") ? node.get("toolResult").asText() : null;
 
                 turns.add(
                         new TurnEntry(

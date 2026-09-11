@@ -116,6 +116,7 @@ function prettyInput(text: string): string {
 /** Per-tool-type icons shown next to the tool name in the header. */
 const TOOL_ICONS: Array<[string, string]> = [
   ['render_chart', '📊'],
+  ['run_python', '🐍'],
   ['execute_sql', '🗄️'],
   ['run_sql', '🗄️'],
   ['query_sql', '🗄️'],
