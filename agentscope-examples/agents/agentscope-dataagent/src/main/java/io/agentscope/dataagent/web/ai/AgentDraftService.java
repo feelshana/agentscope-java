@@ -60,7 +60,7 @@ public class AgentDraftService {
     private static final Duration CALL_TIMEOUT = Duration.ofSeconds(60);
 
     /** Longer budget for generic blocking chats (e.g. graph extraction) that return large JSON. */
-    private static final Duration CHAT_TIMEOUT = Duration.ofSeconds(180);
+    private static final Duration CHAT_TIMEOUT = Duration.ofSeconds(120);
 
     private final Model model;
     private final ObjectMapper mapper = new ObjectMapper();

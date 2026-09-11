@@ -68,7 +68,7 @@ public class KnowledgeGraphService {
     private static final int CHUNK_CHARS = 1500;
 
     /** How many extraction units run in parallel (TC/Yuxi-style concurrent chunk processing). */
-    private static final int BUILD_CONCURRENCY = 4;
+    private static final int BUILD_CONCURRENCY = 8;
 
     private static final String SYSTEM_PROMPT =
             "你是数据资产语义图谱三元组抽取器。仅用以下本体抽取，禁止自创类型/谓词。"

@@ -102,6 +102,7 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
       sessionId: activeKey,
       agentId: ACTIVE_AGENT_ID,
       conversationId: activeKey,
+      title: '新对话',
       label: '新对话',
       lastActivityMs: Date.now(),
       lastMessage: null,
@@ -264,10 +265,10 @@ function SessionRow({ entry, active, onOpen, onDelete }: RowProps) {
         ...(active ? S.rowActive : hover ? S.rowHover : {}),
         ...(entry.unread && !active ? S.rowUnread : {}),
       }}
-      title={entry.lastMessage ?? entry.sessionId}
+      title={entry.title ?? entry.lastMessage ?? entry.sessionId}
     >
       <div style={S.rowMain}>
-        <div style={S.rowTitle}>{entry.label ?? entry.sessionId}</div>
+        <div style={S.rowTitle}>{entry.title ?? entry.label ?? entry.sessionId}</div>
         {entry.lastMessage && <div style={S.rowSnippet}>{entry.lastMessage}</div>}
       </div>
       <div style={S.rowMeta}>
