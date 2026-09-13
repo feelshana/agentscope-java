@@ -71,8 +71,8 @@ const skillRowStyle: React.CSSProperties = {
 const installButtonStyle: React.CSSProperties = {
   padding: '6px 14px',
   borderRadius: 8,
-  border: '1px solid #6366f1',
-  background: '#6366f1',
+  border: '1px solid #4f46e5',
+  background: '#4f46e5',
   color: '#ffffff',
   fontSize: '0.82rem',
   fontWeight: 600,
@@ -91,8 +91,8 @@ const previewButtonStyle: React.CSSProperties = {
 const addButtonStyle: React.CSSProperties = {
   padding: '8px 14px',
   borderRadius: 8,
-  border: '1px solid #6366f1',
-  background: '#6366f1',
+  border: '1px solid #4f46e5',
+  background: '#4f46e5',
   color: '#ffffff',
   fontSize: '0.85rem',
   fontWeight: 600,

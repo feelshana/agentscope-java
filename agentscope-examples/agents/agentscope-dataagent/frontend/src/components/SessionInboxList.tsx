@@ -17,7 +17,7 @@ const S: Record<string, React.CSSProperties> = {
     boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
     transition: 'border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease',
   },
-  cardUnread: { borderLeft: '3px solid #6366f1' },
+  cardUnread: { borderLeft: '3px solid #4f46e5' },
   cardHeader: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 },
   label: { fontSize: '0.98rem', color: '#0f172a', fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   time: { fontSize: '0.8rem', color: '#94a3b8', flexShrink: 0 },
@@ -27,7 +27,7 @@ const S: Record<string, React.CSSProperties> = {
     fontSize: '0.78rem', color: '#94a3b8',
   },
   transcriptLink: {
-    color: '#6366f1', cursor: 'pointer', fontWeight: 500, textDecoration: 'none',
+    color: '#4f46e5', cursor: 'pointer', fontWeight: 500, textDecoration: 'none',
   },
   err: { color: '#dc2626', fontSize: '0.9rem' },
 };

@@ -22,7 +22,7 @@ const S: Record<string, React.CSSProperties> = {
   sub: { fontSize: '0.82rem', color: '#64748b' },
   primaryBtn: {
     padding: '8px 16px',
-    background: 'linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%)',
+    background: 'linear-gradient(135deg,#4f46e5 0%,#4338ca 100%)',
     color: '#ffffff', border: 'none', borderRadius: 8, cursor: 'pointer',
     fontSize: '0.86rem', fontWeight: 600,
     boxShadow: '0 1px 3px rgba(99,102,241,0.3)',

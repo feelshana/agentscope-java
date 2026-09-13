@@ -29,10 +29,20 @@ export default function AppShell() {
 
   return (
     <div style={{ display: 'flex', height: '100vh', background: 'var(--da-app-bg)', color: 'var(--da-text)', overflow: 'hidden' }}>
-      <SessionsSidebar refreshKey={refreshTick} />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+      <a
+        href="#main-content"
+        style={{ position: 'absolute', left: -9999, top: 0, color: 'var(--da-primary)' }}
+        onFocus={e => (e.currentTarget.style.left = '8px')}
+        onBlur={e => (e.currentTarget.style.left = '-9999px')}
+      >
+        跳到主内容
+      </a>
+      <aside style={{ display: 'contents' }}>
+        <SessionsSidebar refreshKey={refreshTick} />
+      </aside>
+      <main id="main-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
         <Outlet context={ctx} />
-      </div>
+      </main>
       <ToastHost />
     </div>
   );

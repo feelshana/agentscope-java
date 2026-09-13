@@ -20,7 +20,7 @@ type Tab = 'builtin' | 'mcp';
 function tabStyle(active: boolean): React.CSSProperties {
   return {
     background: 'transparent', border: 'none',
-    borderBottom: `2px solid ${active ? '#6366f1' : 'transparent'}`,
+    borderBottom: `2px solid ${active ? '#4f46e5' : 'transparent'}`,
     padding: '10px 16px', cursor: 'pointer',
     fontSize: '0.88rem', color: active ? '#0f172a' : '#64748b',
     fontWeight: active ? 600 : 500, marginBottom: -1,
@@ -65,7 +65,7 @@ const S: Record<string, React.CSSProperties> = {
   },
   status: { fontSize: '0.82rem', color: '#64748b', flex: 1 },
   saveBtn: {
-    padding: '8px 18px', background: 'linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%)',
+    padding: '8px 18px', background: 'linear-gradient(135deg,#4f46e5 0%,#4338ca 100%)',
     color: '#ffffff', border: 'none', borderRadius: 8, cursor: 'pointer',
     fontSize: '0.86rem', fontWeight: 600,
   },
@@ -437,7 +437,7 @@ function McpAddForm({ entry, existingNames, onCancel, onSubmit }: AddFormProps) 
             disabled={busy || !name.trim()}
             style={{
               padding: '7px 18px', border: 'none', borderRadius: 7,
-              background: 'linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%)',
+              background: 'linear-gradient(135deg,#4f46e5 0%,#4338ca 100%)',
               color: '#ffffff', cursor: busy ? 'not-allowed' : 'pointer',
               fontSize: '0.86rem', fontWeight: 600,
               opacity: busy || !name.trim() ? 0.6 : 1,

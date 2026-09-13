@@ -58,17 +58,17 @@ function bucketOf(ms: number): Bucket {
 }
 
 const BUCKET_LABEL: Record<Bucket, string> = {
-  today: 'Today',
-  yesterday: 'Yesterday',
-  earlier: 'Earlier',
+  today: '今天',
+  yesterday: '昨天',
+  earlier: '更早',
 };
 
 function relTime(ms: number): string {
   const diff = Date.now() - ms;
-  if (diff < 60_000) return 'just now';
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h`;
-  return `${Math.floor(diff / 86_400_000)}d`;
+  if (diff < 60_000) return '刚刚';
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} 分钟前`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} 小时前`;
+  return `${Math.floor(diff / 86_400_000)} 天前`;
 }
 
 export interface SessionsSidebarProps {
@@ -150,7 +150,7 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
       navigate('/chat');
       return;
     }
-    if (!confirm(`Delete this conversation? "${entry.label ?? entry.sessionId}"`)) return;
+    if (!confirm(`确定删除该对话？「${entry.label ?? entry.sessionId}」`)) return;
     try {
       await deleteSession(ACTIVE_AGENT_ID, entryNavKey(entry));
       setEntries(prev => prev.filter(e => e.sessionKey !== entry.sessionKey));
@@ -163,9 +163,7 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
   return (
     <div style={S.root}>
       <div style={S.brand}>
-        <span style={S.brandMark}>
-          <Icon name="chart" />
-        </span>
+        <span className="da-logo">DA</span>
         <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <span style={S.brandName}>Data Agent</span>
           <span style={S.brandTag}>企业级数据智能体</span>
@@ -231,7 +229,7 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
       </div>
 
       <div style={S.scroll}>
-        {loading && <div style={S.muted}>Loading…</div>}
+        {loading && <div style={S.muted}>加载中…</div>}
         {err && <div style={S.error}>{err}</div>}
         {!loading && !err && entries.length === 0 && !draftEntry && (
           <div style={S.muted}>暂无会话。发送消息即可开始第一段对话。</div>
@@ -297,7 +295,7 @@ function SessionRow({ entry, active, onOpen, onDelete }: RowProps) {
         {hover && (
           <button
             onClick={onDelete}
-            title="Delete conversation"
+            title="删除对话"
             className="da-btn da-btn-ghost da-btn-sm"
           >×</button>
         )}
@@ -330,31 +328,33 @@ function UserMenu({ username, onLogout }: { username: string; onLogout: () => vo
         onClick={() => setOpen(o => !o)}
         style={{
           display: 'flex', alignItems: 'center', gap: 10, width: '100%',
-          background: open ? '#eef2ff' : '#f8fafc',
-          border: `1px solid ${open ? '#c7d2fe' : '#e2e8f0'}`,
+          background: open ? 'var(--da-primary-subtle)' : 'var(--da-surface-sunken)',
+          border: `1px solid ${open ? 'rgba(79,70,229,0.35)' : 'var(--da-border)'}`,
           borderRadius: 10, padding: '8px 12px',
-          cursor: 'pointer', color: '#0f172a',
-          fontSize: '0.88rem', fontWeight: 500,
+          cursor: 'pointer', color: 'var(--da-text)',
+          fontSize: '0.9rem', fontWeight: 500,
+          transition: 'var(--da-transition)',
         }}
       >
         <div style={{
           width: 28, height: 28, borderRadius: '50%',
-          background: 'linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%)',
+          background: 'linear-gradient(135deg, var(--da-primary) 0%, var(--da-primary-hover) 100%)',
           color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: '0.78rem', fontWeight: 700, userSelect: 'none' as const,
+          boxShadow: '0 1px 3px rgba(79,70,229,0.3)',
         }}>{initial}</div>
         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>
           {username || 'User'}
         </span>
-        <span style={{ fontSize: '0.6rem', color: '#94a3b8', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>▼</span>
+        <span style={{ fontSize: '0.6rem', color: 'var(--da-text-muted)', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>▼</span>
       </button>
 
       {open && (
         <div style={{
           position: 'absolute' as const, bottom: 'calc(100% + 6px)', left: 0, right: 0,
-          background: '#ffffff',
-          border: '1px solid #e2e8f0', borderRadius: 10,
-          boxShadow: '0 12px 28px rgba(15,23,42,0.12)',
+          background: 'var(--da-surface)',
+          border: '1px solid var(--da-border)', borderRadius: 10,
+          boxShadow: 'var(--da-shadow-pop)',
           overflow: 'hidden', zIndex: 100,
         }}>
           <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid var(--da-border)' }}>
@@ -410,42 +410,37 @@ const S: Record<string, React.CSSProperties> = {
     display: 'flex', flexDirection: 'column', minHeight: 0,
   },
   brand: {
-    display: 'flex', alignItems: 'center', gap: 10,
-    padding: '16px 14px 12px', borderBottom: '1px solid var(--da-border)', flexShrink: 0,
+    display: 'flex', alignItems: 'center', gap: 12,
+    padding: '18px 16px 14px', borderBottom: '1px solid var(--da-border)', flexShrink: 0,
   },
-  brandMark: {
-    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-    width: 34, height: 34, borderRadius: 9,
-    background: 'var(--da-primary)', color: '#ffffff', flexShrink: 0,
-  },
-  brandName: { fontSize: 15, fontWeight: 700, color: 'var(--da-text)', letterSpacing: '-0.01em' },
-  brandTag: { fontSize: 11, color: 'var(--da-text-muted)' },
+  brandName: { fontSize: 16, fontWeight: 700, color: 'var(--da-text)', letterSpacing: '-0.01em' },
+  brandTag: { fontSize: 12, color: 'var(--da-text-muted)', marginTop: 1 },
   moreMenu: {
     position: 'absolute', left: 10, right: 10, zIndex: 30,
     background: 'var(--da-surface)', border: '1px solid var(--da-border)',
     borderRadius: 'var(--da-radius-lg)', boxShadow: 'var(--da-shadow-pop)',
     padding: 6, display: 'flex', flexDirection: 'column', gap: 2,
   },
-  scroll: { flex: 1, overflowY: 'auto', padding: '10px 8px 16px' },
-  muted: { padding: '8px 12px', fontSize: '0.85rem', color: 'var(--da-text-muted)' },
-  error: { padding: '8px 12px', fontSize: '0.85rem', color: 'var(--da-danger)' },
-  group: { marginBottom: 14 },
+  scroll: { flex: 1, overflowY: 'auto', padding: '12px 10px 18px' },
+  muted: { padding: '8px 12px', fontSize: '0.9rem', color: 'var(--da-text-muted)' },
+  error: { padding: '8px 12px', fontSize: '0.9rem', color: 'var(--da-danger)' },
+  group: { marginBottom: 18 },
   groupLabel: {
-    fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em',
-    color: 'var(--da-text-muted)', textTransform: 'uppercase', padding: '6px 10px 4px',
+    fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.1em',
+    color: 'var(--da-text-muted)', textTransform: 'uppercase', padding: '8px 12px 6px',
   },
   rowMain: { flex: 1, minWidth: 0 },
   rowTitle: {
-    fontSize: '0.88rem', fontWeight: 500, color: 'var(--da-text)',
+    fontSize: '0.95rem', fontWeight: 500, color: 'var(--da-text)',
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   },
   rowSnippet: {
-    fontSize: '0.78rem', color: 'var(--da-text-muted)', marginTop: 2,
+    fontSize: '0.82rem', color: 'var(--da-text-muted)', marginTop: 3,
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   },
   rowMeta: {
     display: 'flex', alignItems: 'center', gap: 4,
-    fontSize: '0.72rem', color: 'var(--da-text-muted)', flexShrink: 0,
+    fontSize: '0.75rem', color: 'var(--da-text-muted)', flexShrink: 0,
   },
   footer: {
     padding: '12px 14px', borderTop: '1px solid var(--da-border)', flexShrink: 0,

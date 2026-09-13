@@ -93,7 +93,7 @@ const S: Record<string, React.CSSProperties> = {
   editRow: { display: 'flex', gap: 8, alignItems: 'center', fontSize: '0.78rem' },
   smallBtn: {
     background: '#e0e7ff',
-    color: '#3730a3',
+    color: '#4338ca',
     border: 'none',
     borderRadius: 6,
     padding: '4px 10px',

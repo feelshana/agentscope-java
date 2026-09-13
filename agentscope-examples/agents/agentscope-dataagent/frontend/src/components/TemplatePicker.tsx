@@ -14,7 +14,7 @@ const S: Record<string, React.CSSProperties> = {
     transition: 'border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease',
   },
   cardActive: {
-    border: '1px solid #6366f1', background: '#eef2ff',
+    border: '1px solid #4f46e5', background: '#eef2ff',
     boxShadow: '0 0 0 3px rgba(99,102,241,0.12)',
   },
   head: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 },

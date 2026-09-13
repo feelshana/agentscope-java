@@ -41,7 +41,7 @@ export default function AdminPageLayout({
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       {/* ── Top banner ───────────────────────────────────────────── */}
       <div style={{
-        background: 'linear-gradient(90deg, #eef2ff 0%, #f8fafc 100%)',
+        background: 'linear-gradient(90deg, var(--da-primary-subtle) 0%, #f8fafc 100%)',
         borderBottom: '1px solid #e5e7eb',
         padding: '0 28px',
         display: 'flex',
@@ -57,7 +57,7 @@ export default function AdminPageLayout({
           gap: 8,
           padding: '0 14px',
           background: '#ffffff',
-          border: '1px solid #c7d2fe',
+          border: '1px solid var(--da-border)',
           borderRadius: 999,
           flexShrink: 0,
           margin: '10px 0',
@@ -69,7 +69,7 @@ export default function AdminPageLayout({
             fontSize: '0.76rem',
             fontWeight: 700,
             letterSpacing: '0.08em',
-            color: '#4f46e5',
+            color: 'var(--da-primary)',
             textTransform: 'uppercase' as const,
           }}>
             Admin
@@ -88,9 +88,9 @@ export default function AdminPageLayout({
                   style={{
                     background: active ? 'rgba(99,102,241,0.10)' : 'transparent',
                     border: 'none',
-                    borderBottom: active ? '2px solid #4f46e5' : '2px solid transparent',
+                    borderBottom: active ? '2px solid var(--da-primary)' : '2px solid transparent',
                     borderTop: '2px solid transparent',
-                    color: active ? '#4338ca' : '#64748b',
+                    color: active ? 'var(--da-primary-hover)' : '#64748b',
                     padding: '0 18px',
                     cursor: 'pointer',
                     fontSize: '0.9rem',
@@ -107,7 +107,7 @@ export default function AdminPageLayout({
                   {tab.badge != null && (
                     <span style={{
                       background: active ? 'rgba(99,102,241,0.18)' : '#f1f5f9',
-                      color: active ? '#4338ca' : '#64748b',
+                      color: active ? 'var(--da-primary-hover)' : '#64748b',
                       borderRadius: 999,
                       padding: '1px 8px',
                       fontSize: '0.74rem',

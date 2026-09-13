@@ -47,7 +47,7 @@ const s: Record<string, React.CSSProperties> = {
   addBtn: {
     background: 'transparent',
     border: 'none',
-    color: '#4f46e5',
+    color: 'var(--da-primary)',
     cursor: 'pointer',
     fontSize: '1.1rem',
     padding: '0 4px',
@@ -63,7 +63,7 @@ const s: Record<string, React.CSSProperties> = {
     width: '100%',
     background: 'transparent',
     border: 'none',
-    color: '#4f46e5',
+    color: 'var(--da-primary)',
     fontSize: '0.88rem',
     cursor: 'pointer',
     padding: '0.5rem 1rem',
@@ -78,8 +78,8 @@ function agentItemStyle(active: boolean): React.CSSProperties {
     cursor: 'pointer',
     borderRadius: 8,
     margin: '2px 0.4rem',
-    background: active ? '#eef2ff' : 'transparent',
-    color: active ? '#4338ca' : '#475569',
+    background: active ? 'var(--da-primary-subtle)' : 'transparent',
+    color: active ? 'var(--da-primary-hover)' : '#475569',
     fontSize: '0.92rem',
     display: 'flex',
     alignItems: 'center',
@@ -95,13 +95,13 @@ function sessionItemStyle(active: boolean): React.CSSProperties {
     cursor: 'pointer',
     borderRadius: 8,
     margin: '2px 0.4rem',
-    background: active ? '#eef2ff' : 'transparent',
-    color: active ? '#4338ca' : '#475569',
+    background: active ? 'var(--da-primary-subtle)' : 'transparent',
+    color: active ? 'var(--da-primary-hover)' : '#475569',
     fontSize: '0.88rem',
     display: 'flex',
     flexDirection: 'column',
     gap: 2,
-    borderLeft: active ? '3px solid #4f46e5' : '3px solid transparent',
+    borderLeft: active ? '3px solid var(--da-primary)' : '3px solid transparent',
     transition: 'background 0.12s',
   };
 }
@@ -207,7 +207,7 @@ function AgentModal({ initial, onSave, onClose }: ModalProps) {
         {error && <div style={{ color: '#dc2626', fontSize: '0.88rem', marginTop: 12 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
           <button onClick={onClose} style={{ background: '#ffffff', border: '1px solid #d1d5db', color: '#475569', borderRadius: 8, padding: '8px 18px', cursor: 'pointer', fontWeight: 500, fontSize: '0.9rem' }}>Cancel</button>
-          <button onClick={handleSave} disabled={saving} style={{ background: '#4f46e5', border: 'none', color: '#fff', borderRadius: 8, padding: '8px 22px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', boxShadow: '0 1px 3px rgba(79,70,229,0.25)' }}>
+          <button onClick={handleSave} disabled={saving} style={{ background: 'var(--da-primary)', border: 'none', color: '#fff', borderRadius: 8, padding: '8px 22px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', boxShadow: '0 1px 3px var(--da-shadow-card)' }}>
             {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
@@ -348,7 +348,7 @@ export default function AgentSidebar({ selectedAgentId, onSelectAgent, userId, r
             <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agent.name}</span>
             <div style={{ display: 'flex', gap: 4, flexShrink: 0, alignItems: 'center' }}>
               <span style={scopeBadgeStyle('user')}>mine</span>
-              <button style={{ background: 'transparent', border: 'none', color: '#4f46e5', cursor: 'pointer', fontSize: '0.82rem', padding: '0 3px' }} title="Edit" onClick={e => { e.stopPropagation(); setEditAgent(agent); }}>✎</button>
+              <button style={{ background: 'transparent', border: 'none', color: 'var(--da-primary)', cursor: 'pointer', fontSize: '0.82rem', padding: '0 3px' }} title="Edit" onClick={e => { e.stopPropagation(); setEditAgent(agent); }}>✎</button>
               <button style={{ background: 'transparent', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '0.82rem', padding: '0 3px' }} title="Delete" onClick={e => handleDelete(agent, e)}>✕</button>
             </div>
           </div>
@@ -375,7 +375,7 @@ export default function AgentSidebar({ selectedAgentId, onSelectAgent, userId, r
               onClick={() => handleSessionClick(sess)}
               title={sess.sessionKey}
             >
-              <span style={{ fontSize: '0.9rem', color: active ? '#4338ca' : '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: active ? 600 : 500 }}>
+              <span style={{ fontSize: '0.9rem', color: active ? 'var(--da-primary-hover)' : '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: active ? 600 : 500 }}>
                 {label}
               </span>
               <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>

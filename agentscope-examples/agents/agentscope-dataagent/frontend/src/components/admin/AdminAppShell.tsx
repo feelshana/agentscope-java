@@ -43,14 +43,14 @@ function navItemStyle(active: boolean): React.CSSProperties {
     alignItems: 'center',
     gap: 10,
     width: '100%',
-    background: active ? '#eef2ff' : 'transparent',
+    background: active ? 'var(--da-primary-subtle)' : 'transparent',
     border: 'none',
     borderRadius: 8,
     padding: '9px 12px',
     margin: '2px 0',
     cursor: 'pointer',
     fontSize: '0.92rem',
-    color: active ? '#4338ca' : '#475569',
+    color: active ? 'var(--da-primary-hover)' : '#475569',
     textAlign: 'left' as const,
     fontWeight: active ? 600 : 500,
     transition: 'background 0.12s, color 0.12s',
@@ -115,7 +115,7 @@ function UserMenu({ username, onLogout, onSwitchToChat }: {
       >
         <div style={{
           width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
-          background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+          background: 'linear-gradient(135deg,var(--da-primary),var(--da-secondary))',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: '0.92rem', fontWeight: 700, color: '#ffffff',
           userSelect: 'none' as const,
@@ -125,7 +125,7 @@ function UserMenu({ username, onLogout, onSwitchToChat }: {
         </div>
         <div style={{ flex: 1, overflow: 'hidden' }}>
           <div style={{ fontSize: '0.92rem', fontWeight: 600, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{username}</div>
-          <div style={{ fontSize: '0.76rem', color: '#6366f1', fontWeight: 500 }}>🛡 admin</div>
+          <div style={{ fontSize: '0.76rem', color: 'var(--da-primary)', fontWeight: 500 }}>🛡 admin</div>
         </div>
         <span style={{ fontSize: '0.72rem', color: '#94a3b8', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>▲</span>
       </button>
@@ -139,7 +139,7 @@ function UserMenu({ username, onLogout, onSwitchToChat }: {
         }}>
           <div style={{ padding: '14px 16px 12px', borderBottom: '1px solid #f1f5f9' }}>
             <div style={{ fontSize: '0.92rem', fontWeight: 600, color: '#0f172a' }}>{username}</div>
-            <div style={{ fontSize: '0.78rem', color: '#6366f1', marginTop: 2, fontWeight: 500 }}>Administrator</div>
+            <div style={{ fontSize: '0.78rem', color: 'var(--da-primary)', marginTop: 2, fontWeight: 500 }}>Administrator</div>
           </div>
           <button
             onClick={() => { onSwitchToChat(); setOpen(false); }}
@@ -194,7 +194,7 @@ export default function AdminAppShell({ children }: AppShellProps) {
         display: 'flex', flexDirection: 'column', flexShrink: 0, overflowY: 'auto',
       }}>
         <div style={{ padding: '22px 20px 18px', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
-          <span style={{ fontWeight: 700, color: '#4f46e5', fontSize: '1.15rem', letterSpacing: '-0.02em', display: 'block' }}>
+          <span style={{ fontWeight: 700, color: 'var(--da-primary)', fontSize: '1.15rem', letterSpacing: '-0.02em', display: 'block' }}>
             ⚙ AgentScope
           </span>
           <span style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: 4, display: 'block', fontWeight: 500 }}>

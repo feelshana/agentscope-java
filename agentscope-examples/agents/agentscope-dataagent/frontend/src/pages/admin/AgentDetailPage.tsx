@@ -154,7 +154,7 @@ function ConfigPanel({ detail, agentId }: { detail: AgentDetailView; agentId: st
             <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.84rem', color: C.dimmed }}>{d.id}</div>
           </div>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, fontSize: '0.78rem' }}>
-            {d.isMain && <span style={{ background: C.accentBg, color: C.accent, borderRadius: 999, padding: '3px 12px', fontWeight: 600, border: '1px solid rgba(84, 87, 201, 0.22)' }}>main</span>}
+            {d.isMain && <span style={{ background: C.accentBg, color: C.accent, borderRadius: 999, padding: '3px 12px', fontWeight: 600, border: '1px solid rgba(79, 70, 229, 0.22)' }}>main</span>}
             {d.liveInGateway
               ? <span style={{ background: C.greenBg, color: '#15803d', borderRadius: 999, padding: '3px 12px', fontWeight: 600, border: '1px solid #86efac' }}>● live</span>
               : <span style={{ background: '#fffbeb', color: '#92400e', borderRadius: 999, padding: '3px 12px', border: '1px solid #fcd34d', fontWeight: 600 }}>○ pending restart</span>}

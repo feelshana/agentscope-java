@@ -44,7 +44,7 @@ const S: Record<string, React.CSSProperties> = {
     color: '#334155', borderRadius: 7, userSelect: 'none',
     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
   },
-  rowActive: { background: '#eef2ff', color: '#3730a3', fontWeight: 500 },
+  rowActive: { background: '#eef2ff', color: '#4338ca', fontWeight: 500 },
   rowHover: { background: '#f8fafc' },
   caret: { width: 12, color: '#94a3b8', flexShrink: 0 },
   err: { padding: 14, fontSize: '0.88rem', color: '#dc2626' },

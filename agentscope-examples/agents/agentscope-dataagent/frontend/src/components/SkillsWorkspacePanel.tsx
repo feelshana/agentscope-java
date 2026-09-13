@@ -41,7 +41,7 @@ const itemStyle = (active: boolean): React.CSSProperties => ({
   borderBottom: '1px solid #f1f5f9',
   cursor: 'pointer',
   background: active ? '#eef2ff' : 'transparent',
-  borderLeft: active ? '3px solid #6366f1' : '3px solid transparent',
+  borderLeft: active ? '3px solid #4f46e5' : '3px solid transparent',
 });
 const detailStyle: React.CSSProperties = {
   flex: 1,
@@ -315,9 +315,9 @@ export default function SkillsWorkspacePanel({
                 onClick={handleSave}
                 style={{
                   ...buttonStyle,
-                  background: dirty ? '#6366f1' : '#e0e7ff',
-                  color: dirty ? '#ffffff' : '#6366f1',
-                  border: dirty ? '1px solid #6366f1' : '1px solid #c7d2fe',
+                  background: dirty ? '#4f46e5' : '#e0e7ff',
+                  color: dirty ? '#ffffff' : '#4f46e5',
+                  border: dirty ? '1px solid #4f46e5' : '1px solid #c7d2fe',
                 }}
                 disabled={!dirty || busy}
               >

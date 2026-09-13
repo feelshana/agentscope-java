@@ -17,7 +17,7 @@ const S: Record<string, React.CSSProperties> = {
   },
   btn: {
     alignSelf: 'flex-start', padding: '10px 22px',
-    background: 'linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%)',
+    background: 'linear-gradient(135deg,#4f46e5 0%,#4338ca 100%)',
     color: '#ffffff',
     border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: '0.92rem', fontWeight: 600,
     boxShadow: '0 2px 6px rgba(99,102,241,0.35), inset 0 1px 0 rgba(255,255,255,0.18)',

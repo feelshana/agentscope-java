@@ -18,12 +18,12 @@ export default function ChatHeader({ title }: ChatHeaderProps) {
   return (
     <div style={S.root}>
       <div style={{ ...S.titleBlock, paddingLeft: 10 }} className="da-keyline">
-        <span className="da-eyebrow">Conversation</span>
+        <span className="da-eyebrow">对话</span>
         <span style={S.title}>{title || '新对话'}</span>
       </div>
       {sessionKey && (
         <span style={S.sessionTag} title={sessionKey}>
-          <Icon name="link" size="sm" /> session: {sessionKey.slice(0, 8)}…
+          <Icon name="link" size="sm" /> 会话: {sessionKey.slice(0, 8)}…
         </span>
       )}
     </div>
@@ -37,7 +37,9 @@ const S: Record<string, React.CSSProperties> = {
     gap: 12,
     padding: '12px 24px',
     borderBottom: '1px solid var(--da-border)',
-    background: 'var(--da-surface)',
+    background: 'rgba(255, 255, 255, 0.82)',
+    backdropFilter: 'blur(8px)',
+    WebkitBackdropFilter: 'blur(8px)',
     flexShrink: 0,
   },
   titleBlock: { display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 },
