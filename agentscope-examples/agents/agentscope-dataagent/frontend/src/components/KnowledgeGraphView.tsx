@@ -46,13 +46,16 @@ const wrapStyle: React.CSSProperties = {
   display: 'flex',
   gap: 12,
   width: '100%',
-  height: 560,
+  flex: 1,
+  minHeight: 0,
+  padding: 16,
 };
 
 const canvasStyle: React.CSSProperties = {
   position: 'relative',
   flex: 1,
-  background: 'var(--da-app-bg)',
+  minHeight: 0,
+  background: 'var(--da-surface)',
   border: '1px solid var(--da-border)',
   borderRadius: 12,
   overflow: 'hidden',
@@ -80,7 +83,9 @@ const toolBtnStyle: React.CSSProperties = {
 };
 
 const panelStyle: React.CSSProperties = {
-  width: 240,
+  width: 260,
+  flexShrink: 0,
+  alignSelf: 'stretch',
   background: 'var(--da-surface)',
   border: '1px solid var(--da-border)',
   borderRadius: 12,
@@ -279,6 +284,22 @@ export default function KnowledgeGraphView({ groupId }: { groupId: string }) {
     <div style={wrapStyle}>
       <div style={canvasStyle}>
         <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+        {!status && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 24,
+            }}
+          >
+            <div className="da-skeleton" style={{ width: 64, height: 64, borderRadius: 999 }} />
+            <div className="da-skeleton" style={{ width: 88, height: 88, borderRadius: 999 }} />
+            <div className="da-skeleton" style={{ width: 56, height: 56, borderRadius: 999 }} />
+          </div>
+        )}
         <div className="da-toolbar" style={{ position: 'absolute', top: 12, left: 12, right: 12 }}>
           <input
             value={search}

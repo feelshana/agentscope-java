@@ -405,6 +405,7 @@ export default function ChatPanel({ agentId, onSessionUpdate, onTitle }: ChatPan
   return (
     <div style={S.root}>
       <div style={S.thread} ref={threadRef}>
+        <div style={{ width: '100%', maxWidth: 860, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
         {restoring && messages.length === 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: '70%' }}>
             <div className="da-skeleton da-skeleton-block" style={{ width: '45%' }} />
@@ -499,6 +500,7 @@ export default function ChatPanel({ agentId, onSessionUpdate, onTitle }: ChatPan
               : m.text}
           </div>
         ))}
+        </div>
       </div>
       <div style={S.composerWrap}>
         <div style={S.composerCard}>

@@ -110,7 +110,7 @@ export default function Markdown({ children }: { children: string }) {
       {lightbox && (
         <div
           style={{
-            position: 'fixed', inset: 0, zIndex: 9999,
+            position: 'fixed', inset: 0, zIndex: 200,
             background: 'rgba(0,0,0,0.75)', display: 'flex',
             alignItems: 'center', justifyContent: 'center',
             cursor: 'zoom-out', padding: 24,

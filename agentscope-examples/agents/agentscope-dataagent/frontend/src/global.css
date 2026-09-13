@@ -267,7 +267,7 @@ button:focus-visible {
   color: var(--da-text-2);
   background: var(--da-surface-sunken);
   border: 1px solid var(--da-border);
-  border-radius: 999px;
+  border-radius: 4px;
 }
 .da-badge-primary {
   color: var(--da-primary);
@@ -658,4 +658,16 @@ button:focus-visible {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ---------- data typography polish ---------- */
+.da-table td,
+.da-stat-row b,
+.da-num {
+  font-variant-numeric: tabular-nums;
+}
+.da-page-title,
+.da-h,
+.da-h2 {
+  text-wrap: balance;
 }
