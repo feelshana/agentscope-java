@@ -104,6 +104,17 @@ const s: Record<string, React.CSSProperties> = {
     marginBottom: 6,
     fontFamily: 'ui-sans-serif, system-ui, sans-serif',
   },
+  downloadBtn: {
+    border: '1px solid #cbd5e1',
+    background: '#f8fafc',
+    color: '#475569',
+    borderRadius: 5,
+    padding: '2px 10px',
+    fontSize: '0.74rem',
+    cursor: 'pointer',
+    fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+    whiteSpace: 'nowrap' as const,
+  },
   errorBlock: {
     padding: '0.85rem 1rem',
     borderTop: '1px solid #e2e8f0',
@@ -233,6 +244,51 @@ function artifactSrc(a: ArtifactInfo): string | null {
 }
 
 /**
+ * Triggers a browser download for an artifact. Prefers the sandbox file
+ * (full, non-truncated content) via the binary API with
+ * `Content-Disposition: attachment`; falls back to the inline content
+ * captured in the tool result for legacy sessions without a path.
+ */
+function downloadArtifact(a: ArtifactInfo) {
+  if (a.path) {
+    const token = getToken();
+    const base =
+      `/api/agents/${ACTIVE_AGENT_ID}/workspace/file/binary` +
+      `?path=${encodeURIComponent(a.path)}&download=true`;
+    const url = token ? `${base}&token=${encodeURIComponent(token)}` : base;
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = a.name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    return;
+  }
+  // Legacy fallback: download the inline content as a Blob.
+  let blob: Blob | null = null;
+  if (a.contentB64) {
+    try {
+      const bytes = Uint8Array.from(atob(a.contentB64), c => c.charCodeAt(0));
+      blob = new Blob([bytes], { type: imageMimeType(a.name) });
+    } catch {
+      blob = null;
+    }
+  } else if (a.content !== undefined) {
+    blob = new Blob([a.content], { type: 'text/plain;charset=utf-8' });
+  }
+  if (blob) {
+    const objUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = objUrl;
+    link.download = a.name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(objUrl);
+  }
+}
+
+/**
  * Renders Python code, execution output, and generated artifacts
  * (PNG charts as inline images, CSV as tables) in the chat stream.
  */
@@ -304,8 +360,29 @@ export default function PythonCodeBlock({ code, result, defaultOpen = true }: Pr
               <div style={s.label}>生成产物</div>
               {parsed.artifacts.map((a, i) => (
                 <div key={i} style={{ marginBottom: 12 }}>
-                  <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: 4 }}>
-                    📎 {a.name} ({a.type}, {(a.size / 1024).toFixed(1)} KB)
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      fontSize: '0.78rem',
+                      color: '#64748b',
+                      marginBottom: 4,
+                    }}
+                  >
+                    <span style={{ flex: 1, minWidth: 0, wordBreak: 'break-all' }}>
+                      📎 {a.name} ({a.type}, {(a.size / 1024).toFixed(1)} KB)
+                    </span>
+                    <button
+                      onClick={e => {
+                        e.stopPropagation();
+                        downloadArtifact(a);
+                      }}
+                      style={s.downloadBtn}
+                      title={`下载 ${a.name}`}
+                    >
+                      ⬇ 下载
+                    </button>
                   </div>
                   {(a.type === 'image' || a.type === 'svg') && (() => {
                     const src = artifactSrc(a);

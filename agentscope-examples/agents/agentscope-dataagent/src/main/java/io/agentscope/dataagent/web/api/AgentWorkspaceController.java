@@ -38,6 +38,7 @@ import io.agentscope.harness.agent.subagent.SubagentDeclaration;
 import io.agentscope.harness.agent.subagent.WorkspaceMode;
 import io.agentscope.harness.agent.workspace.WorkspaceManager;
 import java.net.URLDecoder;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -249,7 +250,10 @@ public class AgentWorkspaceController {
      */
     @GetMapping("/file/binary")
     public Mono<ResponseEntity<byte[]>> readBinaryFile(
-            @PathVariable String agentId, @RequestParam("path") String path, Authentication auth) {
+            @PathVariable String agentId,
+            @RequestParam("path") String path,
+            @RequestParam(name = "download", defaultValue = "false") boolean download,
+            Authentication auth) {
         String userId = (String) auth.getPrincipal();
         // Spring WebFlux should auto-decode @RequestParam, but add fallback
         // for cases where the path arrives still URL-encoded (e.g. when loaded
@@ -294,14 +298,26 @@ public class AgentWorkspaceController {
                     }
                     String contentType = guessContentType(rel);
                     log.info(
-                            "[binary] success: path={}, size={}, contentType={}",
+                            "[binary] success: path={}, size={}, contentType={}, download={}",
                             decodedPath,
                             content.length,
-                            contentType);
-                    return ResponseEntity.ok()
-                            .header("Content-Type", contentType)
-                            .header("Cache-Control", "public, max-age=3600")
-                            .body(content);
+                            contentType,
+                            download);
+                    ResponseEntity.BodyBuilder builder =
+                            ResponseEntity.ok()
+                                    .header("Content-Type", contentType)
+                                    .header("Cache-Control", "public, max-age=3600");
+                    if (download) {
+                        // RFC 5987 encoded filename so Chinese names survive browsers
+                        String filename = rel.substring(rel.lastIndexOf('/') + 1);
+                        String encodedFilename =
+                                URLEncoder.encode(filename, StandardCharsets.UTF_8)
+                                        .replace("+", "%20");
+                        builder.header(
+                                "Content-Disposition",
+                                "attachment; filename*=UTF-8''" + encodedFilename);
+                    }
+                    return builder.body(content);
                 });
     }
 
