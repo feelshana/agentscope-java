@@ -13,7 +13,7 @@ import {
 const overlayStyle: React.CSSProperties = {
   position: 'fixed',
   inset: 0,
-  background: 'rgba(15,23,42,0.5)',
+  background: 'rgba(24, 24, 27, 0.32)',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -21,7 +21,7 @@ const overlayStyle: React.CSSProperties = {
 };
 
 const shellStyle: React.CSSProperties = {
-  background: '#ffffff',
+  background: 'var(--da-surface)',
   borderRadius: 12,
   width: 'min(1000px, 94vw)',
   maxHeight: '88vh',
@@ -32,7 +32,7 @@ const shellStyle: React.CSSProperties = {
 
 const headStyle: React.CSSProperties = {
   padding: '14px 20px',
-  borderBottom: '1px solid #e2e8f0',
+  borderBottom: '1px solid var(--da-border)',
 };
 
 const bodyStyle: React.CSSProperties = {
@@ -44,7 +44,7 @@ const bodyStyle: React.CSSProperties = {
 
 const footStyle: React.CSSProperties = {
   padding: '12px 20px',
-  borderTop: '1px solid #e2e8f0',
+  borderTop: '1px solid var(--da-border)',
   display: 'flex',
   gap: 10,
   alignItems: 'center',
@@ -53,9 +53,9 @@ const footStyle: React.CSSProperties = {
 const primaryBtn: React.CSSProperties = {
   padding: '8px 16px',
   borderRadius: 8,
-  border: '1px solid #2563eb',
-  background: '#2563eb',
-  color: '#ffffff',
+  border: '1px solid var(--da-primary)',
+  background: 'var(--da-primary)',
+  color: 'var(--da-surface)',
   fontSize: '0.85rem',
   fontWeight: 600,
   cursor: 'pointer',
@@ -64,9 +64,9 @@ const primaryBtn: React.CSSProperties = {
 const ghostBtn: React.CSSProperties = {
   padding: '7px 12px',
   borderRadius: 8,
-  border: '1px solid #cbd5e1',
-  background: '#ffffff',
-  color: '#475569',
+  border: '1px solid var(--da-border-strong)',
+  background: 'var(--da-surface)',
+  color: 'var(--da-text-2)',
   fontSize: '0.82rem',
   cursor: 'pointer',
 };
@@ -76,7 +76,7 @@ const colStyle: React.CSSProperties = {
   minHeight: 0,
   overflow: 'auto',
   padding: 10,
-  borderRight: '1px solid #f1f5f9',
+  borderRight: '1px solid var(--da-surface-sunken)',
 };
 
 const itemStyle = (active: boolean): React.CSSProperties => ({
@@ -84,8 +84,8 @@ const itemStyle = (active: boolean): React.CSSProperties => ({
   borderRadius: 6,
   cursor: 'pointer',
   fontSize: '0.82rem',
-  background: active ? '#eef2ff' : 'transparent',
-  color: active ? '#3730a3' : '#0f172a',
+  background: active ? 'var(--da-primary-subtle)' : 'transparent',
+  color: active ? 'var(--da-primary-hover)' : 'var(--da-text)',
   display: 'flex',
   alignItems: 'center',
   gap: 8,
@@ -94,17 +94,17 @@ const itemStyle = (active: boolean): React.CSSProperties => ({
 const thStyle: React.CSSProperties = {
   textAlign: 'left',
   padding: '6px 8px',
-  borderBottom: '1px solid #e2e8f0',
+  borderBottom: '1px solid var(--da-border)',
   fontSize: '0.75rem',
-  color: '#64748b',
+  color: 'var(--da-text-3)',
   fontWeight: 600,
 };
 
 const tdStyle: React.CSSProperties = {
   padding: '6px 8px',
-  borderBottom: '1px solid #f1f5f9',
+  borderBottom: '1px solid var(--da-surface-sunken)',
   fontSize: '0.8rem',
-  color: '#0f172a',
+  color: 'var(--da-text)',
 };
 
 /** TC-style "从数据源关联" modal: pick source → schema → tables → associate into the KB. */
@@ -203,12 +203,12 @@ export default function AssociateTablesModal({
       <div style={shellStyle} onClick={e => e.stopPropagation()}>
         <div style={headStyle}>
           <div style={{ fontSize: '1rem', fontWeight: 700 }}>从数据源关联</div>
-          <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 4 }}>
+          <div style={{ fontSize: '0.78rem', color: 'var(--da-text-3)', marginTop: 4 }}>
             关联数据源上的重要库表，Agent 将为您提供数据查询、分析、预测等回答
           </div>
         </div>
         {error && (
-          <div style={{ color: '#b91c1c', fontSize: '0.85rem', padding: '8px 20px' }}>{error}</div>
+          <div style={{ color: 'var(--da-danger)', fontSize: '0.85rem', padding: '8px 20px' }}>{error}</div>
         )}
         <div style={bodyStyle}>
           <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
@@ -216,7 +216,7 @@ export default function AssociateTablesModal({
               style={{
                 padding: '7px 9px',
                 borderRadius: 6,
-                border: '1px solid #cbd5e1',
+                border: '1px solid var(--da-border-strong)',
                 fontSize: '0.82rem',
                 minWidth: 220,
               }}
@@ -233,7 +233,7 @@ export default function AssociateTablesModal({
           </div>
           <div style={{ display: 'flex', flex: 1, minHeight: 320 }}>
             <div style={{ ...colStyle, maxWidth: 220 }}>
-              <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#64748b', marginBottom: 6 }}>
+              <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--da-text-3)', marginBottom: 6 }}>
                 数据库
               </div>
               {schemas.map(s => (
@@ -243,7 +243,7 @@ export default function AssociateTablesModal({
               ))}
             </div>
             <div style={{ ...colStyle, maxWidth: 320 }}>
-              <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#64748b', marginBottom: 6 }}>
+              <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--da-text-3)', marginBottom: 6 }}>
                 数据表 {schema ? `· ${schema}` : ''}
               </div>
               {tables.map(t => (
@@ -258,7 +258,7 @@ export default function AssociateTablesModal({
                     style={{
                       background: 'transparent',
                       border: 'none',
-                      color: '#2563eb',
+                      color: 'var(--da-primary)',
                       cursor: 'pointer',
                       fontSize: '0.78rem',
                       padding: 0,
@@ -271,39 +271,39 @@ export default function AssociateTablesModal({
               ))}
             </div>
             <div style={colStyle}>
-              <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#64748b', marginBottom: 6 }}>
+              <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--da-text-3)', marginBottom: 6 }}>
                 字段信息 {viewTable ? `· ${viewTable}` : ''}
               </div>
               {viewTable ? (
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <table className="da-table">
                   <thead>
                     <tr>
-                      <th style={thStyle}>列名</th>
-                      <th style={thStyle}>类型</th>
-                      <th style={thStyle}>描述</th>
+                      <th>列名</th>
+                      <th>类型</th>
+                      <th>描述</th>
                     </tr>
                   </thead>
                   <tbody>
                     {columns.map(c => (
                       <tr key={c.name}>
-                        <td style={tdStyle}>{c.name}</td>
-                        <td style={tdStyle}>{c.type}</td>
-                        <td style={tdStyle}>{c.description ?? '-'}</td>
+                        <td>{c.name}</td>
+                        <td>{c.type}</td>
+                        <td>{c.description ?? '-'}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               ) : (
-                <div style={{ color: '#94a3b8', fontSize: '0.82rem' }}>点击"查看"看字段信息</div>
+                <div style={{ color: 'var(--da-text-muted)', fontSize: '0.82rem' }}>点击"查看"看字段信息</div>
               )}
             </div>
           </div>
         </div>
         <div style={footStyle}>
-          <button style={primaryBtn} onClick={handleAssociate} disabled={busy}>
+          <button className="da-btn da-btn-primary" onClick={handleAssociate} disabled={busy}>
             关联已选库表 ({selected.size})
           </button>
-          <button style={ghostBtn} onClick={onClose}>
+          <button className="da-btn" onClick={onClose}>
             取消
           </button>
         </div>

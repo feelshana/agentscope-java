@@ -333,20 +333,29 @@ public class KnowledgeGraphService {
         if (cached != null) {
             return cached;
         }
-        KnowledgeGraphEntityEntity entity =
-                entityRepo
-                        .findByGroupIdAndNormalizedKey(groupId, key)
-                        .orElseGet(
-                                () ->
-                                        entityRepo.save(
-                                                new KnowledgeGraphEntityEntity(
-                                                        UUID.randomUUID().toString(),
-                                                        groupId,
-                                                        ownerId,
-                                                        key,
-                                                        label,
-                                                        text.trim(),
-                                                        null)));
+        KnowledgeGraphEntityEntity entity = null;
+        try {
+            entity = entityRepo.findByGroupIdAndNormalizedKey(groupId, key).orElse(null);
+        } catch (RuntimeException duplicate) {
+            // Legacy/race duplicate rows: fall back to a group scan and reuse the first match.
+            entity =
+                    entityRepo.findByGroupId(groupId).stream()
+                            .filter(e -> key.equals(e.getNormalizedKey()))
+                            .findFirst()
+                            .orElse(null);
+        }
+        if (entity == null) {
+            entity =
+                    entityRepo.save(
+                            new KnowledgeGraphEntityEntity(
+                                    UUID.randomUUID().toString(),
+                                    groupId,
+                                    ownerId,
+                                    key,
+                                    label,
+                                    text.trim(),
+                                    null));
+        }
         keyToId.put(key, entity.getId());
         return entity.getId();
     }

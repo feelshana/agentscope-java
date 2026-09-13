@@ -106,13 +106,18 @@ export async function uploadKnowledge(groupId: string, file: File): Promise<stri
   return body.content ?? '';
 }
 
-export async function getKnowledge(groupId: string): Promise<string> {
+export interface KnowledgeDoc {
+  content: string;
+  updatedAt: string | null;
+}
+
+export async function getKnowledge(groupId: string): Promise<KnowledgeDoc> {
   const res = await fetch(`/api/dataset-groups/${encodeURIComponent(groupId)}/knowledge`, {
     headers: authHeaders(),
   });
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to load knowledge: ${res.status}`));
-  const body = (await res.json()) as { content?: string };
-  return body.content ?? '';
+  const body = (await res.json()) as { content?: string; updatedAt?: string | null };
+  return { content: body.content ?? '', updatedAt: body.updatedAt ?? null };
 }
 
 // ---------------------------------------------------------------- datasets

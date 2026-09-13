@@ -2,14 +2,17 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import BackToChatHeader from '../../components/BackToChatHeader';
 import DataSourceManagerModal from '../../components/DataSourceManagerModal';
+import EmptyIllustration from '../../components/EmptyIllustration';
+import Icon from '../../components/Icon';
+import { toast } from '../../components/Toast';
 import { createGroup, DatasetGroup, deleteGroup, listGroups } from '../../api/datasets';
 
 const helpStyle: React.CSSProperties = {
   padding: '8px 24px',
   fontSize: '0.78rem',
-  color: '#64748b',
-  background: '#f8fafc',
-  borderBottom: '1px solid #e2e8f0',
+  color: 'var(--da-text-3)',
+  background: 'var(--da-surface-sunken)',
+  borderBottom: '1px solid var(--da-border)',
 };
 
 const gridStyle: React.CSSProperties = {
@@ -23,79 +26,6 @@ const gridStyle: React.CSSProperties = {
   alignContent: 'start',
 };
 
-const cardStyle: React.CSSProperties = {
-  background: '#ffffff',
-  border: '1px solid #e2e8f0',
-  borderRadius: 12,
-  padding: 16,
-  cursor: 'pointer',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 8,
-};
-
-const buttonStyle: React.CSSProperties = {
-  padding: '8px 16px',
-  borderRadius: 8,
-  border: '1px solid #2563eb',
-  background: '#2563eb',
-  color: '#ffffff',
-  fontSize: '0.85rem',
-  fontWeight: 600,
-  cursor: 'pointer',
-};
-
-const ghostButtonStyle: React.CSSProperties = {
-  padding: '6px 12px',
-  borderRadius: 8,
-  border: '1px solid #cbd5e1',
-  background: '#ffffff',
-  color: '#475569',
-  fontSize: '0.8rem',
-  cursor: 'pointer',
-};
-
-const dangerStyle: React.CSSProperties = {
-  padding: '4px 10px',
-  borderRadius: 6,
-  border: '1px solid #dc2626',
-  background: '#ffffff',
-  color: '#dc2626',
-  fontSize: '0.75rem',
-  fontWeight: 600,
-  cursor: 'pointer',
-};
-
-const modalOverlayStyle: React.CSSProperties = {
-  position: 'fixed',
-  inset: 0,
-  background: 'rgba(15,23,42,0.55)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  zIndex: 60,
-};
-
-const modalShellStyle: React.CSSProperties = {
-  background: '#ffffff',
-  borderRadius: 12,
-  width: 'min(520px, 92vw)',
-  padding: 20,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 12,
-};
-
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '8px 10px',
-  borderRadius: 8,
-  border: '1px solid #cbd5e1',
-  fontSize: '0.85rem',
-  color: '#0f172a',
-  boxSizing: 'border-box',
-};
-
 const NAME_RE = /^[一-龥A-Za-z0-9_-]{1,100}$/;
 
 export default function DatasetsPage() {
@@ -107,13 +37,17 @@ export default function DatasetsPage() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
+    setLoading(true);
     try {
       setGroups(await listGroups());
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -137,6 +71,7 @@ export default function DatasetsPage() {
       setCreateOpen(false);
       setName('');
       setDescription('');
+      toast('知识库已创建', 'success');
       await refresh();
       navigate(`/configure/datasets/${g.id}`);
     } catch (e) {
@@ -152,6 +87,7 @@ export default function DatasetsPage() {
     setBusy(true);
     try {
       await deleteGroup(id);
+      toast('知识库已删除', 'success');
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -166,65 +102,63 @@ export default function DatasetsPage() {
       <div style={helpStyle}>
         知识库(KB)是数据集的容器：一个 KB 下可上传多张表与一份关系说明文档。问数时无需手动选择，
         agent 会通过 list_data_sources 看到你的全部 KB 内容并自行选用。
-        {error && <span style={{ color: '#b91c1c', marginLeft: 12 }}>{error}</span>}
+        {error && <span style={{ color: 'var(--da-danger)', marginLeft: 12 }}>{error}</span>}
       </div>
       <div style={{ padding: '16px 24px 0', display: 'flex', gap: 10 }}>
-        <button style={buttonStyle} onClick={() => setCreateOpen(true)} disabled={busy}>
+        <button className="da-btn da-btn-primary" onClick={() => setCreateOpen(true)} disabled={busy}>
           + 创建知识库
         </button>
-        <button
-          style={{
-            padding: '8px 16px',
-            borderRadius: 8,
-            border: '1px solid #cbd5e1',
-            background: '#ffffff',
-            color: '#475569',
-            fontSize: '0.85rem',
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
-          onClick={() => setDsOpen(true)}
-        >
+        <button className="da-btn" onClick={() => setDsOpen(true)}>
           数据源管理
         </button>
       </div>
       <div style={gridStyle}>
-        {groups.length === 0 && (
-          <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>
-            还没有知识库，点击"创建知识库"开始。
-          </div>
+        {loading &&
+          [0, 1, 2, 3].map(i => (
+            <div key={i} className="da-card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div className="da-skeleton da-skeleton-line" style={{ width: '60%' }} />
+              <div className="da-skeleton da-skeleton-line" style={{ width: '90%' }} />
+              <div className="da-skeleton da-skeleton-line" style={{ width: '40%' }} />
+            </div>
+          ))}
+        {!loading && groups.length === 0 && (
+          <EmptyIllustration variant="table" caption="还没有知识库，点击「创建知识库」开始" />
         )}
-        {groups.map(g => (
-          <div key={g.id} style={cardStyle} onClick={() => navigate(`/configure/datasets/${g.id}`)}>
+        {groups.map((g, gi) => (
+          <div
+            key={g.id}
+            className="da-card da-card-hover da-enter"
+            style={{
+              cursor: 'pointer',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+              animationDelay: `${gi * 40}ms`,
+            }}
+            onClick={() => navigate(`/configure/datasets/${g.id}`)}
+          >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a', flex: 1 }}>
+              <span style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--da-text)', flex: 1 }}>
                 {g.name}
               </span>
               <button
                 title="基于该知识库问答"
-                style={{
-                  background: '#fff',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: 6,
-                  padding: '2px 8px',
-                  fontSize: '0.78rem',
-                  cursor: 'pointer',
-                }}
+                className="da-btn da-btn-sm"
                 onClick={ev => {
                   ev.stopPropagation();
                   navigate(`/chat?groups=${encodeURIComponent(g.id)}`);
                 }}
               >
-                💬 问答
+                <Icon name="chat" size="sm" /> 问答
               </button>
-              <button style={dangerStyle} onClick={ev => handleDelete(g.id, ev)} disabled={busy}>
+              <button className="da-btn da-btn-danger da-btn-sm" onClick={ev => handleDelete(g.id, ev)} disabled={busy}>
                 删除
               </button>
             </div>
-            <div style={{ fontSize: '0.78rem', color: '#64748b', minHeight: 32 }}>
+            <div style={{ fontSize: '0.78rem', color: 'var(--da-text-3)', minHeight: 32 }}>
               {g.description || '—'}
             </div>
-            <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+            <div style={{ fontSize: '0.72rem', color: 'var(--da-text-muted)' }}>
               {g.datasetCount} 个数据集 · 创建于{' '}
               {g.createdAt ? new Date(g.createdAt).toLocaleDateString() : '-'}
             </div>
@@ -233,40 +167,45 @@ export default function DatasetsPage() {
       </div>
 
       {createOpen && (
-        <div style={modalOverlayStyle} onClick={() => setCreateOpen(false)}>
-          <div style={modalShellStyle} onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>创建知识库</div>
-            <div>
-              <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#475569' }}>
-                知识库名称 *
-              </label>
-              <input
-                style={inputStyle}
-                value={name}
-                onChange={e => setName(e.target.value)}
-                placeholder="请输入知识库名称"
-              />
-              <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 4 }}>
-                只能包含中文、字母、数字、连接线-或下划线_，长度 1-100 字符
+        <div className="da-modal-overlay" onClick={() => setCreateOpen(false)}>
+          <div className="da-modal-shell" style={{ width: 'min(520px, 92vw)' }} onClick={e => e.stopPropagation()}>
+            <div className="da-modal-head">
+              <div className="da-modal-title">创建知识库</div>
+            </div>
+            <div className="da-modal-body">
+              <div className="da-form-grid">
+                <label className="da-label">知识库名称 *</label>
+                <div>
+                  <input
+                    className="da-input"
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    placeholder="请输入知识库名称"
+                  />
+                  <div className="da-small" style={{ marginTop: 4 }}>
+                    只能包含中文、字母、数字、连接线-或下划线_，长度 1-100 字符
+                  </div>
+                </div>
+                <label className="da-label">描述</label>
+                <div>
+                  <textarea
+                    className="da-input"
+                    style={{ minHeight: 90, resize: 'vertical' }}
+                    value={description}
+                    onChange={e => setDescription(e.target.value)}
+                    placeholder="请输入知识库描述"
+                  />
+                  <div className="da-small" style={{ marginTop: 4 }}>
+                    限制 1000 个字符
+                  </div>
+                </div>
               </div>
             </div>
-            <div>
-              <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#475569' }}>描述</label>
-              <textarea
-                style={{ ...inputStyle, minHeight: 90, resize: 'vertical' }}
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                placeholder="请输入知识库描述"
-              />
-              <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 4 }}>
-                限制 1000 个字符
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button style={ghostButtonStyle} onClick={() => setCreateOpen(false)}>
+            <div className="da-modal-foot">
+              <button className="da-btn" onClick={() => setCreateOpen(false)}>
                 取消
               </button>
-              <button style={buttonStyle} onClick={handleCreate} disabled={busy}>
+              <button className="da-btn da-btn-primary" onClick={handleCreate} disabled={busy}>
                 创建
               </button>
             </div>

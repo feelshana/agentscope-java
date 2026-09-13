@@ -20,8 +20,8 @@ const panelStyle: React.CSSProperties = {
 };
 
 const cardStyle: React.CSSProperties = {
-  background: '#ffffff',
-  border: '1px solid #e2e8f0',
+  background: 'var(--da-surface)',
+  border: '1px solid var(--da-border)',
   borderRadius: 12,
   padding: 16,
 };
@@ -42,9 +42,9 @@ const badgeStyle: React.CSSProperties = {
 const buttonStyle: React.CSSProperties = {
   padding: '8px 16px',
   borderRadius: 8,
-  border: '1px solid #2563eb',
-  background: '#2563eb',
-  color: '#ffffff',
+  border: '1px solid var(--da-primary)',
+  background: 'var(--da-primary)',
+  color: 'var(--da-surface)',
   fontSize: '0.85rem',
   fontWeight: 600,
   cursor: 'pointer',
@@ -53,9 +53,9 @@ const buttonStyle: React.CSSProperties = {
 const ghostButtonStyle: React.CSSProperties = {
   padding: '6px 12px',
   borderRadius: 8,
-  border: '1px solid #cbd5e1',
-  background: '#ffffff',
-  color: '#475569',
+  border: '1px solid var(--da-border-strong)',
+  background: 'var(--da-surface)',
+  color: 'var(--da-text-2)',
   fontSize: '0.8rem',
   cursor: 'pointer',
 };
@@ -63,17 +63,17 @@ const ghostButtonStyle: React.CSSProperties = {
 const thStyle: React.CSSProperties = {
   textAlign: 'left',
   padding: '8px 10px',
-  borderBottom: '1px solid #e2e8f0',
+  borderBottom: '1px solid var(--da-border)',
   fontSize: '0.75rem',
-  color: '#64748b',
+  color: 'var(--da-text-3)',
   fontWeight: 600,
 };
 
 const tdStyle: React.CSSProperties = {
   padding: '8px 10px',
-  borderBottom: '1px solid #f1f5f9',
+  borderBottom: '1px solid var(--da-surface-sunken)',
   fontSize: '0.8rem',
-  color: '#0f172a',
+  color: 'var(--da-text)',
   maxWidth: 260,
   overflow: 'hidden',
   textOverflow: 'ellipsis',
@@ -84,9 +84,9 @@ const inputStyle: React.CSSProperties = {
   width: '100%',
   padding: '6px 8px',
   borderRadius: 6,
-  border: '1px solid #cbd5e1',
+  border: '1px solid var(--da-border-strong)',
   fontSize: '0.78rem',
-  color: '#0f172a',
+  color: 'var(--da-text)',
   boxSizing: 'border-box',
 };
 
@@ -146,11 +146,11 @@ export default function DatasetDetailPage() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       <BackToChatHeader title={dataset?.name ?? '数据集'} subtitle={dataset?.tableName ?? ''} />
       <div style={{ padding: '10px 24px 0' }}>
-        <button style={ghostButtonStyle} onClick={() => navigate(`/configure/datasets/${groupId}`)}>
+        <button className="da-btn" onClick={() => navigate(`/configure/datasets/${groupId}`)}>
           ← 返回知识库
         </button>
         {error && (
-          <span style={{ color: '#b91c1c', marginLeft: 12, fontSize: '0.8rem' }}>{error}</span>
+          <span style={{ color: 'var(--da-danger)', marginLeft: 12, fontSize: '0.8rem' }}>{error}</span>
         )}
         {saved && (
           <span style={{ color: '#047857', marginLeft: 12, fontSize: '0.8rem' }}>
@@ -164,48 +164,48 @@ export default function DatasetDetailPage() {
             <span style={badgeStyle}>✓ 表格结构化 → NL2SQL</span>
             {hasLongText && <span style={badgeStyle}>✓ 含长文本字段 → 知识检索</span>}
           </div>
-          <div style={{ fontSize: '0.8rem', color: '#475569', whiteSpace: 'pre-wrap' }}>
+          <div style={{ fontSize: '0.8rem', color: 'var(--da-text-2)', whiteSpace: 'pre-wrap' }}>
             {dataset?.description ?? '—'}
           </div>
         </div>
 
         <div style={cardStyle}>
-          <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#0f172a', marginBottom: 10 }}>
+          <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--da-text)', marginBottom: 10 }}>
             基本信息
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 20px', fontSize: '0.82rem' }}>
             <div>
-              <span style={{ color: '#64748b' }}>来源：</span>
+              <span style={{ color: 'var(--da-text-3)' }}>来源：</span>
               {dataset?.origin === 'datasource' ? '数据源关联' : '文件上传'}
             </div>
             <div>
-              <span style={{ color: '#64748b' }}>库.表：</span>
+              <span style={{ color: 'var(--da-text-3)' }}>库.表：</span>
               {dataset?.schemaName}.{dataset?.tableName}
             </div>
             <div>
-              <span style={{ color: '#64748b' }}>行数：</span>
+              <span style={{ color: 'var(--da-text-3)' }}>行数：</span>
               {dataset?.rowCount ?? '-'}
             </div>
             <div>
-              <span style={{ color: '#64748b' }}>来源文件：</span>
+              <span style={{ color: 'var(--da-text-3)' }}>来源文件：</span>
               {dataset?.sourceFileName ?? '-'}
             </div>
           </div>
         </div>
 
         <div style={cardStyle}>
-          <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#0f172a', marginBottom: 12 }}>
+          <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--da-text)', marginBottom: 12 }}>
             表格解析（前 {preview?.rows.length ?? 0} 行）
           </div>
           {preview && preview.rows.length > 0 ? (
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ borderCollapse: 'collapse', minWidth: '100%' }}>
+              <table className="da-table">
                 <thead>
                   <tr>
                     {preview.columns.map(c => (
                       <th key={c.name} style={thStyle}>
                         <div>{c.description || c.originalName || c.name}</div>
-                        <div style={{ fontWeight: 400, color: '#94a3b8' }}>
+                        <div style={{ fontWeight: 400, color: 'var(--da-text-muted)' }}>
                           {c.name} · {c.sqlType}
                         </div>
                       </th>
@@ -226,7 +226,7 @@ export default function DatasetDetailPage() {
               </table>
             </div>
           ) : (
-            <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>暂无数据行。</div>
+            <div style={{ color: 'var(--da-text-muted)', fontSize: '0.85rem' }}>暂无数据行。</div>
           )}
         </div>
 
@@ -239,32 +239,32 @@ export default function DatasetDetailPage() {
               marginBottom: 12,
             }}
           >
-            <span style={{ fontSize: '0.95rem', fontWeight: 600, color: '#0f172a' }}>
+            <span style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--da-text)' }}>
               字段语义（中文描述，供 agent 理解）
             </span>
-            <button style={buttonStyle} onClick={handleSave} disabled={busy}>
+            <button className="da-btn da-btn-primary" onClick={handleSave} disabled={busy}>
               保存
             </button>
           </div>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <table className="da-table">
             <thead>
               <tr>
-                <th style={thStyle}>字段</th>
-                <th style={thStyle}>类型</th>
-                <th style={thStyle}>中文描述</th>
+                <th>字段</th>
+                <th>类型</th>
+                <th>中文描述</th>
               </tr>
             </thead>
             <tbody>
               {(dataset?.columns ?? []).map(c => (
                 <tr key={c.name}>
-                  <td style={tdStyle}>
+                  <td>
                     {c.name}
-                    <div style={{ color: '#94a3b8', fontSize: '0.7rem' }}>{c.originalName}</div>
+                    <div style={{ color: 'var(--da-text-muted)', fontSize: '0.7rem' }}>{c.originalName}</div>
                   </td>
-                  <td style={tdStyle}>{c.sqlType}</td>
+                  <td>{c.sqlType}</td>
                   <td style={{ ...tdStyle, maxWidth: 420 }}>
                     <input
-                      style={inputStyle}
+                      className="da-input"
                       value={edits[c.name] ?? ''}
                       onChange={e => setEdits(prev => ({ ...prev, [c.name]: e.target.value }))}
                     />

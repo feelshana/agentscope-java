@@ -7,6 +7,8 @@ import {
   KgStatus,
 } from '../api/knowledgeGraph';
 import KgBuildConfigModal from './KgBuildConfigModal';
+import EmptyIllustration from './EmptyIllustration';
+import Icon from './Icon';
 
 const NODE_COLORS = [
   '#3996ae',
@@ -30,8 +32,8 @@ const STATUS_LABEL: Record<string, string> = {
 const STATUS_COLOR: Record<string, string> = {
   SUCCEEDED: '#16a34a',
   RUNNING: '#3b82f6',
-  FAILED: '#dc2626',
-  PENDING: '#94a3b8',
+  FAILED: 'var(--da-danger)',
+  PENDING: 'var(--da-text-muted)',
 };
 
 function hash(s: string): number {
@@ -50,8 +52,8 @@ const wrapStyle: React.CSSProperties = {
 const canvasStyle: React.CSSProperties = {
   position: 'relative',
   flex: 1,
-  background: '#fafbfc',
-  border: '1px solid #e2e8f0',
+  background: 'var(--da-app-bg)',
+  border: '1px solid var(--da-border)',
   borderRadius: 12,
   overflow: 'hidden',
 };
@@ -69,22 +71,22 @@ const toolbarStyle: React.CSSProperties = {
 
 const toolBtnStyle: React.CSSProperties = {
   background: 'rgba(255,255,255,0.94)',
-  border: '1px solid #e2e8f0',
+  border: '1px solid var(--da-border)',
   borderRadius: 6,
   padding: '4px 8px',
   fontSize: '0.72rem',
-  color: '#334155',
+  color: 'var(--da-text-2)',
   cursor: 'pointer',
 };
 
 const panelStyle: React.CSSProperties = {
   width: 240,
-  background: '#fff',
-  border: '1px solid #e2e8f0',
+  background: 'var(--da-surface)',
+  border: '1px solid var(--da-border)',
   borderRadius: 12,
   padding: 14,
   fontSize: '0.78rem',
-  color: '#334155',
+  color: 'var(--da-text-2)',
   overflowY: 'auto',
 };
 
@@ -196,19 +198,23 @@ export default function KnowledgeGraphView({ groupId }: { groupId: string }) {
           labelText: (d: any) => d.data?.label ?? d.id,
           labelFontSize: 11,
           labelFill: '#0f172a',
+          labelBackground: true,
+          labelBackgroundFill: '#f8fafc',
+          labelBackgroundOpacity: 0.85,
         },
       },
       edge: {
         type: 'quadratic',
         style: {
           endArrow: true,
-          stroke: '#c2c8d5',
+          stroke: '#cbd5e1',
           lineWidth: 1,
           labelText: (d: any) => d.data?.label ?? '',
           labelFontSize: 9,
-          labelFill: '#94a3b8',
+          labelFill: '#64748b',
           labelBackground: true,
-          labelBackgroundFill: '#fafbfc',
+          labelBackgroundFill: '#f8fafc',
+          labelBackgroundOpacity: 0.85,
         },
       },
       behaviors: ['drag-canvas', 'zoom-canvas', 'drag-element', 'hover-activate', 'click-select'],
@@ -273,26 +279,23 @@ export default function KnowledgeGraphView({ groupId }: { groupId: string }) {
     <div style={wrapStyle}>
       <div style={canvasStyle}>
         <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
-        <div style={toolbarStyle}>
+        <div className="da-toolbar" style={{ position: 'absolute', top: 12, left: 12, right: 12 }}>
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="搜索实体"
-            style={{
-              ...toolBtnStyle,
-              width: 160,
-              outline: 'none',
-            }}
+            className="da-input"
+            style={{ width: 180 }}
           />
-          <button style={toolBtnStyle} onClick={() => zoom(1.2)} title="放大">
-            ＋
+          <button className="da-btn da-btn-sm" onClick={() => zoom(1.2)} title="放大">
+            <Icon name="zoomIn" size="sm" />
           </button>
-          <button style={toolBtnStyle} onClick={() => zoom(1 / 1.2)} title="缩小">
-            －
+          <button className="da-btn da-btn-sm" onClick={() => zoom(1 / 1.2)} title="缩小">
+            <Icon name="zoomOut" size="sm" />
           </button>
-          <span style={{ ...toolBtnStyle, cursor: 'default' }}>{zoomPct}%</span>
+          <span className="da-small" style={{ minWidth: 40, textAlign: 'center' }}>{zoomPct}%</span>
           <button
-            style={toolBtnStyle}
+            className="da-btn da-btn-sm"
             onClick={() => {
               try {
                 graphRef.current?.fitView?.();
@@ -304,18 +307,15 @@ export default function KnowledgeGraphView({ groupId }: { groupId: string }) {
             适应
           </button>
           <button
-            style={toolBtnStyle}
+            className="da-btn da-btn-sm"
             onClick={() => {
               loadStatus().then(setStatus);
               loadGraph();
             }}
           >
-            刷新
+            <Icon name="refresh" size="sm" /> 刷新
           </button>
-          <button
-            style={{ ...toolBtnStyle, color: '#2563eb' }}
-            onClick={() => setConfigOpen(true)}
-          >
+          <button className="da-btn da-btn-primary da-btn-sm" onClick={() => setConfigOpen(true)}>
             {hasBuild ? '重建图谱' : '开始构建图谱'}
           </button>
         </div>
@@ -326,7 +326,7 @@ export default function KnowledgeGraphView({ groupId }: { groupId: string }) {
               bottom: 8,
               left: '50%',
               transform: 'translateX(-50%)',
-              color: '#b91c1c',
+              color: 'var(--da-danger)',
               fontSize: '0.75rem',
               background: 'rgba(255,255,255,0.94)',
               padding: '4px 10px',
@@ -344,11 +344,9 @@ export default function KnowledgeGraphView({ groupId }: { groupId: string }) {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#94a3b8',
-              fontSize: '0.85rem',
             }}
           >
-            尚未构建知识图谱，点击右上角"开始构建图谱"
+            <EmptyIllustration variant="graph" caption="尚未构建知识图谱，点击「开始构建图谱」" />
           </div>
         )}
         {graph && graph.nodes.length === 0 && hasBuild && !isActive(status) && (
@@ -358,7 +356,7 @@ export default function KnowledgeGraphView({ groupId }: { groupId: string }) {
               bottom: 8,
               left: '50%',
               transform: 'translateX(-50%)',
-              color: '#94a3b8',
+              color: 'var(--da-text-muted)',
               fontSize: '0.75rem',
             }}
           >
@@ -368,9 +366,7 @@ export default function KnowledgeGraphView({ groupId }: { groupId: string }) {
       </div>
 
       <div style={panelStyle}>
-        <div style={{ fontWeight: 600, color: '#0f172a', marginBottom: 10, borderBottom: '2px solid #2563eb', display: 'inline-block', paddingBottom: 2 }}>
-          图谱概览
-        </div>
+        <div className="da-accent-title" style={{ marginBottom: 10 }}>图谱概览</div>
         <Row label="实体数" value={stats?.entityCount ?? 0} />
         <Row label="关系边" value={stats?.relationCount ?? 0} />
         <Row label="文档数量" value={stats ? `${stats.docCount} 篇` : 0} />
@@ -385,7 +381,7 @@ export default function KnowledgeGraphView({ groupId }: { groupId: string }) {
         <div
           style={{
             height: 6,
-            background: '#e2e8f0',
+            background: 'var(--da-border)',
             borderRadius: 3,
             margin: '8px 0 12px',
             overflow: 'hidden',
@@ -395,7 +391,7 @@ export default function KnowledgeGraphView({ groupId }: { groupId: string }) {
             style={{
               height: '100%',
               width: `${Math.round((status?.progress ?? 0) * 100)}%`,
-              background: '#16a34a',
+              background: 'var(--da-success)',
               transition: 'width .3s',
             }}
           />
@@ -424,7 +420,7 @@ export default function KnowledgeGraphView({ groupId }: { groupId: string }) {
         ))}
         {status && status.units.length > 0 && (
           <>
-            <div style={{ fontWeight: 600, color: '#0f172a', margin: '12px 0 6px' }}>解析明细</div>
+            <div style={{ fontWeight: 600, color: 'var(--da-text)', margin: '12px 0 6px' }}>解析明细</div>
             {status.units.map((u, i) => (
               <div key={`${u.unitName}-${i}`} style={{ marginBottom: 6 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -433,19 +429,19 @@ export default function KnowledgeGraphView({ groupId }: { groupId: string }) {
                       width: 8,
                       height: 8,
                       borderRadius: 2,
-                      background: STATUS_COLOR[u.status] ?? '#94a3b8',
+                      background: STATUS_COLOR[u.status] ?? 'var(--da-text-muted)',
                       display: 'inline-block',
                     }}
                   />
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {u.unitName}
                   </span>
-                  <span style={{ color: STATUS_COLOR[u.status] ?? '#94a3b8' }}>
+                  <span style={{ color: STATUS_COLOR[u.status] ?? 'var(--da-text-muted)' }}>
                     {STATUS_LABEL[u.status] ?? u.status}
                   </span>
                 </div>
                 {u.status === 'FAILED' && u.errorMsg && (
-                  <div style={{ color: '#dc2626', fontSize: '0.7rem', marginLeft: 14, marginTop: 2 }}>
+                  <div style={{ color: 'var(--da-danger)', fontSize: '0.7rem', marginLeft: 14, marginTop: 2 }}>
                     {u.errorMsg}
                   </div>
                 )}
@@ -455,7 +451,7 @@ export default function KnowledgeGraphView({ groupId }: { groupId: string }) {
         )}
         {graph && Object.keys(graph.typeDist).length > 0 && (
           <>
-            <div style={{ fontWeight: 600, color: '#0f172a', margin: '12px 0 6px' }}>实体类型</div>
+            <div style={{ fontWeight: 600, color: 'var(--da-text)', margin: '12px 0 6px' }}>实体类型</div>
             {Object.entries(graph.typeDist).map(([t, c]) => (
               <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                 <span
@@ -489,9 +485,9 @@ export default function KnowledgeGraphView({ groupId }: { groupId: string }) {
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-      <span style={{ color: '#64748b' }}>{label}</span>
-      <span style={{ color: '#0f172a', fontWeight: 600 }}>{value}</span>
+    <div className="da-stat-row">
+      <span>{label}</span>
+      <b className="da-num">{value}</b>
     </div>
   );
 }

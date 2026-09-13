@@ -39,10 +39,10 @@ function Sparkline({ data }: { data: BucketCount[] }) {
         return (
           <g key={d.epochMs}>
             <rect x={x} y={y} width={barW} height={h}
-              fill={d.count > 0 ? '#6366f1' : '#1e2235'} rx={2} />
+              fill={d.count > 0 ? 'var(--da-primary)' : 'var(--da-border)'} rx={2} />
             {i === data.length - 1 && d.count > 0 && (
               <text x={x + barW / 2} y={y - 3} textAnchor="middle"
-                fontSize={9} fill="#a5b4fc">{d.count}</text>
+                fontSize={9} fill="var(--da-primary)">{d.count}</text>
             )}
           </g>
         );
@@ -54,23 +54,23 @@ function Sparkline({ data }: { data: BucketCount[] }) {
 // ── Styles ───────────────────────────────────────────────────────────
 const S: Record<string, React.CSSProperties> = {
   page:  { padding: '28px 32px', maxWidth: 700 },
-  title: { margin: '0 0 24px', fontSize: '1.15rem', fontWeight: 700, color: '#e2e8f0' },
+  title: { margin: '0 0 24px', fontSize: '1.15rem', fontWeight: 700, color: 'var(--da-text)' },
   grid:  { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 },
   card:  {
-    background: '#13151f', border: '1px solid #1e2235', borderRadius: 12,
+    background: 'var(--da-surface)', border: '1px solid var(--da-border)', borderRadius: 12,
     padding: '20px 22px',
   },
   cardFull: {
-    background: '#13151f', border: '1px solid #1e2235', borderRadius: 12,
+    background: 'var(--da-surface)', border: '1px solid var(--da-border)', borderRadius: 12,
     padding: '20px 22px', marginBottom: 16,
   },
-  cardLabel: { fontSize: '0.72rem', color: '#4b5280', fontWeight: 700,
+  cardLabel: { fontSize: '0.72rem', color: 'var(--da-text-muted)', fontWeight: 700,
     textTransform: 'uppercase' as const, letterSpacing: '0.07em', marginBottom: 10, display: 'block' },
-  stat:  { fontSize: '2rem', fontWeight: 800, color: '#a5b4fc', lineHeight: 1 },
-  statSub: { fontSize: '0.75rem', color: '#64748b', marginTop: 4 },
+  stat:  { fontSize: '2rem', fontWeight: 800, color: 'var(--da-primary)', lineHeight: 1 },
+  statSub: { fontSize: '0.75rem', color: 'var(--da-text-3)', marginTop: 4 },
   row:   { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 },
-  rowLabel: { width: 110, fontSize: '0.8rem', color: '#64748b', flexShrink: 0 },
-  rowValue: { fontSize: '0.88rem', color: '#e2e8f0' },
+  rowLabel: { width: 110, fontSize: '0.8rem', color: 'var(--da-text-3)', flexShrink: 0 },
+  rowValue: { fontSize: '0.88rem', color: 'var(--da-text)' },
   badgeBase: {
     display: 'inline-block', padding: '2px 9px', borderRadius: 12, fontSize: '0.72rem',
     fontWeight: 600,
@@ -78,17 +78,17 @@ const S: Record<string, React.CSSProperties> = {
   fieldLabel: { display: 'block', fontSize: '0.78rem', fontWeight: 500, color: '#94a3b8', marginBottom: 5 },
   input: {
     width: '100%', boxSizing: 'border-box' as const, padding: '8px 11px',
-    background: '#0f1117', border: '1px solid #2d3148', borderRadius: 7,
-    color: '#e2e8f0', fontSize: '0.85rem',
+    background: 'var(--da-surface)', border: '1px solid var(--da-border-strong)', borderRadius: 7,
+    color: 'var(--da-text)', fontSize: '0.85rem',
   },
   saveBtn: {
-    marginTop: 14, padding: '8px 20px', background: '#6366f1', color: '#fff',
+    marginTop: 14, padding: '8px 20px', background: 'var(--da-primary)', color: '#fff',
     border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600,
   },
-  success: { color: '#34d399', fontSize: '0.8rem', marginTop: 8 },
-  error:   { color: '#f87171', fontSize: '0.8rem', marginTop: 8 },
+  success: { color: 'var(--da-success)', fontSize: '0.8rem', marginTop: 8 },
+  error:   { color: 'var(--da-danger)', fontSize: '0.8rem', marginTop: 8 },
   link: {
-    color: '#6366f1', fontSize: '0.8rem', cursor: 'pointer',
+    color: 'var(--da-primary)', fontSize: '0.8rem', cursor: 'pointer',
     background: 'none', border: 'none', padding: 0, textDecoration: 'underline',
   },
 };
@@ -114,8 +114,8 @@ export default function ProfilePage() {
 
   async function handleChangePwd() {
     setPwdErr(null); setPwdOk(false);
-    if (newPwd.length < 6) { setPwdErr('Password must be ≥ 6 characters'); return; }
-    if (newPwd !== conPwd) { setPwdErr('Passwords do not match'); return; }
+    if (newPwd.length < 6) { setPwdErr('密码至少 6 位'); return; }
+    if (newPwd !== conPwd) { setPwdErr('两次输入的密码不一致'); return; }
     try {
       await changePassword(curPwd, newPwd);
       setPwdOk(true); setCurPwd(''); setNewPwd(''); setConPwd('');
@@ -130,7 +130,7 @@ export default function ProfilePage() {
   return (
     <>
       <div style={S.page}>
-        <h2 style={S.title}>My Profile</h2>
+        <h2 style={S.title}>个人资料</h2>
 
         {loadErr && <p style={S.error}>{loadErr}</p>}
 
@@ -139,28 +139,28 @@ export default function ProfilePage() {
 
           {/* Account card */}
           <div style={S.card}>
-            <span style={S.cardLabel}>Account</span>
+            <span style={S.cardLabel}>账号信息</span>
             {profile && (
               <>
                 <div style={S.row}>
-                  <span style={S.rowLabel}>Username</span>
+                  <span style={S.rowLabel}>用户名</span>
                   <span style={{ ...S.rowValue, fontWeight: 600 }}>{profile.username}</span>
                 </div>
                 <div style={S.row}>
-                  <span style={S.rowLabel}>User ID</span>
-                  <span style={{ ...S.rowValue, fontFamily: 'monospace', fontSize: '0.78rem', color: '#64748b' }}>{profile.userId}</span>
+                  <span style={S.rowLabel}>用户 ID</span>
+                  <span style={{ ...S.rowValue, fontFamily: 'monospace', fontSize: '0.78rem', color: 'var(--da-text-3)' }}>{profile.userId}</span>
                 </div>
                 <div style={S.row}>
-                  <span style={S.rowLabel}>Role</span>
+                  <span style={S.rowLabel}>角色</span>
                   <span>
                     {profile.roles.map(r => (
-                      <span key={r} style={{ ...S.badgeBase, background: r === 'admin' ? '#312e81' : '#1e2235', color: r === 'admin' ? '#a5b4fc' : '#64748b' }}>{r}</span>
+                      <span key={r} style={{ ...S.badgeBase, background: r === 'admin' ? 'var(--da-primary-subtle)' : 'var(--da-border)', color: r === 'admin' ? 'var(--da-primary)' : 'var(--da-text-3)' }}>{r}</span>
                     ))}
                   </span>
                 </div>
                 {profile.roles.includes('admin') && (
                   <button style={S.link} onClick={() => navigate('/admin/overview')}>
-                    Go to Admin Panel →
+                    进入管理控制台 →
                   </button>
                 )}
               </>
@@ -169,61 +169,61 @@ export default function ProfilePage() {
 
           {/* Usage stats card */}
           <div style={S.card}>
-            <span style={S.cardLabel}>My Usage</span>
+            <span style={S.cardLabel}>我的用量</span>
             {usage ? (
               <>
                 <div style={{ display: 'flex', gap: 24, marginBottom: 12 }}>
                   <div>
                     <div style={S.stat}>{usage.totalTurns}</div>
-                    <div style={S.statSub}>total turns</div>
+                    <div style={S.statSub}>总对话数</div>
                   </div>
                   <div>
                     <div style={S.stat}>{usage.todayTurns}</div>
-                    <div style={S.statSub}>today</div>
+                    <div style={S.statSub}>今日</div>
                   </div>
                   {usage.avgDurationMs > 0 && (
                     <div>
                       <div style={{ ...S.stat, fontSize: '1.4rem' }}>{fmt(usage.avgDurationMs)}</div>
-                      <div style={S.statSub}>avg response</div>
+                      <div style={S.statSub}>平均响应</div>
                     </div>
                   )}
                 </div>
                 {daily.length > 0 && (
                   <>
-                    <div style={{ fontSize: '0.7rem', color: '#4b5280', marginBottom: 4 }}>Last 7 days</div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--da-text-muted)', marginBottom: 4 }}>近 7 天</div>
                     <Sparkline data={daily} />
                   </>
                 )}
               </>
             ) : (
-              <div style={{ color: '#4b5280', fontSize: '0.8rem' }}>No usage data yet.</div>
+              <div style={{ color: 'var(--da-text-muted)', fontSize: '0.8rem' }}>暂无用量数据</div>
             )}
           </div>
         </div>
 
         {/* Change password card */}
         <div style={S.cardFull}>
-          <span style={S.cardLabel}>Change Password</span>
+          <span style={S.cardLabel}>修改密码</span>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
             <div>
-              <label style={S.fieldLabel}>Current password</label>
+              <label style={S.fieldLabel}>当前密码</label>
               <input style={S.input} type="password" value={curPwd}
-                onChange={e => setCurPwd(e.target.value)} placeholder="current" />
+                onChange={e => setCurPwd(e.target.value)} placeholder="当前密码" />
             </div>
             <div>
-              <label style={S.fieldLabel}>New password</label>
+              <label style={S.fieldLabel}>新密码</label>
               <input style={S.input} type="password" value={newPwd}
-                onChange={e => setNewPwd(e.target.value)} placeholder="≥ 6 chars" />
+                onChange={e => setNewPwd(e.target.value)} placeholder="至少 6 位" />
             </div>
             <div>
-              <label style={S.fieldLabel}>Confirm new</label>
+              <label style={S.fieldLabel}>确认新密码</label>
               <input style={S.input} type="password" value={conPwd}
-                onChange={e => setConPwd(e.target.value)} placeholder="repeat" />
+                onChange={e => setConPwd(e.target.value)} placeholder="重复新密码" />
             </div>
           </div>
           {pwdErr && <p style={S.error}>{pwdErr}</p>}
-          {pwdOk  && <p style={S.success}>Password changed successfully!</p>}
-          <button style={S.saveBtn} onClick={handleChangePwd}>Update Password</button>
+          {pwdOk  && <p style={S.success}>密码修改成功</p>}
+          <button style={S.saveBtn} onClick={handleChangePwd}>更新密码</button>
         </div>
       </div>
     </>

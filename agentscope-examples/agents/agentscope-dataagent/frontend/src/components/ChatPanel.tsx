@@ -6,6 +6,8 @@ import ToolCallBlock from './ToolCallBlock';
 import ChartBlock from './ChartBlock';
 import EChartsBlock, { ChartPayload } from './EChartsBlock';
 import CitationPanel, { DatasetRef } from './CitationPanel';
+import EmptyIllustration from './EmptyIllustration';
+import Icon from './Icon';
 import PythonCodeBlock from './PythonCodeBlock';
 import Markdown from './Markdown';
 import { extractVegaSpec } from '../utils/charts';
@@ -29,46 +31,100 @@ interface Message {
 }
 
 const S: Record<string, React.CSSProperties> = {
-  root: { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: '#f8fafc' },
+  root: { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: 'var(--da-app-bg)' },
   thread: { flex: 1, overflowY: 'auto', padding: '28px 36px', display: 'flex', flexDirection: 'column', gap: 18 },
-  empty: { color: '#94a3b8', fontSize: '0.95rem', textAlign: 'center', marginTop: 100 },
+  empty: { color: 'var(--da-text-muted)', fontSize: '0.95rem', textAlign: 'center', marginTop: 100 },
   bubble: {
-    maxWidth: '78%', padding: '14px 18px', borderRadius: 14,
+    maxWidth: '78%', padding: '12px 16px', borderRadius: 10,
     fontSize: '0.95rem', lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
   },
   user: {
     alignSelf: 'flex-end',
-    background: 'linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%)',
-    color: '#ffffff',
-    boxShadow: '0 2px 6px rgba(99,102,241,0.25)',
+    background: 'var(--da-primary)',
+    color: '#fdfdff',
+    boxShadow: '0 1px 2px rgba(16, 24, 40, 0.12)',
   },
   assistant: {
-    alignSelf: 'flex-start', background: '#ffffff', color: '#0f172a',
-    border: '1px solid #e2e8f0',
-    boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
+    alignSelf: 'flex-start', background: 'var(--da-surface)', color: 'var(--da-text)',
+    border: '1px solid var(--da-border)',
+    boxShadow: 'var(--da-shadow-card)',
   },
   system: {
-    alignSelf: 'center', background: 'transparent', color: '#94a3b8',
+    alignSelf: 'center', background: 'transparent', color: 'var(--da-text-muted)',
     fontSize: '0.85rem', fontStyle: 'italic',
   },
-  composer: {
-    borderTop: '1px solid #e2e8f0', padding: '18px 28px',
-    display: 'flex', gap: 12, background: '#ffffff',
+  composerWrap: {
+    padding: '0 24px 20px',
+    display: 'flex',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  composerCard: {
+    width: '100%',
+    maxWidth: 880,
+    background: 'var(--da-surface)',
+    border: '1px solid var(--da-border)',
+    borderRadius: 'var(--da-radius-xl)',
+    boxShadow: 'var(--da-shadow-pop)',
+    padding: '12px 16px 10px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
   },
   textarea: {
-    flex: 1, padding: '12px 16px',
-    background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: 10,
-    color: '#0f172a', fontSize: '0.95rem', resize: 'none',
-    minHeight: 48, maxHeight: 200, lineHeight: 1.55,
+    width: '100%',
+    boxSizing: 'border-box',
+    padding: '4px 2px',
+    background: 'transparent',
+    border: 'none',
+    color: 'var(--da-text)',
+    fontSize: 14,
+    resize: 'none',
+    minHeight: 84,
+    maxHeight: 200,
+    lineHeight: 1.6,
+    outline: 'none',
+    fontFamily: 'inherit',
+  },
+  composerBar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    borderTop: '1px solid var(--da-border)',
+    paddingTop: 8,
+  },
+  picker: {
+    position: 'absolute',
+    bottom: 'calc(100% + 6px)',
+    left: 0,
+    background: 'var(--da-surface)',
+    border: '1px solid var(--da-border)',
+    borderRadius: 'var(--da-radius-lg)',
+    boxShadow: 'var(--da-shadow-pop)',
+    padding: 6,
+    minWidth: 220,
+    maxHeight: 240,
+    overflowY: 'auto',
+    zIndex: 30,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
   },
   send: {
-    padding: '0 24px',
-    background: 'linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%)',
-    color: '#ffffff', border: 'none',
-    borderRadius: 10, cursor: 'pointer', fontSize: '0.95rem', fontWeight: 600,
-    boxShadow: '0 2px 6px rgba(99,102,241,0.35), inset 0 1px 0 rgba(255,255,255,0.18)',
+    width: 34,
+    height: 34,
+    borderRadius: 999,
+    padding: 0,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'var(--da-primary)',
+    color: '#ffffff',
+    border: 'none',
+    cursor: 'pointer',
+    flexShrink: 0,
   },
-  sendDisabled: { background: '#e2e8f0', color: '#94a3b8', cursor: 'not-allowed', boxShadow: 'none' },
+  sendDisabled: { background: 'var(--da-surface-sunken)', color: 'var(--da-text-muted)', cursor: 'not-allowed' },
 };
 
 let counter = 0;
@@ -156,9 +212,11 @@ export interface ChatPanelProps {
   agentId: string;
   /** Called after each successful message turn so the sessions sidebar can refresh. */
   onSessionUpdate?: () => void;
+  /** Reports the conversation title (first user question; '' when new). */
+  onTitle?: (title: string) => void;
 }
 
-export default function ChatPanel({ agentId, onSessionUpdate }: ChatPanelProps) {
+export default function ChatPanel({ agentId, onSessionUpdate, onTitle }: ChatPanelProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -253,6 +311,11 @@ export default function ChatPanel({ agentId, onSessionUpdate }: ChatPanelProps) 
     threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight });
   }, [messages]);
 
+  useEffect(() => {
+    const firstUser = messages.find(m => m.role === 'user');
+    onTitle?.(firstUser ? firstUser.text.replace(/\s+/g, ' ').trim().slice(0, 40) : '');
+  }, [messages, onTitle]);
+
   const canSend = useMemo(() => !busy && !restoring && input.trim().length > 0, [busy, restoring, input]);
 
   async function handleSend() {
@@ -343,15 +406,20 @@ export default function ChatPanel({ agentId, onSessionUpdate }: ChatPanelProps) 
     <div style={S.root}>
       <div style={S.thread} ref={threadRef}>
         {restoring && messages.length === 0 && (
-          <div style={S.empty}>Loading conversation…</div>
-        )}
-        {!restoring && messages.length === 0 && (
-          <div style={S.empty}>
-            Start a new conversation. Try <code style={{ background: '#e2e8f0', padding: '1px 6px', borderRadius: 4 }}>/reset</code> to clear the session.
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: '70%' }}>
+            <div className="da-skeleton da-skeleton-block" style={{ width: '45%' }} />
+            <div className="da-skeleton da-skeleton-block" style={{ width: '80%', alignSelf: 'flex-end' }} />
+            <div className="da-skeleton da-skeleton-block" style={{ width: '65%' }} />
           </div>
         )}
+        {!restoring && messages.length === 0 && (
+          <EmptyIllustration
+            variant="doc"
+            caption="开始一段新对话；输入 /reset 可清空当前会话"
+          />
+        )}
         {messages.map(m => (
-          <div key={m.id} style={{
+          <div key={m.id} className="da-enter" style={{
             ...S.bubble,
             ...(m.role === 'user' ? S.user : m.role === 'system' ? S.system : S.assistant),
             // Markdown manages its own whitespace; pre-wrap would double-space it.
@@ -432,89 +500,74 @@ export default function ChatPanel({ agentId, onSessionUpdate }: ChatPanelProps) 
           </div>
         ))}
       </div>
-      <div style={S.composer}>
-        <div style={{ position: 'relative', marginBottom: 6 }}>
-          <button
-            type="button"
-            onClick={() => setGroupPickerOpen(o => !o)}
-            style={{
-              background: selectedGroups.length ? '#eef2ff' : '#f1f5f9',
-              color: selectedGroups.length ? '#4338ca' : '#475569',
-              border: '1px solid #e2e8f0',
-              borderRadius: 8,
-              padding: '4px 10px',
-              fontSize: '0.75rem',
-              cursor: 'pointer',
-            }}
-          >
-            📚 {selectedGroups.length
-              ? groups.filter(g => selectedGroups.includes(g.id)).map(g => g.name).join('、')
-              : '知识库（全部）'} ▾
-          </button>
-          {groupPickerOpen && (
-            <div
-              style={{
-                position: 'absolute',
-                bottom: '100%',
-                left: 0,
-                marginBottom: 4,
-                background: '#fff',
-                border: '1px solid #e2e8f0',
-                borderRadius: 8,
-                boxShadow: '0 8px 24px rgba(15,23,42,0.12)',
-                padding: 8,
-                minWidth: 200,
-                maxHeight: 220,
-                overflowY: 'auto',
-                zIndex: 20,
-              }}
-            >
-              <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: '0.78rem', color: '#334155', padding: '4px 4px' }}>
-                <input
-                  type="checkbox"
-                  checked={selectedGroups.length === 0}
-                  onChange={() => setSelectedGroups([])}
-                />
-                全部知识库（不限定）
-              </label>
-              {groups.map(g => (
-                <label key={g.id} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: '0.78rem', color: '#334155', padding: '4px 4px' }}>
-                  <input
-                    type="checkbox"
-                    checked={selectedGroups.includes(g.id)}
-                    onChange={() =>
-                      setSelectedGroups(prev =>
-                        prev.includes(g.id) ? prev.filter(x => x !== g.id) : [...prev, g.id],
-                      )
-                    }
-                  />
-                  {g.name}
-                </label>
-              ))}
-              {groups.length === 0 && (
-                <div style={{ fontSize: '0.75rem', color: '#94a3b8', padding: 4 }}>暂无知识库</div>
+      <div style={S.composerWrap}>
+        <div style={S.composerCard}>
+          <textarea
+            ref={inputRef}
+            style={S.textarea}
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={restoring ? '加载会话…' : '输入查询、分析、预测数据问题…'}
+            disabled={restoring}
+          />
+          <div style={S.composerBar}>
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                className="da-btn da-btn-sm"
+                onClick={() => setGroupPickerOpen(o => !o)}
+              >
+                <Icon name="book" size="sm" />{' '}
+                {selectedGroups.length
+                  ? groups.filter(g => selectedGroups.includes(g.id)).map(g => g.name).join('、')
+                  : '知识库（全部）'}{' '}
+                ▾
+              </button>
+              {groupPickerOpen && (
+                <div style={S.picker}>
+                  <label className="da-navitem">
+                    <input
+                      type="checkbox"
+                      checked={selectedGroups.length === 0}
+                      onChange={() => setSelectedGroups([])}
+                    />
+                    全部知识库（不限定）
+                  </label>
+                  {groups.map(g => (
+                    <label key={g.id} className="da-navitem">
+                      <input
+                        type="checkbox"
+                        checked={selectedGroups.includes(g.id)}
+                        onChange={() =>
+                          setSelectedGroups(prev =>
+                            prev.includes(g.id) ? prev.filter(x => x !== g.id) : [...prev, g.id],
+                          )
+                        }
+                      />
+                      {g.name}
+                    </label>
+                  ))}
+                  {groups.length === 0 && (
+                    <div className="da-small" style={{ padding: 6 }}>
+                      暂无知识库
+                    </div>
+                  )}
+                </div>
               )}
             </div>
-          )}
+            <span style={{ flex: 1 }} />
+            <span className="da-small">{input.length} 字</span>
+            <button
+              style={{ ...S.send, ...(canSend ? {} : S.sendDisabled) }}
+              onClick={handleSend}
+              disabled={!canSend}
+              title="发送"
+            >
+              <Icon name="send" size="sm" />
+            </button>
+          </div>
         </div>
-        <textarea
-          ref={inputRef}
-          style={S.textarea}
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={restoring ? 'Loading…' : `Message ${agentId}…`}
-          rows={1}
-          autoFocus
-          disabled={restoring}
-        />
-        <button
-          style={{ ...S.send, ...(canSend ? {} : S.sendDisabled) }}
-          onClick={handleSend}
-          disabled={!canSend}
-        >
-          {busy ? '…' : 'Send'}
-        </button>
       </div>
     </div>
   );

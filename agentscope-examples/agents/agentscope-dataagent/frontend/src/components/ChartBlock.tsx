@@ -8,8 +8,8 @@ interface Props {
 
 const s: Record<string, React.CSSProperties> = {
   wrapper: {
-    background: '#ffffff',
-    border: '1px solid #e2e8f0',
+    background: 'var(--da-surface)',
+    border: '1px solid var(--da-border)',
     borderRadius: 9,
     margin: '0.5rem 0',
     overflow: 'hidden',
@@ -21,7 +21,7 @@ const s: Record<string, React.CSSProperties> = {
     gap: 10,
     padding: '0.6rem 0.9rem',
     background: '#f0fdf4',
-    borderBottom: '1px solid #e2e8f0',
+    borderBottom: '1px solid var(--da-border)',
     color: '#065f46',
     fontWeight: 600,
     fontSize: '0.85rem',
@@ -29,7 +29,7 @@ const s: Record<string, React.CSSProperties> = {
   canvas: { padding: '0.75rem', overflowX: 'auto', width: '100%', minWidth: 320 },
   error: {
     padding: '0.85rem 1rem',
-    color: '#b91c1c',
+    color: 'var(--da-danger)',
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
     fontSize: '0.85rem',
     whiteSpace: 'pre-wrap',

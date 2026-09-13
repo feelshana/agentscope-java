@@ -1,0 +1,661 @@
+/*
+ * Global design system for the DataAgent web UI.
+ * Mirrors src/theme.ts as CSS variables and provides the shared component classes
+ * (.da-btn, .da-card, .da-input, .da-table, .da-modal-*, .da-tab*) so surfaces stop
+ * re-declaring inline styles and gain consistent hover/focus/transition behaviour.
+ */
+
+:root {
+  --da-app-bg: #f8fafc;
+  --da-surface: #ffffff;
+  --da-surface-sunken: #f1f5f9;
+  --da-border: #e2e8f0;
+  --da-border-strong: #cbd5e1;
+  --da-text: #0f172a;
+  --da-text-2: #475569;
+  --da-text-3: #64748b;
+  --da-text-muted: #94a3b8;
+  --da-primary: #1e40af;
+  --da-primary-hover: #173489;
+  --da-primary-subtle: #e8eefb;
+  --da-secondary: #3b82f6;
+  --da-accent: #d97706;
+  --da-accent-subtle: #fef3c7;
+  --da-success: #15803d;
+  --da-warn: #b45309;
+  --da-danger: #dc2626;
+  --da-radius-sm: 4px;
+  --da-radius-md: 6px;
+  --da-radius-lg: 10px;
+  --da-radius-xl: 14px;
+  --da-shadow-card: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --da-shadow-pop: 0 8px 24px rgba(15, 23, 42, 0.1);
+  --da-transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease,
+    box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--da-app-bg);
+  /* very subtle mesh gradient + noise to remove the flat "plastic" feel */
+  background-image: radial-gradient(1200px 600px at 85% -10%, rgba(84, 87, 201, 0.05), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(47, 158, 110, 0.04), transparent 60%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.02'/%3E%3C/svg%3E");
+  color: var(--da-text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+::selection {
+  background: rgba(22, 119, 255, 0.18);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.14);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(15, 23, 42, 0.24);
+  background-clip: content-box;
+  border: 3px solid transparent;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---------- buttons ---------- */
+button {
+  transition: var(--da-transition);
+}
+button:hover:not(:disabled) {
+  filter: brightness(0.97);
+}
+button:active:not(:disabled) {
+  transform: translateY(0.5px);
+}
+button:focus-visible {
+  outline: 2px solid rgba(84, 87, 201, 0.45);
+  outline-offset: 1px;
+}
+
+.da-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--da-text-2);
+  background: var(--da-surface);
+  border: 1px solid var(--da-border-strong);
+  border-radius: var(--da-radius-md);
+  cursor: pointer;
+  transition: var(--da-transition);
+  user-select: none;
+  white-space: nowrap;
+}
+.da-btn:hover {
+  background: var(--da-surface-sunken);
+  color: var(--da-text);
+  border-color: rgba(15, 23, 42, 0.2);
+}
+.da-btn:active {
+  transform: translateY(0.5px);
+}
+.da-btn:focus-visible {
+  outline: 2px solid rgba(84, 87, 201, 0.45);
+  outline-offset: 1px;
+}
+.da-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.da-btn-primary {
+  color: #fdfdff;
+  background: var(--da-primary);
+  border-color: var(--da-primary);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.12);
+}
+.da-btn-primary:hover {
+  background: var(--da-primary-hover);
+  border-color: var(--da-primary-hover);
+  color: #fdfdff;
+}
+
+.da-btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--da-text-2);
+}
+.da-btn-ghost:hover {
+  background: var(--da-primary-subtle);
+  color: var(--da-primary);
+  border-color: transparent;
+}
+
+.da-btn-danger {
+  color: var(--da-danger);
+  background: transparent;
+  border-color: rgba(209, 67, 67, 0.35);
+}
+.da-btn-danger:hover {
+  background: rgba(209, 67, 67, 0.08);
+  color: var(--da-danger);
+  border-color: rgba(209, 67, 67, 0.5);
+}
+
+.da-btn-sm {
+  padding: 3px 8px;
+  font-size: 12px;
+  line-height: 18px;
+  border-radius: var(--da-radius-sm);
+}
+
+/* ---------- surfaces ---------- */
+.da-card {
+  background: var(--da-surface);
+  border: 1px solid var(--da-border);
+  border-radius: var(--da-radius-lg);
+  box-shadow: var(--da-shadow-card);
+  padding: 16px;
+  transition: var(--da-transition);
+}
+.da-card-hover:hover {
+  border-color: var(--da-border-strong);
+  box-shadow: 0 2px 8px rgba(16, 24, 40, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  transform: translateY(-1px);
+}
+
+.da-panel {
+  background: var(--da-surface);
+  border: 1px solid var(--da-border);
+  border-radius: var(--da-radius-xl);
+  box-shadow: var(--da-shadow-card);
+}
+
+/* ---------- form controls ---------- */
+.da-input {
+  width: 100%;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--da-text);
+  background: var(--da-surface);
+  border: 1px solid var(--da-border-strong);
+  border-radius: var(--da-radius-md);
+  transition: var(--da-transition);
+  outline: none;
+}
+.da-input::placeholder {
+  color: var(--da-text-muted);
+}
+.da-input:hover {
+  border-color: rgba(15, 23, 42, 0.22);
+}
+.da-input:focus {
+  border-color: var(--da-primary);
+  box-shadow: 0 0 0 3px rgba(84, 87, 201, 0.14);
+}
+
+.da-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--da-text-2);
+}
+
+/* ---------- tables ---------- */
+.da-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.da-table th {
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--da-text-3);
+  background: var(--da-surface-sunken);
+  border-bottom: 1px solid var(--da-border);
+  white-space: nowrap;
+}
+.da-table td {
+  padding: 8px 12px;
+  color: var(--da-text-2);
+  border-bottom: 1px solid var(--da-border);
+  vertical-align: top;
+}
+.da-table tr:hover td {
+  background: rgba(15, 23, 42, 0.02);
+}
+
+/* ---------- badges / tabs ---------- */
+.da-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--da-text-2);
+  background: var(--da-surface-sunken);
+  border: 1px solid var(--da-border);
+  border-radius: 999px;
+}
+.da-badge-primary {
+  color: var(--da-primary);
+  background: var(--da-primary-subtle);
+  border-color: rgba(84, 87, 201, 0.2);
+}
+
+.da-tabbar {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--da-border);
+}
+.da-tab {
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--da-text-3);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: var(--da-transition);
+}
+.da-tab:hover {
+  color: var(--da-text);
+}
+.da-tab-active {
+  color: var(--da-primary);
+  border-bottom-color: var(--da-primary);
+}
+
+/* ---------- modals ---------- */
+.da-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(24, 24, 27, 0.32);
+  backdrop-filter: blur(2px);
+}
+.da-modal-shell {
+  background: var(--da-surface);
+  border: 1px solid var(--da-border);
+  border-radius: var(--da-radius-xl);
+  box-shadow: var(--da-shadow-pop);
+  max-width: 92vw;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.da-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--da-border);
+}
+.da-modal-title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
+  color: var(--da-text);
+}
+.da-modal-body {
+  padding: 20px;
+  overflow-y: auto;
+}
+.da-modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--da-border);
+  background: var(--da-surface-sunken);
+}
+
+/* ---------- typography helpers ---------- */
+.da-h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 28px;
+  letter-spacing: -0.01em;
+  color: var(--da-text);
+}
+.da-h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
+  color: var(--da-text);
+}
+.da-section {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+  color: var(--da-text-2);
+}
+.da-muted {
+  color: var(--da-text-3);
+}
+.da-small {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--da-text-3);
+}
+
+/* ---------- list rows (sessions, files) ---------- */
+.da-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 8px 10px;
+  cursor: pointer;
+  border-radius: var(--da-radius-md);
+  border: 1px solid transparent;
+  transition: var(--da-transition);
+}
+.da-row:hover {
+  background: var(--da-surface-sunken);
+}
+.da-row-active,
+.da-row-active:hover {
+  background: var(--da-primary-subtle);
+  border-color: rgba(84, 87, 201, 0.22);
+}
+.da-row-unread {
+  border-left: 3px solid var(--da-primary);
+  padding-left: 8px;
+}
+
+/* ---------- nav items ---------- */
+.da-navitem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--da-text-2);
+  background: transparent;
+  border: none;
+  border-radius: var(--da-radius-md);
+  cursor: pointer;
+  text-align: left;
+  transition: var(--da-transition);
+}
+.da-navitem:hover {
+  background: var(--da-surface-sunken);
+  color: var(--da-text);
+}
+.da-navitem-active,
+.da-navitem-active:hover {
+  background: var(--da-primary-subtle);
+  color: var(--da-primary);
+}
+
+/* ---------- enterprise layout ---------- */
+.da-rail {
+  width: 260px;
+  flex-shrink: 0;
+  background: var(--da-surface);
+  border-right: 1px solid var(--da-border);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.da-rail-head {
+  padding: 16px;
+  border-bottom: 1px solid var(--da-border);
+}
+.da-rail-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.da-page-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 26px;
+  letter-spacing: -0.01em;
+  color: var(--da-text);
+}
+.da-accent-title {
+  display: inline-block;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
+  color: var(--da-text);
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--da-primary);
+}
+
+/* ---------- enterprise forms ---------- */
+.da-form-grid {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 14px 16px;
+  align-items: start;
+}
+.da-form-grid > .da-label {
+  margin: 0;
+  padding-top: 7px;
+  text-align: left;
+  color: var(--da-text-2);
+}
+.da-dropzone {
+  border: 2px dashed var(--da-border-strong);
+  border-radius: var(--da-radius-lg);
+  background: var(--da-surface-sunken);
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--da-text-3);
+  font-size: 13px;
+  cursor: pointer;
+  transition: var(--da-transition);
+}
+.da-dropzone:hover {
+  border-color: var(--da-primary);
+  color: var(--da-primary);
+  background: var(--da-primary-subtle);
+}
+
+/* ---------- stats / toolbar ---------- */
+.da-stat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--da-text-2);
+}
+.da-stat-row > b {
+  font-weight: 600;
+  color: var(--da-text);
+}
+.da-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--da-surface);
+  border: 1px solid var(--da-border);
+  border-radius: var(--da-radius-lg);
+}
+
+/* ---------- v3 design pass: motion, editorial type, brand accents ---------- */
+@keyframes da-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.da-enter {
+  animation: da-fade-up 0.32s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.da-eyebrow {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--da-text-muted);
+  margin-bottom: 2px;
+}
+
+.da-keyline {
+  position: relative;
+}
+.da-keyline::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 10%;
+  bottom: 10%;
+  width: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #1e40af 0%, #3b82f6 100%);
+}
+
+.da-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.da-icon-sm {
+  width: 14px;
+  height: 14px;
+}
+.da-icon-lg {
+  width: 20px;
+  height: 20px;
+}
+
+.da-h {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+  color: var(--da-text);
+}
+
+.da-num {
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.da-brandpane {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 48px 56px;
+  color: #f5f8ff;
+  background: radial-gradient(900px 500px at 15% 10%, rgba(59, 130, 246, 0.5), transparent 60%),
+    radial-gradient(700px 420px at 85% 90%, rgba(217, 119, 6, 0.18), transparent 60%),
+    linear-gradient(160deg, #0b1f4b 0%, #14307a 55%, #1e40af 130%);
+  overflow: hidden;
+}
+.da-brandpane::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+  pointer-events: none;
+}
+
+/* ---------- skeleton loading ---------- */
+@keyframes da-shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: 200px 0;
+  }
+}
+.da-skeleton {
+  border-radius: var(--da-radius-md);
+  background: linear-gradient(90deg, #eef2f7 25%, #f8fafc 50%, #eef2f7 75%);
+  background-size: 400px 100%;
+  animation: da-shimmer 1.2s ease-in-out infinite;
+}
+.da-skeleton-line {
+  height: 12px;
+  margin: 6px 0;
+}
+.da-skeleton-block {
+  height: 64px;
+}
+
+/* ---------- pressed micro-interaction ---------- */
+.da-btn:active:not(:disabled) {
+  transform: translateY(0.5px) scale(0.98);
+}
+.da-card-hover:active {
+  transform: translateY(0) scale(0.995);
+}
+
+/* ---------- reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
