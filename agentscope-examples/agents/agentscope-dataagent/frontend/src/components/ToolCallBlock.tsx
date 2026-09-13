@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import Markdown from './Markdown';
+import Icon, { IconName } from './Icon';
 
 interface Props {
   toolName: string;
@@ -42,7 +43,7 @@ const s: Record<string, React.CSSProperties> = {
   spinner: {
     width: 14,
     height: 14,
-    border: '2px solid rgba(84, 87, 201, 0.22)',
+    border: '2px solid rgba(79, 70, 229, 0.22)',
     borderTop: '2px solid var(--da-primary)',
     borderRadius: '50%',
     animation: 'tcblock-spin 0.75s linear infinite',
@@ -113,29 +114,29 @@ function prettyInput(text: string): string {
   return truncate(text);
 }
 
-/** Per-tool-type icons shown next to the tool name in the header. */
-const TOOL_ICONS: Array<[string, string]> = [
-  ['render_chart', '📊'],
-  ['run_python', '🐍'],
-  ['execute_sql', '🗄️'],
-  ['run_sql', '🗄️'],
-  ['query_sql', '🗄️'],
-  ['sql', '🗄️'],
-  ['list_tables', '📋'],
-  ['describe_table', '📋'],
-  ['schema', '📋'],
-  ['search', '🔍'],
-  ['read_file', '📄'],
-  ['write_file', '✍️'],
-  ['bash', '⚙️'],
+/** Per-tool-type icons (SVG via Icon component). */
+const TOOL_ICONS: Array<[string, IconName]> = [
+  ['render_chart', 'chart'],
+  ['run_python', 'code'],
+  ['execute_sql', 'database'],
+  ['run_sql', 'database'],
+  ['query_sql', 'database'],
+  ['sql', 'database'],
+  ['list_tables', 'table'],
+  ['describe_table', 'table'],
+  ['schema', 'table'],
+  ['search', 'search'],
+  ['read_file', 'file'],
+  ['write_file', 'edit'],
+  ['bash', 'settings'],
 ];
 
-function toolIcon(name: string): string {
+function toolIcon(name: string): IconName {
   const lower = name.toLowerCase();
   for (const [key, icon] of TOOL_ICONS) {
     if (lower.includes(key)) return icon;
   }
-  return '🔧';
+  return 'settings';
 }
 
 /**
@@ -156,28 +157,23 @@ export default function ToolCallBlock({
   return (
     <>
       <style>{SPIN_STYLE}</style>
-      <div style={s.wrapper}>
-        <div style={s.header} onClick={() => setOpen(o => !o)}>
-          <span style={s.status}>
-            {running ? <span style={s.spinner} /> : <span style={s.check}>✓</span>}
+      <div className="da-toolcall">
+        <div className="da-toolcall-head" onClick={() => setOpen(o => !o)} style={{ cursor: 'pointer' }}>
+          <span style={{ color: 'var(--da-primary)', display: 'inline-flex' }}>
+            <Icon name={toolIcon(toolName)} size="sm" />
           </span>
-          <span style={s.icon}>{toolIcon(toolName)}</span>
-          <span style={s.name}>Tool: {toolName}</span>
-          {running && <span style={s.running}>Running…</span>}
-          <span style={s.arrow}>{open ? '▼' : '▶'}</span>
-          <span style={s.id}>{toolCallId.slice(0, 10)}</span>
+          <span className="da-toolcall-name">{toolName}</span>
+          <span className="da-toolcall-status">
+            {running ? <span className="da-dot" /> : <Icon name="check" size="sm" />}
+            {running ? '运行中' : '已完成'}
+          </span>
+          <span style={{ color: 'var(--da-text-muted)', fontSize: 11 }}>{open ? '▼' : '▶'}</span>
         </div>
         {open && (
           <>
-            {input && (
-              <div style={s.section}>
-                <div style={s.label}>input</div>
-                {prettyInput(input)}
-              </div>
-            )}
+            {input && <div className="da-toolcall-body">{prettyInput(input)}</div>}
             {result && (
-              <div style={s.resultSection}>
-                {input && <div style={s.label}>result</div>}
+              <div className="da-toolcall-body" style={{ fontFamily: 'var(--da-font)' }}>
                 <Markdown>{result}</Markdown>
               </div>
             )}

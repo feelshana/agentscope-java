@@ -405,7 +405,6 @@ export default function ChatPanel({ agentId, onSessionUpdate, onTitle }: ChatPan
   return (
     <div style={S.root}>
       <div style={S.thread} ref={threadRef}>
-        <div style={{ width: '100%', maxWidth: 860, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
         {restoring && messages.length === 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: '70%' }}>
             <div className="da-skeleton da-skeleton-block" style={{ width: '45%' }} />
@@ -420,12 +419,11 @@ export default function ChatPanel({ agentId, onSessionUpdate, onTitle }: ChatPan
           />
         )}
         {messages.map(m => (
-          <div key={m.id} className="da-enter" style={{
-            ...S.bubble,
-            ...(m.role === 'user' ? S.user : m.role === 'system' ? S.system : S.assistant),
-            // Markdown manages its own whitespace; pre-wrap would double-space it.
-            ...(m.role === 'assistant' ? { whiteSpace: 'normal' } : {}),
-          }}>
+          <div
+            key={m.id}
+            className={`da-bubble-row ${m.role === 'user' ? 'user' : 'agent'} da-enter`}
+          >
+            <div className={`da-bubble ${m.role === 'user' ? 'user' : 'agent'}`}>
             {m.tools.length > 0 && (
               <div style={{ marginBottom: m.text ? 10 : 0 }}>
                 {m.tools.filter(t => !isHiddenTool(t.name)).map(t => {
@@ -493,17 +491,21 @@ export default function ChatPanel({ agentId, onSessionUpdate, onTitle }: ChatPan
             {m.role === 'assistant' && m.tools.length > 0 && (
               <CitationPanel tools={m.tools} datasetMap={datasetMap} />
             )}
-            {m.role === 'assistant'
-              ? (m.text
+            <div className="da-msg-content" style={{ color: 'inherit' }}>
+              {m.role === 'assistant'
+                ? m.text
                   ? <Markdown>{m.text}</Markdown>
-                  : (m.pending ? <span style={{ color: '#94a3b8' }}>…</span> : null))
-              : m.text}
+                  : m.pending
+                    ? <div className="da-typing"><span /><span /><span /></div>
+                    : null
+                : <div style={{ whiteSpace: 'pre-wrap' }}>{m.text}</div>}
+            </div>
+            </div>
           </div>
         ))}
-        </div>
       </div>
       <div style={S.composerWrap}>
-        <div style={S.composerCard}>
+        <div className="da-composer" style={S.composerCard}>
           <textarea
             ref={inputRef}
             style={S.textarea}
@@ -517,7 +519,7 @@ export default function ChatPanel({ agentId, onSessionUpdate, onTitle }: ChatPan
             <div style={{ position: 'relative' }}>
               <button
                 type="button"
-                className="da-btn da-btn-sm"
+                className={selectedGroups.length ? 'da-chip da-chip-active' : 'da-chip'}
                 onClick={() => setGroupPickerOpen(o => !o)}
               >
                 <Icon name="book" size="sm" />{' '}
@@ -559,6 +561,10 @@ export default function ChatPanel({ agentId, onSessionUpdate, onTitle }: ChatPan
               )}
             </div>
             <span style={{ flex: 1 }} />
+            <span className="da-small" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <span className="da-kbd">Enter</span> 发送 · <span className="da-kbd">Shift</span>+
+              <span className="da-kbd">Enter</span> 换行
+            </span>
             <span className="da-small">{input.length} 字</span>
             <button
               style={{ ...S.send, ...(canSend ? {} : S.sendDisabled) }}

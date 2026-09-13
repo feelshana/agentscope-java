@@ -51,7 +51,7 @@ const S: Record<string, React.CSSProperties> = {
     border: '1px solid #cbd5e1', background: '#ffffff', color: '#475569',
   },
   btnPrimary: {
-    background: 'linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%)',
+    background: 'linear-gradient(135deg,#4f46e5 0%,#4338ca 100%)',
     color: '#ffffff', border: 'none',
     boxShadow: '0 1px 4px rgba(99,102,241,0.3), inset 0 1px 0 rgba(255,255,255,0.18)',
   },

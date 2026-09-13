@@ -32,7 +32,7 @@ const S: Record<string, React.CSSProperties> = {
   row: { marginBottom: 18 },
   saveBtn: {
     padding: '11px 24px',
-    background: 'linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%)',
+    background: 'linear-gradient(135deg,#4f46e5 0%,#4338ca 100%)',
     color: '#ffffff',
     border: 'none', borderRadius: 9, cursor: 'pointer',
     fontSize: '0.95rem', fontWeight: 600,
@@ -45,7 +45,7 @@ const S: Record<string, React.CSSProperties> = {
   },
   banner: {
     padding: '14px 18px', borderRadius: 10, marginBottom: 20,
-    background: '#eef2ff', color: '#3730a3', fontSize: '0.9rem',
+    background: '#eef2ff', color: '#4338ca', fontSize: '0.9rem',
     border: '1px solid #c7d2fe',
   },
   success: { color: '#059669', fontSize: '0.9rem', marginTop: 10 },

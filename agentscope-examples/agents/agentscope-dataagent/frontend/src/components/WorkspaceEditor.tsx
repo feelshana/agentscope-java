@@ -13,7 +13,7 @@ const S: Record<string, React.CSSProperties> = {
     height: 48, padding: '0 18px', display: 'flex', alignItems: 'center', gap: 12,
     borderBottom: '1px solid #e2e8f0', background: '#ffffff', flexShrink: 0,
   },
-  pathTxt: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.88rem', color: '#3730a3', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 },
+  pathTxt: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.88rem', color: '#4338ca', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 },
   readonlyBadge: {
     background: '#f1f5f9', color: '#64748b',
     border: '1px solid #e2e8f0', borderRadius: 6,

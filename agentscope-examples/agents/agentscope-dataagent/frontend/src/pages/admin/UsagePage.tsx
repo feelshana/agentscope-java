@@ -324,7 +324,7 @@ export default function UsagePage() {
               ))}
             </div>
           </div>
-          <BarChart data={daily} width={840} height={150} color="#6366f1" labelStep={2} />
+          <BarChart data={daily} width={840} height={150} color="#4f46e5" labelStep={2} />
         </div>
 
         {/* Top users / agents */}
@@ -344,7 +344,7 @@ export default function UsagePage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
               <span style={S.chartTitle}>Top Agents by Turns</span>
             </div>
-            <TopList title="" items={topAgents} color="#6366f1" />
+            <TopList title="" items={topAgents} color="#4f46e5" />
           </div>
         </div>
 
