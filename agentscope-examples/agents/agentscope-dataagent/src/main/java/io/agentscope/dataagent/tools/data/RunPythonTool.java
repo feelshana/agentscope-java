@@ -189,6 +189,9 @@ public final class RunPythonTool {
                 artifacts.append("\n### artifact:").append(trimmed).append('\n');
                 artifacts.append("- type: ").append(artifactType(ext)).append('\n');
                 artifacts.append("- size: ").append(content.length).append('\n');
+                // Include the sandbox path so the frontend can download the full
+                // file (inline content below may be truncated for large files).
+                artifacts.append("- path: ").append(fullPath).append('\n');
                 String text = new String(content, java.nio.charset.StandardCharsets.UTF_8);
                 // Truncate large text artifacts
                 if (text.length() > 8000) {

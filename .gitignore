@@ -83,6 +83,12 @@ logs/
 **/frontend/storybook-static/
 # boba-tea-shop: generated static assets served by the supervisor-agent
 **/boba-tea-shop/supervisor-agent/**/static/
+# agentscope-dataagent: vite build output (index.html is tracked, hashed bundles are not)
+**/agentscope-dataagent/src/main/resources/static/assets/
+
+# agentscope-dataagent: local debug logs
+/agentscope-examples/agents/agentscope-dataagent/log
+/agentscope-examples/agents/agentscope-dataagent/docs/log*
 
 ##agentscope
 .agentscope/
