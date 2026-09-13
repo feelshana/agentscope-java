@@ -54,11 +54,11 @@ export default function CitationPanel({
         onClick={() => setOpen(o => !o)}
         style={{
           background: 'transparent',
-          border: '1px solid #e2e8f0',
+          border: '1px solid var(--da-border)',
           borderRadius: 8,
           padding: '4px 10px',
           fontSize: '0.75rem',
-          color: '#64748b',
+          color: 'var(--da-text-3)',
           cursor: 'pointer',
         }}
       >
@@ -68,29 +68,29 @@ export default function CitationPanel({
         <div
           style={{
             marginTop: 6,
-            border: '1px solid #e2e8f0',
+            border: '1px solid var(--da-border)',
             borderRadius: 8,
             padding: 8,
-            background: '#f8fafc',
+            background: 'var(--da-app-bg)',
             display: 'flex',
             flexDirection: 'column',
             gap: 6,
           }}
         >
           {entries.map((e, i) => (
-            <div key={i} style={{ fontSize: '0.75rem', color: '#475569' }}>
+            <div key={i} style={{ fontSize: '0.75rem', color: 'var(--da-text-2)' }}>
               {e.chart ? (
                 <span>📊 图表（render_chart）</span>
               ) : (
                 <>
                   <span style={{ fontWeight: 600 }}>{e.dataset ?? '未知数据集'}</span>
-                  {e.table && <span style={{ color: '#94a3b8' }}> · {e.table}</span>}
+                  {e.table && <span style={{ color: 'var(--da-text-muted)' }}> · {e.table}</span>}
                   {e.sql && (
                     <div
                       style={{
                         fontFamily: 'ui-monospace, Menlo, monospace',
                         fontSize: '0.7rem',
-                        color: '#64748b',
+                        color: 'var(--da-text-3)',
                         whiteSpace: 'pre-wrap',
                         marginTop: 2,
                       }}

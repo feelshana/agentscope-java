@@ -183,7 +183,10 @@ public class DatasetGroupController {
         return Mono.fromCallable(
                         () -> {
                             groupService.getGroup(userId, id);
-                            return Map.of("content", datasetService.knowledgeText(id));
+                            Map<String, String> out = new java.util.HashMap<>();
+                            out.put("content", datasetService.knowledgeText(id));
+                            out.put("updatedAt", datasetService.knowledgeUpdatedAt(id));
+                            return out;
                         })
                 .subscribeOn(Schedulers.boundedElastic())
                 .onErrorMap(this::toStatus);

@@ -11,7 +11,7 @@ import {
 const overlayStyle: React.CSSProperties = {
   position: 'fixed',
   inset: 0,
-  background: 'rgba(15,23,42,0.45)',
+  background: 'rgba(24, 24, 27, 0.32)',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -19,7 +19,7 @@ const overlayStyle: React.CSSProperties = {
 };
 
 const shellStyle: React.CSSProperties = {
-  background: '#ffffff',
+  background: 'var(--da-surface)',
   borderRadius: 12,
   width: 'min(960px, 94vw)',
   maxHeight: '86vh',
@@ -30,7 +30,7 @@ const shellStyle: React.CSSProperties = {
 
 const headStyle: React.CSSProperties = {
   padding: '14px 20px',
-  borderBottom: '1px solid #e2e8f0',
+  borderBottom: '1px solid var(--da-border)',
   display: 'flex',
   alignItems: 'center',
   gap: 12,
@@ -41,7 +41,7 @@ const colStyle: React.CSSProperties = {
   minHeight: 0,
   overflow: 'auto',
   padding: 12,
-  borderRight: '1px solid #f1f5f9',
+  borderRight: '1px solid var(--da-surface-sunken)',
 };
 
 const itemStyle = (active: boolean): React.CSSProperties => ({
@@ -49,24 +49,24 @@ const itemStyle = (active: boolean): React.CSSProperties => ({
   borderRadius: 6,
   cursor: 'pointer',
   fontSize: '0.82rem',
-  background: active ? '#eef2ff' : 'transparent',
-  color: active ? '#3730a3' : '#0f172a',
+  background: active ? 'var(--da-primary-subtle)' : 'transparent',
+  color: active ? 'var(--da-primary-hover)' : 'var(--da-text)',
 });
 
 const thStyle: React.CSSProperties = {
   textAlign: 'left',
   padding: '6px 8px',
-  borderBottom: '1px solid #e2e8f0',
+  borderBottom: '1px solid var(--da-border)',
   fontSize: '0.75rem',
-  color: '#64748b',
+  color: 'var(--da-text-3)',
   fontWeight: 600,
 };
 
 const tdStyle: React.CSSProperties = {
   padding: '6px 8px',
-  borderBottom: '1px solid #f1f5f9',
+  borderBottom: '1px solid var(--da-surface-sunken)',
   fontSize: '0.8rem',
-  color: '#0f172a',
+  color: 'var(--da-text)',
 };
 
 /** TC-style 数据源详情 modal: schema list → table list → column info. */
@@ -122,9 +122,9 @@ export default function DataSourceDetailModal({
             style={{
               padding: '7px 12px',
               borderRadius: 8,
-              border: '1px solid #cbd5e1',
-              background: '#ffffff',
-              color: '#475569',
+              border: '1px solid var(--da-border-strong)',
+              background: 'var(--da-surface)',
+              color: 'var(--da-text-2)',
               fontSize: '0.82rem',
               cursor: 'pointer',
             }}
@@ -134,11 +134,11 @@ export default function DataSourceDetailModal({
           </button>
         </div>
         {error && (
-          <div style={{ color: '#b91c1c', fontSize: '0.85rem', padding: '8px 20px' }}>{error}</div>
+          <div style={{ color: 'var(--da-danger)', fontSize: '0.85rem', padding: '8px 20px' }}>{error}</div>
         )}
         <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
           <div style={{ ...colStyle, maxWidth: 240 }}>
-            <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#64748b', marginBottom: 6 }}>
+            <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--da-text-3)', marginBottom: 6 }}>
               数据库
             </div>
             {schemas.map(s => (
@@ -148,7 +148,7 @@ export default function DataSourceDetailModal({
             ))}
           </div>
           <div style={{ ...colStyle, maxWidth: 280 }}>
-            <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#64748b', marginBottom: 6 }}>
+            <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--da-text-3)', marginBottom: 6 }}>
               数据表 {schema ? `· ${schema}` : ''}
             </div>
             {tables.map(t => (
@@ -158,30 +158,30 @@ export default function DataSourceDetailModal({
             ))}
           </div>
           <div style={colStyle}>
-            <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#64748b', marginBottom: 6 }}>
+            <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--da-text-3)', marginBottom: 6 }}>
               字段信息 {table ? `· ${table}` : ''}
             </div>
             {table ? (
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <table className="da-table">
                 <thead>
                   <tr>
-                    <th style={thStyle}>列名</th>
-                    <th style={thStyle}>类型</th>
-                    <th style={thStyle}>描述</th>
+                    <th>列名</th>
+                    <th>类型</th>
+                    <th>描述</th>
                   </tr>
                 </thead>
                 <tbody>
                   {columns.map(c => (
                     <tr key={c.name}>
-                      <td style={tdStyle}>{c.name}</td>
-                      <td style={tdStyle}>{c.type}</td>
-                      <td style={tdStyle}>{c.description ?? '-'}</td>
+                      <td>{c.name}</td>
+                      <td>{c.type}</td>
+                      <td>{c.description ?? '-'}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             ) : (
-              <div style={{ color: '#94a3b8', fontSize: '0.82rem' }}>请选择数据表</div>
+              <div style={{ color: 'var(--da-text-muted)', fontSize: '0.82rem' }}>请选择数据表</div>
             )}
           </div>
         </div>

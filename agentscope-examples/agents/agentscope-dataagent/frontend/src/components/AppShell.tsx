@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { ACTIVE_AGENT_ID } from '../api/activeAgent';
 import { AgentDefinition, getAgent } from '../api/agents';
 import SessionsSidebar from './SessionsSidebar';
+import { ToastHost } from './Toast';
 import { ShellOutletContext } from './EditTierGate';
 
 export default function AppShell() {
@@ -27,11 +28,12 @@ export default function AppShell() {
   const ctx: ShellOutletContext = { agent, agentLoading, agentError, bumpSidebar };
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: '#f8fafc', color: '#0f172a', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: '100vh', background: 'var(--da-app-bg)', color: 'var(--da-text)', overflow: 'hidden' }}>
       <SessionsSidebar refreshKey={refreshTick} />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
         <Outlet context={ctx} />
       </div>
+      <ToastHost />
     </div>
   );
 }

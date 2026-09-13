@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { clearToken, getToken } from '../../api/auth';
+import Icon, { IconName } from '../Icon';
 
 function decodeJwt(token: string): Record<string, unknown> {
   try { return JSON.parse(atob(token.split('.')[1])); } catch { return {}; }
@@ -16,20 +17,20 @@ function getUsername(): string {
 interface NavItem {
   label: string;
   path: string;
-  icon: string;
+  icon: IconName;
 }
 
 const ADMIN_NAV: NavItem[] = [
-  { label: 'Overview',  path: '/admin/overview',  icon: '📊' },
-  { label: 'Sessions',  path: '/admin/sessions',  icon: '🗂' },
-  { label: 'Instances', path: '/admin/instances', icon: '⚡' },
-  { label: 'Agents',    path: '/admin/agents',    icon: '🤖' },
-  { label: 'Channels',  path: '/admin/channels',  icon: '📡' },
-  { label: 'Approvals', path: '/admin/approvals', icon: '✅' },
-  { label: 'Users',     path: '/admin/users',     icon: '👥' },
-  { label: 'Usage',     path: '/admin/usage',     icon: '📈' },
-  { label: 'Config',    path: '/admin/config',    icon: '⚙️' },
-  { label: 'Debug',     path: '/admin/debug',     icon: '🐛' },
+  { label: 'Overview',  path: '/admin/overview',  icon: 'chart' },
+  { label: 'Sessions',  path: '/admin/sessions',  icon: 'list' },
+  { label: 'Instances', path: '/admin/instances', icon: 'database' },
+  { label: 'Agents',    path: '/admin/agents',    icon: 'user' },
+  { label: 'Channels',  path: '/admin/channels',  icon: 'send' },
+  { label: 'Approvals', path: '/admin/approvals', icon: 'check' },
+  { label: 'Users',     path: '/admin/users',     icon: 'user' },
+  { label: 'Usage',     path: '/admin/usage',     icon: 'chart' },
+  { label: 'Config',    path: '/admin/config',    icon: 'settings' },
+  { label: 'Debug',     path: '/admin/debug',     icon: 'code' },
 ];
 
 interface AppShellProps {
@@ -74,7 +75,7 @@ function NavButton({ item, location, navigate }: {
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
-      <span style={{ fontSize: '1rem', flexShrink: 0 }}>{item.icon}</span>
+      <Icon name={item.icon} />
       <span>{item.label}</span>
     </button>
   );

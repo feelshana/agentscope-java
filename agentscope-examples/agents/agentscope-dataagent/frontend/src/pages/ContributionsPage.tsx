@@ -18,7 +18,7 @@ const S: Record<string, React.CSSProperties> = {
     overflow: 'auto',
   },
   header: { display: 'flex', alignItems: 'baseline', gap: 12 },
-  h1: { fontSize: '1.05rem', fontWeight: 600, color: '#e2e8f0' },
+  h1: { fontSize: '1.05rem', fontWeight: 600, color: 'var(--da-text)' },
   sub: { fontSize: '0.78rem', color: '#7c8bad' },
   panel: { background: '#0d0f18', border: '1px solid #1a1d2e', borderRadius: 8, padding: 16 },
   panelTitle: { fontSize: '0.85rem', fontWeight: 600, color: '#c4caff', marginBottom: 10 },
@@ -28,8 +28,8 @@ const S: Record<string, React.CSSProperties> = {
     gap: 16,
   },
   treeBox: {
-    background: '#0f1117',
-    border: '1px solid #1e2235',
+    background: 'var(--da-surface)',
+    border: '1px solid var(--da-border)',
     borderRadius: 6,
     maxHeight: 360,
     overflowY: 'auto',
@@ -39,15 +39,15 @@ const S: Record<string, React.CSSProperties> = {
   label: { fontSize: '0.72rem', color: '#7c8bad', marginBottom: 4, display: 'block' },
   input: {
     width: '100%',
-    background: '#0f1117',
-    color: '#e2e8f0',
-    border: '1px solid #2d3148',
+    background: 'var(--da-surface)',
+    color: 'var(--da-text)',
+    border: '1px solid var(--da-border-strong)',
     borderRadius: 6,
     padding: '6px 8px',
     fontSize: '0.8rem',
   },
   btn: {
-    background: '#6366f1',
+    background: 'var(--da-primary)',
     color: '#fff',
     border: 'none',
     borderRadius: 6,
@@ -57,7 +57,7 @@ const S: Record<string, React.CSSProperties> = {
     fontWeight: 600,
   },
   btnDisabled: {
-    background: '#312e81',
+    background: 'var(--da-primary-subtle)',
     color: '#94a3b8',
     cursor: 'not-allowed',
   },
@@ -65,7 +65,7 @@ const S: Record<string, React.CSSProperties> = {
   th: {
     textAlign: 'left' as const,
     padding: '6px 8px',
-    borderBottom: '1px solid #1e2235',
+    borderBottom: '1px solid var(--da-border)',
     color: '#7c8bad',
     fontWeight: 500,
     fontSize: '0.72rem',
@@ -77,13 +77,13 @@ const S: Record<string, React.CSSProperties> = {
     color: '#cbd5e1',
     verticalAlign: 'top' as const,
   },
-  err: { color: '#f87171', fontSize: '0.78rem' },
+  err: { color: 'var(--da-danger)', fontSize: '0.78rem' },
   ok: { color: '#86efac', fontSize: '0.78rem' },
   pill: {
     display: 'inline-block',
     padding: '1px 6px',
     borderRadius: 4,
-    background: '#1e2235',
+    background: 'var(--da-border)',
     color: '#c4caff',
     fontSize: '0.68rem',
     fontWeight: 600,
@@ -111,7 +111,7 @@ function badgeStyle(status: string): React.CSSProperties {
     fontSize: '0.7rem',
     fontWeight: 600,
     background:
-      status === 'APPROVED' ? '#1e3a2b' : status === 'REJECTED' ? '#3a1e1e' : '#1e2235',
+      status === 'APPROVED' ? '#1e3a2b' : status === 'REJECTED' ? '#3a1e1e' : 'var(--da-border)',
     color: status === 'APPROVED' ? '#86efac' : status === 'REJECTED' ? '#fca5a5' : '#c4caff',
   };
 }
@@ -366,19 +366,19 @@ export default function ContributionsPage() {
   return (
     <div style={S.page}>
       <div style={S.header}>
-        <div style={S.h1}>Contributions</div>
+        <div style={S.h1}>我的贡献</div>
         <div style={S.sub}>
           Pick workspace files to nominate for the shared agent layer — admin approval required.
         </div>
       </div>
 
       <form onSubmit={onSubmit} style={S.panel}>
-        <div style={S.panelTitle}>Submit a new contribution</div>
+        <div style={S.panelTitle}>提交新贡献</div>
         <div style={S.submitGrid}>
           <div>
             <div style={S.row}>
               <div style={{ flex: 1 }}>
-                <span style={S.label}>Source agent id</span>
+                <span style={S.label}>来源 Agent</span>
                 <input
                   style={S.input}
                   value={sourceAgentId}
@@ -424,7 +424,7 @@ export default function ContributionsPage() {
           <div>
             <div style={S.row}>
               <div style={{ flex: 1 }}>
-                <span style={S.label}>Type</span>
+                <span style={S.label}>类型</span>
                 <select
                   style={{ ...S.input, padding: '5px 8px' }}
                   value={overrideType || inferred?.type || 'skill'}
@@ -438,7 +438,7 @@ export default function ContributionsPage() {
                 </select>
               </div>
               <div style={{ flex: 2 }}>
-                <span style={S.label}>Target path</span>
+                <span style={S.label}>目标路径</span>
                 <input
                   style={S.input}
                   value={overridePath || inferred?.path || ''}
@@ -462,7 +462,7 @@ export default function ContributionsPage() {
               />
             </div>
             <div style={{ marginBottom: 8 }}>
-              <span style={S.label}>Selected files</span>
+              <span style={S.label}>已选文件</span>
               <div
                 style={{
                   ...S.input,
@@ -495,7 +495,7 @@ export default function ContributionsPage() {
       </form>
 
       <div style={S.panel}>
-        <div style={S.panelTitle}>My submissions</div>
+        <div style={S.panelTitle}>我的提交</div>
         {loading && <div style={S.sub}>Loading…</div>}
         {err && <div style={S.err}>{err}</div>}
         {!loading && !err && items.length === 0 && (
@@ -506,12 +506,12 @@ export default function ContributionsPage() {
             <thead>
               <tr>
                 <th style={S.th}>#</th>
-                <th style={S.th}>Status</th>
-                <th style={S.th}>Type</th>
-                <th style={S.th}>Target agent</th>
-                <th style={S.th}>Path</th>
-                <th style={S.th}>Submitted</th>
-                <th style={S.th}>Reviewer note</th>
+                <th style={S.th}>状态</th>
+                <th style={S.th}>类型</th>
+                <th style={S.th}>目标 Agent</th>
+                <th style={S.th}>路径</th>
+                <th style={S.th}>提交时间</th>
+                <th style={S.th}>评审意见</th>
               </tr>
             </thead>
             <tbody>

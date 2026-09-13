@@ -12,7 +12,7 @@ import DataSourceDetailModal from './DataSourceDetailModal';
 const overlayStyle: React.CSSProperties = {
   position: 'fixed',
   inset: 0,
-  background: 'rgba(15,23,42,0.55)',
+  background: 'rgba(24, 24, 27, 0.32)',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -20,7 +20,7 @@ const overlayStyle: React.CSSProperties = {
 };
 
 const shellStyle: React.CSSProperties = {
-  background: '#ffffff',
+  background: 'var(--da-surface)',
   borderRadius: 12,
   width: 'min(880px, 94vw)',
   maxHeight: '86vh',
@@ -31,7 +31,7 @@ const shellStyle: React.CSSProperties = {
 
 const headStyle: React.CSSProperties = {
   padding: '14px 20px',
-  borderBottom: '1px solid #e2e8f0',
+  borderBottom: '1px solid var(--da-border)',
   display: 'flex',
   alignItems: 'center',
   gap: 12,
@@ -42,24 +42,24 @@ const bodyStyle: React.CSSProperties = { padding: 20, overflow: 'auto' };
 const thStyle: React.CSSProperties = {
   textAlign: 'left',
   padding: '8px 10px',
-  borderBottom: '1px solid #e2e8f0',
+  borderBottom: '1px solid var(--da-border)',
   fontSize: '0.78rem',
-  color: '#64748b',
+  color: 'var(--da-text-3)',
   fontWeight: 600,
 };
 
 const tdStyle: React.CSSProperties = {
   padding: '8px 10px',
-  borderBottom: '1px solid #f1f5f9',
+  borderBottom: '1px solid var(--da-surface-sunken)',
   fontSize: '0.82rem',
-  color: '#0f172a',
+  color: 'var(--da-text)',
 };
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
   padding: '7px 9px',
   borderRadius: 6,
-  border: '1px solid #cbd5e1',
+  border: '1px solid var(--da-border-strong)',
   fontSize: '0.82rem',
   boxSizing: 'border-box',
 };
@@ -68,16 +68,16 @@ const labelStyle: React.CSSProperties = {
   display: 'block',
   fontSize: '0.75rem',
   fontWeight: 600,
-  color: '#475569',
+  color: 'var(--da-text-2)',
   marginBottom: 4,
 };
 
 const primaryBtn: React.CSSProperties = {
   padding: '8px 16px',
   borderRadius: 8,
-  border: '1px solid #2563eb',
-  background: '#2563eb',
-  color: '#ffffff',
+  border: '1px solid var(--da-primary)',
+  background: 'var(--da-primary)',
+  color: 'var(--da-surface)',
   fontSize: '0.85rem',
   fontWeight: 600,
   cursor: 'pointer',
@@ -86,9 +86,9 @@ const primaryBtn: React.CSSProperties = {
 const ghostBtn: React.CSSProperties = {
   padding: '7px 12px',
   borderRadius: 8,
-  border: '1px solid #cbd5e1',
-  background: '#ffffff',
-  color: '#475569',
+  border: '1px solid var(--da-border-strong)',
+  background: 'var(--da-surface)',
+  color: 'var(--da-text-2)',
   fontSize: '0.82rem',
   cursor: 'pointer',
 };
@@ -96,7 +96,7 @@ const ghostBtn: React.CSSProperties = {
 const linkBtn: React.CSSProperties = {
   background: 'transparent',
   border: 'none',
-  color: '#2563eb',
+  color: 'var(--da-primary)',
   cursor: 'pointer',
   fontSize: '0.8rem',
   padding: 0,
@@ -106,7 +106,7 @@ const linkBtn: React.CSSProperties = {
 const dangerBtn: React.CSSProperties = {
   background: 'transparent',
   border: 'none',
-  color: '#dc2626',
+  color: 'var(--da-danger)',
   cursor: 'pointer',
   fontSize: '0.8rem',
   padding: 0,
@@ -223,17 +223,17 @@ export default function DataSourceManagerModal({
         <div style={headStyle}>
           <span style={{ fontSize: '1rem', fontWeight: 700 }}>数据源管理</span>
           <span style={{ flex: 1 }} />
-          <button style={ghostBtn} onClick={onClose}>
+          <button className="da-btn" onClick={onClose}>
             关闭
           </button>
         </div>
         <div style={bodyStyle}>
           {error && (
-            <div style={{ color: '#b91c1c', fontSize: '0.85rem', marginBottom: 10 }}>{error}</div>
+            <div style={{ color: 'var(--da-danger)', fontSize: '0.85rem', marginBottom: 10 }}>{error}</div>
           )}
           <div style={{ marginBottom: 12 }}>
             <button
-              style={primaryBtn}
+              className="da-btn da-btn-primary"
               onClick={() => {
                 setFormOpen(o => !o);
                 setEditingId(null);
@@ -247,64 +247,53 @@ export default function DataSourceManagerModal({
 
           {formOpen && (
             <div
-              style={{
-                border: '1px solid #e2e8f0',
-                borderRadius: 10,
-                padding: 14,
-                marginBottom: 14,
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: 10,
-              }}
+              className="da-card"
+              style={{ marginBottom: 14, padding: 16 }}
             >
-              <div>
-                <label style={labelStyle}>数据源名称 *</label>
+              <div className="da-form-grid">
+                <label className="da-label">数据源名称 *</label>
                 <input
-                  style={inputStyle}
+                  className="da-input"
                   value={form.name}
-                  placeholder="字母/数字/下划线，1-64 字符"
+                  placeholder="字母/数字/下划线/中文，1-64 字符"
                   onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                 />
-              </div>
-              <div>
-                <label style={labelStyle}>类型</label>
+                <label className="da-label">类型</label>
                 <select
-                  style={inputStyle}
+                  className="da-input"
                   value={form.kind}
                   onChange={e => setForm(f => ({ ...f, kind: e.target.value }))}
                 >
                   <option value="mysql">MySQL</option>
                   <option value="postgresql">PostgreSQL</option>
                 </select>
-              </div>
-              <div style={{ gridColumn: '1 / -1' }}>
-                <label style={labelStyle}>数据库 jdbc 地址 *</label>
+                <label className="da-label">jdbc 地址 *</label>
                 <input
-                  style={inputStyle}
+                  className="da-input"
                   value={form.jdbcUrl}
                   placeholder="jdbc:mysql://host:port/dbname"
                   onChange={e => setForm(f => ({ ...f, jdbcUrl: e.target.value }))}
                 />
-              </div>
-              <div>
-                <label style={labelStyle}>用户名</label>
+                <label className="da-label">用户名</label>
                 <input
-                  style={inputStyle}
+                  className="da-input"
                   value={form.username}
                   onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
                 />
-              </div>
-              <div>
-                <label style={labelStyle}>密码</label>
+                <label className="da-label">密码</label>
                 <input
-                  style={inputStyle}
+                  className="da-input"
                   type="password"
                   value={form.password}
                   onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
                 />
               </div>
-              <div style={{ gridColumn: '1 / -1' }}>
-                <label style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <details style={{ marginTop: 12 }}>
+                <summary className="da-section" style={{ cursor: 'pointer' }}>高级配置</summary>
+                <label
+                  className="da-label"
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}
+                >
                   <input
                     type="checkbox"
                     checked={form.sampling}
@@ -312,13 +301,13 @@ export default function DataSourceManagerModal({
                   />
                   数据采样（低基数列自动采样示例值，提升 Agent 效果）
                 </label>
-              </div>
-              <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 10 }}>
-                <button style={primaryBtn} onClick={handleSave} disabled={busy}>
+              </details>
+              <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+                <button className="da-btn da-btn-primary" onClick={handleSave} disabled={busy}>
                   {editingId ? '完成' : '确认添加'}
                 </button>
                 <button
-                  style={ghostBtn}
+                  className="da-btn"
                   onClick={() => {
                     setFormOpen(false);
                     setEditingId(null);
@@ -331,35 +320,35 @@ export default function DataSourceManagerModal({
             </div>
           )}
 
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <table className="da-table">
             <thead>
               <tr>
-                <th style={thStyle}>数据源名称</th>
-                <th style={thStyle}>类型</th>
-                <th style={thStyle}>连通性</th>
-                <th style={thStyle}>操作</th>
+                <th>数据源名称</th>
+                <th>类型</th>
+                <th>连通性</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody>
               {items.map(d => (
                 <tr key={d.id}>
-                  <td style={tdStyle}>{d.name}</td>
-                  <td style={tdStyle}>{d.kind.toUpperCase()}</td>
-                  <td style={tdStyle}>
+                  <td>{d.name}</td>
+                  <td>{d.kind.toUpperCase()}</td>
+                  <td>
                     {statuses[d.id] === undefined ? (
                       '检测中…'
                     ) : statuses[d.id] ? (
                       <span style={{ color: '#047857' }}>✓ 数据已连通</span>
                     ) : (
-                      <span style={{ color: '#dc2626' }}>✗ 连接失败</span>
+                      <span style={{ color: 'var(--da-danger)' }}>✗ 连接失败</span>
                     )}
                   </td>
-                  <td style={tdStyle}>
-                    <button style={linkBtn} onClick={() => setDetail(d)}>
+                  <td>
+                    <button className="da-btn da-btn-sm" onClick={() => setDetail(d)}>
                       查看详情
                     </button>
                     <button
-                      style={linkBtn}
+                      className="da-btn da-btn-sm"
                       onClick={() => {
                         setEditingId(d.id);
                         setFormOpen(true);
@@ -375,7 +364,7 @@ export default function DataSourceManagerModal({
                     >
                       配置
                     </button>
-                    <button style={dangerBtn} onClick={() => handleDelete(d.id)}>
+                    <button className="da-btn da-btn-danger da-btn-sm" onClick={() => handleDelete(d.id)}>
                       删除
                     </button>
                   </td>
@@ -383,7 +372,7 @@ export default function DataSourceManagerModal({
               ))}
               {items.length === 0 && (
                 <tr>
-                  <td style={{ ...tdStyle, color: '#94a3b8', textAlign: 'center' }} colSpan={4}>
+                  <td style={{ ...tdStyle, color: 'var(--da-text-muted)', textAlign: 'center' }} colSpan={4}>
                     暂无数据源
                   </td>
                 </tr>

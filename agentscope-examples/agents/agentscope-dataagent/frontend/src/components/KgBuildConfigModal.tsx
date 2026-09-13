@@ -13,7 +13,7 @@ interface Item {
 const overlayStyle: React.CSSProperties = {
   position: 'fixed',
   inset: 0,
-  background: 'rgba(15,23,42,0.45)',
+  background: 'rgba(24, 24, 27, 0.32)',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -21,17 +21,17 @@ const overlayStyle: React.CSSProperties = {
 };
 
 const dialogStyle: React.CSSProperties = {
-  background: '#fff',
+  background: 'var(--da-surface)',
   borderRadius: 12,
   width: 720,
   maxWidth: '92vw',
   padding: 20,
-  boxShadow: '0 20px 60px rgba(15,23,42,0.25)',
+  boxShadow: 'var(--da-shadow-pop)',
 };
 
 const colStyle: React.CSSProperties = {
   flex: 1,
-  border: '1px solid #e2e8f0',
+  border: '1px solid var(--da-border)',
   borderRadius: 8,
   padding: 10,
   minHeight: 260,
@@ -45,12 +45,12 @@ const rowStyle: React.CSSProperties = {
   gap: 8,
   padding: '6px 4px',
   fontSize: '0.82rem',
-  color: '#334155',
+  color: 'var(--da-text-2)',
 };
 
 const btnPrimary: React.CSSProperties = {
   background: '#1f2937',
-  color: '#fff',
+  color: 'var(--da-surface)',
   border: 'none',
   borderRadius: 8,
   padding: '8px 18px',
@@ -59,9 +59,9 @@ const btnPrimary: React.CSSProperties = {
 };
 
 const btnGhost: React.CSSProperties = {
-  background: '#fff',
-  color: '#334155',
-  border: '1px solid #e2e8f0',
+  background: 'var(--da-surface)',
+  color: 'var(--da-text-2)',
+  border: '1px solid var(--da-border)',
   borderRadius: 8,
   padding: '8px 18px',
   fontSize: '0.85rem',
@@ -162,7 +162,7 @@ export default function KgBuildConfigModal({
             marginBottom: 14,
           }}
         >
-          <div style={{ fontSize: '1rem', fontWeight: 600, color: '#0f172a' }}>配置知识图谱</div>
+          <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--da-text)' }}>配置知识图谱</div>
           <button style={btnGhost} onClick={onClose}>
             ×
           </button>
@@ -179,7 +179,7 @@ export default function KgBuildConfigModal({
               placeholder="请输入名称搜索"
               style={{
                 width: '100%',
-                border: '1px solid #e2e8f0',
+                border: '1px solid var(--da-border)',
                 borderRadius: 6,
                 padding: '6px 8px',
                 fontSize: '0.8rem',
@@ -226,13 +226,13 @@ export default function KgBuildConfigModal({
               </div>
             ))}
             {chosen.length === 0 && (
-              <div style={{ color: '#94a3b8', fontSize: '0.8rem', padding: 8 }}>未选择任何文档</div>
+              <div style={{ color: 'var(--da-text-muted)', fontSize: '0.8rem', padding: 8 }}>未选择任何文档</div>
             )}
           </div>
         </div>
 
         {error && (
-          <div style={{ color: '#b91c1c', fontSize: '0.8rem', marginTop: 10 }}>{error}</div>
+          <div style={{ color: 'var(--da-danger)', fontSize: '0.8rem', marginTop: 10 }}>{error}</div>
         )}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>

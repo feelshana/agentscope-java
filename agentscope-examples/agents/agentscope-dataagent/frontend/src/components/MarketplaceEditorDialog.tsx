@@ -58,7 +58,7 @@ const TYPE_FIELDS: Record<MarketplaceType, FieldDef[]> = {
 const overlayStyle: React.CSSProperties = {
   position: 'fixed',
   inset: 0,
-  background: 'rgba(15,23,42,0.55)',
+  background: 'rgba(24, 24, 27, 0.32)',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -66,7 +66,7 @@ const overlayStyle: React.CSSProperties = {
 };
 
 const dialogStyle: React.CSSProperties = {
-  background: '#ffffff',
+  background: 'var(--da-surface)',
   borderRadius: 12,
   padding: 24,
   width: '90%',
@@ -79,7 +79,7 @@ const dialogStyle: React.CSSProperties = {
 const labelStyle: React.CSSProperties = {
   fontSize: '0.78rem',
   fontWeight: 600,
-  color: '#334155',
+  color: 'var(--da-text-2)',
   textTransform: 'uppercase',
   letterSpacing: '0.04em',
   display: 'block',
@@ -89,7 +89,7 @@ const labelStyle: React.CSSProperties = {
 const inputStyle: React.CSSProperties = {
   width: '100%',
   padding: '8px 10px',
-  border: '1px solid #cbd5e1',
+  border: '1px solid var(--da-border-strong)',
   borderRadius: 8,
   fontSize: '0.9rem',
   boxSizing: 'border-box',
@@ -98,16 +98,16 @@ const inputStyle: React.CSSProperties = {
 
 const hintStyle: React.CSSProperties = {
   fontSize: '0.75rem',
-  color: '#64748b',
+  color: 'var(--da-text-3)',
   marginTop: 4,
 };
 
 const primaryButton: React.CSSProperties = {
   padding: '8px 16px',
   borderRadius: 8,
-  border: '1px solid #6366f1',
-  background: '#6366f1',
-  color: '#ffffff',
+  border: '1px solid var(--da-primary)',
+  background: 'var(--da-primary)',
+  color: 'var(--da-surface)',
   fontSize: '0.88rem',
   fontWeight: 600,
   cursor: 'pointer',
@@ -116,9 +116,9 @@ const primaryButton: React.CSSProperties = {
 const secondaryButton: React.CSSProperties = {
   padding: '8px 16px',
   borderRadius: 8,
-  border: '1px solid #cbd5e1',
-  background: '#ffffff',
-  color: '#334155',
+  border: '1px solid var(--da-border-strong)',
+  background: 'var(--da-surface)',
+  color: 'var(--da-text-2)',
   fontSize: '0.88rem',
   fontWeight: 500,
   cursor: 'pointer',
@@ -230,8 +230,8 @@ export default function MarketplaceEditorDialog({ mode, initial, onSave, onCance
               placeholder="team-skills-git"
               style={{
                 ...inputStyle,
-                background: isEdit ? '#f1f5f9' : '#ffffff',
-                color: isEdit ? '#64748b' : '#0f172a',
+                background: isEdit ? 'var(--da-surface-sunken)' : 'var(--da-surface)',
+                color: isEdit ? 'var(--da-text-3)' : 'var(--da-text)',
               }}
             />
             {!isEdit && (
@@ -249,8 +249,8 @@ export default function MarketplaceEditorDialog({ mode, initial, onSave, onCance
               }}
               style={{
                 ...inputStyle,
-                background: isEdit ? '#f1f5f9' : '#ffffff',
-                color: isEdit ? '#64748b' : '#0f172a',
+                background: isEdit ? 'var(--da-surface-sunken)' : 'var(--da-surface)',
+                color: isEdit ? 'var(--da-text-3)' : 'var(--da-text)',
               }}
             >
               <option value="git">git</option>
@@ -261,7 +261,7 @@ export default function MarketplaceEditorDialog({ mode, initial, onSave, onCance
             <div key={f.key}>
               <label style={labelStyle}>
                 {f.label}
-                {f.required && <span style={{ color: '#dc2626', marginLeft: 4 }}>*</span>}
+                {f.required && <span style={{ color: 'var(--da-danger)', marginLeft: 4 }}>*</span>}
               </label>
               <input
                 type={f.secret ? 'password' : 'text'}
@@ -286,7 +286,7 @@ export default function MarketplaceEditorDialog({ mode, initial, onSave, onCance
                 borderRadius: 8,
                 background: testResult.ok ? '#dcfce7' : '#fef2f2',
                 border: `1px solid ${testResult.ok ? '#bbf7d0' : '#fecaca'}`,
-                color: testResult.ok ? '#15803d' : '#dc2626',
+                color: testResult.ok ? '#15803d' : 'var(--da-danger)',
                 fontSize: '0.85rem',
               }}
             >
@@ -305,7 +305,7 @@ export default function MarketplaceEditorDialog({ mode, initial, onSave, onCance
                 borderRadius: 8,
                 background: '#fef2f2',
                 border: '1px solid #fecaca',
-                color: '#dc2626',
+                color: 'var(--da-danger)',
                 fontSize: '0.85rem',
               }}
             >

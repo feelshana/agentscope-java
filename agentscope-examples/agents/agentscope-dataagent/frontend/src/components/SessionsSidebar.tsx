@@ -3,26 +3,31 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { ACTIVE_AGENT_ID } from '../api/activeAgent';
 import { clearToken, getToken, isAdmin } from '../api/auth';
 import { InboxEntry, deleteSession, inbox } from '../api/sessions';
+import Icon, { IconName } from './Icon';
 
 interface UtilityItem {
   label: string;
   path: string;
-  icon: string;
+  icon: IconName;
 }
 
 const UTILITY_ITEMS: UtilityItem[] = [
-  { label: 'Profile', path: '/profile', icon: '👤' },
-  { label: 'Appearance', path: '/appearance', icon: '🎨' },
-  { label: 'Contributions', path: '/contributions', icon: '🤝' },
-  { label: 'Bindings', path: '/bindings', icon: '🔗' },
-  { label: 'Usage', path: '/usage', icon: '📈' },
+  { label: '个人资料', path: '/profile', icon: 'user' },
+  { label: '外观设置', path: '/appearance', icon: 'edit' },
+  { label: '我的贡献', path: '/contributions', icon: 'link' },
+  { label: '授权绑定', path: '/bindings', icon: 'link' },
+  { label: '用量统计', path: '/usage', icon: 'chart' },
 ];
 
-/** TC-style primary navigation: conversations, knowledge bases, semantic settings. */
+/** Primary nav (新建对话 and 更多 are rendered separately). */
 const NAV_ITEMS: UtilityItem[] = [
-  { label: '对话', path: '/chat', icon: '💬' },
-  { label: '知识库', path: '/configure/datasets', icon: '📚' },
-  { label: '语义配置', path: '/configure/semantic', icon: '⚙️' },
+  { label: '知识库', path: '/configure/datasets', icon: 'book' },
+  { label: '语义配置', path: '/configure/semantic', icon: 'settings' },
+];
+
+/** Overflow menu items (TC-style 更多); currently only Workspace. */
+const MORE_ITEMS: UtilityItem[] = [
+  { label: 'Workspace', path: '/workspace', icon: 'folder' },
 ];
 
 function decodeJwt(token: string): Record<string, unknown> {
@@ -79,6 +84,7 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
   const [entries, setEntries] = useState<InboxEntry[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -156,57 +162,72 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
 
   return (
     <div style={S.root}>
-      <div style={S.headerRow}>
-        <button onClick={handleNewChat} style={S.newBtn}>
-          <span style={{ fontSize: '1rem' }}>＋</span> 新建对话
-        </button>
+      <div style={S.brand}>
+        <span style={S.brandMark}>
+          <Icon name="chart" />
+        </span>
+        <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          <span style={S.brandName}>Data Agent</span>
+          <span style={S.brandTag}>企业级数据智能体</span>
+        </span>
       </div>
 
       <div
         style={{
           padding: '8px 10px',
-          borderBottom: '1px solid #f1f5f9',
+          borderBottom: '1px solid var(--da-border)',
           display: 'flex',
           flexDirection: 'column',
           gap: 2,
           flexShrink: 0,
+          position: 'relative',
         }}
       >
+        <button
+          onClick={handleNewChat}
+          className={
+            location.pathname === '/chat' && !activeKey
+              ? 'da-navitem da-navitem-active'
+              : 'da-navitem'
+          }
+        >
+          <Icon name="plus" /> 新建对话
+        </button>
         {NAV_ITEMS.map(item => {
-          const active =
-            item.path === '/chat'
-              ? location.pathname === '/chat'
-              : location.pathname.startsWith(item.path);
+          const active = location.pathname.startsWith(item.path);
           return (
             <button
               key={item.path}
               onClick={() => navigate(item.path)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '8px 12px',
-                borderRadius: 8,
-                cursor: 'pointer',
-                border: 'none',
-                background: active ? '#eef2ff' : 'transparent',
-                color: active ? '#3730a3' : '#334155',
-                fontWeight: active ? 600 : 500,
-                fontSize: '0.88rem',
-                textAlign: 'left' as const,
-              }}
-              onMouseEnter={e => {
-                if (!active) e.currentTarget.style.background = '#f8fafc';
-              }}
-              onMouseLeave={e => {
-                if (!active) e.currentTarget.style.background = 'transparent';
-              }}
+              className={active ? 'da-navitem da-navitem-active' : 'da-navitem'}
             >
-              <span style={{ fontSize: '0.95rem' }}>{item.icon}</span>
+              <Icon name={item.icon} />
               {item.label}
             </button>
           );
         })}
+        <button
+          onClick={() => setMoreOpen(o => !o)}
+          className={moreOpen ? 'da-navitem da-navitem-active' : 'da-navitem'}
+        >
+          <Icon name="list" /> 更多
+        </button>
+        {moreOpen && (
+          <div style={S.moreMenu}>
+            {MORE_ITEMS.filter(m => m.label !== 'Admin' || isAdmin()).map(m => (
+              <button
+                key={m.path}
+                className="da-navitem"
+                onClick={() => {
+                  setMoreOpen(false);
+                  navigate(m.path);
+                }}
+              >
+                <Icon name={m.icon} /> {m.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div style={S.scroll}>
@@ -260,11 +281,11 @@ function SessionRow({ entry, active, onOpen, onDelete }: RowProps) {
       onClick={onOpen}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      style={{
-        ...S.row,
-        ...(active ? S.rowActive : hover ? S.rowHover : {}),
-        ...(entry.unread && !active ? S.rowUnread : {}),
-      }}
+      className={
+        'da-row' +
+        (active ? ' da-row-active' : '') +
+        (entry.unread && !active ? ' da-row-unread' : '')
+      }
       title={entry.title ?? entry.lastMessage ?? entry.sessionId}
     >
       <div style={S.rowMain}>
@@ -277,7 +298,7 @@ function SessionRow({ entry, active, onOpen, onDelete }: RowProps) {
           <button
             onClick={onDelete}
             title="Delete conversation"
-            style={S.deleteBtn}
+            className="da-btn da-btn-ghost da-btn-sm"
           >×</button>
         )}
       </div>
@@ -336,8 +357,8 @@ function UserMenu({ username, onLogout }: { username: string; onLogout: () => vo
           boxShadow: '0 12px 28px rgba(15,23,42,0.12)',
           overflow: 'hidden', zIndex: 100,
         }}>
-          <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid #f1f5f9' }}>
-            <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#0f172a' }}>{username || 'User'}</div>
+          <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid var(--da-border)' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--da-text)' }}>{username || '用户'}</div>
           </div>
 
           {UTILITY_ITEMS.map(item => {
@@ -346,17 +367,9 @@ function UserMenu({ username, onLogout }: { username: string; onLogout: () => vo
               <button
                 key={item.path}
                 onClick={() => { navigate(item.path); setOpen(false); }}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  width: '100%', background: active ? '#eef2ff' : 'transparent',
-                  border: 'none', padding: '10px 14px', cursor: 'pointer',
-                  fontSize: '0.85rem', color: active ? '#3730a3' : '#334155',
-                  textAlign: 'left' as const, fontWeight: active ? 600 : 500,
-                }}
-                onMouseEnter={e => { if (!active) e.currentTarget.style.background = '#f8fafc'; }}
-                onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+                className={active ? 'da-navitem da-navitem-active' : 'da-navitem'}
               >
-                <span style={{ fontSize: '0.95rem' }}>{item.icon}</span>
+                <Icon name={item.icon} />
                 {item.label}
               </button>
             );
@@ -364,40 +377,25 @@ function UserMenu({ username, onLogout }: { username: string; onLogout: () => vo
 
           {isAdmin() && (
             <>
-              <div style={{ height: 1, background: '#f1f5f9' }} />
+              <div style={{ height: 1, background: 'var(--da-border)' }} />
               <button
                 onClick={() => { navigate('/admin/overview'); setOpen(false); }}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  width: '100%', background: 'transparent', border: 'none',
-                  padding: '10px 14px', cursor: 'pointer',
-                  fontSize: '0.85rem', color: '#334155',
-                  textAlign: 'left' as const, fontWeight: 500,
-                }}
-                onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                className="da-navitem"
               >
-                <span style={{ fontSize: '0.95rem' }}>🛡</span>
-                Admin console
+                <Icon name="settings" />
+                管理控制台
               </button>
             </>
           )}
 
-          <div style={{ height: 1, background: '#f1f5f9' }} />
+          <div style={{ height: 1, background: 'var(--da-border)' }} />
           <button
             onClick={() => { onLogout(); setOpen(false); }}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              width: '100%', background: 'transparent', border: 'none',
-              padding: '10px 14px', cursor: 'pointer',
-              fontSize: '0.85rem', color: '#dc2626',
-              textAlign: 'left' as const, fontWeight: 500,
-            }}
-            onMouseEnter={e => (e.currentTarget.style.background = '#fef2f2')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            className="da-navitem"
+            style={{ color: 'var(--da-danger)' }}
           >
-            <span style={{ fontSize: '0.95rem' }}>↩</span>
-            Sign out
+            <Icon name="back" />
+            退出登录
           </button>
         </div>
       )}
@@ -408,56 +406,48 @@ function UserMenu({ username, onLogout }: { username: string; onLogout: () => vo
 const S: Record<string, React.CSSProperties> = {
   root: {
     width: 280, flexShrink: 0,
-    background: '#ffffff', borderRight: '1px solid #e2e8f0',
+    background: 'var(--da-surface)', borderRight: '1px solid var(--da-border)',
     display: 'flex', flexDirection: 'column', minHeight: 0,
   },
-  headerRow: {
-    padding: '14px 14px 10px', borderBottom: '1px solid #f1f5f9', flexShrink: 0,
+  brand: {
+    display: 'flex', alignItems: 'center', gap: 10,
+    padding: '16px 14px 12px', borderBottom: '1px solid var(--da-border)', flexShrink: 0,
   },
-  newBtn: {
-    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%',
-    background: 'linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%)',
-    color: '#ffffff', border: 'none',
-    borderRadius: 10, padding: '11px 14px', fontSize: '0.92rem', fontWeight: 600,
-    cursor: 'pointer',
-    boxShadow: '0 2px 6px rgba(99,102,241,0.35), inset 0 1px 0 rgba(255,255,255,0.18)',
+  brandMark: {
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    width: 34, height: 34, borderRadius: 9,
+    background: 'var(--da-primary)', color: '#ffffff', flexShrink: 0,
+  },
+  brandName: { fontSize: 15, fontWeight: 700, color: 'var(--da-text)', letterSpacing: '-0.01em' },
+  brandTag: { fontSize: 11, color: 'var(--da-text-muted)' },
+  moreMenu: {
+    position: 'absolute', left: 10, right: 10, zIndex: 30,
+    background: 'var(--da-surface)', border: '1px solid var(--da-border)',
+    borderRadius: 'var(--da-radius-lg)', boxShadow: 'var(--da-shadow-pop)',
+    padding: 6, display: 'flex', flexDirection: 'column', gap: 2,
   },
   scroll: { flex: 1, overflowY: 'auto', padding: '10px 8px 16px' },
-  muted: { padding: '8px 12px', fontSize: '0.85rem', color: '#94a3b8' },
-  error: { padding: '8px 12px', fontSize: '0.85rem', color: '#dc2626' },
+  muted: { padding: '8px 12px', fontSize: '0.85rem', color: 'var(--da-text-muted)' },
+  error: { padding: '8px 12px', fontSize: '0.85rem', color: 'var(--da-danger)' },
   group: { marginBottom: 14 },
   groupLabel: {
     fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em',
-    color: '#94a3b8', textTransform: 'uppercase', padding: '6px 10px 4px',
+    color: 'var(--da-text-muted)', textTransform: 'uppercase', padding: '6px 10px 4px',
   },
-  row: {
-    display: 'flex', alignItems: 'flex-start', gap: 6,
-    padding: '8px 10px', cursor: 'pointer',
-    borderRadius: 8, marginBottom: 2,
-    border: '1px solid transparent',
-  },
-  rowActive: { background: '#eef2ff', borderColor: '#c7d2fe' },
-  rowHover: { background: '#f8fafc' },
-  rowUnread: { borderLeft: '3px solid #6366f1', paddingLeft: 8 },
   rowMain: { flex: 1, minWidth: 0 },
   rowTitle: {
-    fontSize: '0.88rem', fontWeight: 500, color: '#0f172a',
+    fontSize: '0.88rem', fontWeight: 500, color: 'var(--da-text)',
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   },
   rowSnippet: {
-    fontSize: '0.78rem', color: '#94a3b8', marginTop: 2,
+    fontSize: '0.78rem', color: 'var(--da-text-muted)', marginTop: 2,
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   },
   rowMeta: {
     display: 'flex', alignItems: 'center', gap: 4,
-    fontSize: '0.72rem', color: '#94a3b8', flexShrink: 0,
-  },
-  deleteBtn: {
-    background: 'transparent', border: 'none', cursor: 'pointer',
-    color: '#94a3b8', fontSize: '1rem', padding: '0 4px',
-    borderRadius: 4, lineHeight: 1,
+    fontSize: '0.72rem', color: 'var(--da-text-muted)', flexShrink: 0,
   },
   footer: {
-    padding: '12px 14px', borderTop: '1px solid #f1f5f9', flexShrink: 0,
+    padding: '12px 14px', borderTop: '1px solid var(--da-border)', flexShrink: 0,
   },
 };

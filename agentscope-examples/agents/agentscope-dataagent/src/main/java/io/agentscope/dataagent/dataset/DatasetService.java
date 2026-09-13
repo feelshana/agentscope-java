@@ -708,6 +708,15 @@ public class DatasetService implements DatasetContextProvider {
                 .orElse("");
     }
 
+    /** ISO timestamp of the knowledge doc's last update, or null when none uploaded. */
+    public String knowledgeUpdatedAt(String groupId) {
+        return knowledgeRepository
+                .findById(groupId)
+                .map(DatasetKnowledgeEntity::getUpdatedAt)
+                .map(Object::toString)
+                .orElse(null);
+    }
+
     @Override
     public String relationshipsText(String ownerId) {
         return relationshipsText(ownerId, null);

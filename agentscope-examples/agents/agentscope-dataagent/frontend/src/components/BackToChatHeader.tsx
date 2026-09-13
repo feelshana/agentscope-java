@@ -10,16 +10,11 @@ export default function BackToChatHeader({ title, subtitle }: BackToChatHeaderPr
   const navigate = useNavigate();
   return (
     <div style={S.root}>
-      <button
-        onClick={() => navigate('/chat')}
-        style={S.backBtn}
-        onMouseEnter={e => { e.currentTarget.style.background = '#eef2ff'; e.currentTarget.style.color = '#3730a3'; }}
-        onMouseLeave={e => { e.currentTarget.style.background = '#ffffff'; e.currentTarget.style.color = '#475569'; }}
-        title="Return to chat"
-      >
+      <button onClick={() => navigate('/chat')} className="da-btn" title="Return to chat">
         ← 返回 Chat
       </button>
-      <div style={S.titleBlock}>
+      <div style={{ ...S.titleBlock, paddingLeft: 10 }} className="da-keyline">
+        <span className="da-eyebrow">Workspace</span>
         <span style={S.title}>{title}</span>
         {subtitle && <span style={S.subtitle}>{subtitle}</span>}
       </div>
@@ -30,21 +25,13 @@ export default function BackToChatHeader({ title, subtitle }: BackToChatHeaderPr
 const S: Record<string, React.CSSProperties> = {
   root: {
     display: 'flex', alignItems: 'center', gap: 16,
-    padding: '12px 24px', borderBottom: '1px solid #e2e8f0',
-    background: '#ffffff', flexShrink: 0,
-  },
-  backBtn: {
-    display: 'inline-flex', alignItems: 'center', gap: 6,
-    background: '#ffffff', border: '1px solid #e2e8f0', color: '#475569',
-    padding: '6px 12px', borderRadius: 8, cursor: 'pointer',
-    fontSize: '0.84rem', fontWeight: 500,
-    transition: 'background 0.12s ease, color 0.12s ease',
-    flexShrink: 0,
+    padding: '12px 24px', borderBottom: '1px solid var(--da-border)',
+    background: 'var(--da-surface)', flexShrink: 0,
   },
   titleBlock: { display: 'flex', flexDirection: 'column', minWidth: 0 },
-  title: { fontSize: '1rem', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.01em' },
+  title: { fontSize: '1.15rem', fontWeight: 600, color: 'var(--da-text)', letterSpacing: '-0.01em' },
   subtitle: {
-    fontSize: '0.78rem', color: '#64748b',
+    fontSize: '0.78rem', color: 'var(--da-text-3)',
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   },
 };

@@ -32,17 +32,17 @@ import {
 // ---------------------------------------------------------------------------
 
 const C = {
-  bg:       '#f8fafc',
-  surface:  '#ffffff',
-  border:   '#e5e7eb',
-  text:     '#0f172a',
-  muted:    '#64748b',
-  dimmed:   '#94a3b8',
-  accent:   '#4f46e5',
-  accentBg: '#eef2ff',
+  bg:       'var(--da-app-bg)',
+  surface:  'var(--da-surface)',
+  border:   'var(--da-border)',
+  text:     'var(--da-text)',
+  muted:    'var(--da-text-3)',
+  dimmed:   'var(--da-text-muted)',
+  accent:   'var(--da-primary)',
+  accentBg: 'var(--da-primary-subtle)',
   green:    '#16a34a',
   greenBg:  '#dcfce7',
-  red:      '#dc2626',
+  red:      'var(--da-danger)',
   yellow:   '#d97706',
 };
 
@@ -78,20 +78,20 @@ const SF: Record<string, React.CSSProperties> = {
   grid:     { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 28 },
   card:     { background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '1.5rem 1.75rem', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' },
   cardTitle:{ fontSize: '0.8rem', fontWeight: 700, color: C.accent, textTransform: 'uppercase' as const, letterSpacing: '0.06em', marginBottom: 18 },
-  label:    { display: 'block', fontSize: '0.85rem', color: '#475569', fontWeight: 500, marginBottom: 6 },
-  input:    { width: '100%', boxSizing: 'border-box' as const, padding: '9px 12px', background: '#ffffff', border: `1px solid #d1d5db`, borderRadius: 8, color: C.text, fontSize: '0.92rem', outline: 'none', marginBottom: 14 },
-  textarea: { width: '100%', boxSizing: 'border-box' as const, minHeight: 180, padding: '12px', background: '#f8fafc', border: `1px solid #d1d5db`, borderRadius: 8, color: '#0f172a', fontSize: '0.9rem', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', outline: 'none', resize: 'vertical' as const, marginBottom: 14, lineHeight: 1.6 },
-  select:   { width: '100%', boxSizing: 'border-box' as const, padding: '9px 12px', background: '#ffffff', border: `1px solid #d1d5db`, borderRadius: 8, color: C.text, fontSize: '0.92rem', marginBottom: 14 },
+  label:    { display: 'block', fontSize: '0.85rem', color: 'var(--da-text-2)', fontWeight: 500, marginBottom: 6 },
+  input:    { width: '100%', boxSizing: 'border-box' as const, padding: '9px 12px', background: 'var(--da-surface)', border: `1px solid #d1d5db`, borderRadius: 8, color: C.text, fontSize: '0.92rem', outline: 'none', marginBottom: 14 },
+  textarea: { width: '100%', boxSizing: 'border-box' as const, minHeight: 180, padding: '12px', background: 'var(--da-app-bg)', border: `1px solid #d1d5db`, borderRadius: 8, color: 'var(--da-text)', fontSize: '0.9rem', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', outline: 'none', resize: 'vertical' as const, marginBottom: 14, lineHeight: 1.6 },
+  select:   { width: '100%', boxSizing: 'border-box' as const, padding: '9px 12px', background: 'var(--da-surface)', border: `1px solid #d1d5db`, borderRadius: 8, color: C.text, fontSize: '0.92rem', marginBottom: 14 },
   row2:     { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 },
   checkRow: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 },
   hint:     { fontSize: '0.8rem', color: C.dimmed, marginTop: -10, marginBottom: 12 },
   btnRow:   { display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 },
-  saveBtn:  { background: '#4f46e5', color: '#ffffff', border: 'none', borderRadius: 8, padding: '10px 28px', cursor: 'pointer', fontSize: '0.92rem', fontWeight: 600, boxShadow: '0 1px 3px rgba(79,70,229,0.25)' } as React.CSSProperties,
+  saveBtn:  { background: 'var(--da-primary)', color: 'var(--da-surface)', border: 'none', borderRadius: 8, padding: '10px 28px', cursor: 'pointer', fontSize: '0.92rem', fontWeight: 600, boxShadow: '0 1px 3px rgba(79,70,229,0.25)' } as React.CSSProperties,
   msgOk:    { color: C.green, fontSize: '0.88rem', fontWeight: 500 },
   msgErr:   { color: C.red, fontSize: '0.88rem', fontWeight: 500 },
   msgWarn:  { color: C.yellow, fontSize: '0.88rem', fontWeight: 500 },
   infoBadge:{ display: 'flex', gap: 14, alignItems: 'center', marginBottom: 22, padding: '14px 18px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, fontSize: '0.92rem', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' },
-  readonlyField:{ background: '#f1f5f9', border: `1px solid #e5e7eb`, borderRadius: 8, padding: '9px 12px', fontSize: '0.88rem', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: '#64748b', marginBottom: 14 },
+  readonlyField:{ background: 'var(--da-surface-sunken)', border: `1px solid var(--da-border)`, borderRadius: 8, padding: '9px 12px', fontSize: '0.88rem', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: 'var(--da-text-3)', marginBottom: 14 },
 };
 
 function ConfigPanel({ detail, agentId }: { detail: AgentDetailView; agentId: string }) {
@@ -154,7 +154,7 @@ function ConfigPanel({ detail, agentId }: { detail: AgentDetailView; agentId: st
             <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.84rem', color: C.dimmed }}>{d.id}</div>
           </div>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, fontSize: '0.78rem' }}>
-            {d.isMain && <span style={{ background: C.accentBg, color: C.accent, borderRadius: 999, padding: '3px 12px', fontWeight: 600, border: '1px solid #c7d2fe' }}>main</span>}
+            {d.isMain && <span style={{ background: C.accentBg, color: C.accent, borderRadius: 999, padding: '3px 12px', fontWeight: 600, border: '1px solid rgba(84, 87, 201, 0.22)' }}>main</span>}
             {d.liveInGateway
               ? <span style={{ background: C.greenBg, color: '#15803d', borderRadius: 999, padding: '3px 12px', fontWeight: 600, border: '1px solid #86efac' }}>● live</span>
               : <span style={{ background: '#fffbeb', color: '#92400e', borderRadius: 999, padding: '3px 12px', border: '1px solid #fcd34d', fontWeight: 600 }}>○ pending restart</span>}
@@ -305,33 +305,33 @@ function selKey(f: SelectedFile): string {
 }
 
 const SW: Record<string, React.CSSProperties> = {
-  root:       { display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden', background: '#ffffff' },
-  tree:       { width: 260, flexShrink: 0, borderRight: `1px solid ${C.border}`, overflowY: 'auto' as const, display: 'flex', flexDirection: 'column' as const, background: '#fafbfc' },
+  root:       { display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden', background: 'var(--da-surface)' },
+  tree:       { width: 260, flexShrink: 0, borderRight: `1px solid ${C.border}`, overflowY: 'auto' as const, display: 'flex', flexDirection: 'column' as const, background: 'var(--da-app-bg)' },
   treeHeader: { padding: '14px 16px 8px', fontSize: '0.78rem', color: C.muted, textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontWeight: 700, flexShrink: 0 },
   item:       { display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px 7px 0', cursor: 'pointer', fontSize: '0.9rem', color: C.text, userSelect: 'none' as const, borderRadius: 6, transition: 'background 0.1s', margin: '1px 4px' } as React.CSSProperties,
-  itemActive: { background: '#eef2ff', color: C.accent, fontWeight: 500 },
-  itemHover:  { background: '#f1f5f9' },
-  folder:     { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px 6px 0', fontSize: '0.86rem', color: '#475569', fontWeight: 600, userSelect: 'none' as const } as React.CSSProperties,
+  itemActive: { background: 'var(--da-primary-subtle)', color: C.accent, fontWeight: 500 },
+  itemHover:  { background: 'var(--da-surface-sunken)' },
+  folder:     { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px 6px 0', fontSize: '0.86rem', color: 'var(--da-text-2)', fontWeight: 600, userSelect: 'none' as const } as React.CSSProperties,
   addBtn:     { marginLeft: 'auto', background: 'transparent', border: 'none', color: C.accent, cursor: 'pointer', fontSize: '1.05rem', padding: '0 6px', lineHeight: 1, fontWeight: 600 } as React.CSSProperties,
   newInput:   { display: 'flex', alignItems: 'center', gap: 4, padding: '4px 12px 4px 38px' },
-  nameInput:  { flex: 1, background: '#ffffff', border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, padding: '4px 9px', fontSize: '0.85rem', outline: 'none', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' },
-  confirmBtn: { background: '#4f46e5', color: '#ffffff', border: 'none', borderRadius: 6, padding: '3px 10px', cursor: 'pointer', fontSize: '0.85rem' } as React.CSSProperties,
+  nameInput:  { flex: 1, background: 'var(--da-surface)', border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, padding: '4px 9px', fontSize: '0.85rem', outline: 'none', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' },
+  confirmBtn: { background: 'var(--da-primary)', color: 'var(--da-surface)', border: 'none', borderRadius: 6, padding: '3px 10px', cursor: 'pointer', fontSize: '0.85rem' } as React.CSSProperties,
   cancelBtn:  { background: 'transparent', border: 'none', color: C.muted, cursor: 'pointer', fontSize: '0.85rem', padding: '3px 6px' } as React.CSSProperties,
   // Editor area
   editor:     { flex: 1, display: 'flex', flexDirection: 'column' as const, minHeight: 0, overflow: 'hidden' },
-  edHead:     { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 18px', borderBottom: `1px solid ${C.border}`, background: '#f8fafc', flexShrink: 0 },
-  edPath:     { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.88rem', color: '#475569', flex: 1, fontWeight: 500 },
-  edSaveBtn:  { background: '#4f46e5', color: '#ffffff', border: 'none', borderRadius: 6, padding: '6px 18px', cursor: 'pointer', fontSize: '0.86rem', fontWeight: 600, boxShadow: '0 1px 3px rgba(79,70,229,0.25)' } as React.CSSProperties,
-  edDelBtn:   { background: '#ffffff', color: C.red, border: '1px solid #fecaca', borderRadius: 6, padding: '6px 14px', cursor: 'pointer', fontSize: '0.86rem', fontWeight: 500 } as React.CSSProperties,
+  edHead:     { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 18px', borderBottom: `1px solid ${C.border}`, background: 'var(--da-app-bg)', flexShrink: 0 },
+  edPath:     { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.88rem', color: 'var(--da-text-2)', flex: 1, fontWeight: 500 },
+  edSaveBtn:  { background: 'var(--da-primary)', color: 'var(--da-surface)', border: 'none', borderRadius: 6, padding: '6px 18px', cursor: 'pointer', fontSize: '0.86rem', fontWeight: 600, boxShadow: '0 1px 3px rgba(79,70,229,0.25)' } as React.CSSProperties,
+  edDelBtn:   { background: 'var(--da-surface)', color: C.red, border: '1px solid #fecaca', borderRadius: 6, padding: '6px 14px', cursor: 'pointer', fontSize: '0.86rem', fontWeight: 500 } as React.CSSProperties,
   edStatus:   { fontSize: '0.82rem', color: C.dimmed },
-  textarea:   { flex: 1, background: '#ffffff', color: C.text, border: 'none', outline: 'none', padding: '20px 22px', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.9rem', resize: 'none' as const, lineHeight: 1.7 } as React.CSSProperties,
-  readonlyPre:{ flex: 1, background: '#fafbfc', color: C.text, padding: '20px 22px', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.9rem', overflowY: 'auto' as const, whiteSpace: 'pre-wrap' as const, lineHeight: 1.7, margin: 0 } as React.CSSProperties,
+  textarea:   { flex: 1, background: 'var(--da-surface)', color: C.text, border: 'none', outline: 'none', padding: '20px 22px', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.9rem', resize: 'none' as const, lineHeight: 1.7 } as React.CSSProperties,
+  readonlyPre:{ flex: 1, background: 'var(--da-app-bg)', color: C.text, padding: '20px 22px', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.9rem', overflowY: 'auto' as const, whiteSpace: 'pre-wrap' as const, lineHeight: 1.7, margin: 0 } as React.CSSProperties,
   empty:      { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.dimmed, fontSize: '0.92rem', flexDirection: 'column' as const, gap: 12 },
   loading:    { color: C.dimmed, padding: '1.25rem', fontSize: '0.88rem' },
   errBox:     { color: C.red, background: '#fef2f2', border: `1px solid #fecaca`, borderRadius: 10, padding: '10px 14px', margin: '10px 18px', fontSize: '0.88rem' },
   // Init banner
   initBanner: { display: 'flex', flexDirection: 'column' as const, alignItems: 'center', justifyContent: 'center', flex: 1, gap: 14, color: C.muted, textAlign: 'center' as const },
-  initBtn:    { background: '#4f46e5', color: '#ffffff', border: 'none', borderRadius: 10, padding: '11px 28px', cursor: 'pointer', fontSize: '0.92rem', fontWeight: 600, marginTop: 10, boxShadow: '0 2px 6px rgba(79,70,229,0.25)' } as React.CSSProperties,
+  initBtn:    { background: 'var(--da-primary)', color: 'var(--da-surface)', border: 'none', borderRadius: 10, padding: '11px 28px', cursor: 'pointer', fontSize: '0.92rem', fontWeight: 600, marginTop: 10, boxShadow: '0 2px 6px rgba(79,70,229,0.25)' } as React.CSSProperties,
 };
 
 // Small tree item component
@@ -371,7 +371,7 @@ function FolderRow({
 }) {
   return (
     <div style={{ ...SW.folder, paddingLeft: 12 + indent * 14 }}>
-      <span style={{ cursor: 'pointer', color: '#94a3b8' }} onClick={onToggle}>{isExpanded ? '▾' : '▸'}</span>
+      <span style={{ cursor: 'pointer', color: 'var(--da-text-muted)' }} onClick={onToggle}>{isExpanded ? '▾' : '▸'}</span>
       <span style={{ opacity: 0.85 }}>{icon}</span>
       <span style={{ cursor: 'pointer', flex: 1 }} onClick={onToggle}>{label}</span>
       {onAdd && (
@@ -550,7 +550,7 @@ export function WorkspaceExplorer({ agentId, agentName }: { agentId: string; age
         <div style={{ fontSize: '2.4rem' }}>📁</div>
         <div style={{ color: C.text, fontWeight: 600, fontSize: '1.1rem' }}>Workspace not yet initialised</div>
         <div style={{ maxWidth: 420, lineHeight: 1.7, fontSize: '0.92rem', color: C.muted }}>
-          Click below to create the skeleton directories and seed an initial <code style={{ background: '#f1f5f9', padding: '1px 6px', borderRadius: 4, color: C.accent }}>AGENTS.md</code>.
+          Click below to create the skeleton directories and seed an initial <code style={{ background: 'var(--da-surface-sunken)', padding: '1px 6px', borderRadius: 4, color: C.accent }}>AGENTS.md</code>.
         </div>
         <button style={SW.initBtn} disabled={scaffolding} onClick={init}>
           {scaffolding ? 'Creating…' : 'Initialise Workspace'}
@@ -781,7 +781,7 @@ export default function AdminAgentDetailPage() {
         bannerRight={bannerRight}
       >
         {/* Back link */}
-        <div style={{ padding: '12px 24px', borderBottom: `1px solid ${C.border}`, flexShrink: 0, display: 'flex', alignItems: 'center', background: '#ffffff' }}>
+        <div style={{ padding: '12px 24px', borderBottom: `1px solid ${C.border}`, flexShrink: 0, display: 'flex', alignItems: 'center', background: 'var(--da-surface)' }}>
           <Link to="/admin/agents" style={{ color: C.muted, textDecoration: 'none', fontSize: '0.9rem', fontWeight: 500 }}>
             ← All Agents
           </Link>

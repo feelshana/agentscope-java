@@ -50,7 +50,7 @@ function TopList({ title, items, color }: { title: string; items: GroupCount[]; 
           <div style={{ flex: 1, background: '#1a1d2e', borderRadius: 3, height: 8 }}>
             <div style={{ width: `${(item.count / max) * 100}%`, background: color, height: 8, borderRadius: 3, minWidth: 4 }} />
           </div>
-          <div style={{ width: 32, fontSize: '0.78rem', color: '#a5b4fc', textAlign: 'right', flexShrink: 0 }}>{item.count}</div>
+          <div style={{ width: 32, fontSize: '0.78rem', color: 'var(--da-primary)', textAlign: 'right', flexShrink: 0 }}>{item.count}</div>
         </div>
       ))}
     </div>
@@ -69,7 +69,7 @@ interface BarChartProps {
   labelStep?: number;
 }
 
-function BarChart({ data, width = 600, height = 120, color = '#6366f1', labelStep = 4 }: BarChartProps) {
+function BarChart({ data, width = 600, height = 120, color = 'var(--da-primary)', labelStep = 4 }: BarChartProps) {
   if (!data.length) return <div style={{ color: '#374056', fontSize: '0.8rem' }}>(no data yet)</div>;
 
   const maxCount = Math.max(...data.map(d => d.count), 1);
@@ -90,7 +90,7 @@ function BarChart({ data, width = 600, height = 120, color = '#6366f1', labelSte
           <line
             key={pct}
             x1={10} y1={y} x2={width - 10} y2={y}
-            stroke="#1e2235" strokeWidth={1}
+            stroke="var(--da-border)" strokeWidth={1}
           />
         );
       })}
@@ -154,7 +154,7 @@ interface SparklineProps {
   color?: string;
 }
 
-function Sparkline({ data, width = 600, height = 60, color = '#6366f1' }: SparklineProps) {
+function Sparkline({ data, width = 600, height = 60, color = 'var(--da-primary)' }: SparklineProps) {
   if (data.length < 2) return null;
   const maxCount = Math.max(...data.map(d => d.count), 1);
   const step = (width - 20) / (data.length - 1);
@@ -193,26 +193,26 @@ function Sparkline({ data, width = 600, height = 60, color = '#6366f1' }: Sparkl
 
 const S: Record<string, React.CSSProperties> = {
   content: { maxWidth: 1000 },
-  heading: { fontSize: '1.3rem', fontWeight: 700, color: '#e2e8f0', marginBottom: '1.5rem' },
+  heading: { fontSize: '1.3rem', fontWeight: 700, color: 'var(--da-text)', marginBottom: '1.5rem' },
   cards: { display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: '2rem' },
-  card: { background: '#13151f', border: '1px solid #1e2235', borderRadius: 10, padding: '1.1rem 1.4rem', flex: '1 1 160px' },
+  card: { background: 'var(--da-surface)', border: '1px solid var(--da-border)', borderRadius: 10, padding: '1.1rem 1.4rem', flex: '1 1 160px' },
   cardLabel: { fontSize: '0.72rem', color: '#374056', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' },
-  cardValue: { fontSize: '1.8rem', fontWeight: 700, color: '#a5b4fc' },
-  chartCard: { background: '#13151f', border: '1px solid #1e2235', borderRadius: 10, padding: '1.25rem 1.4rem', marginBottom: 16 },
+  cardValue: { fontSize: '1.8rem', fontWeight: 700, color: 'var(--da-primary)' },
+  chartCard: { background: 'var(--da-surface)', border: '1px solid var(--da-border)', borderRadius: 10, padding: '1.25rem 1.4rem', marginBottom: 16 },
   chartTitle: { fontSize: '0.85rem', fontWeight: 600, color: '#7c8bad', marginBottom: 12 },
   tabs: { display: 'flex', gap: 8, marginBottom: 16 },
   refreshBtn: {
-    background: 'transparent', border: '1px solid #2d3148', color: '#7c8bad',
+    background: 'transparent', border: '1px solid var(--da-border-strong)', color: '#7c8bad',
     borderRadius: 6, padding: '4px 12px', cursor: 'pointer', fontSize: '0.8rem', marginLeft: 12,
   },
-  err: { color: '#f87171', fontSize: '0.85rem', padding: '1rem', background: '#1f1520', borderRadius: 8, border: '1px solid #5b2030' },
+  err: { color: 'var(--da-danger)', fontSize: '0.85rem', padding: '1rem', background: '#1f1520', borderRadius: 8, border: '1px solid #5b2030' },
 };
 
 function tabBtnStyle(active: boolean): React.CSSProperties {
   return {
-    background: active ? '#1e2235' : 'transparent',
-    border: `1px solid ${active ? '#3d4168' : '#2d3148'}`,
-    color: active ? '#a5b4fc' : '#7c8bad',
+    background: active ? 'var(--da-border)' : 'transparent',
+    border: `1px solid ${active ? '#3d4168' : 'var(--da-border-strong)'}`,
+    color: active ? 'var(--da-primary)' : '#7c8bad',
     borderRadius: 6, padding: '4px 12px', cursor: 'pointer', fontSize: '0.8rem',
   };
 }
@@ -273,19 +273,19 @@ export default function UsagePage() {
         {summary && (
           <div style={S.cards}>
             <div style={S.card}>
-              <div style={S.cardLabel}>Total Turns</div>
+              <div style={S.cardLabel}>总对话数</div>
               <div style={S.cardValue}>{summary.totalTurns.toLocaleString()}</div>
             </div>
             <div style={S.card}>
-              <div style={S.cardLabel}>Today's Turns</div>
+              <div style={S.cardLabel}>今日对话数</div>
               <div style={S.cardValue}>{summary.todayTurns}</div>
             </div>
             <div style={S.card}>
-              <div style={S.cardLabel}>Avg Duration</div>
+              <div style={S.cardLabel}>平均时长</div>
               <div style={S.cardValue}>{fmtDuration(summary.avgDurationMs)}</div>
             </div>
             <div style={S.card}>
-              <div style={S.cardLabel}>Unique Users</div>
+              <div style={S.cardLabel}>活跃用户数</div>
               <div style={S.cardValue}>{summary.uniqueUsers}</div>
             </div>
           </div>
@@ -301,7 +301,7 @@ export default function UsagePage() {
               ))}
             </div>
           </div>
-          <Sparkline data={hourly} width={780} height={64} color="#6366f1" />
+          <Sparkline data={hourly} width={780} height={64} color="var(--da-primary)" />
         </div>
 
         {/* Daily bar chart */}
@@ -321,18 +321,18 @@ export default function UsagePage() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <div style={S.chartCard}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <span style={S.chartTitle}>Top Users by Turns</span>
+              <span style={S.chartTitle}>用户对话排行</span>
               <div style={S.tabs}>
                 {[7, 14, 30].map(d => (
                   <button key={d} style={tabBtnStyle(topRange === d)} onClick={() => setTopRange(d)}>{d}d</button>
                 ))}
               </div>
             </div>
-            <TopList title="" items={topUsers} color="#6366f1" />
+            <TopList title="" items={topUsers} color="var(--da-primary)" />
           </div>
           <div style={S.chartCard}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <span style={S.chartTitle}>Top Agents by Turns</span>
+              <span style={S.chartTitle}>Agent 对话排行</span>
             </div>
             <TopList title="" items={topAgents} color="#818cf8" />
           </div>

@@ -97,8 +97,8 @@ export default function EChartsBlock({ payload }: { payload: ChartPayload }) {
       style={{
         width: '100%',
         height: 360,
-        background: '#ffffff',
-        border: '1px solid #e2e8f0',
+        background: 'var(--da-surface)',
+        border: '1px solid var(--da-border)',
         borderRadius: 10,
         margin: '0.5rem 0',
       }}

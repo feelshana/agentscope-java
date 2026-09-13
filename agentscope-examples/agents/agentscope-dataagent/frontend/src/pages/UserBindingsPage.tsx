@@ -30,27 +30,27 @@ const apiRemove = (i: number) => jsonFetch<{ removed: boolean }>(`/api/user/bind
 
 const S: Record<string, React.CSSProperties> = {
   content: { padding: '2rem 1.5rem', maxWidth: 900, margin: '0 auto' },
-  title:   { fontSize: '1.1rem', fontWeight: 700, color: '#e2e8f0', marginBottom: 12 },
+  title:   { fontSize: '1.1rem', fontWeight: 700, color: 'var(--da-text)', marginBottom: 12 },
   intro:   { color: '#7c8bad', fontSize: '0.82rem', marginBottom: 18, lineHeight: 1.6 },
   toolbar: { display: 'flex', gap: 10, marginBottom: 14, alignItems: 'center' },
-  addBtn:  { background: '#6366f1', color: '#fff', border: 'none', borderRadius: 7, padding: '7px 16px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 },
-  err:     { color: '#f87171', fontSize: '0.82rem', background: '#1f1520', border: '1px solid #5b2030', borderRadius: 8, padding: '8px 12px', marginBottom: 12 },
-  ok:      { color: '#34d399', fontSize: '0.82rem', background: '#0d1f14', border: '1px solid #166534', borderRadius: 8, padding: '8px 12px', marginBottom: 12 },
+  addBtn:  { background: 'var(--da-primary)', color: '#fff', border: 'none', borderRadius: 7, padding: '7px 16px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 },
+  err:     { color: 'var(--da-danger)', fontSize: '0.82rem', background: '#1f1520', border: '1px solid #5b2030', borderRadius: 8, padding: '8px 12px', marginBottom: 12 },
+  ok:      { color: 'var(--da-success)', fontSize: '0.82rem', background: '#0d1f14', border: '1px solid #166534', borderRadius: 8, padding: '8px 12px', marginBottom: 12 },
   table:   { width: '100%', borderCollapse: 'collapse' as const, fontSize: '0.85rem' },
-  th:      { textAlign: 'left' as const, padding: '0.5rem 0.75rem', background: '#13151f', color: '#7c8bad', borderBottom: '1px solid #1e2235', fontWeight: 600 },
-  td:      { padding: '0.55rem 0.75rem', borderBottom: '1px solid #1e2235', color: '#94a3b8' },
+  th:      { textAlign: 'left' as const, padding: '0.5rem 0.75rem', background: 'var(--da-surface)', color: '#7c8bad', borderBottom: '1px solid var(--da-border)', fontWeight: 600 },
+  td:      { padding: '0.55rem 0.75rem', borderBottom: '1px solid var(--da-border)', color: '#94a3b8' },
   mono:    { fontFamily: 'monospace', fontSize: '0.78rem' },
-  editBtn: { background: '#1e2235', border: 'none', color: '#a5b4fc', borderRadius: 4, padding: '3px 10px', cursor: 'pointer', fontSize: '0.78rem', marginRight: 4 },
-  delBtn:  { background: 'transparent', border: '1px solid #5b2030', color: '#f87171', borderRadius: 4, padding: '3px 9px', cursor: 'pointer', fontSize: '0.78rem' },
+  editBtn: { background: 'var(--da-border)', border: 'none', color: 'var(--da-primary)', borderRadius: 4, padding: '3px 10px', cursor: 'pointer', fontSize: '0.78rem', marginRight: 4 },
+  delBtn:  { background: 'transparent', border: '1px solid #5b2030', color: 'var(--da-danger)', borderRadius: 4, padding: '3px 9px', cursor: 'pointer', fontSize: '0.78rem' },
   modal:   { position: 'fixed' as const, inset: 0, background: 'rgba(0,0,0,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 },
-  modalBox:{ background: '#1a1d27', border: '1px solid #2d3148', borderRadius: 10, padding: '1.5rem', width: 520 },
-  modalTitle: { fontSize: '1rem', fontWeight: 700, color: '#e2e8f0', marginBottom: 14 },
+  modalBox:{ background: '#1a1d27', border: '1px solid var(--da-border-strong)', borderRadius: 10, padding: '1.5rem', width: 520 },
+  modalTitle: { fontSize: '1rem', fontWeight: 700, color: 'var(--da-text)', marginBottom: 14 },
   label:   { display: 'block', fontSize: '0.78rem', color: '#94a3b8', fontWeight: 500, marginBottom: 4 },
-  hint:    { display: 'block', fontSize: '0.7rem', color: '#4b5280', marginTop: -8, marginBottom: 10 },
-  input:   { width: '100%', boxSizing: 'border-box' as const, padding: '7px 10px', background: '#0f1117', border: '1px solid #2d3148', borderRadius: 6, color: '#e2e8f0', fontSize: '0.85rem', marginBottom: 12 },
+  hint:    { display: 'block', fontSize: '0.7rem', color: 'var(--da-text-muted)', marginTop: -8, marginBottom: 10 },
+  input:   { width: '100%', boxSizing: 'border-box' as const, padding: '7px 10px', background: 'var(--da-surface)', border: '1px solid var(--da-border-strong)', borderRadius: 6, color: 'var(--da-text)', fontSize: '0.85rem', marginBottom: 12 },
   btnRow:  { display: 'flex', gap: 8, marginTop: 4 },
-  saveBtn: { background: '#6366f1', color: '#fff', border: 'none', borderRadius: 7, padding: '8px 20px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 },
-  cancelBtn:{ background: 'transparent', border: '1px solid #2d3148', color: '#7c8bad', borderRadius: 7, padding: '8px 14px', cursor: 'pointer', fontSize: '0.85rem' },
+  saveBtn: { background: 'var(--da-primary)', color: '#fff', border: 'none', borderRadius: 7, padding: '8px 20px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 },
+  cancelBtn:{ background: 'transparent', border: '1px solid var(--da-border-strong)', color: '#7c8bad', borderRadius: 7, padding: '8px 14px', cursor: 'pointer', fontSize: '0.85rem' },
 };
 
 interface PreferenceFormProps {
@@ -99,12 +99,12 @@ function PreferenceFormModal({ initial, onSaved, onClose }: PreferenceFormProps)
         <div style={S.modalTitle}>{isEdit ? 'Edit Preference' : 'New Channel Preference'}</div>
         {err && <div style={S.err}>{err}</div>}
 
-        <label style={S.label}>Channel ID</label>
+        <label style={S.label}>通道 ID</label>
         <input style={S.input} value={channelId} onChange={e => setChannelId(e.target.value)} placeholder="chatui" />
         <span style={S.hint}>Use <code>chatui</code> for the web UI; other ids match integrations (e.g. <code>slack</code>).</span>
 
         <label style={S.label}>Display label (optional)</label>
-        <input style={S.input} value={displayLabel} onChange={e => setDisplayLabel(e.target.value)} placeholder="My default session" />
+        <input style={S.input} value={displayLabel} onChange={e => setDisplayLabel(e.target.value)} placeholder="我的默认会话" />
 
         <label style={S.label}>Session scope (optional)</label>
         <input style={S.input} value={sessionScope} onChange={e => setSessionScope(e.target.value)} placeholder="MAIN" />
@@ -122,7 +122,7 @@ function PreferenceFormModal({ initial, onSaved, onClose }: PreferenceFormProps)
           <button style={S.saveBtn} disabled={saving || !channelId.trim()} onClick={submit}>
             {saving ? 'Saving…' : isEdit ? 'Update' : 'Add'}
           </button>
-          <button style={S.cancelBtn} onClick={onClose}>Cancel</button>
+          <button style={S.cancelBtn} onClick={onClose}>取消</button>
         </div>
       </div>
     </div>
@@ -153,7 +153,7 @@ export default function UserBindingsPage() {
     if (!confirm('Delete this preference?')) return;
     try {
       await apiRemove(i);
-      setOk('Preference removed.');
+      setOk('偏好已删除');
       await load();
       setTimeout(() => setOk(null), 3000);
     } catch (e: unknown) {
@@ -164,7 +164,7 @@ export default function UserBindingsPage() {
   return (
     <>
       <div style={S.content}>
-        <h2 style={S.title}>Channel Preferences</h2>
+        <h2 style={S.title}>通道偏好</h2>
         <p style={S.intro}>
           DataAgent answers every chat — these settings just shape <em>how</em> it answers on a
           given channel. Set a reply language, restrict which skills are loaded, or override the
@@ -191,12 +191,12 @@ export default function UserBindingsPage() {
             <thead>
               <tr>
                 <th style={S.th}>#</th>
-                <th style={S.th}>Channel</th>
-                <th style={S.th}>Label</th>
-                <th style={S.th}>Language</th>
-                <th style={S.th}>Scope</th>
-                <th style={S.th}>Skills</th>
-                <th style={S.th}>Actions</th>
+                <th style={S.th}>通道</th>
+                <th style={S.th}>标签</th>
+                <th style={S.th}>语言</th>
+                <th style={S.th}>作用域</th>
+                <th style={S.th}>技能</th>
+                <th style={S.th}>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -213,8 +213,8 @@ export default function UserBindingsPage() {
                       : '(all)'}
                   </td>
                   <td style={S.td}>
-                    <button style={S.editBtn} onClick={() => setEditing({ index: i, data: b })}>Edit</button>
-                    <button style={S.delBtn} onClick={() => onDelete(i)}>Delete</button>
+                    <button style={S.editBtn} onClick={() => setEditing({ index: i, data: b })}>编辑</button>
+                    <button style={S.delBtn} onClick={() => onDelete(i)}>删除</button>
                   </td>
                 </tr>
               ))}

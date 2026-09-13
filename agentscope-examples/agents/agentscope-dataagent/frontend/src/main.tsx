@@ -2,6 +2,8 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
+import './global.css';
+
 import LoginPage from './pages/LoginPage';
 import AppShell from './components/AppShell';
 import EditTierGate from './components/EditTierGate';

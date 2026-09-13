@@ -27,8 +27,8 @@ const containerStyle: React.CSSProperties = {
   position: 'relative',
   width: '100%',
   height: 520,
-  background: '#fafbfc',
-  border: '1px solid #e2e8f0',
+  background: 'var(--da-app-bg)',
+  border: '1px solid var(--da-border)',
   borderRadius: 12,
   overflow: 'hidden',
 };
@@ -38,11 +38,11 @@ const statsStyle: React.CSSProperties = {
   top: 8,
   right: 8,
   background: 'rgba(255,255,255,0.92)',
-  border: '1px solid #e2e8f0',
+  border: '1px solid var(--da-border)',
   borderRadius: 8,
   padding: '8px 12px',
   fontSize: '0.72rem',
-  color: '#475569',
+  color: 'var(--da-text-2)',
   boxShadow: '0 2px 8px rgba(15,23,42,0.08)',
   maxWidth: 220,
 };
@@ -52,11 +52,11 @@ const toolbarStyle: React.CSSProperties = {
   top: 8,
   left: 8,
   background: 'rgba(255,255,255,0.92)',
-  border: '1px solid #e2e8f0',
+  border: '1px solid var(--da-border)',
   borderRadius: 8,
   padding: '6px 10px',
   fontSize: '0.72rem',
-  color: '#475569',
+  color: 'var(--da-text-2)',
   display: 'flex',
   alignItems: 'center',
   gap: 6,
@@ -67,11 +67,11 @@ const legendStyle: React.CSSProperties = {
   bottom: 8,
   left: 8,
   background: 'rgba(255,255,255,0.92)',
-  border: '1px solid #e2e8f0',
+  border: '1px solid var(--da-border)',
   borderRadius: 8,
   padding: '8px 10px',
   fontSize: '0.7rem',
-  color: '#475569',
+  color: 'var(--da-text-2)',
   boxShadow: '0 2px 8px rgba(15,23,42,0.08)',
   display: 'flex',
   flexDirection: 'column',
@@ -170,7 +170,7 @@ export default function GraphView({ groupId }: { groupId: string }) {
             ?? PALETTE[hash(d.data?.type ?? 'table') % PALETTE.length],
           labelText: (d: any) => d.data?.label ?? d.id,
           labelFontSize: 11,
-          labelFill: '#0f172a',
+          labelFill: 'var(--da-text)',
         },
       },
       edge: {
@@ -181,7 +181,7 @@ export default function GraphView({ groupId }: { groupId: string }) {
           lineWidth: (d: any) => (d.data?.origin === 'doc' ? 2 : 1),
           labelText: (d: any) => d.data?.label ?? '',
           labelFontSize: 9,
-          labelFill: '#94a3b8',
+          labelFill: 'var(--da-text-muted)',
         },
       },
       plugins: [
@@ -195,16 +195,16 @@ export default function GraphView({ groupId }: { groupId: string }) {
               return `<div style="font-size:12px;line-height:1.5">
                 <b>${d.relationType ?? ''}</b> · 置信度 ${(d.confidence ?? 0).toFixed(1)}<br/>
                 ${d.detail ? `关联列：${d.detail}<br/>` : ''}
-                <span style="color:#94a3b8">来源：${d.origin ?? ''}</span>
+                <span style="color:var(--da-text-muted)">来源：${d.origin ?? ''}</span>
               </div>`;
             }
             const fields = (d.fields ?? [])
               .slice(0, 8)
-              .map((f: any) => `${f.name} <span style="color:#94a3b8">${f.sqlType}</span>`)
+              .map((f: any) => `${f.name} <span style="color:var(--da-text-muted)">${f.sqlType}</span>`)
               .join('<br/>');
             return `<div style="font-size:12px;line-height:1.5">
               <b>${d.label ?? it.id}</b>
-              <span style="color:#94a3b8"> · ${NODE_ORIGIN_LABEL[d.origin] ?? d.origin ?? ''}</span><br/>
+              <span style="color:var(--da-text-muted)"> · ${NODE_ORIGIN_LABEL[d.origin] ?? d.origin ?? ''}</span><br/>
               ${fields}
             </div>`;
           },
@@ -237,10 +237,10 @@ export default function GraphView({ groupId }: { groupId: string }) {
   }, [view]);
 
   if (error) {
-    return <div style={{ color: '#b91c1c', fontSize: '0.85rem' }}>图谱加载失败：{error}</div>;
+    return <div style={{ color: 'var(--da-danger)', fontSize: '0.85rem' }}>图谱加载失败：{error}</div>;
   }
   if (!data) {
-    return <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>图谱加载中…</div>;
+    return <div style={{ color: 'var(--da-text-muted)', fontSize: '0.85rem' }}>图谱加载中…</div>;
   }
 
   return (
@@ -254,7 +254,7 @@ export default function GraphView({ groupId }: { groupId: string }) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#94a3b8',
+            color: 'var(--da-text-muted)',
             fontSize: '0.85rem',
           }}
         >
@@ -268,7 +268,7 @@ export default function GraphView({ groupId }: { groupId: string }) {
             bottom: 8,
             left: '50%',
             transform: 'translateX(-50%)',
-            color: '#94a3b8',
+            color: 'var(--da-text-muted)',
             fontSize: '0.75rem',
           }}
         >
@@ -287,7 +287,7 @@ export default function GraphView({ groupId }: { groupId: string }) {
       </div>
       {view && view.nodeCount > 0 && (
         <div style={legendStyle}>
-          <div style={{ fontWeight: 600, color: '#334155', marginBottom: 2 }}>图例</div>
+          <div style={{ fontWeight: 600, color: 'var(--da-text-2)', marginBottom: 2 }}>图例</div>
           {Array.from(new Set(view.nodes.map(n => n.data.origin))).map(o => (
             <div key={`n-${o}`} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span
@@ -295,7 +295,7 @@ export default function GraphView({ groupId }: { groupId: string }) {
                   width: 10,
                   height: 10,
                   borderRadius: '50%',
-                  background: NODE_ORIGIN_COLOR[o] ?? '#94a3b8',
+                  background: NODE_ORIGIN_COLOR[o] ?? 'var(--da-text-muted)',
                   display: 'inline-block',
                 }}
               />

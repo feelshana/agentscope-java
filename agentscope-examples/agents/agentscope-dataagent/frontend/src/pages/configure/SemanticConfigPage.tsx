@@ -16,8 +16,8 @@ const panelStyle: React.CSSProperties = {
 };
 
 const cardStyle: React.CSSProperties = {
-  background: '#ffffff',
-  border: '1px solid #e2e8f0',
+  background: 'var(--da-surface)',
+  border: '1px solid var(--da-border)',
   borderRadius: 12,
   padding: 16,
 };
@@ -25,17 +25,17 @@ const cardStyle: React.CSSProperties = {
 const thStyle: React.CSSProperties = {
   textAlign: 'left',
   padding: '8px 10px',
-  borderBottom: '1px solid #e2e8f0',
+  borderBottom: '1px solid var(--da-border)',
   fontSize: '0.78rem',
-  color: '#64748b',
+  color: 'var(--da-text-3)',
   fontWeight: 600,
 };
 
 const tdStyle: React.CSSProperties = {
   padding: '8px 10px',
-  borderBottom: '1px solid #f1f5f9',
+  borderBottom: '1px solid var(--da-surface-sunken)',
   fontSize: '0.82rem',
-  color: '#0f172a',
+  color: 'var(--da-text)',
   verticalAlign: 'top',
 };
 
@@ -43,18 +43,18 @@ const inputStyle: React.CSSProperties = {
   width: '100%',
   padding: '6px 8px',
   borderRadius: 6,
-  border: '1px solid #cbd5e1',
+  border: '1px solid var(--da-border-strong)',
   fontSize: '0.8rem',
-  color: '#0f172a',
+  color: 'var(--da-text)',
   boxSizing: 'border-box',
 };
 
 const buttonStyle: React.CSSProperties = {
   padding: '8px 16px',
   borderRadius: 8,
-  border: '1px solid #2563eb',
-  background: '#2563eb',
-  color: '#ffffff',
+  border: '1px solid var(--da-primary)',
+  background: 'var(--da-primary)',
+  color: 'var(--da-surface)',
   fontSize: '0.85rem',
   fontWeight: 600,
   cursor: 'pointer',
@@ -63,7 +63,7 @@ const buttonStyle: React.CSSProperties = {
 const linkBtn: React.CSSProperties = {
   background: 'transparent',
   border: 'none',
-  color: '#2563eb',
+  color: 'var(--da-primary)',
   cursor: 'pointer',
   fontSize: '0.8rem',
   padding: 0,
@@ -73,7 +73,7 @@ const linkBtn: React.CSSProperties = {
 const dangerBtn: React.CSSProperties = {
   background: 'transparent',
   border: 'none',
-  color: '#dc2626',
+  color: 'var(--da-danger)',
   cursor: 'pointer',
   fontSize: '0.8rem',
   padding: 0,
@@ -166,7 +166,7 @@ export default function SemanticConfigPage() {
       <BackToChatHeader title="语义配置" subtitle="业务名词 / 名词解析 / 同义词 / 作用范围" />
       <div style={panelStyle}>
         {error && (
-          <div style={{ color: '#b91c1c', fontSize: '0.85rem', marginBottom: 12 }}>{error}</div>
+          <div style={{ color: 'var(--da-danger)', fontSize: '0.85rem', marginBottom: 12 }}>{error}</div>
         )}
         <div style={cardStyle}>
           <div style={{ marginBottom: 12 }}>
@@ -182,46 +182,46 @@ export default function SemanticConfigPage() {
               添加词条
             </button>
           </div>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <table className="da-table">
             <thead>
               <tr>
-                <th style={thStyle}>业务名词</th>
-                <th style={thStyle}>名词解析</th>
-                <th style={thStyle}>同义词</th>
-                <th style={thStyle}>作用范围</th>
-                <th style={thStyle}>操作</th>
+                <th>业务名词</th>
+                <th>名词解析</th>
+                <th>同义词</th>
+                <th>作用范围</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody>
               {adding && (
                 <tr>
-                  <td style={tdStyle}>
+                  <td>
                     <input
-                      style={inputStyle}
+                      className="da-input"
                       placeholder="请输入业务名词，30字以内"
                       value={draft.term}
                       onChange={e => setDraft(d => ({ ...d, term: e.target.value }))}
                     />
                   </td>
-                  <td style={tdStyle}>
+                  <td>
                     <input
-                      style={inputStyle}
+                      className="da-input"
                       placeholder="请输入业务名词解释，100字以内"
                       value={draft.explanation}
                       onChange={e => setDraft(d => ({ ...d, explanation: e.target.value }))}
                     />
                   </td>
-                  <td style={tdStyle}>
+                  <td>
                     <input
-                      style={inputStyle}
+                      className="da-input"
                       placeholder="请输入同义词，回车键分隔"
                       value={draft.synonyms}
                       onChange={e => setDraft(d => ({ ...d, synonyms: e.target.value }))}
                     />
                   </td>
-                  <td style={tdStyle}>
+                  <td>
                     <select
-                      style={inputStyle}
+                      className="da-input"
                       value={draft.scope}
                       onChange={e => setDraft(d => ({ ...d, scope: e.target.value }))}
                     >
@@ -229,12 +229,12 @@ export default function SemanticConfigPage() {
                       <option value="仅数据集">仅数据集</option>
                     </select>
                   </td>
-                  <td style={tdStyle}>
-                    <button style={linkBtn} onClick={handleSave} disabled={busy}>
+                  <td>
+                    <button className="da-btn da-btn-sm" onClick={handleSave} disabled={busy}>
                       保存
                     </button>
                     <button
-                      style={dangerBtn}
+                      className="da-btn da-btn-danger da-btn-sm"
                       onClick={() => {
                         setAdding(false);
                         setEditingId(null);
@@ -248,15 +248,15 @@ export default function SemanticConfigPage() {
               )}
               {terms.map(t => (
                 <tr key={t.id}>
-                  <td style={tdStyle}>{t.term}</td>
-                  <td style={tdStyle}>{t.explanation ?? '-'}</td>
-                  <td style={tdStyle}>{t.synonyms ?? '-'}</td>
-                  <td style={tdStyle}>{t.scope}</td>
-                  <td style={tdStyle}>
-                    <button style={linkBtn} onClick={() => startEdit(t)}>
+                  <td>{t.term}</td>
+                  <td>{t.explanation ?? '-'}</td>
+                  <td>{t.synonyms ?? '-'}</td>
+                  <td>{t.scope}</td>
+                  <td>
+                    <button className="da-btn da-btn-sm" onClick={() => startEdit(t)}>
                       编辑
                     </button>
-                    <button style={dangerBtn} onClick={() => handleDelete(t.id)}>
+                    <button className="da-btn da-btn-danger da-btn-sm" onClick={() => handleDelete(t.id)}>
                       删除
                     </button>
                   </td>
@@ -264,14 +264,14 @@ export default function SemanticConfigPage() {
               ))}
               {!adding && terms.length === 0 && (
                 <tr>
-                  <td style={{ ...tdStyle, color: '#94a3b8', textAlign: 'center' }} colSpan={5}>
+                  <td style={{ ...tdStyle, color: 'var(--da-text-muted)', textAlign: 'center' }} colSpan={5}>
                     暂无数据
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
-          <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: 8 }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--da-text-muted)', marginTop: 8 }}>
             共 {terms.length} 条
           </div>
         </div>
