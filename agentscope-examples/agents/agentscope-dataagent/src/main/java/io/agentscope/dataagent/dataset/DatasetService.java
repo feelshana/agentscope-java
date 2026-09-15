@@ -20,6 +20,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agentscope.dataagent.dataset.parser.ColumnSchema;
 import io.agentscope.dataagent.dataset.parser.FileParser;
 import io.agentscope.dataagent.dataset.parser.ParsedTable;
+import io.agentscope.dataagent.ontology.OntologyService;
+import io.agentscope.dataagent.ontology.model.ObjectProperty;
+import io.agentscope.dataagent.ontology.model.OntologyModel;
+import io.agentscope.dataagent.ontology.model.OntologyObject;
+import io.agentscope.dataagent.ontology.model.OntologyRelationship;
 import io.agentscope.dataagent.tools.data.DataSource;
 import io.agentscope.dataagent.tools.data.InMemoryDataSourceRegistry;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetEntity;
@@ -47,6 +52,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -74,6 +80,7 @@ public class DatasetService implements DatasetContextProvider {
     private final List<FileParser> parsers;
     private final DatasetStoreProperties props;
     private final ObjectMapper mapper;
+    private final ObjectProvider<OntologyService> ontologyServiceProvider;
 
     public DatasetService(
             DatasetRepository repository,
@@ -88,7 +95,8 @@ public class DatasetService implements DatasetContextProvider {
             TableProvisioner provisioner,
             List<FileParser> parsers,
             DatasetStoreProperties props,
-            ObjectMapper mapper) {
+            ObjectMapper mapper,
+            ObjectProvider<OntologyService> ontologyServiceProvider) {
         this.repository = repository;
         this.groupRepository = groupRepository;
         this.knowledgeRepository = knowledgeRepository;
@@ -102,6 +110,7 @@ public class DatasetService implements DatasetContextProvider {
         this.parsers = parsers;
         this.props = props;
         this.mapper = mapper;
+        this.ontologyServiceProvider = ontologyServiceProvider;
     }
 
     @PostConstruct
@@ -121,6 +130,23 @@ public class DatasetService implements DatasetContextProvider {
             String description,
             InputStream data,
             String fileName) {
+        return ingest(ownerId, groupId, name, description, data, fileName, false);
+    }
+
+    /**
+     * Ingests an uploaded file as a dataset. When {@code overwrite} is true and a dataset with the
+     * same (owner, name) already exists, the old one (physical table, registry entry, metadata) is
+     * removed first so the upload replaces it; otherwise a 409 conflict is thrown.
+     */
+    @Transactional
+    public DatasetEntity ingest(
+            String ownerId,
+            String groupId,
+            String name,
+            String description,
+            InputStream data,
+            String fileName,
+            boolean overwrite) {
         if (name == null || name.isBlank()) {
             throw new DatasetException("Dataset name must not be blank");
         }
@@ -133,10 +159,20 @@ public class DatasetService implements DatasetContextProvider {
                                         new DatasetException(
                                                 "Knowledge base not found: " + groupId, 404));
         repository
-                .findByOwnerIdAndName(ownerId, name.trim())
+                .findByOwnerIdAndGroupIdAndName(ownerId, group.getId(), name.trim())
                 .ifPresent(
                         e -> {
-                            throw new DatasetException("Dataset name already exists: " + name, 409);
+                            if (!overwrite) {
+                                throw new DatasetException(
+                                        "Dataset name already exists: " + name, 409);
+                            }
+                            log.info(
+                                    "DatasetService: overwriting existing dataset '{}' (id {}) for"
+                                            + " owner {}",
+                                    e.getName(),
+                                    e.getId(),
+                                    ownerId);
+                            deleteEntity(e);
                         });
         FileParser parser =
                 parsers.stream()
@@ -209,6 +245,7 @@ public class DatasetService implements DatasetContextProvider {
         repository.save(entity);
         registry.add(toDataSource(entity));
         relationInference.reinferGroup(group.getId());
+        refreshOntology(group.getId(), ownerId);
         log.info(
                 "DatasetService: ingested dataset '{}' ({} rows) for owner {} as {}.{}",
                 entity.getName(),
@@ -222,7 +259,9 @@ public class DatasetService implements DatasetContextProvider {
     @Transactional
     public void delete(String ownerId, String datasetId) {
         DatasetEntity entity = get(ownerId, datasetId);
+        String groupId = entity.getGroupId();
         deleteEntity(entity);
+        refreshOntology(groupId, ownerId);
         log.info("DatasetService: deleted dataset {} for owner {}", datasetId, ownerId);
     }
 
@@ -267,7 +306,7 @@ public class DatasetService implements DatasetContextProvider {
         List<DatasetEntity> created = new ArrayList<>();
         for (String table : tables) {
             repository
-                    .findByOwnerIdAndName(ownerId, table)
+                    .findByOwnerIdAndGroupIdAndName(ownerId, groupId, table)
                     .ifPresent(
                             e -> {
                                 throw new DatasetException(
@@ -311,6 +350,7 @@ public class DatasetService implements DatasetContextProvider {
             created.add(e);
         }
         relationInference.reinferGroup(groupId);
+        refreshOntology(groupId, ownerId);
         log.info(
                 "DatasetService: associated {} table(s) from datasource {} into group {} for owner"
                         + " {}",
@@ -478,6 +518,16 @@ public class DatasetService implements DatasetContextProvider {
         } catch (Exception e) {
             return "[]";
         }
+    }
+
+    /**
+     * Public wrapper used by ManifestImportService to register a freshly persisted dataset
+     * entity into the in-memory registry so the agent can see it immediately.
+     */
+    public DataSource toDataSourcePublic(DatasetEntity entity) {
+        DataSource ds = toDataSource(entity);
+        registry.add(ds);
+        return ds;
     }
 
     private DataSource toDataSource(DatasetEntity e) {
@@ -698,6 +748,7 @@ public class DatasetService implements DatasetContextProvider {
                         .orElseGet(() -> new DatasetKnowledgeEntity(groupId, content));
         knowledgeRepository.save(entity);
         relationInference.reinferGroup(groupId);
+        refreshOntology(groupId, null);
         log.info("DatasetService: saved relationship knowledge for group {}", groupId);
     }
 
@@ -745,5 +796,280 @@ public class DatasetService implements DatasetContextProvider {
             }
         }
         return sb.toString();
+    }
+
+    /**
+     * Compact ontology summary for the owner's KBs (~40 lines max). Lists each object with its
+     * kind and relation count, followed by relation edges. Designed for injection into agent
+     * context (list_data_sources) so the LLM knows the business semantics at a glance.
+     */
+    @Override
+    public String ontologySummary(String ownerId, java.util.List<String> onlyGroups) {
+        OntologyService svc = ontologyServiceProvider.getIfAvailable();
+        if (svc == null || ownerId == null) {
+            return "";
+        }
+        java.util.Set<String> want =
+                onlyGroups == null || onlyGroups.isEmpty()
+                        ? null
+                        : new java.util.HashSet<>(onlyGroups);
+        StringBuilder sb = new StringBuilder();
+        int lineCount = 0;
+        for (DatasetGroupEntity g : groupRepository.findByOwnerIdOrderByCreatedAtDesc(ownerId)) {
+            if (want != null && !want.contains(g.getId())) {
+                continue;
+            }
+            java.util.Optional<OntologyModel> opt = svc.getOntology(ownerId, g.getId());
+            if (opt.isEmpty()) {
+                continue;
+            }
+            OntologyModel model = opt.get();
+            // Object catalog lines
+            for (Map.Entry<String, OntologyObject> e : model.getObjects().entrySet()) {
+                if (lineCount >= 40) {
+                    sb.append("… (truncated; use search_model / get_model for more)\n");
+                    return sb.toString();
+                }
+                OntologyObject obj = e.getValue();
+                sb.append(e.getKey());
+                if (obj.getLabel() != null && !obj.getLabel().equals(e.getKey())) {
+                    sb.append('(').append(obj.getLabel()).append(')');
+                }
+                sb.append(" [")
+                        .append(obj.getKind() != null ? obj.getKind() : "dimension")
+                        .append("]");
+                // Count relations touching this object
+                long relCount =
+                        model.getRelationships().values().stream()
+                                .filter(
+                                        r ->
+                                                e.getKey().equals(r.getFrom())
+                                                        || e.getKey().equals(r.getTo()))
+                                .count();
+                if (relCount > 0) {
+                    sb.append(" — ").append(relCount).append(" relations");
+                }
+                sb.append('\n');
+                lineCount++;
+            }
+            // Relation edge lines
+            for (Map.Entry<String, OntologyRelationship> e : model.getRelationships().entrySet()) {
+                if (lineCount >= 40) {
+                    sb.append("… (truncated)\n");
+                    return sb.toString();
+                }
+                OntologyRelationship rel = e.getValue();
+                String joinText =
+                        rel.getJoin() != null
+                                ? rel.getJoin().stream()
+                                        .map(
+                                                j ->
+                                                        j.getOrDefault("left", "?")
+                                                                + "="
+                                                                + j.getOrDefault("right", "?"))
+                                        .collect(java.util.stream.Collectors.joining(", "))
+                                : "?";
+                sb.append(rel.getFrom())
+                        .append('.')
+                        .append(joinText)
+                        .append(" ↔ ")
+                        .append(rel.getTo());
+                if (rel.getCardinality() != null) {
+                    sb.append(" [").append(rel.getCardinality()).append(']');
+                }
+                sb.append('\n');
+                lineCount++;
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Full definition of a single ontology object: attributes, relation edges with JOIN
+     * suggestions, and derived SQL (if the object maps to a derived table). Name/label fuzzy
+     * matching; returns candidate list when multiple match.
+     */
+    @Override
+    public String ontologyModelText(
+            String ownerId, java.util.List<String> onlyGroups, String objectName) {
+        OntologyService svc = ontologyServiceProvider.getIfAvailable();
+        if (svc == null || ownerId == null || objectName == null || objectName.isBlank()) {
+            return null;
+        }
+        java.util.Set<String> want =
+                onlyGroups == null || onlyGroups.isEmpty()
+                        ? null
+                        : new java.util.HashSet<>(onlyGroups);
+        String query = objectName.toLowerCase();
+
+        for (DatasetGroupEntity g : groupRepository.findByOwnerIdOrderByCreatedAtDesc(ownerId)) {
+            if (want != null && !want.contains(g.getId())) {
+                continue;
+            }
+            java.util.Optional<OntologyModel> opt = svc.getOntology(ownerId, g.getId());
+            if (opt.isEmpty()) {
+                continue;
+            }
+            OntologyModel model = opt.get();
+            // Find matching object (exact name, then label, then contains)
+            OntologyObject hit = null;
+            String hitKey = null;
+            List<String> candidates = new ArrayList<>();
+            for (Map.Entry<String, OntologyObject> e : model.getObjects().entrySet()) {
+                OntologyObject obj = e.getValue();
+                candidates.add(e.getKey());
+                if (e.getKey().equalsIgnoreCase(objectName)
+                        || (obj.getLabel() != null
+                                && obj.getLabel().equalsIgnoreCase(objectName))) {
+                    hit = obj;
+                    hitKey = e.getKey();
+                    break;
+                }
+            }
+            if (hit == null) {
+                // Fuzzy: contains
+                for (Map.Entry<String, OntologyObject> e : model.getObjects().entrySet()) {
+                    OntologyObject obj = e.getValue();
+                    if (e.getKey().toLowerCase().contains(query)
+                            || (obj.getLabel() != null
+                                    && obj.getLabel().toLowerCase().contains(query))) {
+                        hit = obj;
+                        hitKey = e.getKey();
+                        break;
+                    }
+                }
+            }
+            if (hit == null) {
+                continue; // try next group
+            }
+
+            StringBuilder sb = new StringBuilder();
+            sb.append("## ").append(hit.getLabel() != null ? hit.getLabel() : hitKey).append('\n');
+            sb.append("对象名: ").append(hitKey).append('\n');
+            if (hit.getTable() != null) {
+                sb.append("物理表: ").append(hit.getTable()).append('\n');
+            }
+            sb.append("类型: ")
+                    .append(hit.getKind() != null ? hit.getKind() : "dimension")
+                    .append('\n');
+            if (hit.getDescription() != null) {
+                sb.append("描述: ").append(hit.getDescription()).append('\n');
+            }
+            if (hit.getIdentity() != null) {
+                sb.append("身份键: ").append(hit.getIdentity()).append('\n');
+            }
+
+            // Properties table
+            if (!hit.getProperties().isEmpty()) {
+                sb.append("\n### 属性\n");
+                for (Map.Entry<String, ObjectProperty> pe : hit.getProperties().entrySet()) {
+                    ObjectProperty prop = pe.getValue();
+                    sb.append("- ").append(pe.getKey());
+                    if (prop.getColumn() != null && !prop.getColumn().equals(pe.getKey())) {
+                        sb.append(" (column: ").append(prop.getColumn()).append(')');
+                    }
+                    sb.append(" : ").append(prop.getType() != null ? prop.getType() : "string");
+                    if (prop.getLabel() != null && !prop.getLabel().equals(pe.getKey())) {
+                        sb.append(" — ").append(prop.getLabel());
+                    }
+                    sb.append('\n');
+                }
+            }
+
+            // Relation edges + JOIN suggestions
+            boolean hasRels = false;
+            for (OntologyRelationship rel : model.getRelationships().values()) {
+                if (hitKey.equals(rel.getFrom()) || hitKey.equals(rel.getTo())) {
+                    if (!hasRels) {
+                        sb.append("\n### 关系\n");
+                        hasRels = true;
+                    }
+                    boolean isSource = hitKey.equals(rel.getFrom());
+                    String other = isSource ? rel.getTo() : rel.getFrom();
+                    sb.append(isSource ? "→ " : "← ").append(other);
+                    if (rel.getCardinality() != null) {
+                        sb.append(" [").append(rel.getCardinality()).append(']');
+                    }
+                    if (rel.getLabel() != null) {
+                        sb.append(" (").append(rel.getLabel()).append(')');
+                    }
+                    sb.append('\n');
+                    // JOIN suggestion
+                    if (rel.getJoin() != null && isSource) {
+                        OntologyObject otherObj = model.getObjects().get(other);
+                        if (otherObj != null
+                                && hit.getTable() != null
+                                && otherObj.getTable() != null) {
+                            for (Map<String, String> j : rel.getJoin()) {
+                                sb.append("  JOIN ")
+                                        .append(otherObj.getTable())
+                                        .append(" ON ")
+                                        .append(hit.getTable())
+                                        .append('.')
+                                        .append(j.getOrDefault("left", "?"))
+                                        .append(" = ")
+                                        .append(otherObj.getTable())
+                                        .append('.')
+                                        .append(j.getOrDefault("right", "?"))
+                                        .append('\n');
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Derived SQL (if sourceFileName starts with "manifest-derived:")
+            List<DatasetEntity> datasets = repository.findByOwnerIdOrderByCreatedAtDesc(ownerId);
+            for (DatasetEntity ds : datasets) {
+                if (hitKey.equals(ds.getName())
+                        && ds.getSourceFileName() != null
+                        && ds.getSourceFileName().startsWith("manifest-derived:")
+                        && ds.getSourceSQL() != null) {
+                    sb.append("\n### 派生逻辑 (sourceSQL)\n");
+                    sb.append("```sql\n").append(ds.getSourceSQL()).append("\n```\n");
+                    break;
+                }
+            }
+
+            return sb.toString();
+        }
+        return null;
+    }
+
+    /**
+     * Non-blocking ontology refresh. Fires after ingest/associate/saveKnowledge/delete so the
+     * ontology always reflects the current knowledge-base state. Failures are logged but never
+     * propagate — ontology is a secondary concern and must not break the dataset mutation.
+     *
+     * @param ownerId may be null (e.g. saveKnowledge path); resolved from the group when absent.
+     */
+    private void refreshOntology(String groupId, String ownerId) {
+        try {
+            OntologyService svc = ontologyServiceProvider.getIfAvailable();
+            if (svc == null) {
+                return;
+            }
+            String owner = ownerId;
+            if (owner == null) {
+                owner =
+                        groupRepository
+                                .findById(groupId)
+                                .map(DatasetGroupEntity::getOwnerId)
+                                .orElse(null);
+            }
+            if (owner == null) {
+                return;
+            }
+            // 用户显式上传的本体（origin=uploaded）优先，数据集变化触发的自动生成不覆盖它。
+            if (svc.hasUploadedOntology(owner, groupId)) {
+                return;
+            }
+            svc.autoGenerateModel(owner, groupId, null, null);
+        } catch (Exception e) {
+            log.warn(
+                    "DatasetService: ontology auto-refresh failed for group {} (non-fatal): {}",
+                    groupId,
+                    e.getMessage());
+        }
     }
 }

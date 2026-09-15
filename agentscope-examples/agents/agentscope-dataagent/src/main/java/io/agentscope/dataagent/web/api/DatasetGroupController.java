@@ -22,10 +22,13 @@ import io.agentscope.dataagent.dataset.GraphDto;
 import io.agentscope.dataagent.dataset.KnowledgeGraphService;
 import io.agentscope.dataagent.dataset.SchemaRelationInferrer;
 import io.agentscope.dataagent.dataset.parser.DocxDescriptionExtractor;
+import io.agentscope.dataagent.ontology.source.ManifestImportService;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetRelationEntity;
 import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -47,6 +50,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -64,23 +68,34 @@ public class DatasetGroupController {
     private final DatasetGroupService groupService;
     private final DatasetService datasetService;
     private final KnowledgeGraphService knowledgeGraphService;
+    private final ManifestImportService manifestImportService;
 
     public DatasetGroupController(
             DatasetGroupService groupService,
             DatasetService datasetService,
-            KnowledgeGraphService knowledgeGraphService) {
+            KnowledgeGraphService knowledgeGraphService,
+            ManifestImportService manifestImportService) {
         this.groupService = groupService;
         this.datasetService = datasetService;
         this.knowledgeGraphService = knowledgeGraphService;
+        this.manifestImportService = manifestImportService;
     }
 
     public record GroupVO(
-            String id, String name, String description, int datasetCount, String createdAt) {}
+            String id,
+            String name,
+            String description,
+            int datasetCount,
+            boolean hasDescription,
+            String createdAt) {}
 
     public record CreateGroupRequest(String name, String description) {}
 
     public record GroupDetailVO(
-            GroupVO group, List<DatasetController.DatasetVO> datasets, String knowledge) {}
+            GroupVO group,
+            List<DatasetController.DatasetVO> datasets,
+            String knowledge,
+            String manifestJson) {}
 
     @PostMapping
     public Mono<GroupVO> create(@RequestBody CreateGroupRequest req, Authentication auth) {
@@ -130,7 +145,8 @@ public class DatasetGroupController {
                                                                     d,
                                                                     datasetService.readColumns(d)))
                                             .toList(),
-                                    datasetService.knowledgeText(id));
+                                    datasetService.knowledgeText(id),
+                                    group.getManifestJson());
                         })
                 .subscribeOn(Schedulers.boundedElastic())
                 .onErrorMap(this::toStatus);
@@ -250,6 +266,101 @@ public class DatasetGroupController {
         return a.compareTo(b) <= 0 ? a + "|" + b : b + "|" + a;
     }
 
+    /**
+     * 保存数据描述文件（sources.json），存储到知识库实体中。
+     */
+    @PutMapping(value = "/{id}/description", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Mono<Map<String, Object>> saveDescription(
+            @PathVariable String id, @RequestPart("file") FilePart file, Authentication auth) {
+        String userId = (String) auth.getPrincipal();
+        return toBytes(file)
+                .flatMap(
+                        bytes ->
+                                Mono.fromCallable(
+                                                () -> {
+                                                    DatasetGroupEntity group =
+                                                            groupService.getGroup(userId, id);
+                                                    String jsonText =
+                                                            new String(
+                                                                    bytes, StandardCharsets.UTF_8);
+                                                    group.setManifestJson(jsonText);
+                                                    group.setUpdatedAt(java.time.Instant.now());
+                                                    groupService.saveGroup(group);
+                                                    return Map.<String, Object>of(
+                                                            "name",
+                                                            file.filename(),
+                                                            "size",
+                                                            bytes.length,
+                                                            "saved",
+                                                            true);
+                                                })
+                                        .subscribeOn(Schedulers.boundedElastic()))
+                .doOnError(
+                        e ->
+                                log.warn(
+                                        "KB description save failed for {}: {}",
+                                        id,
+                                        e.getMessage(),
+                                        e))
+                .onErrorMap(this::toStatus);
+    }
+
+    /**
+     * 获取已保存的数据描述文件内容。
+     */
+    @GetMapping("/{id}/description")
+    public Mono<Map<String, Object>> getDescription(@PathVariable String id, Authentication auth) {
+        String userId = (String) auth.getPrincipal();
+        return Mono.fromCallable(
+                        () -> {
+                            DatasetGroupEntity group = groupService.getGroup(userId, id);
+                            Map<String, Object> result = new java.util.HashMap<>();
+                            result.put("content", group.getManifestJson());
+                            result.put(
+                                    "hasDescription",
+                                    group.getManifestJson() != null
+                                            && !group.getManifestJson().isBlank());
+                            return result;
+                        })
+                .subscribeOn(Schedulers.boundedElastic())
+                .onErrorMap(this::toStatus);
+    }
+
+    /**
+     * 上传数据文件（Excel），使用已保存的数据描述进行建表。
+     * 有描述时按描述建表（无前缀）；无描述时按 Excel 列名建表。
+     */
+    @PostMapping(value = "/{id}/upload-data", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Mono<ManifestImportService.ImportSummary> uploadData(
+            @PathVariable String id,
+            @RequestPart("files") List<FilePart> files,
+            Authentication auth) {
+        String userId = (String) auth.getPrincipal();
+        return collectFiles(files)
+                .flatMap(
+                        fileMap ->
+                                Mono.fromCallable(
+                                                () -> {
+                                                    DatasetGroupEntity group =
+                                                            groupService.getGroup(userId, id);
+                                                    String manifestJson = group.getManifestJson();
+                                                    if (manifestJson == null
+                                                            || manifestJson.isBlank()) {
+                                                        throw new DatasetException(
+                                                                "未保存数据描述文件，请先上传 sources.json", 400);
+                                                    }
+                                                    return manifestImportService.importManifest(
+                                                            userId,
+                                                            id,
+                                                            manifestJson,
+                                                            fileMap,
+                                                            true);
+                                                })
+                                        .subscribeOn(Schedulers.boundedElastic()))
+                .doOnError(e -> log.warn("KB data upload failed for {}: {}", id, e.getMessage(), e))
+                .onErrorMap(this::toStatus);
+    }
+
     /** Associates existing tables of an external data source into this KB as read-only datasets. */
     @PostMapping("/{id}/associate")
     public Mono<List<DatasetController.DatasetVO>> associate(
@@ -278,12 +389,72 @@ public class DatasetGroupController {
     public record AssociateRequest(
             String dataSourceId, String schema, List<String> tables, Boolean sampling) {}
 
+    /**
+     * 导入本体清单（sources.json）及其关联的 Excel/CSV 文件。批次作为数据集入库，
+     * 派生表执行 SQL 物化，关系声明写入结构化关系表。
+     */
+    @PostMapping(value = "/{id}/import-manifest", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Mono<ManifestImportService.ImportSummary> importManifest(
+            @PathVariable String id,
+            @RequestPart("manifest") FilePart manifest,
+            @RequestPart("files") List<FilePart> files,
+            Authentication auth) {
+        String userId = (String) auth.getPrincipal();
+        return toBytes(manifest)
+                .flatMap(
+                        manifestBytes -> {
+                            String jsonText = new String(manifestBytes, StandardCharsets.UTF_8);
+                            return collectFiles(files)
+                                    .flatMap(
+                                            fileMap ->
+                                                    Mono.fromCallable(
+                                                                    () -> {
+                                                                        groupService.getGroup(
+                                                                                userId, id);
+                                                                        return manifestImportService
+                                                                                .importManifest(
+                                                                                        userId, id,
+                                                                                        jsonText,
+                                                                                        fileMap);
+                                                                    })
+                                                            .subscribeOn(
+                                                                    Schedulers.boundedElastic()));
+                        })
+                .doOnError(
+                        e ->
+                                log.warn(
+                                        "KB manifest import failed for {}: {}",
+                                        id,
+                                        e.getMessage(),
+                                        e))
+                .onErrorMap(this::toStatus);
+    }
+
+    private Mono<Map<String, InputStream>> collectFiles(List<FilePart> parts) {
+        if (parts == null || parts.isEmpty()) {
+            return Mono.just(Map.of());
+        }
+        return Flux.fromIterable(parts)
+                .flatMap(
+                        part ->
+                                toBytes(part)
+                                        .map(
+                                                bytes ->
+                                                        Map.entry(
+                                                                part.filename(),
+                                                                (InputStream)
+                                                                        new ByteArrayInputStream(
+                                                                                bytes))))
+                .collectMap(Map.Entry::getKey, Map.Entry::getValue, HashMap::new);
+    }
+
     private GroupVO toVO(DatasetGroupEntity g, int datasetCount) {
         return new GroupVO(
                 g.getId(),
                 g.getName(),
                 g.getDescription(),
                 datasetCount,
+                g.getManifestJson() != null && !g.getManifestJson().isBlank(),
                 g.getCreatedAt() == null ? null : g.getCreatedAt().toString());
     }
 

@@ -20,11 +20,13 @@ import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -107,7 +109,7 @@ public class TableProvisioner {
                 ddl.append(", ");
             }
         }
-        ddl.append(") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        ddl.append(")").append(engineSuffix());
         try (Connection c = connect();
                 Statement st = c.createStatement()) {
             st.execute(ddl.toString());
@@ -120,6 +122,77 @@ public class TableProvisioner {
                             + ": "
                             + e.getMessage(),
                     e);
+        }
+    }
+
+    /**
+     * Probe the column metadata of a derived SQL without materialising the table: wraps the SQL
+     * in {@code SELECT * FROM (<sql>) _probe LIMIT 0} so no rows are fetched. Returns the
+     * detected columns as {@link ColumnSchema} records with {@code nullable=true} (derived
+     * columns are always considered nullable by default).
+     */
+    public List<ColumnSchema> probeColumns(String sql) {
+        String probeSql = "SELECT * FROM (\n" + sql.trim() + "\n) AS _probe LIMIT 0";
+        try (Connection c = connect();
+                PreparedStatement ps = c.prepareStatement(probeSql);
+                java.sql.ResultSet rs = ps.executeQuery()) {
+            ResultSetMetaData md = rs.getMetaData();
+            int n = md.getColumnCount();
+            List<ColumnSchema> cols = new ArrayList<>(n);
+            for (int i = 1; i <= n; i++) {
+                String name = md.getColumnLabel(i);
+                String type = md.getColumnTypeName(i);
+                int precision = md.getPrecision(i);
+                int scale = md.getScale(i);
+                String sqlType = toMysqlType(type, precision, scale);
+                cols.add(new ColumnSchema(name, name, sqlType, true, null));
+            }
+            return cols;
+        } catch (SQLException e) {
+            throw new DatasetException("Failed to probe derived SQL columns: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Materialise a derived table from a SELECT statement. Uses explicit CREATE TABLE (column
+     * types derived from {@link #probeColumns}) followed by INSERT INTO ... SELECT, avoiding
+     * MySQL's CTAS type-inheritance quirks.
+     */
+    public void createDerivedTable(String table, String sql) {
+        List<ColumnSchema> cols = probeColumns(sql);
+        StringBuilder ddl = new StringBuilder();
+        ddl.append("CREATE TABLE `").append(table).append("` (");
+        for (int i = 0; i < cols.size(); i++) {
+            ColumnSchema c = cols.get(i);
+            ddl.append('`').append(c.name()).append("` ").append(c.sqlType()).append(" NULL");
+            if (i < cols.size() - 1) {
+                ddl.append(", ");
+            }
+        }
+        ddl.append(")").append(engineSuffix());
+        String insertSql =
+                "INSERT INTO `" + table + "` SELECT * FROM (\n" + sql.trim() + "\n) AS _src";
+        try (Connection c = connect();
+                Statement st = c.createStatement()) {
+            st.execute(ddl.toString());
+            st.execute(insertSql);
+        } catch (SQLException e) {
+            dropTable(table);
+            throw new DatasetException(
+                    "Failed to create derived table " + table + ": " + e.getMessage(), e);
+        }
+    }
+
+    /** Row count for a table already in the dataset store. */
+    public long countRows(String table) {
+        String sql = "SELECT COUNT(*) FROM `" + table + "`";
+        try (Connection c = connect();
+                Statement st = c.createStatement();
+                java.sql.ResultSet rs = st.executeQuery(sql)) {
+            return rs.next() ? rs.getLong(1) : 0;
+        } catch (SQLException e) {
+            log.warn("countRows({}) failed: {}", table, e.getMessage());
+            return 0;
         }
     }
 
@@ -171,6 +244,52 @@ public class TableProvisioner {
 
     private Connection connect() throws SQLException {
         return DriverManager.getConnection(props.url(), props.username(), props.password());
+    }
+
+    /**
+     * Engine suffix for CREATE TABLE DDL. H2 (used in tests) does not accept ENGINE=InnoDB;
+     * MySQL does. Explicit COLLATE ensures batch tables and derived tables share the same
+     * collation so that UNION / JOIN operations don't hit "Illegal mix of collations".
+     */
+    private String engineSuffix() {
+        return props.url().contains(":h2:")
+                ? ""
+                : " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+    }
+
+    /**
+     * Map a JDBC column type name + precision/scale to a MySQL DDL type string.
+     * Handles common MySQL 8 and H2 type names.
+     */
+    private static String toMysqlType(String jdbcType, int precision, int scale) {
+        if (jdbcType == null) {
+            return "VARCHAR(255)";
+        }
+        String upper = jdbcType.toUpperCase();
+        return switch (upper) {
+            case "BIGINT", "INT8" -> "BIGINT";
+            case "INTEGER", "INT", "INT4", "MEDIUMINT" -> "INT";
+            case "SMALLINT", "INT2" -> "SMALLINT";
+            case "TINYINT" -> precision == 1 ? "TINYINT(1)" : "TINYINT";
+            case "DECIMAL", "NUMERIC", "NUMBER" ->
+                    "DECIMAL(" + Math.max(precision, 18) + "," + Math.max(scale, 6) + ")";
+            case "DOUBLE", "FLOAT", "FLOAT8" -> "DOUBLE";
+            case "REAL", "FLOAT4" -> "FLOAT";
+            case "DATE" -> "DATE";
+            case "TIMESTAMP", "DATETIME", "TIMESTAMP WITHOUT TIME ZONE" -> "DATETIME";
+            case "TIME" -> "TIME";
+            case "BOOLEAN", "BOOL" -> "TINYINT(1)";
+            case "TEXT", "LONGTEXT", "MEDIUMTEXT", "CLOB" -> "TEXT";
+            default -> {
+                if (upper.startsWith("VARCHAR") || upper.startsWith("CHARACTER VARYING")) {
+                    yield precision > 0 ? "VARCHAR(" + precision + ")" : "VARCHAR(255)";
+                }
+                if (upper.startsWith("CHAR")) {
+                    yield precision > 0 ? "CHAR(" + precision + ")" : "CHAR(1)";
+                }
+                yield "VARCHAR(255)";
+            }
+        };
     }
 
     private Object convert(String sqlType, String v) {

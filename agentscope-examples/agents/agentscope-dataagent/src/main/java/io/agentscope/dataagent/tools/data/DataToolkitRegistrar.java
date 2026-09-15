@@ -18,6 +18,9 @@ package io.agentscope.dataagent.tools.data;
 import io.agentscope.dataagent.dataset.DatasetContextProvider;
 import io.agentscope.dataagent.dataset.KnowledgeGraphService;
 import io.agentscope.dataagent.runtime.DataAgentBootstrap;
+import io.agentscope.dataagent.semantic.service.CubeQueryToSqlConverter;
+import io.agentscope.dataagent.semantic.service.QueryHistoryService;
+import io.agentscope.dataagent.semantic.service.SemanticModelService;
 import io.agentscope.dataagent.web.persistence.jpa.ChartOptionRepository;
 import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
 import io.agentscope.harness.agent.HarnessAgent;
@@ -54,6 +57,9 @@ public class DataToolkitRegistrar {
     private final ChartOptionRepository chartOptions;
     private final KnowledgeGraphService knowledgeGraph;
     private final ConversationScopeRegistry conversationScopes;
+    private final SemanticModelService semanticModelService;
+    private final CubeQueryToSqlConverter cubeQueryConverter;
+    private final QueryHistoryService queryHistoryService;
 
     public DataToolkitRegistrar(
             DataAgentBootstrap bootstrap,
@@ -62,7 +68,10 @@ public class DataToolkitRegistrar {
             DatasetContextProvider contextProvider,
             ChartOptionRepository chartOptions,
             KnowledgeGraphService knowledgeGraph,
-            ConversationScopeRegistry conversationScopes) {
+            ConversationScopeRegistry conversationScopes,
+            SemanticModelService semanticModelService,
+            CubeQueryToSqlConverter cubeQueryConverter,
+            QueryHistoryService queryHistoryService) {
         this.bootstrap = bootstrap;
         this.registry = registry;
         this.sqlConnector = sqlConnector;
@@ -70,6 +79,9 @@ public class DataToolkitRegistrar {
         this.chartOptions = chartOptions;
         this.knowledgeGraph = knowledgeGraph;
         this.conversationScopes = conversationScopes;
+        this.semanticModelService = semanticModelService;
+        this.cubeQueryConverter = cubeQueryConverter;
+        this.queryHistoryService = queryHistoryService;
     }
 
     @PostConstruct
@@ -95,7 +107,11 @@ public class DataToolkitRegistrar {
                                     contextProvider,
                                     chartOptions,
                                     knowledgeGraph,
-                                    conversationScopes));
+                                    conversationScopes,
+                                    null,
+                                    semanticModelService,
+                                    cubeQueryConverter,
+                                    queryHistoryService));
             log.info("Registered DataAgent toolkit onto main agent '{}'", main.getName());
 
             // Register the Python sandbox-execution tool. See the class javadoc for why a

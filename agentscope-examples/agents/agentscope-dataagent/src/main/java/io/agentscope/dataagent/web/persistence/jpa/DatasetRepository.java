@@ -26,6 +26,9 @@ public interface DatasetRepository extends JpaRepository<DatasetEntity, String> 
 
     Optional<DatasetEntity> findByOwnerIdAndName(String ownerId, String name);
 
+    Optional<DatasetEntity> findByOwnerIdAndGroupIdAndName(
+            String ownerId, String groupId, String name);
+
     Optional<DatasetEntity> findBySchemaName(String schemaName);
 
     List<DatasetEntity> findByGroupId(String groupId);

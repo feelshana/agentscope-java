@@ -9,6 +9,8 @@ import CitationPanel, { DatasetRef } from './CitationPanel';
 import EmptyIllustration from './EmptyIllustration';
 import Icon from './Icon';
 import PythonCodeBlock from './PythonCodeBlock';
+import OntologyGraphView from './OntologyGraphView';
+import type { OntologyGraphData } from '../api/ontology';
 import Markdown from './Markdown';
 import { extractVegaSpec } from '../utils/charts';
 import { listDatasets, listGroups, DatasetGroup } from '../api/datasets';
@@ -163,6 +165,21 @@ function chartPayloadFromTool(t: ToolEntry): ChartPayload | null {
     if (obj && obj.chart === 'echarts' && (obj.option || obj.chartId)) return obj;
   } catch {
     /* not a chart payload */
+  }
+  return null;
+}
+
+/** Extract ontology graph payload from show_ontology_graph tool result. */
+function ontologyGraphPayload(t: ToolEntry): OntologyGraphData | null {
+  const raw = t.result ?? t.input;
+  if (!raw) return null;
+  try {
+    let v: unknown = JSON.parse(raw);
+    if (typeof v === 'string') v = JSON.parse(v);
+    const obj = v as any;
+    if (obj && obj.type === 'ontology_graph' && obj.nodes) return obj as OntologyGraphData;
+  } catch {
+    /* not an ontology payload */
   }
   return null;
 }
@@ -429,8 +446,10 @@ export default function ChatPanel({ agentId, onSessionUpdate, onTitle }: ChatPan
                 {m.tools.filter(t => !isHiddenTool(t.name)).map(t => {
                   const isChartTool = t.name.toLowerCase().includes('render_chart');
                   const isPythonTool = t.name.toLowerCase() === 'run_python';
+                  const isOntologyTool = t.name.toLowerCase().includes('show_ontology_graph');
                   const chartPayload = isChartTool ? chartPayloadFromTool(t) : null;
-                  const spec = !chartPayload ? extractVegaSpec(t.name, t.input) : null;
+                  const ontologyPayload = isOntologyTool ? ontologyGraphPayload(t) : null;
+                  const spec = !chartPayload && !ontologyPayload ? extractVegaSpec(t.name, t.input) : null;
                   // Remount when the result arrives so defaultOpen=false takes effect
                   // (React keeps the old component's state when the key is stable).
                   const key = t.id + (t.result ? '-done' : '');
@@ -482,7 +501,13 @@ export default function ChatPanel({ agentId, onSessionUpdate, onTitle }: ChatPan
                         </div>
                       )}
                       {chartPayload && <EChartsBlock payload={chartPayload} />}
-                      {!chartPayload && spec && <ChartBlock spec={spec} />}
+                      {ontologyPayload && (
+                        <OntologyGraphView
+                          data={ontologyPayload}
+                          highlight={(ontologyPayload as any).highlight}
+                        />
+                      )}
+                      {!chartPayload && !ontologyPayload && spec && <ChartBlock spec={spec} />}
                     </React.Fragment>
                   );
                 })}

@@ -59,6 +59,22 @@ public final class Identifiers {
         return cleaned.isEmpty() ? "col" : cleaned;
     }
 
+    /**
+     * Preserves the raw name for manifest-defined tables (no character stripping).
+     * Only trims whitespace, rejects blank/null, and enforces MySQL's 64-char limit.
+     * Backtick-quoting in the provisioner ensures SQL safety.
+     */
+    public static String exactName(String raw, String fallback) {
+        String s = raw == null ? "" : raw.trim();
+        if (s.isEmpty()) {
+            s = fallback == null ? "data" : fallback;
+        }
+        if (s.length() > 64) {
+            s = s.substring(0, 64);
+        }
+        return s;
+    }
+
     /** Appends {@code _2}, {@code _3}, ... to duplicates so a list of identifiers is unique. */
     public static List<String> dedupe(List<String> names) {
         Set<String> seen = new HashSet<>();

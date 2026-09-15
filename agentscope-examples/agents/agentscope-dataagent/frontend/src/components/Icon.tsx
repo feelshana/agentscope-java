@@ -28,7 +28,8 @@ export type IconName =
   | 'chart'
   | 'warn'
   | 'check'
-  | 'back';
+  | 'back'
+  | 'model';
 
 /** Lucide-style 24x24 line paths; rendered with currentColor stroke via .da-icon classes. */
 const PATHS: Record<IconName, React.ReactNode> = {
@@ -165,6 +166,15 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <path d="M19 12H5" />
       <path d="M12 19l-7-7 7-7" />
+    </>
+  ),
+  model: (
+    <>
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <rect x="14" y="14" width="7" height="7" rx="1" />
+      <path d="M10 6.5h4M6.5 10v4M17.5 10v4M10 17.5h4" />
     </>
   ),
 };

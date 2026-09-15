@@ -29,8 +29,8 @@ import java.time.Instant;
  * tableName}); this entity only records what the platform needs to list, scope and re-register
  * the dataset as an agent-visible {@code DataSource} after a restart.
  *
- * <p>{@code (ownerId, name)} is unique so a user cannot shadow an existing dataset by re-uploading
- * under the same friendly name.
+ * <p>{@code (ownerId, groupId, name)} is unique so a user cannot shadow an existing dataset by re-uploading
+ * under the same friendly name within the same knowledge base group.
  */
 @Entity
 @Table(
@@ -38,8 +38,8 @@ import java.time.Instant;
         indexes = {
             @Index(name = "ix_dataagent_dataset_owner", columnList = "owner_id"),
             @Index(
-                    name = "ix_dataagent_dataset_owner_name",
-                    columnList = "owner_id,name",
+                    name = "ix_dataagent_dataset_owner_group_name",
+                    columnList = "owner_id,group_id,name",
                     unique = true)
         })
 public class DatasetEntity {
@@ -88,13 +88,24 @@ public class DatasetEntity {
     @Column(name = "source_file_name", length = 255)
     private String sourceFileName;
 
-    /** 'upload' (file ingested into the dataset store) or 'datasource' (external table reference). */
+    /**
+     * Origin of this dataset: 'upload' (file ingested into the dataset store),
+     * 'datasource' (external table reference), or 'derived' (created by a manifest's derived SQL).
+     */
     @Column(name = "origin", length = 16)
     private String origin = "upload";
 
     /** When origin='datasource', the ExternalDataSourceEntity id this table lives in. */
     @Column(name = "external_datasource_id", length = 64)
     private String externalDataSourceId;
+
+    /**
+     * When origin='derived', the SQL that created this table (for lineage / re-import idempotency).
+     * Stored as raw text so the UI and the manifest re-import can display / reproduce it.
+     */
+    @Lob
+    @Column(name = "source_sql")
+    private String sourceSQL;
 
     public String getOrigin() {
         return origin == null ? "upload" : origin;
@@ -110,6 +121,14 @@ public class DatasetEntity {
 
     public void setExternalDataSourceId(String externalDataSourceId) {
         this.externalDataSourceId = externalDataSourceId;
+    }
+
+    public String getSourceSQL() {
+        return sourceSQL;
+    }
+
+    public void setSourceSQL(String sourceSQL) {
+        this.sourceSQL = sourceSQL;
     }
 
     @Column(name = "created_at")

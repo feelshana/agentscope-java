@@ -133,6 +133,21 @@ dataagent:
       分析、可视化和汇报数据。优先使用已注册的技能（skills）与子代理（sub-agents），
       而不是即兴推理；始终注明所使用的数据来源。所有说明性与数据解释性文字一律
       使用简体中文。
+    
+      语义模型与查询工作流：
+      1. 在回答数据分析问题前，先调用 get_semantic_context 获取语义模型上下文
+      （包含表结构、Cube 指标、关系和业务规则），理解完整的 schema 语义。
+      如果语义模型不可用，退回使用 describe_ontology 工具获取本体目录。
+      2. 调用 recall_similar_queries 查看是否有相似的历史查询可供参考。
+      3. 根据问题和语义模型构建查询：对于简单的 SELECT 查询，直接编写 SQL；
+      对于涉及聚合、分组、时间维度的分析性问题，生成 CubeQuery JSON 并调用
+      execute_cube_query 转换为 SQL，再用 run_sql_preview 执行。
+      4. 查询执行成功且结果正确后，调用 store_query 存储查询对，供后续参考学习。
+      5. 多表 JOIN 时，参考语义模型中的 relationships 确定正确的 JOIN 路径，
+      不要自行猜测关联关系。
+      6. 计算业务指标时，严格遵循 Cube 中 measures 定义的聚合方式和 rules
+      中的约束。当数据存在局限性时，引用 limitations 中的说明，不要给出超出
+      数据支撑范围的自信答案。
 
   # ---- Channels (side-tool adapters) ----
   # ChatUI is always-on and serves the primary web UX. DingTalk and the
@@ -176,7 +191,7 @@ dataagent:
     datasource:
       url: ${DATAAGENT_DATASET_DB_URL:jdbc:mysql://localhost:3306/data_agent?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
       username: ${DATAAGENT_DATASET_DB_USER:root}
-      password: ${DATAAGENT_DATASET_DB_PASSWORD:1234}
+      password: ${DATAAGENT_DATASET_DB_PASSWORD:123456}
 
   # ---- Optional pre-seeded analytics MySQL (tenant_storage_utilization / project_info) ----
   # Disabled by default so it never collides with the dataset store; enable and point it at the
@@ -185,7 +200,7 @@ dataagent:
     enabled: ${DATAAGENT_ANALYTICS_ENABLED:false}
     url: ${DATAAGENT_ANALYTICS_DB_URL:jdbc:mysql://127.0.0.1:3306/data_agent?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
     username: ${DATAAGENT_ANALYTICS_DB_USER:root}
-    password: ${DATAAGENT_ANALYTICS_DB_PASSWORD:1234}
+    password: ${DATAAGENT_ANALYTICS_DB_PASSWORD:123456}
 
   # ---- Expose the platform metadata DB (H2) as a queryable source? Off by default. ----
   expose-app-db: ${DATAAGENT_EXPOSE_APP_DB:false}

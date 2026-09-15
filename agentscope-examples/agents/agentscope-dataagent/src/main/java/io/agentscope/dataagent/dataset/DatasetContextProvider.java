@@ -40,4 +40,16 @@ public interface DatasetContextProvider {
 
     /** Same as {@link #relationsFor(String, String)} but limited to the given knowledge-base ids. */
     String relationsFor(String ownerId, String table, java.util.List<String> onlyGroups);
+
+    /**
+     * Compact ontology summary (object catalog + relation edges) for the owner's KBs, or empty.
+     * Designed to fit within ~40 lines so it can be injected into agent context without bloating.
+     */
+    String ontologySummary(String ownerId, java.util.List<String> onlyGroups);
+
+    /**
+     * Structured lookup: one object's full definition by name/label, or null.
+     * Returns attributes, relation edges, JOIN suggestions, and derived SQL (if applicable).
+     */
+    String ontologyModelText(String ownerId, java.util.List<String> onlyGroups, String objectName);
 }

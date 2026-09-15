@@ -117,6 +117,13 @@
             <artifactId>poi-ooxml</artifactId>
         </dependency>
 
+        <!-- Alibaba EasyExcel: memory-efficient SAX streaming Excel reader for large files -->
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>easyexcel</artifactId>
+            <version>3.3.4</version>
+        </dependency>
+
         <!-- Spring Boot WebFlux (reactive HTTP + SSE) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

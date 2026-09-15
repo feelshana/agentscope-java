@@ -4,7 +4,10 @@ import AssociateTablesModal from '../../components/AssociateTablesModal';
 import DocDetailView from '../../components/DocDetailView';
 import EmptyIllustration from '../../components/EmptyIllustration';
 import KnowledgeGraphView from '../../components/KnowledgeGraphView';
+import ObjectCatalogView from '../../components/ObjectCatalogView';
+import OntologyGraphView from '../../components/OntologyGraphView';
 import SchemaTreeView from '../../components/SchemaTreeView';
+import SemanticGraphView from '../../components/SemanticGraphView';
 import Icon, { IconName } from '../../components/Icon';
 import {
   deleteDataset,
@@ -12,9 +15,16 @@ import {
   GroupDetail,
   uploadDataset,
   uploadKnowledge,
+  saveDescription,
+  getDescription,
+  uploadDataWithDescription,
 } from '../../api/datasets';
+import {
+  getOntologyModel,
+} from '../../api/ontology';
+import { getSemanticGraph, uploadSemanticModel, uploadInstructions, getInstructions } from '../../api/semantic';
 
-type View = 'files' | 'graph' | 'tree' | 'doc';
+type View = 'files' | 'model' | 'graph' | 'tree' | 'doc';
 
 interface UploadStatus {
   name: string;
@@ -31,6 +41,7 @@ const STATUS_LABEL: Record<UploadStatus['status'], string> = {
 
 const NAV_ITEMS: { key: View; icon: IconName; label: string }[] = [
   { key: 'files', icon: 'list', label: '文件' },
+  { key: 'model', icon: 'model', label: '对象目录' },
   { key: 'graph', icon: 'graph', label: '知识图谱' },
   { key: 'tree', icon: 'table', label: '树结构目录' },
   { key: 'doc', icon: 'file', label: '关系说明文档' },
@@ -51,8 +62,34 @@ export default function DatasetGroupPage() {
   const [dragOver, setDragOver] = useState(false);
   const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
   const [associateOpen, setAssociateOpen] = useState(false);
+  /** 当前本体来源：'uploaded'（用户上传 model.yaml）/'auto-generated'（自动生成）/null（无本体）。 */
+  const [ontologyOrigin, setOntologyOrigin] = useState<string | null>(null);
+  /** 是否存在语义模型（优先于本体图谱展示）。 */
+  const [hasSemanticModel, setHasSemanticModel] = useState(false);
+  /** 是否已上传 instructions.md。 */
+  const [hasInstructions, setHasInstructions] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const knowledgeRef = useRef<HTMLInputElement | null>(null);
+  const semanticMdlRef = useRef<HTMLInputElement | null>(null);
+  const instructionsRef = useRef<HTMLInputElement | null>(null);
+  const manifestRef = useRef<HTMLInputElement | null>(null);
+  const dataFilesRef = useRef<HTMLInputElement | null>(null);
+  /** 是否已保存数据描述（来自后端）。 */
+  const [hasDescription, setHasDescription] = useState(false);
+  /** 已保存的描述内容（用于预览）。 */
+  const [descriptionContent, setDescriptionContent] = useState<string | null>(null);
+  /** JSON 预览弹窗内容。 */
+  const [jsonPreview, setJsonPreview] = useState<{ title: string; content: string } | null>(null);
+
+  // 从后端加载描述状态
+  useEffect(() => {
+    getDescription(groupId)
+      .then(info => {
+        setHasDescription(info.hasDescription);
+        setDescriptionContent(info.content);
+      })
+      .catch(() => { /* ignore */ });
+  }, [groupId]);
 
   const view = (searchParams.get('view') as View) || 'files';
   const setView = (v: View) => {
@@ -67,6 +104,27 @@ export default function DatasetGroupPage() {
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    }
+    // 同步本体来源：上传/关联/导入清单后本体状态可能变化，决定知识图谱视图展示哪种图谱
+    try {
+      const m = await getOntologyModel(groupId);
+      setOntologyOrigin(m?.origin ?? null);
+    } catch {
+      setOntologyOrigin(null);
+    }
+    // 检查是否存在语义模型
+    try {
+      const sg = await getSemanticGraph(groupId);
+      setHasSemanticModel((sg?.nodes?.length ?? 0) > 0);
+    } catch {
+      setHasSemanticModel(false);
+    }
+    // 检查是否存在 instructions
+    try {
+      const inst = await getInstructions(groupId);
+      setHasInstructions(inst.hasInstructions);
+    } catch {
+      setHasInstructions(false);
     }
   }, [groupId]);
 
@@ -86,27 +144,77 @@ export default function DatasetGroupPage() {
 
   async function uploadFiles(files: FileList | File[]) {
     const list = Array.from(files);
+    // 如果已保存描述，走 manifest 导入流程（按描述建表，无前缀），逐文件上传
+    if (hasDescription) {
+      const dataFiles = list.filter(f => /\.(xlsx|xls|csv)$/i.test(f.name));
+      if (dataFiles.length > 0) {
+        // 填充状态队列，让用户看到进度
+        setUploadStatuses(prev => [
+          ...prev,
+          ...dataFiles.map(f => ({ name: f.name, status: 'queued' as const })),
+        ]);
+        setBusy(true);
+        setError(null);
+        try {
+          // 逐文件上传：每个文件完成上传→建表→入库后立即更新状态并刷新数据集列表
+          for (const f of dataFiles) {
+            patchStatus(f.name, { status: 'uploading' });
+            try {
+              await uploadDataWithDescription(groupId, f);
+              patchStatus(f.name, { status: 'ready' });
+              // 每个文件完成后立即刷新数据集列表，让新表实时展示
+              await refresh();
+            } catch (fileErr) {
+              const msg = fileErr instanceof Error ? fileErr.message : String(fileErr);
+              patchStatus(f.name, { status: 'failed', error: msg });
+            }
+          }
+        } finally {
+          setBusy(false);
+        }
+        return;
+      }
+    }
     setUploadStatuses(prev => [
       ...prev,
       ...list.map(f => ({ name: f.name, status: 'queued' as const })),
     ]);
     setBusy(true);
     setError(null);
-    for (const f of list) {
-      patchStatus(f.name, { status: 'uploading' });
-      const name = f.name.replace(/\.[^.]+$/, '');
-      try {
-        await uploadDataset(groupId, name, f);
-        patchStatus(f.name, { status: 'ready' });
-      } catch (e) {
-        patchStatus(f.name, {
-          status: 'failed',
-          error: e instanceof Error ? e.message : String(e),
-        });
+    try {
+      for (const f of list) {
+        patchStatus(f.name, { status: 'uploading' });
+        const name = f.name.replace(/\.[^.]+$/, '');
+        try {
+          await uploadDataset(groupId, name, f);
+          patchStatus(f.name, { status: 'ready' });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          // 同名冲突：询问是否覆盖，确认后删旧重建
+          if (
+            msg.includes('already exists') &&
+            window.confirm(
+              `数据集「${name}」已存在，是否覆盖？覆盖将删除原数据集（含物理表）并重新导入。`,
+            )
+          ) {
+            try {
+              await uploadDataset(groupId, name, f, undefined, true);
+              patchStatus(f.name, { status: 'ready' });
+            } catch (e2) {
+              patchStatus(f.name, {
+                status: 'failed',
+                error: e2 instanceof Error ? e2.message : String(e2),
+              });
+            }
+          } else {
+            patchStatus(f.name, { status: 'failed', error: msg });
+          }
+        }
       }
+    } finally {
+      setBusy(false);
+      await refresh();
     }
-    setBusy(false);
-    await refresh();
   }
 
   async function handleKnowledge(f: File) {
@@ -136,7 +244,94 @@ export default function DatasetGroupPage() {
     }
   }
 
+  /** 上传语义模型 mdl.json。 */
+  async function handleUploadSemanticMdl(f: File) {
+    setBusy(true);
+    setError(null);
+    try {
+      await uploadSemanticModel(f, groupId);
+      alert(`语义模型上传成功：${f.name}`);
+      await refresh();
+      setView('graph');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** 上传并保存数据描述文件（sources.json）。 */
+  async function handleSaveDescription(file: File) {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await saveDescription(groupId, file);
+      setHasDescription(true);
+      // 重新获取内容用于预览
+      const info = await getDescription(groupId);
+      setDescriptionContent(info.content);
+      alert(`数据描述文件已保存：${result.name}`);
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** 上传数据文件，使用已保存的描述进行建表（无前缀）。逐文件上传，每个完成后立即更新状态。 */
+  async function handleUploadData(files: File[]) {
+    // 填充状态队列
+    setUploadStatuses(prev => [
+      ...prev,
+      ...files.map(f => ({ name: f.name, status: 'queued' as const })),
+    ]);
+    setBusy(true);
+    setError(null);
+    try {
+      // 逐文件上传：每个文件完成上传→建表→入库后立即更新状态并刷新数据集列表
+      for (const f of files) {
+        patchStatus(f.name, { status: 'uploading' });
+        try {
+          const summary = await uploadDataWithDescription(groupId, f);
+          patchStatus(f.name, { status: 'ready' });
+          // 每个文件完成后立即刷新数据集列表
+          await refresh();
+          const parts: string[] = [];
+          if (summary.batchesImported > 0) parts.push(`${summary.batchesImported} 批次导入`);
+          if (summary.derivedCreated > 0) parts.push(`${summary.derivedCreated} 派生表`);
+          if (summary.warnings.length > 0) parts.push(`${summary.warnings.length} 条警告`);
+          console.log(`${f.name} 导入完成：${parts.join('、') || '无变更'}`);
+        } catch (fileErr) {
+          const msg = fileErr instanceof Error ? fileErr.message : String(fileErr);
+          patchStatus(f.name, { status: 'failed', error: msg });
+        }
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** 上传 instructions.md（业务规则 + 数据限制）。 */
+  async function handleUploadInstructions(f: File) {
+    setBusy(true);
+    setError(null);
+    try {
+      await uploadInstructions(f, groupId);
+      alert(`业务规则文档上传成功：${f.name}`);
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const fileCount = (detail?.datasets.length ?? 0) + (detail?.knowledge ? 1 : 0);
+  // 上传过 model.yaml 或存在数据源关联表时，知识图谱视图展示本体图谱；其余场景保持语义知识图谱
+  const useOntologyGraph =
+    ontologyOrigin === 'uploaded' ||
+    (detail?.datasets ?? []).some(d => d.origin === 'datasource');
 
   return (
     <div style={{ display: 'flex', height: '100%', minHeight: 0 }}>
@@ -265,6 +460,51 @@ export default function DatasetGroupPage() {
             e.target.value = '';
           }}
         />
+        <input
+          ref={semanticMdlRef}
+          type="file"
+          accept=".json"
+          style={{ display: 'none' }}
+          onChange={e => {
+            const f = e.target.files?.[0];
+            if (f) handleUploadSemanticMdl(f);
+            e.target.value = '';
+          }}
+        />
+        <input
+          ref={instructionsRef}
+          type="file"
+          accept=".md,.txt"
+          style={{ display: 'none' }}
+          onChange={e => {
+            const f = e.target.files?.[0];
+            if (f) handleUploadInstructions(f);
+            e.target.value = '';
+          }}
+        />
+        <input
+          ref={manifestRef}
+          type="file"
+          accept=".json,.yaml,.yml"
+          style={{ display: 'none' }}
+          onChange={e => {
+            const f = e.target.files?.[0];
+            if (f) handleSaveDescription(f);
+            e.target.value = '';
+          }}
+        />
+        <input
+          ref={dataFilesRef}
+          type="file"
+          multiple
+          accept=".xlsx,.xls,.csv"
+          style={{ display: 'none' }}
+          onChange={e => {
+            const files = e.target.files ? Array.from(e.target.files) : [];
+            if (files.length > 0) handleUploadData(files);
+            e.target.value = '';
+          }}
+        />
       </div>
 
       {/* ---------- content ---------- */}
@@ -280,9 +520,55 @@ export default function DatasetGroupPage() {
       >
         {view === 'files' && (
           <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* 方式一：两步式导入（推荐）—— ① 上传描述 ② 上传数据 */}
+            <div className="da-card">
+              <div className="da-h2" style={{ marginBottom: 6 }}>按数据描述导入（推荐）</div>
+              <div className="da-small" style={{ marginBottom: 12 }}>
+                先上传 sources.json 描述文件，再上传对应的 Excel 数据文件。
+                系统将按描述内容执行：按指定表名建表（无前缀） → 入数据 → 生成衍生表 → 入衍生数据。
+              </div>
+
+              {/* Step 1: 上传描述文件 */}
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
+                <span className="da-small" style={{ minWidth: 24, fontWeight: 600 }}>①</span>
+                <button className="da-btn" onClick={() => manifestRef.current?.click()}>
+                  <Icon name="upload" size="sm" /> 上传数据描述 (sources.json)
+                </button>
+                {hasDescription && descriptionContent && (
+                  <>
+                    <span className="da-badge da-badge-primary">已保存</span>
+                    <button
+                      className="da-btn da-btn-sm"
+                      onClick={() => setJsonPreview({ title: 'sources.json', content: descriptionContent })}
+                    >
+                      预览
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {/* Step 2: 上传数据文件 */}
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span className="da-small" style={{ minWidth: 24, fontWeight: 600 }}>②</span>
+                {hasDescription ? (
+                  <>
+                    <button className="da-btn da-btn-primary" onClick={() => dataFilesRef.current?.click()}>
+                      <Icon name="upload" size="sm" /> 上传数据文件 (.xlsx)
+                    </button>
+                    <span className="da-small">按已保存的描述建表，表名和列名完全按描述文件</span>
+                  </>
+                ) : (
+                  <span className="da-small" style={{ color: 'var(--da-muted, #999)' }}>
+                    请先上传数据描述文件，再上传数据文件
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* 方式二：直接上传（简单模式，表名 = 文件名） */}
             <div
               className="da-dropzone"
-              style={dragOver ? { borderColor: 'var(--da-primary)', background: 'var(--da-primary-subtle)' } : undefined}
+              style={dragOver ? { borderColor: 'var(--da-primary)', background: 'var(--da-primary-subtle)' } : hasDescription ? { borderColor: 'var(--da-primary)', borderStyle: 'dashed' } : undefined}
               onClick={() => fileRef.current?.click()}
               onDragOver={e => {
                 e.preventDefault();
@@ -295,9 +581,33 @@ export default function DatasetGroupPage() {
                 if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files);
               }}
             >
-              <div style={{ fontWeight: 600, color: 'var(--da-text)' }}>点击上传或拖入本地文档</div>
-              <div style={{ marginTop: 6 }}>支持 .xlsx / .xls / .csv，可多选；每个文件成为一张可问数的表</div>
+              {hasDescription ? (
+                <>
+                  <div style={{ fontWeight: 600, color: 'var(--da-primary)' }}>上传数据文件（按描述建表）</div>
+                  <div style={{ marginTop: 6 }}>已保存数据描述，上传 Excel 后将按描述中的表名和列名建表</div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontWeight: 600, color: 'var(--da-text)' }}>直接上传数据文件</div>
+                  <div style={{ marginTop: 6 }}>点击上传或拖入 .xlsx / .xls / .csv，可多选；表名将使用文件名</div>
+                </>
+              )}
               {busy && <div style={{ color: 'var(--da-primary)', marginTop: 8 }}>处理中…</div>}
+            </div>
+
+            {/* 语义模型（可选） */}
+            <div className="da-card">
+              <div className="da-h2" style={{ marginBottom: 8 }}>语义模型（可选）</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button className="da-btn" onClick={() => semanticMdlRef.current?.click()}>
+                  <Icon name="upload" size="sm" /> 上传语义模型 (mdl.json)
+                  {hasSemanticModel && <span className="da-badge da-badge-primary" style={{ marginLeft: 6 }}>已配置</span>}
+                </button>
+                <button className="da-btn" onClick={() => instructionsRef.current?.click()}>
+                  <Icon name="upload" size="sm" /> 上传业务规则 (instructions.md)
+                  {hasInstructions && <span className="da-badge da-badge-primary" style={{ marginLeft: 6 }}>已配置</span>}
+                </button>
+              </div>
             </div>
 
             <div className="da-card">
@@ -337,8 +647,8 @@ export default function DatasetGroupPage() {
                           </button>
                         </td>
                         <td>
-                          <span className={d.origin === 'datasource' ? 'da-badge da-badge-primary' : 'da-badge'}>
-                            {d.origin === 'datasource' ? '数据源' : '上传'}
+                          <span className={d.origin === 'datasource' ? 'da-badge da-badge-primary' : d.origin === 'derived' ? 'da-badge' : 'da-badge'}>
+                            {d.origin === 'datasource' ? '数据源' : d.origin === 'derived' ? '派生' : '上传'}
                           </span>
                         </td>
                         <td>{d.rowCount}</td>
@@ -369,7 +679,28 @@ export default function DatasetGroupPage() {
           </div>
         )}
 
-        {view === 'graph' && <KnowledgeGraphView groupId={groupId} />}
+        {view === 'model' && <ObjectCatalogView groupId={groupId} />}
+        {view === 'graph' &&
+          (hasSemanticModel ? (
+            <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+              <div className="da-small" style={{ marginBottom: 8 }}>
+                语义模型图谱
+              </div>
+              <SemanticGraphView groupId={groupId} />
+            </div>
+          ) : useOntologyGraph ? (
+            <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+              <div className="da-small" style={{ marginBottom: 8 }}>
+                本体图谱
+                {ontologyOrigin === 'uploaded'
+                  ? '（来自上传的 model.yaml）'
+                  : '（数据源接入场景，由本体建模生成）'}
+              </div>
+              <OntologyGraphView groupId={groupId} />
+            </div>
+          ) : (
+            <KnowledgeGraphView groupId={groupId} />
+          ))}
         {view === 'tree' && <SchemaTreeView datasets={detail?.datasets ?? []} />}
         {view === 'doc' && <DocDetailView groupId={groupId} group={detail?.group ?? null} />}
       </div>
@@ -380,6 +711,44 @@ export default function DatasetGroupPage() {
           onClose={() => setAssociateOpen(false)}
           onAssociated={() => refresh()}
         />
+      )}
+
+      {jsonPreview && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0,0,0,0.4)',
+          }}
+          onClick={() => setJsonPreview(null)}
+        >
+          <div
+            style={{
+              background: 'var(--da-card-bg, #fff)', borderRadius: 8,
+              maxWidth: 720, width: '90%', maxHeight: '80vh',
+              display: 'flex', flexDirection: 'column', boxShadow: '0 4px 24px rgba(0,0,0,0.15)',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--da-border, #e5e5e5)' }}>
+              <span style={{ fontWeight: 600 }}>{jsonPreview.title}</span>
+              <button className="da-btn da-btn-sm" onClick={() => setJsonPreview(null)}>✕</button>
+            </div>
+            <pre
+              style={{
+                margin: 0, padding: 16, overflow: 'auto', flex: 1,
+                fontSize: 12, lineHeight: 1.5, fontFamily: 'monospace',
+                background: 'var(--da-app-bg, #f8f8f8)', borderRadius: '0 0 8px 8px',
+                whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+              }}
+            >
+              {(() => {
+                try { return JSON.stringify(JSON.parse(jsonPreview.content), null, 2); }
+                catch { return jsonPreview.content; }
+              })()}
+            </pre>
+          </div>
+        </div>
       )}
     </div>
   );

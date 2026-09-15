@@ -1,0 +1,338 @@
+{
+  "batches": [
+    {
+      "id": "user-list",
+      "file": "用户列表.xlsx",
+      "table": "app_user",
+      "columns": [
+        {
+          "comment": "用户ID",
+          "name": "user_id",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "账号",
+          "name": "account",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "项目",
+          "name": "projects_raw",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "公司",
+          "name": "company",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "部门",
+          "name": "department",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "职位",
+          "name": "position",
+          "type": "varchar(200)"
+        }
+      ]
+    },
+    {
+      "id": "project-master",
+      "file": "项目简称全称负责人.xlsx",
+      "table": "project",
+      "columns": [
+        {
+          "comment": "项目id",
+          "name": "project_id",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "项目名称",
+          "name": "project_name",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "项目简称",
+          "name": "short_name",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "项目创建日期",
+          "name": "created_date",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "所属工作区",
+          "name": "workspace",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "平台名称",
+          "name": "platform",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "负责人id",
+          "name": "owner_id",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "负责人分析云账号",
+          "name": "owner_account",
+          "type": "varchar(200)"
+        }
+      ]
+    },
+    {
+      "id": "click-detail",
+      "file": "点击详情数据.xlsx",
+      "table": "click_observation",
+      "time_field": "click_time",
+      "columns": [
+        {
+          "comment": "产品名称",
+          "name": "product",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "公司",
+          "name": "event_company",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "部门",
+          "name": "event_department",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "用户账号",
+          "name": "account",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "点击时间",
+          "name": "click_time",
+          "type": "varchar(50)"
+        },
+        {
+          "comment": "项目名称",
+          "name": "project_name",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "模块",
+          "name": "module_name",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "页面URL",
+          "name": "page_url",
+          "type": "varchar(2000)"
+        },
+        {
+          "comment": "访问次数(数量)",
+          "name": "visit_count",
+          "type": "bigint"
+        }
+      ]
+    },
+    {
+      "id": "report-visit",
+      "file": "报表访问明细.xlsx",
+      "table": "report_visit",
+      "time_field": "visit_time",
+      "columns": [
+        {
+          "comment": "项目名称",
+          "name": "project_name",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "报表名称",
+          "name": "asset_name",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "目录",
+          "name": "directory",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "类型",
+          "name": "asset_type",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "用户账号",
+          "name": "account",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "访问时间",
+          "name": "visit_time",
+          "type": "varchar(50)"
+        },
+        {
+          "comment": "访问id(数量)",
+          "name": "visit_count",
+          "type": "bigint"
+        },
+        {
+          "comment": "用户id(数量去重)",
+          "name": "row_uv",
+          "type": "bigint"
+        }
+      ]
+    },
+    {
+      "id": "capacity-20260906",
+      "file": "容量监控_三套汇总.xlsx",
+      "table": "capacity_snapshot",
+      "columns": [
+        {
+          "comment": "project_id",
+          "name": "project_id",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "项目名称",
+          "name": "project_name",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "记录时间",
+          "name": "record_date",
+          "type": "date_compact"
+        },
+        {
+          "comment": "总容量TB",
+          "name": "total_tb",
+          "type": "double"
+        },
+        {
+          "comment": "已用容量TB",
+          "name": "used_tb",
+          "type": "double"
+        },
+        {
+          "comment": "容量已用占比",
+          "name": "used_ratio",
+          "type": "percent"
+        },
+        {
+          "comment": "总文件数量万",
+          "name": "total_files_wan",
+          "type": "double"
+        },
+        {
+          "comment": "已用文件数量万",
+          "name": "used_files_wan",
+          "type": "double"
+        },
+        {
+          "comment": "文件已用容量占比",
+          "name": "file_ratio",
+          "type": "percent"
+        }
+      ]
+    },
+    {
+      "id": "scan-20260909",
+      "file": "各租户可优化数据-V1.xlsx",
+      "table": "table_scan",
+      "constants": {
+        "scan_date": "2026-09-09"
+      },
+      "columns": [
+        {
+          "comment": "集群",
+          "name": "cluster",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "项目名",
+          "name": "project_name",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "库",
+          "name": "db_name",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "表",
+          "name": "table_name",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "建表账号",
+          "name": "creator_account",
+          "type": "varchar(200)"
+        },
+        {
+          "comment": "表大小（GB）",
+          "name": "table_size_gb",
+          "type": "double"
+        },
+        {
+          "comment": "表文件数",
+          "name": "file_count",
+          "type": "bigint"
+        },
+        {
+          "comment": "是否近三个月未访问",
+          "name": "unvisited_3m",
+          "type": "yesno"
+        },
+        {
+          "comment": "是否未压缩",
+          "name": "uncompressed",
+          "type": "yesno"
+        },
+        {
+          "comment": "未压缩大小",
+          "name": "uncompressed_gb",
+          "type": "double"
+        },
+        {
+          "comment": "是否小文件",
+          "name": "small_files",
+          "type": "yesno"
+        },
+        {
+          "comment": "小文件大小",
+          "name": "small_file_gb",
+          "type": "double"
+        }
+      ]
+    }
+
+  ],
+  "derived": [
+    {
+      "table": "project_membership",
+      "sql": "SELECT u.user_id, TRIM(jt.membership_raw) AS membership_raw, p.project_id FROM app_user u JOIN JSON_TABLE( CONCAT('[', REPLACE(COALESCE(u.projects_raw, ''), ',', '\",\"'), ']'), '$[*]' COLUMNS(membership_raw VARCHAR(200) PATH '$') ) jt LEFT JOIN project p ON p.project_name = TRIM(jt.membership_raw) WHERE TRIM(jt.membership_raw) <> ''"
+    },
+    {
+      "table": "user_identity",
+      "sql": "SELECT account, user_id, 'user_list' AS identity_source FROM app_user UNION SELECT account, CONCAT('unknown:', account) AS user_id, 'unmatched_account' AS identity_source FROM ( SELECT DISTINCT account FROM click_observation UNION SELECT DISTINCT account FROM report_visit ) seen WHERE account NOT IN (SELECT account FROM app_user)"
+    },
+    {
+      "table": "user_object",
+      "sql": "SELECT u.user_id, u.account, u.company, u.department, u.position, 'user_list' AS identity_source FROM app_user u UNION ALL SELECT i.user_id, i.account, NULL, NULL, NULL, 'unmatched_account' FROM user_identity i WHERE i.identity_source = 'unmatched_account'"
+    },
+    {
+      "table": "organization",
+      "sql": "SELECT CONCAT(COALESCE(company, ''), '|', COALESCE(department, '')) AS org_key, company, department, COUNT(*) AS member_count FROM app_user GROUP BY org_key, company, department"
+    },
+    {
+      "table": "module",
+      "sql": "SELECT DISTINCT module_name, product FROM click_observation WHERE module_name IS NOT NULL AND module_name <> ''"
+    },
+    {
+      "table": "report_asset",
+      "sql": "SELECT DISTINCT CONCAT(project_name, '|', asset_type, '|', COALESCE(directory, ''), '|', asset_name) AS asset_key, asset_name, directory, asset_type, project_name FROM report_visit WHERE asset_name IS NOT NULL"
+    }
+  ]
+}

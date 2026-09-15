@@ -19,6 +19,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
+import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import java.time.Instant;
 
@@ -51,6 +52,10 @@ public class DatasetGroupEntity {
 
     @Column(name = "description", length = 1000)
     private String description;
+
+    @Lob
+    @Column(name = "manifest_json")
+    private String manifestJson;
 
     @Column(name = "created_at")
     private Instant createdAt = Instant.now();
@@ -99,6 +104,14 @@ public class DatasetGroupEntity {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public String getManifestJson() {
+        return manifestJson;
+    }
+
+    public void setManifestJson(String manifestJson) {
+        this.manifestJson = manifestJson;
     }
 
     public Instant getCreatedAt() {
