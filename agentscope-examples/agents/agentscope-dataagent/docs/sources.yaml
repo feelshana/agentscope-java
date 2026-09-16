@@ -1,0 +1,328 @@
+# Source manifest for one model package.
+#
+# This file is DATA. The ingest code reads it and knows nothing about these
+# column names, files or business terms. Point `root` somewhere else, rewrite
+# the batches, and the same code loads a completely different warehouse.
+
+version: migu-ops-v1
+root: /Users/jinguangliu/Work/project/Migu/honghai_ontology_demo_2/data
+timezone: Asia/Shanghai
+
+batches:
+  - id: user-list
+    file: 用户列表.xlsx
+    sheet: 表格0
+    table: app_user
+    columns:
+      - name: 用户ID
+        to: user_id
+        type: text
+      - name: 账号
+        to: account
+        type: text
+        strip: true
+      - name: 项目
+        to: projects_raw
+        type: text
+      - name: 公司
+        to: company
+        type: text
+      - name: 部门
+        to: department
+        type: text
+      - name: 职位
+        to: position
+        type: text
+
+  - id: project-master
+    file: 项目简称全称负责人.xlsx
+    sheet: 表格0
+    table: project
+    columns:
+      - name: 项目id
+        to: project_id
+        type: text
+      - name: 项目名称
+        to: project_name
+        type: text
+      - name: 项目简称
+        to: short_name
+        type: text
+      - name: 项目创建日期
+        to: created_date
+        type: text
+      - name: 所属工作区
+        to: workspace
+        type: text
+      - name: 平台名称
+        to: platform
+        type: text
+      - name: 负责人id
+        to: owner_id
+        type: text
+      - name: 负责人分析云账号
+        to: owner_account
+        type: text
+        strip: true
+
+  - id: click-detail
+    file: 点击详情数据.xlsx
+    sheet: 表格0
+    table: click_observation
+    time_field: click_time
+    columns:
+      - name: 产品名称
+        to: product
+        type: text
+      - name: 公司
+        to: event_company
+        type: text
+      - name: 部门
+        to: event_department
+        type: text
+      - name: 用户账号
+        to: account
+        type: text
+        strip: true
+      - name: 点击时间
+        to: click_time
+        type: timestamp
+      - name: 项目名称
+        to: project_name
+        type: text
+      - name: 模块
+        to: module_name
+        type: text
+      - name: 页面URL
+        to: page_url
+        type: text
+      - name: 访问次数(数量)
+        to: visit_count
+        type: bigint
+
+  - id: report-visit
+    file: 报表访问明细.xlsx
+    sheet: 报表访问明细
+    table: report_visit
+    time_field: visit_time
+    columns:
+      - name: 项目名称
+        to: project_name
+        type: text
+      - name: 报表名称
+        to: asset_name
+        type: text
+      - name: 目录
+        to: directory
+        type: text
+      - name: 类型
+        to: asset_type
+        type: text
+      - name: 用户账号
+        to: account
+        type: text
+        strip: true
+      - name: 访问时间
+        to: visit_time
+        type: timestamp
+      - name: 访问id(数量)
+        to: visit_count
+        type: bigint
+      - name: 用户id(数量去重)
+        to: row_uv
+        type: bigint
+
+  - id: capacity-20260906
+    file: 容量监控_三套汇总.xlsx
+    sheet: 表格0
+    table: capacity_snapshot
+    columns:
+      - name: project_id
+        to: project_id
+        type: text
+      - name: 项目名称
+        to: project_name
+        type: text
+      - name: 记录时间
+        to: record_date
+        type: date_compact
+      - name: 总容量TB
+        to: total_tb
+        type: double
+      - name: 已用容量TB
+        to: used_tb
+        type: double
+      - name: 容量已用占比
+        to: used_ratio
+        type: percent
+      - name: 总文件数量万
+        to: total_files_wan
+        type: double
+      - name: 已用文件数量万
+        to: used_files_wan
+        type: double
+      - name: 文件已用容量占比
+        to: file_ratio
+        type: percent
+
+  - id: scan-20260909
+    file: 各租户可优化数据-V1.xlsx
+    sheet: 表格0
+    table: table_scan
+    constants: {scan_date: "2026-09-09"}
+    columns:
+      - name: 集群
+        to: cluster
+        type: text
+      - name: 项目名
+        to: project_name
+        type: text
+      - name: 库
+        to: db_name
+        type: text
+      - name: 表
+        to: table_name
+        type: text
+      - name: 建表账号
+        to: creator_account
+        type: text
+        strip: true
+      - name: 表大小（GB）
+        to: table_size_gb
+        type: double
+      - name: 表文件数
+        to: file_count
+        type: bigint
+      - name: 是否近三个月未访问
+        to: unvisited_3m
+        type: yesno
+      - name: 是否未压缩
+        to: uncompressed
+        type: yesno
+      - name: 未压缩大小
+        to: uncompressed_gb
+        type: double
+      - name: 是否小文件
+        to: small_files
+        type: yesno
+      - name: 小文件大小
+        to: small_file_gb
+        type: double
+
+  - id: scan-20260907
+    file: 各租户可优化数据.xlsx
+    sheet: 表格0
+    table: table_scan
+    constants: {scan_date: "2026-09-07"}
+    columns:
+      - name: 集群
+        to: cluster
+        type: text
+      - name: 项目名
+        to: project_name
+        type: text
+      - name: 库
+        to: db_name
+        type: text
+      - name: 表
+        to: table_name
+        type: text
+      - name: 建表账号
+        to: creator_account
+        type: text
+        strip: true
+      - name: 表大小
+        to: table_size_gb
+        type: double
+      - name: 表文件数
+        to: file_count
+        type: bigint
+      - name: 是否近三个月未访问
+        to: unvisited_3m
+        type: yesno
+      - name: 是否未压缩
+        to: uncompressed
+        type: yesno
+      - name: 未压缩大小
+        to: uncompressed_gb
+        type: double
+      - name: 是否小文件
+        to: small_files
+        type: yesno
+      - name: 小文件大小
+        to: small_file_gb
+        type: double
+
+# Derived tables. SQL is data too; the loader just executes what is declared
+# here in order, after every batch has landed.
+derived:
+  - table: project_membership
+    sql: |
+      WITH RECURSIVE split AS (
+        SELECT user_id,
+               TRIM(SUBSTRING_INDEX(COALESCE(projects_raw, ''), ',', 1)) AS membership_raw,
+               CASE WHEN LOCATE(',', COALESCE(projects_raw, '')) > 0
+                    THEN SUBSTRING(COALESCE(projects_raw, ''), LOCATE(',', COALESCE(projects_raw, '')) + 1)
+                    ELSE '' END AS rest
+        FROM app_user
+        UNION ALL
+        SELECT user_id,
+               TRIM(SUBSTRING_INDEX(rest, ',', 1)),
+               CASE WHEN LOCATE(',', rest) > 0
+                    THEN SUBSTRING(rest, LOCATE(',', rest) + 1)
+                    ELSE '' END
+        FROM split
+        WHERE rest <> ''
+      )
+      SELECT s.user_id, s.membership_raw, p.project_id
+      FROM split s
+      LEFT JOIN project p ON p.project_name = s.membership_raw
+      WHERE s.membership_raw <> ''
+
+  # Identity resolution kept explicit and inspectable. Accounts that never
+  # appear in the user list stay in their own namespace instead of being
+  # dropped or fuzzily merged into a known person.
+  - table: user_identity
+    sql: |
+      SELECT account, user_id, 'user_list' AS identity_source FROM app_user
+      UNION
+      SELECT account, CONCAT('unknown:', account) AS user_id, 'unmatched_account' AS identity_source
+      FROM (
+        SELECT DISTINCT account FROM click_observation
+        UNION SELECT DISTINCT account FROM report_visit
+      ) seen
+      WHERE account NOT IN (SELECT account FROM app_user)
+
+  # The queryable User grain. Accounts seen in events but absent from the user
+  # list stay visible under their own identity namespace so headcounts can
+  # disclose them instead of silently dropping them.
+  - table: user_object
+    sql: |
+      SELECT u.user_id, u.account, u.company, u.department, u.position,
+             'user_list' AS identity_source
+      FROM app_user u
+      UNION ALL
+      SELECT i.user_id, i.account, NULL, NULL, NULL, 'unmatched_account'
+      FROM user_identity i
+      WHERE i.identity_source = 'unmatched_account'
+
+  - table: organization
+    sql: |
+      SELECT CONCAT(COALESCE(company, ''), '|', COALESCE(department, '')) AS org_key,
+             company, department, COUNT(*) AS member_count
+      FROM app_user
+      GROUP BY 1, 2, 3
+
+  - table: module
+    sql: |
+      SELECT DISTINCT module_name, product
+      FROM click_observation
+      WHERE module_name IS NOT NULL AND module_name <> ''
+
+  - table: report_asset
+    sql: |
+      SELECT DISTINCT
+             CONCAT(project_name, '|', asset_type, '|', COALESCE(directory, ''), '|', asset_name) AS asset_key,
+             asset_name, directory, asset_type, project_name
+      FROM report_visit
+      WHERE asset_name IS NOT NULL

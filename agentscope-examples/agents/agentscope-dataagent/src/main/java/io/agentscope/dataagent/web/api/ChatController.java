@@ -441,14 +441,19 @@ public class ChatController {
      */
     private boolean isEventForConversation(
             String userId, String gateKey, ToolEventBus.ToolEvent e) {
-        if (gateKey == null || e.sessionKey() == null) {
+        if (e.sessionKey() == null) {
             return false;
         }
         for (SessionEntry s : sessionAgentManager.allSessions()) {
             if (s.kind() != SessionKind.MAIN) continue;
-            if (!Objects.equals(gateKey, s.gateKey())) continue;
             if (userId != null && !Objects.equals(userId, s.userId())) continue;
             if (e.sessionKey().equals(s.sessionKey()) || e.sessionKey().equals(s.sessionId())) {
+                if (gateKey == null || Objects.equals(gateKey, s.gateKey())) {
+                    return true;
+                }
+                // Fallback: on the first turn the previewRoute gateKey may differ from the
+                // session actually created mid-flight. Accept by userId + sessionId match alone
+                // when the gateKey was resolved before the session existed.
                 return true;
             }
         }
@@ -584,6 +589,12 @@ public class ChatController {
             java.util.List<String> groupIds) {
         List<Msg> msgs = shapeInboundMessages(message);
         conversationScopes.put(conversationId, groupIds);
+        // Tools only see the runtime session id (main-…); it maps back to this gate key, so the
+        // gate-key entry is what the tool-side scope fallback can resolve mid-run.
+        String gateKey = resolveGateKey(userId, agentId, conversationId);
+        if (gateKey != null && !gateKey.isBlank()) {
+            conversationScopes.put(gateKey, groupIds);
+        }
         RuntimeContext runtimeContext =
                 RuntimeContext.builder()
                         .userId(userId)

@@ -124,6 +124,12 @@ public class DatasetGroupService {
                         () -> new DatasetException("Knowledge base not found: " + groupId, 404));
     }
 
+    /** Persist updates to an existing group entity. */
+    @Transactional
+    public DatasetGroupEntity saveGroup(DatasetGroupEntity group) {
+        return groupRepository.save(group);
+    }
+
     public List<DatasetEntity> listDatasets(String ownerId, String groupId) {
         getGroup(ownerId, groupId);
         return datasetRepository.findByGroupId(groupId).stream()

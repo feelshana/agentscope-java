@@ -139,8 +139,13 @@ public final class JdbcSqlConnector implements SqlConnector {
                 (user != null && !user.isBlank())
                         ? DriverManager.getConnection(url, user, password)
                         : DriverManager.getConnection(url);
-        conn.setReadOnly(true);
-        return conn;
+        try {
+            conn.setReadOnly(true);
+            return conn;
+        } catch (SQLException e) {
+            conn.close();
+            throw e;
+        }
     }
 
     private static int normalizeRowLimit(int rowLimit) {
@@ -158,51 +163,91 @@ public final class JdbcSqlConnector implements SqlConnector {
      */
     private static String previewQuery(Connection conn, String sql, String question, int maxRows)
             throws SQLException {
+        SqlPreviewResult result = readPreview(conn, sql, maxRows);
+        StringBuilder sb = new StringBuilder();
+        if (question != null && !question.isBlank()) {
+            sb.append("**查询问题：** ").append(question.trim()).append("\n\n");
+        }
+        sb.append("**SQL 语句：**\n```sql\n").append(sql).append("\n```\n\n");
+        sb.append("**查询结果：**\n\n| ");
+        sb.append(
+                String.join(
+                        " | ",
+                        result.columns().stream().map(JdbcSqlConnector::truncateCell).toList()));
+        sb.append(" |\n|").append("---|".repeat(result.columns().size())).append("\n");
+        for (var row : result.rows()) {
+            sb.append("| ")
+                    .append(
+                            String.join(
+                                    " | ",
+                                    row.stream().map(JdbcSqlConnector::truncateCell).toList()))
+                    .append(" |\n");
+        }
+        if (result.rows().isEmpty()) sb.append("*(0 rows returned)*\n");
+        if (result.truncated())
+            sb.append("\n(preview truncated: ").append(result.truncationReason()).append(")");
+        return sb.toString();
+    }
+
+    @Override
+    public SqlPreviewResult query(DataSource source, String sql, int rowLimit) {
+        if (sql == null || sql.isBlank()) throw new IllegalArgumentException("SQL 不能为空");
+        try (Connection conn = open(source)) {
+            return readPreview(conn, sql, normalizeRowLimit(rowLimit));
+        } catch (SQLException e) {
+            throw new IllegalStateException(
+                    "数据库执行失败 [" + e.getSQLState() + "]: " + e.getMessage(), e);
+        }
+    }
+
+    private static SqlPreviewResult readPreview(Connection conn, String sql, int maxRows)
+            throws SQLException {
+        long start = System.nanoTime();
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
         try (Statement stmt = conn.createStatement()) {
             stmt.setQueryTimeout(QUERY_TIMEOUT_SECONDS);
             stmt.setMaxRows(maxRows + 1);
             try (ResultSet rs = stmt.executeQuery(sql)) {
                 ResultSetMetaData meta = rs.getMetaData();
                 int colCount = meta.getColumnCount();
-                List<String> headers = new ArrayList<>(colCount);
-                for (int i = 1; i <= colCount; i++) {
-                    headers.add(meta.getColumnLabel(i));
-                }
-
+                if (colCount > 100) throw new IllegalArgumentException("结果超过 100 列，请缩小投影范围");
+                List<String> headers = new ArrayList<>();
+                for (int i = 1; i <= colCount; i++) headers.add(meta.getColumnLabel(i));
                 List<List<String>> rows = new ArrayList<>();
-                boolean truncated = false;
+                java.util.Set<String> reasons = new java.util.LinkedHashSet<>();
+                int budget = mapper.writeValueAsString(headers).length() + 512;
+                if (budget > 20000) throw new IllegalArgumentException("结果列名过长，请使用简短别名");
                 while (rs.next()) {
                     if (rows.size() >= maxRows) {
-                        truncated = true;
+                        reasons.add("row_limit");
                         break;
                     }
-                    List<String> row = new ArrayList<>(colCount);
+                    List<String> row = new ArrayList<>();
                     for (int i = 1; i <= colCount; i++) {
-                        row.add(truncateCell(rs.getString(i)));
+                        String value = rs.getString(i);
+                        if (value != null && value.length() > CELL_TRUNCATION) {
+                            value = value.substring(0, CELL_TRUNCATION) + "…";
+                            reasons.add("cell_limit");
+                        }
+                        row.add(value);
                     }
-                    rows.add(row);
+                    int size = mapper.writeValueAsString(row).length() + 1;
+                    if (budget + size > 20000) {
+                        reasons.add("payload_limit");
+                        break;
+                    }
+                    budget += size;
+                    rows.add(java.util.Collections.unmodifiableList(row));
                 }
-
-                StringBuilder sb = new StringBuilder();
-                if (question != null && !question.isBlank()) {
-                    sb.append("**查询问题：** ").append(question.trim()).append("\n\n");
-                }
-                sb.append("**SQL 语句：**\n```sql\n").append(sql).append("\n```\n\n");
-                sb.append("**查询结果：**\n\n");
-                sb.append("| ").append(String.join(" | ", headers)).append(" |\n");
-                sb.append("|").append("---|".repeat(Math.max(1, colCount))).append("\n");
-                for (List<String> row : rows) {
-                    sb.append("| ").append(String.join(" | ", row)).append(" |\n");
-                }
-                if (rows.isEmpty()) {
-                    sb.append("*(0 rows returned)*\n");
-                }
-                if (truncated) {
-                    sb.append("\n(showing first ")
-                            .append(maxRows)
-                            .append(" rows; refine the query or raise row_limit for more)");
-                }
-                return sb.toString();
+                return new SqlPreviewResult(
+                        List.copyOf(headers),
+                        List.copyOf(rows),
+                        rows.size(),
+                        !reasons.isEmpty(),
+                        String.join(",", reasons),
+                        (System.nanoTime() - start) / 1_000_000);
+            } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                throw new IllegalStateException("结果无法序列化", e);
             }
         }
     }

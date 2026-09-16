@@ -1,0 +1,384 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Canner/WrenAI/main/wren-mdl/mdl.schema.json",
+  "layoutVersion": 1,
+  "catalog": "migu_ops",
+  "schema": "public",
+  "description": "分析云运营本体 — 从 migu-ops-v1 语义模型转换",
+  "dataSource": "DUCKDB",
+  "models": [
+    {
+      "name": "user_object",
+      "tableReference": { "table": "user_object" },
+      "primaryKey": "user_id",
+      "columns": [
+        { "name": "user_id", "type": "VARCHAR", "notNull": true, "properties": { "label": "用户ID" } },
+        { "name": "account", "type": "VARCHAR", "properties": { "label": "账号" } },
+        { "name": "company", "type": "VARCHAR", "properties": { "label": "公司" } },
+        { "name": "department", "type": "VARCHAR", "properties": { "label": "部门" } },
+        { "name": "position", "type": "VARCHAR", "properties": { "label": "职位", "note": "只有显式标记为领导的行才是领导；空值是未知，不推断。" } },
+        { "name": "identity_source", "type": "VARCHAR", "properties": { "label": "身份来源", "note": "user_list 或 unmatched_account。" } },
+        { "name": "organization", "type": "organization", "relationship": "userBelongsToOrganization", "properties": { "label": "所属组织(handle)" } },
+        { "name": "org_member_count", "type": "INTEGER", "isCalculated": true, "expression": "organization.member_count", "properties": { "label": "组织成员数" } }
+      ],
+      "properties": {
+        "label": "用户",
+        "description": "分析云用户。身份键是用户ID；事件里出现但用户清单中没有的账号保留在 unmatched_account 命名空间，不合并进已知人员。"
+      }
+    },
+    {
+      "name": "organization",
+      "tableReference": { "table": "organization" },
+      "primaryKey": "org_key",
+      "columns": [
+        { "name": "org_key", "type": "VARCHAR", "notNull": true, "properties": { "label": "组织键" } },
+        { "name": "company", "type": "VARCHAR", "properties": { "label": "公司" } },
+        { "name": "department", "type": "VARCHAR", "properties": { "label": "部门" } },
+        { "name": "member_count", "type": "INTEGER", "properties": { "label": "清单成员数" } }
+      ],
+      "properties": {
+        "label": "组织",
+        "description": "公司加部门的局部组合键。没有独立组织ID，父子关系未确认，同名部门可能属于不同公司。"
+      }
+    },
+    {
+      "name": "project",
+      "tableReference": { "table": "project" },
+      "primaryKey": "project_id",
+      "columns": [
+        { "name": "project_id", "type": "VARCHAR", "notNull": true, "properties": { "label": "项目ID" } },
+        { "name": "project_name", "type": "VARCHAR", "properties": { "label": "项目名称" } },
+        { "name": "short_name", "type": "VARCHAR", "properties": { "label": "项目简称" } },
+        { "name": "workspace", "type": "VARCHAR", "properties": { "label": "所属工作区" } },
+        { "name": "owner_account", "type": "VARCHAR", "properties": { "label": "负责人账号" } },
+        { "name": "owner_id", "type": "VARCHAR", "properties": { "label": "负责人ID" } }
+      ],
+      "properties": {
+        "label": "项目",
+        "description": "项目主数据。本批数据里租户在报表中体现为项目，但没有独立租户主数据，不能自动等价。"
+      }
+    },
+    {
+      "name": "module",
+      "tableReference": { "table": "module" },
+      "primaryKey": "module_name",
+      "columns": [
+        { "name": "module_name", "type": "VARCHAR", "notNull": true, "properties": { "label": "模块名" } },
+        { "name": "product", "type": "VARCHAR", "properties": { "label": "产品" } }
+      ],
+      "properties": {
+        "label": "模块",
+        "description": "模块。唯一来源是点击详情的模块列。报表标题不是模块，不能混入。"
+      }
+    },
+    {
+      "name": "report_asset",
+      "tableReference": { "table": "report_asset" },
+      "primaryKey": "asset_key",
+      "columns": [
+        { "name": "asset_key", "type": "VARCHAR", "notNull": true, "properties": { "label": "资产键" } },
+        { "name": "asset_name", "type": "VARCHAR", "properties": { "label": "名称" } },
+        { "name": "directory", "type": "VARCHAR", "properties": { "label": "目录" } },
+        { "name": "asset_type", "type": "VARCHAR", "properties": { "label": "类型" } },
+        { "name": "project_name", "type": "VARCHAR", "properties": { "label": "项目名称" } }
+      ],
+      "properties": {
+        "label": "报表资产",
+        "description": "报表或仪表盘。源数据没有资产ID，身份是项目加类型加目录加名称的临时组合键，改名后不保证连续。"
+      }
+    },
+    {
+      "name": "click_observation",
+      "tableReference": { "table": "click_observation" },
+      "columns": [
+        { "name": "account", "type": "VARCHAR", "properties": { "label": "账号" } },
+        { "name": "module_name", "type": "VARCHAR", "properties": { "label": "模块" } },
+        { "name": "project_name", "type": "VARCHAR", "properties": { "label": "项目名称" } },
+        { "name": "event_company", "type": "VARCHAR", "properties": { "label": "事件记录公司" } },
+        { "name": "event_department", "type": "VARCHAR", "properties": { "label": "事件记录部门" } },
+        { "name": "click_time", "type": "TIMESTAMP", "properties": { "label": "点击时间" } },
+        { "name": "visit_count", "type": "INTEGER", "properties": { "label": "访问次数", "note": "源列已经聚合，PV 对它求和；用行数代替是错的。" } },
+        { "name": "click_user", "type": "user_object", "relationship": "clickPerformedBy", "properties": { "label": "点击用户(handle)" } },
+        { "name": "click_module", "type": "module", "relationship": "clickUsesModule", "properties": { "label": "点击模块(handle)" } },
+        { "name": "click_project", "type": "project", "relationship": "clickInProject", "properties": { "label": "点击项目(handle)" } },
+        { "name": "user_company", "type": "VARCHAR", "isCalculated": true, "expression": "click_user.company", "properties": { "label": "用户公司" } },
+        { "name": "user_department", "type": "VARCHAR", "isCalculated": true, "expression": "click_user.department", "properties": { "label": "用户部门" } },
+        { "name": "user_position", "type": "VARCHAR", "isCalculated": true, "expression": "click_user.position", "properties": { "label": "用户职位" } },
+        { "name": "module_product", "type": "VARCHAR", "isCalculated": true, "expression": "click_module.product", "properties": { "label": "模块所属产品" } }
+      ],
+      "properties": {
+        "label": "点击观察",
+        "description": "模块点击事件。访问次数列已经聚合过，PV 必须对该列求和，不能用行数代替。"
+      }
+    },
+    {
+      "name": "report_visit",
+      "tableReference": { "table": "report_visit" },
+      "columns": [
+        { "name": "account", "type": "VARCHAR", "properties": { "label": "账号" } },
+        { "name": "asset_name", "type": "VARCHAR", "properties": { "label": "报表名称" } },
+        { "name": "asset_type", "type": "VARCHAR", "properties": { "label": "类型" } },
+        { "name": "project_name", "type": "VARCHAR", "properties": { "label": "项目名称" } },
+        { "name": "visit_time", "type": "TIMESTAMP", "properties": { "label": "访问时间" } },
+        { "name": "visit_count", "type": "INTEGER", "properties": { "label": "访问次数", "note": "源列已经聚合，PV 对它求和。" } },
+        { "name": "row_uv", "type": "INTEGER", "properties": { "label": "行内去重用户数", "note": "每行都是1，跨行求和不是UV，任何情况下都不要对它求和。" } },
+        { "name": "visit_user", "type": "user_object", "relationship": "reportPerformedBy", "properties": { "label": "访问用户(handle)" } },
+        { "name": "visited_asset", "type": "report_asset", "relationship": "reportVisitsAsset", "properties": { "label": "访问资产(handle)" } },
+        { "name": "visit_project", "type": "project", "relationship": "reportInProject", "properties": { "label": "访问项目(handle)" } },
+        { "name": "asset_directory", "type": "VARCHAR", "isCalculated": true, "expression": "visited_asset.directory", "properties": { "label": "报表目录" } },
+        { "name": "user_company", "type": "VARCHAR", "isCalculated": true, "expression": "visit_user.company", "properties": { "label": "用户公司" } },
+        { "name": "user_department", "type": "VARCHAR", "isCalculated": true, "expression": "visit_user.department", "properties": { "label": "用户部门" } }
+      ],
+      "properties": {
+        "label": "报表访问观察",
+        "description": "报表和仪表盘访问事件。行内的用户id数量去重每行都是1，跨行求和不是UV。"
+      }
+    },
+    {
+      "name": "capacity_snapshot",
+      "tableReference": { "table": "capacity_snapshot" },
+      "columns": [
+        { "name": "project_id", "type": "VARCHAR", "properties": { "label": "项目ID" } },
+        { "name": "record_date", "type": "DATE", "properties": { "label": "记录日期" } },
+        { "name": "total_tb", "type": "DOUBLE", "properties": { "label": "总容量TB" } },
+        { "name": "used_tb", "type": "DOUBLE", "properties": { "label": "已用容量TB" } },
+        { "name": "used_ratio", "type": "DOUBLE", "properties": { "label": "容量已用占比" } },
+        { "name": "total_files_wan", "type": "DOUBLE", "properties": { "label": "总文件数万" } },
+        { "name": "used_files_wan", "type": "DOUBLE", "properties": { "label": "已用文件数万" } },
+        { "name": "file_ratio", "type": "DOUBLE", "properties": { "label": "文件已用占比" } },
+        { "name": "cap_project", "type": "project", "relationship": "capacitySnapshotOf", "properties": { "label": "容量所属项目(handle)" } },
+        { "name": "project_name", "type": "VARCHAR", "isCalculated": true, "expression": "cap_project.project_name", "properties": { "label": "项目名称" } }
+      ],
+      "properties": {
+        "label": "容量快照",
+        "description": "项目容量快照，只有一个记录日。快照是存量，不能跨日期相加当成累计。"
+      }
+    },
+    {
+      "name": "table_scan",
+      "tableReference": { "table": "table_scan" },
+      "columns": [
+        { "name": "cluster", "type": "VARCHAR", "properties": { "label": "集群" } },
+        { "name": "project_name", "type": "VARCHAR", "properties": { "label": "项目名" } },
+        { "name": "db_name", "type": "VARCHAR", "properties": { "label": "库" } },
+        { "name": "table_name", "type": "VARCHAR", "properties": { "label": "表" } },
+        { "name": "scan_date", "type": "VARCHAR", "properties": { "label": "扫描日期" } },
+        { "name": "table_size_gb", "type": "DOUBLE", "properties": { "label": "表大小GB" } },
+        { "name": "unvisited_3m", "type": "BOOLEAN", "properties": { "label": "近三个月未访问" } },
+        { "name": "uncompressed", "type": "BOOLEAN", "properties": { "label": "未压缩" } },
+        { "name": "small_files", "type": "BOOLEAN", "properties": { "label": "小文件" } },
+        { "name": "scan_project", "type": "project", "relationship": "scanInProject", "properties": { "label": "扫描项目(handle)" } },
+        { "name": "project_id", "type": "VARCHAR", "isCalculated": true, "expression": "scan_project.project_id", "properties": { "label": "项目ID" } }
+      ],
+      "properties": {
+        "label": "表扫描",
+        "description": "数据表扫描快照。两个扫描日的范围不同，不是同一次导出的重复，不能拼接求和。优化类别之间可能重叠。"
+      }
+    },
+    {
+      "name": "project_membership",
+      "tableReference": { "table": "project_membership" },
+      "columns": [
+        { "name": "user_id", "type": "VARCHAR", "properties": { "label": "用户ID" } },
+        { "name": "project_id", "type": "VARCHAR", "properties": { "label": "项目ID" } },
+        { "name": "membership_raw", "type": "VARCHAR", "properties": { "label": "原始条目" } },
+        { "name": "member_user", "type": "user_object", "relationship": "membershipOfUser", "properties": { "label": "成员用户(handle)" } },
+        { "name": "member_project", "type": "project", "relationship": "membershipInProject", "properties": { "label": "成员项目(handle)" } },
+        { "name": "user_account", "type": "VARCHAR", "isCalculated": true, "expression": "member_user.account", "properties": { "label": "用户账号" } },
+        { "name": "project_name", "type": "VARCHAR", "isCalculated": true, "expression": "member_project.project_name", "properties": { "label": "项目名称" } }
+      ],
+      "properties": {
+        "label": "项目成员关系",
+        "description": "用户项目列表按逗号展开的成员条目。部分条目匹配不到项目主数据，保留原字符串。列表是否代表有效授权尚未确认。"
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "name": "clickPerformedBy",
+      "models": ["click_observation", "user_object"],
+      "joinType": "MANY_TO_ONE",
+      "condition": "click_observation.account = user_object.account",
+      "properties": { "label": "点击由用户产生" }
+    },
+    {
+      "name": "clickUsesModule",
+      "models": ["click_observation", "module"],
+      "joinType": "MANY_TO_ONE",
+      "condition": "click_observation.module_name = module.module_name",
+      "properties": { "label": "点击使用模块" }
+    },
+    {
+      "name": "clickInProject",
+      "models": ["click_observation", "project"],
+      "joinType": "MANY_TO_ONE",
+      "condition": "click_observation.project_name = project.project_name",
+      "properties": { "label": "点击发生在项目", "note": "本批有大量项目名为空的行，join 后会被丢弃。" }
+    },
+    {
+      "name": "reportPerformedBy",
+      "models": ["report_visit", "user_object"],
+      "joinType": "MANY_TO_ONE",
+      "condition": "report_visit.account = user_object.account",
+      "properties": { "label": "报表访问由用户产生" }
+    },
+    {
+      "name": "reportVisitsAsset",
+      "models": ["report_visit", "report_asset"],
+      "joinType": "MANY_TO_ONE",
+      "condition": "report_visit.project_name = report_asset.project_name AND report_visit.asset_name = report_asset.asset_name",
+      "properties": { "label": "访问指向报表资产" }
+    },
+    {
+      "name": "reportInProject",
+      "models": ["report_visit", "project"],
+      "joinType": "MANY_TO_ONE",
+      "condition": "report_visit.project_name = project.project_name",
+      "properties": { "label": "报表访问发生在项目" }
+    },
+    {
+      "name": "userBelongsToOrganization",
+      "models": ["user_object", "organization"],
+      "joinType": "MANY_TO_ONE",
+      "condition": "user_object.company = organization.company AND user_object.department = organization.department",
+      "properties": { "label": "用户属于组织" }
+    },
+    {
+      "name": "capacitySnapshotOf",
+      "models": ["capacity_snapshot", "project"],
+      "joinType": "MANY_TO_ONE",
+      "condition": "capacity_snapshot.project_id = project.project_id",
+      "properties": { "label": "容量快照属于项目" }
+    },
+    {
+      "name": "scanInProject",
+      "models": ["table_scan", "project"],
+      "joinType": "MANY_TO_ONE",
+      "condition": "table_scan.project_name = project.project_name",
+      "properties": { "label": "扫描属于项目" }
+    },
+    {
+      "name": "membershipOfUser",
+      "models": ["project_membership", "user_object"],
+      "joinType": "MANY_TO_ONE",
+      "condition": "project_membership.user_id = user_object.user_id",
+      "properties": { "label": "成员关系属于用户" }
+    },
+    {
+      "name": "membershipInProject",
+      "models": ["project_membership", "project"],
+      "joinType": "MANY_TO_ONE",
+      "condition": "project_membership.project_id = project.project_id",
+      "properties": { "label": "成员关系指向项目" }
+    }
+  ],
+  "cubes": [
+    {
+      "name": "click_metrics",
+      "baseObject": "click_observation",
+      "measures": [
+        { "name": "click_pv", "expression": "SUM(visit_count)", "type": "BIGINT", "description": "点击访问次数。对已聚合的访问次数列求和，用行数代替是错的。" },
+        { "name": "click_uv", "expression": "COUNT(DISTINCT account)", "type": "BIGINT", "description": "点击用户数。按用户身份去重。未匹配账号按自身命名空间单独计数。" },
+        { "name": "click_row_count", "expression": "COUNT(*)", "type": "BIGINT", "description": "点击观察行数（非PV，仅供排查用）。" }
+      ],
+      "dimensions": [
+        { "name": "account", "expression": "account", "type": "VARCHAR", "description": "账号" },
+        { "name": "module_name", "expression": "module_name", "type": "VARCHAR", "description": "模块" },
+        { "name": "project_name", "expression": "project_name", "type": "VARCHAR", "description": "项目名称" },
+        { "name": "event_company", "expression": "event_company", "type": "VARCHAR", "description": "事件记录公司" },
+        { "name": "event_department", "expression": "event_department", "type": "VARCHAR", "description": "事件记录部门" }
+      ],
+      "timeDimensions": [
+        { "name": "click_time", "expression": "click_time", "type": "TIMESTAMP", "description": "点击时间" }
+      ],
+      "properties": {
+        "description": "模块点击事件聚合指标。PV 必须对 visit_count 求和，不能用行数代替。"
+      }
+    },
+    {
+      "name": "report_visit_metrics",
+      "baseObject": "report_visit",
+      "measures": [
+        { "name": "report_pv", "expression": "SUM(visit_count)", "type": "BIGINT", "description": "报表访问次数。对已聚合的访问次数列求和。" },
+        { "name": "report_uv", "expression": "COUNT(DISTINCT account)", "type": "BIGINT", "description": "报表访问用户数。按用户身份去重。绝对不能对行内的去重列求和。" }
+      ],
+      "dimensions": [
+        { "name": "account", "expression": "account", "type": "VARCHAR", "description": "账号" },
+        { "name": "asset_name", "expression": "asset_name", "type": "VARCHAR", "description": "报表名称" },
+        { "name": "asset_type", "expression": "asset_type", "type": "VARCHAR", "description": "类型" },
+        { "name": "project_name", "expression": "project_name", "type": "VARCHAR", "description": "项目名称" }
+      ],
+      "timeDimensions": [
+        { "name": "visit_time", "expression": "visit_time", "type": "TIMESTAMP", "description": "访问时间" }
+      ],
+      "properties": {
+        "description": "报表和仪表盘访问事件聚合指标。"
+      }
+    },
+    {
+      "name": "capacity_metrics",
+      "baseObject": "capacity_snapshot",
+      "measures": [
+        { "name": "capacity_used_tb", "expression": "SUM(used_tb)", "type": "DOUBLE", "description": "已用容量TB。快照存量，只在单一记录日内有意义。" },
+        { "name": "capacity_total_tb", "expression": "SUM(total_tb)", "type": "DOUBLE", "description": "总容量TB" },
+        { "name": "max_file_ratio", "expression": "MAX(file_ratio)", "type": "DOUBLE", "description": "文件已用占比。源值可以超过100%，不截断。" }
+      ],
+      "dimensions": [
+        { "name": "project_id", "expression": "project_id", "type": "VARCHAR", "description": "项目ID" }
+      ],
+      "timeDimensions": [
+        { "name": "record_date", "expression": "record_date", "type": "DATE", "description": "记录日期" }
+      ],
+      "properties": {
+        "description": "项目容量快照指标。快照是存量，不能跨日期相加当成累计。"
+      }
+    },
+    {
+      "name": "table_scan_metrics",
+      "baseObject": "table_scan",
+      "measures": [
+        { "name": "scan_table_size_gb", "expression": "SUM(table_size_gb)", "type": "DOUBLE", "description": "扫描表总大小GB" },
+        { "name": "scan_unvisited_size_gb", "expression": "SUM(CASE WHEN unvisited_3m = true THEN table_size_gb ELSE 0 END)", "type": "DOUBLE", "description": "近三个月未访问表大小GB。未访问规模不等于可释放容量，优化类别之间可能重叠。" },
+        { "name": "scan_table_count", "expression": "COUNT(*)", "type": "BIGINT", "description": "扫描表数量" }
+      ],
+      "dimensions": [
+        { "name": "cluster", "expression": "cluster", "type": "VARCHAR", "description": "集群" },
+        { "name": "project_name", "expression": "project_name", "type": "VARCHAR", "description": "项目名" },
+        { "name": "db_name", "expression": "db_name", "type": "VARCHAR", "description": "库" },
+        { "name": "scan_date", "expression": "scan_date", "type": "VARCHAR", "description": "扫描日期" }
+      ],
+      "properties": {
+        "description": "数据表扫描快照指标。两个扫描日范围不同，不能拼接求和。"
+      }
+    },
+    {
+      "name": "user_metrics",
+      "baseObject": "user_object",
+      "measures": [
+        { "name": "user_count", "expression": "COUNT(DISTINCT user_id)", "type": "BIGINT", "description": "用户数。对用户身份去重。用户可能属于多个项目，展开成员关系后不能重复计数。" }
+      ],
+      "dimensions": [
+        { "name": "company", "expression": "company", "type": "VARCHAR", "description": "公司" },
+        { "name": "department", "expression": "department", "type": "VARCHAR", "description": "部门" },
+        { "name": "position", "expression": "position", "type": "VARCHAR", "description": "职位" },
+        { "name": "identity_source", "expression": "identity_source", "type": "VARCHAR", "description": "身份来源" }
+      ],
+      "properties": {
+        "description": "用户维度聚合指标。"
+      }
+    },
+    {
+      "name": "membership_metrics",
+      "baseObject": "project_membership",
+      "measures": [
+        { "name": "membership_count", "expression": "COUNT(*)", "type": "BIGINT", "description": "成员条目数" }
+      ],
+      "dimensions": [
+        { "name": "project_id", "expression": "project_id", "type": "VARCHAR", "description": "项目ID" },
+        { "name": "user_id", "expression": "user_id", "type": "VARCHAR", "description": "用户ID" }
+      ],
+      "properties": {
+        "description": "项目成员关系聚合指标。"
+      }
+    }
+  ]
+}

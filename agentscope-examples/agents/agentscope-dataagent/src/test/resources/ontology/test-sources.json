@@ -1,0 +1,40 @@
+{
+  "batches": [
+    {
+      "id": "user-list",
+      "file": "用户列表.xlsx",
+      "table": "app_user",
+      "columns": [
+        {"comment": "用户ID", "name": "user_id", "type": "varchar(200)"},
+        {"comment": "账号", "name": "account", "type": "varchar(200)"}
+      ]
+    },
+    {
+      "id": "click-detail",
+      "file": "点击详情数据.xlsx",
+      "table": "click_observation",
+      "time_field": "click_time",
+      "columns": [
+        {"comment": "点击时间", "name": "click_time", "type": "timestamp"},
+        {"comment": "用户账号", "name": "account", "type": "varchar(200)"},
+        {"comment": "访问次数", "name": "visit_count", "type": "bigint"}
+      ]
+    }
+  ],
+  "derived": [
+    {
+      "table": "user_identity",
+      "sql": "SELECT account, user_id, 'user_list' AS identity_source FROM app_user UNION SELECT account, CONCAT('unknown:', account), 'unmatched' FROM click_observation"
+    }
+  ],
+  "relationships": [
+    {
+      "source": "app_user",
+      "sourceColumn": "user_id",
+      "target": "click_observation",
+      "targetColumn": "user_id",
+      "joinType": "one_to_many",
+      "label": "用户产生点击"
+    }
+  ]
+}

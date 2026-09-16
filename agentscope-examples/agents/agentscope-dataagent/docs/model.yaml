@@ -1,0 +1,361 @@
+# The semantic model. Objects, relationships, metrics and rules live here, and
+# only here. The query compiler resolves everything by the identifiers below;
+# it contains no business term of its own.
+#
+# Anything the source data cannot support is stated as a limitation rather than
+# rounded off into a confident answer.
+
+version: migu-ops-v1
+name: 分析云运营本体
+base_uri: https://example.org/migu-ops/
+
+objects:
+  User:
+    label: 用户
+    table: user_object
+    kind: dimension
+    identity: user_id
+    description: 分析云用户。身份键是用户ID；事件里出现但用户清单中没有的账号保留在 unmatched_account 命名空间，不合并进已知人员。
+    properties:
+      user_id: {column: user_id, type: string, label: 用户ID}
+      account: {column: account, type: string, label: 账号}
+      company: {column: company, type: string, label: 公司}
+      department: {column: department, type: string, label: 部门}
+      position: {column: position, type: string, label: 职位, note: 只有显式标记为“领导”的行才是领导；空值是未知，不推断。}
+      identity_source: {column: identity_source, type: string, label: 身份来源, note: user_list 或 unmatched_account。}
+
+  Organization:
+    label: 组织
+    table: organization
+    kind: dimension
+    identity: org_key
+    description: 公司加部门的局部组合键。没有独立组织ID，父子关系未确认，同名部门可能属于不同公司。
+    properties:
+      org_key: {column: org_key, type: string, label: 组织键}
+      company: {column: company, type: string, label: 公司}
+      department: {column: department, type: string, label: 部门}
+      member_count: {column: member_count, type: integer, label: 清单成员数}
+
+  Project:
+    label: 项目
+    table: project
+    kind: dimension
+    identity: project_id
+    description: 项目主数据。本批数据里“租户”在报表中体现为项目，但没有独立租户主数据，不能自动等价。
+    properties:
+      project_id: {column: project_id, type: string, label: 项目ID}
+      project_name: {column: project_name, type: string, label: 项目名称}
+      short_name: {column: short_name, type: string, label: 项目简称}
+      workspace: {column: workspace, type: string, label: 所属工作区}
+      owner_account: {column: owner_account, type: string, label: 负责人账号}
+      owner_id: {column: owner_id, type: string, label: 负责人ID}
+
+  Module:
+    label: 模块
+    table: module
+    kind: dimension
+    identity: module_name
+    description: 模块。唯一来源是点击详情的“模块”列。报表标题不是模块，不能混入。本批取值包含“加载中”这类非业务入口的字符串。
+    properties:
+      module_name: {column: module_name, type: string, label: 模块名}
+      product: {column: product, type: string, label: 产品}
+
+  ReportAsset:
+    label: 报表资产
+    table: report_asset
+    kind: dimension
+    identity: asset_key
+    description: 报表或仪表盘。源数据没有资产ID，身份是项目加类型加目录加名称的临时组合键，改名后不保证连续。
+    properties:
+      asset_key: {column: asset_key, type: string, label: 资产键}
+      asset_name: {column: asset_name, type: string, label: 名称}
+      directory: {column: directory, type: string, label: 目录}
+      asset_type: {column: asset_type, type: string, label: 类型}
+      project_name: {column: project_name, type: string, label: 项目名称}
+
+  ClickObservation:
+    label: 点击观察
+    table: click_observation
+    kind: fact
+    time_field: click_time
+    source_batches: [click-detail]
+    description: 模块点击事件。访问次数列已经聚合过，PV 必须对该列求和，不能用行数代替。
+    properties:
+      account: {column: account, type: string, label: 账号}
+      module_name: {column: module_name, type: string, label: 模块}
+      project_name: {column: project_name, type: string, label: 项目名称}
+      event_company: {column: event_company, type: string, label: 事件记录公司}
+      event_department: {column: event_department, type: string, label: 事件记录部门}
+      click_time: {column: click_time, type: timestamp, label: 点击时间}
+      visit_count: {column: visit_count, type: integer, label: 访问次数, note: 源列已经聚合，PV 对它求和；用行数代替是错的。}
+
+  ReportVisitObservation:
+    label: 报表访问观察
+    table: report_visit
+    kind: fact
+    time_field: visit_time
+    source_batches: [report-visit]
+    description: 报表和仪表盘访问事件。行内的“用户id(数量去重)”每行都是1，跨行求和不是UV。
+    properties:
+      account: {column: account, type: string, label: 账号}
+      asset_name: {column: asset_name, type: string, label: 报表名称}
+      asset_type: {column: asset_type, type: string, label: 类型}
+      project_name: {column: project_name, type: string, label: 项目名称}
+      visit_time: {column: visit_time, type: timestamp, label: 访问时间}
+      visit_count: {column: visit_count, type: integer, label: 访问次数, note: 源列已经聚合，PV 对它求和。}
+      row_uv: {column: row_uv, type: integer, label: 行内去重用户数, note: 每行都是1，跨行求和不是UV，任何情况下都不要对它求和。}
+
+  CapacitySnapshot:
+    label: 容量快照
+    table: capacity_snapshot
+    kind: fact
+    grain: snapshot
+    source_batches: [capacity-20260906]
+    description: 项目容量快照，只有一个记录日。快照是存量，不能跨日期相加当成累计。
+    properties:
+      project_id: {column: project_id, type: string, label: 项目ID}
+      record_date: {column: record_date, type: date, label: 记录日期}
+      total_tb: {column: total_tb, type: double, label: 总容量TB}
+      used_tb: {column: used_tb, type: double, label: 已用容量TB}
+      used_ratio: {column: used_ratio, type: double, label: 容量已用占比}
+      total_files_wan: {column: total_files_wan, type: double, label: 总文件数万}
+      used_files_wan: {column: used_files_wan, type: double, label: 已用文件数万}
+      file_ratio: {column: file_ratio, type: double, label: 文件已用占比}
+
+  TableScan:
+    label: 表扫描
+    table: table_scan
+    kind: fact
+    grain: snapshot
+    source_batches: [scan-20260909, scan-20260907]
+    description: 数据表扫描快照。两个扫描日的范围不同，不是同一次导出的重复，不能拼接求和。优化类别之间可能重叠。
+    properties:
+      cluster: {column: cluster, type: string, label: 集群}
+      project_name: {column: project_name, type: string, label: 项目名}
+      db_name: {column: db_name, type: string, label: 库}
+      table_name: {column: table_name, type: string, label: 表}
+      scan_date: {column: scan_date, type: string, label: 扫描日期}
+      table_size_gb: {column: table_size_gb, type: double, label: 表大小GB}
+      unvisited_3m: {column: unvisited_3m, type: boolean, label: 近三个月未访问}
+      uncompressed: {column: uncompressed, type: boolean, label: 未压缩}
+      small_files: {column: small_files, type: boolean, label: 小文件}
+
+  ProjectMembership:
+    label: 项目成员关系
+    table: project_membership
+    kind: fact
+    source_batches: [user-list]
+    description: 用户项目列表按逗号展开的成员条目。部分条目匹配不到项目主数据，保留原字符串。列表是否代表有效授权尚未确认。
+    properties:
+      user_id: {column: user_id, type: string, label: 用户ID}
+      project_id: {column: project_id, type: string, label: 项目ID}
+      membership_raw: {column: membership_raw, type: string, label: 原始条目}
+
+# Join paths. The compiler only ever traverses relationships declared here; it
+# never guesses a join key.
+relationships:
+  clickPerformedBy:
+    from: ClickObservation
+    to: User
+    join: [{left: account, right: account}]
+    cardinality: many_to_one
+    label: 点击由用户产生
+  clickUsesModule:
+    from: ClickObservation
+    to: Module
+    join: [{left: module_name, right: module_name}]
+    cardinality: many_to_one
+    label: 点击使用模块
+  clickInProject:
+    from: ClickObservation
+    to: Project
+    join: [{left: project_name, right: project_name}]
+    cardinality: many_to_one
+    label: 点击发生在项目
+    note: 本批有大量项目名为空的行，join 后会被丢弃。
+  reportPerformedBy:
+    from: ReportVisitObservation
+    to: User
+    join: [{left: account, right: account}]
+    cardinality: many_to_one
+    label: 报表访问由用户产生
+  reportVisitsAsset:
+    from: ReportVisitObservation
+    to: ReportAsset
+    join: [{left: project_name, right: project_name}, {left: asset_name, right: asset_name}]
+    cardinality: many_to_one
+    label: 访问指向报表资产
+  reportInProject:
+    from: ReportVisitObservation
+    to: Project
+    join: [{left: project_name, right: project_name}]
+    cardinality: many_to_one
+    label: 报表访问发生在项目
+  userBelongsToOrganization:
+    from: User
+    to: Organization
+    join: [{left: company, right: company}, {left: department, right: department}]
+    cardinality: many_to_one
+    label: 用户属于组织
+  capacitySnapshotOf:
+    from: CapacitySnapshot
+    to: Project
+    join: [{left: project_id, right: project_id}]
+    cardinality: many_to_one
+    label: 容量快照属于项目
+  scanInProject:
+    from: TableScan
+    to: Project
+    join: [{left: project_name, right: project_name}]
+    cardinality: many_to_one
+    label: 扫描属于项目
+  membershipOfUser:
+    from: ProjectMembership
+    to: User
+    join: [{left: user_id, right: user_id}]
+    cardinality: many_to_one
+    label: 成员关系属于用户
+  membershipInProject:
+    from: ProjectMembership
+    to: Project
+    join: [{left: project_id, right: project_id}]
+    cardinality: many_to_one
+    label: 成员关系指向项目
+
+metrics:
+  click_pv:
+    label: 点击访问次数
+    object: ClickObservation
+    aggregate: sum
+    column: visit_count
+    unit: 次
+    description: 对已聚合的访问次数列求和。用行数代替是错的。
+  click_uv:
+    label: 点击用户数
+    object: ClickObservation
+    aggregate: count_distinct_identity
+    identity_object: User
+    unit: 人
+    rules: [R4]
+    description: 按用户身份去重。未匹配账号按自身命名空间单独计数，可以分开披露。
+  report_pv:
+    label: 报表访问次数
+    object: ReportVisitObservation
+    aggregate: sum
+    column: visit_count
+    unit: 次
+    description: 对已聚合的访问次数列求和。
+  report_uv:
+    label: 报表访问用户数
+    object: ReportVisitObservation
+    aggregate: count_distinct_identity
+    identity_object: User
+    unit: 人
+    rules: [R4]
+    description: 按用户身份去重。绝对不能对行内的去重列求和。
+  capacity_used_tb:
+    label: 已用容量TB
+    object: CapacitySnapshot
+    aggregate: sum
+    column: used_tb
+    unit: TB
+    description: 快照存量，只在单一记录日内有意义。
+  capacity_total_tb:
+    label: 总容量TB
+    object: CapacitySnapshot
+    aggregate: sum
+    column: total_tb
+    unit: TB
+  file_ratio:
+    label: 文件已用占比
+    object: CapacitySnapshot
+    aggregate: max
+    column: file_ratio
+    unit: 比例
+    description: 源值，可以超过100%，不截断。
+  scan_table_size_gb:
+    label: 扫描表大小GB
+    object: TableScan
+    aggregate: sum
+    column: table_size_gb
+    unit: GB
+  scan_unvisited_size_gb:
+    label: 近三个月未访问表大小GB
+    object: TableScan
+    aggregate: sum
+    column: table_size_gb
+    filter: {field: TableScan.unvisited_3m, op: eq, value: true}
+    unit: GB
+    description: 未访问规模，不等于可释放容量。优化类别之间可能重叠。
+  scan_table_count:
+    label: 扫描表数量
+    object: TableScan
+    aggregate: count
+    unit: 张
+  user_count:
+    label: 用户数
+    object: User
+    aggregate: count_distinct_identity
+    identity_object: User
+    unit: 人
+    rules: [R4]
+    description: 对用户身份去重的人数。用户可能属于多个项目，展开成员关系后不能重复计数。
+  membership_count:
+    label: 成员条目数
+    object: ProjectMembership
+    aggregate: count
+    unit: 条
+
+rules:
+  R1:
+    statement: 活跃用户是近30天内有访问行为的用户。
+    kind: definition
+    params: {window_days: 30}
+    open_questions: [访问行为包含哪些来源, 30天窗口的锚点日期]
+  R2:
+    statement: 低频用户是近30天访问次数小于5的用户。
+    kind: threshold
+    params: {window_days: 30, threshold: 5, operator: lt}
+    requires_full_coverage: true
+    open_questions: [是否包含零访问, 两个来源是否重叠, 窗口覆盖是否完整]
+    note: 覆盖不足时不能给出正式低频分类，只能给已观测预览。阈值用 having 执行，例如按用户分组后 having click_pv lt 5。零访问用户在观测数据里指标为空，不会被这个比较选中，需要单独作为一类处理。
+  R3:
+    statement: 模块渗透率是近30天该模块用户数除以总活跃用户数，模块只来自点击详情的模块列。
+    kind: definition
+    params: {window_days: 30}
+    open_questions: [总活跃用户的来源和组织范围]
+  R4:
+    statement: 凡计算用户数都要去重。
+    kind: identity_dedup
+    enforcement: always
+    applies_to_metrics: [click_uv, report_uv]
+  R5:
+    statement: 账号以 wx 结尾为外协，其余为自有；推广对象排除外协和数智化部。
+    kind: eligibility
+    purpose: promotion
+    exclude:
+      - {field: User.account, op: ends_with, value: wx, reason: 外协账号}
+      - {field: User.department, op: eq, value: 数智化部, reason: 明确排除的数智化部}
+      - {field: User.identity_source, op: ne, value: user_list, reason: 账号不在用户清单，身份未确认}
+    defer:
+      - {field: User.department, op: starts_with, value: 数智化部, reason: 数智化部子部门范围未确认}
+    note: 数智化中心不自动等同数智化部。普通分析不排除外协，只有推广用途才执行排除。
+
+# What a formal answer needs but this data cannot supply. The compiler attaches
+# these to results instead of letting a confident number stand alone.
+limitations:
+  - id: click_window
+    applies_to: [ClickObservation]
+    text: 导出条件写的是8月9日到9月7日，实际记录只出现在9月1日到9月7日。30天覆盖未核实，缺失不能当成零。
+  - id: cross_source_pv
+    applies_to: [ClickObservation, ReportVisitObservation]
+    text: 点击和报表访问没有共同事件ID，两个来源的访问次数不能相加。用户集合可以按身份取并集。
+  - id: snapshot_dates
+    applies_to: [CapacitySnapshot, TableScan]
+    text: 容量记录日是9月6日，扫描日是9月7日和9月9日。不同时点不能相除或相加。
+  - id: unmatched_identity
+    applies_to: [User]
+    text: 部分事件账号不在用户清单中，保留在 unmatched_account 命名空间，不进入推广名单。
+  - id: membership_validity
+    applies_to: [ProjectMembership]
+    text: 用户项目列表是否完整、是否代表有效授权尚未确认，只能当作当前清单成员的代理口径。

@@ -24,6 +24,10 @@ package io.agentscope.dataagent.dataset;
  */
 public record DatasetScope(String ownerId, java.util.List<String> groupIds) {
 
+    public DatasetScope {
+        groupIds = groupIds == null ? java.util.List.of() : groupIds;
+    }
+
     public DatasetScope(String ownerId) {
         this(ownerId, null);
     }

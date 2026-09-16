@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { parseSemantic } from '../utils/semanticTools';
 
 export interface CitationToolEntry {
   name: string;
@@ -16,12 +17,9 @@ interface Entry {
   table?: string;
   sql?: string;
   chart?: boolean;
+  semantic?: { groupName: string; sql: string; rowCount: number };
 }
 
-/**
- * Collapsible "来源" panel under an assistant bubble: which datasets/tables/SQL a turn touched,
- * derived from the turn's tool calls (live and history use the same tool entries).
- */
 export default function CitationPanel({
   tools,
   datasetMap,
@@ -33,13 +31,20 @@ export default function CitationPanel({
   const entries: Entry[] = [];
   for (const t of tools) {
     const n = (t.name ?? '').toLowerCase();
-    if (n.includes('run_sql_preview') || n.includes('describe_table')) {
+    const sem = parseSemantic(t.result);
+
+    if (sem?.stage === 'query' && sem.status === 'success') {
+      const d = sem.data as Record<string, unknown>;
+      entries.push({
+        semantic: {
+          groupName: (d.groupName as string) ?? '',
+          sql: (d.semanticSql as string) ?? '',
+          rowCount: (d.returnedRowCount as number) ?? 0,
+        },
+      });
+    } else if (n.includes('run_sql_preview') || n.includes('describe_table')) {
       let input: { source_id?: string; sql?: string } = {};
-      try {
-        input = JSON.parse(t.input ?? '{}');
-      } catch {
-        input = {};
-      }
+      try { input = JSON.parse(t.input ?? '{}'); } catch { input = {}; }
       const ref = input.source_id ? datasetMap[input.source_id] : undefined;
       entries.push({ dataset: ref?.name, table: ref?.tableName, sql: input.sql });
     } else if (n.includes('render_chart')) {
@@ -51,6 +56,7 @@ export default function CitationPanel({
   return (
     <div style={{ marginTop: 8 }}>
       <button
+        type="button"
         onClick={() => setOpen(o => !o)}
         style={{
           background: 'transparent',
@@ -79,7 +85,29 @@ export default function CitationPanel({
         >
           {entries.map((e, i) => (
             <div key={i} style={{ fontSize: '0.75rem', color: 'var(--da-text-2)' }}>
-              {e.chart ? (
+              {e.semantic ? (
+                <>
+                  <span style={{ fontWeight: 600 }}>
+                    {e.semantic.groupName || '语义模型'}
+                  </span>
+                  <span style={{ color: 'var(--da-text-muted)' }}>
+                    {' '}· {e.semantic.rowCount} 行 · 语义 SQL 查询
+                  </span>
+                  {e.semantic.sql && (
+                    <div
+                      style={{
+                        fontFamily: 'ui-monospace, Menlo, monospace',
+                        fontSize: '0.7rem',
+                        color: 'var(--da-text-3)',
+                        whiteSpace: 'pre-wrap',
+                        marginTop: 2,
+                      }}
+                    >
+                      {e.semantic.sql.length > 220 ? e.semantic.sql.slice(0, 220) + '…' : e.semantic.sql}
+                    </div>
+                  )}
+                </>
+              ) : e.chart ? (
                 <span>📊 图表（render_chart）</span>
               ) : (
                 <>

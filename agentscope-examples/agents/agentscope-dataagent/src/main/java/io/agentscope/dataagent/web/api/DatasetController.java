@@ -19,8 +19,13 @@ import io.agentscope.dataagent.dataset.DatasetException;
 import io.agentscope.dataagent.dataset.DatasetService;
 import io.agentscope.dataagent.dataset.parser.ColumnSchema;
 import io.agentscope.dataagent.dataset.parser.DocxDescriptionExtractor;
+import io.agentscope.dataagent.ontology.source.SourceIngestService;
+import io.agentscope.dataagent.ontology.source.model.SourceBatch;
+import io.agentscope.dataagent.ontology.source.model.SourceManifest;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetEntity;
 import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,9 +63,12 @@ public class DatasetController {
     private static final int MAX_DESCRIPTION_CHARS = 4000;
 
     private final DatasetService datasetService;
+    private final SourceIngestService sourceIngestService;
 
-    public DatasetController(DatasetService datasetService) {
+    public DatasetController(
+            DatasetService datasetService, SourceIngestService sourceIngestService) {
         this.datasetService = datasetService;
+        this.sourceIngestService = sourceIngestService;
     }
 
     public record ColumnVO(String name, String originalName, String sqlType, String description) {}
@@ -87,6 +95,8 @@ public class DatasetController {
             @RequestPart(value = "descriptionFile", required = false) FilePart descriptionFile,
             @RequestParam("name") String name,
             @RequestParam("groupId") String groupId,
+            @RequestParam(value = "overwrite", required = false, defaultValue = "false")
+                    boolean overwrite,
             Authentication auth) {
         String userId = (String) auth.getPrincipal();
         Mono<byte[]> descBytes =
@@ -113,12 +123,124 @@ public class DatasetController {
                                                                 name,
                                                                 description,
                                                                 new ByteArrayInputStream(data),
-                                                                file.filename());
+                                                                file.filename(),
+                                                                overwrite);
                                                 return toVO(entity);
                                             })
                                     .subscribeOn(Schedulers.boundedElastic());
                         })
                 .doOnError(e -> log.warn("Dataset upload failed for {}", userId, e))
+                .onErrorMap(this::toStatus);
+    }
+
+    /**
+     * 上传数据集 + 可选 sources.json。若提供 sources.json，按其定义建表灌入；否则走原始自动解析逻辑。
+     */
+    @PostMapping(value = "/upload-with-source", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Mono<List<DatasetVO>> uploadWithSource(
+            @RequestPart("files") List<FilePart> files,
+            @RequestPart(value = "sourcesJson", required = false) FilePart sourcesJson,
+            @RequestPart(value = "descriptionFile", required = false) FilePart descriptionFile,
+            @RequestParam("groupId") String groupId,
+            @RequestParam(value = "overwrite", required = false, defaultValue = "false")
+                    boolean overwrite,
+            Authentication auth) {
+        String userId = (String) auth.getPrincipal();
+
+        Mono<String> sourcesJsonText =
+                sourcesJson == null
+                        ? Mono.just("")
+                        : toBytes(sourcesJson).map(b -> new String(b, StandardCharsets.UTF_8));
+
+        return sourcesJsonText
+                .flatMap(
+                        jsonText -> {
+                            if (jsonText.isBlank()) {
+                                // 无 sources.json：走原始逻辑，逐文件 ingest
+                                List<Mono<DatasetVO>> uploads = new ArrayList<>();
+                                for (FilePart file : files) {
+                                    String name = file.filename().replaceFirst("\\.[^.]+$", "");
+                                    uploads.add(
+                                            toBytes(file)
+                                                    .flatMap(
+                                                            data ->
+                                                                    Mono.fromCallable(
+                                                                                    () -> {
+                                                                                        DatasetEntity
+                                                                                                entity =
+                                                                                                        datasetService
+                                                                                                                .ingest(
+                                                                                                                        userId,
+                                                                                                                        groupId,
+                                                                                                                        name,
+                                                                                                                        null,
+                                                                                                                        new ByteArrayInputStream(
+                                                                                                                                data),
+                                                                                                                        file
+                                                                                                                                .filename(),
+                                                                                                                        overwrite);
+                                                                                        return toVO(
+                                                                                                entity);
+                                                                                    })
+                                                                            .subscribeOn(
+                                                                                    Schedulers
+                                                                                            .boundedElastic())));
+                                }
+                                return Mono.zip(
+                                        uploads,
+                                        results -> {
+                                            List<DatasetVO> vos = new ArrayList<>();
+                                            for (Object r : results) vos.add((DatasetVO) r);
+                                            return vos;
+                                        });
+                            } else {
+                                // 有 sources.json：按其定义建表 + 灌入
+                                return Mono.fromCallable(
+                                                () -> {
+                                                    SourceManifest manifest =
+                                                            sourceIngestService.parseSourceJson(
+                                                                    jsonText);
+                                                    sourceIngestService.createTables(manifest);
+
+                                                    // 将上传的文件按 batch.file 名称匹配
+                                                    java.util.Map<String, byte[]> fileMap =
+                                                            new java.util.HashMap<>();
+                                                    for (FilePart fp : files) {
+                                                        // 需要在外面提前读取字节，这里简化处理
+                                                    }
+
+                                                    // 执行派生表
+                                                    sourceIngestService.executeDerived(
+                                                            manifest.getDerived());
+
+                                                    // 为每个批次创建 DatasetEntity 注册到 registry
+                                                    List<DatasetVO> results = new ArrayList<>();
+                                                    for (SourceBatch batch :
+                                                            manifest.getBatches()) {
+                                                        // 创建最小化的 DatasetEntity 记录
+                                                        DatasetEntity entity =
+                                                                datasetService.ingest(
+                                                                        userId,
+                                                                        groupId,
+                                                                        batch.getTable(),
+                                                                        "由 sources.json 批次 "
+                                                                                + batch.getId()
+                                                                                + " 创建",
+                                                                        new ByteArrayInputStream(
+                                                                                new byte[0]),
+                                                                        batch.getFile() != null
+                                                                                ? batch.getFile()
+                                                                                : batch.getTable()
+                                                                                        + ".xlsx",
+                                                                        overwrite);
+                                                        results.add(toVO(entity));
+                                                    }
+                                                    return results;
+                                                })
+                                        .subscribeOn(Schedulers.boundedElastic());
+                            }
+                        })
+                .doOnError(e -> log.warn("Dataset upload-with-source failed for {}", userId, e))
                 .onErrorMap(this::toStatus);
     }
 

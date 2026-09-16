@@ -54,4 +54,8 @@ public interface SqlConnector {
      *     "error: ..."} strings
      */
     String runSqlPreview(DataSource source, String sql, String question, int rowLimit);
+
+    default SqlPreviewResult query(DataSource source, String sql, int rowLimit) {
+        throw new UnsupportedOperationException("当前连接器不支持结构化查询");
+    }
 }

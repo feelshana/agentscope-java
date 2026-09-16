@@ -23,6 +23,14 @@ import io.agentscope.core.tool.ToolParam;
 import io.agentscope.dataagent.dataset.DatasetContextProvider;
 import io.agentscope.dataagent.dataset.DatasetScope;
 import io.agentscope.dataagent.dataset.KnowledgeGraphService;
+import io.agentscope.dataagent.ontology.OntologyService;
+import io.agentscope.dataagent.runtime.session.SessionAgentManager;
+import io.agentscope.dataagent.semantic.model.CubeQuery;
+import io.agentscope.dataagent.semantic.model.SemanticModel;
+import io.agentscope.dataagent.semantic.service.CubeQueryToSqlConverter;
+import io.agentscope.dataagent.semantic.service.QueryHistoryService;
+import io.agentscope.dataagent.semantic.service.SemanticModelService;
+import io.agentscope.dataagent.semantic.service.SemanticQueryService;
 import io.agentscope.dataagent.web.persistence.jpa.ChartOptionEntity;
 import io.agentscope.dataagent.web.persistence.jpa.ChartOptionRepository;
 import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
@@ -64,6 +72,12 @@ public final class DataAgentToolkit {
     private final ChartOptionRepository chartOptions;
     private final KnowledgeGraphService knowledgeGraph;
     private final ConversationScopeRegistry conversationScopes;
+    private final SessionAgentManager sessionAgents;
+    private final OntologyService ontologyService;
+    private final SemanticModelService semanticModelService;
+    private final CubeQueryToSqlConverter cubeQueryConverter;
+    private final QueryHistoryService queryHistoryService;
+    private final SemanticQueryService semanticQueries;
 
     public DataAgentToolkit(DataSourceRegistry registry, SqlConnector sqlConnector) {
         this(registry, sqlConnector, null, null, null, null);
@@ -100,12 +114,88 @@ public final class DataAgentToolkit {
             ChartOptionRepository chartOptions,
             KnowledgeGraphService knowledgeGraph,
             ConversationScopeRegistry conversationScopes) {
+        this(
+                registry,
+                sqlConnector,
+                contextProvider,
+                chartOptions,
+                knowledgeGraph,
+                conversationScopes,
+                null);
+    }
+
+    public DataAgentToolkit(
+            DataSourceRegistry registry,
+            SqlConnector sqlConnector,
+            DatasetContextProvider contextProvider,
+            ChartOptionRepository chartOptions,
+            KnowledgeGraphService knowledgeGraph,
+            ConversationScopeRegistry conversationScopes,
+            OntologyService ontologyService) {
+        this(
+                registry,
+                sqlConnector,
+                contextProvider,
+                chartOptions,
+                knowledgeGraph,
+                conversationScopes,
+                ontologyService,
+                null,
+                null,
+                null);
+    }
+
+    public DataAgentToolkit(
+            DataSourceRegistry registry,
+            SqlConnector sqlConnector,
+            DatasetContextProvider contextProvider,
+            ChartOptionRepository chartOptions,
+            KnowledgeGraphService knowledgeGraph,
+            ConversationScopeRegistry conversationScopes,
+            OntologyService ontologyService,
+            SemanticModelService semanticModelService,
+            CubeQueryToSqlConverter cubeQueryConverter,
+            QueryHistoryService queryHistoryService) {
+        this(
+                registry,
+                sqlConnector,
+                contextProvider,
+                chartOptions,
+                knowledgeGraph,
+                conversationScopes,
+                ontologyService,
+                semanticModelService,
+                cubeQueryConverter,
+                queryHistoryService,
+                null,
+                null);
+    }
+
+    public DataAgentToolkit(
+            DataSourceRegistry registry,
+            SqlConnector sqlConnector,
+            DatasetContextProvider contextProvider,
+            ChartOptionRepository chartOptions,
+            KnowledgeGraphService knowledgeGraph,
+            ConversationScopeRegistry conversationScopes,
+            OntologyService ontologyService,
+            SemanticModelService semanticModelService,
+            CubeQueryToSqlConverter cubeQueryConverter,
+            QueryHistoryService queryHistoryService,
+            SessionAgentManager sessionAgents,
+            SemanticQueryService semanticQueries) {
+        this.semanticQueries = semanticQueries;
         this.registry = Objects.requireNonNull(registry, "registry");
         this.sqlConnector = Objects.requireNonNull(sqlConnector, "sqlConnector");
         this.contextProvider = contextProvider;
         this.chartOptions = chartOptions;
         this.knowledgeGraph = knowledgeGraph;
         this.conversationScopes = conversationScopes;
+        this.ontologyService = ontologyService;
+        this.semanticModelService = semanticModelService;
+        this.cubeQueryConverter = cubeQueryConverter;
+        this.queryHistoryService = queryHistoryService;
+        this.sessionAgents = sessionAgents;
     }
 
     @Tool(
@@ -115,6 +205,8 @@ public final class DataAgentToolkit {
                     List the data sources the admin has configured for this deployment. Each entry \
                     is reported as 'id | kind | label — description (tags)'. Call this before \
                     drafting any SQL so you pick a source the runtime actually knows about. \
+                    When an ontology summary is present, use search_model to locate specific \
+                    business objects by name/label before writing SQL. \
                     Returns 'none' when no sources are configured.\
                     """)
     public String listDataSources(DatasetScope scope, RuntimeContext rc) {
@@ -151,6 +243,10 @@ public final class DataAgentToolkit {
         }
         String out = sb.toString().stripTrailing();
         if (scope != null && contextProvider != null) {
+            String ontology = contextProvider.ontologySummary(scope.ownerId(), scope.groupIds());
+            if (ontology != null && !ontology.isBlank()) {
+                out = out + "\n\n## 数据本体（对象目录）\n" + ontology;
+            }
             String rel = contextProvider.relationshipsText(scope.ownerId(), scope.groupIds());
             if (rel != null && !rel.isBlank()) {
                 out = out + "\n\n## 数据集关系说明（用户提供）\n" + rel;
@@ -183,6 +279,12 @@ public final class DataAgentToolkit {
                 && rc != null
                 && rc.getSessionId() != null) {
             java.util.List<String> groups = conversationScopes.get(rc.getSessionId());
+            if ((groups == null || groups.isEmpty()) && sessionAgents != null) {
+                String gate = sessionAgents.gateKeyForSessionId(rc.getSessionId());
+                if (gate != null) {
+                    groups = conversationScopes.get(gate);
+                }
+            }
             if (groups != null && !groups.isEmpty()) {
                 return new DatasetScope(base.ownerId(), groups);
             }
@@ -209,6 +311,7 @@ public final class DataAgentToolkit {
                     .filter(
                             ds ->
                                     ds.properties() != null
+                                            && isMine(ds, scope)
                                             && groups.contains(ds.properties().get("groupId")))
                     .toList();
         }
@@ -499,4 +602,403 @@ public final class DataAgentToolkit {
             return "error: failed to serialize chart payload";
         }
     }
+
+    @Tool(
+            name = "describe_ontology",
+            description =
+                    """
+                    Describe the ontology model (objects, relationships, metrics, rules, \
+                    limitations) for the current knowledge base. Call this when the user asks \
+                    "有什么数据集" / "能查什么数据" or when you need to understand the business \
+                    semantics before writing SQL. Returns a formatted text description. \
+                    Returns 'none' when no ontology is configured.\
+                    """)
+    public String describeOntology(DatasetScope scope, RuntimeContext rc) {
+        if (ontologyService == null) {
+            return "none: ontology service not available";
+        }
+        DatasetScope eff = effectiveScope(scope, rc);
+        if (eff == null) {
+            return "error: no tenant context available";
+        }
+        String groupId =
+                eff.hasGroupFilter() && !eff.groupIds().isEmpty() ? eff.groupIds().get(0) : null;
+        if (groupId == null) {
+            return "none: no knowledge base selected. Ask the user to select one.";
+        }
+        return ontologyService.formatOntologyCatalog(eff.ownerId(), groupId);
+    }
+
+    @Tool(
+            name = "show_ontology_graph",
+            description =
+                    """
+                    Show the ontology graph (objects, relationships, metrics) as a visual \
+                    diagram. Call this when the user wants to see the data model, or when a \
+                    query involves multiple ontology objects and the user benefits from seeing \
+                    their relationships. Returns a JSON payload {type:"ontology_graph", ...} \
+                    that the UI renders as an interactive graph.\
+                    """)
+    public String showOntologyGraph(
+            DatasetScope scope,
+            RuntimeContext rc,
+            @ToolParam(
+                            name = "highlight_objects",
+                            description =
+                                    "Optional list of object names to highlight in the graph "
+                                            + "(e.g. the objects involved in the current query)",
+                            required = false)
+                    List<String> highlightObjects) {
+        if (ontologyService == null) {
+            return "error: ontology service not available";
+        }
+        DatasetScope eff = effectiveScope(scope, rc);
+        if (eff == null) {
+            return "error: no tenant context available";
+        }
+        String groupId =
+                eff.hasGroupFilter() && !eff.groupIds().isEmpty() ? eff.groupIds().get(0) : null;
+        if (groupId == null) {
+            return "error: no knowledge base selected";
+        }
+        try {
+            Map<String, Object> graphData =
+                    highlightObjects != null && !highlightObjects.isEmpty()
+                            ? ontologyService.getSubGraph(eff.ownerId(), groupId, highlightObjects)
+                            : ontologyService.getOntologyGraph(eff.ownerId(), groupId);
+            Map<String, Object> payload = new LinkedHashMap<>(graphData);
+            payload.put("type", "ontology_graph");
+            if (highlightObjects != null) {
+                payload.put("highlight", highlightObjects);
+            }
+            return MAPPER.writeValueAsString(payload);
+        } catch (Exception e) {
+            return "error: failed to build ontology graph: " + e.getMessage();
+        }
+    }
+
+    @Tool(
+            name = "search_model",
+            description =
+                    """
+                    Search ontology objects, properties, and relationships by business name \
+                    (Chinese label), table name, or description. Use this to locate the \
+                    business objects relevant to the user's question before writing SQL. \
+                    Returns matched objects with attribute summaries and relation edges. \
+                    If no match, try list_data_sources to see the full object catalog.\
+                    """)
+    public String searchModel(
+            DatasetScope scope,
+            RuntimeContext rc,
+            @ToolParam(
+                            name = "query",
+                            description =
+                                    "Business name, table name, or keyword to search "
+                                            + "(e.g. '用户', 'click_observation', '点击')")
+                    String query) {
+        DatasetScope eff = effectiveScope(scope, rc);
+        if (eff == null) {
+            return "error: no tenant context available";
+        }
+        if (query == null || query.isBlank()) {
+            return "error: query must not be blank";
+        }
+        if (contextProvider == null) {
+            return "no ontology context available";
+        }
+        // Search across all visible groups
+        String q = query.toLowerCase();
+        StringBuilder sb = new StringBuilder();
+
+        // Use ontologySummary to get compact catalog, then match
+        String summary = contextProvider.ontologySummary(eff.ownerId(), eff.groupIds());
+        if (summary == null || summary.isBlank()) {
+            return "no ontology model configured. Call list_data_sources first to see available"
+                    + " data sources, then ask the user to upload data or generate a model.";
+        }
+
+        // For each object, check if query matches name/label/description/property labels
+        // Use ontologyModelText for matched objects to return full details
+        boolean anyMatch = false;
+        // Parse summary lines to find object names, then check each
+        for (String line : summary.split("\n")) {
+            if (line.contains("↔") || line.startsWith("…")) {
+                continue; // skip relation lines and truncation markers
+            }
+            // Object line format: "name(label) [kind] — N relations"
+            String objName = line.split("[\\(\\[]")[0].trim();
+            if (objName.isEmpty()) {
+                continue;
+            }
+            if (objName.toLowerCase().contains(q) || line.toLowerCase().contains(q)) {
+                String detail =
+                        contextProvider.ontologyModelText(eff.ownerId(), eff.groupIds(), objName);
+                if (detail != null) {
+                    if (anyMatch) {
+                        sb.append('\n');
+                    }
+                    sb.append(detail);
+                    anyMatch = true;
+                }
+            }
+        }
+
+        if (!anyMatch) {
+            return "no match for '"
+                    + query
+                    + "'. Try list_data_sources to see the full catalog, or ask the user for"
+                    + " the correct business term.";
+        }
+        return sb.toString();
+    }
+
+    @Tool(
+            name = "get_model",
+            description =
+                    """
+                    Get the full definition of a single ontology object: all attributes, \
+                    relation edges with JOIN suggestions, and derived SQL (if applicable). \
+                    Call this BEFORE writing SQL to understand the exact columns, types, \
+                    and how to JOIN related tables. Pass the object name (e.g. 'app_user') \
+                    or its Chinese label (e.g. '用户').\
+                    """)
+    public String getModel(
+            DatasetScope scope,
+            RuntimeContext rc,
+            @ToolParam(
+                            name = "object_name",
+                            description =
+                                    "Object name or Chinese label " + "(e.g. 'app_user' or '用户')")
+                    String objectName) {
+        DatasetScope eff = effectiveScope(scope, rc);
+        if (eff == null) {
+            return "error: no tenant context available";
+        }
+        if (objectName == null || objectName.isBlank()) {
+            return "error: object_name must not be blank";
+        }
+        if (contextProvider == null) {
+            return "no ontology context available";
+        }
+        String text = contextProvider.ontologyModelText(eff.ownerId(), eff.groupIds(), objectName);
+        if (text == null || text.isBlank()) {
+            return "no object matching '"
+                    + objectName
+                    + "'. Use search_model to find available objects, or list_data_sources"
+                    + " for the full catalog.";
+        }
+        return text;
+    }
+
+    // ====== 语义建模工具 ======
+
+    @Tool(
+            name = "list_models",
+            description =
+                    "发现当前用户/所选知识库中的逻辑语义模型，可按 query 搜索并分页。有模型时按 list_models →"
+                        + " get_semantic_context/describe_model → recall_similar_queries → dry_plan"
+                        + " → query_semantic 工作流问数；Cube 为可选路径。不要把物理表名当成逻辑名。")
+    public String listModels(
+            DatasetScope scope,
+            RuntimeContext rc,
+            @ToolParam(name = "group_id", description = "可选知识库 ID，多选查询时须指定", required = false)
+                    String groupId,
+            @ToolParam(name = "query", description = "模型关键词", required = false) String query,
+            @ToolParam(name = "offset", description = "分页起点，默认 0", required = false) Integer offset,
+            @ToolParam(name = "limit", description = "分页数量，默认 20，最多 100", required = false)
+                    Integer limit) {
+        if (semanticQueries == null)
+            return SemanticQueryService.error("models", groupId, "语义服务不可用");
+        return semanticQueries.listModels(
+                effectiveScope(scope, rc), groupId, query, number(offset), number(limit));
+    }
+
+    @Tool(
+            name = "get_semantic_context",
+            description =
+                    "读取语义模型、Cube 指标、规则和数据限制。小模型返回完整上下文，大模型按章节分页；必须补读未完整返回的规则/局限/说明。SQL"
+                            + " 使用逻辑模型名；字段细节用 describe_model。")
+    public String getSemanticContext(
+            DatasetScope scope,
+            RuntimeContext rc,
+            @ToolParam(name = "group_id", description = "知识库 ID；只有唯一候选时可省略", required = false)
+                    String groupId,
+            @ToolParam(
+                            name = "section",
+                            description =
+                                    "overview/rules/limitations/instructions/relationships/cubes，默认"
+                                            + " overview",
+                            required = false)
+                    String section,
+            @ToolParam(name = "offset", description = "分页起点，默认 0", required = false) Integer offset,
+            @ToolParam(name = "limit", description = "分页数量，默认 20", required = false)
+                    Integer limit) {
+        if (semanticQueries == null)
+            return SemanticQueryService.error("context", groupId, "语义服务不可用");
+        return semanticQueries.context(
+                effectiveScope(scope, rc), groupId, section, number(offset), number(limit));
+    }
+
+    @Tool(
+            name = "describe_model",
+            description =
+                    "读取逻辑模型的字段、计算表达式、关系和 Cube 口径；queryable=false 字段不能直接 SELECT，relationship handle"
+                            + " 只供计算列展开。自动关系仅支持单跳 to-one。")
+    public String describeModel(
+            DatasetScope scope,
+            RuntimeContext rc,
+            @ToolParam(name = "model_name", description = "list_models 返回的逻辑模型名") String name,
+            @ToolParam(name = "group_id", description = "知识库 ID", required = false) String groupId,
+            @ToolParam(name = "offset", description = "字段分页起点", required = false) Integer offset,
+            @ToolParam(name = "limit", description = "字段分页数量", required = false) Integer limit) {
+        if (semanticQueries == null) return SemanticQueryService.error("model", groupId, "语义服务不可用");
+        return semanticQueries.describeModel(
+                effectiveScope(scope, rc), groupId, name, number(offset), number(limit));
+    }
+
+    @Tool(
+            name = "recall_similar_queries",
+            description =
+                    "召回当前模型/规则/绑定版本下执行成功的语义 SQL，最多 5 条；seed_unexecuted 为未执行参考，不代表正确结果。不要照搬旧物理 SQL"
+                            + " 或对 UV 等字段擅自 SUM。")
+    public String recallSimilarQueries(
+            DatasetScope scope,
+            RuntimeContext rc,
+            @ToolParam(name = "question", description = "用户的自然语言问题") String question,
+            @ToolParam(name = "group_id", description = "知识库 ID", required = false)
+                    String groupId) {
+        if (semanticQueries == null)
+            return SemanticQueryService.error("recall", groupId, "语义服务不可用");
+        return semanticQueries.recall(effectiveScope(scope, rc), groupId, question);
+    }
+
+    @Tool(
+            name = "dry_plan",
+            description =
+                    "将逻辑模型名 SELECT SQL"
+                        + " 进行授权绑定及语义编译，不执行数据库、不取业务数据。通过仅表示语义编译通过，不表示物理数据库或业务口径已验证；失败必须修正，不回退到未受控的物理"
+                        + " SQL。")
+    public String dryPlan(
+            DatasetScope scope,
+            RuntimeContext rc,
+            @ToolParam(name = "sql", description = "使用逻辑模型名的单条只读 SELECT SQL") String sql,
+            @ToolParam(name = "group_id", description = "知识库 ID", required = false)
+                    String groupId) {
+        if (semanticQueries == null) return SemanticQueryService.error("plan", groupId, "语义服务不可用");
+        return semanticQueries.dryPlan(effectiveScope(scope, rc), groupId, sql);
+    }
+
+    @Tool(
+            name = "query_semantic",
+            description =
+                    "执行语义 SQL，每次重新授权和编译。传原始逻辑模型 SQL，不能传 dry_plan 返回的"
+                            + " compiledSql。返回结构化列/行、预览截断、耗时及来源；成功自动保存记忆，无需再 store_query。")
+    public String querySemantic(
+            DatasetScope scope,
+            RuntimeContext rc,
+            @ToolParam(name = "sql", description = "原始语义 SQL，不是物理编译 SQL") String sql,
+            @ToolParam(name = "question", description = "当前要回答的问题") String question,
+            @ToolParam(name = "group_id", description = "知识库 ID", required = false) String groupId,
+            @ToolParam(name = "row_limit", description = "预览行数，默认 20，最多 100", required = false)
+                    Integer rowLimit) {
+        if (semanticQueries == null) return SemanticQueryService.error("query", groupId, "语义服务不可用");
+        return semanticQueries.query(
+                effectiveScope(scope, rc), groupId, sql, question, number(rowLimit));
+    }
+
+    private static int number(Integer value) {
+        return value == null ? 0 : value;
+    }
+
+    @Tool(
+            name = "execute_cube_query",
+            description =
+                    """
+                    执行结构化 Cube 查询（DSL 路径）：把 cube_query JSON 转换为物理 SQL 并返回，\
+                    拿到 SQL 后再调用 run_sql_preview 执行取数。
+                    queryJson 格式（cube/measures/dimensions 一律用字符串名称，measures/dimensions 是字符串数组）：
+                    {"type":"cube_query","cube":"<cube名>","measures":["<度量名>"],\
+                    "dimensions":["<维度名>"],\
+                    "timeDimensions":[{"name":"<时间维度>","granularity":"day|week|month|quarter|year",\
+                    "start":"YYYY-MM-DD","end":"YYYY-MM-DD"}],\
+                    "filters":[{"dimension":"<维度>","operator":"eq|ne|gt|gte|lt|lte|in|not_in|like|between",\
+                    "value":"<值>"}],\
+                    "orderBy":[{"member":"<度量或维度>","direction":"asc|desc"}],"limit":100}
+                    示例：{"type":"cube_query","cube":"click_metrics","measures":["click_pv","click_uv"],\
+                    "dimensions":["module_name"],"orderBy":[{"member":"click_pv","direction":"desc"}],\
+                    "limit":50}
+                    度量/维度/时间维度的可用名称以 get_semantic_context 返回的 Cube 定义为准，禁止自造。\
+                    """)
+    public String executeCubeQuery(
+            DatasetScope scope,
+            RuntimeContext rc,
+            @ToolParam(name = "queryJson", description = "CubeQuery JSON 字符串") String queryJson,
+            @ToolParam(name = "group_id", description = "知识库 ID", required = false)
+                    String groupId) {
+        DatasetScope eff = effectiveScope(scope, rc);
+        if (eff == null) {
+            return "error: no tenant context available";
+        }
+        if (cubeQueryConverter == null || semanticModelService == null || semanticQueries == null) {
+            return "error: 语义查询服务不可用";
+        }
+        if (queryJson == null || queryJson.isBlank()) {
+            return "error: queryJson 参数不能为空";
+        }
+        try {
+            String authorizedGroup = semanticQueries.resolveGroup(eff, groupId).getId();
+            Optional<SemanticModel> opt =
+                    semanticModelService.getModel(eff.ownerId(), authorizedGroup);
+            if (opt.isEmpty()) {
+                return "error: 当前知识库未配置语义模型，无法执行 Cube 查询";
+            }
+            CubeQuery query = MAPPER.readValue(queryJson, CubeQuery.class);
+            String sql = cubeQueryConverter.convert(query, opt.get());
+            try {
+                return MAPPER.writeValueAsString(
+                        new CubeQueryResult(query.getCube(), sql, "Cube 查询已转换为 SQL"));
+            } catch (JsonProcessingException e) {
+                return "Cube: " + query.getCube() + "\nSQL:\n" + sql;
+            }
+        } catch (IllegalArgumentException e) {
+            return "error: Cube 查询转换失败 — " + e.getMessage();
+        } catch (Exception e) {
+            log.warn("execute_cube_query 失败", e);
+            return "error: 查询解析失败 — " + e.getMessage();
+        }
+    }
+
+    @Tool(
+            name = "store_query",
+            description =
+                    """
+                    存储一次成功的查询对（自然语言问题 + 结构化查询JSON + 生成的SQL），
+                    供后续 recall_similar_queries 召回作为 few-shot 参考。
+                    在查询执行成功并确认结果正确后调用。
+                    """)
+    public String storeQuery(
+            DatasetScope scope,
+            RuntimeContext rc,
+            @ToolParam(name = "question", description = "用户的自然语言问题") String question,
+            @ToolParam(name = "queryJson", description = "结构化 CubeQuery JSON") String queryJson,
+            @ToolParam(name = "sql", description = "生成的 SQL") String sql) {
+        DatasetScope eff = effectiveScope(scope, rc);
+        if (eff == null) {
+            return "error: no tenant context available";
+        }
+        if (queryHistoryService == null || semanticQueries == null) {
+            return "error: 查询历史服务不可用";
+        }
+        String authorizedGroup;
+        try {
+            authorizedGroup = semanticQueries.resolveGroup(eff, null).getId();
+        } catch (IllegalArgumentException e) {
+            return "error: " + e.getMessage();
+        }
+        queryHistoryService.store(authorizedGroup, question, queryJson, sql);
+        return "查询对已成功存储。";
+    }
+
+    /** Cube 查询转换结果。 */
+    private record CubeQueryResult(String cube, String sql, String explanation) {}
 }

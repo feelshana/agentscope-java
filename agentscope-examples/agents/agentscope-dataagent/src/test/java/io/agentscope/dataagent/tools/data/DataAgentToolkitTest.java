@@ -18,6 +18,7 @@ package io.agentscope.dataagent.tools.data;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.agentscope.core.agent.RuntimeContext;
+import io.agentscope.dataagent.dataset.DatasetContextProvider;
 import io.agentscope.dataagent.dataset.DatasetScope;
 import java.util.List;
 import java.util.Map;
@@ -260,5 +261,175 @@ class DataAgentToolkitTest {
     void renderChartRejectsUnchartableData() {
         assertThat(toolkit.renderChart("q", List.of("a"), List.of(List.of("x")), null, null))
                 .startsWith("error:");
+    }
+
+    // ---------- P4: ontology tool tests ----------
+
+    @Test
+    void listDataSourcesInjectsOntologySummary() {
+        DatasetContextProvider mockCtx =
+                new DatasetContextProvider() {
+                    @Override
+                    public String relationshipsText(String ownerId) {
+                        return "";
+                    }
+
+                    @Override
+                    public String relationshipsText(String ownerId, List<String> onlyGroups) {
+                        return "";
+                    }
+
+                    @Override
+                    public String semanticTermsText() {
+                        return "";
+                    }
+
+                    @Override
+                    public String relationsFor(String ownerId, String table) {
+                        return "";
+                    }
+
+                    @Override
+                    public String relationsFor(
+                            String ownerId, String table, List<String> onlyGroups) {
+                        return "";
+                    }
+
+                    @Override
+                    public String ontologySummary(String ownerId, List<String> onlyGroups) {
+                        return "app_user(用户列表) [dimension] — 1 relations\n"
+                                + "app_user.user_id=click_observation.user_id [one_to_many]\n";
+                    }
+
+                    @Override
+                    public String ontologyModelText(
+                            String ownerId, List<String> onlyGroups, String objectName) {
+                        return null;
+                    }
+                };
+        DataAgentToolkit tk =
+                new DataAgentToolkit(
+                        new InMemoryDataSourceRegistry(List.of(TenantTablesFixture.demoSource())),
+                        new JdbcSqlConnector(),
+                        mockCtx);
+
+        String out = tk.listDataSources(SCOPE, RC);
+        assertThat(out).contains("数据本体（对象目录）");
+        assertThat(out).contains("app_user(用户列表)");
+    }
+
+    @Test
+    void searchModelReturnsNoMatchMessage() {
+        DatasetContextProvider mockCtx =
+                new DatasetContextProvider() {
+                    @Override
+                    public String relationshipsText(String ownerId) {
+                        return "";
+                    }
+
+                    @Override
+                    public String relationshipsText(String ownerId, List<String> onlyGroups) {
+                        return "";
+                    }
+
+                    @Override
+                    public String semanticTermsText() {
+                        return "";
+                    }
+
+                    @Override
+                    public String relationsFor(String ownerId, String table) {
+                        return "";
+                    }
+
+                    @Override
+                    public String relationsFor(
+                            String ownerId, String table, List<String> onlyGroups) {
+                        return "";
+                    }
+
+                    @Override
+                    public String ontologySummary(String ownerId, List<String> onlyGroups) {
+                        return "app_user(用户列表) [dimension]\n";
+                    }
+
+                    @Override
+                    public String ontologyModelText(
+                            String ownerId, List<String> onlyGroups, String objectName) {
+                        return null;
+                    }
+                };
+        DataAgentToolkit tk =
+                new DataAgentToolkit(
+                        new InMemoryDataSourceRegistry(List.of(TenantTablesFixture.demoSource())),
+                        new JdbcSqlConnector(),
+                        mockCtx);
+
+        String result = tk.searchModel(SCOPE, RC, "nonexistent_object");
+        assertThat(result).contains("no match");
+    }
+
+    @Test
+    void getModelDelegatesToContextProvider() {
+        DatasetContextProvider mockCtx =
+                new DatasetContextProvider() {
+                    @Override
+                    public String relationshipsText(String ownerId) {
+                        return "";
+                    }
+
+                    @Override
+                    public String relationshipsText(String ownerId, List<String> onlyGroups) {
+                        return "";
+                    }
+
+                    @Override
+                    public String semanticTermsText() {
+                        return "";
+                    }
+
+                    @Override
+                    public String relationsFor(String ownerId, String table) {
+                        return "";
+                    }
+
+                    @Override
+                    public String relationsFor(
+                            String ownerId, String table, List<String> onlyGroups) {
+                        return "";
+                    }
+
+                    @Override
+                    public String ontologySummary(String ownerId, List<String> onlyGroups) {
+                        return "";
+                    }
+
+                    @Override
+                    public String ontologyModelText(
+                            String ownerId, List<String> onlyGroups, String objectName) {
+                        if ("app_user".equals(objectName)) {
+                            return "## 用户列表\n对象名: app_user\n物理表: ds_o_d_app_user\n";
+                        }
+                        return null;
+                    }
+                };
+        DataAgentToolkit tk =
+                new DataAgentToolkit(
+                        new InMemoryDataSourceRegistry(List.of(TenantTablesFixture.demoSource())),
+                        new JdbcSqlConnector(),
+                        mockCtx);
+
+        assertThat(tk.getModel(SCOPE, RC, "app_user")).contains("用户列表");
+        assertThat(tk.getModel(SCOPE, RC, "unknown_obj")).contains("no object matching");
+    }
+
+    @Test
+    void searchModelRejectsBlankQuery() {
+        DataAgentToolkit tk =
+                new DataAgentToolkit(
+                        new InMemoryDataSourceRegistry(List.of(TenantTablesFixture.demoSource())),
+                        new JdbcSqlConnector(),
+                        null);
+        assertThat(tk.searchModel(SCOPE, RC, "")).startsWith("error:");
     }
 }
