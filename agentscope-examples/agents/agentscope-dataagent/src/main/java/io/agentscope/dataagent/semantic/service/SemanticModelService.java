@@ -15,6 +15,7 @@
  */
 package io.agentscope.dataagent.semantic.service;
 
+import io.agentscope.dataagent.semantic.converter.SemanticToOntologyCatalogAdapter;
 import io.agentscope.dataagent.semantic.model.SemanticCube;
 import io.agentscope.dataagent.semantic.model.SemanticModel;
 import io.agentscope.dataagent.semantic.model.SemanticModelTable;
@@ -203,7 +204,20 @@ public class SemanticModelService {
         repository
                 .findById(modelId)
                 .filter(e -> e.getOwnerId().equals(ownerId))
-                .ifPresent(repository::delete);
+                .ifPresent(
+                        e -> {
+                            String instructions = e.getInstructionsText();
+                            if (instructions != null && !instructions.isBlank()) {
+                                // 保留业务文档：软清除模型内容，instructions 不丢
+                                e.setMdlJson("{}");
+                                e.setMdlHash("");
+                                e.setOrigin("cleared");
+                                e.setUpdatedAt(Instant.now());
+                                repository.save(e);
+                            } else {
+                                repository.delete(e);
+                            }
+                        });
     }
 
     // ---- Instructions（业务规则 + 数据限制）----
@@ -242,6 +256,13 @@ public class SemanticModelService {
     /**
      * 获取指定 group 的 instructions 文本。
      */
+    public String getInstructionsText(String ownerId, String groupId) {
+        return repository
+                .findByOwnerIdAndGroupId(ownerId, groupId)
+                .map(SemanticModelEntity::getInstructionsText)
+                .orElse(null);
+    }
+
     public String getInstructionsText(String groupId) {
         List<SemanticModelEntity> entities = repository.findByGroupId(groupId);
         return entities.stream()
@@ -286,11 +307,55 @@ public class SemanticModelService {
      * 获取前端图谱数据（nodes + edges），供 SemanticGraphView 渲染。
      */
     public Map<String, Object> getGraphData(String ownerId, String groupId) {
-        Optional<SemanticModel> opt = getModel(ownerId, groupId);
-        if (opt.isEmpty()) {
+        Optional<SemanticModelEntity> entity = repository.findByOwnerIdAndGroupId(ownerId, groupId);
+        if (entity.isEmpty()) {
             return Map.of("nodes", List.of(), "edges", List.of());
         }
-        return buildGraphData(opt.get());
+        SemanticModel model = parser.fromJson(entity.get().getMdlJson());
+        Map<String, Object> out = new LinkedHashMap<>(buildGraphData(model));
+        out.put("meta", buildMeta(entity.get(), model));
+        return out;
+    }
+
+    /**
+     * 图谱元信息：来源/更新时间/各类计数 + 规则/局限/instructions 原文，
+     * 供知识图谱 tab 的来源 badge 与右侧规则面板展示。
+     */
+    private Map<String, Object> buildMeta(SemanticModelEntity entity, SemanticModel model) {
+        Map<String, Object> meta = new LinkedHashMap<>();
+        meta.put("modelId", entity.getId());
+        meta.put("origin", entity.getOrigin());
+        meta.put(
+                "updatedAt",
+                entity.getUpdatedAt() == null ? null : entity.getUpdatedAt().toString());
+        meta.put("modelCount", model.getModels() != null ? model.getModels().size() : 0);
+        meta.put(
+                "relationshipCount",
+                model.getRelationships() != null ? model.getRelationships().size() : 0);
+        meta.put("cubeCount", model.getCubes() != null ? model.getCubes().size() : 0);
+        meta.put("ruleCount", model.getRules() != null ? model.getRules().size() : 0);
+        meta.put(
+                "limitationCount",
+                model.getLimitations() != null ? model.getLimitations().size() : 0);
+        String instructions = entity.getInstructionsText();
+        meta.put("hasInstructions", instructions != null && !instructions.isBlank());
+        meta.put("rules", model.getRules() != null ? model.getRules() : List.of());
+        meta.put(
+                "limitations", model.getLimitations() != null ? model.getLimitations() : List.of());
+        meta.put("instructionsText", instructions);
+        return meta;
+    }
+
+    /**
+     * 获取本体目录形状数据（objects/relationships/metrics/rules/limitations），
+     * 供对象目录等视图以 legacy 本体契约消费语义模型；无模型或仅空壳时返回空。
+     */
+    public Optional<Map<String, Object>> getCatalogData(String ownerId, String groupId) {
+        return repository
+                .findByOwnerIdAndGroupId(ownerId, groupId)
+                .map(e -> parser.fromJson(e.getMdlJson()))
+                .filter(m -> m.getModels() != null && !m.getModels().isEmpty())
+                .map(SemanticToOntologyCatalogAdapter::adapt);
     }
 
     /**
@@ -307,6 +372,7 @@ public class SemanticModelService {
                 node.put("id", table.getName());
                 node.put("type", "model");
                 node.put("label", table.getLabel() != null ? table.getLabel() : table.getName());
+                node.put("tableName", table.getTableName());
                 node.put("kind", table.getKind());
                 node.put("description", table.getDescription());
                 node.put("columns", table.getColumns() != null ? table.getColumns() : List.of());

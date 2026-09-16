@@ -42,4 +42,7 @@ public interface QueryHistoryRepository extends JpaRepository<QueryHistoryEntity
      * 查询最近的查询记录，用于召回 few-shot 示例。
      */
     List<QueryHistoryEntity> findTop20ByGroupIdOrderByCreatedAtDesc(String groupId);
+
+    List<QueryHistoryEntity> findTop200ByGroupIdAndSourceOrderByCreatedAtDesc(
+            String groupId, String source);
 }

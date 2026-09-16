@@ -20,7 +20,6 @@ import io.agentscope.dataagent.dataset.DatasetService;
 import io.agentscope.dataagent.dataset.Identifiers;
 import io.agentscope.dataagent.dataset.TableProvisioner;
 import io.agentscope.dataagent.dataset.parser.ColumnSchema;
-import io.agentscope.dataagent.ontology.OntologyService;
 import io.agentscope.dataagent.ontology.source.model.ColumnMapping;
 import io.agentscope.dataagent.ontology.source.model.DerivedTable;
 import io.agentscope.dataagent.ontology.source.model.SourceBatch;
@@ -45,12 +44,11 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 /**
  * Orchestrates a full manifest import: parse sources.yaml, ingest batches as uploaded datasets,
- * create derived tables, write declared relationships, and refresh the ontology.
+ * create derived tables, and write declared relationships.
  *
  * <p>Derived SQL is rewritten so that manifest-logical table names map to the physical
  * {@code ds_<owner8>_<dataset8>_<name>} names created by {@link TableProvisioner}. The
@@ -68,7 +66,6 @@ public class ManifestImportService {
     private final DatasetRepository datasetRepository;
     private final DatasetRelationRepository relationRepository;
     private final InMemoryDataSourceRegistry registry;
-    private final ObjectProvider<OntologyService> ontologyServiceProvider;
 
     public ManifestImportService(
             SourceParser sourceParser,
@@ -77,8 +74,7 @@ public class ManifestImportService {
             TableProvisioner provisioner,
             DatasetRepository datasetRepository,
             DatasetRelationRepository relationRepository,
-            InMemoryDataSourceRegistry registry,
-            ObjectProvider<OntologyService> ontologyServiceProvider) {
+            InMemoryDataSourceRegistry registry) {
         this.sourceParser = sourceParser;
         this.sourceIngestService = sourceIngestService;
         this.datasetService = datasetService;
@@ -86,7 +82,6 @@ public class ManifestImportService {
         this.datasetRepository = datasetRepository;
         this.relationRepository = relationRepository;
         this.registry = registry;
-        this.ontologyServiceProvider = ontologyServiceProvider;
     }
 
     public record ImportSummary(
@@ -375,18 +370,6 @@ public class ManifestImportService {
             rel.setCreatedAt(Instant.now());
             relationRepository.save(rel);
             relsWritten++;
-        }
-
-        // ---------- 4. ontology refresh ----------
-        try {
-            OntologyService svc = ontologyServiceProvider.getIfAvailable();
-            if (svc != null) {
-                svc.autoGenerateModel(ownerId, groupId, null, null);
-            }
-        } catch (Exception e) {
-            log.warn(
-                    "ManifestImportService: ontology refresh failed (non-fatal): {}",
-                    e.getMessage());
         }
 
         log.info(

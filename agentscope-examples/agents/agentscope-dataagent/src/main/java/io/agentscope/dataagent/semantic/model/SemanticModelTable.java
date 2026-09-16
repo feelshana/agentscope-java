@@ -34,6 +34,30 @@ public class SemanticModelTable {
     /** 物理表名（如 "ds_click_observation"）。 */
     private String tableName;
 
+    private Map<String, String> tableReference;
+    private String refSql;
+    private String baseObject;
+
+    public Map<String, String> getTableReference() {
+        return tableReference;
+    }
+
+    public String getRefSql() {
+        return refSql;
+    }
+
+    public void setRefSql(String refSql) {
+        this.refSql = refSql;
+    }
+
+    public String getBaseObject() {
+        return baseObject;
+    }
+
+    public void setBaseObject(String baseObject) {
+        this.baseObject = baseObject;
+    }
+
     /** 主键列名。 */
     private String primaryKey;
 
@@ -112,6 +136,7 @@ public class SemanticModelTable {
     /** WrenAI: "tableReference": { "table": "user_object" } → tableName。 */
     @JsonSetter("tableReference")
     public void setTableReference(Map<String, String> tableReference) {
+        this.tableReference = tableReference;
         if (tableReference != null && tableReference.containsKey("table")) {
             this.tableName = tableReference.get("table");
         }

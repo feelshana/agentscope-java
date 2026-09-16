@@ -1,4 +1,5 @@
 import { getToken } from './auth';
+import type { OntologyModelData } from './ontology';
 
 // ---- 语义术语（Semantic Terms） ----
 
@@ -36,6 +37,7 @@ export interface SemanticGraphNode {
   id: string;
   type: 'model' | 'cube';
   label: string;
+  tableName?: string;
   kind?: string;
   baseObject?: string;
   description?: string;
@@ -55,9 +57,39 @@ export interface SemanticGraphEdge {
   condition?: string;
 }
 
+export interface SemanticRuleVO {
+  id?: string;
+  name?: string;
+  description?: string;
+  parameters?: Record<string, unknown>;
+  sqlHint?: string;
+}
+
+export interface SemanticLimitationVO {
+  id?: string;
+  name?: string;
+  description?: string;
+}
+
+export interface SemanticGraphMeta {
+  modelId: string;
+  origin: string;
+  updatedAt: string | null;
+  modelCount: number;
+  relationshipCount: number;
+  cubeCount: number;
+  ruleCount: number;
+  limitationCount: number;
+  hasInstructions: boolean;
+  rules: SemanticRuleVO[];
+  limitations: SemanticLimitationVO[];
+  instructionsText: string | null;
+}
+
 export interface SemanticGraphData {
   nodes: SemanticGraphNode[];
   edges: SemanticGraphEdge[];
+  meta?: SemanticGraphMeta;
 }
 
 function jsonHeaders(): Record<string, string> {
@@ -153,7 +185,12 @@ export async function autoGenerateSemanticModel(
     headers: semHeaders(),
     body: JSON.stringify({ tableNames: tableNames ?? [] }),
   });
-  if (!res.ok) throw new Error(`Auto-generate failed: ${res.status}`);
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    let msg = txt || `Auto-generate failed: ${res.status}`;
+    try { msg = JSON.parse(txt)?.message ?? msg; } catch { /* keep raw */ }
+    throw new Error(msg);
+  }
   return res.json();
 }
 
@@ -163,6 +200,16 @@ export async function getSemanticGraph(groupId: string): Promise<SemanticGraphDa
     headers: semHeaders(),
   });
   if (!res.ok) throw new Error(`Graph fetch failed: ${res.status}`);
+  return res.json();
+}
+
+/** 获取语义模型适配的本体目录数据；无模型（404）时返回 null 供回落 legacy 本体。 */
+export async function getSemanticCatalog(groupId: string): Promise<OntologyModelData | null> {
+  const res = await fetch(`/api/semantic-model/${encodeURIComponent(groupId)}/catalog`, {
+    headers: semHeaders(),
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Catalog fetch failed: ${res.status}`);
   return res.json();
 }
 

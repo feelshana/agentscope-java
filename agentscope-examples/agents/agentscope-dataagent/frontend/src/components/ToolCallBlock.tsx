@@ -1,100 +1,30 @@
-import React, { useState } from 'react';
-import Markdown from './Markdown';
+import React from 'react';
 import Icon, { IconName } from './Icon';
+import {
+  parseSemantic,
+  stageSummary,
+  stageIcon,
+  isFailed,
+  isSemanticTool,
+} from '../utils/semanticTools';
+
+export interface ToolInspectPayload {
+  id: string;
+  name: string;
+  input?: string;
+  result?: string;
+}
 
 interface Props {
   toolName: string;
   toolCallId: string;
   input?: string;
   result?: string;
-  /** When true the body is expanded on mount; the parent should remount the component (change key) when the result arrives to trigger auto-expand. */
-  defaultOpen?: boolean;
+  /** Opens the tool's input/result in the side inspector panel. */
+  onInspect?: (t: ToolInspectPayload) => void;
 }
 
 const INPUT_LIMIT = 2000;
-
-const s: Record<string, React.CSSProperties> = {
-  wrapper: {
-    background: 'var(--da-app-bg)',
-    border: '1px solid var(--da-border)',
-    borderRadius: 9,
-    margin: '0.5rem 0',
-    overflow: 'hidden',
-    fontSize: '0.9rem',
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-    padding: '0.6rem 0.9rem',
-    cursor: 'pointer',
-    userSelect: 'none',
-    background: 'var(--da-primary-subtle)',
-    borderBottom: '1px solid var(--da-border)',
-  },
-  status: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 18,
-    height: 18,
-    flexShrink: 0,
-  },
-  spinner: {
-    width: 14,
-    height: 14,
-    border: '2px solid rgba(79, 70, 229, 0.22)',
-    borderTop: '2px solid var(--da-primary)',
-    borderRadius: '50%',
-    animation: 'tcblock-spin 0.75s linear infinite',
-  },
-  check: {
-    color: '#16a34a',
-    fontWeight: 700,
-    fontSize: '0.95rem',
-    lineHeight: 1,
-  },
-  icon: { fontSize: '1rem', lineHeight: 1, flexShrink: 0 },
-  name: { color: 'var(--da-primary-hover)', fontWeight: 600 },
-  running: { color: 'var(--da-text-muted)', fontSize: '0.78rem', fontStyle: 'italic' },
-  id: {
-    color: 'var(--da-text-muted)',
-    marginLeft: 'auto',
-    fontSize: '0.78rem',
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-  },
-  arrow: { color: 'var(--da-text-muted)', fontSize: '0.72rem', fontWeight: 700 },
-  section: {
-    padding: '0.85rem 1rem',
-    borderTop: '1px solid var(--da-border)',
-    color: 'var(--da-text-2)',
-    whiteSpace: 'pre-wrap',
-    wordBreak: 'break-all',
-    maxHeight: 320,
-    overflowY: 'auto',
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-    fontSize: '0.85rem',
-    lineHeight: 1.55,
-  },
-  resultSection: {
-    padding: '0.85rem 1rem',
-    borderTop: '1px solid var(--da-border)',
-    color: 'var(--da-text-2)',
-    maxHeight: 420,
-    overflowY: 'auto',
-    fontSize: '0.9rem',
-    lineHeight: 1.55,
-  },
-  label: {
-    color: 'var(--da-text-muted)',
-    fontSize: '0.72rem',
-    fontWeight: 600,
-    letterSpacing: '0.06em',
-    textTransform: 'uppercase',
-    marginBottom: 6,
-    fontFamily: 'ui-sans-serif, system-ui, sans-serif',
-  },
-};
 
 function truncate(text: string): string {
   return text.length <= INPUT_LIMIT ? text : `${text.slice(0, INPUT_LIMIT)}\n…(truncated)`;
@@ -102,9 +32,9 @@ function truncate(text: string): string {
 
 /**
  * Pretty-prints a tool-input JSON string so SQL and chart specs inside the
- * argument map are human-readable when the block is expanded.
+ * argument map are human-readable when inspected.
  */
-function prettyInput(text: string): string {
+export function prettyInput(text: string): string {
   try {
     const parsed = JSON.parse(text);
     if (typeof parsed === 'object' && parsed !== null) {
@@ -112,6 +42,31 @@ function prettyInput(text: string): string {
     }
   } catch { /* not JSON — fall through and show the raw text */ }
   return truncate(text);
+}
+
+/** Unescapes double-encoded newline/quote sequences so prose and tables render. */
+function unescapeText(s: string): string {
+  return s.replace(/\\r\n/g, '\n').replace(/\\n/g, '\n').replace(/\\t/g, '  ').replace(/\\"/g, '"');
+}
+
+/**
+ * Turns a tool result into readable markdown. JSON objects become labelled sections
+ * (key: value) with unescaped inner text; anything else is unescaped raw text.
+ */
+export function formatResult(text: string): string {
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return Object.entries(parsed as Record<string, unknown>)
+        .map(([k, v]) => {
+          const val = typeof v === 'string' ? unescapeText(v) : JSON.stringify(v, null, 2);
+          return `**${k}**\n\n${val}`;
+        })
+        .join('\n\n---\n\n');
+    }
+    if (Array.isArray(parsed)) return `\`\`\`json\n${JSON.stringify(parsed, null, 2)}\n\`\`\``;
+  } catch { /* not JSON — fall through */ }
+  return unescapeText(text);
 }
 
 /** Per-tool-type icons (SVG via Icon component). */
@@ -132,6 +87,7 @@ const TOOL_ICONS: Array<[string, IconName]> = [
 ];
 
 function toolIcon(name: string): IconName {
+  if (isSemanticTool(name)) return stageIcon(name) as IconName;
   const lower = name.toLowerCase();
   for (const [key, icon] of TOOL_ICONS) {
     if (lower.includes(key)) return icon;
@@ -139,47 +95,48 @@ function toolIcon(name: string): IconName {
   return 'settings';
 }
 
-/**
- * CSS keyframes injected once per page load. The animation name is unique to
- * avoid clashing with any host-app stylesheets.
- */
-const SPIN_STYLE = `@keyframes tcblock-spin { to { transform: rotate(360deg); } }`;
-
 export default function ToolCallBlock({
   toolName,
   toolCallId,
   input,
   result,
-  defaultOpen = false,
+  onInspect,
 }: Props) {
-  const [open, setOpen] = useState(defaultOpen);
   const running = result === undefined;
+  const sem = isSemanticTool(toolName) ? parseSemantic(result) : null;
+  const failed = !running && isFailed(sem);
+  const label = sem ? stageSummary(toolName, sem) : toolName;
+
   return (
-    <>
-      <style>{SPIN_STYLE}</style>
-      <div className="da-toolcall">
-        <div className="da-toolcall-head" onClick={() => setOpen(o => !o)} style={{ cursor: 'pointer' }}>
-          <span style={{ color: 'var(--da-primary)', display: 'inline-flex' }}>
-            <Icon name={toolIcon(toolName)} size="sm" />
-          </span>
-          <span className="da-toolcall-name">{toolName}</span>
-          <span className="da-toolcall-status">
-            {running ? <span className="da-dot" /> : <Icon name="check" size="sm" />}
-            {running ? '运行中' : '已完成'}
-          </span>
-          <span style={{ color: 'var(--da-text-muted)', fontSize: 11 }}>{open ? '▼' : '▶'}</span>
-        </div>
-        {open && (
-          <>
-            {input && <div className="da-toolcall-body">{prettyInput(input)}</div>}
-            {result && (
-              <div className="da-toolcall-body" style={{ fontFamily: 'var(--da-font)' }}>
-                <Markdown>{result}</Markdown>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </>
+    <div className="da-toolcall">
+      <button
+        type="button"
+        className="da-toolcall-head"
+        onClick={() => onInspect?.({ id: toolCallId, name: toolName, input, result })}
+        title="在侧栏查看输入与结果"
+        aria-label={`查看 ${toolName} 工具详情`}
+      >
+        <span style={{ color: 'var(--da-text-muted)', display: 'inline-flex' }}>
+          <Icon name={toolIcon(toolName)} size="sm" />
+        </span>
+        <span className="da-toolcall-name">{label}</span>
+        <span className={`da-toolcall-status${failed ? ' failed' : ''}`}>
+          {running ? (
+            <>
+              <span className="da-dot" />运行中
+            </>
+          ) : failed ? (
+            <>
+              <Icon name="close" size="sm" />失败
+            </>
+          ) : (
+            <Icon name="check" size="sm" />
+          )}
+        </span>
+        <span className="da-trace-chevron">
+          <Icon name="chevron" size="sm" />
+        </span>
+      </button>
+    </div>
   );
 }

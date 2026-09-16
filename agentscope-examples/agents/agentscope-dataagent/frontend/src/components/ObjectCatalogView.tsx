@@ -5,6 +5,7 @@ import {
   OntoObject,
   OntoRelationship,
 } from '../api/ontology';
+import { getSemanticCatalog } from '../api/semantic';
 
 const KIND_COLORS: Record<string, string> = {
   dimension: '#5B8FF9',
@@ -124,18 +125,26 @@ export default function ObjectCatalogView({ groupId }: Props) {
   useEffect(() => {
     if (!groupId) return;
     let cancelled = false;
-    getOntologyModel(groupId)
-      .then(m => {
-        if (cancelled) return;
-        setModel(m);
-        if (m && m.objects) {
-          const keys = Object.keys(m.objects);
-          if (keys.length > 0) setSelected(keys[0]);
-        }
-      })
-      .catch(e => {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
-      });
+    const load = async () => {
+      let m: OntologyModelData | null = null;
+      try {
+        m = await getSemanticCatalog(groupId);
+      } catch {
+        m = null;
+      }
+      if (!m) {
+        m = await getOntologyModel(groupId);
+      }
+      if (cancelled) return;
+      setModel(m);
+      if (m && m.objects) {
+        const keys = Object.keys(m.objects);
+        if (keys.length > 0) setSelected(keys[0]);
+      }
+    };
+    load().catch(e => {
+      if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+    });
     return () => {
       cancelled = true;
     };
@@ -158,7 +167,7 @@ export default function ObjectCatalogView({ groupId }: Props) {
   if (objectKeys.length === 0) {
     return (
       <div style={S.empty}>
-        尚未配置本体模型。上传数据后自动生成，或导入 sources.yaml 清单。
+        尚未生成本体模型。可在知识图谱页点击"生成本体图谱"（按数据表或按本体文件）。
       </div>
     );
   }
@@ -276,9 +285,10 @@ export default function ObjectCatalogView({ groupId }: Props) {
                 {selRels.map(([id, rel]) => {
                   const isSource = rel.from === selected;
                   const other = isSource ? rel.to : rel.from;
-                  const joinText = rel.join
-                    ? rel.join.map(j => `${j.left ?? '?'}=${j.right ?? '?'}`).join(', ')
-                    : '?';
+                  const joinText =
+                    rel.join && rel.join.length > 0
+                      ? rel.join.map(j => `${j.left ?? '?'}=${j.right ?? '?'}`).join(', ')
+                      : rel.note ?? '?';
                   return (
                     <div key={id} style={S.relRow}>
                       <span style={{ color: '#64748b', fontSize: '0.75rem' }}>

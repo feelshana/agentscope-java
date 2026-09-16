@@ -245,7 +245,6 @@ public class DatasetService implements DatasetContextProvider {
         repository.save(entity);
         registry.add(toDataSource(entity));
         relationInference.reinferGroup(group.getId());
-        refreshOntology(group.getId(), ownerId);
         log.info(
                 "DatasetService: ingested dataset '{}' ({} rows) for owner {} as {}.{}",
                 entity.getName(),
@@ -259,9 +258,7 @@ public class DatasetService implements DatasetContextProvider {
     @Transactional
     public void delete(String ownerId, String datasetId) {
         DatasetEntity entity = get(ownerId, datasetId);
-        String groupId = entity.getGroupId();
         deleteEntity(entity);
-        refreshOntology(groupId, ownerId);
         log.info("DatasetService: deleted dataset {} for owner {}", datasetId, ownerId);
     }
 
@@ -350,7 +347,6 @@ public class DatasetService implements DatasetContextProvider {
             created.add(e);
         }
         relationInference.reinferGroup(groupId);
-        refreshOntology(groupId, ownerId);
         log.info(
                 "DatasetService: associated {} table(s) from datasource {} into group {} for owner"
                         + " {}",
@@ -748,7 +744,6 @@ public class DatasetService implements DatasetContextProvider {
                         .orElseGet(() -> new DatasetKnowledgeEntity(groupId, content));
         knowledgeRepository.save(entity);
         relationInference.reinferGroup(groupId);
-        refreshOntology(groupId, null);
         log.info("DatasetService: saved relationship knowledge for group {}", groupId);
     }
 
@@ -1034,42 +1029,5 @@ public class DatasetService implements DatasetContextProvider {
             return sb.toString();
         }
         return null;
-    }
-
-    /**
-     * Non-blocking ontology refresh. Fires after ingest/associate/saveKnowledge/delete so the
-     * ontology always reflects the current knowledge-base state. Failures are logged but never
-     * propagate — ontology is a secondary concern and must not break the dataset mutation.
-     *
-     * @param ownerId may be null (e.g. saveKnowledge path); resolved from the group when absent.
-     */
-    private void refreshOntology(String groupId, String ownerId) {
-        try {
-            OntologyService svc = ontologyServiceProvider.getIfAvailable();
-            if (svc == null) {
-                return;
-            }
-            String owner = ownerId;
-            if (owner == null) {
-                owner =
-                        groupRepository
-                                .findById(groupId)
-                                .map(DatasetGroupEntity::getOwnerId)
-                                .orElse(null);
-            }
-            if (owner == null) {
-                return;
-            }
-            // 用户显式上传的本体（origin=uploaded）优先，数据集变化触发的自动生成不覆盖它。
-            if (svc.hasUploadedOntology(owner, groupId)) {
-                return;
-            }
-            svc.autoGenerateModel(owner, groupId, null, null);
-        } catch (Exception e) {
-            log.warn(
-                    "DatasetService: ontology auto-refresh failed for group {} (non-fatal): {}",
-                    groupId,
-                    e.getMessage());
-        }
     }
 }

@@ -68,6 +68,79 @@ public class QueryHistoryService {
         repository.save(entity);
     }
 
+    @Transactional
+    public void storeSemantic(
+            String groupId, String question, String sql, String compiledSql, String version) {
+        QueryHistoryEntity entity = new QueryHistoryEntity();
+        entity.setGroupId(groupId);
+        entity.setNlQuery(question);
+        try {
+            entity.setQueryJson(
+                    mapper.writeValueAsString(
+                            java.util.Map.of(
+                                    "type",
+                                    "semantic_sql",
+                                    "semanticSql",
+                                    sql,
+                                    "version",
+                                    version)));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new IllegalStateException(e);
+        }
+        entity.setSqlGenerated(compiledSql);
+        entity.setSource("semantic_success");
+        entity.setCreatedAt(Instant.now());
+        repository.save(entity);
+    }
+
+    public List<java.util.Map<String, String>> recallSemantic(
+            String groupId, String question, String version, int limit) {
+        List<QueryHistoryEntity> candidates =
+                new ArrayList<>(
+                        repository.findTop200ByGroupIdAndSourceOrderByCreatedAtDesc(
+                                groupId, "semantic_success"));
+        String[] words =
+                (question == null ? "" : question.toLowerCase(java.util.Locale.ROOT))
+                        .split("[\\s,，、]+");
+        candidates.sort(
+                java.util.Comparator.comparingLong(
+                                (QueryHistoryEntity e) ->
+                                        java.util.Arrays.stream(words)
+                                                .filter(
+                                                        w ->
+                                                                !w.isBlank()
+                                                                        && e.getNlQuery() != null
+                                                                        && e.getNlQuery()
+                                                                                .toLowerCase(
+                                                                                        java.util
+                                                                                                .Locale
+                                                                                                .ROOT)
+                                                                                .contains(w))
+                                                .count())
+                        .reversed());
+        List<java.util.Map<String, String>> result = new ArrayList<>();
+        java.util.Set<Long> seen = new java.util.HashSet<>();
+        for (var entity : candidates) {
+            if (!seen.add(entity.getId())) continue;
+            try {
+                var value = mapper.readTree(entity.getQueryJson());
+                if (!"semantic_sql".equals(value.path("type").asText())
+                        || !version.equals(value.path("version").asText())) continue;
+                result.add(
+                        java.util.Map.of(
+                                "question",
+                                entity.getNlQuery(),
+                                "semanticSql",
+                                value.path("semanticSql").asText(),
+                                "source",
+                                "executed"));
+                if (result.size() >= Math.min(5, Math.max(1, limit))) break;
+            } catch (com.fasterxml.jackson.core.JsonProcessingException ignored) {
+            }
+        }
+        return result;
+    }
+
     /**
      * 召回相似历史查询。当前使用关键词 LIKE 匹配，后续可升级为向量搜索。
      *
@@ -143,33 +216,9 @@ public class QueryHistoryService {
                 if (table.getLabel() != null) {
                     nl = "列出所有" + table.getLabel();
                 }
-                String sql = "SELECT * FROM " + table.getTableName() + " LIMIT 100";
-                saveSeed(groupId, nl, sql);
+                String sql = "SELECT * FROM `" + table.getName() + "` LIMIT 20";
+                saveSeed(groupId, nl + "（未执行参考）", sql);
                 count++;
-
-                // 简单聚合（对每个非主键数值列）
-                if (table.getColumns() != null) {
-                    for (var col : table.getColumns()) {
-                        if (isNumericType(col.getType())
-                                && !col.getName().equals(table.getPrimaryKey())
-                                && !col.getName().toLowerCase().endsWith("_id")) {
-                            String aggNl =
-                                    (table.getLabel() != null ? table.getLabel() : table.getName())
-                                            + " 的 "
-                                            + col.getLabel()
-                                            + " 合计";
-                            String aggSql =
-                                    "SELECT SUM("
-                                            + col.getName()
-                                            + ") AS total_"
-                                            + col.getName()
-                                            + " FROM "
-                                            + table.getTableName();
-                            saveSeed(groupId, aggNl, aggSql);
-                            count++;
-                        }
-                    }
-                }
             }
         }
 
@@ -218,16 +267,6 @@ public class QueryHistoryService {
      */
     public long countByGroup(String groupId) {
         return repository.findByGroupIdOrderByCreatedAtDesc(groupId).size();
-    }
-
-    private boolean isNumericType(String type) {
-        if (type == null) return false;
-        String upper = type.toUpperCase();
-        return upper.contains("INT")
-                || upper.contains("DOUBLE")
-                || upper.contains("DECIMAL")
-                || upper.contains("FLOAT")
-                || upper.contains("BIGINT");
     }
 
     private String truncate(String s, int maxLen) {

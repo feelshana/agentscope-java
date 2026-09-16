@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import AssociateTablesModal from '../../components/AssociateTablesModal';
 import DocDetailView from '../../components/DocDetailView';
@@ -8,6 +8,7 @@ import ObjectCatalogView from '../../components/ObjectCatalogView';
 import OntologyGraphView from '../../components/OntologyGraphView';
 import SchemaTreeView from '../../components/SchemaTreeView';
 import SemanticGraphView from '../../components/SemanticGraphView';
+import GenerateOntologyModal from '../../components/GenerateOntologyModal';
 import Icon, { IconName } from '../../components/Icon';
 import {
   deleteDataset,
@@ -22,15 +23,15 @@ import {
 import {
   getOntologyModel,
 } from '../../api/ontology';
-import { getSemanticGraph, uploadSemanticModel, uploadInstructions, getInstructions } from '../../api/semantic';
+import { getSemanticGraph, uploadSemanticModel, uploadInstructions, getInstructions, deleteSemanticModel } from '../../api/semantic';
+import {
+  getUploadStatuses,
+  mutateUploadStatuses,
+  subscribeUploadStatuses,
+  UploadStatus,
+} from '../../state/uploadProgress';
 
 type View = 'files' | 'model' | 'graph' | 'tree' | 'doc';
-
-interface UploadStatus {
-  name: string;
-  status: 'queued' | 'uploading' | 'ready' | 'failed';
-  error?: string;
-}
 
 const STATUS_LABEL: Record<UploadStatus['status'], string> = {
   queued: '排队中',
@@ -60,7 +61,9 @@ export default function DatasetGroupPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
+  const uploadStatuses = useSyncExternalStore(subscribeUploadStatuses, () =>
+    getUploadStatuses(groupId),
+  );
   const [associateOpen, setAssociateOpen] = useState(false);
   /** 当前本体来源：'uploaded'（用户上传 model.yaml）/'auto-generated'（自动生成）/null（无本体）。 */
   const [ontologyOrigin, setOntologyOrigin] = useState<string | null>(null);
@@ -68,6 +71,14 @@ export default function DatasetGroupPage() {
   const [hasSemanticModel, setHasSemanticModel] = useState(false);
   /** 是否已上传 instructions.md。 */
   const [hasInstructions, setHasInstructions] = useState(false);
+  /** 语义模型来源：'uploaded'/'auto-generated'/'cleared'/null。 */
+  const [semanticOrigin, setSemanticOrigin] = useState<string | null>(null);
+  /** 语义模型实体 ID（删除用）。 */
+  const [semanticModelId, setSemanticModelId] = useState<string | null>(null);
+  /** 语义模型更新时间（用作图谱视图 key，重新生成后强制重挂载）。 */
+  const [semanticUpdatedAt, setSemanticUpdatedAt] = useState<string | null>(null);
+  /** 本体图谱生成弹窗开关。 */
+  const [generateOpen, setGenerateOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const knowledgeRef = useRef<HTMLInputElement | null>(null);
   const semanticMdlRef = useRef<HTMLInputElement | null>(null);
@@ -116,8 +127,14 @@ export default function DatasetGroupPage() {
     try {
       const sg = await getSemanticGraph(groupId);
       setHasSemanticModel((sg?.nodes?.length ?? 0) > 0);
+      setSemanticOrigin(sg?.meta?.origin ?? null);
+      setSemanticModelId(sg?.meta?.modelId ?? null);
+      setSemanticUpdatedAt(sg?.meta?.updatedAt ?? null);
     } catch {
       setHasSemanticModel(false);
+      setSemanticOrigin(null);
+      setSemanticModelId(null);
+      setSemanticUpdatedAt(null);
     }
     // 检查是否存在 instructions
     try {
@@ -139,7 +156,9 @@ export default function DatasetGroupPage() {
   }, [detail?.knowledge]);
 
   function patchStatus(name: string, patch: Partial<UploadStatus>) {
-    setUploadStatuses(prev => prev.map(s => (s.name === name ? { ...s, ...patch } : s)));
+    mutateUploadStatuses(groupId, prev =>
+      prev.map(s => (s.name === name ? { ...s, ...patch } : s)),
+    );
   }
 
   async function uploadFiles(files: FileList | File[]) {
@@ -149,7 +168,7 @@ export default function DatasetGroupPage() {
       const dataFiles = list.filter(f => /\.(xlsx|xls|csv)$/i.test(f.name));
       if (dataFiles.length > 0) {
         // 填充状态队列，让用户看到进度
-        setUploadStatuses(prev => [
+        mutateUploadStatuses(groupId, prev => [
           ...prev,
           ...dataFiles.map(f => ({ name: f.name, status: 'queued' as const })),
         ]);
@@ -175,7 +194,7 @@ export default function DatasetGroupPage() {
         return;
       }
     }
-    setUploadStatuses(prev => [
+    mutateUploadStatuses(groupId, prev => [
       ...prev,
       ...list.map(f => ({ name: f.name, status: 'queued' as const })),
     ]);
@@ -282,7 +301,7 @@ export default function DatasetGroupPage() {
   /** 上传数据文件，使用已保存的描述进行建表（无前缀）。逐文件上传，每个完成后立即更新状态。 */
   async function handleUploadData(files: File[]) {
     // 填充状态队列
-    setUploadStatuses(prev => [
+    mutateUploadStatuses(groupId, prev => [
       ...prev,
       ...files.map(f => ({ name: f.name, status: 'queued' as const })),
     ]);
@@ -319,6 +338,22 @@ export default function DatasetGroupPage() {
     try {
       await uploadInstructions(f, groupId);
       alert(`业务规则文档上传成功：${f.name}`);
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** 删除语义模型（后端软清除保留 instructions 业务文档）。 */
+  async function handleDeleteSemanticModel() {
+    if (!semanticModelId) return;
+    if (!window.confirm('删除语义模型？业务文档（instructions）将保留，可稍后重新生成。')) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await deleteSemanticModel(semanticModelId);
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -680,27 +715,86 @@ export default function DatasetGroupPage() {
         )}
 
         {view === 'model' && <ObjectCatalogView groupId={groupId} />}
-        {view === 'graph' &&
-          (hasSemanticModel ? (
-            <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-              <div className="da-small" style={{ marginBottom: 8 }}>
-                语义模型图谱
-              </div>
-              <SemanticGraphView groupId={groupId} />
-            </div>
-          ) : useOntologyGraph ? (
-            <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-              <div className="da-small" style={{ marginBottom: 8 }}>
+        {view === 'graph' && (
+          <div
+            style={{
+              flex: 1,
+              overflowY: 'auto',
+              padding: 16,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div className="da-h2" style={{ margin: 0 }}>
                 本体图谱
-                {ontologyOrigin === 'uploaded'
-                  ? '（来自上传的 model.yaml）'
-                  : '（数据源接入场景，由本体建模生成）'}
               </div>
-              <OntologyGraphView groupId={groupId} />
+              <span className="da-badge da-badge-primary">
+                {hasSemanticModel
+                  ? semanticOrigin === 'uploaded'
+                    ? '语义模型 · 文件上传'
+                    : '语义模型 · 按表生成'
+                  : useOntologyGraph
+                    ? '遗留本体'
+                    : '未生成'}
+              </span>
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                {hasSemanticModel ? (
+                  <>
+                    <button className="da-btn da-btn-sm" onClick={() => setGenerateOpen(true)}>
+                      <Icon name="refresh" size="sm" /> 重新生成
+                    </button>
+                    <button className="da-btn da-btn-sm" onClick={handleDeleteSemanticModel}>
+                      删除模型
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    className="da-btn da-btn-primary da-btn-sm"
+                    onClick={() => setGenerateOpen(true)}
+                  >
+                    <Icon name="plus" size="sm" /> 生成本体图谱
+                  </button>
+                )}
+              </div>
             </div>
-          ) : (
-            <KnowledgeGraphView groupId={groupId} />
-          ))}
+            {!hasSemanticModel && (
+              <div
+                style={{
+                  background: 'var(--da-primary-subtle)',
+                  border: '1px solid var(--da-border)',
+                  borderRadius: 8,
+                  padding: '8px 12px',
+                  fontSize: '0.8rem',
+                  color: 'var(--da-text-2)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
+                尚未生成语义本体——可按数据表生成，或上传本体文件（mdl.json + instructions.md）生成。
+                <button
+                  className="da-btn da-btn-sm"
+                  style={{ marginLeft: 'auto' }}
+                  onClick={() => setGenerateOpen(true)}
+                >
+                  去生成
+                </button>
+              </div>
+            )}
+            {hasSemanticModel ? (
+              <SemanticGraphView
+                key={`${semanticModelId ?? 'x'}-${semanticUpdatedAt ?? 'y'}`}
+                groupId={groupId}
+              />
+            ) : useOntologyGraph ? (
+              <OntologyGraphView groupId={groupId} />
+            ) : (
+              <KnowledgeGraphView groupId={groupId} />
+            )}
+          </div>
+        )}
         {view === 'tree' && <SchemaTreeView datasets={detail?.datasets ?? []} />}
         {view === 'doc' && <DocDetailView groupId={groupId} group={detail?.group ?? null} />}
       </div>
@@ -710,6 +804,15 @@ export default function DatasetGroupPage() {
           groupId={groupId}
           onClose={() => setAssociateOpen(false)}
           onAssociated={() => refresh()}
+        />
+      )}
+
+      {generateOpen && (
+        <GenerateOntologyModal
+          groupId={groupId}
+          datasets={detail?.datasets ?? []}
+          onClose={() => setGenerateOpen(false)}
+          onGenerated={() => refresh()}
         />
       )}
 

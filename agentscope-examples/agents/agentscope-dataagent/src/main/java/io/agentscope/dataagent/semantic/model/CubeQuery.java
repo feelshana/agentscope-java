@@ -15,7 +15,15 @@
  */
 package io.agentscope.dataagent.semantic.model;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -46,13 +54,17 @@ public class CubeQuery {
     /** 查询类型标识：固定为 "cube_query"。 */
     private String type;
 
-    /** Cube 名称（如 "click_metrics"）。 */
+    /** Cube 名称（如 "click_metrics"）。容忍 {"name": "..."} 对象写法与 cubeName 别名。 */
+    @JsonAlias({"cubeName", "cube_name"})
+    @JsonDeserialize(using = NameOrStringDeserializer.class)
     private String cube;
 
-    /** 度量列表（如 ["click_pv", "click_uv"]）。 */
+    /** 度量列表（如 ["click_pv", "click_uv"]）。容忍 [{"name": "..."}] 对象数组写法。 */
+    @JsonDeserialize(using = NameListDeserializer.class)
     private List<String> measures;
 
-    /** 维度列表（如 ["module_name", "event_company"]）。 */
+    /** 维度列表（如 ["module_name", "event_company"]）。容忍 [{"name": "..."}] 对象数组写法。 */
+    @JsonDeserialize(using = NameListDeserializer.class)
     private List<String> dimensions;
 
     /** 时间维度过滤和分组配置。 */
@@ -229,5 +241,53 @@ public class CubeQuery {
 
     public void setLimit(Integer limit) {
         this.limit = limit;
+    }
+
+    /** 容忍 "name" 或 {"name": "..."} 两种写法的字符串字段反序列化器。 */
+    public static class NameOrStringDeserializer extends JsonDeserializer<String> {
+        @Override
+        public String deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+            if (p.currentToken() == JsonToken.START_OBJECT) {
+                String name = null;
+                while (p.nextToken() != JsonToken.END_OBJECT) {
+                    if ("name".equals(p.currentName())) {
+                        p.nextToken();
+                        name = p.getValueAsString();
+                    }
+                }
+                return name;
+            }
+            return p.getValueAsString();
+        }
+    }
+
+    /** 容忍 ["a"] 或 [{"name": "a"}] 两种写法的名称列表反序列化器。 */
+    public static class NameListDeserializer extends JsonDeserializer<List<String>> {
+        @Override
+        public List<String> deserialize(JsonParser p, DeserializationContext ctxt)
+                throws IOException {
+            List<String> out = new ArrayList<>();
+            if (p.currentToken() == JsonToken.START_ARRAY) {
+                while (p.nextToken() != JsonToken.END_ARRAY) {
+                    if (p.currentToken() == JsonToken.START_OBJECT) {
+                        String name = null;
+                        while (p.nextToken() != JsonToken.END_OBJECT) {
+                            if ("name".equals(p.currentName())) {
+                                p.nextToken();
+                                name = p.getValueAsString();
+                            }
+                        }
+                        if (name != null) {
+                            out.add(name);
+                        }
+                    } else {
+                        out.add(p.getValueAsString());
+                    }
+                }
+            } else if (p.currentToken() == JsonToken.VALUE_STRING) {
+                out.add(p.getValueAsString());
+            }
+            return out;
+        }
     }
 }

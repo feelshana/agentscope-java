@@ -100,10 +100,12 @@ public class SemanticColumn {
         this.expression = expression;
     }
 
+    @com.fasterxml.jackson.annotation.JsonProperty("isCalculated")
     public boolean isCalculated() {
         return isCalculated;
     }
 
+    @com.fasterxml.jackson.annotation.JsonProperty("isCalculated")
     public void setCalculated(boolean calculated) {
         isCalculated = calculated;
     }

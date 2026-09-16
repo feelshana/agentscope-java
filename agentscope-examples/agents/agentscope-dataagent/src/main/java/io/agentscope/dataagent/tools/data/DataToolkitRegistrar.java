@@ -21,6 +21,7 @@ import io.agentscope.dataagent.runtime.DataAgentBootstrap;
 import io.agentscope.dataagent.semantic.service.CubeQueryToSqlConverter;
 import io.agentscope.dataagent.semantic.service.QueryHistoryService;
 import io.agentscope.dataagent.semantic.service.SemanticModelService;
+import io.agentscope.dataagent.semantic.service.SemanticQueryService;
 import io.agentscope.dataagent.web.persistence.jpa.ChartOptionRepository;
 import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
 import io.agentscope.harness.agent.HarnessAgent;
@@ -60,6 +61,7 @@ public class DataToolkitRegistrar {
     private final SemanticModelService semanticModelService;
     private final CubeQueryToSqlConverter cubeQueryConverter;
     private final QueryHistoryService queryHistoryService;
+    private final SemanticQueryService semanticQueries;
 
     public DataToolkitRegistrar(
             DataAgentBootstrap bootstrap,
@@ -71,7 +73,8 @@ public class DataToolkitRegistrar {
             ConversationScopeRegistry conversationScopes,
             SemanticModelService semanticModelService,
             CubeQueryToSqlConverter cubeQueryConverter,
-            QueryHistoryService queryHistoryService) {
+            QueryHistoryService queryHistoryService,
+            SemanticQueryService semanticQueries) {
         this.bootstrap = bootstrap;
         this.registry = registry;
         this.sqlConnector = sqlConnector;
@@ -82,6 +85,7 @@ public class DataToolkitRegistrar {
         this.semanticModelService = semanticModelService;
         this.cubeQueryConverter = cubeQueryConverter;
         this.queryHistoryService = queryHistoryService;
+        this.semanticQueries = semanticQueries;
     }
 
     @PostConstruct
@@ -111,7 +115,9 @@ public class DataToolkitRegistrar {
                                     null,
                                     semanticModelService,
                                     cubeQueryConverter,
-                                    queryHistoryService));
+                                    queryHistoryService,
+                                    bootstrap.gateway().sessionAgentManager(),
+                                    semanticQueries));
             log.info("Registered DataAgent toolkit onto main agent '{}'", main.getName());
 
             // Register the Python sandbox-execution tool. See the class javadoc for why a

@@ -28,6 +28,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -194,6 +195,32 @@ public class SemanticModelController {
     public Mono<Map<String, Object>> getGraph(@PathVariable String groupId, Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(() -> semanticModelService.getGraphData(userId, groupId))
+                .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    /**
+     * 获取本体目录形状数据（objects/relationships/metrics/rules/limitations），
+     * 供对象目录视图以 legacy 本体契约消费语义模型；无模型时 404。
+     */
+    @GetMapping("/{groupId}/catalog")
+    public Mono<ResponseEntity<Map<String, Object>>> getCatalog(
+            @PathVariable String groupId, Authentication auth) {
+        String userId = (String) auth.getPrincipal();
+        return Mono.fromCallable(
+                        () ->
+                                semanticModelService
+                                        .getCatalogData(userId, groupId)
+                                        .<ResponseEntity<Map<String, Object>>>map(
+                                                ResponseEntity::ok)
+                                        .orElseGet(
+                                                () ->
+                                                        ResponseEntity.status(HttpStatus.NOT_FOUND)
+                                                                .body(
+                                                                        Map.of(
+                                                                                "error",
+                                                                                "No semantic model"
+                                                                                    + " for group "
+                                                                                        + groupId))))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 

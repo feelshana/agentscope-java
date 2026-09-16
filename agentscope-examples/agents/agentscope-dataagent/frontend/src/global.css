@@ -728,35 +728,43 @@ button:focus-visible {
 
 /* ---------- prototype-derived: tool-call card ---------- */
 .da-toolcall {
-  border-radius: var(--da-radius-md);
-  background: var(--da-surface);
-  border: 1px solid var(--da-border);
+  border-radius: 6px;
+  background: transparent;
+  border: none;
   overflow: hidden;
 }
 .da-toolcall-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
-  background: var(--da-surface-sunken);
-  border-bottom: 1px solid var(--da-border);
+  padding: 5px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
   font-size: 12px;
+  color: var(--da-text-muted);
+  transition: var(--da-transition);
+}
+.da-toolcall-head:hover {
+  background: var(--da-surface-sunken);
 }
 .da-toolcall-name {
   font-weight: 500;
-  color: var(--da-text);
+  color: var(--da-text-muted);
   font-family: var(--da-mono);
 }
 .da-toolcall-status {
   margin-left: auto;
   font-size: 11px;
-  color: var(--da-primary);
+  color: var(--da-text-muted);
   display: flex;
   align-items: center;
   gap: 4px;
 }
 .da-toolcall-body {
-  padding: 12px;
+  padding: 10px 12px;
+  background: var(--da-surface-sunken);
+  border-top: 1px solid var(--da-border);
   font-family: var(--da-mono);
   font-size: 12px;
   color: var(--da-text-2);
@@ -764,6 +772,17 @@ button:focus-visible {
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 260px;
+  overflow: auto;
+}
+.da-toolcall-result {
+  padding: 10px 12px;
+  background: var(--da-surface-sunken);
+  border-top: 1px solid var(--da-border);
+  font-family: var(--da-font);
+  font-size: 0.85rem;
+  color: var(--da-text-2);
+  line-height: 1.6;
+  max-height: 340px;
   overflow: auto;
 }
 
@@ -945,4 +964,334 @@ button:focus-visible {
 .da-composer:focus-within {
   border-color: var(--da-primary);
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12), var(--da-shadow-pop);
+}
+
+/* ---------- assistant turn: collapsible task trace + answer ---------- */
+.da-agent-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+.da-trace {
+  border: 1px solid var(--da-border);
+  border-radius: var(--da-radius-md);
+  background: var(--da-surface);
+  overflow: hidden;
+}
+.da-trace-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--da-text-muted);
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  transition: var(--da-transition);
+}
+.da-trace-head:hover {
+  background: var(--da-surface-sunken);
+}
+.da-trace-status {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.da-trace-status.running {
+  animation: da-trace-pulse 1.6s ease-in-out infinite;
+}
+@keyframes da-trace-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+.da-trace-chevron {
+  display: inline-flex;
+  color: var(--da-text-muted);
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+.da-trace-chevron.open {
+  transform: rotate(90deg);
+}
+.da-trace-body {
+  border-top: 1px solid var(--da-border);
+  padding: 6px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--da-text-muted);
+}
+.da-trace-text {
+  padding: 4px 8px;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: var(--da-text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.da-trace-status.failed {
+  color: var(--da-danger);
+}
+.da-trace-status.interrupted {
+  color: var(--da-warn);
+}
+.da-toolcall-status.failed {
+  color: var(--da-danger);
+}
+.da-toolcall-head {
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  appearance: none;
+  font: inherit;
+}
+.da-toolcall-name {
+  font-family: var(--da-font);
+  font-size: 12px;
+}
+.da-sem-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.da-sem-sql-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.da-sem-tab-bar {
+  display: flex;
+  gap: 4px;
+}
+.da-sem-tab {
+  padding: 3px 10px;
+  font-size: 11px;
+  border: 1px solid var(--da-border);
+  border-radius: var(--da-radius-sm);
+  background: transparent;
+  color: var(--da-text-3);
+  cursor: pointer;
+  transition: var(--da-transition);
+}
+.da-sem-tab.active {
+  background: var(--da-primary-subtle);
+  color: var(--da-primary);
+  border-color: rgba(79, 70, 229, 0.25);
+}
+.da-sem-sql-pre {
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--da-surface-sunken);
+  border-radius: var(--da-radius-md);
+  font-family: var(--da-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--da-text-2);
+  max-height: 200px;
+  overflow: auto;
+}
+.da-sem-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.da-chip-model {
+  background: var(--da-primary-subtle);
+  color: var(--da-primary);
+  border-color: rgba(79, 70, 229, 0.2);
+}
+.da-chip-rel {
+  background: rgba(217, 119, 6, 0.1);
+  color: var(--da-accent);
+  border-color: rgba(217, 119, 6, 0.2);
+}
+.da-chip-calc {
+  background: rgba(22, 163, 74, 0.1);
+  color: var(--da-success);
+  border-color: rgba(22, 163, 74, 0.2);
+}
+.da-sem-warn {
+  font-size: 11px;
+  color: var(--da-warn);
+  padding: 4px 8px;
+  background: rgba(217, 119, 6, 0.07);
+  border-radius: var(--da-radius-sm);
+}
+.da-sem-note {
+  font-size: 11px;
+  color: var(--da-text-muted);
+  font-style: italic;
+}
+.da-sem-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--da-text-3);
+}
+.da-sem-meta-item {
+  font-variant-numeric: tabular-nums;
+}
+.da-sem-truncation {
+  color: var(--da-warn);
+}
+.da-sem-empty {
+  font-size: 12px;
+  color: var(--da-text-muted);
+  font-style: italic;
+}
+.da-sem-table-wrap {
+  overflow-x: auto;
+  border-radius: var(--da-radius-md);
+  border: 1px solid var(--da-border);
+}
+.da-sem-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  font-family: var(--da-mono);
+}
+.da-sem-table th {
+  background: var(--da-surface-sunken);
+  padding: 5px 8px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--da-text-3);
+  border-bottom: 1px solid var(--da-border);
+  white-space: nowrap;
+}
+.da-sem-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--da-border);
+  color: var(--da-text-2);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.da-sem-table tr:last-child td {
+  border-bottom: none;
+}
+.da-sem-table tr:hover td {
+  background: var(--da-surface-sunken);
+}
+.da-sem-null {
+  color: var(--da-text-muted);
+  font-style: italic;
+}
+.da-sem-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.da-sem-list-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: var(--da-radius-sm);
+  font-size: 12px;
+}
+.da-sem-list-item:hover {
+  background: var(--da-surface-sunken);
+}
+.da-sem-list-name {
+  font-family: var(--da-mono);
+  font-weight: 500;
+  color: var(--da-text-2);
+}
+.da-sem-list-label {
+  color: var(--da-text-muted);
+  font-size: 11px;
+}
+.da-sem-model-name {
+  font-family: var(--da-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--da-text);
+}
+.da-sem-bound {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.da-sem-bound.ok {
+  background: rgba(22, 163, 74, 0.1);
+  color: var(--da-success);
+}
+.da-sem-bound.err {
+  background: rgba(225, 29, 72, 0.1);
+  color: var(--da-danger);
+}
+.da-sem-err-text {
+  font-size: 10px;
+  color: var(--da-danger);
+}
+.da-sem-err-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: var(--da-radius-sm);
+  background: rgba(225, 29, 72, 0.12);
+  color: var(--da-danger);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.da-sem-diagnostics {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.da-sem-diag {
+  padding: 8px 10px;
+  border-radius: var(--da-radius-md);
+  background: rgba(225, 29, 72, 0.06);
+  border: 1px solid rgba(225, 29, 72, 0.18);
+}
+.da-sem-diag-code {
+  font-family: var(--da-mono);
+  font-size: 10px;
+  color: var(--da-danger);
+  font-weight: 600;
+}
+.da-sem-diag-msg {
+  font-size: 12px;
+  color: var(--da-text-2);
+  margin-top: 2px;
+}
+.da-sem-diag-hint {
+  font-size: 11px;
+  color: var(--da-text-muted);
+  margin-top: 3px;
+}
+.da-sem-recall-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--da-border);
+}
+.da-sem-recall-item:last-child {
+  border-bottom: none;
+}
+.da-sem-recall-q {
+  font-size: 12px;
+  color: var(--da-text-2);
+  font-weight: 500;
+}
+.da-answer {
+  color: var(--da-text-2);
+  font-size: 0.95rem;
+  line-height: 1.7;
 }

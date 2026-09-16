@@ -587,6 +587,24 @@ public class SessionAgentManager {
         }
     }
 
+    /**
+     * Returns the gateway gate key bound to the given runtime session id (e.g. {@code main-…}),
+     * or {@code null} when unknown. Allows scope registries keyed by conversation gate keys to
+     * resolve the per-call tenant selection from tool RuntimeContexts that only carry the runtime
+     * session id.
+     */
+    public String gateKeyForSessionId(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return null;
+        }
+        for (SessionEntry e : sessionsByKey.values()) {
+            if (sessionId.equals(e.sessionId())) {
+                return e.gateKey();
+            }
+        }
+        return null;
+    }
+
     // -----------------------------------------------------------------
     //  AgentStateStore reset (auto-reset and /new, /reset commands)
     // -----------------------------------------------------------------
