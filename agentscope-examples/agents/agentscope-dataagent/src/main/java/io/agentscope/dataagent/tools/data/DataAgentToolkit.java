@@ -614,9 +614,6 @@ public final class DataAgentToolkit {
                     Returns 'none' when no ontology is configured.\
                     """)
     public String describeOntology(DatasetScope scope, RuntimeContext rc) {
-        if (ontologyService == null) {
-            return "none: ontology service not available";
-        }
         DatasetScope eff = effectiveScope(scope, rc);
         if (eff == null) {
             return "error: no tenant context available";
@@ -626,7 +623,13 @@ public final class DataAgentToolkit {
         if (groupId == null) {
             return "none: no knowledge base selected. Ask the user to select one.";
         }
-        return ontologyService.formatOntologyCatalog(eff.ownerId(), groupId);
+        if (ontologyService != null) {
+            return ontologyService.formatOntologyCatalog(eff.ownerId(), groupId);
+        }
+        if (semanticModelService != null) {
+            return semanticModelService.describeSchemaWithInstructions(groupId);
+        }
+        return "none: ontology service not available";
     }
 
     @Tool(
@@ -649,9 +652,6 @@ public final class DataAgentToolkit {
                                             + "(e.g. the objects involved in the current query)",
                             required = false)
                     List<String> highlightObjects) {
-        if (ontologyService == null) {
-            return "error: ontology service not available";
-        }
         DatasetScope eff = effectiveScope(scope, rc);
         if (eff == null) {
             return "error: no tenant context available";
@@ -662,10 +662,18 @@ public final class DataAgentToolkit {
             return "error: no knowledge base selected";
         }
         try {
-            Map<String, Object> graphData =
-                    highlightObjects != null && !highlightObjects.isEmpty()
-                            ? ontologyService.getSubGraph(eff.ownerId(), groupId, highlightObjects)
-                            : ontologyService.getOntologyGraph(eff.ownerId(), groupId);
+            Map<String, Object> graphData;
+            if (ontologyService != null) {
+                graphData =
+                        highlightObjects != null && !highlightObjects.isEmpty()
+                                ? ontologyService.getSubGraph(
+                                        eff.ownerId(), groupId, highlightObjects)
+                                : ontologyService.getOntologyGraph(eff.ownerId(), groupId);
+            } else if (semanticModelService != null) {
+                graphData = semanticModelService.getGraphData(eff.ownerId(), groupId);
+            } else {
+                return "error: ontology service not available";
+            }
             Map<String, Object> payload = new LinkedHashMap<>(graphData);
             payload.put("type", "ontology_graph");
             if (highlightObjects != null) {
