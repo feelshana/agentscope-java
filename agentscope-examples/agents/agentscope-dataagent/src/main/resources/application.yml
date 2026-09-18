@@ -124,6 +124,7 @@ dataagent:
     api-key: ${DASHSCOPE_API_KEY:sk-c6d487aaddad4ed790c85f2b52dd2e27}
     model-name: ${DATAAGENT_MODEL_NAME:qwen3.8-max}
     stream: true
+    enable-thinking: false
 
   # ---- Agent defaults (used when auto-generating agentscope.json) ----
   agent:
@@ -176,7 +177,7 @@ dataagent:
     datasource:
       url: ${DATAAGENT_DATASET_DB_URL:jdbc:mysql://localhost:3306/data_agent?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
       username: ${DATAAGENT_DATASET_DB_USER:root}
-      password: ${DATAAGENT_DATASET_DB_PASSWORD:1234}
+      password: ${DATAAGENT_DATASET_DB_PASSWORD:123456}
 
   # ---- Optional pre-seeded analytics MySQL (tenant_storage_utilization / project_info) ----
   # Disabled by default so it never collides with the dataset store; enable and point it at the

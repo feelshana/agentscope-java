@@ -38,8 +38,8 @@ import java.time.Instant;
         indexes = {
             @Index(name = "ix_dataagent_dataset_owner", columnList = "owner_id"),
             @Index(
-                    name = "ix_dataagent_dataset_owner_name",
-                    columnList = "owner_id,name",
+                    name = "ix_dataagent_dataset_owner_group_name",
+                    columnList = "owner_id,group_id,name",
                     unique = true)
         })
 public class DatasetEntity {

@@ -19,7 +19,6 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agentscope.dataagent.dataset.parser.ColumnSchema;
 import io.agentscope.dataagent.dataset.parser.FileParser;
-import io.agentscope.dataagent.dataset.parser.ParsedTable;
 import io.agentscope.dataagent.tools.data.DataSource;
 import io.agentscope.dataagent.tools.data.InMemoryDataSourceRegistry;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetEntity;
@@ -59,7 +58,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class DatasetService implements DatasetContextProvider {
 
     private static final Logger log = LoggerFactory.getLogger(DatasetService.class);
-    private static final int ROW_LIMIT = 5000;
 
     private final DatasetRepository repository;
     private final DatasetGroupRepository groupRepository;
@@ -74,6 +72,7 @@ public class DatasetService implements DatasetContextProvider {
     private final List<FileParser> parsers;
     private final DatasetStoreProperties props;
     private final ObjectMapper mapper;
+    private final DatasetImportService importService;
 
     public DatasetService(
             DatasetRepository repository,
@@ -88,7 +87,8 @@ public class DatasetService implements DatasetContextProvider {
             TableProvisioner provisioner,
             List<FileParser> parsers,
             DatasetStoreProperties props,
-            ObjectMapper mapper) {
+            ObjectMapper mapper,
+            DatasetImportService importService) {
         this.repository = repository;
         this.groupRepository = groupRepository;
         this.knowledgeRepository = knowledgeRepository;
@@ -102,6 +102,7 @@ public class DatasetService implements DatasetContextProvider {
         this.parsers = parsers;
         this.props = props;
         this.mapper = mapper;
+        this.importService = importService;
     }
 
     @PostConstruct
@@ -133,65 +134,44 @@ public class DatasetService implements DatasetContextProvider {
                                         new DatasetException(
                                                 "Knowledge base not found: " + groupId, 404));
         repository
-                .findByOwnerIdAndName(ownerId, name.trim())
+                .findByOwnerIdAndGroupIdAndName(ownerId, group.getId(), name.trim())
                 .ifPresent(
                         e -> {
                             throw new DatasetException("Dataset name already exists: " + name, 409);
                         });
-        FileParser parser =
-                parsers.stream()
-                        .filter(p -> p.supports(fileName))
-                        .findFirst()
-                        .orElseThrow(
-                                () ->
-                                        new DatasetException(
-                                                "Unsupported file type: "
-                                                        + fileName
-                                                        + " (expected .xlsx / .xls / .csv)"));
-        ParsedTable table;
-        try {
-            table = parser.parse(data, fileName, ROW_LIMIT);
-        } catch (java.io.IOException e) {
-            throw new DatasetException("Failed to parse " + fileName + ": " + e.getMessage(), e);
-        }
-        if (table.rows().isEmpty()) {
-            throw new DatasetException("No data rows found in " + fileName);
+        // Validate file type
+        String lower = fileName != null ? fileName.toLowerCase() : "";
+        if (!lower.endsWith(".xlsx") && !lower.endsWith(".xls") && !lower.endsWith(".csv")) {
+            throw new DatasetException(
+                    "Unsupported file type: " + fileName + " (expected .xlsx / .xls / .csv)");
         }
 
         String id = UUID.randomUUID().toString();
-        String tableName = TableProvisioner.buildTableName(ownerId, id, name);
 
+        // Use EasyExcel streaming import with AI schema generation
+        DatasetImportService.ImportResult importResult;
         try {
-            provisioner.createTable(tableName, table.columns());
-            provisioner.bulkInsert(tableName, table.columns(), table.rows());
+            importResult = importService.importFile(ownerId, id, name, data, fileName);
         } catch (RuntimeException e) {
-            provisioner.dropTable(tableName);
-            throw e;
+            throw new DatasetException("Failed to import " + fileName + ": " + e.getMessage(), e);
         }
 
-        String autoDesc =
-                "表"
-                        + name.trim()
-                        + "："
-                        + table.rows().size()
-                        + "行×"
-                        + table.columns().size()
-                        + "列；列："
-                        + table.columns().stream()
-                                .map(
-                                        c ->
-                                                (c.description() == null
-                                                                        || c.description().isBlank()
-                                                                ? c.originalName()
-                                                                : c.description())
-                                                        + "("
-                                                        + c.sqlType()
-                                                        + ")")
-                                .collect(java.util.stream.Collectors.joining("、"));
-        String finalDesc =
-                (description == null || description.isBlank())
-                        ? autoDesc
-                        : description.trim() + "\n" + autoDesc;
+        if (importResult.totalRows() == 0) {
+            throw new DatasetException("No data rows found in " + fileName);
+        }
+
+        String tableName = importResult.tableName();
+
+        // Build description: prefer user input, then AI-generated table description
+        String finalDesc;
+        if (description != null && !description.isBlank()) {
+            finalDesc = description.trim();
+        } else if (importResult.tableDescription() != null
+                && !importResult.tableDescription().isBlank()) {
+            finalDesc = importResult.tableDescription();
+        } else {
+            finalDesc = name.trim();
+        }
 
         DatasetEntity entity = new DatasetEntity();
         entity.setId(id);
@@ -201,8 +181,8 @@ public class DatasetService implements DatasetContextProvider {
         entity.setSchemaName(provisioner.databaseName());
         entity.setTableName(tableName);
         entity.setDescription(finalDesc);
-        entity.setColumnSchemaJson(writeJson(table.columns()));
-        entity.setRowCount(table.rows().size());
+        entity.setColumnSchemaJson(writeJson(importResult.columns()));
+        entity.setRowCount(importResult.totalRows());
         entity.setSourceFileName(fileName);
         entity.setCreatedAt(Instant.now());
         entity.setUpdatedAt(Instant.now());
@@ -267,7 +247,7 @@ public class DatasetService implements DatasetContextProvider {
         List<DatasetEntity> created = new ArrayList<>();
         for (String table : tables) {
             repository
-                    .findByOwnerIdAndName(ownerId, table)
+                    .findByOwnerIdAndGroupIdAndName(ownerId, groupId, table)
                     .ifPresent(
                             e -> {
                                 throw new DatasetException(
@@ -499,34 +479,17 @@ public class DatasetService implements DatasetContextProvider {
         if (e.getGroupId() != null) {
             properties.put("groupId", e.getGroupId());
         }
-        StringBuilder desc = new StringBuilder();
-        desc.append(
+        // Store column schema JSON for prepare_data_context to use
+        if (e.getColumnSchemaJson() != null && !e.getColumnSchemaJson().isBlank()) {
+            properties.put("columnSchemaJson", e.getColumnSchemaJson());
+        }
+        // Description only contains AI-generated table description (for SystemPrompt)
+        String desc =
                 (e.getDescription() == null || e.getDescription().isBlank())
                         ? "User-uploaded dataset '" + e.getName() + "'"
-                        : e.getDescription());
-        desc.append(" | table: ").append(e.getTableName());
-        List<ColumnSchema> cols = readColumns(e);
-        if (!cols.isEmpty()) {
-            List<String> rendered = new ArrayList<>();
-            for (ColumnSchema c : cols) {
-                String label =
-                        (c.description() != null && !c.description().isBlank())
-                                ? c.description()
-                                : ((c.originalName() == null || c.originalName().isBlank())
-                                        ? c.name()
-                                        : c.originalName());
-                rendered.add(c.name() + "(" + label + " " + c.sqlType() + ")");
-            }
-            desc.append(" | columns: ").append(String.join(", ", rendered));
-        }
+                        : e.getDescription();
         return new DataSource(
-                e.getId(),
-                e.getName(),
-                desc.toString(),
-                "jdbc",
-                null,
-                List.of("user-dataset"),
-                properties);
+                e.getId(), e.getName(), desc, "jdbc", null, List.of("user-dataset"), properties);
     }
 
     private ExternalDataSourceEntity resolveExternal(DatasetEntity e) {

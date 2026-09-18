@@ -41,6 +41,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -120,6 +121,72 @@ public class DatasetController {
                         })
                 .doOnError(e -> log.warn("Dataset upload failed for {}", userId, e))
                 .onErrorMap(this::toStatus);
+    }
+
+    /**
+     * Batch upload multiple files concurrently. Each file is processed in parallel on the
+     * boundedElastic scheduler. Returns a list of results in the same order as the input files.
+     */
+    @PostMapping(value = "/batch", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Mono<List<DatasetVO>> batchUpload(
+            @RequestPart("files") List<FilePart> files,
+            @RequestParam("groupId") String groupId,
+            Authentication auth) {
+        String userId = (String) auth.getPrincipal();
+
+        return Flux.fromIterable(files)
+                .flatMap(
+                        file ->
+                                toBytes(file)
+                                        .flatMap(
+                                                data ->
+                                                        Mono.fromCallable(
+                                                                        () -> {
+                                                                            String name =
+                                                                                    stripExtension(
+                                                                                            file
+                                                                                                    .filename());
+                                                                            DatasetEntity entity =
+                                                                                    datasetService
+                                                                                            .ingest(
+                                                                                                    userId,
+                                                                                                    groupId,
+                                                                                                    name,
+                                                                                                    null,
+                                                                                                    new ByteArrayInputStream(
+                                                                                                            data),
+                                                                                                    file
+                                                                                                            .filename());
+                                                                            return toVO(entity);
+                                                                        })
+                                                                .subscribeOn(
+                                                                        Schedulers
+                                                                                .boundedElastic()))
+                                        .doOnSuccess(
+                                                vo ->
+                                                        log.info(
+                                                                "Batch upload: '{}' succeeded for"
+                                                                        + " user {}",
+                                                                vo.name(),
+                                                                userId))
+                                        .doOnError(
+                                                e ->
+                                                        log.warn(
+                                                                "Batch upload: '{}' failed for"
+                                                                        + " user {}: {}",
+                                                                file.filename(),
+                                                                userId,
+                                                                e.getMessage())),
+                        4) // concurrency limit: 4 files in parallel
+                .collectList()
+                .doOnError(e -> log.warn("Batch upload failed for {}", userId, e))
+                .onErrorMap(this::toStatus);
+    }
+
+    private static String stripExtension(String fileName) {
+        if (fileName == null) return "unnamed";
+        int dot = fileName.lastIndexOf('.');
+        return dot > 0 ? fileName.substring(0, dot) : fileName;
     }
 
     @GetMapping

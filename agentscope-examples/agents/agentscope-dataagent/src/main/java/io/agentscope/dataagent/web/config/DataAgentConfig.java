@@ -16,6 +16,7 @@
 package io.agentscope.dataagent.web.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.agentscope.core.model.GenerateOptions;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.state.AgentStateStore;
 import io.agentscope.core.state.InMemoryAgentStateStore;
@@ -205,6 +206,7 @@ public class DataAgentConfig {
                 .baseUrl(baseUrl)
                 .modelName(openaiModelName)
                 .stream(openaiStream)
+                .generateOptions(GenerateOptions.builder().thinkingBudget(4096).build())
                 .build();
     }
 
@@ -225,6 +227,7 @@ public class DataAgentConfig {
                 .apiKey(dashscopeApiKey)
                 .modelName(dashscopeModelName)
                 .stream(dashscopeStream)
+                .enableThinking(false)
                 .build();
     }
 

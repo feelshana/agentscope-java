@@ -120,9 +120,9 @@ public final class DataAgentToolkit {
             name = "prepare_data_context",
             description =
                     """
-                    查看当前可用数据源中某张表的完整列结构（列名、类型）、总行数和样例数据。\
-                    在调用 query_structured_data 之前，如果需要确认列名拼写、字段类型、日期格式、\
-                    枚举值等细节，先调用本工具。每次只查 1-3 张最相关的表。\
+                    查看当前可用数据源中某张表的完整列结构（列名、类型、AI 生成的字段描述）、\
+                    总行数和样例数据。在调用 query_structured_data 之前，如果需要确认列名拼写、\
+                    字段类型、日期格式、枚举值等细节，先调用本工具。每次只查 1-3 张最相关的表。\
                     """)
     public String prepareDataContext(
             DatasetScope scope,
@@ -140,7 +140,44 @@ public final class DataAgentToolkit {
         if (!sqlConnector.supports(ds.get())) {
             return "error: 数据源类型 '" + ds.get().kind() + "' 不支持 SQL 查询";
         }
-        return sqlConnector.describeTable(ds.get(), table);
+        String baseDescription = sqlConnector.describeTable(ds.get(), table);
+
+        // Enrich with AI-generated column descriptions from columnSchemaJson
+        String columnSchemaJson =
+                ds.get().properties() != null
+                        ? ds.get().properties().get("columnSchemaJson")
+                        : null;
+        if (columnSchemaJson != null && !columnSchemaJson.isBlank()) {
+            try {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> columns = MAPPER.readValue(columnSchemaJson, List.class);
+                if (!columns.isEmpty()) {
+                    StringBuilder sb = new StringBuilder(baseDescription);
+                    sb.append("\n\n### 字段描述（AI 生成）\n\n");
+                    sb.append("| 英文名 | 原始名 | 类型 | 描述 |\n");
+                    sb.append("|---|---|---|---|\n");
+                    for (Map<String, Object> col : columns) {
+                        String name = String.valueOf(col.getOrDefault("name", ""));
+                        String originalName = String.valueOf(col.getOrDefault("originalName", ""));
+                        String sqlType = String.valueOf(col.getOrDefault("sqlType", ""));
+                        String description = String.valueOf(col.getOrDefault("description", ""));
+                        sb.append("| ")
+                                .append(name)
+                                .append(" | ")
+                                .append(originalName)
+                                .append(" | ")
+                                .append(sqlType)
+                                .append(" | ")
+                                .append(description)
+                                .append(" |\n");
+                    }
+                    return sb.toString();
+                }
+            } catch (Exception e) {
+                log.warn("Failed to parse columnSchemaJson: {}", e.getMessage());
+            }
+        }
+        return baseDescription;
     }
 
     /**

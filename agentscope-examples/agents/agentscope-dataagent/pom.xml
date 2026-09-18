@@ -111,10 +111,23 @@
             <version>3.47.2.0</version>
         </dependency>
 
-        <!-- Apache POI: parse uploaded .xlsx datasets and .docx descriptions (version managed by BOM) -->
+        <!-- Apache POI: parse uploaded .docx descriptions (version managed by BOM) -->
         <dependency>
             <groupId>org.apache.poi</groupId>
             <artifactId>poi-ooxml</artifactId>
+        </dependency>
+
+        <!-- EasyExcel: streaming parse of uploaded .xlsx / .xls / .csv datasets with batch import -->
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>easyexcel</artifactId>
+            <version>4.0.3</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.poi</groupId>
+                    <artifactId>poi-ooxml</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- Spring Boot WebFlux (reactive HTTP + SSE) -->
