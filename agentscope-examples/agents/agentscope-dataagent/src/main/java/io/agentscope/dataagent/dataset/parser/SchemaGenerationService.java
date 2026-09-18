@@ -86,6 +86,7 @@ public class SchemaGenerationService {
 
         String prompt = buildPrompt(originalHeaders, columnSamples);
         log.info("SchemaGenerationService: calling AI model for schema generation...");
+        log.info("SchemaGenerationService: [PROMPT]\n{}", prompt);
         long aiStart = System.currentTimeMillis();
         Msg userMsg = new UserMessage((String) null, prompt);
         List<String> chunks =
@@ -108,6 +109,7 @@ public class SchemaGenerationService {
                 "SchemaGenerationService: AI model returned response ({} chars) in {} ms",
                 response.length(),
                 aiElapsed);
+        log.info("SchemaGenerationService: [RESPONSE]\n{}", response);
 
         return parseAiResponse(response, originalHeaders);
     }

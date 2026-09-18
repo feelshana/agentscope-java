@@ -206,7 +206,10 @@ public class DataAgentConfig {
                 .baseUrl(baseUrl)
                 .modelName(openaiModelName)
                 .stream(openaiStream)
-                .generateOptions(GenerateOptions.builder().thinkingBudget(4096).build())
+                .generateOptions(
+                        GenerateOptions.builder()
+                                .additionalBodyParam("enable_thinking", false)
+                                .build())
                 .build();
     }
 
@@ -321,6 +324,12 @@ public class DataAgentConfig {
                     }
                     // isolationScope() returns the supertype; chain it last.
                     b.filesystem(spec.isolationScope(IsolationScope.USER));
+
+                    // DataAgent does not need filesystem tools (read_file, write_file,
+                    // edit_file, list_files, grep_files, glob_files) or shell execute.
+                    // run_python has its own SandboxBackedFilesystem and is unaffected.
+                    b.disableFilesystemTools();
+                    b.disableShellTool();
 
                     // Exclude run_python from eviction: even with path-based
                     // artifact references the result is small, but as a safety
