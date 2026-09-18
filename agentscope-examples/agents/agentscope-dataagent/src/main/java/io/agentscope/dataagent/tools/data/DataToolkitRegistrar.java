@@ -29,8 +29,8 @@ import org.springframework.stereotype.Component;
 
 /**
  * Wires a singleton {@link DataAgentToolkit} onto the built-in main agent's toolkit at startup,
- * so the agent can call {@code list_data_sources}, {@code describe_table}, {@code run_sql_preview}
- * and {@code render_chart}.
+ * so the agent can call {@code prepare_data_context}, {@code query_structured_data},
+ * {@code retrieve_evidence} and {@code render_chart}.
  *
  * <p>Mirrors {@code ContributionToolRegistrar}: runs after {@link DataAgentBootstrap} has built
  * every agent, fails soft on errors so a missing tool slot does not stop the application from

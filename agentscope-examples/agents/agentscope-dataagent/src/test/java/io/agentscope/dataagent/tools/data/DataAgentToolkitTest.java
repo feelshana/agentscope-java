@@ -25,11 +25,11 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 /**
- * Verifies the four agent-facing tools of {@link DataAgentToolkit} against a real H2 connection
- * (no Spring context): the happy path for each tool plus the guard rails — unknown source ids,
- * the SELECT/WITH gate, unsupported source kinds, per-user dataset scoping, and cross-tenant
- * table-reference rejection. The injected {@link RuntimeContext} is {@code null} here (unit level);
- * owner resolution then relies on the typed {@link DatasetScope}.
+ * Verifies the four TC-style agent-facing tools of {@link DataAgentToolkit} against a real H2
+ * connection (no Spring context): the happy path for each tool plus the guard rails — unknown
+ * source ids, the SELECT/WITH gate, unsupported source kinds, per-user dataset scoping, and
+ * cross-tenant table-reference rejection. The injected {@link RuntimeContext} is {@code null}
+ * here (unit level); owner resolution then relies on the typed {@link DatasetScope}.
  */
 class DataAgentToolkitTest {
 
@@ -48,36 +48,19 @@ class DataAgentToolkitTest {
     }
 
     @Test
-    void listsConfiguredSources() {
-        assertThat(toolkit.listDataSources(SCOPE, RC))
-                .contains("demo-db | jdbc | Demo analytics DB")
-                .contains("tenant_storage_utilization")
-                .contains("(demo,h2)");
-    }
-
-    @Test
-    void listsNoSourcesGracefully() {
-        DataAgentToolkit empty =
-                new DataAgentToolkit(
-                        new InMemoryDataSourceRegistry(List.of()), new JdbcSqlConnector());
-
-        assertThat(empty.listDataSources(SCOPE, RC)).startsWith("none:");
-    }
-
-    @Test
-    void describesTableForKnownSource() {
-        assertThat(toolkit.describeTable(SCOPE, RC, "demo-db", "tenant_storage_utilization"))
+    void prepareDataContextShowsTableStructure() {
+        assertThat(toolkit.prepareDataContext(SCOPE, RC, "demo-db", "tenant_storage_utilization"))
                 .contains("30 rows");
     }
 
     @Test
-    void describeTableRejectsUnknownSource() {
-        assertThat(toolkit.describeTable(SCOPE, RC, "nope", "tenant_storage_utilization"))
-                .isEqualTo("error: unknown or not permitted source_id 'nope'");
+    void prepareDataContextRejectsUnknownSource() {
+        assertThat(toolkit.prepareDataContext(SCOPE, RC, "nope", "tenant_storage_utilization"))
+                .isEqualTo("error: 未知或不 permitted 的 source_id 'nope'");
     }
 
     @Test
-    void describeTableRejectsUnsupportedSourceKind() {
+    void prepareDataContextRejectsUnsupportedSourceKind() {
         DataSource httpSource =
                 new DataSource("api", "HTTP API", null, "http", null, List.of(), Map.of());
         DataAgentToolkit httpOnly =
@@ -85,14 +68,14 @@ class DataAgentToolkitTest {
                         new InMemoryDataSourceRegistry(List.of(httpSource)),
                         new JdbcSqlConnector());
 
-        assertThat(httpOnly.describeTable(SCOPE, RC, "api", "orders"))
-                .isEqualTo("error: no SQL connector available for source kind 'http'");
+        assertThat(httpOnly.prepareDataContext(SCOPE, RC, "api", "orders"))
+                .isEqualTo("error: 数据源类型 'http' 不支持 SQL 查询");
     }
 
     @Test
-    void runsSqlPreview() {
+    void runsQueryStructuredData() {
         String out =
-                toolkit.runSqlPreview(
+                toolkit.queryStructuredData(
                         SCOPE,
                         RC,
                         "demo-db",
@@ -102,34 +85,35 @@ class DataAgentToolkitTest {
 
         assertThat(out).doesNotStartWith("error");
         assertThat(out).contains("| 30 |");
+        assertThat(out).contains("## 查询结果");
     }
 
     @Test
-    void runSqlPreviewRejectsNonSelect() {
+    void queryStructuredDataRejectsNonSelect() {
         assertThat(
-                        toolkit.runSqlPreview(
+                        toolkit.queryStructuredData(
                                 SCOPE,
                                 RC,
                                 "demo-db",
                                 "DELETE FROM tenant_storage_utilization",
                                 null,
                                 null))
-                .isEqualTo("error: only SELECT / WITH statements are allowed");
+                .isEqualTo("error: 只允许 SELECT / WITH 语句");
         assertThat(
-                        toolkit.runSqlPreview(
+                        toolkit.queryStructuredData(
                                 SCOPE,
                                 RC,
                                 "demo-db",
                                 "INSERT INTO project_info VALUES (1,'x','y')",
                                 null,
                                 null))
-                .isEqualTo("error: only SELECT / WITH statements are allowed");
+                .isEqualTo("error: 只允许 SELECT / WITH 语句");
     }
 
     @Test
-    void runSqlPreviewRejectsUnknownSource() {
-        assertThat(toolkit.runSqlPreview(SCOPE, RC, "nope", "SELECT 1", null, null))
-                .isEqualTo("error: unknown or not permitted source_id 'nope'");
+    void queryStructuredDataRejectsUnknownSource() {
+        assertThat(toolkit.queryStructuredData(SCOPE, RC, "nope", "SELECT 1", null, null))
+                .startsWith("error: 未知或不 permitted 的 source_id 'nope'");
     }
 
     @Test
@@ -149,10 +133,16 @@ class DataAgentToolkitTest {
                                 List.of(mine, TenantTablesFixture.demoSource())),
                         new JdbcSqlConnector());
 
-        assertThat(scoped.listDataSources(new DatasetScope("bob"), RC)).contains("ds1");
-        assertThat(scoped.listDataSources(new DatasetScope("alice"), RC)).doesNotContain("ds1");
-        // No scope and no RuntimeContext userId (non-chat channel) exposes globals only.
-        assertThat(scoped.listDataSources(null, RC)).doesNotContain("ds1").contains("demo-db");
+        // Bob can see his own dataset via prepare_data_context
+        assertThat(scoped.prepareDataContext(new DatasetScope("bob"), RC, "ds1", "t"))
+                .doesNotStartWith("error: 未知");
+        // Alice cannot see Bob's dataset
+        assertThat(scoped.prepareDataContext(new DatasetScope("alice"), RC, "ds1", "t"))
+                .startsWith("error: 未知");
+        // No scope exposes globals only
+        assertThat(scoped.prepareDataContext(null, RC, "ds1", "t")).startsWith("error: 未知");
+        assertThat(scoped.prepareDataContext(null, RC, "demo-db", "tenant_storage_utilization"))
+                .doesNotStartWith("error: 未知");
     }
 
     @Test
@@ -175,7 +165,8 @@ class DataAgentToolkitTest {
 
         // Harness out-of-band tool execution supplies a baked context (userId only, no typed
         // attributes); the toolkit must still resolve the owner from it.
-        assertThat(scoped.listDataSources(null, baked)).contains("ds1");
+        assertThat(scoped.prepareDataContext(null, baked, "ds1", "t"))
+                .doesNotStartWith("error: 未知");
     }
 
     @Test
@@ -200,7 +191,7 @@ class DataAgentToolkitTest {
         DatasetScope bob = new DatasetScope("bob");
 
         assertThat(
-                        tk.runSqlPreview(
+                        tk.queryStructuredData(
                                 bob,
                                 RC,
                                 "ds1",
@@ -212,7 +203,7 @@ class DataAgentToolkitTest {
                                 + " ds_alice00_22222222_orders");
         // Own table passes the guard; any failure afterwards is a connection error, not the guard.
         assertThat(
-                        tk.runSqlPreview(
+                        tk.queryStructuredData(
                                 bob,
                                 RC,
                                 "ds1",
@@ -221,7 +212,7 @@ class DataAgentToolkitTest {
                                 null))
                 .doesNotStartWith("error: query references a dataset table you do not own");
         // Non-ds_ tables (shared analytics content) are not affected by the guard.
-        assertThat(tk.runSqlPreview(bob, RC, "ds1", "SELECT * FROM project_info", null, null))
+        assertThat(tk.queryStructuredData(bob, RC, "ds1", "SELECT * FROM project_info", null, null))
                 .doesNotStartWith("error: query references a dataset table you do not own");
     }
 

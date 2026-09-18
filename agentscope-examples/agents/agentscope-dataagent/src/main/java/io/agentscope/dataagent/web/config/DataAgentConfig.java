@@ -19,12 +19,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.state.AgentStateStore;
 import io.agentscope.core.state.InMemoryAgentStateStore;
+import io.agentscope.dataagent.dataset.DatasetContextProvider;
 import io.agentscope.dataagent.runtime.DataAgentBootstrap;
 import io.agentscope.dataagent.runtime.config.ChannelConfigEntry;
 import io.agentscope.dataagent.runtime.marketplace.GitDataAgentMarketplace;
 import io.agentscope.dataagent.runtime.marketplace.LocalApprovalMarketplace;
 import io.agentscope.dataagent.runtime.marketplace.NacosDataAgentMarketplace;
 import io.agentscope.dataagent.runtime.marketplace.UserMarketplaceRegistry.DataAgentMarketplaceFactoryRegistration;
+import io.agentscope.dataagent.runtime.session.DataDynamicContextMiddleware;
+import io.agentscope.dataagent.tools.data.DataSourceRegistry;
+import io.agentscope.dataagent.tools.data.SqlConnector;
 import io.agentscope.dataagent.web.toolbus.ToolEventBus;
 import io.agentscope.dataagent.web.toolbus.ToolNotificationMiddleware;
 import io.agentscope.dataagent.web.workspace.UserSandboxRegistry;
@@ -129,9 +133,33 @@ public class DataAgentConfig {
     private boolean dashscopeStream;
 
     @Value(
-            "${dataagent.agent.sys-prompt:你是一个基于 AgentScope 构建的数据分析智能体"
-                    + "（Data Agent），帮助用户探查、分析、可视化和汇报数据。"
-                    + " 所有说明性与数据解释性文字一律使用简体中文。}")
+            "${dataagent.agent.sys-prompt:"
+                    + "# 数据分析智能体\n\n"
+                    + "你是一个数据分析智能体，帮助用户查询、分析和可视化数据。\n\n"
+                    + "# 最高优先级原则\n\n"
+                    + "1. 显式需求优先：只做用户明确要求的分析，不主动扩展维度。\n"
+                    + "2. 每次工具调用前自检：这一步是否是完成用户请求的必要动作？\n"
+                    + "3. 已有结果足够时停止工具调用，直接回答。\n"
+                    + "4. 不编造数据，不确定时说明局限。\n\n"
+                    + "# 工作流程\n\n"
+                    + "1. 理解用户问题，确定显式要求的对象、维度、时间范围、条件。\n"
+                    + "2. 查阅 system prompt 中的动态上下文：\n"
+                    + "   - [DATA_SOURCES_OVERVIEW] — 可用数据源和表结构\n"
+                    + "   - [KNOWLEDGE_BASE_OVERVIEW] — 可用知识库\n"
+                    + "3. 如果需要结构化数据，先用 prepare_data_context 确认列细节，"
+                    + "再用 query_structured_data 查询。\n"
+                    + "4. 如果是知识/文档类问题，使用 retrieve_evidence。\n"
+                    + "5. 如果需要图表，使用 render_chart。\n"
+                    + "6. 结果足够时直接回答，不要为凑数继续调用工具。\n\n"
+                    + "# 数据源规则\n\n"
+                    + "- 调用 query_structured_data 前，先查看 [DATA_SOURCES_OVERVIEW] 确认表名。\n"
+                    + "- 需要确认列名拼写时用 prepare_data_context。\n"
+                    + "- 没有数据源时不要编造数据，提示用户补充。\n\n"
+                    + "# 回答规则\n\n"
+                    + "- 默认用 markdown 表格呈现结构化数据。\n"
+                    + "- 不主动生成图表，除非用户原话包含趋势/对比/分布等视觉分析语义。\n"
+                    + "- 不主动生成 PDF/Excel/PPT 等文件，除非用户明确要求。\n"
+                    + "- 用简体中文回答。}")
     private String agentSysPrompt;
 
     @Value("${dataagent.agent.name:data-agent}")
@@ -244,7 +272,10 @@ public class DataAgentConfig {
             ToolEventBus toolEventBus,
             SandboxClient<DockerSandboxClientOptions> sandboxClient,
             UserSandboxRegistry userSandboxRegistry,
-            Optional<AgentStateStore> sessionOpt)
+            Optional<AgentStateStore> sessionOpt,
+            DataSourceRegistry dataSourceRegistry,
+            SqlConnector sqlConnector,
+            Optional<DatasetContextProvider> contextProviderOpt)
             throws IOException {
         Path cwd = resolveCwd();
         ensureAgentscopeConfig();
@@ -300,6 +331,15 @@ public class DataAgentConfig {
                             ToolResultEvictionConfig.builder()
                                     .excludedToolNames(excludedTools)
                                     .build());
+
+                    // TC-style dynamic context injection: [DATA_SOURCES_OVERVIEW] and
+                    // [KNOWLEDGE_BASE_OVERVIEW] are rebuilt from the per-call DatasetScope
+                    // and appended to the system prompt on every turn.
+                    b.middleware(
+                            new DataDynamicContextMiddleware(
+                                    dataSourceRegistry,
+                                    sqlConnector,
+                                    contextProviderOpt.orElse(null)));
                 });
 
         DataAgentBootstrap bootstrap = builder.build();

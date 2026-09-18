@@ -108,59 +108,39 @@ public final class DataAgentToolkit {
         this.conversationScopes = conversationScopes;
     }
 
+    // -----------------------------------------------------------------
+    //  TC-style tools: prepare_data_context, query_structured_data,
+    //  retrieve_evidence, render_chart
+    //
+    //  Data source / knowledge base overview is injected into the system
+    //  prompt by DataDynamicContextMiddleware — no longer needs a tool call.
+    // -----------------------------------------------------------------
+
     @Tool(
-            name = "list_data_sources",
+            name = "prepare_data_context",
             description =
                     """
-                    List the data sources the admin has configured for this deployment. Each entry \
-                    is reported as 'id | kind | label — description (tags)'. Call this before \
-                    drafting any SQL so you pick a source the runtime actually knows about. \
-                    Returns 'none' when no sources are configured.\
+                    查看当前可用数据源中某张表的完整列结构（列名、类型）、总行数和样例数据。\
+                    在调用 query_structured_data 之前，如果需要确认列名拼写、字段类型、日期格式、\
+                    枚举值等细节，先调用本工具。每次只查 1-3 张最相关的表。\
                     """)
-    public String listDataSources(DatasetScope scope, RuntimeContext rc) {
-        DatasetScope eff = effectiveScope(scope, rc);
-        List<DataSource> all = visible(eff);
-        if (eff == null) {
-            log.warn(
-                    "list_data_sources: no owner resolvable (typed scope absent and RuntimeContext"
-                            + " userId null); only global sources visible (registry has {}"
-                            + " source(s))",
-                    registry.list().size());
-        } else {
-            log.info(
-                    "list_data_sources: owner={} (typedScope={}) registryIds={} visibleIds={}",
-                    eff.ownerId(),
-                    scope != null,
-                    registry.list().stream().map(DataSource::id).toList(),
-                    all.stream().map(DataSource::id).toList());
+    public String prepareDataContext(
+            DatasetScope scope,
+            RuntimeContext rc,
+            @ToolParam(name = "source_id", description = "数据源 ID，从 [DATA_SOURCES_OVERVIEW] 中获取")
+                    String sourceId,
+            @ToolParam(name = "table", description = "表名") String table) {
+        Optional<DataSource> ds = resolveScoped(effectiveScope(scope, rc), sourceId);
+        if (ds.isEmpty()) {
+            return "error: 未知或不 permitted 的 source_id '" + sourceId + "'";
         }
-        if (all.isEmpty()) {
-            return "none: no data sources are configured. Ask the operator to seed"
-                    + " dataagent.data.sources in agentscope.json.";
+        if (table == null || table.isBlank()) {
+            return "error: table 不能为空";
         }
-        StringBuilder sb = new StringBuilder();
-        for (DataSource ds : all) {
-            sb.append(ds.id()).append(" | ").append(ds.kind()).append(" | ").append(ds.label());
-            if (ds.description() != null && !ds.description().isBlank()) {
-                sb.append(" — ").append(ds.description());
-            }
-            if (!ds.tags().isEmpty()) {
-                sb.append(" (").append(String.join(",", ds.tags())).append(")");
-            }
-            sb.append('\n');
+        if (!sqlConnector.supports(ds.get())) {
+            return "error: 数据源类型 '" + ds.get().kind() + "' 不支持 SQL 查询";
         }
-        String out = sb.toString().stripTrailing();
-        if (scope != null && contextProvider != null) {
-            String rel = contextProvider.relationshipsText(scope.ownerId(), scope.groupIds());
-            if (rel != null && !rel.isBlank()) {
-                out = out + "\n\n## 数据集关系说明（用户提供）\n" + rel;
-            }
-            String terms = contextProvider.semanticTermsText();
-            if (terms != null && !terms.isBlank()) {
-                out = out + "\n\n## 业务术语（语义配置）\n" + terms;
-            }
-        }
-        return out;
+        return sqlConnector.describeTable(ds.get(), table);
     }
 
     /**
@@ -251,193 +231,95 @@ public final class DataAgentToolkit {
     }
 
     @Tool(
-            name = "describe_table",
+            name = "query_structured_data",
             description =
                     """
-                    Return the column schema, total row count, and a short sample for a table in \
-                    a configured data source. Use after list_data_sources to confirm the columns \
-                    you intend to project / filter / group by before writing the query.\
+                    执行只读 SQL 查询并返回结果。前提：[DATA_SOURCES_OVERVIEW] 存在且列出了可用表。\
+                    调用前应先通过 prepare_data_context 确认列名和字段类型。\
+                    只接受 SELECT / WITH 语句。返回结果包含 SQL 语句、执行结果和数据预览。\
                     """)
-    public String describeTable(
+    public String queryStructuredData(
             DatasetScope scope,
             RuntimeContext rc,
-            @ToolParam(name = "source_id", description = "Data source id from list_data_sources")
+            @ToolParam(name = "source_id", description = "数据源 ID，从 [DATA_SOURCES_OVERVIEW] 中获取")
                     String sourceId,
-            @ToolParam(
-                            name = "table",
-                            description = "Fully-qualified table name as understood by the source")
-                    String table) {
-        Optional<DataSource> ds = resolveScoped(effectiveScope(scope, rc), sourceId);
-        if (ds.isEmpty()) {
-            return "error: unknown or not permitted source_id '" + sourceId + "'";
-        }
-        if (table == null || table.isBlank()) {
-            return "error: table must not be blank";
-        }
-        if (!sqlConnector.supports(ds.get())) {
-            return "error: no SQL connector available for source kind '" + ds.get().kind() + "'";
-        }
-        return sqlConnector.describeTable(ds.get(), table);
-    }
-
-    @Tool(
-            name = "run_sql_preview",
-            description =
-                    """
-                    Execute a read-only SQL query against a configured data source and return the \
-                    first N rows as a markdown report (default 20, hard cap 100). The report \
-                    includes the natural-language question being answered, the SQL statement, and \
-                    the result table — making every invocation self-documenting for the user. Only \
-                    SELECT / WITH statements are accepted. Run describe_table first to confirm \
-                    column names, then validate your query here before reporting numbers.\
-                    """)
-    public String runSqlPreview(
-            DatasetScope scope,
-            RuntimeContext rc,
-            @ToolParam(name = "source_id", description = "Data source id from list_data_sources")
-                    String sourceId,
-            @ToolParam(name = "sql", description = "SELECT-only SQL statement") String sql,
+            @ToolParam(name = "sql", description = "SELECT-only SQL 语句") String sql,
             @ToolParam(
                             name = "question",
-                            description =
-                                    "Natural-language question being answered by this query"
-                                            + " (in Chinese); displayed above the SQL and result"
-                                            + " table so the tool block is self-documenting",
+                            description = "自然语言描述本次查询的业务问题（中文），用于结果自文档化",
                             required = false)
                     String question,
-            @ToolParam(
-                            name = "row_limit",
-                            description = "Max rows to return; the connector enforces a hard cap",
-                            required = false)
+            @ToolParam(name = "row_limit", description = "最大返回行数", required = false)
                     Integer rowLimit) {
         DatasetScope eff = effectiveScope(scope, rc);
         Optional<DataSource> ds = resolveScoped(eff, sourceId);
         if (ds.isEmpty()) {
-            return "error: unknown or not permitted source_id '" + sourceId + "'";
+            return "error: 未知或不 permitted 的 source_id '"
+                    + sourceId
+                    + "'。请先查看 [DATA_SOURCES_OVERVIEW] 中的可用数据源。";
         }
         if (sql == null || sql.isBlank()) {
-            return "error: sql must not be blank";
+            return "error: sql 不能为空";
         }
         String trimmed = sql.trim().toLowerCase();
         if (!trimmed.startsWith("select") && !trimmed.startsWith("with")) {
-            return "error: only SELECT / WITH statements are allowed";
+            return "error: 只允许 SELECT / WITH 语句";
         }
         String crossTable = checkCrossTable(eff, sql);
         if (crossTable != null) {
             return crossTable;
         }
         if (!sqlConnector.supports(ds.get())) {
-            return "error: no SQL connector available for source kind '" + ds.get().kind() + "'";
+            return "error: 数据源类型 '" + ds.get().kind() + "' 不支持 SQL 查询";
         }
-        return sqlConnector.runSqlPreview(ds.get(), sql, question, rowLimit != null ? rowLimit : 0);
+        String result =
+                sqlConnector.runSqlPreview(
+                        ds.get(), sql, question, rowLimit != null ? rowLimit : 0);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("## 查询结果\n\n");
+        if (question != null && !question.isBlank()) {
+            sb.append("**业务问题：** ").append(question).append("\n\n");
+        }
+        sb.append("**SQL：**\n```sql\n").append(sql).append("\n```\n\n");
+        sb.append(result);
+        return sb.toString();
     }
 
     @Tool(
-            name = "find_related_tables",
+            name = "retrieve_evidence",
             description =
                     """
-                    Find tables related to a given table (by dataset name or table name) using the \
-                    knowledge-base relation graph. Returns relation edges (shared columns, FK-style \
-                    naming, or user-documented relations) plus suggested JOIN fragments. Call this \
-                    BEFORE writing SQL that needs data from more than one table.\
+                    从知识库中检索与用户问题相关的文档片段。\
+                    当用户问知识、文档、政策、概念定义、制度、口径、说明、解释类问题时使用。\
+                    也可以用于数据源不可达时从知识库中获取相关数据。\
+                    query 应使用 10-30 字精炼关键词，保留核心实体和业务名词。\
                     """)
-    public String findRelatedTables(
+    public String retrieveEvidence(
             DatasetScope scope,
             RuntimeContext rc,
-            @ToolParam(name = "table", description = "Dataset name or table name to expand from")
-                    String table) {
+            @ToolParam(name = "query", description = "检索关键词，10-30 字精炼") String query) {
         DatasetScope eff = effectiveScope(scope, rc);
         if (eff == null) {
-            return "error: no tenant context available";
-        }
-        if (table == null || table.isBlank()) {
-            return "error: table must not be blank";
-        }
-        String rel =
-                contextProvider == null
-                        ? ""
-                        : contextProvider.relationsFor(eff.ownerId(), table, eff.groupIds());
-        if (rel == null || rel.isBlank()) {
-            return "no relations found for table '"
-                    + table
-                    + "'. If the question needs multiple tables, check list_data_sources and"
-                    + " describe_table for shared columns, or ask the user to document relations.";
-        }
-        return rel;
-    }
-
-    @Tool(
-            name = "lookup_semantic",
-            description =
-                    """
-                    Resolve a business term or metric (e.g. '流失率', 'GMV', '高价值客户') against the \
-                    knowledge-base semantic graph. Returns the matched entity(ies) with their \
-                    dependent fields resolved to table.column, calculation caliber (计算口径), \
-                    granularity/range/example facts, and cross-table JOIN hints. Call this BEFORE \
-                    writing SQL whenever the question uses business jargon or a named metric, so \
-                    you query the exact columns and caliber instead of guessing.\
-                    """)
-    public String lookupSemantic(
-            DatasetScope scope,
-            RuntimeContext rc,
-            @ToolParam(name = "term", description = "Business term or metric name to resolve")
-                    String term) {
-        DatasetScope eff = effectiveScope(scope, rc);
-        if (eff == null) {
-            return "error: no tenant context available";
-        }
-        if (term == null || term.isBlank()) {
-            return "error: term must not be blank";
-        }
-        if (knowledgeGraph == null) {
-            return "knowledge graph not available";
-        }
-        String ctx = knowledgeGraph.semanticContext(eff.ownerId(), term, eff.groupIds());
-        if (ctx == null || ctx.isBlank()) {
-            return "no semantic match for '"
-                    + term
-                    + "'. Fall back to list_data_sources + describe_table, or ask the user for the"
-                    + " definition.";
-        }
-        return ctx;
-    }
-
-    @Tool(
-            name = "read_knowledge",
-            description =
-                    """
-                    Read the knowledge-base business document(s) for the current conversation's \
-                    selected knowledge bases: calculation caliber (计算口径), KPI/考核 target \
-                    values, business terms and inter-table relation notes that the user uploaded. \
-                    Call this BEFORE answering any question about business definitions, targets, \
-                    or caliber, and BEFORE concluding that such definitions do not exist.\
-                    """)
-    public String readKnowledge(DatasetScope scope, RuntimeContext rc) {
-        DatasetScope eff = effectiveScope(scope, rc);
-        if (eff == null) {
-            return "error: no tenant context available";
+            return "error: 无法确定租户上下文";
         }
         if (contextProvider == null) {
             return "no knowledge available";
         }
         String text = contextProvider.relationshipsText(eff.ownerId(), eff.groupIds());
         if (text == null || text.isBlank()) {
-            return "no knowledge document in the selected knowledge base(s). Ask the user to"
-                    + " upload one (KB → 知识文档) or provide the definition directly.";
+            return "知识库中没有与 '" + query + "' 相关的内容。";
         }
-        return text;
+        return "## 检索结果\n\n" + text;
     }
 
     @Tool(
             name = "render_chart",
             description =
                     """
-                    Render a chart from a query result. Pass the columns and rows of the LAST \
-                    run_sql_preview result together with the user's question. The chart type and \
-                    the full ECharts option are built deterministically server-side from the data \
-                    shape and the question — do NOT craft chart specs or options yourself. \
-                    Returns a JSON payload {chart:"echarts", chartType, title, option} that the \
-                    UI renders directly.\
+                    渲染图表。传入查询结果的列和数据，图表类型由服务端根据数据形态自动推断。\
+                    返回 JSON payload {chart:"echarts", chartType, title, option} 供 UI 渲染。\
+                    不要自己构造图表配置，只传数据即可。\
                     """)
     public String renderChart(
             @ToolParam(
