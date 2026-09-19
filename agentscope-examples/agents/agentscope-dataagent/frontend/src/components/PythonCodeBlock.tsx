@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ACTIVE_AGENT_ID } from '../api/activeAgent';
 import { getToken } from '../api/auth';
 
-interface ArtifactInfo {
+export interface ArtifactInfo {
   name: string;
   type: 'image' | 'csv' | 'text' | 'svg';
   size: number;
@@ -133,7 +134,7 @@ const s: Record<string, React.CSSProperties> = {
  * sequences (which may appear when the result is double-escaped during
  * session-history serialization or SSE transport).
  */
-function parseResult(result: string): {
+export function parseResult(result: string): {
   exitCode: number;
   stdout: string;
   artifacts: ArtifactInfo[];
@@ -233,7 +234,7 @@ function imageMimeType(name: string): string {
 }
 
 /** Build the src URL for an artifact image (base64 inline or binary API). */
-function artifactSrc(a: ArtifactInfo): string | null {
+export function artifactSrc(a: ArtifactInfo): string | null {
   if (a.contentB64) return `data:${imageMimeType(a.name)};base64,${a.contentB64}`;
   if (a.path) {
     const token = getToken();
@@ -249,7 +250,7 @@ function artifactSrc(a: ArtifactInfo): string | null {
  * `Content-Disposition: attachment`; falls back to the inline content
  * captured in the tool result for legacy sessions without a path.
  */
-function downloadArtifact(a: ArtifactInfo) {
+export function downloadArtifact(a: ArtifactInfo) {
   if (a.path) {
     const token = getToken();
     const base =
@@ -298,20 +299,6 @@ export default function PythonCodeBlock({ code, result, defaultOpen = true }: Pr
   const parsed = result ? parseResult(result) : null;
   const hasError = parsed && parsed.exitCode !== 0;
 
-  // Debug logging
-  if (result) {
-    const hasReal = result.includes('\n');
-    const hasLiteral = /\\n/.test(result);
-    console.log(`[PythonCodeBlock] raw result: len=${result.length}, hasRealNewlines=${hasReal}, hasLiteralEscapes=${hasLiteral}`);
-    console.log('[PythonCodeBlock] raw result preview:', result.substring(0, 500));
-    if (parsed) {
-      console.log('[PythonCodeBlock] parsed artifacts:', parsed.artifacts.length, parsed.artifacts);
-      parsed.artifacts.forEach((a, i) => {
-        console.log(`[PythonCodeBlock] artifact[${i}]:`, JSON.stringify(a));
-      });
-    }
-  }
-
   return (
     <div style={s.wrapper}>
       <div style={s.header} onClick={() => setOpen(o => !o)}>
@@ -319,7 +306,7 @@ export default function PythonCodeBlock({ code, result, defaultOpen = true }: Pr
         <span>Python 代码执行</span>
         {parsed && (
           <span style={{ color: hasError ? '#b91c1c' : '#16a34a', fontWeight: 500, fontSize: '0.8rem' }}>
-            {hasError ? `exit: ${parsed.exitCode}` : '✓ 执行成功'}
+            {hasError ? `退出码: ${parsed.exitCode}` : '✓ 执行成功'}
           </span>
         )}
         {parsed && parsed.artifacts.length > 0 && (
@@ -396,7 +383,7 @@ export default function PythonCodeBlock({ code, result, defaultOpen = true }: Pr
                           const img = e.currentTarget;
                           img.style.opacity = '0.3';
                           img.style.border = '1px dashed #cbd5e1';
-                          img.title = `Image load failed: ${a.name}`;
+                          img.title = `图片加载失败: ${a.name}`;
                           console.error('[PythonCodeBlock] image load failed:', src);
                         }}
                       />
@@ -414,10 +401,10 @@ export default function PythonCodeBlock({ code, result, defaultOpen = true }: Pr
           )}
         </>
       )}
-      {lightbox && (
+      {lightbox && createPortal(
         <div
           style={{
-            position: 'fixed', inset: 0, zIndex: 200,
+            position: 'fixed', inset: 0, zIndex: 9999,
             background: 'rgba(0,0,0,0.75)', display: 'flex',
             alignItems: 'center', justifyContent: 'center',
             cursor: 'zoom-out', padding: 24,
@@ -429,7 +416,8 @@ export default function PythonCodeBlock({ code, result, defaultOpen = true }: Pr
             alt=""
             style={{ maxWidth: '92vw', maxHeight: '92vh', borderRadius: 8, boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}
           />
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

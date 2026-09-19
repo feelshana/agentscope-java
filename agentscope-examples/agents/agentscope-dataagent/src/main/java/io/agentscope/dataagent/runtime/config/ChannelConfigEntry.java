@@ -155,12 +155,12 @@ public class ChannelConfigEntry {
 
     /** Converts this entry into a {@link ChannelConfig} for the given channel id. */
     public ChannelConfig toChannelConfig(String channelId) {
-        DmScope scope = DmScope.MAIN;
+        DmScope scope = DmScope.PER_ACCOUNT_CHANNEL_PEER;
         if (dmScope != null && !dmScope.isBlank()) {
             try {
                 scope = DmScope.valueOf(dmScope.toUpperCase());
             } catch (IllegalArgumentException ignored) {
-                // Unknown value → fall back to MAIN
+                // Unknown value → fall back to PER_ACCOUNT_CHANNEL_PEER
             }
         }
         List<ChannelBinding> resolved = new ArrayList<>();

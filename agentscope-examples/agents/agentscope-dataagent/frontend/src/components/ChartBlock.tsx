@@ -90,9 +90,9 @@ export default function ChartBlock({ spec }: Props) {
 
   return (
     <div style={s.wrapper}>
-      <div style={s.header}>Chart: Vega-Lite</div>
+      <div style={s.header}>图表: Vega-Lite</div>
       {error ? (
-        <div style={s.error}>{`chart render failed: ${error}`}</div>
+        <div style={s.error}>{`图表渲染失败: ${error}`}</div>
       ) : (
         <div style={s.canvas} ref={ref} />
       )}

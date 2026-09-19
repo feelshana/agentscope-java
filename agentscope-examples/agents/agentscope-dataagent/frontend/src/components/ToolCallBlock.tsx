@@ -6,6 +6,7 @@ export interface ToolInspectPayload {
   name: string;
   input?: string;
   result?: string;
+  pythonTools?: { input?: string; result?: string }[];
 }
 
 interface Props {
@@ -19,7 +20,7 @@ interface Props {
 const INPUT_LIMIT = 2000;
 
 function truncate(text: string): string {
-  return text.length <= INPUT_LIMIT ? text : `${text.slice(0, INPUT_LIMIT)}\n…(truncated)`;
+  return text.length <= INPUT_LIMIT ? text : `${text.slice(0, INPUT_LIMIT)}\n…（已截断）`;
 }
 
 export function prettyInput(text: string): string {

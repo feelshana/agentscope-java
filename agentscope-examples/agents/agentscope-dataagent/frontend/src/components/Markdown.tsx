@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import ReactMarkdown, { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ACTIVE_AGENT_ID } from '../api/activeAgent';
@@ -94,7 +95,7 @@ export default function Markdown({ children }: { children: string }) {
             // Hide broken images gracefully
             img.style.opacity = '0.3';
             img.style.border = '1px dashed #cbd5e1';
-            img.title = `Image not found: ${alt || src}`;
+            img.title = `图片未找到: ${alt || src}`;
           }}
         />
       );
@@ -107,10 +108,10 @@ export default function Markdown({ children }: { children: string }) {
       <div className="claw-md">
         <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{children}</ReactMarkdown>
       </div>
-      {lightbox && (
+      {lightbox && createPortal(
         <div
           style={{
-            position: 'fixed', inset: 0, zIndex: 200,
+            position: 'fixed', inset: 0, zIndex: 9999,
             background: 'rgba(0,0,0,0.75)', display: 'flex',
             alignItems: 'center', justifyContent: 'center',
             cursor: 'zoom-out', padding: 24,
@@ -122,7 +123,8 @@ export default function Markdown({ children }: { children: string }) {
             alt=""
             style={{ maxWidth: '92vw', maxHeight: '92vh', borderRadius: 8, boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}
           />
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );

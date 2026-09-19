@@ -27,7 +27,7 @@ const NAV_ITEMS: UtilityItem[] = [
 
 /** Overflow menu items (TC-style 更多); currently only Workspace. */
 const MORE_ITEMS: UtilityItem[] = [
-  { label: 'Workspace', path: '/workspace', icon: 'folder' },
+  { label: '工作区', path: '/workspace', icon: 'folder' },
 ];
 
 function decodeJwt(token: string): Record<string, unknown> {
@@ -96,7 +96,7 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
       .then(list => { if (!cancelled) setEntries(list); })
       .catch(e => {
         if (cancelled) return;
-        setErr(e instanceof Error ? e.message : 'Failed');
+        setErr(e instanceof Error ? e.message : '加载失败');
         // The backend may still be booting right after a restart: retry once.
         if (attempts.current < 1) {
           attempts.current += 1;
@@ -166,7 +166,7 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
       setEntries(prev => prev.filter(e => e.sessionKey !== entry.sessionKey));
       if (activeKey === entryNavKey(entry)) navigate('/chat');
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : 'Delete failed');
+      alert(e instanceof Error ? e.message : '删除失败');
     }
   }
 
@@ -342,7 +342,7 @@ function UserMenu({ username, onLogout }: { username: string; onLogout: () => vo
 
   useEffect(() => { setOpen(false); }, [location.pathname]);
 
-  const initial = username.charAt(0).toUpperCase() || '?';
+  const initial = username.charAt(0).toUpperCase() || '用';
 
   return (
     <div ref={ref} style={{ position: 'relative' as const }}>
@@ -366,7 +366,7 @@ function UserMenu({ username, onLogout }: { username: string; onLogout: () => vo
           boxShadow: '0 1px 3px rgba(79,70,229,0.3)',
         }}>{initial}</div>
         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>
-          {username || 'User'}
+          {username || '用户'}
         </span>
         <span style={{ fontSize: '0.6rem', color: 'var(--da-text-muted)', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>▼</span>
       </button>

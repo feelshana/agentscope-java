@@ -363,8 +363,9 @@ public class DataAgentConfig {
         bootstrap.gateway().setUserSandboxRegistry(userSandboxRegistry);
 
         // Build the chatui channel using the file-config's bindings & dmScope (if any),
-        // so admin-edited bindings in agentscope.json are honored. Falls back to PER_PEER
-        // when no chatui entry exists.
+        // so admin-edited bindings in agentscope.json are honored. Falls back to
+        // PER_ACCOUNT_CHANNEL_PEER so each ChatGPT-style conversation gets its own isolated
+        // session (the conversationId flows through as MsgContext.group → |g: segment).
         ChannelConfigEntry ce =
                 bootstrap.loadedConfig().getChannels() != null
                         ? bootstrap.loadedConfig().getChannels().get(ChatUiChannel.CHANNEL_ID)
@@ -373,7 +374,7 @@ public class DataAgentConfig {
                 ce != null
                         ? ce.toChannelConfig(ChatUiChannel.CHANNEL_ID)
                         : ChannelConfig.builder(ChatUiChannel.CHANNEL_ID)
-                                .dmScope(DmScope.PER_PEER)
+                                .dmScope(DmScope.PER_ACCOUNT_CHANNEL_PEER)
                                 .build();
         ChatUiChannel webChannel = ChatUiChannel.create(chatuiCfg);
         bootstrap.start(webChannel);

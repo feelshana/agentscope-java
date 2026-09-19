@@ -845,6 +845,31 @@ button:focus-visible {
   box-shadow: 0 0 6px var(--da-primary);
   animation: da-pulse 2s ease-in-out infinite;
 }
+@keyframes da-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.da-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--da-border);
+  border-top-color: var(--da-primary);
+  border-radius: 50%;
+  animation: da-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+.da-spinner-sm {
+  width: 12px;
+  height: 12px;
+  border-width: 1.5px;
+}
+.da-spinner-lg {
+  width: 28px;
+  height: 28px;
+  border-width: 3px;
+}
 @keyframes da-typing {
   0%,
   60%,

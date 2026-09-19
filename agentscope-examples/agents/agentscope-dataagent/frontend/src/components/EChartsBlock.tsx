@@ -27,7 +27,7 @@ export default function EChartsBlock({ payload }: { payload: ChartPayload }) {
       return;
     }
     if (!payload.chartId) {
-      setError('chart payload missing option and chartId');
+      setError('图表数据缺少必要字段');
       return;
     }
     let cancelled = false;
@@ -35,7 +35,7 @@ export default function EChartsBlock({ payload }: { payload: ChartPayload }) {
       headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
     })
       .then(r => {
-        if (!r.ok) throw new Error(`chart fetch failed: ${r.status}`);
+        if (!r.ok) throw new Error(`图表加载失败: ${r.status}`);
         return r.json();
       })
       .then(body => {
@@ -86,7 +86,7 @@ export default function EChartsBlock({ payload }: { payload: ChartPayload }) {
           fontSize: '0.8rem',
         }}
       >
-        chart could not be loaded: {error}
+        图表加载失败: {error}
       </div>
     );
   }

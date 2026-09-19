@@ -61,8 +61,8 @@ public class SessionTranscriptWriter {
     /** Soft cap for tool input JSON in the transcript (process-complete; content may truncate). */
     public static final int INPUT_TRUNCATE_CHARS = 500;
 
-    /** Soft cap for tool output text in the transcript. */
-    public static final int OUTPUT_TRUNCATE_CHARS = 1000;
+    /** Soft cap for tool output text in the transcript (structured results need enough room). */
+    public static final int OUTPUT_TRUNCATE_CHARS = 50_000;
 
     private final WorkspaceManager workspaceManager;
     private final TranscriptStore transcriptStore;
@@ -214,10 +214,10 @@ public class SessionTranscriptWriter {
                     textParts.add(text);
                 }
             } else if (block instanceof ThinkingBlock th) {
-                String thinking = th.getThinking();
-                if (thinking != null && !thinking.isBlank()) {
-                    textParts.add(thinking);
-                }
+                // Thinking/reasoning content is not stored in the visible content field.
+                // During live streaming, ChatController filters to only TextBlockDeltaEvent,
+                // so thinking is never shown to the user. We maintain the same behavior
+                // when loading history by excluding ThinkingBlock from the stored content.
             } else if (block instanceof ToolUseBlock tu) {
                 toolUses.add(tu);
             } else if (block instanceof ToolResultBlock tr) {

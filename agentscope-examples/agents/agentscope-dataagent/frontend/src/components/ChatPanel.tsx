@@ -9,10 +9,10 @@ import EChartsBlock, { ChartPayload } from './EChartsBlock';
 import CitationPanel from './CitationPanel';
 import EmptyIllustration from './EmptyIllustration';
 import Icon from './Icon';
-import PythonCodeBlock from './PythonCodeBlock';
 import OntologyGraphView from './OntologyGraphView';
 import type { OntologyGraphData } from '../api/ontology';
 import Markdown from './Markdown';
+import PythonArtifactsPanel from './PythonArtifactsPanel';
 import { extractVegaSpec } from '../utils/charts';
 import { listGroups, DatasetGroup } from '../api/datasets';
 
@@ -162,17 +162,6 @@ function isHiddenTool(name: string): boolean {
   return HIDDEN_TOOL_PATTERNS.some(p => lower.includes(p.toLowerCase()));
 }
 
-/** Extracts the `code` field from a JSON-encoded run_python tool input string. */
-function extractPythonCode(input?: string): string | null {
-  if (!input) return null;
-  try {
-    const parsed = JSON.parse(input);
-    return typeof parsed.code === 'string' ? parsed.code : null;
-  } catch {
-    return null;
-  }
-}
-
 /** Extract the server-built chart payload (chartId or inline option) from a render_chart result. */
 function chartPayloadFromTool(t: ToolEntry): ChartPayload | null {
   const raw = t.result ?? t.input;
@@ -219,7 +208,6 @@ function splitToolRender(
     }
     const t = node.tool;
     const isChartTool = t.name.toLowerCase().includes('render_chart');
-    const isPythonTool = t.name.toLowerCase() === 'run_python';
     const isOntologyTool = t.name.toLowerCase().includes('show_ontology_graph');
     const chartPayload = isChartTool ? chartPayloadFromTool(t) : null;
     const ontologyPayload = isOntologyTool ? ontologyGraphPayload(t) : null;
@@ -236,12 +224,6 @@ function splitToolRender(
         />
       </div>,
     );
-    if (isPythonTool) {
-      const pyCode = extractPythonCode(t.input);
-      if (pyCode) {
-        trace.push(<PythonCodeBlock key={`${key}-py`} code={pyCode} result={t.result} defaultOpen={false} />);
-      }
-    }
     if (isChartTool && !chartPayload && !spec) {
       trace.push(
         <div
@@ -251,7 +233,7 @@ function splitToolRender(
             padding: '0.4rem 0.7rem', color: '#92400e', fontSize: '0.78rem',
           }}
         >
-          chart payload could not be parsed — expand the tool row above to inspect the raw arguments
+          图表解析失败 — 点击工具行查看原始参数
         </div>,
       );
     }
@@ -331,7 +313,7 @@ function turnsToMessages(turns: TurnEntry[]): Message[] {
     }
   }
   for (const m of out) {
-    if (m.role === 'assistant' && m.text.includes('[error]')) m.failed = true;
+    if (m.role === 'assistant' && (m.text.includes('[error]') || m.text.includes('[错误]'))) m.failed = true;
   }
   return out;
 }
@@ -579,15 +561,15 @@ export default function ChatPanel({
           setMessages(prev => prev.map(m => m.id === replyMsg.id ? { ...m, pending: false } : m));
         } else if (evt.type === 'error') {
           setMessages(prev => prev.map(m => m.id === replyMsg.id
-            ? { ...m, pending: false, failed: true, text: m.text + (m.text ? '\n' : '') + `[error] ${evt.error ?? 'unknown'}` }
+            ? { ...m, pending: false, failed: true, text: m.text + (m.text ? '\n' : '') + `[错误] ${evt.error ?? '未知错误'}` }
             : m));
         }
       }
       onSessionUpdate?.();
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'stream failed';
+      const msg = e instanceof Error ? e.message : '连接中断';
       setMessages(prev => prev.map(m => m.id === replyMsg.id
-        ? { ...m, pending: false, failed: true, text: m.text + (m.text ? '\n' : '') + `[error] ${msg}` }
+        ? { ...m, pending: false, failed: true, text: m.text + (m.text ? '\n' : '') + `[错误] ${msg}` }
         : m));
     } finally {
       setBusy(false);
@@ -653,6 +635,9 @@ export default function ChatPanel({
                         ? <div className="da-typing"><span /><span /><span /></div>
                         : null}
                     {answer}
+                    {!m.pending && m.tools.some(t => t.name === 'run_python' && t.result) && (
+                      <PythonArtifactsPanel tools={m.tools} onInspect={onInspect} />
+                    )}
                     {m.tools.length > 0 && (
                       <CitationPanel tools={m.tools} />
                     )}

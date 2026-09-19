@@ -1,6 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import Icon from './Icon';
 import Markdown from './Markdown';
+import PythonCodeBlock from './PythonCodeBlock';
+import { ArtifactInfo, parseResult, artifactSrc, downloadArtifact } from './PythonCodeBlock';
 import { formatResult, prettyInput, ToolInspectPayload } from './ToolCallBlock';
 import { downloadQueryCsv } from '../api/datasets';
 
@@ -52,7 +55,7 @@ function ResultTable({ columns, columnTypes, rows }: {
             <tr key={ri}>
               {row.map((cell, ci) => (
                 <td key={ci} className={cellClassName(kinds[ci]).trim() || undefined}>
-                  {cell === null ? <span className="da-sem-null">NULL</span> : cell}
+                  {cell === null ? <span className="da-sem-null">空值</span> : cell}
                 </td>
               ))}
             </tr>
@@ -98,8 +101,18 @@ function QueryStructuredDetail({ data }: { data: Record<string, unknown> }) {
   const taskId = data.taskId as string;
   const status = data.status as string;
   const error = data.error as string;
-  const results = (data.results as QueryResultItem[]) ?? [];
+  const rawResults = (data.results as QueryResultItem[]) ?? [];
   const steps = (data.steps as { callId: string; name: string; sql?: string; status: string; summary?: string }[]) ?? [];
+
+  const results = React.useMemo(() => {
+    const seen = new Set<string>();
+    return rawResults.filter(r => {
+      const key = r.sql?.trim() ?? r.artifactId;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [rawResults]);
 
   return (
     <div className="da-sem-section">
@@ -162,18 +175,37 @@ function RenderChartDetail({ data }: { data: Record<string, unknown> }) {
   );
 }
 
+function extractPythonCode(input?: string): string | null {
+  if (!input) return null;
+  try {
+    const parsed = JSON.parse(input);
+    return typeof parsed.code === 'string' ? parsed.code : null;
+  } catch {
+    return null;
+  }
+}
+
 function ToolDetail({ name, result }: { name: string; result: string }) {
   let parsed: Record<string, unknown> | null = null;
+  let truncatedJson = false;
   try {
     const v = JSON.parse(result);
     if (v && typeof v === 'object' && !Array.isArray(v)) parsed = v as Record<string, unknown>;
-  } catch { /* not JSON */ }
+  } catch {
+    const trimmed = result.trimStart();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      truncatedJson = true;
+    }
+  }
 
   if (name === 'query_structured_data' && parsed) {
     return <QueryStructuredDetail data={parsed} />;
   }
   if (name === 'render_chart' && parsed) {
     return <RenderChartDetail data={parsed} />;
+  }
+  if (truncatedJson) {
+    return <div className="da-sem-warn" style={{ fontSize: '0.8rem' }}>结果数据过大，历史记录中已截断。重新执行该工具可查看完整结果。</div>;
   }
   return <Markdown>{formatResult(result)}</Markdown>;
 }
@@ -188,9 +220,97 @@ const TC_TOOL_LABELS: Record<string, string> = {
   run_sql: '执行 SQL',
 };
 
+function typeLabel(type: string): string {
+  switch (type) {
+    case 'image': return '图片';
+    case 'svg': return '矢量图';
+    case 'csv': return '数据';
+    case 'text': return '文档';
+    default: return type;
+  }
+}
+
+function PythonArtifactsView({ tools }: { tools: { input?: string; result?: string }[] }) {
+  const [lightbox, setLightbox] = useState<string | null>(null);
+
+  const allArtifacts = React.useMemo(() => {
+    const result: ArtifactInfo[] = [];
+    for (const t of tools) {
+      if (!t.result) continue;
+      try {
+        const parsed = parseResult(t.result);
+        result.push(...parsed.artifacts);
+      } catch { /* skip */ }
+    }
+    return result;
+  }, [tools]);
+
+  return (
+    <>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {allArtifacts.map((a, i) => {
+          const src = (a.type === 'image' || a.type === 'svg') ? artifactSrc(a) : null;
+          return (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--da-border)' }}>
+              {src && (
+                <img
+                  src={src}
+                  alt={a.name}
+                  style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--da-border)', cursor: 'zoom-in', flexShrink: 0 }}
+                  onClick={() => setLightbox(src)}
+                  onError={(e) => { e.currentTarget.style.opacity = '0.3'; }}
+                />
+              )}
+              {!src && (
+                <span style={{ width: 48, textAlign: 'center', fontSize: '0.85rem', flexShrink: 0, color: 'var(--da-text-muted)' }}>
+                  {a.type === 'csv' ? '📊' : '📄'}
+                </span>
+              )}
+              <span style={{ flex: 1, minWidth: 0, wordBreak: 'break-all', fontSize: '0.82rem', color: 'var(--da-text)' }}>
+                {a.name}
+                <span style={{ color: 'var(--da-text-muted)', fontSize: '0.72rem' }}> ({typeLabel(a.type)}, {(a.size / 1024).toFixed(1)} KB)</span>
+              </span>
+              <button
+                type="button"
+                className="da-btn da-btn-ghost"
+                style={{ fontSize: '0.74rem', padding: '2px 10px', flexShrink: 0 }}
+                onClick={() => downloadArtifact(a)}
+                title={`下载 ${a.name}`}
+              >
+                ⬇ 下载
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      {lightbox && createPortal(
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            background: 'rgba(0,0,0,0.75)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center',
+            cursor: 'zoom-out', padding: 24,
+          }}
+          onClick={() => setLightbox(null)}
+        >
+          <img
+            src={lightbox}
+            alt=""
+            style={{ maxWidth: '92vw', maxHeight: '92vh', borderRadius: 8, boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}
+          />
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
 export default function ToolInspector({ tool, onClose }: ToolInspectorProps) {
-  const title = TC_TOOL_LABELS[tool.name] ?? tool.name;
-  const isError = tool.result !== undefined
+  const isPythonArtifacts = tool.id === '__python_artifacts__';
+  const title = isPythonArtifacts
+    ? `生成产物（${(() => { let c = 0; for (const t of tool.pythonTools ?? []) { if (!t.result) continue; try { c += parseResult(t.result).artifacts.length; } catch {/* */} } return c; })()} 个文件）`
+    : TC_TOOL_LABELS[tool.name] ?? tool.name;
+  const isError = !isPythonArtifacts && tool.result !== undefined
     ? (tool.name === 'query_structured_data'
       ? (() => { try { return (JSON.parse(tool.result) as Record<string, unknown>)?.status === 'FAILED'; } catch { return false; } })()
       : tool.result.startsWith('error:'))
@@ -200,7 +320,7 @@ export default function ToolInspector({ tool, onClose }: ToolInspectorProps) {
     <div style={S.root}>
       <div style={S.head}>
         <span style={{ color: 'var(--da-text-muted)', display: 'inline-flex' }}>
-          <Icon name="code" size="sm" />
+          <Icon name={isPythonArtifacts ? 'file' : 'code'} size="sm" />
         </span>
         <span style={S.name}>{title}</span>
         {isError && <span className="da-sem-err-badge">失败</span>}
@@ -209,21 +329,34 @@ export default function ToolInspector({ tool, onClose }: ToolInspectorProps) {
         </button>
       </div>
       <div style={S.body}>
-        {tool.input && (
-          <>
-            <div style={S.label}>输入</div>
-            <div className="da-toolcall-body" style={S.inputBox}>{prettyInput(tool.input)}</div>
-          </>
-        )}
-        {tool.result !== undefined ? (
-          <>
-            <div style={S.label}>结果</div>
-            <div className="da-toolcall-result" style={S.resultBox}>
-              <ToolDetail key={tool.id} name={tool.name} result={tool.result} />
-            </div>
-          </>
+        {isPythonArtifacts ? (
+          <PythonArtifactsView tools={tool.pythonTools ?? []} />
         ) : (
-          <div style={S.pending}>运行中…</div>
+          <>
+            {tool.input && (
+              <>
+                <div style={S.label}>输入</div>
+                <div className="da-toolcall-body" style={S.inputBox}>{prettyInput(tool.input)}</div>
+              </>
+            )}
+            {tool.result !== undefined ? (
+              <>
+                <div style={S.label}>结果</div>
+                <div className="da-toolcall-result" style={S.resultBox}>
+                  {tool.name === 'run_python'
+                    ? (() => {
+                        const code = extractPythonCode(tool.input);
+                        return code
+                          ? <PythonCodeBlock code={code} result={tool.result} defaultOpen />
+                          : <ToolDetail key={tool.id} name={tool.name} result={tool.result} />;
+                      })()
+                    : <ToolDetail key={tool.id} name={tool.name} result={tool.result} />}
+              </div>
+              </>
+            ) : (
+              <div style={S.pending}>运行中…</div>
+            )}
+          </>
         )}
       </div>
     </div>

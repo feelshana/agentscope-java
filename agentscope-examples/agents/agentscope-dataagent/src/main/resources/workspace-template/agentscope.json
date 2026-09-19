@@ -12,7 +12,7 @@
   "channels": {
     "chatui": {
       "defaultAgentId": "data-agent",
-      "dmScope": "MAIN"
+      "dmScope": "PER_ACCOUNT_CHANNEL_PEER"
     }
   }
 }

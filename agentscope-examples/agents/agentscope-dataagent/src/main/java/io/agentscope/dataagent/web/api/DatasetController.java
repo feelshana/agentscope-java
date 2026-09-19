@@ -23,12 +23,9 @@ import io.agentscope.dataagent.web.persistence.jpa.DatasetEntity;
 import java.io.ByteArrayInputStream;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import javax.xml.parsers.DocumentBuilderFactory;
-import org.w3c.dom.NodeList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.buffer.DataBufferUtils;
@@ -202,8 +199,7 @@ public class DatasetController {
         return toBytes(file)
                 .flatMap(
                         data ->
-                                Mono.fromCallable(
-                                                () -> listSheetNamesLightweight(data))
+                                Mono.fromCallable(() -> listSheetNamesLightweight(data))
                                         .subscribeOn(Schedulers.boundedElastic()))
                 .doOnError(e -> log.warn("Failed to list sheets for {}", file.filename(), e))
                 .onErrorMap(this::toStatus);
@@ -222,7 +218,8 @@ public class DatasetController {
                     var dbf = DocumentBuilderFactory.newInstance();
                     dbf.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
                     dbf.setFeature("http://xml.org/sax/features/external-general-entities", false);
-                    dbf.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+                    dbf.setFeature(
+                            "http://xml.org/sax/features/external-parameter-entities", false);
                     var db = dbf.newDocumentBuilder();
                     var doc = db.parse(zis);
                     var sheetNodes = doc.getElementsByTagName("sheet");

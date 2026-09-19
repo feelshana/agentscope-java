@@ -320,7 +320,13 @@ public class ChatController {
                                     : resolvedConversationId));
         }
         String requestId = UUID.randomUUID().toString();
-        return executeChat(userId, agentId, req.message(), resolvedConversationId, req.groupIds(), requestId)
+        return executeChat(
+                        userId,
+                        agentId,
+                        req.message(),
+                        resolvedConversationId,
+                        req.groupIds(),
+                        requestId)
                 .map(
                         reply -> {
                             String text =
@@ -406,7 +412,8 @@ public class ChatController {
      *
      * <p>Uses {@link ChatUiChannel#previewRoute} so the key matches exactly what
      * {@link #executeChat} will produce when it dispatches through the same channel.
-     * {@code conversationId} (when non-null) flows through to {@code MsgContext.threadId}, so each
+     * {@code conversationId} (when non-null) flows through to {@code MsgContext.group} (via
+     * {@code InboundMessage.accountId} and {@code DmScope.PER_ACCOUNT_CHANNEL_PEER}), so each
      * ChatGPT-style session yields a distinct gateKey and therefore a distinct underlying session.
      */
     private String resolveGateKey(String userId, String agentId, String conversationId) {
@@ -628,7 +635,8 @@ public class ChatController {
             java.util.List<String> groupIds,
             String requestId) {
         long startMs = System.currentTimeMillis();
-        InboundMessage inbound = buildInbound(userId, agentId, message, conversationId, groupIds, requestId);
+        InboundMessage inbound =
+                buildInbound(userId, agentId, message, conversationId, groupIds, requestId);
         final String recordedAgentId = agentId != null ? agentId : "(default)";
         return chatUiChannel
                 .dispatch(inbound)
@@ -654,7 +662,8 @@ public class ChatController {
             java.util.List<String> groupIds,
             String requestId) {
         long startMs = System.currentTimeMillis();
-        InboundMessage inbound = buildInbound(userId, agentId, message, conversationId, groupIds, requestId);
+        InboundMessage inbound =
+                buildInbound(userId, agentId, message, conversationId, groupIds, requestId);
         final String recordedAgentId = agentId != null ? agentId : "(default)";
         return chatUiChannel
                 .dispatchStream(inbound)

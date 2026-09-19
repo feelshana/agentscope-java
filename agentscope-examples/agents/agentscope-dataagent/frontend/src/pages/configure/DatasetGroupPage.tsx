@@ -133,11 +133,7 @@ export default function DatasetGroupPage() {
     return () => clearInterval(id);
   }, [groupId, hasActiveTask]);
 
-  // Default to the relationship doc surface when one exists (mirrors TC's doc-first landing).
-  useEffect(() => {
-    if (detail?.knowledge && !searchParams.get('view')) setView('doc');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [detail?.knowledge]);
+  // Always default to the files view on entry.
 
   function patchStatus(name: string, patch: Partial<UploadStatus>) {
     mutateUploadStatuses(groupId, prev =>
@@ -418,10 +414,13 @@ export default function DatasetGroupPage() {
           {(uploadStatuses.length > 0 || importTasks.length > 0) && (
             <div className="da-card" style={{ marginTop: 8, padding: 8 }}>
               {uploadStatuses.map((s, i) => (
-                <div key={`up-${s.name}-${i}`} className="da-small" style={{ display: 'flex', gap: 8 }}>
+                <div key={`up-${s.name}-${i}`} className="da-small" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {s.name}
                   </span>
+                  {(s.status === 'uploading' || s.status === 'queued') && (
+                    <span className="da-spinner da-spinner-sm" style={{ borderColor: 'var(--da-border)', borderTopColor: 'var(--da-primary)' }} />
+                  )}
                   <span
                     style={{
                       color:
@@ -462,7 +461,10 @@ export default function DatasetGroupPage() {
                           </span>
                         )}
                       </span>
-                      <span style={{ color: taskStatusColor(t.status), whiteSpace: 'nowrap' }}>
+                      <span style={{ color: taskStatusColor(t.status), whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {['SCANNING', 'WRITING', 'VERIFYING'].includes(t.status) && (
+                          <span className="da-spinner da-spinner-sm" style={{ borderColor: 'var(--da-border)', borderTopColor: taskStatusColor(t.status) }} />
+                        )}
                         {TASK_STATUS_LABEL[t.status] ?? t.status}
                       </span>
                       {(t.status === 'FAILED' || t.status === 'INTERRUPTED') && (
@@ -560,8 +562,18 @@ export default function DatasetGroupPage() {
               <div style={{ marginTop: 6 }}>
                 点击上传或拖入 .xlsx / .xls / .csv，可多选。CSV/XLSX 将完整导入并建立原始表。
               </div>
-              {sheetPickerBusy && <div style={{ color: 'var(--da-primary)', marginTop: 8 }}>检测工作表…</div>}
-              {busy && !sheetPickerBusy && <div style={{ color: 'var(--da-primary)', marginTop: 8 }}>处理中…</div>}
+              {sheetPickerBusy && (
+                <div style={{ color: 'var(--da-primary)', marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="da-spinner da-spinner-sm" />
+                  检测工作表…
+                </div>
+              )}
+              {busy && !sheetPickerBusy && (
+                <div style={{ color: 'var(--da-primary)', marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="da-spinner da-spinner-sm" />
+                  上传并解析中…
+                </div>
+              )}
             </div>
 
             <div className="da-card">

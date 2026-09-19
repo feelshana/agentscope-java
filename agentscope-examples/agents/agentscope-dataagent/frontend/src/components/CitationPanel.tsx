@@ -99,7 +99,7 @@ export default function CitationPanel({
                   )}
                 </>
               ) : (
-                <span>图表（render_chart）</span>
+                <span>图表</span>
               )}
             </div>
           ))}

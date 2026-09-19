@@ -23,6 +23,7 @@ import io.agentscope.dataagent.runtime.session.SessionAgentManager;
 import io.agentscope.dataagent.runtime.session.SessionEntry;
 import io.agentscope.dataagent.runtime.session.SessionKind;
 import io.agentscope.dataagent.web.catalog.AgentCatalogService;
+import io.agentscope.dataagent.web.session.SessionIndexReconciler;
 import io.agentscope.dataagent.web.session.SessionReadStateStore;
 import io.agentscope.dataagent.web.session.SessionTurnParser;
 import io.agentscope.dataagent.web.workspace.WorkspaceManagerFactory;
@@ -194,6 +195,7 @@ public class SessionController {
         }
         try {
             Path transcript = Paths.get(path);
+            Path sessionDir = transcript.getParent();
             Files.deleteIfExists(transcript);
             String name = transcript.getFileName().toString();
             if (name.endsWith(".log.jsonl")) {
@@ -201,6 +203,7 @@ public class SessionController {
                         transcript.resolveSibling(
                                 name.substring(0, name.length() - ".log".length())));
             }
+            SessionIndexReconciler.writeTombstone(sessionDir);
         } catch (Exception e) {
             log.warn(
                     "Failed to delete transcript for session {}: {}",
@@ -237,8 +240,9 @@ public class SessionController {
     }
 
     /**
-     * Scans registered MAIN sessions for one whose {@code gateKey} carries {@code |t:<key>} and
-     * matches the user+agent pair. Returns {@code null} if no match.
+     * Scans registered MAIN sessions for one whose {@code gateKey} carries the conversationId
+     * (in the {@code |g:<key>} segment with PER_ACCOUNT_CHANNEL_PEER, or legacy {@code |t:<key>})
+     * and matches the user+agent pair. Returns {@code null} if no match.
      */
     private SessionEntry findSessionByConversationId(String agentId, String key, String userId) {
         if (key == null || key.isBlank()) return null;
@@ -259,11 +263,9 @@ public class SessionController {
      * HarnessAgent's internal UUID (not the gateway/catalog id), so we cannot match by agent id
      * directly. Instead we look at the session's {@code gateKey} (which is deterministically
      * derived from {@code (userId, gatewayAgentId, conversationId)}) and check that it carries the
-     * expected gatewayAgentId in its {@code |x:agentId=...} segment — independent of any
-     * {@code |t:<conversationId>} that distinguishes ChatGPT-style sessions for the same agent.
-     * Sub/group sessions that lack a gateKey fall through to a userId-only ownership check —
-     * leaking these isn't possible across users because the inbox/turn endpoints are already
-     * filtered by {@code entry.userId() == auth principal}.
+     * expected gatewayAgentId in its {@code |x:agentId=...} segment — independent of the
+     * {@code |g:<conversationId>} segment that distinguishes ChatGPT-style sessions for the same
+     * agent. Sub/group sessions that lack a gateKey fall through to a userId-only ownership check.
      */
     private static boolean sessionMatchesAgent(SessionEntry e, String gatewayAgentId) {
         if (gatewayAgentId == null) return false;
@@ -289,18 +291,24 @@ public class SessionController {
     }
 
     /**
-     * Extracts the conversationId (the threadId portion of {@link
-     * io.agentscope.harness.agent.gateway.MsgContext}) from a canonical gateKey segment of the
-     * form {@code |t:<value>}. Returns {@code null} when the gateKey is missing or has no thread
-     * segment — pre-multi-session sessions live with a {@code null} conversationId and can still be
-     * addressed by their storage key.
+     * Extracts the conversationId from a canonical gateKey. With {@code
+     * DmScope.PER_ACCOUNT_CHANNEL_PEER} the conversationId lives in the {@code |g:<value>} segment
+     * (group field). Legacy gateKeys used {@code |t:<value>} (threadId field). Returns {@code null}
+     * when neither segment is present.
      */
     static String extractConversationId(String gateKey) {
         if (gateKey == null) return null;
-        String needle = "|t:";
-        int i = gateKey.indexOf(needle);
+        String val = extractSegment(gateKey, "|g:");
+        if (val == null) {
+            val = extractSegment(gateKey, "|t:");
+        }
+        return val;
+    }
+
+    private static String extractSegment(String gateKey, String prefix) {
+        int i = gateKey.indexOf(prefix);
         if (i < 0) return null;
-        int start = i + needle.length();
+        int start = i + prefix.length();
         int end = gateKey.indexOf('|', start);
         String val = end < 0 ? gateKey.substring(start) : gateKey.substring(start, end);
         return val.isEmpty() ? null : val;
