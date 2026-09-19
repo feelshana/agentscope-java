@@ -26,6 +26,7 @@ import io.agentscope.core.middleware.MiddlewareBase;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,19 +64,35 @@ public class ToolNotificationMiddleware implements MiddlewareBase {
             ActingInput input,
             Function<ActingInput, Flux<AgentEvent>> next) {
         String sessionKey = resolveSessionKey(agent, ctx);
+        String requestId = ctx == null ? null : ctx.get(ToolEventBus.REQUEST_ID_CONTEXT_KEY);
+        String runId = UUID.randomUUID().toString().substring(0, 12);
+        Map<String, String> parentMap = new HashMap<>();
         if (sessionKey != null && input.toolCalls() != null) {
             for (ToolUseBlock tu : input.toolCalls()) {
                 Map<String, Object> inputData = new LinkedHashMap<>();
                 if (tu.getInput() != null) {
                     inputData.putAll(tu.getInput());
                 }
+                String parentId = extractParentToolCallId(tu);
+                if (parentId != null) {
+                    parentMap.put(tu.getId(), parentId);
+                }
                 try {
                     bus.publish(
-                            ToolEventBus.ToolEvent.toolCall(sessionKey, tu.getName(), inputData));
+                            ToolEventBus.ToolEvent.toolCall(
+                                    sessionKey,
+                                    tu.getName(),
+                                    tu.getId(),
+                                    inputData,
+                                    requestId,
+                                    runId,
+                                    parentId));
                     log.debug(
-                            "Published TOOL_CALL event: session={}, tool={}",
+                            "Published TOOL_CALL event: session={}, tool={}, runId={}, parent={}",
                             sessionKey,
-                            tu.getName());
+                            tu.getName(),
+                            runId,
+                            parentId);
                 } catch (Exception e) {
                     log.debug(
                             "Failed to publish tool event for {}: {}",
@@ -105,12 +122,19 @@ public class ToolNotificationMiddleware implements MiddlewareBase {
                                 try {
                                     bus.publish(
                                             ToolEventBus.ToolEvent.toolResult(
-                                                    sessionKey, end.getToolCallName(), text));
+                                                    sessionKey,
+                                                    end.getToolCallName(),
+                                                    end.getToolCallId(),
+                                                    text,
+                                                    requestId,
+                                                    runId,
+                                                    parentMap.get(end.getToolCallId())));
                                     log.info(
-                                            "Published TOOL_RESULT: session={}, tool={}, len={},"
-                                                    + " preview=[{}]",
+                                            "Published TOOL_RESULT: session={}, tool={}, runId={},"
+                                                    + " len={}, preview=[{}]",
                                             sessionKey,
                                             end.getToolCallName(),
+                                            runId,
                                             text.length(),
                                             text.substring(0, Math.min(text.length(), 300)));
                                 } catch (Exception e) {
@@ -120,7 +144,14 @@ public class ToolNotificationMiddleware implements MiddlewareBase {
                                             e.getMessage());
                                 }
                             }
-                        });
+                        })
+                .contextWrite(context -> context.put(ToolEventBus.RUN_ID_CONTEXT_KEY, runId));
+    }
+
+    private static String extractParentToolCallId(ToolUseBlock tu) {
+        if (tu.getMetadata() == null) return null;
+        Object val = tu.getMetadata().get("parentToolCallId");
+        return val instanceof String s ? s : null;
     }
 
     private static String resolveSessionKey(Agent agent, RuntimeContext ctx) {

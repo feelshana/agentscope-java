@@ -6,43 +6,38 @@ export interface CitationToolEntry {
   result?: string;
 }
 
-export interface DatasetRef {
-  name: string;
-  tableName: string;
-}
-
 interface Entry {
-  dataset?: string;
-  table?: string;
-  sql?: string;
   chart?: boolean;
+  query?: { purpose: string; sql: string; rowCount: number; artifactId: string };
 }
 
-/**
- * Collapsible "来源" panel under an assistant bubble: which datasets/tables/SQL a turn touched,
- * derived from the turn's tool calls (live and history use the same tool entries).
- */
 export default function CitationPanel({
   tools,
-  datasetMap,
 }: {
   tools: CitationToolEntry[];
-  datasetMap: Record<string, DatasetRef>;
 }) {
   const [open, setOpen] = useState(false);
   const entries: Entry[] = [];
   for (const t of tools) {
     const n = (t.name ?? '').toLowerCase();
-    if (n.includes('run_sql_preview') || n.includes('describe_table')) {
-      let input: { source_id?: string; sql?: string } = {};
+
+    if (n === 'query_structured_data' && t.result) {
       try {
-        input = JSON.parse(t.input ?? '{}');
-      } catch {
-        input = {};
-      }
-      const ref = input.source_id ? datasetMap[input.source_id] : undefined;
-      entries.push({ dataset: ref?.name, table: ref?.tableName, sql: input.sql });
-    } else if (n.includes('render_chart')) {
+        const parsed = JSON.parse(t.result) as Record<string, unknown>;
+        if (parsed.status !== 'FAILED' && Array.isArray(parsed.results)) {
+          for (const r of parsed.results as Record<string, unknown>[]) {
+            entries.push({
+              query: {
+                purpose: (r.purpose as string) ?? '',
+                sql: (r.sql as string) ?? '',
+                rowCount: (r.rowCount as number) ?? 0,
+                artifactId: (r.artifactId as string) ?? '',
+              },
+            });
+          }
+        }
+      } catch { /* malformed result */ }
+    } else if (n === 'render_chart') {
       entries.push({ chart: true });
     }
   }
@@ -51,6 +46,7 @@ export default function CitationPanel({
   return (
     <div style={{ marginTop: 8 }}>
       <button
+        type="button"
         onClick={() => setOpen(o => !o)}
         style={{
           background: 'transparent',
@@ -79,13 +75,16 @@ export default function CitationPanel({
         >
           {entries.map((e, i) => (
             <div key={i} style={{ fontSize: '0.75rem', color: 'var(--da-text-2)' }}>
-              {e.chart ? (
-                <span>📊 图表（render_chart）</span>
-              ) : (
+              {e.query ? (
                 <>
-                  <span style={{ fontWeight: 600 }}>{e.dataset ?? '未知数据集'}</span>
-                  {e.table && <span style={{ color: 'var(--da-text-muted)' }}> · {e.table}</span>}
-                  {e.sql && (
+                  <span style={{ fontWeight: 600 }}>{e.query.purpose || '数据查询'}</span>
+                  <span style={{ color: 'var(--da-text-muted)' }}>
+                    {' '}· {e.query.rowCount} 行
+                  </span>
+                  <span style={{ color: 'var(--da-text-muted)', fontFamily: 'monospace', fontSize: '0.65rem' }}>
+                    {' '}· {e.query.artifactId}
+                  </span>
+                  {e.query.sql && (
                     <div
                       style={{
                         fontFamily: 'ui-monospace, Menlo, monospace',
@@ -95,10 +94,12 @@ export default function CitationPanel({
                         marginTop: 2,
                       }}
                     >
-                      {e.sql.length > 220 ? e.sql.slice(0, 220) + '…' : e.sql}
+                      {e.query.sql.length > 220 ? e.query.sql.slice(0, 220) + '…' : e.query.sql}
                     </div>
                   )}
                 </>
+              ) : (
+                <span>图表（render_chart）</span>
               )}
             </div>
           ))}

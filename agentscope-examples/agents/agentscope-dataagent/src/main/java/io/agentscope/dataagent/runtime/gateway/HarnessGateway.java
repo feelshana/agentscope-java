@@ -322,6 +322,56 @@ public final class HarnessGateway implements Gateway {
     }
 
     /**
+     * Full inbound turn with caller context preservation. Seeds the RuntimeContext from the
+     * callerContext so typed attributes (e.g. DatasetScope with knowledge-base groupIds) are
+     * carried through to agent tools and middleware.
+     */
+    @Override
+    public Mono<Msg> run(
+            MsgContext context,
+            List<Msg> messages,
+            OutboundAddress outboundAddress,
+            RuntimeContext callerContext,
+            InboundMessage inboundMessage) {
+        MsgContext ctx = context != null ? context : MsgContext.defaultContext();
+        String gateKey = ctx.canonicalKey();
+
+        String requestedAgentId = ctx.extra() != null ? (String) ctx.extra().get("agentId") : null;
+        HarnessAgent ha = resolveAgent(requestedAgentId);
+        if (ha == null) {
+            return Mono.error(
+                    new IllegalStateException(
+                            "HarnessGateway.bindMainAgent must be called before run(...)"));
+        }
+
+        String sessionKey = resolveOrCreateMainSession(gateKey, ha, ctx.userId(), requestedAgentId);
+        String sessionId =
+                sessionAgentManager
+                        .viewSession(sessionKey)
+                        .map(SessionView::sessionId)
+                        .orElse(sessionKey);
+
+        if (outboundAddress != null) {
+            lastRouteBySessionKey.put(sessionKey, outboundAddress);
+        }
+
+        RuntimeContext.Builder rtcBuilder =
+                (callerContext != null
+                                ? RuntimeContext.builder(callerContext)
+                                : RuntimeContext.builder())
+                        .sessionId(sessionId)
+                        .put("msgContext", ctx)
+                        .put("sessionKey", sessionKey);
+        if (ctx.userId() != null) {
+            rtcBuilder.userId(ctx.userId());
+        }
+        attachUserSandboxContext(
+                rtcBuilder, ctx.userId(), resolveSandboxAgentId(requestedAgentId, ha));
+        RuntimeContext runtimeContext = rtcBuilder.build();
+        return withGatedTurn(gateKey, () -> ha.call(messages, runtimeContext));
+    }
+
+    /**
      * Streaming variant of {@link #run}. Mirrors the same session resolution and turn-gating logic
      * but calls {@link HarnessAgent#streamEvents} instead of {@link HarnessAgent#call}, emitting
      * fine-grained {@link AgentEvent}s (text deltas, tool-call events, etc.) instead of a single
@@ -357,7 +407,9 @@ public final class HarnessGateway implements Gateway {
         }
 
         RuntimeContext.Builder rtcBuilder =
-                RuntimeContext.builder()
+                (callerContext != null
+                                ? RuntimeContext.builder(callerContext)
+                                : RuntimeContext.builder())
                         .sessionId(sessionId)
                         .put("msgContext", ctx)
                         .put("sessionKey", sessionKey);

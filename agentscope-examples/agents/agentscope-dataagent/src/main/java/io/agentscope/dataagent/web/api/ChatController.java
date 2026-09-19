@@ -221,13 +221,17 @@ public class ChatController {
         // the storage key and use it as the next turn's conversationId, splintering the session.
         doneFrame.put("sessionKey", resolvedConversationId);
 
+        // Generate a requestId for this turn so tool events can be correlated.
+        String requestId = UUID.randomUUID().toString();
+
         Flux<ServerSentEvent<String>> agentEvents =
                 executeChatStream(
                                 userId,
                                 agentId,
                                 req.message(),
                                 resolvedConversationId,
-                                req.groupIds())
+                                req.groupIds(),
+                                requestId)
                         .filter(event -> event instanceof TextBlockDeltaEvent)
                         .map(
                                 event ->
@@ -315,7 +319,8 @@ public class ChatController {
                                     ? cmd.newSessionKey
                                     : resolvedConversationId));
         }
-        return executeChat(userId, agentId, req.message(), resolvedConversationId, req.groupIds())
+        String requestId = UUID.randomUUID().toString();
+        return executeChat(userId, agentId, req.message(), resolvedConversationId, req.groupIds(), requestId)
                 .map(
                         reply -> {
                             String text =
@@ -334,6 +339,11 @@ public class ChatController {
         boolean isResult = "TOOL_RESULT".equalsIgnoreCase(e.eventType());
         data.put("type", isResult ? "tool_result" : "tool_call");
         data.put("toolName", e.toolName());
+        if (e.toolCallId() != null) data.put("toolCallId", e.toolCallId());
+        if (e.requestId() != null) data.put("requestId", e.requestId());
+        if (e.runId() != null) data.put("runId", e.runId());
+        data.put("seq", e.seq());
+        if (e.parentToolCallId() != null) data.put("parentToolCallId", e.parentToolCallId());
         if (e.data() != null) {
             if (isResult && isPlainResult(e.data())) {
                 // Unwrap the single "result" key so toolResult carries plain text — the same
@@ -581,14 +591,18 @@ public class ChatController {
             String agentId,
             String message,
             String conversationId,
-            java.util.List<String> groupIds) {
+            java.util.List<String> groupIds,
+            String requestId) {
         List<Msg> msgs = shapeInboundMessages(message);
         conversationScopes.put(conversationId, groupIds);
-        RuntimeContext runtimeContext =
+        RuntimeContext.Builder runtimeContextBuilder =
                 RuntimeContext.builder()
                         .userId(userId)
-                        .put(DatasetScope.class, new DatasetScope(userId, groupIds))
-                        .build();
+                        .put(DatasetScope.class, new DatasetScope(userId, groupIds));
+        if (requestId != null) {
+            runtimeContextBuilder.put(ToolEventBus.REQUEST_ID_CONTEXT_KEY, requestId);
+        }
+        RuntimeContext runtimeContext = runtimeContextBuilder.build();
         if (agentId == null || agentId.isBlank()) {
             return InboundMessage.dm(ChatUiChannel.CHANNEL_ID, userId, List.copyOf(msgs))
                     .withRuntimeContext(runtimeContext);
@@ -611,9 +625,10 @@ public class ChatController {
             String agentId,
             String message,
             String conversationId,
-            java.util.List<String> groupIds) {
+            java.util.List<String> groupIds,
+            String requestId) {
         long startMs = System.currentTimeMillis();
-        InboundMessage inbound = buildInbound(userId, agentId, message, conversationId, groupIds);
+        InboundMessage inbound = buildInbound(userId, agentId, message, conversationId, groupIds, requestId);
         final String recordedAgentId = agentId != null ? agentId : "(default)";
         return chatUiChannel
                 .dispatch(inbound)
@@ -636,9 +651,10 @@ public class ChatController {
             String agentId,
             String message,
             String conversationId,
-            java.util.List<String> groupIds) {
+            java.util.List<String> groupIds,
+            String requestId) {
         long startMs = System.currentTimeMillis();
-        InboundMessage inbound = buildInbound(userId, agentId, message, conversationId, groupIds);
+        InboundMessage inbound = buildInbound(userId, agentId, message, conversationId, groupIds, requestId);
         final String recordedAgentId = agentId != null ? agentId : "(default)";
         return chatUiChannel
                 .dispatchStream(inbound)

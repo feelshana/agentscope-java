@@ -53,8 +53,8 @@ const MD_STYLE = `
 .claw-md blockquote {
   margin: 0.6em 0;
   padding: 0.2em 0.9em;
-  border-left: 3px solid #c7d2fe;
-  color: #64748b;
+  border-left: 3px solid var(--da-border-strong);
+  color: var(--da-text-3);
 }
 .claw-md table {
   border-collapse: collapse;
@@ -65,13 +65,13 @@ const MD_STYLE = `
   overflow-x: auto;
 }
 .claw-md th, .claw-md td {
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--da-border);
   padding: 0.35em 0.7em;
   text-align: left;
 }
-.claw-md th { background: #f8fafc; font-weight: 600; }
-.claw-md a { color: #4f46e5; }
-.claw-md hr { border: none; border-top: 1px solid #e2e8f0; margin: 1em 0; }
+.claw-md th { background: var(--da-surface-sunken); font-weight: 600; }
+.claw-md a { color: var(--da-primary); }
+.claw-md hr { border: none; border-top: 1px solid var(--da-border); margin: 1em 0; }
 .claw-md img { max-width: 100%; }
 `;
 

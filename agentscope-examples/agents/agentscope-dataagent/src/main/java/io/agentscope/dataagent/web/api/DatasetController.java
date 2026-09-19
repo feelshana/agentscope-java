@@ -21,7 +21,14 @@ import io.agentscope.dataagent.dataset.parser.ColumnSchema;
 import io.agentscope.dataagent.dataset.parser.DocxDescriptionExtractor;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetEntity;
 import java.io.ByteArrayInputStream;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+import javax.xml.parsers.DocumentBuilderFactory;
+import org.w3c.dom.NodeList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.buffer.DataBufferUtils;
@@ -181,6 +188,56 @@ public class DatasetController {
                 .collectList()
                 .doOnError(e -> log.warn("Batch upload failed for {}", userId, e))
                 .onErrorMap(this::toStatus);
+    }
+
+    /**
+     * List sheet names in an Excel file. Used by the frontend to let users pick which sheet to
+     * import when a file contains multiple sheets.
+     *
+     * <p>Uses lightweight ZIP+XML parsing to extract sheet names from workbook.xml without loading
+     * the entire workbook into memory via POI, which is significantly faster for large files.
+     */
+    @PostMapping(value = "/list-sheets", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Mono<List<String>> listSheets(@RequestPart("file") FilePart file) {
+        return toBytes(file)
+                .flatMap(
+                        data ->
+                                Mono.fromCallable(
+                                                () -> listSheetNamesLightweight(data))
+                                        .subscribeOn(Schedulers.boundedElastic()))
+                .doOnError(e -> log.warn("Failed to list sheets for {}", file.filename(), e))
+                .onErrorMap(this::toStatus);
+    }
+
+    /**
+     * Lightweight sheet name extraction for .xlsx files. Parses workbook.xml directly from the ZIP
+     * archive without loading the full workbook model.
+     */
+    private static List<String> listSheetNamesLightweight(byte[] data) throws Exception {
+        List<String> sheets = new ArrayList<>();
+        try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(data))) {
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                if ("xl/workbook.xml".equals(entry.getName())) {
+                    var dbf = DocumentBuilderFactory.newInstance();
+                    dbf.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+                    dbf.setFeature("http://xml.org/sax/features/external-general-entities", false);
+                    dbf.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+                    var db = dbf.newDocumentBuilder();
+                    var doc = db.parse(zis);
+                    var sheetNodes = doc.getElementsByTagName("sheet");
+                    for (int i = 0; i < sheetNodes.getLength(); i++) {
+                        var nameAttr = sheetNodes.item(i).getAttributes().getNamedItem("name");
+                        if (nameAttr != null) {
+                            sheets.add(nameAttr.getNodeValue());
+                        }
+                    }
+                    break;
+                }
+                zis.closeEntry();
+            }
+        }
+        return sheets;
     }
 
     private static String stripExtension(String fileName) {

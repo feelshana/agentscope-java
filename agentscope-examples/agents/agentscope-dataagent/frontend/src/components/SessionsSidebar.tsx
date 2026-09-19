@@ -22,7 +22,7 @@ const UTILITY_ITEMS: UtilityItem[] = [
 /** Primary nav (新建对话 and 更多 are rendered separately). */
 const NAV_ITEMS: UtilityItem[] = [
   { label: '知识库', path: '/configure/datasets', icon: 'book' },
-  { label: '语义配置', path: '/configure/semantic', icon: 'settings' },
+  { label: '业务术语', path: '/configure/business-terms', icon: 'settings' },
 ];
 
 /** Overflow menu items (TC-style 更多); currently only Workspace. */
@@ -85,6 +85,8 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [retryNonce, setRetryNonce] = useState(0);
+  const attempts = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -92,10 +94,18 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
     setLoading(true);
     inbox(ACTIVE_AGENT_ID, { limit: 100 })
       .then(list => { if (!cancelled) setEntries(list); })
-      .catch(e => { if (!cancelled) setErr(e instanceof Error ? e.message : 'Failed'); })
+      .catch(e => {
+        if (cancelled) return;
+        setErr(e instanceof Error ? e.message : 'Failed');
+        // The backend may still be booting right after a restart: retry once.
+        if (attempts.current < 1) {
+          attempts.current += 1;
+          window.setTimeout(() => { if (!cancelled) setRetryNonce(n => n + 1); }, 1500);
+        }
+      })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [refreshKey]);
+  }, [refreshKey, retryNonce]);
 
   // When the user just clicked 新建对话 the URL carries the freshly-minted conversationId, but
   // no SessionEntry exists on the server yet (it is created on the first message). Surface a
@@ -230,7 +240,19 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
 
       <div style={S.scroll}>
         {loading && <div style={S.muted}>加载中…</div>}
-        {err && <div style={S.error}>{err}</div>}
+        {err && (
+          <div style={S.error}>
+            加载历史会话失败
+            <button
+              type="button"
+              className="da-btn da-btn-ghost da-btn-sm"
+              style={{ marginLeft: 8 }}
+              onClick={() => setRetryNonce(n => n + 1)}
+            >
+              重试
+            </button>
+          </div>
+        )}
         {!loading && !err && entries.length === 0 && !draftEntry && (
           <div style={S.muted}>暂无会话。发送消息即可开始第一段对话。</div>
         )}

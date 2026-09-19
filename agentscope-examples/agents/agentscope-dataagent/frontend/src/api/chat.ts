@@ -10,8 +10,13 @@ export interface ChatEvent {
   type: 'token' | 'tool_call' | 'tool_result' | 'done' | 'error' | string;
   data?: string;
   toolName?: string;
+  toolCallId?: string;
   toolInput?: string;
   toolResult?: string;
+  requestId?: string;
+  runId?: string;
+  seq?: number;
+  parentToolCallId?: string;
   error?: string;
   sessionKey?: string;
 }

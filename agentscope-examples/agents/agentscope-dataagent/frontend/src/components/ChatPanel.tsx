@@ -2,37 +2,58 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom';
 import { currentSession, stream } from '../api/chat';
 import { TurnEntry, turns as fetchTurns } from '../api/sessions';
-import ToolCallBlock from './ToolCallBlock';
+import ToolCallBlock, { ToolInspectPayload } from './ToolCallBlock';
+import TaskTrace from './TaskTrace';
 import ChartBlock from './ChartBlock';
 import EChartsBlock, { ChartPayload } from './EChartsBlock';
-import CitationPanel, { DatasetRef } from './CitationPanel';
+import CitationPanel from './CitationPanel';
 import EmptyIllustration from './EmptyIllustration';
 import Icon from './Icon';
 import PythonCodeBlock from './PythonCodeBlock';
+import OntologyGraphView from './OntologyGraphView';
+import type { OntologyGraphData } from '../api/ontology';
 import Markdown from './Markdown';
 import { extractVegaSpec } from '../utils/charts';
-import { listDatasets, listGroups, DatasetGroup } from '../api/datasets';
+import { listGroups, DatasetGroup } from '../api/datasets';
 
 type Role = 'user' | 'assistant' | 'system';
 
 interface ToolEntry {
   id: string;
   name: string;
+  callId?: string;
+  parentCallId?: string;
+  requestId?: string;
+  runId?: string;
+  callSeq?: number;
+  resultSeq?: number;
   input?: string;
   result?: string;
 }
+
+/** One ordered step of the execution trace: a narration/thinking text or a tool call. */
+type TraceNode =
+  | { kind: 'text'; id: string; text: string }
+  | { kind: 'tool'; id: string; tool: ToolEntry };
 
 interface Message {
   id: string;
   role: Role;
   text: string;
   tools: ToolEntry[];
+  trace: TraceNode[];
   pending?: boolean;
+  /** True only when the turn was interrupted and produced no usable answer. */
+  failed?: boolean;
 }
 
 const S: Record<string, React.CSSProperties> = {
   root: { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: 'var(--da-app-bg)' },
   thread: { flex: 1, overflowY: 'auto', padding: '28px 36px', display: 'flex', flexDirection: 'column', gap: 18 },
+  threadInner: {
+    width: '100%', maxWidth: 960, margin: '0 auto',
+    display: 'flex', flexDirection: 'column', gap: 18,
+  },
   empty: { color: 'var(--da-text-muted)', fontSize: '0.95rem', textAlign: 'center', marginTop: 100 },
   bubble: {
     maxWidth: '78%', padding: '12px 16px', borderRadius: 10,
@@ -54,14 +75,14 @@ const S: Record<string, React.CSSProperties> = {
     fontSize: '0.85rem', fontStyle: 'italic',
   },
   composerWrap: {
-    padding: '0 24px 20px',
+    padding: '0 36px 20px',
     display: 'flex',
     justifyContent: 'center',
     flexShrink: 0,
   },
   composerCard: {
     width: '100%',
-    maxWidth: 880,
+    maxWidth: 960,
     background: 'var(--da-surface)',
     border: '1px solid var(--da-border)',
     borderRadius: 'var(--da-radius-xl)',
@@ -167,13 +188,95 @@ function chartPayloadFromTool(t: ToolEntry): ChartPayload | null {
   return null;
 }
 
+/** Extract ontology graph payload from show_ontology_graph tool result. */
+function ontologyGraphPayload(t: ToolEntry): OntologyGraphData | null {
+  const raw = t.result ?? t.input;
+  if (!raw) return null;
+  try {
+    let v: unknown = JSON.parse(raw);
+    if (typeof v === 'string') v = JSON.parse(v);
+    const obj = v as any;
+    if (obj && obj.type === 'ontology_graph' && obj.nodes) return obj as OntologyGraphData;
+  } catch {
+    /* not an ontology payload */
+  }
+  return null;
+}
+
+/** Splits a turn's ordered trace into gray trace rows and answer-area visuals (charts). */
+function splitToolRender(
+  m: Message,
+  onInspect?: (t: ToolInspectPayload) => void,
+): { trace: React.ReactNode[]; answer: React.ReactNode[] } {
+  const trace: React.ReactNode[] = [];
+  const answer: React.ReactNode[] = [];
+  for (const node of m.trace) {
+    if (node.kind === 'text') {
+      trace.push(
+        <div key={node.id} className="da-trace-text">{node.text}</div>,
+      );
+      continue;
+    }
+    const t = node.tool;
+    const isChartTool = t.name.toLowerCase().includes('render_chart');
+    const isPythonTool = t.name.toLowerCase() === 'run_python';
+    const isOntologyTool = t.name.toLowerCase().includes('show_ontology_graph');
+    const chartPayload = isChartTool ? chartPayloadFromTool(t) : null;
+    const ontologyPayload = isOntologyTool ? ontologyGraphPayload(t) : null;
+    const spec = !chartPayload && !ontologyPayload ? extractVegaSpec(t.name, t.input) : null;
+    const key = node.id + (t.result ? '-done' : '');
+    trace.push(
+      <div key={key} style={t.parentCallId ? { marginLeft: 16, paddingLeft: 8, borderLeft: '2px solid var(--da-border)' } : undefined}>
+        <ToolCallBlock
+          toolName={t.name}
+          toolCallId={t.id}
+          input={t.input}
+          result={t.result}
+          onInspect={onInspect}
+        />
+      </div>,
+    );
+    if (isPythonTool) {
+      const pyCode = extractPythonCode(t.input);
+      if (pyCode) {
+        trace.push(<PythonCodeBlock key={`${key}-py`} code={pyCode} result={t.result} defaultOpen={false} />);
+      }
+    }
+    if (isChartTool && !chartPayload && !spec) {
+      trace.push(
+        <div
+          key={`${key}-warn`}
+          style={{
+            background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 6,
+            padding: '0.4rem 0.7rem', color: '#92400e', fontSize: '0.78rem',
+          }}
+        >
+          chart payload could not be parsed — expand the tool row above to inspect the raw arguments
+        </div>,
+      );
+    }
+    if (chartPayload) answer.push(<EChartsBlock key={`${key}-chart`} payload={chartPayload} />);
+    if (ontologyPayload) {
+      answer.push(
+        <OntologyGraphView
+          key={`${key}-onto`}
+          data={ontologyPayload}
+          highlight={(ontologyPayload as any).highlight}
+        />,
+      );
+    }
+    if (!chartPayload && !ontologyPayload && spec) answer.push(<ChartBlock key={`${key}-spec`} spec={spec} />);
+  }
+  return { trace, answer };
+}
+
 function turnsToMessages(turns: TurnEntry[]): Message[] {
   const out: Message[] = [];
   let cur: Message | null = null;
   for (const t of turns) {
     const role = String(t.role).toUpperCase();
     if (role === 'USER') {
-      out.push({ id: t.id, role: 'user', text: t.content ?? '', tools: [] });
+      out.push({ id: t.id, role: 'user', text: t.content ?? '', tools: [], trace: [] });
       cur = null;
     } else if (role === 'TOOL') {
       if (t.toolName && isHiddenTool(t.toolName)) continue;
@@ -182,28 +285,53 @@ function turnsToMessages(turns: TurnEntry[]): Message[] {
         console.log(`[turnsToMessages] loaded run_python result: len=${t.toolResult.length}, evicted=${isEvicted}, preview=[${t.toolResult.substring(0, 300)}]`);
       }
       if (!cur) {
-        cur = { id: `${t.id}-host`, role: 'assistant', text: '', tools: [] };
+        cur = { id: `${t.id}-host`, role: 'assistant', text: '', tools: [], trace: [] };
         out.push(cur);
       }
-      cur.tools = [
-        ...cur.tools,
-        {
-          id: t.id,
-          name: t.toolName ?? 'tool',
-          input: t.toolInput ?? undefined,
-          result: t.toolResult ?? undefined,
-        },
-      ];
+      const name = t.toolName ?? 'tool';
+      if (t.toolResult != null) {
+        // A tool_result turn: attach to the most recent same-name call still awaiting
+        // a result, so tool_use + tool_result pairs render as ONE row.
+        let idx = -1;
+        for (let i = cur.tools.length - 1; i >= 0; i--) {
+          if (cur.tools[i].name === name && cur.tools[i].result === undefined) { idx = i; break; }
+        }
+        if (idx >= 0) {
+          const targetId = cur.tools[idx].id;
+          const updated: ToolEntry = {
+            ...cur.tools[idx],
+            result: t.toolResult,
+            input: cur.tools[idx].input ?? (t.toolInput ?? undefined),
+          };
+          cur.tools = cur.tools.map((e, i) => (i === idx ? updated : e));
+          cur.trace = cur.trace.map(n => (n.kind === 'tool' && n.id === targetId ? { ...n, tool: updated } : n));
+        } else {
+          const entry: ToolEntry = { id: t.id, name, input: t.toolInput ?? undefined, result: t.toolResult };
+          cur.tools = [...cur.tools, entry];
+          cur.trace = [...cur.trace, { kind: 'tool', id: t.id, tool: entry }];
+        }
+      } else {
+        // A tool_use turn: create the row; its result arrives on a later turn.
+        const entry: ToolEntry = { id: t.id, name, input: t.toolInput ?? undefined };
+        cur.tools = [...cur.tools, entry];
+        cur.trace = [...cur.trace, { kind: 'tool', id: t.id, tool: entry }];
+      }
     } else if (role === 'ASSISTANT') {
-      // One bubble per turn: intermediate reasoning texts are superseded by later
-      // assistant texts, so only the final reply text survives — matching the live view.
       if (!cur) {
-        cur = { id: t.id, role: 'assistant', text: '', tools: [] };
+        cur = { id: t.id, role: 'assistant', text: '', tools: [], trace: [] };
         out.push(cur);
+      }
+      // A previous assistant segment that is now superseded was pre-tool narration,
+      // so keep it in the trace; only the last segment stays as the formal answer.
+      if (cur.text) {
+        cur.trace = [...cur.trace, { kind: 'text', id: `${cur.id}-n${cur.trace.length}`, text: cur.text }];
       }
       cur.id = t.id;
       cur.text = t.content ?? '';
     }
+  }
+  for (const m of out) {
+    if (m.role === 'assistant' && m.text.includes('[error]')) m.failed = true;
   }
   return out;
 }
@@ -214,16 +342,28 @@ export interface ChatPanelProps {
   onSessionUpdate?: () => void;
   /** Reports the conversation title (first user question; '' when new). */
   onTitle?: (title: string) => void;
+  /** Opens a tool call's input/result in the side inspector panel. */
+  onInspect?: (t: ToolInspectPayload) => void;
+  /** ID of the tool currently open in the inspector; ChatPanel syncs its latest result. */
+  inspectorId?: string | null;
+  /** Called with the resolved tool payload whenever inspectorId's tool updates. */
+  onToolResolved?: (t: ToolInspectPayload | null) => void;
 }
 
-export default function ChatPanel({ agentId, onSessionUpdate, onTitle }: ChatPanelProps) {
+export default function ChatPanel({
+  agentId,
+  onSessionUpdate,
+  onTitle,
+  onInspect,
+  inspectorId,
+  onToolResolved,
+}: ChatPanelProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [restoring, setRestoring] = useState(true);
   const [sessionKey, setSessionKey] = useState<string | null>(null);
-  const [datasetMap, setDatasetMap] = useState<Record<string, DatasetRef>>({});
   const [groups, setGroups] = useState<DatasetGroup[]>([]);
   const [selectedGroups, setSelectedGroups] = useState<string[]>(() => {
     const raw = searchParams.get('groups');
@@ -232,17 +372,33 @@ export default function ChatPanel({ agentId, onSessionUpdate, onTitle }: ChatPan
   const [groupPickerOpen, setGroupPickerOpen] = useState(false);
   const threadRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const groupPickerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!groupPickerOpen) return;
+    const closePicker = (event: PointerEvent) => {
+      if (!groupPickerRef.current?.contains(event.target as Node)) {
+        setGroupPickerOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', closePicker);
+    return () => document.removeEventListener('pointerdown', closePicker);
+  }, [groupPickerOpen]);
+
+  useEffect(() => {
+    if (!inspectorId || !onToolResolved) return;
+    for (const m of messages) {
+      for (const t of m.tools) {
+        if (t.id === inspectorId) {
+          onToolResolved({ id: t.id, name: t.name, input: t.input, result: t.result });
+          return;
+        }
+      }
+    }
+  }, [messages, inspectorId, onToolResolved]);
 
   useEffect(() => {
     let cancelled = false;
-    listDatasets()
-      .then(list => {
-        if (cancelled) return;
-        const map: Record<string, DatasetRef> = {};
-        for (const d of list) map[d.id] = { name: d.name, tableName: d.tableName };
-        setDatasetMap(map);
-      })
-      .catch(() => undefined);
     listGroups()
       .then(g => {
         if (!cancelled) setGroups(g);
@@ -323,9 +479,10 @@ export default function ChatPanel({ agentId, onSessionUpdate, onTitle }: ChatPan
     const text = input.trim();
     setInput('');
     setBusy(true);
-    const userMsg: Message = { id: nextId(), role: 'user', text, tools: [] };
-    const replyMsg: Message = { id: nextId(), role: 'assistant', text: '', tools: [], pending: true };
+    const userMsg: Message = { id: nextId(), role: 'user', text, tools: [], trace: [] };
+    const replyMsg: Message = { id: nextId(), role: 'assistant', text: '', tools: [], trace: [], pending: true };
     setMessages(prev => [...prev, userMsg, replyMsg]);
+    let lastToolEventSeq = -1;
 
     try {
       for await (const evt of stream(agentId, {
@@ -333,6 +490,12 @@ export default function ChatPanel({ agentId, onSessionUpdate, onTitle }: ChatPan
         sessionKey: sessionKey ?? undefined,
         groupIds: selectedGroups.length ? selectedGroups : undefined,
       })) {
+        const isToolEvent = evt.type === 'tool_call' || evt.type === 'tool_result';
+        if (isToolEvent) {
+          const seq = evt.seq;
+          if (typeof seq !== 'number' || !Number.isSafeInteger(seq) || seq <= lastToolEventSeq) continue;
+          lastToolEventSeq = seq;
+        }
         if (evt.type === 'token') {
           const chunk = evt.data ?? '';
           setMessages(prev => prev.map(m => m.id === replyMsg.id ? { ...m, text: m.text + chunk } : m));
@@ -342,29 +505,66 @@ export default function ChatPanel({ agentId, onSessionUpdate, onTitle }: ChatPan
           const entry: ToolEntry = {
             id: `${evt.toolName ?? 'tool'}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
             name: evt.toolName ?? 'tool',
+            callId: evt.toolCallId,
+            parentCallId: evt.parentToolCallId,
+            requestId: evt.requestId,
+            runId: evt.runId,
+            callSeq: evt.seq,
             input: evt.toolInput,
           };
-          setMessages(prev => prev.map(m => m.id === replyMsg.id ? { ...m, tools: [...m.tools, entry] } : m));
+          // Text streamed before a tool call is pre-tool narration: move it into the
+          // trace so the in-progress view shows the reasoning, not a half answer.
+          setMessages(prev => prev.map(m => {
+            if (m.id !== replyMsg.id) return m;
+            const trace = m.text.trim()
+              ? [...m.trace, { kind: 'text' as const, id: `${m.id}-n${m.trace.length}`, text: m.text }]
+              : [...m.trace];
+            return { ...m, text: '', trace: [...trace, { kind: 'tool' as const, id: entry.id, tool: entry }], tools: [...m.tools, entry] };
+          }));
         } else if (evt.type === 'tool_result') {
           // Skip results for hidden tools.
           if (evt.toolName && isHiddenTool(evt.toolName)) continue;
-          const trLen = evt.toolResult ? evt.toolResult.length : 0;
-          console.log(`[ChatPanel] tool_result: ${evt.toolName}, len=${trLen}, preview=[${evt.toolResult?.substring(0, 300)}]`);
           setMessages(prev => prev.map(m => {
             if (m.id !== replyMsg.id) return m;
             const tools = [...m.tools];
-            for (let i = tools.length - 1; i >= 0; i--) {
-              if (tools[i].name === evt.toolName && !tools[i].result) {
-                tools[i] = { ...tools[i], result: evt.toolResult };
-                return { ...m, tools };
+            let matchedId: string | null = null;
+            if (evt.toolCallId) {
+              for (let i = tools.length - 1; i >= 0; i--) {
+                if (tools[i].callId === evt.toolCallId && tools[i].result === undefined) {
+                  tools[i] = {
+                    ...tools[i],
+                    requestId: evt.requestId,
+                    runId: evt.runId,
+                    result: evt.toolResult,
+                    resultSeq: evt.seq,
+                  };
+                  matchedId = tools[i].id;
+                  break;
+                }
               }
             }
-            tools.push({
-              id: `${evt.toolName ?? 'tool'}-${Date.now()}`,
+            if (matchedId) {
+              const matchedTool = tools.find(t => t.id === matchedId);
+              const trace = m.trace.map(n =>
+                n.kind === 'tool' && n.id === matchedId && matchedTool ? { ...n, tool: matchedTool } : n,
+              );
+              return { ...m, tools, trace };
+            }
+            const unmatched: ToolEntry = {
+              id: `${evt.toolName ?? 'tool'}-result-${evt.seq}`,
               name: evt.toolName ?? 'tool',
+              callId: evt.toolCallId,
+              parentCallId: evt.parentToolCallId,
+              requestId: evt.requestId,
+              runId: evt.runId,
+              resultSeq: evt.seq,
               result: evt.toolResult,
-            });
-            return { ...m, tools };
+            };
+            return {
+              ...m,
+              tools: [...tools, unmatched],
+              trace: [...m.trace, { kind: 'tool' as const, id: unmatched.id, tool: unmatched }],
+            };
           }));
         } else if (evt.type === 'done') {
           if (evt.sessionKey) {
@@ -379,7 +579,7 @@ export default function ChatPanel({ agentId, onSessionUpdate, onTitle }: ChatPan
           setMessages(prev => prev.map(m => m.id === replyMsg.id ? { ...m, pending: false } : m));
         } else if (evt.type === 'error') {
           setMessages(prev => prev.map(m => m.id === replyMsg.id
-            ? { ...m, pending: false, text: m.text + (m.text ? '\n' : '') + `[error] ${evt.error ?? 'unknown'}` }
+            ? { ...m, pending: false, failed: true, text: m.text + (m.text ? '\n' : '') + `[error] ${evt.error ?? 'unknown'}` }
             : m));
         }
       }
@@ -387,7 +587,7 @@ export default function ChatPanel({ agentId, onSessionUpdate, onTitle }: ChatPan
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'stream failed';
       setMessages(prev => prev.map(m => m.id === replyMsg.id
-        ? { ...m, pending: false, text: m.text + (m.text ? '\n' : '') + `[error] ${msg}` }
+        ? { ...m, pending: false, failed: true, text: m.text + (m.text ? '\n' : '') + `[error] ${msg}` }
         : m));
     } finally {
       setBusy(false);
@@ -405,6 +605,7 @@ export default function ChatPanel({ agentId, onSessionUpdate, onTitle }: ChatPan
   return (
     <div style={S.root}>
       <div style={S.thread} ref={threadRef}>
+        <div style={S.threadInner}>
         {restoring && messages.length === 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: '70%' }}>
             <div className="da-skeleton da-skeleton-block" style={{ width: '45%' }} />
@@ -418,91 +619,50 @@ export default function ChatPanel({ agentId, onSessionUpdate, onTitle }: ChatPan
             caption="开始一段新对话；输入 /reset 可清空当前会话"
           />
         )}
-        {messages.map(m => (
-          <div
-            key={m.id}
-            className={`da-bubble-row ${m.role === 'user' ? 'user' : 'agent'} da-enter`}
-          >
-            <div className={`da-bubble ${m.role === 'user' ? 'user' : 'agent'}`}>
-            {m.tools.length > 0 && (
-              <div style={{ marginBottom: m.text ? 10 : 0 }}>
-                {m.tools.filter(t => !isHiddenTool(t.name)).map(t => {
-                  const isChartTool = t.name.toLowerCase().includes('render_chart');
-                  const isPythonTool = t.name.toLowerCase() === 'run_python';
-                  const chartPayload = isChartTool ? chartPayloadFromTool(t) : null;
-                  const spec = !chartPayload ? extractVegaSpec(t.name, t.input) : null;
-                  // Remount when the result arrives so defaultOpen=false takes effect
-                  // (React keeps the old component's state when the key is stable).
-                  const key = t.id + (t.result ? '-done' : '');
-
-                  // Python tool: collapsed raw tool block + expanded code/artifact view.
-                  if (isPythonTool) {
-                    const pyCode = extractPythonCode(t.input);
-                    return (
-                      <React.Fragment key={key}>
-                        <ToolCallBlock
-                          toolName={t.name}
-                          toolCallId={t.id}
-                          input={t.input}
-                          result={t.result}
-                          defaultOpen={false}
-                        />
-                        {pyCode && (
-                          <PythonCodeBlock
-                            code={pyCode}
-                            result={t.result}
-                            defaultOpen={true}
-                          />
-                        )}
-                      </React.Fragment>
-                    );
-                  }
-
-                  return (
-                    <React.Fragment key={key}>
-                      <ToolCallBlock
-                        toolName={t.name}
-                        toolCallId={t.id}
-                        input={t.input}
-                        result={t.result}
-                        defaultOpen={!t.result}
-                      />
-                      {isChartTool && !chartPayload && !spec && (
-                        <div style={{
-                          background: '#fffbeb',
-                          border: '1px solid #fcd34d',
-                          borderRadius: 9,
-                          margin: '0.5rem 0',
-                          padding: '0.6rem 0.9rem',
-                          color: '#92400e',
-                          fontSize: '0.8rem',
-                        }}>
-                          chart payload could not be parsed — expand the tool block above to
-                          inspect the raw arguments
-                        </div>
-                      )}
-                      {chartPayload && <EChartsBlock payload={chartPayload} />}
-                      {!chartPayload && spec && <ChartBlock spec={spec} />}
-                    </React.Fragment>
-                  );
-                })}
-              </div>
-            )}
-            {m.role === 'assistant' && m.tools.length > 0 && (
-              <CitationPanel tools={m.tools} datasetMap={datasetMap} />
-            )}
-            <div className="da-msg-content" style={{ color: 'inherit' }}>
-              {m.role === 'assistant'
-                ? m.text
-                  ? <Markdown>{m.text}</Markdown>
-                  : m.pending
-                    ? <div className="da-typing"><span /><span /><span /></div>
-                    : null
-                : <div style={{ whiteSpace: 'pre-wrap' }}>{m.text}</div>}
+        {messages.map(m => {
+          const { trace, answer } = splitToolRender(m, onInspect);
+          return (
+            <div
+              key={m.id}
+              className={`da-bubble-row ${m.role === 'user' ? 'user' : 'agent'} da-enter`}
+            >
+              {m.role === 'user' ? (
+                <div className="da-bubble user">{m.text}</div>
+              ) : (
+                <div className="da-agent-turn">
+                  {(trace.length > 0 || m.pending) && (
+                    <TaskTrace
+                      running={!!m.pending}
+                      active={trace.length > 0}
+                      hasError={!!m.failed}
+                      hadToolErrors={m.tools.some(t => {
+                        if (!t.result) return false;
+                        if (t.name === 'query_structured_data') {
+                          try { return ['FAILED', 'PARTIAL'].includes(JSON.parse(t.result)?.status); } catch { return false; }
+                        }
+                        return t.result.startsWith('error:');
+                      })}
+                    >
+                      {trace}
+                    </TaskTrace>
+                  )}
+                  <div className="da-answer">
+                    {m.text
+                      ? <Markdown>{m.text}</Markdown>
+                      : m.pending
+                        ? <div className="da-typing"><span /><span /><span /></div>
+                        : null}
+                    {answer}
+                    {m.tools.length > 0 && (
+                      <CitationPanel tools={m.tools} />
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
-            </div>
-          </div>
-        ))}
+          );
+        })}
+        </div>
       </div>
       <div style={S.composerWrap}>
         <div className="da-composer" style={S.composerCard}>
@@ -516,11 +676,11 @@ export default function ChatPanel({ agentId, onSessionUpdate, onTitle }: ChatPan
             disabled={restoring}
           />
           <div style={S.composerBar}>
-            <div style={{ position: 'relative' }}>
+            <div ref={groupPickerRef} style={{ position: 'relative' }}>
               <button
                 type="button"
                 className={selectedGroups.length ? 'da-chip da-chip-active' : 'da-chip'}
-                onClick={() => setGroupPickerOpen(o => !o)}
+                onClick={() => setGroupPickerOpen(open => !open)}
               >
                 <Icon name="book" size="sm" />{' '}
                 {selectedGroups.length
@@ -534,7 +694,10 @@ export default function ChatPanel({ agentId, onSessionUpdate, onTitle }: ChatPan
                     <input
                       type="checkbox"
                       checked={selectedGroups.length === 0}
-                      onChange={() => setSelectedGroups([])}
+                      onChange={() => {
+                        setSelectedGroups([]);
+                        setGroupPickerOpen(false);
+                      }}
                     />
                     全部知识库（不限定）
                   </label>
@@ -543,11 +706,12 @@ export default function ChatPanel({ agentId, onSessionUpdate, onTitle }: ChatPan
                       <input
                         type="checkbox"
                         checked={selectedGroups.includes(g.id)}
-                        onChange={() =>
+                        onChange={() => {
                           setSelectedGroups(prev =>
                             prev.includes(g.id) ? prev.filter(x => x !== g.id) : [...prev, g.id],
-                          )
-                        }
+                          );
+                          setGroupPickerOpen(false);
+                        }}
                       />
                       {g.name}
                     </label>
@@ -560,6 +724,12 @@ export default function ChatPanel({ agentId, onSessionUpdate, onTitle }: ChatPan
                 </div>
               )}
             </div>
+            <button type="button" className="da-chip" disabled title="等待本体 MCP 服务接入">
+              本体（暂无服务）
+            </button>
+            <button type="button" className="da-chip" disabled title="对话级模型切换暂未接入">
+              大模型（自动）
+            </button>
             <span style={{ flex: 1 }} />
             <span className="da-small" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
               <span className="da-kbd">Enter</span> 发送 · <span className="da-kbd">Shift</span>+
