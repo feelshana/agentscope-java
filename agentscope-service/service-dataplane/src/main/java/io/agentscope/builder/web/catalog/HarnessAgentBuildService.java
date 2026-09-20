@@ -38,6 +38,8 @@ import io.agentscope.core.model.Model;
 import io.agentscope.core.skill.repository.AgentSkillRepository;
 import io.agentscope.core.state.AgentStateStore;
 import io.agentscope.harness.agent.HarnessAgent;
+import io.agentscope.harness.agent.memory.compaction.CompactionConfig;
+import io.agentscope.harness.agent.memory.compaction.ToolResultEvictionConfig;
 import io.agentscope.harness.agent.team.TeamClient;
 import io.agentscope.harness.agent.team.TeamContext;
 import io.agentscope.harness.agent.tools.ToolsConfig;
@@ -310,6 +312,26 @@ public class HarnessAgentBuildService {
 
         b.middleware(new ToolNotificationMiddleware(toolEventBus));
         b.middleware(toolConfirmationMiddleware);
+
+        // Context management: evict large tool results to files so context stays lean.
+        b.toolResultEviction(
+                ToolResultEvictionConfig.builder()
+                        .maxResultChars(4_000)
+                        .previewChars(500)
+                        .build());
+
+        // Compaction: higher trigger + aggressive pruning to reduce LLM summarization cost.
+        b.compaction(
+                CompactionConfig.builder()
+                        .triggerMessages(80)
+                        .keepMessages(20)
+                        .prune(
+                                CompactionConfig.PruneConfig.builder()
+                                        .protectTokens(10_000)
+                                        .minimumTokens(5_000)
+                                        .maxOutputChars(1_000)
+                                        .build())
+                        .build());
 
         applyManagedSessionBuildOptions(b, buildOwnerId, agentId, workspace, spec, sysPrompt);
         attachTeamsMiddlewareIfPresent(b, session, resolved);

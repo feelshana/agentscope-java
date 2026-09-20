@@ -26,6 +26,8 @@ import io.agentscope.dataagent.web.share.AgentAclService;
 import io.agentscope.dataagent.web.template.TemplateRegistry;
 import io.agentscope.dataagent.web.workspace.WorkspaceManagerFactory;
 import io.agentscope.harness.agent.HarnessAgent;
+import io.agentscope.harness.agent.memory.compaction.CompactionConfig;
+import io.agentscope.harness.agent.memory.compaction.ToolResultEvictionConfig;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -754,6 +756,26 @@ public class AgentCatalogService {
         // Inject ToolNotificationMiddleware so user-custom agents also publish tool-call events.
         b.middleware(
                 new io.agentscope.dataagent.web.toolbus.ToolNotificationMiddleware(toolEventBus));
+
+        // Context management: evict large tool results to files so context stays lean.
+        b.toolResultEviction(
+                ToolResultEvictionConfig.builder()
+                        .maxResultChars(4_000)
+                        .previewChars(500)
+                        .build());
+
+        // Compaction: higher trigger + aggressive pruning to reduce LLM summarization cost.
+        b.compaction(
+                CompactionConfig.builder()
+                        .triggerMessages(80)
+                        .keepMessages(20)
+                        .prune(
+                                CompactionConfig.PruneConfig.builder()
+                                        .protectTokens(10_000)
+                                        .minimumTokens(5_000)
+                                        .maxOutputChars(1_000)
+                                        .build())
+                        .build());
 
         HarnessAgent agent = b.build();
 

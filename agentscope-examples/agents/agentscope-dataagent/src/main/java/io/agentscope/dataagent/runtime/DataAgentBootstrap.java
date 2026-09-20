@@ -33,6 +33,8 @@ import io.agentscope.dataagent.runtime.session.SubagentRunRegistry;
 import io.agentscope.dataagent.runtime.session.tool.SessionsTool;
 import io.agentscope.harness.agent.HarnessAgent;
 import io.agentscope.harness.agent.gateway.ChannelManager;
+import io.agentscope.harness.agent.memory.compaction.CompactionConfig;
+import io.agentscope.harness.agent.memory.compaction.ToolResultEvictionConfig;
 import io.agentscope.harness.agent.gateway.Gateway;
 import io.agentscope.harness.agent.gateway.channel.Channel;
 import io.agentscope.harness.agent.gateway.channel.ChannelConfig;
@@ -601,6 +603,28 @@ public final class DataAgentBootstrap {
                 Toolkit agentToolkit = new Toolkit();
                 agentToolkit.registerTool(outboundTool);
                 b.toolkit(agentToolkit);
+
+                // Context management: evict large tool results (Python output, CSV data) to files
+                // immediately so context stays lean and compaction is triggered less frequently.
+                b.toolResultEviction(
+                        ToolResultEvictionConfig.builder()
+                                .maxResultChars(4_000)
+                                .previewChars(500)
+                                .build());
+
+                // Compaction: higher message trigger + aggressive pruning to reduce frequency
+                // and cost of LLM summarization calls during long multi-step reasoning.
+                b.compaction(
+                        CompactionConfig.builder()
+                                .triggerMessages(80)
+                                .keepMessages(20)
+                                .prune(
+                                        CompactionConfig.PruneConfig.builder()
+                                                .protectTokens(10_000)
+                                                .minimumTokens(5_000)
+                                                .maxOutputChars(1_000)
+                                                .build())
+                                .build());
 
                 Consumer<HarnessAgent.Builder> c = configurators.get(id);
                 if (c != null) {
