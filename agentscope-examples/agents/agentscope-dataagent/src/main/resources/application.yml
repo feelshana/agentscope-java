@@ -133,7 +133,7 @@ dataagent:
   # ---- DashScope model (fallback when no OpenAI key is configured) ----
   # Set DASHSCOPE_API_KEY env var or override api-key below.
   dashscope:
-    api-key: ${DASHSCOPE_API_KEY:sk-c6d487aaddad4ed790c85f2b52dd2e27}
+    api-key: ${DASHSCOPE_API_KEY:sk-ws-H.PIRRRYD.u8XH.MEQCIEKOQ4FMRJMR_LBoym_VGrmhl844XRyGIetwAgp-J-HXAiBGO0Q-oYvGqyuf3NfVPviGiQLUdZ7lWMz4cr-guM49Pw}
     model-name: ${DATAAGENT_MODEL_NAME:qwen3.8-max}
     stream: true
     enable-thinking: false
