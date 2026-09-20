@@ -161,7 +161,8 @@ public class DataAgentConfig {
                     + "- 默认用 markdown 表格呈现结构化数据。\n"
                     + "- 不主动生成图表，除非用户原话包含趋势/对比/分布等视觉分析语义。\n"
                     + "- 不主动生成 PDF/Excel/PPT 等文件，除非用户明确要求。\n"
-                    + "- 用简体中文回答。}")
+                    + "- 所有输出必须使用简体中文：包括思考过程、工具调用说明、图表标题、轴标签、图例、代码注释等。\n"
+                    + "- 生成 matplotlib 图表时，标题、轴标签、图例必须用中文，例如：plt.title('活跃用户 vs 目标') 而非 plt.title('Active Users vs Target')。}")
     private String agentSysPrompt;
 
     @Value("${dataagent.agent.name:data-agent}")
