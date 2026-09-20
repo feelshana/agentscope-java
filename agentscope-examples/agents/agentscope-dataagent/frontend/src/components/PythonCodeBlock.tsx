@@ -1,7 +1,59 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
+import Prism from 'prismjs';
+import 'prismjs/components/prism-python';
 import { ACTIVE_AGENT_ID } from '../api/activeAgent';
 import { getToken } from '../api/auth';
+import Markdown from './Markdown';
+
+const PY_STYLE = `
+.py-block {
+  background: #fff;
+  border-radius: 0 0 8px 8px;
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: #1e293b;
+}
+.py-block-inner {
+  display: flex;
+  max-height: 420px;
+  overflow: hidden;
+}
+.py-lineno-col {
+  flex-shrink: 0;
+  width: 52px;
+  padding: 0.7rem 0.6rem 0.7rem 1rem;
+  text-align: right;
+  color: #b0b8c4;
+  user-select: none;
+  border-right: 1px solid #eef1f5;
+  background: #fafbfc;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  white-space: nowrap;
+  overflow-y: auto;
+}
+.py-code-col {
+  flex: 1;
+  min-width: 0;
+  padding: 0.7rem 1rem;
+  white-space: pre;
+  overflow: auto;
+}
+.py-block .token.keyword   { color: #a626a4; font-weight: 500; }
+.py-block .token.string    { color: #2a8d3b; }
+.py-block .token.comment   { color: #8e99a4; font-style: italic; }
+.py-block .token.function  { color: #4078f2; }
+.py-block .token.number    { color: #986801; }
+.py-block .token.operator  { color: #383a42; }
+.py-block .token.builtin   { color: #c18401; }
+.py-block .token.boolean   { color: #986801; }
+.py-block .token.class-name{ color: #c18401; font-weight: 500; }
+.py-block .token.decorator { color: #a626a4; }
+.py-block .token.punctuation { color: #383a42; }
+`;
 
 export interface ArtifactInfo {
   name: string;
@@ -9,11 +61,9 @@ export interface ArtifactInfo {
   size: number;
   contentB64?: string;
   content?: string;
-  /** Workspace-relative path for images served via the binary API. */
   path?: string;
 }
 
-/** Deduplicates artifacts by name+size, keeping the first occurrence. */
 export function deduplicateArtifacts(artifacts: ArtifactInfo[]): ArtifactInfo[] {
   const seen = new Set<string>();
   return artifacts.filter(a => {
@@ -31,44 +81,49 @@ interface Props {
 }
 
 const s: Record<string, React.CSSProperties> = {
-  wrapper: {
-    background: '#ffffff',
+  root: {
     border: '1px solid #e2e8f0',
     borderRadius: 9,
     margin: '0.5rem 0',
     overflow: 'hidden',
     fontSize: '0.9rem',
+    background: '#fff',
   },
-  header: {
+  section: {
+    borderTop: '1px solid #e2e8f0',
+  },
+  trigger: {
     display: 'flex',
     alignItems: 'center',
-    gap: 10,
-    padding: '0.6rem 0.9rem',
+    gap: 8,
+    padding: '8px 12px',
     cursor: 'pointer',
     userSelect: 'none',
-    background: '#fefce8',
-    borderBottom: '1px solid #e2e8f0',
-    color: '#854d0e',
-    fontWeight: 600,
-    fontSize: '0.85rem',
-  },
-  arrow: { color: '#94a3b8', fontSize: '0.72rem', fontWeight: 700 },
-  codeBlock: {
-    padding: '0.85rem 1rem',
-    borderTop: '1px solid #e2e8f0',
     background: '#f8fafc',
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
     fontSize: '0.82rem',
-    lineHeight: 1.55,
-    whiteSpace: 'pre-wrap',
-    wordBreak: 'break-word',
-    color: '#1e293b',
-    maxHeight: 400,
-    overflowY: 'auto',
+    fontWeight: 500,
+    color: '#475569',
   },
-  stdoutBlock: {
+  triggerError: {
+    background: '#fef2f2',
+    color: '#b91c1c',
+  },
+  chevron: {
+    fontSize: '0.65rem',
+    color: '#94a3b8',
+    transition: 'transform 0.15s ease',
+    display: 'inline-block',
+    width: 12,
+    textAlign: 'center',
+  },
+  badge: {
+    fontSize: '0.72rem',
+    padding: '1px 8px',
+    borderRadius: 4,
+    fontWeight: 600,
+  },
+  body: {
     padding: '0.85rem 1rem',
-    borderTop: '1px solid #e2e8f0',
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
     fontSize: '0.82rem',
     lineHeight: 1.55,
@@ -78,43 +133,19 @@ const s: Record<string, React.CSSProperties> = {
     maxHeight: 300,
     overflowY: 'auto',
   },
-  artifactContainer: {
-    padding: '0.85rem 1rem',
-    borderTop: '1px solid #e2e8f0',
+  artifactList: {
+    padding: '8px 12px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6,
   },
-  artifactImage: {
-    maxWidth: '100%',
-    borderRadius: 6,
-    border: '1px solid #e2e8f0',
-    marginTop: 8,
-  },
-  csvTable: {
-    width: '100%',
-    borderCollapse: 'collapse' as const,
-    fontSize: '0.82rem',
-    marginTop: 8,
-  },
-  csvTh: {
-    background: '#f1f5f9',
-    padding: '6px 10px',
-    textAlign: 'left' as const,
-    borderBottom: '2px solid #e2e8f0',
-    fontWeight: 600,
-    color: '#334155',
-  },
-  csvTd: {
-    padding: '5px 10px',
-    borderBottom: '1px solid #f1f5f9',
+  artifactRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '4px 0',
+    fontSize: '0.8rem',
     color: '#475569',
-  },
-  label: {
-    color: '#94a3b8',
-    fontSize: '0.72rem',
-    fontWeight: 600,
-    letterSpacing: '0.06em',
-    textTransform: 'uppercase' as const,
-    marginBottom: 6,
-    fontFamily: 'ui-sans-serif, system-ui, sans-serif',
   },
   downloadBtn: {
     border: '1px solid #cbd5e1',
@@ -126,57 +157,175 @@ const s: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     fontFamily: 'ui-sans-serif, system-ui, sans-serif',
     whiteSpace: 'nowrap' as const,
-  },
-  errorBlock: {
-    padding: '0.85rem 1rem',
-    borderTop: '1px solid #e2e8f0',
-    color: '#b91c1c',
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-    fontSize: '0.82rem',
-    whiteSpace: 'pre-wrap' as const,
+    flexShrink: 0,
   },
 };
 
-/**
- * Parses the structured markdown result from RunPythonTool to extract
- * stdout, exit code, and artifact metadata (including base64 images).
- *
- * Handles both real newlines (from live SSE stream) and literal `\n`
- * sequences (which may appear when the result is double-escaped during
- * session-history serialization or SSE transport).
- */
+function Section({ title, icon, defaultOpen = false, error, badge, children }: {
+  title: string;
+  icon: React.ReactNode;
+  defaultOpen?: boolean;
+  error?: boolean;
+  badge?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div style={s.section}>
+      <div
+        style={{ ...s.trigger, ...(error ? s.triggerError : {}) }}
+        onClick={() => setOpen(o => !o)}
+      >
+        <span style={{
+          width: 14, height: 14, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          color: '#94a3b8', flexShrink: 0,
+          transition: 'transform 0.2s ease', transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+        }}>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </span>
+        <span style={{ width: 16, height: 16, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#64748b' }}>{icon}</span>
+        <span style={{ flex: 1 }}>{title}</span>
+        {badge}
+      </div>
+      {open && children}
+    </div>
+  );
+}
+
+function splitSpaceCols(line: string): string[] {
+  return line.trim().split(/\s{2,}/).map(s => s.trim()).filter(Boolean);
+}
+
+function isValidSpaceTable(lines: string[]): boolean {
+  if (lines.length < 2) return false;
+  const headerCols = splitSpaceCols(lines[0]).length;
+  if (headerCols < 2) return false;
+  for (let i = 1; i < lines.length; i++) {
+    if (splitSpaceCols(lines[i]).length !== headerCols) return false;
+  }
+  return true;
+}
+
+function spaceTableToMarkdown(lines: string[]): string {
+  const headers = splitSpaceCols(lines[0]);
+  const rows = lines.slice(1).map(l => splitSpaceCols(l));
+  const hLine = '| ' + headers.map(h => h.replace(/\|/g, '\\|')).join(' | ') + ' |';
+  const sepLine = '| ' + headers.map(() => '---').join(' | ') + ' |';
+  const dataLines = rows.map(r =>
+    '| ' + headers.map((_, i) => (r[i] || '').replace(/\|/g, '\\|')).join(' | ') + ' |'
+  );
+  return [hLine, sepLine, ...dataLines].join('\n');
+}
+
+function isAsciiSep(line: string): boolean {
+  const t = line.trim();
+  return t.length >= 3 && /^[\s\-+:=]+$/.test(t) && t.includes('-');
+}
+
+function detectTableEnd(lines: string[], start: number): number {
+  let end = start;
+  while (end < lines.length && lines[end].trim() !== '') end++;
+  return end;
+}
+
+function toMarkdownTable(lines: string[]): string | null {
+  if (lines.length < 2) return null;
+  let sepIdx = -1;
+  for (let i = 0; i < Math.min(lines.length, 4); i++) {
+    if (isAsciiSep(lines[i])) { sepIdx = i; break; }
+  }
+  if (sepIdx < 0) return null;
+
+  const headers = lines[0].split('|').map(s => s.trim()).filter(Boolean);
+  if (headers.length === 0) {
+    const h = lines[0].trim().split(/\s{2,}/);
+    if (h.length < 2) return null;
+    headers.push(...h);
+  }
+
+  const rows: string[][] = [];
+  for (let i = sepIdx + 1; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (!t || isAsciiSep(t)) continue;
+    const cells = t.startsWith('|')
+      ? t.split('|').slice(1, -1).map(s => s.trim())
+      : t.split(/\s{2,}/).map(s => s.trim());
+    if (cells.length >= headers.length) rows.push(cells);
+  }
+  if (rows.length === 0) return null;
+
+  const hLine = '| ' + headers.map(h => h.replace(/\|/g, '\\|')).join(' | ') + ' |';
+  const sepLine = '| ' + headers.map(() => '---').join(' | ') + ' |';
+  const dataLines = rows.map(r =>
+    '| ' + headers.map((_, i) => (r[i] || '').replace(/\|/g, '\\|')).join(' | ') + ' |'
+  );
+  return [hLine, sepLine, ...dataLines].join('\n');
+}
+
+function formatStdoutContent(stdout: string): string {
+  const lines = stdout.split('\n');
+  const out: string[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const trimmed = lines[i].trim();
+
+    if (trimmed.length > 0) {
+      const cols = splitSpaceCols(lines[i]);
+      if (cols.length >= 2) {
+        const end = detectTableEnd(lines, i + 1);
+        const block = lines.slice(i, end);
+        if (isValidSpaceTable(block)) {
+          out.push('', spaceTableToMarkdown(block), '');
+          i = end;
+          continue;
+        }
+      }
+    }
+
+    if (isAsciiSep(lines[i]) && i > 0) {
+      const start = i - 1;
+      const end = detectTableEnd(lines, i + 1);
+      const tableLines = lines.slice(start, end);
+      const md = toMarkdownTable(tableLines);
+      if (md) {
+        out.push('', md, '');
+        i = end;
+        continue;
+      }
+    }
+
+    out.push(lines[i]);
+    i++;
+  }
+
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 export function parseResult(result: string): {
   exitCode: number;
   stdout: string;
   artifacts: ArtifactInfo[];
 } {
-  // Normalize literal \n (backslash + n) to real newlines.  This can happen
-  // when the tool-result text is double-JSON-encoded somewhere in the
-  // storage or transport pipeline.  We always convert, even when the result
-  // also contains real newlines (mixed-format edge case from history).
-  if (/\\n/.test(result)) {
-    result = result.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+  const hasRealNewlines = result.includes('\n');
+  const hasLiteralEscapes = /\\n/.test(result);
+  if (!hasRealNewlines && hasLiteralEscapes) {
+    result = result.replace(/\\n/g, '\n');
   }
 
   let exitCode = 0;
   let stdout = '';
   const artifacts: ArtifactInfo[] = [];
 
-  // Extract exit code
   const exitMatch = result.match(/### exit_code: (\d+)/);
   if (exitMatch) exitCode = parseInt(exitMatch[1], 10);
 
-  // Extract stdout
   const stdoutMatch = result.match(/### stdout\n```\n([\s\S]*?)```/);
   if (stdoutMatch) stdout = stdoutMatch[1];
 
-  // Extract artifacts
   const artifactSections = result.split(/### artifact:/);
   for (let i = 1; i < artifactSections.length; i++) {
     const section = artifactSections[i];
-    // Capture the filename: everything up to the first newline.
-    // Using [^\n]+ instead of \S+ to avoid matching across lines when
-    // the section text still contains literal \n sequences.
     const nameMatch = section.match(/^([^\n]+)/);
     const typeMatch = section.match(/- type: (\S+)/);
     const sizeMatch = section.match(/- size: (\d+)/);
@@ -186,7 +335,6 @@ export function parseResult(result: string): {
 
     if (nameMatch) {
       const rawName = nameMatch[1].trim();
-      // Skip if the name looks corrupted (contains metadata markers)
       if (rawName.includes('\\n-') || rawName.includes('- type:')) continue;
       const artifact: ArtifactInfo = {
         name: rawName,
@@ -203,38 +351,6 @@ export function parseResult(result: string): {
   return { exitCode, stdout, artifacts };
 }
 
-/** Renders a CSV string as a simple HTML table. */
-function CsvTable({ content }: { content: string }) {
-  const lines = content.split('\n').filter(l => l.trim());
-  if (lines.length === 0) return null;
-  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-  const rows = lines.slice(1).map(line =>
-    line.split(',').map(cell => cell.trim().replace(/^"|"$/g, ''))
-  );
-
-  return (
-    <table style={s.csvTable}>
-      <thead>
-        <tr>
-          {headers.map((h, i) => (
-            <th key={i} style={s.csvTh}>{h}</th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row, ri) => (
-          <tr key={ri}>
-            {row.map((cell, ci) => (
-              <td key={ci} style={s.csvTd}>{cell}</td>
-            ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-/** Returns the MIME type for a data URI based on the file extension. */
 function imageMimeType(name: string): string {
   const lower = name.toLowerCase();
   if (lower.endsWith('.svg')) return 'image/svg+xml';
@@ -242,7 +358,6 @@ function imageMimeType(name: string): string {
   return 'image/png';
 }
 
-/** Build the src URL for an artifact image (base64 inline or binary API). */
 export function artifactSrc(a: ArtifactInfo): string | null {
   if (a.contentB64) return `data:${imageMimeType(a.name)};base64,${a.contentB64}`;
   if (a.path) {
@@ -253,12 +368,6 @@ export function artifactSrc(a: ArtifactInfo): string | null {
   return null;
 }
 
-/**
- * Triggers a browser download for an artifact. Prefers the sandbox file
- * (full, non-truncated content) via the binary API with
- * `Content-Disposition: attachment`; falls back to the inline content
- * captured in the tool result for legacy sessions without a path.
- */
 export function downloadArtifact(a: ArtifactInfo) {
   if (a.path) {
     const token = getToken();
@@ -274,7 +383,6 @@ export function downloadArtifact(a: ArtifactInfo) {
     document.body.removeChild(link);
     return;
   }
-  // Legacy fallback: download the inline content as a Blob.
   let blob: Blob | null = null;
   if (a.contentB64) {
     try {
@@ -298,118 +406,102 @@ export function downloadArtifact(a: ArtifactInfo) {
   }
 }
 
-/**
- * Renders Python code, execution output, and generated artifacts
- * (PNG charts as inline images, CSV as tables) in the chat stream.
- */
-export default function PythonCodeBlock({ code, result, defaultOpen = true }: Props) {
-  const [open, setOpen] = useState(defaultOpen);
+function highlightCode(code: string): string {
+  try {
+    return Prism.highlight(code, Prism.languages.python, 'python');
+  } catch {
+    return code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+}
+
+function PythonCodeView({ code }: { code: string }) {
+  const highlighted = highlightCode(code);
+  const lineCount = code.split('\n').length;
+  const lineNumbers = Array.from({ length: lineCount }, (_, i) => i + 1).join('\n');
+  return (
+    <>
+      <style>{PY_STYLE}</style>
+      <div className="py-block">
+        <div className="py-block-inner">
+          <div className="py-lineno-col"><pre>{lineNumbers}</pre></div>
+          <div className="py-code-col" dangerouslySetInnerHTML={{ __html: highlighted }} />
+        </div>
+      </div>
+    </>
+  );
+}
+
+export default function PythonCodeBlock({ code, result, defaultOpen = false }: Props) {
   const [lightbox, setLightbox] = useState<string | null>(null);
   const parsed = result ? parseResult(result) : null;
-  const hasError = parsed && parsed.exitCode !== 0;
+  const hasError = parsed ? parsed.exitCode !== 0 : false;
 
   return (
-    <div style={s.wrapper}>
-      <div style={s.header} onClick={() => setOpen(o => !o)}>
-        <span>🐍</span>
-        <span>Python 代码执行</span>
-        {parsed && (
-          <span style={{ color: hasError ? '#b91c1c' : '#16a34a', fontWeight: 500, fontSize: '0.8rem' }}>
-            {hasError ? `退出码: ${parsed.exitCode}` : '✓ 执行成功'}
+    <div style={s.root}>
+      <Section
+        title="Python 代码"
+        icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>}
+        defaultOpen={defaultOpen}
+        badge={parsed ? (
+          <span style={{
+            ...s.badge,
+            color: hasError ? '#b91c1c' : '#16a34a',
+            background: hasError ? '#fef2f2' : '#f0fdf4',
+          }}>
+            {hasError ? `退出码 ${parsed.exitCode}` : '执行成功'}
           </span>
-        )}
-        {parsed && parsed.artifacts.length > 0 && (
-          <span style={{ color: '#854d0e', fontSize: '0.78rem' }}>
-            {parsed.artifacts.length} 个产物
-          </span>
-        )}
-        <span style={{ flex: 1 }} />
-        <span style={s.arrow}>{open ? '▼' : '▶'}</span>
-      </div>
-      {open && (
-        <>
-          {/* Python source code */}
-          <div style={s.codeBlock}>
-            <div style={s.label}>Python</div>
-            {code}
-          </div>
+        ) : undefined}
+      >
+        <PythonCodeView code={code} />
+      </Section>
 
-          {/* stdout */}
-          {parsed && parsed.stdout && (
-            <div style={s.stdoutBlock}>
-              <div style={s.label}>输出</div>
-              {parsed.stdout}
+      {parsed && parsed.stdout && (
+        <Section title="输出" icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>} error={hasError}>
+          {hasError ? (
+            <div style={{ ...s.body, color: '#b91c1c' }}>{parsed.stdout}</div>
+          ) : (
+            <div style={{ ...s.body, overflowY: 'auto' }}>
+              <Markdown>{formatStdoutContent(parsed.stdout)}</Markdown>
             </div>
           )}
-
-          {/* Error output */}
-          {hasError && parsed && parsed.stdout && (
-            <div style={s.errorBlock}>
-              <div style={s.label}>错误输出</div>
-              {parsed.stdout}
-            </div>
-          )}
-
-          {/* Artifacts */}
-          {parsed && parsed.artifacts.length > 0 && (
-            <div style={s.artifactContainer}>
-              <div style={s.label}>生成产物</div>
-              {parsed.artifacts.map((a, i) => (
-                <div key={i} style={{ marginBottom: 12 }}>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      fontSize: '0.78rem',
-                      color: '#64748b',
-                      marginBottom: 4,
-                    }}
-                  >
-                    <span style={{ flex: 1, minWidth: 0, wordBreak: 'break-all' }}>
-                      📎 {a.name} ({a.type}, {(a.size / 1024).toFixed(1)} KB)
-                    </span>
-                    <button
-                      onClick={e => {
-                        e.stopPropagation();
-                        downloadArtifact(a);
-                      }}
-                      style={s.downloadBtn}
-                      title={`下载 ${a.name}`}
-                    >
-                      ⬇ 下载
-                    </button>
-                  </div>
-                  {(a.type === 'image' || a.type === 'svg') && (() => {
-                    const src = artifactSrc(a);
-                    return src ? (
-                      <img
-                        src={src}
-                        alt={a.name}
-                        style={{ ...s.artifactImage, cursor: 'zoom-in' }}
-                        onClick={() => setLightbox(src)}
-                        onError={(e) => {
-                          const img = e.currentTarget;
-                          img.style.opacity = '0.3';
-                          img.style.border = '1px dashed #cbd5e1';
-                          img.title = `图片加载失败: ${a.name}`;
-                          console.error('[PythonCodeBlock] image load failed:', src);
-                        }}
-                      />
-                    ) : null;
-                  })()}
-                  {a.type === 'csv' && a.content && <CsvTable content={a.content} />}
-                  {a.type === 'text' && a.content && (
-                    <div style={{ ...s.stdoutBlock, border: '1px solid #e2e8f0', borderRadius: 6, marginTop: 8 }}>
-                      {a.content}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </>
+        </Section>
       )}
+
+      {parsed && parsed.artifacts.length > 0 && (
+        <Section
+          title="生成产物"
+          icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>}
+          defaultOpen
+          badge={
+            <span style={{ ...s.badge, color: '#854d0e', background: '#fefce8' }}>
+              {parsed.artifacts.length} 个文件
+            </span>
+          }
+        >
+          <div style={s.artifactList}>
+            {parsed.artifacts.map((a, i) => (
+              <div key={i} style={s.artifactRow}>
+                <span style={{ flex: 1, minWidth: 0, wordBreak: 'break-all' }}>
+                  {a.name}
+                  <span style={{ color: '#94a3b8', fontSize: '0.72rem', marginLeft: 4 }}>
+                    ({a.type}, {(a.size / 1024).toFixed(1)} KB)
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  style={{ ...s.downloadBtn, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                  onClick={() => downloadArtifact(a)}
+                  title={`下载 ${a.name}`}
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  下载
+                </button>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
       {lightbox && createPortal(
         <div
           style={{

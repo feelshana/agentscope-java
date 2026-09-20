@@ -55,7 +55,8 @@ public final class RunPythonTool {
      * This intercepts savefig calls regardless of when the agent's code invokes them,
      * guaranteeing Chinese labels render correctly even if the agent sets non-CJK fonts.
      */
-    private static final String MATPLOTLIB_PREAMBLE = """
+    private static final String MATPLOTLIB_PREAMBLE =
+            """
             import matplotlib
             matplotlib.use('Agg')
             import matplotlib.pyplot as _plt
