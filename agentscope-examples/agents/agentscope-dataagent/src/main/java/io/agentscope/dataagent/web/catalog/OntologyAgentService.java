@@ -40,6 +40,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
 
 /**
  * Builds and registers isolated ontology agents from {@code ontologies.json}. Each ontology agent
@@ -49,6 +50,7 @@ import org.slf4j.LoggerFactory;
  * <p>Configuration is loaded from {@code ~/.agentscope/dataagent/ontologies.json}. When the file
  * does not exist, the service starts with an empty ontology list (backward-compatible).
  */
+@Service
 public class OntologyAgentService {
 
     private static final Logger log = LoggerFactory.getLogger(OntologyAgentService.class);
