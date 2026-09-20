@@ -235,6 +235,7 @@ ax.plot(x, intercept + slope * x, 'r--', label=f'趋势线 (R²={r_value**2:.3f}
 - ❌ 不探查直接写正式代码——列名/类型写错会浪费一整次执行；先跑探查脚本。
 - ❌ 调用 `plt.show()`——沙箱没有显示设备；用 `plt.savefig()` + `plt.close()`。
 - ❌ 把产物保存到 `outputs/` 之外的目录——工具只收集 `outputs/` 下的文件。
+- ❌ 图表标题/坐标轴/图例/注释使用英文——所有可见文字必须用中文，如 `ax.set_title('活跃用户趋势')` 而非 `ax.set_title('Active User Trend')`。
 - ❌ 字体设置为 `SimHei` 等本机字体——沙箱镜像内置的是 Noto CJK，中文标注用 `Noto Sans CJK SC`。
 - ❌ 图上不写字——有参考线/标签/达成率诉求还用 `render_chart`，那是本技能的场景。
 - ❌ 只贴图不解读——每张图后必须附结论，考核场景必须给出达成率。
