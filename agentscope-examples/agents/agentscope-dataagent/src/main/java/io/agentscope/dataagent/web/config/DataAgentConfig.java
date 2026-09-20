@@ -30,6 +30,7 @@ import io.agentscope.dataagent.runtime.marketplace.UserMarketplaceRegistry.DataA
 import io.agentscope.dataagent.runtime.session.DataDynamicContextMiddleware;
 import io.agentscope.dataagent.tools.data.DataSourceRegistry;
 import io.agentscope.dataagent.tools.data.SqlConnector;
+import io.agentscope.dataagent.web.middleware.DebugLoggingMiddleware;
 import io.agentscope.dataagent.web.toolbus.ToolEventBus;
 import io.agentscope.dataagent.web.toolbus.ToolNotificationMiddleware;
 import io.agentscope.dataagent.web.workspace.UserSandboxRegistry;
@@ -317,6 +318,7 @@ public class DataAgentConfig {
         builder.configureAllAgents(
                 b -> {
                     b.middleware(new ToolNotificationMiddleware(toolEventBus));
+                    b.middleware(new DebugLoggingMiddleware());
                     b.stateStore(stateStore);
                     DockerFilesystemSpec spec = new DockerFilesystemSpec().client(sandboxClient);
                     if (sandboxImage != null && !sandboxImage.isBlank()) {
