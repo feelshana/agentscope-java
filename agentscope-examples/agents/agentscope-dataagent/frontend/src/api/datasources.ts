@@ -27,6 +27,7 @@ export interface DataSourceStatus {
 export interface SchemaTable {
   name: string;
   type: string;
+  comment?: string | null;
 }
 
 export interface SchemaColumn {

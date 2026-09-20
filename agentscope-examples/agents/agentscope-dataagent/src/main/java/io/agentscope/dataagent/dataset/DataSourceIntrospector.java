@@ -36,7 +36,7 @@ public class DataSourceIntrospector {
 
     public record ColumnInfo(String name, String type, String description) {}
 
-    public record TableInfo(String name, String type) {}
+    public record TableInfo(String name, String type, String comment) {}
 
     public boolean testConnection(ExternalDataSourceEntity ds) {
         try (Connection c = open(ds)) {
@@ -85,7 +85,12 @@ public class DataSourceIntrospector {
                 ResultSet rs =
                         c.getMetaData().getTables(schema, schema, "%", new String[] {"TABLE"})) {
             while (rs.next()) {
-                out.add(new TableInfo(rs.getString("TABLE_NAME"), rs.getString("TABLE_TYPE")));
+                String remarks = rs.getString("REMARKS");
+                out.add(
+                        new TableInfo(
+                                rs.getString("TABLE_NAME"),
+                                rs.getString("TABLE_TYPE"),
+                                remarks == null || remarks.isBlank() ? null : remarks));
             }
         } catch (SQLException e) {
             throw new DatasetException("Failed to list tables: " + e.getMessage(), e);
@@ -124,6 +129,21 @@ public class DataSourceIntrospector {
         } catch (SQLException e) {
             return -1;
         }
+    }
+
+    /** Retrieve the table-level COMMENT (REMARKS) if the database provides one. */
+    public String getTableComment(ExternalDataSourceEntity ds, String schema, String table) {
+        try (Connection c = open(ds);
+                ResultSet rs =
+                        c.getMetaData().getTables(schema, schema, table, new String[] {"TABLE"})) {
+            if (rs.next()) {
+                String remarks = rs.getString("REMARKS");
+                return (remarks == null || remarks.isBlank()) ? null : remarks;
+            }
+        } catch (SQLException e) {
+            // ignore — table comment is optional
+        }
+        return null;
     }
 
     private Connection open(ExternalDataSourceEntity ds) throws SQLException {

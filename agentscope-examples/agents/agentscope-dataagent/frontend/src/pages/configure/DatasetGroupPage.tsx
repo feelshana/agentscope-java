@@ -80,6 +80,7 @@ export default function DatasetGroupPage() {
   );
   const [importTasks, setImportTasks] = useState<ImportTask[]>([]);
   const [associateOpen, setAssociateOpen] = useState(false);
+  const [associatingTables, setAssociatingTables] = useState<Set<string>>(new Set());
   /** 多工作表选择弹窗。 */
   interface SheetPick {
     file: File;
@@ -102,6 +103,7 @@ export default function DatasetGroupPage() {
     try {
       setDetail(await getGroupDetail(groupId));
       setError(null);
+      setAssociatingTables(new Set());
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -117,7 +119,7 @@ export default function DatasetGroupPage() {
     refresh();
   }, [refresh]);
 
-  // 有活动任务时每 3 秒轮询一次后端状态；全部终态后停止。
+  // 有活动任务时每 3 秒轮询一次后端状态；全部终态后停止并刷新数据集列表。
   const hasActiveTask = importTasks.some(t =>
     ['RECEIVED', 'SCANNING', 'WRITING', 'VERIFYING'].includes(t.status),
   );
@@ -132,6 +134,18 @@ export default function DatasetGroupPage() {
     }, 3000);
     return () => clearInterval(id);
   }, [groupId, hasActiveTask]);
+
+  // 当所有导入任务都到终态时，再刷新一次以拉取新创建的数据集。
+  const allTerminal =
+    importTasks.length > 0 &&
+    !importTasks.some(t => ['RECEIVED', 'SCANNING', 'WRITING', 'VERIFYING'].includes(t.status));
+  const prevAllTerminalRef = useRef(false);
+  useEffect(() => {
+    if (allTerminal && !prevAllTerminalRef.current) {
+      refresh();
+    }
+    prevAllTerminalRef.current = allTerminal;
+  }, [allTerminal, refresh]);
 
   // Always default to the files view on entry.
 
@@ -383,7 +397,9 @@ export default function DatasetGroupPage() {
               </span>
             </div>
           )}
-          {detail?.datasets.map(d => (
+          {detail?.datasets.map(d => {
+            const isAssociating = associatingTables.has(d.name);
+            return (
             <div
               key={d.id}
               className="da-row"
@@ -401,7 +417,10 @@ export default function DatasetGroupPage() {
               >
                 {d.name}
               </span>
-              {(d.currentVersion ?? 1) > 1 && (
+              {isAssociating && (
+                <span className="da-spinner da-spinner-sm" style={{ borderColor: 'var(--da-border)', borderTopColor: 'var(--da-primary)', flexShrink: 0 }} />
+              )}
+              {!isAssociating && (d.currentVersion ?? 1) > 1 && (
                 <span
                   className="da-badge"
                   style={{ fontSize: '0.68rem', padding: '1px 5px', flexShrink: 0 }}
@@ -410,7 +429,20 @@ export default function DatasetGroupPage() {
                 </span>
               )}
             </div>
-          ))}
+            );
+          })}
+          {Array.from(associatingTables)
+            .filter(name => !detail?.datasets.some(d => d.name === name))
+            .map(name => (
+              <div key={`assoc-${name}`} className="da-row" style={{ opacity: 0.7 }}>
+                <Icon name="database" />
+                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {name}
+                </span>
+                <span className="da-spinner da-spinner-sm" style={{ borderColor: 'var(--da-border)', borderTopColor: 'var(--da-primary)', flexShrink: 0 }} />
+                <span style={{ fontSize: '0.72rem', color: 'var(--da-text-3)', flexShrink: 0 }}>关联中</span>
+              </div>
+            ))}
           {(uploadStatuses.length > 0 || importTasks.length > 0) && (
             <div className="da-card" style={{ marginTop: 8, padding: 8 }}>
               {uploadStatuses.map((s, i) => (
@@ -673,6 +705,10 @@ export default function DatasetGroupPage() {
           groupId={groupId}
           onClose={() => setAssociateOpen(false)}
           onAssociated={() => refresh()}
+          onAssociateStart={(tables) => {
+            setAssociatingTables(new Set(tables));
+            setAssociateOpen(false);
+          }}
         />
       )}
 

@@ -19,6 +19,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agentscope.dataagent.dataset.parser.ColumnSchema;
 import io.agentscope.dataagent.dataset.parser.FileParser;
+import io.agentscope.dataagent.dataset.parser.SchemaGenerationService;
 import io.agentscope.dataagent.tools.data.DataSource;
 import io.agentscope.dataagent.tools.data.InMemoryDataSourceRegistry;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetEntity;
@@ -73,6 +74,7 @@ public class DatasetService implements DatasetContextProvider {
     private final DatasetStoreProperties props;
     private final ObjectMapper mapper;
     private final DatasetImportService importService;
+    private final SchemaGenerationService schemaGeneration;
 
     public DatasetService(
             DatasetRepository repository,
@@ -88,7 +90,8 @@ public class DatasetService implements DatasetContextProvider {
             List<FileParser> parsers,
             DatasetStoreProperties props,
             ObjectMapper mapper,
-            DatasetImportService importService) {
+            DatasetImportService importService,
+            SchemaGenerationService schemaGeneration) {
         this.repository = repository;
         this.groupRepository = groupRepository;
         this.knowledgeRepository = knowledgeRepository;
@@ -103,6 +106,7 @@ public class DatasetService implements DatasetContextProvider {
         this.props = props;
         this.mapper = mapper;
         this.importService = importService;
+        this.schemaGeneration = schemaGeneration;
     }
 
     @PostConstruct
@@ -253,23 +257,43 @@ public class DatasetService implements DatasetContextProvider {
                                 throw new DatasetException(
                                         "Dataset name already exists: " + table, 409);
                             });
-            List<ColumnSchema> schemaCols = new ArrayList<>();
-            for (DataSourceIntrospector.ColumnInfo ci :
-                    introspector.listColumns(ds, schema, table)) {
-                String description = ci.description();
+            List<DataSourceIntrospector.ColumnInfo> columns =
+                    introspector.listColumns(ds, schema, table);
+            List<String> columnNames = new ArrayList<>();
+            List<String> columnTypes = new ArrayList<>();
+            Map<String, String> jdbcComments = new LinkedHashMap<>();
+            Map<String, List<String>> columnSamples = new LinkedHashMap<>();
+            for (DataSourceIntrospector.ColumnInfo ci : columns) {
+                columnNames.add(ci.name());
+                columnTypes.add(ci.type());
+                if (ci.description() != null && !ci.description().isBlank()) {
+                    jdbcComments.put(ci.name(), ci.description());
+                }
                 if (sample) {
-                    String sampleVals = sampleValues(ds, schema, table, ci.name());
-                    if (sampleVals != null) {
-                        description =
-                                (description == null || description.isBlank()
-                                                ? ""
-                                                : description + " ")
-                                        + "示例: "
-                                        + sampleVals;
+                    List<String> samples = sampleValues(ds, schema, table, ci.name());
+                    if (samples != null) {
+                        columnSamples.put(ci.name(), samples);
                     }
                 }
+            }
+            String tableComment = introspector.getTableComment(ds, schema, table);
+            SchemaGenerationService.SchemaResult schemaResult =
+                    schemaGeneration.generateSchema(
+                            columnNames, columnSamples, jdbcComments, tableComment);
+            List<ColumnSchema> schemaCols = new ArrayList<>();
+            for (int i = 0; i < columnNames.size(); i++) {
+                String description = schemaResult.columns().get(i).description();
                 schemaCols.add(
-                        new ColumnSchema(ci.name(), ci.name(), ci.type(), true, description));
+                        new ColumnSchema(
+                                columnNames.get(i),
+                                columnNames.get(i),
+                                columnTypes.get(i),
+                                true,
+                                description));
+            }
+            String tableDesc = schemaResult.tableDescription();
+            if (tableDesc == null || tableDesc.isBlank()) {
+                tableDesc = tableComment != null && !tableComment.isBlank() ? tableComment : table;
             }
             DatasetEntity e = new DatasetEntity();
             e.setId(UUID.randomUUID().toString());
@@ -280,7 +304,7 @@ public class DatasetService implements DatasetContextProvider {
             e.setExternalDataSourceId(ds.getId());
             e.setSchemaName(schema);
             e.setTableName(table);
-            e.setDescription("外部数据源 " + ds.getName() + " 的表 " + schema + "." + table);
+            e.setDescription(tableDesc);
             e.setColumnSchemaJson(writeJson(schemaCols));
             e.setRowCount(introspector.countRows(ds, schema, table));
             e.setSourceFileName(ds.getName() + "/" + schema + "." + table);
@@ -301,8 +325,8 @@ public class DatasetService implements DatasetContextProvider {
         return created;
     }
 
-    /** Distinct values for a column when cardinality is low (<=20); null otherwise. */
-    private String sampleValues(
+    /** Distinct values for a column when cardinality is low (<=20); max 3 returned. null if high cardinality. */
+    private List<String> sampleValues(
             ExternalDataSourceEntity ds, String schema, String table, String column) {
         String q = "postgresql".equalsIgnoreCase(ds.getKind()) ? "\"" : "`";
         String sql =
@@ -331,7 +355,7 @@ public class DatasetService implements DatasetContextProvider {
             if (vals.size() > 20) {
                 return null;
             }
-            return String.join(", ", vals);
+            return vals.subList(0, Math.min(vals.size(), 3));
         } catch (Exception e) {
             return null;
         }
