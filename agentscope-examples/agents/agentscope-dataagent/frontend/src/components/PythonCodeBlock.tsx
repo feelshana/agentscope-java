@@ -13,6 +13,17 @@ export interface ArtifactInfo {
   path?: string;
 }
 
+/** Deduplicates artifacts by name+size, keeping the first occurrence. */
+export function deduplicateArtifacts(artifacts: ArtifactInfo[]): ArtifactInfo[] {
+  const seen = new Set<string>();
+  return artifacts.filter(a => {
+    const key = `${a.name}\t${a.size}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 interface Props {
   code: string;
   result?: string;
@@ -139,14 +150,12 @@ export function parseResult(result: string): {
   stdout: string;
   artifacts: ArtifactInfo[];
 } {
-  // Normalize literal \n (backslash + n) to real newlines when the result
-  // has no real newlines but does contain escaped ones.  This can happen
+  // Normalize literal \n (backslash + n) to real newlines.  This can happen
   // when the tool-result text is double-JSON-encoded somewhere in the
-  // storage or transport pipeline.
-  const hasRealNewlines = result.includes('\n');
-  const hasLiteralEscapes = /\\n/.test(result);
-  if (!hasRealNewlines && hasLiteralEscapes) {
-    result = result.replace(/\\n/g, '\n');
+  // storage or transport pipeline.  We always convert, even when the result
+  // also contains real newlines (mixed-format edge case from history).
+  if (/\\n/.test(result)) {
+    result = result.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
   }
 
   let exitCode = 0;

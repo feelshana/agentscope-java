@@ -1,6 +1,6 @@
 import React from 'react';
 import Icon from './Icon';
-import { parseResult, ArtifactInfo } from './PythonCodeBlock';
+import { parseResult, ArtifactInfo, deduplicateArtifacts } from './PythonCodeBlock';
 
 interface ToolEntry {
   name: string;
@@ -14,21 +14,23 @@ interface Props {
 }
 
 export default function PythonArtifactsPanel({ tools, onInspect }: Props) {
-  const allArtifacts = React.useMemo(() => {
-    const result: ArtifactInfo[] = [];
+  const { allArtifacts, pythonTools } = React.useMemo(() => {
+    const raw: ArtifactInfo[] = [];
+    const pyTools: ToolEntry[] = [];
     for (const t of tools) {
       if (t.name !== 'run_python' || !t.result) continue;
+      pyTools.push(t);
       try {
         const parsed = parseResult(t.result);
-        result.push(...parsed.artifacts);
-      } catch { /* skip unparseable */ }
+        raw.push(...parsed.artifacts);
+      } catch (e) {
+        console.warn('[PythonArtifactsPanel] parseResult threw:', e, 'result preview:', t.result.substring(0, 500));
+      }
     }
-    return result;
+    return { allArtifacts: deduplicateArtifacts(raw), pythonTools: pyTools };
   }, [tools]);
 
   if (allArtifacts.length === 0) return null;
-
-  const pythonTools = tools.filter(t => t.name === 'run_python' && t.result);
 
   return (
     <div className="da-toolcall">
