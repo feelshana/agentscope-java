@@ -34,8 +34,15 @@ import org.springframework.stereotype.Service;
 
 /**
  * Uses the configured LLM to generate English field names, field descriptions (including date
- * format annotations), and a table-level description from the Chinese column headers and sample
- * values collected during the first batch of an EasyExcel streaming import.
+ * format annotations), and a table-level description from column headers and sample values.
+ *
+ * <p>Supports two call sites:
+ *
+ * <ul>
+ *   <li>File upload: Chinese Excel headers → AI generates English names + Chinese descriptions
+ *   <li>Data source association: JDBC column names + optional JDBC REMARKS → AI merges remarks
+ *       into descriptions
+ * </ul>
  *
  * <p>When no {@link Model} bean is available the service falls back to a rule-based heuristic that
  * produces reasonable defaults so the import never fails due to a missing model.
@@ -57,24 +64,34 @@ public class SchemaGenerationService {
     //  Public API
     // -----------------------------------------------------------------
 
-    /**
-     * Generate enriched column metadata and a table description.
-     *
-     * @param originalHeaders Chinese (or original) column header names
-     * @param columnSamples per-column list of up to 10 distinct sample values
-     * @return result containing AI-generated (or fallback) column info and table description
-     */
+    /** File-upload entry point: no JDBC context. */
     public SchemaResult generateSchema(
             List<String> originalHeaders, Map<String, List<String>> columnSamples) {
+        return generateSchema(originalHeaders, columnSamples, Map.of(), null);
+    }
+
+    /**
+     * Full entry point used by both file upload and data-source association.
+     *
+     * @param originalHeaders column names (Chinese for uploads, English for JDBC)
+     * @param columnSamples per-column list of up to 10 distinct sample values
+     * @param jdbcComments optional per-column JDBC REMARKS (may be empty)
+     * @param tableComment optional table-level COMMENT (may be null)
+     */
+    public SchemaResult generateSchema(
+            List<String> originalHeaders,
+            Map<String, List<String>> columnSamples,
+            Map<String, String> jdbcComments,
+            String tableComment) {
 
         if (model.isPresent()) {
             try {
-                return generateWithAi(originalHeaders, columnSamples);
+                return generateWithAi(originalHeaders, columnSamples, jdbcComments, tableComment);
             } catch (Exception e) {
                 log.warn("AI schema generation failed, falling back to rules: {}", e.getMessage());
             }
         }
-        return generateWithRules(originalHeaders, columnSamples);
+        return generateWithRules(originalHeaders, columnSamples, jdbcComments, tableComment);
     }
 
     // -----------------------------------------------------------------
@@ -82,9 +99,12 @@ public class SchemaGenerationService {
     // -----------------------------------------------------------------
 
     private SchemaResult generateWithAi(
-            List<String> originalHeaders, Map<String, List<String>> columnSamples) {
+            List<String> originalHeaders,
+            Map<String, List<String>> columnSamples,
+            Map<String, String> jdbcComments,
+            String tableComment) {
 
-        String prompt = buildPrompt(originalHeaders, columnSamples);
+        String prompt = buildPrompt(originalHeaders, columnSamples, jdbcComments, tableComment);
         log.info("SchemaGenerationService: calling AI model for schema generation...");
         log.info("SchemaGenerationService: [PROMPT]\n{}", prompt);
         long aiStart = System.currentTimeMillis();
@@ -111,26 +131,43 @@ public class SchemaGenerationService {
                 aiElapsed);
         log.info("SchemaGenerationService: [RESPONSE]\n{}", response);
 
-        return parseAiResponse(response, originalHeaders);
+        return parseAiResponse(
+                response, originalHeaders, columnSamples, jdbcComments, tableComment);
     }
 
     private String buildPrompt(
-            List<String> originalHeaders, Map<String, List<String>> columnSamples) {
+            List<String> originalHeaders,
+            Map<String, List<String>> columnSamples,
+            Map<String, String> jdbcComments,
+            String tableComment) {
 
         StringBuilder sb = new StringBuilder();
-        sb.append("你是一个数据库建模专家。请根据以下 Excel 列名和样本值，为每个列生成英文字段名和字段描述。\n\n");
+        sb.append("你是一个数据库建模专家。请根据以下列名和样本值，为每个列生成英文字段名和字段描述。\n\n");
         sb.append("要求：\n");
         sb.append("1. 英文字段名使用 snake_case 格式，简洁明了\n");
         sb.append("2. 字段描述用中文，简明扼要\n");
-        sb.append("3. 对于日期类型字段，在描述中注明日期格式，如：格式为'yyyyMMdd'\n");
+        if (jdbcComments != null && !jdbcComments.isEmpty()) {
+            sb.append("3. 如果列有数据库注释，请在描述中融合该注释的信息，不要简单重复\n");
+        } else {
+            sb.append("3. 对于日期类型字段，在描述中注明日期格式，如：格式为'yyyyMMdd'\n");
+        }
         sb.append("4. 描述示例：order_day（英文字段名）：格式为'yyyy-MM-dd'，包含2026-10-01,2026-10-02等\n");
         sb.append("5. 最后生成一句表描述，概括该表的数据内容和用途\n\n");
         sb.append("请按以下 JSON 格式返回：\n");
         sb.append(
                 "{\"columns\":[{\"original\":\"原始列名\",\"english\":\"english_name\",\"description\":\"字段描述\"}],\"tableDescription\":\"表描述\"}\n\n");
+        if (tableComment != null && !tableComment.isBlank()) {
+            sb.append("表注释：").append(tableComment).append("\n\n");
+        }
         sb.append("列信息：\n");
         for (String header : originalHeaders) {
             sb.append("- 列名: ").append(header);
+            if (jdbcComments != null) {
+                String jdbcComment = jdbcComments.get(header);
+                if (jdbcComment != null && !jdbcComment.isBlank()) {
+                    sb.append("，数据库注释: ").append(jdbcComment);
+                }
+            }
             List<String> samples = columnSamples.getOrDefault(header, List.of());
             if (!samples.isEmpty()) {
                 List<String> top3 =
@@ -147,7 +184,12 @@ public class SchemaGenerationService {
      * rule-based for any column that cannot be parsed.
      */
     @SuppressWarnings("unchecked")
-    private SchemaResult parseAiResponse(String response, List<String> originalHeaders) {
+    private SchemaResult parseAiResponse(
+            String response,
+            List<String> originalHeaders,
+            Map<String, List<String>> columnSamples,
+            Map<String, String> jdbcComments,
+            String tableComment) {
         // Strip markdown code fences if present
         String json = response.trim();
         if (json.contains("```")) {
@@ -187,8 +229,12 @@ public class SchemaGenerationService {
                 if (ai != null && ai[0] != null && !ai[0].isBlank()) {
                     columnInfos.add(new ColumnInfo(ai[0], ai[1]));
                 } else {
-                    // fallback for this column
-                    ColumnInfo fb = fallbackColumn(header, List.of());
+                    // fallback for this column, with real samples
+                    ColumnInfo fb =
+                            fallbackColumn(
+                                    header,
+                                    columnSamples.getOrDefault(header, List.of()),
+                                    jdbcComments != null ? jdbcComments.get(header) : null);
                     columnInfos.add(fb);
                 }
             }
@@ -198,7 +244,7 @@ public class SchemaGenerationService {
             log.warn(
                     "Failed to parse AI response as JSON, falling back to rules: {}",
                     e.getMessage());
-            return generateWithRules(originalHeaders, Map.of());
+            return generateWithRules(originalHeaders, columnSamples, jdbcComments, tableComment);
         }
     }
 
@@ -207,16 +253,23 @@ public class SchemaGenerationService {
     // -----------------------------------------------------------------
 
     private SchemaResult generateWithRules(
-            List<String> originalHeaders, Map<String, List<String>> columnSamples) {
+            List<String> originalHeaders,
+            Map<String, List<String>> columnSamples,
+            Map<String, String> jdbcComments,
+            String tableComment) {
 
         List<ColumnInfo> columnInfos = new ArrayList<>();
         for (String header : originalHeaders) {
             List<String> samples = columnSamples.getOrDefault(header, List.of());
-            columnInfos.add(fallbackColumn(header, samples));
+            String jdbcComment = jdbcComments != null ? jdbcComments.get(header) : null;
+            columnInfos.add(fallbackColumn(header, samples, jdbcComment));
         }
 
         // Build a simple table description from column names
         StringBuilder tableDesc = new StringBuilder();
+        if (tableComment != null && !tableComment.isBlank()) {
+            tableDesc.append(tableComment).append("。");
+        }
         tableDesc.append("包含以下字段：");
         for (int i = 0; i < originalHeaders.size(); i++) {
             if (i > 0) {
@@ -227,14 +280,16 @@ public class SchemaGenerationService {
         return new SchemaResult(columnInfos, tableDesc.toString());
     }
 
-    private ColumnInfo fallbackColumn(String header, List<String> samples) {
+    private ColumnInfo fallbackColumn(String header, List<String> samples, String jdbcComment) {
         String english = Identifiers.sanitize(header, "col");
-        String description = header;
+        String description = (jdbcComment != null && !jdbcComment.isBlank()) ? jdbcComment : header;
 
         // Detect date-like columns by name or sample values
         if (isDateLike(header, samples)) {
             String dateFormat = detectDateFormat(samples);
-            description = header + "：格式为'" + dateFormat + "'";
+            if (!description.contains("格式")) {
+                description = description + "，格式为'" + dateFormat + "'";
+            }
         }
 
         // Append sample values to description

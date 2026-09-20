@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   associateTables,
   ExternalDataSource,
@@ -112,10 +112,12 @@ export default function AssociateTablesModal({
   groupId,
   onClose,
   onAssociated,
+  onAssociateStart,
 }: {
   groupId: string;
   onClose: () => void;
   onAssociated: () => void;
+  onAssociateStart?: (tables: string[]) => void;
 }) {
   const [sources, setSources] = useState<ExternalDataSource[]>([]);
   const [sourceId, setSourceId] = useState<string | null>(null);
@@ -127,6 +129,11 @@ export default function AssociateTablesModal({
   const [columns, setColumns] = useState<SchemaColumn[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => { mountedRef.current = false; };
+  }, []);
 
   useEffect(() => {
     listDataSources()
@@ -176,26 +183,32 @@ export default function AssociateTablesModal({
     });
   }
 
-  async function handleAssociate() {
+  function handleAssociate() {
     if (!sourceId || !schema || selected.size === 0) {
       setError('请选择数据源、库与至少一张表');
       return;
     }
+    const tableNames = Array.from(selected);
+    onAssociateStart?.(tableNames);
+    onClose();
     setBusy(true);
     setError(null);
-    try {
-      await associateTables(groupId, {
-        dataSourceId: sourceId,
-        schema,
-        tables: Array.from(selected),
+    associateTables(groupId, {
+      dataSourceId: sourceId,
+      schema,
+      tables: tableNames,
+    })
+      .then(() => { onAssociated(); })
+      .catch(e => {
+        if (mountedRef.current) {
+          setError(e instanceof Error ? e.message : String(e));
+        }
+      })
+      .finally(() => {
+        if (mountedRef.current) {
+          setBusy(false);
+        }
       });
-      onAssociated();
-      onClose();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
   }
 
   return (
@@ -253,7 +266,14 @@ export default function AssociateTablesModal({
                     checked={selected.has(t.name)}
                     onChange={() => toggle(t.name)}
                   />
-                  <span style={{ flex: 1 }}>{t.name}</span>
+                  <span style={{ flex: 1 }}>
+                    {t.name}
+                    {t.comment && (
+                      <div style={{ fontSize: '0.72rem', color: 'var(--da-text-muted)', marginTop: 1 }}>
+                        {t.comment}
+                      </div>
+                    )}
+                  </span>
                   <button
                     style={{
                       background: 'transparent',
@@ -300,13 +320,24 @@ export default function AssociateTablesModal({
           </div>
         </div>
         <div style={footStyle}>
-          <button className="da-btn da-btn-primary" onClick={handleAssociate} disabled={busy}>
-            关联已选库表 ({selected.size})
+          <button
+            className="da-btn da-btn-primary"
+            onClick={handleAssociate}
+            disabled={busy}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, opacity: busy ? 0.75 : 1 }}
+          >
+            {busy && (
+              <svg width="14" height="14" viewBox="0 0 16 16" style={{ animation: 'da-spin 0.8s linear infinite' }}>
+                <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="28" strokeDashoffset="8" strokeLinecap="round" />
+              </svg>
+            )}
+            {busy ? '关联中…' : `关联已选库表 (${selected.size})`}
           </button>
           <button className="da-btn" onClick={onClose}>
             取消
           </button>
         </div>
+        <style>{`@keyframes da-spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     </div>
   );

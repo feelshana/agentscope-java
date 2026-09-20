@@ -404,10 +404,17 @@ export default function DatasetDetailPage() {
               <span style={{ color: 'var(--da-text-3)' }}>行数：</span>
               {dataset?.rowCount ?? '-'}
             </div>
-            <div>
-              <span style={{ color: 'var(--da-text-3)' }}>来源文件：</span>
-              {dataset?.sourceFileName ?? '-'}
-            </div>
+            {dataset?.origin === 'datasource' ? (
+              <div>
+                <span style={{ color: 'var(--da-text-3)' }}>数据源：</span>
+                {dataset?.sourceFileName?.split('/')[0] ?? '-'}
+              </div>
+            ) : (
+              <div>
+                <span style={{ color: 'var(--da-text-3)' }}>来源文件：</span>
+                {dataset?.sourceFileName ?? '-'}
+              </div>
+            )}
           </div>
         </div>
 
