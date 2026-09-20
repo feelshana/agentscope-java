@@ -14,7 +14,7 @@ FROM python:3.12-slim
 
 # CJK fonts for matplotlib Chinese labels. Cached pip wheels keep the layer rebuildable.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends fonts-noto-cjk \
+    && apt-get install -y --no-install-recommends fonts-noto-cjk ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Optional: override the pip index with a regional mirror at build time, e.g.
@@ -24,7 +24,8 @@ RUN pip install --no-cache-dir -i ${PIP_INDEX_URL} \
         pandas \
         matplotlib \
         scipy \
-        numpy
+        numpy \
+        Pillow
 
 # matplotlib must never try to open a display inside the headless sandbox.
 ENV MPLBACKEND=Agg

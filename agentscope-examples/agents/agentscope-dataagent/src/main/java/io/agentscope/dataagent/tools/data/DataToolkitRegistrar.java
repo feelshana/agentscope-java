@@ -18,6 +18,7 @@ package io.agentscope.dataagent.tools.data;
 import io.agentscope.dataagent.dataset.DatasetContextProvider;
 import io.agentscope.dataagent.dataset.KnowledgeGraphService;
 import io.agentscope.dataagent.runtime.DataAgentBootstrap;
+import io.agentscope.dataagent.service.TtsService;
 import io.agentscope.dataagent.web.persistence.jpa.ChartOptionRepository;
 import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
 import io.agentscope.harness.agent.HarnessAgent;
@@ -54,6 +55,7 @@ public class DataToolkitRegistrar {
     private final ChartOptionRepository chartOptions;
     private final KnowledgeGraphService knowledgeGraph;
     private final ConversationScopeRegistry conversationScopes;
+    private final TtsService ttsService;
 
     public DataToolkitRegistrar(
             DataAgentBootstrap bootstrap,
@@ -62,7 +64,8 @@ public class DataToolkitRegistrar {
             DatasetContextProvider contextProvider,
             ChartOptionRepository chartOptions,
             KnowledgeGraphService knowledgeGraph,
-            ConversationScopeRegistry conversationScopes) {
+            ConversationScopeRegistry conversationScopes,
+            TtsService ttsService) {
         this.bootstrap = bootstrap;
         this.registry = registry;
         this.sqlConnector = sqlConnector;
@@ -70,6 +73,7 @@ public class DataToolkitRegistrar {
         this.chartOptions = chartOptions;
         this.knowledgeGraph = knowledgeGraph;
         this.conversationScopes = conversationScopes;
+        this.ttsService = ttsService;
     }
 
     @PostConstruct
@@ -100,10 +104,18 @@ public class DataToolkitRegistrar {
 
             // Register the Python sandbox-execution tool. See the class javadoc for why a
             // standalone proxy (instead of the agent's own filesystem instance) is sufficient.
+            SandboxBackedFilesystem sandboxFs = new SandboxBackedFilesystem();
             main.getDelegate()
                     .getToolkit()
-                    .registerTool(new RunPythonTool(new SandboxBackedFilesystem()));
+                    .registerTool(new RunPythonTool(sandboxFs));
             log.info("Registered RunPythonTool onto main agent '{}'", main.getName());
+
+            // Register the video report generation tool. Combines TTS narration with chart
+            // images from previous run_python calls to produce an MP4 video slideshow.
+            main.getDelegate()
+                    .getToolkit()
+                    .registerTool(new VideoReportTool(ttsService, sandboxFs));
+            log.info("Registered VideoReportTool onto main agent '{}'", main.getName());
         } catch (RuntimeException e) {
             log.warn("Failed to register DataAgent toolkit onto main agent: {}", e.getMessage());
         }

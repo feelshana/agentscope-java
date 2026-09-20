@@ -13,6 +13,7 @@ import OntologyGraphView from './OntologyGraphView';
 import type { OntologyGraphData } from '../api/ontology';
 import Markdown from './Markdown';
 import PythonArtifactsPanel from './PythonArtifactsPanel';
+import VideoPlayerBlock from './VideoPlayerBlock';
 import { extractVegaSpec } from '../utils/charts';
 import { listGroups, DatasetGroup } from '../api/datasets';
 import { listOntologies, OntologyEntry } from '../api/ontologies';
@@ -152,6 +153,9 @@ const S: Record<string, React.CSSProperties> = {
 let counter = 0;
 const nextId = () => `m${Date.now().toString(36)}-${counter++}`;
 
+/** Tracks messages whose video-generation suggestion has been shown or dismissed. */
+const videoSuggestionHandled = new WeakSet<Message>();
+
 const STORAGE_PREFIX = 'claw_chat_session:';
 const storageKey = (agentId: string) => `${STORAGE_PREFIX}${agentId}`;
 
@@ -176,6 +180,13 @@ function chartPayloadFromTool(t: ToolEntry): ChartPayload | null {
     /* not a chart payload */
   }
   return null;
+}
+
+/** Extract video path from generate_video_report tool result. */
+function videoPathFromTool(t: ToolEntry): string | null {
+  const raw = t.result ?? '';
+  const m = raw.match(/- path:\s*(\/workspace\/[^\s\\]+)/);
+  return m ? m[1] : null;
 }
 
 /** Extract ontology graph payload from show_ontology_graph tool result. */
@@ -249,6 +260,14 @@ function splitToolRender(
       );
     }
     if (!chartPayload && !ontologyPayload && spec) answer.push(<ChartBlock key={`${key}-spec`} spec={spec} />);
+
+    // Render video player for generate_video_report results
+    if (t.name === 'generate_video_report' && t.result) {
+      const vp = videoPathFromTool(t);
+      if (vp) {
+        answer.push(<VideoPlayerBlock key={`${key}-video`} src={vp} title="视频报告" />);
+      }
+    }
   }
   return { trace, answer };
 }
@@ -490,6 +509,117 @@ export default function ChatPanel({
     [busy, restoring, effectiveAgentId, input],
   );
 
+  /** Sends a pre-defined text message (used by the video suggestion button). */
+  async function handleSendWithText(text: string) {
+    if (busy || restoring || !effectiveAgentId) return;
+    setInput('');
+    setBusy(true);
+    const userMsg: Message = { id: nextId(), role: 'user', text, tools: [], trace: [] };
+    const replyMsg: Message = { id: nextId(), role: 'assistant', text: '', tools: [], trace: [], pending: true };
+    setMessages(prev => [...prev, userMsg, replyMsg]);
+    let lastToolEventSeq = -1;
+
+    try {
+      for await (const evt of stream(effectiveAgentId, {
+        message: text,
+        sessionKey: sessionKey ?? undefined,
+        groupIds: selectedGroups.length ? selectedGroups : undefined,
+      })) {
+        const isToolEvent = evt.type === 'tool_call' || evt.type === 'tool_result';
+        if (isToolEvent) {
+          const seq = evt.seq;
+          if (typeof seq !== 'number' || !Number.isSafeInteger(seq) || seq <= lastToolEventSeq) continue;
+          lastToolEventSeq = seq;
+        }
+        if (evt.type === 'token') {
+          const chunk = evt.data ?? '';
+          setMessages(prev => prev.map(m => m.id === replyMsg.id ? { ...m, text: m.text + chunk } : m));
+        } else if (evt.type === 'tool_call') {
+          if (evt.toolName && isHiddenTool(evt.toolName)) continue;
+          const entry: ToolEntry = {
+            id: `${evt.toolName ?? 'tool'}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            name: evt.toolName ?? 'tool',
+            callId: evt.toolCallId,
+            parentCallId: evt.parentToolCallId,
+            requestId: evt.requestId,
+            runId: evt.runId,
+            callSeq: evt.seq,
+            input: evt.toolInput,
+          };
+          setMessages(prev => prev.map(m => {
+            if (m.id !== replyMsg.id) return m;
+            const trace = m.text.trim()
+              ? [...m.trace, { kind: 'text' as const, id: `${m.id}-n${m.trace.length}`, text: m.text }]
+              : [...m.trace];
+            return { ...m, text: '', trace: [...trace, { kind: 'tool' as const, id: entry.id, tool: entry }], tools: [...m.tools, entry] };
+          }));
+        } else if (evt.type === 'tool_result') {
+          if (evt.toolName && isHiddenTool(evt.toolName)) continue;
+          setMessages(prev => prev.map(m => {
+            if (m.id !== replyMsg.id) return m;
+            const tools = [...m.tools];
+            let matchedId: string | null = null;
+            if (evt.toolCallId) {
+              for (let i = tools.length - 1; i >= 0; i--) {
+                if (tools[i].callId === evt.toolCallId && tools[i].result === undefined) {
+                  tools[i] = { ...tools[i], requestId: evt.requestId, runId: evt.runId, result: evt.toolResult, resultSeq: evt.seq };
+                  matchedId = tools[i].id;
+                  break;
+                }
+              }
+            }
+            if (matchedId) {
+              const matchedTool = tools.find(t => t.id === matchedId);
+              const trace = m.trace.map(n =>
+                n.kind === 'tool' && n.id === matchedId && matchedTool ? { ...n, tool: matchedTool } : n,
+              );
+              return { ...m, tools, trace };
+            }
+            const unmatched: ToolEntry = {
+              id: `${evt.toolName ?? 'tool'}-result-${evt.seq}`,
+              name: evt.toolName ?? 'tool',
+              callId: evt.toolCallId,
+              parentCallId: evt.parentToolCallId,
+              requestId: evt.requestId,
+              runId: evt.runId,
+              resultSeq: evt.seq,
+              result: evt.toolResult,
+            };
+            return {
+              ...m,
+              tools: [...tools, unmatched],
+              trace: [...m.trace, { kind: 'tool' as const, id: unmatched.id, tool: unmatched }],
+            };
+          }));
+        } else if (evt.type === 'done') {
+          if (evt.sessionKey) {
+            setSessionKey(evt.sessionKey);
+            persistSession(evt.sessionKey);
+            const next = new URLSearchParams(searchParams);
+            if (next.get('session') !== evt.sessionKey) {
+              next.set('session', evt.sessionKey);
+              setSearchParams(next, { replace: true });
+            }
+          }
+          setMessages(prev => prev.map(m => m.id === replyMsg.id ? { ...m, pending: false } : m));
+        } else if (evt.type === 'error') {
+          setMessages(prev => prev.map(m => m.id === replyMsg.id
+            ? { ...m, pending: false, failed: true, text: m.text + (m.text ? '\n' : '') + `[错误] ${evt.error ?? '未知错误'}` }
+            : m));
+        }
+      }
+      onSessionUpdate?.();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : '连接中断';
+      setMessages(prev => prev.map(m => m.id === replyMsg.id
+        ? { ...m, pending: false, failed: true, text: m.text + (m.text ? '\n' : '') + `[错误] ${msg}` }
+        : m));
+    } finally {
+      setBusy(false);
+      inputRef.current?.focus();
+    }
+  }
+
   async function handleSend() {
     if (!canSend) return;
     const text = input.trim();
@@ -686,6 +816,40 @@ export default function ChatPanel({
                     )}
                     {m.tools.length > 0 && (
                       <CitationPanel tools={m.tools} />
+                    )}
+                    {/* Video generation suggestion card */}
+                    {!m.pending && !m.failed
+                      && !videoSuggestionHandled.has(m)
+                      && m.tools.some(t =>
+                        (t.name === 'run_python' || t.name === 'render_chart') && t.result)
+                      && !m.tools.some(t => t.name === 'generate_video_report')
+                      && (() => { videoSuggestionHandled.add(m); return true; })() && (
+                      <div style={{
+                        marginTop: 12,
+                        padding: '10px 14px',
+                        background: 'var(--da-surface-sunken)',
+                        border: '1px solid var(--da-border)',
+                        borderRadius: 8,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        fontSize: '0.88rem',
+                      }}>
+                        <span style={{ color: 'var(--da-text-muted)' }}>
+                          🎬 基于此分析报告生成视频？
+                        </span>
+                        <button
+                          type="button"
+                          className="da-chip da-chip-active"
+                          style={{ fontSize: '0.82rem' }}
+                          onClick={() => {
+                            videoSuggestionHandled.add(m);
+                            handleSendWithText('请基于以上分析生成视频报告');
+                          }}
+                        >
+                          生成视频
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>

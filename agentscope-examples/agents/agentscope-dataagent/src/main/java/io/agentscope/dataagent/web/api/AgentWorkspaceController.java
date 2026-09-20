@@ -253,6 +253,9 @@ public class AgentWorkspaceController {
             @PathVariable String agentId,
             @RequestParam("path") String path,
             @RequestParam(name = "download", defaultValue = "false") boolean download,
+            @org.springframework.web.bind.annotation.RequestHeader(
+                    value = "Range", required = false)
+                    String rangeHeader,
             Authentication auth) {
         String userId = (String) auth.getPrincipal();
         // Spring WebFlux should auto-decode @RequestParam, but add fallback
@@ -303,10 +306,37 @@ public class AgentWorkspaceController {
                             content.length,
                             contentType,
                             download);
-                    ResponseEntity.BodyBuilder builder =
-                            ResponseEntity.ok()
-                                    .header("Content-Type", contentType)
-                                    .header("Cache-Control", "public, max-age=3600");
+                    ResponseEntity.BodyBuilder builder;
+                    if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
+                        // Handle HTTP Range request for video/audio streaming
+                        String range = rangeHeader.substring(6);
+                        int dash = range.indexOf('-');
+                        long start = Long.parseLong(range.substring(0, dash));
+                        long end = dash < range.length() - 1
+                                ? Long.parseLong(range.substring(dash + 1))
+                                : content.length - 1;
+                        if (end >= content.length) {
+                            end = content.length - 1;
+                        }
+                        int len = (int) (end - start + 1);
+                        byte[] partial = new byte[len];
+                        System.arraycopy(content, (int) start, partial, 0, len);
+                        builder = ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
+                                .header("Content-Type", contentType)
+                                .header("Content-Range",
+                                        "bytes " + start + "-" + end + "/" + content.length)
+                                .header("Content-Length", String.valueOf(len))
+                                .header("Accept-Ranges", "bytes")
+                                .header("Cache-Control", "public, max-age=3600");
+                        log.info("[binary] range response: {}-{} of {}", start, end, content.length);
+                        return builder.body(partial);
+                    }
+                    // Full file response
+                    builder = ResponseEntity.ok()
+                            .header("Content-Type", contentType)
+                            .header("Content-Length", String.valueOf(content.length))
+                            .header("Accept-Ranges", "bytes")
+                            .header("Cache-Control", "public, max-age=3600");
                     if (download) {
                         // RFC 5987 encoded filename so Chinese names survive browsers
                         String filename = rel.substring(rel.lastIndexOf('/') + 1);
@@ -866,6 +896,9 @@ public class AgentWorkspaceController {
         if (lower.endsWith(".gif")) return "image/gif";
         if (lower.endsWith(".webp")) return "image/webp";
         if (lower.endsWith(".pdf")) return "application/pdf";
+        if (lower.endsWith(".mp4")) return "video/mp4";
+        if (lower.endsWith(".wav")) return "audio/wav";
+        if (lower.endsWith(".mp3")) return "audio/mpeg";
         return "application/octet-stream";
     }
 
