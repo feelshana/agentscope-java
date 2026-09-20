@@ -603,6 +603,18 @@ export default function ChatPanel({
         )}
         {messages.map(m => {
           const { trace, answer } = splitToolRender(m, onInspect);
+          if (m.role === 'assistant' && !m.pending) {
+            const pyTools = m.tools.filter(t => t.name === 'run_python');
+            const pyWithResult = pyTools.filter(t => !!t.result);
+            if (pyTools.length > 0 || m.tools.length > 0) {
+              console.log('[ChatPanel] assistant tools summary:', {
+                totalTools: m.tools.length,
+                pythonTools: pyTools.length,
+                pythonWithResult: pyWithResult.length,
+                toolNames: m.tools.map(t => t.name),
+              });
+            }
+          }
           return (
             <div
               key={m.id}

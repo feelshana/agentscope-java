@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import Icon from './Icon';
 import Markdown from './Markdown';
 import PythonCodeBlock from './PythonCodeBlock';
-import { ArtifactInfo, parseResult, artifactSrc, downloadArtifact } from './PythonCodeBlock';
+import { ArtifactInfo, parseResult, artifactSrc, downloadArtifact, deduplicateArtifacts } from './PythonCodeBlock';
 import { formatResult, prettyInput, ToolInspectPayload } from './ToolCallBlock';
 import { downloadQueryCsv } from '../api/datasets';
 
@@ -242,7 +242,7 @@ function PythonArtifactsView({ tools }: { tools: { input?: string; result?: stri
         result.push(...parsed.artifacts);
       } catch { /* skip */ }
     }
-    return result;
+    return deduplicateArtifacts(result);
   }, [tools]);
 
   return (

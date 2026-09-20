@@ -49,6 +49,48 @@ public final class RunPythonTool {
     private static final int EXEC_TIMEOUT_SECONDS = 120;
     private static final String OUTPUT_DIR = "outputs";
 
+    /**
+     * Minimal preamble: ensures Agg backend before any matplotlib import,
+     * then monkey-patches plt.savefig to force CJK fonts before every render.
+     * This intercepts savefig calls regardless of when the agent's code invokes them,
+     * guaranteeing Chinese labels render correctly even if the agent sets non-CJK fonts.
+     */
+    private static final String MATPLOTLIB_PREAMBLE = """
+            import matplotlib
+            matplotlib.use('Agg')
+            import matplotlib.pyplot as _plt
+            import os, glob
+
+            # ── Force CJK fonts and patch savefig to re-apply before every render ──
+            def _ensure_cjk_fonts():
+                _cache_dir = __import__('matplotlib').get_cachedir()
+                for _f in glob.glob(os.path.join(_cache_dir, 'fontlist-*.json')):
+                    try: os.remove(_f)
+                    except: pass
+                _plt.rcParams['font.sans-serif'] = [
+                    'Noto Sans CJK SC', 'Noto Sans SC',
+                    'WenQuanYi Micro Hei', 'WenQuanYi Zen Hei',
+                    'SimHei', 'AR PL UMing CN', 'DejaVu Sans'
+                ]
+                _plt.rcParams['axes.unicode_minus'] = False
+                import matplotlib.font_manager as _fm
+                _cjk_paths = (glob.glob('/usr/share/fonts/**/Noto*CJK*SC*.ttf', recursive=True)
+                            + glob.glob('/usr/share/fonts/**/NotoSans*CJK*.ttf', recursive=True)
+                            + glob.glob('/usr/share/fonts/**/WenQuanYi*.ttf', recursive=True))
+                if _cjk_paths:
+                    _fp = _fm.FontProperties(fname=_cjk_paths[0])
+                    _plt.rcParams['font.family'] = _fp.get_name()
+                _fm.fontManager = _fm.FontManager()
+
+            _ensure_cjk_fonts()
+
+            _orig_savefig = _plt.savefig
+            def _patched_savefig(*args, **kwargs):
+                _ensure_cjk_fonts()
+                return _orig_savefig(*args, **kwargs)
+            _plt.savefig = _patched_savefig
+            """;
+
     /** File extensions recognized as displayable artifacts. */
     private static final Set<String> ARTIFACT_EXTENSIONS =
             new LinkedHashSet<>(List.of(".png", ".jpg", ".jpeg", ".svg", ".csv", ".txt", ".md"));
@@ -100,9 +142,10 @@ public final class RunPythonTool {
         String sessionId = rc != null && rc.getSessionId() != null ? rc.getSessionId() : "default";
         String workDir = "/workspace/runpython/" + sanitize(sessionId);
 
-        // ── Step 1: Write the Python script into the sandbox ──
+        // ── Step 1: Write the Python script into the sandbox ─
         String scriptPath = workDir + "/analysis.py";
-        byte[] codeBytes = code.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        String fullCode = MATPLOTLIB_PREAMBLE + "\n" + code;
+        byte[] codeBytes = fullCode.getBytes(java.nio.charset.StandardCharsets.UTF_8);
         List<FileUploadResponse> uploadResults =
                 filesystem.uploadFiles(
                         rc, List.of(new AbstractMap.SimpleEntry<>(scriptPath, codeBytes)));
