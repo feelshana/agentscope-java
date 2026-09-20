@@ -189,7 +189,7 @@ dataagent:
     datasource:
       url: ${DATAAGENT_DATASET_DB_URL:jdbc:mysql://localhost:3306/data_agent?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
       username: ${DATAAGENT_DATASET_DB_USER:root}
-      password: ${DATAAGENT_DATASET_DB_PASSWORD:1234}
+      password: ${DATAAGENT_DATASET_DB_PASSWORD:123456}
 
   # ---- Optional pre-seeded analytics MySQL (tenant_storage_utilization / project_info) ----
   # Disabled by default so it never collides with the dataset store; enable and point it at the
@@ -197,8 +197,8 @@ dataagent:
   analytics:
     enabled: ${DATAAGENT_ANALYTICS_ENABLED:false}
     url: ${DATAAGENT_ANALYTICS_DB_URL:jdbc:mysql://127.0.0.1:3306/data_agent?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
-    username: ${DATAAGENT_ANALYTICS_DB_USER:123456}
-    password: ${DATAAGENT_ANALYTICS_DB_PASSWORD:1234}
+    username: ${DATAAGENT_ANALYTICS_DB_USER:root}
+    password: ${DATAAGENT_ANALYTICS_DB_PASSWORD:123456}
 
   # ---- Expose the platform metadata DB (H2) as a queryable source? Off by default. ----
   expose-app-db: ${DATAAGENT_EXPOSE_APP_DB:false}
