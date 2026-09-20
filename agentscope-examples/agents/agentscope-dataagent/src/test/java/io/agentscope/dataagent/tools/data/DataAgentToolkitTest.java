@@ -49,8 +49,10 @@ class DataAgentToolkitTest {
 
     @Test
     void prepareDataContextShowsTableStructure() {
-        assertThat(toolkit.prepareDataContext(SCOPE, RC, "demo-db", "tenant_storage_utilization"))
-                .contains("30 rows");
+        String out = toolkit.prepareDataContext(SCOPE, RC, "demo-db", "tenant_storage_utilization");
+        // Output comes from stored metadata, not DB query
+        assertThat(out).contains("Demo analytics DB");
+        assertThat(out).contains("storage-optimization analysis");
     }
 
     @Test

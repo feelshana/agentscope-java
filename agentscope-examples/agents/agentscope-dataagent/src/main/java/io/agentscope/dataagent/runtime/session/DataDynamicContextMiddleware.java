@@ -21,7 +21,6 @@ import io.agentscope.dataagent.dataset.DatasetContextProvider;
 import io.agentscope.dataagent.dataset.DatasetScope;
 import io.agentscope.dataagent.tools.data.DataSource;
 import io.agentscope.dataagent.tools.data.DataSourceRegistry;
-import io.agentscope.dataagent.tools.data.SqlConnector;
 import io.agentscope.harness.agent.middleware.HarnessRuntimeMiddleware;
 import java.util.HashSet;
 import java.util.List;
@@ -42,19 +41,12 @@ public class DataDynamicContextMiddleware implements HarnessRuntimeMiddleware {
 
     private static final Logger log = LoggerFactory.getLogger(DataDynamicContextMiddleware.class);
 
-    /** Maximum characters per table schema description to avoid prompt explosion. */
-    private static final int MAX_SCHEMA_CHARS_PER_TABLE = 2000;
-
     private final DataSourceRegistry registry;
-    private final SqlConnector sqlConnector;
     private final DatasetContextProvider contextProvider;
 
     public DataDynamicContextMiddleware(
-            DataSourceRegistry registry,
-            SqlConnector sqlConnector,
-            DatasetContextProvider contextProvider) {
+            DataSourceRegistry registry, DatasetContextProvider contextProvider) {
         this.registry = registry;
-        this.sqlConnector = sqlConnector;
         this.contextProvider = contextProvider;
     }
 
@@ -112,35 +104,17 @@ public class DataDynamicContextMiddleware implements HarnessRuntimeMiddleware {
 
         StringBuilder sb = new StringBuilder();
         sb.append("# [DATA_SOURCES_OVERVIEW]\n\n");
-        sb.append("以下是当前会话可用的数据源和表结构摘要：\n\n");
+        sb.append("以下是当前会话可用的数据源：\n\n");
 
         for (DataSource ds : sources) {
-            sb.append("## 数据源: ").append(ds.label());
+            sb.append("- ").append(ds.label());
             if (ds.description() != null && !ds.description().isBlank()) {
                 sb.append(" — ").append(ds.description());
             }
-            sb.append("\n");
-            sb.append("- ID: `").append(ds.id()).append("`\n");
-            sb.append("- 类型: ").append(ds.kind()).append("\n");
-
+            sb.append("\n  source_id: `").append(ds.id()).append("`");
             String tableName = ds.properties() != null ? ds.properties().get("tableName") : null;
-            if (tableName != null && !tableName.isBlank() && sqlConnector.supports(ds)) {
-                try {
-                    String schema = sqlConnector.describeTable(ds, tableName);
-                    if (schema != null && !schema.isBlank()) {
-                        sb.append("- 表名: `").append(tableName).append("`\n");
-                        sb.append("- 结构:\n```\n");
-                        String truncated =
-                                schema.length() > MAX_SCHEMA_CHARS_PER_TABLE
-                                        ? schema.substring(0, MAX_SCHEMA_CHARS_PER_TABLE)
-                                                + "\n... (truncated)"
-                                        : schema;
-                        sb.append(truncated).append("\n```\n");
-                    }
-                } catch (Exception e) {
-                    log.warn("Failed to describe table for ds={}: {}", ds.id(), e.getMessage());
-                    sb.append("- **[DATA_SOURCE_UNHEALTHY]** 表结构获取失败\n");
-                }
+            if (tableName != null && !tableName.isBlank()) {
+                sb.append(", 表名: `").append(tableName).append("`");
             }
             sb.append("\n");
         }

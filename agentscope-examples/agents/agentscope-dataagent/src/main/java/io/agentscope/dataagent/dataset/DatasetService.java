@@ -704,7 +704,17 @@ public class DatasetService implements DatasetContextProvider {
                 if (sb.length() > 0) {
                     sb.append('\n');
                 }
-                sb.append("### ").append(g.getName()).append('\n').append(content);
+                sb.append("### ").append(g.getName()).append('\n');
+                // Append ~100-char summary so the LLM can quickly gauge scope
+                String desc = g.getDescription();
+                String summary =
+                        (desc != null && !desc.isBlank())
+                                ? desc
+                                : content.length() <= 100
+                                        ? content.strip()
+                                        : content.substring(0, 100).strip() + "…";
+                sb.append("摘要：").append(summary).append('\n');
+                sb.append(content);
             }
         }
         return sb.toString();

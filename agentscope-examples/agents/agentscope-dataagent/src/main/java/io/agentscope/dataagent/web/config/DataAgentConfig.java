@@ -209,7 +209,8 @@ public class DataAgentConfig {
                 .stream(openaiStream)
                 .generateOptions(
                         GenerateOptions.builder()
-                                .additionalBodyParam("enable_thinking", false)
+                                .additionalBodyParam(
+                                        "thinking", java.util.Map.of("type", "disabled"))
                                 .build())
                 .build();
     }
@@ -351,9 +352,7 @@ public class DataAgentConfig {
                     // and appended to the system prompt on every turn.
                     b.middleware(
                             new DataDynamicContextMiddleware(
-                                    dataSourceRegistry,
-                                    sqlConnector,
-                                    contextProviderOpt.orElse(null)));
+                                    dataSourceRegistry, contextProviderOpt.orElse(null)));
                 });
 
         DataAgentBootstrap bootstrap = builder.build();
