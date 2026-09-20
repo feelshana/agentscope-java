@@ -16,7 +16,6 @@
 package io.agentscope.dataagent.web.api;
 
 import io.agentscope.dataagent.web.catalog.OntologyAgentService;
-import io.agentscope.dataagent.web.catalog.OntologyAgentService.OntologySummary;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
