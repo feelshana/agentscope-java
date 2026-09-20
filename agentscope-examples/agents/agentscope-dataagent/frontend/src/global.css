@@ -818,6 +818,15 @@ button:focus-visible {
   color: var(--da-primary);
   border-color: rgba(79, 70, 229, 0.25);
 }
+.da-chip-frozen {
+  color: var(--da-text-muted);
+  opacity: 0.6;
+  cursor: pointer;
+}
+.da-chip-frozen:hover {
+  opacity: 0.85;
+  background: var(--da-border);
+}
 .da-kbd {
   display: inline-block;
   padding: 1px 5px;

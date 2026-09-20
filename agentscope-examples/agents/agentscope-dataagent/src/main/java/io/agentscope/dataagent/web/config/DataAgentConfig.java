@@ -32,6 +32,7 @@ import io.agentscope.dataagent.tools.data.DataSourceRegistry;
 import io.agentscope.dataagent.tools.data.SqlConnector;
 import io.agentscope.dataagent.web.middleware.DebugLoggingMiddleware;
 import io.agentscope.dataagent.web.toolbus.ToolEventBus;
+import io.agentscope.dataagent.web.catalog.OntologyAgentService;
 import io.agentscope.dataagent.web.toolbus.ToolNotificationMiddleware;
 import io.agentscope.dataagent.web.workspace.UserSandboxRegistry;
 import io.agentscope.extensions.model.dashscope.DashScopeChatModel;
@@ -139,10 +140,11 @@ public class DataAgentConfig {
                     + "# 数据分析智能体\n\n"
                     + "你是一个数据分析智能体，帮助用户查询、分析和可视化数据。\n\n"
                     + "# 最高优先级原则\n\n"
-                    + "1. 显式需求优先：只做用户明确要求的分析，不主动扩展维度。\n"
-                    + "2. 每次工具调用前自检：这一步是否是完成用户请求的必要动作？\n"
-                    + "3. 已有结果足够时停止工具调用，直接回答。\n"
-                    + "4. 不编造数据，不确定时说明局限。\n\n"
+                    + "1. 语言要求：所有输出（包括思考过程、工具调用说明、最终回答）必须使用简体中文，禁止使用英文。\n"
+                    + "2. 显式需求优先：只做用户明确要求的分析，不主动扩展维度。\n"
+                    + "3. 每次工具调用前自检：这一步是否是完成用户请求的必要动作？\n"
+                    + "4. 已有结果足够时停止工具调用，直接回答。\n"
+                    + "5. 不编造数据，不确定时说明局限。\n\n"
                     + "# 工作流程\n\n"
                     + "1. 理解用户问题，确定显式要求的对象、维度、时间范围、条件。\n"
                     + "2. 查阅 system prompt 中的动态上下文：\n"
@@ -161,7 +163,7 @@ public class DataAgentConfig {
                     + "- 默认用 markdown 表格呈现结构化数据。\n"
                     + "- 不主动生成图表，除非用户原话包含趋势/对比/分布等视觉分析语义。\n"
                     + "- 不主动生成 PDF/Excel/PPT 等文件，除非用户明确要求。\n"
-                    + "- 用简体中文回答。}")
+                    + "- 用简体中文回答，包括思考过程和工具调用说明。禁止输出英文。}")
     private String agentSysPrompt;
 
     @Value("${dataagent.agent.name:data-agent}")
@@ -386,6 +388,22 @@ public class DataAgentConfig {
                 chatuiCfg.dmScope(),
                 chatuiCfg.bindings().size());
         return bootstrap;
+    }
+
+    /**
+     * Builds and registers isolated ontology agents from {@code ontologies.json}. Each ontology
+     * agent has only MCP tools and lives in its own session namespace, completely separate from
+     * the knowledge-base agents.
+     */
+    @Bean
+    public OntologyAgentService ontologyAgentService(
+            DataAgentBootstrap bootstrap,
+            Optional<Model> modelOpt,
+            ToolEventBus toolEventBus) {
+        OntologyAgentService svc =
+                new OntologyAgentService(bootstrap, modelOpt.orElse(null), toolEventBus);
+        svc.buildAll();
+        return svc;
     }
 
     /**

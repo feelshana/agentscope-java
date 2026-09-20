@@ -215,7 +215,7 @@ const TC_TOOL_LABELS: Record<string, string> = {
   read_knowledge: '读取业务规则',
   fetch_query_result: '复用查询结果',
   render_chart: '生成图表',
-  run_python: '执行 Python',
+  run_python: '沙箱中执行 Python',
   prepare_data_context: '准备字段与规则',
   run_sql: '执行 SQL',
 };

@@ -1,0 +1,52 @@
+/*
+ * Copyright 2024-2026 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package io.agentscope.dataagent.web.api;
+
+import io.agentscope.dataagent.web.catalog.OntologyAgentService;
+import io.agentscope.dataagent.web.catalog.OntologyAgentService.OntologySummary;
+import java.util.List;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Mono;
+
+/**
+ * REST endpoint exposing the list of available ontology agents. Each ontology maps to an isolated
+ * MCP-only agent that the frontend renders in a dedicated page ({@code /ontology}).
+ */
+@RestController
+@RequestMapping("/api/ontologies")
+public class OntologyController {
+
+    private final OntologyAgentService ontologyAgentService;
+
+    public OntologyController(OntologyAgentService ontologyAgentService) {
+        this.ontologyAgentService = ontologyAgentService;
+    }
+
+    /** View object returned to the frontend. */
+    public record OntologyVO(String id, String name) {}
+
+    /** Returns all successfully registered ontology agents. */
+    @GetMapping
+    public Mono<List<OntologyVO>> list() {
+        return Mono.fromCallable(
+                () ->
+                        ontologyAgentService.listOntologies().stream()
+                                .map(s -> new OntologyVO(s.id(), s.name()))
+                                .toList());
+    }
+}

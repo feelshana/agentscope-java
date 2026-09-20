@@ -9,6 +9,7 @@ import AppShell from './components/AppShell';
 import EditTierGate from './components/EditTierGate';
 
 import ChatPage from './pages/ChatPage';
+import OntologyChatPage from './pages/OntologyChatPage';
 import WorkspacePage from './pages/WorkspacePage';
 import SkillsPage from './pages/configure/SkillsPage';
 import SubagentsPage from './pages/configure/SubagentsPage';
@@ -76,6 +77,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 
           {/* Primary chat surface */}
           <Route path="/chat" element={<ChatPage />} />
+
+          {/* Isolated ontology MCP agent page */}
+          <Route path="/ontology" element={<OntologyChatPage />} />
 
           {/* Workspace browser (RUN-tier read-only allowed) */}
           <Route path="/workspace" element={<WorkspacePage />} />

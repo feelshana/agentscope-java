@@ -15,6 +15,7 @@ import Markdown from './Markdown';
 import PythonArtifactsPanel from './PythonArtifactsPanel';
 import { extractVegaSpec } from '../utils/charts';
 import { listGroups, DatasetGroup } from '../api/datasets';
+import { listOntologies, OntologyEntry } from '../api/ontologies';
 
 type Role = 'user' | 'assistant' | 'system';
 
@@ -352,9 +353,21 @@ export default function ChatPanel({
     return raw ? raw.split(',').filter(Boolean) : [];
   });
   const [groupPickerOpen, setGroupPickerOpen] = useState(false);
+  const [ontologies, setOntologies] = useState<OntologyEntry[]>([]);
+  const [selectedOntology, setSelectedOntology] = useState<string | null>(null);
+  const [ontologyPickerOpen, setOntologyPickerOpen] = useState(false);
+  /** Which picker is currently active (the other is frozen). Default: knowledge-base. */
+  const [chatMode, setChatMode] = useState<'kb' | 'ontology'>('kb');
   const threadRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const groupPickerRef = useRef<HTMLDivElement | null>(null);
+  const ontologyPickerRef = useRef<HTMLDivElement | null>(null);
+
+  /** Mutually-exclusive effective agent: ontology mode overrides knowledge-base mode. */
+  const effectiveAgentId = selectedOntology ? `ontology-${selectedOntology}` : agentId;
+  /** Whether each button is frozen (non-interactive for its own picker, but clickable to switch mode). */
+  const kbFrozen = chatMode === 'ontology';
+  const ontologyFrozen = chatMode === 'kb';
 
   useEffect(() => {
     if (!groupPickerOpen) return;
@@ -366,6 +379,25 @@ export default function ChatPanel({
     document.addEventListener('pointerdown', closePicker);
     return () => document.removeEventListener('pointerdown', closePicker);
   }, [groupPickerOpen]);
+
+  useEffect(() => {
+    if (!ontologyPickerOpen) return;
+    const closePicker = (event: PointerEvent) => {
+      if (!ontologyPickerRef.current?.contains(event.target as Node)) {
+        setOntologyPickerOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', closePicker);
+    return () => document.removeEventListener('pointerdown', closePicker);
+  }, [ontologyPickerOpen]);
+
+  // Mutual exclusivity: switching mode clears the other side's selection.
+  useEffect(() => {
+    if (chatMode === 'ontology') { setSelectedGroups([]); setGroupPickerOpen(false); }
+  }, [chatMode]);
+  useEffect(() => {
+    if (chatMode === 'kb') { setSelectedOntology(null); setOntologyPickerOpen(false); }
+  }, [chatMode]);
 
   useEffect(() => {
     if (!inspectorId || !onToolResolved) return;
@@ -382,22 +414,21 @@ export default function ChatPanel({
   useEffect(() => {
     let cancelled = false;
     listGroups()
-      .then(g => {
-        if (!cancelled) setGroups(g);
-      })
+      .then(g => { if (!cancelled) setGroups(g); })
       .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
+    listOntologies()
+      .then(list => { if (!cancelled) setOntologies(list); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
   }, []);
 
   const persistSession = useCallback((key: string | null) => {
     if (key) {
-      try { localStorage.setItem(storageKey(agentId), key); } catch { /* ignore quota */ }
+      try { localStorage.setItem(storageKey(effectiveAgentId), key); } catch { /* ignore quota */ }
     } else {
-      try { localStorage.removeItem(storageKey(agentId)); } catch { /* ignore */ }
+      try { localStorage.removeItem(storageKey(effectiveAgentId)); } catch { /* ignore */ }
     }
-  }, [agentId]);
+  }, [effectiveAgentId]);
 
   // On agent or URL session change: pick a session (URL > localStorage > backend default) and rehydrate.
   const urlSession = searchParams.get('session');
@@ -407,7 +438,7 @@ export default function ChatPanel({
     setInput('');
     setRestoring(true);
 
-    const stored = (() => { try { return localStorage.getItem(storageKey(agentId)); } catch { return null; } })();
+    const stored = (() => { try { return localStorage.getItem(storageKey(effectiveAgentId)); } catch { return null; } })();
 
     async function run() {
       // URL-provided session always wins: it may be a freshly-minted UUID that the
@@ -415,7 +446,7 @@ export default function ChatPanel({
       let key: string | null = urlSession;
       if (!key) {
         try {
-          const cur = await currentSession(agentId, stored ?? undefined);
+          const cur = await currentSession(effectiveAgentId, stored ?? undefined);
           key = cur.sessionKey || stored || null;
         } catch {
           key = stored || null;
@@ -425,7 +456,7 @@ export default function ChatPanel({
       setSessionKey(key);
       if (key) {
         try {
-          const list = await fetchTurns(agentId, key);
+          const list = await fetchTurns(effectiveAgentId, key);
           if (cancelled) return;
           setMessages(turnsToMessages(list));
         } catch {
@@ -443,7 +474,7 @@ export default function ChatPanel({
     run();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agentId, urlSession]);
+  }, [effectiveAgentId, urlSession]);
 
   useEffect(() => {
     threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight });
@@ -454,7 +485,10 @@ export default function ChatPanel({
     onTitle?.(firstUser ? firstUser.text.replace(/\s+/g, ' ').trim().slice(0, 40) : '');
   }, [messages, onTitle]);
 
-  const canSend = useMemo(() => !busy && !restoring && input.trim().length > 0, [busy, restoring, input]);
+  const canSend = useMemo(
+    () => !busy && !restoring && !!effectiveAgentId && input.trim().length > 0,
+    [busy, restoring, effectiveAgentId, input],
+  );
 
   async function handleSend() {
     if (!canSend) return;
@@ -467,7 +501,7 @@ export default function ChatPanel({
     let lastToolEventSeq = -1;
 
     try {
-      for await (const evt of stream(agentId, {
+      for await (const evt of stream(effectiveAgentId, {
         message: text,
         sessionKey: sessionKey ?? undefined,
         groupIds: selectedGroups.length ? selectedGroups : undefined,
@@ -676,13 +710,16 @@ export default function ChatPanel({
             <div ref={groupPickerRef} style={{ position: 'relative' }}>
               <button
                 type="button"
-                className={selectedGroups.length ? 'da-chip da-chip-active' : 'da-chip'}
-                onClick={() => setGroupPickerOpen(open => !open)}
+                className={`da-chip${!kbFrozen && (selectedGroups.length || selectedOntology) ? ' da-chip-active' : ''}${kbFrozen ? ' da-chip-frozen' : ''}`}
+                onClick={() => kbFrozen ? setChatMode('kb') : setGroupPickerOpen(open => !open)}
+                title={kbFrozen ? '点击切换回知识库模式' : '选择知识库范围'}
               >
                 <Icon name="book" size="sm" />{' '}
-                {selectedGroups.length
-                  ? groups.filter(g => selectedGroups.includes(g.id)).map(g => g.name).join('、')
-                  : '知识库（全部）'}{' '}
+                {selectedOntology
+                  ? '知识库'
+                  : selectedGroups.length
+                    ? groups.filter(g => selectedGroups.includes(g.id)).map(g => g.name).join('、')
+                    : '知识库（全部）'}{' '}
                 ▾
               </button>
               {groupPickerOpen && (
@@ -721,9 +758,42 @@ export default function ChatPanel({
                 </div>
               )}
             </div>
-            <button type="button" className="da-chip" disabled title="等待本体 MCP 服务接入">
-              本体（暂无服务）
-            </button>
+            <div ref={ontologyPickerRef} style={{ position: 'relative' }}>
+              <button
+                type="button"
+                className={`da-chip${!ontologyFrozen && selectedOntology ? ' da-chip-active' : ''}${ontologyFrozen ? ' da-chip-frozen' : ''}`}
+                onClick={() => ontologyFrozen ? setChatMode('ontology') : setOntologyPickerOpen(open => !open)}
+                title={ontologyFrozen ? '点击切换至本体模式' : (ontologies.length ? '选择本体进行数据查询' : '暂无可用本体')}
+              >
+                <Icon name="graph" size="sm" />{' '}
+                {selectedOntology
+                  ? ontologies.find(o => o.id === selectedOntology)?.name ?? '本体'
+                  : ontologies.length ? '本体' : '本体（暂无服务）'}{' '}
+                {ontologies.length ? '▾' : ''}
+              </button>
+              {ontologyPickerOpen && (
+                <div style={S.picker}>
+                  {ontologies.map(o => (
+                    <button
+                      key={o.id}
+                      className="da-navitem"
+                      onClick={() => {
+                        setSelectedOntology(o.id);
+                        setSelectedGroups([]);
+                        setOntologyPickerOpen(false);
+                      }}
+                    >
+                      <Icon name="graph" size="sm" /> {o.name}
+                    </button>
+                  ))}
+                  {ontologies.length === 0 && (
+                    <div className="da-small" style={{ padding: 6 }}>
+                      暂无可用本体
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
             <button type="button" className="da-chip" disabled title="对话级模型切换暂未接入">
               大模型（自动）
             </button>
