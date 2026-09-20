@@ -320,14 +320,9 @@ public final class DataAgentToolkit {
                 sqlConnector.runSqlPreview(
                         ds.get(), sql, question, rowLimit != null ? rowLimit : 0);
 
-        StringBuilder sb = new StringBuilder();
-        sb.append("## 查询结果\n\n");
-        if (question != null && !question.isBlank()) {
-            sb.append("**业务问题：** ").append(question).append("\n\n");
-        }
-        sb.append("**SQL：**\n```sql\n").append(sql).append("\n```\n\n");
-        sb.append(result);
-        return sb.toString();
+        // runSqlPreview already includes question, SQL, and result table —
+        // just prepend a section header to avoid duplicating them.
+        return "## 查询结果\n\n" + result;
     }
 
     @Tool(
