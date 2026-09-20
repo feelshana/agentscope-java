@@ -300,7 +300,7 @@ export default function KnowledgeGraphView({ groupId }: { groupId: string }) {
             <div className="da-skeleton" style={{ width: 56, height: 56, borderRadius: 999 }} />
           </div>
         )}
-        <div className="da-toolbar" style={{ position: 'absolute', top: 12, left: 12, right: 12 }}>
+        <div className="da-toolbar" style={{ position: 'absolute', top: 12, left: 12, right: 12, zIndex: 2 }}>
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
