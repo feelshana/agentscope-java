@@ -53,10 +53,12 @@ public class AgentDraftService {
     private static final Logger log = LoggerFactory.getLogger(AgentDraftService.class);
     private static final String PROMPT_RESOURCE = "classpath:prompts/agent-draft.md";
     private static final String FALLBACK_PROMPT =
-            "You are an agent designer. Given a one-sentence description, return strict JSON with"
-                    + " keys name, description, sysPrompt, suggestedTools (array of strings),"
-                    + " suggestedSkills (array of {name,content}), suggestedSubagents (array of"
-                    + " {name,content}). User description: {{DESCRIPTION}}. Output JSON only.";
+            "你是一个代理设计师。根据一句话描述，返回严格的 JSON，包含以下键："
+                    + "name（名称）、description（描述）、sysPrompt（系统提示词）、"
+                    + "suggestedTools（建议工具，字符串数组）、"
+                    + "suggestedSkills（建议技能，{name,content} 数组）、"
+                    + "suggestedSubagents（建议子代理，{name,content} 数组）。"
+                    + "用户描述：{{DESCRIPTION}}。仅输出 JSON。";
     private static final Duration CALL_TIMEOUT = Duration.ofSeconds(60);
 
     /** Longer budget for generic blocking chats (e.g. graph extraction) that return large JSON. */

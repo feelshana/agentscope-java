@@ -268,7 +268,7 @@ public final class DataAgentToolkit {
         Matcher m = DATASET_TABLE.matcher(sql.toLowerCase());
         while (m.find()) {
             if (!allowed.contains(m.group())) {
-                return "error: query references a dataset table you do not own: " + m.group();
+                return "error: 查询引用了不属于您的数据表: " + m.group();
             }
         }
         return null;
@@ -361,34 +361,25 @@ public final class DataAgentToolkit {
                     不要自己构造图表配置，只传数据即可。\
                     """)
     public String renderChart(
-            @ToolParam(
-                            name = "question",
-                            description = "The user question this chart answers",
-                            required = false)
+            @ToolParam(name = "question", description = "本图表回答的用户问题（中文）", required = false)
                     String question,
-            @ToolParam(name = "columns", description = "Column names of the query result, in order")
-                    List<String> columns,
-            @ToolParam(
-                            name = "rows",
-                            description =
-                                    "Result rows; each row is a list of cell values as strings")
+            @ToolParam(name = "columns", description = "查询结果的列名，按顺序排列") List<String> columns,
+            @ToolParam(name = "rows", description = "结果数据行；每行是一个列表，单元格值为字符串")
                     List<List<String>> rows,
             @ToolParam(
                             name = "mark_line_value",
                             description =
-                                    "Optional KPI target/reference value to draw as a dashed red"
-                                            + " horizontal line (e.g. 20000000 from the knowledge"
-                                            + " doc). Omit when there is no target.",
+                                    "可选的 KPI 目标/参考值，以红色虚线水平线呈现" + "（如知识文档中的 20000000）。无目标时省略。",
                             required = false)
                     String markLineValue,
             @ToolParam(
                             name = "mark_line_label",
-                            description = "Optional label for the reference line, e.g. 日均目标2000万",
+                            description = "参考线的标签，如 日均目标2000万",
                             required = false)
                     String markLineLabel) {
         ChartBuilder.BuiltChart chart = ChartBuilder.build(columns, rows, question);
         if (chart == null) {
-            return "error: data is not chartable (need >=1 numeric column and >1 row)";
+            return "error: 数据不适合绘制图表（需要至少1列数值且多于1行）";
         }
         if (markLineValue != null && !markLineValue.isBlank()) {
             try {
@@ -409,7 +400,7 @@ public final class DataAgentToolkit {
                         new ChartOptionEntity(chartId, MAPPER.writeValueAsString(chart.option())));
                 payload.put("chartId", chartId);
             } catch (JsonProcessingException e) {
-                return "error: failed to serialize chart option";
+                return "error: 序列化图表配置失败";
             }
         } else {
             payload.put("option", chart.option());
@@ -417,7 +408,7 @@ public final class DataAgentToolkit {
         try {
             return MAPPER.writeValueAsString(payload);
         } catch (JsonProcessingException e) {
-            return "error: failed to serialize chart payload";
+            return "error: 序列化图表数据失败";
         }
     }
 }

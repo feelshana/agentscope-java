@@ -41,58 +41,40 @@ public final class OutboundTool {
             name = "outbound_send",
             description =
                     """
-                    Proactively deliver a message into a registered IM channel \
-                    (e.g. DingTalk, WeCom). Use to push notifications, status updates, or \
-                    follow-ups when no incoming user message is in flight. Specify channel_id \
-                    (a registered channel), peer_kind (DIRECT | CHANNEL | GROUP | THREAD), and \
-                    peer_id (the provider-specific user or group id). Either text or markdown \
-                    must be supplied. Returns "ok" on success or a short error description.\
+                    主动向已注册的 IM 频道发送消息（如钉钉、企业微信）。\
+                    用于在没有用户 incoming 消息时推送通知、状态更新或跟进消息。\
+                    指定 channel_id（已注册的频道）、peer_kind（DIRECT | CHANNEL | GROUP | THREAD）\
+                    和 peer_id（提供商特定的用户或群组 ID）。text 和 markdown 二选一。\
+                    成功返回 "ok"，失败返回简短错误描述。\
                     """)
     public String send(
-            @ToolParam(
-                            name = "channel_id",
-                            description = "Registered channel id (e.g. 'wecom-prod')")
+            @ToolParam(name = "channel_id", description = "已注册的频道 ID（如 'wecom-prod'）")
                     String channelId,
             @ToolParam(
                             name = "peer_kind",
-                            description =
-                                    "DIRECT | CHANNEL | GROUP | THREAD; defaults to DIRECT when"
-                                            + " omitted")
+                            description = "DIRECT | CHANNEL | GROUP | THREAD；省略时默认 DIRECT")
                     String peerKind,
-            @ToolParam(name = "peer_id", description = "Target user / group / channel id")
-                    String peerId,
-            @ToolParam(
-                            name = "text",
-                            description =
-                                    "Plain-text message body; mutually exclusive with markdown",
-                            required = false)
+            @ToolParam(name = "peer_id", description = "目标用户/群组/频道 ID") String peerId,
+            @ToolParam(name = "text", description = "纯文本消息内容；与 markdown 互斥", required = false)
                     String text,
             @ToolParam(
                             name = "markdown",
-                            description = "Markdown message body; mutually exclusive with text",
+                            description = "Markdown 格式消息内容；与 text 互斥",
                             required = false)
                     String markdown,
             @ToolParam(
                             name = "account_id",
-                            description =
-                                    "Optional multi-account dimension (corp/app instance) when"
-                                            + " the channel hosts more than one account",
+                            description = "可选的多账户维度标识（企业/应用实例），" + "当频道托管多个账户时使用",
                             required = false)
                     String accountId,
-            @ToolParam(
-                            name = "thread_id",
-                            description = "Optional thread anchor for threaded replies",
-                            required = false)
+            @ToolParam(name = "thread_id", description = "可选的话题锚点，用于话题回复", required = false)
                     String threadId,
             @ToolParam(
                             name = "agent_id",
                             description =
-                                    "Optional caller agent id. When set, the service verifies that"
-                                        + " the channel's routing for this peer resolves to the"
-                                        + " same agent and refuses delivery otherwise — preventing"
-                                        + " one agent from posting into a channel/peer bound to a"
-                                        + " different agent. Omit for backward-compatible behaviour"
-                                        + " with no caller check.",
+                                    "可选的调用方代理 ID。设置后，服务会验证该频道对此 peer 的"
+                                            + "路由是否指向同一代理，否则拒绝投递——防止一个代理"
+                                            + "向绑定到其他代理的频道/peer 发送消息。省略则不进行调用方检查。",
                             required = false)
                     String agentId) {
         try {

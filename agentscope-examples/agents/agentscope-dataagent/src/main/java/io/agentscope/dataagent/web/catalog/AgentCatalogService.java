@@ -331,9 +331,7 @@ public class AgentCatalogService {
         String sysPrompt =
                 draft.sysPrompt() != null && !draft.sysPrompt().isBlank()
                         ? draft.sysPrompt()
-                        : (entry.sysPrompt() != null
-                                ? entry.sysPrompt()
-                                : "You are a helpful assistant.");
+                        : (entry.sysPrompt() != null ? entry.sysPrompt() : "你是一个有帮助的助手。");
 
         StringBuilder agentsMd = new StringBuilder();
         agentsMd.append("# ").append(displayName).append("\n\n");
@@ -759,10 +757,7 @@ public class AgentCatalogService {
 
         // Context management: evict large tool results to files so context stays lean.
         b.toolResultEviction(
-                ToolResultEvictionConfig.builder()
-                        .maxResultChars(4_000)
-                        .previewChars(500)
-                        .build());
+                ToolResultEvictionConfig.builder().maxResultChars(4_000).previewChars(500).build());
 
         // Compaction: higher trigger + aggressive pruning to reduce LLM summarization cost.
         b.compaction(

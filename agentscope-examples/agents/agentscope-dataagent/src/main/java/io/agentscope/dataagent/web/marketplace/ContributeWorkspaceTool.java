@@ -59,60 +59,46 @@ public final class ContributeWorkspaceTool {
             name = "contribute_to_workspace",
             description =
                     """
-                    Nominate one or more workspace files (skill, sub-agent, memory snippet, \
-                    AGENTS.md, or knowledge document) for promotion to the agent's shared \
-                    workspace, so other users of the same agent can benefit from them. The tool \
-                    reads the file content from the caller's sandbox; do NOT inline content into \
-                    arguments. Submits a PENDING contribution that an admin must approve before \
-                    it is materialised. Ask the user before calling this tool. Returns \
-                    "ok: contribution #N submitted, awaiting admin approval" on success, or an \
-                    error string starting with "error:".\
+                    将一个或多个工作区文件（skill、sub-agent、memory 片段、\
+                    AGENTS.md 或知识文档）提名升级到代理的共享工作区，\
+                    以便同一代理的其他用户也能受益。工具从调用者的沙箱中读取文件内容；\
+                    请勿将内容内联到参数中。提交一个待审批（PENDING）的贡献，\
+                    需要管理员批准后才能生效。调用此工具前请先征得用户同意。\
+                    成功返回 "ok: contribution #N submitted, awaiting admin approval"，\
+                    或返回以 "error:" 开头的错误信息。\
                     """)
     public String contribute(
             @ToolParam(
                             name = "source_user_id",
-                            description =
-                                    "Identity of the user whose workspace this artifact came from."
-                                            + " Take this from the active session context.")
+                            description = "来源用户的身份标识，即该文件所属的用户。" + "从当前活跃会话上下文中获取。")
                     String sourceUserId,
-            @ToolParam(
-                            name = "source_agent_id",
-                            description =
-                                    "Agent id the source files live under. The tool reads from"
-                                            + " this user's sandbox of this agent.")
+            @ToolParam(name = "source_agent_id", description = "源文件所在的代理 ID。工具从此用户的该代理沙箱中读取文件。")
                     String sourceAgentId,
             @ToolParam(
                             name = "target_type",
                             description =
-                                    "One of: skill | subagent | memory | agents_md | knowledge")
+                                    "目标类型，可选值: skill | subagent | memory | agents_md | knowledge")
                     String targetType,
             @ToolParam(
                             name = "target_path",
                             description =
-                                    "Where the artifact should land under"
-                                        + " shared/agents/<targetAgentId>/<targetType>/. For a"
-                                        + " skill, the bundle directory name. For subagent / memory"
-                                        + " / knowledge, the file path. For agents_md, the literal"
-                                        + " 'AGENTS.md'.")
+                                    "文件在 shared/agents/<targetAgentId>/<targetType>/ 下的"
+                                            + "目标路径。skill 类型为 bundle 目录名；subagent/memory/knowledge"
+                                            + "为文件路径；agents_md 为字面值 'AGENTS.md'。")
                     String targetPath,
             @ToolParam(
                             name = "source_paths",
                             description =
-                                    "Comma-separated list of workspace-relative source paths to"
-                                            + " harvest from the caller's sandbox. For single-file"
-                                            + " target types pass exactly one path; for skill"
-                                            + " bundles pass one path per file.")
+                                    "逗号分隔的源文件路径列表（相对于工作区），"
+                                            + "从调用者沙箱中采集。单文件目标类型传一个路径；"
+                                            + "skill bundle 传每个文件的路径。")
                     String sourcePaths,
             @ToolParam(
                             name = "target_agent_id",
-                            description = "Agent id to promote into; defaults to source_agent_id.",
+                            description = "目标代理 ID；默认与 source_agent_id 相同。",
                             required = false)
                     String targetAgentId,
-            @ToolParam(
-                            name = "rationale",
-                            description =
-                                    "One- or two-sentence explanation for the reviewing admin.",
-                            required = false)
+            @ToolParam(name = "rationale", description = "向审核管理员说明的一两句话理由。", required = false)
                     String rationale) {
         try {
             List<FileEntry> payload =

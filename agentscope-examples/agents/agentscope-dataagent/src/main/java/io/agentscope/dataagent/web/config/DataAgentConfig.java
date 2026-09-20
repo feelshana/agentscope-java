@@ -135,8 +135,7 @@ public class DataAgentConfig {
     private boolean dashscopeStream;
 
     @Value(
-            "${dataagent.agent.sys-prompt:"
-                    + "# 数据分析智能体\n\n"
+            "${dataagent.agent.sys-prompt:# 数据分析智能体\n\n"
                     + "你是一个数据分析智能体，帮助用户查询、分析和可视化数据。\n\n"
                     + "# 最高优先级原则\n\n"
                     + "1. 显式需求优先：只做用户明确要求的分析，不主动扩展维度。\n"
@@ -148,8 +147,7 @@ public class DataAgentConfig {
                     + "2. 查阅 system prompt 中的动态上下文：\n"
                     + "   - [DATA_SOURCES_OVERVIEW] — 可用数据源和表结构\n"
                     + "   - [KNOWLEDGE_BASE_OVERVIEW] — 可用知识库\n"
-                    + "3. 如果需要结构化数据，先用 prepare_data_context 确认列细节，"
-                    + "再用 query_structured_data 查询。\n"
+                    + "3. 如果需要结构化数据，先用 prepare_data_context 确认列细节，再用 query_structured_data 查询。\n"
                     + "4. 如果是知识/文档类问题，使用 retrieve_evidence。\n"
                     + "5. 如果需要图表，使用 render_chart。\n"
                     + "6. 结果足够时直接回答，不要为凑数继续调用工具。\n\n"
@@ -162,7 +160,8 @@ public class DataAgentConfig {
                     + "- 不主动生成图表，除非用户原话包含趋势/对比/分布等视觉分析语义。\n"
                     + "- 不主动生成 PDF/Excel/PPT 等文件，除非用户明确要求。\n"
                     + "- 所有输出必须使用简体中文：包括思考过程、工具调用说明、图表标题、轴标签、图例、代码注释等。\n"
-                    + "- 生成 matplotlib 图表时，标题、轴标签、图例必须用中文，例如：plt.title('活跃用户 vs 目标') 而非 plt.title('Active Users vs Target')。}")
+                    + "- 生成 matplotlib 图表时，标题、轴标签、图例必须用中文，例如：plt.title('活跃用户 vs 目标') 而非"
+                    + " plt.title('Active Users vs Target')。}")
     private String agentSysPrompt;
 
     @Value("${dataagent.agent.name:data-agent}")

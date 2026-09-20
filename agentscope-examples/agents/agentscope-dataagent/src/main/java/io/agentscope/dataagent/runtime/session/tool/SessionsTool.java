@@ -103,24 +103,21 @@ public class SessionsTool {
             name = "sessions_spawn",
             description =
                     """
-                    Spawn an isolated subagent session for delegated or background work. \
-                    mode="run" (default) executes task immediately and returns reply. \
-                    mode="session" registers a persistent session for follow-up sends via \
-                    sessions_send. timeout_seconds=0 fires and forgets — returns task_id for \
-                    task_output and queues a completion record for \
-                    sessions_pending_completions. Returns run_id and session_key for follow-up \
-                    with sessions_send.\
+                    创建一个隔离的子代理会话，用于委派或后台任务。\
+                    mode="run"（默认）立即执行任务并返回结果。\
+                    mode="session" 注册一个持久会话，后续可通过 sessions_send 继续发送消息。\
+                    timeout_seconds=0 表示即发即忘——返回 task_id 供 task_output 查询，\
+                    并将完成记录放入 sessions_pending_completions 队列。\
+                    返回 run_id 和 session_key 供后续 sessions_send 使用。\
                     """)
     public String sessionsSpawn(
             RuntimeContext runtimeContext,
-            @ToolParam(name = "agent_id", description = "Subagent identifier to instantiate")
-                    String agentId,
+            @ToolParam(name = "agent_id", description = "要实例化的子代理标识符") String agentId,
             @ToolParam(
                             name = "task",
                             description =
                                     """
-                                    Initial task or prompt to send to the spawned agent. Omit to \
-                                    create a session without running a task.\
+                                    发送给子代理的初始任务或提示词。省略则仅创建会话而不执行任务。\
                                     """,
                             required = false)
                     String task,
@@ -128,8 +125,7 @@ public class SessionsTool {
                             name = "label",
                             description =
                                     """
-                                    Optional human-readable label for referencing this session via \
-                                    sessions_send or sessions_list\
+                                    可选的人类可读标签，用于通过 sessions_send 或 sessions_list 引用此会话\
                                     """,
                             required = false)
                     String label,
@@ -137,8 +133,7 @@ public class SessionsTool {
                             name = "mode",
                             description =
                                     """
-                                    "run" (one-shot, default) or "session" (persistent, register \
-                                    now and send later via sessions_send)\
+                                    "run"（一次性执行，默认）或 "session"（持久会话，注册后通过 sessions_send 发送消息）\
                                     """,
                             required = false)
                     String mode,
@@ -146,8 +141,8 @@ public class SessionsTool {
                             name = "timeout_seconds",
                             description =
                                     """
-                                    Max seconds to wait for the task result. 0=fire-and-forget, \
-                                    returns task_id. Default: 30. Max: 600.\
+                                    等待任务结果的最大秒数。0=即发即忘，返回 task_id。\
+                                    默认: 30。最大: 600。\
                                     """,
                             required = false)
                     Integer timeoutSeconds) {
@@ -208,7 +203,7 @@ public class SessionsTool {
                         agentId, canonLabel, parentSessionKey, parentSpawnDepth);
 
         if ("error".equals(reg.status())) {
-            return "Error: " + reg.error();
+            return "错误: " + reg.error();
         }
 
         String spawnedInfo = formatSpawnInfo(reg);
@@ -259,8 +254,8 @@ public class SessionsTool {
             name = "sessions_send",
             description =
                     """
-                    Send a message to an existing managed session by session_key or label. \
-                    timeout_seconds=0 fires and forgets — returns task_id for task_output.\
+                    向已存在的管理会话发送消息（通过 session_key 或 label 定位）。\
+                    timeout_seconds=0 表示即发即忘——返回 task_id 供 task_output 查询。\
                     """)
     public String sessionsSend(
             RuntimeContext runtimeContext,
@@ -268,8 +263,7 @@ public class SessionsTool {
                             name = "session_key",
                             description =
                                     """
-                                    AgentStateStore key returned by sessions_spawn. Mutually exclusive \
-                                    with label.\
+                                    sessions_spawn 返回的 AgentStateStore 键。与 label 互斥。\
                                     """,
                             required = false)
                     String sessionKey,
@@ -277,21 +271,17 @@ public class SessionsTool {
                             name = "label",
                             description =
                                     """
-                                    AgentStateStore label assigned at spawn time. Mutually exclusive with \
-                                    session_key.\
+                                    创建会话时分配的标签。与 session_key 互斥。\
                                     """,
                             required = false)
                     String label,
-            @ToolParam(
-                            name = "message",
-                            description = "Message or follow-up task to send to the session")
-                    String message,
+            @ToolParam(name = "message", description = "发送给会话的消息或后续任务") String message,
             @ToolParam(
                             name = "timeout_seconds",
                             description =
                                     """
-                                    Max seconds to wait for a reply. 0=fire-and-forget, returns \
-                                    task_id. Default: 30. Max: 600.\
+                                    等待回复的最大秒数。0=即发即忘，返回 task_id。\
+                                    默认: 30。最大: 600。\
                                     """,
                             required = false)
                     Integer timeoutSeconds) {
@@ -299,13 +289,13 @@ public class SessionsTool {
         boolean hasKey = sessionKey != null && !sessionKey.isBlank();
         boolean hasLabel = label != null && !label.isBlank();
         if (hasKey && hasLabel) {
-            return "Error: Provide either session_key or label, not both.";
+            return "错误: 请提供 session_key 或 label，但不能同时提供两者。";
         }
         if (!hasKey && !hasLabel) {
-            return "Error: Either session_key or label is required.";
+            return "错误: 必须提供 session_key 或 label。";
         }
         if (message == null || message.isBlank()) {
-            return "Error: message is required";
+            return "错误: message 不能为空";
         }
 
         String target = hasKey ? sessionKey.trim() : label.trim();
@@ -361,29 +351,20 @@ public class SessionsTool {
             name = "sessions_list",
             description =
                     """
-                    List managed subagent sessions with optional filters. Returns session_key, \
-                    agent_id, label, kind, spawn_depth, session_file_path, and last_activity_ms \
-                    for each session.\
+                    列出受管理的子代理会话，支持可选过滤。返回每个会话的 session_key、\
+                    agent_id、label、kind、spawn_depth、session_file_path 和 last_activity_ms。\
                     """)
     public String sessionsList(
             @ToolParam(
                             name = "kinds",
                             description =
                                     """
-                                    Comma-separated session kinds to include (subagent, main). \
-                                    Default: all.\
+                                    逗号分隔的会话类型过滤（subagent, main）。默认: 全部。\
                                     """,
                             required = false)
                     String kinds,
-            @ToolParam(
-                            name = "limit",
-                            description = "Maximum number of sessions to return",
-                            required = false)
-                    Integer limit,
-            @ToolParam(
-                            name = "active_minutes",
-                            description = "Only include sessions active within the last N minutes",
-                            required = false)
+            @ToolParam(name = "limit", description = "最大返回会话数", required = false) Integer limit,
+            @ToolParam(name = "active_minutes", description = "仅包含最近 N 分钟内活跃的会话", required = false)
                     Integer activeMinutes) {
 
         Set<String> kindFilter = parseKinds(kinds);
@@ -394,11 +375,10 @@ public class SessionsTool {
                 sessionAgentManager.list(kindFilter, effectiveLimit, effectiveActive);
 
         if (sessions.isEmpty()) {
-            return "No managed sessions.";
+            return "没有受管理的会话。";
         }
 
-        StringBuilder sb =
-                new StringBuilder("Managed sessions (").append(sessions.size()).append("):\n");
+        StringBuilder sb = new StringBuilder("受管理的会话（").append(sessions.size()).append("）：\n");
         for (SessionView v : sessions) {
             sb.append("- session_key: ").append(v.sessionKey()).append("\n");
             sb.append("  agent_id: ").append(v.agentId()).append("\n");
@@ -431,30 +411,24 @@ public class SessionsTool {
             name = "sessions_history",
             description =
                     """
-                    Read the conversation transcript of a managed session. Transcripts are \
-                    written when messages are offloaded from memory. Returns the \
-                    session_file_path and transcript content.\
+                    读取管理会话的对话记录。对话记录在消息从内存卸载时写入。\
+                    返回 session_file_path 和记录内容。\
                     """)
     public String sessionsHistory(
-            @ToolParam(
-                            name = "session_key",
-                            description = "AgentStateStore key or label of the target session")
+            @ToolParam(name = "session_key", description = "目标会话的 AgentStateStore 键或标签")
                     String sessionKey,
-            @ToolParam(
-                            name = "limit",
-                            description = "Max transcript lines to return from the end (0 = all)",
-                            required = false)
+            @ToolParam(name = "limit", description = "从末尾返回的最大行数（0 = 全部）", required = false)
                     Integer limit) {
 
         if (sessionKey == null || sessionKey.isBlank()) {
-            return "Error: session_key is required";
+            return "错误: session_key 不能为空";
         }
 
         int effectiveLimit = limit != null && limit > 0 ? limit : 0;
         HistoryResult result = sessionAgentManager.history(sessionKey.trim(), effectiveLimit);
 
         if (result.error() != null) {
-            return "Error: " + result.error();
+            return "错误: " + result.error();
         }
         return "session_key: "
                 + result.sessionKey()
@@ -472,25 +446,21 @@ public class SessionsTool {
             name = "sessions_pending_completions",
             description =
                     """
-                    Drain structured subagent completion events for this requester session \
-                    (OpenClaw-style announce queue). Use requester_session_key matching your \
-                    session_key when you spawned children, or omit for the top-level harness. \
-                    Each entry includes announce_text for merging into your next reply.\
+                    排空当前请求会话的子代理完成事件队列（announce 队列）。\
+                    requester_session_key 应匹配您创建子代理时的 session_key，\
+                    或省略以使用顶层主会话。每条记录包含 announce_text，\
+                    可合并到您的下一次回复中。\
                     """)
     public String sessionsPendingCompletions(
             @ToolParam(
                             name = "requester_session_key",
                             description =
                                     """
-                                    AgentStateStore key of the requester that spawned subagents. Omit to \
-                                    use the default root requester (main harness).\
+                                    创建子代理的请求者的 AgentStateStore 键。省略则使用默认根请求者（主会话）。\
                                     """,
                             required = false)
                     String requesterSessionKey,
-            @ToolParam(
-                            name = "limit",
-                            description = "Max events to drain (default 10)",
-                            required = false)
+            @ToolParam(name = "limit", description = "最大排空事件数（默认 10）", required = false)
                     Integer limit) {
 
         String rk =
@@ -500,14 +470,10 @@ public class SessionsTool {
         int lim = limit != null && limit > 0 ? limit : 10;
         List<PendingCompletion> pending = sessionAgentManager.drainPendingCompletions(rk, lim);
         if (pending.isEmpty()) {
-            return "No pending completion events for requester_session_key=" + rk + ".";
+            return "requester_session_key=" + rk + " 没有待处理的完成事件。";
         }
         StringBuilder sb = new StringBuilder();
-        sb.append("Pending completions (")
-                .append(pending.size())
-                .append(") for ")
-                .append(rk)
-                .append(":\n\n");
+        sb.append("待处理完成事件（").append(pending.size()).append("）来自 ").append(rk).append(":\n\n");
         for (PendingCompletion p : pending) {
             sb.append("---\n");
             sb.append("run_id: ").append(p.runId()).append("\n");
