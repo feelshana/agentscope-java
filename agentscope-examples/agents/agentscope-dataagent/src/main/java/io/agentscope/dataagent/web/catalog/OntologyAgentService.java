@@ -65,7 +65,8 @@ public class OntologyAgentService {
     private final Map<String, OntologyConfigEntry> ontologies = new LinkedHashMap<>();
 
     /** Gateway agent IDs that have been successfully registered. */
-    private final ConcurrentHashMap<String, String> registeredGatewayIds = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, String> registeredGatewayIds =
+            new ConcurrentHashMap<>();
 
     public OntologyAgentService(
             DataAgentBootstrap bootstrap, Model model, ToolEventBus toolEventBus) {
@@ -159,10 +160,7 @@ public class OntologyAgentService {
 
         // Context management: evict large tool results to files
         b.toolResultEviction(
-                ToolResultEvictionConfig.builder()
-                        .maxResultChars(4_000)
-                        .previewChars(500)
-                        .build());
+                ToolResultEvictionConfig.builder().maxResultChars(4_000).previewChars(500).build());
 
         // Compaction: higher trigger + aggressive pruning
         b.compaction(
@@ -190,7 +188,8 @@ public class OntologyAgentService {
         }
         try {
             String json = Files.readString(configFile);
-            return objectMapper.readValue(json, new TypeReference<Map<String, OntologyConfigEntry>>() {});
+            return objectMapper.readValue(
+                    json, new TypeReference<Map<String, OntologyConfigEntry>>() {});
         } catch (IOException e) {
             log.warn("Failed to read ontologies.json at {}: {}", configFile, e.getMessage());
             return Map.of();
