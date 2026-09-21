@@ -86,6 +86,9 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
   const [loading, setLoading] = useState(true);
   const [moreOpen, setMoreOpen] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
+  const [batchMode, setBatchMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [batchDeleting, setBatchDeleting] = useState(false);
   const attempts = useRef(0);
 
   useEffect(() => {
@@ -170,6 +173,45 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
     }
   }
 
+  function toggleBatchMode() {
+    setBatchMode(m => {
+      if (m) setSelected(new Set());
+      return !m;
+    });
+  }
+
+  function toggleSelect(key: string) {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    const allKeys = entries.map(e => entryNavKey(e));
+    const allSelected = allKeys.every(k => selected.has(k));
+    setSelected(allSelected ? new Set() : new Set(allKeys));
+  }
+
+  async function handleBatchDelete() {
+    if (selected.size === 0) return;
+    if (!confirm(`确定删除选中的 ${selected.size} 个对话？`)) return;
+    setBatchDeleting(true);
+    try {
+      const keys = Array.from(selected);
+      await Promise.all(keys.map(k => deleteSession(ACTIVE_AGENT_ID, k).catch(() => null)));
+      setEntries(prev => prev.filter(e => !selected.has(entryNavKey(e))));
+      if (activeKey && selected.has(activeKey)) navigate('/chat');
+      setSelected(new Set());
+      setBatchMode(false);
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : '批量删除失败');
+    } finally {
+      setBatchDeleting(false);
+    }
+  }
+
   return (
     <div style={S.root}>
       <div style={S.brand}>
@@ -239,6 +281,51 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
       </div>
 
       <div style={S.scroll}>
+        {entries.length > 0 && (
+          <div style={S.listHeader}>
+            <span style={S.listHeaderTitle}>历史会话</span>
+            {batchMode ? (
+              <>
+                <button
+                  type="button"
+                  onClick={toggleSelectAll}
+                  style={S.batchBtn}
+                >
+                  {entries.every(e => selected.has(entryNavKey(e))) ? '取消全选' : '全选'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBatchDelete}
+                  disabled={selected.size === 0 || batchDeleting}
+                  style={{
+                    ...S.batchBtn,
+                    ...S.batchDeleteBtn,
+                    ...(selected.size === 0 || batchDeleting ? S.batchBtnDisabled : {}),
+                  }}
+                >
+                  {batchDeleting ? '删除中…' : `删除已选（${selected.size}）`}
+                </button>
+                <button
+                  type="button"
+                  onClick={toggleBatchMode}
+                  style={S.batchCancelBtn}
+                  title="取消"
+                >
+                  <Icon name="close" size="sm" />
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={toggleBatchMode}
+                style={S.dotsBtn}
+                title="批量管理"
+              >
+                <Icon name="moreHorizontal" size="sm" />
+              </button>
+            )}
+          </div>
+        )}
         {loading && <div style={S.muted}>加载中…</div>}
         {err && (
           <div style={S.error}>
@@ -265,13 +352,17 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
               <div style={S.groupLabel}>{BUCKET_LABEL[b]}</div>
               {list.map(e => {
                 const isActive = entryNavKey(e) === activeKey && location.pathname === '/chat';
+                const isSelected = selected.has(entryNavKey(e));
                 return (
                   <SessionRow
                     key={e.sessionKey}
                     entry={e}
                     active={isActive}
+                    batchMode={batchMode}
+                    selected={isSelected}
                     onOpen={() => openSession(e)}
                     onDelete={ev => handleDelete(e, ev)}
+                    onToggleSelect={() => toggleSelect(entryNavKey(e))}
                   />
                 );
               })}
@@ -290,31 +381,45 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
 interface RowProps {
   entry: InboxEntry;
   active: boolean;
+  batchMode: boolean;
+  selected: boolean;
   onOpen: () => void;
   onDelete: (e: React.MouseEvent) => void;
+  onToggleSelect: () => void;
 }
 
-function SessionRow({ entry, active, onOpen, onDelete }: RowProps) {
+function SessionRow({ entry, active, batchMode, selected, onOpen, onDelete, onToggleSelect }: RowProps) {
   const [hover, setHover] = useState(false);
   return (
     <div
-      onClick={onOpen}
+      onClick={batchMode ? onToggleSelect : onOpen}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       className={
         'da-row' +
         (active ? ' da-row-active' : '') +
-        (entry.unread && !active ? ' da-row-unread' : '')
+        (entry.unread && !active ? ' da-row-unread' : '') +
+        (batchMode && selected ? ' da-row-selected' : '')
       }
       title={entry.title ?? entry.lastMessage ?? entry.sessionId}
     >
+      {batchMode && (
+        <span style={S.checkbox}>
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelect}
+            onClick={e => e.stopPropagation()}
+          />
+        </span>
+      )}
       <div style={S.rowMain}>
         <div style={S.rowTitle}>{entry.title ?? entry.label ?? entry.sessionId}</div>
         {entry.lastMessage && <div style={S.rowSnippet}>{entry.lastMessage}</div>}
       </div>
       <div style={S.rowMeta}>
         <span>{relTime(entry.lastActivityMs)}</span>
-        {hover && (
+        {hover && !batchMode && (
           <button
             onClick={onDelete}
             title="删除对话"
@@ -444,6 +549,40 @@ const S: Record<string, React.CSSProperties> = {
     padding: 6, display: 'flex', flexDirection: 'column', gap: 2,
   },
   scroll: { flex: 1, overflowY: 'auto', padding: '12px 10px 18px' },
+  listHeader: {
+    display: 'flex', alignItems: 'center', gap: 6,
+    padding: '4px 6px 8px',
+  },
+  listHeaderTitle: {
+    flex: 1, fontSize: '0.78rem', fontWeight: 600, color: 'var(--da-text-muted)',
+  },
+  dotsBtn: {
+    marginLeft: 'auto',
+    background: 'transparent', border: 'none', cursor: 'pointer',
+    color: 'var(--da-text-muted)', padding: '4px 6px', borderRadius: 6,
+    display: 'inline-flex', alignItems: 'center',
+    transition: 'var(--da-transition)',
+  },
+  batchBtn: {
+    fontSize: '0.78rem', padding: '4px 10px', borderRadius: 6,
+    border: '1px solid var(--da-border)', background: 'var(--da-surface)',
+    color: 'var(--da-text)', cursor: 'pointer', fontWeight: 500,
+  },
+  batchDeleteBtn: {
+    background: 'var(--da-danger)', color: '#fff', border: 'none',
+  },
+  batchBtnDisabled: {
+    opacity: 0.5, cursor: 'not-allowed',
+  },
+  batchCancelBtn: {
+    marginLeft: 'auto',
+    background: 'transparent', border: 'none', cursor: 'pointer',
+    color: 'var(--da-text-muted)', padding: '4px 6px', borderRadius: 6,
+    display: 'inline-flex', alignItems: 'center',
+  },
+  checkbox: {
+    display: 'inline-flex', alignItems: 'center', flexShrink: 0, marginRight: 8,
+  },
   muted: { padding: '8px 12px', fontSize: '0.9rem', color: 'var(--da-text-muted)' },
   error: { padding: '8px 12px', fontSize: '0.9rem', color: 'var(--da-danger)' },
   group: { marginBottom: 18 },

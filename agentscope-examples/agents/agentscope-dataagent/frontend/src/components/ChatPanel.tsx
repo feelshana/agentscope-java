@@ -46,6 +46,10 @@ interface Message {
   pending?: boolean;
   /** True only when the turn was interrupted and produced no usable answer. */
   failed?: boolean;
+  /** Timestamp (ms) when the assistant turn started streaming. */
+  startedAtMs?: number;
+  /** Elapsed time (ms) from start to done. */
+  elapsedMs?: number;
 }
 
 const S: Record<string, React.CSSProperties> = {
@@ -504,8 +508,9 @@ export default function ChatPanel({
     const text = input.trim();
     setInput('');
     setBusy(true);
+    const nowMs = Date.now();
     const userMsg: Message = { id: nextId(), role: 'user', text, tools: [], trace: [] };
-    const replyMsg: Message = { id: nextId(), role: 'assistant', text: '', tools: [], trace: [], pending: true };
+    const replyMsg: Message = { id: nextId(), role: 'assistant', text: '', tools: [], trace: [], pending: true, startedAtMs: nowMs };
     setMessages(prev => [...prev, userMsg, replyMsg]);
     let lastToolEventSeq = -1;
     abortRef.current = new AbortController();
@@ -602,10 +607,12 @@ export default function ChatPanel({
               setSearchParams(next, { replace: true });
             }
           }
-          setMessages(prev => prev.map(m => m.id === replyMsg.id ? { ...m, pending: false } : m));
+          setMessages(prev => prev.map(m => m.id === replyMsg.id
+            ? { ...m, pending: false, elapsedMs: m.startedAtMs ? Date.now() - m.startedAtMs : undefined }
+            : m));
         } else if (evt.type === 'error') {
           setMessages(prev => prev.map(m => m.id === replyMsg.id
-            ? { ...m, pending: false, failed: true, text: m.text + (m.text ? '\n' : '') + `[错误] ${evt.error ?? '未知错误'}` }
+            ? { ...m, pending: false, failed: true, text: m.text + (m.text ? '\n' : '') + `[错误] ${evt.error ?? '未知错误'}`, elapsedMs: m.startedAtMs ? Date.now() - m.startedAtMs : undefined }
             : m));
         }
       }
@@ -613,7 +620,7 @@ export default function ChatPanel({
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : '连接中断';
       setMessages(prev => prev.map(m => m.id === replyMsg.id
-        ? { ...m, pending: false, failed: true, text: m.text + (m.text ? '\n' : '') + `[错误] ${msg}` }
+        ? { ...m, pending: false, failed: true, text: m.text + (m.text ? '\n' : '') + `[错误] ${msg}`, elapsedMs: m.startedAtMs ? Date.now() - m.startedAtMs : undefined }
         : m));
     } finally {
       abortRef.current = null;
@@ -657,22 +664,25 @@ export default function ChatPanel({
                 <div className="da-bubble user">{m.text}</div>
               ) : (
                 <div className="da-agent-turn">
-                  {(trace.length > 0 || m.pending) && (
-                    <TaskTrace
-                      running={!!m.pending}
-                      active={trace.length > 0}
-                      hasError={!!m.failed}
-                      hadToolErrors={m.tools.some(t => {
-                        if (!t.result) return false;
-                        if (t.name === 'query_structured_data') {
-                          try { return ['FAILED', 'PARTIAL'].includes(JSON.parse(t.result)?.status); } catch { return false; }
-                        }
-                        return t.result.startsWith('error:');
-                      })}
-                    >
-                      {trace}
-                    </TaskTrace>
-                  )}
+                  <div className="da-agent-header">
+                    <span className="da-agent-avatar">DA</span>
+                    <span className="da-agent-name">Data Agent</span>
+                  </div>
+                  <TaskTrace
+                    running={!!m.pending}
+                    active={trace.length > 0}
+                    hasError={!!m.failed}
+                    hadToolErrors={m.tools.some(t => {
+                      if (!t.result) return false;
+                      if (t.name === 'query_structured_data') {
+                        try { return ['FAILED', 'PARTIAL'].includes(JSON.parse(t.result)?.status); } catch { return false; }
+                      }
+                      return t.result.startsWith('error:');
+                    })}
+                    elapsedMs={m.elapsedMs}
+                  >
+                    {trace}
+                  </TaskTrace>
                   <div className="da-answer">
                     {m.text
                       ? <Markdown>{m.text}</Markdown>
@@ -803,12 +813,17 @@ export default function ChatPanel({
             </span>
             <span className="da-small">{input.length} 字</span>
             <button
-              style={{ ...S.send, ...(canSend ? {} : S.sendDisabled) }}
-              onClick={handleSend}
-              disabled={!canSend}
-              title="发送"
+              style={{
+                ...S.send,
+                ...(busy
+                  ? { background: 'var(--da-danger)', cursor: 'pointer' }
+                  : canSend ? {} : S.sendDisabled),
+              }}
+              onClick={busy ? () => abortRef.current?.abort() : handleSend}
+              disabled={!busy && !canSend}
+              title={busy ? '停止回答' : '发送'}
             >
-              <Icon name="send" size="sm" />
+              {busy ? <Icon name="stop" size="sm" /> : <Icon name="send" size="sm" />}
             </button>
           </div>
         </div>

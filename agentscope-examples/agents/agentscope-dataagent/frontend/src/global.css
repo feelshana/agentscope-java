@@ -403,6 +403,11 @@ button:focus-visible {
   background: var(--da-primary-subtle);
   border-color: rgba(79, 70, 229, 0.22);
 }
+.da-row-selected,
+.da-row-selected:hover {
+  background: rgba(79, 70, 229, 0.08);
+  border-color: rgba(79, 70, 229, 0.18);
+}
 .da-row-unread {
   border-left: 3px solid var(--da-primary);
   padding-left: 8px;
@@ -1017,6 +1022,32 @@ button:focus-visible {
   width: 100%;
   min-width: 0;
 }
+.da-agent-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 2px;
+}
+.da-agent-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, var(--da-primary) 0%, var(--da-primary-hover) 100%);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+.da-agent-name {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--da-text);
+  flex-shrink: 0;
+}
 .da-trace {
   border: 1px solid var(--da-border);
   border-radius: var(--da-radius-md);
@@ -1085,6 +1116,27 @@ button:focus-visible {
 }
 .da-trace-status.interrupted {
   color: var(--da-warn);
+}
+.da-trace-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, var(--da-primary) 0%, var(--da-primary-hover) 100%);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+.da-trace-elapsed {
+  font-size: 0.75rem;
+  color: var(--da-text-muted);
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-right: 4px;
 }
 .da-toolcall-status.failed {
   color: var(--da-danger);
