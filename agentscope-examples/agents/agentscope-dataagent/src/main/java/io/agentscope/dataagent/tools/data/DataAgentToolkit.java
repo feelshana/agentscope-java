@@ -43,7 +43,7 @@ import java.util.regex.Pattern;
  * operators can swap real implementations without touching this class.
  *
  * <p>The bundled {@link JdbcSqlConnector} serves sources with {@code kind: jdbc}: the optional
- * seeded analytics source (disabled by default) plus one source per user-uploaded dataset, all
+ * seeded data source plus one source per user-uploaded dataset, all
  * living as prefixed tables in the configured dataset database; other source kinds fall through
  * to a clear error string so the agent surfaces the limitation rather than hallucinating results.
  *
@@ -255,7 +255,8 @@ public final class DataAgentToolkit {
     /**
      * All dataset tables live in one shared database, so ownership cannot rely on separate
      * schemas: reject any {@code ds_*} table reference in the SQL that is not one of the caller's
-     * visible datasets. Non-{@code ds_} tables (shared analytics content) are unaffected.
+     * visible datasets. Non-{@code ds_} tables (e.g. app-db or other non-dataset sources) are
+     * unaffected.
      */
     private String checkCrossTable(DatasetScope scope, String sql) {
         Set<String> allowed = new HashSet<>();

@@ -63,7 +63,7 @@ public class UserMarketplaceEntity {
      * MySQL/PostgreSQL/H2 — Hibernate's JSON column types vary between dialects.
      */
     @Lob
-    @Column(name = "properties_json")
+    @Column(name = "properties_json", columnDefinition = "TEXT")
     private String propertiesJson;
 
     @Column(name = "created_at")

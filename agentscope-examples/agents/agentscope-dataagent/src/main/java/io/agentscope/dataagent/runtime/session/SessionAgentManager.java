@@ -326,7 +326,9 @@ public class SessionAgentManager {
             labelToSessionKey.put(entry.label().toLowerCase(), sessionKey);
         }
         if (spawnedBy != null) {
-            childrenByParent.computeIfAbsent(spawnedBy, k -> new CopyOnWriteArrayList<>()).add(sessionKey);
+            childrenByParent
+                    .computeIfAbsent(spawnedBy, k -> new CopyOnWriteArrayList<>())
+                    .add(sessionKey);
         }
         if (sessionStore != null) {
             sessionStore.save(entry);

@@ -1,0 +1,22 @@
+# ---------------------------------------------------------------------------
+# Spring profile: h2
+#
+# Activate with `--spring.profiles.active=h2` (or `SPRING_PROFILES_ACTIVE=h2`)
+# to switch the platform metadata DataSource from the default MySQL back to
+# an embedded file-based H2 database. Useful for local dev when MySQL is not
+# available.
+#
+# The H2 database file is written to `${user.home}/.agentscope-dataagent/db`
+# with `AUTO_SERVER=TRUE` so multiple processes (e.g. app + DBeaver) can
+# access it concurrently.
+# ---------------------------------------------------------------------------
+spring:
+  datasource:
+    url: ${DATAAGENT_DB_URL:jdbc:h2:file:${DATAAGENT_DB_PATH:${user.home}/.agentscope-dataagent/db};AUTO_SERVER=TRUE;MODE=MYSQL;DB_CLOSE_DELAY=-1}
+    driver-class-name: ${DATAAGENT_DB_DRIVER:org.h2.Driver}
+    username: ${DATAAGENT_DB_USER:sa}
+    password: ${DATAAGENT_DB_PASSWORD:}
+
+  sql:
+    init:
+      platform: h2

@@ -54,7 +54,7 @@ public class KnowledgeGraphEntityEntity {
     private String text;
 
     @Lob
-    @Column(name = "attributes_json")
+    @Column(name = "attributes_json", columnDefinition = "TEXT")
     private String attributesJson;
 
     @Column(name = "created_at")

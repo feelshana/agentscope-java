@@ -31,6 +31,8 @@ import io.agentscope.dataagent.runtime.session.DataDynamicContextMiddleware;
 import io.agentscope.dataagent.tools.data.DataSourceRegistry;
 import io.agentscope.dataagent.tools.data.SqlConnector;
 import io.agentscope.dataagent.web.middleware.DebugLoggingMiddleware;
+import io.agentscope.dataagent.web.persistence.jpa.IdentityLinkRepository;
+import io.agentscope.dataagent.web.persistence.jpa.SessionRegistryRepository;
 import io.agentscope.dataagent.web.toolbus.ToolEventBus;
 import io.agentscope.dataagent.web.toolbus.ToolNotificationMiddleware;
 import io.agentscope.dataagent.web.workspace.UserSandboxRegistry;
@@ -283,12 +285,16 @@ public class DataAgentConfig {
             Optional<AgentStateStore> sessionOpt,
             DataSourceRegistry dataSourceRegistry,
             SqlConnector sqlConnector,
-            Optional<DatasetContextProvider> contextProviderOpt)
+            Optional<DatasetContextProvider> contextProviderOpt,
+            SessionRegistryRepository sessionRegistryRepository)
             throws IOException {
         Path cwd = resolveCwd();
         ensureAgentscopeConfig();
 
-        DataAgentBootstrap.Builder builder = DataAgentBootstrap.builder().cwd(cwd);
+        DataAgentBootstrap.Builder builder =
+                DataAgentBootstrap.builder()
+                        .cwd(cwd)
+                        .sessionStoreRepository(sessionRegistryRepository);
 
         if (modelOpt.isPresent()) {
             builder.model(modelOpt.get());
@@ -478,9 +484,8 @@ public class DataAgentConfig {
 
     @Bean
     public io.agentscope.dataagent.web.identity.IdentityLinkStore identityLinkStore(
-            DataAgentBootstrap bootstrap) {
-        Path agentscopeDir = bootstrap.cwd().resolve(".agentscope");
-        return new io.agentscope.dataagent.web.identity.IdentityLinkStore(agentscopeDir);
+            IdentityLinkRepository repository) {
+        return new io.agentscope.dataagent.web.identity.IdentityLinkStore(repository);
     }
 
     @Bean

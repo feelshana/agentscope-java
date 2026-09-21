@@ -37,7 +37,7 @@ public class ChartOptionEntity {
     private String chartId;
 
     @Lob
-    @Column(name = "option_json")
+    @Column(name = "option_json", columnDefinition = "TEXT")
     private String optionJson;
 
     @Column(name = "created_at")

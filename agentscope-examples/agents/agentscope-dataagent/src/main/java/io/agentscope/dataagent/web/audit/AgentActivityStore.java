@@ -15,82 +15,47 @@
  */
 package io.agentscope.dataagent.web.audit;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agentscope.dataagent.web.auth.UserStore;
-import io.agentscope.dataagent.web.catalog.UserAgentDefinitionStore;
-import io.agentscope.dataagent.web.workspace.WorkspaceManagerFactory;
-import io.agentscope.harness.agent.filesystem.AbstractFilesystem;
-import io.agentscope.harness.agent.filesystem.model.FileInfo;
-import io.agentscope.harness.agent.filesystem.model.GlobResult;
-import io.agentscope.harness.agent.filesystem.model.ReadResult;
-import java.nio.charset.StandardCharsets;
-import java.util.AbstractMap;
-import java.util.ArrayList;
-import java.util.Comparator;
+import io.agentscope.dataagent.web.persistence.jpa.ActivityEventEntity;
+import io.agentscope.dataagent.web.persistence.jpa.ActivityEventRepository;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Per-agent append-only activity log stored as JSONL inside the agent's own namespaced workspace.
+ * Per-agent append-only activity log backed by the {@code activity_event} MySQL table. Replaces
+ * the former JSONL file store ({@code activity.jsonl}) that lived inside each agent's namespaced
+ * workspace.
  *
- * <p>Layout (relative to the agent's namespace root):
- *
- * <pre>
- *   activity.jsonl              # the live log
- *   activity-{timestampMs}.jsonl # rotated chunks (most recent first by name)
- * </pre>
- *
- * <p>Writes go through the same {@link AbstractFilesystem} the workspace uses, so the file lives
- * inside the per-(owner, agent) sandbox and inherits the deployment's isolation guarantees.
- * Append is implemented as read-modify-write because the abstract filesystem does not expose a
- * streaming append primitive; per-agent in-process locking keeps concurrent appends consistent on
- * a single node. {@code WorkspaceCopier} excludes {@code activity*.jsonl}, so clones start with a
- * fresh audit trail.
- *
- * <p>Rotation: when {@code activity.jsonl} grows beyond {@link #ROTATION_THRESHOLD_BYTES} the next
- * write renames it to {@code activity-{ts}.jsonl} (via copy + delete because the abstract
- * filesystem doesn't expose a {@code rename}/{@code move}) before opening a new live file.
- *
- * <p>Reads are returned newest-first; rotated chunks are merged in lexicographic order (most
- * recent rotation first) after the live file.
+ * <p>Writes are transactional appends; reads are ordered newest-first with an optional
+ * {@code sinceMs} filter. The {@code MAX_RETURN} cap protects the UI from log explosions.
  */
 @Service
 public class AgentActivityStore {
 
     private static final Logger log = LoggerFactory.getLogger(AgentActivityStore.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
-
-    static final String LIVE_FILE = "activity.jsonl";
-    static final String ROTATED_PREFIX = "activity-";
-    static final String ROTATED_SUFFIX = ".jsonl";
-
-    /** Roll the live log when it crosses this size. */
-    static final int ROTATION_THRESHOLD_BYTES = 1024 * 1024; // 1 MiB
+    private static final TypeReference<Map<String, Object>> MAP_TYPE =
+            new TypeReference<Map<String, Object>>() {};
 
     /** Hard cap on a single read response so a log explosion can't blow up the UI. */
     static final int MAX_RETURN = 500;
 
-    private final WorkspaceManagerFactory workspaceFactory;
+    private final ActivityEventRepository repository;
     private final UserStore userStore;
-    private final UserAgentDefinitionStore agentStore;
 
-    /** One lock per (ownerId, agentId) keeps in-process appends consistent. */
-    private final Map<String, ReentrantLock> locks = new ConcurrentHashMap<>();
-
-    public AgentActivityStore(
-            WorkspaceManagerFactory workspaceFactory,
-            UserStore userStore,
-            UserAgentDefinitionStore agentStore) {
-        this.workspaceFactory = workspaceFactory;
+    public AgentActivityStore(ActivityEventRepository repository, UserStore userStore) {
+        this.repository = repository;
         this.userStore = userStore;
-        this.agentStore = agentStore;
     }
 
     /**
@@ -105,6 +70,7 @@ public class AgentActivityStore {
      * Appends a single event with an optional target and metadata. See
      * {@link #record(String, String, ActorRef, String)} for failure semantics.
      */
+    @Transactional
     public void record(
             String ownerId,
             String agentId,
@@ -124,14 +90,10 @@ public class AgentActivityStore {
                         action,
                         target,
                         metadata == null || metadata.isEmpty() ? null : Map.copyOf(metadata));
-        ReentrantLock lock = lockFor(ownerId, agentId);
-        lock.lock();
         try {
-            appendLocked(ownerId, agentId, event);
+            repository.save(toEntity(ownerId, agentId, event));
         } catch (RuntimeException ex) {
             log.warn("Activity log write failed for {}/{}: {}", ownerId, agentId, ex.getMessage());
-        } finally {
-            lock.unlock();
         }
     }
 
@@ -141,15 +103,22 @@ public class AgentActivityStore {
      */
     public List<ActivityEvent> list(String ownerId, String agentId, Long sinceMs, int limit) {
         int cap = Math.min(limit > 0 ? limit : 50, MAX_RETURN);
-        ReentrantLock lock = lockFor(ownerId, agentId);
-        lock.lock();
         try {
-            return readNewestFirst(ownerId, agentId, sinceMs, cap);
+            List<ActivityEventEntity> entities;
+            if (sinceMs != null) {
+                entities =
+                        repository
+                                .findByOwnerIdAndAgentIdAndTimestampMsGreaterThanOrderByTimestampMsDesc(
+                                        ownerId, agentId, sinceMs, PageRequest.of(0, cap));
+            } else {
+                entities =
+                        repository.findByOwnerIdAndAgentIdOrderByTimestampMsDesc(
+                                ownerId, agentId, PageRequest.of(0, cap));
+            }
+            return entities.stream().map(this::fromEntity).toList();
         } catch (RuntimeException ex) {
             log.warn("Activity log read failed for {}/{}: {}", ownerId, agentId, ex.getMessage());
             return List.of();
-        } finally {
-            lock.unlock();
         }
     }
 
@@ -161,134 +130,46 @@ public class AgentActivityStore {
     }
 
     // -----------------------------------------------------------------
-    //  Append path
+    //  Mapping helpers
     // -----------------------------------------------------------------
 
-    private void appendLocked(String ownerId, String agentId, ActivityEvent event) {
-        AbstractFilesystem fs = scopedFs(ownerId, agentId);
-        String line;
-        try {
-            line = MAPPER.writeValueAsString(event) + "\n";
-        } catch (Exception e) {
-            throw new RuntimeException("activity event serialization failed", e);
-        }
-        String existing = readUtf8(fs, LIVE_FILE).orElse("");
-        if (existing.length() >= ROTATION_THRESHOLD_BYTES) {
-            rotateLocked(fs);
-            existing = "";
-        }
-        String combined = existing + line;
-        fs.uploadFiles(
-                null,
-                List.of(
-                        new AbstractMap.SimpleEntry<>(
-                                LIVE_FILE, combined.getBytes(StandardCharsets.UTF_8))));
-    }
-
-    private void rotateLocked(AbstractFilesystem fs) {
-        Optional<String> body = readUtf8(fs, LIVE_FILE);
-        if (body.isEmpty() || body.get().isEmpty()) {
-            return;
-        }
-        String name = ROTATED_PREFIX + System.currentTimeMillis() + ROTATED_SUFFIX;
-        fs.uploadFiles(
-                null,
-                List.of(
-                        new AbstractMap.SimpleEntry<>(
-                                name, body.get().getBytes(StandardCharsets.UTF_8))));
-        // Live file will be overwritten by the next write; explicit delete keeps reads consistent
-        // if the next append is delayed.
-        try {
-            fs.delete(null, "/" + LIVE_FILE);
-        } catch (RuntimeException ignored) {
-            // tolerated; the next uploadFiles will overwrite
-        }
-    }
-
-    // -----------------------------------------------------------------
-    //  Read path
-    // -----------------------------------------------------------------
-
-    private List<ActivityEvent> readNewestFirst(
-            String ownerId, String agentId, Long sinceMs, int cap) {
-        AbstractFilesystem fs = scopedFs(ownerId, agentId);
-
-        List<String> files = new ArrayList<>();
-        files.add(LIVE_FILE);
-
-        GlobResult glob = fs.glob(null, ROTATED_PREFIX + "*" + ROTATED_SUFFIX, null);
-        if (glob != null && glob.isSuccess() && glob.matches() != null) {
-            List<String> rotated = new ArrayList<>();
-            for (FileInfo info : glob.matches()) {
-                if (info.isDirectory()) continue;
-                String absPath = info.path();
-                int slash = absPath.lastIndexOf('/');
-                String name = slash >= 0 ? absPath.substring(slash + 1) : absPath;
-                if (name.startsWith(ROTATED_PREFIX) && name.endsWith(ROTATED_SUFFIX)) {
-                    rotated.add(name);
-                }
-            }
-            // Most recent rotation first.
-            rotated.sort(Comparator.reverseOrder());
-            files.addAll(rotated);
-        }
-
-        List<ActivityEvent> out = new ArrayList<>();
-        for (String name : files) {
-            Optional<String> body = readUtf8(fs, name);
-            if (body.isEmpty()) continue;
-            List<ActivityEvent> parsed = parseLines(body.get());
-            // newest at end of file; iterate in reverse to keep newest-first ordering.
-            for (int i = parsed.size() - 1; i >= 0; i--) {
-                ActivityEvent ev = parsed.get(i);
-                if (sinceMs != null && ev.timestampMs() <= sinceMs) {
-                    continue;
-                }
-                out.add(ev);
-                if (out.size() >= cap) {
-                    return out;
-                }
-            }
-        }
-        return out;
-    }
-
-    private static List<ActivityEvent> parseLines(String body) {
-        List<ActivityEvent> events = new ArrayList<>();
-        if (body == null || body.isEmpty()) return events;
-        for (String line : body.split("\n")) {
-            if (line.isBlank()) continue;
+    private ActivityEventEntity toEntity(String ownerId, String agentId, ActivityEvent event) {
+        ActivityEventEntity e = new ActivityEventEntity();
+        e.setEventId(event.id());
+        e.setOwnerId(ownerId);
+        e.setAgentId(agentId);
+        e.setTimestampMs(event.timestampMs());
+        e.setActorUserId(event.actorUserId());
+        e.setActorUsername(event.actorUsername());
+        e.setAction(event.action());
+        e.setTarget(event.target());
+        if (event.metadata() != null) {
             try {
-                events.add(MAPPER.readValue(line, ActivityEvent.class));
-            } catch (Exception ex) {
-                // tolerate corrupted line
+                e.setMetadataJson(MAPPER.writeValueAsString(event.metadata()));
+            } catch (JsonProcessingException ex) {
+                log.warn("Failed to serialize activity metadata: {}", ex.getMessage());
             }
         }
-        return events;
+        return e;
     }
 
-    // -----------------------------------------------------------------
-    //  Helpers
-    // -----------------------------------------------------------------
-
-    private AbstractFilesystem scopedFs(String ownerId, String agentId) {
-        String workspacePath =
-                agentStore
-                        .findById(ownerId, agentId)
-                        .map(UserAgentDefinitionStore.StoredEntry::workspacePath)
-                        .orElse(null);
-        return workspaceFactory.userDataFs(ownerId, agentId, workspacePath);
-    }
-
-    private static Optional<String> readUtf8(AbstractFilesystem fs, String path) {
-        ReadResult r = fs.read(null, path, 0, Integer.MAX_VALUE);
-        if (r == null || !r.isSuccess() || r.fileData() == null) return Optional.empty();
-        String content = r.fileData().content();
-        return Optional.of(content == null ? "" : content);
-    }
-
-    private ReentrantLock lockFor(String ownerId, String agentId) {
-        return locks.computeIfAbsent(ownerId + "/" + agentId, k -> new ReentrantLock());
+    private ActivityEvent fromEntity(ActivityEventEntity e) {
+        Map<String, Object> metadata = null;
+        if (e.getMetadataJson() != null && !e.getMetadataJson().isBlank()) {
+            try {
+                metadata = MAPPER.readValue(e.getMetadataJson(), MAP_TYPE);
+            } catch (JsonProcessingException ex) {
+                log.warn("Failed to deserialize activity metadata: {}", ex.getMessage());
+            }
+        }
+        return new ActivityEvent(
+                e.getEventId(),
+                e.getTimestampMs(),
+                e.getActorUserId(),
+                e.getActorUsername(),
+                e.getAction(),
+                e.getTarget(),
+                metadata);
     }
 
     private static String newId() {

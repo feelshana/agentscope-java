@@ -163,7 +163,7 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
       navigate('/chat');
       return;
     }
-    if (!confirm(`确定删除该对话？「${entry.label ?? entry.sessionId}」`)) return;
+    if (!confirm(`确定删除该对话？「${entry.title ?? entry.label ?? '新对话'}」`)) return;
     try {
       await deleteSession(ACTIVE_AGENT_ID, entryNavKey(entry));
       setEntries(prev => prev.filter(e => e.sessionKey !== entry.sessionKey));
@@ -401,7 +401,7 @@ function SessionRow({ entry, active, batchMode, selected, onOpen, onDelete, onTo
         (entry.unread && !active ? ' da-row-unread' : '') +
         (batchMode && selected ? ' da-row-selected' : '')
       }
-      title={entry.title ?? entry.lastMessage ?? entry.sessionId}
+      title={entry.title ?? entry.lastMessage ?? '新对话'}
     >
       {batchMode && (
         <span style={S.checkbox}>
@@ -414,7 +414,7 @@ function SessionRow({ entry, active, batchMode, selected, onOpen, onDelete, onTo
         </span>
       )}
       <div style={S.rowMain}>
-        <div style={S.rowTitle}>{entry.title ?? entry.label ?? entry.sessionId}</div>
+        <div style={S.rowTitle}>{entry.title ?? entry.label ?? '新对话'}</div>
         {entry.lastMessage && <div style={S.rowSnippet}>{entry.lastMessage}</div>}
       </div>
       <div style={S.rowMeta}>

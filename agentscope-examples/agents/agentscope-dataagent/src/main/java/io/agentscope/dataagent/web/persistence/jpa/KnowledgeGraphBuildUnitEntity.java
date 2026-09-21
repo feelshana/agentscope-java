@@ -64,7 +64,7 @@ public class KnowledgeGraphBuildUnitEntity {
 
     /** For doc-chunk units: the chunk text to extract from. Null for schema units. */
     @Lob
-    @Column(name = "payload")
+    @Column(name = "payload", columnDefinition = "TEXT")
     private String payload;
 
     @Column(name = "created_at")

@@ -165,8 +165,7 @@ public final class ChartBuilder {
                                             : (!categoricalCols.isEmpty()
                                                     ? categoricalCols.get(0)
                                                     : numericCols.get(0)));
-                    return buildScatter(
-                            columns, rows, xIdx, numericCols.get(0), question);
+                    return buildScatter(columns, rows, xIdx, numericCols.get(0), question);
                 }
             case "hbar":
                 return buildHBar(

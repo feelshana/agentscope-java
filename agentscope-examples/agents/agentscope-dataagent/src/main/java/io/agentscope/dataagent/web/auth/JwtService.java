@@ -43,12 +43,12 @@ import org.springframework.stereotype.Service;
 public class JwtService {
 
     private static final long TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1_000L; // 7 days
-    private static final String DEV_DEFAULT_SECRET = "dataagent-default-dev-secret-change-in-production-32chars";
+    private static final String DEV_DEFAULT_SECRET =
+            "dataagent-default-dev-secret-change-in-production-32chars";
 
     private final SecretKey signingKey;
 
-    public JwtService(
-            @Value("${dataagent.jwt.secret}") String secret) {
+    public JwtService(@Value("${dataagent.jwt.secret}") String secret) {
         if (DEV_DEFAULT_SECRET.equals(secret)) {
             throw new IllegalStateException(
                     "JWT secret 未配置，请在 application.yml 中设置 dataagent.jwt.secret（>=32字符）");

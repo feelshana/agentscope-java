@@ -7,6 +7,8 @@ export interface UploadStatus {
   name: string;
   status: 'queued' | 'uploading' | 'ready' | 'failed';
   error?: string;
+  file?: File;
+  selectedSheet?: string;
 }
 
 const EMPTY: UploadStatus[] = [];

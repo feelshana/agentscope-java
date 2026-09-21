@@ -61,7 +61,7 @@ public class UserEntity {
     private Instant createdAt = Instant.now();
 
     @Lob
-    @Column(name = "bindings_json")
+    @Column(name = "bindings_json", columnDefinition = "TEXT")
     private String bindingsJson;
 
     public UserEntity() {}

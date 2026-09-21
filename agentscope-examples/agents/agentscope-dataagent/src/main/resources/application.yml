@@ -26,32 +26,28 @@ spring:
 
   # --------------------------------------------------------------------------
   # User + agent metadata are persisted via Spring Data JPA. The default
-  # backend is an embedded H2 database written to
-  # `${user.home}/.agentscope-dataagent/db.*` — intentionally NOT placed under
-  # `dataagent.workspace`, so workspace volumes never accidentally include the
-  # catalog tables.
+  # backend is MySQL at localhost:3306/dataagent_platform — matching the
+  # dataset store convention (root/1234).
   #
-  # To switch to MySQL / PostgreSQL in production, activate the `jdbc` Spring
-  # profile (`--spring.profiles.active=jdbc` or `SPRING_PROFILES_ACTIVE=jdbc`)
-  # which sets MySQL-shaped DataSource defaults in `application-jdbc.yml`. You
-  # can also override individual settings directly via `DATAAGENT_DB_*` env
-  # vars without activating the profile.
+  # To fall back to embedded H2 for local dev without MySQL, activate the
+  # `h2` Spring profile (`--spring.profiles.active=h2`) which switches the
+  # DataSource to a file-based H2 in `application-h2.yml`. You can also
+  # override individual settings via `DATAAGENT_DB_*` env vars.
   # --------------------------------------------------------------------------
   datasource:
-    url: ${DATAAGENT_DB_URL:jdbc:h2:file:${DATAAGENT_DB_PATH:${user.home}/.agentscope-dataagent/db};AUTO_SERVER=TRUE;MODE=MYSQL;DB_CLOSE_DELAY=-1}
-    driver-class-name: ${DATAAGENT_DB_DRIVER:org.h2.Driver}
-    username: ${DATAAGENT_DB_USER:sa}
-    password: ${DATAAGENT_DB_PASSWORD:}
+    url: ${DATAAGENT_DB_URL:jdbc:mysql://localhost:3306/dataagent_platform?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true}
+    driver-class-name: ${DATAAGENT_DB_DRIVER:com.mysql.cj.jdbc.Driver}
+    username: ${DATAAGENT_DB_USER:root}
+    password: ${DATAAGENT_DB_PASSWORD:1234}
 
   jpa:
     open-in-view: false
     hibernate:
-      # 'update' is fine for dev / single-node. Production deployments running
-      # against MySQL/PostgreSQL should pin the schema with Flyway/Liquibase
-      # and switch this to `validate`.
+      # 'update' is fine for dev / single-node. Production deployments should
+      # pin the schema with Flyway/Liquibase and switch this to `validate`.
       ddl-auto: ${DATAAGENT_JPA_DDL_AUTO:update}
     # Run the SQL init scripts AFTER Hibernate creates the schema. Required so
-    # `data-h2.sql` finds the `dataagent_user` table to MERGE into.
+    # `data-mysql.sql` finds the `dataagent_user` table to INSERT into.
     defer-datasource-initialization: true
     properties:
       hibernate:
@@ -59,21 +55,18 @@ spring:
           time_zone: UTC
 
   # --------------------------------------------------------------------------
-  # `data-${platform}.sql` seeding. Setting platform=h2 makes Spring only run
-  # `data-h2.sql`; the bundled script seeds two demo accounts (bob / alice,
+  # `data-${platform}.sql` seeding. Setting platform=mysql makes Spring run
+  # `data-mysql.sql`; the bundled script seeds two demo accounts (bob / alice,
   # passwords identical to the usernames) so a fresh local checkout is usable
-  # without first calling the admin API. The script is idempotent (MERGE INTO).
+  # without first calling the admin API. The script is idempotent
+  # (INSERT ... ON DUPLICATE KEY UPDATE).
   #
-  # `mode=always` is intentional: in Spring Boot 4, `mode=embedded` classifies
-  # only `jdbc:h2:mem:` URLs as embedded, which would skip the seed against
-  # the default `jdbc:h2:file:` DataSource. `application-jdbc.yml` explicitly
-  # overrides this to `never` so MySQL/PostgreSQL deployments never run the
-  # H2-only script.
+  # The `h2` profile overrides platform to `h2` and runs `data-h2.sql` instead.
   # --------------------------------------------------------------------------
   sql:
     init:
       mode: ${DATAAGENT_SQL_INIT_MODE:always}
-      platform: ${DATAAGENT_SQL_INIT_PLATFORM:h2}
+      platform: ${DATAAGENT_SQL_INIT_PLATFORM:mysql}
       continue-on-error: false
 
 # --------------------------------------------------------------------------
@@ -194,16 +187,7 @@ dataagent:
       username: ${DATAAGENT_DATASET_DB_USER:root}
       password: ${DATAAGENT_DATASET_DB_PASSWORD:1234}
 
-  # ---- Optional pre-seeded analytics MySQL (tenant_storage_utilization / project_info) ----
-  # Disabled by default so it never collides with the dataset store; enable and point it at the
-  # database that actually holds the seed tables (see mysql-schema.sql) when needed.
-  analytics:
-    enabled: ${DATAAGENT_ANALYTICS_ENABLED:false}
-    url: ${DATAAGENT_ANALYTICS_DB_URL:jdbc:mysql://127.0.0.1:3306/data_agent?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
-    username: ${DATAAGENT_ANALYTICS_DB_USER:root}
-    password: ${DATAAGENT_ANALYTICS_DB_PASSWORD:1234}
-
-  # ---- Expose the platform metadata DB (H2) as a queryable source? Off by default. ----
+  # ---- Expose the platform metadata DB as a queryable source? Off by default. ----
   expose-app-db: ${DATAAGENT_EXPOSE_APP_DB:false}
 
 management:

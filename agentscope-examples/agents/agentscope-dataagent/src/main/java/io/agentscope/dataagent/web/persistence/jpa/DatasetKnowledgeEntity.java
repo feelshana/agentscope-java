@@ -37,7 +37,7 @@ public class DatasetKnowledgeEntity {
     private String groupId;
 
     @Lob
-    @Column(name = "content")
+    @Column(name = "content", columnDefinition = "TEXT")
     private String content;
 
     @Column(name = "updated_at")

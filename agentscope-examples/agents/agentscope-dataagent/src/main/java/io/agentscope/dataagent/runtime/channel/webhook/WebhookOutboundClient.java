@@ -64,8 +64,13 @@ public final class WebhookOutboundClient {
             return Mono.empty();
         }
         if (!isSafeUrl(callbackUrl)) {
-            log.warn("Webhook channel '{}' rejected unsafe callback URL: {}", channelId, callbackUrl);
-            return Mono.error(new IllegalArgumentException("Unsafe callback URL: internal addresses are not allowed"));
+            log.warn(
+                    "Webhook channel '{}' rejected unsafe callback URL: {}",
+                    channelId,
+                    callbackUrl);
+            return Mono.error(
+                    new IllegalArgumentException(
+                            "Unsafe callback URL: internal addresses are not allowed"));
         }
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("channelId", channelId);
@@ -133,7 +138,8 @@ public final class WebhookOutboundClient {
         try {
             URI uri = new URI(url);
             String scheme = uri.getScheme();
-            if (scheme == null || (!scheme.equalsIgnoreCase("http") && !scheme.equalsIgnoreCase("https"))) {
+            if (scheme == null
+                    || (!scheme.equalsIgnoreCase("http") && !scheme.equalsIgnoreCase("https"))) {
                 return false;
             }
             String host = uri.getHost();

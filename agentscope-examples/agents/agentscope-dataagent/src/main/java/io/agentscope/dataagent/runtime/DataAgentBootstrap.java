@@ -31,6 +31,7 @@ import io.agentscope.dataagent.runtime.session.SessionAgentManager;
 import io.agentscope.dataagent.runtime.session.SessionStore;
 import io.agentscope.dataagent.runtime.session.SubagentRunRegistry;
 import io.agentscope.dataagent.runtime.session.tool.SessionsTool;
+import io.agentscope.dataagent.web.persistence.jpa.SessionRegistryRepository;
 import io.agentscope.harness.agent.HarnessAgent;
 import io.agentscope.harness.agent.gateway.ChannelManager;
 import io.agentscope.harness.agent.gateway.Gateway;
@@ -424,6 +425,7 @@ public final class DataAgentBootstrap {
         private final List<Consumer<HarnessAgent.Builder>> globalConfigurators =
                 new java.util.ArrayList<>();
         private final Map<String, Channel> channels = new LinkedHashMap<>();
+        private SessionRegistryRepository sessionStoreRepository;
 
         private Builder() {}
 
@@ -483,6 +485,11 @@ public final class DataAgentBootstrap {
                     this.channels.put(c.channelId(), c);
                 }
             }
+            return this;
+        }
+
+        public Builder sessionStoreRepository(SessionRegistryRepository repository) {
+            this.sessionStoreRepository = Objects.requireNonNull(repository, "repository");
             return this;
         }
 
@@ -560,8 +567,7 @@ public final class DataAgentBootstrap {
             WorkspaceManager wsManager = new WorkspaceManager(mainWorkspace);
             DefaultAgentManager dam = new DefaultAgentManager(entries, wsManager);
 
-            Path storeFile = mainWorkspace.resolve("sessions.json");
-            SessionStore sessionStore = new SessionStore(storeFile);
+            SessionStore sessionStore = new SessionStore(sessionStoreRepository);
             sessionStore.load();
 
             AgentManagerConfig amCfg = resolveAgentManagerConfig(fileConfig);

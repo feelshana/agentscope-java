@@ -15,51 +15,31 @@
  */
 package io.agentscope.dataagent.runtime.session;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
+import io.agentscope.dataagent.web.persistence.jpa.SessionRegistryEntity;
+import io.agentscope.dataagent.web.persistence.jpa.SessionRegistryRepository;
 import java.util.Collection;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Durable session registry backed by a JSON file ({@code sessions.json}). Mirrors OpenClaw's
+ * Durable session registry backed by the {@code session_registry} MySQL table. Mirrors OpenClaw's
  * {@code sessions.json} store that tracks session metadata across restarts.
  *
- * <p>Thread-safe: uses a read-write lock so concurrent reads are non-blocking and writes are
- * serialized. File writes are atomic (write to temp, then rename).
- *
- * <p>The store file contains a JSON object keyed by {@code sessionKey}, where each value is a
- * {@link StoredEntry} capturing the subset of {@link SessionEntry} fields that need to survive
- * restarts.
+ * <p>Thread-safety and atomicity are delegated to JPA transactions. The {@link StoredEntry} record
+ * is the public view type consumed by {@link SessionAgentManager}.
  */
 public final class SessionStore {
 
     private static final Logger log = LoggerFactory.getLogger(SessionStore.class);
-    private static final ObjectMapper MAPPER =
-            new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
 
-    private final Path storeFile;
-    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
-    private final Map<String, StoredEntry> entries = new LinkedHashMap<>();
+    private final SessionRegistryRepository repository;
 
     /**
-     * JSON-serializable subset of {@link SessionEntry} for disk persistence. Uses
-     * {@code @JsonIgnoreProperties(ignoreUnknown = true)} for forward compatibility when new
-     * fields are added.
+     * JSON-serializable subset of {@link SessionEntry} for the public API. Kept as a record so
+     * callers receive an immutable snapshot.
      */
-    @JsonIgnoreProperties(ignoreUnknown = true)
     public record StoredEntry(
             String sessionKey,
             String agentId,
@@ -92,6 +72,23 @@ public final class SessionStore {
                     e.userId());
         }
 
+        public static StoredEntry fromEntity(SessionRegistryEntity e) {
+            return new StoredEntry(
+                    e.getSessionKey(),
+                    e.getAgentId(),
+                    e.getSessionId(),
+                    e.getLabel(),
+                    e.getKind(),
+                    e.getSpawnedBy(),
+                    e.getSpawnDepth(),
+                    e.getCreatedAtMs(),
+                    e.getLastActivityMs(),
+                    e.getSessionFilePath(),
+                    e.getSpawnRunId(),
+                    e.getGateKey(),
+                    e.getUserId());
+        }
+
         public SessionEntry toSessionEntry() {
             SessionKind sk = "main".equals(kind) ? SessionKind.MAIN : SessionKind.SUBAGENT;
             return new SessionEntry(
@@ -109,150 +106,71 @@ public final class SessionStore {
                     gateKey,
                     userId);
         }
-    }
 
-    public SessionStore(Path storeFile) {
-        this.storeFile = storeFile;
-    }
-
-    /**
-     * Loads all entries from the store file into memory. Call once on startup. If the file does not
-     * exist or is empty, the store starts empty.
-     */
-    public void load() {
-        lock.writeLock().lock();
-        try {
-            entries.clear();
-            if (!Files.isRegularFile(storeFile)) {
-                return;
-            }
-            String json = Files.readString(storeFile, StandardCharsets.UTF_8);
-            if (json.isBlank()) {
-                return;
-            }
-            Map<String, StoredEntry> loaded =
-                    MAPPER.readValue(
-                            json, new TypeReference<LinkedHashMap<String, StoredEntry>>() {});
-            if (loaded != null) {
-                entries.putAll(loaded);
-            }
-            log.info("Loaded {} session entries from {}", entries.size(), storeFile);
-        } catch (IOException e) {
-            log.warn("Failed to load session store from {}: {}", storeFile, e.getMessage());
-        } finally {
-            lock.writeLock().unlock();
+        public SessionRegistryEntity toEntity() {
+            SessionRegistryEntity e = new SessionRegistryEntity();
+            e.setSessionKey(sessionKey);
+            e.setAgentId(agentId);
+            e.setSessionId(sessionId);
+            e.setLabel(label);
+            e.setKind(kind);
+            e.setSpawnedBy(spawnedBy);
+            e.setSpawnDepth(spawnDepth);
+            e.setCreatedAtMs(createdAtMs);
+            e.setLastActivityMs(lastActivityMs);
+            e.setSessionFilePath(sessionFilePath);
+            e.setSpawnRunId(spawnRunId);
+            e.setGateKey(gateKey);
+            e.setUserId(userId);
+            return e;
         }
+    }
+
+    public SessionStore(SessionRegistryRepository repository) {
+        this.repository = repository;
+    }
+
+    /** Loads all entries. Logs a summary; no-op for the JPA backend (data lives in MySQL). */
+    public void load() {
+        long count = repository.count();
+        log.info("Session store backed by JPA ({} existing entries)", count);
     }
 
     /** Persists a single session entry (upsert). */
+    @Transactional
     public void save(SessionEntry entry) {
-        lock.writeLock().lock();
-        try {
-            entries.put(entry.sessionKey(), StoredEntry.from(entry));
-            flushToDisk();
-        } finally {
-            lock.writeLock().unlock();
-        }
+        repository.save(StoredEntry.from(entry).toEntity());
     }
 
     /** Updates only the {@code lastActivityMs} for the given key without a full entry replace. */
+    @Transactional
     public void touch(String sessionKey, long lastActivityMs) {
-        lock.writeLock().lock();
-        try {
-            StoredEntry existing = entries.get(sessionKey);
-            if (existing == null) {
-                return;
-            }
-            entries.put(
-                    sessionKey,
-                    new StoredEntry(
-                            existing.sessionKey(),
-                            existing.agentId(),
-                            existing.sessionId(),
-                            existing.label(),
-                            existing.kind(),
-                            existing.spawnedBy(),
-                            existing.spawnDepth(),
-                            existing.createdAtMs(),
-                            lastActivityMs,
-                            existing.sessionFilePath(),
-                            existing.spawnRunId(),
-                            existing.gateKey(),
-                            existing.userId()));
-            flushToDisk();
-        } finally {
-            lock.writeLock().unlock();
-        }
+        repository
+                .findById(sessionKey)
+                .ifPresent(
+                        existing -> {
+                            existing.setLastActivityMs(lastActivityMs);
+                            repository.save(existing);
+                        });
     }
 
     /** Removes a session entry by key. */
+    @Transactional
     public void remove(String sessionKey) {
-        lock.writeLock().lock();
-        try {
-            if (entries.remove(sessionKey) != null) {
-                flushToDisk();
-            }
-        } finally {
-            lock.writeLock().unlock();
-        }
+        repository.deleteById(sessionKey);
     }
 
     /** Returns a snapshot of all stored entries. */
     public Collection<StoredEntry> listAll() {
-        lock.readLock().lock();
-        try {
-            return List.copyOf(entries.values());
-        } finally {
-            lock.readLock().unlock();
-        }
+        return repository.findAll().stream().map(StoredEntry::fromEntity).toList();
     }
 
     /** Returns a single entry by key, if present. */
     public Optional<StoredEntry> get(String sessionKey) {
-        lock.readLock().lock();
-        try {
-            return Optional.ofNullable(entries.get(sessionKey));
-        } finally {
-            lock.readLock().unlock();
-        }
+        return repository.findById(sessionKey).map(StoredEntry::fromEntity);
     }
 
     public int size() {
-        lock.readLock().lock();
-        try {
-            return entries.size();
-        } finally {
-            lock.readLock().unlock();
-        }
-    }
-
-    /** The path to the backing store file. */
-    public Path getStoreFile() {
-        return storeFile;
-    }
-
-    private void flushToDisk() {
-        Path tmp = null;
-        try {
-            Files.createDirectories(storeFile.getParent());
-            tmp = storeFile.resolveSibling(storeFile.getFileName() + ".tmp");
-            byte[] bytes = MAPPER.writeValueAsBytes(entries);
-            Files.write(
-                    tmp, bytes, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-            Files.move(
-                    tmp,
-                    storeFile,
-                    java.nio.file.StandardCopyOption.REPLACE_EXISTING,
-                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
-        } catch (IOException e) {
-            log.warn("Failed to flush session store to {}: {}", storeFile, e.getMessage());
-            if (tmp != null) {
-                try {
-                    Files.deleteIfExists(tmp);
-                } catch (IOException deleteEx) {
-                    log.warn("Failed to clean up temp file {}: {}", tmp, deleteEx.getMessage());
-                }
-            }
-        }
+        return (int) repository.count();
     }
 }

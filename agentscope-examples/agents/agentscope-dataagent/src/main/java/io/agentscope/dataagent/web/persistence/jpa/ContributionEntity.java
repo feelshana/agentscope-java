@@ -113,7 +113,7 @@ public class ContributionEntity {
      * FileEntry[]}. Preserved across approval for audit.
      */
     @Lob
-    @Column(name = "payload", nullable = false)
+    @Column(name = "payload", nullable = false, columnDefinition = "TEXT")
     private String payload;
 
     /**
@@ -121,7 +121,7 @@ public class ContributionEntity {
      * this instead of {@link #payload}. Null when the admin accepted the original as-is.
      */
     @Lob
-    @Column(name = "approved_payload")
+    @Column(name = "approved_payload", columnDefinition = "TEXT")
     private String approvedPayload;
 
     @Column(name = "reviewer_user_id", length = 128)
