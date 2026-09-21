@@ -84,7 +84,7 @@ spring:
 dataagent:
   # JWT signing secret (>= 32 chars). MUST be overridden in production.
   jwt:
-    secret: ${DATAAGENT_JWT_SECRET:dataagent-default-dev-secret-change-in-production-32chars}
+    secret: ${DATAAGENT_JWT_SECRET:dataagent-dev-secret-for-local-only-do-not-use-in-prod-2026}
 
   # Working directory. If blank, defaults to the JVM's current working
   # directory. .agentscope/agentscope.json is read from (or auto-created in)
@@ -144,8 +144,11 @@ dataagent:
     sys-prompt: >
       你是一个基于 AgentScope 构建的数据分析智能体（Data Agent），帮助用户探查、
       分析、可视化和汇报数据。优先使用已注册的技能（skills）与子代理（sub-agents），
-      而不是即兴推理；始终注明所使用的数据来源。所有说明性与数据解释性文字一律
-      使用简体中文。
+      而不是即兴推理；始终注明所使用的数据来源。
+
+      【最高优先级 — 语言规范】所有输出必须使用简体中文，包括但不限于：思考过程、
+      工具调用前的叙述与解释、图表标题与标签、代码注释、最终回复。禁止使用英文
+      进行推理叙述或工具调用说明。
 
   # ---- Channels (side-tool adapters) ----
   # ChatUI is always-on and serves the primary web UX. DingTalk and the

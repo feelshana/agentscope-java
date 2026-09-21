@@ -17,6 +17,7 @@ package io.agentscope.dataagent.runtime.channel.webhook;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agentscope.core.message.Msg;
+import java.net.InetAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -61,6 +62,10 @@ public final class WebhookOutboundClient {
     public Mono<Void> deliver(String callbackUrl, String inboundId, String replyText) {
         if (callbackUrl == null || callbackUrl.isBlank()) {
             return Mono.empty();
+        }
+        if (!isSafeUrl(callbackUrl)) {
+            log.warn("Webhook channel '{}' rejected unsafe callback URL: {}", channelId, callbackUrl);
+            return Mono.error(new IllegalArgumentException("Unsafe callback URL: internal addresses are not allowed"));
         }
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("channelId", channelId);
@@ -118,5 +123,31 @@ public final class WebhookOutboundClient {
             sb.append(t);
         }
         return sb.toString();
+    }
+
+    /**
+     * Validates that the URL does not point to internal/private network addresses.
+     * Rejects localhost, loopback, link-local, site-local, and any-local addresses.
+     */
+    private static boolean isSafeUrl(String url) {
+        try {
+            URI uri = new URI(url);
+            String scheme = uri.getScheme();
+            if (scheme == null || (!scheme.equalsIgnoreCase("http") && !scheme.equalsIgnoreCase("https"))) {
+                return false;
+            }
+            String host = uri.getHost();
+            if (host == null || host.isBlank()) {
+                return false;
+            }
+            InetAddress addr = InetAddress.getByName(host);
+            return !addr.isLoopbackAddress()
+                    && !addr.isLinkLocalAddress()
+                    && !addr.isSiteLocalAddress()
+                    && !addr.isAnyLocalAddress()
+                    && !addr.isMulticastAddress();
+        } catch (Exception e) {
+            return false;
+        }
     }
 }

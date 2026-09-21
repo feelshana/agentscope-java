@@ -254,6 +254,9 @@ public class AgentWorkspaceController {
             @RequestParam("path") String path,
             @RequestParam(name = "download", defaultValue = "false") boolean download,
             Authentication auth) {
+        if (auth == null) {
+            return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
+        }
         String userId = (String) auth.getPrincipal();
         // Spring WebFlux should auto-decode @RequestParam, but add fallback
         // for cases where the path arrives still URL-encoded (e.g. when loaded

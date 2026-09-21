@@ -92,6 +92,7 @@ logs/
 
 ##agentscope
 .agentscope/
+/agentscope-examples/agents/agentscope-dataagent/.workbuddy/
 
 ## harness db
 **/*.db

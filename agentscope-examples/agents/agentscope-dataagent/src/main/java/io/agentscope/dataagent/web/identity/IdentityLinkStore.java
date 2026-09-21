@@ -175,6 +175,7 @@ public class IdentityLinkStore {
     }
 
     private void persist() {
+        Path tmp = null;
         try {
             Files.createDirectories(file.getParent());
             ObjectMapper m =
@@ -183,12 +184,19 @@ public class IdentityLinkStore {
                                     com.fasterxml.jackson.databind.SerializationFeature
                                             .INDENT_OUTPUT);
             m.setSerializationInclusion(JsonInclude.Include.NON_NULL);
-            Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
+            tmp = file.resolveSibling(file.getFileName() + ".tmp");
             Files.writeString(tmp, m.writeValueAsString(snapshot()), StandardCharsets.UTF_8);
             Files.move(
                     tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         } catch (IOException e) {
             log.error("Failed to persist identity-links: {}", e.getMessage());
+            if (tmp != null) {
+                try {
+                    Files.deleteIfExists(tmp);
+                } catch (IOException deleteEx) {
+                    log.warn("Failed to clean up temp file {}: {}", tmp, deleteEx.getMessage());
+                }
+            }
             throw new RuntimeException(e);
         }
     }

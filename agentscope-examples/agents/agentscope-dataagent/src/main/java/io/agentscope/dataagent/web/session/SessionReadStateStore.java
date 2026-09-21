@@ -106,9 +106,10 @@ public class SessionReadStateStore {
     }
 
     private synchronized void flush() {
+        Path tmp = null;
         try {
             Files.createDirectories(stateFile.getParent());
-            Path tmp = stateFile.resolveSibling(stateFile.getFileName() + ".tmp");
+            tmp = stateFile.resolveSibling(stateFile.getFileName() + ".tmp");
             // Use a stable iteration order for diff-friendly writes.
             Map<String, Long> ordered = new LinkedHashMap<>(lastReadAt);
             Files.writeString(tmp, MAPPER.writeValueAsString(ordered), StandardCharsets.UTF_8);
@@ -119,6 +120,13 @@ public class SessionReadStateStore {
                     StandardCopyOption.ATOMIC_MOVE);
         } catch (IOException e) {
             log.warn("Failed to persist session read-state to {}: {}", stateFile, e.getMessage());
+            if (tmp != null) {
+                try {
+                    Files.deleteIfExists(tmp);
+                } catch (IOException deleteEx) {
+                    log.warn("Failed to clean up temp file {}: {}", tmp, deleteEx.getMessage());
+                }
+            }
         }
     }
 }

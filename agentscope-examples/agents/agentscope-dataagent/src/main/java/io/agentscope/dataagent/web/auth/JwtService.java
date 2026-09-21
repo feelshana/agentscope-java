@@ -36,20 +36,23 @@ import org.springframework.stereotype.Service;
  *   <li>{@code roles} — list of role strings
  * </ul>
  *
- * <p>The signing secret is read from {@code dataagent.jwt.secret}. Defaults to a development-only
- * placeholder — <strong>must be overridden in production</strong>.
+ * <p>The signing secret is read from {@code dataagent.jwt.secret}. Must be configured
+ * in production — the application will fail to start if using the default dev secret.
  */
 @Service
 public class JwtService {
 
     private static final long TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1_000L; // 7 days
+    private static final String DEV_DEFAULT_SECRET = "dataagent-default-dev-secret-change-in-production-32chars";
 
     private final SecretKey signingKey;
 
     public JwtService(
-            @Value(
-                            "${dataagent.jwt.secret:dataagent-default-dev-secret-change-in-production-32chars}")
-                    String secret) {
+            @Value("${dataagent.jwt.secret}") String secret) {
+        if (DEV_DEFAULT_SECRET.equals(secret)) {
+            throw new IllegalStateException(
+                    "JWT secret 未配置，请在 application.yml 中设置 dataagent.jwt.secret（>=32字符）");
+        }
         byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
         // JJWT requires >= 32 bytes for HS256
         if (keyBytes.length < 32) {

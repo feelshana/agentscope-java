@@ -232,9 +232,10 @@ public final class SessionStore {
     }
 
     private void flushToDisk() {
+        Path tmp = null;
         try {
             Files.createDirectories(storeFile.getParent());
-            Path tmp = storeFile.resolveSibling(storeFile.getFileName() + ".tmp");
+            tmp = storeFile.resolveSibling(storeFile.getFileName() + ".tmp");
             byte[] bytes = MAPPER.writeValueAsBytes(entries);
             Files.write(
                     tmp, bytes, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
@@ -245,6 +246,13 @@ public final class SessionStore {
                     java.nio.file.StandardCopyOption.ATOMIC_MOVE);
         } catch (IOException e) {
             log.warn("Failed to flush session store to {}: {}", storeFile, e.getMessage());
+            if (tmp != null) {
+                try {
+                    Files.deleteIfExists(tmp);
+                } catch (IOException deleteEx) {
+                    log.warn("Failed to clean up temp file {}: {}", tmp, deleteEx.getMessage());
+                }
+            }
         }
     }
 }

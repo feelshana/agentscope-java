@@ -362,6 +362,9 @@ export default function ChatPanel({
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const groupPickerRef = useRef<HTMLDivElement | null>(null);
   const ontologyPickerRef = useRef<HTMLDivElement | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const onTitleRef = useRef(onTitle);
+  onTitleRef.current = onTitle;
 
   /** Mutually-exclusive effective agent: ontology mode overrides knowledge-base mode. */
   const effectiveAgentId = selectedOntology ? `ontology-${selectedOntology}` : agentId;
@@ -482,8 +485,14 @@ export default function ChatPanel({
 
   useEffect(() => {
     const firstUser = messages.find(m => m.role === 'user');
-    onTitle?.(firstUser ? firstUser.text.replace(/\s+/g, ' ').trim().slice(0, 40) : '');
-  }, [messages, onTitle]);
+    onTitleRef.current?.(firstUser ? firstUser.text.replace(/\s+/g, ' ').trim().slice(0, 40) : '');
+  }, [messages]);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
 
   const canSend = useMemo(
     () => !busy && !restoring && !!effectiveAgentId && input.trim().length > 0,
@@ -499,13 +508,14 @@ export default function ChatPanel({
     const replyMsg: Message = { id: nextId(), role: 'assistant', text: '', tools: [], trace: [], pending: true };
     setMessages(prev => [...prev, userMsg, replyMsg]);
     let lastToolEventSeq = -1;
+    abortRef.current = new AbortController();
 
     try {
       for await (const evt of stream(effectiveAgentId, {
         message: text,
         sessionKey: sessionKey ?? undefined,
         groupIds: selectedGroups.length ? selectedGroups : undefined,
-      })) {
+      }, abortRef.current.signal)) {
         const isToolEvent = evt.type === 'tool_call' || evt.type === 'tool_result';
         if (isToolEvent) {
           const seq = evt.seq;
@@ -606,6 +616,7 @@ export default function ChatPanel({
         ? { ...m, pending: false, failed: true, text: m.text + (m.text ? '\n' : '') + `[错误] ${msg}` }
         : m));
     } finally {
+      abortRef.current = null;
       setBusy(false);
       inputRef.current?.focus();
     }
@@ -637,18 +648,6 @@ export default function ChatPanel({
         )}
         {messages.map(m => {
           const { trace, answer } = splitToolRender(m, onInspect);
-          if (m.role === 'assistant' && !m.pending) {
-            const pyTools = m.tools.filter(t => t.name === 'run_python');
-            const pyWithResult = pyTools.filter(t => !!t.result);
-            if (pyTools.length > 0 || m.tools.length > 0) {
-              console.log('[ChatPanel] assistant tools summary:', {
-                totalTools: m.tools.length,
-                pythonTools: pyTools.length,
-                pythonWithResult: pyWithResult.length,
-                toolNames: m.tools.map(t => t.name),
-              });
-            }
-          }
           return (
             <div
               key={m.id}

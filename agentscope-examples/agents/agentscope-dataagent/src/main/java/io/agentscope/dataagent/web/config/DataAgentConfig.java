@@ -522,12 +522,18 @@ public class DataAgentConfig {
         Path configFile = DataAgentBootstrap.DEFAULT_CONFIG_PATH;
         Path workspaceRoot = DataAgentBootstrap.DEFAULT_WORKSPACE_ROOT;
 
+        Files.createDirectories(configFile.getParent());
+        Files.createDirectories(workspaceRoot);
+
+        // Always ensure workspace scaffolding (AGENTS.md etc.) runs — safe because
+        // scaffold() uses writeIfMissing internally. This fixes the case where
+        // agentscope.json exists from a prior setup but AGENTS.md was never created.
+        io.agentscope.dataagent.web.scaffold.WorkspaceScaffolder.scaffold(
+                workspaceRoot, "Data Agent", agentSysPrompt);
+
         if (Files.exists(configFile)) {
             return;
         }
-
-        Files.createDirectories(configFile.getParent());
-        Files.createDirectories(workspaceRoot);
 
         String agentsJson =
                 """
@@ -551,8 +557,5 @@ public class DataAgentConfig {
 
         Files.writeString(configFile, agentsJson);
         log.info("Auto-generated DataAgent config at {}", configFile);
-
-        io.agentscope.dataagent.web.scaffold.WorkspaceScaffolder.scaffold(
-                workspaceRoot, "Data Agent", agentSysPrompt);
     }
 }

@@ -47,7 +47,7 @@ export default function EChartsBlock({ payload }: { payload: ChartPayload }) {
     return () => {
       cancelled = true;
     };
-  }, [payload]);
+  }, [payload.option, payload.chartId]);
 
   useEffect(() => {
     if (!ref.current || !option) return;
