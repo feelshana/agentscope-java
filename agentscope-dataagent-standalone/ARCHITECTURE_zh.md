@@ -242,6 +242,40 @@ harness 带外执行工具时退化为 `rc.getUserId()`；无 group 过滤时再
 `run_python` 返回结构化报告：`executed_code` / `exit_code` / `stdout` / `artifacts`
 （图片含 `image_ref: ![name](sandbox path)`，要求模型原样复制到最终回复，前端经工作区二进制 API 取图）。
 
+### 4.5 提示词三层分工
+
+规则按「是否每轮都在上下文里」分层，避免同一条规则在多处重复而互相漂移（ADR 0007）：
+
+| 层 | 载体 | 何时进入上下文 | 放什么 |
+|---|---|---|---|
+| 常驻·人格与流程 | `DataAgentConfig#DEFAULT_AGENT_SYS_PROMPT` → `WorkspaceScaffolder` 写进 `workspace/AGENTS.md` | 每轮（harness `WorkspaceContextMiddleware#onSystemPrompt` 追加） | 只放「模型加载任何技能之前就必须成立」的内容：角色、最高优先级原则、工作流程骨架、输出语言与产物门（不主动出图 / 不主动出文件 / 全中文输出）、回答中的计数必须与自己列出的明细行数一致的自检义务、指向 `sql-analysis` 技能的一句话 |
+| 常驻·动作点硬门 | `DataAgentToolkit#queryStructuredData` 的 `@Tool` 描述 | 每轮（工具 schema 随请求下发） | 不可违反的 SQL 硬门：多表关联在同一条 SQL 内用 JOIN/CTE 完成、禁止把上一步结果字面量复制进 `IN (...)`、维表一个关联键对应多行时先 `WITH ... SELECT DISTINCT` 去重防扇出、禁止仅用于了解数据规模 / 日期范围 / 取值分布的摸底查询（`prepareDataContext` 描述则声明字段描述已含取值提示，即该门的替代方案） |
+| 按需·操作手册 | `shared/agents/data-agent/skills/*/SKILL.md` | 模型判断需要时才加载技能体 | 完整步骤、批量 prepare 的表数与 `tables` 参数用法、CTE 写法、报告结构、matplotlib 标签语言与 CJK 字体、反模式清单 |
+
+取舍：技能体不是常驻的（常驻上下文里只有技能名+描述），模型可能不加载技能就直接调
+`query_structured_data`；所以「必须成立」的约束放工具描述，「怎么做才好」的细节放技能。
+
+一条规则到底该常驻还是该下沉，准绳是「它是否需要在模型还没选定技能时就生效」：是则常驻，
+否则下沉。例如「不主动生成图表」必须常驻——`chart-rendering` 只在模型已决定出图后才会被加载，
+下沉等于门失效；而 matplotlib 的标签语言与字体可以下沉——写这类代码前必然已加载
+`python-analysis`。同一条规则的**同一句话**只在一层出现，两处都写就会漂移（ADR 0006 的规则失效正是
+yml / 常量 / SKILL.md 三处各说一半的结果）。但「门 vs 手册」是刻意的分工：常驻层写一句话禁令或义务，
+技能层写例子、替代做法与校验清单（如禁摸底查询、JOIN 去重），两者角色不同因而不算重复（ADR 0008）。
+
+覆盖优先级：`DATAAGENT_AGENT_SYS_PROMPT` > `dataagent.agent.sys-prompt` > 内置常量。
+`application.yml` 有意不声明 `sys-prompt` 键——声明为空会把 scaffold 出的 AGENTS.md 变成空提示词。
+
+**运维事实（易踩）**：`WorkspaceScaffolder` 只在 `DataAgentConfig#ensureAgentscopeConfig`
+发现 `agentscope.json` 缺失时执行一次，此后 `writeIfMissing` 不再覆盖用户编辑。因此内置提示词
+的任何更新对已有部署**不会自动生效**；而删掉 `workspace/AGENTS.md` 也**不会**被重建——
+`<agents_context>` 会变成空标签，常驻层 B 整段丢失（角色、原则、输出语言、产物门全部失效），
+且启动日志里看不出错。要让新的内置提示词落地：删掉
+`~/.agentscope/dataagent-standalone/agentscope.json` 后重启（`workspace/` 下的 `tools.json` /
+`skills/` 等由 `writeIfMissing` 保留），或调用 `POST /api/agents/{agentId}/workspace/scaffold`。
+共享层的技能不受此限制——`SharedWorkspaceSeeder` 有 sha256 簿记，未被手改的副本会自动升级（见第 8 章）。
+
+守卫：`DataAgentConfigTest`（常驻两层，含「不复述技能细节」的反重复断言）、`SharedSkillContentTest`（技能层：非空、有 frontmatter、无退役工具名、确实承载了下沉的细节）。
+
 ---
 
 ## 5. 数据集与知识库
@@ -344,7 +378,7 @@ ExternalDataSource（用户配置的外部 JDBC 连接，可选采样）
 
 - 对话上下文：每轮结束由 ReActAgent 写入 `AgentStateStore`（默认 `InMemoryAgentStateStore`；
   生产应提供分布式实现，见 `DataAgentConfig` 注释与 `dataagent.session.redis.*`）。
-- 会话元数据：`SessionStore` 落 `~/.agentscope/dataagent/workspace/sessions.json`。
+- 会话元数据：`SessionStore` 落 `~/.agentscope/dataagent-standalone/workspace/sessions.json`。
 - 长会话控制：toolResultEviction（4000 字符驱逐大结果，run_python 豁免）+ compaction（80 触发/保留 20）。
 - 斜杠命令：`/new`（新 conversationId）、`/reset`（清当前会话历史）、`/identity`、`/dock_<channel> <id>`（身份链接）。
 
@@ -358,7 +392,8 @@ ExternalDataSource（用户配置的外部 JDBC 连接，可选采样）
   `invalidate(userId, agentId)` 贡献审批通过后批量失效重建。
 - 空闲回收：`dataagent.sandbox.idle-ttl-min`（默认 15min），轮询 `eviction-poll-sec`（默认 60s）。
 - 工作区投影：容器启动时把宿主机共享层 `shared/agents/{agentId}/` 下的
-  `AGENTS.md / skills / subagents / knowledge` 只读投影进容器。
+  `AGENTS.md / skills / subagents / knowledge` 只读投影进容器（`subagents/` 仅在
+  `dataagent.agent.subagents-enabled=true` 时被 harness 加载，见 12.1）。
 - 网关注入：`HarnessGateway#attachUserSandboxContext` 把该容器设为
   `SandboxContext.externalSandbox`（SandboxManager Priority-1 获取路径），
   保证 agent 执行与浏览器工作区 API 读写**同一个容器**。
@@ -394,6 +429,20 @@ UserSandboxRegistry.invalidate(null, agentId)  ← 全用户沙箱失效，
 用户 API：`MarketplacesController`（`/api/me/marketplaces`）。
 技能也可直接在工作区编辑：`AgentSkillsController`（`/api/agents/{agentId}/skills`）。
 内置技能：`sql-analysis` / `chart-rendering` / `python-analysis`；内置子 agent：`data-explorer` / `report-writer`。
+
+**共享层单一事实源**：出厂内容只在 `src/main/resources/shared/`（classpath）维护；项目根 `shared/`
+是运行态目录（已 gitignore），由 `SharedWorkspaceSeeder#seedSharedTree` 在每次启动时物化，同时也是审批
+贡献的落盘位置。写入策略是三态的，簿记在 `shared/.seed-manifest.json`（relPath → 出厂内容 sha256）：
+
+| 磁盘状态 | 动作 |
+|---|---|
+| 文件缺失或 0 字节 | 写入出厂内容（**0 字节自愈**——空 SKILL.md 会因 frontmatter 解析失败而从 `available_skills` 静默消失） |
+| 与 manifest 记录一致、但出厂内容已变 | 覆盖升级（内置技能随版本演进） |
+| 与 manifest 记录不一致（运营手改） | 保留不动 |
+| 不在 manifest 中（审批贡献） | 保留不动 |
+
+manifest 尚不存在时（首次升级到该策略）执行一次性「采纳」：出厂路径全部按 classpath 覆盖，让历史漂移的
+副本收敛。删 `.seed-manifest.json` 可重新采纳，删单个文件可只强制重新物化该文件。
 
 ---
 
@@ -447,6 +496,8 @@ React 18 + TypeScript + Vite SPA（`frontend/`），构建产物进 `classpath:/
 |---|---|---|
 | `dataagent.jwt.secret` | dev 占位 | 生产必须覆盖（≥32 字符） |
 | `dataagent.workspace` | JVM cwd | 运行态工作目录 |
+| `dataagent.agent.name` | `data-agent` | 自动生成 `agentscope.json` 时的 agent 名；系统提示词默认用内置常量，覆盖用 `DATAAGENT_AGENT_SYS_PROMPT`（见 4.5） |
+| `dataagent.agent.subagents-enabled` | false | 子代理编排（harness `agent_spawn` / `agent_send` / `task_*`）。关闭可省下每轮固定约 6.2k 字符的 `## Subagents` 提示词段与相应工具 schema；**不影响网关、会话路由与聊天**（`buildSubagentEntries` 不读该开关），内置定义也不删（ADR 0009） |
 | `dataagent.openai.*` | DeepSeek 默认值 | 主模型（任意 OpenAI 兼容端点） |
 | `dataagent.dashscope.*` | — | 兜底模型 |
 | `dataagent.sandbox.image` | `agentscope/dataagent-sandbox:latest` | 沙箱镜像（`docker/sandbox.Dockerfile` 构建） |
@@ -478,14 +529,21 @@ H2 种子账号：`bob/bob`、`alice/alice`（`data-h2.sql`，幂等 MERGE）。
 ### 12.3 首次启动自动生成的文件
 
 ```
-~/.agentscope/dataagent/
+~/.agentscope/dataagent-standalone/
 ├── agentscope.json          ← agent 定义（main=data-agent, maxIters=20）+ 通道配置
-└── workspace/               ← 共享工作区种子（WorkspaceScaffolder 生成）
-    ├── AGENTS.md            ← data-agent 系统提示词（可编辑）
-    ├── skills/              ← 内置技能（sql-analysis / chart-rendering / python-analysis）
-    ├── subagents/           ← 内置子 agent（data-explorer / report-writer）
+└── workspace/               ← 私有层工作区种子（WorkspaceScaffolder 生成）
+    ├── AGENTS.md            ← data-agent 系统提示词（可编辑；分层见 4.5）
+    ├── skills/              ← 私有层技能（example-skill 示例；内置业务技能在下面的共享层）
+    ├── subagents/           ← 子 agent 定义（开关关闭时不加载，见 12.1）
     ├── knowledge/
     └── sessions.json        ← 会话元数据（运行时生成）
+
+${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物化，已 gitignore）
+├── .seed-manifest.json      ← 出厂内容 sha256 簿记（见第 8 章）
+└── agents/data-agent/
+    ├── skills/              ← 内置技能（sql-analysis / chart-rendering / python-analysis）+ 审批贡献
+    └── subagents/           ← 内置子 agent（data-explorer / report-writer；默认不加载，见 12.1）
+
 ~/.agentscope-dataagent/db.* ← H2 平台元数据库（用户/数据集/图谱/贡献等 JPA 表）
 ```
 

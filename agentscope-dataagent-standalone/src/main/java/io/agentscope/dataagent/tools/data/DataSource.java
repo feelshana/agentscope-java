@@ -26,7 +26,7 @@ import java.util.Objects;
  *
  * <p>Concrete connector implementations (JDBC, BigQuery, Hologres, OSS+Parquet) are explicitly out
  * of scope for v1 — the toolkit returns descriptors here so the agent can reason about which source
- * to use, and an upcoming connector module will implement the actual {@code run_sql_preview}.
+ * to use, and an upcoming connector module will implement the actual {@code query_structured_data}.
  */
 public record DataSource(
         String id,

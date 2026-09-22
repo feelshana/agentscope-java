@@ -34,7 +34,8 @@ import reactor.core.scheduler.Schedulers;
 
 /**
  * Business-term dictionary CRUD (TC "语义配置" page backend). Terms are global and are appended to
- * list_data_sources output so the agent maps business nouns onto tables/columns.
+ * the [KNOWLEDGE_BASE_OVERVIEW] section of the system prompt so the agent maps business nouns onto
+ * tables/columns.
  */
 @RestController
 @RequestMapping("/api/semantic-terms")

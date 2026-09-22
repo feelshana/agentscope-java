@@ -16,8 +16,8 @@
 package io.agentscope.dataagent.tools.data;
 
 /**
- * SPI for executing {@code describe_table} / {@code run_sql_preview} against a configured
- * {@link DataSource}. Mirrors {@link ChartRenderer}: implementations live behind a Spring
+ * SPI for executing {@code prepare_data_context} / {@code query_structured_data} against a
+ * configured {@link DataSource}. Mirrors {@link ChartRenderer}: implementations live behind a Spring
  * {@code @Bean} so operators can swap the JDBC connector for a BigQuery / Hologres connector
  * without touching {@link DataAgentToolkit}.
  *

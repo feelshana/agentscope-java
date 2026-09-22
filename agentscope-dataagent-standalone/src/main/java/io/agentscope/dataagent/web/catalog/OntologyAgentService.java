@@ -47,7 +47,7 @@ import org.springframework.stereotype.Service;
  * has only MCP tools (no filesystem, shell, or knowledge-base middleware) and lives in its own
  * session namespace ({@code ontology-{id}}), completely separate from the knowledge-base agents.
  *
- * <p>Configuration is loaded from {@code ~/.agentscope/dataagent/ontologies.json}. When the file
+ * <p>Configuration is loaded from {@code ~/.agentscope/dataagent-standalone/ontologies.json}. When the file
  * does not exist, the service starts with an empty ontology list (backward-compatible).
  */
 @Service
@@ -202,12 +202,14 @@ public class OntologyAgentService {
         // Use the same directory pattern as agentscope.json
         String userHome = System.getProperty("user.home");
         if (userHome != null) {
-            Path p = Path.of(userHome, ".agentscope", "dataagent", "ontologies.json");
+            Path p = Path.of(userHome, ".agentscope", "dataagent-standalone", "ontologies.json");
             if (Files.exists(p)) return p;
         }
-        // Fallback: look in cwd/.agentscope/dataagent/
+        // Fallback: look in cwd/.agentscope/dataagent-standalone/
         Path cwd = Path.of(System.getProperty("user.dir")).toAbsolutePath().normalize();
-        return cwd.resolve(".agentscope").resolve("dataagent").resolve("ontologies.json");
+        return cwd.resolve(".agentscope")
+                .resolve("dataagent-standalone")
+                .resolve("ontologies.json");
     }
 
     /** Summary record returned by {@link #listOntologies()}. */

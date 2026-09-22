@@ -24,9 +24,9 @@ import java.time.Instant;
 
 /**
  * One per knowledge-base group: the uploaded document (Word/Markdown text) describing how the
- * datasets inside that group relate to each other. Surfaced to the agent via {@code
- * list_data_sources} (aggregated per owner) so cross-dataset questions can be answered without
- * manual dataset selection.
+ * datasets inside that group relate to each other. Surfaced to the agent via the {@code
+ * [KNOWLEDGE_BASE_OVERVIEW]} section (aggregated per owner) so cross-dataset questions can be
+ * answered without manual dataset selection.
  */
 @Entity
 @Table(name = "dataagent_group_knowledge")

@@ -129,6 +129,8 @@ public final class DataAgentToolkit {
                     与问题直接相关的 1-3 张表用 tables 参数一次批量取回（最多 5 张），\
                     不要一张一张分开调用，也不要漏掉直接相关的表而盲写列名；\
                     只确认单表时改用 source_id + table 两个参数。\
+                    输出的字段描述通常已含枚举与取值提示（如「包含领导等值」），\
+                    据此直接写 WHERE，无需再探查取值。\
                     """)
     public String prepareDataContext(
             DatasetScope scope,
@@ -375,6 +377,15 @@ public final class DataAgentToolkit {
                     执行只读 SQL 查询并返回结果。前提：[DATA_SOURCES_OVERVIEW] 存在且列出了可用表。\
                     调用前应先通过 prepare_data_context 确认列名和字段类型。\
                     只接受 SELECT / WITH 语句。返回结果包含 SQL 语句、执行结果和数据预览。\
+                    多表关联必须在同一条 SQL 内用 JOIN/CTE 完成，禁止把上一步查询结果作为字面量复制进 IN (...)——\
+                    跨表筛选和补维度属性（部门、职位等）都算，需要上一步结果里的值时一律改用 JOIN/CTE 在同一条 SQL 内取。\
+                    JOIN 前先判断维表粒度：一个关联键对应多行时（如用户×项目权限表）必须先 \
+                    WITH u AS (SELECT DISTINCT 关联键, 所需列 FROM 维表) 去重再 JOIN 明细表，\
+                    防止扇出导致 COUNT/SUM 被放大。\
+                    不要发仅用于了解数据规模、日期范围或取值分布的探查查询\
+                    （COUNT(*) / MIN / MAX / 无筛选的全表 GROUP BY 分布统计）；\
+                    结论本身需要的聚合不在此列。\
+                    详细写法与反模式见 sql-analysis 技能。\
                     """)
     public String queryStructuredData(
             DatasetScope scope,

@@ -1,6 +1,13 @@
-﻿target/
+target/
 node_modules/
 logs/
 *.iml
 .idea/
 .flattened-pom.xml
+
+# Runtime shared workspace. Seeded at startup by SharedWorkspaceSeeder from
+# src/main/resources/shared (the single source of truth for shipped skills /
+# sub-agents) and additionally written to by approved marketplace contributions,
+# so its content is per-deployment state rather than source. Anchored with a
+# leading slash so src/main/resources/shared stays tracked.
+/shared/

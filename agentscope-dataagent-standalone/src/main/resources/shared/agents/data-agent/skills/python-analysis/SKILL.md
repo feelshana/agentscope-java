@@ -22,7 +22,7 @@ description: 使用 Python 完成数据可视化与深度分析。当用户问�
 | 直方图等分布分析 | `run_python`（本技能） |
 | 需要导出 CSV 数据文件给用户下载 | `run_python`（本技能） |
 | 只要一张简单图表，无标注诉求 | `render_chart`（[[chart-rendering]] 技能） |
-| 只要数字答案，无需图形 | `run_sql_preview`（[[sql-analysis]] 技能） |
+| 只要数字答案，无需图形 | `query_structured_data`（[[sql-analysis]] 技能） |
 
 **判断口诀：图上要写字（标签/参考线/达成率）就用 run_python；只要个形状就用 render_chart。**
 
@@ -30,15 +30,15 @@ description: 使用 Python 完成数据可视化与深度分析。当用户问�
 
 ## 步骤
 
-1. **先用 SQL 拿到原始数据。** 调用 `list_data_sources` 确认数据源，`describe_table` 确认列名，然后用 `run_sql_preview` 执行查询。不要在 Python 中直接连接数据库——沙箱没有网络，始终通过 SQL 工具取数后再用 Python 处理。
+1. **先用 SQL 拿到原始数据。** 查阅 system prompt 中的 `[DATA_SOURCES_OVERVIEW]` 确认数据源，`prepare_data_context` 确认列名，然后用 `query_structured_data` 执行查询。不要在 Python 中直接连接数据库——沙箱没有网络，始终通过 SQL 工具取数后再用 Python 处理。
 
-   问题涉及考核/目标时，先调用 `read_knowledge` 查知识库中的 KPI/考核目标值（如"日均目标 2000 万"）——参考线与达成率都以此为基准；知识库没有就问用户要目标值，不要编造。
+   问题涉及考核/目标时，先调用 `retrieve_evidence` 查知识库中的 KPI/考核目标值（如"日均目标 2000 万"）——参考线与达成率都以此为基准；知识库没有就问用户要目标值，不要编造。
 
 2. **分两次调用 run_python：先探查，再画图。** 第一次传一段探查代码，确认列名、类型与取值范围：
 
    ```python
    import pandas as pd
-   data = [ ...run_sql_preview 返回的行... ]  # 硬编码为 DataFrame
+   data = [ ...query_structured_data 返回的行... ]  # 硬编码为 DataFrame
    df = pd.DataFrame(data)
    print("shape:", df.shape)
    print("columns:", df.columns.tolist())
@@ -83,7 +83,7 @@ description: 使用 Python 完成数据可视化与深度分析。当用户问�
 4. **考核指标分析模式。** 考核/目标达成类问题的标准画法——参考线 + 数据标签 + 达成率：
 
    ```python
-   target = 2000  # 考核目标（来自 read_knowledge 或用户），单位与数据一致
+   target = 2000  # 考核目标（来自 retrieve_evidence 或用户），单位与数据一致
 
    # 折线 + 逐点数据标签
    ax.plot(df['x_label'], df['value_wan'], marker='o', linewidth=2, color='#2196F3', zorder=3)
@@ -230,8 +230,8 @@ ax.plot(x, intercept + slope * x, 'r--', label=f'趋势线 (R²={r_value**2:.3f}
 
 ## 反模式
 
-- ❌ 在 Python 中直接连接数据库——沙箱无网络，必须先用 `run_sql_preview` 取数。
-- ❌ 编造考核目标值——从 `read_knowledge` 或用户处获取；两者都没有就明确说明"无目标值，仅展示数据"。
+- ❌ 在 Python 中直接连接数据库——沙箱无网络，必须先用 `query_structured_data` 取数。
+- ❌ 编造考核目标值——从 `retrieve_evidence` 或用户处获取；两者都没有就明确说明"无目标值，仅展示数据"。
 - ❌ 不探查直接写正式代码——列名/类型写错会浪费一整次执行；先跑探查脚本。
 - ❌ 调用 `plt.show()`——沙箱没有显示设备；用 `plt.savefig()` + `plt.close()`。
 - ❌ 把产物保存到 `outputs/` 之外的目录——工具只收集 `outputs/` 下的文件。

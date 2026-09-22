@@ -22,7 +22,7 @@ description: 将查询结果快速可视化为常规图表（折线图、柱状�
    - `question`：用户的原始问题——标题与图表类型由它推断，写清楚才能选对图。
    - `columns`：查询结果的列名列表，按顺序。
    - `rows`：查询结果的行数据，每行是字符串单元格列表。直接传最后一次 `query_structured_data` 的结果。
-   - `mark_line_value` / `mark_line_label`：可选。KPI 目标值画红色虚线参考线（如从 `read_knowledge` 查到的"日均目标 20000000"）。没有目标就省略。
+   - `mark_line_value` / `mark_line_label`：可选。KPI 目标值画红色虚线参考线（如从 `retrieve_evidence` 查到的"日均目标 20000000"）。没有目标就省略。
 
    不要自己加工数据、不要自己构造 option——服务端从数据形态和问题确定性构建完整 ECharts 配置。
 

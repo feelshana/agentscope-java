@@ -139,13 +139,21 @@ dataagent:
     enable-thinking: false
 
   # ---- Agent defaults (used when auto-generating agentscope.json) ----
+  # The system prompt is NOT declared here on purpose: the built-in
+  # DataAgentConfig#DEFAULT_AGENT_SYS_PROMPT is the default and is scaffolded into
+  # ~/.agentscope/dataagent-standalone/workspace/AGENTS.md on first start. Declaring an
+  # empty `sys-prompt:` key would override it with a blank prompt. To customise, set the
+  # DATAAGENT_AGENT_SYS_PROMPT environment variable (takes precedence over the built-in).
   agent:
     name: ${DATAAGENT_AGENT_NAME:data-agent}
-    sys-prompt: >
-      你是一个基于 AgentScope 构建的数据分析智能体（Data Agent），帮助用户探查、
-      分析、可视化和汇报数据。优先使用已注册的技能（skills）与子代理（sub-agents），
-      而不是即兴推理；始终注明所使用的数据来源。所有说明性与数据解释性文字一律
-      使用简体中文。
+    # Subagent orchestration (harness agent_spawn / agent_send / task_*). Off by default:
+    # the harness injects a fixed ~6.2k-char "## Subagents" system-prompt section plus those
+    # tool schemas on every turn, and this product shape (single agent + TC-style data
+    # toolchain) never delegates. Setting it to true restores the section, the tools and the
+    # loading of workspace/subagents/*.md + the shared-layer definitions - no code change.
+    # Does NOT affect the gateway, session routing or chat: buildSubagentEntries ignores this
+    # flag, so SessionAgentManager is wired either way (ADR 0009).
+    subagents-enabled: ${DATAAGENT_SUBAGENTS_ENABLED:false}
 
   # ---- Channels (side-tool adapters) ----
   # ChatUI is always-on and serves the primary web UX. DingTalk and the

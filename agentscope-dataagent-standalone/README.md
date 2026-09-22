@@ -106,13 +106,17 @@ bus are all backed by Redis, so any replica can serve any user. See
   (HMAC-signed HTTP-in, callback or long-poll HTTP-out).
 - **Capability marketplace** — users nominate skills, sub-agents, or memory
   snippets from their own workspace as *contributions*. Admins approve via the
-  Approvals page; approved files land under `shared/` and become visible to
-  every tenant on the next agent build (via the overlay's lower layer).
-- **DataAgent toolkit slot** — `list_data_sources`, `describe_table`,
-  `run_sql_preview`, `render_chart` are registered on every data agent. v1
-  ships interface-only stubs plus an `InMemoryDataSourceRegistry` so admins
-  can seed sources via `agentscope.json`; concrete JDBC connectors are out of
-  scope and slot in via `DataSourceRegistry` / `ChartRenderer` Spring beans.
+  Approvals page; approved files land under the runtime `shared/` directory
+  (materialised from `src/main/resources/shared`, git-ignored) and become
+  visible to every tenant on the next agent build (via the overlay's lower
+  layer).
+- **DataAgent toolkit** — `prepare_data_context`, `query_structured_data`,
+  `retrieve_evidence` and `render_chart` are registered on every data agent,
+  alongside the sandboxed `run_python`. TC-style: the schema overview is
+  pre-injected into the system prompt, so the tools only confirm column
+  details, run a SELECT/WITH query, retrieve evidence and draw a chart.
+  `JdbcSqlConnector` serves the configured dataset store; other backends slot
+  in via the `SqlConnector` / `DataSourceRegistry` Spring beans.
 
 ---
 
@@ -147,7 +151,7 @@ file store. See [`docs/cluster-deploy.md`](docs/cluster-deploy.md).
 2. The contribution is persisted with status `PENDING` and shown to admins on
    `/admin/approvals`.
 3. Admin approves → the payload is materialised under
-   `~/.agentscope/dataagent/workspace/shared/skills/cohort-builder/SKILL.md`.
+   `~/.agentscope/dataagent-standalone/workspace/shared/skills/cohort-builder/SKILL.md`.
 4. Every per-`(userId, agentId)` overlay picks it up on the next agent build,
    immediately visible to every tenant without restart.
 
@@ -207,7 +211,7 @@ walkthrough.
 
 ### 3. (Optional) Enable the webhook side-channel
 
-In `~/.agentscope/dataagent/agentscope.json`:
+In `~/.agentscope/dataagent-standalone/agentscope.json`:
 
 ```json
 {
@@ -257,7 +261,7 @@ accounts: `bob` / `bob` and `alice` / `alice`. The first user with
 | Property | Default | Description |
 |---|---|---|
 | `dataagent.jwt.secret` | dev placeholder | JWT signing secret (>= 32 chars). **Refuses to boot in non-`dev` profiles when left at the default.** |
-| `dataagent.workspace` | `$CWD` *(dev only)* | Working directory for agent runtime state (not config — config lives at `~/.agentscope/dataagent/agentscope.json`). **Required** in non-`dev` profiles — startup fails if blank. |
+| `dataagent.workspace` | `$CWD` *(dev only)* | Working directory for agent runtime state (not config — config lives at `~/.agentscope/dataagent-standalone/agentscope.json`). **Required** in non-`dev` profiles — startup fails if blank. |
 | `dataagent.workspace-store.local.max-file-size-mb` | `10` | Per-file cap for the `RemoteFilesystem` local store. |
 | `dataagent.openai.api-key` | _(empty)_ | OpenAI-compatible API key (primary model). Env: `DATAAGENT_OPENAI_API_KEY` or `OPENAI_API_KEY`. When set, takes precedence over DashScope. |
 | `dataagent.openai.base-url` | _(empty → official OpenAI)_ | Base URL of any OpenAI-compatible endpoint (DeepSeek, vLLM, one-api, DashScope compatible-mode, ...). Trailing `/v1` is optional. Env: `DATAAGENT_OPENAI_BASE_URL` or `OPENAI_BASE_URL`. |
@@ -265,8 +269,9 @@ accounts: `bob` / `bob` and `alice` / `alice`. The first user with
 | `dataagent.openai.stream` | `true` | Stream chat completions over SSE. |
 | `dataagent.dashscope.api-key` | _(empty)_ | DashScope API key (fallback when no OpenAI key is set). Env: `DASHSCOPE_API_KEY`. |
 | `dataagent.dashscope.model-name` | `qwen-max` | DashScope model id. |
-| `dataagent.agent.name` | `data-agent` | Used when auto-generating `~/.agentscope/dataagent/agentscope.json`. |
-| `dataagent.agent.sys-prompt` | _(built-in)_ | Used when auto-generating `~/.agentscope/dataagent/agentscope.json`. |
+| `dataagent.agent.name` | `data-agent` | Used when auto-generating `~/.agentscope/dataagent-standalone/agentscope.json`. |
+| `dataagent.agent.sys-prompt` | _(built-in prompt)_ | Overrides the built-in system prompt scaffolded into `workspace/AGENTS.md` on first start. Prefer the `DATAAGENT_AGENT_SYS_PROMPT` env var, and never set this key to an empty value — an empty property would scaffold a blank prompt. |
+| `dataagent.agent.subagents-enabled` | `false` | Harness subagent orchestration (`agent_spawn` / `agent_send` / `task_*`). Off by default: the harness otherwise injects a fixed ~6.2k-char `## Subagents` system-prompt section plus those tool schemas on every turn. Setting it to `true` restores the section, the tools and the loading of `workspace/subagents/*.md` — no code change. Does **not** affect the gateway, session routing or chat. Env: `DATAAGENT_SUBAGENTS_ENABLED`. |
 | `dataagent.channels.chatui.enabled` | `true` | Primary web channel. Always-on by default. |
 | `dataagent.session.redis.enabled` | `false` | Use Redis for distributed agent state. |
 | `dataagent.session.redis.host/port/password/database` | `localhost:6379/0` | Redis connection. |

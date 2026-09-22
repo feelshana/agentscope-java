@@ -18,8 +18,8 @@ package io.agentscope.dataagent.dataset;
 /**
  * Supplies per-tenant dataset context that is not carried on the {@code DataSource} records
  * themselves — currently the user-authored document describing how their datasets relate to each
- * other, which {@code list_data_sources} appends so the agent can pick (and join) datasets
- * without the user pre-selecting anything.
+ * other, which the {@code [KNOWLEDGE_BASE_OVERVIEW]} section of the system prompt carries so the
+ * agent can pick (and join) datasets without the user pre-selecting anything.
  */
 public interface DatasetContextProvider {
 

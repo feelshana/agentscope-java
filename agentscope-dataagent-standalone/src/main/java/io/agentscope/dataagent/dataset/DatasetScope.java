@@ -18,7 +18,7 @@ package io.agentscope.dataagent.dataset;
 /**
  * Per-request tenant identity carried in the agent {@code RuntimeContext} and auto-injected into
  * data-tool methods. Users do not pick datasets up front: the agent lists everything this owner
- * may see (via {@code list_data_sources}) and chooses, so the scope only needs to pin {@code
+ * may see (via {@code [DATA_SOURCES_OVERVIEW]}) and chooses, so the scope only needs to pin {@code
  * ownerId} for isolation. {@code groupIds} optionally narrows the visible datasets to one or more
  * knowledge bases (TC-style "answer within selected KBs"); null/empty means all of the owner's KBs.
  */

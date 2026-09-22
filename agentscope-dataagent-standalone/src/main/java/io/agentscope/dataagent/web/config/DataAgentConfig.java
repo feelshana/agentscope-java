@@ -105,7 +105,7 @@ import org.springframework.context.annotation.Configuration;
  *
  * <h2>Agent config</h2>
  *
- * <p>If {@code ~/.agentscope/dataagent/agentscope.json} does not exist, a minimal default agent
+ * <p>If {@code ~/.agentscope/dataagent-standalone/agentscope.json} does not exist, a minimal default agent
  * config is auto-generated so the app starts without manual setup.
  */
 @Configuration
@@ -135,48 +135,62 @@ public class DataAgentConfig {
     private boolean dashscopeStream;
 
     /**
-     * Default system prompt for the built-in data agent, used when {@code
-     * dataagent.agent.sys-prompt} is not configured. Package-visible constant so tests can
-     * assert the built-in cross-table rules (ADR 0006: JOIN-first, no result copying).
+     * Default system prompt for the built-in data agent, used when neither {@code
+     * DATAAGENT_AGENT_SYS_PROMPT} nor {@code dataagent.agent.sys-prompt} is configured.
+     * Package-visible constant so tests can assert the always-on layer of the prompt.
+     *
+     * <p>Layering (ADR 0007): every rule lives in exactly one layer. This prompt keeps only what
+     * must already hold before any skill is loaded — the persona, the self-check gates, the
+     * workflow skeleton and the output-language/format gates — plus the pointer at the {@code
+     * sql-analysis} skill. The hard SQL gates (JOIN-first, dimension-table de-duplication) live in
+     * the {@code query_structured_data} tool description, which travels with the tool schema on
+     * every turn. The how-to (batch-preparing the directly related tables, CTE recipes,
+     * matplotlib labelling and fonts) lives in the skills and is deliberately not restated here:
+     * a rule written in two layers drifts, and the skill version is always the more detailed one.
      */
     static final String DEFAULT_AGENT_SYS_PROMPT =
             "# 数据分析智能体\n\n"
-                + "你是一个数据分析智能体，帮助用户查询、分析和可视化数据。\n\n"
-                + "# 最高优先级原则\n\n"
-                + "1. 显式需求优先：只做用户明确要求的分析，不主动扩展维度。\n"
-                + "2. 每次工具调用前自检：这一步是否是完成用户请求的必要动作？\n"
-                + "3. 已有结果足够时停止工具调用，直接回答。\n"
-                + "4. 不编造数据，不确定时说明局限。\n\n"
-                + "# 工作流程\n\n"
-                + "1. 理解用户问题，确定显式要求的对象、维度、时间范围、条件。\n"
-                + "2. 查阅 system prompt 中的动态上下文：\n"
-                + "   - [DATA_SOURCES_OVERVIEW] — 可用数据源和表结构\n"
-                + "   - [KNOWLEDGE_BASE_OVERVIEW] — 可用知识库\n"
-                + "3. 如果需要结构化数据，先用 prepare_data_context 一次性确认直接相关的 1–3 张表的列细节，再用"
-                + " query_structured_data 查询。\n"
-                + "4. 如果是知识/文档类问题，使用 retrieve_evidence。\n"
-                + "5. 如果需要图表，使用 render_chart。\n"
-                + "6. 结果足够时直接回答，不要为凑数继续调用工具。\n\n"
-                + "# 数据源规则\n\n"
-                + "- 调用 query_structured_data 前，先查看 [DATA_SOURCES_OVERVIEW] 确认表名。\n"
-                + "- 需要确认列名拼写时用 prepare_data_context；直接相关的 1–3 张表用 tables 参数一次批量取回。\n"
-                + "- 涉及多张表的筛选/关联，优先在一条 SQL 内用 JOIN/CTE 完成；禁止把上一步查询结果作为字面量复制进 IN (...)。\n"
-                + "- 多表 JOIN 时先判断维表粒度：若一个关联键对应多行（如用户×项目权限表），必须先用 CTE 按关联键 SELECT DISTINCT 去重，再 JOIN"
-                + " 明细表，防止扇出导致聚合值膨胀（COUNT/SUM 被放大）。\n"
-                + "- 没有数据源时不要编造数据，提示用户补充。\n\n"
-                + "# 回答规则\n\n"
-                + "- 默认用 markdown 表格呈现结构化数据。\n"
-                + "- 不主动生成图表，除非用户原话包含趋势/对比/分布等视觉分析语义。\n"
-                + "- 不主动生成 PDF/Excel/PPT 等文件，除非用户明确要求。\n"
-                + "- 所有输出必须使用简体中文：包括思考过程、工具调用说明、图表标题、轴标签、图例、代码注释等。\n"
-                + "- 生成 matplotlib 图表时，标题、轴标签、图例必须用中文，例如：plt.title('活跃用户 vs 目标') 而非"
-                + " plt.title('Active Users vs Target')。";
+                    + "你是一个数据分析智能体，帮助用户查询、分析和可视化数据。\n\n"
+                    + "# 最高优先级原则\n\n"
+                    + "1. 显式需求优先：只做用户明确要求的分析，不主动扩展维度。\n"
+                    + "2. 每次工具调用前自检：这一步是否是完成用户请求的必要动作？\n"
+                    + "3. 已有结果足够时停止工具调用，直接回答。\n"
+                    + "4. 不编造数据，不确定时说明局限。\n\n"
+                    + "# 工作流程\n\n"
+                    + "1. 理解用户问题，确定显式要求的对象、维度、时间范围、条件。\n"
+                    + "2. 查阅 system prompt 中的动态上下文：\n"
+                    + "   - [DATA_SOURCES_OVERVIEW] — 可用数据源和表结构\n"
+                    + "   - [KNOWLEDGE_BASE_OVERVIEW] — 可用知识库\n"
+                    + "3. 需要结构化数据时，先加载 sql-analysis 技能并严格按其步骤执行："
+                    + "prepare_data_context 确认列细节，再用 query_structured_data 查询。\n"
+                    + "4. 如果是知识/文档类问题，使用 retrieve_evidence。\n"
+                    + "5. 如果需要图表，使用 render_chart。\n"
+                    + "6. 结果足够时直接回答，不要为凑数继续调用工具。\n\n"
+                    + "# 回答规则\n\n"
+                    + "- 结论中的每一个计数都必须与自己列出的明细行数一致；不一致时以明细为准重算后再回答。\n"
+                    + "- 默认用 markdown 表格呈现结构化数据。\n"
+                    + "- 不主动生成图表，除非用户原话包含趋势/对比/分布等视觉分析语义。\n"
+                    + "- 不主动生成 PDF/Excel/PPT 等文件，除非用户明确要求。\n"
+                    + "- 所有输出必须使用简体中文：包括思考过程、工具调用说明、图表标题、轴标签、图例、代码注释等。";
 
-    @Value("${dataagent.agent.sys-prompt:" + DEFAULT_AGENT_SYS_PROMPT + "}")
+    @Value(
+            "${DATAAGENT_AGENT_SYS_PROMPT:${dataagent.agent.sys-prompt:"
+                    + DEFAULT_AGENT_SYS_PROMPT
+                    + "}}")
     private String agentSysPrompt;
 
     @Value("${dataagent.agent.name:data-agent}")
     private String agentName;
+
+    /**
+     * Whether harness subagent orchestration ({@code agent_spawn} / {@code agent_send} / {@code
+     * task_*}) is enabled. Off by default: the harness otherwise injects a fixed {@code ##
+     * Subagents} system-prompt section plus those tool schemas on every turn, which this
+     * single-agent data toolchain never delegates to. Gateway, session routing and chat are
+     * unaffected either way (ADR 0009).
+     */
+    @Value("${dataagent.agent.subagents-enabled:false}")
+    private boolean subagentsEnabled;
 
     @Value("${dataagent.workspace:}")
     private String workspaceDir;
@@ -344,6 +358,13 @@ public class DataAgentConfig {
                     // run_python has its own SandboxBackedFilesystem and is unaffected.
                     b.disableFilesystemTools();
                     b.disableShellTool();
+
+                    // Subagent orchestration is opt-in: the harness otherwise injects a fixed
+                    // "## Subagents" prompt section and the agent_*/task_* tool schemas on every
+                    // turn, which this single-agent data toolchain never uses (ADR 0009).
+                    if (!subagentsEnabled) {
+                        b.disableSubagents();
+                    }
 
                     // Exclude run_python from eviction: even with path-based
                     // artifact references the result is small, but as a safety
@@ -518,7 +539,7 @@ public class DataAgentConfig {
     }
 
     /**
-     * Auto-generates a minimal {@code ~/.agentscope/dataagent/agentscope.json} if it doesn't
+     * Auto-generates a minimal {@code ~/.agentscope/dataagent-standalone/agentscope.json} if it doesn't
      * exist, so the app can start without manual setup. The generated config defines a single
      * GLOBAL {@code data-agent} pre-wired with the {@code chatui} channel and lets the bootstrap
      * fall through to {@link DataAgentBootstrap#DEFAULT_WORKSPACE_ROOT} for the workspace

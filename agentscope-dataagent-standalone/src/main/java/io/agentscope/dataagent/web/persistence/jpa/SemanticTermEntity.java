@@ -23,8 +23,8 @@ import java.time.Instant;
 
 /**
  * Business-term dictionary entry (TC "语义配置" analogue): a business noun, its explanation,
- * synonyms and an optional scope. Surfaced to the agent via list_data_sources so natural-language
- * questions map onto the right tables/columns.
+ * synonyms and an optional scope. Surfaced to the agent via the [KNOWLEDGE_BASE_OVERVIEW] section
+ * so natural-language questions map onto the right tables/columns.
  */
 @Entity
 @Table(name = "dataagent_semantic_term")

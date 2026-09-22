@@ -230,14 +230,15 @@ DataAgentBootstrap dataagent = DataAgentBootstrap.builder()
 
 DataAgent 启动时通过 `@PostConstruct` 注册两类内建工具到所有 GLOBAL agent：
 
-- `tools/data/DataAgentToolkit` —— `list_data_sources` / `describe_table` /
-  `run_sql_preview` / `render_chart`（通过 `DataSourceRegistry` 与
-  `ChartRenderer` SPI 注入实现，未提供时使用 in-memory / stub 默认实现）。
+- `tools/data/DataAgentToolkit` —— `prepare_data_context` / `query_structured_data` /
+  `retrieve_evidence` / `render_chart`（数据源经 `DataSourceRegistry` 解析，SQL 经
+  `SqlConnector` SPI 执行；上传数据集由 `InMemoryDataSourceRegistry` + `JdbcSqlConnector`
+  提供，图表由服务端 `ChartBuilder` 根据数据形态推断生成）。
 - `web/marketplace/ContributeWorkspaceTool` —— `contribute_to_workspace`
   让 agent 自身可以发起贡献（仍需经管理员审批）。
 
 如需为某个 GLOBAL agent 注入自定义工具，提供一个 `DataSourceRegistry` 或
-`ChartRenderer` `@Bean`（Spring 会自动用你的实现替换默认 stub），或在
+`SqlConnector` `@Bean`（Spring 会自动用你的实现替换默认实现），或在
 `configureAgent(...)` 里调用 `builder.tool(...)` 注册任意工具。
 
 ---

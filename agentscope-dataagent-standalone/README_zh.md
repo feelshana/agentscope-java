@@ -73,8 +73,8 @@ dataagent 跑在 **HarnessAgent + `SandboxFilesystem`** 之上，sandbox 生命�
 - **内置 `data-agent`** —— 全局骨架，自带 SQL 分析、图表渲染技能，外加 `data-explorer` / `report-writer` 子智能体。
 - **per-用户数据 agent** —— 任一登录用户都可以 fork 内置或新建。每个用户 agent 拥有独立的 `CompositeFilesystem`，按 `(userId, agentId)` 切分；`skills/` 和 `subagents/` 是 `OverlayFilesystem`，下层是磁盘上共享的内容。
 - **通道（v1）** —— `chatui`（默认开启、主用）、`dingtalk`（可选，原样从 agentscope-builder 移植）以及全新的**通用 Webhook** 通道（HMAC 签名入站，回调 / 长轮询出站）。
-- **能力市场** —— 用户从自己 workspace 中提名 skill / 子智能体 / memory 片段作为 *contributions*。管理员在 Approvals 页审批，通过后内容落到 `shared/`，下次构建时所有租户都能看到。
-- **DataAgent 工具集插槽** —— `list_data_sources`、`describe_table`、`run_sql_preview`、`render_chart` 默认注册在每个 data agent 上。v1 只提供接口骨架 + `InMemoryDataSourceRegistry`，方便管理员在 `agentscope.json` 里种子数据源；具体的 JDBC 连接器超出本模块范围，可以通过 `DataSourceRegistry` / `ChartRenderer` Spring Bean 注入。
+- **能力市场** —— 用户从自己 workspace 中提名 skill / 子智能体 / memory 片段作为 *contributions*。管理员在 Approvals 页审批，通过后内容落到运行态 `shared/` 目录（由 `src/main/resources/shared` 物化、已 gitignore），下次构建时所有租户都能看到。
+- **DataAgent 工具集** —— `prepare_data_context`、`query_structured_data`、`retrieve_evidence`、`render_chart`（另有沙箱内的 `run_python`）默认注册在每个 data agent 上。TC 风格：schema 概览预注入 system prompt，工具只负责确认列细节、执行 SELECT/WITH 查询、检索证据、出图；`JdbcSqlConnector` 对接配置的数据集库，其他后端可通过 `SqlConnector` / `DataSourceRegistry` Spring Bean 注入。
 
 ---
 
@@ -103,7 +103,7 @@ dataagent 跑在 **HarnessAgent + `SandboxFilesystem`** 之上，sandbox 生命�
      "payload": "<file contents>" }
    ```
 2. 贡献以 `PENDING` 状态持久化，呈现在管理员的 `/admin/approvals` 页。
-3. 管理员通过 → payload 落到 `~/.agentscope/dataagent/workspace/shared/skills/cohort-builder/SKILL.md`。
+3. 管理员通过 → payload 落到 `~/.agentscope/dataagent-standalone/workspace/shared/skills/cohort-builder/SKILL.md`。
 4. 每个 per-`(userId, agentId)` 的 overlay 在下次构建时就能看到，无需重启即对所有租户可见。
 
 能力市场的颗粒度故意比 per-agent 的 ACL 共享更细 —— 单个贡献的单位是一项 skill / 一个子智能体 / 一段 memory，而不是整个 agent。
@@ -155,7 +155,7 @@ dataagent:
 
 ### 3.（可选）启用 Webhook 侧通道
 
-在 `~/.agentscope/dataagent/agentscope.json`：
+在 `~/.agentscope/dataagent-standalone/agentscope.json`：
 
 ```json
 {
@@ -202,7 +202,7 @@ java -jar target/agentscope-dataagent-*-exec.jar
 | 配置项 | 默认 | 说明 |
 |---|---|---|
 | `dataagent.jwt.secret` | 开发占位 | JWT 签名密钥（>= 32 字符）。**非 `dev` Profile 下若仍是默认值会拒绝启动**。 |
-| `dataagent.workspace` | `$CWD`（仅开发态） | agent 运行时状态的工作目录（与配置无关 —— 配置在 `~/.agentscope/dataagent/agentscope.json`）。**非 `dev` Profile 下必填**，留空就启动失败。 |
+| `dataagent.workspace` | `$CWD`（仅开发态） | agent 运行时状态的工作目录（与配置无关 —— 配置在 `~/.agentscope/dataagent-standalone/agentscope.json`）。**非 `dev` Profile 下必填**，留空就启动失败。 |
 | `dataagent.workspace-store.local.max-file-size-mb` | `10` | `RemoteFilesystem` 本地后端的单文件上限。 |
 | `dataagent.openai.api-key` | _空_ | OpenAI 兼容 API key（主模型）。环境变量：`DATAAGENT_OPENAI_API_KEY` 或 `OPENAI_API_KEY`。设置后优先于 DashScope。 |
 | `dataagent.openai.base-url` | _空（用 OpenAI 官方）_ | 任意 OpenAI 兼容端点的 base URL（DeepSeek、vLLM、one-api、DashScope compatible-mode 等），尾部 `/v1` 可写可不写。环境变量：`DATAAGENT_OPENAI_BASE_URL` 或 `OPENAI_BASE_URL`。 |
@@ -210,8 +210,9 @@ java -jar target/agentscope-dataagent-*-exec.jar
 | `dataagent.openai.stream` | `true` | 是否以 SSE 流式输出。 |
 | `dataagent.dashscope.api-key` | _空_ | DashScope API key（未配置 OpenAI key 时的回落）。环境变量：`DASHSCOPE_API_KEY`。 |
 | `dataagent.dashscope.model-name` | `qwen-max` | DashScope 模型 id。 |
-| `dataagent.agent.name` | `data-agent` | 自动生成 `~/.agentscope/dataagent/agentscope.json` 时的 agent 名 |
-| `dataagent.agent.sys-prompt` | _（内置）_ | 自动生成 `agentscope.json` 时的系统提示 |
+| `dataagent.agent.name` | `data-agent` | 自动生成 `~/.agentscope/dataagent-standalone/agentscope.json` 时的 agent 名 |
+| `dataagent.agent.sys-prompt` | _（内置提示词）_ | 覆盖首次启动时 scaffold 进 `workspace/AGENTS.md` 的内置系统提示词。推荐用环境变量 `DATAAGENT_AGENT_SYS_PROMPT`；**不要**把该键设为空值（属性存在但为空会 scaffold 出空提示词） |
+| `dataagent.agent.subagents-enabled` | `false` | 子代理编排（harness `agent_spawn` / `agent_send` / `task_*`）。默认关闭：否则 harness 每轮会注入固定约 6.2k 字符的 `## Subagents` 提示词段与相应工具 schema。设为 `true` 即恢复该段、这些工具以及 `workspace/subagents/*.md` 的加载，无需改代码；**不影响**网关、会话路由与聊天。环境变量：`DATAAGENT_SUBAGENTS_ENABLED` |
 | `dataagent.channels.chatui.enabled` | `true` | 主 Web 通道，默认开启 |
 | `dataagent.session.redis.enabled` | `false` | 是否启用 Redis 分布式 agent 状态 |
 | `dataagent.session.redis.host/port/password/database` | `localhost:6379/0` | Redis 连接 |

@@ -35,8 +35,8 @@ import java.util.regex.Pattern;
  *
  * <p>Safety rails: connections are opened read-only with a 10 s query timeout; table names are
  * validated against a strict identifier pattern before being interpolated into the COUNT/sample
- * statements (the SELECT-only gate for {@code run_sql_preview} lives in {@link DataAgentToolkit});
- * preview row counts are clamped to a hard cap of 100.
+ * statements (the SELECT-only gate for {@code query_structured_data} lives in {@link
+ * DataAgentToolkit}); preview row counts are clamped to a hard cap of 100.
  */
 public final class JdbcSqlConnector implements SqlConnector {
 

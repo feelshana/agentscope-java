@@ -64,7 +64,7 @@ import org.slf4j.LoggerFactory;
  *
  * <h2>Build phase — {@link #builder()}</h2>
  *
- * Loads {@code ~/.agentscope/dataagent/agentscope.json} (the per-app home, isolated from other
+ * Loads {@code ~/.agentscope/dataagent-standalone/agentscope.json} (the per-app home, isolated from other
  * harness apps and from the cwd the JVM was launched in), merges file-based agent definitions with
  * programmatic {@link Builder} configuration, and produces {@link HarnessAgent} instances wired
  * with {@link SessionsTool} and a shared {@link SessionAgentManager} + {@link HarnessGateway}.
@@ -89,18 +89,25 @@ public final class DataAgentBootstrap {
      * different harness apps cannot collide on the same {@code .agentscope/workspace/} directory.
      */
     public static final Path DEFAULT_WORKSPACE_ROOT =
-            Paths.get(System.getProperty("user.home"), ".agentscope", "dataagent", "workspace");
+            Paths.get(
+                    System.getProperty("user.home"),
+                    ".agentscope",
+                    "dataagent-standalone",
+                    "workspace");
 
     /**
      * Default location of the {@code agentscope.json} config file. Pinned to the per-app home
-     * directory ({@code ~/.agentscope/dataagent/}) so the dataagent web app never picks up a stale
+     * directory ({@code ~/.agentscope/dataagent-standalone/}) so the dataagent web app never picks up a stale
      * config left behind by another harness app (e.g. builder, codingagent) in the cwd it was
      * launched from. The {@link io.agentscope.dataagent.web.config.DataAgentConfig} auto-generates
      * this file on first start if it doesn't exist.
      */
     public static final Path DEFAULT_CONFIG_PATH =
             Paths.get(
-                    System.getProperty("user.home"), ".agentscope", "dataagent", "agentscope.json");
+                    System.getProperty("user.home"),
+                    ".agentscope",
+                    "dataagent-standalone",
+                    "agentscope.json");
 
     // -----------------------------------------------------------------
     //  Instance state — populated by Builder.build()
@@ -519,9 +526,9 @@ public final class DataAgentBootstrap {
 
             if (ids.isEmpty()) {
                 throw new IllegalStateException(
-                        "No agents defined: add entries to ~/.agentscope/dataagent/agentscope.json"
-                                + " or use AgentBootstrap.builder().agent(id, ...) /"
-                                + " configureAgent(...)");
+                        "No agents defined: add entries to"
+                                + " ~/.agentscope/dataagent-standalone/agentscope.json or use"
+                                + " AgentBootstrap.builder().agent(id, ...) / configureAgent(...)");
             }
 
             String main =
