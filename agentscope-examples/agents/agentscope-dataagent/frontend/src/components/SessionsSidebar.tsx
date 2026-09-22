@@ -22,7 +22,7 @@ const UTILITY_ITEMS: UtilityItem[] = [
 /** Primary nav (新建对话 and 更多 are rendered separately). */
 const NAV_ITEMS: UtilityItem[] = [
   { label: '知识库', path: '/configure/datasets', icon: 'book' },
-  { label: '业务术语', path: '/configure/business-terms', icon: 'settings' },
+  { label: '业务术语', path: '/configure/semantic', icon: 'settings' },
 ];
 
 /** Overflow menu items (TC-style 更多); currently only Workspace. */
@@ -137,11 +137,7 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
   }, [entries, draftEntry]);
 
   function handleNewChat() {
-    const fresh = (typeof crypto !== 'undefined' && crypto.randomUUID)
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    try { localStorage.setItem(`claw_chat_session:${ACTIVE_AGENT_ID}`, fresh); } catch { /* ignore */ }
-    navigate(`/chat?session=${encodeURIComponent(fresh)}`);
+    navigate('/chat');
   }
 
   function entryNavKey(entry: InboxEntry): string {

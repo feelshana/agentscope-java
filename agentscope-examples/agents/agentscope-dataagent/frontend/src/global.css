@@ -1014,6 +1014,147 @@ button:focus-visible {
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12), var(--da-shadow-pop);
 }
 
+/* ---------- landing page: centered composer with hairline flowing tint border ---------- */
+@property --da-flow-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+@property --da-flow-a {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: #c9d4f0;
+}
+@property --da-flow-b {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: #efd9c6;
+}
+
+@keyframes da-flow-spin {
+  to { --da-flow-angle: 360deg; }
+}
+@keyframes da-flow-tint {
+  0%, 100% { --da-flow-a: #c9d4f0; --da-flow-b: #efd9c6; }
+  50% { --da-flow-a: #d5c8ef; --da-flow-b: #c6ddef; }
+}
+
+.da-landing-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  animation: da-fade-up 0.45s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+/* hairline (1px) pastel band rotating slowly: a faint shimmer, not a neon ring */
+.da-composer-glow {
+  position: relative;
+  width: 100%;
+  border-radius: 32px;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--da-flow-angle),
+    #edf0f4 0deg,
+    var(--da-flow-a) 90deg,
+    #edf0f4 180deg,
+    var(--da-flow-b) 270deg,
+    #edf0f4 360deg
+  );
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.05);
+  animation:
+    da-flow-spin 16s linear infinite,
+    da-flow-tint 10s ease-in-out infinite;
+}
+.da-composer-glow:focus-within {
+  box-shadow:
+    0 0 0 3px rgba(79, 70, 229, 0.05),
+    0 6px 20px rgba(15, 23, 42, 0.05);
+}
+.da-landing-wrap .da-composer-glow {
+  max-width: 880px;
+}
+.da-composerwrap .da-composer-glow {
+  max-width: 960px;
+}
+
+.da-composer-shell {
+  background: var(--da-surface);
+  border-radius: 31px;
+  padding: 16px 20px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* the glow wrapper provides the focus effect; suppress the inner focus ring */
+.da-composer-shell.da-composer:focus-within {
+  box-shadow: none;
+}
+
+/* chips sit flush on the composer surface, same tone as the input box */
+.da-composer-shell .da-chip {
+  background: transparent;
+  border-color: transparent;
+  color: var(--da-text-2);
+}
+.da-composer-shell .da-chip:hover:not(:disabled) {
+  background: var(--da-surface-sunken);
+  color: var(--da-text);
+}
+.da-composer-shell .da-chip:disabled {
+  background: transparent;
+  color: var(--da-text-muted);
+}
+.da-composer-shell .da-chip-active,
+.da-composer-shell .da-chip-active:hover {
+  background: var(--da-primary-subtle);
+  border-color: rgba(79, 70, 229, 0.18);
+  color: var(--da-primary);
+}
+
+.da-landing-greeting {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+@property --da-title-c1 {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: #4338ca;
+}
+@property --da-title-c2 {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: #2563eb;
+}
+@keyframes da-title-flow {
+  0%, 100% { --da-title-c1: #4338ca; --da-title-c2: #2563eb; }
+  33% { --da-title-c1: #7c3aed; --da-title-c2: #4f46e5; }
+  66% { --da-title-c1: #2563eb; --da-title-c2: #7c3aed; }
+}
+.da-landing-title {
+  margin: 0;
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 52px;
+  letter-spacing: -0.02em;
+  background: linear-gradient(92deg, var(--da-title-c1), var(--da-title-c2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: da-title-flow 7s ease-in-out infinite;
+}
+
+.da-landing-greeting p {
+  margin: 8px 0 0;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--da-text-3);
+}
+
 /* ---------- assistant turn: collapsible task trace + answer ---------- */
 .da-agent-turn {
   display: flex;
