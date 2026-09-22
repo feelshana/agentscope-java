@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>视频播放测试</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #e0e0e0; padding: 20px; }
+  h1 { text-align: center; margin-bottom: 20px; color: #00d4ff; }
+  .config { background: #16213e; border-radius: 8px; padding: 16px; margin-bottom: 20px; }
+  .config label { display: block; margin-bottom: 6px; font-size: 13px; color: #aaa; }
+  .config input { width: 100%; padding: 8px; border: 1px solid #333; border-radius: 4px; background: #0f3460; color: #fff; font-size: 13px; margin-bottom: 10px; }
+  .config button { padding: 8px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; margin-right: 8px; }
+  .btn-primary { background: #00d4ff; color: #000; font-weight: bold; }
+  .btn-secondary { background: #444; color: #fff; }
+  .test-section { background: #16213e; border-radius: 8px; padding: 16px; margin-bottom: 20px; }
+  .test-section h2 { font-size: 16px; margin-bottom: 10px; color: #e94560; }
+  .test-section h3 { font-size: 13px; margin: 8px 0 4px; color: #aaa; }
+  video { width: 100%; max-height: 400px; background: #000; border-radius: 4px; margin-bottom: 10px; }
+  .debug { background: #0a0a1a; border: 1px solid #333; border-radius: 4px; padding: 10px; font-family: 'Consolas', monospace; font-size: 12px; max-height: 200px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+  .debug .info { color: #00d4ff; }
+  .debug .warn { color: #f0a500; }
+  .debug .error { color: #e94560; }
+  .debug .success { color: #00c853; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; margin: 10px 0; }
+  .stat-item { background: #0f3460; padding: 8px; border-radius: 4px; font-size: 12px; }
+  .stat-item .label { color: #888; }
+  .stat-item .value { color: #fff; font-weight: bold; }
+</style>
+</head>
+<body>
+<h1>🎬 视频播放测试页面</h1>
+
+<div class="config">
+  <label>视频路径 (sandbox 内路径):</label>
+  <input id="videoPath" value="/workspace/runpython/main-07596376-4fb3-4008-b3ca-1349ee0ce3ff/video/report.mp4" />
+  <label>Agent ID:</label>
+  <input id="agentId" value="data-agent" />
+  <label>Token (留空则不附带):</label>
+  <input id="token" placeholder="可选" />
+  <div style="margin-top: 8px;">
+    <button class="btn-primary" onclick="startTest()">开始测试</button>
+    <button class="btn-secondary" onclick="clearLogs()">清除日志</button>
+  </div>
+</div>
+
+<!-- Test 1: Direct HTTP src -->
+<div class="test-section">
+  <h2>方案 A: 直接 HTTP URL (video.src = API URL)</h2>
+  <video id="videoDirect" controls preload="auto" playsinline></video>
+  <div class="stats" id="statsDirect"></div>
+  <h3>调试日志:</h3>
+  <div class="debug" id="logDirect"></div>
+</div>
+
+<!-- Test 2: Blob URL -->
+<div class="test-section">
+  <h2>方案 B: Blob URL (fetch → createObjectURL)</h2>
+  <video id="videoBlob" controls preload="auto" playsinline></video>
+  <div class="stats" id="statsBlob"></div>
+  <h3>调试日志:</h3>
+  <div class="debug" id="logBlob"></div>
+</div>
+
+<!-- Test 3: MediaSource Extensions -->
+<div class="test-section">
+  <h2>方案 C: fetch 后检查文件头信息</h2>
+  <div class="debug" id="logInspect"></div>
+</div>
+
+<script>
+// Auto-load token from localStorage on page load
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem('claw_token');
+  if (saved) {
+    document.getElementById('token').value = saved;
+    log('logDirect', 'Auto-loaded token from localStorage', 'success');
+  } else {
+    log('logDirect', 'No token found in localStorage. Please login first or paste token.', 'warn');
+  }
+});
+
+function getApiUrl() {
+  const path = document.getElementById('videoPath').value;
+  const agentId = document.getElementById('agentId').value;
+  const token = document.getElementById('token').value.trim() || localStorage.getItem('claw_token') || '';
+  let url = `/api/agents/${agentId}/workspace/file/binary?path=${encodeURIComponent(path)}`;
+  if (token) url += `&token=${encodeURIComponent(token)}`;
+  return url;
+}
+
+function getAuthHeaders() {
+  const token = document.getElementById('token').value.trim() || localStorage.getItem('claw_token') || '';
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+}
+
+function log(elId, msg, level = 'info') {
+  const el = document.getElementById(elId);
+  const ts = new Date().toISOString().substr(11, 12);
+  el.innerHTML += `<span class="${level}">[${ts}] ${msg}</span>\n`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function updateStats(elId, data) {
+  const el = document.getElementById(elId);
+  el.innerHTML = Object.entries(data).map(([k, v]) =>
+    `<div class="stat-item"><span class="label">${k}: </span><span class="value">${v}</span></div>`
+  ).join('');
+}
+
+function attachVideoEvents(video, logId, statsId) {
+  video.addEventListener('loadedmetadata', () => {
+    log(logId, `loadedmetadata: duration=${video.duration.toFixed(2)}s, readyState=${video.readyState}`, 'success');
+    updateStats(statsId, {
+      'duration': video.duration.toFixed(2) + 's',
+      'readyState': video.readyState,
+      'videoWidth': video.videoWidth,
+      'videoHeight': video.videoHeight,
+      'networkState': video.networkState,
+    });
+  });
+  video.addEventListener('canplay', () => {
+    log(logId, `canplay: buffered=${formatBuffered(video.buffered)}, duration=${video.duration.toFixed(2)}s`, 'success');
+  });
+  video.addEventListener('canplaythrough', () => {
+    log(logId, `canplaythrough: buffered=${formatBuffered(video.buffered)}`, 'success');
+  });
+  video.addEventListener('play', () => {
+    log(logId, `play: currentTime=${video.currentTime.toFixed(2)}s`);
+  });
+  video.addEventListener('playing', () => {
+    log(logId, `playing: currentTime=${video.currentTime.toFixed(2)}s`, 'success');
+  });
+  video.addEventListener('timeupdate', () => {
+    if (Math.floor(video.currentTime) % 5 === 0 && video.currentTime > 0) {
+      log(logId, `timeupdate: ${video.currentTime.toFixed(1)}s, buffered=${formatBuffered(video.buffered)}, readyState=${video.readyState}`);
+    }
+  });
+  video.addEventListener('progress', () => {
+    log(logId, `progress: buffered=${formatBuffered(video.buffered)}`);
+  });
+  video.addEventListener('stalled', () => {
+    log(logId, `stalled! currentTime=${video.currentTime.toFixed(2)}s, buffered=${formatBuffered(video.buffered)}, readyState=${video.readyState}`, 'warn');
+  });
+  video.addEventListener('waiting', () => {
+    log(logId, `waiting: currentTime=${video.currentTime.toFixed(2)}s, buffered=${formatBuffered(video.buffered)}`, 'warn');
+  });
+  video.addEventListener('error', (e) => {
+    const err = video.error;
+    log(logId, `ERROR: code=${err?.code}, message=${err?.message}`, 'error');
+  });
+  video.addEventListener('ended', () => {
+    log(logId, `ended: played to completion!`, 'success');
+  });
+  video.addEventListener('suspend', () => {
+    log(logId, `suspend: buffered=${formatBuffered(video.buffered)}`);
+  });
+  video.addEventListener('abort', () => {
+    log(logId, `abort event`, 'warn');
+  });
+}
+
+function formatBuffered(buffered) {
+  if (!buffered || buffered.length === 0) return 'none';
+  let s = '';
+  for (let i = 0; i < buffered.length; i++) {
+    s += `${buffered.start(i).toFixed(1)}-${buffered.end(i).toFixed(1)}s`;
+    if (i < buffered.length - 1) s += ', ';
+  }
+  return s;
+}
+
+async function startTest() {
+  const apiUrl = getApiUrl();
+  const videoDirect = document.getElementById('videoDirect');
+  const videoBlob = document.getElementById('videoBlob');
+
+  // Reset
+  videoDirect.src = '';
+  videoBlob.src = '';
+  document.getElementById('logDirect').innerHTML = '';
+  document.getElementById('logBlob').innerHTML = '';
+  document.getElementById('logInspect').innerHTML = '';
+  document.getElementById('statsDirect').innerHTML = '';
+  document.getElementById('statsBlob').innerHTML = '';
+
+  log('logDirect', `API URL: ${apiUrl}`);
+  log('logBlob', `API URL: ${apiUrl}`);
+
+  // Attach events
+  attachVideoEvents(videoDirect, 'logDirect', 'statsDirect');
+  attachVideoEvents(videoBlob, 'logBlob', 'statsBlob');
+
+  // Test A: Direct URL
+  log('logDirect', 'Setting video.src directly...');
+  videoDirect.src = apiUrl;
+
+  // Test B: Blob URL
+  log('logBlob', 'Fetching video as blob...');
+  const fetchStart = Date.now();
+  try {
+    const resp = await fetch(apiUrl, { headers: getAuthHeaders() });
+    const fetchMs = Date.now() - fetchStart;
+    log('logBlob', `Fetch response: status=${resp.status}, ok=${resp.ok}, contentType=${resp.headers.get('content-type')}`, resp.ok ? 'success' : 'error');
+    log('logBlob', `Content-Length: ${resp.headers.get('content-length')} bytes, fetched in ${fetchMs}ms`);
+
+    // Check response headers
+    const headers = {};
+    resp.headers.forEach((v, k) => {
+      if (k.toLowerCase().includes('range') || k.toLowerCase().includes('accept') ||
+          k.toLowerCase().includes('content') || k.toLowerCase().includes('cache')) {
+        log('logBlob', `Header: ${k} = ${v}`);
+      }
+    });
+
+    const blob = await resp.blob();
+    log('logBlob', `Blob size: ${blob.size} bytes, type: ${blob.type}`, 'success');
+
+    const blobUrl = URL.createObjectURL(blob);
+    log('logBlob', `Blob URL: ${blobUrl}`);
+    videoBlob.src = blobUrl;
+  } catch (err) {
+    log('logBlob', `Fetch FAILED: ${err.message}`, 'error');
+  }
+
+  // Test C: Inspect file header
+  inspectFile(apiUrl);
+}
+
+async function inspectFile(apiUrl) {
+  const logId = 'logInspect';
+  try {
+    const resp = await fetch(apiUrl, { headers: getAuthHeaders() });
+    const buf = await resp.arrayBuffer();
+    const view = new Uint8Array(buf);
+
+    log(logId, `=== File Inspection ===`);
+    log(logId, `Total size: ${view.length} bytes`);
+
+    // Check for MP4 signature (ftyp)
+    const ftyp = String.fromCharCode(view[4], view[5], view[6], view[7]);
+    log(logId, `Bytes [4-7]: "${ftyp}" ${ftyp === 'ftyp' ? '✓ Valid MP4 ftyp' : '✗ NOT a valid MP4'}`, ftyp === 'ftyp' ? 'success' : 'error');
+
+    // Find moov atom
+    let pos = 0;
+    const atoms = [];
+    while (pos < Math.min(view.length, 10000)) {
+      if (pos + 8 > view.length) break;
+      const size = (view[pos] << 24) | (view[pos+1] << 16) | (view[pos+2] << 8) | view[pos+3];
+      const type = String.fromCharCode(view[pos+4], view[pos+5], view[pos+6], view[pos+7]);
+      if (size < 8 || size > view.length) break;
+      atoms.push({ type, size, offset: pos });
+      log(logId, `Atom: "${type}" size=${size} offset=${pos}`);
+      pos += size;
+    }
+
+    const moovPos = atoms.findIndex(a => a.type === 'moov');
+    const mdatPos = atoms.findIndex(a => a.type === 'mdat');
+    log(logId, `moov at position: ${moovPos >= 0 ? atoms[moovPos].offset : 'NOT FOUND'}`, moovPos === 0 ? 'success' : 'warn');
+    log(logId, `mdat at position: ${mdatPos >= 0 ? atoms[mdatPos].offset : 'NOT FOUND'}`);
+    log(logId, moovPos === 0 ? '✓ moov is first - good for streaming' : '⚠ moov is NOT first - may cause streaming issues', moovPos === 0 ? 'success' : 'warn');
+
+    // Check last 32 bytes
+    const tail = view.slice(Math.max(0, view.length - 32));
+    let tailHex = '';
+    for (let i = 0; i < tail.length; i++) {
+      tailHex += tail[i].toString(16).padStart(2, '0') + ' ';
+      if ((i + 1) % 16 === 0) tailHex += '\n';
+    }
+    log(logId, `Last 32 bytes (hex):\n${tailHex}`);
+
+  } catch (err) {
+    log(logId, `Inspection failed: ${err.message}`, 'error');
+  }
+}
+
+function clearLogs() {
+  ['logDirect', 'logBlob', 'logInspect'].forEach(id => {
+    document.getElementById(id).innerHTML = '';
+  });
+  ['statsDirect', 'statsBlob'].forEach(id => {
+    document.getElementById(id).innerHTML = '';
+  });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+﻿target/
+node_modules/
+logs/
+*.iml
+.idea/
+.flattened-pom.xml

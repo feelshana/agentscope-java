@@ -1,0 +1,223 @@
+server:
+  port: 8080
+  error:
+    include-message: always
+
+spring:
+  application:
+    name: agentscope-dataagent
+  webflux:
+    static-path-pattern: /**
+  resources:
+    static-locations:
+      - classpath:/static/
+
+  # --------------------------------------------------------------------------
+  # Multipart upload limits for dataset files (Excel/CSV).
+  # Default Spring limit is 1MB which is too small for typical datasets.
+  # --------------------------------------------------------------------------
+  codec:
+    max-in-memory-size: 50MB
+
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+
+  # --------------------------------------------------------------------------
+  # User + agent metadata are persisted via Spring Data JPA. The default
+  # backend is an embedded H2 database written to
+  # `${user.home}/.agentscope-dataagent/db.*` — intentionally NOT placed under
+  # `dataagent.workspace`, so workspace volumes never accidentally include the
+  # catalog tables.
+  #
+  # To switch to MySQL / PostgreSQL in production, activate the `jdbc` Spring
+  # profile (`--spring.profiles.active=jdbc` or `SPRING_PROFILES_ACTIVE=jdbc`)
+  # which sets MySQL-shaped DataSource defaults in `application-jdbc.yml`. You
+  # can also override individual settings directly via `DATAAGENT_DB_*` env
+  # vars without activating the profile.
+  # --------------------------------------------------------------------------
+  datasource:
+    url: ${DATAAGENT_DB_URL:jdbc:h2:file:${DATAAGENT_DB_PATH:${user.home}/.agentscope-dataagent/db};AUTO_SERVER=TRUE;MODE=MYSQL;DB_CLOSE_DELAY=-1}
+    driver-class-name: ${DATAAGENT_DB_DRIVER:org.h2.Driver}
+    username: ${DATAAGENT_DB_USER:sa}
+    password: ${DATAAGENT_DB_PASSWORD:}
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      # 'update' is fine for dev / single-node. Production deployments running
+      # against MySQL/PostgreSQL should pin the schema with Flyway/Liquibase
+      # and switch this to `validate`.
+      ddl-auto: ${DATAAGENT_JPA_DDL_AUTO:update}
+    # Run the SQL init scripts AFTER Hibernate creates the schema. Required so
+    # `data-h2.sql` finds the `dataagent_user` table to MERGE into.
+    defer-datasource-initialization: true
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+  # --------------------------------------------------------------------------
+  # `data-${platform}.sql` seeding. Setting platform=h2 makes Spring only run
+  # `data-h2.sql`; the bundled script seeds two demo accounts (bob / alice,
+  # passwords identical to the usernames) so a fresh local checkout is usable
+  # without first calling the admin API. The script is idempotent (MERGE INTO).
+  #
+  # `mode=always` is intentional: in Spring Boot 4, `mode=embedded` classifies
+  # only `jdbc:h2:mem:` URLs as embedded, which would skip the seed against
+  # the default `jdbc:h2:file:` DataSource. `application-jdbc.yml` explicitly
+  # overrides this to `never` so MySQL/PostgreSQL deployments never run the
+  # H2-only script.
+  # --------------------------------------------------------------------------
+  sql:
+    init:
+      mode: ${DATAAGENT_SQL_INIT_MODE:always}
+      platform: ${DATAAGENT_SQL_INIT_PLATFORM:h2}
+      continue-on-error: false
+
+# --------------------------------------------------------------------------
+# agentscope-dataagent configuration
+#
+# Property prefix is `dataagent.*`. Env vars use `DATAAGENT_*`.
+# --------------------------------------------------------------------------
+dataagent:
+  # JWT signing secret (>= 32 chars). MUST be overridden in production.
+  jwt:
+    secret: ${DATAAGENT_JWT_SECRET:dataagent-default-dev-secret-change-in-production-32chars}
+
+  # Working directory. If blank, defaults to the JVM's current working
+  # directory. .agentscope/agentscope.json is read from (or auto-created in)
+  # this directory.
+  workspace: ${DATAAGENT_WORKSPACE:}
+
+  # ---- Per-user Docker sandbox ----
+  # Image used for every (userId, agentId) container. The agent's run_python
+  # tool executes pandas/matplotlib/scipy code inside these containers, which
+  # run with --network=none, so the analysis stack must be baked into the
+  # image. Build the default tag once (from the module directory):
+  #   docker build -f docker/sandbox.Dockerfile -t agentscope/dataagent-sandbox:latest .
+  # Override (env DATAAGENT_SANDBOX_IMAGE) to point at any image that ships
+  # Python 3 + the analysis stack and runs as root.
+  sandbox:
+    image: ${DATAAGENT_SANDBOX_IMAGE:agentscope/dataagent-sandbox:latest}
+    # How long an idle container stays alive before being evicted.
+    idle-ttl-min: 15
+    eviction-poll-sec: 60
+
+  # ---- Workspace storage topology (multi-tenant filesystem) ----
+  # DataAgent runs every HarnessAgent on a CompositeFilesystem: a read-only
+  # LocalFilesystem over `${dataagent.workspace}/.agentscope/workspace`
+  # (templates, AGENTS.md, default skills/subagents/knowledge shipped on disk)
+  # blended with per-(owner, agent) RemoteFilesystem routes for memory/,
+  # MEMORY.md, sessions/, tasks/, skills/, subagents/. Skill/subagent routes
+  # use OverlayFilesystem with the shared on-disk content as the lower layer
+  # — the basis of the future capability-marketplace contribution flow.
+  workspace-store:
+    local:
+      max-file-size-mb: 10
+
+  # ---- OpenAI-compatible model (primary; used when api-key is set) ----
+  # Works with any OpenAI-compatible endpoint: OpenAI, DeepSeek, vLLM, one-api,
+  # DashScope compatible-mode, ... Set the key via env var DATAAGENT_OPENAI_API_KEY
+  # (or the conventional OPENAI_API_KEY) and, for compatible endpoints,
+  # DATAAGENT_OPENAI_BASE_URL (or OPENAI_BASE_URL). The base URL may or may not
+  # include a trailing /v1 — the client normalises the path. Leave base-url
+  # blank to target the official OpenAI endpoint.
+  openai:
+    api-key: ${DATAAGENT_OPENAI_API_KEY:${OPENAI_API_KEY:sk-7708c665bc024a35bb6c5f1f1a7fc25f}}
+    base-url: ${DATAAGENT_OPENAI_BASE_URL:${OPENAI_BASE_URL:https://api.deepseek.com}}
+    model-name: ${DATAAGENT_OPENAI_MODEL_NAME:${OPENAI_MODEL_NAME:deepseek-flash}}
+    stream: true
+
+  # ---- DashScope model (fallback when no OpenAI key is configured) ----
+  # Set DASHSCOPE_API_KEY env var or override api-key below.
+  dashscope:
+    api-key: ${DASHSCOPE_API_KEY:sk-c6d487aaddad4ed790c85f2b52dd2e27}
+    model-name: ${DATAAGENT_MODEL_NAME:qwen3.8-max}
+    stream: true
+    enable-thinking: false
+
+  # ---- Agent defaults (used when auto-generating agentscope.json) ----
+  agent:
+    name: ${DATAAGENT_AGENT_NAME:data-agent}
+    sys-prompt: >
+      你是一个基于 AgentScope 构建的数据分析智能体（Data Agent），帮助用户探查、
+      分析、可视化和汇报数据。优先使用已注册的技能（skills）与子代理（sub-agents），
+      而不是即兴推理；始终注明所使用的数据来源。所有说明性与数据解释性文字一律
+      使用简体中文。
+
+  # ---- Channels (side-tool adapters) ----
+  # ChatUI is always-on and serves the primary web UX. DingTalk and the
+  # generic webhook channel are opt-in via agentscope.json. Other IM
+  # channels (Feishu / WeCom / GitHub / GitLab) are intentionally not
+  # bundled in v1.
+  channels:
+    chatui:
+      enabled: true
+
+  # ---- Distributed session backend (optional, required for HA) ----
+  # When enabled, RedisSession is auto-wired into SandboxDistributedOptions
+  # so multiple DataAgent replicas share session + sandbox state. Falls back
+  # to local file store when disabled.
+  session:
+    redis:
+      enabled: false
+      host: localhost
+      port: 6379
+      password:
+      database: 0
+      key-prefix: "dataagent:session:"
+
+  # ---- Marketplace + admin approval ----
+  # The on-disk shared workspace under ${dataagent.workspace}/.agentscope/
+  # shared/ is the lower layer for every per-(owner, agent) OverlayFilesystem.
+  # Users can nominate files from their own workspace as contributions; admins
+  # approve or reject via the contribution API. Approved contributions land
+  # under `shared/` and become visible to all tenants.
+  marketplace:
+    enabled: true
+    # Maximum payload size accepted on POST /api/me/contributions (bytes).
+    max-contribution-bytes: 1048576
+
+  # ---- Dedicated dataset store (uploaded Excel/CSV tables) ----
+  # Uploaded datasets become prefixed tables (ds_<owner8>_<dataset8>_<name>)
+  # INSIDE this configured database, so the data lands exactly where the
+  # operator points it; cross-dataset joins are plain same-db joins. Defaults
+  # target a local dev MySQL; override via env in production.
+  dataset:
+    datasource:
+      url: ${DATAAGENT_DATASET_DB_URL:jdbc:mysql://localhost:3306/data_agent?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
+      username: ${DATAAGENT_DATASET_DB_USER:root}
+      password: ${DATAAGENT_DATASET_DB_PASSWORD:123456}
+
+  # ---- Optional pre-seeded analytics MySQL (tenant_storage_utilization / project_info) ----
+  # Disabled by default so it never collides with the dataset store; enable and point it at the
+  # database that actually holds the seed tables (see mysql-schema.sql) when needed.
+  analytics:
+    enabled: ${DATAAGENT_ANALYTICS_ENABLED:false}
+    url: ${DATAAGENT_ANALYTICS_DB_URL:jdbc:mysql://127.0.0.1:3306/data_agent?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
+    username: ${DATAAGENT_ANALYTICS_DB_USER:root}
+    password: ${DATAAGENT_ANALYTICS_DB_PASSWORD:123456}
+
+  # ---- Expose the platform metadata DB (H2) as a queryable source? Off by default. ----
+  expose-app-db: ${DATAAGENT_EXPOSE_APP_DB:false}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      # show-details: never — the public /actuator/health endpoint returns
+      # status only (UP/DOWN). Component-level health is available to admins
+      # under /api/admin/runtime/* without leaking dependency hostnames.
+      show-details: never
+
+logging:
+  level:
+    root: INFO
+    io.agentscope: INFO
+    org.springframework.security: WARN
+    org.springframework.web: WARN
