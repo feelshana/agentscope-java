@@ -7,7 +7,13 @@
         <appender-ref ref="CONSOLE"/>
     </root>
 
-    <!-- Dedicated file appender for LLM debug logging (DebugLoggingMiddleware) -->
+    <!--
+      Dedicated file appender for LLM debug logging (DebugLoggingMiddleware). The pattern is
+      intentionally bare: the middleware already writes self-describing "role / type / text"
+      records and the log is meant to be read by a human, so no timestamp, level or logger name is
+      prefixed. Add "%d{yyyy-MM-dd HH:mm:ss.SSS} " back in front of %msg if wall-clock times are
+      needed to correlate with the console log.
+    -->
     <appender name="LLM_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>logs/LLM.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
@@ -17,7 +23,7 @@
             <totalSizeCap>1GB</totalSizeCap>
         </rollingPolicy>
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %msg%n</pattern>
+            <pattern>%msg%n</pattern>
         </encoder>
     </appender>
 

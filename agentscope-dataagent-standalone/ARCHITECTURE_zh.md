@@ -91,13 +91,16 @@ dataagent 为每位数据分析师提供专属的数据 Agent：上传 Excel/CSV
 
 ```
 1. resolveCwd()                → dataagent.workspace，缺省为 JVM 工作目录
-2. ensureAgentscopeConfig()    → ~/.agentscope/dataagent/agentscope.json 不存在则生成默认配置，
+2. ensureAgentscopeConfig()    → ~/.agentscope/dataagent-standalone/agentscope.json 不存在则生成默认配置，
                                  并调用 WorkspaceScaffolder 生成共享工作区种子
                                  （AGENTS.md=系统提示词、skills/、subagents/、knowledge/）
 3. builder.model(model)
 4. builder.configureAllAgents(b -> { ... })   ← 对【每个】HarnessAgent 生效的横切配置：
    - middleware: ToolNotificationMiddleware（工具事件 → ToolEventBus → SSE）
-   - middleware: DebugLoggingMiddleware（调试日志）
+   - middleware: DebugLoggingMiddleware（把消息写成 `logs/LLM.log` 的人工可读转录：每条记录
+     只有 role / type / text 三个字段；同一 session 内按消息 id 去重，因此整份文件是一条
+     线性对话而不是每轮重放的历史；工具入参按 `key: value` 逐行展开（SQL 保留换行），
+     工具结果反转义为真实文本，图片/音视频等媒体块只留占位符）
    - middleware: DataDynamicContextMiddleware（每轮重建 [DATA_SOURCES_OVERVIEW]
      与 [KNOWLEDGE_BASE_OVERVIEW] 追加到 system prompt —— TC 式动态上下文注入）
    - stateStore: AgentStateStore（默认 InMemoryAgentStateStore；生产应提供分布式实现）
