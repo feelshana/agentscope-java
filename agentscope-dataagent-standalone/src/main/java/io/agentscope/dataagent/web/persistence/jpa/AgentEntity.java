@@ -96,11 +96,11 @@ public class AgentEntity {
     private String name;
 
     @Lob
-    @Column(name = "description")
+    @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
     @Lob
-    @Column(name = "sys_prompt")
+    @Column(name = "sys_prompt", columnDefinition = "TEXT")
     private String sysPrompt;
 
     @Column(name = "model", length = 100)
@@ -110,11 +110,11 @@ public class AgentEntity {
     private Integer maxIters;
 
     @Lob
-    @Column(name = "tools_allow_json")
+    @Column(name = "tools_allow_json", columnDefinition = "TEXT")
     private String toolsAllowJson;
 
     @Lob
-    @Column(name = "tools_deny_json")
+    @Column(name = "tools_deny_json", columnDefinition = "TEXT")
     private String toolsDenyJson;
 
     @Column(name = "identity_name", length = 200)
@@ -124,18 +124,18 @@ public class AgentEntity {
     private String identityEmoji;
 
     @Lob
-    @Column(name = "group_chat_mention_patterns_json")
+    @Column(name = "group_chat_mention_patterns_json", columnDefinition = "TEXT")
     private String groupChatMentionPatternsJson;
 
     @Column(name = "group_chat_require_mention")
     private Boolean groupChatRequireMention;
 
     @Lob
-    @Column(name = "skills_allow_json")
+    @Column(name = "skills_allow_json", columnDefinition = "TEXT")
     private String skillsAllowJson;
 
     @Lob
-    @Column(name = "skills_deny_json")
+    @Column(name = "skills_deny_json", columnDefinition = "TEXT")
     private String skillsDenyJson;
 
     @Column(name = "run_as", length = 20)
@@ -151,7 +151,7 @@ public class AgentEntity {
      * overlay.
      */
     @Lob
-    @Column(name = "skill_repositories_json")
+    @Column(name = "skill_repositories_json", columnDefinition = "TEXT")
     private String skillRepositoriesJson;
 
     /**

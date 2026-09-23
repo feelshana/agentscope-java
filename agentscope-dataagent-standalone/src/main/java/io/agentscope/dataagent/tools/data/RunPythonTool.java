@@ -149,6 +149,10 @@ public final class RunPythonTool {
         String scriptPath = workDir + "/analysis.py";
         String fullCode = MATPLOTLIB_PREAMBLE + "\n" + code;
         byte[] codeBytes = fullCode.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+        // Clear previous artifacts to avoid stale files in outputs/
+        filesystem.execute(rc, "rm -rf " + workDir + "/" + OUTPUT_DIR + "/*", 10);
+
         List<FileUploadResponse> uploadResults =
                 filesystem.uploadFiles(
                         rc, List.of(new AbstractMap.SimpleEntry<>(scriptPath, codeBytes)));

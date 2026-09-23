@@ -45,6 +45,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -59,6 +60,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class DatasetService implements DatasetContextProvider {
 
     private static final Logger log = LoggerFactory.getLogger(DatasetService.class);
+    private static final Pattern SAFE_IDENTIFIER = Pattern.compile("^[a-zA-Z0-9_]+$");
 
     private final DatasetRepository repository;
     private final DatasetGroupRepository groupRepository;
@@ -328,6 +330,9 @@ public class DatasetService implements DatasetContextProvider {
     /** Distinct values for a column when cardinality is low (<=20); max 3 returned. null if high cardinality. */
     private List<String> sampleValues(
             ExternalDataSourceEntity ds, String schema, String table, String column) {
+        validateIdentifier(schema, "schema");
+        validateIdentifier(table, "table");
+        validateIdentifier(column, "column");
         String q = "postgresql".equalsIgnoreCase(ds.getKind()) ? "\"" : "`";
         String sql =
                 "SELECT DISTINCT "
@@ -416,7 +421,12 @@ public class DatasetService implements DatasetContextProvider {
             return mapper.readValue(
                     entity.getColumnSchemaJson(), new TypeReference<List<ColumnSchema>>() {});
         } catch (Exception e) {
-            return List.of();
+            throw new DatasetException(
+                    "Failed to parse column schema JSON for dataset "
+                            + entity.getId()
+                            + ": "
+                            + e.getMessage(),
+                    e);
         }
     }
 
@@ -480,7 +490,7 @@ public class DatasetService implements DatasetContextProvider {
         try {
             return mapper.writeValueAsString(columns);
         } catch (Exception e) {
-            return "[]";
+            throw new DatasetException("Failed to serialize column schema: " + e.getMessage(), e);
         }
     }
 
@@ -557,9 +567,18 @@ public class DatasetService implements DatasetContextProvider {
                     external != null && "postgresql".equalsIgnoreCase(external.getKind())
                             ? "\""
                             : "`";
+            validateIdentifier(e.getSchemaName(), "schema");
+            validateIdentifier(e.getTableName(), "table");
             return q + e.getSchemaName() + q + "." + q + e.getTableName() + q;
         }
+        validateIdentifier(e.getTableName(), "table");
         return "`" + e.getTableName() + "`";
+    }
+
+    private static void validateIdentifier(String name, String label) {
+        if (name == null || !SAFE_IDENTIFIER.matcher(name).matches()) {
+            throw new IllegalArgumentException("非法" + label + "标识符: " + name);
+        }
     }
 
     @Override

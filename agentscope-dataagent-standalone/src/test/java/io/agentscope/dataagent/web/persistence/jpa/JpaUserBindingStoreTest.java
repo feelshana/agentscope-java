@@ -24,8 +24,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.test.context.TestPropertySource;
 
 @DataJpaTest
+@TestPropertySource(properties = {"spring.sql.init.mode=never"})
 class JpaUserBindingStoreTest {
 
     @Autowired private UserEntityRepository repository;

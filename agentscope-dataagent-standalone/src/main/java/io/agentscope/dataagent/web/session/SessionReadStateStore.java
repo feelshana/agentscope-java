@@ -15,21 +15,12 @@
  */
 package io.agentscope.dataagent.web.session;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import io.agentscope.dataagent.runtime.DataAgentBootstrap;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import io.agentscope.dataagent.web.persistence.jpa.SessionReadStateEntity;
+import io.agentscope.dataagent.web.persistence.jpa.SessionReadStateRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Per-user, per-session "last read at" tracker, used by the Threads inbox to derive an unread flag.
@@ -38,42 +29,46 @@ import org.springframework.stereotype.Component;
  * stored last-read timestamp. Marking-as-read updates the stored timestamp to {@link
  * System#currentTimeMillis()} (or to a caller-supplied value).
  *
- * <p>State is persisted as a flat JSON map at {@code .agentscope/session-read-state.json} so that
- * read state survives restarts. Writes go through an atomic temp-file rename.
+ * <p>State is persisted in the {@code session_read_state} MySQL table so that read state survives
+ * restarts.
  */
 @Component
 public class SessionReadStateStore {
 
     private static final Logger log = LoggerFactory.getLogger(SessionReadStateStore.class);
-    private static final ObjectMapper MAPPER =
-            new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
 
-    private final Path stateFile;
-    private final Map<String, Long> lastReadAt = new ConcurrentHashMap<>();
+    private final SessionReadStateRepository repository;
 
-    public SessionReadStateStore(DataAgentBootstrap builderBootstrap) {
-        this.stateFile =
-                builderBootstrap.cwd().resolve(".agentscope").resolve("session-read-state.json");
-        load();
+    public SessionReadStateStore(SessionReadStateRepository repository) {
+        this.repository = repository;
     }
 
     /** Marks the (user, session) pair as read at {@code System.currentTimeMillis()}. */
+    @Transactional
     public long markRead(String userId, String sessionKey) {
         return markRead(userId, sessionKey, System.currentTimeMillis());
     }
 
     /** Marks the (user, session) pair as read at a specific epoch-ms timestamp. */
+    @Transactional
     public long markRead(String userId, String sessionKey, long readAtMs) {
-        String k = key(userId, sessionKey);
-        lastReadAt.put(k, readAtMs);
-        flush();
+        String effectiveUser = userId != null ? userId : "__anon__";
+        SessionReadStateEntity entity =
+                repository
+                        .findByUserIdAndSessionKey(effectiveUser, sessionKey)
+                        .orElse(new SessionReadStateEntity(effectiveUser, sessionKey, 0L));
+        entity.setLastReadAtMs(readAtMs);
+        repository.save(entity);
         return readAtMs;
     }
 
     /** Returns the last-read timestamp for the (user, session) pair, or {@code 0L} if never. */
     public long lastReadAt(String userId, String sessionKey) {
-        Long v = lastReadAt.get(key(userId, sessionKey));
-        return v != null ? v : 0L;
+        String effectiveUser = userId != null ? userId : "__anon__";
+        return repository
+                .findByUserIdAndSessionKey(effectiveUser, sessionKey)
+                .map(SessionReadStateEntity::getLastReadAtMs)
+                .orElse(0L);
     }
 
     /**
@@ -83,42 +78,5 @@ public class SessionReadStateStore {
      */
     public boolean isUnread(String userId, String sessionKey, long lastActivityMs) {
         return lastActivityMs > lastReadAt(userId, sessionKey);
-    }
-
-    private static String key(String userId, String sessionKey) {
-        return (userId != null ? userId : "__anon__") + sessionKey;
-    }
-
-    private synchronized void load() {
-        if (!Files.isRegularFile(stateFile)) {
-            return;
-        }
-        try {
-            String json = Files.readString(stateFile, StandardCharsets.UTF_8);
-            Map<String, Long> raw =
-                    MAPPER.readValue(json, new TypeReference<Map<String, Long>>() {});
-            if (raw != null) {
-                lastReadAt.putAll(raw);
-            }
-        } catch (IOException e) {
-            log.warn("Failed to load session read-state from {}: {}", stateFile, e.getMessage());
-        }
-    }
-
-    private synchronized void flush() {
-        try {
-            Files.createDirectories(stateFile.getParent());
-            Path tmp = stateFile.resolveSibling(stateFile.getFileName() + ".tmp");
-            // Use a stable iteration order for diff-friendly writes.
-            Map<String, Long> ordered = new LinkedHashMap<>(lastReadAt);
-            Files.writeString(tmp, MAPPER.writeValueAsString(ordered), StandardCharsets.UTF_8);
-            Files.move(
-                    tmp,
-                    stateFile,
-                    StandardCopyOption.REPLACE_EXISTING,
-                    StandardCopyOption.ATOMIC_MOVE);
-        } catch (IOException e) {
-            log.warn("Failed to persist session read-state to {}: {}", stateFile, e.getMessage());
-        }
     }
 }

@@ -32,7 +32,7 @@ description: 使用 Python 完成数据可视化与深度分析。当用户问�
 
 1. **先用 SQL 拿到原始数据。** 查阅 system prompt 中的 `[DATA_SOURCES_OVERVIEW]` 确认数据源，`prepare_data_context` 确认列名，然后用 `query_structured_data` 执行查询。不要在 Python 中直接连接数据库——沙箱没有网络，始终通过 SQL 工具取数后再用 Python 处理。
 
-   问题涉及考核/目标时，先调用 `read_knowledge` 查知识库中的 KPI/考核目标值（如"日均目标 2000 万"）——参考线与达成率都以此为基准；知识库没有就问用户要目标值，不要编造。
+   问题涉及考核/目标时，先调用 `retrieve_evidence` 查知识库中的 KPI/考核目标值（如"日均目标 2000 万"）——参考线与达成率都以此为基准；知识库没有就问用户要目标值，不要编造。
 
 2. **分两次调用 run_python：先探查，再画图。** 第一次传一段探查代码，确认列名、类型与取值范围：
 
@@ -83,7 +83,7 @@ description: 使用 Python 完成数据可视化与深度分析。当用户问�
 4. **考核指标分析模式。** 考核/目标达成类问题的标准画法——参考线 + 数据标签 + 达成率：
 
    ```python
-   target = 2000  # 考核目标（来自 read_knowledge 或用户），单位与数据一致
+   target = 2000  # 考核目标（来自 retrieve_evidence 或用户），单位与数据一致
 
    # 折线 + 逐点数据标签
    ax.plot(df['x_label'], df['value_wan'], marker='o', linewidth=2, color='#2196F3', zorder=3)
@@ -231,10 +231,11 @@ ax.plot(x, intercept + slope * x, 'r--', label=f'趋势线 (R²={r_value**2:.3f}
 ## 反模式
 
 - ❌ 在 Python 中直接连接数据库——沙箱无网络，必须先用 `query_structured_data` 取数。
-- ❌ 编造考核目标值——从 `read_knowledge` 或用户处获取；两者都没有就明确说明"无目标值，仅展示数据"。
+- ❌ 编造考核目标值——从 `retrieve_evidence` 或用户处获取；两者都没有就明确说明"无目标值，仅展示数据"。
 - ❌ 不探查直接写正式代码——列名/类型写错会浪费一整次执行；先跑探查脚本。
 - ❌ 调用 `plt.show()`——沙箱没有显示设备；用 `plt.savefig()` + `plt.close()`。
 - ❌ 把产物保存到 `outputs/` 之外的目录——工具只收集 `outputs/` 下的文件。
+- ❌ 图表标题/坐标轴/图例/注释使用英文——所有可见文字必须用中文，如 `ax.set_title('活跃用户趋势')` 而非 `ax.set_title('Active User Trend')`。
 - ❌ 字体设置为 `SimHei` 等本机字体——沙箱镜像内置的是 Noto CJK，中文标注用 `Noto Sans CJK SC`。
 - ❌ 图上不写字——有参考线/标签/达成率诉求还用 `render_chart`，那是本技能的场景。
 - ❌ 只贴图不解读——每张图后必须附结论，考核场景必须给出达成率。

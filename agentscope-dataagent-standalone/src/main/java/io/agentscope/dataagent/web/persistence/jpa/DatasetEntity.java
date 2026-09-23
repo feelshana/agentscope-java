@@ -74,12 +74,12 @@ public class DatasetEntity {
     private String tableName;
 
     @Lob
-    @Column(name = "description")
+    @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
     /** JSON array of {@code {"name","sqlType","nullable"}} column descriptors. */
     @Lob
-    @Column(name = "column_schema_json")
+    @Column(name = "column_schema_json", columnDefinition = "TEXT")
     private String columnSchemaJson;
 
     @Column(name = "row_count")

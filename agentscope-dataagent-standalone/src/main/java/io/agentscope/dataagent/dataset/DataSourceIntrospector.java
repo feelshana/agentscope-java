@@ -24,6 +24,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 
 /**
@@ -33,6 +34,8 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class DataSourceIntrospector {
+
+    private static final Pattern SAFE_IDENTIFIER = Pattern.compile("^[a-zA-Z0-9_]+$");
 
     public record ColumnInfo(String name, String type, String description) {}
 
@@ -118,6 +121,8 @@ public class DataSourceIntrospector {
 
     /** COUNT(*) for a table, used to record rowCount on associated datasets. */
     public long countRows(ExternalDataSourceEntity ds, String schema, String table) {
+        validateIdentifier(schema, "schema");
+        validateIdentifier(table, "table");
         String sql = "SELECT COUNT(*) FROM `" + schema + "`.`" + table + "`";
         if ("postgresql".equalsIgnoreCase(ds.getKind())) {
             sql = "SELECT COUNT(*) FROM \"" + schema + "\".\"" + table + "\"";
@@ -127,7 +132,8 @@ public class DataSourceIntrospector {
                 ResultSet rs = st.executeQuery(sql)) {
             return rs.next() ? rs.getLong(1) : 0;
         } catch (SQLException e) {
-            return -1;
+            throw new DatasetException(
+                    "Failed to count rows for " + schema + "." + table + ": " + e.getMessage(), e);
         }
     }
 
@@ -152,5 +158,11 @@ public class DataSourceIntrospector {
                 DriverManager.getConnection(ds.getJdbcUrl(), ds.getUsername(), ds.getPassword());
         c.setReadOnly(true);
         return c;
+    }
+
+    private static void validateIdentifier(String name, String label) {
+        if (name == null || !SAFE_IDENTIFIER.matcher(name).matches()) {
+            throw new IllegalArgumentException("非法" + label + "标识符: " + name);
+        }
     }
 }

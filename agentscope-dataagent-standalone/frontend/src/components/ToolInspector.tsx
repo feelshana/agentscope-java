@@ -856,6 +856,7 @@ function typeLabel(type: string): string {
 
 function PythonArtifactsView({ tools }: { tools: { input?: string; result?: string }[] }) {
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const [failedImgs, setFailedImgs] = useState<Set<number>>(() => new Set());
   const allArtifacts = React.useMemo(() => {
     const result: ArtifactInfo[] = [];
     for (const t of tools) {
@@ -870,17 +871,26 @@ function PythonArtifactsView({ tools }: { tools: { input?: string; result?: stri
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {allArtifacts.map((a, i) => {
           const src = (a.type === 'image' || a.type === 'svg') ? artifactSrc(a) : null;
+          const failed = failedImgs.has(i);
           return (
             <div key={i} style={{
               display: 'flex', alignItems: 'center', gap: 10,
               padding: '8px 12px', borderBottom: `1px solid ${C.borderLight}`,
             }}>
-              {src ? (
+              {src && !failed ? (
                 <img src={src} alt={a.name} style={{
                   width: 44, height: 44, objectFit: 'cover', borderRadius: 6,
                   border: `1px solid ${C.border}`, cursor: 'zoom-in', flexShrink: 0,
                 }} onClick={() => setLightbox(src)}
-                  onError={e => { e.currentTarget.style.opacity = '0.3'; }} />
+                  onError={() => setFailedImgs(prev => new Set(prev).add(i))} />
+              ) : src ? (
+                <span title="图片加载失败，请重新登录后重试" style={{
+                  width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0, borderRadius: 6, border: `1px dashed ${C.border}`,
+                  color: C.textMuted, fontSize: '0.6rem', textAlign: 'center', lineHeight: 1.2,
+                }}>
+                  加载<br/>失败
+                </span>
               ) : (
                 <span style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: C.textMuted }}>
                   {a.type === 'csv' ? (

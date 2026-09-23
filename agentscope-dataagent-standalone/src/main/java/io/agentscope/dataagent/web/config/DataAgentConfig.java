@@ -31,6 +31,8 @@ import io.agentscope.dataagent.runtime.session.DataDynamicContextMiddleware;
 import io.agentscope.dataagent.tools.data.DataSourceRegistry;
 import io.agentscope.dataagent.tools.data.SqlConnector;
 import io.agentscope.dataagent.web.middleware.DebugLoggingMiddleware;
+import io.agentscope.dataagent.web.persistence.jpa.IdentityLinkRepository;
+import io.agentscope.dataagent.web.persistence.jpa.SessionRegistryRepository;
 import io.agentscope.dataagent.web.toolbus.ToolEventBus;
 import io.agentscope.dataagent.web.toolbus.ToolNotificationMiddleware;
 import io.agentscope.dataagent.web.workspace.UserSandboxRegistry;
@@ -105,7 +107,7 @@ import org.springframework.context.annotation.Configuration;
  *
  * <h2>Agent config</h2>
  *
- * <p>If {@code ~/.agentscope/dataagent-standalone/agentscope.json} does not exist, a minimal default agent
+ * <p>If {@code ~/.agentscope/dataagent/agentscope.json} does not exist, a minimal default agent
  * config is auto-generated so the app starts without manual setup.
  */
 @Configuration
@@ -113,40 +115,15 @@ public class DataAgentConfig {
 
     private static final Logger log = LoggerFactory.getLogger(DataAgentConfig.class);
 
-    @Value("${dataagent.openai.api-key:}")
-    private String openaiApiKey;
-
-    @Value("${dataagent.openai.base-url:}")
-    private String openaiBaseUrl;
-
-    @Value("${dataagent.openai.model-name:gpt-4o}")
-    private String openaiModelName;
-
-    @Value("${dataagent.openai.stream:true}")
-    private boolean openaiStream;
-
-    @Value("${dataagent.dashscope.api-key:}")
-    private String dashscopeApiKey;
-
-    @Value("${dataagent.dashscope.model-name:qwen-max}")
-    private String dashscopeModelName;
-
-    @Value("${dataagent.dashscope.stream:true}")
-    private boolean dashscopeStream;
-
     /**
-     * Default system prompt for the built-in data agent, used when neither {@code
-     * DATAAGENT_AGENT_SYS_PROMPT} nor {@code dataagent.agent.sys-prompt} is configured.
-     * Package-visible constant so tests can assert the always-on layer of the prompt.
+     * 内置系统提示词默认值。当 {@code dataagent.agent.sys-prompt} 未配置时使用。
      *
-     * <p>Layering (ADR 0007): every rule lives in exactly one layer. This prompt keeps only what
-     * must already hold before any skill is loaded — the persona, the self-check gates, the
-     * workflow skeleton and the output-language/format gates — plus the pointer at the {@code
-     * sql-analysis} skill. The hard SQL gates (JOIN-first, dimension-table de-duplication) live in
-     * the {@code query_structured_data} tool description, which travels with the tool schema on
-     * every turn. The how-to (batch-preparing the directly related tables, CTE recipes,
-     * matplotlib labelling and fonts) lives in the skills and is deliberately not restated here:
-     * a rule written in two layers drifts, and the skill version is always the more detailed one.
+     * <p>提示词三层分工（ADR 0007）：
+     * <ul>
+     *   <li>常驻人格/流程 → AGENTS.md（本常量）</li>
+     *   <li>常驻动作点硬门 → {@code @Tool} 描述</li>
+     *   <li>按需操作手册 → SKILL.md</li>
+     * </ul>
      */
     static final String DEFAULT_AGENT_SYS_PROMPT =
             "# 数据分析智能体\n\n"
@@ -173,6 +150,27 @@ public class DataAgentConfig {
                     + "- 不主动生成 PDF/Excel/PPT 等文件，除非用户明确要求。\n"
                     + "- 所有输出必须使用简体中文：包括思考过程、工具调用说明、图表标题、轴标签、图例、代码注释等。";
 
+    @Value("${dataagent.openai.api-key:}")
+    private String openaiApiKey;
+
+    @Value("${dataagent.openai.base-url:}")
+    private String openaiBaseUrl;
+
+    @Value("${dataagent.openai.model-name:gpt-4o}")
+    private String openaiModelName;
+
+    @Value("${dataagent.openai.stream:true}")
+    private boolean openaiStream;
+
+    @Value("${dataagent.dashscope.api-key:}")
+    private String dashscopeApiKey;
+
+    @Value("${dataagent.dashscope.model-name:qwen-max}")
+    private String dashscopeModelName;
+
+    @Value("${dataagent.dashscope.stream:true}")
+    private boolean dashscopeStream;
+
     @Value(
             "${DATAAGENT_AGENT_SYS_PROMPT:${dataagent.agent.sys-prompt:"
                     + DEFAULT_AGENT_SYS_PROMPT
@@ -182,13 +180,6 @@ public class DataAgentConfig {
     @Value("${dataagent.agent.name:data-agent}")
     private String agentName;
 
-    /**
-     * Whether harness subagent orchestration ({@code agent_spawn} / {@code agent_send} / {@code
-     * task_*}) is enabled. Off by default: the harness otherwise injects a fixed {@code ##
-     * Subagents} system-prompt section plus those tool schemas on every turn, which this
-     * single-agent data toolchain never delegates to. Gateway, session routing and chat are
-     * unaffected either way (ADR 0009).
-     */
     @Value("${dataagent.agent.subagents-enabled:false}")
     private boolean subagentsEnabled;
 
@@ -308,12 +299,16 @@ public class DataAgentConfig {
             Optional<AgentStateStore> sessionOpt,
             DataSourceRegistry dataSourceRegistry,
             SqlConnector sqlConnector,
-            Optional<DatasetContextProvider> contextProviderOpt)
+            Optional<DatasetContextProvider> contextProviderOpt,
+            SessionRegistryRepository sessionRegistryRepository)
             throws IOException {
         Path cwd = resolveCwd();
         ensureAgentscopeConfig();
 
-        DataAgentBootstrap.Builder builder = DataAgentBootstrap.builder().cwd(cwd);
+        DataAgentBootstrap.Builder builder =
+                DataAgentBootstrap.builder()
+                        .cwd(cwd)
+                        .sessionStoreRepository(sessionRegistryRepository);
 
         if (modelOpt.isPresent()) {
             builder.model(modelOpt.get());
@@ -359,9 +354,6 @@ public class DataAgentConfig {
                     b.disableFilesystemTools();
                     b.disableShellTool();
 
-                    // Subagent orchestration is opt-in: the harness otherwise injects a fixed
-                    // "## Subagents" prompt section and the agent_*/task_* tool schemas on every
-                    // turn, which this single-agent data toolchain never uses (ADR 0009).
                     if (!subagentsEnabled) {
                         b.disableSubagents();
                     }
@@ -510,9 +502,8 @@ public class DataAgentConfig {
 
     @Bean
     public io.agentscope.dataagent.web.identity.IdentityLinkStore identityLinkStore(
-            DataAgentBootstrap bootstrap) {
-        Path agentscopeDir = bootstrap.cwd().resolve(".agentscope");
-        return new io.agentscope.dataagent.web.identity.IdentityLinkStore(agentscopeDir);
+            IdentityLinkRepository repository) {
+        return new io.agentscope.dataagent.web.identity.IdentityLinkStore(repository);
     }
 
     @Bean
@@ -539,7 +530,7 @@ public class DataAgentConfig {
     }
 
     /**
-     * Auto-generates a minimal {@code ~/.agentscope/dataagent-standalone/agentscope.json} if it doesn't
+     * Auto-generates a minimal {@code ~/.agentscope/dataagent/agentscope.json} if it doesn't
      * exist, so the app can start without manual setup. The generated config defines a single
      * GLOBAL {@code data-agent} pre-wired with the {@code chatui} channel and lets the bootstrap
      * fall through to {@link DataAgentBootstrap#DEFAULT_WORKSPACE_ROOT} for the workspace
@@ -554,12 +545,18 @@ public class DataAgentConfig {
         Path configFile = DataAgentBootstrap.DEFAULT_CONFIG_PATH;
         Path workspaceRoot = DataAgentBootstrap.DEFAULT_WORKSPACE_ROOT;
 
+        Files.createDirectories(configFile.getParent());
+        Files.createDirectories(workspaceRoot);
+
+        // Always ensure workspace scaffolding (AGENTS.md etc.) runs — safe because
+        // scaffold() uses writeIfMissing internally. This fixes the case where
+        // agentscope.json exists from a prior setup but AGENTS.md was never created.
+        io.agentscope.dataagent.web.scaffold.WorkspaceScaffolder.scaffold(
+                workspaceRoot, "Data Agent", agentSysPrompt);
+
         if (Files.exists(configFile)) {
             return;
         }
-
-        Files.createDirectories(configFile.getParent());
-        Files.createDirectories(workspaceRoot);
 
         String agentsJson =
                 """
@@ -583,8 +580,5 @@ public class DataAgentConfig {
 
         Files.writeString(configFile, agentsJson);
         log.info("Auto-generated DataAgent config at {}", configFile);
-
-        io.agentscope.dataagent.web.scaffold.WorkspaceScaffolder.scaffold(
-                workspaceRoot, "Data Agent", agentSysPrompt);
     }
 }

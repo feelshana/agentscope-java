@@ -91,14 +91,18 @@ public class DatasetImportService {
         String tableName = TableProvisioner.buildTableName(ownerId, datasetId, name);
         BatchListener listener = new BatchListener(tableName, provisioner, schemaGenerationService);
 
-        String lower = fileName != null ? fileName.toLowerCase() : "";
-        if (lower.endsWith(".csv")) {
-            EasyExcel.read(data, listener)
-                    .excelType(com.alibaba.excel.support.ExcelTypeEnum.CSV)
-                    .sheet()
-                    .doRead();
-        } else {
-            EasyExcel.read(data, listener).sheet().doRead();
+        try {
+            String lower = fileName != null ? fileName.toLowerCase() : "";
+            if (lower.endsWith(".csv")) {
+                EasyExcel.read(data, listener)
+                        .excelType(com.alibaba.excel.support.ExcelTypeEnum.CSV)
+                        .sheet()
+                        .doRead();
+            } else {
+                EasyExcel.read(data, listener).sheet().doRead();
+            }
+        } finally {
+            listener.shutdownExecutor();
         }
 
         if (listener.getOriginalHeaders().isEmpty()) {
@@ -219,6 +223,9 @@ public class DatasetImportService {
             }
             // Wait for all pending inserts to complete
             waitForPendingInserts();
+        }
+
+        void shutdownExecutor() {
             insertExecutor.shutdown();
         }
 

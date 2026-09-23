@@ -36,6 +36,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
@@ -155,7 +156,7 @@ public class SessionAgentManager {
             }
             if (entry.spawnedBy() != null && !entry.spawnedBy().isBlank()) {
                 childrenByParent
-                        .computeIfAbsent(entry.spawnedBy(), k -> new ArrayList<>())
+                        .computeIfAbsent(entry.spawnedBy(), k -> new CopyOnWriteArrayList<>())
                         .add(entry.sessionKey());
             }
         }
@@ -325,7 +326,9 @@ public class SessionAgentManager {
             labelToSessionKey.put(entry.label().toLowerCase(), sessionKey);
         }
         if (spawnedBy != null) {
-            childrenByParent.computeIfAbsent(spawnedBy, k -> new ArrayList<>()).add(sessionKey);
+            childrenByParent
+                    .computeIfAbsent(spawnedBy, k -> new CopyOnWriteArrayList<>())
+                    .add(sessionKey);
         }
         if (sessionStore != null) {
             sessionStore.save(entry);

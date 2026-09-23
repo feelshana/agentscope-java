@@ -26,32 +26,28 @@ spring:
 
   # --------------------------------------------------------------------------
   # User + agent metadata are persisted via Spring Data JPA. The default
-  # backend is an embedded H2 database written to
-  # `${user.home}/.agentscope-dataagent/db.*` — intentionally NOT placed under
-  # `dataagent.workspace`, so workspace volumes never accidentally include the
-  # catalog tables.
+  # backend is MySQL at localhost:3306/dataagent_platform — matching the
+  # dataset store convention (root/1234).
   #
-  # To switch to MySQL / PostgreSQL in production, activate the `jdbc` Spring
-  # profile (`--spring.profiles.active=jdbc` or `SPRING_PROFILES_ACTIVE=jdbc`)
-  # which sets MySQL-shaped DataSource defaults in `application-jdbc.yml`. You
-  # can also override individual settings directly via `DATAAGENT_DB_*` env
-  # vars without activating the profile.
+  # To fall back to embedded H2 for local dev without MySQL, activate the
+  # `h2` Spring profile (`--spring.profiles.active=h2`) which switches the
+  # DataSource to a file-based H2 in `application-h2.yml`. You can also
+  # override individual settings via `DATAAGENT_DB_*` env vars.
   # --------------------------------------------------------------------------
   datasource:
-    url: ${DATAAGENT_DB_URL:jdbc:h2:file:${DATAAGENT_DB_PATH:${user.home}/.agentscope-dataagent/db};AUTO_SERVER=TRUE;MODE=MYSQL;DB_CLOSE_DELAY=-1}
-    driver-class-name: ${DATAAGENT_DB_DRIVER:org.h2.Driver}
-    username: ${DATAAGENT_DB_USER:sa}
-    password: ${DATAAGENT_DB_PASSWORD:}
+    url: ${DATAAGENT_DB_URL:jdbc:mysql://localhost:3306/dataagent_platform?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true}
+    driver-class-name: ${DATAAGENT_DB_DRIVER:com.mysql.cj.jdbc.Driver}
+    username: ${DATAAGENT_DB_USER:root}
+    password: ${DATAAGENT_DB_PASSWORD:1234}
 
   jpa:
     open-in-view: false
     hibernate:
-      # 'update' is fine for dev / single-node. Production deployments running
-      # against MySQL/PostgreSQL should pin the schema with Flyway/Liquibase
-      # and switch this to `validate`.
+      # 'update' is fine for dev / single-node. Production deployments should
+      # pin the schema with Flyway/Liquibase and switch this to `validate`.
       ddl-auto: ${DATAAGENT_JPA_DDL_AUTO:update}
     # Run the SQL init scripts AFTER Hibernate creates the schema. Required so
-    # `data-h2.sql` finds the `dataagent_user` table to MERGE into.
+    # `data-mysql.sql` finds the `dataagent_user` table to INSERT into.
     defer-datasource-initialization: true
     properties:
       hibernate:
@@ -59,21 +55,18 @@ spring:
           time_zone: UTC
 
   # --------------------------------------------------------------------------
-  # `data-${platform}.sql` seeding. Setting platform=h2 makes Spring only run
-  # `data-h2.sql`; the bundled script seeds two demo accounts (bob / alice,
+  # `data-${platform}.sql` seeding. Setting platform=mysql makes Spring run
+  # `data-mysql.sql`; the bundled script seeds two demo accounts (bob / alice,
   # passwords identical to the usernames) so a fresh local checkout is usable
-  # without first calling the admin API. The script is idempotent (MERGE INTO).
+  # without first calling the admin API. The script is idempotent
+  # (INSERT ... ON DUPLICATE KEY UPDATE).
   #
-  # `mode=always` is intentional: in Spring Boot 4, `mode=embedded` classifies
-  # only `jdbc:h2:mem:` URLs as embedded, which would skip the seed against
-  # the default `jdbc:h2:file:` DataSource. `application-jdbc.yml` explicitly
-  # overrides this to `never` so MySQL/PostgreSQL deployments never run the
-  # H2-only script.
+  # The `h2` profile overrides platform to `h2` and runs `data-h2.sql` instead.
   # --------------------------------------------------------------------------
   sql:
     init:
       mode: ${DATAAGENT_SQL_INIT_MODE:always}
-      platform: ${DATAAGENT_SQL_INIT_PLATFORM:h2}
+      platform: ${DATAAGENT_SQL_INIT_PLATFORM:mysql}
       continue-on-error: false
 
 # --------------------------------------------------------------------------
@@ -84,7 +77,7 @@ spring:
 dataagent:
   # JWT signing secret (>= 32 chars). MUST be overridden in production.
   jwt:
-    secret: ${DATAAGENT_JWT_SECRET:dataagent-default-dev-secret-change-in-production-32chars}
+    secret: ${DATAAGENT_JWT_SECRET:dataagent-dev-secret-for-local-only-do-not-use-in-prod-2026}
 
   # Working directory. If blank, defaults to the JVM's current working
   # directory. .agentscope/agentscope.json is read from (or auto-created in)
@@ -139,21 +132,17 @@ dataagent:
     enable-thinking: false
 
   # ---- Agent defaults (used when auto-generating agentscope.json) ----
-  # The system prompt is NOT declared here on purpose: the built-in
-  # DataAgentConfig#DEFAULT_AGENT_SYS_PROMPT is the default and is scaffolded into
-  # ~/.agentscope/dataagent-standalone/workspace/AGENTS.md on first start. Declaring an
-  # empty `sys-prompt:` key would override it with a blank prompt. To customise, set the
-  # DATAAGENT_AGENT_SYS_PROMPT environment variable (takes precedence over the built-in).
   agent:
     name: ${DATAAGENT_AGENT_NAME:data-agent}
-    # Subagent orchestration (harness agent_spawn / agent_send / task_*). Off by default:
-    # the harness injects a fixed ~6.2k-char "## Subagents" system-prompt section plus those
-    # tool schemas on every turn, and this product shape (single agent + TC-style data
-    # toolchain) never delegates. Setting it to true restores the section, the tools and the
-    # loading of workspace/subagents/*.md + the shared-layer definitions - no code change.
-    # Does NOT affect the gateway, session routing or chat: buildSubagentEntries ignores this
-    # flag, so SessionAgentManager is wired either way (ADR 0009).
     subagents-enabled: ${DATAAGENT_SUBAGENTS_ENABLED:false}
+    sys-prompt: >
+      你是一个基于 AgentScope 构建的数据分析智能体（Data Agent），帮助用户探查、
+      分析、可视化和汇报数据。优先使用已注册的技能（skills）与子代理（sub-agents），
+      而不是即兴推理；始终注明所使用的数据来源。
+
+      【最高优先级 — 语言规范】所有输出必须使用简体中文，包括但不限于：思考过程、
+      工具调用前的叙述与解释、图表标题与标签、代码注释、最终回复。禁止使用英文
+      进行推理叙述或工具调用说明。
 
   # ---- Channels (side-tool adapters) ----
   # ChatUI is always-on and serves the primary web UX. DingTalk and the
@@ -197,18 +186,9 @@ dataagent:
     datasource:
       url: ${DATAAGENT_DATASET_DB_URL:jdbc:mysql://localhost:3306/data_agent?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
       username: ${DATAAGENT_DATASET_DB_USER:root}
-      password: ${DATAAGENT_DATASET_DB_PASSWORD:123456}
+      password: ${DATAAGENT_DATASET_DB_PASSWORD:1234}
 
-  # ---- Optional pre-seeded analytics MySQL (tenant_storage_utilization / project_info) ----
-  # Disabled by default so it never collides with the dataset store; enable and point it at the
-  # database that actually holds the seed tables (see mysql-schema.sql) when needed.
-  analytics:
-    enabled: ${DATAAGENT_ANALYTICS_ENABLED:false}
-    url: ${DATAAGENT_ANALYTICS_DB_URL:jdbc:mysql://127.0.0.1:3306/data_agent?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
-    username: ${DATAAGENT_ANALYTICS_DB_USER:root}
-    password: ${DATAAGENT_ANALYTICS_DB_PASSWORD:123456}
-
-  # ---- Expose the platform metadata DB (H2) as a queryable source? Off by default. ----
+  # ---- Expose the platform metadata DB as a queryable source? Off by default. ----
   expose-app-db: ${DATAAGENT_EXPOSE_APP_DB:false}
 
 management:

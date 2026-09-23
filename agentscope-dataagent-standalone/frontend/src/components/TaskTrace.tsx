@@ -12,6 +12,8 @@ export interface TaskTraceProps {
   hadToolErrors?: boolean;
   /** True when the turn was interrupted before completion. */
   interrupted?: boolean;
+  /** Elapsed time in ms (shown after completion). */
+  elapsedMs?: number;
   children: React.ReactNode;
 }
 
@@ -34,6 +36,7 @@ export default function TaskTrace({
   hasError = false,
   hadToolErrors = false,
   interrupted = false,
+  elapsedMs,
   children,
 }: TaskTraceProps) {
   const [open, setOpen] = useState(running);
@@ -73,10 +76,15 @@ export default function TaskTrace({
     ? 'failed'
     : '';
 
+  const elapsedText = !running && elapsedMs != null
+    ? formatElapsed(elapsedMs)
+    : null;
+
   return (
     <div className="da-trace">
       <button type="button" className="da-trace-head" onClick={toggle} aria-expanded={open}>
         <span className={`da-trace-status ${statusClass}`}>{status}</span>
+        {elapsedText && <span className="da-trace-elapsed">{elapsedText}</span>}
         <span className={`da-trace-chevron${open ? ' open' : ''}`}>
           <Icon name="chevron" size="sm" />
         </span>
@@ -84,4 +92,13 @@ export default function TaskTrace({
       {open && <div className="da-trace-body">{children}</div>}
     </div>
   );
+}
+
+function formatElapsed(ms: number): string {
+  if (ms < 1000) return '不到1秒';
+  const sec = Math.round(ms / 1000);
+  if (sec < 60) return `${sec}秒`;
+  const min = Math.floor(sec / 60);
+  const rem = sec % 60;
+  return rem ? `${min}分${rem}秒` : `${min}分`;
 }

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { currentSession, stream } from '../api/chat';
+import { stream } from '../api/chat';
 import { TurnEntry, turns as fetchTurns } from '../api/sessions';
 import ToolCallBlock, { ToolInspectPayload } from './ToolCallBlock';
 import TaskTrace from './TaskTrace';
@@ -46,6 +46,15 @@ interface Message {
   pending?: boolean;
   /** True only when the turn was interrupted and produced no usable answer. */
   failed?: boolean;
+  /** Timestamp (ms) when the assistant turn started streaming. */
+  startedAtMs?: number;
+  /** Elapsed time (ms) from start to done. */
+  elapsedMs?: number;
+}
+
+interface SessionMsgs {
+  messages: Message[];
+  busy: boolean;
 }
 
 const S: Record<string, React.CSSProperties> = {
@@ -81,18 +90,6 @@ const S: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     flexShrink: 0,
   },
-  composerCard: {
-    width: '100%',
-    maxWidth: 960,
-    background: 'var(--da-surface)',
-    border: '1px solid var(--da-border)',
-    borderRadius: 'var(--da-radius-xl)',
-    boxShadow: 'var(--da-shadow-pop)',
-    padding: '12px 16px 10px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 8,
-  },
   textarea: {
     width: '100%',
     boxSizing: 'border-box',
@@ -112,8 +109,6 @@ const S: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     gap: 8,
-    borderTop: '1px solid var(--da-border)',
-    paddingTop: 8,
   },
   picker: {
     position: 'absolute',
@@ -342,11 +337,13 @@ export default function ChatPanel({
   onToolResolved,
 }: ChatPanelProps) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [sessionMsgs, setSessionMsgs] = useState<Map<string, SessionMsgs>>(new Map());
   const [input, setInput] = useState('');
-  const [busy, setBusy] = useState(false);
   const [restoring, setRestoring] = useState(true);
-  const [sessionKey, setSessionKey] = useState<string | null>(null);
+  const curKey = searchParams.get('session');
+  const messages = curKey ? (sessionMsgs.get(curKey)?.messages ?? []) : [];
+  const busy = curKey ? (sessionMsgs.get(curKey)?.busy ?? false) : false;
+  const isLanding = !restoring && !curKey && messages.length === 0;
   const [groups, setGroups] = useState<DatasetGroup[]>([]);
   const [selectedGroups, setSelectedGroups] = useState<string[]>(() => {
     const raw = searchParams.get('groups');
@@ -362,6 +359,9 @@ export default function ChatPanel({
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const groupPickerRef = useRef<HTMLDivElement | null>(null);
   const ontologyPickerRef = useRef<HTMLDivElement | null>(null);
+  const abortRef = useRef<Map<string, AbortController>>(new Map());
+  const onTitleRef = useRef(onTitle);
+  onTitleRef.current = onTitle;
 
   /** Mutually-exclusive effective agent: ontology mode overrides knowledge-base mode. */
   const effectiveAgentId = selectedOntology ? `ontology-${selectedOntology}` : agentId;
@@ -430,46 +430,43 @@ export default function ChatPanel({
     }
   }, [effectiveAgentId]);
 
-  // On agent or URL session change: pick a session (URL > localStorage > backend default) and rehydrate.
+  // On agent or URL session change: switch display to the target session.
+  // If we already have messages cached (e.g., from background streaming), show them immediately.
+  // Otherwise fetch from backend. Streaming in other sessions continues undisturbed.
   const urlSession = searchParams.get('session');
   useEffect(() => {
     let cancelled = false;
-    setMessages([]);
     setInput('');
-    setRestoring(true);
 
-    const stored = (() => { try { return localStorage.getItem(storageKey(effectiveAgentId)); } catch { return null; } })();
+    // No URL session → landing page. Don't auto-restore from localStorage;
+    // a session is only created when the user sends the first message.
+    if (!urlSession) {
+      setRestoring(false);
+      return;
+    }
 
     async function run() {
-      // URL-provided session always wins: it may be a freshly-minted UUID that the
-      // backend has never seen yet, and we must not let `currentSession` overwrite it.
-      let key: string | null = urlSession;
-      if (!key) {
-        try {
-          const cur = await currentSession(effectiveAgentId, stored ?? undefined);
-          key = cur.sessionKey || stored || null;
-        } catch {
-          key = stored || null;
-        }
-      }
+      const key = urlSession!;
       if (cancelled) return;
-      setSessionKey(key);
-      if (key) {
-        try {
-          const list = await fetchTurns(effectiveAgentId, key);
-          if (cancelled) return;
-          setMessages(turnsToMessages(list));
-        } catch {
-          // missing/empty session is fine — we just start empty
-        }
+
+      if (key && sessionMsgs.has(key)) {
+        setRestoring(false);
+        return;
       }
-      if (cancelled) return;
-      setRestoring(false);
-      if (key && key !== urlSession) {
-        const next = new URLSearchParams(searchParams);
-        next.set('session', key);
-        setSearchParams(next, { replace: true });
+
+      setRestoring(true);
+      try {
+        const list = await fetchTurns(effectiveAgentId, key);
+        if (cancelled) return;
+        setSessionMsgs(prev => {
+          const next = new Map(prev);
+          next.set(key!, { messages: turnsToMessages(list), busy: false });
+          return next;
+        });
+      } catch {
+        // missing/empty session is fine
       }
+      if (!cancelled) setRestoring(false);
     }
     run();
     return () => { cancelled = true; };
@@ -481,9 +478,19 @@ export default function ChatPanel({
   }, [messages]);
 
   useEffect(() => {
+    if (isLanding) inputRef.current?.focus();
+  }, [isLanding]);
+
+  useEffect(() => {
     const firstUser = messages.find(m => m.role === 'user');
-    onTitle?.(firstUser ? firstUser.text.replace(/\s+/g, ' ').trim().slice(0, 40) : '');
-  }, [messages, onTitle]);
+    onTitleRef.current?.(firstUser ? firstUser.text.replace(/\s+/g, ' ').trim().slice(0, 40) : '');
+  }, [messages]);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current.forEach(ac => ac.abort());
+    };
+  }, []);
 
   const canSend = useMemo(
     () => !busy && !restoring && !!effectiveAgentId && input.trim().length > 0,
@@ -494,18 +501,41 @@ export default function ChatPanel({
     if (!canSend) return;
     const text = input.trim();
     setInput('');
-    setBusy(true);
+    const nowMs = Date.now();
     const userMsg: Message = { id: nextId(), role: 'user', text, tools: [], trace: [] };
-    const replyMsg: Message = { id: nextId(), role: 'assistant', text: '', tools: [], trace: [], pending: true };
-    setMessages(prev => [...prev, userMsg, replyMsg]);
+    const replyMsg: Message = { id: nextId(), role: 'assistant', text: '', tools: [], trace: [], pending: true, startedAtMs: nowMs };
+
+    // Use the URL conversationId as the Map key — stable across session switches.
+    let convId = urlSession;
+    if (!convId) {
+      convId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : `conv-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      const next = new URLSearchParams(searchParams);
+      next.set('session', convId);
+      setSearchParams(next, { replace: true });
+    }
+
+    const ac = new AbortController();
+    abortRef.current.set(convId, ac);
+    setSessionMsgs(prev => {
+      const next = new Map(prev);
+      const cur = next.get(convId) ?? { messages: [], busy: false };
+      next.set(convId, { messages: [...cur.messages, userMsg, replyMsg], busy: true });
+      return next;
+    });
     let lastToolEventSeq = -1;
+
+    // Bump sidebar after a short delay so the new session entry is picked up while streaming.
+    // The backend creates the session synchronously before streaming starts, so 500ms is safe.
+    const bumpTimer = setTimeout(() => onSessionUpdate?.(), 500);
 
     try {
       for await (const evt of stream(effectiveAgentId, {
         message: text,
-        sessionKey: sessionKey ?? undefined,
+        sessionKey: convId,
         groupIds: selectedGroups.length ? selectedGroups : undefined,
-      })) {
+      }, ac.signal)) {
         const isToolEvent = evt.type === 'tool_call' || evt.type === 'tool_result';
         if (isToolEvent) {
           const seq = evt.seq;
@@ -514,7 +544,13 @@ export default function ChatPanel({
         }
         if (evt.type === 'token') {
           const chunk = evt.data ?? '';
-          setMessages(prev => prev.map(m => m.id === replyMsg.id ? { ...m, text: m.text + chunk } : m));
+          setSessionMsgs(prev => {
+            const next = new Map(prev);
+            const cur = next.get(convId);
+            if (!cur) return prev;
+            next.set(convId, { ...cur, messages: cur.messages.map(m => m.id === replyMsg.id ? { ...m, text: m.text + chunk } : m) });
+            return next;
+          });
         } else if (evt.type === 'tool_call') {
           // Skip framework-internal tools that should not appear in the UI.
           if (evt.toolName && isHiddenTool(evt.toolName)) continue;
@@ -530,83 +566,130 @@ export default function ChatPanel({
           };
           // Text streamed before a tool call is pre-tool narration: move it into the
           // trace so the in-progress view shows the reasoning, not a half answer.
-          setMessages(prev => prev.map(m => {
-            if (m.id !== replyMsg.id) return m;
-            const trace = m.text.trim()
-              ? [...m.trace, { kind: 'text' as const, id: `${m.id}-n${m.trace.length}`, text: m.text }]
-              : [...m.trace];
-            return { ...m, text: '', trace: [...trace, { kind: 'tool' as const, id: entry.id, tool: entry }], tools: [...m.tools, entry] };
-          }));
+          setSessionMsgs(prev => {
+            const next = new Map(prev);
+            const cur = next.get(convId);
+            if (!cur) return prev;
+            next.set(convId, {
+              ...cur,
+              messages: cur.messages.map(m => {
+                if (m.id !== replyMsg.id) return m;
+                const trace = m.text.trim()
+                  ? [...m.trace, { kind: 'text' as const, id: `${m.id}-n${m.trace.length}`, text: m.text }]
+                  : [...m.trace];
+                return { ...m, text: '', trace: [...trace, { kind: 'tool' as const, id: entry.id, tool: entry }], tools: [...m.tools, entry] };
+              }),
+            });
+            return next;
+          });
         } else if (evt.type === 'tool_result') {
           // Skip results for hidden tools.
           if (evt.toolName && isHiddenTool(evt.toolName)) continue;
-          setMessages(prev => prev.map(m => {
-            if (m.id !== replyMsg.id) return m;
-            const tools = [...m.tools];
-            let matchedId: string | null = null;
-            if (evt.toolCallId) {
-              for (let i = tools.length - 1; i >= 0; i--) {
-                if (tools[i].callId === evt.toolCallId && tools[i].result === undefined) {
-                  tools[i] = {
-                    ...tools[i],
-                    requestId: evt.requestId,
-                    runId: evt.runId,
-                    result: evt.toolResult,
-                    resultSeq: evt.seq,
-                  };
-                  matchedId = tools[i].id;
-                  break;
+          setSessionMsgs(prev => {
+            const next = new Map(prev);
+            const cur = next.get(convId);
+            if (!cur) return prev;
+            next.set(convId, {
+              ...cur,
+              messages: cur.messages.map(m => {
+                if (m.id !== replyMsg.id) return m;
+                const tools = [...m.tools];
+                let matchedId: string | null = null;
+                if (evt.toolCallId) {
+                  for (let i = tools.length - 1; i >= 0; i--) {
+                    if (tools[i].callId === evt.toolCallId && tools[i].result === undefined) {
+                      tools[i] = {
+                        ...tools[i],
+                        requestId: evt.requestId,
+                        runId: evt.runId,
+                        result: evt.toolResult,
+                        resultSeq: evt.seq,
+                      };
+                      matchedId = tools[i].id;
+                      break;
+                    }
+                  }
                 }
-              }
-            }
-            if (matchedId) {
-              const matchedTool = tools.find(t => t.id === matchedId);
-              const trace = m.trace.map(n =>
-                n.kind === 'tool' && n.id === matchedId && matchedTool ? { ...n, tool: matchedTool } : n,
-              );
-              return { ...m, tools, trace };
-            }
-            const unmatched: ToolEntry = {
-              id: `${evt.toolName ?? 'tool'}-result-${evt.seq}`,
-              name: evt.toolName ?? 'tool',
-              callId: evt.toolCallId,
-              parentCallId: evt.parentToolCallId,
-              requestId: evt.requestId,
-              runId: evt.runId,
-              resultSeq: evt.seq,
-              result: evt.toolResult,
-            };
-            return {
-              ...m,
-              tools: [...tools, unmatched],
-              trace: [...m.trace, { kind: 'tool' as const, id: unmatched.id, tool: unmatched }],
-            };
-          }));
+                if (matchedId) {
+                  const matchedTool = tools.find(t => t.id === matchedId);
+                  const trace = m.trace.map(n =>
+                    n.kind === 'tool' && n.id === matchedId && matchedTool ? { ...n, tool: matchedTool } : n,
+                  );
+                  return { ...m, tools, trace };
+                }
+                const unmatched: ToolEntry = {
+                  id: `${evt.toolName ?? 'tool'}-result-${evt.seq}`,
+                  name: evt.toolName ?? 'tool',
+                  callId: evt.toolCallId,
+                  parentCallId: evt.parentToolCallId,
+                  requestId: evt.requestId,
+                  runId: evt.runId,
+                  resultSeq: evt.seq,
+                  result: evt.toolResult,
+                };
+                return {
+                  ...m,
+                  tools: [...tools, unmatched],
+                  trace: [...m.trace, { kind: 'tool' as const, id: unmatched.id, tool: unmatched }],
+                };
+              }),
+            });
+            return next;
+          });
         } else if (evt.type === 'done') {
-          if (evt.sessionKey) {
-            setSessionKey(evt.sessionKey);
-            persistSession(evt.sessionKey);
-            const next = new URLSearchParams(searchParams);
-            if (next.get('session') !== evt.sessionKey) {
-              next.set('session', evt.sessionKey);
-              setSearchParams(next, { replace: true });
-            }
-          }
-          setMessages(prev => prev.map(m => m.id === replyMsg.id ? { ...m, pending: false } : m));
+          persistSession(convId);
+          setSessionMsgs(prev => {
+            const next = new Map(prev);
+            const cur = next.get(convId);
+            if (!cur) return prev;
+            next.set(convId, {
+              ...cur,
+              messages: cur.messages.map(m => m.id === replyMsg.id
+                ? { ...m, pending: false, elapsedMs: m.startedAtMs ? Date.now() - m.startedAtMs : undefined }
+                : m),
+              busy: false,
+            });
+            return next;
+          });
         } else if (evt.type === 'error') {
-          setMessages(prev => prev.map(m => m.id === replyMsg.id
-            ? { ...m, pending: false, failed: true, text: m.text + (m.text ? '\n' : '') + `[错误] ${evt.error ?? '未知错误'}` }
-            : m));
+          setSessionMsgs(prev => {
+            const next = new Map(prev);
+            const cur = next.get(convId);
+            if (!cur) return prev;
+            next.set(convId, {
+              ...cur,
+              messages: cur.messages.map(m => m.id === replyMsg.id
+                ? { ...m, pending: false, failed: true, text: m.text + (m.text ? '\n' : '') + `[错误] ${evt.error ?? '未知错误'}`, elapsedMs: m.startedAtMs ? Date.now() - m.startedAtMs : undefined }
+                : m),
+              busy: false,
+            });
+            return next;
+          });
         }
       }
       onSessionUpdate?.();
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : '连接中断';
-      setMessages(prev => prev.map(m => m.id === replyMsg.id
-        ? { ...m, pending: false, failed: true, text: m.text + (m.text ? '\n' : '') + `[错误] ${msg}` }
-        : m));
+      // Don't show error message when the stream was intentionally aborted (e.g., user clicked stop)
+      const isAbort = e instanceof DOMException && e.name === 'AbortError';
+      if (!isAbort) {
+        const msg = e instanceof Error ? e.message : '连接中断';
+        setSessionMsgs(prev => {
+          const next = new Map(prev);
+          const cur = next.get(convId);
+          if (!cur) return prev;
+          next.set(convId, {
+            ...cur,
+            messages: cur.messages.map(m => m.id === replyMsg.id
+              ? { ...m, pending: false, failed: true, text: m.text + (m.text ? '\n' : '') + `[错误] ${msg}`, elapsedMs: m.startedAtMs ? Date.now() - m.startedAtMs : undefined }
+              : m),
+            busy: false,
+          });
+          return next;
+        });
+      }
     } finally {
-      setBusy(false);
+      clearTimeout(bumpTimer);
+      abortRef.current.delete(convId);
       inputRef.current?.focus();
     }
   }
@@ -616,6 +699,144 @@ export default function ChatPanel({
       e.preventDefault();
       handleSend();
     }
+  }
+
+  const composerContent = (
+    <>
+      <textarea
+        ref={inputRef}
+        style={{ ...S.textarea, ...(isLanding ? { minHeight: 120, fontSize: 15 } : {}) }}
+        value={input}
+        onChange={e => setInput(e.target.value)}
+        onKeyDown={handleKeyDown}
+        placeholder={restoring ? '加载会话…' : '输入查询、分析、预测数据问题…'}
+        disabled={restoring}
+      />
+      <div style={S.composerBar}>
+        <div ref={groupPickerRef} style={{ position: 'relative' }}>
+          <button
+            type="button"
+            className={`da-chip${!kbFrozen && (selectedGroups.length || selectedOntology) ? ' da-chip-active' : ''}${kbFrozen ? ' da-chip-frozen' : ''}`}
+            onClick={() => kbFrozen ? setChatMode('kb') : setGroupPickerOpen(open => !open)}
+            title={kbFrozen ? '点击切换回知识库模式' : '选择知识库范围'}
+          >
+            <Icon name="book" size="sm" />{' '}
+            {selectedOntology
+              ? '知识库'
+              : selectedGroups.length
+                ? groups.filter(g => selectedGroups.includes(g.id)).map(g => g.name).join('、')
+                : '知识库（全部）'}{' '}
+            ▾
+          </button>
+          {groupPickerOpen && (
+            <div style={S.picker}>
+              <label className="da-navitem">
+                <input
+                  type="checkbox"
+                  checked={selectedGroups.length === 0}
+                  onChange={() => {
+                    setSelectedGroups([]);
+                    setGroupPickerOpen(false);
+                  }}
+                />
+                全部知识库（不限定）
+              </label>
+              {groups.map(g => (
+                <label key={g.id} className="da-navitem">
+                  <input
+                    type="checkbox"
+                    checked={selectedGroups.includes(g.id)}
+                    onChange={() => {
+                      setSelectedGroups(prev =>
+                        prev.includes(g.id) ? prev.filter(x => x !== g.id) : [...prev, g.id],
+                      );
+                      setGroupPickerOpen(false);
+                    }}
+                  />
+                  {g.name}
+                </label>
+              ))}
+              {groups.length === 0 && (
+                <div className="da-small" style={{ padding: 6 }}>
+                  暂无知识库
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        <div ref={ontologyPickerRef} style={{ position: 'relative' }}>
+          <button
+            type="button"
+            className={`da-chip${!ontologyFrozen && selectedOntology ? ' da-chip-active' : ''}${ontologyFrozen ? ' da-chip-frozen' : ''}`}
+            onClick={() => ontologyFrozen ? setChatMode('ontology') : setOntologyPickerOpen(open => !open)}
+            title={ontologyFrozen ? '点击切换至本体模式' : (ontologies.length ? '选择本体进行数据查询' : '暂无可用本体')}
+          >
+            <Icon name="graph" size="sm" />{' '}
+            {selectedOntology
+              ? ontologies.find(o => o.id === selectedOntology)?.name ?? '本体'
+              : ontologies.length ? '本体' : '本体（暂无服务）'}{' '}
+            {ontologies.length ? '▾' : ''}
+          </button>
+          {ontologyPickerOpen && (
+            <div style={S.picker}>
+              {ontologies.map(o => (
+                <button
+                  key={o.id}
+                  className="da-navitem"
+                  onClick={() => {
+                    setSelectedOntology(o.id);
+                    setSelectedGroups([]);
+                    setOntologyPickerOpen(false);
+                  }}
+                >
+                  <Icon name="graph" size="sm" /> {o.name}
+                </button>
+              ))}
+              {ontologies.length === 0 && (
+                <div className="da-small" style={{ padding: 6 }}>
+                  暂无可用本体
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        <button type="button" className="da-chip" disabled title="对话级模型切换暂未接入">
+          大模型（自动）
+        </button>
+        <span style={{ flex: 1 }} />
+        <button
+          style={{
+            ...S.send,
+            ...(busy
+              ? { background: 'var(--da-danger)', cursor: 'pointer' }
+              : canSend ? {} : S.sendDisabled),
+          }}
+          onClick={busy && curKey ? () => abortRef.current.get(curKey)?.abort() : handleSend}
+          disabled={!busy && !canSend}
+          title={busy ? '停止回答' : '发送'}
+        >
+          {busy ? <Icon name="stop" size="sm" /> : <Icon name="send" size="sm" />}
+        </button>
+      </div>
+    </>
+  );
+
+  if (isLanding) {
+    return (
+      <div style={S.root}>
+        <div className="da-landing-wrap">
+          <div className="da-landing-greeting">
+            <h1 className="da-landing-title">Data Agent</h1>
+            <p>输入数据问题，我来帮你查询、分析和可视化</p>
+          </div>
+          <div className="da-composer-glow">
+            <div className="da-composer-shell da-composer">
+              {composerContent}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -629,7 +850,7 @@ export default function ChatPanel({
             <div className="da-skeleton da-skeleton-block" style={{ width: '65%' }} />
           </div>
         )}
-        {!restoring && messages.length === 0 && (
+        {!restoring && messages.length === 0 && curKey && (
           <EmptyIllustration
             variant="doc"
             caption="开始一段新对话；输入 /reset 可清空当前会话"
@@ -637,18 +858,6 @@ export default function ChatPanel({
         )}
         {messages.map(m => {
           const { trace, answer } = splitToolRender(m, onInspect);
-          if (m.role === 'assistant' && !m.pending) {
-            const pyTools = m.tools.filter(t => t.name === 'run_python');
-            const pyWithResult = pyTools.filter(t => !!t.result);
-            if (pyTools.length > 0 || m.tools.length > 0) {
-              console.log('[ChatPanel] assistant tools summary:', {
-                totalTools: m.tools.length,
-                pythonTools: pyTools.length,
-                pythonWithResult: pyWithResult.length,
-                toolNames: m.tools.map(t => t.name),
-              });
-            }
-          }
           return (
             <div
               key={m.id}
@@ -658,22 +867,25 @@ export default function ChatPanel({
                 <div className="da-bubble user">{m.text}</div>
               ) : (
                 <div className="da-agent-turn">
-                  {(trace.length > 0 || m.pending) && (
-                    <TaskTrace
-                      running={!!m.pending}
-                      active={trace.length > 0}
-                      hasError={!!m.failed}
-                      hadToolErrors={m.tools.some(t => {
-                        if (!t.result) return false;
-                        if (t.name === 'query_structured_data') {
-                          try { return ['FAILED', 'PARTIAL'].includes(JSON.parse(t.result)?.status); } catch { return false; }
-                        }
-                        return t.result.startsWith('error:');
-                      })}
-                    >
-                      {trace}
-                    </TaskTrace>
-                  )}
+                  <div className="da-agent-header">
+                    <span className="da-agent-avatar">DA</span>
+                    <span className="da-agent-name">Data Agent</span>
+                  </div>
+                  <TaskTrace
+                    running={!!m.pending}
+                    active={trace.length > 0}
+                    hasError={!!m.failed}
+                    hadToolErrors={m.tools.some(t => {
+                      if (!t.result) return false;
+                      if (t.name === 'query_structured_data') {
+                        try { return ['FAILED', 'PARTIAL'].includes(JSON.parse(t.result)?.status); } catch { return false; }
+                      }
+                      return t.result.startsWith('error:');
+                    })}
+                    elapsedMs={m.elapsedMs}
+                  >
+                    {trace}
+                  </TaskTrace>
                   <div className="da-answer">
                     {m.text
                       ? <Markdown>{m.text}</Markdown>
@@ -695,122 +907,10 @@ export default function ChatPanel({
         })}
         </div>
       </div>
-      <div style={S.composerWrap}>
-        <div className="da-composer" style={S.composerCard}>
-          <textarea
-            ref={inputRef}
-            style={S.textarea}
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={restoring ? '加载会话…' : '输入查询、分析、预测数据问题…'}
-            disabled={restoring}
-          />
-          <div style={S.composerBar}>
-            <div ref={groupPickerRef} style={{ position: 'relative' }}>
-              <button
-                type="button"
-                className={`da-chip${!kbFrozen && (selectedGroups.length || selectedOntology) ? ' da-chip-active' : ''}${kbFrozen ? ' da-chip-frozen' : ''}`}
-                onClick={() => kbFrozen ? setChatMode('kb') : setGroupPickerOpen(open => !open)}
-                title={kbFrozen ? '点击切换回知识库模式' : '选择知识库范围'}
-              >
-                <Icon name="book" size="sm" />{' '}
-                {selectedOntology
-                  ? '知识库'
-                  : selectedGroups.length
-                    ? groups.filter(g => selectedGroups.includes(g.id)).map(g => g.name).join('、')
-                    : '知识库（全部）'}{' '}
-                ▾
-              </button>
-              {groupPickerOpen && (
-                <div style={S.picker}>
-                  <label className="da-navitem">
-                    <input
-                      type="checkbox"
-                      checked={selectedGroups.length === 0}
-                      onChange={() => {
-                        setSelectedGroups([]);
-                        setGroupPickerOpen(false);
-                      }}
-                    />
-                    全部知识库（不限定）
-                  </label>
-                  {groups.map(g => (
-                    <label key={g.id} className="da-navitem">
-                      <input
-                        type="checkbox"
-                        checked={selectedGroups.includes(g.id)}
-                        onChange={() => {
-                          setSelectedGroups(prev =>
-                            prev.includes(g.id) ? prev.filter(x => x !== g.id) : [...prev, g.id],
-                          );
-                          setGroupPickerOpen(false);
-                        }}
-                      />
-                      {g.name}
-                    </label>
-                  ))}
-                  {groups.length === 0 && (
-                    <div className="da-small" style={{ padding: 6 }}>
-                      暂无知识库
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            <div ref={ontologyPickerRef} style={{ position: 'relative' }}>
-              <button
-                type="button"
-                className={`da-chip${!ontologyFrozen && selectedOntology ? ' da-chip-active' : ''}${ontologyFrozen ? ' da-chip-frozen' : ''}`}
-                onClick={() => ontologyFrozen ? setChatMode('ontology') : setOntologyPickerOpen(open => !open)}
-                title={ontologyFrozen ? '点击切换至本体模式' : (ontologies.length ? '选择本体进行数据查询' : '暂无可用本体')}
-              >
-                <Icon name="graph" size="sm" />{' '}
-                {selectedOntology
-                  ? ontologies.find(o => o.id === selectedOntology)?.name ?? '本体'
-                  : ontologies.length ? '本体' : '本体（暂无服务）'}{' '}
-                {ontologies.length ? '▾' : ''}
-              </button>
-              {ontologyPickerOpen && (
-                <div style={S.picker}>
-                  {ontologies.map(o => (
-                    <button
-                      key={o.id}
-                      className="da-navitem"
-                      onClick={() => {
-                        setSelectedOntology(o.id);
-                        setSelectedGroups([]);
-                        setOntologyPickerOpen(false);
-                      }}
-                    >
-                      <Icon name="graph" size="sm" /> {o.name}
-                    </button>
-                  ))}
-                  {ontologies.length === 0 && (
-                    <div className="da-small" style={{ padding: 6 }}>
-                      暂无可用本体
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            <button type="button" className="da-chip" disabled title="对话级模型切换暂未接入">
-              大模型（自动）
-            </button>
-            <span style={{ flex: 1 }} />
-            <span className="da-small" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <span className="da-kbd">Enter</span> 发送 · <span className="da-kbd">Shift</span>+
-              <span className="da-kbd">Enter</span> 换行
-            </span>
-            <span className="da-small">{input.length} 字</span>
-            <button
-              style={{ ...S.send, ...(canSend ? {} : S.sendDisabled) }}
-              onClick={handleSend}
-              disabled={!canSend}
-              title="发送"
-            >
-              <Icon name="send" size="sm" />
-            </button>
+      <div style={S.composerWrap} className="da-composerwrap">
+        <div className="da-composer-glow">
+          <div className="da-composer-shell da-composer">
+            {composerContent}
           </div>
         </div>
       </div>

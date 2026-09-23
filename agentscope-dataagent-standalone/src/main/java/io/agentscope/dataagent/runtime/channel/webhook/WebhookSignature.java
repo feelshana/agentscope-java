@@ -48,10 +48,12 @@ public final class WebhookSignature {
     /** Constant-time equality on hex strings. Returns false when either side is null. */
     public static boolean constantTimeEquals(String a, String b) {
         if (a == null || b == null) return false;
-        if (a.length() != b.length()) return false;
-        int r = 0;
-        for (int i = 0; i < a.length(); i++) {
-            r |= a.charAt(i) ^ b.charAt(i);
+        int maxLen = Math.max(a.length(), b.length());
+        int r = a.length() ^ b.length();
+        for (int i = 0; i < maxLen; i++) {
+            char ca = i < a.length() ? a.charAt(i) : 0;
+            char cb = i < b.length() ? b.charAt(i) : 0;
+            r |= ca ^ cb;
         }
         return r == 0;
     }

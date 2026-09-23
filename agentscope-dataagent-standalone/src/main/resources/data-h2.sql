@@ -19,12 +19,8 @@
 -- startup (`spring.sql.init.mode=always`).
 --
 -- These accounts are scoped to H2 by `spring.sql.init.platform=h2`. The
--- `jdbc` Spring profile (application-jdbc.yml) flips
--- `spring.sql.init.mode=never`, so MySQL / PostgreSQL deployments never run
--- this script.
---
--- Analytics demo tables (tenant_storage_utilization, project_info) live in
--- an external MySQL database — see src/main/resources/mysql-schema.sql.
+-- `h2` Spring profile (application-h2.yml) activates this platform so the
+-- seed runs; the default MySQL configuration runs `data-mysql.sql` instead.
 -- ---------------------------------------------------------------------------
 
 MERGE INTO dataagent_user (user_id, username, password_hash, roles_csv, created_at) KEY (user_id) VALUES

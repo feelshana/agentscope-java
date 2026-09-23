@@ -15,6 +15,9 @@
  */
 package io.agentscope.dataagent.web.usage;
 
+import io.agentscope.dataagent.web.persistence.jpa.UsageEventEntity;
+import io.agentscope.dataagent.web.persistence.jpa.UsageEventRepository;
+import jakarta.annotation.PostConstruct;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -24,35 +27,65 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.concurrent.CopyOnWriteArrayList;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
- * In-memory usage event store. Records individual turn events (one per user message) and provides
- * hourly/daily aggregations for trend charts.
+ * Usage event store backed by the {@code usage_event} MySQL table. Records individual turn events
+ * (one per user message) and provides hourly/daily aggregations for trend charts.
  *
- * <p>Data is <em>not</em> persisted across restarts. This is intentional for the current phase;
- * the store is designed to be replaceable with a durable implementation later.
+ * <p>Recent events (up to {@value #MAX_CACHE}) are loaded into an in-memory cache on startup so
+ * that aggregation queries remain fast. New events are appended to both the database and the cache.
  */
 @Component
 public class UsageStore {
 
-    /** Maximum number of raw events to retain in memory (rolling window). */
-    private static final int MAX_EVENTS = 50_000;
+    private static final Logger log = LoggerFactory.getLogger(UsageStore.class);
 
-    private final CopyOnWriteArrayList<UsageEvent> events = new CopyOnWriteArrayList<>();
+    /** Maximum number of recent events to keep in memory for fast aggregation. */
+    private static final int MAX_CACHE = 50_000;
+
+    private final UsageEventRepository repository;
+    private final List<UsageEvent> cache = new ArrayList<>();
+
+    public UsageStore(UsageEventRepository repository) {
+        this.repository = repository;
+    }
+
+    @PostConstruct
+    void loadCache() {
+        List<UsageEventEntity> recent =
+                repository.findAllByOrderByTimestampMsDesc(PageRequest.of(0, MAX_CACHE));
+        for (UsageEventEntity e : recent) {
+            cache.add(
+                    new UsageEvent(
+                            e.getTimestampMs(), e.getUserId(), e.getAgentId(), e.getDurationMs()));
+        }
+        log.info("Loaded {} usage events into memory cache", cache.size());
+    }
 
     /** Records a single turn completion. */
+    @Transactional
     public void record(String userId, String agentId, long durationMs) {
-        events.add(new UsageEvent(System.currentTimeMillis(), userId, agentId, durationMs));
-        if (events.size() > MAX_EVENTS) {
-            events.remove(0);
+        long now = System.currentTimeMillis();
+        repository.save(new UsageEventEntity(now, userId, agentId, durationMs));
+        synchronized (cache) {
+            cache.add(new UsageEvent(now, userId, agentId, durationMs));
+            while (cache.size() > MAX_CACHE) {
+                cache.remove(0);
+            }
         }
     }
 
     /** Returns all raw events (newest-first) up to {@code limit}. */
     public List<UsageEvent> recentEvents(int limit) {
-        List<UsageEvent> copy = new ArrayList<>(events);
+        List<UsageEvent> copy;
+        synchronized (cache) {
+            copy = new ArrayList<>(cache);
+        }
         Collections.reverse(copy);
         return copy.stream().limit(limit).toList();
     }
@@ -68,12 +101,11 @@ public class UsageStore {
         long startMs = nowMs - (long) h * 3_600_000L;
 
         Map<Long, Integer> buckets = new TreeMap<>();
-        // Pre-fill all hours with 0
         for (int i = 0; i < h; i++) {
             long bucketMs = startMs + (long) i * 3_600_000L;
             buckets.put(truncateHour(bucketMs), 0);
         }
-        for (UsageEvent e : events) {
+        for (UsageEvent e : snapshot()) {
             if (e.timestampMs() < startMs) continue;
             long bucket = truncateHour(e.timestampMs());
             buckets.merge(bucket, 1, Integer::sum);
@@ -99,7 +131,7 @@ public class UsageStore {
             long bucketMs = startMs + (long) i * 86_400_000L;
             buckets.put(truncateDay(bucketMs), 0);
         }
-        for (UsageEvent e : events) {
+        for (UsageEvent e : snapshot()) {
             if (e.timestampMs() < startMs) continue;
             long bucket = truncateDay(e.timestampMs());
             buckets.merge(bucket, 1, Integer::sum);
@@ -112,15 +144,11 @@ public class UsageStore {
 
     /** Returns aggregate totals for a specific user only. */
     public UsageSummary summaryForUser(String userId) {
-        List<UsageEvent> mine = events.stream().filter(e -> userId.equals(e.userId())).toList();
-        long totalTurns = mine.size();
+        long totalTurns = repository.countByUserSince(userId, 0L);
         long today = truncateDay(System.currentTimeMillis());
-        long todayTurns = mine.stream().filter(e -> truncateDay(e.timestampMs()) == today).count();
-        long avgDurationMs =
-                mine.isEmpty()
-                        ? 0L
-                        : (long)
-                                mine.stream().mapToLong(UsageEvent::durationMs).average().orElse(0);
+        long todayTurns = repository.countByUserSince(userId, today);
+        Long avg = repository.avgDurationByUser(userId);
+        long avgDurationMs = avg != null ? avg : 0L;
         return new UsageSummary(totalTurns, todayTurns, avgDurationMs, 1L);
     }
 
@@ -133,7 +161,7 @@ public class UsageStore {
         for (int i = 0; i < h; i++) {
             buckets.put(truncateHour(startMs + (long) i * 3_600_000L), 0);
         }
-        for (UsageEvent e : events) {
+        for (UsageEvent e : snapshot()) {
             if (!userId.equals(e.userId()) || e.timestampMs() < startMs) continue;
             buckets.merge(truncateHour(e.timestampMs()), 1, Integer::sum);
         }
@@ -151,7 +179,7 @@ public class UsageStore {
         for (int i = 0; i < d; i++) {
             buckets.put(truncateDay(startMs + (long) i * 86_400_000L), 0);
         }
-        for (UsageEvent e : events) {
+        for (UsageEvent e : snapshot()) {
             if (!userId.equals(e.userId()) || e.timestampMs() < startMs) continue;
             buckets.merge(truncateDay(e.timestampMs()), 1, Integer::sum);
         }
@@ -167,7 +195,7 @@ public class UsageStore {
     public List<GroupCount> topUsersByTurns(int days, int topN) {
         long startMs = System.currentTimeMillis() - (long) days * 86_400_000L;
         java.util.Map<String, Integer> counts = new java.util.LinkedHashMap<>();
-        for (UsageEvent e : events) {
+        for (UsageEvent e : snapshot()) {
             if (e.timestampMs() < startMs || e.userId() == null) continue;
             counts.merge(e.userId(), 1, Integer::sum);
         }
@@ -185,7 +213,7 @@ public class UsageStore {
     public List<GroupCount> topAgentsByTurns(int days, int topN) {
         long startMs = System.currentTimeMillis() - (long) days * 86_400_000L;
         java.util.Map<String, Integer> counts = new java.util.LinkedHashMap<>();
-        for (UsageEvent e : events) {
+        for (UsageEvent e : snapshot()) {
             if (e.timestampMs() < startMs || e.agentId() == null) continue;
             counts.merge(e.agentId(), 1, Integer::sum);
         }
@@ -198,30 +226,24 @@ public class UsageStore {
 
     /** Returns aggregate totals. */
     public UsageSummary summary() {
-        long totalTurns = events.size();
+        long totalTurns = repository.count();
         long today = truncateDay(System.currentTimeMillis());
-        long todayTurns =
-                events.stream().filter(e -> truncateDay(e.timestampMs()) == today).count();
-        long avgDurationMs =
-                events.isEmpty()
-                        ? 0L
-                        : (long)
-                                events.stream()
-                                        .mapToLong(UsageEvent::durationMs)
-                                        .average()
-                                        .orElse(0);
-        long uniqueUsers =
-                events.stream()
-                        .map(UsageEvent::userId)
-                        .filter(u -> u != null && !u.isBlank())
-                        .distinct()
-                        .count();
+        long todayTurns = repository.countSince(today);
+        Long avg = repository.avgDuration();
+        long avgDurationMs = avg != null ? avg : 0L;
+        long uniqueUsers = repository.countDistinctUsers();
         return new UsageSummary(totalTurns, todayTurns, avgDurationMs, uniqueUsers);
     }
 
     // -----------------------------------------------------------------
     //  Internal helpers
     // -----------------------------------------------------------------
+
+    private List<UsageEvent> snapshot() {
+        synchronized (cache) {
+            return List.copyOf(cache);
+        }
+    }
 
     private static long truncateHour(long epochMs) {
         return Instant.ofEpochMilli(epochMs)

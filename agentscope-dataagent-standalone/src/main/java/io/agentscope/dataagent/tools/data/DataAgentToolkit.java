@@ -43,7 +43,7 @@ import java.util.regex.Pattern;
  * operators can swap real implementations without touching this class.
  *
  * <p>The bundled {@link JdbcSqlConnector} serves sources with {@code kind: jdbc}: the optional
- * seeded analytics source (disabled by default) plus one source per user-uploaded dataset, all
+ * seeded data source plus one source per user-uploaded dataset, all
  * living as prefixed tables in the configured dataset database; other source kinds fall through
  * to a clear error string so the agent surfaces the limitation rather than hallucinating results.
  *
@@ -57,9 +57,6 @@ public final class DataAgentToolkit {
 
     private static final Pattern DATASET_TABLE = Pattern.compile("ds_[a-z0-9_]+");
     private static final ObjectMapper MAPPER = new ObjectMapper();
-
-    /** Maximum number of tables accepted by one batch prepare_data_context call. */
-    private static final int MAX_PREPARE_TABLES = 5;
 
     private final DataSourceRegistry registry;
     private final SqlConnector sqlConnector;
@@ -123,12 +120,10 @@ public final class DataAgentToolkit {
             name = "prepare_data_context",
             description =
                     """
-                    查看当前可用数据源中表的描述和完整列结构（列名、类型、AI 生成的字段描述）。\
-                    在调用 query_structured_data 之前，如果需要确认列名拼写、\
-                    字段类型、日期格式、枚举值等细节，先调用本工具。\
-                    与问题直接相关的 1-3 张表用 tables 参数一次批量取回（最多 5 张），\
-                    不要一张一张分开调用，也不要漏掉直接相关的表而盲写列名；\
-                    只确认单表时改用 source_id + table 两个参数。\
+                    查看当前可用数据源中某张表的描述和完整列结构（列名、类型、AI 生成的字段描述、\
+                    维度值示例）。在调用 query_structured_data 之前，如果需要确认列名拼写、\
+                    字段类型、日期格式、枚举值等细节，先调用本工具。每次只查 1-3 张最相关的表。\
+                    批量模式：传 tables 参数（{source_id, table} 数组，最多 5 张）可一次获取多张表结构。\
                     输出的字段描述通常已含枚举与取值提示（如「包含领导等值」），\
                     据此直接写 WHERE，无需再探查取值。\
                     """)
@@ -169,7 +164,49 @@ public final class DataAgentToolkit {
         }
 
         // Build context from stored metadata — no DB query needed.
-        return "# " + ds.get().label() + "\n\n" + buildTableSection(ds.get());
+        StringBuilder sb = new StringBuilder();
+        sb.append("# ").append(ds.get().label()).append("\n\n");
+
+        // Table description
+        String desc = ds.get().description();
+        if (desc != null && !desc.isBlank()) {
+            sb.append(desc).append("\n\n");
+        }
+
+        // Column schema with descriptions and dimension examples
+        String columnSchemaJson =
+                ds.get().properties() != null
+                        ? ds.get().properties().get("columnSchemaJson")
+                        : null;
+        if (columnSchemaJson != null && !columnSchemaJson.isBlank()) {
+            try {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> columns = MAPPER.readValue(columnSchemaJson, List.class);
+                if (!columns.isEmpty()) {
+                    sb.append("### 字段信息\n\n");
+                    sb.append("| 英文名 | 原始名 | 类型 | 描述 |\n");
+                    sb.append("|---|---|---|---|\n");
+                    for (Map<String, Object> col : columns) {
+                        String name = String.valueOf(col.getOrDefault("name", ""));
+                        String originalName = String.valueOf(col.getOrDefault("originalName", ""));
+                        String sqlType = String.valueOf(col.getOrDefault("sqlType", ""));
+                        String description = String.valueOf(col.getOrDefault("description", ""));
+                        sb.append("| ")
+                                .append(name)
+                                .append(" | ")
+                                .append(originalName)
+                                .append(" | ")
+                                .append(sqlType)
+                                .append(" | ")
+                                .append(description)
+                                .append(" |\n");
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to parse columnSchemaJson: {}", e.getMessage());
+            }
+        }
+        return sb.toString();
     }
 
     /**
@@ -189,6 +226,8 @@ public final class DataAgentToolkit {
      * information. More than {@value #MAX_PREPARE_TABLES} tables are rejected outright with no
      * partial execution.
      */
+    private static final int MAX_PREPARE_TABLES = 5;
+
     private String prepareDataContextBatch(DatasetScope eff, List<Map<String, String>> tables) {
         if (tables.size() > MAX_PREPARE_TABLES) {
             return "error: tables 最多 "
@@ -225,62 +264,50 @@ public final class DataAgentToolkit {
                                 + "' 不支持 SQL 查询");
                 continue;
             }
-            sections.add(
-                    "## "
-                            + ds.get().label()
-                            + "\n\n"
-                            + buildTableSection(ds.get()).stripTrailing());
+            StringBuilder sb = new StringBuilder();
+            sb.append("## ").append(ds.get().label()).append("\n\n");
+            String desc = ds.get().description();
+            if (desc != null && !desc.isBlank()) {
+                sb.append(desc).append("\n\n");
+            }
+            String columnSchemaJson =
+                    ds.get().properties() != null
+                            ? ds.get().properties().get("columnSchemaJson")
+                            : null;
+            if (columnSchemaJson != null && !columnSchemaJson.isBlank()) {
+                try {
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> columns =
+                            MAPPER.readValue(columnSchemaJson, List.class);
+                    if (!columns.isEmpty()) {
+                        sb.append("### 字段信息\n\n");
+                        sb.append("| 英文名 | 原始名 | 类型 | 描述 |\n");
+                        sb.append("|---|---|---|---|\n");
+                        for (Map<String, Object> col : columns) {
+                            String name = String.valueOf(col.getOrDefault("name", ""));
+                            String originalName =
+                                    String.valueOf(col.getOrDefault("originalName", ""));
+                            String sqlType = String.valueOf(col.getOrDefault("sqlType", ""));
+                            String description =
+                                    String.valueOf(col.getOrDefault("description", ""));
+                            sb.append("| ")
+                                    .append(name)
+                                    .append(" | ")
+                                    .append(originalName)
+                                    .append(" | ")
+                                    .append(sqlType)
+                                    .append(" | ")
+                                    .append(description)
+                                    .append(" |\n");
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to parse columnSchemaJson: {}", e.getMessage());
+                }
+            }
+            sections.add(sb.toString());
         }
         return String.join("\n\n", sections);
-    }
-
-    /**
-     * Renders the per-table section body (table description + column schema table) from stored
-     * metadata — no DB query needed. Only column name/original name/type/description are
-     * included (no bulky sample values), keeping batch output within the toolResultEviction
-     * budget. The concatenation order is kept byte-identical to the legacy single-table output.
-     */
-    private String buildTableSection(DataSource ds) {
-        StringBuilder sb = new StringBuilder();
-
-        // Table description
-        String desc = ds.description();
-        if (desc != null && !desc.isBlank()) {
-            sb.append(desc).append("\n\n");
-        }
-
-        // Column schema with descriptions and dimension examples
-        String columnSchemaJson =
-                ds.properties() != null ? ds.properties().get("columnSchemaJson") : null;
-        if (columnSchemaJson != null && !columnSchemaJson.isBlank()) {
-            try {
-                @SuppressWarnings("unchecked")
-                List<Map<String, Object>> columns = MAPPER.readValue(columnSchemaJson, List.class);
-                if (!columns.isEmpty()) {
-                    sb.append("### 字段信息\n\n");
-                    sb.append("| 英文名 | 原始名 | 类型 | 描述 |\n");
-                    sb.append("|---|---|---|---|\n");
-                    for (Map<String, Object> col : columns) {
-                        String name = String.valueOf(col.getOrDefault("name", ""));
-                        String originalName = String.valueOf(col.getOrDefault("originalName", ""));
-                        String sqlType = String.valueOf(col.getOrDefault("sqlType", ""));
-                        String description = String.valueOf(col.getOrDefault("description", ""));
-                        sb.append("| ")
-                                .append(name)
-                                .append(" | ")
-                                .append(originalName)
-                                .append(" | ")
-                                .append(sqlType)
-                                .append(" | ")
-                                .append(description)
-                                .append(" |\n");
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("Failed to parse columnSchemaJson: {}", e.getMessage());
-            }
-        }
-        return sb.toString();
     }
 
     /**
@@ -351,7 +378,8 @@ public final class DataAgentToolkit {
     /**
      * All dataset tables live in one shared database, so ownership cannot rely on separate
      * schemas: reject any {@code ds_*} table reference in the SQL that is not one of the caller's
-     * visible datasets. Non-{@code ds_} tables (shared analytics content) are unaffected.
+     * visible datasets. Non-{@code ds_} tables (e.g. app-db or other non-dataset sources) are
+     * unaffected.
      */
     private String checkCrossTable(DatasetScope scope, String sql) {
         Set<String> allowed = new HashSet<>();

@@ -156,12 +156,17 @@ public final class ChartBuilder {
                             question);
                 }
             case "scatter":
-                return buildScatter(
-                        columns,
-                        rows,
-                        numericCols.get(0),
-                        numericCols.size() > 1 ? numericCols.get(1) : numericCols.get(0),
-                        question);
+                {
+                    int xIdx =
+                            numericCols.size() > 1
+                                    ? numericCols.get(1)
+                                    : (dateColIdx != null
+                                            ? dateColIdx
+                                            : (!categoricalCols.isEmpty()
+                                                    ? categoricalCols.get(0)
+                                                    : numericCols.get(0)));
+                    return buildScatter(columns, rows, xIdx, numericCols.get(0), question);
+                }
             case "hbar":
                 return buildHBar(
                         columns,
@@ -494,6 +499,9 @@ public final class ChartBuilder {
                 primaryNumIdx = idx;
                 break;
             }
+        }
+        if (primaryNumIdx == dimIdx && numericCols.size() > 1) {
+            primaryNumIdx = numericCols.get(1);
         }
         List<List<String>> orderedRows =
                 "line".equals(chartType)

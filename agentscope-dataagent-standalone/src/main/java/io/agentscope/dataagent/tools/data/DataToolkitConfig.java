@@ -33,10 +33,8 @@ import org.springframework.context.annotation.Configuration;
  * wires a richer registry or a server-side PNG renderer.
  *
  * <p>Seeding is opt-in per source: the application's own database ({@code app-db}) is only exposed
- * when {@code dataagent.expose-app-db=true} (it holds platform metadata, not business data), and
- * the pre-seeded analytics MySQL source ({@code dataagent.analytics.*}, e.g. the colleague's
- * tenant analytics tables) is only registered when {@code dataagent.analytics.enabled=true}
- * (default false). User-uploaded datasets are added at runtime by the ingestion flow.
+ * when {@code dataagent.expose-app-db=true} (it holds platform metadata, not business data).
+ * User-uploaded datasets are added at runtime by the ingestion flow.
  *
  * <p>The actual registration of the toolkit onto the main agent's toolkit lives in
  * {@link DataToolkitRegistrar} so the {@code @PostConstruct} cannot tangle with self-injection
@@ -49,18 +47,6 @@ public class DataToolkitConfig {
 
     @Value("${dataagent.expose-app-db:false}")
     private boolean exposeAppDb;
-
-    @Value("${dataagent.analytics.enabled:false}")
-    private boolean analyticsEnabled;
-
-    @Value("${dataagent.analytics.url:}")
-    private String analyticsUrl;
-
-    @Value("${dataagent.analytics.username:root}")
-    private String analyticsUsername;
-
-    @Value("${dataagent.analytics.password:}")
-    private String analyticsPassword;
 
     @Bean
     @ConditionalOnMissingBean(DataSourceRegistry.class)
@@ -86,25 +72,6 @@ public class DataToolkitConfig {
                             null,
                             List.of("app", "internal"),
                             props));
-        }
-
-        // Register the optional pre-seeded analytics MySQL source (per-developer config).
-        if (analyticsEnabled && analyticsUrl != null && !analyticsUrl.isBlank()) {
-            Map<String, String> mysqlProps = new LinkedHashMap<>();
-            mysqlProps.put("jdbcUrl", analyticsUrl);
-            mysqlProps.put("username", analyticsUsername);
-            mysqlProps.put("password", analyticsPassword);
-            sources.add(
-                    new DataSource(
-                            "data_agent",
-                            "Tenant analytics DB",
-                            "MySQL database with tenant_storage_utilization (per-table"
-                                    + " storage metrics) and project_info (owner names)."
-                                    + " Join on project_name. Query with SELECT-only SQL.",
-                            "jdbc",
-                            null,
-                            List.of("mysql", "analytics", "tenant"),
-                            mysqlProps));
         }
 
         log.info(

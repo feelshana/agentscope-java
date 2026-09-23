@@ -29,34 +29,33 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 
 /**
  * Wires the JPA-backed {@link UserStore} and {@link UserAgentDefinitionStore}. This is the only
- * persistence backend the builder ships with.
+ * persistence backend the data-agent ships with.
  *
  * <h2>Default DataSource</h2>
  *
- * <p>The default {@code application.yml} points {@code spring.datasource.url} at an embedded H2
- * file under {@code ${user.home}/.agentscope-builder/db} — kept deliberately separate from
- * {@code builder.workspace} so workspace volumes never include the catalog tables. No external
- * services or extra setup are required for a single-node deployment.
+ * <p>The default {@code application.yml} points {@code spring.datasource.url} at a local MySQL
+ * instance ({@code localhost:3306/dataagent_platform}, user {@code root}). This matches the dataset
+ * store convention so a single MySQL server serves both platform metadata and uploaded datasets.
  *
- * <h2>Switching to MySQL / PostgreSQL</h2>
+ * <h2>Falling back to H2</h2>
  *
- * <p>Activate the bundled {@code jdbc} Spring profile to flip the DataSource defaults to
- * MySQL-shaped values:
+ * <p>Activate the bundled {@code h2} Spring profile to switch to an embedded file-based H2
+ * database (useful when MySQL is not available):
  *
  * <pre>{@code
- * --spring.profiles.active=jdbc
+ * --spring.profiles.active=h2
  *
  * # Or override individual settings without the profile:
- * BUILDER_DB_URL=jdbc:postgresql://host:5432/agentscope_builder
- * BUILDER_DB_DRIVER=org.postgresql.Driver
- * BUILDER_DB_USER=...
- * BUILDER_DB_PASSWORD=...
- * BUILDER_JPA_DDL_AUTO=validate          # once Flyway / Liquibase manage the schema
+ * DATAAGENT_DB_URL=jdbc:postgresql://host:5432/dataagent_platform
+ * DATAAGENT_DB_DRIVER=org.postgresql.Driver
+ * DATAAGENT_DB_USER=...
+ * DATAAGENT_DB_PASSWORD=...
+ * DATAAGENT_JPA_DDL_AUTO=validate          # once Flyway / Liquibase manage the schema
  * }</pre>
  *
- * <p>The MySQL ({@code com.mysql:mysql-connector-j}) and PostgreSQL ({@code org.postgresql:postgresql})
- * JDBC drivers are bundled at runtime scope; the active Hibernate dialect is resolved from the
- * {@code spring.datasource.url}.
+ * <p>The MySQL ({@code com.mysql:mysql-connector-j}), PostgreSQL ({@code org.postgresql:postgresql}),
+ * and H2 JDBC drivers are bundled at runtime scope; the active Hibernate dialect is resolved from
+ * the {@code spring.datasource.url}.
  */
 @Configuration
 @EnableJpaRepositories(basePackageClasses = JpaPersistenceConfig.class)

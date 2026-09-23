@@ -43,11 +43,16 @@ export async function currentSession(
   return res.json();
 }
 
-export async function* stream(agentId: string, req: ChatRequest): AsyncGenerator<ChatEvent> {
+export async function* stream(
+  agentId: string,
+  req: ChatRequest,
+  signal?: AbortSignal,
+): AsyncGenerator<ChatEvent> {
   const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/chat/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(req),
+    signal,
   });
   if (!res.ok || !res.body) throw new Error(`Chat stream failed: ${res.status}`);
 

@@ -29,7 +29,9 @@ export type IconName =
   | 'warn'
   | 'check'
   | 'back'
-  | 'model';
+  | 'model'
+  | 'moreHorizontal'
+  | 'stop';
 
 /** Lucide-style 24x24 line paths; rendered with currentColor stroke via .da-icon classes. */
 const PATHS: Record<IconName, React.ReactNode> = {
@@ -177,6 +179,14 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M10 6.5h4M6.5 10v4M17.5 10v4M10 17.5h4" />
     </>
   ),
+  moreHorizontal: (
+    <>
+      <circle cx="12" cy="12" r="1" />
+      <circle cx="19" cy="12" r="1" />
+      <circle cx="5" cy="12" r="1" />
+    </>
+  ),
+  stop: <rect x="6" y="6" width="12" height="12" rx="2" />,
 };
 
 export default function Icon({

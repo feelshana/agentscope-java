@@ -161,7 +161,12 @@ export default function DatasetGroupPage() {
   ) {
     mutateUploadStatuses(groupId, prev => [
       ...prev,
-      ...files.map(f => ({ name: f.name, status: 'queued' as const })),
+      ...files.map(f => ({
+        name: f.name,
+        status: 'queued' as const,
+        file: f,
+        selectedSheet: sheetMap.get(f.name),
+      })),
     ]);
     setBusy(true);
     setError(null);
@@ -180,7 +185,7 @@ export default function DatasetGroupPage() {
     const overwriteCandidates: { file: File; name: string; selectedSheet?: string }[] = [];
     results.forEach((r, i) => {
       if (r.status === 'fulfilled') {
-        patchStatus(files[i].name, { status: 'ready' });
+        mutateUploadStatuses(groupId, prev => prev.filter(x => x.name !== files[i].name));
       } else {
         const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
         if (msg.includes('already exists')) {
@@ -209,7 +214,7 @@ export default function DatasetGroupPage() {
         );
         overwriteResults.forEach((r, i) => {
           if (r.status === 'fulfilled') {
-            patchStatus(overwriteCandidates[i].file.name, { status: 'ready' });
+            mutateUploadStatuses(groupId, prev => prev.filter(x => x.name !== overwriteCandidates[i].file.name));
           } else {
             const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
             patchStatus(overwriteCandidates[i].file.name, {
@@ -443,9 +448,9 @@ export default function DatasetGroupPage() {
                 <span style={{ fontSize: '0.72rem', color: 'var(--da-text-3)', flexShrink: 0 }}>关联中</span>
               </div>
             ))}
-          {(uploadStatuses.length > 0 || importTasks.length > 0) && (
+          {((uploadStatuses.some(s => s.status !== 'ready')) || importTasks.length > 0) && (
             <div className="da-card" style={{ marginTop: 8, padding: 8 }}>
-              {uploadStatuses.map((s, i) => (
+              {uploadStatuses.filter(s => s.status !== 'ready').map((s, i) => (
                 <div key={`up-${s.name}-${i}`} className="da-small" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {s.name}
@@ -458,13 +463,43 @@ export default function DatasetGroupPage() {
                       color:
                         s.status === 'failed'
                           ? 'var(--da-danger)'
-                          : s.status === 'ready'
-                            ? 'var(--da-success)'
-                            : 'var(--da-primary)',
+                          : 'var(--da-primary)',
                     }}
                   >
                     {STATUS_LABEL[s.status]}
                   </span>
+                  {s.status === 'failed' && (
+                    <>
+                      <button
+                        className="da-btn"
+                        style={{ fontSize: '0.7rem', padding: '1px 6px' }}
+                        onClick={async () => {
+                          if (!s.file) return;
+                          patchStatus(s.name, { status: 'uploading', error: undefined });
+                          try {
+                            const datasetName = s.name.replace(/\.[^.]+$/, '');
+                            await uploadDataset(groupId, datasetName, s.file, true, s.selectedSheet);
+                            mutateUploadStatuses(groupId, prev => prev.filter(x => x.name !== s.name));
+                            await refresh();
+                          } catch (e) {
+                            const msg = e instanceof Error ? e.message : String(e);
+                            patchStatus(s.name, { status: 'failed', error: msg });
+                          }
+                        }}
+                      >
+                        重试
+                      </button>
+                      <button
+                        className="da-btn"
+                        style={{ fontSize: '0.7rem', padding: '1px 6px', color: 'var(--da-text-3)' }}
+                        onClick={() => {
+                          mutateUploadStatuses(groupId, prev => prev.filter(x => x.name !== s.name));
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </>
+                  )}
                 </div>
               ))}
               {importTasks.map(t => {
