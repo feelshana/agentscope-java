@@ -38,7 +38,7 @@ spring:
     url: ${DATAAGENT_DB_URL:jdbc:mysql://localhost:3306/dataagent_platform?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true}
     driver-class-name: ${DATAAGENT_DB_DRIVER:com.mysql.cj.jdbc.Driver}
     username: ${DATAAGENT_DB_USER:root}
-    password: ${DATAAGENT_DB_PASSWORD:1234}
+    password: ${DATAAGENT_DB_PASSWORD:123456}
 
   jpa:
     open-in-view: false
@@ -186,7 +186,7 @@ dataagent:
     datasource:
       url: ${DATAAGENT_DATASET_DB_URL:jdbc:mysql://localhost:3306/data_agent?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
       username: ${DATAAGENT_DATASET_DB_USER:root}
-      password: ${DATAAGENT_DATASET_DB_PASSWORD:1234}
+      password: ${DATAAGENT_DATASET_DB_PASSWORD:123456}
 
   # ---- Expose the platform metadata DB as a queryable source? Off by default. ----
   expose-app-db: ${DATAAGENT_EXPOSE_APP_DB:false}

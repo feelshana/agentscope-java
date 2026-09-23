@@ -408,7 +408,7 @@ export default function OntologyChatPage() {
 }
 
 const S: Record<string, React.CSSProperties> = {
-  root: { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: 'var(--da-app-bg)' },
+  root: { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: 'var(--da-canvas-bg)' },
   topBar: {
     padding: '12px 24px',
     borderBottom: '1px solid var(--da-border)',

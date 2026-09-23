@@ -32,8 +32,8 @@ export default function LoginPage() {
     <div style={{ minHeight: '100vh', display: 'flex', background: 'var(--da-app-bg)' }}>
       <div className="da-brandpane">
         <div className="da-enter" style={{ position: 'relative', zIndex: 1 }}>
-          <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.18em', opacity: 0.8 }}>
-            DATA AGENT
+          <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.06em', opacity: 0.8 }}>
+            红海DataAgent
           </span>
           <h1
             style={{
@@ -86,7 +86,7 @@ export default function LoginPage() {
           <div>
             <span className="da-eyebrow">Sign in</span>
             <div className="da-page-title" style={{ fontSize: 22 }}>
-              登录 DataAgent
+              登录红海DataAgent
             </div>
           </div>
           <div>
