@@ -518,7 +518,7 @@ export default function ScheduledTasksPage() {
                     boxSizing: 'border-box',
                   }}
                 >
-                  <option value={ACTIVE_AGENT_ID}>Data Agent（默认）</option>
+                  <option value={ACTIVE_AGENT_ID}>红海DataAgent（默认）</option>
                 </select>
               </div>
 

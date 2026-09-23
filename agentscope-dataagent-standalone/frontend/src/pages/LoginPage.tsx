@@ -86,7 +86,7 @@ export default function LoginPage() {
           <div>
             <span className="da-eyebrow">Sign in</span>
             <div className="da-page-title" style={{ fontSize: 22 }}>
-              登录 DataAgent
+              登录 红海DataAgent
             </div>
           </div>
           <div>
