@@ -112,7 +112,7 @@ function PreferenceFormModal({ initial, onSaved, onClose }: PreferenceFormProps)
 
         <label style={S.label}>Reply language (optional, BCP-47)</label>
         <input style={S.input} value={language} onChange={e => setLanguage(e.target.value)} placeholder="zh-CN" />
-        <span style={S.hint}>If set, DataAgent is asked to reply in this language.</span>
+        <span style={S.hint}>If set, 红海DataAgent is asked to reply in this language.</span>
 
         <label style={S.label}>Enabled skills (optional, comma-separated)</label>
         <input style={S.input} value={skillsText} onChange={e => setSkillsText(e.target.value)} placeholder="sql-analysis, chart-rendering" />
@@ -166,7 +166,7 @@ export default function UserBindingsPage() {
       <div style={S.content}>
         <h2 style={S.title}>通道偏好</h2>
         <p style={S.intro}>
-          DataAgent answers every chat — these settings just shape <em>how</em> it answers on a
+          红海DataAgent answers every chat — these settings just shape <em>how</em> it answers on a
           given channel. Set a reply language, restrict which skills are loaded, or override the
           default session scope. Preferences apply only to your account.
         </p>
@@ -182,7 +182,7 @@ export default function UserBindingsPage() {
 
         {!loading && bindings.length === 0 && (
           <p style={{ color: '#7c8bad', fontSize: '0.85rem' }}>
-            No channel preferences yet — DataAgent uses defaults for every channel.
+            No channel preferences yet — 红海DataAgent uses defaults for every channel.
           </p>
         )}
 

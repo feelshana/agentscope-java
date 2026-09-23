@@ -97,7 +97,15 @@ export default function DatasetsPage() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        minHeight: 0,
+        background: 'var(--da-canvas-bg)',
+      }}
+    >
       <BackToChatHeader title="知识库" subtitle="组织数据集与关系文档，供问数时自动选用" />
       <div style={helpStyle}>
         知识库(KB)是数据集的容器：一个 KB 下可上传多张表与一份关系说明文档。问数时无需手动选择，
