@@ -120,25 +120,23 @@ export default function ToolCallBlock({
         title="在侧栏查看输入与结果"
         aria-label={`查看 ${toolName} 工具详情`}
       >
-        <span style={{ color: 'var(--da-text-muted)', display: 'inline-flex' }}>
+        <span style={{ color: 'var(--da-text-3)', display: 'inline-flex', flexShrink: 0 }}>
           <Icon name={toolIcon(toolName)} size="sm" />
         </span>
-        <span className="da-toolcall-name">{label}{summary ? ` · ${summary}` : ''}</span>
+        <span className="da-toolcall-name">{label}</span>
+        {summary && <span className="da-toolcall-summary">· {summary}</span>}
         <span className={`da-toolcall-status${failed ? ' failed' : ''}`}>
           {running ? (
             <>
-              <span className="da-dot" />运行中
+              <span className="da-dot" />
             </>
           ) : failed ? (
-            <>
-              <Icon name="close" size="sm" />{partial ? '部分完成' : '失败'}
-            </>
+            <Icon name="close" size="sm" />
           ) : (
-            <Icon name="check" size="sm" />
+            <span style={{ color: '#22c55e' }}>
+              <Icon name="check" size="sm" />
+            </span>
           )}
-        </span>
-        <span className="da-trace-chevron">
-          <Icon name="chevron" size="sm" />
         </span>
       </button>
     </div>

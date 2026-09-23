@@ -731,40 +731,45 @@ button:focus-visible {
   color: var(--da-text-2);
 }
 
-/* ---------- prototype-derived: tool-call card ---------- */
+/* ---------- WorkBuddy-style inline tool-call steps ---------- */
 .da-toolcall {
-  border-radius: 6px;
+  border-radius: 0;
   background: transparent;
   border: none;
-  overflow: hidden;
+  overflow: visible;
 }
 .da-toolcall-head {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 8px;
+  gap: 6px;
+  padding: 3px 0;
   background: transparent;
   border: none;
-  border-radius: 6px;
-  font-size: 12px;
+  border-radius: 4px;
+  font-size: 0.82rem;
   color: var(--da-text-muted);
-  transition: var(--da-transition);
+  cursor: pointer;
+  transition: color 0.15s;
+  width: auto;
 }
 .da-toolcall-head:hover {
-  background: var(--da-surface-sunken);
+  color: var(--da-text);
 }
 .da-toolcall-name {
   font-weight: 500;
-  color: var(--da-text-muted);
-  font-family: var(--da-mono);
+  color: var(--da-text-2);
+}
+.da-toolcall-summary {
+  font-size: 0.75rem;
+  color: var(--da-text-3);
 }
 .da-toolcall-status {
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--da-text-muted);
-  display: flex;
+  font-size: 0.75rem;
+  color: var(--da-text-3);
+  display: inline-flex;
   align-items: center;
   gap: 4px;
+  flex-shrink: 0;
 }
 .da-toolcall-body {
   padding: 10px 12px;
@@ -1303,45 +1308,60 @@ button:focus-visible {
   width: 26px;
   height: 26px;
   border-radius: 7px;
-  background: linear-gradient(135deg, var(--da-primary) 0%, var(--da-primary-hover) 100%);
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 40%, #a78bfa 70%, #6366f1 100%);
   color: #fff;
   font-size: 0.62rem;
   font-weight: 700;
   flex-shrink: 0;
   letter-spacing: 0.02em;
+  box-shadow: 0 1px 3px rgba(99, 102, 241, 0.3), inset 0 1px 0 rgba(255,255,255,0.2);
 }
 .da-agent-name {
   font-size: 0.88rem;
-  font-weight: 600;
-  color: var(--da-text);
+  font-weight: 700;
   flex-shrink: 0;
+  background: linear-gradient(
+    105deg,
+    #374151 0%,
+    #6b7280 18%,
+    #9ca3af 30%,
+    #4b5563 42%,
+    #7f858e 55%,
+    #9ca3af 65%,
+    #4b5563 78%,
+    #374151 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: da-metal-shine 4s ease-in-out infinite;
+}
+@keyframes da-metal-shine {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
 }
 .da-trace {
-  border: 1px solid var(--da-border);
-  border-radius: var(--da-radius-md);
-  background: var(--da-surface);
-  overflow: hidden;
+  margin: 4px 0 8px;
 }
 .da-trace-head {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 12px;
+  gap: 6px;
+  padding: 2px 0;
   background: transparent;
   border: none;
   cursor: pointer;
   color: var(--da-text-muted);
   font: inherit;
-  font-size: 0.85rem;
+  font-size: 0.88rem;
   text-align: left;
-  transition: var(--da-transition);
+  transition: color 0.15s;
 }
 .da-trace-head:hover {
-  background: var(--da-surface-sunken);
+  color: var(--da-text);
 }
 .da-trace-status {
-  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1356,23 +1376,26 @@ button:focus-visible {
 }
 .da-trace-chevron {
   display: inline-flex;
-  color: var(--da-text-muted);
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: var(--da-text-3);
   transition: transform 0.15s ease;
   flex-shrink: 0;
+  line-height: 1;
 }
 .da-trace-chevron.open {
   transform: rotate(90deg);
 }
 .da-trace-body {
-  border-top: 1px solid var(--da-border);
-  padding: 6px 10px 10px;
+  margin-top: 6px;
+  padding: 8px 0 4px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   color: var(--da-text-muted);
 }
 .da-trace-text {
-  padding: 4px 8px;
+  padding: 3px 0;
   font-size: 0.82rem;
   line-height: 1.6;
   color: var(--da-text-muted);
@@ -1400,8 +1423,8 @@ button:focus-visible {
   letter-spacing: 0.02em;
 }
 .da-trace-elapsed {
-  font-size: 0.75rem;
-  color: var(--da-text-muted);
+  font-size: 0.82rem;
+  color: var(--da-text-3);
   flex-shrink: 0;
   margin-left: auto;
   padding-right: 4px;
@@ -1411,14 +1434,12 @@ button:focus-visible {
 }
 .da-toolcall-head {
   cursor: pointer;
-  width: 100%;
   text-align: left;
   appearance: none;
   font: inherit;
 }
 .da-toolcall-name {
-  font-family: var(--da-font);
-  font-size: 12px;
+  font-size: 0.82rem;
 }
 .da-sem-section {
   display: flex;

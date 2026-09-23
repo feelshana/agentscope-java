@@ -156,6 +156,16 @@ export async function deleteGroup(groupId: string): Promise<void> {
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to delete KB: ${res.status}`));
 }
 
+export async function updateGroup(groupId: string, name: string, description: string): Promise<DatasetGroup> {
+  const res = await fetch(`/api/dataset-groups/${encodeURIComponent(groupId)}`, {
+    method: 'PUT',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, description }),
+  });
+  if (!res.ok) throw new Error(await errorMessage(res, `Failed to update KB: ${res.status}`));
+  return res.json();
+}
+
 export async function uploadKnowledge(groupId: string, file: File): Promise<string> {
   const form = new FormData();
   form.append('file', file, file.name);

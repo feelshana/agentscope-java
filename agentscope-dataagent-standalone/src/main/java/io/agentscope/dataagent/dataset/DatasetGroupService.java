@@ -153,6 +153,21 @@ public class DatasetGroupService {
                 ownerId);
     }
 
+    @Transactional
+    public DatasetGroupEntity updateGroup(
+            String ownerId, String groupId, String name, String description) {
+        DatasetGroupEntity group = getGroup(ownerId, groupId);
+        if (name != null && !name.isBlank()) {
+            group.setName(name.trim());
+        }
+        if (description != null) {
+            group.setDescription(description.trim());
+        }
+        DatasetGroupEntity saved = groupRepository.save(group);
+        log.info("DatasetGroupService: updated KB {} for owner {}", groupId, ownerId);
+        return saved;
+    }
+
     private String ensureDefaultGroupId(String ownerId) {
         return groupRepository
                 .findByOwnerIdAndName(ownerId, DEFAULT_GROUP_NAME)

@@ -62,6 +62,23 @@ const NAV_ITEMS: { key: View; icon: IconName; label: string }[] = [
   { key: 'doc', icon: 'file', label: '关系说明文档' },
 ];
 
+const S: Record<string, React.CSSProperties> = {
+  backBtn: {
+    display: 'inline-flex', alignItems: 'center', gap: 6,
+    background: 'none', border: 'none', cursor: 'pointer',
+    padding: '6px 10px', borderRadius: 8, margin: '0 -4px 8px',
+    transition: 'background 0.15s',
+  },
+  backArrow: {
+    fontSize: '1.5rem', fontWeight: 400, lineHeight: 1,
+    color: 'var(--da-text-3)',
+  },
+  backLabel: {
+    fontSize: '1.05rem', fontWeight: 600, color: 'var(--da-text)',
+    letterSpacing: '-0.01em',
+  },
+};
+
 /**
  * TC-style knowledge-base workspace: a left rail (KB header, add-file/associate actions, view nav,
  * file list) plus a right content pane that swaps between the file manager, the semantic knowledge
@@ -347,12 +364,16 @@ export default function DatasetGroupPage() {
       {/* ---------- rail ---------- */}
       <div className="da-rail">
         <div className="da-rail-head">
-          <button className="da-btn da-btn-sm" onClick={() => navigate('/configure/datasets')}>
-            ← 知识库列表
+          <button
+            style={S.backBtn}
+            onClick={() => navigate('/configure/datasets')}
+            title="返回知识库列表"
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--da-surface-sunken)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+          >
+            <span style={S.backArrow}>‹</span>
+            <span style={S.backLabel}>{detail?.group.name ?? '知识库'}</span>
           </button>
-          <div className="da-page-title" style={{ marginTop: 10 }}>
-            {detail?.group.name ?? '知识库'}
-          </div>
           {detail?.group.description && (
             <div className="da-small" style={{ marginTop: 4 }}>
               {detail.group.description}

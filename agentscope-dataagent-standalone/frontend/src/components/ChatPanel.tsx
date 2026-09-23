@@ -211,7 +211,7 @@ function splitToolRender(
     const spec = !chartPayload && !ontologyPayload ? extractVegaSpec(t.name, t.input) : null;
     const key = node.id + (t.result ? '-done' : '');
     trace.push(
-      <div key={key} style={t.parentCallId ? { marginLeft: 16, paddingLeft: 8, borderLeft: '2px solid var(--da-border)' } : undefined}>
+      <div key={key}>
         <ToolCallBlock
           toolName={t.name}
           toolCallId={t.id}

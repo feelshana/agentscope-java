@@ -27,6 +27,7 @@ import io.agentscope.dataagent.runtime.marketplace.GitDataAgentMarketplace;
 import io.agentscope.dataagent.runtime.marketplace.LocalApprovalMarketplace;
 import io.agentscope.dataagent.runtime.marketplace.NacosDataAgentMarketplace;
 import io.agentscope.dataagent.runtime.marketplace.UserMarketplaceRegistry.DataAgentMarketplaceFactoryRegistration;
+import io.agentscope.dataagent.runtime.session.ChineseLanguageMiddleware;
 import io.agentscope.dataagent.runtime.session.DataDynamicContextMiddleware;
 import io.agentscope.dataagent.tools.data.DataSourceRegistry;
 import io.agentscope.dataagent.tools.data.SqlConnector;
@@ -377,6 +378,10 @@ public class DataAgentConfig {
                     b.middleware(
                             new DataDynamicContextMiddleware(
                                     dataSourceRegistry, contextProviderOpt.orElse(null)));
+
+                    // 在系统提示词最末尾追加中文语言强制指令，
+                    // 覆盖框架层英文提示词对 LLM 输出语言的倾向影响。
+                    b.middleware(new ChineseLanguageMiddleware());
                 });
 
         DataAgentBootstrap bootstrap = builder.build();
