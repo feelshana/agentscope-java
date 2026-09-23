@@ -20,56 +20,69 @@ const overlayStyle: React.CSSProperties = {
 
 const shellStyle: React.CSSProperties = {
   background: 'var(--da-surface)',
-  borderRadius: 12,
-  width: 'min(960px, 94vw)',
-  maxHeight: '86vh',
+  borderRadius: 16,
+  width: 'min(1400px, 96vw)',
+  maxHeight: '90vh',
+  minHeight: 650,
   display: 'flex',
   flexDirection: 'column',
   overflow: 'hidden',
+  boxShadow: 'var(--da-shadow-pop)',
+  border: '1px solid var(--da-border)',
 };
 
 const headStyle: React.CSSProperties = {
-  padding: '14px 20px',
+  padding: '20px 28px',
   borderBottom: '1px solid var(--da-border)',
   display: 'flex',
-  alignItems: 'center',
-  gap: 12,
+  alignItems: 'flex-start',
+  gap: 16,
 };
 
 const colStyle: React.CSSProperties = {
-  flex: 1,
-  minHeight: 0,
+  flex: '0 0 220px',
+  minWidth: 0,
   overflow: 'auto',
-  padding: 12,
-  borderRight: '1px solid var(--da-surface-sunken)',
+  padding: '0 20px 20px',
+  borderRight: '1px solid var(--da-border)',
+};
+
+const colMidStyle: React.CSSProperties = {
+  flex: '0 0 300px',
+  minWidth: 0,
+  overflow: 'auto',
+  padding: '0 20px 20px',
+  borderRight: '1px solid var(--da-border)',
+};
+
+const colLastStyle: React.CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  overflow: 'auto',
+  padding: '0 20px 20px',
+};
+
+const sectionTitleStyle: React.CSSProperties = {
+  fontSize: '0.88rem',
+  fontWeight: 600,
+  color: 'var(--da-text)',
+  padding: '16px 0 10px',
+  borderBottom: '1px solid var(--da-border)',
+  marginBottom: 12,
 };
 
 const itemStyle = (active: boolean): React.CSSProperties => ({
-  padding: '6px 10px',
-  borderRadius: 6,
+  padding: '9px 12px',
+  borderRadius: 8,
   cursor: 'pointer',
-  fontSize: '0.82rem',
-  background: active ? 'var(--da-primary-subtle)' : 'transparent',
-  color: active ? 'var(--da-primary-hover)' : 'var(--da-text)',
+  fontSize: '0.85rem',
+  background: active ? 'rgba(79, 70, 229, 0.06)' : 'transparent',
+  color: active ? 'var(--da-primary)' : 'var(--da-text)',
+  fontWeight: active ? 500 : 400,
+  transition: 'background 0.12s ease',
+  marginBottom: 2,
 });
 
-const thStyle: React.CSSProperties = {
-  textAlign: 'left',
-  padding: '6px 8px',
-  borderBottom: '1px solid var(--da-border)',
-  fontSize: '0.75rem',
-  color: 'var(--da-text-3)',
-  fontWeight: 600,
-};
-
-const tdStyle: React.CSSProperties = {
-  padding: '6px 8px',
-  borderBottom: '1px solid var(--da-surface-sunken)',
-  fontSize: '0.8rem',
-  color: 'var(--da-text)',
-};
-
-/** TC-style 数据源详情 modal: schema list → table list → column info. */
 export default function DataSourceDetailModal({
   dataSource,
   onClose,
@@ -116,72 +129,290 @@ export default function DataSourceDetailModal({
     <div style={overlayStyle} onClick={onClose}>
       <div style={shellStyle} onClick={e => e.stopPropagation()}>
         <div style={headStyle}>
-          <span style={{ fontSize: '1rem', fontWeight: 700 }}>数据源详情 · {dataSource.name}</span>
-          <span style={{ flex: 1 }} />
+          <div style={{ flex: 1 }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                marginBottom: 8,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: '1.2rem',
+                  fontWeight: 700,
+                  color: 'var(--da-text)',
+                }}
+              >
+                {dataSource.name}
+              </span>
+              <span
+                style={{
+                  display: 'inline-block',
+                  padding: '3px 12px',
+                  borderRadius: 6,
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  letterSpacing: '0.04em',
+                  background: 'rgba(37, 99, 235, 0.08)',
+                  color: '#2563eb',
+                }}
+              >
+                {dataSource.kind.toUpperCase()}
+              </span>
+            </div>
+            <div style={{ fontSize: '0.82rem', color: 'var(--da-text-muted)' }}>
+              {schemas.length} 个数据库 · {tables.length} 个数据表
+            </div>
+          </div>
           <button
-            style={{
-              padding: '7px 12px',
-              borderRadius: 8,
-              border: '1px solid var(--da-border-strong)',
-              background: 'var(--da-surface)',
-              color: 'var(--da-text-2)',
-              fontSize: '0.82rem',
-              cursor: 'pointer',
-            }}
+            className="da-btn"
             onClick={onClose}
+            style={{ padding: '8px 18px', fontSize: '0.85rem', flexShrink: 0 }}
           >
             关闭
           </button>
         </div>
         {error && (
-          <div style={{ color: 'var(--da-danger)', fontSize: '0.85rem', padding: '8px 20px' }}>{error}</div>
+          <div
+            style={{
+              color: 'var(--da-danger)',
+              fontSize: '0.85rem',
+              padding: '12px 28px',
+              background: 'rgba(225, 29, 72, 0.06)',
+              borderBottom: '1px solid rgba(225, 29, 72, 0.18)',
+            }}
+          >
+            {error}
+          </div>
         )}
         <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-          <div style={{ ...colStyle, maxWidth: 240 }}>
-            <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--da-text-3)', marginBottom: 6 }}>
-              数据库
-            </div>
-            {schemas.map(s => (
-              <div key={s} style={itemStyle(schema === s)} onClick={() => setSchema(s)}>
-                {s}
-              </div>
-            ))}
-          </div>
-          <div style={{ ...colStyle, maxWidth: 280 }}>
-            <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--da-text-3)', marginBottom: 6 }}>
-              数据表 {schema ? `· ${schema}` : ''}
-            </div>
-            {tables.map(t => (
-              <div key={t.name} style={itemStyle(table === t.name)} onClick={() => openTable(t.name)}>
-                {t.name}
-              </div>
-            ))}
-          </div>
+          {/* Left: databases */}
           <div style={colStyle}>
-            <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--da-text-3)', marginBottom: 6 }}>
-              字段信息 {table ? `· ${table}` : ''}
+            <div style={sectionTitleStyle}>数据库</div>
+            {schemas.length === 0 ? (
+              <div
+                style={{
+                  color: 'var(--da-text-muted)',
+                  fontSize: '0.85rem',
+                  padding: '32px 0',
+                  textAlign: 'center',
+                }}
+              >
+                暂无数据库
+              </div>
+            ) : (
+              schemas.map(s => (
+                <div
+                  key={s}
+                  style={itemStyle(schema === s)}
+                  onClick={() => setSchema(s)}
+                  onMouseEnter={e => {
+                    if (schema !== s) {
+                      e.currentTarget.style.background = 'var(--da-surface-sunken)';
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (schema !== s) {
+                      e.currentTarget.style.background = 'transparent';
+                    }
+                  }}
+                >
+                  {s}
+                </div>
+              ))
+            )}
+          </div>
+          {/* Middle: tables */}
+          <div style={colMidStyle}>
+            <div style={sectionTitleStyle}>
+              数据表
+              {schema && (
+                <span style={{ color: 'var(--da-text-muted)', fontWeight: 400 }}>
+                  {' '}
+                  · {schema}
+                </span>
+              )}
+            </div>
+            {tables.length === 0 ? (
+              <div
+                style={{
+                  color: 'var(--da-text-muted)',
+                  fontSize: '0.85rem',
+                  padding: '32px 0',
+                  textAlign: 'center',
+                }}
+              >
+                暂无数据表
+              </div>
+            ) : (
+              tables.map(t => (
+                <div
+                  key={t.name}
+                  style={itemStyle(table === t.name)}
+                  onClick={() => openTable(t.name)}
+                  onMouseEnter={e => {
+                    if (table !== t.name) {
+                      e.currentTarget.style.background = 'var(--da-surface-sunken)';
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (table !== t.name) {
+                      e.currentTarget.style.background = 'transparent';
+                    }
+                  }}
+                >
+                  <div>{t.name}</div>
+                  {t.comment && (
+                    <div
+                      style={{
+                        fontSize: '0.75rem',
+                        color: 'var(--da-text-muted)',
+                        marginTop: 3,
+                      }}
+                    >
+                      {t.comment}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+          {/* Right: columns */}
+          <div style={colLastStyle}>
+            <div style={sectionTitleStyle}>
+              字段信息
+              {table && (
+                <span style={{ color: 'var(--da-text-muted)', fontWeight: 400 }}>
+                  {' '}
+                  · {table}
+                </span>
+              )}
             </div>
             {table ? (
-              <table className="da-table">
-                <thead>
-                  <tr>
-                    <th>列名</th>
-                    <th>类型</th>
-                    <th>描述</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {columns.map(c => (
-                    <tr key={c.name}>
-                      <td>{c.name}</td>
-                      <td>{c.type}</td>
-                      <td>{c.description ?? '-'}</td>
+              <div
+                style={{
+                  borderRadius: 8,
+                  border: '1px solid var(--da-border)',
+                  overflow: 'hidden',
+                }}
+              >
+                <table
+                  style={{
+                    width: '100%',
+                    borderCollapse: 'collapse',
+                    fontSize: '0.85rem',
+                  }}
+                >
+                  <thead>
+                    <tr
+                      style={{
+                        background: 'var(--da-surface-sunken)',
+                      }}
+                    >
+                      <th
+                        style={{
+                          padding: '10px 14px',
+                          textAlign: 'left',
+                          fontSize: '0.8rem',
+                          fontWeight: 600,
+                          color: 'var(--da-text-3)',
+                          borderBottom: '1px solid var(--da-border)',
+                        }}
+                      >
+                        列名
+                      </th>
+                      <th
+                        style={{
+                          padding: '10px 14px',
+                          textAlign: 'left',
+                          fontSize: '0.8rem',
+                          fontWeight: 600,
+                          color: 'var(--da-text-3)',
+                          borderBottom: '1px solid var(--da-border)',
+                        }}
+                      >
+                        类型
+                      </th>
+                      <th
+                        style={{
+                          padding: '10px 14px',
+                          textAlign: 'left',
+                          fontSize: '0.8rem',
+                          fontWeight: 600,
+                          color: 'var(--da-text-3)',
+                          borderBottom: '1px solid var(--da-border)',
+                        }}
+                      >
+                        描述
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {columns.map(c => (
+                      <tr
+                        key={c.name}
+                        style={{
+                          borderBottom: '1px solid var(--da-border)',
+                        }}
+                      >
+                        <td
+                          style={{
+                            padding: '11px 14px',
+                            fontWeight: 500,
+                            color: 'var(--da-text)',
+                            verticalAlign: 'top',
+                          }}
+                        >
+                          {c.name}
+                        </td>
+                        <td
+                          style={{
+                            padding: '11px 14px',
+                            verticalAlign: 'top',
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontFamily: 'var(--da-mono)',
+                              fontSize: '0.78rem',
+                              padding: '2px 8px',
+                              borderRadius: 4,
+                              background: 'var(--da-surface-sunken)',
+                              color: 'var(--da-text-2)',
+                              border: '1px solid var(--da-border)',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {c.type}
+                          </span>
+                        </td>
+                        <td
+                          style={{
+                            padding: '11px 14px',
+                            color: 'var(--da-text-2)',
+                            verticalAlign: 'top',
+                          }}
+                        >
+                          {c.description ?? '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             ) : (
-              <div style={{ color: 'var(--da-text-muted)', fontSize: '0.82rem' }}>请选择数据表</div>
+              <div
+                style={{
+                  color: 'var(--da-text-muted)',
+                  fontSize: '0.85rem',
+                  padding: '48px 0',
+                  textAlign: 'center',
+                }}
+              >
+                请选择数据表查看字段信息
+              </div>
             )}
           </div>
         </div>
