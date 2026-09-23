@@ -16,22 +16,12 @@
 package io.agentscope.dataagent.web.persistence.jpa;
 
 import java.util.List;
-import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-/** Spring Data repository for {@link DatasetEntity}. */
-public interface DatasetRepository extends JpaRepository<DatasetEntity, String> {
+/** Spring Data repository for {@link ScheduledTaskEntity}. */
+public interface ScheduledTaskRepository extends JpaRepository<ScheduledTaskEntity, String> {
 
-    List<DatasetEntity> findByOwnerIdOrderByCreatedAtDesc(String ownerId);
+    List<ScheduledTaskEntity> findAllByOrderByCreatedAtDesc();
 
-    Optional<DatasetEntity> findByOwnerIdAndName(String ownerId, String name);
-
-    Optional<DatasetEntity> findByOwnerIdAndGroupIdAndName(
-            String ownerId, String groupId, String name);
-
-    Optional<DatasetEntity> findBySchemaName(String schemaName);
-
-    List<DatasetEntity> findByGroupId(String groupId);
-
-    long countByGroupId(String groupId);
+    List<ScheduledTaskEntity> findByAgentIdOrderByCreatedAtDesc(String agentId);
 }

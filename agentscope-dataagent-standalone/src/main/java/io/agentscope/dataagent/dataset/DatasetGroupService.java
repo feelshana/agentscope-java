@@ -131,6 +131,11 @@ public class DatasetGroupService {
                 .toList();
     }
 
+    public long countDatasets(String ownerId, String groupId) {
+        getGroup(ownerId, groupId);
+        return datasetRepository.countByGroupId(groupId);
+    }
+
     @Transactional
     public void deleteGroup(String ownerId, String groupId) {
         DatasetGroupEntity group = getGroup(ownerId, groupId);

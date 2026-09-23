@@ -31,7 +31,8 @@ export type IconName =
   | 'back'
   | 'model'
   | 'moreHorizontal'
-  | 'stop';
+  | 'stop'
+  | 'clock';
 
 /** Lucide-style 24x24 line paths; rendered with currentColor stroke via .da-icon classes. */
 const PATHS: Record<IconName, React.ReactNode> = {
@@ -187,6 +188,12 @@ const PATHS: Record<IconName, React.ReactNode> = {
     </>
   ),
   stop: <rect x="6" y="6" width="12" height="12" rx="2" />,
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 6v6l4 2" />
+    </>
+  ),
 };
 
 export default function Icon({
