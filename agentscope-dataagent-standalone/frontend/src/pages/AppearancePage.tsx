@@ -13,7 +13,7 @@ const DEFAULTS: Appearance = {
   accentColor: 'var(--da-primary)',
   fontSize: 14,
   compactMode: false,
-  welcomeMessage: 'Welcome to 红海DataAgent!',
+  welcomeMessage: 'Welcome to DataAgent!',
 };
 
 function load(): Appearance {
@@ -106,7 +106,7 @@ export default function AppearancePage() {
       <div style={S.content}>
         <h2 style={S.heading}>外观设置</h2>
         <p style={{ color: '#4b5571', fontSize: '0.82rem', marginBottom: '1.25rem', lineHeight: 1.6 }}>
-          Customize the look and feel of the 红海DataAgent web interface. Settings are saved locally in your browser.
+          Customize the look and feel of the DataAgent web interface. Settings are saved locally in your browser.
         </p>
 
         {/* Theme section */}

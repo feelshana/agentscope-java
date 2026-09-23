@@ -59,7 +59,7 @@ interface SessionMsgs {
 }
 
 const S: Record<string, React.CSSProperties> = {
-  root: { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: 'var(--da-canvas-bg)' },
+  root: { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: 'var(--da-app-bg)' },
   thread: { flex: 1, overflowY: 'auto', padding: '28px 36px', display: 'flex', flexDirection: 'column', gap: 18 },
   threadInner: {
     width: '100%', maxWidth: 960, margin: '0 auto',
@@ -827,7 +827,7 @@ export default function ChatPanel({
       <div style={S.root}>
         <div className="da-landing-wrap">
           <div className="da-landing-greeting">
-            <h1 className="da-landing-title">红海DataAgent</h1>
+            <h1 className="da-landing-title">Data Agent</h1>
             <div className="da-landing-tagline">你的大数据智囊团</div>
             <p>输入数据问题，我来帮你查询、分析和可视化</p>
           </div>
@@ -872,7 +872,7 @@ export default function ChatPanel({
                 <div className="da-agent-turn">
                   <div className="da-agent-header">
                     <span className="da-agent-avatar">DA</span>
-                    <span className="da-agent-name">红海DataAgent</span>
+                    <span className="da-agent-name">Data Agent</span>
                   </div>
                   <TaskTrace
                     running={!!m.pending}

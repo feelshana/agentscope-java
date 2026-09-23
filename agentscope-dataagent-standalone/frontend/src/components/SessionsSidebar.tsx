@@ -214,7 +214,7 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
       <div style={S.brand}>
         <span className="da-logo">DA</span>
         <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          <span style={S.brandName}>红海DataAgent</span>
+          <span style={S.brandName}>Data Agent</span>
           <span style={S.brandTag}>企业级数据智能体</span>
         </span>
       </div>

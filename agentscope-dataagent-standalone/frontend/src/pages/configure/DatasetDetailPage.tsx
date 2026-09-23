@@ -116,7 +116,7 @@ function FieldEditModal({ columns, edits, typeEdits, onChange, onSave, onClose, 
           <div>
             <div style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--da-text)' }}>字段信息</div>
             <div style={{ fontSize: '0.8rem', color: 'var(--da-text-muted)', marginTop: 4 }}>
-              准确的字段信息将帮助红海DataAgent更好地回答你的问题
+              准确的字段信息将帮助DataAgent更好地回答你的问题
             </div>
           </div>
           <button
@@ -307,15 +307,7 @@ export default function DatasetDetailPage() {
   }
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        minHeight: 0,
-        background: 'var(--da-canvas-bg)',
-      }}
-    >
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       <BackToChatHeader title={dataset?.name ?? '数据集'} subtitle={dataset?.tableName ?? ''} />
       <div style={{ padding: '10px 24px 0' }}>
         <button className="da-btn" onClick={() => navigate(`/configure/datasets/${groupId}`)}>

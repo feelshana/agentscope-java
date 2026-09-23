@@ -604,7 +604,7 @@ export default function DatasetGroupPage() {
           minWidth: 0,
           display: 'flex',
           flexDirection: 'column',
-          background: 'var(--da-canvas-bg)',
+          background: 'var(--da-app-bg)',
           overflow: 'hidden',
         }}
       >
