@@ -7,8 +7,6 @@
 
 :root {
   --da-app-bg: #f4f5f7;
-  /* Main canvas (home landing, conversation thread, knowledge-base pages): same brightness as the menu-bar surface. */
-  --da-canvas-bg: var(--da-surface);
   --da-surface: #ffffff;
   --da-surface-sunken: #eef0f3;
   --da-border: #d8dce3;
@@ -1124,36 +1122,50 @@ button:focus-visible {
   /* left-aligned inside the same 880px column as the composer (TC-style hero) */
   width: 100%;
   max-width: 880px;
-  /* TC stacks title + tagline as a flex column with a 10px gap */
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
   text-align: left;
   margin-bottom: 24px;
 }
 
-/* TC-style hero: solid ink title and tagline at medium weight (black, not heavy). */
+@property --da-title-c1 {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: #4338ca;
+}
+@property --da-title-c2 {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: #2563eb;
+}
+@keyframes da-title-flow {
+  0%, 100% { --da-title-c1: #4338ca; --da-title-c2: #2563eb; }
+  33% { --da-title-c1: #7c3aed; --da-title-c2: #4f46e5; }
+  66% { --da-title-c1: #2563eb; --da-title-c2: #7c3aed; }
+}
 .da-landing-title {
   margin: 0;
-  font-size: 30px;
-  font-weight: 500;
-  line-height: 1.25;
-  letter-spacing: -0.01em;
-  color: var(--da-text);
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 52px;
+  letter-spacing: -0.02em;
+  background: linear-gradient(92deg, var(--da-title-c1), var(--da-title-c2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: da-title-flow 7s ease-in-out infinite;
 }
 
 /* Prominent tagline right under the landing title (mirrors the TC-style hero subtitle). */
 .da-landing-tagline {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 500;
-  line-height: 1.3;
+  margin: 6px 0 0;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 36px;
   letter-spacing: -0.01em;
   color: var(--da-text);
 }
 
 .da-landing-greeting p {
-  margin: 2px 0 0;
+  margin: 8px 0 0;
   font-size: 14px;
   line-height: 22px;
   color: var(--da-text-3);
