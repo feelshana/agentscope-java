@@ -19,6 +19,7 @@ import DatasetsPage from './pages/configure/DatasetsPage';
 import DatasetGroupPage from './pages/configure/DatasetGroupPage';
 import DatasetDetailPage from './pages/configure/DatasetDetailPage';
 import SemanticConfigPage from './pages/configure/SemanticConfigPage';
+import ScheduledTasksPage from './pages/configure/ScheduledTasksPage';
 import SettingsPage from './pages/configure/SettingsPage';
 
 import ProfilePage from './pages/ProfilePage';
@@ -93,6 +94,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="/configure/datasets"  element={<DatasetsPage />} />
           <Route path="/configure/datasets/:groupId" element={<DatasetGroupPage />} />
           <Route path="/configure/semantic"  element={<SemanticConfigPage />} />
+          <Route path="/configure/scheduled-tasks"  element={<ScheduledTasksPage />} />
           <Route
             path="/configure/datasets/:groupId/table/:datasetId"
             element={<DatasetDetailPage />}

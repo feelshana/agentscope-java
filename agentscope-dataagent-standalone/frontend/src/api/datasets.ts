@@ -111,9 +111,23 @@ export async function listSheets(file: File): Promise<string[]> {
 // ---------------------------------------------------------------- groups (KB)
 
 export async function listGroups(): Promise<DatasetGroup[]> {
-  const res = await fetch('/api/dataset-groups', { headers: authHeaders() });
-  if (!res.ok) throw new Error(await errorMessage(res, `Failed to list KBs: ${res.status}`));
-  return res.json();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30_000);
+  try {
+    const res = await fetch('/api/dataset-groups', {
+      headers: authHeaders(),
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(await errorMessage(res, `Failed to list KBs: ${res.status}`));
+    return res.json();
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      throw new Error('加载知识库列表超时，请刷新重试');
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function createGroup(name: string, description: string): Promise<DatasetGroup> {

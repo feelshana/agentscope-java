@@ -23,6 +23,7 @@ const UTILITY_ITEMS: UtilityItem[] = [
 const NAV_ITEMS: UtilityItem[] = [
   { label: '知识库', path: '/configure/datasets', icon: 'book' },
   { label: '业务术语', path: '/configure/semantic', icon: 'settings' },
+  { label: '例行任务', path: '/configure/scheduled-tasks', icon: 'clock' },
 ];
 
 /** Overflow menu items (TC-style 更多); currently only Workspace. */

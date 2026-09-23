@@ -105,10 +105,9 @@ public class DatasetGroupController {
                                                 g ->
                                                         toVO(
                                                                 g,
-                                                                groupService
-                                                                        .listDatasets(
-                                                                                userId, g.getId())
-                                                                        .size()))
+                                                                (int)
+                                                                        groupService.countDatasets(
+                                                                                userId, g.getId())))
                                         .toList())
                 .subscribeOn(Schedulers.boundedElastic())
                 .onErrorMap(this::toStatus);
