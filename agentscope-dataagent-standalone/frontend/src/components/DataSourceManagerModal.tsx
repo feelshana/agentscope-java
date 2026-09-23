@@ -21,95 +21,47 @@ const overlayStyle: React.CSSProperties = {
 
 const shellStyle: React.CSSProperties = {
   background: 'var(--da-surface)',
-  borderRadius: 12,
-  width: 'min(880px, 94vw)',
-  maxHeight: '86vh',
+  borderRadius: 16,
+  width: 'min(1300px, 96vw)',
+  maxHeight: '90vh',
+  minHeight: 600,
   display: 'flex',
   flexDirection: 'column',
   overflow: 'hidden',
+  boxShadow: 'var(--da-shadow-pop)',
+  border: '1px solid var(--da-border)',
 };
 
 const headStyle: React.CSSProperties = {
-  padding: '14px 20px',
+  padding: '18px 24px',
   borderBottom: '1px solid var(--da-border)',
   display: 'flex',
   alignItems: 'center',
-  gap: 12,
+  gap: 16,
 };
 
-const bodyStyle: React.CSSProperties = { padding: 20, overflow: 'auto' };
-
-const thStyle: React.CSSProperties = {
-  textAlign: 'left',
-  padding: '8px 10px',
-  borderBottom: '1px solid var(--da-border)',
-  fontSize: '0.78rem',
-  color: 'var(--da-text-3)',
-  fontWeight: 600,
-};
-
-const tdStyle: React.CSSProperties = {
-  padding: '8px 10px',
-  borderBottom: '1px solid var(--da-surface-sunken)',
-  fontSize: '0.82rem',
-  color: 'var(--da-text)',
+const bodyStyle: React.CSSProperties = {
+  padding: '20px 24px',
+  overflow: 'auto',
+  flex: 1,
+  minHeight: 0,
 };
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
-  padding: '7px 9px',
-  borderRadius: 6,
+  padding: '9px 12px',
+  borderRadius: 8,
   border: '1px solid var(--da-border-strong)',
-  fontSize: '0.82rem',
+  fontSize: '0.85rem',
   boxSizing: 'border-box',
 };
 
 const labelStyle: React.CSSProperties = {
   display: 'block',
-  fontSize: '0.75rem',
+  fontSize: '0.8rem',
   fontWeight: 600,
   color: 'var(--da-text-2)',
-  marginBottom: 4,
-};
-
-const primaryBtn: React.CSSProperties = {
-  padding: '8px 16px',
-  borderRadius: 8,
-  border: '1px solid var(--da-primary)',
-  background: 'var(--da-primary)',
-  color: 'var(--da-surface)',
-  fontSize: '0.85rem',
-  fontWeight: 600,
-  cursor: 'pointer',
-};
-
-const ghostBtn: React.CSSProperties = {
-  padding: '7px 12px',
-  borderRadius: 8,
-  border: '1px solid var(--da-border-strong)',
-  background: 'var(--da-surface)',
-  color: 'var(--da-text-2)',
-  fontSize: '0.82rem',
-  cursor: 'pointer',
-};
-
-const linkBtn: React.CSSProperties = {
-  background: 'transparent',
-  border: 'none',
-  color: 'var(--da-primary)',
-  cursor: 'pointer',
-  fontSize: '0.8rem',
-  padding: 0,
-  marginRight: 10,
-};
-
-const dangerBtn: React.CSSProperties = {
-  background: 'transparent',
-  border: 'none',
-  color: 'var(--da-danger)',
-  cursor: 'pointer',
-  fontSize: '0.8rem',
-  padding: 0,
+  marginBottom: 6,
 };
 
 interface FormState {
@@ -130,7 +82,6 @@ const emptyForm: FormState = {
   sampling: true,
 };
 
-/** TC-style 数据源管理 modal: list + add/edit local DB connections + detail browser. */
 export default function DataSourceManagerModal({
   open,
   onClose,
@@ -221,7 +172,9 @@ export default function DataSourceManagerModal({
     <div style={overlayStyle} onClick={onClose}>
       <div style={shellStyle} onClick={e => e.stopPropagation()}>
         <div style={headStyle}>
-          <span style={{ fontSize: '1rem', fontWeight: 700 }}>数据源管理</span>
+          <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--da-text)' }}>
+            数据源管理
+          </span>
           <span style={{ flex: 1 }} />
           <button className="da-btn" onClick={onClose}>
             关闭
@@ -229,9 +182,32 @@ export default function DataSourceManagerModal({
         </div>
         <div style={bodyStyle}>
           {error && (
-            <div style={{ color: 'var(--da-danger)', fontSize: '0.85rem', marginBottom: 10 }}>{error}</div>
+            <div
+              style={{
+                color: 'var(--da-danger)',
+                fontSize: '0.85rem',
+                marginBottom: 12,
+                padding: '10px 14px',
+                background: 'rgba(225, 29, 72, 0.06)',
+                borderRadius: 8,
+                border: '1px solid rgba(225, 29, 72, 0.18)',
+              }}
+            >
+              {error}
+            </div>
           )}
-          <div style={{ marginBottom: 12 }}>
+
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: 16,
+            }}
+          >
+            <div style={{ fontSize: '0.85rem', color: 'var(--da-text-3)' }}>
+              共 {items.length} 个数据源
+            </div>
             <button
               className="da-btn da-btn-primary"
               onClick={() => {
@@ -240,71 +216,111 @@ export default function DataSourceManagerModal({
                 setForm(emptyForm);
               }}
               disabled={busy}
+              style={{ padding: '8px 18px', fontSize: '0.85rem' }}
             >
-              添加数据源
+              + 添加数据源
             </button>
           </div>
 
           {formOpen && (
             <div
               className="da-card"
-              style={{ marginBottom: 14, padding: 16 }}
+              style={{ marginBottom: 20, padding: 20 }}
             >
-              <div className="da-form-grid">
-                <label className="da-label">数据源名称 *</label>
-                <input
-                  className="da-input"
-                  value={form.name}
-                  placeholder="字母/数字/下划线/中文，1-64 字符"
-                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                />
-                <label className="da-label">类型</label>
-                <select
-                  className="da-input"
-                  value={form.kind}
-                  onChange={e => setForm(f => ({ ...f, kind: e.target.value }))}
-                >
-                  <option value="mysql">MySQL</option>
-                  <option value="postgresql">PostgreSQL</option>
-                </select>
-                <label className="da-label">jdbc 地址 *</label>
-                <input
-                  className="da-input"
-                  value={form.jdbcUrl}
-                  placeholder="jdbc:mysql://host:port/dbname"
-                  onChange={e => setForm(f => ({ ...f, jdbcUrl: e.target.value }))}
-                />
-                <label className="da-label">用户名</label>
-                <input
-                  className="da-input"
-                  value={form.username}
-                  onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
-                />
-                <label className="da-label">密码</label>
-                <input
-                  className="da-input"
-                  type="password"
-                  value={form.password}
-                  onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                />
+              <div
+                style={{
+                  fontSize: '0.9rem',
+                  fontWeight: 600,
+                  color: 'var(--da-text)',
+                  marginBottom: 16,
+                }}
+              >
+                {editingId ? '编辑数据源' : '添加新数据源'}
               </div>
-              <details style={{ marginTop: 12 }}>
-                <summary className="da-section" style={{ cursor: 'pointer' }}>高级配置</summary>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: '16px 20px',
+                }}
+              >
+                <div>
+                  <label style={labelStyle}>数据源名称 *</label>
+                  <input
+                    className="da-input"
+                    value={form.name}
+                    placeholder="字母/数字/下划线/中文，1-64 字符"
+                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                    style={{ padding: '10px 12px' }}
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>类型</label>
+                  <select
+                    className="da-input"
+                    value={form.kind}
+                    onChange={e => setForm(f => ({ ...f, kind: e.target.value }))}
+                    style={{ padding: '10px 12px' }}
+                  >
+                    <option value="mysql">MySQL</option>
+                    <option value="postgresql">PostgreSQL</option>
+                  </select>
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={labelStyle}>JDBC 地址 *</label>
+                  <input
+                    className="da-input"
+                    value={form.jdbcUrl}
+                    placeholder="jdbc:mysql://host:port/dbname"
+                    onChange={e => setForm(f => ({ ...f, jdbcUrl: e.target.value }))}
+                    style={{ padding: '10px 12px' }}
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>用户名</label>
+                  <input
+                    className="da-input"
+                    value={form.username}
+                    placeholder="数据库用户名"
+                    onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
+                    style={{ padding: '10px 12px' }}
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>密码</label>
+                  <input
+                    className="da-input"
+                    type="password"
+                    value={form.password}
+                    placeholder="数据库密码"
+                    onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                    style={{ padding: '10px 12px' }}
+                  />
+                </div>
+              </div>
+              <div style={{ marginTop: 16 }}>
                 <label
-                  className="da-label"
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    fontSize: '0.85rem',
+                    color: 'var(--da-text-2)',
+                    cursor: 'pointer',
+                  }}
                 >
                   <input
                     type="checkbox"
                     checked={form.sampling}
                     onChange={e => setForm(f => ({ ...f, sampling: e.target.checked }))}
+                    style={{ width: 16, height: 16 }}
                   />
                   数据采样（低基数列自动采样示例值，提升 Agent 效果）
                 </label>
-              </details>
-              <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+              </div>
+              <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
                 <button className="da-btn da-btn-primary" onClick={handleSave} disabled={busy}>
-                  {editingId ? '完成' : '确认添加'}
+                  {editingId ? '保存' : '确认添加'}
                 </button>
                 <button
                   className="da-btn"
@@ -320,65 +336,172 @@ export default function DataSourceManagerModal({
             </div>
           )}
 
-          <table className="da-table">
-            <thead>
-              <tr>
-                <th>数据源名称</th>
-                <th>类型</th>
-                <th>连通性</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map(d => (
-                <tr key={d.id}>
-                  <td>{d.name}</td>
-                  <td>{d.kind.toUpperCase()}</td>
-                  <td>
-                    {statuses[d.id] === undefined ? (
-                      '检测中…'
-                    ) : statuses[d.id] ? (
-                      <span style={{ color: '#047857' }}>✓ 数据已连通</span>
-                    ) : (
-                      <span style={{ color: 'var(--da-danger)' }}>✗ 连接失败</span>
-                    )}
-                  </td>
-                  <td>
-                    <button className="da-btn da-btn-sm" onClick={() => setDetail(d)}>
-                      查看详情
-                    </button>
-                    <button
-                      className="da-btn da-btn-sm"
-                      onClick={() => {
-                        setEditingId(d.id);
-                        setFormOpen(true);
-                        setForm({
-                          name: d.name,
-                          kind: d.kind,
-                          jdbcUrl: d.jdbcUrl,
-                          username: d.username ?? '',
-                          password: '',
-                          sampling: d.sampling,
-                        });
+          <div
+            style={{
+              borderRadius: 10,
+              border: '1px solid var(--da-border)',
+              overflow: 'hidden',
+              background: 'var(--da-surface)',
+            }}
+          >
+            <table className="da-table">
+              <thead>
+                <tr>
+                  <th style={{ padding: '12px 16px', fontSize: '0.8rem' }}>数据源名称</th>
+                  <th style={{ padding: '12px 16px', fontSize: '0.8rem' }}>类型</th>
+                  <th style={{ padding: '12px 16px', fontSize: '0.8rem' }}>连通性</th>
+                  <th style={{ padding: '12px 16px', fontSize: '0.8rem', textAlign: 'right' }}>
+                    操作
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map(d => (
+                  <tr key={d.id}>
+                    <td
+                      style={{
+                        padding: '14px 16px',
+                        fontWeight: 500,
+                        color: 'var(--da-text)',
                       }}
                     >
-                      配置
-                    </button>
-                    <button className="da-btn da-btn-danger da-btn-sm" onClick={() => handleDelete(d.id)}>
-                      删除
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {items.length === 0 && (
-                <tr>
-                  <td style={{ ...tdStyle, color: 'var(--da-text-muted)', textAlign: 'center' }} colSpan={4}>
-                    暂无数据源
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                      {d.name}
+                    </td>
+                    <td style={{ padding: '14px 16px' }}>
+                      <span
+                        style={{
+                          display: 'inline-block',
+                          padding: '3px 10px',
+                          borderRadius: 6,
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          background:
+                            d.kind === 'mysql'
+                              ? 'rgba(37, 99, 235, 0.1)'
+                              : 'rgba(124, 58, 237, 0.1)',
+                          color: d.kind === 'mysql' ? '#2563eb' : '#7c3aed',
+                        }}
+                      >
+                        {d.kind.toUpperCase()}
+                      </span>
+                    </td>
+                    <td style={{ padding: '14px 16px' }}>
+                      {statuses[d.id] === undefined ? (
+                        <span style={{ color: 'var(--da-text-muted)', fontSize: '0.85rem' }}>
+                          检测中…
+                        </span>
+                      ) : statuses[d.id] ? (
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '4px 12px',
+                            borderRadius: 6,
+                            fontSize: '0.8rem',
+                            fontWeight: 500,
+                            background: 'rgba(22, 163, 74, 0.1)',
+                            color: '#16a34a',
+                          }}
+                        >
+                          <span
+                            style={{
+                              width: 6,
+                              height: 6,
+                              borderRadius: '50%',
+                              background: '#16a34a',
+                            }}
+                          />
+                          已连通
+                        </span>
+                      ) : (
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '4px 12px',
+                            borderRadius: 6,
+                            fontSize: '0.8rem',
+                            fontWeight: 500,
+                            background: 'rgba(225, 29, 72, 0.1)',
+                            color: '#e11d48',
+                          }}
+                        >
+                          <span
+                            style={{
+                              width: 6,
+                              height: 6,
+                              borderRadius: '50%',
+                              background: '#e11d48',
+                            }}
+                          />
+                          连接失败
+                        </span>
+                      )}
+                    </td>
+                    <td
+                      style={{
+                        padding: '14px 16px',
+                        textAlign: 'right',
+                        display: 'flex',
+                        gap: 8,
+                        justifyContent: 'flex-end',
+                      }}
+                    >
+                      <button
+                        className="da-btn da-btn-sm"
+                        onClick={() => setDetail(d)}
+                        style={{ padding: '5px 12px' }}
+                      >
+                        查看详情
+                      </button>
+                      <button
+                        className="da-btn da-btn-sm"
+                        onClick={() => {
+                          setEditingId(d.id);
+                          setFormOpen(true);
+                          setForm({
+                            name: d.name,
+                            kind: d.kind,
+                            jdbcUrl: d.jdbcUrl,
+                            username: d.username ?? '',
+                            password: '',
+                            sampling: d.sampling,
+                          });
+                        }}
+                        style={{ padding: '5px 12px' }}
+                      >
+                        配置
+                      </button>
+                      <button
+                        className="da-btn da-btn-danger da-btn-sm"
+                        onClick={() => handleDelete(d.id)}
+                        style={{ padding: '5px 12px' }}
+                      >
+                        删除
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {items.length === 0 && (
+                  <tr>
+                    <td
+                      style={{
+                        padding: '48px 16px',
+                        color: 'var(--da-text-muted)',
+                        textAlign: 'center',
+                        fontSize: '0.9rem',
+                      }}
+                      colSpan={4}
+                    >
+                      暂无数据源，点击上方按钮添加
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
       {detail && <DataSourceDetailModal dataSource={detail} onClose={() => setDetail(null)} />}
