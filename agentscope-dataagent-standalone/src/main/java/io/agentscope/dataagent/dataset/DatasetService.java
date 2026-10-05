@@ -72,7 +72,6 @@ public class DatasetService implements DatasetContextProvider {
     private final SemanticBusinessRuleRepository semanticBusinessRules;
     private final ExternalDataSourceRepository externalSources;
     private final DataSourceIntrospector introspector;
-    private final RelationInferenceService relationInference;
     private final DatasetRelationRepository relationRepository;
     private final InMemoryDataSourceRegistry registry;
     private final TableProvisioner provisioner;
@@ -92,7 +91,6 @@ public class DatasetService implements DatasetContextProvider {
             SemanticBusinessRuleRepository semanticBusinessRules,
             ExternalDataSourceRepository externalSources,
             DataSourceIntrospector introspector,
-            RelationInferenceService relationInference,
             DatasetRelationRepository relationRepository,
             InMemoryDataSourceRegistry registry,
             TableProvisioner provisioner,
@@ -110,7 +108,6 @@ public class DatasetService implements DatasetContextProvider {
         this.semanticBusinessRules = semanticBusinessRules;
         this.externalSources = externalSources;
         this.introspector = introspector;
-        this.relationInference = relationInference;
         this.relationRepository = relationRepository;
         this.registry = registry;
         this.provisioner = provisioner;
@@ -207,7 +204,6 @@ public class DatasetService implements DatasetContextProvider {
         repository.save(entity);
         registry.add(toDataSource(entity));
         markMdlDirty(group.getId());
-        relationInference.reinferGroup(group.getId());
         log.info(
                 "DatasetService: ingested dataset '{}' ({} rows) for owner {} as {}.{}",
                 entity.getName(),
@@ -291,7 +287,6 @@ public class DatasetService implements DatasetContextProvider {
         created.forEach(repository::save);
         registrations.forEach(registry::add);
         markMdlDirty(groupId);
-        relationInference.reinferGroup(groupId);
         log.info(
                 "DatasetService: associated {} table(s) from datasource {} into group {} for owner"
                         + " {}",
@@ -919,7 +914,6 @@ public class DatasetService implements DatasetContextProvider {
                         .orElseGet(() -> new DatasetKnowledgeEntity(groupId, content));
         knowledgeRepository.save(entity);
         markMdlDirty(groupId);
-        relationInference.reinferGroup(groupId);
         log.info("DatasetService: saved relationship knowledge for group {}", groupId);
     }
 

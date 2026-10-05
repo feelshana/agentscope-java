@@ -28,10 +28,10 @@ import java.util.List;
 
 /**
  * A structured relation edge between two datasets inside a knowledge base: which columns join
- * them and how the edge was derived (column-name heuristics or the user's relationship document).
- * Powers the graph tab and the agent's find_related_tables tool. The {@code status}/{@code
+ * them and how the edge was derived (LLM suggestion, the user's relationship document or manual
+ * entry). Powers the graph tab and the agent's find_related_tables tool. The {@code status}/{@code
  * joinType} fields carry the human-review verdict consumed by the semantic-modeling flow
- * (specs/010): curated records survive {@code RelationInferenceService#reinferGroup} rebuilds.
+ * (specs/010); rows are never auto-deleted — no rule-based rebuild since ADR 0046.
  */
 @Entity
 @Table(name = "dataagent_dataset_relation")

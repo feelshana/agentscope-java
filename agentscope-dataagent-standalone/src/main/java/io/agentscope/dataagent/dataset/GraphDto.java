@@ -18,9 +18,9 @@ package io.agentscope.dataagent.dataset;
 import java.util.List;
 
 /**
- * Payload for the deterministic dataset-relationship graph rendered in the KB "知识图谱" tab.
- * Nodes are tables (one per dataset); edges are inferred table relations with a confidence score
- * so the UI can filter weak links.
+ * Payload for the dataset-relationship graph rendered in the KB "知识图谱" tab. Nodes are tables
+ * (one per dataset); edges are persisted relation candidates (LLM-proposed, doc-derived or
+ * manual) with a confidence score so the UI can filter weak links.
  */
 public record GraphDto(List<Node> nodes, List<Edge> edges) {
 
@@ -30,9 +30,10 @@ public record GraphDto(List<Node> nodes, List<Edge> edges) {
     public record Field(String name, String sqlType, String description) {}
 
     /**
-     * {@code origin} marks how the relation was discovered: {@code column-heuristic} for live
-     * schema inference, or the persisted {@code SAME_COLUMN}/{@code SUFFIX}/{@code DOC}/{@code LLM}
-     * relation type stored by {@code RelationInferenceService}.
+     * {@code relationType} is the persisted type ({@code SAME_COLUMN}/{@code SUFFIX}/{@code DOC}
+     * /{@code LLM}); {@code origin} marks how the relation was discovered ({@code llm},
+     * {@code doc}, {@code manual} — legacy {@code inferred} rows from the retired rule layer may
+     * still surface from old snapshots).
      */
     public record Edge(
             String id,

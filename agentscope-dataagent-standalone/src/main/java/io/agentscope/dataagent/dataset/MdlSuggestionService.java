@@ -37,6 +37,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -48,18 +49,19 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Semantic-modeling suggestion layer for a knowledge base (specs/010 M1): deterministic rule
- * edges (delegated to {@link RelationInferenceService#reinferGroup}), LLM-proposed relation
+ * Semantic-modeling suggestion layer for a knowledge base (specs/010 M1): LLM-proposed relation
  * candidates and cube proposals, plus joinType resolution by uniqueness probing
- * ({@code COUNT(DISTINCT)} vs row count — never guessed). Human review state lives on
+ * ({@code COUNT(DISTINCT)} vs row count — never guessed). All relation judgement is LLM-driven
+ * (ADR 0046: the rule-based inference layer is retired). Human review state lives on
  * {@link DatasetRelationEntity#getStatus()}: cursored records (CONFIRMED/REJECTED) and
- * manual/llm origins survive re-inference.
+ * manual/llm origins are never auto-deleted.
  *
  * <p>specs/019 §7: a confirmed edge is also persisted straight into the workspace's {@code
  * relationships.yml} (the official project file the wren engine joins on); the DB row remains
@@ -104,7 +106,6 @@ public class MdlSuggestionService {
     private final DatasetRepository datasetRepository;
     private final DatasetService datasetService;
     private final DatasetRelationRepository relationRepository;
-    private final RelationInferenceService relationInference;
     private final SemanticCubeRepository cubeRepository;
     private final SemanticTermRepository termRepository;
     private final SemanticViewRepository viewRepository;
@@ -128,7 +129,6 @@ public class MdlSuggestionService {
             DatasetRepository datasetRepository,
             DatasetService datasetService,
             DatasetRelationRepository relationRepository,
-            RelationInferenceService relationInference,
             SemanticCubeRepository cubeRepository,
             SemanticTermRepository termRepository,
             SemanticViewRepository viewRepository,
@@ -139,7 +139,6 @@ public class MdlSuggestionService {
         this.datasetRepository = datasetRepository;
         this.datasetService = datasetService;
         this.relationRepository = relationRepository;
-        this.relationInference = relationInference;
         this.cubeRepository = cubeRepository;
         this.termRepository = termRepository;
         this.viewRepository = viewRepository;
@@ -225,13 +224,12 @@ public class MdlSuggestionService {
     }
 
     /**
-     * Full relation refresh: rule edges (selective rebuild), LLM candidates merged as PENDING
-     * llm-origin edges, then joinType probing on every edge still missing one. Returns the
-     * group's edges as persisted.
+     * Full relation refresh: LLM candidates merged as PENDING llm-origin edges (known pairs are
+     * skipped), then joinType probing on every edge still missing one. Returns the group's edges
+     * as persisted. All relation judgement is LLM-driven — no rule rebuild (ADR 0046).
      */
     @Transactional
     public List<DatasetRelationEntity> refreshRelations(String groupId) {
-        relationInference.reinferGroup(groupId);
         suggestRelationsLlm(groupId);
         probeJoinTypes(groupId);
         return relationRepository.findByGroupId(groupId);
@@ -533,12 +531,21 @@ public class MdlSuggestionService {
      */
     private String resolveModelName(String groupId, String datasetId) {
         requireDatasetInGroup(groupId, datasetId);
-        for (MdlWorkspaceReader.WorkspaceModel m : workspaceReader.read(groupId).models()) {
+        return modelName(workspaceReader.read(groupId), datasetId);
+    }
+
+    /**
+     * The engine-facing model name a dataset is published under; specs/037 reuses it for the
+     * cube {@code base_object}. Errors when the dataset has no seeded model yet — a workspace
+     * asset must point at an existing model.
+     */
+    private String modelName(MdlWorkspaceReader.Snapshot snapshot, String datasetId) {
+        for (MdlWorkspaceReader.WorkspaceModel m : snapshot.models()) {
             if (datasetId.equals(m.datasetId())) {
                 return m.name();
             }
         }
-        throw new DatasetException("数据集尚未播种模型文件（工作区 models/ 中没有对应映射），请先在「语义建模」页完成一次发布后再确认关系", 400);
+        throw new DatasetException("数据集尚未播种模型文件（工作区 models/ 中没有对应映射），请先在「语义建模」页完成一次发布后再操作", 400);
     }
 
     private static String conditionText(
@@ -825,12 +832,16 @@ public class MdlSuggestionService {
         e.setMeasuresJson(writeJson(p.measures()));
         e.setDimensionsJson(writeJson(p.dimensions()));
         e.setTimeDimensionsJson(writeJson(p.timeDimensions()));
+        // specs/037: mirror the row into the workspace before saving — a workspace failure
+        // aborts the whole operation, so the two sides can never diverge on create.
+        syncCubeToWorkspace(groupId, e, null);
         return cubeRepository.save(e);
     }
 
     @Transactional
     public SemanticCubeEntity updateCube(String groupId, String cubeId, CubePayload p) {
         SemanticCubeEntity e = getCube(groupId, cubeId);
+        String previousName = null;
         if (p.name() != null && !p.name().isBlank()) {
             String name = requireCubeName(p.name());
             if (!name.equals(e.getName())) {
@@ -838,6 +849,7 @@ public class MdlSuggestionService {
                 if (clash != null && !clash.getId().equals(cubeId)) {
                     throw new DatasetException("Cube name already exists in this KB: " + name, 409);
                 }
+                previousName = e.getName();
                 e.setName(name);
             }
         }
@@ -860,12 +872,15 @@ public class MdlSuggestionService {
         e.setUpdatedAt(java.time.Instant.now());
         // An edit makes the published cube stale: back to DRAFT until the KB is republished.
         e.setStatus("DRAFT");
+        syncCubeToWorkspace(groupId, e, previousName);
         return cubeRepository.save(e);
     }
 
     @Transactional
     public void deleteCube(String groupId, String cubeId) {
-        cubeRepository.delete(getCube(groupId, cubeId));
+        SemanticCubeEntity e = getCube(groupId, cubeId);
+        deleteWorkspaceDir(groupId, "cubes", e.getName());
+        cubeRepository.delete(e);
     }
 
     private SemanticCubeEntity getCube(String groupId, String cubeId) {
@@ -910,6 +925,228 @@ public class MdlSuggestionService {
         } catch (Exception e) {
             throw new DatasetException("Failed to serialize cube JSON: " + e.getMessage(), e);
         }
+    }
+
+    // ------------------------------------------------------- workspace sync (specs/037)
+
+    /**
+     * specs/037: the workspace is the single source of truth the publish chain consumes, so
+     * every cube REST write mirrors its DB row into {@code cubes/<name>/metadata.yml} under the
+     * workspace lock. File writes run before the entity save so a workspace failure aborts the
+     * whole operation and a one-sided write can never happen. {@code previousName} is the name
+     * whose directory must be removed after a rename (null when the name is unchanged).
+     */
+    private void syncCubeToWorkspace(String groupId, SemanticCubeEntity e, String previousName) {
+        workspace.withWorkspaceLock(
+                groupId,
+                () -> {
+                    workspace.ensureWorkspace(groupId);
+                    Path root = workspace.workspaceRoot(groupId).resolve("cubes");
+                    Path dir = root.resolve(assetDirName(e.getName()));
+                    Path oldDir =
+                            previousName == null ? null : root.resolve(assetDirName(previousName));
+                    if (!dir.equals(oldDir) && Files.isDirectory(dir)) {
+                        throw new DatasetException(
+                                "工作区已存在同名 Cube 目录：" + e.getName() + "，请先清理或改名", 409);
+                    }
+                    MdlWorkspaceReader.Snapshot snapshot = workspaceReader.read(groupId);
+                    Map<String, Object> doc = new LinkedHashMap<>();
+                    doc.put("name", e.getName());
+                    doc.put("base_object", modelName(snapshot, e.getBaseDatasetId()));
+                    if (e.getDescription() != null && !e.getDescription().isBlank()) {
+                        doc.put("description", e.getDescription());
+                    }
+                    MdlWorkspaceReader.WorkspaceModel baseModel =
+                            baseModelOf(snapshot, e.getBaseDatasetId());
+                    List<Map<String, Object>> measures =
+                            renderCubeMembers(baseModel, readJsonList(e.getMeasuresJson()), true);
+                    List<Map<String, Object>> dimensions =
+                            renderCubeMembers(
+                                    baseModel, readJsonList(e.getDimensionsJson()), false);
+                    List<Map<String, Object>> timeDimensions =
+                            renderCubeMembers(
+                                    baseModel, readJsonList(e.getTimeDimensionsJson()), false);
+                    if (!measures.isEmpty()) {
+                        doc.put("measures", measures);
+                    }
+                    if (!dimensions.isEmpty()) {
+                        doc.put("dimensions", dimensions);
+                    }
+                    if (!timeDimensions.isEmpty()) {
+                        doc.put("time_dimensions", timeDimensions);
+                    }
+                    writeWorkspaceYaml(dir.resolve("metadata.yml"), doc);
+                    if (oldDir != null && !oldDir.equals(dir)) {
+                        deleteTree(oldDir);
+                    }
+                    return null;
+                });
+    }
+
+    /**
+     * specs/037 view side: mirrors a view row into {@code views/<name>/metadata.yml} (official
+     * {@code properties.description}) plus {@code sql.yml} ({@code statement}), under the same
+     * no-one-sided-write rule as cubes. A view needs no base_object, so the (optional)
+     * baseDatasetId is never resolved here.
+     */
+    private void syncViewToWorkspace(String groupId, SemanticViewEntity e, String previousName) {
+        workspace.withWorkspaceLock(
+                groupId,
+                () -> {
+                    workspace.ensureWorkspace(groupId);
+                    Path root = workspace.workspaceRoot(groupId).resolve("views");
+                    Path dir = root.resolve(assetDirName(e.getName()));
+                    Path oldDir =
+                            previousName == null ? null : root.resolve(assetDirName(previousName));
+                    if (!dir.equals(oldDir) && Files.isDirectory(dir)) {
+                        throw new DatasetException("工作区已存在同名视图目录：" + e.getName() + "，请先清理或改名", 409);
+                    }
+                    Map<String, Object> metadata = new LinkedHashMap<>();
+                    metadata.put("name", e.getName());
+                    if (e.getDescription() != null && !e.getDescription().isBlank()) {
+                        metadata.put("properties", Map.of("description", e.getDescription()));
+                    }
+                    writeWorkspaceYaml(dir.resolve("metadata.yml"), metadata);
+                    Map<String, Object> sql = new LinkedHashMap<>();
+                    sql.put("statement", e.getSqlText());
+                    writeWorkspaceYaml(dir.resolve("sql.yml"), sql);
+                    if (oldDir != null && !oldDir.equals(dir)) {
+                        deleteTree(oldDir);
+                    }
+                    return null;
+                });
+    }
+
+    /** Removes a deleted cube/view's workspace directory (specs/037); no-op when absent. */
+    private void deleteWorkspaceDir(String groupId, String section, String name) {
+        workspace.withWorkspaceLock(
+                groupId,
+                () -> {
+                    deleteTree(
+                            workspace
+                                    .workspaceRoot(groupId)
+                                    .resolve(section)
+                                    .resolve(assetDirName(name)));
+                    return null;
+                });
+    }
+
+    /**
+     * Renders one member list (DB JSON) into the official cube YAML shape: measures become
+     * {@code AGG(col)} or {@code AGG(CASE WHEN filter THEN col END)} (specs/026 caseFilter),
+     * and a member {@code type} — mandatory for the context-build serde — comes from the
+     * seeded base model's normalized column type, falling back to VARCHAR for columns the
+     * workspace does not know yet.
+     */
+    private List<Map<String, Object>> renderCubeMembers(
+            MdlWorkspaceReader.WorkspaceModel baseModel,
+            List<Map<String, Object>> raw,
+            boolean measure) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        if (raw == null) {
+            return out;
+        }
+        for (Map<String, Object> item : raw) {
+            String column = text(item.get("column"));
+            if (column.isEmpty()) {
+                continue;
+            }
+            String name = text(item.get("name"));
+            String agg = text(item.get("agg"));
+            String filter = text(item.get("caseFilter"));
+            Map<String, Object> member = new LinkedHashMap<>();
+            member.put("name", name.isEmpty() ? column : name);
+            if (measure) {
+                String fn = agg.isEmpty() ? "SUM" : agg;
+                member.put(
+                        "expression",
+                        filter.isEmpty()
+                                ? fn + "(" + column + ")"
+                                : fn + "(CASE WHEN " + filter + " THEN " + column + " END)");
+            } else {
+                member.put("expression", column);
+            }
+            member.put("type", columnType(baseModel, column));
+            String granularity = text(item.get("granularity"));
+            if (!measure && !granularity.isEmpty()) {
+                member.put("granularity", granularity);
+            }
+            String description = text(item.get("description"));
+            if (!description.isEmpty()) {
+                member.put("description", description);
+            }
+            out.add(member);
+        }
+        return out;
+    }
+
+    /** The seeded base model of a dataset, or null when it cannot be resolved. */
+    private static MdlWorkspaceReader.WorkspaceModel baseModelOf(
+            MdlWorkspaceReader.Snapshot snapshot, String datasetId) {
+        for (MdlWorkspaceReader.WorkspaceModel m : snapshot.models()) {
+            if (datasetId != null && datasetId.equals(m.datasetId())) {
+                return m;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Wren type of a base-model column (the seeded, parse-types-normalized value); VARCHAR is
+     * the serde-safe fallback for columns the workspace does not know yet.
+     */
+    private static String columnType(MdlWorkspaceReader.WorkspaceModel baseModel, String column) {
+        if (baseModel != null) {
+            for (MdlWorkspaceReader.WorkspaceColumn c : baseModel.columns()) {
+                if (column.equals(c.name()) && c.type() != null && !c.type().isBlank()) {
+                    return c.type();
+                }
+            }
+        }
+        return "VARCHAR";
+    }
+
+    /** Workspace directory name of a cube/view: sanitized, deterministic, 60 chars max. */
+    private static String assetDirName(String name) {
+        return MdlPublishService.sanitizeIdentifier(name, 60);
+    }
+
+    /** Inverse of {@link #writeJson}: the stored member JSON as typed maps. */
+    private List<Map<String, Object>> readJsonList(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return mapper.readValue(json, new TypeReference<List<Map<String, Object>>>() {});
+        } catch (Exception e) {
+            throw new DatasetException("Failed to parse cube JSON: " + e.getMessage(), e);
+        }
+    }
+
+    private void writeWorkspaceYaml(Path file, Map<String, Object> doc) {
+        try {
+            Files.createDirectories(file.getParent());
+            Files.writeString(file, yaml.writeValueAsString(doc) + "\n", StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new DatasetException("写入工作区文件失败：" + file.getFileName() + "：" + e.getMessage(), e);
+        }
+    }
+
+    private static void deleteTree(Path root) {
+        if (!Files.exists(root)) {
+            return;
+        }
+        try (Stream<Path> walk = Files.walk(root)) {
+            for (Path p : walk.sorted(Comparator.reverseOrder()).toList()) {
+                Files.deleteIfExists(p);
+            }
+        } catch (IOException e) {
+            throw new DatasetException("删除工作区目录失败：" + root.getFileName() + "：" + e.getMessage(), e);
+        }
+    }
+
+    private static String text(Object value) {
+        return value == null ? "" : String.valueOf(value).strip();
     }
 
     // ------------------------------------------------------------------ semantic terms
@@ -991,19 +1228,23 @@ public class MdlSuggestionService {
         if (viewRepository.findByGroupIdAndName(groupId, name) != null) {
             throw new DatasetException("View name already exists in this KB: " + name, 409);
         }
-        return viewRepository.save(
+        SemanticViewEntity e =
                 new SemanticViewEntity(
                         UUID.randomUUID().toString(),
                         groupId,
                         name,
                         blankToNull(p.baseDatasetId()),
                         sql,
-                        blankToNull(p.description())));
+                        blankToNull(p.description()));
+        // specs/037: mirror into the workspace before saving, same no-one-sided-write rule.
+        syncViewToWorkspace(groupId, e, null);
+        return viewRepository.save(e);
     }
 
     @Transactional
     public SemanticViewEntity updateView(String groupId, String viewId, ViewPayload p) {
         SemanticViewEntity e = getView(groupId, viewId);
+        String previousName = null;
         if (p.name() != null && !p.name().isBlank()) {
             String name = requireViewName(p.name());
             if (!name.equals(e.getName())) {
@@ -1011,6 +1252,7 @@ public class MdlSuggestionService {
                 if (clash != null && !clash.getId().equals(viewId)) {
                     throw new DatasetException("View name already exists in this KB: " + name, 409);
                 }
+                previousName = e.getName();
                 e.setName(name);
             }
         }
@@ -1029,12 +1271,15 @@ public class MdlSuggestionService {
         e.setUpdatedAt(java.time.Instant.now());
         // Same staleness rule as cubes: an edited view must be republished to take effect.
         e.setStatus("DRAFT");
+        syncViewToWorkspace(groupId, e, previousName);
         return viewRepository.save(e);
     }
 
     @Transactional
     public void deleteView(String groupId, String viewId) {
-        viewRepository.delete(getView(groupId, viewId));
+        SemanticViewEntity e = getView(groupId, viewId);
+        deleteWorkspaceDir(groupId, "views", e.getName());
+        viewRepository.delete(e);
     }
 
     private SemanticViewEntity getView(String groupId, String viewId) {
@@ -1125,17 +1370,29 @@ public class MdlSuggestionService {
         sb.append("你是数据建模助手。以下是同一知识库中的 ")
                 .append(datasets.size())
                 .append(" 张表及其字段（物理列名、原始表头、类型、业务描述）。\n")
-                .append("请判断表与表之间真实存在的关联关系（外键关系，或业务上可用于 JOIN 的列对应）。")
+                .append("第一步：结合每张表的描述、行数与示例数据判断它是事实表还是维表——")
+                .append("事实表记录业务事件，通常行数多、含金额/数量等度量列；")
+                .append("维表描述业务实体，通常行数少、每行一个实体。不要只按主键位置猜测。\n")
+                .append("第二步：只提议事实表 → 维表的关联关系（外键关系，或业务上可用于 JOIN 的列对应），")
+                .append("source 必须是事实表一侧；维表中被引用的列不一定是维表的主键（可能是业务编码等普通列）。")
+                .append("事实表与事实表之间、维表与维表之间严禁推荐关联。")
                 .append("只输出有把握的候选，没有把握就不要输出。\n\n");
         for (DatasetEntity d : datasets) {
             sb.append("## 表：").append(d.getName()).append('\n');
+            if (d.getDescription() != null && !d.getDescription().isBlank()) {
+                sb.append("表描述：").append(d.getDescription().trim()).append('\n');
+            }
+            if (d.getRowCount() > 0) {
+                sb.append("表行数：约 ").append(d.getRowCount()).append(" 行\n");
+            }
             appendColumns(sb, d);
+            appendSampleRows(sb, d);
             sb.append('\n');
         }
         sb.append("仅输出一个 JSON 对象，不要输出其他文字。格式：\n")
                 .append(
-                        "{\"relations\":[{\"source_table\":\"表名\",\"source_column\":\"物理列名\","
-                                + "\"target_table\":\"表名\",\"target_column\":\"物理列名\","
+                        "{\"relations\":[{\"source_table\":\"事实表名\",\"source_column\":\"物理列名\","
+                                + "\"target_table\":\"维表名\",\"target_column\":\"物理列名\","
                                 + "\"reason\":\"中文依据\"}]}\n")
                 .append("source_column/target_column 必须使用上面列出的物理列名（行首的名称）。");
         return sb.toString();
@@ -1192,6 +1449,44 @@ public class MdlSuggestionService {
         }
     }
 
+    /** Appends a few preview rows as LLM context for fact/dimension judgement (specs/036). */
+    private void appendSampleRows(StringBuilder sb, DatasetEntity d) {
+        try {
+            DatasetService.Preview p = datasetService.preview(d.getOwnerId(), d.getId(), 5);
+            List<List<String>> rows = p == null ? List.of() : p.rows();
+            if (rows.isEmpty()) {
+                return;
+            }
+            sb.append("示例数据：\n");
+            for (List<String> row : rows) {
+                if (row == null || row.isEmpty()) {
+                    continue;
+                }
+                StringBuilder cells = new StringBuilder();
+                for (String cell : row) {
+                    if (!cells.isEmpty()) {
+                        cells.append(" | ");
+                    }
+                    cells.append(clipCell(cell));
+                }
+                sb.append("- ").append(cells).append('\n');
+            }
+        } catch (RuntimeException e) {
+            log.warn(
+                    "MdlSuggestionService: preview unavailable on dataset {}: {}",
+                    d.getId(),
+                    e.getMessage());
+        }
+    }
+
+    private static String clipCell(String cell) {
+        if (cell == null) {
+            return "";
+        }
+        String t = cell.strip().replaceAll("\\s+", " ");
+        return t.length() > 40 ? t.substring(0, 40) + "…" : t;
+    }
+
     private List<LlmRelation> parseRelationSuggestions(String reply, List<DatasetEntity> datasets) {
         Map<String, DatasetEntity> byName = nameIndex(datasets);
         List<LlmRelation> out = new ArrayList<>();
@@ -1212,7 +1507,13 @@ public class MdlSuggestionService {
                 if (ac == null || bc == null) {
                     continue;
                 }
-                out.add(new LlmRelation(a.getId(), ac, b.getId(), bc, n.path("reason").asText("")));
+                String reason = n.path("reason").asText("");
+                if (pkLike(a, ac) && !pkLike(b, bc)) {
+                    // LLM put the PK-shaped side on source: flip to fact→dimension (specs/036).
+                    out.add(new LlmRelation(b.getId(), bc, a.getId(), ac, reason));
+                } else {
+                    out.add(new LlmRelation(a.getId(), ac, b.getId(), bc, reason));
+                }
             }
         } catch (Exception e) {
             log.warn(
@@ -1298,6 +1599,22 @@ public class MdlSuggestionService {
             }
         }
         return null;
+    }
+
+    /**
+     * PK-shaped column check (leading column or {@code <table>_id}) used to repair obviously
+     * reversed LLM proposals only — it never drops candidates, because a dimension's join key is
+     * not always its primary key (specs/036).
+     */
+    private boolean pkLike(DatasetEntity d, String column) {
+        List<ColumnSchema> cols = datasetService.readColumns(d);
+        for (int i = 0; i < cols.size(); i++) {
+            ColumnSchema c = cols.get(i);
+            if (c.name().equals(column)) {
+                return i == 0 || c.name().equals(d.getTableName() + "_id");
+            }
+        }
+        return false;
     }
 
     private static Map<String, DatasetEntity> nameIndex(List<DatasetEntity> datasets) {

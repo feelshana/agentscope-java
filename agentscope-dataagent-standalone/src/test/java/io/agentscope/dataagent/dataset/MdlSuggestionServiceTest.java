@@ -21,9 +21,11 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -52,12 +54,13 @@ import java.util.function.Supplier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * Locks the modeling-suggestion contract: LLM candidates merge with rule edges (no duplicate
- * pairs), joinType comes from uniqueness probing rather than guessing, malformed LLM output is
+ * Locks the modeling-suggestion contract: LLM relation candidates merge without duplicate pairs,
+ * joinType comes from uniqueness probing rather than guessing, malformed LLM output is
  * tolerated item-by-item, and review operations are scoped to the owning group.
  */
 class MdlSuggestionServiceTest {
@@ -65,7 +68,6 @@ class MdlSuggestionServiceTest {
     private DatasetRepository datasetRepository;
     private DatasetService datasetService;
     private DatasetRelationRepository relationRepository;
-    private RelationInferenceService relationInference;
     private SemanticCubeRepository cubeRepository;
     private SemanticTermRepository termRepository;
     private SemanticViewRepository viewRepository;
@@ -89,7 +91,6 @@ class MdlSuggestionServiceTest {
         datasetRepository = mock(DatasetRepository.class);
         datasetService = mock(DatasetService.class);
         relationRepository = mock(DatasetRelationRepository.class);
-        relationInference = mock(RelationInferenceService.class);
         cubeRepository = mock(SemanticCubeRepository.class);
         termRepository = mock(SemanticTermRepository.class);
         viewRepository = mock(SemanticViewRepository.class);
@@ -101,7 +102,6 @@ class MdlSuggestionServiceTest {
                         datasetRepository,
                         datasetService,
                         relationRepository,
-                        relationInference,
                         cubeRepository,
                         termRepository,
                         viewRepository,
@@ -189,7 +189,7 @@ class MdlSuggestionServiceTest {
         groupDatasets = List.of();
     }
 
-    private void registerDataset(
+    private DatasetEntity registerDataset(
             String id, String groupId, String name, String tableName, String[][] headerToPhysical) {
         DatasetEntity d = new DatasetEntity();
         d.setId(id);
@@ -209,6 +209,7 @@ class MdlSuggestionServiceTest {
         datasetsById.put(id, d);
         colsOf.put(id, cols);
         groupDatasets = new ArrayList<>(datasetsById.values());
+        return d;
     }
 
     private DatasetRelationEntity registerRelation(
@@ -369,6 +370,113 @@ class MdlSuggestionServiceTest {
         DatasetRelationEntity e = relationsById.values().iterator().next();
         assertEquals("llm", e.getOrigin());
         assertEquals("有效", e.getDescription());
+    }
+
+    @Test
+    void relationPromptCarriesTableFactsSampleRowsAndTheFactDimRule() {
+        registerDataset(
+                "ds_orders",
+                "g1",
+                "订单表",
+                "ds_orders",
+                new String[][] {{"订单id", "id"}, {"用户id", "id_2"}, {"订单金额", "col_3"}});
+        registerDataset(
+                "ds_users",
+                "g1",
+                "用户表",
+                "ds_users",
+                new String[][] {{"用户id", "id"}, {"用户名", "col_2"}});
+        DatasetEntity orders = datasetsById.get("ds_orders");
+        orders.setDescription("订单明细事实表：一行一条订单记录");
+        orders.setRowCount(162662);
+        when(agentDraftService.modelAvailable()).thenReturn(true);
+        when(agentDraftService.chatBlockingModeling(anyString())).thenReturn("{\"relations\":[]}");
+        when(datasetService.preview(anyString(), anyString(), anyInt()))
+                .thenReturn(
+                        new DatasetService.Preview(
+                                List.of(),
+                                List.of(
+                                        List.of("o1", "u1", "199.00"),
+                                        List.of("o2", "u2", "59.50"))));
+
+        service.refreshRelations("g1");
+
+        ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
+        verify(agentDraftService).chatBlockingModeling(prompt.capture());
+        String p = prompt.getValue();
+        assertTrue(p.contains("订单明细事实表"), "table description must reach the LLM prompt");
+        assertTrue(p.contains("表行数：约 162662 行"), "row count must reach the LLM prompt");
+        assertTrue(p.contains("示例数据"), "sample rows must reach the LLM prompt");
+        assertTrue(p.contains("o1"), "sample row cells must reach the LLM prompt");
+        assertTrue(p.contains("事实表"), "fact/dimension judgement instructions must be present");
+        assertTrue(p.contains("严禁"), "the fact-fact prohibition must be present");
+    }
+
+    @Test
+    void llmReversedFkToPkProposalIsReorientedFactToDim() {
+        registerDataset(
+                "ds_users",
+                "g1",
+                "用户表",
+                "ds_users",
+                new String[][] {{"用户id", "id"}, {"用户名", "col_2"}});
+        registerDataset(
+                "ds_orders",
+                "g1",
+                "订单表",
+                "ds_orders",
+                new String[][] {{"订单id", "id"}, {"用户id", "id_2"}, {"订单金额", "col_3"}});
+        when(agentDraftService.modelAvailable()).thenReturn(true);
+        when(agentDraftService.chatBlockingModeling(anyString()))
+                .thenReturn(
+                        "{\"relations\":[{\"source_table\":\"用户表\",\"source_column\":\"id\","
+                                + "\"target_table\":\"订单表\",\"target_column\":\"id_2\","
+                                + "\"reason\":\"用户维度\"}]}");
+        when(datasetService.columnProfile(anyString(), anyString(), anyString()))
+                .thenReturn(new long[] {100, 40});
+
+        service.refreshRelations("g1");
+
+        assertEquals(1, relationsById.size());
+        DatasetRelationEntity e = relationsById.values().iterator().next();
+        assertEquals("ds_orders", e.getSourceDatasetId(), "fact side must be flipped to source");
+        assertEquals("id_2", e.getSourceColumn());
+        assertEquals("ds_users", e.getTargetDatasetId());
+        assertEquals("id", e.getTargetColumn());
+    }
+
+    @Test
+    void llmProposalWithNonPkDimensionKeyIsKept() {
+        registerDataset(
+                "ds_orders",
+                "g1",
+                "订单表",
+                "ds_orders",
+                new String[][] {{"订单id", "id"}, {"商品编码", "col_2"}, {"订单金额", "col_3"}});
+        registerDataset(
+                "ds_products",
+                "g1",
+                "商品表",
+                "ds_products",
+                new String[][] {{"商品id", "id"}, {"商品编码", "col_2"}, {"商品名", "col_3"}});
+        when(agentDraftService.modelAvailable()).thenReturn(true);
+        when(agentDraftService.chatBlockingModeling(anyString()))
+                .thenReturn(
+                        "{\"relations\":[{\"source_table\":\"订单表\",\"source_column\":\"col_2\","
+                                + "\"target_table\":\"商品表\",\"target_column\":\"col_2\","
+                                + "\"reason\":\"按商品编码关联\"}]}");
+        when(datasetService.columnProfile(anyString(), anyString(), anyString()))
+                .thenReturn(new long[] {100, 40});
+
+        service.refreshRelations("g1");
+
+        assertEquals(1, relationsById.size(), "non-PK business keys must not be dropped");
+        DatasetRelationEntity e = relationsById.values().iterator().next();
+        assertEquals("ds_orders", e.getSourceDatasetId());
+        assertEquals("col_2", e.getSourceColumn());
+        assertEquals("ds_products", e.getTargetDatasetId());
+        assertEquals("col_2", e.getTargetColumn());
+        assertEquals("llm", e.getOrigin());
     }
 
     @Test
@@ -563,13 +671,27 @@ class MdlSuggestionServiceTest {
                             "",
                             d.getTableName(),
                             null,
-                            List.of(),
+                            workspaceColumns(d.getId()),
                             "models/" + d.getName() + "/metadata.yml",
                             null,
                             null));
         }
         return new MdlWorkspaceReader.Snapshot(
                 List.of(), List.of(), models, List.of(), List.of(), List.of());
+    }
+
+    /**
+     * Stand-in for the seeded model's columns; the fixture's ColumnSchema.sqlType doubles as
+     * the parse-types-normalized wren type the real seeder would write.
+     */
+    private List<MdlWorkspaceReader.WorkspaceColumn> workspaceColumns(String datasetId) {
+        List<MdlWorkspaceReader.WorkspaceColumn> out = new ArrayList<>();
+        for (ColumnSchema c : colsOf.getOrDefault(datasetId, List.of())) {
+            out.add(
+                    new MdlWorkspaceReader.WorkspaceColumn(
+                            c.name(), c.sqlType(), c.description(), null, false, null));
+        }
+        return out;
     }
 
     private Path relationsFile() {
@@ -758,5 +880,179 @@ class MdlSuggestionServiceTest {
         DatasetException missing =
                 assertThrows(DatasetException.class, () -> service.deleteView("g1", "v_missing"));
         assertEquals(404, missing.status());
+    }
+
+    // ------------------------------------------------------- workspace sync (specs/037)
+
+    @Test
+    void createCubeMirrorsWorkspaceMetadata() throws IOException {
+        registerDataset(
+                "ds_orders",
+                "g1",
+                "orders",
+                "ds_orders",
+                new String[][] {{"amount", "amount"}, {"status", "status"}});
+        colsOf.get("ds_orders").set(0, new ColumnSchema("amount", "amount", "DECIMAL", true, ""));
+
+        SemanticCubeEntity cube =
+                service.createCube(
+                        "g1",
+                        new MdlSuggestionService.CubePayload(
+                                "订单分析",
+                                "ds_orders",
+                                "订单金额汇总",
+                                List.of(
+                                        Map.of("name", "总额", "column", "amount", "agg", "SUM"),
+                                        Map.of(
+                                                "name",
+                                                "已支付总额",
+                                                "column",
+                                                "amount",
+                                                "agg",
+                                                "SUM",
+                                                "caseFilter",
+                                                "status = 'PAID'")),
+                                List.of(Map.of("name", "状态", "column", "status")),
+                                List.of()));
+
+        assertNotNull(cube.getId());
+        Path meta = temp.resolve("cubes").resolve("订单分析").resolve("metadata.yml");
+        assertTrue(Files.exists(meta), "the workspace mirror must be written on create");
+        String yamlText = Files.readString(meta);
+        assertTrue(yamlText.contains("name: 订单分析"), yamlText);
+        assertTrue(yamlText.contains("base_object: orders"), yamlText);
+        assertTrue(yamlText.contains("description: 订单金额汇总"), yamlText);
+        assertTrue(yamlText.contains("expression: SUM(amount)"), yamlText);
+        assertTrue(
+                yamlText.contains("expression: SUM(CASE WHEN status = 'PAID' THEN amount END)"),
+                yamlText);
+        assertTrue(yamlText.contains("type: DECIMAL"), yamlText);
+        assertTrue(yamlText.contains("type: VARCHAR"), yamlText);
+        assertTrue(yamlText.contains("dimensions:"), yamlText);
+    }
+
+    @Test
+    void createViewMirrorsWorkspaceFiles() throws IOException {
+        when(viewRepository.findByGroupIdAndName(anyString(), anyString())).thenReturn(null);
+        when(viewRepository.save(any(SemanticViewEntity.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        service.createView(
+                "g1",
+                new MdlSuggestionService.ViewPayload(
+                        "monthly_revenue",
+                        null,
+                        "SELECT month, SUM(amount) AS revenue FROM orders GROUP BY month",
+                        "月度销售额"));
+
+        Path dir = temp.resolve("views").resolve("monthly_revenue");
+        String metadata = Files.readString(dir.resolve("metadata.yml"));
+        assertTrue(metadata.contains("name: monthly_revenue"), metadata);
+        assertTrue(metadata.contains("description: 月度销售额"), metadata);
+        String sql = Files.readString(dir.resolve("sql.yml"));
+        assertTrue(sql.contains("statement:"), sql);
+        assertTrue(sql.contains("SELECT month, SUM(amount) AS revenue"), sql);
+    }
+
+    @Test
+    void renameCubeMovesTheWorkspaceDirectory() throws IOException {
+        registerDataset("ds_a", "g1", "a", "a", new String[][] {{"x", "x"}});
+        SemanticCubeEntity cube =
+                service.createCube(
+                        "g1",
+                        new MdlSuggestionService.CubePayload(
+                                "c1",
+                                "ds_a",
+                                null,
+                                List.of(Map.of("name", "m", "column", "x", "agg", "SUM")),
+                                List.of(),
+                                List.of()));
+
+        service.updateCube(
+                "g1",
+                cube.getId(),
+                new MdlSuggestionService.CubePayload("c2", null, null, null, null, null));
+
+        assertTrue(
+                Files.notExists(temp.resolve("cubes").resolve("c1")),
+                "the old directory goes away with the rename");
+        assertTrue(Files.exists(temp.resolve("cubes").resolve("c2").resolve("metadata.yml")));
+    }
+
+    @Test
+    void deleteCubeRemovesTheWorkspaceDirectory() throws IOException {
+        registerDataset("ds_a", "g1", "a", "a", new String[][] {{"x", "x"}});
+        SemanticCubeEntity cube =
+                service.createCube(
+                        "g1",
+                        new MdlSuggestionService.CubePayload(
+                                "c1",
+                                "ds_a",
+                                null,
+                                List.of(Map.of("name", "m", "column", "x", "agg", "SUM")),
+                                List.of(),
+                                List.of()));
+        Path dir = temp.resolve("cubes").resolve("c1");
+        assertTrue(Files.exists(dir.resolve("metadata.yml")));
+
+        service.deleteCube("g1", cube.getId());
+
+        assertTrue(Files.notExists(dir), "the workspace mirror must go with the row");
+    }
+
+    @Test
+    void createCubeWithoutSeededModelIsRejectedAndWritesNothing() {
+        registerDataset("ds_a", "g1", "a", "a", new String[][] {{"x", "x"}});
+        when(workspaceReader.read("g1"))
+                .thenReturn(
+                        new MdlWorkspaceReader.Snapshot(
+                                List.of(), List.of(), List.of(), List.of(), List.of(), List.of()));
+
+        DatasetException rejected =
+                assertThrows(
+                        DatasetException.class,
+                        () ->
+                                service.createCube(
+                                        "g1",
+                                        new MdlSuggestionService.CubePayload(
+                                                "c1",
+                                                "ds_a",
+                                                null,
+                                                List.of(
+                                                        Map.of(
+                                                                "name", "m", "column", "x", "agg",
+                                                                "SUM")),
+                                                List.of(),
+                                                List.of())));
+
+        assertEquals(400, rejected.status());
+        assertTrue(cubesById.isEmpty(), "a one-sided write must never happen");
+        assertTrue(Files.notExists(temp.resolve("cubes")));
+    }
+
+    @Test
+    void createCubeRejectsWhenTheWorkspaceDirectoryAlreadyExists() throws IOException {
+        registerDataset("ds_a", "g1", "a", "a", new String[][] {{"x", "x"}});
+        Files.createDirectories(temp.resolve("cubes").resolve("c1"));
+
+        DatasetException rejected =
+                assertThrows(
+                        DatasetException.class,
+                        () ->
+                                service.createCube(
+                                        "g1",
+                                        new MdlSuggestionService.CubePayload(
+                                                "c1",
+                                                "ds_a",
+                                                null,
+                                                List.of(
+                                                        Map.of(
+                                                                "name", "m", "column", "x", "agg",
+                                                                "SUM")),
+                                                List.of(),
+                                                List.of())));
+
+        assertEquals(409, rejected.status());
+        assertTrue(cubesById.isEmpty(), "the taken workspace directory blocks the create");
     }
 }

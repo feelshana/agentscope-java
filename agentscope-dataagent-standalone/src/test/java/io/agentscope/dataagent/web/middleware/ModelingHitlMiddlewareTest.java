@@ -137,12 +137,12 @@ class ModelingHitlMiddlewareTest {
         // specs/019 M3: the gated surface is the file write tools plus the relation candidate
         // queue; the retired structured write tools must no longer pause (the tools no longer
         // exist on the agent). specs/035 added create_view — the view file-pair write.
+        // specs/036 removed suggest_relations — recompute-only, no persisted semantic change.
         for (String name :
                 new String[] {
                     "write_file",
                     "patch_file",
                     "create_view",
-                    "suggest_relations",
                     "decide_relation",
                     "decide_relations",
                     "confirm_relation",
@@ -165,6 +165,13 @@ class ModelingHitlMiddlewareTest {
                 }) {
             assertThat(ModelingHitlMiddleware.WRITE_TOOL_NAMES).doesNotContain(retired);
         }
+    }
+
+    @Test
+    void recomputeOnlySuggestRelationsLeavesTheGate() {
+        // specs/036: suggest_relations only recomputes the pending candidate queue (no persisted
+        // semantic change), so it must not pop a confirmation card any more.
+        assertThat(ModelingHitlMiddleware.WRITE_TOOL_NAMES).doesNotContain("suggest_relations");
     }
 
     private static ToolUseBlock tool(String id, String name, ToolCallState state) {

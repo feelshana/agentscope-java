@@ -419,7 +419,8 @@ export default function SemanticModelingPage() {
   const [draftError, setDraftError] = useState<string | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
   /** specs/030: the chat lives in a collapsible right dock, open by default on the fullscreen
-   *  workbench (1360px asset column remains when docked); the header button collapses it. */
+   *  workbench; the header button collapses it. specs/036: dock widened to 640px — the 520px
+   *  dock squeezed the HITL decide cards. */
   const [chatOpen, setChatOpen] = useState(true);
   /** Hidden input for the unified "上传语义文档" entries (specs/028). */
   const semanticDocRef = useRef<HTMLInputElement | null>(null);
@@ -459,28 +460,25 @@ export default function SemanticModelingPage() {
   };
 
   const refresh = useCallback(async () => {
+    // specs/037: settle both sources independently — one failing source must not blank the page.
+    const results = await Promise.allSettled([getModelingOverview(groupId), getMdlView(groupId)]);
+    let failed: unknown = null;
+    if (results[0].status === 'fulfilled') setOverview(results[0].value);
+    else failed ??= results[0].reason;
+    if (results[1].status === 'fulfilled') setMdlView(results[1].value);
+    else failed ??= results[1].reason;
     try {
-      const [nextOverview, nextView] = await Promise.all([
-        getModelingOverview(groupId),
-        getMdlView(groupId),
-      ]);
-      setOverview(nextOverview);
-      setMdlView(nextView);
-      try {
-        const preview = await getMdlPreview(groupId);
-        const published = new Map(preview.publishedFiles.map(f => [f.path, f.content]));
-        setDirtyPaths(
-          new Set(
-            preview.files.filter(f => published.get(f.path) !== f.content).map(f => f.path),
-          ),
-        );
-      } catch {
-        setDirtyPaths(new Set());
-      }
-      setError(null);
-    } catch (e) {
-      setError(msg(e));
+      const preview = await getMdlPreview(groupId);
+      const published = new Map(preview.publishedFiles.map(f => [f.path, f.content]));
+      setDirtyPaths(
+        new Set(
+          preview.files.filter(f => published.get(f.path) !== f.content).map(f => f.path),
+        ),
+      );
+    } catch {
+      setDirtyPaths(new Set());
     }
+    setError(failed ? msg(failed) : null);
   }, [groupId]);
 
   const refreshEnhance = useCallback(async () => {
@@ -590,6 +588,26 @@ export default function SemanticModelingPage() {
     [datasetsById],
   );
 
+  // specs/036: relation rows show the three-element form — short dataset name (no description
+  // tail) and the original header without the description, so each row stays one glance-readable.
+  const datasetShortName = useCallback(
+    (id: string) => datasetsById.get(id)?.name.trim() || '未知表',
+    [datasetsById],
+  );
+
+  const datasetColumnShortName = useCallback(
+    (datasetId: string, columnName: string) => {
+      const column = datasetsById
+        .get(datasetId)
+        ?.columns.find(item => item.name === columnName);
+      if (!column) return columnName;
+      return column.originalName && column.originalName !== column.name
+        ? `${column.originalName}（${column.name}）`
+        : column.name;
+    },
+    [datasetsById],
+  );
+
   const columnsOf = useCallback(
     (datasetId: string) => datasetsById.get(datasetId)?.columns ?? [],
     [datasetsById],
@@ -634,8 +652,10 @@ export default function SemanticModelingPage() {
     { key: 'overview', label: '总览' },
     { key: 'schema', label: '表与关系', count: datasets.length },
     { key: 'derived', label: '派生模型', count: mdlView?.derivedModels.length ?? 0 },
-    { key: 'cubes', label: 'Cube', count: overview?.cubes.length ?? 0 },
-    { key: 'views', label: '视图', count: overview?.views.length ?? 0 },
+    // specs/037: cube/view counts read the workspace (mdlView) — the same source as the tab
+    // content, so counts and lists can no longer diverge after REST or chat writes.
+    { key: 'cubes', label: 'Cube', count: mdlView?.cubes.length ?? 0 },
+    { key: 'views', label: '视图', count: mdlView?.views.length ?? 0 },
     { key: 'glossary', label: '术语与规则', count: overview?.terms.length ?? 0 },
     { key: 'mdl', label: 'MDL' },
   ];
@@ -775,6 +795,7 @@ export default function SemanticModelingPage() {
       }
       setDraft(null);
       setDraftError(null);
+      await refresh();
     });
 
   const onDeleteCube = (c: ModelingCube) => {
@@ -784,6 +805,7 @@ export default function SemanticModelingPage() {
       setOverview(prev =>
         prev ? { ...prev, cubes: prev.cubes.filter(x => x.id !== c.id) } : prev,
       );
+      await refresh();
     });
   };
 
@@ -812,6 +834,7 @@ export default function SemanticModelingPage() {
       }
       setViewDraft(null);
       setViewDraftError(null);
+      await refresh();
     });
 
   const onDeleteView = (v: ModelingView) => {
@@ -821,6 +844,7 @@ export default function SemanticModelingPage() {
       setOverview(prev =>
         prev ? { ...prev, views: prev.views.filter(x => x.id !== v.id) } : prev,
       );
+      await refresh();
     });
   };
 
@@ -832,8 +856,8 @@ export default function SemanticModelingPage() {
         relation={r}
         kind={kind}
         rowBusy={rowBusy}
-        datasetName={datasetName}
-        columnName={datasetColumnName}
+        datasetName={datasetShortName}
+        columnName={datasetColumnShortName}
         onConfirm={jt => onConfirm(r, jt)}
         onSwap={() => onSwap(r)}
         onReject={() => onReject(r)}
@@ -2157,7 +2181,7 @@ export default function SemanticModelingPage() {
       {chatOpen && (
         <div
           style={{
-            width: 520,
+            width: 640,
             flexShrink: 0,
             height: '100%',
             minWidth: 0,
@@ -2278,15 +2302,9 @@ function RelationRow({
           </>
         )}
       </div>
-      {(r.description || kind === 'pending') && (
+      {(kind === 'pending' && !r.joinType) && (
         <div className="da-small" style={{ color: 'var(--da-text-3)', marginTop: 4 }}>
-          {r.description && <span>{r.description}</span>}
-          {kind === 'pending' && (
-            <span style={{ marginLeft: r.description ? 8 : 0 }}>
-              置信度 {(r.confidence * 100).toFixed(0)}%
-              {!r.joinType && '（join 类型待探测，可手动指定）'}
-            </span>
-          )}
+          join 类型待探测，可手动指定
         </div>
       )}
     </div>

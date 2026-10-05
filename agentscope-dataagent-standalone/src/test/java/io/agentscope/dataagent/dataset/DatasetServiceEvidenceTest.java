@@ -86,7 +86,6 @@ class DatasetServiceEvidenceTest {
                         mock(SemanticBusinessRuleRepository.class),
                         mock(ExternalDataSourceRepository.class),
                         mock(DataSourceIntrospector.class),
-                        mock(RelationInferenceService.class),
                         mock(DatasetRelationRepository.class),
                         new InMemoryDataSourceRegistry(List.of()),
                         mock(TableProvisioner.class),

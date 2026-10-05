@@ -85,7 +85,6 @@ class DatasetServiceMdlDirtyTest {
                         mock(SemanticBusinessRuleRepository.class),
                         mock(ExternalDataSourceRepository.class),
                         mock(DataSourceIntrospector.class),
-                        mock(RelationInferenceService.class),
                         mock(DatasetRelationRepository.class),
                         new InMemoryDataSourceRegistry(List.of()),
                         provisioner,

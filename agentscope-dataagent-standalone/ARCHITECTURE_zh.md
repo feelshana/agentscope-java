@@ -48,7 +48,7 @@ dataagent 为每位数据分析师提供专属的数据 Agent，核心流程是*
 │  DataAgentToolkit(retrieve_evidence / render_chart) + run_python      │
 ├─────────────────────────────────────────────────────────────────────┤
 │  数据资产层（dataset/ 包）                                           │
-│  DatasetService(上传导入·外部表关联) / RelationInferenceService /     │
+│  DatasetService(上传导入·外部表关联) / MdlSuggestionService(LLM关系建议)│
 │  MdlPublishService·MdlSeeder(MDL基线发布链) / SchemaGenerationService │
 ├─────────────────────────────────────────────────────────────────────┤
 │  Runtime 层（runtime/ 包，复用 agentscope-harness/core）             │
@@ -181,9 +181,10 @@ dataagent 为每位数据分析师提供专属的数据 Agent，核心流程是*
   此 CLI 通道为包缺失时的回退，见 5.6）、`wren_context_show/instructions`、`wren_dry_plan` /
   `wren_dry_run`、`wren_cube_list/describe/query`（`--sql-only` 模式免库预检）；关系工具
   `suggest_relations` / `decide_relation`（统一 CONFIRM/ADJUST/REJECT/SKIP）/ `decide_relations`
-  （specs/024 批量多选：一次 HITL 卡列出全部候选——表.字段 → 表.字段、基数中文、业务含义——
-  用户勾选后一次写入并附 `context validate --strict` 诊断；validate 失败仅报告不回滚，
-  因为写入侧是平台结构化渲染而非自由 YAML）/ `add_relation`
+  （specs/024 批量多选：一次 HITL 卡列出全部候选——specs/036 起为三要素「表.字段 → 表.字段 +
+  连接基数」，业务含义与置信度退场——用户勾选后一次写入并附 `context validate --strict` 诊断；
+  validate 失败仅报告不回滚，因为写入侧是平台结构化渲染而非自由 YAML；确认一次即生效，之后
+  不再复述或二次确认，纯重算的 `suggest_relations` 已从写工具门禁摘除）/ `add_relation`
   与 `validate_mdl`——确认动作直接写工程 `relationships.yml`（幂等 upsert：模型对相同且
   条件列互为子集视为同一条，命中做文本手术替换、未命中尾部追加；DB 仅保留候选建议队列，
   REJECTED 不动文件，specs/019 §7）；只读工具 `list_modeling_state` / `list_terms` /
@@ -575,8 +576,7 @@ ExternalDataSource（用户配置的外部 JDBC 连接，可选采样）
 3. SchemaGenerationService#generateSchema：AI 生成表描述与每列业务描述
    （结合 JDBC 注释、低基数列采样值）
 4. 元数据落 DatasetEntity（含 columnSchemaJson）→ registry.add(toDataSource)
-5. RelationInferenceService#reinferGroup 重建该知识库的关系边
-6. Controller 在单次上传或整批上传完成后调用 BaselineMdlService，一次性发布可查询基础 MDL
+5. Controller 在单次上传或整批上传完成后调用 BaselineMdlService，一次性发布可查询基础 MDL
 ```
 
 `DatasetService#rebuildRegistry`（@PostConstruct）：启动时从 JPA 重建内存 DataSourceRegistry，数据集跨重启存活。
@@ -593,28 +593,36 @@ PostgreSQL。`DatasetService#prepareAssociatedTables` 在任何 repository/regis
 重复项、已有关联、字段元数据、描述与行数预检；任一表失败时整批不写入。全部准备成功后再统一
 持久化并注册，Controller 最后只触发一次基础 MDL 发布。
 
-### 5.4 关系推断
+### 5.4 关系判定（全 LLM，ADR 0046）
 
-`RelationInferenceService#reinferGroup`（上传/关联/保存知识文档后触发；选择性重建，人工记录保护见下）：
+**候选生成（唯一自动通道：LLM）**：表间关系候选全部由 `MdlSuggestionService#suggestRelationsLlm`
+产生（`refreshRelations` 触发，两步语义判定——先按表描述/表行数/示例数据判定各表是事实表还是
+维表，再只提议事实→维方向的关联：维表被引用列不一定是主键、业务键关联合法；事实表↔事实表、
+维表↔维表严禁推荐；解析层仅当提案恰好维侧为主键形态列而事实侧非时做方向反转修复，其余原方向
+保留、永不丢弃，人工兜底）。知识文档不再走正则解析为 DOC 边——文档内容仍经
+[KNOWLEDGE_BASE_OVERVIEW] 注入，由建模对话的 LLM 自行据此提议关系；建模页人工录入
+（`addManualRelation`）是第二个非自动入口。原规则推断层（`RelationInferenceService` 的
+SAME_COLUMN/SUFFIX 推断与 specs/036 XOR 定向、`SchemaRelationInferrer` 图谱现场推断）已整体
+退役删除：主键形态机械过滤会误杀非主键业务键关联（订单表.商品编码 ↔ 商品表.商品编码），
+语义等价但写法不同（`user_id` vs `用户id`）的场景规则无法桥接——两能力都只有 LLM 能覆盖；
+上传/关联/保存文档入口不再触发任何关系重建。
 
-| 边类型 | 规则 | 置信度 |
-|---|---|---|
-| `SAME_COLUMN` | 两数据集共享列，按 `originalName` 原始表头匹配（回退物理列名）——中文表头清洗后物理名分歧仍能命中（`用户id` 在两表分别为 `id`/`id_2`），位置回退名（`col_2`）也不会跨表误报；本表主键形态列（首列/`<表名>_id`）仅当对端也持有同一表头时参与，即 FK↔PK 关联模式；字面 `id` 永不参与。边上落的列是物理列名，可直接用于 JOIN | 0.7 |
-| `SUFFIX` | 列名去 `_id`/`_key` 后缀后等于另一表名/数据集名 | 0.6 |
-| `DOC` | 知识文档中的显式表达（正则 `A.x = B.y`、`A 通过 x 关联 B`，支持中文标识符） | 0.9 |
-
-**选择性重建（人工记录保护，specs/010 M1）**：`reinferGroup` 只删除并重推未审阅的自动边（`origin=inferred/doc` 且 `status` 为 PENDING/null）；`origin=manual/llm` 的边与任何 `CONFIRMED`/`REJECTED` 记录在重建时保留，且保留边参与去重（不会被重推为重复边）。语义建模页的人审成果因此不会被后续上传/关联/保存文档静默清空。`DatasetRelationEntity` 的 `joinType`（MANY_TO_ONE 等）与 `status`（PENDING/CONFIRMED/REJECTED）、`DatasetGroupEntity` 的 `mdlState/mdlVersion/mdlPublishedAt` 为语义建模流程预留（specs/010 M1）。
-
-**复合键列对（specs/013 M1，ADR 0024 D4）**：`DatasetRelationEntity` 新增 `source_columns`/`target_columns`（JSON 数组文本，nullable）承载多列对齐，单列字段保留为旧行回退；发布时 `MdlPublishService#buildRelations` 逐列校验并渲染 `a.c1 = b.c1 AND a.c2 = b.c2`。必要性实证：省份×日期粒度表在单列键下 JOIN 扇出、度量 ×10 膨胀——wren 引擎忠实编译不做基数校验，完整键必须在建模期确认。
+**候选管理（specs/010 M1）**：DB `DatasetRelationEntity` 是候选建议队列（PENDING/CONFIRMED/
+REJECTED，specs/013 起支持复合键 `source_columns`/`target_columns`——发布时
+`MdlPublishService#buildRelations` 逐列校验渲染 `a.c1 = b.c1 AND a.c2 = b.c2`）；记录永不自动
+删除（无重建即无清理），`joinType`（MANY_TO_ONE 等）由唯一性探测补齐
+（`MdlSuggestionService#probeJoinTypes`，COUNT DISTINCT vs 行数比对，绝不猜测）。
+`DatasetGroupEntity` 的 `mdlState/mdlVersion/mdlPublishedAt` 为发布流程预留。
 
 `DatasetService#relationsFor(owner, table)` 把命中边渲染为可读行 + 建议 JOIN 片段；当前无生产调用方（为 specs/010 建议服务预留）。
 
-**关系候选 → MDL relationships 的现行通路（specs/019 YAML-first）**：推断边（SAME_COLUMN/SUFFIX/DOC）
-+ LLM 建议（必需层）+ joinType 唯一性探测（COUNT DISTINCT vs 行数比对）构成候选池；建模对话经
+**关系候选 → MDL relationships 的现行通路（specs/019 YAML-first → specs/036 一次即生效）**：
+LLM 建议候选（唯一自动通道，见上）+ joinType 唯一性探测构成候选池；建模对话经
 `decide_relation` / `decide_relations` HITL 确认后直接写工程 `relationships.yml`（幂等 upsert，
-DB 边仅保留候选建议队列，见 2.5 与 5.6）。首列盲区已修复（specs/010 M1）：主键形态列在对端持有
-同一表头时参与匹配（订单表.用户id ↔ 用户表.用户id 可推，边落物理列名）；LLM 建议层仍为必需层——
-语义等价但写法不同（`user_id` vs `用户id`）的场景规则无法桥接。见 ADR 0018 D2/D6/D9。
+DB 边仅保留候选建议队列，见 2.5 与 5.6）；确认一次即生效（specs/036：确认即写入并附
+`context validate --strict` 结论，之后不复述不二次确认）。知识图谱 Tab 的图节点按数据集列
+schema 现场构造、边只来自持久化关系（LLM/历史 DOC 行/manual），见 `DatasetGroupController#graph`。
+见 ADR 0018 D2/D6/D9、ADR 0044 与 ADR 0046。
 
 ### 5.5 语义术语与口径落库（specs/011，ADR 0027）
 
@@ -677,7 +685,7 @@ specs/019 结构化写面退役。原路由决策树在 YAML-first 形态下的�
 `BaselineMdlServiceTest`（空组路径记录覆盖）。
 
 **实施进度（specs/010）**：**M1 已落地**——`MdlSuggestionService`（`refreshRelations` =
-规则边（5.4 选择性重建）+ LLM 建议合并去重 + `probeJoinType` 唯一性探测；人审
+LLM 建议合并去重 + `probeJoinType` 唯一性探测（规则边重建已随 ADR 0046 退役）；人审
 `confirmRelation`/`rejectRelation`/`addManualRelation`；`suggestCubes` 与 cube CRUD）、
 `SemanticModelingController`（`/api/dataset-groups/{id}/modeling`，每端点先经
 `DatasetGroupService#getGroup` 做多租户 404 校验）、前端 `SemanticModelingPage`
@@ -744,8 +752,9 @@ DocEnhance 规则采纳双写（见 5.7）。守卫：`MdlSuggestionServiceTest`
 `DatasetService#semanticViewsText` 渲染工程 `views/` 文件，每视图在名称与描述下附一行折叠、
 超 400 字截断的 `SQL: <statement>`（上游 `_describe_view` 对齐：SQL 原文即视图的 schema，
 问数模型免 describe 即得输出列；specs/020，ADR 0034）（`[KNOWLEDGE_BASE_OVERVIEW]`
-「语义视图」小节；specs/019 §7 起以工作区文件为事实源，发布链 v2 后 DB 语义视图实体与
-`POST/PUT/DELETE /api/dataset-groups/{id}/modeling/views` 端点保留但不再进入快照）；
+「语义视图」小节；specs/019 §7 起以工作区文件为事实源；specs/037 起 REST 写侧与对话写侧同权——
+`createCube`/`createView` 等 CRUD 在工作区锁内镜像写/删对应工程文件（文件写先于 DB 落库，
+绝不单边写，ADR 0045））；
 语义建模页视图卡片与术语只读卡片（管理在「语义配置」页）不变。
 
 **派生模型（ref_sql 模型，specs/034 → specs/035 降级人工载体，ADR 0043）**：手工精修载体——
@@ -765,7 +774,9 @@ refSql/refSqlPath（models/、views/ 缺 metadata.yml 的静默跳过已改 erro
 **发布语义与状态机（specs/019 M2，发布链 v2）**：
 
 - 事实源唯一：语义资产以工作区工程文件为准，HITL 确认写入即生效；发布 = 全量校验 + 快照 + 版本。
-  BASELINE/SEMANTIC 双模式与 DRAFT 草稿已退役（DB 语义实体停止作为事实源，REST 端点保留但不进快照）。
+  BASELINE/SEMANTIC 双模式与 DRAFT 草稿已退役（DB 语义实体停止作为事实源）；specs/037 起读侧同源
+  （Cube/视图页签计数与内容同读工作区）且 REST 写侧（Cube/视图 CRUD）同步镜像工作区文件，
+  文件写先于 DB 落库，DB 与工作区不再分叉（ADR 0045）。
 - 发布链（`MdlPublishService#doPublish`）：`MdlSeeder#reconcile` 播种对账 → staging 拷贝（排除
   `.platform/`、`target/`）→ `context validate --strict` → `context build` → ref_sql 物化（staging
   `target/mdl.json` 改写物理全限定名，specs/035/ADR 0043）→ 逐视图 `dry-run`（ADR 0032）
@@ -1047,8 +1058,7 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 | 文件解析/导入 | `dataset/DatasetImportService`、`dataset/parser/{ExcelParser,CsvParser,TypeInferrer}` |
 | AI 字段描述 | `dataset/parser/SchemaGenerationService` |
 | 外部库内省 | `dataset/DataSourceIntrospector`、`dataset/TableProvisioner` |
-| 关系推断 | `dataset/RelationInferenceService`（`reinferGroup`）、`dataset/SchemaRelationInferrer` |
-| 语义建模（M1） | `dataset/MdlSuggestionService`（`refreshRelations`、`confirmRelation`、`addManualRelation`、`suggestCubes`、`createCube`、`createView`）、`web/api/SemanticModelingController` |
+| 语义建模（M1） | `dataset/MdlSuggestionService`（`refreshRelations`、`confirmRelation`、`addManualRelation`、`suggestCubes`、`createCube`/`createView` 及 specs/037 工作区镜像写、`persistConfirmedRelation`）、`web/api/SemanticModelingController` |
 | 对话式建模与原生 HITL（specs/013/014/017/019/022） | `tools/data/ModelingToolkit`（二十工具，YAML-first 写面 `write_file`/`patch_file` + 统一 `decide_relation` + HITL 预检 `previewChange`）、`web/middleware/ModelingHitlMiddleware`、`tools/data/ModelingToolkitRegistrar`（单例 `toolkit()` 供 HTTP 预检复用同闸）、`web/api/SemanticModelingController`（`workspace/file`、`workspace/preview`）、`web/config/DataAgentConfig`（剧本 + 免沙箱装配 + 技能挂载 `mountWrenSkills`）、`dataset/WrenSkillsLocator`（官方 skills 目录解析）、前端 `components/{ModelingChatPanel,ModelingHitlCard,ReadOnlyRelationGraph}` + `utils/diff.ts` |
 | 文档语义增强（specs/014） | `dataset/DocEnhanceService`（`triggerAnalyzeQuietly`、`adopt`）、`web/api/SemanticModelingController`（enhance 端点）、`web/persistence/jpa/{DocEnhanceTaskEntity,DocEnhanceProposalEntity,SemanticBusinessRuleEntity}`、前端 `pages/configure/SemanticModelingPage` |
 | MDL 拼装/发布（M2 → specs/019 v2） | `dataset/MdlPublishService`（`preview`、`validate`、`publish`、`deleteArtifacts`、`view` 只读视图）、`dataset/{MdlSeeder,MdlWorkspaceService,MdlWorkspaceReader,WrenTypeNormalizer}`（播种/工作区/读面）、`dataset/{WrenCli,WrenProperties}`、前端 `components/{MdlPublishPanel,MdlGraphView}` |

@@ -1317,11 +1317,10 @@ public final class ModelingToolkit {
                     确认卡上多选，代替逐条 decide_relation。relations_json 是 JSON 数组字符串，每项字段：\
                     relation_id（必填）、action（CONFIRM/ADJUST/REJECT/SKIP，默认 CONFIRM）、\
                     join_type（MANY_TO_ONE/ONE_TO_MANY/ONE_TO_ONE）、swap（交换方向）、\
-                    source_columns/target_columns（复合键对齐字段，成对提供）、\
-                    note（这条关系的业务含义，如「一个用户有多条访问记录」，会展示在确认卡上）。\
-                    示例：[{"relation_id":"<id1>","action":"CONFIRM","join_type":"MANY_TO_ONE",\
-                    "note":"一个用户有多条访问记录"}]。任一条目非法将整批拒绝；确认后平台一次性\
-                    写入 relationships.yml 并附 context validate --strict 校验结论。
+                    source_columns/target_columns（复合键对齐字段，成对提供）。\
+                    示例：[{"relation_id":"<id1>","action":"CONFIRM","join_type":"MANY_TO_ONE"}]。\
+                    任一条目非法将整批拒绝；确认即一次性写入 relationships.yml 并附 context validate \
+                    --strict 校验结论，之后不得复述或再次征求确认（specs/036）。
                     """)
     public String decideRelations(
             DatasetScope scope,
@@ -1330,7 +1329,7 @@ public final class ModelingToolkit {
                             name = "relations_json",
                             description =
                                     "JSON 数组字符串，每项含 relation_id 与 action，可选 join_type/swap/"
-                                            + "source_columns/target_columns/note")
+                                            + "source_columns/target_columns")
                     String relationsJson,
             @ToolParam(name = "group_id", description = "知识库 ID；会话仅绑定一个知识库时可省略", required = false)
                     String groupId) {
@@ -1689,13 +1688,12 @@ public final class ModelingToolkit {
                         .append('.')
                         .append(String.join("+", r.targetColumnList()))
                         .append("｜")
-                        .append(r.getJoinType() == null ? "基数未探测" : r.getJoinType());
-                if (r.getDescription() != null && !r.getDescription().isBlank()) {
-                    sb.append("｜含义：").append(truncate(r.getDescription(), 80));
-                }
-                sb.append("｜来源 ").append(r.getOrigin()).append('\n');
+                        .append(r.getJoinType() == null ? "基数未探测" : r.getJoinType())
+                        .append("｜来源 ")
+                        .append(r.getOrigin())
+                        .append('\n');
             }
-            sb.append("（把以上候选一次性整理成清单——每条含 表.字段 → 表.字段、连接基数、业务含义——")
+            sb.append("（把以上候选一次性整理成清单——每条含 表.字段 → 表.字段与连接基数——")
                     .append("用 decide_relations 批量提交，由用户在确认卡上多选；不要逐条调用 decide_relation。）\n");
         }
 

@@ -10,14 +10,13 @@ import type {
 import { diffLines } from '../utils/diff';
 
 const JOIN_LABEL: Record<string, string> = {
-  MANY_TO_ONE: '多条左侧记录可对应一条右侧记录',
-  ONE_TO_MANY: '一条左侧记录可对应多条右侧记录',
-  ONE_TO_ONE: '两侧记录一一对应',
+  MANY_TO_ONE: '多对一',
+  ONE_TO_MANY: '一对多',
+  ONE_TO_ONE: '一对一',
 };
 
 /** Labels for every tool that can still reach the HITL gate (specs/019 M3, specs/035 write surface). */
 const TOOL_LABEL: Record<string, string> = {
-  suggest_relations: '重新计算关系候选',
   decide_relation: '关系提案',
   decide_relations: '关系批量提案',
   confirm_relation: '确认关系',
@@ -50,7 +49,8 @@ function datasetLabel(overview: ModelingOverview | null, datasetId: string | und
 function columnLabel(overview: ModelingOverview | null, datasetId: string | undefined, column: string): string {
   const dataset = overview?.datasets.find(item => item.id === datasetId);
   const found = dataset?.columns.find(item => item.name === column || item.originalName === column);
-  return found?.originalName || found?.description || column;
+  // specs/036: prefer the original header only — no description tail on the card.
+  return found?.originalName || column;
 }
 
 function relationInputColumns(call: HitlToolCall, relation: ModelingRelation | null, side: 'source' | 'target') {
@@ -294,7 +294,7 @@ export default function ModelingHitlCard({
       ) : isRelation && relation ? (
         <>
           <div style={S.summary}>
-            {JOIN_LABEL[recommendedJoinType] ?? '建议建立表之间的对应关系'}：{sourceName} → {targetName}
+            {`${sourceName}.${initialSourceColumns.join('+') || '?'} → ${targetName}.${initialTargetColumns.join('+') || '?'}（${JOIN_LABEL[recommendedJoinType] ?? '基数待定'}）`}
           </div>
           <details style={S.details}>
             <summary>技术详情</summary>
@@ -393,11 +393,10 @@ export default function ModelingHitlCard({
   );
 }
 
-/** One rendered row of the batched relation decision card (specs/024). */
+/** One rendered row of the batched relation decision card (specs/024): three elements only. */
 interface BatchRelationRow {
   relationId: string;
   joinLabel: string;
-  reason: string | null;
   sourceLabel: string;
   targetLabel: string;
 }
@@ -429,11 +428,9 @@ function batchRelationRows(
     const targetColumns = stringList(rec.target_columns);
     const sourceColumn = sourceColumns.length > 0 ? sourceColumns.join('+') : relation?.sourceColumn ?? '?';
     const targetColumn = targetColumns.length > 0 ? targetColumns.join('+') : relation?.targetColumn ?? '?';
-    const note = typeof rec.note === 'string' && rec.note.trim() ? rec.note : null;
     rows.push({
       relationId,
       joinLabel: JOIN_LABEL[joinType] ?? joinType,
-      reason: note ?? relation?.description ?? null,
       sourceLabel: `${datasetLabel(overview, relation?.sourceDatasetId)}.${sourceColumn}`,
       targetLabel: `${datasetLabel(overview, relation?.targetDatasetId)}.${targetColumn}`,
     });
@@ -521,10 +518,7 @@ function BatchRelationCard({
               }
             />
             <span>
-              {row.sourceLabel} → {row.targetLabel}
-              <br />
-              {row.joinLabel}
-              {row.reason ? `；${row.reason}` : ''}
+              {row.sourceLabel} → {row.targetLabel}（{row.joinLabel}）
             </span>
           </label>
         ))}

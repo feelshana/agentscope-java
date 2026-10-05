@@ -21,13 +21,13 @@ import io.agentscope.dataagent.dataset.DatasetGroupService;
 import io.agentscope.dataagent.dataset.DatasetService;
 import io.agentscope.dataagent.dataset.DocEnhanceService;
 import io.agentscope.dataagent.dataset.GraphDto;
-import io.agentscope.dataagent.dataset.SchemaRelationInferrer;
 import io.agentscope.dataagent.dataset.parser.DocxDescriptionExtractor;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetRelationEntity;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -194,24 +194,39 @@ public class DatasetGroupController {
     }
 
     /**
-     * Deterministic table-relationship graph for the KB "知识图谱" tab: live schema-inferred edges
-     * merged with persisted structured relations (doc/inferred) so each edge carries an origin badge
-     * and confidence. No LLM involved.
+     * Table-relationship graph for the KB "知识图谱" tab: nodes mirror the KB's datasets with
+     * their live column schemas; edges come solely from persisted relations (LLM-suggested,
+     * doc-derived or manual — rule-based schema inference retired, ADR 0046), each carrying an
+     * origin badge and confidence.
      */
     @GetMapping("/{id}/graph")
     public Mono<GraphDto> graph(@PathVariable String id, Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
-                        () -> {
-                            GraphDto base =
-                                    SchemaRelationInferrer.infer(
-                                            groupService.listDatasets(userId, id),
-                                            datasetService::readColumns);
-                            return mergePersistedRelations(
-                                    base, datasetService.relationsForGroup(id));
-                        })
+                        () ->
+                                mergePersistedRelations(
+                                        graphNodes(userId, id),
+                                        datasetService.relationsForGroup(id)))
                 .subscribeOn(Schedulers.boundedElastic())
                 .onErrorMap(this::toStatus);
+    }
+
+    private GraphDto graphNodes(String userId, String groupId) {
+        List<GraphDto.Node> nodes = new ArrayList<>();
+        for (DatasetEntity d : groupService.listDatasets(userId, groupId)) {
+            List<GraphDto.Field> fields =
+                    datasetService.readColumns(d).stream()
+                            .map(c -> new GraphDto.Field(c.name(), c.sqlType(), c.description()))
+                            .toList();
+            nodes.add(
+                    new GraphDto.Node(
+                            d.getId(),
+                            d.getName(),
+                            "table",
+                            fields,
+                            d.getOrigin() == null ? "upload" : d.getOrigin()));
+        }
+        return new GraphDto(nodes, List.of());
     }
 
     private static GraphDto mergePersistedRelations(

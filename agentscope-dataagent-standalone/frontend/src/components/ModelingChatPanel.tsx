@@ -233,18 +233,19 @@ export default function ModelingChatPanel({
   const sessionKeyRef = useRef<string>(`modeling-${groupId}`);
   const awaitingDecision = messages.some(message => message.hitl);
 
+  /** specs/036: the decide cards resolve table names from this overview — refetchable. */
+  const loadOverview = useCallback(() => {
+    return getModelingOverview(groupId)
+      .then(value => setOverview(value))
+      .catch(() => setOverview(null));
+  }, [groupId]);
+
   useEffect(() => {
     let cancelled = false;
     sessionKeyRef.current = `modeling-${groupId}`;
     setMessages([]);
     setOverview(null);
-    getModelingOverview(groupId)
-      .then(value => {
-        if (!cancelled) setOverview(value);
-      })
-      .catch(() => {
-        if (!cancelled) setOverview(null);
-      });
+    void loadOverview();
     currentSession(MODELING_AGENT_ID, sessionKeyRef.current)
       .then(session => {
         if (cancelled || !session.pendingReplyId || !session.pendingToolCalls?.length) return;
@@ -269,6 +270,13 @@ export default function ModelingChatPanel({
   useEffect(() => {
     threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight });
   }, [messages]);
+
+  // specs/036: a decide card arrives after the model just refreshed relation candidates — the
+  // overview snapshot from mount time does not contain those new rows yet, so the card would
+  // render 「未知数据表」instead of the two table names. Refetch once when a decision is pending.
+  useEffect(() => {
+    if (awaitingDecision) void loadOverview();
+  }, [awaitingDecision, loadOverview]);
 
   /** specs/027: tell the modeling page to refetch so every tab reflects the change. */
   function notifyUpdated() {
@@ -358,6 +366,10 @@ export default function ModelingChatPanel({
     } else if (evt.type === 'done') {
       if (evt.sessionKey) sessionKeyRef.current = evt.sessionKey;
       patch(message => ({ ...message, pending: false }));
+      // specs/037: a finished turn may have written workspace files (write_file/create_view/
+      // decide_relations); tell the modeling page to refetch so counts and content stay in sync
+      // without a manual refresh.
+      notifyUpdated();
     } else if (evt.type === 'error') {
       patch(message => {
         const segments = [...message.segments];

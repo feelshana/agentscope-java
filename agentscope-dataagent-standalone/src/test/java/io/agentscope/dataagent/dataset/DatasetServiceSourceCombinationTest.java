@@ -48,7 +48,6 @@ class DatasetServiceSourceCombinationTest {
     private DatasetRepository repository;
     private ExternalDataSourceRepository externalSources;
     private DataSourceIntrospector introspector;
-    private RelationInferenceService relationInference;
     private InMemoryDataSourceRegistry registry;
     private DatasetService service;
     private ExternalDataSourceEntity source;
@@ -59,7 +58,6 @@ class DatasetServiceSourceCombinationTest {
         DatasetGroupRepository groupRepository = mock(DatasetGroupRepository.class);
         externalSources = mock(ExternalDataSourceRepository.class);
         introspector = mock(DataSourceIntrospector.class);
-        relationInference = mock(RelationInferenceService.class);
         registry = new InMemoryDataSourceRegistry(List.of());
         DatasetStoreProperties storeProps = mock(DatasetStoreProperties.class);
         when(storeProps.url()).thenReturn("jdbc:mysql://localhost:3306/data_agent");
@@ -93,7 +91,6 @@ class DatasetServiceSourceCombinationTest {
                         mock(SemanticBusinessRuleRepository.class),
                         externalSources,
                         introspector,
-                        relationInference,
                         mock(DatasetRelationRepository.class),
                         registry,
                         mock(TableProvisioner.class),
@@ -215,7 +212,6 @@ class DatasetServiceSourceCombinationTest {
                 .hasMessageContaining("无法读取客户表");
 
         verify(repository, never()).save(any());
-        verify(relationInference, never()).reinferGroup(any());
         assertThat(registry.list()).isEmpty();
     }
 
@@ -240,6 +236,5 @@ class DatasetServiceSourceCombinationTest {
                 .containsExactly("orders", "customers");
         assertThat(registry.list()).hasSize(2);
         verify(repository, org.mockito.Mockito.times(2)).save(any(DatasetEntity.class));
-        verify(relationInference).reinferGroup("group-1");
     }
 }

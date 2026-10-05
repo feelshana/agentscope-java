@@ -53,11 +53,12 @@ public final class ModelingHitlMiddleware implements MiddlewareBase {
      * sibling; the {@code confirmModeling} whitelist in ChatController reads this set, so membership
      * here is the single source of truth for what reaches the HITL card. specs/035: {@code
      * create_view} (named-view pair write) joined the gate, replacing specs/034's {@code
-     * propose_derived_model}, which retired with the view-first route.
+     * propose_derived_model}, which retired with the view-first route. specs/036: {@code
+     * suggest_relations} left the gate — it only recomputes the candidate queue without touching
+     * persisted semantic state, so recompute no longer pops a confirmation card.
      */
     public static final Set<String> WRITE_TOOL_NAMES =
             Set.of(
-                    "suggest_relations",
                     "decide_relation",
                     "decide_relations",
                     "confirm_relation",
