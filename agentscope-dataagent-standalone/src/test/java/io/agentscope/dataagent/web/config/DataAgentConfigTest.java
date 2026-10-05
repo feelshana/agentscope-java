@@ -122,6 +122,10 @@ class DataAgentConfigTest {
         assertThat(DataAgentConfig.DEFAULT_AGENT_SYS_PROMPT)
                 .contains("按官方决策树选工具")
                 .contains("Cube 成员能覆盖时优先用 wren_query_cube")
+                // coverage judgement + ranking split stay in sync across the prompt/router row
+                .contains("覆盖判定")
+                .contains("要求 X 是 Cube 维度成员")
+                .contains("GROUP BY X 排名")
                 .contains("已发布 View 能直接覆盖问题时优先用 wren_run_sql 按视图名直接查询")
                 .contains("展开 many 侧关联字段组")
                 .contains("只查询一个逻辑模型及其投影列")

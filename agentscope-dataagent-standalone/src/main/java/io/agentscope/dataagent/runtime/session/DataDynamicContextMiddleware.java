@@ -191,9 +191,11 @@ public class DataDynamicContextMiddleware implements HarnessRuntimeMiddleware {
     }
 
     /**
-     * Lightweight directory for one published group. Field, relation and Cube-member details are
-     * fetched on demand through {@code wren_describe_model}. Cube rows carry member names so the
-     * model can map question wording onto measures/dimensions without an extra round trip.
+     * Lightweight directory for one published group. Field and relation details are fetched on
+     * demand through {@code wren_describe_model}. Cube rows carry member names plus measure
+     * expressions and a short description so the model can judge coverage (measure, group-by
+     * dimension and time granularity all present) straight from the directory instead of
+     * word-matching the question against cube/member names alone.
      */
     private static String buildLogicalSection(MdlCatalog.GroupMdl g) {
         StringBuilder sb = new StringBuilder();
@@ -207,7 +209,10 @@ public class DataDynamicContextMiddleware implements HarnessRuntimeMiddleware {
                 .append("」，无需复制长 ID）\n\n");
         sb.append(
                 "问数路由（官方决策树）：聚合指标问题先核对 Cube 清单，Cube 成员能覆盖时优先用 wren_query_cube"
-                        + "（引擎确定性编译聚合，错误率更低）；已发布 View 能直接覆盖问题时优先用 wren_run_sql"
+                        + "（引擎确定性编译聚合，错误率更低）——覆盖判定：问题的度量、分组维度、时间粒度需全部落在"
+                        + " Cube 成员上；「按 X 的排名 / TOP-N」要求 X 是 Cube 的维度成员（dimensions=[X] + order_by"
+                        + " 该度量 + limit），Cube 缺该维度即不覆盖，改按 View / 模型 SQL GROUP BY X 排名——禁止不分组"
+                        + "而只对度量排序取 TOP-N（那只是对聚合行排序，不是实体排名）；已发布 View 能直接覆盖问题时优先用 wren_run_sql"
                         + " 按视图名直接查询（视图口径已经建模审阅）；跨模型属性先用"
                         + " wren_describe_model(expand_relation_fields=true) 展开 many"
                         + " 侧关联字段组，并以单一逻辑模型查询投影列让 Wren 自动 JOIN；语义资产都无法表达时使用其他逻辑"
@@ -231,17 +236,27 @@ public class DataDynamicContextMiddleware implements HarnessRuntimeMiddleware {
                         .append(c.name())
                         .append("`（基础模型 `")
                         .append(c.baseModel())
-                        .append("`");
+                        .append("`）\n");
                 if (!c.measures().isEmpty()) {
-                    sb.append("；度量：").append(memberNames(c.measures()));
+                    sb.append("  - 度量：").append(memberDefs(c.measures())).append('\n');
                 }
+                StringBuilder dims = new StringBuilder();
                 if (!c.dimensions().isEmpty()) {
-                    sb.append("；维度：").append(memberNames(c.dimensions()));
+                    dims.append("维度：").append(memberNames(c.dimensions()));
                 }
                 if (!c.timeDimensions().isEmpty()) {
-                    sb.append("；时间维度：").append(memberNames(c.timeDimensions()));
+                    if (dims.length() > 0) {
+                        dims.append("；");
+                    }
+                    dims.append("时间维度：").append(memberNames(c.timeDimensions()));
                 }
-                sb.append("）\n");
+                if (dims.length() > 0) {
+                    sb.append("  - ").append(dims).append('\n');
+                }
+                String desc = flat(c.description(), 100);
+                if (desc != null) {
+                    sb.append("  - 说明：").append(desc).append('\n');
+                }
             }
         }
         return sb.toString();
@@ -250,6 +265,20 @@ public class DataDynamicContextMiddleware implements HarnessRuntimeMiddleware {
     /** Joined member names for the Cube directory rows; member details stay in describe. */
     private static String memberNames(List<MdlCatalog.Member> members) {
         return members.stream().map(MdlCatalog.Member::name).collect(Collectors.joining("、"));
+    }
+
+    /**
+     * Measure rows show the aggregation form ({@code name=expression}) so the model can judge
+     * whether a question's metric is really covered; dimensions keep bare names.
+     */
+    private static String memberDefs(List<MdlCatalog.Member> members) {
+        return members.stream()
+                .map(
+                        m ->
+                                m.expression() == null || m.expression().isBlank()
+                                        ? m.name()
+                                        : m.name() + "=" + m.expression())
+                .collect(Collectors.joining("、"));
     }
 
     /** One-line, length-capped prompt fragment (descriptions may contain newlines). */

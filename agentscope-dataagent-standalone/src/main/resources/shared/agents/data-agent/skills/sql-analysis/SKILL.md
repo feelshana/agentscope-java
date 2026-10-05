@@ -17,7 +17,7 @@ description: 通过针对已配置数据源编写 SQL 查询、校验后呈现�
    - 先查阅 system prompt 中的 `[DATA_SOURCES_OVERVIEW]` 和 `[KNOWLEDGE_BASE_OVERVIEW]`，从轻量目录选择知识库、逻辑模型、Cube 和已发布 View，绝不猜测物理表名、datasetId 或 sourceId。
    - 字段、关系或 Cube 成员不明确时，调用 `wren_describe_model(group_id, model_names)` 一次查看直接相关的 1–5 个逻辑模型；不要逐表重复调用。默认折叠关联投影，需要具体跨模型字段时传 `expand_relation_fields=true`。
    - **阅读 `[KNOWLEDGE_BASE_OVERVIEW]` 中的知识库摘要**，特别注意数据相关性提示和约束（例如"X 数据与 Y 数据无相关性"）。如果知识库明确指出某些数据之间无关联，**不要**探查不相关模型。
-   - 按官方决策树选工具：① 聚合指标问题先核对 Cube 清单，已发布 Cube 成员覆盖时优先用 `wren_query_cube`（引擎确定性编译聚合，错误率更低）；② 已发布 View 能直接覆盖问题时优先用 `wren_run_sql` 按视图名直接查询（视图口径已经建模审阅）；③ 需要跨模型属性时，展开 many 侧关联字段组，以该单一逻辑模型的投影列查询，让 Wren 按 relationship condition 自动 JOIN；④ 语义资产都无法表达时才用 `wren_run_sql` 编写其他逻辑 SQL，显式 JOIN 是最后兜底。没有有效已发布 MDL 时明确告知当前不可问数，不尝试物理 SQL 回退。
+   - 按官方决策树选工具：① 聚合指标问题先核对 Cube 清单，已发布 Cube 成员覆盖时优先用 `wren_query_cube`（引擎确定性编译聚合，错误率更低）——「覆盖」指问题的度量、分组维度、时间粒度全部命中 Cube 成员（清单中度量带聚合表达式可据此比对）；「按 X 的排名 / TOP-N」要求 X 是 Cube 维度成员（`dimensions=[X]` + `order_by` 度量 + `limit`），缺该维度即不覆盖、改用 `wren_run_sql` 按 View / 逻辑模型 `GROUP BY X` 排名，禁止不分组而对度量排序取 TOP-N（只是对聚合行排序，不是实体排名）；② 已发布 View 能直接覆盖问题时优先用 `wren_run_sql` 按视图名直接查询（视图口径已经建模审阅）；③ 需要跨模型属性时，展开 many 侧关联字段组，以该单一逻辑模型的投影列查询，让 Wren 按 relationship condition 自动 JOIN；④ 语义资产都无法表达时才用 `wren_run_sql` 编写其他逻辑 SQL，显式 JOIN 是最后兜底。没有有效已发布 MDL 时明确告知当前不可问数，不尝试物理 SQL 回退。
    - 如果仍然无法确定该用哪个模型：当前工具集里有 `agent_spawn` 时**委托 `data-explorer` 子代理**，把指标定义作为提示词传给它；没有时自己批量调用 `wren_describe_model` 对比语义结构。
 
 3. **不要发纯"摸底"查询。** `wren_describe_model` 返回的字段、关系和 Cube 信息已足够写正式查询。看完模型后，**直接写回答用户问题的查询**——不要发 `SELECT COUNT(*)` / `SELECT MIN(date)` 等仅为了了解数据规模、日期范围的探查查询。在 SQL 中遵守：
@@ -65,6 +65,7 @@ description: 通过针对已配置数据源编写 SQL 查询、校验后呈现�
 - ❌ 只读一行数据就当作趋势汇报。
 - ❌ 凭空编造模型、字段、Cube 或 `group_id`。不确定时先查阅 `[DATA_SOURCES_OVERVIEW]` / 调用 `wren_describe_model`，或（工具集中有 `agent_spawn` 时）委托 `data-explorer`。
 - ❌ Cube 成员能覆盖聚合问题时手写手工聚合 SQL、已发布 View 能直接覆盖问题时绕开视图重建同等口径，或已有 many 侧关系投影时直接写显式 JOIN——语义资产能表达时优先用语义资产，少一层手工出错面。
+- ❌ Cube 缺少所需分组维度（如「按客户排名」但 Cube 没有客户维度）时仍用度量排序 + `limit` 模拟实体排名——那只是对聚合行排序；应判为 Cube 不覆盖，改用 `wren_run_sql` 按 View / 逻辑模型分组排名。
 - ❌ 尝试绕过 Wren 访问 datasetId、sourceId、schema 或物理表；所有结构化问数统一走 `wren_run_sql` / `wren_query_cube`。
 - ❌ 把上一步查询结果字面量复制进 `IN (...)`（跨表筛选或补部门/职位这类维度属性都算）——改用 `JOIN` / CTE 让条件留在库内。
 - ❌ 问题含趋势/对比/考核语义却只交文字表格——查完数应主动升级可视化，不等用户提示。

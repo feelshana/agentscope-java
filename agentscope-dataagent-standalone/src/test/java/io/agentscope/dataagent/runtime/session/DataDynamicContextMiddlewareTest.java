@@ -103,14 +103,21 @@ class DataDynamicContextMiddlewareTest {
                 .contains("- `订单` — 订单明细")
                 .contains("**Cube：**")
                 // member names are part of the directory so question wording maps onto Cube
-                // measures/dimensions without an extra describe round trip
-                .contains("- `销售Cube`（基础模型 `订单`；度量：销售额；维度：城市；时间维度：下单日期）")
+                // measures/dimensions without an extra describe round trip; measure rows also
+                // inline the aggregation expression and a short description so coverage can be
+                // judged straight from the directory
+                .contains(
+                        "- `销售Cube`（基础模型 `订单`）\n"
+                                + "  - 度量：销售额=SUM(金额)\n"
+                                + "  - 维度：城市；时间维度：下单日期\n"
+                                + "  - 说明：销售指标")
                 // empty member lists omit their segment entirely
-                .contains("- `计数Cube`（基础模型 `订单`；度量：订单数）")
-                .doesNotContain("；维度：）")
-                .doesNotContain("；时间维度：）")
-                // column-level details (descriptions, names, types) stay in describe only
-                .doesNotContain("| 字段 |", "开通城市", "金额", "VARCHAR", "客户ID", "MANY_TO_ONE")
+                .contains("- `计数Cube`（基础模型 `订单`）\n" + "  - 度量：订单数=COUNT(*)\n" + "  - 说明：行数指标")
+                .doesNotContain("维度：；", "时间维度：；", "COUNT(*)；")
+                // column-level detail tables/relations stay in describe; member-level
+                // descriptions and types (成交金额/decimal) stay out of the directory too
+                .doesNotContain("| 字段 |", "开通城市", "VARCHAR", "客户ID", "MANY_TO_ONE")
+                .doesNotContain("成交金额", "decimal")
                 .doesNotContain("以下是当前会话可用的数据源")
                 .doesNotContain("source_id")
                 .doesNotContain("ds_a_t1")
@@ -126,6 +133,15 @@ class DataDynamicContextMiddlewareTest {
         assertThat(prompt(middleware, new DatasetScope("alice")))
                 .contains("问数路由（官方决策树）")
                 .contains("Cube 成员能覆盖时优先用 wren_query_cube")
+                // coverage judgement: measure + group-by dimension + time granularity must all
+                // land on Cube members; rankings need X as a Cube dimension member
+                .contains("覆盖判定：问题的度量、分组维度、时间粒度需全部落在")
+                .contains("要求 X 是 Cube 的维度成员")
+                .contains("dimensions=[X]")
+                .contains("Cube 缺该维度即不覆盖")
+                .contains("GROUP BY X 排名")
+                // bare measure order-by + limit is only ordering aggregate rows, not entities
+                .contains("不是实体排名")
                 .contains("已发布 View 能直接覆盖问题时优先用 wren_run_sql 按视图名直接查询")
                 .contains("wren_describe_model(expand_relation_fields=true)")
                 .contains("many 侧关联字段组")

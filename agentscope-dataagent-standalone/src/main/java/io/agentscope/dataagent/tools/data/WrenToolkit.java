@@ -135,7 +135,9 @@ public final class WrenToolkit {
                     """
                     在已发布语义模型的知识库上执行 SQL（wren 语义引擎，在逻辑模型或已发布 View 上查询）；知识库和逻辑模型必须取自 [DATA_SOURCES_OVERVIEW]。\
                     group_id 参数优先直接传知识库名称（推荐）；也可传完整 group_id，必须逐字符原样复制。\
-                    聚合指标问题先核对 Cube 清单，Cube 成员能覆盖时优先用 wren_query_cube（引擎确定性编译聚合，错误率更低）；\
+                    聚合指标问题先核对 Cube 清单，Cube 成员能覆盖时优先用 wren_query_cube（引擎确定性编译聚合，错误率更低）——\
+                    覆盖判定：问题的度量、分组维度、时间粒度需全部落在 Cube 成员上；「按 X 的排名 / TOP-N」要求 X 是 Cube 维度成员，\
+                    Cube 缺该维度即不覆盖、改用本工具按 View / 逻辑模型 GROUP BY X 排名，不要不分组而对度量排序取 TOP-N（那只是聚合行排序）。\
                     已发布 View 能直接覆盖问题时优先直接按视图名查询（视图口径已经建模审阅）。\
                     字段或关联组不明确时先调用 wren_describe_model；跨模型属性优先查询 many 侧模型的关联投影列，让 Wren 自动 JOIN。\
                     仅当语义资产都无法表达问题时才编写其他逻辑 SQL；显式 JOIN 是最后兜底。\
@@ -225,7 +227,10 @@ public final class WrenToolkit {
             description =
                     """
                     在已发布语义模型的知识库上执行 Cube（指标）聚合查询，返回聚合行。\
-                    聚合问题先确认覆盖（参考 [DATA_SOURCES_OVERVIEW] 的 Cube 清单，必要时 wren_cube_describe 核对成员），覆盖时优先用本工具——引擎确定性编译 GROUP BY 与时间粒度，比手工聚合 SQL 错误率更低。\
+                    聚合问题先确认覆盖（核对 [DATA_SOURCES_OVERVIEW] 的 Cube 清单成员），覆盖时优先用本工具——引擎确定性编译 GROUP BY 与时间粒度，比手工聚合 SQL 错误率更低。\
+                    覆盖判定：问题的度量、分组维度、时间粒度需全部落在本 Cube 成员上（清单中度量带聚合表达式可据此比对）；\
+                    「按 X 的排名 / TOP-N」必须把 X 作为维度传入（dimensions=[X]，如按客户排名需客户类维度成员）并 order_by 该度量 + limit；\
+                    本 Cube 缺该分组维度时不覆盖该问题，请改用 wren_run_sql 按 View / 逻辑模型 GROUP BY X 排名——不分组而对度量排序取 TOP-N 只是对聚合行排序，不是实体排名。\
                     cube、度量、维度的名称以 [DATA_SOURCES_OVERVIEW] 中该知识库的 Cube 清单为准，不要自行编造。\
                     group_id 参数优先直接传知识库名称（推荐）；也可传完整 group_id，必须逐字符原样复制。\
                     筛选格式 dim:op[:value]（in/not_in 用逗号分隔多值）；时间维度格式 name:granularity[:start,end]，\

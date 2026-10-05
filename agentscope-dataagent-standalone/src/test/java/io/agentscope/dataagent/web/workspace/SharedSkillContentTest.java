@@ -90,6 +90,13 @@ class SharedSkillContentTest {
         assertThat(read(SQL_ANALYSIS))
                 .contains("按官方决策树选工具")
                 .contains("已发布 Cube 成员覆盖时优先用 `wren_query_cube`")
+                // coverage judgement + ranking split (2026-10-05 cube-misroute analysis): a
+                // ranking needs X as a Cube dimension, otherwise GROUP BY X in SQL
+                .contains("全部命中 Cube 成员")
+                .contains("缺该维度即不覆盖")
+                .contains("GROUP BY X` 排名")
+                .contains("不是实体排名")
+                .contains("应判为 Cube 不覆盖")
                 .contains("已发布 View 能直接覆盖问题时优先用 `wren_run_sql` 按视图名直接查询")
                 .contains("展开 many 侧关联字段组")
                 .contains("单一逻辑模型的投影列查询")

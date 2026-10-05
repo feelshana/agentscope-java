@@ -847,12 +847,20 @@ class WrenToolkitTest {
                 .contains("基础 MDL 初始化")
                 .contains("已发布 View")
                 .contains("优先用 wren_query_cube")
+                // coverage judgement + ranking split (2026-10-05 cube-misroute analysis): a
+                // ranking needs X as a Cube dimension; otherwise fall back to GROUP BY X in SQL
+                .contains("覆盖判定")
+                .contains("GROUP BY X 排名")
+                .contains("TOP-N")
                 .contains("优先直接按视图名查询")
                 .contains("语义资产都无法表达")
                 .contains("SELECT / WITH")
                 .contains("LIMIT/OFFSET")
                 .contains("知识库名称（推荐")
                 .doesNotContain("query_structured_data")
+                // wren_cube_describe lives on the modeling agent's toolkit only; the asking
+                // toolkit must never point the model at a tool it cannot see
+                .doesNotContain("wren_cube_describe")
                 // specs/025: official alignment — prefer wording, no deterministic routing gate
                 .doesNotContain("必须只按该视图名查询")
                 .doesNotContain("不得从基础模型重建同等语义")
@@ -861,12 +869,16 @@ class WrenToolkitTest {
                 .contains("基础 MDL 初始化")
                 .contains("Cube")
                 .contains("覆盖时优先用本工具")
+                .contains("覆盖判定")
+                .contains("dimensions=[X]")
+                .contains("不是实体排名")
                 .contains("左闭右开")
                 .contains("granularity 使用小写")
                 .contains("知识库名称（推荐")
                 .contains("start=end 会得到空结果")
                 .contains("原始成员名")
                 .contains("默认按时间升序")
+                .doesNotContain("wren_cube_describe")
                 .doesNotContain("不得改写为手工聚合 SQL")
                 .doesNotContain("query_structured_data");
         assertThat(toolDescription("wren_describe_model"))

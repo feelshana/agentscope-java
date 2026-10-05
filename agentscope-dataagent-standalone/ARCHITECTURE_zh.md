@@ -482,9 +482,13 @@ wrenai pydantic 接受空串、MySQL 允许不选库连接、重写后的物理 
 | `wren_run_sql` | 自由 | LLM 写全 SQL（逻辑模型名），wren 编译重写为物理表 SQL并执行 | wrenai connector 会在 SQL 尾部追加行数上限；入口正则拒绝显式 LIMIT/OFFSET，引导改用 limit 参数 |
 | `wren_query_cube` | 结构化 | LLM 只出 cube + 指标 + 维度 + 过滤 + 排序，JOIN/聚合由 wren-core 按 MDL 声明确定性编译 | 命名指标优先；time_dimension 为左闭右开，`normalizeTimeDimension` 对同端点日历区间自动扩一档；order_by 成员必须是本次选中的原始名，`normalizeOrderBy` 把时间维度输出别名（如 order_time__month）归一回原始名 |
 
-**Wren-only 路由（官方决策树，specs/025）**：`DataAgentConfig#DEFAULT_AGENT_SYS_PROMPT`、动态目录说明、
+**Wren-only 路由（官方决策树，specs/025；覆盖判定 2026-10-05）**：`DataAgentConfig#DEFAULT_AGENT_SYS_PROMPT`、动态目录说明、
 `sql-analysis` 与工具描述使用同一 prefer 决策树：① 聚合指标问题先核对 Cube 清单，已发布 Cube 成员
-覆盖时优先用 `wren_query_cube`（引擎确定性编译聚合，错误率更低）；② 已发布 View 能直接覆盖问题时
+覆盖时优先用 `wren_query_cube`（引擎确定性编译聚合，错误率更低）——「覆盖」指问题的度量、分组维度、
+时间粒度全部命中 Cube 成员；「按 X 的排名 / TOP-N」要求 X 是 Cube 维度成员（`dimensions=[X]` + `order_by`
+度量 + `limit`），缺该维度即不覆盖、改用 `wren_run_sql` 按 View / 逻辑模型 `GROUP BY X` 排名，禁止不分组
+而对度量排序取 TOP-N（那只是对聚合行排序，不是实体排名——官方 usage 技能同此口径，2026-10-05 探针
+实测维度分组编译为 `GROUP BY 1, 2 ORDER BY 3 DESC LIMIT 10`）；② 已发布 View 能直接覆盖问题时
 优先直接按视图名查询（视图口径已经建模审阅）；③ 跨模型属性先在 many 侧模型用
 `expand_relation_fields=true` 展开关联字段组，查询单一逻辑模型及投影列，由 Wren 根据 relationship
 condition 自动 JOIN；④ 语义资产都无法表达时才用 `wren_run_sql` 编写其他逻辑 SQL，显式 JOIN 是最后
@@ -497,12 +501,17 @@ n-gram 意图门已删除（specs/025、ADR 0036）：词面匹配会误伤视�
 **轻量预注入**：`DataDynamicContextMiddleware` 按 `DatasetScope` 和组状态读取 `MdlCatalog#load`。
 `PUBLISHED` / `DIRTY` 且 manifest 有效时，只渲染知识库 `group_id`、版本、逻辑模型名称与描述
 （并在标题括号内明示「wren 工具的 group_id 参数可直接填本知识库名称」，名称寻址见 4.2），
-Cube 行除名称和基础模型外还携带度量、维度与时间维度的成员名（空成员段省略，
-`DataDynamicContextMiddleware#buildLogicalSection`）；字段、关系和成员的表达式/描述/类型
-由 `wren_describe_model` 按需返回。目录携带成员名的动机（2026-10-03 LLM.log 实证）：只有
+Cube 行除名称和基础模型外还携带度量（含聚合表达式，如
+`paying_customers=COUNT(DISTINCT customer_id)`）、维度与时间维度（空成员段整行省略）及截断 100 字的说明
+（`DataDynamicContextMiddleware#buildLogicalSection` 与 `memberDefs`）；字段、关系和成员的类型与完整
+描述仍由 `wren_describe_model` 按需返回。目录携带成员名的动机（2026-10-03 LLM.log 实证）：只有
 Cube 名时模型无法把问题措辞（如「访问用户数 TOP10」）映射到 Cube 度量，命名指标问题会绕过
 Cube 手写 SQL，口径固化价值落空；`wren_query_cube` 工具描述本就要求「度量、维度名称以
-Cube 清单为准」，成员名进目录后该契约才真正成立。中间件不再输出物理表 bullet、sourceId
+Cube 清单为准」，成员名进目录后该契约才真正成立。表达式与说明的补充动机（2026-10-05 LLM.log
+实证）：首问「25年2月付费客户 top10」仅凭成员名把 `paying_customers` 词面匹配成「按客户排名」，
+误调 Cube 得 1 行后才自纠——度量表达式（`COUNT(DISTINCT customer_id)` 不按客户分组）与
+Cube 说明让模型能在目录层判「是否覆盖」；对应「覆盖判定」文案同步进入路由行、工具描述与
+`sql-analysis`。中间件不再输出物理表 bullet、sourceId
 或直查指令；`INITIALIZING` / `FAILED` 输出不可用状态，避免模型猜测查询。
 
 **实例池事实（M3；调用串行化 2026-09-29，ADR 0023）**：按需 spawn（per-group 双检锁；
@@ -518,9 +527,9 @@ transport 非线程安全（`Sinks#tryEmitNext` 并发返回 FAIL_NON_SERIALIZED
 MDL 边界只管可见模型集合，不自动禁止未声明关系的 JOIN，因此关联路径仍由 MDL relationships
 与 `sql-analysis` 规则共同约束。
 
-**schema 上下文获取路径**：`[DATA_SOURCES_OVERVIEW]` 只注入逻辑模型/Cube 目录（Cube 行含成员名）；
-需要字段、关系、计算列或 Cube 成员的表达式与描述时调用 `wren_describe_model`。关系投影默认只显示
-对端模型、字段数和自动 JOIN 提示；确定需要跨模型列时再传 `expand_relation_fields=true`。该折叠只影响
+**schema 上下文获取路径**：`[DATA_SOURCES_OVERVIEW]` 只注入逻辑模型/Cube 目录（Cube 行含成员名、
+度量表达式与截断说明）；需要字段、关系、计算列或成员的类型与完整描述时调用 `wren_describe_model`。
+关系投影默认只显示对端模型、字段数和自动 JOIN 提示；确定需要跨模型列时再传 `expand_relation_fields=true`。该折叠只影响
 描述输出，发布 MDL 中的投影列保持完整。不调用通用 `describe_schema`，也不暴露物理 schema。
 视图 schema 不走 describe：`[KNOWLEDGE_BASE_OVERVIEW]` 语义视图小节直接注入每视图折叠截断后的
 statement（上游 `_describe_view` 对齐，specs/020 / ADR 0034）；describe 误传视图/Cube 名时由
