@@ -15,13 +15,15 @@
  */
 package io.agentscope.dataagent.web.api;
 
+import io.agentscope.dataagent.dataset.BaselineMdlService;
 import io.agentscope.dataagent.dataset.DatasetException;
 import io.agentscope.dataagent.dataset.DatasetGroupService;
 import io.agentscope.dataagent.dataset.DatasetService;
+import io.agentscope.dataagent.dataset.DocEnhanceService;
 import io.agentscope.dataagent.dataset.GraphDto;
-import io.agentscope.dataagent.dataset.KnowledgeGraphService;
 import io.agentscope.dataagent.dataset.SchemaRelationInferrer;
 import io.agentscope.dataagent.dataset.parser.DocxDescriptionExtractor;
+import io.agentscope.dataagent.web.persistence.jpa.DatasetEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetRelationEntity;
 import java.io.ByteArrayInputStream;
@@ -51,8 +53,9 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 /**
- * Knowledge-base (KB) CRUD: named per-user containers grouping datasets plus one relationship
- * document per KB (the TC DataAgent "知识库" analogue).
+ * Knowledge-base (KB) CRUD: named per-user containers grouping datasets. The relationship document
+ * was folded into the modeling page as the "语义文档" upload (specs/028); uploading it triggers the
+ * doc-enhance analysis only — the automatic knowledge-graph build on upload was removed (ADR 0038).
  */
 @RestController
 @RequestMapping("/api/dataset-groups")
@@ -63,15 +66,18 @@ public class DatasetGroupController {
 
     private final DatasetGroupService groupService;
     private final DatasetService datasetService;
-    private final KnowledgeGraphService knowledgeGraphService;
+    private final DocEnhanceService docEnhanceService;
+    private final BaselineMdlService baselineMdlService;
 
     public DatasetGroupController(
             DatasetGroupService groupService,
             DatasetService datasetService,
-            KnowledgeGraphService knowledgeGraphService) {
+            DocEnhanceService docEnhanceService,
+            BaselineMdlService baselineMdlService) {
         this.groupService = groupService;
         this.datasetService = datasetService;
-        this.knowledgeGraphService = knowledgeGraphService;
+        this.docEnhanceService = docEnhanceService;
+        this.baselineMdlService = baselineMdlService;
     }
 
     public record GroupVO(
@@ -157,12 +163,8 @@ public class DatasetGroupController {
                                                     String text =
                                                             extractText(file.filename(), bytes);
                                                     datasetService.saveKnowledge(id, text);
-                                                    try {
-                                                        knowledgeGraphService.triggerBuild(
-                                                                userId, id, true, null);
-                                                    } catch (RuntimeException ignore) {
-                                                        // already running or no model configured
-                                                    }
+                                                    docEnhanceService.triggerAnalyzeQuietly(
+                                                            userId, id, text, file.filename());
                                                     return Map.of("content", text);
                                                 })
                                         .subscribeOn(Schedulers.boundedElastic()))
@@ -255,21 +257,23 @@ public class DatasetGroupController {
             @PathVariable String id, @RequestBody AssociateRequest req, Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
-                        () ->
-                                datasetService
-                                        .associateTables(
-                                                userId,
-                                                id,
-                                                req.dataSourceId(),
-                                                req.schema(),
-                                                req.tables(),
-                                                req.sampling() == null || req.sampling())
-                                        .stream()
-                                        .map(
-                                                d ->
-                                                        DatasetController.toVOStatic(
-                                                                d, datasetService.readColumns(d)))
-                                        .toList())
+                        () -> {
+                            List<DatasetEntity> datasets =
+                                    datasetService.associateTables(
+                                            userId,
+                                            id,
+                                            req.dataSourceId(),
+                                            req.schema(),
+                                            req.tables(),
+                                            req.sampling() == null || req.sampling());
+                            baselineMdlService.publishAfterDatasetChange(userId, id);
+                            return datasets.stream()
+                                    .map(
+                                            d ->
+                                                    DatasetController.toVOStatic(
+                                                            d, datasetService.readColumns(d)))
+                                    .toList();
+                        })
                 .subscribeOn(Schedulers.boundedElastic())
                 .onErrorMap(this::toStatus);
     }

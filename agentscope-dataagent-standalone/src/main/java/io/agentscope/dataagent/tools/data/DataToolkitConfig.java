@@ -27,10 +27,9 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Spring wiring for the DataAgent toolkit defaults. Exposes a {@link DataSourceRegistry}, a
- * {@link SqlConnector} ({@link JdbcSqlConnector}) and {@link ChartRenderer} ({@link
- * StubChartRenderer}) so operators can override each independently — e.g. a Spring profile that
- * wires a richer registry or a server-side PNG renderer.
+ * Spring wiring for the DataAgent toolkit defaults. Exposes a {@link DataSourceRegistry} and
+ * {@link ChartRenderer} ({@link StubChartRenderer}) so operators can override each independently —
+ * e.g. a Spring profile that wires a richer registry or a server-side PNG renderer.
  *
  * <p>Seeding is opt-in per source: the application's own database ({@code app-db}) is only exposed
  * when {@code dataagent.expose-app-db=true} (it holds platform metadata, not business data).
@@ -79,13 +78,6 @@ public class DataToolkitConfig {
                 sources.size(),
                 sources.stream().map(DataSource::id).toList());
         return new InMemoryDataSourceRegistry(sources);
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(SqlConnector.class)
-    public SqlConnector jdbcSqlConnector() {
-        log.info("DataToolkitConfig: no SqlConnector bean found, using JdbcSqlConnector");
-        return new JdbcSqlConnector();
     }
 
     @Bean

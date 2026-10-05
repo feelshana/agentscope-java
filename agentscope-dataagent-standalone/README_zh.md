@@ -74,7 +74,7 @@ dataagent 跑在 **HarnessAgent + `SandboxFilesystem`** 之上，sandbox 生命�
 - **per-用户数据 agent** —— 任一登录用户都可以 fork 内置或新建。每个用户 agent 拥有独立的 `CompositeFilesystem`，按 `(userId, agentId)` 切分；`skills/` 和 `subagents/` 是 `OverlayFilesystem`，下层是磁盘上共享的内容。
 - **通道（v1）** —— `chatui`（默认开启、主用）、`dingtalk`（可选，原样从 agentscope-builder 移植）以及全新的**通用 Webhook** 通道（HMAC 签名入站，回调 / 长轮询出站）。
 - **能力市场** —— 用户从自己 workspace 中提名 skill / 子智能体 / memory 片段作为 *contributions*。管理员在 Approvals 页审批，通过后内容落到运行态 `shared/` 目录（由 `src/main/resources/shared` 物化、已 gitignore），下次构建时所有租户都能看到。
-- **DataAgent 工具集** —— `prepare_data_context`、`query_structured_data`、`retrieve_evidence`、`render_chart`（另有沙箱内的 `run_python`）默认注册在每个 data agent 上。TC 风格：schema 概览预注入 system prompt，工具只负责确认列细节、执行 SELECT/WITH 查询、检索证据、出图；`JdbcSqlConnector` 对接配置的数据集库，其他后端可通过 `SqlConnector` / `DataSourceRegistry` Spring Bean 注入。
+- **DataAgent 工具集** —— `wren_describe_model`、`wren_run_sql`、`wren_query_cube`、`retrieve_evidence`、`render_chart`（另有沙箱内的 `run_python`）默认注册在每个 data agent 上。结构化问数统一通过已发布 Wren MDL：system prompt 仅预注入逻辑模型/Cube 目录，字段与关系按需读取；上传、批量上传或关联外部表后自动生成并发布基础 MDL。
 
 ---
 
@@ -219,6 +219,9 @@ java -jar target/agentscope-dataagent-*-exec.jar
 | `dataagent.session.redis.key-prefix` | `dataagent:session:` | Redis key 前缀 |
 | `dataagent.marketplace.enabled` | `true` | 关掉则隐藏贡献 + 审批 API |
 | `dataagent.marketplace.max-contribution-bytes` | `1048576` | `POST /api/me/contributions` 接受的最大 payload |
+| `dataagent.wren.executable` | `wren` | WrenAI CLI 可执行文件（安装：`pip install 'wrenai[mysql,mcp]' 'mcp<2'`，需 Python ≥ 3.11）。默认值自动探测 `~/.local/bin`、`/usr/local/bin`、`/usr/bin` 与 PATH——Linux 部署装好后零配置；Windows 开发机指向 venv 的 `wren.exe` 绝对路径。spawn 失败会回显安装引导。环境变量：`DATAAGENT_WREN_EXECUTABLE` |
+| `dataagent.wren.mdl-home` | _空_ → `~/.agentscope/dataagent/mdl` | MDL 产物根目录：生成工程 `project/`、已发布快照 `published/`（含 M4 连接钉入标记 `wren-source.properties`）、平台清单 `mdl.json`（语义建模发布流，specs/010 M2/M3/M4）；同目录下 `.wren/profiles.yml` 为平台托管的运行期连接档案——除默认条目外每个已配置的 MySQL 外部数据源各一条（M4）。环境变量：`DATAAGENT_WREN_MDL_HOME` |
+| `dataagent.wren.profile` / `data-source` / `timeout-seconds` / `instance-idle-seconds` | `dataagent` / `mysql` / `180` / `1800` | 默认 wren 连接档案名（M4 起为回落值：全部数据集来自同一 MySQL 外部源的组在发布期解析专属 `ext-<datasourceId>` 档案并钉入快照；本配置仅作用于纯上传组与 M4 之前存量快照）、工程方言（写进 `wren_project.yml` 并传给 parse-types）、子进程超时（秒）、实例池空闲回收阈值（秒，M3：超时未用的 per-知识库 wren 实例被关闭，下次查询按需重建）。环境变量：`DATAAGENT_WREN_PROFILE` / `DATAAGENT_WREN_DATA_SOURCE` / `DATAAGENT_WREN_TIMEOUT_SECONDS` / `DATAAGENT_WREN_INSTANCE_IDLE_SECONDS` |
 | `server.port` | `8080` | HTTP 端口 |
 
 用户、agent、贡献记录默认持久化到嵌入式 H2，开箱即用，便于本地快速体验。生产部署时，激活 `jdbc` Spring Profile 并设置 `DATAAGENT_DB_URL` / `DATAAGENT_DB_USER` / `DATAAGENT_DB_PASSWORD` 即可切换到 MySQL 或 PostgreSQL。

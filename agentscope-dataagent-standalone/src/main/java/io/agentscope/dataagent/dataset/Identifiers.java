@@ -22,8 +22,8 @@ import java.util.Set;
 
 /**
  * Identifier sanitising shared by the parsers (column names) and the provisioner (schema / table
- * names). Everything that reaches a DDL statement or is handed to the agent as a table name must
- * satisfy {@code [A-Za-z0-9_]+} so it also passes {@code JdbcSqlConnector}'s table-name guard.
+ * names). Everything that reaches a DDL statement or a generated Wren source reference must satisfy
+ * {@code [A-Za-z0-9_]+}.
  */
 public final class Identifiers {
 

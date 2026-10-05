@@ -126,7 +126,7 @@ dataagent:
   # ---- DashScope model (fallback when no OpenAI key is configured) ----
   # Set DASHSCOPE_API_KEY env var or override api-key below.
   dashscope:
-    api-key: ${DASHSCOPE_API_KEY:sk-c6d487aaddad4ed790c85f2b52dd2e27}
+    api-key: ${DASHSCOPE_API_KEY:sk-16fb25f43dfa6ba3f5372c61e048ac2653e00eb48a995377}
     model-name: ${DATAAGENT_MODEL_NAME:qwen3.8-max}
     stream: true
     enable-thinking: false
@@ -187,6 +187,32 @@ dataagent:
       url: ${DATAAGENT_DATASET_DB_URL:jdbc:mysql://localhost:3306/data_agent?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
       username: ${DATAAGENT_DATASET_DB_USER:root}
       password: ${DATAAGENT_DATASET_DB_PASSWORD:123456}
+
+  # ---- WrenAI semantic layer (MDL assembly / validate / publish, specs/010 M2) ----
+  # Requires the `wren` CLI: pip install 'wrenai[mysql,mcp]' 'mcp<2' (Python >= 3.11).
+  # The default `wren` is auto-probed at ~/.local/bin, /usr/local/bin, /usr/bin and
+  # then PATH — Linux deployments work without config after a pip install; on Windows
+  # point `executable` at the venv wren.exe. Generated projects live under
+  # mdl-home/<groupId>/ (project staging + published snapshot + mdl.json).
+  wren:
+    executable: ${DATAAGENT_WREN_EXECUTABLE:wren}
+    # Blank = ~/.agentscope/dataagent/mdl (runtime store, outside the project tree).
+    mdl-home: ${DATAAGENT_WREN_MDL_HOME:}
+    # Connection profile used by the M3 runtime (serve mcp); local validate/build
+    # compile the project offline and do NOT require a registered profile.
+    profile: ${DATAAGENT_WREN_PROFILE:dataagent}
+    # Dialect recorded in wren_project.yml and passed to `wren utils parse-types -d`.
+    data-source: ${DATAAGENT_WREN_DATA_SOURCE:mysql}
+    # Per-command timeout for wren subprocesses (validate / build / parse-types).
+    timeout-seconds: ${DATAAGENT_WREN_TIMEOUT_SECONDS:180}
+    # Idle seconds after which a per-group `wren serve mcp` instance is closed by the reaper
+    # (specs/010 M3); a later query respawns it on demand.
+    instance-idle-seconds: ${DATAAGENT_WREN_INSTANCE_IDLE_SECONDS:1800}
+    # Official wren skills root (specs/022, ADR 0035): the skills_content directory bundled
+    # inside the wrenai pip package, mounted natively onto modeling-agent via the harness skill
+    # repository. Blank = inferred from the resolved executable location; set it only when the
+    # package layout is non-standard. Missing directory → warn + CLI fallback, startup unaffected.
+    skills-dir: ${DATAAGENT_WREN_SKILLS_DIR:}
 
   # ---- Expose the platform metadata DB as a queryable source? Off by default. ----
   expose-app-db: ${DATAAGENT_EXPOSE_APP_DB:false}

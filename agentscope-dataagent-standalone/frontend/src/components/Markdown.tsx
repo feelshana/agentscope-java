@@ -77,8 +77,9 @@ const MD_STYLE = `
 `;
 
 /** Renders markdown text (GFM tables/strikethrough included) for assistant replies.
- *  Rewrites /workspace/ image paths to the binary API and supports click-to-zoom. */
-export default function Markdown({ children }: { children: string }) {
+ *  Rewrites /workspace/ image paths to the binary API and supports click-to-zoom.
+ *  fontSize overrides the default size for compact panels (e.g. the modeling drawer). */
+export default function Markdown({ children, fontSize }: { children: string; fontSize?: number | string }) {
   const [lightbox, setLightbox] = useState<string | null>(null);
 
   const components: Components = {
@@ -105,7 +106,7 @@ export default function Markdown({ children }: { children: string }) {
   return (
     <>
       <style>{MD_STYLE}</style>
-      <div className="claw-md">
+      <div className="claw-md" style={fontSize != null ? { fontSize } : undefined}>
         <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{children}</ReactMarkdown>
       </div>
       {lightbox && createPortal(

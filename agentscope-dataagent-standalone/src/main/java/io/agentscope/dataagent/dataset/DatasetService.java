@@ -32,8 +32,10 @@ import io.agentscope.dataagent.web.persistence.jpa.DatasetRelationRepository;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetRepository;
 import io.agentscope.dataagent.web.persistence.jpa.ExternalDataSourceEntity;
 import io.agentscope.dataagent.web.persistence.jpa.ExternalDataSourceRepository;
+import io.agentscope.dataagent.web.persistence.jpa.SemanticBusinessRuleRepository;
 import io.agentscope.dataagent.web.persistence.jpa.SemanticTermEntity;
 import io.agentscope.dataagent.web.persistence.jpa.SemanticTermRepository;
+import io.agentscope.dataagent.web.persistence.jpa.SemanticViewRepository;
 import jakarta.annotation.PostConstruct;
 import java.io.InputStream;
 import java.time.Instant;
@@ -66,6 +68,8 @@ public class DatasetService implements DatasetContextProvider {
     private final DatasetGroupRepository groupRepository;
     private final DatasetKnowledgeRepository knowledgeRepository;
     private final SemanticTermRepository semanticTerms;
+    private final SemanticViewRepository semanticViews;
+    private final SemanticBusinessRuleRepository semanticBusinessRules;
     private final ExternalDataSourceRepository externalSources;
     private final DataSourceIntrospector introspector;
     private final RelationInferenceService relationInference;
@@ -77,12 +81,15 @@ public class DatasetService implements DatasetContextProvider {
     private final ObjectMapper mapper;
     private final DatasetImportService importService;
     private final SchemaGenerationService schemaGeneration;
+    private final MdlWorkspaceReader workspaceReader;
 
     public DatasetService(
             DatasetRepository repository,
             DatasetGroupRepository groupRepository,
             DatasetKnowledgeRepository knowledgeRepository,
             SemanticTermRepository semanticTerms,
+            SemanticViewRepository semanticViews,
+            SemanticBusinessRuleRepository semanticBusinessRules,
             ExternalDataSourceRepository externalSources,
             DataSourceIntrospector introspector,
             RelationInferenceService relationInference,
@@ -93,11 +100,14 @@ public class DatasetService implements DatasetContextProvider {
             DatasetStoreProperties props,
             ObjectMapper mapper,
             DatasetImportService importService,
-            SchemaGenerationService schemaGeneration) {
+            SchemaGenerationService schemaGeneration,
+            MdlWorkspaceReader workspaceReader) {
         this.repository = repository;
         this.groupRepository = groupRepository;
         this.knowledgeRepository = knowledgeRepository;
         this.semanticTerms = semanticTerms;
+        this.semanticViews = semanticViews;
+        this.semanticBusinessRules = semanticBusinessRules;
         this.externalSources = externalSources;
         this.introspector = introspector;
         this.relationInference = relationInference;
@@ -109,6 +119,7 @@ public class DatasetService implements DatasetContextProvider {
         this.mapper = mapper;
         this.importService = importService;
         this.schemaGeneration = schemaGeneration;
+        this.workspaceReader = workspaceReader;
     }
 
     @PostConstruct
@@ -139,6 +150,7 @@ public class DatasetService implements DatasetContextProvider {
                                 () ->
                                         new DatasetException(
                                                 "Knowledge base not found: " + groupId, 404));
+        validateUploadSourceCombination(group.getId());
         repository
                 .findByOwnerIdAndGroupIdAndName(ownerId, group.getId(), name.trim())
                 .ifPresent(
@@ -194,6 +206,7 @@ public class DatasetService implements DatasetContextProvider {
         entity.setUpdatedAt(Instant.now());
         repository.save(entity);
         registry.add(toDataSource(entity));
+        markMdlDirty(group.getId());
         relationInference.reinferGroup(group.getId());
         log.info(
                 "DatasetService: ingested dataset '{}' ({} rows) for owner {} as {}.{}",
@@ -220,6 +233,7 @@ public class DatasetService implements DatasetContextProvider {
         }
         registry.remove(entity.getId());
         repository.delete(entity);
+        markMdlDirty(entity.getGroupId());
     }
 
     /**
@@ -249,73 +263,34 @@ public class DatasetService implements DatasetContextProvider {
                 .filter(g -> g.getOwnerId().equals(ownerId))
                 .orElseThrow(
                         () -> new DatasetException("Knowledge base not found: " + groupId, 404));
-        boolean sample = sampling && ds.isSampling();
+        validateExternalSourceCombination(groupId, ds);
+        List<AssociatedTableMetadata> prepared =
+                prepareAssociatedTables(
+                        ownerId, groupId, ds, schema, tables, sampling && ds.isSampling());
         List<DatasetEntity> created = new ArrayList<>();
-        for (String table : tables) {
-            repository
-                    .findByOwnerIdAndGroupIdAndName(ownerId, groupId, table)
-                    .ifPresent(
-                            e -> {
-                                throw new DatasetException(
-                                        "Dataset name already exists: " + table, 409);
-                            });
-            List<DataSourceIntrospector.ColumnInfo> columns =
-                    introspector.listColumns(ds, schema, table);
-            List<String> columnNames = new ArrayList<>();
-            List<String> columnTypes = new ArrayList<>();
-            Map<String, String> jdbcComments = new LinkedHashMap<>();
-            Map<String, List<String>> columnSamples = new LinkedHashMap<>();
-            for (DataSourceIntrospector.ColumnInfo ci : columns) {
-                columnNames.add(ci.name());
-                columnTypes.add(ci.type());
-                if (ci.description() != null && !ci.description().isBlank()) {
-                    jdbcComments.put(ci.name(), ci.description());
-                }
-                if (sample) {
-                    List<String> samples = sampleValues(ds, schema, table, ci.name());
-                    if (samples != null) {
-                        columnSamples.put(ci.name(), samples);
-                    }
-                }
-            }
-            String tableComment = introspector.getTableComment(ds, schema, table);
-            SchemaGenerationService.SchemaResult schemaResult =
-                    schemaGeneration.generateSchema(
-                            columnNames, columnSamples, jdbcComments, tableComment);
-            List<ColumnSchema> schemaCols = new ArrayList<>();
-            for (int i = 0; i < columnNames.size(); i++) {
-                String description = schemaResult.columns().get(i).description();
-                schemaCols.add(
-                        new ColumnSchema(
-                                columnNames.get(i),
-                                columnNames.get(i),
-                                columnTypes.get(i),
-                                true,
-                                description));
-            }
-            String tableDesc = schemaResult.tableDescription();
-            if (tableDesc == null || tableDesc.isBlank()) {
-                tableDesc = tableComment != null && !tableComment.isBlank() ? tableComment : table;
-            }
+        List<DataSource> registrations = new ArrayList<>();
+        for (AssociatedTableMetadata metadata : prepared) {
             DatasetEntity e = new DatasetEntity();
             e.setId(UUID.randomUUID().toString());
             e.setOwnerId(ownerId);
             e.setGroupId(groupId);
-            e.setName(table);
+            e.setName(metadata.table());
             e.setOrigin("datasource");
             e.setExternalDataSourceId(ds.getId());
             e.setSchemaName(schema);
-            e.setTableName(table);
-            e.setDescription(tableDesc);
-            e.setColumnSchemaJson(writeJson(schemaCols));
-            e.setRowCount(introspector.countRows(ds, schema, table));
-            e.setSourceFileName(ds.getName() + "/" + schema + "." + table);
+            e.setTableName(metadata.table());
+            e.setDescription(metadata.description());
+            e.setColumnSchemaJson(writeJson(metadata.columns()));
+            e.setRowCount(metadata.rowCount());
+            e.setSourceFileName(ds.getName() + "/" + schema + "." + metadata.table());
             e.setCreatedAt(Instant.now());
             e.setUpdatedAt(Instant.now());
-            repository.save(e);
-            registry.add(toDataSource(e));
             created.add(e);
+            registrations.add(toDataSource(e));
         }
+        created.forEach(repository::save);
+        registrations.forEach(registry::add);
+        markMdlDirty(groupId);
         relationInference.reinferGroup(groupId);
         log.info(
                 "DatasetService: associated {} table(s) from datasource {} into group {} for owner"
@@ -325,6 +300,124 @@ public class DatasetService implements DatasetContextProvider {
                 groupId,
                 ownerId);
         return created;
+    }
+
+    private List<AssociatedTableMetadata> prepareAssociatedTables(
+            String ownerId,
+            String groupId,
+            ExternalDataSourceEntity source,
+            String schema,
+            List<String> tables,
+            boolean sampling) {
+        if (tables == null || tables.isEmpty()) {
+            throw new DatasetException("请至少选择一张外部数据表");
+        }
+        try {
+            validateIdentifier(schema, "schema");
+        } catch (IllegalArgumentException e) {
+            throw new DatasetException(e.getMessage());
+        }
+
+        Set<String> uniqueTables = new HashSet<>();
+        for (String table : tables) {
+            try {
+                validateIdentifier(table, "table");
+            } catch (IllegalArgumentException e) {
+                throw new DatasetException(e.getMessage());
+            }
+            if (!uniqueTables.add(table)) {
+                throw new DatasetException("不能重复关联同一张外部数据表: " + table, 409);
+            }
+            repository
+                    .findByOwnerIdAndGroupIdAndName(ownerId, groupId, table)
+                    .ifPresent(
+                            existing -> {
+                                throw new DatasetException(
+                                        "Dataset name already exists: " + table, 409);
+                            });
+        }
+
+        List<AssociatedTableMetadata> prepared = new ArrayList<>();
+        for (String table : tables) {
+            List<DataSourceIntrospector.ColumnInfo> columns =
+                    introspector.listColumns(source, schema, table);
+            if (columns.isEmpty()) {
+                throw new DatasetException("外部数据表不存在或没有可读取字段: " + schema + "." + table);
+            }
+            List<String> columnNames = new ArrayList<>();
+            List<String> columnTypes = new ArrayList<>();
+            Map<String, String> jdbcComments = new LinkedHashMap<>();
+            Map<String, List<String>> columnSamples = new LinkedHashMap<>();
+            for (DataSourceIntrospector.ColumnInfo column : columns) {
+                columnNames.add(column.name());
+                columnTypes.add(column.type());
+                if (column.description() != null && !column.description().isBlank()) {
+                    jdbcComments.put(column.name(), column.description());
+                }
+                if (sampling) {
+                    List<String> samples = sampleValues(source, schema, table, column.name());
+                    if (samples != null) {
+                        columnSamples.put(column.name(), samples);
+                    }
+                }
+            }
+            String tableComment = introspector.getTableComment(source, schema, table);
+            SchemaGenerationService.SchemaResult schemaResult =
+                    schemaGeneration.generateSchema(
+                            columnNames, columnSamples, jdbcComments, tableComment);
+            if (schemaResult.columns().size() != columnNames.size()) {
+                throw new DatasetException("外部数据表字段描述生成不完整: " + schema + "." + table);
+            }
+            List<ColumnSchema> schemaColumns = new ArrayList<>();
+            for (int i = 0; i < columnNames.size(); i++) {
+                schemaColumns.add(
+                        new ColumnSchema(
+                                columnNames.get(i),
+                                columnNames.get(i),
+                                columnTypes.get(i),
+                                true,
+                                schemaResult.columns().get(i).description()));
+            }
+            String tableDescription = schemaResult.tableDescription();
+            if (tableDescription == null || tableDescription.isBlank()) {
+                tableDescription =
+                        tableComment != null && !tableComment.isBlank() ? tableComment : table;
+            }
+            prepared.add(
+                    new AssociatedTableMetadata(
+                            table,
+                            List.copyOf(schemaColumns),
+                            tableDescription,
+                            introspector.countRows(source, schema, table)));
+        }
+        return List.copyOf(prepared);
+    }
+
+    private record AssociatedTableMetadata(
+            String table, List<ColumnSchema> columns, String description, long rowCount) {}
+
+    private void validateUploadSourceCombination(String groupId) {
+        boolean hasExternal =
+                repository.findByGroupId(groupId).stream()
+                        .anyMatch(dataset -> "datasource".equals(dataset.getOrigin()));
+        if (hasExternal) {
+            throw new DatasetException("知识库已关联外部数据源表，不能再上传本地数据集，请使用独立知识库");
+        }
+    }
+
+    private void validateExternalSourceCombination(
+            String groupId, ExternalDataSourceEntity source) {
+        if (!"mysql".equalsIgnoreCase(source.getKind())) {
+            throw new DatasetException("当前仅支持将 MySQL 外部数据源表关联到 Wren 知识库");
+        }
+        for (DatasetEntity existing : repository.findByGroupId(groupId)) {
+            if (!"datasource".equals(existing.getOrigin())) {
+                throw new DatasetException("知识库已包含上传数据集，不能再关联外部数据源表，请使用独立知识库");
+            }
+            if (!source.getId().equals(existing.getExternalDataSourceId())) {
+                throw new DatasetException("一个知识库只能关联同一个外部数据源的表");
+            }
+        }
     }
 
     /** Distinct values for a column when cardinality is low (<=20); max 3 returned. null if high cardinality. */
@@ -458,6 +551,40 @@ public class DatasetService implements DatasetContextProvider {
         return new Preview(readColumns(entity), rows);
     }
 
+    /**
+     * Total / distinct-non-null value counts of one physical column ({@code [total, distinct]}),
+     * used by the semantic-modeling joinType probe: a unique end is the "one" side of the join.
+     * The column must exist on the dataset's schema — anything else is rejected before it can
+     * reach the SQL text.
+     */
+    public long[] columnProfile(String ownerId, String datasetId, String column) {
+        DatasetEntity entity = get(ownerId, datasetId);
+        boolean known = readColumns(entity).stream().anyMatch(c -> c.name().equals(column));
+        if (!known) {
+            throw new DatasetException(
+                    "Unknown column " + column + " on dataset " + datasetId, 400);
+        }
+        String sql =
+                "SELECT COUNT(*), COUNT(DISTINCT `" + column + "`) FROM " + qualifiedTable(entity);
+        try (java.sql.Connection c = openFor(entity);
+                java.sql.Statement st = c.createStatement();
+                java.sql.ResultSet rs = st.executeQuery(sql)) {
+            if (rs.next()) {
+                return new long[] {rs.getLong(1), rs.getLong(2)};
+            }
+            return new long[] {0, 0};
+        } catch (java.sql.SQLException e) {
+            throw new DatasetException(
+                    "Failed to profile "
+                            + entity.getTableName()
+                            + "."
+                            + column
+                            + ": "
+                            + e.getMessage(),
+                    e);
+        }
+    }
+
     /** Updates column business descriptions and re-registers the source so the agent sees them. */
     @Transactional
     public DatasetEntity updateColumnDescriptions(
@@ -483,6 +610,7 @@ public class DatasetService implements DatasetContextProvider {
         entity.setUpdatedAt(Instant.now());
         repository.save(entity);
         registry.add(toDataSource(entity));
+        markMdlDirty(entity.getGroupId());
         return entity;
     }
 
@@ -513,7 +641,7 @@ public class DatasetService implements DatasetContextProvider {
         if (e.getGroupId() != null) {
             properties.put("groupId", e.getGroupId());
         }
-        // Store column schema JSON for prepare_data_context to use
+        // Keep schema metadata available for baseline MDL assembly and modeling views.
         if (e.getColumnSchemaJson() != null && !e.getColumnSchemaJson().isBlank()) {
             properties.put("columnSchemaJson", e.getColumnSchemaJson());
         }
@@ -582,22 +710,109 @@ public class DatasetService implements DatasetContextProvider {
     }
 
     @Override
-    public String semanticTermsText() {
+    public String semanticTermsText(java.util.List<String> onlyGroups) {
+        // specs/026: terms bind to one knowledge base. Without an explicit group boundary we
+        // render nothing, so another tenant's terms can never leak into the prompt.
+        if (onlyGroups == null || onlyGroups.isEmpty()) {
+            return "";
+        }
         StringBuilder sb = new StringBuilder();
-        for (SemanticTermEntity t : semanticTerms.findAllByOrderByCreatedAtDesc()) {
+        for (String gid : new java.util.LinkedHashSet<>(onlyGroups)) {
+            if (gid == null || gid.isBlank()) {
+                continue;
+            }
+            for (SemanticTermEntity t : semanticTerms.findByGroupIdOrderByCreatedAtDesc(gid)) {
+                if (sb.length() > 0) {
+                    sb.append('\n');
+                }
+                sb.append(t.getTerm());
+                if (t.getExplanation() != null && !t.getExplanation().isBlank()) {
+                    sb.append("：").append(t.getExplanation());
+                }
+                if (t.getSynonyms() != null && !t.getSynonyms().isBlank()) {
+                    sb.append("（同义词：").append(t.getSynonyms().replace("\n", ",")).append("）");
+                }
+            }
+        }
+        return sb.toString();
+    }
+
+    @Override
+    public String semanticViewsText(java.util.List<String> onlyGroups) {
+        // specs/019 §7: views live as workspace files now. Without an explicit group boundary we
+        // render nothing, so another tenant's workspace can never leak into the prompt.
+        if (onlyGroups == null || onlyGroups.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (String gid : new java.util.LinkedHashSet<>(onlyGroups)) {
+            if (gid == null || gid.isBlank()) {
+                continue;
+            }
+            for (MdlWorkspaceReader.WorkspaceView v : workspaceReader.read(gid).views()) {
+                if (sb.length() > 0) {
+                    sb.append('\n');
+                }
+                sb.append(v.name());
+                if (v.description() != null && !v.description().isBlank()) {
+                    sb.append("：").append(v.description().replace("\n", " "));
+                }
+                // specs/020: the statement itself is the best schema hint (upstream _describe_view
+                // parity) — it shows the output columns so the model never needs describe on a
+                // view.
+                String statement = flattenStatement(v.sql());
+                if (!statement.isEmpty()) {
+                    sb.append("\n  SQL: ").append(statement);
+                }
+            }
+        }
+        return sb.toString();
+    }
+
+    /** Prompt statement line cap per view (upstream _view_record keeps a 200-char prefix). */
+    private static final int MAX_VIEW_STATEMENT_CHARS = 400;
+
+    /**
+     * Folds a view statement onto one prompt-safe line and caps its length (specs/020): newlines
+     * would break the one-entry-per-line catalog layout, and over-long statements would crowd
+     * out the rest of [KNOWLEDGE_BASE_OVERVIEW].
+     */
+    static String flattenStatement(String sql) {
+        if (sql == null || sql.isBlank()) {
+            return "";
+        }
+        String flat = sql.replaceAll("\\s+", " ").trim();
+        return flat.length() <= MAX_VIEW_STATEMENT_CHARS
+                ? flat
+                : flat.substring(0, MAX_VIEW_STATEMENT_CHARS) + "…";
+    }
+
+    @Override
+    public String semanticBusinessRulesText(String ownerId, java.util.List<String> onlyGroups) {
+        if (ownerId == null || ownerId.isBlank()) {
+            return "";
+        }
+        // specs/019 §7: business rules live as knowledge/rules/*.md inside each workspace; every
+        // candidate group is owner-checked before its rule files are read.
+        List<DatasetGroupEntity> groups =
+                onlyGroups == null || onlyGroups.isEmpty()
+                        ? groupRepository.findByOwnerIdOrderByCreatedAtDesc(ownerId)
+                        : onlyGroups.stream()
+                                .filter(gid -> gid != null && !gid.isBlank())
+                                .map(groupRepository::findById)
+                                .flatMap(java.util.Optional::stream)
+                                .filter(g -> g.getOwnerId().equals(ownerId))
+                                .toList();
+        StringBuilder sb = new StringBuilder();
+        for (DatasetGroupEntity g : groups) {
+            String text = workspaceReader.readKnowledgeRules(g.getId());
+            if (text.isBlank()) {
+                continue;
+            }
             if (sb.length() > 0) {
                 sb.append('\n');
             }
-            sb.append(t.getTerm());
-            if (t.getExplanation() != null && !t.getExplanation().isBlank()) {
-                sb.append("：").append(t.getExplanation());
-            }
-            if (t.getSynonyms() != null && !t.getSynonyms().isBlank()) {
-                sb.append("（同义词：").append(t.getSynonyms().replace("\n", ",")).append("）");
-            }
-            if (t.getScope() != null && !"global".equals(t.getScope())) {
-                sb.append("［范围：").append(t.getScope()).append("］");
-            }
+            sb.append("【").append(g.getName()).append("】\n").append(text);
         }
         return sb.toString();
     }
@@ -703,8 +918,29 @@ public class DatasetService implements DatasetContextProvider {
                                 })
                         .orElseGet(() -> new DatasetKnowledgeEntity(groupId, content));
         knowledgeRepository.save(entity);
+        markMdlDirty(groupId);
         relationInference.reinferGroup(groupId);
         log.info("DatasetService: saved relationship knowledge for group {}", groupId);
+    }
+
+    /**
+     * Flags the owning KB as DIRTY when a change affects the published MDL (specs/010 M2): the
+     * previous snapshot keeps serving until the user republishes. NONE / DIRTY groups, orphan
+     * datasets without a group and blank ids are no-ops.
+     */
+    void markMdlDirty(String groupId) {
+        if (groupId == null || groupId.isBlank()) {
+            return;
+        }
+        groupRepository
+                .findById(groupId)
+                .filter(g -> "PUBLISHED".equals(g.getMdlState()))
+                .ifPresent(
+                        g -> {
+                            g.setMdlState("DIRTY");
+                            g.setUpdatedAt(Instant.now());
+                            groupRepository.save(g);
+                        });
     }
 
     public String knowledgeText(String groupId) {
@@ -759,6 +995,61 @@ public class DatasetService implements DatasetContextProvider {
                 sb.append("摘要：").append(summary).append('\n');
                 sb.append(content);
             }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Keyword evidence retrieval ({@link KnowledgeEvidence}): chunks each visible knowledge
+     * document, scores every chunk against the query terms and renders the top {@code limit}
+     * passages with a【知识库「name」› section】citation prefix. Documents short enough for
+     * {@link KnowledgeEvidence#isShortDoc} are injected whole regardless of term overlap (a
+     * compact KPI note beats a keyword miss). {@code null} when the owner has no visible document
+     * or no long document yields a matching chunk, so {@code retrieve_evidence} keeps its stable
+     * "not found" wording.
+     */
+    @Override
+    public String evidenceFor(String ownerId, List<String> onlyGroups, String query, int limit) {
+        if (ownerId == null || query == null || query.isBlank() || limit <= 0) {
+            return null;
+        }
+        Set<String> terms = KnowledgeEvidence.terms(query);
+        Set<String> want =
+                onlyGroups == null || onlyGroups.isEmpty() ? null : new HashSet<>(onlyGroups);
+        record Scored(String group, String title, String text, int score) {}
+        List<Scored> scored = new ArrayList<>();
+        for (DatasetGroupEntity g : groupRepository.findByOwnerIdOrderByCreatedAtDesc(ownerId)) {
+            if (want != null && !want.contains(g.getId())) {
+                continue;
+            }
+            String content = knowledgeText(g.getId());
+            if (content == null || content.isBlank()) {
+                continue;
+            }
+            boolean wholeDoc = KnowledgeEvidence.isShortDoc(content);
+            for (KnowledgeEvidence.Chunk c : KnowledgeEvidence.chunks(content)) {
+                int score = KnowledgeEvidence.score(c, terms);
+                if (score > 0 || wholeDoc) {
+                    scored.add(new Scored(g.getName(), c.title(), c.text(), score));
+                }
+            }
+        }
+        if (scored.isEmpty()) {
+            return null;
+        }
+        scored.sort(java.util.Comparator.comparingInt((Scored s) -> s.score()).reversed());
+        StringBuilder sb = new StringBuilder();
+        int take = Math.min(limit, scored.size());
+        for (int i = 0; i < take; i++) {
+            Scored s = scored.get(i);
+            if (sb.length() > 0) {
+                sb.append("\n\n");
+            }
+            sb.append("【知识库「").append(s.group()).append("」");
+            if (s.title() != null && !s.title().isBlank()) {
+                sb.append(" › ").append(s.title());
+            }
+            sb.append("】\n").append(s.text().strip());
         }
         return sb.toString();
     }

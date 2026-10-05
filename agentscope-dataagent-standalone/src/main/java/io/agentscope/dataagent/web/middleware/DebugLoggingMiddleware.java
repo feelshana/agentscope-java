@@ -52,7 +52,7 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 
 /**
- * Debug middleware that writes {@code logs/LLM.log} as a plain transcript meant to be read by a
+ * Debug middleware that writes the agent conversation as a plain transcript meant to be read by a
  * human.
  *
  * <p>Each record carries exactly three fields — {@code role}, {@code type}, {@code text} — one
@@ -65,10 +65,12 @@ import reactor.core.publisher.Flux;
  * written only the first time its id shows up within a session. The file therefore reads as one
  * continuous conversation instead of repeating the system prompt once per turn. Media blocks are
  * reduced to a placeholder — their payload would otherwise flood the log.
+ *
+ * <p>Records go to the logger chosen by the constructor: the default {@code LLM_DEBUG} is wired to
+ * {@code logs/LLM.log}, while the metadata-only modeling assistant uses {@code LLM_MODELING_DEBUG}
+ * → {@code logs/LLM-modeling.log} so semantic-modeling sessions read as a dedicated file.
  */
 public class DebugLoggingMiddleware implements MiddlewareBase {
-
-    private static final Logger log = LoggerFactory.getLogger("LLM_DEBUG");
 
     /** Compact mapper, only used for non-string tool argument values. */
     private static final ObjectMapper MAPPER =
@@ -85,6 +87,22 @@ public class DebugLoggingMiddleware implements MiddlewareBase {
     private final AtomicReference<StreamedReply> lastStreamedReply = new AtomicReference<>();
 
     private final AtomicBoolean resultWritten = new AtomicBoolean(false);
+
+    /** Transcript sink; the logger name selects the logback file (see logback-spring.xml). */
+    private final Logger log;
+
+    /** Writes to the default transcript logger ({@code LLM_DEBUG} → {@code logs/LLM.log}). */
+    public DebugLoggingMiddleware() {
+        this("LLM_DEBUG");
+    }
+
+    /**
+     * @param transcriptLoggerName logback logger that receives the records; the modeling assistant
+     *     passes {@code LLM_MODELING_DEBUG} for its dedicated {@code logs/LLM-modeling.log}
+     */
+    public DebugLoggingMiddleware(String transcriptLoggerName) {
+        this.log = LoggerFactory.getLogger(transcriptLoggerName);
+    }
 
     @Override
     public Flux<AgentEvent> onAgent(
@@ -147,8 +165,11 @@ public class DebugLoggingMiddleware implements MiddlewareBase {
                         });
     }
 
-    /** Writes every message of {@code msgs} that has not been written yet for this session. */
-    private void write(String sessionId, List<Msg> msgs) {
+    /**
+     * Writes every message of {@code msgs} that has not been written yet for this session. Package
+     * private so the transcript-logger routing can be asserted directly.
+     */
+    void write(String sessionId, List<Msg> msgs) {
         for (String rendered : renderNew(sessionId, msgs)) {
             log.info(rendered);
         }

@@ -1,0 +1,74 @@
+model:
+  name: customers
+  refSql: SELECT * FROM customers
+  columns:
+    - name: customer_id
+      type: bigint
+      description: 客户唯一ID
+    - name: customer_name
+      type: varchar
+      description: 客户名称
+    - name: register_time
+      type: datetime
+      description: 客户注册时间
+    - name: customer_type
+      type: tinyint
+      description: 客户类型，1=个人客户，2=企业客户
+    - name: is_internal
+      type: tinyint
+      description: 是否内部测试账号；0=正式客户，1=内部测试账号，指标统计需要排除内部账号
+model:
+  name: orders
+  refSql: SELECT * FROM orders
+  columns:
+    - name: order_id
+      type: bigint
+      description: 订单唯一ID
+    - name: customer_id
+      type: bigint
+      description: 关联客户ID，关联customers表customer_id
+    - name: order_time
+      type: datetime
+      description: 下单时间
+    - name: amount
+      type: decimal
+      description: 订单金额，单位人民币元
+    - name: order_status
+      type: tinyint
+      description: 订单状态；0待支付，1已支付(有效订单计入营收)，2已取消，3已退款
+    - name: is_deleted
+      type: tinyint
+      description: 软删标记，0正常，1删除，统计需要过滤is_deleted=0
+relationships:
+  - name: rel_orders_customers
+    models:
+      - orders
+      - customers
+    joinCondition: orders.customer_id = customers.customer_id
+    description: 订单归属客户关联关系
+cube:
+  name: order_metrics
+  baseObject: orders
+  description: 订单核心指标Cube，统一营收、付费客户口径，所有业务报表优先使用本Cube
+  dimensions:
+    - name: order_month
+      expression: DATE_TRUNC('month', order_time)
+      description: 订单月份，按月聚合
+  measures:
+    - name: total_valid_revenue
+      expression: SUM(amount)
+      description: 有效订单总营收
+      filter: >
+        orders.order_status = 1
+        AND orders.is_deleted = 0
+        AND customers.is_internal = 0
+    - name: paid_customer_count
+      expression: COUNT(DISTINCT orders.customer_id)
+      description: 付费客户数量
+      filter: >
+        orders.order_status = 1
+        AND orders.is_deleted = 0
+        AND customers.is_internal = 0
+  timeDimension:
+    name: order_time
+    expression: order_time

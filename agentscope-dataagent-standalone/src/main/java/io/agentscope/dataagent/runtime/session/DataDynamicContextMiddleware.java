@@ -19,12 +19,18 @@ import io.agentscope.core.agent.Agent;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.dataagent.dataset.DatasetContextProvider;
 import io.agentscope.dataagent.dataset.DatasetScope;
+import io.agentscope.dataagent.dataset.MdlCatalog;
 import io.agentscope.dataagent.tools.data.DataSource;
 import io.agentscope.dataagent.tools.data.DataSourceRegistry;
+import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity;
+import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupRepository;
 import io.agentscope.harness.agent.middleware.HarnessRuntimeMiddleware;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -36,6 +42,10 @@ import reactor.core.scheduler.Schedulers;
  * carried on the {@link RuntimeContext}, so each (user, conversation) pair sees only their own
  * data sources and knowledge bases — matching the TC-DataAgent pattern where schema context is
  * pre-loaded into the prompt rather than discovered via tool calls.
+ *
+ * <p>The data-source overview exposes only Wren-queryable published manifests. It keeps a compact
+ * model/Cube directory in the prompt and directs field-level discovery to {@code
+ * wren_describe_model}; physical table names and direct-query fallback instructions are omitted.
  */
 public class DataDynamicContextMiddleware implements HarnessRuntimeMiddleware {
 
@@ -43,11 +53,30 @@ public class DataDynamicContextMiddleware implements HarnessRuntimeMiddleware {
 
     private final DataSourceRegistry registry;
     private final DatasetContextProvider contextProvider;
+    private final MdlCatalog mdlCatalog;
+    private final DatasetGroupRepository groupRepository;
 
     public DataDynamicContextMiddleware(
             DataSourceRegistry registry, DatasetContextProvider contextProvider) {
+        this(registry, contextProvider, null, null);
+    }
+
+    public DataDynamicContextMiddleware(
+            DataSourceRegistry registry,
+            DatasetContextProvider contextProvider,
+            MdlCatalog mdlCatalog) {
+        this(registry, contextProvider, mdlCatalog, null);
+    }
+
+    public DataDynamicContextMiddleware(
+            DataSourceRegistry registry,
+            DatasetContextProvider contextProvider,
+            MdlCatalog mdlCatalog,
+            DatasetGroupRepository groupRepository) {
         this.registry = registry;
         this.contextProvider = contextProvider;
+        this.mdlCatalog = mdlCatalog;
+        this.groupRepository = groupRepository;
     }
 
     @Override
@@ -102,23 +131,134 @@ public class DataDynamicContextMiddleware implements HarnessRuntimeMiddleware {
             return "";
         }
 
-        StringBuilder sb = new StringBuilder();
-        sb.append("# [DATA_SOURCES_OVERVIEW]\n\n");
-        sb.append("以下是当前会话可用的数据源：\n\n");
-
+        Map<String, MdlCatalog.GroupMdl> logical = new LinkedHashMap<>();
+        Set<String> unavailableGroupIds = new java.util.LinkedHashSet<>();
         for (DataSource ds : sources) {
-            sb.append("- ").append(ds.label());
-            if (ds.description() != null && !ds.description().isBlank()) {
-                sb.append(" — ").append(ds.description());
+            String groupId = ds.properties() == null ? null : ds.properties().get("groupId");
+            if (groupId == null || mdlCatalog == null || logical.containsKey(groupId)) {
+                continue;
             }
-            sb.append("\n  source_id: `").append(ds.id()).append("`");
-            String tableName = ds.properties() != null ? ds.properties().get("tableName") : null;
-            if (tableName != null && !tableName.isBlank()) {
-                sb.append(", 表名: `").append(tableName).append("`");
+            MdlCatalog.GroupMdl mdl = mdlCatalog.load(groupId).orElse(null);
+            if (mdl != null) {
+                logical.put(groupId, mdl);
+            } else {
+                unavailableGroupIds.add(groupId);
             }
-            sb.append("\n");
         }
-        return sb.toString().stripTrailing();
+
+        if (logical.isEmpty() && unavailableGroupIds.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder("# [DATA_SOURCES_OVERVIEW]\n\n");
+        boolean wrote = false;
+        for (MdlCatalog.GroupMdl mdl : logical.values()) {
+            if (wrote) {
+                sb.append("\n\n");
+            }
+            sb.append(buildLogicalSection(mdl));
+            if (groupRepository != null) {
+                groupRepository
+                        .findById(mdl.groupId())
+                        .filter(group -> userId != null && userId.equals(group.getOwnerId()))
+                        .filter(group -> "DIRTY".equals(group.getMdlState()))
+                        .ifPresent(ignored -> sb.append("\n*(提示：当前查询使用已发布版本，草稿或数据变更尚未生效。)*\n"));
+            }
+            wrote = true;
+        }
+        for (String groupId : unavailableGroupIds) {
+            DatasetGroupEntity group =
+                    groupRepository == null
+                            ? null
+                            : groupRepository
+                                    .findById(groupId)
+                                    .filter(value -> userId.equals(value.getOwnerId()))
+                                    .orElse(null);
+            if (group == null) {
+                continue;
+            }
+            if (wrote) {
+                sb.append("\n\n");
+            }
+            sb.append("## 知识库「")
+                    .append(group.getName())
+                    .append("」（group_id: `")
+                    .append(groupId)
+                    .append("`）\n\n")
+                    .append(unavailableState(group));
+            wrote = true;
+        }
+        return wrote ? sb.toString().stripTrailing() : "";
+    }
+
+    /**
+     * Lightweight directory for one published group. Field, relation and Cube-member details are
+     * fetched on demand through {@code wren_describe_model}. Cube rows carry member names so the
+     * model can map question wording onto measures/dimensions without an extra round trip.
+     */
+    private static String buildLogicalSection(MdlCatalog.GroupMdl g) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("## 知识库「").append(g.groupName()).append("」— 已发布语义模型");
+        sb.append("（group_id: `")
+                .append(g.groupId())
+                .append("`，版本 v")
+                .append(g.version())
+                .append("；wren 工具的 group_id 参数可直接填本知识库名称「")
+                .append(g.groupName())
+                .append("」，无需复制长 ID）\n\n");
+        sb.append(
+                "问数路由（官方决策树）：聚合指标问题先核对 Cube 清单，Cube 成员能覆盖时优先用 wren_query_cube"
+                        + "（引擎确定性编译聚合，错误率更低）；已发布 View 能直接覆盖问题时优先用 wren_run_sql"
+                        + " 按视图名直接查询（视图口径已经建模审阅）；跨模型属性先用"
+                        + " wren_describe_model(expand_relation_fields=true) 展开 many"
+                        + " 侧关联字段组，并以单一逻辑模型查询投影列让 Wren 自动 JOIN；语义资产都无法表达时使用其他逻辑"
+                        + " SQL，显式 JOIN 是最后兜底。\n\n");
+        sb.append("**逻辑模型：**\n");
+        for (MdlCatalog.Model m : g.models()) {
+            sb.append("- `").append(m.name()).append("`");
+            if (m.derived()) {
+                sb.append("（派生模型，口径 SQL 已建模审阅，可直接按模型名查询）");
+            }
+            String desc = flat(m.description(), 80);
+            if (desc != null) {
+                sb.append(" — ").append(desc);
+            }
+            sb.append('\n');
+        }
+        if (!g.cubes().isEmpty()) {
+            sb.append("\n**Cube：**\n");
+            for (MdlCatalog.Cube c : g.cubes()) {
+                sb.append("- `")
+                        .append(c.name())
+                        .append("`（基础模型 `")
+                        .append(c.baseModel())
+                        .append("`");
+                if (!c.measures().isEmpty()) {
+                    sb.append("；度量：").append(memberNames(c.measures()));
+                }
+                if (!c.dimensions().isEmpty()) {
+                    sb.append("；维度：").append(memberNames(c.dimensions()));
+                }
+                if (!c.timeDimensions().isEmpty()) {
+                    sb.append("；时间维度：").append(memberNames(c.timeDimensions()));
+                }
+                sb.append("）\n");
+            }
+        }
+        return sb.toString();
+    }
+
+    /** Joined member names for the Cube directory rows; member details stay in describe. */
+    private static String memberNames(List<MdlCatalog.Member> members) {
+        return members.stream().map(MdlCatalog.Member::name).collect(Collectors.joining("、"));
+    }
+
+    /** One-line, length-capped prompt fragment (descriptions may contain newlines). */
+    private static String flat(String text, int max) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        String s = text.replace("\r", " ").replace("\n", " ").trim();
+        return s.length() <= max ? s : s.substring(0, max) + "…";
     }
 
     // -----------------------------------------------------------------
@@ -130,25 +270,50 @@ public class DataDynamicContextMiddleware implements HarnessRuntimeMiddleware {
             return "";
         }
         String text = contextProvider.relationshipsText(userId, groupIds);
-        if (text == null || text.isBlank()) {
+        String terms = contextProvider.semanticTermsText(groupIds);
+        String views = contextProvider.semanticViewsText(groupIds);
+        String rules = contextProvider.semanticBusinessRulesText(userId, groupIds);
+        if (blank(text) && blank(terms) && blank(views) && blank(rules)) {
             return "";
         }
 
         StringBuilder sb = new StringBuilder();
         sb.append("# [KNOWLEDGE_BASE_OVERVIEW]\n\n");
-        sb.append("以下是当前会话可用的知识库内容：\n\n");
-        sb.append(text).append("\n");
+        sb.append("以下是当前会话可用的知识库内容：\n");
+        if (!blank(text)) {
+            sb.append('\n').append(text).append("\n");
+        }
 
-        String terms = contextProvider.semanticTermsText();
         if (terms != null && !terms.isBlank()) {
             sb.append("\n## 业务术语（语义配置）\n");
             sb.append(terms).append("\n");
         }
+        if (views != null && !views.isBlank()) {
+            sb.append("\n## 语义视图（工程 views/ 文件，wren_run_sql 可直接按视图名查询）\n");
+            sb.append("视图口径已经建模审阅，能直接覆盖问题时优先按视图名查询。\n");
+            sb.append(views).append("\n");
+        }
+        if (rules != null && !rules.isBlank()) {
+            sb.append("\n## 业务规则（当前知识库）\n");
+            sb.append(rules).append("\n");
+        }
         return sb.toString();
     }
 
+    private static String unavailableState(DatasetGroupEntity group) {
+        return switch (String.valueOf(group.getMdlState())) {
+            case "INITIALIZING" -> "基础 MDL 正在初始化，当前暂不可问数。";
+            case "FAILED" -> "基础 MDL 初始化失败，当前不可问数，请在建模页重试。";
+            default -> "尚无有效发布版本，当前不可问数。";
+        };
+    }
+
+    private static boolean blank(String value) {
+        return value == null || value.isBlank();
+    }
+
     // -----------------------------------------------------------------
-    //  Visibility — mirrors DataAgentToolkit#visible
+    //  Tenant and knowledge-base visibility
     // -----------------------------------------------------------------
 
     private List<DataSource> visibleSources(String userId, List<String> groupIds) {

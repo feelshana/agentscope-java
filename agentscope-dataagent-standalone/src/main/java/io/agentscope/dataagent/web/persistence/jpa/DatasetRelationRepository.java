@@ -22,6 +22,4 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface DatasetRelationRepository extends JpaRepository<DatasetRelationEntity, String> {
 
     List<DatasetRelationEntity> findByGroupId(String groupId);
-
-    void deleteByGroupId(String groupId);
 }

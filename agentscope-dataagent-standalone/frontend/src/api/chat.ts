@@ -6,8 +6,14 @@ export interface ChatRequest {
   groupIds?: string[];
 }
 
+export interface HitlToolCall {
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
+}
+
 export interface ChatEvent {
-  type: 'token' | 'tool_call' | 'tool_result' | 'done' | 'error' | string;
+  type: 'token' | 'tool_call' | 'tool_result' | 'hitl_request' | 'done' | 'error' | string;
   data?: string;
   toolName?: string;
   toolCallId?: string;
@@ -19,11 +25,25 @@ export interface ChatEvent {
   parentToolCallId?: string;
   error?: string;
   sessionKey?: string;
+  replyId?: string;
+  toolCalls?: HitlToolCall[];
+}
+
+export interface ModelingConfirmRequest {
+  sessionKey: string;
+  groupIds: string[];
+  replyId: string;
+  toolCallId: string;
+  toolName: string;
+  confirmed: boolean;
+  toolInput?: Record<string, unknown>;
 }
 
 export interface CurrentSession {
   sessionKey: string | null;
   exists: boolean;
+  pendingReplyId?: string | null;
+  pendingToolCalls?: HitlToolCall[];
 }
 
 function authHeaders(): Record<string, string> {
@@ -43,19 +63,17 @@ export async function currentSession(
   return res.json();
 }
 
-export async function* stream(
-  agentId: string,
-  req: ChatRequest,
-  signal?: AbortSignal,
-): AsyncGenerator<ChatEvent> {
-  const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/chat/stream`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
-    body: JSON.stringify(req),
-    signal,
-  });
-  if (!res.ok || !res.body) throw new Error(`Chat stream failed: ${res.status}`);
-
+async function* readEventStream(res: Response, fallback: string): AsyncGenerator<ChatEvent> {
+  if (!res.ok || !res.body) {
+    let detail = fallback;
+    try {
+      const body = (await res.json()) as { message?: string };
+      detail = body.message || detail;
+    } catch {
+      // Keep the operation-specific fallback when the error response is not JSON.
+    }
+    throw new Error(`${detail}: ${res.status}`);
+  }
   const reader = res.body.getReader();
   const dec = new TextDecoder();
   let buf = '';
@@ -78,4 +96,32 @@ export async function* stream(
       }
     }
   }
+}
+
+export async function* stream(
+  agentId: string,
+  req: ChatRequest,
+  signal?: AbortSignal,
+): AsyncGenerator<ChatEvent> {
+  const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/chat/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(req),
+    signal,
+  });
+  yield* readEventStream(res, 'Chat stream failed');
+}
+
+export async function* confirmModeling(
+  agentId: string,
+  req: ModelingConfirmRequest,
+  signal?: AbortSignal,
+): AsyncGenerator<ChatEvent> {
+  const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/chat/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(req),
+    signal,
+  });
+  yield* readEventStream(res, 'Modeling confirmation failed');
 }

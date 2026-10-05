@@ -8,6 +8,7 @@ import {
   SemanticTerm,
   updateSemanticTerm,
 } from '../../api/semantic';
+import { DatasetGroup, listGroups } from '../../api/datasets';
 
 const panelStyle: React.CSSProperties = {
   flex: 1,
@@ -70,10 +71,9 @@ const synTagBox: React.CSSProperties = {
 interface Draft {
   term: string;
   explanation: string;
-  scope: string;
 }
 
-const emptyDraft: Draft = { term: '', explanation: '', scope: '全局生效' };
+const emptyDraft: Draft = { term: '', explanation: '' };
 
 const splitSyn = (s: string | null): string[] =>
   (s ?? '').split(/[,，、]/).map(x => x.trim()).filter(Boolean);
@@ -93,8 +93,10 @@ function Chevron({ left = false, double = false }: { left?: boolean; double?: bo
   );
 }
 
-/** TC-style 语义配置 page: business noun → explanation / synonyms / scope, fed to the agent. */
+/** TC-style 语义配置 page: knowledge-base-bound business nouns fed to the agent (specs/026). */
 export default function SemanticConfigPage() {
+  const [groups, setGroups] = useState<DatasetGroup[]>([]);
+  const [groupId, setGroupId] = useState('');
   const [terms, setTerms] = useState<SemanticTerm[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -106,14 +108,27 @@ export default function SemanticConfigPage() {
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
 
+  useEffect(() => {
+    listGroups()
+      .then(gs => {
+        setGroups(gs);
+        setGroupId(prev => prev || (gs[0]?.id ?? ''));
+      })
+      .catch(e => setError(e instanceof Error ? e.message : String(e)));
+  }, []);
+
   const refresh = useCallback(async () => {
+    if (!groupId) {
+      setTerms([]);
+      return;
+    }
     try {
-      setTerms(await listSemanticTerms());
+      setTerms(await listSemanticTerms(groupId));
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, []);
+  }, [groupId]);
 
   useEffect(() => {
     refresh();
@@ -153,10 +168,9 @@ export default function SemanticConfigPage() {
         term: draft.term.trim(),
         explanation: draft.explanation,
         synonyms: finalSyns.join(','),
-        scope: draft.scope,
       };
-      if (editingId) await updateSemanticTerm(editingId, req);
-      else await createSemanticTerm(req);
+      if (editingId) await updateSemanticTerm(groupId, editingId, req);
+      else await createSemanticTerm(groupId, req);
       resetDraft();
       await refresh();
     } catch (e) {
@@ -172,7 +186,6 @@ export default function SemanticConfigPage() {
     setDraft({
       term: t.term,
       explanation: t.explanation ?? '',
-      scope: t.scope ?? '全局生效',
     });
     setSynList(splitSyn(t.synonyms));
     setSynText('');
@@ -182,7 +195,7 @@ export default function SemanticConfigPage() {
     if (!window.confirm('删除该词条？')) return;
     setBusy(true);
     try {
-      await deleteSemanticTerm(id);
+      await deleteSemanticTerm(groupId, id);
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -195,7 +208,10 @@ export default function SemanticConfigPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      <BackToChatHeader title="语义配置" subtitle="业务名词 / 名词解析 / 同义词 / 作用范围" />
+      <BackToChatHeader
+        title="语义配置"
+        subtitle="知识库业务名词 / 名词解析 / 同义词（按知识库存用，specs/026）"
+      />
       <div style={panelStyle}>
         {error && (
           <div
@@ -214,9 +230,32 @@ export default function SemanticConfigPage() {
         )}
         <div className="da-panel" style={{ padding: '16px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+            <span
+              className="da-small"
+              style={{ color: 'var(--da-text-3)', flexShrink: 0, fontWeight: 600 }}
+            >
+              知识库
+            </span>
+            <select
+              className="da-input"
+              style={{ width: 240, padding: '4px 8px' }}
+              value={groupId}
+              onChange={e => {
+                setGroupId(e.target.value);
+                resetDraft();
+                setPage(1);
+              }}
+            >
+              {groups.length === 0 && <option value="">（暂无知识库）</option>}
+              {groups.map(g => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
             <button
               className="da-btn da-btn-primary"
-              disabled={adding || busy}
+              disabled={adding || busy || !groupId}
               onClick={() => {
                 setAdding(true);
                 setEditingId(null);
@@ -240,11 +279,10 @@ export default function SemanticConfigPage() {
           <table className="da-table">
             <thead>
               <tr>
-                <th style={{ width: '18%' }}>业务名词</th>
-                <th style={{ width: '30%' }}>名词解析</th>
-                <th style={{ width: '20%' }}>同义词</th>
-                <th style={{ width: '16%' }}>作用范围</th>
-                <th style={{ width: '16%' }}>操作</th>
+                <th style={{ width: '20%' }}>业务名词</th>
+                <th style={{ width: '38%' }}>名词解析</th>
+                <th style={{ width: '24%' }}>同义词</th>
+                <th style={{ width: '18%' }}>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -318,16 +356,6 @@ export default function SemanticConfigPage() {
                     </div>
                   </td>
                   <td>
-                    <select
-                      className="da-input"
-                      value={draft.scope}
-                      onChange={e => setDraft(d => ({ ...d, scope: e.target.value }))}
-                    >
-                      <option value="全局生效">全局生效</option>
-                      <option value="仅数据集">仅数据集</option>
-                    </select>
-                  </td>
-                  <td>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 14 }}>
                       <button
                         style={canSave ? linkBtn : linkBtnDisabled}
@@ -356,7 +384,6 @@ export default function SemanticConfigPage() {
                         : '-'}
                     </span>
                   </td>
-                  <td>{t.scope}</td>
                   <td>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 14 }}>
                       <button style={linkBtn} onClick={() => startEdit(t)}>
@@ -369,9 +396,26 @@ export default function SemanticConfigPage() {
                   </td>
                 </tr>
               ))}
-              {!adding && terms.length === 0 && (
+              {!adding && !groupId && (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: '28px 0' }}>
+                  <td colSpan={4} style={{ textAlign: 'center', padding: '28px 0' }}>
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        color: 'var(--da-text-muted)',
+                        fontSize: 13,
+                      }}
+                    >
+                      <Icon name="file" size="sm" /> 请先选择上方知识库
+                    </span>
+                  </td>
+                </tr>
+              )}
+              {!adding && groupId && terms.length === 0 && (
+                <tr>
+                  <td colSpan={4} style={{ textAlign: 'center', padding: '28px 0' }}>
                     <span
                       style={{
                         display: 'inline-flex',

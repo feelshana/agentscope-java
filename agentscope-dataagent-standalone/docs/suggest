@@ -1,0 +1,119 @@
+# 结论前置（适配 ClaudeCode Agent 提案 + LLM NL 查询场景）
+
+**优先：用 `sql/ref_sql Model`（带 calculated_fields），而不是 View**
+
+>
+> 一句话理由：
+> Agent（ClaudeCode）自动提案时，Model 可以显式声明 `columns`，**规避 View 的 schema 静态推断风险**；LLM 在 NL 查询时同样可以直接引用这个模型做筛选，业务分层口径可控、build 稳定性更高。
+> View 只适合极轻量的单层过滤，多层 / 带聚合的业务分层，schema 推断非常容易翻车。
+
+## 两者对比，结合你的「高频 / 低频用户」场景
+
+你的业务逻辑：**先按用户聚合得到近 30 天访问次数，再做用户分层标签**（带聚合 + case when）
+
+表格
+
+| 方案 | 适合程度 | 核心优缺点（Agent 提案场景重点） |
+| --- | --- | --- |
+| `ref_sql/sql Model`（推荐） | 首选 | 1. Agent 提案生成 MDL 时，可以一并输出`columns`字段定义，build 不依赖 sqlglot 推断 schema；2. `calculated_fields`的表达式会被 Wren 做方言转换；3. 后续 Cube 可以直接挂载这个 model，度量、过滤都稳定；4. 缺点：MDL 会多维护一份 columns，不过 ClaudeCode 可以自动扫描提取列输出 |
+| View | 不推荐（仅简单过滤场景） | 1. View**不能写 columns**，build 阶段 wren-core 靠 sqlglot 静态 AST 推断输出 schema；2. 你的逻辑包含自关联窗口聚合，AST 复杂，**schema 推断极易失败，build 报错**；3. 一旦嵌套（view 引用另一个 view/model），推断风险指数上升；4. 适合：`where visit_cnt>30`这种纯过滤、无聚合的极简场景 |
+
+## 两种方案对应的 Agent 提案产物样例
+
+### 推荐方案：Model（user_visit_30d_stat），calculated_fields 写用户分层
+
+```
+models:
+  - name: user_visit_30d_stat
+    description: 用户近30天访问统计模型，包含用户访问频次分层标签
+    sql: |
+      SELECT
+        t1.user_account,
+        t1.click_time,
+        t1.product_name,
+        t1.company_name,
+        t1.department_name,
+        t1.project_name,
+        COUNT(t2.user_account) AS visit_cnt_last_30d
+      FROM ds_8c6976e5_2a06a7b5_data t1
+      LEFT JOIN ds_8c6976e5_2a06a7b5_data t2
+        ON t1.user_account = t2.user_account
+        AND t2.click_time BETWEEN DATE_SUB(t1.click_time, INTERVAL 30 DAY) AND t1.click_time
+      GROUP BY t1.user_account,t1.click_time,t1.product_name,t1.company_name,t1.department_name,t1.project_name
+    columns:
+      - name: user_account
+        type: VARCHAR
+      - name: click_time
+        type: DATETIME
+      - name: product_name
+        type: VARCHAR
+      - name: company_name
+        type: VARCHAR
+      - name: department_name
+        type: VARCHAR
+      - name: project_name
+        type: VARCHAR
+      - name: visit_cnt_last_30d
+        type: BIGINT
+    calculated_fields:
+      - name: user_visit_frequency_level
+        expression: |
+          CASE
+            WHEN visit_cnt_last_30d < 5 THEN '低频用户'
+            WHEN visit_cnt_last_30d > 30 THEN '高频用户'
+            ELSE '中频用户'
+          END
+        description: 用户访问频次分层，低频：近30天访问<5次，高频：近30天访问>30次
+```
+
+>
+> LLM 查询时直接写逻辑 SQL：
+> `select count(distinct user_account) from user_visit_30d_stat where user_visit_frequency_level='高频用户'`
+
+### 备选 View 方案（不推荐给这个场景，仅作对比）
+
+```
+views:
+  - name: high_freq_user_view
+    description: 高频用户视图，近30天访问次数大于30次
+    sql: |
+      SELECT
+        user_account,
+        click_time,
+        product_name,
+        company_name,
+        department_name,
+        project_name,
+        visit_cnt_last_30d,
+        user_visit_frequency_level
+      FROM user_visit_30d_stat
+      WHERE visit_cnt_last_30d > 30
+```
+
+>
+> 问题：build 的时候 wren-core 必须解析这段 SELECT，推断所有字段名称和类型。一旦前面 model 修改、字段改名，view 的 schema 推断直接失效，构建报错。
+
+## 那什么时候才让 Agent 提案 View？
+
+**仅当逻辑只是单纯 where 过滤，没有聚合、没有复杂 case，单层简单筛选**
+例如：只筛选某一个产品的访问记录，没有聚合计算，这种简单视图，schema 推断稳定，适合做成 View。
+
+## Agent + enrich-context 配套建议（你这套工作流）
+
+1. 业务文档保留高低频定义，喂给 enrich；
+2. 告诉 ClaudeCode Agent 的规则：
+>
+> 涉及聚合、窗口计算、业务标签分层的业务对象，提案为`sql model`，自动生成 columns 定义；仅单层简单过滤逻辑才提案 View；
+3. Cube 挂载在`user_visit_30d_stat`这个 model 上，直接写高低频用户数量指标；
+4. 人工 Review 重点：核对`calculated_fields`的 case 阈值、model 内 sql 的 MySQL 语法、columns 类型。
+
+## 补充：LLM 使用上有没有差别？
+
+**对 NL 查询侧的 LLM 来说，引用 Model 和 View 的体验几乎一模一样**。LLM 都会把它当成一张逻辑表，唯一区别是底层 MDL 构建稳定性。
+
+>
+> 不要为了 “逻辑上是视图” 就硬选 View，WrenAI 里 Model 完全可以承载子查询，是更稳健的抽象。
+
+## 极简总结
+
+高低频用户这种**带聚合 + 业务标签分层**的口径，**让 ClaudeCode 提案成带 calculated_fields 的 sql model，而不是 View**，规避 view 的 schema 推断风险。View 留给简单过滤场景。

@@ -5,7 +5,6 @@ import Markdown from './Markdown';
 import PythonCodeBlock from './PythonCodeBlock';
 import { ArtifactInfo, parseResult, artifactSrc, downloadArtifact, deduplicateArtifacts } from './PythonCodeBlock';
 import { formatResult, ToolInspectPayload } from './ToolCallBlock';
-import { downloadQueryCsv } from '../api/datasets';
 
 export interface ToolInspectorProps {
   tool: ToolInspectPayload;
@@ -44,17 +43,6 @@ const JC = {
   null: '#94a3b8',
   bracket: '#64748b',
 };
-
-/* ─── SQL syntax colours ─── */
-const SQL_KW = new Set([
-  'SELECT','FROM','WHERE','AND','OR','NOT','IN','LIKE','IS','NULL',
-  'AS','JOIN','LEFT','RIGHT','INNER','OUTER','ON','GROUP','BY',
-  'ORDER','HAVING','LIMIT','OFFSET','UNION','ALL','DISTINCT',
-  'COUNT','SUM','AVG','MIN','MAX','INSERT','INTO','VALUES',
-  'UPDATE','SET','DELETE','CREATE','TABLE','ALTER','DROP',
-  'INDEX','VIEW','CASE','WHEN','THEN','ELSE','END','BETWEEN',
-  'EXISTS','ASC','DESC','TRUE','FALSE','WITH','RECURSIVE',
-]);
 
 /* ══════════════════════════════════════════════════════════
    Collapsible Section
@@ -176,176 +164,6 @@ function JsonViewer({ text }: { text: string }) {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   SQL Formatter
-   ═══════════════════════════════════════════════════════════ */
-function formatSql(sql: string): string {
-  // First uppercase all keywords
-  const keywords = Array.from(SQL_KW).sort((a, b) => b.length - a.length);
-  const pattern = new RegExp(`\\b(${keywords.join('|')})\\b`, 'gi');
-  let formatted = sql.replace(pattern, m => m.toUpperCase());
-
-  // Define major keywords groups
-  const majorClauses = ['SELECT', 'FROM', 'WHERE', 'GROUP BY', 'ORDER BY', 'HAVING', 'LIMIT', 'OFFSET', 'UNION', 'WITH'];
-  const joinKeywords = ['LEFT JOIN', 'RIGHT JOIN', 'INNER JOIN', 'JOIN', 'ON'];
-  const logicalOps = ['AND', 'OR'];
-
-  // Add newlines before major clauses
-  for (const kw of majorClauses) {
-    const re = new RegExp(`\\s+${kw.replace(' ', '\\s+')}\\b`, 'g');
-    formatted = formatted.replace(re, `\n${kw}`);
-  }
-
-  // Add newlines before JOIN keywords
-  for (const kw of joinKeywords) {
-    const re = new RegExp(`\\s+${kw.replace(' ', '\\s+')}\\b`, 'g');
-    formatted = formatted.replace(re, `\n  ${kw}`);
-  }
-
-  // Add newlines before logical operators
-  for (const kw of logicalOps) {
-    const re = new RegExp(`\\s+${kw}\\b`, 'g');
-    formatted = formatted.replace(re, `\n    ${kw}`);
-  }
-
-  // Clean up multiple newlines and trim
-  return formatted.replace(/\n{2,}/g, '\n').trim();
-}
-
-function SqlBlock({ sql }: { sql: string }) {
-  const formatted = formatSql(sql);
-  const tokens = formatted.split(/(\s+)/);
-
-  return (
-    <pre style={{
-      margin: 0, padding: '12px 14px', fontFamily: C.mono,
-      fontSize: '0.78rem', lineHeight: 1.7, color: C.text,
-      whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-      overflow: 'auto', maxHeight: '40vh',
-      background: '#fafbfc',
-    }}>
-      {tokens.map((tok, i) => {
-        if (/^\s+$/.test(tok)) return <span key={i}>{tok}</span>;
-        const upper = tok.toUpperCase();
-        if (SQL_KW.has(upper)) {
-          return <span key={i} style={{ color: '#6366f1', fontWeight: 600 }}>{upper}</span>;
-        }
-        if (/^'[^']*'$/.test(tok) || /^"[^"]*"$/.test(tok)) {
-          return <span key={i} style={{ color: JC.string }}>{tok}</span>;
-        }
-        if (/^\d+(\.\d+)?$/.test(tok)) {
-          return <span key={i} style={{ color: JC.number }}>{tok}</span>;
-        }
-        return <span key={i}>{tok}</span>;
-      })}
-    </pre>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════
-   Table helpers
-   ═══════════════════════════════════════════════════════════ */
-type ColKind = 'number' | 'date' | 'boolean' | 'text';
-
-function classifyJdbcType(t: string | undefined): ColKind {
-  if (!t) return 'text';
-  const u = t.toUpperCase();
-  if (u.includes('INT') || u.includes('NUMERIC') || u.includes('DECIMAL')
-      || u.includes('FLOAT') || u.includes('DOUBLE') || u.includes('REAL')
-      || u === 'NUMBER' || u === 'MONEY' || u === 'SMALLMONEY') return 'number';
-  if (u.includes('DATE') || u.includes('TIME') || u === 'TIMESTAMP') return 'date';
-  if (u === 'BIT' || u === 'BOOLEAN') return 'boolean';
-  return 'text';
-}
-
-function ResultTable({ columns, columnTypes, rows }: {
-  columns: string[]; columnTypes?: string[]; rows: (string | null)[][];
-}) {
-  const kinds = columns.map((_, i) => classifyJdbcType(columnTypes?.[i]));
-  return (
-    <div style={{ overflow: 'auto', maxHeight: '60vh' }}>
-      <table style={{
-        width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem',
-        minWidth: 'fit-content',
-      }}>
-        <thead>
-          <tr>
-            {columns.map((c, i) => (
-              <th key={i} style={{
-                padding: '8px 12px', textAlign: 'left', fontWeight: 600,
-                color: C.text2, background: C.bgSunken,
-                borderBottom: `2px solid ${C.border}`,
-                whiteSpace: 'nowrap',
-                ...(kinds[i] === 'number' ? { textAlign: 'right' } : {}),
-              }}>{c}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, ri) => (
-            <tr key={ri} style={{ background: ri % 2 === 0 ? C.bg : C.bgSubtle }}>
-              {row.map((cell, ci) => (
-                <td key={ci} style={{
-                  padding: '6px 12px', borderBottom: `1px solid ${C.borderLight}`,
-                  color: cell === null ? C.textMuted : C.text,
-                  textAlign: kinds[ci] === 'number' ? 'right' : 'left',
-                  fontFamily: kinds[ci] === 'number' ? C.mono : undefined,
-                }}>
-                  {cell === null ? <span style={{ fontStyle: 'italic' }}>NULL</span> : cell}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════
-   Markdown table parser (for prepare_data_context)
-   ═══════════════════════════════════════════════════════════ */
-function MarkdownTable({ md }: { md: string }) {
-  const lines = md.split('\n').filter(l => l.trim());
-  if (lines.length < 2) return null;
-
-  const parseRow = (line: string): string[] =>
-    line.split('|').map(s => s.trim()).filter(Boolean);
-
-  const headers = parseRow(lines[0]);
-  const rows = lines.slice(2).map(parseRow);
-
-  return (
-    <div style={{ overflow: 'auto', maxHeight: '50vh' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem', minWidth: 'fit-content' }}>
-        <thead>
-          <tr>
-            {headers.map((h, i) => (
-              <th key={i} style={{
-                padding: '8px 12px', textAlign: 'left', fontWeight: 600,
-                color: C.text2, background: C.bgSunken,
-                borderBottom: `2px solid ${C.border}`,
-              }}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, ri) => (
-            <tr key={ri} style={{ background: ri % 2 === 0 ? C.bg : C.bgSubtle }}>
-              {row.map((cell, ci) => (
-                <td key={ci} style={{
-                  padding: '6px 12px', borderBottom: `1px solid ${C.borderLight}`,
-                  color: C.text,
-                }}>{cell}</td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════
    ASCII table → markdown table (for Python stdout)
    ═══════════════════════════════════════════════════════════ */
 function isAsciiSep(line: string): boolean {
@@ -407,191 +225,8 @@ function formatStdoutContent(stdout: string): string {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   Query result types
-   ═══════════════════════════════════════════════════════════ */
-interface QueryResultItem {
-  artifactId: string; sql: string; purpose: string;
-  columns: string[]; columnTypes?: string[];
-  rows: (string | null)[][]; rowCount: number;
-  truncated: boolean; truncationReason?: string; elapsedMs: number;
-}
-
-function QueryDownload({ artifactId, truncated }: { artifactId: string; truncated: boolean }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const download = async () => {
-    setBusy(true); setError('');
-    try { await downloadQueryCsv(artifactId); }
-    catch (err) { setError(err instanceof Error ? err.message : '下载失败，请重试'); }
-    finally { setBusy(false); }
-  };
-  return (
-    <div>
-      <button type="button" disabled={busy} onClick={download} style={{
-        border: `1px solid ${C.border}`, background: C.bg, color: C.text2,
-        borderRadius: 6, padding: '4px 12px', fontSize: '0.75rem',
-        cursor: busy ? 'default' : 'pointer', fontWeight: 500,
-      }}>
-        {busy ? '下载中…' : truncated ? '下载已保存部分 CSV' : '下载结果 CSV'}
-      </button>
-      {error && <div style={{ marginTop: 4, fontSize: '0.75rem', color: C.err }}>{error}</div>}
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════
    Tool-specific detail components
    ═══════════════════════════════════════════════════════════ */
-
-function QueryStructuredDetail({ data }: { data: Record<string, unknown> }) {
-  const taskId = data.taskId as string;
-  const status = data.status as string;
-  const error = data.error as string;
-  const rawResults = (data.results as QueryResultItem[]) ?? [];
-  const steps = (data.steps as { callId: string; name: string; sql?: string; status: string; summary?: string }[]) ?? [];
-
-  const results = React.useMemo(() => {
-    const seen = new Set<string>();
-    return rawResults.filter(r => {
-      const key = r.sql?.trim() ?? r.artifactId;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    }).map(r => ({
-      ...r,
-      // Strip markdown headers and clean up purpose text
-      purpose: (r.purpose || '').replace(/^##\s+查询结果\s*/m, '').replace(/^\*\*查询问题[：:]\*\*\s*/m, '').trim(),
-    }));
-  }, [rawResults]);
-
-  const statusLabel = status === 'SUCCEEDED' ? '查询完成' : status === 'PARTIAL' ? '部分完成' : '查询失败';
-  const statusColor = status === 'SUCCEEDED' ? C.success : status === 'PARTIAL' ? C.warn : C.err;
-  const statusBg = status === 'SUCCEEDED' ? C.successBg : status === 'PARTIAL' ? C.warnBg : C.errBg;
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {/* status bar */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-        padding: '8px 12px', background: statusBg, borderRadius: 8,
-        border: `1px solid ${statusColor}22`,
-      }}>
-        <span style={{
-          fontSize: '0.75rem', fontWeight: 700, color: statusColor,
-          padding: '2px 8px', borderRadius: 4, background: `${statusColor}15`,
-        }}>{statusLabel}</span>
-        {taskId && <span style={{ fontSize: '0.72rem', color: C.textMuted }}>任务 {taskId}</span>}
-        <span style={{ fontSize: '0.72rem', color: C.textMuted }}>{results.length} 份结果</span>
-      </div>
-
-      {error && (
-        <div style={{ padding: '8px 12px', fontSize: '0.8rem', color: C.err, background: C.errBg, borderRadius: 8, border: `1px solid ${C.err}22` }}>
-          {error}
-        </div>
-      )}
-
-      {steps.length > 0 && (
-        <Section title={`执行过程（${steps.length} 步）`} icon={
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-        }>
-          <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {steps.map(step => (
-              <div key={step.callId}>
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: '0.78rem' }}>
-                  <span style={{
-                    fontSize: '0.7rem', fontWeight: 600, padding: '1px 8px', borderRadius: 4,
-                    color: C.text2, background: C.bgSunken,
-                  }}>{step.name === 'run_sql' ? 'SQL' : '准备'}</span>
-                  <span style={{
-                    fontSize: '0.72rem', fontWeight: 600,
-                    color: step.status === 'SUCCEEDED' ? C.success : step.status === 'CANCELLED' ? C.warn : C.err,
-                  }}>{step.status === 'SUCCEEDED' ? '完成' : step.status === 'CANCELLED' ? '中断' : '失败'}</span>
-                </div>
-                {step.summary && <div style={{ marginTop: 2, fontSize: '0.75rem', color: C.textLight }}>{step.summary}</div>}
-                {step.sql && (
-                  <div style={{ marginTop: 4 }}>
-                    <SqlBlock sql={step.sql} />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </Section>
-      )}
-
-      {results.map((r, idx) => (
-        <Section
-          key={r.artifactId}
-          title={`查询 ${idx + 1}：${r.purpose || '未命名查询'}`}
-          icon={
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          }
-          defaultOpen={idx === 0}
-          badge={
-            <span style={{
-              fontSize: '0.7rem', fontWeight: 600, padding: '1px 8px', borderRadius: 4,
-              color: C.text2, background: C.bgSunken,
-            }}>{r.rowCount} 行 × {r.columns.length} 列</span>
-          }
-        >
-          <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {/* meta row */}
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', fontSize: '0.72rem', color: C.textMuted }}>
-              {r.elapsedMs > 0 && <span>{r.elapsedMs}ms</span>}
-              {r.truncated && <span style={{ color: C.warn }}>结果截断</span>}
-              <span style={{ fontFamily: C.mono, fontSize: '0.68rem' }}>{r.artifactId}</span>
-            </div>
-
-            {r.truncated && (
-              <div style={{ padding: '6px 10px', fontSize: '0.75rem', color: '#92400e', background: C.warnBg, borderRadius: 6 }}>
-                达到查询结果预算，不能当作完整数据。{r.truncationReason}
-              </div>
-            )}
-
-            {/* 1. 查询问题 */}
-            {r.purpose && (
-              <Section title="查询问题" icon={
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-              } defaultOpen noBorder>
-                <div style={{
-                  padding: '10px 14px', fontSize: '0.85rem', fontWeight: 500,
-                  color: C.text, lineHeight: 1.6,
-                }}>{r.purpose}</div>
-              </Section>
-            )}
-
-            {/* 2. SQL 语句 */}
-            <Section title="SQL 语句" icon={
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-            } noBorder>
-              <SqlBlock sql={r.sql} />
-            </Section>
-
-            {/* 3. 查询结果 */}
-            {r.columns.length > 0 && r.rows.length > 0 && (
-              <Section
-                title={`查询结果（前 ${r.rows.length} 行）`}
-                icon={
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
-                }
-                defaultOpen
-                noBorder
-              >
-                <ResultTable columns={r.columns} columnTypes={r.columnTypes} rows={r.rows} />
-              </Section>
-            )}
-
-            {r.rowCount === 0 && (
-              <div style={{ color: C.textMuted, fontStyle: 'italic', fontSize: '0.8rem', padding: '8px 0' }}>查询结果为空</div>
-            )}
-
-            <QueryDownload artifactId={r.artifactId} truncated={r.truncated} />
-          </div>
-        </Section>
-      ))}
-    </div>
-  );
-}
 
 function RenderChartDetail({ data }: { data: Record<string, unknown> }) {
   const chartType = data.chartType as string;
@@ -616,79 +251,14 @@ function RenderChartDetail({ data }: { data: Record<string, unknown> }) {
   );
 }
 
-function PrepareDataContextDetail({ result }: { result: string }) {
-  const unescaped = unescapeText(result);
-  const titleMatch = unescaped.match(/^#\s+(.+)$/m);
-
-  // Extract full markdown table (all consecutive pipe-delimited lines)
-  let tableContent = '';
-  const tableStartMatch = unescaped.match(/###\s*字段信息\s*\n+([\s\S]*?)(?=\n###|\n#|\n\n\n|$)/);
-  if (tableStartMatch) {
-    const tableBlock = tableStartMatch[1];
-    const tableLines = tableBlock.split('\n').filter(l => l.trim().startsWith('|'));
-    tableContent = tableLines.join('\n');
-  } else {
-    // Fallback: find any consecutive pipe-delimited lines
-    const allLines = unescaped.split('\n');
-    const pipeLines: string[] = [];
-    for (const line of allLines) {
-      if (line.trim().startsWith('|')) {
-        pipeLines.push(line);
-      } else if (pipeLines.length >= 2) {
-        break;
-      }
-    }
-    if (pipeLines.length >= 2) {
-      tableContent = pipeLines.join('\n');
-    }
-  }
-
-  const descLines: string[] = [];
-  if (unescaped.length > 0) {
-    const lines = unescaped.split('\n');
-    let inDesc = false;
-    for (const line of lines) {
-      if (line.startsWith('# ')) { inDesc = true; continue; }
-      if (line.startsWith('### ') || line.startsWith('|')) { break; }
-      if (inDesc && line.trim()) descLines.push(line.trim());
-    }
-  }
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {titleMatch && (
-        <Section title="数据源" icon={
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-        } defaultOpen>
-          <div style={{ padding: '10px 14px' }}>
-            <div style={{ fontSize: '0.88rem', fontWeight: 700, color: C.text, marginBottom: descLines.length > 0 ? 6 : 0 }}>
-              {titleMatch[1]}
-            </div>
-            {descLines.length > 0 && (
-              <div style={{ fontSize: '0.8rem', color: C.textLight, lineHeight: 1.6 }}>{descLines.join(' ')}</div>
-            )}
-          </div>
-        </Section>
-      )}
-      {tableContent && (
-        <Section title="字段信息" icon={
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
-        } defaultOpen>
-          <div style={{ padding: '4px 0' }}>
-            <MarkdownTable md={tableContent} />
-          </div>
-        </Section>
-      )}
-      {!titleMatch && !tableContent && (
-        <div style={{ padding: '10px 14px' }}>
-          <Markdown>{unescaped}</Markdown>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function unescapeText(s: string): string {
-  return s.replace(/\\r\n/g, '\n').replace(/\\n/g, '\n').replace(/\\t/g, '  ').replace(/\\"/g, '"');
+  const slash = String.fromCharCode(92);
+  const lineFeed = String.fromCharCode(10);
+  return s
+    .split(`${slash}r${slash}n`).join(lineFeed)
+    .split(`${slash}n`).join(lineFeed)
+    .split(`${slash}t`).join('  ')
+    .split(`${slash}"`).join('"');
 }
 
 function RetrieveEvidenceDetail({ result }: { result: string }) {
@@ -713,66 +283,7 @@ function extractPythonCode(input?: string): string | null {
   try { const p = JSON.parse(input); return typeof p.code === 'string' ? p.code : null; } catch { return null; }
 }
 
-function QueryStructuredMarkdownView({ result }: { result: string }) {
-  const unescaped = unescapeText(result);
-  // Strip leading "## 查询结果" header
-  const content = unescaped.replace(/^##\s+查询结果\s*\n+/m, '');
 
-  // Extract SQL from code block
-  const sqlMatch = content.match(/```sql\s*\n([\s\S]*?)```/);
-  const sql = sqlMatch ? sqlMatch[1].trim() : '';
-
-  // Extract purpose
-  const purposeMatch = content.match(/\*\*查询问题[：:]\*\*\s*(.+?)(?:\n|$)/);
-  const purpose = purposeMatch ? purposeMatch[1].trim() : '';
-
-  // Extract table (everything after "**查询结果：**" or after the SQL block)
-  let tableMd = '';
-  const tableStart = content.indexOf('**查询结果');
-  if (tableStart >= 0) {
-    const afterHeader = content.slice(tableStart);
-    const lines = afterHeader.split('\n');
-    const pipeLines = lines.filter(l => l.trim().startsWith('|'));
-    if (pipeLines.length >= 2) {
-      tableMd = pipeLines.join('\n');
-    }
-  }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {purpose && (
-        <Section title="查询问题" icon={
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-        } defaultOpen noBorder>
-          <div style={{ padding: '10px 14px', fontSize: '0.85rem', fontWeight: 500, color: C.text, lineHeight: 1.6 }}>
-            {purpose}
-          </div>
-        </Section>
-      )}
-      {sql && (
-        <Section title="SQL 语句" icon={
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-        } noBorder>
-          <SqlBlock sql={sql} />
-        </Section>
-      )}
-      {tableMd && (
-        <Section title="查询结果" icon={
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
-        } defaultOpen noBorder>
-          <div style={{ padding: '4px 0' }}>
-            <MarkdownTable md={tableMd} />
-          </div>
-        </Section>
-      )}
-      {!purpose && !sql && !tableMd && (
-        <div style={{ padding: '10px 14px' }}>
-          <Markdown>{content}</Markdown>
-        </div>
-      )}
-    </div>
-  );
-}
 
 function ToolDetail({ name, result }: { name: string; result: string }) {
   let parsed: Record<string, unknown> | null = null;
@@ -785,15 +296,17 @@ function ToolDetail({ name, result }: { name: string; result: string }) {
     if (trimmed.startsWith('{') || trimmed.startsWith('[')) truncatedJson = true;
   }
 
-  if (name === 'query_structured_data') {
-    if (parsed) return <QueryStructuredDetail data={parsed} />;
-    return <QueryStructuredMarkdownView result={result} />;
+  if (name === 'wren_run_sql' || name === 'wren_query_cube' || name === 'wren_describe_model') {
+    return (
+      <div style={{ padding: '10px 14px', maxHeight: 500, overflowY: 'auto' }}>
+        <Markdown>{unescapeText(result)}</Markdown>
+      </div>
+    );
   }
   if (name === 'render_chart' && parsed) return <RenderChartDetail data={parsed} />;
   if (truncatedJson) {
     return <div style={{ padding: '12px', fontSize: '0.8rem', color: '#92400e', background: C.warnBg, borderRadius: 8 }}>结果数据过大，历史记录中已截断。重新执行该工具可查看完整结果。</div>;
   }
-  if (name === 'prepare_data_context') return <PrepareDataContextDetail result={result} />;
   if (name === 'retrieve_evidence' || name === 'read_knowledge') return <RetrieveEvidenceDetail result={result} />;
   return (
     <div style={{ padding: '10px 14px', maxHeight: 400, overflowY: 'auto' }}>
@@ -806,10 +319,20 @@ function ToolDetail({ name, result }: { name: string; result: string }) {
    Tool name → icon + color mapping
    ═══════════════════════════════════════════════════════════ */
 const TOOL_META: Record<string, { label: string; icon: React.ReactNode; color: string; badgeBg: string }> = {
-  query_structured_data:  { label: '查询数据', color: '#4f46e5', badgeBg: '#eef2ff', icon: (
+  wren_run_sql:           { label: '查询语义模型', color: '#4f46e5', badgeBg: '#eef2ff', icon: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <ellipse cx="11" cy="5" rx="8" ry="2.5"/><path d="M3 5v14c0 1.38 3.58 2.5 8 2.5s8-1.12 8-2.5V5"/>
       <path d="M19 10v5c0 1.38-3.58 2.5-8 2.5"/>
+    </svg>
+  )},
+  wren_query_cube:        { label: '查询业务指标', color: '#4f46e5', badgeBg: '#eef2ff', icon: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+    </svg>
+  )},
+  wren_describe_model:    { label: '查看语义模型', color: '#9333ea', badgeBg: '#faf5ff', icon: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
     </svg>
   )},
   read_knowledge:         { label: '读取业务规则', color: '#7c3aed', badgeBg: '#f5f3ff', icon: (
@@ -831,11 +354,6 @@ const TOOL_META: Record<string, { label: string; icon: React.ReactNode; color: s
   run_python:             { label: '执行 Python', color: '#2563eb', badgeBg: '#eff6ff', icon: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
-    </svg>
-  )},
-  prepare_data_context:   { label: '准备字段与规则', color: '#9333ea', badgeBg: '#faf5ff', icon: (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19.5 3 21l1.5-4.5L16.5 3.5z"/>
     </svg>
   )},
   run_sql:                { label: '执行 SQL', color: '#dc2626', badgeBg: '#fef2f2', icon: (
@@ -943,11 +461,7 @@ export default function ToolInspector({ tool, onClose }: ToolInspectorProps) {
   const title = isPythonArtifacts
     ? `生成产物（${(() => { let c = 0; for (const t of tool.pythonTools ?? []) { if (!t.result) continue; try { c += parseResult(t.result).artifacts.length; } catch {/* */} } return c; })()} 个文件）`
     : meta.label;
-  const isError = !isPythonArtifacts && tool.result !== undefined
-    ? (tool.name === 'query_structured_data'
-      ? (() => { try { return (JSON.parse(tool.result) as Record<string, unknown>)?.status === 'FAILED'; } catch { return false; } })()
-      : tool.result.startsWith('error:'))
-    : false;
+  const isError = !isPythonArtifacts && tool.result?.startsWith('error:') === true;
 
   const [inputOpen, setInputOpen] = useState(false);
   const [resultOpen, setResultOpen] = useState(true);

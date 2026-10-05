@@ -28,11 +28,16 @@ import io.agentscope.core.event.AgentStartEvent;
 import io.agentscope.core.event.HintBlockEvent;
 import io.agentscope.core.event.ModelCallEndEvent;
 import io.agentscope.core.event.ModelCallStartEvent;
+import io.agentscope.core.event.RequestStopEvent;
+import io.agentscope.core.event.RequireUserConfirmEvent;
 import io.agentscope.core.event.TextBlockDeltaEvent;
 import io.agentscope.core.event.ToolCallStartEvent;
+import io.agentscope.core.event.ToolResultEndEvent;
 import io.agentscope.core.message.ContentBlock;
+import io.agentscope.core.message.GenerateReason;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.TextBlock;
+import io.agentscope.core.message.ToolCallState;
 import io.agentscope.core.message.ToolResultBlock;
 import io.agentscope.core.message.ToolUseBlock;
 import io.agentscope.core.middleware.ActingInput;
@@ -520,5 +525,86 @@ class ReActAgentMiddlewareIntegrationTest {
                 "second call must contain at least AgentStart + AgentEnd; got " + second.size());
         assertTrue(second.get(0) instanceof AgentStartEvent);
         assertTrue(second.get(second.size() - 1) instanceof AgentEndEvent);
+    }
+
+    /**
+     * An onActing middleware that pauses the loop — emitting RequireUserConfirmEvent followed by
+     * RequestStopEvent without delegating to {@code next}, mirroring the modeling HITL gate —
+     * must have its events forwarded to the stream consumer.
+     *
+     * <p>Before the fix these events were dropped: the acting middleware chain only inspected the
+     * stream for RequestStopEvent and never published it to the event sink, so streaming callers
+     * never saw the confirmation request and treated the turn as normally completed.
+     */
+    @Test
+    void actingMiddlewareEmittedConfirmEventsAreForwardedToStream() {
+        MiddlewareBase confirmingGate =
+                new MiddlewareBase() {
+                    @Override
+                    public Flux<AgentEvent> onActing(
+                            Agent agent,
+                            RuntimeContext ctx,
+                            ActingInput input,
+                            Function<ActingInput, Flux<AgentEvent>> next) {
+                        List<ToolUseBlock> asking =
+                                input.toolCalls().stream()
+                                        .map(
+                                                tool ->
+                                                        ToolUseBlock.builder()
+                                                                .id(tool.getId())
+                                                                .name(tool.getName())
+                                                                .input(tool.getInput())
+                                                                .state(ToolCallState.ASKING)
+                                                                .build())
+                                        .toList();
+                        return Flux.just(
+                                new RequireUserConfirmEvent("reply-hitl", asking),
+                                new RequestStopEvent(
+                                        "confirmation required", GenerateReason.PERMISSION_ASKING));
+                    }
+                };
+        Toolkit toolkit = new Toolkit();
+        toolkit.registerAgentTool(new LookupTool());
+        ReActAgent agent =
+                ReActAgent.builder()
+                        .name("asst")
+                        .sysPrompt("hello-system")
+                        .model(new ToolThenFinalModel())
+                        .toolkit(toolkit)
+                        .middleware(confirmingGate)
+                        .build();
+
+        List<AgentEvent> events = agent.streamEvents(List.of()).collectList().block();
+
+        assertNotNull(events);
+        List<RequireUserConfirmEvent> confirmations =
+                events.stream()
+                        .filter(RequireUserConfirmEvent.class::isInstance)
+                        .map(RequireUserConfirmEvent.class::cast)
+                        .toList();
+        assertEquals(1, confirmations.size(), "middleware confirm event must be forwarded");
+        assertEquals("reply-hitl", confirmations.get(0).getReplyId());
+        assertEquals(1, confirmations.get(0).getToolCalls().size());
+        assertEquals(ToolCallState.ASKING, confirmations.get(0).getToolCalls().get(0).getState());
+
+        int iReq = events.indexOf(confirmations.get(0));
+        int iStop = -1;
+        for (int i = 0; i < events.size(); i++) {
+            if (events.get(i) instanceof RequestStopEvent) {
+                iStop = i;
+                break;
+            }
+        }
+        assertTrue(iStop > iReq, "RequestStopEvent must follow the confirm event");
+        assertEquals(
+                GenerateReason.PERMISSION_ASKING,
+                ((RequestStopEvent) events.get(iStop)).getGenerateReason());
+        assertFalse(
+                events.stream().anyMatch(ToolResultEndEvent.class::isInstance),
+                "gated tool must not execute");
+        assertEquals(
+                1,
+                events.stream().filter(ModelCallStartEvent.class::isInstance).count(),
+                "core model events must not be published twice");
     }
 }

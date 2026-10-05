@@ -16,8 +16,10 @@
 package io.agentscope.dataagent.tools.data;
 
 import io.agentscope.dataagent.dataset.DatasetContextProvider;
-import io.agentscope.dataagent.dataset.KnowledgeGraphService;
+import io.agentscope.dataagent.dataset.DatasetGroupService;
+import io.agentscope.dataagent.dataset.MdlCatalog;
 import io.agentscope.dataagent.runtime.DataAgentBootstrap;
+import io.agentscope.dataagent.runtime.wren.WrenQueryGateway;
 import io.agentscope.dataagent.web.persistence.jpa.ChartOptionRepository;
 import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
 import io.agentscope.harness.agent.HarnessAgent;
@@ -28,9 +30,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
- * Wires a singleton {@link DataAgentToolkit} onto the built-in main agent's toolkit at startup,
- * so the agent can call {@code prepare_data_context}, {@code query_structured_data},
- * {@code retrieve_evidence} and {@code render_chart}.
+ * Wires the knowledge, chart and Wren-only structured-query tools onto the built-in main agent at
+ * startup. Physical metadata and direct SQL tools are intentionally absent; all structured data
+ * queries use {@link WrenToolkit}.
  *
  * <p>Mirrors {@code ContributionToolRegistrar}: runs after {@link DataAgentBootstrap} has built
  * every agent, fails soft on errors so a missing tool slot does not stop the application from
@@ -48,28 +50,28 @@ public class DataToolkitRegistrar {
     private static final Logger log = LoggerFactory.getLogger(DataToolkitRegistrar.class);
 
     private final DataAgentBootstrap bootstrap;
-    private final DataSourceRegistry registry;
-    private final SqlConnector sqlConnector;
     private final DatasetContextProvider contextProvider;
     private final ChartOptionRepository chartOptions;
-    private final KnowledgeGraphService knowledgeGraph;
     private final ConversationScopeRegistry conversationScopes;
+    private final WrenQueryGateway wrenGateway;
+    private final DatasetGroupService datasetGroupService;
+    private final MdlCatalog mdlCatalog;
 
     public DataToolkitRegistrar(
             DataAgentBootstrap bootstrap,
-            DataSourceRegistry registry,
-            SqlConnector sqlConnector,
             DatasetContextProvider contextProvider,
             ChartOptionRepository chartOptions,
-            KnowledgeGraphService knowledgeGraph,
-            ConversationScopeRegistry conversationScopes) {
+            ConversationScopeRegistry conversationScopes,
+            WrenQueryGateway wrenGateway,
+            DatasetGroupService datasetGroupService,
+            MdlCatalog mdlCatalog) {
         this.bootstrap = bootstrap;
-        this.registry = registry;
-        this.sqlConnector = sqlConnector;
         this.contextProvider = contextProvider;
         this.chartOptions = chartOptions;
-        this.knowledgeGraph = knowledgeGraph;
         this.conversationScopes = conversationScopes;
+        this.wrenGateway = wrenGateway;
+        this.datasetGroupService = datasetGroupService;
+        this.mdlCatalog = mdlCatalog;
     }
 
     @PostConstruct
@@ -90,13 +92,21 @@ public class DataToolkitRegistrar {
                     .getToolkit()
                     .registerTool(
                             new DataAgentToolkit(
-                                    registry,
-                                    sqlConnector,
-                                    contextProvider,
-                                    chartOptions,
-                                    knowledgeGraph,
-                                    conversationScopes));
+                                    contextProvider, chartOptions, conversationScopes));
             log.info("Registered DataAgent toolkit onto main agent '{}'", main.getName());
+
+            // Wren-only structured query channel (specs/015); the sandbox proxy enables the
+            // CSV data handoff to run_python (specs/016, ADR 0030).
+            main.getDelegate()
+                    .getToolkit()
+                    .registerTool(
+                            new WrenToolkit(
+                                    wrenGateway,
+                                    datasetGroupService,
+                                    conversationScopes,
+                                    mdlCatalog,
+                                    new SandboxBackedFilesystem()));
+            log.info("Registered Wren toolkit onto main agent '{}'", main.getName());
 
             // Register the Python sandbox-execution tool. See the class javadoc for why a
             // standalone proxy (instead of the agent's own filesystem instance) is sufficient.

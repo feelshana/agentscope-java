@@ -19,7 +19,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.agentscope.core.tool.Tool;
 import io.agentscope.dataagent.tools.data.DataAgentToolkit;
+import io.agentscope.dataagent.tools.data.WrenToolkit;
+import io.agentscope.harness.agent.gateway.channel.ChannelConfig;
+import io.agentscope.harness.agent.gateway.channel.DmScope;
 import java.lang.reflect.Method;
+import java.util.Arrays;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -31,10 +36,8 @@ import org.junit.jupiter.api.Test;
  *       persona, the behaviour gates that must hold before any skill is loaded, the workflow
  *       skeleton and a pointer at the {@code sql-analysis} skill — and restates none of the
  *       skill-level how-to;
- *   <li>the {@code query_structured_data} tool description carries the hard SQL gates
- *       (JOIN/CTE-first, dimension-table de-duplication) plus the anti-probe gate. Tool
- *       descriptions travel with the tool schema on every turn, so they reach the model even when
- *       the skill body was never loaded.
+ *   <li>the system prompt and Wren tool descriptions keep structured queries on the published
+ *       semantic model, while the detailed SQL construction rules stay in {@code sql-analysis}.
  * </ul>
  *
  * <p>The detailed how-to lives in the skills and is guarded by {@code SharedSkillContentTest}.
@@ -46,31 +49,40 @@ import org.junit.jupiter.api.Test;
  */
 class DataAgentConfigTest {
 
-    /**
-     * The IN-literal ban must name the "fetch a dimension attribute" case too. A real session
-     * ({@code logs/LLM.log}, 18:23) copied nine accounts into {@code WHERE account IN (...)} just
-     * to look up department names — which the previous wording, scoped to "cross-table filtering",
-     * let through.
-     */
     @Test
-    void queryToolDescriptionCarriesCrossTableGates() {
-        assertThat(toolDescription("query_structured_data"))
-                .contains("禁止把上一步查询结果作为字面量复制进 IN")
-                .contains("补维度属性")
-                .contains("JOIN")
-                .contains("CTE")
-                .contains("一个关联键对应多行")
-                .contains("SELECT DISTINCT")
-                .contains("扇出")
-                .contains("sql-analysis");
+    void chatUiAlwaysUsesConversationScopedSessions() {
+        ChannelConfig configured =
+                ChannelConfig.builder("chatui")
+                        .defaultAgentId("data-agent")
+                        .dmScope(DmScope.MAIN)
+                        .build();
+
+        ChannelConfig effective = DataAgentConfig.conversationScopedChatUiConfig(configured);
+
+        assertThat(effective.dmScope()).isEqualTo(DmScope.PER_ACCOUNT_CHANNEL_PEER);
+        assertThat(effective.defaultAgentId()).isEqualTo("data-agent");
     }
 
     @Test
-    void queryToolDescriptionKeepsPrepareFirstContract() {
-        assertThat(toolDescription("query_structured_data"))
+    void conversationScopedChatUiConfigIsKeptAsIs() {
+        ChannelConfig configured =
+                ChannelConfig.builder("chatui").dmScope(DmScope.PER_ACCOUNT_CHANNEL_PEER).build();
+
+        assertThat(DataAgentConfig.conversationScopedChatUiConfig(configured)).isSameAs(configured);
+    }
+
+    @Test
+    void wrenToolDescriptionsRequirePublishedLogicalModels() {
+        assertThat(toolDescription(WrenToolkit.class, "wren_run_sql"))
                 .contains("[DATA_SOURCES_OVERVIEW]")
-                .contains("prepare_data_context")
-                .contains("SELECT / WITH");
+                .contains("wren_describe_model")
+                .contains("SELECT / WITH")
+                .contains("不要用物理表名")
+                .contains("没有有效已发布 MDL 的知识库不可查询");
+        assertThat(toolDescription(WrenToolkit.class, "wren_query_cube"))
+                .contains("已发布语义模型")
+                .contains("Cube 清单")
+                .contains("基础 MDL 初始化");
     }
 
     /**
@@ -89,23 +101,43 @@ class DataAgentConfigTest {
                 .contains("[KNOWLEDGE_BASE_OVERVIEW]");
     }
 
-    /** The prompt points at the skill for SQL work and carries the tool-chain skeleton. */
+    /** The prompt points at the skill and carries the Wren-only tool-chain skeleton. */
     @Test
-    void defaultSysPromptPointsAtSqlAnalysisSkill() {
+    void defaultSysPromptPointsAtWrenOnlyWorkflow() {
         assertThat(DataAgentConfig.DEFAULT_AGENT_SYS_PROMPT)
                 .contains("sql-analysis")
-                .contains("prepare_data_context")
-                .contains("query_structured_data")
+                .contains("所有结构化数据查询统一走 Wren")
+                .contains("wren_describe_model")
+                .contains("wren_run_sql")
+                .contains("wren_query_cube")
                 .contains("retrieve_evidence")
-                .contains("render_chart");
+                .contains("render_chart")
+                .contains("不存在物理表直查回退通道")
+                .doesNotContain("prepare_data_context")
+                .doesNotContain("query_structured_data");
+    }
+
+    @Test
+    void defaultSysPromptKeepsCubeViewProjectionSqlRoutingOrder() {
+        assertThat(DataAgentConfig.DEFAULT_AGENT_SYS_PROMPT)
+                .contains("按官方决策树选工具")
+                .contains("Cube 成员能覆盖时优先用 wren_query_cube")
+                .contains("已发布 View 能直接覆盖问题时优先用 wren_run_sql 按视图名直接查询")
+                .contains("展开 many 侧关联字段组")
+                .contains("只查询一个逻辑模型及其投影列")
+                .contains("relationship condition 自动 JOIN")
+                .contains("语义资产都无法表达时再用 wren_run_sql")
+                .contains("显式 JOIN 是最后兜底且只能引用逻辑模型名")
+                // specs/025: official alignment — prefer wording, no mandatory gate
+                .doesNotContain("不得改写成手工聚合 SQL")
+                .doesNotContain("不得从基础模型重建同等语义");
     }
 
     /**
      * Anti-duplication guard: how-to detail belongs to exactly one layer. Everything asserted
-     * absent here is carried — in more detail — by {@code sql-analysis} (batch prepare of the
-     * directly related tables), the {@code query_structured_data} tool description (JOIN/CTE
-     * de-duplication) and {@code python-analysis} (matplotlib labelling and CJK fonts), all of
-     * which {@code SharedSkillContentTest} pins down.
+     * absent here is carried — in more detail — by {@code sql-analysis} (logical model discovery
+     * and JOIN/CTE de-duplication) and {@code python-analysis} (matplotlib labelling and CJK
+     * fonts), both guarded by {@code SharedSkillContentTest}.
      */
     @Test
     void defaultSysPromptDoesNotRestateSkillLevelDetail() {
@@ -118,39 +150,28 @@ class DataAgentConfigTest {
                 .doesNotContain("matplotlib");
     }
 
-    /**
-     * Anti-probe gate (ADR 0008). The observed session spent a whole turn on three probe queries
-     * whose results never reached the final SQL, while {@code sql-analysis} step 3 — which forbids
-     * exactly that — was never loaded. Only the function-name anchors live here; the full example
-     * wording ({@code SELECT MIN(date)}) stays in the skill so the two layers do not drift.
-     */
     @Test
-    void queryToolDescriptionForbidsProbeQueries() {
-        assertThat(toolDescription("query_structured_data"))
-                .contains("探查查询")
-                .contains("COUNT(*)")
-                .contains("MIN")
-                .contains("MAX")
-                .contains("结论本身需要的聚合不在此列")
-                // the cross-table gates must survive next to the new one
-                .contains("禁止把上一步查询结果作为字面量复制进 IN")
-                .contains("SELECT DISTINCT")
-                // the gate names functions, it does not restate the skill's example SQL
-                .doesNotContain("SELECT MIN(");
+    void physicalQueryToolsAreAbsentFromAgentToolkits() {
+        List<String> toolNames =
+                java.util.stream.Stream.concat(
+                                Arrays.stream(DataAgentToolkit.class.getDeclaredMethods()),
+                                Arrays.stream(WrenToolkit.class.getDeclaredMethods()))
+                        .map(method -> method.getAnnotation(Tool.class))
+                        .filter(java.util.Objects::nonNull)
+                        .map(Tool::name)
+                        .toList();
+
+        assertThat(toolNames)
+                .contains("wren_describe_model", "wren_run_sql", "wren_query_cube")
+                .doesNotContain("prepare_data_context", "query_structured_data");
     }
 
-    /**
-     * The prepare tool must advertise what it actually returns. {@code buildTableSection} emits
-     * name/original name/type/description only — never sample values — and the AI-written
-     * descriptions usually carry the enum hints, which is what makes the anti-probe gate viable.
-     */
     @Test
-    void prepareToolDescriptionStatesValueHints() {
-        assertThat(toolDescription("prepare_data_context"))
-                .contains("取值提示")
-                .contains("直接写 WHERE")
-                .doesNotContain("样例值")
-                .doesNotContain("维度值样例");
+    void describeModelToolRejectsPhysicalIdentifiersByContract() {
+        assertThat(toolDescription(WrenToolkit.class, "wren_describe_model"))
+                .contains("字段、关系和相关 Cube")
+                .contains("只传逻辑模型名")
+                .contains("不要传 datasetId、sourceId、schema 或物理表名");
     }
 
     /**
@@ -171,13 +192,14 @@ class DataAgentConfigTest {
     }
 
     /** Reads the {@code @Tool#description} the framework exposes to the model for a tool name. */
-    private static String toolDescription(String toolName) {
-        for (Method m : DataAgentToolkit.class.getDeclaredMethods()) {
-            Tool tool = m.getAnnotation(Tool.class);
+    private static String toolDescription(Class<?> toolkitType, String toolName) {
+        for (Method method : toolkitType.getDeclaredMethods()) {
+            Tool tool = method.getAnnotation(Tool.class);
             if (tool != null && toolName.equals(tool.name())) {
                 return tool.description();
             }
         }
-        throw new AssertionError("no @Tool named '" + toolName + "' on DataAgentToolkit");
+        throw new AssertionError(
+                "no @Tool named '" + toolName + "' on " + toolkitType.getSimpleName());
     }
 }

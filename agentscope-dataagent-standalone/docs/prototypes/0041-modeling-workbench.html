@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>原型 · 语义建模工作台（ADR 0041）</title>
+<style>
+  :root {
+    --primary: #3b6cf6; --primary-soft: #eef2ff;
+    --bg: #f5f6fa; --card: #ffffff; --line: #e5e7eb;
+    --text: #1f2329; --text2: #6b7280;
+    --green: #16a34a; --green-bg: #ecfdf5;
+    --orange: #ea8a0d; --orange-bg: #fff7ed;
+    --yellow-bg: #fefce8; --yellow-line: #fde68a;
+    --red-bg: #fef2f2; --red: #dc2626;
+    --chat-w: 520px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "PingFang SC","Microsoft YaHei",system-ui,sans-serif; background: var(--bg); color: var(--text); font-size: 13px; }
+
+  /* ── 原型说明条 ── */
+  .proto-bar { background: #111827; color: #d1d5db; padding: 8px 16px; display: flex; gap: 16px; align-items: center; font-size: 12px; }
+  .proto-bar b { color: #fff; }
+  .proto-url { background: #1f2937; border: 1px solid #374151; border-radius: 6px; padding: 3px 10px; font-family: Consolas, monospace; color: #93c5fd; }
+  .proto-tip { margin-left: auto; color: #9ca3af; }
+
+  /* ── 应用窗体 ── */
+  .app { display: grid; grid-template-columns: 148px 1fr var(--chat-w); height: calc(100vh - 37px); min-height: 640px; transition: grid-template-columns .25s ease; }
+  .app.collapsed { grid-template-columns: 148px 1fr 0px; }
+  .app.collapsed .chat-pane { display: none; }
+
+  /* 拖拽调节对话栏宽度 */
+  .drag-bar { position: absolute; left: -3px; top: 0; bottom: 0; width: 7px; cursor: col-resize; z-index: 5; }
+  .drag-bar:hover, .drag-bar.on { background: linear-gradient(90deg, transparent, rgba(59,108,246,.35), transparent); }
+  .app.collapsed .drag-bar { display: none; }
+
+  /* ── 左导航 ── */
+  .rail { background: var(--card); border-right: 1px solid var(--line); padding: 14px 10px; }
+  .rail .group-name { font-weight: 600; font-size: 13px; margin: 4px 8px 14px; }
+  .rail-item { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: 8px; color: var(--text2); cursor: pointer; margin-bottom: 2px; }
+  .rail-item:hover { background: var(--bg); }
+  .rail-item.active { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
+  .rail-item .ic { width: 16px; text-align: center; }
+  .rail-note { margin: 18px 8px 0; font-size: 11px; color: #9ca3af; line-height: 1.6; }
+
+  /* ── 中栏 资产视图 ── */
+  .assets { overflow-y: auto; padding: 14px 18px; border-right: 1px solid var(--line); }
+  .status-bar { display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; }
+  .badge { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 600; }
+  .badge.pub { background: var(--green-bg); color: var(--green); }
+  .badge.draft { background: var(--orange-bg); color: var(--orange); display: none; }
+  .status-bar .spacer { flex: 1; }
+  .btn { border: none; border-radius: 8px; padding: 7px 16px; font-size: 13px; cursor: pointer; font-weight: 600; }
+  .btn.primary { background: var(--primary); color: #fff; }
+  .btn.primary:disabled { background: #c7d2fe; cursor: not-allowed; }
+  .btn.ghost { background: var(--card); border: 1px solid var(--line); color: var(--text); font-weight: 500; }
+  .btn.sm { padding: 4px 12px; font-size: 12px; border-radius: 6px; }
+
+  .dirty-banner { display: none; align-items: center; gap: 8px; background: var(--yellow-bg); border: 1px solid var(--yellow-line); color: #92400e; border-radius: 10px; padding: 9px 14px; margin-bottom: 12px; }
+  .dirty-banner.show { display: flex; }
+  .dirty-banner .spacer { flex: 1; }
+
+  .tabs { display: flex; gap: 2px; border-bottom: 2px solid var(--line); margin-bottom: 14px; }
+  .tab { padding: 8px 14px; cursor: pointer; color: var(--text2); border-radius: 6px 6px 0 0; position: relative; display: flex; gap: 6px; align-items: center; }
+  .tab:hover { color: var(--text); background: var(--bg); }
+  .tab.active { color: var(--primary); font-weight: 600; }
+  .tab.active::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -2px; height: 2px; background: var(--primary); }
+  .tab .cnt { background: var(--bg); border-radius: 999px; padding: 0 7px; font-size: 11px; color: var(--text2); }
+  .tab.active .cnt { background: var(--primary-soft); color: var(--primary); }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 12px; }
+  .card-head { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); font-weight: 600; }
+  .card-head .spacer { flex: 1; }
+  .card-body { padding: 6px 16px 12px; }
+
+  .row { display: flex; align-items: center; gap: 12px; padding: 11px 4px; border-bottom: 1px dashed var(--line); }
+  .row:last-child { border-bottom: none; }
+  .row .dot { width: 8px; height: 8px; border-radius: 50%; background: #cbd5e1; flex: none; }
+  .row .dot.hot { background: var(--orange); }
+  .row .name { font-weight: 600; min-width: 150px; }
+  .row .meta { color: var(--text2); flex: 1; }
+  .tag-draft { display: none; background: var(--orange-bg); color: var(--orange); border: 1px solid #fed7aa; font-size: 11px; border-radius: 999px; padding: 1px 8px; font-weight: 600; }
+  .row.is-draft .tag-draft { display: inline-block; }
+  .empty-hint { color: #9ca3af; padding: 18px 4px; text-align: center; }
+
+  .note { background: var(--primary-soft); color: #3730a3; border-radius: 8px; padding: 8px 12px; font-size: 12px; margin: 10px 0; line-height: 1.7; }
+
+  /* ── 关系行：三要素精简展示 ── */
+  .rel-line { display: flex; align-items: center; gap: 10px; padding: 11px 4px; border-bottom: 1px dashed var(--line); flex-wrap: wrap; }
+  .rel-line:last-child { border-bottom: none; }
+  .rel-pair { font-weight: 600; }
+  .rel-pair .arrow { color: var(--primary); margin: 0 2px; }
+  .rel-cols { font-family: Consolas, monospace; font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; }
+  .rel-desc { color: var(--text2); flex: 1; min-width: 140px; }
+  .rel-ops { display: flex; gap: 6px; }
+  .cnt-chip { background: var(--orange-bg); color: var(--orange); border-radius: 999px; font-size: 11px; padding: 1px 8px; font-weight: 600; }
+
+  /* ── MDL 工程文件浏览 ── */
+  .mdl-wrap { display: grid; grid-template-columns: 260px 1fr; }
+  .mdl-files { border-right: 1px solid var(--line); padding: 8px 6px; }
+  .file-item { padding: 7px 10px; border-radius: 6px; cursor: pointer; font-family: Consolas, monospace; font-size: 12px; color: var(--text2); display: flex; align-items: center; gap: 6px; }
+  .file-item:hover { background: var(--bg); }
+  .file-item.on { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
+  .file-item .fd { margin-left: auto; width: 6px; height: 6px; border-radius: 50%; background: var(--orange); display: none; flex: none; }
+  .file-item.dirty .fd { display: block; }
+  .mdl-view { padding: 10px 14px; max-height: 430px; overflow: auto; background: #fbfcfe; border-radius: 0 0 10px 10px; }
+  pre.yaml { font-family: Consolas, monospace; font-size: 12px; line-height: 1.8; white-space: pre-wrap; word-break: break-all; margin: 0; }
+  pre.yaml .k { color: #7c3aed; }
+  pre.yaml .c { color: #16a34a; }
+  pre.yaml .v { color: #b45309; }
+
+  /* 资产行（模型/Cube/视图列表项，与文件列表同一交互范式） */
+  .asset-item { padding: 8px 10px; border-radius: 6px; cursor: pointer; }
+  .asset-item:hover { background: var(--bg); }
+  .asset-item.on { background: var(--primary-soft); }
+  .asset-item .an { font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+  .asset-item .am { font-size: 11px; color: var(--text2); margin-top: 2px; }
+  .asset-item .fd { margin-left: auto; width: 6px; height: 6px; border-radius: 50%; background: var(--orange); display: none; flex: none; }
+  .asset-item.dirty .fd { display: block; }
+
+  /* ── 右栏 对话 ── */
+  .chat-pane { background: var(--card); display: flex; flex-direction: column; position: relative; }
+  .chat-head { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); font-weight: 600; }
+  .chat-head .sess { font-size: 11px; color: var(--text2); font-family: Consolas, monospace; background: var(--bg); padding: 2px 8px; border-radius: 6px; }
+  .chat-head .spacer { flex: 1; }
+  .collapse-btn { border: 1px solid var(--line); background: var(--card); border-radius: 6px; width: 26px; height: 26px; cursor: pointer; color: var(--text2); }
+  .expand-tab { display: none; position: absolute; right: 0; top: 84px; writing-mode: vertical-rl; background: var(--primary); color: #fff; border-radius: 8px 0 0 8px; padding: 14px 8px; cursor: pointer; font-size: 12px; letter-spacing: 2px; }
+  .app.collapsed .expand-tab { display: block; }
+
+  .chat-flow { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+  .msg { max-width: 92%; line-height: 1.7; }
+  .msg.ai { align-self: flex-start; }
+  .msg.user { align-self: flex-end; background: var(--primary); color: #fff; border-radius: 12px 12px 2px 12px; padding: 9px 13px; }
+  .msg.ai .bubble { background: var(--bg); border-radius: 12px 12px 12px 2px; padding: 9px 13px; }
+  .msg .task { display: flex; gap: 6px; align-items: center; color: var(--text2); font-size: 12px; margin-top: 6px; padding-left: 4px; }
+  .msg .task .st-ok { color: var(--green); }
+  .msg .task .st-run { color: var(--orange); }
+
+  .hitl { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-top: 4px; background: var(--card); box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+  .hitl-head { background: #f8fafc; padding: 8px 12px; font-weight: 600; font-size: 12px; display: flex; gap: 6px; align-items: center; border-bottom: 1px solid var(--line); }
+  .hitl-body { padding: 10px 12px; }
+  .hitl-path { font-family: Consolas, monospace; font-size: 11px; color: var(--text2); margin-bottom: 8px; }
+  .diff { font-family: Consolas, monospace; font-size: 11px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .diff .dl { padding: 2px 8px; white-space: pre-wrap; word-break: break-all; }
+  .diff .del { background: var(--red-bg); color: #b91c1c; }
+  .diff .add { background: var(--green-bg); color: #15803d; }
+  .diff .ctx { color: var(--text2); }
+  .diff-more { text-align: center; color: #9ca3af; padding: 3px; font-size: 11px; background: #fafafa; }
+  .hitl-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .hitl-ok-msg { display: none; color: var(--green); font-weight: 600; font-size: 12px; margin-top: 10px; }
+  .hitl.done .hitl-actions { display: none; }
+  .hitl.done .hitl-ok-msg { display: block; }
+
+  .chat-input { border-top: 1px solid var(--line); padding: 12px 14px; display: flex; gap: 8px; }
+  .chat-input input { flex: 1; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; font-size: 13px; outline: none; }
+  .chat-input input:focus { border-color: var(--primary); }
+
+  .flow-note { text-align: center; font-size: 11px; color: #9ca3af; margin: 2px 0; }
+</style>
+</head>
+<body>
+
+<div class="proto-bar">
+  <b>原型 · ADR 0041 语义建模工作台</b>
+  <span class="proto-url" id="urlLabel">/configure/datasets/6dc18b39?view=modeling&amp;asset=cubes</span>
+  <span>可交互：① 右栏 HITL 卡点「确认写入」→ 左栏资产标脏 ② 状态条「去发布」→ 标注清零 v3→v4 ③ tab 切换 ④ 「—」折叠对话栏 ⑤ 对话栏左缘可<b>拖拽调宽</b>（默认 520px）</span>
+  <span class="proto-tip">docs/prototypes/0041-modeling-workbench.html</span>
+</div>
+
+<div class="app" id="app">
+
+  <!-- ═══ 左导航 ═══ -->
+  <div class="rail">
+    <div class="group-name">零售分析库</div>
+    <div class="rail-item"><span class="ic">📄</span>文件</div>
+    <div class="rail-item"><span class="ic">🔗</span>知识图谱<span style="margin-left:auto;font-size:10px;color:#c0c4cc;">停用</span></div>
+    <div class="rail-item"><span class="ic">🌳</span>树结构目录</div>
+    <div class="rail-item active"><span class="ic">🧩</span>语义建模</div>
+    <div class="rail-note">左导航维持现状。<br>语义建模页内部改为<br><b>工作台布局</b>：<br>左·资产视图 + 右·对话栏</div>
+  </div>
+
+  <!-- ═══ 中栏 资产视图 ═══ -->
+  <div class="assets">
+
+    <div class="status-bar">
+      <span style="font-weight:600;">语义建模</span>
+      <span class="badge pub" id="pubBadge">● 已发布 v3</span>
+      <span class="badge draft" id="draftBadge">◆ 草稿变更 <b id="draftCnt">0</b> 项</span>
+      <span class="spacer"></span>
+      <span style="color:var(--text2);font-size:12px;" id="pubTime">发布于 2026-10-04 18:32</span>
+      <button class="btn primary sm" id="publishBtn" disabled>去发布</button>
+    </div>
+
+    <div class="dirty-banner" id="dirtyBanner">
+      ⚠ 当前 Wren 查询继续使用 v3 快照；对话产生的草稿变更尚未生效
+      <span class="spacer"></span>
+      <button class="btn sm" style="background:#92400e;color:#fff;" onclick="doPublish()">立即发布</button>
+    </div>
+
+    <div class="tabs" id="tabs">
+      <div class="tab" data-key="overview">总览</div>
+      <div class="tab" data-key="schema">表与关系 <span class="cnt">2</span></div>
+      <div class="tab active" data-key="cubes">Cube <span class="cnt">2</span></div>
+      <div class="tab" data-key="views">视图 <span class="cnt">1</span></div>
+      <div class="tab" data-key="glossary">术语与规则 <span class="cnt">4</span></div>
+      <div class="tab" data-key="mdl">MDL</div>
+    </div>
+
+    <!-- Cube：点击资产 → 右侧展示 YAML -->
+    <div class="panel" data-panel="cubes">
+      <div class="note">✦ 点击左侧 Cube，右侧直接展示 <b>cubes/&lt;name&gt;/metadata.yml</b>；对话确认写入的新 Cube 以「未发布」橙点出现，发布后清零。</div>
+      <div class="card">
+        <div class="card-head">Cube<span class="spacer"></span><button class="btn ghost sm">AI 提议</button><button class="btn ghost sm">+ 新建</button></div>
+        <div class="mdl-wrap">
+          <div class="mdl-files" id="cubeBrowser"></div>
+          <div class="mdl-view"><pre class="yaml" id="yamlCubes"></pre></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 总览：保持现状（完善度 + 文档语义增强） -->
+    <div class="panel" data-panel="overview" style="display:none;">
+      <div class="card"><div class="card-head">语义完善度</div><div class="card-body">
+        <div class="row"><span class="badge pub">已完善</span><span class="meta">Cube / 已发布视图 / 术语 / 业务规则 均已就绪</span></div>
+      </div></div>
+      <div class="card"><div class="card-head">文档语义增强</div><div class="card-body">
+        <div class="empty-hint">上传语义文档 → 差异分析提案 → 逐条审阅采纳（现状保留）</div>
+      </div></div>
+    </div>
+
+    <!-- 表与关系：上半模型（点击看 YAML）+ 下半关系（三要素行式） -->
+    <div class="panel" data-panel="schema" style="display:none;">
+      <div class="note">✦ 点击模型右侧直接展示 <b>models/&lt;name&gt;/metadata.yml</b> 工程内容（工作区即真相，UI 是 YAML 的投影）。</div>
+      <div class="card">
+        <div class="card-head">模型<span class="spacer"></span><button class="btn ghost sm">+ 新建</button></div>
+        <div class="mdl-wrap">
+          <div class="mdl-files" id="modelList"></div>
+          <div class="mdl-view"><pre class="yaml" id="yamlModels"></pre></div>
+        </div>
+      </div>
+      <div class="card"><div class="card-head">待确认关系 <span class="cnt-chip">1</span><span class="spacer"></span><button class="btn ghost sm">重新分析</button></div><div class="card-body">
+        <div class="rel-line">
+          <span class="rel-pair">orders <span class="arrow">→</span> customers</span>
+          <span class="rel-cols">customer_id = id</span>
+          <span class="rel-desc">每笔订单归属一个客户</span>
+          <span class="rel-ops"><button class="btn primary sm">确认</button><button class="btn ghost sm">拒绝</button></span>
+        </div>
+        <div class="note">待确认关系来自对话推断/规则推断；确认后直接写入 <b>relationships.yml</b>（可切 MDL tab 查看该文件内容）。</div>
+      </div></div>
+      <div class="card"><div class="card-head">已确认关系</div><div class="card-body">
+        <div class="rel-line">
+          <span class="rel-pair">orders <span class="arrow">→</span> customers</span>
+          <span class="rel-cols">order_month = month</span>
+          <span class="rel-desc">按月对齐两表口径 · 多对一</span>
+        </div>
+        <div class="note">一行只说三件事：<b>谁关联谁 · 关联字段 · 业务含义</b>；「未发布」标注同 Cube 面板。</div>
+      </div></div>
+    </div>
+
+    <!-- 视图：点击资产 → 右侧展示 YAML -->
+    <div class="panel" data-panel="views" style="display:none;">
+      <div class="note">✦ 点击视图查看 <b>views/&lt;name&gt;/sql.yml</b>（口径固化 SQL，过 specs/018 方言门禁）。</div>
+      <div class="card">
+        <div class="card-head">视图<span class="spacer"></span><button class="btn ghost sm">+ 新建</button></div>
+        <div class="mdl-wrap">
+          <div class="mdl-files" id="viewList"></div>
+          <div class="mdl-view"><pre class="yaml" id="yamlViews"></pre></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" data-panel="glossary" style="display:none;">
+      <div class="card"><div class="card-head">术语与规则</div><div class="card-body">
+        <div class="row"><span class="name">有效订单</span><span class="meta">order_status=1 且 is_deleted=0</span></div>
+        <div class="row"><span class="name">内部客户</span><span class="meta">customers.is_internal=1，口径需排除</span></div>
+        <div class="note">术语 = 全局词典只读；业务规则 = knowledge/rules/*.md（对话可写，写后同样标脏）。</div>
+      </div></div>
+    </div>
+
+    <div class="panel" data-panel="mdl" style="display:none;">
+      <div class="note">✦ 左侧为 wren 工程文件（工作区即真相）；<b>点击文件右侧直接展示 YAML 内容</b>；橙点 = 与 v3 快照有差异（草稿）。发布动作仍走顶部「去发布」，保持全量快照语义（specs/019）。</div>
+      <div class="card">
+        <div class="card-head">MDL 工程文件<span class="spacer"></span><span style="font-size:12px;color:var(--text2);font-weight:400;">MdlPublishPanel · 点击文件查看内容</span></div>
+        <div class="mdl-wrap">
+          <div class="mdl-files" id="mdlFiles"></div>
+          <div class="mdl-view"><pre class="yaml" id="yamlView"></pre></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══ 右栏 对话建模 ═══ -->
+  <div class="chat-pane">
+    <div class="drag-bar" id="dragBar" title="拖拽调节对话栏宽度（400–760px）"></div>
+    <button class="expand-tab" onclick="toggleChat()">◀ 对话建模</button>
+    <div class="chat-head">
+      对话建模 <span class="sess">sessionKey = modeling-&lt;groupId&gt;</span>
+      <span class="spacer"></span>
+      <button class="collapse-btn" title="折叠对话栏" onclick="toggleChat()">—</button>
+    </div>
+
+    <div class="chat-flow" id="chatFlow">
+      <div class="flow-note">— 建模会话与资产视图并排 · HITL 确认后左栏即时刷新 —</div>
+
+      <div class="msg user">帮我把订单金额汇总成月度指标，只统计有效订单</div>
+
+      <div class="msg ai">
+        <div class="bubble">好的。我先盘点了工作区现状：valid_orders 视图已固化有效订单口径，直接在其上新建 Cube <b>total_revenue</b>（SUM(amount)，按月聚合）。</div>
+        <div class="task"><span class="st-ok">✓</span> list_modeling_state · 盘点现状</div>
+        <div class="task"><span class="st-ok">✓</span> load_skill_through_path · enrich-context</div>
+        <div class="task"><span class="st-run">⟳</span> write_file · cubes/total_revenue/metadata.yml · <b>等待你确认</b></div>
+
+        <div class="hitl" id="hitlCard">
+          <div class="hitl-head">✋ 建模变更确认 · 新建文件</div>
+          <div class="hitl-body">
+            <div class="hitl-path">cubes/total_revenue/metadata.yml（新增）</div>
+            <div class="diff">
+              <div class="dl add">+ name: total_revenue</div>
+              <div class="dl add">+ base_object: valid_orders</div>
+              <div class="dl add">+ measures:</div>
+              <div class="dl add">+   - name: revenue</div>
+              <div class="dl add">+     expr: SUM(amount)</div>
+              <div class="dl add">+ dimensions:</div>
+              <div class="dl add">+   - name: order_month  (order_time, 月)</div>
+              <div class="dl more diff-more">… 预检通过（YAML parse ✓ / validate --strict ✓ / dry-plan ✓）</div>
+            </div>
+            <div class="hitl-actions">
+              <button class="btn primary sm" onclick="confirmHitl()">确认写入</button>
+              <button class="btn ghost sm">编辑</button>
+              <button class="btn ghost sm">拒绝</button>
+            </div>
+            <div class="hitl-ok-msg">✓ 已确认 · 写入工作区（草稿，未发布）</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="msg ai" id="aiAfterConfirm" style="display:none;">
+        <div class="bubble">已写入工程 YAML。<b>total_revenue</b> 现在是草稿态——左侧指标列表已标「未发布」；需要问数生效请在上方状态条点<b>「去发布」</b>（发布 = 全量校验 + 快照 v+1）。</div>
+      </div>
+
+      <div class="msg ai" id="aiAfterPublish" style="display:none;">
+        <div class="bubble">✅ 发布成功：<b>v4</b>。total_revenue 标注已清零，现在可以直接问「每月有效订单金额」了（wren_query_cube 优先路由）。</div>
+      </div>
+    </div>
+
+    <div class="chat-input">
+      <input placeholder="继续描述建模需求…（示例：再加一个客户数指标）">
+      <button class="btn primary">发送</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  /* tab 切换：状态即 URL 的 asset 参数（原型仅演示） */
+  const KEYMAP = { overview:'总览', schema:'表与关系', cubes:'Cube', views:'视图', glossary:'术语与规则', mdl:'MDL' };
+  document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    const key = t.dataset.key;
+    document.querySelectorAll('.panel').forEach(p => p.style.display = p.dataset.panel === key ? '' : 'none');
+    document.getElementById('urlLabel').innerHTML =
+      '/configure/datasets/6dc18b39?view=modeling&amp;asset=' + key;
+  }));
+
+  /* 闭环①：HITL 确认 → 资产标脏 */
+  function confirmHitl() {
+    document.getElementById('hitlCard').classList.add('done');
+    document.getElementById('aiAfterConfirm').style.display = '';
+    /* Cube 浏览器与 MDL 文件列表同步出现新 cube（带未发布橙点） */
+    addAssetCube();
+    /* 状态条 + 横幅 */
+    document.getElementById('draftCnt').textContent = '3';
+    document.getElementById('draftBadge').style.display = '';
+    document.getElementById('dirtyBanner').classList.add('show');
+    document.getElementById('publishBtn').disabled = false;
+    /* tab 计数 +1 */
+    document.querySelector('.tab[data-key="cubes"] .cnt').textContent = '3';
+    document.getElementById('urlLabel').innerHTML =
+      '/configure/datasets/6dc18b39?view=modeling&amp;asset=cubes&amp;selected=total_revenue';
+    /* MDL 工程里同步出现新文件（带脏点） */
+    addMdlFile('cubes/total_revenue/metadata.yml');
+  }
+
+  /* 闭环②：发布 → 标注清零 v+1 */
+  function doPublish() {
+    const btn = document.getElementById('publishBtn');
+    btn.disabled = true; btn.textContent = '发布中…';
+    setTimeout(() => {
+      document.querySelectorAll('.file-item.dirty, .asset-item.dirty').forEach(f => f.classList.remove('dirty'));
+      MDL_DIRTY.clear();
+      document.getElementById('draftBadge').style.display = 'none';
+      document.getElementById('dirtyBanner').classList.remove('show');
+      document.getElementById('pubBadge').textContent = '● 已发布 v4';
+      document.getElementById('pubTime').textContent = '发布于 刚刚';
+      btn.textContent = '去发布';
+      document.getElementById('aiAfterPublish').style.display = '';
+      document.getElementById('aiAfterPublish').scrollIntoView({ behavior:'smooth', block:'end' });
+    }, 700);
+  }
+
+  /* 折叠对话栏 */
+  function toggleChat() { document.getElementById('app').classList.toggle('collapsed'); }
+
+  /* 拖拽调节对话栏宽度（400–760px） */
+  (function () {
+    const bar = document.getElementById('dragBar');
+    let startX = 0, startW = 0, dragging = false;
+    bar.addEventListener('mousedown', function (e) {
+      dragging = true; startX = e.clientX; bar.classList.add('on');
+      const cols = getComputedStyle(document.getElementById('app')).gridTemplateColumns.split(' ');
+      startW = parseFloat(cols[cols.length - 1]);
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove', function (e) {
+      if (!dragging) return;
+      let w = Math.round(startW - (e.clientX - startX));
+      w = Math.max(400, Math.min(760, w));
+      document.documentElement.style.setProperty('--chat-w', w + 'px');
+    });
+    window.addEventListener('mouseup', function () {
+      dragging = false; bar.classList.remove('on'); document.body.style.userSelect = '';
+    });
+  })();
+
+  /* ══ 资产浏览器：模型/Cube/视图三 tab 复用「左列表 + 右 YAML」范式 ══ */
+  const ASSET_BROWSER_INIT = {
+    schema: { list: 'modelList', view: 'yamlModels', items: [
+      { name: 'orders',     file: 'models/orders/metadata.yml',    meta: '订单明细 · 4 列' },
+      { name: 'customers',  file: 'models/customers/metadata.yml', meta: '客户维表 · 3 列' } ] },
+    cubes: { list: 'cubeBrowser', view: 'yamlCubes', items: [
+      { name: 'paid_customers', file: 'cubes/paid_customers/metadata.yml', meta: '基准 valid_orders · 1 度量 · 1 维度' },
+      { name: 'monthly_trend',  file: 'cubes/monthly_trend/metadata.yml',  meta: '基准 valid_orders · 1 度量 · 2 维度' } ] },
+    views: { list: 'viewList', view: 'yamlViews', items: [
+      { name: 'valid_orders', file: 'views/valid_orders/sql.yml', meta: 'JOIN orders+customers · 3 过滤固化' } ] }
+  };
+
+  function assetRow(key, it) {
+    const el = document.createElement('div');
+    el.className = 'asset-item'; el.dataset.name = it.name;
+    el.innerHTML = '<div class="an">' + it.name + '<span class="fd"></span></div><div class="am">' + it.meta + '</div>';
+    el.addEventListener('click', function () { openAsset(key, it); });
+    return el;
+  }
+
+  function openAsset(key, it) {
+    const cfg = ASSET_BROWSER_INIT[key];
+    document.querySelectorAll('#' + cfg.list + ' .asset-item').forEach(f => f.classList.toggle('on', f.dataset.name === it.name));
+    document.getElementById(cfg.view).innerHTML = hlYaml(MDL_FILES[it.file] || '# （空文件）');
+    document.getElementById('urlLabel').innerHTML =
+      '/configure/datasets/6dc18b39?view=modeling&amp;asset=' + key + '&amp;selected=' + it.name;
+  }
+
+  function addAssetCube() {
+    const it = { name: 'total_revenue', file: 'cubes/total_revenue/metadata.yml', meta: '基准 valid_orders · 1 度量 · 1 时间维 · 来自对话' };
+    const el = assetRow('cubes', it);
+    el.classList.add('dirty');
+    document.getElementById(ASSET_BROWSER_INIT.cubes.list).prepend(el);
+    openAsset('cubes', it);
+  }
+
+  function initAssetBrowsers() {
+    Object.keys(ASSET_BROWSER_INIT).forEach(function (key) {
+      const cfg = ASSET_BROWSER_INIT[key];
+      const box = document.getElementById(cfg.list);
+      cfg.items.forEach(function (it) { box.appendChild(assetRow(key, it)); });
+      openAsset(key, cfg.items[0]);
+    });
+  }
+
+  /* ══ MDL 工程文件浏览：点击文件 → YAML 高亮展示 ══ */
+  const MDL_FILES = {
+    'wren_project.yml': '# 平台管理文件（agent 禁写面）\nname: retail-demo\ncatalog: mysql_default\nschema: retail',
+    'models/orders/metadata.yml': 'name: orders\nproperties:\n  description: 订单明细表\n  references: retail.orders\ncolumns:\n  - name: id\n    type: varchar\n    is_primary_key: true\n  - name: customer_id\n    type: varchar\n  - name: amount\n    type: decimal\n  - name: order_time\n    type: datetime',
+    'models/customers/metadata.yml': 'name: customers\nproperties:\n  description: 客户维表\n  references: retail.customers\ncolumns:\n  - name: id\n    type: varchar\n    is_primary_key: true\n  - name: customer_name\n    type: varchar\n  - name: is_internal\n    type: int',
+    'relationships.yml': 'relationships:\n  - name: orders_customers\n    models: [orders, customers]\n    joinType: many_to_one\n    condition: orders.customer_id = customers.id\n    properties:\n      description: 每笔订单归属一个客户',
+    'views/valid_orders/sql.yml': '# 语义视图：有效订单口径\nstatement: >-\n  SELECT o.id, o.customer_id, o.amount, o.order_time\n  FROM orders o\n  JOIN customers c ON o.customer_id = c.id\n  WHERE o.order_status = 1\n    AND o.is_deleted = 0\n    AND c.is_internal = 0',
+    'cubes/paid_customers/metadata.yml': 'name: paid_customers\nbase_object: valid_orders\nmeasures:\n  - name: customer_count\n    expr: COUNT(DISTINCT customer_id)\ndimensions:\n  - name: order_month\n    column: order_time',
+    'cubes/monthly_trend/metadata.yml': 'name: monthly_trend\nbase_object: valid_orders\nmeasures:\n  - name: order_amount\n    expr: SUM(amount)\ndimensions:\n  - name: order_month\n    column: order_time\n  - name: customer_city\n    column: customer_city',
+    'knowledge/rules/有效订单.md': '# 有效订单（业务规则）\n\n- order_status = 1 且 is_deleted = 0\n- 内部客户（is_internal = 1）的订单口径需排除'
+  };
+  const MDL_DIRTY = new Set();
+
+  function hlYaml(src) {
+    return src.replace(/&/g, '&amp;').replace(/</g, '&lt;').split('\n').map(function (line) {
+      if (/^\s*#/.test(line)) return '<span class="c">' + line + '</span>';
+      return line.replace(/^(\s*(?:- )+)?([\w\u4e00-\u9fa5_.-]+)(:)(\s.*)?$/, function (m, dash, key, colon, rest) {
+        rest = (rest || '').replace(/('(?:[^'])*'|"(?:[^"])*")/g, '<span class="v">$1</span>');
+        return (dash || '') + '<span class="k">' + key + '</span>' + colon + rest;
+      });
+    }).join('\n');
+  }
+
+  function openMdlFile(path) {
+    document.querySelectorAll('.file-item').forEach(f => f.classList.toggle('on', f.dataset.path === path));
+    document.getElementById('yamlView').innerHTML = hlYaml(MDL_FILES[path] || '# （空文件）');
+  }
+
+  function addMdlFile(path) {
+    if (MDL_FILES[path]) { MDL_DIRTY.add(path); refreshDirty(path); return; }
+    MDL_FILES[path] = 'name: total_revenue\nbase_object: valid_orders\nmeasures:\n  - name: revenue\n    expr: SUM(amount)\ndimensions:\n  - name: order_month\n    column: order_time';
+    MDL_DIRTY.add(path);
+    const el = document.createElement('div');
+    el.className = 'file-item dirty'; el.dataset.path = path;
+    el.innerHTML = path + '<span class="fd"></span>';
+    el.addEventListener('click', function () { openMdlFile(path); });
+    document.getElementById('mdlFiles').appendChild(el);
+  }
+
+  function refreshDirty(path) {
+    document.querySelectorAll('.file-item').forEach(function (f) {
+      if (f.dataset.path === path) f.classList.add('dirty');
+    });
+  }
+
+  (function initMdlFiles() {
+    const box = document.getElementById('mdlFiles');
+    Object.keys(MDL_FILES).forEach(function (p) {
+      const el = document.createElement('div');
+      el.className = 'file-item'; el.dataset.path = p;
+      el.innerHTML = p + '<span class="fd"></span>';
+      el.addEventListener('click', function () { openMdlFile(p); });
+      box.appendChild(el);
+    });
+    openMdlFile('relationships.yml');
+  })();
+
+  /* MDL_FILES 声明完成后才能初始化资产浏览器（其 YAML 内容取自同一数据源） */
+  initAssetBrowsers();
+</script>
+</body>
+</html>

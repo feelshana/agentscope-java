@@ -15,20 +15,29 @@
  */
 package io.agentscope.dataagent.web.persistence.jpa;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * A structured relation edge between two datasets inside a knowledge base: which columns join
  * them and how the edge was derived (column-name heuristics or the user's relationship document).
- * Powers the graph tab and the agent's find_related_tables tool.
+ * Powers the graph tab and the agent's find_related_tables tool. The {@code status}/{@code
+ * joinType} fields carry the human-review verdict consumed by the semantic-modeling flow
+ * (specs/010): curated records survive {@code RelationInferenceService#reinferGroup} rebuilds.
  */
 @Entity
 @Table(name = "dataagent_dataset_relation")
 public class DatasetRelationEntity {
+
+    private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
 
     @Id
     @Column(name = "relation_id", length = 64, nullable = false)
@@ -49,6 +58,17 @@ public class DatasetRelationEntity {
     @Column(name = "target_column", length = 128)
     private String targetColumn;
 
+    /**
+     * Composite-key extensions (specs/013): JSON array texts like {@code ["province","stat_date"]}.
+     * Nullable String (never primitive) so legacy rows with NULL load cleanly; the single-column
+     * fields above always carry the first column of the pair.
+     */
+    @Column(name = "source_columns", length = 512)
+    private String sourceColumns;
+
+    @Column(name = "target_columns", length = 512)
+    private String targetColumns;
+
     /** SAME_COLUMN | SUFFIX | DOC | LLM */
     @Column(name = "relation_type", length = 32, nullable = false)
     private String relationType;
@@ -59,9 +79,17 @@ public class DatasetRelationEntity {
     @Column(name = "confidence", nullable = false)
     private double confidence;
 
-    /** inferred | doc | llm */
+    /** inferred | doc | llm | manual */
     @Column(name = "origin", length = 16, nullable = false)
     private String origin = "inferred";
+
+    /** MANY_TO_ONE | ONE_TO_MANY | ONE_TO_ONE; null until human review or probing fills it. */
+    @Column(name = "join_type", length = 32)
+    private String joinType;
+
+    /** PENDING | CONFIRMED | REJECTED — review verdict (null on legacy rows = PENDING). */
+    @Column(name = "status", length = 16)
+    private String status = "PENDING";
 
     @Column(name = "created_at")
     private Instant createdAt = Instant.now();
@@ -140,6 +168,74 @@ public class DatasetRelationEntity {
         this.targetColumn = targetColumn;
     }
 
+    public String getSourceColumns() {
+        return sourceColumns;
+    }
+
+    public void setSourceColumns(String sourceColumns) {
+        this.sourceColumns = sourceColumns;
+    }
+
+    public String getTargetColumns() {
+        return targetColumns;
+    }
+
+    public void setTargetColumns(String targetColumns) {
+        this.targetColumns = targetColumns;
+    }
+
+    /** Column pair on the source side: JSON first, single-column fallback for legacy rows. */
+    public List<String> sourceColumnList() {
+        return columnList(sourceColumns, sourceColumn);
+    }
+
+    /** Column pair on the target side: JSON first, single-column fallback for legacy rows. */
+    public List<String> targetColumnList() {
+        return columnList(targetColumns, targetColumn);
+    }
+
+    /** Writes the composite pair: JSON column plus the first column into the legacy field. */
+    public void setSourceColumnList(List<String> columns) {
+        this.sourceColumns = toJson(columns);
+        this.sourceColumn = columns == null || columns.isEmpty() ? null : columns.get(0);
+    }
+
+    /** Writes the composite pair: JSON column plus the first column into the legacy field. */
+    public void setTargetColumnList(List<String> columns) {
+        this.targetColumns = toJson(columns);
+        this.targetColumn = columns == null || columns.isEmpty() ? null : columns.get(0);
+    }
+
+    private static List<String> columnList(String json, String single) {
+        if (json != null && !json.isBlank()) {
+            try {
+                List<String> parsed =
+                        JSON_MAPPER.readValue(json, new TypeReference<List<String>>() {});
+                if (parsed != null && !parsed.isEmpty()) {
+                    return List.copyOf(parsed);
+                }
+            } catch (JsonProcessingException | RuntimeException e) {
+                // fall through to the single-column fallback
+            }
+        }
+        List<String> out = new ArrayList<>();
+        if (single != null && !single.isBlank()) {
+            out.add(single);
+        }
+        return List.copyOf(out);
+    }
+
+    private static String toJson(List<String> columns) {
+        if (columns == null || columns.isEmpty()) {
+            return null;
+        }
+        try {
+            return JSON_MAPPER.writeValueAsString(columns);
+        } catch (JsonProcessingException e) {
+            return null;
+        }
+    }
+
     public String getRelationType() {
         return relationType;
     }
@@ -170,6 +266,22 @@ public class DatasetRelationEntity {
 
     public void setOrigin(String origin) {
         this.origin = origin;
+    }
+
+    public String getJoinType() {
+        return joinType;
+    }
+
+    public void setJoinType(String joinType) {
+        this.joinType = joinType;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
     }
 
     public Instant getCreatedAt() {

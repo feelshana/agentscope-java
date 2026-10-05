@@ -45,6 +45,7 @@ import io.agentscope.harness.agent.sandbox.Sandbox;
 import io.agentscope.harness.agent.sandbox.SandboxContext;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
@@ -93,6 +94,18 @@ public final class HarnessGateway implements Gateway {
      * <p>Set via constructor or {@link #setUserSandboxRegistry(UserSandboxRegistry)} (one-shot).
      */
     private volatile UserSandboxRegistry userSandboxRegistry;
+
+    /**
+     * Agent catalog ids exempt from sandbox injection — metadata-only agents (e.g. {@code
+     * modeling-agent}) whose turns must not touch Docker at all. {@link
+     * #attachUserSandboxContext} skips the registry borrow for these ids, so their turns neither
+     * create a container when the Docker engine is up nor stall on a failing {@code docker run}
+     * when it is down. Such agents are built on a local filesystem (see {@code DataAgentConfig}),
+     * so no turn ever falls back to a harness default sandbox context either.
+     *
+     * <p>Set via {@link #setSandboxlessAgents(Set)} at startup; defaults to the empty set.
+     */
+    private volatile Set<String> sandboxlessAgents = Set.of();
 
     /** Primary agent, set via {@link #bindMainAgent}. Used as routing fallback. */
     private final AtomicReference<HarnessAgent> mainAgent = new AtomicReference<>();
@@ -196,6 +209,16 @@ public final class HarnessGateway implements Gateway {
      */
     public void setUserSandboxRegistry(UserSandboxRegistry registry) {
         this.userSandboxRegistry = registry;
+    }
+
+    /**
+     * Marks agent catalog ids that must never borrow a per-user sandbox (see {@link
+     * #sandboxlessAgents}). Intended for one-shot wiring at application startup, alongside {@link
+     * #setUserSandboxRegistry(UserSandboxRegistry)}. Passing {@code null} resets to "every agent
+     * borrows".
+     */
+    public void setSandboxlessAgents(Set<String> agentIds) {
+        this.sandboxlessAgents = agentIds != null ? Set.copyOf(agentIds) : Set.of();
     }
 
     /**
@@ -653,11 +676,14 @@ public final class HarnessGateway implements Gateway {
      * and attaches it to the {@link RuntimeContext} as a {@link SandboxContext#getExternalSandbox()
      * external sandbox}, so {@code SandboxManager.acquire} takes its Priority-1 path and the agent
      * runs against the same container the browser workspace controllers use. No-op when the
-     * registry is unconfigured or {@code userId} is missing.
+     * registry is unconfigured, {@code userId} is missing, or the agent id is marked sandboxless
+     * ({@link #setSandboxlessAgents}).
      */
-    private void attachUserSandboxContext(
-            RuntimeContext.Builder builder, String userId, String agentId) {
+    void attachUserSandboxContext(RuntimeContext.Builder builder, String userId, String agentId) {
         if (userSandboxRegistry == null || userId == null || userId.isBlank()) {
+            return;
+        }
+        if (sandboxlessAgents.contains(agentId)) {
             return;
         }
         try {

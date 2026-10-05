@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import AssociateTablesModal from '../../components/AssociateTablesModal';
-import DocDetailView from '../../components/DocDetailView';
 import EmptyIllustration from '../../components/EmptyIllustration';
 import KnowledgeGraphView from '../../components/KnowledgeGraphView';
 import SchemaTreeView from '../../components/SchemaTreeView';
@@ -15,7 +14,6 @@ import {
   listSheets,
   retryImportTask,
   uploadDataset,
-  uploadKnowledge,
 } from '../../api/datasets';
 import {
   getUploadStatuses,
@@ -24,7 +22,7 @@ import {
   UploadStatus,
 } from '../../state/uploadProgress';
 
-type View = 'files' | 'graph' | 'tree' | 'doc';
+type View = 'files' | 'graph' | 'tree' | 'modeling';
 
 const STATUS_LABEL: Record<UploadStatus['status'], string> = {
   queued: '排队中',
@@ -59,13 +57,16 @@ const NAV_ITEMS: { key: View; icon: IconName; label: string }[] = [
   { key: 'files', icon: 'list', label: '文件' },
   { key: 'graph', icon: 'graph', label: '知识图谱' },
   { key: 'tree', icon: 'table', label: '树结构目录' },
-  { key: 'doc', icon: 'file', label: '关系说明文档' },
+  { key: 'modeling', icon: 'model', label: '语义建模' },
 ];
 
 /**
  * TC-style knowledge-base workspace: a left rail (KB header, add-file/associate actions, view nav,
- * file list) plus a right content pane that swaps between the file manager, the semantic knowledge
- * graph, the schema tree and the relationship-document detail surface.
+ * file list) plus a right content pane that swaps between the file manager, the knowledge graph,
+ * the schema tree and the semantic-modeling entry. Semantic documents are uploaded from the
+ * modeling page (specs/028); the standalone relationship-document view was removed. The modeling
+ * surface itself lives on the fullscreen route `/configure/modeling/:groupId` (specs/030):
+ * the nav item navigates there, and a legacy `?view=modeling` URL redirects to it.
  */
 export default function DatasetGroupPage() {
   const { groupId = '' } = useParams();
@@ -90,7 +91,6 @@ export default function DatasetGroupPage() {
   const [sheetPicks, setSheetPicks] = useState<SheetPick[]>([]);
   const [sheetPickerBusy, setSheetPickerBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
-  const knowledgeRef = useRef<HTMLInputElement | null>(null);
 
   const view = (searchParams.get('view') as View) || 'files';
   const setView = (v: View) => {
@@ -313,20 +313,6 @@ export default function DatasetGroupPage() {
     pendingFilesRef.current = null;
   }
 
-  async function handleKnowledge(f: File) {
-    setBusy(true);
-    setError(null);
-    try {
-      await uploadKnowledge(groupId, f);
-      await refresh();
-      setView('doc');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function handleDeleteDataset(id: string) {
     if (!window.confirm('删除该数据集？其物理表将被 DROP。')) return;
     setBusy(true);
@@ -340,7 +326,7 @@ export default function DatasetGroupPage() {
     }
   }
 
-  const fileCount = (detail?.datasets.length ?? 0) + (detail?.knowledge ? 1 : 0);
+  const fileCount = detail?.datasets.length ?? 0;
 
   return (
     <div style={{ display: 'flex', height: '100%', minHeight: 0 }}>
@@ -380,7 +366,11 @@ export default function DatasetGroupPage() {
             <button
               key={n.key}
               className={view === n.key ? 'da-navitem da-navitem-active' : 'da-navitem'}
-              onClick={() => setView(n.key)}
+              onClick={() =>
+                n.key === 'modeling'
+                  ? navigate(`/configure/modeling/${groupId}`)
+                  : setView(n.key)
+              }
             >
               <Icon name={n.icon} /> {n.label}
             </button>
@@ -391,17 +381,6 @@ export default function DatasetGroupPage() {
           <div className="da-small" style={{ padding: '6px 8px' }}>
             {fileCount} 个文件
           </div>
-          {detail?.knowledge && (
-            <div
-              className={'da-row' + (view === 'doc' ? ' da-row-active' : '')}
-              onClick={() => setView('doc')}
-            >
-              <Icon name="file" />
-              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                关系说明文档
-              </span>
-            </div>
-          )}
           {detail?.datasets.map(d => {
             const isAssociating = associatingTables.has(d.name);
             return (
@@ -584,17 +563,6 @@ export default function DatasetGroupPage() {
             e.target.value = '';
           }}
         />
-        <input
-          ref={knowledgeRef}
-          type="file"
-          accept=".docx,.md,.txt"
-          style={{ display: 'none' }}
-          onChange={e => {
-            const f = e.target.files?.[0];
-            if (f) handleKnowledge(f);
-            e.target.value = '';
-          }}
-        />
       </div>
 
       {/* ---------- content ---------- */}
@@ -698,17 +666,6 @@ export default function DatasetGroupPage() {
                 </table>
               )}
             </div>
-
-            <div className="da-card">
-              <div className="da-h2" style={{ marginBottom: 8 }}>关系说明文档</div>
-              <div className="da-small" style={{ marginBottom: 10 }}>
-                上传一份 .docx / .md / .txt，描述本知识库内各数据集之间的关系（join
-                键、业务口径等）。agent 问数时会读到它，用于跨数据集联表。
-              </div>
-              <button className="da-btn" onClick={() => knowledgeRef.current?.click()}>
-                上传关系说明文档
-              </button>
-            </div>
           </div>
         )}
 
@@ -732,7 +689,8 @@ export default function DatasetGroupPage() {
           </div>
         )}
         {view === 'tree' && <SchemaTreeView datasets={detail?.datasets ?? []} />}
-        {view === 'doc' && <DocDetailView groupId={groupId} group={detail?.group ?? null} />}
+        {/* Legacy `?view=modeling` bookmarks redirect to the fullscreen workbench route (specs/030). */}
+        {view === 'modeling' && <Navigate to={`/configure/modeling/${groupId}`} replace />}
       </div>
 
       {associateOpen && (

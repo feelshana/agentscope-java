@@ -25,9 +25,11 @@ import io.agentscope.dataagent.web.persistence.jpa.DatasetRelationRepository;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetRepository;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -41,7 +43,13 @@ import org.springframework.transaction.annotation.Transactional;
  * tab and the agent's find_related_tables tool can reason about cross-dataset joins:
  *
  * <ul>
- *   <li>SAME_COLUMN (0.7): a non-primary column name shared by two datasets.
+ *   <li>SAME_COLUMN (0.7): a column shared by two datasets, matched on the original header
+ *       ({@code originalName}, falling back to the physical name) so Chinese headers join even
+ *       though their sanitised physical names diverge (上传的「用户id」在两表分别清洗为 {@code id}
+ *       与 {@code id_2}). A table's own PK-like column (leading column or {@code <table>_id})
+ *       participates only when another dataset carries the same header — the FK-to-PK join
+ *       pattern — while the universal PK name {@code id} never participates. Edges carry the
+ *       physical column names so they remain directly usable in JOINs.
  *   <li>SUFFIX (0.6): a column whose name minus {@code _id}/{@code _key} equals another dataset's
  *       table/name (classic FK naming).
  *   <li>DOC (0.9): explicit relations written in the group's relationship document, matching
@@ -49,6 +57,11 @@ import org.springframework.transaction.annotation.Transactional;
  * </ul>
  *
  * <p>LLM-based extraction (origin=llm) is intentionally left for a later milestone.
+ *
+ * <p>Rebuild semantics: {@link #reinferGroup} deletes and re-derives only untouched auto-derived
+ * edges (origin inferred/doc, status PENDING/null). Manual/llm-origin edges and any edge a human
+ * confirmed or rejected survive the rebuild, so uploading a new table never silently wipes
+ * reviewed relations (specs/010 M1, ADR 0018 D2).
  */
 @Service
 public class RelationInferenceService {
@@ -82,7 +95,21 @@ public class RelationInferenceService {
 
     @Transactional
     public int reinferGroup(String groupId) {
-        relationRepository.deleteByGroupId(groupId);
+        // Selective rebuild: drop only untouched auto-derived edges; manual/llm origins and
+        // human-reviewed (CONFIRMED/REJECTED) records survive (specs/010 M1, ADR 0018 D2).
+        List<DatasetRelationEntity> existing = relationRepository.findByGroupId(groupId);
+        List<DatasetRelationEntity> kept = new ArrayList<>();
+        List<DatasetRelationEntity> stale = new ArrayList<>();
+        for (DatasetRelationEntity r : existing) {
+            if (survivesRebuild(r)) {
+                kept.add(r);
+            } else {
+                stale.add(r);
+            }
+        }
+        if (!stale.isEmpty()) {
+            relationRepository.deleteAllInBatch(stale);
+        }
         List<DatasetEntity> datasets = datasetRepository.findByGroupId(groupId);
         Map<String, List<ColumnSchema>> colsOf = new HashMap<>();
         for (DatasetEntity d : datasets) {
@@ -90,33 +117,72 @@ public class RelationInferenceService {
         }
         List<DatasetRelationEntity> edges = new ArrayList<>();
         Map<String, Boolean> seen = new HashMap<>();
+        for (DatasetRelationEntity r : kept) {
+            // Seed the dedupe map so re-derived duplicates of kept edges are skipped.
+            markSeen(
+                    seen,
+                    r.getSourceDatasetId(),
+                    r.getSourceColumn(),
+                    r.getTargetDatasetId(),
+                    r.getTargetColumn());
+        }
 
-        // SAME_COLUMN: shared non-primary column across datasets.
-        Map<String, List<DatasetEntity>> byColumn = new LinkedHashMap<>();
+        // SAME_COLUMN: a column shared across datasets, matched on the original header so
+        // Chinese headers join even though sanitised physical names diverge (「用户id」 becomes
+        // `id` in one table and `id_2` in the other) and position-fallback names (col_2 vs col_3)
+        // cannot create accidental matches. PK-like columns (leading column or <table>_id)
+        // participate only when another dataset carries the same header — the FK-to-PK join
+        // pattern (订单表.用户id ↔ 用户表.用户id), fixing the blind spot where dim-table PKs in
+        // the leading column were systematically skipped (ADR 0018 D9). The universal PK name
+        // "id" never participates: two unrelated tables sharing an "id" column is almost
+        // always accidental. Edges carry physical column names so they are directly usable in
+        // JOINs.
+        Map<String, Integer> datasetsHaving = new LinkedHashMap<>();
         for (DatasetEntity d : datasets) {
-            for (int i = 0; i < colsOf.get(d.getId()).size(); i++) {
-                ColumnSchema c = colsOf.get(d.getId()).get(i);
-                if (i == 0 || c.name().equals("id") || c.name().equals(d.getTableName() + "_id")) {
-                    continue;
+            Set<String> keys = new HashSet<>();
+            for (ColumnSchema c : colsOf.get(d.getId())) {
+                if (keys.add(matchKey(c))) {
+                    datasetsHaving.merge(matchKey(c), 1, Integer::sum);
                 }
-                byColumn.computeIfAbsent(c.name(), k -> new ArrayList<>()).add(d);
             }
         }
-        for (Map.Entry<String, List<DatasetEntity>> e : byColumn.entrySet()) {
-            List<DatasetEntity> share = e.getValue();
+        Map<String, List<ColumnCandidate>> byColumn = new LinkedHashMap<>();
+        for (DatasetEntity d : datasets) {
+            List<ColumnSchema> cols = colsOf.get(d.getId());
+            for (int i = 0; i < cols.size(); i++) {
+                ColumnSchema c = cols.get(i);
+                String key = matchKey(c);
+                if (key.equals("id")) {
+                    continue;
+                }
+                boolean likelyPrimaryKey = i == 0 || c.name().equals(d.getTableName() + "_id");
+                if (likelyPrimaryKey && datasetsHaving.getOrDefault(key, 0) < 2) {
+                    continue;
+                }
+                byColumn.computeIfAbsent(key, k -> new ArrayList<>())
+                        .add(new ColumnCandidate(d, c.name()));
+            }
+        }
+        for (Map.Entry<String, List<ColumnCandidate>> e : byColumn.entrySet()) {
+            List<ColumnCandidate> share = e.getValue();
             if (share.size() < 2) {
                 continue;
             }
             for (int i = 0; i < share.size(); i++) {
                 for (int j = i + 1; j < share.size(); j++) {
+                    ColumnCandidate a = share.get(i);
+                    ColumnCandidate b = share.get(j);
+                    if (a.dataset().getId().equals(b.dataset().getId())) {
+                        continue;
+                    }
                     addEdge(
                             edges,
                             seen,
                             groupId,
-                            share.get(i),
-                            e.getKey(),
-                            share.get(j),
-                            e.getKey(),
+                            a.dataset(),
+                            a.column(),
+                            b.dataset(),
+                            b.column(),
                             "SAME_COLUMN",
                             "共享列 " + e.getKey(),
                             0.7,
@@ -244,6 +310,34 @@ public class RelationInferenceService {
                         description,
                         confidence,
                         origin));
+    }
+
+    /** True when the edge must survive a {@link #reinferGroup} rebuild. */
+    private static boolean survivesRebuild(DatasetRelationEntity r) {
+        String origin = r.getOrigin() == null ? "inferred" : r.getOrigin();
+        if ("manual".equals(origin) || "llm".equals(origin)) {
+            return true;
+        }
+        String status = r.getStatus();
+        return "CONFIRMED".equals(status) || "REJECTED".equals(status);
+    }
+
+    /** Match key for SAME_COLUMN: the original header when present (preserves Chinese headers
+     * whose sanitised physical names diverge across tables), else the physical name. */
+    private static String matchKey(ColumnSchema c) {
+        if (c.originalName() == null || c.originalName().isBlank()) {
+            return c.name();
+        }
+        return c.originalName().trim().toLowerCase();
+    }
+
+    /** A SAME_COLUMN candidate: the owning dataset plus the physical column to put on the edge. */
+    private record ColumnCandidate(DatasetEntity dataset, String column) {}
+
+    private static void markSeen(
+            Map<String, Boolean> seen, String aId, String aCol, String bId, String bCol) {
+        seen.putIfAbsent(aId + "|" + aCol + "|" + bId + "|" + bCol, Boolean.TRUE);
+        seen.putIfAbsent(bId + "|" + bCol + "|" + aId + "|" + aCol, Boolean.TRUE);
     }
 
     private static String stripSuffix(String columnName) {

@@ -24,5 +24,8 @@ public interface SemanticTermRepository extends JpaRepository<SemanticTermEntity
 
     List<SemanticTermEntity> findAllByOrderByCreatedAtDesc();
 
-    Optional<SemanticTermEntity> findByTerm(String term);
+    /** specs/026: terms bind to one knowledge base; every consumer filters by group. */
+    List<SemanticTermEntity> findByGroupIdOrderByCreatedAtDesc(String groupId);
+
+    Optional<SemanticTermEntity> findByGroupIdAndTerm(String groupId, String term);
 }

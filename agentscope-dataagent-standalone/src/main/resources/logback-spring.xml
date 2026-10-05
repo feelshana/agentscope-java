@@ -8,11 +8,17 @@
     </root>
 
     <!--
-      Dedicated file appender for LLM debug logging (DebugLoggingMiddleware). The pattern is
-      intentionally bare: the middleware already writes self-describing "role / type / text"
-      records and the log is meant to be read by a human, so no timestamp, level or logger name is
-      prefixed. Add "%d{yyyy-MM-dd HH:mm:ss.SSS} " back in front of %msg if wall-clock times are
-      needed to correlate with the console log.
+      Dedicated file appenders for the human-readable LLM transcripts
+      (DebugLoggingMiddleware / AgentDraftService). The pattern is intentionally bare: the writers
+      already emit self-describing "role / type / text" records and the log is meant to be read by
+      a human, so no timestamp, level or logger name is prefixed. Add
+      "%d{yyyy-MM-dd HH:mm:ss.SSS} " back in front of %msg if wall-clock times are needed to
+      correlate with the console log.
+
+        logs/LLM.log          — data-agent conversations and every other agent (LLM_DEBUG)
+        logs/LLM-modeling.log — modeling assistant + semantic-modeling AI suggestions
+                                (LLM_MODELING_DEBUG), kept separate so a modeling session reads
+                                as its own file
     -->
     <appender name="LLM_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>logs/LLM.log</file>
@@ -27,8 +33,25 @@
         </encoder>
     </appender>
 
+    <appender name="LLM_MODELING_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/LLM-modeling.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/LLM-modeling.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>200MB</maxFileSize>
+            <maxHistory>3</maxHistory>
+            <totalSizeCap>1GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%msg%n</pattern>
+        </encoder>
+    </appender>
+
     <logger name="LLM_DEBUG" level="INFO" additivity="false">
         <appender-ref ref="LLM_FILE"/>
+    </logger>
+
+    <logger name="LLM_MODELING_DEBUG" level="INFO" additivity="false">
+        <appender-ref ref="LLM_MODELING_FILE"/>
     </logger>
 
     <logger name="io.agentscope" level="INFO"/>

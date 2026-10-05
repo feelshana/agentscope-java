@@ -2744,7 +2744,12 @@ public class ReActAgent extends AgentBase implements AutoCloseable {
                                                         MiddlewareBase::onActing,
                                                         actingCore)
                                                 .apply(new ActingInput(toolCalls));
-                                return stream.doOnNext(
+                                // Publish at the outer acting boundary so events added by
+                                // onActing middlewares (e.g. RequireUserConfirmEvent emitted
+                                // before a RequestStopEvent) are forwarded to the stream
+                                // consumer too, mirroring the reasoning phase.
+                                return stream.doOnNext(this::publishEvent)
+                                        .doOnNext(
                                                 ev -> {
                                                     if (ev instanceof RequestStopEvent rs) {
                                                         actingStopRequested.compareAndSet(null, rs);
@@ -2884,8 +2889,7 @@ public class ReActAgent extends AgentBase implements AutoCloseable {
                                         new RequestStopEvent(
                                                 "permission asking",
                                                 GenerateReason.PERMISSION_ASKING));
-                            })
-                    .doOnNext(this::publishEvent);
+                            });
         }
 
         /**

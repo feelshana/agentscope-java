@@ -878,13 +878,7 @@ export default function ChatPanel({
                     running={!!m.pending}
                     active={trace.length > 0}
                     hasError={!!m.failed}
-                    hadToolErrors={m.tools.some(t => {
-                      if (!t.result) return false;
-                      if (t.name === 'query_structured_data') {
-                        try { return ['FAILED', 'PARTIAL'].includes(JSON.parse(t.result)?.status); } catch { return false; }
-                      }
-                      return t.result.startsWith('error:');
-                    })}
+                    hadToolErrors={m.tools.some(t => t.result?.startsWith('error:') === true)}
                     elapsedMs={m.elapsedMs}
                   >
                     {trace}

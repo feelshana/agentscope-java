@@ -34,7 +34,13 @@ export function prettyInput(text: string): string {
 }
 
 function unescapeText(s: string): string {
-  return s.replace(/\\r\n/g, '\n').replace(/\\n/g, '\n').replace(/\\t/g, '  ').replace(/\\"/g, '"');
+  const slash = String.fromCharCode(92);
+  const lineFeed = String.fromCharCode(10);
+  return s
+    .split(`${slash}r${slash}n`).join(lineFeed)
+    .split(`${slash}n`).join(lineFeed)
+    .split(`${slash}t`).join('  ')
+    .split(`${slash}"`).join('"');
 }
 
 export function formatResult(text: string): string {
@@ -54,17 +60,21 @@ export function formatResult(text: string): string {
 }
 
 const TC_TOOL_LABELS: Record<string, string> = {
-  query_structured_data: '查询数据',
+  wren_run_sql: '查询语义模型',
+  wren_query_cube: '查询业务指标',
+  wren_describe_model: '查看语义模型',
+  retrieve_evidence: '检索业务规则',
   read_knowledge: '读取业务规则',
   fetch_query_result: '复用查询结果',
   render_chart: '生成图表',
   run_python: '沙箱中执行 Python',
-  prepare_data_context: '准备字段与规则',
-  run_sql: '执行 SQL',
 };
 
 const TC_TOOL_ICONS: Record<string, IconName> = {
-  query_structured_data: 'database',
+  wren_run_sql: 'database',
+  wren_query_cube: 'database',
+  wren_describe_model: 'search',
+  retrieve_evidence: 'file',
   read_knowledge: 'file',
   fetch_query_result: 'search',
   render_chart: 'chart',
@@ -79,14 +89,7 @@ function toolIcon(name: string): IconName {
   return TC_TOOL_ICONS[name] ?? 'settings';
 }
 
-function isToolError(name: string, result: string | undefined): boolean {
-  if (result === undefined) return false;
-  if (name === 'query_structured_data') {
-    try {
-      const parsed = JSON.parse(result);
-      return parsed?.status === 'FAILED' || parsed?.status === 'PARTIAL';
-    } catch { return false; }
-  }
+function isToolError(result: string | undefined): boolean {
   return typeof result === 'string' && result.startsWith('error:');
 }
 
@@ -98,18 +101,8 @@ export default function ToolCallBlock({
   onInspect,
 }: Props) {
   const running = result === undefined;
-  const failed = !running && isToolError(toolName, result);
+  const failed = !running && isToolError(result);
   const label = toolLabel(toolName);
-  let summary = '';
-  let partial = false;
-  if (toolName === 'query_structured_data' && result) {
-    try {
-      const data = JSON.parse(result);
-      partial = data.status === 'PARTIAL';
-      const results = data.results as { rowCount: number; columnCount: number; truncated: boolean }[];
-      summary = results?.map(r => `${r.rowCount} 行 × ${r.columnCount} 列${r.truncated ? '（截断）' : ''}`).join('；') ?? '';
-    } catch { /* historical non-JSON output */ }
-  }
 
   return (
     <div className="da-toolcall">
@@ -123,7 +116,7 @@ export default function ToolCallBlock({
         <span style={{ color: 'var(--da-text-muted)', display: 'inline-flex' }}>
           <Icon name={toolIcon(toolName)} size="sm" />
         </span>
-        <span className="da-toolcall-name">{label}{summary ? ` · ${summary}` : ''}</span>
+        <span className="da-toolcall-name">{label}</span>
         <span className={`da-toolcall-status${failed ? ' failed' : ''}`}>
           {running ? (
             <>
@@ -131,7 +124,7 @@ export default function ToolCallBlock({
             </>
           ) : failed ? (
             <>
-              <Icon name="close" size="sm" />{partial ? '部分完成' : '失败'}
+              <Icon name="close" size="sm" />失败
             </>
           ) : (
             <Icon name="check" size="sm" />

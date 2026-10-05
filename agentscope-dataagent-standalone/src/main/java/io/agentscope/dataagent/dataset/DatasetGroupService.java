@@ -50,6 +50,7 @@ public class DatasetGroupService {
     private final TableProvisioner provisioner;
     private final InMemoryDataSourceRegistry registry;
     private final DatasetService datasetService;
+    private final MdlPublishService mdlPublishService;
 
     public DatasetGroupService(
             DatasetGroupRepository groupRepository,
@@ -57,18 +58,26 @@ public class DatasetGroupService {
             DatasetKnowledgeRepository knowledgeRepository,
             TableProvisioner provisioner,
             InMemoryDataSourceRegistry registry,
-            DatasetService datasetService) {
+            DatasetService datasetService,
+            MdlPublishService mdlPublishService) {
         this.groupRepository = groupRepository;
         this.datasetRepository = datasetRepository;
         this.knowledgeRepository = knowledgeRepository;
         this.provisioner = provisioner;
         this.registry = registry;
         this.datasetService = datasetService;
+        this.mdlPublishService = mdlPublishService;
     }
 
-    /** Pre-group legacy datasets (groupId null) are folded into a per-owner default KB. */
+    /**
+     * Pre-group legacy datasets (groupId null) are folded into a per-owner default KB. Runs the
+     * mdl backfill first: rows created before the specs/010 M1 mdl_* columns carry SQL NULL in
+     * {@code mdl_version}, and hydrating NULL into the primitive int field breaks every group
+     * load — including the {@code ensureDefaultGroupId} call below.
+     */
     @PostConstruct
     void assignOrphans() {
+        groupRepository.backfillMdlDefaults();
         List<DatasetEntity> orphans =
                 datasetRepository.findAll().stream()
                         .filter(d -> d.getGroupId() == null || d.getGroupId().isBlank())
@@ -151,6 +160,18 @@ public class DatasetGroupService {
                 groupId,
                 datasets.size(),
                 ownerId);
+        // MDL artifacts are filesystem state, not DB rows: drop them last, best-effort.
+        mdlPublishService.deleteArtifacts(groupId);
+    }
+
+    /**
+     * Flags a published KB as DIRTY when a semantic-modeling change (relation / cube edit) makes
+     * the published MDL stale; the old snapshot keeps serving until republish (specs/010 M2).
+     */
+    @Transactional
+    public void markMdlDirty(String ownerId, String groupId) {
+        getGroup(ownerId, groupId);
+        datasetService.markMdlDirty(groupId);
     }
 
     private String ensureDefaultGroupId(String ownerId) {

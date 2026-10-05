@@ -5,14 +5,18 @@ export interface SemanticTerm {
   term: string;
   explanation: string | null;
   synonyms: string | null;
-  scope: string;
 }
 
 export interface SemanticTermRequest {
   term: string;
   explanation?: string;
   synonyms?: string;
-  scope?: string;
+}
+
+/** specs/026: terms bind to one knowledge base; every call is group-scoped. */
+function termsUrl(groupId: string, id?: string): string {
+  const base = `/api/groups/${encodeURIComponent(groupId)}/semantic-terms`;
+  return id ? `${base}/${encodeURIComponent(id)}` : base;
 }
 
 function jsonHeaders(): Record<string, string> {
@@ -32,14 +36,17 @@ async function errorMessage(res: Response, fallback: string): Promise<string> {
   }
 }
 
-export async function listSemanticTerms(): Promise<SemanticTerm[]> {
-  const res = await fetch('/api/semantic-terms', { headers: jsonHeaders() });
+export async function listSemanticTerms(groupId: string): Promise<SemanticTerm[]> {
+  const res = await fetch(termsUrl(groupId), { headers: jsonHeaders() });
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to list terms: ${res.status}`));
   return res.json();
 }
 
-export async function createSemanticTerm(req: SemanticTermRequest): Promise<SemanticTerm> {
-  const res = await fetch('/api/semantic-terms', {
+export async function createSemanticTerm(
+  groupId: string,
+  req: SemanticTermRequest,
+): Promise<SemanticTerm> {
+  const res = await fetch(termsUrl(groupId), {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify(req),
@@ -49,10 +56,11 @@ export async function createSemanticTerm(req: SemanticTermRequest): Promise<Sema
 }
 
 export async function updateSemanticTerm(
+  groupId: string,
   id: string,
   req: SemanticTermRequest,
 ): Promise<SemanticTerm> {
-  const res = await fetch(`/api/semantic-terms/${encodeURIComponent(id)}`, {
+  const res = await fetch(termsUrl(groupId, id), {
     method: 'PUT',
     headers: jsonHeaders(),
     body: JSON.stringify(req),
@@ -61,8 +69,8 @@ export async function updateSemanticTerm(
   return res.json();
 }
 
-export async function deleteSemanticTerm(id: string): Promise<void> {
-  const res = await fetch(`/api/semantic-terms/${encodeURIComponent(id)}`, {
+export async function deleteSemanticTerm(groupId: string, id: string): Promise<void> {
+  const res = await fetch(termsUrl(groupId, id), {
     method: 'DELETE',
     headers: jsonHeaders(),
   });

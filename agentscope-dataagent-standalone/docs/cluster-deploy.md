@@ -159,3 +159,43 @@ state in ways that are hard to recover from after the fact.
 - The deployment banner printed at startup describes which subsystems are
   cluster-aware on this exact replica — read it once after enabling Redis to
   confirm everything you expect is on.
+
+## WrenAI semantic layer prerequisite (specs/010 M2/M3)
+
+The semantic-modeling publish flow and the wren query channel spawn the
+`wren` CLI as a subprocess (`wren utils parse-types` / `context validate` /
+`context build` during modeling, a per-group long-lived `wren serve mcp`
+during querying). Every replica serving those features needs the CLI:
+
+```bash
+# Python >= 3.11. mcp<2 is mandatory: wrenai 0.15 imports mcp.server.fastmcp,
+# which mcp 2.x renamed to MCPServer — `serve mcp` crashes at startup otherwise.
+pip install 'wrenai[mysql,mcp]' 'mcp<2'
+```
+
+Resolution order for the default `dataagent.wren.executable=wren`: the
+well-known Linux install locations `~/.local/bin`, `/usr/local/bin`,
+`/usr/bin`, then PATH. A system-level or `pip install --user` install is
+zero-config on Linux; on Windows dev machines set
+`DATAAGENT_WREN_EXECUTABLE` to the venv `wren.exe`. A missing CLI fails
+loudly with the installation hint on the modeling page and in chat — no
+silent degradation.
+
+Multi-replica constraint: `mdl-home` (default `~/.agentscope/dataagent/mdl`)
+is local disk and the per-group `serve mcp` instance pool is in-process
+memory. With multiple replicas either pin a knowledge base's traffic to one
+replica (sticky LB) or place `mdl-home` on the shared volume (NFS/EFS);
+otherwise a publish on R1 is invisible to a query served by R2. See ADR 0020.
+
+External datasource groups (specs/010 M4, ADR 0021): external sources are
+configured at runtime from the UI (after startup), and their tables live on
+remote instances. The publish flow resolves the group's wren connection at
+publish time — all-uploaded groups keep the default dataset-store profile,
+while a group whose datasets all come from one MySQL external source binds
+its own `ext-<datasourceId>` profile (connectivity + table existence probed
+over JDBC before snapshotting; mixed/multi-source/deleted/non-MySQL groups
+are refused with a structured error). The chosen profile is pinned into the
+snapshot (`published/wren-source.properties`) and re-rendered into
+`.wren/profiles.yml` on every publish, so no replica-side setup is needed
+beyond the shared `mdl-home` above. PostgreSQL external sources and
+cross-instance JOINs are explicitly out of scope (ADR 0021).

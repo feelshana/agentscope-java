@@ -24,9 +24,9 @@ import java.util.Objects;
  * descriptor: a stable id, a human-readable label, the JDBC-style URL prefix (or other connector
  * hint), and an opaque {@code properties} map for connector-specific configuration.
  *
- * <p>Concrete connector implementations (JDBC, BigQuery, Hologres, OSS+Parquet) are explicitly out
- * of scope for v1 — the toolkit returns descriptors here so the agent can reason about which source
- * to use, and an upcoming connector module will implement the actual {@code query_structured_data}.
+ * <p>The registry uses these descriptors to construct tenant-filtered knowledge-base visibility.
+ * Structured queries themselves run through the published Wren semantic model and never expose
+ * connector details to the agent.
  */
 public record DataSource(
         String id,

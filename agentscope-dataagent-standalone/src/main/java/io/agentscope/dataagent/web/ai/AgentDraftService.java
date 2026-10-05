@@ -51,6 +51,24 @@ import reactor.core.scheduler.Schedulers;
 public class AgentDraftService {
 
     private static final Logger log = LoggerFactory.getLogger(AgentDraftService.class);
+
+    /**
+     * Transcript logger for direct model calls. The name {@code LLM_DEBUG} is wired by
+     * logback-spring.xml to {@code logs/LLM.log} — the same human-readable file the agent
+     * middleware ({@code DebugLoggingMiddleware}) writes to. Direct calls (knowledge-graph
+     * extraction, agent drafts) bypass the middleware chain, so their prompts and replies are
+     * recorded here, one {@code role / type / text} record each.
+     */
+    private static final Logger llmLog = LoggerFactory.getLogger("LLM_DEBUG");
+
+    /**
+     * Transcript logger for the semantic-modeling suggestion flows ({@link #chatBlockingModeling}).
+     * {@code LLM_MODELING_DEBUG} maps to {@code logs/LLM-modeling.log} — the same file the modeling
+     * assistant's conversation is transcribed into, so a modeling session reads as one dedicated
+     * file.
+     */
+    private static final Logger llmModelingLog = LoggerFactory.getLogger("LLM_MODELING_DEBUG");
+
     private static final String PROMPT_RESOURCE = "classpath:prompts/agent-draft.md";
     private static final String FALLBACK_PROMPT =
             "你是一个代理设计师。根据一句话描述，返回严格的 JSON，包含以下键："
@@ -122,16 +140,21 @@ public class AgentDraftService {
                         .content(TextBlock.builder().text(prompt).build())
                         .build();
 
-        return Mono.fromCallable(() -> callModelBlocking(userMsg, CALL_TIMEOUT))
+        return Mono.fromCallable(() -> callModelBlocking(userMsg, CALL_TIMEOUT, llmLog))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(this::parseDraft);
     }
 
     /**
      * Subscribes to the model's streaming response and concatenates every emitted text block into a
-     * single string. Blocks the caller until the stream completes or the timeout elapses.
+     * single string. Blocks the caller until the stream completes or the timeout elapses. The
+     * prompt and reply are recorded into {@code transcript} (one {@code role / type / text} record
+     * each; the logger name picks the target file).
      */
-    private String callModelBlocking(Msg userMsg, Duration timeout) {
+    private String callModelBlocking(Msg userMsg, Duration timeout, Logger transcriptLog) {
+        // Direct model calls bypass the agent middleware chain, so record the transcript here
+        // (same role / type / text shape as DebugLoggingMiddleware; the logger picks the file).
+        transcriptLog.info(transcript("USER", textOf(userMsg)));
         try {
             List<ChatResponse> responses =
                     model.stream(List.of(userMsg), null, null).collectList().block(timeout);
@@ -156,6 +179,7 @@ public class AgentDraftService {
                 throw new ResponseStatusException(
                         HttpStatus.BAD_GATEWAY, "Model returned empty content");
             }
+            transcriptLog.info(transcript("ASSISTANT", raw));
             return raw;
         } catch (ResponseStatusException e) {
             throw e;
@@ -216,9 +240,23 @@ public class AgentDraftService {
     /**
      * Sends a single user prompt to the configured model and returns the concatenated text reply.
      * Blocks the calling thread; intended to be run on a bounded-elastic scheduler. Throws 503 when
-     * no model is configured and 502 on empty/failed model responses.
+     * no model is configured and 502 on empty/failed model responses. The transcript goes to
+     * {@code logs/LLM.log}.
      */
     public String chatBlocking(String prompt) {
+        return chatBlocking(prompt, llmLog);
+    }
+
+    /**
+     * Semantic-modeling variant of {@link #chatBlocking(String)} used by {@code
+     * MdlSuggestionService}: the prompt / reply transcript goes to {@code logs/LLM-modeling.log}
+     * instead, next to the modeling assistant's own conversation.
+     */
+    public String chatBlockingModeling(String prompt) {
+        return chatBlocking(prompt, llmModelingLog);
+    }
+
+    private String chatBlocking(String prompt, Logger transcriptLog) {
         if (model == null) {
             throw new ResponseStatusException(
                     HttpStatus.SERVICE_UNAVAILABLE, "AI not available — configure a model");
@@ -228,7 +266,7 @@ public class AgentDraftService {
                         .role(MsgRole.USER)
                         .content(TextBlock.builder().text(prompt).build())
                         .build();
-        return callModelBlocking(userMsg, CHAT_TIMEOUT);
+        return callModelBlocking(userMsg, CHAT_TIMEOUT, transcriptLog);
     }
 
     /**
@@ -246,5 +284,31 @@ public class AgentDraftService {
                             + (raw.length() > 500 ? raw.substring(0, 500) + "..." : raw));
         }
         return stripped.substring(firstBrace, lastBrace + 1);
+    }
+
+    /**
+     * Renders one transcript record in the same {@code role / type / text} shape that {@code
+     * DebugLoggingMiddleware} writes, so agent conversations and direct model calls read as one
+     * consistent stream in {@code logs/LLM.log}.
+     */
+    static String transcript(String role, String text) {
+        return "role: " + role + "\ntype: text\ntext:\n" + (text == null ? "" : text) + "\n";
+    }
+
+    /** Concatenates the text blocks of {@code msg}; empty when the message has no text. */
+    private static String textOf(Msg msg) {
+        if (msg == null || msg.getContent() == null) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (ContentBlock cb : msg.getContent()) {
+            if (cb instanceof TextBlock tb && tb.getText() != null) {
+                if (sb.length() > 0) {
+                    sb.append('\n');
+                }
+                sb.append(tb.getText());
+            }
+        }
+        return sb.toString();
     }
 }

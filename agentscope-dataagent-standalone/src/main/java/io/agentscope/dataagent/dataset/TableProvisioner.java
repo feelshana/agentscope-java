@@ -34,10 +34,9 @@ import org.springframework.stereotype.Service;
  * ds_<owner8>_<dataset8>_<name>} inside that single database, so the data lands exactly where the
  * operator configured it and cross-dataset joins are plain same-db joins.
  *
- * <p>Tenant isolation is enforced at two layers: the registry only exposes a owner's datasets to
- * that owner, and {@code DataAgentToolkit} rejects SQL referencing another owner's {@code ds_*}
- * table. Read-side querying is left to {@code JdbcSqlConnector}, which connects read-only to the
- * same configured jdbcUrl.
+ * <p>Tenant isolation is enforced at two layers: dataset services verify ownership and the Wren
+ * query channel resolves a published knowledge-base snapshot through {@code DatasetScope}. Physical
+ * {@code ds_*} names are never exposed as agent query targets.
  *
  * <p>Every identifier that reaches a statement is produced by {@link Identifiers#sanitize} /
  * {@link #buildTableName} and is backtick-quoted, so no user-controlled text can escape into SQL.
@@ -83,20 +82,9 @@ public class TableProvisioner {
     }
 
     public void createTable(String table, List<ColumnSchema> columns) {
-        StringBuilder ddl = new StringBuilder();
-        ddl.append("CREATE TABLE IF NOT EXISTS `").append(table).append("` (");
-        for (int i = 0; i < columns.size(); i++) {
-            ColumnSchema col = columns.get(i);
-            ddl.append('`').append(col.name()).append("` ").append(col.sqlType());
-            ddl.append(col.nullable() ? " NULL" : " NOT NULL");
-            if (i < columns.size() - 1) {
-                ddl.append(", ");
-            }
-        }
-        ddl.append(") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
         try (Connection c = connect();
                 Statement st = c.createStatement()) {
-            st.execute(ddl.toString());
+            st.execute(buildCreateTableDdl(table, columns));
         } catch (SQLException e) {
             throw new DatasetException(
                     "Failed to create table "
@@ -107,6 +95,28 @@ public class TableProvisioner {
                             + e.getMessage(),
                     e);
         }
+    }
+
+    /**
+     * Builds the {@code CREATE TABLE} DDL for a dataset table. The collation is pinned explicitly
+     * (specs/010 M3, ADR 0018 D7(e)): MySQL mixes {@code utf8mb4_unicode_ci} (implicit default on
+     * some deployments) with {@code utf8mb4_0900_ai_ci} tables and then fails cross-table joins
+     * with {@code Illegal mix of collations}, which the semantic layer would hit on every modeled
+     * relation. Existing tables are not migrated (specs/010 "不做的事"); only new DDL is fixed.
+     */
+    static String buildCreateTableDdl(String table, List<ColumnSchema> columns) {
+        StringBuilder ddl = new StringBuilder();
+        ddl.append("CREATE TABLE IF NOT EXISTS `").append(table).append("` (");
+        for (int i = 0; i < columns.size(); i++) {
+            ColumnSchema col = columns.get(i);
+            ddl.append('`').append(col.name()).append("` ").append(col.sqlType());
+            ddl.append(col.nullable() ? " NULL" : " NOT NULL");
+            if (i < columns.size() - 1) {
+                ddl.append(", ");
+            }
+        }
+        ddl.append(") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci");
+        return ddl.toString();
     }
 
     public void bulkInsert(String table, List<ColumnSchema> columns, List<List<String>> rows) {

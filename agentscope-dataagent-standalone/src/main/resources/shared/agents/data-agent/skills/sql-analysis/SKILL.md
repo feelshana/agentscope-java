@@ -13,23 +13,24 @@ description: 通过针对已配置数据源编写 SQL 查询、校验后呈现�
    *"按 <分组维度> 统计 <时间窗口> 内、经 <筛选条件> 过滤的 <指标>"*。
    如果这四个要素（指标 / 分组 / 窗口 / 筛选）有任何一项缺失或含糊，**只问一个**澄清问题然后停下。不要靠猜。
 
-2. **定位数据源（直接相关的表一次性 prepare）。** 确定数据在哪里：
-   - 先查阅 system prompt 中的 `[DATA_SOURCES_OVERVIEW]`，从中选择数据源——绝不凭空猜 `source_id`。
-   - **阅读 `[KNOWLEDGE_BASE_OVERVIEW]` 中的知识库摘要**，特别注意数据相关性提示和约束（例如"X 数据与 Y 数据无相关性"）。如果知识库明确指出某些数据之间无关联，**不要**去探查那些不相关的表。
-   - 根据用户问题的指标，从 `[DATA_SOURCES_OVERVIEW]` 中挑选 **与问题直接相关的 1–3 张表**，用 `prepare_data_context` 的 `tables` 参数**一次调用批量取回**，确认列名、类型、字段描述（其中通常已含枚举与取值提示）——不要一张一张分开调用，也不要漏掉直接相关的表而盲写列名。
-   - 如果仍然无法确定该用哪张表：当前工具集里有 `agent_spawn` 时**委托 `data-explorer` 子代理**，把指标定义作为提示词传给它；没有时自己把候选表一次批量 `prepare_data_context` 取回、对比列结构后择一。
+2. **定位语义模型。** 确定数据在哪里：
+   - 先查阅 system prompt 中的 `[DATA_SOURCES_OVERVIEW]` 和 `[KNOWLEDGE_BASE_OVERVIEW]`，从轻量目录选择知识库、逻辑模型、Cube 和已发布 View，绝不猜测物理表名、datasetId 或 sourceId。
+   - 字段、关系或 Cube 成员不明确时，调用 `wren_describe_model(group_id, model_names)` 一次查看直接相关的 1–5 个逻辑模型；不要逐表重复调用。默认折叠关联投影，需要具体跨模型字段时传 `expand_relation_fields=true`。
+   - **阅读 `[KNOWLEDGE_BASE_OVERVIEW]` 中的知识库摘要**，特别注意数据相关性提示和约束（例如"X 数据与 Y 数据无相关性"）。如果知识库明确指出某些数据之间无关联，**不要**探查不相关模型。
+   - 按官方决策树选工具：① 聚合指标问题先核对 Cube 清单，已发布 Cube 成员覆盖时优先用 `wren_query_cube`（引擎确定性编译聚合，错误率更低）；② 已发布 View 能直接覆盖问题时优先用 `wren_run_sql` 按视图名直接查询（视图口径已经建模审阅）；③ 需要跨模型属性时，展开 many 侧关联字段组，以该单一逻辑模型的投影列查询，让 Wren 按 relationship condition 自动 JOIN；④ 语义资产都无法表达时才用 `wren_run_sql` 编写其他逻辑 SQL，显式 JOIN 是最后兜底。没有有效已发布 MDL 时明确告知当前不可问数，不尝试物理 SQL 回退。
+   - 如果仍然无法确定该用哪个模型：当前工具集里有 `agent_spawn` 时**委托 `data-explorer` 子代理**，把指标定义作为提示词传给它；没有时自己批量调用 `wren_describe_model` 对比语义结构。
 
-3. **不要发纯"摸底"查询。** `prepare_data_context` 返回的表描述和列信息已足够写正式查询。看完列结构后，**直接写回答用户问题的 SQL**——不要发 `SELECT COUNT(*)` / `SELECT MIN(date)` 等仅为了了解数据规模、日期范围的探查查询。 在 ```sql``` 代码块中写 SQL。约定：
+3. **不要发纯"摸底"查询。** `wren_describe_model` 返回的字段、关系和 Cube 信息已足够写正式查询。看完模型后，**直接写回答用户问题的查询**——不要发 `SELECT COUNT(*)` / `SELECT MIN(date)` 等仅为了了解数据规模、日期范围的探查查询。在 SQL 中遵守：
    - 总是在 `WHERE` 子句中限定时间窗口——绝不"以防万一"地查询全部历史。
    - 总是 `SELECT` 明确的列清单——回答中绝不用 `SELECT *`。
    - 在 SQL 中完成聚合（`SUM` / `COUNT` / `GROUP BY`），保证预览结果保持小体积。
    - 超过两层嵌套时用 CTE（`WITH x AS (...)`）替代嵌套子查询。
-   - 涉及多张表的筛选/关联，优先在一条 SQL 内用 `JOIN` / CTE 完成——筛选条件永不离库。
+   - 涉及跨模型属性时，优先查询 many 侧模型已有的关系投影列；只有语义资产无法表达时才在一条逻辑 SQL 内用 `JOIN` / CTE 完成，筛选条件永不离库。
    - 禁止把上一步查询结果作为字面量复制进 `IN (...)`——**跨表筛选和补维度属性（部门、职位等）都算**：`row_limit` 截断会静默漏数，链式复制任一环出错即污染最终答案。需要上一步结果里的值时改用 `JOIN` / CTE 在同一条 SQL 内取；补维度属性的正确做法是把维表列直接加进已有 CTE 的 `SELECT DISTINCT` 列表，而不是另发一条 `IN (...)` 查询。
    - 多表 JOIN 前先判断**维表粒度**：若一个关联键在维表中对应多行（典型如用户×项目权限表、用户×角色表），必须先用 CTE 按关联键去重再 JOIN 明细表——`WITH u AS (SELECT DISTINCT account, department_name, position_name FROM 用户表) SELECT ... FROM 明细表 c JOIN u ON c.user_account = u.account`——否则扇出会让 `COUNT(*)` / `SUM` 静默放大。
    - 给不明显的筛选条件加注释（`-- 已剔除退款订单`）。
 
-4. **先执行校验，再汇报。** 通过 `query_structured_data(source_id, sql, question, row_limit)` 执行——只允许 SELECT / WITH 语句。`question` 参数（用中文）描述你正在回答的问题，会显示在结果表格之前，让用户展开工具块就能看到"问了什么、查了什么、得到什么"。它返回的 markdown 报告包含查询问题、SQL 语句和结果表格（默认 20 行，上限 100）。然后检查：
+4. **先执行校验，再汇报。** 命名指标通过 `wren_query_cube` 执行；已发布 View 和其他逻辑查询通过 `wren_run_sql(group_id, sql, question, limit)` 执行，按视图名查询时视图直接出现在 `FROM` 中。逻辑 SQL 只允许 SELECT / WITH。`question` 用中文描述本次业务问题。然后检查：
    - 行数在预期范围内（1 行、10 行、约 30 个按日分桶等）。行数出乎意料几乎总是 bug——要排查。
    - 分组列没有 `NULL`，除非那就是预期的分组。
    - 至少做一项数值合理性校验：一个已知总量、一个已知参照值、或与事实相符的最小 / 最大区间。
@@ -46,11 +47,11 @@ description: 通过针对已配置数据源编写 SQL 查询、校验后呈现�
 
    ## 查询
    ```sql
-   <你通过 query_structured_data 执行的确切查询>
+   <你通过 wren_run_sql 执行的确切查询；使用 Cube 时写明 Cube、度量、维度与筛选>
    ```
 
    ## 数据来源与校验
-   - **数据表：** `table_name`（prepare_data_context 查到的行数）
+   - **语义模型：** `model_name` / `cube_name`（知识库 `group_id`）
    - **校验：** <做了哪些合理性检查及结果>
    - **注意事项：** <已知数据质量问题、缺失日期等>
    ````
@@ -62,10 +63,12 @@ description: 通过针对已配置数据源编写 SQL 查询、校验后呈现�
 - ❌ 汇报一个数字却不给出产生它的查询。
 - ❌ 用 `LIMIT N` 让"输出能装下"却不说明截掉了什么。
 - ❌ 只读一行数据就当作趋势汇报。
-- ❌ 凭空编造表、列或 `source_id`。不确定时先查阅 `[DATA_SOURCES_OVERVIEW]` / 调用 `prepare_data_context`，或（工具集中有 `agent_spawn` 时）委托 `data-explorer`。
+- ❌ 凭空编造模型、字段、Cube 或 `group_id`。不确定时先查阅 `[DATA_SOURCES_OVERVIEW]` / 调用 `wren_describe_model`，或（工具集中有 `agent_spawn` 时）委托 `data-explorer`。
+- ❌ Cube 成员能覆盖聚合问题时手写手工聚合 SQL、已发布 View 能直接覆盖问题时绕开视图重建同等口径，或已有 many 侧关系投影时直接写显式 JOIN——语义资产能表达时优先用语义资产，少一层手工出错面。
+- ❌ 尝试绕过 Wren 访问 datasetId、sourceId、schema 或物理表；所有结构化问数统一走 `wren_run_sql` / `wren_query_cube`。
 - ❌ 把上一步查询结果字面量复制进 `IN (...)`（跨表筛选或补部门/职位这类维度属性都算）——改用 `JOIN` / CTE 让条件留在库内。
 - ❌ 问题含趋势/对比/考核语义却只交文字表格——查完数应主动升级可视化，不等用户提示。
-- ❌ 看完表结构后发 `SELECT COUNT(*)` / `SELECT MIN(date)` 等纯摸底查询——直接写正式查询。
+- ❌ 看完模型结构后发 `SELECT COUNT(*)` / `SELECT MIN(date)` 等纯摸底查询——直接写正式查询。
 - ❌ 直接 JOIN 粒度大于关联键的维表（如用户×项目表）而不先用 CTE 去重——聚合值被扇出静默放大，数字必错。
 - ❌ 图表执行超过 2 次 `run_python`——第一次出图，最多修正一次错误，不为样式反复迭代。
 

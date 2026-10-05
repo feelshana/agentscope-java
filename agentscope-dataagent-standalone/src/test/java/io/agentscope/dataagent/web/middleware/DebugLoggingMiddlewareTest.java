@@ -17,6 +17,10 @@ package io.agentscope.dataagent.web.middleware;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import io.agentscope.core.message.ImageBlock;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
@@ -28,6 +32,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 
 /**
  * Guards the human-readable shape of {@code logs/LLM.log}.
@@ -76,14 +81,14 @@ class DebugLoggingMiddlewareTest {
     @Test
     void rendersToolUseArgumentsAsReadableLines() {
         Map<String, Object> input = new LinkedHashMap<>();
-        input.put("source_id", "ea70a5a4");
+        input.put("group_id", "ea70a5a4");
         input.put(
                 "sql",
                 "WITH leaders AS (\n"
                         + "    SELECT DISTINCT account FROM users\n"
                         + ")\n"
                         + "SELECT * FROM leaders");
-        input.put("row_limit", 200);
+        input.put("limit", 200);
         Msg msg =
                 Msg.builder()
                         .id("m2")
@@ -92,7 +97,7 @@ class DebugLoggingMiddlewareTest {
                                 TextBlock.builder().text("先查领导名单").build(),
                                 ToolUseBlock.builder()
                                         .id("call_1")
-                                        .name("query_structured_data")
+                                        .name("wren_run_sql")
                                         .input(input)
                                         .build())
                         .build();
@@ -102,11 +107,11 @@ class DebugLoggingMiddlewareTest {
         assertThat(rendered)
                 .contains("role: ASSISTANT\ntype: text\ntext:\n先查领导名单\n")
                 .contains("type: tool_use")
-                .contains("query_structured_data")
-                .contains("  source_id: ea70a5a4")
+                .contains("wren_run_sql")
+                .contains("  group_id: ea70a5a4")
                 .contains(
                         "  sql:\n    WITH leaders AS (\n        SELECT DISTINCT account FROM users")
-                .contains("  row_limit: 200");
+                .contains("  limit: 200");
         assertThat(rendered).doesNotContain("\\n").doesNotContain(NOISE.toArray(String[]::new));
     }
 
@@ -123,7 +128,7 @@ class DebugLoggingMiddlewareTest {
                         .content(
                                 ToolResultBlock.builder()
                                         .id("call_1")
-                                        .name("prepare_data_context")
+                                        .name("wren_describe_model")
                                         .output(
                                                 TextBlock.builder()
                                                         .text("\"## 点击详情\\n\\n| 字段 | 类型 |\"")
@@ -136,7 +141,7 @@ class DebugLoggingMiddlewareTest {
         assertThat(rendered)
                 .contains("role: TOOL")
                 .contains("type: tool_result")
-                .contains("prepare_data_context")
+                .contains("wren_describe_model")
                 .contains("## 点击详情\n\n| 字段 | 类型 |");
         assertThat(rendered).doesNotContain("\\n").doesNotContain("\\\"");
     }
@@ -180,6 +185,29 @@ class DebugLoggingMiddlewareTest {
         // without a session key there is nothing to de-duplicate against
         assertThat(middleware.renderNew(null, List.of(system))).hasSize(1);
         assertThat(middleware.renderNew("session-a", List.of())).isEmpty();
+    }
+
+    /**
+     * The modeling assistant routes its transcript to a dedicated file: a middleware constructed
+     * with a custom logger name must send the records there instead of the shared {@code
+     * LLM_DEBUG} logger.
+     */
+    @Test
+    void routesRecordsToTheConfiguredTranscriptLogger() {
+        Logger modeling = (Logger) LoggerFactory.getLogger("LLM_MODELING_DEBUG");
+        modeling.setLevel(Level.INFO);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        modeling.addAppender(appender);
+        try {
+            new DebugLoggingMiddleware("LLM_MODELING_DEBUG")
+                    .write("session-m", List.of(textMsg("m1", MsgRole.USER, "有哪些表")));
+
+            assertThat(appender.list.stream().map(ILoggingEvent::getFormattedMessage).toList())
+                    .containsExactly("role: USER\ntype: text\ntext:\n有哪些表\n");
+        } finally {
+            modeling.detachAppender(appender);
+        }
     }
 
     private static Msg textMsg(String id, MsgRole role, String text) {

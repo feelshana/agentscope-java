@@ -22,9 +22,10 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 
 /**
- * Business-term dictionary entry (TC "语义配置" analogue): a business noun, its explanation,
- * synonyms and an optional scope. Surfaced to the agent via the [KNOWLEDGE_BASE_OVERVIEW] section
- * so natural-language questions map onto the right tables/columns.
+ * Business-term dictionary entry (TC "语义配置" analogue): a business noun, its explanation
+ * and synonyms, bound to one knowledge base (specs/026). Surfaced to the agent via the
+ * [KNOWLEDGE_BASE_OVERVIEW] section so natural-language questions map onto the right
+ * tables/columns.
  */
 @Entity
 @Table(name = "dataagent_semantic_term")
@@ -37,6 +38,10 @@ public class SemanticTermEntity {
     @Column(name = "term", length = 30, nullable = false)
     private String term;
 
+    /** Owning knowledge base (specs/026). Null only for legacy global rows pending migration. */
+    @Column(name = "group_id", length = 64)
+    private String groupId;
+
     @Column(name = "explanation", length = 100)
     private String explanation;
 
@@ -44,9 +49,9 @@ public class SemanticTermEntity {
     @Column(name = "synonyms", length = 500)
     private String synonyms;
 
-    /** Free-form scope label; "global" means applies everywhere. */
+    /** Retired provenance label (specs/011): kept only so legacy rows still render pre-migration. */
     @Column(name = "scope", length = 191)
-    private String scope = "global";
+    private String scope;
 
     @Column(name = "created_at")
     private Instant createdAt = Instant.now();
@@ -57,12 +62,12 @@ public class SemanticTermEntity {
     public SemanticTermEntity() {}
 
     public SemanticTermEntity(
-            String id, String term, String explanation, String synonyms, String scope) {
+            String id, String groupId, String term, String explanation, String synonyms) {
         this.id = id;
+        this.groupId = groupId;
         this.term = term;
         this.explanation = explanation;
         this.synonyms = synonyms;
-        this.scope = scope == null || scope.isBlank() ? "global" : scope;
         this.createdAt = Instant.now();
         this.updatedAt = Instant.now();
     }
@@ -105,6 +110,14 @@ public class SemanticTermEntity {
 
     public void setScope(String scope) {
         this.scope = scope;
+    }
+
+    public String getGroupId() {
+        return groupId;
+    }
+
+    public void setGroupId(String groupId) {
+        this.groupId = groupId;
     }
 
     public Instant getCreatedAt() {

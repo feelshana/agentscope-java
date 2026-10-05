@@ -110,13 +110,13 @@ bus are all backed by Redis, so any replica can serve any user. See
   (materialised from `src/main/resources/shared`, git-ignored) and become
   visible to every tenant on the next agent build (via the overlay's lower
   layer).
-- **DataAgent toolkit** — `prepare_data_context`, `query_structured_data`,
-  `retrieve_evidence` and `render_chart` are registered on every data agent,
-  alongside the sandboxed `run_python`. TC-style: the schema overview is
-  pre-injected into the system prompt, so the tools only confirm column
-  details, run a SELECT/WITH query, retrieve evidence and draw a chart.
-  `JdbcSqlConnector` serves the configured dataset store; other backends slot
-  in via the `SqlConnector` / `DataSourceRegistry` Spring beans.
+- **DataAgent toolkit** — `wren_describe_model`, `wren_run_sql`,
+  `wren_query_cube`, `retrieve_evidence` and `render_chart` are registered on
+  every data agent, alongside the sandboxed `run_python`. Structured queries
+  always use a published Wren MDL: the system prompt contains only a compact
+  logical-model/Cube directory, while field and relationship details are
+  fetched on demand. Uploads and external-table associations automatically
+  build and publish a baseline MDL.
 
 ---
 
@@ -278,6 +278,10 @@ accounts: `bob` / `bob` and `alice` / `alice`. The first user with
 | `dataagent.session.redis.key-prefix` | `dataagent:session:` | Redis key namespace. |
 | `dataagent.marketplace.enabled` | `true` | Disable to hide the contribution + approval API. |
 | `dataagent.marketplace.max-contribution-bytes` | `1048576` | Max payload accepted by `POST /api/me/contributions`. |
+| `dataagent.wren.executable` | `wren` | WrenAI CLI (`pip install 'wrenai[mysql,mcp]' 'mcp<2'`, Python >= 3.11). The default is auto-probed at `~/.local/bin` / `/usr/local/bin` / `/usr/bin` and PATH — Linux deployments need no config; on Windows point it at the venv `wren.exe`. Spawn failures surface an installation hint. Env: `DATAAGENT_WREN_EXECUTABLE`. |
+| `dataagent.wren.mdl-home` | _(empty)_ → `~/.agentscope/dataagent/mdl` | Root of the MDL artifacts: generated `project/`, published snapshot `published/` (including the M4 `wren-source.properties` connection marker) and the platform-side `mdl.json` manifest (semantic-modeling publish flow, specs/010 M2/M3/M4); `.wren/profiles.yml` under it is the platform-managed runtime connection profile — one entry per configured MySQL external datasource besides the default (M4). Env: `DATAAGENT_WREN_MDL_HOME`. |
+| `dataagent.wren.skills-dir` | _(empty)_ → auto-inferred | Official wren skills root (`skills_content` inside the wrenai pip package, specs/022 / ADR 0035): mounted natively onto `modeling-agent` via the harness skill repository so `load_skill_through_path` serves the same playbook files the CLI does. Blank = inferred from the resolved executable location (pip `site-packages` layouts on Windows/Unix). Point it explicitly only at non-standard layouts; a missing/invalid directory logs a warning and the modeling agent falls back to the `wren_skills_get` CLI channel. Env: `DATAAGENT_WREN_SKILLS_DIR`. |
+| `dataagent.wren.profile` / `data-source` / `timeout-seconds` / `instance-idle-seconds` | `dataagent` / `mysql` / `180` / `1800` | Default wren connection profile (M4: a group whose datasets all come from one MySQL external datasource binds its own `ext-<datasourceId>` profile, resolved at publish time and pinned into the snapshot; this setting is the fallback for uploaded-only groups and pre-M4 snapshots), project dialect (written into `wren_project.yml`, passed to parse-types), per-command subprocess timeout (seconds) and the per-group instance-pool idle TTL in seconds (M3: an unused wren instance is closed and respawned on demand). Env: `DATAAGENT_WREN_PROFILE` / `DATAAGENT_WREN_DATA_SOURCE` / `DATAAGENT_WREN_TIMEOUT_SECONDS` / `DATAAGENT_WREN_INSTANCE_IDLE_SECONDS`. |
 | `server.port` | `8080` | HTTP port. |
 
 User accounts, agents and contributions are persisted to embedded H2 by

@@ -63,6 +63,13 @@ public class LocalFilesystemSpec {
     private IsolationScope isolationScope;
 
     /**
+     * Optional custom namespace factory evaluated per call instead of the one derived from
+     * {@link #isolationScope}. See {@link #namespaceFactory(NamespaceFactory)} for the
+     * override semantics.
+     */
+    private NamespaceFactory namespaceFactory;
+
+    /**
      * User project root (lower layer of the resulting {@link OverlayFilesystem}). The agent reads
      * project-authored content (e.g. {@code AGENTS.md}, {@code knowledge/}, {@code skills/}) from
      * this directory and copies-on-write into the agent {@code workspace} when modified. Also
@@ -192,6 +199,27 @@ public class LocalFilesystemSpec {
     /** Returns the configured isolation scope, or {@code null} to use the default. */
     public IsolationScope getIsolationScope() {
         return isolationScope;
+    }
+
+    /**
+     * Sets a custom namespace factory that takes precedence over {@link #isolationScope}. Use it
+     * for isolation dimensions the enum cannot express, for example scoping the agent's
+     * long-term memory per knowledge base instead of per user. The factory is evaluated on
+     * every filesystem operation against the live
+     * {@link io.agentscope.core.agent.RuntimeContext}, so the namespace can follow per-turn
+     * attributes carried on the context.
+     *
+     * @param namespaceFactory namespace factory ({@code null} clears the override)
+     * @return this spec
+     */
+    public LocalFilesystemSpec namespaceFactory(NamespaceFactory namespaceFactory) {
+        this.namespaceFactory = namespaceFactory;
+        return this;
+    }
+
+    /** Returns the custom namespace factory, or {@code null} to derive from the scope. */
+    public NamespaceFactory getNamespaceFactory() {
+        return namespaceFactory;
     }
 
     /**

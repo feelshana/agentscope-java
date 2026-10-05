@@ -56,6 +56,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -422,7 +423,7 @@ public final class DataAgentBootstrap {
         private final Map<String, HarnessAgent> prebuilt = new LinkedHashMap<>();
         private final Map<String, Consumer<HarnessAgent.Builder>> configurators =
                 new LinkedHashMap<>();
-        private final List<Consumer<HarnessAgent.Builder>> globalConfigurators =
+        private final List<BiConsumer<String, HarnessAgent.Builder>> globalConfigurators =
                 new java.util.ArrayList<>();
         private final Map<String, Channel> channels = new LinkedHashMap<>();
         private SessionRegistryRepository sessionStoreRepository;
@@ -473,6 +474,18 @@ public final class DataAgentBootstrap {
          * to any per-agent customizers. Useful for injecting cross-cutting concerns like hooks.
          */
         public Builder configureAllAgents(Consumer<HarnessAgent.Builder> customizer) {
+            Objects.requireNonNull(customizer, "customizer");
+            return configureAllAgents((agentId, b) -> customizer.accept(b));
+        }
+
+        /**
+         * Agent-id aware variant of {@link #configureAllAgents(Consumer)}. The customizer receives
+         * the catalog id of the agent currently being built (e.g. {@code data-agent}, {@code
+         * modeling-agent}), so cross-cutting configuration can exempt specific agents from
+         * features that do not fit them — for example the per-user Docker filesystem spec for
+         * metadata-only agents that must run without a sandbox.
+         */
+        public Builder configureAllAgents(BiConsumer<String, HarnessAgent.Builder> customizer) {
             Objects.requireNonNull(customizer, "customizer");
             this.globalConfigurators.add(customizer);
             return this;
@@ -558,8 +571,8 @@ public final class DataAgentBootstrap {
             if (mainCustomizer != null) {
                 mainCustomizer.accept(mainEntryBuilder);
             }
-            for (Consumer<HarnessAgent.Builder> gc : globalConfigurators) {
-                gc.accept(mainEntryBuilder);
+            for (BiConsumer<String, HarnessAgent.Builder> gc : globalConfigurators) {
+                gc.accept(main, mainEntryBuilder);
             }
 
             List<SubagentEntry> entries = mainEntryBuilder.buildSubagentEntries(mainWorkspace);
@@ -636,8 +649,8 @@ public final class DataAgentBootstrap {
                 if (c != null) {
                     c.accept(b);
                 }
-                for (Consumer<HarnessAgent.Builder> gc : globalConfigurators) {
-                    gc.accept(b);
+                for (BiConsumer<String, HarnessAgent.Builder> gc : globalConfigurators) {
+                    gc.accept(id, b);
                 }
 
                 built.put(id, b.build());

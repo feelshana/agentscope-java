@@ -19,25 +19,35 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.AgentEvent;
+import io.agentscope.core.event.ConfirmResult;
+import io.agentscope.core.event.RequireUserConfirmEvent;
 import io.agentscope.core.event.TextBlockDeltaEvent;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
+import io.agentscope.core.message.ToolCallState;
+import io.agentscope.core.message.ToolUseBlock;
 import io.agentscope.core.model.Model;
+import io.agentscope.core.state.AgentState;
+import io.agentscope.dataagent.dataset.DatasetGroupService;
 import io.agentscope.dataagent.dataset.DatasetScope;
 import io.agentscope.dataagent.runtime.DataAgentBootstrap;
+import io.agentscope.dataagent.runtime.gateway.HarnessGateway;
 import io.agentscope.dataagent.runtime.session.SessionAgentManager;
 import io.agentscope.dataagent.runtime.session.SessionEntry;
 import io.agentscope.dataagent.runtime.session.SessionKind;
+import io.agentscope.dataagent.tools.data.ModelingToolkitRegistrar;
 import io.agentscope.dataagent.web.audit.ActivityEvent;
 import io.agentscope.dataagent.web.audit.AgentActivityStore;
 import io.agentscope.dataagent.web.catalog.AgentCatalogService;
 import io.agentscope.dataagent.web.catalog.AgentDefinition;
 import io.agentscope.dataagent.web.identity.IdentityLinkStore;
+import io.agentscope.dataagent.web.middleware.ModelingHitlMiddleware;
 import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
 import io.agentscope.dataagent.web.share.AgentAccessGuard;
 import io.agentscope.dataagent.web.share.AgentAclService.Tier;
 import io.agentscope.dataagent.web.toolbus.ToolEventBus;
 import io.agentscope.dataagent.web.usage.UsageStore;
+import io.agentscope.harness.agent.HarnessAgent;
 import io.agentscope.harness.agent.gateway.MsgContext;
 import io.agentscope.harness.agent.gateway.channel.InboundMessage;
 import io.agentscope.harness.agent.gateway.channel.Peer;
@@ -93,6 +103,7 @@ public class ChatController {
                     + " dataagent.openai.api-key）后重启应用，再发起问数";
 
     private final ChatUiChannel chatUiChannel;
+    private final HarnessGateway gateway;
     private final SessionAgentManager sessionAgentManager;
     private final AgentCatalogService catalogService;
     private final IdentityLinkStore identityLinks;
@@ -102,6 +113,7 @@ public class ChatController {
     private final AgentActivityStore activity;
     private final ObjectProvider<Model> modelProvider;
     private final ConversationScopeRegistry conversationScopes;
+    private final DatasetGroupService datasetGroupService;
 
     /**
      * AgentStateStore keys for which we have already recorded a RUN_SESSION event. Each (userId, agentId)
@@ -109,6 +121,8 @@ public class ChatController {
      * one per turn.
      */
     private final Set<String> startedSessions = ConcurrentHashMap.newKeySet();
+
+    private final Set<String> consumedConfirmations = ConcurrentHashMap.newKeySet();
 
     public ChatController(
             ChatUiChannel chatUiChannel,
@@ -120,9 +134,11 @@ public class ChatController {
             AgentAccessGuard guard,
             AgentActivityStore activity,
             ObjectProvider<Model> modelProvider,
-            ConversationScopeRegistry conversationScopes) {
+            ConversationScopeRegistry conversationScopes,
+            DatasetGroupService datasetGroupService) {
         this.chatUiChannel = chatUiChannel;
-        this.sessionAgentManager = builderBootstrap.gateway().sessionAgentManager();
+        this.gateway = builderBootstrap.gateway();
+        this.sessionAgentManager = gateway.sessionAgentManager();
         this.catalogService = catalogService;
         this.identityLinks = identityLinks;
         this.usageStore = usageStore;
@@ -131,6 +147,7 @@ public class ChatController {
         this.activity = activity;
         this.modelProvider = modelProvider;
         this.conversationScopes = conversationScopes;
+        this.datasetGroupService = datasetGroupService;
     }
 
     /**
@@ -142,6 +159,16 @@ public class ChatController {
      */
     public record ChatRequest(String message, String sessionKey, java.util.List<String> groupIds) {}
 
+    /** Request body used to resume one native AgentScope modeling confirmation. */
+    public record ModelingConfirmRequest(
+            String sessionKey,
+            java.util.List<String> groupIds,
+            String replyId,
+            String toolCallId,
+            String toolName,
+            Boolean confirmed,
+            Map<String, Object> toolInput) {}
+
     /** Response for the synchronous endpoint. */
     public record ChatResponse(String reply, String sessionKey) {}
 
@@ -150,7 +177,11 @@ public class ChatController {
      * already been created (i.e. the user has sent at least one message); the frontend uses this to
      * decide whether to fetch turns on mount.
      */
-    public record CurrentSessionResponse(String sessionKey, boolean exists) {}
+    public record CurrentSessionResponse(
+            String sessionKey,
+            boolean exists,
+            String pendingReplyId,
+            List<Map<String, Object>> pendingToolCalls) {}
 
     /**
      * SSE streaming endpoint. Emits, in order:
@@ -232,16 +263,7 @@ public class ChatController {
                                 resolvedConversationId,
                                 req.groupIds(),
                                 requestId)
-                        .filter(event -> event instanceof TextBlockDeltaEvent)
-                        .map(
-                                event ->
-                                        sse(
-                                                "token",
-                                                Map.of(
-                                                        "type",
-                                                        "token",
-                                                        "data",
-                                                        ((TextBlockDeltaEvent) event).getDelta())))
+                        .flatMap(this::toAgentFrame)
                         .concatWith(Flux.just(sse("done", doneFrame)))
                         .doOnComplete(() -> done.tryEmitValue(true))
                         .onErrorResume(
@@ -265,6 +287,148 @@ public class ChatController {
         return Flux.merge(toolEvents, agentEvents);
     }
 
+    /** Resumes one paused modeling tool call using AgentScope's native ConfirmResult metadata. */
+    @PostMapping(value = "/confirm", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<String>> confirmModeling(
+            @PathVariable String agentId,
+            @RequestBody ModelingConfirmRequest req,
+            Authentication auth) {
+        String userId = (String) auth.getPrincipal();
+        guard.require(userId, agentId, Tier.RUN);
+        if (!ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "HITL confirmation is only available for modeling-agent");
+        }
+        if (modelProvider.getIfAvailable() == null) {
+            return Flux.just(sse("error", Map.of("type", "error", "error", NO_MODEL_MESSAGE)));
+        }
+        String conversationId = normalizedConversationId(req.sessionKey());
+        if (conversationId == null
+                || req.replyId() == null
+                || req.replyId().isBlank()
+                || req.toolCallId() == null
+                || req.toolCallId().isBlank()
+                || req.toolName() == null
+                || req.toolName().isBlank()
+                || req.confirmed() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "确认请求缺少必要字段");
+        }
+        if (req.groupIds() == null || req.groupIds().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "确认请求必须绑定知识库");
+        }
+        if (req.groupIds().stream().anyMatch(groupId -> groupId == null || groupId.isBlank())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "知识库 ID 不能为空");
+        }
+        List<String> groupIds = List.copyOf(req.groupIds());
+        for (String groupId : groupIds) {
+            try {
+                datasetGroupService.getGroup(userId, groupId);
+            } catch (RuntimeException e) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "知识库不存在");
+            }
+        }
+        List<String> originalGroupIds = conversationScopes.get(conversationId);
+        if (originalGroupIds == null
+                || !Set.copyOf(originalGroupIds).equals(Set.copyOf(groupIds))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "确认请求与原会话知识库范围不一致");
+        }
+
+        String gateKey = resolveGateKey(userId, agentId, conversationId);
+        String storageKey = findSessionKeyByGate(userId, gateKey);
+        if (storageKey == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "没有可恢复的建模会话");
+        }
+        SessionEntry entry =
+                sessionAgentManager
+                        .getSession(storageKey)
+                        .orElseThrow(
+                                () -> new ResponseStatusException(HttpStatus.CONFLICT, "建模会话已失效"));
+        String gatewayAgentId = catalogService.resolveGatewayAgentId(userId, agentId);
+        HarnessAgent modelingAgent = gateway.findAgent(gatewayAgentId);
+        if (modelingAgent == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "建模助手不可用");
+        }
+        AgentState state = modelingAgent.getDelegate().getAgentState(userId, entry.sessionId());
+        if (!req.replyId().equals(state.getReplyId())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "确认请求已过期");
+        }
+        ToolUseBlock asking = findAskingTool(state, req.toolCallId());
+        if (asking == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "工具调用已处理或不存在");
+        }
+        if (!asking.getName().equals(req.toolName())
+                || !ModelingHitlMiddleware.WRITE_TOOL_NAMES.contains(req.toolName())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "工具名称不匹配或不允许确认");
+        }
+
+        Map<String, Object> effectiveInput =
+                req.toolInput() == null ? asking.getInput() : new LinkedHashMap<>(req.toolInput());
+        String confirmationKey = storageKey + ":" + req.replyId() + ":" + req.toolCallId();
+        if (!consumedConfirmations.add(confirmationKey)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "确认请求正在处理或已处理");
+        }
+        ToolUseBlock decidedTool =
+                ToolUseBlock.builder()
+                        .id(asking.getId())
+                        .name(asking.getName())
+                        .input(effectiveInput)
+                        .content(asking.getContent())
+                        .metadata(asking.getMetadata())
+                        .state(ToolCallState.ASKING)
+                        .build();
+        Msg confirmMsg =
+                Msg.builder()
+                        .name("user")
+                        .role(MsgRole.USER)
+                        .textContent(Boolean.TRUE.equals(req.confirmed()) ? "[confirm]" : "[deny]")
+                        .metadata(
+                                Map.of(
+                                        Msg.METADATA_CONFIRM_RESULTS,
+                                        List.of(
+                                                new ConfirmResult(
+                                                        Boolean.TRUE.equals(req.confirmed()),
+                                                        decidedTool))))
+                        .build();
+        String requestId = UUID.randomUUID().toString();
+        Sinks.One<Boolean> done = Sinks.one();
+        Flux<ServerSentEvent<String>> toolEvents =
+                toolEventBus
+                        .events()
+                        .filter(e -> isEventForConversation(userId, gateKey, e))
+                        .takeUntilOther(done.asMono().timeout(Duration.ofMinutes(10)))
+                        .map(this::toToolFrame)
+                        .onErrorResume(ex -> Flux.empty());
+        Map<String, Object> doneFrame = new LinkedHashMap<>();
+        doneFrame.put("type", "done");
+        doneFrame.put("sessionKey", conversationId);
+        Flux<ServerSentEvent<String>> agentEvents =
+                executeChatStream(
+                                userId,
+                                agentId,
+                                List.of(confirmMsg),
+                                conversationId,
+                                groupIds,
+                                requestId)
+                        .flatMap(this::toAgentFrame)
+                        .concatWith(Flux.just(sse("done", doneFrame)))
+                        .doOnComplete(() -> done.tryEmitValue(true))
+                        .onErrorResume(
+                                ex -> {
+                                    done.tryEmitValue(false);
+                                    return Flux.just(
+                                            sse(
+                                                    "error",
+                                                    Map.of(
+                                                            "type",
+                                                            "error",
+                                                            "error",
+                                                            ex.getMessage())));
+                                })
+                        .doFinally(signal -> consumedConfirmations.remove(confirmationKey));
+        return Flux.merge(toolEvents, agentEvents);
+    }
+
     /**
      * Reports whether a session is already registered for the (userId, agentId, conversationId)
      * tuple. The returned {@code sessionKey} field is the caller's own {@code conversationId} (or
@@ -284,12 +448,23 @@ public class ChatController {
         return Mono.fromCallable(
                 () -> {
                     if (conversationId == null) {
-                        return new CurrentSessionResponse(null, false);
+                        return new CurrentSessionResponse(null, false, null, List.of());
                     }
                     String gateKey = resolveGateKey(userId, agentId, conversationId);
-                    boolean exists =
-                            gateKey != null && findSessionKeyByGate(userId, gateKey) != null;
-                    return new CurrentSessionResponse(conversationId, exists);
+                    String storageKey = findSessionKeyByGate(userId, gateKey);
+                    if (storageKey == null) {
+                        return new CurrentSessionResponse(conversationId, false, null, List.of());
+                    }
+                    if (!ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId)) {
+                        return new CurrentSessionResponse(conversationId, true, null, List.of());
+                    }
+                    PendingConfirmation pending =
+                            loadPendingConfirmation(userId, agentId, storageKey);
+                    return new CurrentSessionResponse(
+                            conversationId,
+                            true,
+                            pending == null ? null : pending.replyId(),
+                            pending == null ? List.of() : pending.toolCalls());
                 });
     }
 
@@ -339,6 +514,84 @@ public class ChatController {
     // -----------------------------------------------------------------
     //  Internal helpers
     // -----------------------------------------------------------------
+
+    Mono<ServerSentEvent<String>> toAgentFrame(AgentEvent event) {
+        if (event instanceof TextBlockDeltaEvent text) {
+            return Mono.just(sse("token", Map.of("type", "token", "data", text.getDelta())));
+        }
+        if (event instanceof RequireUserConfirmEvent hitl) {
+            List<Map<String, Object>> calls =
+                    hitl.getToolCalls().stream()
+                            .map(
+                                    tool -> {
+                                        Map<String, Object> call = new LinkedHashMap<>();
+                                        call.put("id", tool.getId());
+                                        call.put("name", tool.getName());
+                                        call.put("input", tool.getInput());
+                                        return call;
+                                    })
+                            .toList();
+            Map<String, Object> frame = new LinkedHashMap<>();
+            frame.put("type", "hitl_request");
+            frame.put("replyId", hitl.getReplyId());
+            frame.put("toolCalls", calls);
+            return Mono.just(sse("hitl_request", frame));
+        }
+        return Mono.empty();
+    }
+
+    private PendingConfirmation loadPendingConfirmation(
+            String userId, String agentId, String storageKey) {
+        SessionEntry entry = sessionAgentManager.getSession(storageKey).orElse(null);
+        if (entry == null) {
+            return null;
+        }
+        String gatewayAgentId = catalogService.resolveGatewayAgentId(userId, agentId);
+        HarnessAgent agent = gateway.findAgent(gatewayAgentId);
+        if (agent == null) {
+            return null;
+        }
+        AgentState state = agent.getDelegate().getAgentState(userId, entry.sessionId());
+        List<ToolUseBlock> asking = findAskingTools(state);
+        if (asking.isEmpty()) {
+            return null;
+        }
+        List<Map<String, Object>> calls = asking.stream().map(this::toHitlToolCall).toList();
+        return new PendingConfirmation(state.getReplyId(), calls);
+    }
+
+    private static ToolUseBlock findAskingTool(AgentState state, String toolCallId) {
+        return findAskingTools(state).stream()
+                .filter(tool -> Objects.equals(toolCallId, tool.getId()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private static List<ToolUseBlock> findAskingTools(AgentState state) {
+        List<Msg> context = state.getContext();
+        for (int i = context.size() - 1; i >= 0; i--) {
+            List<ToolUseBlock> asking =
+                    context.get(i).getContent().stream()
+                            .filter(ToolUseBlock.class::isInstance)
+                            .map(ToolUseBlock.class::cast)
+                            .filter(tool -> tool.getState() == ToolCallState.ASKING)
+                            .toList();
+            if (!asking.isEmpty()) {
+                return asking;
+            }
+        }
+        return List.of();
+    }
+
+    private Map<String, Object> toHitlToolCall(ToolUseBlock tool) {
+        Map<String, Object> call = new LinkedHashMap<>();
+        call.put("id", tool.getId());
+        call.put("name", tool.getName());
+        call.put("input", tool.getInput());
+        return call;
+    }
+
+    private record PendingConfirmation(String replyId, List<Map<String, Object>> toolCalls) {}
 
     private ServerSentEvent<String> toToolFrame(ToolEventBus.ToolEvent e) {
         Map<String, Object> data = new LinkedHashMap<>();
@@ -600,7 +853,22 @@ public class ChatController {
             String conversationId,
             java.util.List<String> groupIds,
             String requestId) {
-        List<Msg> msgs = shapeInboundMessages(message);
+        return buildInbound(
+                userId,
+                agentId,
+                shapeInboundMessages(message),
+                conversationId,
+                groupIds,
+                requestId);
+    }
+
+    private InboundMessage buildInbound(
+            String userId,
+            String agentId,
+            List<Msg> msgs,
+            String conversationId,
+            java.util.List<String> groupIds,
+            String requestId) {
         conversationScopes.put(conversationId, groupIds);
         RuntimeContext.Builder runtimeContextBuilder =
                 RuntimeContext.builder()
@@ -661,9 +929,25 @@ public class ChatController {
             String conversationId,
             java.util.List<String> groupIds,
             String requestId) {
+        return executeChatStream(
+                userId,
+                agentId,
+                shapeInboundMessages(message),
+                conversationId,
+                groupIds,
+                requestId);
+    }
+
+    private Flux<AgentEvent> executeChatStream(
+            String userId,
+            String agentId,
+            List<Msg> messages,
+            String conversationId,
+            java.util.List<String> groupIds,
+            String requestId) {
         long startMs = System.currentTimeMillis();
         InboundMessage inbound =
-                buildInbound(userId, agentId, message, conversationId, groupIds, requestId);
+                buildInbound(userId, agentId, messages, conversationId, groupIds, requestId);
         final String recordedAgentId = agentId != null ? agentId : "(default)";
         return chatUiChannel
                 .dispatchStream(inbound)

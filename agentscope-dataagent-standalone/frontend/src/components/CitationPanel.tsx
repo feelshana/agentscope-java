@@ -8,7 +8,7 @@ export interface CitationToolEntry {
 
 interface Entry {
   chart?: boolean;
-  query?: { purpose: string; sql: string; rowCount: number; artifactId: string };
+  query?: { purpose: string; sql?: string; source?: string };
 }
 
 export default function CitationPanel({
@@ -21,22 +21,14 @@ export default function CitationPanel({
   for (const t of tools) {
     const n = (t.name ?? '').toLowerCase();
 
-    if (n === 'query_structured_data' && t.result) {
-      try {
-        const parsed = JSON.parse(t.result) as Record<string, unknown>;
-        if (parsed.status !== 'FAILED' && Array.isArray(parsed.results)) {
-          for (const r of parsed.results as Record<string, unknown>[]) {
-            entries.push({
-              query: {
-                purpose: (r.purpose as string) ?? '',
-                sql: (r.sql as string) ?? '',
-                rowCount: (r.rowCount as number) ?? 0,
-                artifactId: (r.artifactId as string) ?? '',
-              },
-            });
-          }
-        }
-      } catch { /* malformed result */ }
+    if ((n === 'wren_run_sql' || n === 'wren_query_cube') && t.result && !t.result.startsWith('error:')) {
+      const purpose =
+        t.result.match(/\*\*查询问题：\*\*\s*([^\n]+)/)?.[1]?.trim()
+        ?? t.result.match(/\*\*Cube：\*\*\s*([^\n]+)/)?.[1]?.trim()
+        ?? '语义查询';
+      const source = t.result.match(/\*\*知识库：\*\*\s*([^\n]+)/)?.[1]?.trim();
+      const sql = t.result.match(/```sql\s*\n([\s\S]*?)```/)?.[1]?.trim();
+      entries.push({ query: { purpose, sql, source } });
     } else if (n === 'render_chart') {
       entries.push({ chart: true });
     }
@@ -78,12 +70,11 @@ export default function CitationPanel({
               {e.query ? (
                 <>
                   <span style={{ fontWeight: 600 }}>{e.query.purpose || '数据查询'}</span>
-                  <span style={{ color: 'var(--da-text-muted)' }}>
-                    {' '}· {e.query.rowCount} 行
-                  </span>
-                  <span style={{ color: 'var(--da-text-muted)', fontFamily: 'monospace', fontSize: '0.65rem' }}>
-                    {' '}· {e.query.artifactId}
-                  </span>
+                  {e.query.source && (
+                    <span style={{ color: 'var(--da-text-muted)' }}>
+                      {' '}· {e.query.source}
+                    </span>
+                  )}
                   {e.query.sql && (
                     <div
                       style={{

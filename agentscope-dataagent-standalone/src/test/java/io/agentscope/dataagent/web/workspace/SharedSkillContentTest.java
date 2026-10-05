@@ -42,9 +42,15 @@ class SharedSkillContentTest {
     private static final String PYTHON_ANALYSIS = SKILLS + "python-analysis/SKILL.md";
     private static final String CHART_RENDERING = SKILLS + "chart-rendering/SKILL.md";
 
-    /** Tool names retired by the TC-style toolchain (ADR 0001); they must not be taught anymore. */
+    /** Retired tool names must never be taught by the shipped Wren-only skills. */
     private static final List<String> LEGACY_TOOL_NAMES =
-            List.of("run_sql_preview", "describe_table", "list_data_sources", "read_knowledge");
+            List.of(
+                    "run_sql_preview",
+                    "describe_table",
+                    "list_data_sources",
+                    "read_knowledge",
+                    "prepare_data_context",
+                    "query_structured_data");
 
     @Test
     void everyShippedSkillIsNonEmptyAndHasFrontmatter() {
@@ -65,35 +71,44 @@ class SharedSkillContentTest {
                 .contains("禁止把上一步查询结果作为字面量复制进")
                 // the ban must also cover fetching a dimension attribute, not just filtering
                 .contains("补维度属性")
-                .contains("query_structured_data")
-                .contains("prepare_data_context");
+                .contains("wren_run_sql")
+                .contains("wren_describe_model");
     }
 
-    /**
-     * The batch-prepare how-to (ADR 0006) lives only here: the system prompt just says "load
-     * sql-analysis and follow its steps", so dropping these lines would lose the rule entirely.
-     */
+    /** Logical-model discovery is batched through the Wren metadata tool. */
     @Test
-    void sqlAnalysisCarriesBatchPrepareHowTo() {
+    void sqlAnalysisCarriesModelDiscoveryHowTo() {
         assertThat(read(SQL_ANALYSIS))
-                .contains("1–3 张表")
-                .contains("tables")
-                .contains("一次调用批量取回")
+                .contains("1–5 个逻辑模型")
+                .contains("model_names")
+                .contains("wren_describe_model")
                 .contains("[DATA_SOURCES_OVERVIEW]");
     }
 
-    /**
-     * The skill must not advertise output the tool never produces. {@code
-     * DataAgentToolkit#buildTableSection} emits name/original name/type/description only, so
-     * claiming "维度值样例" invites the model to go probe for values that were promised but
-     * missing (ADR 0008).
-     */
     @Test
-    void sqlAnalysisDoesNotClaimSampleValues() {
+    void sqlAnalysisKeepsCubeViewProjectionSqlRoutingOrder() {
         assertThat(read(SQL_ANALYSIS))
-                .doesNotContain("维度值样例")
-                .doesNotContain("样例值")
-                .contains("取值提示");
+                .contains("按官方决策树选工具")
+                .contains("已发布 Cube 成员覆盖时优先用 `wren_query_cube`")
+                .contains("已发布 View 能直接覆盖问题时优先用 `wren_run_sql` 按视图名直接查询")
+                .contains("展开 many 侧关联字段组")
+                .contains("单一逻辑模型的投影列查询")
+                .contains("relationship condition 自动 JOIN")
+                .contains("语义资产都无法表达时才用 `wren_run_sql`")
+                .contains("显式 JOIN 是最后兜底")
+                // specs/025: official alignment — prefer wording, no mandatory gate
+                .doesNotContain("不得从基础模型重建同等语义")
+                .doesNotContain("禁止改写为手工聚合 SQL")
+                .doesNotContain("View 必须直接出现在 `FROM` 中");
+    }
+
+    @Test
+    void sqlAnalysisRejectsPhysicalFallback() {
+        assertThat(read(SQL_ANALYSIS))
+                .contains("不尝试物理 SQL 回退")
+                .contains("绝不猜测物理表名、datasetId 或 sourceId")
+                .doesNotContain("prepare_data_context")
+                .doesNotContain("query_structured_data");
     }
 
     /**
@@ -121,6 +136,19 @@ class SharedSkillContentTest {
                 .contains("不要尝试调用不存在的工具");
     }
 
+    /** SQL and Python analysis share the same Wren-only structured-query channel. */
+    @Test
+    void skillsUseWrenOnlyChannel() {
+        for (String path : List.of(SQL_ANALYSIS, PYTHON_ANALYSIS)) {
+            assertThat(read(path))
+                    .contains("wren_run_sql")
+                    .contains("wren_query_cube")
+                    .contains("wren_describe_model")
+                    .doesNotContain("prepare_data_context")
+                    .doesNotContain("query_structured_data");
+        }
+    }
+
     @Test
     void skillsDoNotReferenceRetiredToolNames() {
         for (String path : List.of(SQL_ANALYSIS, PYTHON_ANALYSIS, CHART_RENDERING)) {
@@ -137,8 +165,9 @@ class SharedSkillContentTest {
     @Test
     void pythonAnalysisKeepsCurrentToolNamesAndChineseLabelRule() {
         assertThat(read(PYTHON_ANALYSIS))
-                .contains("query_structured_data")
-                .contains("prepare_data_context")
+                .contains("wren_describe_model")
+                .contains("wren_run_sql")
+                .contains("wren_query_cube")
                 .contains("[DATA_SOURCES_OVERVIEW]")
                 .contains("retrieve_evidence")
                 .contains("run_python")
@@ -149,6 +178,21 @@ class SharedSkillContentTest {
     @Test
     void chartRenderingPointsAtEvidenceRetrieval() {
         assertThat(read(CHART_RENDERING)).contains("retrieve_evidence").contains("render_chart");
+    }
+
+    /**
+     * The file-level data handoff (specs/016): the explore template must read the CSV referenced
+     * by the wren query tools, and the anti-pattern list must ban copying rows into code literals
+     * (the old "硬编码为 DataFrame" template was the institutionalised root cause).
+     */
+    @Test
+    void pythonAnalysisReadsQueryDataFilesInsteadOfCopyingRows() {
+        assertThat(read(PYTHON_ANALYSIS))
+                .contains("pd.read_csv('data/")
+                .contains("数据文件")
+                .contains("禁止把查询结果行抄写成代码字面量")
+                .contains("把查询结果数据抄写成 Python 字面量")
+                .doesNotContain("硬编码为 DataFrame");
     }
 
     private static String read(String classpathLocation) {

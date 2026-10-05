@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { ACTIVE_AGENT_ID } from '../api/activeAgent';
 import { AgentDefinition, getAgent } from '../api/agents';
 import SessionsSidebar from './SessionsSidebar';
@@ -7,6 +7,10 @@ import { ToastHost } from './Toast';
 import { ShellOutletContext } from './EditTierGate';
 
 export default function AppShell() {
+  const location = useLocation();
+  // specs/030: the semantic-modeling workbench owns the entire viewport — hide the global
+  // chat sidebar there so the asset view gets the full width.
+  const fullscreen = location.pathname.startsWith('/configure/modeling');
   const [agent, setAgent] = useState<AgentDefinition | null>(null);
   const [agentLoading, setAgentLoading] = useState(true);
   const [agentError, setAgentError] = useState<string | null>(null);
@@ -38,7 +42,7 @@ export default function AppShell() {
         跳到主内容
       </a>
       <aside style={{ display: 'contents' }}>
-        <SessionsSidebar refreshKey={refreshTick} />
+        {!fullscreen && <SessionsSidebar refreshKey={refreshTick} />}
       </aside>
       <main id="main-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
         <Outlet context={ctx} />

@@ -29,8 +29,22 @@ public interface DatasetContextProvider {
     /** Same as {@link #relationshipsText(String)} but limited to the given knowledge-base ids. */
     String relationshipsText(String ownerId, java.util.List<String> onlyGroups);
 
-    /** Global business-term dictionary text (term → explanation/synonyms), or empty. */
-    String semanticTermsText();
+    /**
+     * Business-term dictionary text (term → explanation/synonyms) for the given knowledge bases
+     * (specs/026); empty when none. Terms bind to one knowledge base, so without an explicit
+     * boundary nothing is injected — another tenant's terms can never leak into the prompt.
+     */
+    String semanticTermsText(java.util.List<String> onlyGroups);
+
+    /**
+     * Published named-SQL views for the given knowledge bases (specs/011 M2), one line per view
+     * as query-ready hints for the agent; empty when none are published yet. Draft views are
+     * deliberately omitted — they cannot be queried until a publish.
+     */
+    String semanticViewsText(java.util.List<String> onlyGroups);
+
+    /** Tenant- and group-scoped semantic business rules visible to the current conversation. */
+    String semanticBusinessRulesText(String ownerId, java.util.List<String> onlyGroups);
 
     /**
      * Relation edges touching the given table (by dataset name, table name or dataset id) for the
@@ -40,4 +54,13 @@ public interface DatasetContextProvider {
 
     /** Same as {@link #relationsFor(String, String)} but limited to the given knowledge-base ids. */
     String relationsFor(String ownerId, String table, java.util.List<String> onlyGroups);
+
+    /**
+     * Keyword-level evidence retrieval across the owner's visible knowledge documents (optionally
+     * narrowed to {@code onlyGroups}): returns up to {@code limit} cited passages ranked by
+     * relevance. Documents small enough to be a single chunk are injected whole regardless of
+     * term overlap. {@code null} when nothing matches and no such short document exists; callers
+     * keep their own "not found" wording so agent-facing contracts stay stable.
+     */
+    String evidenceFor(String ownerId, java.util.List<String> onlyGroups, String query, int limit);
 }

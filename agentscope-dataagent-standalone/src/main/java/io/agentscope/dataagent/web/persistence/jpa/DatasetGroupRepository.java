@@ -18,6 +18,9 @@ package io.agentscope.dataagent.web.persistence.jpa;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.transaction.annotation.Transactional;
 
 /** Spring Data repository for {@link DatasetGroupEntity}. */
 public interface DatasetGroupRepository extends JpaRepository<DatasetGroupEntity, String> {
@@ -25,4 +28,20 @@ public interface DatasetGroupRepository extends JpaRepository<DatasetGroupEntity
     List<DatasetGroupEntity> findByOwnerIdOrderByCreatedAtDesc(String ownerId);
 
     Optional<DatasetGroupEntity> findByOwnerIdAndName(String ownerId, String name);
+
+    /**
+     * One-shot startup backfill for rows created before the specs/010 M1 mdl_* columns existed:
+     * {@code ddl-auto=update} adds the columns but leaves them NULL on legacy rows, and hydrating
+     * SQL NULL into the primitive {@code mdlVersion} field throws JpaSystemException on every
+     * group load. Native SQL on purpose — loading the affected rows through JPA is exactly what
+     * fails.
+     */
+    @Modifying
+    @Transactional
+    @Query(
+            value =
+                    "UPDATE dataagent_dataset_group SET mdl_version = 0, mdl_state = 'NONE'"
+                            + " WHERE mdl_version IS NULL OR mdl_state IS NULL",
+            nativeQuery = true)
+    void backfillMdlDefaults();
 }

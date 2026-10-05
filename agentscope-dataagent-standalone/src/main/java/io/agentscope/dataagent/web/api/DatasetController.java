@@ -15,6 +15,7 @@
  */
 package io.agentscope.dataagent.web.api;
 
+import io.agentscope.dataagent.dataset.BaselineMdlService;
 import io.agentscope.dataagent.dataset.DatasetException;
 import io.agentscope.dataagent.dataset.DatasetService;
 import io.agentscope.dataagent.dataset.parser.ColumnSchema;
@@ -63,9 +64,11 @@ public class DatasetController {
     private static final int MAX_DESCRIPTION_CHARS = 4000;
 
     private final DatasetService datasetService;
+    private final BaselineMdlService baselineMdlService;
 
-    public DatasetController(DatasetService datasetService) {
+    public DatasetController(DatasetService datasetService, BaselineMdlService baselineMdlService) {
         this.datasetService = datasetService;
+        this.baselineMdlService = baselineMdlService;
     }
 
     public record ColumnVO(String name, String originalName, String sqlType, String description) {}
@@ -119,6 +122,8 @@ public class DatasetController {
                                                                 description,
                                                                 new ByteArrayInputStream(data),
                                                                 file.filename());
+                                                baselineMdlService.publishAfterDatasetChange(
+                                                        userId, groupId);
                                                 return toVO(entity);
                                             })
                                     .subscribeOn(Schedulers.boundedElastic());
@@ -183,6 +188,15 @@ public class DatasetController {
                                                                 e.getMessage())),
                         4) // concurrency limit: 4 files in parallel
                 .collectList()
+                .flatMap(
+                        results ->
+                                Mono.fromCallable(
+                                                () -> {
+                                                    baselineMdlService.publishAfterDatasetChange(
+                                                            userId, groupId);
+                                                    return results;
+                                                })
+                                        .subscribeOn(Schedulers.boundedElastic()))
                 .doOnError(e -> log.warn("Batch upload failed for {}", userId, e))
                 .onErrorMap(this::toStatus);
     }
@@ -296,7 +310,12 @@ public class DatasetController {
     @DeleteMapping("/{id}")
     public Mono<ResponseEntity<Void>> delete(@PathVariable String id, Authentication auth) {
         String userId = (String) auth.getPrincipal();
-        return Mono.fromRunnable(() -> datasetService.delete(userId, id))
+        return Mono.fromRunnable(
+                        () -> {
+                            String groupId = datasetService.get(userId, id).getGroupId();
+                            datasetService.delete(userId, id);
+                            baselineMdlService.publishAfterDatasetChange(userId, groupId);
+                        })
                 .subscribeOn(Schedulers.boundedElastic())
                 .onErrorMap(this::toStatus)
                 .then(Mono.just(ResponseEntity.noContent().<Void>build()));

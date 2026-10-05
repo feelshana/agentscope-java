@@ -58,6 +58,22 @@ public class DatasetGroupEntity {
     @Column(name = "updated_at")
     private Instant updatedAt = Instant.now();
 
+    /** NONE | INITIALIZING | FAILED | DIRTY | PUBLISHED — MDL lifecycle state. */
+    @Column(name = "mdl_state", length = 16)
+    private String mdlState = "NONE";
+
+    /** User-facing summary of the most recent MDL build failure; cleared after publish. */
+    @Column(name = "mdl_last_error", length = 2000)
+    private String mdlLastError;
+
+    /** Monotonic MDL version; bumped on each publish. */
+    @Column(name = "mdl_version")
+    private int mdlVersion = 0;
+
+    /** When the group's MDL was last published; null while never published. */
+    @Column(name = "mdl_published_at")
+    private Instant mdlPublishedAt;
+
     public DatasetGroupEntity() {}
 
     public DatasetGroupEntity(String id, String ownerId, String name, String description) {
@@ -115,5 +131,37 @@ public class DatasetGroupEntity {
 
     public void setUpdatedAt(Instant updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public String getMdlState() {
+        return mdlState;
+    }
+
+    public void setMdlState(String mdlState) {
+        this.mdlState = mdlState;
+    }
+
+    public String getMdlLastError() {
+        return mdlLastError;
+    }
+
+    public void setMdlLastError(String mdlLastError) {
+        this.mdlLastError = mdlLastError;
+    }
+
+    public int getMdlVersion() {
+        return mdlVersion;
+    }
+
+    public void setMdlVersion(int mdlVersion) {
+        this.mdlVersion = mdlVersion;
+    }
+
+    public Instant getMdlPublishedAt() {
+        return mdlPublishedAt;
+    }
+
+    public void setMdlPublishedAt(Instant mdlPublishedAt) {
+        this.mdlPublishedAt = mdlPublishedAt;
     }
 }

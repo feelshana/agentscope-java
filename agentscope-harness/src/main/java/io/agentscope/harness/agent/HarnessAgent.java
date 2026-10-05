@@ -2369,6 +2369,13 @@ public class HarnessAgent implements Agent, AutoCloseable {
                 fsIsolationScope = localFilesystemSpec.getIsolationScope();
             }
             NamespaceFactory nsFactory = fsIsolationScope.toNamespaceFactory();
+            if (localFilesystemSpec != null && localFilesystemSpec.getNamespaceFactory() != null) {
+                // An explicit namespace factory on the local spec wins over the scope-derived
+                // default: callers can keep the USER-scope middleware defaults while routing
+                // per-tenant paths (long-term memory, session logs) through a custom
+                // namespace, e.g. one memory namespace per knowledge base (ADR 0039).
+                nsFactory = localFilesystemSpec.getNamespaceFactory();
+            }
             if (effectiveSession == null) {
                 effectiveSession = new JsonFileAgentStateStore(defaultStateDir(resolvedAgentId));
                 inner.stateStore(effectiveSession);
