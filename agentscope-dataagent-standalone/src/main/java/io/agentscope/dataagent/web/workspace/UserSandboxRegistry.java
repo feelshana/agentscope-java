@@ -22,6 +22,7 @@ import io.agentscope.harness.agent.sandbox.impl.docker.DockerSandboxClientOption
 import io.agentscope.harness.agent.sandbox.layout.WorkspaceEntry;
 import io.agentscope.harness.agent.sandbox.layout.WorkspaceProjectionEntry;
 import io.agentscope.harness.agent.sandbox.snapshot.NoopSnapshotSpec;
+import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -136,6 +137,85 @@ public final class UserSandboxRegistry {
                 idleTtl,
                 evictionPollInterval,
                 hostWorkspaceRoot);
+    }
+
+    /**
+     * Clean up orphaned containers from previous JVM runs that didn't shut down cleanly (e.g.,
+     * killed IDE, crash, power loss). Without this, containers accumulate across restarts because
+     * the in-memory {@link #entries} map is cleared on JVM exit but the Docker containers keep
+     * running.
+     *
+     * <p>This method runs once on bean initialization, before any {@link #borrow} calls. It scans
+     * all Docker containers whose name starts with {@code agentscope-sandbox-} (the naming
+     * convention used by {@code DockerSandbox}) and removes them. This covers containers created
+     * with any image (e.g. {@code ubuntu:22.04} or {@code agentscope/dataagent-sandbox:latest}).
+     * Safe to call even if Docker is not running (logs a warning and continues).
+     */
+    @PostConstruct
+    void cleanupOrphanedContainers() {
+        if (!(client
+                instanceof io.agentscope.harness.agent.sandbox.impl.docker.DockerSandboxClient)) {
+            return;
+        }
+        try {
+            String namePrefix = "agentscope-sandbox-";
+            log.info(
+                    "[sandbox-registry] cleaning up orphaned containers with name prefix={}",
+                    namePrefix);
+            ProcessBuilder pb =
+                    new ProcessBuilder("docker", "ps", "-aq", "--filter", "name=" + namePrefix);
+            pb.redirectErrorStream(true);
+            Process proc = pb.start();
+            String output =
+                    new String(
+                                    proc.getInputStream().readAllBytes(),
+                                    java.nio.charset.StandardCharsets.UTF_8)
+                            .strip();
+            int exitCode = proc.waitFor();
+            if (exitCode != 0) {
+                log.warn(
+                        "[sandbox-registry] docker ps failed (exit={}): {} — skipping orphan"
+                                + " cleanup",
+                        exitCode,
+                        output);
+                return;
+            }
+            if (output.isEmpty()) {
+                log.info("[sandbox-registry] no orphaned containers found");
+                return;
+            }
+            String[] containerIds = output.split("\\s+");
+            log.info(
+                    "[sandbox-registry] found {} orphaned container(s), removing: {}",
+                    containerIds.length,
+                    String.join(", ", containerIds));
+            ProcessBuilder rmPb =
+                    new ProcessBuilder(
+                            java.util.stream.Stream.concat(
+                                            java.util.stream.Stream.of("docker", "rm", "-f"),
+                                            java.util.Arrays.stream(containerIds))
+                                    .toArray(String[]::new));
+            rmPb.redirectErrorStream(true);
+            Process rmProc = rmPb.start();
+            String rmOutput =
+                    new String(
+                                    rmProc.getInputStream().readAllBytes(),
+                                    java.nio.charset.StandardCharsets.UTF_8)
+                            .strip();
+            int rmExit = rmProc.waitFor();
+            if (rmExit != 0) {
+                log.warn("[sandbox-registry] docker rm failed (exit={}): {}", rmExit, rmOutput);
+            } else {
+                log.info(
+                        "[sandbox-registry] cleaned up {} orphaned container(s)",
+                        containerIds.length);
+            }
+        } catch (Exception e) {
+            log.warn(
+                    "[sandbox-registry] orphan cleanup failed (non-fatal, continuing): {}",
+                    e.getMessage(),
+                    e);
+        }
     }
 
     /**

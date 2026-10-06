@@ -687,17 +687,23 @@ public final class HarnessGateway implements Gateway {
             return;
         }
         try {
-            Sandbox sb = userSandboxRegistry.borrow(userId, agentId);
+            // Lazy initialization: wrap the registry borrow in a LazySandbox so the container
+            // is only created when a tool actually executes a command (e.g., run_python).
+            // Pure SQL queries (wren_run_sql, wren_query_cube) never touch the sandbox, so
+            // no container is created for those turns — saving 3-8s of Docker overhead.
+            Sandbox lazySb =
+                    new io.agentscope.dataagent.web.workspace.LazySandbox(
+                            () -> userSandboxRegistry.borrow(userId, agentId));
             SandboxContext sandboxCtx =
                     SandboxContext.builder()
-                            .externalSandbox(sb)
+                            .externalSandbox(lazySb)
                             .isolationScope(IsolationScope.USER)
                             .build();
             builder.put(SandboxContext.class, sandboxCtx);
         } catch (RuntimeException e) {
             log.warn(
-                    "[gateway] Failed to borrow sandbox for user={}, agent={} — agent turn will"
-                            + " fall back to the default SandboxContext: {}",
+                    "[gateway] Failed to attach lazy sandbox for user={}, agent={} — agent turn"
+                            + " will fall back to the default SandboxContext: {}",
                     userId,
                     agentId,
                     e.getMessage(),
