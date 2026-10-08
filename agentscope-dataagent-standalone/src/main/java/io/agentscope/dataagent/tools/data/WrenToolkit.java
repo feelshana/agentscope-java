@@ -99,6 +99,8 @@ public final class WrenToolkit {
     /** Optional sandbox proxy for the CSV data handoff; {@code null} disables it entirely. */
     private final AbstractSandboxFilesystem sandboxFilesystem;
 
+    private final io.agentscope.dataagent.web.artifact.ArtifactStore artifactStore;
+
     public WrenToolkit(
             WrenQueryGateway wrenGateway,
             DatasetGroupService groupService,
@@ -118,6 +120,17 @@ public final class WrenToolkit {
             ConversationScopeRegistry conversationScopes,
             MdlCatalog mdlCatalog,
             AbstractSandboxFilesystem sandboxFilesystem) {
+        this(wrenGateway, groupService, conversationScopes, mdlCatalog, sandboxFilesystem, null);
+    }
+
+    public WrenToolkit(
+            WrenQueryGateway wrenGateway,
+            DatasetGroupService groupService,
+            ConversationScopeRegistry conversationScopes,
+            MdlCatalog mdlCatalog,
+            AbstractSandboxFilesystem sandboxFilesystem,
+            io.agentscope.dataagent.web.artifact.ArtifactStore artifactStore) {
+        this.artifactStore = artifactStore;
         this.wrenGateway = Objects.requireNonNull(wrenGateway, "wrenGateway");
         this.groupService = Objects.requireNonNull(groupService, "groupService");
         this.conversationScopes = conversationScopes;
@@ -876,12 +889,27 @@ public final class WrenToolkit {
             }
             String fileName = sha256Hex(payload).substring(0, 12) + ".csv";
             String path = RUNPYTHON_DIR + sanitize(rc.getSessionId()) + "/data/" + fileName;
-            List<FileUploadResponse> uploads =
-                    sandboxFilesystem.uploadFiles(
-                            rc, List.of(new AbstractMap.SimpleEntry<>(path, csv)));
-            if (uploads.isEmpty() || !uploads.get(0).isSuccess()) {
-                log.warn("[wren] CSV handoff upload failed for session {}", rc.getSessionId());
-                return "";
+            String downloadNote = "";
+            if (artifactStore != null) {
+                var saved =
+                        artifactStore.save(
+                                rc,
+                                java.util.UUID.randomUUID().toString(),
+                                fileName,
+                                path,
+                                csv,
+                                true);
+                downloadNote = "\n[下载查询数据](" + artifactStore.reference(saved) + ")\n";
+                // Python restores this input on demand. A SQL-only answer must not create a
+                // sandbox.
+            } else {
+                List<FileUploadResponse> uploads =
+                        sandboxFilesystem.uploadFiles(
+                                rc, List.of(new AbstractMap.SimpleEntry<>(path, csv)));
+                if (uploads.isEmpty() || !uploads.get(0).isSuccess()) {
+                    log.warn("[wren] CSV handoff upload failed for session {}", rc.getSessionId());
+                    return "";
+                }
             }
             return "\n**数据文件：** data/"
                     + fileName
@@ -891,13 +919,21 @@ public final class WrenToolkit {
                     + cols.size()
                     + " 列；run_python 中 pd.read_csv('data/"
                     + fileName
-                    + "') 读取）\n";
+                    + "') 读取）\n"
+                    + downloadNote;
         } catch (Exception e) {
             log.warn(
                     "[wren] CSV handoff degraded for session {}: {}",
                     rc.getSessionId(),
                     e.getMessage());
-            return "";
+            String reason =
+                    e
+                                    instanceof
+                                    io.agentscope.dataagent.web.artifact.ArtifactStore
+                                            .CapacityException
+                            ? e.getMessage()
+                            : "请联系管理员检查附件存储";
+            return "\n*(查询成功，但数据文件保存失败：" + reason + "。)*\n";
         }
     }
 

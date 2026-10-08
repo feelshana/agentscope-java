@@ -275,53 +275,57 @@ public class AgentWorkspaceController {
         }
         log.info("[binary] request: agentId={}, path={}", agentId, decodedPath);
         return Mono.fromCallable(
-                () -> {
-                    guard.require(userId, agentId, Tier.RUN);
-                    String rel = validateRelPath(decodedPath);
-                    log.info("[binary] resolved rel={}", rel);
-                    WorkspaceContext ctx = resolveContext(userId, agentId);
-                    AbstractFilesystem fs = ctx.manager().getFilesystem();
-                    RuntimeContext rc = RuntimeContext.empty();
-                    String absPath = "/" + rel;
-                    List<FileDownloadResponse> downloads = fs.downloadFiles(rc, List.of(absPath));
-                    if (downloads.isEmpty() || !downloads.get(0).isSuccess()) {
-                        log.warn(
-                                "[binary] file not found: path={}, absPath={}, downloads={}",
-                                decodedPath,
-                                absPath,
-                                downloads.size());
-                        throw new ResponseStatusException(
-                                HttpStatus.NOT_FOUND, "File not found: " + decodedPath);
-                    }
-                    byte[] content = downloads.get(0).content();
-                    if (content == null || content.length == 0) {
-                        log.warn("[binary] empty file: path={}", decodedPath);
-                        throw new ResponseStatusException(
-                                HttpStatus.NOT_FOUND, "Empty file: " + decodedPath);
-                    }
-                    String contentType = guessContentType(rel);
-                    log.info(
-                            "[binary] success: path={}, size={}, contentType={}, download={}",
-                            decodedPath,
-                            content.length,
-                            contentType,
-                            download);
-                    ResponseEntity.BodyBuilder builder =
-                            ResponseEntity.ok()
-                                    .header("Content-Type", contentType)
-                                    .header("Cache-Control", "public, max-age=3600");
-                    if (download) {
-                        // RFC 5987 encoded filename so Chinese names survive browsers
-                        String filename = rel.substring(rel.lastIndexOf('/') + 1);
-                        String encodedFilename =
-                                URLEncoder.encode(filename, StandardCharsets.UTF_8)
-                                        .replace("+", "%20");
-                        builder.header(
-                                "Content-Disposition",
-                                "attachment; filename*=UTF-8''" + encodedFilename);
-                    }
-                    return builder.body(content);
-                });
+                        () -> {
+                            guard.require(userId, agentId, Tier.RUN);
+                            String rel = validateRelPath(decodedPath);
+                            log.info("[binary] resolved rel={}", rel);
+                            WorkspaceContext ctx = resolveContext(userId, agentId, false);
+                            AbstractFilesystem fs = ctx.manager().getFilesystem();
+                            RuntimeContext rc = RuntimeContext.empty();
+                            String absPath = "/" + rel;
+                            List<FileDownloadResponse> downloads =
+                                    fs.downloadFiles(rc, List.of(absPath));
+                            if (downloads.isEmpty() || !downloads.get(0).isSuccess()) {
+                                log.warn(
+                                        "[binary] file not found: path={}, absPath={},"
+                                                + " downloads={}",
+                                        decodedPath,
+                                        absPath,
+                                        downloads.size());
+                                throw new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND, "File not found: " + decodedPath);
+                            }
+                            byte[] content = downloads.get(0).content();
+                            if (content == null || content.length == 0) {
+                                log.warn("[binary] empty file: path={}", decodedPath);
+                                throw new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND, "Empty file: " + decodedPath);
+                            }
+                            String contentType = guessContentType(rel);
+                            log.info(
+                                    "[binary] success: path={}, size={}, contentType={},"
+                                            + " download={}",
+                                    decodedPath,
+                                    content.length,
+                                    contentType,
+                                    download);
+                            ResponseEntity.BodyBuilder builder =
+                                    ResponseEntity.ok()
+                                            .header("Content-Type", contentType)
+                                            .header("Cache-Control", "private, no-store");
+                            if (download) {
+                                // RFC 5987 encoded filename so Chinese names survive browsers
+                                String filename = rel.substring(rel.lastIndexOf('/') + 1);
+                                String encodedFilename =
+                                        URLEncoder.encode(filename, StandardCharsets.UTF_8)
+                                                .replace("+", "%20");
+                                builder.header(
+                                        "Content-Disposition",
+                                        "attachment; filename*=UTF-8''" + encodedFilename);
+                            }
+                            return builder.body(content);
+                        })
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
 
     @PutMapping("/file")
@@ -703,6 +707,10 @@ public class AgentWorkspaceController {
      * every sandbox at start; user writes stay inside the container.
      */
     private WorkspaceContext resolveContext(String userId, String agentId) {
+        return resolveContext(userId, agentId, true);
+    }
+
+    private WorkspaceContext resolveContext(String userId, String agentId, boolean create) {
         AgentDefinition def =
                 catalogService
                         .findVisible(userId, agentId)
@@ -711,6 +719,20 @@ public class AgentWorkspaceController {
                                         new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND,
                                                 "Agent not found or not accessible: " + agentId));
+        if (!create) {
+            String ownerId =
+                    AgentDefinition.SCOPE_USER.equals(def.scope()) && def.ownerId() != null
+                            ? def.ownerId()
+                            : userId;
+            WorkspaceManager wm =
+                    workspaceManagerFactory
+                            .forExistingAgent(ownerId, agentId, def.workspacePath())
+                            .orElseThrow(
+                                    () ->
+                                            new ResponseStatusException(
+                                                    HttpStatus.GONE, "旧版临时附件已过期，请重新生成"));
+            return new WorkspaceContext(wm.getWorkspace().normalize(), wm, ownerId);
+        }
         if (AgentDefinition.SCOPE_USER.equals(def.scope())) {
             String ownerId = def.ownerId() != null ? def.ownerId() : userId;
             WorkspaceManager wm =

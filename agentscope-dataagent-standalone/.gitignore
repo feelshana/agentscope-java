@@ -11,3 +11,6 @@ logs/
 # so its content is per-deployment state rather than source. Anchored with a
 # leading slash so src/main/resources/shared stays tracked.
 /shared/
+
+# Durable runtime artifacts (back up separately from source).
+/data/artifacts/

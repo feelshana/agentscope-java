@@ -56,6 +56,7 @@ public class DataToolkitRegistrar {
     private final WrenQueryGateway wrenGateway;
     private final DatasetGroupService datasetGroupService;
     private final MdlCatalog mdlCatalog;
+    private final io.agentscope.dataagent.web.artifact.ArtifactStore artifactStore;
 
     public DataToolkitRegistrar(
             DataAgentBootstrap bootstrap,
@@ -64,7 +65,8 @@ public class DataToolkitRegistrar {
             ConversationScopeRegistry conversationScopes,
             WrenQueryGateway wrenGateway,
             DatasetGroupService datasetGroupService,
-            MdlCatalog mdlCatalog) {
+            MdlCatalog mdlCatalog,
+            io.agentscope.dataagent.web.artifact.ArtifactStore artifactStore) {
         this.bootstrap = bootstrap;
         this.contextProvider = contextProvider;
         this.chartOptions = chartOptions;
@@ -72,6 +74,7 @@ public class DataToolkitRegistrar {
         this.wrenGateway = wrenGateway;
         this.datasetGroupService = datasetGroupService;
         this.mdlCatalog = mdlCatalog;
+        this.artifactStore = artifactStore;
     }
 
     @PostConstruct
@@ -105,14 +108,15 @@ public class DataToolkitRegistrar {
                                     datasetGroupService,
                                     conversationScopes,
                                     mdlCatalog,
-                                    new SandboxBackedFilesystem()));
+                                    new SandboxBackedFilesystem(),
+                                    artifactStore));
             log.info("Registered Wren toolkit onto main agent '{}'", main.getName());
 
             // Register the Python sandbox-execution tool. See the class javadoc for why a
             // standalone proxy (instead of the agent's own filesystem instance) is sufficient.
             main.getDelegate()
                     .getToolkit()
-                    .registerTool(new RunPythonTool(new SandboxBackedFilesystem()));
+                    .registerTool(new RunPythonTool(new SandboxBackedFilesystem(), artifactStore));
             log.info("Registered RunPythonTool onto main agent '{}'", main.getName());
         } catch (RuntimeException e) {
             log.warn("Failed to register DataAgent toolkit onto main agent: {}", e.getMessage());

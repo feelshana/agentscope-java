@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { ACTIVE_AGENT_ID } from '../api/activeAgent';
 import { clearToken, getToken, isAdmin } from '../api/auth';
-import { InboxEntry, deleteSession, inbox } from '../api/sessions';
+import { InboxEntry, deleteSession, inboxPage } from '../api/sessions';
 import Icon, { IconName } from './Icon';
 
 interface UtilityItem {
@@ -91,13 +91,43 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [batchDeleting, setBatchDeleting] = useState(false);
   const attempts = useRef(0);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const generation = useRef(0);
+  const moreRequest = useRef<AbortController | null>(null);
+  const [pageError, setPageError] = useState<string | null>(null);
+
+  async function loadMore() {
+    if (!nextCursor || loading || moreRequest.current) return;
+    const version = generation.current;
+    const controller = new AbortController();
+    moreRequest.current = controller;
+    setLoadingMore(true); setPageError(null);
+    try {
+      const page = await inboxPage(ACTIVE_AGENT_ID, { limit: 20, cursor: nextCursor, signal: controller.signal });
+      if (generation.current !== version) return;
+      setEntries(old => {
+        const seen = new Set(old.map(e => e.sessionKey));
+        return [...old, ...page.items.filter(e => !seen.has(e.sessionKey))];
+      });
+      setNextCursor(page.nextCursor);
+    } catch (e) {
+      if (!controller.signal.aborted) setPageError('加载更多失败，请重试');
+    } finally {
+      if (moreRequest.current === controller) { moreRequest.current = null; setLoadingMore(false); }
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
+    generation.current += 1;
+    moreRequest.current?.abort(); moreRequest.current = null;
+    setLoadingMore(false); setNextCursor(null); setPageError(null);
+    const controller = new AbortController();
     setErr(null);
     setLoading(true);
-    inbox(ACTIVE_AGENT_ID, { limit: 100 })
-      .then(list => { if (!cancelled) setEntries(list); })
+    inboxPage(ACTIVE_AGENT_ID, { limit: 20, signal: controller.signal })
+      .then(page => { if (!cancelled) { setEntries(page.items); setNextCursor(page.nextCursor); } })
       .catch(e => {
         if (cancelled) return;
         setErr(e instanceof Error ? e.message : '加载失败');
@@ -108,34 +138,16 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
         }
       })
       .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; controller.abort(); moreRequest.current?.abort(); };
   }, [refreshKey, retryNonce]);
 
-  // When the user just clicked 新建对话 the URL carries the freshly-minted conversationId, but
-  // no SessionEntry exists on the server yet (it is created on the first message). Surface a
-  // synthetic "draft" row in the sidebar so the new chat is immediately visible and selected.
-  const draftEntry = useMemo<InboxEntry | null>(() => {
-    if (location.pathname !== '/chat' || !activeKey) return null;
-    if (entries.some(e => (e.conversationId ?? e.sessionKey) === activeKey)) return null;
-    return {
-      sessionKey: activeKey,
-      sessionId: activeKey,
-      agentId: ACTIVE_AGENT_ID,
-      conversationId: activeKey,
-      title: '新对话',
-      label: '新对话',
-      lastActivityMs: Date.now(),
-      lastMessage: null,
-      unread: false,
-    };
-  }, [location.pathname, activeKey, entries]);
-
+  // Missing entries may be on a later page; do not fabricate a draft for an old URL.
   const grouped = useMemo(() => {
     const map: Record<Bucket, InboxEntry[]> = { today: [], yesterday: [], earlier: [] };
-    if (draftEntry) map.today.push(draftEntry);
+
     for (const e of entries) map[bucketOf(e.lastActivityMs)].push(e);
     return map;
-  }, [entries, draftEntry]);
+  }, [entries]);
 
   function handleNewChat() {
     navigate('/chat');
@@ -153,13 +165,6 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
 
   async function handleDelete(entry: InboxEntry, ev: React.MouseEvent) {
     ev.stopPropagation();
-    // The draft row has no backend session yet — just clear the URL/localStorage and let
-    // SessionsSidebar drop it on the next render.
-    if (draftEntry && entry.sessionKey === draftEntry.sessionKey) {
-      try { localStorage.removeItem(`claw_chat_session:${ACTIVE_AGENT_ID}`); } catch { /* ignore */ }
-      navigate('/chat');
-      return;
-    }
     if (!confirm(`确定删除该对话？「${entry.title ?? entry.label ?? '新对话'}」`)) return;
     try {
       await deleteSession(ACTIVE_AGENT_ID, entryNavKey(entry));
@@ -197,11 +202,14 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
     setBatchDeleting(true);
     try {
       const keys = Array.from(selected);
-      await Promise.all(keys.map(k => deleteSession(ACTIVE_AGENT_ID, k).catch(() => null)));
-      setEntries(prev => prev.filter(e => !selected.has(entryNavKey(e))));
-      if (activeKey && selected.has(activeKey)) navigate('/chat');
-      setSelected(new Set());
-      setBatchMode(false);
+      const results = await Promise.allSettled(keys.map(k => deleteSession(ACTIVE_AGENT_ID, k)));
+      const deleted = new Set(keys.filter((_, i) => results[i].status === 'fulfilled'));
+      const failed = new Set(keys.filter(k => !deleted.has(k)));
+      setEntries(prev => prev.filter(e => !deleted.has(entryNavKey(e))));
+      if (activeKey && deleted.has(activeKey)) navigate('/chat');
+      setSelected(failed);
+      setBatchMode(failed.size > 0);
+      if (failed.size) alert(`${failed.size} 个会话未删除，请先停止正在进行的回答后重试。`);
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : '批量删除失败');
     } finally {
@@ -277,7 +285,10 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
         )}
       </div>
 
-      <div style={S.scroll}>
+      <div style={S.scroll} onScroll={e => {
+        const el = e.currentTarget;
+        if (!pageError && el.scrollHeight - el.scrollTop - el.clientHeight < 120) void loadMore();
+      }}>
         {entries.length > 0 && (
           <div style={S.listHeader}>
             <span style={S.listHeaderTitle}>历史会话</span>
@@ -337,7 +348,7 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
             </button>
           </div>
         )}
-        {!loading && !err && entries.length === 0 && !draftEntry && (
+        {!loading && !err && entries.length === 0 && (
           <div style={S.muted}>暂无会话。发送消息即可开始第一段对话。</div>
         )}
 
@@ -366,6 +377,8 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
             </div>
           );
         })}
+        {nextCursor && <button className="da-btn da-btn-ghost da-btn-sm" disabled={loadingMore}
+          onClick={() => void loadMore()}>{loadingMore ? '加载中…' : pageError ?? '加载更多'}</button>}
       </div>
 
       <div style={S.footer}>

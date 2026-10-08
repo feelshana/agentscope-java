@@ -15,9 +15,15 @@
  */
 package io.agentscope.dataagent.web.persistence.jpa;
 
+import java.util.List;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-/** Spring Data repository for {@link SessionRegistryEntity}. */
-public interface SessionRegistryRepository extends JpaRepository<SessionRegistryEntity, String> {
-    boolean existsByUserIdAndSessionId(String userId, String sessionId);
+public interface SessionMessageRepository extends JpaRepository<SessionMessageEntity, String> {
+    List<SessionMessageEntity> findBySessionKeyOrderByPositionAsc(String key);
+
+    List<SessionMessageEntity> findBySessionKeyAndPositionLessThanOrderByPositionDesc(
+            String key, int before, Pageable page);
+
+    void deleteBySessionKey(String key);
 }

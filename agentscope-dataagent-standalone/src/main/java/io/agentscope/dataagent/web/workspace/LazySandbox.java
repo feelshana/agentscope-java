@@ -52,6 +52,28 @@ public final class LazySandbox implements Sandbox {
 
     private final Supplier<Sandbox> supplier;
     private volatile Sandbox delegate;
+    private UserSandboxRegistry registry;
+    private String owner;
+    private String agent;
+    private UserSandboxRegistry.Lease turnLease;
+
+    public LazySandbox(UserSandboxRegistry registry, String owner, String agent) {
+        this.supplier =
+                () -> {
+                    turnLease = registry.acquire(owner, agent);
+                    return turnLease.sandbox();
+                };
+        this.registry = registry;
+        this.owner = owner;
+        this.agent = agent;
+    }
+
+    public synchronized void releaseLease() {
+        if (turnLease != null) {
+            turnLease.close();
+            turnLease = null;
+        }
+    }
 
     /**
      * Creates a lazy sandbox that defers container creation until first use.
@@ -77,10 +99,12 @@ public final class LazySandbox implements Sandbox {
                 return delegate;
             }
             log.info("[lazy-sandbox] first operation — creating container now");
-            delegate = supplier.get();
+            Sandbox candidate = supplier.get();
             try {
-                delegate.start();
+                candidate.start();
+                delegate = candidate;
             } catch (Exception e) {
+                releaseLease();
                 log.error("[lazy-sandbox] failed to start delegate sandbox", e);
                 throw e;
             }
@@ -137,7 +161,11 @@ public final class LazySandbox implements Sandbox {
     @Override
     public ExecResult exec(RuntimeContext runtimeContext, String command, Integer timeoutSeconds)
             throws Exception {
-        return ensureDelegate().exec(runtimeContext, command, timeoutSeconds);
+        Sandbox target = ensureDelegate();
+        if (registry == null) return target.exec(runtimeContext, command, timeoutSeconds);
+        try (var operation = registry.acquire(owner, agent)) {
+            return operation.sandbox().exec(runtimeContext, command, timeoutSeconds);
+        }
     }
 
     @Override

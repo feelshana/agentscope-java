@@ -97,6 +97,22 @@ dataagent:
     # How long an idle container stays alive before being evicted.
     idle-ttl-min: 15
     eviction-poll-sec: 60
+    instance-id: ${DATAAGENT_SANDBOX_INSTANCE_ID:standalone}
+    max-containers: ${DATAAGENT_SANDBOX_MAX_CONTAINERS:8}
+    memory-mb: ${DATAAGENT_SANDBOX_MEMORY_MB:1024}
+    cpus: ${DATAAGENT_SANDBOX_CPUS:1}
+    workspace-mb: ${DATAAGENT_SANDBOX_WORKSPACE_MB:512}
+
+  # Durable files must be stored outside the application/sandbox container lifecycle.
+  artifacts:
+    directory: ${DATAAGENT_ARTIFACTS_DIRECTORY:./data/artifacts}
+    max-file-mb: ${DATAAGENT_ARTIFACTS_MAX_FILE_MB:20}
+    user-quota-mb: ${DATAAGENT_ARTIFACTS_USER_QUOTA_MB:1024}
+    max-session-files: ${DATAAGENT_ARTIFACTS_MAX_SESSION_FILES:100}
+    total-quota-mb: ${DATAAGENT_ARTIFACTS_TOTAL_QUOTA_MB:10240}
+    min-free-disk-mb: ${DATAAGENT_ARTIFACTS_MIN_FREE_DISK_MB:2048}
+    restore-max-files: ${DATAAGENT_ARTIFACTS_RESTORE_MAX_FILES:10}
+    restore-max-mb: ${DATAAGENT_ARTIFACTS_RESTORE_MAX_MB:100}
 
   # ---- Workspace storage topology (multi-tenant filesystem) ----
   # DataAgent runs every HarnessAgent on a CompositeFilesystem: a read-only

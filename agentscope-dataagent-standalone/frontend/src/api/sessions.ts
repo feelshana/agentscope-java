@@ -28,6 +28,8 @@ export interface InboxEntry {
 export interface InboxOptions {
   limit?: number;
   unreadOnly?: boolean;
+  cursor?: string;
+  signal?: AbortSignal;
 }
 
 export interface TurnEntry {
@@ -52,14 +54,31 @@ export interface ReadStateResult {
   unread: boolean;
 }
 
+export interface InboxPage { items: InboxEntry[]; nextCursor: string | null; hasMore: boolean }
+export interface MessagePage { items: TurnEntry[]; nextBefore: number | null; hasMore: boolean }
+
 export async function inbox(agentId: string, opts: InboxOptions = {}): Promise<InboxEntry[]> {
+  return (await inboxPage(agentId, opts)).items;
+}
+
+export async function inboxPage(agentId: string, opts: InboxOptions = {}): Promise<InboxPage> {
   const params = new URLSearchParams();
   if (opts.limit != null) params.set('limit', String(opts.limit));
   if (opts.unreadOnly) params.set('unreadOnly', 'true');
+  if (opts.cursor) params.set('cursor', opts.cursor);
   const qs = params.toString();
-  const url = `/api/agents/${encodeURIComponent(agentId)}/sessions/inbox${qs ? `?${qs}` : ''}`;
-  const res = await fetch(url, { headers: authHeaders() });
+  const url = `/api/agents/${encodeURIComponent(agentId)}/sessions/inbox-page${qs ? `?${qs}` : ''}`;
+  const res = await fetch(url, { headers: authHeaders(), signal: opts.signal });
   if (!res.ok) throw new Error('Failed to load inbox');
+  return res.json();
+}
+
+export async function messagePage(agentId: string, sessionKey: string, before?: number, signal?: AbortSignal): Promise<MessagePage> {
+  const query = new URLSearchParams({ limit: '50' });
+  if (before != null) query.set('before', String(before));
+  const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/sessions/${encodeURIComponent(sessionKey)}/messages?${query}`,
+    { headers: authHeaders(), signal });
+  if (!res.ok) throw new Error('加载历史消息失败');
   return res.json();
 }
 

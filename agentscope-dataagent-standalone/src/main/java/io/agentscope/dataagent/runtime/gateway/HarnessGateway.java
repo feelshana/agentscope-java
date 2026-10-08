@@ -341,7 +341,23 @@ public final class HarnessGateway implements Gateway {
         attachUserSandboxContext(
                 rtcBuilder, ctx.userId(), resolveSandboxAgentId(requestedAgentId, ha));
         RuntimeContext runtimeContext = rtcBuilder.build();
-        return withGatedTurn(gateKey, () -> ha.call(messages, runtimeContext));
+        notifyHistory(sessionKey);
+        return withGatedTurn(
+                        gateKey,
+                        () -> {
+                            requireCurrentSession(sessionKey, sessionId);
+                            return ha.call(messages, runtimeContext);
+                        })
+                .flatMap(
+                        reply ->
+                                Mono.fromRunnable(() -> flushHistory(sessionKey))
+                                        .subscribeOn(Schedulers.boundedElastic())
+                                        .thenReturn(reply))
+                .doFinally(
+                        signal -> {
+                            releaseSandboxLease(runtimeContext);
+                            notifyHistory(sessionKey);
+                        });
     }
 
     /**
@@ -391,7 +407,23 @@ public final class HarnessGateway implements Gateway {
         attachUserSandboxContext(
                 rtcBuilder, ctx.userId(), resolveSandboxAgentId(requestedAgentId, ha));
         RuntimeContext runtimeContext = rtcBuilder.build();
-        return withGatedTurn(gateKey, () -> ha.call(messages, runtimeContext));
+        notifyHistory(sessionKey);
+        return withGatedTurn(
+                        gateKey,
+                        () -> {
+                            requireCurrentSession(sessionKey, sessionId);
+                            return ha.call(messages, runtimeContext);
+                        })
+                .flatMap(
+                        reply ->
+                                Mono.fromRunnable(() -> flushHistory(sessionKey))
+                                        .subscribeOn(Schedulers.boundedElastic())
+                                        .thenReturn(reply))
+                .doFinally(
+                        signal -> {
+                            releaseSandboxLease(runtimeContext);
+                            notifyHistory(sessionKey);
+                        });
     }
 
     /**
@@ -442,7 +474,23 @@ public final class HarnessGateway implements Gateway {
         attachUserSandboxContext(
                 rtcBuilder, ctx.userId(), resolveSandboxAgentId(requestedAgentId, ha));
         RuntimeContext runtimeContext = rtcBuilder.build();
-        return withGatedStream(gateKey, () -> ha.streamEvents(messages, runtimeContext));
+        notifyHistory(sessionKey);
+        return withGatedStream(
+                        gateKey,
+                        () -> {
+                            requireCurrentSession(sessionKey, sessionId);
+                            return ha.streamEvents(messages, runtimeContext);
+                        })
+                .concatWith(
+                        Mono.fromRunnable(() -> flushHistory(sessionKey))
+                                .subscribeOn(Schedulers.boundedElastic())
+                                .then(Mono.<AgentEvent>empty()))
+                .doOnNext(event -> notifyHistory(sessionKey))
+                .doFinally(
+                        signal -> {
+                            releaseSandboxLease(runtimeContext);
+                            notifyHistory(sessionKey);
+                        });
     }
 
     /**
@@ -533,6 +581,11 @@ public final class HarnessGateway implements Gateway {
 
         final String resolvedGateKey = gateKey;
         withGatedTurn(resolvedGateKey, () -> ha.call(List.of(m), ctx))
+                .doFinally(
+                        signal -> {
+                            releaseSandboxLease(ctx);
+                            notifyHistory(sessionKey);
+                        })
                 .subscribe(
                         reply -> deliverAnnounceReply(deliveryTarget, reply),
                         err -> log.warn("Announce agent run failed: {}", err.toString()));
@@ -693,7 +746,7 @@ public final class HarnessGateway implements Gateway {
             // no container is created for those turns — saving 3-8s of Docker overhead.
             Sandbox lazySb =
                     new io.agentscope.dataagent.web.workspace.LazySandbox(
-                            () -> userSandboxRegistry.borrow(userId, agentId));
+                            userSandboxRegistry, userId, agentId);
             SandboxContext sandboxCtx =
                     SandboxContext.builder()
                             .externalSandbox(lazySb)
@@ -711,12 +764,83 @@ public final class HarnessGateway implements Gateway {
         }
     }
 
+    private static void releaseSandboxLease(RuntimeContext context) {
+        SandboxContext sandbox = context.get(SandboxContext.class);
+        if (sandbox != null
+                && sandbox.getExternalSandbox()
+                        instanceof io.agentscope.dataagent.web.workspace.LazySandbox lazy) {
+            lazy.releaseLease();
+        }
+    }
+
+    public void mutateIdleSession(String key, Runnable action) {
+        String gate = sessionKeyToGateKey.get(key);
+        if (gate == null) {
+            action.run();
+            return;
+        }
+        if (sessionTurnGate.isRunning(gate)) throw new IllegalStateException("请先停止当前回答");
+        try (TurnLease ignored = sessionTurnGate.acquire(gate)) {
+            action.run();
+        } catch (TurnBusyException e) {
+            throw new IllegalStateException("请先停止当前回答", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("会话操作已中断", e);
+        }
+    }
+
+    private void requireCurrentSession(String key, String expectedId) {
+        if (!sessionAgentManager
+                .getSession(key)
+                .map(e -> expectedId.equals(e.sessionId()))
+                .orElse(false)) throw new IllegalStateException("会话已删除或重置，请重新发送消息");
+    }
+
+    private final java.util.Set<String> activeGates =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    public boolean isSessionActive(String sessionKey) {
+        String gate = sessionKeyToGateKey.get(sessionKey);
+        return gate != null && activeGates.contains(gate);
+    }
+
+    private volatile java.util.function.Consumer<String> historyObserver = key -> {};
+
+    private volatile java.util.function.Consumer<String> historyFlusher = key -> {};
+
+    public void setHistoryFlusher(java.util.function.Consumer<String> flusher) {
+        historyFlusher = flusher;
+    }
+
+    private void flushHistory(String key) {
+        try {
+            historyFlusher.accept(key);
+        } catch (RuntimeException e) {
+            notifyHistory(key);
+            log.error("Durable history projection failed; queued for retry: {}", key, e);
+        }
+    }
+
+    public void setHistoryObserver(java.util.function.Consumer<String> observer) {
+        this.historyObserver = java.util.Objects.requireNonNull(observer);
+    }
+
+    private void notifyHistory(String key) {
+        try {
+            historyObserver.accept(key);
+        } catch (RuntimeException e) {
+            log.warn("Failed to enqueue history update", e);
+        }
+    }
+
     private Mono<Msg> withGatedTurn(String gateKey, Supplier<Mono<Msg>> turn) {
         AtomicReference<TurnLease> leaseRef = new AtomicReference<>();
         return Mono.defer(
                         () -> {
                             try {
                                 leaseRef.set(sessionTurnGate.acquire(gateKey));
+                                activeGates.add(gateKey);
                             } catch (TurnBusyException e) {
                                 return Mono.empty();
                             } catch (InterruptedException e) {
@@ -729,6 +853,7 @@ public final class HarnessGateway implements Gateway {
                         sig -> {
                             TurnLease lease = leaseRef.get();
                             if (lease != null) {
+                                activeGates.remove(gateKey);
                                 lease.close();
                             }
                         })
@@ -741,6 +866,7 @@ public final class HarnessGateway implements Gateway {
                         () -> {
                             try {
                                 leaseRef.set(sessionTurnGate.acquire(gateKey));
+                                activeGates.add(gateKey);
                             } catch (TurnBusyException e) {
                                 return Flux.empty();
                             } catch (InterruptedException e) {
@@ -753,6 +879,7 @@ public final class HarnessGateway implements Gateway {
                         sig -> {
                             TurnLease lease = leaseRef.get();
                             if (lease != null) {
+                                activeGates.remove(gateKey);
                                 lease.close();
                             }
                         })
