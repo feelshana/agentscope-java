@@ -114,6 +114,17 @@ dataagent:
     restore-max-files: ${DATAAGENT_ARTIFACTS_RESTORE_MAX_FILES:10}
     restore-max-mb: ${DATAAGENT_ARTIFACTS_RESTORE_MAX_MB:100}
 
+  # Complete-conversation retention. Disabled by default. Enable dry-run first and inspect logs.
+  history-retention:
+    enabled: ${DATAAGENT_HISTORY_RETENTION_ENABLED:false}
+    retention-days: ${DATAAGENT_HISTORY_RETENTION_DAYS:90}
+    cron: ${DATAAGENT_HISTORY_RETENTION_CRON:0 0 3 * * *}
+    zone: ${DATAAGENT_HISTORY_RETENTION_ZONE:Asia/Shanghai}
+    batch-size: ${DATAAGENT_HISTORY_RETENTION_BATCH_SIZE:50}
+    max-per-run: ${DATAAGENT_HISTORY_RETENTION_MAX_PER_RUN:500}
+    dry-run: ${DATAAGENT_HISTORY_RETENTION_DRY_RUN:true}
+    mode: ${DATAAGENT_HISTORY_RETENTION_MODE:full-session}
+
   # ---- Workspace storage topology (multi-tenant filesystem) ----
   # DataAgent runs every HarnessAgent on a CompositeFilesystem: a read-only
   # LocalFilesystem over `${dataagent.workspace}/.agentscope/workspace`

@@ -26,6 +26,7 @@ import io.agentscope.dataagent.web.persistence.jpa.SessionHistoryEntity;
 import io.agentscope.dataagent.web.persistence.jpa.SessionHistoryRepository;
 import io.agentscope.dataagent.web.persistence.jpa.SessionReadStateEntity;
 import io.agentscope.dataagent.web.persistence.jpa.SessionRegistryEntity;
+import io.agentscope.dataagent.web.session.SessionDeletionService;
 import io.agentscope.dataagent.web.session.SessionHistoryService;
 import io.agentscope.dataagent.web.session.SessionReadStateStore;
 import io.agentscope.dataagent.web.session.SessionTurnParser;
@@ -81,6 +82,7 @@ public class SessionController {
     private final SessionHistoryService history;
     private final SessionHistoryRepository historyRepository;
     private final ArtifactStore artifacts;
+    private final SessionDeletionService deletion;
 
     public SessionController(
             DataAgentBootstrap builderBootstrap,
@@ -88,7 +90,8 @@ public class SessionController {
             AgentCatalogService catalogService,
             SessionHistoryService history,
             SessionHistoryRepository historyRepository,
-            ArtifactStore artifacts) {
+            ArtifactStore artifacts,
+            SessionDeletionService deletion) {
         this.bootstrap = builderBootstrap;
         this.sessionAgentManager = builderBootstrap.gateway().sessionAgentManager();
         this.readStateStore = readStateStore;
@@ -96,6 +99,7 @@ public class SessionController {
         this.history = history;
         this.historyRepository = historyRepository;
         this.artifacts = artifacts;
+        this.deletion = deletion;
     }
 
     public record InboxPage(List<InboxEntry> items, String nextCursor, boolean hasMore) {}
@@ -265,23 +269,11 @@ public class SessionController {
         return Mono.<Void>fromRunnable(
                         () -> {
                             SessionEntry entry = requireOwnedSession(agentId, key, userId);
-                            if (bootstrap.gateway().isSessionActive(entry.sessionKey()))
-                                throw new ResponseStatusException(
-                                        HttpStatus.CONFLICT, "请先停止当前回答，再删除或重置会话");
-                            bootstrap
-                                    .gateway()
-                                    .mutateIdleSession(
-                                            entry.sessionKey(),
-                                            () ->
-                                                    history.clear(
-                                                            entry.sessionKey(),
-                                                            () -> {
-                                                                deleteTranscriptFiles(entry);
-                                                                sessionAgentManager.removeSession(
-                                                                        entry.sessionKey());
-                                                            }));
                             try {
-                                artifacts.deleteSession(userId, entry.sessionId());
+                                deletion.delete(entry);
+                            } catch (SessionDeletionService.SessionBusyException e) {
+                                throw new ResponseStatusException(
+                                        HttpStatus.CONFLICT, "请先停止当前回答，再删除会话", e);
                             } catch (java.io.IOException e) {
                                 throw new IllegalStateException("附件清理失败", e);
                             }

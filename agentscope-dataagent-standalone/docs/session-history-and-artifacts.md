@@ -83,3 +83,22 @@ Wren 查询 CSV 也作为会话输入保存，并提供持久下载链接；查�
 备份是把平台数据库、附件目录、引擎工作区额外保存到独立存储，建议使用一致的维护窗口或快照策略。故障后的恢复是将这三部分恢复到匹配的时间点，再确认历史、文件及续聊上下文一致。沙箱仅是可重建的临时执行环境，不需要作为备份主体。本次未执行备份或恢复，也未安装或接入对象存储。
 
 对象存储是通过接口保存、读取文件的独立服务，例如 MinIO、S3 或 OSS。当前使用本地持久目录，单实例部署暂不需要迁移对象存储。
+
+## 历史保留任务
+
+正常会话不会仅因升级而自动删除。可选保留任务默认关闭；启用后按最后活动时间清理完整会话，包括展示消息、引擎历史、会话登记、已读状态和关联附件。当前不支持仅删除附件，以免历史页面留下失效图片和下载链接。
+
+推荐首次配置如下，先观察至少一个调度周期的日志，再将 `DRY_RUN` 改为 `false`：
+
+```text
+DATAAGENT_HISTORY_RETENTION_ENABLED=true
+DATAAGENT_HISTORY_RETENTION_DAYS=90
+DATAAGENT_HISTORY_RETENTION_DRY_RUN=true
+DATAAGENT_HISTORY_RETENTION_CRON=0 0 3 * * *
+DATAAGENT_HISTORY_RETENTION_ZONE=Asia/Shanghai
+DATAAGENT_HISTORY_RETENTION_BATCH_SIZE=50
+DATAAGENT_HISTORY_RETENTION_MAX_PER_RUN=500
+DATAAGENT_HISTORY_RETENTION_MODE=full-session
+```
+
+运行中的会话会跳过，单条失败不影响同批其他会话。试运行中的预计释放空间只统计附件字节。该任务面向单应用实例；多实例部署前必须增加统一任务所有权和分布式会话锁。

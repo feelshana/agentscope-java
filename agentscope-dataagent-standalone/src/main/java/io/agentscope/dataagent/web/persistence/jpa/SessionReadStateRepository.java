@@ -17,10 +17,14 @@ package io.agentscope.dataagent.web.persistence.jpa;
 
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.transaction.annotation.Transactional;
 
 /** Spring Data repository for {@link SessionReadStateEntity}. */
 public interface SessionReadStateRepository
         extends JpaRepository<SessionReadStateEntity, SessionReadStateEntity.ReadStateKey> {
 
     Optional<SessionReadStateEntity> findByUserIdAndSessionKey(String userId, String sessionKey);
+
+    @Transactional
+    void deleteByUserIdAndSessionKey(String userId, String sessionKey);
 }

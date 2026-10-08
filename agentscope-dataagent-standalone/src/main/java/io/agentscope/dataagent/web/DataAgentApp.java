@@ -17,6 +17,7 @@ package io.agentscope.dataagent.web;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * Entry point for the agentscope-dataagent Spring Boot application.
@@ -34,6 +35,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * and {@code web/} packages and is picked up via component scanning.
  */
 @SpringBootApplication(scanBasePackages = "io.agentscope.dataagent")
+@EnableScheduling
 public class DataAgentApp {
 
     public static void main(String[] args) {

@@ -29,6 +29,11 @@ public interface ArtifactRepository extends JpaRepository<ArtifactEntity, String
     @Query("select coalesce(sum(a.sizeBytes), 0) from ArtifactEntity a")
     long totalBytesUsed();
 
+    @Query(
+            "select count(a), coalesce(sum(a.sizeBytes), 0) from ArtifactEntity a "
+                    + "where a.ownerId = :owner and a.sessionId = :session")
+    Object[] sessionUsage(@Param("owner") String owner, @Param("session") String session);
+
     List<ArtifactEntity> findByIdGreaterThanOrderByIdAsc(
             String after, org.springframework.data.domain.Pageable page);
 }
