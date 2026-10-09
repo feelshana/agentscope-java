@@ -437,7 +437,7 @@ button:focus-visible {
 .da-row-active,
 .da-row-active:hover {
   background: var(--da-primary-subtle);
-  border-color: rgba(79, 70, 229, 0.22);
+  border-color: transparent;
 }
 .da-row-selected,
 .da-row-selected:hover {
@@ -445,8 +445,14 @@ button:focus-visible {
   border-color: rgba(79, 70, 229, 0.18);
 }
 .da-row-unread {
-  border-left: 3px solid var(--da-primary);
-  padding-left: 8px;
+  border-left-color: transparent;
+}
+
+.da-session-delete { opacity: 0; }
+.da-row:hover .da-session-delete,
+.da-row:focus-within .da-session-delete { opacity: 1; }
+@media (hover: none) {
+  .da-session-delete { opacity: 1; }
 }
 
 /* ---------- nav items ---------- */
@@ -979,7 +985,7 @@ button:focus-visible {
 
 /* ---------- nav active left accent bar ---------- */
 .da-navitem-active::before {
-  content: '';
+  content: none;
   position: absolute;
   left: -4px;
   top: 8px;
@@ -1021,7 +1027,7 @@ button:focus-visible {
   width: 30px;
   height: 30px;
   border-radius: var(--da-radius-md);
-  background: linear-gradient(135deg, var(--da-primary) 0%, var(--da-primary-hover) 100%);
+  background: var(--da-primary);
   display: grid;
   place-items: center;
   color: #fff;
@@ -1029,7 +1035,7 @@ button:focus-visible {
   font-size: 13px;
   letter-spacing: -0.02em;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  box-shadow: none;
 }
 
 /* ---------- chat bubbles (user right / agent left, full width) ---------- */
@@ -1076,7 +1082,7 @@ button:focus-visible {
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12), var(--da-shadow-pop);
 }
 
-/* ---------- landing page: centered composer with hairline flowing tint border ---------- */
+/* ---------- landing page and compact conversation composer ---------- */
 @property --da-flow-angle {
   syntax: '<angle>';
   inherits: false;
@@ -1114,29 +1120,19 @@ button:focus-visible {
   animation: da-fade-up 0.45s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 
-/* hairline (1px) pastel band rotating slowly: a faint shimmer, not a neon ring */
+/* Neutral hairline border; brand colour appears only while editing. */
 .da-composer-glow {
   position: relative;
   width: 100%;
-  border-radius: 32px;
+  border-radius: 18px;
   padding: 1px;
-  background: conic-gradient(
-    from var(--da-flow-angle),
-    #edf0f4 0deg,
-    var(--da-flow-a) 90deg,
-    #edf0f4 180deg,
-    var(--da-flow-b) 270deg,
-    #edf0f4 360deg
-  );
-  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.05);
-  animation:
-    da-flow-spin 16s linear infinite,
-    da-flow-tint 10s ease-in-out infinite;
+  background: var(--da-border);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
 }
 .da-composer-glow:focus-within {
-  box-shadow:
-    0 0 0 3px rgba(79, 70, 229, 0.05),
-    0 6px 20px rgba(15, 23, 42, 0.05);
+  background: var(--da-primary);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.06);
 }
 .da-landing-wrap .da-composer-glow {
   max-width: 880px;
@@ -1147,8 +1143,8 @@ button:focus-visible {
 
 .da-composer-shell {
   background: var(--da-surface);
-  border-radius: 31px;
-  padding: 16px 20px 12px;
+  border-radius: 17px;
+  padding: 14px 18px 10px;
   display: flex;
   flex-direction: column;
   gap: 6px;

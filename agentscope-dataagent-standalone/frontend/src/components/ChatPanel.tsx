@@ -101,7 +101,7 @@ const S: Record<string, React.CSSProperties> = {
     color: 'var(--da-text)',
     fontSize: 14,
     resize: 'none',
-    minHeight: 84,
+    minHeight: 48,
     maxHeight: 200,
     lineHeight: 1.6,
     outline: 'none',
@@ -761,11 +761,21 @@ export default function ChatPanel({
     }
   }
 
+  useEffect(() => {
+    const textarea = inputRef.current;
+    if (!textarea) return;
+    const minimum = isLanding ? 76 : 48;
+    textarea.style.height = '0px';
+    const height = Math.min(200, Math.max(minimum, textarea.scrollHeight));
+    textarea.style.height = `${height}px`;
+    textarea.style.overflowY = textarea.scrollHeight > 200 ? 'auto' : 'hidden';
+  }, [input, isLanding, curKey]);
+
   const composerContent = (
     <>
       <textarea
         ref={inputRef}
-        style={{ ...S.textarea, ...(isLanding ? { minHeight: 120, fontSize: 15 } : {}) }}
+        style={{ ...S.textarea, ...(isLanding ? { minHeight: 76, fontSize: 15 } : {}) }}
         value={input}
         onChange={e => setInput(e.target.value)}
         onKeyDown={handleKeyDown}
@@ -824,45 +834,6 @@ export default function ChatPanel({
             </div>
           )}
         </div>
-        <div ref={ontologyPickerRef} style={{ position: 'relative' }}>
-          <button
-            type="button"
-            className={`da-chip${!ontologyFrozen && selectedOntology ? ' da-chip-active' : ''}${ontologyFrozen ? ' da-chip-frozen' : ''}`}
-            onClick={() => ontologyFrozen ? setChatMode('ontology') : setOntologyPickerOpen(open => !open)}
-            title={ontologyFrozen ? '点击切换至本体模式' : (ontologies.length ? '选择本体进行数据查询' : '暂无可用本体')}
-          >
-            <Icon name="graph" size="sm" />{' '}
-            {selectedOntology
-              ? ontologies.find(o => o.id === selectedOntology)?.name ?? '本体'
-              : ontologies.length ? '本体' : '本体（暂无服务）'}{' '}
-            {ontologies.length ? '▾' : ''}
-          </button>
-          {ontologyPickerOpen && (
-            <div style={S.picker}>
-              {ontologies.map(o => (
-                <button
-                  key={o.id}
-                  className="da-navitem"
-                  onClick={() => {
-                    setSelectedOntology(o.id);
-                    setSelectedGroups([]);
-                    setOntologyPickerOpen(false);
-                  }}
-                >
-                  <Icon name="graph" size="sm" /> {o.name}
-                </button>
-              ))}
-              {ontologies.length === 0 && (
-                <div className="da-small" style={{ padding: 6 }}>
-                  暂无可用本体
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        <button type="button" className="da-chip" disabled title="对话级模型切换暂未接入">
-          大模型（自动）
-        </button>
         <span style={{ flex: 1 }} />
         <button
           style={{
@@ -888,7 +859,7 @@ export default function ChatPanel({
           <div className="da-landing-greeting">
             <h1 className="da-landing-title">红海DataAgent</h1>
             <div className="da-landing-tagline">你的大数据智囊团</div>
-            <p>输入数据问题，我来帮你查询、分析和可视化</p>
+            <p>选择知识库，查询数据、分析变化或生成报告</p>
           </div>
           <div className="da-composer-glow">
             <div className="da-composer-shell da-composer">

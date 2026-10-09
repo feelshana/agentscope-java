@@ -391,19 +391,16 @@ interface RowProps {
 }
 
 function SessionRow({ entry, active, batchMode, selected, onOpen, onDelete, onToggleSelect }: RowProps) {
-  const [hover, setHover] = useState(false);
   return (
     <div
       onClick={batchMode ? onToggleSelect : onOpen}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
       className={
         'da-row' +
         (active ? ' da-row-active' : '') +
         (entry.unread && !active ? ' da-row-unread' : '') +
         (batchMode && selected ? ' da-row-selected' : '')
       }
-      title={entry.title ?? entry.label ?? '新对话'}
+      title={`${entry.title ?? entry.label ?? '新对话'} · ${relTime(entry.lastActivityMs)}`}
     >
       {batchMode && (
         <span style={S.checkbox}>
@@ -419,12 +416,11 @@ function SessionRow({ entry, active, batchMode, selected, onOpen, onDelete, onTo
         <div style={S.rowTitle}>{entry.title ?? entry.label ?? '新对话'}</div>
       </div>
       <div style={S.rowMeta}>
-        <span>{relTime(entry.lastActivityMs)}</span>
-        {hover && !batchMode && (
+        {!batchMode && (
           <button
             onClick={onDelete}
             title="删除对话"
-            className="da-btn da-btn-ghost da-btn-sm"
+            className="da-btn da-btn-ghost da-btn-sm da-session-delete"
           >×</button>
         )}
       </div>
@@ -465,10 +461,9 @@ function UserMenu({ username }: { username: string }) {
       >
         <div style={{
           width: 28, height: 28, borderRadius: '50%',
-          background: 'linear-gradient(135deg, var(--da-primary) 0%, var(--da-primary-hover) 100%)',
+          background: 'var(--da-primary)',
           color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: '0.78rem', fontWeight: 700, userSelect: 'none' as const,
-          boxShadow: '0 1px 3px rgba(79,70,229,0.3)',
         }}>{initial}</div>
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {username || '用户'}
@@ -551,12 +546,12 @@ const S: Record<string, React.CSSProperties> = {
   error: { padding: '8px 12px', fontSize: '0.9rem', color: 'var(--da-danger)' },
   group: { marginBottom: 18 },
   groupLabel: {
-    fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.1em',
+    fontSize: '0.72rem', fontWeight: 500,
     color: 'var(--da-text-muted)', textTransform: 'uppercase', padding: '8px 12px 6px',
   },
   rowMain: { flex: 1, minWidth: 0 },
   rowTitle: {
-    fontSize: '0.95rem', fontWeight: 500, color: 'var(--da-text)',
+    fontSize: '0.88rem', fontWeight: 400, color: 'var(--da-text-2)',
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   },
   rowMeta: {
