@@ -26,6 +26,8 @@ import io.agentscope.dataagent.dataset.DatasetException;
 import io.agentscope.dataagent.dataset.DatasetGroupService;
 import io.agentscope.dataagent.dataset.DatasetScope;
 import io.agentscope.dataagent.dataset.MdlPublishService;
+import io.agentscope.dataagent.dataset.MdlQuestionService;
+import io.agentscope.dataagent.dataset.MdlQuestionStore;
 import io.agentscope.dataagent.dataset.MdlSuggestionService;
 import io.agentscope.dataagent.dataset.MdlWorkspaceReader;
 import io.agentscope.dataagent.dataset.MdlWorkspaceService;
@@ -97,6 +99,8 @@ public final class ModelingToolkit {
     private final MdlWorkspaceReader reader;
     private final WrenProperties wrenProps;
     private final WrenCli wrenCli;
+    private final MdlQuestionService questions;
+    private final io.agentscope.dataagent.dataset.ModelingWorkflowService workflow;
 
     public ModelingToolkit(
             MdlSuggestionService suggestions,
@@ -107,6 +111,52 @@ public final class ModelingToolkit {
             MdlWorkspaceReader reader,
             WrenProperties wrenProps,
             WrenCli wrenCli) {
+        this(
+                suggestions,
+                mdlPublish,
+                groupService,
+                conversationScopes,
+                workspace,
+                reader,
+                wrenProps,
+                wrenCli,
+                null);
+    }
+
+    public ModelingToolkit(
+            MdlSuggestionService suggestions,
+            MdlPublishService mdlPublish,
+            DatasetGroupService groupService,
+            ConversationScopeRegistry conversationScopes,
+            MdlWorkspaceService workspace,
+            MdlWorkspaceReader reader,
+            WrenProperties wrenProps,
+            WrenCli wrenCli,
+            MdlQuestionService questions) {
+        this(
+                suggestions,
+                mdlPublish,
+                groupService,
+                conversationScopes,
+                workspace,
+                reader,
+                wrenProps,
+                wrenCli,
+                questions,
+                null);
+    }
+
+    public ModelingToolkit(
+            MdlSuggestionService suggestions,
+            MdlPublishService mdlPublish,
+            DatasetGroupService groupService,
+            ConversationScopeRegistry conversationScopes,
+            MdlWorkspaceService workspace,
+            MdlWorkspaceReader reader,
+            WrenProperties wrenProps,
+            WrenCli wrenCli,
+            MdlQuestionService questions,
+            io.agentscope.dataagent.dataset.ModelingWorkflowService workflow) {
         this.suggestions = Objects.requireNonNull(suggestions, "suggestions");
         this.mdlPublish = Objects.requireNonNull(mdlPublish, "mdlPublish");
         this.groupService = Objects.requireNonNull(groupService, "groupService");
@@ -115,6 +165,8 @@ public final class ModelingToolkit {
         this.reader = Objects.requireNonNull(reader, "reader");
         this.wrenProps = Objects.requireNonNull(wrenProps, "wrenProps");
         this.wrenCli = Objects.requireNonNull(wrenCli, "wrenCli");
+        this.questions = questions;
+        this.workflow = workflow;
     }
 
     // -----------------------------------------------------------------
@@ -140,13 +192,81 @@ public final class ModelingToolkit {
             return c.error();
         }
         MdlWorkspaceReader.Snapshot snap = reader.read(c.gid());
-        return renderState(c.group(), snap, c.gid())
-                + renderBusinessRules(reader.readKnowledgeRules(c.gid()));
+        return workflowGuidance(c)
+                + renderState(c.group(), snap, c.gid())
+                + renderBusinessRules(reader.readKnowledgeRules(c.gid()))
+                + (questions == null
+                        ? ""
+                        : "\n\n## 常用问题与验收\n"
+                                + new MdlQuestionStore(workspace)
+                                        .list(c.gid()).stream()
+                                                .map(
+                                                        q ->
+                                                                q.question().id()
+                                                                        + "："
+                                                                        + q.question().question()
+                                                                        + " ["
+                                                                        + q.status()
+                                                                        + "]")
+                                                .collect(
+                                                        java.util.stream.Collectors.joining("\n")));
     }
 
     // -----------------------------------------------------------------
     //  File tools — the modeling write surface (write tools are HITL-gated)
     // -----------------------------------------------------------------
+
+    @Tool(
+            name = "list_modeling_questions",
+            description =
+                    "查看当前知识库的常用问题、业务口径、验证和人员确认状态。问题需求用 write_file/patch_file 写入"
+                        + " knowledge/questions/<英文ID>.yml，字段 question、definition、sql。SQL"
+                        + " 可暂留空等待澄清，但每个用户问题最终都要生成 SQL、经 Wren"
+                        + " 验证并由用户确认。先登记全部问题，合并澄清共用口径，复用或构建视图/Cube。不要求凑满 3–5"
+                        + " 个核心问题，并澄清指标、粒度、单位、时间归属和过滤，不能把执行成功当作业务正确。 SQL 禁止显式 LIMIT/OFFSET 和分号；TopN"
+                        + " 用 CTE 聚合与排名筛选，明确并列处理。字段样例不是实际数据范围。")
+    public String listModelingQuestions(
+            DatasetScope scope,
+            RuntimeContext rc,
+            @ToolParam(name = "group_id", description = "知识库 ID，单库会话可省略", required = false)
+                    String groupId) {
+        Ctx c = resolve(scope, rc, groupId);
+        if (c.error() != null) return c.error();
+        if (questions == null) return "error: 常用问题服务不可用";
+        try {
+            return JSON.writeValueAsString(
+                    questions.list(
+                            new DatasetScope(c.group().getOwnerId(), List.of(c.gid())), c.gid()));
+        } catch (Exception e) {
+            return "error: " + e.getMessage();
+        }
+    }
+
+    @Tool(
+            name = "validate_modeling_question",
+            description =
+                    "使用 Wren 实际执行一个常用问题的逻辑"
+                        + " SQL，针对当前草稿副本，不改变发布模型。执行成功仅为待业务确认；必须引导人员在常用问题页审阅真实结果与口径后确认。模型或问题修改后需重新验证，截断、失败不得确认。")
+    public String validateModelingQuestion(
+            DatasetScope scope,
+            RuntimeContext rc,
+            @ToolParam(name = "question_id", description = "knowledge/questions/<ID>.yml 中的 ID")
+                    String questionId,
+            @ToolParam(name = "group_id", description = "知识库 ID，单库会话可省略", required = false)
+                    String groupId) {
+        Ctx c = resolve(scope, rc, groupId);
+        if (c.error() != null) return c.error();
+        if (questions == null) return "error: 常用问题服务不可用";
+        try {
+            return JSON.writeValueAsString(
+                    questions.validate(
+                            new DatasetScope(c.group().getOwnerId(), List.of(c.gid())),
+                            c.gid(),
+                            questionId));
+        } catch (Exception e) {
+            return "error: " + e.getMessage();
+        }
+    }
 
     @Tool(
             name = "list_files",
@@ -730,7 +850,7 @@ public final class ModelingToolkit {
             description =
                     """
                     校验当前工作区能否通过发布链（严格校验 + 构建 + 视图试跑 + Cube 转译），返回 ok/issues。\
-                    每轮文件写入收尾、以及建模整体收尾时必须调用：全绿后引导用户前往「语义建模」页发布\
+                    建模整体收尾时必须调用：通过只代表工程结构可用，按返回的工作流下一步验证并确认业务问题，满足条件后到「发布」页\
                     （发布动作只能在页面上完成，对话内不做发布）。\
                     """)
     public String validateMdl(
@@ -747,7 +867,7 @@ public final class ModelingToolkit {
             StringBuilder sb = new StringBuilder();
             sb.append("## MDL 校验结果：").append(result.ok() ? "通过" : "未通过").append("\n\n");
             if (result.issues().isEmpty()) {
-                sb.append("无问题。请引导用户前往「语义建模」页查看并发布语义模型。\n");
+                sb.append("工程校验通过，仅证明模型结构可用，不代表业务结果已确认。\n");
             } else {
                 sb.append("| 级别 | 来源 | 问题 |\n|---|---|---|\n");
                 for (MdlPublishService.MdlIssue i : result.issues()) {
@@ -760,7 +880,7 @@ public final class ModelingToolkit {
                             .append(" |\n");
                 }
             }
-            return sb.toString();
+            return sb.toString() + workflowGuidance(c);
         } catch (DatasetException ex) {
             return "error: " + ex.getMessage();
         }
@@ -814,6 +934,11 @@ public final class ModelingToolkit {
      * proposal is acceptable, the error text otherwise; the real workspace is never touched.
      */
     private String validateProposal(String gid, String relative, String newContent) {
+        if (relative.replace('\\', '/').startsWith("knowledge/questions/")
+                && !relative.replace('\\', '/')
+                        .matches("knowledge/questions/[A-Za-z0-9_-]{1,64}\\.yml")) {
+            return "error: 问题文件须直接保存为 knowledge/questions/<英文ID>.yml";
+        }
         String lower = relative.toLowerCase(Locale.ROOT);
         if (lower.endsWith(".yml") || lower.endsWith(".yaml")) {
             try {
@@ -833,6 +958,12 @@ public final class ModelingToolkit {
             Path overlay = scratch.resolve(relative).normalize();
             Files.createDirectories(overlay.getParent());
             Files.writeString(overlay, newContent, StandardCharsets.UTF_8);
+            if (relative.replace('\\', '/').startsWith("knowledge/questions/")) {
+                MdlQuestionStore questionStore = new MdlQuestionStore(workspace);
+                questionStore.readQuestions(scratch);
+                questionStore.requireModelingPlan(
+                        scratch, overlay.getFileName().toString().replaceFirst("\\.yml$", ""));
+            }
             WrenCli.Result r =
                     wrenCli.run(
                             scratch,
@@ -862,6 +993,8 @@ public final class ModelingToolkit {
                         + "dimension 缺 type、关系缺 join_type），请用 load_skill_through_path 加载官方 "
                         + "enrich-context 技能并对照 references/cube_proposals 模板修复后再写。";
             }
+        } catch (DatasetException e) {
+            return "error: 常用问题预检失败，文件未写入：" + e.getMessage();
         } catch (IOException e) {
             return "error: 准备工程预检副本失败，文件未写入：" + e.getMessage();
         } finally {
@@ -1050,10 +1183,11 @@ public final class ModelingToolkit {
         if (path == null || path.isBlank()) {
             return new PreviewResult(false, "path 不能为空", "", "");
         }
-        Path ws = workspace.workspaceRoot(gid).toAbsolutePath().normalize();
-        Path target = ws.resolve(path).normalize();
-        if (!target.startsWith(ws)) {
-            return new PreviewResult(false, "工作区路径越界：" + path, "", "");
+        Path target;
+        try {
+            target = workspace.resolveWritable(gid, path);
+        } catch (DatasetException e) {
+            return new PreviewResult(false, e.getMessage(), "", "");
         }
         String oldContent = "";
         if (Files.isRegularFile(target)) {
@@ -1886,6 +2020,16 @@ public final class ModelingToolkit {
         return new GroupRef(group, null);
     }
 
+    private String workflowGuidance(Ctx c) {
+        if (workflow == null) return "下一步：在「验证与确认」审阅问题；全部问题有效确认后再到「发布」页。\n\n";
+        try {
+            var state = workflow.snapshot(c.eff(), c.gid());
+            return "## 建模阶段与下一步\n" + JSON.writeValueAsString(state) + "\n\n";
+        } catch (Exception e) {
+            return "工作流状态暂不可用，请刷新后核对；不能据此认定可以发布。\n\n";
+        }
+    }
+
     private void markDirty(DatasetScope eff, String groupId) {
         try {
             groupService.markMdlDirty(eff.ownerId(), groupId);
@@ -1920,9 +2064,9 @@ public final class ModelingToolkit {
     private static String stateFooter(DatasetGroupEntity group) {
         String state = group.getMdlState() == null ? "NONE" : group.getMdlState();
         if ("PUBLISHED".equals(state) || "DIRTY".equals(state)) {
-            return "*(语义模型已有变更待发布，收尾时请调用 validate_mdl 并引导用户到「语义建模」页发布。)*";
+            return "*(草稿与已发布版本分开；请读取 list_modeling_state 的下一步。工程校验通过后仍需验证并由人员确认全部分析问题，最后到「发布」页。)*";
         }
-        return "*(收尾时请调用 validate_mdl 校验草稿，并引导用户到「语义建模」页发布。)*";
+        return "*(请读取 list_modeling_state 的下一步，先完成数据准备与口径建模，再进入「验证与确认」；不得跳过业务确认直接发布。)*";
     }
 
     private static String truncate(String s, int max) {

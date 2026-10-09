@@ -130,7 +130,8 @@ public class MdlWorkspaceService {
         if (!resolved.startsWith(ws)) {
             throw new DatasetException("工作区路径越界：" + relative, 400);
         }
-        if (isPlatformOwned(groupId, relative)) {
+        String canonical = ws.relativize(resolved).toString().replace('\\', '/');
+        if (isPlatformOwned(groupId, canonical)) {
             throw new DatasetException("该文件由平台管理，禁止修改：" + relative, 403);
         }
         return resolved;
@@ -149,6 +150,8 @@ public class MdlWorkspaceService {
     public boolean isPlatformOwned(String groupId, String relative) {
         String normalized = relative.replace('\\', '/').strip();
         return normalized.equals("wren_project.yml")
+                || normalized.equals("knowledge/sql")
+                || normalized.startsWith("knowledge/sql/")
                 || normalized.equals(".platform")
                 || normalized.startsWith(".platform/")
                 || normalized.equals("target")

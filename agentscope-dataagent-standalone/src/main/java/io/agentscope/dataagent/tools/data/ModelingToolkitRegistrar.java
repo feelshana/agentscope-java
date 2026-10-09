@@ -17,6 +17,7 @@ package io.agentscope.dataagent.tools.data;
 
 import io.agentscope.dataagent.dataset.DatasetGroupService;
 import io.agentscope.dataagent.dataset.MdlPublishService;
+import io.agentscope.dataagent.dataset.MdlQuestionService;
 import io.agentscope.dataagent.dataset.MdlSuggestionService;
 import io.agentscope.dataagent.dataset.MdlWorkspaceReader;
 import io.agentscope.dataagent.dataset.MdlWorkspaceService;
@@ -57,7 +58,9 @@ public class ModelingToolkitRegistrar {
             MdlWorkspaceService workspace,
             MdlWorkspaceReader reader,
             WrenProperties wrenProps,
-            WrenCli wrenCli) {
+            WrenCli wrenCli,
+            MdlQuestionService questions,
+            io.agentscope.dataagent.dataset.ModelingWorkflowService workflow) {
         this.bootstrap = bootstrap;
         this.toolkit =
                 new ModelingToolkit(
@@ -68,7 +71,9 @@ public class ModelingToolkitRegistrar {
                         workspace,
                         reader,
                         wrenProps,
-                        wrenCli);
+                        wrenCli,
+                        questions,
+                        workflow);
     }
 
     /**

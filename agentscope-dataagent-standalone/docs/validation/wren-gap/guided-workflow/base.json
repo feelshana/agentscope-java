@@ -1,0 +1,26 @@
+{
+  "groupId": "2938f8c8-6fee-44aa-a700-6aa8c9769c98",
+  "stage": "COMPLETE",
+  "mdlState": "PUBLISHED",
+  "publishedVersion": 1,
+  "queryAvailable": true,
+  "draftChanged": false,
+  "engineeringStatus": "PASSED",
+  "engineeringCheckedAt": null,
+  "questionSummary": {
+    "total": 0,
+    "required": 0,
+    "confirmed": 0,
+    "incomplete": 0,
+    "needsValidation": 0,
+    "awaitingConfirmation": 0
+  },
+  "changedAssets": [],
+  "blockers": [],
+  "nextAction": {
+    "type": "MODEL",
+    "label": "完善业务口径",
+    "message": "基础模型已可问数。可选上传文档，通过对话完善指标和常用问题。"
+  },
+  "canPublish": true
+}

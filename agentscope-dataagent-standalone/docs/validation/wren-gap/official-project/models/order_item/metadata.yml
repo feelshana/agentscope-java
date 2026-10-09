@@ -1,0 +1,29 @@
+{
+  "name": "order_item",
+  "properties": {
+    "description": "测试业务模型：order_item"
+  },
+  "table_reference": {
+    "catalog": "",
+    "schema": "wren_gap_fixture",
+    "table": "ds_order_item"
+  },
+  "columns": [
+    {
+      "name": "item_id",
+      "type": "BIGINT"
+    },
+    {
+      "name": "order_id",
+      "type": "BIGINT"
+    },
+    {
+      "name": "product_code",
+      "type": "VARCHAR"
+    },
+    {
+      "name": "line_cents",
+      "type": "BIGINT"
+    }
+  ]
+}

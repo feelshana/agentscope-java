@@ -1,0 +1,11 @@
+{
+  "official_parser": "wren.memory.markdown.load_query_pairs",
+  "pairs": 1,
+  "fields": [
+    "nl",
+    "path",
+    "source",
+    "sql"
+  ],
+  "passed": true
+}

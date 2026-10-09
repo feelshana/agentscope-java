@@ -45,6 +45,12 @@ public interface WrenQueryGateway {
      */
     WrenCallResult call(String groupId, String tool, Map<String, Object> arguments);
 
+    /** Executes against an isolated, already-built draft project; never changes the published pool. */
+    default WrenCallResult callDraft(
+            String groupId, java.nio.file.Path project, String profile, String sql, int limit) {
+        throw new UnsupportedOperationException("草稿验证通道不可用");
+    }
+
     /**
      * Closes the group's instance so the next call respawns it against the current published
      * snapshot; called after a successful publish (发布 = 重建实例, ADR 0018 D8).

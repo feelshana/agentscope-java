@@ -11,3 +11,6 @@ logs/
 # so its content is per-deployment state rather than source. Anchored with a
 # leading slash so src/main/resources/shared stays tracked.
 /shared/
+
+# Isolated local acceptance server state, including platform database and logs.
+/.tmp-question-acceptance/

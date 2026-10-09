@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "D:\workspace\data-agent\agentscope-dataagent-standalone\docs\validation\wren-gap\question_first_browser_check.py", line 71, in <module>
+    assert preview['ok'],preview
+           ~~~~~~~^^^^^^
+AssertionError: {'ok': False, 'error': 'error: 准备工作区预检副本失败：D:\\workspace\\data-agent\\agentscope-dataagent-standalone\\.tmp-question-acceptance\\mdl\\76649222-bc35-4c9c-88e4-7d672b3b0b92\\scratch: 另一个程序正在使用此文件，进程无法访问。', 'oldContent': '', 'newContent': "question: 2025年有效订单销售额是多少？\ndefinition: >\n  统计 2025 自然年（order_time 落在 2025-01-01 00:00:00 至 2025-12-31 23:59:59）内\n  「有效订单」的销售额合计。有效订单口径：status 为 PAID 或 COMPLETED，且 is_deleted = 0。\n  金额单位：amount_cents 为分，除以 100 换算为元；不扣减退款（REFUNDED 状态订单不计入）。\n  结果仅一行合计金额，单位为元。\nsql: >\n  SELECT SUM(amount_cents) / 100.0 AS sales_amount\n  FROM valid_order\n  WHERE order_time >= '2025-01-01 00:00:00'\n    AND order_time < '2026-01-01 00:00:00'\n"}

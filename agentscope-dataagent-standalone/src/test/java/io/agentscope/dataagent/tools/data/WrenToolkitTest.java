@@ -651,15 +651,13 @@ class WrenToolkitTest {
         stubGroup("PUBLISHED");
 
         assertThat(toolkit.wrenDescribeModel(ALICE, null, "gA", List.of("近30天用户行为分层")))
-                .isEqualTo(
-                        "error: '近30天用户行为分层' 是已发布视图而非逻辑模型，请直接用 wren_run_sql"
-                                + " 按视图名查询（FROM 近30天用户行为分层），无需 describe");
+                .contains("视图 近30天用户行为分层", "已审阅定义", "输出列");
         assertThat(toolkit.wrenDescribeModel(ALICE, null, "gA", List.of("销售Cube")))
                 .isEqualTo("error: '销售Cube' 是 Cube 而非逻辑模型，请用 wren_query_cube 按度量/维度查询");
         assertThat(toolkit.wrenDescribeModel(ALICE, null, "gA", List.of("订单", "销售Cube")))
                 .startsWith("error: '销售Cube'")
                 .contains("wren_query_cube");
-        assertThat(gateway.tools).isEmpty();
+        assertThat(gateway.tools).containsExactly("run_sql");
     }
 
     @Test

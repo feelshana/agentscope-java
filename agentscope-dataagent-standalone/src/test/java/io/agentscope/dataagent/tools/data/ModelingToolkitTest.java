@@ -35,6 +35,7 @@ import io.agentscope.dataagent.dataset.MdlPublishService;
 import io.agentscope.dataagent.dataset.MdlSuggestionService;
 import io.agentscope.dataagent.dataset.MdlWorkspaceReader;
 import io.agentscope.dataagent.dataset.MdlWorkspaceService;
+import io.agentscope.dataagent.dataset.ModelingWorkflowService;
 import io.agentscope.dataagent.dataset.WrenCli;
 import io.agentscope.dataagent.dataset.WrenProperties;
 import io.agentscope.dataagent.web.config.DataAgentConfig;
@@ -90,6 +91,22 @@ class ModelingToolkitTest {
     private ConversationScopeRegistry conversationScopes;
     private ModelingToolkit toolkit;
 
+    @Test
+    void previewRejectsPlatformFilesAndConfirmedExamplesEvenWithValidContent() {
+        for (String path :
+                List.of(
+                        "wren_project.yml",
+                        "./wren_project.yml",
+                        "knowledge/sql/accepted.md",
+                        "knowledge/questions/../sql/accepted.md")) {
+            ModelingToolkit.PreviewResult preview =
+                    toolkit.previewChange(
+                            GROUP, "write_file", Map.of("path", path, "content", "name: valid\n"));
+            assertFalse(preview.ok(), path);
+        }
+        assertTrue(cli.calls.isEmpty());
+    }
+
     @BeforeEach
     void setUp() {
         props = new WrenProperties("wren", temp.toString(), "dataagent", "mysql", 30);
@@ -121,6 +138,49 @@ class ModelingToolkitTest {
 
     private DatasetScope ownerScope() {
         return new DatasetScope(OWNER);
+    }
+
+    @Test
+    void stateAndEngineeringValidationExposeTheSameNextAction() {
+        var workflow = mock(ModelingWorkflowService.class);
+        var state =
+                new ModelingWorkflowService.Workflow(
+                        GROUP,
+                        "CONFIRMATION",
+                        "PUBLISHED",
+                        2,
+                        true,
+                        true,
+                        "PASSED",
+                        null,
+                        new ModelingWorkflowService.QuestionSummary(1, 0, 0, 0, 1),
+                        List.of(),
+                        List.of(
+                                new ModelingWorkflowService.Blocker(
+                                        "QUESTION_CONFIRMATION", "sales", "请确认结果")),
+                        new ModelingWorkflowService.Action("CONFIRM", "审阅结果", "执行成功仍需确认"),
+                        false);
+        when(workflow.snapshot(any(), eq(GROUP))).thenReturn(state);
+        var guided =
+                new ModelingToolkit(
+                        suggestions,
+                        mdlPublish,
+                        groupService,
+                        conversationScopes,
+                        workspace,
+                        reader,
+                        props,
+                        cli,
+                        null,
+                        workflow);
+        when(mdlPublish.validate(GROUP))
+                .thenReturn(new MdlPublishService.MdlValidation(true, List.of(), "", List.of()));
+        String inventory = guided.listModelingState(singleGroupScope(), null, null);
+        String validation = guided.validateMdl(singleGroupScope(), null, null);
+        assertTrue(inventory.contains("CONFIRMATION"));
+        assertTrue(validation.contains("CONFIRMATION"));
+        assertTrue(validation.contains("不代表业务结果已确认"));
+        assertTrue(validation.contains("\"canPublish\":false"));
     }
 
     /** A conversation pinned to exactly one group — the frontend pulls up the session this way. */
@@ -265,6 +325,43 @@ class ModelingToolkitTest {
                                                                 "context", "init", "--empty",
                                                                 "--force"))));
         assertTrue(Files.isRegularFile(ws().resolve("wren_project.yml")));
+    }
+
+    @Test
+    void questionWriteRequiresPlanAndDoesNotLeakAcrossScopes() throws Exception {
+        String source = "question: 销售额是多少\ndefinition: 有效订单\nsql: SELECT SUM(amount) FROM orders\n";
+        String missing =
+                toolkit.writeFile(
+                        singleGroupScope(),
+                        null,
+                        "knowledge/questions/sales.yml",
+                        source,
+                        "登记分析问题",
+                        null);
+        assertTrue(missing.startsWith("error"), missing);
+        assertFalse(Files.exists(ws().resolve("knowledge/questions/sales.yml")));
+        String planned = source + "modeling:\n  strategy: EXAMPLE\n  reason: 一次性核对总额\n";
+        String accepted =
+                toolkit.writeFile(
+                        singleGroupScope(),
+                        null,
+                        "knowledge/questions/sales.yml",
+                        planned,
+                        "登记分析问题",
+                        null);
+        assertFalse(accepted.startsWith("error"), accepted);
+        when(groupService.getGroup("other", GROUP))
+                .thenThrow(new io.agentscope.dataagent.dataset.DatasetException("无权访问", 403));
+        String foreign =
+                toolkit.writeFile(
+                        new DatasetScope("other", List.of(GROUP)),
+                        null,
+                        "knowledge/questions/foreign.yml",
+                        planned,
+                        "越权测试",
+                        null);
+        assertTrue(foreign.startsWith("error"), foreign);
+        assertFalse(Files.exists(ws().resolve("knowledge/questions/foreign.yml")));
     }
 
     @Test

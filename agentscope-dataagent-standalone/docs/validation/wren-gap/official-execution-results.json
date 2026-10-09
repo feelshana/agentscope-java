@@ -1,0 +1,294 @@
+{
+  "scope": "Official Wren SDK on local DuckDB; fixed SQL, no LLM, no platform HTTP or Docker.",
+  "cases": [
+    {
+      "id": "Q01",
+      "logical_sql": "SELECT SUM(o.amount_cents)/100.0 FROM \"order\" o JOIN \"customer\" c ON o.customer_id=c.customer_id\nWHERE o.status='PAID' AND o.is_deleted=0 AND c.is_internal=0",
+      "actual": [
+        [
+          1050.0
+        ]
+      ],
+      "expected": [
+        [
+          1050.0
+        ]
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "Q02",
+      "logical_sql": "SELECT COUNT(*),COUNT(DISTINCT o.customer_id) FROM \"order\" o JOIN \"customer\" c ON o.customer_id=c.customer_id\nWHERE o.status='PAID' AND o.is_deleted=0 AND c.is_internal=0",
+      "actual": [
+        [
+          6,
+          2
+        ]
+      ],
+      "expected": [
+        [
+          6,
+          2
+        ]
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "Q03",
+      "logical_sql": "SELECT c.customer_name,SUM(o.amount_cents)/100.0 FROM \"order\" o JOIN \"customer\" c ON o.customer_id=c.customer_id\nWHERE o.status='PAID' AND o.is_deleted=0 AND c.is_internal=0 GROUP BY c.customer_id,c.customer_name ORDER BY 2 DESC,1",
+      "actual": [
+        [
+          "李四",
+          700.0
+        ],
+        [
+          "张三",
+          350.0
+        ]
+      ],
+      "expected": [
+        [
+          "李四",
+          700.0
+        ],
+        [
+          "张三",
+          350.0
+        ]
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "Q04",
+      "logical_sql": "WITH m AS (SELECT substr(o.order_time,1,7) month,SUM(o.amount_cents)/100.0 amount FROM \"order\" o JOIN \"customer\" c ON o.customer_id=c.customer_id\nWHERE o.status='PAID' AND o.is_deleted=0 AND c.is_internal=0 GROUP BY 1) SELECT c.month,COALESCE(m.amount,0) FROM \"calendar_month\" c LEFT JOIN m USING(month) ORDER BY 1",
+      "status": "ERROR",
+      "error": "[INVALID_SQL] Schema error: No field named customer.month. Valid fields are customer.customer_id, customer.customer_name, customer.is_internal, customer.region. phase=SQL_PLANNING"
+    },
+    {
+      "id": "Q05",
+      "logical_sql": "SELECT SUM(o.amount_cents)/100.0 FROM \"order\" o JOIN \"customer\" c ON o.customer_id=c.customer_id\nWHERE o.status='PAID' AND o.is_deleted=0 AND c.is_internal=0 AND o.order_time>='2025-02-01' AND o.order_time<'2025-03-01'",
+      "actual": [
+        [
+          700.0
+        ]
+      ],
+      "expected": [
+        [
+          700.0
+        ]
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "Q06",
+      "logical_sql": "SELECT SUM(o.amount_cents-COALESCE(r.amount,0))/100.0 FROM \"order\" o JOIN \"customer\" c ON o.customer_id=c.customer_id LEFT JOIN (SELECT order_id,SUM(refund_cents) amount FROM \"refund\" WHERE refund_status='SUCCESS' GROUP BY order_id) r ON r.order_id=o.order_id WHERE o.status='PAID' AND o.is_deleted=0 AND c.is_internal=0",
+      "actual": [
+        [
+          950.0
+        ]
+      ],
+      "expected": [
+        [
+          950.0
+        ]
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "Q07",
+      "logical_sql": "SELECT c.customer_name FROM \"customer\" c WHERE c.is_internal=0 AND NOT EXISTS (SELECT 1 FROM \"order\" o WHERE o.customer_id=c.customer_id AND o.status='PAID' AND o.is_deleted=0) ORDER BY 1",
+      "actual": [
+        [
+          "无订单客户"
+        ]
+      ],
+      "expected": [
+        [
+          "无订单客户"
+        ]
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "Q08",
+      "logical_sql": "SELECT product_code,COUNT(*) FROM \"product\" GROUP BY 1 HAVING COUNT(*)>1 ORDER BY 1",
+      "actual": [
+        [
+          "P2",
+          2
+        ]
+      ],
+      "expected": [
+        [
+          "P2",
+          2
+        ]
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "Q09",
+      "logical_sql": "SELECT SUM(o.amount_cents)/100.0 FROM \"order\" o JOIN \"customer\" c ON o.customer_id=c.customer_id\nWHERE o.status='PAID' AND o.is_deleted=0 AND c.is_internal=0 AND EXISTS(SELECT 1 FROM \"order_item\" i WHERE i.order_id=o.order_id)",
+      "actual": [
+        [
+          1050.0
+        ]
+      ],
+      "expected": [
+        [
+          1050.0
+        ]
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "Q10",
+      "logical_sql": "SELECT COUNT(*),SUM(value_cents)/100.0 FROM \"event\"",
+      "actual": [
+        [
+          10005,
+          100.05
+        ]
+      ],
+      "expected": [
+        [
+          10005,
+          100.05
+        ]
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "Q11",
+      "logical_sql": "SELECT COUNT(*) FROM \"order\" o LEFT JOIN \"customer\" c ON c.customer_id=o.customer_id WHERE c.customer_id IS NULL",
+      "actual": [
+        [
+          2
+        ]
+      ],
+      "expected": [
+        [
+          2
+        ]
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "Q12",
+      "logical_sql": "SELECT SUM(o.amount_cents)/100.0/COUNT(*) FROM \"order\" o JOIN \"customer\" c ON o.customer_id=c.customer_id\nWHERE o.status='PAID' AND o.is_deleted=0 AND c.is_internal=0",
+      "actual": [
+        [
+          175.0
+        ]
+      ],
+      "expected": [
+        [
+          175.0
+        ]
+      ],
+      "status": "PASS"
+    }
+  ],
+  "calendar_alias_repair": {
+    "logical_sql": "WITH m AS (SELECT substr(o.order_time,1,7) month,SUM(o.amount_cents)/100.0 amount FROM \"order\" o JOIN \"customer\" cust ON o.customer_id=cust.customer_id\nWHERE o.status='PAID' AND o.is_deleted=0 AND cust.is_internal=0 GROUP BY 1) SELECT c.month,COALESCE(m.amount,0) FROM \"calendar_month\" c LEFT JOIN m USING(month) ORDER BY 1",
+    "actual": [
+      [
+        "2025-01",
+        300.0
+      ],
+      [
+        "2025-02",
+        700.0
+      ],
+      [
+        "2025-03",
+        0.0
+      ],
+      [
+        "2025-04",
+        50.0
+      ]
+    ],
+    "status": "PASS"
+  },
+  "official_mcp_limit_probe": [
+    {
+      "limit": null,
+      "rows": 1000,
+      "truncated": true,
+      "sum_yuan": 10.0
+    },
+    {
+      "limit": 10000,
+      "rows": 10000,
+      "truncated": true,
+      "sum_yuan": 100.0
+    }
+  ],
+  "invalid_column_dry_run": {
+    "status": "REJECTED",
+    "error": "[GENERIC_USER_ERROR] Binder Error: Referenced column \"nonexistent_customer_column\" not found in FROM clause!\nCandidate bindings: \"amount_cents\"\n\nLINE 2: ....ds_order AS __source) AS \"order\") AS \"wren_src_order\") SELECT nonexistent_customer_column, SUM(amount_cents) FROM \"order...\n                                                                          ^ phase=SQL_DRY_RUN"
+  },
+  "unmodeled_table_default": {
+    "status": "REJECTED",
+    "error": "[INVALID_SQL] Error during planning: table 'gap_fixture.main.ds_unpublished' not found phase=SQL_PLANNING"
+  },
+  "unmodeled_table_strict": {
+    "status": "REJECTED",
+    "error": "[MODEL_NOT_FOUND] Table 'ds_unpublished' is not defined in the MDL manifest. In strict mode, all table references must correspond to MDL models. phase=SQL_POLICY_CHECK"
+  },
+  "cube_execution": [
+    {
+      "name": "total",
+      "sql": "SELECT SUM(CASE WHEN status = 'PAID' AND is_deleted = 0 AND customer_internal = 0 THEN amount_cents ELSE 0 END) AS valid_revenue_cents FROM order",
+      "actual": [
+        {
+          "valid_revenue_cents": "105000"
+        }
+      ],
+      "status": "EXECUTED"
+    },
+    {
+      "name": "customer",
+      "sql": "SELECT customer_name AS customer_name, SUM(CASE WHEN status = 'PAID' AND is_deleted = 0 AND customer_internal = 0 THEN amount_cents ELSE 0 END) AS valid_revenue_cents FROM order GROUP BY 1",
+      "actual": [
+        {
+          "customer_name": null,
+          "valid_revenue_cents": "0"
+        },
+        {
+          "customer_name": "李四",
+          "valid_revenue_cents": "70000"
+        },
+        {
+          "customer_name": "内部测试",
+          "valid_revenue_cents": "0"
+        },
+        {
+          "customer_name": "张三",
+          "valid_revenue_cents": "35000"
+        }
+      ],
+      "status": "EXECUTED"
+    },
+    {
+      "name": "month",
+      "sql": "SELECT DATE_TRUNC('month', CAST(order_time AS TIMESTAMP)) AS order_time__month, SUM(CASE WHEN status = 'PAID' AND is_deleted = 0 AND customer_internal = 0 THEN amount_cents ELSE 0 END) AS valid_revenue_cents FROM order WHERE CAST(order_time AS TIMESTAMP) >= '2025-01-01' AND CAST(order_time AS TIMESTAMP) < '2025-05-01' GROUP BY 1 ORDER BY 1",
+      "actual": [
+        {
+          "order_time__month": "2025-01-01 00:00:00",
+          "valid_revenue_cents": "30000"
+        },
+        {
+          "order_time__month": "2025-02-01 00:00:00",
+          "valid_revenue_cents": "70000"
+        },
+        {
+          "order_time__month": "2025-04-01 00:00:00",
+          "valid_revenue_cents": "5000"
+        }
+      ],
+      "status": "EXECUTED"
+    }
+  ]
+}

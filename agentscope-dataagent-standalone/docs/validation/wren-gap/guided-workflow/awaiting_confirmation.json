@@ -1,0 +1,38 @@
+{
+  "groupId": "2938f8c8-6fee-44aa-a700-6aa8c9769c98",
+  "stage": "CONFIRMATION",
+  "mdlState": "PUBLISHED",
+  "publishedVersion": 1,
+  "queryAvailable": true,
+  "draftChanged": true,
+  "engineeringStatus": "PASSED",
+  "engineeringCheckedAt": "2026-10-07T04:47:48.040279800Z",
+  "questionSummary": {
+    "total": 1,
+    "required": 1,
+    "confirmed": 0,
+    "incomplete": 0,
+    "needsValidation": 0,
+    "awaitingConfirmation": 1
+  },
+  "changedAssets": [
+    {
+      "path": "knowledge/questions/total_sales.yml",
+      "label": "分析问题：total_sales",
+      "kind": "ADDED"
+    }
+  ],
+  "blockers": [
+    {
+      "code": "QUESTION_CONFIRMATION",
+      "questionId": "total_sales",
+      "message": "请审阅并确认实际结果：2025年有效订单销售额是多少？"
+    }
+  ],
+  "nextAction": {
+    "type": "CONFIRM",
+    "label": "审阅并确认结果",
+    "message": "检查实际表格、业务口径和查询，再确认或退回。"
+  },
+  "canPublish": false
+}

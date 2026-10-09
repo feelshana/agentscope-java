@@ -1,0 +1,18 @@
+[
+  {
+    "tool": "write_file",
+    "path": "knowledge/questions/valid_order_sales_2025.yml"
+  },
+  {
+    "tool": "write_file",
+    "path": "knowledge/questions/valid_order_count_2025.yml"
+  },
+  {
+    "tool": "create_view",
+    "path": "views/valid_order"
+  },
+  {
+    "tool": "patch_file",
+    "path": "knowledge/questions/valid_order_sales_2025.yml"
+  }
+]

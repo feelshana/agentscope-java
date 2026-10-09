@@ -1,0 +1,4 @@
+{"timestamp": "2026-10-07T10:48:38.363377", "stage": "question-model", "event": "hitl_request", "sessionKey": null, "error": null}
+{"timestamp": "2026-10-07T10:48:38.441560", "stage": "question-model", "event": "done", "sessionKey": "acceptance-model-3693a04f04ef4b84b9f1cb4dc9335697", "error": null}
+{"timestamp": "2026-10-07T10:48:51.389814", "stage": "question-model", "event": "done", "sessionKey": "acceptance-model-3693a04f04ef4b84b9f1cb4dc9335697", "error": null}
+{"timestamp": "2026-10-07T10:55:59.781470", "stage": "question-query", "event": "done", "sessionKey": "acceptance-query-5923a6a4ad5a41fcbcebdb4c341ce359", "error": null}

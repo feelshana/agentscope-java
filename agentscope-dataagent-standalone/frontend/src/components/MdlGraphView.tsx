@@ -78,16 +78,15 @@ export default function MdlGraphView({ groupId }: { groupId: string }) {
     let cancelled = false;
     setView(null);
     setError(null);
-    getMdlView(groupId)
-      .then(v => {
-        if (!cancelled) setView(v);
-      })
-      .catch(e => {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
-      });
-    return () => {
-      cancelled = true;
+    const refresh = () => { void getMdlView(groupId)
+      .then(v => { if (!cancelled) setView(v); })
+      .catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)); }); };
+    const update = (event: Event) => {
+      if ((event as CustomEvent<{ groupId: string }>).detail?.groupId === groupId) refresh();
     };
+    refresh();
+    window.addEventListener('modeling:updated', update);
+    return () => { cancelled = true; window.removeEventListener('modeling:updated', update); };
   }, [groupId]);
 
   const modelLabels = useMemo(() => {

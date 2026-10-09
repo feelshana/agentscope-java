@@ -577,6 +577,38 @@ class MdlSuggestionServiceTest {
     // --------------------------------------------- relationships.yml write side (M4)
 
     @Test
+    void seededEmptyArrayKeepsBothConfirmedRelationships() throws IOException {
+        registerDataset("ds_a", "g1", "a", "a", new String[][] {{"x", "x"}});
+        registerDataset("ds_b", "g1", "b", "b", new String[][] {{"y", "y"}});
+        registerDataset("ds_c", "g1", "c", "c", new String[][] {{"z", "z"}});
+        registerRelation("r1", "g1", "ds_a", "x", "ds_b", "y", "inferred", "PENDING");
+        registerRelation("r2", "g1", "ds_b", "y", "ds_c", "z", "inferred", "PENDING");
+        Files.writeString(relationsFile(), "relationships: []\n# Example\n");
+        service.confirmRelation("g1", "r1", "MANY_TO_ONE", false);
+        service.confirmRelation("g1", "r2", "MANY_TO_ONE", false);
+        var tree =
+                new com.fasterxml.jackson.databind.ObjectMapper(
+                                new com.fasterxml.jackson.dataformat.yaml.YAMLFactory())
+                        .readTree(fileText());
+        assertEquals(2, tree.path("relationships").size());
+        assertTrue(fileText().contains("a.x = b.y"));
+        assertTrue(fileText().contains("b.y = c.z"));
+    }
+
+    @Test
+    void malformedRelationshipsAreNotSilentlyReplaced() throws IOException {
+        registerDataset("ds_a", "g1", "a", "a", new String[][] {{"x", "x"}});
+        registerDataset("ds_b", "g1", "b", "b", new String[][] {{"y", "y"}});
+        registerRelation("r1", "g1", "ds_a", "x", "ds_b", "y", "inferred", "PENDING");
+        String invalid = "relationships: [broken\n";
+        Files.writeString(relationsFile(), invalid);
+        assertThrows(
+                DatasetException.class,
+                () -> service.confirmRelation("g1", "r1", "MANY_TO_ONE", false));
+        assertEquals(invalid, fileText());
+    }
+
+    @Test
     void confirmWritesOfficialRelationshipEntry() throws IOException {
         registerDataset("ds_a", "g1", "a", "a", new String[][] {{"x", "x"}});
         registerDataset("ds_b", "g1", "b", "b", new String[][] {{"y", "y"}});

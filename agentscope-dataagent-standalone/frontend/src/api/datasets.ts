@@ -164,7 +164,7 @@ export async function uploadKnowledge(groupId: string, file: File): Promise<stri
     headers: authHeaders(),
     body: form,
   });
-  if (!res.ok) throw new Error(await errorMessage(res, `Upload failed: ${res.status}`));
+  if (!res.ok) throw new Error(await errorMessage(res, `业务文档上传失败：${res.status}`));
   const body = (await res.json()) as { content?: string };
   return body.content ?? '';
 }
@@ -221,7 +221,7 @@ export async function uploadDataset(
     }
     throw e;
   }
-  if (!res.ok) throw new Error(await errorMessage(res, `Upload failed: ${res.status}`));
+  if (!res.ok) throw new Error(await errorMessage(res, `业务文档上传失败：${res.status}`));
   return res.json();
 }
 
@@ -447,7 +447,7 @@ export async function uploadDataWithDescription(
       body: form,
       signal: controller.signal,
     });
-    if (!res.ok) throw new Error(await errorMessage(res, `Upload failed: ${res.status}`));
+    if (!res.ok) throw new Error(await errorMessage(res, `业务文档上传失败：${res.status}`));
     return res.json() as Promise<ImportSummary>;
   } catch (e) {
     if (e instanceof DOMException && e.name === 'AbortError') {

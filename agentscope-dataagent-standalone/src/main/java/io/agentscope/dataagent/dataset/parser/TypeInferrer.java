@@ -102,6 +102,10 @@ public final class TypeInferrer {
         if (vals.stream().allMatch(TypeInferrer::isDate)) {
             return "DATE";
         }
+        // Numeric-looking identifiers with leading zeros must survive ingestion unchanged.
+        if (vals.stream().anyMatch(s -> s.matches("-?0\\d+"))) {
+            return "VARCHAR(1024)";
+        }
         if (vals.stream().allMatch(s -> INTEGER.matcher(s).matches())) {
             return "BIGINT";
         }

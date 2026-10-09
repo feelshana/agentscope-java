@@ -4,7 +4,16 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import Icon from '../../components/Icon';
 import MdlGraphView from '../../components/MdlGraphView';
 import ModelingChatPanel from '../../components/ModelingChatPanel';
+import ModelingQuestionsPanel from '../../components/modeling/ModelingQuestionsPanel';
+import QuestionIntakeForm from '../../components/modeling/QuestionIntakeForm';
 import MdlPublishPanel from '../../components/MdlPublishPanel';
+import ModelingWorkflowGuide from '../../components/modeling/ModelingWorkflowGuide';
+import { getModelingWorkflow } from '../../api/modelingWorkflow';
+import type { ModelingWorkflow } from '../../api/modelingWorkflow';
+import BusinessDocumentGuide from '../../components/modeling/BusinessDocumentGuide';
+import type { DocumentUploadState } from '../../components/modeling/BusinessDocumentGuide';
+import ModelSnapshotPanel from '../../components/modeling/ModelSnapshotPanel';
+import './SemanticModelingPage.css';
 import AssetYamlBrowser from '../../components/modeling/AssetYamlBrowser';
 import type { AssetEntry } from '../../components/modeling/AssetYamlBrowser';
 import {
@@ -78,9 +87,9 @@ const CONFIDENCE_LABEL: Record<string, string> = { HIGH: '高', MEDIUM: '中', L
 /** specs/027: fixed three-level semantic maturity (pure computed signal, no LLM). */
 type Maturity = 'baseline' | 'partial' | 'refined';
 
-type TabKey = 'overview' | 'schema' | 'derived' | 'cubes' | 'views' | 'glossary' | 'mdl';
+type TabKey = 'overview' | 'modeling' | 'questions' | 'publish' | 'schema' | 'derived' | 'cubes' | 'views' | 'glossary' | 'mdl';
 
-const TAB_KEYS: TabKey[] = ['overview', 'schema', 'derived', 'cubes', 'views', 'glossary', 'mdl'];
+const TAB_KEYS: TabKey[] = ['overview', 'modeling', 'questions', 'publish', 'schema', 'derived', 'cubes', 'views', 'glossary', 'mdl'];
 
 const AGG_OPTIONS = ['SUM', 'AVG', 'COUNT', 'MAX', 'MIN', 'DISTINCT_COUNT'];
 const GRANULARITY_OPTIONS = ['DAY', 'MONTH', 'YEAR'];
@@ -410,18 +419,29 @@ export default function SemanticModelingPage() {
   const { groupId = '' } = useParams();
   const navigate = useNavigate();
   const [groupDetail, setGroupDetail] = useState<GroupDetail | null>(null);
+  const [businessDocument, setBusinessDocument] = useState('');
+  const documentRevision = useRef(0);
+  const [documentUpload, setDocumentUpload] = useState<DocumentUploadState>({ status: 'idle', filename: '' });
+  const documentGroup = useRef(groupId);
+  documentGroup.current = groupId;
   const [searchParams, setSearchParams] = useSearchParams();
   const [overview, setOverview] = useState<ModelingOverview | null>(null);
+  const [workflow, setWorkflow] = useState<ModelingWorkflow | null>(null);
+  const [workflowError, setWorkflowError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<CubeSuggestion[] | null>(null);
   const [draft, setDraft] = useState<CubeDraft | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
-  /** specs/030: the chat lives in a collapsible right dock, open by default on the fullscreen
-   *  workbench; the header button collapses it. specs/036: dock widened to 640px — the 520px
-   *  dock squeezed the HITL decide cards. */
-  const [chatOpen, setChatOpen] = useState(true);
+  const [chatDraft, setChatDraft] = useState<{ groupId: string; message: string; requestId: number; submit: boolean } | null>(null);
+  const [nativeSession, setNativeSession] = useState<{ groupId: string; pending: boolean; error?: string } | null>(null);
+  const onSessionReady = useCallback((pending: boolean, error?: string) => {
+    if (documentGroup.current === groupId) setNativeSession({ groupId, pending, error });
+  }, [groupId]);
+  const intakeReady = workflow?.groupId === groupId && nativeSession?.groupId === groupId;
+  const showConversation = (workflow?.groupId === groupId && workflow.questionSummary.total > 0)
+    || chatDraft?.groupId === groupId || (nativeSession?.groupId === groupId && nativeSession.pending);
   /** Hidden input for the unified "上传语义文档" entries (specs/028). */
   const semanticDocRef = useRef<HTMLInputElement | null>(null);
   /** specs/030: structured workspace view (models/cubes/views with backing YAML paths). */
@@ -444,12 +464,18 @@ export default function SemanticModelingPage() {
   const urlTab = searchParams.get('asset');
   const tab: TabKey = urlTab && (TAB_KEYS as string[]).includes(urlTab) ? (urlTab as TabKey) : 'overview';
   const selectedParam = searchParams.get('selected');
+  const detailOpen = TAB_KEYS.slice(4).includes(tab);
 
   const setTab = (key: TabKey) => {
     const next = new URLSearchParams(searchParams);
     next.set('asset', key);
     next.delete('selected');
     setSearchParams(next, { replace: true });
+  };
+
+  const submitQuestions = (message: string) => {
+    setChatDraft(previous => ({ groupId, message, requestId: (previous?.requestId ?? 0) + 1, submit: true }));
+    setTab('modeling');
   };
 
   const setSelected = (key: string | null) => {
@@ -459,9 +485,24 @@ export default function SemanticModelingPage() {
     setSearchParams(next, { replace: true });
   };
 
+  useEffect(() => {
+    if (urlTab || !workflow || workflow.groupId !== groupId) return;
+    const stageTab: TabKey = workflow.queryAvailable && workflow.questionSummary.total === 0 ? 'modeling' : workflow.stage === 'MODELING' ? 'modeling'
+      : ['VALIDATION', 'CONFIRMATION'].includes(workflow.stage) ? 'questions'
+        : workflow.stage === 'PUBLICATION' ? 'publish' : workflow.queryAvailable ? 'modeling' : 'overview';
+    const next = new URLSearchParams(searchParams);
+    next.set('asset', stageTab);
+    setSearchParams(next, { replace: true });
+  }, [workflow, urlTab, groupId, searchParams, setSearchParams]);
+
+  const refreshGeneration = useRef(0);
   const refresh = useCallback(async () => {
+    const request = ++refreshGeneration.current;
     // specs/037: settle both sources independently — one failing source must not blank the page.
-    const results = await Promise.allSettled([getModelingOverview(groupId), getMdlView(groupId)]);
+    const results = await Promise.allSettled([getModelingOverview(groupId), getMdlView(groupId), getModelingWorkflow(groupId)]);
+    if (request !== refreshGeneration.current) return;
+    if (results[2].status === 'fulfilled') { setWorkflow(results[2].value); setWorkflowError(null); }
+    else { setWorkflow(null); setWorkflowError(msg(results[2].reason)); }
     let failed: unknown = null;
     if (results[0].status === 'fulfilled') setOverview(results[0].value);
     else failed ??= results[0].reason;
@@ -469,6 +510,7 @@ export default function SemanticModelingPage() {
     else failed ??= results[1].reason;
     try {
       const preview = await getMdlPreview(groupId);
+      if (request !== refreshGeneration.current) return;
       const published = new Map(preview.publishedFiles.map(f => [f.path, f.content]));
       setDirtyPaths(
         new Set(
@@ -483,22 +525,29 @@ export default function SemanticModelingPage() {
 
   const refreshEnhance = useCallback(async () => {
     try {
-      setEnhance(await getEnhanceOverview(groupId));
+      const value = await getEnhanceOverview(groupId);
+      if (documentGroup.current === groupId) setEnhance(value);
     } catch (e) {
       setError(msg(e));
     }
   }, [groupId]);
 
   useEffect(() => {
+    setWorkflow(null); setWorkflowError(null); setEnhance(null);
     refresh();
     refreshEnhance();
+    return () => { refreshGeneration.current++; };
   }, [refresh, refreshEnhance]);
 
   // Group name for the fullscreen header back-link (loaded once per group).
   useEffect(() => {
     let cancelled = false;
+    setGroupDetail(null);
+    setDocumentUpload({ status: 'idle', filename: '' });
+    setBusinessDocument('');
+    const revision = ++documentRevision.current;
     getGroupDetail(groupId)
-      .then(d => { if (!cancelled) setGroupDetail(d); })
+      .then(d => { if (!cancelled) { setGroupDetail(d); if (revision === documentRevision.current) setBusinessDocument(d.knowledge ?? ''); } })
       .catch(() => { /* header falls back to a generic label */ });
     return () => { cancelled = true; };
   }, [groupId]);
@@ -649,7 +698,10 @@ export default function SemanticModelingPage() {
   }, [overview, enhance]);
 
   const tabItems: { key: TabKey; label: string; count?: number }[] = [
-    { key: 'overview', label: '总览' },
+    { key: 'overview', label: '1 · 数据准备' },
+    { key: 'modeling', label: '2 · 对话建模' },
+    { key: 'questions', label: '3 · 验证与确认' },
+    { key: 'publish', label: '4 · 发布' },
     { key: 'schema', label: '表与关系', count: datasets.length },
     { key: 'derived', label: '派生模型', count: mdlView?.derivedModels.length ?? 0 },
     // specs/037: cube/view counts read the workspace (mdlView) — the same source as the tab
@@ -659,11 +711,6 @@ export default function SemanticModelingPage() {
     { key: 'glossary', label: '术语与规则', count: overview?.terms.length ?? 0 },
     { key: 'mdl', label: 'MDL' },
   ];
-
-  // specs/030: the guide bar is a first-run hint only — once the user has run a doc-enhance
-  // analysis or decided any proposal, the entries are discoverable and the bar must not nag.
-  const enhanceTouched =
-    !!enhance?.task || (enhance?.proposals ?? []).some(p => p.status !== 'PENDING');
 
   async function run(label: string, fn: () => Promise<void>) {
     setBusy(label);
@@ -681,11 +728,21 @@ export default function SemanticModelingPage() {
     setOverview(prev => (prev ? { ...prev, relations } : prev));
   }
 
-  const onUploadSemanticDoc = (file: File) =>
-    run('semantic-doc', async () => {
-      await uploadKnowledge(groupId, file);
+  const onUploadSemanticDoc = async (file: File) => {
+    if (documentUpload.status === 'uploading') return;
+    documentRevision.current++;
+    setDocumentUpload({ status: 'uploading', filename: file.name });
+    try {
+      const content = await uploadKnowledge(groupId, file);
+      if (documentGroup.current !== groupId) return;
+      setBusinessDocument(content);
+      setGroupDetail(previous => previous ? { ...previous, knowledge: content } : previous);
+      setDocumentUpload({ status: 'success', filename: file.name });
       await Promise.all([refreshEnhance(), refresh()]);
-    });
+    } catch (e) {
+      if (documentGroup.current === groupId) setDocumentUpload({ status: 'error', filename: file.name, error: msg(e) });
+    }
+  };
 
   const onTriggerEnhance = () =>
     run('enhance:run', async () => {
@@ -866,19 +923,8 @@ export default function SemanticModelingPage() {
   }
 
   return (
-    <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
-      {/* ---------- left main column: assets + editors (specs/030 workbench) ---------- */}
-      <div
-        style={{
-          flex: 1,
-          minWidth: 0,
-          overflowY: 'auto',
-          padding: 16,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 12,
-        }}
-      >
+    <div className="modeling-workbench" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', padding: 16, gap: 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flexShrink: 0 }}>
       {error && (
         <div className="da-card" style={{ borderColor: 'var(--da-danger)' }}>
           <div className="da-small" style={{ color: 'var(--da-danger)' }}>
@@ -903,20 +949,18 @@ export default function SemanticModelingPage() {
         <span className="da-small" style={{ color: 'var(--da-text-3)' }}>
           语义建模
         </span>
-        {overview && <MdlStateBadge state={overview.group} />}
-        {overview && <MaturityBadge level={maturity} />}
+        {workflow ? <span className="da-badge">{workflow.queryAvailable ? `已发布 v${workflow.publishedVersion}` : '基础模型待准备'}{workflow.draftChanged ? ' · 有未发布草稿' : ''}</span> : overview && <MdlStateBadge state={overview.group} />}
+        {overview && workflow?.queryAvailable && <MaturityBadge level={maturity} />}
         {overview?.group.mdlPublishedAt && (
           <span className="da-small" style={{ color: 'var(--da-text-3)' }}>
             发布于 {overview.group.mdlPublishedAt.slice(0, 19).replace('T', ' ')}
           </span>
         )}
         <div style={{ flex: 1 }} />
-        <button
-          className="da-btn da-btn-primary da-btn-sm"
-          onClick={() => setChatOpen(v => !v)}
-          title="和建模助手对话逐步完成建模：确认关系、起草 Cube、校验后回本页发布"
-        >
-          <Icon name="chat" size="sm" /> {chatOpen ? '收起对话' : '对话建模'}
+        <button className="da-btn" style={{ borderColor: 'var(--da-primary)', color: 'var(--da-primary)', padding: '9px 18px', fontWeight: 600 }}
+          onClick={() => setTab(detailOpen ? 'modeling' : 'schema')}>
+          <Icon name="model" size="sm" /> {detailOpen ? '← 返回对话建模' : '查看语义模型'}
+          {!detailOpen && <span style={{ display: 'block', fontSize: 11, fontWeight: 400 }}>模型 · Cube · 视图 · MDL</span>}
         </button>
       </div>
 
@@ -938,7 +982,7 @@ export default function SemanticModelingPage() {
           zIndex: 1,
         }}
       >
-        {tabItems.map(item => {
+        {tabItems.slice(0, 4).map(item => {
           const active = tab === item.key;
           return (
             <button
@@ -974,8 +1018,15 @@ export default function SemanticModelingPage() {
             </button>
           );
         })}
+        {detailOpen && <select className="da-input" aria-label="模型详情" value={tab}
+          onChange={event => setTab(event.target.value as TabKey)} style={{ width: 180, marginLeft: 'auto' }}>
+          {tabItems.slice(4).map(item => <option key={item.key} value={item.key}>{item.label}{item.count !== undefined ? ` (${item.count})` : ''}</option>)}
+        </select>}
       </div>
-      {overview?.group.mdlLastError && (
+      </div>
+      <div className="modeling-workbench-body" style={{ display: 'flex', flex: 1, minHeight: 0, gap: 16 }}>
+      <div className="modeling-progress-column" style={{ flex: tab === 'modeling' ? '0 0 300px' : 1, minWidth: 0, overflowY: 'auto', display: tab === 'modeling' && !showConversation && workflow?.queryAvailable ? 'none' : 'flex', flexDirection: 'column', gap: 12 }}>
+      {overview?.group.mdlLastError && !workflow?.queryAvailable && (
         <div className="da-alert da-alert-error">
           <div>{overview.group.mdlLastError}</div>
           <button
@@ -988,58 +1039,44 @@ export default function SemanticModelingPage() {
           </button>
         </div>
       )}
-      {overview?.group.mdlState === 'DIRTY' && overview.group.mdlVersion > 0 && (
-        <div className="da-small" style={{ color: 'var(--da-warn)', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span>
-            当前 Wren 查询继续使用 v{overview.group.mdlVersion}；草稿变更 {dirtyPaths.size} 项尚未生效。
-          </span>
-          <button className="da-btn da-btn-sm" onClick={() => setTab('mdl')}>
-            去发布
-          </button>
-        </div>
-      )}
-      {overview && maturity !== 'refined' && !enhanceTouched && (
-        <div
-          className="da-card"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            padding: '10px 14px',
-            borderColor: 'var(--da-warn)',
-            flexShrink: 0,
-          }}
-        >
-          <Icon name="warn" size="sm" />
-          <span className="da-small">
-            已可正常问数（基线语义）。上传语义文档或使用对话建模，可让问数口径更准。
-          </span>
-          <div style={{ flex: 1 }} />
-          <button
-            className="da-btn da-btn-primary da-btn-sm"
-            disabled={busy !== null}
-            onClick={() => semanticDocRef.current?.click()}
-            title="上传 .docx / .md / .txt，保存后自动与当前模型做差异分析"
-          >
-            {busy === 'semantic-doc' ? '上传中…' : '上传语义文档'}
-          </button>
-          <button className="da-btn da-btn-primary da-btn-sm" onClick={() => setChatOpen(true)}>
-            对话建模
-          </button>
-        </div>
-      )}
 
-      {/* ---------- overview tab (specs/028: digest merged into guide bar + enhance card) ---------- */}
-      {tab === 'overview' && (
-        <div className="da-small" style={{ color: 'var(--da-text-3)' }}>
-          数据源关联后平台已自动播种基线语义（表与列描述），可直接问数；上传语义文档或对话建模可让口径更准。
+      {!detailOpen && <ModelingWorkflowGuide workflow={workflow} error={workflowError} busy={busy !== null}
+        onNext={type => {
+          if (type === 'PREPARE_DATA') navigate(`/configure/datasets/${groupId}`);
+          else if (type === 'INITIALIZE') void onInitializeMdl();
+          else if (type === 'MODEL' || type === 'ADD_QUESTIONS') { setTab('modeling'); }
+          else if (type === 'VALIDATE' || type === 'CONFIRM') setTab('questions');
+          else if (type === 'PUBLISH') setTab('publish');
+          else if (type === 'QUERY') navigate(`/chat?groups=${encodeURIComponent(groupId)}`);
+          else setTab('overview');
+        }} hideModelAction={tab === 'modeling'} hideNextAction={tab === 'questions' || tab === 'publish'} />}
+      {detailOpen && <div className="da-card da-small">当前工作区草稿 · 问数使用已发布 v{workflow?.publishedVersion ?? 0}。在 MDL 页查看已发布工程快照与差异。</div>}
+
+      {tab === 'overview' && <div className="da-card" style={{ padding: 16 }}>
+        <div className="da-h2">准备数据与业务资料</div>
+        <p className="da-small">选择表或上传 CSV / Excel 后，系统生成并发布基础模型。只有发布成功才可问数；业务口径可随后逐步完善。</p>
+        <p className="da-small">业务文档可选。没有文档也可以直接通过对话建模，不必先填写全部问题。</p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="da-btn" onClick={() => navigate(`/configure/datasets/${groupId}`)}>选择表或上传数据</button>
+          <button className="da-btn da-btn-primary" onClick={() => { setTab('modeling'); }}>进入对话建模</button>
         </div>
-      )}
+      </div>}
+
+      {tab === 'modeling' && <ModelingQuestionsPanel key={`${groupId}-requirements`} groupId={groupId} mode="requirements"
+        hideAdd={!showConversation} onAddQuestions={submitQuestions} onDiscuss={message => {
+        setChatDraft(previous => ({ groupId, message, requestId: (previous?.requestId ?? 0) + 1, submit: false }));
+      }} />}
+      {tab === 'questions' && <ModelingQuestionsPanel key={`${groupId}-acceptance`} groupId={groupId} mode="acceptance" workflow={workflow}
+        onAddQuestions={submitQuestions} onPublish={() => setTab('publish')} onQuery={() => navigate(`/chat?groups=${encodeURIComponent(groupId)}`)} onDiscuss={message => {
+        setTab('modeling'); setChatDraft(previous => ({ groupId, message, requestId: (previous?.requestId ?? 0) + 1, submit: false }));
+      }} />}
+      {tab === 'publish' && <MdlPublishPanel groupId={groupId} workflow={workflow} onPublished={refresh}
+        onReview={() => setTab('questions')} />}
 
       {tab === 'schema' && (
         <>
       <div className="da-small" style={{ color: 'var(--da-text-3)', marginBottom: 4 }}>
-        关系建议 = 规则推断（同名/共享列）+ AI 建议，join 类型由数据唯一性探测（不靠猜测）。人工确认或拒绝的记录在重新分析后仍保留。摸不着头绪时，点右上角「对话建模」让助手带你一步步完成。
+        关系建议 = 规则推断（同名/共享列）+ AI 建议，join 类型由数据唯一性探测（不靠猜测）。人工确认或拒绝的记录在重新分析后仍保留。需要补充业务说明时，返回「对话建模」。
       </div>
 
       {/* ---------- models: asset list + workspace YAML projection (specs/030) ---------- */}
@@ -1381,7 +1418,7 @@ export default function SemanticModelingPage() {
       </div>
       )}
 
-      {tab === 'overview' && (
+      {tab === 'glossary' && (
       <div className="da-card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
           <div className="da-h2" style={{ margin: 0 }}>
@@ -1408,11 +1445,11 @@ export default function SemanticModelingPage() {
           <div style={{ flex: 1 }} />
           <button
             className="da-btn da-btn-primary da-btn-sm"
-            disabled={busy !== null}
+            disabled={busy !== null || documentUpload.status === 'uploading'}
             onClick={() => semanticDocRef.current?.click()}
             title="上传 .docx / .md / .txt，保存后自动与当前模型做差异分析"
           >
-            {busy === 'semantic-doc' ? '上传中…' : '上传语义文档'}
+            {documentUpload.status === 'uploading' ? '上传中…' : '上传语义文档'}
           </button>
           <button
             className="da-btn da-btn-sm"
@@ -1575,9 +1612,10 @@ export default function SemanticModelingPage() {
       {/* ---------- mdl tab: publish + graph ---------- */}
       {tab === 'mdl' && (
         <>
-      <MdlPublishPanel groupId={groupId} onPublished={refresh} />
 
-      <MdlGraphView groupId={groupId} />
+
+      <MdlGraphView key={workflow?.engineeringCheckedAt ?? workflow?.publishedVersion} groupId={groupId} />
+      <ModelSnapshotPanel groupId={groupId} />
         </>
       )}
 
@@ -2177,23 +2215,25 @@ export default function SemanticModelingPage() {
       )}
       </div>
 
-      {/* ---------- right-side chat dock (specs/030 workbench, ADR 0041) ---------- */}
-      {chatOpen && (
-        <div
-          style={{
-            width: 640,
-            flexShrink: 0,
-            height: '100%',
-            minWidth: 0,
-          }}
-        >
-          <ModelingChatPanel
-            groupId={groupId}
-            variant="dock"
-            onClose={() => setChatOpen(false)}
-          />
+      {/* Keep the chat mounted so browsing model details does not discard pending HITL. */}
+      <div className="modeling-chat-main" style={{ display: tab === 'modeling' ? 'flex' : 'none', flexDirection: 'column', gap: 12, flex: 1, order: -1, minWidth: 0, minHeight: 0 }}>
+        <BusinessDocumentGuide content={businessDocument} upload={documentUpload} analysisStatus={enhance?.task?.status}
+          onUpload={() => semanticDocRef.current?.click()} />
+        {!showConversation && <div className="da-card" style={{ padding: 24, overflowY: 'auto' }}>
+          {!intakeReady ? <p role="status">{workflowError || '正在读取问题与建模会话…'}</p>
+            : nativeSession?.error ? <p role="alert">{nativeSession.error}</p>
+            : <QuestionIntakeForm key={groupId} initial onSubmit={submitQuestions} />}
+        </div>}
+        <div style={{ display: showConversation ? 'block' : 'none', flex: 1, minHeight: 0 }}>
+          <ModelingChatPanel key={groupId} groupId={groupId}
+            draftPrompt={chatDraft?.groupId === groupId ? chatDraft.message : undefined}
+            draftPromptId={chatDraft?.groupId === groupId ? chatDraft.requestId : undefined}
+            submitDraft={chatDraft?.groupId === groupId && chatDraft.submit}
+            onSessionReady={onSessionReady}
+            variant="dock" onClose={() => setTab('overview')} />
         </div>
-      )}
+      </div>
+      </div>
     </div>
   );
 }

@@ -1,0 +1,111 @@
+[
+  {
+    "name": "import_code_leading_zeros",
+    "expected": "000123",
+    "result": {
+      "columns": [
+        {
+          "name": "event_id",
+          "originalName": "event_id",
+          "sqlType": "BIGINT",
+          "description": "事件ID，唯一标识一条事件记录，如1,2,3等"
+        },
+        {
+          "name": "value_cents",
+          "originalName": "value_cents",
+          "sqlType": "BIGINT",
+          "description": "金额（以分为单位），如1表示1分"
+        },
+        {
+          "name": "code",
+          "originalName": "code",
+          "sqlType": "BIGINT",
+          "description": "编码，定长字符串，如000123"
+        },
+        {
+          "name": "note",
+          "originalName": "note",
+          "sqlType": "VARCHAR(1024)",
+          "description": "备注，补充说明文本"
+        }
+      ],
+      "rows": [
+        [
+          "1",
+          "1",
+          "123",
+          null
+        ],
+        [
+          "2",
+          "1",
+          "123",
+          null
+        ],
+        [
+          "3",
+          "1",
+          "123",
+          null
+        ]
+      ]
+    }
+  },
+  {
+    "name": "valid_platform_file_preview",
+    "status": "FAIL",
+    "note": "Preview only; no file was written. Actual write tool protection must be checked separately.",
+    "response": {
+      "ok": true,
+      "error": null,
+      "oldContent": "schema_version: 5\nname: kb-73b26360-df5c-497e-9137-bdfe7f50df67\nversion: '1.0'\ncatalog: wren\nschema: public\ndata_source: mysql\n",
+      "newContent": "schema_version: 5\nname: kb-73b26360-df5c-497e-9137-bdfe7f50df67\nversion: '1.0'\ncatalog: wren\nschema: public\ndata_source: mysql\n"
+    }
+  },
+  {
+    "name": "confirmed_relation_consistency",
+    "db_confirmed": [
+      {
+        "id": "73058893-31a6-46c4-adba-4da0a41ba32b",
+        "sourceDatasetId": "52f337be-6f5a-4479-ad8b-2ae70e490172",
+        "sourceColumn": "order_id",
+        "targetDatasetId": "515e8631-4dd7-49e9-859c-a79e707f4721",
+        "targetColumn": "order_id",
+        "relationType": "LLM",
+        "description": "退款记录关联订单ID，订单表提供订单金额、状态等信息，属于事实表按订单维度关联维表",
+        "confidence": 0.8,
+        "origin": "llm",
+        "joinType": "MANY_TO_ONE",
+        "status": "CONFIRMED"
+      },
+      {
+        "id": "75b74e32-9104-414a-a691-a64620d37349",
+        "sourceDatasetId": "515e8631-4dd7-49e9-859c-a79e707f4721",
+        "sourceColumn": "customer_id",
+        "targetDatasetId": "9a325ea8-e864-4aca-a3d5-55d0913eba9f",
+        "targetColumn": "customer_id",
+        "relationType": "LLM",
+        "description": "订单记录下单客户ID，客户表提供客户名称与区域等属性，属于事实表按客户维度关联维表",
+        "confidence": 0.8,
+        "origin": "llm",
+        "joinType": "MANY_TO_ONE",
+        "status": "CONFIRMED"
+      }
+    ],
+    "workspace_relations": [
+      {
+        "name": "order_customer",
+        "leftModel": "order",
+        "rightModel": "customer",
+        "joinType": "MANY_TO_ONE",
+        "condition": "order.customer_id = customer.customer_id",
+        "sourceColumns": [
+          "customer_id"
+        ],
+        "targetColumns": [
+          "customer_id"
+        ]
+      }
+    ]
+  }
+]

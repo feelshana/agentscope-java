@@ -1,0 +1,9 @@
+{
+  "phase": "format",
+  "exit_code": 0,
+  "command": [
+    "mvn.cmd",
+    "spotless:apply"
+  ],
+  "cwd": "D:\\workspace\\data-agent\\agentscope-dataagent-standalone"
+}

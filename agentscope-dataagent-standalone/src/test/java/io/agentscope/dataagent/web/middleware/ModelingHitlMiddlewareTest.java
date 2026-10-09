@@ -19,14 +19,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.AgentEvent;
+import io.agentscope.core.event.ConfirmResult;
 import io.agentscope.core.event.RequestStopEvent;
 import io.agentscope.core.event.RequireUserConfirmEvent;
 import io.agentscope.core.message.GenerateReason;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.ToolCallState;
+import io.agentscope.core.message.ToolResultBlock;
+import io.agentscope.core.message.ToolResultState;
 import io.agentscope.core.message.ToolUseBlock;
 import io.agentscope.core.middleware.ActingInput;
+import io.agentscope.core.middleware.AgentInput;
+import io.agentscope.core.middleware.ReasoningInput;
 import io.agentscope.core.state.AgentState;
 import java.util.List;
 import java.util.Map;
@@ -37,6 +42,120 @@ import reactor.core.publisher.Flux;
 class ModelingHitlMiddlewareTest {
 
     private final ModelingHitlMiddleware middleware = new ModelingHitlMiddleware();
+
+    @Test
+    void nativeDeniedCallDoesNotOpenTheSameConfirmationAgain() {
+        ToolUseBlock write = tool("denied-write", "write_file", ToolCallState.ASKING);
+        AgentState state =
+                AgentState.builder()
+                        .sessionId("denied-session")
+                        .addMessage(Msg.builder().role(MsgRole.ASSISTANT).content(write).build())
+                        .addMessage(
+                                Msg.builder()
+                                        .role(MsgRole.TOOL)
+                                        .content(
+                                                ToolResultBlock.text("Permission denied by user")
+                                                        .withIdAndName(
+                                                                write.getId(), write.getName())
+                                                        .withState(ToolResultState.DENIED))
+                                        .build())
+                        .build();
+        RuntimeContext context = RuntimeContext.builder().agentState(state).build();
+        AtomicBoolean delegated = new AtomicBoolean();
+        middleware
+                .onActing(
+                        null,
+                        context,
+                        new ActingInput(List.of(write)),
+                        input -> {
+                            delegated.set(true);
+                            return Flux.empty();
+                        })
+                .blockLast();
+        assertThat(delegated).isTrue();
+    }
+
+    @Test
+    void repairFeedbackRequiresCorrelatedNativeDenialAndIsCallScoped() {
+        ToolUseBlock write = tool("write-1", "write_file", ToolCallState.ASKING);
+        AgentState state = AgentState.builder().sessionId("session-1").build();
+        RuntimeContext context = RuntimeContext.builder().agentState(state).build();
+        Msg request =
+                Msg.builder()
+                        .role(MsgRole.USER)
+                        .textContent("预检失败：禁止 LIMIT，请修正")
+                        .metadata(
+                                Map.of(
+                                        Msg.METADATA_CONFIRM_RESULTS,
+                                        List.of(new ConfirmResult(false, write))))
+                        .build();
+        middleware
+                .onAgent(null, context, new AgentInput(List.of(request)), input -> Flux.empty())
+                .blockLast();
+        ReasoningInput reasoning = new ReasoningInput(List.of(), List.of(), null);
+        middleware
+                .onReasoning(
+                        null,
+                        context,
+                        reasoning,
+                        input -> {
+                            assertThat(input.messages()).isEmpty();
+                            return Flux.empty();
+                        })
+                .blockLast();
+        assertThat(state.getContext()).isEmpty();
+
+        state.contextMutable()
+                .add(
+                        Msg.builder()
+                                .role(MsgRole.TOOL)
+                                .content(
+                                        ToolResultBlock.text("Permission denied by user")
+                                                .withIdAndName("write-1", "write_file")
+                                                .withState(ToolResultState.DENIED))
+                                .build());
+        middleware
+                .onReasoning(
+                        null,
+                        context,
+                        reasoning,
+                        input -> {
+                            assertThat(input.messages())
+                                    .singleElement()
+                                    .satisfies(
+                                            message ->
+                                                    assertThat(message.getTextContent())
+                                                            .contains("禁止 LIMIT"));
+                            return Flux.empty();
+                        })
+                .blockLast();
+        assertThat(state.getContext()).hasSize(2);
+        middleware
+                .onReasoning(
+                        null,
+                        context,
+                        reasoning,
+                        input -> {
+                            assertThat(input.messages()).isEmpty();
+                            return Flux.empty();
+                        })
+                .blockLast();
+        RuntimeContext other =
+                RuntimeContext.builder()
+                        .agentState(AgentState.builder().sessionId("other").build())
+                        .build();
+        middleware
+                .onReasoning(
+                        null,
+                        other,
+                        reasoning,
+                        input -> {
+                            assertThat(input.messages()).isEmpty();
+                            return Flux.empty();
+                        })
+                .blockLast();
+        assertThat(other.getAgentState().getContext()).isEmpty();
+    }
 
     @Test
     void pausesBeforeFirstMutationAndPersistsAskingState() {

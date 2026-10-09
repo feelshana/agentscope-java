@@ -1,0 +1,18 @@
+{
+  "resumes_current_stage_automatically": true,
+  "batch_revalidation_after_model_edit": true,
+  "four_stage_navigation": true,
+  "welcome_matches_guided_workflow": true,
+  "published_and_draft_separated": true,
+  "requirements_mode_without_acceptance_buttons": true,
+  "publish_blocked_until_confirmation": true,
+  "technical_diff_collapsed": true,
+  "same_question_and_real_result": true,
+  "human_confirmation_advances_stage": true,
+  "browser_publication_succeeded": true,
+  "advanced_asset_link_preserved": true,
+  "query_navigation_preserves_group": true,
+  "no_runtime_exceptions": true,
+  "base_version": 2,
+  "published_version": 3
+}

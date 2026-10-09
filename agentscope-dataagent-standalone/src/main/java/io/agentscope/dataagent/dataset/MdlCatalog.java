@@ -73,6 +73,29 @@ public class MdlCatalog {
         }
     }
 
+    /** Reads only published, human-confirmed examples; draft content and old result values are excluded. */
+    public List<String> confirmedExamples(String groupId) {
+        Path root = props.groupRoot(groupId).resolve("published/knowledge/sql");
+        if (!Files.isDirectory(root)) return List.of();
+        try (var files = Files.list(root)) {
+            List<String> out = new ArrayList<>();
+            for (Path file :
+                    files.filter(p -> p.toString().endsWith(".md"))
+                            .filter(p -> !Files.isSymbolicLink(p))
+                            .sorted()
+                            .limit(50)
+                            .toList()) {
+                if (Files.size(file) > 65536) continue;
+                String text = Files.readString(file, StandardCharsets.UTF_8);
+                if (text.contains("\nverified: true\n") && text.contains("\nvalidation_id: "))
+                    out.add(text);
+            }
+            return out;
+        } catch (IOException e) {
+            throw new DatasetException("读取已发布问题示例失败", e);
+        }
+    }
+
     private static GroupMdl parse(JsonNode root) {
         List<Model> models = new ArrayList<>();
         for (JsonNode m : root.path("models")) {

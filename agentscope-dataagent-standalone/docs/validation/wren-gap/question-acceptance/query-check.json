@@ -1,0 +1,11 @@
+{
+  "passed": true,
+  "tools_in_order": [
+    "wren_recall_examples",
+    "wren_describe_model",
+    "wren_run_sql"
+  ],
+  "result_yuan": 3749,
+  "published_version": 2,
+  "answer_mentions_result": true
+}

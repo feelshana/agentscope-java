@@ -37,6 +37,7 @@ export interface ModelingConfirmRequest {
   toolName: string;
   confirmed: boolean;
   toolInput?: Record<string, unknown>;
+  feedback?: string;
 }
 
 export interface CurrentSession {

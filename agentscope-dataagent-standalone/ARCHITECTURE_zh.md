@@ -294,7 +294,9 @@ event: done         data: {"type":"done","sessionKey":"a7c3f1e8-..."}
 
 ### 3.2 语义建模链路（modeling-agent）
 
-**示例**：用户 bob 在知识库的语义建模页（`DatasetGroupPage` 第五 Tab）发起对话
+**查询修正与模型修复（ADR 0059、specs/051）**：批量问题通过 `QuestionIntakeForm` 的可增删行表格录入，空行忽略、去重并检查数量和长度。既有模型足够时沉淀问题实例，不强制新建 Cube/视图。`ModelingQuestionsPanel` 的“修改本次查询 SQL”通过 `ModelingQuestionController#correctSql` → `MdlQuestionService#correctSql` → `MdlQuestionStore#correctSql` 仅更新问题 YAML 和实例落点；提交携带服务端问题指纹，工作区锁内校验，旧确认实例移除，历史凭据因问题指纹不同而失效，随后经既有 Wren 草稿通道重新验证。其他问题与语义资产不修改。“建议修复模型”启动独立诊断对话，先审阅业务变化，实际写入仍经原生 HITL，模型变化后重验。人工 `archive` 将暂不处理的问题移出验收，保留源文件、历史和线上版本；下次发布移除其实例。全部未归档问题须有效确认属于本项目产品约束。
+
+**示例**：用户 bob 在独立语义建模工作台（`SemanticModelingPage`）发起对话
 「帮我把订单表和客户表关联起来，并统计有效订单金额」。
 
 ```
@@ -341,6 +343,20 @@ event: done         data: {"type":"done","sessionKey":"a7c3f1e8-..."}
 视图/规则）经发布成为问数的唯一查询边界（Wren-only，ADR 0029）。
 
 ---
+
+### 常用问题驱动的建模验收（ADR 0048、specs/039）
+
+接入数据并成功发布基础模型后即可问数。业务文档可选，进入对话时从一个核心分析问题开始，逐步澄清文档和现有定义中缺失的指标、粒度、单位、时间及过滤条件；用户先批量提交分析问题，随后通过对话澄清口径；每个未归档问题均需生成 SQL、经 Wren 执行并由人员确认。问题通过既有文件工具与 HITL 写入 `knowledge/questions/<id>.yml`，字段为 `question/definition/sql`（忽略历史 `required` 字段）；不新增数据库结构化写工具。建模过程中仍使用现有 MDL 可视化，同一批问题前期在“对话建模”呈现需求，后期在“验证与确认”审阅 SQL、实际结果并确认，无需再次填写。
+
+`MdlPublishService#validateQuestion` 对草稿进行严格校验、构建及派生模型物化，再通过 `WrenInstanceRegistry#callDraft` 启动独立的短生命周期 Wren MCP 实例执行只读 SQL。草稿验证不替换线上 published 快照，也不启动 Python 沙箱。SQL 执行成功仅表示 EXECUTED，必须由人员通过审阅页面确认业务口径与结果。
+
+### 引导式建模阶段（ADR 0049、specs/040）
+
+用户流程为数据准备 → 可选业务文档 → 对话澄清与建模 → 验证与人员确认 → 发布 → 问数。`ModelingWorkflowService#snapshot` 从租户数据集、published 清单、工作区差异、问题凭据与工程校验凭据推导阶段，不维护另一份数据库阶段状态；响应包含 queryAvailable、publishedVersion、changedAssets（含删除）、questionSummary、blockers、nextAction 和 canPublish。工作区变更不替换已发布版本，页面明确当前问数版本。
+
+`MdlPublishService#validate` 在 publish → workspace 锁顺序内执行工程校验，并由 `ModelingWorkflowStore#record` 将语义指纹与结果写入平台保护的 `.platform/workflow/engineering.json`。`ModelingWorkflowStore#current` 对模型变更后的旧凭据返回失效；业务确认与自动生成的 SQL 示例不改变工程指纹。工程通过不代表业务结果已确认，发布仍完整执行原校验和全部问题确认闸。该凭据仅用于引导，不授权发布或绕过 HITL。
+
+`ModelingToolkit#listModelingState` 与 `ModelingToolkit#validateMdl` 使用同一快照呈现下一步。所有未归档问题缺少定义或 SQL 时回到建模；未验证或过期时进入验证；执行成功且结果完整时要求人员确认；确认完成后进入发布。所有未确认问题均阻断本次发布，未配置问题的历史工程兼容原发布流程。无数据、初始化失败或无发布清单时不宣称可问数。
 
 ## 4. 问数工具链
 
@@ -551,6 +567,14 @@ Illegal mix of collations——`TableProvisioner` 建表 DDL 已统一 `utf8mb4_
 ADR 0020 D11）。
 
 ---
+
+### 问题验收与示例检索工具
+
+`ModelingToolkit#listModelingQuestions` 与 `ModelingToolkit#validateModelingQuestion` 提供问题状态和真实 Wren 执行结果；人员确认没有 agent 工具入口。写入问题仍经通用文件工具、写前三重闸与 HITL。`previewChange` 与实际写入共用 `MdlWorkspaceService#resolveWritable`，平台文件和经确认示例目录均不可写。
+
+问数助手新增 `WrenToolkit#wrenRecallExamples`（工具名 `wren_recall_examples`），仅检索已发布快照中的确认示例，按问题相关性返回最多三个供 SQL 生成参考；必须使用当前数据重新执行，不能把示例当成答案。工具输出包含已发布 MDL 版本；总收入/净收入等口径不明确时要求澄清。`WrenToolkit#wrenDescribeModel` 同时支持 View 的 SQL 定义和零行字段探索。
+
+环比分析提示词由 `DataDynamicContextMiddleware#onSystemPrompt` 所在动态注入链约束：不得暗中加“两个月都有收入”或“只看增长客户”等过滤；零基期、缺失月份和空结果应先核对数据与口径，再解释原因。该提示是行为约束，准确性仍需真实问题回归验证。
 
 ## 5. 数据集与知识库
 
@@ -831,6 +855,20 @@ ADOPTED 状态）；文件写入失败则整个采纳中止，DB 不留已采纳
 
 ---
 
+### 问题、确认凭据与发布门
+
+`MdlQuestionStore` 以工作区问题文件为事实源；执行凭据存放在平台拥有的 `.platform/questions/`，绑定问题哈希、语义文件哈希和验证 ID。模型、规则或问题修改后状态为 STALE，需要重新执行和确认。确认凭据不由模型提交，过期凭据、失败执行、截断结果不可确认。
+
+spec 046 / ADR 0056：新写入的问题必须声明 `modeling.strategy`（MODEL/VIEW/CUBE/EXAMPLE）、业务理由及逻辑资产引用。`ModelingToolkit#validateProposal` 校验声明，`MdlQuestionStore#coverage` 校验资产存在与 SQL 引用，`MdlPublishService#validateQuestion`、人员确认与发布均检查覆盖状态；这不替代 Wren 执行和人员口径确认。历史问题缺少声明时按历史 SQL 示例兼容，新增与修改声明纳入问题指纹。问题 Review 的 published 状态从同知识库 published 快照推导，区分已发布可问数与未发布草稿。前端使用编号列表和选中详情；第三步展示发布条件、阻塞事项及第四步发布入口。写入卡复用 Prism 展示完整内容和放大阅读，编辑内容可一次预检并提交原生 HITL，前端同步锁防重复提交。
+
+`MdlPublishService#doPublish` 在工作区锁内检查所有未归档问题是否 CONFIRMED，失败保留上一份可用 published 快照。未配置问题的现有知识库继续兼容原发布流程。已确认的问题生成 Wren 官方 `knowledge/sql/*.md` 格式（frontmatter 的 `nl/sql/source`），发布副本只保留当前有效的确认示例，历史手写且未确认的 SQL 示例需要迁移为问题后重新验收。
+
+文件写入、确认和发布共用每组工作区锁；发布与草稿执行额外使用既有发布互斥锁，顺序为发布锁再工作区锁。知识库 ownerId 和 DatasetScope 在服务层校验，HTTP 接口还经 AgentAccessGuard；阻塞执行位于 boundedElastic。当前凭据绑定语义版本，不代表数据永久不变，日后数据更新仍通过当前 Wren 查询获取结果。
+
+### 建模流程快照接口
+
+`ModelingWorkflowController#snapshot` 提供 `GET /api/dataset-groups/{groupId}/modeling/workflow`：principal → modeling-agent RUN 鉴权 → DatasetScope → ownerId 校验，文件/JPA 调用位于 boundedElastic。scope 缺失、会话范围之外或他人知识库均拒绝。工程校验状态是平台文件，agent 不能通过 write_file/patch_file 写入。
+
 ## 6. 知识图谱（已停用）
 
 知识图谱构建链路已停用：平台不再从知识文档与数据集 schema 中提炼实体/关系三元组，跨表关系与
@@ -970,11 +1008,13 @@ manifest 尚不存在时（首次升级到该策略）执行一次性「采纳�
 
 ## 11. 前端结构
 
+建模问题入口使用 `QuestionIntakeForm` 可增删行表格；`ModelingQuestionsPanel` 将问题 SQL 修正、模型修复提议与移出验收分开，并在操作后刷新流程快照，提供发布入口。人工编辑只操作问题实例，模型修复仍由现有建模对话和 HITL 执行，详见第 3 章与 specs/051。
+
 React 18 + TypeScript + Vite SPA（`frontend/`），构建产物进 `classpath:/static/` 由后端托管。
 
 - **页面**：
   - 聊天：`ChatPage`（SSE 消费 `api/chat.ts`，`ChatPanel`/`ToolCallBlock`/`EChartsBlock`/`PythonArtifactsPanel`/`Markdown` 渲染），`OntologyChatPage`
-  - 配置：`configure/`（DatasetsPage、DatasetDetailPage、DatasetGroupPage（左侧导航：文件/知识图谱（已停用，历史展示）/树结构目录/语义建模；独立「关系说明文档」视图已删除，上传统一为建模页「上传语义文档」，specs/028。第五 Tab「语义建模」= 独立全屏路由 `/configure/modeling/:groupId`（specs/030 工作台，ADR 0041）：`AppShell` 在该路径隐藏全局会话侧栏、页面独占整个视口；顶栏 = 返回链 + 组名 + 状态徽章 + `ModelingChatPanel` 对话 dock 开关（默认展开可折叠、固定 520px，`variant=dock` 内联渲染无遮罩；建模变更经 `modeling:updated` 事件触发页面 refresh，不重置当前 tab）+ 语义完善度三档徽章（基线/完善中/已完善，specs/027）+ 七资产 tab 分段控件（总览｜表与关系｜派生模型｜Cube｜视图｜术语与规则｜MDL，active 为浅紫底紫边 pill，带计数徽章；tab 与选中资产进 URL `?asset=<key>&selected=<name>`，刷新/分享不丢位；旧 `?view=modeling` 链接重定向至本路由）+ 模型/派生模型/Cube/视图四 tab 为「左资产列表 + 右工作区 YAML 高亮」双栏浏览器（`components/modeling/AssetYamlBrowser`，行级「未发布」橙点 = `/mdl` preview 工作区 vs publishedFiles 内容差异；资产→文件映射由 `MdlWorkspaceReader` path 透传，派生模型右栏渲染 ref_sql.sql，见 5.6）+ DIRTY 状态条带草稿计数与「去发布」入口 + 文档语义增强多类型提案审阅卡（specs/011、014），助手回复按 Markdown 渲染）、SemanticConfigPage、SkillsPage、SubagentsPage、ToolsPage、ChannelsPage、SettingsPage）
+  - 配置：`configure/`（DatasetsPage、DatasetDetailPage、DatasetGroupPage（左侧导航：文件/知识图谱（已停用，历史展示）/树结构目录/语义建模；独立「关系说明文档」视图已删除，上传统一为建模页「上传语义文档」，specs/028。第五 Tab「语义建模」= 独立全屏路由 `/configure/modeling/:groupId`；`AppShell` 隐藏全局会话侧栏。specs/041 / ADR 0050 将聊天置于建模主区域，右侧为问题清单及阶段引导，顶部固定“查看模型”切换资产工作区；旧资产 URL 与选中位置保留。模型/派生模型/Cube/视图复用 `AssetYamlBrowser`，MDL 页提供当前结构图及草稿/发布工程快照。文档语义增强提案移入术语与规则详情）、SemanticConfigPage、SkillsPage、SubagentsPage、ToolsPage、ChannelsPage、SettingsPage）
   - 管理：`admin/`（Overview、Agents、Users、Channels、Instances、Sessions、Usage、Config、Debug）
   - 其他：Login、Profile、Workspace、Usage、Appearance、UserBindings
 - **MDL 可视化与确认**：`MdlPublishPanel`（YAML diff + 验证/发布）、`MdlGraphView`（G6 只读 ERD）与 `ModelingHitlCard`（写工具确认/调整；文件写工具 `write_file`/`patch_file` 走专用变更卡——服务端预检结论、行级 diff 折叠、全文/替换文本编辑、重新预检，specs/019 §5，行级 diff 由 `utils/diff.ts` 自实现）；`MdlGraphView` 和关系确认卡复用 `ReadOnlyRelationGraph`，保持只读语义。
@@ -982,6 +1022,27 @@ React 18 + TypeScript + Vite SPA（`frontend/`），构建产物进 `classpath:/
 - **工作区**：`WorkspaceFileTree` + `WorkspaceEditor` 经 `AgentWorkspaceController` 读写用户沙箱文件。
 
 ---
+
+### 引导式建模工作台
+
+ADR 0054 / spec 044：`MdlPublishService#validateQuestion` 在工作区锁内复用 `MdlWorkspaceReader#read`，将问题 SQL 与当时全部视图定义目录写入 `MdlQuestionStore.Receipt.evidence`。确认与拒绝保留原快照，旧凭据缺失快照时提示重验，不用当前定义冒充历史依据；视图变化仍使旧凭据过期。`ModelingQuestionsPanel` 就地展示定义 SQL、确认人/时间，直接应用确认接口返回的 Review，并用服务端 workflow 展示下一步。建模与验证清单复用 `QuestionIntakeForm`；显式提交后通过原生 SSE 发送一次，并经原生 HITL 后才成为已保存 YAML。
+
+ADR 0053：原生拒绝可能保留历史 ToolUseBlock 的 ASKING 状态，已处理边界以非 suspended ToolResultBlock 为准。`ModelingHitlMiddleware#onActing` 排除已处理调用后继续委托原生 acting/reasoning；`ChatController#findAskingTools` 不恢复或再次确认这些旧调用。
+
+`ModelingChatPanel#restorePendingProposal` 在消息流与确认恢复流结束后回读原生 currentSession，把已持久化的 ASKING 提案显示到当前回复；部分恢复流只含 done 时仍可继续确认。回读不执行或批准工具，也不创建另一套确认状态机。
+
+ADR 0052 / spec 043：预检失败卡片可“让助手修正”，`ChatController#confirmModeling` 接收仅拒绝可携带的 feedback（最多 4000 字符），仍通过原生 ConfirmResult 拒绝当前调用。框架确认恢复不保存入站文本，因此 `ModelingHitlMiddleware#onAgent` 在本次 RuntimeContext 暂存反馈，`ModelingHitlMiddleware#onReasoning` 仅在匹配的原生 DENIED 结果生成后把反馈加入会话和模型输入，避免跨调用共享。新提案仍须 HITL 与写前门禁。`BusinessDocumentGuide` 使用紧凑状态栏与原生 dialog 全文预览，查看文档不挤占聊天高度；进度栏 300px，助手回复占满可用宽度。
+
+ADR 0051 / spec 042：`BusinessDocumentGuide` 在建模主区顶部建议先上传业务文档，再提出分析问题，无文档仍可直接对话。`SemanticModelingPage#onUploadSemanticDoc` 按真实请求显示进度、成功文件名或错误，成功后更新已保存内容；刷新通过 GroupDetail.knowledge 恢复资料状态。文档保存与异步口径分析分别显示，全文在弹窗预览；更新上传替换当前内容。顶部显著“查看语义模型”入口标注模型/Cube/视图/MDL 范围。
+
+spec 041 / ADR 0050：`SemanticModelingPage` 的对话建模阶段以聊天为主区域，右侧显示同一批问题与下一步。顶部保留数据准备、对话建模、验证确认、发布导航，以及固定“查看模型”入口。模型/派生模型/Cube/视图/术语/MDL 沿用资产 URL，在独立详情工作区浏览，返回不卸载聊天或待确认 HITL。窄屏按上下顺序展示。
+
+spec 045 / ADR 0055：无已登记问题、无待确认原生 HITL 时，页面先展示业务文档入口和批量问题表单，隐藏聊天及重复清单入口。显式提交后展示聊天并发送一次批量请求；恢复已有问题或待确认 HITL 时直接展示聊天。新增问题仅从表单进入，对话用于口径澄清和修正。助手通过原生 HITL 保存 `knowledge/questions/*.yml`，完善 SQL，并据此创建或复用视图/Cube。已登记清单仅展示实际保存的 YAML，修改和移除通过对话预填提交。移除采用受保护 YAML 的 `archived=true` 归档，`MdlQuestionStore#readQuestions` 忽略归档项，保留原文件与审计记录；已确认示例仍按当前有效问题过滤，不把归档问题作为发布示例。
+
+`ModelingWorkflowService#snapshot` 将所有问题计入不完整、待验证、待审阅进度，所有未确认项进入发布阻断；`ModelingQuestionsPanel` 批量验证全部完整待验问题，各结果仍逐项人工确认。服务端重新核验所有未归档问题及工程结构；忽略历史分类，内容未变化的旧确认哈希兼容有效。模型/问题变化会使旧结果失效。
+
+`ModelSnapshotPanel` 在 MDL 详情展示草稿和已发布工程文件及差异；上方 `MdlGraphView` 是当前草稿的结构可视化，工程 YAML 明确标注为工程定义，不冒充编译 JSON。`MdlPublishPanel` 展示业务变更和全部问题确认，技术差异折叠。阶段接口及问题查询/验证/确认接口沿用 `api/modelingWorkflow.ts`、`api/modelingQuestions.ts`，无 SSE 变更。问数始终使用已发布版本，HITL 文件修改确认与业务结果确认分开。
+
 
 ## 12. 配置与启动
 

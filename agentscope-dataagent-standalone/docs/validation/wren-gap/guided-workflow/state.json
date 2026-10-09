@@ -1,0 +1,73 @@
+{
+  "group_id": "2938f8c8-6fee-44aa-a700-6aa8c9769c98",
+  "foreign_owner_rejected": true,
+  "dataset": {
+    "id": "065faee3-28c1-4b8e-ab48-6d4216ea3875",
+    "name": "order",
+    "groupId": "2938f8c8-6fee-44aa-a700-6aa8c9769c98",
+    "tableName": "ds_81b637d8_d413fd6c_order",
+    "schemaName": "data_agent",
+    "rowCount": 12,
+    "description": "订单表，记录订单的基础信息，包括订单ID、客户ID、下单时间、订单金额、订单状态及删除标记，用于订单管理与交易分析。",
+    "sourceFileName": "ds_order.csv",
+    "columns": [
+      {
+        "name": "order_id",
+        "originalName": "order_id",
+        "sqlType": "BIGINT",
+        "description": "订单ID，唯一标识一笔订单，包含1001, 1002, 1003等"
+      },
+      {
+        "name": "customer_id",
+        "originalName": "customer_id",
+        "sqlType": "BIGINT",
+        "description": "客户ID，标识下单客户，包含1, 2, 999等"
+      },
+      {
+        "name": "order_time",
+        "originalName": "order_time",
+        "sqlType": "DATETIME",
+        "description": "订单时间，格式为'yyyy-MM-dd HH:mm:ss'，包含2025-01-01 00:00:00,2025-01-31 23:59:59等"
+      },
+      {
+        "name": "amount_cents",
+        "originalName": "amount_cents",
+        "sqlType": "BIGINT",
+        "description": "订单金额，单位为分，包含10000, 20000, 30000等"
+      },
+      {
+        "name": "status",
+        "originalName": "status",
+        "sqlType": "VARCHAR(1024)",
+        "description": "订单状态，包含PAID(已支付)、CANCELLED(已取消)、REFUNDED(已退款)等"
+      },
+      {
+        "name": "is_deleted",
+        "originalName": "is_deleted",
+        "sqlType": "BIGINT",
+        "description": "删除标记，0表示未删除，1表示已删除"
+      }
+    ],
+    "createdAt": "2026-10-07T04:45:06.572793800Z",
+    "origin": "upload",
+    "externalDataSourceId": null
+  },
+  "session": "guided-model-97273e86cc314e72a062eff88634b380",
+  "question_id": "total_sales",
+  "native_hitl_count": 1,
+  "oracle_yuan": 3749.0,
+  "wren_result": {
+    "columns": [
+      "total_sales"
+    ],
+    "rows": [
+      {
+        "total_sales": 3749.0
+      }
+    ],
+    "row_count": 1,
+    "truncated": false
+  },
+  "published_by_browser": true,
+  "expiry_checked": true
+}

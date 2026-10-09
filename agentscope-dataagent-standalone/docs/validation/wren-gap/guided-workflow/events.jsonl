@@ -1,0 +1,4 @@
+{"timestamp": "2026-10-07T12:46:00.540492", "stage": "guided-model", "event": "hitl_request", "sessionKey": null, "error": null}
+{"timestamp": "2026-10-07T12:46:00.755515", "stage": "guided-model", "event": "done", "sessionKey": "guided-model-97273e86cc314e72a062eff88634b380", "error": null}
+{"timestamp": "2026-10-07T12:46:14.828756", "stage": "guided-model", "event": "done", "sessionKey": "guided-model-97273e86cc314e72a062eff88634b380", "error": null}
+{"timestamp": "2026-10-07T13:00:23.217200", "stage": "guided-query", "event": "done", "sessionKey": "guided-query-5d857667e6a84338a7875cadedf22fe6", "error": null}

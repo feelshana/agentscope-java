@@ -1,0 +1,24 @@
+{
+  "session": "repair-probe-a20524d0d6",
+  "group_id": "2938f8c8-6fee-44aa-a700-6aa8c9769c98",
+  "measurements": {
+    "documentHeight": 70,
+    "chatWidth": 1092,
+    "sidebarWidth": 300,
+    "chatHeight": 718
+  },
+  "checks": {
+    "real_preview_rejects_limit": true,
+    "document_strip_under_90px": true,
+    "conversation_wider_than_progress": true,
+    "adopt_disabled_on_failed_preview": true,
+    "document_dialog_no_layout_shift": true,
+    "document_dialog_closes": true,
+    "repair_denies_real_call_with_error": true,
+    "native_resume_proposes_new_call": true,
+    "repaired_proposal_passes_real_preview": true,
+    "no_question_write_without_approval": true,
+    "narrow_no_horizontal_overflow": true,
+    "no_runtime_exceptions": true
+  }
+}

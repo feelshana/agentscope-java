@@ -82,7 +82,7 @@ class HarnessGatewaySandboxlessTest {
     }
 
     @Test
-    void everyOtherAgentStillBorrowsThePerUserSandbox() {
+    void everyOtherAgentBorrowsOnlyOnFirstOperationAndReusesThePerUserSandbox() throws Exception {
         when(client.create(any(), any(), any())).thenReturn(sandbox);
         RuntimeContext.Builder first = RuntimeContext.builder();
         RuntimeContext.Builder second = RuntimeContext.builder();
@@ -92,15 +92,20 @@ class HarnessGatewaySandboxlessTest {
 
         SandboxContext ctx = first.build().get(SandboxContext.class);
         assertThat(ctx).isNotNull();
-        assertThat(ctx.getExternalSandbox()).isSameAs(sandbox);
+        assertThat(ctx.getExternalSandbox()).isNotNull();
         assertThat(ctx.getIsolationScope()).isEqualTo(IsolationScope.USER);
         // The registry keeps one live container per (userId, agentId): the second borrow reuses it.
-        assertThat(second.build().get(SandboxContext.class).getExternalSandbox()).isSameAs(sandbox);
+        verify(client, never()).create(any(), any(), any());
+        ctx.getExternalSandbox().exec(first.build(), "echo first", 1);
+        second.build()
+                .get(SandboxContext.class)
+                .getExternalSandbox()
+                .exec(second.build(), "echo second", 1);
         verify(client, times(1)).create(any(), any(), any());
     }
 
     @Test
-    void clearingTheSandboxlessSetRestoresBorrowingForEveryId() {
+    void clearingTheSandboxlessSetRestoresLazyBorrowingForEveryId() throws Exception {
         when(client.create(any(), any(), any())).thenReturn(sandbox);
         gateway.setSandboxlessAgents(null);
         RuntimeContext.Builder builder = RuntimeContext.builder();
@@ -108,6 +113,11 @@ class HarnessGatewaySandboxlessTest {
         gateway.attachUserSandboxContext(builder, "alice", MODELING_AGENT);
 
         assertThat(builder.build().get(SandboxContext.class)).isNotNull();
+        verify(client, never()).create(any(), any(), any());
+        builder.build()
+                .get(SandboxContext.class)
+                .getExternalSandbox()
+                .exec(builder.build(), "echo test", 1);
         verify(client).create(any(), any(), any());
     }
 }

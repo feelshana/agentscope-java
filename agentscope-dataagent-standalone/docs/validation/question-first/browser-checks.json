@@ -1,0 +1,27 @@
+{
+  "group_id": "76649222-bc35-4c9c-88e4-7d672b3b0b92",
+  "checks": {
+    "initial_batch_form": true,
+    "initial_chat_hidden": true,
+    "initial_single_intake": true,
+    "no_classification": true,
+    "submission_shows_chat": true,
+    "single_sse_submission": true,
+    "no_chat_batch_button": true,
+    "pending_hitl_restores_chat": true,
+    "two_questions_saved_with_sql": true,
+    "classification_removed_from_api": true,
+    "question_driven_view_or_cube": true,
+    "legacy_false_questions_block_publish": true,
+    "one_confirmation_still_blocked": true,
+    "real_wren_matches_csv_oracle": true,
+    "all_confirmed_can_publish": true,
+    "saved_questions_restore_conversation": true,
+    "no_runtime_exceptions": true,
+    "final_doc_copy_matches_intake": true,
+    "append_uses_multi_question_form": true,
+    "cancel_append_does_not_save": true,
+    "narrow_no_horizontal_overflow": true,
+    "final_no_runtime_exceptions": true
+  }
+}

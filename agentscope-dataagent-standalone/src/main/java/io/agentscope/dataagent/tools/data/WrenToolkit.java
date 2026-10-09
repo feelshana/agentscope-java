@@ -130,6 +130,44 @@ public final class WrenToolkit {
     // -----------------------------------------------------------------
 
     @Tool(
+            name = "wren_recall_examples",
+            description =
+                    "按需查看当前知识库已发布且由建模人员确认的问题、口径与逻辑 SQL 示例。问数有口径歧义或复杂计算时先调用；示例只作参考，必须重新经 Wren"
+                            + " 查询，不能复用旧数值。问题含义不明确时先澄清销售额/净营收、粒度、单位与时间。")
+    public String wrenRecallExamples(
+            DatasetScope scope,
+            RuntimeContext rc,
+            @ToolParam(name = "group_id", description = "知识库名称或 ID") String groupId,
+            @ToolParam(name = "question", description = "本次业务问题") String question) {
+        DatasetScope eff = effectiveScope(scope, rc);
+        if (eff == null) return "error: 无法确定租户上下文";
+        GroupRef ref = resolveGroup(eff, groupId);
+        if (ref.error() != null) return ref.error();
+        if (question == null || question.isBlank()) return "error: question 不能为空";
+        List<String> examples = mdlCatalog.confirmedExamples(ref.group().getId());
+        List<String> terms =
+                java.util.Arrays.stream(question.split("[\\s，。？！、]+"))
+                        .filter(s -> !s.isBlank())
+                        .toList();
+        examples =
+                examples.stream()
+                        .sorted(
+                                java.util.Comparator.comparingInt(
+                                                (String value) ->
+                                                        (int)
+                                                                terms.stream()
+                                                                        .filter(value::contains)
+                                                                        .count())
+                                        .reversed())
+                        .limit(3)
+                        .toList();
+        return groupHeader(ref.group())
+                + (examples.isEmpty()
+                        ? "暂无已发布的确认示例，请依赖模型口径，遇到歧义先澄清。"
+                        : String.join("\n\n", examples) + "\n请核对口径并重新查询；不得把示例当作固定答案。");
+    }
+
+    @Tool(
             name = "wren_run_sql",
             description =
                     """
@@ -380,8 +418,8 @@ public final class WrenToolkit {
             description =
                     "按需查看已发布逻辑模型的字段、关系和相关 Cube。关系投影默认折叠；需要具体跨模型字段时传"
                             + " expand_relation_fields=true。只传逻辑模型名，不要传 datasetId、sourceId、schema"
-                            + " 或物理表名；不要传视图名或 Cube 名（视图请直接 wren_run_sql，Cube 请用"
-                            + " wren_query_cube）。group_id 参数优先直接传知识库名称（推荐）；也可传完整"
+                            + " 或物理表名；允许已发布视图名（返回定义与输出列），Cube 请用"
+                            + " wren_query_cube。group_id 参数优先直接传知识库名称（推荐）；也可传完整"
                             + " group_id，必须逐字符原样复制")
     public String wrenDescribeModel(
             DatasetScope scope,
@@ -422,7 +460,10 @@ public final class WrenToolkit {
             byName.put(model.name(), model);
         }
         for (String name : modelNames) {
-            if (name == null || name.isBlank() || !byName.containsKey(name)) {
+            if (name == null
+                    || name.isBlank()
+                    || (!byName.containsKey(name)
+                            && mdl.views().stream().noneMatch(v -> name.equals(v.name())))) {
                 return unknownModelMessage(mdl, name);
             }
         }
@@ -430,8 +471,42 @@ public final class WrenToolkit {
         StringBuilder out = new StringBuilder("## 已发布语义模型详情\n\n");
         out.append(groupHeader(ref.group()));
         for (String name : new java.util.LinkedHashSet<>(modelNames)) {
-            appendModelDescription(
-                    out, byName.get(name), mdl, Boolean.TRUE.equals(expandRelationFields));
+            if (!byName.containsKey(name)) {
+                MdlCatalog.View view =
+                        mdl.views().stream()
+                                .filter(v -> name.equals(v.name()))
+                                .findFirst()
+                                .orElseThrow();
+                out.append("### 视图 ")
+                        .append(name)
+                        .append("\n\n")
+                        .append(view.description() == null ? "" : view.description())
+                        .append("\n\n**已审阅定义：**\n```sql\n")
+                        .append(view.sql())
+                        .append("\n```\n");
+                try {
+                    var columns =
+                            wrenGateway.call(
+                                    ref.group().getId(),
+                                    "run_sql",
+                                    Map.of(
+                                            "sql",
+                                            "SELECT * FROM \""
+                                                    + name.replace("\"", "\"\"")
+                                                    + "\" WHERE 1=0",
+                                            "limit",
+                                            1));
+                    if (columns != null && columns.ok()) {
+                        JsonNode schema = MAPPER.readTree(columns.payload());
+                        out.append("**输出列：** ").append(schema.path("columns")).append("\n\n");
+                    }
+                } catch (Exception e) {
+                    out.append("输出列探查暂不可用，请依据视图定义核对字段。\n");
+                }
+            } else {
+                appendModelDescription(
+                        out, byName.get(name), mdl, Boolean.TRUE.equals(expandRelationFields));
+            }
             if (out.length() > MAX_DESCRIBE_CHARS) {
                 return out.substring(0, MAX_DESCRIBE_CHARS) + "\n\n*(内容已截断，请减少 model_names 后重试)*";
             }
@@ -776,7 +851,13 @@ public final class WrenToolkit {
     // -----------------------------------------------------------------
 
     private static String groupHeader(DatasetGroupEntity group) {
-        return "**知识库：** " + group.getName() + "（group_id: `" + group.getId() + "`）\n\n";
+        return "**知识库：** "
+                + group.getName()
+                + "（group_id: `"
+                + group.getId()
+                + "`，已发布 MDL 版本："
+                + group.getMdlVersion()
+                + "）\n\n";
     }
 
     /** DIRTY groups keep serving the previous valid publish until the next successful rebuild. */

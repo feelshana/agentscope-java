@@ -167,7 +167,19 @@ public class ChatController {
             String toolCallId,
             String toolName,
             Boolean confirmed,
-            Map<String, Object> toolInput) {}
+            Map<String, Object> toolInput,
+            String feedback) {
+        public ModelingConfirmRequest(
+                String sessionKey,
+                java.util.List<String> groupIds,
+                String replyId,
+                String toolCallId,
+                String toolName,
+                Boolean confirmed,
+                Map<String, Object> toolInput) {
+            this(sessionKey, groupIds, replyId, toolCallId, toolName, confirmed, toolInput, null);
+        }
+    }
 
     /** Response for the synchronous endpoint. */
     public record ChatResponse(String reply, String sessionKey) {}
@@ -304,6 +316,11 @@ public class ChatController {
             return Flux.just(sse("error", Map.of("type", "error", "error", NO_MODEL_MESSAGE)));
         }
         String conversationId = normalizedConversationId(req.sessionKey());
+        String feedback = req.feedback() == null ? "" : req.feedback().trim();
+        if (feedback.length() > 4000
+                || (!feedback.isEmpty() && !Boolean.FALSE.equals(req.confirmed()))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "修正反馈只能随拒绝提交，且不能超过 4000 个字符");
+        }
         if (conversationId == null
                 || req.replyId() == null
                 || req.replyId().isBlank()
@@ -381,7 +398,10 @@ public class ChatController {
                 Msg.builder()
                         .name("user")
                         .role(MsgRole.USER)
-                        .textContent(Boolean.TRUE.equals(req.confirmed()) ? "[confirm]" : "[deny]")
+                        .textContent(
+                                Boolean.TRUE.equals(req.confirmed())
+                                        ? "[confirm]"
+                                        : feedback.isEmpty() ? "[deny]" : feedback)
                         .metadata(
                                 Map.of(
                                         Msg.METADATA_CONFIRM_RESULTS,
@@ -569,12 +589,21 @@ public class ChatController {
 
     private static List<ToolUseBlock> findAskingTools(AgentState state) {
         List<Msg> context = state.getContext();
+        Set<String> resolved =
+                context.stream()
+                        .flatMap(message -> message.getContent().stream())
+                        .filter(io.agentscope.core.message.ToolResultBlock.class::isInstance)
+                        .map(io.agentscope.core.message.ToolResultBlock.class::cast)
+                        .filter(result -> !result.isSuspended())
+                        .map(io.agentscope.core.message.ToolResultBlock::getId)
+                        .collect(java.util.stream.Collectors.toSet());
         for (int i = context.size() - 1; i >= 0; i--) {
             List<ToolUseBlock> asking =
                     context.get(i).getContent().stream()
                             .filter(ToolUseBlock.class::isInstance)
                             .map(ToolUseBlock.class::cast)
                             .filter(tool -> tool.getState() == ToolCallState.ASKING)
+                            .filter(tool -> !resolved.contains(tool.getId()))
                             .toList();
             if (!asking.isEmpty()) {
                 return asking;

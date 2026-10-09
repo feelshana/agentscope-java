@@ -59,6 +59,15 @@ class DatasetParsingTest {
     }
 
     @Test
+    void preservesLeadingZeroIdentifiersAndKeepsCompactDates() throws IOException {
+        ParsedTable table = csv("code,value\n000123,1\n001234,2\n", 100);
+        assertEquals("VARCHAR(1024)", table.columns().get(0).sqlType());
+        assertEquals("000123", table.rows().get(0).get(0));
+        assertEquals("DATE", TypeInferrer.infer(List.of("20251001", "20251002")));
+        assertEquals("VARCHAR(1024)", TypeInferrer.infer(List.of("123", "000123")));
+    }
+
+    @Test
     void handlesQuotedCommaAndNewline() throws IOException {
         ParsedTable t = csv("name,note\n\"A, B\",\"line1\nline2\"\nplain,ok\n", 100);
         assertEquals(2, t.rows().size());

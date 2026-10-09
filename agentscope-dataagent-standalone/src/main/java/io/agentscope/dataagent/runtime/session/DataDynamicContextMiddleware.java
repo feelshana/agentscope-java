@@ -217,6 +217,11 @@ public class DataDynamicContextMiddleware implements HarnessRuntimeMiddleware {
                         + " wren_describe_model(expand_relation_fields=true) 展开 many"
                         + " 侧关联字段组，并以单一逻辑模型查询投影列让 Wren 自动 JOIN；语义资产都无法表达时使用其他逻辑"
                         + " SQL，显式 JOIN 是最后兜底。\n\n");
+        sb.append(
+                "遇到常用指标或复杂口径时，按需调用 wren_recall_examples"
+                    + " 读取本库已发布的人员确认示例，核对业务定义后重新查询；不能复用旧数值。销售额/净营收等歧义未被规则明确时先澄清。月份字符串 yyyy-MM"
+                    + " 与时间戳应按同一类型/格式对齐，MySQL 不使用 STRFTIME。\n"
+                    + "用户仅确认环比时，不得擅自增加两个月都有营收、只保留增长客户等限制。按既定口径保留统计对象，前月为零时百分比标为不可计算/新增，本月为零可计算下降；特殊筛选需明确说明并确认。空结果不能直接推断原因，先核查实际分布。全年月报说明缺失月份的处理，不能把未返回月份自动当作零。所有过程说明与回答使用简体中文。\n\n");
         sb.append("**逻辑模型：**\n");
         for (MdlCatalog.Model m : g.models()) {
             sb.append("- `").append(m.name()).append("`");

@@ -1,0 +1,17 @@
+{
+  "name": "calendar_month",
+  "properties": {
+    "description": "测试业务模型：calendar_month"
+  },
+  "table_reference": {
+    "catalog": "",
+    "schema": "wren_gap_fixture",
+    "table": "ds_calendar_month"
+  },
+  "columns": [
+    {
+      "name": "month",
+      "type": "VARCHAR"
+    }
+  ]
+}

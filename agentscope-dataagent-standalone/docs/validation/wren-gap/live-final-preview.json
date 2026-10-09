@@ -1,0 +1,203 @@
+{
+  "files": [
+    {
+      "path": ".gitignore",
+      "content": "# Compiled MDL — rebuild with `wren context build`\r\ntarget/\r\n"
+    },
+    {
+      "path": "AGENTS.md",
+      "content": "# AGENTS.md\r\n\r\nThis project uses [Wren Engine](https://github.com/Canner/WrenAI) as the semantic layer for data querying. Queries are written against MDL model names, not raw database tables.\r\n\r\n## Answering data questions\r\n\r\nWhen the user asks about data, metrics, reports, or business questions, follow this workflow:\r\n\r\n1. `wren memory fetch -q \"<question>\"` — get relevant schema context\r\n2. `wren memory recall -q \"<question>\" --limit 3` — find similar past queries\r\n3. Write SQL using model names from the MDL (not raw table names)\r\n4. `wren --sql \"<sql>\"` — execute through the semantic layer\r\n5. `wren memory store --nl \"<question>\" --sql \"<sql>\"` — store confirmed results\r\n\r\nIf this is the first query in the session, also run `wren context instructions` to load business rules.\r\n\r\n## Modifying the data model\r\n\r\nWhen the user wants to add models, change schema, or onboard a new table:\r\n\r\n1. Edit YAML files in `models/`, `views/`, or `relationships.yml`\r\n2. `wren context validate` — check structure\r\n3. `wren context build` — compile to `target/mdl.json`\r\n4. `wren memory index` — re-index schema for search\r\n\r\n## Capturing business context\r\n\r\nRules the schema can't express — canonical tables, default filters, units, enum meanings — go in `knowledge/rules/*.md` (read by `wren context instructions`). Confirmed NL→SQL examples are saved with `wren memory store` (step 5 above), which writes them to `knowledge/sql/`. Both live in the project and are committed with it.\r\n\r\n## Prerequisites\r\n\r\nThis project requires the `wren` CLI. Install with your data source extra:\r\n\r\n```bash\r\npip install \"wrenai[postgres,memory,ui]\"\r\n```\r\n\r\nReplace `postgres` with your data source (`mysql`, `bigquery`, `snowflake`, `clickhouse`, `trino`, `mssql`, `databricks`, `redshift`, `spark`, `athena`, `oracle`). The `memory` extra upgrades recall to semantic (embedding) search — without it, `memory store` / `index` / `recall` still work over the `knowledge/` files. `ui` enables the interactive UI.\r\n\r\nSee https://docs.getwren.ai/oss/engine/get_started/installation for full setup.\r\n\r\n## Quick reference\r\n\r\n| Task | Command |\r\n|------|---------|\r\n| Run a query | `wren --sql \"SELECT ...\"` |\r\n| Preview planned SQL | `wren dry-plan --sql \"SELECT ...\"` |\r\n| Show available models | `wren context show` |\r\n| Check connection | `wren profile debug` |\r\n| Check memory index | `wren memory status` |\r\n| Rebuild after changes | `wren context build && wren memory index` |\r\n"
+    },
+    {
+      "path": "cubes/net_revenue_metrics/metadata.yml",
+      "content": "name: net_revenue_metrics\nbase_object: order_net_revenue\nmeasures:\n  - name: order_count\n    expression: COUNT(*)\n    type: BIGINT\n  - name: sales_amount_cents\n    expression: SUM(amount_cents)\n    type: BIGINT\n  - name: refund_amount_cents\n    expression: SUM(refund_cents)\n    type: BIGINT\n  - name: net_revenue_cents\n    expression: SUM(net_cents)\n    type: BIGINT\n  - name: net_revenue_yuan\n    expression: SUM(net_cents) / 100.0\n    type: DOUBLE\ndimensions:\n  - name: customer_id\n    expression: customer_id\n    type: BIGINT\ntime_dimensions:\n  - name: order_month\n    expression: order_month\n    type: TIMESTAMP\nproperties:\n  description: |\n    净营收指标：在有效订单基座上扣除 SUCCESS 退款后的净营收。退款先按 order_id 汇总再关联订单（FAILED 不冲减），退款按原订单月份归属。\n    净营收 = 有效订单金额 - 成功退款金额；金额单位为分，元口径已额外提供 net_revenue_yuan。\n"
+    },
+    {
+      "path": "cubes/valid_order_metrics/metadata.yml",
+      "content": "name: valid_order_metrics\nbase_object: valid_order\nmeasures:\n  - name: order_count\n    expression: COUNT(*)\n    type: BIGINT\n  - name: sales_amount_cents\n    expression: SUM(amount_cents)\n    type: BIGINT\n  - name: sales_amount_yuan\n    expression: SUM(amount_cents) / 100.0\n    type: DOUBLE\n  - name: paying_customers\n    expression: COUNT(DISTINCT customer_id)\n    type: BIGINT\ndimensions:\n  - name: customer_id\n    expression: customer_id\n    type: BIGINT\n  - name: customer_name\n    expression: customer_name\n    type: VARCHAR\n  - name: region\n    expression: region\n    type: VARCHAR\ntime_dimensions:\n  - name: order_month\n    expression: order_month\n    type: TIMESTAMP\nproperties:\n  description: |\n    有效订单指标：有效订单口径（status=PAID 且未删除，且客户存在且非内部）下的订单数、销售额（分/元）与付费客户数。\n    付费客户数按 customer_id 去重（禁用 customer_name 去重）。金额字段单位为分，元口径已额外提供 sales_amount_yuan。\n"
+    },
+    {
+      "path": "knowledge/caveats/.gitkeep",
+      "content": ""
+    },
+    {
+      "path": "knowledge/glossary/.gitkeep",
+      "content": ""
+    },
+    {
+      "path": "knowledge/knowledge.yml",
+      "content": "schema_version: 1\r\n"
+    },
+    {
+      "path": "knowledge/metrics/.gitkeep",
+      "content": ""
+    },
+    {
+      "path": "knowledge/rules/.gitkeep",
+      "content": ""
+    },
+    {
+      "path": "knowledge/rules/general.md",
+      "content": "# Business rules\n\n本文件是电商测试库的业务口径唯一说明，问数与取数一律遵循以下约定。\n\n## Currency\n\n- 所有金额字段（`order.amount_cents`、`order_item.line_cents`、`refund.refund_cents`、`event.value_cents`）均以人民币「分」存储。\n- 面向用户展示金额时除以 100 换算为「元」，禁止把「分」当成「元」直接展示或计算。\n- 例：`amount_cents = 10000` 表示 100.00 元。\n\n## Default filters\n\n- 「有效订单」口径：`order.status = 'PAID'` 且 `order.is_deleted = 0`，且关联客户存在（`order.customer_id` 能关联到 `customer`）且 `customer.is_internal = 0`。\n- 未知客户、空客户（`customer_id` 无对应客户或为 NULL）都不计入有效订单；但应在数据质量报告中保留其异常数量，不得直接静默丢弃。\n- 金额为 0 的有效订单仍计入订单数与付费客户数。\n- `FAILED` 状态的退款不冲减营收。\n- 退款按原订单月份归属，而不是按退款时间归属。\n- 时间范围为左闭右开；时间为 Asia/Shanghai 本地时间，不做 UTC 换算。\n\n## Naming conventions\n\n- 「销售额」默认指有效订单总额（有效订单 `amount_cents` 之和 / 100，单位元）。\n- 「净营收」指有效订单金额减去关联该订单的 `SUCCESS` 退款金额（单位元）。\n- 「退款率」在用户未明确是笔数口径还是金额口径时，必须先向用户澄清，不得自行假定。\n- 「付费客户数」指有效订单 `customer_id` 去重计数；客户名称（`customer_name`）不唯一，禁止用名称去重。\n\n## Data quality caveats\n\n- 订单与订单明细为一对多：禁止先连接 `order_item` 再累加订单级 `order.amount_cents`，否则会因明细行放大而重复计数。订单级金额一律在订单粒度汇总。\n- `order_item.product_code` 刻意包含重复值（如 P2 出现多次），**不得**声明 `order_item` 到 `product` 为多对一唯一关系；`product.product_code` 也不是唯一键。明细到商品不建立唯一关联。\n- `event.code` 是编码字符串（如 `000123`），必须保留前导零的字符串语义，禁止当作整数导致前导零丢失。\n- `event.note` 的空字符串与 NULL 具有不同业务含义，CSV 导入通道需声明是否保留该差异。\n- `refund` 与 `order` 虽均为事实表，但 `refund.order_id → order.order_id` 存在业务关联（退款按订单归属），该关系成立。\n- 1 至 4 月趋势须补齐缺失月份（如 3 月为 0）：仅按订单分组不会自然产生空月份行，须借助 `calendar_month` 左连接补齐。\n"
+    },
+    {
+      "path": "knowledge/sql/.gitkeep",
+      "content": ""
+    },
+    {
+      "path": "models/calendar_month/metadata.yml",
+      "content": "name: calendar_month\ntable_reference:\n  catalog: ''\n  schema: data_agent\n  table: ds_81b637d8_eb5f1c0d_calendar_month\ncolumns:\n- name: month\n  type: VARCHAR(1024)\n  properties:\n    description: 月份，格式为'yyyy-MM'，包含2025-01,2025-02,2025-03等\nproperties:\n  description: 月度数据表，用于按月份记录和汇总相关业务指标数据\n"
+    },
+    {
+      "path": "models/customer/metadata.yml",
+      "content": "name: customer\ntable_reference:\n  catalog: ''\n  schema: data_agent\n  table: ds_81b637d8_c37c975d_customer\ncolumns:\n- name: customer_id\n  type: BIGINT\n  properties:\n    description: 客户ID，唯一标识客户，包含1,2,3等\n- name: customer_name\n  type: VARCHAR(1024)\n  properties:\n    description: 客户名称，包含张三,李四,无订单客户等\n- name: is_internal\n  type: BIGINT\n  properties:\n    description: 是否内部客户标记，0表示否，1表示是\n- name: region\n  type: VARCHAR(1024)\n  properties:\n    description: 客户所属区域，包含华东,华北,华南等\nproperties:\n  description: 客户信息表，用于存储客户的基本信息，包括客户ID、名称、是否为内部客户及所属区域\n"
+    },
+    {
+      "path": "models/event/metadata.yml",
+      "content": "name: event\ntable_reference:\n  catalog: ''\n  schema: data_agent\n  table: ds_81b637d8_57a6b6a9_event\ncolumns:\n- name: event_id\n  type: BIGINT\n  properties:\n    description: 事件ID，唯一标识一条事件记录，如1,2,3等\n- name: value_cents\n  type: BIGINT\n  properties:\n    description: 金额（以分为单位），如1表示1分\n- name: code\n  type: BIGINT\n  properties:\n    description: 编码，定长字符串，如000123\n- name: note\n  type: VARCHAR(1024)\n  properties:\n    description: 备注，补充说明文本\nproperties:\n  description: 事件明细表，用于记录事件的基础信息、金额、编码及备注等内容。\n"
+    },
+    {
+      "path": "models/order/metadata.yml",
+      "content": "name: order\ntable_reference:\n  catalog: ''\n  schema: data_agent\n  table: ds_81b637d8_06fd368c_order\ncolumns:\n- name: order_id\n  type: BIGINT\n  properties:\n    description: 订单ID，订单的唯一标识，包含1001,1002,1003等\n- name: customer_id\n  type: BIGINT\n  properties:\n    description: 客户ID，关联下单客户，包含1,2,999等\n- name: order_time\n  type: DATETIME\n  properties:\n    description: 下单时间，格式为'yyyy-MM-dd HH:mm:ss'，包含2025-01-01 00:00:00,2025-01-31 23:59:59等\n- name: amount_cents\n  type: BIGINT\n  properties:\n    description: 订单金额，单位为分，包含10000,20000,30000等\n- name: status\n  type: VARCHAR(1024)\n  properties:\n    description: 订单状态，包含PAID(已支付),CANCELLED(已取消),REFUNDED(已退款)等\n- name: is_deleted\n  type: BIGINT\n  properties:\n    description: 删除标记，0表示未删除，1表示已删除\nproperties:\n  description: 订单表，记录每笔订单的基础信息，包括订单ID、客户ID、下单时间、订单金额、订单状态及删除标记，用于订单交易数据的管理与查询。\n"
+    },
+    {
+      "path": "models/order_item/metadata.yml",
+      "content": "name: order_item\ntable_reference:\n  catalog: ''\n  schema: data_agent\n  table: ds_81b637d8_e75ce6ce_order_item\ncolumns:\n- name: item_id\n  type: BIGINT\n  properties:\n    description: 订单明细行唯一标识ID，如1,2,3\n- name: order_id\n  type: BIGINT\n  properties:\n    description: 订单唯一标识ID，如1001,1002,1003\n- name: product_code\n  type: VARCHAR(1024)\n  properties:\n    description: 商品编码，如P1,P2,P3\n- name: line_cents\n  type: BIGINT\n  properties:\n    description: 订单行金额，单位为分（cents），如4000,6000,20000\nproperties:\n  description: 订单明细表，记录每个订单行对应的订单、商品及行金额信息，用于订单商品明细的存储与分析。\n"
+    },
+    {
+      "path": "models/product/metadata.yml",
+      "content": "name: product\ntable_reference:\n  catalog: ''\n  schema: data_agent\n  table: ds_81b637d8_c29f5f66_product\ncolumns:\n- name: product_row_id\n  type: BIGINT\n  properties:\n    description: 产品行ID，唯一标识每一行记录，包含1,2,3等\n- name: product_code\n  type: VARCHAR(1024)\n  properties:\n    description: 产品编码，产品的唯一业务标识，包含P1,P2,P3等\n- name: product_name\n  type: VARCHAR(1024)\n  properties:\n    description: 产品名称，产品的显示名称，包含产品一,产品二,重复产品二等\nproperties:\n  description: 产品基础信息表，用于存储产品的行ID、产品编码及产品名称等基本信息，支撑产品维度的查询与分析。\n"
+    },
+    {
+      "path": "models/refund/metadata.yml",
+      "content": "name: refund\ntable_reference:\n  catalog: ''\n  schema: data_agent\n  table: ds_81b637d8_4156438f_refund\ncolumns:\n- name: refund_id\n  type: BIGINT\n  properties:\n    description: 退款记录ID，样本值包含1, 2, 3等\n- name: order_id\n  type: BIGINT\n  properties:\n    description: 订单ID，关联订单表，样本值包含1002, 1003, 1004等\n- name: refund_time\n  type: DATETIME\n  properties:\n    description: 退款时间，格式为'yyyy-MM-dd HH:mm:ss'，包含2025-02-02 12:00:00等\n- name: refund_cents\n  type: BIGINT\n  properties:\n    description: 退款金额，单位为分，样本值包含5000, 2000, 3000等\n- name: refund_status\n  type: VARCHAR(1024)\n  properties:\n    description: 退款状态，样本值包含SUCCESS（成功）、FAILED（失败）等\nproperties:\n  description: 退款记录表，用于记录每笔订单的退款信息，包括退款金额、退款时间和退款状态等，支持退款流程的跟踪与对账。\n"
+    },
+    {
+      "path": "relationships.yml",
+      "content": "relationships:\n  - name: order_customer\n    models:\n    - order\n    - customer\n    join_type: MANY_TO_ONE\n    condition: order.customer_id = customer.customer_id\n"
+    },
+    {
+      "path": "views/order_net_revenue/metadata.yml",
+      "content": "name: order_net_revenue\nproperties:\n  description: 净营收视图：以有效订单（PAID + 未删除 + 客户存在且非内部）为基座，先按 order_id 汇总 SUCCESS 退款再左连接（FAILED 不冲减），净额 = 订单金额 - 成功退款金额，退款按原订单月份归属。金额单位为分。\n"
+    },
+    {
+      "path": "views/order_net_revenue/sql.yml",
+      "content": "statement: |-\n  WITH success_refund AS (\n    SELECT\n      order_id,\n      SUM(refund_cents) AS refund_cents\n    FROM refund\n    WHERE refund_status = 'SUCCESS'\n    GROUP BY order_id\n  ),\n  valid_order AS (\n    SELECT\n      o.order_id AS order_id,\n      o.customer_id AS customer_id,\n      DATE_TRUNC('month', o.order_time) AS order_month,\n      o.amount_cents AS amount_cents\n    FROM order o\n    JOIN customer c ON o.customer_id = c.customer_id\n    WHERE o.status = 'PAID'\n      AND o.is_deleted = 0\n      AND c.is_internal = 0\n  )\n  SELECT\n    vo.order_id AS order_id,\n    vo.customer_id AS customer_id,\n    vo.order_month AS order_month,\n    vo.amount_cents AS amount_cents,\n    IFNULL(r.refund_cents, 0) AS refund_cents,\n    vo.amount_cents - IFNULL(r.refund_cents, 0) AS net_cents\n  FROM valid_order vo\n  LEFT JOIN success_refund r ON vo.order_id = r.order_id\n"
+    },
+    {
+      "path": "views/valid_order/metadata.yml",
+      "content": "name: valid_order\nproperties:\n  description: 有效订单口径视图：status=PAID 且未删除，且关联到存在且非内部的客户。金额单位为分，包含订单金额、下单时间与订单月份。未知/空客户不计入。\n"
+    },
+    {
+      "path": "views/valid_order/sql.yml",
+      "content": "statement: |-\n  SELECT\n    o.order_id AS order_id,\n    o.customer_id AS customer_id,\n    o.order_time AS order_time,\n    DATE_TRUNC('month', o.order_time) AS order_month,\n    o.amount_cents AS amount_cents,\n    c.customer_name AS customer_name,\n    c.region AS region\n  FROM order o\n  JOIN customer c ON o.customer_id = c.customer_id\n  WHERE o.status = 'PAID'\n    AND o.is_deleted = 0\n    AND c.is_internal = 0\n"
+    },
+    {
+      "path": "wren_project.yml",
+      "content": "schema_version: 5\nname: kb-73b26360-df5c-497e-9137-bdfe7f50df67\nversion: '1.0'\ncatalog: wren\nschema: public\ndata_source: mysql\n"
+    }
+  ],
+  "publishedFiles": [
+    {
+      "path": ".gitignore",
+      "content": "# Compiled MDL — rebuild with `wren context build`\r\ntarget/\r\n"
+    },
+    {
+      "path": "AGENTS.md",
+      "content": "# AGENTS.md\r\n\r\nThis project uses [Wren Engine](https://github.com/Canner/WrenAI) as the semantic layer for data querying. Queries are written against MDL model names, not raw database tables.\r\n\r\n## Answering data questions\r\n\r\nWhen the user asks about data, metrics, reports, or business questions, follow this workflow:\r\n\r\n1. `wren memory fetch -q \"<question>\"` — get relevant schema context\r\n2. `wren memory recall -q \"<question>\" --limit 3` — find similar past queries\r\n3. Write SQL using model names from the MDL (not raw table names)\r\n4. `wren --sql \"<sql>\"` — execute through the semantic layer\r\n5. `wren memory store --nl \"<question>\" --sql \"<sql>\"` — store confirmed results\r\n\r\nIf this is the first query in the session, also run `wren context instructions` to load business rules.\r\n\r\n## Modifying the data model\r\n\r\nWhen the user wants to add models, change schema, or onboard a new table:\r\n\r\n1. Edit YAML files in `models/`, `views/`, or `relationships.yml`\r\n2. `wren context validate` — check structure\r\n3. `wren context build` — compile to `target/mdl.json`\r\n4. `wren memory index` — re-index schema for search\r\n\r\n## Capturing business context\r\n\r\nRules the schema can't express — canonical tables, default filters, units, enum meanings — go in `knowledge/rules/*.md` (read by `wren context instructions`). Confirmed NL→SQL examples are saved with `wren memory store` (step 5 above), which writes them to `knowledge/sql/`. Both live in the project and are committed with it.\r\n\r\n## Prerequisites\r\n\r\nThis project requires the `wren` CLI. Install with your data source extra:\r\n\r\n```bash\r\npip install \"wrenai[postgres,memory,ui]\"\r\n```\r\n\r\nReplace `postgres` with your data source (`mysql`, `bigquery`, `snowflake`, `clickhouse`, `trino`, `mssql`, `databricks`, `redshift`, `spark`, `athena`, `oracle`). The `memory` extra upgrades recall to semantic (embedding) search — without it, `memory store` / `index` / `recall` still work over the `knowledge/` files. `ui` enables the interactive UI.\r\n\r\nSee https://docs.getwren.ai/oss/engine/get_started/installation for full setup.\r\n\r\n## Quick reference\r\n\r\n| Task | Command |\r\n|------|---------|\r\n| Run a query | `wren --sql \"SELECT ...\"` |\r\n| Preview planned SQL | `wren dry-plan --sql \"SELECT ...\"` |\r\n| Show available models | `wren context show` |\r\n| Check connection | `wren profile debug` |\r\n| Check memory index | `wren memory status` |\r\n| Rebuild after changes | `wren context build && wren memory index` |\r\n"
+    },
+    {
+      "path": "cubes/net_revenue_metrics/metadata.yml",
+      "content": "name: net_revenue_metrics\nbase_object: order_net_revenue\nmeasures:\n  - name: order_count\n    expression: COUNT(*)\n    type: BIGINT\n  - name: sales_amount_cents\n    expression: SUM(amount_cents)\n    type: BIGINT\n  - name: refund_amount_cents\n    expression: SUM(refund_cents)\n    type: BIGINT\n  - name: net_revenue_cents\n    expression: SUM(net_cents)\n    type: BIGINT\n  - name: net_revenue_yuan\n    expression: SUM(net_cents) / 100.0\n    type: DOUBLE\ndimensions:\n  - name: customer_id\n    expression: customer_id\n    type: BIGINT\ntime_dimensions:\n  - name: order_month\n    expression: order_month\n    type: TIMESTAMP\nproperties:\n  description: |\n    净营收指标：在有效订单基座上扣除 SUCCESS 退款后的净营收。退款先按 order_id 汇总再关联订单（FAILED 不冲减），退款按原订单月份归属。\n    净营收 = 有效订单金额 - 成功退款金额；金额单位为分，元口径已额外提供 net_revenue_yuan。\n"
+    },
+    {
+      "path": "cubes/valid_order_metrics/metadata.yml",
+      "content": "name: valid_order_metrics\nbase_object: valid_order\nmeasures:\n  - name: order_count\n    expression: COUNT(*)\n    type: BIGINT\n  - name: sales_amount_cents\n    expression: SUM(amount_cents)\n    type: BIGINT\n  - name: sales_amount_yuan\n    expression: SUM(amount_cents) / 100.0\n    type: DOUBLE\n  - name: paying_customers\n    expression: COUNT(DISTINCT customer_id)\n    type: BIGINT\ndimensions:\n  - name: customer_id\n    expression: customer_id\n    type: BIGINT\n  - name: customer_name\n    expression: customer_name\n    type: VARCHAR\n  - name: region\n    expression: region\n    type: VARCHAR\ntime_dimensions:\n  - name: order_month\n    expression: order_month\n    type: TIMESTAMP\nproperties:\n  description: |\n    有效订单指标：有效订单口径（status=PAID 且未删除，且客户存在且非内部）下的订单数、销售额（分/元）与付费客户数。\n    付费客户数按 customer_id 去重（禁用 customer_name 去重）。金额字段单位为分，元口径已额外提供 sales_amount_yuan。\n"
+    },
+    {
+      "path": "knowledge/caveats/.gitkeep",
+      "content": ""
+    },
+    {
+      "path": "knowledge/glossary/.gitkeep",
+      "content": ""
+    },
+    {
+      "path": "knowledge/knowledge.yml",
+      "content": "schema_version: 1\r\n"
+    },
+    {
+      "path": "knowledge/metrics/.gitkeep",
+      "content": ""
+    },
+    {
+      "path": "knowledge/rules/.gitkeep",
+      "content": ""
+    },
+    {
+      "path": "knowledge/rules/general.md",
+      "content": "# Business rules\n\n本文件是电商测试库的业务口径唯一说明，问数与取数一律遵循以下约定。\n\n## Currency\n\n- 所有金额字段（`order.amount_cents`、`order_item.line_cents`、`refund.refund_cents`、`event.value_cents`）均以人民币「分」存储。\n- 面向用户展示金额时除以 100 换算为「元」，禁止把「分」当成「元」直接展示或计算。\n- 例：`amount_cents = 10000` 表示 100.00 元。\n\n## Default filters\n\n- 「有效订单」口径：`order.status = 'PAID'` 且 `order.is_deleted = 0`，且关联客户存在（`order.customer_id` 能关联到 `customer`）且 `customer.is_internal = 0`。\n- 未知客户、空客户（`customer_id` 无对应客户或为 NULL）都不计入有效订单；但应在数据质量报告中保留其异常数量，不得直接静默丢弃。\n- 金额为 0 的有效订单仍计入订单数与付费客户数。\n- `FAILED` 状态的退款不冲减营收。\n- 退款按原订单月份归属，而不是按退款时间归属。\n- 时间范围为左闭右开；时间为 Asia/Shanghai 本地时间，不做 UTC 换算。\n\n## Naming conventions\n\n- 「销售额」默认指有效订单总额（有效订单 `amount_cents` 之和 / 100，单位元）。\n- 「净营收」指有效订单金额减去关联该订单的 `SUCCESS` 退款金额（单位元）。\n- 「退款率」在用户未明确是笔数口径还是金额口径时，必须先向用户澄清，不得自行假定。\n- 「付费客户数」指有效订单 `customer_id` 去重计数；客户名称（`customer_name`）不唯一，禁止用名称去重。\n\n## Data quality caveats\n\n- 订单与订单明细为一对多：禁止先连接 `order_item` 再累加订单级 `order.amount_cents`，否则会因明细行放大而重复计数。订单级金额一律在订单粒度汇总。\n- `order_item.product_code` 刻意包含重复值（如 P2 出现多次），**不得**声明 `order_item` 到 `product` 为多对一唯一关系；`product.product_code` 也不是唯一键。明细到商品不建立唯一关联。\n- `event.code` 是编码字符串（如 `000123`），必须保留前导零的字符串语义，禁止当作整数导致前导零丢失。\n- `event.note` 的空字符串与 NULL 具有不同业务含义，CSV 导入通道需声明是否保留该差异。\n- `refund` 与 `order` 虽均为事实表，但 `refund.order_id → order.order_id` 存在业务关联（退款按订单归属），该关系成立。\n- 1 至 4 月趋势须补齐缺失月份（如 3 月为 0）：仅按订单分组不会自然产生空月份行，须借助 `calendar_month` 左连接补齐。\n"
+    },
+    {
+      "path": "knowledge/sql/.gitkeep",
+      "content": ""
+    },
+    {
+      "path": "models/calendar_month/metadata.yml",
+      "content": "name: calendar_month\ntable_reference:\n  catalog: ''\n  schema: data_agent\n  table: ds_81b637d8_eb5f1c0d_calendar_month\ncolumns:\n- name: month\n  type: VARCHAR(1024)\n  properties:\n    description: 月份，格式为'yyyy-MM'，包含2025-01,2025-02,2025-03等\nproperties:\n  description: 月度数据表，用于按月份记录和汇总相关业务指标数据\n"
+    },
+    {
+      "path": "models/customer/metadata.yml",
+      "content": "name: customer\ntable_reference:\n  catalog: ''\n  schema: data_agent\n  table: ds_81b637d8_c37c975d_customer\ncolumns:\n- name: customer_id\n  type: BIGINT\n  properties:\n    description: 客户ID，唯一标识客户，包含1,2,3等\n- name: customer_name\n  type: VARCHAR(1024)\n  properties:\n    description: 客户名称，包含张三,李四,无订单客户等\n- name: is_internal\n  type: BIGINT\n  properties:\n    description: 是否内部客户标记，0表示否，1表示是\n- name: region\n  type: VARCHAR(1024)\n  properties:\n    description: 客户所属区域，包含华东,华北,华南等\nproperties:\n  description: 客户信息表，用于存储客户的基本信息，包括客户ID、名称、是否为内部客户及所属区域\n"
+    },
+    {
+      "path": "models/event/metadata.yml",
+      "content": "name: event\ntable_reference:\n  catalog: ''\n  schema: data_agent\n  table: ds_81b637d8_57a6b6a9_event\ncolumns:\n- name: event_id\n  type: BIGINT\n  properties:\n    description: 事件ID，唯一标识一条事件记录，如1,2,3等\n- name: value_cents\n  type: BIGINT\n  properties:\n    description: 金额（以分为单位），如1表示1分\n- name: code\n  type: BIGINT\n  properties:\n    description: 编码，定长字符串，如000123\n- name: note\n  type: VARCHAR(1024)\n  properties:\n    description: 备注，补充说明文本\nproperties:\n  description: 事件明细表，用于记录事件的基础信息、金额、编码及备注等内容。\n"
+    },
+    {
+      "path": "models/order/metadata.yml",
+      "content": "name: order\ntable_reference:\n  catalog: ''\n  schema: data_agent\n  table: ds_81b637d8_06fd368c_order\ncolumns:\n- name: order_id\n  type: BIGINT\n  properties:\n    description: 订单ID，订单的唯一标识，包含1001,1002,1003等\n- name: customer_id\n  type: BIGINT\n  properties:\n    description: 客户ID，关联下单客户，包含1,2,999等\n- name: order_time\n  type: DATETIME\n  properties:\n    description: 下单时间，格式为'yyyy-MM-dd HH:mm:ss'，包含2025-01-01 00:00:00,2025-01-31 23:59:59等\n- name: amount_cents\n  type: BIGINT\n  properties:\n    description: 订单金额，单位为分，包含10000,20000,30000等\n- name: status\n  type: VARCHAR(1024)\n  properties:\n    description: 订单状态，包含PAID(已支付),CANCELLED(已取消),REFUNDED(已退款)等\n- name: is_deleted\n  type: BIGINT\n  properties:\n    description: 删除标记，0表示未删除，1表示已删除\nproperties:\n  description: 订单表，记录每笔订单的基础信息，包括订单ID、客户ID、下单时间、订单金额、订单状态及删除标记，用于订单交易数据的管理与查询。\n"
+    },
+    {
+      "path": "models/order_item/metadata.yml",
+      "content": "name: order_item\ntable_reference:\n  catalog: ''\n  schema: data_agent\n  table: ds_81b637d8_e75ce6ce_order_item\ncolumns:\n- name: item_id\n  type: BIGINT\n  properties:\n    description: 订单明细行唯一标识ID，如1,2,3\n- name: order_id\n  type: BIGINT\n  properties:\n    description: 订单唯一标识ID，如1001,1002,1003\n- name: product_code\n  type: VARCHAR(1024)\n  properties:\n    description: 商品编码，如P1,P2,P3\n- name: line_cents\n  type: BIGINT\n  properties:\n    description: 订单行金额，单位为分（cents），如4000,6000,20000\nproperties:\n  description: 订单明细表，记录每个订单行对应的订单、商品及行金额信息，用于订单商品明细的存储与分析。\n"
+    },
+    {
+      "path": "models/product/metadata.yml",
+      "content": "name: product\ntable_reference:\n  catalog: ''\n  schema: data_agent\n  table: ds_81b637d8_c29f5f66_product\ncolumns:\n- name: product_row_id\n  type: BIGINT\n  properties:\n    description: 产品行ID，唯一标识每一行记录，包含1,2,3等\n- name: product_code\n  type: VARCHAR(1024)\n  properties:\n    description: 产品编码，产品的唯一业务标识，包含P1,P2,P3等\n- name: product_name\n  type: VARCHAR(1024)\n  properties:\n    description: 产品名称，产品的显示名称，包含产品一,产品二,重复产品二等\nproperties:\n  description: 产品基础信息表，用于存储产品的行ID、产品编码及产品名称等基本信息，支撑产品维度的查询与分析。\n"
+    },
+    {
+      "path": "models/refund/metadata.yml",
+      "content": "name: refund\ntable_reference:\n  catalog: ''\n  schema: data_agent\n  table: ds_81b637d8_4156438f_refund\ncolumns:\n- name: refund_id\n  type: BIGINT\n  properties:\n    description: 退款记录ID，样本值包含1, 2, 3等\n- name: order_id\n  type: BIGINT\n  properties:\n    description: 订单ID，关联订单表，样本值包含1002, 1003, 1004等\n- name: refund_time\n  type: DATETIME\n  properties:\n    description: 退款时间，格式为'yyyy-MM-dd HH:mm:ss'，包含2025-02-02 12:00:00等\n- name: refund_cents\n  type: BIGINT\n  properties:\n    description: 退款金额，单位为分，样本值包含5000, 2000, 3000等\n- name: refund_status\n  type: VARCHAR(1024)\n  properties:\n    description: 退款状态，样本值包含SUCCESS（成功）、FAILED（失败）等\nproperties:\n  description: 退款记录表，用于记录每笔订单的退款信息，包括退款金额、退款时间和退款状态等，支持退款流程的跟踪与对账。\n"
+    },
+    {
+      "path": "relationships.yml",
+      "content": "relationships:\n  - name: order_customer\n    models:\n    - order\n    - customer\n    join_type: MANY_TO_ONE\n    condition: order.customer_id = customer.customer_id\n"
+    },
+    {
+      "path": "views/order_net_revenue/metadata.yml",
+      "content": "name: order_net_revenue\nproperties:\n  description: 净营收视图：以有效订单（PAID + 未删除 + 客户存在且非内部）为基座，先按 order_id 汇总 SUCCESS 退款再左连接（FAILED 不冲减），净额 = 订单金额 - 成功退款金额，退款按原订单月份归属。金额单位为分。\n"
+    },
+    {
+      "path": "views/order_net_revenue/sql.yml",
+      "content": "statement: |-\n  WITH success_refund AS (\n    SELECT\n      order_id,\n      SUM(refund_cents) AS refund_cents\n    FROM refund\n    WHERE refund_status = 'SUCCESS'\n    GROUP BY order_id\n  ),\n  valid_order AS (\n    SELECT\n      o.order_id AS order_id,\n      o.customer_id AS customer_id,\n      DATE_TRUNC('month', o.order_time) AS order_month,\n      o.amount_cents AS amount_cents\n    FROM order o\n    JOIN customer c ON o.customer_id = c.customer_id\n    WHERE o.status = 'PAID'\n      AND o.is_deleted = 0\n      AND c.is_internal = 0\n  )\n  SELECT\n    vo.order_id AS order_id,\n    vo.customer_id AS customer_id,\n    vo.order_month AS order_month,\n    vo.amount_cents AS amount_cents,\n    IFNULL(r.refund_cents, 0) AS refund_cents,\n    vo.amount_cents - IFNULL(r.refund_cents, 0) AS net_cents\n  FROM valid_order vo\n  LEFT JOIN success_refund r ON vo.order_id = r.order_id\n"
+    },
+    {
+      "path": "views/valid_order/metadata.yml",
+      "content": "name: valid_order\nproperties:\n  description: 有效订单口径视图：status=PAID 且未删除，且关联到存在且非内部的客户。金额单位为分，包含订单金额、下单时间与订单月份。未知/空客户不计入。\n"
+    },
+    {
+      "path": "views/valid_order/sql.yml",
+      "content": "statement: |-\n  SELECT\n    o.order_id AS order_id,\n    o.customer_id AS customer_id,\n    o.order_time AS order_time,\n    DATE_TRUNC('month', o.order_time) AS order_month,\n    o.amount_cents AS amount_cents,\n    c.customer_name AS customer_name,\n    c.region AS region\n  FROM order o\n  JOIN customer c ON o.customer_id = c.customer_id\n  WHERE o.status = 'PAID'\n    AND o.is_deleted = 0\n    AND c.is_internal = 0\n"
+    },
+    {
+      "path": "wren_project.yml",
+      "content": "schema_version: 5\nname: kb-73b26360-df5c-497e-9137-bdfe7f50df67\nversion: '1.0'\ncatalog: wren\nschema: public\ndata_source: mysql\n"
+    }
+  ],
+  "issues": [],
+  "mdlState": "PUBLISHED",
+  "mdlVersion": 8,
+  "mdlPublishedAt": "2026-10-06T15:35:49.335002Z",
+  "changed": false
+}

@@ -5,6 +5,8 @@ import EmptyIllustration from '../../components/EmptyIllustration';
 import KnowledgeGraphView from '../../components/KnowledgeGraphView';
 import SchemaTreeView from '../../components/SchemaTreeView';
 import Icon, { IconName } from '../../components/Icon';
+import { getModelingWorkflow } from '../../api/modelingWorkflow';
+import type { ModelingWorkflow } from '../../api/modelingWorkflow';
 import {
   deleteDataset,
   getGroupDetail,
@@ -73,6 +75,7 @@ export default function DatasetGroupPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [detail, setDetail] = useState<GroupDetail | null>(null);
+  const [workflow, setWorkflow] = useState<ModelingWorkflow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -102,6 +105,7 @@ export default function DatasetGroupPage() {
   const refresh = useCallback(async () => {
     try {
       setDetail(await getGroupDetail(groupId));
+      setWorkflow(await getModelingWorkflow(groupId).catch(() => null));
       setError(null);
       setAssociatingTables(new Set());
     } catch (e) {
@@ -427,6 +431,17 @@ export default function DatasetGroupPage() {
                 <span style={{ fontSize: '0.72rem', color: 'var(--da-text-3)', flexShrink: 0 }}>关联中</span>
               </div>
             ))}
+          {workflow && <div className="da-card" style={{ marginTop: 8, padding: 10 }}>
+            <div className="da-small">{workflow.queryAvailable
+              ? `基础模型已发布 v${workflow.publishedVersion}，可以问数；业务口径可继续完善。`
+              : '数据接入后需要基础模型发布成功，才可问数。'}</div>
+            {workflow.queryAvailable && <button className="da-btn da-btn-sm" style={{ marginTop: 8 }}
+              onClick={() => navigate(`/chat?groups=${encodeURIComponent(groupId)}`)}>开始问数</button>}
+            <button className="da-btn da-btn-primary da-btn-sm" style={{ marginTop: 8, marginLeft: 8 }}
+              onClick={() => navigate(`/configure/modeling/${groupId}`)}>
+              {workflow.queryAvailable ? '完善业务模型' : '查看建模进度'}
+            </button>
+          </div>}
           {((uploadStatuses.some(s => s.status !== 'ready')) || importTasks.length > 0) && (
             <div className="da-card" style={{ marginTop: 8, padding: 8 }}>
               {uploadStatuses.filter(s => s.status !== 'ready').map((s, i) => (

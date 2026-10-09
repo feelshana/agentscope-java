@@ -1,0 +1,709 @@
+{"type": "token", "data": "我来"}
+{"type": "token", "data": "核查"}
+{"type": "token", "data": "商品"}
+{"type": "token", "data": "业务"}
+{"type": "token", "data": "键"}
+{"type": "token", "data": "（"}
+{"type": "token", "data": "product"}
+{"type": "token", "data": "_code"}
+{"type": "token", "data": "）"}
+{"type": "token", "data": "的唯一"}
+{"type": "token", "data": "性"}
+{"type": "token", "data": "。\n\n"}
+{"type": "token", "data": "先"}
+{"type": "token", "data": "查看"}
+{"type": "token", "data": " product"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "逻辑"}
+{"type": "token", "data": "模型"}
+{"type": "token", "data": "的实际"}
+{"type": "token", "data": "字段"}
+{"type": "token", "data": "结构"}
+{"type": "token", "data": "。"}
+{"type": "tool_call", "toolName": "wren_describe_model", "toolCallId": "call_00_EX7eDhwdq9nJaHcUzLZt8763", "requestId": "479eca4c-1228-4d53-bd91-104928a5ab87", "runId": "262451d6-bae", "seq": 118, "toolInput": "{\"model_names\":[\"product\"],\"group_id\":\"wren-gap-live-20261006-233059\"}"}
+{"type": "tool_result", "toolName": "wren_describe_model", "toolCallId": "call_00_EX7eDhwdq9nJaHcUzLZt8763", "requestId": "479eca4c-1228-4d53-bd91-104928a5ab87", "runId": "262451d6-bae", "seq": 119, "toolResult": "\"## 已发布语义模型详情\\n\\n**知识库：** wren-gap-live-20261006-233059（group_id: `73b26360-df5c-497e-9137-bdfe7f50df67`）\\n\\n### product\\n产品基础信息表，用于存储产品的行ID、产品编码及产品名称等基本信息，支撑产品维度的查询与分析。\\n\\n| 字段 | 类型 | 描述 |\\n|---|---|---|\\n| product_row_id | BIGINT | 产品行ID，唯一标识每一行记录，包含1,2,3等 |\\n| product_code | VARCHAR(1024) | 产品编码，产品的唯一业务标识，包含P1,P2,P3等 |\\n| product_name | VARCHAR(1024) | 产品名称，产品的显示名称，包含产品一,产品二,重复产品二等 |\\n\\n\""}
+{"type": "token", "data": "product"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "表"}
+{"type": "token", "data": "有"}
+{"type": "token", "data": " `"}
+{"type": "token", "data": "product"}
+{"type": "token", "data": "_row"}
+{"type": "token", "data": "_id"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "（"}
+{"type": "token", "data": "行"}
+{"type": "token", "data": "ID"}
+{"type": "token", "data": "）"}
+{"type": "token", "data": "和"}
+{"type": "token", "data": " `"}
+{"type": "token", "data": "product"}
+{"type": "token", "data": "_code"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "（"}
+{"type": "token", "data": "业务"}
+{"type": "token", "data": "编码"}
+{"type": "token", "data": "）。"}
+{"type": "token", "data": "业务"}
+{"type": "token", "data": "键"}
+{"type": "token", "data": "应"}
+{"type": "token", "data": "指"}
+{"type": "token", "data": " `"}
+{"type": "token", "data": "product"}
+{"type": "token", "data": "_code"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "。"}
+{"type": "token", "data": "查询"}
+{"type": "token", "data": "重复"}
+{"type": "token", "data": "的"}
+{"type": "token", "data": " product"}
+{"type": "token", "data": "_code"}
+{"type": "token", "data": "："}
+{"type": "tool_call", "toolName": "wren_run_sql", "toolCallId": "call_00_3eMH9MImPVylXEpnPbwr5434", "requestId": "479eca4c-1228-4d53-bd91-104928a5ab87", "runId": "620afd35-ea5", "seq": 120, "toolInput": "{\"question\":\"商品业务键 product_code 是否唯一？列出出现次数大于1的重复编码\",\"group_id\":\"wren-gap-live-20261006-233059\",\"sql\":\"SELECT product_code, COUNT(*) AS cnt FROM product GROUP BY product_code HAVING COUNT(*) > 1 ORDER BY cnt DESC, product_code\"}"}
+{"type": "tool_call", "toolName": "wren_run_sql", "toolCallId": "call_01_FryKXVhLXHBnLtmh9bA46400", "requestId": "479eca4c-1228-4d53-bd91-104928a5ab87", "runId": "620afd35-ea5", "seq": 121, "toolInput": "{\"question\":\"商品表总行数、product_code 去重数、行ID 去重数\",\"group_id\":\"wren-gap-live-20261006-233059\",\"sql\":\"SELECT COUNT(*) AS total_rows, COUNT(DISTINCT product_code) AS distinct_codes, COUNT(DISTINCT product_row_id) AS distinct_row_ids FROM product\"}"}
+{"type": "tool_result", "toolName": "wren_run_sql", "toolCallId": "call_00_3eMH9MImPVylXEpnPbwr5434", "requestId": "479eca4c-1228-4d53-bd91-104928a5ab87", "runId": "620afd35-ea5", "seq": 122, "toolResult": "\"## wren 语义查询结果\\n\\n**知识库：** wren-gap-live-20261006-233059（group_id: `73b26360-df5c-497e-9137-bdfe7f50df67`）\\n\\n**查询问题：** 商品业务键 product_code 是否唯一？列出出现次数大于1的重复编码\\n\\n**SQL 语句：**\\n```sql\\nSELECT product_code, COUNT(*) AS cnt FROM product GROUP BY product_code HAVING COUNT(*) > 1 ORDER BY cnt DESC, product_code\\n```\\n\\n**查询结果：**\\n\\n| product_code | cnt |\\n|---|---|\\n| P2 | 2 |\\n\\n**数据文件：** data/3c1bb2cbe176.csv（1 行 × 2 列；run_python 中 pd.read_csv('data/3c1bb2cbe176.csv') 读取）\\n\""}
+{"type": "tool_result", "toolName": "wren_run_sql", "toolCallId": "call_01_FryKXVhLXHBnLtmh9bA46400", "requestId": "479eca4c-1228-4d53-bd91-104928a5ab87", "runId": "620afd35-ea5", "seq": 123, "toolResult": "\"## wren 语义查询结果\\n\\n**知识库：** wren-gap-live-20261006-233059（group_id: `73b26360-df5c-497e-9137-bdfe7f50df67`）\\n\\n**查询问题：** 商品表总行数、product_code 去重数、行ID 去重数\\n\\n**SQL 语句：**\\n```sql\\nSELECT COUNT(*) AS total_rows, COUNT(DISTINCT product_code) AS distinct_codes, COUNT(DISTINCT product_row_id) AS distinct_row_ids FROM product\\n```\\n\\n**查询结果：**\\n\\n| total_rows | distinct_codes | distinct_row_ids |\\n|---|---|---|\\n| 4 | 3 | 4 |\\n\\n**数据文件：** data/f404e660a84b.csv（1 行 × 3 列；run_python 中 pd.read_csv('data/f404e660a84b.csv') 读取）\\n\""}
+{"type": "token", "data": "再"}
+{"type": "token", "data": "拉"}
+{"type": "token", "data": "出"}
+{"type": "token", "data": "重复"}
+{"type": "token", "data": "编码"}
+{"type": "token", "data": " P"}
+{"type": "token", "data": "2"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "的具体"}
+{"type": "token", "data": "明细"}
+{"type": "token", "data": "行"}
+{"type": "token", "data": "，"}
+{"type": "token", "data": "确认"}
+{"type": "token", "data": "是"}
+{"type": "token", "data": "名称"}
+{"type": "token", "data": "不同"}
+{"type": "token", "data": "还是"}
+{"type": "token", "data": "完全"}
+{"type": "token", "data": "重复"}
+{"type": "token", "data": "："}
+{"type": "tool_call", "toolName": "wren_run_sql", "toolCallId": "call_00_wmFQiNTYR5fbIW2zo1Nh7287", "requestId": "479eca4c-1228-4d53-bd91-104928a5ab87", "runId": "a59e5723-7ef", "seq": 124, "toolInput": "{\"question\":\"列出 product_code=P2 的全部明细行（行ID、编码、名称）\",\"group_id\":\"wren-gap-live-20261006-233059\",\"sql\":\"SELECT product_row_id, product_code, product_name FROM product WHERE product_code = 'P2' ORDER BY product_row_id\"}"}
+{"type": "tool_call", "toolName": "wren_run_sql", "toolCallId": "call_01_XX3EYDylUwACAbAqZy6r4950", "requestId": "479eca4c-1228-4d53-bd91-104928a5ab87", "runId": "a59e5723-7ef", "seq": 125, "toolInput": "{\"question\":\"查看商品表全部行，确认业务键分布\",\"group_id\":\"wren-gap-live-20261006-233059\",\"sql\":\"SELECT product_row_id, product_code, product_name FROM product ORDER BY product_row_id\"}"}
+{"type": "tool_result", "toolName": "wren_run_sql", "toolCallId": "call_00_wmFQiNTYR5fbIW2zo1Nh7287", "requestId": "479eca4c-1228-4d53-bd91-104928a5ab87", "runId": "a59e5723-7ef", "seq": 126, "toolResult": "\"## wren 语义查询结果\\n\\n**知识库：** wren-gap-live-20261006-233059（group_id: `73b26360-df5c-497e-9137-bdfe7f50df67`）\\n\\n**查询问题：** 列出 product_code=P2 的全部明细行（行ID、编码、名称）\\n\\n**SQL 语句：**\\n```sql\\nSELECT product_row_id, product_code, product_name FROM product WHERE product_code = 'P2' ORDER BY product_row_id\\n```\\n\\n**查询结果：**\\n\\n| product_row_id | product_code | product_name |\\n|---|---|---|\\n| 2 | P2 | 产品二 |\\n| 3 | P2 | 重复产品二 |\\n\\n**数据文件：** data/7dae3e4ec618.csv（2 行 × 3 列；run_python 中 pd.read_csv('data/7dae3e4ec618.csv') 读取）\\n\""}
+{"type": "tool_result", "toolName": "wren_run_sql", "toolCallId": "call_01_XX3EYDylUwACAbAqZy6r4950", "requestId": "479eca4c-1228-4d53-bd91-104928a5ab87", "runId": "a59e5723-7ef", "seq": 127, "toolResult": "\"## wren 语义查询结果\\n\\n**知识库：** wren-gap-live-20261006-233059（group_id: `73b26360-df5c-497e-9137-bdfe7f50df67`）\\n\\n**查询问题：** 查看商品表全部行，确认业务键分布\\n\\n**SQL 语句：**\\n```sql\\nSELECT product_row_id, product_code, product_name FROM product ORDER BY product_row_id\\n```\\n\\n**查询结果：**\\n\\n| product_row_id | product_code | product_name |\\n|---|---|---|\\n| 1 | P1 | 产品一 |\\n| 2 | P2 | 产品二 |\\n| 3 | P2 | 重复产品二 |\\n| 4 | P3 | 产品三 |\\n\\n**数据文件：** data/b2430013899f.csv（4 行 × 3 列；run_python 中 pd.read_csv('data/b2430013899f.csv') 读取）\\n\""}
+{"type": "token", "data": "##"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "结论"}
+{"type": "token", "data": "："}
+{"type": "token", "data": "商品"}
+{"type": "token", "data": "业务"}
+{"type": "token", "data": "键"}
+{"type": "token", "data": " `"}
+{"type": "token", "data": "product"}
+{"type": "token", "data": "_code"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "不"}
+{"type": "token", "data": "唯一"}
+{"type": "token", "data": "\n\n"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": "业务"}
+{"type": "token", "data": "键"}
+{"type": "token", "data": "定义"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": "："}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "product"}
+{"type": "token", "data": ".product"}
+{"type": "token", "data": "_code"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "（"}
+{"type": "token", "data": "产品"}
+{"type": "token", "data": "编码"}
+{"type": "token", "data": "，"}
+{"type": "token", "data": "语义"}
+{"type": "token", "data": "模型"}
+{"type": "token", "data": "描述"}
+{"type": "token", "data": "为"}
+{"type": "token", "data": "\""}
+{"type": "token", "data": "产品的"}
+{"type": "token", "data": "唯一"}
+{"type": "token", "data": "业务"}
+{"type": "token", "data": "标识"}
+{"type": "token", "data": "\""}
+{"type": "token", "data": "）。"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "product"}
+{"type": "token", "data": "_row"}
+{"type": "token", "data": "_id"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "是"}
+{"type": "token", "data": "物理"}
+{"type": "token", "data": "行"}
+{"type": "token", "data": "ID"}
+{"type": "token", "data": "，"}
+{"type": "token", "data": "每个"}
+{"type": "token", "data": "商品"}
+{"type": "token", "data": "行"}
+{"type": "token", "data": "都"}
+{"type": "token", "data": "不同"}
+{"type": "token", "data": "，"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": "不"}
+{"type": "token", "data": "构成"}
+{"type": "token", "data": "业务"}
+{"type": "token", "data": "键"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": "。\n\n"}
+{"type": "token", "data": "###"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "实际"}
+{"type": "token", "data": "查询"}
+{"type": "token", "data": "结果"}
+{"type": "token", "data": "\n\n"}
+{"type": "token", "data": "商品"}
+{"type": "token", "data": "表"}
+{"type": "token", "data": "全"}
+{"type": "token", "data": "表"}
+{"type": "token", "data": "（"}
+{"type": "token", "data": "4"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "行"}
+{"type": "token", "data": "）：\n\n"}
+{"type": "token", "data": "|"}
+{"type": "token", "data": " product"}
+{"type": "token", "data": "_row"}
+{"type": "token", "data": "_id"}
+{"type": "token", "data": " |"}
+{"type": "token", "data": " product"}
+{"type": "token", "data": "_code"}
+{"type": "token", "data": " |"}
+{"type": "token", "data": " product"}
+{"type": "token", "data": "_name"}
+{"type": "token", "data": " |\n"}
+{"type": "token", "data": "|---|---"}
+{"type": "token", "data": "|---"}
+{"type": "token", "data": "|\n"}
+{"type": "token", "data": "|"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "1"}
+{"type": "token", "data": " |"}
+{"type": "token", "data": " P"}
+{"type": "token", "data": "1"}
+{"type": "token", "data": " |"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "产品"}
+{"type": "token", "data": "一"}
+{"type": "token", "data": " |\n"}
+{"type": "token", "data": "|"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "2"}
+{"type": "token", "data": " |"}
+{"type": "token", "data": " P"}
+{"type": "token", "data": "2"}
+{"type": "token", "data": " |"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "产品"}
+{"type": "token", "data": "二"}
+{"type": "token", "data": " |\n"}
+{"type": "token", "data": "|"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "3"}
+{"type": "token", "data": " |"}
+{"type": "token", "data": " P"}
+{"type": "token", "data": "2"}
+{"type": "token", "data": " |"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "重复"}
+{"type": "token", "data": "产品"}
+{"type": "token", "data": "二"}
+{"type": "token", "data": " |\n"}
+{"type": "token", "data": "|"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "4"}
+{"type": "token", "data": " |"}
+{"type": "token", "data": " P"}
+{"type": "token", "data": "3"}
+{"type": "token", "data": " |"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "产品"}
+{"type": "token", "data": "三"}
+{"type": "token", "data": " |\n\n"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": "重复"}
+{"type": "token", "data": "键"}
+{"type": "token", "data": "清单"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": "：\n\n"}
+{"type": "token", "data": "|"}
+{"type": "token", "data": " product"}
+{"type": "token", "data": "_code"}
+{"type": "token", "data": " |"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "重复"}
+{"type": "token", "data": "行"}
+{"type": "token", "data": "数"}
+{"type": "token", "data": " |"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "具体"}
+{"type": "token", "data": "行"}
+{"type": "token", "data": " |\n"}
+{"type": "token", "data": "|---|---"}
+{"type": "token", "data": "|---"}
+{"type": "token", "data": "|\n"}
+{"type": "token", "data": "|"}
+{"type": "token", "data": " **"}
+{"type": "token", "data": "P"}
+{"type": "token", "data": "2"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": " |"}
+{"type": "token", "data": " **"}
+{"type": "token", "data": "2"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": " |"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "行"}
+{"type": "token", "data": "2"}
+{"type": "token", "data": "「"}
+{"type": "token", "data": "产品"}
+{"type": "token", "data": "二"}
+{"type": "token", "data": "」"}
+{"type": "token", "data": "、"}
+{"type": "token", "data": "行"}
+{"type": "token", "data": "3"}
+{"type": "token", "data": "「"}
+{"type": "token", "data": "重复"}
+{"type": "token", "data": "产品"}
+{"type": "token", "data": "二"}
+{"type": "token", "data": "」"}
+{"type": "token", "data": " |\n\n"}
+{"type": "token", "data": "###"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "唯一"}
+{"type": "token", "data": "性"}
+{"type": "token", "data": "度量"}
+{"type": "token", "data": "\n\n"}
+{"type": "token", "data": "|"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "指标"}
+{"type": "token", "data": " |"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "值"}
+{"type": "token", "data": " |\n"}
+{"type": "token", "data": "|---|---"}
+{"type": "token", "data": "|\n"}
+{"type": "token", "data": "|"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "总"}
+{"type": "token", "data": "行"}
+{"type": "token", "data": "数"}
+{"type": "token", "data": " |"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "4"}
+{"type": "token", "data": " |\n"}
+{"type": "token", "data": "|"}
+{"type": "token", "data": " product"}
+{"type": "token", "data": "_code"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "去"}
+{"type": "token", "data": "重"}
+{"type": "token", "data": "数"}
+{"type": "token", "data": " |"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "3"}
+{"type": "token", "data": " |\n"}
+{"type": "token", "data": "|"}
+{"type": "token", "data": " product"}
+{"type": "token", "data": "_row"}
+{"type": "token", "data": "_id"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "去"}
+{"type": "token", "data": "重"}
+{"type": "token", "data": "数"}
+{"type": "token", "data": " |"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "4"}
+{"type": "token", "data": " |\n"}
+{"type": "token", "data": "|"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "重复"}
+{"type": "token", "data": "的"}
+{"type": "token", "data": " product"}
+{"type": "token", "data": "_code"}
+{"type": "token", "data": " |"}
+{"type": "token", "data": " P"}
+{"type": "token", "data": "2"}
+{"type": "token", "data": "（"}
+{"type": "token", "data": "出现"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "2"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "次"}
+{"type": "token", "data": "）"}
+{"type": "token", "data": " |\n\n"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": "判定"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": "："}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "product"}
+{"type": "token", "data": "_code"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "存在"}
+{"type": "token", "data": "重复"}
+{"type": "token", "data": "值"}
+{"type": "token", "data": "（"}
+{"type": "token", "data": "P"}
+{"type": "token", "data": "2"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "出现"}
+{"type": "token", "data": "两次"}
+{"type": "token", "data": "），"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": "不是"}
+{"type": "token", "data": "唯一"}
+{"type": "token", "data": "业务"}
+{"type": "token", "data": "键"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": "；"}
+{"type": "token", "data": "真正"}
+{"type": "token", "data": "唯一"}
+{"type": "token", "data": "的是"}
+{"type": "token", "data": " `"}
+{"type": "token", "data": "product"}
+{"type": "token", "data": "_row"}
+{"type": "token", "data": "_id"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "（"}
+{"type": "token", "data": "行"}
+{"type": "token", "data": "级"}
+{"type": "token", "data": "主"}
+{"type": "token", "data": "键"}
+{"type": "token", "data": "，"}
+{"type": "token", "data": "4"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "行"}
+{"type": "token", "data": "全部"}
+{"type": "token", "data": "不同"}
+{"type": "token", "data": "）。"}
+{"type": "token", "data": "P"}
+{"type": "token", "data": "2"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "的两"}
+{"type": "token", "data": "行"}
+{"type": "token", "data": "记录"}
+{"type": "token", "data": "除"}
+{"type": "token", "data": "编码"}
+{"type": "token", "data": "相同"}
+{"type": "token", "data": "外"}
+{"type": "token", "data": "，"}
+{"type": "token", "data": "名称"}
+{"type": "token", "data": "不同"}
+{"type": "token", "data": "（"}
+{"type": "token", "data": "产品"}
+{"type": "token", "data": "二"}
+{"type": "token", "data": " /"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "重复"}
+{"type": "token", "data": "产品"}
+{"type": "token", "data": "二"}
+{"type": "token", "data": "），"}
+{"type": "token", "data": "属于"}
+{"type": "token", "data": "业务"}
+{"type": "token", "data": "编码"}
+{"type": "token", "data": "冲突"}
+{"type": "token", "data": "而非"}
+{"type": "token", "data": "完全"}
+{"type": "token", "data": "重复"}
+{"type": "token", "data": "行"}
+{"type": "token", "data": "。\n\n"}
+{"type": "token", "data": "###"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "使用的"}
+{"type": "token", "data": "口径"}
+{"type": "token", "data": "与"}
+{"type": "token", "data": "依据"}
+{"type": "token", "data": "\n\n"}
+{"type": "token", "data": "1"}
+{"type": "token", "data": "."}
+{"type": "token", "data": " **"}
+{"type": "token", "data": "业务"}
+{"type": "token", "data": "键"}
+{"type": "token", "data": "判定"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": "："}
+{"type": "token", "data": "依据"}
+{"type": "token", "data": "语义"}
+{"type": "token", "data": "模型"}
+{"type": "token", "data": " `"}
+{"type": "token", "data": "product"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "字段"}
+{"type": "token", "data": "说明"}
+{"type": "token", "data": "——"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "product"}
+{"type": "token", "data": "_code"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "被"}
+{"type": "token", "data": "标注"}
+{"type": "token", "data": "为"}
+{"type": "token", "data": "\""}
+{"type": "token", "data": "产品的"}
+{"type": "token", "data": "唯一"}
+{"type": "token", "data": "业务"}
+{"type": "token", "data": "标识"}
+{"type": "token", "data": "\"，"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "product"}
+{"type": "token", "data": "_row"}
+{"type": "token", "data": "_id"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "为"}
+{"type": "token", "data": "\""}
+{"type": "token", "data": "唯一"}
+{"type": "token", "data": "标识"}
+{"type": "token", "data": "每一"}
+{"type": "token", "data": "行"}
+{"type": "token", "data": "记录"}
+{"type": "token", "data": "\"。"}
+{"type": "token", "data": "因此"}
+{"type": "token", "data": "以"}
+{"type": "token", "data": " `"}
+{"type": "token", "data": "product"}
+{"type": "token", "data": "_code"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "作为"}
+{"type": "token", "data": "业务"}
+{"type": "token", "data": "键"}
+{"type": "token", "data": "检验"}
+{"type": "token", "data": "对象"}
+{"type": "token", "data": "。\n"}
+{"type": "token", "data": "2"}
+{"type": "token", "data": "."}
+{"type": "token", "data": " **"}
+{"type": "token", "data": "重复"}
+{"type": "token", "data": "识别"}
+{"type": "token", "data": "口径"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": "："}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "GROUP"}
+{"type": "token", "data": " BY"}
+{"type": "token", "data": " product"}
+{"type": "token", "data": "_code"}
+{"type": "token", "data": " H"}
+{"type": "token", "data": "AV"}
+{"type": "token", "data": "ING"}
+{"type": "token", "data": " COUNT"}
+{"type": "token", "data": "(*)"}
+{"type": "token", "data": " >"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "1"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "，"}
+{"type": "token", "data": "即"}
+{"type": "token", "data": "同一"}
+{"type": "token", "data": "编码"}
+{"type": "token", "data": "出现"}
+{"type": "token", "data": "多"}
+{"type": "token", "data": "行"}
+{"type": "token", "data": "视为"}
+{"type": "token", "data": "重复"}
+{"type": "token", "data": "键"}
+{"type": "token", "data": "。\n"}
+{"type": "token", "data": "3"}
+{"type": "token", "data": "."}
+{"type": "token", "data": " **"}
+{"type": "token", "data": "一致性"}
+{"type": "token", "data": "佐"}
+{"type": "token", "data": "证"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": "："}
+{"type": "token", "data": "知识"}
+{"type": "token", "data": "库"}
+{"type": "token", "data": "业务"}
+{"type": "token", "data": "规则"}
+{"type": "token", "data": "明确"}
+{"type": "token", "data": "约定"}
+{"type": "token", "data": "——"}
+{"type": "token", "data": "\""}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "order"}
+{"type": "token", "data": "_item"}
+{"type": "token", "data": ".product"}
+{"type": "token", "data": "_code"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "刻意"}
+{"type": "token", "data": "包含"}
+{"type": "token", "data": "重复"}
+{"type": "token", "data": "值"}
+{"type": "token", "data": "（"}
+{"type": "token", "data": "如"}
+{"type": "token", "data": " P"}
+{"type": "token", "data": "2"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "出现"}
+{"type": "token", "data": "多次"}
+{"type": "token", "data": "），"}
+{"type": "token", "data": "不得"}
+{"type": "token", "data": "声明"}
+{"type": "token", "data": " `"}
+{"type": "token", "data": "order"}
+{"type": "token", "data": "_item"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "到"}
+{"type": "token", "data": " `"}
+{"type": "token", "data": "product"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "为"}
+{"type": "token", "data": "多"}
+{"type": "token", "data": "对"}
+{"type": "token", "data": "一"}
+{"type": "token", "data": "唯一"}
+{"type": "token", "data": "关系"}
+{"type": "token", "data": "；"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "product"}
+{"type": "token", "data": ".product"}
+{"type": "token", "data": "_code"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "也不是"}
+{"type": "token", "data": "唯一"}
+{"type": "token", "data": "键"}
+{"type": "token", "data": "\"。"}
+{"type": "token", "data": "本次"}
+{"type": "token", "data": "查询"}
+{"type": "token", "data": "结果"}
+{"type": "token", "data": "与"}
+{"type": "token", "data": "知识"}
+{"type": "token", "data": "库"}
+{"type": "token", "data": "口径"}
+{"type": "token", "data": "完全"}
+{"type": "token", "data": "一致"}
+{"type": "token", "data": "，"}
+{"type": "token", "data": "P"}
+{"type": "token", "data": "2"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "确"}
+{"type": "token", "data": "为"}
+{"type": "token", "data": "刻"}
+{"type": "token", "data": "意的"}
+{"type": "token", "data": "重复"}
+{"type": "token", "data": "样本"}
+{"type": "token", "data": "。\n"}
+{"type": "token", "data": "4"}
+{"type": "token", "data": "."}
+{"type": "token", "data": " **"}
+{"type": "token", "data": "数据"}
+{"type": "token", "data": "来源"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": "："}
+{"type": "token", "data": "知识"}
+{"type": "token", "data": "库"}
+{"type": "token", "data": " `"}
+{"type": "token", "data": "w"}
+{"type": "token", "data": "ren"}
+{"type": "token", "data": "-g"}
+{"type": "token", "data": "ap"}
+{"type": "token", "data": "-l"}
+{"type": "token", "data": "ive"}
+{"type": "token", "data": "-"}
+{"type": "token", "data": "202"}
+{"type": "token", "data": "610"}
+{"type": "token", "data": "06"}
+{"type": "token", "data": "-"}
+{"type": "token", "data": "233"}
+{"type": "token", "data": "059"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "的逻辑"}
+{"type": "token", "data": "模型"}
+{"type": "token", "data": " `"}
+{"type": "token", "data": "product"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "，"}
+{"type": "token", "data": "直接"}
+{"type": "token", "data": "经"}
+{"type": "token", "data": " w"}
+{"type": "token", "data": "ren"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "语义"}
+{"type": "token", "data": "引擎"}
+{"type": "token", "data": "查询"}
+{"type": "token", "data": "原始"}
+{"type": "token", "data": "明细"}
+{"type": "token", "data": "，"}
+{"type": "token", "data": "非"}
+{"type": "token", "data": "样本"}
+{"type": "token", "data": "推断"}
+{"type": "token", "data": "。\n\n"}
+{"type": "token", "data": ">"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "提示"}
+{"type": "token", "data": "："}
+{"type": "token", "data": "由于"}
+{"type": "token", "data": " `"}
+{"type": "token", "data": "product"}
+{"type": "token", "data": "_code"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "不"}
+{"type": "token", "data": "唯一"}
+{"type": "token", "data": "，"}
+{"type": "token", "data": "任何"}
+{"type": "token", "data": "以"}
+{"type": "token", "data": "它为"}
+{"type": "token", "data": "键"}
+{"type": "token", "data": "的"}
+{"type": "token", "data": "关联"}
+{"type": "token", "data": "（"}
+{"type": "token", "data": "如"}
+{"type": "token", "data": "明细"}
+{"type": "token", "data": "→"}
+{"type": "token", "data": "商品"}
+{"type": "token", "data": "）"}
+{"type": "token", "data": "都会有"}
+{"type": "token", "data": "歧"}
+{"type": "token", "data": "义"}
+{"type": "token", "data": "，"}
+{"type": "token", "data": "禁止"}
+{"type": "token", "data": "据此"}
+{"type": "token", "data": "声明"}
+{"type": "token", "data": "唯一"}
+{"type": "token", "data": "多"}
+{"type": "token", "data": "对"}
+{"type": "token", "data": "一"}
+{"type": "token", "data": "关系"}
+{"type": "token", "data": "；"}
+{"type": "token", "data": "涉及"}
+{"type": "token", "data": "商品"}
+{"type": "token", "data": "分组"}
+{"type": "token", "data": "/"}
+{"type": "token", "data": "去"}
+{"type": "token", "data": "重"}
+{"type": "token", "data": "时"}
+{"type": "token", "data": "，"}
+{"type": "token", "data": "务必"}
+{"type": "token", "data": "使用"}
+{"type": "token", "data": " `"}
+{"type": "token", "data": "product"}
+{"type": "token", "data": "_row"}
+{"type": "token", "data": "_id"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "或"}
+{"type": "token", "data": "明确"}
+{"type": "token", "data": "处理"}
+{"type": "token", "data": " P"}
+{"type": "token", "data": "2"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "冲突"}
+{"type": "token", "data": "。"}
+{"type": "done", "sessionKey": "validation-Q08-f1ce985495e94486b682bb51fcc8350a"}

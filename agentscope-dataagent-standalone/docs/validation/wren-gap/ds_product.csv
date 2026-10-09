@@ -1,0 +1,5 @@
+product_row_id,product_code,product_name
+1,P1,产品一
+2,P2,产品二
+3,P2,重复产品二
+4,P3,产品三

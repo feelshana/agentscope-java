@@ -1,0 +1,6 @@
+@media (max-width: 900px) {
+  .modeling-workbench { overflow-y: auto !important; }
+  .modeling-workbench-body { flex-direction: column; min-height: auto !important; }
+  .modeling-chat-main { flex: none !important; min-height: 580px !important; height: 70vh; }
+  .modeling-progress-column { flex: none !important; overflow-y: visible !important; }
+}

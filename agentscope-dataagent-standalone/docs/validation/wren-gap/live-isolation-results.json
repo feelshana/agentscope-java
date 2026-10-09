@@ -1,0 +1,17 @@
+[
+  {
+    "path": "/api/dataset-groups/73b26360-df5c-497e-9137-bdfe7f50df67",
+    "status": "PASS",
+    "detail": "HTTP 404: {\"timestamp\":\"2026-10-06T15:32:21.394Z\",\"path\":\"/api/dataset-groups/73b26360-df5c-497e-9137-bdfe7f50df67\",\"status\":404,\"error\":\"Not Found\",\"requestId\":\"8af8303f-20\"}"
+  },
+  {
+    "path": "/api/dataset-groups/73b26360-df5c-497e-9137-bdfe7f50df67/modeling/mdl/view",
+    "status": "PASS",
+    "detail": "HTTP 404: {\"timestamp\":\"2026-10-06T15:32:21.414Z\",\"path\":\"/api/dataset-groups/73b26360-df5c-497e-9137-bdfe7f50df67/modeling/mdl/view\",\"status\":404,\"error\":\"Not Found\",\"requestId\":\"80a4080f-21\"}"
+  },
+  {
+    "path": "/api/dataset-groups/73b26360-df5c-497e-9137-bdfe7f50df67/modeling/workspace/file?path=relationships.yml",
+    "status": "PASS",
+    "detail": "HTTP 404: {\"timestamp\":\"2026-10-06T15:32:21.445Z\",\"path\":\"/api/dataset-groups/73b26360-df5c-497e-9137-bdfe7f50df67/modeling/workspace/file\",\"status\":404,\"error\":\"Not Found\",\"requestId\":\"17ded865-22\"}"
+  }
+]

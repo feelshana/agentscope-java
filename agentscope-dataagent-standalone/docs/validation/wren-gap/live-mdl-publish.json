@@ -1,0 +1,8 @@
+{
+  "ok": true,
+  "issues": [],
+  "output": "Built: 7 models, 2 views → C:\\Users\\roylin\\.agentscope\\dataagent\\mdl\\73b26360-df5c-497e-9137-bdfe7f50df67\\project\\target\\mdl.json\r\n\r\nNext: wren --sql 'SELECT ...' to query your data.",
+  "mdlState": "PUBLISHED",
+  "mdlVersion": 8,
+  "mdlPublishedAt": "2026-10-06T15:35:49.335001500Z"
+}

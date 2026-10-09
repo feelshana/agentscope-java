@@ -1,0 +1,29 @@
+{
+  "name": "customer",
+  "properties": {
+    "description": "测试业务模型：customer"
+  },
+  "table_reference": {
+    "catalog": "",
+    "schema": "wren_gap_fixture",
+    "table": "ds_customer"
+  },
+  "columns": [
+    {
+      "name": "customer_id",
+      "type": "BIGINT"
+    },
+    {
+      "name": "customer_name",
+      "type": "VARCHAR"
+    },
+    {
+      "name": "is_internal",
+      "type": "BIGINT"
+    },
+    {
+      "name": "region",
+      "type": "VARCHAR"
+    }
+  ]
+}

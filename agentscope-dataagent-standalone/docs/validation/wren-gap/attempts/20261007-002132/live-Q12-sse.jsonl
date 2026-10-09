@@ -1,0 +1,1 @@
+{"type": "error", "error": "io.agentscope.harness.agent.sandbox.SandboxException$SandboxRuntimeException: docker run failed (exit=127): docker: error during connect: Head \"http://%2F%2F.%2Fpipe%2FdockerDesktopLinuxEngine/_ping\": open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified.\nSee 'docker run --help'."}

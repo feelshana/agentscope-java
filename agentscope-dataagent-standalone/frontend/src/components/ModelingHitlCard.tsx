@@ -8,6 +8,7 @@ import type {
   WorkspacePreview,
 } from '../api/semanticModeling';
 import { diffLines } from '../utils/diff';
+import ReadableCode from './ReadableCode';
 
 const JOIN_LABEL: Record<string, string> = {
   MANY_TO_ONE: '多对一',
@@ -72,7 +73,7 @@ export default function ModelingHitlCard({
   groupId: string;
   overview: ModelingOverview | null;
   submitting: boolean;
-  onDecision: (confirmed: boolean, input?: Record<string, unknown>) => void;
+  onDecision: (confirmed: boolean, input?: Record<string, unknown>, feedback?: string) => void;
 }) {
   const relation = relationFor(call, overview);
   const isRelation = call.name === 'decide_relation' && relation != null;
@@ -168,8 +169,19 @@ export default function ModelingHitlCard({
     return next;
   }
 
-  function adoptFileChange() {
-    onDecision(true, fileDirty ? fileDraftInput() : call.input);
+  async function adoptFileChange() {
+    if (call.name !== 'write_file' && call.name !== 'patch_file') return;
+    if (!fileDirty) { onDecision(true); return; }
+    setPreviewing(true);
+    setPreviewError(null);
+    try {
+      const input = fileDraftInput();
+      const checked = await previewWorkspaceChange(groupId, call.name, input);
+      setPreview(checked);
+      if (checked.ok) { setFileDirty(false); onDecision(true, input); }
+    } catch (error) {
+      setPreviewError(error instanceof Error ? error.message : '预检请求失败');
+    } finally { setPreviewing(false); }
   }
 
   return (
@@ -184,9 +196,9 @@ export default function ModelingHitlCard({
       ) : isFileWrite ? (
         <>
           <div style={S.summary}>
-            {call.name === 'write_file' ? '新建或覆盖' : '精确替换'}工程文件 <code>{filePath}</code>
-            {fileReason ? <>：{fileReason}</> : null}
+            {fileReason || '助手未提供业务变更说明，请核对技术详情后再决定。'}
           </div>
+          <div style={S.help}>本次确认写入模型草稿；业务结果需在「验证与确认」审阅，发布后才用于问数。</div>
           {previewing && <div style={S.help}>正在预检（YAML 解析 + 工程校验）…</div>}
           {!previewing && previewError && <div style={S.error}>{previewError}</div>}
           {!previewing && !previewError && preview && (preview.ok ? (
@@ -197,6 +209,7 @@ export default function ModelingHitlCard({
             <div style={S.error}>✗ 预检未通过：{preview.error}</div>
           ))}
           {fileDirty && <div style={S.help}>内容已修改，请点「重新预检」刷新校验结论。</div>}
+          {preview && <details style={S.details} open><summary>查看写入后的完整内容</summary><ReadableCode text={preview.newContent} title={filePath} /></details>}
           {fileDiff.length > 0 && (
             <details style={S.details}>
               <summary>
@@ -204,6 +217,7 @@ export default function ModelingHitlCard({
                   ? `变更内容（+${addedCount} / -${removedCount} 行）`
                   : '变更内容（无差异）'}
               </summary>
+              <div style={S.help}>工程文件：<code>{filePath}</code></div>
               <pre style={S.diffBox}>
                 {fileDiff.map((line, index) => (
                   <div
@@ -266,8 +280,13 @@ export default function ModelingHitlCard({
             </div>
           )}
           <div style={S.actions}>
-            <button style={S.primary} disabled={submitting} onClick={adoptFileChange}>
-              采用并写入
+            {preview && !preview.ok && <button style={S.primary} disabled={submitting || previewing}
+              onClick={() => onDecision(false, undefined,
+                `当前提案预检未通过，请修正后重新提交供我确认。文件：${filePath}。预检错误：${(preview.error || '未知错误').slice(0, 2800)}。不要原样重提；保留已确认口径。问题 SQL 禁止显式 LIMIT/OFFSET，TopN 可用 CTE 与排名筛选，并说明并列处理。`)}>
+              让助手修正
+            </button>}
+            <button style={{ ...S.primary, ...(submitting || previewing || (!preview?.ok && !fileDirty) ? { opacity: 0.4, cursor: 'not-allowed' } : {}) }} disabled={submitting || previewing || (!preview?.ok && !fileDirty)} onClick={() => void adoptFileChange()}>
+              {fileDirty ? '校验并写入修改' : '采用并写入'}
             </button>
             <button
               style={S.secondary}
@@ -360,13 +379,14 @@ export default function ModelingHitlCard({
         </>
       ) : (
         <>
-          <div style={S.summary}>建模助手准备执行此变更，请确认摘要和参数。</div>
+          <div style={S.summary}>{fileReason || '建模助手准备执行此变更，请确认摘要和参数。'}</div>
+          {call.name === 'create_view' && <><p>视图：<strong>{stringValue(call.input.name)}</strong></p><p>{stringValue(call.input.description)}</p><ReadableCode text={stringValue(call.input.statement)} language="sql" title="视图定义 SQL" /></>}
           <details style={S.details} open={editingJson}>
             <summary>提案参数</summary>
             {editingJson ? (
               <textarea style={S.jsonEditor} value={jsonInput} onChange={event => setJsonInput(event.target.value)} />
             ) : (
-              <pre style={S.pre}>{JSON.stringify(call.input, null, 2)}</pre>
+              <ReadableCode text={JSON.stringify(call.input, null, 2)} language="json" title="提案参数" />
             )}
           </details>
           {jsonError && <div style={S.error}>{jsonError}</div>}
@@ -580,7 +600,7 @@ const S: Record<string, CSSProperties> = {
     fontSize: 10,
   },
   summary: { marginTop: 8, lineHeight: 1.6, color: 'var(--da-text)' },
-  details: { marginTop: 8, fontSize: 11.5, color: 'var(--da-text-muted)', lineHeight: 1.7 },
+  details: { marginTop: 8, fontSize: 15, color: 'var(--da-text)', lineHeight: 1.7 },
   form: { display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 },
   label: { display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11.5 },
   checkLabel: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5 },
@@ -642,7 +662,7 @@ const S: Record<string, CSSProperties> = {
     minHeight: 150,
     boxSizing: 'border-box',
     fontFamily: 'monospace',
-    fontSize: 11,
+    fontSize: 15,
   },
   pre: { maxHeight: 180, overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word' },
   error: { marginTop: 6, color: 'var(--da-danger)', fontSize: 11 },
@@ -656,7 +676,7 @@ const S: Record<string, CSSProperties> = {
     maxHeight: 260,
     overflow: 'auto',
     fontFamily: 'monospace',
-    fontSize: 11,
+    fontSize: 15,
     lineHeight: 1.5,
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',

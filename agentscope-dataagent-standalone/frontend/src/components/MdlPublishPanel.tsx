@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Icon from './Icon';
+import type { ModelingWorkflow } from '../api/modelingWorkflow';
 import { getMdlPreview, publishMdl, validateMdl } from '../api/semanticModeling';
 import type {
   MdlIssue,
@@ -82,9 +83,13 @@ function IssueList({ issues }: { issues: MdlIssue[] }) {
 export default function MdlPublishPanel({
   groupId,
   onPublished,
+  workflow,
+  onReview,
 }: {
   groupId: string;
   onPublished?: () => void | Promise<void>;
+  workflow?: ModelingWorkflow | null;
+  onReview?: () => void;
 }) {
   const [preview, setPreview] = useState<MdlPreview | null>(null);
   const [validation, setValidation] = useState<MdlValidation | null>(null);
@@ -148,6 +153,7 @@ export default function MdlPublishPanel({
     run('validate', async () => {
       setResult(null);
       setValidation(await validateMdl(groupId));
+      window.dispatchEvent(new CustomEvent('modeling:updated', { detail: { groupId } }));
     });
 
   const onPublish = () =>
@@ -173,7 +179,7 @@ export default function MdlPublishPanel({
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
         <Icon name="upload" />
         <div className="da-h2" style={{ margin: 0 }}>
-          MDL 发布
+          发布业务模型
         </div>
         {preview && (
           <span
@@ -201,20 +207,33 @@ export default function MdlPublishPanel({
           刷新预览
         </button>
         <button className="da-btn da-btn-sm" disabled={busy !== null} onClick={onValidate}>
-          {busy === 'validate' ? '验证中…' : '验证'}
+          {busy === 'validate' ? '校验中…' : '工程校验'}
         </button>
         <button
           className="da-btn da-btn-primary da-btn-sm"
-          disabled={busy !== null}
+          disabled={busy !== null || !workflow?.canPublish || !workflow.draftChanged}
           onClick={onPublish}
         >
           {busy === 'publish' ? '发布中…' : '发布'}
         </button>
       </div>
       <div className="da-small" style={{ color: 'var(--da-text-3)', marginBottom: 10 }}>
-        确认关系 + Cube 配置会编译为 Wren 项目（类型经 parse-types 归一化，不手写映射）。发布 =
-        验证 → 构建 → 快照，成功后版本号 +1；失败不会影响当前已发布版本。
+        发布后问数使用新版本的业务口径。请先检查本次变更与全部问题确认情况；发布失败时保留原版本。
       </div>
+      {workflow && <div style={{ marginBottom: 12 }}>
+        <strong>本次业务模型变更</strong>
+        <ul>{workflow.changedAssets.map(change => <li key={change.path}>
+          {change.kind === 'ADDED' ? '新增' : change.kind === 'REMOVED' ? '移除' : '调整'}：{change.label}
+        </li>)}</ul>
+        {!workflow.draftChanged && <p className="da-small">没有待发布变更。</p>}
+        <p className="da-small">分析问题已确认 {workflow.questionSummary.confirmed}/{workflow.questionSummary.total}。</p>
+        {(workflow.questionSummary.incomplete + workflow.questionSummary.needsValidation + workflow.questionSummary.awaitingConfirmation > 0) &&
+          <p className="da-small">仍有问题待补充、验证或审阅。请完成全部问题的 SQL 与结果确认后发布。</p>}
+        {workflow.blockers.length > 0 && <div role="status">
+          <ul>{workflow.blockers.map((item, i) => <li key={`${item.code}-${i}`}>{item.message}</li>)}</ul>
+          <button className="da-btn" onClick={onReview}>前往验证与确认</button>
+        </div>}
+      </div>}
 
       {error && (
         <div className="da-small" style={{ color: 'var(--da-danger)', marginBottom: 8 }}>
@@ -271,14 +290,15 @@ export default function MdlPublishPanel({
           }}
         >
           {validation.ok
-            ? '验证通过（wren context validate --strict）'
+            ? '工程校验通过；业务口径与结果仍需人员确认。'
             : `验证未通过：${validation.issues.length} 个问题`}
         </div>
       )}
 
+      <details><summary>查看技术文件差异</summary>
       {(preview?.files.length ?? 0) === 0 ? (
         <div className="da-small" style={{ color: 'var(--da-text-3)' }}>
-          暂无可发布的工程文件（请先上传数据集并确认关系）。
+          暂无可发布的模型文件，请先完成数据准备。
         </div>
       ) : (
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
@@ -395,6 +415,7 @@ export default function MdlPublishPanel({
           </div>
         </div>
       )}
+      </details>
     </div>
   );
 }

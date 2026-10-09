@@ -1,0 +1,13 @@
+{
+  "relationships": [
+    {
+      "name": "order_customer",
+      "models": [
+        "order",
+        "customer"
+      ],
+      "join_type": "MANY_TO_ONE",
+      "condition": "order.customer_id = customer.customer_id"
+    }
+  ]
+}

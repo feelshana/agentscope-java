@@ -1,0 +1,11 @@
+{
+  "sessionKey": "repair-probe-a20524d0d6",
+  "groupIds": [
+    "2938f8c8-6fee-44aa-a700-6aa8c9769c98"
+  ],
+  "replyId": "f0c225cf8fc24646899112034edd9074",
+  "toolCallId": "call_00_eAizuGCqH2H4Cdnt0R0y1405",
+  "toolName": "write_file",
+  "confirmed": false,
+  "feedback": "当前提案预检未通过，请修正后重新提交供我确认。文件：knowledge/questions/repair_probe_68962a.yml。预检错误：error: 常用问题预检失败，文件未写入：验证 SQL 仅允许单条 SELECT/WITH，禁止写操作及显式 LIMIT/OFFSET。不要原样重提；保留已确认口径，不要自行设为必验。问题 SQL 禁止显式 LIMIT/OFFSET，TopN 可用 CTE 与排名筛选，并说明并列处理。"
+}
