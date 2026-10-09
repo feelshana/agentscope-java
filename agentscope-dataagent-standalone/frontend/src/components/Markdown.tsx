@@ -2,18 +2,8 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import ReactMarkdown, { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { ACTIVE_AGENT_ID } from '../api/activeAgent';
-import { getToken } from '../api/auth';
-
-/** Rewrite /workspace/… image src to the workspace binary API URL (with auth token). */
-function rewriteImgSrc(src: string): string {
-  if (src.startsWith('/workspace/')) {
-    const base = `/api/agents/${ACTIVE_AGENT_ID}/workspace/file/binary?path=${encodeURIComponent(src)}`;
-    const token = getToken();
-    return token ? `${base}&token=${encodeURIComponent(token)}` : base;
-  }
-  return src;
-}
+import { fileUrl, downloadFile } from '../api/artifacts';
+import AttachmentImage from './AttachmentImage';
 
 /**
  * Styles for rendered markdown inside chat bubbles. Kept light-themed on
@@ -83,10 +73,17 @@ export default function Markdown({ children, fontSize }: { children: string; fon
   const [lightbox, setLightbox] = useState<string | null>(null);
 
   const components: Components = {
+    a: ({ href, children, title }) => {
+      const attachment = fileUrl(href ?? '');
+      return <a title={title} href={attachment ?? href} rel="noopener noreferrer" onClick={attachment ? e => {
+        e.preventDefault();
+        void downloadFile(attachment).catch(error => window.alert(error.message));
+      } : undefined}>{children}</a>;
+    },
     img: ({ src, alt }) => {
-      const url = rewriteImgSrc(src ?? '');
+      const url = fileUrl(src ?? '') ?? src ?? '';
       return (
-        <img
+        <AttachmentImage
           src={url}
           alt={alt ?? ''}
           style={{ maxWidth: '100%', cursor: 'zoom-in', borderRadius: 6 }}
@@ -119,7 +116,7 @@ export default function Markdown({ children, fontSize }: { children: string; fon
           }}
           onClick={() => setLightbox(null)}
         >
-          <img
+          <AttachmentImage
             src={lightbox}
             alt=""
             style={{ maxWidth: '92vw', maxHeight: '92vh', borderRadius: 8, boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}

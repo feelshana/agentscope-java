@@ -729,7 +729,7 @@ class WrenToolkitTest {
         assertThat(uploads.paths.get(0)).startsWith("/workspace/runpython/s1/data/");
     }
 
-    /** A failed handoff degrades to the markdown-only result — never an error (ADR 0030). */
+    /** A failed handoff never errors: exceptions add a hint, upload failures degrade silently (ADR 0030/0060). */
     @Test
     void handoffFailureDegradesToMarkdownOnlyResult() {
         stubGroup("PUBLISHED");
@@ -742,7 +742,8 @@ class WrenToolkitTest {
         assertThat(withHandoff.wrenRunSql(ALICE, rc("s1"), "gA", "SELECT 城市 FROM 订单表", null, null))
                 .doesNotStartWith("error:")
                 .contains("| 杭州 | 120 |")
-                .doesNotContain("数据文件");
+                .doesNotContain("**数据文件：**")
+                .contains("数据文件保存失败");
 
         doReturn(List.of(FileUploadResponse.fail("p", "denied")))
                 .when(fs)
@@ -750,7 +751,7 @@ class WrenToolkitTest {
         assertThat(withHandoff.wrenRunSql(ALICE, rc("s1"), "gA", "SELECT 城市 FROM 订单表", null, null))
                 .doesNotStartWith("error:")
                 .contains("| 杭州 | 120 |")
-                .doesNotContain("数据文件");
+                .doesNotContain("**数据文件：**");
     }
 
     /** Content-addressed names make re-running the same query overwrite the same file. */

@@ -52,6 +52,21 @@ public class DataAgentWorkspaceConfig {
 
     private static final Logger log = LoggerFactory.getLogger(DataAgentWorkspaceConfig.class);
 
+    @Value("${dataagent.sandbox.instance-id:standalone}")
+    private String instanceId;
+
+    @Value("${dataagent.sandbox.max-containers:8}")
+    private int maxContainers;
+
+    @Value("${dataagent.sandbox.memory-mb:1024}")
+    private long memoryMb;
+
+    @Value("${dataagent.sandbox.cpus:1}")
+    private long cpus;
+
+    @Value("${dataagent.sandbox.workspace-mb:512}")
+    private long workspaceMb;
+
     @Value("${dataagent.sandbox.idle-ttl-min:15}")
     private long idleTtlMinutes;
 
@@ -94,7 +109,24 @@ public class DataAgentWorkspaceConfig {
         Path sharedRoot = resolveCwd().resolve("shared");
         Duration idleTtl = Duration.ofMinutes(idleTtlMinutes);
         Duration evictionPoll = Duration.ofSeconds(evictionPollSeconds);
-        DockerSandboxClientOptions optionsTemplate = new DockerSandboxClientOptions();
+        if (memoryMb < 128 || cpus < 1 || workspaceMb < 64)
+            throw new IllegalArgumentException("Invalid sandbox resource limits");
+        DockerSandboxClientOptions optionsTemplate =
+                new DockerSandboxClientOptions()
+                        .workspaceRoot("/workspace")
+                        .memorySizeBytes(Math.multiplyExact(memoryMb, 1024L * 1024L))
+                        .cpuCount(cpus)
+                        .additionalRunArgs(
+                                "--label=dataagent.managed=true",
+                                "--label=dataagent.instance=" + instanceId,
+                                "--read-only",
+                                "--tmpfs=/tmp:rw,nosuid,nodev,size=67108864",
+                                "--env=HOME=/tmp",
+                                "--env=MPLCONFIGDIR=/tmp/matplotlib",
+                                "--pids-limit=256",
+                                "--memory-swap=" + Math.multiplyExact(memoryMb, 1024L * 1024L),
+                                "--tmpfs=/workspace:rw,nosuid,nodev,size="
+                                        + Math.multiplyExact(workspaceMb, 1024L * 1024L));
         if (sandboxImage != null && !sandboxImage.isBlank()) {
             optionsTemplate.image(sandboxImage.trim());
         }
@@ -105,8 +137,11 @@ public class DataAgentWorkspaceConfig {
                 idleTtl,
                 evictionPoll,
                 optionsTemplate.getImage());
-        return new UserSandboxRegistry(
-                sandboxClient, sharedRoot, idleTtl, evictionPoll, optionsTemplate);
+        UserSandboxRegistry registry =
+                new UserSandboxRegistry(
+                        sandboxClient, sharedRoot, idleTtl, evictionPoll, optionsTemplate);
+        registry.configureLimits(instanceId, maxContainers);
+        return registry;
     }
 
     private Path resolveCwd() {

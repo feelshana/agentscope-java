@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { stream } from '../api/chat';
-import { TurnEntry, turns as fetchTurns } from '../api/sessions';
+import { TurnEntry, messagePage } from '../api/sessions';
 import ToolCallBlock, { ToolInspectPayload } from './ToolCallBlock';
 import TaskTrace from './TaskTrace';
 import ChartBlock from './ChartBlock';
@@ -341,8 +341,16 @@ export default function ChatPanel({
   const [sessionMsgs, setSessionMsgs] = useState<Map<string, SessionMsgs>>(new Map());
   const [input, setInput] = useState('');
   const [restoring, setRestoring] = useState(true);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [olderLoading, setOlderLoading] = useState(false);
+  const [historyCursors, setHistoryCursors] = useState<Record<string, number | null>>({});
+  const historyTurns = useRef(new Map<string, TurnEntry[]>());
+  const olderRequest = useRef(false);
+  const preserveScroll = useRef<{ height: number; top: number } | null>(null);
   const curKey = searchParams.get('session');
   const messages = curKey ? (sessionMsgs.get(curKey)?.messages ?? []) : [];
+  const activeHistoryKey = useRef(curKey);
+  activeHistoryKey.current = curKey;
   const busy = curKey ? (sessionMsgs.get(curKey)?.busy ?? false) : false;
   const isLanding = !restoring && !curKey && messages.length === 0;
   const [groups, setGroups] = useState<DatasetGroup[]>([]);
@@ -457,15 +465,19 @@ export default function ChatPanel({
 
       setRestoring(true);
       try {
-        const list = await fetchTurns(effectiveAgentId, key);
+        const page = await messagePage(effectiveAgentId, key);
         if (cancelled) return;
+        const list = page.items;
+        historyTurns.current.set(key, list);
+        setHistoryCursors(prev => ({ ...prev, [key!]: page.nextBefore }));
+        setHistoryError(null);
         setSessionMsgs(prev => {
           const next = new Map(prev);
           next.set(key!, { messages: turnsToMessages(list), busy: false });
           return next;
         });
       } catch {
-        // missing/empty session is fine
+        if (!cancelled) setHistoryError('历史消息加载失败，请重新打开此会话重试');
       }
       if (!cancelled) setRestoring(false);
     }
@@ -475,8 +487,38 @@ export default function ChatPanel({
   }, [effectiveAgentId, urlSession]);
 
   useEffect(() => {
-    threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight });
+    const node = threadRef.current;
+    if (!node) return;
+    if (preserveScroll.current) {
+      node.scrollTop = preserveScroll.current.top + node.scrollHeight - preserveScroll.current.height;
+      preserveScroll.current = null;
+    } else node.scrollTo({ top: node.scrollHeight });
   }, [messages]);
+
+  async function loadOlderMessages() {
+    const key = curKey;
+    const before = key ? historyCursors[key] : null;
+    if (!key || before == null || olderRequest.current || busy || restoring) return;
+    olderRequest.current = true; setOlderLoading(true); setHistoryError(null);
+    try {
+      const page = await messagePage(effectiveAgentId, key, before);
+      if (activeHistoryKey.current !== key) return;
+      const previous = historyTurns.current.get(key) ?? [];
+      const seen = new Set(previous.map(t => t.id));
+      const combined = [...page.items.filter(t => !seen.has(t.id)), ...previous];
+      const oldIds = new Set(turnsToMessages(previous).map(m => m.id));
+      historyTurns.current.set(key, combined);
+      if (threadRef.current) preserveScroll.current = { height: threadRef.current.scrollHeight, top: threadRef.current.scrollTop };
+      setSessionMsgs(prev => {
+        const next = new Map(prev);
+        const current = next.get(key);
+        if (current) next.set(key, { ...current, messages: [...turnsToMessages(combined), ...current.messages.filter(m => !oldIds.has(m.id))] });
+        return next;
+      });
+      setHistoryCursors(prev => ({ ...prev, [key]: page.nextBefore }));
+    } catch { if (activeHistoryKey.current === key) setHistoryError('加载更早消息失败，请重试'); }
+    finally { olderRequest.current = false; setOlderLoading(false); }
+  }
 
   useEffect(() => {
     if (isLanding) inputRef.current?.focus();
@@ -844,8 +886,14 @@ export default function ChatPanel({
 
   return (
     <div style={S.root}>
-      <div style={S.thread} ref={threadRef}>
+      <div style={S.thread} ref={threadRef} onScroll={e => {
+        if (e.currentTarget.scrollTop < 80 && !historyError) void loadOlderMessages();
+      }}>
         <div style={S.threadInner}>
+        {historyError && <div role="alert">{historyError}</div>}
+        {curKey && historyCursors[curKey] != null && <button className="da-btn da-btn-ghost da-btn-sm"
+          disabled={olderLoading || busy} onClick={() => void loadOlderMessages()}>
+          {olderLoading ? '加载中…' : '加载更早消息'}</button>}
         {restoring && messages.length === 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: '70%' }}>
             <div className="da-skeleton da-skeleton-block" style={{ width: '45%' }} />

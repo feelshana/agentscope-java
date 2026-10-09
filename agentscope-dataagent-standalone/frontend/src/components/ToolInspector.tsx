@@ -1,3 +1,4 @@
+import AttachmentImage from './AttachmentImage';
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from './Icon';
@@ -396,7 +397,7 @@ function PythonArtifactsView({ tools }: { tools: { input?: string; result?: stri
               padding: '8px 12px', borderBottom: `1px solid ${C.borderLight}`,
             }}>
               {src && !failed ? (
-                <img src={src} alt={a.name} style={{
+                <AttachmentImage src={src} alt={a.name} style={{
                   width: 44, height: 44, objectFit: 'cover', borderRadius: 6,
                   border: `1px solid ${C.border}`, cursor: 'zoom-in', flexShrink: 0,
                 }} onClick={() => setLightbox(src)}
@@ -441,7 +442,7 @@ function PythonArtifactsView({ tools }: { tools: { input?: string; result?: stri
           position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.75)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out', padding: 24,
         }} onClick={() => setLightbox(null)}>
-          <img src={lightbox} alt="" style={{ maxWidth: '92vw', maxHeight: '92vh', borderRadius: 8, boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }} />
+          <AttachmentImage src={lightbox} alt="" style={{ maxWidth: '92vw', maxHeight: '92vh', borderRadius: 8, boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }} />
         </div>, document.body,
       )}
     </>

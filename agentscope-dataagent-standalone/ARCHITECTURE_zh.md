@@ -1148,3 +1148,16 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 
 > 维护约定：修改主流程/装配顺序/工具链/数据模型时，必须同步更新本文档对应章节；
 > 架构取舍（为什么这么做）写到 `docs/adr/`，本文档只描述「是什么」。
+
+
+## 2026-10-08 补充：会话历史、附件与沙箱生命周期
+
+当前实现以 [ADR 0060](docs/adr/0060-durable-session-history-and-artifact-lifecycle.md) 和 [spec 052](docs/specs/052-durable-session-history-and-artifacts.md) 为准；涉及旧章节中的历史读沙箱、查询 CSV 立即上传和镜像级孤儿清理描述时，由本节替代。
+
+- 展示：数据库 `session_history/session_message` 提供列表与消息分页；索引器从本地引擎日志补齐，列表不访问 Docker。
+- 续聊：引擎日志及工作区持久状态继续保留，数据库展示投影不替代引擎上下文。
+- 附件：`session_artifact` 元数据加持久目录，所有者通过请求头认证读取；沙箱回收不影响已保存文件，删除或重置会话会清理附件。
+- 执行：按用户和 agent 懒创建，活动租约保护回收；每次 Python 独立运行目录，最近输入有限恢复；容器资源和数量受限。
+- 维护：容量保护、分段锁和分批孤立文件补偿已实施；正常历史保留任务见 ADR 0061，默认关闭并先试运行；多实例协调和对象存储尚未实施。
+
+部署限制、完整参数、备份范围和验证边界见 [会话与附件部署说明](docs/session-history-and-artifacts.md)。

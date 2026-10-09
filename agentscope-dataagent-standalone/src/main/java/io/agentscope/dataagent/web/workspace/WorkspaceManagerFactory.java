@@ -72,6 +72,18 @@ public final class WorkspaceManagerFactory {
      * sandbox-backed, the global/user distinction disappears because the sandbox itself is keyed
      * by {@code (userId, agentId)}. Kept as a separate entry point for call-site readability.
      */
+    public java.util.Optional<WorkspaceManager> forExistingAgent(
+            String ownerId, String agentId, String workspacePath) {
+        validateSegment("ownerId", ownerId);
+        validateSegment("agentId", agentId);
+        return registry.peek(ownerId, agentId)
+                .map(
+                        sb ->
+                                new WorkspaceManager(
+                                        resolveAgentDataPath(workspacePath, agentId),
+                                        new SharedSandboxFilesystem(sb)));
+    }
+
     public WorkspaceManager forGlobalAgent(String userId, String agentId) {
         return forAgent(userId, agentId, null);
     }

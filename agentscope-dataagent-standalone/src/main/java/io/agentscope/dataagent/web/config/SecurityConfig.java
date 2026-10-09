@@ -113,7 +113,8 @@ public class SecurityConfig {
             String token = null;
             if (header != null && header.startsWith("Bearer ")) {
                 token = header.substring(7);
-            } else {
+            } else if (!exchange.getRequest().getPath().value().startsWith("/api/artifacts/")) {
+                // Legacy endpoints only; durable attachments require Authorization.
                 // Fallback: read token from query parameter (for <img src> etc.)
                 String qp = exchange.getRequest().getQueryParams().getFirst("token");
                 if (qp != null && !qp.isBlank()) {

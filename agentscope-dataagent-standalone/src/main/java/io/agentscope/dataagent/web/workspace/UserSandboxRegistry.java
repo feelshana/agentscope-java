@@ -78,6 +78,95 @@ public final class UserSandboxRegistry {
     private final DockerSandboxClientOptions optionsTemplate;
     private final ConcurrentHashMap<Key, Entry> entries = new ConcurrentHashMap<>();
     private final ScheduledExecutorService evictor;
+    private final ConcurrentHashMap<Entry, Key> pendingCleanup = new ConcurrentHashMap<>();
+    private java.util.concurrent.Semaphore slots = new java.util.concurrent.Semaphore(8);
+    private String instanceId = "standalone";
+    private volatile boolean orphanCleanupComplete = true;
+    private java.nio.channels.FileChannel instanceLockChannel;
+    private java.nio.channels.FileLock instanceLock;
+
+    private void lockInstance() {
+        try {
+            Path lock =
+                    Path.of(
+                            System.getProperty("java.io.tmpdir"),
+                            "dataagent-sandbox-" + instanceId + ".lock");
+            instanceLockChannel =
+                    java.nio.channels.FileChannel.open(
+                            lock,
+                            java.nio.file.StandardOpenOption.CREATE,
+                            java.nio.file.StandardOpenOption.WRITE);
+            instanceLock = instanceLockChannel.tryLock();
+            if (instanceLock == null)
+                throw new IllegalStateException(
+                        "Another local DataAgent instance uses sandbox.instance-id=" + instanceId);
+        } catch (Exception e) {
+            if (instanceLockChannel != null)
+                try {
+                    instanceLockChannel.close();
+                } catch (Exception ignored) {
+                }
+            throw new IllegalStateException(
+                    "Cannot acquire sandbox deployment lock; orphan cleanup aborted", e);
+        }
+    }
+
+    public void configureLimits(String instanceId, int maxContainers) {
+        if (instanceId == null || !instanceId.matches("[a-zA-Z0-9_.-]{1,64}") || maxContainers < 1)
+            throw new IllegalArgumentException("Invalid sandbox instance/limit");
+        this.instanceId = instanceId;
+        this.slots = new java.util.concurrent.Semaphore(maxContainers);
+    }
+
+    public final class Lease implements AutoCloseable {
+        private final Key key;
+        private final Entry entry;
+        private final java.util.concurrent.atomic.AtomicBoolean closed =
+                new java.util.concurrent.atomic.AtomicBoolean();
+
+        private Lease(Key key, Entry entry) {
+            this.key = key;
+            this.entry = entry;
+        }
+
+        public Sandbox sandbox() {
+            return entry.sandbox;
+        }
+
+        @Override
+        public void close() {
+            if (!closed.compareAndSet(false, true)) return;
+            entries.computeIfPresent(
+                    key,
+                    (k, current) -> {
+                        if (current != entry) return current;
+                        current.active--;
+                        current.touch();
+                        if (current.active == 0 && current.invalidated) {
+                            closeQuietly(k, current, "deferred invalidate");
+                            return null;
+                        }
+                        return current;
+                    });
+        }
+    }
+
+    /** Pins the container until the turn/operation finishes, including artifact persistence. */
+    public Lease acquire(String userId, String agentId) {
+        validateSegment("userId", userId);
+        validateSegment("agentId", agentId);
+        Key key = new Key(userId, agentId);
+        Entry entry =
+                entries.compute(
+                        key,
+                        (k, current) -> {
+                            if (current == null) current = createAndStart(k);
+                            current.active++;
+                            current.touch();
+                            return current;
+                        });
+        return new Lease(key, entry);
+    }
 
     /**
      * @param client backend client used to {@link SandboxClient#create create} new sandboxes
@@ -146,75 +235,78 @@ public final class UserSandboxRegistry {
      * running.
      *
      * <p>This method runs once on bean initialization, before any {@link #borrow} calls. It scans
-     * all Docker containers whose name starts with {@code agentscope-sandbox-} (the naming
-     * convention used by {@code DockerSandbox}) and removes them. This covers containers created
-     * with any image (e.g. {@code ubuntu:22.04} or {@code agentscope/dataagent-sandbox:latest}).
+     * Docker containers carrying this deployment's managed and instance labels (the naming
+     * convention used by {@code DockerSandbox}) and removes them. Unlabelled legacy containers are preserved for manual recovery.
      * Safe to call even if Docker is not running (logs a warning and continues).
      */
     @PostConstruct
-    void cleanupOrphanedContainers() {
+    synchronized void cleanupOrphanedContainers() {
         if (!(client
-                instanceof io.agentscope.harness.agent.sandbox.impl.docker.DockerSandboxClient)) {
+                instanceof io.agentscope.harness.agent.sandbox.impl.docker.DockerSandboxClient))
             return;
-        }
+        if (instanceLock == null) lockInstance();
+        orphanCleanupComplete = false;
         try {
-            String namePrefix = "agentscope-sandbox-";
-            log.info(
-                    "[sandbox-registry] cleaning up orphaned containers with name prefix={}",
-                    namePrefix);
-            ProcessBuilder pb =
-                    new ProcessBuilder("docker", "ps", "-aq", "--filter", "name=" + namePrefix);
-            pb.redirectErrorStream(true);
-            Process proc = pb.start();
             String output =
-                    new String(
-                                    proc.getInputStream().readAllBytes(),
-                                    java.nio.charset.StandardCharsets.UTF_8)
+                    dockerCommand(
+                                    "docker",
+                                    "ps",
+                                    "-aq",
+                                    "--filter",
+                                    "label=dataagent.managed=true",
+                                    "--filter",
+                                    "label=dataagent.instance=" + instanceId)
                             .strip();
-            int exitCode = proc.waitFor();
-            if (exitCode != 0) {
-                log.warn(
-                        "[sandbox-registry] docker ps failed (exit={}): {} — skipping orphan"
-                                + " cleanup",
-                        exitCode,
-                        output);
-                return;
-            }
             if (output.isEmpty()) {
-                log.info("[sandbox-registry] no orphaned containers found");
+                orphanCleanupComplete = true;
                 return;
             }
-            String[] containerIds = output.split("\\s+");
-            log.info(
-                    "[sandbox-registry] found {} orphaned container(s), removing: {}",
-                    containerIds.length,
-                    String.join(", ", containerIds));
-            ProcessBuilder rmPb =
-                    new ProcessBuilder(
-                            java.util.stream.Stream.concat(
-                                            java.util.stream.Stream.of("docker", "rm", "-f"),
-                                            java.util.Arrays.stream(containerIds))
-                                    .toArray(String[]::new));
-            rmPb.redirectErrorStream(true);
-            Process rmProc = rmPb.start();
-            String rmOutput =
-                    new String(
-                                    rmProc.getInputStream().readAllBytes(),
-                                    java.nio.charset.StandardCharsets.UTF_8)
-                            .strip();
-            int rmExit = rmProc.waitFor();
-            if (rmExit != 0) {
-                log.warn("[sandbox-registry] docker rm failed (exit={}): {}", rmExit, rmOutput);
-            } else {
-                log.info(
-                        "[sandbox-registry] cleaned up {} orphaned container(s)",
-                        containerIds.length);
+            java.util.List<String> command =
+                    new java.util.ArrayList<>(java.util.List.of("docker", "rm", "-f"));
+            for (String id : output.split("\\s+")) {
+                if (!id.matches("[0-9a-f]{12,64}"))
+                    throw new IllegalStateException("Unexpected docker container id");
+                command.add(id);
             }
+            dockerCommand(command.toArray(String[]::new));
+            orphanCleanupComplete = true;
+            log.info(
+                    "[sandbox-registry] removed {} orphan containers for instance {}",
+                    command.size() - 3,
+                    instanceId);
         } catch (Exception e) {
             log.warn(
-                    "[sandbox-registry] orphan cleanup failed (non-fatal, continuing): {}",
-                    e.getMessage(),
-                    e);
+                    "[sandbox-registry] orphan cleanup failed; startup continues: {}",
+                    e.toString());
+        }
+    }
+
+    private static String dockerCommand(String... args) throws Exception {
+        Process process = new ProcessBuilder(args).redirectErrorStream(true).start();
+        var reader =
+                java.util.concurrent.Executors.newSingleThreadExecutor(
+                        r -> {
+                            Thread t = new Thread(r, "sandbox-cleanup-output");
+                            t.setDaemon(true);
+                            return t;
+                        });
+        try {
+            var output =
+                    reader.submit(
+                            () ->
+                                    new String(
+                                            process.getInputStream().readAllBytes(),
+                                            java.nio.charset.StandardCharsets.UTF_8));
+            if (!process.waitFor(30, java.util.concurrent.TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                throw new IllegalStateException("Docker cleanup timed out");
+            }
+            String text = output.get(5, java.util.concurrent.TimeUnit.SECONDS);
+            if (process.exitValue() != 0) throw new IllegalStateException(text);
+            return text;
+        } finally {
+            if (process.isAlive()) process.destroyForcibly();
+            reader.shutdownNow();
         }
     }
 
@@ -235,7 +327,7 @@ public final class UserSandboxRegistry {
                                 existing.touch();
                                 return existing;
                             }
-                            return new Entry(createAndStart(k));
+                            return createAndStart(k);
                         });
         return entry.sandbox;
     }
@@ -282,8 +374,16 @@ public final class UserSandboxRegistry {
             if (userId != null && !userId.isBlank() && !k.userId().equals(userId)) {
                 continue;
             }
-            it.remove();
-            closeQuietly(k, e.getValue().sandbox, "invalidate");
+            entries.computeIfPresent(
+                    k,
+                    (key, current) -> {
+                        if (current.active > 0) {
+                            current.invalidated = true;
+                            return current;
+                        }
+                        closeQuietly(key, current, "invalidate");
+                        return null;
+                    });
             removed++;
         }
         if (removed > 0) {
@@ -301,19 +401,20 @@ public final class UserSandboxRegistry {
      */
     void evictIdle() {
         long cutoff = System.currentTimeMillis() - idleTtl.toMillis();
-        entries.entrySet()
-                .removeIf(
-                        e -> {
-                            if (e.getValue().lastAccessMs >= cutoff) {
-                                return false;
-                            }
-                            closeQuietly(e.getKey(), e.getValue().sandbox, "idle");
-                            return true;
-                        });
+        for (Key key : entries.keySet()) {
+            entries.computeIfPresent(
+                    key,
+                    (k, entry) -> {
+                        if (entry.active > 0 || entry.lastAccessMs >= cutoff) return entry;
+                        closeQuietly(k, entry, "idle");
+                        return null;
+                    });
+        }
     }
 
     private void evictIdleQuietly() {
         try {
+            pendingCleanup.forEach((entry, key) -> closeQuietly(key, entry, "retry"));
             evictIdle();
         } catch (RuntimeException ex) {
             log.warn("[sandbox-registry] eviction sweep failed: {}", ex.getMessage(), ex);
@@ -324,32 +425,40 @@ public final class UserSandboxRegistry {
     public void shutdownAll() {
         evictor.shutdownNow();
         for (Map.Entry<Key, Entry> e : entries.entrySet()) {
-            closeQuietly(e.getKey(), e.getValue().sandbox, "shutdown");
+            closeQuietly(e.getKey(), e.getValue(), "shutdown");
         }
         entries.clear();
+        pendingCleanup.forEach((entry, key) -> closeQuietly(key, entry, "shutdown retry"));
+        try {
+            if (instanceLock != null) instanceLock.release();
+        } catch (Exception e) {
+            log.warn("Failed to release instance lock", e);
+        }
+        try {
+            if (instanceLockChannel != null) instanceLockChannel.close();
+        } catch (Exception e) {
+            log.warn("Failed to close instance lock", e);
+        }
     }
 
-    private Sandbox createAndStart(Key key) {
-        DockerSandboxClientOptions options =
-                optionsTemplate != null ? optionsTemplate : new DockerSandboxClientOptions();
-        WorkspaceSpec ws = buildWorkspaceSpec(key);
-        Sandbox sandbox = client.create(ws, new NoopSnapshotSpec(), options);
+    private Entry createAndStart(Key key) {
+        if (!orphanCleanupComplete) throw new IllegalStateException("启动时孤儿容器清理失败，请修复 Docker 后重启服务");
+        if (!slots.tryAcquire()) throw new IllegalStateException("沙箱容量已满，请稍后重试");
+        Entry entry = null;
         try {
+            DockerSandboxClientOptions options =
+                    optionsTemplate != null ? optionsTemplate : new DockerSandboxClientOptions();
+            Sandbox sandbox =
+                    client.create(buildWorkspaceSpec(key), new NoopSnapshotSpec(), options);
+            entry = new Entry(sandbox);
             sandbox.start();
-        } catch (Exception startErr) {
-            try {
-                sandbox.close();
-            } catch (Exception closeErr) {
-                log.warn(
-                        "[sandbox-registry] failed to close half-started sandbox for {}: {}",
-                        key,
-                        closeErr.getMessage());
-            }
-            throw new IllegalStateException(
-                    "Failed to start sandbox for " + key + ": " + startErr.getMessage(), startErr);
+            log.info("[sandbox-registry] started sandbox for {}", key);
+            return entry;
+        } catch (Exception e) {
+            if (entry == null) slots.release();
+            else closeQuietly(key, entry, "start failure");
+            throw new IllegalStateException("Failed to start sandbox for " + key, e);
         }
-        log.info("[sandbox-registry] started sandbox for {}", key);
-        return sandbox;
     }
 
     /**
@@ -385,17 +494,37 @@ public final class UserSandboxRegistry {
         return spec;
     }
 
-    private void closeQuietly(Key key, Sandbox sandbox, String reason) {
-        try {
-            sandbox.close();
-            log.info("[sandbox-registry] closed sandbox for {} ({})", key, reason);
-        } catch (Exception e) {
-            log.warn(
-                    "[sandbox-registry] failed to close sandbox for {} ({}): {}",
-                    key,
-                    reason,
-                    e.getMessage(),
-                    e);
+    private void closeQuietly(Key key, Entry entry, String reason) {
+        synchronized (entry) {
+            if (entry.closed) return;
+            try {
+                entry.sandbox.close();
+                // DockerSandbox.close logs removal errors without throwing: verify removal.
+                if (entry.sandbox.getState()
+                                instanceof
+                                io.agentscope.harness.agent.sandbox.impl.docker.DockerSandboxState
+                                        state
+                        && state.getContainerId() != null
+                        && !state.getContainerId().isBlank()) {
+                    String id = state.getContainerId();
+                    if (!id.matches("[0-9a-f]{12,64}"))
+                        throw new IllegalStateException("Unexpected docker container id");
+                    if (!dockerCommand("docker", "ps", "-aq", "--filter", "id=" + id).isBlank())
+                        throw new IllegalStateException(
+                                "Container still exists after close: " + id);
+                }
+                entry.closed = true;
+                pendingCleanup.remove(entry);
+                slots.release();
+                log.info("[sandbox-registry] closed sandbox for {} ({})", key, reason);
+            } catch (Exception e) {
+                pendingCleanup.put(entry, key);
+                log.warn(
+                        "[sandbox-registry] cleanup pending for {} ({}); capacity retained: {}",
+                        key,
+                        reason,
+                        e.toString());
+            }
         }
     }
 
@@ -416,6 +545,9 @@ public final class UserSandboxRegistry {
     private static final class Entry {
         final Sandbox sandbox;
         volatile long lastAccessMs;
+        int active;
+        boolean invalidated;
+        boolean closed;
 
         Entry(Sandbox sandbox) {
             this.sandbox = sandbox;

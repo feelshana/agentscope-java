@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import Prism from 'prismjs';
 import 'prismjs/components/prism-python';
-import { ACTIVE_AGENT_ID } from '../api/activeAgent';
-import { getToken } from '../api/auth';
+import { fileUrl, downloadFile } from '../api/artifacts';
 import Markdown from './Markdown';
 
 const PY_STYLE = `
@@ -360,27 +359,13 @@ function imageMimeType(name: string): string {
 
 export function artifactSrc(a: ArtifactInfo): string | null {
   if (a.contentB64) return `data:${imageMimeType(a.name)};base64,${a.contentB64}`;
-  if (a.path) {
-    const token = getToken();
-    const base = `/api/agents/${ACTIVE_AGENT_ID}/workspace/file/binary?path=${encodeURIComponent(a.path)}`;
-    return token ? `${base}&token=${encodeURIComponent(token)}` : base;
-  }
+  if (a.path) return fileUrl(a.path);
   return null;
 }
 
 export function downloadArtifact(a: ArtifactInfo) {
   if (a.path) {
-    const token = getToken();
-    const base =
-      `/api/agents/${ACTIVE_AGENT_ID}/workspace/file/binary` +
-      `?path=${encodeURIComponent(a.path)}&download=true`;
-    const url = token ? `${base}&token=${encodeURIComponent(token)}` : base;
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = a.name;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    void downloadFile(a.path, a.name).catch(error => window.alert(error.message));
     return;
   }
   let blob: Blob | null = null;

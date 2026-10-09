@@ -97,6 +97,33 @@ dataagent:
     # How long an idle container stays alive before being evicted.
     idle-ttl-min: 15
     eviction-poll-sec: 60
+    instance-id: ${DATAAGENT_SANDBOX_INSTANCE_ID:standalone}
+    max-containers: ${DATAAGENT_SANDBOX_MAX_CONTAINERS:8}
+    memory-mb: ${DATAAGENT_SANDBOX_MEMORY_MB:1024}
+    cpus: ${DATAAGENT_SANDBOX_CPUS:1}
+    workspace-mb: ${DATAAGENT_SANDBOX_WORKSPACE_MB:512}
+
+  # Durable files must be stored outside the application/sandbox container lifecycle.
+  artifacts:
+    directory: ${DATAAGENT_ARTIFACTS_DIRECTORY:./data/artifacts}
+    max-file-mb: ${DATAAGENT_ARTIFACTS_MAX_FILE_MB:20}
+    user-quota-mb: ${DATAAGENT_ARTIFACTS_USER_QUOTA_MB:1024}
+    max-session-files: ${DATAAGENT_ARTIFACTS_MAX_SESSION_FILES:100}
+    total-quota-mb: ${DATAAGENT_ARTIFACTS_TOTAL_QUOTA_MB:10240}
+    min-free-disk-mb: ${DATAAGENT_ARTIFACTS_MIN_FREE_DISK_MB:2048}
+    restore-max-files: ${DATAAGENT_ARTIFACTS_RESTORE_MAX_FILES:10}
+    restore-max-mb: ${DATAAGENT_ARTIFACTS_RESTORE_MAX_MB:100}
+
+  # Complete-conversation retention. Disabled by default. Enable dry-run first and inspect logs.
+  history-retention:
+    enabled: ${DATAAGENT_HISTORY_RETENTION_ENABLED:false}
+    retention-days: ${DATAAGENT_HISTORY_RETENTION_DAYS:90}
+    cron: ${DATAAGENT_HISTORY_RETENTION_CRON:0 0 3 * * *}
+    zone: ${DATAAGENT_HISTORY_RETENTION_ZONE:Asia/Shanghai}
+    batch-size: ${DATAAGENT_HISTORY_RETENTION_BATCH_SIZE:50}
+    max-per-run: ${DATAAGENT_HISTORY_RETENTION_MAX_PER_RUN:500}
+    dry-run: ${DATAAGENT_HISTORY_RETENTION_DRY_RUN:true}
+    mode: ${DATAAGENT_HISTORY_RETENTION_MODE:full-session}
 
   # ---- Workspace storage topology (multi-tenant filesystem) ----
   # DataAgent runs every HarnessAgent on a CompositeFilesystem: a read-only

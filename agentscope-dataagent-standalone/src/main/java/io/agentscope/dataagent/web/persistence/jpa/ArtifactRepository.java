@@ -16,21 +16,24 @@
 package io.agentscope.dataagent.web.persistence.jpa;
 
 import java.util.List;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-/** Spring Data repository for {@link SessionRegistryEntity}. */
-public interface SessionRegistryRepository extends JpaRepository<SessionRegistryEntity, String> {
-    boolean existsByUserIdAndSessionId(String userId, String sessionId);
+public interface ArtifactRepository extends JpaRepository<ArtifactEntity, String> {
+    List<ArtifactEntity> findByOwnerIdAndSessionId(String ownerId, String sessionId);
+
+    @Query("select coalesce(sum(a.sizeBytes), 0) from ArtifactEntity a where a.ownerId = :owner")
+    long bytesUsed(@Param("owner") String owner);
+
+    @Query("select coalesce(sum(a.sizeBytes), 0) from ArtifactEntity a")
+    long totalBytesUsed();
 
     @Query(
-            """
-            select s from SessionRegistryEntity s
-            where s.kind = 'main' and s.lastActivityMs < :cutoff
-            order by s.lastActivityMs asc, s.sessionKey asc
-            """)
-    List<SessionRegistryEntity> findRetentionCandidates(
-            @Param("cutoff") long cutoff, Pageable pageable);
+            "select count(a), coalesce(sum(a.sizeBytes), 0) from ArtifactEntity a "
+                    + "where a.ownerId = :owner and a.sessionId = :session")
+    Object[] sessionUsage(@Param("owner") String owner, @Param("session") String session);
+
+    List<ArtifactEntity> findByIdGreaterThanOrderByIdAsc(
+            String after, org.springframework.data.domain.Pageable page);
 }

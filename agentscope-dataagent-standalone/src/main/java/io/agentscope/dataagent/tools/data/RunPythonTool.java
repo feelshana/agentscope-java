@@ -19,7 +19,6 @@ import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.tool.Tool;
 import io.agentscope.core.tool.ToolParam;
 import io.agentscope.harness.agent.filesystem.model.ExecuteResponse;
-import io.agentscope.harness.agent.filesystem.model.FileDownloadResponse;
 import io.agentscope.harness.agent.filesystem.model.FileUploadResponse;
 import io.agentscope.harness.agent.filesystem.sandbox.AbstractSandboxFilesystem;
 import java.util.AbstractMap;
@@ -97,9 +96,17 @@ public final class RunPythonTool {
             new LinkedHashSet<>(List.of(".png", ".jpg", ".jpeg", ".svg", ".csv", ".txt", ".md"));
 
     private final AbstractSandboxFilesystem filesystem;
+    private final io.agentscope.dataagent.web.artifact.ArtifactStore artifactStore;
 
     public RunPythonTool(AbstractSandboxFilesystem filesystem) {
+        this(filesystem, null);
+    }
+
+    public RunPythonTool(
+            AbstractSandboxFilesystem filesystem,
+            io.agentscope.dataagent.web.artifact.ArtifactStore artifactStore) {
         this.filesystem = filesystem;
+        this.artifactStore = artifactStore;
     }
 
     /**
@@ -126,6 +133,7 @@ public final class RunPythonTool {
                     wren_run_sql / wren_query_cube 返回带「数据文件： data/<文件名>.csv」行时，\
                     直接用 pd.read_csv('data/<文件名>.csv') 读取（工作目录即沙箱会话目录），\
                     禁止把查询结果抄写成 Python 字面量——数据行必须走文件通道。\
+                    默认仅自动恢复最近的有限数量分析输入；历史文件缺失时调用 restore_artifact 后重试。\
                     产物保存到 outputs/ 下并用主题命名（如 outputs/活跃用户趋势.png、\
                     outputs/活跃用户趋势_data.csv、outputs/活跃用户趋势_insights.md）。\
                     返回包含代码、执行输出和产物列表的结构化报告。\
@@ -146,15 +154,36 @@ public final class RunPythonTool {
         }
 
         String sessionId = rc != null && rc.getSessionId() != null ? rc.getSessionId() : "default";
-        String workDir = "/workspace/runpython/" + sanitize(sessionId);
+        String sessionDir = "/workspace/runpython/" + sanitize(sessionId);
+        String runId = java.util.UUID.randomUUID().toString();
+        String workDir = sessionDir + "/runs/" + runId;
+        String restoreNotice = "";
+        if (artifactStore != null) {
+            try {
+                restoreNotice = artifactStore.restoreInputs(rc, filesystem);
+            } catch (Exception e) {
+                return "error: 无法恢复分析输入：" + e.getMessage();
+            }
+        }
 
         // ── Step 1: Write the Python script into the sandbox ─
         String scriptPath = workDir + "/analysis.py";
         String fullCode = MATPLOTLIB_PREAMBLE + "\n" + code;
         byte[] codeBytes = fullCode.getBytes(java.nio.charset.StandardCharsets.UTF_8);
 
-        // Clear previous artifacts to avoid stale files in outputs/
-        filesystem.execute(rc, "rm -rf " + workDir + "/" + OUTPUT_DIR + "/*", 10);
+        // Each invocation owns an immutable output directory; share only the session input data.
+        filesystem.execute(
+                rc,
+                "mkdir -p "
+                        + workDir
+                        + "/outputs "
+                        + sessionDir
+                        + "/data && ln -s "
+                        + sessionDir
+                        + "/data "
+                        + workDir
+                        + "/data",
+                10);
 
         List<FileUploadResponse> uploadResults =
                 filesystem.uploadFiles(
@@ -183,7 +212,9 @@ public final class RunPythonTool {
         // ── Step 2: Execute the script ──
         ExecuteResponse execResp =
                 filesystem.execute(
-                        rc, "cd " + workDir + " && python3 " + scriptPath, EXEC_TIMEOUT_SECONDS);
+                        rc,
+                        "cd " + workDir + " && timeout --kill-after=5s 120s python3 " + scriptPath,
+                        EXEC_TIMEOUT_SECONDS + 10);
 
         // ── Step 3: Collect artifacts from outputs/ ──
         ExecuteResponse listResp =
@@ -203,59 +234,51 @@ public final class RunPythonTool {
 
             String fullPath = workDir + "/" + OUTPUT_DIR + "/" + trimmed;
 
-            if (isImageExt(ext)) {
-                // Image artifacts: reference the sandbox file path instead of
-                // embedding base64 data. This keeps the tool result lightweight
-                // (~few KB) so it doesn't bloat LLM context or trigger eviction.
-                // The frontend fetches the image via the workspace binary API.
-                long fileSize = fileSizeFromSandbox(rc, fullPath);
-                log.info(
-                        "[run_python] image artifact: name={}, path={}, size={}",
-                        trimmed,
-                        fullPath,
-                        fileSize);
-                if (fileSize <= 0) {
-                    log.warn("[run_python] skipping image {} (stat failed or size=0)", fullPath);
-                    continue;
+            try {
+                long size = fileSizeFromSandbox(rc, fullPath);
+                long max = artifactStore != null ? artifactStore.maxBytes() : 20L * 1024 * 1024;
+                if (size <= 0 || size > max) throw new IllegalStateException("文件为空或超过保存上限");
+                byte[] content =
+                        io.agentscope.dataagent.web.artifact.SandboxArtifactReader.read(
+                                rc, filesystem, fullPath, size);
+                String reference = fullPath;
+                if (artifactStore != null) {
+                    var saved = artifactStore.save(rc, runId, trimmed, fullPath, content, false);
+                    reference = artifactStore.reference(saved);
                 }
-                artifacts.append("\n### artifact:").append(trimmed).append('\n');
-                artifacts.append("- type: ").append(artifactType(ext)).append('\n');
-                artifacts.append("- size: ").append(fileSize).append('\n');
-                artifacts.append("- path: ").append(fullPath).append('\n');
-                // Ready-to-use markdown image reference for the LLM to copy verbatim
-                artifacts
-                        .append("- image_ref: ![")
-                        .append(trimmed)
-                        .append("](")
-                        .append(fullPath)
-                        .append(")\n");
-            } else {
-                // Text / CSV artifacts: download and include inline (typically small
-                // and useful for the LLM to reference in subsequent reasoning).
-                List<FileDownloadResponse> downloads =
-                        filesystem.downloadFiles(rc, List.of(fullPath));
-                if (downloads.isEmpty() || !downloads.get(0).isSuccess()) continue;
-
-                byte[] content = downloads.get(0).content();
-                if (content == null || content.length == 0) continue;
-
                 artifacts.append("\n### artifact:").append(trimmed).append('\n');
                 artifacts.append("- type: ").append(artifactType(ext)).append('\n');
                 artifacts.append("- size: ").append(content.length).append('\n');
-                // Include the sandbox path so the frontend can download the full
-                // file (inline content below may be truncated for large files).
-                artifacts.append("- path: ").append(fullPath).append('\n');
-                String text = new String(content, java.nio.charset.StandardCharsets.UTF_8);
-                // Truncate large text artifacts
-                if (text.length() > 8000) {
-                    text = text.substring(0, 8000) + "\n...(truncated)";
+                artifacts.append("- path: ").append(reference).append('\n');
+                if (isImageExt(ext)) {
+                    artifacts
+                            .append("- image_ref: ![")
+                            .append(trimmed.replace("[", "").replace("]", ""))
+                            .append("](")
+                            .append(reference)
+                            .append(")\n");
+                } else {
+                    String text = new String(content, java.nio.charset.StandardCharsets.UTF_8);
+                    if (text.length() > 8000) text = text.substring(0, 8000) + "\n...(truncated)";
+                    artifacts.append("- content:\n```\n").append(text).append("\n```\n");
                 }
-                artifacts.append("- content:\n```\n").append(text).append("\n```\n");
+            } catch (Exception e) {
+                log.warn("[run_python] artifact persistence failed: {}", trimmed, e);
+                artifacts
+                        .append("\n文件 ")
+                        .append(trimmed)
+                        .append(" 保存失败：")
+                        .append(e.getMessage())
+                        .append("。未生成永久下载链接，请处理存储问题后重新执行。\n");
             }
         }
 
+        // Durable links no longer depend on this temporary run directory.
+        if (artifactStore != null) filesystem.execute(rc, "rm -rf -- " + workDir, 10);
+
         // ── Step 4: Build structured report ──
         StringBuilder sb = new StringBuilder();
+        if (!restoreNotice.isBlank()) sb.append(restoreNotice).append('\n');
         if (description != null && !description.isBlank()) {
             sb.append("**描述：** ").append(description).append('\n');
         }
@@ -276,6 +299,22 @@ public final class RunPythonTool {
                 "[run_python] result preview (first 800 chars):\n{}",
                 result.substring(0, Math.min(result.length(), 800)));
         return result;
+    }
+
+    @Tool(
+            name = "restore_artifact",
+            description =
+                    "继续分析以前生成的附件时，传入 /api/artifacts/{id}/content 中的 id，将文件恢复到当前分析目录。返回的相对路径可直接用于"
+                            + " run_python。")
+    public String restoreArtifact(
+            RuntimeContext rc,
+            @ToolParam(name = "artifact_id", description = "历史附件的 UUID") String artifactId) {
+        if (artifactStore == null) return "error: 未配置附件存储";
+        try {
+            return "已恢复：" + artifactStore.restore(rc, artifactId, filesystem);
+        } catch (Exception e) {
+            return "error: " + e.getMessage();
+        }
     }
 
     private static String extension(String filename) {

@@ -18,19 +18,12 @@ package io.agentscope.dataagent.web.persistence.jpa;
 import java.util.List;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 
-/** Spring Data repository for {@link SessionRegistryEntity}. */
-public interface SessionRegistryRepository extends JpaRepository<SessionRegistryEntity, String> {
-    boolean existsByUserIdAndSessionId(String userId, String sessionId);
+public interface SessionMessageRepository extends JpaRepository<SessionMessageEntity, String> {
+    List<SessionMessageEntity> findBySessionKeyOrderByPositionAsc(String key);
 
-    @Query(
-            """
-            select s from SessionRegistryEntity s
-            where s.kind = 'main' and s.lastActivityMs < :cutoff
-            order by s.lastActivityMs asc, s.sessionKey asc
-            """)
-    List<SessionRegistryEntity> findRetentionCandidates(
-            @Param("cutoff") long cutoff, Pageable pageable);
+    List<SessionMessageEntity> findBySessionKeyAndPositionLessThanOrderByPositionDesc(
+            String key, int before, Pageable page);
+
+    void deleteBySessionKey(String key);
 }

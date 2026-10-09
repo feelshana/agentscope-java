@@ -16,29 +16,29 @@
 package io.agentscope.dataagent.web.api;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.dataagent.runtime.DataAgentBootstrap;
-import io.agentscope.dataagent.runtime.session.HistoryResult;
 import io.agentscope.dataagent.runtime.session.SessionAgentManager;
 import io.agentscope.dataagent.runtime.session.SessionEntry;
 import io.agentscope.dataagent.runtime.session.SessionKind;
+import io.agentscope.dataagent.web.artifact.ArtifactStore;
 import io.agentscope.dataagent.web.catalog.AgentCatalogService;
-import io.agentscope.dataagent.web.session.SessionIndexReconciler;
+import io.agentscope.dataagent.web.persistence.jpa.SessionHistoryEntity;
+import io.agentscope.dataagent.web.persistence.jpa.SessionHistoryRepository;
+import io.agentscope.dataagent.web.persistence.jpa.SessionReadStateEntity;
+import io.agentscope.dataagent.web.persistence.jpa.SessionRegistryEntity;
+import io.agentscope.dataagent.web.session.SessionDeletionService;
+import io.agentscope.dataagent.web.session.SessionHistoryService;
 import io.agentscope.dataagent.web.session.SessionReadStateStore;
 import io.agentscope.dataagent.web.session.SessionTurnParser;
-import io.agentscope.dataagent.web.workspace.WorkspaceManagerFactory;
-import io.agentscope.harness.agent.HarnessAgent;
-import io.agentscope.harness.agent.workspace.WorkspaceManager;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -52,6 +52,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 /**
  * AgentStateStore management endpoints, scoped to a specific agent.
@@ -78,72 +79,145 @@ public class SessionController {
     private final SessionAgentManager sessionAgentManager;
     private final SessionReadStateStore readStateStore;
     private final AgentCatalogService catalogService;
-    private final WorkspaceManagerFactory workspaceManagerFactory;
+    private final SessionHistoryService history;
+    private final SessionHistoryRepository historyRepository;
+    private final ArtifactStore artifacts;
+    private final SessionDeletionService deletion;
 
     public SessionController(
             DataAgentBootstrap builderBootstrap,
             SessionReadStateStore readStateStore,
             AgentCatalogService catalogService,
-            WorkspaceManagerFactory workspaceManagerFactory) {
+            SessionHistoryService history,
+            SessionHistoryRepository historyRepository,
+            ArtifactStore artifacts,
+            SessionDeletionService deletion) {
         this.bootstrap = builderBootstrap;
         this.sessionAgentManager = builderBootstrap.gateway().sessionAgentManager();
         this.readStateStore = readStateStore;
         this.catalogService = catalogService;
-        this.workspaceManagerFactory = workspaceManagerFactory;
+        this.history = history;
+        this.historyRepository = historyRepository;
+        this.artifacts = artifacts;
+        this.deletion = deletion;
     }
 
-    @GetMapping("/inbox")
-    public Mono<List<InboxEntry>> inbox(
+    public record InboxPage(List<InboxEntry> items, String nextCursor, boolean hasMore) {}
+
+    @GetMapping("/inbox-page")
+    public Mono<InboxPage> inbox(
             @PathVariable String agentId,
-            @RequestParam(defaultValue = "50") int limit,
+            @RequestParam(defaultValue = "20") int limit,
             @RequestParam(defaultValue = "false") boolean unreadOnly,
+            @RequestParam(required = false) String cursor,
             Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
-                () -> {
-                    String gatewayAgentId = catalogService.peekGatewayAgentId(userId, agentId);
-                    List<SessionEntry> matched =
-                            sessionAgentManager.allSessions().stream()
-                                    .filter(e -> Objects.equals(e.userId(), userId))
-                                    .filter(e -> sessionMatchesAgent(e, gatewayAgentId))
-                                    .sorted(
-                                            Comparator.comparingLong(SessionEntry::lastActivityMs)
-                                                    .reversed())
-                                    .limit(limit)
-                                    .toList();
+                        () -> {
+                            int take = Math.max(1, Math.min(limit, 100));
+                            long before = Long.MAX_VALUE;
+                            String beforeKey = "";
+                            if (cursor != null && !cursor.isBlank()) {
+                                try {
+                                    String raw =
+                                            new String(
+                                                    java.util.Base64.getUrlDecoder().decode(cursor),
+                                                    StandardCharsets.UTF_8);
+                                    int split = raw.indexOf('\n');
+                                    before = Long.parseLong(raw.substring(0, split));
+                                    beforeKey = raw.substring(split + 1);
+                                } catch (RuntimeException e) {
+                                    throw new ResponseStatusException(
+                                            HttpStatus.BAD_REQUEST, "Invalid cursor");
+                                }
+                            }
+                            String gatewayId = catalogService.peekGatewayAgentId(userId, agentId);
+                            var rows =
+                                    historyRepository.inbox(
+                                            userId,
+                                            gatewayId,
+                                            unreadOnly,
+                                            before,
+                                            beforeKey,
+                                            PageRequest.of(0, take + 1));
+                            boolean more = rows.size() > take;
+                            List<InboxEntry> items = new ArrayList<>();
+                            for (var row : rows.subList(0, Math.min(take, rows.size()))) {
+                                var entry = (SessionRegistryEntity) row[0];
+                                var h = (SessionHistoryEntity) row[1];
+                                var read = (SessionReadStateEntity) row[2];
+                                long activity =
+                                        h != null ? h.activityMs : entry.getLastActivityMs();
+                                items.add(
+                                        new InboxEntry(
+                                                entry.getSessionKey(),
+                                                entry.getSessionId(),
+                                                entry.getAgentId(),
+                                                extractConversationId(entry.getGateKey()),
+                                                h != null ? h.title : null,
+                                                entry.getLabel(),
+                                                activity,
+                                                h != null ? h.preview : null,
+                                                activity
+                                                        > (read != null
+                                                                ? read.getLastReadAtMs()
+                                                                : 0)));
+                            }
+                            String next = null;
+                            if (more && !items.isEmpty()) {
+                                var last = items.get(items.size() - 1);
+                                next =
+                                        java.util.Base64.getUrlEncoder()
+                                                .withoutPadding()
+                                                .encodeToString(
+                                                        (last.lastActivityMs()
+                                                                        + "\n"
+                                                                        + last.sessionKey())
+                                                                .getBytes(StandardCharsets.UTF_8));
+                            }
+                            return new InboxPage(items, next, more);
+                        })
+                .subscribeOn(Schedulers.boundedElastic());
+    }
 
-                    List<InboxEntry> out = new ArrayList<>(matched.size());
-                    for (SessionEntry e : matched) {
-                        boolean unread =
-                                readStateStore.isUnread(userId, e.sessionKey(), e.lastActivityMs());
-                        if (unreadOnly && !unread) continue;
-                        String preview = lastMessagePreview(agentId, e);
-                        out.add(
-                                new InboxEntry(
-                                        e.sessionKey(),
-                                        e.sessionId(),
-                                        e.agentId(),
-                                        extractConversationId(e.gateKey()),
-                                        firstUserTitle(agentId, e),
-                                        e.label(),
-                                        e.lastActivityMs(),
-                                        preview,
-                                        unread));
-                    }
-                    return out;
-                });
+    /** Compatibility for clients opened before the paginated frontend was deployed. */
+    @GetMapping("/inbox")
+    public Mono<List<InboxEntry>> legacyInbox(
+            @PathVariable String agentId,
+            @RequestParam(defaultValue = "20") int limit,
+            @RequestParam(defaultValue = "false") boolean unreadOnly,
+            Authentication auth) {
+        return inbox(agentId, limit, unreadOnly, null, auth).map(InboxPage::items);
+    }
+
+    @GetMapping("/{key}/messages")
+    public Mono<SessionHistoryService.MessagePage> messagePage(
+            @PathVariable String agentId,
+            @PathVariable String key,
+            @RequestParam(required = false) Integer before,
+            @RequestParam(defaultValue = "50") int limit,
+            Authentication auth) {
+        return Mono.fromCallable(
+                        () -> {
+                            SessionEntry entry =
+                                    requireOwnedSession(agentId, key, (String) auth.getPrincipal());
+                            history.refresh(entry.sessionKey());
+                            return history.page(entry.sessionKey(), before, limit);
+                        })
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
     @GetMapping("/{key}")
     public Mono<List<SessionTurnParser.TurnEntry>> turns(
             @PathVariable String agentId, @PathVariable String key, Authentication auth) {
-        String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
-                () -> {
-                    SessionEntry entry = requireOwnedSession(agentId, key, userId);
-                    String content = readSessionLogContent(agentId, entry);
-                    return SessionTurnParser.parse(content != null ? content : "");
-                });
+                        () -> {
+                            var entry =
+                                    requireOwnedSession(agentId, key, (String) auth.getPrincipal());
+                            history.refresh(entry.sessionKey());
+                            return history.all(entry.sessionKey());
+                        })
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
     @PostMapping("/{key}/reset")
@@ -151,11 +225,27 @@ public class SessionController {
             @PathVariable String agentId, @PathVariable String key, Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
-                () -> {
-                    SessionEntry entry = requireOwnedSession(agentId, key, userId);
-                    boolean ok = sessionAgentManager.resetSession(entry.sessionKey());
-                    return new ResetResult(key, ok);
-                });
+                        () -> {
+                            SessionEntry entry = requireOwnedSession(agentId, key, userId);
+                            if (bootstrap.gateway().isSessionActive(entry.sessionKey()))
+                                throw new ResponseStatusException(
+                                        HttpStatus.CONFLICT, "请先停止当前回答，再删除或重置会话");
+                            bootstrap
+                                    .gateway()
+                                    .mutateIdleSession(
+                                            entry.sessionKey(),
+                                            () ->
+                                                    history.clear(
+                                                            entry.sessionKey(),
+                                                            () -> {
+                                                                deleteTranscriptFiles(entry);
+                                                                sessionAgentManager.resetSession(
+                                                                        entry.sessionKey());
+                                                            }));
+                            artifacts.deleteSession(userId, entry.sessionId());
+                            return new ResetResult(key, true);
+                        })
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
     @PatchMapping("/{key}/read")
@@ -163,11 +253,12 @@ public class SessionController {
             @PathVariable String agentId, @PathVariable String key, Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
-                () -> {
-                    SessionEntry entry = requireOwnedSession(agentId, key, userId);
-                    long readAtMs = readStateStore.markRead(userId, entry.sessionKey());
-                    return new ReadStateResult(key, readAtMs, false);
-                });
+                        () -> {
+                            SessionEntry entry = requireOwnedSession(agentId, key, userId);
+                            long readAtMs = readStateStore.markRead(userId, entry.sessionKey());
+                            return new ReadStateResult(key, readAtMs, false);
+                        })
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
     @DeleteMapping("/{key}")
@@ -175,40 +266,39 @@ public class SessionController {
     public Mono<Void> delete(
             @PathVariable String agentId, @PathVariable String key, Authentication auth) {
         String userId = (String) auth.getPrincipal();
-        return Mono.fromRunnable(
-                () -> {
-                    SessionEntry entry = requireOwnedSession(agentId, key, userId);
-                    deleteTranscriptFiles(entry);
-                    sessionAgentManager.removeSession(entry.sessionKey());
-                });
+        return Mono.<Void>fromRunnable(
+                        () -> {
+                            SessionEntry entry = requireOwnedSession(agentId, key, userId);
+                            try {
+                                deletion.delete(entry);
+                            } catch (SessionDeletionService.SessionBusyException e) {
+                                throw new ResponseStatusException(
+                                        HttpStatus.CONFLICT, "请先停止当前回答，再删除会话", e);
+                            } catch (java.io.IOException e) {
+                                throw new IllegalStateException("附件清理失败", e);
+                            }
+                        })
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
-    /**
-     * Removes a session's on-disk transcripts. Without this the boot-time {@link
-     * SessionIndexReconciler} would re-register any leftover {@code .log.jsonl} and deleted
-     * conversations would come back after a restart.
-     */
+    /** Removes the exact local log and checkpoint before unregistering a session. */
     private void deleteTranscriptFiles(SessionEntry entry) {
-        String path = entry.sessionFilePath();
-        if (path == null || path.isBlank()) {
-            return;
-        }
+        Path transcript = history.transcript(entry);
+        if (transcript == null) return;
         try {
-            Path transcript = Paths.get(path);
-            Path sessionDir = transcript.getParent();
-            Files.deleteIfExists(transcript);
             String name = transcript.getFileName().toString();
+            Files.deleteIfExists(transcript);
             if (name.endsWith(".log.jsonl")) {
                 Files.deleteIfExists(
+                        transcript.resolveSibling(name.replace(".log.jsonl", ".jsonl")));
+            } else if (name.endsWith(".jsonl")) {
+                Files.deleteIfExists(
                         transcript.resolveSibling(
-                                name.substring(0, name.length() - ".log".length())));
+                                name.substring(0, name.length() - 6) + ".log.jsonl"));
             }
-            SessionIndexReconciler.writeTombstone(sessionDir);
         } catch (Exception e) {
-            log.warn(
-                    "Failed to delete transcript for session {}: {}",
-                    entry.sessionKey(),
-                    e.getMessage());
+            log.warn("Failed to delete transcript for {}", entry.sessionKey(), e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "历史文件清理失败，请重试", e);
         }
     }
 
@@ -312,226 +402,6 @@ public class SessionController {
         int end = gateKey.indexOf('|', start);
         String val = end < 0 ? gateKey.substring(start) : gateKey.substring(start, end);
         return val.isEmpty() ? null : val;
-    }
-
-    private String lastMessagePreview(String agentId, SessionEntry entry) {
-        try {
-            String content = readSessionLogContent(agentId, entry);
-            if (content == null || content.isEmpty()) {
-                return null;
-            }
-            List<SessionTurnParser.TurnEntry> turns = SessionTurnParser.parse(content);
-            for (int i = turns.size() - 1; i >= 0; i--) {
-                SessionTurnParser.TurnEntry t = turns.get(i);
-                if (t.content() != null && !t.content().isBlank()) {
-                    String trimmed = t.content().trim();
-                    return trimmed.length() > 200 ? trimmed.substring(0, 200) + "…" : trimmed;
-                }
-            }
-        } catch (Exception ignored) {
-            // fall through
-        }
-        return null;
-    }
-
-    /**
-     * The first USER message of a session, truncated — used as the sidebar conversation title so
-     * history entries read like the question that started them instead of an opaque session id.
-     */
-    private String firstUserTitle(String agentId, SessionEntry entry) {
-        try {
-            String content = readSessionLogContent(agentId, entry);
-            if (content == null || content.isEmpty()) {
-                return null;
-            }
-            for (SessionTurnParser.TurnEntry t : SessionTurnParser.parse(content)) {
-                if (!"USER".equalsIgnoreCase(t.role())) {
-                    continue;
-                }
-                if (t.content() == null || t.content().isBlank()) {
-                    continue;
-                }
-                String trimmed = t.content().trim().replaceAll("\\s+", " ");
-                return trimmed.length() > 40 ? trimmed.substring(0, 40) + "…" : trimmed;
-            }
-        } catch (Exception ignored) {
-            // fall through
-        }
-        return null;
-    }
-
-    /**
-     * Reads the chat content for a session. The transcript lives at {@code
-     * agents/<innerAgentId>/sessions/<sessionId>.log.jsonl}.
-     *
-     * <p>Order: (1) borrow the per-(user, gatewayAgentId) sandbox via {@link
-     * WorkspaceManagerFactory} — does not require an agent call binding; (2) if empty, read the
-     * same relative path from the Agent's host workspace; (3) fall back to {@link
-     * SessionAgentManager#history}. Never routes through call-scoped sandbox proxies that throw
-     * {@code No active sandbox} outside a turn.
-     */
-    private String readSessionLogContent(String urlAgentId, SessionEntry entry) {
-        String gatewayAgentId = catalogService.peekGatewayAgentId(entry.userId(), urlAgentId);
-        HarnessAgent ha =
-                gatewayAgentId != null ? bootstrap.gateway().findAgent(gatewayAgentId) : null;
-        String innerAgentId = ha != null ? ha.getName() : null;
-        if (innerAgentId != null && !innerAgentId.isBlank() && entry.sessionId() != null) {
-            String relLog =
-                    "agents/" + innerAgentId + "/sessions/" + entry.sessionId() + ".log.jsonl";
-            String relCtx = "agents/" + innerAgentId + "/sessions/" + entry.sessionId() + ".jsonl";
-
-            String fromSandbox = readViaSharedSandbox(entry.userId(), gatewayAgentId, relLog);
-            String sandboxPathUsed = relLog;
-            if (fromSandbox == null || fromSandbox.isEmpty()) {
-                fromSandbox = readViaSharedSandbox(entry.userId(), gatewayAgentId, relCtx);
-                sandboxPathUsed = relCtx;
-            }
-            if (fromSandbox != null && !fromSandbox.isEmpty()) {
-                log.info(
-                        "[session-history] source=sandbox userId={} gatewayAgentId={} sessionId={}"
-                                + " path={} bytes={}",
-                        entry.userId(),
-                        gatewayAgentId,
-                        entry.sessionId(),
-                        sandboxPathUsed,
-                        fromSandbox.length());
-                return fromSandbox;
-            }
-            log.info(
-                    "[session-history] sandbox miss userId={} gatewayAgentId={} sessionId={}"
-                            + " tried=[{}, {}]",
-                    entry.userId(),
-                    gatewayAgentId,
-                    entry.sessionId(),
-                    relLog,
-                    relCtx);
-
-            Path localLog =
-                    resolveAgentLocalPath(
-                            ha, entry.userId(), innerAgentId, entry.sessionId(), true);
-            Path localCtx =
-                    resolveAgentLocalPath(
-                            ha, entry.userId(), innerAgentId, entry.sessionId(), false);
-            String fromLocal = readLocalPath(localLog);
-            Path localPathUsed = localLog;
-            if (fromLocal == null || fromLocal.isEmpty()) {
-                fromLocal = readLocalPath(localCtx);
-                localPathUsed = localCtx;
-            }
-            if (fromLocal != null && !fromLocal.isEmpty()) {
-                log.info(
-                        "[session-history] source=local userId={} gatewayAgentId={} sessionId={}"
-                                + " path={} bytes={}",
-                        entry.userId(),
-                        gatewayAgentId,
-                        entry.sessionId(),
-                        localPathUsed,
-                        fromLocal.length());
-                return fromLocal;
-            }
-            log.info(
-                    "[session-history] local miss userId={} sessionId={} tried=[{}, {}]",
-                    entry.userId(),
-                    entry.sessionId(),
-                    localLog,
-                    localCtx);
-        } else {
-            log.info(
-                    "[session-history] skip sandbox/local (agent unresolved) urlAgentId={}"
-                            + " gatewayAgentId={} sessionId={}",
-                    urlAgentId,
-                    gatewayAgentId,
-                    entry.sessionId());
-        }
-        HistoryResult raw = sessionAgentManager.history(entry.sessionKey(), 0);
-        if (raw == null || raw.error() != null) {
-            log.info(
-                    "[session-history] source=empty sessionKey={} error={}",
-                    entry.sessionKey(),
-                    raw != null ? raw.error() : "null");
-            return "";
-        }
-        String content = raw.content() != null ? raw.content() : "";
-        log.info(
-                "[session-history] source=sessionAgentManager sessionKey={} bytes={}",
-                entry.sessionKey(),
-                content.length());
-        return content;
-    }
-
-    /**
-     * Reads through the user sandbox registry (same key as chat write / workspace UI for catalog
-     * gateway ids). Failures return empty — never throw into the HTTP layer.
-     */
-    private String readViaSharedSandbox(String userId, String gatewayAgentId, String relativePath) {
-        if (userId == null
-                || userId.isBlank()
-                || gatewayAgentId == null
-                || gatewayAgentId.isBlank()
-                || relativePath == null) {
-            return "";
-        }
-        try {
-            WorkspaceManager wm = workspaceManagerFactory.forAgent(userId, gatewayAgentId);
-            String content = wm.readManagedWorkspaceFileUtf8(RuntimeContext.empty(), relativePath);
-            return content != null ? content : "";
-        } catch (RuntimeException e) {
-            log.warn(
-                    "[session-history] sandbox read failed userId={} gatewayAgentId={} path={}: {}",
-                    userId,
-                    gatewayAgentId,
-                    relativePath,
-                    e.toString());
-            return "";
-        }
-    }
-
-    /**
-     * Resolves the host path for a session transcript. Prefers namespaced
-     * {@link WorkspaceManager#resolveSessionLogFile} (e.g. {@code bob/agents/...}); falls back to
-     * non-namespaced workspace-relative path when the manager has no namespace factory.
-     */
-    private static Path resolveAgentLocalPath(
-            HarnessAgent ha,
-            String userId,
-            String innerAgentId,
-            String sessionId,
-            boolean logFile) {
-        if (ha == null) {
-            return null;
-        }
-        WorkspaceManager wm = ha.getWorkspaceManager();
-        if (wm == null || wm.getWorkspace() == null) {
-            return null;
-        }
-        RuntimeContext rc =
-                userId != null && !userId.isBlank()
-                        ? RuntimeContext.builder().userId(userId).build()
-                        : RuntimeContext.empty();
-        try {
-            return logFile
-                    ? wm.resolveSessionLogFile(rc, innerAgentId, sessionId)
-                    : wm.resolveSessionContextFile(rc, innerAgentId, sessionId);
-        } catch (RuntimeException e) {
-            String rel =
-                    "agents/"
-                            + innerAgentId
-                            + "/sessions/"
-                            + sessionId
-                            + (logFile ? ".log.jsonl" : ".jsonl");
-            return wm.getWorkspace().resolve(rel).normalize();
-        }
-    }
-
-    private static String readLocalPath(Path file) {
-        if (file == null || !Files.isRegularFile(file)) {
-            return "";
-        }
-        try {
-            return Files.readString(file, StandardCharsets.UTF_8);
-        } catch (Exception e) {
-            return "";
-        }
     }
 
     // -----------------------------------------------------------------
