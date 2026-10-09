@@ -22,6 +22,7 @@ import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupRepository;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetKnowledgeRepository;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetRepository;
 import jakarta.annotation.PostConstruct;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -131,6 +132,36 @@ public class DatasetGroupService {
                 .filter(g -> g.getOwnerId().equals(ownerId))
                 .orElseThrow(
                         () -> new DatasetException("Knowledge base not found: " + groupId, 404));
+    }
+
+    /** Rename only a group owned by the caller; the group ID and its datasets stay unchanged. */
+    @Transactional
+    public DatasetGroupEntity updateGroup(
+            String ownerId, String groupId, String name, String description) {
+        DatasetGroupEntity group = getGroup(ownerId, groupId);
+        if (name == null || !NAME.matcher(name.trim()).matches()) {
+            throw new DatasetException(
+                    "KB name must be 1-100 chars of Chinese/letters/digits/'-'/'_'");
+        }
+        if (description != null && description.length() > 1000) {
+            throw new DatasetException("KB description must not exceed 1000 chars");
+        }
+        String newName = name.trim();
+        if (!newName.equals(group.getName())) {
+            groupRepository
+                    .findByOwnerIdAndName(ownerId, newName)
+                    .ifPresent(
+                            existing -> {
+                                if (!existing.getId().equals(groupId)) {
+                                    throw new DatasetException(
+                                            "KB name already exists: " + newName, 409);
+                                }
+                            });
+        }
+        group.setName(newName);
+        group.setDescription(description == null ? null : description.trim());
+        group.setUpdatedAt(Instant.now());
+        return groupRepository.save(group);
     }
 
     public List<DatasetEntity> listDatasets(String ownerId, String groupId) {

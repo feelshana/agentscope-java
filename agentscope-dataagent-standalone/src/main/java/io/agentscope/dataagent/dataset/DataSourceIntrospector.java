@@ -35,6 +35,16 @@ import org.springframework.stereotype.Service;
 @Service
 public class DataSourceIntrospector {
 
+    private final ExternalDataSourcePolicy policy;
+
+    public DataSourceIntrospector(ExternalDataSourcePolicy policy) {
+        this.policy = policy;
+    }
+
+    public String validatedUrl(ExternalDataSourceEntity ds) {
+        return policy.normalize(ds.getKind(), ds.getJdbcUrl());
+    }
+
     private static final Pattern SAFE_IDENTIFIER = Pattern.compile("^[a-zA-Z0-9_]+$");
 
     public record ColumnInfo(String name, String type, String description) {}
@@ -128,9 +138,11 @@ public class DataSourceIntrospector {
             sql = "SELECT COUNT(*) FROM \"" + schema + "\".\"" + table + "\"";
         }
         try (Connection c = open(ds);
-                Statement st = c.createStatement();
-                ResultSet rs = st.executeQuery(sql)) {
-            return rs.next() ? rs.getLong(1) : 0;
+                Statement st = c.createStatement(); ) {
+            st.setQueryTimeout(30);
+            try (ResultSet rs = st.executeQuery(sql)) {
+                return rs.next() ? rs.getLong(1) : 0;
+            }
         } catch (SQLException e) {
             throw new DatasetException(
                     "Failed to count rows for " + schema + "." + table + ": " + e.getMessage(), e);
@@ -152,12 +164,20 @@ public class DataSourceIntrospector {
         return null;
     }
 
-    private Connection open(ExternalDataSourceEntity ds) throws SQLException {
-        DriverManager.setLoginTimeout(10);
+    public Connection open(ExternalDataSourceEntity ds) throws SQLException {
         Connection c =
-                DriverManager.getConnection(ds.getJdbcUrl(), ds.getUsername(), ds.getPassword());
-        c.setReadOnly(true);
-        return c;
+                DriverManager.getConnection(validatedUrl(ds), ds.getUsername(), ds.getPassword());
+        try {
+            c.setReadOnly(true);
+            return c;
+        } catch (SQLException | RuntimeException e) {
+            try {
+                c.close();
+            } catch (SQLException closeError) {
+                e.addSuppressed(closeError);
+            }
+            throw e;
+        }
     }
 
     private static void validateIdentifier(String name, String label) {

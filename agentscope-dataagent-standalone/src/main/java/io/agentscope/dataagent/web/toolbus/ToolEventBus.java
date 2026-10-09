@@ -64,6 +64,12 @@ public class ToolEventBus {
         return sink.asFlux().filter(e -> sessionKey.equals(e.sessionKey()));
     }
 
+    /** Isolates one HTTP turn, including events emitted before the first session is registered. */
+    public Flux<ToolEvent> subscribeRequest(String requestId) {
+        java.util.Objects.requireNonNull(requestId, "requestId");
+        return sink.asFlux().filter(e -> requestId.equals(e.requestId()));
+    }
+
     /**
      * Returns the unfiltered event stream. Callers that cannot know the session key up-front
      * (e.g. before the gateway has registered the session on the first turn) can filter

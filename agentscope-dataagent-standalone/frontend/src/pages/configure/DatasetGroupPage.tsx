@@ -333,8 +333,9 @@ export default function DatasetGroupPage() {
       {/* ---------- rail ---------- */}
       <div className="da-rail">
         <div className="da-rail-head">
-          <button className="da-btn da-btn-sm" onClick={() => navigate('/configure/datasets')}>
-            ← 知识库列表
+          <button type="button" className="da-header-back" aria-label="返回知识库列表" onClick={() => navigate('/configure/datasets')}>
+            <Icon name="back" size="sm" />
+            <span>返回知识库列表</span>
           </button>
           <div className="da-page-title" style={{ marginTop: 10 }}>
             {detail?.group.name ?? '知识库'}

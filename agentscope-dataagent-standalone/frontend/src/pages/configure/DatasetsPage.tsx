@@ -5,7 +5,7 @@ import DataSourceManagerModal from '../../components/DataSourceManagerModal';
 import EmptyIllustration from '../../components/EmptyIllustration';
 import Icon from '../../components/Icon';
 import { toast } from '../../components/Toast';
-import { createGroup, DatasetGroup, deleteGroup, listGroups } from '../../api/datasets';
+import { createGroup, DatasetGroup, deleteGroup, listGroups, updateGroup } from '../../api/datasets';
 
 const helpStyle: React.CSSProperties = {
   padding: '8px 24px',
@@ -32,7 +32,10 @@ export default function DatasetsPage() {
   const navigate = useNavigate();
   const [groups, setGroups] = useState<DatasetGroup[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editGroup, setEditGroup] = useState<DatasetGroup | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [dsOpen, setDsOpen] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -55,27 +58,63 @@ export default function DatasetsPage() {
     refresh();
   }, [refresh]);
 
-  async function handleCreate() {
+  useEffect(() => {
+    if (!menuOpenId) return;
+    const close = (event: PointerEvent) => {
+      if (!(event.target as HTMLElement).closest('.da-card-menu')) setMenuOpenId(null);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenuOpenId(null);
+    };
+    document.addEventListener('pointerdown', close);
+    document.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('pointerdown', close);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [menuOpenId]);
+
+  function openCreate() {
+    setEditGroup(null);
+    setName('');
+    setDescription('');
+    setFormError(null);
+    setFormOpen(true);
+  }
+
+  function openEdit(group: DatasetGroup, event: React.MouseEvent) {
+    event.stopPropagation();
+    setMenuOpenId(null);
+    setEditGroup(group);
+    setName(group.name);
+    setDescription(group.description ?? '');
+    setFormError(null);
+    setFormOpen(true);
+  }
+
+  async function handleSave() {
     if (!NAME_RE.test(name.trim())) {
-      setError('名称需为 1-100 个中文/字母/数字/-/_ 字符');
+      setFormError('名称需为 1-100 个中文/字母/数字/-/_ 字符');
       return;
     }
     if (description.length > 1000) {
-      setError('描述不能超过 1000 字');
+      setFormError('描述不能超过 1000 字');
       return;
     }
     setBusy(true);
-    setError(null);
+    setFormError(null);
     try {
-      const g = await createGroup(name.trim(), description.trim());
-      setCreateOpen(false);
+      const g = editGroup
+        ? await updateGroup(editGroup.id, name.trim(), description.trim())
+        : await createGroup(name.trim(), description.trim());
+      setFormOpen(false);
       setName('');
       setDescription('');
-      toast('知识库已创建', 'success');
+      toast(editGroup ? '知识库已更新' : '知识库已创建', 'success');
       await refresh();
-      navigate(`/configure/datasets/${g.id}`);
+      if (!editGroup) navigate(`/configure/datasets/${g.id}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setFormError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
@@ -83,6 +122,7 @@ export default function DatasetsPage() {
 
   async function handleDelete(id: string, ev: React.MouseEvent) {
     ev.stopPropagation();
+    setMenuOpenId(null);
     if (!window.confirm('删除该知识库？其中的数据集表与关系文档将一并删除。')) return;
     setBusy(true);
     try {
@@ -113,7 +153,7 @@ export default function DatasetsPage() {
         {error && <span style={{ color: 'var(--da-danger)', marginLeft: 12 }}>{error}</span>}
       </div>
       <div style={{ padding: '16px 24px 0', display: 'flex', gap: 10 }}>
-        <button className="da-btn da-btn-primary" onClick={() => setCreateOpen(true)} disabled={busy}>
+        <button className="da-btn da-btn-primary" onClick={openCreate} disabled={busy}>
           + 创建知识库
         </button>
         <button className="da-btn" onClick={() => setDsOpen(true)}>
@@ -141,6 +181,8 @@ export default function DatasetsPage() {
               display: 'flex',
               flexDirection: 'column',
               gap: 8,
+              position: 'relative',
+              zIndex: menuOpenId === g.id ? 2 : undefined,
               animationDelay: `${gi * 40}ms`,
             }}
             onClick={() => navigate(`/configure/datasets/${g.id}`)}
@@ -159,9 +201,27 @@ export default function DatasetsPage() {
               >
                 <Icon name="chat" size="sm" /> 问答
               </button>
-              <button className="da-btn da-btn-danger da-btn-sm" onClick={ev => handleDelete(g.id, ev)} disabled={busy}>
-                删除
-              </button>
+              <div className="da-card-menu" onClick={ev => ev.stopPropagation()}>
+                <button
+                  type="button"
+                  className="da-btn da-btn-sm"
+                  aria-label={`${g.name}的更多操作`}
+                  aria-expanded={menuOpenId === g.id}
+                  onClick={ev => { ev.stopPropagation(); setMenuOpenId(open => open === g.id ? null : g.id); }}
+                >
+                  <Icon name="moreHorizontal" size="sm" />
+                </button>
+                {menuOpenId === g.id && (
+                  <div className="da-card-menu-popover">
+                    <button type="button" onClick={ev => openEdit(g, ev)} disabled={busy}>
+                      <Icon name="edit" size="sm" /> 修改名称和说明
+                    </button>
+                    <button type="button" className="danger" onClick={ev => handleDelete(g.id, ev)} disabled={busy}>
+                      <Icon name="trash" size="sm" /> 删除知识库
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
             <div style={{ fontSize: '0.78rem', color: 'var(--da-text-3)', minHeight: 32 }}>
               {g.description || '—'}
@@ -174,13 +234,14 @@ export default function DatasetsPage() {
         ))}
       </div>
 
-      {createOpen && (
-        <div className="da-modal-overlay" onClick={() => setCreateOpen(false)}>
+      {formOpen && (
+        <div className="da-modal-overlay" onClick={() => { if (!busy) setFormOpen(false); }}>
           <div className="da-modal-shell" style={{ width: 'min(520px, 92vw)' }} onClick={e => e.stopPropagation()}>
             <div className="da-modal-head">
-              <div className="da-modal-title">创建知识库</div>
+              <div className="da-modal-title">{editGroup ? '编辑知识库' : '创建知识库'}</div>
             </div>
             <div className="da-modal-body">
+              {formError && <div role="alert" style={{ color: 'var(--da-danger)', marginBottom: 12 }}>{formError}</div>}
               <div className="da-form-grid">
                 <label className="da-label">知识库名称 *</label>
                 <div>
@@ -210,11 +271,11 @@ export default function DatasetsPage() {
               </div>
             </div>
             <div className="da-modal-foot">
-              <button className="da-btn" onClick={() => setCreateOpen(false)}>
+              <button className="da-btn" onClick={() => setFormOpen(false)} disabled={busy}>
                 取消
               </button>
-              <button className="da-btn da-btn-primary" onClick={handleCreate} disabled={busy}>
-                创建
+              <button className="da-btn da-btn-primary" onClick={handleSave} disabled={busy}>
+                {busy ? '保存中…' : editGroup ? '保存' : '创建'}
               </button>
             </div>
           </div>

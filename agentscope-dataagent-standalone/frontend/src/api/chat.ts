@@ -63,7 +63,7 @@ export async function currentSession(
   return res.json();
 }
 
-async function* readEventStream(res: Response, fallback: string): AsyncGenerator<ChatEvent> {
+export async function* readEventStream(res: Response, fallback: string): AsyncGenerator<ChatEvent> {
   if (!res.ok || !res.body) {
     let detail = fallback;
     try {
@@ -77,24 +77,43 @@ async function* readEventStream(res: Response, fallback: string): AsyncGenerator
   const reader = res.body.getReader();
   const dec = new TextDecoder();
   let buf = '';
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buf += dec.decode(value, { stream: true });
-    let idx;
-    while ((idx = buf.indexOf('\n\n')) >= 0) {
-      const evt = buf.slice(0, idx);
-      buf = buf.slice(idx + 2);
-      const lines = evt.split('\n');
-      let data = '';
-      for (const ln of lines) if (ln.startsWith('data:')) data += ln.slice(5).trim();
-      if (!data) continue;
-      try {
-        yield JSON.parse(data) as ChatEvent;
-      } catch {
-        yield { type: 'token', data } as ChatEvent;
+  let terminal = false;
+  function parse(frame: string): ChatEvent | null {
+    const data = frame.split(/\r?\n/).filter(line => line.startsWith('data:'))
+      .map(line => line.slice(5).replace(/^ /, '')).join('\n');
+    if (!data) return null;
+    try { return JSON.parse(data) as ChatEvent; }
+    catch { throw new Error('回答数据格式错误，请重新加载会话'); }
+  }
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      buf += done ? dec.decode() : dec.decode(value, { stream: true });
+      let boundary: RegExpExecArray | null;
+      while ((boundary = /\r?\n\r?\n/.exec(buf)) !== null) {
+        const frame = buf.slice(0, boundary.index);
+        buf = buf.slice(boundary.index + boundary[0].length);
+        const event = parse(frame);
+        if (event) {
+          terminal ||= event.type === 'done' || event.type === 'error';
+          yield event;
+        }
+      }
+      if (done) {
+        if (buf.trim()) {
+          const event = parse(buf);
+          if (event) {
+            terminal ||= event.type === 'done' || event.type === 'error';
+            yield event;
+          }
+        }
+        if (!terminal) throw new Error('连接已中断，回答可能尚未完成，请重新加载会话');
+        break;
       }
     }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
   }
 }
 

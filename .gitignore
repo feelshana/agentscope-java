@@ -115,3 +115,13 @@ agentscope-service/.dev-stack/
 /agentscope-examples/data-analysis/src/main/resources/主流程.md
 /agentscope-examples/data-analysis/开发文档-数据分析Agent实施方案.md
 /agentscope-examples/data-analysis/src/main/resources/项目文档.md
+/test_data/体验指南.md
+/test_data/商品.xlsx
+/test_data/客户.xlsx
+/test_data/订单.xlsx
+/test_data/订单明细.xlsx
+/test-data-gen.py
+/shared/agents/data-agent/8c0c5760-581e-44ef-ac0c-101c0f4b4b6c_mdl.json
+
+# Local runtime artifacts are user data, not release assets.
+/data/

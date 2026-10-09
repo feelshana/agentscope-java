@@ -744,7 +744,8 @@ class WrenToolkitTest {
         assertThat(withHandoff.wrenRunSql(ALICE, rc("s1"), "gA", "SELECT 城市 FROM 订单表", null, null))
                 .doesNotStartWith("error:")
                 .contains("| 杭州 | 120 |")
-                .doesNotContain("数据文件");
+                .contains("数据文件保存失败")
+                .doesNotContain("**数据文件：**");
 
         doReturn(List.of(FileUploadResponse.fail("p", "denied")))
                 .when(fs)
@@ -752,7 +753,7 @@ class WrenToolkitTest {
         assertThat(withHandoff.wrenRunSql(ALICE, rc("s1"), "gA", "SELECT 城市 FROM 订单表", null, null))
                 .doesNotStartWith("error:")
                 .contains("| 杭州 | 120 |")
-                .doesNotContain("数据文件");
+                .doesNotContain("**数据文件：**");
     }
 
     /** Content-addressed names make re-running the same query overwrite the same file. */

@@ -26,6 +26,7 @@ import static org.mockito.Mockito.when;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.dataagent.runtime.session.AgentManagerConfig;
 import io.agentscope.dataagent.runtime.session.SessionAgentManager;
+import io.agentscope.dataagent.web.workspace.LazySandbox;
 import io.agentscope.dataagent.web.workspace.UserSandboxRegistry;
 import io.agentscope.harness.agent.IsolationScope;
 import io.agentscope.harness.agent.sandbox.Sandbox;
@@ -35,6 +36,7 @@ import io.agentscope.harness.agent.sandbox.impl.docker.DockerSandboxClientOption
 import java.time.Duration;
 import java.util.List;
 import java.util.Set;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -53,6 +55,7 @@ class HarnessGatewaySandboxlessTest {
     private SandboxClient<DockerSandboxClientOptions> client;
     private Sandbox sandbox;
     private HarnessGateway gateway;
+    private UserSandboxRegistry registry;
 
     @BeforeEach
     @SuppressWarnings("unchecked")
@@ -63,12 +66,17 @@ class HarnessGatewaySandboxlessTest {
         when(sessionAgentManager.getConfig()).thenReturn(AgentManagerConfig.defaults());
         when(sessionAgentManager.allSessions()).thenReturn(List.of());
 
-        UserSandboxRegistry registry =
+        registry =
                 new UserSandboxRegistry(
                         client, null, Duration.ofMinutes(15), Duration.ofSeconds(60));
         gateway = HarnessGateway.create(sessionAgentManager);
         gateway.setUserSandboxRegistry(registry);
         gateway.setSandboxlessAgents(Set.of(MODELING_AGENT));
+    }
+
+    @AfterEach
+    void tearDown() {
+        registry.shutdownAll();
     }
 
     @Test
@@ -82,7 +90,7 @@ class HarnessGatewaySandboxlessTest {
     }
 
     @Test
-    void everyOtherAgentStillBorrowsThePerUserSandbox() {
+    void everyOtherAgentBorrowsOnlyOnFirstOperationAndReusesTheUserSandbox() throws Exception {
         when(client.create(any(), any(), any())).thenReturn(sandbox);
         RuntimeContext.Builder first = RuntimeContext.builder();
         RuntimeContext.Builder second = RuntimeContext.builder();
@@ -92,15 +100,25 @@ class HarnessGatewaySandboxlessTest {
 
         SandboxContext ctx = first.build().get(SandboxContext.class);
         assertThat(ctx).isNotNull();
-        assertThat(ctx.getExternalSandbox()).isSameAs(sandbox);
+        assertThat(ctx.getExternalSandbox()).isInstanceOf(LazySandbox.class);
         assertThat(ctx.getIsolationScope()).isEqualTo(IsolationScope.USER);
-        // The registry keeps one live container per (userId, agentId): the second borrow reuses it.
-        assertThat(second.build().get(SandboxContext.class).getExternalSandbox()).isSameAs(sandbox);
+        verify(client, never()).create(any(), any(), any());
+        RuntimeContext firstContext = first.build();
+        RuntimeContext secondContext = second.build();
+        ctx.getExternalSandbox().exec(firstContext, "echo first", 5);
+        secondContext
+                .get(SandboxContext.class)
+                .getExternalSandbox()
+                .exec(secondContext, "echo second", 5);
         verify(client, times(1)).create(any(), any(), any());
+        verify(sandbox).exec(firstContext, "echo first", 5);
+        verify(sandbox).exec(secondContext, "echo second", 5);
+        ((LazySandbox) ctx.getExternalSandbox()).releaseLease();
+        ((LazySandbox) secondContext.get(SandboxContext.class).getExternalSandbox()).releaseLease();
     }
 
     @Test
-    void clearingTheSandboxlessSetRestoresBorrowingForEveryId() {
+    void clearingTheSandboxlessSetRestoresLazyBorrowingForEveryId() throws Exception {
         when(client.create(any(), any(), any())).thenReturn(sandbox);
         gateway.setSandboxlessAgents(null);
         RuntimeContext.Builder builder = RuntimeContext.builder();
@@ -108,6 +126,11 @@ class HarnessGatewaySandboxlessTest {
         gateway.attachUserSandboxContext(builder, "alice", MODELING_AGENT);
 
         assertThat(builder.build().get(SandboxContext.class)).isNotNull();
+        verify(client, never()).create(any(), any(), any());
+        RuntimeContext context = builder.build();
+        Sandbox lazy = context.get(SandboxContext.class).getExternalSandbox();
+        lazy.exec(context, "echo modeling", 5);
         verify(client).create(any(), any(), any());
+        ((LazySandbox) lazy).releaseLease();
     }
 }

@@ -10,6 +10,7 @@ export interface ToolInspectPayload {
 }
 
 interface Props {
+  finished?: boolean;
   toolName: string;
   toolCallId: string;
   input?: string;
@@ -94,13 +95,15 @@ function isToolError(result: string | undefined): boolean {
 }
 
 export default function ToolCallBlock({
+  finished = false,
   toolName,
   toolCallId,
   input,
   result,
   onInspect,
 }: Props) {
-  const running = result === undefined;
+  const unconfirmed = finished && result === undefined;
+  const running = !finished && result === undefined;
   const failed = !running && isToolError(result);
   const label = toolLabel(toolName);
 
@@ -118,7 +121,7 @@ export default function ToolCallBlock({
         </span>
         <span className="da-toolcall-name">{label}</span>
         <span className={`da-toolcall-status${failed ? ' failed' : ''}`}>
-          {running ? (
+          {unconfirmed ? '结果未确认' : running ? (
             <>
               <span className="da-dot" />运行中
             </>

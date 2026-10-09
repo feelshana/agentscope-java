@@ -122,7 +122,14 @@ public class DatasetService implements DatasetContextProvider {
     @PostConstruct
     void rebuildRegistry() {
         List<DatasetEntity> all = repository.findAll();
-        all.forEach(e -> registry.add(toDataSource(e)));
+        all.forEach(
+                e -> {
+                    try {
+                        registry.add(toDataSource(e));
+                    } catch (DatasetException ex) {
+                        log.warn("Dataset {} not registered: {}", e.getId(), ex.getMessage());
+                    }
+                });
         log.info(
                 "DatasetService: re-registered {} persisted dataset(s) into the registry",
                 all.size());
@@ -436,9 +443,7 @@ public class DatasetService implements DatasetContextProvider {
                         + table
                         + q
                         + " LIMIT 21";
-        try (java.sql.Connection c =
-                        java.sql.DriverManager.getConnection(
-                                ds.getJdbcUrl(), ds.getUsername(), ds.getPassword());
+        try (java.sql.Connection c = introspector.open(ds);
                 java.sql.Statement st = c.createStatement();
                 java.sql.ResultSet rs = st.executeQuery(sql)) {
             List<String> vals = new ArrayList<>();
@@ -621,7 +626,8 @@ public class DatasetService implements DatasetContextProvider {
         Map<String, String> properties = new LinkedHashMap<>();
         ExternalDataSourceEntity external = resolveExternal(e);
         if (external != null) {
-            properties.put("jdbcUrl", withSchema(external.getJdbcUrl(), e.getSchemaName()));
+            properties.put(
+                    "jdbcUrl", withSchema(introspector.validatedUrl(external), e.getSchemaName()));
             properties.put("username", external.getUsername());
             properties.put("password", external.getPassword());
             properties.put("externalDataSourceId", external.getId());
@@ -671,9 +677,7 @@ public class DatasetService implements DatasetContextProvider {
         ExternalDataSourceEntity external = resolveExternal(e);
         java.sql.Connection c;
         if (external != null) {
-            c =
-                    java.sql.DriverManager.getConnection(
-                            external.getJdbcUrl(), external.getUsername(), external.getPassword());
+            c = introspector.open(external);
         } else {
             c =
                     java.sql.DriverManager.getConnection(

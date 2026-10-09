@@ -136,23 +136,7 @@ class ChatControllerHitlTest {
         when(channel.previewRoute(any())).thenReturn(route);
         when(route.context()).thenReturn(context);
         when(context.canonicalKey()).thenReturn("gate-1");
-        when(sessions.allSessions())
-                .thenReturn(
-                        List.of(
-                                new SessionEntry(
-                                        "storage-key",
-                                        "modeling-gateway",
-                                        "runtime-session",
-                                        null,
-                                        SessionKind.MAIN,
-                                        null,
-                                        0,
-                                        1L,
-                                        1L,
-                                        null,
-                                        null,
-                                        "gate-1",
-                                        "alice")));
+        when(gateway.findMainSessionKey("alice", "gate-1")).thenReturn("storage-key");
         when(sessions.getSession("storage-key"))
                 .thenReturn(
                         java.util.Optional.of(

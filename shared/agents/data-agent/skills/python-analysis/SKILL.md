@@ -22,7 +22,7 @@ description: 使用 Python 完成数据可视化与深度分析。当用户问�
 | 直方图等分布分析 | `run_python`（本技能） |
 | 需要导出 CSV 数据文件给用户下载 | `run_python`（本技能） |
 | 只要一张简单图表，无标注诉求 | `render_chart`（[[chart-rendering]] 技能） |
-| 只要数字答案，无需图形 | `query_structured_data`（[[sql-analysis]] 技能） |
+| 只要数字答案，无需图形 | `wren_run_sql` / `wren_query_cube`（[[sql-analysis]] 技能） |
 
 **判断口诀：图上要写字（标签/参考线/达成率）就用 run_python；只要个形状就用 render_chart。**
 
@@ -30,16 +30,17 @@ description: 使用 Python 完成数据可视化与深度分析。当用户问�
 
 ## 步骤
 
-1. **先用 SQL 拿到原始数据。** 查阅 system prompt 中的 `[DATA_SOURCES_OVERVIEW]` 确认数据源，`prepare_data_context` 确认列名，然后用 `query_structured_data` 执行查询。不要在 Python 中直接连接数据库——沙箱没有网络，始终通过 SQL 工具取数后再用 Python 处理。
+1. **先用 Wren 拿到原始数据。** 查阅 system prompt 中的 `[DATA_SOURCES_OVERVIEW]` 选择知识库、逻辑模型和 Cube；字段、关系或 Cube 成员不明确时先调用 `wren_describe_model`。命名指标优先用 `wren_query_cube`，其他查询用 `wren_run_sql`。没有有效已发布 MDL 时明确告知当前不可问数，不尝试物理 SQL 回退。不要在 Python 中直接连接数据库——沙箱没有网络，始终通过 Wren 工具取数后再用 Python 处理。
+
+   查询成功后结果末尾会附「**数据文件：** data/<文件名>.csv（N 行 × M 列）」——记住该文件名，下一步用 `pd.read_csv` 直接读取；**禁止把查询结果行抄写成代码字面量**，数据行只走文件通道。
 
    问题涉及考核/目标时，先调用 `retrieve_evidence` 查知识库中的 KPI/考核目标值（如"日均目标 2000 万"）——参考线与达成率都以此为基准；知识库没有就问用户要目标值，不要编造。
 
-2. **分两次调用 run_python：先探查，再画图。** 第一次传一段探查代码，确认列名、类型与取值范围：
+2. **分两次调用 run_python：先探查，再画图。** 第一次传一段探查代码，用查询返回的数据文件确认列名、类型与取值范围：
 
    ```python
    import pandas as pd
-   data = [ ...query_structured_data 返回的行... ]  # 硬编码为 DataFrame
-   df = pd.DataFrame(data)
+   df = pd.read_csv('data/<查询返回的数据文件名>.csv')  # 如 data/a1b2c3d4e5f6.csv
    print("shape:", df.shape)
    print("columns:", df.columns.tolist())
    print("dtypes:\n", df.dtypes)
@@ -230,7 +231,8 @@ ax.plot(x, intercept + slope * x, 'r--', label=f'趋势线 (R²={r_value**2:.3f}
 
 ## 反模式
 
-- ❌ 在 Python 中直接连接数据库——沙箱无网络，必须先用 `query_structured_data` 取数。
+- ❌ 在 Python 中直接连接数据库——沙箱无网络，必须先经 `wren_run_sql` / `wren_query_cube` 取数。
+- ❌ 尝试绕过 Wren 访问 datasetId、sourceId、schema 或物理表；字段不明确时调用 `wren_describe_model`。
 - ❌ 编造考核目标值——从 `retrieve_evidence` 或用户处获取；两者都没有就明确说明"无目标值，仅展示数据"。
 - ❌ 不探查直接写正式代码——列名/类型写错会浪费一整次执行；先跑探查脚本。
 - ❌ 调用 `plt.show()`——沙箱没有显示设备；用 `plt.savefig()` + `plt.close()`。
@@ -240,7 +242,9 @@ ax.plot(x, intercept + slope * x, 'r--', label=f'趋势线 (R²={r_value**2:.3f}
 - ❌ 图上不写字——有参考线/标签/达成率诉求还用 `render_chart`，那是本技能的场景。
 - ❌ 只贴图不解读——每张图后必须附结论，考核场景必须给出达成率。
 - ❌ 多指标只各自罗列不下对比结论——"A涨B跌"背后的人均/结构变化才是关键洞察。
-- ❌ 会话里已有数据还重查 SQL——复用上一轮查询结果，直接进入画图环节。
+- ❌ 把查询结果数据抄写成 Python 字面量——wren 工具返回「数据文件」行时直接
+  `pd.read_csv('data/<文件名>.csv')` 读取；数百行字面量会撞参数大小限制并导致执行失败。
+- ❌ 会话里已有数据还重查 SQL——复用上一轮查询结果（数据文件仍在 data/ 目录），直接进入画图环节。
 
 ## 何时委托
 

@@ -13,7 +13,11 @@ export interface ExternalDataSource {
 export interface DataSourceRequest {
   name: string;
   kind?: string;
-  jdbcUrl: string;
+  jdbcUrl?: string;
+  host?: string;
+  port?: number;
+  database?: string;
+  sslMode?: string;
   username?: string;
   password?: string;
   sampling?: boolean;
@@ -46,11 +50,17 @@ function jsonHeaders(): Record<string, string> {
 
 async function errorMessage(res: Response, fallback: string): Promise<string> {
   try {
-    const body = (await res.json()) as { message?: string };
-    return body.message || fallback;
+    const body = (await res.json()) as { message?: string; detail?: string };
+    return body.message || body.detail || fallback;
   } catch {
     return fallback;
   }
+}
+
+function saveErrorFallback(res: Response, action: string): string {
+  return res.status === 403
+    ? '操作被拒绝：请确认数据源权限，或联系管理员检查数据源允许列表'
+    : `${action}数据源失败（${res.status}）`;
 }
 
 export async function listDataSources(): Promise<ExternalDataSource[]> {
@@ -65,7 +75,7 @@ export async function createDataSource(req: DataSourceRequest): Promise<External
     headers: jsonHeaders(),
     body: JSON.stringify(req),
   });
-  if (!res.ok) throw new Error(await errorMessage(res, `Failed to create data source: ${res.status}`));
+  if (!res.ok) throw new Error(await errorMessage(res, saveErrorFallback(res, '添加')));
   return res.json();
 }
 
@@ -78,7 +88,7 @@ export async function updateDataSource(
     headers: jsonHeaders(),
     body: JSON.stringify(req),
   });
-  if (!res.ok) throw new Error(await errorMessage(res, `Failed to update data source: ${res.status}`));
+  if (!res.ok) throw new Error(await errorMessage(res, saveErrorFallback(res, '更新')));
   return res.json();
 }
 
@@ -95,6 +105,20 @@ export async function getDataSourceStatus(id: string): Promise<DataSourceStatus>
     headers: jsonHeaders(),
   });
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to check status: ${res.status}`));
+  return res.json();
+}
+
+export async function testDataSourceConnection(
+  req: DataSourceRequest,
+  sourceId?: string | null,
+): Promise<DataSourceStatus> {
+  const query = sourceId ? `?sourceId=${encodeURIComponent(sourceId)}` : '';
+  const res = await fetch(`/api/datasources/test-connection${query}`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) throw new Error(await errorMessage(res, `测试连接失败（${res.status}）`));
   return res.json();
 }
 

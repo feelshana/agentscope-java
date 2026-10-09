@@ -237,7 +237,12 @@ class WrenProfileHomeTest {
     }
 
     private WrenProfileHome home() {
-        return new WrenProfileHome(props, storeProps, externalSources);
+        return new WrenProfileHome(
+                props,
+                storeProps,
+                externalSources,
+                new ExternalDataSourcePolicy(
+                        "10.0.0.8:3307,127.0.0.1:3306,bj-cdb-x.sql.tencentcdb.com:27148,db.example.com:3307,h:3306,h:3307,localhost:3306"));
     }
 
     private static ExternalDataSourceEntity external(

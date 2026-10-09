@@ -34,7 +34,6 @@ import io.agentscope.dataagent.runtime.DataAgentBootstrap;
 import io.agentscope.dataagent.runtime.gateway.HarnessGateway;
 import io.agentscope.dataagent.runtime.session.SessionAgentManager;
 import io.agentscope.dataagent.runtime.session.SessionEntry;
-import io.agentscope.dataagent.runtime.session.SessionKind;
 import io.agentscope.dataagent.tools.data.ModelingToolkitRegistrar;
 import io.agentscope.dataagent.web.audit.ActivityEvent;
 import io.agentscope.dataagent.web.audit.AgentActivityStore;
@@ -231,17 +230,12 @@ public class ChatController {
                     sse("done", doneFrame));
         }
 
-        // Subscribe to tool events. The middleware publishes with the *runtime* session id,
-        // which only exists once the gateway has dispatched this turn — so match lazily per
-        // event against the conversation's gate key. Subscribing once up-front (by the
-        // pre-resolved session key) would silently drop every event on the first turn, and
-        // the runtime id differs from the storage session key anyway.
-        String gateKey = resolveGateKey(userId, agentId, resolvedConversationId);
+        // A server-generated request ID isolates concurrent streams, including the first turn.
+        String requestId = UUID.randomUUID().toString();
         Sinks.One<Boolean> done = Sinks.one();
         Flux<ServerSentEvent<String>> toolEvents =
                 toolEventBus
-                        .events()
-                        .filter(e -> isEventForConversation(userId, gateKey, e))
+                        .subscribeRequest(requestId)
                         .takeUntilOther(done.asMono().timeout(Duration.ofMinutes(10)))
                         .map(this::toToolFrame)
                         .onErrorResume(ex -> Flux.empty());
@@ -251,9 +245,6 @@ public class ChatController {
         // Always echo the conversationId, NOT the storage key — otherwise the FE would persist
         // the storage key and use it as the next turn's conversationId, splintering the session.
         doneFrame.put("sessionKey", resolvedConversationId);
-
-        // Generate a requestId for this turn so tool events can be correlated.
-        String requestId = UUID.randomUUID().toString();
 
         Flux<ServerSentEvent<String>> agentEvents =
                 executeChatStream(
@@ -394,8 +385,7 @@ public class ChatController {
         Sinks.One<Boolean> done = Sinks.one();
         Flux<ServerSentEvent<String>> toolEvents =
                 toolEventBus
-                        .events()
-                        .filter(e -> isEventForConversation(userId, gateKey, e))
+                        .subscribeRequest(requestId)
                         .takeUntilOther(done.asMono().timeout(Duration.ofMinutes(10)))
                         .map(this::toToolFrame)
                         .onErrorResume(ex -> Flux.empty());
@@ -684,45 +674,9 @@ public class ChatController {
         }
     }
 
-    /**
-     * Translates a gateway routing key into the real {@code SessionEntry.sessionKey()}, by
-     * scanning registered MAIN sessions for the matching {@code gateKey}. Returns {@code null}
-     * when no session has been registered yet (e.g. before the first turn).
-     */
+    /** Resolves and authorizes the indexed MAIN session for a gateway routing key. */
     private String findSessionKeyByGate(String userId, String gateKey) {
-        if (gateKey == null) return null;
-        for (SessionEntry e : sessionAgentManager.allSessions()) {
-            if (e.kind() != SessionKind.MAIN) continue;
-            if (!Objects.equals(gateKey, e.gateKey())) continue;
-            if (userId != null && !Objects.equals(userId, e.userId())) continue;
-            return e.sessionKey();
-        }
-        return null;
-    }
-
-    /**
-     * Lazily checks whether a tool event belongs to the conversation this stream serves.
-     *
-     * <p>{@link ToolNotificationMiddleware} publishes with {@code RuntimeContext#getSessionId()}
-     * — the short {@code main-…} runtime id — while the storage layer keys sessions by the full
-     * {@code agent:…:main:…} key, so the event key is matched against either form of the session
-     * resolved through the conversation's gate key. Matching per event (rather than once
-     * up-front) also covers the first turn, where the gateway creates the session mid-flight.
-     */
-    private boolean isEventForConversation(
-            String userId, String gateKey, ToolEventBus.ToolEvent e) {
-        if (gateKey == null || e.sessionKey() == null) {
-            return false;
-        }
-        for (SessionEntry s : sessionAgentManager.allSessions()) {
-            if (s.kind() != SessionKind.MAIN) continue;
-            if (!Objects.equals(gateKey, s.gateKey())) continue;
-            if (userId != null && !Objects.equals(userId, s.userId())) continue;
-            if (e.sessionKey().equals(s.sessionKey()) || e.sessionKey().equals(s.sessionId())) {
-                return true;
-            }
-        }
-        return false;
+        return gateway.findMainSessionKey(userId, gateKey);
     }
 
     /**

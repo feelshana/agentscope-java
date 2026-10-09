@@ -1,10 +1,13 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   createDataSource,
+  DataSourceRequest,
+  DataSourceStatus,
   deleteDataSource,
   ExternalDataSource,
   getDataSourceStatus,
   listDataSources,
+  testDataSourceConnection,
   updateDataSource,
 } from '../api/datasources';
 import DataSourceDetailModal from './DataSourceDetailModal';
@@ -67,7 +70,10 @@ const labelStyle: React.CSSProperties = {
 interface FormState {
   name: string;
   kind: string;
-  jdbcUrl: string;
+  host: string;
+  port: string;
+  database: string;
+  sslMode: string;
   username: string;
   password: string;
   sampling: boolean;
@@ -76,7 +82,10 @@ interface FormState {
 const emptyForm: FormState = {
   name: '',
   kind: 'mysql',
-  jdbcUrl: 'jdbc:mysql://',
+  host: '',
+  port: '3306',
+  database: '',
+  sslMode: 'DISABLED',
   username: '',
   password: '',
   sampling: true,
@@ -97,6 +106,45 @@ export default function DataSourceManagerModal({
   const [form, setForm] = useState<FormState>(emptyForm);
   const [detail, setDetail] = useState<ExternalDataSource | null>(null);
   const [busy, setBusy] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<DataSourceStatus | null>(null);
+  const testRevision = useRef(0);
+
+  function updateForm(patch: Partial<FormState>) {
+    testRevision.current += 1;
+    setForm(f => ({ ...f, ...patch }));
+    setTestResult(null);
+  }
+
+  function resetForm() {
+    testRevision.current += 1;
+    setFormOpen(false);
+    setEditingId(null);
+    setForm(emptyForm);
+    setTestResult(null);
+  }
+
+  function formRequest(): DataSourceRequest {
+    return {
+      name: form.name.trim(),
+      kind: form.kind,
+      host: form.host.trim(),
+      port: Number(form.port),
+      database: form.database.trim(),
+      sslMode: form.sslMode,
+      username: form.username,
+      password: form.password,
+      sampling: form.sampling,
+    };
+  }
+
+  function validForm(): boolean {
+    if (!form.name.trim() || !form.host.trim() || !/^\d+$/.test(form.port)) {
+      setError('请填写名称、数据库主机和有效端口');
+      return false;
+    }
+    return true;
+  }
 
   const refresh = useCallback(async () => {
     try {
@@ -125,31 +173,41 @@ export default function DataSourceManagerModal({
   }, [open, refresh]);
 
   async function handleSave() {
-    if (!form.name.trim() || !form.jdbcUrl.trim()) {
-      setError('名称与 jdbc 地址必填');
+    if (!validForm()) return;
+    if (!testResult?.connected) {
+      setError('请先测试连接，连接成功后再保存');
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      const req = {
-        name: form.name,
-        kind: form.kind,
-        jdbcUrl: form.jdbcUrl,
-        username: form.username,
-        password: form.password,
-        sampling: form.sampling,
-      };
+      const req = formRequest();
       if (editingId) await updateDataSource(editingId, req);
       else await createDataSource(req);
-      setFormOpen(false);
-      setEditingId(null);
-      setForm(emptyForm);
+      resetForm();
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleTest() {
+    if (!validForm()) return;
+    const revision = ++testRevision.current;
+    setTesting(true);
+    setTestResult(null);
+    setError(null);
+    try {
+      const result = await testDataSourceConnection(formRequest(), editingId);
+      if (revision === testRevision.current) setTestResult(result);
+    } catch (e) {
+      if (revision === testRevision.current) {
+        setTestResult({ connected: false, error: e instanceof Error ? e.message : String(e) });
+      }
+    } finally {
+      setTesting(false);
     }
   }
 
@@ -211,9 +269,9 @@ export default function DataSourceManagerModal({
             <button
               className="da-btn da-btn-primary"
               onClick={() => {
-                setFormOpen(o => !o);
-                setEditingId(null);
-                setForm(emptyForm);
+                const nextOpen = !formOpen;
+                resetForm();
+                setFormOpen(nextOpen);
               }}
               disabled={busy}
               style={{ padding: '8px 18px', fontSize: '0.85rem' }}
@@ -250,7 +308,7 @@ export default function DataSourceManagerModal({
                     className="da-input"
                     value={form.name}
                     placeholder="字母/数字/下划线/中文，1-64 字符"
-                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                    onChange={e => updateForm({ name: e.target.value })}
                     style={{ padding: '10px 12px' }}
                   />
                 </div>
@@ -259,22 +317,40 @@ export default function DataSourceManagerModal({
                   <select
                     className="da-input"
                     value={form.kind}
-                    onChange={e => setForm(f => ({ ...f, kind: e.target.value }))}
+                    onChange={e => updateForm({ kind: e.target.value, port: e.target.value === 'mysql' ? '3306' : '5432', sslMode: e.target.value === 'mysql' ? 'DISABLED' : 'disable' })}
                     style={{ padding: '10px 12px' }}
                   >
                     <option value="mysql">MySQL</option>
                     <option value="postgresql">PostgreSQL</option>
                   </select>
                 </div>
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={labelStyle}>JDBC 地址 *</label>
-                  <input
-                    className="da-input"
-                    value={form.jdbcUrl}
-                    placeholder="jdbc:mysql://host:port/dbname"
-                    onChange={e => setForm(f => ({ ...f, jdbcUrl: e.target.value }))}
-                    style={{ padding: '10px 12px' }}
-                  />
+                <div>
+                  <label style={labelStyle}>数据库主机 *</label>
+                  <input className="da-input" value={form.host} placeholder="mysql.example.internal"
+                    onChange={e => updateForm({ host: e.target.value })} />
+                </div>
+                <div>
+                  <label style={labelStyle}>端口 *</label>
+                  <input className="da-input" value={form.port} inputMode="numeric"
+                    onChange={e => updateForm({ port: e.target.value })} />
+                </div>
+                <div>
+                  <label style={labelStyle}>数据库名（可选）</label>
+                  <input className="da-input" value={form.database}
+                    onChange={e => updateForm({ database: e.target.value })} />
+                </div>
+                <div>
+                  <label style={labelStyle}>连接加密</label>
+                  <select className="da-input" value={form.sslMode}
+                    onChange={e => updateForm({ sslMode: e.target.value })}>
+                    {(form.kind === 'mysql'
+                      ? [['REQUIRED', '要求加密'], ['VERIFY_IDENTITY', '加密并校验身份'], ['VERIFY_CA', '加密并校验证书'], ['PREFERRED', '优先加密'], ['DISABLED', '不加密']]
+                      : [['require', '要求加密'], ['verify-full', '加密并校验身份'], ['verify-ca', '加密并校验证书'], ['disable', '不加密']])
+                      .map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                  <div style={{ marginTop: 6, fontSize: '0.75rem', color: 'var(--da-text-3)' }}>
+                    不加密适用于可信内网；跨网络区域或敏感数据建议选择加密并校验身份。
+                  </div>
                 </div>
                 <div>
                   <label style={labelStyle}>用户名</label>
@@ -282,7 +358,7 @@ export default function DataSourceManagerModal({
                     className="da-input"
                     value={form.username}
                     placeholder="数据库用户名"
-                    onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
+                    onChange={e => updateForm({ username: e.target.value })}
                     style={{ padding: '10px 12px' }}
                   />
                 </div>
@@ -293,7 +369,7 @@ export default function DataSourceManagerModal({
                     type="password"
                     value={form.password}
                     placeholder="数据库密码"
-                    onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                    onChange={e => updateForm({ password: e.target.value })}
                     style={{ padding: '10px 12px' }}
                   />
                 </div>
@@ -312,26 +388,27 @@ export default function DataSourceManagerModal({
                   <input
                     type="checkbox"
                     checked={form.sampling}
-                    onChange={e => setForm(f => ({ ...f, sampling: e.target.checked }))}
+                    onChange={e => updateForm({ sampling: e.target.checked })}
                     style={{ width: 16, height: 16 }}
                   />
                   数据采样（低基数列自动采样示例值，提升 Agent 效果）
                 </label>
               </div>
-              <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-                <button className="da-btn da-btn-primary" onClick={handleSave} disabled={busy}>
-                  {editingId ? '保存' : '确认添加'}
+              {testResult && (
+                <div role={testResult.connected ? 'status' : 'alert'} style={{ marginTop: 16, fontSize: '0.85rem', color: testResult.connected ? 'var(--da-success)' : 'var(--da-danger)' }}>
+                  {testResult.connected ? '连接成功，可以保存' : `连接失败：${testResult.error || '请检查连接配置'}`}
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginTop: 20 }}>
+                <button className="da-btn" onClick={handleTest} disabled={busy || testing}>
+                  {testing ? '正在测试...' : '测试连接'}
                 </button>
-                <button
-                  className="da-btn"
-                  onClick={() => {
-                    setFormOpen(false);
-                    setEditingId(null);
-                    setForm(emptyForm);
-                  }}
-                >
-                  取消
-                </button>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button className="da-btn" onClick={resetForm} disabled={busy}>取消</button>
+                  <button className="da-btn da-btn-primary" onClick={handleSave} disabled={busy || testing || !testResult?.connected}>
+                    {editingId ? '保存' : '确认添加'}
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -459,12 +536,27 @@ export default function DataSourceManagerModal({
                       <button
                         className="da-btn da-btn-sm"
                         onClick={() => {
+                          let url: URL;
+                          try {
+                            url = new URL(d.jdbcUrl.replace(/^jdbc:/, ''));
+                            if (!['mysql:', 'postgresql:'].includes(url.protocol) || !url.hostname) throw new Error();
+                          } catch {
+                            setError('旧连接地址格式不受支持，请重新创建 MySQL 或 PostgreSQL 数据源');
+                            return;
+                          }
                           setEditingId(d.id);
                           setFormOpen(true);
+                          testRevision.current += 1;
+                          setTestResult(null);
                           setForm({
                             name: d.name,
                             kind: d.kind,
-                            jdbcUrl: d.jdbcUrl,
+                            host: url.hostname,
+                            port: url.port || (d.kind === 'mysql' ? '3306' : '5432'),
+                            database: url.pathname.replace(/^\//, ''),
+                            sslMode: d.kind === 'mysql'
+                              ? (url.searchParams.get('sslMode') || (url.searchParams.get('useSSL') === 'false' ? 'DISABLED' : 'PREFERRED'))
+                              : (url.searchParams.get('sslmode') || 'require'),
                             username: d.username ?? '',
                             password: '',
                             sampling: d.sampling,

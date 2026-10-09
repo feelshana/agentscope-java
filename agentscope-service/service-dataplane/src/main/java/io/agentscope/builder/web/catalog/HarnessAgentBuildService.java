@@ -315,10 +315,7 @@ public class HarnessAgentBuildService {
 
         // Context management: evict large tool results to files so context stays lean.
         b.toolResultEviction(
-                ToolResultEvictionConfig.builder()
-                        .maxResultChars(4_000)
-                        .previewChars(500)
-                        .build());
+                ToolResultEvictionConfig.builder().maxResultChars(4_000).previewChars(500).build());
 
         // Compaction: higher trigger + aggressive pruning to reduce LLM summarization cost.
         b.compaction(

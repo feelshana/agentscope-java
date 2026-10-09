@@ -47,6 +47,7 @@ interface Message {
   pending?: boolean;
   /** True only when the turn was interrupted and produced no usable answer. */
   failed?: boolean;
+  interrupted?: boolean;
   /** Timestamp (ms) when the assistant turn started streaming. */
   startedAtMs?: number;
   /** Elapsed time (ms) from start to done. */
@@ -217,6 +218,7 @@ function splitToolRender(
           toolCallId={t.id}
           input={t.input}
           result={t.result}
+          finished={!m.pending}
           onInspect={onInspect}
         />
       </div>,
@@ -732,7 +734,22 @@ export default function ChatPanel({
       }
     } finally {
       clearTimeout(bumpTimer);
-      abortRef.current.delete(convId);
+      // A completed turn may already have been followed by another send.
+      if (abortRef.current.get(convId) === ac) {
+        // Every termination path releases the composer, including abort and truncated streams.
+        setSessionMsgs(prev => {
+          const cur = prev.get(convId);
+          if (!cur) return prev;
+          const next = new Map(prev);
+          next.set(convId, { ...cur, busy: false, messages: cur.messages.map(m =>
+            m.id === replyMsg.id && m.pending
+              ? { ...m, pending: false, interrupted: ac.signal.aborted,
+                  elapsedMs: m.startedAtMs ? Date.now() - m.startedAtMs : undefined }
+              : m) });
+          return next;
+        });
+        abortRef.current.delete(convId);
+      }
       inputRef.current?.focus();
     }
   }
@@ -923,6 +940,7 @@ export default function ChatPanel({
                     <span className="da-agent-name">红海DataAgent</span>
                   </div>
                   <TaskTrace
+                    interrupted={m.interrupted}
                     running={!!m.pending}
                     active={trace.length > 0}
                     hasError={!!m.failed}

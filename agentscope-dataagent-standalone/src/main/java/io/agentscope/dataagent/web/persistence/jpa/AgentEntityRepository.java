@@ -18,6 +18,8 @@ package io.agentscope.dataagent.web.persistence.jpa;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 /** Spring Data repository for {@link AgentEntity}. */
 public interface AgentEntityRepository extends JpaRepository<AgentEntity, Long> {
@@ -27,4 +29,27 @@ public interface AgentEntityRepository extends JpaRepository<AgentEntity, Long> 
 
     /** Single definition lookup by the {@code (ownerId, agentId)} pair. */
     Optional<AgentEntity> findByOwnerIdAndAgentId(String ownerId, String agentId);
+
+    @Query(
+            """
+            select distinct a from AgentEntity a left join fetch a.shares
+            where exists (select u.userId from UserEntity u where u.userId = a.ownerId)
+              and (:agentId is null or a.agentId = :agentId)
+              and (a.ownerId = :userId or exists (
+                select g.id from AgentShareEntity g where g.agent = a
+                  and upper(g.tier) in ('CLONE', 'RUN', 'EDIT')
+                  and (g.granteeType = 'WORKSPACE'
+                    or (g.granteeType = 'USER' and g.granteeId = :userId))))
+            order by a.createdAt, a.ownerId, a.rowId
+            """)
+    List<AgentEntity> findVisible(@Param("userId") String userId, @Param("agentId") String agentId);
+
+    @Query(
+            """
+            select distinct a from AgentEntity a left join fetch a.shares
+            where a.agentId = :agentId
+              and exists (select u.userId from UserEntity u where u.userId = a.ownerId)
+            order by a.createdAt, a.ownerId, a.rowId
+            """)
+    List<AgentEntity> findByAgentId(@Param("agentId") String agentId);
 }

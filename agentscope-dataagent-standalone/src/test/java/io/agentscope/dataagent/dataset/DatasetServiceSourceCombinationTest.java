@@ -217,6 +217,10 @@ class DatasetServiceSourceCombinationTest {
 
     @Test
     void associatesPreparedMysqlTablesAsOneBatch() {
+        when(introspector.validatedUrl(source))
+                .thenReturn(
+                        new ExternalDataSourcePolicy("localhost:3306")
+                                .normalize(source.getKind(), source.getJdbcUrl()));
         when(introspector.listColumns(any(), any(), any()))
                 .thenReturn(List.of(new DataSourceIntrospector.ColumnInfo("id", "BIGINT", "主键")));
         when(introspector.countRows(source, "retail", "orders")).thenReturn(3L);

@@ -140,6 +140,16 @@ export async function createGroup(name: string, description: string): Promise<Da
   return res.json();
 }
 
+export async function updateGroup(groupId: string, name: string, description: string): Promise<DatasetGroup> {
+  const res = await fetch(`/api/dataset-groups/${encodeURIComponent(groupId)}`, {
+    method: 'PUT',
+    headers: jsonHeaders(),
+    body: JSON.stringify({ name, description }),
+  });
+  if (!res.ok) throw new Error(await errorMessage(res, `知识库更新失败: ${res.status}`));
+  return res.json();
+}
+
 export async function getGroupDetail(groupId: string): Promise<GroupDetail> {
   const res = await fetch(`/api/dataset-groups/${encodeURIComponent(groupId)}`, {
     headers: authHeaders(),

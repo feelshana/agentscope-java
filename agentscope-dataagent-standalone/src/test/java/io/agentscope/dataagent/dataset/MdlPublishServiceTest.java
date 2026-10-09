@@ -108,7 +108,11 @@ class MdlPublishServiceTest {
                         mapper,
                         wrenProps,
                         wren,
-                        new WrenProfileHome(wrenProps, storeProps, externalSources),
+                        new WrenProfileHome(
+                                wrenProps,
+                                storeProps,
+                                externalSources,
+                                new ExternalDataSourcePolicy("127.0.0.1:3306")),
                         (source, datasets) -> probeReport,
                         seeder,
                         workspaceService,

@@ -1,7 +1,7 @@
 {
-  "agents/data-agent/skills/chart-rendering/SKILL.md" : "4d58f3ca6fe458af306eccc7e8899a915301a51fcfd05caea1e67063febf0270",
-  "agents/data-agent/skills/python-analysis/SKILL.md" : "21dc28520dc5c76c57f1880ab3fe19364890534b428ebe63e4c3d91a5b1ddf3e",
-  "agents/data-agent/skills/sql-analysis/SKILL.md" : "979e6c53cb283045bbedd98e008fda440d1b83c5853ae235a436eac33d564c15",
+  "agents/data-agent/skills/chart-rendering/SKILL.md" : "8344adebfe3c47f21e99a0a6702ff9b0b611cca30d2982605757aadf202666ed",
+  "agents/data-agent/skills/python-analysis/SKILL.md" : "94669e22ac6beb3e6ba8dfdf4b641e85aedc82d0962ce121a153a1981e390f1b",
+  "agents/data-agent/skills/sql-analysis/SKILL.md" : "0fbb2126db56ca52ebe435b5574ffcc2cbf0a2c13173bf53ec8c54f590bb0d88",
   "agents/data-agent/subagents/data-explorer.md" : "1f0ac1b94840861d17ec5cecd0e598ba20befef480de56821516e7352f292898",
   "agents/data-agent/subagents/report-writer.md" : "87f7d00b5214d907071c714bcb149e2e3baeed003324b52d6b713f911b2b3e8b"
 }

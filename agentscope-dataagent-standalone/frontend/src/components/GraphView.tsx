@@ -1,3 +1,4 @@
+import { escapeHtml } from '../utils/html';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Graph } from '@antv/g6';
 import { getGroupGraph, GraphDto } from '../api/datasets';
@@ -193,18 +194,18 @@ export default function GraphView({ groupId }: { groupId: string }) {
             const d = it.data ?? {};
             if (it.source && it.target) {
               return `<div style="font-size:12px;line-height:1.5">
-                <b>${d.relationType ?? ''}</b> · 置信度 ${(d.confidence ?? 0).toFixed(1)}<br/>
-                ${d.detail ? `关联列：${d.detail}<br/>` : ''}
-                <span style="color:var(--da-text-muted)">来源：${d.origin ?? ''}</span>
+                <b>${escapeHtml(d.relationType ?? '')}</b> · 置信度 ${(d.confidence ?? 0).toFixed(1)}<br/>
+                ${d.detail ? `关联列：${escapeHtml(d.detail)}<br/>` : ''}
+                <span style="color:var(--da-text-muted)">来源：${escapeHtml(d.origin ?? '')}</span>
               </div>`;
             }
             const fields = (d.fields ?? [])
               .slice(0, 8)
-              .map((f: any) => `${f.name} <span style="color:var(--da-text-muted)">${f.sqlType}</span>`)
+              .map((f: any) => `${escapeHtml(f.name)} <span style="color:var(--da-text-muted)">${escapeHtml(f.sqlType)}</span>`)
               .join('<br/>');
             return `<div style="font-size:12px;line-height:1.5">
-              <b>${d.label ?? it.id}</b>
-              <span style="color:var(--da-text-muted)"> · ${NODE_ORIGIN_LABEL[d.origin] ?? d.origin ?? ''}</span><br/>
+              <b>${escapeHtml(d.label ?? it.id)}</b>
+              <span style="color:var(--da-text-muted)"> · ${escapeHtml(NODE_ORIGIN_LABEL[d.origin] ?? d.origin ?? '')}</span><br/>
               ${fields}
             </div>`;
           },

@@ -85,6 +85,8 @@ public class DatasetGroupController {
 
     public record CreateGroupRequest(String name, String description) {}
 
+    public record UpdateGroupRequest(String name, String description) {}
+
     public record GroupDetailVO(
             GroupVO group, List<DatasetController.DatasetVO> datasets, String knowledge) {}
 
@@ -137,6 +139,20 @@ public class DatasetGroupController {
                                             .toList(),
                                     datasetService.knowledgeText(id));
                         })
+                .subscribeOn(Schedulers.boundedElastic())
+                .onErrorMap(this::toStatus);
+    }
+
+    @PutMapping("/{id}")
+    public Mono<GroupVO> update(
+            @PathVariable String id, @RequestBody UpdateGroupRequest req, Authentication auth) {
+        String userId = (String) auth.getPrincipal();
+        return Mono.fromCallable(
+                        () ->
+                                toVO(
+                                        groupService.updateGroup(
+                                                userId, id, req.name(), req.description()),
+                                        (int) groupService.countDatasets(userId, id)))
                 .subscribeOn(Schedulers.boundedElastic())
                 .onErrorMap(this::toStatus);
     }

@@ -75,6 +75,11 @@ spring:
 # Property prefix is `dataagent.*`. Env vars use `DATAAGENT_*`.
 # --------------------------------------------------------------------------
 dataagent:
+  # Empty allows user-managed external source addresses. Set exact host:port entries to restrict targets.
+  # Example: mysql.internal:3306,postgres.internal:5432 (no wildcards).
+  external-datasource:
+    allowed-endpoints: ${DATAAGENT_EXTERNAL_DATASOURCE_ALLOWED_ENDPOINTS:}
+
   # JWT signing secret (>= 32 chars). MUST be overridden in production.
   jwt:
     secret: ${DATAAGENT_JWT_SECRET:dataagent-dev-secret-for-local-only-do-not-use-in-prod-2026}

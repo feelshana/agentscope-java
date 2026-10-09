@@ -58,14 +58,17 @@ public class WrenProfileHome {
     private final WrenProperties wrenProps;
     private final DatasetStoreProperties storeProps;
     private final ExternalDataSourceRepository externalSources;
+    private final ExternalDataSourcePolicy connectionPolicy;
 
     public WrenProfileHome(
             WrenProperties wrenProps,
             DatasetStoreProperties storeProps,
-            ExternalDataSourceRepository externalSources) {
+            ExternalDataSourceRepository externalSources,
+            ExternalDataSourcePolicy connectionPolicy) {
         this.wrenProps = wrenProps;
         this.storeProps = storeProps;
         this.externalSources = externalSources;
+        this.connectionPolicy = connectionPolicy;
     }
 
     /**
@@ -142,7 +145,15 @@ public class WrenProfileHome {
                         ds.getKind());
                 continue;
             }
-            Map<String, String> parts = parseJdbcUrlAllowEmptyDb(ds.getJdbcUrl());
+            String validated;
+            try {
+                validated = connectionPolicy.normalize(ds.getKind(), ds.getJdbcUrl());
+            } catch (DatasetException ex) {
+                log.warn(
+                        "Skipping disallowed external profile {}: {}", ds.getId(), ex.getMessage());
+                continue;
+            }
+            Map<String, String> parts = parseJdbcUrlAllowEmptyDb(validated);
             sb.append(
                     renderProfileEntry(
                             externalProfileName(ds.getId()),

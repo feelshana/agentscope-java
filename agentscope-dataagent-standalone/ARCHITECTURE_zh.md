@@ -1100,3 +1100,13 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 - 维护：容量保护、分段锁和分批孤立文件补偿已实施；正常历史保留任务见 ADR 0049，默认关闭并先试运行；多实例协调和对象存储尚未实施。
 
 部署限制、完整参数、备份范围和验证边界见 [会话与附件部署说明](docs/session-history-and-artifacts.md)。
+
+### 2026-10-09：连接边界、聊天可靠性与界面更新
+
+- 用户外部源统一通过 `ExternalDataSourcePolicy` 解析并校验。默认空目标列表允许内网自助接入；非空启用精确地址限制。试连使用未持久化参数，编辑密码留空仅复用本人已有凭证。此限制与目标数据库自身的账号/主机授权是两层不同的校验。
+- `ChatController` 使用服务端生成的 requestId 订阅工具事件；gateway 繁忙明确返回失败。前端 SSE 处理 UTF-8 分块、CRLF、多行 data、末尾帧、异常断流及停止后的状态释放。
+- `AgentCatalogService` 的 Agent 可见性由 JPA 授权查询及批量 shares 加载处理，不再枚举所有用户与所有 Agent；运行时会话使用 gateway 现有路由索引并复核所有者。
+- 图谱工具提示的动态字段先转义 HTML。知识库改名 API 仍按 owner 校验，不引入多人知识库共享。
+- 侧栏、内联执行过程、居中表格、返回导航和知识库编辑见 ADR 0052。用户菜单简化仅改变前端入口；BI 身份接入与知识库 QUERY/EDIT/MANAGE 仍为 ADR 0050 待办。
+
+协议与边界见 [ADR 0051](docs/adr/0051-connection-boundaries-and-chat-reliability.md) / [spec 042](docs/specs/042-connection-boundaries-and-chat-reliability.md)；界面及改名验收见 [spec 043](docs/specs/043-chat-ui-and-knowledge-base-editing.md)。

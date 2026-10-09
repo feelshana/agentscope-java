@@ -17,6 +17,7 @@ package io.agentscope.dataagent.web.api;
 
 import io.agentscope.dataagent.dataset.DataSourceIntrospector;
 import io.agentscope.dataagent.dataset.DatasetException;
+import io.agentscope.dataagent.dataset.ExternalDataSourcePolicy;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetRepository;
 import io.agentscope.dataagent.web.persistence.jpa.ExternalDataSourceEntity;
 import io.agentscope.dataagent.web.persistence.jpa.ExternalDataSourceRepository;
@@ -32,6 +33,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
@@ -61,7 +63,11 @@ public class ExternalDataSourceController {
             String jdbcUrl,
             String username,
             String password,
-            Boolean sampling) {}
+            Boolean sampling,
+            String host,
+            Integer port,
+            String database,
+            String sslMode) {}
 
     public record StatusVO(boolean connected, String error) {}
 
@@ -72,14 +78,17 @@ public class ExternalDataSourceController {
     private final ExternalDataSourceRepository repository;
     private final DatasetRepository datasetRepository;
     private final DataSourceIntrospector introspector;
+    private final ExternalDataSourcePolicy policy;
 
     public ExternalDataSourceController(
             ExternalDataSourceRepository repository,
             DatasetRepository datasetRepository,
-            DataSourceIntrospector introspector) {
+            DataSourceIntrospector introspector,
+            ExternalDataSourcePolicy policy) {
         this.repository = repository;
         this.datasetRepository = datasetRepository;
         this.introspector = introspector;
+        this.policy = policy;
     }
 
     @GetMapping
@@ -98,7 +107,7 @@ public class ExternalDataSourceController {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
                         () -> {
-                            validate(req);
+                            String url = validate(req);
                             if (repository
                                     .findByOwnerIdAndName(userId, req.name().trim())
                                     .isPresent()) {
@@ -115,12 +124,47 @@ public class ExternalDataSourceController {
                                                     req.kind() == null || req.kind().isBlank()
                                                             ? "mysql"
                                                             : req.kind(),
-                                                    req.jdbcUrl().trim(),
+                                                    url,
                                                     req.username(),
                                                     req.password(),
                                                     req.sampling() == null || req.sampling())));
                         })
                 .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @PostMapping("/test-connection")
+    public Mono<StatusVO> testConnection(
+            @RequestBody DataSourceRequest req,
+            @RequestParam(required = false) String sourceId,
+            Authentication auth) {
+        String userId = (String) auth.getPrincipal();
+        return Mono.fromCallable(
+                        () -> {
+                            String url = validate(req);
+                            String password = req.password();
+                            if (sourceId != null && !sourceId.isBlank()) {
+                                ExternalDataSourceEntity saved = owned(userId, sourceId);
+                                if (password == null || password.isBlank()) {
+                                    password = saved.getPassword();
+                                }
+                            }
+                            ExternalDataSourceEntity candidate =
+                                    new ExternalDataSourceEntity(
+                                            UUID.randomUUID().toString(),
+                                            userId,
+                                            req.name().trim(),
+                                            req.kind() == null || req.kind().isBlank()
+                                                    ? "mysql"
+                                                    : req.kind(),
+                                            url,
+                                            req.username(),
+                                            password,
+                                            req.sampling() == null || req.sampling());
+                            String error = introspector.connectionError(candidate);
+                            return new StatusVO(error == null, error);
+                        })
+                .subscribeOn(Schedulers.boundedElastic())
+                .onErrorMap(ExternalDataSourceController::toStatus);
     }
 
     @PutMapping("/{id}")
@@ -129,13 +173,13 @@ public class ExternalDataSourceController {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
                         () -> {
-                            validate(req);
+                            String url = validate(req);
                             ExternalDataSourceEntity e = owned(userId, id);
                             e.setName(req.name().trim());
                             if (req.kind() != null && !req.kind().isBlank()) {
                                 e.setKind(req.kind());
                             }
-                            e.setJdbcUrl(req.jdbcUrl().trim());
+                            e.setJdbcUrl(url);
                             e.setUsername(req.username());
                             if (req.password() != null && !req.password().isBlank()) {
                                 e.setPassword(req.password());
@@ -179,7 +223,8 @@ public class ExternalDataSourceController {
                             String err = introspector.connectionError(e);
                             return new StatusVO(err == null, err);
                         })
-                .subscribeOn(Schedulers.boundedElastic());
+                .subscribeOn(Schedulers.boundedElastic())
+                .onErrorMap(ExternalDataSourceController::toStatus);
     }
 
     @GetMapping("/{id}/schemas")
@@ -229,15 +274,23 @@ public class ExternalDataSourceController {
                                         HttpStatus.NOT_FOUND, "data source not found: " + id));
     }
 
-    private static void validate(DataSourceRequest req) {
+    private String validate(DataSourceRequest req) {
         String name = req.name() == null ? "" : req.name().trim();
         if (name.isEmpty() || name.length() > 64) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST, "name must be 1-64 characters");
         }
-        if (req.jdbcUrl() == null || !req.jdbcUrl().trim().startsWith("jdbc:")) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, "jdbcUrl must start with jdbc:");
+        String kind = req.kind() == null || req.kind().isBlank() ? "mysql" : req.kind();
+        try {
+            if (req.host() != null) {
+                if (req.jdbcUrl() != null && !req.jdbcUrl().isBlank()) {
+                    throw new DatasetException("不能同时提交连接地址和主机字段", 400);
+                }
+                return policy.build(kind, req.host(), req.port(), req.database(), req.sslMode());
+            }
+            return policy.normalize(kind, req.jdbcUrl());
+        } catch (DatasetException e) {
+            throw new ResponseStatusException(HttpStatus.valueOf(e.status()), e.getMessage(), e);
         }
     }
 

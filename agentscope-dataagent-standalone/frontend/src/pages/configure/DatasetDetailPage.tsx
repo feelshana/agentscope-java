@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import BackToChatHeader from '../../components/BackToChatHeader';
 import Icon from '../../components/Icon';
 import {
@@ -225,7 +225,6 @@ function FieldEditModal({ columns, edits, typeEdits, onChange, onSave, onClose, 
 
 export default function DatasetDetailPage() {
   const { groupId = '', datasetId = '' } = useParams();
-  const navigate = useNavigate();
   const [dataset, setDataset] = useState<Dataset | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [edits, setEdits] = useState<Record<string, string>>({});
@@ -316,20 +315,22 @@ export default function DatasetDetailPage() {
         background: 'var(--da-canvas-bg)',
       }}
     >
-      <BackToChatHeader title={dataset?.name ?? '数据集'} subtitle={dataset?.tableName ?? ''} />
-      <div style={{ padding: '10px 24px 0' }}>
-        <button className="da-btn" onClick={() => navigate(`/configure/datasets/${groupId}`)}>
-          ← 返回知识库
-        </button>
+      <BackToChatHeader
+        title={dataset?.name ?? '数据集'}
+        subtitle={dataset?.tableName ?? ''}
+        backTo={`/configure/datasets/${groupId}`}
+        backLabel="返回知识库"
+      />
+      {(error || saved) && <div style={{ padding: '10px 24px 0' }}>
         {error && (
-          <span style={{ color: 'var(--da-danger)', marginLeft: 12, fontSize: '0.8rem' }}>{error}</span>
+          <span style={{ color: 'var(--da-danger)', fontSize: '0.8rem' }}>{error}</span>
         )}
         {saved && (
-          <span style={{ color: '#047857', marginLeft: 12, fontSize: '0.8rem' }}>
+          <span style={{ color: '#047857', fontSize: '0.8rem' }}>
             已保存，agent 立即可见新语义
           </span>
         )}
-      </div>
+      </div>}
       <div style={panelStyle}>
         {/* Merged card: title + description + basic info */}
         <div style={cardStyle}>

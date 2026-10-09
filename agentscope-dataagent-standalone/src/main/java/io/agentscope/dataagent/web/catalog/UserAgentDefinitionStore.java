@@ -56,6 +56,12 @@ public interface UserAgentDefinitionStore {
     /** Deletes an agent definition. Returns {@code true} if the entry existed and was removed. */
     boolean delete(String userId, String agentId);
 
+    /** Database-filtered own/shared definitions; an optional id narrows a single lookup. */
+    List<AgentDefinition> findVisible(String userId, String agentId);
+
+    /** Resolve a custom id without enumerating users. */
+    List<AgentDefinition> findByAgentId(String agentId);
+
     // -----------------------------------------------------------------
     //  Stored data model — stable wire format consumed across the app
     // -----------------------------------------------------------------

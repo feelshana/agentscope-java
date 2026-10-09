@@ -19,6 +19,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agentscope.dataagent.runtime.config.SkillRepositoryConfigEntry;
+import io.agentscope.dataagent.web.catalog.AgentDefinition;
 import io.agentscope.dataagent.web.catalog.UserAgentDefinitionStore;
 import io.agentscope.dataagent.web.share.AgentShareGrant;
 import io.agentscope.dataagent.web.workspace.WorkspaceManagerFactory;
@@ -51,6 +52,22 @@ public class JpaUserAgentDefinitionStore implements UserAgentDefinitionStore {
 
     public JpaUserAgentDefinitionStore(AgentEntityRepository repository) {
         this.repository = repository;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AgentDefinition> findVisible(String userId, String agentId) {
+        return repository.findVisible(userId, agentId).stream()
+                .map(e -> toStoredEntry(e).toDefinition(e.getOwnerId()))
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AgentDefinition> findByAgentId(String agentId) {
+        return repository.findByAgentId(agentId).stream()
+                .map(e -> toStoredEntry(e).toDefinition(e.getOwnerId()))
+                .toList();
     }
 
     @Override
