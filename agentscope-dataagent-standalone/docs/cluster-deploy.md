@@ -1,5 +1,11 @@
 # DataAgent cluster deployment
 
+> **2026-10-09 状态说明：下文为历史集群目标设计及示例，不是当前版本已经验证可运行的部署方案。**
+> 当前工具事件总线、沙箱注册表、部分配额锁与默认运行状态仍在应用进程内；不能仅设置 Redis 标志或共享磁盘就实现下表承诺的跨实例协调。
+> 首次上线建议单实例；复制副本前必须完成状态、事件、回收归属及配额协调改造与联调。
+> 当前 MySQL 默认配置、应用镜像与 profile 也应以源码和实际发布制品为准。
+> 具体缺口与 Linux 发布建议见 [上线准备审查](production-readiness-review-20261009.md)。
+
 This guide shows a minimal 3-replica deployment with shared workspace and
 Redis coordination. The same shape works on Kubernetes (StatefulSet behind a
 Service, PVC for the workspace, a Redis Deployment) — the docker-compose
