@@ -625,7 +625,7 @@ public class MdlSuggestionService {
             JsonNode arr = root.get("relationships");
             return arr != null && arr.isArray() ? arr : null;
         } catch (IOException e) {
-            return null;
+            throw new DatasetException("relationships.yml 无法解析，请先修复文件再确认关系：" + e.getMessage(), e);
         }
     }
 
@@ -644,7 +644,7 @@ public class MdlSuggestionService {
             String srcModel,
             String tgtModel,
             String condition) {
-        if (existing == null || existing.isBlank() || !(entries instanceof JsonNode)) {
+        if (existing == null || existing.isBlank() || entries == null || entries.isEmpty()) {
             return "relationships:\n" + rendered;
         }
         Set<String> wantTerms = conditionTerms(condition);

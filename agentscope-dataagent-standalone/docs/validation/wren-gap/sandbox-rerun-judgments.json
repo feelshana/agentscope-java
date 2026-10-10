@@ -1,0 +1,104 @@
+{
+  "scope": "Single local platform agent run on published v8; reviewed tool results and final answers. Not a controlled official-agent comparison.",
+  "completed": 12,
+  "matches_original_oracle": 11,
+  "metric_ambiguities": 1,
+  "cases": [
+    {
+      "id": "Q01",
+      "status": "PASS",
+      "note": "Actual Cube result 1050 yuan.",
+      "done": true,
+      "errors": [],
+      "tool_calls": 1
+    },
+    {
+      "id": "Q02",
+      "status": "PASS",
+      "note": "Actual Cube result 6 orders, 2 customers.",
+      "done": true,
+      "errors": [],
+      "tool_calls": 1
+    },
+    {
+      "id": "Q03",
+      "status": "PASS",
+      "note": "Actual grouped SQL: Li Si 700, Zhang San 350.",
+      "done": true,
+      "errors": [],
+      "tool_calls": 2
+    },
+    {
+      "id": "Q04",
+      "status": "PASS_WITH_REPAIR",
+      "note": "Final SQL returns sales 300,700,0,50 and net 230,670,0,50; corrected assumed year and month join.",
+      "done": true,
+      "errors": [],
+      "tool_calls": 7
+    },
+    {
+      "id": "Q05",
+      "status": "AMBIGUOUS_METRIC_MISMATCH",
+      "note": "Oracle expects sales 700; agent chose net revenue 670 and disclosed interpretation. Prompt says effective revenue without defining gross/net.",
+      "done": true,
+      "errors": [],
+      "tool_calls": 1
+    },
+    {
+      "id": "Q06",
+      "status": "PASS",
+      "note": "Six actual order rows total net revenue 950.",
+      "done": true,
+      "errors": [],
+      "tool_calls": 1
+    },
+    {
+      "id": "Q07",
+      "status": "PASS",
+      "note": "Actual anti-join returns customer 3 with no valid orders.",
+      "done": true,
+      "errors": [],
+      "tool_calls": 3
+    },
+    {
+      "id": "Q08",
+      "status": "PASS",
+      "note": "Actual duplicate key P2 has two rows.",
+      "done": true,
+      "errors": [],
+      "tool_calls": 5
+    },
+    {
+      "id": "Q09",
+      "status": "PASS",
+      "note": "Actual aggregate compares correct 1050 and amplified 1950.",
+      "done": true,
+      "errors": [],
+      "tool_calls": 2
+    },
+    {
+      "id": "Q10",
+      "status": "PASS",
+      "note": "Actual full-table SQL returns 10005 events and 100.05 yuan.",
+      "done": true,
+      "errors": [],
+      "tool_calls": 2
+    },
+    {
+      "id": "Q11",
+      "status": "PASS_WITH_REPAIR",
+      "note": "Final qualified SQL returns 1 null plus 1 missing customer, total 2.",
+      "done": true,
+      "errors": [],
+      "tool_calls": 3
+    },
+    {
+      "id": "Q12",
+      "status": "PASS",
+      "note": "Actual SQL average 175 yuan, 6 orders, total 1050.",
+      "done": true,
+      "errors": [],
+      "tool_calls": 1
+    }
+  ]
+}

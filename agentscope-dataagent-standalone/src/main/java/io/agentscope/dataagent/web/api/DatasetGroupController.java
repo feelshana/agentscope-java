@@ -72,6 +72,10 @@ public class DatasetGroupController {
     private final BaselineMdlService baselineMdlService;
     private final UserEntityRepository userRepository;
 
+    @org.springframework.beans.factory.annotation.Value(
+            "${dataagent.knowledge-graph.enabled:false}")
+    private boolean knowledgeGraphEnabled;
+
     public DatasetGroupController(
             DatasetGroupService groupService,
             DatasetService datasetService,
@@ -238,6 +242,9 @@ public class DatasetGroupController {
      */
     @GetMapping("/{id}/graph")
     public Mono<GraphDto> graph(@PathVariable String id, Authentication auth) {
+        if (!knowledgeGraphEnabled) {
+            return Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "知识图谱暂未开放"));
+        }
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
                         () ->

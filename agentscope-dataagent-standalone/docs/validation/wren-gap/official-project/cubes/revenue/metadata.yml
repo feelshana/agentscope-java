@@ -1,0 +1,25 @@
+{
+  "name": "revenue",
+  "base_object": "order",
+  "measures": [
+    {
+      "name": "valid_revenue_cents",
+      "type": "BIGINT",
+      "expression": "SUM(CASE WHEN status = 'PAID' AND is_deleted = 0 AND customer_internal = 0 THEN amount_cents ELSE 0 END)"
+    }
+  ],
+  "dimensions": [
+    {
+      "name": "customer_name",
+      "type": "VARCHAR",
+      "expression": "customer_name"
+    }
+  ],
+  "time_dimensions": [
+    {
+      "name": "order_time",
+      "type": "TIMESTAMP",
+      "expression": "CAST(order_time AS TIMESTAMP)"
+    }
+  ]
+}

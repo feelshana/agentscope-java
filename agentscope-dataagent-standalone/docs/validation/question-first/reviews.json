@@ -1,0 +1,88 @@
+[
+  {
+    "question": {
+      "id": "valid_order_count_2025",
+      "question": "2025年有效订单有多少笔？",
+      "definition": "统计 2025 自然年（order_time 落在 2025-01-01 00:00:00 至 2025-12-31 23:59:59）内 「有效订单」的订单笔数。有效订单口径同销售额问题：status 为 PAID 或 COMPLETED，且 is_deleted = 0。 按订单笔数（COUNT(*)）计数，不关联客户维度、不做去重客户处理。 与销售额问题复用同一个「有效订单」视图。",
+      "sql": "SELECT COUNT(*) AS order_count FROM valid_order WHERE order_time >= '2025-01-01 00:00:00'\n  AND order_time < '2026-01-01 00:00:00'"
+    },
+    "status": "EXECUTED",
+    "validation": {
+      "validationId": "13007648-0ff7-4114-86ac-6404dfb54160",
+      "questionHash": "d0d2dd767cce1360b491d20d8ee348d83b51a255d8708eb9db6a0efffbf6a025",
+      "modelHash": "c9095a6b48d5bafd5eb57d9e0f852ecf17640df99f33791da3bed9f0df6db001",
+      "status": "EXECUTED",
+      "executedAt": "2026-10-08T08:18:17.560339900Z",
+      "result": {
+        "columns": [
+          "order_count"
+        ],
+        "rows": [
+          {
+            "order_count": 9
+          }
+        ],
+        "row_count": 1,
+        "truncated": false
+      },
+      "error": null,
+      "truncated": false,
+      "confirmedBy": null,
+      "confirmedAt": null,
+      "evidence": {
+        "sql": "SELECT COUNT(*) AS order_count FROM valid_order WHERE order_time >= '2025-01-01 00:00:00'\n  AND order_time < '2026-01-01 00:00:00'",
+        "views": [
+          {
+            "name": "valid_order",
+            "sql": "SELECT\n  order_id,\n  customer_id,\n  order_time,\n  amount_cents,\n  amount_cents / 100.0 AS amount_yuan,\n  status,\n  is_deleted\nFROM order\nWHERE status IN ('PAID', 'COMPLETED')\n  AND is_deleted = 0",
+            "description": "有效订单口径视图：仅保留 status 为 PAID/COMPLETED 且 is_deleted=0 的订单，并将金额由分换算为元（amount_yuan），供销售额与订单笔数等分析复用。",
+            "path": "views/valid_order/sql.yml"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "question": {
+      "id": "valid_order_sales_2025",
+      "question": "2025年有效订单销售额是多少？",
+      "definition": "统计 2025 自然年（order_time 落在 2025-01-01 00:00:00 至 2025-12-31 23:59:59）内 「有效订单」的销售额合计。有效订单口径：status 为 PAID 或 COMPLETED，且 is_deleted = 0。 金额单位：amount_cents 为分，除以 100 换算为元；不扣减退款（REFUNDED 状态订单不计入）。 结果仅一行合计金额，单位为元。",
+      "sql": "SELECT SUM(amount_yuan) AS sales_amount FROM valid_order WHERE order_time >= '2025-01-01 00:00:00'\n  AND order_time < '2026-01-01 00:00:00'"
+    },
+    "status": "EXECUTED",
+    "validation": {
+      "validationId": "4f628d8c-35db-4b00-b651-738b4589ad2e",
+      "questionHash": "deb550ef08143c261949cd62873eb34b14cbf21c7394ef646b37f0169649522d",
+      "modelHash": "c9095a6b48d5bafd5eb57d9e0f852ecf17640df99f33791da3bed9f0df6db001",
+      "status": "EXECUTED",
+      "executedAt": "2026-10-08T08:18:11.892153800Z",
+      "result": {
+        "columns": [
+          "sales_amount"
+        ],
+        "rows": [
+          {
+            "sales_amount": 3749.0
+          }
+        ],
+        "row_count": 1,
+        "truncated": false
+      },
+      "error": null,
+      "truncated": false,
+      "confirmedBy": null,
+      "confirmedAt": null,
+      "evidence": {
+        "sql": "SELECT SUM(amount_yuan) AS sales_amount FROM valid_order WHERE order_time >= '2025-01-01 00:00:00'\n  AND order_time < '2026-01-01 00:00:00'",
+        "views": [
+          {
+            "name": "valid_order",
+            "sql": "SELECT\n  order_id,\n  customer_id,\n  order_time,\n  amount_cents,\n  amount_cents / 100.0 AS amount_yuan,\n  status,\n  is_deleted\nFROM order\nWHERE status IN ('PAID', 'COMPLETED')\n  AND is_deleted = 0",
+            "description": "有效订单口径视图：仅保留 status 为 PAID/COMPLETED 且 is_deleted=0 的订单，并将金额由分换算为元（amount_yuan），供销售额与订单笔数等分析复用。",
+            "path": "views/valid_order/sql.yml"
+          }
+        ]
+      }
+    }
+  }
+]

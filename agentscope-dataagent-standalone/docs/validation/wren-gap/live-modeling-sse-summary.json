@@ -1,0 +1,382 @@
+{
+  "file": "live-modeling-sse.jsonl",
+  "event_count": 1523,
+  "answer": "I'll start by taking inventory of the current modeling state and locating the business documents.I have the current state. Now let me read the business documents and existing files.Let me look for the semantic-source business documents in the workspace.The workspace has no `raw/` directory or semantic-source docs. Let me search the broader workspace/knowledge tree for the uploaded semantic-source document.The workspace only contains the MDL files — the \"semantic-source\" business document isn't visible as a workspace file. Let me check for it in the raw/ directory and search the project tree.The uploaded \"semantic-source\" document is apparently not present as a workspace file. However, the knowledge base overview injected into my context contains the business semantics (effective orders, cents/yuan, net revenue, refund rules, March gap-fill, duplicate product_code, code=000123 semantics) — that IS the semantic source for this test KB. Let me check the enrich-context skill's gap catalog and the business rules, then proceed.Now let me load the enrich-context skill with its references (cube_proposals and gap_catalog templates) — required before writing cubes/rules.I have the full templates. The \"semantic-source\" business document is not present as a workspace file, but its content is embedded in my knowledge base overview (the injected `[KNOWLEDGE_BASE_OVERVIEW]`), which is the semantic source for this test KB. Let me proceed.\n\nLet me first propose relationship candidates since the queue is empty.Three candidates. Per the business docs:\n- `refund.order_id → order.order_id` — legitimate (fact-to-fact business association explicitly permitted).\n- `order.customer_id → customer.customer_id` — legitimate.\n- `order_item.product_code → product.product_code` — the doc explicitly says product_code contains duplicate P2, so this must NOT be declared MANY_TO_ONE. I must reject this candidate.\n\nLet me submit the batch decision: confirm two, reject the product_code one.Relationships confirmed. Now let me write the business rules (knowledge/rules) and the metric cubes and views. Let me start with the business rules file, which captures the effective-order semantics, cents/yuan, paid-customer dedup, gap-fill, and data-quality caveats.Now let me create the effective-order view (JOIN order+customer for the effective-order definition) — this becomes the base for the customer and month metrics. Then cubes on top of it.Now the net revenue view: refunds first aggregated by order_id (SUCCESS only), then joined to valid orders, attributing refunds to the original order month.The view SQL can only reference `models/` logical models, not other views. I'll inline the valid_order definition into the net revenue view as a CTE.Now the cubes. Since the valid_order view is not usable as a cube base_object? — Let me check whether cubes can sit on views. In Wren, `base_object` can be a model or view name. Let me create the effective-order cube on `valid_order` (customer + month dimensions, order count / amount / paid customers), and a net revenue cube on `order_net_revenue`.Now the net revenue cube on `order_net_revenue`.Now let me validate the two cubes' measure expressions compile, then run the full MDL validation.Both cubes compile. Now the full MDL validation.MDL 校验全绿。下面是本次建模汇总。\n\n## 已完成（仅改动本测试库 `wren-gap-live-20261006-233059`）\n\n**关系（relationships.yml）**\n- 确认 `refund.order_id → order.order_id`（MANY_TO_ONE）——事实表间的业务关联成立（退款按订单归属）。\n- 确认 `order.customer_id → customer.customer_id`（MANY_TO_ONE）。\n- 否决 `order_item.product_code → product.product_code`——业务文档明确 `product_code` 含重复 P2，**未**把重复编码声明成唯一键，明细到商品不建立唯一关联。\n\n**业务规则（knowledge/rules/general.md）**\n- 有效订单口径：`status=PAID` 且 `is_deleted=0`，且客户存在、`is_internal=0`；未知/空客户不计入（但保留异常数量）。\n- 分/元单位：金额字段均以「分」存储，展示与计算须 ÷100。\n- 付费客户数：有效订单 `customer_id` 去重，禁用 `customer_name` 去重。\n- 净营收 / 退款：只扣 SUCCESS 退款，FAILED 不冲减，退款按原订单月份归属。\n- 时间左闭右开、Asia/Shanghai 本地时间。\n- 数据质量：空月份补齐规则（1–4 月缺 3 月需借 `calendar_month` 左连接补 0）；`product_code` 重复不得建唯一键；`event.code`（如 `000123`）保留前导零字符串语义；`event.note` 空串与 NULL 语义不同。\n\n**命名视图（views/）**\n- `valid_order`：有效订单口径视图（PAID + 未删除 + 客户存在且非内部），输出订单金额、下单时间、订单月份、客户属性。\n- `order_net_revenue`：净营收视图——先按 `order_id` 汇总 SUCCESS 退款（FAILED 不冲减）再左连接有效订单，净额 = 订单金额 − 成功退款金额，退款按原订单月份归属。\n\n**Cube（cubes/）**\n- `valid_order_metrics`（基座 `valid_order`）：订单数、销售额（分/元）、付费客户数（去重）；维度：客户ID、客户名、区域；时间维度：订单月份。\n- `net_revenue_metrics`（基座 `order_net_revenue`）：净营收（分/元）、销售额、退款额；维度：客户ID；时间维度：订单月份。\n\n**校验**\n- 两个 Cube 的度量/维度转译均通过。\n- `validate_mdl`：**通过，无问题**。\n\n## 尚需你操作\n改动已写入工程，但**发布动作只能在页面完成**：请前往「语义建模」页审阅以上文件与口径，确认后发布，发布后问数链路方可用新模型、Cube 与视图。\n\n> 说明：本库未在工作区暴露 `raw/` 或独立 semantic-source 文件；上述业务语义取自本知识库已注入的业务口径文档（有效订单、分/元、净营收、退款归属、空月份、重复 product_code、编码 `000123` 等），并非把任何预期答案当作查询依据。",
+  "tools": [
+    {
+      "name": "list_modeling_state",
+      "input": "{}",
+      "result": ""
+    },
+    {
+      "name": "list_files",
+      "input": "{}",
+      "result": ""
+    },
+    {
+      "name": "list_modeling_state",
+      "input": null,
+      "result": "\"## 知识库建模现状：wren-gap-live-20261006-233059（group_id: `73b26360-df5c-497e-9137-bdfe7f50df67`, MDL 状态: DIRTY, 版本: 7）\\n\\n### 逻辑模型（工作区 models/）\\n\\n- `calendar_month`（数据集 `3f34f9ab-78c4-40f2-af06-05e10f820f4a「calendar_month」） → data_agent.ds_81b637d8_eb5f1c0d_calendar_month：月度数据表，用于按月份记录和汇总相关业务指标数据\\n  - month（VARCHAR(1024)）：月份，格式为'yyyy-MM'，包含2025-01,2025-02,2025-03等\\n- `customer`（数据集 `9a325ea8-e864-4aca-a3d5-55d0913eba9f「customer」） → data_agent.ds_81b637d8_c37c975d_customer：客户信息表，用于存储客户的基本信息，包括客户ID、名称、是否为内部客户及所属区域\\n  - customer_id（BIGINT）：客户ID，唯一标识客户，包含1,2,3等\\n  - customer_name（VARCHAR(1024)）：客户名称，包含张三,李四,无订单客户等\\n  - is_internal（BIGINT）：是否内部客户标记，0表示否，1表示是\\n  - region（VARCHAR(1024)）：客户所属区域，包含华东,华北,华南等\\n- `event`（数据集 `6e48c296-d334-4118-b98d-8e3947d1e628「event」） → data_agent.ds_81b637d8_57a6b6a9_event：事件明细表，用于记录事件的基础信息、金额、编码及备注等内容。\\n  - event_id（BIGINT）：事件ID，唯一标识一条事件记录，如1,2,3等\\n  - value_cents（BIGINT）：金额（以分为单位），如1表示1分\\n  - code（BIGINT）：编码，定长字符串，如000123\\n  - note（VARCHAR(1024)）：备注，补充说明文本\\n- `order`（数据集 `515e8631-4dd7-49e9-859c-a79e707f4721「order」） → data_agent.ds_81b637d8_06fd368c_order：订单表，记录每笔订单的基础信息，包括订单ID、客户ID、下单时间、订单金额、订单状态及删除标记，用于订单交易数据的管理与查询。\\n  - order_id（BIGINT）：订单ID，订单的唯一标识，包含1001,1002,1003等\\n  - customer_id（BIGINT）：客户ID，关联下单客户，包含1,2,999等\\n  - order_time（DATETIME）：下单时间，格式为'yyyy-MM-dd HH:mm:ss'，包含2025-01-01 00:00:00,2025-01-31 23:59:59等\\n  - amount_cents（BIGINT）：订单金额，单位为分，包含10000,20000,30000等\\n  - status（VARCHAR(1024)）：订单状态，包含PAID(已支付),CANCELLED(已取消),REFUNDED(已退款)等\\n  - is_deleted（BIGINT）：删除标记，0表示未删除，1表示已删除\\n- `order_item`（数据集 `2d6ba4b2-763f-44b6-8c29-fa490f57832f「order_item」） → data_agent.ds_81b637d8_e75ce6ce_order_item：订单明细表，记录每个订单行对应的订单、商品及行金额信息，用于订单商品明细的存储与分析。\\n  - item_id（BIGINT）：订单明细行唯一标识ID，如1,2,3\\n  - order_id（BIGINT）：订单唯一标识ID，如1001,1002,1003\\n  - product_code（VARCHAR(1024)）：商品编码，如P1,P2,P3\\n  - line_cents（BIGINT）：订单行金额，单位为分（cents），如4000,6000,20000\\n- `product`（数据集 `001fe812-7339-45da-9036-83f3bcd7ded4「product」） → data_agent.ds_81b637d8_c29f5f66_product：产品基础信息表，用于存储产品的行ID、产品编码及产品名称等基本信息，支撑产品维度的查询与分析。\\n  - product_row_id（BIGINT）：产品行ID，唯一标识每一行记录，包含1,2,3等\\n  - product_code（VARCHAR(1024)）：产品编码，产品的唯一业务标识，包含P1,P2,P3等\\n  - product_name（VARCHAR(1024)）：产品名称，产品的显示名称，包含产品一,产品二,重复产品二等\\n- `refund`（数据集 `52f337be-6f5a-4479-ad8b-2ae70e490172「refund」） → data_agent.ds_81b637d8_4156438f_refund：退款记录表，用于记录每笔订单的退款信息，包括退款金额、退款时间和退款状态等，支持退款流程的跟踪与对账。\\n  - refund_id（BIGINT）：退款记录ID，样本值包含1, 2, 3等\\n  - order_id（BIGINT）：订单ID，关联订单表，样本值包含1002, 1003, 1004等\\n  - refund_time（DATETIME）：退款时间，格式为'yyyy-MM-dd HH:mm:ss'，包含2025-02-02 12:00:00等\\n  - refund_cents（BIGINT）：退款金额，单位为分，样本值包含5000, 2000, 3000等\\n  - refund_status（VARCHAR(1024)）：退款状态，样本值包含SUCCESS（成功）、FAILED（失败）等\\n\\n### 关系（relationships.yml）\\n\\n（暂无已确认关系。可调 suggest_relations 计算候选，或经 decide_relation 卡片确认。）\\n\\n### 关系候选（平台队列，待决策）\\n\\n（暂无待决策候选）\\n\\n### Cube（工作区 cubes/）\\n\\n（暂无 Cube；用 write_file 写 cubes/<name>/metadata.yml 创建，写法见 wren_context_instructions）\\n\\n### 视图（工作区 views/，发布后可按视图名查询）\\n\\n（暂无视图；跨表 JOIN/窗口/CTE/HAVING 类复杂口径用 create_view 创建命名视图——statement 只引用逻辑模型名并仅用引擎兼容函数，见工具描述对照表）\\n\\n### 业务规则（工作区 knowledge/rules/）\\n\\n# Business rules\\r\\n\\r\\nAdd custom rules or guidelines for LLM-based query generation here.\\n\""
+    },
+    {
+      "name": "list_files",
+      "input": null,
+      "result": "\"## 工作区文件（18 个）\\n\\n- .gitignore（2 行）\\n- AGENTS.md（51 行）\\n- knowledge/caveats/.gitkeep（0 行）\\n- knowledge/glossary/.gitkeep（0 行）\\n- knowledge/knowledge.yml（1 行）\\n- knowledge/metrics/.gitkeep（0 行）\\n- knowledge/rules/.gitkeep（0 行）\\n- knowledge/rules/general.md（3 行）\\n- knowledge/sql/.gitkeep（0 行）\\n- models/calendar_month/metadata.yml（12 行）\\n- models/customer/metadata.yml（24 行）\\n- models/event/metadata.yml（24 行）\\n- models/order/metadata.yml（32 行）\\n- models/order_item/metadata.yml（24 行）\\n- models/product/metadata.yml（20 行）\\n- models/refund/metadata.yml（28 行）\\n- relationships.yml（9 行）\\n- wren_project.yml（6 行）\\n\""
+    },
+    {
+      "name": "list_files",
+      "input": "{\"group_id\":\"raw\"}",
+      "result": ""
+    },
+    {
+      "name": "read_file",
+      "input": "{\"path\":\"knowledge/rules/general.md\"}",
+      "result": ""
+    },
+    {
+      "name": "read_file",
+      "input": "{\"path\":\"relationships.yml\"}",
+      "result": ""
+    },
+    {
+      "name": "read_file",
+      "input": "{\"path\":\"models/order/metadata.yml\"}",
+      "result": ""
+    },
+    {
+      "name": "list_files",
+      "input": null,
+      "result": "\"error: 未知或无权访问的知识库 'raw'\""
+    },
+    {
+      "name": "read_file",
+      "input": null,
+      "result": "\"# Business rules\\r\\n\\r\\nAdd custom rules or guidelines for LLM-based query generation here.\\r\\n\""
+    },
+    {
+      "name": "read_file",
+      "input": null,
+      "result": "\"relationships: []\\r\\n# Example:\\r\\n# relationships:\\r\\n#   - name: orders_customers\\r\\n#     models:\\r\\n#       - orders\\r\\n#       - customers\\r\\n#     join_type: MANY_TO_ONE\\r\\n#     condition: orders.customer_id = customers.customer_id\\r\\n\""
+    },
+    {
+      "name": "read_file",
+      "input": null,
+      "result": "\"name: order\\ntable_reference:\\n  catalog: ''\\n  schema: data_agent\\n  table: ds_81b637d8_06fd368c_order\\ncolumns:\\n- name: order_id\\n  type: BIGINT\\n  properties:\\n    description: 订单ID，订单的唯一标识，包含1001,1002,1003等\\n- name: customer_id\\n  type: BIGINT\\n  properties:\\n    description: 客户ID，关联下单客户，包含1,2,999等\\n- name: order_time\\n  type: DATETIME\\n  properties:\\n    description: 下单时间，格式为'yyyy-MM-dd HH:mm:ss'，包含2025-01-01 00:00:00,2025-01-31 23:59:59等\\n- name: amount_cents\\n  type: BIGINT\\n  properties:\\n    description: 订单金额，单位为分，包含10000,20000,30000等\\n- name: status\\n  type: VARCHAR(1024)\\n  properties:\\n    description: 订单状态，包含PAID(已支付),CANCELLED(已取消),REFUNDED(已退款)等\\n- name: is_deleted\\n  type: BIGINT\\n  properties:\\n    description: 删除标记，0表示未删除，1表示已删除\\nproperties:\\n  description: 订单表，记录每笔订单的基础信息，包括订单ID、客户ID、下单时间、订单金额、订单状态及删除标记，用于订单交易数据的管理与查询。\\n\""
+    },
+    {
+      "name": "list_files",
+      "input": "{\"group_id\":\"knowledge\"}",
+      "result": ""
+    },
+    {
+      "name": "read_file",
+      "input": "{\"path\":\"knowledge/knowledge.yml\"}",
+      "result": ""
+    },
+    {
+      "name": "read_file",
+      "input": "{\"path\":\"models/refund/metadata.yml\"}",
+      "result": ""
+    },
+    {
+      "name": "read_file",
+      "input": "{\"path\":\"models/customer/metadata.yml\"}",
+      "result": ""
+    },
+    {
+      "name": "read_file",
+      "input": "{\"path\":\"models/order_item/metadata.yml\"}",
+      "result": ""
+    },
+    {
+      "name": "read_file",
+      "input": "{\"path\":\"models/product/metadata.yml\"}",
+      "result": ""
+    },
+    {
+      "name": "read_file",
+      "input": "{\"path\":\"models/calendar_month/metadata.yml\"}",
+      "result": ""
+    },
+    {
+      "name": "read_file",
+      "input": "{\"path\":\"models/event/metadata.yml\"}",
+      "result": ""
+    },
+    {
+      "name": "list_files",
+      "input": null,
+      "result": "\"error: 未知或无权访问的知识库 'knowledge'\""
+    },
+    {
+      "name": "read_file",
+      "input": null,
+      "result": "\"schema_version: 1\\r\\n\""
+    },
+    {
+      "name": "read_file",
+      "input": null,
+      "result": "\"name: refund\\ntable_reference:\\n  catalog: ''\\n  schema: data_agent\\n  table: ds_81b637d8_4156438f_refund\\ncolumns:\\n- name: refund_id\\n  type: BIGINT\\n  properties:\\n    description: 退款记录ID，样本值包含1, 2, 3等\\n- name: order_id\\n  type: BIGINT\\n  properties:\\n    description: 订单ID，关联订单表，样本值包含1002, 1003, 1004等\\n- name: refund_time\\n  type: DATETIME\\n  properties:\\n    description: 退款时间，格式为'yyyy-MM-dd HH:mm:ss'，包含2025-02-02 12:00:00等\\n- name: refund_cents\\n  type: BIGINT\\n  properties:\\n    description: 退款金额，单位为分，样本值包含5000, 2000, 3000等\\n- name: refund_status\\n  type: VARCHAR(1024)\\n  properties:\\n    description: 退款状态，样本值包含SUCCESS（成功）、FAILED（失败）等\\nproperties:\\n  description: 退款记录表，用于记录每笔订单的退款信息，包括退款金额、退款时间和退款状态等，支持退款流程的跟踪与对账。\\n\""
+    },
+    {
+      "name": "read_file",
+      "input": null,
+      "result": "\"name: customer\\ntable_reference:\\n  catalog: ''\\n  schema: data_agent\\n  table: ds_81b637d8_c37c975d_customer\\ncolumns:\\n- name: customer_id\\n  type: BIGINT\\n  properties:\\n    description: 客户ID，唯一标识客户，包含1,2,3等\\n- name: customer_name\\n  type: VARCHAR(1024)\\n  properties:\\n    description: 客户名称，包含张三,李四,无订单客户等\\n- name: is_internal\\n  type: BIGINT\\n  properties:\\n    description: 是否内部客户标记，0表示否，1表示是\\n- name: region\\n  type: VARCHAR(1024)\\n  properties:\\n    description: 客户所属区域，包含华东,华北,华南等\\nproperties:\\n  description: 客户信息表，用于存储客户的基本信息，包括客户ID、名称、是否为内部客户及所属区域\\n\""
+    },
+    {
+      "name": "read_file",
+      "input": null,
+      "result": "\"name: order_item\\ntable_reference:\\n  catalog: ''\\n  schema: data_agent\\n  table: ds_81b637d8_e75ce6ce_order_item\\ncolumns:\\n- name: item_id\\n  type: BIGINT\\n  properties:\\n    description: 订单明细行唯一标识ID，如1,2,3\\n- name: order_id\\n  type: BIGINT\\n  properties:\\n    description: 订单唯一标识ID，如1001,1002,1003\\n- name: product_code\\n  type: VARCHAR(1024)\\n  properties:\\n    description: 商品编码，如P1,P2,P3\\n- name: line_cents\\n  type: BIGINT\\n  properties:\\n    description: 订单行金额，单位为分（cents），如4000,6000,20000\\nproperties:\\n  description: 订单明细表，记录每个订单行对应的订单、商品及行金额信息，用于订单商品明细的存储与分析。\\n\""
+    },
+    {
+      "name": "read_file",
+      "input": null,
+      "result": "\"name: product\\ntable_reference:\\n  catalog: ''\\n  schema: data_agent\\n  table: ds_81b637d8_c29f5f66_product\\ncolumns:\\n- name: product_row_id\\n  type: BIGINT\\n  properties:\\n    description: 产品行ID，唯一标识每一行记录，包含1,2,3等\\n- name: product_code\\n  type: VARCHAR(1024)\\n  properties:\\n    description: 产品编码，产品的唯一业务标识，包含P1,P2,P3等\\n- name: product_name\\n  type: VARCHAR(1024)\\n  properties:\\n    description: 产品名称，产品的显示名称，包含产品一,产品二,重复产品二等\\nproperties:\\n  description: 产品基础信息表，用于存储产品的行ID、产品编码及产品名称等基本信息，支撑产品维度的查询与分析。\\n\""
+    },
+    {
+      "name": "read_file",
+      "input": null,
+      "result": "\"name: calendar_month\\ntable_reference:\\n  catalog: ''\\n  schema: data_agent\\n  table: ds_81b637d8_eb5f1c0d_calendar_month\\ncolumns:\\n- name: month\\n  type: VARCHAR(1024)\\n  properties:\\n    description: 月份，格式为'yyyy-MM'，包含2025-01,2025-02,2025-03等\\nproperties:\\n  description: 月度数据表，用于按月份记录和汇总相关业务指标数据\\n\""
+    },
+    {
+      "name": "read_file",
+      "input": null,
+      "result": "\"name: event\\ntable_reference:\\n  catalog: ''\\n  schema: data_agent\\n  table: ds_81b637d8_57a6b6a9_event\\ncolumns:\\n- name: event_id\\n  type: BIGINT\\n  properties:\\n    description: 事件ID，唯一标识一条事件记录，如1,2,3等\\n- name: value_cents\\n  type: BIGINT\\n  properties:\\n    description: 金额（以分为单位），如1表示1分\\n- name: code\\n  type: BIGINT\\n  properties:\\n    description: 编码，定长字符串，如000123\\n- name: note\\n  type: VARCHAR(1024)\\n  properties:\\n    description: 备注，补充说明文本\\nproperties:\\n  description: 事件明细表，用于记录事件的基础信息、金额、编码及备注等内容。\\n\""
+    },
+    {
+      "name": "list_files",
+      "input": "{}",
+      "result": ""
+    },
+    {
+      "name": "read_file",
+      "input": "{\"path\":\"AGENTS.md\"}",
+      "result": ""
+    },
+    {
+      "name": "list_files",
+      "input": null,
+      "result": "\"## 工作区文件（18 个）\\n\\n- .gitignore（2 行）\\n- AGENTS.md（51 行）\\n- knowledge/caveats/.gitkeep（0 行）\\n- knowledge/glossary/.gitkeep（0 行）\\n- knowledge/knowledge.yml（1 行）\\n- knowledge/metrics/.gitkeep（0 行）\\n- knowledge/rules/.gitkeep（0 行）\\n- knowledge/rules/general.md（3 行）\\n- knowledge/sql/.gitkeep（0 行）\\n- models/calendar_month/metadata.yml（12 行）\\n- models/customer/metadata.yml（24 行）\\n- models/event/metadata.yml（24 行）\\n- models/order/metadata.yml（32 行）\\n- models/order_item/metadata.yml（24 行）\\n- models/product/metadata.yml（20 行）\\n- models/refund/metadata.yml（28 行）\\n- relationships.yml（9 行）\\n- wren_project.yml（6 行）\\n\""
+    },
+    {
+      "name": "read_file",
+      "input": null,
+      "result": "\"# AGENTS.md\\r\\n\\r\\nThis project uses [Wren Engine](https://github.com/Canner/WrenAI) as the semantic layer for data querying. Queries are written against MDL model names, not raw database tables.\\r\\n\\r\\n## Answering data questions\\r\\n\\r\\nWhen the user asks about data, metrics, reports, or business questions, follow this workflow:\\r\\n\\r\\n1. `wren memory fetch -q \\\"<question>\\\"` — get relevant schema context\\r\\n2. `wren memory recall -q \\\"<question>\\\" --limit 3` — find similar past queries\\r\\n3. Write SQL using model names from the MDL (not raw table names)\\r\\n4. `wren --sql \\\"<sql>\\\"` — execute through the semantic layer\\r\\n5. `wren memory store --nl \\\"<question>\\\" --sql \\\"<sql>\\\"` — store confirmed results\\r\\n\\r\\nIf this is the first query in the session, also run `wren context instructions` to load business rules.\\r\\n\\r\\n## Modifying the data model\\r\\n\\r\\nWhen the user wants to add models, change schema, or onboard a new table:\\r\\n\\r\\n1. Edit YAML files in `models/`, `views/`, or `relationships.yml`\\r\\n2. `wren context validate` — check structure\\r\\n3. `wren context build` — compile to `target/mdl.json`\\r\\n4. `wren memory index` — re-index schema for search\\r\\n\\r\\n## Capturing business context\\r\\n\\r\\nRules the schema can't express — canonical tables, default filters, units, enum meanings — go in `knowledge/rules/*.md` (read by `wren context instructions`). Confirmed NL→SQL examples are saved with `wren memory store` (step 5 above), which writes them to `knowledge/sql/`. Both live in the project and are committed with it.\\r\\n\\r\\n## Prerequisites\\r\\n\\r\\nThis project requires the `wren` CLI. Install with your data source extra:\\r\\n\\r\\n```bash\\r\\npip install \\\"wrenai[postgres,memory,ui]\\\"\\r\\n```\\r\\n\\r\\nReplace `postgres` with your data source (`mysql`, `bigquery`, `snowflake`, `clickhouse`, `trino`, `mssql`, `databricks`, `redshift`, `spark`, `athena`, `oracle`). The `memory` extra upgrades recall to semantic (embedding) search — without it, `memory store` / `index` / `recall` still work over the `knowledge/` files. `ui` enables the interactive UI.\\r\\n\\r\\nSee https://docs.getwren.ai/oss/engine/get_started/installation for full setup.\\r\\n\\r\\n## Quick reference\\r\\n\\r\\n| Task | Command |\\r\\n|------|---------|\\r\\n| Run a query | `wren --sql \\\"SELECT ...\\\"` |\\r\\n| Preview planned SQL | `wren dry-plan --sql \\\"SELECT ...\\\"` |\\r\\n| Show available models | `wren context show` |\\r\\n| Check connection | `wren profile debug` |\\r\\n| Check memory index | `wren memory status` |\\r\\n| Rebuild after changes | `wren context build && wren memory index` |\\r\\n\""
+    },
+    {
+      "name": "list_files",
+      "input": "{\"group_id\":\".\"}",
+      "result": ""
+    },
+    {
+      "name": "read_file",
+      "input": "{\"path\":\"raw/semantic-source.md\"}",
+      "result": ""
+    },
+    {
+      "name": "read_file",
+      "input": "{\"path\":\"semantic-source.md\"}",
+      "result": ""
+    },
+    {
+      "name": "list_files",
+      "input": null,
+      "result": "\"error: 未知或无权访问的知识库 '.'\""
+    },
+    {
+      "name": "read_file",
+      "input": null,
+      "result": "\"error: 文件不存在：raw/semantic-source.md（先调用 list_files 查看现有文件）\""
+    },
+    {
+      "name": "read_file",
+      "input": null,
+      "result": "\"error: 文件不存在：semantic-source.md（先调用 list_files 查看现有文件）\""
+    },
+    {
+      "name": "list_business_rules",
+      "input": "{}",
+      "result": ""
+    },
+    {
+      "name": "list_terms",
+      "input": "{}",
+      "result": ""
+    },
+    {
+      "name": "wren_skills_list",
+      "input": "{}",
+      "result": ""
+    },
+    {
+      "name": "list_business_rules",
+      "input": null,
+      "result": "\"\\n### 业务规则（工作区 knowledge/rules/）\\n\\n# Business rules\\r\\n\\r\\nAdd custom rules or guidelines for LLM-based query generation here.\\n\""
+    },
+    {
+      "name": "list_terms",
+      "input": null,
+      "result": "\"（暂无业务术语）\""
+    },
+    {
+      "name": "wren_skills_list",
+      "input": null,
+      "result": "\"Available skills (run `wren skills get <name>`):\\r\\n  dlt-connector   Connect SaaS data (HubSpot, Stripe, Salesforce, GitHub, Slack, etc.) to Wren Engine for SQL analysis\\r\\n                  references: dlt_sources    scripts: introspect_dlt\\r\\n  enrich-context  Augment a Wren project with business context that DB schema cannot carry — enum value meanings, uni…\\r\\n                  references: cube_proposals, gap_catalog\\r\\n  genbi           Turn a Wren project's context layer into a shareable, browser-side GenBI web app and deploy it to t…\\r\\n  generate-mdl    Generate a Wren MDL project by exploring a database with available tools (SQLAlchemy, database driv…\\r\\n  onboarding      Onboard a user to Wren Engine end-to-end\\r\\n  usage           Wren Engine CLI workflow guide for AI agents\\r\\n                  references: memory, wren-sql\""
+    },
+    {
+      "name": "wren_skills_get",
+      "input": "{\"name\":\"enrich-context\",\"full\":true}",
+      "result": ""
+    },
+    {
+      "name": "wren_skills_get",
+      "input": null,
+      "result": "\"---\\r\\nname: enrich-context\\r\\ndescription: \\\"Augment a Wren project with business context that DB schema cannot carry — enum value meanings, units (USD vs cents, ms vs sec), NULL semantics, magic sentinels (-1 = unknown), soft-delete default filters, business synonyms, time-grain / TZ conventions, cross-system identifiers, currency rules, canonical-table preferences, AND named aggregation metrics (ARR, churn, DAU, WAU, NRR) proposed as cubes. Runs in one of two modes selected at session start: `grill` (one question at a time, user-driven) or `auto-pilot` (agent infers and applies, escalates only on conflicts and high-blast-radius additions like new cubes / views / relationships). Reads everything under <project>/raw/ (PDFs, glossaries, handbooks, code, data dictionaries) and optionally samples low-cardinality columns from the live DB (grill mode), compares against the current MDL / cubes / knowledge (rules + NL→SQL pairs), then fills gaps via the ten-category gap catalog and the cube proposal flow. Confirmed findings are written back to the right sink. Use when: user says 'enrich context', 'augment my project', 'grill me on this project', 'auto-fill my context', 'agent doesn't understand our docs / enum values / units / null meanings', 'business context is missing', 'what does status=A mean', 'is this amount in USD or cents', 'we keep getting wrong aggregations', 'add cubes for ARR / DAU / churn', 'we have a handbook / glossary / data dictionary the agent should know'; or after generating an MDL and noticing the agent lacks business semantics.\\\"\\r\\nlicense: Apache-2.0\\r\\nmetadata:\\r\\n  author: wrenai\\r\\n---\\r\\n\\r\\n# Wren Enrich Context — Fill the Business-Context Gap\\r\\n\\r\\nThis skill exists because most business context never lives in a DB schema — it lives in handbooks, glossaries, finance reports, support playbooks, code comments, Slack rules-of-thumb. The agent reads those raw artifacts, finds what's missing from the Wren project, and **either grills the user one question at a time (grill mode) or applies its best inferences directly and hands over an audit (auto-pilot mode)** before writing back. The output lands in the sinks each project already has — MDL, `cubes/`, `knowledge/rules/`, and `knowledge/sql/` — no new artifact, no new tooling.\\r\\n\\r\\n## Hard rules — READ FIRST\\r\\n\\r\\n### Universal (apply to both modes)\\r\\n\\r\\n1. **Only add, never modify existing.** If you find an existing MDL description / relationship / rule that looks wrong, **do not edit it**. Surface it on the \\\"please fix manually\\\" list shown in Step 9.\\r\\n2. **Every MDL edit must validate.** Right after any MDL YAML change, run `wren context validate`. If it fails, **revert that single change** and feed the error back. Never leave a project in an invalid state.\\r\\n3. **Pre-draft every proposal.** Whether you're showing the draft to the user (grill) or applying it directly (auto-pilot), generate the concrete content — never lazy-ask \\\"what should the description say?\\\".\\r\\n4. **Be explicit about confidence.** In grill mode, open Lane 3 inference questions with \\\"I'm guessing — \\\". In auto-pilot, tag every Lane 3 inference and partial Lane 2 match in the Step 9 audit with confidence (high / med / low) and source.\\r\\n\\r\\n### Grill mode only\\r\\n\\r\\n5. **One question at a time. Grill relentlessly.** Walk every gap top-down, resolve one decision before moving to the next. Provide a recommended answer for every question.\\r\\n6. **Skip is final for this session.** No pending queue, no nagging next round. If the user wants to revisit, they re-run the skill.\\r\\n\\r\\n### Auto-pilot mode only\\r\\n\\r\\n7. **Drop into grill for three cases.** Always interrupt auto-pilot and ask the user when:\\r\\n   - (a) **Lane 2 conflict** — raw and current MDL disagree.\\r\\n   - (b) **High-blast-radius proposal (any lane)** — new cube, new view, new relationship, or new MDL metric/calculated column. These become public artifacts visible to every future agent session, so blast radius doesn't depend on whether the trigger was raw evidence (Lane 2) or inference (Lane 3).\\r\\n   - (c) **Lane 2 routing ambiguity** — you can't confidently pick a sink (MDL / `knowledge/rules/` / `knowledge/sql/` / `cubes/`).\\r\\n\\r\\n   Everything else: apply directly and log to the audit list.\\r\\n\\r\\n## Step 0 — Mode selection (before anything else)\\r\\n\\r\\nBefore touching the project or reading any file, ask the user which mode to run in. Lock the choice for the whole session — **no mid-session switching**; the user re-runs to change.\\r\\n\\r\\n> Two modes for this session:\\r\\n>\\r\\n> **a) Grill mode** — I walk every gap with you, one question at a time, proposing a draft and waiting for your accept / edit / skip. You stay in the driver's seat. Best when the raw material is sensitive, when you want to learn what I don't know about your project, or when you'd rather review than re-do.\\r\\n>\\r\\n> **b) Auto-pilot mode** — I read raw + current context, make my best inferences, and apply them. I'll only stop to grill you on (1) conflicts between raw and existing MDL and (2) high-blast-radius additions like new metrics, views, or relationships. The session ends with a full diff + confidence-tagged inference list for you to audit.\\r\\n>\\r\\n> Which? (a / b)\\r\\n\\r\\nRemember the choice as `MODE = grill | autopilot` and use it to branch Steps 6 and 9.\\r\\n\\r\\n## Preflight\\r\\n\\r\\n### Step 1 — Choose the Wren project\\r\\n\\r\\n**Always ask the user which project to enrich before doing anything else** — never assume cwd. A user can have several Wren projects and an ambient `~/.wren` profile that doesn't match the one they want to augment.\\r\\n\\r\\nOffer concrete hints in the question so the user can answer in one round-trip:\\r\\n\\r\\n```bash\\r\\n# Hint 1 — does cwd look like a project?\\r\\ntest -f wren_project.yml && pwd\\r\\n\\r\\n# Hint 2 — does ~/.wren/config.yml point at a default project?\\r\\ngrep -E '^project_path:' ~/.wren/config.yml 2>/dev/null\\r\\n```\\r\\n\\r\\nThen ask:\\r\\n\\r\\n> Which Wren projec"
+    },
+    {
+      "name": "suggest_relations",
+      "input": "{}",
+      "result": ""
+    },
+    {
+      "name": "suggest_relations",
+      "input": null,
+      "result": "\"## 关系候选（重算完成）\\n\\n## 知识库建模现状：wren-gap-live-20261006-233059（group_id: `73b26360-df5c-497e-9137-bdfe7f50df67`, MDL 状态: DIRTY, 版本: 7）\\n\\n### 逻辑模型（工作区 models/）\\n\\n- `calendar_month`（数据集 `3f34f9ab-78c4-40f2-af06-05e10f820f4a「calendar_month」） → data_agent.ds_81b637d8_eb5f1c0d_calendar_month：月度数据表，用于按月份记录和汇总相关业务指标数据\\n  - month（VARCHAR(1024)）：月份，格式为'yyyy-MM'，包含2025-01,2025-02,2025-03等\\n- `customer`（数据集 `9a325ea8-e864-4aca-a3d5-55d0913eba9f「customer」） → data_agent.ds_81b637d8_c37c975d_customer：客户信息表，用于存储客户的基本信息，包括客户ID、名称、是否为内部客户及所属区域\\n  - customer_id（BIGINT）：客户ID，唯一标识客户，包含1,2,3等\\n  - customer_name（VARCHAR(1024)）：客户名称，包含张三,李四,无订单客户等\\n  - is_internal（BIGINT）：是否内部客户标记，0表示否，1表示是\\n  - region（VARCHAR(1024)）：客户所属区域，包含华东,华北,华南等\\n- `event`（数据集 `6e48c296-d334-4118-b98d-8e3947d1e628「event」） → data_agent.ds_81b637d8_57a6b6a9_event：事件明细表，用于记录事件的基础信息、金额、编码及备注等内容。\\n  - event_id（BIGINT）：事件ID，唯一标识一条事件记录，如1,2,3等\\n  - value_cents（BIGINT）：金额（以分为单位），如1表示1分\\n  - code（BIGINT）：编码，定长字符串，如000123\\n  - note（VARCHAR(1024)）：备注，补充说明文本\\n- `order`（数据集 `515e8631-4dd7-49e9-859c-a79e707f4721「order」） → data_agent.ds_81b637d8_06fd368c_order：订单表，记录每笔订单的基础信息，包括订单ID、客户ID、下单时间、订单金额、订单状态及删除标记，用于订单交易数据的管理与查询。\\n  - order_id（BIGINT）：订单ID，订单的唯一标识，包含1001,1002,1003等\\n  - customer_id（BIGINT）：客户ID，关联下单客户，包含1,2,999等\\n  - order_time（DATETIME）：下单时间，格式为'yyyy-MM-dd HH:mm:ss'，包含2025-01-01 00:00:00,2025-01-31 23:59:59等\\n  - amount_cents（BIGINT）：订单金额，单位为分，包含10000,20000,30000等\\n  - status（VARCHAR(1024)）：订单状态，包含PAID(已支付),CANCELLED(已取消),REFUNDED(已退款)等\\n  - is_deleted（BIGINT）：删除标记，0表示未删除，1表示已删除\\n- `order_item`（数据集 `2d6ba4b2-763f-44b6-8c29-fa490f57832f「order_item」） → data_agent.ds_81b637d8_e75ce6ce_order_item：订单明细表，记录每个订单行对应的订单、商品及行金额信息，用于订单商品明细的存储与分析。\\n  - item_id（BIGINT）：订单明细行唯一标识ID，如1,2,3\\n  - order_id（BIGINT）：订单唯一标识ID，如1001,1002,1003\\n  - product_code（VARCHAR(1024)）：商品编码，如P1,P2,P3\\n  - line_cents（BIGINT）：订单行金额，单位为分（cents），如4000,6000,20000\\n- `product`（数据集 `001fe812-7339-45da-9036-83f3bcd7ded4「product」） → data_agent.ds_81b637d8_c29f5f66_product：产品基础信息表，用于存储产品的行ID、产品编码及产品名称等基本信息，支撑产品维度的查询与分析。\\n  - product_row_id（BIGINT）：产品行ID，唯一标识每一行记录，包含1,2,3等\\n  - product_code（VARCHAR(1024)）：产品编码，产品的唯一业务标识，包含P1,P2,P3等\\n  - product_name（VARCHAR(1024)）：产品名称，产品的显示名称，包含产品一,产品二,重复产品二等\\n- `refund`（数据集 `52f337be-6f5a-4479-ad8b-2ae70e490172「refund」） → data_agent.ds_81b637d8_4156438f_refund：退款记录表，用于记录每笔订单的退款信息，包括退款金额、退款时间和退款状态等，支持退款流程的跟踪与对账。\\n  - refund_id（BIGINT）：退款记录ID，样本值包含1, 2, 3等\\n  - order_id（BIGINT）：订单ID，关联订单表，样本值包含1002, 1003, 1004等\\n  - refund_time（DATETIME）：退款时间，格式为'yyyy-MM-dd HH:mm:ss'，包含2025-02-02 12:00:00等\\n  - refund_cents（BIGINT）：退款金额，单位为分，样本值包含5000, 2000, 3000等\\n  - refund_status（VARCHAR(1024)）：退款状态，样本值包含SUCCESS（成功）、FAILED（失败）等\\n\\n### 关系（relationships.yml）\\n\\n（暂无已确认关系。可调 suggest_relations 计算候选，或经 decide_relation 卡片确认。）\\n\\n### 关系候选（平台队列，待决策）\\n\\n- `73058893-31a6-46c4-adba-4da0a41ba32b` refund.order_id → order.order_id｜MANY_TO_ONE｜来源 llm\\n- `75b74e32-9104-414a-a691-a64620d37349` order.customer_id → customer.customer_id｜MANY_TO_ONE｜来源 llm\\n- `ecf92078-48f9-4e08-9c84-7a03ea858d00` order_item.product_code → product.product_code｜基数未探测｜来源 llm\\n（把以上候选一次性整理成清单——每条含 表.字段 → 表.字段与连接基数——用 decide_relations 批量提交，由用户在确认卡上多选；不要逐条调用 decide_relation。）\\n\\n### Cube（工作区 cubes/）\\n\\n（暂无 Cube；用 write_file 写 cubes/<name>/metadata.yml 创建，写法见 wren_context_instructions）\\n\\n### 视图（工作区 views/，发布后可按视图名查询）\\n\\n（暂无视图；跨表 JOIN/窗口/CTE/HAVING 类复杂口径用 create_view 创建命名视图——statement 只引用逻辑模型名并仅用引擎兼容函数，见工具描述对照表）\\n\\n### 业务规则（工作区 knowledge/rules/）\\n\\n# Business rules\\r\\n\\r\\nAdd custom rules or guidelines for LLM-based query generation here.\\n\""
+    },
+    {
+      "name": "decide_relations",
+      "input": "{\"relations_json\":\"[{\\\"relation_id\\\":\\\"73058893-31a6-46c4-adba-4da0a41ba32b\\\",\\\"action\\\":\\\"CONFIRM\\\",\\\"join_type\\\":\\\"MANY_TO_ONE\\\"},{\\\"relation_id\\\":\\\"75b74e32-9104-414a-a691-a64620d37349\\\",\\\"action\\\":\\\"CONFIRM\\\",\\\"join_type\\\":\\\"MANY_TO_ONE\\\"},{\\\"relation_id\\\":\\\"ecf92078-48f9-4e08-9c84-7a03ea858d00\\\",\\\"action\\\":\\\"REJECT\\\"}]\"}",
+      "result": ""
+    },
+    {
+      "name": "decide_relations",
+      "input": null,
+      "result": "\"## 批量决策完成\\n\\n- 已确认 `73058893-31a6-46c4-adba-4da0a41ba32b`（order_id → order_id）：退款记录关联订单ID，订单表提供订单金额、状态等信息，属于事实表按订单维度关联维表\\n- 已确认 `75b74e32-9104-414a-a691-a64620d37349`（customer_id → customer_id）：订单记录下单客户ID，客户表提供客户名称与区域等属性，属于事实表按客户维度关联维表\\n- 已否决 ecf92078-48f9-4e08-9c84-7a03ea858d00\\n\\n共确认 2 条，否决 1 条，跳过 0 条。\\n\\n### 工程校验（context validate --strict）\\n\\n通过。\\nNote: no profile bound to this project. Connection will fall back to the\\r\\n  globally active profile in ~/.wren/profiles.yml.\\r\\n  Run `wren context set-profile <name>` to pin one explicitly.\\r\\nValid — 7 models, 0 views, 1 relationships.\\n*(语义模型已有变更待发布，收尾时请调用 validate_mdl 并引导用户到「语义建模」页发布。)*\""
+    },
+    {
+      "name": "write_file",
+      "input": "{\"path\":\"knowledge/rules/general.md\",\"reason\":\"固化有效订单口径、分/元单位、付费客户去重、退款归属、空月份补齐与重复 product_code/编码 000123 等数据质量规则\",\"content\":\"# Business rules\\n\\n本文件是电商测试库的业务口径唯一说明，问数与取数一律遵循以下约定。\\n\\n## Currency\\n\\n- 所有金额字段（`order.amount_cents`、`order_item.line_cents`、`refund.refund_cents`、`event.value_cents`）均以人民币「分」存储。\\n- 面向用户展示金额时除以 100 换算为「元」，禁止把「分」当成「元」直接展示或计算。\\n- 例：`amount_cents = 10000` 表示 100.00 元。\\n\\n## Default filters\\n\\n- 「有效订单」口径：`order.status = 'PAID'` 且 `order.is_deleted = 0`，且关联客户存在（`order.customer_id` 能关联到 `customer`）且 `customer.is_internal = 0`。\\n- 未知客户、空客户（`customer_id` 无对应客户或为 NULL）都不计入有效订单；但应在数据质量报告中保留其异常数量，不得直接静默丢弃。\\n- 金额为 0 的有效订单仍计入订单数与付费客户数。\\n- `FAILED` 状态的退款不冲减营收。\\n- 退款按原订单月份归属，而不是按退款时间归属。\\n- 时间范围为左闭右开；时间为 Asia/Shanghai 本地时间，不做 UTC 换算。\\n\\n## Naming conventions\\n\\n- 「销售额」默认指有效订单总额（有效订单 `amount_cents` 之和 / 100，单位元）。\\n- 「净营收」指有效订单金额减去关联该订单的 `SUCCESS` 退款金额（单位元）。\\n- 「退款率」在用户未明确是笔数口径还是金额口径时，必须先向用户澄清，不得自行假定。\\n- 「付费客户数」指有效订单 `customer_id` 去重计数；客户名称（`customer_name`）不唯一，禁止用名称去重。\\n\\n## Data quality caveats\\n\\n- 订单与订单明细为一对多：禁止先连接 `order_item` 再累加订单级 `order.amount_cents`，否则会因明细行放大而重复计数。订单级金额一律在订单粒度汇总。\\n- `order_item.product_code` 刻意包含重复值（如 P2 出现多次），**不得**声明 `order_item` 到 `product` 为多对一唯一关系；`product.product_code` 也不是唯一键。明细到商品不建立唯一关联。\\n- `event.code` 是编码字符串（如 `000123`），必须保留前导零的字符串语义，禁止当作整数导致前导零丢失。\\n- `event.note` 的空字符串与 NULL 具有不同业务含义，CSV 导入通道需声明是否保留该差异。\\n- `refund` 与 `order` 虽均为事实表，但 `refund.order_id → order.order_id` 存在业务关联（退款按订单归属），该关系成立。\\n- 1 至 4 月趋势须补齐缺失月份（如 3 月为 0）：仅按订单分组不会自然产生空月份行，须借助 `calendar_month` 左连接补齐。\\n\"}",
+      "result": ""
+    },
+    {
+      "name": "write_file",
+      "input": null,
+      "result": "\"已写入 knowledge/rules/general.md（34 行，预检通过）。\\n变更说明：固化有效订单口径、分/元单位、付费客户去重、退款归属、空月份补齐与重复 product_code/编码 000123 等数据质量规则\\n\\n*(语义模型已有变更待发布，收尾时请调用 validate_mdl 并引导用户到「语义建模」页发布。)*\""
+    },
+    {
+      "name": "create_view",
+      "input": "{\"name\":\"valid_order\",\"statement\":\"SELECT\\n  o.order_id AS order_id,\\n  o.customer_id AS customer_id,\\n  o.order_time AS order_time,\\n  DATE_TRUNC('month', o.order_time) AS order_month,\\n  o.amount_cents AS amount_cents,\\n  c.customer_name AS customer_name,\\n  c.region AS region\\nFROM order o\\nJOIN customer c ON o.customer_id = c.customer_id\\nWHERE o.status = 'PAID'\\n  AND o.is_deleted = 0\\n  AND c.is_internal = 0\",\"reason\":\"固化「有效订单」统一口径（PAID + 未删除 + 客户存在且非内部），作为按客户/按月的订单指标基座\",\"description\":\"有效订单口径视图：status=PAID 且未删除，且关联到存在且非内部的客户。金额单位为分，包含订单金额、下单时间与订单月份。未知/空客户不计入。\"}",
+      "result": ""
+    },
+    {
+      "name": "create_view",
+      "input": null,
+      "result": "\"已创建命名视图 valid_order（views/valid_order/metadata.yml + views/valid_order/sql.yml，三道预检通过）。\\n变更说明：固化「有效订单」统一口径（PAID + 未删除 + 客户存在且非内部），作为按客户/按月的订单指标基座\\n\\n*(语义模型已有变更待发布，收尾时请调用 validate_mdl 并引导用户到「语义建模」页发布。)*\""
+    },
+    {
+      "name": "create_view",
+      "input": "{\"name\":\"order_net_revenue\",\"statement\":\"WITH success_refund AS (\\n  SELECT\\n    order_id,\\n    SUM(refund_cents) AS refund_cents\\n  FROM refund\\n  WHERE refund_status = 'SUCCESS'\\n  GROUP BY order_id\\n)\\nSELECT\\n  vo.order_id AS order_id,\\n  vo.customer_id AS customer_id,\\n  vo.order_month AS order_month,\\n  vo.amount_cents AS amount_cents,\\n  IFNULL(r.refund_cents, 0) AS refund_cents,\\n  vo.amount_cents - IFNULL(r.refund_cents, 0) AS net_cents\\nFROM valid_order vo\\nLEFT JOIN success_refund r ON vo.order_id = r.order_id\",\"reason\":\"建立扣成功退款的净营收口径：退款先按 order_id 汇总再关联有效订单，按原订单月份归属，FAILED 不冲减\",\"description\":\"净营收视图：以有效订单为基座，先按 order_id 汇总 SUCCESS 退款再左连接（FAILED 不冲减），净额 = 订单金额 - 成功退款金额，退款按原订单月份归属。金额单位为分。\"}",
+      "result": ""
+    },
+    {
+      "name": "create_view",
+      "input": null,
+      "result": "\"error: 视图试跑失败，未创建（dry-plan SELECT * FROM \\\"order_net_revenue\\\" 对工程副本执行）：\\nError: [INVALID_SQL] Error during planning: table 'wren.public.valid_order' not found phase=SQL_PLANNING\\n提示：请检查 statement 是否引用了不存在的逻辑模型或列（只允许引用 models/ 下的模型名），以及是否使用了引擎不支持的函数（按 create_view 描述中的兼容写法对照改写，如 CURRENT_DATE - INTERVAL N DAY）。\""
+    },
+    {
+      "name": "create_view",
+      "input": "{\"name\":\"order_net_revenue\",\"statement\":\"WITH success_refund AS (\\n  SELECT\\n    order_id,\\n    SUM(refund_cents) AS refund_cents\\n  FROM refund\\n  WHERE refund_status = 'SUCCESS'\\n  GROUP BY order_id\\n),\\nvalid_order AS (\\n  SELECT\\n    o.order_id AS order_id,\\n    o.customer_id AS customer_id,\\n    DATE_TRUNC('month', o.order_time) AS order_month,\\n    o.amount_cents AS amount_cents\\n  FROM order o\\n  JOIN customer c ON o.customer_id = c.customer_id\\n  WHERE o.status = 'PAID'\\n    AND o.is_deleted = 0\\n    AND c.is_internal = 0\\n)\\nSELECT\\n  vo.order_id AS order_id,\\n  vo.customer_id AS customer_id,\\n  vo.order_month AS order_month,\\n  vo.amount_cents AS amount_cents,\\n  IFNULL(r.refund_cents, 0) AS refund_cents,\\n  vo.amount_cents - IFNULL(r.refund_cents, 0) AS net_cents\\nFROM valid_order vo\\nLEFT JOIN success_refund r ON vo.order_id = r.order_id\",\"reason\":\"建立扣成功退款的净营收口径：退款先按 order_id 汇总再关联有效订单，按原订单月份归属，FAILED 不冲减\",\"description\":\"净营收视图：以有效订单（PAID + 未删除 + 客户存在且非内部）为基座，先按 order_id 汇总 SUCCESS 退款再左连接（FAILED 不冲减），净额 = 订单金额 - 成功退款金额，退款按原订单月份归属。金额单位为分。\"}",
+      "result": ""
+    },
+    {
+      "name": "create_view",
+      "input": null,
+      "result": "\"已创建命名视图 order_net_revenue（views/order_net_revenue/metadata.yml + views/order_net_revenue/sql.yml，三道预检通过）。\\n变更说明：建立扣成功退款的净营收口径：退款先按 order_id 汇总再关联有效订单，按原订单月份归属，FAILED 不冲减\\n\\n*(语义模型已有变更待发布，收尾时请调用 validate_mdl 并引导用户到「语义建模」页发布。)*\""
+    },
+    {
+      "name": "write_file",
+      "input": "{\"path\":\"cubes/valid_order_metrics/metadata.yml\",\"reason\":\"建立按客户与按月的有效订单指标 Cube（订单数、销售额分/元、付费客户数去重），基座为 valid_order 视图\",\"content\":\"name: valid_order_metrics\\nbase_object: valid_order\\nmeasures:\\n  - name: order_count\\n    expression: COUNT(*)\\n    type: BIGINT\\n  - name: sales_amount_cents\\n    expression: SUM(amount_cents)\\n    type: BIGINT\\n  - name: sales_amount_yuan\\n    expression: SUM(amount_cents) / 100.0\\n    type: DOUBLE\\n  - name: paying_customers\\n    expression: COUNT(DISTINCT customer_id)\\n    type: BIGINT\\ndimensions:\\n  - name: customer_id\\n    expression: customer_id\\n    type: BIGINT\\n  - name: customer_name\\n    expression: customer_name\\n    type: VARCHAR\\n  - name: region\\n    expression: region\\n    type: VARCHAR\\ntime_dimensions:\\n  - name: order_month\\n    expression: order_month\\n    type: TIMESTAMP\\nproperties:\\n  description: |\\n    有效订单指标：有效订单口径（status=PAID 且未删除，且客户存在且非内部）下的订单数、销售额（分/元）与付费客户数。\\n    付费客户数按 customer_id 去重（禁用 customer_name 去重）。金额字段单位为分，元口径已额外提供 sales_amount_yuan。\\n\"}",
+      "result": ""
+    },
+    {
+      "name": "write_file",
+      "input": null,
+      "result": "\"已写入 cubes/valid_order_metrics/metadata.yml（33 行，预检通过）。\\n变更说明：建立按客户与按月的有效订单指标 Cube（订单数、销售额分/元、付费客户数去重），基座为 valid_order 视图\\n\\n*(语义模型已有变更待发布，收尾时请调用 validate_mdl 并引导用户到「语义建模」页发布。)*\""
+    },
+    {
+      "name": "write_file",
+      "input": "{\"path\":\"cubes/net_revenue_metrics/metadata.yml\",\"reason\":\"建立净营收 Cube（净营收分/元、销售额、退款额），基座为 order_net_revenue 视图，按客户与订单月份分组\",\"content\":\"name: net_revenue_metrics\\nbase_object: order_net_revenue\\nmeasures:\\n  - name: order_count\\n    expression: COUNT(*)\\n    type: BIGINT\\n  - name: sales_amount_cents\\n    expression: SUM(amount_cents)\\n    type: BIGINT\\n  - name: refund_amount_cents\\n    expression: SUM(refund_cents)\\n    type: BIGINT\\n  - name: net_revenue_cents\\n    expression: SUM(net_cents)\\n    type: BIGINT\\n  - name: net_revenue_yuan\\n    expression: SUM(net_cents) / 100.0\\n    type: DOUBLE\\ndimensions:\\n  - name: customer_id\\n    expression: customer_id\\n    type: BIGINT\\ntime_dimensions:\\n  - name: order_month\\n    expression: order_month\\n    type: TIMESTAMP\\nproperties:\\n  description: |\\n    净营收指标：在有效订单基座上扣除 SUCCESS 退款后的净营收。退款先按 order_id 汇总再关联订单（FAILED 不冲减），退款按原订单月份归属。\\n    净营收 = 有效订单金额 - 成功退款金额；金额单位为分，元口径已额外提供 net_revenue_yuan。\\n\"}",
+      "result": ""
+    },
+    {
+      "name": "write_file",
+      "input": null,
+      "result": "\"已写入 cubes/net_revenue_metrics/metadata.yml（30 行，预检通过）。\\n变更说明：建立净营收 Cube（净营收分/元、销售额、退款额），基座为 order_net_revenue 视图，按客户与订单月份分组\\n\\n*(语义模型已有变更待发布，收尾时请调用 validate_mdl 并引导用户到「语义建模」页发布。)*\""
+    },
+    {
+      "name": "wren_cube_query",
+      "input": "{\"measures\":\"order_count,sales_amount_yuan,paying_customers\",\"time_dimension\":\"order_month:month\",\"cube\":\"valid_order_metrics\",\"sql_only\":true,\"dimensions\":\"customer_id,region\"}",
+      "result": ""
+    },
+    {
+      "name": "wren_cube_query",
+      "input": "{\"measures\":\"net_revenue_yuan,sales_amount_cents,refund_amount_cents\",\"time_dimension\":\"order_month:month\",\"cube\":\"net_revenue_metrics\",\"sql_only\":true}",
+      "result": ""
+    },
+    {
+      "name": "wren_cube_query",
+      "input": null,
+      "result": "\"SELECT DATE_TRUNC('month', order_month) AS order_month__month, customer_id AS customer_id, region AS region, COUNT(*) AS order_count, SUM(amount_cents) / 100.0 AS sales_amount_yuan, COUNT(DISTINCT customer_id) AS paying_customers FROM valid_order GROUP BY 1, 2, 3 ORDER BY 1\""
+    },
+    {
+      "name": "wren_cube_query",
+      "input": null,
+      "result": "\"SELECT DATE_TRUNC('month', order_month) AS order_month__month, SUM(net_cents) / 100.0 AS net_revenue_yuan, SUM(amount_cents) AS sales_amount_cents, SUM(refund_cents) AS refund_amount_cents FROM order_net_revenue GROUP BY 1 ORDER BY 1\""
+    },
+    {
+      "name": "validate_mdl",
+      "input": "{}",
+      "result": ""
+    },
+    {
+      "name": "validate_mdl",
+      "input": null,
+      "result": "\"## MDL 校验结果：通过\\n\\n无问题。请引导用户前往「语义建模」页查看并发布语义模型。\\n\""
+    }
+  ],
+  "errors": [],
+  "done": [
+    {
+      "type": "done",
+      "sessionKey": "validation-modeling-e036be0587744b179b70bd8388c46098"
+    },
+    {
+      "type": "done",
+      "sessionKey": "validation-modeling-e036be0587744b179b70bd8388c46098"
+    },
+    {
+      "type": "done",
+      "sessionKey": "validation-modeling-e036be0587744b179b70bd8388c46098"
+    },
+    {
+      "type": "done",
+      "sessionKey": "validation-modeling-e036be0587744b179b70bd8388c46098"
+    },
+    {
+      "type": "done",
+      "sessionKey": "validation-modeling-e036be0587744b179b70bd8388c46098"
+    },
+    {
+      "type": "done",
+      "sessionKey": "validation-modeling-e036be0587744b179b70bd8388c46098"
+    },
+    {
+      "type": "done",
+      "sessionKey": "validation-modeling-e036be0587744b179b70bd8388c46098"
+    },
+    {
+      "type": "done",
+      "sessionKey": "validation-modeling-e036be0587744b179b70bd8388c46098"
+    }
+  ]
+}

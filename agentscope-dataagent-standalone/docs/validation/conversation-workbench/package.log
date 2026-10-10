@@ -1,0 +1,72 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ------------< io.agentscope.examples:agentscope-dataagent >-------------
+[INFO] Building AgentScope Java - DataAgent 2.0.3-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- frontend-maven-plugin:1.15.1:install-node-and-npm (install-node-npm) @ agentscope-dataagent ---
+[INFO] Node v20.19.2 is already installed.
+[INFO] NPM 10.9.2 is already installed.
+[INFO] 
+[INFO] --- frontend-maven-plugin:1.15.1:npm (npm-install) @ agentscope-dataagent ---
+[INFO] Running 'npm install' in D:\workspace\data-agent\agentscope-dataagent-standalone\frontend
+[INFO] 
+[INFO] up to date in 2s
+[INFO] 
+[INFO] 95 packages are looking for funding
+[INFO]   run `npm fund` for details
+[INFO] 
+[INFO] --- frontend-maven-plugin:1.15.1:npm (npm-build) @ agentscope-dataagent ---
+[INFO] Running 'npm run build' in D:\workspace\data-agent\agentscope-dataagent-standalone\frontend
+[INFO] 
+[INFO] > agentscope-dataagent-frontend@0.1.0 build
+[INFO] > tsc --noEmit && vite build
+[INFO] 
+[INFO] vite v6.4.2 building for production...
+[INFO] transforming...
+[INFO] ✓ 2977 modules transformed.
+[INFO] rendering chunks...
+[INFO] computing gzip size...
+[INFO] ../src/main/resources/static/index.html                       1.54 kB │ gzip:     0.88 kB
+[INFO] ../src/main/resources/static/assets/index-CyGpQnRk.css       32.87 kB │ gzip:     6.68 kB
+[INFO] ../src/main/resources/static/assets/ontology-DsU3osZy.js      0.43 kB │ gzip:     0.31 kB
+[INFO] ../src/main/resources/static/assets/index-DsUpiHC_.js     4,240.43 kB │ gzip: 1,308.40 kB
+[INFO] 
+[INFO] (!) Some chunks are larger than 500 kB after minification. Consider:
+[INFO] - Using dynamic import() to code-split the application
+[INFO] - Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+[INFO] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+[INFO] ✓ built in 33.04s
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:resources (default-resources) @ agentscope-dataagent ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] Copying 17 resources
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.15.0:compile (default-compile) @ agentscope-dataagent ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- spotless-maven-plugin:3.4.0:check (default) @ agentscope-dataagent ---
+[INFO] Spotless.Java is keeping 296 files clean - 0 needs changes to be clean, 0 were already clean, 296 were skipped because caching determined they were already clean
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:testResources (default-testResources) @ agentscope-dataagent ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] skip non existing resourceDirectory D:\workspace\data-agent\agentscope-dataagent-standalone\src\test\resources
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.15.0:testCompile (default-testCompile) @ agentscope-dataagent ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- maven-surefire-plugin:3.5.5:test (default-test) @ agentscope-dataagent ---
+[INFO] Tests are skipped.
+[INFO] 
+[INFO] --- maven-jar-plugin:2.4:jar (default-jar) @ agentscope-dataagent ---
+[INFO] Building jar: D:\workspace\data-agent\agentscope-dataagent-standalone\target\agentscope-dataagent-2.0.3-SNAPSHOT.jar
+[INFO] 
+[INFO] --- spring-boot-maven-plugin:4.0.4:repackage (default) @ agentscope-dataagent ---
+[INFO] Attaching repackaged archive D:\workspace\data-agent\agentscope-dataagent-standalone\target\agentscope-dataagent-2.0.3-SNAPSHOT-exec.jar with classifier exec
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  01:11 min
+[INFO] Finished at: 2026-10-07T19:35:47+08:00
+[INFO] ------------------------------------------------------------------------

@@ -1,0 +1,33 @@
+{
+  "question": {
+    "id": "total_sales",
+    "question": "2025年有效订单销售额是多少？",
+    "definition": "统计 2025 自然年（按 order_time）的有效订单销售额。\n- 时间范围：order_time 落在 2025-01-01 00:00:00 至 2025-12-31 23:59:59 之间。\n- 有效订单过滤：status 为 PAID 或 COMPLETED，且 is_deleted = 0。\n- 金额口径：amount_cents 为分，除以 100 得到元；不扣退款。\n- 统计粒度：全期汇总，无分组。\n- 单位：元。\n- 不涉及客户关联。",
+    "sql": "SELECT SUM(amount_cents) / 100.0 AS total_sales_amount\nFROM \"order\"\nWHERE order_time >= '2025-01-01 00:00:00'\n  AND order_time <= '2025-12-31 23:59:59'\n  AND status IN ('PAID', 'COMPLETED')\n  AND is_deleted = 0",
+    "required": true
+  },
+  "status": "EXECUTED",
+  "validation": {
+    "validationId": "6336ed2e-0384-431e-abe0-1881985efbca",
+    "questionHash": "1b7297eda49bd0cafeeaa77ab3b58f9451468bd01d6bbbb88717905f1d74f496",
+    "modelHash": "094914fc03293bc673b732e757d586bfad7e9274ab67a44ebee14d024b2f5b6a",
+    "status": "EXECUTED",
+    "executedAt": "2026-10-07T02:54:59.919573500Z",
+    "result": {
+      "columns": [
+        "total_sales_amount"
+      ],
+      "rows": [
+        {
+          "total_sales_amount": 3749.0
+        }
+      ],
+      "row_count": 1,
+      "truncated": false
+    },
+    "error": null,
+    "truncated": false,
+    "confirmedBy": null,
+    "confirmedAt": null
+  }
+}

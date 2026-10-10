@@ -1,0 +1,6 @@
+{
+  "ok": true,
+  "error": null,
+  "oldContent": "",
+  "newContent": "id: repair_probe_68962a\nquestion: 原始订单表共有多少条记录？\ndefinition: 统计 order 逻辑模型的全部记录数，不增加任何过滤条件（不排除已删除订单、不限制订单状态、不限制时间范围、不关联客户表），即原始订单表的行数。\nsql: |-\n  SELECT COUNT(*) FROM \"order\"\nrequired: false\n"
+}

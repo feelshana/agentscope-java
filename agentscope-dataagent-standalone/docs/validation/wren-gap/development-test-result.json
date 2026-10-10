@@ -1,0 +1,9 @@
+{
+  "phase": "test",
+  "exit_code": 0,
+  "command": [
+    "mvn.cmd",
+    "test"
+  ],
+  "cwd": "D:\\workspace\\data-agent\\agentscope-dataagent-standalone"
+}

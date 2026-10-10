@@ -1,0 +1,128 @@
+{
+  "scope": "Actual platform published snapshot, direct Wren SDK with MySQL; not chat E2E.",
+  "group_id": "73b26360-df5c-497e-9137-bdfe7f50df67",
+  "version": 8,
+  "cases": [
+    {
+      "id": "effective_revenue",
+      "sql": "SELECT SUM(amount_cents)/100.0 AS revenue_yuan FROM valid_order",
+      "expected": [
+        [
+          1050.0
+        ]
+      ],
+      "actual": [
+        [
+          "1050.0000"
+        ]
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "orders_and_customers",
+      "sql": "SELECT COUNT(*) AS order_count,COUNT(DISTINCT customer_id) AS paying_customers FROM valid_order",
+      "expected": [
+        [
+          6,
+          2
+        ]
+      ],
+      "actual": [
+        [
+          6,
+          2
+        ]
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "customer_revenue",
+      "sql": "SELECT customer_name,SUM(amount_cents)/100.0 AS revenue_yuan FROM valid_order GROUP BY customer_id,customer_name ORDER BY revenue_yuan DESC",
+      "expected": [
+        [
+          "李四",
+          700.0
+        ],
+        [
+          "张三",
+          350.0
+        ]
+      ],
+      "actual": [
+        [
+          "李四",
+          "700.0000"
+        ],
+        [
+          "张三",
+          "350.0000"
+        ]
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "net_revenue",
+      "sql": "SELECT SUM(net_cents)/100.0 AS net_revenue_yuan FROM order_net_revenue",
+      "expected": [
+        [
+          950.0
+        ]
+      ],
+      "actual": [
+        [
+          "950.0000"
+        ]
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "events_full_aggregate",
+      "sql": "SELECT COUNT(*) AS event_count,SUM(value_cents)/100.0 AS event_value_yuan FROM event",
+      "expected": [
+        [
+          10005,
+          100.05
+        ]
+      ],
+      "actual": [
+        [
+          10005,
+          "100.0500"
+        ]
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "orphan_customers",
+      "sql": "SELECT COUNT(*) AS orphan_count FROM \"order\" o LEFT JOIN customer c ON o.customer_id=c.customer_id WHERE c.customer_id IS NULL",
+      "expected": [
+        [
+          2
+        ]
+      ],
+      "actual": [
+        [
+          2
+        ]
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "duplicate_product_code",
+      "sql": "SELECT product_code,COUNT(*) AS duplicate_count FROM product GROUP BY product_code HAVING COUNT(*)>1",
+      "expected": [
+        [
+          "P2",
+          2
+        ]
+      ],
+      "actual": [
+        [
+          "P2",
+          2
+        ]
+      ],
+      "status": "PASS"
+    }
+  ]
+}

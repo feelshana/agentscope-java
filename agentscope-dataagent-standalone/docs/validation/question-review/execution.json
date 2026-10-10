@@ -1,0 +1,44 @@
+{
+  "question": {
+    "id": "review_probe_cadb6daa",
+    "question": "验收依据与确认流程测试",
+    "definition": "已支付且未软删除订单数；单位条",
+    "sql": "SELECT total FROM review_probe_cadb6daa",
+    "required": false
+  },
+  "status": "EXECUTED",
+  "validation": {
+    "validationId": "08bf1e0d-02d7-453c-847e-ebb5b9a51e74",
+    "questionHash": "499e9fae780f9cac362086d4e9b16910d17d0e71ec40286e833fd6e8c852b5b3",
+    "modelHash": "5f95763e4e299eb64d2a3b14e39c3ebf5006398f26d1c93971bc200b527d8661",
+    "status": "EXECUTED",
+    "executedAt": "2026-10-08T04:18:57.130587400Z",
+    "result": {
+      "columns": [
+        "total"
+      ],
+      "rows": [
+        {
+          "total": 9
+        }
+      ],
+      "row_count": 1,
+      "truncated": false
+    },
+    "error": null,
+    "truncated": false,
+    "confirmedBy": null,
+    "confirmedAt": null,
+    "evidence": {
+      "sql": "SELECT total FROM review_probe_cadb6daa",
+      "views": [
+        {
+          "name": "review_probe_cadb6daa",
+          "sql": "SELECT COUNT(*) AS total FROM \"order\" WHERE status = 'PAID' AND is_deleted = 0",
+          "description": "有效已支付订单计数，排除软删除",
+          "path": "views/review_probe_cadb6daa/sql.yml"
+        }
+      ]
+    }
+  }
+}

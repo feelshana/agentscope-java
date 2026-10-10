@@ -1,0 +1,24 @@
+{
+  "file": "live-Q01-sse.jsonl",
+  "event_count": 377,
+  "answer": "I'll query the valid order total amount using the semantic model.## 有效订单总额查询结果\n\n**销售额（有效订单总额）= 1050.00 元**\n\n| 指标 | 数值 |\n|---|---|\n| 销售额（有效订单总额） | **1050.00 元** |\n| 有效订单数 | 6 笔 |\n| 付费客户数 | 2 人 |\n\n### 使用口径说明\n\n本次查询使用知识库已审阅的 **`valid_order_metrics` Cube**（基础模型 `valid_order`），口径与业务规则完全一致：\n\n- **「有效订单」定义**：`order.status = 'PAID'` 且 `order.is_deleted = 0`，且关联客户存在（`customer_id` 能匹配到 `customer`）且 `customer.is_internal = 0`；未知客户、空客户不计入。\n- **金额单位**：底层 `amount_cents` 以人民币「分」存储，`sales_amount_yuan = SUM(amount_cents) / 100.0`，即**已除以 100 换算为元**，未把「分」当「元」。\n- **「销售额」口径**：按业务规则默认指有效订单总额（SUM 在订单粒度汇总，未连接 `order_item`，无明细行放大问题）。\n- **付费客户数**：有效订单 `customer_id` 去重计数（非客户名称去重）。\n- **时间范围**：本次为全时间范围聚合，未加时间过滤。\n\n数据来源：知识库 `wren-gap-live-20261006-233059`，Cube `valid_order_metrics`（数据文件 `data/47df30a6016f.csv`）。",
+  "tools": [
+    {
+      "name": "wren_query_cube",
+      "input": "{\"group_id\":\"wren-gap-live-20261006-233059\",\"measures\":[\"sales_amount_yuan\",\"order_count\",\"paying_customers\"],\"cube\":\"valid_order_metrics\"}",
+      "result": ""
+    },
+    {
+      "name": "wren_query_cube",
+      "input": null,
+      "result": "\"## wren Cube 查询结果\\n\\n**知识库：** wren-gap-live-20261006-233059（group_id: `73b26360-df5c-497e-9137-bdfe7f50df67`）\\n\\n**Cube：** valid_order_metrics\\n**度量：** sales_amount_yuan, order_count, paying_customers\\n\\n**查询结果：**\\n\\n| sales_amount_yuan | order_count | paying_customers |\\n|---|---|---|\\n| 1050.0 | 6 | 2 |\\n\\n**数据文件：** data/47df30a6016f.csv（1 行 × 3 列；run_python 中 pd.read_csv('data/47df30a6016f.csv') 读取）\\n\""
+    }
+  ],
+  "errors": [],
+  "done": [
+    {
+      "type": "done",
+      "sessionKey": "validation-Q01-d159ade20a694506abe1b765a686ba7b"
+    }
+  ]
+}

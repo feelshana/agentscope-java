@@ -141,6 +141,64 @@ class MdlPublishServiceTest {
 
     // ------------------------------------------------------------------ fixtures
 
+    @Test
+    void questionVerificationDoesNotPublishAndUnconfirmedQuestionDoesNotBlockPublication()
+            throws IOException {
+        registerGroup("g1");
+        registerDataset("ds_a", "g1", "orders", new String[][] {{"amount", "BIGINT"}});
+        assertTrue(service.publish("g1").ok());
+        String before = Files.readString(groupRoot.resolve("mdl.json"));
+        write("views/sales/metadata.yml", "name: sales\nproperties:\n  description: 有效营收\n");
+        write("views/sales/sql.yml", "statement: SELECT amount FROM orders WHERE amount > 0\n");
+        write(
+                "knowledge/questions/sales.yml",
+                "question: 销售额是多少\n"
+                        + "definition: 有效订单金额，不扣退款\n"
+                        + "sql: SELECT SUM(amount) AS total FROM orders\n"
+                        + "required: false\n");
+        var gateway =
+                new io.agentscope.dataagent.runtime.wren.WrenQueryGateway() {
+                    @Override
+                    public WrenCallResult call(
+                            String group, String tool, Map<String, Object> args) {
+                        throw new AssertionError(
+                                "Published gateway must not be used for draft validation");
+                    }
+
+                    @Override
+                    public void invalidate(String group) {}
+
+                    @Override
+                    public WrenCallResult callDraft(
+                            String group, Path project, String profile, String sql, int limit) {
+                        assertEquals("g1", group);
+                        assertEquals(groupRoot.resolve("scratch"), project);
+                        assertTrue(sql.contains("SUM(amount)"));
+                        assertEquals("dataagent", profile);
+                        return new WrenCallResult(
+                                true, "{\"columns\":[\"total\"],\"rows\":[{\"total\":1050}]}");
+                    }
+                };
+        var result = service.validateQuestion("g1", "sales", gateway);
+        assertEquals("EXECUTED", result.status());
+        assertEquals(
+                "SELECT SUM(amount) AS total FROM orders", result.validation().evidence().sql());
+        assertEquals("sales", result.validation().evidence().views().get(0).name());
+        assertTrue(
+                result.validation().evidence().views().get(0).sql().contains("WHERE amount > 0"));
+        assertEquals(before, Files.readString(groupRoot.resolve("mdl.json")));
+        assertTrue(service.publish("g1").ok());
+        assertFalse(Files.exists(groupRoot.resolve("published/knowledge/sql/sales.md")));
+        var questionWorkspace =
+                new MdlWorkspaceService(
+                        new WrenProperties("wren", mdlHome.toString(), "dataagent", "mysql", 10),
+                        wren);
+        new MdlQuestionStore(questionWorkspace)
+                .decide("g1", "sales", result.validation().validationId(), true, "alice");
+        assertTrue(service.publish("g1").ok());
+        assertTrue(Files.exists(groupRoot.resolve("published/knowledge/sql/sales.md")));
+    }
+
     private DatasetGroupEntity registerGroup(String groupId) {
         DatasetGroupEntity g = new DatasetGroupEntity(groupId, "owner", "KB " + groupId, null);
         groupsById.put(groupId, g);

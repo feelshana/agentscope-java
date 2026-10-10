@@ -1,0 +1,5 @@
+{
+  "attempt": 30,
+  "ready": false,
+  "stderr": "docker info timed out after 15 seconds"
+}

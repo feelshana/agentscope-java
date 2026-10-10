@@ -1,0 +1,31 @@
+[
+  {
+    "name": "backend_tests",
+    "command": [
+      "mvn.cmd",
+      "test"
+    ],
+    "cwd": "D:\\workspace\\data-agent\\agentscope-dataagent-standalone",
+    "exit_code": 0
+  },
+  {
+    "name": "package",
+    "command": [
+      "mvn.cmd",
+      "package",
+      "-DskipTests"
+    ],
+    "cwd": "D:\\workspace\\data-agent\\agentscope-dataagent-standalone",
+    "exit_code": 0
+  },
+  {
+    "name": "frontend_build",
+    "command": [
+      "npm.cmd",
+      "run",
+      "build"
+    ],
+    "cwd": "D:\\workspace\\data-agent\\agentscope-dataagent-standalone\\frontend",
+    "exit_code": 0
+  }
+]

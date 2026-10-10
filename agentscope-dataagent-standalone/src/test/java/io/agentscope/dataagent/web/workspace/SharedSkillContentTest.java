@@ -86,27 +86,16 @@ class SharedSkillContentTest {
     }
 
     @Test
-    void sqlAnalysisKeepsCubeViewProjectionSqlRoutingOrder() {
+    void sqlAnalysisUsesSqlAndRelevantExamples() {
         assertThat(read(SQL_ANALYSIS))
-                .contains("按官方决策树选工具")
-                .contains("已发布 Cube 成员覆盖时优先用 `wren_query_cube`")
-                // coverage judgement + ranking split (2026-10-05 cube-misroute analysis): a
-                // ranking needs X as a Cube dimension, otherwise GROUP BY X in SQL
-                .contains("全部命中 Cube 成员")
-                .contains("缺该维度即不覆盖")
-                .contains("GROUP BY X` 排名")
-                .contains("不是实体排名")
-                .contains("应判为 Cube 不覆盖")
-                .contains("已发布 View 能直接覆盖问题时优先用 `wren_run_sql` 按视图名直接查询")
-                .contains("展开 many 侧关联字段组")
-                .contains("单一逻辑模型的投影列查询")
-                .contains("relationship condition 自动 JOIN")
-                .contains("语义资产都无法表达时才用 `wren_run_sql`")
-                .contains("显式 JOIN 是最后兜底")
-                // specs/025: official alignment — prefer wording, no mandatory gate
-                .doesNotContain("不得从基础模型重建同等语义")
-                .doesNotContain("禁止改写为手工聚合 SQL")
-                .doesNotContain("View 必须直接出现在 `FROM` 中");
+                .contains(
+                        "wren_recall_examples",
+                        "COUNT DISTINCT",
+                        "query_type",
+                        "BUSINESS",
+                        "DIAGNOSTIC",
+                        "limit 参数")
+                .doesNotContain("wren_query_cube");
     }
 
     @Test
@@ -149,7 +138,7 @@ class SharedSkillContentTest {
         for (String path : List.of(SQL_ANALYSIS, PYTHON_ANALYSIS)) {
             assertThat(read(path))
                     .contains("wren_run_sql")
-                    .contains("wren_query_cube")
+                    .doesNotContain("wren_query_cube")
                     .contains("wren_describe_model")
                     .doesNotContain("prepare_data_context")
                     .doesNotContain("query_structured_data");
@@ -174,7 +163,7 @@ class SharedSkillContentTest {
         assertThat(read(PYTHON_ANALYSIS))
                 .contains("wren_describe_model")
                 .contains("wren_run_sql")
-                .contains("wren_query_cube")
+                .doesNotContain("wren_query_cube")
                 .contains("[DATA_SOURCES_OVERVIEW]")
                 .contains("retrieve_evidence")
                 .contains("run_python")

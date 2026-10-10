@@ -2,10 +2,10 @@ import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore }
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import AssociateTablesModal from '../../components/AssociateTablesModal';
 import EmptyIllustration from '../../components/EmptyIllustration';
-import KnowledgeGraphView from '../../components/KnowledgeGraphView';
-import SchemaTreeView from '../../components/SchemaTreeView';
 import Icon, { IconName } from '../../components/Icon';
 import { KnowledgeBreadcrumb, WorkspaceMenu } from '../../components/KnowledgeWorkspace';
+import { getModelingWorkflow } from '../../api/modelingWorkflow';
+import type { ModelingWorkflow } from '../../api/modelingWorkflow';
 import {
   deleteDataset,
   getGroupDetail,
@@ -24,7 +24,7 @@ import {
   UploadStatus,
 } from '../../state/uploadProgress';
 
-type View = 'files' | 'graph' | 'tree' | 'modeling';
+type View = 'files' | 'modeling';
 
 const STATUS_LABEL: Record<UploadStatus['status'], string> = {
   queued: '排队中',
@@ -57,8 +57,6 @@ function taskStatusColor(status: string): string {
 
 const NAV_ITEMS: { key: View; icon: IconName; label: string }[] = [
   { key: 'files', icon: 'list', label: '数据集' },
-  { key: 'graph', icon: 'graph', label: '知识图谱' },
-  { key: 'tree', icon: 'table', label: '树结构目录' },
   { key: 'modeling', icon: 'model', label: '语义建模' },
 ];
 
@@ -71,6 +69,7 @@ export default function DatasetGroupPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [detail, setDetail] = useState<GroupDetail | null>(null);
+  const [workflow, setWorkflow] = useState<ModelingWorkflow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -95,7 +94,8 @@ export default function DatasetGroupPage() {
   const [sheetPickerBusy, setSheetPickerBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
-  const view = (searchParams.get('view') as View) || 'files';
+  // Retired graph/tree deep links show datasets without mounting their components.
+  const view: View = searchParams.get('view') === 'modeling' ? 'modeling' : 'files';
   const setView = (v: View) => {
     const next = new URLSearchParams(searchParams);
     next.set('view', v);
@@ -105,6 +105,7 @@ export default function DatasetGroupPage() {
   const refresh = useCallback(async () => {
     try {
       setDetail(await getGroupDetail(groupId));
+      setWorkflow(await getModelingWorkflow(groupId).catch(() => null));
       setError(null);
       setAssociatingTables(new Set());
     } catch (e) {
@@ -351,6 +352,12 @@ export default function DatasetGroupPage() {
           <div className="kw-actions"><button className="da-btn da-btn-ghost" disabled={!detail || busy} onClick={() => { setGroupName(detail?.group.name ?? ''); setGroupDescription(detail?.group.description ?? ''); setError(null); setEditingGroup(true); }}><Icon name="edit" size="sm" />编辑信息</button><button className="da-btn da-btn-primary" disabled={!detail} onClick={() => navigate(`/chat?groups=${encodeURIComponent(groupId)}`)}><Icon name="chat" size="sm" />基于此库提问</button></div>
         </div>
         {error && <div className="kw-alert" role="alert">{error}</div>}
+        {workflow && <div className="kw-progress" style={{ display: 'flex', alignItems: 'center', gap: 16, justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <span className="da-small">{workflow.queryAvailable
+            ? `基础模型已发布 v${workflow.publishedVersion}，可以问数；业务口径可继续完善。`
+            : '数据接入后需要基础模型发布成功，才可问数。'}</span>
+          <button className="da-btn da-btn-sm" onClick={() => navigate(`/configure/modeling/${groupId}`)}>{workflow.queryAvailable ? '完善业务模型' : '查看建模进度'}</button>
+        </div>}
         <div className="kw-tabs" role="tablist" aria-label="知识库内容">{NAV_ITEMS.map(n => <button key={n.key} role="tab" aria-selected={view === n.key} className={view === n.key ? 'active' : ''} onClick={() => n.key === 'modeling' ? navigate(`/configure/modeling/${groupId}`) : setView(n.key)}>{n.label}{n.key === 'files' && <span className="kw-badge">{fileCount}</span>}</button>)}</div>
         <input ref={fileRef} type="file" multiple accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={e => { if (e.target.files?.length) uploadFiles(e.target.files); e.target.value = ''; }} />
         <details className="kw-progress" open={hasActiveTask || uploadStatuses.some(s => s.status !== 'ready') || associatingTables.size > 0} hidden={!uploadStatuses.some(s => s.status !== 'ready') && importTasks.length === 0 && associatingTables.size === 0}>
@@ -494,8 +501,6 @@ export default function DatasetGroupPage() {
             {detail.datasets.every(d => !`${d.name} ${d.sourceFileName ?? ''}`.toLowerCase().includes(query.trim().toLowerCase())) && <tr><td colSpan={6} className="kw-empty">没有匹配的数据集</td></tr>}
           </tbody></table></div><div className="kw-tablebottom"><span>共 {fileCount} 个数据集</span><span>点击名称查看数据与字段</span></div></div>}
         </>}
-        {view === 'graph' && <KnowledgeGraphView groupId={groupId} />}
-        {view === 'tree' && <SchemaTreeView datasets={detail?.datasets ?? []} />}
         {view === 'modeling' && <Navigate to={`/configure/modeling/${groupId}`} replace />}
       </div></div>
       {editingGroup && <div className="da-modal-overlay" onClick={() => { if (!busy) setEditingGroup(false); }}><div className="da-modal-shell" style={{ width: 'min(520px, 92vw)' }} onClick={e => e.stopPropagation()}><div className="da-modal-head"><div className="da-modal-title">编辑知识库</div></div><div className="da-modal-body">{error && <div className="kw-alert" role="alert">{error}</div>}<label className="da-label">名称</label><input className="da-input" value={groupName} onChange={e => setGroupName(e.target.value)} maxLength={100} /><label className="da-label" style={{ marginTop: 16 }}>说明</label><textarea className="da-input" value={groupDescription} onChange={e => setGroupDescription(e.target.value)} maxLength={1000} rows={4} /></div><div className="da-modal-foot"><button className="da-btn" disabled={busy} onClick={() => setEditingGroup(false)}>取消</button><button className="da-btn da-btn-primary" disabled={busy} onClick={saveGroupInfo}>{busy ? '保存中…' : '保存'}</button></div></div></div>}

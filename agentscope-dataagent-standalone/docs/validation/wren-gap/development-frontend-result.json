@@ -1,0 +1,10 @@
+{
+  "phase": "frontend",
+  "exit_code": 0,
+  "command": [
+    "npm.cmd",
+    "run",
+    "build"
+  ],
+  "cwd": "D:\\workspace\\data-agent\\agentscope-dataagent-standalone\\frontend"
+}

@@ -1,0 +1,8 @@
+2026-10-08 Independent JUnit reproduction, not the running DataAgentApp service.
+Session: ModelingHitlMiddlewareTest.nativeDeniedCallDoesNotOpenTheSameConfirmationAgain
+Paused: ModelingHitlMiddleware#onActing, before pending.isEmpty() branch.
+Stack: ModelingHitlMiddleware#onActing <- ModelingHitlMiddlewareTest#nativeDeniedCallDoesNotOpenTheSameConfirmationAgain
+Runtime expression result: ASKING|result=DENIED|pending=1
+The native rejected tool retains ASKING in its historical ToolUseBlock, but has a correlated DENIED ToolResultBlock. Business HITL middleware incorrectly treats it as unresolved and pauses it again.
+Independent test also failed before fix: AtomicBoolean(false), expected true (native continuation was not delegated).
+Agent breakpoint removed; independent test debug session stopped. Existing DataAgentApp session and user exception breakpoints preserved.

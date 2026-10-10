@@ -12,5 +12,8 @@ logs/
 # leading slash so src/main/resources/shared stays tracked.
 /shared/
 
+# Isolated local acceptance server state, including platform database and logs.
+/.tmp-question-acceptance/
+
 # Durable runtime artifacts (back up separately from source).
 /data/artifacts/

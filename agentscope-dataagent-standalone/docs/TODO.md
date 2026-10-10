@@ -2,6 +2,8 @@
 
 ## 知识库工作台页面
 
+- 2026-10-10：暂停知识图谱/树结构目录展示，默认关闭 GraphRAG；合并 Wren 建模与问答反馈提交，待整体试用，见 [ADR 0068](adr/0068-suspend-knowledge-graph-and-tree.md) / [spec 057](specs/057-suspend-knowledge-graph-and-tree.md)。
+
 - 第一版视觉与第二版卡片菜单已迁移到真实前端，见 [ADR 0053](adr/0053-knowledge-workspace-layout.md) / [spec 044](specs/044-knowledge-workspace-layout.md)。待用户预览及真实上传、关联、编辑场景验收。
 - 字段类型变更：当前更新接口仅支持字段说明；类型只读。数据集描述已补齐独立保存接口，待人工验收。
 

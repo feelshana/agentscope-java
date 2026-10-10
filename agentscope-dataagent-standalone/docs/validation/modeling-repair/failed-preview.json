@@ -1,0 +1,6 @@
+{
+  "ok": false,
+  "error": "error: 常用问题预检失败，文件未写入：验证 SQL 仅允许单条 SELECT/WITH，禁止写操作及显式 LIMIT/OFFSET",
+  "oldContent": "",
+  "newContent": "question: 原始订单表共有多少条记录\ndefinition: 全表记录计数\nsql: SELECT COUNT(*) AS total FROM \"order\" LIMIT 1\nrequired: false\n"
+}

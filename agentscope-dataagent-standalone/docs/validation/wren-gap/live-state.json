@@ -1,0 +1,284 @@
+{
+  "group_id": "73b26360-df5c-497e-9137-bdfe7f50df67",
+  "group_name": "wren-gap-live-20261006-233059",
+  "uploaded": [
+    "customer",
+    "order",
+    "refund",
+    "order_item",
+    "product",
+    "calendar_month",
+    "event"
+  ],
+  "datasets": {
+    "customer": {
+      "id": "9a325ea8-e864-4aca-a3d5-55d0913eba9f",
+      "name": "customer",
+      "groupId": "73b26360-df5c-497e-9137-bdfe7f50df67",
+      "tableName": "ds_81b637d8_c37c975d_customer",
+      "schemaName": "data_agent",
+      "rowCount": 4,
+      "description": "客户信息表，用于存储客户的基本信息，包括客户ID、名称、是否为内部客户及所属区域",
+      "sourceFileName": "ds_customer.csv",
+      "columns": [
+        {
+          "name": "customer_id",
+          "originalName": "customer_id",
+          "sqlType": "BIGINT",
+          "description": "客户ID，唯一标识客户，包含1,2,3等"
+        },
+        {
+          "name": "customer_name",
+          "originalName": "customer_name",
+          "sqlType": "VARCHAR(1024)",
+          "description": "客户名称，包含张三,李四,无订单客户等"
+        },
+        {
+          "name": "is_internal",
+          "originalName": "is_internal",
+          "sqlType": "BIGINT",
+          "description": "是否内部客户标记，0表示否，1表示是"
+        },
+        {
+          "name": "region",
+          "originalName": "region",
+          "sqlType": "VARCHAR(1024)",
+          "description": "客户所属区域，包含华东,华北,华南等"
+        }
+      ],
+      "createdAt": "2026-10-06T15:31:37.460138500Z",
+      "origin": "upload",
+      "externalDataSourceId": null
+    },
+    "order": {
+      "id": "515e8631-4dd7-49e9-859c-a79e707f4721",
+      "name": "order",
+      "groupId": "73b26360-df5c-497e-9137-bdfe7f50df67",
+      "tableName": "ds_81b637d8_06fd368c_order",
+      "schemaName": "data_agent",
+      "rowCount": 12,
+      "description": "订单表，记录每笔订单的基础信息，包括订单ID、客户ID、下单时间、订单金额、订单状态及删除标记，用于订单交易数据的管理与查询。",
+      "sourceFileName": "ds_order.csv",
+      "columns": [
+        {
+          "name": "order_id",
+          "originalName": "order_id",
+          "sqlType": "BIGINT",
+          "description": "订单ID，订单的唯一标识，包含1001,1002,1003等"
+        },
+        {
+          "name": "customer_id",
+          "originalName": "customer_id",
+          "sqlType": "BIGINT",
+          "description": "客户ID，关联下单客户，包含1,2,999等"
+        },
+        {
+          "name": "order_time",
+          "originalName": "order_time",
+          "sqlType": "DATETIME",
+          "description": "下单时间，格式为'yyyy-MM-dd HH:mm:ss'，包含2025-01-01 00:00:00,2025-01-31 23:59:59等"
+        },
+        {
+          "name": "amount_cents",
+          "originalName": "amount_cents",
+          "sqlType": "BIGINT",
+          "description": "订单金额，单位为分，包含10000,20000,30000等"
+        },
+        {
+          "name": "status",
+          "originalName": "status",
+          "sqlType": "VARCHAR(1024)",
+          "description": "订单状态，包含PAID(已支付),CANCELLED(已取消),REFUNDED(已退款)等"
+        },
+        {
+          "name": "is_deleted",
+          "originalName": "is_deleted",
+          "sqlType": "BIGINT",
+          "description": "删除标记，0表示未删除，1表示已删除"
+        }
+      ],
+      "createdAt": "2026-10-06T15:31:41.706073200Z",
+      "origin": "upload",
+      "externalDataSourceId": null
+    },
+    "refund": {
+      "id": "52f337be-6f5a-4479-ad8b-2ae70e490172",
+      "name": "refund",
+      "groupId": "73b26360-df5c-497e-9137-bdfe7f50df67",
+      "tableName": "ds_81b637d8_4156438f_refund",
+      "schemaName": "data_agent",
+      "rowCount": 4,
+      "description": "退款记录表，用于记录每笔订单的退款信息，包括退款金额、退款时间和退款状态等，支持退款流程的跟踪与对账。",
+      "sourceFileName": "ds_refund.csv",
+      "columns": [
+        {
+          "name": "refund_id",
+          "originalName": "refund_id",
+          "sqlType": "BIGINT",
+          "description": "退款记录ID，样本值包含1, 2, 3等"
+        },
+        {
+          "name": "order_id",
+          "originalName": "order_id",
+          "sqlType": "BIGINT",
+          "description": "订单ID，关联订单表，样本值包含1002, 1003, 1004等"
+        },
+        {
+          "name": "refund_time",
+          "originalName": "refund_time",
+          "sqlType": "DATETIME",
+          "description": "退款时间，格式为'yyyy-MM-dd HH:mm:ss'，包含2025-02-02 12:00:00等"
+        },
+        {
+          "name": "refund_cents",
+          "originalName": "refund_cents",
+          "sqlType": "BIGINT",
+          "description": "退款金额，单位为分，样本值包含5000, 2000, 3000等"
+        },
+        {
+          "name": "refund_status",
+          "originalName": "refund_status",
+          "sqlType": "VARCHAR(1024)",
+          "description": "退款状态，样本值包含SUCCESS（成功）、FAILED（失败）等"
+        }
+      ],
+      "createdAt": "2026-10-06T15:31:45.467625300Z",
+      "origin": "upload",
+      "externalDataSourceId": null
+    },
+    "order_item": {
+      "id": "2d6ba4b2-763f-44b6-8c29-fa490f57832f",
+      "name": "order_item",
+      "groupId": "73b26360-df5c-497e-9137-bdfe7f50df67",
+      "tableName": "ds_81b637d8_e75ce6ce_order_item",
+      "schemaName": "data_agent",
+      "rowCount": 9,
+      "description": "订单明细表，记录每个订单行对应的订单、商品及行金额信息，用于订单商品明细的存储与分析。",
+      "sourceFileName": "ds_order_item.csv",
+      "columns": [
+        {
+          "name": "item_id",
+          "originalName": "item_id",
+          "sqlType": "BIGINT",
+          "description": "订单明细行唯一标识ID，如1,2,3"
+        },
+        {
+          "name": "order_id",
+          "originalName": "order_id",
+          "sqlType": "BIGINT",
+          "description": "订单唯一标识ID，如1001,1002,1003"
+        },
+        {
+          "name": "product_code",
+          "originalName": "product_code",
+          "sqlType": "VARCHAR(1024)",
+          "description": "商品编码，如P1,P2,P3"
+        },
+        {
+          "name": "line_cents",
+          "originalName": "line_cents",
+          "sqlType": "BIGINT",
+          "description": "订单行金额，单位为分（cents），如4000,6000,20000"
+        }
+      ],
+      "createdAt": "2026-10-06T15:31:48.396354200Z",
+      "origin": "upload",
+      "externalDataSourceId": null
+    },
+    "product": {
+      "id": "001fe812-7339-45da-9036-83f3bcd7ded4",
+      "name": "product",
+      "groupId": "73b26360-df5c-497e-9137-bdfe7f50df67",
+      "tableName": "ds_81b637d8_c29f5f66_product",
+      "schemaName": "data_agent",
+      "rowCount": 4,
+      "description": "产品基础信息表，用于存储产品的行ID、产品编码及产品名称等基本信息，支撑产品维度的查询与分析。",
+      "sourceFileName": "ds_product.csv",
+      "columns": [
+        {
+          "name": "product_row_id",
+          "originalName": "product_row_id",
+          "sqlType": "BIGINT",
+          "description": "产品行ID，唯一标识每一行记录，包含1,2,3等"
+        },
+        {
+          "name": "product_code",
+          "originalName": "product_code",
+          "sqlType": "VARCHAR(1024)",
+          "description": "产品编码，产品的唯一业务标识，包含P1,P2,P3等"
+        },
+        {
+          "name": "product_name",
+          "originalName": "product_name",
+          "sqlType": "VARCHAR(1024)",
+          "description": "产品名称，产品的显示名称，包含产品一,产品二,重复产品二等"
+        }
+      ],
+      "createdAt": "2026-10-06T15:31:51.662700800Z",
+      "origin": "upload",
+      "externalDataSourceId": null
+    },
+    "calendar_month": {
+      "id": "3f34f9ab-78c4-40f2-af06-05e10f820f4a",
+      "name": "calendar_month",
+      "groupId": "73b26360-df5c-497e-9137-bdfe7f50df67",
+      "tableName": "ds_81b637d8_eb5f1c0d_calendar_month",
+      "schemaName": "data_agent",
+      "rowCount": 4,
+      "description": "月度数据表，用于按月份记录和汇总相关业务指标数据",
+      "sourceFileName": "ds_calendar_month.csv",
+      "columns": [
+        {
+          "name": "month",
+          "originalName": "month",
+          "sqlType": "VARCHAR(1024)",
+          "description": "月份，格式为'yyyy-MM'，包含2025-01,2025-02,2025-03等"
+        }
+      ],
+      "createdAt": "2026-10-06T15:31:54.335896700Z",
+      "origin": "upload",
+      "externalDataSourceId": null
+    },
+    "event": {
+      "id": "6e48c296-d334-4118-b98d-8e3947d1e628",
+      "name": "event",
+      "groupId": "73b26360-df5c-497e-9137-bdfe7f50df67",
+      "tableName": "ds_81b637d8_57a6b6a9_event",
+      "schemaName": "data_agent",
+      "rowCount": 10005,
+      "description": "事件明细表，用于记录事件的基础信息、金额、编码及备注等内容。",
+      "sourceFileName": "ds_event.csv",
+      "columns": [
+        {
+          "name": "event_id",
+          "originalName": "event_id",
+          "sqlType": "BIGINT",
+          "description": "事件ID，唯一标识一条事件记录，如1,2,3等"
+        },
+        {
+          "name": "value_cents",
+          "originalName": "value_cents",
+          "sqlType": "BIGINT",
+          "description": "金额（以分为单位），如1表示1分"
+        },
+        {
+          "name": "code",
+          "originalName": "code",
+          "sqlType": "BIGINT",
+          "description": "编码，定长字符串，如000123"
+        },
+        {
+          "name": "note",
+          "originalName": "note",
+          "sqlType": "VARCHAR(1024)",
+          "description": "备注，补充说明文本"
+        }
+      ],
+      "createdAt": "2026-10-06T15:31:59.105154800Z",
+      "origin": "upload",
+      "externalDataSourceId": null
+    }
+  },
+  "modeling_session": "validation-modeling-e036be0587744b179b70bd8388c46098",
+  "published_version": 8
+}

@@ -1,0 +1,33 @@
+{
+  "name": "refund",
+  "properties": {
+    "description": "测试业务模型：refund"
+  },
+  "table_reference": {
+    "catalog": "",
+    "schema": "wren_gap_fixture",
+    "table": "ds_refund"
+  },
+  "columns": [
+    {
+      "name": "refund_id",
+      "type": "BIGINT"
+    },
+    {
+      "name": "order_id",
+      "type": "BIGINT"
+    },
+    {
+      "name": "refund_time",
+      "type": "VARCHAR"
+    },
+    {
+      "name": "refund_cents",
+      "type": "BIGINT"
+    },
+    {
+      "name": "refund_status",
+      "type": "VARCHAR"
+    }
+  ]
+}

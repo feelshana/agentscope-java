@@ -1,0 +1,17 @@
+{
+  "groupId": "76649222-bc35-4c9c-88e4-7d672b3b0b92",
+  "checks": {
+    "numbered_list": true,
+    "selected_detail_only": true,
+    "readable_font": true,
+    "enlarged_dialog": true,
+    "publication_shortcut": true,
+    "published_questions_visible": true,
+    "published_next_step_query": true,
+    "write_yaml_font": true,
+    "single_click_writes": true,
+    "same_proposal_not_asked_again": true,
+    "narrow_no_overflow": true,
+    "no_runtime_exceptions": true
+  }
+}

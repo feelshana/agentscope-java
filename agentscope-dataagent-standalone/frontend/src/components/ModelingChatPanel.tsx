@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react';
 import Icon from './Icon';
 import Markdown from './Markdown';
 import ModelingHitlCard from './ModelingHitlCard';
+import ReadableCode from './ReadableCode';
 import { confirmModeling, currentSession, stream } from '../api/chat';
 import type { ChatEvent, HitlToolCall } from '../api/chat';
 import { getModelingOverview } from '../api/semanticModeling';
@@ -22,23 +23,7 @@ import type { ModelingOverview } from '../api/semanticModeling';
 const MODELING_AGENT_ID = 'modeling-agent';
 
 /** 快捷引导：一条预设消息 = 一个建模动作，与 MODELING_SCRIPT 剧本对齐。 */
-const QUICK_STARTS: { label: string; hint: string; prompt: string }[] = [
-  {
-    label: '开始建模',
-    hint: '盘点现状 · 规划待办',
-    prompt: '开始建模：请先盘点当前知识库的建模现状，告诉我有哪些待办。',
-  },
-  {
-    label: '重算关系候选',
-    hint: '规则 + AI 重新推断',
-    prompt: '请重新计算一下关系候选，我担心有遗漏的表关系。',
-  },
-  {
-    label: '给我 Cube 提案',
-    hint: '起草指标与维度口径',
-    prompt: '请基于当前表结构和已确认的关系，给我几个 Cube 提案。',
-  },
-];
+
 
 interface ToolFrame {
   id: string;
@@ -101,6 +86,7 @@ function taskLabel(name: string, inputJson?: string): string {
     case 'read_file':
       return path ? `读取 ${baseName(path)}` : '读取工程文件';
     case 'write_file':
+      if (typeof input.files_json === 'string') return '提交完整业务方案';
       return path ? `写入 ${path}` : '写入工程文件';
     case 'patch_file':
       return path ? `修改 ${path}` : '修改工程文件';
@@ -126,10 +112,6 @@ function taskLabel(name: string, inputJson?: string): string {
       return '预览编译计划';
     case 'wren_dry_run':
       return '试跑验证';
-    case 'wren_cube_list':
-      return '列出 Cube';
-    case 'wren_cube_query':
-      return '试算 Cube 查询';
     default:
       return name;
   }
@@ -139,6 +121,10 @@ function taskLabel(name: string, inputJson?: string): string {
 function TaskRow({ frame }: { frame: ToolFrame }) {
   const [open, setOpen] = useState(false);
   const label = taskLabel(frame.name, frame.input);
+  const input = parseToolInput(frame.input);
+  const writeContent = frame.name === 'write_file' ? input.content : frame.name === 'patch_file' ? input.replacement : frame.name === 'create_view' ? input.statement : undefined;
+  let readableResult = frame.result || '';
+  try { const value: unknown = JSON.parse(readableResult); if (typeof value === 'string') readableResult = value; } catch { /* Keep plain tool output. */ }
   let prettyInput = '';
   if (frame.input) {
     try {
@@ -197,14 +183,14 @@ function TaskRow({ frame }: { frame: ToolFrame }) {
         <div style={S.taskDetail}>
           {prettyInput && (
             <>
-              <div style={S.taskDetailHead}>输入</div>
-              <pre style={S.taskDetailPre}>{clip(prettyInput)}</pre>
+              {typeof input.reason === 'string' && <p style={{ fontSize: 15, lineHeight: 1.7 }}>{input.reason}</p>}
+              {typeof writeContent === 'string' ? <ReadableCode text={writeContent} language={frame.name === 'create_view' ? 'sql' : 'yaml'} title={frame.name === 'patch_file' ? '本次替换内容' : '写入内容'} /> : <ReadableCode text={prettyInput} language="json" title="工具输入" />}
             </>
           )}
           {frame.result && (
             <>
               <div style={S.taskDetailHead}>输出</div>
-              <pre style={S.taskDetailPre}>{clip(frame.result)}</pre>
+              <pre style={{ ...S.taskDetailPre, fontSize: 15, lineHeight: 1.7 }}>{clip(readableResult)}</pre>
             </>
           )}
         </div>
@@ -217,21 +203,45 @@ export default function ModelingChatPanel({
   groupId,
   onClose,
   variant = 'modal',
+  draftPrompt,
+  draftPromptId,
+  submitDraft = false,
+  onSessionReady,
+  onAttachDocument,
 }: {
   groupId: string;
   onClose: () => void;
   /** specs/027: centered large window by default; specs/030 adds the right-side dock.
    *  `dock` renders inline (no overlay) so the parent workbench layout controls its width. */
   variant?: 'modal' | 'drawer' | 'dock';
+  draftPrompt?: string;
+  draftPromptId?: number;
+  submitDraft?: boolean;
+  onSessionReady?: (hasPending: boolean, error?: string) => void;
+  onAttachDocument?: () => void;
 }) {
   const [messages, setMessages] = useState<PanelMessage[]>([]);
   const [input, setInput] = useState('');
+  const [sessionReady, setSessionReady] = useState(false);
+  const [sessionError, setSessionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const decisionInFlight = useRef(false);
   const [overview, setOverview] = useState<ModelingOverview | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const consumedDraft = useRef<string | null>(null);
+  const consumedSubmission = useRef<string | null>(null);
   const sessionKeyRef = useRef<string>(`modeling-${groupId}`);
   const awaitingDecision = messages.some(message => message.hitl);
+
+  useEffect(() => {
+    const key = `${groupId}:${draftPromptId ?? draftPrompt}`;
+    if (draftPrompt && !submitDraft && consumedDraft.current !== key) {
+      consumedDraft.current = key;
+      setInput(previous => (previous.trim() ? previous.trim() + '\n\n' : '') + draftPrompt);
+      inputRef.current?.focus();
+    }
+  }, [draftPrompt, draftPromptId, submitDraft, groupId]);
 
   /** specs/036: the decide cards resolve table names from this overview — refetchable. */
   const loadOverview = useCallback(() => {
@@ -245,27 +255,35 @@ export default function ModelingChatPanel({
     sessionKeyRef.current = `modeling-${groupId}`;
     setMessages([]);
     setOverview(null);
+    setSessionReady(false); setSessionError(null);
     void loadOverview();
     currentSession(MODELING_AGENT_ID, sessionKeyRef.current)
       .then(session => {
-        if (cancelled || !session.pendingReplyId || !session.pendingToolCalls?.length) return;
+        if (cancelled) return;
+        const hasPending = !!session.pendingReplyId && !!session.pendingToolCalls?.length;
+        setSessionReady(true);
+        onSessionReady?.(hasPending);
+        if (!hasPending) return;
         setMessages([
           {
             id: nextId(),
             role: 'assistant',
             segments: [{ kind: 'text', text: '已恢复上次尚未处理的建模提案。' }],
             hitl: {
-              replyId: session.pendingReplyId,
-              toolCalls: session.pendingToolCalls,
+              replyId: session.pendingReplyId as string,
+              toolCalls: session.pendingToolCalls as HitlToolCall[],
             },
           },
         ]);
       })
-      .catch(() => undefined);
+      .catch(error => { if (!cancelled) {
+        const detail = `建模会话加载失败，请刷新重试。${error instanceof Error ? error.message : ''}`;
+        setSessionError(detail); onSessionReady?.(false, detail);
+      } });
     return () => {
       cancelled = true;
     };
-  }, [groupId]);
+  }, [groupId, onSessionReady]);
 
   useEffect(() => {
     threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight });
@@ -388,13 +406,24 @@ export default function ModelingChatPanel({
     }
   }
 
-  /** 发送一条消息（输入框回车与快捷引导共用）。 */
+  async function restorePendingProposal(messageId: string) {
+    try {
+      const session = await currentSession(MODELING_AGENT_ID, sessionKeyRef.current);
+      if (session.pendingReplyId && session.pendingToolCalls?.length) {
+        applyEvent(messageId, { type: 'hitl_request', replyId: session.pendingReplyId, toolCalls: session.pendingToolCalls });
+      }
+    } catch (error) {
+      applyEvent(messageId, { type: 'error', error: `建模确认状态同步失败，请刷新页面恢复提案。${error instanceof Error ? error.message : ''}` });
+    }
+  }
+
+  /** Sends a user message and reconciles persisted native confirmation state. */
   async function sendText(raw: string) {
     const text = raw.trim();
     if (!text || busy || awaitingDecision) return;
     setInput('');
     setBusy(true);
-    const userMsg: PanelMessage = { id: nextId(), role: 'user', segments: [] };
+    const userMsg: PanelMessage = { id: nextId(), role: 'user', segments: [{ kind: 'text', text }] };
     const replyMsg: PanelMessage = {
       id: nextId(),
       role: 'assistant',
@@ -409,6 +438,7 @@ export default function ModelingChatPanel({
       )) {
         applyEvent(replyMsg.id, evt);
       }
+      await restorePendingProposal(replyMsg.id);
     } catch (e) {
       const msg = e instanceof Error ? e.message : '连接中断';
       setMessages(previous =>
@@ -437,8 +467,10 @@ export default function ModelingChatPanel({
     call: HitlToolCall,
     confirmed: boolean,
     toolInput?: Record<string, unknown>,
+    feedback?: string,
   ) {
-    if (busy) return;
+    if (busy || decisionInFlight.current) return;
+    decisionInFlight.current = true;
     setBusy(true);
     setMessages(previous =>
       previous.map(message => {
@@ -464,9 +496,11 @@ export default function ModelingChatPanel({
         toolName: call.name,
         confirmed,
         toolInput,
+        feedback,
       })) {
         applyEvent(messageId, evt);
       }
+      await restorePendingProposal(messageId);
       getModelingOverview(groupId).then(setOverview).catch(() => undefined);
       notifyUpdated();
     } catch (error) {
@@ -487,6 +521,7 @@ export default function ModelingChatPanel({
         ),
       );
     } finally {
+      decisionInFlight.current = false;
       setBusy(false);
     }
   }
@@ -494,6 +529,14 @@ export default function ModelingChatPanel({
   function handleSend() {
     void sendText(input);
   }
+
+  useEffect(() => {
+    const key = `${groupId}:${draftPromptId ?? draftPrompt}`;
+    if (submitDraft && draftPrompt && sessionReady && !busy && !awaitingDecision && consumedSubmission.current !== key) {
+      consumedSubmission.current = key;
+      void sendText(draftPrompt);
+    }
+  }, [submitDraft, draftPrompt, draftPromptId, sessionReady, busy, awaitingDecision, groupId]);
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -523,38 +566,22 @@ export default function ModelingChatPanel({
           <span style={S.title}>
             <Icon name="model" size="sm" /> 对话建模
           </span>
-          <span style={S.headerHint}>发布动作请回「语义建模」页完成</span>
-          <button style={S.close} onClick={handleClose} title="关闭">
+          <span style={S.headerHint}>写入草稿 → 验证与确认 → 发布</span>
+          {variant !== 'dock' && <button style={S.close} onClick={handleClose} title="关闭">
             <Icon name="close" size="sm" />
-          </button>
+          </button>}
         </div>
 
         <div style={S.thread} ref={threadRef}>
+          {sessionError && <p role="alert">{sessionError}</p>}
           {messages.length === 0 && (
             <div style={S.welcome}>
               <div style={S.welcomeTitle}>
                 <Icon name="model" size="sm" /> 我是建模助手
               </div>
-              <div style={S.welcomeDesc}>我会一次一个问题，帮你把这批表整理成语义模型：</div>
-              <ol style={S.steps}>
-                <li>盘点表关系，逐条和你确认（支持复合键、连接方向调整）</li>
-                <li>按你的口径起草 Cube 指标与维度</li>
-                <li>校验通过后，引导你回「语义建模」页发布</li>
-              </ol>
-              <div style={S.welcomeDesc}>点一下开始，无需自己组织问题：</div>
-              <div style={S.quickCol}>
-                {QUICK_STARTS.map((q, i) => (
-                  <button
-                    key={q.label}
-                    style={i === 0 ? S.quickPrimary : S.quickBtn}
-                    onClick={() => void sendText(q.prompt)}
-                    disabled={busy || awaitingDecision}
-                  >
-                    <span>{q.label}</span>
-                    <span style={S.quickHint}>{q.hint}</span>
-                  </button>
-                ))}
-              </div>
+              <div style={S.welcomeDesc}>围绕已提交的分析问题澄清口径、完善模型、关系、口径与明细视图。</div>
+              <p style={S.welcomeDesc}>这里用于回答助手的问题和反馈结果。需要增加分析问题时，请使用右侧问题清单的“添加问题”。</p>
+              <div style={S.welcomeDesc}>每个问题都会生成 SQL，经 Wren 验证并由你确认结果后再发布。</div>
             </div>
           )}
           {messages.map(m => (
@@ -565,7 +592,7 @@ export default function ModelingChatPanel({
                     {m.segments.map((seg, i) =>
                       seg.kind === 'text' ? (
                         seg.text ? (
-                          <Markdown key={i} fontSize={13}>
+                          <Markdown key={i} fontSize={14}>
                             {seg.text}
                           </Markdown>
                         ) : null
@@ -580,8 +607,8 @@ export default function ModelingChatPanel({
                         groupId={groupId}
                         overview={overview}
                         submitting={busy}
-                        onDecision={(confirmed, toolInput) =>
-                          void submitDecision(m.id, m.hitl as PendingHitl, call, confirmed, toolInput)
+                        onDecision={(confirmed, toolInput, feedback) =>
+                          void submitDecision(m.id, m.hitl as PendingHitl, call, confirmed, toolInput, feedback)
                         }
                       />
                     ))}
@@ -604,21 +631,9 @@ export default function ModelingChatPanel({
         </div>
 
         <div style={S.composer}>
-          {messages.length > 0 && (
-            <div style={S.chips}>
-              {QUICK_STARTS.map(q => (
-                <button
-                  key={q.label}
-                  style={S.chip}
-                  title={q.hint}
-                  onClick={() => void sendText(q.prompt)}
-                  disabled={busy || awaitingDecision}
-                >
-                  {q.label}
-                </button>
-              ))}
-            </div>
-          )}
+          <div style={S.chips}>
+            {onAttachDocument && <button style={S.chip} onClick={onAttachDocument} disabled={busy || awaitingDecision}>＋ 添加业务文档（可选）</button>}
+          </div>
           <div style={S.composerRow}>
             <textarea
               ref={inputRef}
@@ -631,7 +646,7 @@ export default function ModelingChatPanel({
                   ? '请先处理上方待确认提案…'
                   : busy
                     ? '建模助手思考中…'
-                    : '直接输入，或点上方快捷操作…'
+                    : '回答助手的口径问题，或反馈需要修正的内容…'
               }
               disabled={busy || awaitingDecision}
             />
@@ -640,6 +655,7 @@ export default function ModelingChatPanel({
                 ...S.send,
                 ...(busy || awaitingDecision || !input.trim() ? S.sendDisabled : {}),
               }}
+              aria-label="发送建模消息"
               onClick={handleSend}
               disabled={busy || awaitingDecision || !input.trim()}
             >
@@ -680,7 +696,8 @@ const S: Record<string, CSSProperties> = {
     minWidth: 0,
     overflow: 'hidden',
     background: 'var(--da-canvas-bg, #fafafa)',
-    borderLeft: '1px solid var(--da-border)',
+    border: '1px solid var(--da-border)',
+    borderRadius: 12,
   },
   dockShell: {
     display: 'flex',
@@ -809,7 +826,10 @@ const S: Record<string, CSSProperties> = {
   },
   botBubble: {
     alignSelf: 'flex-start',
-    maxWidth: '92%',
+    maxWidth: '100%',
+    width: '100%',
+    boxSizing: 'border-box',
+    minWidth: 0,
     background: 'var(--da-surface, #fff)',
     border: '1px solid var(--da-border)',
     borderRadius: 12,

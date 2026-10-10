@@ -62,7 +62,7 @@ public class DocEnhanceService {
 
     private static final Logger log = LoggerFactory.getLogger(DocEnhanceService.class);
     private static final Set<String> TYPES =
-            Set.of("TERM", "BUSINESS_RULE", "RELATIONSHIP", "CUBE", "VIEW", "MANUAL_FIX");
+            Set.of("TERM", "BUSINESS_RULE", "RELATIONSHIP", "VIEW", "MANUAL_FIX");
     private static final Set<String> CLASSIFICATIONS = Set.of("NEW", "PARTIAL", "CONFLICT");
     private static final Set<String> CONFIDENCES = Set.of("HIGH", "MEDIUM", "LOW");
 
@@ -306,18 +306,7 @@ public class DocEnhanceService {
                                 targetColumns));
                 yield true;
             }
-            case "CUBE" -> {
-                modelingService.createCube(
-                        groupId,
-                        new MdlSuggestionService.CubePayload(
-                                text(payload, "name"),
-                                text(payload, "baseDatasetId"),
-                                nullableText(payload, "description"),
-                                objectList(payload.path("measures")),
-                                objectList(payload.path("dimensions")),
-                                objectList(payload.path("timeDimensions"))));
-                yield true;
-            }
+            case "CUBE" -> throw new DatasetException("Cube 已停用，请使用逻辑模型或明细视图", 410);
             case "VIEW" -> {
                 modelingService.createView(
                         groupId,
@@ -504,16 +493,6 @@ public class DocEnhanceService {
                     p.set("sourceColumns", mapper.valueToTree(sourceColumns));
                     p.set("targetColumns", mapper.valueToTree(targetColumns));
                 }
-                case "CUBE" -> {
-                    DatasetEntity base = resolveDataset(datasetIndex, text(p, "baseDatasetId"));
-                    if (base == null || text(p, "name").isBlank()) {
-                        return null;
-                    }
-                    p.put("baseDatasetId", base.getId());
-                    if (!p.path("measures").isArray()) {
-                        return null;
-                    }
-                }
                 case "VIEW" -> {
                     String sql = text(p, "sqlText").trim();
                     String upperSql = upper(sql);
@@ -550,7 +529,9 @@ public class DocEnhanceService {
                 .append("分类：NEW=没有等价资产，PARTIAL=已有资产只覆盖部分，CONFLICT=与已确认资产冲突，")
                 .append("COVERED=已完整覆盖。COVERED 不需要用户处理。\n")
                 .append("路由：业务词/别名/枚举含义→TERM；默认过滤、软删、权威表、币种、财务周期、NULL/哨兵→BUSINESS_RULE；")
-                .append("关系/复合键/基数→RELATIONSHIP；单表聚合→CUBE；HAVING/窗口/CTE/多表预聚合→VIEW；")
+                .append(
+                        "关系/复合键/基数→RELATIONSHIP；指标公式、单位、时间归属→BUSINESS_RULE；必需过滤和复杂关联→明细"
+                                + " VIEW（保留实体身份与原始时间，不预聚合）；")
                 .append("计算列或无法安全落点→MANUAL_FIX。不要把已有列描述或枚举样例重复生成。\n")
                 .append("所有表引用优先使用下方 dataset_id，所有列使用物理列名。View SQL 只能是一条 SELECT/WITH。\n\n")
                 .append("# 当前数据表\n");
@@ -586,16 +567,6 @@ public class DocEnhanceService {
                                         .append(" [")
                                         .append(r.getStatus())
                                         .append("]\n"));
-        sb.append("\n# 当前 Cube\n");
-        modelingService
-                .listCubes(task.getGroupId())
-                .forEach(
-                        c ->
-                                sb.append("- ")
-                                        .append(c.getName())
-                                        .append(": ")
-                                        .append(c.getDescription())
-                                        .append('\n'));
         sb.append("\n# 当前 View\n");
         modelingService
                 .listViews(task.getGroupId())
@@ -632,11 +603,10 @@ public class DocEnhanceService {
                 .append(trim(sourceText, 20000))
                 .append("\n\n")
                 .append(
-                        "仅输出：{\"proposals\":[{\"type\":\"TERM|BUSINESS_RULE|RELATIONSHIP|CUBE|VIEW|MANUAL_FIX\",\"classification\":\"NEW|PARTIAL|CONFLICT|COVERED\",\"title\":\"短标题\",\"summary\":\"自包含说明\",\"payload\":{},\"source_quote\":\"原文\",\"confidence\":\"HIGH|MEDIUM|LOW\"}]}\n")
+                        "仅输出：{\"proposals\":[{\"type\":\"TERM|BUSINESS_RULE|RELATIONSHIP|VIEW|MANUAL_FIX\",\"classification\":\"NEW|PARTIAL|CONFLICT|COVERED\",\"title\":\"短标题\",\"summary\":\"自包含说明\",\"payload\":{},\"source_quote\":\"原文\",\"confidence\":\"HIGH|MEDIUM|LOW\"}]}\n")
                 .append(
                         "TERM payload={term,explanation,synonyms}; BUSINESS_RULE={name,content};"
                             + " RELATIONSHIP={sourceDatasetId,sourceColumns,targetDatasetId,targetColumns,joinType};"
-                            + " CUBE={name,baseDatasetId,description,measures,dimensions,timeDimensions};"
                             + " VIEW={name,baseDatasetId,sqlText,description}。");
         return sb.toString();
     }

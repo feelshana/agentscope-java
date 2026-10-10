@@ -56,7 +56,7 @@ export default function ReadOnlyRelationGraph({
           labelText: (d: any) => `${d.data?.label ?? d.id}`,
           labelFontSize: compact ? 11 : 12,
           labelFontWeight: 'bold',
-          labelFill: '#fff',
+          labelFill: '#1e293b',
         },
       },
       edge: {

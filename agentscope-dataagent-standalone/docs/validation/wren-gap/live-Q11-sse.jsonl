@@ -1,0 +1,567 @@
+{"type": "token", "data": "我来"}
+{"type": "token", "data": "查询"}
+{"type": "token", "data": "客户"}
+{"type": "token", "data": "为空"}
+{"type": "token", "data": "或不"}
+{"type": "token", "data": "存在的"}
+{"type": "token", "data": "订单"}
+{"type": "token", "data": "数量"}
+{"type": "token", "data": "。"}
+{"type": "token", "data": "先"}
+{"type": "token", "data": "确认"}
+{"type": "token", "data": "口径"}
+{"type": "token", "data": "："}
+{"type": "token", "data": "这是"}
+{"type": "token", "data": "数据"}
+{"type": "token", "data": "质量"}
+{"type": "token", "data": "统计"}
+{"type": "token", "data": "，"}
+{"type": "token", "data": "需要"}
+{"type": "token", "data": "统计"}
+{"type": "token", "data": " `"}
+{"type": "token", "data": "order"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "表中"}
+{"type": "token", "data": " `"}
+{"type": "token", "data": "customer"}
+{"type": "token", "data": "_id"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "为"}
+{"type": "token", "data": " NULL"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "或"}
+{"type": "token", "data": "无法"}
+{"type": "token", "data": "关联"}
+{"type": "token", "data": "到"}
+{"type": "token", "data": " `"}
+{"type": "token", "data": "customer"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "表的"}
+{"type": "token", "data": "订单"}
+{"type": "token", "data": "数量"}
+{"type": "token", "data": "，"}
+{"type": "token", "data": "且"}
+{"type": "token", "data": "不属于"}
+{"type": "token", "data": "「"}
+{"type": "token", "data": "有效"}
+{"type": "token", "data": "订单"}
+{"type": "token", "data": "」。\n\n"}
+{"type": "token", "data": "先"}
+{"type": "token", "data": "了解"}
+{"type": "token", "data": "订单"}
+{"type": "token", "data": "模型的"}
+{"type": "token", "data": "字段"}
+{"type": "token", "data": "结构"}
+{"type": "token", "data": "。"}
+{"type": "tool_call", "toolName": "wren_describe_model", "toolCallId": "call_00_ARXbfhMFMVyhVHHykgKe8057", "requestId": "4438c73a-f34e-4232-adf3-95936397b702", "runId": "7c02743d-88d", "seq": 136, "toolInput": "{\"model_names\":[\"order\",\"customer\"],\"group_id\":\"wren-gap-live-20261006-233059\"}"}
+{"type": "tool_result", "toolName": "wren_describe_model", "toolCallId": "call_00_ARXbfhMFMVyhVHHykgKe8057", "requestId": "4438c73a-f34e-4232-adf3-95936397b702", "runId": "7c02743d-88d", "seq": 137, "toolResult": "\"## 已发布语义模型详情\\n\\n**知识库：** wren-gap-live-20261006-233059（group_id: `73b26360-df5c-497e-9137-bdfe7f50df67`）\\n\\n### order\\n订单表，记录每笔订单的基础信息，包括订单ID、客户ID、下单时间、订单金额、订单状态及删除标记，用于订单交易数据的管理与查询。\\n\\n| 字段 | 类型 | 描述 |\\n|---|---|---|\\n| order_id | BIGINT | 订单ID，订单的唯一标识，包含1001,1002,1003等 |\\n| customer_id | BIGINT | 客户ID，关联下单客户，包含1,2,999等 |\\n| order_time | DATETIME | 下单时间，格式为'yyyy-MM-dd HH:mm:ss'，包含2025-01-01 00:00:00,2025-01-31 23:59:59等 |\\n| amount_cents | BIGINT | 订单金额，单位为分，包含10000,20000,30000等 |\\n| status | VARCHAR(1024) | 订单状态，包含PAID(已支付),CANCELLED(已取消),REFUNDED(已退款)等 |\\n| is_deleted | BIGINT | 删除标记，0表示未删除，1表示已删除 |\\n\\n**关系：**\\n- order MANY_TO_ONE customer：order.customer_id = customer.customer_id\\n\\n### customer\\n客户信息表，用于存储客户的基本信息，包括客户ID、名称、是否为内部客户及所属区域\\n\\n| 字段 | 类型 | 描述 |\\n|---|---|---|\\n| customer_id | BIGINT | 客户ID，唯一标识客户，包含1,2,3等 |\\n| customer_name | VARCHAR(1024) | 客户名称，包含张三,李四,无订单客户等 |\\n| is_internal | BIGINT | 是否内部客户标记，0表示否，1表示是 |\\n| region | VARCHAR(1024) | 客户所属区域，包含华东,华北,华南等 |\\n\\n**关系：**\\n- order MANY_TO_ONE customer：order.customer_id = customer.customer_id\\n\\n\""}
+{"type": "token", "data": "现在"}
+{"type": "token", "data": "查询"}
+{"type": "token", "data": "客户"}
+{"type": "token", "data": "为空"}
+{"type": "token", "data": "或不"}
+{"type": "token", "data": "存在的"}
+{"type": "token", "data": "订单"}
+{"type": "token", "data": "数量"}
+{"type": "token", "data": "。"}
+{"type": "token", "data": "区分"}
+{"type": "token", "data": "两类"}
+{"type": "token", "data": "："}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "customer"}
+{"type": "token", "data": "_id"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "为"}
+{"type": "token", "data": " NULL"}
+{"type": "token", "data": "，"}
+{"type": "token", "data": "以及"}
+{"type": "token", "data": " `"}
+{"type": "token", "data": "customer"}
+{"type": "token", "data": "_id"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "无法"}
+{"type": "token", "data": "关联"}
+{"type": "token", "data": "到"}
+{"type": "token", "data": " customer"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "表"}
+{"type": "token", "data": "。"}
+{"type": "tool_call", "toolName": "wren_run_sql", "toolCallId": "call_00_FhnAMHYRW00ilZtn9dKY2812", "requestId": "4438c73a-f34e-4232-adf3-95936397b702", "runId": "fd6b4b3a-672", "seq": 138, "toolInput": "{\"question\":\"统计订单表中客户为空（customer_id 为 NULL）或客户不存在（无法关联 customer 表）的订单数量\",\"group_id\":\"wren-gap-live-20261006-233059\",\"sql\":\"WITH o AS (\\n  SELECT order_id, customer_id\\n  FROM order\\n)\\nSELECT\\n  COUNT(*) AS total_orders,\\n  SUM(CASE WHEN customer_id IS NULL THEN 1 ELSE 0 END) AS null_customer_orders,\\n  SUM(CASE WHEN customer_id IS NOT NULL AND c.customer_id IS NULL THEN 1 ELSE 0 END) AS unknown_customer_orders,\\n  SUM(CASE WHEN customer_id IS NULL OR c.customer_id IS NULL THEN 1 ELSE 0 END) AS abnormal_orders\\nFROM o\\nLEFT JOIN customer c ON o.customer_id = c.customer_id\"}"}
+{"type": "tool_result", "toolName": "wren_run_sql", "toolCallId": "call_00_FhnAMHYRW00ilZtn9dKY2812", "requestId": "4438c73a-f34e-4232-adf3-95936397b702", "runId": "fd6b4b3a-672", "seq": 139, "toolResult": "\"error: wren 语义引擎拒绝了该查询：Error executing tool run_sql: [GENERIC_USER_ERROR] (1052, \\\"Column 'customer_id' in field list is ambiguous\\\") phase=SQL_EXECUTION\""}
+{"type": "token", "data": "列"}
+{"type": "token", "data": "名"}
+{"type": "token", "data": "歧"}
+{"type": "token", "data": "义"}
+{"type": "token", "data": "，"}
+{"type": "token", "data": "我"}
+{"type": "token", "data": "加"}
+{"type": "token", "data": "限定"}
+{"type": "token", "data": "后"}
+{"type": "token", "data": "重"}
+{"type": "token", "data": "试"}
+{"type": "token", "data": "。"}
+{"type": "tool_call", "toolName": "wren_run_sql", "toolCallId": "call_00_w9aCP5qqp4NbYKrlQncy6186", "requestId": "4438c73a-f34e-4232-adf3-95936397b702", "runId": "b6dfa1f2-742", "seq": 140, "toolInput": "{\"question\":\"统计订单表中客户为空（customer_id 为 NULL）或客户不存在（无法关联 customer 表）的订单数量\",\"group_id\":\"wren-gap-live-20261006-233059\",\"sql\":\"WITH o AS (\\n  SELECT order_id, customer_id\\n  FROM order\\n)\\nSELECT\\n  COUNT(*) AS total_orders,\\n  SUM(CASE WHEN o.customer_id IS NULL THEN 1 ELSE 0 END) AS null_customer_orders,\\n  SUM(CASE WHEN o.customer_id IS NOT NULL AND c.customer_id IS NULL THEN 1 ELSE 0 END) AS unknown_customer_orders,\\n  SUM(CASE WHEN o.customer_id IS NULL OR c.customer_id IS NULL THEN 1 ELSE 0 END) AS abnormal_orders\\nFROM o\\nLEFT JOIN customer c ON o.customer_id = c.customer_id\"}"}
+{"type": "tool_result", "toolName": "wren_run_sql", "toolCallId": "call_00_w9aCP5qqp4NbYKrlQncy6186", "requestId": "4438c73a-f34e-4232-adf3-95936397b702", "runId": "b6dfa1f2-742", "seq": 141, "toolResult": "\"## wren 语义查询结果\\n\\n**知识库：** wren-gap-live-20261006-233059（group_id: `73b26360-df5c-497e-9137-bdfe7f50df67`）\\n\\n**查询问题：** 统计订单表中客户为空（customer_id 为 NULL）或客户不存在（无法关联 customer 表）的订单数量\\n\\n**SQL 语句：**\\n```sql\\nWITH o AS (\\n  SELECT order_id, customer_id\\n  FROM order\\n)\\nSELECT\\n  COUNT(*) AS total_orders,\\n  SUM(CASE WHEN o.customer_id IS NULL THEN 1 ELSE 0 END) AS null_customer_orders,\\n  SUM(CASE WHEN o.customer_id IS NOT NULL AND c.customer_id IS NULL THEN 1 ELSE 0 END) AS unknown_customer_orders,\\n  SUM(CASE WHEN o.customer_id IS NULL OR c.customer_id IS NULL THEN 1 ELSE 0 END) AS abnormal_orders\\nFROM o\\nLEFT JOIN customer c ON o.customer_id = c.customer_id\\n```\\n\\n**查询结果：**\\n\\n| total_orders | null_customer_orders | unknown_customer_orders | abnormal_orders |\\n|---|---|---|---|\\n| 12 | 1.0 | 1.0 | 2.0 |\\n\\n**数据文件：** data/df272edfb5b2.csv（1 行 × 4 列；run_python 中 pd.read_csv('data/df272edfb5b2.csv') 读取）\\n\""}
+{"type": "token", "data": "查询"}
+{"type": "token", "data": "结果"}
+{"type": "token", "data": "如下"}
+{"type": "token", "data": "。\n\n"}
+{"type": "token", "data": "##"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "结论"}
+{"type": "token", "data": "\n\n"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": "客户"}
+{"type": "token", "data": "为空"}
+{"type": "token", "data": "或不"}
+{"type": "token", "data": "存在的"}
+{"type": "token", "data": "订单"}
+{"type": "token", "data": "共"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "2"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "笔"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": "（"}
+{"type": "token", "data": "占"}
+{"type": "token", "data": "全部"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "12"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "笔"}
+{"type": "token", "data": "订单"}
+{"type": "token", "data": "的"}
+{"type": "token", "data": "约"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "16"}
+{"type": "token", "data": "."}
+{"type": "token", "data": "7"}
+{"type": "token", "data": "%"}
+{"type": "token", "data": "）。\n\n"}
+{"type": "token", "data": "|"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "异常"}
+{"type": "token", "data": "类型"}
+{"type": "token", "data": " |"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "订单"}
+{"type": "token", "data": "数"}
+{"type": "token", "data": " |"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "说明"}
+{"type": "token", "data": " |\n"}
+{"type": "token", "data": "|---|---"}
+{"type": "token", "data": "|---"}
+{"type": "token", "data": "|\n"}
+{"type": "token", "data": "|"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "客户"}
+{"type": "token", "data": "为空"}
+{"type": "token", "data": "（"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "customer"}
+{"type": "token", "data": "_id"}
+{"type": "token", "data": " IS"}
+{"type": "token", "data": " NULL"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "）"}
+{"type": "token", "data": " |"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "1"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "笔"}
+{"type": "token", "data": " |"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "订单"}
+{"type": "token", "data": "未"}
+{"type": "token", "data": "记录"}
+{"type": "token", "data": "客户"}
+{"type": "token", "data": "ID"}
+{"type": "token", "data": " |\n"}
+{"type": "token", "data": "|"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "客户"}
+{"type": "token", "data": "不存在"}
+{"type": "token", "data": "（"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "customer"}
+{"type": "token", "data": "_id"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "无法"}
+{"type": "token", "data": "关联"}
+{"type": "token", "data": "到"}
+{"type": "token", "data": " customer"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "表"}
+{"type": "token", "data": "）"}
+{"type": "token", "data": " |"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "1"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "笔"}
+{"type": "token", "data": " |"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "有"}
+{"type": "token", "data": "客户"}
+{"type": "token", "data": "ID"}
+{"type": "token", "data": "但"}
+{"type": "token", "data": "客户"}
+{"type": "token", "data": "主"}
+{"type": "token", "data": "数据"}
+{"type": "token", "data": "缺失"}
+{"type": "token", "data": "（"}
+{"type": "token", "data": "如"}
+{"type": "token", "data": " customer"}
+{"type": "token", "data": "_id"}
+{"type": "token", "data": "="}
+{"type": "token", "data": "999"}
+{"type": "token", "data": "）"}
+{"type": "token", "data": " |\n"}
+{"type": "token", "data": "|"}
+{"type": "token", "data": " **"}
+{"type": "token", "data": "合计"}
+{"type": "token", "data": "异常"}
+{"type": "token", "data": "订单"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": " |"}
+{"type": "token", "data": " **"}
+{"type": "token", "data": "2"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "笔"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": " |"}
+{"type": "token", "data": " |\n"}
+{"type": "token", "data": "|"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "全部"}
+{"type": "token", "data": "订单"}
+{"type": "token", "data": " |"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "12"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "笔"}
+{"type": "token", "data": " |"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "用于"}
+{"type": "token", "data": "对照"}
+{"type": "token", "data": " |\n\n"}
+{"type": "token", "data": "##"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "使用"}
+{"type": "token", "data": "口径"}
+{"type": "token", "data": "\n\n"}
+{"type": "token", "data": "-"}
+{"type": "token", "data": " **"}
+{"type": "token", "data": "统计"}
+{"type": "token", "data": "对象"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": "："}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "order"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "表"}
+{"type": "token", "data": "全部"}
+{"type": "token", "data": "订单"}
+{"type": "token", "data": "（"}
+{"type": "token", "data": "不加"}
+{"type": "token", "data": " `"}
+{"type": "token", "data": "status"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "/"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "is"}
+{"type": "token", "data": "_de"}
+{"type": "token", "data": "leted"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "过滤"}
+{"type": "token", "data": "），"}
+{"type": "token", "data": "因为"}
+{"type": "token", "data": "这是"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": "数据"}
+{"type": "token", "data": "质量"}
+{"type": "token", "data": "统计"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": "，"}
+{"type": "token", "data": "异常"}
+{"type": "token", "data": "订单"}
+{"type": "token", "data": "要"}
+{"type": "token", "data": "完整"}
+{"type": "token", "data": "保留"}
+{"type": "token", "data": "、"}
+{"type": "token", "data": "不得"}
+{"type": "token", "data": "静"}
+{"type": "token", "data": "默"}
+{"type": "token", "data": "丢弃"}
+{"type": "token", "data": "（"}
+{"type": "token", "data": "符合"}
+{"type": "token", "data": "知识"}
+{"type": "token", "data": "库"}
+{"type": "token", "data": "「"}
+{"type": "token", "data": "未知"}
+{"type": "token", "data": "客户"}
+{"type": "token", "data": "、"}
+{"type": "token", "data": "空"}
+{"type": "token", "data": "客户"}
+{"type": "token", "data": "都应"}
+{"type": "token", "data": "保留"}
+{"type": "token", "data": "异常"}
+{"type": "token", "data": "数量"}
+{"type": "token", "data": "」"}
+{"type": "token", "data": "的要求"}
+{"type": "token", "data": "）。\n"}
+{"type": "token", "data": "-"}
+{"type": "token", "data": " **"}
+{"type": "token", "data": "异常"}
+{"type": "token", "data": "定义"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": "：\n"}
+{"type": "token", "data": " "}
+{"type": "token", "data": " -"}
+{"type": "token", "data": " **"}
+{"type": "token", "data": "客户"}
+{"type": "token", "data": "为空"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": "："}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "order"}
+{"type": "token", "data": ".c"}
+{"type": "token", "data": "ustomer"}
+{"type": "token", "data": "_id"}
+{"type": "token", "data": " IS"}
+{"type": "token", "data": " NULL"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "；\n"}
+{"type": "token", "data": " "}
+{"type": "token", "data": " -"}
+{"type": "token", "data": " **"}
+{"type": "token", "data": "客户"}
+{"type": "token", "data": "不存在"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": "："}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "order"}
+{"type": "token", "data": ".c"}
+{"type": "token", "data": "ustomer"}
+{"type": "token", "data": "_id"}
+{"type": "token", "data": " IS"}
+{"type": "token", "data": " NOT"}
+{"type": "token", "data": " NULL"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "但"}
+{"type": "token", "data": "左"}
+{"type": "token", "data": "连接"}
+{"type": "token", "data": " `"}
+{"type": "token", "data": "customer"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "后"}
+{"type": "token", "data": " `"}
+{"type": "token", "data": "c"}
+{"type": "token", "data": ".c"}
+{"type": "token", "data": "ustomer"}
+{"type": "token", "data": "_id"}
+{"type": "token", "data": " IS"}
+{"type": "token", "data": " NULL"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "；\n"}
+{"type": "token", "data": " "}
+{"type": "token", "data": " -"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "两者"}
+{"type": "token", "data": "互"}
+{"type": "token", "data": "斥"}
+{"type": "token", "data": "，"}
+{"type": "token", "data": "合计"}
+{"type": "token", "data": "即"}
+{"type": "token", "data": "「"}
+{"type": "token", "data": "客户"}
+{"type": "token", "data": "为空"}
+{"type": "token", "data": "或"}
+{"type": "token", "data": "不存在"}
+{"type": "token", "data": "」"}
+{"type": "token", "data": "的总"}
+{"type": "token", "data": "数"}
+{"type": "token", "data": "。\n"}
+{"type": "token", "data": "-"}
+{"type": "token", "data": " **"}
+{"type": "token", "data": "判定"}
+{"type": "token", "data": "方法"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": "："}
+{"type": "token", "data": "以"}
+{"type": "token", "data": " `"}
+{"type": "token", "data": "order"}
+{"type": "token", "data": " LEFT"}
+{"type": "token", "data": " JOIN"}
+{"type": "token", "data": " customer"}
+{"type": "token", "data": " ON"}
+{"type": "token", "data": " order"}
+{"type": "token", "data": ".c"}
+{"type": "token", "data": "ustomer"}
+{"type": "token", "data": "_id"}
+{"type": "token", "data": " ="}
+{"type": "token", "data": " customer"}
+{"type": "token", "data": ".c"}
+{"type": "token", "data": "ustomer"}
+{"type": "token", "data": "_id"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "做"}
+{"type": "token", "data": "左"}
+{"type": "token", "data": "连接"}
+{"type": "token", "data": "，"}
+{"type": "token", "data": "未"}
+{"type": "token", "data": "命中"}
+{"type": "token", "data": "即"}
+{"type": "token", "data": "异常"}
+{"type": "token", "data": "，"}
+{"type": "token", "data": "避免"}
+{"type": "token", "data": "误"}
+{"type": "token", "data": "删"}
+{"type": "token", "data": "。\n"}
+{"type": "token", "data": "-"}
+{"type": "token", "data": " **"}
+{"type": "token", "data": "与"}
+{"type": "token", "data": "「"}
+{"type": "token", "data": "有效"}
+{"type": "token", "data": "订单"}
+{"type": "token", "data": "」"}
+{"type": "token", "data": "的关系"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": "："}
+{"type": "token", "data": "这"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "2"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "笔"}
+{"type": "token", "data": "订单"}
+{"type": "token", "data": "因"}
+{"type": "token", "data": "客户"}
+{"type": "token", "data": "异常"}
+{"type": "token", "data": "，"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": "均"}
+{"type": "token", "data": "不计"}
+{"type": "token", "data": "入"}
+{"type": "token", "data": "有效"}
+{"type": "token", "data": "订单"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": "、"}
+{"type": "token", "data": "也不"}
+{"type": "token", "data": "计入"}
+{"type": "token", "data": "付费"}
+{"type": "token", "data": "客户"}
+{"type": "token", "data": "数"}
+{"type": "token", "data": "；"}
+{"type": "token", "data": "但"}
+{"type": "token", "data": "按"}
+{"type": "token", "data": "口径"}
+{"type": "token", "data": "要求"}
+{"type": "token", "data": "须"}
+{"type": "token", "data": "在"}
+{"type": "token", "data": "数据"}
+{"type": "token", "data": "质量"}
+{"type": "token", "data": "报告中"}
+{"type": "token", "data": "保留"}
+{"type": "token", "data": "其"}
+{"type": "token", "data": "数量"}
+{"type": "token", "data": "。\n"}
+{"type": "token", "data": "-"}
+{"type": "token", "data": " **"}
+{"type": "token", "data": "注意事项"}
+{"type": "token", "data": "**"}
+{"type": "token", "data": "："}
+{"type": "token", "data": "客户"}
+{"type": "token", "data": "去"}
+{"type": "token", "data": "重"}
+{"type": "token", "data": "必须"}
+{"type": "token", "data": "用"}
+{"type": "token", "data": " `"}
+{"type": "token", "data": "customer"}
+{"type": "token", "data": "_id"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "，"}
+{"type": "token", "data": "不能用"}
+{"type": "token", "data": " `"}
+{"type": "token", "data": "customer"}
+{"type": "token", "data": "_name"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "。\n\n"}
+{"type": "token", "data": "数据"}
+{"type": "token", "data": "来源"}
+{"type": "token", "data": "："}
+{"type": "token", "data": "知识"}
+{"type": "token", "data": "库"}
+{"type": "token", "data": " `"}
+{"type": "token", "data": "w"}
+{"type": "token", "data": "ren"}
+{"type": "token", "data": "-g"}
+{"type": "token", "data": "ap"}
+{"type": "token", "data": "-l"}
+{"type": "token", "data": "ive"}
+{"type": "token", "data": "-"}
+{"type": "token", "data": "202"}
+{"type": "token", "data": "610"}
+{"type": "token", "data": "06"}
+{"type": "token", "data": "-"}
+{"type": "token", "data": "233"}
+{"type": "token", "data": "059"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "逻辑"}
+{"type": "token", "data": "模型"}
+{"type": "token", "data": " `"}
+{"type": "token", "data": "order"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": " /"}
+{"type": "token", "data": " `"}
+{"type": "token", "data": "customer"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "，"}
+{"type": "token", "data": "实"}
+{"type": "token", "data": "查"}
+{"type": "token", "data": "结果"}
+{"type": "token", "data": "（"}
+{"type": "token", "data": "结果"}
+{"type": "token", "data": "文件"}
+{"type": "token", "data": " `"}
+{"type": "token", "data": "data"}
+{"type": "token", "data": "/"}
+{"type": "token", "data": "df"}
+{"type": "token", "data": "272"}
+{"type": "token", "data": "ed"}
+{"type": "token", "data": "fb"}
+{"type": "token", "data": "5"}
+{"type": "token", "data": "b"}
+{"type": "token", "data": "2"}
+{"type": "token", "data": ".csv"}
+{"type": "token", "data": "`"}
+{"type": "token", "data": "）。\n\n"}
+{"type": "token", "data": ">"}
+{"type": "token", "data": " "}
+{"type": "token", "data": "说明"}
+{"type": "token", "data": "："}
+{"type": "token", "data": "结果为"}
+{"type": "token", "data": "实时"}
+{"type": "token", "data": "查询"}
+{"type": "token", "data": "所得"}
+{"type": "token", "data": "，"}
+{"type": "token", "data": "未"}
+{"type": "token", "data": "做"}
+{"type": "token", "data": "任何"}
+{"type": "token", "data": "推测"}
+{"type": "token", "data": "或"}
+{"type": "token", "data": "编"}
+{"type": "token", "data": "造"}
+{"type": "token", "data": "。"}
+{"type": "done", "sessionKey": "validation-Q11-4414c7f79d004e9eb38adb58c7b7943a"}

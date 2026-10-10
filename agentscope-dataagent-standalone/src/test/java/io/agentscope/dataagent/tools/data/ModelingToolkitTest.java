@@ -35,6 +35,7 @@ import io.agentscope.dataagent.dataset.MdlPublishService;
 import io.agentscope.dataagent.dataset.MdlSuggestionService;
 import io.agentscope.dataagent.dataset.MdlWorkspaceReader;
 import io.agentscope.dataagent.dataset.MdlWorkspaceService;
+import io.agentscope.dataagent.dataset.ModelingWorkflowService;
 import io.agentscope.dataagent.dataset.WrenCli;
 import io.agentscope.dataagent.dataset.WrenProperties;
 import io.agentscope.dataagent.web.config.DataAgentConfig;
@@ -82,6 +83,236 @@ class ModelingToolkitTest {
 
     private WrenProperties props;
     private FakeWrenCli cli;
+
+    @Test
+    void batchRuntimeWriteFailureRestoresPreviouslyWrittenFiles() throws Exception {
+        seed("wren_project.yml", "schema_version: 5\n");
+        seed("knowledge/rules/existing.md", "Original rule");
+        Files.createDirectories(ws().resolve("knowledge/rules/blocked.md"));
+        var writer = new io.agentscope.dataagent.dataset.ModelingPlanWriter(workspace, cli, props);
+        String base = writer.revision(GROUP);
+        String plan =
+                new com.fasterxml.jackson.databind.ObjectMapper()
+                        .writeValueAsString(
+                                List.of(
+                                        Map.of(
+                                                "path",
+                                                "knowledge/rules/existing.md",
+                                                "content",
+                                                "Changed rule"),
+                                        Map.of(
+                                                "path",
+                                                "knowledge/rules/blocked.md",
+                                                "content",
+                                                "Cannot replace a directory")));
+        assertTrue(writer.apply(GROUP, plan, base, true).startsWith("error:"));
+        assertEquals("Original rule", read("knowledge/rules/existing.md"));
+        assertTrue(Files.isDirectory(ws().resolve("knowledge/rules/blocked.md")));
+        assertEquals(base, writer.revision(GROUP));
+    }
+
+    @Test
+    void singleQuestionPreflightRejectsEmptySqlBeforeHumanReview() throws Exception {
+        seed("wren_project.yml", "schema_version: 5\n");
+        String question =
+                "question: Revenue\n"
+                        + "definition: Paid revenue\n"
+                        + "sql: ''\n"
+                        + "modeling:\n"
+                        + "  strategy: EXAMPLE\n"
+                        + "  reason: Existing model\n"
+                        + "  assets: []\n";
+        var call =
+                io.agentscope.core.message.ToolUseBlock.builder()
+                        .id("empty-question")
+                        .name("write_file")
+                        .input(
+                                Map.of(
+                                        "group_id",
+                                        GROUP,
+                                        "path",
+                                        "knowledge/questions/revenue.yml",
+                                        "content",
+                                        question,
+                                        "reason",
+                                        "revenue definition"))
+                        .build();
+        assertTrue(toolkit.preflight(singleGroupScope(), null, call).contains("SQL"));
+        assertFalse(Files.exists(ws().resolve("knowledge/questions/revenue.yml")));
+    }
+
+    @Test
+    void completeViewAndQuestionPlanIsValidatedTogetherBeforeAnyFileIsWritten() throws Exception {
+        seed("wren_project.yml", "schema_version: 5\n");
+        var writer = new io.agentscope.dataagent.dataset.ModelingPlanWriter(workspace, cli, props);
+        String base = writer.revision(GROUP);
+        String question =
+                "question: Monthly revenue\n"
+                        + "definition: Monthly paid revenue\n"
+                        + "sql: SELECT month, revenue FROM monthly_revenue\n"
+                        + "modeling:\n"
+                        + "  strategy: VIEW\n"
+                        + "  reason: Reusable monthly metric\n"
+                        + "  assets:\n"
+                        + "    - kind: VIEW\n"
+                        + "      name: monthly_revenue\n";
+        String plan =
+                new com.fasterxml.jackson.databind.ObjectMapper()
+                        .writeValueAsString(
+                                List.of(
+                                        Map.of(
+                                                "path",
+                                                "relationships.yml",
+                                                "content",
+                                                "relationships: []\n"),
+                                        Map.of(
+                                                "path",
+                                                "views/monthly_revenue/metadata.yml",
+                                                "content",
+                                                "name: monthly_revenue\n"
+                                                        + "description: Monthly paid revenue\n"),
+                                        Map.of(
+                                                "path",
+                                                "views/monthly_revenue/sql.yml",
+                                                "content",
+                                                "statement: SELECT '2025-01' AS month, 99 AS"
+                                                        + " revenue\n"),
+                                        Map.of(
+                                                "path",
+                                                "knowledge/questions/revenue.yml",
+                                                "content",
+                                                question)));
+        assertEquals(null, writer.apply(GROUP, plan, base, false));
+        assertFalse(Files.exists(ws().resolve("views/monthly_revenue")));
+        assertEquals(null, writer.apply(GROUP, plan, base, true));
+        assertTrue(Files.exists(ws().resolve("views/monthly_revenue/sql.yml")));
+        assertEquals(question, read("knowledge/questions/revenue.yml"));
+        assertTrue(
+                cli.calls.stream()
+                        .anyMatch(
+                                call ->
+                                        call.args()
+                                                .contains(
+                                                        "SELECT month, revenue FROM"
+                                                                + " monthly_revenue")));
+        assertTrue(
+                cli.calls.stream()
+                        .anyMatch(
+                                call -> call.args().contains("SELECT * FROM \"monthly_revenue\"")));
+    }
+
+    @Test
+    void batchPlanPreflightDoesNotWriteAndCommitRejectsStaleBase() throws Exception {
+        seed("wren_project.yml", "schema_version: 5\n");
+        var writer = new io.agentscope.dataagent.dataset.ModelingPlanWriter(workspace, cli, props);
+        String base = writer.revision(GROUP);
+        String plan =
+                new com.fasterxml.jackson.databind.ObjectMapper()
+                        .writeValueAsString(
+                                List.of(
+                                        Map.of(
+                                                "path",
+                                                "knowledge/rules/revenue.md",
+                                                "content",
+                                                "# Revenue\nPaid orders only\n"),
+                                        Map.of(
+                                                "path",
+                                                "relationships.yml",
+                                                "content",
+                                                "relationships: []\n")));
+        assertEquals(null, writer.apply(GROUP, plan, base, false));
+        assertFalse(Files.exists(ws().resolve("knowledge/rules/revenue.md")));
+        assertEquals(base, writer.revision(GROUP));
+        assertEquals(null, writer.apply(GROUP, plan, base, true));
+        assertTrue(read("knowledge/rules/revenue.md").contains("Paid"));
+        assertTrue(writer.apply(GROUP, plan, base, true).contains("基准已变化"));
+    }
+
+    @Test
+    void batchPlanRejectsProtectedDuplicateAndInvalidFilesWithoutWriting() throws Exception {
+        seed("wren_project.yml", "schema_version: 5\n");
+        var writer = new io.agentscope.dataagent.dataset.ModelingPlanWriter(workspace, cli, props);
+        String base = writer.revision(GROUP);
+        var json = new com.fasterxml.jackson.databind.ObjectMapper();
+        for (String path :
+                List.of("wren_project.yml", "../outside.yml", "knowledge/sql/accepted.md")) {
+            String plan =
+                    json.writeValueAsString(List.of(Map.of("path", path, "content", "name: x\n")));
+            assertTrue(writer.apply(GROUP, plan, base, true).startsWith("error:"));
+        }
+        String duplicate =
+                json.writeValueAsString(
+                        List.of(
+                                Map.of("path", "knowledge/rules/x.md", "content", "x"),
+                                Map.of("path", "knowledge/rules/./x.md", "content", "y")));
+        assertTrue(writer.apply(GROUP, duplicate, base, true).contains("重复"));
+        String malformed =
+                json.writeValueAsString(
+                        List.of(Map.of("path", "models/x/metadata.yml", "content", "name: [")));
+        assertTrue(writer.apply(GROUP, malformed, base, true).startsWith("error:"));
+        assertEquals(base, writer.revision(GROUP));
+        assertTrue(cli.calls.isEmpty());
+    }
+
+    @Test
+    void batchPlanCompileFailureAndEmptyQuestionLeaveWorkspaceUnchanged() throws Exception {
+        seed("wren_project.yml", "schema_version: 5\n");
+        var writer = new io.agentscope.dataagent.dataset.ModelingPlanWriter(workspace, cli, props);
+        var json = new com.fasterxml.jackson.databind.ObjectMapper();
+        String base = writer.revision(GROUP);
+        String question =
+                "question: Monthly revenue\n"
+                        + "definition: Paid revenue\n"
+                        + "sql: ''\n"
+                        + "modeling:\n"
+                        + "  strategy: EXAMPLE\n"
+                        + "  reason: Existing model suffices\n"
+                        + "  assets: []\n";
+        String plan =
+                json.writeValueAsString(
+                        List.of(
+                                Map.of(
+                                        "path",
+                                        "knowledge/questions/revenue.yml",
+                                        "content",
+                                        question)));
+        assertTrue(writer.apply(GROUP, plan, base, true).contains("SQL"));
+        cli.failBuild = true;
+        plan =
+                json.writeValueAsString(
+                        List.of(
+                                Map.of(
+                                        "path",
+                                        "knowledge/rules/revenue.md",
+                                        "content",
+                                        "Paid only")));
+        assertTrue(writer.apply(GROUP, plan, base, true).contains("build"));
+        assertEquals(base, writer.revision(GROUP));
+        assertFalse(Files.exists(ws().resolve("knowledge/rules/revenue.md")));
+    }
+
+    @Test
+    void preflightDeniesAnotherTenantsGroupBeforeWorkspaceAccess() {
+        var call =
+                io.agentscope.core.message.ToolUseBlock.builder()
+                        .id("foreign")
+                        .name("write_file")
+                        .input(
+                                Map.of(
+                                        "group_id",
+                                        "g2",
+                                        "files_json",
+                                        "[]",
+                                        "base_revision",
+                                        "x",
+                                        "reason",
+                                        "test"))
+                        .build();
+        assertTrue(toolkit.preflight(singleGroupScope(), null, call).startsWith("error:"));
+        assertTrue(cli.calls.isEmpty());
+        verify(groupService, never()).getGroup(anyString(), eq("g2"));
+    }
+
     private MdlWorkspaceService workspace;
     private MdlWorkspaceReader reader;
     private MdlSuggestionService suggestions;
@@ -89,6 +320,22 @@ class ModelingToolkitTest {
     private DatasetGroupService groupService;
     private ConversationScopeRegistry conversationScopes;
     private ModelingToolkit toolkit;
+
+    @Test
+    void previewRejectsPlatformFilesAndConfirmedExamplesEvenWithValidContent() {
+        for (String path :
+                List.of(
+                        "wren_project.yml",
+                        "./wren_project.yml",
+                        "knowledge/sql/accepted.md",
+                        "knowledge/questions/../sql/accepted.md")) {
+            ModelingToolkit.PreviewResult preview =
+                    toolkit.previewChange(
+                            GROUP, "write_file", Map.of("path", path, "content", "name: valid\n"));
+            assertFalse(preview.ok(), path);
+        }
+        assertTrue(cli.calls.isEmpty());
+    }
 
     @BeforeEach
     void setUp() {
@@ -121,6 +368,49 @@ class ModelingToolkitTest {
 
     private DatasetScope ownerScope() {
         return new DatasetScope(OWNER);
+    }
+
+    @Test
+    void stateAndEngineeringValidationExposeTheSameNextAction() {
+        var workflow = mock(ModelingWorkflowService.class);
+        var state =
+                new ModelingWorkflowService.Workflow(
+                        GROUP,
+                        "CONFIRMATION",
+                        "PUBLISHED",
+                        2,
+                        true,
+                        true,
+                        "PASSED",
+                        null,
+                        new ModelingWorkflowService.QuestionSummary(1, 0, 0, 0, 1),
+                        List.of(),
+                        List.of(
+                                new ModelingWorkflowService.Blocker(
+                                        "QUESTION_CONFIRMATION", "sales", "请确认结果")),
+                        new ModelingWorkflowService.Action("CONFIRM", "审阅结果", "执行成功仍需确认"),
+                        false);
+        when(workflow.snapshot(any(), eq(GROUP))).thenReturn(state);
+        var guided =
+                new ModelingToolkit(
+                        suggestions,
+                        mdlPublish,
+                        groupService,
+                        conversationScopes,
+                        workspace,
+                        reader,
+                        props,
+                        cli,
+                        null,
+                        workflow);
+        when(mdlPublish.validate(GROUP))
+                .thenReturn(new MdlPublishService.MdlValidation(true, List.of(), "", List.of()));
+        String inventory = guided.listModelingState(singleGroupScope(), null, null);
+        String validation = guided.validateMdl(singleGroupScope(), null, null);
+        assertTrue(inventory.contains("CONFIRMATION"));
+        assertTrue(validation.contains("CONFIRMATION"));
+        assertTrue(validation.contains("不代表业务结果已确认"));
+        assertTrue(validation.contains("\"canPublish\":false"));
     }
 
     /** A conversation pinned to exactly one group — the frontend pulls up the session this way. */
@@ -175,7 +465,7 @@ class ModelingToolkitTest {
                 }
                 case "context validate --strict" -> {
                     return failValidate
-                            ? new Result(1, "1 error(s): cubes/order_stats: unknown column")
+                            ? new Result(1, "1 error(s): models/order_stats: unknown column")
                             : new Result(0, "0 warning(s), 0 error(s)");
                 }
                 case "context build" -> {
@@ -220,7 +510,7 @@ class ModelingToolkitTest {
                 toolkit.writeFile(
                         singleGroupScope(),
                         null,
-                        "cubes/order_stats/metadata.yml",
+                        "models/order_stats/metadata.yml",
                         "name: order_stats\nbase_object: orders\n",
                         "新增订单分析 Cube",
                         null);
@@ -229,7 +519,8 @@ class ModelingToolkitTest {
         assertTrue(out.contains("已写入"));
         assertTrue(out.contains("新增订单分析 Cube"));
         assertEquals(
-                "name: order_stats\nbase_object: orders\n", read("cubes/order_stats/metadata.yml"));
+                "name: order_stats\nbase_object: orders\n",
+                read("models/order_stats/metadata.yml"));
         // Gates ②+③ run the publish-chain argv against a scratch copy, in order.
         List<List<String>> gateArgv = cli.calls.stream().map(FakeWrenCli.Call::args).toList();
         assertTrue(gateArgv.contains(List.of("context", "validate", "--strict")));
@@ -252,7 +543,7 @@ class ModelingToolkitTest {
 
         String out =
                 toolkit.writeFile(
-                        singleGroupScope(), null, "cubes/x/metadata.yml", "name: x\n", "r", null);
+                        singleGroupScope(), null, "models/x/metadata.yml", "name: x\n", "r", null);
 
         assertFalse(out.startsWith("error"), out);
         assertTrue(
@@ -268,6 +559,43 @@ class ModelingToolkitTest {
     }
 
     @Test
+    void questionWriteRequiresPlanAndDoesNotLeakAcrossScopes() throws Exception {
+        String source = "question: 销售额是多少\ndefinition: 有效订单\nsql: SELECT SUM(amount) FROM orders\n";
+        String missing =
+                toolkit.writeFile(
+                        singleGroupScope(),
+                        null,
+                        "knowledge/questions/sales.yml",
+                        source,
+                        "登记分析问题",
+                        null);
+        assertTrue(missing.startsWith("error"), missing);
+        assertFalse(Files.exists(ws().resolve("knowledge/questions/sales.yml")));
+        String planned = source + "modeling:\n  strategy: EXAMPLE\n  reason: 一次性核对总额\n";
+        String accepted =
+                toolkit.writeFile(
+                        singleGroupScope(),
+                        null,
+                        "knowledge/questions/sales.yml",
+                        planned,
+                        "登记分析问题",
+                        null);
+        assertFalse(accepted.startsWith("error"), accepted);
+        when(groupService.getGroup("other", GROUP))
+                .thenThrow(new io.agentscope.dataagent.dataset.DatasetException("无权访问", 403));
+        String foreign =
+                toolkit.writeFile(
+                        new DatasetScope("other", List.of(GROUP)),
+                        null,
+                        "knowledge/questions/foreign.yml",
+                        planned,
+                        "越权测试",
+                        null);
+        assertTrue(foreign.startsWith("error"), foreign);
+        assertFalse(Files.exists(ws().resolve("knowledge/questions/foreign.yml")));
+    }
+
+    @Test
     void writeFileRejectsMalformedYamlWithoutTouchingWorkspace() throws Exception {
         workspace.ensureWorkspace(GROUP);
         cli.calls.clear();
@@ -276,13 +604,13 @@ class ModelingToolkitTest {
                 toolkit.writeFile(
                         singleGroupScope(),
                         null,
-                        "cubes/bad/metadata.yml",
+                        "models/bad/metadata.yml",
                         "name: [unclosed\n",
                         "坏文件",
                         null);
 
         assertTrue(out.startsWith("error: YAML 解析失败"), out);
-        assertFalse(Files.exists(ws().resolve("cubes/bad/metadata.yml")));
+        assertFalse(Files.exists(ws().resolve("models/bad/metadata.yml")));
         assertTrue(cli.calls.stream().noneMatch(c -> c.args().contains("validate")));
     }
 
@@ -314,15 +642,15 @@ class ModelingToolkitTest {
     @Test
     void dryPlanGateBlocksWriteWhenSerdeRejectsManifest() throws Exception {
         workspace.ensureWorkspace(GROUP);
-        seed("cubes/order_stats/metadata.yml", "name: order_stats\n");
-        String before = read("cubes/order_stats/metadata.yml");
+        seed("models/order_stats/metadata.yml", "name: order_stats\n");
+        String before = read("models/order_stats/metadata.yml");
         cli.failDryPlan = true;
 
         String out =
                 toolkit.writeFile(
                         singleGroupScope(),
                         null,
-                        "cubes/order_stats/metadata.yml",
+                        "models/order_stats/metadata.yml",
                         "name: order_stats\nbase_object: orders\n",
                         "补写 Cube",
                         null);
@@ -333,7 +661,7 @@ class ModelingToolkitTest {
         assertTrue(out.contains("dry-plan 物化预检"), out);
         assertTrue(out.contains("missing field `type`"), out);
         assertTrue(out.contains("enrich-context"), out);
-        assertEquals(before, read("cubes/order_stats/metadata.yml"));
+        assertEquals(before, read("models/order_stats/metadata.yml"));
         // validate ran but the real workspace never saw the write.
         assertTrue(
                 cli.calls.stream()
@@ -405,7 +733,7 @@ class ModelingToolkitTest {
                 toolkit.writeFile(
                         new DatasetScope("bob", List.of("bob-group")),
                         null,
-                        "cubes/x/metadata.yml",
+                        "models/x/metadata.yml",
                         "a: 1\n",
                         "r",
                         GROUP);
@@ -498,7 +826,7 @@ class ModelingToolkitTest {
                 toolkit.patchFile(
                         singleGroupScope(),
                         null,
-                        "cubes/new/metadata.yml",
+                        "models/new/metadata.yml",
                         "a",
                         "b",
                         null,
@@ -681,7 +1009,7 @@ class ModelingToolkitTest {
                         "write_file",
                         Map.of(
                                 "path",
-                                "cubes/order_stats/metadata.yml",
+                                "models/order_stats/metadata.yml",
                                 "content",
                                 "name: order_stats\n"));
 
@@ -693,14 +1021,14 @@ class ModelingToolkitTest {
                         .anyMatch(
                                 c -> c.args().equals(List.of("context", "validate", "--strict"))));
         // Preview never touches the real workspace.
-        assertFalse(Files.exists(ws().resolve("cubes/order_stats/metadata.yml")));
+        assertFalse(Files.exists(ws().resolve("models/order_stats/metadata.yml")));
         assertFalse(Files.exists(props.groupRoot(GROUP).resolve("scratch")));
     }
 
     @Test
     void previewWriteExistingFileCarriesOldContentForDiff() throws Exception {
         workspace.ensureWorkspace(GROUP);
-        seed("cubes/order_stats/metadata.yml", "name: order_stats_old\n");
+        seed("models/order_stats/metadata.yml", "name: order_stats_old\n");
         cli.calls.clear();
 
         ModelingToolkit.PreviewResult r =
@@ -709,14 +1037,14 @@ class ModelingToolkitTest {
                         "write_file",
                         Map.of(
                                 "path",
-                                "cubes/order_stats/metadata.yml",
+                                "models/order_stats/metadata.yml",
                                 "content",
                                 "name: order_stats\n"));
 
         assertTrue(r.ok(), String.valueOf(r.error()));
         assertEquals("name: order_stats_old\n", r.oldContent());
         assertEquals("name: order_stats\n", r.newContent());
-        assertEquals("name: order_stats_old\n", read("cubes/order_stats/metadata.yml"));
+        assertEquals("name: order_stats_old\n", read("models/order_stats/metadata.yml"));
     }
 
     @Test
@@ -772,7 +1100,7 @@ class ModelingToolkitTest {
                 toolkit.previewChange(
                         GROUP,
                         "write_file",
-                        Map.of("path", "cubes/bad/metadata.yml", "content", "name: [unclosed\n"));
+                        Map.of("path", "models/bad/metadata.yml", "content", "name: [unclosed\n"));
 
         assertFalse(r.ok());
         assertTrue(r.error().startsWith("error: YAML 解析失败"), r.error());
@@ -810,7 +1138,7 @@ class ModelingToolkitTest {
                 toolkit.previewChange(
                         GROUP,
                         "write_file",
-                        Map.of("path", "cubes/x/metadata.yml", "content", " "));
+                        Map.of("path", "models/x/metadata.yml", "content", " "));
         assertEquals("content 不能为空", emptyContent.error());
 
         ModelingToolkit.PreviewResult emptyOriginal =
@@ -823,7 +1151,7 @@ class ModelingToolkitTest {
                         GROUP,
                         "patch_file",
                         Map.of(
-                                "path", "cubes/new/metadata.yml",
+                                "path", "models/new/metadata.yml",
                                 "original", "a",
                                 "replacement", "b"));
         assertFalse(missingFile.ok());
@@ -1024,7 +1352,7 @@ class ModelingToolkitTest {
                     condition: orders.customer_id = customers.id
                 """);
         seed(
-                "cubes/order_stats/metadata.yml",
+                "models/order_stats/metadata.yml",
                 """
                 name: order_stats
                 base_object: orders
@@ -1050,7 +1378,7 @@ class ModelingToolkitTest {
         assertTrue(out.contains("MANY_TO_ONE"), out);
         assertTrue(out.contains("dsA.c1 → dsB.c2"), out);
         assertTrue(out.contains("order_stats"), out);
-        assertTrue(out.contains("revenue=SUM(amount)"), out);
+        assertFalse(out.contains("### Cube"), out);
         assertTrue(out.contains("high_value"), out);
     }
 
@@ -1078,7 +1406,7 @@ class ModelingToolkitTest {
     @Test
     void stateSurfacesWorkspaceParseIssues() throws Exception {
         workspace.ensureWorkspace(GROUP);
-        seed("cubes/broken/metadata.yml", "name: [unclosed\n");
+        seed("models/broken/metadata.yml", "name: [unclosed\n");
 
         String out = toolkit.listModelingState(singleGroupScope(), null, null);
 
@@ -1426,7 +1754,7 @@ class ModelingToolkitTest {
                     "write_file",
                     "patch_file",
                     "validate_mdl",
-                    "wren_cube_query",
+                    "wren_dry_plan",
                     "suggest_relations",
                     "decide_relation",
                     "decide_relations",

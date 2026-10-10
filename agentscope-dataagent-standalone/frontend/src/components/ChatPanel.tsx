@@ -14,6 +14,7 @@ import OntologyGraphView from './OntologyGraphView';
 import type { OntologyGraphData } from '../api/ontology';
 import Markdown from './Markdown';
 import PythonArtifactsPanel from './PythonArtifactsPanel';
+import AnswerFeedback from './AnswerFeedback';
 import { extractVegaSpec } from '../utils/charts';
 import { listGroups, DatasetGroup } from '../api/datasets';
 import { listOntologies, OntologyEntry } from '../api/ontologies';
@@ -40,6 +41,7 @@ type TraceNode =
 
 interface Message {
   id: string;
+  answerId?: string;
   role: Role;
   text: string;
   tools: ToolEntry[];
@@ -308,6 +310,7 @@ function turnsToMessages(turns: TurnEntry[]): Message[] {
         cur.trace = [...cur.trace, { kind: 'text', id: `${cur.id}-n${cur.trace.length}`, text: cur.text }];
       }
       cur.id = t.id;
+      cur.answerId = t.id;
       cur.text = t.content ?? '';
     }
   }
@@ -598,7 +601,9 @@ export default function ChatPanel({
           });
         } else if (evt.type === 'tool_call') {
           // Skip framework-internal tools that should not appear in the UI.
-          if (evt.toolName && isHiddenTool(evt.toolName)) continue;
+          if (evt.toolName && isHiddenTool(evt.toolName)) {
+            continue;
+          }
           const entry: ToolEntry = {
             id: `${evt.toolName ?? 'tool'}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
             name: evt.toolName ?? 'tool',
@@ -690,7 +695,7 @@ export default function ChatPanel({
             next.set(convId, {
               ...cur,
               messages: cur.messages.map(m => m.id === replyMsg.id
-                ? { ...m, pending: false, elapsedMs: m.startedAtMs ? Date.now() - m.startedAtMs : undefined }
+                ? { ...m, answerId: evt.answerId, pending: false, elapsedMs: m.startedAtMs ? Date.now() - m.startedAtMs : undefined }
                 : m),
               busy: false,
             });
@@ -927,6 +932,9 @@ export default function ChatPanel({
                         ? <div className="da-typing"><span /><span /><span /></div>
                         : null}
                     {answer}
+                    {agentId === 'data-agent' && curKey && !m.pending && !m.failed && m.text.trim() && (
+                      <AnswerFeedback agentId={agentId} session={curKey} answerId={m.answerId} text={m.text} />
+                    )}
                     {!m.pending && m.tools.some(t => t.name === 'run_python' && t.result) && (
                       <PythonArtifactsPanel tools={m.tools} onInspect={onInspect} />
                     )}

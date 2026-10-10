@@ -1,0 +1,32 @@
+{
+  "groupId": "2938f8c8-6fee-44aa-a700-6aa8c9769c98",
+  "stage": "DATA_PREPARATION",
+  "mdlState": "NONE",
+  "publishedVersion": 0,
+  "queryAvailable": false,
+  "draftChanged": false,
+  "engineeringStatus": "NOT_CHECKED",
+  "engineeringCheckedAt": null,
+  "questionSummary": {
+    "total": 0,
+    "required": 0,
+    "confirmed": 0,
+    "incomplete": 0,
+    "needsValidation": 0,
+    "awaitingConfirmation": 0
+  },
+  "changedAssets": [],
+  "blockers": [
+    {
+      "code": "DATA_REQUIRED",
+      "questionId": null,
+      "message": "请先选择数据表或上传数据文件"
+    }
+  ],
+  "nextAction": {
+    "type": "PREPARE_DATA",
+    "label": "选择表或上传数据",
+    "message": "接入数据后系统自动生成基础模型，成功后即可问数。"
+  },
+  "canPublish": false
+}

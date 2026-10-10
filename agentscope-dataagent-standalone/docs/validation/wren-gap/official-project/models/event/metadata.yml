@@ -1,0 +1,29 @@
+{
+  "name": "event",
+  "properties": {
+    "description": "测试业务模型：event"
+  },
+  "table_reference": {
+    "catalog": "",
+    "schema": "wren_gap_fixture",
+    "table": "ds_event"
+  },
+  "columns": [
+    {
+      "name": "event_id",
+      "type": "BIGINT"
+    },
+    {
+      "name": "value_cents",
+      "type": "BIGINT"
+    },
+    {
+      "name": "code",
+      "type": "VARCHAR"
+    },
+    {
+      "name": "note",
+      "type": "VARCHAR"
+    }
+  ]
+}

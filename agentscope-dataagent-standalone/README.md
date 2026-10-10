@@ -340,6 +340,16 @@ the `jdbc` Spring profile and set `DATAAGENT_DB_URL` / `DATAAGENT_DB_USER`
 
 ---
 
+## Conversational modeling acceptance
+
+Start with **数据准备**: select tables or upload CSV/Excel. A successfully published base model can already answer queries. Business documents are optional. In **对话建模**, start with one representative business question and refine the missing business definitions; recommended questions remain optional unless you agree to make them required. The modeling assistant clarifies metric definitions, granularity, units, dates and filters, then proposes question YAML through the existing HITL file workflow. The same question records appear in **验证与确认**: run engineering checks and real draft Wren queries, inspect definitions and results, then confirm or return each required question. **发布** shows business changes and blockers, with technical file differences collapsed. Queries continue using the published version until publication succeeds.
+
+Required questions must be confirmed before publication. Editing the question or semantic model expires the previous confirmation. Confirmed examples use Wren's `knowledge/sql` format and are available to the query assistant only after publication; the assistant reruns SQL against current data. Existing knowledge bases without questions retain their original publication behavior. Unconfirmed legacy SQL examples are excluded from new published snapshots.
+
+The workbench and assistant share a derived next-action snapshot; failed initialization never claims query availability. See [ADR 0049](docs/adr/0049-guided-modeling-workflow.md) and [specification 040](docs/specs/040-guided-modeling-workflow.md).
+
+See [ADR 0048](docs/adr/0048-question-driven-modeling-and-verified-examples.md) and [specification 039](docs/specs/039-question-driven-modeling.md).
+
 ## Building
 
 ```bash
@@ -356,3 +366,19 @@ Format check (CI gates on this):
 ```bash
 mvn -pl agentscope-examples/agents/agentscope-dataagent spotless:check
 ```
+
+对话建模工作台：聊天为主区域，支持多个预设问题、共用口径澄清与逐项验收；顶部“查看模型”访问模型/Cube/视图/MDL 及发布快照。设计见 [spec 041](docs/specs/041-conversation-first-multi-question-workbench.md) 和 [ADR 0050](docs/adr/0050-conversation-first-multi-question-workbench.md)。
+
+
+### Wren 问数与示例召回
+
+语义建模使用模型、关系与明细视图，问数统一走 Wren SQL，Cube 已停用（ADR 0063）。预设问题可选；建模确认且发布的问题和最终答案点赞的成功查询参与召回。
+
+在 `DATAAGENT_WREN_EXECUTABLE` 对应的 Python 环境安装官方多语言记忆依赖：
+
+```powershell
+python -m pip install -r requirements-wren.txt
+wren memory status
+```
+
+`memory status` 需在 Wren 工程目录执行。后端显示 `lancedb` 才是向量召回；默认使用 `paraphrase-multilingual-MiniLM-L12-v2`，首次下载需要网络。可在服务进程环境设置 `WREN_MEMORY_BACKEND=lancedb`、`WREN_EMBEDDING_BACKEND=onnx`。缺依赖、模型不可用或 CLI 失败时，召回工具会明确显示中文词项匹配的降级状态，不因相同年份召回无关问题。应用不会改动外部 Python 环境。

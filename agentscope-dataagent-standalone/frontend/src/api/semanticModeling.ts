@@ -195,14 +195,7 @@ export async function suggestRelations(groupId: string): Promise<ModelingRelatio
 }
 
 /** LLM cube proposals (not persisted). */
-export async function suggestCubes(groupId: string): Promise<CubeSuggestion[]> {
-  const res = await fetch(`${base(groupId)}/suggest/cubes`, {
-    method: 'POST',
-    headers: authHeaders(),
-  });
-  if (!res.ok) throw new Error(await errorMessage(res, `Cube 建议生成失败: ${res.status}`));
-  return res.json();
-}
+
 
 /** Human review of an edge: confirm (optionally redirecting via swap / joinType) or reject. */
 export async function updateRelation(
@@ -233,37 +226,11 @@ export async function addManualRelation(
   return res.json();
 }
 
-export async function createCube(groupId: string, req: CubeRequest): Promise<ModelingCube> {
-  const res = await fetch(`${base(groupId)}/cubes`, {
-    method: 'POST',
-    headers: jsonHeaders(),
-    body: JSON.stringify(req),
-  });
-  if (!res.ok) throw new Error(await errorMessage(res, `Cube 创建失败: ${res.status}`));
-  return res.json();
-}
 
-export async function updateCube(
-  groupId: string,
-  cubeId: string,
-  req: CubeRequest,
-): Promise<ModelingCube> {
-  const res = await fetch(`${base(groupId)}/cubes/${encodeURIComponent(cubeId)}`, {
-    method: 'PUT',
-    headers: jsonHeaders(),
-    body: JSON.stringify(req),
-  });
-  if (!res.ok) throw new Error(await errorMessage(res, `Cube 更新失败: ${res.status}`));
-  return res.json();
-}
 
-export async function deleteCube(groupId: string, cubeId: string): Promise<void> {
-  const res = await fetch(`${base(groupId)}/cubes/${encodeURIComponent(cubeId)}`, {
-    method: 'DELETE',
-    headers: authHeaders(),
-  });
-  if (!res.ok) throw new Error(await errorMessage(res, `Cube 删除失败: ${res.status}`));
-}
+
+
+
 
 // ------------------------------------------------------------------ views (specs/011 M2)
 

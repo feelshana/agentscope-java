@@ -1,0 +1,12 @@
+{
+  "real_wren_query_matches_csv_oracle": true,
+  "oracle_yuan": 3749.0,
+  "query_uses_published_version_with_expired_draft": 2,
+  "group_scope_preserved": true,
+  "csv_export_present": true,
+  "query_tools": [
+    "wren_recall_examples",
+    "wren_describe_model",
+    "wren_run_sql"
+  ]
+}

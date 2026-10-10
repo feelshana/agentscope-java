@@ -1,0 +1,26 @@
+{
+  "groupId": "2938f8c8-6fee-44aa-a700-6aa8c9769c98",
+  "stage": "COMPLETE",
+  "mdlState": "PUBLISHED",
+  "publishedVersion": 3,
+  "queryAvailable": true,
+  "draftChanged": false,
+  "engineeringStatus": "PASSED",
+  "engineeringCheckedAt": "2026-10-07T05:02:05.254757100Z",
+  "questionSummary": {
+    "total": 1,
+    "required": 1,
+    "confirmed": 1,
+    "incomplete": 0,
+    "needsValidation": 0,
+    "awaitingConfirmation": 0
+  },
+  "changedAssets": [],
+  "blockers": [],
+  "nextAction": {
+    "type": "QUERY",
+    "label": "开始问数",
+    "message": "当前确认的业务模型已发布，问数使用已发布版本。"
+  },
+  "canPublish": true
+}

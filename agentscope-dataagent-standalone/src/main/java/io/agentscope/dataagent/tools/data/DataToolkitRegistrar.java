@@ -57,6 +57,7 @@ public class DataToolkitRegistrar {
     private final DatasetGroupService datasetGroupService;
     private final MdlCatalog mdlCatalog;
     private final io.agentscope.dataagent.web.artifact.ArtifactStore artifactStore;
+    private final io.agentscope.dataagent.dataset.AnswerQueryMemory answerMemory;
 
     public DataToolkitRegistrar(
             DataAgentBootstrap bootstrap,
@@ -66,7 +67,8 @@ public class DataToolkitRegistrar {
             WrenQueryGateway wrenGateway,
             DatasetGroupService datasetGroupService,
             MdlCatalog mdlCatalog,
-            io.agentscope.dataagent.web.artifact.ArtifactStore artifactStore) {
+            io.agentscope.dataagent.web.artifact.ArtifactStore artifactStore,
+            io.agentscope.dataagent.dataset.AnswerQueryMemory answerMemory) {
         this.bootstrap = bootstrap;
         this.contextProvider = contextProvider;
         this.chartOptions = chartOptions;
@@ -75,6 +77,7 @@ public class DataToolkitRegistrar {
         this.datasetGroupService = datasetGroupService;
         this.mdlCatalog = mdlCatalog;
         this.artifactStore = artifactStore;
+        this.answerMemory = answerMemory;
     }
 
     @PostConstruct
@@ -104,12 +107,13 @@ public class DataToolkitRegistrar {
                     .getToolkit()
                     .registerTool(
                             new WrenToolkit(
-                                    wrenGateway,
-                                    datasetGroupService,
-                                    conversationScopes,
-                                    mdlCatalog,
-                                    new SandboxBackedFilesystem(),
-                                    artifactStore));
+                                            wrenGateway,
+                                            datasetGroupService,
+                                            conversationScopes,
+                                            mdlCatalog,
+                                            new SandboxBackedFilesystem(),
+                                            artifactStore)
+                                    .withAnswerMemory(answerMemory));
             log.info("Registered Wren toolkit onto main agent '{}'", main.getName());
 
             // Register the Python sandbox-execution tool. See the class javadoc for why a

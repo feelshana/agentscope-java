@@ -1,0 +1,36 @@
+[
+  {
+    "name": "invalid_yaml",
+    "status": "PASS",
+    "response": {
+      "ok": false,
+      "error": "error: YAML 解析失败，文件未写入（cubes/invalid_probe/metadata.yml）：while parsing a flow sequence",
+      "oldContent": "",
+      "newContent": "name: [invalid"
+    }
+  },
+  {
+    "name": "platform_file",
+    "status": "PASS",
+    "response": {
+      "ok": false,
+      "error": "error: 工程校验未通过，文件未写入（context validate --strict 对工程副本执行）：\n[ERROR] wren_project.yml: missing required field 'data_source'\r\n[ERROR] relationships > order_customer: references unknown model 'order'\r\n[ERROR] relationships > order_customer: references unknown model 'customer'\n提示：--strict 模式下 warning 也判失败；若报出的 warning 来自本文件的同类问题（如多条关系缺 join_type），请在本次变更中一并修完，或用 write_file 重写全文件，不要逐条提交。",
+      "oldContent": "schema_version: 5\nname: kb-73b26360-df5c-497e-9137-bdfe7f50df67\nversion: '1.0'\ncatalog: wren\nschema: public\ndata_source: mysql\n",
+      "newContent": "name: forbidden_probe"
+    }
+  },
+  {
+    "name": "path_escape",
+    "status": "PASS",
+    "response": {
+      "ok": false,
+      "error": "工作区路径越界：../outside_probe.yml",
+      "oldContent": "",
+      "newContent": ""
+    }
+  },
+  {
+    "name": "preview_does_not_mutate_workspace",
+    "status": "PASS"
+  }
+]

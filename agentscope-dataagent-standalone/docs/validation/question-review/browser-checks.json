@@ -1,0 +1,22 @@
+{
+  "group_id": "2938f8c8-6fee-44aa-a700-6aa8c9769c98",
+  "question_id": "review_probe_cadb6daa",
+  "checks": {
+    "real_wren_execution": true,
+    "receipt_has_view_definition": true,
+    "adding_not_saved_label": true,
+    "requirements_add_prefills_multiple": true,
+    "prefill_does_not_write": true,
+    "acceptance_has_same_add_entry": true,
+    "same_card_shows_view_sql": true,
+    "failed_confirmation_not_reported_saved": true,
+    "confirmation_button_removed": true,
+    "confirmation_has_person_and_time": true,
+    "next_step_visible": true,
+    "confirmation_survives_refresh": true,
+    "stale_keeps_old_definition": true,
+    "stale_cannot_confirm": true,
+    "narrow_no_horizontal_overflow": true,
+    "no_runtime_exceptions": true
+  }
+}

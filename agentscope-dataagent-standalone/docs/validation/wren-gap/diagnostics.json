@@ -1,0 +1,8 @@
+{
+  "fanout_wrong_revenue": 1950.0,
+  "correct_revenue": 1050.0,
+  "default_1000_rows_event_sum": 10.0,
+  "maximum_10000_rows_event_sum": 100.0,
+  "full_event_sum": 100.05,
+  "note": "Reference results only; not a platform or Wren execution accuracy score."
+}

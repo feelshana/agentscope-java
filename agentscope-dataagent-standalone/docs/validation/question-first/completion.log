@@ -1,0 +1,13 @@
+{"timestamp": "2026-10-08T16:17:30.599096", "stage": "question-first", "event": "hitl_request", "sessionKey": null, "error": null}
+{"timestamp": "2026-10-08T16:17:30.622446", "stage": "question-first", "event": "done", "sessionKey": "modeling-76649222-bc35-4c9c-88e4-7d672b3b0b92", "error": null}
+{"timestamp": "2026-10-08T16:17:44.538646", "stage": "question-first", "event": "hitl_request", "sessionKey": null, "error": null}
+{"timestamp": "2026-10-08T16:17:44.550884", "stage": "question-first", "event": "done", "sessionKey": "modeling-76649222-bc35-4c9c-88e4-7d672b3b0b92", "error": null}
+{"timestamp": "2026-10-08T16:17:51.347227", "stage": "question-first", "event": "hitl_request", "sessionKey": null, "error": null}
+{"timestamp": "2026-10-08T16:17:51.367502", "stage": "question-first", "event": "done", "sessionKey": "modeling-76649222-bc35-4c9c-88e4-7d672b3b0b92", "error": null}
+{"timestamp": "2026-10-08T16:18:20.053894", "stage": "question-first", "event": "done", "sessionKey": "modeling-76649222-bc35-4c9c-88e4-7d672b3b0b92", "error": null}
+Traceback (most recent call last):
+  File "D:\workspace\data-agent\agentscope-dataagent-standalone\docs\validation\wren-gap\question_first_complete.py", line 27, in <module>
+    exec(textwrap.dedent(tail))
+  File "<string>", line 43, in <module>
+NameError: name 'csv' is not defined
+{"initial_batch_form": true, "initial_chat_hidden": true, "initial_single_intake": true, "no_classification": true, "submission_shows_chat": true, "single_sse_submission": true, "no_chat_batch_button": true, "pending_hitl_restores_chat": true, "two_questions_saved_with_sql": true, "classification_removed_from_api": true, "question_driven_view_or_cube": true, "legacy_false_questions_block_publish": true, "one_confirmation_still_blocked": true, "real_wren_matches_csv_oracle": true, "all_confirmed_can_publish": true, "saved_questions_restore_conversation": true, "no_runtime_exceptions": true}

@@ -208,15 +208,14 @@ public class DataDynamicContextMiddleware implements HarnessRuntimeMiddleware {
                 .append(g.groupName())
                 .append("」，无需复制长 ID）\n\n");
         sb.append(
-                "问数路由（官方决策树）：聚合指标问题先核对 Cube 清单，Cube 成员能覆盖时优先用 wren_query_cube"
-                        + "（引擎确定性编译聚合，错误率更低）——覆盖判定：问题的度量、分组维度、时间粒度需全部落在"
-                        + " Cube 成员上；「按 X 的排名 / TOP-N」要求 X 是 Cube 的维度成员（dimensions=[X] + order_by"
-                        + " 该度量 + limit），Cube 缺该维度即不覆盖，改按 View / 模型 SQL GROUP BY X 排名——禁止不分组"
-                        + "而只对度量排序取 TOP-N（那只是对聚合行排序，不是实体排名）；已发布 View 能直接覆盖问题时优先用 wren_run_sql"
-                        + " 按视图名直接查询（视图口径已经建模审阅）；跨模型属性先用"
-                        + " wren_describe_model(expand_relation_fields=true) 展开 many"
-                        + " 侧关联字段组，并以单一逻辑模型查询投影列让 Wren 自动 JOIN；语义资产都无法表达时使用其他逻辑"
-                        + " SQL，显式 JOIN 是最后兜底。\n\n");
+                "问数统一使用 wren_run_sql 查询已发布逻辑模型或视图；先召回示例核对口径，再用 wren_describe_model"
+                    + " 核对实际字段。年份是时间筛选，不代表按年分组；去重客户数在所需时间范围内 COUNT DISTINCT 客户身份，不能累加月度去重人数。复杂 SQL"
+                    + " 先规划，禁止猜测派生列。\n\n");
+        sb.append(
+                "遇到常用指标或复杂口径时，按需调用 wren_recall_examples"
+                    + " 读取本库已发布的人员确认示例，核对业务定义后重新查询；不能复用旧数值。销售额/净营收等歧义未被规则明确时先澄清。月份字符串 yyyy-MM"
+                    + " 与时间戳应按同一类型/格式对齐，MySQL 不使用 STRFTIME。\n"
+                    + "用户仅确认环比时，不得擅自增加两个月都有营收、只保留增长客户等限制。按既定口径保留统计对象，前月为零时百分比标为不可计算/新增，本月为零可计算下降；特殊筛选需明确说明并确认。空结果不能直接推断原因，先核查实际分布。全年月报说明缺失月份的处理，不能把未返回月份自动当作零。所有过程说明与回答使用简体中文。\n\n");
         sb.append("**逻辑模型：**\n");
         for (MdlCatalog.Model m : g.models()) {
             sb.append("- `").append(m.name()).append("`");
@@ -228,36 +227,6 @@ public class DataDynamicContextMiddleware implements HarnessRuntimeMiddleware {
                 sb.append(" — ").append(desc);
             }
             sb.append('\n');
-        }
-        if (!g.cubes().isEmpty()) {
-            sb.append("\n**Cube：**\n");
-            for (MdlCatalog.Cube c : g.cubes()) {
-                sb.append("- `")
-                        .append(c.name())
-                        .append("`（基础模型 `")
-                        .append(c.baseModel())
-                        .append("`）\n");
-                if (!c.measures().isEmpty()) {
-                    sb.append("  - 度量：").append(memberDefs(c.measures())).append('\n');
-                }
-                StringBuilder dims = new StringBuilder();
-                if (!c.dimensions().isEmpty()) {
-                    dims.append("维度：").append(memberNames(c.dimensions()));
-                }
-                if (!c.timeDimensions().isEmpty()) {
-                    if (dims.length() > 0) {
-                        dims.append("；");
-                    }
-                    dims.append("时间维度：").append(memberNames(c.timeDimensions()));
-                }
-                if (dims.length() > 0) {
-                    sb.append("  - ").append(dims).append('\n');
-                }
-                String desc = flat(c.description(), 100);
-                if (desc != null) {
-                    sb.append("  - 说明：").append(desc).append('\n');
-                }
-            }
         }
         return sb.toString();
     }

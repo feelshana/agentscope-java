@@ -1,0 +1,27 @@
+{
+  "unconfirmed_publish_blocked": true,
+  "real_wren_result": {
+    "columns": [
+      "total_sales_amount"
+    ],
+    "rows": [
+      {
+        "total_sales_amount": 3749.0
+      }
+    ],
+    "row_count": 1,
+    "truncated": false
+  },
+  "independent_csv_oracle_yuan": 3749.0,
+  "forged_receipt_rejected": true,
+  "confirmed_publish": {
+    "ok": true,
+    "issues": [],
+    "output": "Built: 1 models, 0 views → D:\\workspace\\data-agent\\agentscope-dataagent-standalone\\.tmp-question-acceptance\\mdl\\f8b8ddbe-7b0f-4e41-8f4e-48e33dac3ada\\project\\target\\mdl.json\r\n\r\nNext: wren --sql 'SELECT ...' to query your data.",
+    "mdlState": "PUBLISHED",
+    "mdlVersion": 2,
+    "mdlPublishedAt": "2026-10-07T02:55:02.080935500Z"
+  },
+  "foreign_owner_rejected": true,
+  "protected_preview_rejected": true
+}

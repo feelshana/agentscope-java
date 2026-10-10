@@ -1,0 +1,55 @@
+{
+  "group_id": "f8b8ddbe-7b0f-4e41-8f4e-48e33dac3ada",
+  "dataset": {
+    "id": "d22cf7e3-2d56-4bff-8086-282f5e4317a0",
+    "name": "order",
+    "groupId": "f8b8ddbe-7b0f-4e41-8f4e-48e33dac3ada",
+    "tableName": "ds_81b637d8_ac81ee81_order",
+    "schemaName": "data_agent",
+    "rowCount": 12,
+    "description": "订单表，记录每笔订单的基本信息，包括订单ID、客户ID、下单时间、订单金额、订单状态及逻辑删除标记，用于订单管理与交易分析。",
+    "sourceFileName": "ds_order.csv",
+    "columns": [
+      {
+        "name": "order_id",
+        "originalName": "order_id",
+        "sqlType": "BIGINT",
+        "description": "订单ID，唯一标识一笔订单，如1001、1002、1003"
+      },
+      {
+        "name": "customer_id",
+        "originalName": "customer_id",
+        "sqlType": "BIGINT",
+        "description": "客户ID，标识下单客户，如1、2、999"
+      },
+      {
+        "name": "order_time",
+        "originalName": "order_time",
+        "sqlType": "DATETIME",
+        "description": "下单时间，格式为'yyyy-MM-dd HH:mm:ss'，如2025-01-01 00:00:00、2025-01-31 23:59:59等"
+      },
+      {
+        "name": "amount_cents",
+        "originalName": "amount_cents",
+        "sqlType": "BIGINT",
+        "description": "订单金额，单位为分，如10000表示100.00元"
+      },
+      {
+        "name": "status",
+        "originalName": "status",
+        "sqlType": "VARCHAR(1024)",
+        "description": "订单状态，枚举值包括PAID（已支付）、CANCELLED（已取消）、REFUNDED（已退款）"
+      },
+      {
+        "name": "is_deleted",
+        "originalName": "is_deleted",
+        "sqlType": "BIGINT",
+        "description": "删除标记，0表示未删除，1表示已删除"
+      }
+    ],
+    "createdAt": "2026-10-07T02:48:08.535509400Z",
+    "origin": "upload",
+    "externalDataSourceId": null
+  },
+  "modeling_session": "acceptance-model-3693a04f04ef4b84b9f1cb4dc9335697"
+}

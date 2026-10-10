@@ -1,0 +1,1720 @@
+[
+  {
+    "type": "token",
+    "data": "我先"
+  },
+  {
+    "type": "token",
+    "data": "确认"
+  },
+  {
+    "type": "token",
+    "data": "知识"
+  },
+  {
+    "type": "token",
+    "data": "库"
+  },
+  {
+    "type": "token",
+    "data": "中的"
+  },
+  {
+    "type": "token",
+    "data": " Cube"
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": "清单"
+  },
+  {
+    "type": "token",
+    "data": "与"
+  },
+  {
+    "type": "token",
+    "data": "已"
+  },
+  {
+    "type": "token",
+    "data": "确认"
+  },
+  {
+    "type": "token",
+    "data": "口径"
+  },
+  {
+    "type": "token",
+    "data": "，"
+  },
+  {
+    "type": "token",
+    "data": "再做"
+  },
+  {
+    "type": "token",
+    "data": "实际"
+  },
+  {
+    "type": "token",
+    "data": "查询"
+  },
+  {
+    "type": "token",
+    "data": "。"
+  },
+  {
+    "type": "tool_call",
+    "toolName": "wren_recall_examples",
+    "toolCallId": "call_00_zbFP1W5DOIxRwlsReUEA7843",
+    "requestId": "310c7746-5c70-4330-aaa7-3b6e255d26e2",
+    "runId": "c5ca79c0-e85",
+    "seq": 0,
+    "toolInput": "{\"question\":\"2025年有效订单销售额（按已确认口径，单位元）\",\"group_id\":\"guided-workflow-43b1c84c\"}"
+  },
+  {
+    "type": "tool_call",
+    "toolName": "wren_describe_model",
+    "toolCallId": "call_01_IogX0wzPbPgNd0OOwIPJ7958",
+    "requestId": "310c7746-5c70-4330-aaa7-3b6e255d26e2",
+    "runId": "c5ca79c0-e85",
+    "seq": 1,
+    "toolInput": "{\"model_names\":[\"order\"],\"group_id\":\"guided-workflow-43b1c84c\"}"
+  },
+  {
+    "type": "tool_result",
+    "toolName": "wren_recall_examples",
+    "toolCallId": "call_00_zbFP1W5DOIxRwlsReUEA7843",
+    "requestId": "310c7746-5c70-4330-aaa7-3b6e255d26e2",
+    "runId": "c5ca79c0-e85",
+    "seq": 2,
+    "toolResult": "\"**知识库：** guided-workflow-43b1c84c（group_id: `2938f8c8-6fee-44aa-a700-6aa8c9769c98`，已发布 MDL 版本：2）\\n\\n---\\nnl: 2025年有效订单销售额是多少？\\nsql: SELECT SUM(amount_cents) / 100 AS total_sales FROM \\\"order\\\" WHERE order_time >= DATE_TRUNC('year', DATE '2025-01-01')   AND order_time < DATE_TRUNC('year', DATE '2025-01-01') + INTERVAL 1 YEAR   AND status IN ('PAID', 'COMPLETED')   AND is_deleted = 0\\nsource: user\\nverified: true\\nvalidation_id: a064758e-2331-4709-ad09-d667b98fa8d4\\nmodel_hash: 30ff15e816360a24b3d1d289aa9fca1100c37e01c3e285b152ba1157fdbef76b\\nconfirmed_by: bob\\n---\\n\\n# 业务口径\\n\\n统计 2025 自然年（order_time 在 2025-01-01 00:00:00 至 2025-12-31 23:59:59 之间） 的有效订单销售额。有效订单指 status 为 PAID 或 COMPLETED、且 is_deleted = 0 的订单。 销售额为订单金额合计，amount_cents 单位为分，需除以 100 换算为元，不扣除退款， 不需要关联客户表。\\n\\n# SQL\\n\\n```sql\\nSELECT SUM(amount_cents) / 100 AS total_sales FROM \\\"order\\\" WHERE order_time >= DATE_TRUNC('year', DATE '2025-01-01')\\n  AND order_time < DATE_TRUNC('year', DATE '2025-01-01') + INTERVAL 1 YEAR\\n  AND status IN ('PAID', 'COMPLETED')\\n  AND is_deleted = 0\\n```\\n\\n请核对口径并重新查询；不得把示例当作固定答案。\""
+  },
+  {
+    "type": "tool_result",
+    "toolName": "wren_describe_model",
+    "toolCallId": "call_01_IogX0wzPbPgNd0OOwIPJ7958",
+    "requestId": "310c7746-5c70-4330-aaa7-3b6e255d26e2",
+    "runId": "c5ca79c0-e85",
+    "seq": 3,
+    "toolResult": "\"## 已发布语义模型详情\\n\\n**知识库：** guided-workflow-43b1c84c（group_id: `2938f8c8-6fee-44aa-a700-6aa8c9769c98`，已发布 MDL 版本：2）\\n\\n### order\\n订单表，记录订单的基础信息，包括订单ID、客户ID、下单时间、订单金额、订单状态及删除标记，用于订单管理与交易分析。\\n\\n| 字段 | 类型 | 描述 |\\n|---|---|---|\\n| order_id | BIGINT | 订单ID，唯一标识一笔订单，包含1001, 1002, 1003等 |\\n| customer_id | BIGINT | 客户ID，标识下单客户，包含1, 2, 999等 |\\n| order_time | DATETIME | 订单时间，格式为'yyyy-MM-dd HH:mm:ss'，包含2025-01-01 00:00:00,2025-01-31 23:59:59等 |\\n| amount_cents | BIGINT | 订单金额，单位为分，包含10000, 20000, 30000等 |\\n| status | VARCHAR(1024) | 订单状态，包含PAID(已支付)、CANCELLED(已取消)、REFUNDED(已退款)等 |\\n| is_deleted | BIGINT | 删除标记，0表示未删除，1表示已删除 |\\n\\n\""
+  },
+  {
+    "type": "token",
+    "data": "已"
+  },
+  {
+    "type": "token",
+    "data": "确认"
+  },
+  {
+    "type": "token",
+    "data": "口径"
+  },
+  {
+    "type": "token",
+    "data": "（"
+  },
+  {
+    "type": "token",
+    "data": "有效"
+  },
+  {
+    "type": "token",
+    "data": "订单"
+  },
+  {
+    "type": "token",
+    "data": " ="
+  },
+  {
+    "type": "token",
+    "data": " status"
+  },
+  {
+    "type": "token",
+    "data": " ∈"
+  },
+  {
+    "type": "token",
+    "data": " {"
+  },
+  {
+    "type": "token",
+    "data": "PA"
+  },
+  {
+    "type": "token",
+    "data": "ID"
+  },
+  {
+    "type": "token",
+    "data": ","
+  },
+  {
+    "type": "token",
+    "data": " COMP"
+  },
+  {
+    "type": "token",
+    "data": "LET"
+  },
+  {
+    "type": "token",
+    "data": "ED"
+  },
+  {
+    "type": "token",
+    "data": "}"
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": "且"
+  },
+  {
+    "type": "token",
+    "data": " is"
+  },
+  {
+    "type": "token",
+    "data": "_de"
+  },
+  {
+    "type": "token",
+    "data": "leted"
+  },
+  {
+    "type": "token",
+    "data": " ="
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": "0"
+  },
+  {
+    "type": "token",
+    "data": "，"
+  },
+  {
+    "type": "token",
+    "data": "金额"
+  },
+  {
+    "type": "token",
+    "data": "分"
+  },
+  {
+    "type": "token",
+    "data": "转"
+  },
+  {
+    "type": "token",
+    "data": "元"
+  },
+  {
+    "type": "token",
+    "data": "）。"
+  },
+  {
+    "type": "token",
+    "data": "现在"
+  },
+  {
+    "type": "token",
+    "data": "重新"
+  },
+  {
+    "type": "token",
+    "data": "查询"
+  },
+  {
+    "type": "token",
+    "data": "，"
+  },
+  {
+    "type": "token",
+    "data": "不复"
+  },
+  {
+    "type": "token",
+    "data": "用"
+  },
+  {
+    "type": "token",
+    "data": "旧"
+  },
+  {
+    "type": "token",
+    "data": "数值"
+  },
+  {
+    "type": "token",
+    "data": "。"
+  },
+  {
+    "type": "tool_call",
+    "toolName": "wren_run_sql",
+    "toolCallId": "call_00_As8KoRPq81gyn2uua5Ge0722",
+    "requestId": "310c7746-5c70-4330-aaa7-3b6e255d26e2",
+    "runId": "66f568cf-328",
+    "seq": 4,
+    "toolInput": "{\"question\":\"2025年有效订单销售额（status为PAID或COMPLETED且未删除，金额分转元）\",\"group_id\":\"guided-workflow-43b1c84c\",\"sql\":\"SELECT SUM(amount_cents) / 100 AS total_sales FROM \\\"order\\\" WHERE order_time >= DATE_TRUNC('year', DATE '2025-01-01') AND order_time < DATE_TRUNC('year', DATE '2025-01-01') + INTERVAL 1 YEAR AND status IN ('PAID', 'COMPLETED') AND is_deleted = 0\"}"
+  },
+  {
+    "type": "tool_result",
+    "toolName": "wren_run_sql",
+    "toolCallId": "call_00_As8KoRPq81gyn2uua5Ge0722",
+    "requestId": "310c7746-5c70-4330-aaa7-3b6e255d26e2",
+    "runId": "66f568cf-328",
+    "seq": 5,
+    "toolResult": "\"## wren 语义查询结果\\n\\n**知识库：** guided-workflow-43b1c84c（group_id: `2938f8c8-6fee-44aa-a700-6aa8c9769c98`，已发布 MDL 版本：2）\\n\\n**查询问题：** 2025年有效订单销售额（status为PAID或COMPLETED且未删除，金额分转元）\\n\\n**SQL 语句：**\\n```sql\\nSELECT SUM(amount_cents) / 100 AS total_sales FROM \\\"order\\\" WHERE order_time >= DATE_TRUNC('year', DATE '2025-01-01') AND order_time < DATE_TRUNC('year', DATE '2025-01-01') + INTERVAL 1 YEAR AND status IN ('PAID', 'COMPLETED') AND is_deleted = 0\\n```\\n\\n**查询结果：**\\n\\n| total_sales |\\n|---|\\n| 3749.0 |\\n\\n**数据文件：** data/78b5340bdadb.csv（1 行 × 1 列；run_python 中 pd.read_csv('data/78b5340bdadb.csv') 读取）\\n\""
+  },
+  {
+    "type": "token",
+    "data": "##"
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": "202"
+  },
+  {
+    "type": "token",
+    "data": "5"
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": "年"
+  },
+  {
+    "type": "token",
+    "data": "有效"
+  },
+  {
+    "type": "token",
+    "data": "订单"
+  },
+  {
+    "type": "token",
+    "data": "销售额"
+  },
+  {
+    "type": "token",
+    "data": "（"
+  },
+  {
+    "type": "token",
+    "data": "实测"
+  },
+  {
+    "type": "token",
+    "data": "查询"
+  },
+  {
+    "type": "token",
+    "data": "）\n\n"
+  },
+  {
+    "type": "token",
+    "data": "**"
+  },
+  {
+    "type": "token",
+    "data": "结果"
+  },
+  {
+    "type": "token",
+    "data": "："
+  },
+  {
+    "type": "token",
+    "data": "3"
+  },
+  {
+    "type": "token",
+    "data": ","
+  },
+  {
+    "type": "token",
+    "data": "749"
+  },
+  {
+    "type": "token",
+    "data": "."
+  },
+  {
+    "type": "token",
+    "data": "00"
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": "元"
+  },
+  {
+    "type": "token",
+    "data": "**\n\n"
+  },
+  {
+    "type": "token",
+    "data": "**"
+  },
+  {
+    "type": "token",
+    "data": "口径"
+  },
+  {
+    "type": "token",
+    "data": "说明"
+  },
+  {
+    "type": "token",
+    "data": "（"
+  },
+  {
+    "type": "token",
+    "data": "已"
+  },
+  {
+    "type": "token",
+    "data": "确认"
+  },
+  {
+    "type": "token",
+    "data": "口径"
+  },
+  {
+    "type": "token",
+    "data": "）"
+  },
+  {
+    "type": "token",
+    "data": "**\n"
+  },
+  {
+    "type": "token",
+    "data": "-"
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": "统计"
+  },
+  {
+    "type": "token",
+    "data": "范围"
+  },
+  {
+    "type": "token",
+    "data": "："
+  },
+  {
+    "type": "token",
+    "data": "202"
+  },
+  {
+    "type": "token",
+    "data": "5"
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": "自然"
+  },
+  {
+    "type": "token",
+    "data": "年"
+  },
+  {
+    "type": "token",
+    "data": "，"
+  },
+  {
+    "type": "token",
+    "data": "`"
+  },
+  {
+    "type": "token",
+    "data": "order"
+  },
+  {
+    "type": "token",
+    "data": "_time"
+  },
+  {
+    "type": "token",
+    "data": "`"
+  },
+  {
+    "type": "token",
+    "data": " ∈"
+  },
+  {
+    "type": "token",
+    "data": " ["
+  },
+  {
+    "type": "token",
+    "data": "202"
+  },
+  {
+    "type": "token",
+    "data": "5"
+  },
+  {
+    "type": "token",
+    "data": "-"
+  },
+  {
+    "type": "token",
+    "data": "01"
+  },
+  {
+    "type": "token",
+    "data": "-"
+  },
+  {
+    "type": "token",
+    "data": "01"
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": "00"
+  },
+  {
+    "type": "token",
+    "data": ":"
+  },
+  {
+    "type": "token",
+    "data": "00"
+  },
+  {
+    "type": "token",
+    "data": ":"
+  },
+  {
+    "type": "token",
+    "data": "00"
+  },
+  {
+    "type": "token",
+    "data": ","
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": "202"
+  },
+  {
+    "type": "token",
+    "data": "6"
+  },
+  {
+    "type": "token",
+    "data": "-"
+  },
+  {
+    "type": "token",
+    "data": "01"
+  },
+  {
+    "type": "token",
+    "data": "-"
+  },
+  {
+    "type": "token",
+    "data": "01"
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": "00"
+  },
+  {
+    "type": "token",
+    "data": ":"
+  },
+  {
+    "type": "token",
+    "data": "00"
+  },
+  {
+    "type": "token",
+    "data": ":"
+  },
+  {
+    "type": "token",
+    "data": "00"
+  },
+  {
+    "type": "token",
+    "data": ")\n"
+  },
+  {
+    "type": "token",
+    "data": "-"
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": "有效"
+  },
+  {
+    "type": "token",
+    "data": "订单"
+  },
+  {
+    "type": "token",
+    "data": "："
+  },
+  {
+    "type": "token",
+    "data": "`"
+  },
+  {
+    "type": "token",
+    "data": "status"
+  },
+  {
+    "type": "token",
+    "data": "`"
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": "为"
+  },
+  {
+    "type": "token",
+    "data": " `"
+  },
+  {
+    "type": "token",
+    "data": "PA"
+  },
+  {
+    "type": "token",
+    "data": "ID"
+  },
+  {
+    "type": "token",
+    "data": "`"
+  },
+  {
+    "type": "token",
+    "data": "（"
+  },
+  {
+    "type": "token",
+    "data": "已"
+  },
+  {
+    "type": "token",
+    "data": "支付"
+  },
+  {
+    "type": "token",
+    "data": "）"
+  },
+  {
+    "type": "token",
+    "data": "或"
+  },
+  {
+    "type": "token",
+    "data": " `"
+  },
+  {
+    "type": "token",
+    "data": "COMP"
+  },
+  {
+    "type": "token",
+    "data": "LET"
+  },
+  {
+    "type": "token",
+    "data": "ED"
+  },
+  {
+    "type": "token",
+    "data": "`"
+  },
+  {
+    "type": "token",
+    "data": "（"
+  },
+  {
+    "type": "token",
+    "data": "已完成"
+  },
+  {
+    "type": "token",
+    "data": "）\n"
+  },
+  {
+    "type": "token",
+    "data": "-"
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": "排除"
+  },
+  {
+    "type": "token",
+    "data": "已"
+  },
+  {
+    "type": "token",
+    "data": "删除"
+  },
+  {
+    "type": "token",
+    "data": "记录"
+  },
+  {
+    "type": "token",
+    "data": "："
+  },
+  {
+    "type": "token",
+    "data": "`"
+  },
+  {
+    "type": "token",
+    "data": "is"
+  },
+  {
+    "type": "token",
+    "data": "_de"
+  },
+  {
+    "type": "token",
+    "data": "leted"
+  },
+  {
+    "type": "token",
+    "data": " ="
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": "0"
+  },
+  {
+    "type": "token",
+    "data": "`\n"
+  },
+  {
+    "type": "token",
+    "data": "-"
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": "金额"
+  },
+  {
+    "type": "token",
+    "data": "换算"
+  },
+  {
+    "type": "token",
+    "data": "："
+  },
+  {
+    "type": "token",
+    "data": "`"
+  },
+  {
+    "type": "token",
+    "data": "amount"
+  },
+  {
+    "type": "token",
+    "data": "_c"
+  },
+  {
+    "type": "token",
+    "data": "ents"
+  },
+  {
+    "type": "token",
+    "data": "`"
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": "单位为"
+  },
+  {
+    "type": "token",
+    "data": "分"
+  },
+  {
+    "type": "token",
+    "data": "，"
+  },
+  {
+    "type": "token",
+    "data": "除以"
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": "100"
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": "换算"
+  },
+  {
+    "type": "token",
+    "data": "为"
+  },
+  {
+    "type": "token",
+    "data": "元"
+  },
+  {
+    "type": "token",
+    "data": "；"
+  },
+  {
+    "type": "token",
+    "data": "不"
+  },
+  {
+    "type": "token",
+    "data": "扣除"
+  },
+  {
+    "type": "token",
+    "data": "退款"
+  },
+  {
+    "type": "token",
+    "data": "、"
+  },
+  {
+    "type": "token",
+    "data": "无需"
+  },
+  {
+    "type": "token",
+    "data": "关联"
+  },
+  {
+    "type": "token",
+    "data": "客户"
+  },
+  {
+    "type": "token",
+    "data": "表"
+  },
+  {
+    "type": "token",
+    "data": "\n\n"
+  },
+  {
+    "type": "token",
+    "data": "**"
+  },
+  {
+    "type": "token",
+    "data": "实际"
+  },
+  {
+    "type": "token",
+    "data": "执行"
+  },
+  {
+    "type": "token",
+    "data": " SQL"
+  },
+  {
+    "type": "token",
+    "data": "（"
+  },
+  {
+    "type": "token",
+    "data": "本次"
+  },
+  {
+    "type": "token",
+    "data": "重新"
+  },
+  {
+    "type": "token",
+    "data": "查询"
+  },
+  {
+    "type": "token",
+    "data": "，"
+  },
+  {
+    "type": "token",
+    "data": "未"
+  },
+  {
+    "type": "token",
+    "data": "复用"
+  },
+  {
+    "type": "token",
+    "data": "旧"
+  },
+  {
+    "type": "token",
+    "data": "数值"
+  },
+  {
+    "type": "token",
+    "data": "）"
+  },
+  {
+    "type": "token",
+    "data": "**\n"
+  },
+  {
+    "type": "token",
+    "data": "```"
+  },
+  {
+    "type": "token",
+    "data": "sql"
+  },
+  {
+    "type": "token",
+    "data": "\n"
+  },
+  {
+    "type": "token",
+    "data": "SELECT"
+  },
+  {
+    "type": "token",
+    "data": " SUM"
+  },
+  {
+    "type": "token",
+    "data": "("
+  },
+  {
+    "type": "token",
+    "data": "amount"
+  },
+  {
+    "type": "token",
+    "data": "_c"
+  },
+  {
+    "type": "token",
+    "data": "ents"
+  },
+  {
+    "type": "token",
+    "data": ")"
+  },
+  {
+    "type": "token",
+    "data": " /"
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": "100"
+  },
+  {
+    "type": "token",
+    "data": " AS"
+  },
+  {
+    "type": "token",
+    "data": " total"
+  },
+  {
+    "type": "token",
+    "data": "_s"
+  },
+  {
+    "type": "token",
+    "data": "ales"
+  },
+  {
+    "type": "token",
+    "data": "\n"
+  },
+  {
+    "type": "token",
+    "data": "FROM"
+  },
+  {
+    "type": "token",
+    "data": " \""
+  },
+  {
+    "type": "token",
+    "data": "order"
+  },
+  {
+    "type": "token",
+    "data": "\"\n"
+  },
+  {
+    "type": "token",
+    "data": "WHERE"
+  },
+  {
+    "type": "token",
+    "data": " order"
+  },
+  {
+    "type": "token",
+    "data": "_time"
+  },
+  {
+    "type": "token",
+    "data": " >="
+  },
+  {
+    "type": "token",
+    "data": " DATE"
+  },
+  {
+    "type": "token",
+    "data": "_TR"
+  },
+  {
+    "type": "token",
+    "data": "UNC"
+  },
+  {
+    "type": "token",
+    "data": "('"
+  },
+  {
+    "type": "token",
+    "data": "year"
+  },
+  {
+    "type": "token",
+    "data": "',"
+  },
+  {
+    "type": "token",
+    "data": " DATE"
+  },
+  {
+    "type": "token",
+    "data": " '"
+  },
+  {
+    "type": "token",
+    "data": "202"
+  },
+  {
+    "type": "token",
+    "data": "5"
+  },
+  {
+    "type": "token",
+    "data": "-"
+  },
+  {
+    "type": "token",
+    "data": "01"
+  },
+  {
+    "type": "token",
+    "data": "-"
+  },
+  {
+    "type": "token",
+    "data": "01"
+  },
+  {
+    "type": "token",
+    "data": "')\n"
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": " AND"
+  },
+  {
+    "type": "token",
+    "data": " order"
+  },
+  {
+    "type": "token",
+    "data": "_time"
+  },
+  {
+    "type": "token",
+    "data": " <"
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": " DATE"
+  },
+  {
+    "type": "token",
+    "data": "_TR"
+  },
+  {
+    "type": "token",
+    "data": "UNC"
+  },
+  {
+    "type": "token",
+    "data": "('"
+  },
+  {
+    "type": "token",
+    "data": "year"
+  },
+  {
+    "type": "token",
+    "data": "',"
+  },
+  {
+    "type": "token",
+    "data": " DATE"
+  },
+  {
+    "type": "token",
+    "data": " '"
+  },
+  {
+    "type": "token",
+    "data": "202"
+  },
+  {
+    "type": "token",
+    "data": "5"
+  },
+  {
+    "type": "token",
+    "data": "-"
+  },
+  {
+    "type": "token",
+    "data": "01"
+  },
+  {
+    "type": "token",
+    "data": "-"
+  },
+  {
+    "type": "token",
+    "data": "01"
+  },
+  {
+    "type": "token",
+    "data": "')"
+  },
+  {
+    "type": "token",
+    "data": " +"
+  },
+  {
+    "type": "token",
+    "data": " INTER"
+  },
+  {
+    "type": "token",
+    "data": "VAL"
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": "1"
+  },
+  {
+    "type": "token",
+    "data": " YEAR"
+  },
+  {
+    "type": "token",
+    "data": "\n"
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": " AND"
+  },
+  {
+    "type": "token",
+    "data": " status"
+  },
+  {
+    "type": "token",
+    "data": " IN"
+  },
+  {
+    "type": "token",
+    "data": " ('"
+  },
+  {
+    "type": "token",
+    "data": "PA"
+  },
+  {
+    "type": "token",
+    "data": "ID"
+  },
+  {
+    "type": "token",
+    "data": "',"
+  },
+  {
+    "type": "token",
+    "data": " '"
+  },
+  {
+    "type": "token",
+    "data": "COMP"
+  },
+  {
+    "type": "token",
+    "data": "LET"
+  },
+  {
+    "type": "token",
+    "data": "ED"
+  },
+  {
+    "type": "token",
+    "data": "')\n"
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": " AND"
+  },
+  {
+    "type": "token",
+    "data": " is"
+  },
+  {
+    "type": "token",
+    "data": "_de"
+  },
+  {
+    "type": "token",
+    "data": "leted"
+  },
+  {
+    "type": "token",
+    "data": " ="
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": "0"
+  },
+  {
+    "type": "token",
+    "data": "\n"
+  },
+  {
+    "type": "token",
+    "data": "```\n\n"
+  },
+  {
+    "type": "token",
+    "data": "**"
+  },
+  {
+    "type": "token",
+    "data": "数据"
+  },
+  {
+    "type": "token",
+    "data": "来源"
+  },
+  {
+    "type": "token",
+    "data": "**"
+  },
+  {
+    "type": "token",
+    "data": "："
+  },
+  {
+    "type": "token",
+    "data": "知识"
+  },
+  {
+    "type": "token",
+    "data": "库"
+  },
+  {
+    "type": "token",
+    "data": " `"
+  },
+  {
+    "type": "token",
+    "data": "guided"
+  },
+  {
+    "type": "token",
+    "data": "-work"
+  },
+  {
+    "type": "token",
+    "data": "flow"
+  },
+  {
+    "type": "token",
+    "data": "-"
+  },
+  {
+    "type": "token",
+    "data": "43"
+  },
+  {
+    "type": "token",
+    "data": "b"
+  },
+  {
+    "type": "token",
+    "data": "1"
+  },
+  {
+    "type": "token",
+    "data": "c"
+  },
+  {
+    "type": "token",
+    "data": "84"
+  },
+  {
+    "type": "token",
+    "data": "c"
+  },
+  {
+    "type": "token",
+    "data": "`"
+  },
+  {
+    "type": "token",
+    "data": " ·"
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": "逻辑"
+  },
+  {
+    "type": "token",
+    "data": "模型"
+  },
+  {
+    "type": "token",
+    "data": " `"
+  },
+  {
+    "type": "token",
+    "data": "order"
+  },
+  {
+    "type": "token",
+    "data": "`"
+  },
+  {
+    "type": "token",
+    "data": " ·"
+  },
+  {
+    "type": "token",
+    "data": " w"
+  },
+  {
+    "type": "token",
+    "data": "ren"
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": "语义"
+  },
+  {
+    "type": "token",
+    "data": "引擎"
+  },
+  {
+    "type": "token",
+    "data": "实测"
+  },
+  {
+    "type": "token",
+    "data": "结果"
+  },
+  {
+    "type": "token",
+    "data": "（"
+  },
+  {
+    "type": "token",
+    "data": "数据"
+  },
+  {
+    "type": "token",
+    "data": "文件"
+  },
+  {
+    "type": "token",
+    "data": " `"
+  },
+  {
+    "type": "token",
+    "data": "data"
+  },
+  {
+    "type": "token",
+    "data": "/"
+  },
+  {
+    "type": "token",
+    "data": "78"
+  },
+  {
+    "type": "token",
+    "data": "b"
+  },
+  {
+    "type": "token",
+    "data": "534"
+  },
+  {
+    "type": "token",
+    "data": "0"
+  },
+  {
+    "type": "token",
+    "data": "bd"
+  },
+  {
+    "type": "token",
+    "data": "adb"
+  },
+  {
+    "type": "token",
+    "data": ".csv"
+  },
+  {
+    "type": "token",
+    "data": "`"
+  },
+  {
+    "type": "token",
+    "data": "）。\n\n"
+  },
+  {
+    "type": "token",
+    "data": ">"
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": "注"
+  },
+  {
+    "type": "token",
+    "data": "："
+  },
+  {
+    "type": "token",
+    "data": "该"
+  },
+  {
+    "type": "token",
+    "data": "数值"
+  },
+  {
+    "type": "token",
+    "data": "明显"
+  },
+  {
+    "type": "token",
+    "data": "偏"
+  },
+  {
+    "type": "token",
+    "data": "小"
+  },
+  {
+    "type": "token",
+    "data": "（"
+  },
+  {
+    "type": "token",
+    "data": "3"
+  },
+  {
+    "type": "token",
+    "data": ","
+  },
+  {
+    "type": "token",
+    "data": "749"
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": "元"
+  },
+  {
+    "type": "token",
+    "data": "），"
+  },
+  {
+    "type": "token",
+    "data": "可能"
+  },
+  {
+    "type": "token",
+    "data": "与该"
+  },
+  {
+    "type": "token",
+    "data": "模型"
+  },
+  {
+    "type": "token",
+    "data": "内"
+  },
+  {
+    "type": "token",
+    "data": " `"
+  },
+  {
+    "type": "token",
+    "data": "status"
+  },
+  {
+    "type": "token",
+    "data": "`"
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": "实际"
+  },
+  {
+    "type": "token",
+    "data": "取值"
+  },
+  {
+    "type": "token",
+    "data": "分布"
+  },
+  {
+    "type": "token",
+    "data": "或"
+  },
+  {
+    "type": "token",
+    "data": "数据"
+  },
+  {
+    "type": "token",
+    "data": "量"
+  },
+  {
+    "type": "token",
+    "data": "有关"
+  },
+  {
+    "type": "token",
+    "data": "。"
+  },
+  {
+    "type": "token",
+    "data": "如需"
+  },
+  {
+    "type": "token",
+    "data": "，"
+  },
+  {
+    "type": "token",
+    "data": "我可以"
+  },
+  {
+    "type": "token",
+    "data": "进一步"
+  },
+  {
+    "type": "token",
+    "data": "核查"
+  },
+  {
+    "type": "token",
+    "data": " status"
+  },
+  {
+    "type": "token",
+    "data": " "
+  },
+  {
+    "type": "token",
+    "data": "取值"
+  },
+  {
+    "type": "token",
+    "data": "分布"
+  },
+  {
+    "type": "token",
+    "data": "与"
+  },
+  {
+    "type": "token",
+    "data": "订单"
+  },
+  {
+    "type": "token",
+    "data": "量"
+  },
+  {
+    "type": "token",
+    "data": "，"
+  },
+  {
+    "type": "token",
+    "data": "确认"
+  },
+  {
+    "type": "token",
+    "data": "是否存在"
+  },
+  {
+    "type": "token",
+    "data": "口径"
+  },
+  {
+    "type": "token",
+    "data": "外的"
+  },
+  {
+    "type": "token",
+    "data": "数据"
+  },
+  {
+    "type": "token",
+    "data": "情况"
+  },
+  {
+    "type": "token",
+    "data": "。"
+  },
+  {
+    "type": "done",
+    "sessionKey": "guided-query-5d857667e6a84338a7875cadedf22fe6"
+  }
+]

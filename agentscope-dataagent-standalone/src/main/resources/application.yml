@@ -75,6 +75,9 @@ spring:
 # Property prefix is `dataagent.*`. Env vars use `DATAAGENT_*`.
 # --------------------------------------------------------------------------
 dataagent:
+  # GraphRAG UI and construction are suspended; Wren modeling relations remain available.
+  knowledge-graph:
+    enabled: false
   # Empty allows user-managed external source addresses. Set exact host:port entries to restrict targets.
   # Example: mysql.internal:3306,postgres.internal:5432 (no wildcards).
   external-datasource:

@@ -1,0 +1,167 @@
+[
+  {
+    "id": "Q01",
+    "question": "有效订单总额是多少（人民币元）？",
+    "oracle_sql_sqlite": "SELECT SUM(o.amount_cents)/100.0 FROM ds_order o JOIN ds_customer c ON o.customer_id=c.customer_id\nWHERE o.status='PAID' AND o.is_deleted=0 AND c.is_internal=0",
+    "expected": [
+      [
+        1050.0
+      ]
+    ],
+    "platform_status": "NOT_RUN",
+    "official_agent_status": "NOT_RUN"
+  },
+  {
+    "id": "Q02",
+    "question": "有效订单数和付费客户数是多少？",
+    "oracle_sql_sqlite": "SELECT COUNT(*),COUNT(DISTINCT o.customer_id) FROM ds_order o JOIN ds_customer c ON o.customer_id=c.customer_id\nWHERE o.status='PAID' AND o.is_deleted=0 AND c.is_internal=0",
+    "expected": [
+      [
+        6,
+        2
+      ]
+    ],
+    "platform_status": "NOT_RUN",
+    "official_agent_status": "NOT_RUN"
+  },
+  {
+    "id": "Q03",
+    "question": "按客户列出有效订单总额，降序排名。",
+    "oracle_sql_sqlite": "SELECT c.customer_name,SUM(o.amount_cents)/100.0 FROM ds_order o JOIN ds_customer c ON o.customer_id=c.customer_id\nWHERE o.status='PAID' AND o.is_deleted=0 AND c.is_internal=0 GROUP BY c.customer_id,c.customer_name ORDER BY 2 DESC,1",
+    "expected": [
+      [
+        "李四",
+        700.0
+      ],
+      [
+        "张三",
+        350.0
+      ]
+    ],
+    "platform_status": "NOT_RUN",
+    "official_agent_status": "NOT_RUN"
+  },
+  {
+    "id": "Q04",
+    "question": "列出1至4月营收，没订单的月份也显示0。",
+    "oracle_sql_sqlite": "WITH m AS (SELECT substr(o.order_time,1,7) month,SUM(o.amount_cents)/100.0 amount FROM ds_order o JOIN ds_customer c ON o.customer_id=c.customer_id\nWHERE o.status='PAID' AND o.is_deleted=0 AND c.is_internal=0 GROUP BY 1) SELECT c.month,COALESCE(m.amount,0) FROM ds_calendar_month c LEFT JOIN m USING(month) ORDER BY 1",
+    "expected": [
+      [
+        "2025-01",
+        300.0
+      ],
+      [
+        "2025-02",
+        700.0
+      ],
+      [
+        "2025-03",
+        0
+      ],
+      [
+        "2025-04",
+        50.0
+      ]
+    ],
+    "platform_status": "NOT_RUN",
+    "official_agent_status": "NOT_RUN"
+  },
+  {
+    "id": "Q05",
+    "question": "2025年2月有效营收是多少？按月边界计算。",
+    "oracle_sql_sqlite": "SELECT SUM(o.amount_cents)/100.0 FROM ds_order o JOIN ds_customer c ON o.customer_id=c.customer_id\nWHERE o.status='PAID' AND o.is_deleted=0 AND c.is_internal=0 AND o.order_time>='2025-02-01' AND o.order_time<'2025-03-01'",
+    "expected": [
+      [
+        700.0
+      ]
+    ],
+    "platform_status": "NOT_RUN",
+    "official_agent_status": "NOT_RUN"
+  },
+  {
+    "id": "Q06",
+    "question": "按订单归属统计扣除成功退款后的净营收。",
+    "oracle_sql_sqlite": "SELECT SUM(o.amount_cents-COALESCE(r.amount,0))/100.0 FROM ds_order o JOIN ds_customer c ON o.customer_id=c.customer_id LEFT JOIN (SELECT order_id,SUM(refund_cents) amount FROM ds_refund WHERE refund_status='SUCCESS' GROUP BY order_id) r ON r.order_id=o.order_id WHERE o.status='PAID' AND o.is_deleted=0 AND c.is_internal=0",
+    "expected": [
+      [
+        950.0
+      ]
+    ],
+    "platform_status": "NOT_RUN",
+    "official_agent_status": "NOT_RUN"
+  },
+  {
+    "id": "Q07",
+    "question": "谁没有产生任何有效订单？排除内部客户。",
+    "oracle_sql_sqlite": "SELECT c.customer_name FROM ds_customer c WHERE c.is_internal=0 AND NOT EXISTS (SELECT 1 FROM ds_order o WHERE o.customer_id=c.customer_id AND o.status='PAID' AND o.is_deleted=0) ORDER BY 1",
+    "expected": [
+      [
+        "无订单客户"
+      ]
+    ],
+    "platform_status": "NOT_RUN",
+    "official_agent_status": "NOT_RUN"
+  },
+  {
+    "id": "Q08",
+    "question": "商品业务键是否唯一？列出重复键。",
+    "oracle_sql_sqlite": "SELECT product_code,COUNT(*) FROM ds_product GROUP BY 1 HAVING COUNT(*)>1 ORDER BY 1",
+    "expected": [
+      [
+        "P2",
+        2
+      ]
+    ],
+    "platform_status": "NOT_RUN",
+    "official_agent_status": "NOT_RUN"
+  },
+  {
+    "id": "Q09",
+    "question": "查看订单明细时，总有效订单金额不能重复累加。",
+    "oracle_sql_sqlite": "SELECT SUM(o.amount_cents)/100.0 FROM ds_order o JOIN ds_customer c ON o.customer_id=c.customer_id\nWHERE o.status='PAID' AND o.is_deleted=0 AND c.is_internal=0 AND EXISTS(SELECT 1 FROM ds_order_item i WHERE i.order_id=o.order_id)",
+    "expected": [
+      [
+        1050.0
+      ]
+    ],
+    "platform_status": "NOT_RUN",
+    "official_agent_status": "NOT_RUN"
+  },
+  {
+    "id": "Q10",
+    "question": "事件总数和总金额是多少？应覆盖全部数据。",
+    "oracle_sql_sqlite": "SELECT COUNT(*),SUM(value_cents)/100.0 FROM ds_event",
+    "expected": [
+      [
+        10005,
+        100.05
+      ]
+    ],
+    "platform_status": "NOT_RUN",
+    "official_agent_status": "NOT_RUN"
+  },
+  {
+    "id": "Q11",
+    "question": "有多少订单的客户为空或不存在？",
+    "oracle_sql_sqlite": "SELECT COUNT(*) FROM ds_order o LEFT JOIN ds_customer c ON c.customer_id=o.customer_id WHERE c.customer_id IS NULL",
+    "expected": [
+      [
+        2
+      ]
+    ],
+    "platform_status": "NOT_RUN",
+    "official_agent_status": "NOT_RUN"
+  },
+  {
+    "id": "Q12",
+    "question": "有效订单平均金额是多少？",
+    "oracle_sql_sqlite": "SELECT SUM(o.amount_cents)/100.0/COUNT(*) FROM ds_order o JOIN ds_customer c ON o.customer_id=c.customer_id\nWHERE o.status='PAID' AND o.is_deleted=0 AND c.is_internal=0",
+    "expected": [
+      [
+        175.0
+      ]
+    ],
+    "platform_status": "NOT_RUN",
+    "official_agent_status": "NOT_RUN"
+  }
+]

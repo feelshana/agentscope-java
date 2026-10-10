@@ -1,0 +1,306 @@
+{
+  "state": "DIRTY",
+  "version": 7,
+  "publishedAt": "2026-10-06T15:32:00.683795Z",
+  "changed": false,
+  "models": [
+    {
+      "datasetId": "3f34f9ab-78c4-40f2-af06-05e10f820f4a",
+      "datasetName": "calendar_month",
+      "tableName": "ds_81b637d8_eb5f1c0d_calendar_month",
+      "modelName": "calendar_month",
+      "description": "月度数据表，用于按月份记录和汇总相关业务指标数据",
+      "columns": [
+        {
+          "name": "month",
+          "type": "VARCHAR(1024)",
+          "description": "月份，格式为'yyyy-MM'，包含2025-01,2025-02,2025-03等",
+          "relationship": false,
+          "calculated": false,
+          "expression": null
+        }
+      ],
+      "path": "models/calendar_month/metadata.yml",
+      "refSqlPath": null
+    },
+    {
+      "datasetId": "9a325ea8-e864-4aca-a3d5-55d0913eba9f",
+      "datasetName": "customer",
+      "tableName": "ds_81b637d8_c37c975d_customer",
+      "modelName": "customer",
+      "description": "客户信息表，用于存储客户的基本信息，包括客户ID、名称、是否为内部客户及所属区域",
+      "columns": [
+        {
+          "name": "customer_id",
+          "type": "BIGINT",
+          "description": "客户ID，唯一标识客户，包含1,2,3等",
+          "relationship": false,
+          "calculated": false,
+          "expression": null
+        },
+        {
+          "name": "customer_name",
+          "type": "VARCHAR(1024)",
+          "description": "客户名称，包含张三,李四,无订单客户等",
+          "relationship": false,
+          "calculated": false,
+          "expression": null
+        },
+        {
+          "name": "is_internal",
+          "type": "BIGINT",
+          "description": "是否内部客户标记，0表示否，1表示是",
+          "relationship": false,
+          "calculated": false,
+          "expression": null
+        },
+        {
+          "name": "region",
+          "type": "VARCHAR(1024)",
+          "description": "客户所属区域，包含华东,华北,华南等",
+          "relationship": false,
+          "calculated": false,
+          "expression": null
+        }
+      ],
+      "path": "models/customer/metadata.yml",
+      "refSqlPath": null
+    },
+    {
+      "datasetId": "6e48c296-d334-4118-b98d-8e3947d1e628",
+      "datasetName": "event",
+      "tableName": "ds_81b637d8_57a6b6a9_event",
+      "modelName": "event",
+      "description": "事件明细表，用于记录事件的基础信息、金额、编码及备注等内容。",
+      "columns": [
+        {
+          "name": "event_id",
+          "type": "BIGINT",
+          "description": "事件ID，唯一标识一条事件记录，如1,2,3等",
+          "relationship": false,
+          "calculated": false,
+          "expression": null
+        },
+        {
+          "name": "value_cents",
+          "type": "BIGINT",
+          "description": "金额（以分为单位），如1表示1分",
+          "relationship": false,
+          "calculated": false,
+          "expression": null
+        },
+        {
+          "name": "code",
+          "type": "BIGINT",
+          "description": "编码，定长字符串，如000123",
+          "relationship": false,
+          "calculated": false,
+          "expression": null
+        },
+        {
+          "name": "note",
+          "type": "VARCHAR(1024)",
+          "description": "备注，补充说明文本",
+          "relationship": false,
+          "calculated": false,
+          "expression": null
+        }
+      ],
+      "path": "models/event/metadata.yml",
+      "refSqlPath": null
+    },
+    {
+      "datasetId": "515e8631-4dd7-49e9-859c-a79e707f4721",
+      "datasetName": "order",
+      "tableName": "ds_81b637d8_06fd368c_order",
+      "modelName": "order",
+      "description": "订单表，记录每笔订单的基础信息，包括订单ID、客户ID、下单时间、订单金额、订单状态及删除标记，用于订单交易数据的管理与查询。",
+      "columns": [
+        {
+          "name": "order_id",
+          "type": "BIGINT",
+          "description": "订单ID，订单的唯一标识，包含1001,1002,1003等",
+          "relationship": false,
+          "calculated": false,
+          "expression": null
+        },
+        {
+          "name": "customer_id",
+          "type": "BIGINT",
+          "description": "客户ID，关联下单客户，包含1,2,999等",
+          "relationship": false,
+          "calculated": false,
+          "expression": null
+        },
+        {
+          "name": "order_time",
+          "type": "DATETIME",
+          "description": "下单时间，格式为'yyyy-MM-dd HH:mm:ss'，包含2025-01-01 00:00:00,2025-01-31 23:59:59等",
+          "relationship": false,
+          "calculated": false,
+          "expression": null
+        },
+        {
+          "name": "amount_cents",
+          "type": "BIGINT",
+          "description": "订单金额，单位为分，包含10000,20000,30000等",
+          "relationship": false,
+          "calculated": false,
+          "expression": null
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(1024)",
+          "description": "订单状态，包含PAID(已支付),CANCELLED(已取消),REFUNDED(已退款)等",
+          "relationship": false,
+          "calculated": false,
+          "expression": null
+        },
+        {
+          "name": "is_deleted",
+          "type": "BIGINT",
+          "description": "删除标记，0表示未删除，1表示已删除",
+          "relationship": false,
+          "calculated": false,
+          "expression": null
+        }
+      ],
+      "path": "models/order/metadata.yml",
+      "refSqlPath": null
+    },
+    {
+      "datasetId": "2d6ba4b2-763f-44b6-8c29-fa490f57832f",
+      "datasetName": "order_item",
+      "tableName": "ds_81b637d8_e75ce6ce_order_item",
+      "modelName": "order_item",
+      "description": "订单明细表，记录每个订单行对应的订单、商品及行金额信息，用于订单商品明细的存储与分析。",
+      "columns": [
+        {
+          "name": "item_id",
+          "type": "BIGINT",
+          "description": "订单明细行唯一标识ID，如1,2,3",
+          "relationship": false,
+          "calculated": false,
+          "expression": null
+        },
+        {
+          "name": "order_id",
+          "type": "BIGINT",
+          "description": "订单唯一标识ID，如1001,1002,1003",
+          "relationship": false,
+          "calculated": false,
+          "expression": null
+        },
+        {
+          "name": "product_code",
+          "type": "VARCHAR(1024)",
+          "description": "商品编码，如P1,P2,P3",
+          "relationship": false,
+          "calculated": false,
+          "expression": null
+        },
+        {
+          "name": "line_cents",
+          "type": "BIGINT",
+          "description": "订单行金额，单位为分（cents），如4000,6000,20000",
+          "relationship": false,
+          "calculated": false,
+          "expression": null
+        }
+      ],
+      "path": "models/order_item/metadata.yml",
+      "refSqlPath": null
+    },
+    {
+      "datasetId": "001fe812-7339-45da-9036-83f3bcd7ded4",
+      "datasetName": "product",
+      "tableName": "ds_81b637d8_c29f5f66_product",
+      "modelName": "product",
+      "description": "产品基础信息表，用于存储产品的行ID、产品编码及产品名称等基本信息，支撑产品维度的查询与分析。",
+      "columns": [
+        {
+          "name": "product_row_id",
+          "type": "BIGINT",
+          "description": "产品行ID，唯一标识每一行记录，包含1,2,3等",
+          "relationship": false,
+          "calculated": false,
+          "expression": null
+        },
+        {
+          "name": "product_code",
+          "type": "VARCHAR(1024)",
+          "description": "产品编码，产品的唯一业务标识，包含P1,P2,P3等",
+          "relationship": false,
+          "calculated": false,
+          "expression": null
+        },
+        {
+          "name": "product_name",
+          "type": "VARCHAR(1024)",
+          "description": "产品名称，产品的显示名称，包含产品一,产品二,重复产品二等",
+          "relationship": false,
+          "calculated": false,
+          "expression": null
+        }
+      ],
+      "path": "models/product/metadata.yml",
+      "refSqlPath": null
+    },
+    {
+      "datasetId": "52f337be-6f5a-4479-ad8b-2ae70e490172",
+      "datasetName": "refund",
+      "tableName": "ds_81b637d8_4156438f_refund",
+      "modelName": "refund",
+      "description": "退款记录表，用于记录每笔订单的退款信息，包括退款金额、退款时间和退款状态等，支持退款流程的跟踪与对账。",
+      "columns": [
+        {
+          "name": "refund_id",
+          "type": "BIGINT",
+          "description": "退款记录ID，样本值包含1, 2, 3等",
+          "relationship": false,
+          "calculated": false,
+          "expression": null
+        },
+        {
+          "name": "order_id",
+          "type": "BIGINT",
+          "description": "订单ID，关联订单表，样本值包含1002, 1003, 1004等",
+          "relationship": false,
+          "calculated": false,
+          "expression": null
+        },
+        {
+          "name": "refund_time",
+          "type": "DATETIME",
+          "description": "退款时间，格式为'yyyy-MM-dd HH:mm:ss'，包含2025-02-02 12:00:00等",
+          "relationship": false,
+          "calculated": false,
+          "expression": null
+        },
+        {
+          "name": "refund_cents",
+          "type": "BIGINT",
+          "description": "退款金额，单位为分，样本值包含5000, 2000, 3000等",
+          "relationship": false,
+          "calculated": false,
+          "expression": null
+        },
+        {
+          "name": "refund_status",
+          "type": "VARCHAR(1024)",
+          "description": "退款状态，样本值包含SUCCESS（成功）、FAILED（失败）等",
+          "relationship": false,
+          "calculated": false,
+          "expression": null
+        }
+      ],
+      "path": "models/refund/metadata.yml",
+      "refSqlPath": null
+    }
+  ],
+  "relations": [],
+  "cubes": [],
+  "views": [],
+  "issues": [],
+  "derivedModels": []
+}

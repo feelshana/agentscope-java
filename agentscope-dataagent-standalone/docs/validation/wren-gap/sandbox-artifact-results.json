@@ -1,0 +1,47 @@
+[
+  {
+    "path": "/workspace/runpython/main-3e4ed8b7-5f29-4fc1-a8fb-a018763e6622/outputs/有效订单销售额趋势.png",
+    "local_file": "artifacts\\有效订单销售额趋势.png",
+    "http_status": 200,
+    "bytes": 74762,
+    "content_type": "image/png",
+    "sha256": "1725c4c06195746d25109879819e0378c77b56c772101116038e18faf45139cc",
+    "png_signature_valid": true
+  },
+  {
+    "path": "/workspace/runpython/main-3e4ed8b7-5f29-4fc1-a8fb-a018763e6622/outputs/有效订单销售额趋势_data.csv",
+    "local_file": "artifacts\\有效订单销售额趋势_data.csv",
+    "http_status": 200,
+    "bytes": 145,
+    "content_type": "application/octet-stream",
+    "sha256": "dc0c634684c5c31db799fed9dedee82dc1f1350362816d7ac1f27a9cb5486b04",
+    "rows": [
+      {
+        "month": "2025-01",
+        "sales_cents": "30000.0",
+        "sales_yuan": "300.0",
+        "环比": ""
+      },
+      {
+        "month": "2025-02",
+        "sales_cents": "70000.0",
+        "sales_yuan": "700.0",
+        "环比": "1.3333333333333333"
+      },
+      {
+        "month": "2025-03",
+        "sales_cents": "0.0",
+        "sales_yuan": "0.0",
+        "环比": "-1.0"
+      },
+      {
+        "month": "2025-04",
+        "sales_cents": "5000.0",
+        "sales_yuan": "50.0",
+        "环比": ""
+      }
+    ],
+    "values_match": true,
+    "april_mom_blank": true
+  }
+]

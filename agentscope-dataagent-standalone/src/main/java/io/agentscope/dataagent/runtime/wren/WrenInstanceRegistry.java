@@ -213,10 +213,33 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
         if (!Files.isRegularFile(project.resolve("target").resolve("mdl.json"))) {
             throw new DatasetException("知识库的语义模型产物不存在（缺少已发布的 mdl.json）。请在「语义建模」页重新发布后再查询。", 409);
         }
+        return spawnProject(groupId, project, resolveSnapshotProfile(project, props.profile()));
+    }
+
+    @Override
+    public WrenCallResult callDraft(
+            String groupId, Path project, String profile, String sql, int limit) {
+        Path allowed = props.groupRoot(groupId).resolve("scratch").toAbsolutePath().normalize();
+        if (!allowed.equals(project.toAbsolutePath().normalize())) {
+            throw new DatasetException("草稿验证工程路径无效", 400);
+        }
+        Instance draft = spawnProject(groupId + "-validation", project, profile);
+        try {
+            McpSchema.CallToolResult result =
+                    draft.client
+                            .callTool("run_sql", Map.of("sql", sql, "limit", limit))
+                            .block(props.timeout().plus(CALL_SLACK));
+            if (result == null) throw new DatasetException("草稿查询无响应", 503);
+            return new WrenCallResult(!Boolean.TRUE.equals(result.isError()), extractText(result));
+        } finally {
+            closeQuietly(groupId + "-validation", draft);
+        }
+    }
+
+    private Instance spawnProject(String groupId, Path project, String profile) {
         Path home = profileHome.ensure();
         // specs/010 M4: the snapshot pins its connection (ext-<id> for external-source groups);
         // a missing marker falls back to the default profile so pre-M4 snapshots keep working.
-        String profile = resolveSnapshotProfile(project, props.profile());
         List<String> args =
                 List.of(
                         "serve",

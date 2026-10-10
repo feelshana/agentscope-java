@@ -1,0 +1,48 @@
+{
+  "columns": [
+    {
+      "name": "event_id",
+      "originalName": "event_id",
+      "sqlType": "BIGINT",
+      "description": "事件ID，唯一标识一条事件记录，如1,2,3等"
+    },
+    {
+      "name": "value_cents",
+      "originalName": "value_cents",
+      "sqlType": "BIGINT",
+      "description": "金额（以分为单位），如1表示1分"
+    },
+    {
+      "name": "code",
+      "originalName": "code",
+      "sqlType": "BIGINT",
+      "description": "编码，定长字符串，如000123"
+    },
+    {
+      "name": "note",
+      "originalName": "note",
+      "sqlType": "VARCHAR(1024)",
+      "description": "备注，补充说明文本"
+    }
+  ],
+  "rows": [
+    [
+      "1",
+      "1",
+      "123",
+      null
+    ],
+    [
+      "2",
+      "1",
+      "123",
+      null
+    ],
+    [
+      "3",
+      "1",
+      "123",
+      null
+    ]
+  ]
+}

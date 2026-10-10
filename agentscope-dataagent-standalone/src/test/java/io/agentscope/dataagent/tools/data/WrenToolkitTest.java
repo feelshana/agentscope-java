@@ -77,7 +77,9 @@ class WrenToolkitTest {
     void unpublishedGroupReturnsGuidedError() {
         stubGroup("NONE");
 
-        String out = toolkit.wrenRunSql(ALICE, null, "gA", "SELECT * FROM 订单表", null, null);
+        String out =
+                toolkit.wrenRunSql(
+                        ALICE, null, "gA", "SELECT * FROM 订单表", "测试业务查询", null, "BUSINESS");
 
         assertThat(out).startsWith("error:");
         assertThat(out).contains("没有有效的已发布 MDL").contains("基础 MDL 初始化");
@@ -89,7 +91,7 @@ class WrenToolkitTest {
         DatasetGroupEntity own = new DatasetGroupEntity("gA", "alice", "订单分析", null);
         when(groupService.listGroups("alice")).thenReturn(List.of(own));
 
-        assertThat(toolkit.wrenRunSql(ALICE, null, "gB", "SELECT 1", null, null))
+        assertThat(toolkit.wrenRunSql(ALICE, null, "gB", "SELECT 1", "测试业务查询", null, "BUSINESS"))
                 .isEqualTo("error: 未知或无权访问的知识库 'gB'");
         assertThat(
                         toolkit.wrenQueryCube(
@@ -115,7 +117,7 @@ class WrenToolkitTest {
         when(groupService.listGroups("alice")).thenReturn(List.of(own));
 
         // The KB exists for the owner, but the conversation selected another one.
-        assertThat(toolkit.wrenRunSql(scoped, null, "gA", "SELECT 1", null, null))
+        assertThat(toolkit.wrenRunSql(scoped, null, "gA", "SELECT 1", "测试业务查询", null, "BUSINESS"))
                 .isEqualTo("error: 未知或无权访问的知识库 'gA'");
         assertThat(gateway.tools).isEmpty();
     }
@@ -129,7 +131,8 @@ class WrenToolkitTest {
     void groupIdAcceptsKnowledgeBaseName() {
         stubGroup("PUBLISHED");
 
-        String out = toolkit.wrenRunSql(ALICE, null, "订单分析", "SELECT 1", null, null);
+        String out =
+                toolkit.wrenRunSql(ALICE, null, "订单分析", "SELECT 1", "测试业务查询", null, "BUSINESS");
 
         assertThat(out).doesNotStartWith("error:");
         assertThat(gateway.groupIds).containsExactly("gA");
@@ -143,21 +146,21 @@ class WrenToolkitTest {
         stubGroup("PUBLISHED");
 
         // A name outside alice's own groups stays indistinguishable from a missing KB.
-        assertThat(toolkit.wrenRunSql(ALICE, null, "别人的库", "SELECT 1", null, null))
+        assertThat(toolkit.wrenRunSql(ALICE, null, "别人的库", "SELECT 1", "测试业务查询", null, "BUSINESS"))
                 .isEqualTo("error: 未知或无权访问的知识库 '别人的库'");
 
         // The conversation-level group filter also gates name resolution.
         DatasetScope scoped = new DatasetScope("alice", List.of("gOther"));
-        assertThat(toolkit.wrenRunSql(scoped, null, "订单分析", "SELECT 1", null, null))
+        assertThat(toolkit.wrenRunSql(scoped, null, "订单分析", "SELECT 1", "测试业务查询", null, "BUSINESS"))
                 .isEqualTo("error: 未知或无权访问的知识库 '订单分析'");
         assertThat(gateway.tools).isEmpty();
     }
 
     @Test
     void blankGroupIdAndMissingScopeAreGuided() {
-        assertThat(toolkit.wrenRunSql(ALICE, null, " ", "SELECT 1", null, null))
+        assertThat(toolkit.wrenRunSql(ALICE, null, " ", "SELECT 1", "测试业务查询", null, "BUSINESS"))
                 .startsWith("error: group_id 不能为空");
-        assertThat(toolkit.wrenRunSql(null, null, "gA", "SELECT 1", null, null))
+        assertThat(toolkit.wrenRunSql(null, null, "gA", "SELECT 1", "测试业务查询", null, "BUSINESS"))
                 .isEqualTo("error: 无法确定租户上下文");
     }
 
@@ -167,7 +170,7 @@ class WrenToolkitTest {
         RuntimeContext baked = RuntimeContext.builder().userId("alice").sessionId("s").build();
 
         // Out-of-band tool execution supplies userId only (no typed DatasetScope).
-        assertThat(toolkit.wrenRunSql(null, baked, "gA", "SELECT 1", null, null))
+        assertThat(toolkit.wrenRunSql(null, baked, "gA", "SELECT 1", "测试业务查询", null, "BUSINESS"))
                 .doesNotStartWith("error:");
         verify(groupService).listGroups("alice");
     }
@@ -186,7 +189,8 @@ class WrenToolkitTest {
                         "gA",
                         "SELECT 城市, SUM(销售额) AS 销售额 FROM 订单表 GROUP BY 城市",
                         "各城市销售额",
-                        500);
+                        500,
+                        "BUSINESS");
 
         assertThat(out)
                 .contains("## wren 语义查询结果")
@@ -207,7 +211,9 @@ class WrenToolkitTest {
         stubGroup("DIRTY");
         gateway.result = new WrenCallResult(true, ROWS_PAYLOAD);
 
-        String out = toolkit.wrenRunSql(ALICE, null, "gA", "SELECT 城市 FROM 订单表", null, null);
+        String out =
+                toolkit.wrenRunSql(
+                        ALICE, null, "gA", "SELECT 城市 FROM 订单表", "测试业务查询", null, "BUSINESS");
 
         assertThat(out).doesNotStartWith("error:");
         assertThat(out).contains("上一次成功发布的 MDL 快照").doesNotContain("query_structured_data");
@@ -218,9 +224,11 @@ class WrenToolkitTest {
     void runSqlRejectsNonSelectAndNegativeLimit() {
         stubGroup("PUBLISHED");
 
-        assertThat(toolkit.wrenRunSql(ALICE, null, "gA", "DELETE FROM 订单表", null, null))
+        assertThat(
+                        toolkit.wrenRunSql(
+                                ALICE, null, "gA", "DELETE FROM 订单表", "测试业务查询", null, "BUSINESS"))
                 .isEqualTo("error: 只允许 SELECT / WITH 语句");
-        assertThat(toolkit.wrenRunSql(ALICE, null, "gA", "SELECT 1", null, -1))
+        assertThat(toolkit.wrenRunSql(ALICE, null, "gA", "SELECT 1", "测试业务查询", -1, "BUSINESS"))
                 .isEqualTo("error: limit 不能为负数");
         assertThat(gateway.tools).isEmpty();
     }
@@ -234,7 +242,15 @@ class WrenToolkitTest {
     void runSqlRejectsExplicitLimitOrOffsetClauses() {
         stubGroup("PUBLISHED");
 
-        assertThat(toolkit.wrenRunSql(ALICE, null, "gA", "SELECT * FROM 订单表 LIMIT 50", null, null))
+        assertThat(
+                        toolkit.wrenRunSql(
+                                ALICE,
+                                null,
+                                "gA",
+                                "SELECT * FROM 订单表 LIMIT 50",
+                                "测试业务查询",
+                                null,
+                                "BUSINESS"))
                 .startsWith("error: SQL 中禁止显式 LIMIT/OFFSET 子句")
                 .contains("limit 参数");
         assertThat(
@@ -243,8 +259,9 @@ class WrenToolkitTest {
                                 null,
                                 "gA",
                                 "WITH t AS (SELECT * FROM 订单表) SELECT * FROM t LIMIT 10 OFFSET 5",
+                                "测试业务查询",
                                 null,
-                                null))
+                                "BUSINESS"))
                 .startsWith("error: SQL 中禁止显式 LIMIT/OFFSET 子句");
         assertThat(gateway.tools).isEmpty();
     }
@@ -261,7 +278,8 @@ class WrenToolkitTest {
                         "SELECT user_segment, SUM(visit_count) FROM \"近30天用户行为分层\" GROUP BY"
                                 + " user_segment",
                         "对比低频用户与高频用户的行为偏好",
-                        null);
+                        null,
+                        "BUSINESS");
 
         assertThat(out).doesNotStartWith("error:");
         assertThat(gateway.tools).containsExactly("run_sql");
@@ -278,7 +296,8 @@ class WrenToolkitTest {
                         "gA",
                         "SELECT 城市, SUM(销售额) FROM 订单表 GROUP BY 城市",
                         "各城市销售额",
-                        null);
+                        null,
+                        "BUSINESS");
 
         assertThat(out).doesNotStartWith("error:");
         assertThat(gateway.tools).containsExactly("run_sql");
@@ -291,14 +310,18 @@ class WrenToolkitTest {
                 new WrenCallResult(
                         true,
                         "{\"columns\":[\"n\"],\"rows\":[],\"row_count\":0,\"truncated\":false}");
-        assertThat(toolkit.wrenRunSql(ALICE, null, "gA", "SELECT 1 AS n", null, null))
+        assertThat(
+                        toolkit.wrenRunSql(
+                                ALICE, null, "gA", "SELECT 1 AS n", "测试业务查询", null, "BUSINESS"))
                 .contains("*(0 rows returned)*");
 
         gateway.result =
                 new WrenCallResult(
                         true,
                         "{\"columns\":[\"n\"],\"rows\":[{\"n\":1}],\"row_count\":1,\"truncated\":true}");
-        assertThat(toolkit.wrenRunSql(ALICE, null, "gA", "SELECT 1 AS n", null, null))
+        assertThat(
+                        toolkit.wrenRunSql(
+                                ALICE, null, "gA", "SELECT 1 AS n", "测试业务查询", null, "BUSINESS"))
                 .contains("结果已截断");
     }
 
@@ -307,7 +330,7 @@ class WrenToolkitTest {
         stubGroup("PUBLISHED");
         gateway.result = new WrenCallResult(true, "{\"sql\":\"SELECT 1\"}");
 
-        assertThat(toolkit.wrenRunSql(ALICE, null, "gA", "SELECT 1", null, null))
+        assertThat(toolkit.wrenRunSql(ALICE, null, "gA", "SELECT 1", "测试业务查询", null, "BUSINESS"))
                 .contains("原始 JSON");
     }
 
@@ -319,7 +342,9 @@ class WrenToolkitTest {
         gateway.result =
                 new WrenCallResult(false, "Error executing tool run_sql: Model '订单表' not found.");
 
-        String out = toolkit.wrenRunSql(ALICE, null, "gA", "SELECT * FROM 订单表", null, null);
+        String out =
+                toolkit.wrenRunSql(
+                        ALICE, null, "gA", "SELECT * FROM 订单表", "测试业务查询", null, "BUSINESS");
 
         assertThat(out).startsWith("error: wren 语义引擎拒绝了该查询").contains("Model '订单表' not found.");
     }
@@ -329,7 +354,7 @@ class WrenToolkitTest {
         stubGroup("PUBLISHED");
         gateway.failure = new DatasetException("启动 wren 语义引擎失败（可执行文件「wren」）：not found", 503);
 
-        assertThat(toolkit.wrenRunSql(ALICE, null, "gA", "SELECT 1", null, null))
+        assertThat(toolkit.wrenRunSql(ALICE, null, "gA", "SELECT 1", "测试业务查询", null, "BUSINESS"))
                 .startsWith("error: 启动 wren 语义引擎失败");
     }
 
@@ -600,7 +625,7 @@ class WrenToolkitTest {
                 .contains("### 订单")
                 .contains("| 城市 | VARCHAR | 开通城市 |")
                 .contains("订单 MANY_TO_ONE 客户")
-                .contains("销售Cube")
+                .doesNotContain("销售Cube")
                 .doesNotContain("ds_a");
         assertThat(gateway.tools).isEmpty();
     }
@@ -651,15 +676,13 @@ class WrenToolkitTest {
         stubGroup("PUBLISHED");
 
         assertThat(toolkit.wrenDescribeModel(ALICE, null, "gA", List.of("近30天用户行为分层")))
-                .isEqualTo(
-                        "error: '近30天用户行为分层' 是已发布视图而非逻辑模型，请直接用 wren_run_sql"
-                                + " 按视图名查询（FROM 近30天用户行为分层），无需 describe");
+                .contains("视图 近30天用户行为分层", "已审阅定义", "输出列");
         assertThat(toolkit.wrenDescribeModel(ALICE, null, "gA", List.of("销售Cube")))
-                .isEqualTo("error: '销售Cube' 是 Cube 而非逻辑模型，请用 wren_query_cube 按度量/维度查询");
+                .isEqualTo("error: '销售Cube' 是已停用的 Cube，请使用逻辑模型或视图");
         assertThat(toolkit.wrenDescribeModel(ALICE, null, "gA", List.of("订单", "销售Cube")))
                 .startsWith("error: '销售Cube'")
-                .contains("wren_query_cube");
-        assertThat(gateway.tools).isEmpty();
+                .doesNotContain("wren_query_cube");
+        assertThat(gateway.tools).containsExactly("run_sql");
     }
 
     @Test
@@ -669,7 +692,8 @@ class WrenToolkitTest {
                 .contains("基础 MDL 初始化失败");
 
         stubGroup("INITIALIZING");
-        assertThat(toolkit.wrenRunSql(ALICE, null, "gA", "SELECT 1", null, null)).contains("正在初始化");
+        assertThat(toolkit.wrenRunSql(ALICE, null, "gA", "SELECT 1", "测试业务查询", null, "BUSINESS"))
+                .contains("正在初始化");
         assertThat(gateway.tools).isEmpty();
     }
 
@@ -689,7 +713,8 @@ class WrenToolkitTest {
         WrenToolkit withHandoff = new WrenToolkit(gateway, groupService, null, mdlCatalog, fs);
 
         String out =
-                withHandoff.wrenRunSql(ALICE, rc("s-1"), "gA", "SELECT 城市 FROM 订单表", null, null);
+                withHandoff.wrenRunSql(
+                        ALICE, rc("s-1"), "gA", "SELECT 城市 FROM 订单表", "测试业务查询", null, "BUSINESS");
 
         assertThat(out)
                 .doesNotStartWith("error:")
@@ -731,7 +756,7 @@ class WrenToolkitTest {
         assertThat(uploads.paths.get(0)).startsWith("/workspace/runpython/s1/data/");
     }
 
-    /** A failed handoff degrades to the markdown-only result — never an error (ADR 0030). */
+    /** A failed handoff never errors: exceptions add a hint, upload failures degrade silently (ADR 0030/0060). */
     @Test
     void handoffFailureDegradesToMarkdownOnlyResult() {
         stubGroup("PUBLISHED");
@@ -741,7 +766,15 @@ class WrenToolkitTest {
         // doThrow/doReturn (not when().thenX()): re-stubbing with when() would invoke the
         // previous thenThrow answer inside the when() call itself.
         doThrow(new RuntimeException("sandbox not ready")).when(fs).uploadFiles(any(), any());
-        assertThat(withHandoff.wrenRunSql(ALICE, rc("s1"), "gA", "SELECT 城市 FROM 订单表", null, null))
+        assertThat(
+                        withHandoff.wrenRunSql(
+                                ALICE,
+                                rc("s1"),
+                                "gA",
+                                "SELECT 城市 FROM 订单表",
+                                "测试业务查询",
+                                null,
+                                "BUSINESS"))
                 .doesNotStartWith("error:")
                 .contains("| 杭州 | 120 |")
                 .contains("数据文件保存失败")
@@ -750,7 +783,15 @@ class WrenToolkitTest {
         doReturn(List.of(FileUploadResponse.fail("p", "denied")))
                 .when(fs)
                 .uploadFiles(any(), any());
-        assertThat(withHandoff.wrenRunSql(ALICE, rc("s1"), "gA", "SELECT 城市 FROM 订单表", null, null))
+        assertThat(
+                        withHandoff.wrenRunSql(
+                                ALICE,
+                                rc("s1"),
+                                "gA",
+                                "SELECT 城市 FROM 订单表",
+                                "测试业务查询",
+                                null,
+                                "BUSINESS"))
                 .doesNotStartWith("error:")
                 .contains("| 杭州 | 120 |")
                 .doesNotContain("**数据文件：**");
@@ -764,8 +805,10 @@ class WrenToolkitTest {
         Uploads uploads = stubSuccessfulUploads(fs);
         WrenToolkit withHandoff = new WrenToolkit(gateway, groupService, null, mdlCatalog, fs);
 
-        withHandoff.wrenRunSql(ALICE, rc("s1"), "gA", "SELECT 城市 FROM 订单表", null, null);
-        withHandoff.wrenRunSql(ALICE, rc("s1"), "gA", "SELECT 城市 FROM 订单表", null, null);
+        withHandoff.wrenRunSql(
+                ALICE, rc("s1"), "gA", "SELECT 城市 FROM 订单表", "测试业务查询", null, "BUSINESS");
+        withHandoff.wrenRunSql(
+                ALICE, rc("s1"), "gA", "SELECT 城市 FROM 订单表", "测试业务查询", null, "BUSINESS");
 
         assertThat(uploads.paths).hasSize(2);
         assertThat(uploads.paths.get(0)).isEqualTo(uploads.paths.get(1));
@@ -784,7 +827,8 @@ class WrenToolkitTest {
         Uploads uploads = stubSuccessfulUploads(fs);
         WrenToolkit withHandoff = new WrenToolkit(gateway, groupService, null, mdlCatalog, fs);
 
-        withHandoff.wrenRunSql(ALICE, rc("s1"), "gA", "SELECT 名称, 备注 FROM 订单表", null, null);
+        withHandoff.wrenRunSql(
+                ALICE, rc("s1"), "gA", "SELECT 名称, 备注 FROM 订单表", "测试业务查询", null, "BUSINESS");
 
         // RFC 4180: commas/quotes/newlines trigger quoting, inner quotes double, NULL -> empty
         assertThat(new String(uploads.contents.get(0), StandardCharsets.UTF_8))
@@ -796,7 +840,8 @@ class WrenToolkitTest {
     void legacyConstructorSkipsHandoff() {
         stubGroup("PUBLISHED");
 
-        String out = toolkit.wrenRunSql(ALICE, rc("s1"), "gA", "SELECT 1", null, null);
+        String out =
+                toolkit.wrenRunSql(ALICE, rc("s1"), "gA", "SELECT 1", "测试业务查询", null, "BUSINESS");
 
         assertThat(out).doesNotStartWith("error:").doesNotContain("数据文件");
     }
@@ -809,8 +854,8 @@ class WrenToolkitTest {
         Uploads uploads = stubSuccessfulUploads(fs);
         WrenToolkit withHandoff = new WrenToolkit(gateway, groupService, null, mdlCatalog, fs);
 
-        withHandoff.wrenRunSql(ALICE, rc("s1"), "gA", "SELECT 1", null, null);
-        withHandoff.wrenRunSql(ALICE, rc("s2"), "gA", "SELECT 1", null, null);
+        withHandoff.wrenRunSql(ALICE, rc("s1"), "gA", "SELECT 1", "测试业务查询", null, "BUSINESS");
+        withHandoff.wrenRunSql(ALICE, rc("s2"), "gA", "SELECT 1", "测试业务查询", null, "BUSINESS");
 
         assertThat(uploads.paths.get(0)).startsWith("/workspace/runpython/s1/data/");
         assertThat(uploads.paths.get(1)).startsWith("/workspace/runpython/s2/data/");
@@ -831,7 +876,9 @@ class WrenToolkitTest {
         AbstractSandboxFilesystem fs = mock(AbstractSandboxFilesystem.class);
         WrenToolkit withHandoff = new WrenToolkit(gateway, groupService, null, mdlCatalog, fs);
 
-        String out = withHandoff.wrenRunSql(ALICE, rc("s1"), "gA", "SELECT 1", null, null);
+        String out =
+                withHandoff.wrenRunSql(
+                        ALICE, rc("s1"), "gA", "SELECT 1", "测试业务查询", null, "BUSINESS");
 
         assertThat(out)
                 .doesNotStartWith("error:")
@@ -845,43 +892,15 @@ class WrenToolkitTest {
     @Test
     void toolDescriptionsCarryWrenOnlyGates() {
         assertThat(toolDescription("wren_run_sql"))
-                .contains("基础 MDL 初始化")
-                .contains("已发布 View")
-                .contains("优先用 wren_query_cube")
-                // coverage judgement + ranking split (2026-10-05 cube-misroute analysis): a
-                // ranking needs X as a Cube dimension; otherwise fall back to GROUP BY X in SQL
-                .contains("覆盖判定")
-                .contains("GROUP BY X 排名")
-                .contains("TOP-N")
-                .contains("优先直接按视图名查询")
-                .contains("语义资产都无法表达")
-                .contains("SELECT / WITH")
-                .contains("LIMIT/OFFSET")
-                .contains("知识库名称（推荐")
-                .doesNotContain("query_structured_data")
-                // wren_cube_describe lives on the modeling agent's toolkit only; the asking
-                // toolkit must never point the model at a tool it cannot see
-                .doesNotContain("wren_cube_describe")
-                // specs/025: official alignment — prefer wording, no deterministic routing gate
-                .doesNotContain("必须只按该视图名查询")
-                .doesNotContain("不得从基础模型重建同等语义")
-                .doesNotContain("不得再 JOIN 其他逻辑模型");
-        assertThat(toolDescription("wren_query_cube"))
-                .contains("基础 MDL 初始化")
-                .contains("Cube")
-                .contains("覆盖时优先用本工具")
-                .contains("覆盖判定")
-                .contains("dimensions=[X]")
-                .contains("不是实体排名")
-                .contains("左闭右开")
-                .contains("granularity 使用小写")
-                .contains("知识库名称（推荐")
-                .contains("start=end 会得到空结果")
-                .contains("原始成员名")
-                .contains("默认按时间升序")
-                .doesNotContain("wren_cube_describe")
-                .doesNotContain("不得改写为手工聚合 SQL")
-                .doesNotContain("query_structured_data");
+                .contains("SELECT / WITH", "LIMIT/OFFSET", "逻辑模型", "明细视图")
+                .doesNotContain("wren_query_cube");
+        assertThat(
+                        java.util.Arrays.stream(WrenToolkit.class.getMethods())
+                                .map(m -> m.getAnnotation(Tool.class))
+                                .filter(java.util.Objects::nonNull)
+                                .map(Tool::name)
+                                .toList())
+                .doesNotContain("wren_query_cube");
         assertThat(toolDescription("wren_describe_model"))
                 .contains("逻辑模型名")
                 .contains("知识库名称（推荐")

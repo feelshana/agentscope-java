@@ -191,6 +191,22 @@ class ChatControllerHitlTest {
                             assertThat(call.get("name")).isEqualTo("decide_relation");
                             assertThat(call.get("input")).isEqualTo(tool.getInput());
                         });
+        state.contextMutable()
+                .add(
+                        Msg.builder()
+                                .role(MsgRole.TOOL)
+                                .content(
+                                        io.agentscope.core.message.ToolResultBlock.text(
+                                                        "Permission denied by user")
+                                                .withIdAndName(tool.getId(), tool.getName())
+                                                .withState(
+                                                        io.agentscope.core.message.ToolResultState
+                                                                .DENIED))
+                                .build());
+        ChatController.CurrentSessionResponse resolved =
+                controller.currentSession(MODELING_AGENT_ID, "modeling-g1", authentication).block();
+        assertThat(resolved.pendingReplyId()).isNull();
+        assertThat(resolved.pendingToolCalls()).isEmpty();
     }
 
     @Test
@@ -212,6 +228,38 @@ class ChatControllerHitlTest {
                 .isInstanceOfSatisfying(
                         ResponseStatusException.class,
                         ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+    }
+
+    @Test
+    void confirmationRejectsOversizedFeedbackAndFeedbackOnApproval() {
+        for (ChatController.ModelingConfirmRequest request :
+                List.of(
+                        new ChatController.ModelingConfirmRequest(
+                                "modeling-g1",
+                                List.of("g1"),
+                                "reply-1",
+                                "call-1",
+                                "write_file",
+                                false,
+                                null,
+                                "x".repeat(4001)),
+                        new ChatController.ModelingConfirmRequest(
+                                "modeling-g1",
+                                List.of("g1"),
+                                "reply-1",
+                                "call-1",
+                                "write_file",
+                                true,
+                                null,
+                                "请修正"))) {
+            assertThatThrownBy(
+                            () ->
+                                    controller.confirmModeling(
+                                            MODELING_AGENT_ID, request, authentication))
+                    .isInstanceOfSatisfying(
+                            ResponseStatusException.class,
+                            ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+        }
     }
 
     @Test

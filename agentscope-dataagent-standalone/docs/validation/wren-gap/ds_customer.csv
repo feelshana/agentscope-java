@@ -1,0 +1,5 @@
+customer_id,customer_name,is_internal,region
+1,张三,0,华东
+2,李四,0,华北
+3,无订单客户,0,华南
+999,内部测试,1,华东

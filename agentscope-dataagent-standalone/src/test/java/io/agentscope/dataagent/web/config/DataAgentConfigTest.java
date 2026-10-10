@@ -79,10 +79,8 @@ class DataAgentConfigTest {
                 .contains("SELECT / WITH")
                 .contains("不要用物理表名")
                 .contains("没有有效已发布 MDL 的知识库不可查询");
-        assertThat(toolDescription(WrenToolkit.class, "wren_query_cube"))
-                .contains("已发布语义模型")
-                .contains("Cube 清单")
-                .contains("基础 MDL 初始化");
+        assertThat(toolDescription(WrenToolkit.class, "wren_run_sql"))
+                .doesNotContain("wren_query_cube");
     }
 
     /**
@@ -106,10 +104,10 @@ class DataAgentConfigTest {
     void defaultSysPromptPointsAtWrenOnlyWorkflow() {
         assertThat(DataAgentConfig.DEFAULT_AGENT_SYS_PROMPT)
                 .contains("sql-analysis")
-                .contains("所有结构化数据查询统一走 Wren")
+                .contains("所有结构化数据查询统一使用 wren_run_sql")
                 .contains("wren_describe_model")
                 .contains("wren_run_sql")
-                .contains("wren_query_cube")
+                .doesNotContain("wren_query_cube")
                 .contains("retrieve_evidence")
                 .contains("render_chart")
                 .contains("不存在物理表直查回退通道")
@@ -118,31 +116,19 @@ class DataAgentConfigTest {
     }
 
     @Test
-    void defaultSysPromptKeepsCubeViewProjectionSqlRoutingOrder() {
+    void defaultSysPromptUsesRelevantExamplesSqlAndCompleteFinalAnswer() {
         assertThat(DataAgentConfig.DEFAULT_AGENT_SYS_PROMPT)
-                .contains("按官方决策树选工具")
-                .contains("Cube 成员能覆盖时优先用 wren_query_cube")
-                // coverage judgement + ranking split stay in sync across the prompt/router row
-                .contains("覆盖判定")
-                .contains("要求 X 是 Cube 维度成员")
-                .contains("GROUP BY X 排名")
-                .contains("已发布 View 能直接覆盖问题时优先用 wren_run_sql 按视图名直接查询")
-                .contains("展开 many 侧关联字段组")
-                .contains("只查询一个逻辑模型及其投影列")
-                .contains("relationship condition 自动 JOIN")
-                .contains("语义资产都无法表达时再用 wren_run_sql")
-                .contains("显式 JOIN 是最后兜底且只能引用逻辑模型名")
-                // specs/025: official alignment — prefer wording, no mandatory gate
-                .doesNotContain("不得改写成手工聚合 SQL")
-                .doesNotContain("不得从基础模型重建同等语义");
+                .contains(
+                        "wren_recall_examples",
+                        "COUNT DISTINCT",
+                        "年份必须落实为时间筛选",
+                        "完整最终回答",
+                        "query_type",
+                        "BUSINESS",
+                        "DIAGNOSTIC")
+                .doesNotContain("wren_query_cube");
     }
 
-    /**
-     * Anti-duplication guard: how-to detail belongs to exactly one layer. Everything asserted
-     * absent here is carried — in more detail — by {@code sql-analysis} (logical model discovery
-     * and JOIN/CTE de-duplication) and {@code python-analysis} (matplotlib labelling and CJK
-     * fonts), both guarded by {@code SharedSkillContentTest}.
-     */
     @Test
     void defaultSysPromptDoesNotRestateSkillLevelDetail() {
         assertThat(DataAgentConfig.DEFAULT_AGENT_SYS_PROMPT)
@@ -166,14 +152,15 @@ class DataAgentConfigTest {
                         .toList();
 
         assertThat(toolNames)
-                .contains("wren_describe_model", "wren_run_sql", "wren_query_cube")
+                .contains("wren_describe_model", "wren_run_sql", "wren_recall_examples")
+                .doesNotContain("wren_query_cube", "wren_answer_queries")
                 .doesNotContain("prepare_data_context", "query_structured_data");
     }
 
     @Test
     void describeModelToolRejectsPhysicalIdentifiersByContract() {
         assertThat(toolDescription(WrenToolkit.class, "wren_describe_model"))
-                .contains("字段、关系和相关 Cube")
+                .contains("字段与关系")
                 .contains("只传逻辑模型名")
                 .contains("不要传 datasetId、sourceId、schema 或物理表名");
     }
@@ -205,5 +192,15 @@ class DataAgentConfigTest {
         }
         throw new AssertionError(
                 "no @Tool named '" + toolName + "' on " + toolkitType.getSimpleName());
+    }
+
+    @Test
+    void queryAgentUsesPlatformPromptWithoutLegacyWorkspaceContext() {
+        var builder = io.agentscope.harness.agent.HarnessAgent.builder();
+        DataAgentConfig.configureQueryPrompt(builder, DataAgentConfig.DEFAULT_AGENT_SYS_PROMPT);
+        assertThat(builder).isNotNull();
+        assertThat(DataAgentConfig.DEFAULT_AGENT_SYS_PROMPT)
+                .contains("query_type", "BUSINESS", "DIAGNOSTIC")
+                .doesNotContain("wren_answer_queries");
     }
 }

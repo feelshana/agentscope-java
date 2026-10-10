@@ -4,15 +4,22 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import Icon from '../../components/Icon';
 import MdlGraphView from '../../components/MdlGraphView';
 import ModelingChatPanel from '../../components/ModelingChatPanel';
+import ModelingQuestionsPanel from '../../components/modeling/ModelingQuestionsPanel';
+import QuestionIntakeForm from '../../components/modeling/QuestionIntakeForm';
 import MdlPublishPanel from '../../components/MdlPublishPanel';
+import ModelingWorkflowGuide from '../../components/modeling/ModelingWorkflowGuide';
+import { getModelingWorkflow } from '../../api/modelingWorkflow';
+import type { ModelingWorkflow } from '../../api/modelingWorkflow';
+import BusinessDocumentGuide from '../../components/modeling/BusinessDocumentGuide';
+import type { DocumentUploadState } from '../../components/modeling/BusinessDocumentGuide';
+import ModelSnapshotPanel from '../../components/modeling/ModelSnapshotPanel';
+import './SemanticModelingPage.css';
 import AssetYamlBrowser from '../../components/modeling/AssetYamlBrowser';
 import type { AssetEntry } from '../../components/modeling/AssetYamlBrowser';
 import {
   addManualRelation,
   adoptEnhanceProposal,
-  createCube,
   createView,
-  deleteCube,
   deleteView,
   getEnhanceOverview,
   getMdlPreview,
@@ -20,21 +27,15 @@ import {
   getModelingOverview,
   ignoreEnhanceProposal,
   initializeMdl,
-  suggestCubes,
   suggestRelations,
   triggerEnhance,
-  updateCube,
   updateRelation,
   updateView,
 } from '../../api/semanticModeling';
 import type {
-  CubeItem,
-  CubeRequest,
-  CubeSuggestion,
   EnhanceOverview,
   EnhanceProposal,
   MdlView,
-  ModelingCube,
   ModelingGroupState,
   ModelingOverview,
   ModelingRelation,
@@ -62,7 +63,6 @@ const ENHANCE_TYPE_LABEL: Record<string, string> = {
   TERM: '业务术语',
   BUSINESS_RULE: '业务规则',
   RELATIONSHIP: '表关系',
-  CUBE: 'Cube',
   VIEW: '语义视图',
   MANUAL_FIX: '人工处理',
 };
@@ -78,9 +78,9 @@ const CONFIDENCE_LABEL: Record<string, string> = { HIGH: '高', MEDIUM: '中', L
 /** specs/027: fixed three-level semantic maturity (pure computed signal, no LLM). */
 type Maturity = 'baseline' | 'partial' | 'refined';
 
-type TabKey = 'overview' | 'schema' | 'derived' | 'cubes' | 'views' | 'glossary' | 'mdl';
+type TabKey = 'overview' | 'modeling' | 'questions' | 'publish' | 'schema' | 'derived' | 'views' | 'glossary' | 'mdl';
 
-const TAB_KEYS: TabKey[] = ['overview', 'schema', 'derived', 'cubes', 'views', 'glossary', 'mdl'];
+const TAB_KEYS: TabKey[] = ['overview', 'modeling', 'questions', 'publish', 'schema', 'derived', 'views', 'glossary', 'mdl'];
 
 const AGG_OPTIONS = ['SUM', 'AVG', 'COUNT', 'MAX', 'MIN', 'DISTINCT_COUNT'];
 const GRANULARITY_OPTIONS = ['DAY', 'MONTH', 'YEAR'];
@@ -224,142 +224,12 @@ function ColumnSelect({
   );
 }
 
-interface MeasureDraft {
-  name: string;
-  column: string;
-  agg: string;
-  caseOn: boolean;
-  caseColumn: string;
-  caseOp: string;
-  caseValue: string;
-}
-
-interface DimensionDraft {
-  name: string;
-  column: string;
-}
-
-interface TimeDimDraft {
-  name: string;
-  column: string;
-  granularity: string;
-}
-
-interface CubeDraft {
-  /** null = new cube; otherwise the cube being edited. */
-  id: string | null;
-  name: string;
-  baseDatasetId: string;
-  description: string;
-  measures: MeasureDraft[];
-  dimensions: DimensionDraft[];
-  timeDimensions: TimeDimDraft[];
-}
-
 interface ManualDraft {
   sourceDatasetId: string;
   sourceColumn: string;
   targetDatasetId: string;
   targetColumn: string;
   joinType: string;
-}
-
-function parseMeasure(m: CubeItem): MeasureDraft {
-  const cf = str(m.caseFilter);
-  const parts = cf.split(/\s+/).filter(Boolean);
-  return {
-    name: str(m.name),
-    column: str(m.column),
-    agg: str(m.agg) || 'SUM',
-    caseOn: cf !== '',
-    caseColumn: parts[0] ?? '',
-    caseOp: parts[1] ?? '=',
-    caseValue: parts
-      .slice(2)
-      .join(' ')
-      .replace(/^'(.*)'$/, '$1'),
-  };
-}
-
-function cubeToDraft(c: ModelingCube): CubeDraft {
-  return {
-    id: c.id,
-    name: c.name,
-    baseDatasetId: c.baseDatasetId,
-    description: c.description ?? '',
-    measures: c.measures.map(parseMeasure),
-    dimensions: c.dimensions.map(d => ({ name: str(d.name), column: str(d.column) })),
-    timeDimensions: c.timeDimensions.map(t => ({
-      name: str(t.name),
-      column: str(t.column),
-      granularity: str(t.granularity) || 'MONTH',
-    })),
-  };
-}
-
-function suggestionToDraft(s: CubeSuggestion): CubeDraft {
-  return {
-    id: null,
-    name: s.name,
-    baseDatasetId: s.datasetId,
-    description: s.reason,
-    measures: s.measures.map(m => ({
-      ...parseMeasure(m),
-      caseOn: str(m.caseFilter) !== '',
-    })),
-    dimensions: s.dimensions.map(d => ({ name: str(d.name), column: str(d.column) })),
-    timeDimensions: s.timeDimensions.map(t => ({
-      name: str(t.name),
-      column: str(t.column),
-      granularity: str(t.granularity) || 'MONTH',
-    })),
-  };
-}
-
-function emptyDraft(datasets: Dataset[]): CubeDraft {
-  const base = datasets[0]?.id ?? '';
-  return {
-    id: null,
-    name: '',
-    baseDatasetId: base,
-    description: '',
-    measures: [{ name: '', column: '', agg: 'SUM', caseOn: false, caseColumn: '', caseOp: '=', caseValue: '' }],
-    dimensions: [],
-    timeDimensions: [],
-  };
-}
-
-function draftToRequest(d: CubeDraft): CubeRequest {
-  return {
-    name: d.name.trim(),
-    baseDatasetId: d.baseDatasetId,
-    description: d.description.trim() || null,
-    measures: d.measures
-      .filter(m => m.column && m.name.trim())
-      .map(m => {
-        const item: CubeItem = { name: m.name.trim(), column: m.column, agg: m.agg };
-        if (m.caseOn && m.caseColumn && m.caseValue.trim()) {
-          item.caseFilter = `${m.caseColumn} ${m.caseOp} ${caseLiteral(m.caseValue.trim())}`;
-        }
-        return item;
-      }),
-    dimensions: d.dimensions
-      .filter(x => x.column && x.name.trim())
-      .map(x => ({ name: x.name.trim(), column: x.column })),
-    timeDimensions: d.timeDimensions
-      .filter(x => x.column && x.name.trim())
-      .map(x => ({ name: x.name.trim(), column: x.column, granularity: x.granularity })),
-  };
-}
-
-function validateDraft(d: CubeDraft): string | null {
-  if (!d.name.trim()) return '请填写 Cube 名称';
-  if (!d.baseDatasetId) return '请选择基准数据集';
-  const req = draftToRequest(d);
-  if (req.measures.length + req.dimensions.length + req.timeDimensions.length === 0) {
-    return '至少需要一个有效指标、维度或时间维度（名称与列都要填写）';
-  }
-  return null;
 }
 
 interface ViewDraft {
@@ -410,18 +280,24 @@ export default function SemanticModelingPage() {
   const { groupId = '' } = useParams();
   const navigate = useNavigate();
   const [groupDetail, setGroupDetail] = useState<GroupDetail | null>(null);
+  const [businessDocument, setBusinessDocument] = useState('');
+  const documentRevision = useRef(0);
+  const [documentUpload, setDocumentUpload] = useState<DocumentUploadState>({ status: 'idle', filename: '' });
+  const documentGroup = useRef(groupId);
+  documentGroup.current = groupId;
   const [searchParams, setSearchParams] = useSearchParams();
   const [overview, setOverview] = useState<ModelingOverview | null>(null);
+  const [workflow, setWorkflow] = useState<ModelingWorkflow | null>(null);
+  const [workflowError, setWorkflowError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [candidates, setCandidates] = useState<CubeSuggestion[] | null>(null);
-  const [draft, setDraft] = useState<CubeDraft | null>(null);
-  const [draftError, setDraftError] = useState<string | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
-  /** specs/030: the chat lives in a collapsible right dock, open by default on the fullscreen
-   *  workbench; the header button collapses it. specs/036: dock widened to 640px — the 520px
-   *  dock squeezed the HITL decide cards. */
-  const [chatOpen, setChatOpen] = useState(true);
+  const [chatDraft, setChatDraft] = useState<{ groupId: string; message: string; requestId: number; submit: boolean } | null>(null);
+  const [nativeSession, setNativeSession] = useState<{ groupId: string; pending: boolean; error?: string } | null>(null);
+  const onSessionReady = useCallback((pending: boolean, error?: string) => {
+    if (documentGroup.current === groupId) setNativeSession({ groupId, pending, error });
+  }, [groupId]);
+  const showConversation = true;
   /** Hidden input for the unified "上传语义文档" entries (specs/028). */
   const semanticDocRef = useRef<HTMLInputElement | null>(null);
   /** specs/030: structured workspace view (models/cubes/views with backing YAML paths). */
@@ -444,12 +320,18 @@ export default function SemanticModelingPage() {
   const urlTab = searchParams.get('asset');
   const tab: TabKey = urlTab && (TAB_KEYS as string[]).includes(urlTab) ? (urlTab as TabKey) : 'overview';
   const selectedParam = searchParams.get('selected');
+  const detailOpen = TAB_KEYS.slice(4).includes(tab);
 
   const setTab = (key: TabKey) => {
     const next = new URLSearchParams(searchParams);
     next.set('asset', key);
     next.delete('selected');
     setSearchParams(next, { replace: true });
+  };
+
+  const submitQuestions = (message: string) => {
+    setChatDraft(previous => ({ groupId, message, requestId: (previous?.requestId ?? 0) + 1, submit: true }));
+    setTab('modeling');
   };
 
   const setSelected = (key: string | null) => {
@@ -459,9 +341,24 @@ export default function SemanticModelingPage() {
     setSearchParams(next, { replace: true });
   };
 
+  useEffect(() => {
+    if (urlTab || !workflow || workflow.groupId !== groupId) return;
+    const stageTab: TabKey = workflow.stage === 'PUBLICATION' ? 'publish'
+      : workflow.stage === 'CONFIRMATION' ? 'questions'
+        : workflow.queryAvailable ? 'modeling' : 'overview';
+    const next = new URLSearchParams(searchParams);
+    next.set('asset', stageTab);
+    setSearchParams(next, { replace: true });
+  }, [workflow, urlTab, groupId, searchParams, setSearchParams]);
+
+  const refreshGeneration = useRef(0);
   const refresh = useCallback(async () => {
+    const request = ++refreshGeneration.current;
     // specs/037: settle both sources independently — one failing source must not blank the page.
-    const results = await Promise.allSettled([getModelingOverview(groupId), getMdlView(groupId)]);
+    const results = await Promise.allSettled([getModelingOverview(groupId), getMdlView(groupId), getModelingWorkflow(groupId)]);
+    if (request !== refreshGeneration.current) return;
+    if (results[2].status === 'fulfilled') { setWorkflow(results[2].value); setWorkflowError(null); }
+    else { setWorkflow(null); setWorkflowError(msg(results[2].reason)); }
     let failed: unknown = null;
     if (results[0].status === 'fulfilled') setOverview(results[0].value);
     else failed ??= results[0].reason;
@@ -469,6 +366,7 @@ export default function SemanticModelingPage() {
     else failed ??= results[1].reason;
     try {
       const preview = await getMdlPreview(groupId);
+      if (request !== refreshGeneration.current) return;
       const published = new Map(preview.publishedFiles.map(f => [f.path, f.content]));
       setDirtyPaths(
         new Set(
@@ -483,22 +381,29 @@ export default function SemanticModelingPage() {
 
   const refreshEnhance = useCallback(async () => {
     try {
-      setEnhance(await getEnhanceOverview(groupId));
+      const value = await getEnhanceOverview(groupId);
+      if (documentGroup.current === groupId) setEnhance(value);
     } catch (e) {
       setError(msg(e));
     }
   }, [groupId]);
 
   useEffect(() => {
+    setWorkflow(null); setWorkflowError(null); setEnhance(null);
     refresh();
     refreshEnhance();
+    return () => { refreshGeneration.current++; };
   }, [refresh, refreshEnhance]);
 
   // Group name for the fullscreen header back-link (loaded once per group).
   useEffect(() => {
     let cancelled = false;
+    setGroupDetail(null);
+    setDocumentUpload({ status: 'idle', filename: '' });
+    setBusinessDocument('');
+    const revision = ++documentRevision.current;
     getGroupDetail(groupId)
-      .then(d => { if (!cancelled) setGroupDetail(d); })
+      .then(d => { if (!cancelled) { setGroupDetail(d); if (revision === documentRevision.current) setBusinessDocument(d.knowledge ?? ''); } })
       .catch(() => { /* header falls back to a generic label */ });
     return () => { cancelled = true; };
   }, [groupId]);
@@ -552,18 +457,6 @@ export default function SemanticModelingPage() {
         file: m.refSqlPath ?? m.path,
         dirty:
           dirtyPaths.has(m.path) || (m.refSqlPath !== null && dirtyPaths.has(m.refSqlPath)),
-      })),
-    [mdlView, dirtyPaths],
-  );
-
-  const cubeEntries: AssetEntry[] = useMemo(
-    () =>
-      (mdlView?.cubes ?? []).map(c => ({
-        key: c.name,
-        title: c.name,
-        subtitle: `${c.baseModel || '—'} · 指标 ${c.measures.length} · 维度 ${c.dimensions.length}`,
-        file: c.path,
-        dirty: dirtyPaths.has(c.path),
       })),
     [mdlView, dirtyPaths],
   );
@@ -628,42 +521,37 @@ export default function SemanticModelingPage() {
   const rejected = (overview?.relations ?? []).filter(r => r.status === 'REJECTED');
 
   // specs/030: the URL-selected asset resolved against platform entities for edit/delete actions.
-  const selectedCube = (overview?.cubes ?? []).find(c => c.name === selectedParam) ?? null;
   const selectedView = (overview?.views ?? []).find(v => v.name === selectedParam) ?? null;
 
   // specs/027: three fixed levels from one overview fetch (+ adopted doc-enhance rules).
   const maturity: Maturity = useMemo(() => {
     if (!overview) return 'baseline';
     const confirmedRelations = overview.relations.filter(r => r.status === 'CONFIRMED').length;
-    const cubes = overview.cubes.length;
     const publishedViews = overview.views.filter(v => v.status === 'PUBLISHED').length;
     const terms = overview.terms.length;
     const rules = (enhance?.proposals ?? []).filter(
       p => p.type === 'BUSINESS_RULE' && p.status === 'ADOPTED',
     ).length;
-    if (confirmedRelations === 0 && cubes === 0 && publishedViews === 0 && terms === 0) {
+    if (confirmedRelations === 0 && publishedViews === 0 && terms === 0) {
       return 'baseline';
     }
-    if ((cubes > 0 || publishedViews > 0) && (rules > 0 || terms > 0)) return 'refined';
+    if ((publishedViews > 0) && (rules > 0 || terms > 0)) return 'refined';
     return 'partial';
   }, [overview, enhance]);
 
   const tabItems: { key: TabKey; label: string; count?: number }[] = [
-    { key: 'overview', label: '总览' },
+    { key: 'overview', label: '1 · 数据准备' },
+    { key: 'modeling', label: '2 · 对话建模' },
+    { key: 'publish', label: '3 · 检查与发布' },
+    { key: 'questions', label: '问题验证（可选）' },
     { key: 'schema', label: '表与关系', count: datasets.length },
     { key: 'derived', label: '派生模型', count: mdlView?.derivedModels.length ?? 0 },
     // specs/037: cube/view counts read the workspace (mdlView) — the same source as the tab
     // content, so counts and lists can no longer diverge after REST or chat writes.
-    { key: 'cubes', label: 'Cube', count: mdlView?.cubes.length ?? 0 },
     { key: 'views', label: '视图', count: mdlView?.views.length ?? 0 },
     { key: 'glossary', label: '术语与规则', count: overview?.terms.length ?? 0 },
     { key: 'mdl', label: 'MDL' },
   ];
-
-  // specs/030: the guide bar is a first-run hint only — once the user has run a doc-enhance
-  // analysis or decided any proposal, the entries are discoverable and the bar must not nag.
-  const enhanceTouched =
-    !!enhance?.task || (enhance?.proposals ?? []).some(p => p.status !== 'PENDING');
 
   async function run(label: string, fn: () => Promise<void>) {
     setBusy(label);
@@ -681,11 +569,21 @@ export default function SemanticModelingPage() {
     setOverview(prev => (prev ? { ...prev, relations } : prev));
   }
 
-  const onUploadSemanticDoc = (file: File) =>
-    run('semantic-doc', async () => {
-      await uploadKnowledge(groupId, file);
+  const onUploadSemanticDoc = async (file: File) => {
+    if (documentUpload.status === 'uploading') return;
+    documentRevision.current++;
+    setDocumentUpload({ status: 'uploading', filename: file.name });
+    try {
+      const content = await uploadKnowledge(groupId, file);
+      if (documentGroup.current !== groupId) return;
+      setBusinessDocument(content);
+      setGroupDetail(previous => previous ? { ...previous, knowledge: content } : previous);
+      setDocumentUpload({ status: 'success', filename: file.name });
       await Promise.all([refreshEnhance(), refresh()]);
-    });
+    } catch (e) {
+      if (documentGroup.current === groupId) setDocumentUpload({ status: 'error', filename: file.name, error: msg(e) });
+    }
+  };
 
   const onTriggerEnhance = () =>
     run('enhance:run', async () => {
@@ -714,11 +612,6 @@ export default function SemanticModelingPage() {
   const onSuggestRelations = () =>
     run('relations', async () => {
       applyRelations(await suggestRelations(groupId));
-    });
-
-  const onSuggestCubes = () =>
-    run('cubes', async () => {
-      setCandidates(await suggestCubes(groupId));
     });
 
   const onConfirm = (r: ModelingRelation, joinType: string) =>
@@ -769,45 +662,6 @@ export default function SemanticModelingPage() {
       setManualOpen(false);
       setManual(m => ({ ...m, sourceColumn: '', targetColumn: '', joinType: '' }));
     });
-
-  const onSaveCube = () =>
-    run('cube:save', async () => {
-      if (!draft) return;
-      const problem = validateDraft(draft);
-      if (problem) {
-        setDraftError(problem);
-        return;
-      }
-      const req = draftToRequest(draft);
-      if (draft.id) {
-        const saved = await updateCube(groupId, draft.id, req);
-        setOverview(prev =>
-          prev ? { ...prev, cubes: prev.cubes.map(c => (c.id === saved.id ? saved : c)) } : prev,
-        );
-      } else {
-        const saved = await createCube(groupId, req);
-        setOverview(prev => (prev ? { ...prev, cubes: [...prev.cubes, saved] } : prev));
-        setCandidates(prev => {
-          if (prev === null) return prev;
-          const rest = prev.filter(c => c.name !== saved.name);
-          return rest.length > 0 ? rest : null;
-        });
-      }
-      setDraft(null);
-      setDraftError(null);
-      await refresh();
-    });
-
-  const onDeleteCube = (c: ModelingCube) => {
-    if (!window.confirm(`删除 Cube「${c.name}」？`)) return;
-    run(`cube:del:${c.id}`, async () => {
-      await deleteCube(groupId, c.id);
-      setOverview(prev =>
-        prev ? { ...prev, cubes: prev.cubes.filter(x => x.id !== c.id) } : prev,
-      );
-      await refresh();
-    });
-  };
 
   const onSaveView = () =>
     run('view:save', async () => {
@@ -866,19 +720,8 @@ export default function SemanticModelingPage() {
   }
 
   return (
-    <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
-      {/* ---------- left main column: assets + editors (specs/030 workbench) ---------- */}
-      <div
-        style={{
-          flex: 1,
-          minWidth: 0,
-          overflowY: 'auto',
-          padding: 16,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 12,
-        }}
-      >
+    <div className="modeling-workbench" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', padding: 16, gap: 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flexShrink: 0 }}>
       {error && (
         <div className="da-card" style={{ borderColor: 'var(--da-danger)' }}>
           <div className="da-small" style={{ color: 'var(--da-danger)' }}>
@@ -903,20 +746,18 @@ export default function SemanticModelingPage() {
         <span className="da-small" style={{ color: 'var(--da-text-3)' }}>
           语义建模
         </span>
-        {overview && <MdlStateBadge state={overview.group} />}
-        {overview && <MaturityBadge level={maturity} />}
+        {workflow ? <span className="da-badge">{workflow.queryAvailable ? `已发布 v${workflow.publishedVersion}` : '基础模型待准备'}{workflow.draftChanged ? ' · 有未发布草稿' : ''}</span> : overview && <MdlStateBadge state={overview.group} />}
+        {overview && workflow?.queryAvailable && <MaturityBadge level={maturity} />}
         {overview?.group.mdlPublishedAt && (
           <span className="da-small" style={{ color: 'var(--da-text-3)' }}>
             发布于 {overview.group.mdlPublishedAt.slice(0, 19).replace('T', ' ')}
           </span>
         )}
         <div style={{ flex: 1 }} />
-        <button
-          className="da-btn da-btn-primary da-btn-sm"
-          onClick={() => setChatOpen(v => !v)}
-          title="和建模助手对话逐步完成建模：确认关系、起草 Cube、校验后回本页发布"
-        >
-          <Icon name="chat" size="sm" /> {chatOpen ? '收起对话' : '对话建模'}
+        <button className="da-btn" style={{ borderColor: 'var(--da-primary)', color: 'var(--da-primary)', padding: '9px 18px', fontWeight: 600 }}
+          onClick={() => setTab(detailOpen ? 'modeling' : 'schema')}>
+          <Icon name="model" size="sm" /> {detailOpen ? '← 返回对话建模' : '查看语义模型'}
+          {!detailOpen && <span style={{ display: 'block', fontSize: 11, fontWeight: 400 }}>模型 · 关系 · 视图 · MDL</span>}
         </button>
       </div>
 
@@ -938,7 +779,7 @@ export default function SemanticModelingPage() {
           zIndex: 1,
         }}
       >
-        {tabItems.map(item => {
+        {tabItems.slice(0, 4).map(item => {
           const active = tab === item.key;
           return (
             <button
@@ -974,8 +815,15 @@ export default function SemanticModelingPage() {
             </button>
           );
         })}
+        {detailOpen && <select className="da-input" aria-label="模型详情" value={tab}
+          onChange={event => setTab(event.target.value as TabKey)} style={{ width: 180, marginLeft: 'auto' }}>
+          {tabItems.slice(4).map(item => <option key={item.key} value={item.key}>{item.label}{item.count !== undefined ? ` (${item.count})` : ''}</option>)}
+        </select>}
       </div>
-      {overview?.group.mdlLastError && (
+      </div>
+      <div className="modeling-workbench-body" style={{ display: 'flex', flex: 1, minHeight: 0, gap: 16 }}>
+      <div className="modeling-progress-column" style={{ flex: tab === 'modeling' ? '0 0 300px' : 1, minWidth: 0, overflowY: 'auto', display: tab === 'modeling' && !showConversation && workflow?.queryAvailable ? 'none' : 'flex', flexDirection: 'column', gap: 12 }}>
+      {overview?.group.mdlLastError && !workflow?.queryAvailable && (
         <div className="da-alert da-alert-error">
           <div>{overview.group.mdlLastError}</div>
           <button
@@ -988,58 +836,48 @@ export default function SemanticModelingPage() {
           </button>
         </div>
       )}
-      {overview?.group.mdlState === 'DIRTY' && overview.group.mdlVersion > 0 && (
-        <div className="da-small" style={{ color: 'var(--da-warn)', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span>
-            当前 Wren 查询继续使用 v{overview.group.mdlVersion}；草稿变更 {dirtyPaths.size} 项尚未生效。
-          </span>
-          <button className="da-btn da-btn-sm" onClick={() => setTab('mdl')}>
-            去发布
-          </button>
-        </div>
-      )}
-      {overview && maturity !== 'refined' && !enhanceTouched && (
-        <div
-          className="da-card"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            padding: '10px 14px',
-            borderColor: 'var(--da-warn)',
-            flexShrink: 0,
-          }}
-        >
-          <Icon name="warn" size="sm" />
-          <span className="da-small">
-            已可正常问数（基线语义）。上传语义文档或使用对话建模，可让问数口径更准。
-          </span>
-          <div style={{ flex: 1 }} />
-          <button
-            className="da-btn da-btn-primary da-btn-sm"
-            disabled={busy !== null}
-            onClick={() => semanticDocRef.current?.click()}
-            title="上传 .docx / .md / .txt，保存后自动与当前模型做差异分析"
-          >
-            {busy === 'semantic-doc' ? '上传中…' : '上传语义文档'}
-          </button>
-          <button className="da-btn da-btn-primary da-btn-sm" onClick={() => setChatOpen(true)}>
-            对话建模
-          </button>
-        </div>
-      )}
 
-      {/* ---------- overview tab (specs/028: digest merged into guide bar + enhance card) ---------- */}
-      {tab === 'overview' && (
-        <div className="da-small" style={{ color: 'var(--da-text-3)' }}>
-          数据源关联后平台已自动播种基线语义（表与列描述），可直接问数；上传语义文档或对话建模可让口径更准。
+      {!detailOpen && <ModelingWorkflowGuide workflow={workflow} error={workflowError} busy={busy !== null}
+        onNext={type => {
+          if (type === 'PREPARE_DATA') navigate(`/configure/datasets/${groupId}`);
+          else if (type === 'INITIALIZE') void onInitializeMdl();
+          else if (type === 'MODEL' || type === 'ADD_QUESTIONS') { setTab('modeling'); }
+          else if (type === 'VALIDATE') {
+            setTab('modeling');
+            setChatDraft(previous => ({ groupId, message: '请完成当前草稿的 YAML 校验、编译与查询检查，技术错误自动修复。预设问题验证可选，不阻碍发布；工程检查通过后引导我去发布。', requestId: (previous?.requestId ?? 0) + 1, submit: true }));
+          }
+          else if (type === 'CONFIRM') setTab('questions');
+          else if (type === 'PUBLISH') setTab('publish');
+          else if (type === 'QUERY') navigate(`/chat?groups=${encodeURIComponent(groupId)}`);
+          else setTab('overview');
+        }} hideModelAction={tab === 'modeling'} hideNextAction={tab === 'questions' || tab === 'publish'} />}
+      {detailOpen && <div className="da-card da-small">当前工作区草稿 · 问数使用已发布 v{workflow?.publishedVersion ?? 0}。在 MDL 页查看已发布工程快照与差异。</div>}
+
+      {tab === 'overview' && <div className="da-card" style={{ padding: 16 }}>
+        <div className="da-h2">准备数据与业务资料</div>
+        <p className="da-small">选择表或上传 CSV / Excel 后，系统生成并发布基础模型。只有发布成功才可问数；业务口径可随后逐步完善。</p>
+        <p className="da-small">业务文档可选。没有文档也可以直接通过对话建模，不必先填写全部问题。</p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="da-btn" onClick={() => navigate(`/configure/datasets/${groupId}`)}>选择表或上传数据</button>
+          <button className="da-btn da-btn-primary" onClick={() => { setTab('modeling'); }}>进入对话建模</button>
         </div>
-      )}
+      </div>}
+
+      {tab === 'modeling' && <ModelingQuestionsPanel key={`${groupId}-requirements`} groupId={groupId} mode="requirements"
+        hideAdd={!showConversation} onAddQuestions={submitQuestions} onDiscuss={message => {
+        setChatDraft(previous => ({ groupId, message, requestId: (previous?.requestId ?? 0) + 1, submit: false }));
+      }} />}
+      {tab === 'questions' && <ModelingQuestionsPanel key={`${groupId}-acceptance`} groupId={groupId} mode="acceptance" workflow={workflow}
+        onAddQuestions={submitQuestions} onPublish={() => setTab('publish')} onQuery={() => navigate(`/chat?groups=${encodeURIComponent(groupId)}`)} onDiscuss={message => {
+        setTab('modeling'); setChatDraft(previous => ({ groupId, message, requestId: (previous?.requestId ?? 0) + 1, submit: false }));
+      }} />}
+      {tab === 'publish' && <MdlPublishPanel groupId={groupId} workflow={workflow} onPublished={refresh}
+        onReview={() => setTab('questions')} />}
 
       {tab === 'schema' && (
         <>
       <div className="da-small" style={{ color: 'var(--da-text-3)', marginBottom: 4 }}>
-        关系建议 = 规则推断（同名/共享列）+ AI 建议，join 类型由数据唯一性探测（不靠猜测）。人工确认或拒绝的记录在重新分析后仍保留。摸不着头绪时，点右上角「对话建模」让助手带你一步步完成。
+        关系建议 = 规则推断（同名/共享列）+ AI 建议，join 类型由数据唯一性探测（不靠猜测）。人工确认或拒绝的记录在重新分析后仍保留。需要补充业务说明时，返回「对话建模」。
       </div>
 
       {/* ---------- models: asset list + workspace YAML projection (specs/030) ---------- */}
@@ -1201,130 +1039,6 @@ export default function SemanticModelingPage() {
         </div>
       )}
 
-      {tab === 'cubes' && (
-      <div className="da-card">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-          <div className="da-h2" style={{ margin: 0 }}>
-            语义 Cube ({overview?.cubes.length ?? 0})
-          </div>
-          <div style={{ flex: 1 }} />
-          <button
-            className="da-btn da-btn-sm"
-            disabled={busy !== null || datasets.length === 0}
-            onClick={onSuggestCubes}
-          >
-            {busy === 'cubes' ? '生成中…' : 'AI 提议'}
-          </button>
-          <button
-            className="da-btn da-btn-primary da-btn-sm"
-            disabled={busy !== null || datasets.length === 0}
-            onClick={() => {
-              setDraftError(null);
-              setDraft(emptyDraft(datasets));
-            }}
-          >
-            + 新建 Cube
-          </button>
-        </div>
-        <div className="da-small" style={{ color: 'var(--da-text-3)', marginBottom: 10 }}>
-          Cube = 指标的聚合视图（指标聚合函数 + 维度 + 时间维度），供已发布组的问数工具使用。
-        </div>
-
-        {candidates && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-            <div className="da-small" style={{ fontWeight: 600 }}>
-              AI 提议（{candidates.length}）
-            </div>
-            {candidates.length === 0 ? (
-              <div className="da-small">
-                没有新的提议（可能是模型不可用或没有合适的聚合表）。
-              </div>
-            ) : (
-              candidates.map((s, i) => (
-                <div
-                  key={`cand-${i}`}
-                  className="da-card"
-                  style={{
-                    background: 'var(--da-primary-subtle)',
-                    padding: 10,
-                    borderColor: 'var(--da-primary)',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontWeight: 600 }}>{s.name}</span>
-                    <span className="da-badge">{datasetName(s.datasetId)}</span>
-                    <div style={{ flex: 1 }} />
-                    <button
-                      className="da-btn da-btn-primary da-btn-sm"
-                      disabled={busy !== null}
-                      onClick={() => {
-                        setDraftError(null);
-                        setDraft(suggestionToDraft(s));
-                      }}
-                    >
-                      采纳
-                    </button>
-                    <button
-                      className="da-btn da-btn-sm"
-                      onClick={() =>
-                        setCandidates(prev => {
-                          const rest = (prev ?? []).filter((_, idx) => idx !== i);
-                          return rest.length > 0 ? rest : null;
-                        })
-                      }
-                    >
-                      忽略
-                    </button>
-                  </div>
-                  {s.reason && (
-                    <div className="da-small" style={{ marginTop: 4 }}>
-                      {s.reason}
-                    </div>
-                  )}
-                  <div className="da-small" style={{ color: 'var(--da-text-3)', marginTop: 4 }}>
-                    指标 {s.measures.length} · 维度 {s.dimensions.length} · 时间维度{' '}
-                    {s.timeDimensions.length}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        )}
-
-        <AssetYamlBrowser
-          groupId={groupId}
-          entries={cubeEntries}
-          selectedKey={tab === 'cubes' ? selectedParam : null}
-          onSelect={setSelected}
-          emptyText="暂无 Cube。可用「AI 提议」或手工新建。"
-        />
-        {tab === 'cubes' && selectedCube && (
-          <div style={{ display: 'flex', gap: 6, marginTop: 10, alignItems: 'center' }}>
-            <span className="da-small" style={{ color: 'var(--da-text-3)', marginRight: 'auto' }}>
-              已选中「{selectedCube.name}」
-            </span>
-            <button
-              className="da-btn da-btn-sm"
-              disabled={busy !== null}
-              onClick={() => {
-                setDraftError(null);
-                setDraft(cubeToDraft(selectedCube));
-              }}
-            >
-              编辑
-            </button>
-            <button
-              className="da-btn da-btn-danger da-btn-sm"
-              disabled={busy !== null}
-              onClick={() => onDeleteCube(selectedCube)}
-            >
-              删除
-            </button>
-          </div>
-        )}
-      </div>
-      )}
-
       {tab === 'views' && (
       <div className="da-card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
@@ -1345,7 +1059,7 @@ export default function SemanticModelingPage() {
         </div>
         <div className="da-small" style={{ color: 'var(--da-text-3)', marginBottom: 10 }}>
           视图 = 一条 SELECT/WITH 固化的 SQL 口径（HAVING 阈值、窗口函数、多表 JOIN 等
-          Cube 表达不了的口径），发布后问数可直接按视图名查询。
+          复杂业务口径），发布后问数可直接按视图名查询。
         </div>
         <AssetYamlBrowser
           groupId={groupId}
@@ -1381,7 +1095,7 @@ export default function SemanticModelingPage() {
       </div>
       )}
 
-      {tab === 'overview' && (
+      {tab === 'glossary' && (
       <div className="da-card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
           <div className="da-h2" style={{ margin: 0 }}>
@@ -1408,11 +1122,11 @@ export default function SemanticModelingPage() {
           <div style={{ flex: 1 }} />
           <button
             className="da-btn da-btn-primary da-btn-sm"
-            disabled={busy !== null}
+            disabled={busy !== null || documentUpload.status === 'uploading'}
             onClick={() => semanticDocRef.current?.click()}
             title="上传 .docx / .md / .txt，保存后自动与当前模型做差异分析"
           >
-            {busy === 'semantic-doc' ? '上传中…' : '上传语义文档'}
+            {documentUpload.status === 'uploading' ? '上传中…' : '上传语义文档'}
           </button>
           <button
             className="da-btn da-btn-sm"
@@ -1575,9 +1289,10 @@ export default function SemanticModelingPage() {
       {/* ---------- mdl tab: publish + graph ---------- */}
       {tab === 'mdl' && (
         <>
-      <MdlPublishPanel groupId={groupId} onPublished={refresh} />
 
-      <MdlGraphView groupId={groupId} />
+
+      <MdlGraphView key={workflow?.engineeringCheckedAt ?? workflow?.publishedVersion} groupId={groupId} />
+      <ModelSnapshotPanel groupId={groupId} />
         </>
       )}
 
@@ -1595,481 +1310,6 @@ export default function SemanticModelingPage() {
           e.target.value = '';
         }}
       />
-
-      {/* ---------- cube editor ---------- */}
-      {draft && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.45)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-          }}
-          onClick={() => setDraft(null)}
-        >
-          <div
-            className="da-card"
-            style={{ width: 760, maxHeight: '85vh', overflowY: 'auto', padding: 20 }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="da-h2" style={{ marginBottom: 12 }}>
-              {draft.id ? `编辑 Cube：${draft.name}` : '新建 Cube'}
-            </div>
-
-            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-              <div style={{ flex: 1 }}>
-                <div className="da-label">名称</div>
-                <input
-                  className="da-input"
-                  value={draft.name}
-                  onChange={e => setDraft(d => (d ? { ...d, name: e.target.value } : d))}
-                  style={{ width: '100%' }}
-                  placeholder="如：订单分析"
-                />
-              </div>
-              <div style={{ flex: 1 }}>
-                <div className="da-label">基准数据集</div>
-                <select
-                  className="da-input"
-                  value={draft.baseDatasetId}
-                  onChange={e =>
-                    setDraft(d =>
-                      d
-                        ? {
-                            ...d,
-                            baseDatasetId: e.target.value,
-                            measures: d.measures.map(m => ({ ...m, column: '' })),
-                            dimensions: d.dimensions.map(x => ({ ...x, column: '' })),
-                            timeDimensions: d.timeDimensions.map(x => ({ ...x, column: '' })),
-                          }
-                        : d,
-                    )
-                  }
-                  style={{ width: '100%' }}
-                >
-                  <option value="">请选择…</option>
-                  {datasets.map(ds => (
-                    <option key={ds.id} value={ds.id}>
-                      {datasetLabel(ds)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div style={{ marginBottom: 12 }}>
-              <div className="da-label">描述（可选）</div>
-              <input
-                className="da-input"
-                value={draft.description}
-                onChange={e => setDraft(d => (d ? { ...d, description: e.target.value } : d))}
-                style={{ width: '100%' }}
-                placeholder="业务口径说明"
-              />
-            </div>
-
-            {/* measures */}
-            <div className="da-small" style={{ fontWeight: 600, marginBottom: 6 }}>
-              指标
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
-              {draft.measures.map((m, i) => (
-                <div key={`m-${i}`}>
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <input
-                      className="da-input"
-                      value={m.name}
-                      placeholder="指标名"
-                      onChange={e =>
-                        setDraft(d =>
-                          d
-                            ? {
-                                ...d,
-                                measures: d.measures.map((x, idx) =>
-                                  idx === i ? { ...x, name: e.target.value } : x,
-                                ),
-                              }
-                            : d,
-                        )
-                      }
-                      style={{ width: 130 }}
-                    />
-                    <ColumnSelect
-                      columns={columnsOf(draft.baseDatasetId)}
-                      value={m.column}
-                      onChange={v =>
-                        setDraft(d =>
-                          d
-                            ? {
-                                ...d,
-                                measures: d.measures.map((x, idx) =>
-                                  idx === i ? { ...x, column: v } : x,
-                                ),
-                              }
-                            : d,
-                        )
-                      }
-                    />
-                    <select
-                      className="da-input"
-                      value={m.agg}
-                      onChange={e =>
-                        setDraft(d =>
-                          d
-                            ? {
-                                ...d,
-                                measures: d.measures.map((x, idx) =>
-                                  idx === i ? { ...x, agg: e.target.value } : x,
-                                ),
-                              }
-                            : d,
-                        )
-                      }
-                      style={{ width: 88 }}
-                    >
-                      {AGG_OPTIONS.map(a => (
-                        <option key={a} value={a}>
-                          {a}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      className="da-btn da-btn-sm"
-                      style={{ fontSize: '0.72rem' }}
-                      onClick={() =>
-                        setDraft(d =>
-                          d
-                            ? {
-                                ...d,
-                                measures: d.measures.map((x, idx) =>
-                                  idx === i
-                                    ? { ...x, caseOn: !x.caseOn, caseColumn: x.caseOn ? '' : x.caseColumn }
-                                    : x,
-                                ),
-                              }
-                            : d,
-                        )
-                      }
-                    >
-                      {m.caseOn ? '移除 CASE' : '+ CASE 条件'}
-                    </button>
-                    <button
-                      className="da-btn da-btn-sm"
-                      disabled={draft.measures.length <= 1}
-                      onClick={() =>
-                        setDraft(d =>
-                          d ? { ...d, measures: d.measures.filter((_, idx) => idx !== i) } : d,
-                        )
-                      }
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  {m.caseOn && (
-                    <div
-                      style={{
-                        display: 'flex',
-                        gap: 6,
-                        alignItems: 'center',
-                        marginTop: 4,
-                        paddingLeft: 12,
-                      }}
-                    >
-                      <span className="da-small" style={{ color: 'var(--da-text-3)' }}>
-                        CASE 条件
-                      </span>
-                      <ColumnSelect
-                        columns={columnsOf(draft.baseDatasetId)}
-                        value={m.caseColumn}
-                        onChange={v =>
-                          setDraft(d =>
-                            d
-                              ? {
-                                  ...d,
-                                  measures: d.measures.map((x, idx) =>
-                                    idx === i ? { ...x, caseColumn: v } : x,
-                                  ),
-                                }
-                              : d,
-                          )
-                        }
-                        style={{ maxWidth: 200 }}
-                      />
-                      <select
-                        className="da-input"
-                        value={m.caseOp}
-                        onChange={e =>
-                          setDraft(d =>
-                            d
-                              ? {
-                                  ...d,
-                                  measures: d.measures.map((x, idx) =>
-                                    idx === i ? { ...x, caseOp: e.target.value } : x,
-                                  ),
-                                }
-                              : d,
-                          )
-                        }
-                        style={{ width: 70 }}
-                      >
-                        {CASE_OPS.map(op => (
-                          <option key={op} value={op}>
-                            {op}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        className="da-input"
-                        value={m.caseValue}
-                        placeholder="值"
-                        onChange={e =>
-                          setDraft(d =>
-                            d
-                              ? {
-                                  ...d,
-                                  measures: d.measures.map((x, idx) =>
-                                    idx === i ? { ...x, caseValue: e.target.value } : x,
-                                  ),
-                                }
-                              : d,
-                          )
-                        }
-                        style={{ width: 120 }}
-                      />
-                      <span className="da-small" style={{ color: 'var(--da-text-3)' }}>
-                        指标 ={' '}
-                        {(m.agg === 'DISTINCT_COUNT' ? 'COUNT(DISTINCT ' : `${m.agg}(`) +
-                          `CASE WHEN ${m.caseColumn || '列'} ${m.caseOp} ${
-                            m.caseValue ? caseLiteral(m.caseValue) : '值'
-                          } THEN ${m.column || '列'} END`}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              ))}
-              <div>
-                <button
-                  className="da-btn da-btn-sm"
-                  onClick={() =>
-                    setDraft(d =>
-                      d
-                        ? {
-                            ...d,
-                            measures: [
-                              ...d.measures,
-                              {
-                                name: '',
-                                column: '',
-                                agg: 'SUM',
-                                caseOn: false,
-                                caseColumn: '',
-                                caseOp: '=',
-                                caseValue: '',
-                              },
-                            ],
-                          }
-                        : d,
-                    )
-                  }
-                >
-                  + 添加指标
-                </button>
-              </div>
-            </div>
-
-            {/* dimensions */}
-            <div className="da-small" style={{ fontWeight: 600, marginBottom: 6 }}>
-              维度
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
-              {draft.dimensions.map((x, i) => (
-                <div key={`d-${i}`} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  <input
-                    className="da-input"
-                    value={x.name}
-                    placeholder="维度名"
-                    onChange={e =>
-                      setDraft(d =>
-                        d
-                          ? {
-                              ...d,
-                              dimensions: d.dimensions.map((y, idx) =>
-                                idx === i ? { ...y, name: e.target.value } : y,
-                              ),
-                            }
-                          : d,
-                      )
-                    }
-                    style={{ width: 130 }}
-                  />
-                  <ColumnSelect
-                    columns={columnsOf(draft.baseDatasetId)}
-                    value={x.column}
-                    onChange={v =>
-                      setDraft(d =>
-                        d
-                          ? {
-                              ...d,
-                              dimensions: d.dimensions.map((y, idx) =>
-                                idx === i ? { ...y, column: v } : y,
-                              ),
-                            }
-                          : d,
-                      )
-                    }
-                  />
-                  <button
-                    className="da-btn da-btn-sm"
-                    onClick={() =>
-                      setDraft(d =>
-                        d ? { ...d, dimensions: d.dimensions.filter((_, idx) => idx !== i) } : d,
-                      )
-                    }
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
-              <div>
-                <button
-                  className="da-btn da-btn-sm"
-                  onClick={() =>
-                    setDraft(d =>
-                      d ? { ...d, dimensions: [...d.dimensions, { name: '', column: '' }] } : d,
-                    )
-                  }
-                >
-                  + 添加维度
-                </button>
-              </div>
-            </div>
-
-            {/* time dimensions */}
-            <div className="da-small" style={{ fontWeight: 600, marginBottom: 6 }}>
-              时间维度
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
-              {draft.timeDimensions.map((x, i) => (
-                <div key={`t-${i}`} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  <input
-                    className="da-input"
-                    value={x.name}
-                    placeholder="时间维度名"
-                    onChange={e =>
-                      setDraft(d =>
-                        d
-                          ? {
-                              ...d,
-                              timeDimensions: d.timeDimensions.map((y, idx) =>
-                                idx === i ? { ...y, name: e.target.value } : y,
-                              ),
-                            }
-                          : d,
-                      )
-                    }
-                    style={{ width: 130 }}
-                  />
-                  <ColumnSelect
-                    columns={columnsOf(draft.baseDatasetId)}
-                    value={x.column}
-                    onChange={v =>
-                      setDraft(d =>
-                        d
-                          ? {
-                              ...d,
-                              timeDimensions: d.timeDimensions.map((y, idx) =>
-                                idx === i ? { ...y, column: v } : y,
-                              ),
-                            }
-                          : d,
-                      )
-                    }
-                  />
-                  <select
-                    className="da-input"
-                    value={x.granularity}
-                    onChange={e =>
-                      setDraft(d =>
-                        d
-                          ? {
-                              ...d,
-                              timeDimensions: d.timeDimensions.map((y, idx) =>
-                                idx === i ? { ...y, granularity: e.target.value } : y,
-                              ),
-                            }
-                          : d,
-                      )
-                    }
-                    style={{ width: 100 }}
-                  >
-                    {GRANULARITY_OPTIONS.map(g => (
-                      <option key={g} value={g}>
-                        {g}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    className="da-btn da-btn-sm"
-                    onClick={() =>
-                      setDraft(d =>
-                        d
-                          ? {
-                              ...d,
-                              timeDimensions: d.timeDimensions.filter((_, idx) => idx !== i),
-                            }
-                          : d,
-                      )
-                    }
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
-              <div>
-                <button
-                  className="da-btn da-btn-sm"
-                  onClick={() =>
-                    setDraft(d =>
-                      d
-                        ? {
-                            ...d,
-                            timeDimensions: [
-                              ...d.timeDimensions,
-                              { name: '', column: '', granularity: 'MONTH' },
-                            ],
-                          }
-                        : d,
-                    )
-                  }
-                >
-                  + 添加时间维度
-                </button>
-              </div>
-            </div>
-
-            {draftError && (
-              <div className="da-small" style={{ color: 'var(--da-danger)', marginBottom: 8 }}>
-                {draftError}
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button className="da-btn" onClick={() => setDraft(null)}>
-                取消
-              </button>
-              <button
-                className="da-btn da-btn-primary"
-                disabled={busy !== null}
-                onClick={onSaveCube}
-              >
-                {busy === 'cube:save' ? '保存中…' : '保存'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ---------- view editor (specs/011 M2) ---------- */}
       {viewDraft && (
@@ -2177,23 +1417,25 @@ export default function SemanticModelingPage() {
       )}
       </div>
 
-      {/* ---------- right-side chat dock (specs/030 workbench, ADR 0041) ---------- */}
-      {chatOpen && (
-        <div
-          style={{
-            width: 640,
-            flexShrink: 0,
-            height: '100%',
-            minWidth: 0,
-          }}
-        >
-          <ModelingChatPanel
-            groupId={groupId}
-            variant="dock"
-            onClose={() => setChatOpen(false)}
-          />
+      {/* Keep the chat mounted so browsing model details does not discard pending HITL. */}
+      <div className="modeling-chat-main" style={{ display: tab === 'modeling' ? 'flex' : 'none', flexDirection: 'column', gap: 12, flex: 1, order: -1, minWidth: 0, minHeight: 0 }}>
+        <BusinessDocumentGuide content={businessDocument} upload={documentUpload} analysisStatus={enhance?.task?.status}
+          onUpload={() => semanticDocRef.current?.click()} />
+        {nativeSession?.error && <p role="alert">{nativeSession.error}</p>}
+        <details className="da-card" style={{ padding: 12 }}>
+          <summary>预设分析问题（可选）· 可批量填写，也可直接对话建模</summary>
+          <QuestionIntakeForm key={groupId} onSubmit={submitQuestions} />
+        </details>
+        <div style={{ display: showConversation ? 'block' : 'none', flex: 1, minHeight: 0 }}>
+          <ModelingChatPanel key={groupId} groupId={groupId}
+            draftPrompt={chatDraft?.groupId === groupId ? chatDraft.message : undefined}
+            draftPromptId={chatDraft?.groupId === groupId ? chatDraft.requestId : undefined}
+            submitDraft={chatDraft?.groupId === groupId && chatDraft.submit}
+            onSessionReady={onSessionReady}
+            variant="dock" onClose={() => setTab('overview')} />
         </div>
-      )}
+      </div>
+      </div>
     </div>
   );
 }

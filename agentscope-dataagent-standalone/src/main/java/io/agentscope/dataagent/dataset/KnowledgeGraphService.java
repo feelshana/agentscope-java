@@ -58,6 +58,10 @@ import reactor.core.scheduler.Schedulers;
  * nodes/edges with per-unit processing status so the UI can poll progress.
  */
 @Service
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+        prefix = "dataagent.knowledge-graph",
+        name = "enabled",
+        havingValue = "true")
 public class KnowledgeGraphService {
 
     private static final Logger log = LoggerFactory.getLogger(KnowledgeGraphService.class);

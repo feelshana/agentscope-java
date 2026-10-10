@@ -1,0 +1,222 @@
+{
+  "scope": "Installed official Wren CLI compilation/planning only; no database or LLM execution.",
+  "wren_executable": "D:/workspace/wren-probe/.venv/Scripts/wren.exe",
+  "python_executable": "D:\\workspace\\wren-probe\\.venv\\Scripts\\python.exe",
+  "probes": [
+    {
+      "name": "version",
+      "argv": [
+        "--version"
+      ],
+      "exit_code": 0,
+      "stdout": "wrenai 0.15.0\n",
+      "stderr": "",
+      "expectation_met": true
+    },
+    {
+      "name": "validate",
+      "argv": [
+        "context",
+        "validate",
+        "--strict"
+      ],
+      "exit_code": 0,
+      "stdout": "\nNote: no profile bound to this project. Connection will fall back to the\n  globally active profile in ~/.wren/profiles.yml.\n  Run `wren context set-profile <name>` to pin one explicitly.\nValid — 7 models, 0 views, 1 relationships.\n",
+      "stderr": "",
+      "expectation_met": true
+    },
+    {
+      "name": "build",
+      "argv": [
+        "context",
+        "build"
+      ],
+      "exit_code": 0,
+      "stdout": "Built: 7 models, 0 views → D:\\workspace\\data-agent\\agentscope-dataagent-standalone\\docs\\validation\\wren-gap\\official-project\\target\\mdl.json\n\nNext: wren --sql 'SELECT ...' to query your data.\n",
+      "stderr": "",
+      "expectation_met": true
+    },
+    {
+      "name": "manifest_deserialization",
+      "argv": [
+        "dry-plan",
+        "--sql",
+        "SELECT 1",
+        "-d",
+        "mysql"
+      ],
+      "exit_code": 0,
+      "stdout": "SELECT 1\n",
+      "stderr": "",
+      "expectation_met": true
+    },
+    {
+      "name": "logical_revenue_plan",
+      "argv": [
+        "dry-plan",
+        "--sql",
+        "SELECT SUM(CASE WHEN status = 'PAID' AND is_deleted = 0 AND customer_internal = 0 THEN amount_cents ELSE 0 END) FROM \"order\"",
+        "-d",
+        "mysql"
+      ],
+      "exit_code": 0,
+      "stdout": "WITH `order` AS (SELECT `wren_src_order`.amount_cents AS amount_cents, `wren_src_order`.customer_internal AS customer_internal, `wren_src_order`.`status` AS status, `wren_src_order`.is_deleted AS is_deleted FROM (SELECT __relation__1.amount_cents, __relation__1.is_internal AS customer_internal, __relation__1.is_deleted, __relation__1.`status` FROM (SELECT `order`.amount_cents, `order`.customer_id, `order`.is_deleted, customer.is_internal, `order`.`status` FROM (SELECT customer.customer_id, customer.is_internal FROM (SELECT customer.customer_id, customer.is_internal FROM (SELECT __source.customer_id AS customer_id, __source.is_internal AS is_internal FROM wren_gap_fixture.ds_customer AS __source) AS customer) AS customer) AS customer RIGHT OUTER JOIN (SELECT __source.amount_cents AS amount_cents, __source.customer_id AS customer_id, __source.is_deleted AS is_deleted, __source.`status` AS `status` FROM wren_gap_fixture.ds_order AS __source) AS `order` ON customer.customer_id = `order`.customer_id) AS __relation__1) AS `wren_src_order`) SELECT SUM(CASE WHEN status = 'PAID' AND is_deleted = 0 AND customer_internal = 0 THEN amount_cents ELSE 0 END) FROM `order`\n",
+      "stderr": "",
+      "expectation_met": true
+    },
+    {
+      "name": "cube_total",
+      "argv": [
+        "cube",
+        "query",
+        "--cube",
+        "revenue",
+        "--measures",
+        "valid_revenue_cents",
+        "--sql-only"
+      ],
+      "exit_code": 0,
+      "stdout": "SELECT SUM(CASE WHEN status = 'PAID' AND is_deleted = 0 AND customer_internal = 0 THEN amount_cents ELSE 0 END) AS valid_revenue_cents FROM order\n",
+      "stderr": "",
+      "expectation_met": true
+    },
+    {
+      "name": "cube_customer",
+      "argv": [
+        "cube",
+        "query",
+        "--cube",
+        "revenue",
+        "--measures",
+        "valid_revenue_cents",
+        "--dimensions",
+        "customer_name",
+        "--sql-only"
+      ],
+      "exit_code": 0,
+      "stdout": "SELECT customer_name AS customer_name, SUM(CASE WHEN status = 'PAID' AND is_deleted = 0 AND customer_internal = 0 THEN amount_cents ELSE 0 END) AS valid_revenue_cents FROM order GROUP BY 1\n",
+      "stderr": "",
+      "expectation_met": true
+    },
+    {
+      "name": "cube_month",
+      "argv": [
+        "cube",
+        "query",
+        "--cube",
+        "revenue",
+        "--measures",
+        "valid_revenue_cents",
+        "--time-dimension",
+        "order_time:month:2025-01-01,2025-05-01",
+        "--sql-only"
+      ],
+      "exit_code": 0,
+      "stdout": "SELECT DATE_TRUNC('month', CAST(order_time AS TIMESTAMP)) AS order_time__month, SUM(CASE WHEN status = 'PAID' AND is_deleted = 0 AND customer_internal = 0 THEN amount_cents ELSE 0 END) AS valid_revenue_cents FROM order WHERE CAST(order_time AS TIMESTAMP) >= '2025-01-01' AND CAST(order_time AS TIMESTAMP) < '2025-05-01' GROUP BY 1 ORDER BY 1\n",
+      "stderr": "",
+      "expectation_met": true
+    },
+    {
+      "name": "unknown_cube_dimension",
+      "argv": [
+        "cube",
+        "query",
+        "--cube",
+        "revenue",
+        "--measures",
+        "valid_revenue_cents",
+        "--dimensions",
+        "region",
+        "--sql-only"
+      ],
+      "exit_code": 1,
+      "stdout": "",
+      "stderr": "Error: Error during planning: Unknown dimension 'region' in cube 'revenue'\n",
+      "expectation_met": true
+    },
+    {
+      "name": "bad_dimension_validate",
+      "argv": [
+        "context",
+        "validate",
+        "--strict"
+      ],
+      "exit_code": 0,
+      "stdout": "\nNote: no profile bound to this project. Connection will fall back to the\n  globally active profile in ~/.wren/profiles.yml.\n  Run `wren context set-profile <name>` to pin one explicitly.\nValid — 7 models, 0 views, 1 relationships.\n",
+      "stderr": "",
+      "expectation_met": true
+    },
+    {
+      "name": "bad_dimension_build",
+      "argv": [
+        "context",
+        "build"
+      ],
+      "exit_code": 0,
+      "stdout": "Built: 7 models, 0 views → D:\\workspace\\data-agent\\agentscope-dataagent-standalone\\docs\\validation\\wren-gap\\official-project\\target\\mdl.json\n\nNext: wren --sql 'SELECT ...' to query your data.\n",
+      "stderr": "",
+      "expectation_met": true
+    },
+    {
+      "name": "bad_dimension_measure_only",
+      "argv": [
+        "cube",
+        "query",
+        "--cube",
+        "revenue",
+        "--measures",
+        "valid_revenue_cents",
+        "--sql-only"
+      ],
+      "exit_code": 0,
+      "stdout": "SELECT SUM(CASE WHEN status = 'PAID' AND is_deleted = 0 AND customer_internal = 0 THEN amount_cents ELSE 0 END) AS valid_revenue_cents FROM order\n",
+      "stderr": "",
+      "expectation_met": true
+    },
+    {
+      "name": "bad_dimension_selected_sqlonly",
+      "argv": [
+        "cube",
+        "query",
+        "--cube",
+        "revenue",
+        "--measures",
+        "valid_revenue_cents",
+        "--dimensions",
+        "nonexistent_customer_column",
+        "--sql-only"
+      ],
+      "exit_code": 1,
+      "stdout": "",
+      "stderr": "Error: Error during planning: Unknown dimension 'nonexistent_customer_column' in cube 'revenue'\n",
+      "expectation_met": true
+    },
+    {
+      "name": "bad_dimension_expanded_plan",
+      "argv": [
+        "dry-plan",
+        "--sql",
+        "SELECT nonexistent_customer_column, SUM(amount_cents) FROM \"order\" GROUP BY 1",
+        "-d",
+        "mysql"
+      ],
+      "exit_code": 0,
+      "stdout": "WITH `order` AS (SELECT `wren_src_order`.amount_cents AS amount_cents FROM (SELECT `order`.amount_cents FROM (SELECT __source.amount_cents AS amount_cents FROM wren_gap_fixture.ds_order AS __source) AS `order`) AS `wren_src_order`) SELECT nonexistent_customer_column, SUM(amount_cents) FROM `order` GROUP BY 1\n",
+      "stderr": "",
+      "expectation_met": true
+    }
+  ],
+  "python_handoff": {
+    "scope": "Local pandas CSV parsing; not Docker run_python",
+    "pandas_version": "3.0.6",
+    "rows": 10005,
+    "default_code": "123.0",
+    "explicit_code": "000123",
+    "default_null_and_empty_both_na": true,
+    "full_sum": 100.05,
+    "first_1000_sum": 10.0,
+    "first_10000_sum": 100.0
+  },
+  "platform_e2e": "NOT_RUN",
+  "official_agent_e2e": "NOT_RUN"
+}

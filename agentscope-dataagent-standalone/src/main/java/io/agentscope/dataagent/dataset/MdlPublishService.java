@@ -102,6 +102,7 @@ public class MdlPublishService {
     private final MdlSeeder seeder;
     private final MdlWorkspaceService workspace;
     private final MdlWorkspaceReader reader;
+    private final MdlQuestionStore questionStore;
 
     /**
      * Per-group mutex serialising the whole validate/publish flow (reconcile → staging copy →
@@ -143,6 +144,7 @@ public class MdlPublishService {
         this.seeder = seeder;
         this.workspace = workspace;
         this.reader = reader;
+        this.questionStore = new MdlQuestionStore(workspace);
     }
 
     // ------------------------------------------------------------------ public API result types
@@ -359,6 +361,20 @@ public class MdlPublishService {
     public MdlValidation validate(String groupId) {
         return withPublishLock(
                 groupId,
+                () ->
+                        workspace.withWorkspaceLock(
+                                groupId,
+                                () -> {
+                                    MdlValidation result = validateInternal(groupId);
+                                    new ModelingWorkflowStore(workspace, questionStore)
+                                            .record(groupId, result);
+                                    return result;
+                                }));
+    }
+
+    private MdlValidation validateInternal(String groupId) {
+        return withPublishLock(
+                groupId,
                 () -> {
                     List<MdlIssue> issues = new ArrayList<>();
                     if (datasetRepository.findByGroupId(groupId).isEmpty()) {
@@ -435,6 +451,101 @@ public class MdlPublishService {
                         throw e;
                     }
                 });
+    }
+
+    /** Executes a requirement against a fresh draft without replacing any published artifact. */
+    public MdlQuestionStore.Review validateQuestion(
+            String groupId,
+            String questionId,
+            io.agentscope.dataagent.runtime.wren.WrenQueryGateway gateway) {
+        return withPublishLock(
+                groupId,
+                () ->
+                        workspace.withWorkspaceLock(
+                                groupId,
+                                () -> {
+                                    MdlSeeder.SeedResult seed = seeder.reconcile(groupId);
+                                    MdlQuestionStore.Question question =
+                                            questionStore.requireQuestion(groupId, questionId);
+                                    questionStore.requireCoverage(groupId, question);
+                                    if (question.sql().isBlank()
+                                            || question.definition().isBlank()) {
+                                        throw new DatasetException("请先通过建模对话完善业务口径和逻辑 SQL", 400);
+                                    }
+                                    MdlQuestionStore.requireReadSql(question.sql());
+                                    String hash =
+                                            questionStore.modelHash(
+                                                    workspace.workspaceRoot(groupId));
+                                    com.fasterxml.jackson.databind.JsonNode result = null;
+                                    String error = null;
+                                    boolean truncated = false;
+                                    try {
+                                        if (hasErrors(seed.issues()))
+                                            throw new DatasetException("模型播种存在问题，请先修复");
+                                        WrenSourceSelection selection =
+                                                selectWrenSource(
+                                                        datasetRepository.findByGroupId(groupId));
+                                        if (selection.error() != null)
+                                            throw new DatasetException(selection.error());
+                                        Path scratch = workspace.copyToScratch(groupId);
+                                        WrenCli.Result validation =
+                                                wrenCli.run(
+                                                        scratch,
+                                                        props.timeout(),
+                                                        List.of("context", "validate", "--strict"));
+                                        if (!validation.ok())
+                                            throw new DatasetException(validation.output());
+                                        WrenCli.Result build =
+                                                wrenCli.run(
+                                                        scratch,
+                                                        props.timeout(),
+                                                        List.of("context", "build"));
+                                        if (!build.ok()) throw new DatasetException(build.output());
+                                        List<MdlIssue> materialized =
+                                                materializeDerivedModels(scratch);
+                                        if (hasErrors(materialized))
+                                            throw new DatasetException(materialized.toString());
+                                        var call =
+                                                gateway.callDraft(
+                                                        groupId,
+                                                        scratch,
+                                                        selection.profile(),
+                                                        question.sql(),
+                                                        1000);
+                                        if (!call.ok()) throw new DatasetException(call.payload());
+                                        result = mapper.readTree(call.payload());
+                                        if (result != null && result.isTextual())
+                                            result = mapper.readTree(result.asText());
+                                        if (result == null
+                                                || !result.path("columns").isArray()
+                                                || !result.path("rows").isArray()) {
+                                            throw new DatasetException("Wren 未返回结构化查询结果，不能保存为成功验证");
+                                        }
+                                        truncated =
+                                                result.path("truncated").asBoolean(false)
+                                                        || result.path("rows").size() >= 1000;
+                                    } catch (IOException | RuntimeException e) {
+                                        error =
+                                                e.getMessage() == null
+                                                        ? e.getClass().getSimpleName()
+                                                        : e.getMessage();
+                                    } finally {
+                                        workspace.deleteScratchQuietly(groupId);
+                                    }
+                                    MdlQuestionStore.Receipt receipt =
+                                            questionStore.saveExecution(
+                                                    groupId,
+                                                    question,
+                                                    hash,
+                                                    result,
+                                                    error,
+                                                    truncated,
+                                                    new MdlQuestionStore.Evidence(
+                                                            question.sql(),
+                                                            reader.read(groupId).views()));
+                                    return questionStore.review(
+                                            groupId, question, receipt.status(), receipt);
+                                }));
     }
 
     /**
@@ -520,6 +631,10 @@ public class MdlPublishService {
      * because one wren project can only bind a single connection.
      */
     private MdlPublishResult doPublish(DatasetGroupEntity group, String groupId) {
+        return workspace.withWorkspaceLock(groupId, () -> doPublishLocked(group, groupId));
+    }
+
+    private MdlPublishResult doPublishLocked(DatasetGroupEntity group, String groupId) {
         long assembleStartTick = System.nanoTime();
         List<MdlIssue> issues = new ArrayList<>();
         List<DatasetEntity> datasets = datasetRepository.findByGroupId(groupId);
@@ -532,6 +647,7 @@ public class MdlPublishService {
         // lock nested inside the publish lock — the only nesting direction.
         MdlSeeder.SeedResult seed = seeder.reconcile(groupId);
         issues.addAll(seed.issues());
+        // Optional questions do not gate publication; engineering validation still applies.
         if (hasErrors(issues)) {
             return failure(group, issues, "");
         }
@@ -598,6 +714,7 @@ public class MdlPublishService {
         Path preparedDir = groupRoot.resolve("published.next");
         Path preparedManifest = groupRoot.resolve("mdl.json.next");
         prepareSnapshot(projectDir, preparedDir);
+        questionStore.filterPublishedExamples(groupId, preparedDir);
         writeWrenSourceProperties(preparedDir, selection.profile());
         writeMetaJson(preparedManifest, group, snapshot);
         replacePublishedArtifacts(groupRoot, preparedDir, preparedManifest);

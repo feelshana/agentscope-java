@@ -78,16 +78,15 @@ export default function MdlGraphView({ groupId }: { groupId: string }) {
     let cancelled = false;
     setView(null);
     setError(null);
-    getMdlView(groupId)
-      .then(v => {
-        if (!cancelled) setView(v);
-      })
-      .catch(e => {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
-      });
-    return () => {
-      cancelled = true;
+    const refresh = () => { void getMdlView(groupId)
+      .then(v => { if (!cancelled) setView(v); })
+      .catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)); }); };
+    const update = (event: Event) => {
+      if ((event as CustomEvent<{ groupId: string }>).detail?.groupId === groupId) refresh();
     };
+    refresh();
+    window.addEventListener('modeling:updated', update);
+    return () => { cancelled = true; window.removeEventListener('modeling:updated', update); };
   }, [groupId]);
 
   const modelLabels = useMemo(() => {
@@ -160,7 +159,7 @@ export default function MdlGraphView({ groupId }: { groupId: string }) {
           </span>
         )}
         <span className="da-small" style={{ color: 'var(--da-text-3)' }}>
-          模型 {view.models.length} · 关系 {view.relations.length} · Cube {view.cubes.length}
+          模型 {view.models.length} · 关系 {view.relations.length} · 视图 {view.views.length}
         </span>
       </div>
       {view.issues.map((i, idx) => (
@@ -173,7 +172,7 @@ export default function MdlGraphView({ groupId }: { groupId: string }) {
       <div style={S.graph}>
         {graphData && <ReadOnlyRelationGraph data={graphData} />}
         {graphData && graphData.nodes.length === 0 && (
-          <div style={S.empty}>暂无逻辑模型（确认关系并配置 Cube 后展示）</div>
+          <div style={S.empty}>暂无逻辑模型，请先上传数据或关联数据表</div>
         )}
         {graphData && graphData.nodes.length > 0 && (
           <div style={S.legend}>
@@ -196,38 +195,12 @@ export default function MdlGraphView({ groupId }: { groupId: string }) {
         )}
       </div>
 
-      {/* Cube 卡列表 */}
-      {view.cubes.length > 0 && (
+      {view.views.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 }}>
-          {view.cubes.map(c => (
-            <div key={c.name} style={S.cubeCard}>
-              <div style={{ fontWeight: 600, marginBottom: 4 }}>
-                {c.name}
-                <span className="da-small" style={{ color: 'var(--da-text-3)', marginLeft: 8 }}>
-                  基于 {modelLabels.get(c.baseModel) ?? '未知表'}
-                </span>
-              </div>
-              {c.description && (
-                <div className="da-small" style={{ color: 'var(--da-text-3)', marginBottom: 6 }}>
-                  {c.description}
-                </div>
-              )}
-              {c.measures.map(m => (
-                <div key={`m-${m.name}`} style={S.member}>
-                  ƒ {m.name} = {m.expression}
-                  {m.description ? `（${m.description}）` : ''}
-                </div>
-              ))}
-              {c.dimensions.map(m => (
-                <div key={`d-${m.name}`} style={S.member}>
-                  ↗ {m.name} = {m.expression}
-                </div>
-              ))}
-              {c.timeDimensions.map(m => (
-                <div key={`t-${m.name}`} style={S.member}>
-                  ⏱ {m.name} = {m.expression}
-                </div>
-              ))}
+          {view.views.map(v => (
+            <div key={v.name} className="da-card">
+              <strong>{v.name}</strong>
+              {v.description && <p>{v.description}</p>}
             </div>
           ))}
         </div>

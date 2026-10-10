@@ -1,0 +1,19 @@
+{
+  "file": "live-Q02-sse.jsonl",
+  "event_count": 31,
+  "answer": "我来查询有效订单数和付费客户数。这两个指标正好都在 `valid_order_metrics` Cube 中，直接用它查询最稳妥。",
+  "tools": [
+    {
+      "name": "wren_query_cube",
+      "input": "{\"group_id\":\"wren-gap-live-20261006-233059\",\"measures\":[\"order_count\",\"paying_customers\"],\"cube\":\"valid_order_metrics\"}",
+      "result": ""
+    },
+    {
+      "name": "wren_query_cube",
+      "input": null,
+      "result": "\"## wren Cube 查询结果\\n\\n**知识库：** wren-gap-live-20261006-233059（group_id: `73b26360-df5c-497e-9137-bdfe7f50df67`）\\n\\n**Cube：** valid_order_metrics\\n**度量：** order_count, paying_customers\\n\\n**查询结果：**\\n\\n| order_count | paying_customers |\\n|---|---|\\n| 6 | 2 |\\n\\n**数据文件：** data/eddac6a22f19.csv（1 行 × 2 列；run_python 中 pd.read_csv('data/eddac6a22f19.csv') 读取）\\n\""
+    }
+  ],
+  "errors": [],
+  "done": []
+}

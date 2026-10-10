@@ -51,5 +51,5 @@ iframe 需约定 HTTPS、允许嵌入的 BI Origin、Cookie/令牌传递及过�
 ## 关联
 
 - [spec 041](../specs/041-knowledge-base-sharing-and-bi-identity.md)
-- [ADR 0048](0048-durable-session-history-and-artifact-lifecycle.md)
+- [会话与附件持久化 ADR](0060-durable-session-history-and-artifact-lifecycle.md)
 - [部署与容量评估](../deployment-and-capacity-review-20261010.md)

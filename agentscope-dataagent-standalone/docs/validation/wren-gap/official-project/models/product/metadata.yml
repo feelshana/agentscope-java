@@ -1,0 +1,25 @@
+{
+  "name": "product",
+  "properties": {
+    "description": "测试业务模型：product"
+  },
+  "table_reference": {
+    "catalog": "",
+    "schema": "wren_gap_fixture",
+    "table": "ds_product"
+  },
+  "columns": [
+    {
+      "name": "product_row_id",
+      "type": "BIGINT"
+    },
+    {
+      "name": "product_code",
+      "type": "VARCHAR"
+    },
+    {
+      "name": "product_name",
+      "type": "VARCHAR"
+    }
+  ]
+}
