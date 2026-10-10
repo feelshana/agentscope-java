@@ -36,9 +36,12 @@ import io.agentscope.core.middleware.ReasoningInput;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 /**
  * Native AgentScope HITL gate for semantic-modeling mutations.
@@ -49,6 +52,15 @@ import reactor.core.publisher.Flux;
  * carrying {@code Msg.METADATA_CONFIRM_RESULTS} resumes the same ReAct loop.
  */
 public final class ModelingHitlMiddleware implements MiddlewareBase {
+    private final BiFunction<RuntimeContext, ToolUseBlock, String> preflight;
+
+    public ModelingHitlMiddleware() {
+        this(null);
+    }
+
+    public ModelingHitlMiddleware(BiFunction<RuntimeContext, ToolUseBlock, String> preflight) {
+        this.preflight = preflight;
+    }
 
     private record RepairFeedback(String toolId, Msg message) {}
 
@@ -158,6 +170,71 @@ public final class ModelingHitlMiddleware implements MiddlewareBase {
             return next.apply(input);
         }
 
+        if (preflight != null) {
+            return Mono.fromCallable(
+                            () -> {
+                                for (ToolUseBlock tool : pending) {
+                                    String error;
+                                    try {
+                                        error = preflight.apply(ctx, tool);
+                                    } catch (RuntimeException failure) {
+                                        error = "技术预检异常，未执行写入：" + failure.getMessage();
+                                    }
+                                    if (error != null) return error;
+                                }
+                                return "";
+                            })
+                    .subscribeOn(Schedulers.boundedElastic())
+                    .flatMapMany(
+                            error -> {
+                                if (!error.isEmpty()) {
+                                    if (ctx == null || ctx.getAgentState() == null)
+                                        return Flux.error(
+                                                new IllegalStateException("缺少工具恢复上下文，未执行写入"));
+                                    for (ToolUseBlock tool : pending) {
+                                        ctx.getAgentState()
+                                                .contextMutable()
+                                                .add(
+                                                        Msg.builder()
+                                                                .role(MsgRole.TOOL)
+                                                                .content(
+                                                                        ToolResultBlock.text(
+                                                                                        "[ERROR]"
+                                                                                            + " 技术预检失败，未写入、未提交业务确认："
+                                                                                                + error
+                                                                                                + "\n"
+                                                                                                + "请自动修复完整方案后重新提交；这不是用户拒绝，不要等待用户点击修正，不要原样重提。")
+                                                                                .withIdAndName(
+                                                                                        tool
+                                                                                                .getId(),
+                                                                                        tool
+                                                                                                .getName())
+                                                                                .withState(
+                                                                                        ToolResultState
+                                                                                                .ERROR))
+                                                                .build());
+                                    }
+                                    Set<String> failed =
+                                            pending.stream()
+                                                    .map(ToolUseBlock::getId)
+                                                    .collect(Collectors.toSet());
+                                    return next.apply(
+                                            new ActingInput(
+                                                    input.toolCalls().stream()
+                                                            .filter(
+                                                                    tool ->
+                                                                            !failed.contains(
+                                                                                    tool.getId()))
+                                                            .toList()));
+                                }
+                                return ask(ctx, pending);
+                            });
+        }
+        return ask(ctx, pending);
+    }
+
+    private Flux<AgentEvent> ask(RuntimeContext ctx, List<ToolUseBlock> pending) {
+
         // The modeling script promises one decision at a time. If a model emits several
         // mutations in one response, pause on the first one; native pending-tool recovery will
         // present the remaining calls after this decision has been consumed.
@@ -173,7 +250,7 @@ public final class ModelingHitlMiddleware implements MiddlewareBase {
                         : null;
         return Flux.just(
                 new RequireUserConfirmEvent(replyId, asking),
-                new RequestStopEvent("建模写操作需要用户确认", GenerateReason.PERMISSION_ASKING));
+                new RequestStopEvent("技术预检已通过，请审阅业务变更", GenerateReason.PERMISSION_ASKING));
     }
 
     private static void markAsking(RuntimeContext ctx, List<ToolUseBlock> pending) {

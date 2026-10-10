@@ -1,7 +1,7 @@
 import type { ModelingWorkflow } from '../../api/modelingWorkflow';
 
 const STAGE: Record<ModelingWorkflow['stage'], string> = {
-  DATA_PREPARATION: '数据准备', MODELING: '对话建模', VALIDATION: '验证问题',
+  DATA_PREPARATION: '数据准备', MODELING: '对话建模', VALIDATION: '模型工程检查',
   CONFIRMATION: '业务确认', PUBLICATION: '待发布', COMPLETE: '已发布，可继续完善',
 };
 
@@ -29,7 +29,7 @@ export default function ModelingWorkflowGuide({ workflow, error, busy, onNext, h
     </p>}
     <div className="da-small" style={{ marginBottom: 10 }}>
       工程校验：{workflow.engineeringStatus === 'PASSED' ? '通过' : workflow.engineeringStatus === 'FAILED' ? '未通过' : '待校验'}；
-      问题已确认：{summary.confirmed}/{summary.total}；待审阅：{summary.awaitingConfirmation}
+      可选问题已确认：{summary.confirmed}/{summary.total}；待审阅：{summary.awaitingConfirmation}（不阻碍发布）
     </div>
     {workflow.blockers.length > 0 && <details style={{ marginBottom: 10 }}>
       <summary>待处理事项（{workflow.blockers.length}）</summary>

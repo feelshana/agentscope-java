@@ -138,7 +138,7 @@ class MdlPublishServiceTest {
     // ------------------------------------------------------------------ fixtures
 
     @Test
-    void questionVerificationDoesNotPublishAndUnconfirmedRequirementPreservesOldSnapshot()
+    void questionVerificationDoesNotPublishAndUnconfirmedQuestionDoesNotBlockPublication()
             throws IOException {
         registerGroup("g1");
         registerDataset("ds_a", "g1", "orders", new String[][] {{"amount", "BIGINT"}});
@@ -152,8 +152,6 @@ class MdlPublishServiceTest {
                         + "definition: 有效订单金额，不扣退款\n"
                         + "sql: SELECT SUM(amount) AS total FROM orders\n"
                         + "required: false\n");
-        assertFalse(service.publish("g1").ok());
-        assertEquals(before, Files.readString(groupRoot.resolve("mdl.json")));
         var gateway =
                 new io.agentscope.dataagent.runtime.wren.WrenQueryGateway() {
                     @Override
@@ -185,7 +183,8 @@ class MdlPublishServiceTest {
         assertTrue(
                 result.validation().evidence().views().get(0).sql().contains("WHERE amount > 0"));
         assertEquals(before, Files.readString(groupRoot.resolve("mdl.json")));
-        assertFalse(service.publish("g1").ok());
+        assertTrue(service.publish("g1").ok());
+        assertFalse(Files.exists(groupRoot.resolve("published/knowledge/sql/sales.md")));
         var questionWorkspace =
                 new MdlWorkspaceService(
                         new WrenProperties("wren", mdlHome.toString(), "dataagent", "mysql", 10),

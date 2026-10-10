@@ -82,8 +82,6 @@ public class ModelingWorkflowService {
             var question = review.question();
             if (review.coverage() != null && !review.coverage().ready()) {
                 incomplete++;
-                blockers.add(
-                        new Blocker("QUESTION_ASSET", question.id(), review.coverage().message()));
                 continue;
             }
             if ("CONFIRMED".equals(review.status())) {
@@ -92,27 +90,13 @@ public class ModelingWorkflowService {
             }
             if (question.definition().isBlank() || question.sql().isBlank()) {
                 incomplete++;
-                blockers.add(
-                        new Blocker(
-                                "QUESTION_INCOMPLETE",
-                                question.id(),
-                                "请通过对话补齐问题口径与查询：" + question.question()));
             } else if ("EXECUTED".equals(review.status()) && !review.validation().truncated()) {
                 awaiting++;
-                blockers.add(
-                        new Blocker(
-                                "QUESTION_CONFIRMATION",
-                                question.id(),
-                                "请审阅并确认实际结果：" + question.question()));
             } else {
                 needsValidation++;
-                blockers.add(
-                        new Blocker(
-                                "QUESTION_VALIDATION",
-                                question.id(),
-                                "请重新验证问题（" + review.status() + "）：" + question.question()));
             }
         }
+        // Question review remains available, but never blocks the modeling journey.
         var check = checks.current(groupId);
         String engineering =
                 check == null
@@ -144,24 +128,15 @@ public class ModelingWorkflowService {
         } else if (!available) {
             stage = "DATA_PREPARATION";
             action = new Action("INITIALIZE", "生成或重试基础模型", "基础模型尚不可查询，请先完成初始化；已有草稿问题可能需要先处理。");
-        } else if (!preview.changed() && incomplete == 0 && needsValidation == 0 && awaiting == 0) {
+        } else if (!preview.changed()) {
             stage = "COMPLETE";
             action =
                     reviews.isEmpty()
-                            ? new Action(
-                                    "ADD_QUESTIONS",
-                                    "添加分析问题",
-                                    "基础模型已可问数。先批量添加希望分析的问题，再由助手澄清口径并构建模型。")
+                            ? new Action("MODEL", "完善业务模型（可选）", "基础模型已可问数。可上传业务文档或直接对话完善口径，预设问题可选。")
                             : new Action("QUERY", "开始问数", "当前确认的业务模型已发布，问数使用已发布版本。");
-        } else if (incomplete > 0) {
-            stage = "MODELING";
-            action = new Action("MODEL", "继续澄清与建模", "补齐已有问题的口径和查询，不必重新填写问题。");
-        } else if (!"PASSED".equals(engineering) || needsValidation > 0) {
+        } else if (!"PASSED".equals(engineering)) {
             stage = "VALIDATION";
-            action = new Action("VALIDATE", "校验模型并验证问题", "先检查模型结构，再执行已有问题；执行成功后仍需人员确认。");
-        } else if (awaiting > 0) {
-            stage = "CONFIRMATION";
-            action = new Action("CONFIRM", "审阅并确认结果", "检查实际表格、业务口径和查询，再确认或退回。");
+            action = new Action("VALIDATE", "检查模型并准备发布", "由助手完成 YAML 校验、编译和查询检查；预设问题验证可选。");
         } else {
             stage = "PUBLICATION";
             action =
@@ -170,7 +145,7 @@ public class ModelingWorkflowService {
                             "查看发布摘要",
                             reviews.isEmpty()
                                     ? "请审阅本次模型变更并发布；添加分析问题可进一步验证业务口径。"
-                                    : "全部分析问题已确认，请审阅本次变更并发布新版本。");
+                                    : "模型工程检查已通过，可发布新版本；预设问题不阻碍发布。");
         }
         return new Workflow(
                 groupId,

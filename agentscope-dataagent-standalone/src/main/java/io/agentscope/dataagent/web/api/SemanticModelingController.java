@@ -291,10 +291,10 @@ public class SemanticModelingController {
     public Mono<List<MdlSuggestionService.CubeSuggestion>> suggestCubes(
             @PathVariable String groupId, Authentication auth) {
         String userId = (String) auth.getPrincipal();
-        return Mono.fromCallable(
+        return Mono.<List<MdlSuggestionService.CubeSuggestion>>fromCallable(
                         () -> {
                             groupService.getGroup(userId, groupId);
-                            return modelingService.suggestCubes(groupId);
+                            throw new DatasetException("Cube 已停用，请使用逻辑模型或视图", 410);
                         })
                 .subscribeOn(Schedulers.boundedElastic())
                 .onErrorMap(this::toStatus);
@@ -367,13 +367,10 @@ public class SemanticModelingController {
     public Mono<CubeVO> createCube(
             @PathVariable String groupId, @RequestBody CubeRequest req, Authentication auth) {
         String userId = (String) auth.getPrincipal();
-        return Mono.fromCallable(
+        return Mono.<CubeVO>fromCallable(
                         () -> {
                             groupService.getGroup(userId, groupId);
-                            CubeVO vo =
-                                    toCubeVO(modelingService.createCube(groupId, toPayload(req)));
-                            groupService.markMdlDirty(userId, groupId);
-                            return vo;
+                            throw new DatasetException("Cube 已停用，请使用逻辑模型或视图", 410);
                         })
                 .subscribeOn(Schedulers.boundedElastic())
                 .onErrorMap(this::toStatus);
@@ -386,15 +383,10 @@ public class SemanticModelingController {
             @RequestBody CubeRequest req,
             Authentication auth) {
         String userId = (String) auth.getPrincipal();
-        return Mono.fromCallable(
+        return Mono.<CubeVO>fromCallable(
                         () -> {
                             groupService.getGroup(userId, groupId);
-                            CubeVO vo =
-                                    toCubeVO(
-                                            modelingService.updateCube(
-                                                    groupId, cubeId, toPayload(req)));
-                            groupService.markMdlDirty(userId, groupId);
-                            return vo;
+                            throw new DatasetException("Cube 已停用，请使用逻辑模型或视图", 410);
                         })
                 .subscribeOn(Schedulers.boundedElastic())
                 .onErrorMap(this::toStatus);
@@ -407,8 +399,7 @@ public class SemanticModelingController {
         return Mono.fromRunnable(
                         () -> {
                             groupService.getGroup(userId, groupId);
-                            modelingService.deleteCube(groupId, cubeId);
-                            groupService.markMdlDirty(userId, groupId);
+                            throw new DatasetException("Cube 已停用，请使用逻辑模型或视图", 410);
                         })
                 .subscribeOn(Schedulers.boundedElastic())
                 .onErrorMap(this::toStatus)

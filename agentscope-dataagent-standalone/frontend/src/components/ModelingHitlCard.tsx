@@ -78,6 +78,16 @@ export default function ModelingHitlCard({
   const relation = relationFor(call, overview);
   const isRelation = call.name === 'decide_relation' && relation != null;
   const isFileWrite = call.name === 'write_file' || call.name === 'patch_file';
+  const isBatchWrite = call.name === 'write_file' && typeof call.input.files_json === 'string';
+  const batchFiles = useMemo(() => {
+    if (!isBatchWrite) return [];
+    try {
+      const parsed: unknown = JSON.parse(stringValue(call.input.files_json));
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((item): item is { path: string; content: string } =>
+        item !== null && typeof item === 'object' && typeof item.path === 'string' && typeof item.content === 'string');
+    } catch { return []; }
+  }, [isBatchWrite, call.input.files_json]);
   const filePath = stringValue(call.input.path);
   const fileReason = stringValue(call.input.reason);
   const recommendedJoinType = stringValue(call.input.join_type) || relation?.joinType || 'MANY_TO_ONE';
@@ -121,8 +131,8 @@ export default function ModelingHitlCard({
 
   // Refresh the gate verdict + diff on mount; re-checks go through the explicit button.
   useEffect(() => {
-    if (isFileWrite) void loadPreview(call.input);
-  }, [isFileWrite, loadPreview, call.input]);
+    if (isFileWrite && !isBatchWrite) void loadPreview(call.input);
+  }, [isFileWrite, isBatchWrite, loadPreview, call.input]);
 
   const fileDiff = useMemo(
     () => (preview ? diffLines(preview.oldContent, preview.newContent) : []),
@@ -188,10 +198,28 @@ export default function ModelingHitlCard({
     <div style={S.card}>
       <div style={S.header}>
         <span style={S.badge}>需要确认</span>
-        <strong>{TOOL_LABEL[call.name] ?? call.name}</strong>
+        <strong>{isBatchWrite ? '业务建模方案' : TOOL_LABEL[call.name] ?? call.name}</strong>
       </div>
 
-      {call.name === 'decide_relations' ? (
+      {isBatchWrite ? (
+        <>
+          <div style={S.summary}>{fileReason}</div>
+          <div style={S.verdictOk}>技术预检已通过，待你确认业务口径。</div>
+          <p style={S.help}>一次采纳整套方案，写入模型草稿。助手随后执行问题验证；请在「验证与确认」审阅真实结果，再发布。</p>
+          <details style={S.details}>
+            <summary>查看完整方案（{batchFiles.length} 个文件）</summary>
+            {batchFiles.map(file => <details key={file.path} style={S.details}>
+              <summary>{file.path}</summary>
+              <ReadableCode text={file.content} title={file.path} />
+            </details>)}
+          </details>
+          <div style={S.actions}>
+            <button style={S.primary} disabled={submitting || batchFiles.length === 0} onClick={() => onDecision(true)}>采纳方案并写入草稿</button>
+            <button style={S.secondary} disabled={submitting} onClick={() => onDecision(false, undefined, '请先根据我的业务反馈调整整套方案，再重新提交；不要重复提交原方案。')}>退回调整</button>
+            <button style={S.ghost} disabled={submitting} onClick={() => onDecision(false)}>暂不采纳</button>
+          </div>
+        </>
+      ) : call.name === 'decide_relations' ? (
         <BatchRelationCard call={call} overview={overview} submitting={submitting} onDecision={onDecision} />
       ) : isFileWrite ? (
         <>

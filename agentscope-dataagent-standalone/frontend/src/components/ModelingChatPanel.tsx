@@ -86,6 +86,7 @@ function taskLabel(name: string, inputJson?: string): string {
     case 'read_file':
       return path ? `读取 ${baseName(path)}` : '读取工程文件';
     case 'write_file':
+      if (typeof input.files_json === 'string') return '提交完整业务方案';
       return path ? `写入 ${path}` : '写入工程文件';
     case 'patch_file':
       return path ? `修改 ${path}` : '修改工程文件';
@@ -111,10 +112,6 @@ function taskLabel(name: string, inputJson?: string): string {
       return '预览编译计划';
     case 'wren_dry_run':
       return '试跑验证';
-    case 'wren_cube_list':
-      return '列出 Cube';
-    case 'wren_cube_query':
-      return '试算 Cube 查询';
     default:
       return name;
   }
@@ -582,7 +579,7 @@ export default function ModelingChatPanel({
               <div style={S.welcomeTitle}>
                 <Icon name="model" size="sm" /> 我是建模助手
               </div>
-              <div style={S.welcomeDesc}>围绕已提交的分析问题澄清口径、构建视图或 Cube。</div>
+              <div style={S.welcomeDesc}>围绕已提交的分析问题澄清口径、完善模型、关系、口径与明细视图。</div>
               <p style={S.welcomeDesc}>这里用于回答助手的问题和反馈结果。需要增加分析问题时，请使用右侧问题清单的“添加问题”。</p>
               <div style={S.welcomeDesc}>每个问题都会生成 SQL，经 Wren 验证并由你确认结果后再发布。</div>
             </div>

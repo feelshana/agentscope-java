@@ -44,6 +44,149 @@ class ModelingHitlMiddlewareTest {
     private final ModelingHitlMiddleware middleware = new ModelingHitlMiddleware();
 
     @Test
+    void nativeReactLoopRepairsTechnicalFailureBeforeFirstHumanPrompt() {
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var model =
+                new io.agentscope.core.model.ChatModelBase() {
+                    @Override
+                    public String getModelName() {
+                        return "preflight-script";
+                    }
+
+                    @Override
+                    protected Flux<io.agentscope.core.model.ChatResponse> doStream(
+                            List<Msg> messages,
+                            List<io.agentscope.core.model.ToolSchema> tools,
+                            io.agentscope.core.model.GenerateOptions options) {
+                        int index = calls.getAndIncrement();
+                        if (index == 1) {
+                            assertThat(
+                                            messages.stream()
+                                                    .flatMap(msg -> msg.getContent().stream())
+                                                    .filter(ToolResultBlock.class::isInstance)
+                                                    .map(ToolResultBlock.class::cast)
+                                                    .anyMatch(
+                                                            result ->
+                                                                    result.getState()
+                                                                            == ToolResultState
+                                                                                    .ERROR))
+                                    .isTrue();
+                        }
+                        assertThat(index).isLessThan(2);
+                        return Flux.just(
+                                io.agentscope.core.model.ChatResponse.builder()
+                                        .content(
+                                                List.of(
+                                                        tool(
+                                                                index == 0
+                                                                        ? "invalid-native"
+                                                                        : "valid-native",
+                                                                "write_file",
+                                                                ToolCallState.PENDING)))
+                                        .build());
+                    }
+                };
+        var gate =
+                new ModelingHitlMiddleware(
+                        (ctx, call) -> call.getId().startsWith("invalid") ? "empty SQL" : null);
+        var agent =
+                io.agentscope.core.ReActAgent.builder()
+                        .name("modeling-preflight-test")
+                        .model(model)
+                        .toolkit(new io.agentscope.core.tool.Toolkit())
+                        .middleware(gate)
+                        .enablePendingToolRecovery(true)
+                        .build();
+        var events =
+                agent.streamEvents(
+                                List.of(
+                                        Msg.builder()
+                                                .role(MsgRole.USER)
+                                                .textContent("build plan")
+                                                .build()))
+                        .collectList()
+                        .block(java.time.Duration.ofSeconds(10));
+        assertThat(calls.get()).isEqualTo(2);
+        assertThat(events)
+                .filteredOn(RequireUserConfirmEvent.class::isInstance)
+                .singleElement()
+                .satisfies(
+                        event ->
+                                assertThat(((RequireUserConfirmEvent) event).getToolCalls())
+                                        .extracting(ToolUseBlock::getId)
+                                        .containsExactly("valid-native"));
+    }
+
+    @Test
+    void failedPreflightProducesRecoverableErrorWithoutHumanConfirmation() {
+        ToolUseBlock write = tool("bad-plan", "write_file", ToolCallState.PENDING);
+        ToolUseBlock read = tool("read", "list_files", ToolCallState.PENDING);
+        AgentState state = AgentState.builder().sessionId("preflight").build();
+        RuntimeContext context = RuntimeContext.builder().agentState(state).build();
+        var gate = new ModelingHitlMiddleware((ctx, call) -> "SQL cannot be empty");
+        var events =
+                gate.onActing(
+                                null,
+                                context,
+                                new ActingInput(List.of(write, read)),
+                                input -> {
+                                    assertThat(input.toolCalls()).containsExactly(read);
+                                    return Flux.empty();
+                                })
+                        .collectList()
+                        .block();
+        assertThat(events).isEmpty();
+        ToolResultBlock result = (ToolResultBlock) state.getContext().get(0).getContent().get(0);
+        assertThat(result.getState()).isEqualTo(ToolResultState.ERROR);
+        assertThat(result.getId()).isEqualTo("bad-plan");
+        gate.onActing(
+                        null,
+                        context,
+                        new ActingInput(List.of(write)),
+                        input -> {
+                            assertThat(input.toolCalls()).containsExactly(write);
+                            return Flux.empty();
+                        })
+                .blockLast();
+        assertThat(state.getContext()).hasSize(1);
+    }
+
+    @Test
+    void unexpectedPreflightFailureAlsoReturnsErrorAndCorrectedPlanCanAsk() {
+        AgentState state = AgentState.builder().sessionId("repair").build();
+        RuntimeContext context = RuntimeContext.builder().agentState(state).build();
+        var failed =
+                new ModelingHitlMiddleware(
+                        (ctx, call) -> {
+                            throw new IllegalArgumentException("bad YAML");
+                        });
+        failed.onActing(
+                        null,
+                        context,
+                        new ActingInput(
+                                List.of(tool("invalid", "write_file", ToolCallState.PENDING))),
+                        input -> Flux.empty())
+                .blockLast();
+        assertThat(((ToolResultBlock) state.getContext().get(0).getContent().get(0)).getState())
+                .isEqualTo(ToolResultState.ERROR);
+        var fixed = new ModelingHitlMiddleware((ctx, call) -> null);
+        var events =
+                fixed.onActing(
+                                null,
+                                context,
+                                new ActingInput(
+                                        List.of(
+                                                tool(
+                                                        "fixed",
+                                                        "write_file",
+                                                        ToolCallState.PENDING))),
+                                input -> Flux.empty())
+                        .collectList()
+                        .block();
+        assertThat(events).filteredOn(RequireUserConfirmEvent.class::isInstance).hasSize(1);
+    }
+
+    @Test
     void nativeDeniedCallDoesNotOpenTheSameConfirmationAgain() {
         ToolUseBlock write = tool("denied-write", "write_file", ToolCallState.ASKING);
         AgentState state =

@@ -118,7 +118,7 @@ class ModelingWorkflowServiceTest {
         var state = service.snapshot(scope, "g");
         assertTrue(state.queryAvailable());
         assertEquals("COMPLETE", state.stage());
-        assertEquals("ADD_QUESTIONS", state.nextAction().type());
+        assertEquals("MODEL", state.nextAction().type());
         assertEquals(0, state.questionSummary().total());
     }
 
@@ -133,40 +133,6 @@ class ModelingWorkflowServiceTest {
         group.setMdlState("FAILED");
         assertEquals("INITIALIZE", service.snapshot(scope, "g").nextAction().type());
         assertFalse(service.snapshot(scope, "g").queryAvailable());
-    }
-
-    @Test
-    void sameQuestionMovesFromRequirementThroughValidationConfirmationAndPublication()
-            throws Exception {
-        preview(true);
-        question("", "", true);
-        assertEquals("MODELING", service.snapshot(scope, "g").stage());
-        question("有效订单，元", "SELECT SUM(amount) FROM order", true);
-        assertEquals("VALIDATION", service.snapshot(scope, "g").stage());
-        engineering(true);
-        assertEquals("VALIDATION", service.snapshot(scope, "g").stage());
-        var receipt = execute(false);
-        assertEquals("CONFIRMATION", service.snapshot(scope, "g").stage());
-        assertFalse(service.snapshot(scope, "g").canPublish());
-        questions.decide("g", "sales", receipt.validationId(), true, "alice");
-        assertEquals("PUBLICATION", service.snapshot(scope, "g").stage());
-        assertTrue(service.snapshot(scope, "g").canPublish());
-        preview(false);
-        assertEquals("COMPLETE", service.snapshot(scope, "g").stage());
-        assertEquals("QUERY", service.snapshot(scope, "g").nextAction().type());
-        assertEquals("sales", questions.list("g").get(0).question().id());
-    }
-
-    @Test
-    void engineeringPassDoesNotSubstituteForBusinessConfirmation() throws Exception {
-        preview(true);
-        question("有效订单", "SELECT SUM(amount) FROM order", true);
-        engineering(true);
-        assertFalse(service.snapshot(scope, "g").canPublish());
-        assertEquals("VALIDATION", service.snapshot(scope, "g").stage());
-        execute(true);
-        assertEquals("VALIDATION", service.snapshot(scope, "g").stage());
-        assertEquals(0, service.snapshot(scope, "g").questionSummary().awaitingConfirmation());
     }
 
     @Test
@@ -187,74 +153,24 @@ class ModelingWorkflowServiceTest {
     }
 
     @Test
-    void legacyFalseQuestionsRequireAcceptanceAndDeletedAssetsAppearInSummary() throws Exception {
-        question("", "", false);
+    void optionalQuestionsDoNotBlockPublicationButEngineeringStillDoes() throws Exception {
+        preview(true);
+        question("", "", true);
+        assertFalse(service.snapshot(scope, "g").canPublish());
         engineering(true);
-        when(publisher.preview("g"))
-                .thenReturn(
-                        new MdlPublishService.MdlPreview(
-                                List.of(
-                                        new MdlPublishService.MdlFile(
-                                                "models/order/metadata.yml", "name: order")),
-                                List.of(
-                                        new MdlPublishService.MdlFile(
-                                                "models/order/metadata.yml", "name: order"),
-                                        new MdlPublishService.MdlFile(
-                                                "views/removed/metadata.yml", "name: removed")),
-                                List.of(),
-                                "PUBLISHED",
-                                1,
-                                null,
-                                true));
-        var state = service.snapshot(scope, "g");
-        assertEquals("MODELING", state.stage());
-        assertEquals(1, state.questionSummary().incomplete());
-        assertFalse(state.canPublish());
-        assertEquals("REMOVED", state.changedAssets().get(0).kind());
-        assertEquals("业务视图：removed", state.changedAssets().get(0).label());
-    }
-
-    @Test
-    void legacyFalseQuestionsBlockUntilSqlExecutionAndConfirmation() throws Exception {
-        question("有效订单，元", "SELECT SUM(amount) FROM order", false);
+        var incomplete = service.snapshot(scope, "g");
+        assertEquals("PUBLICATION", incomplete.stage());
+        assertTrue(incomplete.canPublish());
+        assertTrue(incomplete.blockers().isEmpty());
+        assertEquals(1, incomplete.questionSummary().incomplete());
+        question("有效订单", "SELECT SUM(amount) FROM order", false);
         engineering(true);
-        var initial = service.snapshot(scope, "g");
-        assertEquals("VALIDATION", initial.stage());
-        assertEquals(1, initial.questionSummary().needsValidation());
-        assertEquals(1, initial.questionSummary().total());
-        assertFalse(initial.canPublish());
-        assertEquals("QUESTION_VALIDATION", initial.blockers().get(0).code());
-        var receipt = execute(false);
-        var executed = service.snapshot(scope, "g");
-        assertEquals("CONFIRMATION", executed.stage());
-        assertEquals(1, executed.questionSummary().awaitingConfirmation());
-        assertFalse(executed.canPublish());
-        questions.decide("g", "sales", receipt.validationId(), true, "alice");
-        assertEquals("COMPLETE", service.snapshot(scope, "g").stage());
-    }
-
-    @Test
-    void allQuestionsBlockRegardlessOfLegacyClassification() throws Exception {
-        question("有效订单，元", "SELECT SUM(amount) FROM order", true);
-        Files.writeString(
-                root.resolve("knowledge/questions/customers.yml"),
-                "question: 客户数\n"
-                        + "definition: 正式客户\n"
-                        + "sql: SELECT COUNT(*) FROM order\n"
-                        + "required: false\n");
-        engineering(true);
-        var initial = service.snapshot(scope, "g");
-        assertEquals(2, initial.questionSummary().total());
-        assertEquals(2, initial.questionSummary().needsValidation());
-        assertEquals(2, initial.blockers().size());
-        var receipt = execute(false);
-        questions.decide("g", "sales", receipt.validationId(), true, "alice");
-        var state = service.snapshot(scope, "g");
-        assertEquals("VALIDATION", state.stage());
-        assertEquals(1, state.questionSummary().confirmed());
-        assertEquals(1, state.questionSummary().needsValidation());
-        assertFalse(state.canPublish());
-        assertEquals(1, state.blockers().size());
+        assertTrue(service.snapshot(scope, "g").canPublish());
+        execute(false);
+        assertTrue(service.snapshot(scope, "g").canPublish());
+        assertEquals(1, service.snapshot(scope, "g").questionSummary().awaitingConfirmation());
+        engineering(false);
+        assertFalse(service.snapshot(scope, "g").canPublish());
     }
 
     @Test

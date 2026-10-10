@@ -320,6 +320,25 @@ class DocEnhanceServiceTest {
         return task;
     }
 
+    @Test
+    void documentAnalysisDropsCubeProposalsAndOldCubeAdoptionCannotWrite() {
+        var task = task("cube-task");
+        when(agentDraftService.chatBlockingModeling(anyString()))
+                .thenReturn(
+                        "{\"proposals\":[{\"type\":\"CUBE\",\"classification\":\"NEW\",\"title\":\"月度营收\",\"payload\":{}}]}");
+        service.analyzeTask(task.getId(), "客户营收按支付时间统计");
+        assertThat(savedProposals).isEmpty();
+        var old = proposal("cube-proposal", "CUBE", "NEW", "{}");
+        assertThatThrownBy(() -> service.adopt("alice", "g1", old.getId()))
+                .isInstanceOf(DatasetException.class)
+                .hasMessageContaining("Cube 已停用");
+        org.mockito.Mockito.verify(modelingService, org.mockito.Mockito.never())
+                .createCube(anyString(), any());
+        ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
+        verify(agentDraftService).chatBlockingModeling(prompt.capture());
+        assertThat(prompt.getValue()).doesNotContain("CUBE", "# 当前 Cube").contains("保留实体身份与原始时间");
+    }
+
     private DocEnhanceProposalEntity proposal(
             String id, String type, String classification, String payload) {
         DocEnhanceProposalEntity proposal = new DocEnhanceProposalEntity();

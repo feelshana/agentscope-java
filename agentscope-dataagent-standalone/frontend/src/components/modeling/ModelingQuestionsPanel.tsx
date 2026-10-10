@@ -105,19 +105,19 @@ export default function ModelingQuestionsPanel({ groupId, onDiscuss, onAddQuesti
           <div className="da-h2">{requirements ? '本次分析问题' : '验证已有问题并确认结果'}</div>
           {!hideAdd && <button className="da-btn da-btn-primary" disabled={busy !== null} onClick={() => setAdding(true)}>＋ 添加问题</button>}
         </div>
-        <p className="da-small">{requirements ? '问题从表单统一提交，保存后出现在这里。对话用于澄清口径和反馈，共用口径只需确认一次。' : '这里展示建模时登记的同一批问题，无需再填一遍。先校验模型，再由 Wren 查询当前草稿，最后审阅结果。'}</p>
+        <p className="da-small">{requirements ? '可选问题保存后出现在这里，也可直接对话说明业务目标。共用口径只需澄清一次。' : '这里展示已登记的可选问题。需要保存建模示例时，可用 Wren 查询草稿并审阅结果；不测试也可发布模型。'}</p>
         {!requirements && <p className="da-small">
           执行成功只说明查询可运行。请检查指标、粒度、单位、时间和过滤是否符合业务，再确认。
           模型或问题变化后需重新验证。
         </p>}
         {!requirements && <div className="da-small" style={{ marginBottom: 10 }}>
-          {reviews.length ? '每个问题都需要生成 SQL、通过 Wren 验证并确认结果；全部有效确认后再发布。' : '先提交希望分析的问题，再由助手完善模型与查询。基础模型已可问数。'}
+      {reviews.length ? '预设问题测试可选。确认 SQL 与结果后可保存为示例；未测试或未确认的问题不阻碍模型发布。' : '基础模型已可问数。可选填写问题，也可直接对话完善业务模型。'}
         </div>}
-        <div className="da-small">已保存 {reviews.length} 个问题 · 已确认 {reviews.filter(r => r.status === 'CONFIRMED').length}/{reviews.length}。问题可在建模过程中随时补充，模型完善后逐题验收。</div>
+        <div className="da-small">已保存 {reviews.length} 个问题 · 已确认 {reviews.filter(r => r.status === 'CONFIRMED').length}/{reviews.length}。可随时补充和选择验证，不作为发布前提。</div>
         {!requirements && workflow && <div className="da-card" style={{ margin: '12px 0', padding: 16, border: '2px solid var(--da-primary)' }} role="status">
           <strong>下一步：{workflow.nextAction.label}</strong><p className="da-small">{workflow.nextAction.message}</p>
           {workflow.draftChanged && <p>已确认 {workflow.questionSummary.confirmed}/{workflow.questionSummary.total} 个问题 · 模型校验{workflow.engineeringStatus === 'PASSED' ? '已通过' : '尚未通过'}</p>}
-          {workflow.draftChanged && onPublish && <button className="da-btn da-btn-primary" disabled={!workflow.canPublish || busy !== null} onClick={onPublish}>{workflow.canPublish ? '全部确认完成 → 第四步：发布' : '完成以下事项后即可发布'}</button>}
+        {workflow.draftChanged && onPublish && <button className="da-btn da-btn-primary" disabled={!workflow.canPublish || busy !== null} onClick={onPublish}>{workflow.canPublish ? '模型检查通过 → 发布' : '完成模型工程检查后即可发布'}</button>}
           {workflow.blockers.length > 0 && <ul>{workflow.blockers.map((blocker, i) => <li key={i}>{blocker.message}</li>)}</ul>}
           {workflow.stage === 'COMPLETE' && onQuery && <button className="da-btn" onClick={onQuery}>开始问数</button>}
         </div>}
@@ -132,7 +132,7 @@ export default function ModelingQuestionsPanel({ groupId, onDiscuss, onAddQuesti
       {!!reviews.length && <nav aria-label="分析问题列表"><ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 6 }}>
         {reviews.map((review, index) => <li key={review.question.id}><button type="button" aria-pressed={review.question.id === (reviews.some(r => r.question.id === selectedId) ? selectedId : reviews[0]?.question.id)} onClick={() => setSelectedId(review.question.id)} style={{ width: '100%', textAlign: 'left', padding: '12px 14px', border: '1px solid var(--da-border)', borderRadius: 8, background: review.question.id === (reviews.some(r => r.question.id === selectedId) ? selectedId : reviews[0]?.question.id) ? 'color-mix(in srgb, var(--da-primary) 10%, var(--da-surface))' : 'var(--da-surface)', color: 'var(--da-text)', cursor: 'pointer' }}>
           <div style={{ display: 'flex', gap: 8 }}><span>{index + 1}.</span><strong style={{ flex: 1 }}>{review.question.question}</strong></div>
-          <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}><span className="da-badge">{review.published?.current ? '已发布 · 问数可用' : review.published?.available ? '已发布版本可用 · 草稿待更新' : LABEL[review.status]}</span><span className="da-small">{review.coverage?.assets.map(a => `${a.kind === 'CUBE' ? 'Cube' : a.kind === 'VIEW' ? '视图' : '模型'}：${a.name}`).join('、') || 'SQL 示例'}</span></div>
+          <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}><span className="da-badge">{review.published?.current ? '已发布 · 问数可用' : review.published?.available ? '已发布版本可用 · 草稿待更新' : LABEL[review.status]}</span><span className="da-small">{review.coverage?.assets.map(a => `${a.kind === 'VIEW' ? '视图' : '模型'}：${a.name}`).join('、') || 'SQL 示例'}</span></div>
         </button></li>)}
       </ol></nav>}
       {reviews.filter(r => r.question.id === (reviews.some(item => item.question.id === selectedId) ? selectedId : reviews[0]?.question.id)).map(({ question: q, status, validation, coverage, published, revision }) => {
@@ -173,7 +173,7 @@ export default function ModelingQuestionsPanel({ groupId, onDiscuss, onAddQuesti
             {!requirements && validation && <div className="da-small" style={{ marginBottom: 10 }}>
               执行时间：{validation.executedAt}{validation.confirmedBy ? `；确认人：${validation.confirmedBy}；确认时间：${validation.confirmedAt}` : ''}
             </div>}
-            {status === 'CONFIRMED' && <p role="status" style={{ color: 'var(--da-success)' }}>{published?.current ? '✓ 已发布，问数已可复用此问题及其模型。' : '✓ 确认已保存。全部问题确认并通过模型校验后，点击上方按钮进入第四步发布。'}</p>}
+            {status === 'CONFIRMED' && <p role="status" style={{ color: 'var(--da-success)' }}>{published?.current ? '✓ 已发布，问数已可复用此问题及其模型。' : '✓ 确认已保存。模型工程检查通过后，可点击上方按钮发布，无需确认其他问题。'}</p>}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {!requirements && <button className="da-btn" disabled={busy !== null} onClick={() => setEditing({ id: q.id, revision, sql: q.sql })}>修改本次查询 SQL</button>}
               {!requirements && <><button className="da-btn" disabled={busy !== null || !q.sql || !q.definition || coverage?.ready === false}
@@ -194,7 +194,7 @@ export default function ModelingQuestionsPanel({ groupId, onDiscuss, onAddQuesti
               )}>建议修复模型</button>
             </div>
             {editing?.id === q.id && <div className="da-card" style={{ padding: 14, marginTop: 12 }}>
-              <strong>修改本题 SQL</strong><p>仅更新这个问题，不修改视图、Cube 或其他模型。保存后旧确认失效，重新验证成功后仍需确认结果。</p>
+              <strong>修改本题 SQL</strong><p>仅更新这个问题，不修改视图或其他模型。保存后旧确认失效，重新验证成功后仍需确认结果。</p>
               <textarea aria-label="本题 SQL" className="da-input" value={editing.sql} maxLength={16000} rows={10}
                 style={{ width: '100%', boxSizing: 'border-box', fontFamily: 'monospace', fontSize: 14 }}
                 onChange={e => setEditing({ ...editing, sql: e.target.value })} />

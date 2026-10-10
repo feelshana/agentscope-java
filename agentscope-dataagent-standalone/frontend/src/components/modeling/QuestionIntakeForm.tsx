@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 export function questionRequest(questions: string[]): string {
-  return '这是本次建模的分析问题，请先核对已有问题并去重，经受保护文件工具与 HITL 保存；工具成功前不要声称已保存。结合已有模型和可选文档，合并澄清缺失或冲突的业务口径。已有资产足够时直接生成逻辑查询并沉淀确认实例，不要求每题新建资产；只有可复用的业务定义需要新增视图、Cube 或 SQL 定义模型。自动完成 YAML 校验、编译与查询检查，生成每题查询供我验证结果。不要根据问题标题猜测业务规则，也不要只记录空 SQL 后结束：\n' + questions.join('\n');
+  return '这些是可选的分析问题，请结合已有模型和可选业务文档澄清关键歧义，优先复用现有资产，不要求每题新建视图。需要修改模型时，先 list_files 获取 base_revision，再通过 write_file 的 files_json 一次提交完整业务方案，reason 说明计算、过滤、粒度、单位和依据；技术预检失败自行修复，通过后一次确认业务方案。由你完成模型校验、编译与查询检查，问题逐题测试和确认属于可选示例保存，不阻碍发布。不要直接写 knowledge/sql/ 示例，不冒称文档定义已经由我确认：\n' + questions.join('\n');
 }
 
 export default function QuestionIntakeForm({ onSubmit, onCancel, initial = false }: {
@@ -16,7 +16,7 @@ export default function QuestionIntakeForm({ onSubmit, onCancel, initial = false
   const tooLong = questions.some(q => q.length > 1000);
   return <div aria-label="分析问题表单">
     <h3>{initial ? '填写你希望分析的问题' : '添加分析问题'}</h3>
-    <p className="da-small">每行一个问题，最多 50 个。可以先填写一个，再继续补充；助手优先复用已有模型，只在需要时提出新增资产。</p>
+    <p className="da-small">预设问题可选，每行一个，最多 50 个。不填写也可直接对话建模；问题测试与确认不阻碍模型发布。</p>
     <table className="da-table" style={{ width: '100%' }}>
       <thead><tr><th style={{ width: 40 }}>序号</th><th>分析问题</th><th style={{ width: 70 }}>操作</th></tr></thead>
       <tbody>{rows.map((row, index) => <tr key={index}>

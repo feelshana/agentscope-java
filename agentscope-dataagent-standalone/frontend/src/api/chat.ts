@@ -26,6 +26,7 @@ export interface ChatEvent {
   error?: string;
   sessionKey?: string;
   replyId?: string;
+  answerId?: string;
   toolCalls?: HitlToolCall[];
 }
 
@@ -50,6 +51,18 @@ export interface CurrentSession {
 function authHeaders(): Record<string, string> {
   const token = getToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+export interface AnswerFeedbackResult { vote: 'UP' | 'DOWN' | null; savedPairs: number; message: string; memoryStatus: 'NONE' | 'SAVED' | 'FAILED' }
+
+export async function answerFeedback(agentId: string, session: string, answerId: string,
+  vote?: 'UP' | 'DOWN'): Promise<AnswerFeedbackResult> {
+  const url = `/api/agents/${encodeURIComponent(agentId)}/sessions/${encodeURIComponent(session)}/answers/${encodeURIComponent(answerId)}/feedback`;
+  const res = await fetch(url, { method: vote ? 'POST' : 'GET',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: vote ? JSON.stringify({ vote }) : undefined });
+  if (!res.ok) throw new Error('反馈未保存，请重试');
+  return res.json();
 }
 
 export async function currentSession(

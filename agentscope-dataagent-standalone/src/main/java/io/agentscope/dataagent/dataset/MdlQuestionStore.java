@@ -259,11 +259,11 @@ public class MdlQuestionStore {
         String strategy = node.path("strategy").asText("");
         String reason = node.path("reason").asText("").trim();
         if (!node.isObject()
-                || !List.of("MODEL", "VIEW", "CUBE", "EXAMPLE").contains(strategy)
+                || !List.of("MODEL", "VIEW", "EXAMPLE").contains(strategy)
                 || reason.isBlank()
                 || reason.length() > 4000) {
             throw new DatasetException(
-                    "问题须声明 modeling.strategy（MODEL/VIEW/CUBE/EXAMPLE）和业务理由：" + id, 400);
+                    "问题须声明 modeling.strategy（MODEL/VIEW/EXAMPLE）和业务理由：" + id, 400);
         }
         List<AssetRef> assets = new ArrayList<>();
         JsonNode refs = node.path("assets");
@@ -272,9 +272,9 @@ public class MdlQuestionStore {
         for (JsonNode ref : refs) {
             String kind = ref.path("kind").asText("");
             String name = ref.path("name").asText("");
-            if (!List.of("MODEL", "VIEW", "CUBE").contains(kind)
+            if (!List.of("MODEL", "VIEW").contains(kind)
                     || !name.matches("[\\p{L}_][\\p{L}\\p{N}_]{0,63}")) {
-                throw new DatasetException("问题资产须使用 MODEL/VIEW/CUBE 和安全的逻辑名称：" + id, 400);
+                throw new DatasetException("问题资产须使用 MODEL/VIEW 和安全的逻辑名称：" + id, 400);
             }
             assets.add(new AssetRef(kind, name));
         }

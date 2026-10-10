@@ -21,7 +21,7 @@ export default function ModelSnapshotPanel({ groupId }: { groupId: string }) {
     return () => { cancelled = true; window.removeEventListener('modeling:updated', update); };
   }, [groupId]);
   const files = ((version === 'draft' ? preview?.files : preview?.publishedFiles) ?? [])
-    .filter(f => /^(models|cubes|views|knowledge)\//.test(f.path) || f.path === 'relationships.yml');
+    .filter(f => /^(models|views|knowledge)\//.test(f.path) || f.path === 'relationships.yml');
   const file = files.find(f => f.path === selected)
     ?? files.find(f => f.path.startsWith('models/') && f.path.endsWith('metadata.yml')) ?? files[0];
   const previous = preview?.publishedFiles.find(f => f.path === file?.path);

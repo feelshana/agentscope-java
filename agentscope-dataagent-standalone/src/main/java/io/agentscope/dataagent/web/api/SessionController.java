@@ -312,7 +312,7 @@ public class SessionController {
      * the conversationId surfaced via {@link InboxEntry#conversationId()} — the FE only ever sees
      * the latter for ChatGPT-style multi-session navigation.
      */
-    private SessionEntry requireOwnedSession(String agentId, String key, String userId) {
+    SessionEntry requireOwnedSession(String agentId, String key, String userId) {
         SessionEntry entry =
                 sessionAgentManager
                         .getSession(key)

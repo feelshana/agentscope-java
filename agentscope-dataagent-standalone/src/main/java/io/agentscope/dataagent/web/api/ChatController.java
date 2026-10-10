@@ -19,6 +19,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.AgentEvent;
+import io.agentscope.core.event.AgentResultEvent;
 import io.agentscope.core.event.ConfirmResult;
 import io.agentscope.core.event.RequireUserConfirmEvent;
 import io.agentscope.core.event.TextBlockDeltaEvent;
@@ -275,8 +276,15 @@ public class ChatController {
                                 resolvedConversationId,
                                 req.groupIds(),
                                 requestId)
+                        .doOnNext(
+                                event -> {
+                                    if (event instanceof AgentResultEvent result
+                                            && result.getResult() != null) {
+                                        doneFrame.put("answerId", result.getResult().getId());
+                                    }
+                                })
                         .flatMap(this::toAgentFrame)
-                        .concatWith(Flux.just(sse("done", doneFrame)))
+                        .concatWith(Mono.fromSupplier(() -> sse("done", doneFrame)))
                         .doOnComplete(() -> done.tryEmitValue(true))
                         .onErrorResume(
                                 ex -> {

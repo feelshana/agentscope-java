@@ -99,6 +99,7 @@ public final class ModelingToolkit {
     private final MdlWorkspaceReader reader;
     private final WrenProperties wrenProps;
     private final WrenCli wrenCli;
+    private final io.agentscope.dataagent.dataset.ModelingPlanWriter planWriter;
     private final MdlQuestionService questions;
     private final io.agentscope.dataagent.dataset.ModelingWorkflowService workflow;
 
@@ -165,6 +166,9 @@ public final class ModelingToolkit {
         this.reader = Objects.requireNonNull(reader, "reader");
         this.wrenProps = Objects.requireNonNull(wrenProps, "wrenProps");
         this.wrenCli = Objects.requireNonNull(wrenCli, "wrenCli");
+        this.planWriter =
+                new io.agentscope.dataagent.dataset.ModelingPlanWriter(
+                        workspace, wrenCli, wrenProps);
         this.questions = questions;
         this.workflow = workflow;
     }
@@ -179,7 +183,7 @@ public final class ModelingToolkit {
                     """
                     查看知识库的语义建模现状快照（读自 wren 工程文件）：逻辑模型（含每张表的完整列清单——\
                     列名/类型/说明/计算列表达式）、relationships.yml 已确认关系、平台关系候选队列（待决策）、\
-                    cubes/ 与 views/ 已定义资产、以及工作区解析问题。每次建模会话开场必须先调用本工具，\
+                    models/ 与 views/ 已定义资产、以及工作区解析问题。每次建模会话开场必须先调用本工具，\
                     根据待办规划下一步；提议列名时只能引用快照中实际存在的列，不要向用户索要列名。\
                     """)
     public String listModelingState(
@@ -221,8 +225,8 @@ public final class ModelingToolkit {
             description =
                     "查看当前知识库的常用问题、业务口径、验证和人员确认状态。问题需求用 write_file/patch_file 写入"
                         + " knowledge/questions/<英文ID>.yml，字段 question、definition、sql。SQL"
-                        + " 可暂留空等待澄清，但每个用户问题最终都要生成 SQL、经 Wren"
-                        + " 验证并由用户确认。先登记全部问题，合并澄清共用口径，复用或构建视图/Cube。不要求凑满 3–5"
+                        + " 问题可选；需要验证的问题先澄清并生成 SQL，经 Wren"
+                        + " 按用户选择验证并确认；不阻碍发布。问题可选；合并澄清共用口径，复用模型或构建明细视图。不要求凑满 3–5"
                         + " 个核心问题，并澄清指标、粒度、单位、时间归属和过滤，不能把执行成功当作业务正确。 SQL 禁止显式 LIMIT/OFFSET 和分号；TopN"
                         + " 用 CTE 聚合与排名筛选，明确并列处理。字段样例不是实际数据范围。")
     public String listModelingQuestions(
@@ -273,7 +277,7 @@ public final class ModelingToolkit {
             description =
                     """
                     列出知识库 wren 工作区的全部工程文件（相对路径 + 行数）。工作区即语义事实源：\
-                    models/ 物理模型、cubes/ 语义 Cube、views/ 命名视图、relationships.yml 关系、\
+                    models/ 逻辑模型、views/ 命名视图、relationships.yml 关系、\
                     knowledge/ 术语与业务规则。修改前先 list_files 定位目标路径，再 read_file 查看现状。\
                     """)
     public String listFiles(
@@ -291,6 +295,7 @@ public final class ModelingToolkit {
                     + "首次 write_file 也会自动初始化官方工程骨架。";
         }
         StringBuilder sb = new StringBuilder("## 工作区文件（").append(files.size()).append(" 个）\n\n");
+        sb.append("base_revision: ").append(planWriter.revision(c.gid())).append("\n\n");
         for (MdlPublishService.MdlFile f : files) {
             sb.append("- ")
                     .append(f.path())
@@ -342,26 +347,48 @@ public final class ModelingToolkit {
             name = "write_file",
             description =
                     """
-                    新建或整体覆写工作区内的一个工程文件（写操作，由 HITL 卡片让用户确认后生效）。\
-                    路径相对工作区根，如 cubes/order_stats/metadata.yml、relationships.yml、\
+                    提交一个完整业务方案，技术预检自动通过后才由用户一次确认写入草稿。\
+                    主流程优先 files_json：JSON 数组 [{"path":"relationships.yml","content":"完整内容"},...]，\
+                    将关系、视图双文件、规则与可选问题放在同一方案；同时提供 list_files 的 base_revision。\
+                    批量模式不传 path/content，最多100文件/1MB。不要逐个确认配套文件。\
+                    仅修正单个文件时可使用 path/content；与 files_json 互斥。\
+                    路径相对工作区根，如 views/valid_orders/metadata.yml、relationships.yml、\
                     knowledge/rules/general.md；目录不存在会自动创建。\
                     wren_project.yml、.platform/**、target/** 由平台管理，禁止写入。\
                     平台在写入前自动执行两道预检：① YAML 可解析；② 工程副本 context validate --strict。\
                     预检失败时文件不会被写入，请根据报错修正后重试。content 必须是完整文件内容；\
                     只改局部请改用 patch_file。reason 用一句话向用户说明本次变更意图，会展示在确认卡片上。\
                     """)
-    public String writeFile(
+    public String writeFilePlan(
             DatasetScope scope,
             RuntimeContext rc,
-            @ToolParam(name = "path", description = "工作区相对路径，如 cubes/order_stats/metadata.yml")
-                    String path,
-            @ToolParam(name = "content", description = "完整文件内容（UTF-8 文本）") String content,
+            @ToolParam(name = "path", description = "单文件相对路径；批量模式省略", required = false) String path,
+            @ToolParam(name = "content", description = "单文件完整内容；批量模式省略", required = false)
+                    String content,
             @ToolParam(name = "reason", description = "一句话向用户说明本次变更意图（展示在确认卡片上）") String reason,
+            @ToolParam(
+                            name = "files_json",
+                            description = "完整业务方案的文件数组 JSON；与 path/content 互斥",
+                            required = false)
+                    String filesJson,
+            @ToolParam(
+                            name = "base_revision",
+                            description = "list_files 返回的工程基准；批量模式必填",
+                            required = false)
+                    String baseRevision,
             @ToolParam(name = "group_id", description = "知识库 ID；会话仅绑定一个知识库时可省略", required = false)
                     String groupId) {
         Ctx c = resolve(scope, rc, groupId);
         if (c.error() != null) {
             return c.error();
+        }
+        if (filesJson != null) {
+            if (path != null || content != null) return "error: files_json 与 path/content 互斥";
+            if (reason == null || reason.isBlank()) return "error: 请说明业务方案的口径、来源和影响问题";
+            String error = planWriter.apply(c.gid(), filesJson, baseRevision, true);
+            if (error != null) return error;
+            markDirty(c.eff(), c.gid());
+            return "业务方案已完整写入草稿。业务变更：" + reason + "\n下一步：自动验证问题，问题结果可选确认；工程检查通过即可到发布页发布。";
         }
         if (path == null || path.isBlank()) {
             return "error: path 不能为空";
@@ -386,6 +413,95 @@ public final class ModelingToolkit {
                 + (reason == null || reason.isBlank() ? "" : "\n变更说明：" + reason)
                 + "\n\n"
                 + stateFooter(c.group());
+    }
+
+    /** Compatibility entry point for single-file callers. */
+    public String writeFile(
+            DatasetScope scope,
+            RuntimeContext rc,
+            String path,
+            String content,
+            String reason,
+            String groupId) {
+        return writeFilePlan(scope, rc, path, content, reason, null, null, groupId);
+    }
+
+    /** Read-only technical gate used before native HITL; tenant checks precede all filesystem access. */
+    public String preflight(
+            DatasetScope scope, RuntimeContext rc, io.agentscope.core.message.ToolUseBlock tool) {
+        Map<String, Object> input = tool.getInput();
+        Ctx c = resolve(scope, rc, stringValue(input.get("group_id")));
+        if (c.error() != null) return c.error();
+        return workspace.withWorkspaceLock(c.gid(), () -> preflightResolved(c, tool));
+    }
+
+    private String preflightResolved(Ctx c, io.agentscope.core.message.ToolUseBlock tool) {
+        Map<String, Object> input = tool.getInput();
+        if ("write_file".equals(tool.getName()) && input.containsKey("files_json")) {
+            if (input.get("path") != null || input.get("content") != null)
+                return "error: 批量和单文件参数互斥";
+            if (stringValue(input.get("reason")) == null
+                    || stringValue(input.get("reason")).isBlank()) return "error: 请说明业务方案";
+            return planWriter.apply(
+                    c.gid(),
+                    stringValue(input.get("files_json")),
+                    stringValue(input.get("base_revision")),
+                    false);
+        }
+        if ("write_file".equals(tool.getName()) || "patch_file".equals(tool.getName())) {
+            var preview = previewChange(c.gid(), tool.getName(), input);
+            if (!preview.ok()) return "error: " + preview.error();
+            String path = stringValue(input.get("path"));
+            if (path != null && path.replace('\\', '/').startsWith("knowledge/questions/")) {
+                try {
+                    String files =
+                            new com.fasterxml.jackson.databind.ObjectMapper()
+                                    .writeValueAsString(
+                                            List.of(
+                                                    Map.of(
+                                                            "path",
+                                                            path,
+                                                            "content",
+                                                            preview.newContent())));
+                    return planWriter.apply(c.gid(), files, planWriter.revision(c.gid()), false);
+                } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                    return "error: 无法准备问题预检：" + e.getMessage();
+                }
+            }
+            return null;
+        }
+        if ("create_view".equals(tool.getName())) {
+            String name = stringValue(input.get("name"));
+            if (name == null || !VIEW_NAME.matcher(name.trim()).matches())
+                return "error: 视图名称格式不合法";
+            name = name.trim();
+            String conflict = assetNameConflict(reader.read(c.gid()), name);
+            if (conflict != null) return "error: 视图名称与现有" + conflict + "重名";
+            String sql = MdlSuggestionService.requireViewSql(stringValue(input.get("statement")));
+            try {
+                String files =
+                        new com.fasterxml.jackson.databind.ObjectMapper()
+                                .writeValueAsString(
+                                        List.of(
+                                                Map.of(
+                                                        "path",
+                                                        "views/" + name + "/metadata.yml",
+                                                        "content",
+                                                        renderViewMeta(
+                                                                name,
+                                                                stringValue(
+                                                                        input.get("description")))),
+                                                Map.of(
+                                                        "path",
+                                                        "views/" + name + "/sql.yml",
+                                                        "content",
+                                                        renderViewSql(sql))));
+                return planWriter.apply(c.gid(), files, planWriter.revision(c.gid()), false);
+            } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                return "error: 无法准备视图预检：" + e.getMessage();
+            }
+        }
+        return null;
     }
 
     @Tool(
@@ -464,7 +580,7 @@ public final class ModelingToolkit {
                     月份截断 `DATE_TRUNC('month', col)`（月末再 + INTERVAL 1 MONTH - INTERVAL 1 DAY，禁 LAST_DAY）、\
                     日期差 `DATE_DIFF(unit, a, b)`（禁 DATEDIFF/TIMESTAMPDIFF）、条件判断 `CASE WHEN`（禁 IF）、\
                     拼接聚合 `STRING_AGG(col, '分隔符')`（禁 GROUP_CONCAT）、空值兜底 IFNULL/COALESCE、\
-                    时间戳秒数 `EPOCH(col)`（禁 UNIX_TIMESTAMP）；③ name 不得与现有模型/Cube/视图重名。\
+                    时间戳秒数 `EPOCH(col)`（禁 UNIX_TIMESTAMP）；③ name 不得与现有模型/视图重名。\
                     reason 用一句话说明口径业务含义，展示在确认卡片上。\
                     """)
     public String createView(
@@ -538,7 +654,7 @@ public final class ModelingToolkit {
     @Tool(
             name = "wren_skills_list",
             description =
-                    "列出 wren 官方技能剧本清单（generate-mdl=建模全流程、enrich-context=Cube/视图模板与业务语义增强、"
+                    "列出 wren 官方技能剧本清单（generate-mdl=建模全流程、enrich-context=模型/视图模板与业务语义增强、"
                             + "usage=CLI 用法与报错排查、onboarding=工程初始化）。建模流程或字段写法不确定时先查清单，再用"
                             + " wren_skills_get 取对应剧本照做。")
     public String wrenSkillsList(
@@ -560,7 +676,7 @@ public final class ModelingToolkit {
                     获取一个 wren 官方技能剧本全文（先 wren_skills_list 查名字）。\
                     要连同 references/ 参考文档（如 enrich-context 的 cube_proposals、gap_catalog 模板）一起拿时必须设 full=true——\
                     这是取模板与细则的唯一途径；script 参数仅用于技能自带可执行脚本（scripts/ 目录），不能用于 references 文档。\
-                    写 Cube/YAML 前先取模板，不要凭记忆写结构。\
+                    写模型/视图 YAML 前先取模板，不要凭记忆写结构。\
                     """)
     public String wrenSkillsGet(
             DatasetScope scope,
@@ -698,9 +814,6 @@ public final class ModelingToolkit {
         return runWorkspaceCommand(c.gid(), List.of("dry-run", "--sql", sql.trim()), "dry-run");
     }
 
-    @Tool(
-            name = "wren_cube_list",
-            description = "列出工程中全部语义 Cube（cube list，读自 context build 产物 mdl.json）。工具会先自动 build。")
     public String wrenCubeList(
             DatasetScope scope,
             RuntimeContext rc,
@@ -717,13 +830,6 @@ public final class ModelingToolkit {
         return runWorkspaceCommand(c.gid(), List.of("cube", "list"), "cube list");
     }
 
-    @Tool(
-            name = "wren_cube_describe",
-            description =
-                    """
-                    查看单个 Cube 的官方结构化描述（cube describe，JSON 输出）。工具会先自动 build。\
-                    提议修改 Cube 前先用它核对现状。\
-                    """)
     public String wrenCubeDescribe(
             DatasetScope scope,
             RuntimeContext rc,
@@ -745,17 +851,6 @@ public final class ModelingToolkit {
                 c.gid(), List.of("cube", "describe", name.trim()), "cube describe " + name.trim());
     }
 
-    @Tool(
-            name = "wren_cube_query",
-            description =
-                    """
-                    按语义成员查询 Cube（cube query）。sql_only=true（默认）只做 wren-core 转译、\
-                    免连库，返回将执行的 SQL——校验度量/维度/过滤表达式是否成立的首选；\
-                    sql_only=false 时真实执行（需连接 profile）。filters 每个形如 dim:op[:value]，\
-                    操作符含 eq/ne/gt/ge/lt/le/is_null/is_not_null/in/not_in；order_by 形如\
-                    member:asc|desc；time_dimension 形如 name:granularity[:start,end]。\
-                    工具会先自动 build。\
-                    """)
     public String wrenCubeQuery(
             DatasetScope scope,
             RuntimeContext rc,
@@ -849,7 +944,7 @@ public final class ModelingToolkit {
             name = "validate_mdl",
             description =
                     """
-                    校验当前工作区能否通过发布链（严格校验 + 构建 + 视图试跑 + Cube 转译），返回 ok/issues。\
+                    校验当前工作区能否通过发布链（严格校验 + 构建 + 视图试跑），返回 ok/issues。\
                     建模整体收尾时必须调用：通过只代表工程结构可用，按返回的工作流下一步验证并确认业务问题，满足条件后到「发布」页\
                     （发布动作只能在页面上完成，对话内不做发布）。\
                     """)
@@ -1831,27 +1926,6 @@ public final class ModelingToolkit {
                     .append("用 decide_relations 批量提交，由用户在确认卡上多选；不要逐条调用 decide_relation。）\n");
         }
 
-        sb.append("\n### Cube（工作区 cubes/）\n\n");
-        if (snap.cubes().isEmpty()) {
-            sb.append(
-                    "（暂无 Cube；用 write_file 写 cubes/<name>/metadata.yml 创建，写法见"
-                            + " wren_context_instructions）\n");
-        }
-        for (MdlWorkspaceReader.WorkspaceCube cube : snap.cubes()) {
-            sb.append("- ")
-                    .append(cube.name())
-                    .append("（base: ")
-                    .append(cube.baseModel())
-                    .append("）");
-            if (cube.description() != null && !cube.description().isBlank()) {
-                sb.append("：").append(truncate(cube.description(), 80));
-            }
-            sb.append('\n');
-            appendMembers(sb, "measures", cube.measures());
-            appendMembers(sb, "dimensions", cube.dimensions());
-            appendMembers(sb, "time_dimensions", cube.timeDimensions());
-        }
-
         sb.append("\n### 视图（工作区 views/，发布后可按视图名查询）\n\n");
         if (snap.views().isEmpty()) {
             sb.append(
@@ -2021,7 +2095,7 @@ public final class ModelingToolkit {
     }
 
     private String workflowGuidance(Ctx c) {
-        if (workflow == null) return "下一步：在「验证与确认」审阅问题；全部问题有效确认后再到「发布」页。\n\n";
+        if (workflow == null) return "下一步：完成模型工程检查后到「发布」页；问题 SQL 与结果审阅可选，不阻碍发布。\n\n";
         try {
             var state = workflow.snapshot(c.eff(), c.gid());
             return "## 建模阶段与下一步\n" + JSON.writeValueAsString(state) + "\n\n";
@@ -2064,9 +2138,9 @@ public final class ModelingToolkit {
     private static String stateFooter(DatasetGroupEntity group) {
         String state = group.getMdlState() == null ? "NONE" : group.getMdlState();
         if ("PUBLISHED".equals(state) || "DIRTY".equals(state)) {
-            return "*(草稿与已发布版本分开；请读取 list_modeling_state 的下一步。工程校验通过后仍需验证并由人员确认全部分析问题，最后到「发布」页。)*";
+            return "*(草稿与已发布版本分开；请读取 list_modeling_state 的下一步。工程检查通过后到「发布」页；问题验证与结果确认可选，不阻碍发布。)*";
         }
-        return "*(请读取 list_modeling_state 的下一步，先完成数据准备与口径建模，再进入「验证与确认」；不得跳过业务确认直接发布。)*";
+        return "*(请读取 list_modeling_state 的下一步，先完成数据准备与口径建模，工程检查通过后到「发布」页；问题验证与确认可选。)*";
     }
 
     private static String truncate(String s, int max) {

@@ -95,6 +95,12 @@ public final class WrenToolkit {
     private final DatasetGroupService groupService;
     private final ConversationScopeRegistry conversationScopes;
     private final MdlCatalog mdlCatalog;
+    private io.agentscope.dataagent.dataset.AnswerQueryMemory answerMemory;
+
+    public WrenToolkit withAnswerMemory(io.agentscope.dataagent.dataset.AnswerQueryMemory memory) {
+        this.answerMemory = memory;
+        return this;
+    }
 
     /** Optional sandbox proxy for the CSV data handoff; {@code null} disables it entirely. */
     private final AbstractSandboxFilesystem sandboxFilesystem;
@@ -145,7 +151,7 @@ public final class WrenToolkit {
     @Tool(
             name = "wren_recall_examples",
             description =
-                    "按需查看当前知识库已发布且由建模人员确认的问题、口径与逻辑 SQL 示例。问数有口径歧义或复杂计算时先调用；示例只作参考，必须重新经 Wren"
+                    "查看当前知识库的已发布建模确认示例和用户点赞问题—SQL 示例。生成业务查询前调用；示例只作参考，必须重新经 Wren"
                             + " 查询，不能复用旧数值。问题含义不明确时先澄清销售额/净营收、粒度、单位与时间。")
     public String wrenRecallExamples(
             DatasetScope scope,
@@ -157,27 +163,14 @@ public final class WrenToolkit {
         GroupRef ref = resolveGroup(eff, groupId);
         if (ref.error() != null) return ref.error();
         if (question == null || question.isBlank()) return "error: question 不能为空";
-        List<String> examples = mdlCatalog.confirmedExamples(ref.group().getId());
-        List<String> terms =
-                java.util.Arrays.stream(question.split("[\\s，。？！、]+"))
-                        .filter(s -> !s.isBlank())
-                        .toList();
-        examples =
-                examples.stream()
-                        .sorted(
-                                java.util.Comparator.comparingInt(
-                                                (String value) ->
-                                                        (int)
-                                                                terms.stream()
-                                                                        .filter(value::contains)
-                                                                        .count())
-                                        .reversed())
-                        .limit(3)
-                        .toList();
-        return groupHeader(ref.group())
-                + (examples.isEmpty()
-                        ? "暂无已发布的确认示例，请依赖模型口径，遇到歧义先澄清。"
-                        : String.join("\n\n", examples) + "\n请核对口径并重新查询；不得把示例当作固定答案。");
+        if (answerMemory == null) return groupHeader(ref.group()) + "示例服务不可用，请核对模型口径后查询。";
+        String recalled =
+                answerMemory.recall(
+                        eff.ownerId(),
+                        ref.group().getId(),
+                        question,
+                        mdlCatalog.confirmedExamples(ref.group().getId()));
+        return groupHeader(ref.group()) + (recalled.isBlank() ? "暂无确认示例，请依据模型口径查询。" : recalled);
     }
 
     @Tool(
@@ -186,15 +179,15 @@ public final class WrenToolkit {
                     """
                     在已发布语义模型的知识库上执行 SQL（wren 语义引擎，在逻辑模型或已发布 View 上查询）；知识库和逻辑模型必须取自 [DATA_SOURCES_OVERVIEW]。\
                     group_id 参数优先直接传知识库名称（推荐）；也可传完整 group_id，必须逐字符原样复制。\
-                    聚合指标问题先核对 Cube 清单，Cube 成员能覆盖时优先用 wren_query_cube（引擎确定性编译聚合，错误率更低）——\
-                    覆盖判定：问题的度量、分组维度、时间粒度需全部落在 Cube 成员上；「按 X 的排名 / TOP-N」要求 X 是 Cube 维度成员，\
-                    Cube 缺该维度即不覆盖、改用本工具按 View / 逻辑模型 GROUP BY X 排名，不要不分组而对度量排序取 TOP-N（那只是聚合行排序）。\
+                    使用逻辑模型或明细视图查询；按业务要求明确去重实体、时间范围与过滤条件。\
                     已发布 View 能直接覆盖问题时优先直接按视图名查询（视图口径已经建模审阅）。\
                     字段或关联组不明确时先调用 wren_describe_model；跨模型属性优先查询 many 侧模型的关联投影列，让 Wren 自动 JOIN。\
                     仅当语义资产都无法表达问题时才编写其他逻辑 SQL；显式 JOIN 是最后兜底。\
                     只接受 SELECT / WITH 语句；表名和列名使用语义模型中的逻辑名称，不要用物理表名。\
                     SQL 内禁止写显式 LIMIT/OFFSET 子句：引擎会自动在 SQL 末尾追加行数上限，\
                     显式 LIMIT 会与之叠加成语法错误；控制返回行数请用 limit 参数。\
+                    必须填写中文 question 和 query_type；业务回答用 BUSINESS，排查数据范围和异常用 DIAGNOSTIC。\
+                    只有用户点赞后，成功 BUSINESS 查询才会保存为样例。\
                     没有有效已发布 MDL 的知识库不可查询，请先完成基础 MDL 初始化。\
                     """)
     public String wrenRunSql(
@@ -212,13 +205,15 @@ public final class WrenToolkit {
                                     "SELECT-only SQL，表名/列名用语义模型中的逻辑名称；不要包含 LIMIT/OFFSET 子句（行数用"
                                             + " limit 参数控制）")
                     String sql,
-            @ToolParam(
-                            name = "question",
-                            description = "自然语言描述本次查询的业务问题（中文），用于结果自文档化",
-                            required = false)
+            @ToolParam(name = "question", description = "本次查询的中文问题；业务查询应描述实际回答的业务问题")
                     String question,
             @ToolParam(name = "limit", description = "最大返回行数（默认 1000，上限 10000）", required = false)
-                    Integer limit) {
+                    Integer limit,
+            @ToolParam(
+                            name = "query_type",
+                            description =
+                                    "查询用途，必填：BUSINESS 回答用户业务问题；DIAGNOSTIC 排查数据范围、异常或失败原因，不作为业务样例保存")
+                    String queryType) {
         DatasetScope eff = effectiveScope(scope, rc);
         if (eff == null) {
             return "error: 无法确定租户上下文";
@@ -226,6 +221,12 @@ public final class WrenToolkit {
         GroupRef ref = resolveGroup(eff, groupId);
         if (ref.error() != null) {
             return ref.error();
+        }
+        if (!"BUSINESS".equals(queryType) && !"DIAGNOSTIC".equals(queryType)) {
+            return "error: query_type 必须为 BUSINESS 或 DIAGNOSTIC";
+        }
+        if (!io.agentscope.dataagent.dataset.AnswerQueryMemory.hasChinese(question)) {
+            return "error: question 必须是包含中文的非空问题";
         }
         if (sql == null || sql.isBlank()) {
             return "error: sql 不能为空";
@@ -241,11 +242,12 @@ public final class WrenToolkit {
         if (limit != null && limit < 0) {
             return "error: limit 不能为负数";
         }
+        if (limit != null && (limit == 0 || limit > 10000)) {
+            return "error: limit 必须在 1–10000 之间";
+        }
         Map<String, Object> args = new LinkedHashMap<>();
         args.put("sql", sql);
-        if (limit != null) {
-            args.put("limit", limit);
-        }
+        args.put("limit", limit == null ? 1000 : limit);
         WrenCallResult result;
         try {
             result = wrenGateway.call(ref.group().getId(), "run_sql", args);
@@ -263,37 +265,25 @@ public final class WrenToolkit {
             sb.append("**查询问题：** ").append(question.trim()).append("\n\n");
         }
         sb.append("**SQL 语句：**\n```sql\n").append(sql).append("\n```\n\n");
+        sb.append("**查询用途：** ").append(queryType).append("\n\n");
         sb.append(renderTable(result.payload()));
         sb.append(dataFileNote(rc, result.payload()));
+        if (question != null && !question.isBlank()) {
+            sb.append("\n答案查询编号：`")
+                    .append(
+                            io.agentscope.dataagent.dataset.AnswerQueryMemory.receiptId(
+                                    ref.group().getId(),
+                                    question.trim(),
+                                    sql,
+                                    limit == null ? 1000 : limit,
+                                    queryType))
+                    .append("`\n");
+        }
         sb.append(dirtyNote(ref.group()));
         return sb.toString();
     }
 
-    // -----------------------------------------------------------------
-    //  wren_query_cube
-    // -----------------------------------------------------------------
-
-    @Tool(
-            name = "wren_query_cube",
-            description =
-                    """
-                    在已发布语义模型的知识库上执行 Cube（指标）聚合查询，返回聚合行。\
-                    聚合问题先确认覆盖（核对 [DATA_SOURCES_OVERVIEW] 的 Cube 清单成员），覆盖时优先用本工具——引擎确定性编译 GROUP BY 与时间粒度，比手工聚合 SQL 错误率更低。\
-                    覆盖判定：问题的度量、分组维度、时间粒度需全部落在本 Cube 成员上（清单中度量带聚合表达式可据此比对）；\
-                    「按 X 的排名 / TOP-N」必须把 X 作为维度传入（dimensions=[X]，如按客户排名需客户类维度成员）并 order_by 该度量 + limit；\
-                    本 Cube 缺该分组维度时不覆盖该问题，请改用 wren_run_sql 按 View / 逻辑模型 GROUP BY X 排名——不分组而对度量排序取 TOP-N 只是对聚合行排序，不是实体排名。\
-                    cube、度量、维度的名称以 [DATA_SOURCES_OVERVIEW] 中该知识库的 Cube 清单为准，不要自行编造。\
-                    group_id 参数优先直接传知识库名称（推荐）；也可传完整 group_id，必须逐字符原样复制。\
-                    筛选格式 dim:op[:value]（in/not_in 用逗号分隔多值）；时间维度格式 name:granularity[:start,end]，\
-                    granularity 使用小写 year/quarter/month/week/day/hour/minute；网关也会统一转成小写。\
-                    时间区间为左闭右开，end 不含在内：start=end 会得到空结果——查单个自然日 D 必须传次日作 end，\
-                    如查 2026-09-29 全天应传 2026-09-29,2026-09-30；查某月应传 2026-09-01,2026-10-01；\
-                    仅传 name:granularity 不带区间则按全时间聚合。\
-                    排序格式 member:direction（asc/desc），成员必须是本次查询已选中的原始成员名——度量/维度写其名称，\
-                    时间维度写原始名（如 order_time；即使结果列显示为 order_time__month 也写 order_time）；\
-                    未传 order_by 时引擎默认按时间升序（最早在前），取最近 N 期请用 order_by ["<时间维度名>:desc"] + limit。\
-                    没有有效已发布 MDL 的知识库不可查询，请先完成基础 MDL 初始化。\
-                    """)
+    /** @deprecated Cube is retired as an agent tool; retained for source compatibility. */
     public String wrenQueryCube(
             DatasetScope scope,
             RuntimeContext rc,
@@ -429,10 +419,9 @@ public final class WrenToolkit {
     @Tool(
             name = "wren_describe_model",
             description =
-                    "按需查看已发布逻辑模型的字段、关系和相关 Cube。关系投影默认折叠；需要具体跨模型字段时传"
+                    "按需查看已发布逻辑模型的字段与关系。关系投影默认折叠；需要具体跨模型字段时传"
                             + " expand_relation_fields=true。只传逻辑模型名，不要传 datasetId、sourceId、schema"
-                            + " 或物理表名；允许已发布视图名（返回定义与输出列），Cube 请用"
-                            + " wren_query_cube。group_id 参数优先直接传知识库名称（推荐）；也可传完整"
+                            + " 或物理表名；允许已发布视图名（返回定义与输出列），只查询模型或视图。group_id 参数优先直接传知识库名称（推荐）；也可传完整"
                             + " group_id，必须逐字符原样复制")
     public String wrenDescribeModel(
             DatasetScope scope,
@@ -552,7 +541,7 @@ public final class WrenToolkit {
             }
             boolean isCube = mdl.cubes().stream().anyMatch(cube -> name.equals(cube.name()));
             if (isCube) {
-                return "error: '" + name + "' 是 Cube 而非逻辑模型，请用 wren_query_cube 按度量/维度查询";
+                return "error: '" + name + "' 是已停用的 Cube，请使用逻辑模型或视图";
             }
         }
         return "error: 未知或无权访问的已发布逻辑模型";
@@ -641,20 +630,6 @@ public final class WrenToolkit {
                         .append("：")
                         .append(relation.condition())
                         .append('\n');
-            }
-        }
-        List<MdlCatalog.Cube> cubes =
-                mdl.cubes().stream().filter(cube -> model.name().equals(cube.baseModel())).toList();
-        if (!cubes.isEmpty()) {
-            out.append("\n**相关 Cube：**\n");
-            for (MdlCatalog.Cube cube : cubes) {
-                out.append("- ")
-                        .append(cube.name())
-                        .append("（度量：")
-                        .append(cube.measures().stream().map(MdlCatalog.Member::name).toList())
-                        .append("；维度：")
-                        .append(cube.dimensions().stream().map(MdlCatalog.Member::name).toList())
-                        .append("）\n");
             }
         }
         out.append('\n');

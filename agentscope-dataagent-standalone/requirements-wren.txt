@@ -1,0 +1,2 @@
+# Official Wren CLI with the multilingual ONNX memory backend.
+wrenai[memory-onnx]==0.15.0

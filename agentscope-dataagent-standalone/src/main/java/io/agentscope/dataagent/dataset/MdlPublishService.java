@@ -647,7 +647,7 @@ public class MdlPublishService {
         // lock nested inside the publish lock — the only nesting direction.
         MdlSeeder.SeedResult seed = seeder.reconcile(groupId);
         issues.addAll(seed.issues());
-        issues.addAll(questionStore.publishIssues(groupId));
+        // Optional questions do not gate publication; engineering validation still applies.
         if (hasErrors(issues)) {
             return failure(group, issues, "");
         }

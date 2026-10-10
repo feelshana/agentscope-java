@@ -218,7 +218,7 @@ export default function MdlPublishPanel({
         </button>
       </div>
       <div className="da-small" style={{ color: 'var(--da-text-3)', marginBottom: 10 }}>
-        发布后问数使用新版本的业务口径。请先检查本次变更与全部问题确认情况；发布失败时保留原版本。
+        发布后问数使用新版本的业务口径。请检查本次变更与模型工程检查结果；预设问题测试可选，发布失败时保留原版本。
       </div>
       {workflow && <div style={{ marginBottom: 12 }}>
         <strong>本次业务模型变更</strong>
@@ -228,7 +228,7 @@ export default function MdlPublishPanel({
         {!workflow.draftChanged && <p className="da-small">没有待发布变更。</p>}
         <p className="da-small">分析问题已确认 {workflow.questionSummary.confirmed}/{workflow.questionSummary.total}。</p>
         {(workflow.questionSummary.incomplete + workflow.questionSummary.needsValidation + workflow.questionSummary.awaitingConfirmation > 0) &&
-          <p className="da-small">仍有问题待补充、验证或审阅。请完成全部问题的 SQL 与结果确认后发布。</p>}
+          <p className="da-small">部分可选问题待补充、验证或审阅，不阻碍模型发布。可继续问数并对最终答案反馈。</p>}
         {workflow.blockers.length > 0 && <div role="status">
           <ul>{workflow.blockers.map((item, i) => <li key={`${item.code}-${i}`}>{item.message}</li>)}</ul>
           <button className="da-btn" onClick={onReview}>前往验证与确认</button>

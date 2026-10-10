@@ -42,6 +42,24 @@ class MdlQuestionStoreTest {
                         + "'\nrequired: true\n");
     }
 
+    @Test
+    void questionPlansRejectRetiredCubeStrategiesAndAssetReferences() throws Exception {
+        Path source = root.resolve("knowledge/questions/sales.yml");
+        for (String strategy : List.of("CUBE", "EXAMPLE")) {
+            Files.writeString(
+                    source,
+                    "question: 营收\ndefinition: 元\nsql: SELECT SUM(amount) FROM order\n"
+                            + "modeling:\n  strategy: "
+                            + strategy
+                            + "\n"
+                            + "  reason: 文档定义\n"
+                            + "  assets:\n"
+                            + "    - kind: CUBE\n"
+                            + "      name: revenue\n");
+            assertThrows(DatasetException.class, () -> store.requireQuestion("g1", "sales"));
+        }
+    }
+
     private MdlQuestionStore.Receipt execute(boolean truncated, String error) throws Exception {
         var result =
                 new ObjectMapper()
@@ -448,29 +466,23 @@ class MdlQuestionStoreTest {
     }
 
     @Test
-    void cubeCoverageUsesItsBaseObjectAndPlanChangesExpireReceipts() throws Exception {
+    void modelCoverageAndPlanChangesExpireReceipts() throws Exception {
         Path file = root.resolve("knowledge/questions/sales.yml");
         Files.writeString(
                 file,
                 Files.readString(file)
                         + "modeling:\n"
-                        + "  strategy: CUBE\n"
+                        + "  strategy: MODEL\n"
                         + "  reason: 稳定销售指标\n"
                         + "  assets:\n"
-                        + "    - kind: CUBE\n"
-                        + "      name: sales_metrics\n");
-        Files.createDirectories(root.resolve("cubes/sales_metrics"));
-        Files.writeString(
-                root.resolve("cubes/sales_metrics/metadata.yml"),
-                "name: sales_metrics\nbase_object: order\n");
+                        + "    - kind: MODEL\n"
+                        + "      name: order\n");
         assertTrue(store.list("g1").get(0).coverage().ready());
         var receipt = execute(false, null);
         store.decide("g1", "sales", receipt.validationId(), true, "alice");
         Files.writeString(file, Files.readString(file).replace("稳定销售指标", "净销售口径"));
         assertEquals("STALE", store.list("g1").get(0).status());
-        Files.writeString(
-                root.resolve("cubes/sales_metrics/metadata.yml"),
-                "name: sales_metrics\nbase_object: missing\n");
+        Files.delete(root.resolve("models/order/metadata.yml"));
         assertFalse(store.list("g1").get(0).coverage().ready());
     }
 

@@ -131,6 +131,10 @@ public class MdlWorkspaceService {
             throw new DatasetException("工作区路径越界：" + relative, 400);
         }
         String canonical = ws.relativize(resolved).toString().replace('\\', '/');
+        if (canonical.equalsIgnoreCase("cubes")
+                || canonical.toLowerCase(java.util.Locale.ROOT).startsWith("cubes/")) {
+            throw new DatasetException("Cube 已停用，请使用逻辑模型、明细视图与 SQL 定义业务口径", 400);
+        }
         if (isPlatformOwned(groupId, canonical)) {
             throw new DatasetException("该文件由平台管理，禁止修改：" + relative, 403);
         }
