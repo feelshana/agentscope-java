@@ -29,6 +29,7 @@ export interface Dataset {
 }
 
 export interface DatasetGroup {
+  ownerUsername?: string | null;
   id: string;
   artifactId: string | null;
   name: string;
@@ -110,9 +111,12 @@ export async function listSheets(file: File): Promise<string[]> {
 
 // ---------------------------------------------------------------- groups (KB)
 
-export async function listGroups(): Promise<DatasetGroup[]> {
+export async function listGroups(signal?: AbortSignal): Promise<DatasetGroup[]> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 30_000);
+  const abort = () => controller.abort();
+  if (signal?.aborted) controller.abort();
+  signal?.addEventListener('abort', abort, { once: true });
   try {
     const res = await fetch('/api/dataset-groups', {
       headers: authHeaders(),
@@ -121,12 +125,14 @@ export async function listGroups(): Promise<DatasetGroup[]> {
     if (!res.ok) throw new Error(await errorMessage(res, `Failed to list KBs: ${res.status}`));
     return res.json();
   } catch (e) {
+    if (signal?.aborted) throw e;
     if (e instanceof DOMException && e.name === 'AbortError') {
       throw new Error('加载知识库列表超时，请刷新重试');
     }
     throw e;
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener('abort', abort);
   }
 }
 

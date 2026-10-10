@@ -585,6 +585,21 @@ public class DatasetService implements DatasetContextProvider {
         }
     }
 
+    /** Updates the dataset description and refreshes the metadata used by the agent. */
+    @Transactional
+    public DatasetEntity updateDescription(String ownerId, String datasetId, String description) {
+        DatasetEntity entity = get(ownerId, datasetId);
+        if (description == null) {
+            throw new DatasetException("Dataset description is required", 400);
+        }
+        entity.setDescription(description.trim());
+        entity.setUpdatedAt(Instant.now());
+        repository.save(entity);
+        registry.add(toDataSource(entity));
+        markMdlDirty(entity.getGroupId());
+        return entity;
+    }
+
     /** Updates column business descriptions and re-registers the source so the agent sees them. */
     @Transactional
     public DatasetEntity updateColumnDescriptions(
@@ -646,7 +661,7 @@ public class DatasetService implements DatasetContextProvider {
         if (e.getColumnSchemaJson() != null && !e.getColumnSchemaJson().isBlank()) {
             properties.put("columnSchemaJson", e.getColumnSchemaJson());
         }
-        // Description only contains AI-generated table description (for SystemPrompt)
+        // Description contains generated or manually edited table metadata (for SystemPrompt).
         String desc =
                 (e.getDescription() == null || e.getDescription().isBlank())
                         ? "User-uploaded dataset '" + e.getName() + "'"

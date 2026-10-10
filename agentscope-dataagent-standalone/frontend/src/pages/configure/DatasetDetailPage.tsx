@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import BackToChatHeader from '../../components/BackToChatHeader';
+import { KnowledgeBreadcrumb } from '../../components/KnowledgeWorkspace';
 import Icon from '../../components/Icon';
 import {
   Dataset,
@@ -9,46 +9,8 @@ import {
   getPreview,
   Preview,
   updateColumns,
+  updateDatasetDescription,
 } from '../../api/datasets';
-
-const panelStyle: React.CSSProperties = {
-  flex: 1,
-  minHeight: 0,
-  overflow: 'auto',
-  padding: 24,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 20,
-};
-
-const cardStyle: React.CSSProperties = {
-  background: 'var(--da-surface)',
-  border: '1px solid var(--da-border)',
-  borderRadius: 12,
-  padding: 20,
-};
-
-const thStyle: React.CSSProperties = {
-  textAlign: 'left',
-  padding: '10px 12px',
-  borderBottom: '2px solid var(--da-border)',
-  fontSize: '0.78rem',
-  color: 'var(--da-text-3)',
-  fontWeight: 600,
-  verticalAlign: 'top',
-  minWidth: 120,
-};
-
-const tdStyle: React.CSSProperties = {
-  padding: '8px 12px',
-  borderBottom: '1px solid var(--da-surface-sunken)',
-  fontSize: '0.8rem',
-  color: 'var(--da-text)',
-  maxWidth: 260,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-};
 
 const overlayStyle: React.CSSProperties = {
   position: 'fixed',
@@ -63,7 +25,7 @@ const overlayStyle: React.CSSProperties = {
 const modalStyle: React.CSSProperties = {
   background: 'var(--da-surface)',
   borderRadius: 16,
-  width: 720,
+  width: 'min(1120px, 94vw)',
   maxHeight: '80vh',
   display: 'flex',
   flexDirection: 'column',
@@ -131,7 +93,7 @@ function FieldEditModal({ columns, edits, typeEdits, onChange, onSave, onClose, 
           </button>
         </div>
         <div style={modalBodyStyle}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}><colgroup><col style={{ width: '22%' }} /><col style={{ width: '17%' }} /><col style={{ width: '16%' }} /><col style={{ width: '45%' }} /></colgroup>
             <thead>
               <tr>
                 {['字段名', '原字段名', '字段类型', '字段描述'].map(h => (
@@ -163,6 +125,8 @@ function FieldEditModal({ columns, edits, typeEdits, onChange, onSave, onClose, 
                     </td>
                     <td style={{ padding: '10px', borderBottom: '1px solid var(--da-surface-sunken)' }}>
                       <select
+                        disabled
+                        title="数据类型只读；此接口仅支持修改字段说明"
                         value={currentType}
                         onChange={e => onChange(c.name, edits[c.name] ?? c.description ?? '', e.target.value)}
                         style={{
@@ -177,7 +141,9 @@ function FieldEditModal({ columns, edits, typeEdits, onChange, onSave, onClose, 
                       </select>
                     </td>
                     <td style={{ padding: '10px', borderBottom: '1px solid var(--da-surface-sunken)' }}>
-                      <input
+                      <textarea
+                        rows={3}
+                        aria-label={`${c.name} 字段描述`}
                         className="da-input"
                         value={edits[c.name] ?? c.description ?? ''}
                         onChange={e => onChange(c.name, e.target.value, typeEdits[c.name] ?? c.sqlType)}
@@ -185,7 +151,7 @@ function FieldEditModal({ columns, edits, typeEdits, onChange, onSave, onClose, 
                         style={{
                           width: '100%', padding: '6px 8px', borderRadius: 6,
                           border: '1px solid var(--da-border-strong)', fontSize: '0.82rem',
-                          boxSizing: 'border-box',
+                          boxSizing: 'border-box', resize: 'vertical', lineHeight: 1.6,
                         }}
                       />
                     </td>
@@ -225,6 +191,9 @@ function FieldEditModal({ columns, edits, typeEdits, onChange, onSave, onClose, 
 
 export default function DatasetDetailPage() {
   const { groupId = '', datasetId = '' } = useParams();
+  const [groupName, setGroupName] = useState('知识库');
+  const [tab, setTab] = useState<'preview' | 'fields' | 'technical'>('preview');
+  const [loading, setLoading] = useState(true);
   const [dataset, setDataset] = useState<Dataset | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [edits, setEdits] = useState<Record<string, string>>({});
@@ -233,16 +202,21 @@ export default function DatasetDetailPage() {
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
-  const [descEditing, setDescEditing] = useState(false);
-  const [descDraft, setDescDraft] = useState('');
+  const [descriptionOpen, setDescriptionOpen] = useState(false);
+  const [descriptionDraft, setDescriptionDraft] = useState('');
+  const [descriptionError, setDescriptionError] = useState<string | null>(null);
+  const [savedMessage, setSavedMessage] = useState('');
 
   const load = useCallback(async () => {
+    setLoading(true);
+    setDataset(null);
+    setPreview(null);
     try {
       const detail = await getGroupDetail(groupId);
+      setGroupName(detail.group.name);
       const ds = detail.datasets.find(d => d.id === datasetId) ?? null;
       setDataset(ds);
       if (ds) {
-        setPreview(await getPreview(ds.id, 20));
         const descInit: Record<string, string> = {};
         const typeInit: Record<string, string> = {};
         for (const c of ds.columns) {
@@ -251,15 +225,19 @@ export default function DatasetDetailPage() {
         }
         setEdits(descInit);
         setTypeEdits(typeInit);
-        setDescDraft(ds.description ?? '');
+        setPreview(await getPreview(ds.id, 20));
       }
-      setError(null);
+      setError(ds ? null : '数据集不存在或已被删除');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
-    }
+    } finally { setLoading(false); }
   }, [groupId, datasetId]);
 
   useEffect(() => {
+    setTab('preview');
+    setSaved(false);
+    setModalOpen(false);
+    setDescriptionOpen(false);
     load();
   }, [load]);
 
@@ -274,24 +252,8 @@ export default function DatasetDetailPage() {
       }));
       await updateColumns(dataset.id, updates);
       setSaved(true);
+      setSavedMessage('字段说明已保存');
       setModalOpen(false);
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleDescSave() {
-    if (!dataset) return;
-    setBusy(true);
-    try {
-      await updateColumns(dataset.id, dataset.columns.map(c => ({
-        name: c.name,
-        description: edits[c.name] ?? c.description ?? '',
-      })));
-      setDescEditing(false);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -305,203 +267,56 @@ export default function DatasetDetailPage() {
     setTypeEdits(prev => ({ ...prev, [name]: sqlType }));
   }
 
+  async function saveDescription() {
+    if (!dataset || busy) return;
+    setBusy(true);
+    setDescriptionError(null);
+    setSaved(false);
+    try {
+      const updated = await updateDatasetDescription(dataset.id, descriptionDraft);
+      setDataset(updated);
+      setDescriptionOpen(false);
+      setSavedMessage('数据集描述已保存');
+      setSaved(true);
+    } catch (e) {
+      setDescriptionError(e instanceof Error ? e.message : String(e));
+    } finally { setBusy(false); }
+  }
+
+  const originLabel = dataset?.origin === 'datasource' ? '数据源关联' : dataset?.origin === 'derived' ? '派生数据' : '文件上传';
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        minHeight: 0,
-        background: 'var(--da-canvas-bg)',
-      }}
-    >
-      <BackToChatHeader
-        title={dataset?.name ?? '数据集'}
-        subtitle={dataset?.tableName ?? ''}
-        backTo={`/configure/datasets/${groupId}`}
-        backLabel="返回知识库"
-      />
-      {(error || saved) && <div style={{ padding: '10px 24px 0' }}>
-        {error && (
-          <span style={{ color: 'var(--da-danger)', fontSize: '0.8rem' }}>{error}</span>
-        )}
-        {saved && (
-          <span style={{ color: '#047857', fontSize: '0.8rem' }}>
-            已保存，agent 立即可见新语义
-          </span>
-        )}
+    <div className="kw-page">
+      <KnowledgeBreadcrumb items={[{ label: '返回对话', to: '/chat' }, { label: '知识库', to: '/configure/datasets' }, { label: groupName, to: `/configure/datasets/${groupId}` }, { label: dataset?.name ?? '数据集' }]} />
+      <div className="kw-scroll"><div className="kw-content">
+        <div className="kw-pagehead">
+          <div className="kw-heading"><div className="kw-datasethead"><div className="kw-icon"><Icon name="table" /></div><div><h1>{dataset?.name ?? '数据集'}</h1><p>{originLabel}的数据集</p></div></div>
+            <p style={{ marginTop: 17 }}>{dataset?.description || '暂无说明'}</p>
+            <div className="kw-infochips"><span><Icon name="table" size="sm" />{dataset?.rowCount.toLocaleString() ?? '—'} 行</span><span>{dataset?.columns.length ?? '—'} 个字段</span>{dataset?.sourceFileName && <span><Icon name={dataset.origin === 'datasource' ? 'database' : 'file'} size="sm" />{dataset.sourceFileName}</span>}</div>
+          </div>
+          <div className="kw-actions"><button className="da-btn" disabled={!dataset || busy} onClick={() => { setDescriptionDraft(dataset?.description ?? ''); setDescriptionError(null); setDescriptionOpen(true); }}><Icon name="edit" size="sm" />编辑数据集描述</button></div>
+        </div>
+        {error && <div role="alert" className="kw-alert">{error}</div>}
+        {saved && <div role="status" style={{ color: 'var(--da-success)', fontSize: 12, marginBottom: 20 }}>{savedMessage}</div>}
+        <div className="kw-tabs" role="tablist" aria-label="数据集信息">{([{ key: 'preview', label: '数据预览' }, { key: 'fields', label: '字段信息' }, { key: 'technical', label: '技术信息' }] as const).map(t => <button key={t.key} role="tab" aria-selected={tab === t.key} className={tab === t.key ? 'active' : ''} onClick={() => setTab(t.key)}>{t.label}</button>)}</div>
+        {loading && <div className="kw-empty">加载数据集…</div>}
+        {!loading && dataset && tab === 'preview' && <>
+          <div className="kw-toolbar"><span style={{ fontSize: 12 }}>数据预览</span><span className="kw-count">前 {preview?.rows.length ?? 0} 行</span><span className="kw-spacer" /><span className="kw-count">悬停字段查看说明 · 横向滚动查看全部字段</span></div>
+          {preview && preview.rows.length > 0 ? <div className="kw-tablebox"><div className="kw-table-scroll" style={{ maxHeight: 520 }}><table className="kw-table kw-preview"><thead><tr><th className="rownum">#</th>{preview.columns.map(c => <th key={c.name} title={`${c.description || '暂无字段说明'} · ${c.sqlType}`}>{c.originalName || c.name}{c.originalName && c.originalName !== c.name && <small>{c.name}</small>}</th>)}</tr></thead><tbody>{preview.rows.map((row, i) => <tr key={i}><td className="rownum">{i + 1}</td>{row.map((v, j) => <td key={j} className={/^(decimal|float|double|numeric|real)/i.test(preview.columns[j]?.sqlType ?? '') ? 'numeric' : ''} title={v == null ? 'NULL' : String(v)}>{v == null ? <span style={{ color: 'var(--kw-muted)' }}>NULL</span> : String(v)}</td>)}</tr>)}</tbody></table></div><div className="kw-tablebottom"><span>显示 {preview.rows.length} 行 / 共 {dataset.rowCount.toLocaleString()} 行</span><span>保持原始数据值，未做精度转换</span></div></div> : <div className="kw-empty">{error ? '数据预览暂不可用' : '暂无数据行'}</div>}
+        </>}
+        {!loading && dataset && tab === 'fields' && <>
+          <div className="kw-toolbar"><span className="kw-count">字段含义与类型集中管理，不占用数据预览表头。</span><span className="kw-spacer" /><button className="da-btn da-btn-sm" disabled={busy} onClick={() => setModalOpen(true)}><Icon name="edit" size="sm" />编辑字段说明</button></div>
+          <div className="kw-tablebox"><div className="kw-table-scroll"><table className="kw-table"><thead><tr><th>字段名称</th><th>原字段名称</th><th>数据类型</th><th>业务说明</th></tr></thead><tbody>{dataset.columns.map(c => <tr key={c.name}><td><code className="kw-code">{c.name}</code></td><td>{c.originalName || '—'}</td><td><span className="kw-type">{c.sqlType}</span></td><td style={{ whiteSpace: 'normal', minWidth: 240 }}>{c.description || '暂无说明'}</td></tr>)}</tbody></table></div></div>
+        </>}
+        {!loading && dataset && tab === 'technical' && <div className="kw-technical"><div><span>所属知识库</span><span>{groupName}</span></div><div><span>来源类型</span><span>{originLabel}</span></div><div><span>来源文件 / 表</span><span>{dataset.sourceFileName || '—'}</span></div><div><span>物理库表</span><code className="kw-code">{[dataset.schemaName, dataset.tableName].filter(Boolean).join('.')}</code></div><div><span>记录 / 字段</span><span>{dataset.rowCount.toLocaleString()} 行 / {dataset.columns.length} 个字段</span></div><div><span>版本</span><span>v{dataset.currentVersion ?? 1}</span></div></div>}
+      </div></div>
+      {modalOpen && dataset && <FieldEditModal columns={dataset.columns} edits={edits} typeEdits={typeEdits} onChange={handleFieldChange} onSave={handleSave} onClose={() => { if (!busy) setModalOpen(false); }} busy={busy} />}
+      {descriptionOpen && dataset && <div style={overlayStyle} onClick={() => { if (!busy) setDescriptionOpen(false); }}>
+        <form role="dialog" aria-modal="true" aria-labelledby="dataset-description-title" style={{ ...modalStyle, width: 'min(600px, 90vw)' }} onClick={e => e.stopPropagation()} onSubmit={e => { e.preventDefault(); void saveDescription(); }}>
+          <div style={modalHeaderStyle}><div><strong id="dataset-description-title">编辑数据集描述</strong><p style={{ fontSize: 13, color: 'var(--da-text-muted)', marginBottom: 0 }}>描述数据集的业务含义，帮助智能体理解和选用数据。</p></div></div>
+          <div style={modalBodyStyle}><label htmlFor="dataset-description">{dataset.name}</label><textarea id="dataset-description" autoFocus className="da-input" value={descriptionDraft} disabled={busy} onChange={e => setDescriptionDraft(e.target.value)} rows={6} style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', marginTop: 12 }} />{descriptionError && <div role="alert" className="kw-alert">{descriptionError}</div>}</div>
+          <div style={modalFooterStyle}><button type="button" className="da-btn" disabled={busy} onClick={() => setDescriptionOpen(false)}>取消</button><button type="submit" className="da-btn da-btn-primary" disabled={busy}>{busy ? '保存中…' : '保存'}</button></div>
+        </form>
       </div>}
-      <div style={panelStyle}>
-        {/* Merged card: title + description + basic info */}
-        <div style={cardStyle}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--da-text)', marginBottom: 8 }}>
-                {dataset?.sourceFileName ?? dataset?.name ?? '数据集'}
-              </div>
-              {descEditing ? (
-                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                  <textarea
-                    value={descDraft}
-                    onChange={e => setDescDraft(e.target.value)}
-                    rows={3}
-                    style={{
-                      flex: 1, padding: '8px 10px', borderRadius: 8,
-                      border: '1px solid var(--da-border-strong)', fontSize: '0.85rem',
-                      color: 'var(--da-text)', resize: 'vertical', fontFamily: 'inherit',
-                    }}
-                  />
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <button
-                      onClick={handleDescSave}
-                      disabled={busy}
-                      style={{
-                        padding: '5px 14px', borderRadius: 6, border: 'none',
-                        background: 'var(--da-primary)', color: '#fff', fontSize: '0.78rem',
-                        fontWeight: 600, cursor: busy ? 'default' : 'pointer',
-                      }}
-                    >
-                      保存
-                    </button>
-                    <button
-                      onClick={() => { setDescEditing(false); setDescDraft(dataset?.description ?? ''); }}
-                      style={{
-                        padding: '5px 14px', borderRadius: 6, border: '1px solid var(--da-border)',
-                        background: 'var(--da-surface)', color: 'var(--da-text)', fontSize: '0.78rem',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      取消
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                  <div style={{ fontSize: '0.85rem', color: 'var(--da-text-2)', whiteSpace: 'pre-wrap', flex: 1, lineHeight: 1.6 }}>
-                    {dataset?.description ?? '—'}
-                  </div>
-                  <button
-                    onClick={() => { setDescEditing(true); setDescDraft(dataset?.description ?? ''); }}
-                    title="编辑描述"
-                    style={{
-                      background: 'none', border: 'none', cursor: 'pointer',
-                      color: 'var(--da-text-muted)', flexShrink: 0,
-                      padding: '2px 4px', display: 'flex', alignItems: 'center',
-                    }}
-                  >
-                    <Icon name="edit" size="sm" />
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div style={{
-            display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 20px',
-            fontSize: '0.82rem', marginTop: 16, paddingTop: 14,
-            borderTop: '1px solid var(--da-border)',
-          }}>
-            <div>
-              <span style={{ color: 'var(--da-text-3)' }}>来源：</span>
-              {dataset?.origin === 'datasource' ? '数据源关联' : '文件上传'}
-            </div>
-            <div>
-              <span style={{ color: 'var(--da-text-3)' }}>库.表：</span>
-              {dataset?.schemaName}.{dataset?.tableName}
-            </div>
-            <div>
-              <span style={{ color: 'var(--da-text-3)' }}>行数：</span>
-              {dataset?.rowCount ?? '-'}
-            </div>
-            {dataset?.origin === 'datasource' ? (
-              <div>
-                <span style={{ color: 'var(--da-text-3)' }}>数据源：</span>
-                {dataset?.sourceFileName?.split('/')[0] ?? '-'}
-              </div>
-            ) : (
-              <div>
-                <span style={{ color: 'var(--da-text-3)' }}>来源文件：</span>
-                {dataset?.sourceFileName ?? '-'}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Table preview card */}
-        <div style={cardStyle}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--da-text)' }}>
-              表格解析（前 {preview?.rows.length ?? 0} 行）
-            </div>
-            <button
-              onClick={() => setModalOpen(true)}
-              style={{
-                background: 'none', border: 'none', color: 'var(--da-primary)',
-                fontSize: '0.82rem', cursor: 'pointer', fontWeight: 500,
-                display: 'flex', alignItems: 'center', gap: 4,
-              }}
-            >
-              <Icon name="edit" size="sm" /> 修改字段类型/描述
-            </button>
-          </div>
-          {preview && preview.rows.length > 0 ? (
-            <div style={{ overflowX: 'auto' }}>
-              <table className="da-table">
-                <thead>
-                  <tr>
-                    {preview.columns.map(c => (
-                      <th key={c.name} style={thStyle}>
-                        <div style={{ fontWeight: 600, color: 'var(--da-text)', fontSize: '0.82rem', marginBottom: 3 }}>
-                          {c.originalName || c.name}
-                        </div>
-                        <div style={{ color: 'var(--da-text-2)', fontSize: '0.75rem', marginBottom: 4, lineHeight: 1.4 }}>
-                          {c.description || '—'}
-                        </div>
-                        <div style={{
-                          display: 'inline-block', padding: '1px 8px', borderRadius: 4,
-                          background: '#f0f0ff', color: '#6366f1', fontSize: '0.7rem',
-                          fontWeight: 600, marginBottom: 3,
-                        }}>
-                          {c.sqlType}
-                        </div>
-                        <div style={{ color: 'var(--da-text-3)', fontSize: '0.7rem', fontFamily: 'monospace' }}>
-                          {c.name}
-                        </div>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {preview.rows.map((r, i) => (
-                    <tr key={i}>
-                      {r.map((v, j) => (
-                        <td key={j} style={tdStyle} title={v ?? ''}>
-                          {v ?? ''}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div style={{ color: 'var(--da-text-muted)', fontSize: '0.85rem' }}>暂无数据行。</div>
-          )}
-        </div>
-
-        {/* Field edit modal */}
-        {modalOpen && dataset && (
-          <FieldEditModal
-            columns={dataset.columns}
-            edits={edits}
-            typeEdits={typeEdits}
-            onChange={handleFieldChange}
-            onSave={handleSave}
-            onClose={() => setModalOpen(false)}
-            busy={busy}
-          />
-        )}
-      </div>
     </div>
   );
 }

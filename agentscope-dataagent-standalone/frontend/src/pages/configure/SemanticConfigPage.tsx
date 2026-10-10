@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import BackToChatHeader from '../../components/BackToChatHeader';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { KnowledgeBreadcrumb } from '../../components/KnowledgeWorkspace';
 import Icon from '../../components/Icon';
 import {
   createSemanticTerm,
@@ -14,7 +14,7 @@ const panelStyle: React.CSSProperties = {
   flex: 1,
   minHeight: 0,
   overflow: 'auto',
-  padding: 24,
+  padding: '34px 36px 48px', maxWidth: 1480, width: '100%', boxSizing: 'border-box', margin: '0 auto',
 };
 
 const linkBtn: React.CSSProperties = {
@@ -109,29 +109,40 @@ export default function SemanticConfigPage() {
   const [page, setPage] = useState(1);
 
   useEffect(() => {
-    listGroups()
+    const controller = new AbortController();
+    listGroups(controller.signal)
       .then(gs => {
+        if (controller.signal.aborted) return;
         setGroups(gs);
         setGroupId(prev => prev || (gs[0]?.id ?? ''));
       })
-      .catch(e => setError(e instanceof Error ? e.message : String(e)));
+      .catch(e => { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : String(e)); });
+    return () => controller.abort();
   }, []);
 
+  const request = useRef<AbortController | null>(null);
   const refresh = useCallback(async () => {
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
     if (!groupId) {
       setTerms([]);
       return;
     }
     try {
-      setTerms(await listSemanticTerms(groupId));
+      const result = await listSemanticTerms(groupId, controller.signal);
+      if (controller.signal.aborted) return;
+      setTerms(result);
       setError(null);
     } catch (e) {
+      if (controller.signal.aborted) return;
       setError(e instanceof Error ? e.message : String(e));
     }
   }, [groupId]);
 
   useEffect(() => {
     refresh();
+    return () => request.current?.abort();
   }, [refresh]);
 
   const totalPages = Math.max(1, Math.ceil(terms.length / pageSize));
@@ -207,12 +218,10 @@ export default function SemanticConfigPage() {
   const canSave = draft.term.trim().length > 0 && !busy;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      <BackToChatHeader
-        title="语义配置"
-        subtitle="知识库业务名词 / 名词解析 / 同义词（按知识库存用，specs/026）"
-      />
+    <div className="kw-page kw-secondary-page">
+      <KnowledgeBreadcrumb items={[{ label: '返回对话', to: '/chat' }, { label: '业务术语' }]} />
       <div style={panelStyle}>
+        <div className="kw-pagehead"><div className="kw-heading"><h1>业务术语</h1><p>统一业务定义与常用表达，让数据分析遵循一致的口径。</p></div></div>
         {error && (
           <div
             style={{
@@ -228,7 +237,7 @@ export default function SemanticConfigPage() {
             {error}
           </div>
         )}
-        <div className="da-panel" style={{ padding: '16px 20px' }}>
+        <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
             <span
               className="da-small"
@@ -264,7 +273,7 @@ export default function SemanticConfigPage() {
                 setSynText('');
               }}
             >
-              添加词条
+              添加术语
             </button>
             <span style={{ flex: 1 }} />
             <button
@@ -276,11 +285,11 @@ export default function SemanticConfigPage() {
               <Icon name="refresh" size="sm" />
             </button>
           </div>
-          <table className="da-table">
+          <div className="kw-tablebox"><div className="kw-table-scroll"><table className="kw-table kw-terms-table">
             <thead>
               <tr>
-                <th style={{ width: '20%' }}>业务名词</th>
-                <th style={{ width: '38%' }}>名词解析</th>
+                <th style={{ width: '20%' }}>业务术语</th>
+                <th style={{ width: '38%' }}>业务定义</th>
                 <th style={{ width: '24%' }}>同义词</th>
                 <th style={{ width: '18%' }}>操作</th>
               </tr>
@@ -398,7 +407,7 @@ export default function SemanticConfigPage() {
               ))}
               {!adding && !groupId && (
                 <tr>
-                  <td colSpan={4} style={{ textAlign: 'center', padding: '28px 0' }}>
+                  <td colSpan={4} style={{ textAlign: 'center', padding: '64px 20px' }}>
                     <span
                       style={{
                         display: 'inline-flex',
@@ -415,7 +424,7 @@ export default function SemanticConfigPage() {
               )}
               {!adding && groupId && terms.length === 0 && (
                 <tr>
-                  <td colSpan={4} style={{ textAlign: 'center', padding: '28px 0' }}>
+                  <td colSpan={4} style={{ textAlign: 'center', padding: '64px 20px' }}>
                     <span
                       style={{
                         display: 'inline-flex',
@@ -425,13 +434,13 @@ export default function SemanticConfigPage() {
                         fontSize: 13,
                       }}
                     >
-                      <Icon name="file" size="sm" /> 暂无数据
+                      <Icon name="file" size="sm" /> 暂无业务术语，添加术语来说明你的业务口径
                     </span>
                   </td>
                 </tr>
               )}
             </tbody>
-          </table>
+          </table></div></div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 2px 2px' }}>
             <span className="da-small">共 {terms.length} 条</span>
             <span style={{ flex: 1 }} />

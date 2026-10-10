@@ -1,30 +1,11 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import BackToChatHeader from '../../components/BackToChatHeader';
+import { KnowledgeBreadcrumb, WorkspaceMenu } from '../../components/KnowledgeWorkspace';
 import DataSourceManagerModal from '../../components/DataSourceManagerModal';
 import EmptyIllustration from '../../components/EmptyIllustration';
 import Icon from '../../components/Icon';
 import { toast } from '../../components/Toast';
 import { createGroup, DatasetGroup, deleteGroup, listGroups, updateGroup } from '../../api/datasets';
-
-const helpStyle: React.CSSProperties = {
-  padding: '8px 24px',
-  fontSize: '0.78rem',
-  color: 'var(--da-text-3)',
-  background: 'var(--da-surface-sunken)',
-  borderBottom: '1px solid var(--da-border)',
-};
-
-const gridStyle: React.CSSProperties = {
-  flex: 1,
-  minHeight: 0,
-  overflow: 'auto',
-  padding: 24,
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-  gap: 16,
-  alignContent: 'start',
-};
 
 const NAME_RE = /^[一-龥A-Za-z0-9_-]{1,100}$/;
 
@@ -35,44 +16,38 @@ export default function DatasetsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editGroup, setEditGroup] = useState<DatasetGroup | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
-  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [dsOpen, setDsOpen] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState('date');
+  const [viewMode, setViewMode] = useState<'grid' | 'rows'>('grid');
 
+  const request = useRef<AbortController | null>(null);
   const refresh = useCallback(async () => {
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
     setLoading(true);
     try {
-      setGroups(await listGroups());
+      const result = await listGroups(controller.signal);
+      if (controller.signal.aborted) return;
+      setGroups(result);
       setError(null);
     } catch (e) {
+      if (controller.signal.aborted) return;
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
+      if (request.current === controller) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     refresh();
+    return () => request.current?.abort();
   }, [refresh]);
-
-  useEffect(() => {
-    if (!menuOpenId) return;
-    const close = (event: PointerEvent) => {
-      if (!(event.target as HTMLElement).closest('.da-card-menu')) setMenuOpenId(null);
-    };
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setMenuOpenId(null);
-    };
-    document.addEventListener('pointerdown', close);
-    document.addEventListener('keydown', escape);
-    return () => {
-      document.removeEventListener('pointerdown', close);
-      document.removeEventListener('keydown', escape);
-    };
-  }, [menuOpenId]);
 
   function openCreate() {
     setEditGroup(null);
@@ -82,9 +57,8 @@ export default function DatasetsPage() {
     setFormOpen(true);
   }
 
-  function openEdit(group: DatasetGroup, event: React.MouseEvent) {
-    event.stopPropagation();
-    setMenuOpenId(null);
+  function openEdit(group: DatasetGroup, event?: React.MouseEvent) {
+    event?.stopPropagation();
     setEditGroup(group);
     setName(group.name);
     setDescription(group.description ?? '');
@@ -120,9 +94,8 @@ export default function DatasetsPage() {
     }
   }
 
-  async function handleDelete(id: string, ev: React.MouseEvent) {
-    ev.stopPropagation();
-    setMenuOpenId(null);
+  async function handleDelete(id: string, ev?: React.MouseEvent) {
+    ev?.stopPropagation();
     if (!window.confirm('删除该知识库？其中的数据集表与关系文档将一并删除。')) return;
     setBusy(true);
     try {
@@ -136,103 +109,46 @@ export default function DatasetsPage() {
     }
   }
 
+  const filtered = groups.filter(g => `${g.name} ${g.description ?? ''}`.toLowerCase().includes(query.trim().toLowerCase()))
+    .sort((a, b) => sort === 'name' ? a.name.localeCompare(b.name, 'zh-CN') : (Date.parse(b.createdAt ?? '') || 0) - (Date.parse(a.createdAt ?? '') || 0));
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        minHeight: 0,
-        background: 'var(--da-canvas-bg)',
-      }}
-    >
-      <BackToChatHeader title="知识库" subtitle="组织数据集与关系文档，供问数时自动选用" />
-      <div style={helpStyle}>
-        知识库(KB)是数据集的容器：一个 KB 下可上传多张表与一份关系说明文档。问数时无需手动选择，
-        agent 会通过 list_data_sources 看到你的全部 KB 内容并自行选用。
-        {error && <span style={{ color: 'var(--da-danger)', marginLeft: 12 }}>{error}</span>}
-      </div>
-      <div style={{ padding: '16px 24px 0', display: 'flex', gap: 10 }}>
-        <button className="da-btn da-btn-primary" onClick={openCreate} disabled={busy}>
-          + 创建知识库
-        </button>
-        <button className="da-btn" onClick={() => setDsOpen(true)}>
-          数据源管理
-        </button>
-      </div>
-      <div style={gridStyle}>
-        {loading &&
-          [0, 1, 2, 3].map(i => (
-            <div key={i} className="da-card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div className="da-skeleton da-skeleton-line" style={{ width: '60%' }} />
-              <div className="da-skeleton da-skeleton-line" style={{ width: '90%' }} />
-              <div className="da-skeleton da-skeleton-line" style={{ width: '40%' }} />
-            </div>
-          ))}
-        {!loading && groups.length === 0 && (
-          <EmptyIllustration variant="table" caption="还没有知识库，点击「创建知识库」开始" />
-        )}
-        {groups.map((g, gi) => (
-          <div
-            key={g.id}
-            className="da-card da-card-hover da-enter"
-            style={{
-              cursor: 'pointer',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 8,
-              position: 'relative',
-              zIndex: menuOpenId === g.id ? 2 : undefined,
-              animationDelay: `${gi * 40}ms`,
-            }}
-            onClick={() => navigate(`/configure/datasets/${g.id}`)}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--da-text)', flex: 1 }}>
-                {g.name}
-              </span>
-              <button
-                title="基于该知识库问答"
-                className="da-btn da-btn-sm"
-                onClick={ev => {
-                  ev.stopPropagation();
-                  navigate(`/chat?groups=${encodeURIComponent(g.id)}`);
-                }}
-              >
-                <Icon name="chat" size="sm" /> 问答
-              </button>
-              <div className="da-card-menu" onClick={ev => ev.stopPropagation()}>
-                <button
-                  type="button"
-                  className="da-btn da-btn-sm"
-                  aria-label={`${g.name}的更多操作`}
-                  aria-expanded={menuOpenId === g.id}
-                  onClick={ev => { ev.stopPropagation(); setMenuOpenId(open => open === g.id ? null : g.id); }}
-                >
-                  <Icon name="moreHorizontal" size="sm" />
-                </button>
-                {menuOpenId === g.id && (
-                  <div className="da-card-menu-popover">
-                    <button type="button" onClick={ev => openEdit(g, ev)} disabled={busy}>
-                      <Icon name="edit" size="sm" /> 修改名称和说明
-                    </button>
-                    <button type="button" className="danger" onClick={ev => handleDelete(g.id, ev)} disabled={busy}>
-                      <Icon name="trash" size="sm" /> 删除知识库
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div style={{ fontSize: '0.78rem', color: 'var(--da-text-3)', minHeight: 32 }}>
-              {g.description || '—'}
-            </div>
-            <div style={{ fontSize: '0.72rem', color: 'var(--da-text-muted)' }}>
-              {g.datasetCount} 个数据集 · 创建于{' '}
-              {g.createdAt ? new Date(g.createdAt).toLocaleDateString() : '-'}
-            </div>
+    <div className="kw-page">
+      <KnowledgeBreadcrumb items={[{ label: '返回对话', to: '/chat' }, { label: '知识库' }]} />
+      <div className="kw-scroll"><div className="kw-content">
+        <div className="kw-pagehead">
+          <div className="kw-heading"><h1>知识库</h1><p>组织你的业务数据，让每一次分析都有清晰的依据。</p></div>
+          <div className="kw-actions">
+            <button className="da-btn" onClick={() => setDsOpen(true)}><Icon name="database" size="sm" />数据源管理</button>
+            <button className="da-btn da-btn-primary" onClick={openCreate} disabled={busy}><Icon name="plus" size="sm" />创建知识库</button>
           </div>
-        ))}
-      </div>
+        </div>
+        {error && <div className="kw-alert" role="alert">{error}<button className="da-btn da-btn-sm" onClick={refresh}>重试</button></div>}
+        <div className="kw-toolbar">
+          <label className="kw-search"><Icon name="search" size="sm" /><input aria-label="搜索知识库" placeholder="搜索知识库名称或说明" value={query} onChange={e => setQuery(e.target.value)} /></label>
+          <span className="kw-count">{loading ? '加载中…' : `${filtered.length} 个知识库`}</span><span className="kw-spacer" />
+          <select className="kw-select" aria-label="知识库排序" value={sort} onChange={e => setSort(e.target.value)}><option value="date">最近创建</option><option value="name">名称排序</option></select>
+          <div className="kw-viewtoggle"><button aria-label="卡片视图" aria-pressed={viewMode === 'grid'} className={viewMode === 'grid' ? 'active' : ''} onClick={() => setViewMode('grid')}><Icon name="table" size="sm" /></button><button aria-label="列表视图" aria-pressed={viewMode === 'rows'} className={viewMode === 'rows' ? 'active' : ''} onClick={() => setViewMode('rows')}><Icon name="list" size="sm" /></button></div>
+        </div>
+        <div className={viewMode === 'grid' ? 'kw-grid' : 'kw-rows'}>
+          {loading && [0, 1, 2].map(i => <div key={i} className="kw-card" style={{ padding: 24 }}><div className="da-skeleton da-skeleton-line" /><div className="da-skeleton da-skeleton-line" style={{ marginTop: 20 }} /></div>)}
+          {!loading && !error && filtered.map(g => <article key={g.id} className="kw-card" tabIndex={0} aria-label={`查看${g.name}`}
+            onClick={() => navigate(`/configure/datasets/${g.id}`)}
+            onKeyDown={e => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); navigate(`/configure/datasets/${g.id}`); } }}>
+            <div className="kw-cardtop"><div className="kw-icon"><Icon name="book" /></div><h2 title={g.name}>{g.name}</h2>
+              <WorkspaceMenu label={`${g.name}的更多操作`} items={[
+                { label: '查看详情', icon: 'book', onClick: () => navigate(`/configure/datasets/${g.id}`) },
+                { label: '编辑名称和说明', icon: 'edit', disabled: busy, onClick: () => openEdit(g) },
+                { label: '删除知识库', icon: 'trash', danger: true, disabled: busy, onClick: () => void handleDelete(g.id) },
+              ]} />
+            </div>
+            <p className="kw-description" title={g.description ?? ''} style={!g.description ? { color: 'var(--kw-muted)' } : undefined}>{g.description || '暂无说明'}</p>
+            <div className="kw-cardcreator" title={`创建人：${g.ownerUsername || '未知用户'}`}>创建人：{g.ownerUsername || '未知用户'}</div>
+            <div className="kw-cardmeta"><Icon name="table" size="sm" /><span>{g.datasetCount} 个数据集</span><span>·</span><span>{g.createdAt ? new Date(g.createdAt).toLocaleDateString('zh-CN') : '创建时间未知'}</span></div>
+            <div className="kw-cardfoot"><button onClick={e => { e.stopPropagation(); navigate(`/configure/datasets/${g.id}`); }}>查看详情 →</button><button onClick={e => { e.stopPropagation(); navigate(`/chat?groups=${encodeURIComponent(g.id)}`); }}><Icon name="chat" size="sm" />基于此库提问</button></div>
+          </article>)}
+        </div>
+        {!loading && !error && filtered.length === 0 && <div className="kw-empty">{groups.length ? '没有匹配的知识库，试试其他关键词。' : <EmptyIllustration variant="table" caption="还没有知识库，点击「创建知识库」开始" />}</div>}
+      </div></div>
 
       {formOpen && (
         <div className="da-modal-overlay" onClick={() => { if (!busy) setFormOpen(false); }}>

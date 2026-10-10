@@ -46,8 +46,9 @@ export async function summary(agentId: string): Promise<WorkspaceSummary> {
   return unwrap<WorkspaceSummary>(res);
 }
 
-export async function tree(agentId: string, recursive = true): Promise<FileNode[]> {
+export async function tree(agentId: string, recursive = true, signal?: AbortSignal): Promise<FileNode[]> {
   const res = await fetch(`${base(agentId)}/files?recursive=${recursive}`, {
+    signal,
     headers: authHeaders(),
   });
   return unwrap<FileNode[]>(res);

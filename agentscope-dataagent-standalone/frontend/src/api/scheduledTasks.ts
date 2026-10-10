@@ -49,8 +49,8 @@ async function errorMessage(res: Response, fallback: string): Promise<string> {
   }
 }
 
-export async function listScheduledTasks(): Promise<ScheduledTask[]> {
-  const res = await fetch('/api/scheduled-tasks', { headers: jsonHeaders() });
+export async function listScheduledTasks(signal?: AbortSignal): Promise<ScheduledTask[]> {
+  const res = await fetch('/api/scheduled-tasks', { headers: jsonHeaders(), signal });
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to list tasks: ${res.status}`));
   return res.json();
 }

@@ -53,7 +53,10 @@ class DatasetGroupControllerTest {
                         mock(DatasetGroupService.class),
                         datasetService,
                         mock(DocEnhanceService.class),
-                        baselineMdlService);
+                        baselineMdlService,
+                        mock(
+                                io.agentscope.dataagent.web.persistence.jpa.UserEntityRepository
+                                        .class));
         when(datasetService.readColumns(any())).thenReturn(List.of());
     }
 

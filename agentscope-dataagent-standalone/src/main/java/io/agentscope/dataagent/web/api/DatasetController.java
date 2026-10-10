@@ -295,6 +295,21 @@ public class DatasetController {
                 .onErrorMap(this::toStatus);
     }
 
+    public record DescriptionUpdate(String description) {}
+
+    @PutMapping("/{id}/description")
+    public Mono<DatasetVO> updateDescription(
+            @PathVariable String id, @RequestBody DescriptionUpdate update, Authentication auth) {
+        String userId = (String) auth.getPrincipal();
+        return Mono.fromCallable(
+                        () ->
+                                toVO(
+                                        datasetService.updateDescription(
+                                                userId, id, update.description())))
+                .subscribeOn(Schedulers.boundedElastic())
+                .onErrorMap(this::toStatus);
+    }
+
     @PutMapping("/{id}/columns")
     public Mono<DatasetVO> updateColumns(
             @PathVariable String id,

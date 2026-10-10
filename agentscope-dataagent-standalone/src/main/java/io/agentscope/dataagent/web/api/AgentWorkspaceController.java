@@ -123,11 +123,12 @@ public class AgentWorkspaceController {
     public Mono<WorkspaceSummary> summary(@PathVariable String agentId, Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
-                () -> {
-                    guard.require(userId, agentId, Tier.RUN);
-                    WorkspaceContext ctx = resolveContext(userId, agentId);
-                    return summarize(agentId, ctx);
-                });
+                        () -> {
+                            guard.require(userId, agentId, Tier.RUN);
+                            WorkspaceContext ctx = resolveContext(userId, agentId);
+                            return summarize(agentId, ctx);
+                        })
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
 
     @PostMapping("/scaffold")
@@ -137,23 +138,29 @@ public class AgentWorkspaceController {
             Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
-                () -> {
-                    guard.require(userId, agentId, Tier.EDIT);
-                    WorkspaceContext ctx = resolveContext(userId, agentId);
-                    AbstractFilesystem fs = ctx.manager().getFilesystem();
-                    RuntimeContext rc = RuntimeContext.empty();
-                    // skills/, subagents/, memory/ are virtual via composite routes — no mkdir
-                    // needed. Only AGENTS.md needs materialisation, and only if missing.
-                    if (!fs.exists(rc, "AGENTS.md")) {
-                        String displayName = agentName.isBlank() ? agentId : agentName;
-                        ctx.manager()
-                                .writeUtf8WorkspaceRelative(
-                                        rc,
-                                        "AGENTS.md",
-                                        "# " + displayName + "\n\nYou are " + displayName + ".\n");
-                    }
-                    return summarize(agentId, ctx);
-                });
+                        () -> {
+                            guard.require(userId, agentId, Tier.EDIT);
+                            WorkspaceContext ctx = resolveContext(userId, agentId);
+                            AbstractFilesystem fs = ctx.manager().getFilesystem();
+                            RuntimeContext rc = RuntimeContext.empty();
+                            // skills/, subagents/, memory/ are virtual via composite routes — no
+                            // mkdir
+                            // needed. Only AGENTS.md needs materialisation, and only if missing.
+                            if (!fs.exists(rc, "AGENTS.md")) {
+                                String displayName = agentName.isBlank() ? agentId : agentName;
+                                ctx.manager()
+                                        .writeUtf8WorkspaceRelative(
+                                                rc,
+                                                "AGENTS.md",
+                                                "# "
+                                                        + displayName
+                                                        + "\n\nYou are "
+                                                        + displayName
+                                                        + ".\n");
+                            }
+                            return summarize(agentId, ctx);
+                        })
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
 
     // -----------------------------------------------------------------
@@ -164,32 +171,37 @@ public class AgentWorkspaceController {
     public Mono<MemoryView> memory(@PathVariable String agentId, Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
-                () -> {
-                    guard.require(userId, agentId, Tier.RUN);
-                    WorkspaceContext ctx = resolveContext(userId, agentId);
-                    AbstractFilesystem fs = ctx.manager().getFilesystem();
-                    RuntimeContext rc = RuntimeContext.empty();
-                    String memoryContent = null;
-                    if (fs.exists(rc, "MEMORY.md")) {
-                        ReadResult rr = fs.read(rc, "MEMORY.md", 0, 50000);
-                        if (rr.isSuccess()) {
-                            memoryContent = rr.fileData().content();
-                        }
-                    }
-                    List<DailyMemoryFile> dailyFiles = new ArrayList<>();
-                    LsResult ls = fs.ls(rc, "/memory");
-                    if (ls.isSuccess() && ls.entries() != null) {
-                        ls.entries().stream()
-                                .filter(fi -> !fi.isDirectory() && fi.path().endsWith(".md"))
-                                .sorted(Comparator.comparing(FileInfo::path).reversed())
-                                .forEach(
-                                        fi ->
-                                                dailyFiles.add(
-                                                        new DailyMemoryFile(
-                                                                fileName(fi.path()), fi.size())));
-                    }
-                    return new MemoryView(memoryContent, dailyFiles);
-                });
+                        () -> {
+                            guard.require(userId, agentId, Tier.RUN);
+                            WorkspaceContext ctx = resolveContext(userId, agentId);
+                            AbstractFilesystem fs = ctx.manager().getFilesystem();
+                            RuntimeContext rc = RuntimeContext.empty();
+                            String memoryContent = null;
+                            if (fs.exists(rc, "MEMORY.md")) {
+                                ReadResult rr = fs.read(rc, "MEMORY.md", 0, 50000);
+                                if (rr.isSuccess()) {
+                                    memoryContent = rr.fileData().content();
+                                }
+                            }
+                            List<DailyMemoryFile> dailyFiles = new ArrayList<>();
+                            LsResult ls = fs.ls(rc, "/memory");
+                            if (ls.isSuccess() && ls.entries() != null) {
+                                ls.entries().stream()
+                                        .filter(
+                                                fi ->
+                                                        !fi.isDirectory()
+                                                                && fi.path().endsWith(".md"))
+                                        .sorted(Comparator.comparing(FileInfo::path).reversed())
+                                        .forEach(
+                                                fi ->
+                                                        dailyFiles.add(
+                                                                new DailyMemoryFile(
+                                                                        fileName(fi.path()),
+                                                                        fi.size())));
+                            }
+                            return new MemoryView(memoryContent, dailyFiles);
+                        })
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
 
     // -----------------------------------------------------------------
@@ -203,12 +215,19 @@ public class AgentWorkspaceController {
             Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
-                () -> {
-                    guard.require(userId, agentId, Tier.RUN);
-                    WorkspaceContext ctx = resolveContext(userId, agentId);
-                    AbstractFilesystem fs = ctx.manager().getFilesystem();
-                    return collectChildrenFs(fs, "/", recursive ? 6 : 1);
-                });
+                        () -> {
+                            guard.require(userId, agentId, Tier.RUN);
+                            WorkspaceContext ctx = resolveContext(userId, agentId);
+                            AbstractFilesystem fs = ctx.manager().getFilesystem();
+                            return collectChildrenFs(fs, "", recursive ? 6 : 1, new TreeBudget());
+                        })
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
+                .timeout(java.time.Duration.ofSeconds(15))
+                .onErrorMap(
+                        java.util.concurrent.TimeoutException.class,
+                        e ->
+                                new ResponseStatusException(
+                                        HttpStatus.GATEWAY_TIMEOUT, "工作区文件扫描超时", e));
     }
 
     @GetMapping("/file")
@@ -216,30 +235,34 @@ public class AgentWorkspaceController {
             @PathVariable String agentId, @RequestParam("path") String path, Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
-                () -> {
-                    guard.require(userId, agentId, Tier.RUN);
-                    String rel = validateRelPath(path);
-                    WorkspaceContext ctx = resolveContext(userId, agentId);
-                    AbstractFilesystem fs = ctx.manager().getFilesystem();
-                    RuntimeContext rc = RuntimeContext.empty();
-                    if (!fs.exists(rc, rel)) {
-                        throw new ResponseStatusException(
-                                HttpStatus.NOT_FOUND, "File not found: " + path);
-                    }
-                    ReadResult rr = fs.read(rc, rel, 0, 0);
-                    if (!rr.isSuccess()) {
-                        throw new ResponseStatusException(
-                                HttpStatus.INTERNAL_SERVER_ERROR, "Read failed: " + rr.error());
-                    }
-                    String content =
-                            rr.fileData() != null && rr.fileData().content() != null
-                                    ? rr.fileData().content()
-                                    : "";
-                    if (content.length() > MAX_FILE_SIZE) {
-                        return "(file too large to display: " + content.length() + " bytes)";
-                    }
-                    return content;
-                });
+                        () -> {
+                            guard.require(userId, agentId, Tier.RUN);
+                            String rel = validateRelPath(path);
+                            WorkspaceContext ctx = resolveContext(userId, agentId);
+                            AbstractFilesystem fs = ctx.manager().getFilesystem();
+                            RuntimeContext rc = RuntimeContext.empty();
+                            if (!fs.exists(rc, rel)) {
+                                throw new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND, "File not found: " + path);
+                            }
+                            ReadResult rr = fs.read(rc, rel, 0, 0);
+                            if (!rr.isSuccess()) {
+                                throw new ResponseStatusException(
+                                        HttpStatus.INTERNAL_SERVER_ERROR,
+                                        "Read failed: " + rr.error());
+                            }
+                            String content =
+                                    rr.fileData() != null && rr.fileData().content() != null
+                                            ? rr.fileData().content()
+                                            : "";
+                            if (content.length() > MAX_FILE_SIZE) {
+                                return "(file too large to display: "
+                                        + content.length()
+                                        + " bytes)";
+                            }
+                            return content;
+                        })
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
 
     /**
@@ -336,33 +359,37 @@ public class AgentWorkspaceController {
             Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
-                () -> {
-                    guard.require(userId, agentId, Tier.EDIT);
-                    String rel = validateRelPath(path);
-                    WorkspaceContext ctx = resolveContext(userId, agentId);
-                    AbstractFilesystem fs = ctx.manager().getFilesystem();
-                    RuntimeContext rc = RuntimeContext.empty();
-                    if (isDirectoryEntry(fs, rc, rel)) {
-                        throw new ResponseStatusException(
-                                HttpStatus.CONFLICT, "Path is a directory: " + path);
-                    }
-                    boolean existed = fs.exists(rc, rel);
-                    String content = req != null && req.content() != null ? req.content() : "";
-                    ctx.manager().writeUtf8WorkspaceRelative(rc, rel, content);
-                    if (ctx.ownerId() != null) {
-                        activity.record(
-                                ctx.ownerId(),
-                                agentId,
-                                activity.actor(userId),
-                                existed
-                                        ? ActivityEvent.Action.EDIT_FILE
-                                        : ActivityEvent.Action.CREATE_FILE,
-                                path,
-                                null);
-                    }
-                    return fileNode(
-                            rel, false, (long) content.getBytes(StandardCharsets.UTF_8).length);
-                });
+                        () -> {
+                            guard.require(userId, agentId, Tier.EDIT);
+                            String rel = validateRelPath(path);
+                            WorkspaceContext ctx = resolveContext(userId, agentId);
+                            AbstractFilesystem fs = ctx.manager().getFilesystem();
+                            RuntimeContext rc = RuntimeContext.empty();
+                            if (isDirectoryEntry(fs, rc, rel)) {
+                                throw new ResponseStatusException(
+                                        HttpStatus.CONFLICT, "Path is a directory: " + path);
+                            }
+                            boolean existed = fs.exists(rc, rel);
+                            String content =
+                                    req != null && req.content() != null ? req.content() : "";
+                            ctx.manager().writeUtf8WorkspaceRelative(rc, rel, content);
+                            if (ctx.ownerId() != null) {
+                                activity.record(
+                                        ctx.ownerId(),
+                                        agentId,
+                                        activity.actor(userId),
+                                        existed
+                                                ? ActivityEvent.Action.EDIT_FILE
+                                                : ActivityEvent.Action.CREATE_FILE,
+                                        path,
+                                        null);
+                            }
+                            return fileNode(
+                                    rel,
+                                    false,
+                                    (long) content.getBytes(StandardCharsets.UTF_8).length);
+                        })
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
 
     @PostMapping("/file")
@@ -374,30 +401,31 @@ public class AgentWorkspaceController {
             Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
-                () -> {
-                    guard.require(userId, agentId, Tier.EDIT);
-                    String rel = validateRelPath(path);
-                    WorkspaceContext ctx = resolveContext(userId, agentId);
-                    AbstractFilesystem fs = ctx.manager().getFilesystem();
-                    RuntimeContext rc = RuntimeContext.empty();
-                    boolean isDir = "dir".equalsIgnoreCase(type);
-                    String materialised = isDir ? rel + "/.keep" : rel;
-                    if (fs.exists(rc, materialised)) {
-                        throw new ResponseStatusException(
-                                HttpStatus.CONFLICT, "Already exists: " + path);
-                    }
-                    ctx.manager().writeUtf8WorkspaceRelative(rc, materialised, "");
-                    if (ctx.ownerId() != null && !isDir) {
-                        activity.record(
-                                ctx.ownerId(),
-                                agentId,
-                                activity.actor(userId),
-                                ActivityEvent.Action.CREATE_FILE,
-                                path,
-                                null);
-                    }
-                    return fileNode(rel, isDir, isDir ? null : 0L);
-                });
+                        () -> {
+                            guard.require(userId, agentId, Tier.EDIT);
+                            String rel = validateRelPath(path);
+                            WorkspaceContext ctx = resolveContext(userId, agentId);
+                            AbstractFilesystem fs = ctx.manager().getFilesystem();
+                            RuntimeContext rc = RuntimeContext.empty();
+                            boolean isDir = "dir".equalsIgnoreCase(type);
+                            String materialised = isDir ? rel + "/.keep" : rel;
+                            if (fs.exists(rc, materialised)) {
+                                throw new ResponseStatusException(
+                                        HttpStatus.CONFLICT, "Already exists: " + path);
+                            }
+                            ctx.manager().writeUtf8WorkspaceRelative(rc, materialised, "");
+                            if (ctx.ownerId() != null && !isDir) {
+                                activity.record(
+                                        ctx.ownerId(),
+                                        agentId,
+                                        activity.actor(userId),
+                                        ActivityEvent.Action.CREATE_FILE,
+                                        path,
+                                        null);
+                            }
+                            return fileNode(rel, isDir, isDir ? null : 0L);
+                        })
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
 
     @PostMapping("/file/move")
@@ -405,41 +433,43 @@ public class AgentWorkspaceController {
             @PathVariable String agentId, @RequestBody MoveRequest req, Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
-                () -> {
-                    if (req == null || req.from() == null || req.to() == null) {
-                        throw new ResponseStatusException(
-                                HttpStatus.BAD_REQUEST, "from and to are required");
-                    }
-                    guard.require(userId, agentId, Tier.EDIT);
-                    String fromRel = validateRelPath(req.from());
-                    String toRel = validateRelPath(req.to());
-                    WorkspaceContext ctx = resolveContext(userId, agentId);
-                    AbstractFilesystem fs = ctx.manager().getFilesystem();
-                    RuntimeContext rc = RuntimeContext.empty();
-                    if (!fs.exists(rc, fromRel)) {
-                        throw new ResponseStatusException(
-                                HttpStatus.NOT_FOUND, "Source not found: " + req.from());
-                    }
-                    if (fs.exists(rc, toRel)) {
-                        throw new ResponseStatusException(
-                                HttpStatus.CONFLICT, "Target already exists: " + req.to());
-                    }
-                    WriteResult mv = fs.move(rc, fromRel, toRel);
-                    if (!mv.isSuccess()) {
-                        throw new ResponseStatusException(
-                                HttpStatus.INTERNAL_SERVER_ERROR, "Move failed: " + mv.error());
-                    }
-                    if (ctx.ownerId() != null) {
-                        activity.record(
-                                ctx.ownerId(),
-                                agentId,
-                                activity.actor(userId),
-                                ActivityEvent.Action.RENAME_FILE,
-                                req.to(),
-                                Map.of("from", req.from()));
-                    }
-                    return fileNode(toRel, isDirectoryEntry(fs, rc, toRel), null);
-                });
+                        () -> {
+                            if (req == null || req.from() == null || req.to() == null) {
+                                throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST, "from and to are required");
+                            }
+                            guard.require(userId, agentId, Tier.EDIT);
+                            String fromRel = validateRelPath(req.from());
+                            String toRel = validateRelPath(req.to());
+                            WorkspaceContext ctx = resolveContext(userId, agentId);
+                            AbstractFilesystem fs = ctx.manager().getFilesystem();
+                            RuntimeContext rc = RuntimeContext.empty();
+                            if (!fs.exists(rc, fromRel)) {
+                                throw new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND, "Source not found: " + req.from());
+                            }
+                            if (fs.exists(rc, toRel)) {
+                                throw new ResponseStatusException(
+                                        HttpStatus.CONFLICT, "Target already exists: " + req.to());
+                            }
+                            WriteResult mv = fs.move(rc, fromRel, toRel);
+                            if (!mv.isSuccess()) {
+                                throw new ResponseStatusException(
+                                        HttpStatus.INTERNAL_SERVER_ERROR,
+                                        "Move failed: " + mv.error());
+                            }
+                            if (ctx.ownerId() != null) {
+                                activity.record(
+                                        ctx.ownerId(),
+                                        agentId,
+                                        activity.actor(userId),
+                                        ActivityEvent.Action.RENAME_FILE,
+                                        req.to(),
+                                        Map.of("from", req.from()));
+                            }
+                            return fileNode(toRel, isDirectoryEntry(fs, rc, toRel), null);
+                        })
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
 
     @DeleteMapping("/file")
@@ -447,32 +477,34 @@ public class AgentWorkspaceController {
     public Mono<Void> deleteNode(
             @PathVariable String agentId, @RequestParam("path") String path, Authentication auth) {
         String userId = (String) auth.getPrincipal();
-        return Mono.fromRunnable(
-                () -> {
-                    guard.require(userId, agentId, Tier.EDIT);
-                    String rel = validateRelPath(path);
-                    WorkspaceContext ctx = resolveContext(userId, agentId);
-                    AbstractFilesystem fs = ctx.manager().getFilesystem();
-                    RuntimeContext rc = RuntimeContext.empty();
-                    if (!fs.exists(rc, rel)) {
-                        throw new ResponseStatusException(
-                                HttpStatus.NOT_FOUND, "Not found: " + path);
-                    }
-                    WriteResult wr = fs.delete(rc, rel);
-                    if (!wr.isSuccess()) {
-                        throw new ResponseStatusException(
-                                HttpStatus.INTERNAL_SERVER_ERROR, "Delete failed: " + wr.error());
-                    }
-                    if (ctx.ownerId() != null) {
-                        activity.record(
-                                ctx.ownerId(),
-                                agentId,
-                                activity.actor(userId),
-                                ActivityEvent.Action.DELETE_FILE,
-                                path,
-                                null);
-                    }
-                });
+        return Mono.<Void>fromRunnable(
+                        () -> {
+                            guard.require(userId, agentId, Tier.EDIT);
+                            String rel = validateRelPath(path);
+                            WorkspaceContext ctx = resolveContext(userId, agentId);
+                            AbstractFilesystem fs = ctx.manager().getFilesystem();
+                            RuntimeContext rc = RuntimeContext.empty();
+                            if (!fs.exists(rc, rel)) {
+                                throw new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND, "Not found: " + path);
+                            }
+                            WriteResult wr = fs.delete(rc, rel);
+                            if (!wr.isSuccess()) {
+                                throw new ResponseStatusException(
+                                        HttpStatus.INTERNAL_SERVER_ERROR,
+                                        "Delete failed: " + wr.error());
+                            }
+                            if (ctx.ownerId() != null) {
+                                activity.record(
+                                        ctx.ownerId(),
+                                        agentId,
+                                        activity.actor(userId),
+                                        ActivityEvent.Action.DELETE_FILE,
+                                        path,
+                                        null);
+                            }
+                        })
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
 
     @PostMapping("/upload")
@@ -533,8 +565,11 @@ public class AgentWorkspaceController {
                                                 }
                                                 return fileNode(
                                                         targetRel, false, (long) bytes.length);
-                                            });
-                        });
+                                            })
+                                    .subscribeOn(
+                                            reactor.core.scheduler.Schedulers.boundedElastic());
+                        })
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
 
     // -----------------------------------------------------------------
@@ -546,36 +581,38 @@ public class AgentWorkspaceController {
             @PathVariable String agentId, Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
-                () -> {
-                    guard.require(userId, agentId, Tier.RUN);
-                    WorkspaceContext ctx = resolveContext(userId, agentId);
-                    AbstractFilesystem fs = ctx.manager().getFilesystem();
-                    RuntimeContext rc = RuntimeContext.empty();
-                    LsResult ls = fs.ls(rc, "/subagents");
-                    if (!ls.isSuccess() || ls.entries() == null) {
-                        return List.<SubagentInfo>of();
-                    }
-                    List<SubagentInfo> result = new ArrayList<>();
-                    for (FileInfo fi : ls.entries()) {
-                        String entryPath = fi.path();
-                        if (fi.isDirectory() || !entryPath.endsWith(".md")) {
-                            continue;
-                        }
-                        ReadResult rr = fs.read(rc, "subagents/" + fileName(entryPath), 0, 50000);
-                        if (!rr.isSuccess()) {
-                            continue;
-                        }
-                        String markdown = rr.fileData().content();
-                        String name = stripMdExtension(fileName(entryPath));
-                        SubagentDeclaration decl =
-                                AgentSpecLoader.parse(markdown, name, ctx.workspace());
-                        if (decl != null) {
-                            result.add(toSubagentInfo(decl));
-                        }
-                    }
-                    result.sort(Comparator.comparing(SubagentInfo::name));
-                    return result;
-                });
+                        () -> {
+                            guard.require(userId, agentId, Tier.RUN);
+                            WorkspaceContext ctx = resolveContext(userId, agentId);
+                            AbstractFilesystem fs = ctx.manager().getFilesystem();
+                            RuntimeContext rc = RuntimeContext.empty();
+                            LsResult ls = fs.ls(rc, "/subagents");
+                            if (!ls.isSuccess() || ls.entries() == null) {
+                                return List.<SubagentInfo>of();
+                            }
+                            List<SubagentInfo> result = new ArrayList<>();
+                            for (FileInfo fi : ls.entries()) {
+                                String entryPath = fi.path();
+                                if (fi.isDirectory() || !entryPath.endsWith(".md")) {
+                                    continue;
+                                }
+                                ReadResult rr =
+                                        fs.read(rc, "subagents/" + fileName(entryPath), 0, 50000);
+                                if (!rr.isSuccess()) {
+                                    continue;
+                                }
+                                String markdown = rr.fileData().content();
+                                String name = stripMdExtension(fileName(entryPath));
+                                SubagentDeclaration decl =
+                                        AgentSpecLoader.parse(markdown, name, ctx.workspace());
+                                if (decl != null) {
+                                    result.add(toSubagentInfo(decl));
+                                }
+                            }
+                            result.sort(Comparator.comparing(SubagentInfo::name));
+                            return result;
+                        })
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
 
     @PutMapping("/subagents/{name}")
@@ -586,27 +623,32 @@ public class AgentWorkspaceController {
             Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
-                () -> {
-                    guard.require(userId, agentId, Tier.EDIT);
-                    if (req == null || req.description() == null || req.description().isBlank()) {
-                        throw new ResponseStatusException(
-                                HttpStatus.BAD_REQUEST, "description is required");
-                    }
-                    validateSubagentName(name);
-                    WorkspaceContext ctx = resolveContext(userId, agentId);
-                    String markdown = renderSubagentMarkdown(req);
-                    ctx.manager()
-                            .writeUtf8WorkspaceRelative(
-                                    RuntimeContext.empty(), "subagents/" + name + ".md", markdown);
-                    SubagentDeclaration decl =
-                            AgentSpecLoader.parse(markdown, name, ctx.workspace());
-                    if (decl == null) {
-                        throw new ResponseStatusException(
-                                HttpStatus.INTERNAL_SERVER_ERROR,
-                                "Generated markdown failed to parse");
-                    }
-                    return toSubagentInfo(decl);
-                });
+                        () -> {
+                            guard.require(userId, agentId, Tier.EDIT);
+                            if (req == null
+                                    || req.description() == null
+                                    || req.description().isBlank()) {
+                                throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST, "description is required");
+                            }
+                            validateSubagentName(name);
+                            WorkspaceContext ctx = resolveContext(userId, agentId);
+                            String markdown = renderSubagentMarkdown(req);
+                            ctx.manager()
+                                    .writeUtf8WorkspaceRelative(
+                                            RuntimeContext.empty(),
+                                            "subagents/" + name + ".md",
+                                            markdown);
+                            SubagentDeclaration decl =
+                                    AgentSpecLoader.parse(markdown, name, ctx.workspace());
+                            if (decl == null) {
+                                throw new ResponseStatusException(
+                                        HttpStatus.INTERNAL_SERVER_ERROR,
+                                        "Generated markdown failed to parse");
+                            }
+                            return toSubagentInfo(decl);
+                        })
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
 
     @PostMapping("/subagents/from-agent")
@@ -615,59 +657,61 @@ public class AgentWorkspaceController {
             @PathVariable String agentId, @RequestBody FromAgentRequest req, Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
-                () -> {
-                    guard.require(userId, agentId, Tier.EDIT);
-                    if (req == null
-                            || req.sourceAgentId() == null
-                            || req.sourceAgentId().isBlank()) {
-                        throw new ResponseStatusException(
-                                HttpStatus.BAD_REQUEST, "sourceAgentId is required");
-                    }
-                    AgentDefinition source =
-                            catalogService
-                                    .findVisible(userId, req.sourceAgentId())
-                                    .orElseThrow(
-                                            () ->
-                                                    new ResponseStatusException(
-                                                            HttpStatus.NOT_FOUND,
-                                                            "Source agent not found: "
-                                                                    + req.sourceAgentId()));
-                    String subName =
-                            (req.name() != null && !req.name().isBlank())
-                                    ? req.name()
-                                    : req.sourceAgentId();
-                    validateSubagentName(subName);
+                        () -> {
+                            guard.require(userId, agentId, Tier.EDIT);
+                            if (req == null
+                                    || req.sourceAgentId() == null
+                                    || req.sourceAgentId().isBlank()) {
+                                throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST, "sourceAgentId is required");
+                            }
+                            AgentDefinition source =
+                                    catalogService
+                                            .findVisible(userId, req.sourceAgentId())
+                                            .orElseThrow(
+                                                    () ->
+                                                            new ResponseStatusException(
+                                                                    HttpStatus.NOT_FOUND,
+                                                                    "Source agent not found: "
+                                                                            + req.sourceAgentId()));
+                            String subName =
+                                    (req.name() != null && !req.name().isBlank())
+                                            ? req.name()
+                                            : req.sourceAgentId();
+                            validateSubagentName(subName);
 
-                    String description =
-                            (source.description() != null && !source.description().isBlank())
-                                    ? source.description()
-                                    : source.name();
-                    SubagentUpsertRequest upsert =
-                            new SubagentUpsertRequest(
-                                    description,
-                                    source.model(),
-                                    source.maxIters(),
-                                    source.tools(),
-                                    "shared",
-                                    null,
-                                    source.sysPrompt(),
-                                    req.sourceAgentId());
-                    String markdown = renderSubagentMarkdown(upsert);
-                    WorkspaceContext ctx = resolveContext(userId, agentId);
-                    ctx.manager()
-                            .writeUtf8WorkspaceRelative(
-                                    RuntimeContext.empty(),
-                                    "subagents/" + subName + ".md",
-                                    markdown);
-                    SubagentDeclaration decl =
-                            AgentSpecLoader.parse(markdown, subName, ctx.workspace());
-                    if (decl == null) {
-                        throw new ResponseStatusException(
-                                HttpStatus.INTERNAL_SERVER_ERROR,
-                                "Generated markdown failed to parse");
-                    }
-                    return toSubagentInfo(decl);
-                });
+                            String description =
+                                    (source.description() != null
+                                                    && !source.description().isBlank())
+                                            ? source.description()
+                                            : source.name();
+                            SubagentUpsertRequest upsert =
+                                    new SubagentUpsertRequest(
+                                            description,
+                                            source.model(),
+                                            source.maxIters(),
+                                            source.tools(),
+                                            "shared",
+                                            null,
+                                            source.sysPrompt(),
+                                            req.sourceAgentId());
+                            String markdown = renderSubagentMarkdown(upsert);
+                            WorkspaceContext ctx = resolveContext(userId, agentId);
+                            ctx.manager()
+                                    .writeUtf8WorkspaceRelative(
+                                            RuntimeContext.empty(),
+                                            "subagents/" + subName + ".md",
+                                            markdown);
+                            SubagentDeclaration decl =
+                                    AgentSpecLoader.parse(markdown, subName, ctx.workspace());
+                            if (decl == null) {
+                                throw new ResponseStatusException(
+                                        HttpStatus.INTERNAL_SERVER_ERROR,
+                                        "Generated markdown failed to parse");
+                            }
+                            return toSubagentInfo(decl);
+                        })
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
 
     @DeleteMapping("/subagents/{name}")
@@ -675,23 +719,25 @@ public class AgentWorkspaceController {
     public Mono<Void> deleteSubagent(
             @PathVariable String agentId, @PathVariable String name, Authentication auth) {
         String userId = (String) auth.getPrincipal();
-        return Mono.fromRunnable(
-                () -> {
-                    guard.require(userId, agentId, Tier.EDIT);
-                    validateSubagentName(name);
-                    WorkspaceContext ctx = resolveContext(userId, agentId);
-                    AbstractFilesystem fs = ctx.manager().getFilesystem();
-                    String path = "subagents/" + name + ".md";
-                    if (!fs.exists(RuntimeContext.empty(), path)) {
-                        throw new ResponseStatusException(
-                                HttpStatus.NOT_FOUND, "Subagent not found: " + name);
-                    }
-                    WriteResult wr = fs.delete(RuntimeContext.empty(), path);
-                    if (!wr.isSuccess()) {
-                        throw new ResponseStatusException(
-                                HttpStatus.INTERNAL_SERVER_ERROR, "Delete failed: " + wr.error());
-                    }
-                });
+        return Mono.<Void>fromRunnable(
+                        () -> {
+                            guard.require(userId, agentId, Tier.EDIT);
+                            validateSubagentName(name);
+                            WorkspaceContext ctx = resolveContext(userId, agentId);
+                            AbstractFilesystem fs = ctx.manager().getFilesystem();
+                            String path = "subagents/" + name + ".md";
+                            if (!fs.exists(RuntimeContext.empty(), path)) {
+                                throw new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND, "Subagent not found: " + name);
+                            }
+                            WriteResult wr = fs.delete(RuntimeContext.empty(), path);
+                            if (!wr.isSuccess()) {
+                                throw new ResponseStatusException(
+                                        HttpStatus.INTERNAL_SERVER_ERROR,
+                                        "Delete failed: " + wr.error());
+                            }
+                        })
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
 
     // -----------------------------------------------------------------
@@ -795,19 +841,42 @@ public class AgentWorkspaceController {
      * a routed virtual directory ({@code /memory/}) and a same-named entry from the default
      * store, in which case the routed entry wins.
      */
+    private static final class TreeBudget {
+        private final long deadline =
+                System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
+        private int nodes;
+
+        void check() {
+            if (Thread.currentThread().isInterrupted()) {
+                throw new java.util.concurrent.CancellationException("Workspace scan cancelled");
+            }
+            if (System.nanoTime() > deadline) {
+                throw new ResponseStatusException(
+                        HttpStatus.GATEWAY_TIMEOUT, "工作区文件扫描超时，请减少目录层级后重试");
+            }
+        }
+    }
+
     private static List<FileNode> collectChildrenFs(
-            AbstractFilesystem fs, String absPath, int depth) {
+            AbstractFilesystem fs, String absPath, int depth, TreeBudget budget) {
         List<FileNode> out = new ArrayList<>();
+        budget.check();
         if (depth <= 0) {
             return out;
         }
-        LsResult ls = fs.ls(RuntimeContext.empty(), absPath);
+        // Sandbox commands run in /workspace; absolute "/" would scan the container OS.
+        LsResult ls = fs.ls(RuntimeContext.empty(), absPath.isEmpty() ? "." : absPath);
         if (!ls.isSuccess() || ls.entries() == null) {
             return out;
         }
         java.util.LinkedHashMap<String, FileNode> bySeg = new java.util.LinkedHashMap<>();
         String prefix = "/".equals(absPath) ? "" : trimTrailingSlash(absPath) + "/";
         for (FileInfo fi : ls.entries()) {
+            budget.check();
+            if (++budget.nodes > 2000) {
+                throw new ResponseStatusException(
+                        HttpStatus.PAYLOAD_TOO_LARGE, "工作区文件超过 2000 项，请整理文件后重试");
+            }
             String basename = basenameFromFiPath(fi.path());
             if (basename.isEmpty() || basename.equals(".") || basename.equals("..")) {
                 continue;
@@ -819,8 +888,8 @@ public class AgentWorkspaceController {
                                     ? prefix.substring(1) + basename
                                     : prefix + basename);
             if (fi.isDirectory()) {
-                String childAbs = "/" + rel;
-                List<FileNode> children = collectChildrenFs(fs, childAbs, depth - 1);
+                String childAbs = rel;
+                List<FileNode> children = collectChildrenFs(fs, childAbs, depth - 1, budget);
                 bySeg.put(basename, new FileNode(basename, rel, "dir", null, children));
             } else {
                 if (!bySeg.containsKey(basename)) {

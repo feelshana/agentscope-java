@@ -25,6 +25,8 @@ import io.agentscope.dataagent.dataset.parser.DocxDescriptionExtractor;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetRelationEntity;
+import io.agentscope.dataagent.web.persistence.jpa.UserEntity;
+import io.agentscope.dataagent.web.persistence.jpa.UserEntityRepository;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -68,20 +70,28 @@ public class DatasetGroupController {
     private final DatasetService datasetService;
     private final DocEnhanceService docEnhanceService;
     private final BaselineMdlService baselineMdlService;
+    private final UserEntityRepository userRepository;
 
     public DatasetGroupController(
             DatasetGroupService groupService,
             DatasetService datasetService,
             DocEnhanceService docEnhanceService,
-            BaselineMdlService baselineMdlService) {
+            BaselineMdlService baselineMdlService,
+            UserEntityRepository userRepository) {
         this.groupService = groupService;
         this.datasetService = datasetService;
         this.docEnhanceService = docEnhanceService;
         this.baselineMdlService = baselineMdlService;
+        this.userRepository = userRepository;
     }
 
     public record GroupVO(
-            String id, String name, String description, int datasetCount, String createdAt) {}
+            String id,
+            String name,
+            String description,
+            int datasetCount,
+            String createdAt,
+            String ownerUsername) {}
 
     public record CreateGroupRequest(String name, String description) {}
 
@@ -107,16 +117,27 @@ public class DatasetGroupController {
     public Mono<List<GroupVO>> list(Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
-                        () ->
-                                groupService.listGroups(userId).stream()
-                                        .map(
-                                                g ->
-                                                        toVO(
-                                                                g,
-                                                                (int)
-                                                                        groupService.countDatasets(
-                                                                                userId, g.getId())))
-                                        .toList())
+                        () -> {
+                            var groups = groupService.listGroups(userId);
+                            Map<String, String> usernames = new LinkedHashMap<>();
+                            userRepository
+                                    .findAllById(
+                                            groups.stream()
+                                                    .map(DatasetGroupEntity::getOwnerId)
+                                                    .distinct()
+                                                    .toList())
+                                    .forEach(u -> usernames.put(u.getUserId(), u.getUsername()));
+                            return groups.stream()
+                                    .map(
+                                            g ->
+                                                    toVO(
+                                                            g,
+                                                            (int)
+                                                                    groupService.countDatasets(
+                                                                            userId, g.getId()),
+                                                            usernames.get(g.getOwnerId())))
+                                    .toList();
+                        })
                 .subscribeOn(Schedulers.boundedElastic())
                 .onErrorMap(this::toStatus);
     }
@@ -313,12 +334,20 @@ public class DatasetGroupController {
             String dataSourceId, String schema, List<String> tables, Boolean sampling) {}
 
     private GroupVO toVO(DatasetGroupEntity g, int datasetCount) {
+        return toVO(
+                g,
+                datasetCount,
+                userRepository.findById(g.getOwnerId()).map(UserEntity::getUsername).orElse(null));
+    }
+
+    private GroupVO toVO(DatasetGroupEntity g, int datasetCount, String ownerUsername) {
         return new GroupVO(
                 g.getId(),
                 g.getName(),
                 g.getDescription(),
                 datasetCount,
-                g.getCreatedAt() == null ? null : g.getCreatedAt().toString());
+                g.getCreatedAt() == null ? null : g.getCreatedAt().toString(),
+                ownerUsername);
     }
 
     private String extractText(String fileName, byte[] bytes) throws java.io.IOException {

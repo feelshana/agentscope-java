@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { ACTIVE_AGENT_ID } from '../api/activeAgent';
 import { getToken } from '../api/auth';
@@ -78,6 +79,28 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [moreOpen, setMoreOpen] = useState(false);
+  const moreButton = useRef<HTMLButtonElement>(null);
+  const moreMenu = useRef<HTMLDivElement>(null);
+  const [morePosition, setMorePosition] = useState({ left: 0, top: 0 });
+  useEffect(() => {
+    if (!moreOpen) return;
+    const outside = (e: PointerEvent) => {
+      if (!moreButton.current?.contains(e.target as Node) && !moreMenu.current?.contains(e.target as Node)) setMoreOpen(false);
+    };
+    const escape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setMoreOpen(false); moreButton.current?.focus(); }
+    };
+    const close = () => setMoreOpen(false);
+    document.addEventListener('pointerdown', outside);
+    document.addEventListener('keydown', escape);
+    window.addEventListener('resize', close);
+    return () => {
+      document.removeEventListener('pointerdown', outside);
+      document.removeEventListener('keydown', escape);
+      window.removeEventListener('resize', close);
+    };
+  }, [moreOpen]);
+  useEffect(() => { setMoreOpen(false); }, [location.pathname]);
   const [retryNonce, setRetryNonce] = useState(0);
   const [batchMode, setBatchMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -254,13 +277,20 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
           );
         })}
         <button
-          onClick={() => setMoreOpen(o => !o)}
+          ref={moreButton}
+          aria-expanded={moreOpen}
+          aria-controls="sidebar-more-menu"
+          onClick={() => {
+            const rect = moreButton.current?.getBoundingClientRect();
+            if (rect) setMorePosition({ left: Math.min(rect.right + 12, window.innerWidth - 196), top: Math.max(8, Math.min(rect.top, window.innerHeight - 68)) });
+            setMoreOpen(o => !o);
+          }}
           className={moreOpen ? 'da-navitem da-navitem-active' : 'da-navitem'}
         >
-          <Icon name="list" /> 更多
+          <Icon name="moreHorizontal" /> 更多
         </button>
-        {moreOpen && (
-          <div style={S.moreMenu}>
+        {moreOpen && createPortal(
+          <div ref={moreMenu} id="sidebar-more-menu" aria-label="更多选项" style={{ ...S.moreMenu, ...morePosition }}>
             {MORE_ITEMS.map(m => (
               <button
                 key={m.path}
@@ -273,7 +303,7 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
                 <Icon name={m.icon} /> {m.label}
               </button>
             ))}
-          </div>
+          </div>, document.body
         )}
       </div>
 
@@ -502,7 +532,7 @@ const S: Record<string, React.CSSProperties> = {
   brandName: { fontSize: 16, fontWeight: 700, color: 'var(--da-text)', letterSpacing: '-0.01em' },
   brandTag: { fontSize: 12, color: 'var(--da-text-muted)', marginTop: 1 },
   moreMenu: {
-    position: 'absolute', left: 10, right: 10, zIndex: 30,
+    position: 'fixed', width: 180, zIndex: 1100,
     background: 'var(--da-surface)', border: '1px solid var(--da-border)',
     borderRadius: 'var(--da-radius-lg)', boxShadow: 'var(--da-shadow-pop)',
     padding: 6, display: 'flex', flexDirection: 'column', gap: 2,
