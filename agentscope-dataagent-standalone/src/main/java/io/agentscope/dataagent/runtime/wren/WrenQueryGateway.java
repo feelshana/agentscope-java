@@ -56,4 +56,9 @@ public interface WrenQueryGateway {
      * snapshot; called after a successful publish (发布 = 重建实例, ADR 0018 D8).
      */
     void invalidate(String groupId);
+
+    /** Deletion requires a confirmed close, rather than best-effort invalidation. */
+    default void closeForDeletion(String groupId) {
+        invalidate(groupId);
+    }
 }

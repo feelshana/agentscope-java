@@ -22,7 +22,7 @@ description: 使用 Python 完成数据可视化与深度分析。当用户问�
 | 直方图等分布分析 | `run_python`（本技能） |
 | 需要导出 CSV 数据文件给用户下载 | `run_python`（本技能） |
 | 只要一张简单图表，无标注诉求 | `render_chart`（[[chart-rendering]] 技能） |
-| 只要数字答案，无需图形 | `wren_run_sql` / `wren_query_cube`（[[sql-analysis]] 技能） |
+| 只要数字答案，无需图形 | `wren_run_sql`（[[sql-analysis]] 技能） |
 
 **判断口诀：图上要写字（标签/参考线/达成率）就用 run_python；只要个形状就用 render_chart。**
 
@@ -30,7 +30,7 @@ description: 使用 Python 完成数据可视化与深度分析。当用户问�
 
 ## 步骤
 
-1. **先用 Wren 拿到原始数据。** 查阅 system prompt 中的 `[DATA_SOURCES_OVERVIEW]` 选择知识库、逻辑模型和 Cube；字段、关系或 Cube 成员不明确时先调用 `wren_describe_model`。命名指标优先用 `wren_query_cube`，其他查询用 `wren_run_sql`。没有有效已发布 MDL 时明确告知当前不可问数，不尝试物理 SQL 回退。不要在 Python 中直接连接数据库——沙箱没有网络，始终通过 Wren 工具取数后再用 Python 处理。
+1. **先用 Wren 拿到原始数据。** 查阅 system prompt 中的 `[DATA_SOURCES_OVERVIEW]` 选择知识库、逻辑模型和 逻辑模型；字段、关系或 逻辑模型 成员不明确时先调用 `wren_describe_model`。命名指标优先用 `wren_run_sql`，其他查询用 `wren_run_sql`。没有有效已发布 MDL 时明确告知当前不可问数，不尝试物理 SQL 回退。不要在 Python 中直接连接数据库——沙箱没有网络，始终通过 Wren 工具取数后再用 Python 处理。
 
    查询成功后结果末尾会附「**数据文件：** data/<文件名>.csv（N 行 × M 列）」——记住该文件名，下一步用 `pd.read_csv` 直接读取；**禁止把查询结果行抄写成代码字面量**，数据行只走文件通道。
 
@@ -231,7 +231,7 @@ ax.plot(x, intercept + slope * x, 'r--', label=f'趋势线 (R²={r_value**2:.3f}
 
 ## 反模式
 
-- ❌ 在 Python 中直接连接数据库——沙箱无网络，必须先经 `wren_run_sql` / `wren_query_cube` 取数。
+- ❌ 在 Python 中直接连接数据库——沙箱无网络，必须先经 `wren_run_sql` 取数。
 - ❌ 尝试绕过 Wren 访问 datasetId、sourceId、schema 或物理表；字段不明确时调用 `wren_describe_model`。
 - ❌ 编造考核目标值——从 `retrieve_evidence` 或用户处获取；两者都没有就明确说明"无目标值，仅展示数据"。
 - ❌ 不探查直接写正式代码——列名/类型写错会浪费一整次执行；先跑探查脚本。

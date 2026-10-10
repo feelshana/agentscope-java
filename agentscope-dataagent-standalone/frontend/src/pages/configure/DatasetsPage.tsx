@@ -96,14 +96,16 @@ export default function DatasetsPage() {
 
   async function handleDelete(id: string, ev?: React.MouseEvent) {
     ev?.stopPropagation();
-    if (!window.confirm('删除该知识库？其中的数据集表与关系文档将一并删除。')) return;
+    if (!window.confirm('删除该知识库？将停止相关执行，清理导入数据表、建模文件和库内配置。外部数据库原表、历史回答及附件保留。')) return;
     setBusy(true);
     try {
       await deleteGroup(id);
       toast('知识库已删除', 'success');
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const message = e instanceof Error ? e.message : String(e);
+      await refresh();
+      setError(message);
     } finally {
       setBusy(false);
     }
@@ -131,20 +133,21 @@ export default function DatasetsPage() {
         </div>
         <div className={viewMode === 'grid' ? 'kw-grid' : 'kw-rows'}>
           {loading && [0, 1, 2].map(i => <div key={i} className="kw-card" style={{ padding: 24 }}><div className="da-skeleton da-skeleton-line" /><div className="da-skeleton da-skeleton-line" style={{ marginTop: 20 }} /></div>)}
-          {!loading && !error && filtered.map(g => <article key={g.id} className="kw-card" tabIndex={0} aria-label={`查看${g.name}`}
-            onClick={() => navigate(`/configure/datasets/${g.id}`)}
-            onKeyDown={e => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); navigate(`/configure/datasets/${g.id}`); } }}>
+          {!loading && filtered.map(g => <article key={g.id} className="kw-card" tabIndex={g.deletionPending ? -1 : 0} aria-label={`查看${g.name}`}
+            onClick={() => { if (!g.deletionPending) navigate(`/configure/datasets/${g.id}`); }}
+            onKeyDown={e => { if (!g.deletionPending && e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); navigate(`/configure/datasets/${g.id}`); } }}>
             <div className="kw-cardtop"><div className="kw-icon"><Icon name="book" /></div><h2 title={g.name}>{g.name}</h2>
               <WorkspaceMenu label={`${g.name}的更多操作`} items={[
-                { label: '查看详情', icon: 'book', onClick: () => navigate(`/configure/datasets/${g.id}`) },
-                { label: '编辑名称和说明', icon: 'edit', disabled: busy, onClick: () => openEdit(g) },
-                { label: '删除知识库', icon: 'trash', danger: true, disabled: busy, onClick: () => void handleDelete(g.id) },
+                { label: '查看详情', icon: 'book', disabled: g.deletionPending, onClick: () => navigate(`/configure/datasets/${g.id}`) },
+                { label: '编辑名称和说明', icon: 'edit', disabled: busy || g.deletionPending, onClick: () => openEdit(g) },
+                { label: g.deletionPending ? '重试删除' : '删除知识库', icon: 'trash', danger: true, disabled: busy, onClick: () => void handleDelete(g.id) },
               ]} />
             </div>
             <p className="kw-description" title={g.description ?? ''} style={!g.description ? { color: 'var(--kw-muted)' } : undefined}>{g.description || '暂无说明'}</p>
             <div className="kw-cardcreator" title={`创建人：${g.ownerUsername || '未知用户'}`}>创建人：{g.ownerUsername || '未知用户'}</div>
+            {g.deletionPending && <p className="da-small" role="status">删除待完成，后台正在重试清理。</p>}
             <div className="kw-cardmeta"><Icon name="table" size="sm" /><span>{g.datasetCount} 个数据集</span><span>·</span><span>{g.createdAt ? new Date(g.createdAt).toLocaleDateString('zh-CN') : '创建时间未知'}</span></div>
-            <div className="kw-cardfoot"><button onClick={e => { e.stopPropagation(); navigate(`/configure/datasets/${g.id}`); }}>查看详情 →</button><button onClick={e => { e.stopPropagation(); navigate(`/chat?groups=${encodeURIComponent(g.id)}`); }}><Icon name="chat" size="sm" />基于此库提问</button></div>
+            <div className="kw-cardfoot">{g.deletionPending ? <button disabled={busy} onClick={e => handleDelete(g.id, e)}>重试删除</button> : <><button onClick={e => { e.stopPropagation(); navigate(`/configure/datasets/${g.id}`); }}>查看详情 →</button><button onClick={e => { e.stopPropagation(); navigate(`/chat?groups=${encodeURIComponent(g.id)}`); }}><Icon name="chat" size="sm" />基于此库提问</button></>}</div>
           </article>)}
         </div>
         {!loading && !error && filtered.length === 0 && <div className="kw-empty">{groups.length ? '没有匹配的知识库，试试其他关键词。' : <EmptyIllustration variant="table" caption="还没有知识库，点击「创建知识库」开始" />}</div>}

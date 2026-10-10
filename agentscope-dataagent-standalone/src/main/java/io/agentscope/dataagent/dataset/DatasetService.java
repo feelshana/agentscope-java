@@ -60,6 +60,8 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class DatasetService implements DatasetContextProvider {
+    @org.springframework.beans.factory.annotation.Autowired
+    private KnowledgeBaseOperations operations;
 
     private static final Logger log = LoggerFactory.getLogger(DatasetService.class);
     private static final Pattern SAFE_IDENTIFIER = Pattern.compile("^[a-zA-Z0-9_]+$");
@@ -122,14 +124,19 @@ public class DatasetService implements DatasetContextProvider {
     @PostConstruct
     void rebuildRegistry() {
         List<DatasetEntity> all = repository.findAll();
-        all.forEach(
-                e -> {
-                    try {
-                        registry.add(toDataSource(e));
-                    } catch (DatasetException ex) {
-                        log.warn("Dataset {} not registered: {}", e.getId(), ex.getMessage());
-                    }
-                });
+        all.stream()
+                .filter(dataset -> activeGroup(dataset.getGroupId()))
+                .forEach(
+                        e -> {
+                            try {
+                                registry.add(toDataSource(e));
+                            } catch (DatasetException ex) {
+                                log.warn(
+                                        "Dataset {} not registered: {}",
+                                        e.getId(),
+                                        ex.getMessage());
+                            }
+                        });
         log.info(
                 "DatasetService: re-registered {} persisted dataset(s) into the registry",
                 all.size());
@@ -169,11 +176,15 @@ public class DatasetService implements DatasetContextProvider {
         }
 
         String id = UUID.randomUUID().toString();
+        if (operations != null)
+            operations.recordImportedTable(
+                    groupId, TableProvisioner.buildTableName(ownerId, id, name));
 
         // Use EasyExcel streaming import with AI schema generation
         DatasetImportService.ImportResult importResult;
         try {
-            importResult = importService.importFile(ownerId, id, name, data, fileName);
+            importResult =
+                    importService.importFileForGroup(groupId, ownerId, id, name, data, fileName);
         } catch (RuntimeException e) {
             throw new DatasetException("Failed to import " + fileName + ": " + e.getMessage(), e);
         }
@@ -460,7 +471,16 @@ public class DatasetService implements DatasetContextProvider {
     }
 
     public List<DatasetEntity> listByOwner(String ownerId) {
-        return repository.findByOwnerIdOrderByCreatedAtDesc(ownerId);
+        return repository.findByOwnerIdOrderByCreatedAtDesc(ownerId).stream()
+                .filter(dataset -> activeGroup(dataset.getGroupId()))
+                .toList();
+    }
+
+    private boolean activeGroup(String groupId) {
+        return groupId == null
+                || groupId.isBlank()
+                || operations == null
+                || !operations.deletionPending(groupId);
     }
 
     public DatasetEntity get(String ownerId, String datasetId) {
@@ -819,6 +839,7 @@ public class DatasetService implements DatasetContextProvider {
                                 .toList();
         StringBuilder sb = new StringBuilder();
         for (DatasetGroupEntity g : groups) {
+            if (!activeGroup(g.getId())) continue;
             String text = workspaceReader.readKnowledgeRules(g.getId());
             if (text.isBlank()) {
                 continue;
@@ -988,6 +1009,7 @@ public class DatasetService implements DatasetContextProvider {
                         : new java.util.HashSet<>(onlyGroups);
         StringBuilder sb = new StringBuilder();
         for (DatasetGroupEntity g : groupRepository.findByOwnerIdOrderByCreatedAtDesc(ownerId)) {
+            if (!activeGroup(g.getId())) continue;
             if (want != null && !want.contains(g.getId())) {
                 continue;
             }
@@ -1032,6 +1054,7 @@ public class DatasetService implements DatasetContextProvider {
         record Scored(String group, String title, String text, int score) {}
         List<Scored> scored = new ArrayList<>();
         for (DatasetGroupEntity g : groupRepository.findByOwnerIdOrderByCreatedAtDesc(ownerId)) {
+            if (!activeGroup(g.getId())) continue;
             if (want != null && !want.contains(g.getId())) {
                 continue;
             }

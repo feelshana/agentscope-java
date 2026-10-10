@@ -52,6 +52,9 @@ public class MdlWorkspaceService {
     private final WrenProperties props;
     private final WrenCli wrenCli;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private KnowledgeBaseOperations operations;
+
     /** Per-group mutex serialising workspace file mutations (seeder, agent write tools). */
     private final Map<String, ReentrantLock> workspaceLocks = new ConcurrentHashMap<>();
 
@@ -70,6 +73,7 @@ public class MdlWorkspaceService {
         ReentrantLock lock = workspaceLocks.computeIfAbsent(groupId, key -> new ReentrantLock());
         lock.lock();
         try {
+            if (operations != null) operations.requireActive(groupId);
             return action.get();
         } finally {
             lock.unlock();

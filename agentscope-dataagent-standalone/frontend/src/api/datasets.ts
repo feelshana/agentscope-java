@@ -29,6 +29,7 @@ export interface Dataset {
 }
 
 export interface DatasetGroup {
+  deletionPending?: boolean;
   ownerUsername?: string | null;
   id: string;
   artifactId: string | null;

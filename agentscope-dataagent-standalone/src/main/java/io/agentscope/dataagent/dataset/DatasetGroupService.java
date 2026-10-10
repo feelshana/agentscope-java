@@ -53,6 +53,12 @@ public class DatasetGroupService {
     private final DatasetService datasetService;
     private final MdlPublishService mdlPublishService;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private KnowledgeBaseDeletionService deletionService;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private KnowledgeBaseOperations operations;
+
     public DatasetGroupService(
             DatasetGroupRepository groupRepository,
             DatasetRepository datasetRepository,
@@ -126,7 +132,12 @@ public class DatasetGroupService {
         return groupRepository.findByOwnerIdOrderByCreatedAtDesc(ownerId);
     }
 
+    public boolean deletionPending(String groupId) {
+        return operations != null && operations.deletionPending(groupId);
+    }
+
     public DatasetGroupEntity getGroup(String ownerId, String groupId) {
+        if (operations != null) operations.requireActive(groupId);
         return groupRepository
                 .findById(groupId)
                 .filter(g -> g.getOwnerId().equals(ownerId))
@@ -172,27 +183,15 @@ public class DatasetGroupService {
     }
 
     public long countDatasets(String ownerId, String groupId) {
-        getGroup(ownerId, groupId);
+        groupRepository
+                .findById(groupId)
+                .filter(group -> group.getOwnerId().equals(ownerId))
+                .orElseThrow(() -> new DatasetException("Knowledge base not found", 404));
         return datasetRepository.countByGroupId(groupId);
     }
 
-    @Transactional
     public void deleteGroup(String ownerId, String groupId) {
-        DatasetGroupEntity group = getGroup(ownerId, groupId);
-        List<DatasetEntity> datasets = datasetRepository.findByGroupId(groupId);
-        for (DatasetEntity d : datasets) {
-            datasetService.deleteEntity(d);
-        }
-        datasetRepository.deleteAll(datasets);
-        knowledgeRepository.deleteById(groupId);
-        groupRepository.delete(group);
-        log.info(
-                "DatasetGroupService: deleted KB {} with {} dataset(s) for owner {}",
-                groupId,
-                datasets.size(),
-                ownerId);
-        // MDL artifacts are filesystem state, not DB rows: drop them last, best-effort.
-        mdlPublishService.deleteArtifacts(groupId);
+        deletionService.delete(ownerId, groupId);
     }
 
     /**

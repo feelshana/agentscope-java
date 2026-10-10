@@ -115,6 +115,9 @@ public class ChatController {
     private final ConversationScopeRegistry conversationScopes;
     private final DatasetGroupService datasetGroupService;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private io.agentscope.dataagent.dataset.KnowledgeBaseOperations knowledgeBaseOperations;
+
     /**
      * AgentStateStore keys for which we have already recorded a RUN_SESSION event. Each (userId, agentId)
      * pair gets one entry per process lifetime so the activity log shows one row per session, not
@@ -897,8 +900,8 @@ public class ChatController {
         InboundMessage inbound =
                 buildInbound(userId, agentId, message, conversationId, groupIds, requestId);
         final String recordedAgentId = agentId != null ? agentId : "(default)";
-        return chatUiChannel
-                .dispatch(inbound)
+        return watchKnowledgeBases(userId, groupIds, () -> chatUiChannel.dispatch(inbound).flux())
+                .singleOrEmpty()
                 .doOnSuccess(
                         reply ->
                                 usageStore.record(
@@ -940,14 +943,37 @@ public class ChatController {
         InboundMessage inbound =
                 buildInbound(userId, agentId, messages, conversationId, groupIds, requestId);
         final String recordedAgentId = agentId != null ? agentId : "(default)";
-        return chatUiChannel
-                .dispatchStream(inbound)
+        return watchKnowledgeBases(userId, groupIds, () -> chatUiChannel.dispatchStream(inbound))
                 .doOnComplete(
                         () ->
                                 usageStore.record(
                                         userId,
                                         recordedAgentId,
                                         System.currentTimeMillis() - startMs));
+    }
+
+    private <T> Flux<T> watchKnowledgeBases(
+            String userId, List<String> groupIds, java.util.function.Supplier<Flux<T>> action) {
+        if (knowledgeBaseOperations == null) return action.get();
+        return Flux.defer(
+                        () -> {
+                            List<String> selected =
+                                    groupIds == null || groupIds.isEmpty()
+                                            ? datasetGroupService.listGroups(userId).stream()
+                                                    .filter(
+                                                            group ->
+                                                                    !datasetGroupService
+                                                                            .deletionPending(
+                                                                                    group.getId()))
+                                                    .map(
+                                                            io.agentscope.dataagent.web.persistence
+                                                                            .jpa.DatasetGroupEntity
+                                                                    ::getId)
+                                                    .toList()
+                                            : groupIds;
+                            return knowledgeBaseOperations.watch(selected, action);
+                        })
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
 
     private ServerSentEvent<String> sse(String eventType, Object data) {

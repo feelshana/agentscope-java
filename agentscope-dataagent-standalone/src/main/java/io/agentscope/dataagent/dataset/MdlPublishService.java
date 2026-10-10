@@ -74,6 +74,8 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class MdlPublishService {
+    @org.springframework.beans.factory.annotation.Autowired
+    private KnowledgeBaseOperations operations;
 
     private static final Logger log = LoggerFactory.getLogger(MdlPublishService.class);
 
@@ -428,6 +430,7 @@ public class MdlPublishService {
         ReentrantLock lock = publishLocks.computeIfAbsent(groupId, key -> new ReentrantLock());
         lock.lock();
         try {
+            if (operations != null) operations.requireActive(groupId);
             return action.get();
         } finally {
             lock.unlock();

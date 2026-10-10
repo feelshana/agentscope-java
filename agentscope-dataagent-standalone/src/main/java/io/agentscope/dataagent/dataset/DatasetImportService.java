@@ -53,6 +53,8 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class DatasetImportService {
+    @org.springframework.beans.factory.annotation.Autowired
+    private KnowledgeBaseOperations operations;
 
     private static final Logger log = LoggerFactory.getLogger(DatasetImportService.class);
 
@@ -86,10 +88,22 @@ public class DatasetImportService {
      */
     public ImportResult importFile(
             String ownerId, String datasetId, String name, InputStream data, String fileName) {
+        return importFileForGroup(null, ownerId, datasetId, name, data, fileName);
+    }
+
+    public ImportResult importFileForGroup(
+            String groupId,
+            String ownerId,
+            String datasetId,
+            String name,
+            InputStream data,
+            String fileName) {
 
         long importStart = System.currentTimeMillis();
         String tableName = TableProvisioner.buildTableName(ownerId, datasetId, name);
         BatchListener listener = new BatchListener(tableName, provisioner, schemaGenerationService);
+        listener.operations = operations;
+        listener.groupId = groupId;
 
         try {
             String lower = fileName != null ? fileName.toLowerCase() : "";
@@ -131,6 +145,8 @@ public class DatasetImportService {
      * creates the table, and inserts rows in batches of {@value #BATCH_SIZE}.
      */
     static class BatchListener extends AnalysisEventListener<Map<Integer, String>> {
+        private KnowledgeBaseOperations operations;
+        private String groupId;
 
         private final String tableName;
         private final TableProvisioner provisioner;
@@ -292,6 +308,16 @@ public class DatasetImportService {
             CompletableFuture<Void> future =
                     CompletableFuture.runAsync(
                             () -> {
+                                if (operations != null && groupId != null) {
+                                    operations.run(
+                                            groupId,
+                                            () -> {
+                                                provisioner.bulkInsert(
+                                                        tableName, cols, batchToInsert);
+                                                return null;
+                                            });
+                                    return;
+                                }
                                 long start = System.currentTimeMillis();
                                 provisioner.bulkInsert(tableName, cols, batchToInsert);
                                 log.info(
@@ -328,7 +354,15 @@ public class DatasetImportService {
             log.info(
                     "DatasetImportService: waiting for {} pending batch inserts to complete",
                     pendingInserts.size());
-            CompletableFuture.allOf(pendingInserts.toArray(new CompletableFuture[0])).join();
+            try {
+                CompletableFuture.allOf(pendingInserts.toArray(new CompletableFuture[0])).get();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                insertExecutor.shutdownNow();
+                throw new DatasetException("导入已取消", e);
+            } catch (java.util.concurrent.ExecutionException e) {
+                throw new DatasetException("批量导入失败", e.getCause());
+            }
             log.info("DatasetImportService: all batch inserts completed");
         }
 

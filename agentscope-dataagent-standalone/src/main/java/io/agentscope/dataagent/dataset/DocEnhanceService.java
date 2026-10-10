@@ -79,6 +79,9 @@ public class DocEnhanceService {
     private final ObjectMapper mapper;
     private final TransactionTemplate transactionTemplate;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private KnowledgeBaseOperations operations;
+
     public DocEnhanceService(
             DocEnhanceTaskRepository taskRepository,
             DocEnhanceProposalRepository proposalRepository,
@@ -162,6 +165,21 @@ public class DocEnhanceService {
 
     /** Synchronous worker entry kept package-visible for deterministic service tests. */
     void analyzeTask(String taskId, String sourceText) {
+        DocEnhanceTaskEntity task = taskRepository.findById(taskId).orElse(null);
+        if (task == null) return;
+        if (operations == null) {
+            analyzeTaskActive(taskId, sourceText);
+        } else {
+            operations.run(
+                    task.getGroupId(),
+                    () -> {
+                        analyzeTaskActive(taskId, sourceText);
+                        return null;
+                    });
+        }
+    }
+
+    private void analyzeTaskActive(String taskId, String sourceText) {
         DocEnhanceTaskEntity task = taskRepository.findById(taskId).orElse(null);
         if (task == null) {
             return;

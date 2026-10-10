@@ -220,6 +220,22 @@ public class KnowledgeGraphService {
     }
 
     void executeBuild(String groupId, String ownerId) {
+        if (operations == null) {
+            executeBuildActive(groupId, ownerId);
+        } else {
+            operations.run(
+                    groupId,
+                    () -> {
+                        executeBuildActive(groupId, ownerId);
+                        return null;
+                    });
+        }
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private KnowledgeBaseOperations operations;
+
+    private void executeBuildActive(String groupId, String ownerId) {
         try {
             List<KnowledgeGraphBuildUnitEntity> units =
                     unitRepo.findByGroupIdOrderByCreatedAtAsc(groupId);
@@ -253,6 +269,19 @@ public class KnowledgeGraphService {
     }
 
     private void runUnit(String ownerId, String groupId, KnowledgeGraphBuildUnitEntity unit) {
+        if (operations == null) {
+            runUnitActive(ownerId, groupId, unit);
+        } else {
+            operations.run(
+                    groupId,
+                    () -> {
+                        runUnitActive(ownerId, groupId, unit);
+                        return null;
+                    });
+        }
+    }
+
+    private void runUnitActive(String ownerId, String groupId, KnowledgeGraphBuildUnitEntity unit) {
         unit.setStatus(KnowledgeGraphBuildUnitEntity.STATUS_RUNNING);
         unitRepo.save(unit);
         try {

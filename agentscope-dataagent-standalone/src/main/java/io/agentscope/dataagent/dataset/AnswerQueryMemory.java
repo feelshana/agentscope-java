@@ -21,6 +21,9 @@ import org.springframework.stereotype.Service;
 /** Stores explicit answer feedback and builds isolated official Wren query memory. */
 @Service
 public class AnswerQueryMemory {
+    @org.springframework.beans.factory.annotation.Autowired
+    private KnowledgeBaseOperations operations;
+
     private static final Logger log = LoggerFactory.getLogger(AnswerQueryMemory.class);
     private final WrenProperties properties;
     private final WrenCli cli;
@@ -104,9 +107,15 @@ public class AnswerQueryMemory {
             write(owner, new State(answers, old.projects()));
             try {
                 for (Pair pair : candidates) {
-                    Path project = project(owner, pair.groupId());
-                    initialize(project);
-                    store(project, pair.question(), pair.memorySql());
+                    java.util.function.Supplier<Void> save =
+                            () -> {
+                                Path project = project(owner, pair.groupId());
+                                initialize(project);
+                                store(project, pair.question(), pair.memorySql());
+                                return null;
+                            };
+                    if (operations == null) save.get();
+                    else operations.run(pair.groupId(), save);
                 }
             } catch (DatasetException e) {
                 return result(pending);

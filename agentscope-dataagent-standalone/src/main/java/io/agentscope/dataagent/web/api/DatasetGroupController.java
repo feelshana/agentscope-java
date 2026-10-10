@@ -95,7 +95,8 @@ public class DatasetGroupController {
             String description,
             int datasetCount,
             String createdAt,
-            String ownerUsername) {}
+            String ownerUsername,
+            boolean deletionPending) {}
 
     public record CreateGroupRequest(String name, String description) {}
 
@@ -354,7 +355,8 @@ public class DatasetGroupController {
                 g.getDescription(),
                 datasetCount,
                 g.getCreatedAt() == null ? null : g.getCreatedAt().toString(),
-                ownerUsername);
+                ownerUsername,
+                groupService.deletionPending(g.getId()));
     }
 
     private String extractText(String fileName, byte[] bytes) throws java.io.IOException {
