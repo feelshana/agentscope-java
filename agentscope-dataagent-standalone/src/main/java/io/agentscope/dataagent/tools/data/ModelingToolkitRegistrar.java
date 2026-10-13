@@ -32,9 +32,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
- * Wires a singleton {@link ModelingToolkit} onto the built-in {@code modeling-agent}'s toolkit at
- * startup (specs/013 M1, ADR 0024 D2): the modeling assistant gets ONLY the nine modeling tools —
- * a deliberately narrow surface, isolated from the query channel's toolkits.
+ * Registers native file operations and the official CLI adapter on the modeling agent (ADR 0068).
+ * The legacy toolkit is retained solely for existing HTTP callers and is never registered.
  *
  * <p>Mirrors {@link DataToolkitRegistrar}: runs after {@link DataAgentBootstrap} has built every
  * agent, fails soft on errors so a missing tool slot does not stop the application from booting.
@@ -48,6 +47,8 @@ public class ModelingToolkitRegistrar {
 
     private final DataAgentBootstrap bootstrap;
     private final ModelingToolkit toolkit;
+    private final WrenProjectFilesystem projectFilesystem;
+    private final OfficialWrenToolkit officialTools;
 
     public ModelingToolkitRegistrar(
             DataAgentBootstrap bootstrap,
@@ -60,8 +61,13 @@ public class ModelingToolkitRegistrar {
             WrenProperties wrenProps,
             WrenCli wrenCli,
             MdlQuestionService questions,
-            io.agentscope.dataagent.dataset.ModelingWorkflowService workflow) {
+            io.agentscope.dataagent.dataset.ModelingWorkflowService workflow,
+            io.agentscope.dataagent.dataset.WrenProjectAccess projectAccess,
+            io.agentscope.dataagent.dataset.ModelingWorkflowStore checks) {
         this.bootstrap = bootstrap;
+        this.projectFilesystem = new WrenProjectFilesystem(projectAccess);
+        this.officialTools =
+                new OfficialWrenToolkit(projectAccess, wrenCli, wrenProps, mdlPublish, checks);
         this.toolkit =
                 new ModelingToolkit(
                         suggestions,
@@ -77,11 +83,31 @@ public class ModelingToolkitRegistrar {
     }
 
     /**
-     * The singleton toolkit instance also serves the HITL file-change preview endpoint (specs/019
-     * §5): the HTTP layer reuses the exact same gate code path that will execute the write.
+     * Retains legacy HTTP preview behavior for historical patch and batch cards.
      */
     public ModelingToolkit toolkit() {
         return toolkit;
+    }
+
+    public WrenProjectFilesystem projectFilesystem() {
+        return projectFilesystem;
+    }
+
+    public String preflight(
+            io.agentscope.core.agent.RuntimeContext context,
+            io.agentscope.core.message.ToolUseBlock call) {
+        return "wren_cli".equals(call.getName())
+                ? officialTools.preflight(context, call)
+                : projectFilesystem.preflight(context, call);
+    }
+
+    static void registerOfficialTools(
+            io.agentscope.core.tool.Toolkit target,
+            WrenProjectFilesystem files,
+            OfficialWrenToolkit commands) {
+        target.registerTool(new io.agentscope.harness.agent.tool.FilesystemTool(files));
+        target.registerTool(files);
+        target.registerTool(commands);
     }
 
     @PostConstruct
@@ -95,8 +121,11 @@ public class ModelingToolkitRegistrar {
             return;
         }
         try {
-            modeling.getDelegate().getToolkit().registerTool(toolkit);
-            log.info("Registered Modeling toolkit onto agent '{}'", modeling.getName());
+            registerOfficialTools(
+                    modeling.getDelegate().getToolkit(), projectFilesystem, officialTools);
+            log.info(
+                    "Registered native file tools and official Wren CLI onto agent '{}'",
+                    modeling.getName());
         } catch (RuntimeException e) {
             log.warn(
                     "Failed to register Modeling toolkit onto '{}': {}",

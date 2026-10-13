@@ -99,7 +99,7 @@ class MdlCatalogTest {
     private MdlCatalog catalog;
 
     @Test
-    void examplesReadOnlyConfirmedPublishedFilesForTheRequestedGroup() throws Exception {
+    void examplesReadOfficialAndLegacyPublishedFilesForTheRequestedGroup() throws Exception {
         Path published = tmp.resolve("gA/published/knowledge/sql");
         Path draft = tmp.resolve("gA/workspace/knowledge/sql");
         Files.createDirectories(published);
@@ -107,10 +107,11 @@ class MdlCatalogTest {
         String confirmed =
                 "---\nnl: revenue\nsql: SELECT 1\nverified: true\nvalidation_id: receipt\n---\n";
         Files.writeString(published.resolve("confirmed.md"), confirmed);
-        Files.writeString(
-                published.resolve("unverified.md"), "---\nnl: other\nsql: SELECT 2\n---\n");
+        String official = "---\nnl: other\nsql: SELECT 2\n---\n";
+        Files.writeString(published.resolve("official.md"), official);
+        Files.writeString(published.resolve("malformed.md"), "---\nnl: missing SQL\n---\n");
         Files.writeString(draft.resolve("draft.md"), confirmed + "draft-only");
-        assertThat(catalog.confirmedExamples("gA")).containsExactly(confirmed);
+        assertThat(catalog.confirmedExamples("gA")).containsExactly(confirmed, official);
         assertThat(catalog.confirmedExamples("gB")).isEmpty();
     }
 

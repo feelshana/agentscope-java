@@ -60,6 +60,9 @@ public class ProcessWrenCli implements WrenCli {
             pb.environment().put("PYTHONUTF8", "1");
             pb.environment().put("PYTHONIOENCODING", "utf-8");
             pb.environment().put("WREN_PROJECT_HOME", projectHome.toAbsolutePath().toString());
+            // Never resolve profiles/config from the operator's ambient ~/.wren.
+            pb.environment().put("WREN_HOME", props.wrenHome().toAbsolutePath().toString());
+            io.agentscope.dataagent.runtime.wren.WrenProcessEnvironment.configure(pb.environment());
 
             Process process;
             try {

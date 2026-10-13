@@ -20,6 +20,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import io.agentscope.dataagent.dataset.BaselineMdlService;
@@ -28,12 +29,16 @@ import io.agentscope.dataagent.dataset.DatasetGroupService;
 import io.agentscope.dataagent.dataset.DatasetService;
 import io.agentscope.dataagent.dataset.DocEnhanceService;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetEntity;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.io.buffer.DefaultDataBufferFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.web.server.ResponseStatusException;
+import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 
 /** Locks one baseline publication after an all-or-nothing external table association. */
@@ -41,6 +46,8 @@ class DatasetGroupControllerTest {
 
     private DatasetService datasetService;
     private BaselineMdlService baselineMdlService;
+    private DatasetGroupService groupService;
+    private DocEnhanceService docEnhanceService;
     private DatasetGroupController controller;
     private final TestingAuthenticationToken alice = new TestingAuthenticationToken("alice", "n/a");
 
@@ -48,13 +55,46 @@ class DatasetGroupControllerTest {
     void setUp() {
         datasetService = mock(DatasetService.class);
         baselineMdlService = mock(BaselineMdlService.class);
+        groupService = mock(DatasetGroupService.class);
+        docEnhanceService = mock(DocEnhanceService.class);
         controller =
                 new DatasetGroupController(
-                        mock(DatasetGroupService.class),
-                        datasetService,
-                        mock(DocEnhanceService.class),
-                        baselineMdlService);
+                        groupService, datasetService, docEnhanceService, baselineMdlService);
         when(datasetService.readColumns(any())).thenReturn(List.of());
+    }
+
+    @Test
+    void documentUploadSavesSourceWithoutStartingLegacyAnalysis() {
+        var result = controller.uploadKnowledge("group-1", document(), alice).block();
+
+        assertThat(result).containsEntry("content", "业务文档");
+        verify(groupService).getGroup("alice", "group-1");
+        verify(datasetService).saveKnowledge("group-1", "业务文档");
+        verifyNoInteractions(docEnhanceService);
+    }
+
+    @Test
+    void anotherOwnersDocumentCannotBeSavedOrAnalyzed() {
+        when(groupService.getGroup("alice", "bobs-group"))
+                .thenThrow(new DatasetException("知识库不存在", 404));
+
+        StepVerifier.create(controller.uploadKnowledge("bobs-group", document(), alice))
+                .expectError(ResponseStatusException.class)
+                .verify();
+
+        verify(datasetService, never()).saveKnowledge(any(), any());
+        verifyNoInteractions(docEnhanceService);
+    }
+
+    private static FilePart document() {
+        FilePart file = mock(FilePart.class);
+        when(file.filename()).thenReturn("business.md");
+        when(file.content())
+                .thenReturn(
+                        Flux.just(
+                                DefaultDataBufferFactory.sharedInstance.wrap(
+                                        "业务文档".getBytes(StandardCharsets.UTF_8))));
+        return file;
     }
 
     @Test

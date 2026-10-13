@@ -25,6 +25,9 @@ const TOOL_LABEL: Record<string, string> = {
   add_relation: '新增关系',
   write_file: '写入工程文件',
   patch_file: '修改工程文件',
+  edit_file: '修改工程文件',
+  delete_file: '撤回工程文件',
+  wren_cli: '保存 Wren 问题与 SQL 示例',
   create_view: '新建命名视图',
 };
 
@@ -77,7 +80,7 @@ export default function ModelingHitlCard({
 }) {
   const relation = relationFor(call, overview);
   const isRelation = call.name === 'decide_relation' && relation != null;
-  const isFileWrite = call.name === 'write_file' || call.name === 'patch_file';
+  const isFileWrite = call.name === 'write_file' || call.name === 'patch_file' || call.name === 'edit_file' || call.name === 'delete_file';
   const isBatchWrite = call.name === 'write_file' && typeof call.input.files_json === 'string';
   const batchFiles = useMemo(() => {
     if (!isBatchWrite) return [];
@@ -104,7 +107,7 @@ export default function ModelingHitlCard({
 
   // File-change card state (specs/019 §5): server-side gated preview + editable draft.
   const [contentText, setContentText] = useState(() => stringValue(call.input.content));
-  const [replacementText, setReplacementText] = useState(() => stringValue(call.input.replacement));
+  const [replacementText, setReplacementText] = useState(() => stringValue(call.name === 'edit_file' ? call.input.new_string : call.input.replacement));
   const [replaceAll, setReplaceAll] = useState(() => Boolean(call.input.replace_all));
   const [editingFile, setEditingFile] = useState(false);
   const [fileDirty, setFileDirty] = useState(false);
@@ -114,7 +117,7 @@ export default function ModelingHitlCard({
 
   const loadPreview = useCallback(
     async (input: Record<string, unknown>) => {
-      if (call.name !== 'write_file' && call.name !== 'patch_file') return;
+      if (call.name !== 'write_file' && call.name !== 'patch_file' && call.name !== 'edit_file' && call.name !== 'delete_file') return;
       setPreviewing(true);
       setPreviewError(null);
       try {
@@ -176,11 +179,16 @@ export default function ModelingHitlCard({
       next.replacement = replacementText;
       next.replace_all = replaceAll;
     }
+    if (call.name === 'edit_file') {
+      next.new_string = replacementText;
+      next.replace_all = replaceAll;
+    }
     return next;
   }
 
   async function adoptFileChange() {
-    if (call.name !== 'write_file' && call.name !== 'patch_file') return;
+    if (call.name === 'delete_file') { onDecision(true); return; }
+    if (call.name !== 'write_file' && call.name !== 'patch_file' && call.name !== 'edit_file') return;
     if (!fileDirty) { onDecision(true); return; }
     setPreviewing(true);
     setPreviewError(null);
@@ -224,20 +232,20 @@ export default function ModelingHitlCard({
       ) : isFileWrite ? (
         <>
           <div style={S.summary}>
-            {fileReason || '助手未提供业务变更说明，请核对技术详情后再决定。'}
+            {fileReason || `工程文件：${filePath}`}
           </div>
-          <div style={S.help}>本次确认写入模型草稿；业务结果需在「验证与确认」审阅，发布后才用于问数。</div>
-          {previewing && <div style={S.help}>正在预检（YAML 解析 + 工程校验）…</div>}
+                <div style={S.help}>本次授权修改草稿。助手按官方 Wren 流程检查；在「检查与发布」发布后才影响问数。</div>
+          {previewing && <div style={S.help}>正在检查写入权限和变更内容…</div>}
           {!previewing && previewError && <div style={S.error}>{previewError}</div>}
           {!previewing && !previewError && preview && (preview.ok ? (
             <div style={S.verdictOk}>
-              ✓ 预检通过：YAML 解析与工程校验（context validate --strict）均通过
+              {call.name === 'patch_file' ? '✓ 旧版工程预检通过' : '✓ 路径与写入内容检查通过；助手写入后将通过官方 Wren 校验和编译'}
             </div>
           ) : (
             <div style={S.error}>✗ 预检未通过：{preview.error}</div>
           ))}
           {fileDirty && <div style={S.help}>内容已修改，请点「重新预检」刷新校验结论。</div>}
-          {preview && <details style={S.details} open><summary>查看写入后的完整内容</summary><ReadableCode text={preview.newContent} title={filePath} /></details>}
+          {preview && <details style={S.details} open><summary>{call.name === 'delete_file' ? '查看将撤回的内容' : '查看写入后的完整内容'}</summary><ReadableCode text={call.name === 'delete_file' ? preview.oldContent : preview.newContent} title={filePath} /></details>}
           {fileDiff.length > 0 && (
             <details style={S.details}>
               <summary>
@@ -278,11 +286,11 @@ export default function ModelingHitlCard({
               ) : (
                 <>
                   <div>
-                    <div style={S.label}>被替换文本（original，逐字符精确匹配）</div>
-                    <pre style={S.pre}>{stringValue(call.input.original)}</pre>
+                    <div style={S.label}>待替换文本（精确匹配）</div>
+                    <pre style={S.pre}>{stringValue(call.name === 'edit_file' ? call.input.old_string : call.input.original)}</pre>
                   </div>
                   <label style={S.label}>
-                    替换为（replacement）
+                    替换为
                     <textarea
                       style={S.jsonEditor}
                       value={replacementText}
@@ -301,7 +309,7 @@ export default function ModelingHitlCard({
                         setFileDirty(true);
                       }}
                     />
-                    替换所有匹配（replace_all）
+                    替换所有匹配
                   </label>
                 </>
               )}
@@ -310,15 +318,15 @@ export default function ModelingHitlCard({
           <div style={S.actions}>
             {preview && !preview.ok && <button style={S.primary} disabled={submitting || previewing}
               onClick={() => onDecision(false, undefined,
-                `当前提案预检未通过，请修正后重新提交供我确认。文件：${filePath}。预检错误：${(preview.error || '未知错误').slice(0, 2800)}。不要原样重提；保留已确认口径。问题 SQL 禁止显式 LIMIT/OFFSET，TopN 可用 CTE 与排名筛选，并说明并列处理。`)}>
+                `当前提案预检未通过，请修正后重新提交供我确认。文件：${filePath}。预检错误：${(preview.error || '未知错误').slice(0, 2800)}。不要原样重提；保留已确认口径。SQL 与查询选项遵循安装版官方 Wren 工具契约。`)}>
               让助手修正
             </button>}
             <button style={{ ...S.primary, ...(submitting || previewing || (!preview?.ok && !fileDirty) ? { opacity: 0.4, cursor: 'not-allowed' } : {}) }} disabled={submitting || previewing || (!preview?.ok && !fileDirty)} onClick={() => void adoptFileChange()}>
-              {fileDirty ? '校验并写入修改' : '采用并写入'}
+              {call.name === 'delete_file' ? '确认撤回' : fileDirty ? '校验并写入修改' : '采用并写入'}
             </button>
             <button
               style={S.secondary}
-              disabled={submitting}
+              disabled={submitting || call.name === 'delete_file'}
               onClick={() => setEditingFile(value => !value)}
             >
               {editingFile ? '收起编辑' : '编辑内容'}
@@ -408,6 +416,12 @@ export default function ModelingHitlCard({
       ) : (
         <>
           <div style={S.summary}>{fileReason || '建模助手准备执行此变更，请确认摘要和参数。'}</div>
+          {call.name === 'wren_cli' && (() => {
+            const args = stringList(call.input.arguments);
+            const question = args[args.indexOf('--nl') + 1];
+            const sql = args[args.indexOf('--sql') + 1];
+            return <><p>问题：{question}</p><ReadableCode text={sql || ''} language="sql" title="将保存的 SQL 示例" /><p style={S.help}>本次授权保存到当前工程；请核对问题和 SQL 的对应关系。执行成功后助手会报告保存结果。</p></>;
+          })()}
           {call.name === 'create_view' && <><p>视图：<strong>{stringValue(call.input.name)}</strong></p><p>{stringValue(call.input.description)}</p><ReadableCode text={stringValue(call.input.statement)} language="sql" title="视图定义 SQL" /></>}
           <details style={S.details} open={editingJson}>
             <summary>提案参数</summary>

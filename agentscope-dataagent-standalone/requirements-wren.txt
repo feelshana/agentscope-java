@@ -1,2 +1,4 @@
 # Official Wren CLI with the multilingual ONNX memory backend.
-wrenai[memory-onnx]==0.15.0
+wrenai[mcp,mysql,memory-onnx]==0.15.0
+wren-core-py==0.8.0
+mcp==1.30.0

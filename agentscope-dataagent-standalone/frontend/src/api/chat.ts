@@ -31,6 +31,7 @@ export interface ChatEvent {
 }
 
 export interface ModelingConfirmRequest {
+  confirmBatch?: boolean;
   sessionKey: string;
   groupIds: string[];
   replyId: string;

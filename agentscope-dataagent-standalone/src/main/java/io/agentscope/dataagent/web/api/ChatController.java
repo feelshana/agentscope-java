@@ -169,7 +169,29 @@ public class ChatController {
             String toolName,
             Boolean confirmed,
             Map<String, Object> toolInput,
-            String feedback) {
+            String feedback,
+            Boolean confirmBatch) {
+        public ModelingConfirmRequest(
+                String sessionKey,
+                java.util.List<String> groupIds,
+                String replyId,
+                String toolCallId,
+                String toolName,
+                Boolean confirmed,
+                Map<String, Object> toolInput,
+                String feedback) {
+            this(
+                    sessionKey,
+                    groupIds,
+                    replyId,
+                    toolCallId,
+                    toolName,
+                    confirmed,
+                    toolInput,
+                    feedback,
+                    false);
+        }
+
         public ModelingConfirmRequest(
                 String sessionKey,
                 java.util.List<String> groupIds,
@@ -389,7 +411,9 @@ public class ChatController {
 
         Map<String, Object> effectiveInput =
                 req.toolInput() == null ? asking.getInput() : new LinkedHashMap<>(req.toolInput());
-        String confirmationKey = storageKey + ":" + req.replyId() + ":" + req.toolCallId();
+        if (Boolean.TRUE.equals(req.confirmBatch()) && req.toolInput() != null)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "批量授权不能同时修改单个调用参数");
+        String confirmationKey = storageKey + ":" + req.replyId();
         if (!consumedConfirmations.add(confirmationKey)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "确认请求正在处理或已处理");
         }
@@ -402,6 +426,29 @@ public class ChatController {
                         .metadata(asking.getMetadata())
                         .state(ToolCallState.ASKING)
                         .build();
+        List<ConfirmResult> decisions = new java.util.ArrayList<>();
+        decisions.add(new ConfirmResult(Boolean.TRUE.equals(req.confirmed()), decidedTool));
+        if (Boolean.TRUE.equals(req.confirmBatch())) {
+            java.util.Set<String> decidedIds = new java.util.HashSet<>();
+            decidedIds.add(asking.getId());
+            state.getContext().stream()
+                    .flatMap(message -> message.getContent().stream())
+                    .filter(ToolUseBlock.class::isInstance)
+                    .map(ToolUseBlock.class::cast)
+                    .filter(tool -> tool.getState() == ToolCallState.ASKING)
+                    .filter(tool -> !tool.getId().equals(asking.getId()))
+                    .filter(
+                            tool ->
+                                    ModelingHitlMiddleware.WRITE_TOOL_NAMES.contains(
+                                            tool.getName()))
+                    .filter(tool -> findAskingTool(state, tool.getId()) != null)
+                    .filter(tool -> decidedIds.add(tool.getId()))
+                    .forEach(
+                            tool ->
+                                    decisions.add(
+                                            new ConfirmResult(
+                                                    Boolean.TRUE.equals(req.confirmed()), tool)));
+        }
         Msg confirmMsg =
                 Msg.builder()
                         .name("user")
@@ -410,13 +457,7 @@ public class ChatController {
                                 Boolean.TRUE.equals(req.confirmed())
                                         ? "[confirm]"
                                         : feedback.isEmpty() ? "[deny]" : feedback)
-                        .metadata(
-                                Map.of(
-                                        Msg.METADATA_CONFIRM_RESULTS,
-                                        List.of(
-                                                new ConfirmResult(
-                                                        Boolean.TRUE.equals(req.confirmed()),
-                                                        decidedTool))))
+                        .metadata(Map.of(Msg.METADATA_CONFIRM_RESULTS, decisions))
                         .build();
         String requestId = UUID.randomUUID().toString();
         Sinks.One<Boolean> done = Sinks.one();

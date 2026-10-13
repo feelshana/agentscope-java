@@ -77,7 +77,8 @@ public final class SessionTurnParser {
                                     timestampMs,
                                     text(node, "name"),
                                     node.has("input") ? node.get("input").toString() : null,
-                                    null));
+                                    null,
+                                    text(node, "toolCallId")));
                     continue;
                 }
                 if ("tool_result".equals(type)) {
@@ -90,7 +91,8 @@ public final class SessionTurnParser {
                                     timestampMs,
                                     text(node, "name"),
                                     null,
-                                    node.has("output") ? node.get("output").asText() : null));
+                                    node.has("output") ? node.get("output").asText() : null,
+                                    text(node, "toolCallId")));
                     continue;
                 }
 
@@ -147,5 +149,18 @@ public final class SessionTurnParser {
             long timestampMs,
             String toolName,
             String toolInput,
-            String toolResult) {}
+            String toolResult,
+            String toolCallId) {
+        public TurnEntry(
+                String id,
+                String parentId,
+                String role,
+                String content,
+                long timestampMs,
+                String toolName,
+                String toolInput,
+                String toolResult) {
+            this(id, parentId, role, content, timestampMs, toolName, toolInput, toolResult, null);
+        }
+    }
 }

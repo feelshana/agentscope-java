@@ -87,8 +87,8 @@ public class MdlCatalog {
                             .toList()) {
                 if (Files.size(file) > 65536) continue;
                 String text = Files.readString(file, StandardCharsets.UTF_8);
-                if (text.contains("\nverified: true\n") && text.contains("\nvalidation_id: "))
-                    out.add(text);
+                if ((text.contains("\nverified: true\n") && text.contains("\nvalidation_id: "))
+                        || !SqlExampleRecall.published(List.of(text)).isEmpty()) out.add(text);
             }
             return out;
         } catch (IOException e) {

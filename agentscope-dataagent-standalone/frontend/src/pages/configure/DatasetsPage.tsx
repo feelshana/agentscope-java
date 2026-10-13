@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import BackToChatHeader from '../../components/BackToChatHeader';
 import DataSourceManagerModal from '../../components/DataSourceManagerModal';
@@ -33,6 +33,8 @@ export default function DatasetsPage() {
   const [groups, setGroups] = useState<DatasetGroup[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const creating = useRef(false);
   const [dsOpen, setDsOpen] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -56,16 +58,22 @@ export default function DatasetsPage() {
   }, [refresh]);
 
   async function handleCreate() {
+    if (creating.current) return;
     if (!NAME_RE.test(name.trim())) {
-      setError('名称需为 1-100 个中文/字母/数字/-/_ 字符');
+      setCreateError('名称需为 1-100 个中文/字母/数字/-/_ 字符');
       return;
     }
     if (description.length > 1000) {
-      setError('描述不能超过 1000 字');
+      setCreateError('描述不能超过 1000 字');
       return;
     }
+    if (groups.some(group => group.name === name.trim())) {
+      setCreateError(`知识库「${name.trim()}」已存在，请更换名称，或取消后打开已有知识库。`);
+      return;
+    }
+    creating.current = true;
     setBusy(true);
-    setError(null);
+    setCreateError(null);
     try {
       const g = await createGroup(name.trim(), description.trim());
       setCreateOpen(false);
@@ -75,8 +83,9 @@ export default function DatasetsPage() {
       await refresh();
       navigate(`/configure/datasets/${g.id}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setCreateError(e instanceof Error ? e.message : String(e));
     } finally {
+      creating.current = false;
       setBusy(false);
     }
   }
@@ -113,7 +122,7 @@ export default function DatasetsPage() {
         {error && <span style={{ color: 'var(--da-danger)', marginLeft: 12 }}>{error}</span>}
       </div>
       <div style={{ padding: '16px 24px 0', display: 'flex', gap: 10 }}>
-        <button className="da-btn da-btn-primary" onClick={() => setCreateOpen(true)} disabled={busy}>
+        <button className="da-btn da-btn-primary" onClick={() => { setCreateError(null); setCreateOpen(true); }} disabled={busy}>
           + 创建知识库
         </button>
         <button className="da-btn" onClick={() => setDsOpen(true)}>
@@ -175,32 +184,38 @@ export default function DatasetsPage() {
       </div>
 
       {createOpen && (
-        <div className="da-modal-overlay" onClick={() => setCreateOpen(false)}>
-          <div className="da-modal-shell" style={{ width: 'min(520px, 92vw)' }} onClick={e => e.stopPropagation()}>
+        <div className="da-modal-overlay" onClick={() => { if (!busy) setCreateOpen(false); }}>
+          <div className="da-modal-shell" role="dialog" aria-modal="true" aria-labelledby="create-kb-title" style={{ width: 'min(520px, 92vw)' }} onClick={e => e.stopPropagation()}>
             <div className="da-modal-head">
-              <div className="da-modal-title">创建知识库</div>
+              <div className="da-modal-title" id="create-kb-title">创建知识库</div>
             </div>
             <div className="da-modal-body">
               <div className="da-form-grid">
-                <label className="da-label">知识库名称 *</label>
+                <label className="da-label" htmlFor="create-kb-name">知识库名称 *</label>
                 <div>
                   <input
+                    id="create-kb-name"
                     className="da-input"
                     value={name}
-                    onChange={e => setName(e.target.value)}
+                    disabled={busy}
+                    aria-invalid={!!createError}
+                    aria-describedby={createError ? 'create-kb-error' : undefined}
+                    onChange={e => { setName(e.target.value); setCreateError(null); }}
                     placeholder="请输入知识库名称"
                   />
                   <div className="da-small" style={{ marginTop: 4 }}>
                     只能包含中文、字母、数字、连接线-或下划线_，长度 1-100 字符
                   </div>
                 </div>
-                <label className="da-label">描述</label>
+                <label className="da-label" htmlFor="create-kb-description">描述</label>
                 <div>
                   <textarea
+                    id="create-kb-description"
                     className="da-input"
+                    disabled={busy}
                     style={{ minHeight: 90, resize: 'vertical' }}
                     value={description}
-                    onChange={e => setDescription(e.target.value)}
+                    onChange={e => { setDescription(e.target.value); setCreateError(null); }}
                     placeholder="请输入知识库描述"
                   />
                   <div className="da-small" style={{ marginTop: 4 }}>
@@ -208,13 +223,18 @@ export default function DatasetsPage() {
                   </div>
                 </div>
               </div>
+              {createError && (
+                <div id="create-kb-error" role="alert" style={{ color: 'var(--da-danger)', marginTop: 16 }}>
+                  {createError}
+                </div>
+              )}
             </div>
             <div className="da-modal-foot">
-              <button className="da-btn" onClick={() => setCreateOpen(false)}>
+              <button className="da-btn" onClick={() => setCreateOpen(false)} disabled={busy}>
                 取消
               </button>
               <button className="da-btn da-btn-primary" onClick={handleCreate} disabled={busy}>
-                创建
+                {busy ? '创建中…' : '创建'}
               </button>
             </div>
           </div>

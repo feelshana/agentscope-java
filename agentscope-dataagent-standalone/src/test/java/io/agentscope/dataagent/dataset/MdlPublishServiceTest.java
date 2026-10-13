@@ -739,7 +739,7 @@ class MdlPublishServiceTest {
     }
 
     @Test
-    void publishMaterialisesDerivedModelRefSqlIntoSnapshot() throws IOException {
+    void publishPreservesOfficialDerivedModelRefSqlInSnapshot() throws IOException {
         registerGroup("g1");
         registerDataset(
                 "o1",
@@ -777,7 +777,7 @@ class MdlPublishServiceTest {
                                 groupRoot.resolve("published/target/mdl.json"),
                                 StandardCharsets.UTF_8));
         assertEquals(
-                "SELECT COUNT(*) AS c FROM data_agent.ds_o1",
+                "SELECT COUNT(*) AS c FROM orders",
                 manifestModel(built, "monthly_active").path("refSql").asText());
         // The workspace copy keeps the human-readable logical name for editing.
         assertEquals(
@@ -809,16 +809,15 @@ class MdlPublishServiceTest {
                 ]}
                 """;
 
+        wren.failDryRunFor = "broken";
         MdlPublishService.MdlPublishResult result = service.publishBaseline("g1");
 
         assertFalse(result.ok());
-        assertEquals("FAILED", result.mdlState());
         assertTrue(
                 result.issues().stream()
-                        .anyMatch(i -> i.message().contains("不存在的逻辑模型「ghost_table」")),
+                        .anyMatch(i -> i.message().contains("broken derived model")),
                 String.valueOf(result.issues()));
         assertFalse(Files.exists(groupRoot.resolve("published")));
-        assertFalse(Files.exists(groupRoot.resolve("mdl.json")));
     }
 
     @Test
@@ -855,17 +854,13 @@ class MdlPublishServiceTest {
                 ]}
                 """;
 
+        wren.failDryRunFor = "first_stage";
         MdlPublishService.MdlPublishResult result = service.publishBaseline("g1");
 
         assertFalse(result.ok());
         assertTrue(
                 result.issues().stream()
-                        .anyMatch(
-                                i ->
-                                        i.message()
-                                                .contains(
-                                                        "派生模型「second_stage」的 SQL"
-                                                                + " 引用了其他派生模型「first_stage」")),
+                        .anyMatch(i -> i.message().contains("broken derived model")),
                 String.valueOf(result.issues()));
         assertFalse(Files.exists(groupRoot.resolve("published")));
     }
@@ -893,13 +888,15 @@ class MdlPublishServiceTest {
                 ],"views":[{"name":"monthly","statement":"SELECT 1"}]}
                 """;
 
+        wren.failDryRunFor = "broken";
         MdlPublishService.MdlPublishResult result = service.publishBaseline("g1");
 
         assertFalse(result.ok());
         assertTrue(
                 result.issues().stream()
-                        .anyMatch(i -> i.message().contains("派生模型「broken」的 SQL 引用了视图「monthly」")),
+                        .anyMatch(i -> i.message().contains("broken derived model")),
                 String.valueOf(result.issues()));
+        assertFalse(Files.exists(groupRoot.resolve("published")));
     }
 
     @Test

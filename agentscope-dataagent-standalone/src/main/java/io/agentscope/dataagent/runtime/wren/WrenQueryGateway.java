@@ -45,6 +45,11 @@ public interface WrenQueryGateway {
      */
     WrenCallResult call(String groupId, String tool, Map<String, Object> arguments);
 
+    /** Discovers the official schema; adapters must not invent domain-specific arguments. */
+    default java.util.List<io.modelcontextprotocol.spec.McpSchema.Tool> listTools(String groupId) {
+        throw new UnsupportedOperationException("官方 MCP 工具发现不可用");
+    }
+
     /** Executes against an isolated, already-built draft project; never changes the published pool. */
     default WrenCallResult callDraft(
             String groupId, java.nio.file.Path project, String profile, String sql, int limit) {

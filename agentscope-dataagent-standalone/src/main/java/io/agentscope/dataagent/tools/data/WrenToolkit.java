@@ -928,7 +928,7 @@ public final class WrenToolkit {
      * <p>The file name is content-addressed (first 12 hex chars of the payload SHA-256), so a
      * re-run of the same query overwrites the same file instead of accumulating copies.
      */
-    private String dataFileNote(RuntimeContext rc, String payload) {
+    String dataFileNote(RuntimeContext rc, String payload) {
         if (sandboxFilesystem == null || rc == null || rc.getSessionId() == null) {
             return "";
         }

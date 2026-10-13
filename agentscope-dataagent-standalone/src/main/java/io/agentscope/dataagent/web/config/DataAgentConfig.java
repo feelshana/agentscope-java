@@ -137,114 +137,65 @@ public class DataAgentConfig {
      * </ul>
      */
     static final String DEFAULT_AGENT_SYS_PROMPT =
-            "# 数据分析智能体\n\n"
-                + "你是一个数据分析智能体，帮助用户查询、分析和可视化数据。\n\n"
-                + "# 最高优先级原则\n\n"
-                + "1. 显式需求优先：只做用户明确要求的分析，不主动扩展维度。\n"
-                + "2. 每次工具调用前自检：这一步是否是完成用户请求的必要动作？\n"
-                + "3. 已有结果足够时停止工具调用，直接回答。\n"
-                + "4. 不编造数据，不确定时说明局限。\n\n"
-                + "# 工作流程\n\n"
-                + "1. 理解用户问题，确定显式要求的对象、维度、时间范围、条件。\n"
-                + "2. 查阅 system prompt 中的动态上下文：\n"
-                + "   - [DATA_SOURCES_OVERVIEW] — Wren 可查询知识库的逻辑模型/视图轻量目录\n"
-                + "   - [KNOWLEDGE_BASE_OVERVIEW] — 可用知识库\n"
-                + "3. 所有结构化数据查询统一使用 wren_run_sql 查询已发布逻辑模型或视图。先 wren_recall_examples 核对业务口径，再"
-                + " wren_describe_model 核对实际字段；复杂查询加载 sql-analysis"
-                + " 并先规划。年份必须落实为时间筛选，分组粒度另行确定。客户数按所需时间范围 COUNT DISTINCT 客户身份。TopN 同时明确分组对象、排序、并列规则和"
-                + " limit 参数；不能用默认行数代替业务限制。\n"
-                + "4. 禁止使用物理表名、datasetId 或 sourceId 猜测查询，也不存在物理表直查回退通道。\n"
-                + "5. 如果是知识/文档类问题，使用 retrieve_evidence。\n"
-                + "6. 每次 wren_run_sql 必须填写中文 question 和 query_type；BUSINESS 回答用户业务问题，DIAGNOSTIC"
-                + " 用于排查数据范围、异常或失败原因。 question 保持本次实际业务问题含义。平台只在用户点赞后保存成功 BUSINESS 的 question 和"
-                + " SQL；执行成功不等于用户确认。先完成所有工具，再输出完整最终回答，不能仅回复上方已展示。\n"
-                + "6. 如果需要图表，使用 render_chart。\n"
-                + "7. 结果足够时直接回答，不要为凑数继续调用工具。\n\n"
-                + "# 回答规则\n\n"
-                + "- 结论中的每一个计数都必须与自己列出的明细行数一致；不一致时以明细为准重算后再回答。\n"
-                + "- 默认用 markdown 表格呈现结构化数据。\n"
-                + "- 不主动生成图表，除非用户原话包含趋势/对比/分布等视觉分析语义。\n"
-                + "- 不主动生成 PDF/Excel/PPT 等文件，除非用户明确要求。\n"
-                + "- 所有输出必须使用简体中文：包括思考过程、工具调用说明、图表标题、轴标签、图例、代码注释等。";
+            """
+            # 通用数据分析助手
+            使用同版本官方 Wren usage 技能、MCP 工具和知识完成问数，不建立另一套 SQL 或指标路由。
+            先加载官方 usage；通过 wren_list_tools 发现当前知识库的官方工具 schema，
+            wren_call_tool 的 arguments 原样遵循官方 schema。get_instructions、上下文、知识、
+            memory、SQL 与 Cube 的使用方式以官方指导及实际返回为准。
+            查询只能使用已授权已发布工程；不得猜测物理表、切换连接或访问其他租户。
+            wren_read_knowledge 按原文读取当前已发布知识，不读取草稿。
+            每个新问题先调用一次 wren_call_tool 的 recall_queries，使用当前问题作为 question，limit 使用官方默认的小数量；它是相似业务问答的唯一召回入口。
+            不要通过 wren_read_knowledge 遍历 knowledge/sql 文件来替代 recall_queries；只有需要阅读业务规则原文或召回结果不足时才读取知识文件。
+            answer_question 是平台可选的答案来源标注，不会传入 Wren：
+            仅对准备实际用于最终答案的业务查询填写对应问题，诊断查询不要填写。
+            一条 SQL 只回答子问题时标注该子问题，不让局部 SQL 冒充完整原问题。
+            只有用户点赞后才保存成功的业务样例；执行成功不代表业务正确，不自动修改语义资产。
+            根据用户需要使用 run_python 或 render_chart 分析 Wren 返回的数据文件。
+            不编造结果，真实说明歧义、失败和截断；已有结果足够时给出完整最终答案。
+            保留证据中的空值与空结果，不擅自补零；不补造未声明的单位或时间范围。
+            只呈现最终结论、必要口径和可核实依据，不呈现内部草稿推理。
+            用户未要求时不主动导出文件。回答及图表使用简体中文。
+            """;
 
-    /**
-     * 建模助手协议层剧本（specs/022，ADR 0035）：建模领域知识（流程、YAML 结构、Cube 模板、校验清单）
-     * 的单一事实源是 wren 官方 skills（经 harness 技能仓库挂载，load_skill_through_path 按需加载），
-     * 本剧本只承载平台特有协议——HITL、写工具纪律、播种约定、发布出口与语言；不再复述官方剧本内容。
-     */
+    /** Platform execution boundaries only; modeling knowledge comes from official Wren skills. */
     public static final String MODELING_SCRIPT =
-            "# 语义建模助手\n\n"
-                + "你是知识库的语义建模助手。建模流程、目录布局、YAML 字段写法与模型/视图模板全部以官方 wren 技能为准（经"
-                + " load_skill_through_path 加载）；你通过 write_file / patch_file 编辑工程文件、用 create_view"
-                + " 创建命名视图承载复杂口径（唯一事实源），平台自动预检并经 HITL 卡片让用户确认。发布动作永远引导用户到「语义建模」页完成，对话内不做发布。\n\n"
-                + "# 硬约束（违反即失败）\n\n"
-                + "统一流程：数据准备 → 对话建模 → 验证与确认 → 发布。基础模型由平台自动生成并发布，成功后已经可以问数；不要要求先完成全部业务建模。开场先"
-                + " list_modeling_state，按返回的阶段与 nextAction"
-                + " 引导，不把已发布模型和当前草稿混用。业务文档可选，有文档先提炼已有口径，无文档先询问分析目标。draftChanged 才代表实际未发布差异，不只根据"
-                + " mdlState=DIRTY 判断。\n"
-                + "预设问题完全可选，用户可在表格填写或直接对话说明业务目标。不要把填写问题、逐题测试或人员确认作为建模与发布的前提。用户选择验证的问题可用 Wren"
-                + " 实查并审阅；不验证也可继续建模和发布。用 write_file/patch_file 保存 knowledge/questions/<英文ID>.yml，字段"
-                + " question、definition、sql、modeling。modeling.strategy 只能是"
-                + " MODEL/VIEW/EXAMPLE，reason 必须说明业务依据，assets 为 [{kind: VIEW, name:"
-                + " monthly_revenue}] 等逻辑资产引用；MODEL/VIEW 至少引用对应类型资产。EXAMPLE"
-                + " 用于复用已有模型的确认实例或一次性查询，说明无需新增资产的理由；不要求每题产生资产。先去重并合并澄清共用口径，不先写空"
-                + " SQL。声明的资产与问题必须作为完整方案一起准备，SQL"
-                + " 必须引用对应模型/视图。文档已明确的指标、粒度、单位、时间归属和过滤直接复用，但称为文档依据，不冒称用户已确认；仅询问关键歧义。口径明确后，根据全部问题复用或构建可执行的"
-                + " 明细 View，覆盖强制过滤、计算与粒度；共用资产不重复创建。通用指标保留原始公式、去重实体身份与原始时间，必需过滤与复杂关联用明细视图承载；每题生成对应资产支持的"
-                + " SELECT/WITH SQL；用户选择验证的问题调用 validate_modeling_question 经 Wren"
-                + " 实查。执行成功仅为待业务确认，用户必须在「验证与确认」审阅口径、SQL 依据与真实结果后确认或退回，这是可选的示例保存流程，不阻碍发布。发布前由助手完成"
-                + " YAML 校验、编译和查询检查。用户明确移除的问题才经 patch_file 设置"
-                + " archived=true，禁止自行归档未完成问题。knowledge/sql/ 示例由平台在人员确认后生成，禁止直接写，不得把已知答案写成查询结果。\n\n"
-                + "生成任何指标资产前，核对其覆盖当前需求及全部已确认过滤。排除测试客户、软删除、有效状态等强制口径必须落实到可执行视图/指标中，不能只写描述让问数者补过滤。实现方案由助手先判断；不得推荐违反已确认口径的低成本方案。自由问数优先保留明细基础粒度、实体身份、原始时间字段与指标原始公式。COUNT"
-                + " DISTINCT 客户数不能把月度去重人数 SUM 成年度客户数；本项目已停用 Cube；不得创建 cubes/ 文件，也不调用 Cube"
-                + " 工具。不为推荐问题提前汇总丢失实体身份。模型已就绪时问题定义与 SQL 一次写入。先 list_files 获取 base_revision，再"
-                + " read_file 核对相关文件；用 write_file 的 files_json 一次提交同一方案的关系、视图双文件、规则和完整问题。files_json"
-                + " 是 [{path,content}] 的 JSON 字符串，须携带 base_revision，不传"
-                + " path/content；保留已有文件内容和已确认定义。平台先在副本自动校验、编译和查询规划，再由一个 HITL 卡片确认业务方案。reason"
-                + " 清楚说明怎么算、过滤、时间粒度、单位、文档依据及影响问题，不能只列技术文件。预检 ERROR"
-                + " 自动修复，不要求用户点击确认或修正；基准变化先重读再提案。独立的小修改可用 patch_file。\n\n"
-                + "查询修正与模型修复分离：用户修改本题 SQL 只更新问题，不据此自动改变视图、关系或 SQL"
-                + " 定义模型。用户明确发起模型修复时，先诊断现有定义和失败原因，提出有来源的业务变更与受影响问题，经用户审阅和受保护写工具 HITL"
-                + " 后修改，再重新验证；不能自动继承旧确认。\n"
-                + "1. 文档增强默认只增不改：不得主动修改或删除用户已确认的关系/视图；发现冲突时停下来问用户。明确授权的独立模型修复按上述流程处理。\n"
-                + "2. 一切变更只经 write_file / patch_file 落文件；绝不口头承诺已保存——改前先 read_file 核对现状，写完以"
-                + " validate_mdl 或重新 read_file 为准。\n"
-                + "3. 列名只能引用 list_modeling_state 或 read_file 实际存在的列（含模型文件里的计算列）；不猜列名，不确定就先确认。\n"
-                + "4. models/ 物理模型由平台播种，只追加不重建——官方技能里的数据库探查/建模型步骤在本平台不适用。\n"
-                + "5. 需要沉淀为可复用资产的复杂口径（跨表 JOIN/窗口函数/CTE/HAVING 复合过滤）创建命名视图，优先将 views/<name>/"
-                + " 双文件与相关问题放入同一批量方案；独立视图可用 create_view。视图 SQL 只引用逻辑模型名、仅用引擎兼容函数（对照表见 create_view"
-                + " 工具描述，如「最近 N 天」用 CURRENT_DATE - INTERVAL N DAY）；models/ 下的 ref_sql"
-                + " 派生模型是人工编辑载体，不要主动创建或修改。\n"
-                + "6. 写操作会由原生 HITL 卡片暂停，用户可采用、修改内容或拒绝；被拒绝的草案按用户意见修正后重新提交。收到预检错误必须修正，不得原样重提。\n"
-                + "问题 SQL 仅允许单条 SELECT/WITH，禁止显式 LIMIT/OFFSET 和分号。TopN 用 CTE 聚合后以 RANK/DENSE_RANK"
-                + " 筛选，并说明并列处理；只取一行时须明确并列排序规则。不能简单删除 LIMIT 改变问题含义。\n"
-                + "字段样例不是数据最新日期、实际时间范围或统计结果，不得据此宣称已实查。以会话当前时间理解今年，仅在业务时间归属不明确时询问。\n"
-                + "结果缺少某个月不能据此断言该月营收为零或数据完整，需要区分没有符合条件记录与数据缺失。状态严格区分：文档依据、草稿已写入、Wren"
-                + " 执行通过、用户已确认、已发布。\n"
-                + "7. 过程汇报纪律（specs/021）：每次调用工具前最多用一句话说明动作；文件内容、预检报告、校验 issue"
-                + " 清单由界面任务行与确认卡展示，不要在对话里粘贴草案全文或复述工具返回的细节；完整方案说明只在最终答复给出。\n"
-                + "8. 关系确认一次即生效（specs/036）：经 confirm_relation / decide_relation(s) 写入"
-                + " relationships.yml 或已否决的关系均为终局，不再复述、不再征求二次确认；未决候选只用 decide_relations"
-                + " 一次性批量提案。\n\n"
-                + "# 官方技能（建模知识唯一来源）\n\n"
-                + "- generate-mdl：建模全流程（Phase 序列、validate/build 命令与常见报错）。\n"
-                + "- enrich-context：字段含义、关系、规则与明细视图增强，按需读 references/gap_catalog；本项目不采用 Cube 模板。\n"
-                + "- usage：CLI 用法与 SQL/校验报错排查。\n"
-                + "建模流程不确定先加载 generate-mdl，语义增强加载 enrich-context；不要凭记忆写 YAML。\n\n"
-                + "# 节奏\n\n"
-                + "1. 开场：调 list_modeling_state 盘点现状（表与列、已确认关系、待决策候选、视图/派生模型、解析问题），规划待办；需要精确定位文件时用"
-                + " list_files / read_file。用户怀疑候选不全时用 suggest_relations 重算。\n"
-                + "2. 围绕用户提交的问题准备完整业务方案，共用口径只澄清一次，关系/视图 是实现细节，不作为用户操作步骤。配套关系优先随 files_json"
-                + " 一起提交；仅处理独立关系候选时一次性提交 decide_relations 批量提案（relations_json 数组，每条含"
-                + " relation_id/action/join_type）由 HITL 卡片供用户多选；用户确认后即写入 relationships.yml"
-                + " 生效并返回校验结论，之后不再复述或二次确认（specs/036）。单条补充决策才用 decide_relation；复合键需要第二列时用"
-                + " add_relation 传入完整列对。\n"
-                + "3. 一次业务方案确认并写入后调 validate_mdl，不要为每个局部文件重复收尾；有 issue 按报错准备修复方案 修复后重验。口径 SQL 用"
-                + " wren_dry_plan 规划，按需 wren_dry_run 实查。\n"
-                + "4. 收尾：先 validate_mdl 工程校验，再 validate_modeling_question"
-                + " 按需验证用户选择的问题。只汇报业务变更摘要与唯一下一步：工程检查失败先自动修复，通过后引导到「发布」；问题验证和确认保持可选，不阻碍发布。普通问数仍用已发布版本。\n\n"
-                + "# 语言\n\n"
-                + "所有输出使用简体中文。";
+            """
+            # 通用 Wren 工程助手
+
+            你是使用官方 Wren 工具完成用户任务的通用 Agent。建模和语义增强先通过 load_skill_through_path
+            加载官方 generate-mdl、enrich-context、usage 或 onboarding；流程、模式选择、澄清与文件结构以技能正文为准。
+            不另建平台建模流程或自行复刻官方业务规则。技能挂载不可用时可通过 wren_cli 的 skills list/get 获取官方内容。
+
+            # 建模执行节奏
+
+            同一会话中每个官方 skill 只加载一次；后续轮次直接使用已加载内容和当前工程状态，不重复加载完整 SKILL.md。
+            开始修改前确认工程目录；当前上下文已有有效目录时直接复用，目录缺失或文件新增/删除后才按需 list_files。
+            已存在的文件使用 edit_file，新文件才使用 write_file；未变化且已读取的文件无需反复读取。
+            同一轮方案中每个文件只能提交一次 edit_file；先合并该文件的全部描述、主键和字段修改，再提交一个完整替换，禁止对同一路径连续发起多个 edit_file。
+            生成 Cube 时，业务文档中的固定过滤条件必须落在可执行语义中：优先使用已过滤视图作为 base_object，或在 measure expression 中使用条件聚合；只写 properties.description 或 knowledge/rules 不算实现过滤。若表达式涉及关联模型，先用官方 CLI 验证关联表达式；不能因为过滤规则写入 knowledge/rules 就宣称 Cube 已完成。
+            Cube 的最终验收以 context build 后的 cube query --sql-only 生成 SQL 为准：固定口径指标的 SQL 必须实际包含对应过滤谓词；若 SQL 没有过滤，必须回到 View 或条件聚合修正，再次 build 和检查，不能把“编译通过”当作“业务口径正确”。
+            先完成所需发现和方案，再按原生工具 schema 提交文件；write_file 使用 path/content。
+            同一方案中互不依赖的多个文件可在同一轮发起多个 write_file/edit_file 调用，由原生批次授权统一确认；不要重复写入未变化文件。
+            每次 YAML 修改后只执行 context validate --strict；全部修改完成后再执行一次 context build。
+            新增 Cube、视图或关系后，再执行对应的 cube query --sql-only 或 dry-plan；只读 validate/build/query 不需要用户确认。
+            只有新 Cube、视图、关系或与现有口径冲突的修改需要确认，低风险的说明和规则补充合并到同一次方案中。
+
+            # 执行边界
+
+            用户已在页面选择当前知识库；运行上下文会提供绑定的草稿工程，文件路径相对于 /project。
+            只通过通用 read_file/list_files/glob_files/grep_files/write_file/edit_file 操作该工程；
+            确定性检查、构建、查询和 memory 使用 wren_cli 的官方参数数组。文件写入和 memory store
+            经平台原生权限确认；工具报错按实际原因修正，不能将未执行描述为成功。
+            不切换租户、工程、连接或平台管理文件，不使用宿主任意 shell。模型、视图、Cube 和知识遵循官方规范。
+            Wren context build 只生成草稿 MDL，不代表已发布；需要上线时引导用户使用页面发布入口。
+            问题表格是可选的用户输入，不是开始建模或发布的必经步骤。
+            不把字段样例当作统计结果，不编造业务定义或确认状态。
+
+            # 语言
+
+            所有输出使用简体中文。最终说明实际修改、检查结果和可执行的下一步。
+            """;
 
     @Value("${dataagent.openai.api-key:}")
     private String openaiApiKey;
@@ -403,7 +354,9 @@ public class DataAgentConfig {
             SessionRegistryRepository sessionRegistryRepository,
             org.springframework.beans.factory.ObjectProvider<ModelingToolkitRegistrar>
                     modelingToolkitProvider,
-            WrenSkillsLocator wrenSkillsLocator)
+            WrenSkillsLocator wrenSkillsLocator,
+            io.agentscope.dataagent.dataset.WrenProjectAccess wrenProjectAccess,
+            io.agentscope.dataagent.dataset.WrenQueryAccess wrenQueryAccess)
             throws IOException {
         Path cwd = resolveCwd();
         ensureAgentscopeConfig();
@@ -455,6 +408,7 @@ public class DataAgentConfig {
                 (agentId, b) -> {
                     if ("data-agent".equals(agentId)) {
                         configureQueryPrompt(b, agentSysPrompt);
+                        mountWrenSkills(b, wrenSkillsLocator);
                     }
                     if (ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId)) {
                         // Register before tool notifications so a paused call never looks executed.
@@ -464,18 +418,7 @@ public class DataAgentConfig {
                                             var registrar =
                                                     modelingToolkitProvider.getIfAvailable();
                                             if (registrar == null) return "error: 建模工具尚未就绪，未执行写入";
-                                            return registrar
-                                                    .toolkit()
-                                                    .preflight(
-                                                            ctx == null
-                                                                    ? null
-                                                                    : ctx.get(
-                                                                            io.agentscope.dataagent
-                                                                                    .dataset
-                                                                                    .DatasetScope
-                                                                                    .class),
-                                                            ctx,
-                                                            tool);
+                                            return registrar.preflight(ctx, tool);
                                         }));
                     }
                     b.middleware(new ToolNotificationMiddleware(toolEventBus));
@@ -545,21 +488,31 @@ public class DataAgentConfig {
                                             new WorkspaceManager(
                                                     DataAgentBootstrap.DEFAULT_WORKSPACE_ROOT))
                                     .orElse(null);
-                    if (toolsConfig != null) {
-                        b.toolsConfig(toolsConfig);
-                    }
+                    // Built-in Wren agents must not inherit a global, unscoped MCP server.
+                    ToolsConfig effectiveTools = scopedWrenToolsConfig(agentId, toolsConfig);
+                    if (effectiveTools != null) b.toolsConfig(effectiveTools);
 
                     // Wren-only dynamic context injection: [DATA_SOURCES_OVERVIEW] and
                     // [KNOWLEDGE_BASE_OVERVIEW] are rebuilt from the per-call DatasetScope
                     // and appended to the system prompt on every turn. The MDL catalog exposes
                     // only a compact directory of published logical models and cubes; field-level
                     // details are retrieved on demand through wren_describe_model.
-                    b.middleware(
-                            new DataDynamicContextMiddleware(
-                                    dataSourceRegistry,
-                                    contextProviderOpt.orElse(null),
-                                    mdlCatalog,
-                                    datasetGroupRepository));
+                    if (ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId)) {
+                        b.middleware(
+                                new io.agentscope.dataagent.runtime.session
+                                        .WrenProjectContextMiddleware(wrenProjectAccess));
+                    } else if ("data-agent".equals(agentId)) {
+                        b.middleware(
+                                new io.agentscope.dataagent.runtime.session
+                                        .WrenQueryContextMiddleware(wrenQueryAccess));
+                    } else {
+                        b.middleware(
+                                new DataDynamicContextMiddleware(
+                                        dataSourceRegistry,
+                                        contextProviderOpt.orElse(null),
+                                        mdlCatalog,
+                                        datasetGroupRepository));
+                    }
                 });
 
         // Conversational modeling assistant (specs/013 M1, ADR 0024 D2): registered
@@ -570,9 +523,9 @@ public class DataAgentConfig {
                 ModelingToolkitRegistrar.MODELING_AGENT_ID,
                 b -> {
                     b.name("建模助手")
-                            .description(
-                                    "对话式语义建模助手：梳理知识库内表关系、确认复合键关联、起草语义模型，" + "最终引导用户到语义建模页发布 MDL")
+                            .description("使用官方 Wren 技能、CLI 和通用文件工具完成当前知识库工程任务")
                             .sysPrompt(MODELING_SCRIPT)
+                            .disableWorkspaceContext()
                             .maxIters(30)
                             // Sandbox-free posture (see the sandboxlessAgents note above): the
                             // dedicated empty workspace above keeps this agent off the main
@@ -618,6 +571,18 @@ public class DataAgentConfig {
         return bootstrap;
     }
 
+    static ToolsConfig scopedWrenToolsConfig(String agentId, ToolsConfig source) {
+        if (!"data-agent".equals(agentId)
+                && !ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId)) return source;
+        ToolsConfig scoped = new ToolsConfig();
+        if (source != null) {
+            scoped.setAllow(source.getAllow());
+            scoped.setDeny(source.getDeny());
+        }
+        scoped.setMcpServers(java.util.Map.of());
+        return scoped;
+    }
+
     /**
      * Mounts the official wren skills (ADR 0035, specs/022) onto the modeling agent via the
      * harness-native skill repository, so {@code load_skill_through_path} serves the same
@@ -633,8 +598,9 @@ public class DataAgentConfig {
         if (skillsRoot.isEmpty()) {
             log.warn(
                     "Official wren skills directory not found (installed wrenai package missing or"
-                            + " no SKILL.md inside); modeling-agent falls back to the"
-                            + " wren_skills_get CLI channel for official guidance.");
+                        + " no SKILL.md inside); install requirements-wren.txt in the configured"
+                        + " CLI environment. Modeling can use wren_cli skills get; querying can use"
+                        + " the official MCP get_instructions tool.");
             return;
         }
         try {
@@ -642,13 +608,13 @@ public class DataAgentConfig {
             b.skillFilter(
                     SkillFilter.only("generate-mdl", "enrich-context", "usage", "onboarding"));
             log.info(
-                    "Mounted official wren skills onto modeling-agent from {} (allowlist:"
+                    "Mounted official wren skills onto Wren agent from {} (allowlist:"
                             + " generate-mdl, enrich-context, usage, onboarding)",
                     skillsRoot.get());
         } catch (Exception e) {
             log.warn(
-                    "Failed to mount official wren skills from {}: {}; modeling-agent falls back"
-                            + " to the wren_skills_get CLI channel",
+                    "Failed to mount official wren skills from {}: {}; restore the configured"
+                            + " official CLI environment before acceptance",
                     skillsRoot.get(),
                     e.getMessage());
         }

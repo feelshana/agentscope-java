@@ -16,9 +16,12 @@
 package io.agentscope.dataagent.runtime.wren;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.agentscope.core.tool.mcp.McpClientWrapper;
@@ -55,6 +58,46 @@ import reactor.core.publisher.Mono;
 class WrenInstanceRegistryTest {
 
     @TempDir Path tmp;
+
+    @Test
+    void discoveryIsCachedPerInstanceAndInvalidationDropsIt() throws Exception {
+        var registry = newRegistry();
+        var first = mock(McpClientWrapper.class);
+        var second = mock(McpClientWrapper.class);
+        var tool = mock(McpSchema.Tool.class);
+        when(first.listTools()).thenReturn(Mono.just(List.of(tool)));
+        when(second.listTools()).thenReturn(Mono.just(List.of()));
+        try {
+            injectInstance(registry, "g1", first);
+            injectInstance(registry, "g2", second);
+            assertThat(registry.listTools("g1")).containsExactly(tool);
+            assertThat(registry.listTools("g1")).containsExactly(tool);
+            assertThat(registry.listTools("g2")).isEmpty();
+            verify(first, times(1)).listTools();
+            registry.invalidate("g1");
+            injectInstance(registry, "g1", second);
+            assertThat(registry.listTools("g1")).isEmpty();
+            verify(second, times(2)).listTools();
+        } finally {
+            registry.close();
+        }
+    }
+
+    @Test
+    void failedDiscoveryIsNotCached() throws Exception {
+        var registry = newRegistry();
+        var client = mock(McpClientWrapper.class);
+        when(client.listTools())
+                .thenReturn(Mono.error(new IllegalStateException("offline")), Mono.just(List.of()));
+        try {
+            injectInstance(registry, "g1", client);
+            assertThatThrownBy(() -> registry.listTools("g1")).hasMessage("offline");
+            assertThat(registry.listTools("g1")).isEmpty();
+            verify(client, times(2)).listTools();
+        } finally {
+            registry.close();
+        }
+    }
 
     @Test
     void readsPinnedExternalProfileFromSnapshot() throws Exception {

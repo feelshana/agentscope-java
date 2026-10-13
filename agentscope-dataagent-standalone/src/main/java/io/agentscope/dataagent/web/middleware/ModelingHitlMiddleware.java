@@ -39,6 +39,8 @@ import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -52,6 +54,7 @@ import reactor.core.scheduler.Schedulers;
  * carrying {@code Msg.METADATA_CONFIRM_RESULTS} resumes the same ReAct loop.
  */
 public final class ModelingHitlMiddleware implements MiddlewareBase {
+    private static final Logger log = LoggerFactory.getLogger(ModelingHitlMiddleware.class);
     private final BiFunction<RuntimeContext, ToolUseBlock, String> preflight;
 
     public ModelingHitlMiddleware() {
@@ -150,6 +153,9 @@ public final class ModelingHitlMiddleware implements MiddlewareBase {
                     "reject_relation",
                     "add_relation",
                     "write_file",
+                    "edit_file",
+                    "delete_file",
+                    "wren_cli",
                     "patch_file",
                     "create_view");
 
@@ -163,6 +169,12 @@ public final class ModelingHitlMiddleware implements MiddlewareBase {
         List<ToolUseBlock> pending =
                 input.toolCalls().stream()
                         .filter(toolCall -> WRITE_TOOL_NAMES.contains(toolCall.getName()))
+                        .filter(
+                                toolCall ->
+                                        !"wren_cli".equals(toolCall.getName())
+                                                || io.agentscope.dataagent.tools.data
+                                                        .OfficialWrenToolkit.requiresConfirmation(
+                                                        toolCall))
                         .filter(toolCall -> toolCall.getState() != ToolCallState.ALLOWED)
                         .filter(toolCall -> !resolved.contains(toolCall.getId()))
                         .toList();
@@ -173,6 +185,8 @@ public final class ModelingHitlMiddleware implements MiddlewareBase {
         if (preflight != null) {
             return Mono.fromCallable(
                             () -> {
+                                java.util.Map<String, String> failures =
+                                        new java.util.LinkedHashMap<>();
                                 for (ToolUseBlock tool : pending) {
                                     String error;
                                     try {
@@ -180,54 +194,57 @@ public final class ModelingHitlMiddleware implements MiddlewareBase {
                                     } catch (RuntimeException failure) {
                                         error = "技术预检异常，未执行写入：" + failure.getMessage();
                                     }
-                                    if (error != null) return error;
+                                    if (error != null && !error.isBlank())
+                                        failures.put(tool.getId(), error);
                                 }
-                                return "";
+                                return failures;
                             })
                     .subscribeOn(Schedulers.boundedElastic())
                     .flatMapMany(
-                            error -> {
-                                if (!error.isEmpty()) {
+                            failures -> {
+                                if (!failures.isEmpty()) {
                                     if (ctx == null || ctx.getAgentState() == null)
                                         return Flux.error(
                                                 new IllegalStateException("缺少工具恢复上下文，未执行写入"));
                                     for (ToolUseBlock tool : pending) {
-                                        ctx.getAgentState()
-                                                .contextMutable()
-                                                .add(
-                                                        Msg.builder()
-                                                                .role(MsgRole.TOOL)
-                                                                .content(
-                                                                        ToolResultBlock.text(
-                                                                                        "[ERROR]"
-                                                                                            + " 技术预检失败，未写入、未提交业务确认："
-                                                                                                + error
-                                                                                                + "\n"
-                                                                                                + "请自动修复完整方案后重新提交；这不是用户拒绝，不要等待用户点击修正，不要原样重提。")
-                                                                                .withIdAndName(
-                                                                                        tool
-                                                                                                .getId(),
-                                                                                        tool
-                                                                                                .getName())
-                                                                                .withState(
-                                                                                        ToolResultState
-                                                                                                .ERROR))
-                                                                .build());
+                                        String error = failures.get(tool.getId());
+                                        if (error != null)
+                                            ctx.getAgentState()
+                                                    .contextMutable()
+                                                    .add(
+                                                            Msg.builder()
+                                                                    .role(MsgRole.TOOL)
+                                                                    .content(
+                                                                            ToolResultBlock.text(
+                                                                                            "[ERROR]"
+                                                                                                + " 技术预检失败，未写入、未提交业务确认："
+                                                                                                    + error
+                                                                                                    + "\n"
+                                                                                                    + "请自动修复完整方案后重新提交；这不是用户拒绝，不要等待用户点击修正，不要原样重提。")
+                                                                                    .withIdAndName(
+                                                                                            tool
+                                                                                                    .getId(),
+                                                                                            tool
+                                                                                                    .getName())
+                                                                                    .withState(
+                                                                                            ToolResultState
+                                                                                                    .ERROR))
+                                                                    .build());
                                     }
-                                    Set<String> failed =
-                                            pending.stream()
-                                                    .map(ToolUseBlock::getId)
-                                                    .collect(Collectors.toSet());
-                                    return next.apply(
-                                            new ActingInput(
-                                                    input.toolCalls().stream()
-                                                            .filter(
-                                                                    tool ->
-                                                                            !failed.contains(
-                                                                                    tool.getId()))
-                                                            .toList()));
                                 }
-                                return ask(ctx, pending);
+                                List<ToolUseBlock> valid =
+                                        pending.stream()
+                                                .filter(t -> !failures.containsKey(t.getId()))
+                                                .toList();
+                                if (!valid.isEmpty()) return ask(ctx, valid);
+                                return next.apply(
+                                        new ActingInput(
+                                                input.toolCalls().stream()
+                                                        .filter(
+                                                                t ->
+                                                                        !failures.containsKey(
+                                                                                t.getId()))
+                                                        .toList()));
                             });
         }
         return ask(ctx, pending);
@@ -235,14 +252,13 @@ public final class ModelingHitlMiddleware implements MiddlewareBase {
 
     private Flux<AgentEvent> ask(RuntimeContext ctx, List<ToolUseBlock> pending) {
 
-        // The modeling script promises one decision at a time. If a model emits several
-        // mutations in one response, pause on the first one; native pending-tool recovery will
-        // present the remaining calls after this decision has been consumed.
+        // Native confirmation supports all independent calls from the same response.
         List<ToolUseBlock> asking =
-                pending.stream()
-                        .limit(1)
-                        .map(tool -> tool.withState(ToolCallState.ASKING))
-                        .toList();
+                pending.stream().map(tool -> tool.withState(ToolCallState.ASKING)).toList();
+        log.info(
+                "[modeling-hitl] confirmation batch size={} tools={}",
+                asking.size(),
+                asking.stream().map(ToolUseBlock::getName).toList());
         markAsking(ctx, asking);
         String replyId =
                 ctx != null && ctx.getAgentState() != null

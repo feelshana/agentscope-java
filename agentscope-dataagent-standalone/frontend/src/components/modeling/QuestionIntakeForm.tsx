@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 export function questionRequest(questions: string[]): string {
-  return '这些是可选的分析问题，请结合已有模型和可选业务文档澄清关键歧义，优先复用现有资产，不要求每题新建视图。需要修改模型时，先 list_files 获取 base_revision，再通过 write_file 的 files_json 一次提交完整业务方案，reason 说明计算、过滤、粒度、单位和依据；技术预检失败自行修复，通过后一次确认业务方案。由你完成模型校验、编译与查询检查，问题逐题测试和确认属于可选示例保存，不阻碍发布。不要直接写 knowledge/sql/ 示例，不冒称文档定义已经由我确认：\n' + questions.join('\n');
+  return '这些是可选的业务问题。请加载同版本官方 Wren 技能，结合当前工程与可选文档澄清歧义，按官方流程完善模型。复用已有资产，选择模型、视图或 Cube 的依据遵循官方指导，不要求每题新建资产。通过原生文件工具提出草稿变更，并由你执行官方校验、编译和查询检查。预设问题不是发布前置条件；需要保存问题与 SQL 时使用官方 memory store，并让我确认。\n' + questions.join('\n');
 }
 
 export default function QuestionIntakeForm({ onSubmit, onCancel, initial = false }: {
@@ -42,7 +42,7 @@ export default function QuestionIntakeForm({ onSubmit, onCancel, initial = false
         }}>加入表格</button>
       {pasteError && <p role="alert">{pasteError}</p>}
     </details>
-    <p role="status" className="da-small">{questions.length} 个不同问题 · 尚未保存。提交后进入澄清与建模，保存成功后出现在问题清单中。</p>
+    <p role="status" className="da-small">{questions.length} 个不同问题 · 提交后交给建模助手处理。助手保存的官方 SQL 样例可在“查看语义模型 → 业务知识与样例”中查看。</p>
     {(questions.length > 50 || tooLong) && <p role="alert">每次最多 50 个问题，每个问题最多 1000 字符，请调整后提交。</p>}
     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
       {onCancel && <button className="da-btn" onClick={onCancel}>取消</button>}

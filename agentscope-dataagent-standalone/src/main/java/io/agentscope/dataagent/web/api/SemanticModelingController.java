@@ -294,7 +294,7 @@ public class SemanticModelingController {
         return Mono.<List<MdlSuggestionService.CubeSuggestion>>fromCallable(
                         () -> {
                             groupService.getGroup(userId, groupId);
-                            throw new DatasetException("Cube 已停用，请使用逻辑模型或视图", 410);
+                            throw new DatasetException("旧版结构化 Cube 接口已退役，请在官方建模工程维护 cubes/", 410);
                         })
                 .subscribeOn(Schedulers.boundedElastic())
                 .onErrorMap(this::toStatus);
@@ -370,7 +370,7 @@ public class SemanticModelingController {
         return Mono.<CubeVO>fromCallable(
                         () -> {
                             groupService.getGroup(userId, groupId);
-                            throw new DatasetException("Cube 已停用，请使用逻辑模型或视图", 410);
+                            throw new DatasetException("旧版结构化 Cube 接口已退役，请在官方建模工程维护 cubes/", 410);
                         })
                 .subscribeOn(Schedulers.boundedElastic())
                 .onErrorMap(this::toStatus);
@@ -386,7 +386,7 @@ public class SemanticModelingController {
         return Mono.<CubeVO>fromCallable(
                         () -> {
                             groupService.getGroup(userId, groupId);
-                            throw new DatasetException("Cube 已停用，请使用逻辑模型或视图", 410);
+                            throw new DatasetException("旧版结构化 Cube 接口已退役，请在官方建模工程维护 cubes/", 410);
                         })
                 .subscribeOn(Schedulers.boundedElastic())
                 .onErrorMap(this::toStatus);
@@ -399,7 +399,7 @@ public class SemanticModelingController {
         return Mono.fromRunnable(
                         () -> {
                             groupService.getGroup(userId, groupId);
-                            throw new DatasetException("Cube 已停用，请使用逻辑模型或视图", 410);
+                            throw new DatasetException("旧版结构化 Cube 接口已退役，请在官方建模工程维护 cubes/", 410);
                         })
                 .subscribeOn(Schedulers.boundedElastic())
                 .onErrorMap(this::toStatus)
@@ -607,18 +607,28 @@ public class SemanticModelingController {
             Authentication auth) {
         String userId = (String) auth.getPrincipal();
         if (req.toolName() == null
-                || !Set.of("write_file", "patch_file").contains(req.toolName())
+                || !Set.of("write_file", "edit_file", "patch_file", "delete_file")
+                        .contains(req.toolName())
                 || req.input() == null) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, "仅支持 write_file / patch_file 预检");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "仅支持工程文件写入预览");
         }
         return Mono.fromCallable(
                         () -> {
                             groupService.getGroup(userId, groupId);
                             ModelingToolkit.PreviewResult r =
-                                    modelingToolkitRegistrar
-                                            .toolkit()
-                                            .previewChange(groupId, req.toolName(), req.input());
+                                    "patch_file".equals(req.toolName())
+                                                    || req.input().containsKey("files_json")
+                                            ? modelingToolkitRegistrar
+                                                    .toolkit()
+                                                    .previewChange(
+                                                            groupId, req.toolName(), req.input())
+                                            : modelingToolkitRegistrar
+                                                    .projectFilesystem()
+                                                    .preview(
+                                                            userId,
+                                                            groupId,
+                                                            req.toolName(),
+                                                            req.input());
                             return new WorkspacePreviewVO(
                                     r.ok(), r.error(), r.oldContent(), r.newContent());
                         })

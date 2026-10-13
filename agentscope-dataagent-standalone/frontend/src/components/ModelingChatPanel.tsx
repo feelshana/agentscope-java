@@ -79,6 +79,21 @@ function taskLabel(name: string, inputJson?: string): string {
   const input = parseToolInput(inputJson);
   const path = typeof input.path === 'string' ? (input.path as string) : '';
   switch (name) {
+    case 'wren_cli': {
+      const args = Array.isArray(input.arguments) ? input.arguments.filter((value): value is string => typeof value === 'string') : [];
+      const operation = args.slice(0, 2).join(' ');
+      const labels: Record<string, string> = {
+        'context show': '查看 Wren 工程', 'context validate': 'Wren 校验工程',
+        'context build': 'Wren 编译草稿', 'context instructions': '读取业务规则',
+        'memory store': '保存问题与 SQL 示例', 'memory recall': '召回 SQL 示例',
+        'memory fetch': '检索语义上下文', 'memory index': '更新 Wren 索引',
+        'memory status': '查看 Wren 记忆状态', 'skills get': '读取官方技能',
+      };
+      return labels[operation] || (args[0] === 'query' ? '执行 Wren 草稿查询' : args[0] === 'dry-plan' ? '预览 Wren SQL 计划' : args[0] === 'dry-run' ? 'Wren 查询检查' : `官方 Wren：${operation}`);
+    }
+    case 'glob_files':
+    case 'grep_files':
+      return '搜索工程文件';
     case 'list_modeling_state':
       return '盘点建模现状';
     case 'list_files':
@@ -89,6 +104,7 @@ function taskLabel(name: string, inputJson?: string): string {
       if (typeof input.files_json === 'string') return '提交完整业务方案';
       return path ? `写入 ${path}` : '写入工程文件';
     case 'patch_file':
+    case 'edit_file':
       return path ? `修改 ${path}` : '修改工程文件';
     case 'validate_mdl':
       return '校验工程文件';
@@ -122,7 +138,7 @@ function TaskRow({ frame }: { frame: ToolFrame }) {
   const [open, setOpen] = useState(false);
   const label = taskLabel(frame.name, frame.input);
   const input = parseToolInput(frame.input);
-  const writeContent = frame.name === 'write_file' ? input.content : frame.name === 'patch_file' ? input.replacement : frame.name === 'create_view' ? input.statement : undefined;
+  const writeContent = frame.name === 'write_file' ? input.content : frame.name === 'patch_file' ? input.replacement : frame.name === 'edit_file' ? input.new_string : frame.name === 'create_view' ? input.statement : undefined;
   let readableResult = frame.result || '';
   try { const value: unknown = JSON.parse(readableResult); if (typeof value === 'string') readableResult = value; } catch { /* Keep plain tool output. */ }
   let prettyInput = '';
@@ -208,6 +224,7 @@ export default function ModelingChatPanel({
   submitDraft = false,
   onSessionReady,
   onAttachDocument,
+  onDraftSubmitted,
 }: {
   groupId: string;
   onClose: () => void;
@@ -219,6 +236,7 @@ export default function ModelingChatPanel({
   submitDraft?: boolean;
   onSessionReady?: (hasPending: boolean, error?: string) => void;
   onAttachDocument?: () => void;
+  onDraftSubmitted?: () => void;
 }) {
   const [messages, setMessages] = useState<PanelMessage[]>([]);
   const [input, setInput] = useState('');
@@ -468,6 +486,7 @@ export default function ModelingChatPanel({
     confirmed: boolean,
     toolInput?: Record<string, unknown>,
     feedback?: string,
+    confirmBatch = false,
   ) {
     if (busy || decisionInFlight.current) return;
     decisionInFlight.current = true;
@@ -497,6 +516,7 @@ export default function ModelingChatPanel({
         confirmed,
         toolInput,
         feedback,
+        confirmBatch,
       })) {
         applyEvent(messageId, evt);
       }
@@ -534,6 +554,7 @@ export default function ModelingChatPanel({
     const key = `${groupId}:${draftPromptId ?? draftPrompt}`;
     if (submitDraft && draftPrompt && sessionReady && !busy && !awaitingDecision && consumedSubmission.current !== key) {
       consumedSubmission.current = key;
+      onDraftSubmitted?.();
       void sendText(draftPrompt);
     }
   }, [submitDraft, draftPrompt, draftPromptId, sessionReady, busy, awaitingDecision, groupId]);
@@ -566,7 +587,7 @@ export default function ModelingChatPanel({
           <span style={S.title}>
             <Icon name="model" size="sm" /> 对话建模
           </span>
-          <span style={S.headerHint}>写入草稿 → 验证与确认 → 发布</span>
+          <span style={S.headerHint}>完善草稿 → 助手检查 → 发布</span>
           {variant !== 'dock' && <button style={S.close} onClick={handleClose} title="关闭">
             <Icon name="close" size="sm" />
           </button>}
@@ -579,9 +600,9 @@ export default function ModelingChatPanel({
               <div style={S.welcomeTitle}>
                 <Icon name="model" size="sm" /> 我是建模助手
               </div>
-              <div style={S.welcomeDesc}>围绕已提交的分析问题澄清口径、完善模型、关系、口径与明细视图。</div>
-              <p style={S.welcomeDesc}>这里用于回答助手的问题和反馈结果。需要增加分析问题时，请使用右侧问题清单的“添加问题”。</p>
-              <div style={S.welcomeDesc}>每个问题都会生成 SQL，经 Wren 验证并由你确认结果后再发布。</div>
+              <div style={S.welcomeDesc}>助手通过官方 Wren 完善模型、关系、视图、Cube 和业务知识。</div>
+              <p style={S.welcomeDesc}>业务文档和常用问题均为可选。可以直接描述业务，或让助手根据现有资料提出建议。</p>
+              <div style={S.welcomeDesc}>确认草稿变更后，助手执行检查；你确认业务含义并发布，即可问数。</div>
             </div>
           )}
           {messages.map(m => (
@@ -600,18 +621,29 @@ export default function ModelingChatPanel({
                         <TaskRow key={seg.frame.id} frame={seg.frame} />
                       ),
                     )}
-                    {m.hitl?.toolCalls.map(call => (
-                      <ModelingHitlCard
-                        key={call.id}
-                        call={call}
-                        groupId={groupId}
-                        overview={overview}
-                        submitting={busy}
-                        onDecision={(confirmed, toolInput, feedback) =>
-                          void submitDecision(m.id, m.hitl as PendingHitl, call, confirmed, toolInput, feedback)
-                        }
-                      />
-                    ))}
+                    {m.hitl && m.hitl.toolCalls.length > 1 && <div style={{ padding: '12px', border: '1px solid #cbd5e1', borderRadius: 8 }}>
+                      <strong>本次工程变更：{m.hitl.toolCalls.length} 项</strong>
+                      <p>下面列出本次全部变更，可以一次授权。相同文件的多条变更会按列表顺序依次应用，全部授权会全部执行，不会自动在两条内容中择一；写入后助手继续官方检查，发布仍需单独操作。</p>
+                      <button disabled={busy} onClick={() => void submitDecision(m.id, m.hitl as PendingHitl, m.hitl!.toolCalls[0], true, undefined, undefined, true)}>一次授权全部变更</button>
+                    </div>}
+                    {m.hitl?.toolCalls.map((call, index, calls) => {
+                      const path = typeof call.input.path === 'string' ? call.input.path : '';
+                      const samePath = path ? calls.filter(other => other.input.path === path).length : 0;
+                      return <div key={call.id}>
+                        {calls.length > 1 && <div style={{ margin: '8px 0 4px', color: '#475569', fontSize: 12 }}>
+                          变更 {index + 1}/{calls.length}{samePath > 1 ? ` · 同一文件还有 ${samePath - 1} 条待处理变更` : ''}
+                        </div>}
+                        <ModelingHitlCard
+                          call={call}
+                          groupId={groupId}
+                          overview={overview}
+                          submitting={busy}
+                          onDecision={(confirmed, toolInput, feedback) =>
+                            void submitDecision(m.id, m.hitl as PendingHitl, call, confirmed, toolInput, feedback)
+                          }
+                        />
+                      </div>;
+                    })}
                     {m.pending && m.segments.length === 0 && !m.hitl && (
                       <span className="da-typing">
                         <span />

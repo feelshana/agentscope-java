@@ -1,0 +1,294 @@
+[
+  {
+    "question": "2024年营收是多少",
+    "sql": "SELECT SUM(amount) AS value FROM valid_orders WHERE order_date >= DATE '2024-01-01' AND order_date < DATE '2025-01-01'",
+    "expected": [
+      {
+        "value": 100
+      }
+    ]
+  },
+  {
+    "question": "2024年付费客户数是多少",
+    "sql": "SELECT COUNT(DISTINCT customer_id) AS value FROM valid_orders WHERE order_date >= DATE '2024-01-01' AND order_date < DATE '2025-01-01'",
+    "expected": [
+      {
+        "value": 1
+      }
+    ]
+  },
+  {
+    "question": "2024年付费订单数是多少",
+    "sql": "SELECT COUNT(*) AS value FROM valid_orders WHERE order_date >= DATE '2024-01-01' AND order_date < DATE '2025-01-01'",
+    "expected": [
+      {
+        "value": 1
+      }
+    ]
+  },
+  {
+    "question": "2024年平均订单金额是多少",
+    "sql": "SELECT AVG(amount) AS value FROM valid_orders WHERE order_date >= DATE '2024-01-01' AND order_date < DATE '2025-01-01'",
+    "expected": [
+      {
+        "value": 100.0
+      }
+    ]
+  },
+  {
+    "question": "2024年最大订单金额是多少",
+    "sql": "SELECT MAX(amount) AS value FROM valid_orders WHERE order_date >= DATE '2024-01-01' AND order_date < DATE '2025-01-01'",
+    "expected": [
+      {
+        "value": 100
+      }
+    ]
+  },
+  {
+    "question": "2025年营收是多少",
+    "sql": "SELECT SUM(amount) AS value FROM valid_orders WHERE order_date >= DATE '2025-01-01' AND order_date < DATE '2026-01-01'",
+    "expected": [
+      {
+        "value": 3099
+      }
+    ]
+  },
+  {
+    "question": "2025年付费客户数是多少",
+    "sql": "SELECT COUNT(DISTINCT customer_id) AS value FROM valid_orders WHERE order_date >= DATE '2025-01-01' AND order_date < DATE '2026-01-01'",
+    "expected": [
+      {
+        "value": 2
+      }
+    ]
+  },
+  {
+    "question": "2025年付费订单数是多少",
+    "sql": "SELECT COUNT(*) AS value FROM valid_orders WHERE order_date >= DATE '2025-01-01' AND order_date < DATE '2026-01-01'",
+    "expected": [
+      {
+        "value": 4
+      }
+    ]
+  },
+  {
+    "question": "2025年平均订单金额是多少",
+    "sql": "SELECT AVG(amount) AS value FROM valid_orders WHERE order_date >= DATE '2025-01-01' AND order_date < DATE '2026-01-01'",
+    "expected": [
+      {
+        "value": 774.75
+      }
+    ]
+  },
+  {
+    "question": "2025年最大订单金额是多少",
+    "sql": "SELECT MAX(amount) AS value FROM valid_orders WHERE order_date >= DATE '2025-01-01' AND order_date < DATE '2026-01-01'",
+    "expected": [
+      {
+        "value": 2790
+      }
+    ]
+  },
+  {
+    "question": "2026年营收是多少",
+    "sql": "SELECT SUM(amount) AS value FROM valid_orders WHERE order_date >= DATE '2026-01-01' AND order_date < DATE '2027-01-01'",
+    "expected": [
+      {
+        "value": 40
+      }
+    ]
+  },
+  {
+    "question": "2026年付费客户数是多少",
+    "sql": "SELECT COUNT(DISTINCT customer_id) AS value FROM valid_orders WHERE order_date >= DATE '2026-01-01' AND order_date < DATE '2027-01-01'",
+    "expected": [
+      {
+        "value": 1
+      }
+    ]
+  },
+  {
+    "question": "2026年付费订单数是多少",
+    "sql": "SELECT COUNT(*) AS value FROM valid_orders WHERE order_date >= DATE '2026-01-01' AND order_date < DATE '2027-01-01'",
+    "expected": [
+      {
+        "value": 1
+      }
+    ]
+  },
+  {
+    "question": "2026年平均订单金额是多少",
+    "sql": "SELECT AVG(amount) AS value FROM valid_orders WHERE order_date >= DATE '2026-01-01' AND order_date < DATE '2027-01-01'",
+    "expected": [
+      {
+        "value": 40.0
+      }
+    ]
+  },
+  {
+    "question": "2026年最大订单金额是多少",
+    "sql": "SELECT MAX(amount) AS value FROM valid_orders WHERE order_date >= DATE '2026-01-01' AND order_date < DATE '2027-01-01'",
+    "expected": [
+      {
+        "value": 40
+      }
+    ]
+  },
+  {
+    "question": "2025年1月营收是多少",
+    "sql": "SELECT SUM(amount) AS value FROM valid_orders WHERE YEAR(order_date)=2025 AND MONTH(order_date)=1",
+    "expected": [
+      {
+        "value": 99
+      }
+    ]
+  },
+  {
+    "question": "2025年1月付费客户数是多少",
+    "sql": "SELECT COUNT(DISTINCT customer_id) AS value FROM valid_orders WHERE YEAR(order_date)=2025 AND MONTH(order_date)=1",
+    "expected": [
+      {
+        "value": 1
+      }
+    ]
+  },
+  {
+    "question": "2025年1月订单数是多少",
+    "sql": "SELECT COUNT(*) AS value FROM valid_orders WHERE YEAR(order_date)=2025 AND MONTH(order_date)=1",
+    "expected": [
+      {
+        "value": 1
+      }
+    ]
+  },
+  {
+    "question": "2025年2月营收是多少",
+    "sql": "SELECT SUM(amount) AS value FROM valid_orders WHERE YEAR(order_date)=2025 AND MONTH(order_date)=2",
+    "expected": [
+      {
+        "value": 2990
+      }
+    ]
+  },
+  {
+    "question": "2025年2月付费客户数是多少",
+    "sql": "SELECT COUNT(DISTINCT customer_id) AS value FROM valid_orders WHERE YEAR(order_date)=2025 AND MONTH(order_date)=2",
+    "expected": [
+      {
+        "value": 2
+      }
+    ]
+  },
+  {
+    "question": "2025年2月订单数是多少",
+    "sql": "SELECT COUNT(*) AS value FROM valid_orders WHERE YEAR(order_date)=2025 AND MONTH(order_date)=2",
+    "expected": [
+      {
+        "value": 2
+      }
+    ]
+  },
+  {
+    "question": "2025年3月营收是多少",
+    "sql": "SELECT SUM(amount) AS value FROM valid_orders WHERE YEAR(order_date)=2025 AND MONTH(order_date)=3",
+    "expected": [
+      {
+        "value": null
+      }
+    ]
+  },
+  {
+    "question": "2025年3月付费客户数是多少",
+    "sql": "SELECT COUNT(DISTINCT customer_id) AS value FROM valid_orders WHERE YEAR(order_date)=2025 AND MONTH(order_date)=3",
+    "expected": [
+      {
+        "value": 0
+      }
+    ]
+  },
+  {
+    "question": "2025年3月订单数是多少",
+    "sql": "SELECT COUNT(*) AS value FROM valid_orders WHERE YEAR(order_date)=2025 AND MONTH(order_date)=3",
+    "expected": [
+      {
+        "value": 0
+      }
+    ]
+  },
+  {
+    "question": "2025年12月营收是多少",
+    "sql": "SELECT SUM(amount) AS value FROM valid_orders WHERE YEAR(order_date)=2025 AND MONTH(order_date)=12",
+    "expected": [
+      {
+        "value": 10
+      }
+    ]
+  },
+  {
+    "question": "2025年12月付费客户数是多少",
+    "sql": "SELECT COUNT(DISTINCT customer_id) AS value FROM valid_orders WHERE YEAR(order_date)=2025 AND MONTH(order_date)=12",
+    "expected": [
+      {
+        "value": 1
+      }
+    ]
+  },
+  {
+    "question": "2025年12月订单数是多少",
+    "sql": "SELECT COUNT(*) AS value FROM valid_orders WHERE YEAR(order_date)=2025 AND MONTH(order_date)=12",
+    "expected": [
+      {
+        "value": 1
+      }
+    ]
+  },
+  {
+    "question": "2025年客户营收排名",
+    "sql": "SELECT customer_id, SUM(amount) AS revenue FROM valid_orders WHERE YEAR(order_date)=2025 GROUP BY customer_id ORDER BY revenue DESC",
+    "expected": [
+      {
+        "customer_id": "B",
+        "revenue": 2800
+      },
+      {
+        "customer_id": "A",
+        "revenue": 299
+      }
+    ]
+  },
+  {
+    "question": "内部客户有多少付费订单（诊断，不保存）",
+    "sql": "SELECT COUNT(*) AS value FROM orders WHERE is_internal=1 AND status='paid'",
+    "expected": [
+      {
+        "value": 1
+      }
+    ]
+  },
+  {
+    "question": "2025年外部付费订单明细",
+    "sql": "SELECT id,customer_id,amount FROM valid_orders WHERE YEAR(order_date)=2025 ORDER BY id",
+    "expected": [
+      {
+        "id": 2,
+        "customer_id": "A",
+        "amount": 99
+      },
+      {
+        "id": 3,
+        "customer_id": "A",
+        "amount": 200
+      },
+      {
+        "id": 4,
+        "customer_id": "B",
+        "amount": 2790
+      },
+      {
+        "id": 7,
+        "customer_id": "B",
+        "amount": 10
+      }
+    ]
+  }
+]

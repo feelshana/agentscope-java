@@ -44,6 +44,42 @@ class ModelingHitlMiddlewareTest {
     private final ModelingHitlMiddleware middleware = new ModelingHitlMiddleware();
 
     @Test
+    void oneInvalidWriteDoesNotPoisonAnotherWriteInSameBatch() {
+        var state = AgentState.builder().sessionId("mixed").replyId("reply").build();
+        var context = RuntimeContext.builder().agentState(state).build();
+        var gate =
+                new ModelingHitlMiddleware(
+                        (ctx, call) -> call.getId().equals("bad") ? "文件已存在" : null);
+        var events =
+                gate.onActing(
+                                null,
+                                context,
+                                new ActingInput(
+                                        List.of(
+                                                tool("bad", "write_file", ToolCallState.PENDING),
+                                                tool("good", "write_file", ToolCallState.PENDING))),
+                                input -> Flux.empty())
+                        .collectList()
+                        .block();
+        assertThat(events)
+                .filteredOn(RequireUserConfirmEvent.class::isInstance)
+                .singleElement()
+                .satisfies(
+                        event ->
+                                assertThat(((RequireUserConfirmEvent) event).getToolCalls())
+                                        .extracting(ToolUseBlock::getId)
+                                        .containsExactly("good"));
+        assertThat(
+                        state.getContext().stream()
+                                .flatMap(m -> m.getContent().stream())
+                                .filter(ToolResultBlock.class::isInstance)
+                                .map(ToolResultBlock.class::cast)
+                                .toList())
+                .hasSize(1)
+                .allSatisfy(result -> assertThat(result.getId()).isEqualTo("bad"));
+    }
+
+    @Test
     void nativeReactLoopRepairsTechnicalFailureBeforeFirstHumanPrompt() {
         var calls = new java.util.concurrent.atomic.AtomicInteger();
         var model =
@@ -337,7 +373,7 @@ class ModelingHitlMiddlewareTest {
         assertThat(confirmation.getReplyId()).isEqualTo("reply-1");
         assertThat(confirmation.getToolCalls())
                 .extracting(ToolUseBlock::getId)
-                .containsExactly("write-1");
+                .containsExactly("write-1", "write-2");
         assertThat(confirmation.getToolCalls().get(0).getState()).isEqualTo(ToolCallState.ASKING);
         assertThat(events.get(1)).isInstanceOf(RequestStopEvent.class);
         assertThat(((RequestStopEvent) events.get(1)).getGenerateReason())
@@ -350,7 +386,7 @@ class ModelingHitlMiddlewareTest {
                         .toList();
         assertThat(persisted)
                 .extracting(ToolUseBlock::getState)
-                .containsExactly(ToolCallState.ASKING, ToolCallState.PENDING);
+                .containsExactly(ToolCallState.ASKING, ToolCallState.ASKING);
     }
 
     @Test
@@ -443,5 +479,80 @@ class ModelingHitlMiddlewareTest {
                 .input(Map.of("group_id", "g1"))
                 .state(state)
                 .build();
+    }
+
+    @Test
+    void officialBuildRunsWithoutConfirmationButMemoryStorePausesAndResumes() {
+        ToolUseBlock build =
+                ToolUseBlock.builder()
+                        .id("build")
+                        .name("wren_cli")
+                        .input(Map.of("arguments", List.of("context", "build")))
+                        .state(ToolCallState.PENDING)
+                        .build();
+        var state = AgentState.builder().sessionId("official").build();
+        var context = RuntimeContext.builder().agentState(state).build();
+        AtomicBoolean delegated = new AtomicBoolean();
+        assertThat(
+                        middleware
+                                .onActing(
+                                        null,
+                                        context,
+                                        new ActingInput(List.of(build)),
+                                        input -> {
+                                            delegated.set(true);
+                                            return Flux.empty();
+                                        })
+                                .collectList()
+                                .block())
+                .isEmpty();
+        assertThat(delegated).isTrue();
+        ToolUseBlock store =
+                ToolUseBlock.builder()
+                        .id("store")
+                        .name("wren_cli")
+                        .input(
+                                Map.of(
+                                        "arguments",
+                                        List.of(
+                                                "memory",
+                                                "store",
+                                                "--nl",
+                                                "营收",
+                                                "--sql",
+                                                "SELECT 1")))
+                        .state(ToolCallState.PENDING)
+                        .build();
+        var events =
+                middleware
+                        .onActing(
+                                null,
+                                context,
+                                new ActingInput(List.of(store)),
+                                input -> Flux.empty())
+                        .collectList()
+                        .block();
+        assertThat(events).filteredOn(RequireUserConfirmEvent.class::isInstance).singleElement();
+        var confirmation = (RequireUserConfirmEvent) events.get(0);
+        assertThat(confirmation.getToolCalls().get(0).getState()).isEqualTo(ToolCallState.ASKING);
+        ToolUseBlock allowed =
+                ToolUseBlock.builder()
+                        .id("store")
+                        .name("wren_cli")
+                        .input(store.getInput())
+                        .state(ToolCallState.ALLOWED)
+                        .build();
+        delegated.set(false);
+        middleware
+                .onActing(
+                        null,
+                        context,
+                        new ActingInput(List.of(allowed)),
+                        input -> {
+                            delegated.set(true);
+                            return Flux.empty();
+                        })
+                .blockLast();
+        assertThat(delegated).isTrue();
     }
 }

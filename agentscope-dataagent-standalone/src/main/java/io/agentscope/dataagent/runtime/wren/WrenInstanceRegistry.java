@@ -84,6 +84,8 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
 
     private final WrenProperties props;
     private final WrenProfileHome profileHome;
+    private final io.agentscope.dataagent.dataset.WrenPublishedProject publishedProject;
+    private final io.agentscope.dataagent.web.persistence.jpa.DatasetGroupRepository groups;
 
     private final Map<String, Instance> instances = new ConcurrentHashMap<>();
     private final Map<String, Object> spawnLocks = new ConcurrentHashMap<>();
@@ -103,14 +105,41 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
                     });
 
     public WrenInstanceRegistry(WrenProperties props, WrenProfileHome profileHome) {
+        this(props, profileHome, null, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public WrenInstanceRegistry(
+            WrenProperties props,
+            WrenProfileHome profileHome,
+            io.agentscope.dataagent.dataset.WrenPublishedProject publishedProject,
+            io.agentscope.dataagent.web.persistence.jpa.DatasetGroupRepository groups) {
         this.props = props;
         this.profileHome = profileHome;
+        this.publishedProject = publishedProject;
+        this.groups = groups;
+    }
+
+    @Override
+    public List<McpSchema.Tool> listTools(String groupId) {
+        synchronized (callGates.computeIfAbsent(groupId, ignored -> new Object())) {
+            Instance instance = acquire(groupId);
+            instance.touch();
+            if (instance.tools == null) {
+                List<McpSchema.Tool> tools = instance.client.listTools().block(props.timeout());
+                if (tools == null) throw new DatasetException("官方 MCP 工具列表无响应", 503);
+                instance.tools = List.copyOf(tools);
+            }
+            return instance.tools;
+        }
     }
 
     /** A live subprocess bound to one group's published snapshot. */
     private static final class Instance {
         private final Path projectDir;
         private final McpClientWrapper client;
+        // Accessed under the per-group gate; discarded together with this subprocess.
+        private List<McpSchema.Tool> tools;
         private final AtomicLong lastUsed = new AtomicLong(System.currentTimeMillis());
 
         Instance(Path projectDir, McpClientWrapper client) {
@@ -210,6 +239,11 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
 
     private Instance spawn(String groupId) {
         Path project = props.groupRoot(groupId).resolve("published");
+        if (publishedProject != null) {
+            var group =
+                    groups.findById(groupId).orElseThrow(() -> new DatasetException("知识库不存在", 404));
+            project = publishedProject.prepare(group.getOwnerId(), groupId);
+        }
         if (!Files.isRegularFile(project.resolve("target").resolve("mdl.json"))) {
             throw new DatasetException("知识库的语义模型产物不存在（缺少已发布的 mdl.json）。请在「语义建模」页重新发布后再查询。", 409);
         }
@@ -255,6 +289,7 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
         env.put("PYTHONUTF8", "1");
         env.put("PYTHONIOENCODING", "utf-8");
         env.put("WREN_HOME", home.toAbsolutePath().toString());
+        WrenProcessEnvironment.configure(env);
 
         McpClientWrapper client =
                 McpClientBuilder.create("wren-" + groupId)

@@ -148,7 +148,7 @@ dataagent:
     api-key: ${DATAAGENT_OPENAI_API_KEY:${OPENAI_API_KEY:sk-7708c665bc024a35bb6c5f1f1a7fc25f}}
     base-url: ${DATAAGENT_OPENAI_BASE_URL:${OPENAI_BASE_URL:https://api.deepseek.com}}
     model-name: ${DATAAGENT_OPENAI_MODEL_NAME:${OPENAI_MODEL_NAME:deepseek-flash}}
-    stream: true
+    stream: ${DATAAGENT_OPENAI_STREAM:true}
 
   # ---- DashScope model (fallback when no OpenAI key is configured) ----
   # Set DASHSCOPE_API_KEY env var or override api-key below.

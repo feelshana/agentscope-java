@@ -49,6 +49,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
@@ -102,6 +103,14 @@ public final class ModelingToolkit {
     private final io.agentscope.dataagent.dataset.ModelingPlanWriter planWriter;
     private final MdlQuestionService questions;
     private final io.agentscope.dataagent.dataset.ModelingWorkflowService workflow;
+
+    /** Official enrich-context mode, locked for the lifetime of a modeling conversation. */
+    private final Map<String, EnrichContextMode> enrichContextModes = new ConcurrentHashMap<>();
+
+    private enum EnrichContextMode {
+        GRILL,
+        AUTOPILOT
+    }
 
     public ModelingToolkit(
             MdlSuggestionService suggestions,
@@ -176,6 +185,50 @@ public final class ModelingToolkit {
     // -----------------------------------------------------------------
     //  list_modeling_state — snapshot rendered from the workspace files
     // -----------------------------------------------------------------
+
+    @Tool(
+            name = "set_enrich_context_mode",
+            description =
+                    "在本次语义增强会话开始时锁定官方 Wren enrich-context 模式。mode 只能是 grill 或"
+                            + " autopilot，且同一会话不能中途切换。grill 逐项询问并等待确认；autopilot 自动应用低风险补充，但遇到现有 MDL"
+                            + " 冲突、路由不确定或新增指标/视图/关系时必须切回逐项确认。调用本工具前先向用户明确展示两种模式并取得选择。")
+    public String setEnrichContextMode(
+            DatasetScope scope,
+            RuntimeContext rc,
+            @ToolParam(name = "mode", description = "官方模式：grill 或 autopilot") String mode) {
+        String sessionId = modeKey(rc);
+        if (sessionId == null || sessionId.isBlank()) return "error: enrich-context 模式必须绑定当前建模会话";
+        if (mode == null || mode.isBlank()) return "error: mode 必须是 grill 或 autopilot";
+        EnrichContextMode requested;
+        try {
+            requested = EnrichContextMode.valueOf(mode.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            return "error: mode 必须是 grill 或 autopilot";
+        }
+        EnrichContextMode previous = enrichContextModes.putIfAbsent(sessionId, requested);
+        if (previous != null && previous != requested)
+            return "error: 官方 enrich-context 模式已锁定为 "
+                    + previous.name().toLowerCase(Locale.ROOT)
+                    + "，不能在本次会话中切换；请新建会话后重试";
+        EnrichContextMode effective = previous == null ? requested : previous;
+        log.info(
+                "[enrich-context] session={} mode={}",
+                sessionId,
+                effective.name().toLowerCase(Locale.ROOT));
+        return "enrich-context 模式已锁定："
+                + effective.name().toLowerCase(Locale.ROOT)
+                + "。请继续遵守官方技能的冲突、高影响变更和路由不确定升级规则。";
+    }
+
+    @Tool(
+            name = "get_enrich_context_mode",
+            description = "读取当前建模会话已锁定的官方 enrich-context 模式；尚未选择时返回未选择。")
+    public String getEnrichContextMode(RuntimeContext rc) {
+        String sessionId = modeKey(rc);
+        if (sessionId == null || sessionId.isBlank()) return "mode: unset (missing session)";
+        EnrichContextMode mode = enrichContextModes.get(sessionId);
+        return "mode: " + (mode == null ? "unset" : mode.name().toLowerCase(Locale.ROOT));
+    }
 
     @Tool(
             name = "list_modeling_state",
@@ -2092,6 +2145,12 @@ public final class ModelingToolkit {
             return new GroupRef(null, unknownGroup(groupId));
         }
         return new GroupRef(group, null);
+    }
+
+    private static String modeKey(RuntimeContext rc) {
+        if (rc == null || rc.getSessionId() == null || rc.getSessionId().isBlank()) return null;
+        String user = rc.getUserId() == null ? "" : rc.getUserId();
+        return user + "|" + rc.getSessionId();
     }
 
     private String workflowGuidance(Ctx c) {

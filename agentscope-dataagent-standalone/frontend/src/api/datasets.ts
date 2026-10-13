@@ -76,8 +76,10 @@ export async function downloadQueryCsv(artifactId: string): Promise<void> {
 
 async function errorMessage(res: Response, fallback: string): Promise<string> {
   try {
-    const body = (await res.json()) as { message?: string };
-    return body.message || fallback;
+    const body = (await res.json()) as { message?: unknown; detail?: unknown };
+    if (typeof body.message === 'string' && body.message.trim()) return body.message;
+    if (typeof body.detail === 'string' && body.detail.trim()) return body.detail;
+    return fallback;
   } catch {
     return fallback;
   }
@@ -136,7 +138,12 @@ export async function createGroup(name: string, description: string): Promise<Da
     headers: jsonHeaders(),
     body: JSON.stringify({ name, description }),
   });
-  if (!res.ok) throw new Error(await errorMessage(res, `Failed to create KB: ${res.status}`));
+  if (!res.ok) {
+    const fallback = res.status === 409
+      ? `知识库「${name}」已存在，请更换名称，或取消后打开已有知识库。`
+      : `创建知识库失败（${res.status}），请稍后重试。`;
+    throw new Error(await errorMessage(res, fallback));
+  }
   return res.json();
 }
 

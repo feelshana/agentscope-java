@@ -1,8 +1,6 @@
 package io.agentscope.dataagent.dataset;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
@@ -56,21 +54,12 @@ class SqlExampleRecallTest {
     }
 
     @Test
-    void canonicalCubePathsAreRejectedBeforeWritingButModelAndViewPathsRemainWritable() {
-        var props = new WrenProperties("wren", home.toString(), "dataagent", "mysql", 30);
-        var workspace =
-                new MdlWorkspaceService(props, (path, timeout, args) -> new WrenCli.Result(0, ""));
-        for (String path :
-                List.of(
-                        "cubes/a/metadata.yml",
-                        "CUBES/a/metadata.yml",
-                        "models/../cubes/a/metadata.yml")) {
-            var error =
-                    assertThrows(
-                            DatasetException.class, () -> workspace.resolveWritable("g", path));
-            assertTrue(error.getMessage().contains("Cube 已停用"));
-        }
-        assertDoesNotThrow(() -> workspace.resolveWritable("g", "models/orders/metadata.yml"));
-        assertDoesNotThrow(() -> workspace.resolveWritable("g", "views/valid_orders/sql.yml"));
+    void canonicalCubePathsUseOfficialWorkspace() {
+        var cli = (WrenCli) (cwd, timeout, args) -> new WrenCli.Result(0, "");
+        var props = new WrenProperties("wren", home.toString(), "test", "mysql", 30);
+        var workspace = new MdlWorkspaceService(props, cli);
+        assertEquals(
+                workspace.workspaceRoot("g1").resolve("cubes/revenue/metadata.yml"),
+                workspace.resolveWritable("g1", "cubes/revenue/metadata.yml"));
     }
 }

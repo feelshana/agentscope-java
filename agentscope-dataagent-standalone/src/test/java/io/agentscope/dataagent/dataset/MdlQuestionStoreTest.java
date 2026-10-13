@@ -365,10 +365,8 @@ class MdlQuestionStoreTest {
     }
 
     @Test
-    void platformPathsAndConfirmedExamplesCannotBeAgentWritten() {
-        assertThrows(
-                DatasetException.class,
-                () -> workspace.resolveWritable("g1", "knowledge/sql/forged.md"));
+    void platformPathsAreProtectedButOfficialExamplesAreWritable() {
+        assertDoesNotThrow(() -> workspace.resolveWritable("g1", "knowledge/sql/forged.md"));
         assertThrows(
                 DatasetException.class,
                 () -> workspace.resolveWritable("g1", ".platform/questions/sales.json"));
@@ -400,7 +398,9 @@ class MdlQuestionStoreTest {
                 () -> workspace.resolveWritable("g1", "./wren_project.yml"));
         assertThrows(
                 DatasetException.class,
-                () -> workspace.resolveWritable("g1", "knowledge/questions/../sql/forged.md"));
+                () ->
+                        workspace.resolveWritable(
+                                "g1", "knowledge/questions/../../wren_project.yml"));
     }
 
     @Test

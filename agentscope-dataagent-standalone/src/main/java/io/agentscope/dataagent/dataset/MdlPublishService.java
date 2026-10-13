@@ -15,7 +15,6 @@
  */
 package io.agentscope.dataagent.dataset;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -35,10 +34,8 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -354,7 +351,7 @@ public class MdlPublishService {
 
     /**
      * Runs the full publish chain minus the snapshot swap: reconcile, staging copy, {@code
-     * validate --strict}, {@code build}, ref_sql materialisation, per-view/per-derived-model
+     * validate --strict}, {@code build}, per-view/per-derived-model
      * dry-run and per-cube {@code cube query --sql-only}. Local and wren issues are returned
      * without throwing.
      */
@@ -414,7 +411,7 @@ public class MdlPublishService {
                         }
                         return new MdlValidation(false, issues, build.output(), snapshot.files());
                     }
-                    issues.addAll(materializeDerivedModels(projectDir));
+
                     issues.addAll(dryRunViews(projectDir, snapshot.views()));
                     issues.addAll(dryRunDerivedModels(projectDir, derivedModelsOf(snapshot)));
                     issues.addAll(dryRunCubes(projectDir, snapshot.cubes()));
@@ -501,10 +498,7 @@ public class MdlPublishService {
                                                         props.timeout(),
                                                         List.of("context", "build"));
                                         if (!build.ok()) throw new DatasetException(build.output());
-                                        List<MdlIssue> materialized =
-                                                materializeDerivedModels(scratch);
-                                        if (hasErrors(materialized))
-                                            throw new DatasetException(materialized.toString());
+
                                         var call =
                                                 gateway.callDraft(
                                                         groupId,
@@ -694,14 +688,11 @@ public class MdlPublishService {
             return failure(group, issues, build.output());
         }
 
-        // specs/035 / ADR 0043: a ref_sql body is expanded verbatim by the engine (no logical
-        // name resolution), so the staging manifest is physically qualified first; unresolved
-        // references block the publish with a precise local error.
-        issues.addAll(materializeDerivedModels(projectDir));
+        // Official build output is immutable semantic input.
         // Same gate as validate(): a view that cannot survive its own dry-run must never be
-        // snapshotted — published views are force-routed to by the query guard (specs/018).
+        // snapshotted; the official engine is the authority for view execution.
         issues.addAll(dryRunViews(projectDir, snapshot.views()));
-        // Derived models must equally survive their own dry-run against the materialised
+        // Derived models must equally survive their own dry-run against the official
         // manifest before the snapshot.
         issues.addAll(dryRunDerivedModels(projectDir, derivedModelsOf(snapshot)));
         // ADR 0033 D6: every cube must survive its own SQL transformation before the snapshot.
@@ -714,7 +705,7 @@ public class MdlPublishService {
         Path preparedDir = groupRoot.resolve("published.next");
         Path preparedManifest = groupRoot.resolve("mdl.json.next");
         prepareSnapshot(projectDir, preparedDir);
-        questionStore.filterPublishedExamples(groupId, preparedDir);
+
         writeWrenSourceProperties(preparedDir, selection.profile());
         writeMetaJson(preparedManifest, group, snapshot);
         replacePublishedArtifacts(groupRoot, preparedDir, preparedManifest);
@@ -771,6 +762,18 @@ public class MdlPublishService {
      * source, non-MySQL kind) is refused — cross-instance JOIN is physically impossible and a
      * silent broken snapshot is worse than a loud refusal.
      */
+    /** Returns the server-selected draft connection; agents cannot choose a profile. */
+    public String draftCliProfile(String ownerId, String groupId) {
+        groupRepository
+                .findById(groupId)
+                .filter(group -> ownerId != null && ownerId.equals(group.getOwnerId()))
+                .orElseThrow(() -> new DatasetException("知识库不可见或不存在", 404));
+        WrenSourceSelection selected = selectWrenSource(datasetRepository.findByGroupId(groupId));
+        if (selected.error() != null) throw new DatasetException(selected.error(), 400);
+        profileHome.ensureAll(externalSources.findAll());
+        return selected.profile();
+    }
+
     private WrenSourceSelection selectWrenSource(List<DatasetEntity> datasets) {
         boolean anyUpload = false;
         LinkedHashSet<String> sourceIds = new LinkedHashSet<>();
@@ -841,129 +844,6 @@ public class MdlPublishService {
         }
     }
 
-    // ------------------------------------------------------- ref_sql materialisation (M5)
-
-    /**
-     * Physically qualifies every derived (ref_sql) model in the freshly built {@code
-     * target/mdl.json} manifest (specs/035, ADR 0043).
-     *
-     * <p>Empirical basis (official CLI 0.15.0, {@code target/wren-refsql-verify}): the engine
-     * expands a ref_sql body verbatim and resolves bare names against the connection's default
-     * database (MySQL error 1146), unlike view statements, for which it injects physical CTEs
-     * per referenced model. The workspace keeps human-readable logical names; this method
-     * rewrites the staging manifest in place after {@code context build}, and {@code
-     * prepareSnapshot} carries the materialised manifest into the published snapshot the
-     * runtime loads. The logical→physical map comes from the manifest's own physical models
-     * ({@code tableReference}).
-     *
-     * <p>Unmapped references become error issues (unknown model, chained derived-model
-     * reference or view reference); a model with unresolved references is left untouched so the
-     * follow-up dry-run reports its own diagnosis, while other models are still materialised.
-     * No-op when the manifest has no derived model.
-     */
-    private List<MdlIssue> materializeDerivedModels(Path projectDir) {
-        List<MdlIssue> issues = new ArrayList<>();
-        Path mdlJson = projectDir.resolve("target").resolve("mdl.json");
-        if (!Files.isRegularFile(mdlJson)) {
-            issues.add(issue("error", "派生模型物化失败：未找到构建产物 target/mdl.json", "local"));
-            return issues;
-        }
-        JsonNode root;
-        try {
-            root = mapper.readTree(Files.readString(mdlJson, StandardCharsets.UTF_8));
-        } catch (IOException e) {
-            issues.add(issue("error", "派生模型物化失败：无法解析 target/mdl.json：" + e.getMessage(), "local"));
-            return issues;
-        }
-        JsonNode models = root.path("models");
-        if (!models.isArray()) {
-            issues.add(issue("error", "派生模型物化失败：target/mdl.json 缺少 models 数组", "local"));
-            return issues;
-        }
-        Map<String, String> physicalByLogical = new HashMap<>();
-        Set<String> derivedNames = new HashSet<>();
-        int derivedCount = 0;
-        for (JsonNode model : models) {
-            String name = model.path("name").asText("");
-            if (model.hasNonNull("refSql")) {
-                derivedCount++;
-                derivedNames.add(name.toLowerCase(Locale.ROOT));
-                continue;
-            }
-            JsonNode tableRef = model.path("tableReference");
-            String physical =
-                    RefSqlMaterializer.physicalName(
-                            tableRef.path("schema").asText(null),
-                            tableRef.path("table").asText(null));
-            if (!name.isEmpty() && physical != null) {
-                physicalByLogical.put(name, physical);
-            }
-        }
-        if (derivedCount == 0) {
-            return issues;
-        }
-        Set<String> viewNames = new HashSet<>();
-        for (JsonNode view : root.path("views")) {
-            viewNames.add(view.path("name").asText("").toLowerCase(Locale.ROOT));
-        }
-        boolean changed = false;
-        for (JsonNode model : models) {
-            if (!model.hasNonNull("refSql")) {
-                continue;
-            }
-            String modelName = model.path("name").asText("");
-            String refSql = model.get("refSql").asText("");
-            List<String> unresolved = new ArrayList<>();
-            for (String ref : RefSqlMaterializer.extractTableRefs(refSql)) {
-                if (RefSqlMaterializer.resolve(physicalByLogical, ref) == null) {
-                    unresolved.add(ref);
-                }
-            }
-            for (String ref : unresolved) {
-                issues.add(
-                        issue(
-                                "error",
-                                "派生模型「"
-                                        + modelName
-                                        + "」的 SQL 引用了"
-                                        + unresolvedHint(ref, derivedNames, viewNames),
-                                "local"));
-            }
-            if (!unresolved.isEmpty()) {
-                continue;
-            }
-            String materialized = RefSqlMaterializer.materialize(refSql, physicalByLogical);
-            if (!materialized.equals(refSql)) {
-                ((ObjectNode) model).put("refSql", materialized);
-                changed = true;
-            }
-        }
-        if (changed) {
-            try {
-                Files.writeString(
-                        mdlJson,
-                        mapper.writerWithDefaultPrettyPrinter().writeValueAsString(root),
-                        StandardCharsets.UTF_8);
-            } catch (IOException e) {
-                issues.add(issue("error", "派生模型物化写回失败：" + e.getMessage(), "local"));
-            }
-        }
-        return issues;
-    }
-
-    /** One unresolved bare reference of a derived model, classified for the error message. */
-    private static String unresolvedHint(
-            String ref, Set<String> derivedNames, Set<String> viewNames) {
-        String lower = ref.toLowerCase(Locale.ROOT);
-        if (derivedNames.contains(lower)) {
-            return "其他派生模型「" + ref + "」；ref_sql 不支持链式引用派生模型，请将其 SQL 展开或改为引用物理模型";
-        }
-        if (viewNames.contains(lower)) {
-            return "视图「" + ref + "」；ref_sql 内不支持引用视图，请改用视图承载该口径或直接书写物理表";
-        }
-        return "不存在的逻辑模型「" + ref + "」，请检查模型名或先在建模页定义";
-    }
-
     // ------------------------------------------------------------------ dry-run gates
 
     /**
@@ -994,14 +874,7 @@ public class MdlPublishService {
         return issues;
     }
 
-    /**
-     * Dry-runs every derived (ref_sql) model against the freshly built {@code target/mdl.json}
-     * (specs/034, specs/035): the manifest was already materialised to physical names by {@link
-     * #materializeDerivedModels}, so a failure here means a broken physical reference, unknown
-     * column or unsupported dialect detail in the model's SQL. Same argv shape as {@link
-     * #dryRunViews}; each failure becomes an error issue naming the model and the loop continues
-     * so one broken model does not mask the others.
-     */
+    /** Dry-runs ref_sql models against the unmodified official manifest. */
     private List<MdlIssue> dryRunDerivedModels(
             Path projectDir, List<MdlWorkspaceReader.WorkspaceModel> derivedModels) {
         List<MdlIssue> issues = new ArrayList<>();

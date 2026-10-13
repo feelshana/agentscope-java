@@ -54,8 +54,8 @@ import reactor.core.scheduler.Schedulers;
 
 /**
  * Knowledge-base (KB) CRUD: named per-user containers grouping datasets. The relationship document
- * was folded into the modeling page as the "语义文档" upload (specs/028); uploading it triggers the
- * doc-enhance analysis only — the automatic knowledge-graph build on upload was removed (ADR 0038).
+ * was folded into the modeling page as the "语义文档" upload (specs/028). Uploading saves source
+ * material; the modeling agent performs enrichment using official Wren skills (ADR 0068).
  */
 @RestController
 @RequestMapping("/api/dataset-groups")
@@ -163,8 +163,6 @@ public class DatasetGroupController {
                                                     String text =
                                                             extractText(file.filename(), bytes);
                                                     datasetService.saveKnowledge(id, text);
-                                                    docEnhanceService.triggerAnalyzeQuietly(
-                                                            userId, id, text, file.filename());
                                                     return Map.of("content", text);
                                                 })
                                         .subscribeOn(Schedulers.boundedElastic()))

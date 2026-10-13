@@ -28,6 +28,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.tool.Tool;
 import io.agentscope.dataagent.dataset.DatasetGroupService;
 import io.agentscope.dataagent.dataset.DatasetScope;
@@ -234,8 +235,7 @@ class ModelingToolkitTest {
         var writer = new io.agentscope.dataagent.dataset.ModelingPlanWriter(workspace, cli, props);
         String base = writer.revision(GROUP);
         var json = new com.fasterxml.jackson.databind.ObjectMapper();
-        for (String path :
-                List.of("wren_project.yml", "../outside.yml", "knowledge/sql/accepted.md")) {
+        for (String path : List.of("wren_project.yml", "../outside.yml", "target/mdl.json")) {
             String plan =
                     json.writeValueAsString(List.of(Map.of("path", path, "content", "name: x\n")));
             assertTrue(writer.apply(GROUP, plan, base, true).startsWith("error:"));
@@ -322,19 +322,29 @@ class ModelingToolkitTest {
     private ModelingToolkit toolkit;
 
     @Test
-    void previewRejectsPlatformFilesAndConfirmedExamplesEvenWithValidContent() {
+    void previewRejectsPlatformFilesEvenWithValidContent() {
         for (String path :
                 List.of(
                         "wren_project.yml",
                         "./wren_project.yml",
-                        "knowledge/sql/accepted.md",
-                        "knowledge/questions/../sql/accepted.md")) {
+                        "target/mdl.json",
+                        "knowledge/questions/../../wren_project.yml")) {
             ModelingToolkit.PreviewResult preview =
                     toolkit.previewChange(
                             GROUP, "write_file", Map.of("path", path, "content", "name: valid\n"));
             assertFalse(preview.ok(), path);
         }
         assertTrue(cli.calls.isEmpty());
+    }
+
+    @Test
+    void enrichContextModeFollowsOfficialLockingRule() {
+        RuntimeContext rc = mock(RuntimeContext.class);
+        when(rc.getSessionId()).thenReturn("session-1");
+        assertTrue(toolkit.setEnrichContextMode(null, rc, "autopilot").contains("autopilot"));
+        assertEquals("mode: autopilot", toolkit.getEnrichContextMode(rc));
+        assertTrue(toolkit.setEnrichContextMode(null, rc, "autopilot").contains("autopilot"));
+        assertTrue(toolkit.setEnrichContextMode(null, rc, "grill").startsWith("error:"));
     }
 
     @BeforeEach
@@ -1748,37 +1758,32 @@ class ModelingToolkitTest {
         String script = DataAgentConfig.MODELING_SCRIPT;
         for (String token :
                 new String[] {
-                    "list_modeling_state",
                     "list_files",
                     "read_file",
                     "write_file",
-                    "patch_file",
-                    "validate_mdl",
-                    "wren_dry_plan",
-                    "suggest_relations",
-                    "decide_relation",
-                    "decide_relations",
-                    "add_relation",
-                    "relationships.yml",
-                    "语义建模",
+                    "edit_file",
+                    "wren_cli",
                     // Official-skill pointing (specs/022).
                     "load_skill_through_path",
                     "generate-mdl",
                     "enrich-context",
                     "usage",
-                    "models/",
-                    "只追加不重建",
-                    "HITL",
-                    // View-first route (specs/035, ADR 0043): complex metrics go through the
-                    // create_view paired-write tool; ref_sql derived models are manual-edit only.
-                    "create_view",
-                    "命名视图",
-                    "派生模型"
+                    "onboarding",
+                    "草稿",
+                    "发布"
                 }) {
             assertTrue(script.contains(token), "script must mention " + token);
         }
         for (String retired :
                 new String[] {
+                    "set_enrich_context_mode",
+                    "get_enrich_context_mode",
+                    "list_modeling_state",
+                    "validate_mdl",
+                    "wren_dry_plan",
+                    "create_view",
+                    "patch_file",
+                    "files_json",
                     "create_cube",
                     "update_cube",
                     "delete_cube",

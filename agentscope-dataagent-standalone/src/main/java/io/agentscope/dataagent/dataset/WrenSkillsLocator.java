@@ -65,6 +65,7 @@ public class WrenSkillsLocator {
         if (!explicit.isBlank()) {
             Path p = Paths.get(explicit).toAbsolutePath().normalize();
             if (isSkillsRoot(p)) {
+                log.info("Resolved official wren skills root from explicit configuration: {}", p);
                 return Optional.of(p);
             }
             log.warn(
@@ -80,6 +81,8 @@ public class WrenSkillsLocator {
         }
         for (Path candidate : candidates(exeDir)) {
             if (isSkillsRoot(candidate)) {
+                log.info(
+                        "Resolved official wren skills root from executable layout: {}", candidate);
                 return Optional.of(candidate);
             }
         }

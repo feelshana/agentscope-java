@@ -50,6 +50,26 @@ import org.junit.jupiter.api.Test;
 class DataAgentConfigTest {
 
     @Test
+    void builtInWrenAgentsCannotInheritUnscopedWorkspaceMcpServers() {
+        var source = new io.agentscope.harness.agent.tools.ToolsConfig();
+        source.setDeny(List.of("execute_shell_command"));
+        source.setMcpServers(
+                java.util.Map.of(
+                        "legacy-wren",
+                        org.mockito.Mockito.mock(
+                                io.agentscope.harness.agent.tools.McpServerConfig.class)));
+        for (String agent : List.of("data-agent", "modeling-agent")) {
+            var actual = DataAgentConfig.scopedWrenToolsConfig(agent, source);
+            assertThat(actual.getMcpServers()).isEmpty();
+            assertThat(actual.getDeny()).containsExactly("execute_shell_command");
+            assertThat(DataAgentConfig.scopedWrenToolsConfig(agent, null).getMcpServers())
+                    .isEmpty();
+        }
+        assertThat(source.getMcpServers()).containsKey("legacy-wren");
+        assertThat(DataAgentConfig.scopedWrenToolsConfig("custom-agent", source)).isSameAs(source);
+    }
+
+    @Test
     void chatUiAlwaysUsesConversationScopedSessions() {
         ChannelConfig configured =
                 ChannelConfig.builder("chatui")
@@ -91,42 +111,28 @@ class DataAgentConfigTest {
     @Test
     void defaultSysPromptKeepsAlwaysOnBehaviourGates() {
         assertThat(DataAgentConfig.DEFAULT_AGENT_SYS_PROMPT)
-                .contains("不编造数据")
-                .contains("不主动生成图表")
-                .contains("不主动生成 PDF/Excel/PPT")
-                .contains("所有输出必须使用简体中文")
-                .contains("[DATA_SOURCES_OVERVIEW]")
-                .contains("[KNOWLEDGE_BASE_OVERVIEW]");
+                .contains("不编造结果", "不主动导出文件", "简体中文", "已授权已发布工程");
     }
 
     /** The prompt points at the skill and carries the Wren-only tool-chain skeleton. */
     @Test
     void defaultSysPromptPointsAtWrenOnlyWorkflow() {
         assertThat(DataAgentConfig.DEFAULT_AGENT_SYS_PROMPT)
-                .contains("sql-analysis")
-                .contains("所有结构化数据查询统一使用 wren_run_sql")
-                .contains("wren_describe_model")
-                .contains("wren_run_sql")
-                .doesNotContain("wren_query_cube")
-                .contains("retrieve_evidence")
-                .contains("render_chart")
-                .contains("不存在物理表直查回退通道")
-                .doesNotContain("prepare_data_context")
-                .doesNotContain("query_structured_data");
+                .contains(
+                        "官方 Wren usage",
+                        "wren_list_tools",
+                        "wren_call_tool",
+                        "run_python",
+                        "render_chart")
+                .doesNotContain(
+                        "sql-analysis", "wren_run_sql", "wren_describe_model", "query_type");
     }
 
     @Test
     void defaultSysPromptUsesRelevantExamplesSqlAndCompleteFinalAnswer() {
         assertThat(DataAgentConfig.DEFAULT_AGENT_SYS_PROMPT)
-                .contains(
-                        "wren_recall_examples",
-                        "COUNT DISTINCT",
-                        "年份必须落实为时间筛选",
-                        "完整最终回答",
-                        "query_type",
-                        "BUSINESS",
-                        "DIAGNOSTIC")
-                .doesNotContain("wren_query_cube");
+                .contains("memory", "完整最终答案", "只有用户点赞后", "诊断查询", "answer_question")
+                .doesNotContain("BUSINESS", "DIAGNOSTIC");
     }
 
     @Test
@@ -173,13 +179,8 @@ class DataAgentConfigTest {
     @Test
     void defaultSysPromptRequiresCountConsistency() {
         assertThat(DataAgentConfig.DEFAULT_AGENT_SYS_PROMPT)
-                .contains("与自己列出的明细行数一致")
-                .contains("以明细为准重算")
-                // the pre-existing answer rules must all survive
-                .contains("默认用 markdown 表格呈现结构化数据")
-                .contains("不主动生成图表")
-                .contains("不主动生成 PDF/Excel/PPT")
-                .contains("所有输出必须使用简体中文");
+                .contains("不编造结果", "截断")
+                .doesNotContain("以明细为准重算");
     }
 
     /** Reads the {@code @Tool#description} the framework exposes to the model for a tool name. */
@@ -198,9 +199,8 @@ class DataAgentConfigTest {
     void queryAgentUsesPlatformPromptWithoutLegacyWorkspaceContext() {
         var builder = io.agentscope.harness.agent.HarnessAgent.builder();
         DataAgentConfig.configureQueryPrompt(builder, DataAgentConfig.DEFAULT_AGENT_SYS_PROMPT);
-        assertThat(builder).isNotNull();
         assertThat(DataAgentConfig.DEFAULT_AGENT_SYS_PROMPT)
-                .contains("query_type", "BUSINESS", "DIAGNOSTIC")
-                .doesNotContain("wren_answer_queries");
+                .contains("官方指导", "原样遵循官方 schema")
+                .doesNotContain("[DATA_SOURCES_OVERVIEW]", "query_type");
     }
 }

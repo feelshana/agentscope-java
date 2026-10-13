@@ -481,7 +481,7 @@ export interface WorkspaceFile {
   content: string;
 }
 
-/** Gates ①+② verdict plus the before/after content for one write_file/patch_file draft. */
+/** Permission verdict and before/after content; legacy patch cards retain their old checks. */
 export interface WorkspacePreview {
   ok: boolean;
   error: string | null;
@@ -499,12 +499,12 @@ export async function readWorkspaceFile(groupId: string, path: string): Promise<
 }
 
 /**
- * Previews a write_file/patch_file draft through the real write gates (YAML parse + scratch
- * `context validate --strict`) without touching the workspace; feeds the HITL card diff.
+ * Previews native write_file/edit_file permissions and content without writing; legacy patch
+ * cards retain scratch validation. Feeds the HITL card diff.
  */
 export async function previewWorkspaceChange(
   groupId: string,
-  toolName: 'write_file' | 'patch_file',
+  toolName: 'write_file' | 'patch_file' | 'edit_file' | 'delete_file',
   input: Record<string, unknown>,
 ): Promise<WorkspacePreview> {
   const res = await fetch(`${base(groupId)}/workspace/preview`, {

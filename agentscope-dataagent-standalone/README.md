@@ -4,6 +4,14 @@
 
 ## Overview
 
+Modeling uses a generic AgentScope agent with the installed official Wren skills, native
+file operations, and a project-scoped CLI adapter (ADR 0068 / spec 057). The adapter binds
+the authenticated tenant's draft project and connection; it does not define a second
+modeling workflow. File changes and official memory store requests use native HITL.
+Official validate/build/query results are returned with their exit codes. Building the
+draft does not publish it: the modeling page explicitly publishes the snapshot used for
+SQL-only asking. See [the architecture](ARCHITECTURE_zh.md) for the current execution boundary.
+
 dataagent is a place where every analyst in your company gets their own data
 agent — one that learns the team's data sources, picks up the team's
 reporting conventions, remembers the team's gotchas, and gets sharper the
@@ -95,8 +103,8 @@ bus are all backed by Redis, so any replica can serve any user. See
 
 ## What is included
 
-- **Built-in `data-agent`** — global tenant; ships with SQL-analysis and
-  chart-rendering skills plus `data-explorer` / `report-writer` sub-agents.
+- **Built-in `data-agent`** — generic AgentScope execution with the installed
+  official Wren skills; includes `data-explorer` / `report-writer` sub-agents.
 - **Per-user data agents** — every authenticated user can fork the built-in or
   draft a new one. Each user-agent gets its own `CompositeFilesystem` keyed by
   `(userId, agentId)`; `skills/` and `subagents/` are an `OverlayFilesystem`
@@ -110,13 +118,13 @@ bus are all backed by Redis, so any replica can serve any user. See
   (materialised from `src/main/resources/shared`, git-ignored) and become
   visible to every tenant on the next agent build (via the overlay's lower
   layer).
-- **DataAgent toolkit** — `wren_describe_model`, `wren_run_sql`,
-  `wren_query_cube`, `retrieve_evidence` and `render_chart` are registered on
-  every data agent, alongside the sandboxed `run_python`. Structured queries
-  always use a published Wren MDL: the system prompt contains only a compact
-  logical-model/Cube directory, while field and relationship details are
-  fetched on demand. Uploads and external-table associations automatically
-  build and publish a baseline MDL.
+- **Official Wren tools** — modeling uses native scoped file tools and `wren_cli`;
+  querying uses `wren_list_tools`, `wren_call_tool` and `wren_read_knowledge`.
+  Official MCP tool schemas and arguments pass through unchanged. The platform
+  adds tenant authorization, publication, result artifacts, `run_python`,
+  `retrieve_evidence` and `render_chart`; it does not route metrics or rewrite MDL.
+  Ordinary models, SQL-defined models, relationships, views and Cubes are supported.
+  Uploads and external-table associations build and publish a baseline MDL.
 
 ---
 
@@ -266,7 +274,7 @@ accounts: `bob` / `bob` and `alice` / `alice`. The first user with
 | `dataagent.openai.api-key` | _(empty)_ | OpenAI-compatible API key (primary model). Env: `DATAAGENT_OPENAI_API_KEY` or `OPENAI_API_KEY`. When set, takes precedence over DashScope. |
 | `dataagent.openai.base-url` | _(empty → official OpenAI)_ | Base URL of any OpenAI-compatible endpoint (DeepSeek, vLLM, one-api, DashScope compatible-mode, ...). Trailing `/v1` is optional. Env: `DATAAGENT_OPENAI_BASE_URL` or `OPENAI_BASE_URL`. |
 | `dataagent.openai.model-name` | `gpt-4o` | OpenAI-compatible model id. Env: `DATAAGENT_OPENAI_MODEL_NAME` or `OPENAI_MODEL_NAME`. |
-| `dataagent.openai.stream` | `true` | Stream chat completions over SSE. |
+| `dataagent.openai.stream` | `true` | Stream model completions over SSE. Env: `DATAAGENT_OPENAI_STREAM`. Set `false` to compare non-streaming model requests when diagnosing upstream EOF; browser chat still uses SSE. |
 | `dataagent.dashscope.api-key` | _(empty)_ | DashScope API key (fallback when no OpenAI key is set). Env: `DASHSCOPE_API_KEY`. |
 | `dataagent.dashscope.model-name` | `qwen-max` | DashScope model id. |
 | `dataagent.agent.name` | `data-agent` | Used when auto-generating `~/.agentscope/dataagent-standalone/agentscope.json`. |
@@ -278,7 +286,7 @@ accounts: `bob` / `bob` and `alice` / `alice`. The first user with
 | `dataagent.session.redis.key-prefix` | `dataagent:session:` | Redis key namespace. |
 | `dataagent.marketplace.enabled` | `true` | Disable to hide the contribution + approval API. |
 | `dataagent.marketplace.max-contribution-bytes` | `1048576` | Max payload accepted by `POST /api/me/contributions`. |
-| `dataagent.wren.executable` | `wren` | WrenAI CLI (`pip install 'wrenai[mysql,mcp]' 'mcp<2'`, Python >= 3.11). The default is auto-probed at `~/.local/bin` / `/usr/local/bin` / `/usr/bin` and PATH — Linux deployments need no config; on Windows point it at the venv `wren.exe`. Spawn failures surface an installation hint. Env: `DATAAGENT_WREN_EXECUTABLE`. |
+| `dataagent.wren.executable` | `wren` | WrenAI CLI (`pip install -r requirements-wren.txt`, Python >= 3.11). The default is auto-probed at `~/.local/bin` / `/usr/local/bin` / `/usr/bin` and PATH — Linux deployments need no config; on Windows point it at the venv `wren.exe`. Spawn failures surface an installation hint. Env: `DATAAGENT_WREN_EXECUTABLE`. |
 | `dataagent.wren.mdl-home` | _(empty)_ → `~/.agentscope/dataagent/mdl` | Root of the MDL artifacts: generated `project/`, published snapshot `published/` (including the M4 `wren-source.properties` connection marker) and the platform-side `mdl.json` manifest (semantic-modeling publish flow, specs/010 M2/M3/M4); `.wren/profiles.yml` under it is the platform-managed runtime connection profile — one entry per configured MySQL external datasource besides the default (M4). Env: `DATAAGENT_WREN_MDL_HOME`. |
 | `dataagent.wren.skills-dir` | _(empty)_ → auto-inferred | Official wren skills root (`skills_content` inside the wrenai pip package, specs/022 / ADR 0035): mounted natively onto `modeling-agent` via the harness skill repository so `load_skill_through_path` serves the same playbook files the CLI does. Blank = inferred from the resolved executable location (pip `site-packages` layouts on Windows/Unix). Point it explicitly only at non-standard layouts; a missing/invalid directory logs a warning and the modeling agent falls back to the `wren_skills_get` CLI channel. Env: `DATAAGENT_WREN_SKILLS_DIR`. |
 | `dataagent.wren.profile` / `data-source` / `timeout-seconds` / `instance-idle-seconds` | `dataagent` / `mysql` / `180` / `1800` | Default wren connection profile (M4: a group whose datasets all come from one MySQL external datasource binds its own `ext-<datasourceId>` profile, resolved at publish time and pinned into the snapshot; this setting is the fallback for uploaded-only groups and pre-M4 snapshots), project dialect (written into `wren_project.yml`, passed to parse-types), per-command subprocess timeout (seconds) and the per-group instance-pool idle TTL in seconds (M3: an unused wren instance is closed and respawned on demand). Env: `DATAAGENT_WREN_PROFILE` / `DATAAGENT_WREN_DATA_SOURCE` / `DATAAGENT_WREN_TIMEOUT_SECONDS` / `DATAAGENT_WREN_INSTANCE_IDLE_SECONDS`. |
@@ -340,20 +348,28 @@ the `jdbc` Spring profile and set `DATAAGENT_DB_URL` / `DATAAGENT_DB_USER`
 
 ---
 
-## Conversational modeling acceptance
+## Conversational modeling and querying
 
-Start with **数据准备**: select tables or upload CSV/Excel. A successfully published base model can already answer queries. Business documents are optional. In **对话建模**, start with one representative business question and refine the missing business definitions; recommended questions remain optional unless you agree to make them required. The modeling assistant clarifies metric definitions, granularity, units, dates and filters, then proposes question YAML through the existing HITL file workflow. The same question records appear in **验证与确认**: run engineering checks and real draft Wren queries, inspect definitions and results, then confirm or return each required question. **发布** shows business changes and blockers, with technical file differences collapsed. Queries continue using the published version until publication succeeds.
+上传 / 关联数据 → 基本 Wren 模型 → 可选业务文档与批量问题 → 官方对话建模 → 助手检查 → 显式发布 → 问数。
+官方同版本 generate-mdl/enrich-context/usage/onboarding skills 决定业务流程，项目只作通用 AgentScope 执行器。
+业务文档保存后显示成功，可在对话中让助手读取；问题表格支持增加行数，预设问题和逐题验证均不阻碍发布。
+草稿写权限可一次授权同一批待执行操作，也可逐项审阅；技术检查失败由助手修正。官方 build 不等于发布。
 
-Required questions must be confirmed before publication. Editing the question or semantic model expires the previous confirmation. Confirmed examples use Wren's `knowledge/sql` format and are available to the query assistant only after publication; the assistant reruns SQL against current data. Existing knowledge bases without questions retain their original publication behavior. Unconfirmed legacy SQL examples are excluded from new published snapshots.
+“查看语义模型”提供模型、关系、SQL 定义模型、视图、Cube、业务知识、MDL 与发布快照。
+问数使用已发布工程与其 knowledge 原文，不读取未发布草稿；官方编译 `target/mdl.json` 保持原样。
+查询结果仍可交给 Python/ECharts。最终答案点赞后，由官方 memory store 保存成功且标注用于答案的业务 SQL，
+诊断查询不标注，点踩仅记录反馈。SQL 原样保存，不添加 LIMIT 或修改语义资产。
 
-The workbench and assistant share a derived next-action snapshot; failed initialization never claims query availability. See [ADR 0049](docs/adr/0049-guided-modeling-workflow.md) and [specification 040](docs/specs/040-guided-modeling-workflow.md).
+运行工程 `runtime/query-project` 合并已发布的 knowledge/sql 与 `runtime/liked-examples` 中的点赞样例。
+索引只是官方衍生物，模型或样例源码变化时由官方 memory index 重建。调用 get_context/recall_queries 前准备索引；
+其他 SQL 查询不因缺记忆依赖被阻断。使用官方检索，不提供平台自研评分或中文词项降级。
 
-See [ADR 0048](docs/adr/0048-question-driven-modeling-and-verified-examples.md) and [specification 039](docs/specs/039-question-driven-modeling.md).
+设计与验收：[ADR 0069](docs/adr/0069-wren-native-modeling-and-query-agents.md)、[spec 058](docs/specs/058-wren-native-modeling-and-query-agents.md)、[完整计划](docs/plans/058-wren-native-modeling-and-query-agents.md)。
 
 ## Building
 
 ```bash
-mvn -pl agentscope-examples/agents/agentscope-dataagent -am package -DskipTests
+mvn package -DskipTests
 ```
 
 Outputs:
@@ -364,15 +380,18 @@ Outputs:
 Format check (CI gates on this):
 
 ```bash
-mvn -pl agentscope-examples/agents/agentscope-dataagent spotless:check
+mvn spotless:check
 ```
 
-对话建模工作台：聊天为主区域，支持多个预设问题、共用口径澄清与逐项验收；顶部“查看模型”访问模型/Cube/视图/MDL 及发布快照。设计见 [spec 041](docs/specs/041-conversation-first-multi-question-workbench.md) 和 [ADR 0050](docs/adr/0050-conversation-first-multi-question-workbench.md)。
+### Wren dependencies and example retrieval
 
+固定官方 `wrenai==0.15.0` / `wren-core-py==0.8.0` / `mcp==1.30.0`，使用 `memory-onnx` 依赖支持中文语义召回。Wren 0.15.0 使用的 FastMCP 导入与 MCP 2.x 不兼容，不要仅安装未固定版本的 `wrenai[mcp]`。
+应用不会自动修改外部 Python 环境；在服务实际使用的 CLI 环境安装依赖并重启加载新代码。
 
-### Wren 问数与示例召回
-
-语义建模使用模型、关系与明细视图，问数统一走 Wren SQL，Cube 已停用（ADR 0063）。预设问题可选；建模确认且发布的问题和最终答案点赞的成功查询参与召回。
+应用启动的 CLI/MCP 子进程带有针对 Wren 0.15.0 MySQL 重复 LIMIT 的临时兼容修复：保留 SQL
+原有排序、分页与内层限制，仅收紧最外层行数，官方 N+1 截断行为不变。资源随 JAR 打包，
+不修改 Python 安装目录；直接在终端执行原版 `wren` 不会自动带上此修复。升级 Wren 后需重验并移除补丁。
+工具列表在同一 MCP 实例内复用，发布或进程重建后重新发现。详见 [ADR 0072](docs/adr/0072-wren-mysql-limit-compatibility-and-discovery-cache.md)。
 
 在 `DATAAGENT_WREN_EXECUTABLE` 对应的 Python 环境安装官方多语言记忆依赖：
 
@@ -381,4 +400,6 @@ python -m pip install -r requirements-wren.txt
 wren memory status
 ```
 
-`memory status` 需在 Wren 工程目录执行。后端显示 `lancedb` 才是向量召回；默认使用 `paraphrase-multilingual-MiniLM-L12-v2`，首次下载需要网络。可在服务进程环境设置 `WREN_MEMORY_BACKEND=lancedb`、`WREN_EMBEDDING_BACKEND=onnx`。缺依赖、模型不可用或 CLI 失败时，召回工具会明确显示中文词项匹配的降级状态，不因相同年份召回无关问题。应用不会改动外部 Python 环境。
+`memory status` 需在 Wren 工程目录执行。后端显示 `lancedb` 才是向量召回；默认使用 `paraphrase-multilingual-MiniLM-L12-v2`，首次下载需要网络。可在服务进程环境设置 `WREN_MEMORY_BACKEND=lancedb`、`WREN_EMBEDDING_BACKEND=onnx`。缺向量依赖时官方可能选择 grep；纯中文改写可能无匹配。模型不可用或索引失败会明确返回错误，不能把执行成功当作业务准确率。应用不会改动外部 Python 环境。
+
+隔离数据、30 问参考结果、真实模型评估和浏览器复现见 [验收说明](docs/fixtures/wren-native/README.md)。测试目录中的 Python 环境不会自动替换正在运行的服务环境；部署时需要在 `DATAAGENT_WREN_EXECUTABLE` 对应环境安装上述 requirements，并重启应用加载新代码。

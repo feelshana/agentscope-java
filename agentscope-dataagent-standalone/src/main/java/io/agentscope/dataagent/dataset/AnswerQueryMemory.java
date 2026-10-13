@@ -25,14 +25,25 @@ public class AnswerQueryMemory {
     private final WrenProperties properties;
     private final WrenCli cli;
     private final DatasetGroupService groups;
+    private final WrenPublishedProject publishedProjects;
     private final ObjectMapper mapper = new ObjectMapper();
     private final Object[] locks =
             java.util.stream.IntStream.range(0, 64).mapToObj(i -> new Object()).toArray();
 
     public AnswerQueryMemory(WrenProperties properties, WrenCli cli, DatasetGroupService groups) {
+        this(properties, cli, groups, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AnswerQueryMemory(
+            WrenProperties properties,
+            WrenCli cli,
+            DatasetGroupService groups,
+            WrenPublishedProject publishedProjects) {
         this.properties = properties;
         this.cli = cli;
         this.groups = groups;
+        this.publishedProjects = publishedProjects;
     }
 
     public record Pair(String groupId, String question, String sql, int limit) {
@@ -41,7 +52,7 @@ public class AnswerQueryMemory {
         }
 
         public String memorySql() {
-            return sql.stripTrailing() + "\nLIMIT " + limit;
+            return sql.stripTrailing();
         }
     }
 
@@ -74,6 +85,13 @@ public class AnswerQueryMemory {
         if (vote == null || !Set.of("UP", "DOWN").contains(vote))
             throw new DatasetException("反馈只能为 UP 或 DOWN", 400);
         List<Pair> candidates = candidates(owner, answerId, turns);
+        log.info(
+                "[answer-memory] feedback owner={} session={} answerId={} vote={} candidates={}",
+                owner,
+                session,
+                answerId,
+                vote,
+                candidates.size());
         synchronized (lock(owner)) {
             State old = read(owner);
             String key = queryId(session, answerId, "answer");
@@ -107,6 +125,7 @@ public class AnswerQueryMemory {
                     Path project = project(owner, pair.groupId());
                     initialize(project);
                     store(project, pair.question(), pair.memorySql());
+                    if (publishedProjects != null) publishedProjects.indexed(owner, pair.groupId());
                 }
             } catch (DatasetException e) {
                 return result(pending);
@@ -222,8 +241,77 @@ public class AnswerQueryMemory {
         while (start > 0 && !"USER".equalsIgnoreCase(turns.get(start).role())) start--;
         Map<String, Pair> successful = new LinkedHashMap<>();
         List<JsonNode> calls = new ArrayList<>();
+        Map<String, JsonNode> officialCalls = new LinkedHashMap<>();
         for (int i = start; i < end; i++) {
             TurnEntry turn = turns.get(i);
+            if ("wren_call_tool".equals(turn.toolName())
+                    && turn.toolInput() != null
+                    && turn.toolCallId() != null)
+                officialCalls.put(turn.toolCallId(), json(turn.toolInput()));
+            if ("wren_call_tool".equals(turn.toolName())
+                    && turn.toolResult() != null
+                    && !turn.toolResult().startsWith("error:")) {
+                int receiptStart = turn.toolResult().indexOf("[WREN_QUERY_RECEIPT]");
+                if (receiptStart >= 0) {
+                    String receiptText =
+                            turn.toolResult()
+                                    .substring(receiptStart + "[WREN_QUERY_RECEIPT]".length())
+                                    .lines()
+                                    .findFirst()
+                                    .orElse("");
+                    JsonNode receipt = json(receiptText);
+                    String group = receipt.path("groupId").asText("");
+                    String question = receipt.path("question").asText("");
+                    String sql = receipt.path("sql").asText("");
+                    String tool = receipt.path("tool").asText("");
+                    String queryType = receipt.path("queryType").asText("BUSINESS");
+                    if (!"BUSINESS".equalsIgnoreCase(queryType)) continue;
+                    boolean owned =
+                            groups.listGroups(owner).stream()
+                                    .anyMatch(
+                                            g ->
+                                                    owner.equals(g.getOwnerId())
+                                                            && group.equals(g.getId()));
+                    if (owned && !question.isBlank() && !sql.isBlank()) {
+                        JsonNode matched = officialCalls.get(turn.toolCallId());
+                        // The persisted transcript can lose the transport tool-call id while the
+                        // server-generated receipt remains intact. The receipt is authoritative
+                        // for a successful Wren call; fall back to it after tenant/type/content
+                        // checks instead of silently dropping a liked answer.
+                        List<JsonNode> matchedCalls =
+                                matched == null && officialCalls.isEmpty()
+                                        ? java.util.Collections.singletonList(null)
+                                        : matched == null ? List.of() : List.of(matched);
+                        for (JsonNode call : matchedCalls) {
+                            String recordedQuestion =
+                                    call == null
+                                            ? question.strip()
+                                            : call.path("answer_question").asText("").strip();
+                            if (call != null && recordedQuestion.isBlank()) {
+                                recordedQuestion =
+                                        call.path("arguments")
+                                                .path("answer_question")
+                                                .asText("")
+                                                .strip();
+                            }
+                            if (!question.equals(recordedQuestion)
+                                    || (call != null
+                                            && !tool.equals(call.path("tool_name").asText(""))))
+                                continue;
+                            JsonNode args = call == null ? null : call.path("arguments");
+                            if (args != null && args.path("sql_only").asBoolean(false)) continue;
+                            if (args != null
+                                    && "run_sql".equals(tool)
+                                    && !sql.equals(args.path("sql").asText(""))) continue;
+                            if (!Set.of("run_sql", "query_cube").contains(tool)) continue;
+                            int limit = receipt.path("limit").asInt(1000);
+                            successful.put(
+                                    queryId(group, question, sql, limit),
+                                    new Pair(group, question, sql, limit));
+                        }
+                    }
+                }
+            }
             if ("wren_run_sql".equals(turn.toolName()) && turn.toolInput() != null)
                 calls.add(json(turn.toolInput()));
             if ("wren_run_sql".equals(turn.toolName())
@@ -265,6 +353,7 @@ public class AnswerQueryMemory {
 
     private Path project(String owner, String group) {
         groups.getGroup(owner, group);
+        if (publishedProjects != null) return publishedProjects.likedProject(owner, group);
         return properties
                 .groupRoot(group)
                 .resolve("runtime/business-memory-v1")

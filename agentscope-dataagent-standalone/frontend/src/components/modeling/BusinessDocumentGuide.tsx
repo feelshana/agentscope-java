@@ -5,7 +5,7 @@ export interface DocumentUploadState {
   filename: string;
   error?: string;
 }
-export default function BusinessDocumentGuide({ content, upload, analysisStatus, onUpload }: {
+export default function BusinessDocumentGuide({ content, upload, onUpload }: {
   content: string;
   upload: DocumentUploadState;
   analysisStatus?: string;
@@ -14,10 +14,7 @@ export default function BusinessDocumentGuide({ content, upload, analysisStatus,
   const dialogRef = useRef<HTMLDialogElement>(null);
   const saved = !!content.trim();
   const uploading = upload.status === 'uploading';
-  const analysis = analysisStatus === 'RUNNING' ? '口径分析中，可继续对话'
-    : analysisStatus === 'READY' ? '口径分析完成，提案待审阅'
-      : analysisStatus === 'FAILED' ? '口径分析未完成，可继续对话或重新分析'
-        : '口径变更仍需确认';
+  const analysis = '在对话建模中请助手按业务文档完善模型';
   const status = uploading ? `正在上传：${upload.filename}`
     : upload.status === 'error' ? `上传失败：${upload.filename}。${upload.error || '请重试'}`
       : upload.status === 'success' ? `✓ 上传成功：${upload.filename} · 已保存到当前知识库`
@@ -41,7 +38,7 @@ export default function BusinessDocumentGuide({ content, upload, analysisStatus,
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
         <strong>已保存的业务文档</strong><button className="da-btn da-btn-sm" onClick={() => dialogRef.current?.close()}>关闭文档</button>
       </div>
-      <p className="da-small">{analysis}。可到“查看语义模型 → 术语与规则”审阅提案；文档保存不等于模型已修改。</p>
+      <p className="da-small">文档已保存。请在“对话建模”中让助手根据文档完善模型，助手会按 Wren 官方技能读取资料；文档保存不等于模型已修改。</p>
       <pre style={{ maxHeight: '60vh', overflowY: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontFamily: 'inherit', lineHeight: 1.7 }}>{content}</pre>
       <p className="da-small">更新上传会替换当前业务文档内容。</p>
     </dialog>
