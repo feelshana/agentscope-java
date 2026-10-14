@@ -498,6 +498,37 @@ export async function readWorkspaceFile(groupId: string, path: string): Promise<
   return res.json();
 }
 
+export interface SqlQaExample {
+  id: string;
+  source: 'modeling' | 'liked';
+  state: string;
+  file: string;
+  question: string;
+  sql: string;
+  editable: boolean;
+  message: string;
+}
+
+export async function listSqlQaExamples(groupId: string): Promise<SqlQaExample[]> {
+  const res = await fetch(`${base(groupId)}/sql-examples`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(await errorMessage(res, `SQL 问答对加载失败: ${res.status}`));
+  return res.json();
+}
+
+export async function updateSqlQaExample(groupId: string, value: Pick<SqlQaExample, 'source' | 'file' | 'question' | 'sql'>): Promise<SqlQaExample> {
+  const res = await fetch(`${base(groupId)}/sql-examples`, {
+    method: 'PUT', headers: jsonHeaders(), body: JSON.stringify(value),
+  });
+  if (!res.ok) throw new Error(await errorMessage(res, `SQL 问答对保存失败: ${res.status}`));
+  return res.json();
+}
+
+export async function deleteSqlQaExample(groupId: string, source: string, file: string): Promise<void> {
+  const query = new URLSearchParams({ source, file });
+  const res = await fetch(`${base(groupId)}/sql-examples?${query.toString()}`, { method: 'DELETE', headers: authHeaders() });
+  if (!res.ok) throw new Error(await errorMessage(res, `SQL 问答对删除失败: ${res.status}`));
+}
+
 /**
  * Previews native write_file/edit_file permissions and content without writing; legacy patch
  * cards retain scratch validation. Feeds the HITL card diff.

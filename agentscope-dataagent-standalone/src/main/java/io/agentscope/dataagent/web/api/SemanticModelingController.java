@@ -25,6 +25,7 @@ import io.agentscope.dataagent.dataset.DocEnhanceService;
 import io.agentscope.dataagent.dataset.MdlPublishService;
 import io.agentscope.dataagent.dataset.MdlSuggestionService;
 import io.agentscope.dataagent.dataset.MdlWorkspaceService;
+import io.agentscope.dataagent.dataset.SqlQaExampleService;
 import io.agentscope.dataagent.runtime.wren.WrenQueryGateway;
 import io.agentscope.dataagent.tools.data.ModelingToolkit;
 import io.agentscope.dataagent.tools.data.ModelingToolkitRegistrar;
@@ -77,7 +78,35 @@ public class SemanticModelingController {
     private final MdlWorkspaceService workspace;
     private final ModelingToolkitRegistrar modelingToolkitRegistrar;
     private final ObjectMapper mapper;
+    private final SqlQaExampleService sqlQaExamples;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    public SemanticModelingController(
+            DatasetGroupService groupService,
+            DatasetService datasetService,
+            MdlSuggestionService modelingService,
+            MdlPublishService mdlPublishService,
+            DocEnhanceService docEnhanceService,
+            WrenQueryGateway wrenGateway,
+            BaselineMdlService baselineMdlService,
+            MdlWorkspaceService workspace,
+            ModelingToolkitRegistrar modelingToolkitRegistrar,
+            ObjectMapper mapper,
+            SqlQaExampleService sqlQaExamples) {
+        this.groupService = groupService;
+        this.datasetService = datasetService;
+        this.modelingService = modelingService;
+        this.mdlPublishService = mdlPublishService;
+        this.docEnhanceService = docEnhanceService;
+        this.wrenGateway = wrenGateway;
+        this.baselineMdlService = baselineMdlService;
+        this.workspace = workspace;
+        this.modelingToolkitRegistrar = modelingToolkitRegistrar;
+        this.mapper = mapper;
+        this.sqlQaExamples = sqlQaExamples;
+    }
+
+    /** Compatibility constructor retained for focused controller unit tests. */
     public SemanticModelingController(
             DatasetGroupService groupService,
             DatasetService datasetService,
@@ -89,16 +118,18 @@ public class SemanticModelingController {
             MdlWorkspaceService workspace,
             ModelingToolkitRegistrar modelingToolkitRegistrar,
             ObjectMapper mapper) {
-        this.groupService = groupService;
-        this.datasetService = datasetService;
-        this.modelingService = modelingService;
-        this.mdlPublishService = mdlPublishService;
-        this.docEnhanceService = docEnhanceService;
-        this.wrenGateway = wrenGateway;
-        this.baselineMdlService = baselineMdlService;
-        this.workspace = workspace;
-        this.modelingToolkitRegistrar = modelingToolkitRegistrar;
-        this.mapper = mapper;
+        this(
+                groupService,
+                datasetService,
+                modelingService,
+                mdlPublishService,
+                docEnhanceService,
+                wrenGateway,
+                baselineMdlService,
+                workspace,
+                modelingToolkitRegistrar,
+                mapper,
+                null);
     }
 
     // ------------------------------------------------------------------ VOs
@@ -543,6 +574,63 @@ public class SemanticModelingController {
     }
 
     // ------------------------------------------------------------------ workspace file access
+
+    /** Lists the two official SQL-example sources used by this knowledge base. */
+    @GetMapping("/sql-examples")
+    public Mono<List<SqlQaExampleService.Example>> sqlExamples(
+            @PathVariable String groupId, Authentication auth) {
+        String userId = (String) auth.getPrincipal();
+        return Mono.fromCallable(
+                        () -> {
+                            groupService.getGroup(userId, groupId);
+                            return sqlQaExamples.list(userId, groupId);
+                        })
+                .subscribeOn(Schedulers.boundedElastic())
+                .onErrorMap(this::toStatus);
+    }
+
+    public record SqlExampleUpdate(String source, String file, String question, String sql) {}
+
+    /** Updates an official SQL-example source; modeling edits await explicit publish. */
+    @PutMapping("/sql-examples")
+    public Mono<SqlQaExampleService.Example> updateSqlExample(
+            @PathVariable String groupId,
+            @RequestBody SqlExampleUpdate update,
+            Authentication auth) {
+        String userId = (String) auth.getPrincipal();
+        return Mono.fromCallable(
+                        () -> {
+                            groupService.getGroup(userId, groupId);
+                            if (update == null) throw new DatasetException("请提供问答对内容", 400);
+                            return sqlQaExamples.update(
+                                    userId,
+                                    groupId,
+                                    update.source(),
+                                    update.file(),
+                                    update.question(),
+                                    update.sql());
+                        })
+                .subscribeOn(Schedulers.boundedElastic())
+                .onErrorMap(this::toStatus);
+    }
+
+    @org.springframework.web.bind.annotation.DeleteMapping("/sql-examples")
+    public Mono<Void> deleteSqlExample(
+            @PathVariable String groupId,
+            @RequestParam String source,
+            @RequestParam String file,
+            Authentication auth) {
+        String userId = (String) auth.getPrincipal();
+        return Mono.fromRunnable(
+                        () -> {
+                            groupService.getGroup(userId, groupId);
+                            sqlQaExamples.delete(userId, groupId, source, file);
+                        })
+                .subscribeOn(Schedulers.boundedElastic())
+                .then()
+                .onErrorMap(this::toStatus);
+    }
+
     //  (specs/019 §5: the HITL file-change card needs the current file and a gated preview)
 
     /** Reads one workspace file for the HITL card editor and asset browsers; path-confined. */

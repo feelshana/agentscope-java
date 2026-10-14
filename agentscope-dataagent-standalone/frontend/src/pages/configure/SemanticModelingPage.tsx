@@ -8,6 +8,7 @@ import type { DocumentUploadState } from '../../components/modeling/BusinessDocu
 import QuestionIntakeForm from '../../components/modeling/QuestionIntakeForm';
 import ModelSnapshotPanel from '../../components/modeling/ModelSnapshotPanel';
 import AssetYamlBrowser from '../../components/modeling/AssetYamlBrowser';
+import SqlQaExamplesPanel from '../../components/modeling/SqlQaExamplesPanel';
 import type { AssetEntry } from '../../components/modeling/AssetYamlBrowser';
 import { getGroupDetail, uploadKnowledge } from '../../api/datasets';
 import { getMdlView, getMdlPreview, initializeMdl } from '../../api/semanticModeling';
@@ -17,7 +18,7 @@ import type { ModelingWorkflow } from '../../api/modelingWorkflow';
 import './SemanticModelingPage.css';
 
 type Tab = 'overview' | 'modeling' | 'publish' | 'assets';
-type Asset = 'schema' | 'derived' | 'views' | 'cubes' | 'glossary' | 'mdl';
+type Asset = 'schema' | 'derived' | 'views' | 'cubes' | 'glossary' | 'sql' | 'mdl';
 const tabs: { key: Tab; label: string }[] = [
   { key: 'overview', label: '1 · 数据与资料' },
   { key: 'modeling', label: '2 · 对话建模' },
@@ -26,7 +27,7 @@ const tabs: { key: Tab; label: string }[] = [
 ];
 const assetLabels: Record<Asset, string> = {
   schema: '模型与关系', derived: 'SQL 定义模型', views: '视图', cubes: 'Cube',
-  glossary: '业务知识与样例', mdl: 'MDL 与工程快照',
+  glossary: '业务知识与样例', sql: 'SQL 问答对', mdl: 'MDL 与工程快照',
 };
 const message = (e: unknown) => e instanceof Error ? e.message : String(e);
 
@@ -170,7 +171,7 @@ export default function SemanticModelingPage() {
         <select className="da-input" aria-label="语义资产类型" value={asset} onChange={e => setParams({ asset: 'assets', kind: e.target.value }, { replace: true })}>
           {Object.entries(assetLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
         </select>
-        {asset === 'mdl' ? <><MdlGraphView groupId={groupId} /><ModelSnapshotPanel groupId={groupId} /></>
+        {asset === 'sql' ? <SqlQaExamplesPanel groupId={groupId} /> : asset === 'mdl' ? <><MdlGraphView groupId={groupId} /><ModelSnapshotPanel groupId={groupId} /></>
           : <><AssetYamlBrowser groupId={groupId} entries={entries} selectedKey={selected}
             onSelect={key => setParams({ asset: 'assets', kind: asset, selected: key }, { replace: true })} emptyText="当前草稿暂无此类资产" />
             {asset === 'schema' && <MdlGraphView groupId={groupId} />}</>}

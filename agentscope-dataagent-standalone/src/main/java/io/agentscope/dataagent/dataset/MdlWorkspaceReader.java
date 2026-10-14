@@ -276,7 +276,12 @@ public class MdlWorkspaceReader {
                                 text(parsed.get("name"), dir.getFileName().toString()),
                                 statement,
                                 propertiesDescription(parsed),
-                                "views/" + dir.getFileName() + "/sql.yml"));
+                                "views/"
+                                        + dir.getFileName()
+                                        + "/"
+                                        + (Files.isRegularFile(sqlFile)
+                                                ? "sql.yml"
+                                                : "metadata.yml")));
             } catch (IOException | RuntimeException e) {
                 issues.add(
                         issue(
