@@ -18,6 +18,7 @@ package io.agentscope.harness.agent.bus;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.util.JsonUtils;
 import io.agentscope.harness.agent.filesystem.AbstractFilesystem;
+import io.agentscope.harness.agent.filesystem.BakedContextFilesystem;
 import io.agentscope.harness.agent.filesystem.model.FileInfo;
 import io.agentscope.harness.agent.filesystem.model.LsResult;
 import io.agentscope.harness.agent.filesystem.model.ReadResult;
@@ -58,6 +59,13 @@ public class WorkspaceAsyncToolRegistry implements AsyncToolRegistry {
                 registryRoot.endsWith("/")
                         ? registryRoot.substring(0, registryRoot.length() - 1)
                         : registryRoot;
+    }
+
+    @Override
+    public AsyncToolRegistry withContext(RuntimeContext context) {
+        return new WorkspaceAsyncToolRegistry(
+                new BakedContextFilesystem(fs, RuntimeContext.builder(context).build()),
+                registryRoot);
     }
 
     @Override

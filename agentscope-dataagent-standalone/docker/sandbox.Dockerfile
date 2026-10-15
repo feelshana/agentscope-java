@@ -14,7 +14,7 @@ FROM python:3.12-slim
 
 # CJK fonts for matplotlib Chinese labels. Cached pip wheels keep the layer rebuildable.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends fonts-noto-cjk \
+    && apt-get install -y --no-install-recommends fonts-noto-cjk util-linux \
     && rm -rf /var/lib/apt/lists/*
 
 # Optional: override the pip index with a regional mirror at build time, e.g.

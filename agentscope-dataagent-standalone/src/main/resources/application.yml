@@ -110,10 +110,18 @@ dataagent:
     idle-ttl-min: 15
     eviction-poll-sec: 60
     instance-id: ${DATAAGENT_SANDBOX_INSTANCE_ID:standalone}
-    max-containers: ${DATAAGENT_SANDBOX_MAX_CONTAINERS:8}
+    max-containers: ${DATAAGENT_SANDBOX_MAX_CONTAINERS:16}
     memory-mb: ${DATAAGENT_SANDBOX_MEMORY_MB:1024}
     cpus: ${DATAAGENT_SANDBOX_CPUS:1}
     workspace-mb: ${DATAAGENT_SANDBOX_WORKSPACE_MB:512}
+
+  chat:
+    max-active: 16
+    max-active-per-user: 2
+    max-waiting: 16
+    max-waiting-per-user: 1
+    wait-seconds: 30
+    execution-seconds: 600
 
   # Durable files must be stored outside the application/sandbox container lifecycle.
   artifacts:
@@ -157,6 +165,8 @@ dataagent:
   # include a trailing /v1 — the client normalises the path. Leave base-url
   # blank to target the official OpenAI endpoint.
   openai:
+    # Avoid cross-stream disconnects observed on shared HTTP/2 model connections.
+    http-version: ${DATAAGENT_OPENAI_HTTP_VERSION:HTTP_1_1}
     api-key: ${DATAAGENT_OPENAI_API_KEY:${OPENAI_API_KEY:sk-7708c665bc024a35bb6c5f1f1a7fc25f}}
     base-url: ${DATAAGENT_OPENAI_BASE_URL:${OPENAI_BASE_URL:https://api.deepseek.com}}
     model-name: ${DATAAGENT_OPENAI_MODEL_NAME:${OPENAI_MODEL_NAME:deepseek-flash}}
@@ -247,6 +257,9 @@ dataagent:
     # Idle seconds after which a per-group `wren serve mcp` instance is closed by the reaper
     # (specs/010 M3); a later query respawns it on demand.
     instance-idle-seconds: ${DATAAGENT_WREN_INSTANCE_IDLE_SECONDS:1800}
+    # MCP instance budget and per-knowledge-base gate wait; ordinary CLI calls are separate.
+    max-instances: 16
+    call-wait-seconds: 30
     # Official wren skills root (specs/022, ADR 0035): the skills_content directory bundled
     # inside the wrenai pip package, mounted natively onto modeling-agent via the harness skill
     # repository. Blank = inferred from the resolved executable location; set it only when the

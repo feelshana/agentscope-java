@@ -50,6 +50,7 @@ interface Message {
   tools: ToolEntry[];
   trace: TraceNode[];
   pending?: boolean;
+  capacityMessage?: string;
   /** True only when the turn was interrupted and produced no usable answer. */
   failed?: boolean;
   interrupted?: boolean;
@@ -734,7 +735,16 @@ export default function ChatPanel({
           if (typeof seq !== 'number' || !Number.isSafeInteger(seq) || seq <= lastToolEventSeq) continue;
           lastToolEventSeq = seq;
         }
-        if (evt.type === 'scope' && evt.knowledgeScope) {
+        if (evt.type === 'capacity') {
+          setSessionMsgs(prev => {
+            const cur = prev.get(convId);
+            if (!cur) return prev;
+            const next = new Map(prev);
+            next.set(convId, { ...cur, messages: cur.messages.map(m => m.id === replyMsg.id
+              ? { ...m, capacityMessage: evt.state === 'queued' ? evt.message || '排队中，正在等待执行名额…' : undefined } : m) });
+            return next;
+          });
+        } else if (evt.type === 'scope' && evt.knowledgeScope) {
           const scope = evt.knowledgeScope;
           selectionByConversation.current.set(convId, scope.groupIds);
           allSelectionByConversation.current.set(convId, scope.allGroups);
@@ -1103,7 +1113,9 @@ export default function ChatPanel({
                     {m.text
                       ? <Markdown>{m.text}</Markdown>
                       : m.pending
-                        ? <div className="da-typing"><span /><span /><span /></div>
+                        ? m.capacityMessage
+                          ? <div role="status" style={{ color: 'var(--da-text-muted)', fontSize: 14 }}>{m.capacityMessage}</div>
+                          : <div className="da-typing"><span /><span /><span /></div>
                         : null}
                     {answer}
                     {agentId === 'data-agent' && curKey && !m.pending && !m.failed && m.text.trim() && (

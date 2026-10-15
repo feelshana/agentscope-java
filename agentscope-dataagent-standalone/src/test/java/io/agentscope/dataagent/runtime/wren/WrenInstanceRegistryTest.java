@@ -215,14 +215,66 @@ class WrenInstanceRegistryTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    void revokedQueuedDiscoveryCannotReachMcpOrInvalidateSharedInstance() throws Exception {
+        WrenInstanceRegistry registry = newRegistry();
+        McpClientWrapper client = mock(McpClientWrapper.class);
+        injectInstance(registry, "g1", client);
+        Field gatesField = WrenInstanceRegistry.class.getDeclaredField("callGates");
+        gatesField.setAccessible(true);
+        var gates =
+                (Map<String, java.util.concurrent.locks.ReentrantLock>) gatesField.get(registry);
+        var gate =
+                gates.computeIfAbsent(
+                        "g1", ignored -> new java.util.concurrent.locks.ReentrantLock(true));
+        AtomicBoolean revoked = new AtomicBoolean();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Thread queued =
+                new Thread(
+                        () -> {
+                            try {
+                                registry.listToolsAuthorized(
+                                        "g1",
+                                        () -> {
+                                            if (revoked.get())
+                                                throw new DatasetException("知识库不存在或未授权", 404);
+                                        });
+                            } catch (Throwable e) {
+                                failure.set(e);
+                            }
+                        });
+        gate.lock();
+        try {
+            queued.start();
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (queued.getState() != Thread.State.TIMED_WAITING && System.nanoTime() < deadline)
+                Thread.sleep(5);
+            assertThat(queued.getState()).isEqualTo(Thread.State.TIMED_WAITING);
+            revoked.set(true);
+        } finally {
+            gate.unlock();
+        }
+        queued.join(5000);
+        assertThat(queued.isAlive()).isFalse();
+        assertThat(failure.get()).isInstanceOf(DatasetException.class);
+        verify(client, never()).listTools();
+        when(client.listTools()).thenReturn(Mono.just(List.of()));
+        assertThat(registry.listTools("g1")).isEmpty();
+        registry.close();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     void revokedQueuedCallCannotReachMcpOrInvalidateSharedInstance() throws Exception {
         WrenInstanceRegistry registry = newRegistry();
         McpClientWrapper client = mock(McpClientWrapper.class);
         injectInstance(registry, "g1", client);
         Field gatesField = WrenInstanceRegistry.class.getDeclaredField("callGates");
         gatesField.setAccessible(true);
-        var gates = (Map<String, Object>) gatesField.get(registry);
-        Object gate = gates.computeIfAbsent("g1", ignored -> new Object());
+        var gates =
+                (Map<String, java.util.concurrent.locks.ReentrantLock>) gatesField.get(registry);
+        var gate =
+                gates.computeIfAbsent(
+                        "g1", ignored -> new java.util.concurrent.locks.ReentrantLock(true));
         AtomicBoolean revoked = new AtomicBoolean();
         AtomicReference<Throwable> failure = new AtomicReference<>();
         Thread queued =
@@ -241,13 +293,16 @@ class WrenInstanceRegistryTest {
                                 failure.set(e);
                             }
                         });
-        synchronized (gate) {
+        gate.lock();
+        try {
             queued.start();
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
-            while (queued.getState() != Thread.State.BLOCKED && System.nanoTime() < deadline)
+            while (queued.getState() != Thread.State.TIMED_WAITING && System.nanoTime() < deadline)
                 Thread.sleep(5);
-            assertThat(queued.getState()).isEqualTo(Thread.State.BLOCKED);
+            assertThat(queued.getState()).isEqualTo(Thread.State.TIMED_WAITING);
             revoked.set(true);
+        } finally {
+            gate.unlock();
         }
         queued.join(5000);
         assertThat(queued.isAlive()).isFalse();
@@ -293,7 +348,107 @@ class WrenInstanceRegistryTest {
     private static WrenInstanceRegistry newRegistry() {
         WrenProperties props = mock(WrenProperties.class);
         when(props.timeout()).thenReturn(Duration.ofSeconds(5));
+        when(props.maxInstances()).thenReturn(16);
+        when(props.callWaitSeconds()).thenReturn(30);
         return new WrenInstanceRegistry(props, mock(WrenProfileHome.class));
+    }
+
+    @Test
+    void failedEngineCloseRetainsBudgetUntilRetryConfirmsCleanup() throws Exception {
+        WrenInstanceRegistry registry = newRegistry();
+        McpClientWrapper client = mock(McpClientWrapper.class);
+        org.mockito.Mockito.doThrow(new IllegalStateException("close failed"))
+                .doNothing()
+                .when(client)
+                .close();
+        injectInstance(registry, "retry", client);
+        Object instance =
+                ((Map<?, ?>)
+                                org.springframework.test.util.ReflectionTestUtils.getField(
+                                        registry, "instances"))
+                        .get("retry");
+        ((AtomicBoolean)
+                        org.springframework.test.util.ReflectionTestUtils.getField(
+                                instance, "reserved"))
+                .set(true);
+        var slots =
+                (java.util.concurrent.Semaphore)
+                        org.springframework.test.util.ReflectionTestUtils.getField(
+                                registry, "slots");
+        slots.acquire();
+        int before = slots.availablePermits();
+        registry.invalidate("retry");
+        assertThat(slots.availablePermits()).isEqualTo(before);
+        org.springframework.test.util.ReflectionTestUtils.invokeMethod(registry, "sweepIdle");
+        assertThat(slots.availablePermits()).isEqualTo(before + 1);
+        registry.close();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void fullPoolNeverEvictsAnExecutingEngineAndReclaimsItAfterRelease() throws Exception {
+        WrenProperties props = mock(WrenProperties.class);
+        when(props.maxInstances()).thenReturn(1);
+        WrenInstanceRegistry registry =
+                new WrenInstanceRegistry(props, mock(WrenProfileHome.class));
+        McpClientWrapper client = mock(McpClientWrapper.class);
+        injectInstance(registry, "busy", client);
+        var instances =
+                (Map<String, Object>)
+                        org.springframework.test.util.ReflectionTestUtils.getField(
+                                registry, "instances");
+        var instance = instances.get("busy");
+        ((AtomicBoolean)
+                        org.springframework.test.util.ReflectionTestUtils.getField(
+                                instance, "reserved"))
+                .set(true);
+        var slots =
+                (java.util.concurrent.Semaphore)
+                        org.springframework.test.util.ReflectionTestUtils.getField(
+                                registry, "slots");
+        slots.acquire();
+        var gates =
+                (Map<String, java.util.concurrent.locks.ReentrantLock>)
+                        org.springframework.test.util.ReflectionTestUtils.getField(
+                                registry, "callGates");
+        var gate = new java.util.concurrent.locks.ReentrantLock();
+        gates.put("busy", gate);
+        var entered = new java.util.concurrent.CountDownLatch(1);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        Thread worker =
+                new Thread(
+                        () -> {
+                            gate.lock();
+                            try {
+                                entered.countDown();
+                                release.await();
+                            } catch (InterruptedException interrupted) {
+                                Thread.currentThread().interrupt();
+                            } finally {
+                                gate.unlock();
+                            }
+                        });
+        worker.start();
+        try {
+            assertThat(entered.await(2, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            assertThatThrownBy(
+                            () ->
+                                    org.springframework.test.util.ReflectionTestUtils.invokeMethod(
+                                            registry, "reserveSlot", "next"))
+                    .isInstanceOf(DatasetException.class);
+            verify(client, never()).close();
+            assertThat(instances).containsKey("busy");
+        } finally {
+            release.countDown();
+            worker.join(2000);
+        }
+        org.springframework.test.util.ReflectionTestUtils.invokeMethod(
+                registry, "reserveSlot", "next");
+        verify(client).close();
+        assertThat(instances).doesNotContainKey("busy");
+        assertThat(slots.availablePermits()).isZero();
+        slots.release();
+        registry.close();
     }
 
     /** Puts a mock-backed instance into the registry so {@code call} never spawns a process. */

@@ -150,7 +150,14 @@ public class MemoryMaintenanceMiddleware implements HarnessRuntimeMiddleware {
                 .doOnComplete(
                         () -> {
                             MemoryBackgroundTasks.begin();
-                            Mono.defer(() -> doMaintenance(rc))
+                            RuntimeContext captured =
+                                    rc.get(
+                                                            io.agentscope.harness.agent.sandbox
+                                                                    .SandboxAcquireResult.class)
+                                                    == null
+                                            ? rc
+                                            : RuntimeContext.builder(rc).build();
+                            Mono.defer(() -> doMaintenance(captured))
                                     .subscribeOn(Schedulers.boundedElastic())
                                     .doFinally(signal -> MemoryBackgroundTasks.end())
                                     .subscribe(

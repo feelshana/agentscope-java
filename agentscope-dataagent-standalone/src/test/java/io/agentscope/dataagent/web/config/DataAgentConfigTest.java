@@ -70,6 +70,37 @@ class DataAgentConfigTest {
     }
 
     @Test
+    void modelTransportDefaultsToHttp11AndAllowsExplicitProtocolOverride() throws Exception {
+        for (var version : io.agentscope.core.model.transport.HttpVersion.values()) {
+            var config = new DataAgentConfig();
+            org.springframework.test.util.ReflectionTestUtils.setField(
+                    config, "openaiApiKey", "test");
+            org.springframework.test.util.ReflectionTestUtils.setField(
+                    config, "openaiModelName", "test");
+            if (version == io.agentscope.core.model.transport.HttpVersion.HTTP_2)
+                org.springframework.test.util.ReflectionTestUtils.setField(
+                        config, "openaiHttpVersion", version);
+            var model = config.openaiModel();
+            var client =
+                    org.springframework.test.util.ReflectionTestUtils.getField(model, "client");
+            var transport =
+                    (io.agentscope.core.model.transport.HttpTransport)
+                            org.springframework.test.util.ReflectionTestUtils.getField(
+                                    client, "transport");
+            try {
+                var options =
+                        (io.agentscope.core.model.transport.HttpTransportConfig)
+                                org.springframework.test.util.ReflectionTestUtils.getField(
+                                        transport, "config");
+                assertThat(options.getHttpVersion()).isEqualTo(version);
+            } finally {
+                transport.close();
+                io.agentscope.core.model.transport.HttpTransportFactory.unregister(transport);
+            }
+        }
+    }
+
+    @Test
     void chatUiAlwaysUsesConversationScopedSessions() {
         ChannelConfig configured =
                 ChannelConfig.builder("chatui")

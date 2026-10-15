@@ -32,6 +32,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -146,7 +147,26 @@ public class DockerSandbox extends AbstractBaseSandbox {
         cmd.add(containerId);
         cmd.add("sh");
         cmd.add("-c");
-        cmd.add(command);
+        String jobFile = "/tmp/agentscope-exec-" + UUID.randomUUID();
+        // A separate process group lets cancellation stop this command and its children only.
+        String managedCommand =
+                "echo $$ > "
+                        + jobFile
+                        + "; "
+                        + "if [ -f "
+                        + jobFile
+                        + ".cancel ]; then rm -f "
+                        + jobFile
+                        + " "
+                        + jobFile
+                        + ".cancel; exit 130; fi; sh -c "
+                        + shellQuote(command)
+                        + "; r=$?; rm -f "
+                        + jobFile
+                        + " "
+                        + jobFile
+                        + ".cancel; exit $r";
+        cmd.add("exec setsid --wait sh -c " + shellQuote(managedCommand));
 
         ProcessBuilder pb = new ProcessBuilder(cmd);
         Process process = pb.start();
@@ -169,25 +189,64 @@ public class DockerSandbox extends AbstractBaseSandbox {
                 drainer.submit(() -> readStream(process.getErrorStream(), OUTPUT_TRUNCATE_BYTES));
         drainer.shutdown();
 
-        boolean exited = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
-        if (!exited) {
-            process.destroyForcibly();
+        boolean interrupted = false;
+        try {
+            boolean exited;
+            try {
+                exited = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+            } catch (InterruptedException cancelled) {
+                interrupted = true;
+                stopExecGroup(containerId, jobFile);
+                process.waitFor(2, TimeUnit.SECONDS);
+                throw cancelled;
+            }
+            if (!exited) {
+                stopExecGroup(containerId, jobFile);
+                throw new SandboxException.ExecTimeoutException(command, timeoutSeconds);
+            }
+            String stdout = stdoutFuture.get(5, TimeUnit.SECONDS);
+            String stderr = stderrFuture.get(5, TimeUnit.SECONDS);
+            int exitCode = process.exitValue();
+            boolean truncated =
+                    stdout.length() >= OUTPUT_TRUNCATE_BYTES
+                            || stderr.length() >= OUTPUT_TRUNCATE_BYTES;
+            ExecResult result = new ExecResult(exitCode, stdout, stderr, truncated);
+            if (!result.ok()) throw new SandboxException.ExecException(exitCode, stdout, stderr);
+            return result;
+        } finally {
+            if (process.isAlive()) process.destroyForcibly();
+            stdoutFuture.cancel(true);
+            stderrFuture.cancel(true);
+            process.getInputStream().close();
+            process.getErrorStream().close();
             drainer.shutdownNow();
-            throw new SandboxException.ExecTimeoutException(command, timeoutSeconds);
+            if (interrupted) Thread.currentThread().interrupt();
         }
+    }
 
-        String stdout = stdoutFuture.get();
-        String stderr = stderrFuture.get();
-        int exitCode = process.exitValue();
+    private static String shellQuote(String value) {
+        return "'" + value.replace("'", "'\\''") + "'";
+    }
 
-        boolean truncated =
-                stdout.length() >= OUTPUT_TRUNCATE_BYTES
-                        || stderr.length() >= OUTPUT_TRUNCATE_BYTES;
-        ExecResult result = new ExecResult(exitCode, stdout, stderr, truncated);
-        if (!result.ok()) {
-            throw new SandboxException.ExecException(exitCode, stdout, stderr);
-        }
-        return result;
+    private void stopExecGroup(String containerId, String jobFile) throws Exception {
+        // The tombstone handles cancellation before the exec process has written its PID.
+        String stop =
+                "touch "
+                        + jobFile
+                        + ".cancel; "
+                        + "if [ -f "
+                        + jobFile
+                        + " ]; then p=$(cat "
+                        + jobFile
+                        + "); case $p in ''|*[!0-9]*) exit 1;; esac; [ \"$p\" -gt 1 ] || exit 1;"
+                        + " kill -TERM -\"$p\" 2>/dev/null || true; i=0; while kill -0 -\"$p\""
+                        + " 2>/dev/null && [ $i -lt 10 ]; do sleep 0.1; i=$((i+1)); done; kill"
+                        + " -KILL -\"$p\" 2>/dev/null || true; sleep 0.1; rm -f "
+                        + jobFile
+                        + " "
+                        + jobFile
+                        + ".cancel; fi";
+        runDockerCliBlocking(10, "docker", "exec", containerId, "sh", "-c", stop);
     }
 
     @Override

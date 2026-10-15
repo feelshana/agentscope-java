@@ -1,5 +1,7 @@
 # 平台增量验证
 
+来源覆盖核对：`python docs/fixtures/platform-integration/audit_source_integration.py` 只读取 Git/工作区，生成 target/source-integration-audit.json，记录 10 月 9 日以来的来源提交及文件状态。该结果不自动判定行为等价，人工结论见 [逐提交核对表](../../source-branch-integration-audit-20261015.md)。
+
 在 standalone 项目根目录执行。`isolated_acl_smoke.py` 启动已打包 exec JAR，使用临时端口、内存 H2、独立 user.home/工作区/MDL/附件目录和独立 sandbox instance-id；结束时关闭该实例。不会连接现有应用的元数据库，也不会调用模型或查询业务表。
 
 ```powershell

@@ -64,52 +64,56 @@ public class AuthController {
     @PostMapping("/login")
     public Mono<ResponseEntity<LoginResponse>> login(@RequestBody LoginRequest req) {
         return Mono.fromCallable(
-                () -> {
-                    if (req.username() == null || req.password() == null) {
-                        return ResponseEntity.badRequest().<LoginResponse>build();
-                    }
-                    return userStore
-                            .findByUsername(req.username())
-                            .filter(u -> userStore.verifyPassword(u, req.password()))
-                            .map(
-                                    u -> {
-                                        String token =
-                                                jwtService.generate(
-                                                        u.userId(), u.username(), u.roles());
-                                        return ResponseEntity.ok(
-                                                new LoginResponse(
-                                                        token,
-                                                        u.userId(),
-                                                        u.username(),
-                                                        u.roles()));
-                                    })
-                            .orElse(
-                                    ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                                            .<LoginResponse>build());
-                });
+                        () -> {
+                            if (req.username() == null || req.password() == null) {
+                                return ResponseEntity.badRequest().<LoginResponse>build();
+                            }
+                            return userStore
+                                    .findByUsername(req.username())
+                                    .filter(u -> userStore.verifyPassword(u, req.password()))
+                                    .map(
+                                            u -> {
+                                                String token =
+                                                        jwtService.generate(
+                                                                u.userId(),
+                                                                u.username(),
+                                                                u.roles());
+                                                return ResponseEntity.ok(
+                                                        new LoginResponse(
+                                                                token,
+                                                                u.userId(),
+                                                                u.username(),
+                                                                u.roles()));
+                                            })
+                                    .orElse(
+                                            ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                                                    .<LoginResponse>build());
+                        })
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
 
     @GetMapping("/me")
     public Mono<MeResponse> me(Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
-                () ->
-                        userStore
-                                .findById(userId)
-                                .map(
-                                        u ->
+                        () ->
+                                userStore
+                                        .findById(userId)
+                                        .map(
+                                                u ->
+                                                        new MeResponse(
+                                                                u.userId(),
+                                                                u.username(),
+                                                                u.roles(),
+                                                                aiAvailable,
+                                                                u.hasRole("admin")))
+                                        .orElse(
                                                 new MeResponse(
-                                                        u.userId(),
-                                                        u.username(),
-                                                        u.roles(),
+                                                        userId,
+                                                        userId,
+                                                        List.of("user"),
                                                         aiAvailable,
-                                                        u.hasRole("admin")))
-                                .orElse(
-                                        new MeResponse(
-                                                userId,
-                                                userId,
-                                                List.of("user"),
-                                                aiAvailable,
-                                                false)));
+                                                        false)))
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
 }

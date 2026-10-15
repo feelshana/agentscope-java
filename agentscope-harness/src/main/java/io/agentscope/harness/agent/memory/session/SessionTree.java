@@ -598,9 +598,16 @@ public class SessionTree {
      * When {@code fs} is a call-scoped sandbox proxy with an active binding, return a pinned
      * filesystem that keeps that sandbox for async uploads. Otherwise return {@code fs} as-is.
      */
-    private static AbstractFilesystem pinIfSandbox(AbstractFilesystem fs) {
+    private AbstractFilesystem pinIfSandbox(AbstractFilesystem fs) {
+        if (fsRc.get(io.agentscope.harness.agent.sandbox.SandboxAcquireResult.class) != null) {
+            // Preserve prefix routes as well as the invocation binding. A routed filesystem
+            // is not SandboxAware, and replacing it with a plain pin would discard its routes.
+            return new io.agentscope.harness.agent.filesystem.BakedContextFilesystem(
+                    fs, RuntimeContext.builder(fsRc).build());
+        }
         if (fs instanceof SandboxAware aware) {
-            Sandbox sb = aware.getSandbox();
+            var bound = fsRc.get(io.agentscope.harness.agent.sandbox.SandboxAcquireResult.class);
+            Sandbox sb = bound != null ? bound.getSandbox() : aware.getSandbox();
             if (sb != null) {
                 return new PinnedSandboxFilesystem(sb);
             }

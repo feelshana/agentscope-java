@@ -29,16 +29,14 @@ Three things shape the design:
   they can nominate it for sharing. An admin reviews it, and if approved,
   it lands in a shared library that every other user's agent picks up
   automatically. Knowledge moves bottom-up, but with a gate.
-- **You decide what the sandbox is.** Every script the agent runs goes
-  through an isolated execution sandbox. Unlike codingagent — which spins
-  containers up and down per session on its own — dataagent leaves
-  sandbox lifecycle to *you*: provision it the way your data security and
-  ops teams want, recycle it on whatever cadence makes sense, plug in
-  whatever drivers and notebook tooling fit the stack.
+- **Application-managed sandboxes.** Python scripts run in per-user Docker
+  sandboxes. UserSandboxRegistry manages leases, lazy startup, idle collection
+  and capacity eviction; deployments configure the image, resource limits and
+  instance labels. The modeling agent uses a scoped host filesystem.
 
-dataagent is built to be deployed distributed from day one — flip on the
-shared-state switch and any replica can serve any user, no sticky sessions
-required.
+Redis can coordinate sessions and shared state. Docker sandboxes, MCP pools and
+capacity budgets remain process-local: production replicas need sticky routing,
+shared durable storage and explicit resource budgets. See [deployment constraints](docs/cluster-deploy.md).
 
 ### At a glance
 
@@ -50,7 +48,7 @@ required.
 | **Self-evolution** | ✅ Per user — **plus** approved contributions are shared with everyone |
 | **Sandbox lifecycle** | **Owned by the application** — provisioned, sized and recycled outside the agent runtime |
 | **Channels** | Built-in web UI · DingTalk · generic HTTP webhook |
-| **Distribution** | ✅ First-class — turn on shared state and any replica serves any user |
+| **Distribution** | Optional Redis coordination; local sandboxes and budgets require routing and shared-storage planning |
 | **Filesystem** | `SandboxFilesystem` for script execution + `OverlayFilesystem` for blending shared / private skills |
 
 ### Architecture
@@ -103,8 +101,9 @@ bus are all backed by Redis, so any replica can serve any user. See
 
 ## What is included
 
-- **Built-in `data-agent`** — generic AgentScope execution with the installed
-  official Wren skills; includes `data-explorer` / `report-writer` sub-agents.
+- **Built-in `data-agent` and `modeling-agent`** — generic AgentScope execution
+  with the installed official Wren skills. Sub-agent definitions are retained;
+  orchestration is disabled by default (`dataagent.agent.subagents-enabled=false`).
 - **Per-user data agents** — every authenticated user can fork the built-in or
   draft a new one. Each user-agent gets its own `CompositeFilesystem` keyed by
   `(userId, agentId)`; `skills/` and `subagents/` are an `OverlayFilesystem`
@@ -219,7 +218,7 @@ walkthrough.
 
 ### 3. (Optional) Enable the webhook side-channel
 
-In `~/.agentscope/dataagent-standalone/agentscope.json`:
+In `~/.agentscope/dataagent/agentscope.json`:
 
 ```json
 {
@@ -258,8 +257,11 @@ Replies are POSTed to `callbackUrl` (same HMAC), or parked for long-poll at
 java -jar target/agentscope-dataagent-*-exec.jar
 ```
 
-Open **http://localhost:8080** and log in. The H2 demo seed creates two demo
-accounts: `bob` / `bob` and `alice` / `alice`. For isolated local development,
+Open **http://localhost:8080** and log in. The checked-in configuration uses MySQL
+for platform metadata; `--spring.profiles.active=h2` selects file-based H2.
+SQL initialization is separately controlled by `DATAAGENT_SQL_INIT_MODE` and
+`DATAAGENT_SQL_INIT_PLATFORM`; bundled demo SQL seeds `bob` and `alice`.
+For isolated local development,
 set `dataagent.seed-demo-users=true` to seed the initial administrator. It defaults
 to false; existing users and grants are retained.
 
@@ -269,18 +271,18 @@ to false; existing users and grants are retained.
 
 | Property | Default | Description |
 |---|---|---|
-| `dataagent.jwt.secret` | dev placeholder | JWT signing secret (>= 32 UTF-8 bytes). Blank, placeholder and short secrets are rejected. |
+| `dataagent.jwt.secret` | deployment configuration | HS256 signing key: at least 32 UTF-8 bytes. Empty, development-placeholder and short keys are rejected in every profile. |
 | `dataagent.seed-demo-users` | `false` | Opt in to Java administrator seeding for local development; does not disable separately configured SQL initialization. |
 | `dataagent.cors.allowed-origins` | `*` | Allowed browser origin patterns; configure explicit origins for deployment. |
-| `dataagent.workspace` | `$CWD` *(dev only)* | Working directory for agent runtime state (not config — config lives at `~/.agentscope/dataagent-standalone/agentscope.json`). **Required** in non-`dev` profiles — startup fails if blank. |
+| `dataagent.workspace` | JVM working directory when blank | Runtime workspace, separate from `~/.agentscope/dataagent/agentscope.json`. Set an explicit durable directory in deployments. |
 | `dataagent.workspace-store.local.max-file-size-mb` | `10` | Per-file cap for the `RemoteFilesystem` local store. |
-| `dataagent.openai.api-key` | _(empty)_ | OpenAI-compatible API key (primary model). Env: `DATAAGENT_OPENAI_API_KEY` or `OPENAI_API_KEY`. When set, takes precedence over DashScope. |
-| `dataagent.openai.base-url` | _(empty → official OpenAI)_ | Base URL of any OpenAI-compatible endpoint (DeepSeek, vLLM, one-api, DashScope compatible-mode, ...). Trailing `/v1` is optional. Env: `DATAAGENT_OPENAI_BASE_URL` or `OPENAI_BASE_URL`. |
-| `dataagent.openai.model-name` | `gpt-4o` | OpenAI-compatible model id. Env: `DATAAGENT_OPENAI_MODEL_NAME` or `OPENAI_MODEL_NAME`. |
+| `dataagent.openai.api-key` | deployment configuration | OpenAI-compatible credentials; DATAAGENT_OPENAI_API_KEY or OPENAI_API_KEY. Configured OpenAI takes precedence over DashScope. |
+| `dataagent.openai.base-url` | `https://api.deepseek.com` | Current application.yml fallback; override with DATAAGENT_OPENAI_BASE_URL or OPENAI_BASE_URL for the deployed provider. |
+| `dataagent.openai.model-name` | `deepseek-flash` | Current application.yml fallback; override with DATAAGENT_OPENAI_MODEL_NAME or OPENAI_MODEL_NAME. |
 | `dataagent.openai.stream` | `true` | Stream model completions over SSE. Env: `DATAAGENT_OPENAI_STREAM`. Set `false` to compare non-streaming model requests when diagnosing upstream EOF; browser chat still uses SSE. |
 | `dataagent.dashscope.api-key` | _(empty)_ | DashScope API key (fallback when no OpenAI key is set). Env: `DASHSCOPE_API_KEY`. |
-| `dataagent.dashscope.model-name` | `qwen-max` | DashScope model id. |
-| `dataagent.agent.name` | `data-agent` | Used when auto-generating `~/.agentscope/dataagent-standalone/agentscope.json`. |
+| `dataagent.dashscope.model-name` | `qwen3.8-max` | Current application.yml fallback; DATAAGENT_MODEL_NAME. |
+| `dataagent.agent.name` | `data-agent` | Used when auto-generating `~/.agentscope/dataagent/agentscope.json`. |
 | `dataagent.agent.sys-prompt` | _(built-in prompt)_ | Overrides the built-in system prompt scaffolded into `workspace/AGENTS.md` on first start. Prefer the `DATAAGENT_AGENT_SYS_PROMPT` env var, and never set this key to an empty value — an empty property would scaffold a blank prompt. |
 | `dataagent.agent.subagents-enabled` | `false` | Harness subagent orchestration (`agent_spawn` / `agent_send` / `task_*`). Off by default: the harness otherwise injects a fixed ~6.2k-char `## Subagents` system-prompt section plus those tool schemas on every turn. Setting it to `true` restores the section, the tools and the loading of `workspace/subagents/*.md` — no code change. Does **not** affect the gateway, session routing or chat. Env: `DATAAGENT_SUBAGENTS_ENABLED`. |
 | `dataagent.channels.chatui.enabled` | `true` | Primary web channel. Always-on by default. |
@@ -294,11 +296,23 @@ to false; existing users and grants are retained.
 | `dataagent.wren.skills-dir` | _(empty)_ → auto-inferred | Official wren skills root (`skills_content` inside the wrenai pip package, specs/022 / ADR 0035): mounted natively onto `modeling-agent` via the harness skill repository so `load_skill_through_path` serves the same playbook files the CLI does. Blank = inferred from the resolved executable location (pip `site-packages` layouts on Windows/Unix). Point it explicitly only at non-standard layouts; a missing/invalid directory logs a warning and the modeling agent falls back to the `wren_skills_get` CLI channel. Env: `DATAAGENT_WREN_SKILLS_DIR`. |
 | `dataagent.wren.profile` / `data-source` / `timeout-seconds` / `instance-idle-seconds` | `dataagent` / `mysql` / `180` / `1800` | Default wren connection profile (M4: a group whose datasets all come from one MySQL external datasource binds its own `ext-<datasourceId>` profile, resolved at publish time and pinned into the snapshot; this setting is the fallback for uploaded-only groups and pre-M4 snapshots), project dialect (written into `wren_project.yml`, passed to parse-types), per-command subprocess timeout (seconds) and the per-group instance-pool idle TTL in seconds (M3: an unused wren instance is closed and respawned on demand). Env: `DATAAGENT_WREN_PROFILE` / `DATAAGENT_WREN_DATA_SOURCE` / `DATAAGENT_WREN_TIMEOUT_SECONDS` / `DATAAGENT_WREN_INSTANCE_IDLE_SECONDS`. |
 | `server.port` | `8080` | HTTP port. |
+| `dataagent.upload.max-file-size` / `max-selection-size` / `max-files` | `50MB` / `100MB` / `10` | 单文件、整批选择大小及文件数量；前端从上传策略 API 读取。 |
+| `dataagent.upload.max-rows` / `max-columns` / `max-cells` | `100000` / `100` / `2000000` | 每文件解析规模限制。 |
+| `dataagent.upload.concurrent-files` | `8` | 单进程在途上传预算（1—32）；超额 429，前端有限调度。 |
+| `dataagent.chat.max-active` / `max-active-per-user` | `16` / `2` | ChatController 问数执行预算，建模豁免。 |
+| `dataagent.chat.max-waiting` / `max-waiting-per-user` | `16` / `1` | 问数等待名额；排队通过 SSE capacity 提示。 |
+| `dataagent.chat.wait-seconds` / `execution-seconds` | `30` / `600` | 问数等待和执行超时。 |
+| `dataagent.wren.max-instances` / `call-wait-seconds` | `16` / `30` | MCP 实例预算及每库门锁等待；不覆盖普通 CLI 子进程。 |
+| `dataagent.sandbox.max-containers` | `16` | 每进程沙箱上限，满额只驱逐空闲容器。环境变量 DATAAGENT_SANDBOX_MAX_CONTAINERS。 |
+| `dataagent.openai.http-version` | `HTTP_1_1` | 默认模型 HTTP 协议；环境变量 DATAAGENT_OPENAI_HTTP_VERSION。 |
 
-User accounts, agents and contributions are persisted to embedded H2 by
-default for instant local quick-start. For production deployments, activate
-the `jdbc` Spring profile and set `DATAAGENT_DB_URL` / `DATAAGENT_DB_USER`
-/ `DATAAGENT_DB_PASSWORD` to switch to MySQL or PostgreSQL.
+The current default platform database is MySQL. The `h2` profile selects embedded
+H2. Configure `DATAAGENT_DB_URL`, `DATAAGENT_DB_DRIVER`, `DATAAGENT_DB_USER` and
+`DATAAGENT_DB_PASSWORD` explicitly when changing databases; PostgreSQL also needs
+compatible initialization SQL and dialect settings. Uploaded physical tables
+continue to use the separately configured dataset MySQL database.
+
+共享权限、上传失败处理、问答排队及本次框架依赖/镜像发布步骤见 [平台并发与发布说明](docs/platform-concurrency-and-release.md)。来源 ADR/spec 原文及编号映射见 [导入索引](docs/imported/multiAgent-Mdl-lyf/README.md)。容量是单 JVM 约束，默认值不代表已完成真实负载压测。
 
 ---
 
@@ -317,18 +331,18 @@ the `jdbc` Spring profile and set `DATAAGENT_DB_URL` / `DATAAGENT_DB_USER`
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/api/auth/me` | Current user info |
-| `GET` | `/api/me/agent-info` | Metadata for the built-in `data-agent` |
-| `POST` | `/api/chat/stream` | SSE streaming chat (request body: `{ message }`) |
-| `POST` | `/api/chat/send` | Synchronous chat (request body: `{ message }`) |
-| `GET` | `/api/sessions` | List own sessions |
-| `GET` | `/api/sessions/{key}/history` | Session message history |
-| `GET` | `/api/sessions/{key}/turns` | Per-turn transcript |
-| `GET` | `/api/sessions/{key}/tree` | Sub-agent fan-out tree |
-| `POST` | `/api/sessions/{key}/reset` | Reset a session |
-| `GET` `POST` | `/api/me/agents` | List / create per-user data agents |
-| `GET` `POST` | `/api/me/agents/{id}/skills` | List / write a skill in your workspace |
-| `GET` `POST` | `/api/me/agents/{id}/tools` | List / register custom tools |
-| `POST` | `/api/me/agents/{sourceId}/clone` | Fork a built-in or your own agent |
+| `GET` | `/api/agents/{id}` | Metadata for the built-in `data-agent` |
+| `POST` | `/api/agents/{agentId}/chat/stream` | SSE streaming chat (request body: `{ message }`) |
+| `POST` | `/api/agents/{agentId}/chat/send` | Synchronous chat (request body: `{ message }`) |
+| `GET` | `/api/agents/{agentId}/sessions` | List own sessions |
+| `GET` | `/api/agents/{agentId}/sessions/{key}/history` | Session message history |
+| `GET` | `/api/agents/{agentId}/sessions/{key}/turns` | Per-turn transcript |
+| `GET` | `/api/agents/{agentId}/sessions/{key}/tree` | Sub-agent fan-out tree |
+| `POST` | `/api/agents/{agentId}/sessions/{key}/reset` | Reset a session |
+| `GET` `POST` | `/api/agents` | List / create per-user data agents |
+| `GET` `POST` | `/api/agents/{id}/skills` | List / write a skill in your workspace |
+| `GET` `POST` | `/api/agents/{id}/tools` | List / register custom tools |
+| `POST` | `/api/agents/{sourceId}/clone` | Fork a built-in or your own agent |
 | `GET` `POST` | `/api/user/bindings` | List / add channel preferences |
 | `PUT` `DELETE` | `/api/user/bindings/{index}` | Update / remove a preference |
 | `GET` `POST` | `/api/me/contributions` | List own contributions / submit a new one |
@@ -370,6 +384,10 @@ the `jdbc` Spring profile and set `DATAAGENT_DB_URL` / `DATAAGENT_DB_USER`
 设计与验收：[ADR 0069](docs/adr/0069-wren-native-modeling-and-query-agents.md)、[spec 058](docs/specs/058-wren-native-modeling-and-query-agents.md)、[完整计划](docs/plans/058-wren-native-modeling-and-query-agents.md)。
 
 ## Building
+
+This is a standalone Maven project with Java 17 as its compilation baseline.
+When harness or OpenAI-extension sources change, first install matching dependencies
+from the parent repository as described in [the release guide](docs/platform-concurrency-and-release.md).
 
 ```bash
 mvn package -DskipTests

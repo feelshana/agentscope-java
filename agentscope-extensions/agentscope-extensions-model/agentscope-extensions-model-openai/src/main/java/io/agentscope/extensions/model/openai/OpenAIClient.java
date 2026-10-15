@@ -31,6 +31,7 @@ import io.agentscope.extensions.model.openai.exception.OpenAIException;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -39,6 +40,7 @@ import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
+import reactor.util.retry.Retry;
 
 /**
  * Stateless HTTP client for OpenAI-compatible APIs.
@@ -403,7 +405,7 @@ public class OpenAIClient {
                             .build();
 
             AtomicBoolean seenChunk = new AtomicBoolean(false);
-            return transport.stream(httpRequest)
+            return streamBeforeFirstEvent(httpRequest, options)
                     // The SSE `[DONE]` sentinel terminates the stream: complete the Flux here
                     // rather than merely filtering it out, otherwise completion is deferred until
                     // the underlying connection closes (keep-alive gateways may stall this for the
@@ -463,6 +465,50 @@ public class OpenAIClient {
             return Flux.error(
                     new OpenAIException("Failed to initialize request: " + e.getMessage(), e));
         }
+    }
+
+    private Flux<String> streamBeforeFirstEvent(HttpRequest request, GenerateOptions options) {
+        return Flux.defer(
+                () -> {
+                    AtomicBoolean received = new AtomicBoolean();
+                    Flux<String> source =
+                            Flux.defer(() -> transport.stream(request))
+                                    .doOnNext(ignored -> received.set(true));
+                    if (options != null
+                            && options.getExecutionConfig() != null
+                            && options.getExecutionConfig().getMaxAttempts() != null
+                            && options.getExecutionConfig().getMaxAttempts() <= 1) return source;
+                    // A peer can retire a pooled connection with GOAWAY/closed/reset. Re-issue only
+                    // this model request, once, before receiving any event (including tool deltas).
+                    // Never replay a partial response or a whole agent turn/tool execution.
+                    return source.retryWhen(
+                            Retry.backoff(1, Duration.ofMillis(250))
+                                    .jitter(0)
+                                    .filter(error -> !received.get() && isEarlyDisconnect(error))
+                                    .doBeforeRetry(
+                                            ignored ->
+                                                    log.info(
+                                                            "Retrying model stream before first"
+                                                                    + " event after connection"
+                                                                    + " disconnect"))
+                                    .onRetryExhaustedThrow((spec, signal) -> signal.failure()));
+                });
+    }
+
+    private static boolean isEarlyDisconnect(Throwable error) {
+        if (!(error instanceof HttpTransportException transportError)
+                || transportError.getStatusCode() != null) return false;
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            if (cause instanceof java.io.IOException && cause.getMessage() != null) {
+                String message = cause.getMessage().toUpperCase(java.util.Locale.ROOT);
+                if (message.contains("GOAWAY")
+                        || message.equals("CLOSED")
+                        || message.contains("CONNECTION RESET")
+                        || cause instanceof java.io.EOFException) return true;
+            }
+            if (cause.getCause() == cause) break;
+        }
+        return false;
     }
 
     /**

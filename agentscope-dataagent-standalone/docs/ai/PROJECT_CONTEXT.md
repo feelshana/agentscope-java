@@ -1,5 +1,17 @@
 # 项目长期背景
 
+## 当前文档事实源与来源核对（2026-10-15，ADR 0079）
+
+当前根 pom.xml 是 Java17 standalone，application.yml 默认 MySQL 平台库，h2 profile 切文件 H2；Agent 配置为 ~/.agentscope/dataagent/agentscope.json。README/中文 README、ARCHITECTURE_zh.md、根 AGENTS.md、docs/agent-definition.md 已按实际代码对齐，根 AGENTS.md 通过项目 .gitignore 的单文件例外进入可交付范围。
+
+来源自 10 月 9 日有 11 主线提交及 3 公共历史提交，平台功能选择性移植而非整个分支历史合并；打包和旧建模保留当前方案。逐提交、差异与来源 ADR/spec 映射见 docs/source-branch-integration-audit-20261015.md 和 docs/imported/multiAgent-Mdl-lyf/README.md。后者保留 11 ADR/8 spec，原编号可能与当前冲突。审计工具只提供祖先/文件证据，不能替代行为验收。
+
+## 并发平台补充（2026-10-15，ADR 0078）
+
+来源 a29cc754/6a75b6cf 的上传与问答容量已完成集成核对：单进程上传准入、磁盘暂存与回滚，ChatController 问数全局/每用户预算、有限等待和超时；建模及其他通道不经过该问答预算。Wren MCP 工具发现/查询共用公平有时限门锁和实例名额，沙箱支持空闲驱逐及进程组取消；不宣称所有 CLI 进程受同一预算。下文“容量未实现”是此前来源截至 32c6d292 的历史状态。
+
+独立构建必须配套安装修改后的 harness/OpenAI 扩展，部署同步前端/JAR 和含 setsid 的沙箱镜像。当前配置/发布说明见 docs/platform-concurrency-and-release.md；来源 ADR/spec 因编号冲突保留在 docs/imported/multiAgent-Mdl-lyf 并由 ADR 0078/spec 067 解释适用范围。实测及尚未完成的 Docker/真实负载验收见 CURRENT_TASK，源码和构建通过不等于用户服务已重载。
+
 ## 当前共享权限补充（2026-10-15，ADR 0077）
 
 已将用户确认的 data-agent-multiAgent-Mdl-lyf 平台增量适配到当前官方 Wren 链路。知识库 QUERY/使用、MANAGE/管理授权，创建者与当前全局管理员拥有管理权；普通问答每轮零/单/多/全选，建模单库。当前用户身份不替换为库创建者，历史/沙箱/附件/反馈仍私有；点赞 SQL 示例为库内召回资料，按库串行存储索引。下文“全部资源仅创建者可访问”的旧描述不适用于显式共享知识库。

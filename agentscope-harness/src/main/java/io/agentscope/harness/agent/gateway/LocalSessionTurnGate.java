@@ -35,6 +35,16 @@ public final class LocalSessionTurnGate implements SessionTurnGate {
         return semaphore::release;
     }
 
+    /** Non-blocking variant for interactive requests that must not queue duplicate turns. */
+    public TurnLease tryAcquire(String key) throws TurnBusyException {
+        Semaphore semaphore = gates.computeIfAbsent(key, k -> new Semaphore(1, true));
+        if (!semaphore.tryAcquire()) throw new TurnBusyException(key);
+        var released = new java.util.concurrent.atomic.AtomicBoolean();
+        return () -> {
+            if (released.compareAndSet(false, true)) semaphore.release();
+        };
+    }
+
     @Override
     public boolean isRunning(String key) {
         Semaphore semaphore = gates.get(key);

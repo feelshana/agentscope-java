@@ -18,6 +18,7 @@ package io.agentscope.harness.agent.bus;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.util.JsonUtils;
 import io.agentscope.harness.agent.filesystem.AbstractFilesystem;
+import io.agentscope.harness.agent.filesystem.BakedContextFilesystem;
 import io.agentscope.harness.agent.filesystem.model.FileInfo;
 import io.agentscope.harness.agent.filesystem.model.LsResult;
 import io.agentscope.harness.agent.filesystem.model.ReadResult;
@@ -60,15 +61,27 @@ public class WorkspaceMessageBus implements MessageBus {
 
     private final AbstractFilesystem fs;
     private final String busRoot;
-    private final AtomicLong seq = new AtomicLong(System.nanoTime());
+    private final AtomicLong seq;
 
     /**
      * @param filesystem any {@link AbstractFilesystem} implementation
      * @param busRoot    absolute path within the filesystem for bus data (e.g. {@code "/bus"})
      */
     public WorkspaceMessageBus(AbstractFilesystem filesystem, String busRoot) {
+        this(filesystem, busRoot, new AtomicLong(System.nanoTime()));
+    }
+
+    private WorkspaceMessageBus(AbstractFilesystem filesystem, String busRoot, AtomicLong seq) {
         this.fs = filesystem;
         this.busRoot = busRoot.endsWith("/") ? busRoot.substring(0, busRoot.length() - 1) : busRoot;
+        this.seq = seq;
+    }
+
+    @Override
+    public MessageBus withContext(RuntimeContext context) {
+        // Snapshot the binding: lifecycle cleanup clears the original context after the turn.
+        RuntimeContext snapshot = RuntimeContext.builder(context).build();
+        return new WorkspaceMessageBus(new BakedContextFilesystem(fs, snapshot), busRoot, seq);
     }
 
     // ---- Mode A: drain queue ----

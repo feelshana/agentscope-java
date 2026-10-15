@@ -45,6 +45,23 @@ class SandboxBackedFilesystemTest {
     private static final RuntimeContext RT = RuntimeContext.empty();
 
     @Test
+    void executePropagatesCancellationWithoutContinuingArtifactCollection() throws Exception {
+        Sandbox sandbox = org.mockito.Mockito.mock(Sandbox.class);
+        org.mockito.Mockito.when(sandbox.exec(RT, "sleep 10", 20))
+                .thenThrow(new InterruptedException("cancelled"));
+        SandboxBackedFilesystem filesystem = new SandboxBackedFilesystem();
+        filesystem.setSandbox(sandbox);
+        try {
+            org.junit.jupiter.api.Assertions.assertThrows(
+                    java.util.concurrent.CancellationException.class,
+                    () -> filesystem.execute(RT, "sleep 10", 20));
+            assertTrue(Thread.currentThread().isInterrupted());
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
     void downloadFiles_decodesWrappedBase64Output() {
         byte[] expected = new byte[] {1, 2, 3, 4, 5, 6};
         SandboxBackedFilesystem filesystem = new SandboxBackedFilesystem();

@@ -165,6 +165,9 @@ public class SandboxBackedFilesystem extends BaseSandboxFilesystem implements Sa
                                     ? "\n" + e.getStderr()
                                     : "");
             return new ExecuteResponse(combined, e.getExitCode(), false);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new java.util.concurrent.CancellationException("Sandbox execution cancelled");
         } catch (Exception e) {
             log.error("[sandbox-fs] execute failed: {}", command, e);
             return new ExecuteResponse("Internal sandbox error: " + e.getMessage(), -1, false);

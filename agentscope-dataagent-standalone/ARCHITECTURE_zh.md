@@ -15,7 +15,7 @@
 1. [项目定位与分层架构](#1-项目定位与分层架构)
 2. [启动装配流程](#2-启动装配流程)
 3. [主流程：Wren 语义建模与问数](#3-主流程wren-语义建模与问数)
-4. [问数工具链（Wren-only + 知识检索 + 可视化）](#4-问数工具链)
+4. [问数工具链（官方 Wren MCP + Python/图表）](#4-问数工具链)
 5. [数据集与知识库](#5-数据集与知识库)
 6. [知识图谱（已停用）](#6-知识图谱已停用)
 7. [会话管理与沙箱](#7-会话管理与沙箱)
@@ -67,8 +67,8 @@ dataagent 为每位数据分析师提供专属的数据 Agent，核心流程是*
 **设计哲学**：业务层只写 Web API + 数据工具 + 数据资产服务；ReAct 循环、沙箱生命周期、
 会话路由全部复用 harness/core 框架，禁止在业务层重复实现。
 
-**多租户模型**：所有数据资产按 `ownerId` 隔离；数据集组织为「知识库（DatasetGroup）→ 数据集（Dataset）→ 物理表」三级；
-运行时通过 `DatasetScope(ownerId, groupIds?)` 把租户与知识库过滤注入每个 agent turn。
+**多租户模型**：数据资产保留 `ownerId` 归属；数据集组织为「知识库（DatasetGroup）→ 数据集（Dataset）→ 物理表」三级。
+知识库通过 QUERY/MANAGE 显式共享，创建者与全局管理员天然管理；`DatasetScope` 注入请求用户和本轮授权范围，库 owner 仅用于资源路径。私有会话、沙箱、附件与反馈不随知识库共享扩大，见 ADR 0077。
 
 ---
 
@@ -116,10 +116,9 @@ dataagent 为每位数据分析师提供专属的数据 Agent，核心流程是*
      `logs/LLM-modeling.log`（LLM_MODELING_DEBUG），建模会话与问数流量分开成两份文件。
      不经中间件链的直调 LLM 由 AgentDraftService#callModelBlocking 自己以同一结构转录：
      语义建模 AI 建议 → logs/LLM-modeling.log，agent 草稿 → logs/LLM.log）
-   - middleware: DataDynamicContextMiddleware（每轮重建 [DATA_SOURCES_OVERVIEW]
-     与 [KNOWLEDGE_BASE_OVERVIEW] 追加到 system prompt；数据源概览只渲染可查询的
-     已发布逻辑模型/视图 轻量目录（不含物理名称），字段与关系详情由
-     官方 describe_model 按需获取，见 4.6）
+   - middleware: 主 data-agent 使用 WrenQueryContextMiddleware 注入本轮授权发布工程目录；
+     modeling-agent 使用 WrenProjectContextMiddleware 注入单库工程身份与资料位置。
+     DataDynamicContextMiddleware 仅为非主问数兼容装配保留，不能恢复平台语义路由。
    - stateStore: AgentStateStore（默认 InMemoryAgentStateStore；生产应提供分布式实现）
    - filesystem: DockerFilesystemSpec(IsolationScope.USER)，镜像 dataagent.sandbox.image
      —— 仅问数 agent；sandboxlessAgents（当前 = modeling-agent）显式设 LocalFilesystemSpec +
@@ -172,9 +171,9 @@ dataagent 为每位数据分析师提供专属的数据 Agent，核心流程是*
   此处用独立代理实例即可：每轮调用的真实沙箱由 SandboxLifecycleMiddleware 绑定在
   RuntimeContext 上，工具调用拿到的就是同一个上下文。
 - `ModelingToolkitRegistrar#registerOfficialTools` 向 modeling-agent 挂载 AgentScope 原生 FilesystemTool（list_files/read_file/write_file/edit_file/grep_files/glob_files）与 OfficialWrenToolkit 的单一 wren_cli 工具。旧 ModelingToolkit 不再注册，set/get_enrich_context_mode、关系/视图/问题专用工具与阶段剧本退出 Agent 运行时；遗留 HTTP 服务保留（ADR 0068/spec 057）。
-- `WrenProjectAccess#resolve` 从鉴权用户和 DatasetScope/ConversationScopeRegistry 绑定单个草稿工程；`WrenProjectFilesystem` 仅做路径和权限映射，委托 LocalFilesystem 执行原生文件操作。禁止穿越、宿主路径、符号链接、平台文件及 Cube；业务文档同步到 raw/business-document.md，用户不能修改该映射文件。根目录搜索过滤平台目录，文件写入后标记草稿 DIRTY。
+- `WrenProjectAccess#resolve` 校验当前用户 MANAGE，从 DatasetScope/ConversationScopeRegistry 绑定单个草稿工程；`WrenProjectFilesystem` 只做路径和权限映射，委托 LocalFilesystem 执行文件操作。禁止穿越、宿主路径、符号链接和平台文件，Cube 按官方契约支持；业务文档同步到 raw/business-document.md，用户不能修改该映射文件。根目录搜索过滤平台目录，文件写入后标记草稿 DIRTY。
 - `OfficialWrenToolkit#execute` 将参数数组传给真实官方 CLI，强制 cwd/project/MDL/memory 路径；不开放任意 shell、profile 切换、连接参数或发布命令。query/dry-run 通过 `MdlPublishService#draftCliProfile` 绑定当前知识库连接；ProcessWrenCli 的 WREN_HOME 指向平台维护的 profiles，避免宿主账号的 active profile。返回退出码与原始输出；校验/编译/SQL 计划和 memory 均没有平台第二实现。 官方 build 退出码同步现有 ModelingWorkflowStore 页面记录，validate 成功单独不表示已编译；失败原样显示。query/dry-run 的临时连接绑定在调用后恢复平台工程文件。memory 索引位于知识库 runtime/modeling-memory，源示例仍在 knowledge/sql，派生二进制不进入发布。
-- `ModelingHitlMiddleware#onActing` 对 write_file/edit_file 与 wren_cli memory store 请求原生权限确认；通用预览只检查路径、内容和精确替换，不预先运行 YAML 语义规则或 scratch 三重闸。Agent 写入后按官方技能执行 context validate/build/dry-plan/dry-run，技术失败进入原生循环修复。context build 和 memory index 不请求写权限卡；memory index 强制 --no-seed，避免未授权生成示例。历史 patch_file/批量卡继续由遗留 HTTP 预览处理。
+- `ModelingHitlMiddleware#onActing` 对 write_file/edit_file、wren_cli memory store 和会生成源码样例的 memory index 请求通用写确认；显式 --no-seed 的索引仅更新派生产物。预览检查路径、内容和精确替换，不运行平台业务语义规则。Agent 写入后按官方技能执行 validate/build/dry-plan/dry-run，技术失败进入原生循环修复；build 不代替显式发布。历史 patch_file/批量卡只由兼容 HTTP 预览处理。
 
 ### 2.6 tools.json 与 MCP 挂载（WrenAI 语义层）
 
@@ -313,7 +312,7 @@ SemanticView（命名 SQL 视图：单条 SELECT/WITH，工作区 views/<name>/ 
 ExternalDataSource（用户配置的外部 JDBC 连接，可选采样）
 ```
 
-元数据全部走 JPA（默认 H2：`~/.agentscope-dataagent/db.*`；生产 `jdbc` profile 切 MySQL/PG）。
+元数据走 JPA；当前 application.yml 默认 MySQL，h2 profile 使用 `~/.agentscope-dataagent/db.*` 文件库。切换其他 JDBC 数据库需匹配驱动、初始化 SQL 和方言；上传物理数据仍落独立的数据集 MySQL。
 
 ### 5.2 上传导入流程
 
@@ -331,6 +330,8 @@ ExternalDataSource（用户配置的外部 JDBC 连接，可选采样）
 
 `DatasetService#rebuildRegistry`（@PostConstruct）：启动时从 JPA 重建内存 DataSourceRegistry，数据集跨重启存活。
 
+ADR 0078 / spec 067：`DatasetUploadProperties` 统一大小、文件数量、解析规模和并发策略，前端通过 `DatasetController#uploadPolicy` 读取；`DatasetUploadAdmission#acquire` 限制单进程在途文件、同库同名重复和上传编号复用。`DatasetUploadIntake` 将内容暂存磁盘，超限/取消清理；导入以有限在途批次写入，失败回滚物理表及元数据。浏览器 `uploadQueue` 调度文件，服务端满额 429，不构建持久等待队列。`DatasetController#uploadStatuses` 校验库管理权限，仅返回当前上传者的状态；数据导入成功与基础模型发布结果分别反馈，支持部分成功和发布待处理。
+
 ### 5.3 外部数据源关联
 
 `ExternalDataSourceController`（`/api/datasources`）管理用户级 JDBC 连接；
@@ -343,7 +344,9 @@ PostgreSQL。`DatasetService#prepareAssociatedTables` 在任何 repository/regis
 重复项、已有关联、字段元数据、描述与行数预检；任一表失败时整批不写入。全部准备成功后再统一
 持久化并注册，Controller 最后只触发一次基础 MDL 发布。
 
-### 5.4 关系判定（全 LLM，ADR 0046）
+### 5.4 历史关系服务与兼容台账（ADR 0046）
+
+本节保留旧服务与数据结构说明，当前 Agent 不注册这些领域写工具。关系的当前事实源为官方工程 YAML，建模按第 3.2 节执行。
 
 **候选生成（唯一自动通道：LLM）**：表间关系候选全部由 `MdlSuggestionService#suggestRelationsLlm`
 产生（`refreshRelations` 触发，两步语义判定——先按表描述/表行数/示例数据判定各表是事实表还是
@@ -374,7 +377,9 @@ DB 边仅保留候选建议队列，见 2.5 与 5.6）；确认一次即生效�
 schema 现场构造、边只来自持久化关系（LLM/历史 DOC 行/manual），见 `DatasetGroupController#graph`。
 见 ADR 0018 D2/D6/D9、ADR 0044 与 ADR 0046。
 
-### 5.5 语义术语与口径落库（specs/011，ADR 0027）
+### 5.5 历史术语与口径台账（specs/011，ADR 0027）
+
+以下实体和接口属于兼容面；当前运行知识与业务规则以官方 knowledge 源码及发布工程为准，不从台账重建线上语义。
 
 `SemanticTermController`（`/api/semantic-terms`）维护全局业务词典；
 `DatasetService#semanticTermsText()` 渲染进 `[KNOWLEDGE_BASE_OVERVIEW]` 的「业务术语」小节。
@@ -489,7 +494,7 @@ DocEnhance 规则采纳双写（见 5.7）。守卫：`MdlSuggestionServiceTest`
 `ModelingToolkitTest`（listBusinessRules 读文件 + 外组拒绝 + 退役守卫）、
 `DataDynamicContextMiddlewareTest`（标题与空源回归）。
 
-**对话式建模入口（ADR 0068/spec 057）**：modeling-agent 是通用 AgentScope 执行器。DataAgentConfig#MODELING_SCRIPT 只声明官方技能、当前工程、中文、权限和发布边界；WrenProjectContextMiddleware#onSystemPrompt 仅注入项目身份和资料位置，不注入平台建模状态/阶段。WrenSkillsLocator 挂载安装版官方技能，技能不可用时经 wren_cli skills list/get 读取官方内容。文件预览由 SemanticModelingController#workspacePreview 分派原生 write_file/edit_file 与历史 patch_file/批量卡；确认卡展示实际前后内容与 diff，不宣称写入前已完成官方语义检查。ChatController#confirmModeling 复用原生 ConfirmResult 恢复工具执行。模型、关系、视图和 SQL 定义模型的内容由官方技能指导生成，平台不强制资产推荐路由；Cube 仍禁用。最终发布是页面显式动作，草稿 build 不更新线上版本。过程任务行和 SSE 协议保留，新增原生 edit_file 内容展示。
+**对话式建模入口（ADR 0069/spec 058）**：modeling-agent 是通用 AgentScope 执行器。DataAgentConfig#MODELING_SCRIPT 只声明官方技能、当前工程、中文、权限和发布边界；WrenProjectContextMiddleware#onSystemPrompt 仅注入项目身份和资料位置，不注入平台建模状态/阶段。WrenSkillsLocator 挂载安装版官方技能，技能不可用时经 wren_cli skills list/get 读取官方内容。文件预览由 SemanticModelingController#workspacePreview 分派原生 write_file/edit_file 与历史 patch_file/批量卡；确认卡展示实际前后内容与 diff，不宣称写入前已完成官方语义检查。ChatController#confirmModeling 复用原生 ConfirmResult 恢复工具执行。模型、关系、视图、SQL 定义模型与 Cube 由官方契约和技能指导，平台不强制资产推荐路由。最终发布是页面显式动作，草稿 build 不更新线上版本；原生 edit_file 展示实际变更内容。
 
 以下遗留 HTTP 能力及历史 ADR 说明不代表当前 Agent 注册工具或固定步骤：
 
@@ -574,7 +579,9 @@ ADOPTED 状态）；文件写入失败则整个采纳中止，DB 不留已采纳
 
 ---
 
-### 问题、确认凭据与发布门
+### 历史问题确认与兼容接口
+
+本节描述旧问题验证/审阅台账，不是当前 Agent 的发布前置流程。当前 `MdlPublishService#doPublishLocked` 明确问题可选，官方工程校验仍执行；不要求逐题平台确认。
 
 `MdlQuestionStore` 以工作区问题文件为事实源；执行凭据存放在平台拥有的 `.platform/questions/`，绑定问题哈希、语义文件哈希和验证 ID。模型、规则或问题修改后状态为 STALE，需要重新执行和确认。确认凭据不由模型提交，过期凭据、失败执行、截断结果不可确认。
 
@@ -614,10 +621,11 @@ Schema Linking 职责由 Wren 语义层承接（`relationships.yml` / Cube / Vie
   每用户每会话互相不可见的实现。
 - chatui 通道默认 `DmScope.PER_ACCOUNT_CHANNEL_PEER`：conversationId 流入 `MsgContext.group`，
   实现 ChatGPT 式多会话。
-- `HarnessGateway.withGatedTurn/withGatedStream`：同一 gateKey 同一时刻仅一个 turn；
-  忙时 `TurnBusyException` → 丢弃（Mono/Flux.empty()）。
+- `HarnessGateway#withGatedTurn/withGatedStream`：同一 gateKey 同一时刻仅一个 turn，以 using 在完成、错误和取消时关闭 lease；交互准入繁忙明确提示，不静默丢弃。
 - `contextKeyToSessionKey`：gateKey→sessionKey 内存映射；启动时 `restorePersistedMainSessions`
   从持久化会话存储恢复（平台库 `session_registry` 表，受 SessionResetPolicy 新鲜度过滤）。
+
+ADR 0078：`ChatController#stream/send` 在问数执行前经 `ChatCapacity#execute` 分配单进程/每用户执行或等待名额，建模豁免；SSE capacity 通知 queued/running。等待不创建沙箱、不占工作线程，支持等待和执行超时。排队后执行仍复核当前知识库权限。`ChatCapacity.Lease#operation` 使 Python 真实退出前保留预算。其他通道不经过 ChatController 的该准入。资源门锁不替代租户隔离，也不是多副本全局预算。
 
 ### 7.2 会话状态持久化
 
@@ -637,6 +645,7 @@ Schema Linking 职责由 Wren 语义层承接（`relationships.yml` / Cube / Vie
 - `borrow()` 取用（无则创建并启动），`peek()` 只读探测（UI 文件树避免冷启动），
   `invalidate(userId, agentId)` 失效重建（userId 传 null 时对全用户生效），下次 borrow 重建容器并投影最新共享层。
 - 空闲回收：`dataagent.sandbox.idle-ttl-min`（默认 15min），轮询 `eviction-poll-sec`（默认 60s）。
+- ADR 0078：默认最多 16 容器；满额按 LRU 驱逐无活动 lease 的空闲容器，跨 key 驱逐移出 compute 以避免死锁。Docker exec 用 setsid 进程组支持取消，Python 的 timeout 使用 foreground；沙箱镜像需同步更新。控制记录通过 `UserControlFilesystem` 按当前用户隔离，避免读取框架记录时批量启动沙箱。
 - 工作区投影：容器启动时把宿主机共享层 `shared/agents/{agentId}/` 下的
   `AGENTS.md / skills / subagents / knowledge` 只读投影进容器（`subagents/` 仅在
   `dataagent.agent.subagents-enabled=true` 时被 harness 加载，见 12.1）。
@@ -726,14 +735,14 @@ manifest 尚不存在时（首次升级到该策略）执行一次性「采纳�
 
 知识库模型和数据归创建者，会话、历史、沙箱、附件及反馈状态归操作者。点赞 SQL 样例进入该库的官方 memory，保存和索引通过 `WrenPublishedProject#locked` 按知识库串行执行；不把草稿混入已发布查询工程。当前官方 Wren 建模、问数语义边界不变。
 
-`KnowledgeBaseOperations` 跟踪运行操作、导入表及 CLI 进程，删除时停止相关操作；`KnowledgeBaseDeletionService` 持久化删除日志并支持重试。上传取消和批量插入失败向调用方传播，同会话忙状态明确返回错误。这些机制不等同于全局或每用户问答容量控制，也不提供有界上传队列和 Wren 总进程预算。
+`KnowledgeBaseOperations` 跟踪运行操作、导入表及 CLI 进程，删除时停止相关操作；`KnowledgeBaseDeletionService` 持久化删除日志并支持重试。ADR 0078 在此基础上增加上传准入和 ChatCapacity，而非来源截至 32c6d292 时的取消/忙提示。`WrenInstanceRegistry#withGate` 将工具发现和查询统一为每库公平有时限门锁，保留排队后授权检查；信号量限制 MCP 实例，关闭失败保留名额并重试清理。此预算不含所有 CLI 短进程。
 
 - **认证**：`SecurityConfig`（WebFlux Security）：`POST /api/auth/login`、actuator health/info、`/api/webhook/**` 公开；
   其余 `/api/**` 需 JWT（`JwtAuthFilter` 校验 Bearer 或 `?token=` 查询参数，后者供 `<img src>` 使用）。CORS 放开（含 Vite dev 5173）。
 - **前端会话**：`SessionGate` 在受保护页面挂载前通过 `auth.me` 校验缓存令牌；`auth.apiFetch` 统一处理同源 API 的 401，只有请求使用的令牌仍为当前令牌时才清除登录状态，显示“登录状态已失效，请重新登录”。登录接口及外部资源不触发退出；403 和网络故障保留会话，首次校验网络失败提供重试。
 - **授权**：`web/share/AgentAclService` + `AgentAccessGuard`：每个 agent 按 Tier（RUN/EDIT/…）鉴权，
   Controller 入口统一 `guard.require(userId, agentId, Tier.X)`。
-- **agent 目录**：`web/catalog/AgentCatalogService`（内置 agent 目录；平台不提供用户自建 agent）。
+- **agent 目录**：`web/catalog/AgentCatalogService` 合并全局与用户可见自定义定义，复用 Agent ACL；当前仍有创建/克隆兼容 API，详见 docs/agent-definition.md。主建模/问数的固定工具装配不自动套用于所有自定义 Agent。
 - **审计**：`web/audit/AgentActivityStore`（RUN_SESSION 等事件，`AgentActivityController` 查询）。
 - **用量**：`web/usage/UsageStore`（每 turn 记录 userId/agentId/耗时，admin 端 `/api/admin/usage/...` 聚合）。
 - **AI 草稿**：`web/ai/AgentDraftService`（聊天式生成 agent 定义，`/api/agents/draft`），语义建模页 AI 建议（`dataset/MdlSuggestionService`，经 `chatBlockingModeling` 转录进 `logs/LLM-modeling.log`）也复用它；直调模型时以与 DebugLoggingMiddleware 相同的 role/type/text 结构把输入输出转录进对应文件（见 2.3）。
@@ -765,7 +774,15 @@ React 18 + TypeScript + Vite SPA（`frontend/`），构建产物进 `classpath:/
 
 ---
 
-### 引导式建模工作台
+### 当前建模工作台（ADR 0069、0075、0076）
+
+`SemanticModelingPage` 组织资料与问题、对话建模、检查与发布、语义资产四区。文档和预设问题均可选；上传只保存资料，不自动触发旧口径分析。助手按官方技能和通用 HITL 修改草稿，页面单独执行显式发布。预设问题不逐题阻断发布，官方工程校验失败保留旧快照。问数始终使用已发布工程。
+
+语义资产展示普通/ref_sql 模型、关系、视图、Cube、knowledge 及 MDL/工程快照；SQL 问答对区由 SqlQaExamplesPanel 管理建模与点赞来源，修改/删除遵循来源生命周期，详情见第 4.2 节及 ADR 0075/0076。工具返回通过 WrenToolResult 中文结构化展示，原文可查看。
+
+### 历史引导界面与兼容接口（ADR 0050—0055）
+
+以下保留历史演进及兼容组件说明；其中阶段剧本、问题必填/逐题审阅、自动文档分析等已经被上述当前流程取代，不得依据本节恢复旧 Agent 注册或发布门禁。
 
 ADR 0054 / spec 044：`MdlPublishService#validateQuestion` 在工作区锁内复用 `MdlWorkspaceReader#read`，将问题 SQL 与当时全部视图定义目录写入 `MdlQuestionStore.Receipt.evidence`。确认与拒绝保留原快照，旧凭据缺失快照时提示重验，不用当前定义冒充历史依据；视图变化仍使旧凭据过期。`ModelingQuestionsPanel` 就地展示定义 SQL、确认人/时间，直接应用确认接口返回的 Review，并用服务端 workflow 展示下一步。建模与验证清单复用 `QuestionIntakeForm`；显式提交后通过原生 SSE 发送一次，并经原生 HITL 后才成为已保存 YAML。
 
@@ -804,12 +821,21 @@ spec 045 / ADR 0055：无已登记问题、无待确认原生 HITL 时，页面�
 | `dataagent.openai.stream` | `true` | `DATAAGENT_OPENAI_STREAM` 可切换模型流式/非流式请求以定位上游 EOF；前端 SSE 协议不变，关闭流式不表示连接问题已解决 |
 | `dataagent.dashscope.*` | — | 兜底模型 |
 | `dataagent.sandbox.image` | `agentscope/dataagent-sandbox:latest` | 沙箱镜像（`docker/sandbox.Dockerfile` 构建） |
+| `dataagent.sandbox.max-containers` | `16` | 单进程容器上限，满额驱逐空闲实例；环境变量 DATAAGENT_SANDBOX_MAX_CONTAINERS |
+| `dataagent.upload.max-file-size` / `max-selection-size` / `max-files` | `50MB` / `100MB` / `10` | 上传单文件、整批及数量上限 |
+| `dataagent.upload.max-rows` / `max-columns` / `max-cells` | `100000` / `100` / `2000000` | 解析规模上限 |
+| `dataagent.upload.concurrent-files` | `8` | 单进程在途文件准入，允许 1—32 |
+| `dataagent.chat.max-active` / `max-active-per-user` | `16` / `2` | 问数全局/每用户执行数 |
+| `dataagent.chat.max-waiting` / `max-waiting-per-user` | `16` / `1` | 全局/每用户等待数 |
+| `dataagent.chat.wait-seconds` / `execution-seconds` | `30` / `600` | 等待/执行超时 |
+| `dataagent.wren.max-instances` / `call-wait-seconds` | `16` / `30` | MCP 实例数与每库门锁等待秒数 |
+| `dataagent.openai.http-version` | `HTTP_1_1` | 默认模型协议，环境变量 DATAAGENT_OPENAI_HTTP_VERSION |
 | `dataagent.dataset.datasource.*` | 本地 MySQL `data_agent` 库 | **上传数据集物理表所在库** |
 | `dataagent.wren.*` | `wren` CLI / `~/.agentscope/dataagent/mdl` / `mysql` / 180s / 1800s | WrenAI CLI 与 MDL 产物根（拼装/validate/build/发布快照，specs/010 M2，见 5.6）；`profile`/`instance-idle-seconds` 供运行期 `serve mcp` 实例池用（M3，见 4.6/ADR 0020）。M4 起 `profile` 是默认回落值——外部数据源组的实际连接由快照内 `wren-source.properties` 钉入（`ext-<datasourceId>`，发布期解析，见 4.6/ADR 0021）。`executable` 默认值按平台探测：Linux 先查 `~/.local/bin`/`/usr/local/bin`/`/usr/bin` 再回落 PATH（`pip install` 后零配置），Windows 需显式指向 venv `wren.exe`；`skills-dir` 指向 wrenai 包内官方 skills 根（specs/022、ADR 0035，空值从 executable 位置推断，失效仅 warn 降级 CLI 通道）；CLI 与 serve mcp 两处 spawn 失败统一回跨平台安装引导（`WrenProperties#resolveExecutable`/`unavailableMessage`），集群部署前置见 `docs/cluster-deploy.md` |
 | `dataagent.analytics.enabled` | false | 预置分析库（tenant_storage_utilization / project_info） |
 | `dataagent.expose-app-db` | false | 是否把平台元数据库暴露为数据源 |
 | `dataagent.session.redis.*` | 关闭 | 分布式会话（HA 必需；多副本另需 sticky LB，见 7.3） |
-| `spring.datasource.*` | H2 文件库 | 平台元数据（JPA）；生产激活 `jdbc` profile 切 MySQL/PG |
+| `spring.datasource.*` | 本地 MySQL `dataagent_platform` | 平台元数据（JPA）；h2 profile 切文件 H2，其他数据库需同步驱动和初始化 SQL |
 
 ### Wren 记忆依赖
 
@@ -819,10 +845,10 @@ spec 045 / ADR 0055：无已登记问题、无待确认原生 HITL 时，页面�
 
 ```bash
 # 构建（含前端：自动安装 Node → npm build → 后端打包）
-mvn -pl agentscope-examples/agents/agentscope-dataagent -am package -DskipTests
+mvn package -DskipTests
 
 # 格式门禁（CI 必过）
-mvn -pl agentscope-examples/agents/agentscope-dataagent spotless:check
+mvn spotless:check
 
 # 沙箱镜像（一次性）
 docker build -f docker/sandbox.Dockerfile -t agentscope/dataagent-sandbox:latest .
@@ -832,6 +858,10 @@ java -jar target/agentscope-dataagent-*-exec.jar   # → http://localhost:8080
 ```
 
 H2 种子账号：`bob/bob`、`alice/alice`（`data-h2.sql`，幂等 MERGE）。
+
+根 pom.xml 的编译基线为 Java 17，本项目不依赖旧多模块 `-pl agentscope-examples/...` 路径。框架改动后先安装配套 harness/OpenAI 扩展，再构建本项目；默认 Maven 流程会构建前端，已有前端构建时可使用 skip.npm/skip.installnodenpm 参数跳过。当前为 Boot exec JAR，来源 Assembly/tar.gz 未采用。部署步骤见 [并发与发布说明](docs/platform-concurrency-and-release.md)。
+
+SQL 演示账号初始化与 Java 管理员初始化是独立开关；`dataagent.seed-demo-users` 默认 false，不代表禁用 SQL 初始化。生产环境须明确设置初始化策略和数据库配置，不能根据旧文档假设默认 H2 或自动创建管理员。
 
 ### 12.3 首次启动自动生成的文件
 
@@ -882,7 +912,7 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 | AI 字段描述 | `dataset/parser/SchemaGenerationService` |
 | 外部库内省 | `dataset/DataSourceIntrospector`、`dataset/TableProvisioner` |
 | 语义建模（M1） | `dataset/MdlSuggestionService`（`refreshRelations`、`confirmRelation`、`addManualRelation`、`suggestCubes`、`createView` 及 specs/037 工作区镜像写、`persistConfirmedRelation`）、`web/api/SemanticModelingController` |
-| 对话式建模与原生 HITL（specs/013/014/017/019/022） | `tools/data/ModelingToolkit`（二十工具，YAML-first 写面 `write_file`/`patch_file` + 统一 `decide_relation` + HITL 预检 `previewChange`）、`web/middleware/ModelingHitlMiddleware`、`tools/data/ModelingToolkitRegistrar`（单例 `toolkit()` 供 HTTP 预检复用同闸）、`web/api/SemanticModelingController`（`workspace/file`、`workspace/preview`）、`web/config/DataAgentConfig`（剧本 + 免沙箱装配 + 技能挂载 `mountWrenSkills`）、`dataset/WrenSkillsLocator`（官方 skills 目录解析）、前端 `components/{ModelingChatPanel,ModelingHitlCard,ReadOnlyRelationGraph}` + `utils/diff.ts` |
+| 当前建模与通用 HITL | `ModelingToolkitRegistrar#registerOfficialTools`、`OfficialWrenToolkit#execute`、`WrenProjectAccess#resolve`、`WrenProjectFilesystem`、`ModelingHitlMiddleware`；前端 ModelingChatPanel/ModelingHitlCard。旧 ModelingToolkit 仅兼容源码，不是当前注册工具链 |
 | 文档语义增强（specs/014） | `dataset/DocEnhanceService`（`triggerAnalyzeQuietly`、`adopt`）、`web/api/SemanticModelingController`（enhance 端点）、`web/persistence/jpa/{DocEnhanceTaskEntity,DocEnhanceProposalEntity,SemanticBusinessRuleEntity}`、前端 `pages/configure/SemanticModelingPage` |
 | MDL 拼装/发布（M2 → specs/019 v2） | `dataset/MdlPublishService`（`preview`、`validate`、`publish`、`deleteArtifacts`、`view` 只读视图）、`dataset/{MdlSeeder,MdlWorkspaceService,MdlWorkspaceReader,WrenTypeNormalizer}`（播种/工作区/读面）、`dataset/{WrenCli,WrenProperties}`、前端 `components/{MdlPublishPanel,MdlGraphView}` |
 | Wren 运行期（M3） | `tools/data/WrenToolkit`（`wrenRunSql`）、`runtime/wren/{WrenQueryGateway,WrenInstanceRegistry}`（`call`、`invalidate`、`resolveSnapshotProfile`）、`dataset/{WrenProfileHome,MdlCatalog}` |

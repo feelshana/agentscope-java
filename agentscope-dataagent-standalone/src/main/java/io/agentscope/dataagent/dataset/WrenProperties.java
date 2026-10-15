@@ -65,6 +65,20 @@ public class WrenProperties {
     @Value("${dataagent.wren.instance-idle-seconds:1800}")
     private int instanceIdleSeconds = 1800;
 
+    @Value("${dataagent.wren.max-instances:16}")
+    private int maxInstances = 16;
+
+    @Value("${dataagent.wren.call-wait-seconds:30}")
+    private int callWaitSeconds = 30;
+
+    public int maxInstances() {
+        return Math.max(1, maxInstances);
+    }
+
+    public int callWaitSeconds() {
+        return Math.max(1, callWaitSeconds);
+    }
+
     /**
      * Explicit override for the official wren skills directory (the {@code skills_content} root
      * bundled inside the wrenai pip package, ADR 0035). Blank = inferred from the resolved

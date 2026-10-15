@@ -118,6 +118,34 @@ class ChatControllerHitlTest {
     }
 
     @Test
+    void unauthorizedSendCannotConsumeQuestionCapacity() {
+        var capacity = mock(io.agentscope.dataagent.web.chat.ChatCapacity.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(
+                controller, "chatCapacity", capacity);
+        when(guard.require(
+                        "alice",
+                        "data-agent",
+                        io.agentscope.dataagent.web.share.AgentAclService.Tier.RUN))
+                .thenThrow(new ResponseStatusException(HttpStatus.FORBIDDEN));
+        reactor.test.StepVerifier.create(
+                        controller.send(
+                                "data-agent",
+                                new ChatController.ChatRequest(
+                                        "问题", "conversation", List.of(), false),
+                                authentication))
+                .expectErrorSatisfies(
+                        error ->
+                                assertThat(error)
+                                        .isInstanceOfSatisfying(
+                                                ResponseStatusException.class,
+                                                status ->
+                                                        assertThat(status.getStatusCode())
+                                                                .isEqualTo(HttpStatus.FORBIDDEN)))
+                .verify();
+        org.mockito.Mockito.verifyNoInteractions(capacity);
+    }
+
+    @Test
     void normalChatAcceptsMultipleGroupsAndNormalizesSelection() {
         when(groupService.queryGroups("alice", List.of("g1", "g2")))
                 .thenReturn(

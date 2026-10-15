@@ -15,6 +15,7 @@
  */
 package io.agentscope.harness.agent.bus;
 
+import io.agentscope.core.agent.RuntimeContext;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,6 +44,11 @@ import reactor.core.publisher.Mono;
  * </ul>
  */
 public interface MessageBus extends AutoCloseable {
+
+    /** Returns an invocation-bound view; external transports need no filesystem binding. */
+    default MessageBus withContext(RuntimeContext context) {
+        return this;
+    }
 
     // ---- Mode A: drain queue (single consumer, ack-on-read) ----
 

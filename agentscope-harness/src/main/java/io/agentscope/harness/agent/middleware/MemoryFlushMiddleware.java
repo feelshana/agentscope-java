@@ -171,7 +171,11 @@ public class MemoryFlushMiddleware implements HarnessRuntimeMiddleware {
         ConversationKey conversationKey =
                 new ConversationKey(
                         agent, blankToEmpty(rc.getUserId()), blankToEmpty(rc.getSessionId()));
-        Runnable task = () -> runFlush(key, agent, rc);
+        RuntimeContext captured =
+                rc.get(io.agentscope.harness.agent.sandbox.SandboxAcquireResult.class) == null
+                        ? rc
+                        : RuntimeContext.builder(rc).build();
+        Runnable task = () -> runFlush(key, agent, captured);
         Runnable[] starter = new Runnable[1];
         Runnable[] displaced = new Runnable[1];
         FLUSH_QUEUES.compute(

@@ -28,14 +28,19 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -94,7 +99,11 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
      * Per-group call gates (ADR 0023). Entries are never removed: one monitor object per
      * knowledge base is negligible next to the subprocess it guards.
      */
-    private final Map<String, Object> callGates = new ConcurrentHashMap<>();
+    private final Map<String, ReentrantLock> callGates = new ConcurrentHashMap<>();
+
+    private final Object capacityLock = new Object();
+    private final Map<Instance, String> pendingCleanup = new ConcurrentHashMap<>();
+    private final Semaphore slots;
 
     private final ScheduledExecutorService reaper =
             Executors.newSingleThreadScheduledExecutor(
@@ -118,30 +127,36 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
         this.profileHome = profileHome;
         this.publishedProject = publishedProject;
         this.groups = groups;
+        this.slots = new Semaphore(props.maxInstances());
     }
 
     @Override
     public List<McpSchema.Tool> listToolsAuthorized(String groupId, Runnable authorization) {
-        synchronized (callGates.computeIfAbsent(groupId, ignored -> new Object())) {
-            authorization.run();
-            var result = listTools(groupId);
-            authorization.run();
-            return result;
-        }
+        return withGate(
+                groupId,
+                () -> {
+                    authorization.run();
+                    var result = listTools(groupId);
+                    authorization.run();
+                    return result;
+                });
     }
 
     @Override
     public List<McpSchema.Tool> listTools(String groupId) {
-        synchronized (callGates.computeIfAbsent(groupId, ignored -> new Object())) {
-            Instance instance = acquire(groupId);
-            instance.touch();
-            if (instance.tools == null) {
-                List<McpSchema.Tool> tools = instance.client.listTools().block(props.timeout());
-                if (tools == null) throw new DatasetException("官方 MCP 工具列表无响应", 503);
-                instance.tools = List.copyOf(tools);
-            }
-            return instance.tools;
-        }
+        return withGate(
+                groupId,
+                () -> {
+                    Instance instance = acquire(groupId);
+                    instance.touch();
+                    if (instance.tools == null) {
+                        List<McpSchema.Tool> tools =
+                                instance.client.listTools().block(props.timeout());
+                        if (tools == null) throw new DatasetException("官方 MCP 工具列表无响应", 503);
+                        instance.tools = List.copyOf(tools);
+                    }
+                    return instance.tools;
+                });
     }
 
     /** A live subprocess bound to one group's published snapshot. */
@@ -151,6 +166,7 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
         // Accessed under the per-group gate; discarded together with this subprocess.
         private List<McpSchema.Tool> tools;
         private final AtomicLong lastUsed = new AtomicLong(System.currentTimeMillis());
+        private final AtomicBoolean reserved = new AtomicBoolean();
 
         Instance(Path projectDir, McpClientWrapper client) {
             this.projectDir = projectDir;
@@ -176,6 +192,7 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
                 closeQuietly(e.getKey(), e.getValue());
             }
         }
+        pendingCleanup.forEach((instance, group) -> closeQuietly(group, instance));
     }
 
     @Override
@@ -184,10 +201,7 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
         // Sinks FAIL_NON_SERIALIZED and its invalidate() would kill our in-flight request
         // (both errors observed paired in the 2026-09-29 log). Lock ordering is one-way
         // (callGate -> spawnLock inside acquire), so no deadlock is possible.
-        Object gate = callGates.computeIfAbsent(groupId, k -> new Object());
-        synchronized (gate) {
-            return doCall(groupId, tool, arguments);
-        }
+        return withGate(groupId, () -> doCall(groupId, tool, arguments));
     }
 
     private WrenCallResult doCall(String groupId, String tool, Map<String, Object> arguments) {
@@ -197,10 +211,27 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
     @Override
     public WrenCallResult callAuthorized(
             String groupId, String tool, Map<String, Object> arguments, Runnable authorization) {
-        Object gate = callGates.computeIfAbsent(groupId, k -> new Object());
-        synchronized (gate) {
-            authorization.run();
-            return doCall(groupId, tool, arguments, authorization);
+        return withGate(
+                groupId,
+                () -> {
+                    authorization.run();
+                    return doCall(groupId, tool, arguments, authorization);
+                });
+    }
+
+    private <T> T withGate(String groupId, Supplier<T> operation) {
+        var gate = callGates.computeIfAbsent(groupId, key -> new ReentrantLock(true));
+        try {
+            if (!gate.tryLock(props.callWaitSeconds(), TimeUnit.SECONDS))
+                throw new DatasetException("该知识库查询繁忙，等待执行超时，请稍后重试", 503);
+        } catch (InterruptedException cancelled) {
+            Thread.currentThread().interrupt();
+            throw new java.util.concurrent.CancellationException("知识库查询等待已取消");
+        }
+        try {
+            return operation.get();
+        } finally {
+            gate.unlock();
         }
     }
 
@@ -248,15 +279,18 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
 
     @Override
     public void closeForDeletion(String groupId) {
-        Object gate = callGates.computeIfAbsent(groupId, ignored -> new Object());
-        synchronized (gate) {
-            Instance instance = instances.get(groupId);
-            if (instance == null) return;
-            // Retain the instance on failure so a retry can close it again.
-            instance.client.close();
-            instances.remove(groupId, instance);
-            log.info("wren instance closed for deleted group {}", groupId);
-        }
+        withGate(
+                groupId,
+                () -> {
+                    Instance instance = instances.get(groupId);
+                    if (instance == null) return null;
+                    // Retain the instance on failure so a retry can close it again.
+                    instance.client.close();
+                    instances.remove(groupId, instance);
+                    if (instance.reserved.compareAndSet(true, false)) slots.release();
+                    log.info("wren instance closed for deleted group {}", groupId);
+                    return null;
+                });
     }
 
     private Instance acquire(String groupId) {
@@ -270,9 +304,44 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
             if (inst != null) {
                 return inst;
             }
-            Instance created = spawn(groupId);
-            instances.put(groupId, created);
-            return created;
+            reserveSlot(groupId);
+            try {
+                Instance created = spawn(groupId);
+                created.reserved.set(true);
+                instances.put(groupId, created);
+                return created;
+            } catch (RuntimeException failure) {
+                slots.release();
+                throw failure;
+            }
+        }
+    }
+
+    private void reserveSlot(String groupId) {
+        synchronized (capacityLock) {
+            if (slots.tryAcquire()) return;
+            var candidates =
+                    instances.entrySet().stream()
+                            .filter(entry -> !entry.getKey().equals(groupId))
+                            .sorted(
+                                    Comparator.comparingLong(
+                                            entry -> entry.getValue().lastUsed.get()))
+                            .toList();
+            for (var candidate : candidates) {
+                var gate =
+                        callGates.computeIfAbsent(
+                                candidate.getKey(), key -> new ReentrantLock(true));
+                // Never wait on another group's gate while holding this group's gate.
+                if (!gate.tryLock()) continue;
+                try {
+                    if (instances.remove(candidate.getKey(), candidate.getValue()))
+                        closeQuietly(candidate.getKey(), candidate.getValue());
+                } finally {
+                    gate.unlock();
+                }
+                if (slots.tryAcquire()) return;
+            }
+            throw new DatasetException("语义查询引擎正在满负荷运行，请稍后重试", 503);
         }
     }
 
@@ -352,27 +421,39 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
     }
 
     private void sweepIdle() {
+        pendingCleanup.forEach((instance, group) -> closeQuietly(group, instance));
         long cutoff = System.currentTimeMillis() - props.instanceIdle().toMillis();
         for (Map.Entry<String, Instance> e : instances.entrySet()) {
             Instance inst = e.getValue();
             if (inst.lastUsed.get() >= cutoff) {
                 continue;
             }
-            if (instances.remove(e.getKey(), inst)) {
-                closeQuietly(e.getKey(), inst);
-                log.info(
-                        "wren instance for group {} reaped after {}s idle",
-                        e.getKey(),
-                        props.instanceIdle().toSeconds());
+            var gate = callGates.computeIfAbsent(e.getKey(), key -> new ReentrantLock(true));
+            if (!gate.tryLock()) continue;
+            try {
+                if (inst.lastUsed.get() < cutoff && instances.remove(e.getKey(), inst)) {
+                    closeQuietly(e.getKey(), inst);
+                    log.info(
+                            "wren instance for group {} reaped after {}s idle",
+                            e.getKey(),
+                            props.instanceIdle().toSeconds());
+                }
+            } finally {
+                gate.unlock();
             }
         }
     }
 
     private void closeQuietly(String groupId, Instance inst) {
-        try {
-            inst.client.close();
-        } catch (RuntimeException e) {
-            log.warn("Failed to close wren instance for group {}: {}", groupId, e.getMessage());
+        synchronized (inst) {
+            try {
+                inst.client.close();
+                if (inst.reserved.compareAndSet(true, false)) slots.release();
+                pendingCleanup.remove(inst);
+            } catch (RuntimeException e) {
+                pendingCleanup.put(inst, groupId);
+                log.warn("Failed to close wren instance for group {}: {}", groupId, e.getMessage());
+            }
         }
     }
 

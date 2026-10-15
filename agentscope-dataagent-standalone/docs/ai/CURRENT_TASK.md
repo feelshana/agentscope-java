@@ -1,5 +1,38 @@
 # 当前任务与接手入口
 
+## 最新检查点：2026-10-15 20:01 +08:00｜10 月 9 日起来源覆盖与文档核对
+
+- 用户要求检查来源分支 10 月 9 日以来的提交，并按当前代码完善 README、架构和 Agent 文档。本轮仅审计/文档与审计辅助脚本，不修改业务实现；保留上一阶段全部平台/框架未提交改动，HEAD 仍为 bc11f3a5。
+- fetch 后来源仍为 6a75b6cf。范围有 14 个可达提交，其中 11 个主线提交；b7f18957/a240788c/9f8b0462 已通过公共历史继承。其余为功能移植，不存在整段来源历史整体 merge 的事实。
+- 新增 docs/source-branch-integration-audit-20261015.md 逐提交表及 ADR0079，明确已移植、当前替代和未采用范围：当前官方 Wren/Cube/问答对管理优先；不采用来源 Assembly/tar.gz/脚本打包；旧领域建模流程不恢复；另一个 service-dataplane 应用的 helper 不属于 standalone 交付。
+- 审计脚本 docs/fixtures/platform-integration/audit_source_integration.py 本轮实测成功，target/source-integration-audit.json：主线涉及去重 Java/TS/TSX 201 文件，139 与来源末端一致、62 有差异、无整个文件缺失。文件存在/一致只是机械证据，不等同业务验收；已对 DI、共享范围、原生 Wren、工具发现、前端 apiFetch 等主要差异分类核对。
+- 补入遗漏的来源布局 ADR0053/spec044，现有来源档案为 11 ADR/8 spec；补入历史上线审查、早期体验及设计预览，明确非当前运行页面/发布成功证据。编号映射在 docs/imported/multiAgent-Mdl-lyf/README.md。
+- 更新 README.md/README_zh.md、ARCHITECTURE_zh.md、AGENTS.md、docs/agent-definition.md、docs/cluster-deploy.md：Java17 standalone、当前默认 MySQL/h2 profile、配置位置 ~/.agentscope/dataagent/agentscope.json、真实 API 路径、官方 MCP/CLI、可选问题/显式发布、QUERY/MANAGE、单进程预算及多副本粘性约束。AgentCatalog 当前保留自定义 Agent API，不再误写为不存在；不会自动赋予所有自定义 Agent 主 Wren 工具链。
+- 上层 Git 忽略 AGENTS.md，项目 .gitignore 已增加仅根 /AGENTS.md 的例外，使更新可随代码交付；没有修改运行时子目录忽略规则，也没有暂存/提交。
+- 本轮实测：来源审计脚本、34 份 Markdown 相对链接检查（0 失效，报告 target/source-documentation-check.json）、源码方法/配置锚点核对及 git diff --check 通过。业务测试未重跑；上一阶段 613/框架28/官方集成2 等为历史实测，不能记为本轮执行。
+- 未提交 Git、未重启用户服务。下一步审阅工作区（包括配套 harness/OpenAI 与根 AGENTS.md），随后按上一检查点发布新框架/JAR/前端/镜像并验收 Docker 取消、真实用户权限/召回、多用户负载及恢复。当前无文档检查阻塞。
+
+## 最新检查点：2026-10-15 19:35 +08:00｜来源后续两次提交集成完成
+
+- 执行者：当前 Codex 会话；分支 design/wren-official-capability-boundary，起点 HEAD bc11f3a5。用户授权继续合入来源 2026-10-14 的 a29cc754（上传）与 6a75b6cf（容量），并补齐 ADR/spec/系统文档。
+- 起点已有上传提交 bc11f3a5，以及容量、harness/OpenAI 框架代码、来源文档和两份共享记忆的未提交改动。本轮保留并核对这些既有移植；没有切换分支、cherry-pick/commit、重置或重启用户服务。下方旧记录“容量未实现”仅对应此前截至 32c6d292 的来源范围。
+- 已完成：上传大小/解析/准入/失败回滚；ChatCapacity 全局/每用户预算、有限排队、等待与执行时限及 SSE；沙箱空闲驱逐和取消；Wren MCP 门锁及实例预算；网关 lease 清理与 OpenAI 连接恢复。当前官方 Wren 建模/问数、中文展示、LIMIT、共享权限与问答对管理/召回保持。
+- 本轮修正 WrenInstanceRegistry 的工具发现仍用旧 synchronized 导致的类型错误：发现与查询统一 withGate，保留发现前后及排队撤权复核；新增排队发现撤权回归。send 增加容量准入前鉴权及未授权不占名额用例。独立构建原本读取旧 harness 导致 tryAcquire 缺失，已构建安装配套 harness/OpenAI 依赖。
+- 文档：新增 ADR 0078、spec 067、docs/platform-concurrency-and-release.md，导入 10 份来源 ADR、7 份 spec 到 docs/imported/multiAgent-Mdl-lyf，保留来源编号并提供映射；来源同编号 0070/059 兼容文件标注适用边界。六份部署/体验/TODO 来源文档已更新至 6a75b6cf 并标注历史性质。README、ARCHITECTURE 第 5/7/10/12 章及配置表同步；显式补充 wren.max-instances/call-wait-seconds。
+- 本轮最终实测：Maven 全量 613 项，0 失败/错误，18 条件跳过；框架专项 harness 22 项（2 Docker 条件跳过）及 OpenAI 6 项（0 失败/错误）；官方 Wren CLI/MCP 与点赞记忆集成 2 项通过。前端 build、认证/SSE/HTML 11 项、浏览器四场景、Spotless、package 和 diff check 通过。隔离 JAR 健康/前端及 18 次 HTTP ACL 检查通过，processStopped=true；测试未连接用户现有元数据库。
+- 复现：standalone 根 `mvn -Dskip.npm=true -Dskip.installnodenpm=true test`，同参数 `package -DskipTests`；frontend 下 `npm run build`；根 `node --test frontend/tests/auth-session.test.mjs frontend/tests/stream-and-html.test.mjs`。官方集成加 `-Ddataagent.test.wren=D:/workspace/wren-probe/.venv/Scripts/wren.exe -Dtest=OfficialWrenCliIntegrationTest,WrenQueryMemoryIntegrationTest`。浏览器使用 `target/wren-native-venv/Scripts/python.exe docs/fixtures/platform-integration/auth_session_browser.py`；默认 python 缺 Playwright，已用既有环境解决。
+- 框架复现：上层仓库 `mvn -pl agentscope-harness,agentscope-extensions/agentscope-extensions-model/agentscope-extensions-model-openai -am install -DskipTests`；专项 test 参数为 `-Dtest=WorkspaceBusContextTest,SessionMirrorBindingTest,DockerExecCancellationTest,WorkspaceNamespaceLockTest,SandboxBackedFilesystemTest,OpenAIGoAwayRecoveryTest -Dsurefire.failIfNoSpecifiedTests=false -Dspotless.skip=true`。详细证据 target/followup-final-tests.log、followup-framework-tests.log、followup-official-wren.log、followup-package.log、followup-frontend-* 和 target/platform-integration-service/report.json。
+- 限制：Docker Desktop 镜像检查返回接口 500，2 项真实容器取消测试未启用，不能记为通过；真实 LLM、多用户容量与云端发布恢复未验收。预算是单 JVM；ChatCapacity 仅 ChatController 问数（建模及其他通道不计入），Wren 信号量只管 MCP 实例，不是所有 CLI 进程总预算。
+- 当前改动未提交；上层 harness/OpenAI 改动必须与本应用一起交付。下一步部署同版本依赖/前端/JAR，并以本分支 Dockerfile 重建沙箱镜像；目标环境启用 DATAAGENT_DOCKER_TESTS=true 验证取消，再完成实际账号共享权限、问数/问答对召回、并发负载及恢复验收。本助手未替用户启停服务。
+
+## 保存快照：2026-10-15 15:42 +08:00
+
+- 执行者：当前 Codex 会话；用户请求 shared-memory 存储，本次仅更新共享记录。
+- Git 核对：分支 design/wren-official-capability-boundary，HEAD 已变为 70a80f6d，包含平台移植及 SessionGate 修复。保存前本 standalone 项目工作区干净；上层仓库仍有未跟踪内容，未处理。本助手未执行提交；下方“未提交”是当时状态，以本快照为最新状态。
+- 验证沿用上一开发阶段结果，本次未重跑：认证/SSE/HTML 11 项、浏览器四场景、前端 build、package 通过；本次复核浏览器报告 passed=true 与 package BUILD SUCCESS。可复现命令：`node --test frontend/tests/auth-session.test.mjs frontend/tests/stream-and-html.test.mjs`、`python docs/fixtures/platform-integration/auth_session_browser.py`；前端目录 `npm run build`；根目录 `mvn package -DskipTests`。
+- 服务是否已加载新包及重新登录后是否恢复，尚无用户验收反馈。本助手未重启服务。下一步加载新制品、刷新并登录，验收知识库/数据源列表及共享权限，再继续真实建模/问数与问答对召回验收。
+- 完整上传队列、全局/每用户问答容量及 Wren 总进程预算仍未实现，不能以提交标题视为已完成；保留后续待办。当前没有已知代码验证阻塞。
+
 ## 2026-10-15｜启动后页面 401 修复（最新检查点）
 
 - 执行者：当前 Codex 会话；分支 design/wren-official-capability-boundary。保留下面平台移植的全部未提交修改。

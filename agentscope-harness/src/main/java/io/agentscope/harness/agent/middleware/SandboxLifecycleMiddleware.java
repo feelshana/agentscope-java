@@ -95,22 +95,9 @@ public class SandboxLifecycleMiddleware implements HarnessRuntimeMiddleware {
             return;
         }
         try {
-            Consumer<RuntimeContext> cb = beforeStartCallback;
-            if (cb != null) {
-                try {
-                    cb.accept(ctx);
-                } catch (Exception e) {
-                    log.warn(
-                            "[sandbox-mw] beforeStartCallback failed; proceeding with sandbox"
-                                    + " start: {}",
-                            e.getMessage(),
-                            e);
-                }
-            }
             SandboxAcquireResult result = sandboxManager.acquire(sandboxContext, ctx);
             Sandbox sandbox = result.getSandbox();
             try {
-                sandbox.start();
                 // Bind the acquired sandbox per-call on this invocation's RuntimeContext rather
                 // than only on a shared agent-level slot. Distinct (userId, sessionId) sessions
                 // run in parallel on the same agent bean, so a shared slot lets concurrent calls
@@ -119,6 +106,19 @@ public class SandboxLifecycleMiddleware implements HarnessRuntimeMiddleware {
                 // context-free callers (e.g. WorkspaceMessageBus) that do not thread a per-call.
                 ctx.put(SandboxAcquireResult.class, result);
                 filesystemProxy.setSandbox(sandbox);
+                Consumer<RuntimeContext> cb = beforeStartCallback;
+                if (cb != null) {
+                    try {
+                        cb.accept(ctx);
+                    } catch (Exception e) {
+                        log.warn(
+                                "[sandbox-mw] beforeStartCallback failed; proceeding with sandbox"
+                                        + " start: {}",
+                                e.getMessage(),
+                                e);
+                    }
+                }
+                sandbox.start();
                 log.debug(
                         "[sandbox-mw] Acquired sandbox {}",
                         sandbox.getState() != null ? sandbox.getState().getSessionId() : "?");

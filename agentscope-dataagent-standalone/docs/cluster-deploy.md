@@ -5,15 +5,23 @@ Redis coordination. The same shape works on Kubernetes (StatefulSet behind a
 Service, PVC for the workspace, a Redis Deployment) — the docker-compose
 sample below is the smallest reproducible example.
 
+Current constraint (ADR 0078/0079): this is a deployment template, not a verified
+multi-replica capacity guarantee. Use sticky routing for an active user's sandbox
+and conversations. Redis does not migrate live Docker workspaces, MCP subprocesses
+or process-local locks/budgets. Share platform metadata and durable MDL/history/
+artifact storage explicitly; concurrent writes to shared MDL/memory also need
+ownership routing or cross-process coordination. Merely sharing a volume is not
+sufficient to make current process-local locks distributed.
+
 ## What needs to be shared across replicas
 
 | Subsystem | Shared via | Reason |
 |---|---|---|
 | Per-user workspace (`memory/`, `sessions/`, `tasks/`, `skills/`, …) | Redis-backed `RemoteFilesystem` (`dataagent.session.redis.enabled=true`) | A user routed to R2 must see files R1 wrote against the same `(userId, agentId)` namespace. |
-| Sandbox state / session snapshots | Redis (same flag) | A user routed to R2 must be able to resume the sandbox that R1 started. |
+| Session coordination / snapshots | Redis where configured | Does not transfer the live Docker sandbox from R1 to R2; active execution needs routing affinity. |
 | Tool-event SSE | Redis Pub/Sub (auto when Redis enabled) | An SSE subscriber on R2 must see tool calls fired by the agent running on R1. |
 | User channel bindings | Redis hash (auto when Redis enabled) | Preferences set on R1 should take effect immediately on R2. |
-| JPA tables (`dataagent_user`, `dataagent_agent`, `dataagent_contribution`) | Shared RDBMS (MySQL / PostgreSQL via `jdbc` profile) | The H2 default is single-node only; cluster deployments must point every replica at the same external database. |
+| JPA tables (users, grants, conversations, history and artifacts) | Shared RDBMS | Current default is MySQL; the optional H2 profile is for local use. Other databases require matching JDBC/initialization settings. |
 | `${dataagent.workspace}/.agentscope/shared/` | Shared filesystem (NFS / EFS) | The OverlayFilesystem's lower layer; every replica must read the same set of approved contributions. Approval writes from any replica must be visible to all. |
 | In-memory log SSE | (not shared — single-replica view) | Admin "live logs" only show events from the replica serving that connection. Documented behaviour. |
 
@@ -86,6 +94,7 @@ session state lives in Redis):
 events {}
 http {
   upstream dataagent_replicas {
+    ip_hash; # Illustrative affinity; verify routing against real user/session traffic.
     server dataagent-1:8080;
     server dataagent-2:8080;
     server dataagent-3:8080;

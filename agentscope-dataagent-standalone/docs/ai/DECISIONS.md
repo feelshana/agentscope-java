@@ -144,3 +144,15 @@
 - 用户明确确认来源 data-agent-multiAgent-Mdl-lyf；当前官方 Wren 建模/问数为准。移植平台权限、失败取消和适用修复，保留当前语义执行、中文展示、LIMIT 和问答对管理。
 - QUERY 只查询已发布库；MANAGE 管理草稿/发布/成员，创建者及全局管理员天然管理。运行身份保持当前用户，私有历史/附件不因库权限扩大。共享库点赞样例按库保存索引，反馈状态仍私有。
 - 来源未实现完整上传/问答容量预算，不将待办记为合入成果。详见 [ADR 0077](../adr/0077-shared-knowledge-official-wren-integration.md) 与 spec 066。
+
+## 已接受并实施：ADR 0078 来源后续并发集成（2026-10-15）
+
+- 用户继续授权合入来源 a29cc754/6a75b6cf，更新此前截至 32c6d292 的容量缺失状态。保留当前官方 Wren 执行，只集成通用上传/问答/沙箱/MCP 资源机制及配套框架修复。
+- 来源 ADR/spec 编号冲突通过 docs/imported/multiAgent-Mdl-lyf 快照与映射保留，当前决策为 [ADR 0078](../adr/0078-platform-capacity-followup-integration.md)，实施 spec 067；来源历史验收与本轮实测分开。
+- 所有容量机制为单 JVM；建模和其他通道不经过 ChatController 的问答预算，普通 Wren CLI 也不属于 MCP 实例预算。Docker 取消实测与真实负载压测仍需目标环境验收，不把默认 16 当作性能承诺。
+
+## 已接受：ADR 0079 来源历史与文档事实源（2026-10-15）
+
+- 不把功能移植描述为整段 Git 历史已合并；逐提交表区分继承/移植/当前替代/未采用。来源 Assembly/tar.gz、旧建模/Cube 禁用及静态预览不当作当前运行能力。
+- 当前主文档按 pom/config/工具注册/控制器事实对齐；AGENTS.md 为开发约束，docs/agent-definition.md 为实际装配/API 说明。项目根指南通过单文件 Git 忽略例外可交付。
+- 来源布局 ADR0053/spec044 本轮补齐，档案共11 ADR/8 spec，编号冲突不覆盖当前决策。详见 [ADR0079](../adr/0079-source-history-and-current-documentation.md) 与逐提交核对表。

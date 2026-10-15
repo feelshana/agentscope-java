@@ -15,6 +15,7 @@
  */
 package io.agentscope.harness.agent.bus;
 
+import io.agentscope.core.agent.RuntimeContext;
 import java.time.Duration;
 import java.util.List;
 import reactor.core.publisher.Mono;
@@ -35,6 +36,11 @@ import reactor.core.publisher.Mono;
  * </ul>
  */
 public interface AsyncToolRegistry {
+
+    /** Captures this invocation's filesystem identity for foreground and background callbacks. */
+    default AsyncToolRegistry withContext(RuntimeContext context) {
+        return this;
+    }
 
     /**
      * Register a new async tool execution.

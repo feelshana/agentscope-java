@@ -376,7 +376,7 @@ public class WorkspaceManager implements AutoCloseable {
         if (normalized.isEmpty()) {
             return;
         }
-        ReentrantLock lock = pathLocks.computeIfAbsent(normalized, k -> new ReentrantLock());
+        ReentrantLock lock = pathLock(rc, normalized);
         lock.lock();
         try {
             if (filesystem == null) {
@@ -409,7 +409,7 @@ public class WorkspaceManager implements AutoCloseable {
             return;
         }
         String rel = AGENTS_DIR + "/" + agentId + "/" + SESSIONS_DIR + "/" + SESSIONS_STORE;
-        ReentrantLock lock = pathLocks.computeIfAbsent(rel, k -> new ReentrantLock());
+        ReentrantLock lock = pathLock(rc, rel);
         lock.lock();
         try {
             String existing = readWritableWorkspaceRelativeUtf8(rc, rel);
@@ -474,7 +474,7 @@ public class WorkspaceManager implements AutoCloseable {
             return;
         }
         String rel = taskRecordPath(agentId, sessionId);
-        ReentrantLock lock = pathLocks.computeIfAbsent(rel, k -> new ReentrantLock());
+        ReentrantLock lock = pathLock(rc, rel);
         lock.lock();
         try {
             Map<String, TaskRecord> map;
@@ -628,7 +628,7 @@ public class WorkspaceManager implements AutoCloseable {
      * as a partial JSON read.
      */
     private Map<String, TaskRecord> readTaskMapLocked(RuntimeContext rc, String rel) {
-        ReentrantLock lock = pathLocks.computeIfAbsent(rel, k -> new ReentrantLock());
+        ReentrantLock lock = pathLock(rc, rel);
         lock.lock();
         try {
             try {
@@ -705,6 +705,16 @@ public class WorkspaceManager implements AutoCloseable {
             return "";
         }
         return readWithOverride(rc, normalized);
+    }
+
+    private ReentrantLock pathLock(RuntimeContext context, String relativePath) {
+        // Equal relative paths in different users' workspaces are different physical files.
+        String key =
+                resolveRuntimeDataPath(context, relativePath)
+                        .toAbsolutePath()
+                        .normalize()
+                        .toString();
+        return pathLocks.computeIfAbsent(key, ignored -> new ReentrantLock());
     }
 
     /** Overwrites a workspace-relative UTF-8 file. All writes go through the filesystem. */

@@ -79,7 +79,8 @@ public final class UserSandboxRegistry {
     private final ConcurrentHashMap<Key, Entry> entries = new ConcurrentHashMap<>();
     private final ScheduledExecutorService evictor;
     private final ConcurrentHashMap<Entry, Key> pendingCleanup = new ConcurrentHashMap<>();
-    private java.util.concurrent.Semaphore slots = new java.util.concurrent.Semaphore(8);
+    private java.util.concurrent.Semaphore slots = new java.util.concurrent.Semaphore(16);
+    private final Object capacityLock = new Object();
     private String instanceId = "standalone";
     private volatile boolean orphanCleanupComplete = true;
     private java.nio.channels.FileChannel instanceLockChannel;
@@ -157,15 +158,61 @@ public final class UserSandboxRegistry {
         validateSegment("agentId", agentId);
         Key key = new Key(userId, agentId);
         Entry entry =
-                entries.compute(
+                entries.computeIfPresent(
                         key,
                         (k, current) -> {
-                            if (current == null) current = createAndStart(k);
                             current.active++;
                             current.touch();
                             return current;
                         });
+        if (entry != null) return new Lease(key, entry);
+        // Reserve outside a per-key compute: cross-key eviction under compute can deadlock.
+        reserveSlot(key);
+        java.util.concurrent.atomic.AtomicBoolean consumed =
+                new java.util.concurrent.atomic.AtomicBoolean();
+        try {
+            entry =
+                    entries.compute(
+                            key,
+                            (k, current) -> {
+                                if (current == null) {
+                                    consumed.set(true);
+                                    current = createAndStart(k);
+                                }
+                                current.active++;
+                                current.touch();
+                                return current;
+                            });
+        } finally {
+            if (!consumed.get()) slots.release();
+        }
         return new Lease(key, entry);
+    }
+
+    private void reserveSlot(Key requested) {
+        ensureOrphanCleanupComplete();
+        synchronized (capacityLock) {
+            if (slots.tryAcquire()) return;
+            var idle =
+                    entries.entrySet().stream()
+                            .filter(e -> !e.getKey().equals(requested))
+                            .sorted(
+                                    java.util.Comparator.comparingLong(
+                                            e -> e.getValue().lastAccessMs))
+                            .toList();
+            for (var candidate : idle) {
+                entries.computeIfPresent(
+                        candidate.getKey(),
+                        (key, current) -> {
+                            if (current != candidate.getValue() || current.active > 0)
+                                return current;
+                            closeQuietly(key, current, "capacity reclaim");
+                            return null;
+                        });
+                if (slots.tryAcquire()) return;
+            }
+            throw new IllegalStateException("分析任务繁忙，运行中的沙箱名额已用满，请稍后重试（不是磁盘空间不足）");
+        }
     }
 
     /**
@@ -316,20 +363,9 @@ public final class UserSandboxRegistry {
      * and bump its idle timer.
      */
     public Sandbox borrow(String userId, String agentId) {
-        validateSegment("userId", userId);
-        validateSegment("agentId", agentId);
-        Key key = new Key(userId, agentId);
-        Entry entry =
-                entries.compute(
-                        key,
-                        (k, existing) -> {
-                            if (existing != null) {
-                                existing.touch();
-                                return existing;
-                            }
-                            return createAndStart(k);
-                        });
-        return entry.sandbox;
+        try (Lease lease = acquire(userId, agentId)) {
+            return lease.sandbox();
+        }
     }
 
     /**
@@ -450,8 +486,6 @@ public final class UserSandboxRegistry {
     }
 
     private Entry createAndStart(Key key) {
-        ensureOrphanCleanupComplete();
-        if (!slots.tryAcquire()) throw new IllegalStateException("沙箱容量已满，请稍后重试");
         Entry entry = null;
         try {
             DockerSandboxClientOptions options =

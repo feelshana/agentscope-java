@@ -37,6 +37,8 @@ export interface ChatEvent {
   groupIds?: string[];
   allGroups?: boolean;
   knowledgeScope?: KnowledgeScope;
+  state?: 'queued' | 'running';
+  message?: string;
   toolCalls?: HitlToolCall[];
 }
 

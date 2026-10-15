@@ -96,6 +96,16 @@ public class AsyncToolMiddleware implements HarnessRuntimeMiddleware {
             ActingInput input,
             Function<ActingInput, Flux<AgentEvent>> next) {
 
+        // Keep the call binding alive in background callbacks after lifecycle cleanup.
+        final RuntimeContext callContext =
+                ctx == null
+                                || ctx.get(
+                                                io.agentscope.harness.agent.sandbox
+                                                        .SandboxAcquireResult.class)
+                                        == null
+                        ? ctx
+                        : RuntimeContext.builder(ctx).build();
+
         return Flux.create(
                 sink -> {
                     AtomicBoolean completed = new AtomicBoolean(false);
@@ -128,6 +138,7 @@ public class AsyncToolMiddleware implements HarnessRuntimeMiddleware {
                                                                                 .getSimpleName();
                                                         for (ToolUseBlock tc : input.toolCalls()) {
                                                             asyncToolRegistry
+                                                                    .withContext(callContext)
                                                                     .fail(tc.getId(), errMsg)
                                                                     .subscribe();
                                                         }
@@ -142,7 +153,7 @@ public class AsyncToolMiddleware implements HarnessRuntimeMiddleware {
                                                         deliverBackgroundResult(
                                                                 backgroundBuffer,
                                                                 input.toolCalls(),
-                                                                ctx);
+                                                                callContext);
                                                     }
                                                 }
                                             });
@@ -162,7 +173,10 @@ public class AsyncToolMiddleware implements HarnessRuntimeMiddleware {
                                                                     ? ctx.getSessionId()
                                                                     : "null");
                                                     emitPlaceholderAndComplete(
-                                                            sink, input.toolCalls(), agent, ctx);
+                                                            sink,
+                                                            input.toolCalls(),
+                                                            agent,
+                                                            callContext);
                                                 }
                                             },
                                             offloadTimeout.toMillis(),
@@ -191,6 +205,7 @@ public class AsyncToolMiddleware implements HarnessRuntimeMiddleware {
         for (ToolUseBlock toolCall : toolCalls) {
             if (asyncToolRegistry != null && sessionId != null) {
                 asyncToolRegistry
+                        .withContext(ctx)
                         .register(
                                 new AsyncToolRecord(
                                         toolCall.getId(),
@@ -268,15 +283,16 @@ public class AsyncToolMiddleware implements HarnessRuntimeMiddleware {
         if (asyncToolRegistry != null) {
             String resultStr = resultText.length() > 0 ? resultText.toString() : "(no output)";
             for (ToolUseBlock tc : toolCalls) {
-                asyncToolRegistry.complete(tc.getId(), resultStr).subscribe();
+                asyncToolRegistry.withContext(ctx).complete(tc.getId(), resultStr).subscribe();
             }
         }
 
-        messageBus.inboxPush(sessionId, hintPayload).subscribe();
+        messageBus.withContext(ctx).inboxPush(sessionId, hintPayload).subscribe();
 
         String agentId = ctx.get("agentId");
         String userId = ctx.getUserId();
         messageBus
+                .withContext(ctx)
                 .enqueueWakeup(
                         userId != null ? userId : "", sessionId, agentId != null ? agentId : "")
                 .subscribe(

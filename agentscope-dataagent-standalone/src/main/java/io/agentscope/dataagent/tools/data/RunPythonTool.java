@@ -149,6 +149,21 @@ public final class RunPythonTool {
             @ToolParam(name = "description", description = "代码功能简述（中文）", required = false)
                     String description) {
 
+        var budget =
+                rc == null
+                        ? null
+                        : rc.get(io.agentscope.dataagent.web.chat.ChatCapacity.Lease.class);
+        try (var operation = budget == null ? null : budget.operation()) {
+            return executePython(rc, code, description);
+        } catch (RuntimeException error) {
+            throw error;
+        } catch (Exception error) {
+            throw new IllegalStateException("Python 执行失败", error);
+        }
+    }
+
+    private String executePython(RuntimeContext rc, String code, String description) {
+
         if (code == null || code.isBlank()) {
             return "error: code 不能为空";
         }
@@ -213,7 +228,12 @@ public final class RunPythonTool {
         ExecuteResponse execResp =
                 filesystem.execute(
                         rc,
-                        "cd " + workDir + " && timeout --kill-after=5s 120s python3 " + scriptPath,
+                        // Keep timeout/Python in DockerSandbox's managed process group so
+                        // cancelling a turn also stops Python and its subprocesses.
+                        "cd "
+                                + workDir
+                                + " && timeout --foreground --kill-after=5s 120s python3 "
+                                + scriptPath,
                         EXEC_TIMEOUT_SECONDS + 10);
 
         // ── Step 3: Collect artifacts from outputs/ ──

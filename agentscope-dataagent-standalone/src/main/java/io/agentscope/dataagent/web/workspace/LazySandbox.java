@@ -101,7 +101,9 @@ public final class LazySandbox implements Sandbox {
             log.info("[lazy-sandbox] first operation — creating container now");
             Sandbox candidate = supplier.get();
             try {
-                candidate.start();
+                // Registry.acquire already returns a started container. Starting it again on
+                // every turn repeats Docker probes and workspace projection unnecessarily.
+                if (registry == null) candidate.start();
                 delegate = candidate;
             } catch (Exception e) {
                 releaseLease();

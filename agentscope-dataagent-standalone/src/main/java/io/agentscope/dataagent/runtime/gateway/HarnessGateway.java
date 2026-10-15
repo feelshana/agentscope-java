@@ -155,7 +155,20 @@ public final class HarnessGateway implements Gateway {
     private final ConcurrentHashMap<String, OutboundAddress> lastRouteBySessionKey =
             new ConcurrentHashMap<>();
 
-    private final SessionTurnGate sessionTurnGate = new LocalSessionTurnGate();
+    private final SessionTurnGate sessionTurnGate =
+            new SessionTurnGate() {
+                private final LocalSessionTurnGate local = new LocalSessionTurnGate();
+
+                @Override
+                public TurnLease acquire(String key) throws TurnBusyException {
+                    return local.tryAcquire(key);
+                }
+
+                @Override
+                public boolean isRunning(String key) {
+                    return local.isRunning(key);
+                }
+            };
 
     private HarnessGateway(
             SessionAgentManager sessionAgentManager,
@@ -893,54 +906,36 @@ public final class HarnessGateway implements Gateway {
     }
 
     private Mono<Msg> withGatedTurn(String gateKey, Supplier<Mono<Msg>> turn) {
-        AtomicReference<TurnLease> leaseRef = new AtomicReference<>();
-        return Mono.defer(
-                        () -> {
-                            try {
-                                leaseRef.set(sessionTurnGate.acquire(gateKey));
-                                activeGates.add(gateKey);
-                            } catch (TurnBusyException e) {
-                                return Mono.error(new IllegalStateException("当前会话正在回答，请稍后重试", e));
-                            } catch (InterruptedException e) {
-                                Thread.currentThread().interrupt();
-                                return Mono.error(new IllegalStateException(e));
-                            }
-                            return turn.get();
+        return Mono.using(
+                        () -> sessionTurnGate.acquire(gateKey),
+                        lease -> {
+                            activeGates.add(gateKey);
+                            return Mono.defer(turn);
+                        },
+                        lease -> {
+                            activeGates.remove(gateKey);
+                            lease.close();
                         })
-                .doFinally(
-                        sig -> {
-                            TurnLease lease = leaseRef.get();
-                            if (lease != null) {
-                                activeGates.remove(gateKey);
-                                lease.close();
-                            }
-                        })
+                .onErrorMap(
+                        TurnBusyException.class,
+                        error -> new IllegalStateException("当前会话正在回答，请稍后重试", error))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
     private Flux<AgentEvent> withGatedStream(String gateKey, Supplier<Flux<AgentEvent>> stream) {
-        AtomicReference<TurnLease> leaseRef = new AtomicReference<>();
-        return Flux.defer(
-                        () -> {
-                            try {
-                                leaseRef.set(sessionTurnGate.acquire(gateKey));
-                                activeGates.add(gateKey);
-                            } catch (TurnBusyException e) {
-                                return Flux.error(new IllegalStateException("当前会话正在回答，请稍后重试", e));
-                            } catch (InterruptedException e) {
-                                Thread.currentThread().interrupt();
-                                return Flux.error(new IllegalStateException(e));
-                            }
-                            return stream.get();
+        return Flux.using(
+                        () -> sessionTurnGate.acquire(gateKey),
+                        lease -> {
+                            activeGates.add(gateKey);
+                            return Flux.defer(stream);
+                        },
+                        lease -> {
+                            activeGates.remove(gateKey);
+                            lease.close();
                         })
-                .doFinally(
-                        sig -> {
-                            TurnLease lease = leaseRef.get();
-                            if (lease != null) {
-                                activeGates.remove(gateKey);
-                                lease.close();
-                            }
-                        })
+                .onErrorMap(
+                        TurnBusyException.class,
+                        error -> new IllegalStateException("当前会话正在回答，请稍后重试", error))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 }

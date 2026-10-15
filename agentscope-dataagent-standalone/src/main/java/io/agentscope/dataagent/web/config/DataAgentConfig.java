@@ -42,6 +42,7 @@ import io.agentscope.dataagent.web.persistence.jpa.IdentityLinkRepository;
 import io.agentscope.dataagent.web.persistence.jpa.SessionRegistryRepository;
 import io.agentscope.dataagent.web.toolbus.ToolEventBus;
 import io.agentscope.dataagent.web.toolbus.ToolNotificationMiddleware;
+import io.agentscope.dataagent.web.workspace.UserControlFilesystem;
 import io.agentscope.dataagent.web.workspace.UserSandboxRegistry;
 import io.agentscope.extensions.model.dashscope.DashScopeChatModel;
 import io.agentscope.extensions.model.openai.OpenAIChatModel;
@@ -213,6 +214,10 @@ public class DataAgentConfig {
     @Value("${dataagent.openai.stream:true}")
     private boolean openaiStream;
 
+    @Value("${dataagent.openai.http-version:HTTP_1_1}")
+    private io.agentscope.core.model.transport.HttpVersion openaiHttpVersion =
+            io.agentscope.core.model.transport.HttpVersion.HTTP_1_1;
+
     @Value("${dataagent.dashscope.api-key:}")
     private String dashscopeApiKey;
 
@@ -269,7 +274,17 @@ public class DataAgentConfig {
                 "Building OpenAIChatModel: model={}, baseUrl={}",
                 openaiModelName,
                 baseUrl != null ? baseUrl : "https://api.openai.com (default)");
+        var transport =
+                io.agentscope.core.model.transport.JdkHttpTransport.builder()
+                        .config(
+                                io.agentscope.core.model.transport.HttpTransportConfig.builder()
+                                        .httpVersion(openaiHttpVersion)
+                                        .build())
+                        .build();
+        io.agentscope.core.model.transport.HttpTransportFactory.register(transport);
+        log.info("Model HTTP protocol: {}", openaiHttpVersion);
         return OpenAIChatModel.builder()
+                .httpTransport(transport)
                 .apiKey(openaiApiKey)
                 .baseUrl(baseUrl)
                 .modelName(openaiModelName)
@@ -455,6 +470,20 @@ public class DataAgentConfig {
                         }
                         // isolationScope() returns the supertype; chain it last.
                         b.filesystem(spec.isolationScope(IsolationScope.USER));
+                        if ("data-agent".equals(agentId)) {
+                            // Coordination records and transcript indexes are platform metadata,
+                            // not Python inputs. Avoid a Docker exec for every inbox/index check.
+                            // Session files remain namespaced by user; bus keys use server-owned
+                            // session ids and the shared wakeup queue must stay globally visible.
+                            Path controlRoot = cwd.resolve(".runtime").resolve(agentId);
+                            b.filesystemRoute(
+                                    "agents/",
+                                    new UserControlFilesystem(controlRoot.resolve("agents")));
+                            b.filesystemRoute(
+                                    ".agentscope/bus/",
+                                    new io.agentscope.harness.agent.filesystem.local
+                                            .LocalFilesystem(controlRoot.resolve("bus"), true, 10));
+                        }
                     }
 
                     // DataAgent does not need filesystem tools (read_file, write_file,

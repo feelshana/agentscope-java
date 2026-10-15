@@ -41,6 +41,7 @@ import io.agentscope.dataagent.web.audit.ActivityEvent;
 import io.agentscope.dataagent.web.audit.AgentActivityStore;
 import io.agentscope.dataagent.web.catalog.AgentCatalogService;
 import io.agentscope.dataagent.web.catalog.AgentDefinition;
+import io.agentscope.dataagent.web.chat.ChatCapacity;
 import io.agentscope.dataagent.web.identity.IdentityLinkStore;
 import io.agentscope.dataagent.web.middleware.ModelingHitlMiddleware;
 import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
@@ -118,6 +119,8 @@ public class ChatController {
 
     private io.agentscope.dataagent.dataset.KnowledgeBaseOperations knowledgeBaseOperations;
 
+    private ChatCapacity chatCapacity;
+
     /**
      * AgentStateStore keys for which we have already recorded a RUN_SESSION event. Each (userId, agentId)
      * pair gets one entry per process lifetime so the activity log shows one row per session, not
@@ -152,6 +155,7 @@ public class ChatController {
         this.conversationScopes = conversationScopes;
         this.gateway.setConversationScopes(conversationScopes);
         this.datasetGroupService = datasetGroupService;
+        this.chatCapacity = new ChatCapacity();
     }
 
     /**
@@ -247,6 +251,51 @@ public class ChatController {
     @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> stream(
             @PathVariable String agentId, @RequestBody ChatRequest req, Authentication auth) {
+        String conversation = normalizedConversationId(req.sessionKey());
+        if (conversation == null) conversation = UUID.randomUUID().toString();
+        ChatRequest normalized =
+                new ChatRequest(req.message(), conversation, req.groupIds(), req.allGroups());
+        Flux<ServerSentEvent<String>> execution =
+                ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId)
+                        ? Flux.defer(() -> streamAdmitted(agentId, normalized, auth))
+                        : chatCapacity.execute(
+                                (String) auth.getPrincipal(),
+                                agentId + ":" + conversation,
+                                () -> streamAdmitted(agentId, normalized, auth),
+                                state ->
+                                        sse(
+                                                "capacity",
+                                                Map.of(
+                                                        "type",
+                                                        "capacity",
+                                                        "state",
+                                                        state,
+                                                        "message",
+                                                        state.equals("queued")
+                                                                ? "排队中，正在等待执行名额…"
+                                                                : "正在处理你的问题…")));
+        return Flux.defer(
+                        () -> {
+                            guard.require((String) auth.getPrincipal(), agentId, Tier.RUN);
+                            return execution;
+                        })
+                .onErrorResume(
+                        error ->
+                                Flux.just(
+                                        sse(
+                                                "error",
+                                                Map.of(
+                                                        "type",
+                                                        "error",
+                                                        "error",
+                                                        error.getMessage() == null
+                                                                ? "问答失败，请稍后重试"
+                                                                : error.getMessage()))))
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+    }
+
+    private Flux<ServerSentEvent<String>> streamAdmitted(
+            String agentId, ChatRequest req, Authentication auth) {
         String userId = (String) auth.getPrincipal();
         AgentDefinition def = guard.require(userId, agentId, Tier.RUN);
         if (modelProvider.getIfAvailable() == null) {
@@ -579,6 +628,34 @@ public class ChatController {
     @PostMapping("/send")
     public Mono<ChatResponse> send(
             @PathVariable String agentId, @RequestBody ChatRequest req, Authentication auth) {
+        String conversation = normalizedConversationId(req.sessionKey());
+        if (conversation == null) conversation = UUID.randomUUID().toString();
+        ChatRequest normalized =
+                new ChatRequest(req.message(), conversation, req.groupIds(), req.allGroups());
+        if (ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId))
+            return Mono.defer(() -> sendAdmitted(agentId, normalized, auth))
+                    .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+        return Mono.defer(
+                        () -> {
+                            String userId = (String) auth.getPrincipal();
+                            guard.require(userId, agentId, Tier.RUN);
+                            return chatCapacity
+                                    .execute(
+                                            userId,
+                                            agentId + ":" + normalized.sessionKey(),
+                                            () -> sendAdmitted(agentId, normalized, auth).flux(),
+                                            null)
+                                    .single();
+                        })
+                .onErrorMap(
+                        ChatCapacity.BusyException.class,
+                        error ->
+                                new ResponseStatusException(
+                                        HttpStatus.TOO_MANY_REQUESTS, error.getMessage(), error))
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+    }
+
+    private Mono<ChatResponse> sendAdmitted(String agentId, ChatRequest req, Authentication auth) {
         String userId = (String) auth.getPrincipal();
         AgentDefinition def = guard.require(userId, agentId, Tier.RUN);
         if (modelProvider.getIfAvailable() == null) {
@@ -1210,9 +1287,17 @@ public class ChatController {
     private <T> Flux<T> watchKnowledgeBases(
             java.util.function.Supplier<InboundMessage> input,
             java.util.function.Function<InboundMessage, Flux<T>> action) {
-        return Flux.defer(
-                        () -> {
+        return Flux.deferContextual(
+                        reactorContext -> {
                             InboundMessage inbound = input.get();
+                            if (reactorContext.hasKey(ChatCapacity.Lease.class)) {
+                                inbound.runtimeContext()
+                                        .put(
+                                                ChatCapacity.Lease.class,
+                                                reactorContext.get(
+                                                        io.agentscope.dataagent.web.chat
+                                                                .ChatCapacity.Lease.class));
+                            }
                             List<String> selected =
                                     inbound.runtimeContext().get(DatasetScope.class).groupIds();
                             return knowledgeBaseOperations == null
@@ -1246,7 +1331,8 @@ public class ChatController {
             ObjectProvider<Model> modelProvider,
             ConversationScopeRegistry conversationScopes,
             DatasetGroupService datasetGroupService,
-            io.agentscope.dataagent.dataset.KnowledgeBaseOperations knowledgeBaseOperations) {
+            io.agentscope.dataagent.dataset.KnowledgeBaseOperations knowledgeBaseOperations,
+            ChatCapacity chatCapacity) {
         this(
                 chatUiChannel,
                 builderBootstrap,
@@ -1260,5 +1346,6 @@ public class ChatController {
                 conversationScopes,
                 datasetGroupService);
         this.knowledgeBaseOperations = knowledgeBaseOperations;
+        this.chatCapacity = chatCapacity;
     }
 }

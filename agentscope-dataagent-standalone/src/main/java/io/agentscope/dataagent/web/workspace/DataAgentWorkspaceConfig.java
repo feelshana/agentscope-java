@@ -55,7 +55,7 @@ public class DataAgentWorkspaceConfig {
     @Value("${dataagent.sandbox.instance-id:standalone}")
     private String instanceId;
 
-    @Value("${dataagent.sandbox.max-containers:8}")
+    @Value("${dataagent.sandbox.max-containers:16}")
     private int maxContainers;
 
     @Value("${dataagent.sandbox.memory-mb:1024}")

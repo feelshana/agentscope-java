@@ -1,5 +1,7 @@
 # ADR 0023: wren 实例调用按组串行化（MCP stdio transport 非线程安全）
 
+> 2026-10-14 来源更新（当前集成见 ADR 0078；来源 ADR 0070 原文见 docs/imported/multiAgent-Mdl-lyf）：调用门控从 `synchronized(Object)` 升级为 `ReentrantLock(true)` + `tryLock(callWaitSeconds)`，等待超时返回 503 而非无限阻塞；新增 `Semaphore(maxInstances)` 控制实例总数，满额时 LRU 驱逐空闲实例。
+
 日期：2026-09-29
 状态：已接受（已实施）
 

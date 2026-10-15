@@ -1,271 +1,49 @@
-# Agent 定义方式
+# Agent 定义与当前装配
 
-本文档说明在 agentscope-dataagent 中定义和配置 Agent 的所有方式。
+更新：2026-10-15。本文依据 DataAgentConfig、DataAgentBootstrap、AgentCatalogService、DataToolkitRegistrar 和 ModelingToolkitRegistrar；开发约束见 [AGENTS.md](../AGENTS.md)，主流程见 [架构文档](../ARCHITECTURE_zh.md)。
 
-## 概览
+## 内置 Agent
 
-agentscope-dataagent 通过 `DataAgentBootstrap` 组装 Agent。Bootstrap 启动后由
-Spring 包装为 Web 应用，每个登录用户都会得到一份基于 `(userId, agentId)` 的
-独立 workspace。
+| Agent | 运行方式 | 工具与数据边界 |
+| --- | --- | --- |
+| data-agent | HarnessAgent/ReActAgent，挂载安装版官方 Wren skills | `wren_list_tools` / `wren_call_tool` 透传授权已发布工程的官方 MCP，配合 `run_python` / `render_chart` |
+| modeling-agent | 通用 AgentScope Agent，单知识库、宿主受限文件系统，无分析 Docker 沙箱 | 原生文件工具及 `wren_cli`；当前用户需库 MANAGE，工程归属由库 owner 决定 |
 
-支持三种定义方式，可以单独使用，也可以混合使用：
+两者使用同版本官方技能和 CLI/MCP。普通模型、ref_sql、关系、视图、Cube、knowledge 按官方契约；平台不实现第二套 SQL/指标/召回路由、不修改官方 MDL。旧 WrenToolkit/ModelingToolkit 源码及兼容 HTTP 服务不代表仍在主 Agent 上注册。
 
-| 方式 | 适用场景 | 是否需要改代码 |
-|---|---|---|
-| [agentscope.json 文件](#方式一agentscopejson-文件) | 生产部署、多 Agent、需要版本管理 | 否 |
-| [application.yml 配置](#方式二applicationyml-配置仅限-web-模块) | 快速试用、单 Agent、零配置启动 | 否 |
-| [Java 代码注入](#方式三java-代码注入) | 注入自定义工具、动态构建、测试 | 是 |
+建模文档和问题可选，文件修改走 ModelingHitlMiddleware 通用写确认；官方校验/编译不代替页面显式发布。业务文档映射 raw/business-document.md，平台文件、宿主路径、跨库工程、任意 shell 与 profile 切换受限。问数仅用本轮有效 QUERY 范围，工具排队后复核撤权。
 
-GLOBAL 与 USER 两种 scope 的区别：
+## 文件配置与代码装配
 
-- **GLOBAL** —— `agentscope.json` 里声明的 agent（v1 默认只有内置 `data-agent`），
-  系统启动时由 `DataAgentBootstrap` 注册到 `HarnessGateway`，所有租户共享同一份
-  agent 定义（但每个租户仍拥有独立的 `CompositeFilesystem`）。
-- **USER** —— 任一登录用户通过 `/api/me/agents` 创建/克隆出的 agent，由
-  `JpaUserAgentDefinitionStore` 持久化，按需懒加载，注册 id 形如
-  `uda-{userId}-{agentId}`。这些 agent 只对其所有者可见，永远不会被其他用户
-  路由到。
+`DataAgentBootstrap.DEFAULT_CONFIG_PATH` 当前为 `~/.agentscope/dataagent/agentscope.json`，不是 workspace 下的 `.agentscope/agentscope.json`，也不是 `dataagent-standalone` 目录。`dataagent.workspace` 指运行工作区，与配置文件位置分开。
 
----
+`DataAgentConfig#ensureAgentscopeConfig` 负责首次缺失配置的生成，既有文件不会被无条件覆盖。`DataAgentBootstrap.Builder` 支持读取配置、`configureAgent` 定制、注册预构建 Agent 和 `skipConfigFile`；这是框架扩展方式，不能绕过平台租户、权限或工具边界。具体 JSON 字段以当前 Config 模型为准，勿照搬旧版本示例。
 
-## 方式一：`agentscope.json` 文件
+主装配由 `DataAgentConfig#builderBootstrap` 完成：模型、工作区、提示词、技能、通用中间件、沙箱及会话网关。`DataToolkitRegistrar#registerDataToolkit` 向主问数 Agent 后置注册当前官方 MCP/图表/Python 工具；`ModelingToolkitRegistrar#registerOfficialTools` 独立装配建模工具。不要在新入口重新注册旧领域工具。
 
-**文件位置**：`${dataagent.workspace}/.agentscope/agentscope.json`
-（`workspace` 默认为 JVM 工作目录，可通过 `application.yml` 中的
-`dataagent.workspace` 覆盖）
+子 Agent 定义可保留，`dataagent.agent.subagents-enabled=false` 默认关闭编排工具；定义存在不代表已启用并发执行，也不代表替换主问数/建模流程。
 
-### 完整示例
+## 目录 API 与自定义 Agent 兼容面
 
-```json
-{
-  "$schema": "...",
-  "main": "data-agent",
-  "agents": {
-    "data-agent": {
-      "name": "Data Agent",
-      "sysPrompt": "你是一个 Data Agent…（被 workspace/AGENTS.md 覆盖）",
-      "workspace": ".agentscope/workspace",
-      "maxIters": 20,
-      "description": "Tenant-isolated data-analysis assistant."
-    },
-    "analyst": {
-      "name": "数据分析师",
-      "sysPrompt": "你是一个专业的数据分析师。",
-      "workspace": ".agentscope/workspace-analyst",
-      "skillRepository": {
-        "type": "filesystem",
-        "path": ".agentscope/skills"
-      }
-    }
-  },
-  "channels": {
-    "chatui": { "defaultAgentId": "data-agent", "dmScope": "MAIN" },
-    "ops-webhook": {
-      "type": "webhook",
-      "defaultAgentId": "data-agent",
-      "dmScope": "MAIN",
-      "properties": {
-        "sharedSecret": "${WEBHOOK_SECRET}",
-        "allowedIps": ["10.0.0.0/8"]
-      }
-    }
-  }
-}
-```
+当前代码仍有用户自定义 Agent 的目录、持久化、克隆与共享能力，不能仅凭旧文档说它不存在，也不能假定它自动获得内置 Wren 工具链：
 
-### `agents.<id>` 字段说明
+| API | 当前控制器与含义 |
+| --- | --- |
+| `GET /api/agents`、`GET /api/agents/{id}` | AgentCatalogController，按可见性和 ACL 返回目录/详情 |
+| `POST /api/agents`、`PUT/DELETE /api/agents/{id}` | 用户自定义定义创建/更新/删除，鉴权按具体操作执行 |
+| `POST /api/agents/{id}/clone` | AgentCloneController，按权限克隆 |
+| `/api/agents/{agentId}/skills`、`/tools`、`/workspace` | 技能、工具和工作区管理，分别受 Agent 权限控制 |
 
-| 字段 | 类型 | 默认值 | 说明 |
-|---|---|---|---|
-| `name` | String | agent id | Agent 显示名 |
-| `description` | String | — | Agent 功能描述（用于 subagent 路由决策） |
-| `sysPrompt` | String | — | 系统提示词（与 workspace `AGENTS.md` 叠加，后者优先） |
-| `workspace` | String | `.agentscope/workspace` | workspace 目录（相对 `${dataagent.workspace}`） |
-| `maxIters` | Integer | HarnessAgent 默认值 | ReAct 最大迭代轮数 |
-| `environmentMemory` | String | — | 注入 Agent 的额外上下文（如 schema、业务规则） |
-| `skillRepository` | Object | — | Skill 仓库配置（见下） |
+`AgentCatalogService` 合并全局定义与当前用户可见的自定义定义；自定义运行注册键使用 `uca-` 前缀。可见/共享 Agent 不等于能访问对方的私有会话、附件或数据源。新能力须复用已有目录和 ACL，不重建第二套注册系统。
 
-### Skill 仓库配置
+## 每轮上下文与容量
 
-```json
-{
-  "skillRepository": {
-    "type": "filesystem",
-    "path": ".agentscope/skills"
-  }
-}
-```
+聊天 API 为 `/api/agents/{agentId}/chat/stream` 和 `/send`，请求含 message、可选 sessionKey、groupIds、allGroups。sessionKey 在聊天协议中是 conversationId，不是存储会话键。
 
-```json
-{
-  "skillRepository": {
-    "type": "git",
-    "remoteUrl": "https://github.com/your-org/your-skills.git",
-    "branch": "main",
-    "localPath": ".agentscope/skills-git",
-    "autoSync": true
-  }
-}
-```
+有效选库范围保存到 ConversationScopeRegistry 并注入 DatasetScope；运行身份保持请求用户。知识库 QUERY/MANAGE 与 Agent 自身 Tier 权限分别检查。共享点赞资料归库，个人历史/反馈/附件归当前用户。
 
-| type | 说明 | 依赖 |
-|---|---|---|
-| `filesystem` | 从本地目录加载（每个子目录含 `SKILL.md`） | 无 |
-| `git` | 从 Git 仓库克隆并加载 | `agentscope-extensions-skill-git-repository` |
+ChatCapacity 限制 ChatController 问数的执行、排队和时限，建模及其他通道不计入该预算；每用户沙箱和 MCP 实例预算也是单进程。SSE capacity 显示 queued/running，401 通过前端 apiFetch/SessionGate 返回登录页。配置和配套依赖/镜像发布见 [运维补充](platform-concurrency-and-release.md)。
 
-DataAgent 自身另外维护一份 **shared** skill 目录
-（`${dataagent.workspace}/.agentscope/shared/skills/`），通过 `OverlayFilesystem`
-挂载在每个租户 workspace 的 `skills/` 之下，作为下层只读源。这是
-[marketplace 贡献流程](../README.md#marketplace-flow) 落盘的目标位置 ——
-管理员通过审批 API 写入这里，所有租户的下一次 agent 构建即可看到。
+## 修改与核对入口
 
-### workspace 目录结构
-
-```
-workspace/
-├── AGENTS.md          # Agent 角色定义（自动注入系统提示，优先级高于 sysPrompt）
-├── subagents/         # Subagent 声明文件（*.md）
-├── skills/            # Skill 目录（每个子目录一个 Skill；与 shared/ overlay 合并）
-└── knowledge/         # 知识库文件（管理员只读维护，租户通过贡献流程提议变更）
-```
-
-### 顶层字段
-
-| 字段 | 说明 |
-|---|---|
-| `main` | 主 Agent 的 id（`DataAgentBootstrap.Builder.mainAgent(id)` 可覆盖） |
-| `agents` | Agent 定义 Map，key 为 agent id |
-| `channels` | Channel 配置 Map（v1 支持 `chatui` / `dingtalk` / `webhook`） |
-
----
-
-## 方式二：`application.yml` 配置（fallback）
-
-若 `${dataagent.workspace}/.agentscope/agentscope.json` **不存在**，
-`DataAgentConfig` 会根据 `application.yml` 的 `dataagent.agent.*` 属性
-**自动生成**一份单 Agent 配置（id 固定为 `data-agent`）：
-
-```yaml
-dataagent:
-  agent:
-    name: Data Agent
-    sys-prompt: |
-      You are a Data Agent built with AgentScope. You help users explore,
-      analyse, visualise and report on data.
-```
-
-等价于自动写出：
-
-```json
-{
-  "main": "data-agent",
-  "agents": {
-    "data-agent": {
-      "name": "Data Agent",
-      "sysPrompt": "You are a Data Agent…",
-      "workspace": ".agentscope/workspace",
-      "maxIters": 20
-    }
-  },
-  "channels": {
-    "chatui": { "defaultAgentId": "data-agent", "dmScope": "MAIN" }
-  }
-}
-```
-
-> **注意**：配置生成后会落盘，后续直接编辑 `agentscope.json` 文件即可。
-
----
-
-## 方式三：Java 代码注入
-
-通过 `DataAgentBootstrap.Builder` 的 API 在代码中控制 Agent 的构建，适合需要
-注入 Spring Bean（数据库连接、API 客户端）或动态参数的场景。
-
-### 3a. 传入预构建的 `HarnessAgent` 实例
-
-```java
-HarnessAgent myAgent = HarnessAgent.builder()
-    .name("code-agent")
-    .model(model)
-    .workspace(Paths.get(".agentscope/workspace"))
-    .sysPrompt("你是一个专注于代码审查和重构的助手。")
-    .maxIters(15)
-    .build();
-
-DataAgentBootstrap dataagent = DataAgentBootstrap.builder()
-    .agent("code-agent", myAgent)   // 注册预构建 Agent
-    .mainAgent("code-agent")        // 设为主 Agent
-    .build();
-```
-
-### 3b. 用 `configureAgent` 叠加文件配置
-
-文件（`agentscope.json`）声明结构，代码追加动态参数。两者在 `build()` 时合并，
-代码侧优先。
-
-```java
-DataAgentBootstrap dataagent = DataAgentBootstrap.builder()
-    .model(model)
-    .configureAgent("data-agent", builder -> {
-        builder.maxIters(30);
-        builder.environmentMemory("数据库：PostgreSQL 17\nschema: " + loadSchema());
-    })
-    .configureAgent("analyst", builder -> {
-        builder.environmentMemory("可用数据集：sales_2025, user_events");
-    })
-    .build();
-```
-
-### 3c. 跳过配置文件
-
-```java
-DataAgentBootstrap dataagent = DataAgentBootstrap.builder()
-    .skipConfigFile(true)        // 完全忽略 agentscope.json
-    .agent("data-agent", prebuilt)
-    .build();
-```
-
-### 3d. 注入工具（与 marketplace 配合）
-
-DataAgent 启动时通过 `@PostConstruct` 注册两类内建工具到所有 GLOBAL agent：
-
-- `tools/data/DataAgentToolkit` —— `retrieve_evidence` / `render_chart`（知识检索与图表渲染）；
-- `tools/data/WrenToolkit` —— `wren_describe_model` / `wren_run_sql` /
-  `wren_query_cube`（按 `DatasetScope` 校验知识库可见性，只查询已发布 Wren MDL）；
-  图表由服务端 `ChartBuilder` 根据数据形态推断生成。
-- `web/marketplace/ContributeWorkspaceTool` —— `contribute_to_workspace`
-  让 agent 自身可以发起贡献（仍需经管理员审批）。
-
-如需为某个 GLOBAL agent 注入自定义工具，可提供 `DataSourceRegistry` Bean 覆盖默认
-数据源目录，或在 `configureAgent(...)` 里调用 `builder.tool(...)` 注册任意工具。
-
----
-
-## 优先级与合并规则
-
-当多种方式同时存在时，`build()` 按以下优先级处理：
-
-```
-高                                                              低
-┌──────────────────┬──────────────────┬──────────────────┬──────────────────┐
-│  3a              │  3b              │  1               │  2               │
-│  .agent(id, ha)  │  .configureAgent │  agentscope.json │  auto-generate   │
-│  预构建实例       │  代码定制         │  文件声明         │  (web 模块兜底)   │
-└──────────────────┴──────────────────┴──────────────────┴──────────────────┘
-```
-
-- **3a** 完全绕过文件，直接注册现成实例，对同一 id 文件中的声明不生效
-- **3b** 在文件声明基础上叠加，可覆盖 `maxIters`、`environmentMemory` 等，也可追加工具
-- **1** 文件声明是基础，`3b` 中未覆盖的字段保持文件值
-- **2** 仅当文件不存在时触发，相当于自动写入方式 1 的配置
-
-### 典型生产用法
-
-```
-agentscope.json       → 定义 GLOBAL agent（id、name、sysPrompt、channels）
-configureAgent        → 注入 Spring 管理的工具、运行时 environmentMemory
-application.yml       → API Key、模型名、JWT 密钥、Redis、JPA 等部署参数
-shared/{skills,…}/    → 通过 /api/admin/contributions 审批落盘，所有租户共享
-/api/me/agents        → 单个登录用户自助创建 USER scope agent
-```
+装配修改同步本文件、AGENTS.md、ARCHITECTURE_zh.md 和 README；配置修改同步配置表。来源自 10 月 9 日的提交覆盖、保留当前实现的差异和 ADR/spec 映射见 [集成核对表](source-branch-integration-audit-20261015.md)。
