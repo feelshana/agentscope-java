@@ -18,24 +18,31 @@ package io.agentscope.dataagent.web.api;
 import io.agentscope.dataagent.dataset.BaselineMdlService;
 import io.agentscope.dataagent.dataset.DatasetException;
 import io.agentscope.dataagent.dataset.DatasetService;
+import io.agentscope.dataagent.dataset.DatasetUploadAdmission;
+import io.agentscope.dataagent.dataset.DatasetUploadIntake;
+import io.agentscope.dataagent.dataset.DatasetUploadProperties;
 import io.agentscope.dataagent.dataset.parser.ColumnSchema;
 import io.agentscope.dataagent.dataset.parser.DocxDescriptionExtractor;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetEntity;
-import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import javax.xml.parsers.DocumentBuilderFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.core.io.buffer.DataBufferUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -66,9 +73,64 @@ public class DatasetController {
     private final DatasetService datasetService;
     private final BaselineMdlService baselineMdlService;
 
+    private final DatasetUploadProperties uploadProperties;
+    private final DatasetUploadAdmission admission;
+    private final DatasetUploadIntake intake;
+
+    @Autowired
+    public DatasetController(
+            DatasetService datasetService,
+            BaselineMdlService baselineMdlService,
+            DatasetUploadProperties properties,
+            DatasetUploadAdmission admission,
+            DatasetUploadIntake intake) {
+        this.datasetService = datasetService;
+        this.baselineMdlService = baselineMdlService;
+        this.uploadProperties = properties;
+        this.admission = admission;
+        this.intake = intake;
+    }
+
     public DatasetController(DatasetService datasetService, BaselineMdlService baselineMdlService) {
         this.datasetService = datasetService;
         this.baselineMdlService = baselineMdlService;
+        this.uploadProperties = new DatasetUploadProperties();
+        this.admission = new DatasetUploadAdmission(uploadProperties);
+        this.intake = new DatasetUploadIntake(uploadProperties, admission);
+    }
+
+    public record UploadPolicy(
+            long maxFileBytes,
+            long maxSelectionBytes,
+            int maxFiles,
+            long maxRows,
+            int maxColumns,
+            long maxCells,
+            int concurrentFiles) {}
+
+    @GetMapping("/upload-policy")
+    public UploadPolicy uploadPolicy() {
+        return new UploadPolicy(
+                uploadProperties.getMaxFileSize().toBytes(),
+                uploadProperties.getMaxSelectionSize().toBytes(),
+                uploadProperties.getMaxFiles(),
+                uploadProperties.getMaxRows(),
+                uploadProperties.getMaxColumns(),
+                uploadProperties.getMaxCells(),
+                uploadProperties.getConcurrentFiles());
+    }
+
+    @GetMapping("/upload-status")
+    public Mono<List<DatasetUploadAdmission.Status>> uploadStatuses(
+            @RequestParam String groupId, Authentication auth) {
+        String user = (String) auth.getPrincipal();
+        return Mono.fromCallable(
+                        () -> {
+                            datasetService.requireUploadAccess(user, groupId);
+                            return admission.statuses(user, groupId);
+                        })
+                .subscribeOn(Schedulers.boundedElastic())
+                .onErrorMap(this::toStatus);
     }
 
     public record ColumnVO(String name, String originalName, String sqlType, String description) {}
@@ -90,132 +152,267 @@ public class DatasetController {
     public record PreviewVO(List<ColumnVO> columns, List<List<String>> rows) {}
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public Mono<DatasetVO> upload(
+    public Mono<DatasetVO> uploadWithId(
             @RequestPart("file") FilePart file,
             @RequestPart(value = "descriptionFile", required = false) FilePart descriptionFile,
             @RequestParam("name") String name,
             @RequestParam("groupId") String groupId,
+            @RequestParam(value = "uploadId", required = false) String uploadId,
             Authentication auth) {
-        String userId = (String) auth.getPrincipal();
-        Mono<byte[]> descBytes =
-                descriptionFile == null ? Mono.just(new byte[0]) : toBytes(descriptionFile);
-        return toBytes(file)
-                .flatMap(data -> descBytes.map(desc -> new byte[][] {data, desc}))
-                .flatMap(
-                        pair -> {
-                            byte[] data = pair[0];
-                            byte[] desc = pair[1];
-                            return Mono.fromCallable(
-                                            () -> {
-                                                String description =
-                                                        desc.length == 0
-                                                                ? null
-                                                                : DocxDescriptionExtractor.extract(
-                                                                        new ByteArrayInputStream(
-                                                                                desc),
-                                                                        MAX_DESCRIPTION_CHARS);
-                                                DatasetEntity entity =
-                                                        datasetService.ingest(
-                                                                userId,
-                                                                groupId,
-                                                                name,
-                                                                description,
-                                                                new ByteArrayInputStream(data),
-                                                                file.filename());
+        String user = (String) auth.getPrincipal();
+        return Mono.defer(
+                        () -> {
+                            datasetService.requireUploadAccess(user, groupId);
+                            requireFile(file.filename());
+                            if (name == null || name.isBlank())
+                                throw new DatasetException("数据集名称不能为空");
+                            return intake.run(
+                                    file,
+                                    descriptionFile,
+                                    user,
+                                    groupId,
+                                    name.trim(),
+                                    uploadId,
+                                    input -> {
+                                        try (InputStream data =
+                                                Files.newInputStream(input.staged().file())) {
+                                            String description = null;
+                                            if (input.staged().description() != null)
+                                                try (InputStream desc =
+                                                        Files.newInputStream(
+                                                                input.staged().description())) {
+                                                    description =
+                                                            DocxDescriptionExtractor.extract(
+                                                                    desc, MAX_DESCRIPTION_CHARS);
+                                                }
+                                            DatasetEntity entity =
+                                                    datasetService.ingest(
+                                                            user,
+                                                            groupId,
+                                                            name,
+                                                            description,
+                                                            data,
+                                                            file.filename());
+                                            input.lease().saved(entity.getId());
+                                            try {
                                                 baselineMdlService.publishAfterDatasetChange(
-                                                        userId, groupId);
-                                                return toVO(entity);
-                                            })
-                                    .subscribeOn(Schedulers.boundedElastic());
+                                                        user, groupId);
+                                            } catch (RuntimeException failure) {
+                                                throw new UploadPublicationException(
+                                                        entity.getId(), failure);
+                                            }
+                                            input.lease().completed();
+                                            return toVO(entity);
+                                        } catch (java.io.IOException e) {
+                                            throw new DatasetException("读取上传文件失败", e);
+                                        }
+                                    });
                         })
-                .doOnError(e -> log.warn("Dataset upload failed for {}", userId, e))
+                .subscribeOn(Schedulers.boundedElastic())
+                .doOnError(e -> log.warn("Dataset upload failed for {}: {}", user, e.getMessage()))
                 .onErrorMap(this::toStatus);
     }
 
-    /**
-     * Batch upload multiple files concurrently. Each file is processed in parallel on the
-     * boundedElastic scheduler. Returns a list of results in the same order as the input files.
-     */
+    public Mono<DatasetVO> upload(
+            FilePart file,
+            FilePart descriptionFile,
+            String name,
+            String groupId,
+            Authentication auth) {
+        return uploadWithId(file, descriptionFile, name, groupId, null, auth);
+    }
+
+    public static class UploadPublicationException extends ResponseStatusException {
+        private final String datasetId;
+
+        UploadPublicationException(String datasetId, Throwable failure) {
+            super(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "数据已保存，但模型尚未就绪，请检查与发布：" + failure.getMessage(),
+                    failure);
+            this.datasetId = datasetId;
+        }
+    }
+
+    public record UploadError(String code, String message, String datasetId) {}
+
+    @ExceptionHandler(org.springframework.core.io.buffer.DataBufferLimitException.class)
+    public ResponseEntity<UploadError> multipartLimit(
+            org.springframework.core.io.buffer.DataBufferLimitException error) {
+        return ResponseEntity.status(413)
+                .body(new UploadError("UPLOAD_LIMIT", "上传文件超过大小限制，请缩小文件后重试", null));
+    }
+
+    @ExceptionHandler(UploadPublicationException.class)
+    public ResponseEntity<UploadError> publicationError(UploadPublicationException error) {
+        return ResponseEntity.status(500)
+                .body(
+                        new UploadError(
+                                "IMPORTED_MODEL_PENDING", error.getReason(), error.datasetId));
+    }
+
+    public record BatchUploadResult(
+            String fileName, String status, DatasetVO dataset, String error) {}
+
     @PostMapping(value = "/batch", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public Mono<List<DatasetVO>> batchUpload(
+    public Mono<List<BatchUploadResult>> batchUpload(
             @RequestPart("files") List<FilePart> files,
             @RequestParam("groupId") String groupId,
             Authentication auth) {
-        String userId = (String) auth.getPrincipal();
-
-        return Flux.fromIterable(files)
-                .flatMap(
-                        file ->
-                                toBytes(file)
-                                        .flatMap(
-                                                data ->
-                                                        Mono.fromCallable(
-                                                                        () -> {
-                                                                            String name =
-                                                                                    stripExtension(
-                                                                                            file
-                                                                                                    .filename());
-                                                                            DatasetEntity entity =
-                                                                                    datasetService
-                                                                                            .ingest(
-                                                                                                    userId,
+        String user = (String) auth.getPrincipal();
+        return Mono.defer(
+                        () -> {
+                            datasetService.requireUploadAccess(user, groupId);
+                            if (files.isEmpty() || files.size() > uploadProperties.getMaxFiles())
+                                throw new DatasetException(
+                                        "一次最多上传 " + uploadProperties.getMaxFiles() + " 个文件");
+                            var names = new java.util.HashSet<String>();
+                            for (FilePart file : files) {
+                                requireFile(file.filename());
+                                if (!names.add(
+                                        stripExtension(file.filename()).toLowerCase(Locale.ROOT)))
+                                    throw new DatasetException("本批次存在同名数据集");
+                            }
+                            return Mono.usingWhen(
+                                    intake.stageBatch(files, user),
+                                    staged ->
+                                            Flux.fromIterable(staged)
+                                                    .flatMapSequential(
+                                                            file ->
+                                                                    importBatchFile(
+                                                                            file, user, groupId),
+                                                            uploadProperties.getConcurrentFiles(),
+                                                            1)
+                                                    .collectList()
+                                                    .flatMap(
+                                                            results ->
+                                                                    Mono.fromCallable(
+                                                                                    () ->
+                                                                                            publishBatch(
+                                                                                                    user,
                                                                                                     groupId,
-                                                                                                    name,
-                                                                                                    null,
-                                                                                                    new ByteArrayInputStream(
-                                                                                                            data),
-                                                                                                    file
-                                                                                                            .filename());
-                                                                            return toVO(entity);
-                                                                        })
-                                                                .subscribeOn(
-                                                                        Schedulers
-                                                                                .boundedElastic()))
-                                        .doOnSuccess(
-                                                vo ->
-                                                        log.info(
-                                                                "Batch upload: '{}' succeeded for"
-                                                                        + " user {}",
-                                                                vo.name(),
-                                                                userId))
-                                        .doOnError(
-                                                e ->
-                                                        log.warn(
-                                                                "Batch upload: '{}' failed for"
-                                                                        + " user {}: {}",
-                                                                file.filename(),
-                                                                userId,
-                                                                e.getMessage())),
-                        4) // concurrency limit: 4 files in parallel
-                .collectList()
-                .flatMap(
-                        results ->
-                                Mono.fromCallable(
-                                                () -> {
-                                                    baselineMdlService.publishAfterDatasetChange(
-                                                            userId, groupId);
-                                                    return results;
-                                                })
-                                        .subscribeOn(Schedulers.boundedElastic()))
-                .doOnError(e -> log.warn("Batch upload failed for {}", userId, e))
+                                                                                                    results))
+                                                                            .subscribeOn(
+                                                                                    Schedulers
+                                                                                            .boundedElastic())),
+                                    this::closeStaged,
+                                    (staged, error) -> closeStaged(staged),
+                                    this::closeStaged);
+                        })
+                .subscribeOn(Schedulers.boundedElastic())
                 .onErrorMap(this::toStatus);
     }
 
-    /**
-     * List sheet names in an Excel file. Used by the frontend to let users pick which sheet to
-     * import when a file contains multiple sheets.
-     *
-     * <p>Uses lightweight ZIP+XML parsing to extract sheet names from workbook.xml without loading
-     * the entire workbook into memory via POI, which is significantly faster for large files.
-     */
+    private Mono<BatchUploadResult> importBatchFile(
+            DatasetUploadIntake.Staged file, String user, String groupId) {
+        return intake.runStaged(
+                        file,
+                        user,
+                        groupId,
+                        stripExtension(file.filename()),
+                        input -> {
+                            try (InputStream data = Files.newInputStream(file.file())) {
+                                DatasetEntity entity =
+                                        datasetService.ingest(
+                                                user,
+                                                groupId,
+                                                stripExtension(file.filename()),
+                                                null,
+                                                data,
+                                                file.filename());
+                                input.lease().saved(entity.getId());
+                                return new BatchUploadResult(
+                                        file.filename(),
+                                        "IMPORTED_MODEL_PENDING",
+                                        toVO(entity),
+                                        null);
+                            } catch (java.io.IOException e) {
+                                throw new DatasetException("读取上传文件失败", e);
+                            }
+                        })
+                .onErrorResume(
+                        error ->
+                                Mono.just(
+                                        new BatchUploadResult(
+                                                file.filename(),
+                                                "FAILED",
+                                                null,
+                                                error.getMessage())));
+    }
+
+    private List<BatchUploadResult> publishBatch(
+            String user, String groupId, List<BatchUploadResult> results) {
+        List<String> ids =
+                results.stream()
+                        .filter(row -> row.dataset() != null)
+                        .map(row -> row.dataset().id())
+                        .toList();
+        if (ids.isEmpty()) return results;
+        String publishError = null;
+        try (var publication = admission.acquire(user, "@publication", groupId, null)) {
+            publication.start();
+            admission.publishing(user, groupId, ids);
+            baselineMdlService.publishAfterDatasetChange(user, groupId);
+            publication.completed();
+        } catch (RuntimeException failure) {
+            publishError = "数据已保存，但模型尚未就绪，请检查与发布：" + failure.getMessage();
+        }
+        admission.published(user, groupId, ids, publishError);
+        final String error = publishError;
+        return results.stream()
+                .map(
+                        row ->
+                                row.dataset() == null
+                                        ? row
+                                        : new BatchUploadResult(
+                                                row.fileName(),
+                                                error == null
+                                                        ? "COMPLETED"
+                                                        : "IMPORTED_MODEL_PENDING",
+                                                row.dataset(),
+                                                error))
+                .toList();
+    }
+
+    private Mono<Void> closeStaged(List<DatasetUploadIntake.Staged> staged) {
+        return Mono.fromRunnable(() -> staged.forEach(DatasetUploadIntake.Staged::closeIfIdle))
+                .subscribeOn(Schedulers.boundedElastic())
+                .then();
+    }
+
+    private void requireFile(String name) {
+        String lower = name == null ? "" : name.toLowerCase(Locale.ROOT);
+        if (!lower.endsWith(".xlsx") && !lower.endsWith(".xls") && !lower.endsWith(".csv"))
+            throw new DatasetException("仅支持 .xlsx / .xls / .csv 文件");
+    }
+
     @PostMapping(value = "/list-sheets", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public Mono<List<String>> listSheets(@RequestPart("file") FilePart file) {
-        return toBytes(file)
-                .flatMap(
-                        data ->
-                                Mono.fromCallable(() -> listSheetNamesLightweight(data))
-                                        .subscribeOn(Schedulers.boundedElastic()))
-                .doOnError(e -> log.warn("Failed to list sheets for {}", file.filename(), e))
+    public Mono<List<String>> listSheetsWithAuth(
+            @RequestPart("file") FilePart file, Authentication auth) {
+        return listSheetsFor(file, (String) auth.getPrincipal());
+    }
+
+    public Mono<List<String>> listSheets(FilePart file) {
+        return listSheetsFor(file, "test");
+    }
+
+    private Mono<List<String>> listSheetsFor(FilePart file, String user) {
+        return intake.run(
+                        file,
+                        null,
+                        user,
+                        "@sheets",
+                        UUID.randomUUID().toString(),
+                        null,
+                        input -> {
+                            try (InputStream stream = Files.newInputStream(input.staged().file())) {
+                                List<String> names = listSheetNamesLightweight(stream);
+                                input.lease().completed();
+                                return names;
+                            } catch (Exception e) {
+                                throw new DatasetException("无法读取工作表：" + e.getMessage(), e);
+                            }
+                        })
                 .onErrorMap(this::toStatus);
     }
 
@@ -223,9 +420,9 @@ public class DatasetController {
      * Lightweight sheet name extraction for .xlsx files. Parses workbook.xml directly from the ZIP
      * archive without loading the full workbook model.
      */
-    private static List<String> listSheetNamesLightweight(byte[] data) throws Exception {
+    private static List<String> listSheetNamesLightweight(InputStream data) throws Exception {
         List<String> sheets = new ArrayList<>();
-        try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(data))) {
+        try (ZipInputStream zis = new ZipInputStream(data)) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
                 if ("xl/workbook.xml".equals(entry.getName())) {
@@ -362,17 +559,6 @@ public class DatasetController {
 
     private static ColumnVO toColumnVO(ColumnSchema c) {
         return new ColumnVO(c.name(), c.originalName(), c.sqlType(), c.description());
-    }
-
-    private Mono<byte[]> toBytes(FilePart part) {
-        return DataBufferUtils.join(part.content())
-                .map(
-                        db -> {
-                            byte[] bytes = new byte[db.readableByteCount()];
-                            db.read(bytes);
-                            DataBufferUtils.release(db);
-                            return bytes;
-                        });
     }
 
     private Throwable toStatus(Throwable t) {

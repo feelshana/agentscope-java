@@ -8,6 +8,11 @@ import { KnowledgeBreadcrumb, WorkspaceMenu } from '../../components/KnowledgeWo
 import { getModelingWorkflow } from '../../api/modelingWorkflow';
 import type { ModelingWorkflow } from '../../api/modelingWorkflow';
 import {
+  DatasetUploadError,
+  getUploadPolicy,
+  getServerUploadStatuses,
+  validateUploadSelection,
+  UploadPolicy,
   deleteDataset,
   getGroupDetail,
   GroupDetail,
@@ -22,11 +27,18 @@ import {
   UploadStatus,
 } from '../../state/uploadProgress';
 
+import { settleUploads } from '../../api/uploadQueue';
+import { getToken } from '../../api/auth';
+
 type View = 'files' | 'modeling';
 
 const STATUS_LABEL: Record<UploadStatus['status'], string> = {
   queued: '排队中',
-  uploading: '上传/解析中',
+  uploading: '上传中',
+  importing: '解析/导入中',
+  publishing: '检查与发布中',
+  model_pending: '已导入，模型未就绪',
+  uncertain: '状态待确认',
   ready: '完成',
   failed: '失败',
 };
@@ -43,11 +55,13 @@ const NAV_ITEMS: { key: View; icon: IconName; label: string }[] = [
 export default function DatasetGroupPage() {
   const { groupId = '' } = useParams();
   const navigate = useNavigate();
+  const uploadScope = `${getToken() ?? ''}:${groupId}`;
   const [searchParams, setSearchParams] = useSearchParams();
   const [detail, setDetail] = useState<GroupDetail | null>(null);
   const [workflow, setWorkflow] = useState<ModelingWorkflow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [uploadPolicy, setUploadPolicy] = useState<UploadPolicy | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -55,7 +69,7 @@ export default function DatasetGroupPage() {
   const [groupName, setGroupName] = useState('');
   const [groupDescription, setGroupDescription] = useState('');
   const uploadStatuses = useSyncExternalStore(subscribeUploadStatuses, () =>
-    getUploadStatuses(groupId),
+    getUploadStatuses(uploadScope),
   );
   const [membersOpen, setMembersOpen] = useState(false);
   const [associateOpen, setAssociateOpen] = useState(false);
@@ -69,6 +83,44 @@ export default function DatasetGroupPage() {
   const [sheetPicks, setSheetPicks] = useState<SheetPick[]>([]);
   const [sheetPickerBusy, setSheetPickerBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
+
+  const hasPendingUploads = uploadStatuses.some(item => ['uploading', 'importing', 'publishing', 'uncertain'].includes(item.status));
+  useEffect(() => { getUploadPolicy().then(setUploadPolicy).catch(e => setError(String(e))); }, []);
+  useEffect(() => {
+    if (!uploadPolicy?.statusAvailable) return;
+    let cancelled = false;
+    let fetching = false;
+    const poll = async () => {
+      if (fetching) return;
+      fetching = true;
+      try {
+        const items = await getServerUploadStatuses(groupId);
+        const recovered = items.some(item => item.phase === 'IMPORTED_MODEL_PENDING')
+          ? await getModelingWorkflow(groupId).catch(() => null) : null;
+        if (cancelled) return;
+        mutateUploadStatuses(uploadScope, previous => {
+          const rows = [...previous];
+          const latest = new Map(items.map(item => [item.fileName, item]));
+          const phases: Record<string, UploadStatus['status']> = { UPLOADING: 'uploading', IMPORTING: 'importing', PUBLISHING: 'publishing', COMPLETED: 'ready', IMPORTED_MODEL_PENDING: 'model_pending', FAILED: 'failed', CANCELLED: 'uncertain' };
+          for (const item of latest.values()) {
+            const index = rows.findIndex(row => row.name === item.fileName);
+            if (index >= 0 && rows[index].uploadId && rows[index].uploadId !== item.uploadId) continue;
+            const recoveredReady = item.phase === 'IMPORTED_MODEL_PENDING' && recovered?.queryAvailable && !recovered.draftChanged && recovered.mdlState === 'PUBLISHED';
+            const ready = recoveredReady || item.phase === 'COMPLETED';
+            const update = { name: item.fileName, uploadId: item.uploadId, datasetId: item.datasetId,
+              status: recoveredReady ? 'ready' as const : phases[item.phase] ?? 'uncertain' as UploadStatus['status'], error: recoveredReady ? undefined : item.error,
+              file: ready ? undefined : index >= 0 ? rows[index].file : undefined };
+            if (index >= 0) rows[index] = { ...rows[index], ...update }; else rows.push(update);
+          }
+          return rows;
+        });
+      } catch { /* A failed status poll must not turn an upload into a failed import. */ }
+      finally { fetching = false; }
+    };
+    void poll();
+    const timer = busy || hasPendingUploads ? window.setInterval(() => void poll(), 1500) : undefined;
+    return () => { cancelled = true; if (timer) window.clearInterval(timer); };
+  }, [groupId, uploadScope, busy, hasPendingUploads, uploadPolicy?.statusAvailable]);
 
   // Retired graph/tree deep links show datasets without mounting their components.
   const view: View = searchParams.get('view') === 'modeling' ? 'modeling' : 'files';
@@ -99,7 +151,7 @@ export default function DatasetGroupPage() {
   // Always default to the files view on entry.
 
   function patchStatus(name: string, patch: Partial<UploadStatus>) {
-    mutateUploadStatuses(groupId, prev =>
+    mutateUploadStatuses(uploadScope, prev =>
       prev.map(s => (s.name === name ? { ...s, ...patch } : s)),
     );
   }
@@ -108,33 +160,28 @@ export default function DatasetGroupPage() {
     files: File[],
     sheetMap: Map<string, string>,
   ) {
-    mutateUploadStatuses(groupId, prev => [
-      ...prev,
-      ...files.map(f => ({
-        name: f.name,
-        status: 'queued' as const,
-        file: f,
-        selectedSheet: sheetMap.get(f.name),
-      })),
+    const policy = await getUploadPolicy();
+    setUploadOpen(false);
+    mutateUploadStatuses(uploadScope, prev => [
+      ...prev.filter(row => !files.some(file => file.name === row.name)),
+      ...files.map(f => ({ name: f.name, status: 'queued' as const, file: f, selectedSheet: sheetMap.get(f.name) })),
     ]);
     setBusy(true);
     setError(null);
-
-    files.forEach(f => patchStatus(f.name, { status: 'uploading' }));
-
-    const results = await Promise.allSettled(
-      files.map(async f => {
-        const name = f.name.replace(/\.[^.]+$/, '');
-        const selectedSheet = sheetMap.get(f.name);
-        await uploadDataset(groupId, name, f, false, selectedSheet);
-        return { file: f, name, selectedSheet };
-      }),
-    );
+    const results = await settleUploads(files, policy.concurrentFiles, async f => {
+      const name = f.name.replace(/\.[^.]+$/, '');
+      const selectedSheet = sheetMap.get(f.name);
+      const uploadId = crypto.randomUUID();
+      patchStatus(f.name, { status: 'uploading', uploadId, error: undefined });
+      const dataset = await uploadDataset(groupId, name, f, false, selectedSheet, uploadId);
+      patchStatus(f.name, { status: 'ready', datasetId: dataset.id, file: undefined });
+      return { file: f, name, selectedSheet };
+    });
 
     const overwriteCandidates: { file: File; name: string; selectedSheet?: string }[] = [];
     results.forEach((r, i) => {
       if (r.status === 'fulfilled') {
-        mutateUploadStatuses(groupId, prev => prev.filter(x => x.name !== files[i].name));
+        patchStatus(files[i].name, { status: 'ready' });
       } else {
         const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
         if (msg.includes('already exists')) {
@@ -144,7 +191,8 @@ export default function DatasetGroupPage() {
             selectedSheet: sheetMap.get(files[i].name),
           });
         } else {
-          patchStatus(files[i].name, { status: 'failed', error: msg });
+          const failure = r.reason instanceof DatasetUploadError ? r.reason : undefined;
+          patchStatus(files[i].name, { status: failure?.code === 'IMPORTED_MODEL_PENDING' ? 'model_pending' : failure?.code === 'UNCERTAIN' ? 'uncertain' : 'failed', error: msg, datasetId: failure?.datasetId });
         }
       }
     });
@@ -156,14 +204,10 @@ export default function DatasetGroupPage() {
           `数据集「${names}」已存在，是否覆盖？新版本通过完整校验后替换当前数据。`,
         )
       ) {
-        const overwriteResults = await Promise.allSettled(
-          overwriteCandidates.map(c =>
-            uploadDataset(groupId, c.name, c.file, true, c.selectedSheet),
-          ),
-        );
+        const overwriteResults = await settleUploads(overwriteCandidates, policy.concurrentFiles, c => uploadDataset(groupId, c.name, c.file, true, c.selectedSheet, crypto.randomUUID()));
         overwriteResults.forEach((r, i) => {
           if (r.status === 'fulfilled') {
-            mutateUploadStatuses(groupId, prev => prev.filter(x => x.name !== overwriteCandidates[i].file.name));
+            mutateUploadStatuses(uploadScope, prev => prev.filter(x => x.name !== overwriteCandidates[i].file.name));
           } else {
             const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
             patchStatus(overwriteCandidates[i].file.name, {
@@ -186,6 +230,9 @@ export default function DatasetGroupPage() {
   async function uploadFiles(files: FileList | File[]) {
     if (busy || sheetPickerBusy || sheetPicks.length > 0) return;
     const list = Array.from(files);
+    let policy: UploadPolicy;
+    try { policy = await getUploadPolicy(); validateUploadSelection(list, policy); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); return; }
     const xlsxFiles = list.filter(f => f.name.toLowerCase().endsWith('.xlsx'));
     const otherFiles = list.filter(f => !f.name.toLowerCase().endsWith('.xlsx'));
 
@@ -197,12 +244,10 @@ export default function DatasetGroupPage() {
     setSheetPickerBusy(true);
     setError(null);
     try {
-      const sheetResults = await Promise.all(
-        xlsxFiles.map(async f => {
-          const sheets = await listSheets(f);
-          return { file: f, sheets };
-        }),
-      );
+      const inspected = await settleUploads(xlsxFiles, policy.concurrentFiles, async f => ({ file: f, sheets: await listSheets(f) }));
+      const rejected = inspected.find(result => result.status === 'rejected');
+      if (rejected?.status === 'rejected') throw rejected.reason;
+      const sheetResults = inspected.flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
 
       const multiSheet = sheetResults.filter(r => r.sheets.length > 1);
 
@@ -219,6 +264,7 @@ export default function DatasetGroupPage() {
       setSheetPicks(
         multiSheet.map(r => ({ file: r.file, sheets: r.sheets, selected: '' })),
       );
+      setUploadOpen(false);
       setSheetPickerBusy(false);
       // Store otherFiles + single-sheet xlsx for later upload when picker confirms
       pendingFilesRef.current = {
@@ -305,17 +351,17 @@ export default function DatasetGroupPage() {
         </div>}
         <div className="kw-tabs" role="tablist" aria-label="知识库内容">{NAV_ITEMS.map(n => <button key={n.key} role="tab" aria-selected={view === n.key} className={view === n.key ? 'active' : ''} onClick={() => n.key === 'modeling' ? navigate(`/configure/modeling/${groupId}`) : setView(n.key)}>{n.label}{n.key === 'files' && <span className="kw-badge">{fileCount}</span>}</button>)}</div>
         <input ref={fileRef} type="file" multiple accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={e => { if (e.target.files?.length) uploadFiles(e.target.files); e.target.value = ''; }} />
-        <details className="kw-progress" open={uploadStatuses.some(s => s.status !== 'ready') || associatingTables.size > 0} hidden={!uploadStatuses.some(s => s.status !== 'ready') && associatingTables.size === 0}>
-          <summary>导入与关联进度</summary>
+        <details className="kw-progress" open={uploadStatuses.some(s => s.status !== 'ready') || associatingTables.size > 0} hidden={uploadStatuses.length === 0 && associatingTables.size === 0}>
+          <summary>导入与关联进度{uploadStatuses.length > 0 && ` · 已完成 ${uploadStatuses.filter(s => s.status === 'ready').length}/${uploadStatuses.length} 个文件`}</summary>
           {Array.from(associatingTables).map(name => <div className="da-small" key={name}>{name} · 关联中…</div>)}
-          {uploadStatuses.some(s => s.status !== 'ready') && (
+          {uploadStatuses.length > 0 && (
             <div className="da-card" style={{ marginTop: 8, padding: 8 }}>
-              {uploadStatuses.filter(s => s.status !== 'ready').map((s, i) => (
+              {uploadStatuses.map((s, i) => (
                 <div key={`up-${s.name}-${i}`} className="da-small" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {s.name}
+                    {s.name}{s.error && <span style={{ display: 'block', color: 'var(--da-danger)', whiteSpace: 'normal' }}>{s.error}</span>}
                   </span>
-                  {(s.status === 'uploading' || s.status === 'queued') && (
+                  {['uploading', 'queued', 'importing', 'publishing'].includes(s.status) && (
                     <span className="da-spinner da-spinner-sm" style={{ borderColor: 'var(--da-border)', borderTopColor: 'var(--da-primary)' }} />
                   )}
                   <span
@@ -328,22 +374,27 @@ export default function DatasetGroupPage() {
                   >
                     {STATUS_LABEL[s.status]}
                   </span>
+                  {s.status === 'model_pending' && <button className="da-btn" onClick={() => navigate(`/configure/modeling/${groupId}?asset=publish`)}>检查与发布</button>}
+                  {s.status === 'uncertain' && <button className="da-btn" onClick={() => void refresh()}>刷新确认结果</button>}
                   {s.status === 'failed' && (
                     <>
                       <button
                         className="da-btn"
                         style={{ fontSize: '0.7rem', padding: '1px 6px' }}
+                        disabled={!s.file || busy}
+                        title={!s.file ? '请重新选择原文件后上传' : '重新导入此文件'}
                         onClick={async () => {
                           if (!s.file) return;
-                          patchStatus(s.name, { status: 'uploading', error: undefined });
+                          const retryId = crypto.randomUUID();
+                          patchStatus(s.name, { status: 'uploading', error: undefined, uploadId: retryId });
                           try {
                             const datasetName = s.name.replace(/\.[^.]+$/, '');
-                            await uploadDataset(groupId, datasetName, s.file, true, s.selectedSheet);
-                            mutateUploadStatuses(groupId, prev => prev.filter(x => x.name !== s.name));
+                            await uploadDataset(groupId, datasetName, s.file, false, s.selectedSheet, retryId);
+                            mutateUploadStatuses(uploadScope, prev => prev.filter(x => x.name !== s.name));
                             await refresh();
                           } catch (e) {
                             const msg = e instanceof Error ? e.message : String(e);
-                            patchStatus(s.name, { status: 'failed', error: msg });
+                            patchStatus(s.name, { status: e instanceof DatasetUploadError && e.code === 'IMPORTED_MODEL_PENDING' ? 'model_pending' : e instanceof DatasetUploadError && e.code === 'UNCERTAIN' ? 'uncertain' : 'failed', error: msg, datasetId: e instanceof DatasetUploadError ? e.datasetId : undefined });
                           }
                         }}
                       >
@@ -353,7 +404,7 @@ export default function DatasetGroupPage() {
                         className="da-btn"
                         style={{ fontSize: '0.7rem', padding: '1px 6px', color: 'var(--da-text-3)' }}
                         onClick={() => {
-                          mutateUploadStatuses(groupId, prev => prev.filter(x => x.name !== s.name));
+                          mutateUploadStatuses(uploadScope, prev => prev.filter(x => x.name !== s.name));
                         }}
                       >
                         ✕
@@ -383,7 +434,7 @@ export default function DatasetGroupPage() {
         {view === 'modeling' && <Navigate to={`/configure/modeling/${groupId}`} replace />}
       </div></div>
       {editingGroup && <div className="da-modal-overlay" onClick={() => { if (!busy) setEditingGroup(false); }}><div className="da-modal-shell" style={{ width: 'min(520px, 92vw)' }} onClick={e => e.stopPropagation()}><div className="da-modal-head"><div className="da-modal-title">编辑知识库</div></div><div className="da-modal-body">{error && <div className="kw-alert" role="alert">{error}</div>}<label className="da-label">名称</label><input className="da-input" value={groupName} onChange={e => setGroupName(e.target.value)} maxLength={100} /><label className="da-label" style={{ marginTop: 16 }}>说明</label><textarea className="da-input" value={groupDescription} onChange={e => setGroupDescription(e.target.value)} maxLength={1000} rows={4} /></div><div className="da-modal-foot"><button className="da-btn" disabled={busy} onClick={() => setEditingGroup(false)}>取消</button><button className="da-btn da-btn-primary" disabled={busy} onClick={saveGroupInfo}>{busy ? '保存中…' : '保存'}</button></div></div></div>}
-      {uploadOpen && <div className="da-modal-overlay" onClick={() => setUploadOpen(false)}><div className="da-modal-shell" style={{ width: 'min(560px, 92vw)' }} onClick={e => e.stopPropagation()}><div className="da-modal-head"><div className="da-modal-title">上传数据文件</div></div><div className="da-modal-body">{error && <div className="kw-alert" role="alert">{error}</div>}<div className="da-dropzone" role="button" tabIndex={0} style={dragOver ? { borderColor: 'var(--da-primary)' } : undefined} onClick={() => fileRef.current?.click()} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileRef.current?.click(); } }} onDragOver={e => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={e => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files); }}><Icon name="upload" /><div style={{ marginTop: 12 }}>点击选择或拖入 Excel / CSV 文件</div><div className="da-small" style={{ marginTop: 8 }}>支持 .xlsx / .xls / .csv，可多选</div>{(busy || sheetPickerBusy) && <div className="da-small" style={{ marginTop: 12 }}>{sheetPickerBusy ? '检测工作表…' : '上传并解析中…'}</div>}</div></div><div className="da-modal-foot"><button className="da-btn" onClick={() => setUploadOpen(false)}>关闭</button></div></div></div>}
+      {uploadOpen && <div className="da-modal-overlay" onClick={() => setUploadOpen(false)}><div className="da-modal-shell" style={{ width: 'min(560px, 92vw)' }} onClick={e => e.stopPropagation()}><div className="da-modal-head"><div className="da-modal-title">上传数据文件</div></div><div className="da-modal-body">{error && <div className="kw-alert" role="alert">{error}</div>}<div className="da-dropzone" role="button" tabIndex={0} style={dragOver ? { borderColor: 'var(--da-primary)' } : undefined} onClick={() => fileRef.current?.click()} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileRef.current?.click(); } }} onDragOver={e => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={e => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files); }}><Icon name="upload" /><div style={{ marginTop: 12 }}>点击选择或拖入 Excel / CSV 文件</div><div className="da-small" style={{ marginTop: 8 }}>支持 .xlsx / .xls / .csv；单文件 {uploadPolicy ? uploadPolicy.maxFileBytes / 1024 ** 2 : 50} MB，最多 {uploadPolicy?.maxFiles ?? 10} 个，总计 {uploadPolicy ? uploadPolicy.maxSelectionBytes / 1024 ** 2 : 100} MB</div>{(busy || sheetPickerBusy) && <div className="da-small" style={{ marginTop: 12 }}>{sheetPickerBusy ? '检测工作表…' : '上传并解析中…'}</div>}</div></div><div className="da-modal-foot"><button className="da-btn" onClick={() => setUploadOpen(false)}>关闭</button></div></div></div>}
       {membersOpen && detail && <KnowledgeBaseMembersModal groupId={groupId} name={detail.group.name} onClose={() => setMembersOpen(false)} />}
       {associateOpen && (
         <AssociateTablesModal

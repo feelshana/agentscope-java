@@ -52,6 +52,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * Orchestrates the dataset lifecycle: parse an uploaded file, materialise it as a table in its own
@@ -143,6 +145,11 @@ public class DatasetService implements DatasetContextProvider {
                 all.size());
     }
 
+    public void requireUploadAccess(String userId, String groupId) {
+        DatasetGroupEntity group = access.requireManage(userId, groupId);
+        validateUploadSourceCombination(group.getId());
+    }
+
     @Transactional
     public DatasetEntity ingest(
             String ownerId,
@@ -181,7 +188,7 @@ public class DatasetService implements DatasetContextProvider {
             importResult =
                     importService.importFileForGroup(groupId, ownerId, id, name, data, fileName);
         } catch (RuntimeException e) {
-            throw new DatasetException("Failed to import " + fileName + ": " + e.getMessage(), e);
+            throw DatasetImportService.importFailure(e);
         }
 
         if (importResult.totalRows() == 0) {
@@ -189,42 +196,72 @@ public class DatasetService implements DatasetContextProvider {
         }
 
         String tableName = importResult.tableName();
+        boolean transactional = TransactionSynchronizationManager.isSynchronizationActive();
+        Runnable cleanup =
+                () -> {
+                    registry.remove(id);
+                    importService.cleanupFailedImport(groupId, tableName);
+                };
+        if (transactional)
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override
+                        public void afterCompletion(int status) {
+                            if (status != STATUS_COMMITTED)
+                                try {
+                                    cleanup.run();
+                                } catch (RuntimeException failure) {
+                                    log.error("导入事务回滚，临时表待清理：{}", tableName, failure);
+                                }
+                        }
+                    });
+        try {
 
-        // Build description: prefer user input, then AI-generated table description
-        String finalDesc;
-        if (description != null && !description.isBlank()) {
-            finalDesc = description.trim();
-        } else if (importResult.tableDescription() != null
-                && !importResult.tableDescription().isBlank()) {
-            finalDesc = importResult.tableDescription();
-        } else {
-            finalDesc = name.trim();
+            // Build description: prefer user input, then AI-generated table description
+            String finalDesc;
+            if (description != null && !description.isBlank()) {
+                finalDesc = description.trim();
+            } else if (importResult.tableDescription() != null
+                    && !importResult.tableDescription().isBlank()) {
+                finalDesc = importResult.tableDescription();
+            } else {
+                finalDesc = name.trim();
+            }
+
+            DatasetEntity entity = new DatasetEntity();
+            entity.setId(id);
+            entity.setOwnerId(ownerId);
+            entity.setGroupId(group.getId());
+            entity.setName(name.trim());
+            entity.setSchemaName(provisioner.databaseName());
+            entity.setTableName(tableName);
+            entity.setDescription(finalDesc);
+            entity.setColumnSchemaJson(writeJson(importResult.columns()));
+            entity.setRowCount(importResult.totalRows());
+            entity.setSourceFileName(fileName);
+            entity.setCreatedAt(Instant.now());
+            entity.setUpdatedAt(Instant.now());
+            repository.save(entity);
+            registry.add(toDataSource(entity));
+            markMdlDirty(group.getId());
+            log.info(
+                    "DatasetService: ingested dataset '{}' ({} rows) for owner {} as {}.{}",
+                    entity.getName(),
+                    entity.getRowCount(),
+                    ownerId,
+                    entity.getSchemaName(),
+                    tableName);
+            return entity;
+        } catch (RuntimeException failure) {
+            if (!transactional)
+                try {
+                    cleanup.run();
+                } catch (RuntimeException cleanupFailure) {
+                    cleanupFailure.addSuppressed(failure);
+                    throw new DatasetException("导入失败，临时表待清理：" + tableName, cleanupFailure);
+                }
+            throw failure;
         }
-
-        DatasetEntity entity = new DatasetEntity();
-        entity.setId(id);
-        entity.setOwnerId(ownerId);
-        entity.setGroupId(group.getId());
-        entity.setName(name.trim());
-        entity.setSchemaName(provisioner.databaseName());
-        entity.setTableName(tableName);
-        entity.setDescription(finalDesc);
-        entity.setColumnSchemaJson(writeJson(importResult.columns()));
-        entity.setRowCount(importResult.totalRows());
-        entity.setSourceFileName(fileName);
-        entity.setCreatedAt(Instant.now());
-        entity.setUpdatedAt(Instant.now());
-        repository.save(entity);
-        registry.add(toDataSource(entity));
-        markMdlDirty(group.getId());
-        log.info(
-                "DatasetService: ingested dataset '{}' ({} rows) for owner {} as {}.{}",
-                entity.getName(),
-                entity.getRowCount(),
-                ownerId,
-                entity.getSchemaName(),
-                tableName);
-        return entity;
     }
 
     @Transactional

@@ -24,6 +24,7 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
+import java.util.Properties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -84,6 +85,7 @@ public class TableProvisioner {
     public void createTable(String table, List<ColumnSchema> columns) {
         try (Connection c = connect();
                 Statement st = c.createStatement()) {
+            st.setQueryTimeout(60);
             st.execute(buildCreateTableDdl(table, columns));
         } catch (SQLException e) {
             throw new DatasetException(
@@ -126,6 +128,7 @@ public class TableProvisioner {
         try (Connection c = connect()) {
             c.setAutoCommit(false);
             try (PreparedStatement ps = c.prepareStatement(sql)) {
+                ps.setQueryTimeout(60);
                 int count = 0;
                 for (List<String> row : rows) {
                     for (int i = 0; i < columns.size(); i++) {
@@ -172,6 +175,7 @@ public class TableProvisioner {
         }
         try (Connection c = connect();
                 Statement statement = c.createStatement()) {
+            statement.setQueryTimeout(60);
             statement.execute("DROP TABLE IF EXISTS `" + table + "`");
         } catch (SQLException e) {
             throw new DatasetException("删除导入表失败：" + table, e);
@@ -179,7 +183,13 @@ public class TableProvisioner {
     }
 
     private Connection connect() throws SQLException {
-        return DriverManager.getConnection(props.url(), props.username(), props.password());
+        Properties options = new Properties();
+        options.setProperty("user", props.username());
+        options.setProperty("password", props.password());
+        // JDBC URL options take precedence when the deployment explicitly configures a timeout.
+        options.setProperty("connectTimeout", "10000");
+        options.setProperty("socketTimeout", "60000");
+        return DriverManager.getConnection(props.url(), options);
     }
 
     private Object convert(String sqlType, String v) {

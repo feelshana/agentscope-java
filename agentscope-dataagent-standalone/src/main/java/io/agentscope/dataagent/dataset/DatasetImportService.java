@@ -22,7 +22,9 @@ import io.agentscope.dataagent.dataset.parser.ColumnSchema;
 import io.agentscope.dataagent.dataset.parser.SchemaGenerationService;
 import io.agentscope.dataagent.dataset.parser.TypeInferrer;
 import java.io.InputStream;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -31,6 +33,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -54,6 +57,9 @@ import org.springframework.stereotype.Service;
 @Service
 public class DatasetImportService {
     private KnowledgeBaseOperations operations;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private DatasetUploadProperties uploadProperties = new DatasetUploadProperties();
 
     private static final Logger log = LoggerFactory.getLogger(DatasetImportService.class);
 
@@ -103,6 +109,7 @@ public class DatasetImportService {
         BatchListener listener = new BatchListener(tableName, provisioner, schemaGenerationService);
         listener.operations = operations;
         listener.groupId = groupId;
+        listener.limits = uploadProperties;
 
         try {
             String lower = fileName != null ? fileName.toLowerCase() : "";
@@ -114,12 +121,25 @@ public class DatasetImportService {
             } else {
                 EasyExcel.read(data, listener).sheet().doRead();
             }
+            if (listener.getOriginalHeaders().isEmpty() || listener.getTotalRows() == 0) {
+                throw new DatasetException("No data rows found in file: " + fileName);
+            }
+        } catch (RuntimeException failure) {
+            boolean interrupted = Thread.interrupted();
+            interrupted |= listener.abortAndDrain();
+            try {
+                if (listener.tableAttempted) cleanupFailedImport(groupId, tableName);
+                else if (operations != null && groupId != null)
+                    operations.forgetImportedTable(groupId, tableName);
+            } catch (RuntimeException cleanup) {
+                cleanup.addSuppressed(failure);
+                throw new DatasetException("导入失败，临时表待清理：" + tableName, cleanup);
+            } finally {
+                if (interrupted) Thread.currentThread().interrupt();
+            }
+            throw importFailure(failure);
         } finally {
             listener.shutdownExecutor();
-        }
-
-        if (listener.getOriginalHeaders().isEmpty()) {
-            throw new DatasetException("No data found in file: " + fileName);
         }
 
         log.info(
@@ -133,6 +153,21 @@ public class DatasetImportService {
                 listener.getTotalRows(),
                 listener.getTableDescription(),
                 tableName);
+    }
+
+    public void cleanupFailedImport(String groupId, String tableName) {
+        provisioner.dropTableStrict(tableName);
+        if (operations != null && groupId != null)
+            operations.forgetImportedTable(groupId, tableName);
+    }
+
+    static DatasetException importFailure(RuntimeException failure) {
+        Throwable cause = failure;
+        while (cause != null) {
+            if (cause instanceof DatasetException domain) return domain;
+            cause = cause.getCause();
+        }
+        return new DatasetException("文件解析或入库失败：" + failure.getMessage(), failure);
     }
 
     // -----------------------------------------------------------------
@@ -151,7 +186,11 @@ public class DatasetImportService {
         private final TableProvisioner provisioner;
         private final SchemaGenerationService schemaGenerationService;
         private final ExecutorService insertExecutor;
-        private final List<CompletableFuture<Void>> pendingInserts = new ArrayList<>();
+        private final Deque<CompletableFuture<Void>> pendingInserts = new ArrayDeque<>();
+        private DatasetUploadProperties limits = new DatasetUploadProperties();
+        private volatile boolean aborting;
+        private boolean tableAttempted;
+        private long batchNumber, bufferedChars;
 
         // Header info
         private List<String> originalHeaders;
@@ -179,7 +218,10 @@ public class DatasetImportService {
 
         @Override
         public void invokeHeadMap(Map<Integer, String> headMap, AnalysisContext context) {
-            columnCount = headMap.size();
+            columnCount = headMap.keySet().stream().mapToInt(i -> i + 1).max().orElse(0);
+            if (columnCount == 0) throw new DatasetException("文件表头为空");
+            if (columnCount > limits.getMaxColumns())
+                throw new DatasetException("文件列数超过限制：" + limits.getMaxColumns(), 413);
             originalHeaders = new ArrayList<>(columnCount);
             sampleSets = new LinkedHashMap<>();
             for (int i = 0; i < columnCount; i++) {
@@ -194,7 +236,15 @@ public class DatasetImportService {
 
         @Override
         public void invoke(Map<Integer, String> rowData, AnalysisContext context) {
+            if (Thread.currentThread().isInterrupted()) throw new DatasetException("导入已取消", 409);
+            int observedColumns = rowData.keySet().stream().mapToInt(i -> i + 1).max().orElse(0);
+            if (observedColumns > columnCount) throw new DatasetException("数据列超出表头范围，请检查文件");
             totalRows++;
+            if (totalRows > limits.getMaxRows())
+                throw new DatasetException("文件行数超过限制：" + limits.getMaxRows(), 413);
+            if (totalRows > limits.getMaxCells() / columnCount)
+                throw new DatasetException("文件总单元格数超过限制：" + limits.getMaxCells(), 413);
+            reapCompleted();
 
             // Collect sample values (up to MAX_SAMPLES_PER_COLUMN distinct per column)
             for (int i = 0; i < columnCount; i++) {
@@ -213,11 +263,12 @@ public class DatasetImportService {
             for (int i = 0; i < columnCount; i++) {
                 String val = rowData.get(i);
                 row.add(val == null || val.isBlank() ? null : val.trim());
+                if (val != null) bufferedChars += val.length();
             }
             batch.add(row);
 
             // Flush when batch is full
-            if (batch.size() >= BATCH_SIZE) {
+            if (batch.size() >= BATCH_SIZE || bufferedChars >= 1000000) {
                 if (!tableCreated) {
                     createTableAndInsertFirstBatch();
                 } else {
@@ -242,6 +293,42 @@ public class DatasetImportService {
 
         void shutdownExecutor() {
             insertExecutor.shutdown();
+        }
+
+        boolean abortAndDrain() {
+            aborting = true;
+            insertExecutor.shutdown();
+            boolean interrupted = false;
+            while (!insertExecutor.isTerminated()) {
+                try {
+                    insertExecutor.awaitTermination(1, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    interrupted = true;
+                }
+            }
+            return interrupted;
+        }
+
+        private void await(CompletableFuture<?> future) {
+            try {
+                future.get();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new DatasetException("导入已取消", 409, e);
+            } catch (java.util.concurrent.ExecutionException e) {
+                throw new DatasetException("批量导入失败", e.getCause());
+            }
+        }
+
+        private void reapCompleted() {
+            var iterator = pendingInserts.iterator();
+            while (iterator.hasNext()) {
+                var task = iterator.next();
+                if (task.isDone()) {
+                    await(task);
+                    iterator.remove();
+                }
+            }
         }
 
         private void createTableAndInsertFirstBatch() {
@@ -284,6 +371,7 @@ public class DatasetImportService {
             // Create table
             long createStart = System.currentTimeMillis();
             log.info("DatasetImportService: creating table {}", tableName);
+            tableAttempted = true;
             provisioner.createTable(tableName, columns);
             log.info(
                     "DatasetImportService: table {} created in {} ms, inserting first batch",
@@ -299,14 +387,21 @@ public class DatasetImportService {
             if (batch.isEmpty() || columns == null) {
                 return;
             }
+            reapCompleted();
+            while (pendingInserts.size() >= INSERT_THREADS) {
+                await(CompletableFuture.anyOf(pendingInserts.toArray(new CompletableFuture[0])));
+                reapCompleted();
+            }
             final List<List<String>> batchToInsert = batch;
             final List<ColumnSchema> cols = columns;
-            final int batchIndex = pendingInserts.size() + 1;
+            final long batchIndex = ++batchNumber;
             batch = new ArrayList<>();
+            bufferedChars = 0;
 
             CompletableFuture<Void> future =
                     CompletableFuture.runAsync(
                             () -> {
+                                if (aborting) return;
                                 if (operations != null && groupId != null) {
                                     operations.run(
                                             groupId,
@@ -344,6 +439,7 @@ public class DatasetImportService {
                     tableName,
                     System.currentTimeMillis() - start);
             batch = new ArrayList<>();
+            bufferedChars = 0;
         }
 
         private void waitForPendingInserts() {
@@ -353,15 +449,7 @@ public class DatasetImportService {
             log.info(
                     "DatasetImportService: waiting for {} pending batch inserts to complete",
                     pendingInserts.size());
-            try {
-                CompletableFuture.allOf(pendingInserts.toArray(new CompletableFuture[0])).get();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                insertExecutor.shutdownNow();
-                throw new DatasetException("导入已取消", e);
-            } catch (java.util.concurrent.ExecutionException e) {
-                throw new DatasetException("批量导入失败", e.getCause());
-            }
+            while (!pendingInserts.isEmpty()) await(pendingInserts.removeFirst());
             log.info("DatasetImportService: all batch inserts completed");
         }
 

@@ -5,8 +5,10 @@
  */
 export interface UploadStatus {
   name: string;
-  status: 'queued' | 'uploading' | 'ready' | 'failed';
+  status: 'queued' | 'uploading' | 'importing' | 'publishing' | 'ready' | 'failed' | 'model_pending' | 'uncertain';
   error?: string;
+  uploadId?: string;
+  datasetId?: string;
   file?: File;
   selectedSheet?: string;
 }

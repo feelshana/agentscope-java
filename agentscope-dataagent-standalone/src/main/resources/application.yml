@@ -75,6 +75,18 @@ spring:
 # Property prefix is `dataagent.*`. Env vars use `DATAAGENT_*`.
 # --------------------------------------------------------------------------
 dataagent:
+  # Uploaded Excel/CSV limits; the UI reads the same policy from the upload-policy endpoint.
+  upload:
+    max-file-size: 50MB
+    max-selection-size: 100MB
+    max-files: 10
+    max-rows: 100000
+    max-columns: 100
+    max-cells: 2000000
+    concurrent-files: 8
+  external-datasource:
+    allowed-endpoints: ${DATAAGENT_EXTERNAL_DATASOURCE_ALLOWED_ENDPOINTS:}
+
   # JWT signing secret (>= 32 chars). MUST be overridden in production.
   jwt:
     secret: ${DATAAGENT_JWT_SECRET:dataagent-dev-secret-for-local-only-do-not-use-in-prod-2026}

@@ -101,6 +101,46 @@ function fetchWithTimeout(
   return apiFetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
 }
 
+export interface UploadPolicy {
+  maxFileBytes: number; maxSelectionBytes: number; maxFiles: number;
+  maxRows: number; maxColumns: number; maxCells: number; concurrentFiles: number;
+  statusAvailable?: boolean;
+}
+export class DatasetUploadError extends Error {
+  constructor(message: string, public code: string, public datasetId?: string) { super(message); }
+}
+let uploadPolicyPromise: Promise<UploadPolicy> | undefined;
+export function getUploadPolicy(): Promise<UploadPolicy> {
+  return uploadPolicyPromise ??= (async () => {
+    const res = await fetch('/api/datasets/upload-policy', { headers: authHeaders() });
+    // Allows the development UI to remain usable until the local backend is restarted.
+    if (res.status === 404 || res.status === 405) return { maxFileBytes: 50 * 1024 ** 2, maxSelectionBytes: 100 * 1024 ** 2,
+      maxFiles: 10, maxRows: 100000, maxColumns: 100, maxCells: 2000000, concurrentFiles: 8, statusAvailable: false };
+    if (!res.ok) throw new Error(await errorMessage(res, '读取上传限制失败'));
+    return { ...await res.json(), statusAvailable: true };
+  })().catch(error => { uploadPolicyPromise = undefined; throw error; });
+}
+export interface ServerUploadStatus {
+  uploadId: string; name: string; fileName: string; phase: string; datasetId?: string; error?: string; active: boolean;
+}
+export async function getServerUploadStatuses(groupId: string): Promise<ServerUploadStatus[]> {
+  const res = await fetch(`/api/datasets/upload-status?groupId=${encodeURIComponent(groupId)}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(await errorMessage(res, '读取上传状态失败'));
+  return res.json();
+}
+export function validateUploadSelection(files: File[], policy: UploadPolicy): void {
+  if (!files.length || files.length > policy.maxFiles) throw new Error(`一次最多选择 ${policy.maxFiles} 个文件`);
+  if (files.reduce((sum, f) => sum + f.size, 0) > policy.maxSelectionBytes) throw new Error(`本次文件总大小不能超过 ${policy.maxSelectionBytes / 1024 ** 2} MB`);
+  const names = new Set<string>();
+  for (const file of files) {
+    if (!/\.(xlsx|xls|csv)$/i.test(file.name)) throw new Error(`不支持的文件格式：${file.name}`);
+    if (file.size > policy.maxFileBytes) throw new Error(`${file.name} 超过单文件 ${policy.maxFileBytes / 1024 ** 2} MB 限制`);
+    const name = file.name.replace(/\.[^.]+$/, '').trim().toLowerCase();
+    if (names.has(name)) throw new Error(`本次选择包含同名数据集：${file.name}`);
+    names.add(name);
+  }
+}
+
 // ---------------------------------------------------------------- sheets
 
 export async function listSheets(file: File): Promise<string[]> {
@@ -249,13 +289,15 @@ export async function uploadDataset(
   file: File,
   overwrite = false,
   selectedSheet?: string,
-): Promise<ImportTask> {
+  uploadId?: string,
+): Promise<Dataset> {
   const form = new FormData();
   form.append('file', file, file.name);
   // `name`/`groupId`/`overwrite`/`selectedSheet` travel as query params: WebFlux @RequestParam does not bind
   // multipart fields. When overwrite is true, the new version replaces the current dataset after validation.
   const params: Record<string, string> = { name, groupId, overwrite: String(overwrite) };
   if (selectedSheet) params.selectedSheet = selectedSheet;
+  if (uploadId) params.uploadId = uploadId;
   const qs = new URLSearchParams(params);
   let res: Response;
   try {
@@ -266,11 +308,16 @@ export async function uploadDataset(
     });
   } catch (e) {
     if (e instanceof DOMException && e.name === 'AbortError') {
-      throw new Error('上传超时（超过 5 分钟），请检查文件是否过大或服务端日志');
+      throw new DatasetUploadError('请求超过 5 分钟，导入状态待确认，请先刷新查看结果，勿立即重复上传', 'UNCERTAIN');
     }
-    throw e;
+    throw new DatasetUploadError(e instanceof Error ? `网络中断，导入状态待确认：${e.message}` : '网络中断，导入状态待确认', 'UNCERTAIN');
   }
-  if (!res.ok) throw new Error(await errorMessage(res, `业务文档上传失败：${res.status}`));
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { code?: string; message?: string; detail?: string; datasetId?: string };
+    const uncertain = res.status >= 500 && !body.code;
+    throw new DatasetUploadError(body.message || body.detail || (uncertain ? `服务器异常（${res.status}），请先刷新确认导入结果` : `导入失败：${res.status}`),
+      body.code || (res.status === 429 ? 'BUSY' : uncertain ? 'UNCERTAIN' : 'FAILED'), body.datasetId);
+  }
   return res.json();
 }
 
@@ -500,7 +547,7 @@ export async function uploadDataWithDescription(
     return res.json() as Promise<ImportSummary>;
   } catch (e) {
     if (e instanceof DOMException && e.name === 'AbortError') {
-      throw new Error('上传超时（超过 5 分钟），请检查文件是否过大或服务端日志');
+      throw new DatasetUploadError('请求超过 5 分钟，导入状态待确认，请先刷新查看结果，勿立即重复上传', 'UNCERTAIN');
     }
     throw e;
   } finally {

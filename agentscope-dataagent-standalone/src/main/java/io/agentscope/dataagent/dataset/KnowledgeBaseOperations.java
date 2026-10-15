@@ -63,6 +63,27 @@ public class KnowledgeBaseOperations {
         }
     }
 
+    /** Forget a failed import only after its table has been successfully removed. */
+    public void forgetImportedTable(String groupId, String table) {
+        State state = state(groupId);
+        synchronized (state) {
+            var tables = new java.util.LinkedHashSet<>(importedTables(groupId));
+            if (!tables.remove(table)) return;
+            Path file = resourceFile(groupId);
+            Path temp = file.resolveSibling(file.getFileName() + ".tmp");
+            try {
+                new com.fasterxml.jackson.databind.ObjectMapper().writeValue(temp.toFile(), tables);
+                Files.move(
+                        temp,
+                        file,
+                        java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            } catch (java.io.IOException e) {
+                throw new DatasetException("无法更新导入清理记录", e);
+            }
+        }
+    }
+
     public java.util.List<String> importedTables(String groupId) {
         Path file = resourceFile(groupId);
         if (!Files.exists(file)) return java.util.List.of();

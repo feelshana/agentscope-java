@@ -20,6 +20,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -30,6 +31,7 @@ import io.agentscope.dataagent.dataset.DatasetService;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetEntity;
 import java.io.InputStream;
 import java.util.List;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.buffer.DefaultDataBufferFactory;
@@ -97,11 +99,11 @@ class DatasetControllerTest {
                             return dataset("dataset-" + name, name, "group-1");
                         });
 
-        List<DatasetController.DatasetVO> result =
+        List<DatasetController.BatchUploadResult> result =
                 controller.batchUpload(List.of(orders, customers), "group-1", alice).block();
 
         assertThat(result)
-                .extracting(DatasetController.DatasetVO::name)
+                .extracting(resultItem -> resultItem.dataset().name())
                 .containsExactlyInAnyOrder("orders", "customers");
         verify(datasetService, times(2))
                 .ingest(eq("alice"), eq("group-1"), any(), eq(null), any(InputStream.class), any());
@@ -157,6 +159,93 @@ class DatasetControllerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
         verify(datasetService).delete("alice", "dataset-1");
         verify(baselineMdlService).publishAfterDatasetChange("alice", "group-1");
+    }
+
+    @Test
+    void permissionFailureDoesNotReadOrImportFile() {
+        FilePart upload = file("orders.csv", "id\n1");
+        doThrow(new DatasetException("无管理权限", 403))
+                .when(datasetService)
+                .requireUploadAccess("alice", "group-1");
+        StepVerifier.create(controller.upload(upload, null, "orders", "group-1", alice))
+                .expectErrorMatches(
+                        e ->
+                                e instanceof ResponseStatusException status
+                                        && status.getStatusCode().value() == 403)
+                .verify();
+        verify(upload, never()).content();
+        verify(datasetService, never()).ingest(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void batchFileCountAndDuplicateNamesRejectBeforeImport() {
+        var files = IntStream.range(0, 11).mapToObj(i -> file("f" + i + ".csv", "id\n1")).toList();
+        StepVerifier.create(controller.batchUpload(files, "group-1", alice))
+                .expectError(ResponseStatusException.class)
+                .verify();
+        StepVerifier.create(
+                        controller.batchUpload(
+                                List.of(file("same.csv", "id\n1"), file("same.xlsx", "id\n1")),
+                                "group-1",
+                                alice))
+                .expectError(ResponseStatusException.class)
+                .verify();
+        verify(datasetService, never()).ingest(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void batchKeepsSuccessfulFileWhenAnotherFileFails() {
+        when(datasetService.ingest(
+                        eq("alice"), eq("group-1"), any(), eq(null), any(InputStream.class), any()))
+                .thenAnswer(
+                        inv -> {
+                            String name = inv.getArgument(2);
+                            if (name.equals("bad")) throw new DatasetException("invalid rows");
+                            return dataset("saved", name, "group-1");
+                        });
+        var rows =
+                controller
+                        .batchUpload(
+                                List.of(file("good.csv", "id\n1"), file("bad.csv", "a,b\n1,2,3")),
+                                "group-1",
+                                alice)
+                        .block();
+        assertThat(rows)
+                .extracting(DatasetController.BatchUploadResult::status)
+                .containsExactly("COMPLETED", "FAILED");
+        assertThat(rows.get(0).dataset().id()).isEqualTo("saved");
+        verify(baselineMdlService).publishAfterDatasetChange("alice", "group-1");
+    }
+
+    @Test
+    void batchPublicationFailureKeepsEverySavedDataset() {
+        when(datasetService.ingest(
+                        eq("alice"), eq("group-1"), any(), eq(null), any(InputStream.class), any()))
+                .thenAnswer(
+                        inv ->
+                                dataset(
+                                        "saved-" + inv.getArgument(2),
+                                        inv.getArgument(2),
+                                        "group-1"));
+        doThrow(new DatasetException("compile failed"))
+                .when(baselineMdlService)
+                .publishAfterDatasetChange("alice", "group-1");
+        var rows =
+                controller
+                        .batchUpload(
+                                List.of(file("one.csv", "id\n1"), file("two.csv", "id\n2")),
+                                "group-1",
+                                alice)
+                        .block();
+        assertThat(rows)
+                .extracting(DatasetController.BatchUploadResult::status)
+                .containsOnly("IMPORTED_MODEL_PENDING");
+        assertThat(rows)
+                .allSatisfy(
+                        row -> {
+                            assertThat(row.dataset()).isNotNull();
+                            assertThat(row.error()).contains("compile failed");
+                        });
     }
 
     private static DatasetEntity dataset(String id, String name, String groupId) {
