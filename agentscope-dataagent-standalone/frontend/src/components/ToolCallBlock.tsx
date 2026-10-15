@@ -1,5 +1,6 @@
 import React from 'react';
 import Icon, { IconName } from './Icon';
+import { wrenToolLabel, parseWrenResult } from '../utils/wrenToolPresentation';
 
 export interface ToolInspectPayload {
   id: string;
@@ -101,8 +102,8 @@ export default function ToolCallBlock({
   onInspect,
 }: Props) {
   const running = result === undefined;
-  const failed = !running && isToolError(result);
-  const label = toolLabel(toolName);
+  const failed = !running && (isToolError(result) || (toolName.startsWith('wren_') && parseWrenResult(result ?? '').error));
+  const label = wrenToolLabel(toolName, input) ?? toolLabel(toolName);
 
   return (
     <div className="da-toolcall">
@@ -111,7 +112,7 @@ export default function ToolCallBlock({
         className="da-toolcall-head"
         onClick={() => onInspect?.({ id: toolCallId, name: toolName, input, result })}
         title="在侧栏查看输入与结果"
-        aria-label={`查看 ${toolName} 工具详情`}
+        aria-label={`查看 ${label} 工具详情`}
       >
         <span style={{ color: 'var(--da-text-muted)', display: 'inline-flex' }}>
           <Icon name={toolIcon(toolName)} size="sm" />

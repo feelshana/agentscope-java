@@ -98,7 +98,7 @@ class DataDynamicContextMiddlewareTest {
                         "BASE\n\n# [DATA_SOURCES_OVERVIEW]\n\n"
                                 + "## 知识库「订单分析」— 已发布语义模型（group_id: `gA`，版本 v3；"
                                 + "wren 工具的 group_id 参数可直接填本知识库名称「订单分析」，无需复制长 ID）\n\n")
-                .contains("wren_describe_model")
+                .contains("describe_model")
                 .contains("**逻辑模型：**")
                 .contains("- `订单` — 订单明细")
                 .doesNotContain("**Cube：**", "销售Cube", "计数Cube", "wren_query_cube")
@@ -116,7 +116,7 @@ class DataDynamicContextMiddlewareTest {
         when(catalog.load("gA")).thenReturn(Optional.of(mdl()));
         var middleware = new DataDynamicContextMiddleware(registry(aliceDataset()), null, catalog);
         assertThat(prompt(middleware, new DatasetScope("alice")))
-                .contains("wren_run_sql", "COUNT DISTINCT", "年份是时间筛选", "禁止猜测派生列")
+                .contains("官方 run_sql", "COUNT DISTINCT", "年份是时间筛选", "禁止猜测派生列")
                 .doesNotContain("wren_query_cube", "**Cube：**");
     }
 
@@ -181,7 +181,7 @@ class DataDynamicContextMiddlewareTest {
                 .contains("# [DATA_SOURCES_OVERVIEW]")
                 .contains("# [KNOWLEDGE_BASE_OVERVIEW]")
                 .contains("订单表与客户表通过客户ID关联")
-                .contains("## 语义视图（工程 views/ 文件，wren_run_sql 可直接按视图名查询）")
+                .contains("## 语义视图（工程 views/ 文件，官方 run_sql 可直接按视图名查询）")
                 .contains("视图口径已经建模审阅")
                 .contains("近30天用户行为分层")
                 .contains("SQL: SELECT user_segment FROM 点击详情数据")

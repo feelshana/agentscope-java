@@ -119,10 +119,10 @@ bus are all backed by Redis, so any replica can serve any user. See
   visible to every tenant on the next agent build (via the overlay's lower
   layer).
 - **Official Wren tools** — modeling uses native scoped file tools and `wren_cli`;
-  querying uses `wren_list_tools`, `wren_call_tool` and `wren_read_knowledge`.
-  Official MCP tool schemas and arguments pass through unchanged. The platform
-  adds tenant authorization, publication, result artifacts, `run_python`,
-  `retrieve_evidence` and `render_chart`; it does not route metrics or rewrite MDL.
+  querying uses `wren_list_tools` and `wren_call_tool` to expose the current
+  published project's official MCP schema and arguments unchanged. The platform
+  adds tenant authorization, publication, result artifacts, `run_python` and
+  `render_chart`; it does not add SQL, metric routing, custom retrieval, or rewrite MDL.
   Ordinary models, SQL-defined models, relationships, views and Cubes are supported.
   Uploads and external-table associations build and publish a baseline MDL.
 

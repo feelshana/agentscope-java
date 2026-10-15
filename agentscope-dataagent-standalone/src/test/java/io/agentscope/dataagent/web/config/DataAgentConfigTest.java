@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.agentscope.core.tool.Tool;
 import io.agentscope.dataagent.tools.data.DataAgentToolkit;
-import io.agentscope.dataagent.tools.data.WrenToolkit;
+import io.agentscope.dataagent.tools.data.WrenMcpToolkit;
 import io.agentscope.harness.agent.gateway.channel.ChannelConfig;
 import io.agentscope.harness.agent.gateway.channel.DmScope;
 import java.lang.reflect.Method;
@@ -93,14 +93,8 @@ class DataAgentConfigTest {
 
     @Test
     void wrenToolDescriptionsRequirePublishedLogicalModels() {
-        assertThat(toolDescription(WrenToolkit.class, "wren_run_sql"))
-                .contains("[DATA_SOURCES_OVERVIEW]")
-                .contains("wren_describe_model")
-                .contains("SELECT / WITH")
-                .contains("不要用物理表名")
-                .contains("没有有效已发布 MDL 的知识库不可查询");
-        assertThat(toolDescription(WrenToolkit.class, "wren_run_sql"))
-                .doesNotContain("wren_query_cube");
+        assertThat(toolDescription(WrenMcpToolkit.class, "wren_call_tool"))
+                .contains("官方 MCP", "wren_list_tools", "run_sql", "LIMIT/OFFSET");
     }
 
     /**
@@ -151,24 +145,33 @@ class DataAgentConfigTest {
         List<String> toolNames =
                 java.util.stream.Stream.concat(
                                 Arrays.stream(DataAgentToolkit.class.getDeclaredMethods()),
-                                Arrays.stream(WrenToolkit.class.getDeclaredMethods()))
+                                Arrays.stream(WrenMcpToolkit.class.getDeclaredMethods()))
                         .map(method -> method.getAnnotation(Tool.class))
                         .filter(java.util.Objects::nonNull)
                         .map(Tool::name)
                         .toList();
 
         assertThat(toolNames)
-                .contains("wren_describe_model", "wren_run_sql", "wren_recall_examples")
-                .doesNotContain("wren_query_cube", "wren_answer_queries")
+                .contains("wren_list_tools", "wren_call_tool")
+                .doesNotContain(
+                        "wren_read_knowledge",
+                        "wren_describe_model",
+                        "wren_run_sql",
+                        "wren_recall_examples",
+                        "wren_query_cube",
+                        "wren_answer_queries")
                 .doesNotContain("prepare_data_context", "query_structured_data");
     }
 
     @Test
-    void describeModelToolRejectsPhysicalIdentifiersByContract() {
-        assertThat(toolDescription(WrenToolkit.class, "wren_describe_model"))
-                .contains("字段与关系")
-                .contains("只传逻辑模型名")
-                .contains("不要传 datasetId、sourceId、schema 或物理表名");
+    void customKnowledgeRetrievalIsNotAnAgentTool() {
+        assertThat(
+                        Arrays.stream(DataAgentToolkit.class.getDeclaredMethods())
+                                .map(method -> method.getAnnotation(Tool.class))
+                                .filter(java.util.Objects::nonNull)
+                                .map(Tool::name)
+                                .toList())
+                .doesNotContain("retrieve_evidence");
     }
 
     /**

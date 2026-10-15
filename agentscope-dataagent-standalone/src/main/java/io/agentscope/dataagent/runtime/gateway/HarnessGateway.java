@@ -742,7 +742,7 @@ public final class HarnessGateway implements Gateway {
         try {
             // Lazy initialization: wrap the registry borrow in a LazySandbox so the container
             // is only created when a tool actually executes a command (e.g., run_python).
-            // Pure SQL queries (wren_run_sql, wren_query_cube) never touch the sandbox, so
+            // Pure SQL queries (official run_sql, query_cube) never touch the sandbox, so
             // no container is created for those turns — saving 3-8s of Docker overhead.
             Sandbox lazySb =
                     new io.agentscope.dataagent.web.workspace.LazySandbox(

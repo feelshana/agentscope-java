@@ -4,8 +4,8 @@
 > 本文档面向开发者与 AI 编码助手，基于当前代码实际实现梳理（非上游 agentscope 示例的原始版本）。
 > 核心流程：**通过 Wren 进行语义建模 + 问数**——数据集组即 wren project，表结构变化自动播种并发布
 > 基础 MDL；建模助手（modeling-agent）经对话完善关系/模型口径/明细视图/业务规则后发布；问数助手（data-agent）
-> 在已发布语义模型上发现并透传官方 MCP（`wren_list_tools` / `wren_call_tool` / `wren_read_knowledge`），
-> 配合 `retrieve_evidence` / `render_chart`。知识图谱构建链路已停用（见第 6 章）。
+> 在已发布语义模型上发现并透传官方 MCP（`wren_list_tools` / `wren_call_tool`），
+> 配合 `run_python` / `render_chart` 做结果分析与展示。知识图谱构建链路已停用（见第 6 章）。
 > 引用代码位置时使用「类名 + 方法名」锚点，不引用行号（行号会漂移，类名可由 SearchSymbol 定位）。
 
 ---
@@ -43,9 +43,9 @@ dataagent 为每位数据分析师提供专属的数据 Agent，核心流程是*
 │  ToolEventBus(SSE) / 审计 / 用量 / AgentCatalog(内置agent目录)        │
 ├─────────────────────────────────────────────────────────────────────┤
 │  Agent 工具层（tools/data/ 包）                                    │
-│  WrenToolkit(问数: wren_describe_model / wren_run_sql /            │
-│  wren_recall_examples) 原生文件工具 + OfficialWrenToolkit(建模)     │
-│  DataAgentToolkit(retrieve_evidence / render_chart) + run_python      │
+│  WrenMcpToolkit(官方 MCP 发现与透传) + 原生文件工具                  │
+│  OfficialWrenToolkit(建模) + DataAgentToolkit(render_chart)          │
+│  RunPythonTool(run_python)                                           │
 ├─────────────────────────────────────────────────────────────────────┤
 │  数据资产层（dataset/ 包）                                           │
 │  DatasetService(上传导入·外部表关联) / MdlSuggestionService(LLM关系建议)│
@@ -119,7 +119,7 @@ dataagent 为每位数据分析师提供专属的数据 Agent，核心流程是*
    - middleware: DataDynamicContextMiddleware（每轮重建 [DATA_SOURCES_OVERVIEW]
      与 [KNOWLEDGE_BASE_OVERVIEW] 追加到 system prompt；数据源概览只渲染可查询的
      已发布逻辑模型/视图 轻量目录（不含物理名称），字段与关系详情由
-     wren_describe_model 按需获取，见 4.6）
+     官方 describe_model 按需获取，见 4.6）
    - stateStore: AgentStateStore（默认 InMemoryAgentStateStore；生产应提供分布式实现）
    - filesystem: DockerFilesystemSpec(IsolationScope.USER)，镜像 dataagent.sandbox.image
      —— 仅问数 agent；sandboxlessAgents（当前 = modeling-agent）显式设 LocalFilesystemSpec +
@@ -165,10 +165,9 @@ dataagent 为每位数据分析师提供专属的数据 Agent，核心流程是*
 `tools/data/DataToolkitRegistrar.java`（`@PostConstruct`）在 Bootstrap 构建完成后，
 向主 agent 的 Toolkit 注册（建模助手挂载走同款 `ModelingToolkitRegistrar`，见末条）：
 
-- `DataAgentToolkit` — 知识检索与服务端图表工具（`retrieve_evidence` / `render_chart`）；
-- `WrenToolkit` — 唯一结构化问数通道（`wren_describe_model` / `wren_run_sql` /
-  `wren_recall_examples`，见 4.6），依赖 `WrenQueryGateway`（`WrenInstanceRegistry` 的接口）、
-  `MdlCatalog`、`DatasetGroupService` 与 `ConversationScopeRegistry`；
+- `DataAgentToolkit` — 仅提供服务端图表工具（`render_chart`）；
+- `WrenMcpToolkit` — 官方 MCP schema 发现与原始调用透传（`wren_list_tools` / `wren_call_tool`），
+  依赖 `WrenQueryGateway`（`WrenInstanceRegistry` 的接口）与当前发布工程；
 - `RunPythonTool(new SandboxBackedFilesystem())` — 沙箱 Python 执行工具。
   此处用独立代理实例即可：每轮调用的真实沙箱由 SandboxLifecycleMiddleware 绑定在
   RuntimeContext 上，工具调用拿到的就是同一个上下文。
@@ -255,8 +254,8 @@ ref_sql 的内容和依赖是否可执行由官方引擎判断。任何检查失
 ### 4.1 原始官方调用与通用产物
 
 `WrenMcpToolkit#listTools` 返回原始官方工具 schema；`WrenMcpToolkit#callTool` 原样透传参数与官方输出。
-run_sql/query_cube 成功结果可经通用 CSV 产物交给 run_python/render_chart。get_instructions 读取官方规则；
-`WrenMcpToolkit#readKnowledge` 限定到当前已发布工程 knowledge，覆盖 glossary/metrics/caveats/rules/sql 原文，不读草稿或宿主文件。
+run_sql/query_cube 成功结果可经通用 CSV 产物交给 run_python/render_chart。get_instructions、list_knowledge、
+recall_queries、describe_model 与 describe_cube 均由官方 MCP 提供，平台不再提供第二套知识读取或召回工具。
 问题范围、时间粒度、JOIN、DISTINCT、视图与 Cube 的选择遵循官方技能，不由平台正则路由。
 
 ### 4.2 点赞与官方 memory
@@ -267,16 +266,28 @@ run_sql/query_cube 成功结果可经通用 CSV 产物交给 run_python/render_c
 一条 SQL 只回答子问题时标注该子问题，避免局部 SQL 冒充完整用户问题。点赞是用户认可最终结果，不证明算法绝对正确。
 
 `AnswerQueryMemory#feedback` 只在 UP 后用官方 memory store 写入 knowledge/sql；DOWN 仅记反馈，失败可重试，不自动修订语义资产。
+
+语义建模页的 SQL 问答对模块由 `SqlQaExampleService` 统一读取两类官方 Markdown 源：建模工作区
+`knowledge/sql` 与当前用户知识库的点赞源 `runtime/liked-examples/knowledge/sql`。建模源修改后须重新发布，
+点赞源修改后重建官方 memory index；接口按 owner/group 隔离并限制文件名。视图资产路径由
+`MdlWorkspaceReader#read` 返回实际存在的 `sql.yml`，缺失时回退 `metadata.yml`，避免页面读取派生的不存在文件。
+问答对删除沿用相同的来源隔离；点赞来源删除后重新执行官方 memory index。
 SQL 原样保存，不二次添加 LIMIT。`WrenPublishedProject#prepare` 合并发布源码与隔离的点赞源码，
 `WrenPublishedProject#indexed` 按源码摘要调用官方 memory index --no-seed，索引改变时不复用旧模型/示例内容。
+
+建模推荐问答按官方技能成功验证后，由 `wren_cli memory store` 经原生写授权保存到草稿 `knowledge/sql`，页面显式发布后进入问数工程；问题列表和 schema 索引本身不代表存在问答。`WrenPublishedProject#mergeExamples` 保留已发布文件名，为点赞来源生成不冲突的派生文件名（默认 `liked-` 前缀），原始 Markdown 内容不变；只同步派生目录，避免两类中文问题都生成 `query.md` 时覆盖。每次部署修正派生文件并清除不再由来源提供的副本，索引仍由官方实现负责。
+
+`AnswerQueryMemory#candidates` 优先匹配调用 ID；历史回合缺 ID 时按业务问题、工具类型与实际 SQL 核对所有候选，不因同题的首条 SQL 不同而漏存。有调用但内容不匹配、诊断、失败及其他用户知识库回执均排除；完全缺失调用输入时才采用服务端成功回执。显式再次点赞可重试此前空候选，已保存状态仍保持幂等。
+
+问数工具展示由 `ToolCallBlock`/`ToolInspector` 解析外层调用的 `tool_name` 显示中文操作名；`WrenToolResult` 展示官方 `nl_query/sql_query` 问答卡、查询行表格及模型/Cube结构，并保留空值、截断提示、SQL回执和产物说明。原始响应可展开复制，JSON字符串只按 JSON 语义解码，不修改 SQL 转义；SSE 与存储原文不变。参见 spec 063。
 线上 recall_queries/get_context 使用该同一工程的官方 memory；无平台评分、中文词项算法或可信等级扩展。
 CLI/依赖/多语言模型不可用时明确返回错误；普通 SQL 查询仍可执行。
 
 ### 4.3 保留的数据分析能力
 
-DataAgentToolkit 的 retrieve_evidence/render_chart 与沙箱 run_python 继续复用现有 ArtifactStore、SandboxManager 和 AgentScope 执行。
+DataAgentToolkit 的 render_chart 与沙箱 run_python 继续复用现有 ArtifactStore、SandboxManager 和 AgentScope 执行。
 MCP 返回的 columns/rows 与截断信息保持原样；CSV 是通用传输，不引入 SQL 编译、指标口径或领域规划。
-历史 WrenToolkit/SqlExampleRecall 与平台 sql-analysis 文件保留兼容测试，主 data-agent 不注册这些领域工具或挂载旧技能。
+历史 WrenToolkit/SqlExampleRecall 源码保留迁移期兼容测试，主 data-agent 不注册这些领域工具；随后的问数技能只引用官方 Wren 工具名。
 
 ---
 
@@ -446,7 +457,7 @@ MDL 三端点 `GET /mdl` / `POST /mdl/validate` / `POST /mdl/publish`、前端
 `mdl_state='NONE'`）再加载任何组实体；守卫 `DatasetGroupMdlBackfillTest`（先证明 NULL
 行必炸，再证明回填后可加载）。
 **M3 + Wren-only 收敛已落地**（ADR 0020、0029）——`WrenToolkit` 提供
-`wren_describe_model` / `wren_run_sql` / `wren_recall_examples`；`WrenInstanceRegistry` 管理 per-group
+`官方 describe_model` / `官方 run_sql` / `官方 recall_queries`；`WrenInstanceRegistry` 管理 per-group
 `wren serve mcp` 实例池（按需 spawn、空闲回收、发布后 invalidate、传输失败重建）；
 `WrenProfileHome` 托管连接档案；`MdlCatalog` + `DataDynamicContextMiddleware` 仅渲染轻量逻辑目录；
 旧物理直查工具与 JDBC connector 已删除。
@@ -456,7 +467,7 @@ MDL 三端点 `GET /mdl` / `POST /mdl/validate` / `POST /mdl/publish`、前端
 发布期连通性预检（information_schema 验证表存在，连接超时 8s，失败拒绝并报表名）、
 `WrenProfileHome#ensureAll` profiles.yml 幂等全量重建（发布路径重渲染，单一事实源是数据库）、
 `published/wren-source.properties` 快照连接钉入 + `WrenInstanceRegistry#resolveSnapshotProfile`
-spawn 读取（缺失回落默认，M3 存量组零迁移）、`wren_run_sql` 入口 LIMIT/OFFSET 硬门
+spawn 读取（缺失回落默认，M3 存量组零迁移）、`官方 run_sql` 入口 LIMIT/OFFSET 硬门
 （wrenai `_apply_limit` 无条件尾部叠加的 1064 坑，工具描述同步禁止）；守卫：
 `MdlPublishServiceTest`（混合组拒绝/多源拒绝/源删拒绝/非 MySQL 拒绝/预检失败不落快照/
 ext marker 钉入）、`WrenProfileHomeTest`（多条目渲染/无库名空串/非 MySQL 跳过/DB 收敛）、
@@ -471,7 +482,7 @@ ext marker 钉入）、`WrenProfileHomeTest`（多条目渲染/无库名空串/�
 问数注入切工作区文件源：业务规则 `DatasetService#semanticBusinessRulesText` →
 `MdlWorkspaceReader#readKnowledgeRules`（官方 load_knowledge_rules 语义，按组分节），
 语义视图 `DatasetService#semanticViewsText` → 工作区 `views/`（`DataDynamicContextMiddleware`
-视图小节同步改口径「工程 views/ 文件，wren_run_sql 可直接按视图名查询」）；
+视图小节同步改口径「工程 views/ 文件，官方 run_sql 可直接按视图名查询」）；
 `ModelingToolkit#listBusinessRules` 切文件源，`DocEnhanceService` 退出建模工具链；
 DocEnhance 规则采纳双写（见 5.7）。守卫：`MdlSuggestionServiceTest`（幂等确认/交换重确认
 替换不重复/拒绝不动文件/复合键生长）、`MdlWorkspaceReaderTest#readKnowledgeRules*`、
@@ -490,7 +501,7 @@ DocEnhance 规则采纳双写（见 5.7）。守卫：`MdlSuggestionServiceTest`
 机制化解；轻量口径仍可经 `write_file` 手工写入。事实源为工作区
 `views/<name>/{metadata.yml,sql.yml}`（`statement` 块标量承载 SQL，`create_view` 渲染 `|-` 字面块；
 建模对话经 `create_view` 写入并过 HITL 三重闸）。视图名与 model/cube 名经 `sanitizeIdentifier` 归一后
-互斥；wren 引擎 `queryable_names` 含视图名，`wren_run_sql` 可直接按视图名查询。概览注入
+互斥；wren 引擎 `queryable_names` 含视图名，`官方 run_sql` 可直接按视图名查询。概览注入
 `DatasetService#semanticViewsText` 渲染工程 `views/` 文件，每视图在名称与描述下附一行折叠、
 超 400 字截断的 `SQL: <statement>`（上游 `_describe_view` 对齐：SQL 原文即视图的 schema，
 问数模型免 describe 即得输出列；specs/020，ADR 0034）（`[KNOWLEDGE_BASE_OVERVIEW]`
@@ -528,7 +539,7 @@ refSql/refSqlPath（models/、views/ 缺 metadata.yml 的静默跳过已改 erro
   `DIRTY`（工作区与快照存在待发布差异），保留旧快照、版本和可查询能力。空知识库删除全部工件并回到 `NONE`。
 - 发布使用 `published.next` / `mdl.json.next` 预构建和原子替换；替换异常时恢复 previous 备份。
 - 实例热加载不可行，发布成功后必须 `WrenQueryGateway#invalidate`，下一次查询重新 spawn。
-- 文档类 RAG 继续由平台 `retrieve_evidence` 提供；历史知识库不迁移，由上线前清理。
+- 业务规则与知识读取统一使用官方 get_instructions/list_knowledge；历史知识库不迁移，由上线前清理。
 
 ### 5.7 文档驱动语义增强（specs/014，ADR 0028）
 

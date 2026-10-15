@@ -45,7 +45,7 @@ import reactor.core.scheduler.Schedulers;
  *
  * <p>The data-source overview exposes only Wren-queryable published manifests. It keeps a compact
  * model/Cube directory in the prompt and directs field-level discovery to {@code
- * wren_describe_model}; physical table names and direct-query fallback instructions are omitted.
+ * official describe_model; physical table names and direct-query fallback instructions are omitted.
  */
 public class DataDynamicContextMiddleware implements HarnessRuntimeMiddleware {
 
@@ -192,7 +192,7 @@ public class DataDynamicContextMiddleware implements HarnessRuntimeMiddleware {
 
     /**
      * Lightweight directory for one published group. Field and relation details are fetched on
-     * demand through {@code wren_describe_model}. Cube rows carry member names plus measure
+     * demand through the official {@code describe_model}. Cube rows carry member names plus measure
      * expressions and a short description so the model can judge coverage (measure, group-by
      * dimension and time granularity all present) straight from the directory instead of
      * word-matching the question against cube/member names alone.
@@ -208,14 +208,19 @@ public class DataDynamicContextMiddleware implements HarnessRuntimeMiddleware {
                 .append(g.groupName())
                 .append("」，无需复制长 ID）\n\n");
         sb.append(
-                "问数统一使用 wren_run_sql 查询已发布逻辑模型或视图；先召回示例核对口径，再用 wren_describe_model"
-                    + " 核对实际字段。年份是时间筛选，不代表按年分组；去重客户数在所需时间范围内 COUNT DISTINCT 客户身份，不能累加月度去重人数。复杂 SQL"
-                    + " 先规划，禁止猜测派生列。\n\n");
+                "问数统一通过 wren_call_tool 调用官方 run_sql 或 query_cube 查询已发布逻辑模型、视图和指标；先调用官方"
+                        + " recall_queries 核对口径，再按需调用 describe_model 或"
+                        + " describe_cube。年份是时间筛选，不代表按年分组；去重客户数在所需时间范围内 COUNT DISTINCT"
+                        + " 客户身份，不能累加月度去重人数。复杂 SQL 先规划，禁止猜测派生列。\n\n");
         sb.append(
-                "遇到常用指标或复杂口径时，按需调用 wren_recall_examples"
-                    + " 读取本库已发布的人员确认示例，核对业务定义后重新查询；不能复用旧数值。销售额/净营收等歧义未被规则明确时先澄清。月份字符串 yyyy-MM"
+                "遇到常用指标或复杂口径时，按需通过 wren_call_tool 调用官方 get_instructions 和 recall_queries"
+                    + " 读取本库已发布规则与问答，核对业务定义后重新查询；不能复用旧数值。销售额/净营收等歧义未被规则明确时先澄清。月份字符串 yyyy-MM"
                     + " 与时间戳应按同一类型/格式对齐，MySQL 不使用 STRFTIME。\n"
                     + "用户仅确认环比时，不得擅自增加两个月都有营收、只保留增长客户等限制。按既定口径保留统计对象，前月为零时百分比标为不可计算/新增，本月为零可计算下降；特殊筛选需明确说明并确认。空结果不能直接推断原因，先核查实际分布。全年月报说明缺失月份的处理，不能把未返回月份自动当作零。所有过程说明与回答使用简体中文。\n\n");
+        sb.append(
+                "Top N 或单条结果优先使用官方 query_cube 的 order_by 与 limit；没有合适 Cube 时使用 run_sql 的标准"
+                        + " SQL（可按官方语法使用 LIMIT/OFFSET）。不要把 View 传给 describe_model；View 用"
+                        + " get_mdl/describe_schema，Cube 用 describe_cube。\n\n");
         sb.append("**逻辑模型：**\n");
         for (MdlCatalog.Model m : g.models()) {
             sb.append("- `").append(m.name()).append("`");
@@ -287,8 +292,8 @@ public class DataDynamicContextMiddleware implements HarnessRuntimeMiddleware {
             sb.append(terms).append("\n");
         }
         if (views != null && !views.isBlank()) {
-            sb.append("\n## 语义视图（工程 views/ 文件，wren_run_sql 可直接按视图名查询）\n");
-            sb.append("视图口径已经建模审阅，能直接覆盖问题时优先按视图名查询。\n");
+            sb.append("\n## 语义视图（工程 views/ 文件，官方 run_sql 可直接按视图名查询）\n");
+            sb.append("视图口径已经建模审阅，能直接覆盖问题时优先通过 wren_call_tool 调用官方 run_sql 按视图名查询。\n");
             sb.append(views).append("\n");
         }
         if (rules != null && !rules.isBlank()) {

@@ -15,12 +15,12 @@ description: 通过针对已配置数据源编写 SQL 查询、校验后呈现�
 
 2. **定位语义模型。** 确定数据在哪里：
    - 先查阅 system prompt 中的 `[DATA_SOURCES_OVERVIEW]` 和 `[KNOWLEDGE_BASE_OVERVIEW]`，从轻量目录选择知识库、逻辑模型和已发布 View，绝不猜测物理表名、datasetId 或 sourceId。
-   - 字段或关系不明确时，调用 `wren_describe_model(group_id, model_names)` 一次查看直接相关的 1–5 个逻辑模型；不要逐表重复调用。默认折叠关联投影，需要具体跨模型字段时传 `expand_relation_fields=true`。
+   - 字段或关系不明确时，调用 `官方 describe_model(group_id, model_names)` 一次查看直接相关的 1–5 个逻辑模型；不要逐表重复调用。默认折叠关联投影，需要具体跨模型字段时传 `expand_relation_fields=true`。
    - **阅读 `[KNOWLEDGE_BASE_OVERVIEW]` 中的知识库摘要**，特别注意数据相关性提示和约束（例如"X 数据与 Y 数据无相关性"）。如果知识库明确指出某些数据之间无关联，**不要**探查不相关模型。
-   - 先调用 `wren_recall_examples`，核对本库已发布确认与用户点赞的示例；核对指标、实体去重、时间和单位后重新查询。统一用 `wren_run_sql` 查询逻辑模型或明细视图；已发布 View 能直接覆盖问题时优先用 `wren_run_sql` 按视图名直接查询。展开 many 侧关联字段组，以单一逻辑模型的投影列查询，让 Wren 按 relationship condition 自动 JOIN；语义资产无法表达时显式 JOIN 是最后兜底。没有已发布 MDL 就说明不可问数，不尝试物理 SQL 回退。
-   - 如果仍然无法确定该用哪个模型：当前工具集里有 `agent_spawn` 时**委托 `data-explorer` 子代理**，把指标定义作为提示词传给它；没有时自己批量调用 `wren_describe_model` 对比语义结构。
+   - 先调用 `官方 recall_queries`，核对本库已发布确认与用户点赞的示例；核对指标、实体去重、时间和单位后重新查询。统一用 `官方 run_sql` 查询逻辑模型或明细视图；已发布 View 能直接覆盖问题时优先用 `官方 run_sql` 按视图名直接查询。展开 many 侧关联字段组，以单一逻辑模型的投影列查询，让 Wren 按 relationship condition 自动 JOIN；语义资产无法表达时显式 JOIN 是最后兜底。没有已发布 MDL 就说明不可问数，不尝试物理 SQL 回退。
+   - 如果仍然无法确定该用哪个模型：当前工具集里有 `agent_spawn` 时**委托 `data-explorer` 子代理**，把指标定义作为提示词传给它；没有时自己批量调用 `官方 describe_model` 对比语义结构。
 
-3. **先准备正式业务查询，避免纯摸底。** `wren_describe_model` 返回的字段与关系信息已足够写正式查询。看完模型后，**直接写回答用户问题的查询**——不要发 `SELECT COUNT(*)` / `SELECT MIN(date)` 等仅为了了解数据规模、日期范围的探查查询。在 SQL 中遵守：
+3. **先准备正式业务查询，避免纯摸底。** `官方 describe_model` 返回的字段与关系信息已足够写正式查询。看完模型后，**直接写回答用户问题的查询**——不要发 `SELECT COUNT(*)` / `SELECT MIN(date)` 等仅为了了解数据规模、日期范围的探查查询。在 SQL 中遵守：
    - 年份是筛选，不是分组粒度。跨月客户数在整个范围内 COUNT DISTINCT 客户身份，不能累加月度去重人数。TopN 明确分组实体、排序、并列规则；工具 SQL 不写 LIMIT/OFFSET，实际条数放在 limit 参数。召回示例中的 LIMIT 同样转换为 limit 参数。
    - 总是在 `WHERE` 子句中限定时间窗口——绝不"以防万一"地查询全部历史。
    - 总是 `SELECT` 明确的列清单——回答中绝不用 `SELECT *`。
@@ -31,13 +31,13 @@ description: 通过针对已配置数据源编写 SQL 查询、校验后呈现�
    - 多表 JOIN 前先判断**维表粒度**：若一个关联键在维表中对应多行（典型如用户×项目权限表、用户×角色表），必须先用 CTE 按关联键去重再 JOIN 明细表——`WITH u AS (SELECT DISTINCT account, department_name, position_name FROM 用户表) SELECT ... FROM 明细表 c JOIN u ON c.user_account = u.account`——否则扇出会让 `COUNT(*)` / `SUM` 静默放大。
    - 给不明显的筛选条件加注释（`-- 已剔除退款订单`）。
 
-4. **先执行校验，再汇报。** 所有已发布 View 和逻辑查询通过 `wren_run_sql(group_id, sql, question, limit)` 执行，按视图名查询时视图直接出现在 `FROM` 中。逻辑 SQL 只允许 SELECT / WITH。`question` 用中文描述本次业务问题。然后检查：
+4. **先执行校验，再汇报。** 所有已发布 View 和逻辑查询通过 `官方 run_sql(group_id, sql, question, limit)` 执行，按视图名查询时视图直接出现在 `FROM` 中。逻辑 SQL 只允许 SELECT / WITH。`question` 用中文描述本次业务问题。然后检查：
    - 行数在预期范围内（1 行、10 行、约 30 个按日分桶等）。行数出乎意料几乎总是 bug——要排查。
    - 分组列没有 `NULL`，除非那就是预期的分组。
    - 至少做一项数值合理性校验：一个已知总量、一个已知参照值、或与事实相符的最小 / 最大区间。
    - 任何一项不对劲，**都不要汇报数字**——先修正查询。
 
-5. **先完成所有工具，再撰写完整报告。** 每次 `wren_run_sql` 填写中文 `question` 和 `query_type`：回答业务问题用 `BUSINESS`，排查范围或异常用 `DIAGNOSTIC`。平台仅在用户点赞后保存成功业务查询；工具调用完成后输出完整最终答案。 使用这个固定结构：
+5. **先完成所有工具，再撰写完整报告。** 每次 `官方 run_sql` 填写中文 `question` 和 `query_type`：回答业务问题用 `BUSINESS`，排查范围或异常用 `DIAGNOSTIC`。平台仅在用户点赞后保存成功业务查询；工具调用完成后输出完整最终答案。 使用这个固定结构：
 
    ```
    ## 答案
@@ -48,7 +48,7 @@ description: 通过针对已配置数据源编写 SQL 查询、校验后呈现�
 
    ## 查询
    ```sql
-   <你通过 wren_run_sql 执行的确切查询>
+   <你通过 官方 run_sql 执行的确切查询>
    ```
 
    ## 数据来源与校验
@@ -64,8 +64,8 @@ description: 通过针对已配置数据源编写 SQL 查询、校验后呈现�
 - ❌ 汇报一个数字却不给出产生它的查询。
 - ❌ 用 `LIMIT N` 让"输出能装下"却不说明截掉了什么。
 - ❌ 只读一行数据就当作趋势汇报。
-- ❌ 凭空编造模型、字段或 `group_id`。不确定时先查阅 `[DATA_SOURCES_OVERVIEW]` / 调用 `wren_describe_model`，或（工具集中有 `agent_spawn` 时）委托 `data-explorer`。
-- ❌ 尝试绕过 Wren 访问 datasetId、sourceId、schema 或物理表；所有结构化问数统一走 `wren_run_sql`。
+- ❌ 凭空编造模型、字段或 `group_id`。不确定时先查阅 `[DATA_SOURCES_OVERVIEW]` / 调用 `官方 describe_model`，或（工具集中有 `agent_spawn` 时）委托 `data-explorer`。
+- ❌ 尝试绕过 Wren 访问 datasetId、sourceId、schema 或物理表；所有结构化问数统一走 `官方 run_sql`。
 - ❌ 把上一步查询结果字面量复制进 `IN (...)`（跨表筛选或补部门/职位这类维度属性都算）——改用 `JOIN` / CTE 让条件留在库内。
 - ❌ 问题含趋势/对比/考核语义却只交文字表格——查完数应主动升级可视化，不等用户提示。
 - ❌ 空结果时直接猜测业务不存在：先核查时间过滤、状态、连接和去重条件；必要的诊断查询不保存为业务示例。

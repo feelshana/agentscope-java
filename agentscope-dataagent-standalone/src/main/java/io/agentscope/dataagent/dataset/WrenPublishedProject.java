@@ -5,7 +5,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 import org.springframework.stereotype.Service;
@@ -141,7 +143,8 @@ public final class WrenPublishedProject {
                             copy(published, runtime);
                             Files.writeString(marker, version, StandardCharsets.UTF_8);
                         }
-                        copyExamples(
+                        mergeExamples(
+                                published.resolve("knowledge/sql"),
                                 likedProject(owner, group).resolve("knowledge/sql"),
                                 runtime.resolve("knowledge/sql"));
                         return runtime;
@@ -169,18 +172,38 @@ public final class WrenPublishedProject {
         }
     }
 
-    private static void copyExamples(Path from, Path to) throws IOException {
-        if (!Files.isDirectory(from)) return;
-        check(from);
+    private static void mergeExamples(Path published, Path liked, Path to) throws IOException {
+        check(published);
+        check(liked);
         check(to);
         Files.createDirectories(to);
-        try (var files = Files.list(from)) {
-            for (Path file :
-                    files.filter(Files::isRegularFile)
-                            .filter(p -> p.toString().endsWith(".md"))
-                            .toList())
-                Files.copy(
-                        file, to.resolve(file.getFileName()), StandardCopyOption.REPLACE_EXISTING);
+        Map<String, Path> sources = new LinkedHashMap<>();
+        for (Path file : examples(published)) sources.put(file.getFileName().toString(), file);
+        for (Path file : examples(liked)) {
+            // Both official stores can generate query.md for different Chinese questions.
+            // Only derived filenames change; preserve the official Markdown bytes verbatim.
+            String name = "liked-" + file.getFileName();
+            while (sources.containsKey(name)) name = "liked-" + name;
+            sources.put(name, file);
+        }
+        for (var entry : sources.entrySet()) {
+            Path target = to.resolve(entry.getKey());
+            if (!Files.isRegularFile(target) || Files.mismatch(entry.getValue(), target) != -1)
+                Files.copy(entry.getValue(), target, StandardCopyOption.REPLACE_EXISTING);
+        }
+        // This directory is a projection of the two sources, never an editable source itself.
+        for (Path file : examples(to)) {
+            if (!sources.containsKey(file.getFileName().toString())) Files.delete(file);
+        }
+    }
+
+    private static List<Path> examples(Path root) throws IOException {
+        if (!Files.isDirectory(root)) return List.of();
+        try (var files = Files.list(root)) {
+            return files.filter(Files::isRegularFile)
+                    .filter(p -> p.toString().endsWith(".md"))
+                    .sorted()
+                    .toList();
         }
     }
 

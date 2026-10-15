@@ -173,7 +173,7 @@ class OfficialWrenCliIntegrationTest {
         var repository =
                 mock(io.agentscope.dataagent.web.persistence.jpa.DatasetGroupRepository.class);
         when(repository.findById("fixture")).thenReturn(java.util.Optional.of(group));
-        var deployed = new io.agentscope.dataagent.dataset.WrenPublishedProject(props, groups);
+        var deployed = new io.agentscope.dataagent.dataset.WrenPublishedProject(props, groups, cli);
         var registry =
                 new io.agentscope.dataagent.runtime.wren.WrenInstanceRegistry(
                         props, profileHome, deployed, repository);
@@ -206,7 +206,7 @@ class OfficialWrenCliIntegrationTest {
                                     null))
                     .contains("matches", "全年营收是多少");
         } finally {
-            registry.invalidate("fixture");
+            registry.close();
         }
     }
 }

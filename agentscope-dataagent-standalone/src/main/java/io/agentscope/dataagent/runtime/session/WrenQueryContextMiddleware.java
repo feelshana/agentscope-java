@@ -38,9 +38,10 @@ public final class WrenQueryContextMiddleware implements HarnessRuntimeMiddlewar
                                     调用节奏：先遵循官方 usage。当前会话中已有的技能正文、工具 schema、工程说明和模型字段可以复用，
                                     不必每个问题重新 load_skill、wren_list_tools、get_instructions 或列出全部模型/Cube。
                                     仅在上下文缺失、知识库/发布版本变化或工具明确报告失效时重新获取；不同知识库的信息不能混用。
-                                    每个新问题仍按官方技能召回相关示例，按需获取相关模型和业务口径；不要用旧查询结果替代本次执行。
+                                    每个新问题仍通过官方 recall_queries 召回相关示例，按需调用官方 get_instructions、describe_model 或 describe_cube；不要用旧查询结果替代本次执行。
                                     结果已足够支持答案时直接回答或分析；仅在错误、疑点、缺失证据或用户要求核验时增加诊断查询。
                                     不为凑步骤查询全表统计，也不省略会影响答案正确性的必要验证。
+                                    Top N 或单条结果优先使用官方 query_cube 的 order_by 与 limit；没有合适 Cube 时使用 run_sql 的标准 SQL（可按官方语法使用 LIMIT/OFFSET）。不要把 View（例如 valid_orders）传给 describe_model；View 用 get_mdl/describe_schema，Cube 用 describe_cube。
                                     """);
                             return text.toString();
                         })

@@ -144,9 +144,9 @@ public class DataAgentConfig {
             wren_call_tool 的 arguments 原样遵循官方 schema。get_instructions、上下文、知识、
             memory、SQL 与 Cube 的使用方式以官方指导及实际返回为准。
             查询只能使用已授权已发布工程；不得猜测物理表、切换连接或访问其他租户。
-            wren_read_knowledge 按原文读取当前已发布知识，不读取草稿。
+            业务规则、知识与相似问答均通过 wren_call_tool 调用官方 get_instructions、list_knowledge、recall_queries；不调用平台自定义知识检索。
             每个新问题先调用一次 wren_call_tool 的 recall_queries，使用当前问题作为 question，limit 使用官方默认的小数量；它是相似业务问答的唯一召回入口。
-            不要通过 wren_read_knowledge 遍历 knowledge/sql 文件来替代 recall_queries；只有需要阅读业务规则原文或召回结果不足时才读取知识文件。
+            不要遍历工程文件或调用平台自定义检索；业务规则、知识目录和相似问答只通过官方 get_instructions、list_knowledge、recall_queries 获取。
             answer_question 是平台可选的答案来源标注，不会传入 Wren：
             仅对准备实际用于最终答案的业务查询填写对应问题，诊断查询不要填写。
             一条 SQL 只回答子问题时标注该子问题，不让局部 SQL 冒充完整原问题。
@@ -156,6 +156,8 @@ public class DataAgentConfig {
             保留证据中的空值与空结果，不擅自补零；不补造未声明的单位或时间范围。
             只呈现最终结论、必要口径和可核实依据，不呈现内部草稿推理。
             用户未要求时不主动导出文件。回答及图表使用简体中文。
+            语言硬约束：所有面向用户的思考摘要、工具调用前说明、工具调用后说明和最终回答必须使用简体中文；不要输出英文解释。SQL、Python、官方工具原始字段和错误原文可以保留原格式。
+            Top N 或单条结果优先使用官方 query_cube 的 order_by 与 limit；没有合适 Cube 时使用 run_sql 的标准 SQL（可按官方语法使用 LIMIT/OFFSET）。不要把 View（例如 valid_orders）传给 describe_model；View 用 get_mdl/describe_schema，Cube 用 describe_cube。
             """;
 
     /** Platform execution boundaries only; modeling knowledge comes from official Wren skills. */
@@ -190,11 +192,13 @@ public class DataAgentConfig {
             不切换租户、工程、连接或平台管理文件，不使用宿主任意 shell。模型、视图、Cube 和知识遵循官方规范。
             Wren context build 只生成草稿 MDL，不代表已发布；需要上线时引导用户使用页面发布入口。
             问题表格是可选的用户输入，不是开始建模或发布的必经步骤。
+            对本轮已按官方技能成功验证的推荐问题，完成对应的 memory store --nl/--sql 写回（建模示例使用官方 source:enrich 标签），不要把问答保存留为“如需可继续”的遗漏步骤。
+            保存仍须原生写授权；用户拒绝或尚未成功验证时不得声称已保存。仅写问题、规则或执行 memory index 不等于已保存问答；收尾核对 knowledge/sql 中的问题与 SQL，并说明需页面显式发布后才能用于问数召回。
             不把字段样例当作统计结果，不编造业务定义或确认状态。
 
             # 语言
 
-            所有输出使用简体中文。最终说明实际修改、检查结果和可执行的下一步。
+            所有面向用户的思考摘要、工具调用前说明、工具调用后说明和最终回答使用简体中文；不要输出英文解释。官方 CLI 原始输出、SQL、Python 和文件路径可以保留原格式。最终说明实际修改、检查结果和可执行的下一步。
             """;
 
     @Value("${dataagent.openai.api-key:}")
@@ -496,7 +500,7 @@ public class DataAgentConfig {
                     // [KNOWLEDGE_BASE_OVERVIEW] are rebuilt from the per-call DatasetScope
                     // and appended to the system prompt on every turn. The MDL catalog exposes
                     // only a compact directory of published logical models and cubes; field-level
-                    // details are retrieved on demand through wren_describe_model.
+                    // Details are retrieved on demand through the official describe_model tool.
                     if (ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId)) {
                         b.middleware(
                                 new io.agentscope.dataagent.runtime.session

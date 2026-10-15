@@ -82,6 +82,7 @@ public final class SessionTurnParser {
                     continue;
                 }
                 if ("tool_result".equals(type)) {
+                    String output = node.has("output") ? jsonText(node.get("output")) : null;
                     turns.add(
                             new TurnEntry(
                                     id,
@@ -91,7 +92,7 @@ public final class SessionTurnParser {
                                     timestampMs,
                                     text(node, "name"),
                                     null,
-                                    node.has("output") ? node.get("output").asText() : null,
+                                    output,
                                     text(node, "toolCallId")));
                     continue;
                 }
@@ -125,6 +126,23 @@ public final class SessionTurnParser {
     private static String text(JsonNode node, String field) {
         JsonNode v = node.path(field);
         return v.isMissingNode() || v.isNull() ? null : v.asText();
+    }
+
+    /** Unwraps the JSON string envelope used by persisted harness tool results. */
+    private static String jsonText(JsonNode value) {
+        if (value == null || value.isNull()) return null;
+        String result = value.isTextual() ? value.asText() : value.toString();
+        for (int i = 0; i < 2; i++) {
+            if (result == null || result.isBlank()) break;
+            try {
+                JsonNode decoded = MAPPER.readTree(result);
+                if (!decoded.isTextual()) break;
+                result = decoded.asText();
+            } catch (Exception ignored) {
+                break;
+            }
+        }
+        return result;
     }
 
     /**

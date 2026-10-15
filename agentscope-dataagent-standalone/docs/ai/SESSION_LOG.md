@@ -1,5 +1,17 @@
 # 交接历史
 
+## 2026-10-14 22:56 +08:00｜checkpoint｜官方 SQL 契约对齐
+
+- 日志分析确认 Docker 导致的 run_python 恢复错误与 Wren 无关；建模流程除一次已正确修复的 write_file 预检外均成功。
+- Wren 官方文档允许 `wren --sql` 使用 LIMIT，Cube 查询使用结构化 limit；已移除平台对 run_sql LIMIT/OFFSET 的额外拒绝，回执记录 SQL 末尾 limit，并补充 View/Model/Cube 入口提示。
+- 定向测试 14 项通过。服务仍需重启后做真实问数验收；未提交 Git。
+
+## 2026-10-14 17:57 +08:00｜checkpoint｜点赞回执、中文与 Limit
+
+- 当前 Codex 会话修复持久化工具结果双层 JSON 解包，并补充回归测试；收紧问数及建模中文提示，补充 query_cube 排序与 arguments.limit 指导，修正新增提示的乱码。
+- 本次 22 项定向测试、Spotless 和 Java 编译通过；前端构建在本轮较早阶段通过。全量测试、package、服务重启和真实点赞/召回尚未在最终改动后验证。未提交 Git，工作区既有改动保留。
+- 下一步按 CURRENT_TASK.md 重启后验收中文、limit=1、candidates>0/store/recall。
+
 只追加简短阶段记录；详细进度以 CURRENT_TASK.md 为准。不推断账号身份，不复制完整聊天或秘密配置。
 
 ## 2026-10-10（Asia/Shanghai）｜初始化 checkpoint
@@ -156,12 +168,12 @@
 - 结论状态：已完成日志分析，未修改业务代码；后续待讨论/实施的是问数每个新问题改为一次官方 `recall_queries`，并按 Wren 实际后端决定是否启用向量索引。历史示例按用户要求暂不处理。
 - 验证：本次仅读取日志与共享记忆并检查 Git 状态；未运行测试、未重启服务、未提交 Git。
 
-## 2026-10-12 �����������ٷ� Wren ���� memory
-- ������ ADR 0073 �� spec 062����ȷʹ�ùٷ� wrenai[memory-onnx]��LanceDB/ONNX����֪ʶ������Ҳ�Ǩ����ʷ���ݡ�
-- WrenProcessEnvironment Ϊ CLI/MCP �ӽ���ע�� WREN_MEMORY_BACKEND=lancedb �� WREN_EMBEDDING_BACKEND=onnx Ĭ��ֵ��
-- WrenPublishedProject ��������ǰ��� backend=lancedb���ɱ�ǻᴥ���ٷ� memory index����ɺ�У�� memory status��
-- ����ϵͳ��ʾҪ��ÿ���������Ƚ���һ�� recall_queries����ֹ���� knowledge/sql ����ٻء�
-- ��֤��spotless:apply ����ɣ�package -DskipTests ����ִ�У�δ��������δ�ύ Git��
+## 2026-10-12 �����������ٷ� Wren ���� memory
+- ������ ADR 0073 �� spec 062����ȷʹ�ùٷ� wrenai[memory-onnx]��LanceDB/ONNX����֪ʶ������Ҳ�Ǩ����ʷ���ݡ�
+- WrenProcessEnvironment Ϊ CLI/MCP �ӽ���ע�� WREN_MEMORY_BACKEND=lancedb �� WREN_EMBEDDING_BACKEND=onnx Ĭ��ֵ��
+- WrenPublishedProject ��������ǰ��� backend=lancedb���ɱ�ǻᴥ���ٷ� memory index����ɺ�У�� memory status��
+- ����ϵͳ��ʾҪ��ÿ���������Ƚ���һ�� recall_queries����ֹ���� knowledge/sql ����ٻء�
+- ��֤��spotless:apply ����ɣ�package -DskipTests ����ִ�У�δ�������δ�ύ Git��
 
 
 ## 2026-10-13 向量 memory 运行验证 checkpoint
@@ -200,3 +212,27 @@
 - candidates 现在在官方回合完全缺失时允许使用服务端 WREN_QUERY_RECEIPT 作为权威来源，仍校验 owner、BUSINESS、question、SQL 和工具类型；存在不匹配的官方调用时继续拒绝，保持安全。
 - AnswerQueryMemoryTest 3 项已通过；未重启服务、未提交 Git。
 
+
+## 2026-10-13 19:05 +08:00 — 问数工具链与多会话日志评估 checkpoint
+- 用户澄清：`logs/LLM.log` 中的 6 个问题分别来自 6 个新对话，不能把跨块调用当作同一会话的上下文复用。
+- 证据：每个问题块均出现官方 usage 首次查询指引；语义查询实际均通过 `wren_call_tool` 转发至 Wren MCP 的 `recall_queries`、`run_sql`/`query_cube` 等官方工具。
+- 现状差距：`DataToolkitRegistrar` 仍同时注册 `DataAgentToolkit`、`WrenMcpToolkit`（官方 MCP 适配）和旧 `WrenToolkit`；`DataDynamicContextMiddleware` 仍注入 `wren_run_sql`/`wren_recall_examples` 等旧工具名，造成工具面和提示词竞争。`retrieve_evidence`、`wren_read_knowledge` 是平台自定义工具；`run_python`/`render_chart` 属于结果分析/展示，不是语义查询。
+- 日志现象：新会话的重复发现、技能加载和知识读取部分由官方 usage 的首次查询流程触发；额外冗余来自旧提示词/自定义知识读取。一次 `wren_call_tool` 曾因缺少 `arguments` 参数失败。部分官方 `run_sql` SQL 仍带显式 `LIMIT`，与项目 Wren 0.15.0 连接器兼容约束不一致。
+- 未实施改动：本轮仅分析，未移除工具或修改提示词；前端 `WrenToolResult` 已有官方 JSON 结构化展示实现，但旧 `WrenToolkit` 结果仍走旧 Markdown 展示。
+- 下一步：按“最新已发布 MDL + 官方 Wren MCP/CLI”为唯一语义查询入口，移除 data-agent 对旧 `WrenToolkit`/`retrieve_evidence` 的注册与旧提示词引用；保留 `wren_call_tool` 作为按知识库动态适配官方 MCP 的边界，保留 Python/图表作为查询结果后处理；补充 `run_sql` 参数约束、工具注册测试和日志验收。
+
+## 2026-10-14｜checkpoint｜官方 Wren 问数工具收敛
+
+- 完成 ADR 0074/spec 064 与实现：移除平台自定义检索/知识读取工具运行时注册，旧 WrenToolkit 不再注册；仅保留官方 Wren MCP 适配器、run_python、render_chart。
+- 统一问数上下文、系统提示词、本地技能和测试中的官方工具名；run_sql 拒绝显式 LIMIT/OFFSET，查询绑定最新发布 MDL。
+- 验证通过：后端全量 test、Maven package -DskipTests、前端 npm run build、git diff --check。
+- 未提交 Git，未重启服务；真实运行验收仍需重启后新建会话确认工具列表与点赞 memory recall。
+
+## 2026-10-15｜SQL 问答对管理与视图 404 修复
+
+- 已新增 ADR 0075 与 spec 065。
+- 新增 SqlQaExampleService 与语义建模 API /sql-examples，覆盖建模和点赞来源。
+- 修复视图路径回退 metadata.yml。
+- 验证 Maven package、前端 build、Spotless 通过；未提交、未重启。
+
+- 修复 SemanticModelingController 多构造器未标注注入导致的 BeanCreationException；Spotless/package 通过。

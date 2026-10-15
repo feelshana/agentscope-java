@@ -98,7 +98,10 @@ public class AnswerQueryMemory {
             Feedback previous = old.answers().get(key);
             if (previous != null
                     && previous.vote().equals(vote)
-                    && !"FAILED".equals(previous.memoryStatus())) return result(previous);
+                    && !"FAILED".equals(previous.memoryStatus())
+                    && !("UP".equals(vote)
+                            && "NONE".equals(previous.memoryStatus())
+                            && !candidates.isEmpty())) return result(previous);
             Map<String, Feedback> answers = new LinkedHashMap<>(old.answers());
             if ("DOWN".equals(vote)) {
                 Feedback negative =
@@ -195,7 +198,7 @@ public class AnswerQueryMemory {
                                         .map(SqlExampleRecall.Example::content)
                                         .collect(java.util.stream.Collectors.joining("\n\n")))
                         + "\n"
-                        + "示例仅供参考，核对时间、口径和字段后重新查询；示例中的 LIMIT 转为 wren_run_sql 的 limit 参数，工具 SQL 中不写"
+                        + "示例仅供参考，核对时间、口径和字段后重新查询；示例中的 LIMIT 转为官方 run_sql 的 limit 参数，工具 SQL 中不写"
                         + " LIMIT。";
             } catch (Exception e) {
                 return "召回不可用：官方 Wren 记忆初始化、同步或结果解析失败，请检查 CLI 与记忆依赖。";
@@ -242,12 +245,14 @@ public class AnswerQueryMemory {
         Map<String, Pair> successful = new LinkedHashMap<>();
         List<JsonNode> calls = new ArrayList<>();
         Map<String, JsonNode> officialCalls = new LinkedHashMap<>();
+        List<JsonNode> officialInputs = new ArrayList<>();
         for (int i = start; i < end; i++) {
             TurnEntry turn = turns.get(i);
-            if ("wren_call_tool".equals(turn.toolName())
-                    && turn.toolInput() != null
-                    && turn.toolCallId() != null)
-                officialCalls.put(turn.toolCallId(), json(turn.toolInput()));
+            if ("wren_call_tool".equals(turn.toolName()) && turn.toolInput() != null) {
+                JsonNode input = json(turn.toolInput());
+                officialInputs.add(input);
+                if (turn.toolCallId() != null) officialCalls.put(turn.toolCallId(), input);
+            }
             if ("wren_call_tool".equals(turn.toolName())
                     && turn.toolResult() != null
                     && !turn.toolResult().startsWith("error:")) {
@@ -278,10 +283,18 @@ public class AnswerQueryMemory {
                         // server-generated receipt remains intact. The receipt is authoritative
                         // for a successful Wren call; fall back to it after tenant/type/content
                         // checks instead of silently dropping a liked answer.
-                        List<JsonNode> matchedCalls =
-                                matched == null && officialCalls.isEmpty()
-                                        ? java.util.Collections.singletonList(null)
-                                        : matched == null ? List.of() : List.of(matched);
+                        List<JsonNode> matchedCalls;
+                        if (matched != null) {
+                            matchedCalls = List.of(matched);
+                        } else if (officialInputs.isEmpty()) {
+                            matchedCalls = java.util.Collections.singletonList(null);
+                        } else if (turn.toolCallId() == null) {
+                            // Validate every candidate below: the same question can have multiple
+                            // SQLs.
+                            matchedCalls = officialInputs;
+                        } else {
+                            matchedCalls = List.of();
+                        }
                         for (JsonNode call : matchedCalls) {
                             String recordedQuestion =
                                     call == null
@@ -299,6 +312,13 @@ public class AnswerQueryMemory {
                                             && !tool.equals(call.path("tool_name").asText(""))))
                                 continue;
                             JsonNode args = call == null ? null : call.path("arguments");
+                            if (call != null) {
+                                String recordedType = call.path("query_type").asText("");
+                                if (recordedType.isBlank())
+                                    recordedType = args.path("query_type").asText("");
+                                if (!recordedType.isBlank()
+                                        && !"BUSINESS".equalsIgnoreCase(recordedType)) continue;
+                            }
                             if (args != null && args.path("sql_only").asBoolean(false)) continue;
                             if (args != null
                                     && "run_sql".equals(tool)

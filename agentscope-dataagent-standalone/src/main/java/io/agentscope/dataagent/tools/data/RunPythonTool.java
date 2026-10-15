@@ -130,7 +130,7 @@ public final class RunPythonTool {
                     用户问趋势/对比/构成/完成得怎么样等视觉分析问题时，无需明说"画图"也应主动可视化：\
                     查到数据后直接用本工具（或 render_chart）生成图表，由问题性质判定而非字面提示。\
                     建议分两次调用：先传探查代码（shape/dtypes/head）确认列名与取值范围，再传正式分析代码。\
-                    wren_run_sql / wren_query_cube 返回带「数据文件： data/<文件名>.csv」行时，\
+                    官方 run_sql / query_cube 返回带「数据文件： data/<文件名>.csv」行时，\
                     直接用 pd.read_csv('data/<文件名>.csv') 读取（工作目录即沙箱会话目录），\
                     禁止把查询结果抄写成 Python 字面量——数据行必须走文件通道。\
                     默认仅自动恢复最近的有限数量分析输入；历史文件缺失时调用 restore_artifact 后重试。\

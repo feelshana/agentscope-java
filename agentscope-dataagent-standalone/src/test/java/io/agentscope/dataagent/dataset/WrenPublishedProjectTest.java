@@ -56,12 +56,51 @@ class WrenPublishedProjectTest {
         Files.writeString(liked.resolve("liked.md"), "点赞样例");
         service.indexed("alice", "g");
         assertThat(calls.stream().filter(args -> "index".equals(args.get(1)))).hasSize(2);
-        assertThat(Files.readString(runtime.resolve("knowledge/sql/liked.md"))).isEqualTo("点赞样例");
+        assertThat(Files.readString(runtime.resolve("knowledge/sql/liked-liked.md")))
+                .isEqualTo("点赞样例");
         assertThatThrownBy(() -> service.prepare("bob", "g")).isInstanceOf(DatasetException.class);
         Files.writeString(published.resolve("target/mdl.json"), "新版本");
         group.setMdlVersion(2);
         service.indexed("alice", "g");
         assertThat(calls.stream().filter(args -> "index".equals(args.get(1)))).hasSize(3);
-        assertThat(Files.readString(runtime.resolve("knowledge/sql/liked.md"))).isEqualTo("点赞样例");
+        assertThat(Files.readString(runtime.resolve("knowledge/sql/liked-liked.md")))
+                .isEqualTo("点赞样例");
+    }
+
+    @Test
+    void sameOfficialFilenamesNeverOverwritePublishedExamplesOrLeakDrafts() throws Exception {
+        var props = new WrenProperties("wren", home.toString(), "test", "duckdb", 30);
+        var groups = mock(DatasetGroupService.class);
+        var group = new DatasetGroupEntity("g", "alice", "销售", "");
+        group.setMdlVersion(1);
+        when(groups.getGroup("alice", "g")).thenReturn(group);
+        when(groups.getGroup("bob", "g")).thenThrow(new DatasetException("不存在", 404));
+        var service = new WrenPublishedProject(props, groups);
+        Path published = props.groupRoot("g").resolve("published");
+        Files.createDirectories(published.resolve("target"));
+        Files.writeString(published.resolve("target/mdl.json"), "{}");
+        Files.createDirectories(published.resolve("knowledge/sql"));
+        Files.writeString(published.resolve("knowledge/sql/query.md"), "建模推荐问答");
+        Files.writeString(published.resolve("knowledge/sql/liked-query.md"), "另一条建模问答");
+        Path liked = service.likedProject("alice", "g").resolve("knowledge/sql");
+        Files.createDirectories(liked);
+        Files.writeString(liked.resolve("query.md"), "点赞问答");
+        Path draft = props.groupRoot("g").resolve("workspace/knowledge/sql");
+        Files.createDirectories(draft);
+        Files.writeString(draft.resolve("private.md"), "未发布问答");
+        Path runtime = service.prepare("alice", "g").resolve("knowledge/sql");
+        assertThat(Files.readString(runtime.resolve("query.md"))).isEqualTo("建模推荐问答");
+        assertThat(Files.readString(runtime.resolve("liked-query.md"))).isEqualTo("另一条建模问答");
+        assertThat(Files.readString(runtime.resolve("liked-liked-query.md"))).isEqualTo("点赞问答");
+        assertThat(runtime.resolve("private.md")).doesNotExist();
+        assertThatThrownBy(() -> service.prepare("bob", "g")).isInstanceOf(DatasetException.class);
+        assertThat(Files.readString(published.resolve("knowledge/sql/query.md")))
+                .isEqualTo("建模推荐问答");
+        Files.delete(published.resolve("knowledge/sql/liked-query.md"));
+        group.setMdlVersion(2);
+        service.prepare("alice", "g");
+        assertThat(Files.readString(runtime.resolve("liked-query.md"))).isEqualTo("点赞问答");
+        assertThat(runtime.resolve("liked-liked-query.md")).doesNotExist();
+        assertThat(Files.readString(runtime.resolve("query.md"))).isEqualTo("建模推荐问答");
     }
 }

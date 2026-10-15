@@ -6,6 +6,8 @@ import Markdown from './Markdown';
 import PythonCodeBlock from './PythonCodeBlock';
 import { ArtifactInfo, parseResult, artifactSrc, downloadArtifact, deduplicateArtifacts } from './PythonCodeBlock';
 import { formatResult, ToolInspectPayload } from './ToolCallBlock';
+import WrenToolResult from './WrenToolResult';
+import { wrenToolLabel, parseWrenResult } from '../utils/wrenToolPresentation';
 
 export interface ToolInspectorProps {
   tool: ToolInspectPayload;
@@ -60,6 +62,7 @@ function Section({
     <div style={{
       border: noBorder ? 'none' : `1px solid ${C.border}`,
       borderRadius: 8, overflow: 'hidden', background: C.bg,
+      flexShrink: 0,
       boxShadow: noBorder ? 'none' : '0 1px 2px rgba(0,0,0,0.03)',
     }}>
       <div
@@ -287,6 +290,9 @@ function extractPythonCode(input?: string): string | null {
 
 
 function ToolDetail({ name, result }: { name: string; result: string }) {
+  if (['wren_call_tool', 'wren_list_tools', 'wren_read_knowledge'].includes(name)) {
+    return <WrenToolResult result={result} />;
+  }
   let parsed: Record<string, unknown> | null = null;
   let truncatedJson = false;
   try {
@@ -461,8 +467,9 @@ export default function ToolInspector({ tool, onClose }: ToolInspectorProps) {
   )};
   const title = isPythonArtifacts
     ? `生成产物（${(() => { let c = 0; for (const t of tool.pythonTools ?? []) { if (!t.result) continue; try { c += parseResult(t.result).artifacts.length; } catch {/* */} } return c; })()} 个文件）`
-    : meta.label;
-  const isError = !isPythonArtifacts && tool.result?.startsWith('error:') === true;
+    : wrenToolLabel(tool.name, tool.input) ?? meta.label;
+  const isError = !isPythonArtifacts && (tool.result?.startsWith('error:') === true
+    || (tool.name.startsWith('wren_') && parseWrenResult(tool.result ?? '').error));
 
   const [inputOpen, setInputOpen] = useState(false);
   const [resultOpen, setResultOpen] = useState(true);
@@ -532,7 +539,7 @@ export default function ToolInspector({ tool, onClose }: ToolInspectorProps) {
 
             {/* Result - expand to fill available space */}
             {tool.result !== undefined ? (
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+              <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
                 <Section title="结果" icon={
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 } defaultOpen={resultOpen}>

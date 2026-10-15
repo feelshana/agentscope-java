@@ -16,25 +16,16 @@
 package io.agentscope.dataagent.tools.data;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
-import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.tool.Tool;
-import io.agentscope.dataagent.dataset.DatasetContextProvider;
-import io.agentscope.dataagent.dataset.DatasetScope;
 import java.util.Arrays;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** Verifies the remaining knowledge-retrieval and chart tools of {@link DataAgentToolkit}. */
+/** Verifies the remaining chart presentation tool of {@link DataAgentToolkit}. */
 class DataAgentToolkitTest {
 
-    private static final RuntimeContext RC = null;
-    private static final DataAgentToolkit TOOLKIT = new DataAgentToolkit(null, null, null);
+    private static final DataAgentToolkit TOOLKIT = new DataAgentToolkit(null);
 
     @Test
     void physicalQueryToolsAreRemoved() {
@@ -46,7 +37,7 @@ class DataAgentToolkitTest {
                         .toList();
 
         assertThat(toolNames)
-                .contains("retrieve_evidence", "render_chart")
+                .containsExactly("render_chart")
                 .doesNotContain("prepare_data_context", "query_structured_data");
     }
 
@@ -85,31 +76,5 @@ class DataAgentToolkitTest {
     void renderChartRejectsUnchartableData() {
         assertThat(TOOLKIT.renderChart("q", List.of("a"), List.of(List.of("x")), null, null))
                 .startsWith("error:");
-    }
-
-    @Test
-    void retrieveEvidenceReturnsCitedPassages() {
-        DatasetContextProvider provider = mock(DatasetContextProvider.class);
-        when(provider.evidenceFor(eq("bob"), any(), anyString(), eq(3)))
-                .thenReturn("【知识库「KB」 › 考核口径】\n- 日活跃用户目标 1000 万");
-        DataAgentToolkit tk = new DataAgentToolkit(provider, null, null);
-
-        String out = tk.retrieveEvidence(new DatasetScope("bob"), RC, "考核目标");
-
-        assertThat(out).startsWith("## 检索结果");
-        assertThat(out).contains("【知识库「KB」 › 考核口径】");
-        assertThat(out).contains("目标 1000 万");
-    }
-
-    @Test
-    void retrieveEvidenceKeepsNotFoundWording() {
-        DatasetContextProvider provider = mock(DatasetContextProvider.class);
-        when(provider.evidenceFor(any(), any(), anyString(), org.mockito.ArgumentMatchers.anyInt()))
-                .thenReturn(null);
-        DataAgentToolkit tk = new DataAgentToolkit(provider, null, null);
-
-        // The not-found wording stays byte-stable: the LLM already adapts to this failure shape
-        assertThat(tk.retrieveEvidence(new DatasetScope("bob"), RC, "考核目标"))
-                .isEqualTo("知识库中没有与 '考核目标' 相关的内容。");
     }
 }

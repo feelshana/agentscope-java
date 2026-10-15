@@ -71,8 +71,8 @@ class SharedSkillContentTest {
                 .contains("禁止把上一步查询结果作为字面量复制进")
                 // the ban must also cover fetching a dimension attribute, not just filtering
                 .contains("补维度属性")
-                .contains("wren_run_sql")
-                .contains("wren_describe_model");
+                .contains("官方 run_sql")
+                .contains("官方 describe_model");
     }
 
     /** Logical-model discovery is batched through the Wren metadata tool. */
@@ -81,7 +81,7 @@ class SharedSkillContentTest {
         assertThat(read(SQL_ANALYSIS))
                 .contains("1–5 个逻辑模型")
                 .contains("model_names")
-                .contains("wren_describe_model")
+                .contains("官方 describe_model")
                 .contains("[DATA_SOURCES_OVERVIEW]");
     }
 
@@ -89,7 +89,7 @@ class SharedSkillContentTest {
     void sqlAnalysisUsesSqlAndRelevantExamples() {
         assertThat(read(SQL_ANALYSIS))
                 .contains(
-                        "wren_recall_examples",
+                        "官方 recall_queries",
                         "COUNT DISTINCT",
                         "query_type",
                         "BUSINESS",
@@ -137,9 +137,9 @@ class SharedSkillContentTest {
     void skillsUseWrenOnlyChannel() {
         for (String path : List.of(SQL_ANALYSIS, PYTHON_ANALYSIS)) {
             assertThat(read(path))
-                    .contains("wren_run_sql")
+                    .contains("官方 run_sql")
                     .doesNotContain("wren_query_cube")
-                    .contains("wren_describe_model")
+                    .contains("官方 describe_model")
                     .doesNotContain("prepare_data_context")
                     .doesNotContain("query_structured_data");
         }
@@ -161,11 +161,10 @@ class SharedSkillContentTest {
     @Test
     void pythonAnalysisKeepsCurrentToolNamesAndChineseLabelRule() {
         assertThat(read(PYTHON_ANALYSIS))
-                .contains("wren_describe_model")
-                .contains("wren_run_sql")
+                .contains("官方 describe_model")
+                .contains("官方 run_sql")
                 .doesNotContain("wren_query_cube")
                 .contains("[DATA_SOURCES_OVERVIEW]")
-                .contains("retrieve_evidence")
                 .contains("run_python")
                 .contains("图表标题/坐标轴/图例/注释使用英文")
                 .contains("Noto Sans CJK SC");
@@ -173,7 +172,7 @@ class SharedSkillContentTest {
 
     @Test
     void chartRenderingPointsAtEvidenceRetrieval() {
-        assertThat(read(CHART_RENDERING)).contains("retrieve_evidence").contains("render_chart");
+        assertThat(read(CHART_RENDERING)).contains("官方 get_instructions").contains("render_chart");
     }
 
     /**

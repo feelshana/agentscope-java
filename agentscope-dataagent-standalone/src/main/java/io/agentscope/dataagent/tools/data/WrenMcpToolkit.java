@@ -8,9 +8,6 @@ import io.agentscope.dataagent.dataset.DatasetException;
 import io.agentscope.dataagent.dataset.WrenPublishedProject;
 import io.agentscope.dataagent.dataset.WrenQueryAccess;
 import io.agentscope.dataagent.runtime.wren.WrenQueryGateway;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -71,8 +68,10 @@ public final class WrenMcpToolkit {
             name = "wren_call_tool",
             description =
                     "调用当前授权已发布 Wren 工程的官方 MCP 工具。tool_name 与 arguments 必须遵循 wren_list_tools 的官方"
-                            + " schema；arguments 原样传给官方服务，不增加平台字段。返回官方原始输出，执行的数据可交给"
-                            + " Python。answer_question 是可选答案来源标注，仅业务查询使用，诊断查询省略；只在最终答案点赞后保存样例。")
+                        + " schema；arguments 原样传给官方服务，不增加平台字段。返回官方原始 JSON，执行的数据可交给"
+                        + " Python。answer_question 是可选答案来源标注，仅业务查询使用，诊断查询省略；只在最终答案点赞后保存样例。run_sql"
+                        + " 只能使用逻辑模型，并遵循官方 Wren SQL 语法（包括 LIMIT/OFFSET）；query_cube 使用官方"
+                        + " limit/offset 参数。")
     public String callTool(
             RuntimeContext context,
             @ToolParam(
@@ -140,7 +139,7 @@ public final class WrenMcpToolkit {
                                     ? String.valueOf(args.get("sql"))
                                     : cubeSql(selected.getId(), args);
                     if (sql != null && !sql.isBlank()) {
-                        int limit = args.get("limit") instanceof Number n ? n.intValue() : 1000;
+                        int limit = queryLimit(tool, args);
                         Map<String, Object> receipt =
                                 Map.of(
                                         "groupId",
@@ -194,46 +193,18 @@ public final class WrenMcpToolkit {
         }
     }
 
-    @Tool(
-            name = "wren_read_knowledge",
-            description =
-                    "通过通用文件读取当前已发布 Wren knowledge 原文，包括 glossary/metrics/caveats/rules/sql。path 为"
-                            + " knowledge/ 下相对文件路径；不读取草稿、宿主文件或隐藏目录。省略路径列出文件。")
-    public String readKnowledge(
-            RuntimeContext context,
-            @ToolParam(name = "group_id", description = "当前知识库名称或 ID", required = false)
-                    String group,
-            @ToolParam(name = "path", description = "knowledge/ 下相对文件路径，省略则列出文件", required = false)
-                    String relative) {
-        try {
-            var selected = access.resolve(context, group);
-            Path root =
-                    projects.prepare(context.getUserId(), selected.getId()).resolve("knowledge");
-            WrenPublishedProject.check(root);
-            if (relative == null || relative.isBlank()) {
-                if (!Files.isDirectory(root)) return "当前工程没有 knowledge 文件";
-                try (var files = Files.walk(root)) {
-                    return JSON.writeValueAsString(
-                            files.filter(Files::isRegularFile)
-                                    .map(p -> root.relativize(p).toString().replace('\\', '/'))
-                                    .toList());
-                }
-            }
-            String path = relative.replace('\\', '/');
-            if (path.startsWith("/")
-                    || path.contains(":")
-                    || path.contains("\0")
-                    || java.util.Arrays.stream(path.split("/"))
-                            .anyMatch(p -> p.startsWith(".") || p.endsWith(".") || p.endsWith(" ")))
-                throw new DatasetException("知识路径越界", 403);
-            Path file = root.resolve(path).normalize();
-            if (!file.startsWith(root) || !Files.isRegularFile(file))
-                throw new DatasetException("已发布知识文件不存在", 404);
-            WrenPublishedProject.check(file);
-            if (Files.size(file) > 1024 * 1024) throw new DatasetException("知识文件过大，请缩小资料", 400);
-            return Files.readString(file, StandardCharsets.UTF_8);
-        } catch (Exception e) {
-            return "error: " + e.getMessage();
+    private int queryLimit(String tool, Map<String, Object> arguments) {
+        Object configured = arguments.get("limit");
+        if (configured instanceof Number number) return number.intValue();
+        if (!"run_sql".equals(tool)) return 1000;
+        Object sql = arguments.get("sql");
+        if (sql instanceof String value) {
+            var matcher =
+                    java.util.regex.Pattern.compile(
+                                    "(?i)\\blimit\\s+(\\d+)\\s*$", java.util.regex.Pattern.DOTALL)
+                            .matcher(value.strip());
+            if (matcher.find()) return Integer.parseInt(matcher.group(1));
         }
+        return 1000;
     }
 }

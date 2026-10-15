@@ -1,5 +1,20 @@
 # 当前任务与接手入口
 
+## 最新检查点：2026-10-14 22:56 +08:00
+
+- 基于重启后的日志确认：建模 CLI 链路成功；问数的 `describe_model(valid_orders)` 是 View/Model 类型误用，`run_sql LIMIT` 错误来自平台自定义拒绝，非 Wren 官方限制。
+- 已修正：WrenMcpToolkit 遵循官方 Wren SQL 语法，允许 `run_sql` 的 LIMIT/OFFSET；回执从 SQL 末尾提取 LIMIT，避免记录默认 1000。问数与动态上下文提示明确 View 使用 get_mdl/describe_schema、Cube 使用 describe_cube，并区分 query_cube 参数 limit 与 run_sql 标准 SQL。
+- 验证：Spotless、WrenMcpToolkitTest、DataAgentConfigTest 共 14 项通过；未重启服务，未执行完整测试/package，未提交 Git。
+- 下一步：重启加载本次适配层后复测 Top N 问题，确认不再出现 LIMIT 拒绝；确认 Agent 不再对 valid_orders 调用 describe_model；月度 Cube 的 2026-01-01 边界问题仍待建模侧修正。
+
+## 最新检查点：2026-10-14 17:57 +08:00
+
+- 分支：design/wren-official-capability-boundary。执行者：当前 Codex 会话。
+- 已完成：SessionTurnParser 解包持久化工具结果的 JSON 字符串，修复 Wren 回执无法解析导致点赞 candidates=0；新增双层 JSON 回归用例。DataAgentConfig 加强建模及问数过程说明的简体中文要求；系统提示和两个动态上下文增加官方 arguments.limit/排序指导，单条查询使用 limit=1，全部并列结果例外。新增提示乱码已修正。
+- 本次验证：Spotless apply/check、Java 编译、SessionTurnParserTest/AnswerQueryMemoryTest/DataAgentConfigTest/WrenMcpToolkitTest 共 22 项通过。前一轮 Maven 流程已成功执行前端构建；最终后端修正后未重复前端构建。未重新执行全量测试或 package，旧全量通过记录属于历史。
+- 修改入口：SessionTurnParser、DataAgentConfig、WrenQueryContextMiddleware、DataDynamicContextMiddleware、SessionTurnParserTest。工作区有大量既有未提交改动，全部保留；未提交 Git，未重启服务，未处理历史数据。
+- 下一步：重启加载新版本后新建会话，确认过程说明中文；查询“去年哪个月营收最多”检查 query_cube arguments.limit=1；点赞检查 candidates>0 和官方 memory store；新对话检查 recall_queries。中文及 limit 是提示约束，真实模型遵循效果仍待验收。
+
 ## 2026-10-12｜LIMIT 修复与冗余调用精简（当前入口）
 
 - 用户要求先解决反复出现的 LIMIT，再减少冗余调用。已新增 ADR 0072 / spec 061，同步 ARCHITECTURE、README，并纠正 spec 060 的原生文件工具参数说明。
@@ -327,10 +342,10 @@
 - 结论状态：已完成日志分析，未修改业务代码；后续待讨论/实施的是问数每个新问题改为一次官方 `recall_queries`，并按 Wren 实际后端决定是否启用向量索引。历史示例按用户要求暂不处理。
 - 验证：本次仅读取日志与共享记忆并检查 Git 状态；未运行测试、未重启服务、未提交 Git。
 
-## 2026-10-12 ��ǰ checkpoint���ٷ� Wren ���� memory
-- ����� ADR 0073/spec 062 �������죻�����ļ������� wrenai[memory-onnx]==0.15.0��
-- ����ɣ�ȷ�� Maven package �����������������½�/����֪ʶ����֤ status=lancedb��recall_queries �ܷ��� question+SQL��
-- Լ������������ʷ���ݣ����ύ Git��
+## 2026-10-12 ��ǰ checkpoint���ٷ� Wren ���� memory
+- ����� ADR 0073/spec 062 �������죻�����ļ������� wrenai[memory-onnx]==0.15.0��
+- ����ɣ�ȷ�� Maven package ����������������½�/����֪ʶ����֤ status=lancedb��recall_queries �ܷ��� question+SQL��
+- Լ������������ʷ���ݣ����ύ Git��
 
 
 ## 2026-10-13 向量 memory 验证
@@ -338,3 +353,38 @@
 - 已更新并通过 WrenPublishedProjectTest。
 - 仍待真实服务重启后的点赞保存与问答召回端到端验证。
 
+## 2026-10-14｜官方 Wren 工具边界收敛（本阶段已完成）
+
+- 目标：问数运行时仅暴露官方 Wren MCP 能力，以及平台保留的 `run_python` 和 `render_chart`。
+- 已完成：新增 [ADR 0074](../adr/0074-official-wren-only-query-tools.md) 与 [spec 064](../specs/064-official-wren-only-query-tools.md)；移除 `DataAgentToolkit#retrieveEvidence` 和 `WrenMcpToolkit#wren_read_knowledge` 的运行时注册；旧 `WrenToolkit` 仅保留结果文件交接兼容，不再作为 AgentScope toolkit 注册；提示词和本地技能统一使用官方 `get_instructions`、`list_knowledge`、`recall_queries`、`describe_model`、`describe_cube`、`run_sql`、`query_cube`；官方 `run_sql` 拒绝显式 LIMIT/OFFSET；知识库查询使用最新已发布 MDL 项目。
+- 验证：`mvn.cmd '-q' '-Dskip.npm=true' '-Dskip.installnodenpm=true' test` 通过；`mvn.cmd '-q' '-DskipTests' '-Dskip.npm=true' '-Dskip.installnodenpm=true' package` 通过；`frontend/npm run build` 通过；`git diff --check` 无内容错误。前端仅有 Vite 大 chunk 警告，后端仅有 Mockito/JDK 动态代理警告。
+- 当前工作区：保留其他会话已有未提交修改，未执行 commit、reset、clean 或服务重启。
+- 下一步：如需验收，重启服务后用新会话确认实际工具列表只包含官方 Wren 适配器、`run_python`、`render_chart`，再验证点赞后的官方 memory store/recall 链路。
+
+## 2026-10-15｜SQL 问答对管理与视图 404 修复
+
+- 已新增 ADR 0075 与 spec 065。
+- 新增 SqlQaExampleService 与语义建模 API /sql-examples：读取当前知识库工作区 knowledge/sql（建模来源）和 owner/group 隔离的 runtime/liked-examples/knowledge/sql（点赞来源），支持编辑问题与 SQL；建模修改需重新发布，点赞修改后调用官方 memory index。
+- 建模页新增独立「SQL 问答对」模块，显示来源与生效提示，可编辑保存。
+- 修复 MdlWorkspaceReader：视图没有 sql.yml 时返回实际存在的 metadata.yml，避免 AssetYamlBrowser 请求不存在路径造成 404。
+- 更新 ARCHITECTURE_zh.md。
+- 验证：mvn -q -DskipTests package 通过；npm run build 通过；Spotless 已执行。未提交 Git、未重启服务、未处理历史数据。
+- 下一步：重启服务后在一个知识库分别验证建模样例和点赞样例列表/编辑、视图读取；如需更细的编辑审计可再补充。
+
+## 2026-10-15｜启动构造器修复
+
+- 运行时报 SemanticModelingController 无默认构造器：此前新增兼容构造器后 Spring 无法判断注入构造器。
+- 已给完整依赖构造器增加 Autowired，保留测试兼容构造器。
+- 验证：Spotless 与 mvn -q -DskipTests package 通过。
+
+## 2026-10-15｜修复点赞 SQL 折叠行截断
+
+- 根因：Wren 点赞样例使用 YAML folded scalar，SQL 在 sql: 后的缩进行继续；旧正则只读取首行。
+- 修复：SqlQaExampleService 使用跨行 frontmatter SQL 解析并合并空白，完整展示和保存 SQL。
+- 验证：Spotless、mvn -q -DskipTests package 通过。
+
+## 2026-10-15｜SQL 问答对删除能力
+
+- 新增 DELETE /modeling/sql-examples，建模与点赞来源均可删除，点赞删除后重建官方 memory index。
+- 前端 SQL 问答对模块增加删除按钮和确认提示。
+- 验证：Spotless、Maven package、前端 npm run build 均通过。

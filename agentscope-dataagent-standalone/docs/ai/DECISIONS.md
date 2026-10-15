@@ -130,3 +130,11 @@
 - 官方 enrich-context Auto-pilot 在新增视图/Cube等高影响资产时会升级 Grill要求业务确认；本轮真实 trace已出现。合成验收需要区分业务确认与原生文件授权，不以忽略业务确认的测试失败判断接入失效；平台不新增第二套业务审批。
 - 通用忠实证据提示未消除六问复测中“空结果解释为零”的问题。执行成功、采集模式通过和主要数值人工审阅不能替代最终答案正确性；保留失败，不宣布 P6/P7已完成。
 - 当前已接受方向仍为 [ADR 0069](../adr/0069-wren-native-modeling-and-query-agents.md)；下文 Cube 禁用、点踩撤回、领域模式工具锁定等旧条目均为历史，冲突时按根 AGENTS.md当前运行边界和 ADR 0069执行。此记录仅澄清已授权方案，不引入新业务路由。
+
+## 已接受：ADR 0074 官方 Wren 问数工具唯一入口（2026-10-14）
+
+- 语义查询、模型/字段、Cube、规则、知识和相似问题召回统一通过官方 Wren MCP/CLI；平台不再注册 `retrieve_evidence`、`wren_read_knowledge` 或旧 WrenToolkit 语义工具。
+- 平台运行时只保留官方 Wren MCP 适配器、`run_python` 和 `render_chart`；旧 WrenToolkit 仅用于结果文件/答案记忆交接兼容。
+- 详见 [ADR 0074](../adr/0074-official-wren-only-query-tools.md) 与 [spec 064](../specs/064-official-wren-only-query-tools.md)。
+
+- ADR 0075：SQL 问答对管理按官方 Markdown 来源分层编辑，建模源需发布、点赞源更新后索引；视图路径回退真实 metadata.yml。

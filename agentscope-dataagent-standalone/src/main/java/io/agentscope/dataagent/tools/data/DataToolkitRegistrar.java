@@ -15,7 +15,6 @@
  */
 package io.agentscope.dataagent.tools.data;
 
-import io.agentscope.dataagent.dataset.DatasetContextProvider;
 import io.agentscope.dataagent.dataset.DatasetGroupService;
 import io.agentscope.dataagent.dataset.MdlCatalog;
 import io.agentscope.dataagent.runtime.DataAgentBootstrap;
@@ -30,9 +29,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
- * Wires the knowledge, chart and Wren-only structured-query tools onto the built-in main agent at
+ * Wires the official Wren MCP adapter and presentation tools onto the built-in main agent at
  * startup. Physical metadata and direct SQL tools are intentionally absent; all structured data
- * queries use {@link WrenToolkit}.
+ * queries use the official Wren MCP schema.
  *
  * <p>Mirrors {@code ContributionToolRegistrar}: runs after {@link DataAgentBootstrap} has built
  * every agent, fails soft on errors so a missing tool slot does not stop the application from
@@ -50,7 +49,6 @@ public class DataToolkitRegistrar {
     private static final Logger log = LoggerFactory.getLogger(DataToolkitRegistrar.class);
 
     private final DataAgentBootstrap bootstrap;
-    private final DatasetContextProvider contextProvider;
     private final ChartOptionRepository chartOptions;
     private final ConversationScopeRegistry conversationScopes;
     private final WrenQueryGateway wrenGateway;
@@ -63,7 +61,6 @@ public class DataToolkitRegistrar {
 
     public DataToolkitRegistrar(
             DataAgentBootstrap bootstrap,
-            DatasetContextProvider contextProvider,
             ChartOptionRepository chartOptions,
             ConversationScopeRegistry conversationScopes,
             WrenQueryGateway wrenGateway,
@@ -74,7 +71,6 @@ public class DataToolkitRegistrar {
             io.agentscope.dataagent.dataset.WrenQueryAccess queryAccess,
             io.agentscope.dataagent.dataset.WrenPublishedProject publishedProject) {
         this.bootstrap = bootstrap;
-        this.contextProvider = contextProvider;
         this.chartOptions = chartOptions;
         this.conversationScopes = conversationScopes;
         this.wrenGateway = wrenGateway;
@@ -100,15 +96,20 @@ public class DataToolkitRegistrar {
                                                             + " onto"));
         }
         try {
-            main.getDelegate()
-                    .getToolkit()
-                    .registerTool(
-                            new DataAgentToolkit(
-                                    contextProvider, chartOptions, conversationScopes));
+            main.getDelegate().getToolkit().registerTool(new DataAgentToolkit(chartOptions));
             log.info("Registered DataAgent toolkit onto main agent '{}'", main.getName());
 
-            // Wren-only structured query channel (specs/015); the sandbox proxy enables the
-            // CSV data handoff to run_python (specs/016, ADR 0030).
+            // Official Wren MCP channel. The WrenToolkit instance below is retained only as the
+            // result-file handoff helper; it is never registered as an AgentScope toolkit, so its
+            // legacy semantic tools cannot compete with the official Wren schema.
+            WrenToolkit resultHandoff =
+                    new WrenToolkit(
+                            wrenGateway,
+                            datasetGroupService,
+                            conversationScopes,
+                            mdlCatalog,
+                            new SandboxBackedFilesystem(),
+                            artifactStore);
             main.getDelegate()
                     .getToolkit()
                     .registerTool(
@@ -116,15 +117,8 @@ public class DataToolkitRegistrar {
                                     wrenGateway,
                                     queryAccess,
                                     publishedProject,
-                                    new WrenToolkit(
-                                                    wrenGateway,
-                                                    datasetGroupService,
-                                                    conversationScopes,
-                                                    mdlCatalog,
-                                                    new SandboxBackedFilesystem(),
-                                                    artifactStore)
-                                            .withAnswerMemory(answerMemory)));
-            log.info("Registered Wren toolkit onto main agent '{}'", main.getName());
+                                    resultHandoff.withAnswerMemory(answerMemory)));
+            log.info("Registered official Wren MCP adapter onto main agent '{}'", main.getName());
 
             // Register the Python sandbox-execution tool. See the class javadoc for why a
             // standalone proxy (instead of the agent's own filesystem instance) is sufficient.
