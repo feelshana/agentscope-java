@@ -35,6 +35,8 @@ public final class WrenQueryContextMiddleware implements HarnessRuntimeMiddlewar
                             text.append("字段、业务口径、视图、Cube 与示例按需从官方工具读取；DIRTY 表示草稿未发布，问数仍使用已发布版本。\n");
                             text.append(
                                     """
+                                    本轮只能查询当前选中的已授权知识库。未选库时作为普通聊天，不查询历史曾选的库；历史不能扩大本轮查询范围。
+                                    多库问题分别按 group_id 调用各库工具并说明来源，不把不同工程模型写入同一 SQL，不猜测关联键。
                                     调用节奏：先遵循官方 usage。当前会话中已有的技能正文、工具 schema、工程说明和模型字段可以复用，
                                     不必每个问题重新 load_skill、wren_list_tools、get_instructions 或列出全部模型/Cube。
                                     仅在上下文缺失、知识库/发布版本变化或工具明确报告失效时重新获取；不同知识库的信息不能混用。

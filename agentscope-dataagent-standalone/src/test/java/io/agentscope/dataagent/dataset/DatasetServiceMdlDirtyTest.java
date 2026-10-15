@@ -94,6 +94,13 @@ class DatasetServiceMdlDirtyTest {
                         mock(DatasetImportService.class),
                         mock(SchemaGenerationService.class),
                         mock(MdlWorkspaceReader.class));
+        var access = mock(KnowledgeBaseAccessService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "access", access);
+        when(access.requireManage(
+                        org.mockito.ArgumentMatchers.anyString(),
+                        org.mockito.ArgumentMatchers.anyString()))
+                .thenAnswer(inv -> groupRepository.findById(inv.getArgument(1)).orElseThrow());
+
         when(groupRepository.findById(anyString()))
                 .thenAnswer(inv -> Optional.ofNullable(groupsById.get(inv.getArgument(0))));
         when(groupRepository.save(any(DatasetGroupEntity.class)))

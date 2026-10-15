@@ -57,6 +57,46 @@ class WrenProfileHomeTest {
     }
 
     @Test
+    void cliConnectionKeepsLiteralCredentialsAndExternalSsl() throws Exception {
+        stubStore("jdbc:mysql://127.0.0.1:3306/data_agent?useSSL=false", "root", "pa$sword");
+        ExternalDataSourceEntity source =
+                new ExternalDataSourceEntity(
+                        "cloud",
+                        "owner",
+                        "cloud",
+                        "mysql",
+                        "jdbc:mysql://127.0.0.1:13306/shop?sslMode=REQUIRED",
+                        "u",
+                        "a$${VAR}\\\"\n中文",
+                        true);
+        WrenProfileHome home =
+                new WrenProfileHome(
+                        props,
+                        storeProps,
+                        externalSources,
+                        new ExternalDataSourcePolicy("127.0.0.1:13306"));
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        var connection = mapper.readTree(mapper.writeValueAsString(home.connectionInfo(source)));
+        assertThat(connection.path("password").asText()).isEqualTo(source.getPassword());
+        assertThat(connection.path("port").asText()).isEqualTo("13306");
+        assertThat(connection.path("database").asText()).isEqualTo("shop");
+        assertThat(connection.path("ssl_mode").asText()).isEqualTo("ENABLED");
+        assertThat(home.connectionInfo(null))
+                .containsEntry("database", "data_agent")
+                .containsEntry("password", "pa$sword")
+                .containsEntry("ssl_mode", "DISABLED");
+        assertThatThrownBy(
+                        () ->
+                                new WrenProfileHome(
+                                                props,
+                                                storeProps,
+                                                externalSources,
+                                                new ExternalDataSourcePolicy("127.0.0.1:3306"))
+                                        .connectionInfo(source))
+                .isInstanceOf(DatasetException.class);
+    }
+
+    @Test
     void parseJdbcUrlExtractsHostPortDatabase() {
         Map<String, String> parts =
                 WrenProfileHome.parseJdbcUrl(
@@ -237,7 +277,12 @@ class WrenProfileHomeTest {
     }
 
     private WrenProfileHome home() {
-        return new WrenProfileHome(props, storeProps, externalSources);
+        return new WrenProfileHome(
+                props,
+                storeProps,
+                externalSources,
+                new ExternalDataSourcePolicy(
+                        "10.0.0.8:3307,127.0.0.1:3306,bj-cdb-x.sql.tencentcdb.com:27148,db.example.com:3307,h:3306,h:3307,localhost:3306"));
     }
 
     private static ExternalDataSourceEntity external(

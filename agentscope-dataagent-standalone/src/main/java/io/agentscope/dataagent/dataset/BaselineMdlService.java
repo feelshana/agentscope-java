@@ -26,6 +26,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class BaselineMdlService {
 
+    private KnowledgeBaseAccessService access;
+
     private final DatasetGroupRepository groupRepository;
     private final DatasetRepository datasetRepository;
     private final MdlPublishService publishService;
@@ -88,11 +90,7 @@ public class BaselineMdlService {
     }
 
     private DatasetGroupEntity requireOwnedGroup(String ownerId, String groupId) {
-        return groupRepository
-                .findById(groupId)
-                .filter(group -> group.getOwnerId().equals(ownerId))
-                .orElseThrow(
-                        () -> new DatasetException("Knowledge base not found: " + groupId, 404));
+        return access.requireManage(ownerId, groupId);
     }
 
     private static DatasetException publishFailure(
@@ -109,5 +107,16 @@ public class BaselineMdlService {
         }
         String message = current.getMessage();
         return message == null || message.isBlank() ? current.getClass().getSimpleName() : message;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public BaselineMdlService(
+            DatasetGroupRepository groupRepository,
+            DatasetRepository datasetRepository,
+            MdlPublishService publishService,
+            WrenQueryGateway wrenGateway,
+            KnowledgeBaseAccessService access) {
+        this(groupRepository, datasetRepository, publishService, wrenGateway);
+        this.access = access;
     }
 }

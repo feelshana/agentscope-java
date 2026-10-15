@@ -60,6 +60,9 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class DatasetService implements DatasetContextProvider {
+    private KnowledgeBaseAccessService access;
+
+    private KnowledgeBaseOperations operations;
 
     private static final Logger log = LoggerFactory.getLogger(DatasetService.class);
     private static final Pattern SAFE_IDENTIFIER = Pattern.compile("^[a-zA-Z0-9_]+$");
@@ -122,7 +125,19 @@ public class DatasetService implements DatasetContextProvider {
     @PostConstruct
     void rebuildRegistry() {
         List<DatasetEntity> all = repository.findAll();
-        all.forEach(e -> registry.add(toDataSource(e)));
+        all.stream()
+                .filter(dataset -> activeGroup(dataset.getGroupId()))
+                .forEach(
+                        e -> {
+                            try {
+                                registry.add(toDataSource(e));
+                            } catch (DatasetException ex) {
+                                log.warn(
+                                        "Dataset {} not registered: {}",
+                                        e.getId(),
+                                        ex.getMessage());
+                            }
+                        });
         log.info(
                 "DatasetService: re-registered {} persisted dataset(s) into the registry",
                 all.size());
@@ -139,14 +154,8 @@ public class DatasetService implements DatasetContextProvider {
         if (name == null || name.isBlank()) {
             throw new DatasetException("Dataset name must not be blank");
         }
-        DatasetGroupEntity group =
-                groupRepository
-                        .findById(groupId == null ? "" : groupId)
-                        .filter(g -> g.getOwnerId().equals(ownerId))
-                        .orElseThrow(
-                                () ->
-                                        new DatasetException(
-                                                "Knowledge base not found: " + groupId, 404));
+        DatasetGroupEntity group = access.requireManage(ownerId, groupId);
+        ownerId = group.getOwnerId();
         validateUploadSourceCombination(group.getId());
         repository
                 .findByOwnerIdAndGroupIdAndName(ownerId, group.getId(), name.trim())
@@ -162,11 +171,15 @@ public class DatasetService implements DatasetContextProvider {
         }
 
         String id = UUID.randomUUID().toString();
+        if (operations != null)
+            operations.recordImportedTable(
+                    groupId, TableProvisioner.buildTableName(ownerId, id, name));
 
         // Use EasyExcel streaming import with AI schema generation
         DatasetImportService.ImportResult importResult;
         try {
-            importResult = importService.importFile(ownerId, id, name, data, fileName);
+            importResult =
+                    importService.importFileForGroup(groupId, ownerId, id, name, data, fileName);
         } catch (RuntimeException e) {
             throw new DatasetException("Failed to import " + fileName + ": " + e.getMessage(), e);
         }
@@ -246,19 +259,17 @@ public class DatasetService implements DatasetContextProvider {
             String schema,
             List<String> tables,
             boolean sampling) {
+        String actorId = ownerId;
+        DatasetGroupEntity group = access.requireManage(actorId, groupId);
         ExternalDataSourceEntity ds =
                 externalSources
                         .findById(dataSourceId)
-                        .filter(d -> d.getOwnerId().equals(ownerId))
+                        .filter(d -> d.getOwnerId().equals(actorId))
                         .orElseThrow(
                                 () ->
                                         new DatasetException(
                                                 "Data source not found: " + dataSourceId, 404));
-        groupRepository
-                .findById(groupId)
-                .filter(g -> g.getOwnerId().equals(ownerId))
-                .orElseThrow(
-                        () -> new DatasetException("Knowledge base not found: " + groupId, 404));
+        ownerId = group.getOwnerId();
         validateExternalSourceCombination(groupId, ds);
         List<AssociatedTableMetadata> prepared =
                 prepareAssociatedTables(
@@ -436,9 +447,7 @@ public class DatasetService implements DatasetContextProvider {
                         + table
                         + q
                         + " LIMIT 21";
-        try (java.sql.Connection c =
-                        java.sql.DriverManager.getConnection(
-                                ds.getJdbcUrl(), ds.getUsername(), ds.getPassword());
+        try (java.sql.Connection c = introspector.open(ds);
                 java.sql.Statement st = c.createStatement();
                 java.sql.ResultSet rs = st.executeQuery(sql)) {
             List<String> vals = new ArrayList<>();
@@ -455,14 +464,36 @@ public class DatasetService implements DatasetContextProvider {
     }
 
     public List<DatasetEntity> listByOwner(String ownerId) {
-        return repository.findByOwnerIdOrderByCreatedAtDesc(ownerId);
+        List<String> ids =
+                access.visible(ownerId, null).stream()
+                        .filter(
+                                g ->
+                                        access.role(ownerId, g)
+                                                == KnowledgeBaseAccessService.Role.MANAGE)
+                        .map(DatasetGroupEntity::getId)
+                        .toList();
+        return ids.isEmpty() ? List.of() : repository.findByGroupIdInOrderByCreatedAtDesc(ids);
+    }
+
+    public List<DatasetEntity> listForGroup(String userId, String groupId) {
+        access.requireManage(userId, groupId);
+        return repository.findByGroupId(groupId);
+    }
+
+    private boolean activeGroup(String groupId) {
+        return groupId == null
+                || groupId.isBlank()
+                || operations == null
+                || !operations.deletionPending(groupId);
     }
 
     public DatasetEntity get(String ownerId, String datasetId) {
-        return repository
-                .findById(datasetId)
-                .filter(e -> e.getOwnerId().equals(ownerId))
-                .orElseThrow(() -> new DatasetException("Dataset not found: " + datasetId, 404));
+        DatasetEntity dataset =
+                repository
+                        .findById(datasetId)
+                        .orElseThrow(() -> new DatasetException("数据集不存在或未授权", 404));
+        access.requireManage(ownerId, dataset.getGroupId());
+        return dataset;
     }
 
     /**
@@ -580,6 +611,21 @@ public class DatasetService implements DatasetContextProvider {
         }
     }
 
+    /** Updates the dataset description and refreshes the metadata used by the agent. */
+    @Transactional
+    public DatasetEntity updateDescription(String ownerId, String datasetId, String description) {
+        DatasetEntity entity = get(ownerId, datasetId);
+        if (description == null) {
+            throw new DatasetException("Dataset description is required", 400);
+        }
+        entity.setDescription(description.trim());
+        entity.setUpdatedAt(Instant.now());
+        repository.save(entity);
+        registry.add(toDataSource(entity));
+        markMdlDirty(entity.getGroupId());
+        return entity;
+    }
+
     /** Updates column business descriptions and re-registers the source so the agent sees them. */
     @Transactional
     public DatasetEntity updateColumnDescriptions(
@@ -621,7 +667,8 @@ public class DatasetService implements DatasetContextProvider {
         Map<String, String> properties = new LinkedHashMap<>();
         ExternalDataSourceEntity external = resolveExternal(e);
         if (external != null) {
-            properties.put("jdbcUrl", withSchema(external.getJdbcUrl(), e.getSchemaName()));
+            properties.put(
+                    "jdbcUrl", withSchema(introspector.validatedUrl(external), e.getSchemaName()));
             properties.put("username", external.getUsername());
             properties.put("password", external.getPassword());
             properties.put("externalDataSourceId", external.getId());
@@ -640,7 +687,7 @@ public class DatasetService implements DatasetContextProvider {
         if (e.getColumnSchemaJson() != null && !e.getColumnSchemaJson().isBlank()) {
             properties.put("columnSchemaJson", e.getColumnSchemaJson());
         }
-        // Description only contains AI-generated table description (for SystemPrompt)
+        // Description contains generated or manually edited table metadata (for SystemPrompt).
         String desc =
                 (e.getDescription() == null || e.getDescription().isBlank())
                         ? "User-uploaded dataset '" + e.getName() + "'"
@@ -671,9 +718,7 @@ public class DatasetService implements DatasetContextProvider {
         ExternalDataSourceEntity external = resolveExternal(e);
         java.sql.Connection c;
         if (external != null) {
-            c =
-                    java.sql.DriverManager.getConnection(
-                            external.getJdbcUrl(), external.getUsername(), external.getPassword());
+            c = introspector.open(external);
         } else {
             c =
                     java.sql.DriverManager.getConnection(
@@ -702,6 +747,13 @@ public class DatasetService implements DatasetContextProvider {
         if (name == null || !SAFE_IDENTIFIER.matcher(name).matches()) {
             throw new IllegalArgumentException("非法" + label + "标识符: " + name);
         }
+    }
+
+    @Override
+    public List<String> authorizedGroupIds(String userId, List<String> selected) {
+        return access.visible(userId, selected == null ? List.of() : selected).stream()
+                .map(DatasetGroupEntity::getId)
+                .toList();
     }
 
     @Override
@@ -790,16 +842,10 @@ public class DatasetService implements DatasetContextProvider {
         // specs/019 §7: business rules live as knowledge/rules/*.md inside each workspace; every
         // candidate group is owner-checked before its rule files are read.
         List<DatasetGroupEntity> groups =
-                onlyGroups == null || onlyGroups.isEmpty()
-                        ? groupRepository.findByOwnerIdOrderByCreatedAtDesc(ownerId)
-                        : onlyGroups.stream()
-                                .filter(gid -> gid != null && !gid.isBlank())
-                                .map(groupRepository::findById)
-                                .flatMap(java.util.Optional::stream)
-                                .filter(g -> g.getOwnerId().equals(ownerId))
-                                .toList();
+                access.visible(ownerId, onlyGroups == null ? List.of() : onlyGroups);
         StringBuilder sb = new StringBuilder();
         for (DatasetGroupEntity g : groups) {
+            if (!activeGroup(g.getId())) continue;
             String text = workspaceReader.readKnowledgeRules(g.getId());
             if (text.isBlank()) {
                 continue;
@@ -826,7 +872,11 @@ public class DatasetService implements DatasetContextProvider {
                 onlyGroups == null || onlyGroups.isEmpty()
                         ? null
                         : new java.util.HashSet<>(onlyGroups);
-        List<DatasetEntity> mine = repository.findByOwnerIdOrderByCreatedAtDesc(ownerId);
+        List<String> visibleIds = authorizedGroupIds(ownerId, onlyGroups);
+        List<DatasetEntity> mine =
+                visibleIds.isEmpty()
+                        ? List.of()
+                        : repository.findByGroupIdInOrderByCreatedAtDesc(visibleIds);
         Map<String, DatasetEntity> byId = new HashMap<>();
         Set<String> matchIds = new HashSet<>();
         Set<String> groupIds = new HashSet<>();
@@ -968,7 +1018,9 @@ public class DatasetService implements DatasetContextProvider {
                         ? null
                         : new java.util.HashSet<>(onlyGroups);
         StringBuilder sb = new StringBuilder();
-        for (DatasetGroupEntity g : groupRepository.findByOwnerIdOrderByCreatedAtDesc(ownerId)) {
+        for (DatasetGroupEntity g :
+                access.visible(ownerId, onlyGroups == null ? List.of() : onlyGroups)) {
+            if (!activeGroup(g.getId())) continue;
             if (want != null && !want.contains(g.getId())) {
                 continue;
             }
@@ -1012,7 +1064,9 @@ public class DatasetService implements DatasetContextProvider {
                 onlyGroups == null || onlyGroups.isEmpty() ? null : new HashSet<>(onlyGroups);
         record Scored(String group, String title, String text, int score) {}
         List<Scored> scored = new ArrayList<>();
-        for (DatasetGroupEntity g : groupRepository.findByOwnerIdOrderByCreatedAtDesc(ownerId)) {
+        for (DatasetGroupEntity g :
+                access.visible(ownerId, onlyGroups == null ? List.of() : onlyGroups)) {
+            if (!activeGroup(g.getId())) continue;
             if (want != null && !want.contains(g.getId())) {
                 continue;
             }
@@ -1046,5 +1100,48 @@ public class DatasetService implements DatasetContextProvider {
             sb.append("】\n").append(s.text().strip());
         }
         return sb.toString();
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public DatasetService(
+            DatasetRepository repository,
+            DatasetGroupRepository groupRepository,
+            DatasetKnowledgeRepository knowledgeRepository,
+            SemanticTermRepository semanticTerms,
+            SemanticViewRepository semanticViews,
+            SemanticBusinessRuleRepository semanticBusinessRules,
+            ExternalDataSourceRepository externalSources,
+            DataSourceIntrospector introspector,
+            DatasetRelationRepository relationRepository,
+            InMemoryDataSourceRegistry registry,
+            TableProvisioner provisioner,
+            List<FileParser> parsers,
+            DatasetStoreProperties props,
+            ObjectMapper mapper,
+            DatasetImportService importService,
+            SchemaGenerationService schemaGeneration,
+            MdlWorkspaceReader workspaceReader,
+            KnowledgeBaseAccessService access,
+            KnowledgeBaseOperations operations) {
+        this(
+                repository,
+                groupRepository,
+                knowledgeRepository,
+                semanticTerms,
+                semanticViews,
+                semanticBusinessRules,
+                externalSources,
+                introspector,
+                relationRepository,
+                registry,
+                provisioner,
+                parsers,
+                props,
+                mapper,
+                importService,
+                schemaGeneration,
+                workspaceReader);
+        this.access = access;
+        this.operations = operations;
     }
 }

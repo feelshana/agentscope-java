@@ -1,4 +1,4 @@
-import { getToken } from './auth';
+import { apiFetch, getToken } from './auth';
 
 export interface ExternalDataSource {
   id: string;
@@ -13,7 +13,11 @@ export interface ExternalDataSource {
 export interface DataSourceRequest {
   name: string;
   kind?: string;
-  jdbcUrl: string;
+  jdbcUrl?: string;
+  host?: string;
+  port?: number;
+  database?: string;
+  sslMode?: string;
   username?: string;
   password?: string;
   sampling?: boolean;
@@ -46,26 +50,32 @@ function jsonHeaders(): Record<string, string> {
 
 async function errorMessage(res: Response, fallback: string): Promise<string> {
   try {
-    const body = (await res.json()) as { message?: string };
-    return body.message || fallback;
+    const body = (await res.json()) as { message?: string; detail?: string };
+    return body.message || body.detail || fallback;
   } catch {
     return fallback;
   }
 }
 
+function saveErrorFallback(res: Response, action: string): string {
+  return res.status === 403
+    ? '操作被拒绝：请确认数据源权限，或联系管理员检查数据源允许列表'
+    : `${action}数据源失败（${res.status}）`;
+}
+
 export async function listDataSources(): Promise<ExternalDataSource[]> {
-  const res = await fetch('/api/datasources', { headers: jsonHeaders() });
+  const res = await apiFetch('/api/datasources', { headers: jsonHeaders() });
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to list data sources: ${res.status}`));
   return res.json();
 }
 
 export async function createDataSource(req: DataSourceRequest): Promise<ExternalDataSource> {
-  const res = await fetch('/api/datasources', {
+  const res = await apiFetch('/api/datasources', {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify(req),
   });
-  if (!res.ok) throw new Error(await errorMessage(res, `Failed to create data source: ${res.status}`));
+  if (!res.ok) throw new Error(await errorMessage(res, saveErrorFallback(res, '添加')));
   return res.json();
 }
 
@@ -73,17 +83,17 @@ export async function updateDataSource(
   id: string,
   req: DataSourceRequest,
 ): Promise<ExternalDataSource> {
-  const res = await fetch(`/api/datasources/${encodeURIComponent(id)}`, {
+  const res = await apiFetch(`/api/datasources/${encodeURIComponent(id)}`, {
     method: 'PUT',
     headers: jsonHeaders(),
     body: JSON.stringify(req),
   });
-  if (!res.ok) throw new Error(await errorMessage(res, `Failed to update data source: ${res.status}`));
+  if (!res.ok) throw new Error(await errorMessage(res, saveErrorFallback(res, '更新')));
   return res.json();
 }
 
 export async function deleteDataSource(id: string): Promise<void> {
-  const res = await fetch(`/api/datasources/${encodeURIComponent(id)}`, {
+  const res = await apiFetch(`/api/datasources/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     headers: jsonHeaders(),
   });
@@ -91,15 +101,29 @@ export async function deleteDataSource(id: string): Promise<void> {
 }
 
 export async function getDataSourceStatus(id: string): Promise<DataSourceStatus> {
-  const res = await fetch(`/api/datasources/${encodeURIComponent(id)}/status`, {
+  const res = await apiFetch(`/api/datasources/${encodeURIComponent(id)}/status`, {
     headers: jsonHeaders(),
   });
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to check status: ${res.status}`));
   return res.json();
 }
 
+export async function testDataSourceConnection(
+  req: DataSourceRequest,
+  sourceId?: string | null,
+): Promise<DataSourceStatus> {
+  const query = sourceId ? `?sourceId=${encodeURIComponent(sourceId)}` : '';
+  const res = await apiFetch(`/api/datasources/test-connection${query}`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) throw new Error(await errorMessage(res, `测试连接失败（${res.status}）`));
+  return res.json();
+}
+
 export async function listSchemas(id: string): Promise<string[]> {
-  const res = await fetch(`/api/datasources/${encodeURIComponent(id)}/schemas`, {
+  const res = await apiFetch(`/api/datasources/${encodeURIComponent(id)}/schemas`, {
     headers: jsonHeaders(),
   });
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to list schemas: ${res.status}`));
@@ -107,7 +131,7 @@ export async function listSchemas(id: string): Promise<string[]> {
 }
 
 export async function listTables(id: string, schema: string): Promise<SchemaTable[]> {
-  const res = await fetch(
+  const res = await apiFetch(
     `/api/datasources/${encodeURIComponent(id)}/schemas/${encodeURIComponent(schema)}/tables`,
     { headers: jsonHeaders() },
   );
@@ -120,7 +144,7 @@ export async function listColumns(
   schema: string,
   table: string,
 ): Promise<SchemaColumn[]> {
-  const res = await fetch(
+  const res = await apiFetch(
     `/api/datasources/${encodeURIComponent(id)}/schemas/${encodeURIComponent(schema)}/tables/${encodeURIComponent(table)}/columns`,
     { headers: jsonHeaders() },
   );
@@ -132,7 +156,7 @@ export async function associateTables(
   groupId: string,
   payload: { dataSourceId: string; schema: string; tables: string[]; sampling?: boolean },
 ): Promise<unknown[]> {
-  const res = await fetch(`/api/dataset-groups/${encodeURIComponent(groupId)}/associate`, {
+  const res = await apiFetch(`/api/dataset-groups/${encodeURIComponent(groupId)}/associate`, {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify(payload),

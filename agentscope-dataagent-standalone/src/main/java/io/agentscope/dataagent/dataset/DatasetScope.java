@@ -16,11 +16,9 @@
 package io.agentscope.dataagent.dataset;
 
 /**
- * Per-request tenant identity carried in the agent {@code RuntimeContext} and auto-injected into
- * data-tool methods. Users do not pick datasets up front: the agent lists everything this owner
- * may see (via {@code [DATA_SOURCES_OVERVIEW]}) and chooses, so the scope only needs to pin {@code
- * ownerId} for isolation. {@code groupIds} optionally narrows the visible datasets to one or more
- * knowledge bases (TC-style "answer within selected KBs"); null/empty means all of the owner's KBs.
+ * Authenticated caller identity and selected KB IDs. ownerId is a legacy accessor name for the
+ * caller, never an impersonated KB creator. Services resolve each KB's real owner after ACL checks.
+ * null selection is unresolved; an empty list explicitly grants no KB access for this turn.
  */
 public record DatasetScope(String ownerId, java.util.List<String> groupIds) {
 
@@ -29,6 +27,6 @@ public record DatasetScope(String ownerId, java.util.List<String> groupIds) {
     }
 
     public boolean hasGroupFilter() {
-        return groupIds != null && !groupIds.isEmpty();
+        return groupIds != null;
     }
 }

@@ -21,9 +21,10 @@ class WrenQueryAccessTest {
         b.setMdlVersion(1);
         var foreign = new DatasetGroupEntity("c", "bob", "销售", "");
         foreign.setMdlVersion(1);
-        when(groups.listGroups("alice")).thenReturn(List.of(a, b, foreign));
+        when(groups.queryGroups("alice", List.of("a"))).thenReturn(List.of(a));
         var ctx = mock(RuntimeContext.class);
         when(ctx.getUserId()).thenReturn("alice");
+        when(ctx.get(DatasetScope.class)).thenReturn(new DatasetScope("alice", List.of("a")));
         when(ctx.get(DatasetScope.class)).thenReturn(new DatasetScope("alice", List.of("a")));
         var access = new WrenQueryAccess(groups, new ConversationScopeRegistry());
         assertThat(access.visible(ctx)).containsExactly(a);
@@ -37,10 +38,11 @@ class WrenQueryAccessTest {
     @Test
     void unpublishedModelCannotBeQueried() {
         var groups = mock(DatasetGroupService.class);
-        when(groups.listGroups("alice"))
+        when(groups.queryGroups("alice", List.of("a")))
                 .thenReturn(List.of(new DatasetGroupEntity("a", "alice", "销售", "")));
         var ctx = mock(RuntimeContext.class);
         when(ctx.getUserId()).thenReturn("alice");
+        when(ctx.get(DatasetScope.class)).thenReturn(new DatasetScope("alice", List.of("a")));
         var access = new WrenQueryAccess(groups, new ConversationScopeRegistry());
         assertThatThrownBy(() -> access.resolve(ctx, "a"))
                 .isInstanceOf(DatasetException.class)

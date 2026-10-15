@@ -34,4 +34,17 @@ public interface DatasetRepository extends JpaRepository<DatasetEntity, String> 
     List<DatasetEntity> findByGroupId(String groupId);
 
     long countByGroupId(String groupId);
+
+    List<DatasetEntity> findByGroupIdInOrderByCreatedAtDesc(List<String> groupIds);
+
+    interface GroupCount {
+        String getGroupId();
+
+        long getTotal();
+    }
+
+    @org.springframework.data.jpa.repository.Query(
+            "select d.groupId as groupId, count(d) as total from DatasetEntity d where d.groupId in"
+                    + " :groupIds group by d.groupId")
+    List<GroupCount> countForGroups(List<String> groupIds);
 }

@@ -1,3 +1,4 @@
+import { apiFetch } from '../api/auth';
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UserView, getProfile, changePassword } from '../api/users';
@@ -12,13 +13,13 @@ function authHeader(): Record<string, string> {
 }
 
 async function fetchMyUsage(): Promise<UsageSummary> {
-  const r = await fetch('/api/usage/me/summary', { headers: authHeader() });
+  const r = await apiFetch('/api/usage/me/summary', { headers: authHeader() });
   if (!r.ok) throw new Error('Failed to fetch usage');
   return r.json();
 }
 
 async function fetchMyDaily(days = 7): Promise<BucketCount[]> {
-  const r = await fetch(`/api/usage/me/daily?days=${days}`, { headers: authHeader() });
+  const r = await apiFetch(`/api/usage/me/daily?days=${days}`, { headers: authHeader() });
   if (!r.ok) throw new Error('Failed to fetch daily usage');
   return r.json();
 }

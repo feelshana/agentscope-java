@@ -250,7 +250,7 @@ public final class WrenToolkit {
         args.put("limit", limit == null ? 1000 : limit);
         WrenCallResult result;
         try {
-            result = wrenGateway.call(ref.group().getId(), "run_sql", args);
+            result = authorizedCall(eff.ownerId(), ref.group().getId(), "run_sql", args);
         } catch (DatasetException e) {
             return "error: " + e.getMessage();
         }
@@ -378,7 +378,7 @@ public final class WrenToolkit {
         }
         WrenCallResult result;
         try {
-            result = wrenGateway.call(ref.group().getId(), "query_cube", args);
+            result = authorizedCall(eff.ownerId(), ref.group().getId(), "query_cube", args);
         } catch (DatasetException e) {
             return "error: " + e.getMessage();
         }
@@ -488,7 +488,8 @@ public final class WrenToolkit {
                         .append("\n```\n");
                 try {
                     var columns =
-                            wrenGateway.call(
+                            authorizedCall(
+                                    eff.ownerId(),
                                     ref.group().getId(),
                                     "run_sql",
                                     Map.of(
@@ -775,8 +776,8 @@ public final class WrenToolkit {
                 && conversationScopes != null
                 && rc != null
                 && rc.getSessionId() != null) {
-            List<String> groups = conversationScopes.get(rc.getSessionId());
-            if (groups != null && !groups.isEmpty()) {
+            List<String> groups = conversationScopes.get(base.ownerId(), rc.getSessionId());
+            if (groups != null) {
                 return new DatasetScope(base.ownerId(), groups);
             }
         }
@@ -797,12 +798,16 @@ public final class WrenToolkit {
                     null, "error: group_id 不能为空（取自 [DATA_SOURCES_OVERVIEW] 中知识库的逻辑模型段落）");
         }
         String raw = groupId.trim();
-        List<DatasetGroupEntity> owned = groupService.listGroups(eff.ownerId());
-        Set<String> allowed = eff.hasGroupFilter() ? Set.copyOf(eff.groupIds()) : null;
-        List<DatasetGroupEntity> visible =
-                allowed == null
-                        ? owned
-                        : owned.stream().filter(g -> allowed.contains(g.getId())).toList();
+        List<DatasetGroupEntity> visible;
+        try {
+            visible = groupService.queryGroups(eff.ownerId(), eff.groupIds());
+        } catch (DatasetException error) {
+            return new GroupRef(null, "error: " + error.getMessage());
+        }
+        if (visible.stream().filter(g -> raw.equalsIgnoreCase(g.getName())).count() > 1
+                && visible.stream().noneMatch(g -> raw.equalsIgnoreCase(g.getId()))) {
+            return new GroupRef(null, "error: 多个知识库同名，请使用完整 group_id 选择知识库");
+        }
         DatasetGroupEntity group =
                 visible.stream()
                         .filter(g -> raw.equalsIgnoreCase(g.getId()))
@@ -820,6 +825,13 @@ public final class WrenToolkit {
             return new GroupRef(null, unavailableGroup(group));
         }
         return new GroupRef(group, null);
+    }
+
+    private WrenCallResult authorizedCall(
+            String actor, String groupId, String tool, Map<String, Object> arguments) {
+        groupService.queryGroup(actor, groupId);
+        return wrenGateway.callAuthorized(
+                groupId, tool, arguments, () -> groupService.queryGroup(actor, groupId));
     }
 
     private static String unknownGroup(String groupId) {

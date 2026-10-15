@@ -71,6 +71,7 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class MdlPublishService {
+    private KnowledgeBaseOperations operations;
 
     private static final Logger log = LoggerFactory.getLogger(MdlPublishService.class);
 
@@ -374,9 +375,15 @@ public class MdlPublishService {
                 groupId,
                 () -> {
                     List<MdlIssue> issues = new ArrayList<>();
-                    if (datasetRepository.findByGroupId(groupId).isEmpty()) {
+                    List<DatasetEntity> datasets = datasetRepository.findByGroupId(groupId);
+                    if (datasets.isEmpty()) {
                         issues.add(issue("error", "知识库内没有数据集，无法生成 MDL", "local"));
                         return new MdlValidation(false, issues, "", List.of());
+                    }
+                    WrenSourceSelection selection = selectWrenSource(datasets);
+                    if (selection.error() != null) {
+                        issues.add(issue("error", selection.error(), "local"));
+                        return new MdlValidation(false, issues, "", reader.listFiles(groupId));
                     }
                     MdlSeeder.SeedResult seed = seeder.reconcile(groupId);
                     issues.addAll(seed.issues());
@@ -412,8 +419,7 @@ public class MdlPublishService {
                         return new MdlValidation(false, issues, build.output(), snapshot.files());
                     }
 
-                    issues.addAll(dryRunViews(projectDir, snapshot.views()));
-                    issues.addAll(dryRunDerivedModels(projectDir, derivedModelsOf(snapshot)));
+                    issues.addAll(dryRunSqlObjects(projectDir, snapshot, selection));
                     issues.addAll(dryRunCubes(projectDir, snapshot.cubes()));
                     return new MdlValidation(
                             !hasErrors(issues), issues, result.output(), snapshot.files());
@@ -425,6 +431,7 @@ public class MdlPublishService {
         ReentrantLock lock = publishLocks.computeIfAbsent(groupId, key -> new ReentrantLock());
         lock.lock();
         try {
+            if (operations != null) operations.requireActive(groupId);
             return action.get();
         } finally {
             lock.unlock();
@@ -691,10 +698,7 @@ public class MdlPublishService {
         // Official build output is immutable semantic input.
         // Same gate as validate(): a view that cannot survive its own dry-run must never be
         // snapshotted; the official engine is the authority for view execution.
-        issues.addAll(dryRunViews(projectDir, snapshot.views()));
-        // Derived models must equally survive their own dry-run against the official
-        // manifest before the snapshot.
-        issues.addAll(dryRunDerivedModels(projectDir, derivedModelsOf(snapshot)));
+        issues.addAll(dryRunSqlObjects(projectDir, snapshot, selection));
         // ADR 0033 D6: every cube must survive its own SQL transformation before the snapshot.
         issues.addAll(dryRunCubes(projectDir, snapshot.cubes()));
         if (hasErrors(issues)) {
@@ -853,8 +857,38 @@ public class MdlPublishService {
      * failure becomes an error issue naming the view; the loop continues so one broken view does
      * not mask the others.
      */
+    private List<MdlIssue> dryRunSqlObjects(
+            Path projectDir, MdlWorkspaceReader.Snapshot snapshot, WrenSourceSelection selection) {
+        List<MdlWorkspaceReader.WorkspaceModel> derived = derivedModelsOf(snapshot);
+        if (snapshot.views().isEmpty() && derived.isEmpty()) {
+            return List.of();
+        }
+        List<MdlIssue> issues = new ArrayList<>();
+        Path connectionFile = null;
+        try {
+            // The dry-run CLI has no --profile flag. Explicit per-operation connection JSON
+            // prevents fallback to ~/.wren and avoids changing a shared active profile.
+            Map<String, String> connection = profileHome.connectionInfo(selection.external());
+            connectionFile = Files.createTempFile("dataagent-wren-check-", ".json");
+            mapper.writeValue(connectionFile.toFile(), connection);
+            issues.addAll(dryRunViews(projectDir, snapshot.views(), connectionFile));
+            issues.addAll(dryRunDerivedModels(projectDir, derived, connectionFile));
+        } catch (IOException | DatasetException ex) {
+            issues.add(issue("error", "准备 SQL 校验连接失败：" + ex.getMessage(), "local"));
+        } finally {
+            if (connectionFile != null) {
+                try {
+                    Files.deleteIfExists(connectionFile);
+                } catch (IOException ex) {
+                    issues.add(issue("error", "清理 SQL 校验临时连接文件失败", "local"));
+                }
+            }
+        }
+        return issues;
+    }
+
     private List<MdlIssue> dryRunViews(
-            Path projectDir, List<MdlWorkspaceReader.WorkspaceView> views) {
+            Path projectDir, List<MdlWorkspaceReader.WorkspaceView> views, Path connectionFile) {
         List<MdlIssue> issues = new ArrayList<>();
         for (MdlWorkspaceReader.WorkspaceView view : views) {
             String quoted = view.name().replace("\"", "\"\"");
@@ -862,7 +896,12 @@ public class MdlPublishService {
                     wrenCli.run(
                             projectDir,
                             props.timeout(),
-                            List.of("dry-run", "-s", "SELECT * FROM \"" + quoted + "\""));
+                            List.of(
+                                    "dry-run",
+                                    "-s",
+                                    "SELECT * FROM \"" + quoted + "\"",
+                                    "--connection-file",
+                                    connectionFile.toString()));
             if (!result.ok()) {
                 issues.add(
                         issue(
@@ -876,7 +915,9 @@ public class MdlPublishService {
 
     /** Dry-runs ref_sql models against the unmodified official manifest. */
     private List<MdlIssue> dryRunDerivedModels(
-            Path projectDir, List<MdlWorkspaceReader.WorkspaceModel> derivedModels) {
+            Path projectDir,
+            List<MdlWorkspaceReader.WorkspaceModel> derivedModels,
+            Path connectionFile) {
         List<MdlIssue> issues = new ArrayList<>();
         for (MdlWorkspaceReader.WorkspaceModel model : derivedModels) {
             String quoted = model.name().replace("\"", "\"\"");
@@ -884,7 +925,12 @@ public class MdlPublishService {
                     wrenCli.run(
                             projectDir,
                             props.timeout(),
-                            List.of("dry-run", "-s", "SELECT * FROM \"" + quoted + "\""));
+                            List.of(
+                                    "dry-run",
+                                    "-s",
+                                    "SELECT * FROM \"" + quoted + "\"",
+                                    "--connection-file",
+                                    connectionFile.toString()));
             if (!result.ok()) {
                 issues.add(
                         issue(
@@ -1413,5 +1459,34 @@ public class MdlPublishService {
             end--;
         }
         return s.substring(start, end);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public MdlPublishService(
+            DatasetRepository datasetRepository,
+            DatasetGroupRepository groupRepository,
+            ExternalDataSourceRepository externalSources,
+            ObjectMapper mapper,
+            WrenProperties props,
+            WrenCli wrenCli,
+            WrenProfileHome profileHome,
+            WrenSourceProber sourceProber,
+            MdlSeeder seeder,
+            MdlWorkspaceService workspace,
+            MdlWorkspaceReader reader,
+            KnowledgeBaseOperations operations) {
+        this(
+                datasetRepository,
+                groupRepository,
+                externalSources,
+                mapper,
+                props,
+                wrenCli,
+                profileHome,
+                sourceProber,
+                seeder,
+                workspace,
+                reader);
+        this.operations = operations;
     }
 }

@@ -355,6 +355,7 @@ public class DataAgentConfig {
             Optional<DatasetContextProvider> contextProviderOpt,
             MdlCatalog mdlCatalog,
             DatasetGroupRepository datasetGroupRepository,
+            io.agentscope.dataagent.web.session.ConversationScopeRegistry conversationScopes,
             SessionRegistryRepository sessionRegistryRepository,
             org.springframework.beans.factory.ObjectProvider<ModelingToolkitRegistrar>
                     modelingToolkitProvider,
@@ -566,6 +567,7 @@ public class DataAgentConfig {
         ChannelConfig chatuiCfg = conversationScopedChatUiConfig(configuredChatuiCfg);
         ChatUiChannel webChannel = ChatUiChannel.create(chatuiCfg);
         bootstrap.start(webChannel);
+        bootstrap.gateway().setConversationScopes(conversationScopes);
 
         log.info(
                 "DataAgentBootstrap initialized: cwd={}, chatui dmScope={}, bindings={}",

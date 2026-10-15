@@ -1,6 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
-import { stream } from '../api/chat';
+import { currentSession, stream } from '../api/chat';
+import type { KnowledgeScope } from '../api/chat';
 import { TurnEntry, messagePage } from '../api/sessions';
 import ToolCallBlock, { ToolInspectPayload } from './ToolCallBlock';
 import TaskTrace from './TaskTrace';
@@ -16,7 +18,7 @@ import Markdown from './Markdown';
 import PythonArtifactsPanel from './PythonArtifactsPanel';
 import AnswerFeedback from './AnswerFeedback';
 import { extractVegaSpec } from '../utils/charts';
-import { listGroups, DatasetGroup } from '../api/datasets';
+import { listGroupPage, listGroupCards, DatasetGroup, GroupPage } from '../api/datasets';
 import { listOntologies, OntologyEntry } from '../api/ontologies';
 
 type Role = 'user' | 'assistant' | 'system';
@@ -40,6 +42,7 @@ type TraceNode =
   | { kind: 'tool'; id: string; tool: ToolEntry };
 
 interface Message {
+  knowledgeScope?: KnowledgeScope;
   id: string;
   answerId?: string;
   role: Role;
@@ -49,6 +52,7 @@ interface Message {
   pending?: boolean;
   /** True only when the turn was interrupted and produced no usable answer. */
   failed?: boolean;
+  interrupted?: boolean;
   /** Timestamp (ms) when the assistant turn started streaming. */
   startedAtMs?: number;
   /** Elapsed time (ms) from start to done. */
@@ -102,7 +106,7 @@ const S: Record<string, React.CSSProperties> = {
     color: 'var(--da-text)',
     fontSize: 14,
     resize: 'none',
-    minHeight: 84,
+    minHeight: 48,
     maxHeight: 200,
     lineHeight: 1.6,
     outline: 'none',
@@ -219,6 +223,7 @@ function splitToolRender(
           toolCallId={t.id}
           input={t.input}
           result={t.result}
+          finished={!m.pending}
           onInspect={onInspect}
         />
       </div>,
@@ -257,7 +262,7 @@ function turnsToMessages(turns: TurnEntry[]): Message[] {
   for (const t of turns) {
     const role = String(t.role).toUpperCase();
     if (role === 'USER') {
-      out.push({ id: t.id, role: 'user', text: t.content ?? '', tools: [], trace: [] });
+      out.push({ id: t.id, role: 'user', text: t.content ?? '', tools: [], trace: [], knowledgeScope: t.knowledgeScope });
       cur = null;
     } else if (role === 'TOOL') {
       if (t.toolName && isHiddenTool(t.toolName)) continue;
@@ -357,10 +362,24 @@ export default function ChatPanel({
   const busy = curKey ? (sessionMsgs.get(curKey)?.busy ?? false) : false;
   const isLanding = !restoring && !curKey && messages.length === 0;
   const [groups, setGroups] = useState<DatasetGroup[]>([]);
+  const [groupPage, setGroupPage] = useState(0);
+  const [groupTotal, setGroupTotal] = useState(0);
+  const [groupSearch, setGroupSearch] = useState('');
+  const [groupLoading, setGroupLoading] = useState(false);
+  const [groupError, setGroupError] = useState<string | null>(null);
+  // Page-local metadata only: leaving this page discards it and refreshes permissions next time.
+  const groupPages = useRef(new Map<string, GroupPage>());
+  const groupRequests = useRef(new Map<string, Promise<GroupPage>>());
+  const groupControllers = useRef(new Set<AbortController>());
+  const [groupNames, setGroupNames] = useState<Record<string, string>>({});
   const [selectedGroups, setSelectedGroups] = useState<string[]>(() => {
     const raw = searchParams.get('groups');
-    return raw ? raw.split(',').filter(Boolean) : [];
+    return raw ? [...new Set(raw.split(',').filter(Boolean))] : [];
   });
+  const [selectAllGroups, setSelectAllGroups] = useState(false);
+  const selectionByConversation = useRef(new Map<string, string[]>());
+  const allSelectionByConversation = useRef(new Map<string, boolean>());
+  const [scopeRestoring, setScopeRestoring] = useState(false);
   const [groupPickerOpen, setGroupPickerOpen] = useState(false);
   const [ontologies, setOntologies] = useState<OntologyEntry[]>([]);
   const [selectedOntology, setSelectedOntology] = useState<string | null>(null);
@@ -370,6 +389,8 @@ export default function ChatPanel({
   const threadRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const groupPickerRef = useRef<HTMLDivElement | null>(null);
+  const groupPopoverRef = useRef<HTMLDivElement | null>(null);
+  const [groupPickerPosition, setGroupPickerPosition] = useState<React.CSSProperties>({});
   const ontologyPickerRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef<Map<string, AbortController>>(new Map());
   const onTitleRef = useRef(onTitle);
@@ -384,12 +405,34 @@ export default function ChatPanel({
   useEffect(() => {
     if (!groupPickerOpen) return;
     const closePicker = (event: PointerEvent) => {
-      if (!groupPickerRef.current?.contains(event.target as Node)) {
+      if (!groupPickerRef.current?.contains(event.target as Node) && !groupPopoverRef.current?.contains(event.target as Node)) {
         setGroupPickerOpen(false);
       }
     };
     document.addEventListener('pointerdown', closePicker);
     return () => document.removeEventListener('pointerdown', closePicker);
+  }, [groupPickerOpen]);
+
+  useLayoutEffect(() => {
+    if (!groupPickerOpen) return;
+    function positionPicker() {
+      const rect = groupPickerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const headerBottom = document.querySelector('main')?.getBoundingClientRect().top ?? 0;
+      const topBoundary = Math.max(16, headerBottom + 84);
+      const above = rect.top - topBoundary - 10;
+      const below = window.innerHeight - rect.bottom - 26;
+      const openBelow = below >= 380 || below > above;
+      setGroupPickerPosition({
+        position: 'fixed', left: Math.max(16, Math.min(rect.left, window.innerWidth - 360)),
+        ...(openBelow ? { top: rect.bottom + 10, bottom: 'auto' } : { bottom: window.innerHeight - rect.top + 10, top: 'auto' }),
+        maxHeight: Math.max(180, Math.min(480, openBelow ? below : above)),
+      });
+    }
+    positionPicker();
+    window.addEventListener('resize', positionPicker);
+    window.addEventListener('scroll', positionPicker, true);
+    return () => { window.removeEventListener('resize', positionPicker); window.removeEventListener('scroll', positionPicker, true); };
   }, [groupPickerOpen]);
 
   useEffect(() => {
@@ -405,7 +448,7 @@ export default function ChatPanel({
 
   // Mutual exclusivity: switching mode clears the other side's selection.
   useEffect(() => {
-    if (chatMode === 'ontology') { setSelectedGroups([]); setGroupPickerOpen(false); }
+    if (chatMode === 'ontology') { setSelectedGroups([]); setSelectAllGroups(false); setGroupPickerOpen(false); }
   }, [chatMode]);
   useEffect(() => {
     if (chatMode === 'kb') { setSelectedOntology(null); setOntologyPickerOpen(false); }
@@ -425,14 +468,89 @@ export default function ChatPanel({
 
   useEffect(() => {
     let cancelled = false;
-    listGroups()
-      .then(g => { if (!cancelled) setGroups(g); })
-      .catch(() => undefined);
     listOntologies()
       .then(list => { if (!cancelled) setOntologies(list); })
       .catch(() => undefined);
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    const controllers = groupControllers.current;
+    const pages = groupPages.current;
+    const requests = groupRequests.current;
+    return () => {
+      controllers.forEach(controller => controller.abort());
+      controllers.clear(); pages.clear(); requests.clear();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!groupPickerOpen) return;
+    let active = true;
+    const search = groupSearch.trim().toLowerCase();
+    const key = JSON.stringify([search, groupPage]);
+    const applyPage = (result: GroupPage) => {
+      setGroups(result.items); setGroupTotal(result.total);
+      setGroupNames(prev => ({ ...prev, ...Object.fromEntries(result.items.map(g => [g.id, g.name])) }));
+      setGroupLoading(false); setGroupError(null);
+    };
+    // Only search locally if the unfiltered first page contains the entire accessible list.
+    const all = groupPages.current.get(JSON.stringify(['', 0]));
+    if (all && all.total <= all.items.length) {
+      const matching = all.items.filter(g => !search || `${g.name}\n${g.description ?? ''}`.toLowerCase().includes(search));
+      applyPage({ items: matching.slice(groupPage * 20, (groupPage + 1) * 20), total: matching.length, page: groupPage, size: 20 });
+      return;
+    }
+    const cached = groupPages.current.get(key);
+    if (cached) { applyPage(cached); return; }
+    setGroups([]); setGroupTotal(0); setGroupLoading(true); setGroupError(null);
+    const timer = window.setTimeout(() => {
+      let request = groupRequests.current.get(key);
+      if (!request) {
+        const controller = new AbortController();
+        groupControllers.current.add(controller);
+        request = listGroupPage({ page: groupPage, size: 20, search }, controller.signal)
+          .then(result => {
+            if (!controller.signal.aborted) {
+              groupPages.current.set(key, result);
+              // Bound long-lived chat metadata while retaining the default page for fast reopening.
+              if (groupPages.current.size > 32) {
+                const oldest = [...groupPages.current.keys()].find(k => k !== JSON.stringify(['', 0]));
+                if (oldest) groupPages.current.delete(oldest);
+              }
+            }
+            return result;
+          }).finally(() => {
+            groupRequests.current.delete(key);
+            groupControllers.current.delete(controller);
+          });
+        groupRequests.current.set(key, request);
+      }
+      request
+        .then(result => {
+          if (active) applyPage(result);
+        }).catch(e => { if (active) setGroupError(e instanceof Error ? e.message : String(e)); })
+        .finally(() => { if (active) setGroupLoading(false); });
+    }, search ? 200 : 0);
+    // Closing the menu keeps an in-flight request reusable; unmounting aborts it.
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [groupPickerOpen, groupPage, groupSearch]);
+
+  const selectedGroupKey = selectedGroups.join(',');
+  useEffect(() => {
+    const ids = selectedGroupKey.split(',').filter(Boolean);
+    if (ids.length !== 1) return;
+    const cached = new Map([...groupPages.current.values()].flatMap(page => page.items.map(g => [g.id, g.name] as const)));
+    if (ids.every(id => cached.has(id))) {
+      setGroupNames(prev => ({ ...prev, ...Object.fromEntries(ids.map(id => [id, cached.get(id)!])) }));
+      return;
+    }
+    const controller = new AbortController();
+    listGroupCards(ids, controller.signal).then(result => {
+      if (!controller.signal.aborted) setGroupNames(prev => ({ ...prev, ...Object.fromEntries(result.map(g => [g.id, g.name])) }));
+    }).catch(() => { /* A revoked selection remains pinned and the server refuses new reads. */ });
+    return () => controller.abort();
+  }, [selectedGroupKey]);
 
   const persistSession = useCallback((key: string | null) => {
     if (key) {
@@ -446,6 +564,28 @@ export default function ChatPanel({
   // If we already have messages cached (e.g., from background streaming), show them immediately.
   // Otherwise fetch from backend. Streaming in other sessions continues undisturbed.
   const urlSession = searchParams.get('session');
+  const urlGroups = searchParams.get('groups');
+  useEffect(() => {
+    if (!urlSession) {
+      setSelectedGroups(urlGroups ? [...new Set(urlGroups.split(',').filter(Boolean))] : []);
+      setSelectAllGroups(false);
+    }
+  }, [urlSession, urlGroups]);
+  useEffect(() => {
+    if (!urlSession) { setScopeRestoring(false); return; }
+    const controller = new AbortController();
+    setScopeRestoring(true);
+    currentSession(effectiveAgentId, urlSession, controller.signal).then(session => {
+      if (controller.signal.aborted) return;
+      const scope = session.groupIds ?? selectionByConversation.current.get(urlSession) ?? [];
+      selectionByConversation.current.set(urlSession, scope);
+      setSelectedGroups(scope);
+      setSelectAllGroups(session.allGroups ?? allSelectionByConversation.current.get(urlSession) ?? false);
+    }).catch(() => { /* History stays readable; the server checks scope again when sending. */ })
+      .finally(() => { if (!controller.signal.aborted) setScopeRestoring(false); });
+    return () => controller.abort();
+  }, [effectiveAgentId, urlSession]);
+
   useEffect(() => {
     let cancelled = false;
     setInput('');
@@ -538,17 +678,20 @@ export default function ChatPanel({
     };
   }, []);
 
+  const kbSelectionLocked = effectiveAgentId === 'modeling-agent' && !!urlSession && messages.length > 0;
+  const ordinaryChat = effectiveAgentId === 'data-agent' && !selectAllGroups && selectedGroups.length === 0;
   const canSend = useMemo(
-    () => !busy && !restoring && !!effectiveAgentId && input.trim().length > 0,
-    [busy, restoring, effectiveAgentId, input],
+    () => !busy && !restoring && !scopeRestoring && !!effectiveAgentId && input.trim().length > 0,
+    [busy, restoring, scopeRestoring, effectiveAgentId, input],
   );
 
   async function handleSend() {
     if (!canSend) return;
+    setGroupPickerOpen(false);
     const text = input.trim();
     setInput('');
     const nowMs = Date.now();
-    const userMsg: Message = { id: nextId(), role: 'user', text, tools: [], trace: [] };
+    const userMsg: Message = { id: nextId(), role: 'user', text, tools: [], trace: [], knowledgeScope: { groupIds: selectedGroups, allGroups: selectAllGroups, groupNames } };
     const replyMsg: Message = { id: nextId(), role: 'assistant', text: '', tools: [], trace: [], pending: true, startedAtMs: nowMs };
 
     // Use the URL conversationId as the Map key — stable across session switches.
@@ -557,6 +700,8 @@ export default function ChatPanel({
       convId = (typeof crypto !== 'undefined' && crypto.randomUUID)
         ? crypto.randomUUID()
         : `conv-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      selectionByConversation.current.set(convId, selectedGroups);
+      allSelectionByConversation.current.set(convId, selectAllGroups);
       const next = new URLSearchParams(searchParams);
       next.set('session', convId);
       setSearchParams(next, { replace: true });
@@ -580,7 +725,8 @@ export default function ChatPanel({
       for await (const evt of stream(effectiveAgentId, {
         message: text,
         sessionKey: convId,
-        groupIds: selectedGroups.length ? selectedGroups : undefined,
+        groupIds: selectAllGroups ? undefined : selectedGroups,
+        allGroups: selectAllGroups,
       }, ac.signal)) {
         const isToolEvent = evt.type === 'tool_call' || evt.type === 'tool_result';
         if (isToolEvent) {
@@ -588,7 +734,19 @@ export default function ChatPanel({
           if (typeof seq !== 'number' || !Number.isSafeInteger(seq) || seq <= lastToolEventSeq) continue;
           lastToolEventSeq = seq;
         }
-        if (evt.type === 'token') {
+        if (evt.type === 'scope' && evt.knowledgeScope) {
+          const scope = evt.knowledgeScope;
+          selectionByConversation.current.set(convId, scope.groupIds);
+          allSelectionByConversation.current.set(convId, scope.allGroups);
+          setGroupNames(prev => ({ ...prev, ...scope.groupNames }));
+          setSessionMsgs(prev => {
+            const cur = prev.get(convId);
+            if (!cur) return prev;
+            const next = new Map(prev);
+            next.set(convId, { ...cur, messages: cur.messages.map(m => m.id === userMsg.id ? { ...m, knowledgeScope: scope } : m) });
+            return next;
+          });
+        } else if (evt.type === 'token') {
           const chunk = evt.data ?? '';
           setSessionMsgs(prev => {
             const next = new Map(prev);
@@ -686,6 +844,13 @@ export default function ChatPanel({
           });
         } else if (evt.type === 'done') {
           persistSession(convId);
+          if (evt.groupIds) {
+            selectionByConversation.current.set(convId, evt.groupIds);
+            allSelectionByConversation.current.set(convId, evt.allGroups ?? false);
+            if (activeHistoryKey.current === convId) {
+              setSelectedGroups(evt.groupIds); setSelectAllGroups(evt.allGroups ?? false);
+            }
+          }
           setSessionMsgs(prev => {
             const next = new Map(prev);
             const cur = next.get(convId);
@@ -737,7 +902,22 @@ export default function ChatPanel({
       }
     } finally {
       clearTimeout(bumpTimer);
-      abortRef.current.delete(convId);
+      // A completed turn may already have been followed by another send.
+      if (abortRef.current.get(convId) === ac) {
+        // Every termination path releases the composer, including abort and truncated streams.
+        setSessionMsgs(prev => {
+          const cur = prev.get(convId);
+          if (!cur) return prev;
+          const next = new Map(prev);
+          next.set(convId, { ...cur, busy: false, messages: cur.messages.map(m =>
+            m.id === replyMsg.id && m.pending
+              ? { ...m, pending: false, interrupted: ac.signal.aborted,
+                  elapsedMs: m.startedAtMs ? Date.now() - m.startedAtMs : undefined }
+              : m) });
+          return next;
+        });
+        abortRef.current.delete(convId);
+      }
       inputRef.current?.focus();
     }
   }
@@ -749,108 +929,90 @@ export default function ChatPanel({
     }
   }
 
+  useEffect(() => {
+    const textarea = inputRef.current;
+    if (!textarea) return;
+    const minimum = isLanding ? 76 : 48;
+    textarea.style.height = '0px';
+    const height = Math.min(200, Math.max(minimum, textarea.scrollHeight));
+    textarea.style.height = `${height}px`;
+    textarea.style.overflowY = textarea.scrollHeight > 200 ? 'auto' : 'hidden';
+  }, [input, isLanding, curKey]);
+
   const composerContent = (
     <>
       <textarea
         ref={inputRef}
-        style={{ ...S.textarea, ...(isLanding ? { minHeight: 120, fontSize: 15 } : {}) }}
+        style={{ ...S.textarea, ...(isLanding ? { minHeight: 76, fontSize: 15 } : {}) }}
         value={input}
         onChange={e => setInput(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder={restoring ? '加载会话…' : '输入查询、分析、预测数据问题…'}
+        placeholder={restoring ? '加载会话…' : ordinaryChat ? '输入问题；选择知识库后可查询数据…' : '输入查询、分析、预测数据问题…'}
         disabled={restoring}
       />
       <div style={S.composerBar}>
         <div ref={groupPickerRef} style={{ position: 'relative' }}>
           <button
             type="button"
-            className={`da-chip${!kbFrozen && (selectedGroups.length || selectedOntology) ? ' da-chip-active' : ''}${kbFrozen ? ' da-chip-frozen' : ''}`}
+            className={`da-kb-select${!kbFrozen && (selectedGroups.length || selectAllGroups || selectedOntology) ? ' is-selected' : ''}${groupPickerOpen ? ' is-open' : ''}`}
             onClick={() => kbFrozen ? setChatMode('kb') : setGroupPickerOpen(open => !open)}
-            title={kbFrozen ? '点击切换回知识库模式' : '选择知识库范围'}
+            disabled={kbSelectionLocked || restoring || scopeRestoring || busy}
+            aria-expanded={groupPickerOpen}
+            aria-controls="chat-knowledge-picker"
+            title={kbSelectionLocked ? '建模会话使用当前知识库' : busy ? '回答完成后可调整知识库' : kbFrozen ? '点击切换回知识库模式' : '可选一个、多个或全部知识库；未选时仅普通聊天'}
           >
-            <Icon name="book" size="sm" />{' '}
+            <span className="da-kb-select-icon"><Icon name="book" size="sm" /></span>
+            <span className="da-kb-select-label">
             {selectedOntology
               ? '知识库'
-              : selectedGroups.length
-                ? groups.filter(g => selectedGroups.includes(g.id)).map(g => g.name).join('、')
-                : '知识库（全部）'}{' '}
-            ▾
+              : selectAllGroups ? '全部知识库'
+                : selectedGroups.length > 1 ? '知识库'
+                  : selectedGroups.length ? groupNames[selectedGroups[0]] || '已选知识库'
+                    : '选择知识库'}</span>
+            {!kbFrozen && !selectAllGroups && selectedGroups.length > 1 && <span className="da-kb-select-count">{selectedGroups.length}</span>}
+            {selectAllGroups && <span className="da-kb-select-count">全选</span>}
+            <span className="da-kb-select-chevron"><Icon name="chevron" size="sm" /></span>
           </button>
-          {groupPickerOpen && (
-            <div style={S.picker}>
-              <label className="da-navitem">
-                <input
-                  type="checkbox"
-                  checked={selectedGroups.length === 0}
-                  onChange={() => {
-                    setSelectedGroups([]);
-                    setGroupPickerOpen(false);
-                  }}
-                />
-                全部知识库（不限定）
-              </label>
-              {groups.map(g => (
-                <label key={g.id} className="da-navitem">
+          {groupPickerOpen && createPortal(
+            <div ref={groupPopoverRef} id="chat-knowledge-picker" className="da-kb-picker" style={groupPickerPosition} role="dialog" aria-label="选择本轮知识库" onKeyDown={e => { if (e.key === 'Escape') { setGroupPickerOpen(false); groupPickerRef.current?.querySelector('button')?.focus(); } }}>
+              <div className="da-kb-picker-heading"><span>查询范围</span><small>可多选</small></div>
+              <div className="da-kb-picker-search"><Icon name="search" size="sm" /><input autoFocus aria-label="搜索可使用的知识库" placeholder="搜索知识库" value={groupSearch} onChange={e => { setGroupSearch(e.target.value); setGroupPage(0); }} /></div>
+              {groupError && <div className="da-small" role="alert" style={{ padding: 8, color: 'var(--da-danger)' }}>{groupError}</div>}
+              <label className={`da-kb-picker-all${selectAllGroups ? ' is-checked' : ''}`}><input type="checkbox" checked={selectAllGroups} onChange={e => { setSelectAllGroups(e.target.checked); setSelectedGroups([]); }} /><span>全部可用知识库<small>每次发送时更新可用范围</small></span></label>
+              <div className="da-kb-picker-list">
+              {!groupLoading && groups.map(g => (
+                <label key={g.id} className={`da-kb-picker-item${selectAllGroups || selectedGroups.includes(g.id) ? ' is-checked' : ''}`}>
                   <input
                     type="checkbox"
-                    checked={selectedGroups.includes(g.id)}
-                    onChange={() => {
-                      setSelectedGroups(prev =>
-                        prev.includes(g.id) ? prev.filter(x => x !== g.id) : [...prev, g.id],
-                      );
-                      setGroupPickerOpen(false);
+                    checked={g.canQuery && (selectAllGroups || selectedGroups.includes(g.id))}
+                    disabled={!g.canQuery || selectAllGroups}
+                    onChange={e => {
+                      if (selectAllGroups) return;
+                      setSelectedGroups(prev => e.target.checked ? [...new Set([...prev, g.id])] : prev.filter(id => id !== g.id));
                     }}
                   />
-                  {g.name}
+                  <span className="da-kb-picker-item-icon"><Icon name="book" size="sm" /></span>
+                  <span className="da-kb-picker-item-text">{g.name}<small>创建人：{g.ownerUsername}</small></span>
                 </label>
               ))}
-              {groups.length === 0 && (
+              {groupLoading && <div className="da-small" style={{ padding: 8 }}>加载中…</div>}
+              {!groupLoading && groupTotal > 20 && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: 8 }}>
+                <button className="da-btn da-btn-sm" disabled={groupPage === 0} onClick={() => setGroupPage(p => p - 1)}>上一页</button><span className="da-small">{groupPage + 1} / {Math.ceil(groupTotal / 20)}</span><button className="da-btn da-btn-sm" disabled={(groupPage + 1) * 20 >= groupTotal} onClick={() => setGroupPage(p => p + 1)}>下一页</button>
+              </div>}
+              {!groupLoading && groups.length === 0 && (
                 <div className="da-small" style={{ padding: 6 }}>
                   暂无知识库
                 </div>
               )}
+              </div>
+              <div className="da-kb-picker-footer">
+                <button className="da-kb-picker-clear" onClick={() => { setSelectedGroups([]); setSelectAllGroups(false); }}>清空选择</button>
+                <span>{selectAllGroups ? '全部可用' : selectedGroups.length ? `已选 ${selectedGroups.length} 个` : '普通聊天'}</span>
+                <button className="da-btn da-btn-primary da-btn-sm" onClick={() => setGroupPickerOpen(false)}>完成</button>
+              </div>
             </div>
-          )}
+          , document.body)}
         </div>
-        <div ref={ontologyPickerRef} style={{ position: 'relative' }}>
-          <button
-            type="button"
-            className={`da-chip${!ontologyFrozen && selectedOntology ? ' da-chip-active' : ''}${ontologyFrozen ? ' da-chip-frozen' : ''}`}
-            onClick={() => ontologyFrozen ? setChatMode('ontology') : setOntologyPickerOpen(open => !open)}
-            title={ontologyFrozen ? '点击切换至本体模式' : (ontologies.length ? '选择本体进行数据查询' : '暂无可用本体')}
-          >
-            <Icon name="graph" size="sm" />{' '}
-            {selectedOntology
-              ? ontologies.find(o => o.id === selectedOntology)?.name ?? '本体'
-              : ontologies.length ? '本体' : '本体（暂无服务）'}{' '}
-            {ontologies.length ? '▾' : ''}
-          </button>
-          {ontologyPickerOpen && (
-            <div style={S.picker}>
-              {ontologies.map(o => (
-                <button
-                  key={o.id}
-                  className="da-navitem"
-                  onClick={() => {
-                    setSelectedOntology(o.id);
-                    setSelectedGroups([]);
-                    setOntologyPickerOpen(false);
-                  }}
-                >
-                  <Icon name="graph" size="sm" /> {o.name}
-                </button>
-              ))}
-              {ontologies.length === 0 && (
-                <div className="da-small" style={{ padding: 6 }}>
-                  暂无可用本体
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        <button type="button" className="da-chip" disabled title="对话级模型切换暂未接入">
-          大模型（自动）
-        </button>
         <span style={{ flex: 1 }} />
         <button
           style={{
@@ -876,7 +1038,7 @@ export default function ChatPanel({
           <div className="da-landing-greeting">
             <h1 className="da-landing-title">红海DataAgent</h1>
             <div className="da-landing-tagline">你的大数据智囊团</div>
-            <p>输入数据问题，我来帮你查询、分析和可视化</p>
+            <p>选择知识库，查询数据、分析变化或生成报告</p>
           </div>
           <div className="da-composer-glow">
             <div className="da-composer-shell da-composer">
@@ -920,7 +1082,7 @@ export default function ChatPanel({
               className={`da-bubble-row ${m.role === 'user' ? 'user' : 'agent'} da-enter`}
             >
               {m.role === 'user' ? (
-                <div className="da-bubble user">{m.text}</div>
+                <div className="da-user-turn"><div className="da-bubble user">{m.text}</div>{m.knowledgeScope && <div className="da-turn-scope" title={m.knowledgeScope.groupIds.map(id => m.knowledgeScope!.groupNames[id] || id).join('、')}><Icon name={m.knowledgeScope.groupIds.length ? 'book' : 'chat'} size="sm" />{m.knowledgeScope.allGroups ? `全部可用 · ${m.knowledgeScope.groupIds.length} 个知识库` : m.knowledgeScope.groupIds.length > 1 ? `${m.knowledgeScope.groupIds.length} 个知识库` : m.knowledgeScope.groupIds.length ? m.knowledgeScope.groupNames[m.knowledgeScope.groupIds[0]] || '指定知识库' : '普通聊天'}</div>}</div>
               ) : (
                 <div className="da-agent-turn">
                   <div className="da-agent-header">
@@ -928,6 +1090,7 @@ export default function ChatPanel({
                     <span className="da-agent-name">红海DataAgent</span>
                   </div>
                   <TaskTrace
+                    interrupted={m.interrupted}
                     running={!!m.pending}
                     active={trace.length > 0}
                     hasError={!!m.failed}

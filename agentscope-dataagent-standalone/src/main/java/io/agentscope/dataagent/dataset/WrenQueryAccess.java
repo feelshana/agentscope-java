@@ -25,11 +25,8 @@ public final class WrenQueryAccess {
         if (scope != null && !owner.equals(scope.ownerId()))
             throw new DatasetException("问数会话租户不匹配", 403);
         List<String> selected =
-                scope != null ? scope.groupIds() : scopes.get(context.getSessionId());
-        return groups.listGroups(owner).stream()
-                .filter(g -> owner.equals(g.getOwnerId()))
-                .filter(g -> selected == null || selected.isEmpty() || selected.contains(g.getId()))
-                .toList();
+                scope != null ? scope.groupIds() : scopes.get(owner, context.getSessionId());
+        return groups.queryGroups(owner, selected);
     }
 
     public DatasetGroupEntity resolve(RuntimeContext context, String id) {

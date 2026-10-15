@@ -38,6 +38,10 @@ import reactor.core.scheduler.Schedulers;
  * build, poll per-document build status, and fetch the extracted entity/relation graph.
  */
 @RestController
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+        prefix = "dataagent.knowledge-graph",
+        name = "enabled",
+        havingValue = "true")
 @RequestMapping("/api/dataset-groups/{id}/kg")
 public class KnowledgeGraphController {
 

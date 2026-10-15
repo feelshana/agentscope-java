@@ -48,7 +48,9 @@ public final class WrenMcpToolkit {
                     String group) {
         try {
             var selected = access.resolve(context, group);
-            return JSON.writeValueAsString(gateway.listTools(selected.getId()));
+            return JSON.writeValueAsString(
+                    gateway.listToolsAuthorized(
+                            selected.getId(), () -> access.resolve(context, selected.getId())));
         } catch (Exception e) {
             return "error: " + e.getMessage();
         }
@@ -96,7 +98,11 @@ public final class WrenMcpToolkit {
             var selected = access.resolve(context, group);
             if (tool == null || tool.equals("store_query"))
                 throw new DatasetException("问数 MCP 为只读；样例写入由最终答案点赞授权", 403);
-            if (gateway.listTools(selected.getId()).stream().noneMatch(t -> tool.equals(t.name())))
+            if (gateway
+                    .listToolsAuthorized(
+                            selected.getId(), () -> access.resolve(context, selected.getId()))
+                    .stream()
+                    .noneMatch(t -> tool.equals(t.name())))
                 throw new DatasetException("该官方工具未在当前工程提供，请先发现工具", 400);
             if (Set.of("recall_queries", "get_context").contains(tool))
                 projects.indexed(context.getUserId(), selected.getId());
@@ -127,7 +133,12 @@ public final class WrenMcpToolkit {
                     throw new DatasetException("官方 sql 参数不能为空", 400);
                 OfficialWrenToolkit.requireReadOnly(value);
             }
-            var result = gateway.call(selected.getId(), tool, args);
+            var result =
+                    gateway.callAuthorized(
+                            selected.getId(),
+                            tool,
+                            args,
+                            () -> access.resolve(context, selected.getId()));
             if (!result.ok()) return "error: " + result.payload();
             String output = result.payload();
             if (Set.of("run_sql", "query_cube").contains(tool)
@@ -137,7 +148,7 @@ public final class WrenMcpToolkit {
                     String sql =
                             tool.equals("run_sql")
                                     ? String.valueOf(args.get("sql"))
-                                    : cubeSql(selected.getId(), args);
+                                    : cubeSql(context, selected.getId(), args);
                     if (sql != null && !sql.isBlank()) {
                         int limit = queryLimit(tool, args);
                         Map<String, Object> receipt =
@@ -182,11 +193,13 @@ public final class WrenMcpToolkit {
         }
     }
 
-    private String cubeSql(String group, Map<String, Object> arguments) {
+    private String cubeSql(RuntimeContext context, String group, Map<String, Object> arguments) {
         try {
             Map<String, Object> args = new LinkedHashMap<>(arguments);
             args.put("sql_only", true);
-            var plan = gateway.call(group, "query_cube", args);
+            var plan =
+                    gateway.callAuthorized(
+                            group, "query_cube", args, () -> access.resolve(context, group));
             return plan.ok() ? JSON.readTree(plan.payload()).path("sql").asText("") : null;
         } catch (Exception e) {
             return null;

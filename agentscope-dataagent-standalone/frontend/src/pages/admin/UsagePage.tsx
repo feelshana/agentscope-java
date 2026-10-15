@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import AdminPageLayout from '../../components/admin/AdminPageLayout';
-import { getToken } from '../../api/auth';
+import { apiFetch as sessionFetch, getToken } from '../../api/auth';
 
 interface UsageSummary {
   totalTurns: number;
@@ -25,7 +25,7 @@ function authHeaders() {
 }
 
 async function apiFetch<T>(path: string): Promise<T> {
-  const res = await fetch(path, { headers: authHeaders() });
+  const res = await sessionFetch(path, { headers: authHeaders() });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json() as Promise<T>;
 }

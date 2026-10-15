@@ -56,6 +56,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  */
 @Service
 public class SessionHistoryService {
+    private ConversationScopeRegistry conversationScopes;
+
     private static final Logger log = LoggerFactory.getLogger(SessionHistoryService.class);
     private final DataAgentBootstrap bootstrap;
     private final SessionRegistryRepository registry;
@@ -156,7 +158,11 @@ public class SessionHistoryService {
                     && previous.sourcePath.endsWith(".log.jsonl")
                     && !path.toString().endsWith(".log.jsonl")) return;
             String content = Files.readString(path, StandardCharsets.UTF_8);
-            var turns = SessionTurnParser.parse(content);
+            var parsed = SessionTurnParser.parse(content);
+            var turns =
+                    conversationScopes == null
+                            ? parsed
+                            : conversationScopes.enrichTurns(entry.userId(), parsed);
             // A concurrent append or partial last line is retried by the next batch.
             if (Files.size(path) != size || Files.getLastModifiedTime(path).toMillis() != stamp)
                 return;
@@ -352,5 +358,17 @@ public class SessionHistoryService {
     @PreDestroy
     public void stop() {
         worker.shutdownNow();
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public SessionHistoryService(
+            DataAgentBootstrap bootstrap,
+            SessionRegistryRepository registry,
+            SessionHistoryRepository histories,
+            SessionMessageRepository messages,
+            PlatformTransactionManager transactionManager,
+            ConversationScopeRegistry conversationScopes) {
+        this(bootstrap, registry, histories, messages, transactionManager);
+        this.conversationScopes = conversationScopes;
     }
 }

@@ -1,5 +1,25 @@
 # 当前任务与接手入口
 
+## 2026-10-15｜启动后页面 401 修复（最新检查点）
+
+- 执行者：当前 Codex 会话；分支 design/wren-official-capability-boundary。保留下面平台移植的全部未提交修改。
+- 用户截图中知识库、数据源及历史接口返回 401，前端仅检查缓存 token 是否存在，因此仍显示已登录。具体失效原因（过期或签名配置变化等）未核实，不能据此判断数据丢失。
+- 已增加 SessionGate：挂载受保护页面前调用 auth/me；统一 apiFetch 处理同源 API 的 401，清除对应失效 token、返回登录页并中文提示。403、网络异常保留登录状态；旧请求迟到的 401 不清除新登录 token；登录失败和外部资源请求不触发退出。所有现有 fetch API 调用接入包装器，登录请求保留独立处理。
+- 修改入口：frontend/src/api/auth.ts、components/SessionGate.tsx、main.tsx、pages/LoginPage.tsx 及现有 API 调用点；测试 frontend/tests/auth-session.test.mjs、docs/fixtures/platform-integration/auth_session_browser.py。
+- 本轮实测：认证单元测试 6 项加 SSE/HTML 5 项全部通过；浏览器模拟 API 的缓存失效、中途 401、网络故障、无 token 四场景通过（target/auth-session-browser/report.json）；前端 build、Maven package -DskipTests 和 diff check 通过。后端无代码变动，570 项全量测试是下方上一阶段记录，本轮未重跑。
+- 未提交 Git，未重启用户服务。下一步加载本轮新构建、刷新并重新登录后验收真实服务；此前共享权限/问数效果验收继续保留。当前无代码验证阻塞。
+
+## 2026-10-15｜平台分支增量合入（当前任务）
+
+- 用户要求分析并合入 multiAgent-Mdl 的共享权限、上传并发失败、问答容量和 BUG 修复；建模/问数以当前分支为准。此前任务保留待续。
+- 起点 HEAD 4c96099b，当前项目无既有未提交变更；上层仓库 26 个未跟踪文件保持原样。
+- 用户已确认以 data-agent-multiAgent-Mdl-lyf（32c6d292）为来源。已移植 QUERY/MANAGE 权限、成员/审计、分页与每轮选库、导入取消失败传播、删除重试、沙箱恢复、SSE/HTML 和连接校验等修复。
+- 当前官方 Wren 建模/问数保持：适配 WrenQueryAccess、WrenProjectAccess、WrenPublishedProject 和 WrenMcpToolkit 的共享权限及排队撤权；保留中文展示、LIMIT、问答对管理/召回；共享点赞保存与索引按库锁串行，反馈和会话附件仍归当前用户。没有恢复旧领域工具注册或 SQL/MDL 改写。来源字段注入改为构造器注入。
+- 文档为 ADR 0077/spec 066，已同步 ARCHITECTURE、README；源分支部署配置、pom、官方 skills 未覆盖。完整上传有界队列、全局/每用户问答准入及 Wren 总进程预算在来源中不存在，本次仍未实现，不宣称容量目标达标。
+- 本次最终测试：根 Maven test 570 项，0 失败/错误、18 条件跳过；显式 dataagent.test.wren 的官方 CLI/MCP 专项 5 项全部通过（含建模、建模示例及点赞后召回）；package -DskipTests、前端 npm build、diff check 通过。SSE/HTML 5、工具解析8、工具展示浏览器6项通过。
+- 隔离 exec JAR 实测健康/前端及18次 HTTP 检查通过：登录、创建者/管理员、QUERY 禁止详情/成员/SQL问答对管理、MANAGE 编辑、撤权和列表过滤。脚本 docs/fixtures/platform-integration/isolated_acl_smoke.py，证据 target/platform-integration-service/report.json、target/integration-final-tests.log、integration-final-package.log、integration-wren.log。首次重跑发现 Java launcher 留下子进程，已清理本次实例并修正脚本直接启动实际 JDK；最终 processStopped=true，无残留验证实例。
+- 当前源码和构建验证完成；未提交 Git、未重启现有服务，未执行真实 LLM 业务效果或容量压测。下一步加载新制品后按真实账号验收共享查询/建模；完整容量控制需作为独立新增开发。此前业务效果验收任务保留待续。
+
 ## 最新检查点：2026-10-14 22:56 +08:00
 
 - 基于重启后的日志确认：建模 CLI 链路成功；问数的 `describe_model(valid_orders)` 是 View/Model 类型误用，`run_sql LIMIT` 错误来自平台自定义拒绝，非 Wren 官方限制。

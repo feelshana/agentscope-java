@@ -41,12 +41,16 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -108,7 +112,11 @@ class MdlPublishServiceTest {
                         mapper,
                         wrenProps,
                         wren,
-                        new WrenProfileHome(wrenProps, storeProps, externalSources),
+                        new WrenProfileHome(
+                                wrenProps,
+                                storeProps,
+                                externalSources,
+                                new ExternalDataSourcePolicy("127.0.0.1:3306,127.0.0.1:13306")),
                         (source, datasets) -> probeReport,
                         seeder,
                         workspaceService,
@@ -485,6 +493,87 @@ class MdlPublishServiceTest {
     // ------------------------------------------------------------------ source selection
 
     @Test
+    void externalViewValidationAndPublishUseSelectedConnection() throws IOException {
+        registerGroup("g1");
+        registerExternalSource(
+                "cloud", "mysql", "jdbc:mysql://127.0.0.1:13306/cloud_shop?sslMode=REQUIRED");
+        registerExternalDataset("e1", "g1", "orders", "cloud", new String[][] {{"id", "bigint"}});
+        write("views/sales/metadata.yml", "name: sales\n");
+        write("views/sales/sql.yml", "statement: SELECT id FROM orders\n");
+        assertTrue(service.validate("g1").ok());
+        assertTrue(service.publish("g1").ok());
+        assertEquals(2, wren.checkConnections.size());
+        for (JsonNode connection : wren.checkConnections) {
+            assertEquals("13306", connection.path("port").asText());
+            assertEquals("cloud_shop", connection.path("database").asText());
+            assertEquals("ENABLED", connection.path("ssl_mode").asText());
+        }
+        assertFalse(wren.connectionFiles.get(0).equals(wren.connectionFiles.get(1)));
+        for (Path file : wren.connectionFiles) assertFalse(Files.exists(file));
+        assertTrue(
+                Files.readString(groupRoot.resolve("published/wren-source.properties"))
+                        .contains("ext-cloud"));
+        try (Stream<Path> paths = Files.walk(groupRoot)) {
+            assertFalse(
+                    paths.anyMatch(
+                            path ->
+                                    path.getFileName()
+                                            .toString()
+                                            .startsWith("dataagent-wren-check-")));
+        }
+    }
+
+    @Test
+    void uploadedViewChecksUseStoreAndFailureKeepsPublishedVersion() throws IOException {
+        registerGroup("g1");
+        registerDataset("d1", "g1", "orders", new String[][] {{"id", "bigint"}});
+        assertTrue(service.publishBaseline("g1").ok());
+        String previous = Files.readString(groupRoot.resolve("mdl.json"));
+        write("views/sales/metadata.yml", "name: sales\n");
+        write("views/sales/sql.yml", "statement: SELECT id FROM orders\n");
+        wren.failDryRunFor = "sales";
+        var result = service.publish("g1");
+        assertFalse(result.ok());
+        assertEquals(1, result.mdlVersion());
+        assertEquals("PUBLISHED", result.mdlState());
+        assertEquals(previous, Files.readString(groupRoot.resolve("mdl.json")));
+        assertEquals("data_agent", wren.checkConnections.get(0).path("database").asText());
+        assertEquals("3306", wren.checkConnections.get(0).path("port").asText());
+        assertFalse(Files.exists(wren.connectionFiles.get(0)));
+    }
+
+    @Test
+    void concurrentKnowledgeBasesDoNotShareCheckConnections() throws Exception {
+        for (String id : List.of("g1", "g2")) {
+            registerGroup(id);
+            registerExternalSource(id, "mysql", "jdbc:mysql://127.0.0.1:13306/shop_" + id);
+            registerExternalDataset("e_" + id, id, "orders", id, new String[][] {{"id", "bigint"}});
+            Path views = mdlHome.resolve(id).resolve("workspace/views/sales");
+            Files.createDirectories(views);
+            Files.writeString(views.resolve("metadata.yml"), "name: sales\n");
+            Files.writeString(views.resolve("sql.yml"), "statement: SELECT id FROM orders\n");
+        }
+        wren.checkBarrier = new CyclicBarrier(2);
+        var executor = Executors.newFixedThreadPool(2);
+        try {
+            var first = executor.submit(() -> service.validate("g1"));
+            var second = executor.submit(() -> service.validate("g2"));
+            assertTrue(first.get(20, TimeUnit.SECONDS).ok());
+            assertTrue(second.get(20, TimeUnit.SECONDS).ok());
+        } finally {
+            executor.shutdownNow();
+        }
+        assertEquals(2, wren.checkConnections.size());
+        assertEquals(
+                java.util.Set.of("shop_g1", "shop_g2"),
+                wren.checkConnections.stream()
+                        .map(c -> c.path("database").asText())
+                        .collect(java.util.stream.Collectors.toSet()));
+        assertEquals(2, wren.connectionFiles.stream().distinct().count());
+        for (Path file : wren.connectionFiles) assertFalse(Files.exists(file));
+    }
+
+    @Test
     void refusesMixedSources() {
         registerGroup("g1");
         registerDataset(
@@ -504,6 +593,8 @@ class MdlPublishServiceTest {
                 String.valueOf(result.issues()));
         assertEquals("FAILED", result.mdlState());
         assertFalse(Files.exists(groupRoot.resolve("published")));
+        assertFalse(
+                service.validate("g1").ok(), "validation must apply the same source restrictions");
     }
 
     @Test
@@ -684,7 +775,12 @@ class MdlPublishServiceTest {
 
         assertTrue(result.ok(), String.valueOf(result.issues()));
         assertTrue(
-                wren.calls.contains("dry-run -s SELECT * FROM \"monthly_active\""),
+                wren.calls.stream()
+                        .anyMatch(
+                                c ->
+                                        c.startsWith(
+                                                "dry-run -s SELECT * FROM \"monthly_active\""
+                                                        + " --connection-file ")),
                 String.valueOf(wren.calls));
         JsonNode manifest =
                 mapper.readTree(
@@ -920,7 +1016,10 @@ class MdlPublishServiceTest {
     /** Scriptable wren CLI: fakes init/parse-types/validate/build/dry-run; cube query can fail. */
     private static final class FakeWrenCli implements WrenCli {
 
-        final List<String> calls = new ArrayList<>();
+        final List<String> calls = Collections.synchronizedList(new ArrayList<>());
+        final List<JsonNode> checkConnections = Collections.synchronizedList(new ArrayList<>());
+        final List<Path> connectionFiles = Collections.synchronizedList(new ArrayList<>());
+        CyclicBarrier checkBarrier;
         boolean failCubeQuery;
 
         /** When set, dry-run commands mentioning this substring fail (derived/view gate tests). */
@@ -956,6 +1055,15 @@ class MdlPublishServiceTest {
                 return new Result(0, "built");
             }
             if (cmd.startsWith("dry-run")) {
+                try {
+                    Path file = Path.of(args.get(args.indexOf("--connection-file") + 1));
+                    connectionFiles.add(file);
+                    checkConnections.add(new ObjectMapper().readTree(file.toFile()));
+                    if (checkBarrier != null) checkBarrier.await(10, TimeUnit.SECONDS);
+                } catch (Exception ex) {
+                    throw new IllegalStateException(
+                            "SQL checks require a live, explicit connection file", ex);
+                }
                 if (failDryRunFor != null && cmd.contains(failDryRunFor)) {
                     return new Result(1, "[ERROR] broken derived model");
                 }

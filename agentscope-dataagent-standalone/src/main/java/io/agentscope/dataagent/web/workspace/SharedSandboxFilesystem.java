@@ -165,6 +165,10 @@ public final class SharedSandboxFilesystem extends BaseSandboxFilesystem {
             ExecResult result = sandbox.exec(runtimeContext, effectiveCmd, timeoutSeconds);
             return new ExecuteResponse(
                     result.combinedOutput(), result.exitCode(), result.truncated());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new java.util.concurrent.CancellationException(
+                    "Sandbox filesystem request cancelled");
         } catch (SandboxException.ExecTimeoutException e) {
             return new ExecuteResponse(e.getMessage(), 124, false);
         } catch (SandboxException.ExecException e) {

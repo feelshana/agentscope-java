@@ -1,4 +1,4 @@
-import { getToken } from './auth';
+import { apiFetch, getToken } from './auth';
 
 export interface ScheduledTask {
   id: string;
@@ -49,14 +49,14 @@ async function errorMessage(res: Response, fallback: string): Promise<string> {
   }
 }
 
-export async function listScheduledTasks(): Promise<ScheduledTask[]> {
-  const res = await fetch('/api/scheduled-tasks', { headers: jsonHeaders() });
+export async function listScheduledTasks(signal?: AbortSignal): Promise<ScheduledTask[]> {
+  const res = await apiFetch('/api/scheduled-tasks', { headers: jsonHeaders(), signal });
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to list tasks: ${res.status}`));
   return res.json();
 }
 
 export async function createScheduledTask(req: ScheduledTaskRequest): Promise<ScheduledTask> {
-  const res = await fetch('/api/scheduled-tasks', {
+  const res = await apiFetch('/api/scheduled-tasks', {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify(req),
@@ -69,7 +69,7 @@ export async function updateScheduledTask(
   id: string,
   req: ScheduledTaskRequest,
 ): Promise<ScheduledTask> {
-  const res = await fetch(`/api/scheduled-tasks/${encodeURIComponent(id)}`, {
+  const res = await apiFetch(`/api/scheduled-tasks/${encodeURIComponent(id)}`, {
     method: 'PUT',
     headers: jsonHeaders(),
     body: JSON.stringify(req),
@@ -79,7 +79,7 @@ export async function updateScheduledTask(
 }
 
 export async function updateTaskStatus(id: string, status: string): Promise<ScheduledTask> {
-  const res = await fetch(`/api/scheduled-tasks/${encodeURIComponent(id)}/status`, {
+  const res = await apiFetch(`/api/scheduled-tasks/${encodeURIComponent(id)}/status`, {
     method: 'PUT',
     headers: jsonHeaders(),
     body: JSON.stringify({ status }),
@@ -89,7 +89,7 @@ export async function updateTaskStatus(id: string, status: string): Promise<Sche
 }
 
 export async function deleteScheduledTask(id: string): Promise<void> {
-  const res = await fetch(`/api/scheduled-tasks/${encodeURIComponent(id)}`, {
+  const res = await apiFetch(`/api/scheduled-tasks/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     headers: jsonHeaders(),
   });

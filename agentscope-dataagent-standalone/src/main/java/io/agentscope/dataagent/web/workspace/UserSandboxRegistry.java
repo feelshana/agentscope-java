@@ -441,8 +441,16 @@ public final class UserSandboxRegistry {
         }
     }
 
+    /** Retry startup cleanup after Docker becomes available, before admitting any container. */
+    private synchronized void ensureOrphanCleanupComplete() {
+        if (orphanCleanupComplete) return;
+        cleanupOrphanedContainers();
+        if (!orphanCleanupComplete)
+            throw new IllegalStateException("Docker 尚未就绪或遗留容器清理失败，请确认 Docker 正常运行后重试");
+    }
+
     private Entry createAndStart(Key key) {
-        if (!orphanCleanupComplete) throw new IllegalStateException("启动时孤儿容器清理失败，请修复 Docker 后重启服务");
+        ensureOrphanCleanupComplete();
         if (!slots.tryAcquire()) throw new IllegalStateException("沙箱容量已满，请稍后重试");
         Entry entry = null;
         try {

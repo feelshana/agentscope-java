@@ -25,6 +25,27 @@ import org.springframework.transaction.annotation.Transactional;
 /** Spring Data repository for {@link DatasetGroupEntity}. */
 public interface DatasetGroupRepository extends JpaRepository<DatasetGroupEntity, String> {
 
+    @Query(
+            """
+            select g from DatasetGroupEntity g
+            where (:admin = true or g.ownerId = :userId or exists
+              (select m.id from KnowledgeBaseGrantEntity m where m.groupId = g.id and m.userId = :userId
+               and (:manageOnly = false or m.role = 'MANAGE')))
+              and (:search = '' or lower(g.name) like concat('%', :search, '%')
+                   or lower(g.description) like concat('%', :search, '%'))
+            """)
+    org.springframework.data.domain.Page<DatasetGroupEntity> findAccessible(
+            String userId,
+            boolean admin,
+            boolean manageOnly,
+            String search,
+            org.springframework.data.domain.Pageable pageable);
+
+    @org.springframework.data.jpa.repository.Lock(
+            jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select g from DatasetGroupEntity g where g.id = :id")
+    Optional<DatasetGroupEntity> findByIdForUpdate(String id);
+
     List<DatasetGroupEntity> findByOwnerIdOrderByCreatedAtDesc(String ownerId);
 
     Optional<DatasetGroupEntity> findByOwnerIdAndName(String ownerId, String name);

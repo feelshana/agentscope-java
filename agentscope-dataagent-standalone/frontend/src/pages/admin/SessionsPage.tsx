@@ -1,3 +1,4 @@
+import { apiFetch } from '../../api/auth';
 import React, { useEffect, useState } from 'react';
 import AdminPageLayout from '../../components/admin/AdminPageLayout';
 
@@ -38,13 +39,13 @@ function authH(): Record<string, string> {
 }
 
 async function listAdminSessions(limit = 200): Promise<SessionView[]> {
-  const r = await fetch(`/api/admin/sessions?limit=${limit}`, { headers: authH() });
+  const r = await apiFetch(`/api/admin/sessions?limit=${limit}`, { headers: authH() });
   if (!r.ok) throw new Error('Failed to load sessions');
   return r.json();
 }
 
 async function fetchSessionTree(key: string): Promise<SessionTreeNode> {
-  const r = await fetch(`/api/admin/sessions/${encodeURIComponent(key)}/tree`, { headers: authH() });
+  const r = await apiFetch(`/api/admin/sessions/${encodeURIComponent(key)}/tree`, { headers: authH() });
   if (!r.ok) throw new Error('Failed to load session tree');
   return r.json();
 }
@@ -65,7 +66,7 @@ interface MutationEntry {
 }
 
 async function fetchWorkspaceEvents(key: string, limit = 500): Promise<MutationEntry[]> {
-  const r = await fetch(
+  const r = await apiFetch(
     `/api/admin/sessions/${encodeURIComponent(key)}/workspace/events?limit=${limit}`,
     { headers: authH() },
   );

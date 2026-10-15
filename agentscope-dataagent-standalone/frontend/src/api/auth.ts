@@ -1,5 +1,27 @@
 const BASE = '';
 
+export const AUTH_EXPIRED_EVENT = 'dataagent:auth-expired';
+export const SESSION_EXPIRED_MESSAGE = '登录状态已失效，请重新登录';
+
+/** Only the server's rejection of the current credential can end this browser session. */
+export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const request = input instanceof Request ? input : null;
+  const url = new URL(request ? request.url : String(input), window.location.href);
+  const headers = new Headers(init?.headers ?? request?.headers);
+  const credential = headers.get('Authorization');
+  const response = await fetch(input, init);
+  if (response.status === 401 && url.origin === window.location.origin
+      && url.pathname.startsWith('/api/') && url.pathname !== '/api/auth/login') {
+    const current = getToken();
+    if (current && credential === `Bearer ${current}`) {
+      clearToken();
+      window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+    }
+    throw new Error(SESSION_EXPIRED_MESSAGE);
+  }
+  return response;
+}
+
 export interface LoginResponse {
   token: string;
   userId: string;
@@ -24,10 +46,10 @@ export async function login(username: string, password: string): Promise<LoginRe
 }
 
 export async function me(): Promise<MeResponse> {
-  const res = await fetch(`${BASE}/api/auth/me`, {
+  const res = await apiFetch(`${BASE}/api/auth/me`, {
     headers: { Authorization: `Bearer ${localStorage.getItem('claw_token')}` },
   });
-  if (!res.ok) throw new Error('Unauthorized');
+  if (!res.ok) throw new Error('暂时无法验证登录状态，请稍后重试');
   return res.json();
 }
 

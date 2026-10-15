@@ -78,6 +78,19 @@ import reactor.core.scheduler.Schedulers;
  * {@code HarnessAgent.call} runs at a time for that key.
  */
 public final class HarnessGateway implements Gateway {
+    private io.agentscope.dataagent.web.session.ConversationScopeRegistry conversationScopes;
+
+    public void setConversationScopes(
+            io.agentscope.dataagent.web.session.ConversationScopeRegistry scopes) {
+        this.conversationScopes = scopes;
+    }
+
+    private void rememberDatasetScope(RuntimeContext context) {
+        var scope = context.get(io.agentscope.dataagent.dataset.DatasetScope.class);
+        if (conversationScopes != null && scope != null) {
+            conversationScopes.put(context.getUserId(), context.getSessionId(), scope.groupIds());
+        }
+    }
 
     private static final Logger log = LoggerFactory.getLogger(HarnessGateway.class);
 
@@ -346,6 +359,11 @@ public final class HarnessGateway implements Gateway {
                         gateKey,
                         () -> {
                             requireCurrentSession(sessionKey, sessionId);
+                            var turnScope =
+                                    runtimeContext.get(
+                                            io.agentscope.dataagent.dataset.ChatTurnScope.class);
+                            if (turnScope != null) turnScope.accept();
+                            rememberDatasetScope(runtimeContext);
                             return ha.call(messages, runtimeContext);
                         })
                 .flatMap(
@@ -412,6 +430,11 @@ public final class HarnessGateway implements Gateway {
                         gateKey,
                         () -> {
                             requireCurrentSession(sessionKey, sessionId);
+                            var turnScope =
+                                    runtimeContext.get(
+                                            io.agentscope.dataagent.dataset.ChatTurnScope.class);
+                            if (turnScope != null) turnScope.accept();
+                            rememberDatasetScope(runtimeContext);
                             return ha.call(messages, runtimeContext);
                         })
                 .flatMap(
@@ -479,6 +502,11 @@ public final class HarnessGateway implements Gateway {
                         gateKey,
                         () -> {
                             requireCurrentSession(sessionKey, sessionId);
+                            var turnScope =
+                                    runtimeContext.get(
+                                            io.agentscope.dataagent.dataset.ChatTurnScope.class);
+                            if (turnScope != null) turnScope.accept();
+                            rememberDatasetScope(runtimeContext);
                             return ha.streamEvents(messages, runtimeContext);
                         })
                 .concatWith(
@@ -499,6 +527,20 @@ public final class HarnessGateway implements Gateway {
      */
     private void onSpawn(SpawnResult result, String parentSessionKey) {
         if (parentSessionKey != null) {
+            if (conversationScopes != null) {
+                var parent =
+                        sessionAgentManager.getSessionStore().get(parentSessionKey).orElse(null);
+                var child =
+                        sessionAgentManager.getSessionStore().get(result.sessionKey()).orElse(null);
+                if (parent != null
+                        && child != null
+                        && java.util.Objects.equals(parent.userId(), child.userId())) {
+                    conversationScopes.put(
+                            parent.userId(),
+                            result.sessionId(),
+                            conversationScopes.get(parent.userId(), parent.sessionId()));
+                }
+            }
             String gateKey =
                     sessionKeyToGateKey.getOrDefault(
                             parentSessionKey, MsgContext.defaultContext().canonicalKey());
@@ -800,6 +842,22 @@ public final class HarnessGateway implements Gateway {
     private final java.util.Set<String> activeGates =
             java.util.concurrent.ConcurrentHashMap.newKeySet();
 
+    /** Constant-time routing lookup; stale mappings must never bypass ownership checks. */
+    public String findMainSessionKey(String userId, String gateKey) {
+        if (gateKey == null) return null;
+        String key = contextKeyToSessionKey.get(gateKey);
+        if (key == null) return null;
+        return sessionAgentManager
+                .getSession(key)
+                .filter(
+                        e ->
+                                e.kind() == SessionKind.MAIN
+                                        && java.util.Objects.equals(userId, e.userId())
+                                        && java.util.Objects.equals(gateKey, e.gateKey()))
+                .map(SessionEntry::sessionKey)
+                .orElse(null);
+    }
+
     public boolean isSessionActive(String sessionKey) {
         String gate = sessionKeyToGateKey.get(sessionKey);
         return gate != null && activeGates.contains(gate);
@@ -842,7 +900,7 @@ public final class HarnessGateway implements Gateway {
                                 leaseRef.set(sessionTurnGate.acquire(gateKey));
                                 activeGates.add(gateKey);
                             } catch (TurnBusyException e) {
-                                return Mono.empty();
+                                return Mono.error(new IllegalStateException("当前会话正在回答，请稍后重试", e));
                             } catch (InterruptedException e) {
                                 Thread.currentThread().interrupt();
                                 return Mono.error(new IllegalStateException(e));
@@ -868,7 +926,7 @@ public final class HarnessGateway implements Gateway {
                                 leaseRef.set(sessionTurnGate.acquire(gateKey));
                                 activeGates.add(gateKey);
                             } catch (TurnBusyException e) {
-                                return Flux.empty();
+                                return Flux.error(new IllegalStateException("当前会话正在回答，请稍后重试", e));
                             } catch (InterruptedException e) {
                                 Thread.currentThread().interrupt();
                                 return Flux.error(new IllegalStateException(e));

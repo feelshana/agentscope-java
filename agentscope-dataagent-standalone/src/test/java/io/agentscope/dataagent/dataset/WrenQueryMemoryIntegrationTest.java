@@ -36,9 +36,10 @@ class WrenQueryMemoryIntegrationTest {
         var groups = mock(DatasetGroupService.class);
         var group = new DatasetGroupEntity("g", "alice", "测试", "");
         group.setMdlVersion(1);
-        when(groups.getGroup("alice", "g")).thenReturn(group);
+        when(groups.queryGroup("alice", "g")).thenReturn(group);
         when(groups.listGroups("alice")).thenReturn(List.of(group));
-        when(groups.getGroup("bob", "g")).thenThrow(new DatasetException("不存在", 404));
+        when(groups.queryGroups("alice", List.of("g"))).thenReturn(List.of(group));
+        when(groups.queryGroup("bob", "g")).thenThrow(new DatasetException("不存在", 404));
         Files.createDirectories(props.wrenHome());
         Files.writeString(
                 props.wrenHome().resolve("profiles.yml"),

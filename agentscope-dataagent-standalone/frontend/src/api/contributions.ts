@@ -1,4 +1,4 @@
-import { getToken } from './auth';
+import { apiFetch, getToken } from './auth';
 
 export type ContributionStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 export type ContributionTargetType =
@@ -76,7 +76,7 @@ async function unwrap<T>(res: Response, ctx: string): Promise<T> {
 }
 
 export async function submitContribution(req: SubmitRequest): Promise<Contribution> {
-  const res = await fetch('/api/me/contributions', {
+  const res = await apiFetch('/api/me/contributions', {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify(req),
@@ -87,7 +87,7 @@ export async function submitContribution(req: SubmitRequest): Promise<Contributi
 export async function submitFromWorkspace(
   req: SubmitFromWorkspaceRequest,
 ): Promise<Contribution> {
-  const res = await fetch('/api/me/contributions/from-workspace', {
+  const res = await apiFetch('/api/me/contributions/from-workspace', {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify(req),
@@ -96,18 +96,18 @@ export async function submitFromWorkspace(
 }
 
 export async function listMyContributions(): Promise<Contribution[]> {
-  const res = await fetch('/api/me/contributions', { headers: authHeaders() });
+  const res = await apiFetch('/api/me/contributions', { headers: authHeaders() });
   return unwrap<Contribution[]>(res, 'listMyContributions');
 }
 
 export async function listContributions(status?: ContributionStatus): Promise<Contribution[]> {
   const url = '/api/admin/contributions' + (status ? `?status=${status}` : '');
-  const res = await fetch(url, { headers: authHeaders() });
+  const res = await apiFetch(url, { headers: authHeaders() });
   return unwrap<Contribution[]>(res, 'listContributions');
 }
 
 export async function getContribution(id: number): Promise<ContributionDetail> {
-  const res = await fetch(`/api/admin/contributions/${id}`, { headers: authHeaders() });
+  const res = await apiFetch(`/api/admin/contributions/${id}`, { headers: authHeaders() });
   return unwrap<ContributionDetail>(res, 'getContribution');
 }
 
@@ -115,7 +115,7 @@ export async function approveContribution(
   id: number,
   req: ApproveRequest,
 ): Promise<Contribution> {
-  const res = await fetch(`/api/admin/contributions/${id}/approve`, {
+  const res = await apiFetch(`/api/admin/contributions/${id}/approve`, {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify(req),
@@ -124,7 +124,7 @@ export async function approveContribution(
 }
 
 export async function rejectContribution(id: number, note: string): Promise<Contribution> {
-  const res = await fetch(`/api/admin/contributions/${id}/reject`, {
+  const res = await apiFetch(`/api/admin/contributions/${id}/reject`, {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify({ note }),

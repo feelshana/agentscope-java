@@ -264,14 +264,18 @@ public class DatasetController {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
                         () ->
-                                datasetService.listByOwner(userId).stream()
-                                        .filter(
-                                                d ->
-                                                        groupId == null
-                                                                || groupId.isBlank()
-                                                                || groupId.equals(d.getGroupId()))
-                                        .map(this::toVO)
-                                        .toList())
+                                (groupId == null || groupId.isBlank()
+                                                ? datasetService.listByOwner(userId)
+                                                : datasetService.listForGroup(userId, groupId))
+                                        .stream()
+                                                .filter(
+                                                        d ->
+                                                                groupId == null
+                                                                        || groupId.isBlank()
+                                                                        || groupId.equals(
+                                                                                d.getGroupId()))
+                                                .map(this::toVO)
+                                                .toList())
                 .subscribeOn(Schedulers.boundedElastic())
                 .onErrorMap(this::toStatus);
     }
@@ -291,6 +295,21 @@ public class DatasetController {
                                             .toList(),
                                     p.rows());
                         })
+                .subscribeOn(Schedulers.boundedElastic())
+                .onErrorMap(this::toStatus);
+    }
+
+    public record DescriptionUpdate(String description) {}
+
+    @PutMapping("/{id}/description")
+    public Mono<DatasetVO> updateDescription(
+            @PathVariable String id, @RequestBody DescriptionUpdate update, Authentication auth) {
+        String userId = (String) auth.getPrincipal();
+        return Mono.fromCallable(
+                        () ->
+                                toVO(
+                                        datasetService.updateDescription(
+                                                userId, id, update.description())))
                 .subscribeOn(Schedulers.boundedElastic())
                 .onErrorMap(this::toStatus);
     }

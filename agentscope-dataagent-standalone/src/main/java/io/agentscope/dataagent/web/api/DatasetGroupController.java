@@ -25,6 +25,8 @@ import io.agentscope.dataagent.dataset.parser.DocxDescriptionExtractor;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetRelationEntity;
+import io.agentscope.dataagent.web.persistence.jpa.UserEntity;
+import io.agentscope.dataagent.web.persistence.jpa.UserEntityRepository;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -68,22 +70,58 @@ public class DatasetGroupController {
     private final DatasetService datasetService;
     private final DocEnhanceService docEnhanceService;
     private final BaselineMdlService baselineMdlService;
+    private final UserEntityRepository userRepository;
+
+    @org.springframework.beans.factory.annotation.Value(
+            "${dataagent.knowledge-graph.enabled:false}")
+    private boolean knowledgeGraphEnabled;
 
     public DatasetGroupController(
             DatasetGroupService groupService,
             DatasetService datasetService,
             DocEnhanceService docEnhanceService,
-            BaselineMdlService baselineMdlService) {
+            BaselineMdlService baselineMdlService,
+            UserEntityRepository userRepository) {
         this.groupService = groupService;
         this.datasetService = datasetService;
         this.docEnhanceService = docEnhanceService;
         this.baselineMdlService = baselineMdlService;
+        this.userRepository = userRepository;
     }
 
     public record GroupVO(
-            String id, String name, String description, int datasetCount, String createdAt) {}
+            String id,
+            String name,
+            String description,
+            int datasetCount,
+            String createdAt,
+            String ownerUsername,
+            boolean deletionPending,
+            String role,
+            boolean canManage,
+            boolean canQuery) {}
+
+    public record GroupPage(List<GroupVO> items, long total, int page, int size) {}
+
+    /** Metadata only, for selected chat chips; does not grant access to the detail endpoint. */
+    @GetMapping("/cards")
+    public Mono<List<GroupVO>> cards(
+            Authentication auth,
+            @org.springframework.web.bind.annotation.RequestParam List<String> ids) {
+        return Mono.fromCallable(
+                        () -> {
+                            if (ids.size() > 100)
+                                throw new DatasetException("最多查询 100 个知识库卡片", 400);
+                            String actor = (String) auth.getPrincipal();
+                            return listVO(actor, groupService.queryGroups(actor, ids));
+                        })
+                .subscribeOn(Schedulers.boundedElastic())
+                .onErrorMap(this::toStatus);
+    }
 
     public record CreateGroupRequest(String name, String description) {}
+
+    public record UpdateGroupRequest(String name, String description) {}
 
     public record GroupDetailVO(
             GroupVO group, List<DatasetController.DatasetVO> datasets, String knowledge) {}
@@ -105,18 +143,57 @@ public class DatasetGroupController {
     public Mono<List<GroupVO>> list(Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
-                        () ->
-                                groupService.listGroups(userId).stream()
-                                        .map(
-                                                g ->
-                                                        toVO(
-                                                                g,
-                                                                (int)
-                                                                        groupService.countDatasets(
-                                                                                userId, g.getId())))
-                                        .toList())
+                        () -> {
+                            return listVO(userId, groupService.listGroups(userId));
+                        })
                 .subscribeOn(Schedulers.boundedElastic())
                 .onErrorMap(this::toStatus);
+    }
+
+    /** Explicit paged contract; the old array endpoint remains for existing clients. */
+    @GetMapping("/page")
+    public Mono<GroupPage> page(
+            Authentication auth,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "0") int page,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "20") int size,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "") String search,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "date")
+                    String sort,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "false")
+                    boolean manageOnly) {
+        String userId = (String) auth.getPrincipal();
+        return Mono.fromCallable(
+                        () -> {
+                            var result =
+                                    groupService.pageGroups(
+                                            userId, page, size, search, sort, manageOnly);
+                            return new GroupPage(
+                                    listVO(userId, result.getContent()),
+                                    result.getTotalElements(),
+                                    page,
+                                    size);
+                        })
+                .subscribeOn(Schedulers.boundedElastic())
+                .onErrorMap(this::toStatus);
+    }
+
+    private List<GroupVO> listVO(String actor, List<DatasetGroupEntity> groups) {
+        Map<String, String> names = new LinkedHashMap<>();
+        userRepository
+                .findAllById(
+                        groups.stream().map(DatasetGroupEntity::getOwnerId).distinct().toList())
+                .forEach(u -> names.put(u.getUserId(), u.getUsername()));
+        var counts = groupService.datasetCounts(groups);
+        var roles = groupService.roles(actor, groups);
+        return groups.stream()
+                .map(
+                        g ->
+                                toVO(
+                                        g,
+                                        counts.getOrDefault(g.getId(), 0L).intValue(),
+                                        names.get(g.getOwnerId()),
+                                        roles.get(g.getId())))
+                .toList();
     }
 
     @GetMapping("/{id}")
@@ -137,6 +214,20 @@ public class DatasetGroupController {
                                             .toList(),
                                     datasetService.knowledgeText(id));
                         })
+                .subscribeOn(Schedulers.boundedElastic())
+                .onErrorMap(this::toStatus);
+    }
+
+    @PutMapping("/{id}")
+    public Mono<GroupVO> update(
+            @PathVariable String id, @RequestBody UpdateGroupRequest req, Authentication auth) {
+        String userId = (String) auth.getPrincipal();
+        return Mono.fromCallable(
+                        () ->
+                                toVO(
+                                        groupService.updateGroup(
+                                                userId, id, req.name(), req.description()),
+                                        (int) groupService.countDatasets(userId, id)))
                 .subscribeOn(Schedulers.boundedElastic())
                 .onErrorMap(this::toStatus);
     }
@@ -199,6 +290,9 @@ public class DatasetGroupController {
      */
     @GetMapping("/{id}/graph")
     public Mono<GraphDto> graph(@PathVariable String id, Authentication auth) {
+        if (!knowledgeGraphEnabled) {
+            return Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "知识图谱暂未开放"));
+        }
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
                         () ->
@@ -295,12 +389,36 @@ public class DatasetGroupController {
             String dataSourceId, String schema, List<String> tables, Boolean sampling) {}
 
     private GroupVO toVO(DatasetGroupEntity g, int datasetCount) {
+        return toVO(
+                g,
+                datasetCount,
+                userRepository.findById(g.getOwnerId()).map(UserEntity::getUsername).orElse(null));
+    }
+
+    private GroupVO toVO(DatasetGroupEntity g, int datasetCount, String ownerUsername) {
+        return toVO(
+                g,
+                datasetCount,
+                ownerUsername,
+                io.agentscope.dataagent.dataset.KnowledgeBaseAccessService.Role.MANAGE);
+    }
+
+    private GroupVO toVO(
+            DatasetGroupEntity g,
+            int datasetCount,
+            String ownerUsername,
+            io.agentscope.dataagent.dataset.KnowledgeBaseAccessService.Role role) {
         return new GroupVO(
                 g.getId(),
                 g.getName(),
                 g.getDescription(),
                 datasetCount,
-                g.getCreatedAt() == null ? null : g.getCreatedAt().toString());
+                g.getCreatedAt() == null ? null : g.getCreatedAt().toString(),
+                ownerUsername == null ? "已移除用户" : ownerUsername,
+                groupService.deletionPending(g.getId()),
+                role == null ? null : role.name(),
+                role == io.agentscope.dataagent.dataset.KnowledgeBaseAccessService.Role.MANAGE,
+                role != null && !groupService.deletionPending(g.getId()));
     }
 
     private String extractText(String fileName, byte[] bytes) throws java.io.IOException {

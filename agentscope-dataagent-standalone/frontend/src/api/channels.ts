@@ -1,4 +1,4 @@
-import { getToken } from './auth';
+import { apiFetch, getToken } from './auth';
 
 export interface ChannelInfo {
   channelId: string;
@@ -96,19 +96,19 @@ async function failOn(res: Response, fallback: string): Promise<never> {
 }
 
 export async function listChannels(): Promise<ChannelInfo[]> {
-  const res = await fetch('/api/channels', { headers: authHeaders() });
+  const res = await apiFetch('/api/channels', { headers: authHeaders() });
   if (!res.ok) return failOn(res, 'Failed to load channels');
   return res.json();
 }
 
 export async function listChannelTypes(): Promise<string[]> {
-  const res = await fetch('/api/channels/types', { headers: authHeaders() });
+  const res = await apiFetch('/api/channels/types', { headers: authHeaders() });
   if (!res.ok) return failOn(res, 'Failed to load channel types');
   return res.json();
 }
 
 export async function getChannelDetail(channelId: string): Promise<ChannelDetail> {
-  const res = await fetch(`/api/channels/${encodeURIComponent(channelId)}`, {
+  const res = await apiFetch(`/api/channels/${encodeURIComponent(channelId)}`, {
     headers: authHeaders(),
   });
   if (!res.ok) return failOn(res, 'Failed to load channel');
@@ -116,7 +116,7 @@ export async function getChannelDetail(channelId: string): Promise<ChannelDetail
 }
 
 export async function createChannel(req: ChannelUpsertRequest): Promise<ChannelDetail> {
-  const res = await fetch('/api/channels', {
+  const res = await apiFetch('/api/channels', {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify(req),
@@ -129,7 +129,7 @@ export async function updateChannel(
   channelId: string,
   req: ChannelUpsertRequest,
 ): Promise<ChannelDetail> {
-  const res = await fetch(`/api/channels/${encodeURIComponent(channelId)}`, {
+  const res = await apiFetch(`/api/channels/${encodeURIComponent(channelId)}`, {
     method: 'PUT',
     headers: jsonHeaders(),
     body: JSON.stringify(req),
@@ -139,7 +139,7 @@ export async function updateChannel(
 }
 
 export async function deleteChannel(channelId: string): Promise<void> {
-  const res = await fetch(`/api/channels/${encodeURIComponent(channelId)}`, {
+  const res = await apiFetch(`/api/channels/${encodeURIComponent(channelId)}`, {
     method: 'DELETE',
     headers: authHeaders(),
   });
@@ -147,7 +147,7 @@ export async function deleteChannel(channelId: string): Promise<void> {
 }
 
 export async function enableChannel(channelId: string): Promise<void> {
-  const res = await fetch(`/api/channels/${encodeURIComponent(channelId)}/enable`, {
+  const res = await apiFetch(`/api/channels/${encodeURIComponent(channelId)}/enable`, {
     method: 'POST',
     headers: authHeaders(),
   });
@@ -155,7 +155,7 @@ export async function enableChannel(channelId: string): Promise<void> {
 }
 
 export async function disableChannel(channelId: string): Promise<void> {
-  const res = await fetch(`/api/channels/${encodeURIComponent(channelId)}/disable`, {
+  const res = await apiFetch(`/api/channels/${encodeURIComponent(channelId)}/disable`, {
     method: 'POST',
     headers: authHeaders(),
   });
@@ -163,7 +163,7 @@ export async function disableChannel(channelId: string): Promise<void> {
 }
 
 export async function listAgentBindings(agentId: string): Promise<AgentBinding[]> {
-  const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/bindings`, {
+  const res = await apiFetch(`/api/agents/${encodeURIComponent(agentId)}/bindings`, {
     headers: authHeaders(),
   });
   if (!res.ok) return failOn(res, 'Failed to load agent bindings');
@@ -174,7 +174,7 @@ export async function addBinding(
   agentId: string,
   req: BindingCreateRequest,
 ): Promise<AgentBinding> {
-  const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/bindings`, {
+  const res = await apiFetch(`/api/agents/${encodeURIComponent(agentId)}/bindings`, {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify(req),
@@ -190,7 +190,7 @@ export async function updateBinding(
   req: BindingCreateRequest,
 ): Promise<AgentBinding> {
   const url = `/api/agents/${encodeURIComponent(agentId)}/bindings/${index}?channelId=${encodeURIComponent(channelId)}`;
-  const res = await fetch(url, {
+  const res = await apiFetch(url, {
     method: 'PUT',
     headers: jsonHeaders(),
     body: JSON.stringify(req),
@@ -205,12 +205,12 @@ export async function deleteBinding(
   index: number,
 ): Promise<void> {
   const url = `/api/agents/${encodeURIComponent(agentId)}/bindings/${index}?channelId=${encodeURIComponent(channelId)}`;
-  const res = await fetch(url, { method: 'DELETE', headers: authHeaders() });
+  const res = await apiFetch(url, { method: 'DELETE', headers: authHeaders() });
   if (!res.ok && res.status !== 204) return failOn(res, 'Failed to delete binding');
 }
 
 export async function setChannelDefault(agentId: string, channelId: string): Promise<void> {
-  const res = await fetch(
+  const res = await apiFetch(
     `/api/agents/${encodeURIComponent(agentId)}/channels/${encodeURIComponent(channelId)}/default`,
     { method: 'POST', headers: authHeaders() },
   );

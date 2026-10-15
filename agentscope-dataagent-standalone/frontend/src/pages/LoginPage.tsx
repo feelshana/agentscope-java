@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { login, saveToken } from '../api/auth';
 
 /**
@@ -12,6 +12,7 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -112,6 +113,7 @@ export default function LoginPage() {
               placeholder="请输入密码"
             />
           </div>
+          {!error && location.state?.sessionExpired && <div role="status" style={{ color: 'var(--da-text-muted)', fontSize: 13 }}>登录状态已失效，请重新登录</div>}
           {error && <div style={{ color: 'var(--da-danger)', fontSize: 13 }}>{error}</div>}
           <button
             className="da-btn da-btn-primary"

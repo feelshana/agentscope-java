@@ -1,4 +1,4 @@
-import { getToken } from './auth';
+import { apiFetch, getToken } from './auth';
 
 export interface KgUnit {
   unitName: string;
@@ -78,7 +78,7 @@ export async function triggerKgBuild(
   groupId: string,
   req?: KgBuildRequest,
 ): Promise<KgBuildTask> {
-  const res = await fetch(`/api/dataset-groups/${encodeURIComponent(groupId)}/kg/build`, {
+  const res = await apiFetch(`/api/dataset-groups/${encodeURIComponent(groupId)}/kg/build`, {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify(req ?? {}),
@@ -88,7 +88,7 @@ export async function triggerKgBuild(
 }
 
 export async function getKgStatus(groupId: string): Promise<KgStatus> {
-  const res = await fetch(`/api/dataset-groups/${encodeURIComponent(groupId)}/kg/status`, {
+  const res = await apiFetch(`/api/dataset-groups/${encodeURIComponent(groupId)}/kg/status`, {
     headers: authHeaders(),
   });
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to load graph status: ${res.status}`));
@@ -96,7 +96,7 @@ export async function getKgStatus(groupId: string): Promise<KgStatus> {
 }
 
 export async function getKgGraph(groupId: string): Promise<KgGraph> {
-  const res = await fetch(`/api/dataset-groups/${encodeURIComponent(groupId)}/kg/graph`, {
+  const res = await apiFetch(`/api/dataset-groups/${encodeURIComponent(groupId)}/kg/graph`, {
     headers: authHeaders(),
   });
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to load graph: ${res.status}`));

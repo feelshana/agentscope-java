@@ -15,34 +15,150 @@
  */
 package io.agentscope.dataagent.web.session;
 
+import io.agentscope.dataagent.web.persistence.jpa.ConversationDatasetScopeEntity;
+import io.agentscope.dataagent.web.persistence.jpa.ConversationDatasetScopeRepository;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Component;
 
 /**
- * Server-side map of conversation (session key) to the knowledge bases the user scoped that
- * conversation to (TC-style "answer within selected KBs"). The harness chatui channel does not
- * propagate typed {@code RuntimeContext} attributes to tool invocations, so the selected group ids
- * are stashed here by the chat controller and looked up by the data toolkit via the session id,
- * which does survive.
+ * Persists the last accepted selection for history restoration, immutable per-message snapshots,
+ * and the active runtime scope used by tools that only receive a session id. Runtime writes are
+ * serialized by the gateway turn gate; ordinary conversations may change selection between turns.
  */
 @Component
 public class ConversationScopeRegistry {
 
-    private final ConcurrentHashMap<String, List<String>> scopes = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Selection> scopes = new ConcurrentHashMap<>();
+    private final Object[] locks =
+            java.util.stream.IntStream.range(0, 64).mapToObj(i -> new Object()).toArray();
 
-    public void put(String sessionKey, List<String> groupIds) {
-        if (sessionKey == null || sessionKey.isBlank()) {
-            return;
-        }
-        if (groupIds == null || groupIds.isEmpty()) {
-            scopes.remove(sessionKey);
-        } else {
-            scopes.put(sessionKey, List.copyOf(groupIds));
+    public record Selection(
+            List<String> groupIds, boolean allGroups, java.util.Map<String, String> groupNames) {
+        public Selection {
+            groupIds = groupIds.stream().distinct().sorted().toList();
+            groupNames = java.util.Map.copyOf(groupNames);
         }
     }
 
-    public List<String> get(String sessionKey) {
-        return sessionKey == null ? null : scopes.get(sessionKey);
+    public ConversationScopeRegistry() {}
+
+    private ConversationDatasetScopeRepository repository;
+
+    private final com.fasterxml.jackson.databind.ObjectMapper mapper =
+            new com.fasterxml.jackson.databind.ObjectMapper();
+
+    public void put(String userId, String sessionKey, List<String> groupIds) {
+        if (groupIds != null)
+            putSelection(userId, sessionKey, new Selection(groupIds, false, java.util.Map.of()));
+    }
+
+    public void putSelection(String userId, String sessionKey, Selection selection) {
+        if (userId == null || sessionKey == null || sessionKey.isBlank()) {
+            return;
+        }
+        String key = ConversationDatasetScopeEntity.key(userId, sessionKey);
+        synchronized (locks[Math.floorMod(key.hashCode(), locks.length)]) {
+            try {
+                if (repository != null) {
+                    var row =
+                            new ConversationDatasetScopeEntity(
+                                    userId,
+                                    sessionKey,
+                                    mapper.writeValueAsString(selection.groupIds()));
+                    row.setSelectionJson(mapper.writeValueAsString(selection));
+                    repository.save(row);
+                }
+                // Per-message snapshots are read in one batch by the history projection; do not
+                // cache all turns.
+                if (!sessionKey.startsWith("turn:")) scopes.put(key, selection);
+            } catch (java.io.IOException e) {
+                throw new IllegalStateException("保存会话知识库范围失败", e);
+            }
+        }
+    }
+
+    public List<String> get(String userId, String sessionKey) {
+        Selection selection = getSelection(userId, sessionKey);
+        return selection == null ? null : selection.groupIds();
+    }
+
+    public Selection getSelection(String userId, String sessionKey) {
+        if (userId == null || sessionKey == null) return null;
+        String key = ConversationDatasetScopeEntity.key(userId, sessionKey);
+        Selection existing = scopes.get(key);
+        if (existing != null || repository == null) return existing;
+        return repository
+                .findById(key)
+                .map(
+                        row -> {
+                            try {
+                                Selection snapshot = readSelection(row);
+                                scopes.put(key, snapshot);
+                                return snapshot;
+                            } catch (java.io.IOException e) {
+                                throw new IllegalStateException("读取会话知识库范围失败", e);
+                            }
+                        })
+                .orElse(null);
+    }
+
+    private Selection readSelection(ConversationDatasetScopeEntity row) throws java.io.IOException {
+        if (row.getSelectionJson() != null)
+            return mapper.readValue(row.getSelectionJson(), Selection.class);
+        return new Selection(
+                mapper.readValue(
+                        row.getGroupsJson(),
+                        new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {}),
+                false,
+                java.util.Map.of());
+    }
+
+    /** Batch enrichment avoids a database query for every historical message. Legacy turns stay unlabeled. */
+    public List<SessionTurnParser.TurnEntry> enrichTurns(
+            String userId, List<SessionTurnParser.TurnEntry> turns) {
+        if (repository == null || userId == null) return turns;
+        var keys =
+                turns.stream()
+                        .filter(t -> "USER".equalsIgnoreCase(t.role()) && t.id() != null)
+                        .map(t -> ConversationDatasetScopeEntity.key(userId, "turn:" + t.id()))
+                        .toList();
+        if (keys.isEmpty()) return turns;
+        var byKey = new java.util.HashMap<String, Selection>();
+        for (var row : repository.findAllById(keys)) {
+            try {
+                byKey.put(row.getId(), readSelection(row));
+            } catch (java.io.IOException e) {
+                throw new IllegalStateException("读取历史问答知识库范围失败", e);
+            }
+        }
+        return turns.stream()
+                .map(
+                        t -> {
+                            var scope =
+                                    byKey.get(
+                                            ConversationDatasetScopeEntity.key(
+                                                    userId, "turn:" + t.id()));
+                            return scope == null
+                                    ? t
+                                    : new SessionTurnParser.TurnEntry(
+                                            t.id(),
+                                            t.parentId(),
+                                            t.role(),
+                                            t.content(),
+                                            t.timestampMs(),
+                                            t.toolName(),
+                                            t.toolInput(),
+                                            t.toolResult(),
+                                            t.toolCallId(),
+                                            scope);
+                        })
+                .toList();
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public ConversationScopeRegistry(ConversationDatasetScopeRepository repository) {
+        this();
+        this.repository = repository;
     }
 }

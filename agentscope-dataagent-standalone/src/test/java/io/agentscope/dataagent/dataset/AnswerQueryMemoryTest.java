@@ -131,6 +131,27 @@ class AnswerQueryMemoryTest {
     }
 
     @Test
+    void sharedQueryMemberCanSaveButRevokedMemberCannotSelectReceipt() throws Exception {
+        var groups = mock(DatasetGroupService.class);
+        var group = new DatasetGroupEntity("g", "owner", "shared", "");
+        when(groups.listGroups("alice")).thenReturn(List.of(group));
+        when(groups.queryGroup("alice", "g")).thenReturn(group);
+        var service =
+                new AnswerQueryMemory(
+                        new WrenProperties("wren", home.toString(), "test", "duckdb", 30),
+                        (cwd, timeout, args) -> new WrenCli.Result(0, ""),
+                        groups);
+        var transcript = turns(receipt("g", "SELECT 2", "BUSINESS"), "two");
+        assertEquals(1, service.candidates("alice", "a", transcript).size());
+        assertEquals(
+                "SAVED",
+                service.feedback("alice", "session", "a", "UP", transcript).memoryStatus());
+        when(groups.listGroups("alice")).thenReturn(List.of());
+        assertTrue(service.candidates("alice", "a", transcript).isEmpty());
+        assertEquals("NONE", service.status("owner", "session", "a").memoryStatus());
+    }
+
+    @Test
     void receiptOnlyTranscriptIsAcceptedButDiagnosticInputIsNeverPromoted() throws Exception {
         var service = service(new ArrayList<>());
         var all = turns(receipt("g", "SELECT 2", "BUSINESS"), null);

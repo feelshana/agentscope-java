@@ -2,7 +2,7 @@
  * 本体模型 API 客户端。对应后端 /api/ontology/* 端点。
  */
 
-import { getToken } from './auth';
+import { apiFetch as sessionFetch, getToken } from './auth';
 
 export interface OntologyVO {
   id: string;
@@ -61,7 +61,7 @@ function authHeaders(): Record<string, string> {
 }
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, { headers: authHeaders(), ...init });
+  const res = await sessionFetch(path, { headers: authHeaders(), ...init });
   if (!res.ok) {
     const txt = await res.text().catch(() => res.statusText);
     throw new Error(txt || `HTTP ${res.status}`);
@@ -74,7 +74,7 @@ export async function uploadOntology(file: File, groupId: string): Promise<Ontol
   const form = new FormData();
   form.append('file', file);
   const token = getToken();
-  const res = await fetch(`/api/ontology/upload?groupId=${encodeURIComponent(groupId)}`, {
+  const res = await sessionFetch(`/api/ontology/upload?groupId=${encodeURIComponent(groupId)}`, {
     method: 'POST',
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: form,
@@ -123,7 +123,7 @@ export async function getOntologySubGraph(
 /** 获取格式化目录文本 */
 export async function getOntologyCatalog(groupId: string): Promise<string> {
   const token = getToken();
-  const res = await fetch(`/api/ontology/${encodeURIComponent(groupId)}/catalog`, {
+  const res = await sessionFetch(`/api/ontology/${encodeURIComponent(groupId)}/catalog`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!res.ok) throw new Error(`Catalog fetch failed: ${res.status}`);
@@ -133,7 +133,7 @@ export async function getOntologyCatalog(groupId: string): Promise<string> {
 /** 删除本体 */
 export async function deleteOntology(id: string): Promise<void> {
   const token = getToken();
-  const res = await fetch(`/api/ontology/${id}`, {
+  const res = await sessionFetch(`/api/ontology/${id}`, {
     method: 'DELETE',
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
@@ -212,7 +212,7 @@ export interface ImportSummary {
 /** 获取本体模型结构化数据（对象目录视图数据源） */
 export async function getOntologyModel(groupId: string): Promise<OntologyModelData | null> {
   const token = getToken();
-  const res = await fetch(`/api/ontology/${encodeURIComponent(groupId)}/model`, {
+  const res = await sessionFetch(`/api/ontology/${encodeURIComponent(groupId)}/model`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (res.status === 404) return null;
@@ -223,7 +223,7 @@ export async function getOntologyModel(groupId: string): Promise<OntologyModelDa
 /** 下载本体 YAML 文件 */
 export async function downloadOntologyYaml(groupId: string): Promise<void> {
   const token = getToken();
-  const res = await fetch(`/api/ontology/${encodeURIComponent(groupId)}/yaml`, {
+  const res = await sessionFetch(`/api/ontology/${encodeURIComponent(groupId)}/yaml`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!res.ok) throw new Error(`YAML download failed: ${res.status}`);
@@ -241,7 +241,7 @@ export async function uploadOntologyYaml(groupId: string, file: File): Promise<O
   const form = new FormData();
   form.append('file', file);
   const token = getToken();
-  const res = await fetch(`/api/ontology/${encodeURIComponent(groupId)}/ontology`, {
+  const res = await sessionFetch(`/api/ontology/${encodeURIComponent(groupId)}/ontology`, {
     method: 'PUT',
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: form,
@@ -265,7 +265,7 @@ export async function importManifest(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 300_000); // 5 min
   try {
-    const res = await fetch(
+    const res = await sessionFetch(
       `/api/dataset-groups/${encodeURIComponent(groupId)}/import-manifest`,
       {
         method: 'POST',

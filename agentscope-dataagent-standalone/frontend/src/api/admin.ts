@@ -1,11 +1,11 @@
-import { getToken } from './auth';
+import { apiFetch as sessionFetch, getToken } from './auth';
 
 function authHeaders() {
   return { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' };
 }
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, { headers: authHeaders(), ...init });
+  const res = await sessionFetch(path, { headers: authHeaders(), ...init });
   if (!res.ok) {
     const txt = await res.text().catch(() => res.statusText);
     throw new Error(txt || `HTTP ${res.status}`);
@@ -254,7 +254,7 @@ export const updateBinding = (channelId: string, index: number, req: BindingMuta
   );
 
 export const deleteBinding = async (channelId: string, index: number): Promise<void> => {
-  const res = await fetch(
+  const res = await sessionFetch(
     `/api/admin/channels/${encodeURIComponent(channelId)}/bindings/${index}`,
     { method: 'DELETE', headers: authHeaders() },
   );
@@ -390,7 +390,7 @@ export const updateWorkspaceSkill = (id: string, name: string, content: string) 
     method: 'PUT', body: JSON.stringify({ name, content, exists: true }),
   });
 export const deleteWorkspaceSkill = async (id: string, name: string): Promise<void> => {
-  const res = await fetch(`${wsBase(id)}/skills/${encodeURIComponent(name)}`, {
+  const res = await sessionFetch(`${wsBase(id)}/skills/${encodeURIComponent(name)}`, {
     method: 'DELETE', headers: authHeaders(),
   });
   if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
@@ -409,7 +409,7 @@ export const updateWorkspaceSubagent = (id: string, name: string, content: strin
     method: 'PUT', body: JSON.stringify({ name, content, exists: true }),
   });
 export const deleteWorkspaceSubagent = async (id: string, name: string): Promise<void> => {
-  const res = await fetch(`${wsBase(id)}/subagents/${encodeURIComponent(name)}`, {
+  const res = await sessionFetch(`${wsBase(id)}/subagents/${encodeURIComponent(name)}`, {
     method: 'DELETE', headers: authHeaders(),
   });
   if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
@@ -447,7 +447,7 @@ export function openLogStream(
   const controller = new AbortController();
   (async () => {
     try {
-      const res = await fetch('/api/admin/runtime/logs', {
+      const res = await sessionFetch('/api/admin/runtime/logs', {
         headers: authHeaders(),
         signal: controller.signal,
       });

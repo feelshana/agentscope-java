@@ -1,4 +1,4 @@
-import { getToken } from './auth';
+import { apiFetch, getToken } from './auth';
 
 export interface ModelingWorkflow {
   groupId: string;
@@ -21,7 +21,7 @@ export interface ModelingWorkflow {
 
 export async function getModelingWorkflow(groupId: string): Promise<ModelingWorkflow> {
   const token = getToken();
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/dataset-groups/${encodeURIComponent(groupId)}/modeling/workflow`,
     { headers: token ? { Authorization: `Bearer ${token}` } : {} },
   );

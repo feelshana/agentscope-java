@@ -1,4 +1,4 @@
-import { getToken } from './auth';
+import { apiFetch, getToken } from './auth';
 
 export interface SubagentInfo {
   name: string;
@@ -37,7 +37,7 @@ function base(agentId: string): string {
 }
 
 export async function listSubagents(agentId: string): Promise<SubagentInfo[]> {
-  const res = await fetch(base(agentId), { headers: authHeaders() });
+  const res = await apiFetch(base(agentId), { headers: authHeaders() });
   if (!res.ok) throw new Error('Failed to list subagents');
   return res.json();
 }
@@ -47,7 +47,7 @@ export async function upsertSubagent(
   name: string,
   req: SubagentUpsertRequest,
 ): Promise<SubagentInfo> {
-  const res = await fetch(`${base(agentId)}/${encodeURIComponent(name)}`, {
+  const res = await apiFetch(`${base(agentId)}/${encodeURIComponent(name)}`, {
     method: 'PUT',
     headers: jsonHeaders(),
     body: JSON.stringify(req),
@@ -64,7 +64,7 @@ export async function createFromAgent(
   sourceAgentId: string,
   name?: string,
 ): Promise<SubagentInfo> {
-  const res = await fetch(`${base(agentId)}/from-agent`, {
+  const res = await apiFetch(`${base(agentId)}/from-agent`, {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify({ sourceAgentId, name }),
@@ -77,7 +77,7 @@ export async function createFromAgent(
 }
 
 export async function deleteSubagent(agentId: string, name: string): Promise<void> {
-  const res = await fetch(`${base(agentId)}/${encodeURIComponent(name)}`, {
+  const res = await apiFetch(`${base(agentId)}/${encodeURIComponent(name)}`, {
     method: 'DELETE',
     headers: authHeaders(),
   });

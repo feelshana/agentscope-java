@@ -168,8 +168,9 @@ class OfficialWrenCliIntegrationTest {
         when(profileHome.ensure()).thenReturn(props.wrenHome());
         var group = new DatasetGroupEntity("fixture", "alice", "测试工程", "");
         group.setMdlVersion(1);
-        when(groups.getGroup("alice", "fixture")).thenReturn(group);
+        when(groups.queryGroup("alice", "fixture")).thenReturn(group);
         when(groups.listGroups("alice")).thenReturn(List.of(group));
+        when(groups.queryGroups("alice", List.of("fixture"))).thenReturn(List.of(group));
         var repository =
                 mock(io.agentscope.dataagent.web.persistence.jpa.DatasetGroupRepository.class);
         when(repository.findById("fixture")).thenReturn(java.util.Optional.of(group));

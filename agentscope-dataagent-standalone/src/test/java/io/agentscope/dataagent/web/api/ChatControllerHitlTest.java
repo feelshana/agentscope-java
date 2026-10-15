@@ -19,7 +19,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -32,6 +35,7 @@ import io.agentscope.core.message.ToolCallState;
 import io.agentscope.core.message.ToolUseBlock;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.state.AgentState;
+import io.agentscope.dataagent.dataset.DatasetException;
 import io.agentscope.dataagent.dataset.DatasetGroupService;
 import io.agentscope.dataagent.runtime.DataAgentBootstrap;
 import io.agentscope.dataagent.runtime.gateway.HarnessGateway;
@@ -85,6 +89,8 @@ class ChatControllerHitlTest {
         when(gateway.sessionAgentManager()).thenReturn(sessions);
         when(authentication.getPrincipal()).thenReturn("alice");
         when(modelProvider.getIfAvailable()).thenReturn(mock(Model.class));
+        // Mockito defaults collection results to empty; the real registry returns null if unbound.
+        when(conversationScopes.get(anyString(), anyString())).thenReturn(null);
         when(groupService.getGroup(anyString(), anyString()))
                 .thenReturn(new DatasetGroupEntity("g1", "alice", "KB", null));
 
@@ -101,6 +107,165 @@ class ChatControllerHitlTest {
                         modelProvider,
                         conversationScopes,
                         groupService);
+    }
+
+    @Test
+    void ordinaryChatDoesNotExpandToUserKnowledgeBases() {
+        assertThat(controller.resolveGroupScope("alice", "data-agent", "plain", null, false))
+                .isEmpty();
+        verify(groupService).queryGroups("alice", List.of());
+        verify(groupService, never()).listGroups(anyString());
+    }
+
+    @Test
+    void normalChatAcceptsMultipleGroupsAndNormalizesSelection() {
+        when(groupService.queryGroups("alice", List.of("g1", "g2")))
+                .thenReturn(
+                        List.of(
+                                new DatasetGroupEntity("g2", "bob", "共享库", null),
+                                new DatasetGroupEntity("g1", "alice", "自己的库", null)));
+        assertThat(
+                        controller.resolveGroupScope(
+                                "alice", "data-agent", "multi", List.of("g2", "g1", "g2"), false))
+                .containsExactly("g1", "g2");
+        verify(groupService, never()).getGroup(anyString(), anyString());
+    }
+
+    @Test
+    void allGroupsExpandsOnlyAuthorizedGroupsAndConflictingSelectionIsRejected() {
+        var groups =
+                List.of(
+                        new DatasetGroupEntity("g1", "alice", "自己的库", null),
+                        new DatasetGroupEntity("g2", "bob", "共享库", null));
+        when(groupService.listGroups("alice")).thenReturn(groups);
+        when(groupService.queryGroups("alice", List.of("g1", "g2"))).thenReturn(groups);
+        assertThat(controller.resolveGroupScope("alice", "data-agent", "all", null, true))
+                .containsExactly("g1", "g2");
+        assertThatThrownBy(
+                        () ->
+                                controller.resolveGroupScope(
+                                        "alice", "data-agent", "all", List.of("g1"), true))
+                .isInstanceOf(DatasetException.class);
+    }
+
+    @Test
+    void continuationUsesSavedRangeAndReorderingIsAllowed() {
+        when(conversationScopes.get("alice", "multi")).thenReturn(List.of("g2", "g1"));
+        var groups =
+                List.of(
+                        new DatasetGroupEntity("g1", "alice", "一", null),
+                        new DatasetGroupEntity("g2", "bob", "二", null));
+        when(groupService.queryGroups("alice", List.of("g1", "g2"))).thenReturn(groups);
+        assertThat(controller.resolveGroupScope("alice", "data-agent", "multi", null, false))
+                .containsExactly("g1", "g2");
+        assertThat(
+                        controller.resolveGroupScope(
+                                "alice", "data-agent", "multi", List.of("g1", "g2"), false))
+                .containsExactly("g1", "g2");
+        assertThat(controller.resolveGroupScope("alice", "data-agent", "multi", List.of(), false))
+                .isEmpty();
+    }
+
+    @Test
+    void plainConversationCanSelectKnowledgeBasesAndRevokedSelectionFails() {
+        when(conversationScopes.get("alice", "plain")).thenReturn(List.of());
+        when(groupService.queryGroups("alice", List.of("g1")))
+                .thenReturn(List.of(new DatasetGroupEntity("g1", "alice", "KB", null)));
+        assertThat(
+                        controller.resolveGroupScope(
+                                "alice", "data-agent", "plain", List.of("g1"), false))
+                .containsExactly("g1");
+        when(groupService.queryGroups("alice", List.of("g1")))
+                .thenThrow(new DatasetException("知识库不存在或未授权", 404));
+        assertThatThrownBy(
+                        () ->
+                                controller.resolveGroupScope(
+                                        "alice", "data-agent", "new", List.of("g1"), false))
+                .isInstanceOf(DatasetException.class);
+    }
+
+    @Test
+    void scopeIsNotSavedUntilTurnAcceptanceAndRevocationBeforeAcceptanceIsRejected() {
+        var g1 = new DatasetGroupEntity("g1", "alice", "销售库", null);
+        when(groupService.queryGroups("alice", List.of("g1"))).thenReturn(List.of(g1));
+        when(catalogService.resolveGatewayAgentId("alice", "data-agent")).thenReturn("data-agent");
+        Msg message = Msg.builder().role(MsgRole.USER).textContent("问题").build();
+        io.agentscope.harness.agent.gateway.channel.InboundMessage inbound =
+                org.springframework.test.util.ReflectionTestUtils.invokeMethod(
+                        controller,
+                        "buildInbound",
+                        "alice",
+                        "data-agent",
+                        List.of(message),
+                        "conv",
+                        List.of("g1"),
+                        false,
+                        "req");
+        verify(conversationScopes, never()).putSelection(anyString(), anyString(), any());
+        inbound.runtimeContext().get(io.agentscope.dataagent.dataset.ChatTurnScope.class).accept();
+        verify(conversationScopes).putSelection(eq("alice"), eq("conv"), any());
+        verify(conversationScopes).putSelection(eq("alice"), eq("turn:" + message.getId()), any());
+        when(groupService.queryGroups("alice", List.of("g1")))
+                .thenThrow(new DatasetException("已撤权", 404));
+        assertThatThrownBy(
+                        () ->
+                                inbound.runtimeContext()
+                                        .get(io.agentscope.dataagent.dataset.ChatTurnScope.class)
+                                        .accept())
+                .isInstanceOf(DatasetException.class);
+        verify(conversationScopes, org.mockito.Mockito.times(1))
+                .putSelection(eq("alice"), eq("conv"), any());
+    }
+
+    @Test
+    void allSelectionExpandsLatestAuthorizationEachTurn() {
+        var g1 = new DatasetGroupEntity("g1", "alice", "一", null);
+        var g2 = new DatasetGroupEntity("g2", "bob", "二", null);
+        when(conversationScopes.get("alice", "all")).thenReturn(List.of("g1"));
+        when(groupService.listGroups("alice"))
+                .thenReturn(List.of(g1), List.of(g1, g2), List.of(g2));
+        when(groupService.queryGroups("alice", List.of("g1"))).thenReturn(List.of(g1));
+        when(groupService.queryGroups("alice", List.of("g1", "g2"))).thenReturn(List.of(g1, g2));
+        when(groupService.queryGroups("alice", List.of("g2"))).thenReturn(List.of(g2));
+        assertThat(controller.resolveGroupScope("alice", "data-agent", "all", null, true))
+                .containsExactly("g1");
+        assertThat(controller.resolveGroupScope("alice", "data-agent", "all", null, true))
+                .containsExactly("g1", "g2");
+        assertThat(controller.resolveGroupScope("alice", "data-agent", "all", null, true))
+                .containsExactly("g2");
+    }
+
+    @Test
+    void modelingConversationStillCannotSwitchItsKnowledgeBase() {
+        when(conversationScopes.get("alice", "model")).thenReturn(List.of("g1"));
+        assertThatThrownBy(
+                        () ->
+                                controller.resolveGroupScope(
+                                        "alice", MODELING_AGENT_ID, "model", List.of("g2"), false))
+                .isInstanceOf(DatasetException.class);
+    }
+
+    @Test
+    void modelingRejectsNoneMultipleAndAllButAllowsOneManagedGroup() {
+        for (List<String> ids : List.of(List.<String>of(), List.of("g1", "g2"))) {
+            assertThatThrownBy(
+                            () ->
+                                    controller.resolveGroupScope(
+                                            "alice", MODELING_AGENT_ID, "model", ids, false))
+                    .isInstanceOf(DatasetException.class);
+        }
+        assertThatThrownBy(
+                        () ->
+                                controller.resolveGroupScope(
+                                        "alice", MODELING_AGENT_ID, "model", null, true))
+                .isInstanceOf(DatasetException.class);
+        when(groupService.queryGroups("alice", List.of("g1")))
+                .thenReturn(List.of(new DatasetGroupEntity("g1", "alice", "KB", null)));
+        assertThat(
+                        controller.resolveGroupScope(
+                                "alice", MODELING_AGENT_ID, "model", List.of("g1"), false))
+                .containsExactly("g1");
+        verify(groupService).getGroup("alice", "g1");
     }
 
     @Test
@@ -136,23 +301,7 @@ class ChatControllerHitlTest {
         when(channel.previewRoute(any())).thenReturn(route);
         when(route.context()).thenReturn(context);
         when(context.canonicalKey()).thenReturn("gate-1");
-        when(sessions.allSessions())
-                .thenReturn(
-                        List.of(
-                                new SessionEntry(
-                                        "storage-key",
-                                        "modeling-gateway",
-                                        "runtime-session",
-                                        null,
-                                        SessionKind.MAIN,
-                                        null,
-                                        0,
-                                        1L,
-                                        1L,
-                                        null,
-                                        null,
-                                        "gate-1",
-                                        "alice")));
+        when(gateway.findMainSessionKey("alice", "gate-1")).thenReturn("storage-key");
         when(sessions.getSession("storage-key"))
                 .thenReturn(
                         java.util.Optional.of(
@@ -280,7 +429,7 @@ class ChatControllerHitlTest {
 
     @Test
     void confirmationRejectsChangedKnowledgeBaseScope() {
-        when(conversationScopes.get("modeling-g1")).thenReturn(List.of("g1"));
+        when(conversationScopes.get("alice", "modeling-g1")).thenReturn(List.of("g1"));
         ChatController.ModelingConfirmRequest request =
                 new ChatController.ModelingConfirmRequest(
                         "modeling-g1",

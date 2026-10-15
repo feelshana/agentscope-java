@@ -1,4 +1,4 @@
-import { getToken } from './auth';
+import { apiFetch, getToken } from './auth';
 
 export type SkillOrigin = 'custom' | 'marketplace';
 
@@ -54,7 +54,7 @@ async function readError(res: Response, fallback: string): Promise<Error> {
 }
 
 export async function listWorkspaceSkills(agentId: string): Promise<WorkspaceSkillInfo[]> {
-  const res = await fetch(`${base(agentId)}/workspace`, { headers: authHeaders() });
+  const res = await apiFetch(`${base(agentId)}/workspace`, { headers: authHeaders() });
   if (!res.ok) throw await readError(res, 'Failed to list workspace skills');
   return res.json();
 }
@@ -63,7 +63,7 @@ export async function getWorkspaceSkill(
   agentId: string,
   name: string,
 ): Promise<WorkspaceSkillDetail> {
-  const res = await fetch(`${base(agentId)}/workspace/${encodeURIComponent(name)}`, {
+  const res = await apiFetch(`${base(agentId)}/workspace/${encodeURIComponent(name)}`, {
     headers: authHeaders(),
   });
   if (!res.ok) throw await readError(res, 'Failed to load workspace skill');
@@ -76,7 +76,7 @@ export async function upsertWorkspaceSkill(
   markdown: string,
   resources?: Record<string, string>,
 ): Promise<WorkspaceSkillInfo> {
-  const res = await fetch(`${base(agentId)}/workspace/${encodeURIComponent(name)}`, {
+  const res = await apiFetch(`${base(agentId)}/workspace/${encodeURIComponent(name)}`, {
     method: 'PUT',
     headers: jsonHeaders(),
     body: JSON.stringify({ markdown, resources }),
@@ -86,7 +86,7 @@ export async function upsertWorkspaceSkill(
 }
 
 export async function deleteWorkspaceSkill(agentId: string, name: string): Promise<void> {
-  const res = await fetch(`${base(agentId)}/workspace/${encodeURIComponent(name)}`, {
+  const res = await apiFetch(`${base(agentId)}/workspace/${encodeURIComponent(name)}`, {
     method: 'DELETE',
     headers: authHeaders(),
   });
@@ -110,7 +110,7 @@ export async function installFromMarketplace(
   agentId: string,
   req: MarketplaceInstallRequest,
 ): Promise<InstallResult> {
-  const res = await fetch(`${base(agentId)}/workspace/marketplace-install`, {
+  const res = await apiFetch(`${base(agentId)}/workspace/marketplace-install`, {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify(req),

@@ -17,19 +17,7 @@ export interface TaskTraceProps {
   children: React.ReactNode;
 }
 
-/**
- * TC-style collapsible execution trace.
- *
- * Outcome semantics (per user expectation):
- * - 任务执行完成 — the turn finished and produced an answer, even if some
- *   intermediate tool calls failed and the agent recovered via another route.
- * - 任务执行完成（部分步骤重试后成功）— finished with an answer, but one or more
- *   tool calls had errored along the way (visible per-tool in the trace body).
- * - 任务执行失败 — the turn was interrupted (stream error) and produced no answer.
- *
- * The body stays open while running and on failure so the user can inspect what
- * happened; it auto-collapses on success unless the user opened it by hand.
- */
+/** A compact execution summary; failed and interrupted traces remain open for inspection. */
 export default function TaskTrace({
   running,
   active,
@@ -39,17 +27,13 @@ export default function TaskTrace({
   elapsedMs,
   children,
 }: TaskTraceProps) {
-  const [open, setOpen] = useState(running);
+  const [open, setOpen] = useState(running || hasError || interrupted);
   const userToggled = useRef(false);
 
   const failed = hasError || interrupted;
 
   useEffect(() => {
-    // Keep open on interruption so the user can see what went wrong;
-    // auto-collapse on any successful finish unless user manually opened.
-    if (!running && !userToggled.current && !failed) {
-      setOpen(false);
-    }
+    if (!userToggled.current) setOpen(running || failed);
   }, [running, failed]);
 
   function toggle() {
@@ -59,22 +43,18 @@ export default function TaskTrace({
 
   let status: string;
   if (running) {
-    status = active ? '任务进行中…' : '好的，收到您的需求，我将为您执行任务…';
+    status = active ? '执行中…' : '收到，正在处理…';
   } else if (interrupted) {
-    status = '任务已中断';
+    status = '已中断';
   } else if (hasError) {
-    status = '任务执行失败（未产出回答）';
+    status = '执行失败';
   } else if (hadToolErrors) {
-    status = '任务执行完成（部分步骤重试后成功）';
+    status = '已完成（部分步骤重试）';
   } else {
-    status = '任务执行完成';
+    status = '已完成';
   }
 
-  const statusClass = running
-    ? 'running'
-    : failed
-    ? 'failed'
-    : '';
+  const statusClass = running ? 'running' : interrupted ? 'interrupted' : hasError ? 'failed' : '';
 
   const elapsedText = !running && elapsedMs != null
     ? formatElapsed(elapsedMs)
@@ -85,7 +65,7 @@ export default function TaskTrace({
       <button type="button" className="da-trace-head" onClick={toggle} aria-expanded={open}>
         <span className={`da-trace-status ${statusClass}`}>{status}</span>
         {elapsedText && <span className="da-trace-elapsed">{elapsedText}</span>}
-        <span className={`da-trace-chevron${open ? ' open' : ''}`}>
+        <span className={`da-trace-chevron${open ? ' open' : ''}`} aria-hidden="true">
           <Icon name="chevron" size="sm" />
         </span>
       </button>

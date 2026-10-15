@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { ACTIVE_AGENT_ID } from '../api/activeAgent';
-import { clearToken, getToken, isAdmin } from '../api/auth';
+import { getToken } from '../api/auth';
 import { InboxEntry, deleteSession, inboxPage } from '../api/sessions';
 import Icon, { IconName } from './Icon';
 
@@ -10,14 +11,6 @@ interface UtilityItem {
   path: string;
   icon: IconName;
 }
-
-const UTILITY_ITEMS: UtilityItem[] = [
-  { label: '个人资料', path: '/profile', icon: 'user' },
-  { label: '外观设置', path: '/appearance', icon: 'edit' },
-  { label: '我的贡献', path: '/contributions', icon: 'link' },
-  { label: '授权绑定', path: '/bindings', icon: 'link' },
-  { label: '用量统计', path: '/usage', icon: 'chart' },
-];
 
 /** Primary nav (新建对话 and 更多 are rendered separately). */
 const NAV_ITEMS: UtilityItem[] = [
@@ -86,6 +79,28 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [moreOpen, setMoreOpen] = useState(false);
+  const moreButton = useRef<HTMLButtonElement>(null);
+  const moreMenu = useRef<HTMLDivElement>(null);
+  const [morePosition, setMorePosition] = useState({ left: 0, top: 0 });
+  useEffect(() => {
+    if (!moreOpen) return;
+    const outside = (e: PointerEvent) => {
+      if (!moreButton.current?.contains(e.target as Node) && !moreMenu.current?.contains(e.target as Node)) setMoreOpen(false);
+    };
+    const escape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setMoreOpen(false); moreButton.current?.focus(); }
+    };
+    const close = () => setMoreOpen(false);
+    document.addEventListener('pointerdown', outside);
+    document.addEventListener('keydown', escape);
+    window.addEventListener('resize', close);
+    return () => {
+      document.removeEventListener('pointerdown', outside);
+      document.removeEventListener('keydown', escape);
+      window.removeEventListener('resize', close);
+    };
+  }, [moreOpen]);
+  useEffect(() => { setMoreOpen(false); }, [location.pathname]);
   const [retryNonce, setRetryNonce] = useState(0);
   const [batchMode, setBatchMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -262,14 +277,21 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
           );
         })}
         <button
-          onClick={() => setMoreOpen(o => !o)}
+          ref={moreButton}
+          aria-expanded={moreOpen}
+          aria-controls="sidebar-more-menu"
+          onClick={() => {
+            const rect = moreButton.current?.getBoundingClientRect();
+            if (rect) setMorePosition({ left: Math.min(rect.right + 12, window.innerWidth - 196), top: Math.max(8, Math.min(rect.top, window.innerHeight - 68)) });
+            setMoreOpen(o => !o);
+          }}
           className={moreOpen ? 'da-navitem da-navitem-active' : 'da-navitem'}
         >
-          <Icon name="list" /> 更多
+          <Icon name="moreHorizontal" /> 更多
         </button>
-        {moreOpen && (
-          <div style={S.moreMenu}>
-            {MORE_ITEMS.filter(m => m.label !== 'Admin' || isAdmin()).map(m => (
+        {moreOpen && createPortal(
+          <div ref={moreMenu} id="sidebar-more-menu" aria-label="更多选项" style={{ ...S.moreMenu, ...morePosition }}>
+            {MORE_ITEMS.map(m => (
               <button
                 key={m.path}
                 className="da-navitem"
@@ -281,7 +303,7 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
                 <Icon name={m.icon} /> {m.label}
               </button>
             ))}
-          </div>
+          </div>, document.body
         )}
       </div>
 
@@ -382,7 +404,7 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
       </div>
 
       <div style={S.footer}>
-        <UserMenu username={getUsername()} onLogout={() => { clearToken(); navigate('/login', { replace: true }); }} />
+        <UserMenu username={getUsername()} />
       </div>
     </div>
   );
@@ -399,19 +421,16 @@ interface RowProps {
 }
 
 function SessionRow({ entry, active, batchMode, selected, onOpen, onDelete, onToggleSelect }: RowProps) {
-  const [hover, setHover] = useState(false);
   return (
     <div
       onClick={batchMode ? onToggleSelect : onOpen}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
       className={
         'da-row' +
         (active ? ' da-row-active' : '') +
         (entry.unread && !active ? ' da-row-unread' : '') +
         (batchMode && selected ? ' da-row-selected' : '')
       }
-      title={entry.title ?? entry.lastMessage ?? '新对话'}
+      title={`${entry.title ?? entry.label ?? '新对话'} · ${relTime(entry.lastActivityMs)}`}
     >
       {batchMode && (
         <span style={S.checkbox}>
@@ -425,15 +444,13 @@ function SessionRow({ entry, active, batchMode, selected, onOpen, onDelete, onTo
       )}
       <div style={S.rowMain}>
         <div style={S.rowTitle}>{entry.title ?? entry.label ?? '新对话'}</div>
-        {entry.lastMessage && <div style={S.rowSnippet}>{entry.lastMessage}</div>}
       </div>
       <div style={S.rowMeta}>
-        <span>{relTime(entry.lastActivityMs)}</span>
-        {hover && !batchMode && (
+        {!batchMode && (
           <button
             onClick={onDelete}
             title="删除对话"
-            className="da-btn da-btn-ghost da-btn-sm"
+            className="da-btn da-btn-ghost da-btn-sm da-session-delete"
           >×</button>
         )}
       </div>
@@ -441,8 +458,7 @@ function SessionRow({ entry, active, batchMode, selected, onOpen, onDelete, onTo
   );
 }
 
-function UserMenu({ username, onLogout }: { username: string; onLogout: () => void }) {
-  const navigate = useNavigate();
+function UserMenu({ username }: { username: string }) {
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -463,77 +479,39 @@ function UserMenu({ username, onLogout }: { username: string; onLogout: () => vo
     <div ref={ref} style={{ position: 'relative' as const }}>
       <button
         onClick={() => setOpen(o => !o)}
+        type="button"
+        aria-label="查看当前用户"
+        aria-expanded={open}
         style={{
-          display: 'flex', alignItems: 'center', gap: 10, width: '100%',
-          background: open ? 'var(--da-primary-subtle)' : 'var(--da-surface-sunken)',
-          border: `1px solid ${open ? 'rgba(79,70,229,0.35)' : 'var(--da-border)'}`,
-          borderRadius: 10, padding: '8px 12px',
-          cursor: 'pointer', color: 'var(--da-text)',
-          fontSize: '0.9rem', fontWeight: 500,
-          transition: 'var(--da-transition)',
+          display: 'inline-flex', alignItems: 'center', gap: 9,
+          maxWidth: '100%', minHeight: 36, padding: '0 6px 0 0',
+          background: 'var(--da-sidebar-bg)', border: 'none', borderRadius: 8,
+          cursor: 'pointer', color: 'var(--da-text)', fontSize: '0.88rem', fontWeight: 500,
         }}
       >
         <div style={{
           width: 28, height: 28, borderRadius: '50%',
-          background: 'linear-gradient(135deg, var(--da-primary) 0%, var(--da-primary-hover) 100%)',
+          background: 'var(--da-primary)',
           color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: '0.78rem', fontWeight: 700, userSelect: 'none' as const,
-          boxShadow: '0 1px 3px rgba(79,70,229,0.3)',
         }}>{initial}</div>
-        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {username || '用户'}
         </span>
-        <span style={{ fontSize: '0.6rem', color: 'var(--da-text-muted)', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>▼</span>
       </button>
 
       {open && (
         <div style={{
-          position: 'absolute' as const, bottom: 'calc(100% + 6px)', left: 0, right: 0,
+          position: 'absolute' as const, bottom: 'calc(100% + 6px)', left: 0,
+          minWidth: 120, maxWidth: 240,
           background: 'var(--da-surface)',
           border: '1px solid var(--da-border)', borderRadius: 10,
-          boxShadow: 'var(--da-shadow-pop)',
+          boxShadow: 'var(--da-shadow-pop)', padding: '10px 14px',
           overflow: 'hidden', zIndex: 100,
         }}>
-          <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid var(--da-border)' }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--da-text)' }}>{username || '用户'}</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--da-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {username || '用户'}
           </div>
-
-          {UTILITY_ITEMS.map(item => {
-            const active = location.pathname === item.path;
-            return (
-              <button
-                key={item.path}
-                onClick={() => { navigate(item.path); setOpen(false); }}
-                className={active ? 'da-navitem da-navitem-active' : 'da-navitem'}
-              >
-                <Icon name={item.icon} />
-                {item.label}
-              </button>
-            );
-          })}
-
-          {isAdmin() && (
-            <>
-              <div style={{ height: 1, background: 'var(--da-border)' }} />
-              <button
-                onClick={() => { navigate('/admin/overview'); setOpen(false); }}
-                className="da-navitem"
-              >
-                <Icon name="settings" />
-                管理控制台
-              </button>
-            </>
-          )}
-
-          <div style={{ height: 1, background: 'var(--da-border)' }} />
-          <button
-            onClick={() => { onLogout(); setOpen(false); }}
-            className="da-navitem"
-            style={{ color: 'var(--da-danger)' }}
-          >
-            <Icon name="back" />
-            退出登录
-          </button>
         </div>
       )}
     </div>
@@ -543,17 +521,18 @@ function UserMenu({ username, onLogout }: { username: string; onLogout: () => vo
 const S: Record<string, React.CSSProperties> = {
   root: {
     width: 280, flexShrink: 0,
-    background: 'var(--da-surface)', borderRight: '1px solid var(--da-border)',
+    background: 'var(--da-sidebar-bg)', borderRight: '1px solid var(--da-border)',
     display: 'flex', flexDirection: 'column', minHeight: 0,
   },
   brand: {
     display: 'flex', alignItems: 'center', gap: 12,
-    padding: '18px 16px 14px', borderBottom: '1px solid var(--da-border)', flexShrink: 0,
+    height: 'var(--da-shell-header-height)', boxSizing: 'border-box',
+    padding: '0 16px', flexShrink: 0,
   },
   brandName: { fontSize: 16, fontWeight: 700, color: 'var(--da-text)', letterSpacing: '-0.01em' },
   brandTag: { fontSize: 12, color: 'var(--da-text-muted)', marginTop: 1 },
   moreMenu: {
-    position: 'absolute', left: 10, right: 10, zIndex: 30,
+    position: 'fixed', width: 180, zIndex: 1100,
     background: 'var(--da-surface)', border: '1px solid var(--da-border)',
     borderRadius: 'var(--da-radius-lg)', boxShadow: 'var(--da-shadow-pop)',
     padding: 6, display: 'flex', flexDirection: 'column', gap: 2,
@@ -597,16 +576,12 @@ const S: Record<string, React.CSSProperties> = {
   error: { padding: '8px 12px', fontSize: '0.9rem', color: 'var(--da-danger)' },
   group: { marginBottom: 18 },
   groupLabel: {
-    fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.1em',
+    fontSize: '0.72rem', fontWeight: 500,
     color: 'var(--da-text-muted)', textTransform: 'uppercase', padding: '8px 12px 6px',
   },
   rowMain: { flex: 1, minWidth: 0 },
   rowTitle: {
-    fontSize: '0.95rem', fontWeight: 500, color: 'var(--da-text)',
-    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-  },
-  rowSnippet: {
-    fontSize: '0.82rem', color: 'var(--da-text-muted)', marginTop: 3,
+    fontSize: '0.88rem', fontWeight: 400, color: 'var(--da-text-2)',
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   },
   rowMeta: {
@@ -614,6 +589,6 @@ const S: Record<string, React.CSSProperties> = {
     fontSize: '0.75rem', color: 'var(--da-text-muted)', flexShrink: 0,
   },
   footer: {
-    padding: '12px 14px', borderTop: '1px solid var(--da-border)', flexShrink: 0,
+    padding: '12px 14px', flexShrink: 0,
   },
 };

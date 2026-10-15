@@ -58,14 +58,17 @@ public class WrenProfileHome {
     private final WrenProperties wrenProps;
     private final DatasetStoreProperties storeProps;
     private final ExternalDataSourceRepository externalSources;
+    private final ExternalDataSourcePolicy connectionPolicy;
 
     public WrenProfileHome(
             WrenProperties wrenProps,
             DatasetStoreProperties storeProps,
-            ExternalDataSourceRepository externalSources) {
+            ExternalDataSourceRepository externalSources,
+            ExternalDataSourcePolicy connectionPolicy) {
         this.wrenProps = wrenProps;
         this.storeProps = storeProps;
         this.externalSources = externalSources;
+        this.connectionPolicy = connectionPolicy;
     }
 
     /**
@@ -142,7 +145,15 @@ public class WrenProfileHome {
                         ds.getKind());
                 continue;
             }
-            Map<String, String> parts = parseJdbcUrlAllowEmptyDb(ds.getJdbcUrl());
+            String validated;
+            try {
+                validated = connectionPolicy.normalize(ds.getKind(), ds.getJdbcUrl());
+            } catch (DatasetException ex) {
+                log.warn(
+                        "Skipping disallowed external profile {}: {}", ds.getId(), ex.getMessage());
+                continue;
+            }
+            Map<String, String> parts = parseJdbcUrlAllowEmptyDb(validated);
             sb.append(
                     renderProfileEntry(
                             externalProfileName(ds.getId()),
@@ -164,6 +175,34 @@ public class WrenProfileHome {
     /** Profile name for an external datasource entry: {@code ext-<datasourceId>}. */
     static String externalProfileName(String datasourceId) {
         return EXTERNAL_PROFILE_PREFIX + datasourceId;
+    }
+
+    /**
+     * Raw connection values for CLI SQL checks. Unlike profiles.yml these values are passed
+     * through JSON, without environment-template expansion or dollar escaping. A null source
+     * selects the uploaded-table store, using the same URL and SSL mapping as the MCP profile.
+     */
+    Map<String, String> connectionInfo(ExternalDataSourceEntity source) {
+        String url;
+        Map<String, String> info;
+        if (source == null) {
+            url = storeProps.url();
+            if (url == null || url.isBlank()) {
+                throw new DatasetException("未配置数据集库连接，无法执行 SQL 校验");
+            }
+            info = new LinkedHashMap<>(parseJdbcUrl(url));
+            info.put("datasource", wrenProps.dataSource());
+            info.put("user", storeProps.username() == null ? "" : storeProps.username());
+            info.put("password", storeProps.password() == null ? "" : storeProps.password());
+        } else {
+            url = connectionPolicy.normalize(source.getKind(), source.getJdbcUrl());
+            info = new LinkedHashMap<>(parseJdbcUrlAllowEmptyDb(url));
+            info.put("datasource", "mysql");
+            info.put("user", source.getUsername() == null ? "" : source.getUsername());
+            info.put("password", source.getPassword() == null ? "" : source.getPassword());
+        }
+        info.put("ssl_mode", sslMode(url));
+        return info;
     }
 
     /**

@@ -1,4 +1,4 @@
-import { getToken } from './auth';
+import { apiFetch, getToken } from './auth';
 
 export interface ModelingQuestion {
   id: string;
@@ -32,7 +32,7 @@ export interface QuestionReview {
 
 async function request<T>(groupId: string, suffix = '', body?: unknown): Promise<T> {
   const token = getToken();
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/dataset-groups/${encodeURIComponent(groupId)}/modeling/questions${suffix}`,
     {
       method: body === undefined ? 'GET' : 'POST',

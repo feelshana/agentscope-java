@@ -1,4 +1,4 @@
-import { getToken } from './auth';
+import { apiFetch, getToken } from './auth';
 import { ACTIVE_AGENT_ID } from './activeAgent';
 
 /** Only attach credentials to the two local file endpoints. */
@@ -18,7 +18,7 @@ export async function fetchFile(path: string, signal?: AbortSignal): Promise<Res
   if (!url) throw new Error('不支持的附件地址');
   const token = getToken();
   if (!token) throw new Error('请先登录后再访问附件');
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     headers: { Authorization: `Bearer ${token}` }, signal, cache: 'no-store', redirect: 'error',
   });
   if (!response.ok) {

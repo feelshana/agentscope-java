@@ -49,16 +49,14 @@ public class JwtService {
     private final SecretKey signingKey;
 
     public JwtService(@Value("${dataagent.jwt.secret}") String secret) {
-        if (DEV_DEFAULT_SECRET.equals(secret)) {
+        if (secret == null || secret.isBlank() || DEV_DEFAULT_SECRET.equals(secret)) {
             throw new IllegalStateException(
                     "JWT secret 未配置，请在 application.yml 中设置 dataagent.jwt.secret（>=32字符）");
         }
         byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
         // JJWT requires >= 32 bytes for HS256
         if (keyBytes.length < 32) {
-            byte[] padded = new byte[32];
-            System.arraycopy(keyBytes, 0, padded, 0, keyBytes.length);
-            keyBytes = padded;
+            throw new IllegalStateException("JWT secret 至少需要 32 个 UTF-8 字节，不能使用短密钥");
         }
         this.signingKey = Keys.hmacShaKeyFor(keyBytes);
     }

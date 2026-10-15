@@ -1,9 +1,16 @@
-import { getToken } from './auth';
+import { apiFetch, getToken } from './auth';
 
 export interface ChatRequest {
   message: string;
   sessionKey?: string;
   groupIds?: string[];
+  allGroups?: boolean;
+}
+
+export interface KnowledgeScope {
+  groupIds: string[];
+  allGroups: boolean;
+  groupNames: Record<string, string>;
 }
 
 export interface HitlToolCall {
@@ -27,6 +34,9 @@ export interface ChatEvent {
   sessionKey?: string;
   replyId?: string;
   answerId?: string;
+  groupIds?: string[];
+  allGroups?: boolean;
+  knowledgeScope?: KnowledgeScope;
   toolCalls?: HitlToolCall[];
 }
 
@@ -43,6 +53,8 @@ export interface ModelingConfirmRequest {
 }
 
 export interface CurrentSession {
+  allGroups?: boolean;
+  groupIds?: string[] | null;
   sessionKey: string | null;
   exists: boolean;
   pendingReplyId?: string | null;
@@ -59,7 +71,7 @@ export interface AnswerFeedbackResult { vote: 'UP' | 'DOWN' | null; savedPairs: 
 export async function answerFeedback(agentId: string, session: string, answerId: string,
   vote?: 'UP' | 'DOWN'): Promise<AnswerFeedbackResult> {
   const url = `/api/agents/${encodeURIComponent(agentId)}/sessions/${encodeURIComponent(session)}/answers/${encodeURIComponent(answerId)}/feedback`;
-  const res = await fetch(url, { method: vote ? 'POST' : 'GET',
+  const res = await apiFetch(url, { method: vote ? 'POST' : 'GET',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: vote ? JSON.stringify({ vote }) : undefined });
   if (!res.ok) throw new Error('反馈未保存，请重试');
@@ -69,16 +81,18 @@ export async function answerFeedback(agentId: string, session: string, answerId:
 export async function currentSession(
   agentId: string,
   sessionKey?: string,
+  signal?: AbortSignal,
 ): Promise<CurrentSession> {
   const qs = sessionKey ? `?sessionKey=${encodeURIComponent(sessionKey)}` : '';
-  const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/chat/session${qs}`, {
+  const res = await apiFetch(`/api/agents/${encodeURIComponent(agentId)}/chat/session${qs}`, {
     headers: authHeaders(),
+    signal,
   });
   if (!res.ok) throw new Error(`Failed to resolve current session: ${res.status}`);
   return res.json();
 }
 
-async function* readEventStream(res: Response, fallback: string): AsyncGenerator<ChatEvent> {
+export async function* readEventStream(res: Response, fallback: string): AsyncGenerator<ChatEvent> {
   if (!res.ok || !res.body) {
     let detail = fallback;
     try {
@@ -92,24 +106,43 @@ async function* readEventStream(res: Response, fallback: string): AsyncGenerator
   const reader = res.body.getReader();
   const dec = new TextDecoder();
   let buf = '';
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buf += dec.decode(value, { stream: true });
-    let idx;
-    while ((idx = buf.indexOf('\n\n')) >= 0) {
-      const evt = buf.slice(0, idx);
-      buf = buf.slice(idx + 2);
-      const lines = evt.split('\n');
-      let data = '';
-      for (const ln of lines) if (ln.startsWith('data:')) data += ln.slice(5).trim();
-      if (!data) continue;
-      try {
-        yield JSON.parse(data) as ChatEvent;
-      } catch {
-        yield { type: 'token', data } as ChatEvent;
+  let terminal = false;
+  function parse(frame: string): ChatEvent | null {
+    const data = frame.split(/\r?\n/).filter(line => line.startsWith('data:'))
+      .map(line => line.slice(5).replace(/^ /, '')).join('\n');
+    if (!data) return null;
+    try { return JSON.parse(data) as ChatEvent; }
+    catch { throw new Error('回答数据格式错误，请重新加载会话'); }
+  }
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      buf += done ? dec.decode() : dec.decode(value, { stream: true });
+      let boundary: RegExpExecArray | null;
+      while ((boundary = /\r?\n\r?\n/.exec(buf)) !== null) {
+        const frame = buf.slice(0, boundary.index);
+        buf = buf.slice(boundary.index + boundary[0].length);
+        const event = parse(frame);
+        if (event) {
+          terminal ||= event.type === 'done' || event.type === 'error';
+          yield event;
+        }
+      }
+      if (done) {
+        if (buf.trim()) {
+          const event = parse(buf);
+          if (event) {
+            terminal ||= event.type === 'done' || event.type === 'error';
+            yield event;
+          }
+        }
+        if (!terminal) throw new Error('连接已中断，回答可能尚未完成，请重新加载会话');
+        break;
       }
     }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
   }
 }
 
@@ -118,7 +151,7 @@ export async function* stream(
   req: ChatRequest,
   signal?: AbortSignal,
 ): AsyncGenerator<ChatEvent> {
-  const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/chat/stream`, {
+  const res = await apiFetch(`/api/agents/${encodeURIComponent(agentId)}/chat/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(req),
@@ -132,7 +165,7 @@ export async function* confirmModeling(
   req: ModelingConfirmRequest,
   signal?: AbortSignal,
 ): AsyncGenerator<ChatEvent> {
-  const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/chat/confirm`, {
+  const res = await apiFetch(`/api/agents/${encodeURIComponent(agentId)}/chat/confirm`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(req),

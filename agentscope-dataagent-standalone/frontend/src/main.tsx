@@ -6,6 +6,7 @@ import './global.css';
 
 import LoginPage from './pages/LoginPage';
 import AppShell from './components/AppShell';
+import SessionGate from './components/SessionGate';
 import EditTierGate from './components/EditTierGate';
 
 import ChatPage from './pages/ChatPage';
@@ -59,7 +60,7 @@ function isAdmin(): boolean {
 }
 
 function PrivateRoute({ children }: { children: React.ReactElement }) {
-  return getToken() ? children : <Navigate to="/login" replace />;
+  return <SessionGate>{children}</SessionGate>;
 }
 
 function AdminRoute({ children }: { children: React.ReactElement }) {

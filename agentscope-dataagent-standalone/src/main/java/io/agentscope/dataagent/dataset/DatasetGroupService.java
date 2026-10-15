@@ -22,6 +22,7 @@ import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupRepository;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetKnowledgeRepository;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetRepository;
 import jakarta.annotation.PostConstruct;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +41,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class DatasetGroupService {
 
+    private KnowledgeBaseAccessService access;
+
     private static final Logger log = LoggerFactory.getLogger(DatasetGroupService.class);
     private static final Pattern NAME = Pattern.compile("^[\\u4e00-\\u9fa5A-Za-z0-9_-]{1,100}$");
     public static final String DEFAULT_GROUP_NAME = "默认知识库";
@@ -51,6 +54,10 @@ public class DatasetGroupService {
     private final InMemoryDataSourceRegistry registry;
     private final DatasetService datasetService;
     private final MdlPublishService mdlPublishService;
+
+    private KnowledgeBaseDeletionService deletionService;
+
+    private KnowledgeBaseOperations operations;
 
     public DatasetGroupService(
             DatasetGroupRepository groupRepository,
@@ -99,6 +106,7 @@ public class DatasetGroupService {
 
     @Transactional
     public DatasetGroupEntity createGroup(String ownerId, String name, String description) {
+        access.requireUser(ownerId);
         if (name == null || !NAME.matcher(name.trim()).matches()) {
             throw new DatasetException(
                     "KB name must be 1-100 chars of Chinese/letters/digits/'-'/'_'");
@@ -122,46 +130,89 @@ public class DatasetGroupService {
     }
 
     public List<DatasetGroupEntity> listGroups(String ownerId) {
-        return groupRepository.findByOwnerIdOrderByCreatedAtDesc(ownerId);
+        return access.visible(ownerId, null);
+    }
+
+    public List<DatasetGroupEntity> queryGroups(String userId, List<String> selected) {
+        return access.visible(userId, selected == null ? List.of() : selected);
+    }
+
+    public DatasetGroupEntity queryGroup(String userId, String groupId) {
+        return access.requireQuery(userId, groupId);
+    }
+
+    public org.springframework.data.domain.Page<DatasetGroupEntity> pageGroups(
+            String userId, int page, int size, String search, String sort, boolean manageOnly) {
+        return access.page(userId, page, size, search, sort, manageOnly);
+    }
+
+    public Map<String, KnowledgeBaseAccessService.Role> roles(
+            String userId, List<DatasetGroupEntity> groups) {
+        return access.roles(userId, groups);
+    }
+
+    public Map<String, Long> datasetCounts(List<DatasetGroupEntity> groups) {
+        Map<String, Long> counts = new HashMap<>();
+        if (!groups.isEmpty())
+            datasetRepository
+                    .countForGroups(groups.stream().map(DatasetGroupEntity::getId).toList())
+                    .forEach(c -> counts.put(c.getGroupId(), c.getTotal()));
+        return counts;
+    }
+
+    public boolean deletionPending(String groupId) {
+        return operations != null && operations.deletionPending(groupId);
     }
 
     public DatasetGroupEntity getGroup(String ownerId, String groupId) {
-        return groupRepository
-                .findById(groupId)
-                .filter(g -> g.getOwnerId().equals(ownerId))
-                .orElseThrow(
-                        () -> new DatasetException("Knowledge base not found: " + groupId, 404));
+        return access.requireManage(ownerId, groupId);
+    }
+
+    /** Rename only a group owned by the caller; the group ID and its datasets stay unchanged. */
+    @Transactional
+    public DatasetGroupEntity updateGroup(
+            String ownerId, String groupId, String name, String description) {
+        DatasetGroupEntity group = getGroup(ownerId, groupId);
+        if (name == null || !NAME.matcher(name.trim()).matches()) {
+            throw new DatasetException(
+                    "KB name must be 1-100 chars of Chinese/letters/digits/'-'/'_'");
+        }
+        if (description != null && description.length() > 1000) {
+            throw new DatasetException("KB description must not exceed 1000 chars");
+        }
+        String newName = name.trim();
+        if (!newName.equals(group.getName())) {
+            groupRepository
+                    .findByOwnerIdAndName(group.getOwnerId(), newName)
+                    .ifPresent(
+                            existing -> {
+                                if (!existing.getId().equals(groupId)) {
+                                    throw new DatasetException(
+                                            "KB name already exists: " + newName, 409);
+                                }
+                            });
+        }
+        group.setName(newName);
+        group.setDescription(description == null ? null : description.trim());
+        group.setUpdatedAt(Instant.now());
+        return groupRepository.save(group);
     }
 
     public List<DatasetEntity> listDatasets(String ownerId, String groupId) {
-        getGroup(ownerId, groupId);
+        DatasetGroupEntity group = getGroup(ownerId, groupId);
         return datasetRepository.findByGroupId(groupId).stream()
-                .filter(d -> d.getOwnerId().equals(ownerId))
+                .filter(d -> d.getOwnerId().equals(group.getOwnerId()))
                 .toList();
     }
 
     public long countDatasets(String ownerId, String groupId) {
-        getGroup(ownerId, groupId);
+        access.requireQuery(ownerId, groupId);
         return datasetRepository.countByGroupId(groupId);
     }
 
-    @Transactional
     public void deleteGroup(String ownerId, String groupId) {
-        DatasetGroupEntity group = getGroup(ownerId, groupId);
-        List<DatasetEntity> datasets = datasetRepository.findByGroupId(groupId);
-        for (DatasetEntity d : datasets) {
-            datasetService.deleteEntity(d);
-        }
-        datasetRepository.deleteAll(datasets);
-        knowledgeRepository.deleteById(groupId);
-        groupRepository.delete(group);
-        log.info(
-                "DatasetGroupService: deleted KB {} with {} dataset(s) for owner {}",
-                groupId,
-                datasets.size(),
-                ownerId);
-        // MDL artifacts are filesystem state, not DB rows: drop them last, best-effort.
-        mdlPublishService.deleteArtifacts(groupId);
+        deletionService.delete(
+                access.requireManageForDeletion(ownerId, groupId).getOwnerId(), groupId);
     }
 
     /**
@@ -188,5 +239,31 @@ public class DatasetGroupService {
                                                         DEFAULT_GROUP_NAME,
                                                         "自动创建的默认知识库"))
                                         .getId());
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public DatasetGroupService(
+            DatasetGroupRepository groupRepository,
+            DatasetRepository datasetRepository,
+            DatasetKnowledgeRepository knowledgeRepository,
+            TableProvisioner provisioner,
+            InMemoryDataSourceRegistry registry,
+            DatasetService datasetService,
+            MdlPublishService mdlPublishService,
+            KnowledgeBaseAccessService access,
+            @org.springframework.context.annotation.Lazy
+                    KnowledgeBaseDeletionService deletionService,
+            KnowledgeBaseOperations operations) {
+        this(
+                groupRepository,
+                datasetRepository,
+                knowledgeRepository,
+                provisioner,
+                registry,
+                datasetService,
+                mdlPublishService);
+        this.access = access;
+        this.deletionService = deletionService;
+        this.operations = operations;
     }
 }

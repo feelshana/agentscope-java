@@ -1,4 +1,4 @@
-import { getToken } from './auth';
+import { apiFetch, getToken } from './auth';
 
 function authHeaders(): Record<string, string> {
   const token = getToken();
@@ -33,6 +33,7 @@ export interface InboxOptions {
 }
 
 export interface TurnEntry {
+  knowledgeScope?: import('./chat').KnowledgeScope;
   id: string;
   parentId: string | null;
   role: 'USER' | 'ASSISTANT' | 'TOOL' | string;
@@ -68,7 +69,7 @@ export async function inboxPage(agentId: string, opts: InboxOptions = {}): Promi
   if (opts.cursor) params.set('cursor', opts.cursor);
   const qs = params.toString();
   const url = `/api/agents/${encodeURIComponent(agentId)}/sessions/inbox-page${qs ? `?${qs}` : ''}`;
-  const res = await fetch(url, { headers: authHeaders(), signal: opts.signal });
+  const res = await apiFetch(url, { headers: authHeaders(), signal: opts.signal });
   if (!res.ok) throw new Error('Failed to load inbox');
   return res.json();
 }
@@ -76,14 +77,14 @@ export async function inboxPage(agentId: string, opts: InboxOptions = {}): Promi
 export async function messagePage(agentId: string, sessionKey: string, before?: number, signal?: AbortSignal): Promise<MessagePage> {
   const query = new URLSearchParams({ limit: '50' });
   if (before != null) query.set('before', String(before));
-  const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/sessions/${encodeURIComponent(sessionKey)}/messages?${query}`,
+  const res = await apiFetch(`/api/agents/${encodeURIComponent(agentId)}/sessions/${encodeURIComponent(sessionKey)}/messages?${query}`,
     { headers: authHeaders(), signal });
   if (!res.ok) throw new Error('加载历史消息失败');
   return res.json();
 }
 
 export async function turns(agentId: string, sessionKey: string): Promise<TurnEntry[]> {
-  const res = await fetch(
+  const res = await apiFetch(
     `/api/agents/${encodeURIComponent(agentId)}/sessions/${encodeURIComponent(sessionKey)}`,
     { headers: authHeaders() },
   );
@@ -92,7 +93,7 @@ export async function turns(agentId: string, sessionKey: string): Promise<TurnEn
 }
 
 export async function resetSession(agentId: string, sessionKey: string): Promise<ResetResult> {
-  const res = await fetch(
+  const res = await apiFetch(
     `/api/agents/${encodeURIComponent(agentId)}/sessions/${encodeURIComponent(sessionKey)}/reset`,
     { method: 'POST', headers: authHeaders() },
   );
@@ -101,7 +102,7 @@ export async function resetSession(agentId: string, sessionKey: string): Promise
 }
 
 export async function markRead(agentId: string, sessionKey: string): Promise<ReadStateResult> {
-  const res = await fetch(
+  const res = await apiFetch(
     `/api/agents/${encodeURIComponent(agentId)}/sessions/${encodeURIComponent(sessionKey)}/read`,
     { method: 'PATCH', headers: authHeaders() },
   );
@@ -110,7 +111,7 @@ export async function markRead(agentId: string, sessionKey: string): Promise<Rea
 }
 
 export async function deleteSession(agentId: string, sessionKey: string): Promise<void> {
-  const res = await fetch(
+  const res = await apiFetch(
     `/api/agents/${encodeURIComponent(agentId)}/sessions/${encodeURIComponent(sessionKey)}`,
     { method: 'DELETE', headers: authHeaders() },
   );
@@ -131,7 +132,7 @@ export interface SessionView {
 }
 
 export async function listSessions(limit = 50): Promise<SessionView[]> {
-  const res = await fetch(`/api/sessions?limit=${limit}`, { headers: authHeaders() });
+  const res = await apiFetch(`/api/sessions?limit=${limit}`, { headers: authHeaders() });
   if (!res.ok) throw new Error('Failed to list sessions');
   return res.json();
 }

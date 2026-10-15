@@ -718,8 +718,19 @@ manifest 尚不存在时（首次升级到该策略）执行一次性「采纳�
 
 ## 10. 认证、权限、审计与用量
 
+### 知识库共享（ADR 0077）
+
+`KnowledgeBaseAccessService#requireQuery/requireManage` 统一 QUERY/使用与 MANAGE/管理权限；创建者和当前全局管理员拥有管理权限。列表先按 ACL 过滤再分页，成员变更与审计同事务提交。QUERY 只能获取查询卡片和调用已发布工程，草稿、原始数据预览、建模、发布、问答对管理及成员管理需要 MANAGE。
+
+`ConversationScopeRegistry` 按用户和会话持久化最近选择，并按用户消息保存实际范围快照。`ChatController#resolveGroupScope` 支持普通问答零/单/多/全选，建模保持单库；`ChatTurnScope#accept` 在框架会话锁内复核并接受范围。`WrenQueryAccess` 查询共享库而不替换操作者；官方 MCP 调用与工具发现经 `WrenInstanceRegistry#callAuthorized/listToolsAuthorized` 在排队结束后再次授权。
+
+知识库模型和数据归创建者，会话、历史、沙箱、附件及反馈状态归操作者。点赞 SQL 样例进入该库的官方 memory，保存和索引通过 `WrenPublishedProject#locked` 按知识库串行执行；不把草稿混入已发布查询工程。当前官方 Wren 建模、问数语义边界不变。
+
+`KnowledgeBaseOperations` 跟踪运行操作、导入表及 CLI 进程，删除时停止相关操作；`KnowledgeBaseDeletionService` 持久化删除日志并支持重试。上传取消和批量插入失败向调用方传播，同会话忙状态明确返回错误。这些机制不等同于全局或每用户问答容量控制，也不提供有界上传队列和 Wren 总进程预算。
+
 - **认证**：`SecurityConfig`（WebFlux Security）：`POST /api/auth/login`、actuator health/info、`/api/webhook/**` 公开；
   其余 `/api/**` 需 JWT（`JwtAuthFilter` 校验 Bearer 或 `?token=` 查询参数，后者供 `<img src>` 使用）。CORS 放开（含 Vite dev 5173）。
+- **前端会话**：`SessionGate` 在受保护页面挂载前通过 `auth.me` 校验缓存令牌；`auth.apiFetch` 统一处理同源 API 的 401，只有请求使用的令牌仍为当前令牌时才清除登录状态，显示“登录状态已失效，请重新登录”。登录接口及外部资源不触发退出；403 和网络故障保留会话，首次校验网络失败提供重试。
 - **授权**：`web/share/AgentAclService` + `AgentAccessGuard`：每个 agent 按 Tier（RUN/EDIT/…）鉴权，
   Controller 入口统一 `guard.require(userId, agentId, Tier.X)`。
 - **agent 目录**：`web/catalog/AgentCatalogService`（内置 agent 目录；平台不提供用户自建 agent）。
@@ -780,6 +791,8 @@ spec 045 / ADR 0055：无已登记问题、无待确认原生 HITL 时，页面�
 > Standalone 构建使用根目录 mvn test / mvn package -DskipTests，前端在 frontend/ 运行 npm run build。requirements-wren.txt 固定 wrenai 0.15.0/core 0.8.0 及 memory-onnx；服务实际 CLI 环境必须安装相同依赖。多语言模型首次下载需要网络，可用官方缓存，不自研词项降级。
 
 ### 12.1 关键配置（`application.yml`，`dataagent.*` 前缀 / `DATAAGENT_*` 环境变量）
+
+平台增量带入 `dataagent.seed-demo-users`（默认 false，显式启用 Java 本地管理员初始化，不替代 SQL 初始化开关）和 `dataagent.cors.allowed-origins`（默认 `*`，部署时指定允许来源）。JWT 密钥拒绝空值、开发占位值及不足 32 UTF-8 字节的短密钥。本轮不覆盖现有 application.yml 或部署 profile。
 
 | 配置 | 默认 | 说明 |
 |---|---|---|

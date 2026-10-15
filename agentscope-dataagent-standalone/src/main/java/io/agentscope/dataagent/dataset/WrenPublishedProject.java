@@ -103,7 +103,7 @@ public final class WrenPublishedProject {
     }
 
     public Path prepare(String owner, String group) {
-        var entity = groups.getGroup(owner, group);
+        var entity = groups.queryGroup(owner, group);
         return locked(
                 group,
                 () -> {
@@ -156,7 +156,7 @@ public final class WrenPublishedProject {
 
     /** Official store writes here; only its Markdown source is merged into query projects. */
     public Path likedProject(String owner, String group) {
-        groups.getGroup(owner, group);
+        groups.queryGroup(owner, group);
         Path root =
                 props.groupRoot(group)
                         .resolve("runtime/liked-examples")

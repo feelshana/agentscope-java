@@ -65,7 +65,7 @@ public final class WrenProjectAccess {
         String user = context.getUserId();
         if (scope == null) {
             if (user == null || user.isBlank()) throw new DatasetException("无法确定租户上下文", 403);
-            List<String> selected = scopes.get(context.getSessionId());
+            List<String> selected = scopes.get(user, context.getSessionId());
             scope = new DatasetScope(user, selected == null ? List.of() : selected);
         }
         if (scope.ownerId() == null

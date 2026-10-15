@@ -20,7 +20,6 @@ import io.agentscope.dataagent.runtime.DataAgentBootstrap;
 import io.agentscope.dataagent.runtime.config.AgentConfigEntry;
 import io.agentscope.dataagent.runtime.gateway.HarnessGateway;
 import io.agentscope.dataagent.web.auth.UserStore;
-import io.agentscope.dataagent.web.auth.UserStore.UserRecord;
 import io.agentscope.dataagent.web.scaffold.WorkspaceScaffolder;
 import io.agentscope.dataagent.web.share.AgentAclService;
 import io.agentscope.dataagent.web.template.TemplateRegistry;
@@ -122,20 +121,14 @@ public class AgentCatalogService {
     public List<AgentDefinition> listVisible(String userId) {
         List<AgentDefinition> result = new ArrayList<>(globalDefinitions());
         Map<String, AgentDefinition> visibleUserAgents = new LinkedHashMap<>();
-        // The user's own agents first so they win id collisions over shared-in ones.
-        for (AgentDefinition def : userDefinitions(userId)) {
-            visibleUserAgents.put(def.id(), def);
-        }
-        // Then everyone else's, filtered by ACL.
-        for (UserRecord owner : userStore.listAll()) {
-            if (owner.userId().equals(userId)) continue;
-            for (UserAgentDefinitionStore.StoredEntry e : store.list(owner.userId())) {
-                AgentDefinition def = e.toDefinition(owner.userId());
-                if (aclService.tierFor(userId, def) != null) {
-                    visibleUserAgents.putIfAbsent(def.id(), def);
-                }
-            }
-        }
+        // Keep own definitions first when custom IDs collide with shared definitions.
+        List<AgentDefinition> visible = store.findVisible(userId, null);
+        visible.stream()
+                .filter(d -> userId.equals(d.ownerId()))
+                .forEach(d -> visibleUserAgents.put(d.id(), d));
+        visible.stream()
+                .filter(d -> aclService.tierFor(userId, d) != null)
+                .forEach(d -> visibleUserAgents.putIfAbsent(d.id(), d));
         result.addAll(visibleUserAgents.values());
         return result;
     }
@@ -145,7 +138,13 @@ public class AgentCatalogService {
      * (own or shared-in).
      */
     public Optional<AgentDefinition> findVisible(String userId, String agentId) {
-        return listVisible(userId).stream().filter(d -> d.id().equals(agentId)).findFirst();
+        Optional<AgentDefinition> global =
+                globalDefinitions().stream().filter(d -> d.id().equals(agentId)).findFirst();
+        if (global.isPresent()) return global;
+        return store.findVisible(userId, agentId).stream()
+                .filter(d -> aclService.tierFor(userId, d) != null)
+                .sorted(java.util.Comparator.comparing(d -> !userId.equals(d.ownerId())))
+                .findFirst();
     }
 
     /**
@@ -155,22 +154,12 @@ public class AgentCatalogService {
      */
     public Optional<String> findOwnerOf(String agentId) {
         if (isGlobal(agentId)) return Optional.empty();
-        for (UserRecord owner : userStore.listAll()) {
-            if (store.findById(owner.userId(), agentId).isPresent()) {
-                return Optional.of(owner.userId());
-            }
-        }
-        return Optional.empty();
+        return store.findByAgentId(agentId).stream().map(AgentDefinition::ownerId).findFirst();
     }
 
-    /** Look up the on-disk store entry for a user-custom agent by id, across all owners. */
+    /** Look up a stored custom definition without scanning all users. */
     public Optional<UserAgentDefinitionStore.StoredEntry> findStoredEntry(String agentId) {
-        for (UserRecord owner : userStore.listAll()) {
-            Optional<UserAgentDefinitionStore.StoredEntry> e =
-                    store.findById(owner.userId(), agentId);
-            if (e.isPresent()) return e;
-        }
-        return Optional.empty();
+        return findOwnerOf(agentId).flatMap(owner -> store.findById(owner, agentId));
     }
 
     /** Returns {@code true} if the agent id refers to a global (project-level) agent. */

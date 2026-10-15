@@ -6,10 +6,12 @@
  */
 
 :root {
+  --da-shell-header-height: 64px;
   --da-app-bg: #f4f5f7;
   /* Main canvas (home landing, conversation thread, knowledge-base pages): same brightness as the menu-bar surface. */
   --da-canvas-bg: var(--da-surface);
   --da-surface: #ffffff;
+  --da-sidebar-bg: #f7f9fc;
   --da-surface-sunken: #eef0f3;
   --da-border: #d8dce3;
   --da-border-strong: #b8bec9;
@@ -192,6 +194,38 @@ button:focus-visible {
   box-shadow: 0 2px 8px rgba(16, 24, 40, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.6);
   transform: translateY(-1px);
 }
+.da-card-menu { position: relative; flex-shrink: 0; }
+.da-card-menu-popover {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 10;
+  min-width: 170px;
+  padding: 4px;
+  border: 1px solid var(--da-border);
+  border-radius: 8px;
+  background: var(--da-surface);
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.14);
+}
+.da-card-menu-popover button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--da-text);
+  font: inherit;
+  font-size: 0.82rem;
+  text-align: left;
+  cursor: pointer;
+}
+.da-card-menu-popover button:hover,
+.da-card-menu-popover button:focus-visible { background: var(--da-surface-sunken); }
+.da-card-menu-popover button.danger { color: var(--da-danger); }
+.da-card-menu-popover button:disabled { opacity: 0.5; cursor: default; }
 
 .da-panel {
   background: var(--da-surface);
@@ -403,7 +437,7 @@ button:focus-visible {
 .da-row-active,
 .da-row-active:hover {
   background: var(--da-primary-subtle);
-  border-color: rgba(79, 70, 229, 0.22);
+  border-color: transparent;
 }
 .da-row-selected,
 .da-row-selected:hover {
@@ -411,8 +445,14 @@ button:focus-visible {
   border-color: rgba(79, 70, 229, 0.18);
 }
 .da-row-unread {
-  border-left: 3px solid var(--da-primary);
-  padding-left: 8px;
+  border-left-color: transparent;
+}
+
+.da-session-delete { opacity: 0; }
+.da-row:hover .da-session-delete,
+.da-row:focus-within .da-session-delete { opacity: 1; }
+@media (hover: none) {
+  .da-session-delete { opacity: 1; }
 }
 
 /* ---------- nav items ---------- */
@@ -560,6 +600,28 @@ button:focus-visible {
   text-transform: uppercase;
   color: var(--da-text-muted);
   margin-bottom: 2px;
+}
+
+.da-header-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 5px 2px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--da-text-3);
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+.da-header-back:hover { color: var(--da-primary); }
+.da-header-back:focus-visible { outline: 2px solid var(--da-primary); outline-offset: 2px; }
+.da-header-divider { width: 1px; height: 22px; background: var(--da-border); flex-shrink: 0; }
+@media (max-width: 720px) {
+  .da-header-back span { display: none; }
+  .da-header-divider { height: 18px; }
 }
 
 .da-keyline {
@@ -733,40 +795,44 @@ button:focus-visible {
   color: var(--da-text-2);
 }
 
-/* ---------- prototype-derived: tool-call card ---------- */
+/* ---------- inline execution steps ---------- */
 .da-toolcall {
-  border-radius: 6px;
+  border-radius: 4px;
   background: transparent;
   border: none;
-  overflow: hidden;
+  overflow: visible;
 }
 .da-toolcall-head {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 8px;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 4px;
   background: transparent;
   border: none;
-  border-radius: 6px;
-  font-size: 12px;
+  border-radius: 4px;
+  font-size: 0.82rem;
   color: var(--da-text-muted);
-  transition: var(--da-transition);
+  transition: color 0.15s, background-color 0.15s;
 }
 .da-toolcall-head:hover {
   background: var(--da-surface-sunken);
+  color: var(--da-text);
 }
 .da-toolcall-name {
   font-weight: 500;
-  color: var(--da-text-muted);
-  font-family: var(--da-mono);
+  color: var(--da-text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .da-toolcall-status {
-  margin-left: auto;
-  font-size: 11px;
+  font-size: 0.75rem;
   color: var(--da-text-muted);
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 4px;
+  flex-shrink: 0;
 }
 .da-toolcall-body {
   padding: 10px 12px;
@@ -919,7 +985,7 @@ button:focus-visible {
 
 /* ---------- nav active left accent bar ---------- */
 .da-navitem-active::before {
-  content: '';
+  content: none;
   position: absolute;
   left: -4px;
   top: 8px;
@@ -961,7 +1027,7 @@ button:focus-visible {
   width: 30px;
   height: 30px;
   border-radius: var(--da-radius-md);
-  background: linear-gradient(135deg, var(--da-primary) 0%, var(--da-primary-hover) 100%);
+  background: var(--da-primary);
   display: grid;
   place-items: center;
   color: #fff;
@@ -969,7 +1035,7 @@ button:focus-visible {
   font-size: 13px;
   letter-spacing: -0.02em;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  box-shadow: none;
 }
 
 /* ---------- chat bubbles (user right / agent left, full width) ---------- */
@@ -1016,7 +1082,7 @@ button:focus-visible {
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12), var(--da-shadow-pop);
 }
 
-/* ---------- landing page: centered composer with hairline flowing tint border ---------- */
+/* ---------- landing page and compact conversation composer ---------- */
 @property --da-flow-angle {
   syntax: '<angle>';
   inherits: false;
@@ -1054,29 +1120,19 @@ button:focus-visible {
   animation: da-fade-up 0.45s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 
-/* hairline (1px) pastel band rotating slowly: a faint shimmer, not a neon ring */
+/* Neutral hairline border; brand colour appears only while editing. */
 .da-composer-glow {
   position: relative;
   width: 100%;
-  border-radius: 32px;
+  border-radius: 18px;
   padding: 1px;
-  background: conic-gradient(
-    from var(--da-flow-angle),
-    #edf0f4 0deg,
-    var(--da-flow-a) 90deg,
-    #edf0f4 180deg,
-    var(--da-flow-b) 270deg,
-    #edf0f4 360deg
-  );
-  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.05);
-  animation:
-    da-flow-spin 16s linear infinite,
-    da-flow-tint 10s ease-in-out infinite;
+  background: var(--da-border);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
 }
 .da-composer-glow:focus-within {
-  box-shadow:
-    0 0 0 3px rgba(79, 70, 229, 0.05),
-    0 6px 20px rgba(15, 23, 42, 0.05);
+  background: var(--da-primary);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.06);
 }
 .da-landing-wrap .da-composer-glow {
   max-width: 880px;
@@ -1087,8 +1143,8 @@ button:focus-visible {
 
 .da-composer-shell {
   background: var(--da-surface);
-  border-radius: 31px;
-  padding: 16px 20px 12px;
+  border-radius: 17px;
+  padding: 14px 18px 10px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1291,45 +1347,43 @@ button:focus-visible {
   width: 26px;
   height: 26px;
   border-radius: 7px;
-  background: linear-gradient(135deg, var(--da-primary) 0%, var(--da-primary-hover) 100%);
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 40%, #a78bfa 70%, #6366f1 100%);
   color: #fff;
   font-size: 0.62rem;
   font-weight: 700;
   flex-shrink: 0;
   letter-spacing: 0.02em;
+  box-shadow: 0 1px 3px rgba(99, 102, 241, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 .da-agent-name {
   font-size: 0.88rem;
-  font-weight: 600;
-  color: var(--da-text);
+  font-weight: 700;
+  color: var(--da-text-3);
   flex-shrink: 0;
 }
 .da-trace {
-  border: 1px solid var(--da-border);
-  border-radius: var(--da-radius-md);
-  background: var(--da-surface);
-  overflow: hidden;
+  margin: 4px 0 8px;
+  min-width: 0;
 }
 .da-trace-head {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 12px;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 0;
   background: transparent;
   border: none;
   cursor: pointer;
   color: var(--da-text-muted);
   font: inherit;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   text-align: left;
-  transition: var(--da-transition);
+  transition: color 0.15s;
 }
 .da-trace-head:hover {
-  background: var(--da-surface-sunken);
+  color: var(--da-text);
 }
 .da-trace-status {
-  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1352,15 +1406,16 @@ button:focus-visible {
   transform: rotate(90deg);
 }
 .da-trace-body {
-  border-top: 1px solid var(--da-border);
-  padding: 6px 10px 10px;
+  margin-top: 6px;
+  padding: 4px 0 4px 8px;
+  border-left: 1px solid var(--da-border);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   color: var(--da-text-muted);
 }
 .da-trace-text {
-  padding: 4px 8px;
+  padding: 3px 4px;
   font-size: 0.82rem;
   line-height: 1.6;
   color: var(--da-text-muted);
@@ -1388,25 +1443,23 @@ button:focus-visible {
   letter-spacing: 0.02em;
 }
 .da-trace-elapsed {
-  font-size: 0.75rem;
-  color: var(--da-text-muted);
+  font-size: 0.82rem;
+  color: var(--da-text-3);
   flex-shrink: 0;
-  margin-left: auto;
-  padding-right: 4px;
 }
 .da-toolcall-status.failed {
   color: var(--da-danger);
 }
 .da-toolcall-head {
   cursor: pointer;
-  width: 100%;
+  width: auto;
   text-align: left;
   appearance: none;
   font: inherit;
 }
 .da-toolcall-name {
   font-family: var(--da-font);
-  font-size: 12px;
+  font-size: 0.82rem;
 }
 .da-sem-section {
   display: flex;
@@ -1654,10 +1707,15 @@ button:focus-visible {
   font-weight: 500;
 }
 .da-answer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
   color: var(--da-text-2);
   font-size: 0.95rem;
   line-height: 1.7;
 }
+.da-answer > * { min-width: 0; }
 
 /* ---------- tool inspector panel (v2) ---------- */
 .da-insp-root {

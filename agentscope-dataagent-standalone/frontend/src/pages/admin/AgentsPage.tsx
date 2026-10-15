@@ -1,3 +1,4 @@
+import { apiFetch } from '../../api/auth';
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import AdminPageLayout from '../../components/admin/AdminPageLayout';
@@ -14,7 +15,7 @@ function authH(): Record<string, string> {
 }
 
 async function listAgents(): Promise<RegisteredAgentView[]> {
-  const res = await fetch('/api/admin/agents', { headers: authH() });
+  const res = await apiFetch('/api/admin/agents', { headers: authH() });
   if (!res.ok) throw new Error(`Failed to load agents: ${res.status}`);
   return res.json();
 }

@@ -1,3 +1,4 @@
+import { escapeHtml } from '../utils/html';
 import { useEffect, useRef } from 'react';
 import { Graph } from '@antv/g6';
 
@@ -84,13 +85,13 @@ export default function ReadOnlyRelationGraph({
                 if (!item) return '';
                 const d = item.data ?? {};
                 if (item.source && item.target) {
-                  return `<div style="font-size:12px;line-height:1.5"><b>${d.label ?? ''}</b><br/>${
-                    d.columns ? `关联列：${d.columns}<br/>` : ''
-                  }<span style="color:#94a3b8">${d.condition ?? ''}</span></div>`;
+                  return `<div style="font-size:12px;line-height:1.5"><b>${escapeHtml(d.label ?? '')}</b><br/>${
+                    d.columns ? `关联列：${escapeHtml(d.columns)}<br/>` : ''
+                  }<span style="color:#94a3b8">${escapeHtml(d.condition ?? '')}</span></div>`;
                 }
-                return `<div style="font-size:12px;line-height:1.5"><b>${d.label ?? item.id}</b><br/>${
-                  d.modelName ? `逻辑模型：${d.modelName}<br/>` : ''
-                }列数：${d.columnCount ?? 0}${d.description ? `<br/>${d.description}` : ''}</div>`;
+                return `<div style="font-size:12px;line-height:1.5"><b>${escapeHtml(d.label ?? item.id)}</b><br/>${
+                  d.modelName ? `逻辑模型：${escapeHtml(d.modelName)}<br/>` : ''
+                }列数：${escapeHtml(d.columnCount ?? 0)}${d.description ? `<br/>${escapeHtml(d.description)}` : ''}</div>`;
               },
             },
           ],

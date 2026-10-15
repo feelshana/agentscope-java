@@ -32,4 +32,7 @@ public interface UserEntityRepository extends JpaRepository<UserEntity, String> 
     Optional<UserEntity> findByIdForUpdate(@Param("userId") String userId);
 
     boolean existsByUsernameIgnoreCase(String username);
+
+    org.springframework.data.domain.Page<UserEntity> findByUsernameContainingIgnoreCase(
+            String username, org.springframework.data.domain.Pageable pageable);
 }

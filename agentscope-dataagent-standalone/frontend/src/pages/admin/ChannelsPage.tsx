@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import AdminPageLayout from '../../components/admin/AdminPageLayout';
-import { getToken } from '../../api/auth';
+import { apiFetch, getToken } from '../../api/auth';
 import {
   listChannels, listBindings, createBinding, updateBinding, deleteBinding,
   ChannelView, BindingView, EditableBinding, BindingMutationRequest,
@@ -19,7 +19,7 @@ function IdentityLinksPanel() {
     setLoading(true); setErr(null);
     try {
       const t = getToken() ?? '';
-      const res = await fetch('/api/admin/identity-links', { headers: { Authorization: `Bearer ${t}` } });
+      const res = await apiFetch('/api/admin/identity-links', { headers: { Authorization: `Bearer ${t}` } });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setSnap(await res.json());
     } catch (e: unknown) { setErr(e instanceof Error ? e.message : String(e)); }

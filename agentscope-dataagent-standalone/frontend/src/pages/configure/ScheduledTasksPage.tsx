@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import BackToChatHeader from '../../components/BackToChatHeader';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { KnowledgeBreadcrumb, WorkspaceMenu } from '../../components/KnowledgeWorkspace';
 import Icon from '../../components/Icon';
 import { toast } from '../../components/Toast';
 import {
@@ -10,13 +10,6 @@ import {
   updateTaskStatus,
 } from '../../api/scheduledTasks';
 import { ACTIVE_AGENT_ID } from '../../api/activeAgent';
-
-const panelStyle: React.CSSProperties = {
-  flex: 1,
-  minHeight: 0,
-  overflow: 'auto',
-  padding: 24,
-};
 
 const FREQ_LABEL: Record<string, string> = {
   daily: '每日',
@@ -42,33 +35,31 @@ export default function ScheduledTasksPage() {
   const [draft, setDraft] = useState(emptyDraft);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
 
+  const request = useRef<AbortController | null>(null);
   const refresh = useCallback(async () => {
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
     setLoading(true);
     try {
-      setTasks(await listScheduledTasks());
+      const result = await listScheduledTasks(controller.signal);
+      if (controller.signal.aborted) return;
+      setTasks(result);
       setError(null);
     } catch (e) {
+      if (controller.signal.aborted) return;
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
+      if (request.current === controller) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     refresh();
+    return () => request.current?.abort();
   }, [refresh]);
-
-  useEffect(() => {
-    function handleClick() {
-      setMenuOpenId(null);
-    }
-    if (menuOpenId) {
-      document.addEventListener('click', handleClick);
-      return () => document.removeEventListener('click', handleClick);
-    }
-  }, [menuOpenId]);
 
   async function handleCreate() {
     if (!draft.title.trim()) {
@@ -140,228 +131,14 @@ export default function ScheduledTasksPage() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      <BackToChatHeader title="例行任务" subtitle="设置定时执行的 Agent 任务，自动分析并推送结果" />
-
-      <div
-        style={{
-          padding: '16px 24px',
-          display: 'flex',
-          justifyContent: 'flex-end',
-          alignItems: 'center',
-          gap: 12,
-        }}
-      >
-        <div style={{ position: 'relative', width: 280 }}>
-          <input
-            type="text"
-            placeholder="搜索任务名称"
-            style={{
-              width: '100%',
-              height: 40,
-              padding: '0 12px 0 36px',
-              border: '1px solid var(--da-border)',
-              borderRadius: 20,
-              fontSize: 14,
-              background: 'var(--da-surface)',
-              color: 'var(--da-text)',
-              boxSizing: 'border-box',
-              outline: 'none',
-            }}
-          />
-          <span
-            style={{
-              position: 'absolute',
-              left: 12,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: 'var(--da-text-muted)',
-              pointerEvents: 'none',
-              display: 'flex',
-              alignItems: 'center',
-            }}
-          >
-            <Icon name="search" size="sm" />
-          </span>
-        </div>
-        <button
-          className="da-btn da-btn-primary"
-          onClick={() => setCreateOpen(true)}
-          disabled={busy}
-          style={{ height: 40, borderRadius: 20, padding: '0 20px', fontSize: 14 }}
-        >
-          + 创建定时任务
-        </button>
-      </div>
-
-      <div style={panelStyle}>
-        {loading && (
-          <div style={{ color: 'var(--da-text-muted)', padding: 24 }}>加载中…</div>
-        )}
-
-        {!loading && tasks.length === 0 && (
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '80px 24px',
-              color: 'var(--da-text-muted)',
-            }}
-          >
-            <svg width="120" height="120" viewBox="0 0 120 120" fill="none" aria-hidden="true">
-              <rect x="20" y="30" width="80" height="60" rx="8" fill="var(--da-surface-sunken)" stroke="var(--da-border)" strokeWidth="2" />
-              <rect x="30" y="42" width="60" height="8" rx="4" fill="var(--da-border)" opacity="0.5" />
-              <rect x="30" y="56" width="45" height="8" rx="4" fill="var(--da-border)" opacity="0.3" />
-              <rect x="30" y="70" width="50" height="8" rx="4" fill="var(--da-border)" opacity="0.3" />
-              <circle cx="90" cy="30" r="12" fill="var(--da-primary)" opacity="0.2" />
-              <path d="M90 24v6l4 4" stroke="var(--da-primary)" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-            <div style={{ fontSize: 14, marginTop: 16 }}>暂无例行任务</div>
-            <button
-              onClick={() => setCreateOpen(true)}
-              style={{
-                marginTop: 12,
-                background: 'transparent',
-                border: 'none',
-                color: 'var(--da-primary)',
-                cursor: 'pointer',
-                fontSize: 14,
-              }}
-            >
-              创建定时任务
-            </button>
-          </div>
-        )}
-
-        {!loading && tasks.length > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 16 }}>
-            {tasks.map((task) => (
-              <div
-                key={task.id}
-                className="da-card"
-                style={{
-                  padding: 20,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 12,
-                  position: 'relative',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--da-text)', marginBottom: 8 }}>
-                      {task.title}
-                    </div>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                      <span
-                        style={{
-                          padding: '2px 8px',
-                          background: 'var(--da-surface-sunken)',
-                          border: '1px solid var(--da-border)',
-                          borderRadius: 4,
-                          fontSize: 12,
-                          color: 'var(--da-text-muted)',
-                        }}
-                      >
-                        {FREQ_LABEL[task.scheduleFrequency] || task.scheduleFrequency} · {task.scheduleTime}
-                      </span>
-                      <span style={{ fontSize: 12, color: 'var(--da-text-muted)' }}>
-                        {task.prompt.length > 30 ? task.prompt.substring(0, 30) + '...' : task.prompt}
-                      </span>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 4, position: 'relative' }}>
-                    <button
-                      onClick={() => handleToggleStatus(task)}
-                      className="da-btn da-btn-ghost da-btn-sm"
-                      title={task.status === 'active' ? '暂停任务' : '恢复任务'}
-                      style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-                    >
-                      {task.status === 'active' ? (
-                        <>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                            <rect x="6" y="4" width="4" height="16" rx="1" />
-                            <rect x="14" y="4" width="4" height="16" rx="1" />
-                          </svg>
-                          暂停任务
-                        </>
-                      ) : (
-                        <>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M8 5v14l11-7z" />
-                          </svg>
-                          恢复任务
-                        </>
-                      )}
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setMenuOpenId(menuOpenId === task.id ? null : task.id);
-                      }}
-                      className="da-btn da-btn-ghost da-btn-sm"
-                      title="更多操作"
-                    >
-                      <Icon name="moreHorizontal" size="sm" />
-                    </button>
-                    {menuOpenId === task.id && (
-                      <div
-                        style={{
-                          position: 'absolute',
-                          right: 0,
-                          top: '100%',
-                          marginTop: 4,
-                          background: 'var(--da-surface)',
-                          border: '1px solid var(--da-border)',
-                          borderRadius: 8,
-                          boxShadow: 'var(--da-shadow-pop)',
-                          zIndex: 10,
-                          minWidth: 120,
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <button
-                          onClick={() => {
-                            handleDelete(task);
-                            setMenuOpenId(null);
-                          }}
-                          className="da-navitem"
-                          style={{ color: 'var(--da-danger)', width: '100%', textAlign: 'left' }}
-                        >
-                          <Icon name="trash" size="sm" />
-                          删除任务
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: 'var(--da-text-muted)',
-                    display: 'flex',
-                    gap: 12,
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <span>{task.createdBy || '当前用户'}</span>
-                  <span>·</span>
-                  <span>创建于 {formatDate(task.createdAt)}</span>
-                  <span>·</span>
-                  <span>{task.runCount} 次运行</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {error && (
-          <div style={{ color: 'var(--da-danger)', padding: '12px 0', fontSize: 14 }}>{error}</div>
-        )}
-      </div>
+    <div className="kw-page kw-secondary-page">
+      <KnowledgeBreadcrumb items={[{ label: '返回对话', to: '/chat' }, { label: '例行任务' }]} />
+      <div className="kw-scroll"><div className="kw-content">
+        <div className="kw-pagehead"><div className="kw-heading"><h1>例行任务</h1><p>管理周期性分析任务，集中查看执行计划与任务状态。</p></div><button className="da-btn da-btn-primary" onClick={() => setCreateOpen(true)} disabled={busy}><Icon name="plus" size="sm" />创建任务</button></div>
+        <div className="kw-toolbar"><label className="kw-search"><Icon name="search" size="sm" /><input aria-label="搜索任务" placeholder="搜索任务名称或分析问题" value={query} onChange={e => setQuery(e.target.value)} /></label><span className="kw-count">{tasks.length} 个任务</span><span className="kw-spacer" /><button className="da-btn da-btn-ghost" onClick={refresh} disabled={loading}><Icon name="refresh" size="sm" />刷新</button></div>
+        {error && <div role="alert" className="kw-alert">{error}</div>}
+        {loading ? <div className="kw-empty">加载任务…</div> : tasks.length === 0 ? <div className="kw-task-empty"><div className="kw-icon"><Icon name="clock" /></div><h2>安排你的下一次分析</h2><p>创建任务并设置执行计划，在这里管理周期性的数据问题。</p><button className="da-btn da-btn-primary" onClick={() => setCreateOpen(true)}>创建第一个任务</button></div> : <div className="kw-tablebox"><div className="kw-table-scroll"><table className="kw-table"><thead><tr><th>任务名称 / 分析问题</th><th>执行计划</th><th>状态</th><th>运行次数</th><th>创建时间</th><th>操作</th></tr></thead><tbody>{tasks.filter(t => `${t.title} ${t.prompt}`.toLowerCase().includes(query.toLowerCase())).map(task => <tr key={task.id}><td style={{ whiteSpace: 'normal', maxWidth: 440 }}><strong>{task.title}</strong><div className="kw-task-prompt" title={task.prompt}>{task.prompt}</div></td><td>{FREQ_LABEL[task.scheduleFrequency] || task.scheduleFrequency} · {task.scheduleTime}</td><td><span className="kw-status">{task.status === 'active' ? '已启用' : '已暂停'}</span></td><td>{task.runCount}</td><td>{formatDate(task.createdAt)}</td><td><WorkspaceMenu label={`${task.title}操作`} items={[{ label: task.status === 'active' ? '暂停任务' : '恢复任务', icon: 'clock', onClick: () => { void handleToggleStatus(task); } }, { label: '删除任务', icon: 'trash', danger: true, onClick: () => { void handleDelete(task); } }]} /></td></tr>)}</tbody></table></div>{tasks.filter(t => `${t.title} ${t.prompt}`.toLowerCase().includes(query.toLowerCase())).length === 0 && <div className="kw-empty">没有匹配的任务</div>}</div>}
+      </div></div>
 
       {createOpen && (
         <div

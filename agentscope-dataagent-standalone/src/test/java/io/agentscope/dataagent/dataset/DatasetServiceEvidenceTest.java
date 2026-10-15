@@ -95,6 +95,19 @@ class DatasetServiceEvidenceTest {
                         mock(DatasetImportService.class),
                         mock(SchemaGenerationService.class),
                         mock(MdlWorkspaceReader.class));
+        var access = mock(KnowledgeBaseAccessService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "access", access);
+        when(access.visible(anyString(), org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(
+                        inv -> {
+                            List<String> ids = inv.getArgument(1);
+                            return ids == null
+                                    ? List.of()
+                                    : ids.stream()
+                                            .map(groupsById::get)
+                                            .filter(java.util.Objects::nonNull)
+                                            .toList();
+                        });
 
         when(groupRepository.findByOwnerIdOrderByCreatedAtDesc(anyString()))
                 .thenAnswer(inv -> List.copyOf(groupsById.values()));
@@ -126,7 +139,7 @@ class DatasetServiceEvidenceTest {
         registerGroup("g1", "测试MDL");
         knowledgeByGroup.put("g1", KPI_DOC);
 
-        String out = service.evidenceFor("owner", null, "活跃用户 考核目标", 1);
+        String out = service.evidenceFor("owner", List.of("g1"), "活跃用户 考核目标", 1);
 
         assertTrue(out != null && !out.isBlank(), "a matching passage must come back");
         assertTrue(out.contains("【知识库「测试MDL」 › 2026年9月咪咕视频考核口径】"));
@@ -138,7 +151,7 @@ class DatasetServiceEvidenceTest {
         registerGroup("g1", "测试MDL");
         knowledgeByGroup.put("g1", KPI_DOC);
 
-        assertNull(service.evidenceFor("owner", null, "量子物理与元宇宙科普", 3));
+        assertNull(service.evidenceFor("owner", List.of("g1"), "量子物理与元宇宙科普", 3));
     }
 
     @Test
@@ -146,7 +159,7 @@ class DatasetServiceEvidenceTest {
         registerGroup("g1", "测试MDL");
         knowledgeByGroup.put("g1", SHORT_KPI_NOTE);
 
-        String out = service.evidenceFor("owner", null, "量子物理与元宇宙科普", 3);
+        String out = service.evidenceFor("owner", List.of("g1"), "量子物理与元宇宙科普", 3);
 
         assertTrue(out != null && !out.isBlank(), "short docs bypass the keyword gate");
         assertTrue(out.contains("【知识库「测试MDL」 › 2026年9月考核目标】"));
@@ -160,7 +173,7 @@ class DatasetServiceEvidenceTest {
         knowledgeByGroup.put("g1", KPI_DOC);
         knowledgeByGroup.put("g2", SHORT_UNRELATED_NOTE);
 
-        String out = service.evidenceFor("owner", null, "活跃用户 考核目标", 1);
+        String out = service.evidenceFor("owner", List.of("g1", "g2"), "活跃用户 考核目标", 1);
 
         assertTrue(out != null && out.contains("长文库"));
         assertTrue(!out.contains("便签库"), "keyword hits outrank the whole-doc fallback");
@@ -171,7 +184,7 @@ class DatasetServiceEvidenceTest {
         registerGroup("g1", "便签库");
         knowledgeByGroup.put("g1", SHORT_UNRELATED_NOTE);
 
-        String out = service.evidenceFor("owner", null, "？？？", 3);
+        String out = service.evidenceFor("owner", List.of("g1"), "？？？", 3);
 
         assertTrue(out != null && out.contains("会议室守则"));
     }
@@ -193,7 +206,7 @@ class DatasetServiceEvidenceTest {
     void groupWithoutDocumentIsSkipped() {
         registerGroup("g1", "空库");
 
-        assertNull(service.evidenceFor("owner", null, "活跃用户", 3));
+        assertNull(service.evidenceFor("owner", List.of("g1"), "活跃用户", 3));
     }
 
     @Test
@@ -202,7 +215,7 @@ class DatasetServiceEvidenceTest {
         knowledgeByGroup.put("g1", KPI_DOC);
 
         assertNull(service.evidenceFor(null, null, "活跃用户", 3));
-        assertNull(service.evidenceFor("owner", null, "  ", 3));
-        assertNull(service.evidenceFor("owner", null, "活跃用户", 0));
+        assertNull(service.evidenceFor("owner", List.of("g1"), "  ", 3));
+        assertNull(service.evidenceFor("owner", List.of("g1"), "活跃用户", 0));
     }
 }

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FileNode, tree as fetchTree } from '../api/workspace';
 
 interface Props {
@@ -153,11 +153,16 @@ export default function WorkspaceFileTree({ agentId, selectedPath, onSelect, ref
   const [showHidden, setShowHidden] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const request = useRef<AbortController | null>(null);
   async function reload() {
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
     setErr(null);
     setLoading(true);
     try {
-      const list = await fetchTree(agentId, true);
+      const list = await fetchTree(agentId, true, controller.signal);
+      if (controller.signal.aborted) return;
       setNodes(list);
       setExpanded(prev => {
         if (prev.size > 0) return prev;
@@ -166,14 +171,16 @@ export default function WorkspaceFileTree({ agentId, selectedPath, onSelect, ref
         return next;
       });
     } catch (e: unknown) {
+      if (controller.signal.aborted) return;
       setErr(e instanceof Error ? e.message : 'Failed to load files');
     } finally {
-      setLoading(false);
+      if (request.current === controller) setLoading(false);
     }
   }
 
   useEffect(() => {
     reload();
+    return () => request.current?.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agentId, refreshKey]);
 

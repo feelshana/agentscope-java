@@ -21,6 +21,8 @@ import org.springframework.stereotype.Service;
 /** Stores explicit answer feedback and builds isolated official Wren query memory. */
 @Service
 public class AnswerQueryMemory {
+    private KnowledgeBaseOperations operations;
+
     private static final Logger log = LoggerFactory.getLogger(AnswerQueryMemory.class);
     private final WrenProperties properties;
     private final WrenCli cli;
@@ -34,7 +36,6 @@ public class AnswerQueryMemory {
         this(properties, cli, groups, null);
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
     public AnswerQueryMemory(
             WrenProperties properties,
             WrenCli cli,
@@ -125,10 +126,22 @@ public class AnswerQueryMemory {
             write(owner, new State(answers, old.projects()));
             try {
                 for (Pair pair : candidates) {
-                    Path project = project(owner, pair.groupId());
-                    initialize(project);
-                    store(project, pair.question(), pair.memorySql());
-                    if (publishedProjects != null) publishedProjects.indexed(owner, pair.groupId());
+                    java.util.function.Supplier<Void> save =
+                            () -> {
+                                Path project = project(owner, pair.groupId());
+                                initialize(project);
+                                store(project, pair.question(), pair.memorySql());
+                                if (publishedProjects != null)
+                                    publishedProjects.indexed(owner, pair.groupId());
+                                return null;
+                            };
+                    java.util.function.Supplier<Void> serialized =
+                            () -> {
+                                if (publishedProjects == null) return save.get();
+                                return publishedProjects.locked(pair.groupId(), save);
+                            };
+                    if (operations == null) serialized.get();
+                    else operations.run(pair.groupId(), serialized);
                 }
             } catch (DatasetException e) {
                 return result(pending);
@@ -153,7 +166,7 @@ public class AnswerQueryMemory {
     }
 
     public String recall(String owner, String group, String question, List<String> confirmed) {
-        groups.getGroup(owner, group);
+        groups.queryGroup(owner, group);
         synchronized (lock(owner)) {
             Path project = project(owner, group);
             try {
@@ -273,10 +286,7 @@ public class AnswerQueryMemory {
                     if (!"BUSINESS".equalsIgnoreCase(queryType)) continue;
                     boolean owned =
                             groups.listGroups(owner).stream()
-                                    .anyMatch(
-                                            g ->
-                                                    owner.equals(g.getOwnerId())
-                                                            && group.equals(g.getId()));
+                                    .anyMatch(g -> group.equals(g.getId()));
                     if (owned && !question.isBlank() && !sql.isBlank()) {
                         JsonNode matched = officialCalls.get(turn.toolCallId());
                         // The persisted transcript can lose the transport tool-call id while the
@@ -372,7 +382,7 @@ public class AnswerQueryMemory {
     }
 
     private Path project(String owner, String group) {
-        groups.getGroup(owner, group);
+        groups.queryGroup(owner, group);
         if (publishedProjects != null) return publishedProjects.likedProject(owner, group);
         return properties
                 .groupRoot(group)
@@ -526,5 +536,16 @@ public class AnswerQueryMemory {
         } catch (Exception e) {
             throw new DatasetException("保存答案反馈失败", e);
         }
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AnswerQueryMemory(
+            WrenProperties properties,
+            WrenCli cli,
+            DatasetGroupService groups,
+            WrenPublishedProject publishedProjects,
+            KnowledgeBaseOperations operations) {
+        this(properties, cli, groups, publishedProjects);
+        this.operations = operations;
     }
 }

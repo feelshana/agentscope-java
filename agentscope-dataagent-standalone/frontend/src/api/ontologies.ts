@@ -1,4 +1,4 @@
-import { getToken } from './auth';
+import { apiFetch, getToken } from './auth';
 
 export interface OntologyEntry {
   id: string;
@@ -12,7 +12,7 @@ function authHeaders(): Record<string, string> {
 
 /** Fetches the list of available ontology agents from the backend. */
 export async function listOntologies(): Promise<OntologyEntry[]> {
-  const res = await fetch('/api/ontologies', { headers: authHeaders() });
+  const res = await apiFetch('/api/ontologies', { headers: authHeaders() });
   if (!res.ok) throw new Error(`Failed to list ontologies: ${res.status}`);
   return res.json();
 }

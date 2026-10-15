@@ -165,6 +165,19 @@ public class TableProvisioner {
         }
     }
 
+    /** Strict KB cleanup: failed DDL must remain visible and retryable. */
+    public void dropTableStrict(String table) {
+        if (table == null || !table.matches("[A-Za-z0-9_]+")) {
+            throw new DatasetException("非法导入表名称", 500);
+        }
+        try (Connection c = connect();
+                Statement statement = c.createStatement()) {
+            statement.execute("DROP TABLE IF EXISTS `" + table + "`");
+        } catch (SQLException e) {
+            throw new DatasetException("删除导入表失败：" + table, e);
+        }
+    }
+
     private Connection connect() throws SQLException {
         return DriverManager.getConnection(props.url(), props.username(), props.password());
     }

@@ -48,6 +48,13 @@ import reactor.core.scheduler.Schedulers;
  * official describe_model; physical table names and direct-query fallback instructions are omitted.
  */
 public class DataDynamicContextMiddleware implements HarnessRuntimeMiddleware {
+    private io.agentscope.dataagent.web.session.ConversationScopeRegistry conversationScopes;
+
+    public DataDynamicContextMiddleware withConversationScopes(
+            io.agentscope.dataagent.web.session.ConversationScopeRegistry scopes) {
+        conversationScopes = scopes;
+        return this;
+    }
 
     private static final Logger log = LoggerFactory.getLogger(DataDynamicContextMiddleware.class);
 
@@ -94,6 +101,18 @@ public class DataDynamicContextMiddleware implements HarnessRuntimeMiddleware {
                                     scope != null && scope.hasGroupFilter()
                                             ? scope.groupIds()
                                             : null;
+                            if (groupIds == null && conversationScopes != null)
+                                groupIds = conversationScopes.get(userId, ctx.getSessionId());
+                            if (contextProvider != null)
+                                groupIds = contextProvider.authorizedGroupIds(userId, groupIds);
+
+                            if (scope != null && groupIds != null && groupIds.isEmpty()) {
+                                return base
+                                        + "\n\n"
+                                        + "[CHAT_KNOWLEDGE_SCOPE]\n"
+                                        + "本轮未选择知识库，仅进行普通聊天。"
+                                        + "不要查询企业数据库、知识库或调用问数工具；需要业务数据时请提示用户在输入框选择知识库。历史回答可以作为聊天上下文，但不能据此继续查询旧知识库。";
+                            }
 
                             String dsOverview = buildDataSourcesOverview(userId, groupIds);
                             String kbOverview = buildKnowledgeBaseOverview(userId, groupIds);
@@ -115,6 +134,17 @@ public class DataDynamicContextMiddleware implements HarnessRuntimeMiddleware {
                             }
                             if (!kbOverview.isEmpty()) {
                                 sb.append(kbOverview).append("\n");
+                            }
+                            sb.append(
+                                    "\n"
+                                        + "[CURRENT_TURN_SCOPE] 本轮查询只能使用当前选中的知识库。保留历史聊天帮助理解追问，但旧库、旧"
+                                        + " SQL 和旧结果不能扩大本轮查询范围；跨库口径不确定时先澄清。\n");
+                            if (groupIds != null && groupIds.size() > 1) {
+                                sb.append(
+                                        "\n[CHAT_KNOWLEDGE_SCOPE]\n用户选择了多个知识库。根据问题和各库模型说明，"
+                                                + "自行判断需要查询哪些库，并按对应 group_id 分别调用工具，必要时综合多个库的结果。"
+                                                + "同名知识库必须使用完整 group_id；不要把不同知识库的模型直接写入同一条 SQL，"
+                                                + "不要假设指标口径和关联键一致，回答应注明采用的知识库来源。\n");
                             }
                             return sb.toString();
                         })
@@ -159,7 +189,6 @@ public class DataDynamicContextMiddleware implements HarnessRuntimeMiddleware {
             if (groupRepository != null) {
                 groupRepository
                         .findById(mdl.groupId())
-                        .filter(group -> userId != null && userId.equals(group.getOwnerId()))
                         .filter(group -> "DIRTY".equals(group.getMdlState()))
                         .ifPresent(ignored -> sb.append("\n*(提示：当前查询使用已发布版本，草稿或数据变更尚未生效。)*\n"));
             }
@@ -167,12 +196,7 @@ public class DataDynamicContextMiddleware implements HarnessRuntimeMiddleware {
         }
         for (String groupId : unavailableGroupIds) {
             DatasetGroupEntity group =
-                    groupRepository == null
-                            ? null
-                            : groupRepository
-                                    .findById(groupId)
-                                    .filter(value -> userId.equals(value.getOwnerId()))
-                                    .orElse(null);
+                    groupRepository == null ? null : groupRepository.findById(groupId).orElse(null);
             if (group == null) {
                 continue;
             }
@@ -324,7 +348,7 @@ public class DataDynamicContextMiddleware implements HarnessRuntimeMiddleware {
         if (userId == null) {
             return all.stream().filter(this::isGlobal).toList();
         }
-        if (groupIds != null && !groupIds.isEmpty()) {
+        if (groupIds != null) {
             Set<String> groupSet = new HashSet<>(groupIds);
             return all.stream()
                     .filter(

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   listMyContributions,
   submitFromWorkspace,
@@ -276,10 +276,15 @@ export default function ContributionsPage() {
     }
   }, []);
 
+  const treeRequest = useRef<AbortController | null>(null);
   const reloadTree = useCallback(async (agentId: string) => {
+    treeRequest.current?.abort();
+    const controller = new AbortController();
+    treeRequest.current = controller;
     setTreeErr(null);
     try {
-      const list = await fetchTree(agentId, true);
+      const list = await fetchTree(agentId, true, controller.signal);
+      if (controller.signal.aborted) return;
       const visible = filterTree(list);
       setNodes(visible);
       setExpanded(prev => {
@@ -289,6 +294,7 @@ export default function ContributionsPage() {
         return next;
       });
     } catch (e: unknown) {
+      if (controller.signal.aborted) return;
       setTreeErr(e instanceof Error ? e.message : 'Failed to load files');
     }
   }, []);
@@ -299,6 +305,7 @@ export default function ContributionsPage() {
   useEffect(() => {
     reloadTree(sourceAgentId);
     setSelected(new Set());
+    return () => treeRequest.current?.abort();
   }, [sourceAgentId, reloadTree]);
 
   const toggleExpand = (p: string) => {

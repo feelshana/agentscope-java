@@ -40,6 +40,7 @@ import io.agentscope.dataagent.web.persistence.jpa.DatasetEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DocEnhanceProposalEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DocEnhanceTaskEntity;
+import io.agentscope.dataagent.web.persistence.jpa.SemanticCubeEntity;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -48,11 +49,17 @@ import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.codec.json.JacksonJsonEncoder;
 import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Locks the modeling API shell: every endpoint resolves the group through
@@ -231,12 +238,196 @@ class SemanticModelingControllerTest {
         assertThat(started.status()).isEqualTo("READY");
         assertThat(overview).isNotNull();
         assertThat(overview.proposals()).hasSize(1);
-        assertThat(overview.proposals().get(0).payload().path("name").asText()).isEqualTo("有效订单");
+        assertThat(overview.proposals().get(0).payload().get("name")).isEqualTo("有效订单");
         assertThat(adopted.type()).isEqualTo("BUSINESS_RULE");
         assertThat(ignored.id()).isEqualTo("p1");
         verify(docEnhanceService).triggerAnalyze("alice", "gA");
         verify(docEnhanceService).adopt("alice", "gA", "p1");
         verify(docEnhanceService).ignore("alice", "gA", "p1");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"overview", "adopt", "ignore"})
+    void proposalHttpResponsesKeepBusinessJsonWithJackson3(String operation) throws Exception {
+        DatasetGroupEntity group = new DatasetGroupEntity();
+        group.setOwnerId("alice");
+        when(groupService.getGroup("alice", "gA")).thenReturn(group);
+        DocEnhanceProposalEntity relationship =
+                proposal(
+                        "p1",
+                        "RELATIONSHIP",
+                        """
+                        {"sourceDatasetId":"ds_orders","sourceColumns":["customer_id"],
+                         "targetDatasetId":"ds_customers","targetColumns":["id"],
+                         "joinType":"MANY_TO_ONE","metadata":{"reviewed":true,"score":0.95,
+                         "optional":null,"keys":["customer_id",{"name":"id"}]}}
+                        """);
+        List<DocEnhanceProposalEntity> proposals =
+                List.of(
+                        relationship,
+                        proposal(
+                                "p2",
+                                "TERM",
+                                """
+                                {"term":"客户","explanation":"订单所属客户","synonyms":"顾客,买家"}
+                                """),
+                        proposal(
+                                "p3",
+                                "BUSINESS_RULE",
+                                """
+                                {"name":"有效销售","content":"排除\\\"已取消\\\"\\n保留退款"}
+                                """),
+                        proposal(
+                                "p4",
+                                "VIEW",
+                                """
+                                {"name":"销售明细","baseDatasetId":null,
+                                 "sqlText":"SELECT * FROM orders WHERE status <> '已取消'","description":"明细视图"}
+                                """));
+        when(docEnhanceService.latestTask("alice", "gA"))
+                .thenReturn(
+                        Optional.of(
+                                new DocEnhanceTaskEntity(
+                                        "t1", "alice", "gA", "UPLOAD", "业务规则.md")));
+        when(docEnhanceService.latestProposals("alice", "gA")).thenReturn(proposals);
+        when(docEnhanceService.adopt("alice", "gA", "p1")).thenReturn(relationship);
+        when(docEnhanceService.ignore("alice", "gA", "p1")).thenReturn(relationship);
+
+        WebTestClient client = jackson3HttpClient();
+        WebTestClient.ResponseSpec response =
+                "overview".equals(operation)
+                        ? client.get().uri("/api/dataset-groups/gA/modeling/enhance").exchange()
+                        : client.post()
+                                .uri(
+                                        "/api/dataset-groups/gA/modeling/enhance/proposals/p1/"
+                                                + operation)
+                                .exchange();
+        byte[] body =
+                response.expectStatus()
+                        .isOk()
+                        .expectHeader()
+                        .contentTypeCompatibleWith(MediaType.APPLICATION_JSON)
+                        .expectBody()
+                        .returnResult()
+                        .getResponseBody();
+        ObjectMapper reader = new ObjectMapper();
+        var root = reader.readTree(body);
+        if ("overview".equals(operation)) {
+            assertThat(root.path("proposals").size()).isEqualTo(proposals.size());
+            for (int i = 0; i < proposals.size(); i++) {
+                assertThat(root.path("proposals").get(i).path("payload"))
+                        .isEqualTo(reader.readTree(proposals.get(i).getPayloadJson()));
+            }
+        } else {
+            assertThat(root.path("payload"))
+                    .isEqualTo(reader.readTree(relationship.getPayloadJson()));
+        }
+        verify(groupService).getGroup("alice", "gA");
+    }
+
+    @Test
+    void cubeOverviewHttpResponseKeepsNestedArraysWithJackson3() throws Exception {
+        DatasetGroupEntity group = new DatasetGroupEntity();
+        group.setOwnerId("alice");
+        when(groupService.getGroup("alice", "gA")).thenReturn(group);
+        when(groupService.listDatasets("alice", "gA")).thenReturn(List.of());
+        when(modelingService.listRelations("gA")).thenReturn(List.of());
+        when(modelingService.listViews("gA")).thenReturn(List.of());
+        when(modelingService.listTerms("gA")).thenReturn(List.of());
+        SemanticCubeEntity cube = new SemanticCubeEntity("c1", "gA", "销售额", "ds_orders", "销售指标");
+        cube.setMeasuresJson(
+                """
+                [{"name":"销售额","column":"amount","agg":"sum","options":{"enabled":true,"scale":2}}]
+                """);
+        cube.setDimensionsJson(
+                """
+                [{"name":"渠道","column":"channel","values":["小程序","商城"],"description":null}]
+                """);
+        cube.setTimeDimensionsJson(
+                """
+                [{"column":"order_date","granularities":["day","month"]}]
+                """);
+        when(modelingService.listCubes("gA")).thenReturn(List.of(cube));
+        WebTestClient client = jackson3HttpClient();
+        WebTestClient.ResponseSpec response =
+                client.get().uri("/api/dataset-groups/gA/modeling").exchange();
+        byte[] body = response.expectStatus().isOk().expectBody().returnResult().getResponseBody();
+        ObjectMapper reader = new ObjectMapper();
+        var root = reader.readTree(body);
+        var returned = root.path("cubes").get(0);
+        assertThat(returned.path("measures")).isEqualTo(reader.readTree(cube.getMeasuresJson()));
+        assertThat(returned.path("dimensions"))
+                .isEqualTo(reader.readTree(cube.getDimensionsJson()));
+        assertThat(returned.path("timeDimensions"))
+                .isEqualTo(reader.readTree(cube.getTimeDimensionsJson()));
+        verify(groupService).getGroup("alice", "gA");
+    }
+
+    private WebTestClient jackson3HttpClient() {
+        return WebTestClient.bindToController(controller)
+                .httpMessageCodecs(
+                        codecs ->
+                                codecs.defaultCodecs()
+                                        .jacksonJsonEncoder(
+                                                new JacksonJsonEncoder(
+                                                        JsonMapper.builder().build())))
+                .webFilter(
+                        (exchange, chain) ->
+                                chain.filter(exchange.mutate().principal(Mono.just(alice)).build()))
+                .build();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "   ", "null", "not-json"})
+    void missingOrInvalidStoredJsonReturnsEmptyContainers(String json) throws Exception {
+        DatasetGroupEntity group = new DatasetGroupEntity();
+        group.setOwnerId("alice");
+        when(groupService.getGroup("alice", "gA")).thenReturn(group);
+        when(groupService.listDatasets("alice", "gA")).thenReturn(List.of());
+        when(modelingService.listRelations("gA")).thenReturn(List.of());
+        when(modelingService.listViews("gA")).thenReturn(List.of());
+        when(modelingService.listTerms("gA")).thenReturn(List.of());
+        SemanticCubeEntity cube = new SemanticCubeEntity("c1", "gA", "销售额", "ds_orders", null);
+        cube.setMeasuresJson(json);
+        cube.setDimensionsJson(json);
+        cube.setTimeDimensionsJson(json);
+        when(modelingService.listCubes("gA")).thenReturn(List.of(cube));
+        when(docEnhanceService.adopt("alice", "gA", "p1")).thenReturn(proposal("p1", "TERM", json));
+        WebTestClient client = jackson3HttpClient();
+        ObjectMapper reader = new ObjectMapper();
+        byte[] cubeBody =
+                client.get()
+                        .uri("/api/dataset-groups/gA/modeling")
+                        .exchange()
+                        .expectStatus()
+                        .isOk()
+                        .expectBody()
+                        .returnResult()
+                        .getResponseBody();
+        var returned = reader.readTree(cubeBody).path("cubes").get(0);
+        for (String field : List.of("measures", "dimensions", "timeDimensions")) {
+            assertThat(returned.path(field).isArray()).isTrue();
+            assertThat(returned.path(field).isEmpty()).isTrue();
+        }
+        byte[] proposalBody =
+                client.post()
+                        .uri("/api/dataset-groups/gA/modeling/enhance/proposals/p1/adopt")
+                        .exchange()
+                        .expectStatus()
+                        .isOk()
+                        .expectBody()
+                        .returnResult()
+                        .getResponseBody();
+        assertThat(reader.readTree(proposalBody).path("payload")).isEqualTo(reader.readTree("{}"));
+    }
+
+    private static DocEnhanceProposalEntity proposal(String id, String type, String json) {
+        DocEnhanceProposalEntity proposal = new DocEnhanceProposalEntity();
+        proposal.setId(id);
+        proposal.setProposalType(type);
+        proposal.setClassification("NEW");
+        proposal.setPayloadJson(json);
+        return proposal;
     }
 
     @Test

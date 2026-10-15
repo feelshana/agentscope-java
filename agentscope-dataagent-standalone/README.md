@@ -259,8 +259,9 @@ java -jar target/agentscope-dataagent-*-exec.jar
 ```
 
 Open **http://localhost:8080** and log in. The H2 demo seed creates two demo
-accounts: `bob` / `bob` and `alice` / `alice`. The first user with
-`ROLE_ADMIN` is also seeded — check the startup banner.
+accounts: `bob` / `bob` and `alice` / `alice`. For isolated local development,
+set `dataagent.seed-demo-users=true` to seed the initial administrator. It defaults
+to false; existing users and grants are retained.
 
 ---
 
@@ -268,7 +269,9 @@ accounts: `bob` / `bob` and `alice` / `alice`. The first user with
 
 | Property | Default | Description |
 |---|---|---|
-| `dataagent.jwt.secret` | dev placeholder | JWT signing secret (>= 32 chars). **Refuses to boot in non-`dev` profiles when left at the default.** |
+| `dataagent.jwt.secret` | dev placeholder | JWT signing secret (>= 32 UTF-8 bytes). Blank, placeholder and short secrets are rejected. |
+| `dataagent.seed-demo-users` | `false` | Opt in to Java administrator seeding for local development; does not disable separately configured SQL initialization. |
+| `dataagent.cors.allowed-origins` | `*` | Allowed browser origin patterns; configure explicit origins for deployment. |
 | `dataagent.workspace` | `$CWD` *(dev only)* | Working directory for agent runtime state (not config — config lives at `~/.agentscope/dataagent-standalone/agentscope.json`). **Required** in non-`dev` profiles — startup fails if blank. |
 | `dataagent.workspace-store.local.max-file-size-mb` | `10` | Per-file cap for the `RemoteFilesystem` local store. |
 | `dataagent.openai.api-key` | _(empty)_ | OpenAI-compatible API key (primary model). Env: `DATAAGENT_OPENAI_API_KEY` or `OPENAI_API_KEY`. When set, takes precedence over DashScope. |

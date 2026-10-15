@@ -1,4 +1,4 @@
-import { getToken } from './auth';
+import { apiFetch, getToken } from './auth';
 
 export interface ActiveTool {
   name: string;
@@ -76,19 +76,19 @@ async function readError(res: Response, fallback: string): Promise<Error> {
 }
 
 export async function fetchActive(agentId: string): Promise<ActiveToolsResponse> {
-  const res = await fetch(`${base(agentId)}/active`, { headers: authHeaders() });
+  const res = await apiFetch(`${base(agentId)}/active`, { headers: authHeaders() });
   if (!res.ok) throw await readError(res, 'Failed to load active tools');
   return res.json();
 }
 
 export async function fetchConfig(agentId: string): Promise<ToolsConfig> {
-  const res = await fetch(`${base(agentId)}/config`, { headers: authHeaders() });
+  const res = await apiFetch(`${base(agentId)}/config`, { headers: authHeaders() });
   if (!res.ok) throw await readError(res, 'Failed to load tools config');
   return res.json();
 }
 
 export async function saveConfig(agentId: string, cfg: ToolsConfig): Promise<ToolsConfig> {
-  const res = await fetch(`${base(agentId)}/config`, {
+  const res = await apiFetch(`${base(agentId)}/config`, {
     method: 'PUT',
     headers: jsonHeaders(),
     body: JSON.stringify(cfg),
@@ -98,13 +98,13 @@ export async function saveConfig(agentId: string, cfg: ToolsConfig): Promise<Too
 }
 
 export async function fetchBuiltinCatalog(agentId: string): Promise<BuiltinToolInfo[]> {
-  const res = await fetch(`${base(agentId)}/catalog/builtins`, { headers: authHeaders() });
+  const res = await apiFetch(`${base(agentId)}/catalog/builtins`, { headers: authHeaders() });
   if (!res.ok) throw await readError(res, 'Failed to load built-in catalog');
   return res.json();
 }
 
 export async function fetchMcpCatalog(agentId: string): Promise<McpCatalogEntry[]> {
-  const res = await fetch(`${base(agentId)}/catalog/mcp-servers`, { headers: authHeaders() });
+  const res = await apiFetch(`${base(agentId)}/catalog/mcp-servers`, { headers: authHeaders() });
   if (!res.ok) throw await readError(res, 'Failed to load MCP catalog');
   return res.json();
 }

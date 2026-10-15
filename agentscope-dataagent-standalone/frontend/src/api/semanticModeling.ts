@@ -1,4 +1,4 @@
-import { getToken } from './auth';
+import { apiFetch, getToken } from './auth';
 import type { Dataset } from './datasets';
 
 /** Lifecycle of the knowledge base's published Wren snapshot. */
@@ -179,14 +179,14 @@ function base(groupId: string): string {
 
 /** Group MDL state + datasets + persisted relations + cubes. */
 export async function getModelingOverview(groupId: string): Promise<ModelingOverview> {
-  const res = await fetch(base(groupId), { headers: authHeaders() });
+  const res = await apiFetch(base(groupId), { headers: authHeaders() });
   if (!res.ok) throw new Error(await errorMessage(res, `加载语义模型失败: ${res.status}`));
   return res.json();
 }
 
 /** Recomputes rule edges + LLM candidates + joinType probing; returns the persisted edges. */
 export async function suggestRelations(groupId: string): Promise<ModelingRelation[]> {
-  const res = await fetch(`${base(groupId)}/suggest/relations`, {
+  const res = await apiFetch(`${base(groupId)}/suggest/relations`, {
     method: 'POST',
     headers: authHeaders(),
   });
@@ -203,7 +203,7 @@ export async function updateRelation(
   relationId: string,
   req: RelationUpdateRequest,
 ): Promise<ModelingRelation> {
-  const res = await fetch(`${base(groupId)}/relations/${encodeURIComponent(relationId)}`, {
+  const res = await apiFetch(`${base(groupId)}/relations/${encodeURIComponent(relationId)}`, {
     method: 'PUT',
     headers: jsonHeaders(),
     body: JSON.stringify(req),
@@ -217,7 +217,7 @@ export async function addManualRelation(
   groupId: string,
   req: ManualRelationRequest,
 ): Promise<ModelingRelation> {
-  const res = await fetch(`${base(groupId)}/relations`, {
+  const res = await apiFetch(`${base(groupId)}/relations`, {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify(req),
@@ -235,7 +235,7 @@ export async function addManualRelation(
 // ------------------------------------------------------------------ views (specs/011 M2)
 
 export async function createView(groupId: string, req: ViewRequest): Promise<ModelingView> {
-  const res = await fetch(`${base(groupId)}/views`, {
+  const res = await apiFetch(`${base(groupId)}/views`, {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify(req),
@@ -249,7 +249,7 @@ export async function updateView(
   viewId: string,
   req: ViewRequest,
 ): Promise<ModelingView> {
-  const res = await fetch(`${base(groupId)}/views/${encodeURIComponent(viewId)}`, {
+  const res = await apiFetch(`${base(groupId)}/views/${encodeURIComponent(viewId)}`, {
     method: 'PUT',
     headers: jsonHeaders(),
     body: JSON.stringify(req),
@@ -259,7 +259,7 @@ export async function updateView(
 }
 
 export async function deleteView(groupId: string, viewId: string): Promise<void> {
-  const res = await fetch(`${base(groupId)}/views/${encodeURIComponent(viewId)}`, {
+  const res = await apiFetch(`${base(groupId)}/views/${encodeURIComponent(viewId)}`, {
     method: 'DELETE',
     headers: authHeaders(),
   });
@@ -269,13 +269,13 @@ export async function deleteView(groupId: string, viewId: string): Promise<void>
 // ------------------------------------------------------------------ document semantic enhancement (specs/014)
 
 export async function getEnhanceOverview(groupId: string): Promise<EnhanceOverview> {
-  const res = await fetch(`${base(groupId)}/enhance`, { headers: authHeaders() });
+  const res = await apiFetch(`${base(groupId)}/enhance`, { headers: authHeaders() });
   if (!res.ok) throw new Error(await errorMessage(res, `语义增强状态加载失败: ${res.status}`));
   return res.json();
 }
 
 export async function triggerEnhance(groupId: string): Promise<EnhanceTask> {
-  const res = await fetch(`${base(groupId)}/enhance`, {
+  const res = await apiFetch(`${base(groupId)}/enhance`, {
     method: 'POST',
     headers: authHeaders(),
   });
@@ -287,7 +287,7 @@ export async function adoptEnhanceProposal(
   groupId: string,
   proposalId: string,
 ): Promise<EnhanceProposal> {
-  const res = await fetch(
+  const res = await apiFetch(
     `${base(groupId)}/enhance/proposals/${encodeURIComponent(proposalId)}/adopt`,
     { method: 'POST', headers: authHeaders() },
   );
@@ -299,7 +299,7 @@ export async function ignoreEnhanceProposal(
   groupId: string,
   proposalId: string,
 ): Promise<EnhanceProposal> {
-  const res = await fetch(
+  const res = await apiFetch(
     `${base(groupId)}/enhance/proposals/${encodeURIComponent(proposalId)}/ignore`,
     { method: 'POST', headers: authHeaders() },
   );
@@ -351,7 +351,7 @@ export interface MdlPublishResult {
 
 /** Assembles the MDL YAML (confirmed relations + cubes, normalized types); read-only. */
 export async function getMdlPreview(groupId: string): Promise<MdlPreview> {
-  const res = await fetch(`${base(groupId)}/mdl`, { headers: authHeaders() });
+  const res = await apiFetch(`${base(groupId)}/mdl`, { headers: authHeaders() });
   if (!res.ok) throw new Error(await errorMessage(res, `MDL 预览生成失败: ${res.status}`));
   return res.json();
 }
@@ -438,14 +438,14 @@ export interface MdlView {
 
 /** Fetches the structured MDL view for visualization; read-only, never touches staging. */
 export async function getMdlView(groupId: string): Promise<MdlView> {
-  const res = await fetch(`${base(groupId)}/mdl/view`, { headers: authHeaders() });
+  const res = await apiFetch(`${base(groupId)}/mdl/view`, { headers: authHeaders() });
   if (!res.ok) throw new Error(await errorMessage(res, `MDL 视图加载失败: ${res.status}`));
   return res.json();
 }
 
 /** Local checks + `wren context validate --strict`; local errors short-circuit the CLI. */
 export async function validateMdl(groupId: string): Promise<MdlValidation> {
-  const res = await fetch(`${base(groupId)}/mdl/validate`, {
+  const res = await apiFetch(`${base(groupId)}/mdl/validate`, {
     method: 'POST',
     headers: authHeaders(),
   });
@@ -455,7 +455,7 @@ export async function validateMdl(groupId: string): Promise<MdlValidation> {
 
 /** Rebuilds the table/column baseline without adopting semantic drafts. */
 export async function initializeMdl(groupId: string): Promise<MdlPublishResult> {
-  const res = await fetch(`${base(groupId)}/mdl/initialize`, {
+  const res = await apiFetch(`${base(groupId)}/mdl/initialize`, {
     method: 'POST',
     headers: authHeaders(),
   });
@@ -465,7 +465,7 @@ export async function initializeMdl(groupId: string): Promise<MdlPublishResult> 
 
 /** validate -> build -> snapshot -> version+1; any failure keeps the previous snapshot. */
 export async function publishMdl(groupId: string): Promise<MdlPublishResult> {
-  const res = await fetch(`${base(groupId)}/mdl/publish`, {
+  const res = await apiFetch(`${base(groupId)}/mdl/publish`, {
     method: 'POST',
     headers: authHeaders(),
   });
@@ -491,7 +491,7 @@ export interface WorkspacePreview {
 
 /** Reads one workspace file; the backend is tenant-checked and path-confined. */
 export async function readWorkspaceFile(groupId: string, path: string): Promise<WorkspaceFile> {
-  const res = await fetch(`${base(groupId)}/workspace/file?path=${encodeURIComponent(path)}`, {
+  const res = await apiFetch(`${base(groupId)}/workspace/file?path=${encodeURIComponent(path)}`, {
     headers: authHeaders(),
   });
   if (!res.ok) throw new Error(await errorMessage(res, `工作区文件读取失败: ${res.status}`));
@@ -510,13 +510,13 @@ export interface SqlQaExample {
 }
 
 export async function listSqlQaExamples(groupId: string): Promise<SqlQaExample[]> {
-  const res = await fetch(`${base(groupId)}/sql-examples`, { headers: authHeaders() });
+  const res = await apiFetch(`${base(groupId)}/sql-examples`, { headers: authHeaders() });
   if (!res.ok) throw new Error(await errorMessage(res, `SQL 问答对加载失败: ${res.status}`));
   return res.json();
 }
 
 export async function updateSqlQaExample(groupId: string, value: Pick<SqlQaExample, 'source' | 'file' | 'question' | 'sql'>): Promise<SqlQaExample> {
-  const res = await fetch(`${base(groupId)}/sql-examples`, {
+  const res = await apiFetch(`${base(groupId)}/sql-examples`, {
     method: 'PUT', headers: jsonHeaders(), body: JSON.stringify(value),
   });
   if (!res.ok) throw new Error(await errorMessage(res, `SQL 问答对保存失败: ${res.status}`));
@@ -525,7 +525,7 @@ export async function updateSqlQaExample(groupId: string, value: Pick<SqlQaExamp
 
 export async function deleteSqlQaExample(groupId: string, source: string, file: string): Promise<void> {
   const query = new URLSearchParams({ source, file });
-  const res = await fetch(`${base(groupId)}/sql-examples?${query.toString()}`, { method: 'DELETE', headers: authHeaders() });
+  const res = await apiFetch(`${base(groupId)}/sql-examples?${query.toString()}`, { method: 'DELETE', headers: authHeaders() });
   if (!res.ok) throw new Error(await errorMessage(res, `SQL 问答对删除失败: ${res.status}`));
 }
 
@@ -538,7 +538,7 @@ export async function previewWorkspaceChange(
   toolName: 'write_file' | 'patch_file' | 'edit_file' | 'delete_file',
   input: Record<string, unknown>,
 ): Promise<WorkspacePreview> {
-  const res = await fetch(`${base(groupId)}/workspace/preview`, {
+  const res = await apiFetch(`${base(groupId)}/workspace/preview`, {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify({ toolName, input }),

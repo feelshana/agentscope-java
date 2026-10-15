@@ -1,3 +1,4 @@
+import { apiFetch } from './auth';
 const BASE = '';
 
 export interface UserView {
@@ -12,7 +13,7 @@ function authHeaders(): Record<string, string> {
 }
 
 export async function listUsers(): Promise<UserView[]> {
-  const res = await fetch(`${BASE}/api/admin/users`, { headers: authHeaders() });
+  const res = await apiFetch(`${BASE}/api/admin/users`, { headers: authHeaders() });
   if (!res.ok) throw new Error('Failed to list users');
   return res.json();
 }
@@ -23,7 +24,7 @@ export async function createUser(data: {
   password: string;
   roles?: string[];
 }): Promise<UserView> {
-  const res = await fetch(`${BASE}/api/admin/users`, {
+  const res = await apiFetch(`${BASE}/api/admin/users`, {
     method: 'POST',
     headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -36,7 +37,7 @@ export async function createUser(data: {
 }
 
 export async function updateUserRoles(userId: string, roles: string[]): Promise<UserView> {
-  const res = await fetch(`${BASE}/api/admin/users/${encodeURIComponent(userId)}/roles`, {
+  const res = await apiFetch(`${BASE}/api/admin/users/${encodeURIComponent(userId)}/roles`, {
     method: 'PATCH',
     headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ roles }),
@@ -46,7 +47,7 @@ export async function updateUserRoles(userId: string, roles: string[]): Promise<
 }
 
 export async function deleteUser(userId: string): Promise<void> {
-  const res = await fetch(`${BASE}/api/admin/users/${encodeURIComponent(userId)}`, {
+  const res = await apiFetch(`${BASE}/api/admin/users/${encodeURIComponent(userId)}`, {
     method: 'DELETE',
     headers: authHeaders(),
   });
@@ -54,7 +55,7 @@ export async function deleteUser(userId: string): Promise<void> {
 }
 
 export async function adminResetPassword(userId: string, newPassword: string): Promise<void> {
-  const res = await fetch(`${BASE}/api/admin/users/${encodeURIComponent(userId)}/password`, {
+  const res = await apiFetch(`${BASE}/api/admin/users/${encodeURIComponent(userId)}/password`, {
     method: 'PATCH',
     headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ newPassword }),
@@ -63,13 +64,13 @@ export async function adminResetPassword(userId: string, newPassword: string): P
 }
 
 export async function getProfile(): Promise<UserView> {
-  const res = await fetch(`${BASE}/api/user/profile`, { headers: authHeaders() });
+  const res = await apiFetch(`${BASE}/api/user/profile`, { headers: authHeaders() });
   if (!res.ok) throw new Error('Failed to fetch profile');
   return res.json();
 }
 
 export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
-  const res = await fetch(`${BASE}/api/user/change-password`, {
+  const res = await apiFetch(`${BASE}/api/user/change-password`, {
     method: 'POST',
     headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ currentPassword, newPassword }),

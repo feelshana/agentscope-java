@@ -121,6 +121,16 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
     }
 
     @Override
+    public List<McpSchema.Tool> listToolsAuthorized(String groupId, Runnable authorization) {
+        synchronized (callGates.computeIfAbsent(groupId, ignored -> new Object())) {
+            authorization.run();
+            var result = listTools(groupId);
+            authorization.run();
+            return result;
+        }
+    }
+
+    @Override
     public List<McpSchema.Tool> listTools(String groupId) {
         synchronized (callGates.computeIfAbsent(groupId, ignored -> new Object())) {
             Instance instance = acquire(groupId);
@@ -181,7 +191,23 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
     }
 
     private WrenCallResult doCall(String groupId, String tool, Map<String, Object> arguments) {
+        return doCall(groupId, tool, arguments, () -> {});
+    }
+
+    @Override
+    public WrenCallResult callAuthorized(
+            String groupId, String tool, Map<String, Object> arguments, Runnable authorization) {
+        Object gate = callGates.computeIfAbsent(groupId, k -> new Object());
+        synchronized (gate) {
+            authorization.run();
+            return doCall(groupId, tool, arguments, authorization);
+        }
+    }
+
+    private WrenCallResult doCall(
+            String groupId, String tool, Map<String, Object> arguments, Runnable authorization) {
         Instance inst = acquire(groupId);
+        authorization.run();
         inst.touch();
         McpSchema.CallToolResult result;
         try {
@@ -219,6 +245,19 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
     }
 
     // ------------------------------------------------------------------ instance lifecycle
+
+    @Override
+    public void closeForDeletion(String groupId) {
+        Object gate = callGates.computeIfAbsent(groupId, ignored -> new Object());
+        synchronized (gate) {
+            Instance instance = instances.get(groupId);
+            if (instance == null) return;
+            // Retain the instance on failure so a retry can close it again.
+            instance.client.close();
+            instances.remove(groupId, instance);
+            log.info("wren instance closed for deleted group {}", groupId);
+        }
+    }
 
     private Instance acquire(String groupId) {
         Instance inst = instances.get(groupId);

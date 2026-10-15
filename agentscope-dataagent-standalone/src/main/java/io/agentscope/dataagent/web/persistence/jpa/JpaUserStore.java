@@ -30,10 +30,8 @@ import org.springframework.transaction.annotation.Transactional;
  * JPA-backed {@link UserStore}. This is the only {@link UserStore} implementation shipped with
  * the builder; it is always wired in by {@link JpaPersistenceConfig}.
  *
- * <p>On first start, if the {@code dataagent_user} table is empty, a default {@code admin/admin}
- * user is seeded so an operator can sign in immediately after pointing the dataagent at a fresh
- * database. The seeded password is logged with a "change immediately" warning, matching the
- * file-mode behavior.
+ * <p>Demo account seeding is enabled only for local development. Production imports BI users and
+ * sets administrator roles in SQL, without automatically creating or resetting accounts.
  *
  * <p>Wired through {@link io.agentscope.dataagent.web.persistence.jpa.JpaPersistenceConfig};
  * declared as a plain {@code @Service}-flavored Spring bean (annotated via the configuration
@@ -47,13 +45,20 @@ public class JpaUserStore implements UserStore {
 
     private final UserEntityRepository repository;
     private final PasswordEncoder encoder = new BCryptPasswordEncoder();
+    private final boolean seedDemoUsers;
 
     public JpaUserStore(UserEntityRepository repository) {
+        this(repository, true);
+    }
+
+    public JpaUserStore(UserEntityRepository repository, boolean seedDemoUsers) {
         this.repository = repository;
+        this.seedDemoUsers = seedDemoUsers;
     }
 
     @PostConstruct
     void seedDefaultAdmin() {
+        if (!seedDemoUsers) return;
         // existsById, not count() > 0, so the admin row is created even if other seed scripts
         // (e.g. the H2-only data-h2.sql that adds bob / alice for local dev) populated the table
         // before this @PostConstruct fired. Re-running on an already-seeded admin is a no-op.
@@ -62,9 +67,7 @@ public class JpaUserStore implements UserStore {
         }
         UserEntity admin = new UserEntity("admin", "admin", encoder.encode("admin"), "user,admin");
         repository.save(admin);
-        log.info(
-                "Initialized default admin user in database (password: admin) — change"
-                        + " immediately!");
+        log.info("Initialized administrator account; password is not logged");
     }
 
     @Override

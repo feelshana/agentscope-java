@@ -79,6 +79,8 @@ public class DocEnhanceService {
     private final ObjectMapper mapper;
     private final TransactionTemplate transactionTemplate;
 
+    private KnowledgeBaseOperations operations;
+
     public DocEnhanceService(
             DocEnhanceTaskRepository taskRepository,
             DocEnhanceProposalRepository proposalRepository,
@@ -130,7 +132,7 @@ public class DocEnhanceService {
             String sourceText,
             String sourceType,
             String sourceLabel) {
-        groupService.getGroup(ownerId, groupId);
+        ownerId = groupService.getGroup(ownerId, groupId).getOwnerId();
         if (taskRepository.existsByOwnerIdAndGroupIdAndStatus(
                 ownerId, groupId, DocEnhanceTaskEntity.STATUS_RUNNING)) {
             throw new DatasetException("文档语义分析正在运行，请稍后再试", 409);
@@ -150,7 +152,8 @@ public class DocEnhanceService {
     /** Latest task visible to this tenant, or empty when the group has never been analyzed. */
     public Optional<DocEnhanceTaskEntity> latestTask(String ownerId, String groupId) {
         groupService.getGroup(ownerId, groupId);
-        return taskRepository.findFirstByOwnerIdAndGroupIdOrderByCreatedAtDesc(ownerId, groupId);
+        return taskRepository.findFirstByOwnerIdAndGroupIdOrderByCreatedAtDesc(
+                groupService.getGroup(ownerId, groupId).getOwnerId(), groupId);
     }
 
     /** Proposals belonging to the latest tenant-visible task, including decided audit rows. */
@@ -162,6 +165,21 @@ public class DocEnhanceService {
 
     /** Synchronous worker entry kept package-visible for deterministic service tests. */
     void analyzeTask(String taskId, String sourceText) {
+        DocEnhanceTaskEntity task = taskRepository.findById(taskId).orElse(null);
+        if (task == null) return;
+        if (operations == null) {
+            analyzeTaskActive(taskId, sourceText);
+        } else {
+            operations.run(
+                    task.getGroupId(),
+                    () -> {
+                        analyzeTaskActive(taskId, sourceText);
+                        return null;
+                    });
+        }
+    }
+
+    private void analyzeTaskActive(String taskId, String sourceText) {
         DocEnhanceTaskEntity task = taskRepository.findById(taskId).orElse(null);
         if (task == null) {
             return;
@@ -248,7 +266,13 @@ public class DocEnhanceService {
             String ownerId, String groupId, String proposalId, String message) {
         proposalRepository
                 .findById(proposalId)
-                .filter(p -> ownerId.equals(p.getOwnerId()) && groupId.equals(p.getGroupId()))
+                .filter(
+                        p ->
+                                groupService
+                                                .getGroup(ownerId, groupId)
+                                                .getOwnerId()
+                                                .equals(p.getOwnerId())
+                                        && groupId.equals(p.getGroupId()))
                 .filter(p -> DocEnhanceProposalEntity.STATUS_PENDING.equals(p.getStatus()))
                 .ifPresent(
                         proposal -> {
@@ -325,7 +349,7 @@ public class DocEnhanceService {
     @Transactional
     public SemanticBusinessRuleEntity createBusinessRule(
             String ownerId, String groupId, String name, String content, String sourceLabel) {
-        groupService.getGroup(ownerId, groupId);
+        ownerId = groupService.getGroup(ownerId, groupId).getOwnerId();
         String n = required(name, 100, "规则名称");
         String body = required(content, 2000, "规则内容");
         if (ruleRepository.findByOwnerIdAndGroupIdAndName(ownerId, groupId, n).isPresent()) {
@@ -346,7 +370,8 @@ public class DocEnhanceService {
 
     public List<SemanticBusinessRuleEntity> listBusinessRules(String ownerId, String groupId) {
         groupService.getGroup(ownerId, groupId);
-        return ruleRepository.findByOwnerIdAndGroupIdOrderByCreatedAtAsc(ownerId, groupId);
+        return ruleRepository.findByOwnerIdAndGroupIdOrderByCreatedAtAsc(
+                groupService.getGroup(ownerId, groupId).getOwnerId(), groupId);
     }
 
     /**
@@ -383,7 +408,13 @@ public class DocEnhanceService {
             String ownerId, String groupId, String proposalId) {
         return proposalRepository
                 .findById(proposalId)
-                .filter(p -> ownerId.equals(p.getOwnerId()) && groupId.equals(p.getGroupId()))
+                .filter(
+                        p ->
+                                groupService
+                                                .getGroup(ownerId, groupId)
+                                                .getOwnerId()
+                                                .equals(p.getOwnerId())
+                                        && groupId.equals(p.getGroupId()))
                 .orElseThrow(() -> new DatasetException("语义增强提案不存在", 404));
     }
 
@@ -721,5 +752,36 @@ public class DocEnhanceService {
         }
         String message = current.getMessage();
         return message == null || message.isBlank() ? current.getClass().getSimpleName() : message;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public DocEnhanceService(
+            DocEnhanceTaskRepository taskRepository,
+            DocEnhanceProposalRepository proposalRepository,
+            SemanticBusinessRuleRepository ruleRepository,
+            DatasetRepository datasetRepository,
+            DatasetService datasetService,
+            DatasetGroupService groupService,
+            MdlSuggestionService modelingService,
+            MdlWorkspaceService workspace,
+            MdlPublishService mdlPublishService,
+            AgentDraftService agentDraftService,
+            ObjectMapper mapper,
+            PlatformTransactionManager transactionManager,
+            KnowledgeBaseOperations operations) {
+        this(
+                taskRepository,
+                proposalRepository,
+                ruleRepository,
+                datasetRepository,
+                datasetService,
+                groupService,
+                modelingService,
+                workspace,
+                mdlPublishService,
+                agentDraftService,
+                mapper,
+                transactionManager);
+        this.operations = operations;
     }
 }

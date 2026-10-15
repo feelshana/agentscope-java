@@ -1,4 +1,4 @@
-import { getToken } from './auth';
+import { apiFetch, getToken } from './auth';
 
 export interface SemanticTerm {
   id: string;
@@ -36,8 +36,8 @@ async function errorMessage(res: Response, fallback: string): Promise<string> {
   }
 }
 
-export async function listSemanticTerms(groupId: string): Promise<SemanticTerm[]> {
-  const res = await fetch(termsUrl(groupId), { headers: jsonHeaders() });
+export async function listSemanticTerms(groupId: string, signal?: AbortSignal): Promise<SemanticTerm[]> {
+  const res = await apiFetch(termsUrl(groupId), { headers: jsonHeaders(), signal });
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to list terms: ${res.status}`));
   return res.json();
 }
@@ -46,7 +46,7 @@ export async function createSemanticTerm(
   groupId: string,
   req: SemanticTermRequest,
 ): Promise<SemanticTerm> {
-  const res = await fetch(termsUrl(groupId), {
+  const res = await apiFetch(termsUrl(groupId), {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify(req),
@@ -60,7 +60,7 @@ export async function updateSemanticTerm(
   id: string,
   req: SemanticTermRequest,
 ): Promise<SemanticTerm> {
-  const res = await fetch(termsUrl(groupId, id), {
+  const res = await apiFetch(termsUrl(groupId, id), {
     method: 'PUT',
     headers: jsonHeaders(),
     body: JSON.stringify(req),
@@ -70,7 +70,7 @@ export async function updateSemanticTerm(
 }
 
 export async function deleteSemanticTerm(groupId: string, id: string): Promise<void> {
-  const res = await fetch(termsUrl(groupId, id), {
+  const res = await apiFetch(termsUrl(groupId, id), {
     method: 'DELETE',
     headers: jsonHeaders(),
   });

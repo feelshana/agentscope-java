@@ -250,7 +250,7 @@ public final class ModelingToolkit {
         }
         MdlWorkspaceReader.Snapshot snap = reader.read(c.gid());
         return workflowGuidance(c)
-                + renderState(c.group(), snap, c.gid())
+                + renderState(c.eff().ownerId(), c.group(), snap, c.gid())
                 + renderBusinessRules(reader.readKnowledgeRules(c.gid()))
                 + (questions == null
                         ? ""
@@ -291,9 +291,7 @@ public final class ModelingToolkit {
         if (c.error() != null) return c.error();
         if (questions == null) return "error: 常用问题服务不可用";
         try {
-            return JSON.writeValueAsString(
-                    questions.list(
-                            new DatasetScope(c.group().getOwnerId(), List.of(c.gid())), c.gid()));
+            return JSON.writeValueAsString(questions.list(c.eff(), c.gid()));
         } catch (Exception e) {
             return "error: " + e.getMessage();
         }
@@ -315,11 +313,7 @@ public final class ModelingToolkit {
         if (c.error() != null) return c.error();
         if (questions == null) return "error: 常用问题服务不可用";
         try {
-            return JSON.writeValueAsString(
-                    questions.validate(
-                            new DatasetScope(c.group().getOwnerId(), List.of(c.gid())),
-                            c.gid(),
-                            questionId));
+            return JSON.writeValueAsString(questions.validate(c.eff(), c.gid(), questionId));
         } catch (Exception e) {
             return "error: " + e.getMessage();
         }
@@ -1447,7 +1441,7 @@ public final class ModelingToolkit {
         }
         MdlWorkspaceReader.Snapshot snap = reader.read(c.gid());
         return "## 关系候选（重算完成）\n\n"
-                + renderState(c.group(), snap, c.gid())
+                + renderState(c.eff().ownerId(), c.group(), snap, c.gid())
                 + renderBusinessRules(reader.readKnowledgeRules(c.gid()));
     }
 
@@ -1875,7 +1869,7 @@ public final class ModelingToolkit {
     // -----------------------------------------------------------------
 
     private String renderState(
-            DatasetGroupEntity group, MdlWorkspaceReader.Snapshot snap, String gid) {
+            String actor, DatasetGroupEntity group, MdlWorkspaceReader.Snapshot snap, String gid) {
         StringBuilder sb = new StringBuilder();
         sb.append("## 知识库建模现状：")
                 .append(group.getName())
@@ -1890,7 +1884,7 @@ public final class ModelingToolkit {
         sb.append("### 逻辑模型（工作区 models/）\n\n");
         if (snap.models().isEmpty()) {
             sb.append("（工作区尚未播种模型文件——在「语义建模」页发布一次后平台会按数据集物理结构播种；" + "下方为数据集原始字段清单，可用于规划。）\n\n");
-            appendDbDatasets(sb, group);
+            appendDbDatasets(sb, actor, group);
         } else {
             for (MdlWorkspaceReader.WorkspaceModel m : snap.models()) {
                 sb.append("- `").append(m.name()).append("`");
@@ -1955,7 +1949,7 @@ public final class ModelingToolkit {
             sb.append("（暂无待决策候选）\n");
         } else {
             Map<String, String> names = new LinkedHashMap<>();
-            for (DatasetEntity d : groupService.listDatasets(group.getOwnerId(), group.getId())) {
+            for (DatasetEntity d : groupService.listDatasets(actor, group.getId())) {
                 names.put(d.getId(), d.getName());
             }
             for (DatasetRelationEntity r : pending) {
@@ -2018,8 +2012,8 @@ public final class ModelingToolkit {
     }
 
     /** Physical column inventory straight from the dataset store (pre-seeding fallback). */
-    private void appendDbDatasets(StringBuilder sb, DatasetGroupEntity group) {
-        List<DatasetEntity> datasets = groupService.listDatasets(group.getOwnerId(), group.getId());
+    private void appendDbDatasets(StringBuilder sb, String actor, DatasetGroupEntity group) {
+        List<DatasetEntity> datasets = groupService.listDatasets(actor, group.getId());
         if (datasets.isEmpty()) {
             sb.append("（无数据集，请先在知识库页上传或关联数据表）\n");
             return;
@@ -2102,8 +2096,8 @@ public final class ModelingToolkit {
                 && conversationScopes != null
                 && rc != null
                 && rc.getSessionId() != null) {
-            List<String> groups = conversationScopes.get(rc.getSessionId());
-            if (groups != null && !groups.isEmpty()) {
+            List<String> groups = conversationScopes.get(base.ownerId(), rc.getSessionId());
+            if (groups != null) {
                 return new DatasetScope(base.ownerId(), groups);
             }
         }
@@ -2135,7 +2129,7 @@ public final class ModelingToolkit {
 
     /** Tenant-checked group load; visibility and existence collapse into one error (anti-probe). */
     private GroupRef loadGroup(DatasetScope eff, String groupId) {
-        if (eff.hasGroupFilter() && !eff.groupIds().contains(groupId)) {
+        if (!eff.hasGroupFilter() || !eff.groupIds().contains(groupId)) {
             return new GroupRef(null, unknownGroup(groupId));
         }
         DatasetGroupEntity group;

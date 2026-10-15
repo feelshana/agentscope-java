@@ -25,14 +25,14 @@ class WrenMcpToolkitTest {
         var groups = mock(DatasetGroupService.class);
         var g = new DatasetGroupEntity("g", "alice", "销售", "");
         g.setMdlVersion(1);
-        when(groups.listGroups("alice")).thenReturn(List.of(g));
+        when(groups.queryGroups("alice", List.of("g"))).thenReturn(List.of(g));
         var context = mock(RuntimeContext.class);
         when(context.getUserId()).thenReturn("alice");
         when(context.get(DatasetScope.class)).thenReturn(new DatasetScope("alice", List.of("g")));
-        var gateway = mock(WrenQueryGateway.class);
+        var gateway = mock(WrenQueryGateway.class, org.mockito.Mockito.CALLS_REAL_METHODS);
         var schema = mock(McpSchema.Tool.class);
         when(schema.name()).thenReturn("run_sql");
-        when(gateway.listTools("g")).thenReturn(List.of(schema));
+        org.mockito.Mockito.doReturn(List.of(schema)).when(gateway).listTools("g");
         Map<String, Object> args = Map.of("sql", "SELECT COUNT(*) FROM orders", "limit", 7);
         when(gateway.call("g", "run_sql", args))
                 .thenReturn(
@@ -71,14 +71,14 @@ class WrenMcpToolkitTest {
         var groups = mock(DatasetGroupService.class);
         var g = new DatasetGroupEntity("g", "alice", "sales", "");
         g.setMdlVersion(1);
-        when(groups.listGroups("alice")).thenReturn(List.of(g));
+        when(groups.queryGroups("alice", List.of("g"))).thenReturn(List.of(g));
         var context = mock(RuntimeContext.class);
         when(context.getUserId()).thenReturn("alice");
         when(context.get(DatasetScope.class)).thenReturn(new DatasetScope("alice", List.of("g")));
-        var gateway = mock(WrenQueryGateway.class);
+        var gateway = mock(WrenQueryGateway.class, org.mockito.Mockito.CALLS_REAL_METHODS);
         var schema = mock(McpSchema.Tool.class);
         when(schema.name()).thenReturn("run_sql");
-        when(gateway.listTools("g")).thenReturn(List.of(schema));
+        org.mockito.Mockito.doReturn(List.of(schema)).when(gateway).listTools("g");
         when(gateway.call("g", "run_sql", Map.of("sql", "SELECT 1", "limit", 10)))
                 .thenReturn(new WrenQueryGateway.WrenCallResult(true, "{\"rows\":[{\"n\":1}]}"));
         var tool =

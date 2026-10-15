@@ -377,7 +377,7 @@ class ModelingToolkitTest {
     }
 
     private DatasetScope ownerScope() {
-        return new DatasetScope(OWNER);
+        return new DatasetScope(OWNER, List.of(GROUP));
     }
 
     @Test
@@ -1426,7 +1426,8 @@ class ModelingToolkitTest {
 
     @Test
     void stateWithoutGroupAndAmbiguousScopeErrors() {
-        assertTrue(toolkit.listModelingState(ownerScope(), null, null).startsWith("error"));
+        assertTrue(
+                toolkit.listModelingState(new DatasetScope(OWNER), null, null).startsWith("error"));
 
         String out =
                 toolkit.listModelingState(
@@ -1592,7 +1593,7 @@ class ModelingToolkitTest {
     /** specs/026: terms bind to one KB; an unpinned conversation must be told to pass group_id. */
     @Test
     void listTermsRequiresResolvableGroup() {
-        String out = toolkit.listTerms(ownerScope(), null, null);
+        String out = toolkit.listTerms(new DatasetScope(OWNER), null, null);
 
         assertTrue(out.startsWith("error"), out);
         assertTrue(out.contains("无法确定知识库"), out);

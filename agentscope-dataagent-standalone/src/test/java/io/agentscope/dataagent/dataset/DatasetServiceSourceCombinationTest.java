@@ -100,6 +100,12 @@ class DatasetServiceSourceCombinationTest {
                         mock(DatasetImportService.class),
                         new SchemaGenerationService(Optional.empty()),
                         mock(MdlWorkspaceReader.class));
+        var access = mock(KnowledgeBaseAccessService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "access", access);
+        when(access.requireManage(
+                        org.mockito.ArgumentMatchers.anyString(),
+                        org.mockito.ArgumentMatchers.anyString()))
+                .thenAnswer(inv -> groupRepository.findById(inv.getArgument(1)).orElseThrow());
     }
 
     @Test
@@ -217,6 +223,10 @@ class DatasetServiceSourceCombinationTest {
 
     @Test
     void associatesPreparedMysqlTablesAsOneBatch() {
+        when(introspector.validatedUrl(source))
+                .thenReturn(
+                        new ExternalDataSourcePolicy("localhost:3306")
+                                .normalize(source.getKind(), source.getJdbcUrl()));
         when(introspector.listColumns(any(), any(), any()))
                 .thenReturn(List.of(new DataSourceIntrospector.ColumnInfo("id", "BIGINT", "主键")));
         when(introspector.countRows(source, "retail", "orders")).thenReturn(3L);

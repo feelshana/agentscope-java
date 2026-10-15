@@ -20,11 +20,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.agentscope.core.tool.mcp.McpClientWrapper;
+import io.agentscope.dataagent.dataset.DatasetException;
 import io.agentscope.dataagent.dataset.WrenProfileHome;
 import io.agentscope.dataagent.dataset.WrenProperties;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -39,7 +41,9 @@ import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import reactor.core.publisher.Mono;
@@ -207,6 +211,83 @@ class WrenInstanceRegistryTest {
         b.join(15_000);
 
         assertThat(a.isAlive() || b.isAlive()).isFalse();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void revokedQueuedCallCannotReachMcpOrInvalidateSharedInstance() throws Exception {
+        WrenInstanceRegistry registry = newRegistry();
+        McpClientWrapper client = mock(McpClientWrapper.class);
+        injectInstance(registry, "g1", client);
+        Field gatesField = WrenInstanceRegistry.class.getDeclaredField("callGates");
+        gatesField.setAccessible(true);
+        var gates = (Map<String, Object>) gatesField.get(registry);
+        Object gate = gates.computeIfAbsent("g1", ignored -> new Object());
+        AtomicBoolean revoked = new AtomicBoolean();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Thread queued =
+                new Thread(
+                        () -> {
+                            try {
+                                registry.callAuthorized(
+                                        "g1",
+                                        "run_sql",
+                                        Map.of(),
+                                        () -> {
+                                            if (revoked.get())
+                                                throw new DatasetException("知识库不存在或未授权", 404);
+                                        });
+                            } catch (Throwable e) {
+                                failure.set(e);
+                            }
+                        });
+        synchronized (gate) {
+            queued.start();
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (queued.getState() != Thread.State.BLOCKED && System.nanoTime() < deadline)
+                Thread.sleep(5);
+            assertThat(queued.getState()).isEqualTo(Thread.State.BLOCKED);
+            revoked.set(true);
+        }
+        queued.join(5000);
+        assertThat(queued.isAlive()).isFalse();
+        assertThat(failure.get()).isInstanceOf(DatasetException.class);
+        verify(client, never()).callTool(anyString(), any());
+        when(client.callTool(anyString(), any()))
+                .thenReturn(
+                        Mono.just(
+                                new McpSchema.CallToolResult(
+                                        List.of(new McpSchema.TextContent("ok")), null)));
+        assertThat(registry.call("g1", "run_sql", Map.of()).ok()).isTrue();
+        registry.close();
+    }
+
+    @Test
+    void authorizationIsRecheckedAfterAcquireAndDenialKeepsInstance() throws Exception {
+        WrenInstanceRegistry registry = newRegistry();
+        McpClientWrapper client = mock(McpClientWrapper.class);
+        injectInstance(registry, "g1", client);
+        AtomicInteger checks = new AtomicInteger();
+        assertThatThrownBy(
+                        () ->
+                                registry.callAuthorized(
+                                        "g1",
+                                        "run_sql",
+                                        Map.of(),
+                                        () -> {
+                                            if (checks.incrementAndGet() == 2)
+                                                throw new DatasetException("已撤权", 404);
+                                        }))
+                .isInstanceOf(DatasetException.class);
+        assertThat(checks.get()).isEqualTo(2);
+        verify(client, never()).callTool(anyString(), any());
+        when(client.callTool(anyString(), any()))
+                .thenReturn(
+                        Mono.just(
+                                new McpSchema.CallToolResult(
+                                        List.of(new McpSchema.TextContent("ok")), null)));
+        assertThat(registry.call("g1", "run_sql", Map.of()).ok()).isTrue();
+        registry.close();
     }
 
     private static WrenInstanceRegistry newRegistry() {

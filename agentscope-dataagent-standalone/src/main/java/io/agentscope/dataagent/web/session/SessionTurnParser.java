@@ -168,7 +168,31 @@ public final class SessionTurnParser {
             String toolName,
             String toolInput,
             String toolResult,
-            String toolCallId) {
+            String toolCallId,
+            ConversationScopeRegistry.Selection knowledgeScope) {
+        public TurnEntry(
+                String id,
+                String parentId,
+                String role,
+                String content,
+                long timestampMs,
+                String toolName,
+                String toolInput,
+                String toolResult,
+                String toolCallId) {
+            this(
+                    id,
+                    parentId,
+                    role,
+                    content,
+                    timestampMs,
+                    toolName,
+                    toolInput,
+                    toolResult,
+                    toolCallId,
+                    null);
+        }
+
         public TurnEntry(
                 String id,
                 String parentId,
@@ -178,7 +202,17 @@ public final class SessionTurnParser {
                 String toolName,
                 String toolInput,
                 String toolResult) {
-            this(id, parentId, role, content, timestampMs, toolName, toolInput, toolResult, null);
+            this(
+                    id,
+                    parentId,
+                    role,
+                    content,
+                    timestampMs,
+                    toolName,
+                    toolInput,
+                    toolResult,
+                    null,
+                    null);
         }
     }
 }

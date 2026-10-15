@@ -1,4 +1,4 @@
-import { getToken } from './auth';
+import { apiFetch, getToken } from './auth';
 
 export interface AgentShareGrant {
   granteeType: string;
@@ -65,19 +65,19 @@ function authHeaders() {
 }
 
 export async function listAgents(): Promise<AgentDefinition[]> {
-  const res = await fetch('/api/agents', { headers: authHeaders() });
+  const res = await apiFetch('/api/agents', { headers: authHeaders() });
   if (!res.ok) throw new Error(`Failed to list agents: ${res.status}`);
   return res.json();
 }
 
 export async function getAgent(id: string): Promise<AgentDefinition> {
-  const res = await fetch(`/api/agents/${encodeURIComponent(id)}`, { headers: authHeaders() });
+  const res = await apiFetch(`/api/agents/${encodeURIComponent(id)}`, { headers: authHeaders() });
   if (!res.ok) throw new Error(`Failed to load agent: ${res.status}`);
   return res.json();
 }
 
 export async function createAgent(req: AgentCreateRequest): Promise<AgentDefinition> {
-  const res = await fetch('/api/agents', {
+  const res = await apiFetch('/api/agents', {
     method: 'POST',
     headers: authHeaders(),
     body: JSON.stringify(req),
@@ -93,7 +93,7 @@ export async function updateAgent(
   id: string,
   req: AgentCreateRequest,
 ): Promise<AgentDefinition> {
-  const res = await fetch(`/api/agents/${encodeURIComponent(id)}`, {
+  const res = await apiFetch(`/api/agents/${encodeURIComponent(id)}`, {
     method: 'PUT',
     headers: authHeaders(),
     body: JSON.stringify(req),
@@ -106,7 +106,7 @@ export async function updateAgent(
 }
 
 export async function deleteAgent(id: string): Promise<void> {
-  const res = await fetch(`/api/agents/${encodeURIComponent(id)}`, {
+  const res = await apiFetch(`/api/agents/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     headers: authHeaders(),
   });
@@ -116,7 +116,7 @@ export async function deleteAgent(id: string): Promise<void> {
 }
 
 export async function draftAgentWithAi(description: string): Promise<AgentDraft> {
-  const res = await fetch('/api/agents/draft', {
+  const res = await apiFetch('/api/agents/draft', {
     method: 'POST',
     headers: authHeaders(),
     body: JSON.stringify({ description }),
@@ -129,7 +129,7 @@ export async function draftAgentWithAi(description: string): Promise<AgentDraft>
 }
 
 export async function cloneAgent(sourceId: string, body: { id?: string; name?: string }): Promise<AgentDefinition> {
-  const res = await fetch(`/api/agents/${encodeURIComponent(sourceId)}/clone`, {
+  const res = await apiFetch(`/api/agents/${encodeURIComponent(sourceId)}/clone`, {
     method: 'POST',
     headers: authHeaders(),
     body: JSON.stringify(body),

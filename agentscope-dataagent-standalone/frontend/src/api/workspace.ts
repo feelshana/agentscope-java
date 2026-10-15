@@ -1,4 +1,4 @@
-import { getToken } from './auth';
+import { apiFetch, getToken } from './auth';
 
 export interface FileNode {
   name: string;
@@ -42,19 +42,20 @@ async function unwrap<T>(res: Response): Promise<T> {
 }
 
 export async function summary(agentId: string): Promise<WorkspaceSummary> {
-  const res = await fetch(base(agentId), { headers: authHeaders() });
+  const res = await apiFetch(base(agentId), { headers: authHeaders() });
   return unwrap<WorkspaceSummary>(res);
 }
 
-export async function tree(agentId: string, recursive = true): Promise<FileNode[]> {
-  const res = await fetch(`${base(agentId)}/files?recursive=${recursive}`, {
+export async function tree(agentId: string, recursive = true, signal?: AbortSignal): Promise<FileNode[]> {
+  const res = await apiFetch(`${base(agentId)}/files?recursive=${recursive}`, {
+    signal,
     headers: authHeaders(),
   });
   return unwrap<FileNode[]>(res);
 }
 
 export async function readFile(agentId: string, path: string): Promise<string> {
-  const res = await fetch(`${base(agentId)}/file?path=${encodeURIComponent(path)}`, {
+  const res = await apiFetch(`${base(agentId)}/file?path=${encodeURIComponent(path)}`, {
     headers: authHeaders(),
   });
   if (!res.ok) {
@@ -65,7 +66,7 @@ export async function readFile(agentId: string, path: string): Promise<string> {
 }
 
 export async function writeFile(agentId: string, path: string, content: string): Promise<FileNode> {
-  const res = await fetch(`${base(agentId)}/file?path=${encodeURIComponent(path)}`, {
+  const res = await apiFetch(`${base(agentId)}/file?path=${encodeURIComponent(path)}`, {
     method: 'PUT',
     headers: jsonHeaders(),
     body: JSON.stringify({ content }),
@@ -74,7 +75,7 @@ export async function writeFile(agentId: string, path: string, content: string):
 }
 
 export async function createFile(agentId: string, path: string): Promise<FileNode> {
-  const res = await fetch(`${base(agentId)}/file?path=${encodeURIComponent(path)}&type=file`, {
+  const res = await apiFetch(`${base(agentId)}/file?path=${encodeURIComponent(path)}&type=file`, {
     method: 'POST',
     headers: authHeaders(),
   });
@@ -82,7 +83,7 @@ export async function createFile(agentId: string, path: string): Promise<FileNod
 }
 
 export async function createDir(agentId: string, path: string): Promise<FileNode> {
-  const res = await fetch(`${base(agentId)}/file?path=${encodeURIComponent(path)}&type=dir`, {
+  const res = await apiFetch(`${base(agentId)}/file?path=${encodeURIComponent(path)}&type=dir`, {
     method: 'POST',
     headers: authHeaders(),
   });
@@ -90,7 +91,7 @@ export async function createDir(agentId: string, path: string): Promise<FileNode
 }
 
 export async function moveNode(agentId: string, from: string, to: string): Promise<FileNode> {
-  const res = await fetch(`${base(agentId)}/file/move`, {
+  const res = await apiFetch(`${base(agentId)}/file/move`, {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify({ from, to }),
@@ -99,7 +100,7 @@ export async function moveNode(agentId: string, from: string, to: string): Promi
 }
 
 export async function deleteNode(agentId: string, path: string): Promise<void> {
-  const res = await fetch(`${base(agentId)}/file?path=${encodeURIComponent(path)}`, {
+  const res = await apiFetch(`${base(agentId)}/file?path=${encodeURIComponent(path)}`, {
     method: 'DELETE',
     headers: authHeaders(),
   });
@@ -110,7 +111,7 @@ export async function uploadFile(agentId: string, file: File, dir = 'knowledge')
   const form = new FormData();
   form.append('file', file, file.name);
   const q = new URLSearchParams({ path: dir });
-  const res = await fetch(`${base(agentId)}/upload?${q.toString()}`, {
+  const res = await apiFetch(`${base(agentId)}/upload?${q.toString()}`, {
     method: 'POST',
     headers: authHeaders(),
     body: form,

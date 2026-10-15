@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getToken } from '../api/auth';
+import { apiFetch, getToken } from '../api/auth';
 
 interface UserBinding {
   channelId: string;
@@ -14,7 +14,7 @@ function authHeaders() {
 }
 
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, { headers: authHeaders(), ...init });
+  const res = await apiFetch(url, { headers: authHeaders(), ...init });
   if (!res.ok) {
     const t = await res.text().catch(() => res.statusText);
     throw new Error(t || `HTTP ${res.status}`);

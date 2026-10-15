@@ -58,6 +58,10 @@ import reactor.core.scheduler.Schedulers;
  * nodes/edges with per-unit processing status so the UI can poll progress.
  */
 @Service
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+        prefix = "dataagent.knowledge-graph",
+        name = "enabled",
+        havingValue = "true")
 public class KnowledgeGraphService {
 
     private static final Logger log = LoggerFactory.getLogger(KnowledgeGraphService.class);
@@ -216,6 +220,21 @@ public class KnowledgeGraphService {
     }
 
     void executeBuild(String groupId, String ownerId) {
+        if (operations == null) {
+            executeBuildActive(groupId, ownerId);
+        } else {
+            operations.run(
+                    groupId,
+                    () -> {
+                        executeBuildActive(groupId, ownerId);
+                        return null;
+                    });
+        }
+    }
+
+    private KnowledgeBaseOperations operations;
+
+    private void executeBuildActive(String groupId, String ownerId) {
         try {
             List<KnowledgeGraphBuildUnitEntity> units =
                     unitRepo.findByGroupIdOrderByCreatedAtAsc(groupId);
@@ -249,6 +268,19 @@ public class KnowledgeGraphService {
     }
 
     private void runUnit(String ownerId, String groupId, KnowledgeGraphBuildUnitEntity unit) {
+        if (operations == null) {
+            runUnitActive(ownerId, groupId, unit);
+        } else {
+            operations.run(
+                    groupId,
+                    () -> {
+                        runUnitActive(ownerId, groupId, unit);
+                        return null;
+                    });
+        }
+    }
+
+    private void runUnitActive(String ownerId, String groupId, KnowledgeGraphBuildUnitEntity unit) {
         unit.setStatus(KnowledgeGraphBuildUnitEntity.STATUS_RUNNING);
         unitRepo.save(unit);
         try {
@@ -600,5 +632,28 @@ public class KnowledgeGraphService {
             }
         }
         return sb.toString();
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public KnowledgeGraphService(
+            KnowledgeGraphEntityRepository entityRepo,
+            KnowledgeGraphRelationRepository relationRepo,
+            KnowledgeGraphBuildUnitRepository unitRepo,
+            KnowledgeGraphBuildTaskRepository taskRepo,
+            DatasetRepository datasetRepository,
+            DatasetService datasetService,
+            DatasetGroupService groupService,
+            AgentDraftService agentDraftService,
+            KnowledgeBaseOperations operations) {
+        this(
+                entityRepo,
+                relationRepo,
+                unitRepo,
+                taskRepo,
+                datasetRepository,
+                datasetService,
+                groupService,
+                agentDraftService);
+        this.operations = operations;
     }
 }

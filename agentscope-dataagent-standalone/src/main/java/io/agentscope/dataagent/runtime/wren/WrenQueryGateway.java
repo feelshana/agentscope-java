@@ -45,9 +45,22 @@ public interface WrenQueryGateway {
      */
     WrenCallResult call(String groupId, String tool, Map<String, Object> arguments);
 
+    default java.util.List<io.modelcontextprotocol.spec.McpSchema.Tool> listToolsAuthorized(
+            String groupId, Runnable authorization) {
+        authorization.run();
+        return listTools(groupId);
+    }
+
     /** Discovers the official schema; adapters must not invent domain-specific arguments. */
     default java.util.List<io.modelcontextprotocol.spec.McpSchema.Tool> listTools(String groupId) {
         throw new UnsupportedOperationException("官方 MCP 工具发现不可用");
+    }
+
+    /** Recheck authorization after queueing and immediately before the database query starts. */
+    default WrenCallResult callAuthorized(
+            String groupId, String tool, Map<String, Object> arguments, Runnable authorization) {
+        authorization.run();
+        return call(groupId, tool, arguments);
     }
 
     /** Executes against an isolated, already-built draft project; never changes the published pool. */
@@ -61,4 +74,9 @@ public interface WrenQueryGateway {
      * snapshot; called after a successful publish (发布 = 重建实例, ADR 0018 D8).
      */
     void invalidate(String groupId);
+
+    /** Deletion requires a confirmed close, rather than best-effort invalidation. */
+    default void closeForDeletion(String groupId) {
+        invalidate(groupId);
+    }
 }

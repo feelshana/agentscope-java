@@ -15,7 +15,7 @@
  */
 package io.agentscope.dataagent.web.api;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agentscope.dataagent.dataset.BaselineMdlService;
 import io.agentscope.dataagent.dataset.DatasetException;
@@ -67,6 +67,11 @@ import reactor.core.scheduler.Schedulers;
 @RestController
 @RequestMapping("/api/dataset-groups/{groupId}/modeling")
 public class SemanticModelingController {
+
+    // Keep Jackson 2 tree types out of response DTOs: WebFlux encodes them with Jackson 3.
+    private static final TypeReference<Map<String, Object>> JSON_OBJECT_TYPE =
+            new TypeReference<>() {};
+    private static final TypeReference<List<Object>> JSON_ARRAY_TYPE = new TypeReference<>() {};
 
     private final DatasetGroupService groupService;
     private final DatasetService datasetService;
@@ -172,9 +177,9 @@ public class SemanticModelingController {
             String baseDatasetId,
             String description,
             String status,
-            JsonNode measures,
-            JsonNode dimensions,
-            JsonNode timeDimensions,
+            List<Object> measures,
+            List<Object> dimensions,
+            List<Object> timeDimensions,
             String createdAt,
             String updatedAt) {}
 
@@ -215,7 +220,7 @@ public class SemanticModelingController {
             String classification,
             String title,
             String summary,
-            JsonNode payload,
+            Map<String, Object> payload,
             String sourceQuote,
             String confidence,
             String status,
@@ -821,9 +826,9 @@ public class SemanticModelingController {
                 e.getBaseDatasetId(),
                 e.getDescription(),
                 e.getStatus(),
-                readJson(e.getMeasuresJson()),
-                readJson(e.getDimensionsJson()),
-                readJson(e.getTimeDimensionsJson()),
+                readArrayJson(e.getMeasuresJson()),
+                readArrayJson(e.getDimensionsJson()),
+                readArrayJson(e.getTimeDimensionsJson()),
                 e.getCreatedAt() == null ? null : e.getCreatedAt().toString(),
                 e.getUpdatedAt() == null ? null : e.getUpdatedAt().toString());
     }
@@ -840,11 +845,13 @@ public class SemanticModelingController {
                 e.getUpdatedAt() == null ? null : e.getUpdatedAt().toString());
     }
 
-    private JsonNode readJson(String json) {
+    private List<Object> readArrayJson(String json) {
         try {
-            return mapper.readTree(json == null || json.isBlank() ? "[]" : json);
+            List<Object> values =
+                    mapper.readValue(json == null || json.isBlank() ? "[]" : json, JSON_ARRAY_TYPE);
+            return values == null ? List.of() : values;
         } catch (Exception e) {
-            return mapper.createArrayNode();
+            return List.of();
         }
     }
 
@@ -875,11 +882,14 @@ public class SemanticModelingController {
                 proposal.getDecidedAt() == null ? null : proposal.getDecidedAt().toString());
     }
 
-    private JsonNode readObjectJson(String json) {
+    private Map<String, Object> readObjectJson(String json) {
         try {
-            return mapper.readTree(json == null || json.isBlank() ? "{}" : json);
+            Map<String, Object> values =
+                    mapper.readValue(
+                            json == null || json.isBlank() ? "{}" : json, JSON_OBJECT_TYPE);
+            return values == null ? Map.of() : values;
         } catch (Exception e) {
-            return mapper.createObjectNode();
+            return Map.of();
         }
     }
 

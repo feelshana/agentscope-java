@@ -18,7 +18,6 @@ package io.agentscope.dataagent.dataset;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetEntity;
 import io.agentscope.dataagent.web.persistence.jpa.ExternalDataSourceEntity;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -42,20 +41,21 @@ import org.springframework.stereotype.Component;
 @Component
 public class JdbcWrenSourceProber implements WrenSourceProber {
 
-    /** Seconds a connection attempt may take before the publish is failed. */
-    private static final int LOGIN_TIMEOUT_SECONDS = 8;
+    private final DataSourceIntrospector introspector;
+
+    public JdbcWrenSourceProber(DataSourceIntrospector introspector) {
+        this.introspector = introspector;
+    }
 
     @Override
     public ProbeReport probe(ExternalDataSourceEntity source, List<DatasetEntity> datasets) {
         Set<String> missing = new LinkedHashSet<>();
-        DriverManager.setLoginTimeout(LOGIN_TIMEOUT_SECONDS);
-        try (Connection conn =
-                DriverManager.getConnection(
-                        source.getJdbcUrl(), source.getUsername(), source.getPassword())) {
+        try (Connection conn = introspector.open(source)) {
             try (PreparedStatement ps =
                     conn.prepareStatement(
                             "SELECT 1 FROM information_schema.tables"
                                     + " WHERE table_schema = ? AND table_name = ?")) {
+                ps.setQueryTimeout(30);
                 for (DatasetEntity d : datasets) {
                     if (d.getSchemaName() == null || d.getTableName() == null) {
                         continue;

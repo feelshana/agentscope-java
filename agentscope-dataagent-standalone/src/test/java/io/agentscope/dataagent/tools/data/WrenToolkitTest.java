@@ -52,7 +52,7 @@ import org.junit.jupiter.api.Test;
  */
 class WrenToolkitTest {
 
-    private static final DatasetScope ALICE = new DatasetScope("alice");
+    private static final DatasetScope ALICE = new DatasetScope("alice", List.of("gA"));
 
     private static final String ROWS_PAYLOAD =
             "{\"columns\":[\"城市\",\"销售额\"],\"rows\":[{\"城市\":\"杭州\",\"销售额\":120},"
@@ -68,7 +68,19 @@ class WrenToolkitTest {
         groupService = mock(DatasetGroupService.class);
         mdlCatalog = mock(MdlCatalog.class);
         gateway = new RecordingGateway();
-        toolkit = new WrenToolkit(gateway, groupService, null, mdlCatalog);
+        var scopes = mock(io.agentscope.dataagent.web.session.ConversationScopeRegistry.class);
+        when(scopes.get(org.mockito.ArgumentMatchers.eq("alice"), any())).thenReturn(List.of("gA"));
+        toolkit = new WrenToolkit(gateway, groupService, scopes, mdlCatalog);
+        when(groupService.queryGroups(org.mockito.ArgumentMatchers.eq("alice"), any()))
+                .thenAnswer(
+                        inv -> {
+                            List<String> ids = inv.getArgument(1);
+                            return ids == null
+                                    ? List.of()
+                                    : groupService.listGroups("alice").stream()
+                                            .filter(g -> ids.contains(g.getId()))
+                                            .toList();
+                        });
     }
 
     // ------------------------------------------------------------------ NONE / multi-tenant
@@ -172,7 +184,7 @@ class WrenToolkitTest {
         // Out-of-band tool execution supplies userId only (no typed DatasetScope).
         assertThat(toolkit.wrenRunSql(null, baked, "gA", "SELECT 1", "测试业务查询", null, "BUSINESS"))
                 .doesNotStartWith("error:");
-        verify(groupService).listGroups("alice");
+        verify(groupService).queryGroups("alice", List.of("gA"));
     }
 
     // ------------------------------------------------------------------ run_sql happy paths
@@ -777,8 +789,8 @@ class WrenToolkitTest {
                                 "BUSINESS"))
                 .doesNotStartWith("error:")
                 .contains("| 杭州 | 120 |")
-                .doesNotContain("**数据文件：**")
-                .contains("数据文件保存失败");
+                .contains("数据文件保存失败")
+                .doesNotContain("**数据文件：**");
 
         doReturn(List.of(FileUploadResponse.fail("p", "denied")))
                 .when(fs)

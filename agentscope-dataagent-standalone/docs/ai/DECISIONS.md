@@ -138,3 +138,9 @@
 - 详见 [ADR 0074](../adr/0074-official-wren-only-query-tools.md) 与 [spec 064](../specs/064-official-wren-only-query-tools.md)。
 
 - ADR 0075：SQL 问答对管理按官方 Markdown 来源分层编辑，建模源需发布、点赞源更新后索引；视图路径回退真实 metadata.yml。
+
+## 已接受并实施：ADR 0077 平台共享权限集成（2026-10-15）
+
+- 用户明确确认来源 data-agent-multiAgent-Mdl-lyf；当前官方 Wren 建模/问数为准。移植平台权限、失败取消和适用修复，保留当前语义执行、中文展示、LIMIT 和问答对管理。
+- QUERY 只查询已发布库；MANAGE 管理草稿/发布/成员，创建者及全局管理员天然管理。运行身份保持当前用户，私有历史/附件不因库权限扩大。共享库点赞样例按库保存索引，反馈状态仍私有。
+- 来源未实现完整上传/问答容量预算，不将待办记为合入成果。详见 [ADR 0077](../adr/0077-shared-knowledge-official-wren-integration.md) 与 spec 066。

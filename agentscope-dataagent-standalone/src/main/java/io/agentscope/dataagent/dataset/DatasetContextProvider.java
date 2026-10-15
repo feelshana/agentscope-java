@@ -22,6 +22,11 @@ package io.agentscope.dataagent.dataset;
  * agent can pick (and join) datasets without the user pre-selecting anything.
  */
 public interface DatasetContextProvider {
+    /** Resolve and recheck the caller's selected knowledge bases before injecting any metadata. */
+    default java.util.List<String> authorizedGroupIds(
+            String userId, java.util.List<String> selected) {
+        return selected;
+    }
 
     /** Free-text relationship/knowledge note for the owner, or empty when none was uploaded. */
     String relationshipsText(String ownerId);

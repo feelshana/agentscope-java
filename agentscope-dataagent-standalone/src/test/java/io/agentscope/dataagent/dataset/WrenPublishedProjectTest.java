@@ -23,8 +23,8 @@ class WrenPublishedProjectTest {
         var groups = mock(DatasetGroupService.class);
         var group = new DatasetGroupEntity("g", "alice", "销售", "");
         group.setMdlVersion(1);
-        when(groups.getGroup("alice", "g")).thenReturn(group);
-        when(groups.getGroup("bob", "g")).thenThrow(new DatasetException("不存在", 404));
+        when(groups.queryGroup("alice", "g")).thenReturn(group);
+        when(groups.queryGroup("bob", "g")).thenThrow(new DatasetException("不存在", 404));
         List<List<String>> calls = new ArrayList<>();
         var service =
                 new WrenPublishedProject(
@@ -73,8 +73,8 @@ class WrenPublishedProjectTest {
         var groups = mock(DatasetGroupService.class);
         var group = new DatasetGroupEntity("g", "alice", "销售", "");
         group.setMdlVersion(1);
-        when(groups.getGroup("alice", "g")).thenReturn(group);
-        when(groups.getGroup("bob", "g")).thenThrow(new DatasetException("不存在", 404));
+        when(groups.queryGroup("alice", "g")).thenReturn(group);
+        when(groups.queryGroup("bob", "g")).thenThrow(new DatasetException("不存在", 404));
         var service = new WrenPublishedProject(props, groups);
         Path published = props.groupRoot("g").resolve("published");
         Files.createDirectories(published.resolve("target"));

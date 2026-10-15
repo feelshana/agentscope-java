@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as echarts from 'echarts';
-import { getToken } from '../api/auth';
+import { apiFetch, getToken } from '../api/auth';
 
 export interface ChartPayload {
   chart?: string;
@@ -31,7 +31,7 @@ export default function EChartsBlock({ payload }: { payload: ChartPayload }) {
       return;
     }
     let cancelled = false;
-    fetch(`/api/charts/${encodeURIComponent(payload.chartId)}`, {
+    apiFetch(`/api/charts/${encodeURIComponent(payload.chartId)}`, {
       headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
     })
       .then(r => {

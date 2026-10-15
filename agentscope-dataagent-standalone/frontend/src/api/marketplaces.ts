@@ -1,4 +1,4 @@
-import { getToken } from './auth';
+import { apiFetch, getToken } from './auth';
 
 export type MarketplaceType = 'git' | 'nacos';
 
@@ -57,7 +57,7 @@ async function readError(res: Response, fallback: string): Promise<Error> {
 }
 
 export async function listMarketplaces(): Promise<MarketplaceSummary[]> {
-  const res = await fetch(BASE, { headers: authHeaders() });
+  const res = await apiFetch(BASE, { headers: authHeaders() });
   if (!res.ok) throw await readError(res, 'Failed to list marketplaces');
   return res.json();
 }
@@ -65,7 +65,7 @@ export async function listMarketplaces(): Promise<MarketplaceSummary[]> {
 export async function createMarketplace(
   req: MarketplaceWriteRequest,
 ): Promise<MarketplaceSummary> {
-  const res = await fetch(BASE, {
+  const res = await apiFetch(BASE, {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify(req),
@@ -78,7 +78,7 @@ export async function updateMarketplace(
   id: string,
   req: MarketplaceWriteRequest,
 ): Promise<MarketplaceSummary> {
-  const res = await fetch(`${BASE}/${encodeURIComponent(id)}`, {
+  const res = await apiFetch(`${BASE}/${encodeURIComponent(id)}`, {
     method: 'PUT',
     headers: jsonHeaders(),
     body: JSON.stringify(req),
@@ -88,7 +88,7 @@ export async function updateMarketplace(
 }
 
 export async function deleteMarketplace(id: string): Promise<void> {
-  const res = await fetch(`${BASE}/${encodeURIComponent(id)}`, {
+  const res = await apiFetch(`${BASE}/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     headers: authHeaders(),
   });
@@ -98,7 +98,7 @@ export async function deleteMarketplace(id: string): Promise<void> {
 export async function testMarketplaceTransient(
   req: MarketplaceWriteRequest,
 ): Promise<TestConnectionResult> {
-  const res = await fetch(`${BASE}/test`, {
+  const res = await apiFetch(`${BASE}/test`, {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify(req),
@@ -108,7 +108,7 @@ export async function testMarketplaceTransient(
 }
 
 export async function testMarketplaceExisting(id: string): Promise<TestConnectionResult> {
-  const res = await fetch(`${BASE}/${encodeURIComponent(id)}/test`, {
+  const res = await apiFetch(`${BASE}/${encodeURIComponent(id)}/test`, {
     method: 'POST',
     headers: authHeaders(),
   });
@@ -117,7 +117,7 @@ export async function testMarketplaceExisting(id: string): Promise<TestConnectio
 }
 
 export async function listMarketplaceSkills(id: string): Promise<MarketSkillBrief[]> {
-  const res = await fetch(`${BASE}/${encodeURIComponent(id)}/skills`, { headers: authHeaders() });
+  const res = await apiFetch(`${BASE}/${encodeURIComponent(id)}/skills`, { headers: authHeaders() });
   if (!res.ok) throw await readError(res, 'Failed to list marketplace skills');
   return res.json();
 }
@@ -126,7 +126,7 @@ export async function getMarketplaceSkill(
   id: string,
   name: string,
 ): Promise<MarketSkillDetail> {
-  const res = await fetch(
+  const res = await apiFetch(
     `${BASE}/${encodeURIComponent(id)}/skills/${encodeURIComponent(name)}`,
     { headers: authHeaders() },
   );

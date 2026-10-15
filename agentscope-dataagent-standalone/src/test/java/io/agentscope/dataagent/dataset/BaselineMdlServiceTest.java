@@ -52,6 +52,18 @@ class BaselineMdlServiceTest {
         service =
                 new BaselineMdlService(
                         groupRepository, datasetRepository, publishService, wrenGateway);
+        var access = mock(KnowledgeBaseAccessService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "access", access);
+        when(access.requireManage(
+                        org.mockito.ArgumentMatchers.anyString(),
+                        org.mockito.ArgumentMatchers.anyString()))
+                .thenAnswer(
+                        inv -> {
+                            var group = groupRepository.findById(inv.getArgument(1)).orElseThrow();
+                            if (!group.getOwnerId().equals(inv.getArgument(0)))
+                                throw new DatasetException("Knowledge base not found", 404);
+                            return group;
+                        });
     }
 
     @Test

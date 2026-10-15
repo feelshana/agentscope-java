@@ -39,16 +39,26 @@ public class ProcessWrenCli implements WrenCli {
 
     private final WrenProperties props;
 
+    private KnowledgeBaseOperations operations;
+
     public ProcessWrenCli(WrenProperties props) {
         this.props = props;
     }
 
     @Override
     public Result run(Path projectHome, Duration timeout, List<String> args) {
+        if (operations == null) return runProcess(projectHome, timeout, args);
+        return operations.run(
+                operations.groupForProject(projectHome),
+                () -> runProcess(projectHome, timeout, args));
+    }
+
+    private Result runProcess(Path projectHome, Duration timeout, List<String> args) {
         List<String> command = new ArrayList<>();
         command.add(props.resolveExecutable());
         command.addAll(args);
         Path outFile = null;
+        Process process = null;
         try {
             outFile = Files.createTempFile("wren-cli-", ".log");
             ProcessBuilder pb = new ProcessBuilder(command);
@@ -64,9 +74,10 @@ public class ProcessWrenCli implements WrenCli {
             pb.environment().put("WREN_HOME", props.wrenHome().toAbsolutePath().toString());
             io.agentscope.dataagent.runtime.wren.WrenProcessEnvironment.configure(pb.environment());
 
-            Process process;
             try {
                 process = pb.start();
+                if (operations != null)
+                    operations.trackProcess(operations.groupForProject(projectHome), process);
             } catch (IOException e) {
                 log.warn("wren CLI unavailable ({}): {}", props.executable(), e.getMessage());
                 return new Result(
@@ -88,6 +99,10 @@ public class ProcessWrenCli implements WrenCli {
             Thread.currentThread().interrupt();
             return new Result(-1, "wren 命令执行被中断");
         } finally {
+            if (process != null && process.isAlive()) {
+                process.descendants().forEach(ProcessHandle::destroyForcibly);
+                process.destroyForcibly();
+            }
             if (outFile != null) {
                 try {
                     Files.deleteIfExists(outFile);
@@ -96,5 +111,11 @@ public class ProcessWrenCli implements WrenCli {
                 }
             }
         }
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public ProcessWrenCli(WrenProperties props, KnowledgeBaseOperations operations) {
+        this(props);
+        this.operations = operations;
     }
 }

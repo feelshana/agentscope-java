@@ -50,7 +50,7 @@ export default function WorkspacePage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      <BackToChatHeader title="Workspace" subtitle="Browse the agent's working directory" />
+      <BackToChatHeader title="工作区" subtitle="查看 Agent 的工作目录" />
       {summary?.workspacePath && (
         <div style={pathBar} title={summary.workspacePath}>
           <span style={pathLabel}>Path</span>

@@ -29,13 +29,13 @@ import io.agentscope.core.message.ToolCallState;
 import io.agentscope.core.message.ToolUseBlock;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.state.AgentState;
+import io.agentscope.dataagent.dataset.DatasetException;
 import io.agentscope.dataagent.dataset.DatasetGroupService;
 import io.agentscope.dataagent.dataset.DatasetScope;
 import io.agentscope.dataagent.runtime.DataAgentBootstrap;
 import io.agentscope.dataagent.runtime.gateway.HarnessGateway;
 import io.agentscope.dataagent.runtime.session.SessionAgentManager;
 import io.agentscope.dataagent.runtime.session.SessionEntry;
-import io.agentscope.dataagent.runtime.session.SessionKind;
 import io.agentscope.dataagent.tools.data.ModelingToolkitRegistrar;
 import io.agentscope.dataagent.web.audit.ActivityEvent;
 import io.agentscope.dataagent.web.audit.AgentActivityStore;
@@ -116,6 +116,8 @@ public class ChatController {
     private final ConversationScopeRegistry conversationScopes;
     private final DatasetGroupService datasetGroupService;
 
+    private io.agentscope.dataagent.dataset.KnowledgeBaseOperations knowledgeBaseOperations;
+
     /**
      * AgentStateStore keys for which we have already recorded a RUN_SESSION event. Each (userId, agentId)
      * pair gets one entry per process lifetime so the activity log shows one row per session, not
@@ -148,6 +150,7 @@ public class ChatController {
         this.activity = activity;
         this.modelProvider = modelProvider;
         this.conversationScopes = conversationScopes;
+        this.gateway.setConversationScopes(conversationScopes);
         this.datasetGroupService = datasetGroupService;
     }
 
@@ -158,7 +161,12 @@ public class ChatController {
      * ChatGPT-style sessions for the same (userId, agentId) pair. {@code null}/blank requests collapse
      * to the legacy single-session behaviour by deferring to the gateway's deterministic key.
      */
-    public record ChatRequest(String message, String sessionKey, java.util.List<String> groupIds) {}
+    public record ChatRequest(
+            String message, String sessionKey, java.util.List<String> groupIds, Boolean allGroups) {
+        public ChatRequest(String message, String sessionKey, java.util.List<String> groupIds) {
+            this(message, sessionKey, groupIds, false);
+        }
+    }
 
     /** Request body used to resume one native AgentScope modeling confirmation. */
     public record ModelingConfirmRequest(
@@ -216,7 +224,9 @@ public class ChatController {
             String sessionKey,
             boolean exists,
             String pendingReplyId,
-            List<Map<String, Object>> pendingToolCalls) {}
+            List<Map<String, Object>> pendingToolCalls,
+            List<String> groupIds,
+            boolean allGroups) {}
 
     /**
      * SSE streaming endpoint. Emits, in order:
@@ -266,17 +276,12 @@ public class ChatController {
                     sse("done", doneFrame));
         }
 
-        // Subscribe to tool events. The middleware publishes with the *runtime* session id,
-        // which only exists once the gateway has dispatched this turn — so match lazily per
-        // event against the conversation's gate key. Subscribing once up-front (by the
-        // pre-resolved session key) would silently drop every event on the first turn, and
-        // the runtime id differs from the storage session key anyway.
-        String gateKey = resolveGateKey(userId, agentId, resolvedConversationId);
+        // A server-generated request ID isolates concurrent streams, including the first turn.
+        String requestId = UUID.randomUUID().toString();
         Sinks.One<Boolean> done = Sinks.one();
         Flux<ServerSentEvent<String>> toolEvents =
                 toolEventBus
-                        .events()
-                        .filter(e -> isEventForConversation(userId, gateKey, e))
+                        .subscribeRequest(requestId)
                         .takeUntilOther(done.asMono().timeout(Duration.ofMinutes(10)))
                         .map(this::toToolFrame)
                         .onErrorResume(ex -> Flux.empty());
@@ -287,9 +292,7 @@ public class ChatController {
         // the storage key and use it as the next turn's conversationId, splintering the session.
         doneFrame.put("sessionKey", resolvedConversationId);
 
-        // Generate a requestId for this turn so tool events can be correlated.
-        String requestId = UUID.randomUUID().toString();
-
+        Sinks.One<ServerSentEvent<String>> scopeFrame = Sinks.one();
         Flux<ServerSentEvent<String>> agentEvents =
                 executeChatStream(
                                 userId,
@@ -297,7 +300,22 @@ public class ChatController {
                                 req.message(),
                                 resolvedConversationId,
                                 req.groupIds(),
-                                requestId)
+                                Boolean.TRUE.equals(req.allGroups()),
+                                requestId,
+                                selection -> {
+                                    doneFrame.put("groupIds", selection.groupIds());
+                                    doneFrame.put("allGroups", selection.allGroups());
+                                    doneFrame.put("knowledgeScope", selection);
+                                    scopeFrame.tryEmitValue(
+                                            sse(
+                                                    "scope",
+                                                    Map.of(
+                                                            "type",
+                                                            "scope",
+                                                            "knowledgeScope",
+                                                            selection)));
+                                })
+                        .doFinally(signal -> scopeFrame.tryEmitEmpty())
                         .doOnNext(
                                 event -> {
                                     if (event instanceof AgentResultEvent result
@@ -306,7 +324,11 @@ public class ChatController {
                                     }
                                 })
                         .flatMap(this::toAgentFrame)
-                        .concatWith(Mono.fromSupplier(() -> sse("done", doneFrame)))
+                        .concatWith(
+                                Mono.fromSupplier(
+                                        () -> {
+                                            return sse("done", doneFrame);
+                                        }))
                         .doOnComplete(() -> done.tryEmitValue(true))
                         .onErrorResume(
                                 ex -> {
@@ -326,7 +348,7 @@ public class ChatController {
                                                             ex.getMessage())));
                                 });
 
-        return Flux.merge(toolEvents, agentEvents);
+        return Flux.merge(toolEvents, scopeFrame.asMono(), agentEvents);
     }
 
     /** Resumes one paused modeling tool call using AgentScope's native ConfirmResult metadata. */
@@ -375,7 +397,7 @@ public class ChatController {
                 throw new ResponseStatusException(HttpStatus.NOT_FOUND, "知识库不存在");
             }
         }
-        List<String> originalGroupIds = conversationScopes.get(conversationId);
+        List<String> originalGroupIds = conversationScopes.get(userId, conversationId);
         if (originalGroupIds == null
                 || !Set.copyOf(originalGroupIds).equals(Set.copyOf(groupIds))) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "确认请求与原会话知识库范围不一致");
@@ -463,8 +485,7 @@ public class ChatController {
         Sinks.One<Boolean> done = Sinks.one();
         Flux<ServerSentEvent<String>> toolEvents =
                 toolEventBus
-                        .events()
-                        .filter(e -> isEventForConversation(userId, gateKey, e))
+                        .subscribeRequest(requestId)
                         .takeUntilOther(done.asMono().timeout(Duration.ofMinutes(10)))
                         .map(this::toToolFrame)
                         .onErrorResume(ex -> Flux.empty());
@@ -478,6 +499,7 @@ public class ChatController {
                                 List.of(confirmMsg),
                                 conversationId,
                                 groupIds,
+                                false,
                                 requestId)
                         .flatMap(this::toAgentFrame)
                         .concatWith(Flux.just(sse("done", doneFrame)))
@@ -515,26 +537,42 @@ public class ChatController {
         guard.require(userId, agentId, Tier.RUN);
         String conversationId = normalizedConversationId(sessionKey);
         return Mono.fromCallable(
-                () -> {
-                    if (conversationId == null) {
-                        return new CurrentSessionResponse(null, false, null, List.of());
-                    }
-                    String gateKey = resolveGateKey(userId, agentId, conversationId);
-                    String storageKey = findSessionKeyByGate(userId, gateKey);
-                    if (storageKey == null) {
-                        return new CurrentSessionResponse(conversationId, false, null, List.of());
-                    }
-                    if (!ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId)) {
-                        return new CurrentSessionResponse(conversationId, true, null, List.of());
-                    }
-                    PendingConfirmation pending =
-                            loadPendingConfirmation(userId, agentId, storageKey);
-                    return new CurrentSessionResponse(
-                            conversationId,
-                            true,
-                            pending == null ? null : pending.replyId(),
-                            pending == null ? List.of() : pending.toolCalls());
-                });
+                        () -> {
+                            if (conversationId == null) {
+                                return new CurrentSessionResponse(
+                                        null, false, null, List.of(), null, false);
+                            }
+                            String gateKey = resolveGateKey(userId, agentId, conversationId);
+                            String storageKey = findSessionKeyByGate(userId, gateKey);
+                            if (storageKey == null) {
+                                return new CurrentSessionResponse(
+                                        conversationId,
+                                        false,
+                                        null,
+                                        List.of(),
+                                        conversationScopes.get(userId, conversationId),
+                                        isAllSelection(userId, conversationId));
+                            }
+                            if (!ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId)) {
+                                return new CurrentSessionResponse(
+                                        conversationId,
+                                        true,
+                                        null,
+                                        List.of(),
+                                        conversationScopes.get(userId, conversationId),
+                                        isAllSelection(userId, conversationId));
+                            }
+                            PendingConfirmation pending =
+                                    loadPendingConfirmation(userId, agentId, storageKey);
+                            return new CurrentSessionResponse(
+                                    conversationId,
+                                    true,
+                                    pending == null ? null : pending.replyId(),
+                                    pending == null ? List.of() : pending.toolCalls(),
+                                    conversationScopes.get(userId, conversationId),
+                                    isAllSelection(userId, conversationId));
+                        })
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
 
     /** Synchronous (non-streaming) chat. Blocks until the agent produces a reply. */
@@ -570,6 +608,7 @@ public class ChatController {
                         req.message(),
                         resolvedConversationId,
                         req.groupIds(),
+                        Boolean.TRUE.equals(req.allGroups()),
                         requestId)
                 .map(
                         reply -> {
@@ -762,45 +801,9 @@ public class ChatController {
         }
     }
 
-    /**
-     * Translates a gateway routing key into the real {@code SessionEntry.sessionKey()}, by
-     * scanning registered MAIN sessions for the matching {@code gateKey}. Returns {@code null}
-     * when no session has been registered yet (e.g. before the first turn).
-     */
+    /** Resolves and authorizes the indexed MAIN session for a gateway routing key. */
     private String findSessionKeyByGate(String userId, String gateKey) {
-        if (gateKey == null) return null;
-        for (SessionEntry e : sessionAgentManager.allSessions()) {
-            if (e.kind() != SessionKind.MAIN) continue;
-            if (!Objects.equals(gateKey, e.gateKey())) continue;
-            if (userId != null && !Objects.equals(userId, e.userId())) continue;
-            return e.sessionKey();
-        }
-        return null;
-    }
-
-    /**
-     * Lazily checks whether a tool event belongs to the conversation this stream serves.
-     *
-     * <p>{@link ToolNotificationMiddleware} publishes with {@code RuntimeContext#getSessionId()}
-     * — the short {@code main-…} runtime id — while the storage layer keys sessions by the full
-     * {@code agent:…:main:…} key, so the event key is matched against either form of the session
-     * resolved through the conversation's gate key. Matching per event (rather than once
-     * up-front) also covers the first turn, where the gateway creates the session mid-flight.
-     */
-    private boolean isEventForConversation(
-            String userId, String gateKey, ToolEventBus.ToolEvent e) {
-        if (gateKey == null || e.sessionKey() == null) {
-            return false;
-        }
-        for (SessionEntry s : sessionAgentManager.allSessions()) {
-            if (s.kind() != SessionKind.MAIN) continue;
-            if (!Objects.equals(gateKey, s.gateKey())) continue;
-            if (userId != null && !Objects.equals(userId, s.userId())) continue;
-            if (e.sessionKey().equals(s.sessionKey()) || e.sessionKey().equals(s.sessionId())) {
-                return true;
-            }
-        }
-        return false;
+        return gateway.findMainSessionKey(userId, gateKey);
     }
 
     /**
@@ -930,6 +933,7 @@ public class ChatController {
             String message,
             String conversationId,
             java.util.List<String> groupIds,
+            boolean allGroups,
             String requestId) {
         return buildInbound(
                 userId,
@@ -937,6 +941,7 @@ public class ChatController {
                 shapeInboundMessages(message),
                 conversationId,
                 groupIds,
+                allGroups,
                 requestId);
     }
 
@@ -946,12 +951,69 @@ public class ChatController {
             List<Msg> msgs,
             String conversationId,
             java.util.List<String> groupIds,
+            boolean allGroups,
             String requestId) {
-        conversationScopes.put(conversationId, groupIds);
+        return buildInbound(
+                userId,
+                agentId,
+                msgs,
+                conversationId,
+                groupIds,
+                allGroups,
+                requestId,
+                ignored -> {});
+    }
+
+    private boolean isAllSelection(String userId, String conversationId) {
+        var selection = conversationScopes.getSelection(userId, conversationId);
+        return selection != null && selection.allGroups();
+    }
+
+    private InboundMessage buildInbound(
+            String userId,
+            String agentId,
+            List<Msg> msgs,
+            String conversationId,
+            List<String> groupIds,
+            boolean allGroups,
+            String requestId,
+            java.util.function.Consumer<
+                            io.agentscope.dataagent.web.session.ConversationScopeRegistry.Selection>
+                    onAccepted) {
+        List<String> authorized =
+                resolveGroupScope(userId, agentId, conversationId, groupIds, allGroups);
+        var groupNames = new java.util.LinkedHashMap<String, String>();
+        for (var group : datasetGroupService.queryGroups(userId, authorized))
+            groupNames.put(group.getId(), group.getName());
+        var selection =
+                new io.agentscope.dataagent.web.session.ConversationScopeRegistry.Selection(
+                        authorized, allGroups, groupNames);
         RuntimeContext.Builder runtimeContextBuilder =
                 RuntimeContext.builder()
                         .userId(userId)
-                        .put(DatasetScope.class, new DatasetScope(userId, groupIds));
+                        .put(DatasetScope.class, new DatasetScope(userId, authorized))
+                        .put(
+                                io.agentscope.dataagent.dataset.ChatTurnScope.class,
+                                new io.agentscope.dataagent.dataset.ChatTurnScope(
+                                        () -> {
+                                            // Runs inside the gateway gate: queued turns cannot
+                                            // overwrite active tool scope.
+                                            resolveGroupScope(
+                                                    userId,
+                                                    agentId,
+                                                    conversationId,
+                                                    authorized,
+                                                    false);
+                                            conversationScopes.putSelection(
+                                                    userId, conversationId, selection);
+                                            for (Msg msg : msgs)
+                                                if (msg.getRole() == MsgRole.USER)
+                                                    conversationScopes.putSelection(
+                                                            userId,
+                                                            "turn:" + msg.getId(),
+                                                            selection);
+                                            onAccepted.accept(selection);
+                                        }));
         if (requestId != null) {
             runtimeContextBuilder.put(ToolEventBus.REQUEST_ID_CONTEXT_KEY, requestId);
         }
@@ -969,6 +1031,48 @@ public class ChatController {
                 .build();
     }
 
+    /** Resolve UI selection only; the existing per-group context, Wren routing and ACL remain. */
+    List<String> resolveGroupScope(
+            String userId,
+            String agentId,
+            String conversationId,
+            List<String> groupIds,
+            boolean allGroups) {
+        boolean modeling = ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId);
+        if (allGroups && modeling) throw new DatasetException("建模会话必须选择一个知识库", 400);
+        if (allGroups && groupIds != null && !groupIds.isEmpty())
+            throw new DatasetException("全选不能同时指定知识库列表", 400);
+        List<String> previous = conversationScopes.get(userId, conversationId);
+        List<String> requested =
+                allGroups
+                        ? datasetGroupService.listGroups(userId).stream()
+                                .map(
+                                        io.agentscope.dataagent.web.persistence.jpa
+                                                        .DatasetGroupEntity
+                                                ::getId)
+                                .toList()
+                        : groupIds != null ? groupIds : previous == null ? List.of() : previous;
+        if (requested.stream().anyMatch(id -> id == null || id.isBlank()))
+            throw new DatasetException("知识库 ID 不能为空", 400);
+        List<String> normalized = requested.stream().distinct().sorted().toList();
+        if (modeling
+                && previous != null
+                && !new java.util.HashSet<>(previous).equals(new java.util.HashSet<>(normalized)))
+            throw new DatasetException("当前会话已绑定知识库范围，请新建对话切换", 400);
+        if (modeling && normalized.size() != 1) throw new DatasetException("建模会话必须选择一个知识库", 400);
+        List<String> authorized =
+                datasetGroupService.queryGroups(userId, normalized).stream()
+                        .map(io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity::getId)
+                        .distinct()
+                        .sorted()
+                        .toList();
+        if (modeling) {
+            if (authorized.size() != 1) throw new DatasetException("建模会话必须选择一个知识库", 400);
+            datasetGroupService.getGroup(userId, authorized.get(0));
+        }
+        return authorized;
+    }
+
     /**
      * Synchronous dispatch — returns the final reply as a single {@link Msg}. Used by the
      * {@link #send} endpoint which does not need incremental text streaming.
@@ -979,13 +1083,23 @@ public class ChatController {
             String message,
             String conversationId,
             java.util.List<String> groupIds,
+            boolean allGroups,
             String requestId) {
         long startMs = System.currentTimeMillis();
-        InboundMessage inbound =
-                buildInbound(userId, agentId, message, conversationId, groupIds, requestId);
+
         final String recordedAgentId = agentId != null ? agentId : "(default)";
-        return chatUiChannel
-                .dispatch(inbound)
+        return watchKnowledgeBases(
+                        () ->
+                                buildInbound(
+                                        userId,
+                                        agentId,
+                                        message,
+                                        conversationId,
+                                        groupIds,
+                                        allGroups,
+                                        requestId),
+                        inbound -> chatUiChannel.dispatch(inbound).flux())
+                .singleOrEmpty()
                 .doOnSuccess(
                         reply ->
                                 usageStore.record(
@@ -1006,6 +1120,7 @@ public class ChatController {
             String message,
             String conversationId,
             java.util.List<String> groupIds,
+            boolean allGroups,
             String requestId) {
         return executeChatStream(
                 userId,
@@ -1013,7 +1128,30 @@ public class ChatController {
                 shapeInboundMessages(message),
                 conversationId,
                 groupIds,
+                allGroups,
                 requestId);
+    }
+
+    private Flux<AgentEvent> executeChatStream(
+            String userId,
+            String agentId,
+            String message,
+            String conversationId,
+            List<String> groupIds,
+            boolean allGroups,
+            String requestId,
+            java.util.function.Consumer<
+                            io.agentscope.dataagent.web.session.ConversationScopeRegistry.Selection>
+                    onAccepted) {
+        return executeChatStream(
+                userId,
+                agentId,
+                shapeInboundMessages(message),
+                conversationId,
+                groupIds,
+                allGroups,
+                requestId,
+                onAccepted);
     }
 
     private Flux<AgentEvent> executeChatStream(
@@ -1022,19 +1160,67 @@ public class ChatController {
             List<Msg> messages,
             String conversationId,
             java.util.List<String> groupIds,
+            boolean allGroups,
             String requestId) {
+        return executeChatStream(
+                userId,
+                agentId,
+                messages,
+                conversationId,
+                groupIds,
+                allGroups,
+                requestId,
+                ignored -> {});
+    }
+
+    private Flux<AgentEvent> executeChatStream(
+            String userId,
+            String agentId,
+            List<Msg> messages,
+            String conversationId,
+            List<String> groupIds,
+            boolean allGroups,
+            String requestId,
+            java.util.function.Consumer<
+                            io.agentscope.dataagent.web.session.ConversationScopeRegistry.Selection>
+                    onAccepted) {
         long startMs = System.currentTimeMillis();
-        InboundMessage inbound =
-                buildInbound(userId, agentId, messages, conversationId, groupIds, requestId);
+
         final String recordedAgentId = agentId != null ? agentId : "(default)";
-        return chatUiChannel
-                .dispatchStream(inbound)
+        return watchKnowledgeBases(
+                        () ->
+                                buildInbound(
+                                        userId,
+                                        agentId,
+                                        messages,
+                                        conversationId,
+                                        groupIds,
+                                        allGroups,
+                                        requestId,
+                                        onAccepted),
+                        chatUiChannel::dispatchStream)
                 .doOnComplete(
                         () ->
                                 usageStore.record(
                                         userId,
                                         recordedAgentId,
                                         System.currentTimeMillis() - startMs));
+    }
+
+    private <T> Flux<T> watchKnowledgeBases(
+            java.util.function.Supplier<InboundMessage> input,
+            java.util.function.Function<InboundMessage, Flux<T>> action) {
+        return Flux.defer(
+                        () -> {
+                            InboundMessage inbound = input.get();
+                            List<String> selected =
+                                    inbound.runtimeContext().get(DatasetScope.class).groupIds();
+                            return knowledgeBaseOperations == null
+                                    ? action.apply(inbound)
+                                    : knowledgeBaseOperations.watch(
+                                            selected, () -> action.apply(inbound));
+                        })
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
 
     private ServerSentEvent<String> sse(String eventType, Object data) {
@@ -1045,5 +1231,34 @@ public class ChatController {
             json = "{\"type\":\"" + eventType + "\"}";
         }
         return ServerSentEvent.<String>builder().event(eventType).data(json).build();
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public ChatController(
+            ChatUiChannel chatUiChannel,
+            DataAgentBootstrap builderBootstrap,
+            AgentCatalogService catalogService,
+            IdentityLinkStore identityLinks,
+            UsageStore usageStore,
+            ToolEventBus toolEventBus,
+            AgentAccessGuard guard,
+            AgentActivityStore activity,
+            ObjectProvider<Model> modelProvider,
+            ConversationScopeRegistry conversationScopes,
+            DatasetGroupService datasetGroupService,
+            io.agentscope.dataagent.dataset.KnowledgeBaseOperations knowledgeBaseOperations) {
+        this(
+                chatUiChannel,
+                builderBootstrap,
+                catalogService,
+                identityLinks,
+                usageStore,
+                toolEventBus,
+                guard,
+                activity,
+                modelProvider,
+                conversationScopes,
+                datasetGroupService);
+        this.knowledgeBaseOperations = knowledgeBaseOperations;
     }
 }

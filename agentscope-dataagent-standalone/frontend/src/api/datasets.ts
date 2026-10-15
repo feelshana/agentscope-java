@@ -1,4 +1,4 @@
-import { getToken } from './auth';
+import { apiFetch, getToken } from './auth';
 
 export interface DatasetColumn {
   name: string;
@@ -29,6 +29,11 @@ export interface Dataset {
 }
 
 export interface DatasetGroup {
+  role: 'QUERY' | 'MANAGE';
+  canManage: boolean;
+  canQuery: boolean;
+  deletionPending?: boolean;
+  ownerUsername?: string | null;
   id: string;
   artifactId: string | null;
   name: string;
@@ -60,7 +65,7 @@ function jsonHeaders(): Record<string, string> {
 }
 
 export async function downloadQueryCsv(artifactId: string): Promise<void> {
-  const res = await fetch(`/api/datasets/query-results/${encodeURIComponent(artifactId)}/csv`, {
+  const res = await apiFetch(`/api/datasets/query-results/${encodeURIComponent(artifactId)}/csv`, {
     headers: authHeaders(),
   });
   if (!res.ok) throw new Error(await errorMessage(res, '查询结果下载失败'));
@@ -93,7 +98,7 @@ function fetchWithTimeout(
 ): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
-  return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+  return apiFetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
 }
 
 // ---------------------------------------------------------------- sheets
@@ -101,7 +106,7 @@ function fetchWithTimeout(
 export async function listSheets(file: File): Promise<string[]> {
   const form = new FormData();
   form.append('file', file, file.name);
-  const res = await fetch('/api/datasets/list-sheets', {
+  const res = await apiFetch('/api/datasets/list-sheets', {
     method: 'POST',
     headers: authHeaders(),
     body: form,
@@ -112,28 +117,55 @@ export async function listSheets(file: File): Promise<string[]> {
 
 // ---------------------------------------------------------------- groups (KB)
 
-export async function listGroups(): Promise<DatasetGroup[]> {
+export interface GroupPage { items: DatasetGroup[]; total: number; page: number; size: number }
+export interface GroupListOptions { page?: number; size?: number; search?: string; sort?: string; manageOnly?: boolean }
+
+export async function listGroupCards(ids: string[], signal?: AbortSignal): Promise<DatasetGroup[]> {
+  if (!ids.length) return [];
+  const response = await apiFetch(`/api/dataset-groups/cards?${new URLSearchParams({ ids: ids.join(',') })}`, { headers: authHeaders(), signal });
+  if (!response.ok) throw new Error(await errorMessage(response, '所选知识库不存在或未授权'));
+  return response.json();
+}
+
+export async function listGroupPage(options: GroupListOptions = {}, signal?: AbortSignal): Promise<GroupPage> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 30_000);
+  const abort = () => controller.abort();
+  if (signal?.aborted) controller.abort();
+  signal?.addEventListener('abort', abort, { once: true });
   try {
-    const res = await fetch('/api/dataset-groups', {
+    const params = new URLSearchParams({ page: String(options.page ?? 0), size: String(options.size ?? 20),
+      search: options.search ?? '', sort: options.sort ?? 'date', manageOnly: String(options.manageOnly ?? false) });
+    const res = await apiFetch(`/api/dataset-groups/page?${params}`, {
       headers: authHeaders(),
       signal: controller.signal,
     });
     if (!res.ok) throw new Error(await errorMessage(res, `Failed to list KBs: ${res.status}`));
     return res.json();
   } catch (e) {
+    if (signal?.aborted) throw e;
     if (e instanceof DOMException && e.name === 'AbortError') {
       throw new Error('加载知识库列表超时，请刷新重试');
     }
     throw e;
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener('abort', abort);
+  }
+}
+
+/** Compatibility for the business-term selector; the card page and chat picker load one page. */
+export async function listGroups(signal?: AbortSignal, manageOnly = false): Promise<DatasetGroup[]> {
+  const all: DatasetGroup[] = [];
+  for (let page = 0; ; page++) {
+    const result = await listGroupPage({ page, size: 100, manageOnly }, signal);
+    all.push(...result.items);
+    if (!result.items.length || (page + 1) * result.size >= result.total) return all;
   }
 }
 
 export async function createGroup(name: string, description: string): Promise<DatasetGroup> {
-  const res = await fetch('/api/dataset-groups', {
+  const res = await apiFetch('/api/dataset-groups', {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify({ name, description }),
@@ -147,8 +179,18 @@ export async function createGroup(name: string, description: string): Promise<Da
   return res.json();
 }
 
+export async function updateGroup(groupId: string, name: string, description: string): Promise<DatasetGroup> {
+  const res = await apiFetch(`/api/dataset-groups/${encodeURIComponent(groupId)}`, {
+    method: 'PUT',
+    headers: jsonHeaders(),
+    body: JSON.stringify({ name, description }),
+  });
+  if (!res.ok) throw new Error(await errorMessage(res, `知识库更新失败: ${res.status}`));
+  return res.json();
+}
+
 export async function getGroupDetail(groupId: string): Promise<GroupDetail> {
-  const res = await fetch(`/api/dataset-groups/${encodeURIComponent(groupId)}`, {
+  const res = await apiFetch(`/api/dataset-groups/${encodeURIComponent(groupId)}`, {
     headers: authHeaders(),
   });
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to load KB: ${res.status}`));
@@ -156,7 +198,7 @@ export async function getGroupDetail(groupId: string): Promise<GroupDetail> {
 }
 
 export async function deleteGroup(groupId: string): Promise<void> {
-  const res = await fetch(`/api/dataset-groups/${encodeURIComponent(groupId)}`, {
+  const res = await apiFetch(`/api/dataset-groups/${encodeURIComponent(groupId)}`, {
     method: 'DELETE',
     headers: authHeaders(),
   });
@@ -166,7 +208,7 @@ export async function deleteGroup(groupId: string): Promise<void> {
 export async function uploadKnowledge(groupId: string, file: File): Promise<string> {
   const form = new FormData();
   form.append('file', file, file.name);
-  const res = await fetch(`/api/dataset-groups/${encodeURIComponent(groupId)}/knowledge`, {
+  const res = await apiFetch(`/api/dataset-groups/${encodeURIComponent(groupId)}/knowledge`, {
     method: 'PUT',
     headers: authHeaders(),
     body: form,
@@ -177,7 +219,7 @@ export async function uploadKnowledge(groupId: string, file: File): Promise<stri
 }
 
 export async function getInstructions(groupId: string): Promise<{ hasInstructions: boolean; instructionsText: string }> {
-  const res = await fetch(`/api/dataset-groups/${encodeURIComponent(groupId)}/instructions`, { headers: authHeaders() });
+  const res = await apiFetch(`/api/dataset-groups/${encodeURIComponent(groupId)}/instructions`, { headers: authHeaders() });
   if (!res.ok) throw new Error(await errorMessage(res, `规则读取失败: ${res.status}`));
   return res.json();
 }
@@ -185,7 +227,7 @@ export async function getInstructions(groupId: string): Promise<{ hasInstruction
 export async function uploadInstructions(file: File, groupId: string): Promise<{ status: string; message: string }> {
   const form = new FormData();
   form.append('file', file, file.name);
-  const res = await fetch(`/api/dataset-groups/${encodeURIComponent(groupId)}/instructions`, {
+  const res = await apiFetch(`/api/dataset-groups/${encodeURIComponent(groupId)}/instructions`, {
     method: 'POST', headers: authHeaders(), body: form,
   });
   if (!res.ok) throw new Error(await errorMessage(res, `规则上传失败: ${res.status}`));
@@ -196,7 +238,7 @@ export async function uploadInstructions(file: File, groupId: string): Promise<{
 
 export async function listDatasets(groupId?: string): Promise<Dataset[]> {
   const qs = groupId ? `?groupId=${encodeURIComponent(groupId)}` : '';
-  const res = await fetch(`/api/datasets${qs}`, { headers: authHeaders() });
+  const res = await apiFetch(`/api/datasets${qs}`, { headers: authHeaders() });
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to list datasets: ${res.status}`));
   return res.json();
 }
@@ -233,7 +275,7 @@ export async function uploadDataset(
 }
 
 export async function deleteDataset(id: string): Promise<void> {
-  const res = await fetch(`/api/datasets/${encodeURIComponent(id)}`, {
+  const res = await apiFetch(`/api/datasets/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     headers: authHeaders(),
   });
@@ -241,7 +283,7 @@ export async function deleteDataset(id: string): Promise<void> {
 }
 
 export async function getPreview(id: string, limit = 20): Promise<Preview> {
-  const res = await fetch(`/api/datasets/${encodeURIComponent(id)}/preview?limit=${limit}`, {
+  const res = await apiFetch(`/api/datasets/${encodeURIComponent(id)}/preview?limit=${limit}`, {
     headers: authHeaders(),
   });
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to preview: ${res.status}`));
@@ -252,7 +294,7 @@ export async function updateColumns(
   id: string,
   updates: { name: string; description: string }[],
 ): Promise<Dataset> {
-  const res = await fetch(`/api/datasets/${encodeURIComponent(id)}/columns`, {
+  const res = await apiFetch(`/api/datasets/${encodeURIComponent(id)}/columns`, {
     method: 'PUT',
     headers: jsonHeaders(),
     body: JSON.stringify(updates),
@@ -262,7 +304,7 @@ export async function updateColumns(
 }
 
 export async function updateDatasetDescription(id: string, description: string): Promise<Dataset> {
-  const res = await fetch(`/api/datasets/${encodeURIComponent(id)}/description`, {
+  const res = await apiFetch(`/api/datasets/${encodeURIComponent(id)}/description`, {
     method: 'PUT',
     headers: jsonHeaders(),
     body: JSON.stringify({ description }),
@@ -318,7 +360,7 @@ export interface ImportTask {
 }
 
 export async function listImportTasks(groupId: string): Promise<ImportTask[]> {
-  const res = await fetch(`/api/datasets/import-tasks?groupId=${encodeURIComponent(groupId)}`, {
+  const res = await apiFetch(`/api/datasets/import-tasks?groupId=${encodeURIComponent(groupId)}`, {
     headers: authHeaders(),
   });
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to list import tasks: ${res.status}`));
@@ -326,7 +368,7 @@ export async function listImportTasks(groupId: string): Promise<ImportTask[]> {
 }
 
 export async function retryImportTask(taskId: string): Promise<ImportTask> {
-  const res = await fetch(`/api/datasets/import-tasks/${encodeURIComponent(taskId)}/retry`, {
+  const res = await apiFetch(`/api/datasets/import-tasks/${encodeURIComponent(taskId)}/retry`, {
     method: 'POST',
     headers: authHeaders(),
   });
@@ -344,7 +386,7 @@ export async function startColumnFormatReimport(
   datasetId: string,
   columns: ColumnFormatUpdate[],
 ): Promise<ImportTask> {
-  const res = await fetch(`/api/datasets/${encodeURIComponent(datasetId)}/column-format-reimport`, {
+  const res = await apiFetch(`/api/datasets/${encodeURIComponent(datasetId)}/column-format-reimport`, {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify({ columns }),
@@ -354,7 +396,7 @@ export async function startColumnFormatReimport(
 }
 
 export async function getImportTask(taskId: string): Promise<ImportTask> {
-  const res = await fetch(`/api/datasets/import-tasks/${encodeURIComponent(taskId)}`, {
+  const res = await apiFetch(`/api/datasets/import-tasks/${encodeURIComponent(taskId)}`, {
     headers: authHeaders(),
   });
   if (!res.ok) throw new Error(await errorMessage(res, `读取导入任务失败: ${res.status}`));
@@ -393,7 +435,7 @@ export interface GraphDto {
 }
 
 export async function getGroupGraph(groupId: string): Promise<GraphDto> {
-  const res = await fetch(`/api/dataset-groups/${encodeURIComponent(groupId)}/graph`, {
+  const res = await apiFetch(`/api/dataset-groups/${encodeURIComponent(groupId)}/graph`, {
     headers: authHeaders(),
   });
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to load graph: ${res.status}`));
@@ -411,7 +453,7 @@ export interface DescriptionInfo {
 export async function saveDescription(groupId: string, file: File): Promise<{ name: string; saved: boolean }> {
   const form = new FormData();
   form.append('file', file, file.name);
-  const res = await fetch(`/api/dataset-groups/${encodeURIComponent(groupId)}/description`, {
+  const res = await apiFetch(`/api/dataset-groups/${encodeURIComponent(groupId)}/description`, {
     method: 'PUT',
     headers: authHeaders(),
     body: form,
@@ -422,7 +464,7 @@ export async function saveDescription(groupId: string, file: File): Promise<{ na
 
 /** @deprecated Legacy description import API. */
 export async function getDescription(groupId: string): Promise<DescriptionInfo> {
-  const res = await fetch(`/api/dataset-groups/${encodeURIComponent(groupId)}/description`, {
+  const res = await apiFetch(`/api/dataset-groups/${encodeURIComponent(groupId)}/description`, {
     headers: authHeaders(),
   });
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to get description: ${res.status}`));
@@ -448,7 +490,7 @@ export async function uploadDataWithDescription(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 300_000); // 5 min
   try {
-    const res = await fetch(`/api/dataset-groups/${encodeURIComponent(groupId)}/upload-data`, {
+    const res = await apiFetch(`/api/dataset-groups/${encodeURIComponent(groupId)}/upload-data`, {
       method: 'POST',
       headers: authHeaders(),
       body: form,

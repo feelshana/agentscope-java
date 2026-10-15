@@ -1,3 +1,4 @@
+import { escapeHtml } from '../utils/html';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Graph } from '@antv/g6';
 import { OntologyGraphData, OntologyNode, OntologyEdge } from '../api/ontology';
@@ -180,21 +181,21 @@ export default function OntologyGraphView({ groupId, data: externalData, highlig
             const d = it.data ?? {};
             if (it.source && it.target) {
               return `<div style="font-size:12px;line-height:1.5">
-                <b>${d.label ?? ''}</b><br/>
-                ${d.joinColumns ? `关联列：${d.joinColumns}<br/>` : ''}
-                <span style="color:#94a3b8">${d.cardinality ?? ''}</span>
+                <b>${escapeHtml(d.label ?? '')}</b><br/>
+                ${d.joinColumns ? `关联列：${escapeHtml(d.joinColumns)}<br/>` : ''}
+                <span style="color:#94a3b8">${escapeHtml(d.cardinality ?? '')}</span>
               </div>`;
             }
             const props = (d.properties ?? [])
               .slice(0, 10)
-              .map((p: any) => `${p.label} <span style="color:#94a3b8">${p.type}</span>`)
+              .map((p: any) => `${escapeHtml(p.label)} <span style="color:#94a3b8">${escapeHtml(p.type)}</span>`)
               .join('<br/>');
             const kindLabel = KIND_LABEL[d.kind] ?? d.kind;
             return `<div style="font-size:12px;line-height:1.5">
-              <b>${d.label ?? it.id}</b>
-              <span style="color:#94a3b8"> · ${kindLabel}</span><br/>
-              ${d.table ? `表：${d.table}<br/>` : ''}
-              ${d.unit ? `单位：${d.unit}<br/>` : ''}
+              <b>${escapeHtml(d.label ?? it.id)}</b>
+              <span style="color:#94a3b8"> · ${escapeHtml(kindLabel)}</span><br/>
+              ${d.table ? `表：${escapeHtml(d.table)}<br/>` : ''}
+              ${d.unit ? `单位：${escapeHtml(d.unit)}<br/>` : ''}
               ${props}
             </div>`;
           },

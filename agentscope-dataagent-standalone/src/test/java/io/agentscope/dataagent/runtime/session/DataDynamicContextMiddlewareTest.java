@@ -46,6 +46,40 @@ class DataDynamicContextMiddlewareTest {
     // ------------------------------------------------------------------ unavailable rendering
 
     @Test
+    void explicitEmptyScopeIsOrdinaryChatAndLoadsNoKnowledgeModel() {
+        MdlCatalog catalog = mock(MdlCatalog.class);
+        var middleware = new DataDynamicContextMiddleware(registry(aliceDataset()), null, catalog);
+        assertThat(prompt(middleware, new DatasetScope("alice", List.of())))
+                .contains("仅进行普通聊天", "不要查询企业数据库")
+                .doesNotContain("[DATA_SOURCES_OVERVIEW]", "[KNOWLEDGE_BASE_OVERVIEW]");
+        verify(catalog, never()).load(anyString());
+    }
+
+    @Test
+    void multipleSelectedGroupsExposeBothDirectoriesAndExplicitRoutingGuidance() {
+        MdlCatalog catalog = mock(MdlCatalog.class);
+        MdlCatalog.GroupMdl first = mdl();
+        var second =
+                new MdlCatalog.GroupMdl(
+                        "gOther",
+                        "库存库",
+                        1,
+                        first.models(),
+                        first.relations(),
+                        first.cubes(),
+                        first.views());
+        when(catalog.load("gA")).thenReturn(Optional.of(first));
+        when(catalog.load("gOther")).thenReturn(Optional.of(second));
+        var middleware =
+                new DataDynamicContextMiddleware(
+                        registry(aliceDataset(), dataset("other", "other", "gOther", "t_other")),
+                        null,
+                        catalog);
+        assertThat(prompt(middleware, new DatasetScope("alice", List.of("gA", "gOther"))))
+                .contains("订单分析", "库存库", "自行判断需要查询哪些库", "按对应 group_id 分别调用工具");
+    }
+
+    @Test
     void absentCatalogDoesNotExposePhysicalOverview() {
         var middleware = new DataDynamicContextMiddleware(registry(aliceDataset()), null);
 
@@ -166,6 +200,8 @@ class DataDynamicContextMiddlewareTest {
     @Test
     void knowledgeBaseOverviewStillRendersAlongsideLogicalSection() {
         DatasetContextProvider ctxProvider = mock(DatasetContextProvider.class);
+        when(ctxProvider.authorizedGroupIds(anyString(), any()))
+                .thenAnswer(inv -> inv.getArgument(1));
         when(ctxProvider.relationshipsText(anyString(), any())).thenReturn("订单表与客户表通过客户ID关联");
         when(ctxProvider.semanticViewsText(List.of("gA")))
                 .thenReturn(
@@ -191,6 +227,8 @@ class DataDynamicContextMiddlewareTest {
     @Test
     void groupScopedBusinessRulesRenderWithoutDocumentsOrVisibleSources() {
         DatasetContextProvider ctxProvider = mock(DatasetContextProvider.class);
+        when(ctxProvider.authorizedGroupIds(anyString(), any()))
+                .thenAnswer(inv -> inv.getArgument(1));
         when(ctxProvider.semanticBusinessRulesText("alice", List.of("gA")))
                 .thenReturn("- 有效订单：默认排除 deleted_at 非空的订单");
         var middleware = new DataDynamicContextMiddleware(registry(bobDataset()), ctxProvider);

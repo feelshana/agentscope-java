@@ -236,3 +236,21 @@
 - 验证 Maven package、前端 build、Spotless 通过；未提交、未重启。
 
 - 修复 SemanticModelingController 多构造器未标注注入导致的 BeanCreationException；Spotless/package 通过。
+
+## 2026-10-15｜平台增量合入分析 checkpoint
+
+- 用户要求保留当前建模/问数并合入共享权限、上传、容量及修复。当前 HEAD 4c96099b；fetch 确认指定 multiAgent-Mdl 为祖先 9f8b0462，无新增提交。
+- 定位候选 -lyf 分支 32c6d292，已询问用户确认来源。权限及部分取消/失败/忙状态修复存在，完整上传和问答容量预算在来源记录中仍待开发。
+- 新增 spec 066，更新当前任务；仅分析与记忆，无业务修改、测试、Git 合并提交或服务重启。下一步等待来源澄清后适配当前官方 Wren 入口，保持历史/附件身份隔离。
+
+## 2026-10-15（Asia/Shanghai）｜平台增量移植完成 checkpoint
+
+- 用户确认 -lyf 后，移植共享权限、成员/审计、每轮选库、上传取消失败、删除重试、沙箱和界面修复；当前官方 Wren CLI/MCP、中文展示、LIMIT、问答对管理保留。补充共享入口鉴权、撤权及跨用户点赞串行保存，字段注入改为构造器。
+- 最终全量570项0失败/错误18跳过；真实CLI/MCP专项5项通过；最终package和前端build通过；SSE/HTML5、解析8、浏览器展示6通过；隔离JAR健康/前端与18次HTTP ACL检查通过。验证脚本修正Java启动器孤儿进程问题，本次验证进程已全部清理。
+- ADR0077/spec066/ARCHITECTURE/README与共享记忆已同步。现有服务未重启、无Git提交；完整容量预算来源未实现，仍待独立开发；真实LLM效果和容量压测未执行。恢复入口为CURRENT_TASK顶部。
+
+## 2026-10-15（Asia/Shanghai）｜启动后 401 修复 checkpoint
+
+- 截图显示 API 认证失败，代码确认前端只检查 token 存在。新增 SessionGate 服务端校验、统一 apiFetch 401 处理及中文重新登录提示；403/网络异常和迟到旧请求不清除有效新会话。未推断实际 token 失效原因或数据状态。
+- 本轮认证/SSE/HTML 共 11 测试、模拟 API 浏览器四场景、前端 build、Maven package -DskipTests、diff check 通过；后端全量测试未重复执行。新增测试脚本及架构说明，保留原平台移植未提交修改。
+- 未重启用户服务、未提交 Git；下一步加载新制品并重新登录验收真实服务。共享权限与真实问数效果验收仍按既有任务继续。

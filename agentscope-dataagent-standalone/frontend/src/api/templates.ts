@@ -1,4 +1,4 @@
-import { getToken } from './auth';
+import { apiFetch, getToken } from './auth';
 
 export interface TemplateSummary {
   id: string;
@@ -27,13 +27,13 @@ function authHeaders(): Record<string, string> {
 }
 
 export async function listTemplates(): Promise<TemplateSummary[]> {
-  const res = await fetch('/api/templates', { headers: authHeaders() });
+  const res = await apiFetch('/api/templates', { headers: authHeaders() });
   if (!res.ok) throw new Error('Failed to load templates');
   return res.json();
 }
 
 export async function getTemplate(id: string): Promise<TemplateDetail> {
-  const res = await fetch(`/api/templates/${encodeURIComponent(id)}`, {
+  const res = await apiFetch(`/api/templates/${encodeURIComponent(id)}`, {
     headers: authHeaders(),
   });
   if (!res.ok) throw new Error('Failed to load template');
