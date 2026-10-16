@@ -172,7 +172,7 @@ dataagent 为每位数据分析师提供专属的数据 Agent，核心流程是*
   RuntimeContext 上，工具调用拿到的就是同一个上下文。
 - `ModelingToolkitRegistrar#registerOfficialTools` 向 modeling-agent 挂载 AgentScope 原生 FilesystemTool（list_files/read_file/write_file/edit_file/grep_files/glob_files）与 OfficialWrenToolkit 的单一 wren_cli 工具。旧 ModelingToolkit 不再注册，set/get_enrich_context_mode、关系/视图/问题专用工具与阶段剧本退出 Agent 运行时；遗留 HTTP 服务保留（ADR 0068/spec 057）。
 - `WrenProjectAccess#resolve` 校验当前用户 MANAGE，从 DatasetScope/ConversationScopeRegistry 绑定单个草稿工程；`WrenProjectFilesystem` 只做路径和权限映射，委托 LocalFilesystem 执行文件操作。禁止穿越、宿主路径、符号链接和平台文件，Cube 按官方契约支持；业务文档同步到 raw/business-document.md，用户不能修改该映射文件。根目录搜索过滤平台目录，文件写入后标记草稿 DIRTY。
-- `OfficialWrenToolkit#execute` 将参数数组传给真实官方 CLI，强制 cwd/project/MDL/memory 路径；不开放任意 shell、profile 切换、连接参数或发布命令。query/dry-run 通过 `MdlPublishService#draftCliProfile` 绑定当前知识库连接；ProcessWrenCli 的 WREN_HOME 指向平台维护的 profiles，避免宿主账号的 active profile。返回退出码与原始输出；校验/编译/SQL 计划和 memory 均没有平台第二实现。 官方 build 退出码同步现有 ModelingWorkflowStore 页面记录，validate 成功单独不表示已编译；失败原样显示。query/dry-run 的临时连接绑定在调用后恢复平台工程文件。memory 索引位于知识库 runtime/modeling-memory，源示例仍在 knowledge/sql，派生二进制不进入发布。
+- `OfficialWrenToolkit#execute` 将参数数组传给真实官方 CLI，强制 cwd/project/MDL/memory 路径；不开放任意 shell、profile 切换、连接参数或发布命令。query/dry-run 及需要执行的 Cube query 通过 `MdlPublishService#draftCliProfile` 在工作区锁内再次校验当前操作者的 MANAGE 权限，再按知识库数据集绑定连接；创建者、共享管理员与全局管理员遵循同一权限规则，排队期间撤权则拒绝执行，操作者身份不替换为库创建者；ProcessWrenCli 的 WREN_HOME 指向平台维护的 profiles，避免宿主账号的 active profile。返回退出码与原始输出；校验/编译/SQL 计划和 memory 均没有平台第二实现。 官方 build 退出码同步现有 ModelingWorkflowStore 页面记录，validate 成功单独不表示已编译；失败原样显示。query/dry-run 的临时连接绑定在调用后恢复平台工程文件。memory 索引位于知识库 runtime/modeling-memory，源示例仍在 knowledge/sql，派生二进制不进入发布。
 - `ModelingHitlMiddleware#onActing` 对 write_file/edit_file、wren_cli memory store 和会生成源码样例的 memory index 请求通用写确认；显式 --no-seed 的索引仅更新派生产物。预览检查路径、内容和精确替换，不运行平台业务语义规则。Agent 写入后按官方技能执行 validate/build/dry-plan/dry-run，技术失败进入原生循环修复；build 不代替显式发布。历史 patch_file/批量卡只由兼容 HTTP 预览处理。
 
 ### 2.6 tools.json 与 MCP 挂载（WrenAI 语义层）
@@ -867,7 +867,7 @@ java -jar target/agentscope-dataagent-*-exec.jar   # → http://localhost:8080
 
 H2 种子账号：`bob/bob`、`alice/alice`（`data-h2.sql`，幂等 MERGE）。
 
-根 pom.xml 的编译基线为 Java 17，本项目不依赖旧多模块 `-pl agentscope-examples/...` 路径。框架改动后先安装配套 harness/OpenAI 扩展，再构建本项目；默认 Maven 流程会构建前端，已有前端构建时可使用 skip.npm/skip.installnodenpm 参数跳过。当前为 Boot exec JAR，来源 Assembly/tar.gz 未采用。部署步骤见 [并发与发布说明](docs/platform-concurrency-and-release.md)。
+根 pom.xml 的编译基线为 Java 17，本项目不依赖旧多模块 `-pl agentscope-examples/...` 路径。框架改动后先安装配套 harness/OpenAI 扩展，再构建本项目；默认 Maven 流程会构建前端，已有前端构建时可使用 skip.npm/skip.installnodenpm 参数跳过。保留原 Boot exec JAR，同时按 ADR0080 生成 dataagent-<version>.tar.gz，包含 bin/conf/lib。公共默认配置及 h2 profile 保留；私有 dev/prod 的 YAML/properties 同时由 Maven resources 和 jar 插件排除，分发仅带无凭据样例。dataagent.sh 通过共享启停锁、PID/启动时间/JAR 身份管理单实例，启动前用 check-wren.py 校验固定 Wren 依赖，再等待 HTTP 健康；停止不依赖 Wren。数据位于版本父目录 data/，日志位于当前版本 log/。发布默认重建前端，可选 frontend/build.ps1 只是提前构建包装。步骤及脚本环境变量见 [单机发布](docs/single-host-release.md)。部署步骤见 [并发与发布说明](docs/platform-concurrency-and-release.md)。
 
 SQL 演示账号初始化与 Java 管理员初始化是独立开关；`dataagent.seed-demo-users` 默认 false，不代表禁用 SQL 初始化。生产环境须明确设置初始化策略和数据库配置，不能根据旧文档假设默认 H2 或自动创建管理员。
 

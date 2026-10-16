@@ -48,6 +48,7 @@
         <google-java-format.version>1.28.0</google-java-format.version>
         <maven-compiler-plugin.version>3.15.0</maven-compiler-plugin.version>
         <maven-surefire-plugin.version>3.5.5</maven-surefire-plugin.version>
+        <release.name>dataagent-${project.version}</release.name>
     </properties>
 
     <!--
@@ -284,7 +285,32 @@
     </dependencies>
 
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <excludes>
+                    <exclude>application-dev.yml</exclude>
+                    <exclude>application-dev.yaml</exclude>
+                    <exclude>application-dev.properties</exclude>
+                    <exclude>application-prod.yml</exclude>
+                    <exclude>application-prod.yaml</exclude>
+                    <exclude>application-prod.properties</exclude>
+                </excludes>
+            </resource>
+        </resources>
         <plugins>
+            <!-- Also exclude stale private resources from an earlier non-clean build. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.4.1</version>
+                <configuration>
+                    <excludes>
+                        <exclude>application-dev.*</exclude>
+                        <exclude>application-prod.*</exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -369,7 +395,28 @@
                 </executions>
             </plugin>
 
-            <!-- Frontend build: npm run build -> src/main/resources/static -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <version>3.7.1</version>
+                <configuration>
+                    <descriptors>
+                        <descriptor>src/main/assembly/assembly.xml</descriptor>
+                    </descriptors>
+                    <finalName>${release.name}</finalName>
+                    <appendAssemblyId>false</appendAssemblyId>
+                    <tarLongFileMode>gnu</tarLongFileMode>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>distribution</id>
+                        <phase>package</phase>
+                        <goals><goal>single</goal></goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Build current frontend assets by default, including release packages. -->
             <plugin>
                 <groupId>com.github.eirslett</groupId>
                 <artifactId>frontend-maven-plugin</artifactId>

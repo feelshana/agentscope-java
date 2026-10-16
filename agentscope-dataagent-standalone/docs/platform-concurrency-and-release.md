@@ -30,7 +30,7 @@ ChatController 的 stream/send 问数默认全局 16 执行、每用户 2 执行
 mvn -pl agentscope-harness,agentscope-extensions/agentscope-extensions-model/agentscope-extensions-model-openai -am install -DskipTests
 ```
 
-随后在 standalone 根目录执行 `mvn test`、`mvn package -DskipTests`；前端目录执行 `npm run build`。当前 pom 产物为 Spring Boot JAR，不套用来源 Assembly/tar.gz 发布步骤。若跳过 Maven 内的 npm 步骤，必须先用本分支前端完成构建，禁止复制来源的 hash JS 产物。沙箱用本分支 `docker/sandbox.Dockerfile` 重建镜像，再按既有环境配置部署新包。重启会清空内存准入队列，应先停止接收新任务并等待正在执行的任务退出。
+随后在 standalone 根目录执行 `mvn test`、`mvn package -DskipTests`；前端目录执行 `npm run build`。当前 pom 保留 Spring Boot exec JAR，并按 ADR0080 额外生成 dataagent-<version>.tar.gz，采用 bin/conf/lib 与版本外 data/ 布局。默认 Maven 仍构建当前前端；本地 dev/prod 配置不进入 JAR/发布包，部署时由无凭据样例创建目标配置。Linux 脚本检查 Wren CLI/Python 依赖并等待应用健康后才返回成功；停止只校验进程身份，不依赖 Wren。详见[单机发布](single-host-release.md)。若跳过 Maven 内的 npm 步骤，必须先用本分支前端完成构建，禁止复制来源的 hash JS 产物。沙箱用本分支 `docker/sandbox.Dockerfile` 重建镜像，再按既有环境配置部署新包。重启会清空内存准入队列，应先停止接收新任务并等待正在执行的任务退出。
 
 部署前备份平台元数据库、MDL 工作区与 published、历史及附件；QUERY/MANAGE 授权表也属于平台库。回滚应用时需配套框架 JAR、前端与镜像，保留持久目录。本文不包含凭据，使用现有安全配置注入。
 

@@ -1,0 +1,21 @@
+# Copy to application-prod.yml on the target host. Supply credentials via environment.
+spring:
+  datasource:
+    url: ${DATAAGENT_DB_URL}
+    username: ${DATAAGENT_DB_USER}
+    password: ${DATAAGENT_DB_PASSWORD}
+  sql:
+    init:
+      mode: never
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+dataagent:
+  jwt:
+    secret: ${DATAAGENT_JWT_SECRET}
+  seed-demo-users: false
+  cors:
+    allowed-origins: ${DATAAGENT_CORS_ALLOWED_ORIGINS}
+  wren:
+    executable: ${DATAAGENT_WREN_EXECUTABLE}

@@ -304,6 +304,9 @@ mvn package -DskipTests
 
 - `target/agentscope-dataagent-<version>-exec.jar` —— 可执行 fat JAR
 - `target/agentscope-dataagent-<version>.jar` —— thin 库 JAR
+- `target/dataagent-<version>.tar.gz` —— Linux 单机发布包（bin/conf/lib）
+
+默认构建当前前端。公共默认配置与 h2 profile 保留在 JAR；本地 application-dev/prod 的 yml/yaml/properties 不进入 JAR 或发布包。分发仅提供无凭据配置样例；部署时创建外置配置。Linux 脚本检查 Wren 依赖并等待应用健康，持久状态位于版本目录外。操作步骤见[单机发布](docs/single-host-release.md)。
 
 格式检查（CI 会卡）：
 
