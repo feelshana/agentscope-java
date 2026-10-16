@@ -4,6 +4,10 @@
 
 ## Overview
 
+External table association samples at most 1,000 rows per table, without full-table COUNT or per-column DISTINCT. Total row count is unknown (`rowCount: null`); file uploads retain their exact imported count. Managers can refresh samples from the dataset page. Samples are observations, not complete enums or exact statistics. Modeling receives a bounded summary; querying reads published Wren rules. See [ADR 0080](docs/adr/0080-bounded-sampling-and-wren-context.md) and [spec 068](docs/specs/068-bounded-sampling-and-wren-context.md).
+
+Schema upgrade: the platform database needs nullable `dataagent_dataset.sample_summary_json LONGTEXT`. The default JPA `update` mode adds it; deployments using `validate` must apply the [MySQL migration](docs/migrations/0080-dataset-sampling-mysql.sql) before starting the new JAR. Existing records remain unsampled until explicitly refreshed; no startup scan is performed.
+
 Modeling uses a generic AgentScope agent with the installed official Wren skills, native
 file operations, and a project-scoped CLI adapter (ADR 0068 / spec 057). The adapter binds
 the authenticated tenant's draft project and connection; it does not define a second

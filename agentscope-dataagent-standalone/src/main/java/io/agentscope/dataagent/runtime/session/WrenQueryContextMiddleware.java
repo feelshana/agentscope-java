@@ -45,6 +45,13 @@ public final class WrenQueryContextMiddleware implements HarnessRuntimeMiddlewar
                                     不为凑步骤查询全表统计，也不省略会影响答案正确性的必要验证。
                                     Top N 或单条结果优先使用官方 query_cube 的 order_by 与 limit；没有合适 Cube 时使用 run_sql 的标准 SQL（可按官方语法使用 LIMIT/OFFSET）。不要把 View（例如 valid_orders）传给 describe_model；View 用 get_mdl/describe_schema，Cube 用 describe_cube。
                                     """);
+                            text.append("\n# 采样使用约束\n")
+                                    .append(
+                                            io.agentscope.dataagent.dataset.DatasetSampleDocuments
+                                                    .POLICY)
+                                    .append(
+                                            "样本与规则仅从当前已发布工程获取，可通过官方 get_instructions"
+                                                    + " 读取；不得使用未发布草稿。\n");
                             return text.toString();
                         })
                 .subscribeOn(Schedulers.boundedElastic());

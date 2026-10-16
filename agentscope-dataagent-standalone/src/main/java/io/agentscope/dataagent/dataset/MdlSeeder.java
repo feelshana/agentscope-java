@@ -204,6 +204,7 @@ public class MdlSeeder {
         if (mappingChanged) {
             writeMapping(groupId, mapping);
         }
+        changed |= DatasetSampleDocuments.sync(workspace.workspaceRoot(groupId), datasets);
         return new SeedResult(issues, changed);
     }
 

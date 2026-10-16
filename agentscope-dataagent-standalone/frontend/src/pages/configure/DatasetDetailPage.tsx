@@ -10,6 +10,7 @@ import {
   Preview,
   updateColumns,
   updateDatasetDescription,
+  refreshDatasetSample,
 } from '../../api/datasets';
 
 const overlayStyle: React.CSSProperties = {
@@ -283,6 +284,16 @@ export default function DatasetDetailPage() {
     } finally { setBusy(false); }
   }
 
+  async function refreshSample() {
+    if (!dataset || busy) return;
+    setBusy(true); setError(null); setSaved(false);
+    try {
+      setDataset(await refreshDatasetSample(dataset.id));
+      setSavedMessage('样本已刷新，重新发布后用于问数'); setSaved(true);
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  }
+
   const originLabel = dataset?.origin === 'datasource' ? '数据源关联' : dataset?.origin === 'derived' ? '派生数据' : '文件上传';
   return (
     <div className="kw-page">
@@ -291,23 +302,24 @@ export default function DatasetDetailPage() {
         <div className="kw-pagehead">
           <div className="kw-heading"><div className="kw-datasethead"><div className="kw-icon"><Icon name="table" /></div><div><h1>{dataset?.name ?? '数据集'}</h1><p>{originLabel}的数据集</p></div></div>
             <p style={{ marginTop: 17 }}>{dataset?.description || '暂无说明'}</p>
-            <div className="kw-infochips"><span><Icon name="table" size="sm" />{dataset?.rowCount.toLocaleString() ?? '—'} 行</span><span>{dataset?.columns.length ?? '—'} 个字段</span>{dataset?.sourceFileName && <span><Icon name={dataset.origin === 'datasource' ? 'database' : 'file'} size="sm" />{dataset.sourceFileName}</span>}</div>
+            <div className="kw-infochips"><span><Icon name="table" size="sm" />{dataset?.rowCount == null ? '总行数未统计' : dataset.rowCount.toLocaleString() + ' 行'}</span><span>{dataset?.columns.length ?? '—'} 个字段</span>{dataset?.sourceFileName && <span><Icon name={dataset.origin === 'datasource' ? 'database' : 'file'} size="sm" />{dataset.sourceFileName}</span>}</div>
           </div>
-          <div className="kw-actions"><button className="da-btn" disabled={!dataset || busy} onClick={() => { setDescriptionDraft(dataset?.description ?? ''); setDescriptionError(null); setDescriptionOpen(true); }}><Icon name="edit" size="sm" />编辑数据集描述</button></div>
+          <div className="kw-actions">{dataset?.origin === 'datasource' && <button className="da-btn" disabled={busy} onClick={refreshSample}>刷新样本</button>}<button className="da-btn" disabled={!dataset || busy} onClick={() => { setDescriptionDraft(dataset?.description ?? ''); setDescriptionError(null); setDescriptionOpen(true); }}><Icon name="edit" size="sm" />编辑数据集描述</button></div>
         </div>
+        {dataset?.origin === 'datasource' && <div className="kw-alert" role="status">{dataset.sampling?.status === 'SUCCESS' ? '已采样 ' + dataset.sampling.sampledRows + ' 行（最多1000行），仅为观察值，非完整枚举；采集时间：' + new Date(dataset.sampling.sampledAt).toLocaleString() : dataset.sampling?.status === 'DISABLED' ? '采样已关闭' : dataset.sampling?.status === 'FAILED' ? '样本采集失败，已保留表结构，可手动重试' : '尚无有效采样摘要'}。总行数未统计。</div>}
         {error && <div role="alert" className="kw-alert">{error}</div>}
         {saved && <div role="status" style={{ color: 'var(--da-success)', fontSize: 12, marginBottom: 20 }}>{savedMessage}</div>}
         <div className="kw-tabs" role="tablist" aria-label="数据集信息">{([{ key: 'preview', label: '数据预览' }, { key: 'fields', label: '字段信息' }, { key: 'technical', label: '技术信息' }] as const).map(t => <button key={t.key} role="tab" aria-selected={tab === t.key} className={tab === t.key ? 'active' : ''} onClick={() => setTab(t.key)}>{t.label}</button>)}</div>
         {loading && <div className="kw-empty">加载数据集…</div>}
         {!loading && dataset && tab === 'preview' && <>
           <div className="kw-toolbar"><span style={{ fontSize: 12 }}>数据预览</span><span className="kw-count">前 {preview?.rows.length ?? 0} 行</span><span className="kw-spacer" /><span className="kw-count">悬停字段查看说明 · 横向滚动查看全部字段</span></div>
-          {preview && preview.rows.length > 0 ? <div className="kw-tablebox"><div className="kw-table-scroll" style={{ maxHeight: 520 }}><table className="kw-table kw-preview"><thead><tr><th className="rownum">#</th>{preview.columns.map(c => <th key={c.name} title={`${c.description || '暂无字段说明'} · ${c.sqlType}`}>{c.originalName || c.name}{c.originalName && c.originalName !== c.name && <small>{c.name}</small>}</th>)}</tr></thead><tbody>{preview.rows.map((row, i) => <tr key={i}><td className="rownum">{i + 1}</td>{row.map((v, j) => <td key={j} className={/^(decimal|float|double|numeric|real)/i.test(preview.columns[j]?.sqlType ?? '') ? 'numeric' : ''} title={v == null ? 'NULL' : String(v)}>{v == null ? <span style={{ color: 'var(--kw-muted)' }}>NULL</span> : String(v)}</td>)}</tr>)}</tbody></table></div><div className="kw-tablebottom"><span>显示 {preview.rows.length} 行 / 共 {dataset.rowCount.toLocaleString()} 行</span><span>保持原始数据值，未做精度转换</span></div></div> : <div className="kw-empty">{error ? '数据预览暂不可用' : '暂无数据行'}</div>}
+          {preview && preview.rows.length > 0 ? <div className="kw-tablebox"><div className="kw-table-scroll" style={{ maxHeight: 520 }}><table className="kw-table kw-preview"><thead><tr><th className="rownum">#</th>{preview.columns.map(c => <th key={c.name} title={`${c.description || '暂无字段说明'} · ${c.sqlType}`}>{c.originalName || c.name}{c.originalName && c.originalName !== c.name && <small>{c.name}</small>}</th>)}</tr></thead><tbody>{preview.rows.map((row, i) => <tr key={i}><td className="rownum">{i + 1}</td>{row.map((v, j) => <td key={j} className={/^(decimal|float|double|numeric|real)/i.test(preview.columns[j]?.sqlType ?? '') ? 'numeric' : ''} title={v == null ? 'NULL' : String(v)}>{v == null ? <span style={{ color: 'var(--kw-muted)' }}>NULL</span> : String(v)}</td>)}</tr>)}</tbody></table></div><div className="kw-tablebottom"><span>显示 {preview.rows.length} 行 / {dataset.rowCount == null ? '总行数未统计' : '共 ' + dataset.rowCount.toLocaleString() + ' 行'}</span><span>保持原始数据值，未做精度转换</span></div></div> : <div className="kw-empty">{error ? '数据预览暂不可用' : '暂无数据行'}</div>}
         </>}
         {!loading && dataset && tab === 'fields' && <>
           <div className="kw-toolbar"><span className="kw-count">字段含义与类型集中管理，不占用数据预览表头。</span><span className="kw-spacer" /><button className="da-btn da-btn-sm" disabled={busy} onClick={() => setModalOpen(true)}><Icon name="edit" size="sm" />编辑字段说明</button></div>
           <div className="kw-tablebox"><div className="kw-table-scroll"><table className="kw-table"><thead><tr><th>字段名称</th><th>原字段名称</th><th>数据类型</th><th>业务说明</th></tr></thead><tbody>{dataset.columns.map(c => <tr key={c.name}><td><code className="kw-code">{c.name}</code></td><td>{c.originalName || '—'}</td><td><span className="kw-type">{c.sqlType}</span></td><td style={{ whiteSpace: 'normal', minWidth: 240 }}>{c.description || '暂无说明'}</td></tr>)}</tbody></table></div></div>
         </>}
-        {!loading && dataset && tab === 'technical' && <div className="kw-technical"><div><span>所属知识库</span><span>{groupName}</span></div><div><span>来源类型</span><span>{originLabel}</span></div><div><span>来源文件 / 表</span><span>{dataset.sourceFileName || '—'}</span></div><div><span>物理库表</span><code className="kw-code">{[dataset.schemaName, dataset.tableName].filter(Boolean).join('.')}</code></div><div><span>记录 / 字段</span><span>{dataset.rowCount.toLocaleString()} 行 / {dataset.columns.length} 个字段</span></div><div><span>版本</span><span>v{dataset.currentVersion ?? 1}</span></div></div>}
+        {!loading && dataset && tab === 'technical' && <div className="kw-technical"><div><span>所属知识库</span><span>{groupName}</span></div><div><span>来源类型</span><span>{originLabel}</span></div><div><span>来源文件 / 表</span><span>{dataset.sourceFileName || '—'}</span></div><div><span>物理库表</span><code className="kw-code">{[dataset.schemaName, dataset.tableName].filter(Boolean).join('.')}</code></div><div><span>记录 / 字段</span><span>{dataset.rowCount == null ? '总行数未统计' : dataset.rowCount.toLocaleString() + ' 行'} / {dataset.columns.length} 个字段</span></div><div><span>版本</span><span>v{dataset.currentVersion ?? 1}</span></div></div>}
       </div></div>
       {modalOpen && dataset && <FieldEditModal columns={dataset.columns} edits={edits} typeEdits={typeEdits} onChange={handleFieldChange} onSave={handleSave} onClose={() => { if (!busy) setModalOpen(false); }} busy={busy} />}
       {descriptionOpen && dataset && <div style={overlayStyle} onClick={() => { if (!busy) setDescriptionOpen(false); }}>

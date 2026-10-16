@@ -152,7 +152,8 @@ public class DatasetImportService {
                 listener.getColumns(),
                 listener.getTotalRows(),
                 listener.getTableDescription(),
-                tableName);
+                tableName,
+                listener.sampleSummary());
     }
 
     public void cleanupFailedImport(String groupId, String tableName) {
@@ -454,6 +455,31 @@ public class DatasetImportService {
         }
 
         // Accessors for the result
+        DatasetSampling.Summary sampleSummary() {
+            List<DatasetSampling.ColumnSample> samples = new ArrayList<>();
+            for (ColumnSchema column : getColumns()) {
+                var values = sampleSets.getOrDefault(column.originalName(), Set.of());
+                samples.add(
+                        new DatasetSampling.ColumnSample(
+                                column.name(),
+                                values.stream()
+                                        .map(v -> v.length() > 256 ? v.substring(0, 256) : v)
+                                        .toList(),
+                                -1,
+                                -1,
+                                true,
+                                false));
+            }
+            return new DatasetSampling.Summary(
+                    1,
+                    "SUCCESS",
+                    java.time.Instant.now().toString(),
+                    (int) Math.min(totalRows, Integer.MAX_VALUE),
+                    0,
+                    "文件流式导入期间收集每列最多10个非空样例；NULL数和基数未统计；非完整枚举",
+                    samples);
+        }
+
         List<String> getOriginalHeaders() {
             return originalHeaders != null ? originalHeaders : List.of();
         }
@@ -480,7 +506,16 @@ public class DatasetImportService {
             List<ColumnSchema> columns,
             long totalRows,
             String tableDescription,
-            String tableName) {}
+            String tableName,
+            DatasetSampling.Summary sampling) {
+        public ImportResult(
+                List<ColumnSchema> columns,
+                long totalRows,
+                String tableDescription,
+                String tableName) {
+            this(columns, totalRows, tableDescription, tableName, null);
+        }
+    }
 
     @org.springframework.beans.factory.annotation.Autowired
     public DatasetImportService(

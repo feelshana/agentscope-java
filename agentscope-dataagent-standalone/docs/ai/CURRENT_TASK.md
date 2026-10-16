@@ -43,6 +43,17 @@
 - 起点既有 shared/.seed-manifest.json、3份data-agent技能和本地配置/数据保持；核对期间根 .gitignore 出现另外新增规则，已保留，不归为本轮成果。没有改用户运行配置、没有重启用户服务；代码已修复且验证，服务尚未加载新代码。
 - 下一步：向用户报告遗漏，等待其与同事处理；未经新授权不补合。用户自行加载本轮修复后再验收实际业务建模/问数。真实供应商LLM准确率、生产库与多用户性能仍未验收。
 
+## 最新检查点：2026-10-16 10:07 +08:00｜有界采样与 Wren 复用完成
+
+- 用户确认先写 ADR/spec 再实施；ADR0080/spec068 已落盘。分支 design/wren-official-capability-boundary，HEAD 93ceaee5；原有暂存 .gitignore 和上层未跟踪文件未动。本轮代码、文档与前端制品尚未提交。
+- 外部关联改为 DatasetSampling 每表一次 LIMIT 1000，30秒语句超时；内存列去重、最多20个示例、值最多256字符、二进制跳过，不再 countRows/逐列DISTINCT。失败记录状态并继续关联结构；上传沿用导入期间每列最多10个样例，新增持久摘要，不追加数据库探查。
+- DatasetEntity 新增 sample_summary_json LONGTEXT 可空列；DatasetVO sampling、可空 rowCount，所有外部表（含历史）总行数返回null，UI显示未统计及采样状态。MANAGE手动刷新入口 POST /api/datasets/{id}/sample-refresh，数据集悲观锁前后及采样后复核权限；失败保留旧摘要，成功标记DIRTY。DDL validate部署需先用 docs/migrations/0080-dataset-sampling-mysql.sql 补列，默认update自动添加。
+- DatasetSampleDocuments 生成 raw/data-samples.md / knowledge/rules/data-sampling.md。MdlSeeder发布前同步；WrenProjectAccess在已授权工作区锁内同步并再次鉴权。平台派生文件写保护，删除数据集后重建资料去掉旧摘要；原生官方skills和编译MDL未修改。
+- 建模系统上下文每次构造时含通用约束和最多6000字符摘要，不以首次标记牺牲恢复会话；问数只注入通用约束，通过官方已发布rules读取最多24000字符样本摘要。列描述直接保留3个观察样例；不把有限样本伪装为完整枚举，不自动生成已确认[enum]。必要精确业务聚合保留，提示不是SQL成本硬限制。
+- 本轮最终实测：后端621项，0失败/错误，18条件跳过（target/sampling-final-tests.log）；真实官方CLI/MCP两项0跳过（target/sampling-official-wren.log），包含context instructions/get_instructions新规则可见断言；前端npm build、Spotless、git diff --check、package均通过（target/sampling-frontend.log、sampling-format.log、sampling-package.log）。初次补充样例编译泛型不匹配已修正后全量重跑通过。
+- 浏览器模拟API三场景通过：未知总行数、刷新成功、刷新失败保留样本，无JS异常（target/sampling-browser/report.json）。夹具首次缺分页inbox响应导致外壳报错，修正夹具后通过；不涉及业务页面错误。脚本 docs/fixtures/platform-integration/sampling_browser.py。
+- 中英文README、ARCHITECTURE、迁移脚本和验收说明已同步。未重启用户服务、未执行真实大表压测/真实LLM行为验收，也未执行迁移脚本；真实模型重复探查下降仍待上线观察。部署新JAR/前端前确认平台库补列；旧外部表由管理者手动刷新，发布后用于问数。此前平台集成的Docker取消/多用户负载验收继续保留待续。
+
 ## 最新检查点：2026-10-15 20:01 +08:00｜10 月 9 日起来源覆盖与文档核对
 
 - 用户要求检查来源分支 10 月 9 日以来的提交，并按当前代码完善 README、架构和 Agent 文档。本轮仅审计/文档与审计辅助脚本，不修改业务实现；保留上一阶段全部平台/框架未提交改动，HEAD 仍为 bc11f3a5。

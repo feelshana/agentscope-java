@@ -146,7 +146,7 @@ export default function SchemaTreeView({ datasets }: { datasets: Dataset[] }) {
                       </span>
                       <span style={S.tableName}>📄 {d.name}</span>
                       <span style={S.tableMeta}>
-                        {d.rowCount.toLocaleString()} 行 · {d.columns.length} 列
+                        {d.rowCount == null ? '总行数未统计' : d.rowCount.toLocaleString() + ' 行'} · {d.columns.length} 列
                       </span>
                     </div>
                   </td>

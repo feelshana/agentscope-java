@@ -238,6 +238,8 @@ public class DatasetService implements DatasetContextProvider {
             entity.setDescription(finalDesc);
             entity.setColumnSchemaJson(writeJson(importResult.columns()));
             entity.setRowCount(importResult.totalRows());
+            if (importResult.sampling() != null)
+                entity.setSampleSummaryJson(DatasetSampling.encode(importResult.sampling()));
             entity.setSourceFileName(fileName);
             entity.setCreatedAt(Instant.now());
             entity.setUpdatedAt(Instant.now());
@@ -325,7 +327,8 @@ public class DatasetService implements DatasetContextProvider {
             e.setTableName(metadata.table());
             e.setDescription(metadata.description());
             e.setColumnSchemaJson(writeJson(metadata.columns()));
-            e.setRowCount(metadata.rowCount());
+            e.setRowCount(0);
+            e.setSampleSummaryJson(DatasetSampling.encode(metadata.sampling()));
             e.setSourceFileName(ds.getName() + "/" + schema + "." + metadata.table());
             e.setCreatedAt(Instant.now());
             e.setUpdatedAt(Instant.now());
@@ -390,18 +393,14 @@ public class DatasetService implements DatasetContextProvider {
             List<String> columnNames = new ArrayList<>();
             List<String> columnTypes = new ArrayList<>();
             Map<String, String> jdbcComments = new LinkedHashMap<>();
-            Map<String, List<String>> columnSamples = new LinkedHashMap<>();
+            DatasetSampling.Summary sample =
+                    DatasetSampling.read(introspector, source, schema, table, columns, sampling);
+            Map<String, List<String>> columnSamples = DatasetSampling.examples(sample);
             for (DataSourceIntrospector.ColumnInfo column : columns) {
                 columnNames.add(column.name());
                 columnTypes.add(column.type());
                 if (column.description() != null && !column.description().isBlank()) {
                     jdbcComments.put(column.name(), column.description());
-                }
-                if (sampling) {
-                    List<String> samples = sampleValues(source, schema, table, column.name());
-                    if (samples != null) {
-                        columnSamples.put(column.name(), samples);
-                    }
                 }
             }
             String tableComment = introspector.getTableComment(source, schema, table);
@@ -419,7 +418,19 @@ public class DatasetService implements DatasetContextProvider {
                                 columnNames.get(i),
                                 columnTypes.get(i),
                                 true,
-                                schemaResult.columns().get(i).description()));
+                                schemaResult.columns().get(i).description()
+                                        + (columnSamples
+                                                        .getOrDefault(columnNames.get(i), List.of())
+                                                        .isEmpty()
+                                                ? ""
+                                                : "；采样观察值："
+                                                        + writeJson(
+                                                                columnSamples
+                                                                        .get(columnNames.get(i))
+                                                                        .stream()
+                                                                        .limit(3)
+                                                                        .toList())
+                                                        + "（非完整枚举，业务含义须确认；刷新后的样本以采样摘要为准）")));
             }
             String tableDescription = schemaResult.tableDescription();
             if (tableDescription == null || tableDescription.isBlank()) {
@@ -428,16 +439,16 @@ public class DatasetService implements DatasetContextProvider {
             }
             prepared.add(
                     new AssociatedTableMetadata(
-                            table,
-                            List.copyOf(schemaColumns),
-                            tableDescription,
-                            introspector.countRows(source, schema, table)));
+                            table, List.copyOf(schemaColumns), tableDescription, sample));
         }
         return List.copyOf(prepared);
     }
 
     private record AssociatedTableMetadata(
-            String table, List<ColumnSchema> columns, String description, long rowCount) {}
+            String table,
+            List<ColumnSchema> columns,
+            String description,
+            DatasetSampling.Summary sampling) {}
 
     private void validateUploadSourceCombination(String groupId) {
         boolean hasExternal =
@@ -460,43 +471,6 @@ public class DatasetService implements DatasetContextProvider {
             if (!source.getId().equals(existing.getExternalDataSourceId())) {
                 throw new DatasetException("一个知识库只能关联同一个外部数据源的表");
             }
-        }
-    }
-
-    /** Distinct values for a column when cardinality is low (<=20); max 3 returned. null if high cardinality. */
-    private List<String> sampleValues(
-            ExternalDataSourceEntity ds, String schema, String table, String column) {
-        validateIdentifier(schema, "schema");
-        validateIdentifier(table, "table");
-        validateIdentifier(column, "column");
-        String q = "postgresql".equalsIgnoreCase(ds.getKind()) ? "\"" : "`";
-        String sql =
-                "SELECT DISTINCT "
-                        + q
-                        + column
-                        + q
-                        + " FROM "
-                        + q
-                        + schema
-                        + q
-                        + "."
-                        + q
-                        + table
-                        + q
-                        + " LIMIT 21";
-        try (java.sql.Connection c = introspector.open(ds);
-                java.sql.Statement st = c.createStatement();
-                java.sql.ResultSet rs = st.executeQuery(sql)) {
-            List<String> vals = new ArrayList<>();
-            while (rs.next()) {
-                vals.add(rs.getString(1));
-            }
-            if (vals.size() > 20) {
-                return null;
-            }
-            return vals.subList(0, Math.min(vals.size(), 3));
-        } catch (Exception e) {
-            return null;
         }
     }
 
@@ -589,6 +563,41 @@ public class DatasetService implements DatasetContextProvider {
     public record Preview(List<ColumnSchema> columns, List<List<String>> rows) {}
 
     public record ColumnDescUpdate(String name, String description) {}
+
+    @Transactional
+    public DatasetEntity refreshSample(String ownerId, String datasetId) {
+        DatasetEntity entity = get(ownerId, datasetId);
+        entity =
+                repository
+                        .lockById(datasetId)
+                        .orElseThrow(() -> new DatasetException("数据集不存在", 404));
+        access.requireManage(ownerId, entity.getGroupId());
+        if (!"datasource".equals(entity.getOrigin())) throw new DatasetException("仅外部表支持刷新样本");
+        var source =
+                externalSources
+                        .findById(entity.getExternalDataSourceId())
+                        .orElseThrow(() -> new DatasetException("数据源不存在", 404));
+        if (!source.isSampling()) throw new DatasetException("数据源已关闭采样，请先启用采样");
+        var columns =
+                introspector.listColumns(source, entity.getSchemaName(), entity.getTableName());
+        if (columns.isEmpty()) throw new DatasetException("外部表不存在或没有可读取字段");
+        var summary =
+                DatasetSampling.read(
+                        introspector,
+                        source,
+                        entity.getSchemaName(),
+                        entity.getTableName(),
+                        columns,
+                        true);
+        if (!"SUCCESS".equals(summary.status()))
+            throw new DatasetException("样本采集失败，已保留上次成功摘要", 503);
+        access.requireManage(ownerId, entity.getGroupId());
+        entity.setSampleSummaryJson(DatasetSampling.encode(summary));
+        entity.setUpdatedAt(Instant.now());
+        repository.save(entity);
+        markMdlDirty(entity.getGroupId());
+        return entity;
+    }
 
     /** Read-only sample of the dataset's physical table for the detail page. */
     public Preview preview(String ownerId, String datasetId, int limit) {
@@ -692,7 +701,7 @@ public class DatasetService implements DatasetContextProvider {
         return entity;
     }
 
-    private String writeJson(List<ColumnSchema> columns) {
+    private String writeJson(List<?> columns) {
         try {
             return mapper.writeValueAsString(columns);
         } catch (Exception e) {

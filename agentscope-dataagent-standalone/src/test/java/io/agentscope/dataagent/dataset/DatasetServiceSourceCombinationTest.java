@@ -203,7 +203,6 @@ class DatasetServiceSourceCombinationTest {
                                         "order_id", "BIGINT", "订单ID")));
         when(introspector.listColumns(source, "retail", "customers"))
                 .thenThrow(new DatasetException("无法读取客户表"));
-        when(introspector.countRows(source, "retail", "orders")).thenReturn(3L);
 
         assertThatThrownBy(
                         () ->
@@ -229,8 +228,6 @@ class DatasetServiceSourceCombinationTest {
                                 .normalize(source.getKind(), source.getJdbcUrl()));
         when(introspector.listColumns(any(), any(), any()))
                 .thenReturn(List.of(new DataSourceIntrospector.ColumnInfo("id", "BIGINT", "主键")));
-        when(introspector.countRows(source, "retail", "orders")).thenReturn(3L);
-        when(introspector.countRows(source, "retail", "customers")).thenReturn(2L);
 
         List<DatasetEntity> created =
                 service.associateTables(
@@ -245,6 +242,59 @@ class DatasetServiceSourceCombinationTest {
                 .extracting(DatasetEntity::getName)
                 .containsExactly("orders", "customers");
         assertThat(registry.list()).hasSize(2);
+        verify(introspector, never()).countRows(any(), any(), any());
+        assertThat(created)
+                .allSatisfy(
+                        d ->
+                                assertThat(
+                                                DatasetSampling.decode(d.getSampleSummaryJson())
+                                                        .status())
+                                        .isEqualTo("DISABLED"));
         verify(repository, org.mockito.Mockito.times(2)).save(any(DatasetEntity.class));
+    }
+
+    @Test
+    void refreshChecksManagementAgainAfterWaitingForLock() {
+        var dataset = new DatasetEntity();
+        dataset.setId("dataset-1");
+        dataset.setGroupId("group-1");
+        dataset.setOrigin("datasource");
+        when(repository.findById("dataset-1")).thenReturn(Optional.of(dataset));
+        when(repository.lockById("dataset-1")).thenReturn(Optional.of(dataset));
+        var access =
+                (KnowledgeBaseAccessService)
+                        org.springframework.test.util.ReflectionTestUtils.getField(
+                                service, "access");
+        when(access.requireManage("alice", "group-1"))
+                .thenReturn(new DatasetGroupEntity("group-1", "alice", "test", null))
+                .thenThrow(new DatasetException("权限已撤销", 403));
+        assertThatThrownBy(() -> service.refreshSample("alice", "dataset-1"))
+                .isInstanceOf(DatasetException.class)
+                .hasMessageContaining("权限已撤销");
+        verify(introspector, never()).listColumns(any(), any(), any());
+    }
+
+    @Test
+    void refreshFailurePreservesSuccessfulSample() throws Exception {
+        var dataset = new DatasetEntity();
+        dataset.setId("dataset-1");
+        dataset.setGroupId("group-1");
+        dataset.setOrigin("datasource");
+        dataset.setSchemaName("retail");
+        dataset.setTableName("orders");
+        dataset.setExternalDataSourceId("source-1");
+        String previous = DatasetSampling.encode(DatasetSampling.empty("SUCCESS"));
+        dataset.setSampleSummaryJson(previous);
+        source.setSampling(true);
+        when(repository.findById("dataset-1")).thenReturn(Optional.of(dataset));
+        when(repository.lockById("dataset-1")).thenReturn(Optional.of(dataset));
+        when(introspector.listColumns(any(), any(), any()))
+                .thenReturn(List.of(new DataSourceIntrospector.ColumnInfo("id", "BIGINT", "")));
+        when(introspector.open(source)).thenThrow(new java.sql.SQLException("timeout"));
+        assertThatThrownBy(() -> service.refreshSample("alice", "dataset-1"))
+                .isInstanceOf(DatasetException.class)
+                .hasMessageContaining("保留上次");
+        assertThat(dataset.getSampleSummaryJson()).isEqualTo(previous);
+        verify(repository, never()).save(any());
     }
 }

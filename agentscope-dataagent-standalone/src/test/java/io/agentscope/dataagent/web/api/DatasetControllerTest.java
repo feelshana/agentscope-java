@@ -45,6 +45,16 @@ import reactor.test.StepVerifier;
 /** Locks controller-level baseline publication after each dataset mutation workflow. */
 class DatasetControllerTest {
 
+    @Test
+    void externalRowCountIsUnknownWhileUploadCountRemainsExact() {
+        var entity = new DatasetEntity();
+        entity.setRowCount(123456);
+        entity.setOrigin("datasource");
+        assertThat(DatasetController.toVOStatic(entity, List.of()).rowCount()).isNull();
+        entity.setOrigin("upload");
+        assertThat(DatasetController.toVOStatic(entity, List.of()).rowCount()).isEqualTo(123456L);
+    }
+
     private DatasetService datasetService;
     private BaselineMdlService baselineMdlService;
     private DatasetController controller;
