@@ -13,7 +13,13 @@ spring:
 
 dataagent:
   jwt:
+    ttl-seconds: 1800
     secret: ${DATAAGENT_JWT_SECRET}
+  auth:
+    password-login-enabled: false
+    bi:
+      enabled: true
+      shared-key: ${DATAAGENT_BI_SHARED_KEY}
   seed-demo-users: false
   cors:
     allowed-origins: ${DATAAGENT_CORS_ALLOWED_ORIGINS}

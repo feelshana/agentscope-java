@@ -207,6 +207,9 @@ java -jar target/agentscope-dataagent-*-exec.jar
 | 配置项 | 默认 | 说明 |
 |---|---|---|
 | `dataagent.jwt.secret` | 部署配置 | HS256 密钥至少 32 UTF-8 字节；所有 profile 都拒绝空值、开发占位值及短密钥。 |
+| `dataagent.jwt.ttl-seconds` | `1800` | JWT固定有效期，刷新不续期。 |
+| `dataagent.auth.password-login-enabled` | `true` | 本地密码登录；prod强制关闭接口及表单。 |
+| `dataagent.auth.bi.enabled` / `bi.shared-key` | `false` / 空 | prod强制启用BI，需32字节Base64共享密钥，与JWT密钥分开。前端持钥可伪造用户名，包括管理员。 |
 | `dataagent.workspace` | 为空时使用 JVM 工作目录 | 运行状态目录，与 `~/.agentscope/dataagent/agentscope.json` 分开；部署显式配置持久目录。 |
 | `dataagent.workspace-store.local.max-file-size-mb` | `10` | `RemoteFilesystem` 本地后端的单文件上限。 |
 | `dataagent.openai.api-key` | 部署配置 | OpenAI 兼容 API key（主模型）。环境变量：`DATAAGENT_OPENAI_API_KEY` 或 `OPENAI_API_KEY`。设置后优先于 DashScope。 |
@@ -250,6 +253,8 @@ java -jar target/agentscope-dataagent-*-exec.jar
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | `POST` | `/api/auth/login` | 登录，返回 JWT |
+| `GET` | `/api/auth/options` | 非秘密入口配置，控制本地/生产登录展示 |
+| `POST` | `/api/auth/bi-login` | 加密ticket换取JWT，未知用户名自动创建普通用户 |
 | `POST` | `/api/webhook/{channelId}/inbound` | 通用 webhook 入站（必须带 HMAC） |
 | `GET` | `/api/webhook/{channelId}/outbound/{inboundId}` | `poll` 模式下长轮询取回复 |
 

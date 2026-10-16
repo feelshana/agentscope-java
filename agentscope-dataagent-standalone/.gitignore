@@ -20,3 +20,7 @@ logs/
 
 # Version the project guide even when the parent repository ignores AGENTS.md.
 !/AGENTS.md
+
+# Private deployment profiles contain credentials; Maven also excludes them.
+/src/main/resources/application-dev.yml
+/src/main/resources/application-prod.yml

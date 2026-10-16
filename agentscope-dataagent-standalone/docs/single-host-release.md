@@ -1,5 +1,11 @@
 # Linux 单机发布
 
+## BI 同域免登部署（ADR0081）
+
+完整协议、可直接交付BI的JavaScript、生产配置与Nginx示例见[BI对接](integration/bi-login.md)，迁移见[0081 SQL](migrations/0081-bi-login-mysql.sql)。生产profile强制禁用密码接口/表单、启用BI；配置独立32字节Base64免登密钥，JWT默认1800秒，并关闭SQL演示初始化。前端共享密钥可被提取并用于伪造任意用户名，限制已获用户接受，不能当作可信SSO。
+
+若部署到/dataagent/，构建前设置DATAAGENT_BASE_PATH=/dataagent/（Windows PowerShell：`$env:DATAAGENT_BASE_PATH='/dataagent/'`），再正常Maven打包。Nginx剥离前缀、关闭SSE缓冲并只允许同源iframe。私有dev/prod配置已Git忽略，既有凭据仍外置，不提交、不打包；BI模块通过参数接收密钥，仓库不保存正式值。此配置不代表已完成真实BI/生产代理验收。
+
 本包运行当前分支的 Boot exec JAR 与官方 Wren。版本目录为 `dataagent-<version>/`，包含 `bin/`、`conf/`、`lib/` 与 `requirements-wren.txt`；相邻的 `data/` 保存状态，不随版本目录替换。适用于单机单实例，不提供分布式锁或全局预算。
 
 ## 构建

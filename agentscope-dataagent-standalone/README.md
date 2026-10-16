@@ -286,6 +286,9 @@ to false; existing users and grants are retained.
 | Property | Default | Description |
 |---|---|---|
 | `dataagent.jwt.secret` | deployment configuration | HS256 signing key: at least 32 UTF-8 bytes. Empty, development-placeholder and short keys are rejected in every profile. |
+| `dataagent.jwt.ttl-seconds` | `1800` | Fixed JWT lifetime; refreshing does not renew it. |
+| `dataagent.auth.password-login-enabled` | `true` | Password entry for development; always disabled in prod. |
+| `dataagent.auth.bi.enabled` / `bi.shared-key` | `false` / empty | BI is always enabled in prod; supply a Base64-encoded 32-byte key, separate from the JWT key. A browser key holder can impersonate any username, including admins. |
 | `dataagent.seed-demo-users` | `false` | Opt in to Java administrator seeding for local development; does not disable separately configured SQL initialization. |
 | `dataagent.cors.allowed-origins` | `*` | Allowed browser origin patterns; configure explicit origins for deployment. |
 | `dataagent.workspace` | JVM working directory when blank | Runtime workspace, separate from `~/.agentscope/dataagent/agentscope.json`. Set an explicit durable directory in deployments. |
@@ -337,6 +340,8 @@ continue to use the separately configured dataset MySQL database.
 | Method | Path | Description |
 |---|---|---|
 | `POST` | `/api/auth/login` | Login, returns JWT |
+| `GET` | `/api/auth/options` | Public entry policy without secrets |
+| `POST` | `/api/auth/bi-login` | Exchange encrypted ticket; create unknown usernames as ordinary users |
 | `POST` | `/api/webhook/{channelId}/inbound` | Generic webhook ingress (HMAC-required) |
 | `GET` | `/api/webhook/{channelId}/outbound/{inboundId}` | Long-poll for the reply in `poll` mode |
 

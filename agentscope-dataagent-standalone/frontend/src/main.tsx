@@ -5,6 +5,10 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import './global.css';
 
 import LoginPage from './pages/LoginPage';
+import BiEntryPage from './pages/BiEntryPage';
+import AuthBootstrap from './components/AuthBootstrap';
+import { getToken, isAdmin } from './api/auth';
+import { APP_BASE } from './api/paths';
 import AppShell from './components/AppShell';
 import SessionGate from './components/SessionGate';
 import EditTierGate from './components/EditTierGate';
@@ -43,22 +47,6 @@ import AdminAgentsPage from './pages/admin/AgentsPage';
 import AdminAgentDetailPage from './pages/admin/AgentDetailPage';
 import AdminChannelDetailPage from './pages/admin/ChannelDetailPage';
 
-function getToken(): string | null {
-  return localStorage.getItem('claw_token');
-}
-
-function decodeJwt(token: string): Record<string, unknown> {
-  try { return JSON.parse(atob(token.split('.')[1])); } catch { return {}; }
-}
-
-function isAdmin(): boolean {
-  const token = getToken();
-  if (!token) return false;
-  const p = decodeJwt(token);
-  const roles = Array.isArray(p.roles) ? (p.roles as string[]) : [];
-  return roles.some((r: string) => r.toLowerCase() === 'admin');
-}
-
 function PrivateRoute({ children }: { children: React.ReactElement }) {
   return <SessionGate>{children}</SessionGate>;
 }
@@ -71,9 +59,10 @@ function AdminRoute({ children }: { children: React.ReactElement }) {
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <BrowserRouter>
+    <AuthBootstrap><BrowserRouter basename={APP_BASE || '/'}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/bi-entry" element={<BiEntryPage />} />
 
         <Route element={<PrivateRoute><AppShell /></PrivateRoute>}>
           <Route index element={<Navigate to="/chat" replace />} />
@@ -129,6 +118,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 
         <Route path="*" element={<Navigate to="/chat" replace />} />
       </Routes>
-    </BrowserRouter>
+    </BrowserRouter></AuthBootstrap>
   </React.StrictMode>,
 );

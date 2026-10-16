@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { clearToken, getToken } from '../../api/auth';
+import { clearToken, getEntryOptions, getToken } from '../../api/auth';
 import Icon, { IconName } from '../Icon';
 
 function decodeJwt(token: string): Record<string, unknown> {
@@ -153,7 +153,7 @@ function UserMenu({ username, onLogout, onSwitchToChat }: {
           >
             <span style={{ fontSize: '0.95rem' }}>💬</span>Switch to chat
           </button>
-          <button
+          {getEntryOptions().passwordLoginEnabled && <button
             onClick={() => { onLogout(); setOpen(false); }}
             style={{
               display: 'flex', alignItems: 'center', gap: 10, width: '100%',
@@ -164,7 +164,7 @@ function UserMenu({ username, onLogout, onSwitchToChat }: {
             }}
           >
             <span style={{ fontSize: '0.95rem' }}>↩</span>Sign out
-          </button>
+          </button>}
         </div>
       )}
     </div>

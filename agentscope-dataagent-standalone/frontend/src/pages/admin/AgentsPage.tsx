@@ -1,4 +1,4 @@
-import { apiFetch } from '../../api/auth';
+import { apiFetch, getToken } from '../../api/auth';
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import AdminPageLayout from '../../components/admin/AdminPageLayout';
@@ -11,7 +11,7 @@ interface RegisteredAgentView {
 }
 
 function authH(): Record<string, string> {
-  return { Authorization: `Bearer ${localStorage.getItem('claw_token') ?? ''}` };
+  return { Authorization: `Bearer ${getToken() ?? ''}` };
 }
 
 async function listAgents(): Promise<RegisteredAgentView[]> {

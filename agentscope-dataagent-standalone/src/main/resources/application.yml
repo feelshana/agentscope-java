@@ -89,7 +89,14 @@ dataagent:
 
   # JWT signing secret (>= 32 chars). MUST be overridden in production.
   jwt:
+    ttl-seconds: ${DATAAGENT_JWT_TTL_SECONDS:1800}
     secret: ${DATAAGENT_JWT_SECRET:dataagent-dev-secret-for-local-only-do-not-use-in-prod-2026}
+
+  auth:
+    password-login-enabled: ${DATAAGENT_PASSWORD_LOGIN_ENABLED:true}
+    bi:
+      enabled: ${DATAAGENT_BI_LOGIN_ENABLED:false}
+      shared-key: ${DATAAGENT_BI_SHARED_KEY:}
 
   # Working directory. If blank, defaults to the JVM's current working
   # directory. .agentscope/agentscope.json is read from (or auto-created in)

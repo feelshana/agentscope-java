@@ -1,5 +1,9 @@
 # 项目长期背景
 
+## BI免登补充（2026-10-17，ADR0081/spec069）
+
+用户确认BI前端直接持共享密钥加密用户名，不接BI后端/IM SDK；可提取密钥并伪造管理员用户名的限制已明确接受，不能宣称可信SSO。AES-GCM ticket POST换默认固定1800秒JWT、刷新不续期、关页不撤销；唯一消费记录使用元数据库。未知用户自动建普通用户，旧userId/roles保留、管理员SQL维护。prod强制禁密码及Java演示种子并启用BI，SQL种子在prod配置关闭；开发保留密码。前端sessionStorage、options先行、同源iframe握手和新入口整页重载；DATAAGENT_BASE_PATH与代理同配。实现/本地验证完成，未提交部署，真实BI联调仍待做，见CURRENT_TASK和docs/integration/bi-login.md。
+
 ## 单机发布补充（2026-10-15，ADR0080）
 
 用户已授权实施来源核对建议：当前Boot exec JAR和默认前端自动构建保留，额外生成tar.gz/conf/bin/lib；私有dev/prod配置不进入资源/JAR/包，目标环境通过外置配置加载，公共默认值与h2 profile保留。Linux启停脚本检查Wren依赖、进程身份和HTTP就绪，跨版本持久状态位于父目录data/。五份来源框架回归测试已补回。详见docs/single-host-release.md与ADR0080；本次覆盖了下方旧记录“打包保留当前、不采用来源发布布局”的选择。工作区实现未提交、用户服务未重载，验证见CURRENT_TASK。

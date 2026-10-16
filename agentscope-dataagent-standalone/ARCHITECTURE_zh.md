@@ -745,9 +745,10 @@ manifest 尚不存在时（首次升级到该策略）执行一次性「采纳�
 
 `KnowledgeBaseOperations` 跟踪运行操作、导入表及 CLI 进程，删除时停止相关操作；`KnowledgeBaseDeletionService` 持久化删除日志并支持重试。ADR 0078 在此基础上增加上传准入和 ChatCapacity，而非来源截至 32c6d292 时的取消/忙提示。`WrenInstanceRegistry#withGate` 将工具发现和查询统一为每库公平有时限门锁，保留排队后授权检查；信号量限制 MCP 实例，关闭失败保留名额并重试清理。此预算不含所有 CLI 短进程。
 
-- **认证**：`SecurityConfig`（WebFlux Security）：`POST /api/auth/login`、actuator health/info、`/api/webhook/**` 公开；
+- **认证（ADR0081/spec069）**：`AuthSettings`在prod强制关闭密码登录、启用BI免登，Java演示种子关闭；SQL演示初始化在prod配置设never。`AuthController#biLogin`接受前端共享密钥AES-GCM ticket，`BiTicketCodec#decode`校验协议及60秒/未来30秒时间窗；`BiLoginService#login`按用户名复用或自动创建普通用户，通过JPA消费记录唯一插入防重放，用户创建与消费独立事务，失败须使用新ticket。前端持钥可伪造任意用户名（含管理员）的限制由用户明确接受，不能描述为可信BI身份验证。管理员仍按本地roles_csv；不接BI后端、不同步退出。
+- **公开入口**：`SecurityConfig`（WebFlux Security）：GET `/api/auth/options`、POST `/api/auth/bi-login`与`/api/auth/login`、actuator health/info、`/api/webhook/**`公开到控制器；关闭的入口由控制器拒绝，认证响应no-store、iframe限同源；
   其余 `/api/**` 需 JWT（`JwtAuthFilter` 校验 Bearer 或 `?token=` 查询参数，后者供 `<img src>` 使用）。CORS 放开（含 Vite dev 5173）。
-- **前端会话**：`SessionGate` 在受保护页面挂载前通过 `auth.me` 校验缓存令牌；`auth.apiFetch` 统一处理同源 API 的 401，只有请求使用的令牌仍为当前令牌时才清除登录状态，显示“登录状态已失效，请重新登录”。登录接口及外部资源不触发退出；403 和网络故障保留会话，首次校验网络失败提供重试。
+- **前端会话**：`AuthBootstrap`先获取入口配置，失败可重试且不显示密码框；`SessionGate`挂载业务页面前通过`auth.me`校验sessionStorage令牌，旧localStorage凭据不迁移。`auth.apiFetch`处理同源当前凭据401，403/网络故障不退出。JWT默认1800秒固定到期，刷新不续期、已有SSE不定时截断。生产失效页提示从BI重新进入，dev保留密码页。`BiEntryPage`仅在显式/bi-entry接受同源父窗口握手，校验JWT后整页重载，避免切换用户残留组件与模块缓存；凭据不进URL，关闭页面不撤销JWT。部署前缀由Vite BASE_URL统一至Router/API；见[BI对接](docs/integration/bi-login.md)。
 - **授权**：`web/share/AgentAclService` + `AgentAccessGuard`：每个 agent 按 Tier（RUN/EDIT/…）鉴权，
   Controller 入口统一 `guard.require(userId, agentId, Tier.X)`。
 - **agent 目录**：`web/catalog/AgentCatalogService` 合并全局与用户可见自定义定义，复用 Agent ACL；当前仍有创建/克隆兼容 API，详见 docs/agent-definition.md。主建模/问数的固定工具装配不自动套用于所有自定义 Agent。
@@ -816,6 +817,8 @@ spec 045 / ADR 0055：无已登记问题、无待确认原生 HITL 时，页面�
 > Standalone 构建使用根目录 mvn test / mvn package -DskipTests，前端在 frontend/ 运行 npm run build。requirements-wren.txt 固定 wrenai 0.15.0/core 0.8.0 及 memory-onnx；服务实际 CLI 环境必须安装相同依赖。多语言模型首次下载需要网络，可用官方缓存，不自研词项降级。
 
 ### 12.1 关键配置（`application.yml`，`dataagent.*` 前缀 / `DATAAGENT_*` 环境变量）
+
+认证新增`dataagent.jwt.ttl-seconds`（默认1800）、`dataagent.auth.password-login-enabled`（默认true，prod强制false）、`dataagent.auth.bi.enabled`（默认false，prod强制true）、`dataagent.auth.bi.shared-key`（启用时必填32字节Base64，与JWT密钥独立）。环境变量为DATAAGENT_JWT_TTL_SECONDS、DATAAGENT_PASSWORD_LOGIN_ENABLED、DATAAGENT_BI_LOGIN_ENABLED、DATAAGENT_BI_SHARED_KEY。私有dev/prod文件Git忽略且不进入发布包。同域/dataagent/构建使用DATAAGENT_BASE_PATH，配置反向代理剥离前缀、关闭流式缓冲。新增消费表及管理员SQL见docs/migrations/0081-bi-login-mysql.sql；ddl-auto=validate须先迁移。对接示例不携带正式密钥。
 
 平台增量带入 `dataagent.seed-demo-users`（默认 false，显式启用 Java 本地管理员初始化，不替代 SQL 初始化开关）和 `dataagent.cors.allowed-origins`（默认 `*`，部署时指定允许来源）。JWT 密钥拒绝空值、开发占位值及不足 32 UTF-8 字节的短密钥。本轮不覆盖现有 application.yml 或部署 profile。
 

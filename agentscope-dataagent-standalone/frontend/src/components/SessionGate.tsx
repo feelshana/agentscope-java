@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { AUTH_EXPIRED_EVENT, getToken, me } from '../api/auth';
+import { AUTH_EXPIRED_EVENT, getEntryOptions, getToken, me } from '../api/auth';
+import BiEntryPage from '../pages/BiEntryPage';
 
 /** Validate cached credentials before mounting protected pages or fetching their data. */
 export default function SessionGate({ children }: { children: React.ReactElement }) {
@@ -23,7 +24,9 @@ export default function SessionGate({ children }: { children: React.ReactElement
     } else expire();
     return () => { active = false; window.removeEventListener(AUTH_EXPIRED_EVENT, expire); };
   }, [attempt]);
-  if (state === 'expired') return <Navigate to="/login" replace state={{ sessionExpired: hadToken }} />;
+  if (state === 'expired') return getEntryOptions().passwordLoginEnabled
+    ? <Navigate to="/login" replace state={{ sessionExpired: hadToken }} />
+    : <BiEntryPage receive={false} />;
   if (state === 'ready') return children;
   return <div role="status" style={{ padding: 32 }}>
     {state === 'checking' ? '正在验证登录状态…' : '暂时无法验证登录状态，请检查服务连接后重试。'}

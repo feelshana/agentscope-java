@@ -1,5 +1,11 @@
 # 决策记录
 
+## 已接受并实施：ADR0081 BI前端免登（2026-10-17）
+
+- 用户要求本项目定义共享密钥加解密协议，由BI前端直接调用；不要求BI后端，接受前端密钥可提取及冒用任意用户名（含管理员）的限制。采用AES-256-GCM ticket、60秒时间窗/未来30秒容差、JPA唯一消费、固定30分钟JWT、同源iframe握手与sessionStorage。
+- 首次用户自动创建普通用户；旧userId/角色不重置，管理员仅本地SQL维护。prod禁密码及Java种子、启用BI，SQL种子通过prod配置关闭，dev密码保留；URL无凭据。不改变Agent/Wren及之前已记录P1。
+- 详见[ADR0081](../adr/0081-bi-frontend-shared-key-login.md)、[spec069](../specs/069-bi-frontend-login.md)及[BI对接](../integration/bi-login.md)。本地构建/641项回归通过（18条件跳过），不代表真实BI、MySQL迁移或生产Nginx联调通过。
+
 ## 已接受并实施：ADR 0080 有界采样与官方上下文复用（2026-10-16）
 
 - 用户确认外部关联只读1000行内存采样，不用COUNT/DISTINCT；官方技能保持原样，通过原生工程资料和系统上下文约束减少枚举补全探查。

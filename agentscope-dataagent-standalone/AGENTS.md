@@ -48,7 +48,7 @@
 ### 前端
 
 1. 函数组件 + TS 严格类型；新页面先看 `frontend/src/pages/` 同类页与 `components/` 复用件；禁止引入新 UI 组件库/图表库（图表统一 ECharts）。
-2. API 调用统一走 `frontend/src/api/*.ts` 的 `apiFetch`；同源 API 401 清理对应失效令牌并返回登录页，403/网络错误不退出。SSE 协议（含 `capacity`、`tool_call/tool_result/token/done/error`）改动必须前后端同步。
+2. API 调用统一走 `frontend/src/api/*.ts` 的 `apiFetch`，由统一入口适配部署前缀；同源 API 401 只清理当前被拒令牌，dev返回登录页、prod提示从BI重新进入，403/网络错误不退出。认证配置加载失败不展示密码框。SSE 协议（含 `capacity`、`tool_call/tool_result/token/done/error`）改动必须前后端同步。
 3. `done` 帧的 `sessionKey` 是 conversationId 而非存储层 sessionKey，前端不得混用（会话分裂教训，见 ChatController 注释）。
 
 ### 文档
@@ -76,6 +76,11 @@ cd frontend && npm run build
 Conventional Commits：`feat|fix|refactor|docs|test|chore|perf(<scope>): 摘要`，
 scope ∈ `web|runtime|tools|dataset|frontend|marketplace|docs`。
 正文写：动机（为什么改）→ 方案要点 → 影响面 → 已执行的验证命令。
+
+标题和正文使用中文，保留上述类型和 scope；标题简洁、末尾不加句号，建议不超过50字符。
+正文空行后用编号简述实现、影响和验证，建议每行不超过72字符；不同主题拆分提交。
+不兼容变更在页脚使用 `BREAKING CHANGE:` 说明迁移要求；仅关联实际存在的 Issue。
+用户指定参考：[提交信息规范文章](https://blog.csdn.net/baidu_38225647/article/details/163135257)。
 
 ## 当前运行边界（ADR 0069、0074、0077、0078）
 

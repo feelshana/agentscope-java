@@ -1,4 +1,4 @@
-import { apiFetch } from './auth';
+import { apiFetch, getToken } from './auth';
 const BASE = '';
 
 export interface UserView {
@@ -8,7 +8,7 @@ export interface UserView {
 }
 
 function authHeaders(): Record<string, string> {
-  const token = localStorage.getItem('claw_token');
+  const token = getToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
