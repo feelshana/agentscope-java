@@ -146,6 +146,7 @@ public class SchemaGenerationService {
         sb.append("要求：\n");
         sb.append("1. 英文字段名使用 snake_case 格式，简洁明了\n");
         sb.append("2. 字段描述用中文，简明扼要\n");
+        sb.append("样本值仅为有限观察值，不代表完整枚举；不能仅凭样本确认业务含义、唯一性、全表范围，不要生成 [enum] 标签。\n");
         if (jdbcComments != null && !jdbcComments.isEmpty()) {
             sb.append("3. 如果列有数据库注释，请在描述中融合该注释的信息，不要简单重复\n");
         } else {

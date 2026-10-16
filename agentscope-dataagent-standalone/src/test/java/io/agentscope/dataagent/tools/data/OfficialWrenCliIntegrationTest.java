@@ -70,6 +70,10 @@ class OfficialWrenCliIntegrationTest {
         var checks = new ModelingWorkflowStore(workspace, new MdlQuestionStore(workspace));
         var adapter = new OfficialWrenToolkit(access, cli, props, publication, checks);
         var p = access.resolve(context);
+        io.agentscope.dataagent.dataset.DatasetSampleDocuments.sync(p.root(), List.of());
+        var instructions = cli.run(p.root(), props.timeout(), List.of("context", "instructions"));
+        assertThat(instructions.exitCode()).as(instructions.output()).isZero();
+        assertThat(instructions.output()).contains("不能用样本代替", "不为补齐枚举");
         Files.createDirectories(props.wrenHome());
         Files.writeString(
                 props.wrenHome().resolve("profiles.yml"),

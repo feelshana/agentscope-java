@@ -22,6 +22,12 @@ import org.springframework.data.jpa.repository.JpaRepository;
 /** Spring Data repository for {@link DatasetEntity}. */
 public interface DatasetRepository extends JpaRepository<DatasetEntity, String> {
 
+    @org.springframework.data.jpa.repository.Lock(
+            jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("select d from DatasetEntity d where d.id = :id")
+    Optional<DatasetEntity> lockById(
+            @org.springframework.data.repository.query.Param("id") String id);
+
     List<DatasetEntity> findByOwnerIdOrderByCreatedAtDesc(String ownerId);
 
     Optional<DatasetEntity> findByOwnerIdAndName(String ownerId, String name);

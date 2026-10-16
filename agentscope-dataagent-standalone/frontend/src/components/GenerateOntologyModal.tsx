@@ -205,7 +205,7 @@ export default function GenerateOntologyModal({
                         </td>
                         <td style={tdStyle}>{d.name}</td>
                         <td style={{ ...tdStyle, color: 'var(--da-text-3)' }}>{d.tableName}</td>
-                        <td style={tdStyle}>{d.rowCount}</td>
+                        <td style={tdStyle}>{d.rowCount ?? '未统计'}</td>
                         <td style={tdStyle}>{d.columns.length}</td>
                       </tr>
                     ))}

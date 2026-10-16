@@ -153,6 +153,8 @@ public class MdlWorkspaceService {
     public boolean isPlatformOwned(String groupId, String relative) {
         String normalized = relative.replace('\\', '/').strip();
         return normalized.equals("wren_project.yml")
+                || normalized.equals("raw/data-samples.md")
+                || normalized.equals("knowledge/rules/data-sampling.md")
                 || normalized.equals(".platform")
                 || normalized.startsWith(".platform/")
                 || normalized.equals("target")

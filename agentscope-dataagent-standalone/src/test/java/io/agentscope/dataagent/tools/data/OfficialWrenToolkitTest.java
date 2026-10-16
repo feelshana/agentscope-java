@@ -130,6 +130,8 @@ class OfficialWrenToolkitTest {
                         "TARGET/mdl.json",
                         "knowledge/sql./x.md",
                         "raw/business-document.md",
+                        "raw/data-samples.md",
+                        "knowledge/rules/data-sampling.md",
                         ".platform/map.json")) {
             assertThat(files.write(alice, path, "blocked").isSuccess()).as(path).isFalse();
         }

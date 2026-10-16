@@ -391,7 +391,7 @@ export default function DataSourceManagerModal({
                     onChange={e => updateForm({ sampling: e.target.checked })}
                     style={{ width: 16, height: 16 }}
                   />
-                  数据采样（低基数列自动采样示例值，提升 Agent 效果）
+                  数据采样（每表最多1000行，提取列样例，非完整枚举）
                 </label>
               </div>
               {testResult && (

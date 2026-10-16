@@ -43,12 +43,18 @@ class WrenPublishedProjectTest {
         Files.writeString(published.resolve("target/mdl.json"), mdl);
         Files.createDirectories(published.resolve("knowledge"));
         Files.writeString(published.resolve("knowledge/metrics.md"), "正式口径");
+        Files.createDirectories(published.resolve("knowledge/rules"));
+        Files.writeString(published.resolve("knowledge/rules/data-sampling.md"), "已发布样本 PAID");
         Path draft = props.groupRoot("g").resolve("workspace/knowledge");
         Files.createDirectories(draft);
         Files.writeString(draft.resolve("metrics.md"), "未发布口径");
+        Files.createDirectories(draft.resolve("rules"));
+        Files.writeString(draft.resolve("rules/data-sampling.md"), "未发布样本 PRIVATE");
         Path runtime = service.indexed("alice", "g");
         assertThat(Files.readString(runtime.resolve("target/mdl.json"))).isEqualTo(mdl);
         assertThat(Files.readString(runtime.resolve("knowledge/metrics.md"))).isEqualTo("正式口径");
+        assertThat(Files.readString(runtime.resolve("knowledge/rules/data-sampling.md")))
+                .isEqualTo("已发布样本 PAID");
         service.indexed("alice", "g");
         assertThat(calls.stream().filter(args -> "index".equals(args.get(1)))).hasSize(1);
         Path liked = service.likedProject("alice", "g").resolve("knowledge/sql");

@@ -75,6 +75,7 @@ class WrenQueryMemoryIntegrationTest {
                 "--tags",
                 "source:enrich");
         Path published = props.groupRoot("g").resolve("published");
+        DatasetSampleDocuments.sync(draft, List.of());
         try (var paths = Files.walk(draft)) {
             for (Path file : paths.filter(Files::isRegularFile).toList()) {
                 Path relative = draft.relativize(file);
@@ -104,6 +105,9 @@ class WrenQueryMemoryIntegrationTest {
         var memory = new AnswerQueryMemory(props, cli, groups, projects);
         var json = new ObjectMapper();
         try {
+            String instructions =
+                    toolkit.callTool(context, "g", "get_instructions", Map.of(), null);
+            assertThat(instructions).contains("不为补齐枚举", "不能用样本代替");
             String recalled =
                     toolkit.callTool(
                             context,

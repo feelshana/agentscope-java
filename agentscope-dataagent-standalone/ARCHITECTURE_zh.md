@@ -336,13 +336,21 @@ ADR 0078 / spec 067：`DatasetUploadProperties` 统一大小、文件数量、�
 
 `ExternalDataSourceController`（`/api/datasources`）管理用户级 JDBC 连接；
 `DatasetService#associateTables` 把外部库已有表关联进知识库：`DataSourceIntrospector`
-读取列元数据/表注释/行数，可选低基数列采样（≤20 distinct 取 3 个样例），再经
+读取列元数据/表注释，可选通过 `DatasetSampling#read` 每表一次 LIMIT 1000 有界读取，在内存提取每列最多20个观察值，再经
 `SchemaGenerationService` 生成 AI 描述。`origin=datasource`，删除时不 drop 物理表。
 
 Wren 知识库当前只允许关联同一个 MySQL 外部数据源，拒绝与上传表混合、跨多个外部源或关联
 PostgreSQL。`DatasetService#prepareAssociatedTables` 在任何 repository/registry 写入前完成整批表名、
-重复项、已有关联、字段元数据、描述与行数预检；任一表失败时整批不写入。全部准备成功后再统一
+重复项、已有关联、字段元数据与描述预检；结构准备失败时整批不写入，采样失败只记录 FAILED，不阻断结构关联。全部准备成功后再统一
 持久化并注册，Controller 最后只触发一次基础 MDL 发布。
+
+ADR 0080/spec 068：关联不再执行 COUNT(*) 或逐列 DISTINCT。外部表 API rowCount 为 null（包括历史外部记录），UI 显示总行数未统计；上传文件保留准确行数。摘要存入 DatasetEntity.sampleSummaryJson，对应可空 LONGTEXT 列 sample_summary_json，包含时间、范围、NULL 数、截断后的样本内不同值数和状态。MySQL 投影每值最多257字符，内存保留256字符并标记截断，二进制列不取内容。每次采样30秒语句超时、最多1000行，无失败全表回退。上传沿用导入中的每列最多10个非空样例，不新增数据库查询，未知NULL数/基数以-1表示。
+
+`DatasetService#refreshSample` 提供 MANAGE 受限的 POST /api/datasets/{id}/sample-refresh，先鉴权，再取得数据集悲观锁并复核权限，采样完成后再次复核；源采样关闭时拒绝刷新。失败保留旧摘要，成功标记草稿待发布。新资料在下一次草稿读取或 reconcile 时生成，不直接改变已发布版本。
+
+`DatasetSampleDocuments#sync` 生成官方目录内 raw/data-samples.md 与 knowledge/rules/data-sampling.md；平台文件禁止原生或兼容写入口覆盖，不修改安装版 skills 或 target/mdl.json。`MdlSeeder#reconcile` 在发布前同步资料；`WrenProjectAccess#resolve` 在当前授权库的工作区锁内同步。列 description 保存简短样例提示，业务含义充分确认后才由官方建模流程写 [enum]，样本不证明完整枚举或关系唯一性。
+
+`WrenProjectContextMiddleware#onSystemPrompt` 每次构造上下文时提供通用约束及最多6000字符摘要，完整资料按需读取；不会用“首次已发送”进程标记丢失恢复会话上下文。`WrenQueryContextMiddleware#onSystemPrompt` 仅注入通用约束，官方 get_instructions 读取已发布的采样规则和限长摘要（24000字符）；不注入草稿资料。提示约束不能保证模型必然遵循，也不是数据库端成本硬限制。必要的准确聚合和业务验证仍通过官方 Wren 运行。
 
 ### 5.4 历史关系服务与兼容台账（ADR 0046）
 

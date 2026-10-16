@@ -85,6 +85,18 @@ public class DatasetEntity {
     @Column(name = "row_count")
     private long rowCount;
 
+    @Lob
+    @Column(name = "sample_summary_json", columnDefinition = "LONGTEXT")
+    private String sampleSummaryJson;
+
+    public String getSampleSummaryJson() {
+        return sampleSummaryJson;
+    }
+
+    public void setSampleSummaryJson(String value) {
+        sampleSummaryJson = value;
+    }
+
     @Column(name = "source_file_name", length = 255)
     private String sourceFileName;
 

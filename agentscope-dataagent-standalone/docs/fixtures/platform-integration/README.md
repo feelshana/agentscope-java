@@ -18,3 +18,5 @@ HTTP 验证涵盖创建者、全局管理员、无授权、QUERY、MANAGE、成�
 真实 CLI/MCP、示例召回与点赞闭环另由 OfficialWrenCliIntegrationTest 和 WrenQueryMemoryIntegrationTest 验证，需设置 Maven 属性 dataagent.test.wren。它们不替代真实模型业务效果或容量压测。
 
 登录失效回归：先构建 frontend，然后运行 `node --test frontend/tests/auth-session.test.mjs frontend/tests/stream-and-html.test.mjs` 和 `python docs/fixtures/platform-integration/auth_session_browser.py`。浏览器脚本需要 Playwright 与 Edge，使用本地静态服务器和模拟 API，不访问真实服务或账号；覆盖缓存令牌失效、请求中途 401、网络故障及未登录，报告写入 `target/auth-session-browser/report.json`。
+
+采样界面回归：构建 frontend 后运行 `python docs/fixtures/platform-integration/sampling_browser.py`（需要 Playwright 与 Edge）。模拟外部表未知行数、刷新成功、刷新失败保留上次样本，检查页面无 JS 异常，报告和截图位于 `target/sampling-browser/`。该脚本不访问真实数据库，也不证明 LLM 遵循探查规则。

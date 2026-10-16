@@ -141,13 +141,14 @@ public class DatasetController {
             String groupId,
             String tableName,
             String schemaName,
-            long rowCount,
+            Long rowCount,
             String description,
             String sourceFileName,
             List<ColumnVO> columns,
             String createdAt,
             String origin,
-            String externalDataSourceId) {}
+            String externalDataSourceId,
+            io.agentscope.dataagent.dataset.DatasetSampling.Summary sampling) {}
 
     public record PreviewVO(List<ColumnVO> columns, List<List<String>> rows) {}
 
@@ -498,6 +499,14 @@ public class DatasetController {
 
     public record DescriptionUpdate(String description) {}
 
+    @PostMapping("/{id}/sample-refresh")
+    public Mono<DatasetVO> refreshSample(@PathVariable String id, Authentication auth) {
+        String userId = (String) auth.getPrincipal();
+        return Mono.fromCallable(() -> toVO(datasetService.refreshSample(userId, id)))
+                .subscribeOn(Schedulers.boundedElastic())
+                .onErrorMap(this::toStatus);
+    }
+
     @PutMapping("/{id}/description")
     public Mono<DatasetVO> updateDescription(
             @PathVariable String id, @RequestBody DescriptionUpdate update, Authentication auth) {
@@ -548,13 +557,15 @@ public class DatasetController {
                 entity.getGroupId(),
                 entity.getTableName(),
                 entity.getSchemaName(),
-                entity.getRowCount(),
+                "datasource".equals(entity.getOrigin()) ? null : entity.getRowCount(),
                 entity.getDescription(),
                 entity.getSourceFileName(),
                 cols.stream().map(DatasetController::toColumnVO).toList(),
                 entity.getCreatedAt() == null ? null : entity.getCreatedAt().toString(),
                 entity.getOrigin(),
-                entity.getExternalDataSourceId());
+                entity.getExternalDataSourceId(),
+                io.agentscope.dataagent.dataset.DatasetSampling.decode(
+                        entity.getSampleSummaryJson()));
     }
 
     private static ColumnVO toColumnVO(ColumnSchema c) {

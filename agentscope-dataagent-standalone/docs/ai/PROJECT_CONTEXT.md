@@ -1,5 +1,11 @@
 # 项目长期背景
 
+## 采样与 Wren 资料复用（2026-10-16，ADR 0080/spec 068）
+
+外部表关联每表最多1000行，内存提取样例，不执行全表计数或逐列DISTINCT；外部rowCount API为null，上传保留准确导入数。可空LONGTEXT sample_summary_json保存摘要，旧记录不自动补采样，MANAGE手动刷新、发布后进入问数。
+
+平台派生raw/data-samples.md和knowledge/rules/data-sampling.md，官方skills不改。建模每次系统上下文构造含最多6000字符摘要与通用约束；问数仅通用约束，官方get_instructions读取已发布规则。样本不代表完整枚举/唯一性/最新日期，[enum]需业务依据，准确业务统计不能用样本替代。细节、迁移及本轮实测见CURRENT_TASK，源码完成不表示现有服务已加载。
+
 ## 当前文档事实源与来源核对（2026-10-15，ADR 0079）
 
 当前根 pom.xml 是 Java17 standalone，application.yml 默认 MySQL 平台库，h2 profile 切文件 H2；Agent 配置为 ~/.agentscope/dataagent/agentscope.json。README/中文 README、ARCHITECTURE_zh.md、根 AGENTS.md、docs/agent-definition.md 已按实际代码对齐，根 AGENTS.md 通过项目 .gitignore 的单文件例外进入可交付范围。

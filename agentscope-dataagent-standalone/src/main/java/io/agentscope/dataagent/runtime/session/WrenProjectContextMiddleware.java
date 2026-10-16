@@ -42,7 +42,13 @@ public final class WrenProjectContextMiddleware implements HarnessRuntimeMiddlew
                                     + "草稿工程根目录：/project\n"
                                     + "用户已在页面选择此知识库。官方技能需要确认项目时，只能确认此工程，不能输入其他宿主路径。业务文档（如已上传）位于"
                                     + " raw/business-document.md；可选问题表格位于 knowledge/questions/。"
-                                    + "先加载官方技能，再按其要求读取工程；当前工程为草稿，页面发布后才用于正式问数。";
+                                    + "先加载官方技能，再按其要求读取工程；当前工程为草稿，页面发布后才用于正式问数。"
+                                    + "\n\n# 采样使用约束\n"
+                                    + io.agentscope.dataagent.dataset.DatasetSampleDocuments.POLICY
+                                    + "\n"
+                                    + "采样资料：raw/data-samples.md；规则：knowledge/rules/data-sampling.md。\n"
+                                    + io.agentscope.dataagent.dataset.DatasetSampleDocuments
+                                            .context(project.root());
                         })
                 .subscribeOn(Schedulers.boundedElastic());
     }

@@ -14,7 +14,8 @@ export interface Dataset {
   groupId: string | null;
   tableName: string;
   schemaName: string;
-  rowCount: number;
+  rowCount: number | null;
+  sampling?: { status: string; sampledAt: string; sampledRows: number; rowLimit: number } | null;
   description: string | null;
   sourceFileName: string | null;
   fileArtifactId: string | null;
@@ -357,6 +358,14 @@ export async function updateDatasetDescription(id: string, description: string):
     body: JSON.stringify({ description }),
   });
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to update description: ${res.status}`));
+  return res.json();
+}
+
+export async function refreshDatasetSample(id: string): Promise<Dataset> {
+  const res = await apiFetch(`/api/datasets/${encodeURIComponent(id)}/sample-refresh`, {
+    method: 'POST', headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(await errorMessage(res, '样本刷新失败'));
   return res.json();
 }
 

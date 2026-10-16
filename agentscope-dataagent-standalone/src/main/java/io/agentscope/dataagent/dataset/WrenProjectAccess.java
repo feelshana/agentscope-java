@@ -45,16 +45,28 @@ public final class WrenProjectAccess {
     private final MdlWorkspaceService workspace;
     private final DatasetKnowledgeRepository knowledge;
     private final ConversationScopeRegistry scopes;
+    private final io.agentscope.dataagent.web.persistence.jpa.DatasetRepository datasets;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public WrenProjectAccess(
+            DatasetGroupService groups,
+            MdlWorkspaceService workspace,
+            DatasetKnowledgeRepository knowledge,
+            ConversationScopeRegistry scopes,
+            io.agentscope.dataagent.web.persistence.jpa.DatasetRepository datasets) {
+        this.groups = groups;
+        this.workspace = workspace;
+        this.knowledge = knowledge;
+        this.scopes = scopes;
+        this.datasets = datasets;
+    }
 
     public WrenProjectAccess(
             DatasetGroupService groups,
             MdlWorkspaceService workspace,
             DatasetKnowledgeRepository knowledge,
             ConversationScopeRegistry scopes) {
-        this.groups = groups;
-        this.workspace = workspace;
-        this.knowledge = knowledge;
-        this.scopes = scopes;
+        this(groups, workspace, knowledge, scopes, null);
     }
 
     public record Project(String ownerId, String groupId, String name, Path root) {}
@@ -88,8 +100,11 @@ public final class WrenProjectAccess {
         return workspace.withWorkspaceLock(
                 group,
                 () -> {
+                    groups.getGroup(owner, group);
                     workspace.ensureWorkspace(group);
                     syncRaw(group, root);
+                    if (datasets != null)
+                        DatasetSampleDocuments.sync(root, datasets.findByGroupId(group));
                     return new Project(owner, group, entity.getName(), root);
                 });
     }
@@ -166,7 +181,7 @@ public final class WrenProjectAccess {
         }
     }
 
-    private static void assertNoLinks(Path path) {
+    static void assertNoLinks(Path path) {
         for (Path current = path; current != null; current = current.getParent()) {
             if (Files.isSymbolicLink(current)) throw new DatasetException("不允许通过符号链接访问工程", 403);
         }
