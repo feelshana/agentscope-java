@@ -17,3 +17,6 @@ logs/
 
 # Durable runtime artifacts (back up separately from source).
 /data/artifacts/
+
+# Version the project guide even when the parent repository ignores AGENTS.md.
+!/AGENTS.md
