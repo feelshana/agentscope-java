@@ -251,6 +251,16 @@ X-DataAgent-Sig: <HMAC-SHA256 of body, hex>
 Replies are POSTed to `callbackUrl` (same HMAC), or parked for long-poll at
 `GET /api/webhook/ops-webhook/outbound/{inboundId}` when `replyMode=poll`.
 
+### Build and distribute
+
+`mvn package` rebuilds the current frontend and produces the existing Boot exec JAR
+plus `target/dataagent-<version>.tar.gz` with `bin/conf/lib`. Public defaults and the
+h2 profile stay in the JAR; private application-dev/prod YAML/properties are excluded
+from resources, JARs and the archive. The archive ships only a credential-free
+configuration example. The Linux launcher checks Wren dependencies, waits for HTTP
+health and keeps durable state outside the version directory. See the
+[single-host release guide](docs/single-host-release.md).
+
 ### 4. Run
 
 ```bash

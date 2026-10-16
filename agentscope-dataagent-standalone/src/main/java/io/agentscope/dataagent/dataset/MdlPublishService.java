@@ -72,6 +72,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class MdlPublishService {
     private KnowledgeBaseOperations operations;
+    private KnowledgeBaseAccessService access;
 
     private static final Logger log = LoggerFactory.getLogger(MdlPublishService.class);
 
@@ -767,11 +768,9 @@ public class MdlPublishService {
      * silent broken snapshot is worse than a loud refusal.
      */
     /** Returns the server-selected draft connection; agents cannot choose a profile. */
-    public String draftCliProfile(String ownerId, String groupId) {
-        groupRepository
-                .findById(groupId)
-                .filter(group -> ownerId != null && ownerId.equals(group.getOwnerId()))
-                .orElseThrow(() -> new DatasetException("知识库不可见或不存在", 404));
+    public String draftCliProfile(String actorId, String groupId) {
+        if (access == null) throw new DatasetException("知识库权限服务尚未就绪，未绑定草稿连接", 503);
+        access.requireManage(actorId, groupId);
         WrenSourceSelection selected = selectWrenSource(datasetRepository.findByGroupId(groupId));
         if (selected.error() != null) throw new DatasetException(selected.error(), 400);
         profileHome.ensureAll(externalSources.findAll());
@@ -1474,7 +1473,8 @@ public class MdlPublishService {
             MdlSeeder seeder,
             MdlWorkspaceService workspace,
             MdlWorkspaceReader reader,
-            KnowledgeBaseOperations operations) {
+            KnowledgeBaseOperations operations,
+            KnowledgeBaseAccessService access) {
         this(
                 datasetRepository,
                 groupRepository,
@@ -1488,5 +1488,6 @@ public class MdlPublishService {
                 workspace,
                 reader);
         this.operations = operations;
+        this.access = access;
     }
 }

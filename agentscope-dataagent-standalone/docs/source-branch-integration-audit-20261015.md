@@ -1,5 +1,7 @@
 # 来源分支提交覆盖核对（2026-10-15）
 
+> 后续实施补充（ADR0080）：用户已授权采用核对建议，现已补回5份来源框架测试，并加入适配后的Assembly/tar.gz、Linux启停及外置配置；保留当前Maven自动前端构建。下文“未采用发布方案”等为此前审计基线，当前发布规范见 [单机发布](single-host-release.md)。此前93ceaee5提交实际只有134相同/62不同/5测试缺失，不能把当时工作区139/62/0当作提交覆盖；新增文件与验证以当前源码和共享检查点为准。
+
 来源：`origin/data-agent-multiAgent-Mdl-lyf`，已 fetch，末端 `6a75b6cf`。当前分支 `design/wren-official-capability-boundary`，HEAD `bc11f3a5`，包含现有未提交移植。核对范围从 2026-10-09 00:00 +08:00 起。
 
 ## 结论与口径

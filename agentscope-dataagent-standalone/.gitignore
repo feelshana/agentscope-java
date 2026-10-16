@@ -17,3 +17,12 @@ logs/
 
 # Durable runtime artifacts (back up separately from source).
 /data/artifacts/
+
+# Private environment settings stay outside source and release artifacts.
+/src/main/resources/application-dev.yml
+/src/main/resources/application-dev.yaml
+/src/main/resources/application-dev.properties
+/src/main/resources/application-prod.yml
+/src/main/resources/application-prod.yaml
+/src/main/resources/application-prod.properties
+/log/

@@ -1,5 +1,9 @@
 # 项目长期背景
 
+## 单机发布补充（2026-10-15，ADR0080）
+
+用户已授权实施来源核对建议：当前Boot exec JAR和默认前端自动构建保留，额外生成tar.gz/conf/bin/lib；私有dev/prod配置不进入资源/JAR/包，目标环境通过外置配置加载，公共默认值与h2 profile保留。Linux启停脚本检查Wren依赖、进程身份和HTTP就绪，跨版本持久状态位于父目录data/。五份来源框架回归测试已补回。详见docs/single-host-release.md与ADR0080；本次覆盖了下方旧记录“打包保留当前、不采用来源发布布局”的选择。工作区实现未提交、用户服务未重载，验证见CURRENT_TASK。
+
 ## 当前文档事实源与来源核对（2026-10-15，ADR 0079）
 
 当前根 pom.xml 是 Java17 standalone，application.yml 默认 MySQL 平台库，h2 profile 切文件 H2；Agent 配置为 ~/.agentscope/dataagent/agentscope.json。README/中文 README、ARCHITECTURE_zh.md、根 AGENTS.md、docs/agent-definition.md 已按实际代码对齐，根 AGENTS.md 通过项目 .gitignore 的单文件例外进入可交付范围。

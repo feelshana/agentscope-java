@@ -1,5 +1,48 @@
 # 当前任务与接手入口
 
+## 最新检查点：2026-10-16 01:42 +08:00｜合并后真实全链路验收完成，未全部通过
+
+- 完整报告：[20261016-merged-end-to-end-acceptance.md](../test-reports/20261016-merged-end-to-end-acceptance.md)。本轮真实模型、官方 Wren CLI/MCP/ONNX/LanceDB、MySQL、Docker、浏览器和云 MySQL/Doris；不是上一阶段625项回归的复述。HEAD93ceaee5及此前工作区修改保留，本轮未修改业务源码、合并、提交或推送。
+- 最终14库全部PUBLISHED；48张上传表229809行全部与源/元数据/物理行数一致，源文件哈希不变，无物理孤表；加云8表共56数据集242087行。有效上传46/48立即成功，2次Windows published.next目录切换500但数据保留、后续恢复。
+- 固定88题：83有效数值题81通过（97.59%），5题为坏数据识别另计；音乐完播率34.37%被答60.24%，视频26.295%被答40.05%，错误来自阈值被映射成is_complete并保存错误记忆。另2诊断题通过（显式音乐阈值重算、财务预算执行率70.01%），未覆盖原失败。中位问答11.25秒/P95 26.99秒，混合负载有限夹具，不是生产SLA。
+- 30项核心权限/认证审计通过，PNG/CSV私有附件通过；但原生/api/charts/{id}无owner校验，其他登录用户可200读取同图表数据，为P1。ChartController#get、DataAgentToolkit#renderChart、ChartOptionEntity为入口。
+- 云正常建模/发布/12题通过；独立代理断线后恢复连接检查true但旧Wren仍失败，重建MCP才恢复，P1自动恢复缺陷。用户SSH未停止，云只读数据保持完整。
+- 14项边界/发布失败保护/删除检查通过；33用户短对话32完成1拒绝、峰值16运行16等待；单用户20请求3完成17拒绝、峰值2运行1等待；不等同16路复杂问数容量。真实Docker执行取消后无迟到写入、同会话3.398秒恢复；16条闲置沙箱回收实测。
+- 67.7分钟/792点采样与1500次GET+GC未见该路径线性泄漏；Wren ONNX实例约944–952MiB，子进程工作集总和峰值9193MiB，约31.73GiB机器在既有负载下可用量最低41.3MiB；曾人工重新发布释放MCP，不能当自然回收。部署预算与至少24小时soak仍需补测。
+- 原第10场景为空，生成IT及两份标量修复对照在.runtime下，未覆盖原数据；原财务/生成IT有数组字符串坏列，不能把这些题当正常零值通过。
+- 旧本地19库已备份清理，旧库知识库/数据集归零、23账号保留；云不清理。本轮独立数据/工程/证据保留.runtime/acceptance，SQL/文件备份old-data-backup含私有数据不得提交。收尾独立Java/全部子进程/仅本轮标签容器及2浏览器会话已关闭，原SSH和其他服务未动。instance.json的PID/端口是历史记录，当前不在运行。
+- 下一步建议待授权实施：图表owner隔离→两个指标工程及错误memory→明确连接失效受控重建→目标机容量/长期稳定性→Windows快照切换/夹具生成器。以上为建议，尚未实施；本轮不能标成生产验收全绿。报告26个本地证据链接与git diff --check通过。
+
+## 进行中：2026-10-16 00:30 +08:00｜合并后全链路与上线情形验收
+
+- 用户授权使用test_data10场景做完整真实上传/建模/发布/问数、权限/并发/异常/资源回收及云外联测试，并允许清理旧数据。用户保持13306/19030 SSH隧道，不关闭；云只读库不清理。
+- 不是“已稳定验收”：已发现Windows快照目录切换偶发失败、完播率口径错误、财务源数据数组字符串等，尚未全部测试完成。40表201909行实查与源一致，24项权限通过；更多用例仍运行，不能提前宣称全绿。
+- 本轮独立MySQL元数据/上传库和实例PID/端口保存在上层.runtime/acceptance/instance.json；恢复详细状态、脚本、证据、运行session和未完成清单见.runtime/acceptance/STATE.md（本地私有日志/凭据不提交）。业务源代码本轮未改，保留此前全部未提交改动；原始test_data不覆盖。
+- 当前结论与最终报告待所有用例完成后更新；上一检查点625项等为上一阶段回归，不冒充本轮全链路实测。
+
+## 最新检查点：2026-10-15 23:53 +08:00｜按用户授权实施来源回归与单机发布
+
+- 当前 Codex 会话，分支design/wren-official-capability-boundary，HEAD93ceaee5，来源LYF6a75b6cf。用户明确“可以，按照你的建议实施”，覆盖上一检查点的“遗漏只报告”限制；本轮只移植选定内容，没有Git merge/cherry-pick/commit/push，保留此前MANAGE修复和既有用户改动。
+- 补回LYF原版5测试：WorkspaceBusContextTest、SessionMirrorBindingTest、DockerExecCancellationTest、WorkspaceNamespaceLockTest、OpenAIGoAwayRecoveryTest。主实现及官方Wren/Cube/memory不变。来源审计当前工作区139相同/62不同/无缺失；这是工作区覆盖，不是已提交。
+- pom保留JAR命名及默认Maven自动前端构建，新增Assembly生成dataagent-<version>.tar.gz（bin/conf/lib）；public application.yml/h2保留，private dev/prod的6类资源排除，同时jar插件排除旧target/classes遗留。发布包仅无凭据prod样例，实际配置部署时外置，不复制用户本机配置。
+- 新增dataagent.sh/check-wren.py：启停锁、PID/启动时间/JAR身份、跨版本data/、Wren依赖/版本导入与CLI预检、端口预检及HTTP就绪等待；健康超时停止本次进程，停止无需Wren/Python。Linux隔离测试发现TIME_WAIT影响重启，端口预检加SO_REUSEADDR后复验通过。新增可选frontend/build.ps1，仍不改变默认前端重建。
+- 补充根及模块.gitignore：保留用户先加的.runtime/data/artifacts/test_data，增加根data、本地生成文件、dev/prod配置、log；不重复frontend/dist全局规则。用户两份dev/prod文件哈希不变。
+- 新增ADR0080/spec068、docs/single-host-release.md和release_smoke.py；同步中英README、ARCHITECTURE第12章、发布指南、来源审计的历史/当前边界。ADR0080替代ADR0079中未采用发布布局的选择。
+- 本轮实测：恢复的框架11项通过、0跳过，包含2真实Docker；固定隔离检出默认package（含前端自动构建和standalone测试）通过，625项0失败/错误16条件跳过，真实官方Wren集成启用；前端11项测试通过。格式、包资源审计、8份Markdown链接及diff检查通过。Linux脚本10场景通过（JVM/Wren桩用于进程控制）；真实Wren预检正反例通过；真实JAR在既有Linux/Java17镜像健康/前端通过，容器已清理。框架依赖用独立2.0.3-review-93ceaee5验证，未覆盖常用SNAPSHOT。最后仅文档变更后跳过测试/npm重打包并复查包内README/脚本一致。
+- 本地证据在上层.runtime/release-implementation/：framework-results.json、standalone-results.json、frontend-tests.log、linux-launcher.log、wren-preflight.json、linux-jar.json、archive-check.json、release-full-package.log；验证包dataagent-2.0.3-SNAPSHOT.tar.gz也在该目录。16项条件跳过见standalone-results.json；未验收生产库/目标服务器/真实LLM效果和负载。
+- 代码/文档/测试已完成且验证；未重启用户服务、未修改其运行配置、未部署或提交。下一步用户审阅工作区并自行提交；正式构建先安装同仓库框架依赖，再在standalone正常package。现有私有profile需用--spring.config.additional-location=file:src/main/resources/显式加载，说明已入发布指南。生产首次部署需准备schema/管理员、数据库/模型凭据、Wren环境和可读模型缓存。
+
+## 最新检查点：2026-10-15 23:27 +08:00｜共享管理员草稿查询修复与 LYF 覆盖报告
+
+- 当前 Codex 会话；分支 design/wren-official-capability-boundary，HEAD 93ceaee5；来源 LYF 6a75b6cf。用户授权复用现有 MANAGE 校验并保留操作者；最新明确要求发现遗漏只报告，不自行合并。误恢复的遗漏文件/忽略规则已撤回，本轮未 merge/cherry-pick/commit/push。
+- 已修改 MdlPublishService#draftCliProfile：注入 KnowledgeBaseAccessService，替代仅创建者校验，在 CLI 连接绑定前 requireManage 当前操作者；按知识库数据集选连接，保留 actor 身份。ARCHITECTURE_zh.md 同步规则。
+- 新增 SharedDraftWrenAuthorizationTest：创建者/共享 MANAGE/全局管理员 × query/dry-run/Cube query，QUERY/未授权拒绝、等待工作区锁期间撤权、共享连接选择与临时配置恢复，12 项全部通过。
+- 本轮修复后固定提交隔离检出实测：全量625项、0失败/错误、16条件跳过（明细在根 .runtime/merge-review-93ceaee5/fix-tests.json）；真实官方Wren CLI/MCP/向量记忆集成启用，Spotless/package通过。框架使用独立2.0.3-review-93ceaee5依赖。隔离新JAR健康/前端、18次HTTP ACL、超限上传413、1执行/1等待/超额拒绝通过；模型为本地协议桩，不代表真实LLM业务效果。进程及本轮2个容器已清理。前端未改，沿用前一核对阶段11项测试与生产构建结果，本修复阶段未重跑。
+- 覆盖作者 iridescentpeo 的11个非继承提交；主要平台运行逻辑已保留，但不能称除Wren外全部内容都包含：5份框架回归测试缺失，assembly.xml/dataagent.sh/frontend/build.ps1及tar.gz配置未采用，部分本地配置/运行数据忽略规则未包含。5份来源测试上个核对阶段在隔离目录临时恢复运行11项全通过（含2真实Docker），随后移除；本轮不补合。
+- 旧审计“139相同/62不同/0缺失”与93ceaee5提交不符：201个源码/测试文件实查134相同、62不同、5缺失（均测试）。完整路径、提交范围、运行功能与新版Wren替代说明见上层仓库 .runtime/merge-review-93ceaee5/lyf-author-coverage-and-manage-fix.md；这是本地报告，不作Git交付。
+- 起点既有 shared/.seed-manifest.json、3份data-agent技能和本地配置/数据保持；核对期间根 .gitignore 出现另外新增规则，已保留，不归为本轮成果。没有改用户运行配置、没有重启用户服务；代码已修复且验证，服务尚未加载新代码。
+- 下一步：向用户报告遗漏，等待其与同事处理；未经新授权不补合。用户自行加载本轮修复后再验收实际业务建模/问数。真实供应商LLM准确率、生产库与多用户性能仍未验收。
+
 ## 最新检查点：2026-10-15 20:01 +08:00｜10 月 9 日起来源覆盖与文档核对
 
 - 用户要求检查来源分支 10 月 9 日以来的提交，并按当前代码完善 README、架构和 Agent 文档。本轮仅审计/文档与审计辅助脚本，不修改业务实现；保留上一阶段全部平台/框架未提交改动，HEAD 仍为 bc11f3a5。
