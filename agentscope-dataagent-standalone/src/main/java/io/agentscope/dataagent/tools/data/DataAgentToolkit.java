@@ -17,6 +17,7 @@ package io.agentscope.dataagent.tools.data;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.tool.Tool;
 import io.agentscope.core.tool.ToolParam;
 import io.agentscope.dataagent.web.persistence.jpa.ChartOptionEntity;
@@ -52,6 +53,7 @@ public final class DataAgentToolkit {
                     不要自己构造图表配置，只传数据即可。\
                     """)
     public String renderChart(
+            RuntimeContext context,
             @ToolParam(name = "question", description = "本图表回答的用户问题（中文）", required = false)
                     String question,
             @ToolParam(name = "columns", description = "查询结果的列名，按顺序排列") List<String> columns,
@@ -68,6 +70,9 @@ public final class DataAgentToolkit {
                             description = "参考线的标签，如 日均目标2000万",
                             required = false)
                     String markLineLabel) {
+        if (context == null || context.getUserId() == null || context.getUserId().isBlank()) {
+            return "error: 缺少图表所属用户，无法生成图表";
+        }
         ChartBuilder.BuiltChart chart = ChartBuilder.build(columns, rows, question);
         if (chart == null) {
             return "error: 数据不适合绘制图表（需要至少1列数值且多于1行）";
@@ -88,7 +93,10 @@ public final class DataAgentToolkit {
             try {
                 String chartId = java.util.UUID.randomUUID().toString();
                 chartOptions.save(
-                        new ChartOptionEntity(chartId, MAPPER.writeValueAsString(chart.option())));
+                        new ChartOptionEntity(
+                                chartId,
+                                context.getUserId(),
+                                MAPPER.writeValueAsString(chart.option())));
                 payload.put("chartId", chartId);
             } catch (JsonProcessingException e) {
                 return "error: 序列化图表配置失败";

@@ -17,6 +17,7 @@ package io.agentscope.dataagent.tools.data;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.tool.Tool;
 import java.util.Arrays;
 import java.util.List;
@@ -45,6 +46,7 @@ class DataAgentToolkitTest {
     void renderChartBuildsDeterministicOption() {
         String out =
                 TOOLKIT.renderChart(
+                        RuntimeContext.builder().userId("alice").build(),
                         "分析下云南省 30 天走势",
                         List.of("dt", "cnt"),
                         List.of(
@@ -63,6 +65,7 @@ class DataAgentToolkitTest {
     void renderChartAppliesTargetMarkLine() {
         String out =
                 TOOLKIT.renderChart(
+                        RuntimeContext.builder().userId("alice").build(),
                         "活跃用户趋势",
                         List.of("dt", "cnt"),
                         List.of(List.of("2026-09-01", "10"), List.of("2026-09-02", "12")),
@@ -74,7 +77,14 @@ class DataAgentToolkitTest {
 
     @Test
     void renderChartRejectsUnchartableData() {
-        assertThat(TOOLKIT.renderChart("q", List.of("a"), List.of(List.of("x")), null, null))
+        assertThat(
+                        TOOLKIT.renderChart(
+                                RuntimeContext.builder().userId("alice").build(),
+                                "q",
+                                List.of("a"),
+                                List.of(List.of("x")),
+                                null,
+                                null))
                 .startsWith("error:");
     }
 }
