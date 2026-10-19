@@ -83,6 +83,32 @@ class BiAuthHttpTest {
     }
 
     @Test
+    void scheduledTaskEndpointsAreClosedForEveryRole() throws Exception {
+        for (var roles : List.of(List.of("user"), List.of("user", "admin"))) {
+            String token = jwt.generate("closed-task-user", "closed-task-user", roles);
+            for (String path :
+                    List.of(
+                            "/api/scheduled-tasks",
+                            "/api/scheduled-tasks/old-task",
+                            "/api/scheduled-tasks/old-task/status")) {
+                for (String method : List.of("GET", "POST", "PUT", "DELETE")) {
+                    var request =
+                            HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + path))
+                                    .header("Authorization", "Bearer " + token)
+                                    .header("Content-Type", "application/json")
+                                    .method(method, HttpRequest.BodyPublishers.ofString("{}"));
+                    assertThat(
+                                    client.send(
+                                                    request.build(),
+                                                    HttpResponse.BodyHandlers.ofString())
+                                            .statusCode())
+                            .isEqualTo(403);
+                }
+            }
+        }
+    }
+
+    @Test
     void prodEntryPolicyAndActualHttpAuthentication() throws Exception {
         var options = get("/api/auth/options", null);
         assertThat(options.statusCode()).isEqualTo(200);

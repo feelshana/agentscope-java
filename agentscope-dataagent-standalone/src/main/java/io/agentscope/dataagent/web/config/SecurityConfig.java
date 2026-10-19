@@ -88,6 +88,9 @@ public class SecurityConfig {
                                         .permitAll()
                                         .pathMatchers("/api/webhook/**")
                                         .permitAll()
+                                        .pathMatchers(
+                                                "/api/scheduled-tasks", "/api/scheduled-tasks/**")
+                                        .denyAll()
                                         .pathMatchers("/api/**")
                                         .authenticated()
                                         .anyExchange()

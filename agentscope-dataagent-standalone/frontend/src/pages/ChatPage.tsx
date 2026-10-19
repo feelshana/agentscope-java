@@ -67,6 +67,7 @@ export default function ChatPage() {
         {inspectorPayload && (
           <>
             <div
+              className="da-tool-panel-divider"
               title="拖动调整宽度"
               onMouseDown={() => { dragging.current = true; }}
               style={{
@@ -75,7 +76,7 @@ export default function ChatPage() {
                 background: 'transparent',
               }}
             />
-            <div style={{
+            <div className="da-tool-panel-host" style={{
               width: panelW, flexShrink: 0, minHeight: 0,
               background: 'var(--da-surface)',
               borderLeft: '1px solid var(--da-border)',
