@@ -1,10 +1,15 @@
 # agentscope-dataagent
 
+例行任务首发仅保留占位入口，旧读写API全部关闭，后续再完善调度与隔离。当前完成情况和未修P1统一见[上线总览](docs/go-live-gap-review-20261012.md)。
+
+
 > 🇬🇧 English version: [README.md](README.md)
 
 ## 项目概览
 
 外部表关联每表最多读取1000行，在内存提取列样例，不执行全表 COUNT 或逐列 DISTINCT。总行数显示“未统计”，上传文件仍显示准确导入行数；管理者可在数据集详情刷新样本。建模系统上下文包含限长摘要，问数读取已发布的官方工程规则。样本不代表完整枚举、唯一性或精确统计。详见 [ADR 0080](docs/adr/0080-bounded-sampling-and-wren-context.md) 与 [spec 068](docs/specs/068-bounded-sampling-and-wren-context.md)。
+
+图表归属升级：已有平台表且使用 `ddl-auto=validate` 时，启动前执行 [0083迁移](docs/migrations/0083-chart-owner-mysql.sql)。新图仅提问用户本人可读；旧归属为空的图保留但不展示、不自动回填，需重新生成。
 
 升级需要平台表新增可空 `sample_summary_json LONGTEXT` 列。默认 JPA `update` 自动补列；使用 `validate` 的部署须先执行 [MySQL 迁移脚本](docs/migrations/0080-dataset-sampling-mysql.sql)。历史数据不在启动时自动采样，外部表可由管理者手动刷新。
 
@@ -68,7 +73,7 @@ dataagent 跑在 **HarnessAgent + `SandboxFilesystem`** 之上，sandbox 生命�
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
-设置 `dataagent.session.redis.enabled=true` 后，per-用户的 `RemoteFilesystem`、`Session`、`ToolEventBus` 全部走 Redis —— 任意副本都能服务任意用户。详见 [`docs/cluster-deploy.md`](docs/cluster-deploy.md)。
+会话上下文默认使用平台MySQL中的`dataagent_agent_state`最新快照，H2开发使用持久JSON文件。框架按用户/会话加载，重启后可继续已保存状态；生产validate先执行[0084迁移](docs/migrations/0084-agent-state-mysql.sql)。这不代表沙箱、网关门锁及事件总线已支持任意多副本，见[ADR0084](docs/adr/0084-durable-mysql-agent-state.md)。
 
 ---
 
@@ -93,7 +98,7 @@ dataagent 跑在 **HarnessAgent + `SandboxFilesystem`** 之上，sandbox 生命�
 | `skills/`、`subagents/` | `OverlayFilesystem` —— 上层是 per-用户 `RemoteFilesystem`，下层是共享目录 `shared/{skills,subagents}/` |
 | `knowledge/`、`AGENTS.md` | 磁盘上的共享根目录，对租户只读挂载（变更只能走能力市场贡献流程） |
 
-当 `dataagent.session.redis.enabled=true` 时，同一份 `RemoteFilesystem` 由 Redis 后端支撑（跨副本重启可恢复）；否则是本机文件存储。详见 [`docs/cluster-deploy.md`](docs/cluster-deploy.md)。
+Agent上下文通过框架状态存储持久化，沙箱文件仍按当前单机部署方式保存；开启旧Redis配置块不会自动切换这些存储。已有完整展示历史不等于遗失的Agent状态可自动重建。
 
 ---
 
@@ -222,7 +227,8 @@ java -jar target/agentscope-dataagent-*-exec.jar
 | `dataagent.agent.sys-prompt` | _（内置提示词）_ | 覆盖首次启动时 scaffold 进 `workspace/AGENTS.md` 的内置系统提示词。推荐用环境变量 `DATAAGENT_AGENT_SYS_PROMPT`；**不要**把该键设为空值（属性存在但为空会 scaffold 出空提示词） |
 | `dataagent.agent.subagents-enabled` | `false` | 子代理编排（harness `agent_spawn` / `agent_send` / `task_*`）。默认关闭：否则 harness 每轮会注入固定约 6.2k 字符的 `## Subagents` 提示词段与相应工具 schema。设为 `true` 即恢复该段、这些工具以及 `workspace/subagents/*.md` 的加载，无需改代码；**不影响**网关、会话路由与聊天。环境变量：`DATAAGENT_SUBAGENTS_ENABLED` |
 | `dataagent.channels.chatui.enabled` | `true` | 主 Web 通道，默认开启 |
-| `dataagent.session.redis.enabled` | `false` | 是否启用 Redis 分布式 agent 状态 |
+| Agent状态存储（自动选择） | 平台MySQL；H2开发JSON文件 | 共用spring.datasource；DDL跟随spring.jpa.hibernate.ddl-auto，见ADR0084；自定义AgentStateStore Bean优先 |
+| `dataagent.session.redis.enabled` | `false` | 历史保留项，当前默认装配不读取；不自动启用分布式存储 |
 | `dataagent.session.redis.host/port/password/database` | `localhost:6379/0` | Redis 连接 |
 | `dataagent.session.redis.key-prefix` | `dataagent:session:` | Redis key 前缀 |
 | `dataagent.marketplace.enabled` | `true` | 关掉则隐藏贡献 + 审批 API |

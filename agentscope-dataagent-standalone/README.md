@@ -1,10 +1,15 @@
 # agentscope-dataagent
 
+Scheduled tasks remain a placeholder in the initial release; legacy task APIs are denied for all roles. Current readiness and known blockers: [release ledger](docs/go-live-gap-review-20261012.md).
+
+
 > 🇨🇳 中文版：[README_zh.md](README_zh.md)
 
 ## Overview
 
 External table association samples at most 1,000 rows per table, without full-table COUNT or per-column DISTINCT. Total row count is unknown (`rowCount: null`); file uploads retain their exact imported count. Managers can refresh samples from the dataset page. Samples are observations, not complete enums or exact statistics. Modeling receives a bounded summary; querying reads published Wren rules. See [ADR 0080](docs/adr/0080-bounded-sampling-and-wren-context.md) and [spec 068](docs/specs/068-bounded-sampling-and-wren-context.md).
+
+Chart ownership upgrade: existing platform tables using `ddl-auto=validate` must apply [migration 0083](docs/migrations/0083-chart-owner-mysql.sql) before starting. New charts are private to the requesting user; legacy owner-null charts remain stored but cannot be displayed and are not backfilled.
 
 Schema upgrade: the platform database needs nullable `dataagent_dataset.sample_summary_json LONGTEXT`. The default JPA `update` mode adds it; deployments using `validate` must apply the [MySQL migration](docs/migrations/0080-dataset-sampling-mysql.sql) before starting the new JAR. Existing records remain unsampled until explicitly refreshed; no startup scan is performed.
 
@@ -93,13 +98,15 @@ flow).
 │                                                                       │
 │   Marketplace:  user contributes ─▶ admin approves ─▶ shared/ grows   │
 │   Channels:     chatui · dingtalk · generic webhook                   │
-│   Storage:      embedded H2 by default (swap for MySQL/PG in prod)    │
+│   Storage:      platform MySQL; H2 for local development             │
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
-With shared state enabled, the per-user filesystem, sessions and tool-event
-bus are all backed by Redis, so any replica can serve any user. See
-[`docs/cluster-deploy.md`](docs/cluster-deploy.md).
+Conversation checkpoints use the framework MySQL store in the platform database,
+with durable JSON files for H2 development. Each session keeps its latest snapshot.
+Production with `ddl-auto=validate` requires [migration 0084](docs/migrations/0084-agent-state-mysql.sql).
+This does not distribute sandbox files, gateway locks or tool events across replicas.
+See [ADR 0084](docs/adr/0084-durable-mysql-agent-state.md).
 
 ---
 
@@ -142,9 +149,9 @@ Every `HarnessAgent` runs on a `CompositeFilesystem` built by
 | `skills/`, `subagents/` | `OverlayFilesystem` — per-user `RemoteFilesystem` on top of the shared `shared/{skills,subagents}/` directory |
 | `knowledge/`, `AGENTS.md` | Shared on-disk root, mounted read-only for tenants (mutations only go through the marketplace contribution flow) |
 
-The same `RemoteFilesystem` is backed by Redis (and survives replica
-restarts) when `dataagent.session.redis.enabled=true`; otherwise it is a local
-file store. See [`docs/cluster-deploy.md`](docs/cluster-deploy.md).
+Agent checkpoints are durable independently of sandbox files. The legacy Redis
+configuration block does not switch these backends in the current wiring.
+Display history is retained; previously lost checkpoints are not reconstructed automatically.
 
 ---
 
@@ -303,7 +310,8 @@ to false; existing users and grants are retained.
 | `dataagent.agent.sys-prompt` | _(built-in prompt)_ | Overrides the built-in system prompt scaffolded into `workspace/AGENTS.md` on first start. Prefer the `DATAAGENT_AGENT_SYS_PROMPT` env var, and never set this key to an empty value — an empty property would scaffold a blank prompt. |
 | `dataagent.agent.subagents-enabled` | `false` | Harness subagent orchestration (`agent_spawn` / `agent_send` / `task_*`). Off by default: the harness otherwise injects a fixed ~6.2k-char `## Subagents` system-prompt section plus those tool schemas on every turn. Setting it to `true` restores the section, the tools and the loading of `workspace/subagents/*.md` — no code change. Does **not** affect the gateway, session routing or chat. Env: `DATAAGENT_SUBAGENTS_ENABLED`. |
 | `dataagent.channels.chatui.enabled` | `true` | Primary web channel. Always-on by default. |
-| `dataagent.session.redis.enabled` | `false` | Use Redis for distributed agent state. |
+| Agent checkpoint backend (automatic) | Platform MySQL; JSON files for H2 | Reuses spring.datasource and the existing DDL policy; explicit AgentStateStore beans take precedence. See ADR 0084. |
+| `dataagent.session.redis.enabled` | `false` | Legacy reserved setting, not consumed by the default wiring. |
 | `dataagent.session.redis.host/port/password/database` | `localhost:6379/0` | Redis connection. |
 | `dataagent.session.redis.key-prefix` | `dataagent:session:` | Redis key namespace. |
 | `dataagent.marketplace.enabled` | `true` | Disable to hide the contribution + approval API. |
