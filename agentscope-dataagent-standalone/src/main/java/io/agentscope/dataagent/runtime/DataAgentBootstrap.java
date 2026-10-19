@@ -427,6 +427,7 @@ public final class DataAgentBootstrap {
                 new java.util.ArrayList<>();
         private final Map<String, Channel> channels = new LinkedHashMap<>();
         private SessionRegistryRepository sessionStoreRepository;
+        private io.agentscope.core.state.AgentStateStore agentStateStore;
 
         private Builder() {}
 
@@ -503,6 +504,12 @@ public final class DataAgentBootstrap {
 
         public Builder sessionStoreRepository(SessionRegistryRepository repository) {
             this.sessionStoreRepository = Objects.requireNonNull(repository, "repository");
+            return this;
+        }
+
+        /** Coordinates lifecycle cleanup for the store used by the configured agents. */
+        public Builder agentStateStore(io.agentscope.core.state.AgentStateStore stateStore) {
+            this.agentStateStore = Objects.requireNonNull(stateStore, "stateStore");
             return this;
         }
 
@@ -585,7 +592,8 @@ public final class DataAgentBootstrap {
 
             AgentManagerConfig amCfg = resolveAgentManagerConfig(fileConfig);
             SessionAgentManager sam =
-                    new SessionAgentManager(dam, amCfg, new SubagentRunRegistry(), sessionStore);
+                    new SessionAgentManager(
+                            dam, amCfg, new SubagentRunRegistry(), sessionStore, agentStateStore);
 
             ChannelManager channelMgr = new ChannelManager();
             HarnessGateway gateway = HarnessGateway.create(sam, channelMgr);

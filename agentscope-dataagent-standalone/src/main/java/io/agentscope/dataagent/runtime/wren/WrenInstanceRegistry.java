@@ -60,9 +60,9 @@ import org.springframework.stereotype.Component;
  * connection profile always points at the dataset store, and with UTF-8 mode forced — both are
  * probe-verified requirements of the wren CLI on Windows.
  *
- * <p>MCP request failures never kill the engine: {@code ok=false} results carry the server-side
- * diagnostics back to the model for self-correction, while transport-level failures drop the
- * instance so the next call respawns it.
+ * <p>Query diagnostics normally keep the engine alive. Recognized database disconnects on
+ * read-only tools rebuild and replay once; repeated failures enter a per-group cooldown.
+ * Transport-level failures drop the instance so the next call respawns it.
  *
  * <p>Calls on one group's instance are serialized (ADR 0023): the MCP stdio transport
  * underneath is not thread-safe — {@code StdioClientTransport#sendMessage} is a Reactor
@@ -86,6 +86,7 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
     private static final Duration CALL_SLACK = Duration.ofSeconds(30);
 
     private static final long SWEEP_INTERVAL_SECONDS = 60;
+    private static final long RECOVERY_COOLDOWN_NANOS = TimeUnit.SECONDS.toNanos(30);
 
     private final WrenProperties props;
     private final WrenProfileHome profileHome;
@@ -94,6 +95,8 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
 
     private final Map<String, Instance> instances = new ConcurrentHashMap<>();
     private final Map<String, Object> spawnLocks = new ConcurrentHashMap<>();
+    // Accessed under the same per-group gate as calls; monotonic deadlines survive no restart.
+    private final Map<String, Long> recoveryNotBefore = new ConcurrentHashMap<>();
 
     /**
      * Per-group call gates (ADR 0023). Entries are never removed: one monitor object per
@@ -147,6 +150,9 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
         return withGate(
                 groupId,
                 () -> {
+                    // Discovery precedes every toolkit call; it must not bypass outage backoff
+                    // by spawning a new instance while the query path is cooling down.
+                    requireRecoveryReady(groupId);
                     Instance instance = acquire(groupId);
                     instance.touch();
                     if (instance.tools == null) {
@@ -237,21 +243,79 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
 
     private WrenCallResult doCall(
             String groupId, String tool, Map<String, Object> arguments, Runnable authorization) {
+        requireRecoveryReady(groupId);
         Instance inst = acquire(groupId);
         authorization.run();
+        long deadline = System.nanoTime() + props.timeout().plus(CALL_SLACK).toNanos();
+        WrenCallResult first = invoke(groupId, inst, tool, arguments, deadline);
+        if (!WrenConnectionFailure.matches(tool, first)) return first;
+
+        requireNotCancelled();
+        authorization.run();
+        discard(groupId, inst);
+        recoveryNotBefore.put(groupId, System.nanoTime() + RECOVERY_COOLDOWN_NANOS);
+        log.info("Rebuilding wren connection for group {} after {} disconnect", groupId, tool);
+        try {
+            requireNotCancelled();
+            authorization.run();
+            if (deadline - System.nanoTime() <= 0)
+                throw new DatasetException("知识库查询恢复超出本次执行时间，请稍后重试", 503);
+            Instance replacement = acquire(groupId);
+            requireNotCancelled();
+            authorization.run();
+            WrenCallResult retried = invoke(groupId, replacement, tool, arguments, deadline);
+            if (!WrenConnectionFailure.matches(tool, retried)) {
+                recoveryNotBefore.remove(groupId);
+                return retried;
+            }
+            discard(groupId, replacement);
+            return new WrenCallResult(false, retried.payload() + "\n数据源连接重建后仍失败，已停止自动重试，请30秒后重试。");
+        } finally {
+            // Failed spawn/transport/authorization must not bypass the recovery cooldown either.
+            // Start it after the last attempt, not before a possibly slow cold start.
+            if (recoveryNotBefore.containsKey(groupId))
+                recoveryNotBefore.put(groupId, System.nanoTime() + RECOVERY_COOLDOWN_NANOS);
+        }
+    }
+
+    private static void requireNotCancelled() {
+        if (Thread.currentThread().isInterrupted())
+            throw new java.util.concurrent.CancellationException("知识库查询已取消");
+    }
+
+    private void requireRecoveryReady(String groupId) {
+        Long deadline = recoveryNotBefore.get(groupId);
+        if (deadline == null) return;
+        if (deadline - System.nanoTime() > 0)
+            throw new DatasetException("该知识库数据源连接恢复失败，请30秒后重试；本次未执行查询", 503);
+        recoveryNotBefore.remove(groupId, deadline);
+    }
+
+    private void discard(String groupId, Instance instance) {
+        if (instances.remove(groupId, instance)) closeQuietly(groupId, instance);
+    }
+
+    private WrenCallResult invoke(
+            String groupId,
+            Instance inst,
+            String tool,
+            Map<String, Object> arguments,
+            long deadline) {
+        requireNotCancelled();
+        long remaining = deadline - System.nanoTime();
+        if (remaining <= 0) throw new DatasetException("知识库查询恢复超出本次执行时间，请稍后重试", 503);
         inst.touch();
         McpSchema.CallToolResult result;
         try {
-            result = inst.client.callTool(tool, arguments).block(props.timeout().plus(CALL_SLACK));
+            result = inst.client.callTool(tool, arguments).block(Duration.ofNanos(remaining));
         } catch (RuntimeException e) {
             // Transport/protocol failure (or request timeout): the instance may be wedged, so it
-            // is dropped and the next call respawns it. Query-level errors come back as ok=false
-            // results instead and deliberately keep the instance alive.
-            invalidate(groupId);
+            // is dropped and the next call respawns it. Query diagnostics are classified above.
+            discard(groupId, inst);
             throw new DatasetException("wren 语义引擎调用失败（实例已重置，重试将自动重建）：" + rootMessage(e), 503);
         }
         if (result == null) {
-            invalidate(groupId);
+            discard(groupId, inst);
             throw new DatasetException("wren 语义引擎无响应（" + tool + "），实例已重置", 503);
         }
         inst.touch();
@@ -379,6 +443,13 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
     }
 
     private Instance spawnProject(String groupId, Path project, String profile) {
+        McpClientWrapper client = createClient(groupId, project, profile);
+        log.info("wren instance started for group {} (project={})", groupId, project);
+        return new Instance(project, client);
+    }
+
+    /** Opens the framework client; package visibility allows deterministic lifecycle tests. */
+    McpClientWrapper createClient(String groupId, Path project, String profile) {
         Path home = profileHome.ensure();
         // specs/010 M4: the snapshot pins its connection (ext-<id> for external-source groups);
         // a missing marker falls back to the default profile so pre-M4 snapshots keep working.
@@ -416,8 +487,7 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
             throw new DatasetException(
                     WrenProperties.unavailableMessage(props.executable(), rootMessage(e)), 503);
         }
-        log.info("wren instance started for group {} (project={})", groupId, project);
-        return new Instance(project, client);
+        return client;
     }
 
     private void sweepIdle() {

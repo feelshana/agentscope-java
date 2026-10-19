@@ -21,7 +21,6 @@ import io.agentscope.core.model.Model;
 import io.agentscope.core.skill.SkillFilter;
 import io.agentscope.core.skill.repository.FileSystemSkillRepository;
 import io.agentscope.core.state.AgentStateStore;
-import io.agentscope.core.state.InMemoryAgentStateStore;
 import io.agentscope.dataagent.dataset.DatasetContextProvider;
 import io.agentscope.dataagent.dataset.MdlCatalog;
 import io.agentscope.dataagent.dataset.WrenSkillsLocator;
@@ -365,7 +364,7 @@ public class DataAgentConfig {
             ToolEventBus toolEventBus,
             SandboxClient<DockerSandboxClientOptions> sandboxClient,
             UserSandboxRegistry userSandboxRegistry,
-            Optional<AgentStateStore> sessionOpt,
+            AgentStateStore stateStore,
             DataSourceRegistry dataSourceRegistry,
             Optional<DatasetContextProvider> contextProviderOpt,
             MdlCatalog mdlCatalog,
@@ -396,21 +395,7 @@ public class DataAgentConfig {
                             + " bean. Agent calls will fail until a model is available.");
         }
 
-        // AgentStateStore backend selection is independent of the workspace filesystem now that
-        // workspaces
-        // are sandbox-backed: each user's sandbox is reached through the in-memory
-        // UserSandboxRegistry under sticky load-balancing. Operators should still provide a
-        // distributed AgentStateStore bean for production so conversation state survives pod
-        // restarts.
-        AgentStateStore stateStore = sessionOpt.orElseGet(InMemoryAgentStateStore::new);
-        if (sessionOpt.isEmpty()) {
-            log.warn(
-                    "No distributed AgentStateStore bean configured ({}); using"
-                            + " InMemoryAgentStateStore. For multi-replica deployments, provide"
-                            + " a DistributedStore or a distributed AgentStateStore bean"
-                            + " (e.g. from agentscope-extensions-redis).",
-                    AgentStateStore.class.getName());
-        }
+        // Checkpoints survive process restarts independently of sandbox workspaces.
 
         // The modeling assistant is a metadata-only agent (relations / cubes / MDL validation)
         // and must run without the per-user Docker sandbox: it is exempt from the sandbox
@@ -568,7 +553,7 @@ public class DataAgentConfig {
                     mountWrenSkills(b, wrenSkillsLocator);
                 });
 
-        DataAgentBootstrap bootstrap = builder.build();
+        DataAgentBootstrap bootstrap = builder.agentStateStore(stateStore).build();
 
         // Hand the gateway a reference to the per-user sandbox registry so every run(...) turn
         // injects the user's live container as SandboxContext.externalSandbox (Priority-1 acquire

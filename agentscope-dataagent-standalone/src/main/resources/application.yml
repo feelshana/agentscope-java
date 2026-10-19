@@ -209,10 +209,10 @@ dataagent:
     chatui:
       enabled: true
 
-  # ---- Distributed session backend (optional, required for HA) ----
-  # When enabled, RedisSession is auto-wired into SandboxDistributedOptions
-  # so multiple DataAgent replicas share session + sandbox state. Falls back
-  # to local file store when disabled.
+  # Conversation checkpoints automatically use the platform MySQL DataSource.
+  # H2 development uses the framework JSON file store under persistent user.home.
+  # The legacy Redis block below is not wired by the default state configuration;
+  # an explicit AgentStateStore bean may override the default. See ADR 0084.
   session:
     redis:
       enabled: false
