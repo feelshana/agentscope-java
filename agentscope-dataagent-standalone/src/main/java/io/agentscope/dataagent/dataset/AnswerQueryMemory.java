@@ -83,6 +83,20 @@ public class AnswerQueryMemory {
     /** Accepts only a final answer from the authenticated user's server-side transcript. */
     public Result feedback(
             String owner, String session, String answerId, String vote, List<TurnEntry> turns) {
+        try (var timing = new WrenTiming("answer_feedback", null)) {
+            return timing.measure(
+                    "feedback_request",
+                    () -> feedbackTimed(owner, session, answerId, vote, turns, timing));
+        }
+    }
+
+    private Result feedbackTimed(
+            String owner,
+            String session,
+            String answerId,
+            String vote,
+            List<TurnEntry> turns,
+            WrenTiming timing) {
         if (vote == null || !Set.of("UP", "DOWN").contains(vote))
             throw new DatasetException("反馈只能为 UP 或 DOWN", 400);
         List<Pair> candidates = candidates(owner, answerId, turns);
@@ -93,7 +107,9 @@ public class AnswerQueryMemory {
                 answerId,
                 vote,
                 candidates.size());
+        long waiting = System.nanoTime();
         synchronized (lock(owner)) {
+            timing.record("owner_lock_wait", waiting, "ok");
             State old = read(owner);
             String key = queryId(session, answerId, "answer");
             Feedback previous = old.answers().get(key);
@@ -129,16 +145,34 @@ public class AnswerQueryMemory {
                     java.util.function.Supplier<Void> save =
                             () -> {
                                 Path project = project(owner, pair.groupId());
-                                initialize(project);
-                                store(project, pair.question(), pair.memorySql());
+                                timing.measure(
+                                        "initialize_project",
+                                        () -> {
+                                            initialize(project);
+                                            return null;
+                                        });
+                                timing.measure(
+                                        "store_example",
+                                        () -> {
+                                            store(project, pair.question(), pair.memorySql());
+                                            return null;
+                                        });
                                 if (publishedProjects != null)
-                                    publishedProjects.indexed(owner, pair.groupId());
+                                    timing.measure(
+                                            "update_published_index",
+                                            () -> publishedProjects.indexed(owner, pair.groupId()));
                                 return null;
+                            };
+                    long groupWait = System.nanoTime();
+                    java.util.function.Supplier<Void> measuredSave =
+                            () -> {
+                                timing.record("group_lock_wait", groupWait, "ok");
+                                return save.get();
                             };
                     java.util.function.Supplier<Void> serialized =
                             () -> {
-                                if (publishedProjects == null) return save.get();
-                                return publishedProjects.locked(pair.groupId(), save);
+                                if (publishedProjects == null) return measuredSave.get();
+                                return publishedProjects.locked(pair.groupId(), measuredSave);
                             };
                     if (operations == null) serialized.get();
                     else operations.run(pair.groupId(), serialized);

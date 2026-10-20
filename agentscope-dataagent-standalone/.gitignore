@@ -24,3 +24,6 @@ logs/
 # Private deployment profiles contain credentials; Maven also excludes them.
 /src/main/resources/application-dev.yml
 /src/main/resources/application-prod.yml
+
+# BI simulation keeps the shared key in external, deployment-local configuration.
+/docs/integration/bi-simulator.config.json

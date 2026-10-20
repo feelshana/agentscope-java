@@ -1,0 +1,10 @@
+{
+  "basePath": "/dataagent",
+  "sharedKey": "",
+  "users": [
+    { "username": "bi_sim_admin_1019", "label": "管理员体验" },
+    { "username": "bi_sim_owner_1019", "label": "知识库创建者" },
+    { "username": "bi_sim_reader_1019", "label": "共享用户" },
+    { "username": "bi_sim_guest_1019", "label": "新用户" }
+  ]
+}

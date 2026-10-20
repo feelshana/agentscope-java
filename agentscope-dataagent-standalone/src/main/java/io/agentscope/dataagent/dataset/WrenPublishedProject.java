@@ -33,75 +33,119 @@ public final class WrenPublishedProject {
 
     /** Rebuilds the official derived index only when deployed source changes. */
     public Path indexed(String owner, String group) {
-        return locked(
-                group,
-                () -> {
-                    Path project = prepare(owner, group);
-                    if (cli == null) return project;
-                    try {
-                        var digest = java.security.MessageDigest.getInstance("SHA-256");
-                        digest.update(Files.readAllBytes(project.resolve("target/mdl.json")));
-                        Path knowledge = project.resolve("knowledge");
-                        if (Files.isDirectory(knowledge)) {
-                            try (var paths = Files.walk(knowledge)) {
-                                for (Path file :
-                                        paths.filter(Files::isRegularFile).sorted().toList()) {
-                                    digest.update(
-                                            knowledge
-                                                    .relativize(file)
-                                                    .toString()
-                                                    .getBytes(StandardCharsets.UTF_8));
-                                    digest.update(Files.readAllBytes(file));
-                                }
-                            }
-                        }
-                        String hash = java.util.HexFormat.of().formatHex(digest.digest());
-                        Path marker = project.resolve(".indexed-source");
-                        String expectedMarker = hash + "\nbackend=lancedb";
-                        if (!Files.isRegularFile(marker)
-                                || !expectedMarker.equals(Files.readString(marker))) {
-                            // A failed rebuild must never leave a stale success marker reusable.
-                            Files.deleteIfExists(marker);
-                            var result =
-                                    cli.run(
-                                            project,
-                                            props.timeout(),
-                                            List.of(
-                                                    "memory",
-                                                    "index",
-                                                    "--mdl",
-                                                    project.resolve("target/mdl.json").toString(),
-                                                    "--path",
-                                                    project.resolve(".wren/memory").toString(),
-                                                    "--no-seed"));
-                            if (!result.ok())
-                                throw new DatasetException("官方 Wren 记忆索引失败，请检查多语言模型依赖或缓存后重试", 502);
-                            var status =
-                                    cli.run(
-                                            project,
-                                            props.timeout(),
-                                            List.of(
-                                                    "memory",
-                                                    "status",
-                                                    "--path",
-                                                    project.resolve(".wren/memory").toString()));
-                            if (!status.ok()
-                                    || !status.output()
-                                            .toLowerCase(java.util.Locale.ROOT)
-                                            .contains("lancedb")) {
-                                throw new DatasetException(
-                                        "Wren 向量记忆后端不可用，请安装 wrenai[memory-onnx] 并确认 LanceDB 配置",
-                                        502);
-                            }
-                            Files.writeString(marker, expectedMarker, StandardCharsets.UTF_8);
-                        }
-                        return project;
-                    } catch (DatasetException e) {
-                        throw e;
-                    } catch (Exception e) {
-                        throw new DatasetException("准备官方 Wren 记忆索引失败", e);
-                    }
-                });
+        try (var timing = new WrenTiming("published_index", group)) {
+            long waiting = System.nanoTime();
+            return timing.measure(
+                    "index_request",
+                    () ->
+                            locked(
+                                    group,
+                                    () -> {
+                                        timing.record("lock_wait", waiting, "ok");
+                                        Path project =
+                                                timing.measure(
+                                                        "prepare_project",
+                                                        () -> prepare(owner, group));
+                                        if (cli == null) return project;
+                                        try {
+                                            long fingerprint = System.nanoTime();
+                                            var digest =
+                                                    java.security.MessageDigest.getInstance(
+                                                            "SHA-256");
+                                            digest.update(
+                                                    Files.readAllBytes(
+                                                            project.resolve("target/mdl.json")));
+                                            Path knowledge = project.resolve("knowledge");
+                                            if (Files.isDirectory(knowledge)) {
+                                                try (var paths = Files.walk(knowledge)) {
+                                                    for (Path file :
+                                                            paths.filter(Files::isRegularFile)
+                                                                    .sorted()
+                                                                    .toList()) {
+                                                        digest.update(
+                                                                knowledge
+                                                                        .relativize(file)
+                                                                        .toString()
+                                                                        .getBytes(
+                                                                                StandardCharsets
+                                                                                        .UTF_8));
+                                                        digest.update(Files.readAllBytes(file));
+                                                    }
+                                                }
+                                            }
+                                            String hash =
+                                                    java.util.HexFormat.of()
+                                                            .formatHex(digest.digest());
+                                            Path marker = project.resolve(".indexed-source");
+                                            String expectedMarker = hash + "\nbackend=lancedb";
+                                            timing.record("fingerprint", fingerprint, "ok");
+                                            if (!Files.isRegularFile(marker)
+                                                    || !expectedMarker.equals(
+                                                            Files.readString(marker))) {
+                                                // A failed rebuild must never leave a stale success
+                                                // marker reusable.
+                                                Files.deleteIfExists(marker);
+                                                var result =
+                                                        timing.measure(
+                                                                "rebuild_index",
+                                                                () ->
+                                                                        cli.run(
+                                                                                project,
+                                                                                props.timeout(),
+                                                                                List.of(
+                                                                                        "memory",
+                                                                                        "index",
+                                                                                        "--mdl",
+                                                                                        project.resolve(
+                                                                                                        "target/mdl.json")
+                                                                                                .toString(),
+                                                                                        "--path",
+                                                                                        project.resolve(
+                                                                                                        ".wren/memory")
+                                                                                                .toString(),
+                                                                                        "--no-seed")));
+                                                if (!result.ok())
+                                                    throw new DatasetException(
+                                                            "官方 Wren 记忆索引失败，请检查多语言模型依赖或缓存后重试", 502);
+                                                var status =
+                                                        timing.measure(
+                                                                "check_backend",
+                                                                () ->
+                                                                        cli.run(
+                                                                                project,
+                                                                                props.timeout(),
+                                                                                List.of(
+                                                                                        "memory",
+                                                                                        "status",
+                                                                                        "--path",
+                                                                                        project.resolve(
+                                                                                                        ".wren/memory")
+                                                                                                .toString())));
+                                                if (!status.ok()
+                                                        || !status.output()
+                                                                .toLowerCase(java.util.Locale.ROOT)
+                                                                .contains("lancedb")) {
+                                                    throw new DatasetException(
+                                                            "Wren 向量记忆后端不可用，请安装 wrenai[memory-onnx]"
+                                                                    + " 并确认 LanceDB 配置",
+                                                            502);
+                                                }
+                                                Files.writeString(
+                                                        marker,
+                                                        expectedMarker,
+                                                        StandardCharsets.UTF_8);
+                                            } else {
+                                                timing.record(
+                                                        "reuse_index", System.nanoTime(), "ok");
+                                            }
+                                            return project;
+                                        } catch (DatasetException e) {
+                                            throw e;
+                                        } catch (Exception e) {
+                                            throw new DatasetException("准备官方 Wren 记忆索引失败", e);
+                                        }
+                                    }));
+        }
     }
 
     public Path prepare(String owner, String group) {

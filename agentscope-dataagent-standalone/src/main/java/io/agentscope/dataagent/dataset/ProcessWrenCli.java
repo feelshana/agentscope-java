@@ -47,13 +47,39 @@ public class ProcessWrenCli implements WrenCli {
 
     @Override
     public Result run(Path projectHome, Duration timeout, List<String> args) {
-        if (operations == null) return runProcess(projectHome, timeout, args);
-        return operations.run(
-                operations.groupForProject(projectHome),
-                () -> runProcess(projectHome, timeout, args));
+        String group = operations == null ? null : operations.groupForProject(projectHome);
+        try (var timing = new WrenTiming(operation(args), group)) {
+            long start = System.nanoTime();
+            java.util.function.Supplier<Result> action =
+                    () -> {
+                        timing.record("admission", start, "ok");
+                        return runProcess(projectHome, timeout, args, timing);
+                    };
+            return timing.measure(
+                    "admission_and_process",
+                    () -> operations == null ? action.get() : operations.run(group, action));
+        }
     }
 
-    private Result runProcess(Path projectHome, Duration timeout, List<String> args) {
+    private static String operation(List<String> args) {
+        if (args.size() >= 2
+                && List.of("memory", "context").contains(args.get(0))
+                && List.of(
+                                "store",
+                                "recall",
+                                "fetch",
+                                "index",
+                                "status",
+                                "init",
+                                "build",
+                                "validate")
+                        .contains(args.get(1))) return args.get(0) + "." + args.get(1);
+        return "cli";
+    }
+
+    private Result runProcess(
+            Path projectHome, Duration timeout, List<String> args, WrenTiming timing) {
+        long prepared = System.nanoTime();
         List<String> command = new ArrayList<>();
         command.add(props.resolveExecutable());
         command.addAll(args);
@@ -73,32 +99,52 @@ public class ProcessWrenCli implements WrenCli {
             // Never resolve profiles/config from the operator's ambient ~/.wren.
             pb.environment().put("WREN_HOME", props.wrenHome().toAbsolutePath().toString());
             io.agentscope.dataagent.runtime.wren.WrenProcessEnvironment.configure(pb.environment());
+            timing.record("prepare", prepared, "ok");
 
+            long spawn = System.nanoTime();
             try {
                 process = pb.start();
+                timing.record("spawn", spawn, "ok");
                 if (operations != null)
                     operations.trackProcess(operations.groupForProject(projectHome), process);
             } catch (IOException e) {
+                timing.record("spawn", spawn, "failed");
                 log.warn("wren CLI unavailable ({}): {}", props.executable(), e.getMessage());
                 return new Result(
                         -1, WrenProperties.unavailableMessage(props.executable(), e.getMessage()));
             }
             process.getOutputStream().close();
 
-            if (!process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
-                process.destroyForcibly();
-                return new Result(
-                        -1,
-                        "wren " + String.join(" ", args) + " 执行超时（" + timeout.toSeconds() + "s）");
+            long wait = System.nanoTime();
+            String waitOutcome = "interrupted";
+            try {
+                if (!process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
+                    waitOutcome = "timeout";
+                    process.destroyForcibly();
+                    return new Result(
+                            -1,
+                            "wren "
+                                    + String.join(" ", args)
+                                    + " 执行超时（"
+                                    + timeout.toSeconds()
+                                    + "s）");
+                }
+                waitOutcome = process.exitValue() == 0 ? "ok" : "failed";
+            } finally {
+                timing.record("process_wait", wait, waitOutcome);
             }
+            long read = System.nanoTime();
             String output = Files.readString(outFile, StandardCharsets.UTF_8).trim();
+            timing.record("read_output", read, "ok");
             return new Result(process.exitValue(), output);
         } catch (IOException e) {
+            timing.record("io_failure", prepared, "failed");
             return new Result(-1, "执行 wren 命令失败：" + e.getMessage());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return new Result(-1, "wren 命令执行被中断");
         } finally {
+            long cleanup = System.nanoTime();
             if (process != null && process.isAlive()) {
                 process.descendants().forEach(ProcessHandle::destroyForcibly);
                 process.destroyForcibly();
@@ -110,6 +156,7 @@ public class ProcessWrenCli implements WrenCli {
                     // temp file cleanup is best-effort
                 }
             }
+            timing.record("cleanup", cleanup, "ok");
         }
     }
 

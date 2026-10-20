@@ -89,9 +89,15 @@ public final class OfficialWrenToolkit {
                     List<String> arguments) {
         try {
             Project p = access.resolve(context);
+            long waiting = System.nanoTime();
             return access.locked(
                     p,
                     () -> {
+                        log.info(
+                                "[wren-timing] operation=modeling_cli group={}"
+                                        + " phase=workspace_lock_wait elapsedMs={}",
+                                p.groupId(),
+                                (System.nanoTime() - waiting) / 1_000_000.0);
                         access.checkTree(p);
                         List<String> command = command(p, arguments);
                         boolean bindConnection =

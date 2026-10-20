@@ -1,5 +1,91 @@
 # 交接历史
 
+## 2026-10-20｜checkpoint：清理后按用户要求一次提交
+
+用户纠正为一次提交，并要求先整理。保留真实部署/MCP修复、模拟BI、既有诊断、配套回归测试和上传50万/1000万上限；同步中英README与架构表，合并CURRENT_TASK/PROJECT_CONTEXT重复摘要及总账中旧部署描述，专项报告保留阶段失败、哈希和未覆盖项。spec077标明同事处理、我方不实施，未动官方库或用户数据。私有模拟配置/dev-prod/原始.runtime和output排除，无制品入Git。
+
+本次检查：mvn -q -DskipTests -Dskip.npm=true -Dskip.installnodenpm=true compile退出0（含Spotless门禁）；Python5文件AST解析、MJS3文件node --check、无密钥配置样例及路径排除、git diff --check通过。未重跑单元/业务测试或打包部署，Git Bash不在检查路径因而未新增Shell语法验收；10.19已有Java68/Python11、模拟BI等历史记录保留，不当本轮结果。编译日志在上层.runtime/organize-20261020-compile.log。采用一次Conventional Commit中文信息，不推送；提交号由Git最终HEAD确定，云运行版本不变。后续待同事合并后候选版回归与目标容量/真实BI/恢复验收。
+
+## 2026-10-20｜checkpoint：性能任务交同事与总体上线进度
+
+用户说同事正在处理性能，要求我方暂不管；记录为停止该项实现，spec077仍建议而非已交付。同事时间窗口限制仅截图/当前检出无对应实现，待同步验收。总体核对主功能与模拟BI真实云端链路已贯通，缓存下载阻断解除但性能未收口；HEAD9183e77f后40项工作区差异仍未提交。唯一上线总账增加最新状态覆盖旧“云端尚未启动”等历史措辞；列合并/版本冻结、全流程与10人目标负载/长稳、真实BI/HTTPS、回退/备份恢复和灰度。显示失败误标仍待修，不恢复准确性规则定制。仅文档核对，无新测试、运行代码、服务变更或提交。
+
+## 2026-10-20｜checkpoint：首问沙箱与官方Wren源码核对
+
+按用户要求只读对照D:/code/WrenAI。发现默认工作区技能扫描在提示词/预暂存时经glob→exec触发LazySandbox，解释首问容器立即出现；不是每个会话独立容器。纠正indexed条件含标记缺失、20秒历史为诊断发布后场景。官方5关键文件归一换行与安装0.15一致（检出声明0.14/HEAD871118e9）；官方明确模型变更后索引，recall不重建，store单条索引，watch同进程但全schema，模型首次encode懒加载并缓存。补spec077/当前进度；无新性能/调用栈实测，无产品代码、官方源码、部署、提交修改。下一步继续确认方案后实施，保留权限/技能语义。
+
+## 2026-10-19｜云端沙箱检查通过，prod配置已准备
+
+用户反馈“沙箱依赖和setsid检查通过”，离线镜像导入阶段完成；未代表应用业务或10人容量通过。output/cloud-deploy-20261019新增私有application-prod.cloud.yml及bi-simulator.cloud.json，Git忽略已确认。模型参数复制既有本地已验证私有配置，密钥不打印/提交；新JWT secret及32字节Base64 BI key独立生成并持久，两文件共享BI key。数据源为dataagent_app@127.0.0.1:3306的dataagent_platform/data_agent，密码两处占位等待用户服务器getpass输入；非空/JSON-YAML特殊字符转义已本地校验。server监听127.0.0.1:8080，JPA validate/init never、prod无密码/无演示用户，沙箱tag为已导入镜像。
+
+模拟入口预设liyufanwx（李雨繁）、demo_owner/demo_reader/demo_guest，角色仍由后台库决定，尚未设置管理员。计划用SSH localhost18880→云Nginx80访问同源/bi-sim与/dataagent，故CORS准备localhost/127.0.0.1:18880；实际Nginx/SSH步骤尚未执行。不将该本地转发当作真实BI/正式HTTPS验收。
+
+下一步用户本地PowerShell上传这两文件，Xshell将prod安装到/data/app/dataagent/dataagent-2.0.3-SNAPSHOT/conf/application-prod.yml（root:dataagent/0640），用系统Python/getpass填数据库密码；export DATAAGENT_WREN_EXECUTABLE/PYTHON后从版本目录执行bin/dataagent.sh start，再curl /actuator/health与/api/auth/options。应用运行目录由现有root启动分支创建并交给dataagent；不手工chown旧资产，不重复建表。云端实际配置填写和启动仍待反馈；没有再构建/测试业务代码或自动提交。私有准备证据.runtime/cloud-deploy-20261019/cloud-config-prepared.json。
+
+
+## 2026-10-19｜Docker Hub连接超时，沙箱改为离线导入
+
+云端docker build在FROM python:3.12-slim读取DockerHub manifest阶段超时，尚未执行apt/pip构建；不按应用/依赖安装故障处理，不改daemon镜像源或重启Docker。已复用本地既有已验收镜像agentscope/dataagent-sandbox:latest，确认linux/amd64，断网512MiB限制容器中实际导入pandas3.0.5/numpy2.5.3/scipy1.18.1/matplotlib3.11.2、Agg后端、setsid及4个CJK字体文件。没有注入业务配置或挂载宿主数据。
+
+imageId=sha256:6b96c40d12a2c8f4241481694fb0be25cf34fb6361d1ce9c8603f0a66c413ec2。已docker save并gzip导出上层output/cloud-deploy-20261019/dataagent-sandbox-linux-amd64.tar.gz，242247512字节；SHA256=0514ee62108c1e02a4e9265bd58c8c28b5c92121d08fe1634694f3cb6c34d4c1。归档manifest/config digest、OS架构已核对，本地docker load往返确认同一imageId；同目录SHA256SUMS更新。原始证据.runtime/cloud-deploy-20261019/sandbox-export.json。复用镜像不是此次云端从浮动Dockerfile重新构建的结果，具体版本如上。
+
+下一步用户本地PowerShell用原SSH key上传该镜像包到/root；Xshell docker load -i后以dataagent账号运行--rm/--network none分析库+setsid检查。云端导入/容器运行结果尚待反馈，后端和真实BI尚未启动/验收。Wren预检、35表及授权此前已通过。未自动上传/提交或修改业务代码。
+
+
+## 2026-10-19｜云端Wren预检已通过，准备沙箱镜像
+
+用户最新截图确认以dataagent账号执行已修正的check-wren.py后输出Wren CLI/MCP/MySQL/ONNX-LanceDB依赖检查通过。编译系统包缺失和误查pymysql两项阻断在此云端步骤已闭环；这不代表模型缓存、业务查询或应用启动通过。
+
+下一步指引使用已上传并解压的/root/cloud-support/docker/sandbox.Dockerfile构建agentscope/dataagent-sandbox:latest，随后runuser -u dataagent启动--rm/--network none容器，验证pandas/numpy/scipy/matplotlib导入及setsid存在。已核对support包Dockerfile与当前源码一致。此步尚待用户执行；不提前记录镜像已就绪，不修改Docker网络/镜像源，不停Doris或MySQL。通过后准备外置prod配置与应用启动，再同源BI入口和完整云端验收。未自动提交。
+
+
+## 2026-10-19｜mysqlclient安装成功，发布预检驱动名称已修正
+
+用户云端截图已出现Successfully built mysqlclient和Successfully installed wrenai0.15.0/wren-core-py0.8.0/mcp1.30.0，但check-wren报No module named pymysql。核对本机同版官方wrenai元数据与connector/mysql.py确认真实连接器依赖mysqlclient、导入MySQLdb；原预检pymysql是错误要求。
+
+源码src/main/bin/check-wren.py仅将导入项pymysql改为MySQLdb；新增src/test/python/test_check_wren.py三项定向回归，覆盖真实模块名、缺MySQLdb仍失败、固定版本仍校验，3/3通过。首轮测试夹具误用源码布局导致3项找不到requirements文件，修正为临时发布目录后全过；不是放宽生产脚本。另用实际已安装Wren/原生驱动及CLI、屏蔽PyMySQL导入验证依赖预检通过，没有连接云数据库。
+
+mvn assembly:single成功，仅重建分发tar、JAR保持aa05b6d1a52386a4300110a000b4c644e6f5f2f2ba1a3bd3f772196ef6a07640及/dataagent/前缀不变；输出目录原tar更新SHA256为76b1120fe0171ff6f68626dcfb02e58f5b03e5124518655f34ec449cae619bd7，SHA256SUMS同步。服务器此前上传的是旧tar；给用户一条sed命令等效修正已解压bin/check-wren.py，随后原账号重新预检，无需重装/重传150MB包。云端修改及通过结果仍待用户执行反馈。部署说明/本报告/共享记忆同步，未自动提交，未重跑全量Java/云端业务。
+
+
+## 2026-10-19｜云端Wren安装阻断：mysqlclient编译依赖
+
+用户在既有venv安装requirements-wren.txt时，mysqlclient2.3.0源码构建报pkg-config not found（exit127），尚未完成Wren安装。已核对mysqlclient官方Debian/Ubuntu安装要求，前一步指引遗漏系统开发依赖；补充root安装python3-dev/default-libmysqlclient-dev/build-essential/pkg-config，再原dataagent账号重试pip及包内依赖预检。不删venv、不改Wren固定版本、不手工绕过驱动。single-host-release已补安装/排障说明；云端实际恢复结果待用户反馈，本轮未运行安装/测试、未改业务代码或重建发布包。
+
+
+## 2026-10-19｜用户已完成云端建表
+
+用户最新Xshell截图确认bootstrap-platform.sql导入无报错：dataagent_platform为35表、data_agent为0表；dataagent_app@localhost对两个库均ALL PRIVILEGES（仅库级，USAGE全局）。此前截图确认运行账号dataagent属docker组、暂无镜像。发布材料已由用户上传，尚无解压/依赖安装/应用启动证据。
+
+下一步指引：Xshell解压/root/dataagent-2.0.3-SNAPSHOT.tar.gz到/data/app/dataagent，配套cloud-support解压到/root；安装python3-venv，由dataagent用户在/data/app/dataagent/wren-venv建venv并按发布包requirements-wren.txt安装，调用包内bin/check-wren.py dependencies检查。Wren通过后再构建sandbox.Dockerfile镜像、准备外置prod配置、Nginx/SSH同源入口及实际云端验收。当前只是指引，不能提前记作云端依赖/服务已就绪。无需重复执行增量ALTER或建表。
+
+
+## 2026-10-19｜空库初始化材料完成，待用户上传/导入
+
+用户最新截图确认dataagent_platform和data_agent均0表；dataagent_app仅localhost；dataagent用户已属docker组；Docker镜像列表为空。目录与Doris保持原状，云端尚未导入/启动应用。
+
+已在上层output/cloud-deploy-20261019生成bootstrap-platform.sql：当前JAR在本地独立空MySQL8.0.41库创建结构，再仅导出35张表DDL，导入第二个新空库后，实际同一JAR以prod/ddl-auto=validate/sql-init=never启动及auth/options检查成功。SQL0业务行、无DROP/ALTER/INSERT，包含会话状态/免登/图表owner等当前列，因此该空库基线导入后不要再盲跑旧增量ALTER。data_agent上传物理表仍由实际上传创建。
+
+生成探针首次因Windows Java launcher子进程未退出占端口而误读旧实例，该次证据作废；改独立18086端口并确认新启动日志及HTTP后通过。收尾脚本曾混用Popen/psutil清理接口，已修正并显式核对停止所有schema探针JVM；原本地18084/18766保留。两个新本地验证库保留，不含导出的用户数据。原始证据.runtime/cloud-deploy-20261019/schema-validation.json及schema-replay/startup-verified.log。
+
+发布包SHA仍448041050ceafa6fbd92cda4e1619b4330508fec1ab8448cdc2f231b7deb657f；完整DDL SHA7710d04e5373a97f0a41276ead15375ae2d7dba901637952a06cd9115143894f。同输出目录另有cloud-support.tar.gz、三文件SHA256SUMS.txt。下一步让用户在本地PowerShell用原cloud-verify-ed25519密钥上传3文件到/root，Xshell导入bootstrap-platform.sql并回传平台35表/上传库0表及SHOW GRANTS结果，再准备Wren、沙箱、外置prod配置和启动。未自动上传/提交；不是新的全流程/并发验收。
+
+
+## 2026-10-19｜云端演练准备进度
+
+- 用户截图确认云端Java17/Python3.12.3、MySQL8.0.46，Docker/MySQL/Nginx active，约11GiB可用内存/60GiB磁盘；Doris保留、8080空闲。dataagent_platform/data_agent库存在，表和账号权限未确认；/data/app存在，项目子目录未创建，旧/opt/dataagent不移动。
+- 已完成/dataagent/前缀的完整Maven package -DskipTests（含真实前端构建），新tar位于上层output/cloud-deploy-20261019，SHA256448041050ceafa6fbd92cda4e1619b4330508fec1ab8448cdc2f231b7deb657f。配套cloud-support.tar.gz不含有效密钥；不是完整空库schema。验证包内前缀/私有配置排除/LF，原源码static字节恢复，无新增业务代码；本轮未重跑测试，引用上一轮732项。
+- 专用本地后端更新为PID53776，代理PID19632/18766，TTL1800，prod auth检查正常。尚未上传/初始化/部署云端，未自动提交。下一步用户在Xshell回传两个库的表、dataagent_app的Host、id dataagent和沙箱镜像，再给匹配当前状态的初始化/上传步骤。详细证据仍在20261019-bi-simulator专项报告顶部。
+
+
+## 2026-10-19｜完成｜模拟BI入口与实际JAR本地验收
+
+- 增静态工作台/宿主/样式/模块/本地代理/7项Node测试、部署说明及Nginx片段；spec075/ADR0086、架构、上线总账和记忆同步。复用正式免登，prod禁密码，随机私有配置在.runtime，用户旧资产保留。新增admin/owner/reader/guest4账号及商品100行库。
+- 实际浏览器图标→新页→iframe，聊天及暗号追问、切账号/多标签、权限和历史隔离、无续期刷新、20秒实际JWT过期后重新进入通过，恢复1800秒。owner/reader真实Wren SQL100，37/11秒。Maven732项707通过25跳过、Node7/7、TypeScript/Vite独立子路径和Maven打包通过；不重复声称历史负载/断连恢复已本轮覆盖。
+- 首轮JAR问数No default McpJsonMapper，探针证明后台loader SPI发现问题。WrenInstanceRegistry#createClient局部应用loader+finally恢复，新增2测试，冷启动真实查询成功。失败会话保留。证据.runtime/bi-simulator-20261019及output/playwright/bi-simulator-20261019；报告20261019-bi-simulator。
+- 本轮未提交/推送/云部署，之前4提交最终9183e77f。保留后端18084 PID15748、代理18766 PID19632供体验；tar根路径静态资源，部署/dataagent/前重打包。下一步请用户配合云端完整发布演练，再BI与目标容量；准确性治理不处理。
+
+
 ## 2026-10-18｜checkpoint｜MySQL会话持久化完成
 
 - 用户要求跳过准确性治理，批准上下文持久化；ADR0084/spec073。框架MysqlAgentStateStore共用平台库最新快照，H2开发文件，自定义Bean优先；重置/删除/维护清理状态，生产validate先迁移。不改官方技能/业务模型，不自动重建已丢失状态。
@@ -413,3 +499,65 @@
 - 用户授权提交并明确分4次。前三次功能提交：f782bf3b, 02bc8e60, 4b0f96e3；本条随第4次文档/静态资源提交收口，最终HEAD为完整待部署基线。主题及迁移见唯一上线总账；本轮没有新增业务代码。
 - 检查实际diff/暂存文件/私有配置忽略与新秘密值排除，既有JAR哈希匹配10.18验收记录；引用730项707通过23跳过和Maven构建，本次未重跑测试。生产validate注意0083/0084，子路径需设置DATAAGENT_BASE_PATH重建。
 - 不推送/打标签/部署，不改模型与测试资产；模拟BI及云端全流程仍为已讨论未实施。后续为模拟BI本地真实链路、云部署、真实BI及65容量，准确性治理继续跳过。
+
+
+### 2026-10-19｜checkpoint：统一发布日志目录
+
+云端私有配置已安装/密码已填，首次启动暴露log与logs不一致。用户确认logs，已修正启动脚本并同步发布/架构说明；Python5/5及隔离Linux旧脚本失败、新脚本root降权/普通账号启停与日志归属探针通过。云端等效补丁和实际启动待用户执行，不覆盖配置、不提交。详细证据见20261019-bi-simulator报告。
+
+
+### 2026-10-19｜checkpoint：云端应用首次就绪
+
+用户回传Wren预检通过、应用就绪PID302435、日志logs/；日志目录与后续1045认证阻断已闭环，密码不落文档。下一步独立健康/auth选项和Nginx启用站点检查，再静态BI及SSH localhost同源入口；尚未进行云端浏览器/业务验收，未自动提交。
+
+
+### 2026-10-19｜checkpoint：健康/auth选项通过
+
+用户确认UP、密码登录关闭/BI开启，Nginx仅默认站点。下一步用独立127.0.0.1:18881演练server及localhost18880 SSH转发，避免修改默认站点；静态安装与Nginx、浏览器步骤尚待用户执行。
+
+
+### 2026-10-19｜checkpoint：云端模拟入口转发通过
+
+用户确认Nginx18881两个页面200及auth配置正确。下一步用户在Windows建立18880→云18881 SSH转发，再浏览器验证liyufanwx免登；管理员尚未设置，业务全流程待验收。
+
+
+### 2026-10-19｜checkpoint：模拟工作台模块类型修正
+
+用户空下拉现象已通过真实SSH HTTP定位：两mjs为octet-stream。补模拟Nginx静态MIME表，Node8/8、support归档及校验同步；云端补丁/reload/强刷及实际免登仍待用户，应用无需重启。
+
+
+### 2026-10-19｜checkpoint：云端免登通过，评估上传50万行
+
+用户明确确认自动进入真实云对话、无登录页；已建测试库并导入3文件（基础发布v2），另3文件行数超10万。核对现有配置可提高行数，无需重编译；需同步单元格预算，保留体积/并发预算。50万导入尚未实测，配置未自动修改；不处理业务建模规则。
+
+
+### 2026-10-19｜checkpoint：红海真实文件上传基线
+
+用户提供桌面6表。只读清点大表约16万行，20列文件338万cells；专用云账号/独立库真实上传3小文件成功且行数一致，1大文件复现10万限制413/10.71秒、操作已结束/列表无失败数据集。云策略未改；下一步用户配合prod调50万/1000万cells并重启，再由我验大文件。原文件、现有库、业务模型规则不改，未提交；报告20261019-honghai-upload。
+
+
+### 2026-10-19｜checkpoint：红海三个大文件导入通过
+
+用户重启后策略50万/1000万cells生效。三大原文件HTTP200、行数162862/168893/159284一致、20.46/24.89/23.09秒；合计6数据集基础发布v6，MDL无变更/无issues，health UP。未测试50万边界/内存/并发/业务问数，未动源文件与原库，测试账号/库保留；下一步回云业务建模与问数主线，未提交。
+
+
+### 2026-10-19｜checkpoint：调查memory store耗时
+
+源码确认官方保存为Markdown+问题向量+LanceDB，平台每次同步CLI新进程/单库锁/结束才回传输出。首次HF下载及每次模型加载为待证方向；云会话只读历史0未拿到回执，已请求用户展开结果及实际耗时。不修改代码或用户工程；云缓存/具体慢因未确认。
+
+
+### 2026-10-19｜checkpoint：云端慢建模/问答根因实测
+
+用户要求自己跑流程。独立库实际建模确认18.4秒→保存185秒超时；校验/发布1.4/1.5秒，v7；普通COUNT10.8秒、追问17.6秒，带召回191.4秒（召回180秒失败，SQL0.38秒）。SSH只读现场确认实际HOME无模型缓存，HF网络不可达；原用户2个样例文件存在，UI非零退出码绿完成问题待修。离线模型包约434MB与384维检查脚本已备，新缓存HF_OFFLINE真实保存3.97秒；尚未部署云端、不宣称修好。详细报告20261019-cloud-modeling-latency；保留数据/历史，不改用户业务模型，未提交或重启。下一步用户配合部署缓存再完整复测。
+
+### 2026-10-19｜checkpoint：云端向量模型部署后业务回归
+
+用户安装模型并反馈离线384维预检2.22秒。真实云API专用库：首次召回成功29.669秒整轮，最小建模10.091秒到确认；保存退出0/7.810秒，立即召回命中新文件，确认整轮19.433秒。校验/发布1.655/1.619秒、v8；发布后召回问数162862/27.678秒，点赞SAVED1/20.687秒，再新会话召回刚点赞样例并COUNT2046/5.553秒、召回0.053秒。未改业务/运行时代码或重启，原用户库未操作；180秒阻断未再出现，首次/发布后索引约20秒仍需评估。UI失败误报未修，并发/长稳/浏览器/重启未重测，无提交。证据及限制已更新耗时专项。
+
+### 2026-10-19｜checkpoint：分段计时与云端冷热对照
+
+用户授权先加诊断，不先优化。增加Java固定阶段计时（CLI/索引/点赞/建模锁/MCP）和按需profile-wren.py；spec076/架构/发布说明及专项同步。Java68定向、Python11、真实六表Java/CLI通过；云端临时副本冷store/index/recall4.672/7.091/4.606秒，原发布源哈希不变。无全局跟踪同进程：LanceDB含导入初始化1.564秒、模型2.349秒、单条向量9.717毫秒、保存/召回16–19毫秒、67项全索引2.699秒。本地样例变化重建4.881秒+状态进程2.494秒；无变化复用20.225毫秒。证据.runtime/cloud-perf-20261019；深度跟踪明显放大导入，仅按需诊断。新JAR未部署，无服务重启、官方源码/业务模型修改、提交；性能优化及UI失败误标仍待续，其他来源上传阈值改动保留。
+
+### 2026-10-19｜checkpoint：按用户体验追踪完整召回链路
+
+用户指出工具几十秒仍严重，要求整体根因/方案。真实云API独立库示例问题加诊断标记、SQL不变，显式发布v9；首问召回20.557秒/整轮25.522秒，另一新会话同题0.046秒/5.498秒，均SQL162862。进程观察index10.136秒/status2.190秒。官方stdio隔离复现初始化0.874+发现0.007+index7.306+status2.300+首次recall3.741秒，后续0.022秒、总14.252；清理临时进程/目录且发布源哈希不变。确认发布只编译、查询补全schema/status并再由MCP冷加载，点赞同库锁可影响他人；框架collectList后统一end又放大快工具显示。spec077待确认方案及报告/记忆同步；本轮无优化代码、新JAR部署、重启或提交，原用户库未改。下一步评阅方案后做P0检索就绪，P1通知/错误状态待续。

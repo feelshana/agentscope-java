@@ -213,6 +213,8 @@ main 线程）同步执行，每个 server 经 `McpClientBuilder.buildAsync().bl
 只有官方已提供的工具可调用；问数服务不使用 --allow-write，store_query 不对 Agent 开放。
 
 `WrenQueryAccess#resolve` 检查 ownerId、DatasetScope 与当前会话范围并要求已发布版本。
+实际可执行JAR中，后台线程的默认ContextClassLoader可能看不到嵌套依赖中的MCP JSON SPI。`WrenInstanceRegistry#createClient`在客户端创建/初始化范围内临时使用应用类加载器，finally恢复调用线程原值；不依赖主线程预热，不全局替换线程类加载器。实际JAR验证见spec075及20261019模拟BI报告。
+
 `WrenInstanceRegistry#spawn` 使用 `WrenPublishedProject#prepare` 的运行工程与发布时锁定的 profile，继续复用框架 MCP ClientWrapper。
 
 ADR 0072 / spec 061：`ProcessWrenCli#run` 与 `WrenInstanceRegistry#spawnProject` 共用
@@ -291,6 +293,8 @@ SQL 原样保存，不二次添加 LIMIT。`WrenPublishedProject#prepare` 合并
 `ToolInspector` 右侧详情按 spec 071 使用“结果/输入/原始内容”页签，支持放大、窄屏覆盖和键盘切换；SQL表格只展开已返回行，Python文件按调用分组，失败时保留部分文件警告，原生图表复用ECharts。展示解析不触发重跑或改变权限；无回执显示“结果未确认”，不补造耗时、版本及调用导航。聊天内工具块和建模页面保持原实现。
 线上 recall_queries/get_context 使用该同一工程的官方 memory；无平台评分、中文词项算法或可信等级扩展。
 CLI/依赖/多语言模型不可用时明确返回错误；普通 SQL 查询仍可执行。
+
+Wren耗时诊断（spec076）：`WrenTiming`只记录固定阶段、随机trace、库ID及毫秒，不增加问题/SQL内容。`ProcessWrenCli#run`拆分准入、启动、进程执行和输出读取；`WrenPublishedProject#indexed`拆分锁等待、工程准备、指纹、重建及后端检查；`AnswerQueryMemory#feedback`拆分保存和发布索引。建模工具补工作区锁等待，MCP实例注册器补门锁等待、实例获取和RPC。发布包`bin/profile-wren.py`按需使用单调时钟跟踪官方Python调用边界，不修改安装文件、不挂到默认请求；深度跟踪有开销且嵌套耗时不可直接相加。见[专项报告](docs/test-reports/20261019-wren-phase-timing.md)。这些计时不改变授权、取消、索引一致性或保存完成语义。
 
 ### 4.3 保留的数据分析能力
 
@@ -623,7 +627,7 @@ SSE 由 `api/chat.ts` 消费，`done.sessionKey` 是 conversationId。
 | `dataagent.sandbox.image` | `agentscope/dataagent-sandbox:latest` | 沙箱镜像（`docker/sandbox.Dockerfile` 构建） |
 | `dataagent.sandbox.max-containers` | `16` | 单进程容器上限，满额驱逐空闲实例；环境变量 DATAAGENT_SANDBOX_MAX_CONTAINERS |
 | `dataagent.upload.max-file-size` / `max-selection-size` / `max-files` | `50MB` / `100MB` / `10` | 上传单文件、整批及数量上限 |
-| `dataagent.upload.max-rows` / `max-columns` / `max-cells` | `100000` / `100` / `2000000` | 解析规模上限 |
+| `dataagent.upload.max-rows` / `max-columns` / `max-cells` | `500000` / `100` / `10000000` | application.yml 解析上限；外置配置可调整，不代表容量验收结论 |
 | `dataagent.upload.concurrent-files` | `8` | 单进程在途文件准入，允许 1—32 |
 | `dataagent.chat.max-active` / `max-active-per-user` | `16` / `2` | 问数全局/每用户执行数 |
 | `dataagent.chat.max-waiting` / `max-waiting-per-user` | `16` / `1` | 全局/每用户等待数 |
@@ -659,7 +663,7 @@ java -jar target/agentscope-dataagent-*-exec.jar   # → http://localhost:8080
 
 H2 种子账号：`bob/bob`、`alice/alice`（`data-h2.sql`，幂等 MERGE）。
 
-根 pom.xml 的编译基线为 Java 17，本项目不依赖旧多模块 `-pl agentscope-examples/...` 路径。框架改动后先安装配套 harness/OpenAI 扩展，再构建本项目；默认 Maven 流程会构建前端，已有前端构建时可使用 skip.npm/skip.installnodenpm 参数跳过。保留原 Boot exec JAR，同时按 ADR0080 生成 dataagent-<version>.tar.gz，包含 bin/conf/lib。公共默认配置及 h2 profile 保留；私有 dev/prod 的 YAML/properties 同时由 Maven resources 和 jar 插件排除，分发仅带无凭据样例。dataagent.sh 通过共享启停锁、PID/启动时间/JAR 身份管理单实例，启动前用 check-wren.py 校验固定 Wren 依赖，再等待 HTTP 健康；停止不依赖 Wren。数据位于版本父目录 data/，日志位于当前版本 log/。发布默认重建前端，可选 frontend/build.ps1 只是提前构建包装。步骤及脚本环境变量见 [单机发布](docs/single-host-release.md)。部署步骤见 [并发与发布说明](docs/platform-concurrency-and-release.md)。
+根 pom.xml 的编译基线为 Java 17，本项目不依赖旧多模块 `-pl agentscope-examples/...` 路径。框架改动后先安装配套 harness/OpenAI 扩展，再构建本项目；默认 Maven 流程会构建前端，已有前端构建时可使用 skip.npm/skip.installnodenpm 参数跳过。保留原 Boot exec JAR，同时按 ADR0080 生成 dataagent-<version>.tar.gz，包含 bin/conf/lib。公共默认配置及 h2 profile 保留；私有 dev/prod 的 YAML/properties 同时由 Maven resources 和 jar 插件排除，分发仅带无凭据样例。dataagent.sh 通过共享启停锁、PID/启动时间/JAR 身份管理单实例，启动前用 check-wren.py 校验固定 Wren 依赖，再等待 HTTP 健康；停止不依赖 Wren。数据位于版本父目录 data/，日志位于当前版本 logs/。发布默认重建前端，可选 frontend/build.ps1 只是提前构建包装。步骤及脚本环境变量见 [单机发布](docs/single-host-release.md)。部署步骤见 [并发与发布说明](docs/platform-concurrency-and-release.md)。
 
 SQL 演示账号初始化与 Java 管理员初始化是独立开关；`dataagent.seed-demo-users` 默认 false，不代表禁用 SQL 初始化。生产环境须明确设置初始化策略和数据库配置，不能根据旧文档假设默认 H2 或自动创建管理员。
 
@@ -744,3 +748,7 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 - 维护：容量保护、分段锁和分批孤立文件补偿已实施；正常历史保留任务见 ADR 0061，默认关闭并先试运行；多实例协调和对象存储尚未实施。
 
 部署限制、完整参数、备份范围和验证边界见 [会话与附件部署说明](docs/session-history-and-artifacts.md)。
+
+### 模拟BI联调入口（spec075 / ADR0086）
+
+`docs/integration/bi-simulator*`是独立静态工作台和iframe宿主，复用正式`bi-login.mjs`及真实prod后端，不新增模拟认证接口或产品菜单。本地Node仅提供loopback静态服务和SSE流式代理；云端用Nginx同源子路径。未知用户仍自动创建普通用户，角色由平台库决定；每标签页保存身份，刷新复用固定到期JWT，切账号显式重新免登。私有配置外置；此入口不作为可信SSO的新机制，既有前端持钥边界不变。见[运行与部署说明](docs/integration/bi-simulator.md)。

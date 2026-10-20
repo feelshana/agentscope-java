@@ -227,24 +227,32 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
 
     private <T> T withGate(String groupId, Supplier<T> operation) {
         var gate = callGates.computeIfAbsent(groupId, key -> new ReentrantLock(true));
-        try {
-            if (!gate.tryLock(props.callWaitSeconds(), TimeUnit.SECONDS))
-                throw new DatasetException("该知识库查询繁忙，等待执行超时，请稍后重试", 503);
-        } catch (InterruptedException cancelled) {
-            Thread.currentThread().interrupt();
-            throw new java.util.concurrent.CancellationException("知识库查询等待已取消");
-        }
-        try {
-            return operation.get();
-        } finally {
-            gate.unlock();
+        try (var timing = new io.agentscope.dataagent.dataset.WrenTiming("mcp_gate", groupId)) {
+            long waiting = System.nanoTime();
+            try {
+                boolean acquired = gate.tryLock(props.callWaitSeconds(), TimeUnit.SECONDS);
+                timing.record("gate_wait", waiting, acquired ? "ok" : "timeout");
+                if (!acquired) throw new DatasetException("该知识库查询繁忙，等待执行超时，请稍后重试", 503);
+            } catch (InterruptedException cancelled) {
+                timing.record("gate_wait", waiting, "interrupted");
+                Thread.currentThread().interrupt();
+                throw new java.util.concurrent.CancellationException("知识库查询等待已取消");
+            }
+            try {
+                return timing.measure("gate_execution", operation);
+            } finally {
+                gate.unlock();
+            }
         }
     }
 
     private WrenCallResult doCall(
             String groupId, String tool, Map<String, Object> arguments, Runnable authorization) {
         requireRecoveryReady(groupId);
-        Instance inst = acquire(groupId);
+        Instance inst;
+        try (var timing = new io.agentscope.dataagent.dataset.WrenTiming("mcp_acquire", groupId)) {
+            inst = timing.measure("acquire_instance", () -> acquire(groupId));
+        }
         authorization.run();
         long deadline = System.nanoTime() + props.timeout().plus(CALL_SLACK).toNanos();
         WrenCallResult first = invoke(groupId, inst, tool, arguments, deadline);
@@ -306,8 +314,16 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
         if (remaining <= 0) throw new DatasetException("知识库查询恢复超出本次执行时间，请稍后重试", 503);
         inst.touch();
         McpSchema.CallToolResult result;
-        try {
-            result = inst.client.callTool(tool, arguments).block(Duration.ofNanos(remaining));
+        try (var timing = new io.agentscope.dataagent.dataset.WrenTiming("mcp_invoke", groupId)) {
+            result =
+                    timing.measure(
+                            "rpc",
+                            () ->
+                                    inst.client
+                                            .callTool(tool, arguments)
+                                            .block(Duration.ofNanos(remaining)));
+            if (result == null || Boolean.TRUE.equals(result.isError()))
+                timing.record("rpc_result", System.nanoTime(), "failed");
         } catch (RuntimeException e) {
             // Transport/protocol failure (or request timeout): the instance may be wedged, so it
             // is dropped and the next call respawns it. Query diagnostics are classified above.
@@ -450,6 +466,19 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
 
     /** Opens the framework client; package visibility allows deterministic lifecycle tests. */
     McpClientWrapper createClient(String groupId, Path project, String profile) {
+        Thread caller = Thread.currentThread();
+        ClassLoader previous = caller.getContextClassLoader();
+        try {
+            // Worker threads can inherit the system loader, which cannot discover providers
+            // inside a Spring Boot executable JAR. Limit the correction to client creation.
+            caller.setContextClassLoader(WrenInstanceRegistry.class.getClassLoader());
+            return openClient(groupId, project, profile);
+        } finally {
+            caller.setContextClassLoader(previous);
+        }
+    }
+
+    private McpClientWrapper openClient(String groupId, Path project, String profile) {
         Path home = profileHome.ensure();
         // specs/010 M4: the snapshot pins its connection (ext-<id> for external-source groups);
         // a missing marker falls back to the default profile so pre-M4 snapshots keep working.

@@ -36,7 +36,7 @@ def main():
         actual = version(package)
         if actual != expected:
             raise ValueError(f"{package} 版本应为 {expected}，当前为 {actual}")
-    for module in ("wren", "wren_core", "mcp", "pymysql", "lancedb", "onnxruntime"):
+    for module in ("wren", "wren_core", "mcp", "MySQLdb", "lancedb", "onnxruntime"):
         importlib.import_module(module)
     executable = shutil.which(args[0])
     if not executable:

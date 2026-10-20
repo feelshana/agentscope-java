@@ -239,7 +239,7 @@ java -jar target/agentscope-dataagent-*-exec.jar
 | `server.port` | `8080` | HTTP 端口 |
 | `dataagent.seed-demo-users` / `cors.allowed-origins` | `false` / `*` | Java 管理员初始化需启用；CORS 按部署配置允许来源。SQL 初始化是独立开关。 |
 | `dataagent.upload.max-file-size` / `max-selection-size` / `max-files` | `50MB` / `100MB` / `10` | 单文件、整批选择和文件数限制，前端读取服务端策略。 |
-| `dataagent.upload.max-rows` / `max-columns` / `max-cells` | `100000` / `100` / `2000000` | 解析规模限制。 |
+| `dataagent.upload.max-rows` / `max-columns` / `max-cells` | `500000` / `100` / `10000000` | application.yml 解析上限，可由外置配置调整；不代表已完成 50 万行容量验收。 |
 | `dataagent.upload.concurrent-files` | `8` | 单进程在途文件预算，允许 1—32，满额 429。 |
 | `dataagent.chat.max-active` / `max-active-per-user` | `16` / `2` | ChatController 问数执行名额，建模豁免。 |
 | `dataagent.chat.max-waiting` / `max-waiting-per-user` | `16` / `1` | 全局/每用户等待名额。 |
