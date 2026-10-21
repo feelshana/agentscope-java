@@ -1,19 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import ts from 'typescript';
-
-// Compile the actual small TS modules in memory; no browser, server, or added test dependency.
-function moduleUrl(path, rewrite = source => source) {
-  const source = rewrite(readFileSync(new URL(path, import.meta.url), 'utf8'));
-  const { outputText } = ts.transpileModule(source, {
-    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-  });
-  return `data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`;
-}
-const auth = moduleUrl('../src/api/auth.ts');
-const { readEventStream } = await import(moduleUrl('../src/api/chat.ts', s => s.replace("'./auth'", JSON.stringify(auth))));
-const { escapeHtml } = await import(moduleUrl('../src/utils/html.ts'));
+import { readEventStream } from '../src/api/chat.ts';
+import { escapeHtml } from '../src/utils/html.ts';
 const encoder = new TextEncoder();
 function response(text) {
   const bytes = encoder.encode(text);
@@ -49,4 +37,36 @@ test('dataset and model text cannot introduce tooltip markup', () => {
   assert.equal(escapeHtml('<img src=x onerror="alert(1)"> & \'test\''), '&lt;img src=x onerror=&quot;alert(1)&quot;&gt; &amp; &#39;test&#39;');
   assert.equal(escapeHtml('营业收入（万元）'), '营业收入（万元）');
   assert.equal(escapeHtml(null), '');
+});
+
+test('capacity, tool and confirmation events retain their metadata before the terminal conversation id', async () => {
+  const expected = [
+    { type: 'capacity', status: 'queued', position: 2 },
+    { type: 'tool_call', toolName: 'wren_call_tool', toolCallId: 'tool-1', requestId: 'request-1' },
+    { type: 'tool_result', toolCallId: 'tool-1', toolResult: '退出码：2\n失败' },
+    { type: 'hitl_request', requestId: 'confirm-1' },
+    { type: 'done', sessionKey: 'conversation-1' },
+  ];
+  assert.deepEqual(await collect(readEventStream(response(expected.map(event => `data: ${JSON.stringify(event)}\n\n`).join('')), 'failed')), expected);
+});
+
+test('HTTP failures preserve the operation fallback or server message', async () => {
+  await assert.rejects(collect(readEventStream(Response.json({ message: '请稍后重试' }, { status: 503 }), '请求失败')), /请稍后重试: 503/);
+  await assert.rejects(collect(readEventStream(new Response('upstream unavailable', { status: 502 }), '请求失败')), /请求失败: 502/);
+  await assert.rejects(collect(readEventStream(new Response(null), '请求失败')), /请求失败: 200/);
+});
+
+test('a reader failure after partial output propagates instead of inventing completion', async () => {
+  let reads = 0;
+  const res = new Response(new ReadableStream({
+    pull(controller) {
+      if (reads++ === 0) controller.enqueue(encoder.encode('data: {"type":"token","data":"partial"}\n\n'));
+      else controller.error(new TypeError('connection reset'));
+    },
+  }));
+  const seen = [];
+  await assert.rejects(async () => {
+    for await (const event of readEventStream(res, 'failed')) seen.push(event);
+  }, /connection reset/);
+  assert.deepEqual(seen, [{ type: 'token', data: 'partial' }]);
 });

@@ -597,3 +597,21 @@ mvn assembly:single成功，仅重建分发tar、JAR保持aa05b6d1a52386a4300110
 ### 2026-10-21（Asia/Shanghai）｜checkpoint：按用户要求一次提交现有代码与文档
 
 用户先要求提交未提交代码，随后在任何新提交执行前明确“一次性提交，不分”。按单次提交交付spec080源码/测试/原型/static、0088迁移/架构README、65准备/BI跨服务器代理/上线清单及配置页面化后续参考，提交号以本条所在Git提交为准；规划仍暂缓，不接管同事性能，不推送部署。提交前本次新跑npm run build、mvn test、mvn package -DskipTests均0：759项Java733通过/26跳过，零失败错误，Spotless通过。脱敏检查历史模型Key在新包/待提交文件中命中0，无私有dev/prod，static引用有效；本次新包未启动，原真实验收及本次制品哈希见spec080报告。日志在上层.runtime/commit-model-services-20261021。shared既有修改不暂存、原SHA256保留，个人交接继续忽略；下次以最终提交核对部署候选，仍需公司接口/生产schema与主密钥/65与BI验收。
+
+### 2026-10-21（Asia/Shanghai）｜checkpoint：可选深度分析调研与讨论稿
+
+基于boundary-lyf@f11ce17c，用户讨论按需深度分析、专业方法和右侧HTML报告。查阅DeepAnalyze及部分执行示例、Deep Agents/Enterprise Deep Research公开资料和IBM/NIST方法说明，核对当前主Agent工具装配、Wren范围、Python后缀、附件持久化/认证及前端图片预览。新增docs/plans/optional-deep-analysis-proposal.md：独立入口/上下文、默认关闭及后端开关、按数据条件选择方法、证据/可执行核验、受限离线HTML及预算和混合负载验收；均待确认，未实施，不构成已接受ADR或上线阻断。未运行参考项目、闭源逆向或真实分析；未改业务代码/原型/配置/制品/服务，未跑Maven或前端构建。本轮仅文档差异与链接检查；无提交推送部署，shared既有SHA256保持675FB4C9D5482E3C5FC4910595612ED4DD2383738C8CFE75D8556AE3BF6CAC5D，个人文档继续忽略。下一步用户评估方向，确认试做后再选真实题目并形成spec/ADR/视觉样例；同事性能与公司模型/65验收沿用原边界。
+
+### 2026-10-21（Asia/Shanghai）｜checkpoint：深度分析转为后续规划
+
+用户明确将可选深度分析与HTML报告作为后续规划，由其与同事再评估。更新规划状态、CURRENT_TASK及DECISIONS，保留此前调研内容；暂不实施、未排期，未来需明确指令后再启动spec/ADR/原型或代码。仅文档修改，差异空白检查通过；未跑业务测试、构建或更改服务，无提交推送部署，其他既有修改保留。
+
+### 2026-10-21（Asia/Shanghai）｜checkpoint：前端测试入口与文档校准完成
+
+用户授权优化清单第4、7项，起点boundary-lyf@f11ce17c。复现旧入口16通过/2文件失败、11项未执行；改为Vite编译真实TS模块及BASE_URL后由Node测试，修正sessionStorage夹具，保留27项并新增8项，两种前缀各35通过。npm test加入Maven前端构建前门禁，无新增依赖/业务代码；临时故意失败使Maven退出1并停止后续构建，已移除；隔离编译的前缀回归另检出3项失败，源码不改。全量mvn test退出0（759项733通过/26跳过、失败错误0），mvn package -DskipTests退出0，前端测试/TypeScript/Vite与Spotless通过。12份文档157个本地链接目标及状态/空白检查通过，未查外网或全部历史锚点。
+
+校准AGENTS/README/架构构建说明、TODO/上线总账/清单/单机手册与共享记忆；CURRENT_TASK收敛当前任务，模型管理已提交未部署，旧测试缺口已修复，历史证据留在原报告/SESSION_LOG，不搬迁目录或采纳同事附件规则。新报告20261021-frontend-regression-and-docs记录命令、负例、未验边界及非clean根路径制品哈希；本轮未启动部署，受跟踪static与package-lock无差异。未重跑真实浏览器/BI/公司模型/Wren全流程/负载或恢复，不接管性能，深度分析和配置页面化继续暂缓。源码/文档未提交、暂存区空；shared既有SHA256仍675FB4C9D5482E3C5FC4910595612ED4DD2383738C8CFE75D8556AE3BF6CAC5D，个人交接继续忽略。日志在Git根.runtime/frontend-tests-docs-20261021；下一步用户审阅或另行指令，同事交付后统一候选验收。
+
+### 2026-10-21（Asia/Shanghai）｜checkpoint：按用户要求提交测试与文档
+
+用户明确要求提交当前代码，沿用一次提交偏好。交付前端回归入口/夹具/新增断言、Maven门禁、文档状态校准、此前暂缓的深度分析规划和本轮报告；不含上层shared既有修改、忽略的个人交接或私有资料。测试/构建代码与上一checkpoint实测一致，本次只更新提交状态并检查差异和暂存范围，不重复全量测试；此前npm test两组各35项、mvn test759项733通过/26跳过、前端构建/Spotless和打包均通过。最终提交号以本条所在Git提交为准，不推送或部署；规划继续暂缓，目标环境待办保持。

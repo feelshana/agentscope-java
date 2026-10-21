@@ -63,8 +63,10 @@
 ```bash
 mvn test
 mvn package -DskipTests
-cd frontend && npm run build
+cd frontend && npm test && npm run build
 ```
+
+`npm test` 编译真实 TS 模块并以根路径和 `/dataagent/` 两种前缀执行 Node 回归；默认 Maven 在前端构建前执行它。`-DskipTests` 只跳过 Java 测试，不跳过此前端门禁。历史测试成绩、接口桩验证和运行服务版本须分别记录。
 
 ## 测试约定
 

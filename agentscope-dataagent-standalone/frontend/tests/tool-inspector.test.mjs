@@ -1,17 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import ts from 'typescript';
-
-function moduleUrl(path, rewrite = s => s) {
-  const source = rewrite(readFileSync(new URL(path, import.meta.url), 'utf8'));
-  const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } });
-  return `data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`;
-}
-const wren = moduleUrl('../src/utils/wrenToolPresentation.ts');
-const { decodeToolValue, inspectResult, inputFields, tableData, valueText } = await import(moduleUrl(
-  '../src/utils/toolInspectorPresentation.ts', s => s.replace("'./wrenToolPresentation'", JSON.stringify(wren)),
-));
+import { decodeToolValue, inspectResult, inputFields, tableData, valueText } from '../src/utils/toolInspectorPresentation.ts';
 
 test('nested JSON strings and native text arrays are decoded', () => {
   assert.deepEqual(decodeToolValue(JSON.stringify([JSON.stringify({ chartId: 'test-chart' })])), { chartId: 'test-chart' });

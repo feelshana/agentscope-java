@@ -25,6 +25,8 @@ mvn test
 mvn package -DskipTests
 ```
 
+默认在前端构建前运行 `npm test`（根路径和 `/dataagent/` 两组模块回归），失败即停止 Maven；`-DskipTests` 只跳过 Java 测试。只验前端时在 frontend 执行 `npm test` 和 `npm run build`；发布时不使用 skip.npm 绕过门禁。模块测试不代替真实 BI/浏览器联调。
+
 默认自动构建当前前端，产出原有 `agentscope-dataagent-<version>-exec.jar` 及 `dataagent-<version>.tar.gz`。公共 application.yml 和 h2 profile 保留在 JAR；私有 application-dev/prod 的 yml/yaml/properties 不进入资源/JAR/发布包。即使旧 target/classes 有这些文件，JAR 也会排除。分发包只携带无凭据 prod 样例。
 
 前端已经编译为JAR内static静态文件，由同一个Java应用提供；65不需要另起前端服务或安装Node/Maven。/dataagent/构建前缀必须与BI入口代理一致，上传tar后按运行手册启动Java即可同时提供前后端。私有prod配置仍需在服务器单独创建。

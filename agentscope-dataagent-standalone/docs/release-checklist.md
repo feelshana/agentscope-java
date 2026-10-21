@@ -1,6 +1,6 @@
 # DataAgent 上线执行清单
 
-核对日期：2026-10-21。源码基线 `boundary-lyf@1d5f594704332a85819132d117f523872dcb741f`；本文是执行顺序和验收清单，具体安装、启停命令统一引用 [Linux 单机发布手册](single-host-release.md)，不另建一套部署实现。
+维护日期：2026-10-21。本文只维护执行顺序和验收要求；当前分支、提交、修改及本轮验证见[当前任务](ai/CURRENT_TASK.md)，已知风险与发布待办见[上线总账](go-live-gap-review-20261012.md)。具体安装、启停命令统一引用 [Linux 单机发布手册](single-host-release.md)，不另建一套部署实现。
 
 交运维的环境采集/条件安装与数据库命令见[65准备单](65-server-preparation.md)。系统版本未知，32CPU/252GiB不是应用配额；BI入口网关与65可以分机，但浏览器仍使用同源/dataagent/。
 
@@ -34,8 +34,8 @@ Remove-Item Env:\DATAAGENT_BASE_PATH
 ```
 
 - [ ] 两条Maven命令都退出0，记录通过、失败和条件跳过项。默认构建前端，Spotless也是门禁；不能跳过失败后仍交付。
-- [ ] 当前旧前端测试入口须先修复再加入门禁：`node --test tests/auth-session.test.mjs tests/stream-and-html.test.mjs tests/tool-inspector.test.mjs` 在 frontend 执行，本次结果16通过、2入口失败，原因是data URL模块不能解析 `./paths`，不等于产品浏览器已证实故障。
-- [ ] 核对JAR中的static/index.html引用 `/dataagent/`；当前1d5f5947本机包是根路径构建，不能直接作为该前缀的正式包。clean构建可避免target/classes中的历史散列资源带入新包。
+- [ ] 前端统一入口为 frontend 下的 `npm test`，自动覆盖根路径与 `/dataagent/`；默认 Maven 在前端构建前执行，失败即停止。`-DskipTests` 不跳过此前端检查。旧的直接 Node 命令/data URL 编译不是当前入口；历史加载失败保留在对应报告，不代表当前模块测试仍失败。
+- [ ] 核对候选JAR中的static/index.html引用实际部署前缀 `/dataagent/`，不能用根路径构建包替代。测试覆盖两种前缀不等于应用包同时支持两种前缀；clean构建可避免target/classes中的历史散列资源带入新包。
 - [ ] 包内不带私有application-dev/prod配置、密钥或本机运行数据。按现有布局交付tar.gz、对应沙箱镜像及校验值；模型缓存另行交付或准备。
 - [ ] spec080已移除公共application两项模型Key默认值；正式候选重新打包后检查产物，并由凭据负责人确认历史凭据是否需轮换；不能用私有配置排除检查代替整个候选凭据检查。旧包不会自动更新。
 - [ ] **配套材料另行交付**：当前assembly只放bin/conf/lib、requirements与根README，迁移SQL、BI脚本和完整docs并未内置。请从同一候选提交导出受版本管理的正式docs资料并保持层级，使用其中docs/single-host-release.md及本清单；不复制工作区中的忽略文件、个人交接或私有运行材料。包根README的相对文档链接不能当作所有附件均已携带。
@@ -60,7 +60,7 @@ Remove-Item Env:\DATAAGENT_BASE_PATH
 - [ ] **全新空平台库的缺口**：当前没有一份完整、已验收的首次schema初始化脚本。先由候选版本在隔离空库生成并核对结构，导出纯结构经DBA复核后导入目标库；不能只执行以上增量SQL就直接启prod，也不把生产临时改为update作为默认部署步骤。这个准备未完成则停在本步。
 - [ ] 从发布包 `conf/application-prod.yml.example` 创建目标配置，生产保持ddl-auto=validate、SQL演示初始化关闭、密码登录关闭/BI启用。私有配置不入Git，不复制开发数据库或开发用户种子。
 - [ ] 配置平台DB URL/账号/密码、独立上传库连接、JWT密钥、独立BI Base64共享密钥、CORS同源地址、模型供应商key/base URL/model name、Wren CLI/Python、实际镜像/资源预算。变量及配置位置见 [生产配置清单](single-host-release.md#生产配置清单)。
-- [ ] 生产公司模型默认接入需分别验证认证有效期、最终URL、SSE及tool_calls；自有公网备用先确认允许的数据范围及65出站。管理员手动切换建议见spec080，尚未实施；不得将现有DashScope启动时选择理解为请求失败自动切公网。
+- [ ] 生产公司模型默认接入需分别验证认证有效期、最终URL、SSE及tool_calls；自有公网备用先确认允许的数据范围及65出站。spec080管理员配置、测试和手动热切换已实现，目标环境仍需验证；没有请求失败自动切公网的行为。
 - [ ] 管理员使用稳定的真实BI用户名维护roles_csv，不覆盖已有user_id；新JWT才反映角色变更。首次普通用户可自动创建，不代表管理员已准备好。
 
 ## 4. 安装与启动

@@ -264,7 +264,7 @@ Replies are POSTed to `callbackUrl` (same HMAC), or parked for long-poll at
 
 ### Build and distribute
 
-`mvn package` rebuilds the current frontend and produces the existing Boot exec JAR
+`mvn package` runs frontend regression tests, rebuilds the current frontend and produces the existing Boot exec JAR
 plus `target/dataagent-<version>.tar.gz` with `bin/conf/lib`. Public defaults and the
 h2 profile stay in the JAR; private application-dev/prod YAML/properties are excluded
 from resources, JARs and the archive. The archive ships only a credential-free
@@ -420,8 +420,23 @@ When harness or OpenAI-extension sources change, first install matching dependen
 from the parent repository as described in [the release guide](docs/platform-concurrency-and-release.md).
 
 ```bash
+mvn test
 mvn package -DskipTests
 ```
+
+For frontend-only changes, run `npm test` and `npm run build` in `frontend/`.
+The tests use the existing Vite compiler and Node test runner, with both `/` and
+`/dataagent/` deployment prefixes. They compile real TypeScript imports into a
+temporary directory without loading private `.env` files or writing application
+static assets. The default Maven flow runs `npm test` before the frontend build;
+`-DskipTests` skips Java tests only. These module tests do not replace browser,
+real BI or backend integration checks.
+
+Current execution and validation status: [CURRENT_TASK](docs/ai/CURRENT_TASK.md).
+Release risks and remaining work: [release overview](docs/go-live-gap-review-20261012.md).
+Deployment order and commands: [checklist](docs/release-checklist.md) and
+[single-host guide](docs/single-host-release.md). Historical evidence stays in
+`docs/test-reports/`; it does not describe the currently running service version.
 
 Outputs:
 

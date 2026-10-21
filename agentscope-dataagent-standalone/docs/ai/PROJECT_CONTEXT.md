@@ -37,7 +37,7 @@ prod强制禁密码登录/Java种子并开启BI，SQL演示初始化在prod配�
 
 平台元数据与上传MySQL分库；默认application.yml用MySQL，h2 profile仅切元数据。上传ds_表同库支持JOIN。默认ddl-auto=update便于开发，生产发布样例validate，先准备schema/迁移。私有dev/prod配置Git忽略、不入JAR/分发，必须外置加载，不记录密钥/测试账号密码。
 
-Maven默认重建前端，产出exec.jar与tar.gz/conf/bin/lib，版本内log、父级data持久状态。single-host-release.md是唯一当前操作手册；manual-release-guide只导航。单机单实例，扩副本需共享状态和协调，不把本地门锁/预算当分布式保证。
+Maven默认先执行前端npm test再重建前端，产出exec.jar与tar.gz/conf/bin/lib，版本内log、父级data持久状态。前端模块回归由已有Vite编译真实TS依赖，分别覆盖根路径与/dataagent/；不加载私有env、不写应用static，失败阻止构建。-DskipTests只跳过Java；不代替浏览器/真实BI验收。single-host-release.md是唯一当前操作手册；manual-release-guide只导航。单机单实例，扩副本需共享状态和协调，不把本地门锁/预算当分布式保证。
 
 ## 容量及当前证据
 

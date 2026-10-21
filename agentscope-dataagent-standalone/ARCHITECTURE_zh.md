@@ -666,7 +666,8 @@ SSE 由 `api/chat.ts` 消费，`done.sessionKey` 是 conversationId。
 ### 12.2 构建与运行
 
 ```bash
-# 构建（含前端：自动安装 Node → npm build → 后端打包）
+# 验证与构建（前端：自动安装 Node → npm test → npm build）
+mvn test
 mvn package -DskipTests
 
 # 格式门禁（CI 必过）
@@ -681,7 +682,7 @@ java -jar target/agentscope-dataagent-*-exec.jar   # → http://localhost:8080
 
 H2 种子账号：`bob/bob`、`alice/alice`（`data-h2.sql`，幂等 MERGE）。
 
-根 pom.xml 的编译基线为 Java 17，本项目不依赖旧多模块 `-pl agentscope-examples/...` 路径。框架改动后先安装配套 harness/OpenAI 扩展，再构建本项目；默认 Maven 流程会构建前端，已有前端构建时可使用 skip.npm/skip.installnodenpm 参数跳过。保留原 Boot exec JAR，同时按 ADR0080 生成 dataagent-<version>.tar.gz，包含 bin/conf/lib。公共默认配置及 h2 profile 保留；私有 dev/prod 的 YAML/properties 同时由 Maven resources 和 jar 插件排除，分发仅带无凭据样例。dataagent.sh 通过共享启停锁、PID/启动时间/JAR 身份管理单实例，启动前用 check-wren.py 校验固定 Wren 依赖，再等待 HTTP 健康；停止不依赖 Wren。数据位于版本父目录 data/，日志位于当前版本 logs/。发布默认重建前端，可选 frontend/build.ps1 只是提前构建包装。步骤及脚本环境变量见 [单机发布](docs/single-host-release.md)。部署步骤见 [并发与发布说明](docs/platform-concurrency-and-release.md)。
+根 pom.xml 的编译基线为 Java 17，本项目不依赖旧多模块 `-pl agentscope-examples/...` 路径。框架改动后先安装配套 harness/OpenAI 扩展，再构建本项目；默认 Maven 流程会先测试再构建前端。`frontend/tests/run.mjs` 使用已安装 Vite 编译真实 TS 依赖，以根路径和 `/dataagent/` 两种前缀运行 Node 测试；不加载应用 Vite 配置及私有 env 文件，产物仅在本次创建的系统临时目录并在结束后清理。覆盖认证、SSE、内容转义与工具结果解析；不代替真实浏览器、BI和后端验收。`-DskipTests` 只跳过 Java 测试；skip.npm/skip.installnodenpm 是显式绕过前端流程的本地选项，正式候选不能以绕过门禁的结果代替验证。保留原 Boot exec JAR，同时按 ADR0080 生成 dataagent-<version>.tar.gz，包含 bin/conf/lib。公共默认配置及 h2 profile 保留；私有 dev/prod 的 YAML/properties 同时由 Maven resources 和 jar 插件排除，分发仅带无凭据样例。dataagent.sh 通过共享启停锁、PID/启动时间/JAR 身份管理单实例，启动前用 check-wren.py 校验固定 Wren 依赖，再等待 HTTP 健康；停止不依赖 Wren。数据位于版本父目录 data/，日志位于当前版本 logs/。发布默认重建前端，可选 frontend/build.ps1 只是提前构建包装。步骤及脚本环境变量见 [单机发布](docs/single-host-release.md)。部署步骤见 [并发与发布说明](docs/platform-concurrency-and-release.md)。
 
 SQL 演示账号初始化与 Java 管理员初始化是独立开关；`dataagent.seed-demo-users` 默认 false，不代表禁用 SQL 初始化。生产环境须明确设置初始化策略和数据库配置，不能根据旧文档假设默认 H2 或自动创建管理员。
 
