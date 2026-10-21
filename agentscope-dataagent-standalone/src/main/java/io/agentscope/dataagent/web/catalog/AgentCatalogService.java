@@ -712,8 +712,11 @@ public class AgentCatalogService {
         if (entry.maxIters() != null) {
             b.maxIters(entry.maxIters());
         }
-        // Model: prefer per-agent override, fall back to bootstrap-level model.
-        if (entry.model() != null && !entry.model().isBlank()) {
+        // Platform-managed connections take precedence over cached per-agent defaults.
+        if (model instanceof io.agentscope.dataagent.runtime.model.SwitchingModel switching) {
+            b.model(switching);
+            b.middleware(switching);
+        } else if (entry.model() != null && !entry.model().isBlank()) {
             b.model(entry.model());
         } else if (model != null) {
             b.model(model);

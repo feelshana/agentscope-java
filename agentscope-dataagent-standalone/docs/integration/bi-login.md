@@ -65,3 +65,39 @@ location /dataagent/ {
 ```
 
 使用prod profile并加载外置私有配置。应用frame-options=SAMEORIGIN，BI嵌入须同源；上游不能另加DENY或禁止该来源的CSP frame-ancestors。无需对外开放8080。Java会在新HTTP请求校验JWT，到期不强行截断已经开始的SSE。入口、附件、深链刷新、流式问答需在真实BI/Nginx单独联调，不把本地协议检查当生产验收。
+
+## BI与DataAgent在不同服务器
+
+物理服务器不同可以保持浏览器同源。当前推荐路径为：
+
+```text
+浏览器访问 https://BI域名/dataagent/...
+    → BI域名的入口网关/反向代理
+    → 65内网地址:8080（DataAgent Java，同时提供静态前端及API）
+```
+
+请求由浏览器中的BI前端发起；不需要BI业务后端新增调用模型或登录的接口。BI前端仍使用相对路径/dataagent/，iframe也使用同源/dataagent/bi-entry。浏览器不直接访问65 IP，因此不同机器不必改变当前postMessage与SAMEORIGIN约束；“同一公司内网”或“不同域名加CORS”不等于同源。
+
+前面127.0.0.1的Nginx例子只适用于代理和Java在同一主机。如果代理在BI服务器或统一入口网关，将以下location合并到**现有BI HTTPS虚拟主机**。192.0.2.65仅为文档示例地址，必须换实际65内网地址/端口；不能另创建抢占BI端口的独立server。
+
+```nginx
+location = /dataagent { return 302 /dataagent/; }
+location /dataagent/ {
+    proxy_pass http://192.0.2.65:8080/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_read_timeout 600s;
+    proxy_send_timeout 600s;
+    client_max_body_size 100m;
+}
+```
+
+proxy_pass末尾斜杠使该location剥离/dataagent/前缀，Java收到/api/...或静态资源实际路径。依据 [Nginx代理模块说明](https://nginx.org/en/docs/http/ngx_http_proxy_module.html)；SSE链路上有多层代理时每层都要核对缓冲/超时。运维先备份原配置、执行nginx -t，成功后按现有流程reload，不覆盖整个BI配置。
+
+这种单层方案不要求65另装Nginx；65的8080仅向BI入口网关等获准内网来源开放。若公司规定65必须有内层Nginx，BI网关仍须有/dataagent/路由，再转65内层代理；约定在哪一层剥前缀且只剥一次，保留浏览器原始Host/协议，最终再到127.0.0.1:8080。仅在65配置反向代理、让iframe直连另一个IP/域名，不满足当前嵌入和免登方案。
+
+真实BI必须做最小环境验收：同源握手、固定过期/切账号、prod禁密码、流式不攒到结尾、上传/附件下载、深路由刷新及权限；模拟BI全流程已通过可以减少重复业务回归，但不能证明真实入口的网络/证书/CSP/资源配额也相同。

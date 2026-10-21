@@ -75,6 +75,9 @@ spring:
 # Property prefix is `dataagent.*`. Env vars use `DATAAGENT_*`.
 # --------------------------------------------------------------------------
 dataagent:
+  model-services:
+    encryption-key: ${DATAAGENT_MODEL_ENCRYPTION_KEY:}
+
   # Uploaded Excel/CSV limits; the UI reads the same policy from the upload-policy endpoint.
   upload:
     max-file-size: 50MB
@@ -174,7 +177,7 @@ dataagent:
   openai:
     # Avoid cross-stream disconnects observed on shared HTTP/2 model connections.
     http-version: ${DATAAGENT_OPENAI_HTTP_VERSION:HTTP_1_1}
-    api-key: ${DATAAGENT_OPENAI_API_KEY:${OPENAI_API_KEY:sk-7708c665bc024a35bb6c5f1f1a7fc25f}}
+    api-key: ${DATAAGENT_OPENAI_API_KEY:${OPENAI_API_KEY:}}
     base-url: ${DATAAGENT_OPENAI_BASE_URL:${OPENAI_BASE_URL:https://api.deepseek.com}}
     model-name: ${DATAAGENT_OPENAI_MODEL_NAME:${OPENAI_MODEL_NAME:deepseek-flash}}
     stream: ${DATAAGENT_OPENAI_STREAM:true}
@@ -182,7 +185,7 @@ dataagent:
   # ---- DashScope model (fallback when no OpenAI key is configured) ----
   # Set DASHSCOPE_API_KEY env var or override api-key below.
   dashscope:
-    api-key: ${DASHSCOPE_API_KEY:sk-16fb25f43dfa6ba3f5372c61e048ac2653e00eb48a995377}
+    api-key: ${DASHSCOPE_API_KEY:}
     model-name: ${DATAAGENT_MODEL_NAME:qwen3.8-max}
     stream: true
     enable-thinking: false

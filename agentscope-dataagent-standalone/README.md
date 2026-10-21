@@ -290,6 +290,8 @@ to false; existing users and grants are retained.
 
 ## Configuration reference (`application.yml`)
 
+Global administrators can manage OpenAI-compatible, DeepSeek and Qwen connections under More → Model services. Save, test, then explicitly activate a revision; new turns use it without restart and in-flight turns keep their original source. There is no automatic provider failover. Production upgrades require migration0088 and a durable encryption key; see [the release guide](docs/single-host-release.md).
+
 | Property | Default | Description |
 |---|---|---|
 | `dataagent.jwt.secret` | deployment configuration | HS256 signing key: at least 32 UTF-8 bytes. Empty, development-placeholder and short keys are rejected in every profile. |
@@ -300,7 +302,8 @@ to false; existing users and grants are retained.
 | `dataagent.cors.allowed-origins` | `*` | Allowed browser origin patterns; configure explicit origins for deployment. |
 | `dataagent.workspace` | JVM working directory when blank | Runtime workspace, separate from `~/.agentscope/dataagent/agentscope.json`. Set an explicit durable directory in deployments. |
 | `dataagent.workspace-store.local.max-file-size-mb` | `10` | Per-file cap for the `RemoteFilesystem` local store. |
-| `dataagent.openai.api-key` | deployment configuration | OpenAI-compatible credentials; DATAAGENT_OPENAI_API_KEY or OPENAI_API_KEY. Configured OpenAI takes precedence over DashScope. |
+| `dataagent.openai.api-key` | _(empty)_ | Startup OpenAI-compatible credentials; DATAAGENT_OPENAI_API_KEY or OPENAI_API_KEY. Used until an administrator activates a saved service. |
+| `dataagent.model-services.encryption-key` | _(empty)_ | DATAAGENT_MODEL_ENCRYPTION_KEY: independent Base64-encoded 32-byte encryption key. If omitted, first save generates `${user.home}/.agentscope-dataagent/model-services.key`; back it up with the platform database. |
 | `dataagent.openai.base-url` | `https://api.deepseek.com` | Current application.yml fallback; override with DATAAGENT_OPENAI_BASE_URL or OPENAI_BASE_URL for the deployed provider. |
 | `dataagent.openai.model-name` | `deepseek-flash` | Current application.yml fallback; override with DATAAGENT_OPENAI_MODEL_NAME or OPENAI_MODEL_NAME. |
 | `dataagent.openai.stream` | `true` | Stream model completions over SSE. Env: `DATAAGENT_OPENAI_STREAM`. Set `false` to compare non-streaming model requests when diagnosing upstream EOF; browser chat still uses SSE. |

@@ -217,7 +217,8 @@ java -jar target/agentscope-dataagent-*-exec.jar
 | `dataagent.auth.bi.enabled` / `bi.shared-key` | `false` / 空 | prod强制启用BI，需32字节Base64共享密钥，与JWT密钥分开。前端持钥可伪造用户名，包括管理员。 |
 | `dataagent.workspace` | 为空时使用 JVM 工作目录 | 运行状态目录，与 `~/.agentscope/dataagent/agentscope.json` 分开；部署显式配置持久目录。 |
 | `dataagent.workspace-store.local.max-file-size-mb` | `10` | `RemoteFilesystem` 本地后端的单文件上限。 |
-| `dataagent.openai.api-key` | 部署配置 | OpenAI 兼容 API key（主模型）。环境变量：`DATAAGENT_OPENAI_API_KEY` 或 `OPENAI_API_KEY`。设置后优先于 DashScope。 |
+| `dataagent.openai.api-key` | 空 | 启动兼容凭据，环境变量`DATAAGENT_OPENAI_API_KEY`或`OPENAI_API_KEY`；页面应用连接后由所选服务接管，无代码内Key默认值。 |
+| `dataagent.model-services.encryption-key` | 空 | `DATAAGENT_MODEL_ENCRYPTION_KEY`：独立32字节Base64主密钥。空时首次保存生成`${user.home}/.agentscope-dataagent/model-services.key`；必须与平台库配套备份恢复。全局管理员通过“更多 > 大模型服务”配置/测试/应用，详见[单机手册](docs/single-host-release.md)。 |
 | `dataagent.openai.base-url` | `https://api.deepseek.com` | 任意 OpenAI 兼容端点的 base URL（DeepSeek、vLLM、one-api、DashScope compatible-mode 等），尾部 `/v1` 可写可不写。环境变量：`DATAAGENT_OPENAI_BASE_URL` 或 `OPENAI_BASE_URL`。 |
 | `dataagent.openai.model-name` | `deepseek-flash` | OpenAI 兼容模型 id。环境变量：`DATAAGENT_OPENAI_MODEL_NAME` 或 `OPENAI_MODEL_NAME`。 |
 | `dataagent.openai.stream` | `true` | 是否以 SSE 流式输出。 |

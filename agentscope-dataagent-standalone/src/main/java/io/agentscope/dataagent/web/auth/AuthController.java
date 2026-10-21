@@ -42,7 +42,7 @@ public class AuthController {
 
     private final UserStore userStore;
     private final JwtService jwtService;
-    private final boolean aiAvailable;
+    private final Optional<Model> model;
     private final AuthSettings settings;
     private final BiLoginService biLogin;
 
@@ -54,7 +54,7 @@ public class AuthController {
             BiLoginService biLogin) {
         this.userStore = userStore;
         this.jwtService = jwtService;
-        this.aiAvailable = modelOpt.isPresent();
+        this.model = modelOpt;
         this.settings = settings;
         this.biLogin = biLogin;
     }
@@ -136,15 +136,27 @@ public class AuthController {
                                                                 u.userId(),
                                                                 u.username(),
                                                                 u.roles(),
-                                                                aiAvailable,
+                                                                aiAvailable(),
                                                                 u.hasRole("admin")))
                                         .orElse(
                                                 new MeResponse(
                                                         userId,
                                                         userId,
                                                         List.of("user"),
-                                                        aiAvailable,
+                                                        aiAvailable(),
                                                         false)))
                 .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+    }
+
+    private boolean aiAvailable() {
+        return model.map(
+                        value ->
+                                value
+                                                instanceof
+                                                io.agentscope.dataagent.runtime.model.SwitchingModel
+                                                        switching
+                                        ? switching.isAvailable()
+                                        : true)
+                .orElse(false);
     }
 }

@@ -85,10 +85,14 @@ dataagent 为每位数据分析师提供专属的数据 Agent，核心流程是*
 
 `DataAgentConfig` 中：
 
-1. 容器中已存在 `Model` Bean（其他配置类提供）→ 直接使用；
-2. `dataagent.openai.api-key` 非空 → 创建 `OpenAIChatModel`（任意 OpenAI 兼容端点：DeepSeek/vLLM/one-api/DashScope 兼容模式），默认关闭 thinking；
-3. 否则 `dataagent.dashscope.api-key` 非空 → 创建 `DashScopeChatModel`；
-4. 都没有 → 应用照常启动，但聊天端点返回「未配置模型」错误（`ChatController.NO_MODEL_MESSAGE`）。
+1. `DataAgentConfig#managedModel`提供Primary `SwitchingModel`，供Bootstrap、用户Agent、导入字段分析、标题/草稿等Model消费者共用。页面已应用连接时使用平台库中的有效快照；保存草稿不会影响该快照。
+2. 页面尚未应用连接时，启动源按“自定义Model Bean → 非空OpenAI Key → 非空DashScope Key”选择。自定义启动Bean仍被统一代理；公共配置不包含Key默认值。
+3. `SwitchingModel#onAgent`复用原生中间件，在每次Agent调用订阅固定快照，经Reactor Context覆盖本次推理/工具循环，缓存Agent不用重建。代理保守声明上下文与结构化能力；每个独立辅助请求也读取当前源。平台全局连接优先于旧Agent定义中的模型覆盖。
+4. 两种来源都未配置时应用可启动，模型请求明确报错；`AuthController#me`动态报告模型是否可用。密文无法解密时拒绝请求，不静默回退启动源。
+
+管理员入口为“更多 > 大模型服务”(`/admin/models`)；API `/api/admin/model-services`逐端点校验全局ADMIN，知识库MANAGE不具有此权限。OpenAI兼容、DeepSeek、千问预设均复用原生OpenAIChatModel，支持自定义根地址和接口路径、SSE、超时、temperature及有限thinking参数。测试仅向所选连接发送两条合成短请求（文本与虚拟工具），不执行工具、不带用户历史、不自动重试或换源；激活须匹配已测成功的保存版本。新轮使用新源，在途轮保留旧源；HITL暂停后显式恢复及独立异步任务是新的调用边界，不自动重放此前动作。
+
+`ModelServiceRegistry`按单实例锁与JPA乐观版本存储草稿、有效快照、测试结果及最多50条切换元数据；`dataagent_model_service_config`整行AES-GCM密文，GET不返回API Key。编辑留空保留Key，当前ID不可删除；失败/过期测试不能激活。主密钥独立于JWT/BI，环境变量或持久HOME文件提供；数据库和匹配密钥必须一起恢复。生产validate升级先执行0088迁移。当前不支持多副本配置传播或自动主备切换（ADR0088/spec080）。
 
 注意：Model 注入采用 `@Bean` 方法参数注入（非字段 `@Autowired`），避免与本类中 Model Bean 定义的循环依赖。
 
@@ -580,6 +584,8 @@ manifest 尚不存在时（首次升级到该策略）执行一次性「采纳�
 
 ## 11. 前端结构
 
+`ModelServicesPage`位于`/admin/models`，复用KnowledgeBreadcrumb、DataSourceDialog、Icon及apiFetch，通过MorePage的admin入口进入；侧栏高亮更多。模型API集中于`api/modelServices.ts`，页面不持久化或回读Key明文，提交失败保留编辑草稿，测试/激活使用保存版本。表格窄屏内部滚动，弹窗使用原生模态焦点管理。
+
 React 18 + TypeScript + Vite SPA，构建到 `classpath:/static/`。`AppShell` 提供全局导航；
 `SessionsSidebar` 按原型组织品牌、导航、实际历史及账号区；`ShellNavigationContext` 与
 `ShellNavigationToggle` 在窄屏打开单份侧栏，支持关闭、Escape、焦点循环及正文 inert。
@@ -632,7 +638,8 @@ SSE 由 `api/chat.ts` 消费，`done.sessionKey` 是 conversationId。
 | AgentStateStore（自动装配） | 平台MySQL，H2开发JSON文件 | AgentStateConfig#durableAgentStateStore共用spring.datasource和既有DDL策略；生产先0084迁移，自定义Bean优先；旧Redis块不自动切换存储 |
 | `dataagent.agent.name` | `data-agent` | 自动生成 `agentscope.json` 时的 agent 名；系统提示词默认用内置常量，覆盖用 `DATAAGENT_AGENT_SYS_PROMPT`（见 4.5） |
 | `dataagent.agent.subagents-enabled` | false | 子代理编排（harness `agent_spawn` / `agent_send` / `task_*`）。关闭可省下每轮固定约 6.2k 字符的 `## Subagents` 提示词段与相应工具 schema；**不影响网关、会话路由与聊天**（`buildSubagentEntries` 不读该开关），内置定义也不删（ADR 0009） |
-| `dataagent.openai.*` | DeepSeek 默认值 | 主模型（任意 OpenAI 兼容端点） |
+| `dataagent.openai.*` | 无Key默认值 | 尚未应用页面连接时的启动模型；URL/model保留兼容默认值 |
+| `dataagent.model-services.encryption-key` | 空 | `DATAAGENT_MODEL_ENCRYPTION_KEY`：独立32字节Base64主密钥；空时首次保存生成持久`${user.home}/.agentscope-dataagent/model-services.key`，Linux新文件0600、Windows继承HOME权限。不得丢失或随意更换，生产建议显式注入并备份 |
 | `dataagent.openai.stream` | `true` | `DATAAGENT_OPENAI_STREAM` 可切换模型流式/非流式请求以定位上游 EOF；前端 SSE 协议不变，关闭流式不表示连接问题已解决 |
 | `dataagent.dashscope.*` | — | 兜底模型 |
 | `dataagent.sandbox.image` | `agentscope/dataagent-sandbox:latest` | 沙箱镜像（`docker/sandbox.Dockerfile` 构建） |

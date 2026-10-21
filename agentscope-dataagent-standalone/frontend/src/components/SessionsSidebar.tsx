@@ -224,8 +224,8 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
           return <button key={item.path} onClick={() => navigate(item.path)} aria-current={active ? 'page' : undefined}
             className={`rail-nav-item${active ? ' is-active' : ''}`}><Icon name={item.icon} />{item.label}</button>;
         })}
-        <button className={`rail-nav-item${location.pathname === '/more' || location.pathname === '/workspace' ? ' is-active' : ''}`}
-          aria-current={location.pathname === '/more' || location.pathname === '/workspace' ? 'page' : undefined} onClick={() => navigate('/more')}><Icon name="moreHorizontal" />更多</button>
+        <button className={`rail-nav-item${['/more', '/workspace', '/admin/models'].includes(location.pathname) ? ' is-active' : ''}`}
+          aria-current={['/more', '/workspace', '/admin/models'].includes(location.pathname) ? 'page' : undefined} onClick={() => navigate('/more')}><Icon name="moreHorizontal" />更多</button>
       </nav>
 
       <div className="rail-history" onScroll={e => {

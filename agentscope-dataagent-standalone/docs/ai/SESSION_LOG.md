@@ -573,3 +573,27 @@ mvn assembly:single成功，仅重建分发tar、JAR保持aa05b6d1a52386a4300110
 ### 2026-10-21（Asia/Shanghai）｜checkpoint：用户授权提交 UI 交付
 
 用户要求提交代码；spec078/079源码、文档及static作为同一UI主题随本条提交交付，实际提交号以Git为准。补跑mvn test退出0，736项710通过26跳过、失败/错误0；mvn package -DskipTests退出0（56.419秒），Spotless及默认前端构建通过，生成新exec.jar/tar.gz，私有dev/prod配置未包含，未启动部署。保留原阶段浏览器报告与未提交快照语义，报告末尾追加提交检查；不相关shared/.seed-manifest.json不入索引、哈希不变，个人交接仍忽略。不推送，真实后端联调及同事性能待办继续保留。
+
+### 2026-10-21（Asia/Shanghai）｜checkpoint：总体状态与上线指引核对
+
+用户询问故障、功能/逻辑及上线步骤。1d5f5947本模块起点干净；仅做代码/文档核对与Node测试，不访问云端。确认CLI失败误显示和批次结束通知路径仍在，性能由同事处理；三个前端Node入口本次16通过、2入口加载失败，11内部断言未执行，非产品认证故障结论。新增release-checklist，更新总账/单机手册/生产配置与旧容量数字；明确空库完整DDL尚未验收、当前tar缺迁移SQL/BI附件、根路径包需前缀重建及真实BI/负载/恢复待办。文档未提交，业务代码/服务/资源不改，个人文件仍忽略，shared既有哈希不变；下一步建议先对齐同事交付与失败状态职责，再冻结候选按清单验收。
+
+### 2026-10-21（Asia/Shanghai）｜checkpoint：65运维命令与模型切换建议
+
+继续用户部署问题，新增65-server-preparation，限定Ubuntu24.04安装参考/先采集OS，截图32CPU/252GiB仅整机；补双库/迁移含义/管理员SQL、公司模型/认证、前端随JAR及BI入口网关跨服务器代理。只读Supersonic模型工厂/keyDecrypt，形成spec080待确认手动双源建议，不实现或调用模型、不复制凭据。脱敏核对公共application.yml和本机JAR均有两项疑似模型Key默认值，新增发布阻断待办，未修复/轮换。文档/共享记忆更新未提交，1d5f5947不变，业务代码与服务不动，个人仍忽略/shared既有哈希保留；下一步运维与模型部门回填，合并后冻结候选再验收，模型切换须确认范围。
+
+### 2026-10-21（Asia/Shanghai）｜checkpoint：管理员模型服务完成
+
+用户确认spec080第一版并要求补UI原型。新增/admin/models及更多页admin入口；OpenAI兼容/DeepSeek/千问预设，保存/测试/应用分开，草稿/有效快照、版本控制、Key不回显和全局管理员API权限。Primary SwitchingModel与原生onAgent固定调用快照，覆盖缓存Agent及辅助Model消费者；JPA单行AES-GCM持久化、独立主密钥、0088迁移。移除公共application两项模型Key默认值，未复制/调用真实凭据，未改Supersonic或私有配置；无自动公网回退。
+
+新增23项专项测试全过；最终759项Java733通过26跳过、失败错误0，前端构建/Spotless/打包通过。原生HTTP/SSE/tool_calls及401/403/429/5xx、版本竞争、加密/H2恢复、同一个ReActAgent第一次响应前切换后工具再推理仍旧源/下轮新源均验证。真实React→Java→H2→本地桩、管理员操作/失败保留草稿、公网提示、普通成员隐藏/路由及401/403、隔离JAR重启保留选择、桌面/390布局与焦点实测；公司服务/真实MySQL迁移/超时与部分流中断专项等未验边界见20261021-admin-model-services报告。
+
+制品脱敏检查旧Key命中0、无私有dev/prod且static引用有效。日志/截图/合成H2保留于上层.runtime/model-services-20261021；临时18773/18774/18775最终未监听，原用户资源未清理。分支/HEAD仍boundary-lyf@1d5f5947，源码/原型/正式文档和先前运维文档均未提交；暂存区空，shared既有SHA256仍675FB4C9D5482E3C5FC4910595612ED4DD2383738C8CFE75D8556AE3BF6CAC5D，个人忽略保持。下一步用户审阅及公司提供方确认签名有效期/完整URL/工具流式能力、公网数据范围，再按手册0088/主密钥备份与目标环境验收；不接管同事性能、不自动提交推送部署。
+
+### 2026-10-21（Asia/Shanghai）｜checkpoint：其他配置页面化仅留规划
+
+用户明确暂不实施，仅允许记录后续参考。新增docs/plans/platform-settings-backlog.md，区分建议候选、部署配置保留边界、已有入口复用和热更新前提；TODO增加导航，CURRENT_TASK/DECISIONS记录用户暂缓，未排期且非首发阻断。未改业务代码、application、原型或制品，未运行/清理服务，不影响spec080既有工作或接管同事性能。本次只核对本地链接与差异空白，不重跑测试；文档未提交，未来重新确认范围后再实施。
+
+### 2026-10-21（Asia/Shanghai）｜checkpoint：按用户要求一次提交现有代码与文档
+
+用户先要求提交未提交代码，随后在任何新提交执行前明确“一次性提交，不分”。按单次提交交付spec080源码/测试/原型/static、0088迁移/架构README、65准备/BI跨服务器代理/上线清单及配置页面化后续参考，提交号以本条所在Git提交为准；规划仍暂缓，不接管同事性能，不推送部署。提交前本次新跑npm run build、mvn test、mvn package -DskipTests均0：759项Java733通过/26跳过，零失败错误，Spotless通过。脱敏检查历史模型Key在新包/待提交文件中命中0，无私有dev/prod，static引用有效；本次新包未启动，原真实验收及本次制品哈希见spec080报告。日志在上层.runtime/commit-model-services-20261021。shared既有修改不暂存、原SHA256保留，个人交接继续忽略；下次以最终提交核对部署候选，仍需公司接口/生产schema与主密钥/65与BI验收。
