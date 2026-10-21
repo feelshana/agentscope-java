@@ -16,11 +16,13 @@ import EditTierGate from './components/EditTierGate';
 import ChatPage from './pages/ChatPage';
 import OntologyChatPage from './pages/OntologyChatPage';
 import WorkspacePage from './pages/WorkspacePage';
+import MorePage from './pages/MorePage';
 import SkillsPage from './pages/configure/SkillsPage';
 import SubagentsPage from './pages/configure/SubagentsPage';
 import ChannelsPage from './pages/configure/ChannelsPage';
 import ToolsPage from './pages/configure/ToolsPage';
 import DatasetsPage from './pages/configure/DatasetsPage';
+import DataSourcesPage from './pages/configure/DataSourcesPage';
 import DatasetGroupPage from './pages/configure/DatasetGroupPage';
 import DatasetDetailPage from './pages/configure/DatasetDetailPage';
 import SemanticModelingPage from './pages/configure/SemanticModelingPage';
@@ -75,6 +77,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 
           {/* Workspace browser (RUN-tier read-only allowed) */}
           <Route path="/workspace" element={<WorkspacePage />} />
+          <Route path="/more" element={<MorePage />} />
 
           {/* Configuration pages — EDIT tier only */}
           <Route path="/configure/skills"    element={<EditTierGate><SkillsPage /></EditTierGate>} />
@@ -83,6 +86,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="/configure/tools"     element={<EditTierGate><ToolsPage /></EditTierGate>} />
           {/* Datasets are per-user data, not agent config — no EDIT-tier gate. */}
           <Route path="/configure/datasets"  element={<DatasetsPage />} />
+          <Route path="/configure/datasources" element={<DataSourcesPage />} />
           <Route path="/configure/datasets/:groupId" element={<DatasetGroupPage />} />
           {/* specs/030 fullscreen workbench: owns the whole viewport, AppShell hides the global sidebar here. */}
           <Route path="/configure/modeling/:groupId" element={<SemanticModelingPage />} />

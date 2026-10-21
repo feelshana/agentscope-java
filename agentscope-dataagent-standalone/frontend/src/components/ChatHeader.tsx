@@ -1,4 +1,5 @@
 import React from 'react';
+import { ShellNavigationToggle } from './ShellNavigation';
 
 export interface ChatHeaderProps {
   /** Current conversation title (first user question); empty for a new conversation. */
@@ -12,6 +13,7 @@ export interface ChatHeaderProps {
 export default function ChatHeader({ title }: ChatHeaderProps) {
   return (
     <div style={S.root}>
+      <ShellNavigationToggle />
       <div style={{ ...S.titleBlock, paddingLeft: 10 }} className="da-keyline">
         <span className="da-eyebrow">对话</span>
         <span style={S.title}>{title || '新对话'}</span>

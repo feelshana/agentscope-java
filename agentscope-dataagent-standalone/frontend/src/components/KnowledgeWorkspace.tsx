@@ -3,13 +3,15 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import Icon, { IconName } from './Icon';
 import '../knowledge-workspace.css';
+import { ShellNavigationToggle } from './ShellNavigation';
 
 export function KnowledgeBreadcrumb({ items }: { items: { label: string; to?: string }[] }) {
   const navigate = useNavigate();
   return <header className="kw-breadcrumb" aria-label="当前位置">
+    <ShellNavigationToggle />
     {items.map((item, index) => <React.Fragment key={`${index}-${item.label}`}>
       {index > 0 && <Icon name="chevron" size="sm" />}
-      {item.to ? <button onClick={() => { if (item.to) navigate(item.to); }}>{item.label}</button> : <span aria-current="page">{item.label}</span>}
+      {item.to ? <button onClick={() => { if (item.to) navigate(item.to); }}>{item.to === '/chat' && item.label === '返回对话' ? '对话' : item.label}</button> : <span aria-current="page">{item.label}</span>}
     </React.Fragment>)}
   </header>;
 }

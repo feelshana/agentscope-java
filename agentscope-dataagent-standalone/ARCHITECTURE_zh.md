@@ -581,7 +581,10 @@ manifest 尚不存在时（首次升级到该策略）执行一次性「采纳�
 ## 11. 前端结构
 
 React 18 + TypeScript + Vite SPA，构建到 `classpath:/static/`。`AppShell` 提供全局导航；
-独立语义建模路由隐藏会话侧栏。业务 HTTP 调用经 `apiFetch` 适配部署前缀及认证；
+`SessionsSidebar` 按原型组织品牌、导航、实际历史及账号区；`ShellNavigationContext` 与
+`ShellNavigationToggle` 在窄屏打开单份侧栏，支持关闭、Escape、焦点循环及正文 inert。
+`KnowledgeBreadcrumb` 统一顶部路径栏；独立语义建模路由隐藏会话侧栏和展开按钮。
+业务 HTTP 调用经 `apiFetch` 适配部署前缀及认证；
 SSE 由 `api/chat.ts` 消费，`done.sessionKey` 是 conversationId。
 
 - 普通问答：`ChatPage` / `ChatPanel`，本轮零/单/多/全选；`ToolCallBlock` 展示轨迹，
@@ -589,6 +592,13 @@ SSE 由 `api/chat.ts` 消费，`done.sessionKey` 是 conversationId。
   展示图表与附件，`AnswerFeedback` 只在用户点赞后保存成功业务查询。
 - 知识库：`DatasetsPage`、`DatasetGroupPage`、`DatasetDetailPage` 提供列表、上传/关联、
   数据预览及成员授权；QUERY 与 MANAGE 的管理入口不同，后端仍复核。
+- 数据源：`DatasetsPage` 进入独立 `/configure/datasources` 的 `DataSourcesPage`，
+  按既有原型展示连接列表和实际检测结果；`DataSourceFormModal` 保留检测后保存、加密、采样
+  与编辑时密码留空保留，`DataSourceDetailModal` 提供连接概况及按需库表字段浏览。
+  `DataSourceDialog` 使用原生模态框管理键盘焦点；窄屏由全局导航抽屉提供入口，也可通过面包屑返回知识库。
+- 业务术语：`SemanticConfigPage` 保留可管理知识库范围和组级 API，提供选择、搜索、表格、
+  分页及轻量编辑弹窗；切库取消旧读取，失败保留草稿，术语不会自动改写已发布工程。
+- 更多：`MorePage` 在 `/more` 提供既有 `/workspace` 文件浏览入口，工作区面包屑经“更多”返回。
 - 建模：`SemanticModelingPage` 分资料与可选问题、对话建模、检查与发布、语义资产。
   `ModelingChatPanel` / `ModelingHitlCard` 复用原生确认及实际文件预览，不把确认写入当作业务验收。
   `MdlPublishPanel` 提供工程检查与显式发布；`ModelSnapshotPanel` / `MdlGraphView` 浏览草稿及发布结构。
@@ -596,8 +606,9 @@ SSE 由 `api/chat.ts` 消费，`done.sessionKey` 是 conversationId。
   `SqlQaExamplesPanel` 管理建模和点赞两种来源，来源生命周期见第4.2节及ADR0075/0076。
 - `ModelingChatPanel#restorePendingProposal` 只恢复已持久化待确认卡；回读不执行或批准工具。
   拒绝反馈经原生 ConfirmResult 进入匹配会话，不创建第二套确认状态机。
-- 例行任务入口按 ADR0082/spec070 仅占位；开发密码与生产 BI 入口行为见第10章。
-  其他配置/管理/工作区页面继续使用现有实现，当前不是整体 HTML 原型的全量改造。
+- 例行任务按原型提供页面和表头，但按 ADR0082/spec070 仅占位，不调用任务 API。
+  本轮局部 UI 范围见 spec078/079；知识库卡片主体、聊天和建模主体、其他管理页沿用现有实现。
+  开发密码与生产 BI 入口行为见第10章。
 
 旧四阶段引导、问题必填/逐题确认、自动文档增强卡、Cube 隐藏等已被当前流程取代；
 历史演进查 ADR0050—0063。当前依据为 ADR0069、0075—0078，不复制旧 UI 流程作为现状。

@@ -1,510 +1,154 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { KnowledgeBreadcrumb } from '../../components/KnowledgeWorkspace';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { KnowledgeBreadcrumb, WorkspaceMenu } from '../../components/KnowledgeWorkspace';
+import WorkspaceDialog from '../../components/DataSourceDialog';
 import Icon from '../../components/Icon';
-import {
-  createSemanticTerm,
-  deleteSemanticTerm,
-  listSemanticTerms,
-  SemanticTerm,
-  updateSemanticTerm,
-} from '../../api/semantic';
+import { toast } from '../../components/Toast';
+import { createSemanticTerm, deleteSemanticTerm, listSemanticTerms, SemanticTerm, updateSemanticTerm } from '../../api/semantic';
 import { DatasetGroup, listGroups } from '../../api/datasets';
+import '../../secondary-pages.css';
 
-const panelStyle: React.CSSProperties = {
-  flex: 1,
-  minHeight: 0,
-  overflow: 'auto',
-  padding: '34px 36px 48px', maxWidth: 1480, width: '100%', boxSizing: 'border-box', margin: '0 auto',
-};
+const splitSynonyms = (value: string | null) => [...new Set((value ?? '').split(/[,，、]/).map(item => item.trim()).filter(Boolean))];
 
-const linkBtn: React.CSSProperties = {
-  background: 'transparent',
-  border: 'none',
-  color: 'var(--da-primary)',
-  cursor: 'pointer',
-  fontSize: 13,
-  padding: 0,
-};
-
-const linkBtnDisabled: React.CSSProperties = {
-  ...linkBtn,
-  color: 'var(--da-text-muted)',
-  opacity: 0.55,
-  cursor: 'not-allowed',
-};
-
-const pagerBtn: React.CSSProperties = {
-  width: 26,
-  height: 26,
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  background: 'var(--da-surface)',
-  border: '1px solid var(--da-border)',
-  borderRadius: 6,
-  color: 'var(--da-text-3)',
-  cursor: 'pointer',
-  padding: 0,
-  flexShrink: 0,
-};
-
-const pagerBtnDisabled: React.CSSProperties = {
-  ...pagerBtn,
-  opacity: 0.45,
-  cursor: 'not-allowed',
-};
-
-const synTagBox: React.CSSProperties = {
-  display: 'flex',
-  flexWrap: 'wrap',
-  alignItems: 'center',
-  gap: 4,
-  minHeight: 34,
-  padding: '3px 6px',
-  width: '100%',
-  boxSizing: 'border-box',
-  background: 'var(--da-surface)',
-  border: '1px solid var(--da-border-strong)',
-  borderRadius: 'var(--da-radius-md)',
-};
-
-interface Draft {
-  term: string;
-  explanation: string;
-}
-
-const emptyDraft: Draft = { term: '', explanation: '' };
-
-const splitSyn = (s: string | null): string[] =>
-  (s ?? '').split(/[,，、]/).map(x => x.trim()).filter(Boolean);
-
-function Chevron({ left = false, double = false }: { left?: boolean; double?: boolean }) {
-  const one = (
-    <span style={{ display: 'inline-flex', transform: left ? 'rotate(180deg)' : undefined }}>
-      <Icon name="chevron" size="sm" />
-    </span>
-  );
-  if (!double) return one;
-  return (
-    <span style={{ display: 'inline-flex' }}>
-      <span style={{ marginRight: -7 }}>{one}</span>
-      {one}
-    </span>
-  );
-}
-
-/** TC-style 语义配置 page: knowledge-base-bound business nouns fed to the agent (specs/026). */
 export default function SemanticConfigPage() {
   const [groups, setGroups] = useState<DatasetGroup[]>([]);
   const [groupId, setGroupId] = useState('');
   const [terms, setTerms] = useState<SemanticTerm[]>([]);
+  const [groupsLoading, setGroupsLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [groupError, setGroupError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState<Draft>(emptyDraft);
-  const [synList, setSynList] = useState<string[]>([]);
-  const [synText, setSynText] = useState('');
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [pageSize, setPageSize] = useState(10);
+  const [attempt, setAttempt] = useState(0);
+  const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [editor, setEditor] = useState<{ groupId: string; term: SemanticTerm | null } | null>(null);
+  const [deleting, setDeleting] = useState<SemanticTerm | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deletingBusy, setDeletingBusy] = useState(false);
+  const deletePending = useRef(false);
+  const active = useRef(false);
+  const request = useRef<AbortController | null>(null);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
 
   useEffect(() => {
     const controller = new AbortController();
-    listGroups(controller.signal, true)
-      .then(gs => {
-        if (controller.signal.aborted) return;
-        setGroups(gs);
-        setGroupId(prev => prev || (gs[0]?.id ?? ''));
-      })
-      .catch(e => { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : String(e)); });
+    setGroupsLoading(true); setGroupError(null);
+    listGroups(controller.signal, true).then(result => {
+      if (controller.signal.aborted) return;
+      setGroups(result); setGroupId(previous => result.some(group => group.id === previous) ? previous : result[0]?.id ?? '');
+    }).catch(e => { if (!controller.signal.aborted) setGroupError(e instanceof Error ? e.message : String(e)); })
+      .finally(() => { if (!controller.signal.aborted) setGroupsLoading(false); });
     return () => controller.abort();
-  }, []);
+  }, [attempt]);
 
-  const request = useRef<AbortController | null>(null);
   const refresh = useCallback(async () => {
     request.current?.abort();
-    const controller = new AbortController();
-    request.current = controller;
-    if (!groupId) {
-      setTerms([]);
-      return;
-    }
+    const controller = new AbortController(); request.current = controller;
+    setError(null);
+    if (!groupId) { setTerms([]); setLoading(false); return; }
+    setLoading(true);
     try {
       const result = await listSemanticTerms(groupId, controller.signal);
-      if (controller.signal.aborted) return;
-      setTerms(result);
-      setError(null);
+      if (!controller.signal.aborted) setTerms(result);
     } catch (e) {
-      if (controller.signal.aborted) return;
-      setError(e instanceof Error ? e.message : String(e));
+      if (!controller.signal.aborted) setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      if (!controller.signal.aborted) setLoading(false);
     }
   }, [groupId]);
+  useEffect(() => { void refresh(); return () => request.current?.abort(); }, [refresh]);
 
-  useEffect(() => {
-    refresh();
-    return () => request.current?.abort();
-  }, [refresh]);
+  const selectedGroup = groups.find(group => group.id === groupId);
+  const canManage = selectedGroup?.canManage === true;
+  const needle = query.trim().toLocaleLowerCase();
+  const filtered = terms.filter(term => [term.term, term.explanation, term.synonyms].some(value => value?.toLocaleLowerCase().includes(needle)));
+  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, pages);
+  const rows = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const failure = groupError || error;
 
-  const totalPages = Math.max(1, Math.ceil(terms.length / pageSize));
-  const curPage = Math.min(page, totalPages);
-  const rows = useMemo(
-    () => terms.slice((curPage - 1) * pageSize, curPage * pageSize),
-    [terms, curPage, pageSize],
-  );
-
-  function commitSyn() {
-    const v = synText.trim().replace(/[,，、]+$/, '');
-    if (v && !synList.includes(v)) setSynList(l => [...l, v]);
-    setSynText('');
-  }
-
-  function resetDraft() {
-    setAdding(false);
-    setEditingId(null);
-    setDraft(emptyDraft);
-    setSynList([]);
-    setSynText('');
-  }
-
-  async function handleSave() {
-    if (!draft.term.trim()) return;
-    const pending = synText.trim().replace(/[,，、]+$/, '');
-    const finalSyns = pending && !synList.includes(pending) ? [...synList, pending] : synList;
-    setSynList(finalSyns);
-    setSynText('');
-    setBusy(true);
-    setError(null);
+  async function remove() {
+    if (!deleting || !canManage || deletePending.current) return;
+    deletePending.current = true; setDeletingBusy(true); setDeleteError(null);
     try {
-      const req = {
-        term: draft.term.trim(),
-        explanation: draft.explanation,
-        synonyms: finalSyns.join(','),
-      };
-      if (editingId) await updateSemanticTerm(groupId, editingId, req);
-      else await createSemanticTerm(groupId, req);
-      resetDraft();
-      await refresh();
+      await deleteSemanticTerm(groupId, deleting.id);
+      if (!active.current) return;
+      setDeleting(null); toast('业务术语已删除', 'success'); await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
+      if (active.current) setDeleteError(e instanceof Error ? e.message : String(e));
+    } finally { deletePending.current = false; if (active.current) setDeletingBusy(false); }
   }
 
-  function startEdit(t: SemanticTerm) {
-    setAdding(true);
-    setEditingId(t.id);
-    setDraft({
-      term: t.term,
-      explanation: t.explanation ?? '',
-    });
-    setSynList(splitSyn(t.synonyms));
-    setSynText('');
-  }
-
-  async function handleDelete(id: string) {
-    if (!window.confirm('删除该词条？')) return;
-    setBusy(true);
-    try {
-      await deleteSemanticTerm(groupId, id);
-      await refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const canSave = draft.term.trim().length > 0 && !busy;
-
-  return (
-    <div className="kw-page kw-secondary-page">
-      <KnowledgeBreadcrumb items={[{ label: '返回对话', to: '/chat' }, { label: '业务术语' }]} />
-      <div style={panelStyle}>
-        <div className="kw-pagehead"><div className="kw-heading"><h1>业务术语</h1><p>统一业务定义与常用表达，让数据分析遵循一致的口径。</p></div></div>
-        {error && (
-          <div
-            style={{
-              color: 'var(--da-danger)',
-              background: 'rgba(225, 29, 72, 0.06)',
-              border: '1px solid rgba(225, 29, 72, 0.25)',
-              borderRadius: 8,
-              padding: '8px 12px',
-              fontSize: '0.85rem',
-              marginBottom: 12,
-            }}
-          >
-            {error}
-          </div>
-        )}
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-            <span
-              className="da-small"
-              style={{ color: 'var(--da-text-3)', flexShrink: 0, fontWeight: 600 }}
-            >
-              知识库
-            </span>
-            <select
-              className="da-input"
-              style={{ width: 240, padding: '4px 8px' }}
-              value={groupId}
-              onChange={e => {
-                setGroupId(e.target.value);
-                resetDraft();
-                setPage(1);
-              }}
-            >
-              {groups.length === 0 && <option value="">（暂无知识库）</option>}
-              {groups.map(g => (
-                <option key={g.id} value={g.id}>
-                  {g.name}
-                </option>
-              ))}
-            </select>
-            <button
-              className="da-btn da-btn-primary"
-              disabled={adding || busy || !groupId}
-              onClick={() => {
-                setAdding(true);
-                setEditingId(null);
-                setDraft(emptyDraft);
-                setSynList([]);
-                setSynText('');
-              }}
-            >
-              添加术语
-            </button>
-            <span style={{ flex: 1 }} />
-            <button
-              className="da-btn da-btn-ghost da-btn-sm"
-              title="刷新"
-              onClick={refresh}
-              disabled={busy}
-            >
-              <Icon name="refresh" size="sm" />
-            </button>
-          </div>
-          <div className="kw-tablebox"><div className="kw-table-scroll"><table className="kw-table kw-terms-table">
-            <thead>
-              <tr>
-                <th style={{ width: '20%' }}>业务术语</th>
-                <th style={{ width: '38%' }}>业务定义</th>
-                <th style={{ width: '24%' }}>同义词</th>
-                <th style={{ width: '18%' }}>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {adding && (
-                <tr>
-                  <td>
-                    <input
-                      className="da-input"
-                      placeholder="请输入业务名词，30字以内"
-                      maxLength={30}
-                      value={draft.term}
-                      onChange={e => setDraft(d => ({ ...d, term: e.target.value }))}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      className="da-input"
-                      placeholder="请输入业务名词解释，100字以内"
-                      maxLength={100}
-                      value={draft.explanation}
-                      onChange={e => setDraft(d => ({ ...d, explanation: e.target.value }))}
-                    />
-                  </td>
-                  <td>
-                    <div className="da-input" style={synTagBox}>
-                      {synList.map((s, i) => (
-                        <span key={`${s}-${i}`} className="da-badge">
-                          {s}
-                          <button
-                            type="button"
-                            title="移除"
-                            onClick={() => setSynList(l => l.filter((_, j) => j !== i))}
-                            style={{
-                              border: 'none',
-                              background: 'transparent',
-                              cursor: 'pointer',
-                              padding: 0,
-                              display: 'inline-flex',
-                              color: 'var(--da-text-3)',
-                            }}
-                          >
-                            <Icon name="close" size="sm" />
-                          </button>
-                        </span>
-                      ))}
-                      <input
-                        placeholder={synList.length ? '' : '请输入同义词，回车键分隔'}
-                        value={synText}
-                        onChange={e => setSynText(e.target.value)}
-                        onBlur={commitSyn}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter' || e.key === ',') {
-                            e.preventDefault();
-                            commitSyn();
-                          } else if (e.key === 'Backspace' && !synText && synList.length) {
-                            setSynList(l => l.slice(0, -1));
-                          }
-                        }}
-                        style={{
-                          flex: 1,
-                          minWidth: 110,
-                          border: 'none',
-                          outline: 'none',
-                          background: 'transparent',
-                          font: 'inherit',
-                          fontSize: 13,
-                          color: 'var(--da-text)',
-                          padding: '3px 2px',
-                        }}
-                      />
-                    </div>
-                  </td>
-                  <td>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 14 }}>
-                      <button
-                        style={canSave ? linkBtn : linkBtnDisabled}
-                        disabled={!canSave}
-                        onClick={handleSave}
-                      >
-                        保存
-                      </button>
-                      <button style={linkBtn} onClick={resetDraft}>
-                        取消
-                      </button>
-                    </span>
-                  </td>
-                </tr>
-              )}
-              {rows.map(t => (
-                <tr key={t.id}>
-                  <td style={{ fontWeight: 500, color: 'var(--da-text)' }}>{t.term}</td>
-                  <td>{t.explanation || '-'}</td>
-                  <td>
-                    <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 4 }}>
-                      {splitSyn(t.synonyms).length
-                        ? splitSyn(t.synonyms).map(s => (
-                            <span key={s} className="da-badge">{s}</span>
-                          ))
-                        : '-'}
-                    </span>
-                  </td>
-                  <td>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 14 }}>
-                      <button style={linkBtn} onClick={() => startEdit(t)}>
-                        编辑
-                      </button>
-                      <button style={linkBtn} onClick={() => handleDelete(t.id)}>
-                        删除
-                      </button>
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {!adding && !groupId && (
-                <tr>
-                  <td colSpan={4} style={{ textAlign: 'center', padding: '64px 20px' }}>
-                    <span
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        color: 'var(--da-text-muted)',
-                        fontSize: 13,
-                      }}
-                    >
-                      <Icon name="file" size="sm" /> 请先选择上方知识库
-                    </span>
-                  </td>
-                </tr>
-              )}
-              {!adding && groupId && terms.length === 0 && (
-                <tr>
-                  <td colSpan={4} style={{ textAlign: 'center', padding: '64px 20px' }}>
-                    <span
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        color: 'var(--da-text-muted)',
-                        fontSize: 13,
-                      }}
-                    >
-                      <Icon name="file" size="sm" /> 暂无业务术语，添加术语来说明你的业务口径
-                    </span>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table></div></div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 2px 2px' }}>
-            <span className="da-small">共 {terms.length} 条</span>
-            <span style={{ flex: 1 }} />
-            <select
-              className="da-input"
-              style={{ width: 'auto', padding: '2px 6px', fontSize: 12 }}
-              value={pageSize}
-              onChange={e => {
-                setPageSize(Number(e.target.value));
-                setPage(1);
-              }}
-            >
-              <option value={10}>10</option>
-              <option value={20}>20</option>
-              <option value={50}>50</option>
-            </select>
-            <span className="da-small">条 / 页</span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
-              <button
-                style={curPage === 1 ? pagerBtnDisabled : pagerBtn}
-                disabled={curPage === 1}
-                title="首页"
-                onClick={() => setPage(1)}
-              >
-                <Chevron left double />
-              </button>
-              <button
-                style={curPage === 1 ? pagerBtnDisabled : pagerBtn}
-                disabled={curPage === 1}
-                title="上一页"
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-              >
-                <Chevron left />
-              </button>
-              <input
-                className="da-input"
-                style={{ width: 44, padding: '2px 4px', fontSize: 12, textAlign: 'center' }}
-                value={curPage}
-                onChange={e => {
-                  const n = parseInt(e.target.value, 10);
-                  if (!Number.isNaN(n)) setPage(Math.min(Math.max(1, n), totalPages));
-                }}
-              />
-              <span className="da-small">/ {totalPages} 页</span>
-              <button
-                style={curPage === totalPages ? pagerBtnDisabled : pagerBtn}
-                disabled={curPage === totalPages}
-                title="下一页"
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-              >
-                <Chevron />
-              </button>
-              <button
-                style={curPage === totalPages ? pagerBtnDisabled : pagerBtn}
-                disabled={curPage === totalPages}
-                title="末页"
-                onClick={() => setPage(totalPages)}
-              >
-                <Chevron double />
-              </button>
-            </span>
-          </div>
-        </div>
+  return <div className="kw-page kw-secondary-page">
+    <KnowledgeBreadcrumb items={[{ label: '对话', to: '/chat' }, { label: '业务术语' }]} />
+    <div className="kw-scroll"><div className="kw-content">
+      <div className="kw-pagehead"><div className="kw-heading"><h1>业务术语</h1><p>按知识库维护术语，供成员查阅。</p></div>
+        <div className="kw-actions"><button className="da-btn da-btn-primary" disabled={!canManage || groupsLoading || !!groupError} onClick={() => setEditor({ groupId, term: null })}><Icon name="plus" size="sm" />添加术语</button></div>
       </div>
-    </div>
-  );
+      {failure && <div className="secondary-alert" role="alert"><Icon name="warn" size="sm" /><span>{failure}</span><button className="da-btn da-btn-sm" onClick={() => groupError ? setAttempt(value => value + 1) : void refresh()}>重试</button></div>}
+      <div className="kw-toolbar terms-toolbar"><label className="terms-kb-label" htmlFor="terms-knowledge-base">知识库</label>
+        <select id="terms-knowledge-base" className="kw-select" value={groupId} disabled={groupsLoading || !groups.length} onChange={event => {
+          request.current?.abort(); setGroupId(event.target.value); setTerms([]); setLoading(true); setError(null); setQuery(''); setPage(1); setEditor(null);
+        }}>
+          {!groups.length && <option value="">{groupsLoading ? '加载中…' : groupError ? '知识库加载失败' : '暂无可管理的知识库'}</option>}
+          {groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}
+        </select><span className="kw-spacer" />
+        <label className="kw-search"><Icon name="search" size="sm" /><input aria-label="搜索业务术语" placeholder="搜索业务术语" value={query} onChange={event => { setQuery(event.target.value); setPage(1); }} /></label>
+      </div>
+      <div className="kw-tablebox"><div className="kw-table-scroll" tabIndex={0} role="region" aria-label="业务术语表格，可横向滚动"><table className="kw-table kw-terms-table" aria-label="业务术语" aria-busy={loading || groupsLoading}>
+        <thead><tr><th scope="col">业务术语</th><th scope="col">业务定义</th><th scope="col">同义词</th><th scope="col">操作</th></tr></thead>
+        <tbody>{loading || groupsLoading ? <tr><td colSpan={4} className="kw-empty" role="status">正在加载业务术语…</td></tr>
+          : failure ? <tr><td colSpan={4} className="kw-empty">暂时无法读取业务术语，请重试。</td></tr>
+          : !groupId ? <tr><td colSpan={4} className="kw-empty">暂无可管理的知识库，请先创建或取得知识库管理权限。</td></tr>
+          : !rows.length ? <tr><td colSpan={4} className="kw-empty">{needle ? '没有匹配的术语' : '暂无业务术语，添加术语来说明你的业务口径。'}</td></tr>
+          : rows.map(term => <tr key={term.id}><td><strong>{term.term}</strong></td><td>{term.explanation || '—'}</td><td>{splitSynonyms(term.synonyms).join('、') || '—'}</td>
+            <td>{canManage ? <div className="terms-row-actions"><button className="da-btn da-btn-ghost da-btn-sm" onClick={() => setEditor({ groupId, term })}><Icon name="edit" size="sm" />编辑</button>
+              <WorkspaceMenu label={`${term.term}的更多操作`} items={[{ label: '删除术语', icon: 'trash', danger: true, onClick: () => { setDeleting(term); setDeleteError(null); } }]} /></div> : <span className="kw-source">只读</span>}</td></tr>)}
+        </tbody>
+      </table></div><div className="kw-tablebottom">当前知识库的术语 · 不跨库共用定义</div></div>
+      {!failure && !groupsLoading && !loading && groupId && <div className="kw-pagination terms-pagination"><span>共 {filtered.length} 条{needle && `（全部 ${terms.length} 条）`}</span><span className="kw-spacer" />
+        <select className="kw-select" aria-label="每页术语数" value={pageSize} onChange={event => { setPageSize(Number(event.target.value)); setPage(1); }}>{[10, 20, 50].map(size => <option key={size} value={size}>{size} 条 / 页</option>)}</select>
+        <button className="da-btn da-btn-sm" aria-label="首页" disabled={currentPage === 1} onClick={() => setPage(1)}>首页</button>
+        <button className="da-btn da-btn-sm" aria-label="上一页" disabled={currentPage === 1} onClick={() => setPage(value => Math.max(1, value - 1))}><span className="terms-chevron-back"><Icon name="chevron" size="sm" /></span></button>
+        <span>{currentPage} / {pages}</span><button className="da-btn da-btn-sm" aria-label="下一页" disabled={currentPage === pages} onClick={() => setPage(value => Math.min(pages, value + 1))}><Icon name="chevron" size="sm" /></button>
+        <button className="da-btn da-btn-sm" aria-label="末页" disabled={currentPage === pages} onClick={() => setPage(pages)}>末页</button>
+      </div>}
+      <div className="secondary-notice"><Icon name="info" size="sm" /><p>这里保存的术语不会自动改写已发布模型。需要影响问数口径时，请在建模对话中完善工程业务知识，再检查发布。</p></div>
+    </div></div>
+    {editor && <TermEditor key={`${editor.groupId}:${editor.term?.id ?? 'new'}`} groupId={editor.groupId} groupName={selectedGroup?.name ?? ''} term={editor.term} onClose={() => setEditor(null)} onSaved={() => { setEditor(null); toast('业务术语已保存', 'success'); void refresh(); }} />}
+    {deleting && <WorkspaceDialog title="删除业务术语" description={deleting.term} onClose={() => setDeleting(null)} busy={deletingBusy}><div className="ds-dialog-body"><p>确认删除该词条？</p>{deleteError && <div className="secondary-alert" role="alert">{deleteError}</div>}</div>
+      <footer className="ds-dialog-foot"><button className="da-btn" disabled={deletingBusy} onClick={() => setDeleting(null)}>取消</button><button className="da-btn da-btn-danger" disabled={deletingBusy} onClick={remove}>{deletingBusy ? '删除中…' : '确认删除'}</button></footer>
+    </WorkspaceDialog>}
+  </div>;
+}
+
+function TermEditor({ groupId, groupName, term, onClose, onSaved }: { groupId: string; groupName: string; term: SemanticTerm | null; onClose: () => void; onSaved: () => void }) {
+  const [name, setName] = useState(term?.term ?? '');
+  const [explanation, setExplanation] = useState(term?.explanation ?? '');
+  const [synonyms, setSynonyms] = useState(term?.synonyms ?? '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const pending = useRef(false);
+  const active = useRef(false);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
+  async function save(event: React.FormEvent) {
+    event.preventDefault();
+    if (pending.current) return;
+    if (!name.trim() || name.trim().length > 30 || explanation.length > 100) { setError('术语名称需为1–30字，业务定义不超过100字。'); return; }
+    pending.current = true; setBusy(true); setError(null);
+    const payload = { term: name.trim(), explanation, synonyms: splitSynonyms(synonyms).join(',') };
+    try {
+      if (term) await updateSemanticTerm(groupId, term.id, payload); else await createSemanticTerm(groupId, payload);
+      if (active.current) onSaved();
+    } catch (e) { if (active.current) setError(e instanceof Error ? e.message : String(e)); }
+    finally { pending.current = false; if (active.current) setBusy(false); }
+  }
+  return <WorkspaceDialog title={term ? '编辑业务术语' : '添加业务术语'} description={`仅属于当前知识库：${groupName}。保存不会自动改写已发布模型。`} onClose={onClose} busy={busy}><form onSubmit={save}>
+    <div className="ds-dialog-body"><fieldset className="ds-fields" disabled={busy}>
+      <label className="ds-field ds-full">业务术语<input autoFocus value={name} maxLength={30} required onChange={event => setName(event.target.value)} placeholder="请输入业务名词，30字以内" /></label>
+      <label className="ds-field ds-full">业务定义<textarea value={explanation} maxLength={100} rows={3} onChange={event => setExplanation(event.target.value)} placeholder="说明业务含义，100字以内" /></label>
+      <label className="ds-field ds-full">同义词<input value={synonyms} onChange={event => setSynonyms(event.target.value)} placeholder="多个同义词用逗号分隔" /></label>
+    </fieldset>{error && <div className="ds-feedback ds-failed" role="alert">{error}</div>}</div>
+    <footer className="ds-dialog-foot"><button type="button" className="da-btn" disabled={busy} onClick={onClose}>取消</button><button type="submit" className="da-btn da-btn-primary" disabled={busy || !name.trim()}>{busy ? '保存中…' : '保存'}</button></footer>
+  </form></WorkspaceDialog>;
 }

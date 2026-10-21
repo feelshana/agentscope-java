@@ -1,0 +1,50 @@
+.kw-secondary-page .kw-content { padding: 29px 32px 36px; }
+.kw-secondary-page .kw-heading h1 { font-size: 25px; font-weight: 650; letter-spacing: -.6px; }
+.kw-secondary-page .kw-heading p { font-size: 12px; color: #687080; }
+.kw-secondary-page .kw-pagehead { margin-bottom: 26px; align-items: center; }
+.kw-secondary-page .kw-table td { font-size: 12px; }
+.kw-secondary-page .da-btn-primary { background: #6654ce; border-color: #6654ce; }
+.terms-kb-label { font-size: 12px; color: #687080; flex-shrink: 0; }
+.terms-toolbar > select { width: 220px; max-width: 100%; font-size: 12px; min-height: 40px; }
+.terms-toolbar .kw-search { width: 280px; min-height: 40px; }
+.kw-terms-table th:first-child { width: 20%; }
+.kw-terms-table th:nth-child(2) { width: 38%; }
+.kw-terms-table th:nth-child(3) { width: 26%; }
+.kw-terms-table th:last-child { width: 16%; }
+.kw-terms-table strong { font-weight: 600; color: #252936; }
+.kw-terms-table td { vertical-align: top; line-height: 1.8; }
+.terms-row-actions { display: flex; align-items: center; }
+.terms-pagination { font-size: 11px; margin-top: 15px; gap: 8px; flex-wrap: wrap; }
+.terms-pagination .da-btn-sm { min-height: 28px; padding: 4px 7px; font-size: 11px; }
+.terms-chevron-back { display: inline-flex; transform: rotate(180deg); }
+.secondary-alert { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; border: 1px solid #f5dce0; background: #fff2f3; color: #b44651; font-size: 12px; padding: 12px 14px; border-radius: 8px; overflow-wrap: anywhere; }
+.secondary-alert > span { flex: 1; }
+.secondary-notice { display: flex; align-items: flex-start; gap: 9px; padding: 13px 16px; margin-top: 22px; border: 1px solid #e7e4f2; background: #f8f7fd; color: #777285; border-radius: 8px; }
+.secondary-notice .da-icon { width: 16px; height: 16px; flex-shrink: 0; margin-top: 2px; }
+.secondary-notice p { margin: 0; font-size: 12px; line-height: 1.8; }
+.ds-field textarea { width: 100%; min-width: 0; resize: vertical; border: 1px solid #dddfe6; border-radius: 7px; background: #fff; color: #323844; font: inherit; font-size: 13px; padding: 10px 12px; line-height: 1.8; }
+.ds-field textarea:focus { outline: 0; border-color: #a99ae0; box-shadow: 0 0 0 3px #6654cc0c; }
+.secondary-docrow { display: flex; align-items: center; gap: 12px; padding: 15px 18px; }
+.secondary-docrow > .da-icon { width: 18px; height: 18px; flex-shrink: 0; color: #8b829f; }
+.secondary-docrow > div { min-width: 0; flex: 1; }
+.secondary-docrow h2 { font-size: 13px; font-weight: 600; color: #252936; margin: 0; }
+.secondary-docrow p { font-size: 12px; color: #949bab; margin: 5px 0 0; }
+.secondary-task-empty { padding: 56px 24px; display: flex; flex-direction: column; align-items: center; text-align: center; }
+.secondary-empty-icon { width: 44px; height: 44px; background: #eeebfa; border-radius: 12px; display: grid; place-items: center; color: #8474bd; }
+.secondary-task-empty h2 { font-size: 17px; font-weight: 600; color: #555d6b; margin: 18px 0 8px; }
+.secondary-task-empty p { font-size: 12px; color: #949bab; line-height: 1.8; margin: 0; }
+@media (min-width: 1600px) { .kw-secondary-page .kw-content { padding-left: 44px; padding-right: 44px; } }
+@media (max-width: 1100px) { .kw-secondary-page .kw-content { padding: 24px; } }
+@media (max-width: 760px) {
+  .kw-secondary-page .kw-content { padding: 21px 17px; }
+  .kw-secondary-page .kw-pagehead { align-items: flex-start; gap: 14px; margin-bottom: 21px; }
+  .kw-secondary-page .kw-heading h1 { font-size: 23px; }
+  .terms-toolbar { gap: 9px; }
+  .terms-toolbar > select { width: calc(100% - 50px); }
+  .terms-toolbar .kw-search { width: 100%; }
+  .terms-toolbar .kw-spacer { display: none; }
+  .kw-terms-table { min-width: 650px; }
+  .secondary-task-table { min-width: 520px; }
+  .secondary-docrow { gap: 12px; padding: 18px 16px; }
+  .terms-pagination .kw-spacer { flex-basis: 100%; }
+}

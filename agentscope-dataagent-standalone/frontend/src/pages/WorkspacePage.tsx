@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ACTIVE_AGENT_ID } from '../api/activeAgent';
 import { summary as fetchSummary, WorkspaceSummary } from '../api/workspace';
-import BackToChatHeader from '../components/BackToChatHeader';
+import { KnowledgeBreadcrumb } from '../components/KnowledgeWorkspace';
 import WorkspaceFileTree from '../components/WorkspaceFileTree';
 import WorkspaceEditor from '../components/WorkspaceEditor';
 
@@ -50,7 +50,7 @@ export default function WorkspacePage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      <BackToChatHeader title="工作区" subtitle="查看 Agent 的工作目录" />
+      <KnowledgeBreadcrumb items={[{ label: '对话', to: '/chat' }, { label: '更多', to: '/more' }, { label: '工作区' }]} />
       {summary?.workspacePath && (
         <div style={pathBar} title={summary.workspacePath}>
           <span style={pathLabel}>Path</span>

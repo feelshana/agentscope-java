@@ -1,6 +1,33 @@
 # 当前任务与接手入口
 
-更新：2026-10-20；分支boundary-lyf。用户最新要求：先整理和清理，再将保留内容一次中文提交；不拆多次，不推送或部署。
+更新：2026-10-21；分支 `boundary-lyf`。本文件随用户授权的 UI 提交交付，实际提交号以 Git HEAD 为准；开发起点为 `bd9d2b8a`。
+
+## 当前：原型导航、业务术语、例行任务与更多（spec079）
+
+用户在数据源UI之后追加授权：这三个页面、左侧栏和顶部“对话 > 知识库”路径框按既有原型改造。
+
+- 已实现：原型侧栏/实际历史与账号、统一面包屑、窄屏导航抽屉及键盘焦点；业务术语表格/搜索/轻量编辑；独立更多页进入既有工作区；例行任务按ADR0082继续占位、无任务API。知识库卡片与聊天/建模主体未重做。
+- 文件：AppShell/AppShell.css、ShellNavigation、SessionsSidebar、KnowledgeWorkspace、两个聊天头部、SemanticConfigPage、ScheduledTasksPage、MorePage、WorkspacePage、secondary-pages.css、Icon及main路由。保留下面spec078全部修改，DataSources.css移除被全局抽屉替代的旧窄屏隐藏规则。
+- 本次实测：npm run build退出0（TypeScript/Vite，22.74秒），static产物更新；IAB隔离内存API桩验证术语CRUD/搜索/分页/切库旧响应/失败保留草稿/重试、导航/工作区入口、历史会话ID和批量选择、390窄屏/焦点、全屏建模侧栏隐藏；1280×800原型截图对照、2561×1398导航核对，view_image视觉检查；diff空白检查通过。[专项报告](../test-reports/20261021-prototype-navigation-and-secondary-pages.md)。
+- 用户随后授权提交，本次提交检查：`mvn test`退出0，736项中710通过、26跳过、失败/错误0；`mvn package -DskipTests`退出0，生成新JAR与tar.gz，默认前端构建和Spotless门禁通过。JAR引用当前UI，私有dev/prod配置未包含。详见专项报告末尾补充。
+- 未运行：真实后端/数据库/权限回归、真实任务执行、子路径部署；MDL接口未造桩，全屏建模仅核对侧栏边界。新JAR未启动或部署，既有服务不自动加载。
+- 本轮提交包含spec078/079源码、配套文档及static；不推送。上层shared/.seed-manifest.json已有不相关修改保留，前后哈希一致；个人交接仍本地忽略，不入索引。
+- 下一步：真实后端可用时联调术语、历史、工作区权限和数据源页；发布仍需用户指令。同事性能任务及原上线待办保留。
+
+## 前一阶段：按既有原型改造数据源管理（实现完成，本轮一并提交）
+
+用户已授权采用 `docs/previews` 原型的数据源管理页面（spec078/ADR0087），不扩大到整站UI或同事性能任务。
+
+- 已实现：独立 `/configure/datasources`；列表、实际状态检测；轻量新建/配置、详情概况与按需库表字段；保留加密/采样、检测后保存和删除约束；窄屏与键盘适配。
+- 主要文件：`DataSourcesPage`、`DataSourceFormModal`、`DataSourceDetailModal`、`DataSourceDialog`、`DataSources.css`、连接解析辅助；DatasetsPage入口、main路由及AppShell/SessionsSidebar的本页适配。旧 `DataSourceManagerModal` 移除，构建生成的static资源更新。
+- 本次验证：`npm run build`（TypeScript/Vite）退出0；IAB用隔离内存API桩检查创建/编辑/失败/删除/旧响应/导航/390窄屏，原型与实现截图对照；`git diff --check`通过。详见[报告](../test-reports/20261021-data-source-management-ui.md)。
+- 未运行：真实数据库/多租户后端回归、Maven测试/打包、真实Java服务与子路径部署验证；已有JAR不自动更新。没有操作原用户连接。
+- 阶段结束时未提交；随后用户授权与spec079一并提交。历史验证细节保留在原报告，新增Maven检查见当前任务；个人交接仍本地忽略，没有推送或部署。
+- 下一步：在真实后端可用时联调本页，用户另行决定发布；原上线待办继续保留，同事性能工作不接管。
+
+## 历史：2026-10-20 整理收口（已完成，保留记录）
+
+当时要求：先整理和清理，再将保留内容一次中文提交；不拆多次，不推送或部署。
 
 本页随本次单次提交交付，Git最终HEAD标识本轮源码。整理已完成；本次Maven compile（跳过测试/npm）通过，Python5文件AST与MJS3文件语法检查、私有配置排除和差异空白检查通过。未重跑测试；Git Bash不可用，未新增Shell语法检查，不覆盖历史Linux验证。
 
