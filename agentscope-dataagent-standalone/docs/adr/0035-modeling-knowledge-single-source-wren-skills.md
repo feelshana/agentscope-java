@@ -2,7 +2,7 @@
 
 - 状态：已采纳
 - 日期：2026-10-04
-- 证据：`logs/LLM-modeling.log`（Cube「报表访问分析/点击详情分析」试跑反复报 `Invalid manifest JSON: missing field 'type' at line 331 column 9`，agent 三次获取官方指引失败后凭记忆写出缺 type 的 Cube，L5010–L5480）；本机实测 `wren skills get enrich-context --full` 一次返回 46726 字符（SKILL.md + `cube_proposals` 参考 + `gap_catalog` 参考，其中 Cube YAML 模板带 `type`、`time_dimensions` 复数数组，与黄金组成功发布格式一致）；`wren/skills_content/`（generate-mdl 11KB、enrich-context 27KB+references 19KB、usage 16KB、onboarding 9KB）；agentscope 框架源码 `SkillToolFactory`（`load_skill_through_path` 工具，支持 `SKILL.md` 与 `references/*` 资源及磁盘回退）、`HarnessAgentBuilderSupport#composeSkillRepositories`（四层 skill 仓库装配）、`AgentSkillPromptProvider`（常驻注入技能名+描述）
+- 证据：`../../logs/archive-20261020/LLM-modeling.log`（Cube「报表访问分析/点击详情分析」试跑反复报 `Invalid manifest JSON: missing field 'type' at line 331 column 9`，agent 三次获取官方指引失败后凭记忆写出缺 type 的 Cube，L5010–L5480）；本机实测 `wren skills get enrich-context --full` 一次返回 46726 字符（SKILL.md + `cube_proposals` 参考 + `gap_catalog` 参考，其中 Cube YAML 模板带 `type`、`time_dimensions` 复数数组，与黄金组成功发布格式一致）；`wren/skills_content/`（generate-mdl 11KB、enrich-context 27KB+references 19KB、usage 16KB、onboarding 9KB）；agentscope 框架源码 `SkillToolFactory`（`load_skill_through_path` 工具，支持 `SKILL.md` 与 `references/*` 资源及磁盘回退）、`HarnessAgentBuilderSupport#composeSkillRepositories`（四层 skill 仓库装配）、`AgentSkillPromptProvider`（常驻注入技能名+描述）
 - 关系：延续 ADR 0033（YAML-first，官方 CLI 为确定性校验器）与 ADR 0031（原生 HITL）；修正 ADR 0033 落地时把建模流程写进 `MODELING_SCRIPT` 的做法；兑现 ADR 0007 的分层准绳并吸取 ADR 0008「技能没被加载」教训
 
 ## 背景

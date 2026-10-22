@@ -103,6 +103,19 @@ class DatasetServiceMdlDirtyTest {
 
         when(groupRepository.findById(anyString()))
                 .thenAnswer(inv -> Optional.ofNullable(groupsById.get(inv.getArgument(0))));
+        org.mockito.Mockito.doAnswer(
+                        inv -> {
+                            DatasetGroupEntity g = groupsById.get(inv.getArgument(0));
+                            if (g != null) {
+                                g.setMdlState("DIRTY");
+                                g.setUpdatedAt(Instant.now());
+                                org.springframework.test.util.ReflectionTestUtils.setField(
+                                        g, "modelingRevision", g.getModelingRevision() + 1);
+                            }
+                            return null;
+                        })
+                .when(groupRepository)
+                .requireModeling(anyString());
         when(groupRepository.save(any(DatasetGroupEntity.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
         when(knowledgeRepository.save(any(DatasetKnowledgeEntity.class)))
@@ -152,23 +165,22 @@ class DatasetServiceMdlDirtyTest {
         assertEquals("KB g1", g.getName());
         assertTrue(g.getUpdatedAt().isAfter(g.getCreatedAt()));
         assertEquals(3, g.getMdlVersion(), "the version only moves on publish");
-        verify(groupRepository).save(g);
+        verify(groupRepository).requireModeling(g.getId());
     }
 
     @Test
-    void markMdlDirtyLeavesNoneAndDirtyGroupsAlone() {
+    void everyMutationRequiresANewPublicationEvenWhenAlreadyDirty() {
         registerGroup("none", "NONE");
         DatasetGroupEntity dirty = registerGroup("dirty", "DIRTY");
 
         service.markMdlDirty("none");
         service.markMdlDirty("dirty");
 
-        assertEquals("NONE", groupsById.get("none").getMdlState());
+        assertEquals("DIRTY", groupsById.get("none").getMdlState());
         assertEquals("DIRTY", dirty.getMdlState());
-        assertEquals(
-                Instant.parse("2026-09-01T00:00:00Z"),
-                dirty.getUpdatedAt(),
-                "an already-dirty group must not be rewritten");
+        assertEquals(1, dirty.getModelingRevision());
+        service.markMdlDirty("dirty");
+        assertEquals(2, dirty.getModelingRevision());
         verify(groupRepository, never()).save(any(DatasetGroupEntity.class));
     }
 
@@ -198,7 +210,7 @@ class DatasetServiceMdlDirtyTest {
         verify(provisioner).dropTable("ds_t1");
         verify(repository).delete(d);
         assertEquals("DIRTY", g.getMdlState());
-        verify(groupRepository).save(g);
+        verify(groupRepository).requireModeling(g.getId());
     }
 
     @Test
@@ -214,7 +226,7 @@ class DatasetServiceMdlDirtyTest {
                 d.getColumnSchemaJson().contains("新描述"),
                 "the edited description must land on the dataset");
         assertEquals("DIRTY", g.getMdlState());
-        verify(groupRepository).save(g);
+        verify(groupRepository).requireModeling(g.getId());
     }
 
     @Test
@@ -226,6 +238,6 @@ class DatasetServiceMdlDirtyTest {
 
         verify(knowledgeRepository).save(any(DatasetKnowledgeEntity.class));
         assertEquals("DIRTY", g.getMdlState());
-        verify(groupRepository).save(g);
+        verify(groupRepository).requireModeling(g.getId());
     }
 }

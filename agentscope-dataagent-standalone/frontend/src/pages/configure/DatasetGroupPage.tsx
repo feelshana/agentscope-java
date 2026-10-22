@@ -1,3 +1,4 @@
+import { FactQueryWindowSettings } from '../../components/FactQueryWindowSettings';
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import KnowledgeBaseMembersModal from '../../components/KnowledgeBaseMembersModal';
@@ -36,7 +37,7 @@ const STATUS_LABEL: Record<UploadStatus['status'], string> = {
   queued: '排队中',
   uploading: '上传中',
   importing: '解析/导入中',
-  publishing: '检查与发布中',
+  publishing: '准备模型草稿中',
   model_pending: '已导入，模型未就绪',
   uncertain: '状态待确认',
   ready: '完成',
@@ -55,6 +56,8 @@ const NAV_ITEMS: { key: View; icon: IconName; label: string }[] = [
 export default function DatasetGroupPage() {
   const { groupId = '' } = useParams();
   const navigate = useNavigate();
+  const activeGroup = useRef<string | null>(groupId);
+  useEffect(() => { activeGroup.current = groupId; return () => { activeGroup.current = null; }; }, [groupId]);
   const uploadScope = `${getToken() ?? ''}:${groupId}`;
   const [searchParams, setSearchParams] = useSearchParams();
   const [detail, setDetail] = useState<GroupDetail | null>(null);
@@ -160,6 +163,8 @@ export default function DatasetGroupPage() {
     files: File[],
     sheetMap: Map<string, string>,
   ) {
+    let prepared = 0;
+    const batchErrors: string[] = [];
     const policy = await getUploadPolicy();
     setUploadOpen(false);
     mutateUploadStatuses(uploadScope, prev => [
@@ -181,9 +186,11 @@ export default function DatasetGroupPage() {
     const overwriteCandidates: { file: File; name: string; selectedSheet?: string }[] = [];
     results.forEach((r, i) => {
       if (r.status === 'fulfilled') {
+        prepared++;
         patchStatus(files[i].name, { status: 'ready' });
       } else {
         const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
+        if (!msg.includes('already exists')) batchErrors.push(`${files[i].name}：${msg}`);
         if (msg.includes('already exists')) {
           overwriteCandidates.push({
             file: files[i],
@@ -207,9 +214,11 @@ export default function DatasetGroupPage() {
         const overwriteResults = await settleUploads(overwriteCandidates, policy.concurrentFiles, c => uploadDataset(groupId, c.name, c.file, true, c.selectedSheet, crypto.randomUUID()));
         overwriteResults.forEach((r, i) => {
           if (r.status === 'fulfilled') {
+            prepared++;
             mutateUploadStatuses(uploadScope, prev => prev.filter(x => x.name !== overwriteCandidates[i].file.name));
           } else {
             const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
+            batchErrors.push(`${overwriteCandidates[i].file.name}：${msg}`);
             patchStatus(overwriteCandidates[i].file.name, {
               status: 'failed',
               error: msg,
@@ -225,6 +234,7 @@ export default function DatasetGroupPage() {
 
     setBusy(false);
     await refresh();
+    if (prepared > 0 && activeGroup.current === groupId) navigate(`/configure/modeling/${groupId}?asset=modeling&start=1`, { state: { intakeErrors: batchErrors } });
   }
 
   async function uploadFiles(files: FileList | File[]) {
@@ -334,6 +344,7 @@ export default function DatasetGroupPage() {
 
   return (
     <div className="kw-page">
+      <FactQueryWindowSettings key={groupId} groupId={groupId} />
       <KnowledgeBreadcrumb items={[{ label: '返回对话', to: '/chat' }, { label: '知识库', to: '/configure/datasets' }, { label: detail?.group.name ?? '加载中…' }]} />
       <div className="kw-scroll"><div className="kw-content">
         <div className="kw-pagehead">
@@ -346,7 +357,7 @@ export default function DatasetGroupPage() {
         {workflow && <div className="kw-progress" style={{ display: 'flex', alignItems: 'center', gap: 16, justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <span className="da-small">{workflow.queryAvailable
             ? `基础模型已发布 v${workflow.publishedVersion}，可以问数；业务口径可继续完善。`
-            : '数据接入后需要基础模型发布成功，才可问数。'}</span>
+            : '采样完成后请进行语义建模并发布，之后才能问数。'}</span>
           <button className="da-btn da-btn-sm" onClick={() => navigate(`/configure/modeling/${groupId}`)}>{workflow.queryAvailable ? '完善业务模型' : '查看建模进度'}</button>
         </div>}
         <div className="kw-tabs" role="tablist" aria-label="知识库内容">{NAV_ITEMS.map(n => <button key={n.key} role="tab" aria-selected={view === n.key} className={view === n.key ? 'active' : ''} onClick={() => n.key === 'modeling' ? navigate(`/configure/modeling/${groupId}`) : setView(n.key)}>{n.label}{n.key === 'files' && <span className="kw-badge">{fileCount}</span>}</button>)}</div>
@@ -440,7 +451,8 @@ export default function DatasetGroupPage() {
         <AssociateTablesModal
           groupId={groupId}
           onClose={() => setAssociateOpen(false)}
-          onAssociated={() => refresh()}
+          onAssociated={() => { if (activeGroup.current === groupId) { void refresh(); navigate(`/configure/modeling/${groupId}?asset=modeling&start=1`); } }}
+          onError={(message) => { setError(message); setAssociatingTables(new Set()); }}
           onAssociateStart={(tables) => {
             setAssociatingTables(new Set(tables));
             setAssociateOpen(false);

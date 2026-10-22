@@ -627,8 +627,12 @@ public final class DataAgentBootstrap {
                 // immediately so context stays lean and compaction is triggered less frequently.
                 b.toolResultEviction(
                         ToolResultEvictionConfig.builder()
-                                .maxResultChars(4_000)
-                                .previewChars(500)
+                                // Keep the harness default (about 80k chars). A 4k threshold
+                                // evicts ordinary Wren result payloads and makes the UI report
+                                // a misleading history-truncation message before the official
+                                // Wren limit is reached.
+                                .maxResultChars(ToolResultEvictionConfig.DEFAULT_MAX_RESULT_CHARS)
+                                .previewChars(ToolResultEvictionConfig.DEFAULT_PREVIEW_CHARS)
                                 .build());
 
                 // Compaction: higher message trigger + aggressive pruning to reduce frequency

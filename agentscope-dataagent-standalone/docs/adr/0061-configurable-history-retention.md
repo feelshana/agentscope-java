@@ -26,5 +26,5 @@
 
 ## 关联
 
-- [spec 053](../specs/053-configurable-history-retention.md)
+- [spec 053](../specs/done/053-configurable-history-retention.md)
 - [ADR 0060](0060-durable-session-history-and-artifact-lifecycle.md)

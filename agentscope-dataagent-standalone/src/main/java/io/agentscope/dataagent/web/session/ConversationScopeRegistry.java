@@ -43,6 +43,24 @@ public class ConversationScopeRegistry {
 
     public ConversationScopeRegistry() {}
 
+    /**
+     * Purpose of the latest modeling request per conversation (in memory, not persisted). A
+     * confirmation resume keeps the purpose of the request that raised the card.
+     */
+    private final ConcurrentHashMap<String, String> modelingPurposes = new ConcurrentHashMap<>();
+
+    public void putModelingPurpose(String userId, String sessionKey, String purpose) {
+        if (userId == null || sessionKey == null || sessionKey.isBlank()) return;
+        String key = ConversationDatasetScopeEntity.key(userId, sessionKey);
+        if (purpose == null) modelingPurposes.remove(key);
+        else modelingPurposes.put(key, purpose);
+    }
+
+    public String modelingPurpose(String userId, String sessionKey) {
+        if (userId == null || sessionKey == null || sessionKey.isBlank()) return null;
+        return modelingPurposes.get(ConversationDatasetScopeEntity.key(userId, sessionKey));
+    }
+
     private ConversationDatasetScopeRepository repository;
 
     private final com.fasterxml.jackson.databind.ObjectMapper mapper =

@@ -31,67 +31,85 @@ public final class WrenPublishedProject {
         this.cli = cli;
     }
 
+    /** The published snapshot directory of a group; read-only use, no ownership check. */
+    public Path publishedRoot(String group) {
+        return props.groupRoot(group).resolve("published");
+    }
+
     /** Rebuilds the official derived index only when deployed source changes. */
     public Path indexed(String owner, String group) {
+        return indexed(owner, group, null);
+    }
+
+    public Path indexed(
+            String owner, String group, io.agentscope.core.agent.RuntimeContext context) {
+        long waiting = System.nanoTime();
         return locked(
                 group,
                 () -> {
-                    Path project = prepare(owner, group);
+                    timing(context, "index.wait", waiting, "SUCCESS");
+                    Path project = measured(context, "index.deploy", () -> prepare(owner, group));
                     if (cli == null) return project;
                     try {
-                        var digest = java.security.MessageDigest.getInstance("SHA-256");
-                        digest.update(Files.readAllBytes(project.resolve("target/mdl.json")));
-                        Path knowledge = project.resolve("knowledge");
-                        if (Files.isDirectory(knowledge)) {
-                            try (var paths = Files.walk(knowledge)) {
-                                for (Path file :
-                                        paths.filter(Files::isRegularFile).sorted().toList()) {
-                                    digest.update(
-                                            knowledge
-                                                    .relativize(file)
-                                                    .toString()
-                                                    .getBytes(StandardCharsets.UTF_8));
-                                    digest.update(Files.readAllBytes(file));
-                                }
-                            }
-                        }
-                        String hash = java.util.HexFormat.of().formatHex(digest.digest());
+                        String hash = measured(context, "index.hash", () -> sourceHash(project));
                         Path marker = project.resolve(".indexed-source");
                         String expectedMarker = hash + "\nbackend=lancedb";
                         if (!Files.isRegularFile(marker)
                                 || !expectedMarker.equals(Files.readString(marker))) {
                             var result =
-                                    cli.run(
-                                            project,
-                                            props.timeout(),
-                                            List.of(
-                                                    "memory",
-                                                    "index",
-                                                    "--mdl",
-                                                    project.resolve("target/mdl.json").toString(),
-                                                    "--path",
-                                                    project.resolve(".wren/memory").toString(),
-                                                    "--no-seed"));
+                                    measured(
+                                            context,
+                                            "index.build",
+                                            () ->
+                                                    cli.run(
+                                                            project,
+                                                            props.timeout(),
+                                                            List.of(
+                                                                    "memory",
+                                                                    "index",
+                                                                    "--mdl",
+                                                                    project.resolve(
+                                                                                    "target/mdl.json")
+                                                                            .toString(),
+                                                                    "--path",
+                                                                    project.resolve(".wren/memory")
+                                                                            .toString(),
+                                                                    "--no-seed")));
                             if (!result.ok())
                                 throw new DatasetException("官方 Wren 记忆索引失败，请检查多语言模型依赖或缓存后重试", 502);
-                            var status =
-                                    cli.run(
-                                            project,
-                                            props.timeout(),
-                                            List.of(
-                                                    "memory",
-                                                    "status",
-                                                    "--path",
-                                                    project.resolve(".wren/memory").toString()));
-                            if (!status.ok()
-                                    || !status.output()
-                                            .toLowerCase(java.util.Locale.ROOT)
-                                            .contains("lancedb")) {
-                                throw new DatasetException(
-                                        "Wren 向量记忆后端不可用，请安装 wrenai[memory-onnx] 并确认 LanceDB 配置",
-                                        502);
+                            if (!confirmsLanceIndex(result.output())) {
+                                var status =
+                                        measured(
+                                                context,
+                                                "index.status",
+                                                () ->
+                                                        cli.run(
+                                                                project,
+                                                                props.timeout(),
+                                                                List.of(
+                                                                        "memory",
+                                                                        "status",
+                                                                        "--path",
+                                                                        project.resolve(
+                                                                                        ".wren/memory")
+                                                                                .toString())));
+                                if (!status.ok()
+                                        || !status.output()
+                                                .toLowerCase(java.util.Locale.ROOT)
+                                                .contains("lancedb"))
+                                    throw new DatasetException(
+                                            "Wren 向量记忆后端不可用，请安装 wrenai[memory-onnx] 并确认 LanceDB 配置",
+                                            502);
+                            } else {
+                                timing(
+                                        context,
+                                        "index.status",
+                                        System.nanoTime(),
+                                        "VERIFIED_BY_INDEX_OUTPUT");
                             }
                             Files.writeString(marker, expectedMarker, StandardCharsets.UTF_8);
+                        } else {
+                            timing(context, "index.reuse", System.nanoTime(), "CACHE_HIT");
                         }
                         return project;
                     } catch (DatasetException e) {
@@ -100,6 +118,61 @@ public final class WrenPublishedProject {
                         throw new DatasetException("准备官方 Wren 记忆索引失败", e);
                     }
                 });
+    }
+
+    static boolean confirmsLanceIndex(String output) {
+        return output != null
+                && java.util.regex.Pattern.compile(
+                                "(?m)^Indexed [0-9]+ schema items(?:, [0-9]+ seed queries)?\\.$")
+                        .matcher(output.replace("\r", ""))
+                        .find()
+                && !output.toLowerCase(java.util.Locale.ROOT).contains("grep backend");
+    }
+
+    private static String sourceHash(Path project) {
+        try {
+            var digest = java.security.MessageDigest.getInstance("SHA-256");
+            digest.update(Files.readAllBytes(project.resolve("target/mdl.json")));
+            Path knowledge = project.resolve("knowledge");
+            if (Files.isDirectory(knowledge)) {
+                try (var paths = Files.walk(knowledge)) {
+                    for (Path file : paths.filter(Files::isRegularFile).sorted().toList()) {
+                        digest.update(
+                                knowledge
+                                        .relativize(file)
+                                        .toString()
+                                        .getBytes(StandardCharsets.UTF_8));
+                        digest.update(Files.readAllBytes(file));
+                    }
+                }
+            }
+            return java.util.HexFormat.of().formatHex(digest.digest());
+        } catch (IOException | java.security.NoSuchAlgorithmException e) {
+            throw new DatasetException("计算问数索引版本失败", e);
+        }
+    }
+
+    private static <T> T measured(
+            io.agentscope.core.agent.RuntimeContext context, String phase, Supplier<T> action) {
+        long start = System.nanoTime();
+        try {
+            T result = action.get();
+            String status = result instanceof WrenCli.Result r && !r.ok() ? "ERROR" : "SUCCESS";
+            timing(context, phase, start, status);
+            return result;
+        } catch (RuntimeException failure) {
+            timing(context, phase, start, "ERROR");
+            throw failure;
+        }
+    }
+
+    private static void timing(
+            io.agentscope.core.agent.RuntimeContext context,
+            String phase,
+            long start,
+            String status) {
+        io.agentscope.dataagent.web.middleware.ExecutionTimingMiddleware.record(
+                context, phase, "", start, status);
     }
 
     public Path prepare(String owner, String group) {

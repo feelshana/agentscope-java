@@ -10,7 +10,8 @@ export default function AppShell() {
   const location = useLocation();
   // specs/030: the semantic-modeling workbench owns the entire viewport — hide the global
   // chat sidebar there so the asset view gets the full width.
-  const fullscreen = location.pathname.startsWith('/configure/modeling');
+  // The modeling list page (spec092) keeps the sidebar; only a knowledge base's workbench is fullscreen.
+  const fullscreen = location.pathname.startsWith('/configure/modeling/');
   const [agent, setAgent] = useState<AgentDefinition | null>(null);
   const [agentLoading, setAgentLoading] = useState(true);
   const [agentError, setAgentError] = useState<string | null>(null);

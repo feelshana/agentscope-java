@@ -53,4 +53,4 @@ target/wren-native-venv/Scripts/python.exe docs/fixtures/wren-native/browser_smo
 
 默认使用本机 Edge；其他浏览器可传 `--browser` 可执行文件路径。脚本仅在 127.0.0.1 临时端口提供静态页面，API 全部用隔离 fixture 替换，不改用户数据。验证初始对话隐藏、资料保存、多行问题、连续提交、Cube YAML、切页保留对话、无必验问题发布及下一步入口。报告与截图在 `target/wren-native-browser/`。
 
-完整阶段状态见 [实施计划](../../plans/058-wren-native-modeling-and-query-agents.md)，实际运行环境和未验收项见 [当前任务](../../ai/CURRENT_TASK.md)。
+完整阶段状态见 [实施计划](../../archive/plans/058-wren-native-modeling-and-query-agents.md)，实际运行环境和未验收项见 [当前任务](../../ai/CURRENT_TASK.md)。

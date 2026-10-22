@@ -22,7 +22,7 @@ import io.agentscope.dataagent.web.persistence.jpa.DatasetRepository;
 import java.time.Instant;
 import org.springframework.stereotype.Service;
 
-/** Coordinates one baseline MDL publication after a knowledge base's datasets change. */
+/** Prepares the interactive modeling draft after knowledge-base datasets change. */
 @Service
 public class BaselineMdlService {
 
@@ -45,15 +45,11 @@ public class BaselineMdlService {
     }
 
     /**
-     * Publishes the current table/column baseline once. The caller must already run on a blocking
+     * Prepares the current table/column draft without publishing it. The caller must already run on a blocking
      * scheduler because this method performs JPA, filesystem and subprocess work.
      */
     public MdlPublishService.MdlPublishResult publishAfterDatasetChange(
             String ownerId, String groupId) {
-        // Taken before any lock queueing: the tick strictly postdates this request's committed
-        // change, so a publish that began assembling later necessarily observed it
-        // (MdlPublishService#publishBaseline coalesces on that invariant).
-        long requestTick = System.nanoTime();
         DatasetGroupEntity group = requireOwnedGroup(ownerId, groupId);
         if (datasetRepository.countByGroupId(groupId) == 0) {
             publishService.deleteArtifacts(groupId);
@@ -72,7 +68,7 @@ public class BaselineMdlService {
         boolean hadPublishedSnapshot = group.getMdlVersion() > 0;
         MdlPublishService.MdlPublishResult result;
         try {
-            result = publishService.publishBaseline(groupId, requestTick);
+            result = publishService.prepareModeling(groupId);
         } catch (RuntimeException error) {
             throw publishFailure(hadPublishedSnapshot, rootMessage(error), error);
         }
@@ -96,7 +92,7 @@ public class BaselineMdlService {
     private static DatasetException publishFailure(
             boolean hadPublishedSnapshot, String reason, RuntimeException cause) {
         String prefix =
-                hadPublishedSnapshot ? "数据已保存，但基础 MDL 重建失败，新数据尚不可查询：" : "数据已保存，但基础 MDL 初始化失败：";
+                hadPublishedSnapshot ? "数据已保存，但基础模型草稿准备失败，请完成语义建模并发布后再问数：" : "数据已保存，但基础模型草稿初始化失败：";
         return new DatasetException(prefix + reason, 500, cause);
     }
 

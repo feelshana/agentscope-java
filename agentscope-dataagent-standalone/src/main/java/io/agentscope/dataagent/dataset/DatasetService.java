@@ -439,7 +439,10 @@ public class DatasetService implements DatasetContextProvider {
             }
             prepared.add(
                     new AssociatedTableMetadata(
-                            table, List.copyOf(schemaColumns), tableDescription, sample));
+                            table,
+                            List.copyOf(schemaColumns),
+                            tableDescription,
+                            DatasetSampling.withRole(sample, schemaResult.tableRole(), false)));
         }
         return List.copyOf(prepared);
     }
@@ -592,6 +595,12 @@ public class DatasetService implements DatasetContextProvider {
         if (!"SUCCESS".equals(summary.status()))
             throw new DatasetException("样本采集失败，已保留上次成功摘要", 503);
         access.requireManage(ownerId, entity.getGroupId());
+        var previous = DatasetSampling.decode(entity.getSampleSummaryJson());
+        summary =
+                DatasetSampling.withRole(
+                        summary,
+                        DatasetSampling.role(previous),
+                        previous != null && previous.tableRoleConfirmed());
         entity.setSampleSummaryJson(DatasetSampling.encode(summary));
         entity.setUpdatedAt(Instant.now());
         repository.save(entity);
@@ -1013,24 +1022,12 @@ public class DatasetService implements DatasetContextProvider {
         log.info("DatasetService: saved relationship knowledge for group {}", groupId);
     }
 
-    /**
-     * Flags the owning KB as DIRTY when a change affects the published MDL (specs/010 M2): the
-     * previous snapshot keeps serving until the user republishes. NONE / DIRTY groups, orphan
-     * datasets without a group and blank ids are no-ops.
-     */
+    /** Atomically requires publication of every dataset or document change, including dirty drafts. */
     void markMdlDirty(String groupId) {
         if (groupId == null || groupId.isBlank()) {
             return;
         }
-        groupRepository
-                .findById(groupId)
-                .filter(g -> "PUBLISHED".equals(g.getMdlState()))
-                .ifPresent(
-                        g -> {
-                            g.setMdlState("DIRTY");
-                            g.setUpdatedAt(Instant.now());
-                            groupRepository.save(g);
-                        });
+        groupRepository.requireModeling(groupId);
     }
 
     public String knowledgeText(String groupId) {

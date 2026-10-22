@@ -261,6 +261,41 @@ public class AnswerQueryMemory {
         List<JsonNode> officialInputs = new ArrayList<>();
         for (int i = start; i < end; i++) {
             TurnEntry turn = turns.get(i);
+            if (turn.toolName() != null
+                    && Set.of("run_sql", "query_cube").contains(turn.toolName())
+                    && turn.toolResult() != null
+                    && !turn.toolResult().startsWith("error:")) {
+                int receiptStart = turn.toolResult().indexOf("[WREN_QUERY_RECEIPT]");
+                if (receiptStart >= 0) {
+                    JsonNode receipt =
+                            json(
+                                    turn.toolResult()
+                                            .substring(
+                                                    receiptStart + "[WREN_QUERY_RECEIPT]".length())
+                                            .lines()
+                                            .findFirst()
+                                            .orElse(""));
+                    String group = receipt.path("groupId").asText("");
+                    String sql = receipt.path("sql").asText("");
+                    String question =
+                            turns.get(start).content() == null
+                                    ? ""
+                                    : turns.get(start).content().strip();
+                    int limit = receipt.path("limit").asInt(1000);
+                    boolean owned =
+                            groups.listGroups(owner).stream()
+                                    .anyMatch(g -> group.equals(g.getId()));
+                    if (owned
+                            && hasChinese(question)
+                            && !sql.isBlank()
+                            && limit > 0
+                            && limit <= 10000) {
+                        successful.put(
+                                queryId(group, question, sql, limit),
+                                new Pair(group, question, sql, limit));
+                    }
+                }
+            }
             if ("wren_call_tool".equals(turn.toolName()) && turn.toolInput() != null) {
                 JsonNode input = json(turn.toolInput());
                 officialInputs.add(input);

@@ -1,6 +1,6 @@
 # ADR 0027: 语义视图与口径落库（term 保存即生效 + view 发布生效双轨）
 
-日期：2026-10-01 ｜ 状态：已接受 ｜ 关联规格：docs/specs/011-semantic-enrich-and-views.md
+日期：2026-10-01 ｜ 状态：已接受 ｜ 关联规格：docs/specs/done/011-semantic-enrich-and-views.md
 
 ## 背景
 

@@ -33,6 +33,7 @@ import io.agentscope.dataagent.runtime.marketplace.NacosDataAgentMarketplace;
 import io.agentscope.dataagent.runtime.marketplace.UserMarketplaceRegistry.DataAgentMarketplaceFactoryRegistration;
 import io.agentscope.dataagent.runtime.session.DataDynamicContextMiddleware;
 import io.agentscope.dataagent.runtime.session.GroupScopedMemoryNamespace;
+import io.agentscope.dataagent.runtime.session.WrenScopedToolkitMiddleware;
 import io.agentscope.dataagent.tools.data.DataSourceRegistry;
 import io.agentscope.dataagent.tools.data.ModelingToolkitRegistrar;
 import io.agentscope.dataagent.web.middleware.DebugLoggingMiddleware;
@@ -141,12 +142,12 @@ public class DataAgentConfig {
             """
             # 通用数据分析助手
             使用同版本官方 Wren usage 技能、MCP 工具和知识完成问数，不建立另一套 SQL 或指标路由。
-            先加载官方 usage；通过 wren_list_tools 发现当前知识库的官方工具 schema，
-            wren_call_tool 的 arguments 原样遵循官方 schema。get_instructions、上下文、知识、
+            运行上下文列出受限事实表时，先遵守其中的日期约束；进入实际分析时加载官方 usage，直接使用当前知识库提供的官方工具 schema，
+            官方工具的 arguments 原样遵循官方 schema。get_instructions、上下文、知识、
             memory、SQL 与 Cube 的使用方式以官方指导及实际返回为准。
             查询只能使用已授权已发布工程；不得猜测物理表、切换连接或访问其他租户。
-            业务规则、知识与相似问答均通过 wren_call_tool 调用官方 get_instructions、list_knowledge、recall_queries；不调用平台自定义知识检索。
-            每个新问题先调用一次 wren_call_tool 的 recall_queries，使用当前问题作为 question，limit 使用官方默认的小数量；它是相似业务问答的唯一召回入口。
+            业务规则、知识与相似问答均通过 官方工具调用 get_instructions、list_knowledge、recall_queries；不调用平台自定义知识检索。
+            日期澄清完成或问题不需要日期时，每个进入实际分析的新问题先调用一次官方 recall_queries，使用当前问题作为 question，limit 使用官方默认的小数量；它是相似业务问答的唯一召回入口。
             不要遍历工程文件或调用平台自定义检索；业务规则、知识目录和相似问答只通过官方 get_instructions、list_knowledge、recall_queries 获取。
             answer_question 是平台可选的答案来源标注，不会传入 Wren：
             仅对准备实际用于最终答案的业务查询填写对应问题，诊断查询不要填写。
@@ -154,7 +155,7 @@ public class DataAgentConfig {
             只有用户点赞后才保存成功的业务样例；执行成功不代表业务正确，不自动修改语义资产。
             根据用户需要使用 run_python 或 render_chart 分析 Wren 返回的数据文件。
             不编造结果，真实说明歧义、失败和截断；已有结果足够时给出完整最终答案。
-            保留证据中的空值与空结果，不擅自补零；不补造未声明的单位或时间范围。
+            保留证据中的空值与空结果，不擅自补零；不补造未声明的单位或时间范围。查询成功但结果为空时如实回答无数据，不改日期或追加探查寻找有数据的时间。
             只呈现最终结论、必要口径和可核实依据，不呈现内部草稿推理。
             用户未要求时不主动导出文件。回答及图表使用简体中文。
             语言硬约束：所有面向用户的思考摘要、工具调用前说明、工具调用后说明和最终回答必须使用简体中文；不要输出英文解释。SQL、Python、官方工具原始字段和错误原文可以保留原格式。
@@ -167,22 +168,38 @@ public class DataAgentConfig {
             # 通用 Wren 工程助手
 
             你是使用官方 Wren 工具完成用户任务的通用 Agent。建模和语义增强先通过 load_skill_through_path
-            加载官方 generate-mdl、enrich-context、usage 或 onboarding；流程、模式选择、澄清与文件结构以技能正文为准。
-            不另建平台建模流程或自行复刻官方业务规则。技能挂载不可用时可通过 wren_cli 的 skills list/get 获取官方内容。
+            加载官方 generate-mdl、enrich-context、usage 或 onboarding；流程、模式选择、澄清与文件结构以官方技能正文为准。
+            不另建平台建模流程或自行复刻官方业务规则。技能已挂载时只用 load_skill_through_path 读取 SKILL.md 和 references 文件，
+            不再通过 wren_cli skills list/get 重复获取同一技能；仅在挂载不可用时使用 skills list/get。
 
             # 建模执行节奏
 
             同一会话中每个官方 skill 只加载一次；后续轮次直接使用已加载内容和当前工程状态，不重复加载完整 SKILL.md。
+            基础语义增强只需 enrich-context 及其按需引用的 references；wren_cli 命令和参数以工具描述为准，不为了解命令语法加载 usage 或 generate-mdl 全文，也不反复执行 --help。
+            基础建模不读取、不写入 cubes/ 与 views/ 下的任何文件，不调用 cube 命令，不读取 Cube 提案参考；官方技能中创建或检查 Cube/View 的步骤一律跳过，发现的指标或视图需求只在最终说明中记录为提案。已有 Cube/View 由官方校验与编译自动处理，无需读取。
             开始修改前确认工程目录；当前上下文已有有效目录时直接复用，目录缺失或文件新增/删除后才按需 list_files。
-            已存在的文件使用 edit_file，新文件才使用 write_file；未变化且已读取的文件无需反复读取。
-            同一轮方案中每个文件只能提交一次 edit_file；先合并该文件的全部描述、主键和字段修改，再提交一个完整替换，禁止对同一路径连续发起多个 edit_file。
-            生成 Cube 时，业务文档中的固定过滤条件必须落在可执行语义中：优先使用已过滤视图作为 base_object，或在 measure expression 中使用条件聚合；只写 properties.description 或 knowledge/rules 不算实现过滤。若表达式涉及关联模型，先用官方 CLI 验证关联表达式；不能因为过滤规则写入 knowledge/rules 就宣称 Cube 已完成。
-            Cube 的最终验收以 context build 后的 cube query --sql-only 生成 SQL 为准：固定口径指标的 SQL 必须实际包含对应过滤谓词；若 SQL 没有过滤，必须回到 View 或条件聚合修正，再次 build 和检查，不能把“编译通过”当作“业务口径正确”。
+            已存在的文件局部修改用 edit_file，整体替换可直接用 write_file（修改直接进入草稿，用户发布前统一审阅新旧差异）；采样后工程已包含 models/*/metadata.yml、relationships.yml、knowledge/knowledge.yml 和 knowledge/rules/general.md。未变化且已读取的文件无需反复读取。
+            草稿尚未编译时，首次 query、dry-plan、dry-run 或 memory describe 会由平台自动先执行 context build；修改文件后仍按官方流程集中执行 validate 与 build。
+            同一文件的修改优先合并为一次 edit_file；确需多处修改时可对同一文件多次 edit_file，但各次 old_string 不得重叠。
+            基础语义建模完整使用官方 enrich-context，并默认选择官方 Auto-pilot 模式；模型和列描述属于技术性基础建模变更，按当前任务直接执行并自动校验，不要求用户逐项确认。所有改动（关系、业务规则等）直接用 write_file/edit_file 写入草稿，不会逐项弹出确认，由用户在发布前统一审阅；不要在对话中用文字列出方案等待回复后再写，最终总结也不提供视图或 Cube 选项（Cube/View 不在基础建模范围内）。写入原则：采样和表结构能确定的列含义、业务文档写清楚的定义/过滤/术语、用户在对话中说明的口径，直接写入列描述或 knowledge/rules/（注明依据），不要向用户确认；只有口径确实有歧义且不同选择会改变统计结果时，才用 request_user_confirmation 向用户提问（每轮最多 3 个，第一个选项为推荐）；其余推断或不确定的说明写入 knowledge/caveats/，不写入 knowledge/rules/ 成为默认规则（例如没有依据的"只统计某类账号"）。收到用户的确认答复后，把每条答复整理后写入 knowledge/rules/（指标定义、默认过滤、术语）或对应模型的列描述（字段含义），问数会读取这两处。
+            knowledge/rules/ 中每条规则只能来自业务文档原句、用户对话或用户的确定，所注依据必须能在该来源中找到；文档没写、但不同理解会改变统计结果的指标口径（例如"访问次数"按记录行数还是按 visit_count 求和、"报表"是否只指某个资产类型）必须用 request_user_confirmation 提问，不得自行选定后标注为文档依据。
+            读取业务文档和当前工程素材，先确认口径，再通过官方查询验证样例 SQL。
+            数据探查按运行上下文“表来源与探查边界”区分：上传表只做其中列出的时间范围与关系验证两类探查；外部数据源及其他来源表禁止为补画像探测，必要业务 SQL 验证遵守逐表时间门禁与只读边界。收到 SQL_TIME_WINDOW_REJECTED 后停止本轮SQL尝试：用户指定的业务范围被拒绝时展示明细并请用户确认范围或调整配置；自拟技术样例被拒绝时说明尚未验证，不要求用户替样例选择日期。检查服务异常时说明检查未完成、查询未执行，不归咎于用户日期或数据库，不自动缩小范围或改写问题。
+            采样已标注 temporal_columns；请提出 FACT/DIMENSION/UNKNOWN 角色和 analysis_date_columns 的建议，只有用户明确确认后才写 table_role_confirmed: true。
+            主键、唯一性及关系基数不能由1000行采样证明；没有约束、全表验证或用户确认时保留未知。
+            关系的 join_type 必须与两侧粒度一致：被连接侧的连接键未确认唯一，或已知同一键可能对应多行时，不得声明 MANY_TO_ONE 或 ONE_TO_ONE，应使用 MANY_TO_MANY 或暂不写入该关系并说明原因；关系描述与声明的基数不得互相矛盾。
+            上传表的被连接侧键经全表查询证实唯一（总行数等于去重数且无空键）时，可以声明 MANY_TO_ONE，并在关系描述中注明“依据当前上传数据的全表验证，非数据库约束，重新上传后需复核”；外部数据源表仍需约束或用户确认。
+            平台数据库的查询窗口属于动态运行策略：具体天数、maxWindowDays和配置值禁止写进模型/列description、MDL properties或knowledge业务规则；这些位置只写“使用明确日期条件的小窗口查询”等通用建议。历史内容若把平台最大窗口写成固定天数，在本次正常修订中改为通用说明；保留真正的业务时间口径（例如滚动30天活跃），不要误删业务规则。
+            建模样例日期可自行选择，无需用户确认；生成前参考当前数据库逐表时间配置，选择符合各表限制的有限范围；外部数据源表不先探查最大、最小或最新日期，可参考运行上下文中的当前日期。说明这是技术验证样例，不能冒充用户指定日期，不代表完整统计。样例SQL仍须通过工具时间门禁。
+            自拟样例的问题文字与SQL的日期范围、指标和已确认过滤必须一致。用户原始问题、历史问答及固定业务周期（例如月度或滚动30天指标）不能缩短后冒充原问题；当前限制无法验证时保留业务定义并说明尚未执行验证。
+            SQL实际执行成功但结果为空可以视为执行验证成功，不代表业务口径正确或存在业务数据，不改日期继续找数据。context build、dry-plan或其它仅编译/规划检查成功不能冒充SQL执行验证成功。
+            为用户问题生成 SQL 或复用样例前，逐项核对名称、已确认口径与SQL过滤一致：例如“有效/已支付订单”不得遗漏已确认支付状态；已确认排除软删、退款、内部测试账号时保持对应过滤和必要关联。只检查已确认规则，不擅自新增业务条件。技术执行成功不等于业务口径正确。
+            业务文档中的固定过滤、指标和日期口径按官方 enrich-context 的 sink 决策写入；规则已记录不等于已执行验证，结构编译通过不代表业务口径已验证。
             先完成所需发现和方案，再按原生工具 schema 提交文件；write_file 使用 path/content。
             同一方案中互不依赖的多个文件可在同一轮发起多个 write_file/edit_file 调用，由原生批次授权统一确认；不要重复写入未变化文件。
-            每次 YAML 修改后只执行 context validate --strict；全部修改完成后再执行一次 context build。
-            新增 Cube、视图或关系后，再执行对应的 cube query --sql-only 或 dry-plan；只读 validate/build/query 不需要用户确认。
-            只有新 Cube、视图、关系或与现有口径冲突的修改需要确认，低风险的说明和规则补充合并到同一次方案中。
+            同一批互相关联的 YAML 修改全部完成后集中执行 context validate --strict，再执行一次 context build；仅在失败或后续再次修改时重验。
+            外部数据源及其他来源表禁止为验证结构或补充描述执行数据画像查询；必要业务样例可在口径确认后验证，已知边界拒绝后不得改写成等价探测重试。
+            模型描述、列描述和基础关系按技术任务自动执行并校验；计算列或与现有口径冲突的修改仍按官方业务确认规则处理，低风险的说明和规则补充合并到同一次方案中。
 
             # 执行边界
 
@@ -190,16 +207,48 @@ public class DataAgentConfig {
             只通过通用 read_file/list_files/glob_files/grep_files/write_file/edit_file 操作该工程；
             确定性检查、构建、查询和 memory 使用 wren_cli 的官方参数数组。文件写入和 memory store
             经平台原生权限确认；工具报错按实际原因修正，不能将未执行描述为成功。
-            不切换租户、工程、连接或平台管理文件，不使用宿主任意 shell。模型、视图、Cube 和知识遵循官方规范。
+            不切换租户、工程、连接或平台管理文件，不使用宿主任意 shell。模型、关系和知识遵循官方规范。
             Wren context build 只生成草稿 MDL，不代表已发布；需要上线时引导用户使用页面发布入口。
             问题表格是可选的用户输入，不是开始建模或发布的必经步骤。
-            对本轮已按官方技能成功验证的推荐问题，完成对应的 memory store --nl/--sql 写回（建模示例使用官方 source:enrich 标签），不要把问答保存留为“如需可继续”的遗漏步骤。
-            保存仍须原生写授权；用户拒绝或尚未成功验证时不得声称已保存。仅写问题、规则或执行 memory index 不等于已保存问答；收尾核对 knowledge/sql 中的问题与 SQL，并说明需页面显式发布后才能用于问数召回。
+            基础语义建模不生成、不保存问答对：不调用 memory store，不写 knowledge/sql/；官方 enrich-context 覆盖检查中"knowledge/sql 至少有几条问答对"一项跳过，也不为此自拟样例问题；最终总结写明"问答对待用户在问题确认流程中补充"。
+            用户提交业务问题时，逐题生成一条只读 SQL 并用 wren_cli query 实际执行一次确认可运行，然后写入 knowledge/questions/<ID>.yml（question 原文不改写、definition 写明指标/粒度/时间范围/过滤与所作假设、sql），由用户在试问面板逐题验证并确认；确认后平台保存为问答对，页面发布后可被问数召回。
+            仅为重建本地索引时使用 ["memory","index","--no-seed"]，基础建模通常不需要。
             不把字段样例当作统计结果，不编造业务定义或确认状态。
 
             # 语言
 
             所有面向用户的思考摘要、工具调用前说明、工具调用后说明和最终回答使用简体中文；不要输出英文解释。官方 CLI 原始输出、SQL、Python 和文件路径可以保留原格式。最终说明实际修改、检查结果和可执行的下一步。
+            """;
+
+    public static final String MODELING_PROBE_RULES =
+            """
+            探查规则以运行上下文“表来源与探查边界”的逐表列表为准。外部数据源及其他来源表（含未列出的表）禁止自动探测：不要为补齐枚举、基数、最小值、最大值或数据画像执行 SELECT DISTINCT、COUNT、COUNT DISTINCT、MIN、MAX、GROUP BY 或 COUNT(*)，复用采样、字段描述和模型 properties 元数据。上传表只允许运行上下文列出的时间范围（每张事实表一次 MIN/MAX）与关系验证（每条候选关系一次唯一性与匹配率合并查询）两类探查；维度候选取值已在采样中提取，不执行 SELECT DISTINCT 或分布统计，不导出明细行，不重复统计。禁止把时间范围扩大到 100 年绕过规则。
+            """;
+
+    /** Query-stage rules that prevent redundant official-tool calls and oversized answers. */
+    public static final String QUERY_EFFICIENCY_RULES =
+            """
+            # 日期理解
+
+            是否因缺少日期而先询问，只由运行上下文的"受限事实表日期约束"决定：上下文列出受限事实表时按其执行；未列出时不因缺少日期追问。
+            只查询回答当前问题所必需的信息。用户已提供日期也不代表可以额外探查时间覆盖、数据分布或寻找有数据的区间；禁止把这类探查单独执行或附加在业务SQL中。日期列的MIN/MAX、日期排序取首尾记录等操作，仅在用户问题本身明确要求对应日期信息时，才在其指定范围和门禁内使用。
+            用户已写明月日（如“10月7日”）或相对日期（如“最近30天”）即视为已提供日期：未写年份按当前年份理解，不为年份或日期再向用户确认，在答案中说明所用日期。指标口径（如“访问量”）先按已发布的业务规则和召回示例理解，规则未定义且存在实质歧义时才询问。
+            用户补充日期后通过已有对话历史继续原问题；相对日期由你结合运行时当前时间理解，不需要探查数据库最新日期来解释“最近30天”。表结构查询、业务规则解释及不受时间限制的表查询不强制询问日期。
+
+            # 问数执行边界
+
+            简单问数在已有上下文已明确模型、字段和业务口径时，完成召回后直接生成SQL，不重复describe_model；字段或含义不明确时仍按需读取，不猜测字段。
+            日期澄清完成或问题不需要日期后，每个进入实际分析的新问题最多调用一次 recall_queries；召回为空时继续使用已发布 MDL，不要重复召回或改写同一问题反复尝试。
+            平台不会解析或生成日期范围；用户已写明月日但未写年份时，按当前年份理解，例如“10月6日”按今年10月6日处理，不为年份向用户提问，在答案中说明。生成SQL后，共用时间门禁只检查当前知识库已登记事实表各自的时间字段和最大窗口，未登记表跳过。运行上下文中的数据库策略优先于历史MDL/描述中固化的平台窗口；修改限制应到知识库的事实表时间配置，不能要求修改MDL或重新发布。
+            主动澄清是你的预判，不得伪称已经调用工具门禁或伪造平台allowed/tables结果。需要修改问题范围时请用户选择，不擅自拆分原问题反复查询，也不向用户提出拆分成多次查询再汇总的方案。
+            对完全相同的工具参数和 SQL 不要重复调用。已经得到足以回答问题的结果后立即结束，不要为了“确认”再次执行同一查询。
+            优先一次查询完成分组、排序和 Top N；普通语法错误最多修正重试一次。遇到 SQL_TIME_WINDOW_REJECTED 必须停止本轮所有SQL尝试。用户请求的范围缺失或超限时展示真实逐表明细，请用户确认范围或调整配置，不自行缩小、拆分或改写原问题，不切换Cube/View绕过。自增可选探查被拒绝时放弃探查，按已有证据回答，不足时说明限制，不要求用户为探查修改原问题。检查服务异常时说明检查未完成、查询未执行，不描述为数据库拒绝或用户日期错误。
+            收到SQL成功执行但结果为空时正常结束并如实说明，不为确认同一范围追加统计或重复分组，不改日期找数据。空结果不等于任一指标为0，不补造计数、金额或其它统计值；只有工具实际返回的数值才能作为统计结论。
+            召回SQL只是示例：执行前对照当前问题和已确认业务规则，保留必要状态、软删、退款、内部账号等过滤和关联；缺少已确认过滤时补齐，不新增未经确认的业务要求。
+            run_sql/query_cube 返回的结果可能按 Wren 的有效 limit 截断；以返回的 row_count/truncated 为准，向用户说明范围，不要把上下文裁剪提示误报为数据库失败。需要完整明细时 limit 不得小于预期行数；只需结论时直接用聚合 SQL 返回汇总值。
+            按某个主体排名或计数（例如按负责人、项目、部门）时，GROUP BY 只放该主体；工作区、部门等附加属性用聚合函数（如 GROUP_CONCAT、MAX）带出或另行查询，不得加入分组导致同一主体被拆成多行。
+            表格列名和图表标题必须与 SQL 字段的实际含义一致；回答中描述的执行过程必须与实际工具调用一致，执行了查询就不能声称未重新统计。
+            答案中的计数、合计、分组分布和排名必须来自工具实际返回的数值；不得对多行结果心算或手工汇总，需要新的统计时补一条聚合 SQL（例如按工作区、负责人分组计数），沙箱不可用时同样如此。
             """;
 
     @Value("${dataagent.openai.api-key:}")
@@ -376,7 +425,11 @@ public class DataAgentConfig {
                     modelingToolkitProvider,
             WrenSkillsLocator wrenSkillsLocator,
             io.agentscope.dataagent.dataset.WrenProjectAccess wrenProjectAccess,
-            io.agentscope.dataagent.dataset.WrenQueryAccess wrenQueryAccess)
+            io.agentscope.dataagent.dataset.WrenQueryAccess wrenQueryAccess,
+            io.agentscope.dataagent.runtime.wren.WrenQueryGateway wrenQueryGateway,
+            io.agentscope.dataagent.dataset.WrenPublishedProject wrenPublishedProject,
+            io.agentscope.dataagent.dataset.FactQueryWindowPolicy windowPolicy,
+            io.agentscope.dataagent.web.persistence.jpa.DatasetRepository datasetRepository)
             throws IOException {
         Path cwd = resolveCwd();
         ensureAgentscopeConfig();
@@ -427,7 +480,7 @@ public class DataAgentConfig {
         builder.configureAllAgents(
                 (agentId, b) -> {
                     if ("data-agent".equals(agentId)) {
-                        configureQueryPrompt(b, agentSysPrompt);
+                        configureQueryPrompt(b, QUERY_EFFICIENCY_RULES + "\n" + agentSysPrompt);
                         mountWrenSkills(b, wrenSkillsLocator);
                     }
                     if (ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId)) {
@@ -442,6 +495,8 @@ public class DataAgentConfig {
                                         }));
                     }
                     b.middleware(new ToolNotificationMiddleware(toolEventBus));
+                    b.middleware(
+                            new io.agentscope.dataagent.web.middleware.ExecutionTimingMiddleware());
                     // The modeling assistant's transcript goes to its own file
                     // (logs/LLM-modeling.log) so semantic-modeling sessions stay separate from
                     // data-agent chat traffic; every other agent keeps the shared logs/LLM.log.
@@ -534,11 +589,22 @@ public class DataAgentConfig {
                     if (ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId)) {
                         b.middleware(
                                 new io.agentscope.dataagent.runtime.session
-                                        .WrenProjectContextMiddleware(wrenProjectAccess));
+                                        .WrenProjectContextMiddleware(
+                                        wrenProjectAccess, windowPolicy, datasetRepository));
                     } else if ("data-agent".equals(agentId)) {
                         b.middleware(
+                                new WrenScopedToolkitMiddleware(
+                                        wrenQueryAccess,
+                                        wrenQueryGateway,
+                                        wrenPublishedProject,
+                                        mdlCatalog,
+                                        windowPolicy));
+                        b.middleware(
                                 new io.agentscope.dataagent.runtime.session
-                                        .WrenQueryContextMiddleware(wrenQueryAccess));
+                                        .WrenQueryContextMiddleware(
+                                        wrenQueryAccess,
+                                        windowPolicy,
+                                        wrenPublishedProject::publishedRoot));
                     } else {
                         b.middleware(
                                 new DataDynamicContextMiddleware(
@@ -558,9 +624,13 @@ public class DataAgentConfig {
                 b -> {
                     b.name("建模助手")
                             .description("使用官方 Wren 技能、CLI 和通用文件工具完成当前知识库工程任务")
-                            .sysPrompt(MODELING_SCRIPT)
+                            .sysPrompt(MODELING_SCRIPT + "\n" + MODELING_PROBE_RULES)
                             .disableWorkspaceContext()
                             .maxIters(30)
+                            // A browser can leave an interrupted modeling turn with orphaned
+                            // tool calls in the persisted session. Resume with synthetic error
+                            // results so the user can continue the draft conversation.
+                            .enablePendingToolRecovery(true)
                             // Sandbox-free posture (see the sandboxlessAgents note above): the
                             // dedicated empty workspace above keeps this agent off the main
                             // agent's shared workspace content.
@@ -801,7 +871,10 @@ public class DataAgentConfig {
      */
     static void configureQueryPrompt(
             io.agentscope.harness.agent.HarnessAgent.Builder builder, String prompt) {
-        builder.sysPrompt(prompt).disableWorkspaceContext();
+        // The query agent uses the packaged official Wren repository below. Do not also scan the
+        // per-user sandbox workspace skills on every turn: that scan starts Docker before the
+        // first Wren call and makes a failed orphan cleanup look like a slow LLM response.
+        builder.sysPrompt(prompt).disableWorkspaceContext().disableDefaultWorkspaceSkills();
     }
 
     private void ensureAgentscopeConfig() throws IOException {

@@ -154,9 +154,11 @@ public class SchemaGenerationService {
         }
         sb.append("4. 描述示例：order_day（英文字段名）：格式为'yyyy-MM-dd'，包含2026-10-01,2026-10-02等\n");
         sb.append("5. 最后生成一句表描述，概括该表的数据内容和用途\n\n");
+        sb.append(
+                "6. 同时判断表角色tableRole：FACT表示订单、支付、访问等事件/交易事实；DIMENSION表示客户、产品、组织等实体属性/字典。客户注册时间或创建/更新时间不代表事实表；不能因存在日期列就判FACT。证据不足返回UNKNOWN，不猜测。\n");
         sb.append("请按以下 JSON 格式返回：\n");
         sb.append(
-                "{\"columns\":[{\"original\":\"原始列名\",\"english\":\"english_name\",\"description\":\"字段描述\"}],\"tableDescription\":\"表描述\"}\n\n");
+                "{\"columns\":[{\"original\":\"原始列名\",\"english\":\"english_name\",\"description\":\"字段描述\"}],\"tableDescription\":\"表描述\",\"tableRole\":\"FACT或DIMENSION或UNKNOWN\"}\n\n");
         if (tableComment != null && !tableComment.isBlank()) {
             sb.append("表注释：").append(tableComment).append("\n\n");
         }
@@ -240,7 +242,10 @@ public class SchemaGenerationService {
                 }
             }
 
-            return new SchemaResult(columnInfos, tableDesc);
+            return new SchemaResult(
+                    columnInfos,
+                    tableDesc,
+                    java.util.Objects.toString(parsed.get("tableRole"), "UNKNOWN"));
         } catch (Exception e) {
             log.warn(
                     "Failed to parse AI response as JSON, falling back to rules: {}",
@@ -343,5 +348,15 @@ public class SchemaGenerationService {
     public record ColumnInfo(String englishName, String description) {}
 
     /** Result of schema generation: per-column info + table description. */
-    public record SchemaResult(List<ColumnInfo> columns, String tableDescription) {}
+    public record SchemaResult(
+            List<ColumnInfo> columns, String tableDescription, String tableRole) {
+        public SchemaResult(List<ColumnInfo> columns, String tableDescription) {
+            this(columns, tableDescription, "UNKNOWN");
+        }
+
+        public SchemaResult {
+            if (!java.util.Set.of("FACT", "DIMENSION")
+                    .contains(java.util.Objects.toString(tableRole, ""))) tableRole = "UNKNOWN";
+        }
+    }
 }

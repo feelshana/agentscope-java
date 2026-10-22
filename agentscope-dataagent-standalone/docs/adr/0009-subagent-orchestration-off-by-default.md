@@ -1,8 +1,8 @@
 # ADR 0009: 子代理编排默认关闭（可配置开关）
 
-- 状态：已采纳（2026-09-22 实施，见 [spec 003](../specs/003-subagent-orchestration-off-by-default.md)）
+- 状态：已采纳（2026-09-22 实施，见 [spec 003](../specs/done/003-subagent-orchestration-off-by-default.md)）
 - 日期：2026-09-22
-- 证据：`logs/LLM.log`（system message 13726 字符，其中 `## Subagents` + Task Tools 段
+- 证据：`../../logs/archive-20261020/LLM.log`（system message 13726 字符，其中 `## Subagents` + Task Tools 段
   6284 字符，占 45.8%；7 次工具调用中 0 次 `agent_spawn` / `agent_send` / `task_*`）；
   harness `SubagentsMiddleware.SUBAGENT_SECTION_TEMPLATE`（固定模板，约 4600 字符）；
   `src/main/resources/shared/agents/data-agent/subagents/`（`data-explorer.md` 2471B、

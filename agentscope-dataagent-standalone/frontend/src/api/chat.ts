@@ -5,7 +5,13 @@ export interface ChatRequest {
   sessionKey?: string;
   groupIds?: string[];
   allGroups?: boolean;
+  /** Modeling only: why the turn runs; labels draft changes and gates capabilities (spec092). */
+  purpose?: TurnPurpose;
 }
+
+/** 'question': user-question SQL (may query external tables); 'auto': automatic modeling
+ *  (no business rules without a document); 'document': reconcile changed business documents. */
+export type TurnPurpose = 'question' | 'auto' | 'document' | 'confirm';
 
 export interface KnowledgeScope {
   groupIds: string[];

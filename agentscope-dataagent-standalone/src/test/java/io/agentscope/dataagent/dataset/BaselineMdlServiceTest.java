@@ -17,8 +17,6 @@ package io.agentscope.dataagent.dataset;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -67,18 +65,19 @@ class BaselineMdlServiceTest {
     }
 
     @Test
-    void publishesBaselineAndInvalidatesRunningInstance() {
+    void preparesDraftWithoutPublishingAndInvalidatesRunningInstance() {
         DatasetGroupEntity group = group(0);
         MdlPublishService.MdlPublishResult published =
                 new MdlPublishService.MdlPublishResult(
-                        true, List.of(), "build ok", "PUBLISHED", 1, "2026-10-02T10:00:00Z");
+                        true, List.of(), "draft ready", "DIRTY", 0, null);
         when(groupRepository.findById("g1")).thenReturn(Optional.of(group));
         when(datasetRepository.countByGroupId("g1")).thenReturn(2L);
-        when(publishService.publishBaseline(eq("g1"), anyLong())).thenReturn(published);
+        when(publishService.prepareModeling("g1")).thenReturn(published);
 
         assertThat(service.publishAfterDatasetChange("alice", "g1")).isSameAs(published);
 
-        verify(publishService).publishBaseline(eq("g1"), anyLong());
+        verify(publishService).prepareModeling("g1");
+        verify(publishService, never()).publish("g1");
         verify(publishService, never()).recordBaselineCoverage("g1");
         verify(wrenGateway).invalidate("g1");
     }
@@ -103,7 +102,7 @@ class BaselineMdlServiceTest {
         assertThat(group.getMdlLastError()).isNull();
         verify(publishService).deleteArtifacts("g1");
         verify(publishService).recordBaselineCoverage("g1");
-        verify(publishService, never()).publishBaseline(eq("g1"), anyLong());
+        verify(publishService, never()).prepareModeling("g1");
         verify(wrenGateway).invalidate("g1");
         verify(groupRepository).save(group);
     }
@@ -113,7 +112,7 @@ class BaselineMdlServiceTest {
         DatasetGroupEntity group = group(0);
         when(groupRepository.findById("g1")).thenReturn(Optional.of(group));
         when(datasetRepository.countByGroupId("g1")).thenReturn(1L);
-        when(publishService.publishBaseline(eq("g1"), anyLong()))
+        when(publishService.prepareModeling("g1"))
                 .thenReturn(
                         new MdlPublishService.MdlPublishResult(
                                 false,
@@ -127,7 +126,7 @@ class BaselineMdlServiceTest {
 
         assertThatThrownBy(() -> service.publishAfterDatasetChange("alice", "g1"))
                 .isInstanceOf(DatasetException.class)
-                .hasMessageContaining("基础 MDL 初始化失败")
+                .hasMessageContaining("基础模型草稿初始化失败")
                 .hasMessageContaining("字段类型不受支持");
         verify(wrenGateway, never()).invalidate("g1");
     }
@@ -137,15 +136,15 @@ class BaselineMdlServiceTest {
         DatasetGroupEntity group = group(2);
         when(groupRepository.findById("g1")).thenReturn(Optional.of(group));
         when(datasetRepository.countByGroupId("g1")).thenReturn(1L);
-        when(publishService.publishBaseline(eq("g1"), anyLong()))
+        when(publishService.prepareModeling("g1"))
                 .thenThrow(
                         new IllegalStateException(
                                 "wrapper", new IllegalArgumentException("wren build failed")));
 
         assertThatThrownBy(() -> service.publishAfterDatasetChange("alice", "g1"))
                 .isInstanceOf(DatasetException.class)
-                .hasMessageContaining("基础 MDL 重建失败")
-                .hasMessageContaining("新数据尚不可查询")
+                .hasMessageContaining("基础模型草稿准备失败")
+                .hasMessageContaining("发布后再问数")
                 .hasMessageContaining("wren build failed");
         verify(wrenGateway, never()).invalidate("g1");
     }
@@ -163,7 +162,7 @@ class BaselineMdlServiceTest {
                             assertThat(error.getMessage()).contains("Knowledge base not found");
                         });
         verify(datasetRepository, never()).countByGroupId("g1");
-        verify(publishService, never()).publishBaseline(eq("g1"), anyLong());
+        verify(publishService, never()).prepareModeling("g1");
         verify(publishService, never()).recordBaselineCoverage("g1");
     }
 

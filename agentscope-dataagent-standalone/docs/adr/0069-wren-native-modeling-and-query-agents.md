@@ -1,8 +1,8 @@
 # ADR 0069：建模与问数统一使用官方 Wren 能力
 
-- 状态：Accepted（2026-10-11 用户确认按完整计划开始实施；阶段进度见实施计划和共享记忆）
+- 状态：Accepted（2026-10-11 用户确认按完整计划开始实施；阶段进度见实施计划和共享记忆）；"未授权写入保留原生 HITL"条款已被 ADR-0111 取代（2026-10-21）
 - 日期：2026-10-11
-- 关联：[spec 058](../specs/058-wren-native-modeling-and-query-agents.md)、[实施计划](../plans/058-wren-native-modeling-and-query-agents.md)。
+- 关联：[spec 058](../specs/done/058-wren-native-modeling-and-query-agents.md)、[实施计划](../archive/plans/058-wren-native-modeling-and-query-agents.md)。
 - 生效后取代：ADR 0063 的 Cube 禁用、ADR 0064 的平台 SQL 流程、ADR 0068 的 Cube 排除及与本决策冲突的工具限制；保留旧 ADR 作为历史。
 
 ## 背景与证据

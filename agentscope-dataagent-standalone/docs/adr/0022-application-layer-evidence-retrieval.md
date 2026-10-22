@@ -8,7 +8,7 @@
 `retrieve_evidence` 自 TC 式工具链引入以来是伪检索：`DataAgentToolkit#retrieveEvidence`
 调用 `DatasetService#relationshipsText`（知识文档全文渲染，本是
 `[KNOWLEDGE_BASE_OVERVIEW]` 预注入的复用），`query` 参数完全不参与过滤——query 非空
-返回全部文档全文，为空则「没有相关内容」，二选一。2026-09-28 会话（`logs/LLM.log`，
+返回全部文档全文，为空则「没有相关内容」，二选一。2026-09-28 会话（`../../logs/archive-20261020/LLM.log`，
 M4 落地后首个真实问数）实证其失败形态：用户问「咪咕视频考核指标完成情况」，模型
 4 次调 `retrieve_evidence`（query 各不相同），因知识库尚未录入考核目标文档全部落空；
 且返回内容对查询零区分度——文档一旦就位并增长，「全量或无」也无法定位到回答问题的
@@ -72,4 +72,4 @@ markdown 结构化短文（考核口径、表关系说明、业务规则）。
   （知识库范围：文档类 RAG 留平台）
 - 框架源码：`agentscope-core/.../rag/Knowledge.java`（@Deprecated forRemoval）、
   `agentscope-extensions-rag-bailian/.../BailianKnowledge.java#addDocuments`
-- 诊断记录：`logs/LLM.log`（2026-09-28 会话，4 次 retrieve_evidence 全落空）
+- 诊断记录：`../../logs/archive-20261020/LLM.log`（2026-09-28 会话，4 次 retrieve_evidence 全落空）

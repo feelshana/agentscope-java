@@ -25,7 +25,18 @@ public final class DatasetSampling {
             int nullCount,
             int observedDistinct,
             boolean valuesTruncated,
-            boolean skipped) {}
+            boolean skipped,
+            String dateFormat) {
+        public ColumnSample(
+                String name,
+                List<String> values,
+                int nullCount,
+                int observedDistinct,
+                boolean valuesTruncated,
+                boolean skipped) {
+            this(name, values, nullCount, observedDistinct, valuesTruncated, skipped, null);
+        }
+    }
 
     public record Summary(
             int version,
@@ -34,7 +45,53 @@ public final class DatasetSampling {
             int sampledRows,
             int rowLimit,
             String method,
-            List<ColumnSample> columns) {}
+            List<ColumnSample> columns,
+            String tableRole,
+            boolean tableRoleConfirmed) {
+        public Summary(
+                int version,
+                String status,
+                String sampledAt,
+                int sampledRows,
+                int rowLimit,
+                String method,
+                List<ColumnSample> columns) {
+            this(
+                    version,
+                    status,
+                    sampledAt,
+                    sampledRows,
+                    rowLimit,
+                    method,
+                    columns,
+                    "UNKNOWN",
+                    false);
+        }
+    }
+
+    public static String role(Summary summary) {
+        String role =
+                summary == null || summary.tableRole() == null ? "UNKNOWN" : summary.tableRole();
+        return java.util.Set.of("FACT", "DIMENSION").contains(role) ? role : "UNKNOWN";
+    }
+
+    public static Summary withRole(Summary summary, String role, boolean confirmed) {
+        if (summary == null) return null;
+        String normalized =
+                java.util.Set.of("FACT", "DIMENSION").contains(java.util.Objects.toString(role, ""))
+                        ? role
+                        : "UNKNOWN";
+        return new Summary(
+                summary.version(),
+                summary.status(),
+                summary.sampledAt(),
+                summary.sampledRows(),
+                summary.rowLimit(),
+                summary.method(),
+                summary.columns(),
+                normalized,
+                confirmed);
+    }
 
     public static Summary empty(String status) {
         return new Summary(
@@ -91,6 +148,8 @@ public final class DatasetSampling {
         List<LinkedHashSet<String>> values = new ArrayList<>();
         int[] nulls = new int[columns.size()];
         boolean[] truncated = new boolean[columns.size()];
+        TemporalSamples[] dates = new TemporalSamples[columns.size()];
+        for (int i = 0; i < dates.length; i++) dates[i] = new TemporalSamples();
         for (int i = 0; i < columns.size(); i++) values.add(new LinkedHashSet<>());
         int count = 0;
         while (count < ROW_LIMIT && rows.next()) {
@@ -98,6 +157,7 @@ public final class DatasetSampling {
             for (int i = 0; i < columns.size(); i++) {
                 if (binary(columns.get(i).type())) continue;
                 String value = rows.getString(i + 1);
+                dates[i].add(value);
                 if (value == null) {
                     nulls[i]++;
                     continue;
@@ -118,7 +178,8 @@ public final class DatasetSampling {
                             nulls[i],
                             values.get(i).size(),
                             truncated[i] || values.get(i).size() > 20,
-                            binary(columns.get(i).type())));
+                            binary(columns.get(i).type()),
+                            dates[i].format(columns.get(i).type())));
         }
         return new Summary(
                 1,

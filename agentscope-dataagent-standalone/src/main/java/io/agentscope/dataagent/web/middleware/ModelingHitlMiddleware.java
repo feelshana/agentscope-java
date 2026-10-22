@@ -35,7 +35,9 @@ import io.agentscope.core.middleware.MiddlewareBase;
 import io.agentscope.core.middleware.ReasoningInput;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -55,6 +57,8 @@ import reactor.core.scheduler.Schedulers;
  */
 public final class ModelingHitlMiddleware implements MiddlewareBase {
     private static final Logger log = LoggerFactory.getLogger(ModelingHitlMiddleware.class);
+    private static final Map<io.agentscope.core.state.AgentState, Boolean> MEMORY_APPROVALS =
+            java.util.Collections.synchronizedMap(new WeakHashMap<>());
     private final BiFunction<RuntimeContext, ToolUseBlock, String> preflight;
 
     public ModelingHitlMiddleware() {
@@ -87,8 +91,13 @@ public final class ModelingHitlMiddleware implements MiddlewareBase {
                         && results instanceof List<?> list) {
                     for (Object result : list) {
                         if (result instanceof ConfirmResult decision
-                                && !decision.isConfirmed()
                                 && decision.getToolCall() != null) {
+                            if (decision.isConfirmed()
+                                    && ctx.getAgentState() != null
+                                    && isMemoryStore(decision.getToolCall())) {
+                                MEMORY_APPROVALS.put(ctx.getAgentState(), Boolean.TRUE);
+                            }
+                            if (decision.isConfirmed()) continue;
                             ctx.put(
                                     RepairFeedback.class,
                                     new RepairFeedback(
@@ -165,6 +174,31 @@ public final class ModelingHitlMiddleware implements MiddlewareBase {
             RuntimeContext ctx,
             ActingInput input,
             Function<ActingInput, Flux<AgentEvent>> next) {
+        List<ToolUseBlock> blockedReads =
+                input.toolCalls().stream()
+                        .filter(ModelingHitlMiddleware::isBlockedSkillRead)
+                        .toList();
+        if (!blockedReads.isEmpty() && ctx != null && ctx.getAgentState() != null) {
+            for (ToolUseBlock tool : blockedReads)
+                ctx.getAgentState()
+                        .contextMutable()
+                        .add(
+                                Msg.builder()
+                                        .role(MsgRole.TOOL)
+                                        .content(
+                                                ToolResultBlock.text(BLOCKED_SKILL_READ)
+                                                        .withIdAndName(tool.getId(), tool.getName())
+                                                        .withState(ToolResultState.ERROR))
+                                        .build());
+            return onActing(
+                    agent,
+                    ctx,
+                    new ActingInput(
+                            input.toolCalls().stream()
+                                    .filter(tool -> !blockedReads.contains(tool))
+                                    .toList()),
+                    next);
+        }
         Set<String> resolved = resolvedToolIds(ctx);
         List<ToolUseBlock> pending =
                 input.toolCalls().stream()
@@ -175,6 +209,9 @@ public final class ModelingHitlMiddleware implements MiddlewareBase {
                                                 || io.agentscope.dataagent.tools.data
                                                         .OfficialWrenToolkit.requiresConfirmation(
                                                         toolCall))
+                        .filter(toolCall -> !isTechnicalModelingWrite(toolCall))
+                        .filter(toolCall -> !isMemoryStore(toolCall))
+                        .filter(toolCall -> !isApprovedMemoryStore(ctx, toolCall))
                         .filter(toolCall -> toolCall.getState() != ToolCallState.ALLOWED)
                         .filter(toolCall -> !resolved.contains(toolCall.getId()))
                         .toList();
@@ -248,6 +285,45 @@ public final class ModelingHitlMiddleware implements MiddlewareBase {
                             });
         }
         return ask(ctx, pending);
+    }
+
+    static final String BLOCKED_SKILL_READ =
+            "[ERROR] 基础语义建模阶段不读取 Cube 提案参考：Cube 由独立的指标建模模块创建和验证。"
+                    + "发现的聚合指标只在最终说明中记录为提案，直接继续当前建模，不要再次尝试读取。";
+
+    /** Basic modeling never handles cubes (ADR0085), so the official cube reference stays unread. */
+    static boolean isBlockedSkillRead(ToolUseBlock tool) {
+        if (!"load_skill_through_path".equals(tool.getName()) || tool.getInput() == null)
+            return false;
+        Object path = tool.getInput().get("path");
+        return path instanceof String value
+                && value.replace('\\', '/')
+                        .toLowerCase(java.util.Locale.ROOT)
+                        .contains("cube_proposals");
+    }
+
+    /**
+     * ADR0111: every draft-project file write goes straight into the draft and is reviewed as a
+     * diff before publication, so no file write pauses the turn for a card. The tools themselves
+     * still enforce permission, path, YAML, model-layout and business-rule guards.
+     */
+    private static boolean isTechnicalModelingWrite(ToolUseBlock tool) {
+        return Set.of("write_file", "edit_file", "delete_file").contains(tool.getName());
+    }
+
+    private static boolean isApprovedMemoryStore(RuntimeContext ctx, ToolUseBlock tool) {
+        return ctx != null
+                && ctx.getAgentState() != null
+                && isMemoryStore(tool)
+                && Boolean.TRUE.equals(MEMORY_APPROVALS.get(ctx.getAgentState()));
+    }
+
+    private static boolean isMemoryStore(ToolUseBlock tool) {
+        if (!"wren_cli".equals(tool.getName()) || tool.getInput() == null) return false;
+        Object args = tool.getInput().get("arguments");
+        return args instanceof java.util.Collection<?> values
+                && values.stream().map(String::valueOf).anyMatch("memory"::equals)
+                && values.stream().map(String::valueOf).anyMatch("store"::equals);
     }
 
     private Flux<AgentEvent> ask(RuntimeContext ctx, List<ToolUseBlock> pending) {

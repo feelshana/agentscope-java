@@ -84,6 +84,7 @@ public class SemanticModelingController {
     private final ModelingToolkitRegistrar modelingToolkitRegistrar;
     private final ObjectMapper mapper;
     private final SqlQaExampleService sqlQaExamples;
+    private final io.agentscope.dataagent.dataset.ModelingActivity modelingActivity;
 
     @org.springframework.beans.factory.annotation.Autowired
     public SemanticModelingController(
@@ -97,7 +98,8 @@ public class SemanticModelingController {
             MdlWorkspaceService workspace,
             ModelingToolkitRegistrar modelingToolkitRegistrar,
             ObjectMapper mapper,
-            SqlQaExampleService sqlQaExamples) {
+            SqlQaExampleService sqlQaExamples,
+            io.agentscope.dataagent.dataset.ModelingActivity modelingActivity) {
         this.groupService = groupService;
         this.datasetService = datasetService;
         this.modelingService = modelingService;
@@ -109,6 +111,34 @@ public class SemanticModelingController {
         this.modelingToolkitRegistrar = modelingToolkitRegistrar;
         this.mapper = mapper;
         this.sqlQaExamples = sqlQaExamples;
+        this.modelingActivity = modelingActivity;
+    }
+
+    public SemanticModelingController(
+            DatasetGroupService groupService,
+            DatasetService datasetService,
+            MdlSuggestionService modelingService,
+            MdlPublishService mdlPublishService,
+            DocEnhanceService docEnhanceService,
+            WrenQueryGateway wrenGateway,
+            BaselineMdlService baselineMdlService,
+            MdlWorkspaceService workspace,
+            ModelingToolkitRegistrar modelingToolkitRegistrar,
+            ObjectMapper mapper,
+            SqlQaExampleService sqlQaExamples) {
+        this(
+                groupService,
+                datasetService,
+                modelingService,
+                mdlPublishService,
+                docEnhanceService,
+                wrenGateway,
+                baselineMdlService,
+                workspace,
+                modelingToolkitRegistrar,
+                mapper,
+                sqlQaExamples,
+                null);
     }
 
     /** Compatibility constructor retained for focused controller unit tests. */
@@ -795,12 +825,14 @@ public class SemanticModelingController {
         return Mono.fromCallable(
                         () -> {
                             groupService.getGroup(userId, groupId);
+                            // ADR0111: never publish a draft the assistant is still changing.
+                            if (modelingActivity != null) modelingActivity.requireIdle(groupId);
                             MdlPublishService.MdlPublishResult result =
                                     mdlPublishService.publish(groupId);
                             // Publish = rebuild the instance (ADR 0018 D8): the running wren engine
                             // froze the previous manifest at startup, so it is closed here — the
                             // next query respawns against the fresh snapshot.
-                            wrenGateway.invalidate(groupId);
+                            // Publication events invalidate before scheduling retrieval warmup.
                             return result;
                         })
                 .subscribeOn(Schedulers.boundedElastic())

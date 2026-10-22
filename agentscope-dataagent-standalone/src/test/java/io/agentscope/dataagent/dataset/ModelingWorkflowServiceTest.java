@@ -131,22 +131,31 @@ class ModelingWorkflowServiceTest {
         when(groups.listDatasets("alice", "g")).thenReturn(List.of(mock(DatasetEntity.class)));
         when(catalog.load("g")).thenReturn(Optional.empty());
         group.setMdlState("FAILED");
-        assertEquals("INITIALIZE", service.snapshot(scope, "g").nextAction().type());
+        assertEquals("MODEL", service.snapshot(scope, "g").nextAction().type());
         assertFalse(service.snapshot(scope, "g").queryAvailable());
     }
 
     @Test
-    void modelEditExpiresEngineeringAndBusinessReceiptsButKeepsPublishedQueries() throws Exception {
+    void modelEditExpiresEngineeringButKeepsQuestionConfirmationsAndPublishedQueries()
+            throws Exception {
         preview(true);
         question("有效订单", "SELECT SUM(amount) FROM order", true);
         engineering(true);
-        var receipt = execute(false);
-        questions.decide("g", "sales", receipt.validationId(), true, "alice");
+        execute(false);
+        questions.decide("g", "sales", true, "alice");
+        assertTrue(service.snapshot(scope, "g").affectedQuestionIds().isEmpty());
+        // Uploading source material does not touch the modeled semantics.
+        Files.createDirectories(root.resolve("raw/docs"));
+        Files.writeString(root.resolve("raw/docs/口径.md"), "营收只算正式账号");
+        assertTrue(service.snapshot(scope, "g").affectedQuestionIds().isEmpty());
         Files.writeString(root.resolve("models/order/metadata.yml"), "name: changed\n");
         var state = service.snapshot(scope, "g");
+        // spec092: a model changed since confirmation suggests a re-check, never a block.
+        assertEquals(java.util.List.of("sales"), state.affectedQuestionIds());
         assertEquals("NOT_CHECKED", state.engineeringStatus());
         assertEquals("VALIDATION", state.stage());
-        assertEquals(0, state.questionSummary().confirmed());
+        // spec091: confirmations bind to the question; the publish dry-plan re-checks the SQL.
+        assertEquals(1, state.questionSummary().confirmed());
         assertTrue(state.queryAvailable());
         assertEquals(1, state.publishedVersion());
         assertFalse(state.canPublish());

@@ -17,6 +17,69 @@ class WrenPublishedProjectTest {
     @TempDir Path home;
 
     @Test
+    void officialLanceSuccessIsDistinctFromGrepAndUnknownOutput() {
+        assertThat(
+                        WrenPublishedProject.confirmsLanceIndex(
+                                "Indexed 13 schema items.\n"
+                                        + "Indexed 2 pair(s) from knowledge/sql/.\n"))
+                .isTrue();
+        assertThat(
+                        WrenPublishedProject.confirmsLanceIndex(
+                                "Indexed 13 schema items, 6 seed queries.\r\n"))
+                .isTrue();
+        assertThat(WrenPublishedProject.confirmsLanceIndex("grep backend: no index build needed."))
+                .isFalse();
+        assertThat(WrenPublishedProject.confirmsLanceIndex("indexed")).isFalse();
+    }
+
+    @Test
+    void simultaneousPreparationBuildsOnceAndWarmQueryReusesIt() throws Exception {
+        var props = new WrenProperties("wren", home.toString(), "test", "mysql", 30);
+        var groups = mock(DatasetGroupService.class);
+        var group = new DatasetGroupEntity("g", "alice", "测试", "");
+        group.setMdlVersion(1);
+        when(groups.queryGroup("alice", "g")).thenReturn(group);
+        var builds = new java.util.concurrent.atomic.AtomicInteger();
+        var entered = new java.util.concurrent.CountDownLatch(1);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        var service =
+                new WrenPublishedProject(
+                        props,
+                        groups,
+                        (cwd, timeout, args) -> {
+                            if (args.get(1).equals("index")) {
+                                builds.incrementAndGet();
+                                entered.countDown();
+                                try {
+                                    if (!release.await(5, java.util.concurrent.TimeUnit.SECONDS))
+                                        throw new IllegalStateException("timeout");
+                                } catch (InterruptedException e) {
+                                    Thread.currentThread().interrupt();
+                                    throw new IllegalStateException(e);
+                                }
+                            }
+                            return new WrenCli.Result(0, "Backend: lancedb");
+                        });
+        Path published = props.groupRoot("g").resolve("published/target");
+        Files.createDirectories(published);
+        Files.writeString(published.resolve("mdl.json"), "{}");
+        var workers = java.util.concurrent.Executors.newFixedThreadPool(2);
+        try {
+            var first = workers.submit(() -> service.indexed("alice", "g"));
+            assertThat(entered.await(3, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            var second = workers.submit(() -> service.indexed("alice", "g"));
+            release.countDown();
+            assertThat(first.get(5, java.util.concurrent.TimeUnit.SECONDS))
+                    .isEqualTo(second.get(5, java.util.concurrent.TimeUnit.SECONDS));
+            service.indexed("alice", "g");
+            assertThat(builds.get()).isEqualTo(1);
+        } finally {
+            release.countDown();
+            workers.shutdownNow();
+        }
+    }
+
+    @Test
     void deploysPublishedManifestVerbatimAndRefreshesOfficialIndexOnSourceChange()
             throws Exception {
         var props = new WrenProperties("wren", home.toString(), "test", "duckdb", 30);
@@ -35,7 +98,7 @@ class WrenPublishedProjectTest {
                             if (args.size() > 1 && "status".equals(args.get(1))) {
                                 return new WrenCli.Result(0, "Backend: lancedb");
                             }
-                            return new WrenCli.Result(0, "indexed");
+                            return new WrenCli.Result(0, "Indexed 13 schema items.");
                         });
         Path published = props.groupRoot("g").resolve("published");
         Files.createDirectories(published.resolve("target"));
@@ -51,6 +114,7 @@ class WrenPublishedProjectTest {
         Files.createDirectories(draft.resolve("rules"));
         Files.writeString(draft.resolve("rules/data-sampling.md"), "未发布样本 PRIVATE");
         Path runtime = service.indexed("alice", "g");
+        assertThat(calls.stream().filter(args -> "status".equals(args.get(1)))).isEmpty();
         assertThat(Files.readString(runtime.resolve("target/mdl.json"))).isEqualTo(mdl);
         assertThat(Files.readString(runtime.resolve("knowledge/metrics.md"))).isEqualTo("正式口径");
         assertThat(Files.readString(runtime.resolve("knowledge/rules/data-sampling.md")))

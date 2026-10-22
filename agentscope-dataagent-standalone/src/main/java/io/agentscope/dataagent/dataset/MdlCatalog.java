@@ -96,6 +96,83 @@ public class MdlCatalog {
         }
     }
 
+    /** Reads the published source metadata, never draft properties or sample row values. */
+    public java.util.Map<String, Object> dateGateContext(String groupId) {
+        var manifest = load(groupId).orElseThrow(() -> new DatasetException("已发布模型目录不可用", 409));
+        java.util.List<Object> models = new java.util.ArrayList<>();
+        var yaml =
+                new com.fasterxml.jackson.databind.ObjectMapper(
+                        new com.fasterxml.jackson.dataformat.yaml.YAMLFactory());
+        Path root = props.groupRoot(groupId).resolve("published");
+        java.util.Map<String, JsonNode> properties = new java.util.HashMap<>();
+        Path modelRoot = root.resolve("models");
+        if (java.nio.file.Files.isDirectory(modelRoot)) {
+            try (var paths = java.nio.file.Files.walk(modelRoot)) {
+                for (Path path :
+                        paths.filter(p -> p.getFileName().toString().equals("metadata.yml"))
+                                .toList()) {
+                    if (java.nio.file.Files.isSymbolicLink(path)
+                            || !path.toRealPath().startsWith(root.toRealPath())) continue;
+                    JsonNode doc = yaml.readTree(path.toFile());
+                    properties.put(doc.path("name").asText(), doc.path("properties"));
+                }
+            } catch (Exception e) {
+                throw new DatasetException("无法读取已发布日期元数据", 409);
+            }
+        }
+        for (Model m : manifest.models()) {
+            JsonNode p = properties.getOrDefault(m.name(), yaml.createObjectNode());
+            String role =
+                    p.path("table_role_confirmed").asBoolean(false)
+                            ? p.path("table_role").asText("UNKNOWN")
+                            : "UNKNOWN";
+            models.add(
+                    java.util.Map.of(
+                            "name",
+                            m.name(),
+                            "role",
+                            role,
+                            "temporalColumns",
+                            p.path("temporal_columns"),
+                            "analysisDateColumns",
+                            p.path("analysis_date_columns"),
+                            "columns",
+                            m.columns().stream()
+                                    .map(
+                                            c ->
+                                                    java.util.Map.of(
+                                                            "name",
+                                                            c.name(),
+                                                            "type",
+                                                            c.type() == null ? "" : c.type()))
+                                    .toList()));
+        }
+        StringBuilder rules = new StringBuilder();
+        Path rulesRoot = root.resolve("knowledge/rules");
+        if (java.nio.file.Files.isDirectory(rulesRoot)) {
+            try (var paths = java.nio.file.Files.walk(rulesRoot)) {
+                for (Path path :
+                        paths.filter(java.nio.file.Files::isRegularFile).sorted().toList()) {
+                    if (!path.toRealPath().startsWith(root.toRealPath()) || rules.length() >= 6000)
+                        continue;
+                    String text = java.nio.file.Files.readString(path);
+                    rules.append(text, 0, Math.min(text.length(), 6000 - rules.length()));
+                }
+            } catch (Exception e) {
+                throw new DatasetException("无法读取已发布规则", 409);
+            }
+        }
+        return java.util.Map.of(
+                "group",
+                groupId,
+                "version",
+                manifest.version(),
+                "models",
+                models,
+                "rules",
+                rules.toString());
+    }
+
     private static GroupMdl parse(JsonNode root) {
         List<Model> models = new ArrayList<>();
         for (JsonNode m : root.path("models")) {

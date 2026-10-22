@@ -83,6 +83,7 @@ class MdlPublishServiceTest {
     private Path ws;
     private Path groupRoot;
     private MdlPublishService service;
+    private final List<Object> publicationEvents = new ArrayList<>();
 
     @TempDir Path tempDir;
 
@@ -120,7 +121,8 @@ class MdlPublishServiceTest {
                         (source, datasets) -> probeReport,
                         seeder,
                         workspaceService,
-                        reader);
+                        reader,
+                        publicationEvents::add);
         ws = mdlHome.resolve("g1").resolve("workspace");
         groupRoot = mdlHome.resolve("g1");
 
@@ -144,6 +146,52 @@ class MdlPublishServiceTest {
     }
 
     // ------------------------------------------------------------------ fixtures
+
+    @Test
+    void onlySuccessfulPublicationEmitsQueryPreparationEvent() throws IOException {
+        registerGroup("g1");
+        registerDataset("a", "g1", "orders", new String[][] {{"id", "bigint"}});
+        assertTrue(service.prepareModeling("g1").ok());
+        assertTrue(publicationEvents.isEmpty());
+        assertTrue(service.publish("g1").ok());
+        assertEquals(
+                List.of(new PublishedQueryProjectChanged(groupsById.get("g1").getOwnerId(), "g1")),
+                publicationEvents);
+        write("views/bad/metadata.yml", "name: bad\n");
+        write("views/bad/sql.yml", "statement: SELECT * FROM missing_model\n");
+        wren.onBuild =
+                () -> {
+                    throw new DatasetException("编译失败", 502);
+                };
+        org.junit.jupiter.api.Assertions.assertThrows(
+                DatasetException.class, () -> service.publish("g1"));
+        assertEquals(1, publicationEvents.size());
+    }
+
+    @Test
+    void preparationDoesNotPublishAndPublicationCoversOnlyItsStartingRevision() throws IOException {
+        registerGroup("g1");
+        registerDataset("a", "g1", "orders", new String[][] {{"id", "bigint"}});
+        var group = groupsById.get("g1");
+        org.springframework.test.util.ReflectionTestUtils.setField(group, "modelingRevision", 1L);
+        assertTrue(service.prepareModeling("g1").ok());
+        assertTrue(Files.exists(ws.resolve("models/orders/metadata.yml")));
+        assertFalse(Files.exists(groupRoot.resolve("mdl.json")));
+        assertEquals(0, group.getMdlVersion());
+        wren.onBuild =
+                () -> {
+                    var newer =
+                            new DatasetGroupEntity("g1", group.getOwnerId(), group.getName(), "");
+                    org.springframework.test.util.ReflectionTestUtils.setField(
+                            newer, "modelingRevision", 2L);
+                    groupsById.put("g1", newer);
+                };
+        assertTrue(service.publish("g1").ok());
+        org.mockito.Mockito.verify(groupRepository).coverModelingRevision("g1", 1L);
+        org.mockito.Mockito.verify(groupRepository, org.mockito.Mockito.never())
+                .coverModelingRevision("g1", 2L);
+        assertTrue(groupsById.get("g1").isModelingPending());
+    }
 
     @Test
     void questionVerificationDoesNotPublishAndUnconfirmedQuestionDoesNotBlockPublication()
@@ -197,10 +245,57 @@ class MdlPublishServiceTest {
                 new MdlWorkspaceService(
                         new WrenProperties("wren", mdlHome.toString(), "dataagent", "mysql", 10),
                         wren);
-        new MdlQuestionStore(questionWorkspace)
-                .decide("g1", "sales", result.validation().validationId(), true, "alice");
+        new MdlQuestionStore(questionWorkspace).decide("g1", "sales", true, "alice");
         assertTrue(service.publish("g1").ok());
         assertTrue(Files.exists(groupRoot.resolve("published/knowledge/sql/sales.md")));
+    }
+
+    @Test
+    void confirmedQuestionFailingDryPlanIsLeftOutWithoutBlockingPublication() throws IOException {
+        registerGroup("g1");
+        registerDataset("ds_a", "g1", "orders", new String[][] {{"amount", "BIGINT"}});
+        assertTrue(service.publish("g1").ok());
+        write(
+                "knowledge/questions/good.yml",
+                "question: 销售额\ndefinition: 金额合计\nsql: SELECT SUM(amount) AS total FROM orders\n");
+        write(
+                "knowledge/questions/bad.yml",
+                "question: 退款额\ndefinition: 退款合计\nsql: SELECT SUM(refund) AS total FROM orders\n");
+        var questions =
+                new MdlQuestionStore(
+                        new MdlWorkspaceService(
+                                new WrenProperties(
+                                        "wren", mdlHome.toString(), "dataagent", "mysql", 10),
+                                wren));
+        questions.decide("g1", "good", true, "alice");
+        questions.decide("g1", "bad", true, "alice");
+        wren.failDryPlanFor = "refund";
+        DraftChangeLog.record(
+                groupRoot.resolve("workspace"),
+                "knowledge/questions/good.yml",
+                "question",
+                "alice");
+
+        var result = service.publish("g1");
+
+        assertTrue(result.ok());
+        // ADR0111: after a publish the draft equals the snapshot, so its annotations are spent.
+        assertTrue(DraftChangeLog.read(groupRoot.resolve("workspace")).isEmpty());
+        assertTrue(Files.exists(groupRoot.resolve("published/knowledge/sql/good.md")));
+        assertFalse(Files.exists(groupRoot.resolve("published/knowledge/sql/bad.md")));
+        assertTrue(
+                result.issues().stream()
+                        .anyMatch(
+                                i ->
+                                        "warning".equals(i.severity())
+                                                && i.message().contains("bad")));
+        var bad =
+                questions.list("g1").stream()
+                        .filter(r -> r.question().id().equals("bad"))
+                        .findFirst()
+                        .orElseThrow();
+        assertEquals("FAILED", bad.status());
+        assertTrue(bad.validation().error().contains("column not found"));
     }
 
     private DatasetGroupEntity registerGroup(String groupId) {
@@ -1021,9 +1116,13 @@ class MdlPublishServiceTest {
         final List<Path> connectionFiles = Collections.synchronizedList(new ArrayList<>());
         CyclicBarrier checkBarrier;
         boolean failCubeQuery;
+        Runnable onBuild;
 
         /** When set, dry-run commands mentioning this substring fail (derived/view gate tests). */
         String failDryRunFor;
+
+        /** When set, dry-plan commands mentioning this substring fail (question publish check). */
+        String failDryPlanFor;
 
         /** When set, the build artifact carries this JSON instead of the empty default. */
         String buildMdlJson;
@@ -1051,6 +1150,7 @@ class MdlPublishServiceTest {
                 return new Result(0, "0 warning(s), 0 error(s)");
             }
             if (cmd.startsWith("context build")) {
+                if (onBuild != null) onBuild.run();
                 writeBuildOutput(projectHome);
                 return new Result(0, "built");
             }
@@ -1068,6 +1168,11 @@ class MdlPublishServiceTest {
                     return new Result(1, "[ERROR] broken derived model");
                 }
                 return new Result(0, "planned");
+            }
+            if (cmd.startsWith("dry-plan")) {
+                return failDryPlanFor != null && cmd.contains(failDryPlanFor)
+                        ? new Result(1, "[ERROR] column not found")
+                        : new Result(0, "planned");
             }
             if (cmd.startsWith("cube query")) {
                 return failCubeQuery

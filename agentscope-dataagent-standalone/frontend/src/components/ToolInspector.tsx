@@ -7,7 +7,7 @@ import PythonCodeBlock from './PythonCodeBlock';
 import { ArtifactInfo, parseResult, artifactSrc, downloadArtifact, deduplicateArtifacts } from './PythonCodeBlock';
 import { formatResult, ToolInspectPayload } from './ToolCallBlock';
 import WrenToolResult from './WrenToolResult';
-import { wrenToolLabel, parseWrenResult } from '../utils/wrenToolPresentation';
+import { wrenToolLabel, parseWrenResult, isWrenTool } from '../utils/wrenToolPresentation';
 
 export interface ToolInspectorProps {
   tool: ToolInspectPayload;
@@ -290,18 +290,14 @@ function extractPythonCode(input?: string): string | null {
 
 
 function ToolDetail({ name, result }: { name: string; result: string }) {
-  if (['wren_call_tool', 'wren_list_tools', 'wren_read_knowledge'].includes(name)) {
+  if (isWrenTool(name)) {
     return <WrenToolResult result={result} />;
   }
   let parsed: Record<string, unknown> | null = null;
-  let truncatedJson = false;
   try {
     const v = JSON.parse(result);
     if (v && typeof v === 'object' && !Array.isArray(v)) parsed = v as Record<string, unknown>;
-  } catch {
-    const trimmed = result.trimStart();
-    if (trimmed.startsWith('{') || trimmed.startsWith('[')) truncatedJson = true;
-  }
+  } catch { /* Non-JSON output is not evidence of truncation; preserve the original content. */ }
 
   if (name === 'wren_run_sql' || name === 'wren_query_cube' || name === 'wren_describe_model') {
     return (
@@ -311,9 +307,6 @@ function ToolDetail({ name, result }: { name: string; result: string }) {
     );
   }
   if (name === 'render_chart' && parsed) return <RenderChartDetail data={parsed} />;
-  if (truncatedJson) {
-    return <div style={{ padding: '12px', fontSize: '0.8rem', color: '#92400e', background: C.warnBg, borderRadius: 8 }}>结果数据过大，历史记录中已截断。重新执行该工具可查看完整结果。</div>;
-  }
   if (name === 'retrieve_evidence' || name === 'read_knowledge') return <RetrieveEvidenceDetail result={result} />;
   return (
     <div style={{ padding: '10px 14px', maxHeight: 400, overflowY: 'auto' }}>
@@ -469,7 +462,7 @@ export default function ToolInspector({ tool, onClose }: ToolInspectorProps) {
     ? `生成产物（${(() => { let c = 0; for (const t of tool.pythonTools ?? []) { if (!t.result) continue; try { c += parseResult(t.result).artifacts.length; } catch {/* */} } return c; })()} 个文件）`
     : wrenToolLabel(tool.name, tool.input) ?? meta.label;
   const isError = !isPythonArtifacts && (tool.result?.startsWith('error:') === true
-    || (tool.name.startsWith('wren_') && parseWrenResult(tool.result ?? '').error));
+    || (isWrenTool(tool.name) && parseWrenResult(tool.result ?? '').error));
 
   const [inputOpen, setInputOpen] = useState(false);
   const [resultOpen, setResultOpen] = useState(true);

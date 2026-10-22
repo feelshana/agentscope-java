@@ -102,6 +102,7 @@ public class MdlPublishService {
     private final MdlWorkspaceService workspace;
     private final MdlWorkspaceReader reader;
     private final MdlQuestionStore questionStore;
+    private final org.springframework.context.ApplicationEventPublisher events;
 
     /**
      * Per-group mutex serialising the whole validate/publish flow (reconcile → staging copy →
@@ -132,6 +133,34 @@ public class MdlPublishService {
             MdlSeeder seeder,
             MdlWorkspaceService workspace,
             MdlWorkspaceReader reader) {
+        this(
+                datasetRepository,
+                groupRepository,
+                externalSources,
+                mapper,
+                props,
+                wrenCli,
+                profileHome,
+                sourceProber,
+                seeder,
+                workspace,
+                reader,
+                event -> {});
+    }
+
+    public MdlPublishService(
+            DatasetRepository datasetRepository,
+            DatasetGroupRepository groupRepository,
+            ExternalDataSourceRepository externalSources,
+            ObjectMapper mapper,
+            WrenProperties props,
+            WrenCli wrenCli,
+            WrenProfileHome profileHome,
+            WrenSourceProber sourceProber,
+            MdlSeeder seeder,
+            MdlWorkspaceService workspace,
+            MdlWorkspaceReader reader,
+            org.springframework.context.ApplicationEventPublisher events) {
         this.datasetRepository = datasetRepository;
         this.groupRepository = groupRepository;
         this.externalSources = externalSources;
@@ -144,6 +173,7 @@ public class MdlPublishService {
         this.workspace = workspace;
         this.reader = reader;
         this.questionStore = new MdlQuestionStore(workspace);
+        this.events = events;
     }
 
     // ------------------------------------------------------------------ public API result types
@@ -458,6 +488,26 @@ public class MdlPublishService {
                 });
     }
 
+    /** Prepares the existing interactive workbench without changing published artifacts. */
+    public MdlPublishResult prepareModeling(String groupId) {
+        return withPublishLock(
+                groupId,
+                () -> {
+                    DatasetGroupEntity group = requireGroup(groupId);
+                    MdlSeeder.SeedResult result = seeder.reconcile(groupId);
+                    if (hasErrors(result.issues())) return failure(group, result.issues(), "");
+                    return new MdlPublishResult(
+                            true,
+                            result.issues(),
+                            "采样及草稿准备完成，请进入语义建模并显式发布。",
+                            "DIRTY",
+                            group.getMdlVersion(),
+                            group.getMdlPublishedAt() == null
+                                    ? null
+                                    : group.getMdlPublishedAt().toString());
+                });
+    }
+
     /** Executes a requirement against a fresh draft without replacing any published artifact. */
     public MdlQuestionStore.Review validateQuestion(
             String groupId,
@@ -706,6 +756,10 @@ public class MdlPublishService {
             return failure(group, issues, build.output());
         }
 
+        // spec091: confirmed questions must still plan against this build; failures are left out
+        // of the snapshot and returned to the user without blocking the model release.
+        issues.addAll(dryPlanConfirmedQuestions(groupId, projectDir));
+
         Path groupRoot = props.groupRoot(groupId);
         Path preparedDir = groupRoot.resolve("published.next");
         Path preparedManifest = groupRoot.resolve("mdl.json.next");
@@ -715,9 +769,20 @@ public class MdlPublishService {
         writeMetaJson(preparedManifest, group, snapshot);
         replacePublishedArtifacts(groupRoot, preparedDir, preparedManifest);
         markPublished(group);
+        // The draft now equals the snapshot; its change annotations are spent (ADR0111).
+        DraftChangeLog.clear(workspace.workspaceRoot(groupId));
+        groupRepository.coverModelingRevision(groupId, group.getModelingRevision());
         // From here the snapshot reflects every change committed before this run began; automatic
         // baseline requests that entered before this tick can skip their own run.
         assembledAtTicks.merge(groupId, assembleStartTick, Math::max);
+        try {
+            events.publishEvent(new PublishedQueryProjectChanged(group.getOwnerId(), groupId));
+        } catch (RuntimeException failure) {
+            log.warn(
+                    "Query preparation scheduling failed for group={}: {}",
+                    groupId,
+                    failure.getClass().getSimpleName());
+        }
         return new MdlPublishResult(
                 true,
                 issues,
@@ -725,6 +790,32 @@ public class MdlPublishService {
                 group.getMdlState(),
                 group.getMdlVersion(),
                 group.getMdlPublishedAt() == null ? null : group.getMdlPublishedAt().toString());
+    }
+
+    private List<MdlIssue> dryPlanConfirmedQuestions(String groupId, Path projectDir) {
+        List<MdlIssue> issues = new ArrayList<>();
+        for (Map.Entry<String, String> entry : questionStore.confirmedSql(groupId).entrySet()) {
+            WrenCli.Result result =
+                    wrenCli.run(
+                            projectDir,
+                            props.timeout(),
+                            List.of(
+                                    "dry-plan",
+                                    "--sql",
+                                    entry.getValue(),
+                                    "-d",
+                                    props.dataSource()));
+            if (result.ok()) continue;
+            String reason = "发布检查未通过，未进入本次发布：" + firstLine(result.output());
+            try {
+                Files.deleteIfExists(projectDir.resolve("knowledge/sql/" + entry.getKey() + ".md"));
+            } catch (IOException e) {
+                throw new DatasetException("移除未通过检查的问答失败：" + e.getMessage(), e);
+            }
+            questionStore.revokeConfirmation(groupId, entry.getKey(), reason);
+            issues.add(issue("warning", "问题 " + entry.getKey() + " " + reason, "questions"));
+        }
+        return issues;
     }
 
     /** Removes the group's MDL artifacts (workspace included); used when a KB is deleted. */
@@ -1460,7 +1551,6 @@ public class MdlPublishService {
         return s.substring(start, end);
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
     public MdlPublishService(
             DatasetRepository datasetRepository,
             DatasetGroupRepository groupRepository,
@@ -1486,7 +1576,41 @@ public class MdlPublishService {
                 sourceProber,
                 seeder,
                 workspace,
-                reader);
+                reader,
+                operations,
+                access,
+                event -> {});
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public MdlPublishService(
+            DatasetRepository datasetRepository,
+            DatasetGroupRepository groupRepository,
+            ExternalDataSourceRepository externalSources,
+            ObjectMapper mapper,
+            WrenProperties props,
+            WrenCli wrenCli,
+            WrenProfileHome profileHome,
+            WrenSourceProber sourceProber,
+            MdlSeeder seeder,
+            MdlWorkspaceService workspace,
+            MdlWorkspaceReader reader,
+            KnowledgeBaseOperations operations,
+            KnowledgeBaseAccessService access,
+            org.springframework.context.ApplicationEventPublisher events) {
+        this(
+                datasetRepository,
+                groupRepository,
+                externalSources,
+                mapper,
+                props,
+                wrenCli,
+                profileHome,
+                sourceProber,
+                seeder,
+                workspace,
+                reader,
+                events);
         this.operations = operations;
         this.access = access;
     }

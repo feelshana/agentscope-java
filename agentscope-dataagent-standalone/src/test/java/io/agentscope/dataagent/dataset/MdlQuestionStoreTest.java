@@ -76,7 +76,7 @@ class MdlQuestionStoreTest {
     @Test
     void archivedQuestionsLeaveReviewAndPublishGateButKeepSourceAndReceipt() throws Exception {
         var receipt = execute(false, null);
-        store.decide("g1", "sales", receipt.validationId(), true, "alice");
+        store.decide("g1", "sales", true, "alice");
         Path source = root.resolve("knowledge/questions/sales.yml");
         Files.writeString(source, Files.readString(source) + "archived: true\n");
         assertTrue(store.list("g1").isEmpty());
@@ -97,9 +97,9 @@ class MdlQuestionStoreTest {
                         new ObjectMapper().readTree("{\"columns\":[],\"rows\":[]}"),
                         null,
                         false);
-        store.decide("g1", "other", otherReceipt.validationId(), true, "alice");
+        store.decide("g1", "other", true, "alice");
         var receipt = execute(false, null);
-        store.decide("g1", "sales", receipt.validationId(), true, "alice");
+        store.decide("g1", "sales", true, "alice");
         String modelHash = store.modelHash(root);
         String metadata = Files.readString(root.resolve("models/order/metadata.yml"));
         var updated =
@@ -120,9 +120,6 @@ class MdlQuestionStoreTest {
                         .findFirst()
                         .orElseThrow()
                         .status());
-        assertThrows(
-                DatasetException.class,
-                () -> store.decide("g1", "sales", receipt.validationId(), true, "alice"));
         var newReceipt = execute(false, null);
         assertEquals(
                 "EXECUTED",
@@ -131,7 +128,7 @@ class MdlQuestionStoreTest {
                         .findFirst()
                         .orElseThrow()
                         .status());
-        store.decide("g1", "sales", newReceipt.validationId(), true, "alice");
+        store.decide("g1", "sales", true, "alice");
         assertTrue(Files.readString(root.resolve("knowledge/sql/sales.md")).contains("COUNT(*)"));
     }
 
@@ -154,9 +151,26 @@ class MdlQuestionStoreTest {
     }
 
     @Test
+    void confirmedPairIsShippedByThePublishCopyAndArchivedPairIsNot() throws Exception {
+        // spec090 recall chain, platform half: confirm writes knowledge/sql/<id>.md, the publish
+        // staging copy (MdlWorkspaceService#copyToStaging) ships it, and WrenPublishedProject
+        // merges published knowledge/sql into the indexed query runtime (WrenPublishedProjectTest).
+        var receipt = execute(false, null);
+        store.decide("g1", "sales", true, "alice");
+        Path staged = workspace.copyToStaging("g1").resolve("knowledge/sql/sales.md");
+        assertTrue(Files.isRegularFile(staged));
+        String shipped = Files.readString(staged);
+        assertTrue(shipped.contains("\nnl: "));
+        assertTrue(shipped.contains("\ntags:\n- source:user-confirmed\n"));
+
+        store.archive("g1", "sales", store.revision("g1", "sales"));
+        assertFalse(Files.exists(workspace.copyToStaging("g1").resolve("knowledge/sql/sales.md")));
+    }
+
+    @Test
     void humanArchiveRemovesDraftExampleButKeepsHistoryAndPublishedVersion() throws Exception {
         var receipt = execute(false, null);
-        store.decide("g1", "sales", receipt.validationId(), true, "alice");
+        store.decide("g1", "sales", true, "alice");
         Path published = root.getParent().resolve("published/knowledge/sql/sales.md");
         Files.createDirectories(published.getParent());
         Files.writeString(published, "published example");
@@ -202,13 +216,18 @@ class MdlQuestionStoreTest {
         var receipt = execute(false, null);
         assertEquals("EXECUTED", store.list("g1").get(0).status());
         assertFalse(store.publishIssues("g1").isEmpty());
-        store.decide("g1", "sales", receipt.validationId(), true, "alice");
+        store.decide("g1", "sales", true, "alice");
         assertEquals("CONFIRMED", store.list("g1").get(0).status());
         assertTrue(store.publishIssues("g1").isEmpty());
         String pair = Files.readString(root.resolve("knowledge/sql/sales.md"));
         assertTrue(pair.contains("\nnl: "));
         assertTrue(pair.contains("\nsql: "));
         assertTrue(pair.contains("verified: true"));
+        // spec090: same tag list form as official `memory store --tags`, so recall can tell
+        // user-confirmed pairs apart.
+        assertTrue(pair.contains("\ntags:\n- source:user-confirmed\n"));
+        // The official index keeps only `source`, so recall shows source:user-confirmed.
+        assertTrue(pair.contains("\nsource: user-confirmed\n"));
         assertFalse(pair.contains("1050"));
         assertEquals("alice", store.list("g1").get(0).validation().confirmedBy());
     }
@@ -237,15 +256,12 @@ class MdlQuestionStoreTest {
                         false,
                         evidence);
         assertEquals(evidence, store.list("g1").get(0).validation().evidence());
-        var decided = store.decide("g1", "sales", receipt.validationId(), true, "alice");
+        var decided = store.decide("g1", "sales", true, "alice");
         assertEquals(evidence, decided.validation().evidence());
         Files.writeString(view, "statement: SELECT COUNT(*) FROM order\n");
-        var stale = store.list("g1").get(0);
-        assertEquals("STALE", stale.status());
-        assertEquals(evidence, stale.validation().evidence());
-        assertThrows(
-                DatasetException.class,
-                () -> store.decide("g1", "sales", receipt.validationId(), true, "alice"));
+        var kept = store.list("g1").get(0);
+        assertEquals("CONFIRMED", kept.status());
+        assertEquals(evidence, kept.validation().evidence());
     }
 
     @Test
@@ -293,7 +309,7 @@ class MdlQuestionStoreTest {
                             mapper.readTree(Files.readString(saved));
             oldReceipt.put("questionHash", oldHash);
             Files.writeString(saved, mapper.writeValueAsString(oldReceipt));
-            store.decide("g1", "sales", receipt.validationId(), true, "alice");
+            store.decide("g1", "sales", true, "alice");
             assertEquals("CONFIRMED", store.list("g1").get(0).status());
             assertTrue(store.publishIssues("g1").isEmpty());
             assertFalse(mapper.valueToTree(store.requireQuestion("g1", "sales")).has("required"));
@@ -301,60 +317,78 @@ class MdlQuestionStoreTest {
     }
 
     @Test
-    void semanticChangesInvalidateConfirmationButReceiptAndExamplesDoNot() throws Exception {
-        var receipt = execute(false, null);
-        store.decide("g1", "sales", receipt.validationId(), true, "alice");
-        assertEquals(receipt.modelHash(), store.modelHash(root));
+    void modelChangesKeepConfirmationForThePublishDryPlanToCheck() throws Exception {
+        store.decide("g1", "sales", true, "alice");
         Files.writeString(
                 root.resolve("models/order/metadata.yml"),
                 "name: order\nproperties:\n  description: 新口径\n");
-        assertEquals("STALE", store.list("g1").get(0).status());
-        assertThrows(
-                DatasetException.class,
-                () -> store.decide("g1", "sales", receipt.validationId(), true, "alice"));
-        assertFalse(store.publishIssues("g1").isEmpty());
+        assertEquals("CONFIRMED", store.list("g1").get(0).status());
+        assertTrue(store.publishIssues("g1").isEmpty());
+        assertEquals(
+                java.util.Map.of("sales", "SELECT SUM(amount) AS total FROM order"),
+                store.confirmedSql("g1"));
     }
 
     @Test
-    void questionChangeAndWrongExecutionIdCannotBeConfirmed() throws Exception {
-        var receipt = execute(false, null);
-        assertThrows(
-                DatasetException.class, () -> store.decide("g1", "sales", "forged", true, "alice"));
+    void confirmationNeedsNoExecutionAndBindsToTheQuestionText() throws Exception {
+        assertEquals("DRAFT", store.list("g1").get(0).status());
+        var confirmed = store.decide("g1", "sales", true, "alice");
+        assertEquals("CONFIRMED", confirmed.status());
+        assertEquals(null, confirmed.validation().result());
+        assertTrue(
+                Files.readString(root.resolve("knowledge/sql/sales.md"))
+                        .contains("verified: true"));
         question("sales", "SELECT COUNT(*) AS total FROM order");
         assertEquals("STALE", store.list("g1").get(0).status());
-        assertThrows(
-                DatasetException.class,
-                () -> store.decide("g1", "sales", receipt.validationId(), true, "alice"));
+        assertEquals("CONFIRMED", store.decide("g1", "sales", true, "alice").status());
     }
 
     @Test
-    void failuresAndTruncationCannotBeConfirmed() throws Exception {
-        var failed = execute(false, "SQL rejected");
-        assertThrows(
-                DatasetException.class,
-                () -> store.decide("g1", "sales", failed.validationId(), true, "alice"));
-        var truncated = execute(true, null);
-        assertThrows(
-                DatasetException.class,
-                () -> store.decide("g1", "sales", truncated.validationId(), true, "alice"));
+    void failedOrTruncatedTrialRunsDoNotBlockConfirmation() throws Exception {
+        execute(false, "SQL rejected");
+        assertEquals("CONFIRMED", store.decide("g1", "sales", true, "alice").status());
+        execute(true, null);
+        var truncated = store.decide("g1", "sales", true, "alice");
+        assertEquals("CONFIRMED", truncated.status());
+        assertTrue(truncated.validation().truncated());
     }
 
     @Test
-    void rejectionRemovesExampleAndRequiresNewValidation() throws Exception {
-        var receipt = execute(false, null);
-        store.decide("g1", "sales", receipt.validationId(), true, "alice");
-        store.decide("g1", "sales", receipt.validationId(), false, "alice");
+    void confirmationRejectsUnsafeSqlButOtherQuestionsStayListed() throws Exception {
+        question("cross", "SELECT COUNT(*) FROM order o CROSS JOIN customer c");
+        assertEquals(2, store.list("g1").size());
+        assertThrows(DatasetException.class, () -> store.decide("g1", "cross", true, "alice"));
+        assertFalse(Files.exists(root.resolve("knowledge/sql/cross.md")));
+        Files.writeString(
+                root.resolve("knowledge/questions/empty.yml"), "question: 待生成\ndefinition: ''\n");
+        assertThrows(DatasetException.class, () -> store.decide("g1", "empty", true, "alice"));
+    }
+
+    @Test
+    void revokedConfirmationReturnsToUnconfirmedWithReason() throws Exception {
+        store.decide("g1", "sales", true, "alice");
+        store.revokeConfirmation("g1", "sales", "发布检查未通过：column not found");
+        var review = store.list("g1").get(0);
+        assertEquals("FAILED", review.status());
+        assertTrue(review.validation().error().contains("column not found"));
+        assertFalse(Files.exists(root.resolve("knowledge/sql/sales.md")));
+        assertTrue(store.confirmedSql("g1").isEmpty());
+        assertEquals("CONFIRMED", store.decide("g1", "sales", true, "alice").status());
+    }
+
+    @Test
+    void rejectionRemovesExampleAndCanBeConfirmedAgain() throws Exception {
+        store.decide("g1", "sales", true, "alice");
+        store.decide("g1", "sales", false, "alice");
         assertFalse(Files.exists(root.resolve("knowledge/sql/sales.md")));
         assertEquals("REJECTED", store.list("g1").get(0).status());
-        assertThrows(
-                DatasetException.class,
-                () -> store.decide("g1", "sales", receipt.validationId(), true, "alice"));
+        assertEquals("CONFIRMED", store.decide("g1", "sales", true, "alice").status());
     }
 
     @Test
     void publishedFilteringDropsStaleOptionalAndUnverifiedExamples() throws Exception {
         var receipt = execute(false, null);
-        store.decide("g1", "sales", receipt.validationId(), true, "alice");
+        store.decide("g1", "sales", true, "alice");
         Path prepared = home.resolve("prepared/knowledge/sql");
         Files.createDirectories(prepared);
         Files.writeString(prepared.resolve("sales.md"), "trusted");
@@ -380,7 +414,8 @@ class MdlQuestionStoreTest {
                 List.of(
                         "DELETE FROM order",
                         "SELECT 1; DROP TABLE order",
-                        "SELECT * FROM order LIMIT 1",
+                        "SELECT COUNT(*) FROM order o CROSS JOIN customer c",
+                        "SELECT COUNT(*) FROM order o, customer c",
                         "SELECT * INTO OUTFILE 'a' FROM order",
                         "WITH x AS (DELETE FROM order) SELECT * FROM x")) {
             assertThrows(DatasetException.class, () -> MdlQuestionStore.requireReadSql(sql));
@@ -404,7 +439,7 @@ class MdlQuestionStoreTest {
     }
 
     @Test
-    void topQuestionUsesRankingWithoutWeakeningSqlGate() {
+    void topQuestionMayUseRankingOrOfficialLimit() {
         assertDoesNotThrow(
                 () ->
                         MdlQuestionStore.requireReadSql(
@@ -413,11 +448,12 @@ class MdlQuestionStoreTest {
                                     + " (SELECT project_name, visitors, DENSE_RANK() OVER (ORDER BY"
                                     + " visitors DESC) AS ranking FROM counts) SELECT project_name,"
                                     + " visitors FROM ranked WHERE ranking = 1"));
-        assertThrows(
-                DatasetException.class,
+        // spec090: user Top-N questions may use the official LIMIT/OFFSET.
+        assertDoesNotThrow(
                 () ->
                         MdlQuestionStore.requireReadSql(
-                                "SELECT project_name FROM clicks ORDER BY project_name OFFSET 1"));
+                                "SELECT report_name, COUNT(*) AS pv FROM clicks GROUP BY"
+                                        + " report_name ORDER BY pv DESC LIMIT 10 OFFSET 0"));
     }
 
     @Test
@@ -447,9 +483,7 @@ class MdlQuestionStoreTest {
                                 "FROM order WHERE ''FROM valid_order'' = ''FROM valid_order''"));
         assertFalse(store.coverage(root, store.requireQuestion("g1", "sales")).ready());
         var receipt = execute(false, null);
-        assertThrows(
-                DatasetException.class,
-                () -> store.decide("g1", "sales", receipt.validationId(), true, "alice"));
+        assertThrows(DatasetException.class, () -> store.decide("g1", "sales", true, "alice"));
     }
 
     @Test
@@ -479,7 +513,7 @@ class MdlQuestionStoreTest {
                         + "      name: order\n");
         assertTrue(store.list("g1").get(0).coverage().ready());
         var receipt = execute(false, null);
-        store.decide("g1", "sales", receipt.validationId(), true, "alice");
+        store.decide("g1", "sales", true, "alice");
         Files.writeString(file, Files.readString(file).replace("稳定销售指标", "净销售口径"));
         assertEquals("STALE", store.list("g1").get(0).status());
         Files.delete(root.resolve("models/order/metadata.yml"));
@@ -489,7 +523,7 @@ class MdlQuestionStoreTest {
     @Test
     void publishedStateUsesSnapshotAndIsIsolatedByGroup() throws Exception {
         var receipt = execute(false, null);
-        store.decide("g1", "sales", receipt.validationId(), true, "alice");
+        store.decide("g1", "sales", true, "alice");
         assertFalse(store.list("g1").get(0).published().available());
         Path published = root.getParent().resolve("published");
         Files.createDirectories(published.resolve("knowledge/questions"));

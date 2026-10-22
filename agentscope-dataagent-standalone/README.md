@@ -4,7 +4,9 @@
 
 ## Overview
 
-External table association samples at most 1,000 rows per table, without full-table COUNT or per-column DISTINCT. Total row count is unknown (`rowCount: null`); file uploads retain their exact imported count. Managers can refresh samples from the dataset page. Samples are observations, not complete enums or exact statistics. Modeling receives a bounded summary; querying reads published Wren rules. See [ADR 0080](docs/adr/0080-bounded-sampling-and-wren-context.md) and [spec 068](docs/specs/068-bounded-sampling-and-wren-context.md).
+Current behavior ([ADR 0089](docs/adr/0089-lightweight-date-gate-and-native-history.md)): modeling creates views only after an explicit user request and confirmation of the structure. Historical views are left untouched. Before Wren tool discovery, a lightweight question gate asks for missing or ambiguous date ranges without rewriting the question or inventing dates. Clarifications use native conversation history; there is no separate persistent date state. This is a question-level policy, not SQL-plan enforcement. Per-turn model, tool and gate durations are written to `logs/archive-20261020/execution-timing.log`.
+
+External table association samples at most 1,000 rows per table, without full-table COUNT or per-column DISTINCT. Total row count is unknown (`rowCount: null`); file uploads retain their exact imported count. Managers can refresh samples from the dataset page. Samples are observations, not complete enums or exact statistics. Modeling receives a bounded summary; querying reads published Wren rules. See [ADR 0080](docs/adr/0080-bounded-sampling-and-wren-context.md) and [spec 068](docs/specs/done/068-bounded-sampling-and-wren-context.md).
 
 Schema upgrade: the platform database needs nullable `dataagent_dataset.sample_summary_json LONGTEXT`. The default JPA `update` mode adds it; deployments using `validate` must apply the [MySQL migration](docs/migrations/0080-dataset-sampling-mysql.sql) before starting the new JAR. Existing records remain unsampled until explicitly refreshed; no startup scan is performed.
 
@@ -40,7 +42,7 @@ Three things shape the design:
 
 Redis can coordinate sessions and shared state. Docker sandboxes, MCP pools and
 capacity budgets remain process-local: production replicas need sticky routing,
-shared durable storage and explicit resource budgets. See [deployment constraints](docs/cluster-deploy.md).
+shared durable storage and explicit resource budgets. See [deployment constraints](docs/guides/cluster-deploy.md).
 
 ### At a glance
 
@@ -99,7 +101,7 @@ flow).
 
 With shared state enabled, the per-user filesystem, sessions and tool-event
 bus are all backed by Redis, so any replica can serve any user. See
-[`docs/cluster-deploy.md`](docs/cluster-deploy.md).
+[`docs/guides/cluster-deploy.md`](docs/guides/cluster-deploy.md).
 
 ---
 
@@ -144,7 +146,7 @@ Every `HarnessAgent` runs on a `CompositeFilesystem` built by
 
 The same `RemoteFilesystem` is backed by Redis (and survives replica
 restarts) when `dataagent.session.redis.enabled=true`; otherwise it is a local
-file store. See [`docs/cluster-deploy.md`](docs/cluster-deploy.md).
+file store. See [`docs/guides/cluster-deploy.md`](docs/guides/cluster-deploy.md).
 
 ---
 
@@ -217,7 +219,7 @@ When enabled:
 - Pre-flight refuses to start if `dataagent.workspace` points at an ephemeral
   path (`/tmp/`, `/var/tmp/`, …).
 
-See [`docs/cluster-deploy.md`](docs/cluster-deploy.md) for a 3-replica
+See [`docs/guides/cluster-deploy.md`](docs/guides/cluster-deploy.md) for a 3-replica
 walkthrough.
 
 ### 3. (Optional) Enable the webhook side-channel
@@ -263,7 +265,7 @@ h2 profile stay in the JAR; private application-dev/prod YAML/properties are exc
 from resources, JARs and the archive. The archive ships only a credential-free
 configuration example. The Linux launcher checks Wren dependencies, waits for HTTP
 health and keeps durable state outside the version directory. See the
-[single-host release guide](docs/single-host-release.md).
+[single-host release guide](docs/guides/single-host-release.md).
 
 ### 4. Run
 
@@ -326,7 +328,7 @@ H2. Configure `DATAAGENT_DB_URL`, `DATAAGENT_DB_DRIVER`, `DATAAGENT_DB_USER` and
 compatible initialization SQL and dialect settings. Uploaded physical tables
 continue to use the separately configured dataset MySQL database.
 
-共享权限、上传失败处理、问答排队及本次框架依赖/镜像发布步骤见 [平台并发与发布说明](docs/platform-concurrency-and-release.md)。来源 ADR/spec 原文及编号映射见 [导入索引](docs/imported/multiAgent-Mdl-lyf/README.md)。容量是单 JVM 约束，默认值不代表已完成真实负载压测。
+共享权限、上传失败处理、问答排队及本次框架依赖/镜像发布步骤见 [平台并发与发布说明](docs/guides/platform-concurrency-and-release.md)。来源 ADR/spec 原文及编号映射见 [导入索引](docs/archive/imported/multiAgent-Mdl-lyf/README.md)。容量是单 JVM 约束，默认值不代表已完成真实负载压测。
 
 ---
 
@@ -395,13 +397,13 @@ continue to use the separately configured dataset MySQL database.
 索引只是官方衍生物，模型或样例源码变化时由官方 memory index 重建。调用 get_context/recall_queries 前准备索引；
 其他 SQL 查询不因缺记忆依赖被阻断。使用官方检索，不提供平台自研评分或中文词项降级。
 
-设计与验收：[ADR 0069](docs/adr/0069-wren-native-modeling-and-query-agents.md)、[spec 058](docs/specs/058-wren-native-modeling-and-query-agents.md)、[完整计划](docs/plans/058-wren-native-modeling-and-query-agents.md)。
+设计与验收：[ADR 0069](docs/adr/0069-wren-native-modeling-and-query-agents.md)、[spec 058](docs/specs/done/058-wren-native-modeling-and-query-agents.md)、[完整计划](docs/archive/plans/058-wren-native-modeling-and-query-agents.md)。
 
 ## Building
 
 This is a standalone Maven project with Java 17 as its compilation baseline.
 When harness or OpenAI-extension sources change, first install matching dependencies
-from the parent repository as described in [the release guide](docs/platform-concurrency-and-release.md).
+from the parent repository as described in [the release guide](docs/guides/platform-concurrency-and-release.md).
 
 ```bash
 mvn package -DskipTests
@@ -438,3 +440,14 @@ wren memory status
 `memory status` 需在 Wren 工程目录执行。后端显示 `lancedb` 才是向量召回；默认使用 `paraphrase-multilingual-MiniLM-L12-v2`，首次下载需要网络。可在服务进程环境设置 `WREN_MEMORY_BACKEND=lancedb`、`WREN_EMBEDDING_BACKEND=onnx`。缺向量依赖时官方可能选择 grep；纯中文改写可能无匹配。模型不可用或索引失败会明确返回错误，不能把执行成功当作业务准确率。应用不会改动外部 Python 环境。
 
 隔离数据、30 问参考结果、真实模型评估和浏览器复现见 [验收说明](docs/fixtures/wren-native/README.md)。测试目录中的 Python 环境不会自动替换正在运行的服务环境；部署时需要在 `DATAAGENT_WREN_EXECUTABLE` 对应环境安装上述 requirements，并重启应用加载新代码。
+
+## Current runtime constraints
+
+The effective rules for modeling, user-confirmed Q&A, the SQL time-window gate and query preparation are maintained in one place:
+
+- [ARCHITECTURE_zh.md, chapter 14](ARCHITECTURE_zh.md#14-建模与问数的当前运行约束) — what the code does today
+- [AGENTS.md, section 6](AGENTS.md) — the short list AI coding assistants follow
+- [ADR index](docs/adr/README.md) — why, including which decisions supersede which
+- [Spec index](docs/specs/README.md) — active and completed feature specs
+
+Operational guides (deployment, single-host release, concurrency) live in [docs/guides/](docs/guides/).

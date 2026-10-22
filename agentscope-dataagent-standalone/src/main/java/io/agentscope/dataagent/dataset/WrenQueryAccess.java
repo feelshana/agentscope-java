@@ -42,6 +42,8 @@ public final class WrenQueryAccess {
                         .toList();
         if (matching.size() != 1) throw new DatasetException("请选择当前已授权知识库的唯一名称或 ID", 400);
         DatasetGroupEntity group = matching.get(0);
+        if (group.isModelingPending())
+            throw new DatasetException("该知识库数据或资料已变更，请完成基础语义建模并发布后再问数。", 409);
         if (group.getMdlVersion() < 1) throw new DatasetException("该知识库尚未发布 Wren 工程", 409);
         return group;
     }

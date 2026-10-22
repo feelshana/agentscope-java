@@ -165,7 +165,7 @@
   server（stdio、演示 project proj4、enableTools: run_sql + describe_schema）。
 - 已完成：query_cube E2E 探针（target\wren-probe\proj5 + probe_query_cube.py，20/20；产物含
   cube YAML 范式 setup_proj5.py、collation 对齐脚本 align_collation.py）。
-- 待实施（规格已立项：docs/specs/010-semantic-modeling-and-wren-publish.md，分 M1/M2/M3）：
+- 待实施（规格已立项：docs/specs/done/010-semantic-modeling-and-wren-publish.md，分 M1/M2/M3）：
   语义建模页（`DatasetGroupPage` 第五 Tab：模型卡/关系候选/cube
   候选/验证/发布，D9）+ MDL 发布服务（validate/build/实例管理）、MdlSuggestionService
   （规则边 + LLM 建议 + joinType 探测合并，D9）、Java WrenToolkit + per-group 实例池、

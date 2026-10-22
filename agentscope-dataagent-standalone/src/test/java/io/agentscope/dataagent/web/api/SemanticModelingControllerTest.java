@@ -471,7 +471,7 @@ class SemanticModelingControllerTest {
         assertThat(gotPublish.mdlVersion()).isEqualTo(3);
         verify(groupService, times(3)).getGroup("alice", "gA");
         // 发布 = 重建实例 (ADR 0018 D8): a successful publish drops the group's wren instance.
-        verify(wrenGateway).invalidate("gA");
+        verify(wrenGateway, org.mockito.Mockito.never()).invalidate("gA");
     }
 
     @Test

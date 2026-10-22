@@ -79,7 +79,7 @@ agent」，剧本通过 `wren skills get` 以纯文本发放，由 Claude Code/C
 
 ## 影响面
 
-- 待实施（规格：docs/specs/013-conversational-mdl-modeling.md，M1-M4 里程碑）：新建
+- 待实施（规格：docs/specs/done/013-conversational-mdl-modeling.md，M1-M4 里程碑）：新建
   ModelingToolkit + 建模助手 agent 装配、grill 剧本 prompt、DatasetRelationEntity 复合键
   扩展（JPA 迁移）、MdlPublishService 复合键渲染 + 发布期基数预检、MDL 只读视图端点、
   前端 SemanticModelingPage 对话入口 + MdlGraphView（G6）。

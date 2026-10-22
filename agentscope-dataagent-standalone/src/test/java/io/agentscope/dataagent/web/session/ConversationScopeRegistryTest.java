@@ -45,6 +45,17 @@ class ConversationScopeRegistryTest {
     }
 
     @Test
+    void modelingPurposeIsPerUserConversationAndClearedByTheNextPlainRequest() {
+        var registry = new ConversationScopeRegistry();
+        registry.putModelingPurpose("alice", "c1", "question");
+        assertThat(registry.modelingPurpose("alice", "c1")).isEqualTo("question");
+        assertThat(registry.modelingPurpose("bob", "c1")).isNull();
+        assertThat(registry.modelingPurpose("alice", "c2")).isNull();
+        registry.putModelingPurpose("alice", "c1", null);
+        assertThat(registry.modelingPurpose("alice", "c1")).isNull();
+    }
+
+    @Test
     void sameSessionNameIsIsolatedByUserAndTracksLatestAcceptedTurn() {
         var registry = new ConversationScopeRegistry();
         registry.put("alice", "same", List.of("g1"));

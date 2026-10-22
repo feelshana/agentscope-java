@@ -1,6 +1,6 @@
 # ADR 0070: 问答并发容量控制与排队机制
 
-> 来源兼容入口：data-agent-multiAgent-Mdl-lyf 的 ADR 0070，与本分支现有 ADR 0070 含义不同。当前集成决策为 [ADR 0078](0078-platform-capacity-followup-integration.md)，保留原文的 [完整来源快照](../imported/multiAgent-Mdl-lyf/README.md) 及适用范围。下文“已实施/测试”是来源记录，不代表当前环境验收。
+> 来源兼容入口：data-agent-multiAgent-Mdl-lyf 的 ADR 0070，与本分支现有 ADR 0070 含义不同。当前集成决策为 [ADR 0078](0078-platform-capacity-followup-integration.md)，保留原文的 [完整来源快照](../archive/imported/multiAgent-Mdl-lyf/README.md) 及适用范围。下文“已实施/测试”是来源记录，不代表当前环境验收。
 
 日期：2026-10-14
 状态：已接受（已实施）

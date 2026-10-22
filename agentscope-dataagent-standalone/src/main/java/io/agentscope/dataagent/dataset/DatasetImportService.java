@@ -199,6 +199,7 @@ public class DatasetImportService {
 
         // Sample collection: column header -> distinct sample values (up to MAX_SAMPLES_PER_COLUMN)
         private Map<String, Set<String>> sampleSets;
+        private final Map<String, TemporalSamples> temporalSamples = new LinkedHashMap<>();
 
         // Batch buffer
         private List<List<String>> batch = new ArrayList<>();
@@ -250,6 +251,10 @@ public class DatasetImportService {
             // Collect sample values (up to MAX_SAMPLES_PER_COLUMN distinct per column)
             for (int i = 0; i < columnCount; i++) {
                 String val = rowData.get(i);
+                if (totalRows <= DatasetSampling.ROW_LIMIT)
+                    temporalSamples
+                            .computeIfAbsent(originalHeaders.get(i), k -> new TemporalSamples())
+                            .add(val);
                 if (val != null && !val.isBlank()) {
                     val = val.trim();
                     Set<String> samples = sampleSets.get(originalHeaders.get(i));
@@ -468,7 +473,10 @@ public class DatasetImportService {
                                 -1,
                                 -1,
                                 true,
-                                false));
+                                false,
+                                temporalSamples
+                                        .getOrDefault(column.originalName(), new TemporalSamples())
+                                        .format(column.sqlType())));
             }
             return new DatasetSampling.Summary(
                     1,

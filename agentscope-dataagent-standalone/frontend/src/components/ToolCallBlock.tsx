@@ -1,6 +1,6 @@
 import React from 'react';
 import Icon, { IconName } from './Icon';
-import { wrenToolLabel, parseWrenResult } from '../utils/wrenToolPresentation';
+import { wrenToolLabel, parseWrenResult, isWrenTool } from '../utils/wrenToolPresentation';
 
 export interface ToolInspectPayload {
   id: string;
@@ -105,7 +105,7 @@ export default function ToolCallBlock({
 }: Props) {
   const unconfirmed = finished && result === undefined;
   const running = !finished && result === undefined;
-  const failed = !running && (isToolError(result) || (toolName.startsWith('wren_') && parseWrenResult(result ?? '').error));
+  const failed = !running && (isToolError(result) || (isWrenTool(toolName) && parseWrenResult(result ?? '').error));
   const label = wrenToolLabel(toolName, input) ?? toolLabel(toolName);
 
   return (

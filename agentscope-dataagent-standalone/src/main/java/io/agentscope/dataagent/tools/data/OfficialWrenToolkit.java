@@ -20,6 +20,7 @@ import io.agentscope.core.message.ToolUseBlock;
 import io.agentscope.core.tool.Tool;
 import io.agentscope.core.tool.ToolParam;
 import io.agentscope.dataagent.dataset.DatasetException;
+import io.agentscope.dataagent.dataset.FactQueryWindowPolicy;
 import io.agentscope.dataagent.dataset.MdlPublishService;
 import io.agentscope.dataagent.dataset.ModelingWorkflowStore;
 import io.agentscope.dataagent.dataset.WrenCli;
@@ -46,6 +47,9 @@ public final class OfficialWrenToolkit {
     private final WrenProperties props;
     private final MdlPublishService publish;
     private final ModelingWorkflowStore checks;
+    private final FactQueryWindowPolicy windowPolicy;
+    private final boolean skillsMounted;
+    private final java.util.function.Function<String, Set<String>> uploadTables;
 
     public OfficialWrenToolkit(
             WrenProjectAccess access,
@@ -61,11 +65,55 @@ public final class OfficialWrenToolkit {
             WrenProperties props,
             MdlPublishService publish,
             ModelingWorkflowStore checks) {
+        this(access, cli, props, publish, checks, null);
+    }
+
+    public OfficialWrenToolkit(
+            WrenProjectAccess access,
+            WrenCli cli,
+            WrenProperties props,
+            MdlPublishService publish,
+            ModelingWorkflowStore checks,
+            FactQueryWindowPolicy windowPolicy) {
+        this(access, cli, props, publish, checks, windowPolicy, false);
+    }
+
+    /**
+     * @param skillsMounted when the official skills are mounted on the agent, the CLI skills
+     *     channel is closed so the same SKILL.md is not loaded twice per session
+     */
+    public OfficialWrenToolkit(
+            WrenProjectAccess access,
+            WrenCli cli,
+            WrenProperties props,
+            MdlPublishService publish,
+            ModelingWorkflowStore checks,
+            FactQueryWindowPolicy windowPolicy,
+            boolean skillsMounted) {
+        this(access, cli, props, publish, checks, windowPolicy, skillsMounted, null);
+    }
+
+    /**
+     * @param uploadTables model names of uploaded tables per group; every other referenced table
+     *     is treated as an external source and gets the probe guard. {@code null} disables it.
+     */
+    public OfficialWrenToolkit(
+            WrenProjectAccess access,
+            WrenCli cli,
+            WrenProperties props,
+            MdlPublishService publish,
+            ModelingWorkflowStore checks,
+            FactQueryWindowPolicy windowPolicy,
+            boolean skillsMounted,
+            java.util.function.Function<String, Set<String>> uploadTables) {
         this.access = access;
         this.cli = cli;
         this.props = props;
         this.publish = publish;
         this.checks = checks;
+        this.windowPolicy = windowPolicy;
+        this.skillsMounted = skillsMounted;
+        this.uploadTables = uploadTables;
     }
 
     @Tool(
@@ -73,14 +121,16 @@ public final class OfficialWrenToolkit {
             description =
                     """
                     在当前会话已授权的 Wren 草稿工程执行官方 CLI。arguments 是可执行文件后面的参数数组，不是 shell 文本。
-                    例如 ["context","show","-o","json"]、["context","validate","--strict"]、["context","build"]、
-                    ["dry-plan","--sql","SELECT ..."]、["query","--sql","SELECT ...","--limit","10"]、
-                    ["memory","status"]、["memory","recall","-q","问题","-o","json"]。
-                    可用命令为 context show/validate/build/instructions、skills list/get、utils parse-type/parse-types、
-                    query、dry-plan、dry-run、cube list/describe/query、memory status/describe/fetch/recall/index/store/list/check，以及帮助和版本。
+                    可用命令及选项（无需再查 --help）：
+                    context show [-o json|summary]；context validate [--strict] [--level 级别]；context build；context instructions；
+                    query --sql "SELECT ..." [--limit N] [-o table|json|csv]；dry-plan --sql "SELECT ..."；dry-run --sql "SELECT ..."；
+                    query 默认 table 输出可读日期时间；-o json 会把日期时间输出为毫秒时间戳，查询日期时间时用默认输出，确需 json 时在 SQL 中用 DATE_FORMAT 转为字符串，不要为换算格式重复查询；
+                    memory index --no-seed；memory recall -q "问题" [-l N] [-o json]；memory status/check/describe/list/fetch；
+                    utils parse-type --type 类型 / parse-types --input 工程内文件；技能挂载不可用时才用 skills list/get。
+                    基础语义建模阶段不开放 cube 命令。SQL 中使用模型名（models/<模型>/metadata.yml 的 name），不要使用 table_reference 中的物理库表名。每轮建模最多执行 10 条 query；SQL 禁止 CROSS JOIN 和 FROM 后逗号并列多表的笛卡尔积，多表必须 JOIN … ON。
                     使用官方技能决定步骤和文件内容。工程/MDL/连接/记忆路径由服务端绑定，不能切换 profile 或指定其他路径。
                     SQL 仅允许单条只读 SELECT/WITH，参数契约遵循安装版官方 CLI。
-                    memory store 保存工程示例前由原生确认卡请求授权；这不改变问数的点赞保存策略。
+                    基础语义建模不开放 memory store：问答对只在用户逐题确认后由平台保存，用户问题写入 knowledge/questions/<ID>.yml。
                     返回官方退出码和原始输出；构建草稿不会发布或替换线上版本。\
                     """)
     public String execute(
@@ -89,11 +139,39 @@ public final class OfficialWrenToolkit {
                     List<String> arguments) {
         try {
             Project p = access.resolve(context);
+            // Argument, Cube and time-window checks run before the project lock: refusals need no
+            // lock and the window gate's model call must not hold other calls on this project.
+            List<String> command = command(p, arguments);
+            // The external-table refusal needs no model call, so it runs before the window gate.
+            String externalShape = guardExternalProbe(context, p, command);
+            validateQueryBoundary(context, p, command);
+            reserveQuery(context, p, command);
+            String op = operation(command);
+            long waitingAt = System.nanoTime();
             return access.locked(
                     p,
                     () -> {
+                        timed(context, "wren_cli.lock_wait", op, waitingAt, "SUCCESS");
                         access.checkTree(p);
-                        List<String> command = command(p, arguments);
+                        String autoBuilt = "";
+                        if (needsCompiledMdl(command)
+                                && !Files.isRegularFile(p.root().resolve("target/mdl.json"))) {
+                            // Query-class commands always fail without a draft build; build once
+                            // here instead of letting the agent discover it by failing.
+                            List<String> buildArgs = List.of("context", "build");
+                            long buildingAt = System.nanoTime();
+                            WrenCli.Result built =
+                                    cli.run(p.root(), props.timeout(), command(p, buildArgs));
+                            timed(context, "wren_cli.auto_build", op, buildingAt, status(built));
+                            String buildWarning = syncDisplayState(p, buildArgs, built);
+                            if (!built.ok())
+                                return "error: 草稿尚未编译，平台自动执行 context build 失败，未执行 "
+                                        + op
+                                        + buildWarning
+                                        + "\n"
+                                        + built.output();
+                            autoBuilt = "\n（草稿此前未编译，平台已先自动执行 context build）";
+                        }
                         boolean bindConnection =
                                 !arguments.contains("--help")
                                         && (command.get(0).equals("query")
@@ -106,11 +184,18 @@ public final class OfficialWrenToolkit {
                         try {
                             if (bindConnection) {
                                 String profile = publish.draftCliProfile(p.ownerId(), p.groupId());
+                                long bindingAt = System.nanoTime();
                                 WrenCli.Result pinned =
                                         cli.run(
                                                 p.root(),
                                                 props.timeout(),
                                                 List.of("context", "set-profile", profile));
+                                timed(
+                                        context,
+                                        "wren_cli.bind_profile",
+                                        op,
+                                        bindingAt,
+                                        status(pinned));
                                 if (!pinned.ok())
                                     return "error: 当前知识库连接绑定失败，未执行查询\n" + pinned.output();
                             }
@@ -120,18 +205,28 @@ public final class OfficialWrenToolkit {
                                     p.groupId(),
                                     operation(command),
                                     p.root());
+                            long executingAt = System.nanoTime();
                             WrenCli.Result result = cli.run(p.root(), props.timeout(), command);
+                            timed(context, "wren_cli.execute", op, executingAt, status(result));
+                            if (externalShape != null
+                                    && result.ok()
+                                    && isEmptyResult(result.output()))
+                                rememberEmptyShape(context, p, externalShape);
                             if (result.ok() && isStore(arguments)) access.changed(p);
                             String stateWarning = syncDisplayState(p, arguments, result);
                             log.info(
-                                    "[official-wren] group={} operation={} exitCode={}",
+                                    "[official-wren] group={} operation={} exitCode={}"
+                                            + " executeMs={}",
                                     p.groupId(),
                                     operation(command),
-                                    result.exitCode());
+                                    result.exitCode(),
+                                    java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(
+                                            System.nanoTime() - executingAt));
                             return "Wren 官方 CLI｜知识库："
                                     + p.name()
                                     + "｜草稿工程：/project\n退出码："
                                     + result.exitCode()
+                                    + autoBuilt
                                     + stateWarning
                                     + "\n"
                                     + result.output();
@@ -142,6 +237,28 @@ public final class OfficialWrenToolkit {
         } catch (RuntimeException e) {
             return "error: " + e.getMessage();
         }
+    }
+
+    /** Splits a wren_cli call into lock wait, profile binding and CLI execution in timing logs. */
+    private static void timed(
+            RuntimeContext context, String phase, String op, long started, String status) {
+        io.agentscope.dataagent.web.middleware.ExecutionTimingMiddleware.record(
+                context, phase, op, started, status);
+    }
+
+    /** Commands that read target/mdl.json and fail when the draft has never been built. */
+    static boolean needsCompiledMdl(List<String> command) {
+        if (command.isEmpty() || command.contains("--help")) return false;
+        String top = command.get(0);
+        return Set.of("query", "dry-plan", "dry-run").contains(top)
+                || (top.equals("memory")
+                        && command.size() > 1
+                        && command.get(1).equals("describe"));
+    }
+
+    private static String status(WrenCli.Result result) {
+        if (result.ok()) return "SUCCESS";
+        return result.exitCode() == -1 && result.output().contains("执行超时") ? "TIMEOUT" : "ERROR";
     }
 
     /** Keeps temporary connection pinning from changing the platform-owned project or UI hash. */
@@ -197,7 +314,9 @@ public final class OfficialWrenToolkit {
                     || values.stream().anyMatch(v -> !(v instanceof String))) {
                 return "arguments 必须为字符串数组";
             }
-            command(p, values.stream().map(String.class::cast).toList());
+            List<String> command = command(p, values.stream().map(String.class::cast).toList());
+            // A store refused by the time window must fail before the user is asked to approve it.
+            validateQueryBoundary(context, p, command);
             return null;
         } catch (RuntimeException e) {
             return e.getMessage();
@@ -248,6 +367,13 @@ public final class OfficialWrenToolkit {
         if (grouped && args.size() == 2 && args.get(1).equals("--help")) return args;
         String sub = grouped && args.size() > 1 ? args.get(1) : "";
         String op = grouped ? top + " " + sub : top;
+        if (skillsMounted && top.equals("skills")) {
+            throw new DatasetException(
+                    "官方技能已挂载，请用"
+                        + " load_skill_through_path(skillId=\"<技能名>_filesystem-wren_skills_content\","
+                        + " path=\"SKILL.md\" 或 \"references/文件名.md\") 读取；本会话已加载的技能直接复用，不要重复获取",
+                    400);
+        }
         Set<String> flags = new HashSet<>(Set.of("--help"));
         Set<String> valued = new HashSet<>();
         boolean positional = false;
@@ -383,7 +509,23 @@ public final class OfficialWrenToolkit {
             } else if (positional && !arg.startsWith("-") && arg.matches("[A-Za-z0-9_-]+")) {
                 result.add(arg);
                 positional = false;
-            } else throw new DatasetException("未开放的官方选项或路径：" + arg, 403);
+            } else
+                throw new DatasetException(
+                        "未开放的官方选项或路径："
+                                + arg
+                                + "；"
+                                + op
+                                + " 可用选项："
+                                + (flags.size() + valued.size() == 1
+                                        ? "无（仅 --help）"
+                                        : String.join(
+                                                " ",
+                                                new java.util.TreeSet<>(
+                                                        java.util.stream.Stream.concat(
+                                                                        flags.stream(),
+                                                                        valued.stream())
+                                                                .toList()))),
+                        403);
         }
         if (top.equals("context")) result.addAll(List.of("--path", p.root().toString()));
         if (op.equals("utils parse-types")
@@ -406,6 +548,224 @@ public final class OfficialWrenToolkit {
         return result;
     }
 
+    /** Data-reading queries allowed per modeling turn; probes and sample checks share it. */
+    public static final int MAX_QUERIES_PER_TURN = 10;
+
+    /**
+     * Turn-scoped hard cap on data-reading queries. The RuntimeContext is rebuilt every turn, so
+     * the count never carries over; only commands that pass every other check are counted.
+     */
+    private static void reserveQuery(
+            RuntimeContext context, Project project, List<String> command) {
+        if (context == null || !command.get(0).equals("query") || command.contains("--help"))
+            return;
+        synchronized (context) {
+            String key = "wrenCli.queries." + project.groupId();
+            int used = context.get(key) instanceof Integer count ? count : 0;
+            if (used >= MAX_QUERIES_PER_TURN)
+                throw new DatasetException(
+                        "本轮建模已执行 "
+                                + used
+                                + " 条查询，达到单轮上限，未执行此查询。请基于已有结果继续完成建模：发现的数据问题写入描述或 caveat，"
+                                + "未能验证的样例说明尚未验证，不要改写成其它查询重试。",
+                        429);
+            context.put(key, used + 1);
+        }
+    }
+
+    private static final java.util.regex.Pattern TABLE_REF =
+            java.util.regex.Pattern.compile(
+                    "(?i)\\b(?:FROM|JOIN)\\s+[\\\"`]?([\\p{L}_][\\p{L}\\p{N}_]*(?:\\.[\\p{L}_][\\p{L}\\p{N}_]*)*)");
+    private static final java.util.regex.Pattern MIN_MAX =
+            java.util.regex.Pattern.compile("(?i)\\b(?:MIN|MAX)\\s*\\(");
+    private static final java.util.regex.Pattern IDENTIFIER =
+            java.util.regex.Pattern.compile("[\\p{L}_][\\p{L}\\p{N}_]*");
+    private static final java.util.regex.Pattern TIME_NAME =
+            java.util.regex.Pattern.compile("(?i)(time|date|day|month|日期|时间|(^|_)dt($|_)|_at$)");
+    private static final java.util.regex.Pattern DATE_LITERAL =
+            java.util.regex.Pattern.compile("'\\d{4}-\\d{1,2}-\\d{1,2}[^']*'");
+
+    /** Registered time columns of the project's limited tables, lower-cased. */
+    private Set<String> timeColumns(Project project) {
+        Set<String> out = new java.util.HashSet<>();
+        if (windowPolicy == null) return out;
+        try {
+            for (var rule : windowPolicy.rules(project.groupId()))
+                rule.timeColumns().forEach(c -> out.add(c.toLowerCase()));
+        } catch (RuntimeException e) {
+            // Unreadable configuration: the name heuristic below still applies.
+        }
+        return out;
+    }
+
+    /**
+     * True when a MIN/MAX argument is a time column (a time-range probe). Other extremes, such as
+     * MAX(project_name) carrying an attribute through a GROUP BY, are ordinary query shapes: the
+     * 2026-10-22 log refused a valid question SQL twice for that.
+     */
+    static boolean extremeOfTime(String code, Set<String> timeColumns) {
+        var m = MIN_MAX.matcher(code);
+        while (m.find()) {
+            int depth = 1;
+            int i = m.end();
+            while (i < code.length() && depth > 0) {
+                char c = code.charAt(i++);
+                if (c == '(') depth++;
+                else if (c == ')') depth--;
+            }
+            String argument = code.substring(m.end(), Math.max(m.end(), i - 1));
+            var names = IDENTIFIER.matcher(argument);
+            while (names.find()) {
+                String name = names.group().toLowerCase();
+                if (timeColumns.contains(name) || TIME_NAME.matcher(name).find()) return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * External-source tables may not be profiled (rule violated repeatedly by prompt alone, so it
+     * is enforced here): outside {@link io.agentscope.dataagent.dataset.ModelingTurnPurpose}
+     * question turns they are not queried at all; inside them, no MIN/MAX, and once a query came
+     * back empty the same query with other dates is refused for the rest of the turn. Returns the
+     * date-agnostic shape of an allowed external query so an empty result can be remembered.
+     */
+    private String guardExternalProbe(
+            RuntimeContext context, Project project, List<String> command) {
+        if (uploadTables == null || command.isEmpty() || !command.get(0).equals("query"))
+            return null;
+        String sql = sqlOf(command);
+        if (sql == null) return null;
+        String code = sql.replaceAll("(?s)'(?:''|[^'])*'|/\\*.*?\\*/|--[^\\r\\n]*", " ");
+        Set<String> uploads = new java.util.HashSet<>();
+        for (String name : uploadTables.apply(project.groupId())) uploads.add(name.toLowerCase());
+        Set<String> external = new java.util.TreeSet<>();
+        var refs = TABLE_REF.matcher(code);
+        while (refs.find()) {
+            String name = refs.group(1);
+            name = name.substring(name.lastIndexOf('.') + 1).toLowerCase();
+            if (!uploads.contains(name)) external.add(name);
+        }
+        if (external.isEmpty()) return null;
+        String tables = String.join("、", external);
+        // Basic modeling generates no Q&A and may not verify relationships on external data, so
+        // only user-question turns (generate, retry or repair a question's SQL) query them.
+        io.agentscope.dataagent.dataset.ModelingTurnPurpose purpose =
+                context == null
+                        ? null
+                        : context.get(io.agentscope.dataagent.dataset.ModelingTurnPurpose.class);
+        boolean questionTurn = purpose != null && purpose.question();
+        if (!questionTurn)
+            throw new DatasetException(
+                    "基础建模只使用采样资料与元数据，不查询外部数据源表（"
+                            + tables
+                            + "），未执行查询。候选关系用 request_user_confirmation"
+                            + " 请用户确定后再写入；无法验证的唯一性、空值或样例写为未确认并记入 caveat；业务 SQL 在用户提交问题后再验证。",
+                    403);
+        if (extremeOfTime(code, timeColumns(project)))
+            throw new DatasetException(
+                    "外部数据源表（"
+                            + tables
+                            + "）禁止探查时间范围或取值极值，未执行查询。样例使用自选的固定日期范围；没有数据时说明该样例尚未验证，继续完成其余建模。",
+                    403);
+        String shape = shapeOf(sql);
+        if (context == null) return shape;
+        synchronized (context) {
+            if (context.get(emptyShapesKey(project)) instanceof Set<?> empty
+                    && empty.contains(shape))
+                throw new DatasetException(
+                        "同一查询在其它日期上已返回空结果，外部数据源表（"
+                                + tables
+                                + "）不允许换日期重试寻找数据，未执行查询。请说明该样例在所选日期无数据、尚未验证，继续完成其余工作。",
+                        403);
+        }
+        return shape;
+    }
+
+    private static String sqlOf(List<String> command) {
+        for (int i = 0; i + 1 < command.size(); i++)
+            if (Set.of("--sql", "-s").contains(command.get(i))) return command.get(i + 1);
+        return null;
+    }
+
+    /** Date literals blanked so retries that only move the window share one shape. */
+    static String shapeOf(String sql) {
+        return DATE_LITERAL
+                .matcher(sql)
+                .replaceAll("'?'")
+                .replaceAll("\\s+", " ")
+                .trim()
+                .toLowerCase();
+    }
+
+    private static String emptyShapesKey(Project project) {
+        return "wrenCli.emptyExternalShapes." + project.groupId();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void rememberEmptyShape(RuntimeContext context, Project project, String shape) {
+        if (context == null) return;
+        synchronized (context) {
+            Object current = context.get(emptyShapesKey(project));
+            Set<String> shapes =
+                    current instanceof Set<?> set ? (Set<String>) set : new java.util.HashSet<>();
+            shapes.add(shape);
+            context.put(emptyShapesKey(project), shapes);
+        }
+    }
+
+    /**
+     * True when the official table output has no rows, or a single aggregate row whose values are
+     * all zero or null-like (e.g. {@code 0 NaT NaT}).
+     */
+    static boolean isEmptyResult(String output) {
+        if (output.contains("Empty DataFrame")) return true;
+        List<String> lines = new ArrayList<>();
+        for (String line : output.split("\\R")) {
+            if (line.startsWith("Wren 官方 CLI") || line.startsWith("退出码") || line.startsWith("（"))
+                continue;
+            if (line.startsWith("#")) break;
+            if (!line.isBlank()) lines.add(line.trim());
+        }
+        if (lines.size() == 1) return true;
+        if (lines.size() != 2) return false;
+        for (String value : lines.get(1).split("\\s+"))
+            if (!Set.of("0", "0.0", "NaT", "None", "NaN", "null", "NULL", "<NA>").contains(value))
+                return false;
+        return true;
+    }
+
+    private void validateQueryBoundary(
+            RuntimeContext context, Project project, List<String> command) {
+        if (command.isEmpty() || command.contains("--help")) return;
+        // spec090: Q&A pairs are written only by the platform after the user confirms a question.
+        if (command.get(0).equals("memory") && command.size() > 1 && command.get(1).equals("store"))
+            throw new IllegalArgumentException(
+                    "基础语义建模不生成问答对，未执行保存。问答由用户问题确认流程保存：请把问题与 SQL 写入"
+                            + " knowledge/questions/<ID>.yml，由用户在试问面板确认正确。");
+        if (command.get(0).equals("cube"))
+            throw new IllegalArgumentException("当前语义建模阶段不执行 Cube 构建；请在指标建模模块中单独创建和验证 Cube");
+        if (windowPolicy == null) return;
+        String op = command.get(0);
+        boolean sqlOperation =
+                // dry-plan only compiles against the MDL and reads no data, so it needs no window.
+                Set.of("query", "dry-run").contains(op)
+                        || (op.equals("memory")
+                                && command.size() > 1
+                                && command.get(1).equals("store"));
+        if (!sqlOperation) return;
+        for (int i = 0; i + 1 < command.size(); i++) {
+            if (Set.of("--sql", "-s").contains(command.get(i))) {
+                windowPolicy.requireAllowed(
+                        context,
+                        project.groupId(),
+                        command.get(i + 1),
+                        "wren_cli " + operation(command));
+                return;
+            }
+        }
+    }
+
     public static void requireReadOnly(String sql) {
         // Lexical security policy only; Wren remains the SQL parser and semantic compiler.
         String tokens =
@@ -421,5 +781,26 @@ public final class OfficialWrenToolkit {
                 || tokens.contains(";")) {
             throw new DatasetException("SQL 仅允许单条只读 SELECT/WITH", 400);
         }
+        if (CROSS_JOIN.matcher(tokens).find() || IMPLICIT_JOIN.matcher(tokens).find()) {
+            throw new DatasetException(
+                    "禁止 CROSS JOIN 或 FROM 后用逗号并列多表的隐式连接（笛卡尔积），未执行查询；请用 JOIN … ON"
+                            + " 写明连接条件，或分别对单表统计后再比较",
+                    400);
+        }
     }
+
+    // Lexical guards on the literal/comment-stripped text; quoted identifiers are blanked there,
+    // so a table name may be absent between FROM and the comma.
+    private static final java.util.regex.Pattern CROSS_JOIN =
+            java.util.regex.Pattern.compile("(?i)\\bCROSS\\s+JOIN\\b");
+    private static final String NOT_KEYWORD =
+            "(?!(?:WHERE|(?:GROUP|ORDER)\\s+BY|BY|LIMIT|OFFSET|HAVING|JOIN|LEFT|RIGHT|INNER|FULL|OUTER|CROSS"
+                + "|UNION|ON|USING|WINDOW|QUALIFY)\\b)";
+    private static final java.util.regex.Pattern IMPLICIT_JOIN =
+            java.util.regex.Pattern.compile(
+                    "(?i)\\bFROM\\s+(?:"
+                            + NOT_KEYWORD
+                            + "[^\\s,()]+\\s*)?(?:(?:AS\\s+)?"
+                            + NOT_KEYWORD
+                            + "[^\\s,()]+\\s*)?,");
 }

@@ -151,6 +151,9 @@ class SharedDraftWrenAuthorizationTest {
         workspace.ensureWorkspace("g");
         config = workspace.workspaceRoot("g").resolve("wren_project.yml");
         originalConfig = Files.readString(config);
+        // A built draft: queries bind the shared connection without an automatic build first.
+        Files.createDirectories(workspace.workspaceRoot("g").resolve("target"));
+        Files.writeString(workspace.workspaceRoot("g").resolve("target/mdl.json"), "{}");
         calls.clear();
     }
 
@@ -160,14 +163,7 @@ class SharedDraftWrenAuthorizationTest {
                         actor ->
                                 Stream.of(
                                                 List.of("query", "--sql", "SELECT 1"),
-                                                List.of("dry-run", "--sql", "SELECT 1"),
-                                                List.of(
-                                                        "cube",
-                                                        "query",
-                                                        "--cube",
-                                                        "sales",
-                                                        "--measures",
-                                                        "revenue"))
+                                                List.of("dry-run", "--sql", "SELECT 1"))
                                         .map(command -> Arguments.of(actor, command)));
     }
 
@@ -182,6 +178,26 @@ class SharedDraftWrenAuthorizationTest {
         assertThat(calls.get(1)).startsWith(command.toArray(String[]::new));
         assertThat(Files.readString(config)).isEqualTo(originalConfig);
         verify(acl, org.mockito.Mockito.atLeast(2)).requireManage(actor, "g");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"owner", "manager", "admin"})
+    void basicModelingRejectsCubeBeforeBindingSharedConnection(String actor) throws Exception {
+        assertThat(projects.resolve(actor, "g").ownerId()).isEqualTo(actor);
+        assertThat(
+                        toolkit.execute(
+                                context(actor),
+                                List.of(
+                                        "cube",
+                                        "query",
+                                        "--cube",
+                                        "sales",
+                                        "--measures",
+                                        "revenue")))
+                .contains("当前语义建模阶段不执行 Cube");
+        assertThat(calls).isEmpty();
+        assertThat(Files.readString(config)).isEqualTo(originalConfig);
+        verify(acl, org.mockito.Mockito.atLeastOnce()).requireManage(actor, "g");
     }
 
     @ParameterizedTest

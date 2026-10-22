@@ -17,11 +17,90 @@ class MdlQuestionServiceTest {
             new MdlQuestionService(groups, store, publisher, mock(WrenQueryGateway.class));
 
     @Test
+    void questionValidationPassesTheSameTimeWindowGateBeforeExecution() {
+        var windows = mock(FactQueryWindowPolicy.class);
+        var gated =
+                new MdlQuestionService(
+                        groups, store, publisher, mock(WrenQueryGateway.class), windows);
+        String sql = "SELECT SUM(amount) FROM orders";
+        when(store.requireQuestion("a", "q-1"))
+                .thenReturn(new MdlQuestionStore.Question("q-1", "营收", "全部订单", sql));
+        org.mockito.Mockito.doThrow(new DatasetException("SQL_TIME_WINDOW_REJECTED", 422))
+                .when(windows)
+                .requireAllowed(
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.eq("a"),
+                        org.mockito.ArgumentMatchers.eq(sql),
+                        org.mockito.ArgumentMatchers.eq("question validate"));
+        var refused =
+                assertThrows(
+                        DatasetException.class,
+                        () -> gated.validate(new DatasetScope("alice", List.of("a")), "a", "q-1"));
+        org.junit.jupiter.api.Assertions.assertTrue(
+                refused.getMessage().contains("SQL_TIME_WINDOW_REJECTED"));
+        verifyNoInteractions(publisher);
+    }
+
+    @Test
+    void confirmationPassesTheTimeWindowGateBeforeWritingButReturnDoesNot() {
+        var windows = mock(FactQueryWindowPolicy.class);
+        var gated =
+                new MdlQuestionService(
+                        groups, store, publisher, mock(WrenQueryGateway.class), windows);
+        String sql = "SELECT SUM(amount) FROM orders";
+        when(store.requireQuestion("a", "q-1"))
+                .thenReturn(new MdlQuestionStore.Question("q-1", "营收", "全部订单", sql));
+        org.mockito.Mockito.doThrow(new DatasetException("SQL_TIME_WINDOW_REJECTED", 422))
+                .when(windows)
+                .requireAllowed(
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.eq("a"),
+                        org.mockito.ArgumentMatchers.eq(sql),
+                        org.mockito.ArgumentMatchers.eq("question confirm"));
+        DatasetScope scope = new DatasetScope("alice", List.of("a"));
+        assertThrows(DatasetException.class, () -> gated.decide(scope, "a", "q-1", true));
+        org.mockito.Mockito.verify(store, org.mockito.Mockito.never())
+                .decide("a", "q-1", true, "alice");
+        gated.decide(scope, "a", "q-1", false);
+        org.mockito.Mockito.verify(store).decide("a", "q-1", false, "alice");
+    }
+
+    @Test
+    void suggestionsAreScopedAndSkipExistingQuestions() {
+        var suggester = mock(QuestionSuggestionService.class);
+        var suggesting =
+                new MdlQuestionService(
+                        groups, store, publisher, mock(WrenQueryGateway.class), null, suggester);
+        when(store.list("a"))
+                .thenReturn(
+                        List.of(
+                                new MdlQuestionStore.Review(
+                                        new MdlQuestionStore.Question("q-1", "营收", "", ""),
+                                        "DRAFT",
+                                        null)));
+        when(suggester.suggest("a", List.of("营收"))).thenReturn(List.of("10月1日访问量"));
+        org.junit.jupiter.api.Assertions.assertEquals(
+                List.of("10月1日访问量"),
+                suggesting.suggestions(new DatasetScope("alice", List.of("a")), "a"));
+        assertThrows(
+                DatasetException.class,
+                () -> suggesting.suggestions(new DatasetScope("alice", List.of("a")), "b"));
+        when(groups.getGroup("alice", "c")).thenThrow(new DatasetException("not found", 404));
+        assertThrows(
+                DatasetException.class,
+                () -> suggesting.suggestions(new DatasetScope("alice"), "c"));
+        org.mockito.Mockito.verify(suggester, org.mockito.Mockito.never())
+                .suggest(org.mockito.ArgumentMatchers.eq("b"), org.mockito.ArgumentMatchers.any());
+        org.mockito.Mockito.verify(suggester, org.mockito.Mockito.never())
+                .suggest(org.mockito.ArgumentMatchers.eq("c"), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
     void narrowedScopeCannotReadValidateOrDecideAnotherGroup() {
         DatasetScope scope = new DatasetScope("alice", List.of("a"));
         assertThrows(DatasetException.class, () -> service.list(scope, "b"));
         assertThrows(DatasetException.class, () -> service.validate(scope, "b", "sales"));
-        assertThrows(DatasetException.class, () -> service.decide(scope, "b", "sales", "id", true));
+        assertThrows(DatasetException.class, () -> service.decide(scope, "b", "sales", true));
         assertThrows(
                 DatasetException.class,
                 () -> service.correctSql(scope, "b", "sales", "rev", "SELECT 1"));
@@ -38,7 +117,7 @@ class MdlQuestionServiceTest {
                 () -> service.validate(new DatasetScope("alice"), "b", "sales"));
         assertThrows(
                 DatasetException.class,
-                () -> service.decide(new DatasetScope("alice"), "b", "sales", "id", true));
+                () -> service.decide(new DatasetScope("alice"), "b", "sales", true));
         assertThrows(
                 DatasetException.class,
                 () ->

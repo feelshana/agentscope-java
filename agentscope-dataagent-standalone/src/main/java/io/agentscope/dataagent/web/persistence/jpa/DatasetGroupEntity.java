@@ -52,6 +52,10 @@ public class DatasetGroupEntity {
     @Column(name = "description", length = 1000)
     private String description;
 
+    /** Maximum analytical window in days for fact-table queries. */
+    @Column(name = "fact_query_window_days")
+    private Integer factQueryWindowDays = 31;
+
     @Column(name = "created_at")
     private Instant createdAt = Instant.now();
 
@@ -69,6 +73,25 @@ public class DatasetGroupEntity {
     /** Monotonic MDL version; bumped on each publish. */
     @Column(name = "mdl_version")
     private int mdlVersion = 0;
+
+    /** Written only by atomic repository updates, never by a stale entity merge. */
+    @Column(name = "modeling_revision", updatable = false)
+    private Long modelingRevision = 0L;
+
+    @Column(name = "published_modeling_revision", updatable = false)
+    private Long publishedModelingRevision = 0L;
+
+    public long getModelingRevision() {
+        return modelingRevision == null ? 0 : modelingRevision;
+    }
+
+    public long getPublishedModelingRevision() {
+        return publishedModelingRevision == null ? 0 : publishedModelingRevision;
+    }
+
+    public boolean isModelingPending() {
+        return getModelingRevision() > getPublishedModelingRevision();
+    }
 
     /** When the group's MDL was last published; null while never published. */
     @Column(name = "mdl_published_at")
@@ -115,6 +138,14 @@ public class DatasetGroupEntity {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public int getFactQueryWindowDays() {
+        return factQueryWindowDays == null || factQueryWindowDays < 1 ? 31 : factQueryWindowDays;
+    }
+
+    public void setFactQueryWindowDays(Integer days) {
+        this.factQueryWindowDays = days;
     }
 
     public Instant getCreatedAt() {

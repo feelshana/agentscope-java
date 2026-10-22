@@ -32,6 +32,7 @@ public class ModelingQuestionController {
         this.guard = guard;
     }
 
+    /** {@code validationId} is accepted for old clients and ignored (spec091). */
     public record Decision(String validationId, Boolean accepted) {}
 
     public record Correction(String revision, String sql) {}
@@ -92,6 +93,20 @@ public class ModelingQuestionController {
                 });
     }
 
+    @GetMapping("/suggestions")
+    public Mono<java.util.Map<String, List<String>>> suggestions(
+            @PathVariable String groupId, Authentication auth) {
+        String owner = (String) auth.getPrincipal();
+        return blocking(
+                () -> {
+                    guard.require(owner, "modeling-agent", Tier.RUN);
+                    return java.util.Map.of(
+                            "questions",
+                            service.suggestions(
+                                    new DatasetScope(owner, List.of(groupId)), groupId));
+                });
+    }
+
     @GetMapping
     public Mono<List<MdlQuestionStore.Review>> list(
             @PathVariable String groupId, Authentication auth) {
@@ -125,14 +140,13 @@ public class ModelingQuestionController {
         return blocking(
                 () -> {
                     guard.require(owner, "modeling-agent", Tier.RUN);
-                    if (decision.validationId() == null || decision.accepted() == null) {
-                        throw new DatasetException("请提供验证 ID 和确认/退回决定", 400);
+                    if (decision.accepted() == null) {
+                        throw new DatasetException("请提供确认/退回决定", 400);
                     }
                     return service.decide(
                             new DatasetScope(owner, List.of(groupId)),
                             groupId,
                             questionId,
-                            decision.validationId(),
                             decision.accepted());
                 });
     }

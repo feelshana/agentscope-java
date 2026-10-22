@@ -118,5 +118,5 @@ ADR 0019 落地 M2 发布流（发布 = 快照 + `mdl.json` + 版本 +1、脏标
   `MdlCatalogTest`（6）、`WrenProfileHomeTest`（7：档案生成/转义/ssl 三态）、
   `TableProvisionerTest`（2：collation）、`DataAgentConfigTest`（9：含双通道路由断言）。
 - 文档：README/README_zh 配置表、ARCHITECTURE_zh.md 2.5 / 2.6 / 3 / 4.1 / 4.6 / 5.6 / 12.1 / 13。
-- 后续：集群部署文档补 sticky LB / 共享盘约束（`docs/cluster-deploy.md`）；实例池上限与
+- 后续：集群部署文档补 sticky LB / 共享盘约束（`docs/guides/cluster-deploy.md`）；实例池上限与
   监控（若组数规模化）；tools.json 演示 wren 声明随文档清理。

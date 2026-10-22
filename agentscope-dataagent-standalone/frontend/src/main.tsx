@@ -20,6 +20,7 @@ import DatasetsPage from './pages/configure/DatasetsPage';
 import DatasetGroupPage from './pages/configure/DatasetGroupPage';
 import DatasetDetailPage from './pages/configure/DatasetDetailPage';
 import SemanticModelingPage from './pages/configure/SemanticModelingPage';
+import ModelingHubPage from './pages/configure/ModelingHubPage';
 import SemanticConfigPage from './pages/configure/SemanticConfigPage';
 import ScheduledTasksPage from './pages/configure/ScheduledTasksPage';
 import SettingsPage from './pages/configure/SettingsPage';
@@ -96,6 +97,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="/configure/datasets"  element={<DatasetsPage />} />
           <Route path="/configure/datasets/:groupId" element={<DatasetGroupPage />} />
           {/* specs/030 fullscreen workbench: owns the whole viewport, AppShell hides the global sidebar here. */}
+          <Route path="/configure/modeling" element={<ModelingHubPage />} />
           <Route path="/configure/modeling/:groupId" element={<SemanticModelingPage />} />
           <Route path="/configure/semantic"  element={<SemanticConfigPage />} />
           <Route path="/configure/scheduled-tasks"  element={<ScheduledTasksPage />} />

@@ -1,17 +1,73 @@
 # 决策记录
 
+## 已接受并实施：平台确定性处理三类反复问题（2026-10-20，ADR0110）
+
+提示词与上下文写明后仍反复出现：编译前查询、write_file 覆盖已有文件被拒、无受限表的库追问年份。改为平台自动补编译、允许整文件替换（YAML 检查与确认卡差异保留）、"缺日期先问"仅在登记了受限表时注入。
+
+## 已接受并实施：文档按 Agent 编程结构重组（2026-10-21，用户确认）
+
+AGENTS.md 只写当前有效规则与文档地图，CLAUDE.md 引用 AGENTS.md；ARCHITECTURE_zh 描述当前实现，第 14 章汇总建模与问数约束；ADR 只增不改并由索引标注主线；spec 完成后移入 done/；历史资料移入 docs/archive/，不作为当前依据；共享记忆的 CURRENT_TASK 只保留当前任务。
+
+## 已接受并实施：问答对只来自用户确认（2026-10-20，ADR0109/spec090）
+
+官方 enrich-context Auto-pilot 自行补问答且不暂停，平台提示还要求写回、保存自动放行，导致自拟问答进入召回。改为工具层禁止建模写问答；用户问题（每批 5 题）由 Agent 生成 SQL、用户逐题确认后由平台写 knowledge/sql/<ID>.md（source:user-confirmed），发布后经现有链路召回。问题验证同样受时间门禁与笛卡尔积检查，允许官方 LIMIT。
+
+## 已接受并实施：建模查询硬上限、禁笛卡尔积与 Cube/View 不读不写（2026-10-20，ADR0106/0107）
+
+软约束两次运行差异大（5 条对 18 条）且出现 2 亿行 CROSS JOIN，用户要求探测必须限制、禁用 CROSS JOIN，且 view/cube 相关内容不读不写。改为工具层硬约束：单轮 10 条 query、词法拒绝笛卡尔积写法（含问数）、cubes/views 封闭、cube_proposals 不加载。取代 ADR0104"不新增计数"及 ADR0085/0088"已有 Cube/View 可读取"。问数侧 Cube/View 使用待决定。
+
+## 已接受并实施：编译状态上下文、CLI 日期输出说明与问数排名粒度（2026-10-20，ADR0105）
+
+通用"先 build"提示无效，改为运行上下文按 target/mdl.json 如实写入编译状态；说明 -o json 日期为毫秒时间戳；排名/计数只按主体分组，列名与执行描述须与实际一致。均为提示/上下文约束。
+
+## 已接受并实施：上传表探查按用途限定与问数统计走 SQL（2026-10-20，ADR0104）
+
+收窄 ADR0103：维度候选值已在采样提取，上传表只做时间范围 MIN/MAX 与关系唯一性/匹配率两类探查；全表验证唯一的上传表键可声明 MANY_TO_ONE 并注明非约束。问数计数、分布和排名必须来自 SQL 返回值，沙箱不可用也不手工汇总。均为提示约束，无硬性计数。
+
+## 已接受并实施：来源分层探查、门禁明细为准与 CLI 契约对齐（2026-10-20，ADR0103/spec089）
+
+用户确认上传表数据量有限，不加时间门禁并允许官方技能探查；外部/手工/未知来源表保持禁止探查与逐表门禁。门禁 allowed 由逐表明细重算，取代 ADR0102 中“矛盾输出不处理”。CLI 契约以安装版 wrenai 0.15.0 为准（memory store 仅 --tags）；技能挂载时关闭 CLI skills 通道；检查在工程锁前完成。真实 Agent 行为尚待加载后验收。
+
+## 已接受并实施：通用问数日期优先与建模样例约束（2026-10-20，ADR0102/spec088）
+
+缺少日期先询问优先于探索/技能/召回；规则按受限事实表和用户意图适用，不绑定营收或具体表字段。运行时只提供当前时间，相对日期与补充日期交给Agent原生历史，不加日期算法/状态。建模自拟样例先参考逐表配置且NL/SQL匹配，不能缩短原问题或固定业务周期；成功空结果正常结束，拒绝后仍同轮停止。只修提示与上下文/中文指导，不新增自动重试、不改官方技能或保存确认。真实跨业务受控验收通过不等于严格保证；真实联表门禁漏检和矛盾输出仍是独立未解决项，失败证据保留。见本次验收报告。
+
+## 已接受并实施：发布提示只保留简单结果（2026-10-20，spec087展示补充）
+
+用户要求不要复杂化并确认点击发布后展示。仅本页发布成功后提示“正在准备问数…”，完成短暂显示后隐藏，未完成提示首次提问重试；不展示后台技术阶段、不常驻轮询、不新增用户操作，后台状态/日志保持。
+
+## 已实施第一阶段：实际MCP召回预热（2026-10-20，ADR0101/spec087）
+
+在已复用实例执行官方只读召回预热，资源/权限边界保持；明确LanceDB index成功输出省独立status，未知格式fallback。发布页新增准备状态，实例回收不宣称继续就绪。真实隔离工程预热后47ms、并发31–275ms不等于端到端问数性能。候选原子切换与增量同步仍未实施，后续单列，不修改官方包。
+
+## 已接受并实施：发布提交后异步准备问数索引（2026-10-20，ADR0100）
+
+用户要求执行耗时优化。官方索引构建移到发布后后台，失败不回滚发布，按需校验/重试及源hash保持；同库合并与有界调度，不改Wren/召回路由。无参数工程说明成功结果可缓存同一MCP实例，权限始终复核，失效随实例。增加分段耗时，真实效果待服务加载；暂不增加额外召回预热，后台状态通过日志观察。
+
+## 已接受并实施：运行时窗口不落MDL，建模自选样例日期（2026-10-20，ADR0099）
+
+用户明确允许建模自行选择样例日期，无需确认；真实窗口值仅数据库存储，运行上下文可见但不复制到MDL/knowledge。只保存符合已确认业务过滤的示例，不发明规则。工具边界独立审计，真实模型18项受控验收通过，不等同全量SQL准确率或真实服务端到端验收。此前日志审查对自选样例日期的疑问已被此决定覆盖。
+
+## 已接受并实施：原生工具展示与可观测性（2026-10-17，ADR0087）
+
+用户要求基于日志整体优化。原生MCP与旧网关共享前端展示，不将JSON解析失败当截断、不引导重复SQL；保留真实truncated字段。平台建模提示服从0085/0086，官方技能不修改；增加脱敏分段耗时，暂不改变同库门锁。实现不等于真实LLM加速或全部业务正确，验证状态见CURRENT_TASK。
+
+## 待验证建议：Wren工具契约与结果证据改造（2026-10-16）
+
+架构审查见docs/test-reports/20261016-wren-architecture-review.md。建议同模型同题对照直接官方/平台固定SQL/Agent自然语言，评估会话内具体MCP schema注册及结果引用，保留授权和发布边界。尚未接受或实施替换ADR0069的双工具入口，不认定替换Wren或模型可自动解决准确性；旧决策继续有效。
+
 ## 已接受并实施：ADR 0080 有界采样与官方上下文复用（2026-10-16）
 
 - 用户确认外部关联只读1000行内存采样，不用COUNT/DISTINCT；官方技能保持原样，通过原生工程资料和系统上下文约束减少枚举补全探查。
 - 仅description或raw文件存在不能保证Agent读取；建模构造系统消息时注入限长摘要，问数通用约束直接可见，样本依据发布快照经官方工具获取。不用“首次已发送”标记省略恢复会话上下文。
-- 不自动将样本写为完整[enum]；保留必要精确业务查询。提示不是数据库成本强制门禁。实现、迁移和验证见 [ADR0080](../adr/0080-bounded-sampling-and-wren-context.md)、[spec068](../specs/068-bounded-sampling-and-wren-context.md) 与CURRENT_TASK。
+- 不自动将样本写为完整[enum]；保留必要精确业务查询。提示不是数据库成本强制门禁。实现、迁移和验证见 [ADR0080](../adr/0080-bounded-sampling-and-wren-context.md)、[spec068](../specs/done/068-bounded-sampling-and-wren-context.md) 与CURRENT_TASK。
 
 ## 已接受并实施：ADR 0072 LIMIT 兼容与工具发现复用（2026-10-12）
 
 - 用户要求修复重复LIMIT并减少冗余调用；安装版0.15.0 MySQL连接器直接追加LIMIT是已复现根因。
 - 平台子进程加载版本限定兼容资源，仅合并最外层行数，保留官方技能/MDL、SQL其余原文和截断协议；不修改安装目录、不恢复平台领域路由。升级官方版本必须重验并移除此补丁。
 - 官方工具列表按实例复用，生命周期失效；权限仍每次校验，不缓存业务结果。建模提示服从真实原生文件schema，纠正patch_file/files_json错误，不添加自研批量写工具。
-- 实现与本次全量503项回归、真实MySQL CLI/MCP、构建通过；在线服务未重载，真实LLM调用轮数下降尚未实测。参见 [ADR 0072](../adr/0072-wren-mysql-limit-compatibility-and-discovery-cache.md)、[spec 061](../specs/061-wren-limit-and-call-efficiency.md)。
+- 实现与本次全量503项回归、真实MySQL CLI/MCP、构建通过；在线服务未重载，真实LLM调用轮数下降尚未实测。参见 [ADR 0072](../adr/0072-wren-mysql-limit-compatibility-and-discovery-cache.md)、[spec 061](../specs/done/061-wren-limit-and-call-efficiency.md)。
 
 ## 已接受并实施：ADR 0069 官方建模与问数（2026-10-11）
 
@@ -25,7 +81,7 @@
 ## 已确认方向、实施计划待审阅：建模与问数都使用官方 Wren（2026-10-11）
 
 - 最新用户明确本项目作为通用 Agent，建模与问数用 Wren，不使用本体，先完整计划再开发；此前 Cube 开放建议已获方向授权，不再属于未授权方向，但完整方案尚未确认实施。
-- [ADR 0069](../adr/0069-wren-native-modeling-and-query-agents.md)、[spec 058](../specs/058-wren-native-modeling-and-query-agents.md)、[计划](../plans/058-wren-native-modeling-and-query-agents.md) 已落盘，状态 Proposed。接受后取代旧 Cube 禁用和平台 SQL 流程，保留权限/显式发布/可选问题/点赞门槛。
+- [ADR 0069](../adr/0069-wren-native-modeling-and-query-agents.md)、[spec 058](../specs/done/058-wren-native-modeling-and-query-agents.md)、[计划](../archive/plans/058-wren-native-modeling-and-query-agents.md) 已落盘，状态 Proposed。接受后取代旧 Cube 禁用和平台 SQL 流程，保留权限/显式发布/可选问题/点赞门槛。
 - 选择官方 CLI + skills + MCP，LLM 仍由 AgentScope 装配；不声称已经部署官方完整产品或获得官方产品准确率。官方编译 MDL 不允许再由平台语义物化改写。
 - memory 使用官方能力与同一授权问数工程；向量后端须真实验证。没有自研评分、资产路由、本体或 SQL 反馈反推资产。
 - 本轮仅文档，无业务实施。下方旧状态与决定保留历史；当前计划入口以上述条目为准。
@@ -60,7 +116,7 @@
 
 ## 已接受：取消 Cube，保留普通模型与明细视图
 
-- 依据：[ADR 0063](../adr/0063-sql-only-modeling-and-relevant-example-recall.md)、[spec 055](../specs/055-sql-only-modeling-and-example-recall.md)。
+- 依据：[ADR 0063](../adr/0063-sql-only-modeling-and-relevant-example-recall.md)、[spec 055](../specs/done/055-sql-only-modeling-and-example-recall.md)。
 - 自由问数优先普通模型、SQL 定义模型和保留实体身份/原始时间的明细视图。
 - 原因：减少查询分支，避免按月预聚合的去重客户数被错误累加。
 - 用户自行清理旧数据，不进行旧资产迁移或删除。
@@ -141,7 +197,7 @@
 
 - 语义查询、模型/字段、Cube、规则、知识和相似问题召回统一通过官方 Wren MCP/CLI；平台不再注册 `retrieve_evidence`、`wren_read_knowledge` 或旧 WrenToolkit 语义工具。
 - 平台运行时只保留官方 Wren MCP 适配器、`run_python` 和 `render_chart`；旧 WrenToolkit 仅用于结果文件/答案记忆交接兼容。
-- 详见 [ADR 0074](../adr/0074-official-wren-only-query-tools.md) 与 [spec 064](../specs/064-official-wren-only-query-tools.md)。
+- 详见 [ADR 0074](../adr/0074-official-wren-only-query-tools.md) 与 [spec 064](../specs/done/064-official-wren-only-query-tools.md)。
 
 - ADR 0075：SQL 问答对管理按官方 Markdown 来源分层编辑，建模源需发布、点赞源更新后索引；视图路径回退真实 metadata.yml。
 
@@ -154,13 +210,13 @@
 ## 已接受并实施：ADR 0078 来源后续并发集成（2026-10-15）
 
 - 用户继续授权合入来源 a29cc754/6a75b6cf，更新此前截至 32c6d292 的容量缺失状态。保留当前官方 Wren 执行，只集成通用上传/问答/沙箱/MCP 资源机制及配套框架修复。
-- 来源 ADR/spec 编号冲突通过 docs/imported/multiAgent-Mdl-lyf 快照与映射保留，当前决策为 [ADR 0078](../adr/0078-platform-capacity-followup-integration.md)，实施 spec 067；来源历史验收与本轮实测分开。
+- 来源 ADR/spec 编号冲突通过 docs/archive/imported/multiAgent-Mdl-lyf 快照与映射保留，当前决策为 [ADR 0078](../adr/0078-platform-capacity-followup-integration.md)，实施 spec 067；来源历史验收与本轮实测分开。
 - 所有容量机制为单 JVM；建模和其他通道不经过 ChatController 的问答预算，普通 Wren CLI 也不属于 MCP 实例预算。Docker 取消实测与真实负载压测仍需目标环境验收，不把默认 16 当作性能承诺。
 
 ## 已接受：ADR 0079 来源历史与文档事实源（2026-10-15）
 
 - 不把功能移植描述为整段 Git 历史已合并；逐提交表区分继承/移植/当前替代/未采用。来源 Assembly/tar.gz、旧建模/Cube 禁用及静态预览不当作当前运行能力。
-- 当前主文档按 pom/config/工具注册/控制器事实对齐；AGENTS.md 为开发约束，docs/agent-definition.md 为实际装配/API 说明。项目根指南通过单文件 Git 忽略例外可交付。
+- 当前主文档按 pom/config/工具注册/控制器事实对齐；AGENTS.md 为开发约束，docs/reference/agent-definition.md 为实际装配/API 说明。项目根指南通过单文件 Git 忽略例外可交付。
 - 来源布局 ADR0053/spec044 本轮补齐，档案共11 ADR/8 spec，编号冲突不覆盖当前决策。详见 [ADR0079](../adr/0079-source-history-and-current-documentation.md) 与逐提交核对表。
 
 
@@ -175,3 +231,43 @@
 - 用户在差异选型建议后明确授权实施，更新此前只报告的限制：补回5测试、必要忽略规则，采用LYF单机发布布局并适配当前版本；不合并整个分支历史。
 - 保留当前官方Wren和默认前端重建；私有环境配置外置，发布仅带无凭据样例；停止不依赖Wren，启动等待HTTP健康，持久数据在版本外。见[ADR0080](../adr/0080-single-host-release-and-regression-tests.md)。
 - 固定隔离检出验证完成，未提交、未部署，生产首次schema/凭据/Wren模型缓存仍由目标环境准备，不能把本轮隔离通过等同生产验收。
+
+## 2026-10-16｜ADR0081 实施决定
+
+- 采用 AgentScope 原生 Toolkit.registerMcpClient，通过 RuntimeContext 绑定调用作用域 Toolkit；共享 Agent Toolkit 不保存 project、用户或知识库状态。
+- 当前原生工具模式按单知识库作用域启用；多库同时选择因官方工具同名冲突暂要求用户先选择单库，待独立命名/路由方案确认。
+- Wren MCP server 继续由 WrenInstanceRegistry 通过 stdio transport 按知识库懒启动并复用，平台不改 Wren project 参数协议。
+
+## 2026-10-17｜ADR0082 采样上下文收敛
+
+- 上传/关联表采样继续用于初始 MDL 列 description；完整采样摘要不再写入 knowledge/rules，也不通过官方 get_instructions 返回。
+- raw/data-samples.md 仍保留为刷新/审计资料；同步时删除历史自动生成的 data-sampling.md，不修改用户手写规则。详见 ADR0082/spec070。
+
+## 2026-10-17｜采样不落地 Markdown
+
+- 进一步确认：采样不生成 raw/data-samples.md，也不生成 knowledge/rules/data-sampling.md；采样只在上传/关联首步用于列 description/初始 MDL，结构化摘要仅保留数据库内部刷新/审计。详见 ADR0082/spec070。
+
+- 2026-10-17������ ADR 0083/spec 071����ģ wren_cli �������ٷ� MCP ��ִ��ǰ�ܾ��漰ʱ���ֶε���ʱ��ν�ʵľۺ�/DISTINCT��LIMIT ����Ϊ�߽磻ͳһ�������� 422 ����
+
+- 2026-10-17���ѽ��ܣ�ADR 0086����������ģ��ֹ�Զ�̽���ѯ����ά��ģ�� COUNT(*) ���κξۺ�/DISTINCT �ں�����/ʱ��ģ���ϱ���ʹ�ö�Ӧʱ�������������� LIMIT ��100�귶Χ�ƹ����ٷ� skill �ļ����޸ģ�����Ŀ��ʾ�ʺʹ���߽�ִ�С�
+
+- 2026-10-18：落实 ADR0087/spec075 的可执行部分：问数提示要求一次召回和有限重试；Harness 工具结果驱逐恢复默认 80000 字符，区分 Wren 自身 truncated 与上下文裁剪；旧 Wren 表格渲染先剥离 transport receipt。未宣称 AST 边界或真实性能已验收。
+- 2026-10-18：保存 ADR0087/spec075 实施检查点。已采用默认 80000 字符工具结果驱逐阈值和回执剥离解析，以避免普通 Wren 结果被 4000 字符平台阈值误报为历史截断；问数重复调用先用提示约束降低，不引入未经验证的结果缓存。
+- 2026-10-18 已接受并实施 ADR0089/spec076：轻量问题日期门禁复用原生消息，缺日期直接澄清，不改问题、不补默认、不保存独立日期继承状态；退出问数SQL正则门禁，不建设AST。基础建模不自动建视图，用户明确提出并确认结构后复用原生文件授权；历史视图不处理。同轮成功SQL复用且重查权限，非跨轮缓存。提示/门禁不等于确定性SQL保障。
+
+
+## 2026-10-19 checkpoint ? rollback lite skill and keep official modeling
+
+- ??????? `enrich-context-lite`?`deep-modeling-agent` ????????????? Agent ???????? `generate-mdl`?`enrich-context`?`usage`?`onboarding`?
+- ??????????????????/revision?????????????
+- `ModelingHitlMiddleware` ? `models/**`?`relationships.yml` ????????????????Cube/View??????????????????
+- ?? ADR0094/spec080??? `mvn spotless:check`?`mvn -DskipTests compile` ? HITL/ChatController ?????
+- ????????? Git??????????????????????
+
+## 2026-10-19｜已接受并实施：ADR0097 独立事实表 SQL 门禁
+
+事实表配置是独立数据库资产，不依赖MDL、建模或问数状态，知识库页面管理，保存后执行边界立即读取。SQL+登记逻辑名/时间字段/各自窗口交给LLM逐表检查，不做SQL AST或视图血缘，未登记/不限制/未匹配视图跳过。CLI/MCP共用，拒绝显示明细并阻止同轮重试，不改SQL或问题。用户明确授权删除冲突ADR，0091/0092/0095/0096合并至0097后删除；其它独立历史决定保留。物理SQL底层未发现公开钩子，本次不改Wren安装包。真实LLM验收仍待运行。
+
+## 2026-10-19｜ADR0098：采样后先确认事实窗口，再自动建模
+
+用户明确要求恢复采样后的事实表时间弹窗，维度不弹。配置资产独立于建模不意味着取消采样后确认步骤。复用既有采样字段说明LLM判断角色并保存DB，UNKNOWN不当FACT、行内确认；这是已说明的推荐默认，用户未回复角色方式选项。事实窗口保存成功后挂载并自动启动建模，关闭/失败暂停，旧配置复用。MANAGE在数据集锁前后复核。无MDL依赖、无新后台状态机，现有外部表范围不扩展。

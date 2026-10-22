@@ -80,16 +80,98 @@ public final class WrenProjectFilesystem implements AbstractFilesystem {
         }
     }
 
+    /**
+     * Returns a Chinese, line-precise YAML syntax error for .yml/.yaml content, or null. Broken
+     * YAML is rejected at write time instead of surfacing later as an official validate crash.
+     */
+    static String yamlError(String path, String content) {
+        String lower = path == null ? "" : path.toLowerCase(java.util.Locale.ROOT);
+        if (!(lower.endsWith(".yml") || lower.endsWith(".yaml")) || content == null) return null;
+        try {
+            for (Object ignored : new org.yaml.snakeyaml.Yaml().loadAll(content)) {
+                // Parsing every document is the check itself.
+            }
+            return null;
+        } catch (org.yaml.snakeyaml.error.MarkedYAMLException e) {
+            var mark = e.getProblemMark();
+            return "YAML 语法错误，未保存本次修改："
+                    + (mark == null
+                            ? ""
+                            : "第 " + (mark.getLine() + 1) + " 行第 " + (mark.getColumn() + 1) + " 列，")
+                    + e.getProblem()
+                    + "。多行描述请写成 `description: |` 块格式且每行缩进一致，[enum]/[null] 等标记行放在块内；修正后在原文件上重新提交。";
+        } catch (RuntimeException e) {
+            return "YAML 语法错误，未保存本次修改：" + e.getMessage();
+        }
+    }
+
+    static final String RULES_NEED_EVIDENCE =
+            "自动建模没有业务文档依据，不能写入业务规则（knowledge/rules/），未保存本次修改。确实需要用户决定、且会改变统计结果的口径，用"
+                    + " request_user_confirmation 向用户提问；其余不确定之处写入 knowledge/caveats/ 说明。";
+
+    /**
+     * ADR0111: with no confirmation card, inference must not become a business rule. Turns the
+     * page started as automatic modeling may write rules only when a business document exists.
+     */
+    private static String rulesGuard(RuntimeContext context, Project p, String relative) {
+        if (!relative.toLowerCase(java.util.Locale.ROOT).startsWith("knowledge/rules/"))
+            return null;
+        var purpose =
+                context == null
+                        ? null
+                        : context.get(io.agentscope.dataagent.dataset.ModelingTurnPurpose.class);
+        if (purpose == null || !purpose.auto()) return null;
+        return io.agentscope.dataagent.dataset.BusinessDocumentService.hasDocuments(p.root())
+                ? null
+                : RULES_NEED_EVIDENCE;
+    }
+
+    /** Annotates the draft diff with the turn's source and user (never blocks the write). */
+    private static void recordChange(RuntimeContext context, Project p, String relative) {
+        var purpose =
+                context == null
+                        ? null
+                        : context.get(io.agentscope.dataagent.dataset.ModelingTurnPurpose.class);
+        io.agentscope.dataagent.dataset.DraftChangeLog.record(
+                p.root(),
+                relative,
+                purpose == null
+                        ? io.agentscope.dataagent.dataset.ModelingTurnPurpose.CHAT
+                        : purpose.value(),
+                context == null ? p.ownerId() : context.getUserId());
+    }
+
     @Override
     public WriteResult write(RuntimeContext context, String path, String content) {
         try {
             Project p = access.resolve(context);
+            String invalid = yamlError(path, content);
+            if (invalid != null) return WriteResult.fail(invalid);
             return access.locked(
                     p,
                     () -> {
-                        WriteResult result =
-                                delegate(p).write(context, checked(p, path, true), content);
-                        if (result.isSuccess()) access.changed(p);
+                        String relative = checked(p, path, true);
+                        String refused = rulesGuard(context, p, relative);
+                        if (refused != null) return WriteResult.fail(refused);
+                        Path file = p.root().resolve(relative);
+                        WriteResult result;
+                        if (Files.isRegularFile(file)) {
+                            // Whole-file replacement of an existing project file: the native
+                            // tool refuses it, but the path, permission and YAML checks above
+                            // already apply and the review page shows the full diff (ADR0111).
+                            try {
+                                Files.writeString(file, content, StandardCharsets.UTF_8);
+                                result = WriteResult.ok(relative);
+                            } catch (java.io.IOException e) {
+                                result = WriteResult.fail("写入文件失败：" + e.getMessage());
+                            }
+                        } else {
+                            result = delegate(p).write(context, relative, content);
+                        }
+                        if (result.isSuccess()) {
+                            access.changed(p);
+                            recordChange(context, p, relative);
+                        }
                         return result;
                     });
         } catch (RuntimeException e) {
@@ -105,19 +187,42 @@ public final class WrenProjectFilesystem implements AbstractFilesystem {
             return access.locked(
                     p,
                     () -> {
+                        String relative = checked(p, path, true);
+                        String refused = rulesGuard(context, p, relative);
+                        if (refused != null) return EditResult.fail(refused);
+                        Path file = p.root().resolve(relative);
+                        String original = readQuietly(file);
                         EditResult result =
-                                delegate(p)
-                                        .edit(
-                                                context,
-                                                checked(p, path, true),
-                                                oldString,
-                                                newString,
-                                                all);
-                        if (result.isSuccess()) access.changed(p);
+                                delegate(p).edit(context, relative, oldString, newString, all);
+                        if (!result.isSuccess()) return result;
+                        String invalid = yamlError(relative, readQuietly(file));
+                        if (invalid != null) {
+                            // Restore the previous bytes so a broken edit never lands on disk.
+                            try {
+                                if (original != null)
+                                    Files.writeString(file, original, StandardCharsets.UTF_8);
+                            } catch (java.io.IOException restore) {
+                                return EditResult.fail(
+                                        invalid + "（恢复原文件失败：" + restore.getMessage() + "）");
+                            }
+                            return EditResult.fail(invalid);
+                        }
+                        access.changed(p);
+                        recordChange(context, p, relative);
                         return result;
                     });
         } catch (RuntimeException e) {
             return EditResult.fail(e.getMessage());
+        }
+    }
+
+    private static String readQuietly(Path file) {
+        try {
+            return Files.isRegularFile(file)
+                    ? Files.readString(file, StandardCharsets.UTF_8)
+                    : null;
+        } catch (java.io.IOException e) {
+            return null;
         }
     }
 
@@ -206,8 +311,10 @@ public final class WrenProjectFilesystem implements AbstractFilesystem {
                                         : "";
                         String next;
                         if (name.equals("write_file")) {
-                            if (Files.exists(file))
-                                throw new IllegalArgumentException("文件已存在，请使用 edit_file 修改");
+                            // Existing files are replaced as a whole; the preview diff shows old
+                            // and new content for approval.
+                            if (Files.isDirectory(file))
+                                throw new IllegalArgumentException("目标是目录，不能写入文件");
                             if (!(input.get("content") instanceof String content))
                                 throw new IllegalArgumentException("缺少文件内容");
                             next = content;
@@ -238,6 +345,10 @@ public final class WrenProjectFilesystem implements AbstractFilesystem {
                         } else
                             throw new IllegalArgumentException(
                                     "只支持通用 write_file / edit_file / delete_file");
+                        if (!name.equals("delete_file")) {
+                            String invalid = yamlError(path, next);
+                            if (invalid != null) throw new IllegalArgumentException(invalid);
+                        }
                         return new ModelingToolkit.PreviewResult(true, null, old, next);
                     } catch (Exception e) {
                         return new ModelingToolkit.PreviewResult(false, e.getMessage(), "", "");
@@ -270,8 +381,14 @@ public final class WrenProjectFilesystem implements AbstractFilesystem {
                                         return WriteResult.fail("只允许删除文件或空目录");
                                 }
                             }
-                            WriteResult result = delegate(p).delete(c, checked(p, path, true));
-                            if (result.isSuccess()) access.changed(p);
+                            String relative = checked(p, path, true);
+                            String refused = rulesGuard(c, p, relative);
+                            if (refused != null) return WriteResult.fail(refused);
+                            WriteResult result = delegate(p).delete(c, relative);
+                            if (result.isSuccess()) {
+                                access.changed(p);
+                                recordChange(c, p, relative);
+                            }
                             return result;
                         } catch (java.io.IOException e) {
                             return WriteResult.fail(e.getMessage());
@@ -284,7 +401,7 @@ public final class WrenProjectFilesystem implements AbstractFilesystem {
 
     @io.agentscope.core.tool.Tool(
             name = "delete_file",
-            description = "撤回当前授权草稿工程的文件或空目录，适用于官方检查失败后的修正；不能删除平台文件或递归删除目录，需写权限确认。")
+            description = "撤回当前授权草稿工程的文件或空目录，适用于官方检查失败后的修正；不能删除平台文件或递归删除目录。修改进入草稿，由用户发布前统一审阅。")
     public String deleteFile(
             RuntimeContext context,
             @io.agentscope.core.tool.ToolParam(name = "path", description = "当前工程相对文件或空目录路径")

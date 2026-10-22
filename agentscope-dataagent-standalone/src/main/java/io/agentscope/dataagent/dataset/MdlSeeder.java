@@ -171,6 +171,13 @@ public class MdlSeeder {
                 String dir =
                         uniqueDir(usedDirs, MdlPublishService.sanitizeIdentifier(d.getName(), 60));
                 writeSeedModel(groupId, dir, d, cols, typeByRaw);
+                ModelTemporalMetadata.enrich(
+                        workspace
+                                .workspaceRoot(groupId)
+                                .resolve("models")
+                                .resolve(dir)
+                                .resolve("metadata.yml"),
+                        d.getSampleSummaryJson());
                 mapping.put(d.getId(), dir);
                 mappingChanged = true;
                 changed = true;
@@ -178,6 +185,9 @@ public class MdlSeeder {
             }
             SeedResult existing =
                     reconcileExistingModel(groupId, modelDirName, modelFile, d, cols, typeByRaw);
+            if (!existing.hasErrors()) {
+                changed |= ModelTemporalMetadata.enrich(modelFile, d.getSampleSummaryJson());
+            }
             issues.addAll(existing.issues());
             changed |= existing.changed();
         }

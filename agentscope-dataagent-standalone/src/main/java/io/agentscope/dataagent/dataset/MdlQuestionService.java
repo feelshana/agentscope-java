@@ -11,16 +11,40 @@ public class MdlQuestionService {
     private final MdlQuestionStore store;
     private final MdlPublishService publisher;
     private final WrenQueryGateway gateway;
+    private final FactQueryWindowPolicy windowPolicy;
+    private final QuestionSuggestionService suggestions;
 
     public MdlQuestionService(
             DatasetGroupService groups,
             MdlQuestionStore store,
             MdlPublishService publisher,
             WrenQueryGateway gateway) {
+        this(groups, store, publisher, gateway, null, null);
+    }
+
+    public MdlQuestionService(
+            DatasetGroupService groups,
+            MdlQuestionStore store,
+            MdlPublishService publisher,
+            WrenQueryGateway gateway,
+            FactQueryWindowPolicy windowPolicy) {
+        this(groups, store, publisher, gateway, windowPolicy, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public MdlQuestionService(
+            DatasetGroupService groups,
+            MdlQuestionStore store,
+            MdlPublishService publisher,
+            WrenQueryGateway gateway,
+            FactQueryWindowPolicy windowPolicy,
+            QuestionSuggestionService suggestions) {
         this.groups = groups;
         this.store = store;
         this.publisher = publisher;
         this.gateway = gateway;
+        this.windowPolicy = windowPolicy;
+        this.suggestions = suggestions;
     }
 
     private void requireScope(DatasetScope scope, String groupId) {
@@ -39,7 +63,32 @@ public class MdlQuestionService {
 
     public MdlQuestionStore.Review validate(DatasetScope scope, String groupId, String questionId) {
         requireScope(scope, groupId);
+        requireWindow(scope, groupId, questionId, "question validate");
         return publisher.validateQuestion(groupId, questionId, gateway);
+    }
+
+    /** Same per-table time window as every other SQL execution path (spec090/091). */
+    private void requireWindow(
+            DatasetScope scope, String groupId, String questionId, String operation) {
+        if (windowPolicy == null) return;
+        String sql = store.requireQuestion(groupId, questionId).sql();
+        if (sql != null && !sql.isBlank())
+            windowPolicy.requireAllowed(
+                    io.agentscope.core.agent.RuntimeContext.builder()
+                            .userId(scope.ownerId())
+                            .build(),
+                    groupId,
+                    sql,
+                    operation);
+    }
+
+    /** Suggested question texts for the post-modeling dialog; empty when unavailable. */
+    public List<String> suggestions(DatasetScope scope, String groupId) {
+        requireScope(scope, groupId);
+        if (suggestions == null) return List.of();
+        List<String> existing =
+                store.list(groupId).stream().map(r -> r.question().question()).toList();
+        return suggestions.suggest(groupId, existing);
     }
 
     public String revision(DatasetScope scope, String groupId, String questionId) {
@@ -62,14 +111,11 @@ public class MdlQuestionService {
     }
 
     public MdlQuestionStore.Review decide(
-            DatasetScope scope,
-            String groupId,
-            String questionId,
-            String validationId,
-            boolean accepted) {
+            DatasetScope scope, String groupId, String questionId, boolean accepted) {
         requireScope(scope, groupId);
+        if (accepted) requireWindow(scope, groupId, questionId, "question confirm");
         MdlQuestionStore.Review result =
-                store.decide(groupId, questionId, validationId, accepted, scope.ownerId());
+                store.decide(groupId, questionId, accepted, scope.ownerId());
         groups.markMdlDirty(scope.ownerId(), groupId);
         return result;
     }

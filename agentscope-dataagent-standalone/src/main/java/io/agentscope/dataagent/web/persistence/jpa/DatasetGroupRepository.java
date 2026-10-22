@@ -25,6 +25,20 @@ import org.springframework.transaction.annotation.Transactional;
 /** Spring Data repository for {@link DatasetGroupEntity}. */
 public interface DatasetGroupRepository extends JpaRepository<DatasetGroupEntity, String> {
 
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Transactional
+    @Query(
+            "update DatasetGroupEntity g set g.modelingRevision = coalesce(g.modelingRevision, 0) +"
+                    + " 1, g.mdlState = 'DIRTY' where g.id = :id")
+    void requireModeling(String id);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Transactional
+    @Query(
+            "update DatasetGroupEntity g set g.publishedModelingRevision = :revision where g.id ="
+                    + " :id and coalesce(g.publishedModelingRevision, 0) <= :revision")
+    void coverModelingRevision(String id, long revision);
+
     @Query(
             """
             select g from DatasetGroupEntity g

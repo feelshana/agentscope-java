@@ -1,5 +1,13 @@
 # 交接历史
 
+## 2026-10-17｜Checkpoint：原生工具展示与日志效率优化
+
+新增ADR0087/spec075及日志报告；修复原生回执假截断/中文标签、空选库Reactive空完成；清理建模Cube提示冲突、集中校验；补分段耗时及单次MDL读取。前端4项回归及build通过。全量647项首次3项旧Cube测试失败，已对齐0085并重跑；测试日志target/spec075-tests.log。未重启、提交或改线上数据；AST/profile/最终答案证据等仍待续。
+
+## 2026-10-16｜Checkpoint：Wren架构审查
+
+完成当前代码、安装版usage、历史验收与用户日志的架构核对；报告docs/test-reports/20261016-wren-architecture-review.md。识别通用Map二次封装、提示依赖、业务验收和答案来源薄弱点；建议受控对照后再确定重构。未改业务代码、模型、数据库或重启服务，未新跑测试；文档diffcheck通过。在线官方文档网络失败，不宣称最新官方能力。CURRENT_TASK已更新，旧任务保留。
+
 ## 2026-10-14 22:56 +08:00｜checkpoint｜官方 SQL 契约对齐
 
 - 日志分析确认 Docker 导致的 run_python 恢复错误与 Wren 无关；建模流程除一次已正确修复的 write_file 预检外均成功。
@@ -116,7 +124,7 @@
 
 ## 2026-10-12 07:22 +08:00 — ADR 0070 / spec 059 实施 checkpoint
 
-- 已新增 `docs/adr/0070-official-mcp-query-receipts-and-autopilot-confirmation.md` 与 `docs/specs/059-official-mcp-query-receipts-and-feedback.md`。
+- 已新增 `docs/adr/0070-official-mcp-query-receipts-and-autopilot-confirmation.md` 与 `docs/specs/done/059-official-mcp-query-receipts-and-feedback.md`。
 - `WrenMcpToolkit` 现在接受平台侧可选 `answer_question/query_type` 元数据；兼容模型把元数据嵌入 `arguments` 的现有调用，并在转发官方 Wren MCP 前剥离；成功 `run_sql/query_cube` 生成 `[WREN_QUERY_RECEIPT]`，记录 group/question/sql/limit/queryType。
 - `AnswerQueryMemory` 反馈候选支持嵌套 question，且仅接受 receipt 标记为 BUSINESS 的中文业务问题；继续通过官方 Wren CLI memory store，未做历史迁移，也未实现撤回处理。反馈、候选、CLI store 均有日志。
 - 新增嵌套元数据与诊断类型排除回归测试。验证：`mvn.cmd '-Dskip.npm=true' '-Dskip.installnodenpm=true' spotless:apply` 成功；`WrenMcpToolkitTest`、`AnswerQueryMemoryTest` 共 6 项测试通过。
@@ -163,7 +171,7 @@
 - 未重启在线服务、未实测LLM调用次数变化；向量召回/P6/P7继续待续。保留其他会话修改，无Git提交。下一步后端重启后新会话验收。
 
 ## 2026-10-12 18:xx +08:00 — 相似问题召回分析 checkpoint
-- 核对 `logs/LLM-modeling.log`：建模阶段显式调用三次官方 `wren memory store --tags source:enrich`，生成 `knowledge/sql/query.md`、`query-2.md`、`query-3.md`，内容分别是有效订单总营收、付费客户数、月度有效营收示例；随后执行 `memory index`。
+- 核对 `../../logs/archive-20261020/LLM-modeling.log`：建模阶段显式调用三次官方 `wren memory store --tags source:enrich`，生成 `knowledge/sql/query.md`、`query-2.md`、`query-3.md`，内容分别是有效订单总营收、付费客户数、月度有效营收示例；随后执行 `memory index`。
 - 建模阶段曾验证 `memory recall`，CLI 明确返回 `grep backend: 3 pair(s)`，不是向量后端；当前问数 `LLM.log` 没有调用 `recall_queries`，而是 `list_knowledge` 后逐个 `wren_read_knowledge` 三个 SQL 文件。
 - 结论状态：已完成日志分析，未修改业务代码；后续待讨论/实施的是问数每个新问题改为一次官方 `recall_queries`，并按 Wren 实际后端决定是否启用向量索引。历史示例按用户要求暂不处理。
 - 验证：本次仅读取日志与共享记忆并检查 Git 状态；未运行测试、未重启服务、未提交 Git。
@@ -214,7 +222,7 @@
 
 
 ## 2026-10-13 19:05 +08:00 — 问数工具链与多会话日志评估 checkpoint
-- 用户澄清：`logs/LLM.log` 中的 6 个问题分别来自 6 个新对话，不能把跨块调用当作同一会话的上下文复用。
+- 用户澄清：`../../logs/archive-20261020/LLM.log` 中的 6 个问题分别来自 6 个新对话，不能把跨块调用当作同一会话的上下文复用。
 - 证据：每个问题块均出现官方 usage 首次查询指引；语义查询实际均通过 `wren_call_tool` 转发至 Wren MCP 的 `recall_queries`、`run_sql`/`query_cube` 等官方工具。
 - 现状差距：`DataToolkitRegistrar` 仍同时注册 `DataAgentToolkit`、`WrenMcpToolkit`（官方 MCP 适配）和旧 `WrenToolkit`；`DataDynamicContextMiddleware` 仍注入 `wren_run_sql`/`wren_recall_examples` 等旧工具名，造成工具面和提示词竞争。`retrieve_evidence`、`wren_read_knowledge` 是平台自定义工具；`run_python`/`render_chart` 属于结果分析/展示，不是语义查询。
 - 日志现象：新会话的重复发现、技能加载和知识读取部分由官方 usage 的首次查询流程触发；额外冗余来自旧提示词/自定义知识读取。一次 `wren_call_tool` 曾因缺少 `arguments` 参数失败。部分官方 `run_sql` SQL 仍带显式 `LIMIT`，与项目 Wren 0.15.0 连接器兼容约束不一致。
@@ -299,3 +307,94 @@
 - 完成外部LIMIT1000内存采样、持久摘要、未知总行数、MANAGE刷新、官方raw/rules资料与建模限长上下文；ADR0080/spec068、README/架构/迁移和验收脚本已同步。
 - 本轮后端621项0失败/错误18跳过，真实CLI/MCP2项通过，前端build、浏览器采样3场景、Spotless、diffcheck、package通过。报告和代码入口见CURRENT_TASK。
 - 未提交、未重启服务、未对业务库执行迁移或大表压测。按DDL模式补列并加载制品后，旧外部表可手动刷新与发布；真实LLM少探查效果及此前Docker/并发验收待续。
+
+## 2026-10-16 17:50 +08:00｜官方 MCP 原生工具接入 checkpoint
+
+- 完成调用作用域 Toolkit、WrenScopedMcpClient 和 AgentScope Core 作用域解析；移除共享 DataToolkitRegistrar 的 WrenMcpToolkit 注册。
+- 验证 core install、standalone compile、mvn test（638/0/18）、新增5项原生 MCP 测试及前端构建均通过。
+- 待真实服务重启后的工具列表/问数验收；多知识库直接官方工具的命名方案尚需后续设计。
+
+- 原生工具结果回执与点赞保存链路已补齐；AnswerQueryMemory/WrenScopedMcpClient 相关13项测试通过。
+
+## 2026-10-17 12:12 +08:00｜采样上下文收敛 checkpoint
+
+- 取消完整采样写入 knowledge/rules 和建模 prompt 注入；保留 raw 摘要用于审计/刷新，初始采样继续进入 MDL 列 description。
+- 新增 ADR0082/spec070；DatasetSamplingTest、WrenSamplingContextTest 共5项通过。
+
+## 2026-10-17 12:21 +08:00｜采样注入移除完成 checkpoint
+
+- 完成 ADR0082/spec070：采样继续进入初始 MDL 列 description；DatasetSampleDocuments 不再生成完整 knowledge/rules/data-sampling.md，同步会删除旧自动文件，建模 prompt 不再注入 raw 采样正文。
+- 全量 mvn test 638项0失败18跳过；专项采样/上下文5项及提示词相关25项通过；前端构建、Spotless通过。服务未重启，未提交 Git。
+
+## 2026-10-17 12:25 +08:00｜取消采样 Markdown 文件
+
+- 用户进一步要求不写 raw/data-samples.md；已改为只清理旧采样 Markdown，保留数据库结构化摘要。专项测试待重跑。
+
+- 2026-10-17�����ʱ���ֶβ�ѯ�߽�� ADR/spec��QueryBoundary ��������ؼ���Ԫ���ԣ�Maven �������������δ��ʱ���أ����������顣
+
+- 2026-10-17���������뽨ģ�ݸ� models YAML ��ʱ���ֶ���ȡ��OfficialWrenToolkit ������ MCP ���� QueryBoundary��DISTINCT+LIMIT/TOP ���������������ء�Maven ���������δ���ؽ����
+
+- 2026-10-17��shared-memory checkpoint������ ADR/spec 0083-0086��071-074 �� QueryBoundary/OfficialWrenToolkit/WrenScopedMcpClient �ĵ�ǰ״̬���Ѽ�¼�������ܱ߽�Ҫ�󣻲������������Դ���֤��δ�ύ Git��
+
+- 2026-10-18 checkpoint：完成 Wren 查询结果解析和问数效率提示改造；前端 build 通过，Maven compile 生成制品但需重跑并保存完整测试日志；未提交、未重启服务。
+- 2026-10-18 verification：Maven targeted 26 tests and frontend Wren presentation 4 tests passed; compile/package-side frontend build passed. No service restart or Git commit.
+- 2026-10-18 00:18 +08:00｜checkpoint｜shared-memory 保存：记录效率优化代码、26 项后端定向测试、4 项前端解析测试及 build/compile 结果；遗留 AST、真实服务复测、全量验证和 Git 提交。
+- 2026-10-18（Asia/Shanghai）checkpoint：ADR0089/spec076轻量实现完成；全量657项0失败0错误18跳过，Spotless和Maven前端构建通过。缺日期原生澄清、延迟MCP、有限采样日期属性、显式视图提示和逐步耗时已接通。保留历史视图与既有工作区修改；服务未重启、Git未提交。下一步加载制品后真实同题验收。
+
+- 2026-10-18 verification: mvn package -DskipTests passed, including frontend npm run build; artifacts produced. Log: target/spec076-package.log. No service restart or Git commit.
+
+- 2026-10-18 10:38 +08:00｜checkpoint｜Codex 按用户要求执行 shared-memory 保存：核对分支、Git差异和上一阶段测试/打包日志；657项0失败0错误18跳过，package及内置前端构建成功。本次未重跑测试，仅补充交接入口、状态及验收顺序。ADR0089轻量方案已实施，服务尚未由本助手重启、未提交Git；下一步加载制品后验证日期澄清/补充、显式视图和逐步耗时。
+
+
+## 2026-10-19 checkpoint ? rollback lite skill and keep official modeling
+
+- ??????? `enrich-context-lite`?`deep-modeling-agent` ????????????? Agent ???????? `generate-mdl`?`enrich-context`?`usage`?`onboarding`?
+- ??????????????????/revision?????????????
+- `ModelingHitlMiddleware` ? `models/**`?`relationships.yml` ????????????????Cube/View??????????????????
+- ?? ADR0094/spec080??? `mvn spotless:check`?`mvn -DskipTests compile` ? HITL/ChatController ?????
+- ????????? Git??????????????????????
+
+- 2026-10-19 19:01 +08:00｜checkpoint｜完成ADR0097/spec083：独立数据库事实表配置，知识库页面管理，不依赖MDL/建模/发布；CLI/MCP共用LLM逐表SQL门禁与同轮拒绝停止；删除合并0091/0092/0095/0096，文档引用迁移。全量673项0失败0错误18跳过，package（含前端build）和Spotless通过。JUnit默认临时目录AccessDenied，通过验证进程JAVA_TOOL_OPTIONS指向工作区临时目录解决，未改全局环境。未重启/提交/改线上数据，真实LLM准确率及延迟待加载制品后验收；Wren底层无公开物理SQL钩子，本次未改安装包。
+
+- 2026-10-19（Asia/Shanghai）｜checkpoint｜ADR0098/spec084完成：采样现有模型调用一并识别FACT/DIMENSION/UNKNOWN并存数据库；仅待配置FACT弹时间窗口，DIMENSION跳过、UNKNOWN行内确认，保存后自动启动建模，失败/关闭暂停，旧配置不重复弹。角色和窗口写入在dataset锁前后复核MANAGE；建模上下文读取独立DB策略。最终全量682项0失败0错误18跳过、前端8项回归通过、Spotless/package（含前端build）通过。新摘要字段使用原JSON列，不需新增DB列。未重启/提交/改线上数据，真实LLM和浏览器流程待验收；角色判定采用已说明推荐默认，未记作用户明确选项回复。
+
+- 2026-10-20（Asia/Shanghai）｜日志复核checkpoint｜确认3次真实日期门禁ALLOWED（建模696/501ms，问数733ms）；全年问题仅主Agent预判无SQL，一月查询经过门禁，未验证DENIED。发现31天策略被写入MDL、修改配置指引错误、逐月拼全年建议矛盾、自选样例日期、有效订单/内部账号过滤遗漏及只读cube list误拦截。只写报告和共享记忆，未改业务代码/配置/MDL/服务、未执行SQL或新测试。报告见20261020-wren-runtime-date-gate-review.md。
+
+- 2026-10-20（Asia/Shanghai）｜checkpoint｜ADR0099/spec085实施：动态窗口不落MDL、允许建模自选样例日期、已确认业务过滤提示、CLI/MCP独立门禁日志。真实LLM+实际适配器18项通过，10拒绝执行端0调用，16模型判定中位952ms；模拟执行端，非真实DB端到端。最终全量686项0失败0错误19跳过；Spotless/package通过，含npm run build（target/spec085-package.log）。未重启/发布/提交，下一步加载新制品复测实际日志。
+
+- 2026-10-20（Asia/Shanghai）｜日志分析checkpoint｜最新实际服务出现365>90天DENIED（857ms），停止重试，配置31→90无需发布，动态天数未落MDL。发现企业样例缺customer_type=2、推断规则正式化、维度时间建议泛化、Q4实际92天却作90天示例；首轮22.358秒主要首次召回准备，第二轮6.978秒。仅分析/报告/记忆，未修改业务代码或执行查询。报告20261020-latest-modeling-query-review.md。
+
+- 2026-10-20（Asia/Shanghai）｜checkpoint｜ADR0100/spec086问数准备优化实施：发布提交后异步索引、同库合并与指纹复用、实例级工程说明缓存且权限复核、索引/MCP细分计时。全量692项0失败0错误19跳过；Spotless/package通过，包含npm run build（target/spec086-package.log）。未重启/发布/提交，实际提速待加载后同题验证，语义样例问题仍待续。
+
+- 2026-10-20（Asia/Shanghai）｜第一阶段checkpoint｜ADR0101/spec087：实际池内MCP只读召回预热、明确成功输出省status、发布页权限隔离状态。真实隔离工程预热后召回47ms，10并发31–275ms；进程重建预热后67ms。最终698项0失败0错误19跳过，Spotless/package/前端build成功。未重启当前服务/发布/提交；候选原子切换及增量同步未实现，不能混记完成。
+
+- 2026-10-20（Asia/Shanghai）｜checkpoint｜编译错误未复现：Maven clean test package完整重编译/前端build/Spotless/698项测试及IDE build_project均成功（仅deprecated警告），用户具体错误待提供。发布提示简化为点击发布成功后出现、完成2.5秒隐藏、未完成首次提问重试，不增加阶段/操作。日志target/compile-repair-full.log；clean已清除旧target临时验证产物，历史数据见正式报告。未重启/提交。
+
+- 2026-10-20（Asia/Shanghai）｜修复checkpoint｜用户堆栈定位MdlPublishService两个必选Autowired构造器，合并唯一完整注入入口保留权限/删除保护/事件；真实Spring单Bean装配测试先复现再通过。最终699项0失败0错误19跳过、Spotless/package/前端build及IDE指定构建通过，日志target/mdl-wiring-package.log。新exec.jar已生成，未重启/提交，需加载重启验证完整服务。
+
+- 2026-10-20（Asia/Shanghai）｜日志分析checkpoint｜确认默认memory index被当store审批，前端缺参取memory且标题重复；建议--no-seed自动维护与命令分类，未改代码。真实预热后召回7–9ms、月问数4.243/4.760秒。发现规则冲突、分段全年建议、样例超窗兜底确认及正式样例缺失等。仅报告/记忆，详见20261020-modeling-index-confirmation-review.md。
+
+- 2026-10-20（Asia/Shanghai）｜ADR0102/spec088 checkpoint｜通用日期先询问、当前时间上下文、建模样例与空结果/拒绝提示已实现，保留原停止机制。705项0失败0错误20跳过、Spotless/前端/打包通过；真实模型3业务12轮受控验收通过，非实际业务服务端到端。已修空表测试夹具，保留早期失败；真实联表门禁漏检和矛盾输出未修。完整矩阵见20261020-query-date-priority-validation报告，新exec.jar待加载；未重启/发布/修改业务DB/提交。
+
+- 2026-10-20（Asia/Shanghai）｜实施checkpoint｜ADR0103/spec089：上传表不加门禁且允许官方探查、外部表禁止探查（运行时逐表列出）；门禁结论按逐表明细重算；--tags source:enrich、挂载时关闭CLI skills、未知选项列出可用项、检查前移出工程锁、memory store先过门禁、确认卡区分store/index、关系基数与年份不提问规则。714项0失败20跳过，package与前端build成功。未重启/未真实验收/未提交。
+
+- 2026-10-20（Asia/Shanghai）｜实施checkpoint｜上传库实测确认ADR0103多数生效；发现探查过多、write_file覆盖失败、编译前查询、唯一性过保守与问数手工汇总算错。ADR0104收窄上传表探查为时间范围与关系验证两类，全表验证唯一可MANY_TO_ONE，统计必须来自SQL。714项0失败20跳过，package/前端build成功。未重启/未提交，外部数据源库待测。
+
+- 2026-10-20（Asia/Shanghai）｜实施checkpoint｜上传库复测确认ADR0104生效；ADR0105注入编译状态、说明-o json时间戳、问数排名只按主体分组。714项0失败20跳过，package/前端build成功。Docker诊断为backend到VM 192.168.65.7 no route to host，疑Mihomo TUN劫持，待用户处理。未重启/未提交。
+
+- 2026-10-20（Asia/Shanghai）｜实施checkpoint｜ADR0106/0107：建模query单轮上限10、禁CROSS JOIN与逗号隐式连接、cube_proposals不加载、超时先杀子进程、cubes/views不读不写、自动建模消息引用运行上下文。718项0失败20跳过，前端build/package成功。未重启/未提交；问数侧Cube/View待定。
+
+- 2026-10-20（Asia/Shanghai）｜实施checkpoint｜ADR0108：YAML写入语法检查、models只写metadata.yml/ref_sql.sql、问数年份规则提级、wren_cli分段计时。720项0失败20跳过，前端build/package成功。另给出架构评审：问数保留Wren，建模问题源于官方技能驱动Agent与平台约束冲突及手写YAML；建议停止自动生成问答、改为用户填写问题逐题确认，基础建模确定性化待用户决定。未重启/未提交。
+
+- 2026-10-20（Asia/Shanghai）｜实施checkpoint｜spec090/ADR0109：建模不生成问答、自动建模后弹窗填写最多5题、Agent写knowledge/questions、用户逐题确认后平台写knowledge/sql（source:user-confirmed）、发布后可召回；问题验证加时间门禁与笛卡尔积检查并允许LIMIT。722项0失败20跳过，前端build成功，package收尾中。未重启/未提交。
+
+- 2026-10-21（Asia/Shanghai）｜实施checkpoint｜ADR0110：自动补编译、允许整文件替换、日期优先规则按受限表条件注入；724项0失败20跳过。文档重组：AGENTS重写+CLAUDE.md、ARCHITECTURE第14章合并、ADR/spec索引、spec001–089移入done、guides/reference/samples/archive目录、链接机械更新、PROJECT_CONTEXT与CURRENT_TASK精简并存档旧版。未重启/未提交。
+
+- 2026-10-21（Asia/Shanghai）｜实施checkpoint｜可持续开发机制：AGENTS 工作流与判断表（默认不写）、ADR 模板、doc-maintenance Skill、DocsConsistencyTest（规模/索引/取代/spec/链接）、第14章结构化、历史小节归档。729项0失败20跳过，前端build/package成功。未提交。
+
+- 2026-10-22（Asia/Shanghai）｜实施checkpoint｜spec092 §7：建模页改为对话为中心（AI 建模结果逐条编辑/删除、对话内"需要你确定的部分"、试问推荐3题并过时间门禁、答对写knowledge/sql、底部草稿栏一次发布、开始前提示上传文档）；新增DraftItemService与/modeling/draft/items；日期识别兼容不补零与无分隔符；删除旧审阅页组件。未提交。
+- 2026-10-22（Asia/Shanghai）｜实施checkpoint｜13:50 建模日志：确认工具因多余"其他"选项失败两次且失败计数导致一题未问、外部表零关系、门禁先于外部表拒绝、不补零文本时间按字符串比较。已修复并按用户确认的原型细化建模页。未提交。
+- 2026-10-22（Asia/Shanghai）｜实施checkpoint｜16:00 日志：问数 STR_TO_DATE 后 >= 正确；试问用 LIKE（上一轮提示词所致）且门禁对同一 SQL 先放行后拒绝；同一关系问题重复；"访问次数=行数"无文档依据写入规则；确认后不滚动、无下一步引导。已按用户确认方案修复（平台给出时间条件写法，不用 LIKE）。未提交。
+- 2026-10-22（Asia/Shanghai）｜实施checkpoint｜16:38 日志：访问次数口径与关系已改为提问，问数用 STR_TO_DATE 与 SUM(visit_count)，确认正确命中门禁复用；问题 SQL 因 MAX(project_name) 被外部表极值规则误拒两次，已改为只限制时间列极值。推荐问题改简单、试问打开时才生成，"设为示例"改为"确认正确"。未提交。
+- 2026-10-22（Asia/Shanghai）｜实施checkpoint｜17:05 新库测试：自动建模未运行（切换标签丢失 start=1，只跑了文档更新），已改为记住开始意图；推荐问题出现"各项目的项目数量"，提示词要求围绕事实表度量；问数按报表过滤、STR_TO_DATE、SUM 正确；门禁 CACHE_HIT 生效。"已设为示例"为旧页面缓存，需刷新。未提交。
+- 2026-10-22（Asia/Shanghai）｜实施checkpoint｜17:21 重建测试：自动建模正常运行，规则依据真实，三个口径问题合理，推荐问题简单，问数遵循用户确认口径；但三个问题名额全用于口径、外部表零关系，已给关系问题单独名额；dry-plan 不再调用门禁模型。未提交。

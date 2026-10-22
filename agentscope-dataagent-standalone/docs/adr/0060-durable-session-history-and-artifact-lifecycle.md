@@ -29,7 +29,7 @@
 
 ## 关联及替代关系
 
-- [spec 052](../specs/052-durable-session-history-and-artifacts.md)：接口、配置和验收。
-- [部署说明](../session-history-and-artifacts.md)、[迁移 SQL](../migrations/20261008-session-history-artifacts.sql)。
+- [spec 052](../specs/done/052-durable-session-history-and-artifacts.md)：接口、配置和验收。
+- [部署说明](../reference/session-history-and-artifacts.md)、[迁移 SQL](../migrations/20261008-session-history-artifacts.sql)。
 - 部分替代 ADR 0047 / spec 038 的镜像级清理、supplier 生命周期示例及旧兼容性描述；保留按用户懒加载方向。
 - 部分替代 ADR 0030 / spec 016 的立即沙箱上传方式，保留文件交接原则。

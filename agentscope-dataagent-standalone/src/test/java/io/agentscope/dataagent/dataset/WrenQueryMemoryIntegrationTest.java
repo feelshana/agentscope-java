@@ -76,6 +76,8 @@ class WrenQueryMemoryIntegrationTest {
                 "source:enrich");
         Path published = props.groupRoot("g").resolve("published");
         DatasetSampleDocuments.sync(draft, List.of());
+        Files.createDirectories(draft.resolve("knowledge/rules"));
+        Files.writeString(draft.resolve("knowledge/rules/sampling.md"), "不为补齐枚举探查全表；不能用样本代替准确统计。");
         try (var paths = Files.walk(draft)) {
             for (Path file : paths.filter(Files::isRegularFile).toList()) {
                 Path relative = draft.relativize(file);
@@ -108,6 +110,15 @@ class WrenQueryMemoryIntegrationTest {
             String instructions =
                     toolkit.callTool(context, "g", "get_instructions", Map.of(), null);
             assertThat(instructions).contains("不为补齐枚举", "不能用样本代替");
+            java.util.Map<String, Object> timings = new java.util.LinkedHashMap<>();
+            long indexStart = System.nanoTime();
+            projects.indexed("alice", "g");
+            timings.put("indexMs", (System.nanoTime() - indexStart) / 1_000_000);
+            long warmStart = System.nanoTime();
+            registry.warmRecall("g", () -> groups.queryGroup("alice", "g"));
+            timings.put("warmRecallMs", (System.nanoTime() - warmStart) / 1_000_000);
+            assertThat(registry.recallWarm("g")).isTrue();
+            long firstStart = System.nanoTime();
             String recalled =
                     toolkit.callTool(
                             context,
@@ -116,6 +127,34 @@ class WrenQueryMemoryIntegrationTest {
                             Map.of("question", "一年的营业收入合计是多少"),
                             null);
             assertThat(recalled).contains(modelingQuestion, modelingSql).doesNotContain("未发布的秘密问题");
+            timings.put("firstUserRecallMs", (System.nanoTime() - firstStart) / 1_000_000);
+            var workers = java.util.concurrent.Executors.newFixedThreadPool(10);
+            try {
+                java.util.List<java.util.concurrent.Future<Long>> pending =
+                        new java.util.ArrayList<>();
+                for (int i = 0; i < 10; i++)
+                    pending.add(
+                            workers.submit(
+                                    () -> {
+                                        long started = System.nanoTime();
+                                        var call =
+                                                registry.callAuthorized(
+                                                        "g",
+                                                        "recall_queries",
+                                                        Map.of("question", "营收和订单数量", "limit", 3),
+                                                        () -> groups.queryGroup("alice", "g"));
+                                        assertThat(call.ok()).isTrue();
+                                        assertThat(call.payload()).doesNotContain("未发布的秘密问题");
+                                        return (System.nanoTime() - started) / 1_000_000;
+                                    }));
+                java.util.List<Long> durations = new java.util.ArrayList<>();
+                for (var future : pending)
+                    durations.add(future.get(120, java.util.concurrent.TimeUnit.SECONDS));
+                timings.put("tenConcurrentRecallMs", durations);
+            } finally {
+                workers.shutdownNow();
+            }
+
             String result =
                     toolkit.callTool(
                             context, "g", "run_sql", Map.of("sql", likedSql), likedQuestion);
@@ -154,6 +193,13 @@ class WrenQueryMemoryIntegrationTest {
             assertThat(Files.readString(runtime.resolve("knowledge/sql/liked-query.md")))
                     .contains(likedQuestion);
             registry.invalidate("g");
+            assertThat(registry.recallWarm("g")).isFalse();
+            long restartWarmStart = System.nanoTime();
+            registry.warmRecall("g", () -> groups.queryGroup("alice", "g"));
+            timings.put(
+                    "recycledInstanceWarmMs", (System.nanoTime() - restartWarmStart) / 1_000_000);
+            long afterRecycleStart = System.nanoTime();
+
             String both =
                     toolkit.callTool(
                             context,
@@ -165,6 +211,12 @@ class WrenQueryMemoryIntegrationTest {
                     .contains(modelingQuestion, modelingSql, likedQuestion, likedSql)
                     .doesNotContain("未发布的秘密问题");
             assertThat(json.readTree(both).path("matches").size()).isEqualTo(2);
+            timings.put(
+                    "afterRecycleRecallMs", (System.nanoTime() - afterRecycleStart) / 1_000_000);
+            Files.writeString(
+                    Path.of("target/spec087-recall-timings.json"),
+                    json.writerWithDefaultPrettyPrinter().writeValueAsString(timings));
+
             assertThatThrownBy(() -> projects.indexed("bob", "g"))
                     .isInstanceOf(DatasetException.class);
             assertThat(

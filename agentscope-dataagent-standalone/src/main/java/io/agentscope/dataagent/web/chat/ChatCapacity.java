@@ -35,6 +35,9 @@ import reactor.core.scheduler.Schedulers;
 /** Process-local question budget. Queued requests do not occupy a worker or a sandbox. */
 @Component
 public final class ChatCapacity {
+    private static final org.slf4j.Logger LOG =
+            org.slf4j.LoggerFactory.getLogger("EXECUTION_TIMING");
+
     public static final class BusyException extends IllegalStateException {
         BusyException(String message) {
             super(message);

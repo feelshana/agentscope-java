@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import Icon from './Icon';
 import Markdown from './Markdown';
 import ModelingHitlCard from './ModelingHitlCard';
 import ReadableCode from './ReadableCode';
 import { confirmModeling, currentSession, stream } from '../api/chat';
-import type { ChatEvent, HitlToolCall } from '../api/chat';
+import type { ChatEvent, HitlToolCall, TurnPurpose } from '../api/chat';
 import { getModelingOverview } from '../api/semanticModeling';
 import type { ModelingOverview } from '../api/semanticModeling';
 
@@ -48,6 +48,8 @@ interface PanelMessage {
   segments: Segment[];
   pending?: boolean;
   hitl?: PendingHitl;
+  /** spec092 §7: when this turn was sent, so its draft changes can be listed under the reply. */
+  startedAt?: string;
 }
 
 let seq = 0;
@@ -134,6 +136,47 @@ function taskLabel(name: string, inputJson?: string): string {
 }
 
 /** 任务行（specs/021）：一行状态 + 中文任务标签；默认收起，点击展开完整 input/result。 */
+type Part = { kind: 'text'; text: string } | { kind: 'tools'; frames: ToolFrame[] };
+
+/** Consecutive tool calls form one group, so a reply reads as text with folded work steps. */
+function groupSegments(segments: Segment[]): Part[] {
+  const parts: Part[] = [];
+  for (const seg of segments) {
+    const last = parts[parts.length - 1];
+    if (seg.kind === 'text') parts.push({ kind: 'text', text: seg.text });
+    else if (last?.kind === 'tools') last.frames.push(seg.frame);
+    else parts.push({ kind: 'tools', frames: [seg.frame] });
+  }
+  return parts;
+}
+
+const TOOL_KIND: Record<string, string> = {
+  read_file: '读取', list_files: '读取', glob_files: '读取', grep_files: '读取', load_skill_through_path: '加载技能',
+  write_file: '修改', edit_file: '修改', delete_file: '修改', wren_cli: '命令', request_user_confirmation: '提问',
+};
+
+/**
+ * spec092 §7: finished work steps fold into one line like a coding agent; a group with a running
+ * step or a pending decision stays open, and failures are counted in the folded line.
+ */
+function ToolGroup({ frames }: { frames: ToolFrame[] }) {
+  const [open, setOpen] = useState(false);
+  if (frames.length <= 2 || frames.some(f => f.state === 'running' || f.state === 'waiting')) {
+    return <>{frames.map(f => <TaskRow key={f.id} frame={f} />)}</>;
+  }
+  const counts = new Map<string, number>();
+  frames.forEach(f => { const k = TOOL_KIND[f.name] ?? '其他'; counts.set(k, (counts.get(k) ?? 0) + 1); });
+  const failed = frames.filter(f => f.state === 'failed').length;
+  const summary = [...counts].map(([k, n]) => `${k} ${n}`).join(' · ');
+  return <div style={{ margin: '4px 0' }}>
+    <button type="button" onClick={() => setOpen(v => !v)}
+      style={{ background: 'none', border: 'none', padding: '2px 0', cursor: 'pointer', fontSize: 12, color: 'var(--da-text-muted)' }}>
+      {open ? '▾' : '▸'} 执行了 {frames.length} 步：{summary}{failed ? ` · ${failed} 步失败` : ''}
+    </button>
+    {open && frames.map(f => <TaskRow key={f.id} frame={f} />)}
+  </div>;
+}
+
 function TaskRow({ frame }: { frame: ToolFrame }) {
   const [open, setOpen] = useState(false);
   const label = taskLabel(frame.name, frame.input);
@@ -215,6 +258,9 @@ function TaskRow({ frame }: { frame: ToolFrame }) {
   );
 }
 
+/** What the modeling assistant is doing: a queued request waits for 'idle'. */
+export type AssistantState = 'idle' | 'running' | 'awaiting';
+
 export default function ModelingChatPanel({
   groupId,
   onClose,
@@ -225,6 +271,11 @@ export default function ModelingChatPanel({
   onSessionReady,
   onAttachDocument,
   onDraftSubmitted,
+  onTurnDone,
+  draftPurpose,
+  onActivityChange,
+  renderTurnResult,
+  footer,
 }: {
   groupId: string;
   onClose: () => void;
@@ -237,6 +288,17 @@ export default function ModelingChatPanel({
   onSessionReady?: (hasPending: boolean, error?: string) => void;
   onAttachDocument?: () => void;
   onDraftSubmitted?: () => void;
+  /** spec090: fired when a modeling turn finishes; `awaitingConfirmation` is true while a
+   *  confirmation card from that turn is still undecided. */
+  onTurnDone?: (awaitingConfirmation: boolean) => void;
+  /** Sent with the draft so the server can label and gate the turn (spec092). */
+  draftPurpose?: TurnPurpose;
+  /** Running turn or undecided confirmation card; drafts sent meanwhile queue behind it. */
+  onActivityChange?: (state: AssistantState) => void;
+  /** spec092 §7: "AI 建模结果" under a finished reply, given the turn's start time. */
+  renderTurnResult?: (startedAt: string) => ReactNode;
+  /** spec092 §7: inline cards after the conversation, e.g. "需要你确定的部分". */
+  footer?: ReactNode;
 }) {
   const [messages, setMessages] = useState<PanelMessage[]>([]);
   const [input, setInput] = useState('');
@@ -248,6 +310,10 @@ export default function ModelingChatPanel({
   const threadRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const consumedDraft = useRef<string | null>(null);
+  const turnDone = useRef(onTurnDone);
+  turnDone.current = onTurnDone;
+  // Set when the current stream asked for confirmation; cleared once the user decides.
+  const turnCompleted = useRef(false);
   const consumedSubmission = useRef<string | null>(null);
   const sessionKeyRef = useRef<string>(`modeling-${groupId}`);
   const awaitingDecision = messages.some(message => message.hitl);
@@ -303,8 +369,23 @@ export default function ModelingChatPanel({
     };
   }, [groupId, onSessionReady]);
 
+  // spec092 §7: follow the conversation while the user is at the bottom. Result cards and
+  // confirmation cards load asynchronously after a turn, so DOM changes (not only new messages)
+  // keep the view pinned; scrolling up to read stops the following until the user returns.
+  const pinned = useRef(true);
   useEffect(() => {
-    threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight });
+    const thread = threadRef.current;
+    if (!thread) return;
+    const follow = () => { if (pinned.current) thread.scrollTo({ top: thread.scrollHeight }); };
+    const onScroll = () => { pinned.current = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 80; };
+    const observer = new MutationObserver(follow);
+    observer.observe(thread, { childList: true, subtree: true, characterData: true });
+    thread.addEventListener('scroll', onScroll, { passive: true });
+    follow();
+    return () => { observer.disconnect(); thread.removeEventListener('scroll', onScroll); };
+  }, []);
+  useEffect(() => {
+    if (pinned.current) threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight });
   }, [messages]);
 
   // specs/036: a decide card arrives after the model just refreshed relation candidates — the
@@ -384,6 +465,9 @@ export default function ModelingChatPanel({
         }
         return { ...message, segments };
       });
+      // spec091/092: the review page shows each draft write as soon as it lands, not per turn.
+      const written = evt.toolResult ?? '';
+      if (!written.startsWith('error') && /Written to |Edited |已撤回工程文件|已提交给用户确认/.test(written)) notifyUpdated();
     } else if (evt.type === 'hitl_request' && evt.replyId && evt.toolCalls?.length) {
       patch(message => {
         const ids = new Set((evt.toolCalls as HitlToolCall[]).map(call => call.id));
@@ -406,6 +490,7 @@ export default function ModelingChatPanel({
       // decide_relations); tell the modeling page to refetch so counts and content stay in sync
       // without a manual refresh.
       notifyUpdated();
+      turnCompleted.current = true;
     } else if (evt.type === 'error') {
       patch(message => {
         const segments = [...message.segments];
@@ -424,39 +509,56 @@ export default function ModelingChatPanel({
     }
   }
 
-  async function restorePendingProposal(messageId: string) {
+  /** Restores persisted pending confirmations; returns true when any card still awaits a decision. */
+  async function restorePendingProposal(messageId: string): Promise<boolean> {
     try {
       const session = await currentSession(MODELING_AGENT_ID, sessionKeyRef.current);
       if (session.pendingReplyId && session.pendingToolCalls?.length) {
         applyEvent(messageId, { type: 'hitl_request', replyId: session.pendingReplyId, toolCalls: session.pendingToolCalls });
+        return true;
       }
+      return false;
     } catch (error) {
       applyEvent(messageId, { type: 'error', error: `建模确认状态同步失败，请刷新页面恢复提案。${error instanceof Error ? error.message : ''}` });
+      return true;
     }
   }
 
+  /**
+   * Reports a finished turn only after the stream ended and the server-side pending state was
+   * reconciled: a batch decision may emit {@code done} before the remaining cards are restored.
+   */
+  async function finishTurn(messageId: string) {
+    const pending = await restorePendingProposal(messageId);
+    if (turnCompleted.current) turnDone.current?.(pending);
+  }
+
   /** Sends a user message and reconciles persisted native confirmation state. */
-  async function sendText(raw: string) {
+  async function sendText(raw: string, purpose?: TurnPurpose) {
     const text = raw.trim();
     if (!text || busy || awaitingDecision) return;
     setInput('');
     setBusy(true);
+    pinned.current = true;
+    turnCompleted.current = false;
     const userMsg: PanelMessage = { id: nextId(), role: 'user', segments: [{ kind: 'text', text }] };
     const replyMsg: PanelMessage = {
       id: nextId(),
       role: 'assistant',
       segments: [],
       pending: true,
+      // A little earlier than now, so writes are never missed through clock skew.
+      startedAt: new Date(Date.now() - 2000).toISOString(),
     };
     setMessages(prev => [...prev, userMsg, replyMsg]);
     try {
       for await (const evt of stream(
         MODELING_AGENT_ID,
-        { message: text, sessionKey: sessionKeyRef.current, groupIds: [groupId] },
+        { message: text, sessionKey: sessionKeyRef.current, groupIds: [groupId], purpose },
       )) {
         applyEvent(replyMsg.id, evt);
       }
-      await restorePendingProposal(replyMsg.id);
+      await finishTurn(replyMsg.id);
     } catch (e) {
       const msg = e instanceof Error ? e.message : '连接中断';
       setMessages(previous =>
@@ -490,6 +592,7 @@ export default function ModelingChatPanel({
   ) {
     if (busy || decisionInFlight.current) return;
     decisionInFlight.current = true;
+    turnCompleted.current = false;
     setBusy(true);
     setMessages(previous =>
       previous.map(message => {
@@ -520,7 +623,7 @@ export default function ModelingChatPanel({
       })) {
         applyEvent(messageId, evt);
       }
-      await restorePendingProposal(messageId);
+      await finishTurn(messageId);
       getModelingOverview(groupId).then(setOverview).catch(() => undefined);
       notifyUpdated();
     } catch (error) {
@@ -555,9 +658,15 @@ export default function ModelingChatPanel({
     if (submitDraft && draftPrompt && sessionReady && !busy && !awaitingDecision && consumedSubmission.current !== key) {
       consumedSubmission.current = key;
       onDraftSubmitted?.();
-      void sendText(draftPrompt);
+      void sendText(draftPrompt, draftPurpose);
     }
-  }, [submitDraft, draftPrompt, draftPromptId, sessionReady, busy, awaitingDecision, groupId]);
+  }, [submitDraft, draftPrompt, draftPromptId, draftPurpose, sessionReady, busy, awaitingDecision, groupId]);
+
+  // Lets the page show that a request will queue behind the running turn or pending cards.
+  const activity = useRef(onActivityChange);
+  activity.current = onActivityChange;
+  const state: AssistantState = awaitingDecision ? 'awaiting' : busy ? 'running' : 'idle';
+  useEffect(() => { activity.current?.(state); }, [state]);
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -583,15 +692,15 @@ export default function ModelingChatPanel({
         }
         onClick={e => e.stopPropagation()}
       >
-        <div style={S.header}>
+        {variant !== 'dock' && <div style={S.header}>
           <span style={S.title}>
             <Icon name="model" size="sm" /> 对话建模
           </span>
           <span style={S.headerHint}>完善草稿 → 助手检查 → 发布</span>
-          {variant !== 'dock' && <button style={S.close} onClick={handleClose} title="关闭">
+          <button style={S.close} onClick={handleClose} title="关闭">
             <Icon name="close" size="sm" />
-          </button>}
-        </div>
+          </button>
+        </div>}
 
         <div style={S.thread} ref={threadRef}>
           {sessionError && <p role="alert">{sessionError}</p>}
@@ -600,9 +709,9 @@ export default function ModelingChatPanel({
               <div style={S.welcomeTitle}>
                 <Icon name="model" size="sm" /> 我是建模助手
               </div>
-              <div style={S.welcomeDesc}>助手通过官方 Wren 完善模型、关系、视图、Cube 和业务知识。</div>
+              <div style={S.welcomeDesc}>助手通过官方 Wren 完善模型、关系和业务语义。</div>
               <p style={S.welcomeDesc}>业务文档和常用问题均为可选。可以直接描述业务，或让助手根据现有资料提出建议。</p>
-              <div style={S.welcomeDesc}>确认草稿变更后，助手执行检查；你确认业务含义并发布，即可问数。</div>
+              <div style={S.welcomeDesc}>每轮修改列在回复下方的"AI建模结果"中，可直接编辑；右侧试问验证口径，满意后在底部草稿栏发布。</div>
             </div>
           )}
           {messages.map(m => (
@@ -610,15 +719,15 @@ export default function ModelingChatPanel({
               <div style={m.role === 'user' ? S.userBubble : S.botBubble}>
                 {m.role === 'assistant' ? (
                   <>
-                    {m.segments.map((seg, i) =>
-                      seg.kind === 'text' ? (
-                        seg.text ? (
+                    {groupSegments(m.segments).map((part, i) =>
+                      part.kind === 'text' ? (
+                        part.text ? (
                           <Markdown key={i} fontSize={14}>
-                            {seg.text}
+                            {part.text}
                           </Markdown>
                         ) : null
                       ) : (
-                        <TaskRow key={seg.frame.id} frame={seg.frame} />
+                        <ToolGroup key={part.frames[0].id} frames={part.frames} />
                       ),
                     )}
                     {m.hitl && m.hitl.toolCalls.length > 1 && <div style={{ padding: '12px', border: '1px solid #cbd5e1', borderRadius: 8 }}>
@@ -644,6 +753,7 @@ export default function ModelingChatPanel({
                         />
                       </div>;
                     })}
+                    {!m.pending && m.startedAt && renderTurnResult?.(m.startedAt)}
                     {m.pending && m.segments.length === 0 && !m.hitl && (
                       <span className="da-typing">
                         <span />
@@ -660,6 +770,7 @@ export default function ModelingChatPanel({
               </div>
             </div>
           ))}
+          {footer}
         </div>
 
         <div style={S.composer}>

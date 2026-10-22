@@ -2,7 +2,7 @@
 
 - 状态：Accepted
 - 日期：2026-10-12
-- 关联：[spec 059](../specs/059-official-mcp-query-receipts-and-feedback.md)、[ADR 0069](0069-wren-native-modeling-and-query-agents.md)
+- 关联：[spec 059](../specs/done/059-official-mcp-query-receipts-and-feedback.md)、[ADR 0069](0069-wren-native-modeling-and-query-agents.md)
 
 ## 背景
 

@@ -50,8 +50,12 @@ async function request<T>(groupId: string, suffix = '', body?: unknown): Promise
 export const getModelingQuestions = (groupId: string) => request<QuestionReview[]>(groupId);
 export const validateModelingQuestion = (groupId: string, id: string) =>
   request<QuestionReview>(groupId, `/${encodeURIComponent(id)}/validate`, {});
-export const decideModelingQuestion = (groupId: string, id: string, validationId: string, accepted: boolean) =>
-  request<QuestionReview>(groupId, `/${encodeURIComponent(id)}/decision`, { validationId, accepted });
+/** spec091: confirmation needs no prior trial run; the server re-checks SQL policy and time window. */
+export const decideModelingQuestion = (groupId: string, id: string, accepted: boolean) =>
+  request<QuestionReview>(groupId, `/${encodeURIComponent(id)}/decision`, { accepted });
+/** Suggested question texts for prefilling the question form; empty when unavailable. */
+export const getQuestionSuggestions = (groupId: string) =>
+  request<{ questions: string[] }>(groupId, '/suggestions').then(r => r.questions ?? []);
 
 export const correctModelingQuestionSql = (groupId: string, id: string, revision: string, sql: string) =>
   request<QuestionReview>(groupId, `/${encodeURIComponent(id)}/sql`, { revision, sql });

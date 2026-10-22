@@ -1,8 +1,8 @@
 # ADR 0010: `LLM.log` 改为人工可读的消息转录（只记 role / type / text）
 
-- 状态：已采纳（2026-09-22 实施，见 [spec 004](../specs/004-llm-log-readable-transcript.md)）
+- 状态：已采纳（2026-09-22 实施，见 [spec 004](../specs/done/004-llm-log-readable-transcript.md)）
 - 日期：2026-09-22
-- 证据：改造前的 `logs/LLM.log`（922 行只覆盖一次提问的 5 轮 LLM 调用：system message
+- 证据：改造前的 `../../logs/archive-20261020/LLM.log`（922 行只覆盖一次提问的 5 轮 LLM 调用：system message
   每轮重放一遍，每条消息带 `id` / `name` / `metadata` / `timestamp` / `usage` 五个与阅读
   无关的字段；`tool_result` 的文本是 JSON 二次编码字符串，schema 表格与 SQL 被压成带字面
   `\n` 的单行）；改造前的 `DebugLoggingMiddleware`（缩进 JSON 全量 dump +
@@ -87,4 +87,4 @@ ADR 0008 的摸底查询与计数不一致、ADR 0009 的 `## Subagents` 段占�
 - 多会话并发写同一文件时记录会交错（旧格式同样如此）；由于不再写 session 字段，
   交错后无法按会话拆分。将来若需并发排障，应加回时间戳与会话标识，或按会话分文件。
 - appender 是追加写：格式切换后旧内容仍留在同一文件里，需要纯净转录时先删除
-  `logs/LLM.log`。
+  `../../logs/archive-20261020/LLM.log`。

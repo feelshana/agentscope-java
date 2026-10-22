@@ -19,6 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -62,6 +63,87 @@ import reactor.core.publisher.Mono;
 class WrenInstanceRegistryTest {
 
     @TempDir Path tmp;
+
+    @Test
+    void recallWarmupUsesPooledInstanceAndEvictionClearsReadiness() throws Exception {
+        var registry = newRegistry();
+        var client = mock(McpClientWrapper.class);
+        when(client.callTool(eq("recall_queries"), any()))
+                .thenReturn(
+                        Mono.just(
+                                new McpSchema.CallToolResult(
+                                        List.of(new McpSchema.TextContent("{\"matches\":[]}")),
+                                        false)));
+        injectInstance(registry, "a", client);
+        assertThat(registry.recallWarm("a")).isFalse();
+        var checks = new AtomicInteger();
+        registry.warmRecall("a", checks::incrementAndGet);
+        assertThat(checks.get()).isGreaterThanOrEqualTo(2);
+        assertThat(registry.recallWarm("a")).isTrue();
+        registry.callAuthorized(
+                "a", "recall_queries", Map.of("question", "业务问题"), checks::incrementAndGet);
+        verify(client, times(2)).callTool(eq("recall_queries"), any());
+        registry.invalidate("a");
+        assertThat(registry.recallWarm("a")).isFalse();
+        registry.close();
+    }
+
+    @Test
+    void instructionsCacheIsInstanceScopedAndNeverSkipsAuthorization() throws Exception {
+        var registry = newRegistry();
+        var client = mock(McpClientWrapper.class);
+        when(client.callTool("get_instructions", Map.of()))
+                .thenReturn(
+                        Mono.just(
+                                new McpSchema.CallToolResult(
+                                        List.of(new McpSchema.TextContent("a")), false)));
+        var other = mock(McpClientWrapper.class);
+        when(other.callTool("get_instructions", Map.of()))
+                .thenReturn(
+                        Mono.just(
+                                new McpSchema.CallToolResult(
+                                        List.of(new McpSchema.TextContent("b")), false)));
+        injectInstance(registry, "a", client);
+        injectInstance(registry, "b", other);
+        assertThat(registry.callAuthorized("a", "get_instructions", Map.of(), () -> {}).payload())
+                .isEqualTo("a");
+        assertThat(registry.callAuthorized("a", "get_instructions", Map.of(), () -> {}).payload())
+                .isEqualTo("a");
+        assertThatThrownBy(
+                        () ->
+                                registry.callAuthorized(
+                                        "a",
+                                        "get_instructions",
+                                        Map.of(),
+                                        () -> {
+                                            throw new DatasetException("无权访问", 403);
+                                        }))
+                .isInstanceOf(DatasetException.class);
+        assertThat(registry.callAuthorized("b", "get_instructions", Map.of(), () -> {}).payload())
+                .isEqualTo("b");
+        verify(client, times(1)).callTool("get_instructions", Map.of());
+        registry.invalidate("a");
+        injectInstance(registry, "a", client);
+        registry.callAuthorized("a", "get_instructions", Map.of(), () -> {});
+        verify(client, times(2)).callTool("get_instructions", Map.of());
+        registry.close();
+    }
+
+    @Test
+    void failedInstructionsAreNeverCached() throws Exception {
+        var registry = newRegistry();
+        var client = mock(McpClientWrapper.class);
+        when(client.callTool("get_instructions", Map.of()))
+                .thenReturn(
+                        Mono.just(
+                                new McpSchema.CallToolResult(
+                                        List.of(new McpSchema.TextContent("error")), true)));
+        injectInstance(registry, "a", client);
+        assertThat(registry.call("a", "get_instructions", Map.of()).ok()).isFalse();
+        assertThat(registry.call("a", "get_instructions", Map.of()).ok()).isFalse();
+        verify(client, times(2)).callTool("get_instructions", Map.of());
+        registry.close();
+    }
 
     @Test
     void discoveryIsCachedPerInstanceAndInvalidationDropsIt() throws Exception {

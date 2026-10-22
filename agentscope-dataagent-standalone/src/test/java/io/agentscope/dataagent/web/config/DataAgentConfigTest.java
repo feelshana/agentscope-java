@@ -125,7 +125,7 @@ class DataAgentConfigTest {
     @Test
     void wrenToolDescriptionsRequirePublishedLogicalModels() {
         assertThat(toolDescription(WrenMcpToolkit.class, "wren_call_tool"))
-                .contains("官方 MCP", "wren_list_tools", "run_sql", "LIMIT/OFFSET");
+                .contains("官方 MCP", "run_sql", "LIMIT/OFFSET");
     }
 
     /**
@@ -133,6 +133,53 @@ class DataAgentConfigTest {
      * rule is useless inside the charting skill (which is loaded only after the model already
      * decided to chart), and the output-language rule applies whether or not any skill is loaded.
      */
+    @Test
+    void modelingPromptMatchesTheOfficialCliContractAndSourceTiers() {
+        assertThat(DataAgentConfig.MODELING_SCRIPT)
+                .contains(
+                        "不调用 memory store，不写 knowledge/sql/",
+                        "不为此自拟样例问题",
+                        "knowledge/questions/<ID>.yml",
+                        "页面发布后可被问数召回",
+                        "[\"memory\",\"index\",\"--no-seed\"]",
+                        "不再通过 wren_cli skills list/get 重复获取同一技能",
+                        "不调用 cube 命令",
+                        "不得声明 MANY_TO_ONE 或 ONE_TO_ONE",
+                        "表来源与探查边界")
+                .doesNotContain(
+                        "禁止对同一路径连续发起多个 edit_file", "\"--tags\",\"source:enrich\"", "不要把问答保存留为");
+        // 2026-10-22: rules must cite a real source, and date conditions come from the platform's
+        // per-column formats rather than a prompt-taught LIKE technique.
+        assertThat(DataAgentConfig.MODELING_SCRIPT)
+                .contains("所注依据必须能在该来源中找到", "必须用 request_user_confirmation 提问")
+                .doesNotContain("LIKE");
+        assertThat(DataAgentConfig.QUERY_EFFICIENCY_RULES).doesNotContain("LIKE");
+        assertThat(DataAgentConfig.MODELING_PROBE_RULES)
+                .contains("外部数据源及其他来源表（含未列出的表）禁止自动探测", "每张事实表一次 MIN/MAX", "不执行 SELECT DISTINCT")
+                .doesNotContain("上传表可按官方技能需要");
+        assertThat(DataAgentConfig.MODELING_SCRIPT)
+                .contains(
+                        "整体替换可直接用 write_file",
+                        "由平台自动先执行 context build",
+                        "可以声明 MANY_TO_ONE",
+                        "非数据库约束",
+                        "不读取、不写入 cubes/ 与 views/",
+                        "由用户在发布前统一审阅",
+                        "不要在对话中用文字列出方案等待回复",
+                        "request_user_confirmation",
+                        "不要向用户确认",
+                        "写入 knowledge/rules/（指标定义、默认过滤、术语）或对应模型的列描述");
+        assertThat(DataAgentConfig.QUERY_EFFICIENCY_RULES)
+                .contains(
+                        "不为年份向用户提问",
+                        "不为年份或日期再向用户确认",
+                        "规则未定义且存在实质歧义时才询问",
+                        "不得对多行结果心算或手工汇总",
+                        "limit 不得小于预期行数",
+                        "GROUP BY 只放该主体",
+                        "执行了查询就不能声称未重新统计");
+    }
+
     @Test
     void defaultSysPromptKeepsAlwaysOnBehaviourGates() {
         assertThat(DataAgentConfig.DEFAULT_AGENT_SYS_PROMPT)
@@ -143,12 +190,7 @@ class DataAgentConfigTest {
     @Test
     void defaultSysPromptPointsAtWrenOnlyWorkflow() {
         assertThat(DataAgentConfig.DEFAULT_AGENT_SYS_PROMPT)
-                .contains(
-                        "官方 Wren usage",
-                        "wren_list_tools",
-                        "wren_call_tool",
-                        "run_python",
-                        "render_chart")
+                .contains("官方 Wren usage", "官方工具 schema", "run_python", "render_chart")
                 .doesNotContain(
                         "sql-analysis", "wren_run_sql", "wren_describe_model", "query_type");
     }
@@ -183,7 +225,6 @@ class DataAgentConfigTest {
                         .toList();
 
         assertThat(toolNames)
-                .contains("wren_list_tools", "wren_call_tool")
                 .doesNotContain(
                         "wren_read_knowledge",
                         "wren_describe_model",

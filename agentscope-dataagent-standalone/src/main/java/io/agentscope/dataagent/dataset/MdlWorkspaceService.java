@@ -155,6 +155,9 @@ public class MdlWorkspaceService {
         return normalized.equals("wren_project.yml")
                 || normalized.equals("raw/data-samples.md")
                 || normalized.equals("knowledge/rules/data-sampling.md")
+                // spec092: business documents are uploaded by users only; the agent reads them.
+                || normalized.equals(BusinessDocumentService.DIRECTORY)
+                || normalized.startsWith(BusinessDocumentService.DIRECTORY + "/")
                 || normalized.equals(".platform")
                 || normalized.startsWith(".platform/")
                 || normalized.equals("target")

@@ -63,6 +63,22 @@ public interface WrenQueryGateway {
         return call(groupId, tool, arguments);
     }
 
+    /** Warms only the official retrieval path on the instance used by subsequent queries. */
+    default void warmRecall(String groupId, Runnable authorization) {
+        WrenCallResult result =
+                callAuthorized(
+                        groupId,
+                        "recall_queries",
+                        Map.of("question", "检索准备检查", "limit", 1),
+                        authorization);
+        if (!result.ok())
+            throw new io.agentscope.dataagent.dataset.DatasetException("问数检索预热失败，可在问数时重试", 502);
+    }
+
+    default boolean recallWarm(String groupId) {
+        return false;
+    }
+
     /** Executes against an isolated, already-built draft project; never changes the published pool. */
     default WrenCallResult callDraft(
             String groupId, java.nio.file.Path project, String profile, String sql, int limit) {

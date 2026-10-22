@@ -1,8 +1,8 @@
 # ADR 0008: 禁「摸底查询」硬门上移 + 回答计数一致性自检
 
-- 状态：已采纳（2026-09-22 实施，见 [spec 002](../specs/002-anti-probe-and-count-consistency.md)）
+- 状态：已采纳（2026-09-22 实施，见 [spec 002](../specs/done/002-anti-probe-and-count-consistency.md)）
 - 日期：2026-09-22
-- 证据：`logs/LLM.log`（会话 `main-cd465cf5`，17:01:27→17:02:08，4 轮 LLM / 7 次工具调用，
+- 证据：`../../logs/archive-20261020/LLM.log`（会话 `main-cd465cf5`，17:01:27→17:02:08，4 轮 LLM / 7 次工具调用，
   问题「有哪些领导访问了，分别访问了哪些模块，哪些报表？」）；
   `DataAgentToolkit#buildTableSection`（javadoc 明确 no bulky sample values）；
   `shared/agents/data-agent/skills/sql-analysis/SKILL.md` 第 2、3、4 步

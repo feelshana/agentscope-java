@@ -8,6 +8,7 @@ import type {
   WorkspacePreview,
 } from '../api/semanticModeling';
 import { diffLines } from '../utils/diff';
+import { wrenCliProposal } from '../utils/wrenToolPresentation';
 import ReadableCode from './ReadableCode';
 
 const JOIN_LABEL: Record<string, string> = {
@@ -206,7 +207,7 @@ export default function ModelingHitlCard({
     <div style={S.card}>
       <div style={S.header}>
         <span style={S.badge}>需要确认</span>
-        <strong>{isBatchWrite ? '业务建模方案' : TOOL_LABEL[call.name] ?? call.name}</strong>
+        <strong>{isBatchWrite ? '业务建模方案' : call.name === 'wren_cli' ? wrenCliProposal(stringList(call.input.arguments)).title : TOOL_LABEL[call.name] ?? call.name}</strong>
       </div>
 
       {isBatchWrite ? (
@@ -234,6 +235,9 @@ export default function ModelingHitlCard({
           <div style={S.summary}>
             {fileReason || `工程文件：${filePath}`}
           </div>
+          {/knowledge\/rules\//.test(filePath.replace(/\\/g, '/')) && <div role="note" style={S.error}>
+            业务规则会作为默认口径影响之后所有问数。请逐条核对：没有业务文档或你确认依据的过滤条件（例如"只统计某类账号"）不应写成规则，可拒绝并让助手改为待确认事项。
+          </div>}
                 <div style={S.help}>本次授权修改草稿。助手按官方 Wren 流程检查；在「检查与发布」发布后才影响问数。</div>
           {previewing && <div style={S.help}>正在检查写入权限和变更内容…</div>}
           {!previewing && previewError && <div style={S.error}>{previewError}</div>}
@@ -417,10 +421,12 @@ export default function ModelingHitlCard({
         <>
           <div style={S.summary}>{fileReason || '建模助手准备执行此变更，请确认摘要和参数。'}</div>
           {call.name === 'wren_cli' && (() => {
-            const args = stringList(call.input.arguments);
-            const question = args[args.indexOf('--nl') + 1];
-            const sql = args[args.indexOf('--sql') + 1];
-            return <><p>问题：{question}</p><ReadableCode text={sql || ''} language="sql" title="将保存的 SQL 示例" /><p style={S.help}>本次授权保存到当前工程；请核对问题和 SQL 的对应关系。执行成功后助手会报告保存结果。</p></>;
+            const proposal = wrenCliProposal(stringList(call.input.arguments));
+            if (proposal.kind === 'index') {
+              return <p style={S.help}>本次授权在当前工程重建 Wren 记忆索引，并由官方 CLI 自动生成种子示例；不会新增你确认过的问答文件。</p>;
+            }
+            if (proposal.kind !== 'store') return null;
+            return <><p>问题：{proposal.question}</p><ReadableCode text={proposal.sql} language="sql" title="将保存的 SQL 示例" /><p style={S.help}>本次授权保存到当前工程；请核对问题和 SQL 的对应关系。执行成功后助手会报告保存结果。</p></>;
           })()}
           {call.name === 'create_view' && <><p>视图：<strong>{stringValue(call.input.name)}</strong></p><p>{stringValue(call.input.description)}</p><ReadableCode text={stringValue(call.input.statement)} language="sql" title="视图定义 SQL" /></>}
           <details style={S.details} open={editingJson}>

@@ -26,7 +26,6 @@ public class MdlQuestionStore {
     private static final ObjectMapper YAML = new ObjectMapper(new YAMLFactory());
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final Pattern ID = Pattern.compile("[A-Za-z0-9_-]{1,64}");
-    private static final Pattern LIMIT = Pattern.compile("(?i)\\b(limit|offset)\\b");
     private final MdlWorkspaceService workspace;
 
     public MdlQuestionStore(MdlWorkspaceService workspace) {
@@ -174,14 +173,13 @@ public class MdlQuestionStore {
 
     private List<Review> listLocked(String groupId) {
         Path root = workspace.workspaceRoot(groupId);
-        String modelHash = modelHash(root);
         List<Review> out = new ArrayList<>();
         for (Question question : readQuestions(root)) {
             Receipt receipt = readReceipt(groupId, question.id());
             String status = receipt == null ? "DRAFT" : receipt.status();
-            if (receipt != null
-                    && (!matchesQuestionHash(question, receipt.questionHash())
-                            || !modelHash.equals(receipt.modelHash()))) {
+            // spec091: decisions bind to the question and its SQL only; model drift is caught by
+            // the publish-time dry-plan instead of invalidating every confirmation.
+            if (receipt != null && !matchesQuestionHash(question, receipt.questionHash())) {
                 status = "STALE";
             }
             out.add(review(groupId, question, status, receipt));
@@ -226,7 +224,8 @@ public class MdlQuestionStore {
                         || sql.length() > 16000) {
                     throw new DatasetException("常用问题不能为空，且问题/口径/SQL 不能超过长度上限：" + id, 400);
                 }
-                if (!sql.isBlank()) requireReadSql(sql);
+                // SQL policy is enforced on confirm, trial run and correction, so one invalid
+                // agent draft cannot hide the rest of the list.
                 out.add(
                         new Question(
                                 id,
@@ -245,13 +244,15 @@ public class MdlQuestionStore {
         String value = sql == null ? "" : sql.trim();
         if (!value.matches("(?is)^(select|with)\\b.*")
                 || value.contains(";")
-                || LIMIT.matcher(value).find()
                 || Pattern.compile(
                                 "(?i)\\b(insert|update|delete|drop|alter|create|merge|call|into|outfile|load_file|sleep|benchmark)\\b")
                         .matcher(value)
                         .find()) {
-            throw new DatasetException("验证 SQL 仅允许单条 SELECT/WITH，禁止写操作及显式 LIMIT/OFFSET", 400);
+            throw new DatasetException("验证 SQL 仅允许单条 SELECT/WITH，禁止写操作", 400);
         }
+        // Same lexical policy as Wren CLI/MCP: read-only and no cartesian joins. Official
+        // LIMIT/OFFSET is allowed (Top-N questions); truncated results still cannot be confirmed.
+        io.agentscope.dataagent.tools.data.OfficialWrenToolkit.requireReadOnly(value);
     }
 
     private static ModelingPlan readPlan(JsonNode node, String id) {
@@ -432,41 +433,40 @@ public class MdlQuestionStore {
         return receipt;
     }
 
-    public Review decide(
-            String groupId, String id, String validationId, boolean accepted, String ownerId) {
+    /**
+     * Confirms or returns a question directly (spec091): no prior execution is required. Accepting
+     * re-checks the SQL policy and asset coverage; time-window gating is the caller's job.
+     */
+    public Review decide(String groupId, String id, boolean accepted, String ownerId) {
         return workspace.withWorkspaceLock(
                 groupId,
                 () -> {
                     Question question = requireQuestion(groupId, id);
-                    Receipt receipt = readReceipt(groupId, id);
-                    if (receipt == null
-                            || !receipt.validationId().equals(validationId)
-                            || !matchesQuestionHash(question, receipt.questionHash())
-                            || !receipt.modelHash()
-                                    .equals(modelHash(workspace.workspaceRoot(groupId)))) {
-                        throw new DatasetException("问题或模型已变化，请重新执行验证后再确认", 409);
+                    if (accepted) {
+                        if (question.sql().isBlank())
+                            throw new DatasetException("本题尚未生成 SQL，不能确认", 409);
+                        requireReadSql(question.sql());
+                        requireCoverage(groupId, question);
                     }
-                    if (!"EXECUTED".equals(receipt.status())
-                            && !"CONFIRMED".equals(receipt.status())) {
-                        throw new DatasetException("只能确认成功执行的验证结果", 409);
-                    }
-                    if (accepted && receipt.truncated()) {
-                        throw new DatasetException("结果已截断，请改为完整聚合或缩小范围后验证", 409);
-                    }
-                    if (accepted) requireCoverage(groupId, question);
+                    Receipt previous = readReceipt(groupId, id);
+                    boolean sameQuestion =
+                            previous != null
+                                    && matchesQuestionHash(question, previous.questionHash());
                     Receipt decided =
                             new Receipt(
-                                    receipt.validationId(),
-                                    receipt.questionHash(),
-                                    receipt.modelHash(),
+                                    sameQuestion
+                                            ? previous.validationId()
+                                            : UUID.randomUUID().toString(),
+                                    questionHash(question),
+                                    modelHash(workspace.workspaceRoot(groupId)),
                                     accepted ? "CONFIRMED" : "REJECTED",
-                                    receipt.executedAt(),
-                                    receipt.result(),
-                                    receipt.error(),
-                                    receipt.truncated(),
+                                    sameQuestion ? previous.executedAt() : null,
+                                    sameQuestion ? previous.result() : null,
+                                    null,
+                                    sameQuestion && previous.truncated(),
                                     accepted ? ownerId : null,
                                     accepted ? Instant.now().toString() : null,
-                                    receipt.evidence());
+                                    sameQuestion ? previous.evidence() : null);
                     Path pair =
                             workspace.workspaceRoot(groupId).resolve("knowledge/sql/" + id + ".md");
                     if (accepted) {
@@ -480,6 +480,52 @@ public class MdlQuestionStore {
                     }
                     writeReceipt(groupId, id, decided);
                     return review(groupId, question, decided.status(), decided);
+                });
+    }
+
+    /** Ids of currently confirmed questions with their SQL, for the publish-time dry-plan. */
+    public Map<String, String> confirmedSql(String groupId) {
+        Map<String, String> out = new java.util.LinkedHashMap<>();
+        for (Review review : list(groupId)) {
+            if ("CONFIRMED".equals(review.status()))
+                out.put(review.question().id(), review.question().sql());
+        }
+        return out;
+    }
+
+    /**
+     * Returns a confirmed question to the unconfirmed state after its SQL failed the publish
+     * check; the reason stays visible on the question until the user confirms again.
+     */
+    public void revokeConfirmation(String groupId, String id, String reason) {
+        workspace.withWorkspaceLock(
+                groupId,
+                () -> {
+                    Question question = requireQuestion(groupId, id);
+                    try {
+                        Files.deleteIfExists(
+                                workspace
+                                        .workspaceRoot(groupId)
+                                        .resolve("knowledge/sql/" + id + ".md"));
+                    } catch (IOException e) {
+                        throw new DatasetException("移除示例失败：" + e.getMessage(), e);
+                    }
+                    writeReceipt(
+                            groupId,
+                            id,
+                            new Receipt(
+                                    UUID.randomUUID().toString(),
+                                    questionHash(question),
+                                    modelHash(workspace.workspaceRoot(groupId)),
+                                    "FAILED",
+                                    null,
+                                    null,
+                                    reason,
+                                    false,
+                                    null,
+                                    null,
+                                    null));
+                    return null;
                 });
     }
 
@@ -523,7 +569,10 @@ public class MdlQuestionStore {
         }
     }
 
-    /** Excludes receipts and query examples, which do not change the modeled query semantics. */
+    /**
+     * Excludes receipts, query examples and raw source material, which do not change the modeled
+     * query semantics.
+     */
     public String modelHash(Path root) {
         if (!Files.isDirectory(root)) return digest("");
         try (var walk = Files.walk(root)) {
@@ -537,6 +586,8 @@ public class MdlQuestionStore {
                         || relative.startsWith("target/")
                         || relative.equals("wren-source.properties")
                         || relative.startsWith(".wren/")
+                        // Source material (documents, samples) never compiles into the MDL.
+                        || relative.startsWith("raw/")
                         || relative.startsWith("knowledge/questions/")
                         || relative.startsWith("knowledge/sql/")) continue;
                 content.append(relative)
@@ -632,7 +683,10 @@ public class MdlQuestionStore {
                 + MdlPublishService.yamlScalar(question.question())
                 + "\nsql: "
                 + MdlPublishService.yamlScalar(question.sql())
-                + "\nsource: user"
+                // The official markdown sync indexes only `source` (as tag `source:<value>`) and
+                // drops the `tags` list, so provenance must live in `source` to reach recall.
+                + "\nsource: user-confirmed"
+                + "\ntags:\n- source:user-confirmed"
                 + "\nverified: true\nvalidation_id: "
                 + receipt.validationId()
                 + "\nmodel_hash: "

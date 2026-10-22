@@ -20,7 +20,6 @@ import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetKnowledgeRepository;
 import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -31,16 +30,11 @@ import org.springframework.stereotype.Component;
 /** Resolves the authenticated conversation's single draft project, without modeling decisions. */
 @Component
 public final class WrenProjectAccess {
+    // cubes/ and views/ are neither readable nor writable by the modeling agent; existing assets
+    // still take part in the official CLI's validate/build, which reads the project directly.
+    private static final Set<String> CLOSED_ROOTS = Set.of("cubes", "views");
     private static final Set<String> READ_ROOTS =
-            Set.of(
-                    "models",
-                    "views",
-                    "cubes",
-                    "relationships.yml",
-                    "knowledge",
-                    "raw",
-                    "target",
-                    "wren_project.yml");
+            Set.of("models", "relationships.yml", "knowledge", "raw", "target", "wren_project.yml");
     private final DatasetGroupService groups;
     private final MdlWorkspaceService workspace;
     private final DatasetKnowledgeRepository knowledge;
@@ -109,38 +103,61 @@ public final class WrenProjectAccess {
                 });
     }
 
-    /** Only the platform's uploaded document is mirrored; agent-authored raw files are preserved. */
+    /**
+     * Mirrors the platform's question history only. Business documents live in the draft under
+     * {@code raw/docs/} and are managed by {@link BusinessDocumentService} (spec092).
+     */
     private void syncRaw(String group, Path root) {
-        Path file = root.resolve("raw/business-document.md");
-        assertNoLinks(file);
         try {
-            var document = knowledge.findById(group).orElse(null);
-            String content = document == null ? null : document.getContent();
-            if (content == null || content.isBlank()) {
-                Files.deleteIfExists(file);
-            } else if (!Files.isRegularFile(file)
-                    || !content.equals(Files.readString(file, StandardCharsets.UTF_8))) {
-                Files.createDirectories(file.getParent());
-                Files.writeString(file, content, StandardCharsets.UTF_8);
+            Path history = root.getParent().resolve("raw/question-history.md");
+            Path material = root.resolve("raw/question-history.md");
+            assertNoLinks(history);
+            assertNoLinks(material);
+            if (Files.isRegularFile(history)) {
+                Files.createDirectories(material.getParent());
+                Files.copy(history, material, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (IOException e) {
-            throw new DatasetException("同步业务文档到 Wren raw 目录失败", e);
+            throw new DatasetException("同步问数历史到 Wren raw 目录失败", e);
         }
     }
 
     public Path path(Project project, String path, boolean write) {
         String relative = relative(path);
         String first = relative.split("/", 2)[0].toLowerCase(Locale.ROOT);
+        if (CLOSED_ROOTS.contains(first)) {
+            throw new DatasetException(
+                    "基础语义建模不读取也不写入 Cube/View 资产，它们由独立模块处理；已有资产仍会参与官方校验与编译，无需读取，请继续当前建模。", 403);
+        }
         if (!relative.equals(".") && !READ_ROOTS.contains(first)) {
-            throw new DatasetException("只能访问当前 Wren 工程的模型、视图、Cube、知识、资料与产物", 403);
+            throw new DatasetException("只能访问当前 Wren 工程的模型、关系、知识、资料与产物", 403);
         }
         Path resolved = project.root().resolve(relative).normalize();
         if (!resolved.startsWith(project.root())) throw new DatasetException("工程路径越界", 403);
         assertNoLinks(resolved);
         if (write) {
+            // spec090: Q&A pairs are written by MdlQuestionStore#decide after user confirmation
+            // only.
+            String sqlDir = relative.toLowerCase(Locale.ROOT);
+            if (sqlDir.equals("knowledge/sql") || sqlDir.startsWith("knowledge/sql/")) {
+                throw new DatasetException(
+                        "knowledge/sql/ 中的问答对只能在用户逐题确认后由平台保存；请把问题与 SQL 写入"
+                                + " knowledge/questions/<ID>.yml。",
+                        403);
+            }
+            // Official layout (wren context v2-v5): metadata.yml plus an optional ref_sql.sql.
+            if (first.equals("models")
+                    && !relative.toLowerCase(Locale.ROOT)
+                            .matches("models/[^/]+/(metadata\\.yml|ref_sql\\.sql)")) {
+                throw new DatasetException(
+                        "models/ 下只能写 models/<模型名>/metadata.yml 或官方"
+                                + " ref_sql.sql，不要创建副本或临时文件；请直接在原文件上用 edit_file 修正。",
+                        403);
+            }
             String lower = relative.toLowerCase(Locale.ROOT);
             if (relative.equals(".")
                     || lower.equals("raw/business-document.md")
+                    || lower.equals("raw/question-history.md")
                     || workspace.isPlatformOwned(project.groupId(), lower)) {
                 throw new DatasetException("该位置由平台管理，禁止修改", 403);
             }

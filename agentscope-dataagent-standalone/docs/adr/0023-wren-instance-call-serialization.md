@@ -1,6 +1,6 @@
 # ADR 0023: wren 实例调用按组串行化（MCP stdio transport 非线程安全）
 
-> 2026-10-14 来源更新（当前集成见 ADR 0078；来源 ADR 0070 原文见 docs/imported/multiAgent-Mdl-lyf）：调用门控从 `synchronized(Object)` 升级为 `ReentrantLock(true)` + `tryLock(callWaitSeconds)`，等待超时返回 503 而非无限阻塞；新增 `Semaphore(maxInstances)` 控制实例总数，满额时 LRU 驱逐空闲实例。
+> 2026-10-14 来源更新（当前集成见 ADR 0078；来源 ADR 0070 原文见 docs/archive/imported/multiAgent-Mdl-lyf）：调用门控从 `synchronized(Object)` 升级为 `ReentrantLock(true)` + `tryLock(callWaitSeconds)`，等待超时返回 503 而非无限阻塞；新增 `Semaphore(maxInstances)` 控制实例总数，满额时 LRU 驱逐空闲实例。
 
 日期：2026-09-29
 状态：已接受（已实施）
@@ -8,7 +8,7 @@
 ## 背景
 
 2026-09-29（服务重启后首次问数）用户报告 `wren_run_sql` / `wren_query_cube` 报
-「实例已重置，重试将自动重建」。`logs/LLM.log` 该会话四轮调用呈**确定性**对照：
+「实例已重置，重试将自动重建」。`../../logs/archive-20261020/LLM.log` 该会话四轮调用呈**确定性**对照：
 
 | 轮次 | 调用形态 | 结果 |
 |---|---|---|
@@ -75,5 +75,5 @@ Reactor `Sinks.Many#tryEmitNext` 的契约是**调用方保证串行**（并发�
 - ADR 0021（遗留观察定案来源）、ADR 0020（实例池 M3）
 - MCP Java SDK 0.17.2：`StdioClientTransport#sendMessage`（反汇编实证）、
   Reactor `Sinks#tryEmitNext` 契约（FAIL_NON_SERIALIZED）
-- 诊断记录：`logs/LLM.log`（2026-09-29 会话，四轮对照）
+- 诊断记录：`../../logs/archive-20261020/LLM.log`（2026-09-29 会话，四轮对照）
 - 守卫：`WrenInstanceRegistryTest`（同组串行不重叠 / 跨组仍并行）

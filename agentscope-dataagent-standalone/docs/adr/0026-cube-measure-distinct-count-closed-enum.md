@@ -1,6 +1,6 @@
 # ADR 0026: Cube 度量去重计数采用封闭枚举 DISTINCT_COUNT
 
-日期：2026-10-01 ｜ 状态：已接受 ｜ 关联规格：docs/specs/010-cube-distinct-count-measure.md
+日期：2026-10-01 ｜ 状态：已接受 ｜ 关联规格：docs/specs/done/010-cube-distinct-count-measure.md
 
 ## 背景
 

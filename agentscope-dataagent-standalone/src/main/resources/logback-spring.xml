@@ -55,6 +55,28 @@
     </logger>
 
     <logger name="io.agentscope" level="INFO"/>
+    <appender name="TIMING_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/execution-timing.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/execution-timing.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>50MB</maxFileSize><maxHistory>7</maxHistory><totalSizeCap>500MB</totalSizeCap>
+        </rollingPolicy>
+        <encoder><pattern>%msg%n</pattern></encoder>
+    </appender>
+    <logger name="EXECUTION_TIMING" level="INFO" additivity="false">
+        <appender-ref ref="TIMING_FILE"/>
+    </logger>
+    <appender name="SQL_WINDOW_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/sql-window-gate.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/sql-window-gate.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>50MB</maxFileSize><maxHistory>7</maxHistory><totalSizeCap>500MB</totalSizeCap>
+        </rollingPolicy>
+        <encoder><pattern>%msg%n</pattern></encoder>
+    </appender>
+    <logger name="SQL_WINDOW_GATE" level="INFO" additivity="false">
+        <appender-ref ref="SQL_WINDOW_FILE"/>
+    </logger>
     <logger name="org.springframework.security" level="WARN"/>
     <logger name="org.springframework.web" level="WARN"/>
 </configuration>

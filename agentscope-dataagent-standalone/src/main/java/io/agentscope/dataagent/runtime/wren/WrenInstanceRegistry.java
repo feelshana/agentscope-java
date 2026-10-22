@@ -165,6 +165,8 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
         private final McpClientWrapper client;
         // Accessed under the per-group gate; discarded together with this subprocess.
         private List<McpSchema.Tool> tools;
+        private WrenCallResult instructions;
+        private volatile boolean recallWarm;
         private final AtomicLong lastUsed = new AtomicLong(System.currentTimeMillis());
         private final AtomicBoolean reserved = new AtomicBoolean();
 
@@ -211,10 +213,17 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
     @Override
     public WrenCallResult callAuthorized(
             String groupId, String tool, Map<String, Object> arguments, Runnable authorization) {
+        long requestedAt = System.nanoTime();
         return withGate(
                 groupId,
                 () -> {
                     authorization.run();
+                    phase(groupId, tool, "wren.queue", requestedAt, "SUCCESS");
+                    log.info(
+                            "[wren-timing] group={} tool={} queueMs={}",
+                            groupId,
+                            tool,
+                            TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - requestedAt));
                     return doCall(groupId, tool, arguments, authorization);
                 });
     }
@@ -237,13 +246,35 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
 
     private WrenCallResult doCall(
             String groupId, String tool, Map<String, Object> arguments, Runnable authorization) {
-        Instance inst = acquire(groupId);
-        authorization.run();
+        long preparingAt = System.nanoTime();
+        Instance inst;
+        try {
+            inst = acquire(groupId);
+            authorization.run();
+            phase(groupId, tool, "wren.prepare", preparingAt, "SUCCESS");
+        } catch (RuntimeException failure) {
+            phase(groupId, tool, "wren.prepare", preparingAt, "ERROR");
+            throw failure;
+        }
         inst.touch();
+        boolean cacheInstructions = "get_instructions".equals(tool) && arguments.isEmpty();
+        if (cacheInstructions && inst.instructions != null) {
+            phase(groupId, tool, "wren.instructions", System.nanoTime(), "CACHE_HIT");
+            return inst.instructions;
+        }
+        long executingAt = System.nanoTime();
         McpSchema.CallToolResult result;
         try {
             result = inst.client.callTool(tool, arguments).block(props.timeout().plus(CALL_SLACK));
         } catch (RuntimeException e) {
+            phase(groupId, tool, "wren.execute", executingAt, "ERROR");
+            log.warn(
+                    "[wren-timing] group={} tool={} prepareMs={} executeMs={}"
+                            + " transportFailure=true",
+                    groupId,
+                    tool,
+                    TimeUnit.NANOSECONDS.toMillis(executingAt - preparingAt),
+                    TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - executingAt));
             // Transport/protocol failure (or request timeout): the instance may be wedged, so it
             // is dropped and the next call respawns it. Query-level errors come back as ok=false
             // results instead and deliberately keep the instance alive.
@@ -251,16 +282,41 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
             throw new DatasetException("wren 语义引擎调用失败（实例已重置，重试将自动重建）：" + rootMessage(e), 503);
         }
         if (result == null) {
+            phase(groupId, tool, "wren.execute", executingAt, "ERROR");
             invalidate(groupId);
             throw new DatasetException("wren 语义引擎无响应（" + tool + "），实例已重置", 503);
         }
         inst.touch();
         String text = extractText(result);
         boolean ok = !Boolean.TRUE.equals(result.isError());
+        phase(groupId, tool, "wren.execute", executingAt, ok ? "SUCCESS" : "ERROR");
+        log.info(
+                "[wren-timing] group={} tool={} prepareMs={} executeMs={} resultChars={} ok={}",
+                groupId,
+                tool,
+                TimeUnit.NANOSECONDS.toMillis(executingAt - preparingAt),
+                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - executingAt),
+                text.length(),
+                ok);
         if (!ok) {
             log.warn("wren {} rejected on group {}: {}", tool, groupId, firstLine(text));
         }
-        return new WrenCallResult(ok, text);
+        WrenCallResult response = new WrenCallResult(ok, text);
+        if (ok && cacheInstructions) inst.instructions = response;
+        if (ok && "recall_queries".equals(tool)) inst.recallWarm = true;
+        return response;
+    }
+
+    @Override
+    public boolean recallWarm(String groupId) {
+        Instance instance = instances.get(groupId);
+        return instance != null && instance.recallWarm;
+    }
+
+    private static void phase(
+            String group, String tool, String phase, long started, String status) {
+        io.agentscope.dataagent.web.middleware.ExecutionTimingMiddleware.record(
+                null, phase, group + ":" + tool, started, status);
     }
 
     @Override

@@ -56,8 +56,11 @@ class ModelingHitlMiddlewareTest {
                                 context,
                                 new ActingInput(
                                         List.of(
-                                                tool("bad", "write_file", ToolCallState.PENDING),
-                                                tool("good", "write_file", ToolCallState.PENDING))),
+                                                tool("bad", "add_relation", ToolCallState.PENDING),
+                                                tool(
+                                                        "good",
+                                                        "add_relation",
+                                                        ToolCallState.PENDING))),
                                 input -> Flux.empty())
                         .collectList()
                         .block();
@@ -77,6 +80,73 @@ class ModelingHitlMiddlewareTest {
                                 .toList())
                 .hasSize(1)
                 .allSatisfy(result -> assertThat(result.getId()).isEqualTo("bad"));
+    }
+
+    @Test
+    void cubeProposalReferenceIsAnsweredWithAnErrorAndNeverLoaded() {
+        var state = AgentState.builder().sessionId("cube").replyId("reply").build();
+        var context = RuntimeContext.builder().agentState(state).build();
+        var forwarded = new java.util.ArrayList<ToolUseBlock>();
+        ToolUseBlock cube =
+                ToolUseBlock.builder()
+                        .id("cube")
+                        .name("load_skill_through_path")
+                        .input(
+                                Map.of(
+                                        "skillId",
+                                        "enrich-context_filesystem-wren_skills_content",
+                                        "path",
+                                        "references/cube_proposals.md"))
+                        .build();
+        ToolUseBlock gap =
+                ToolUseBlock.builder()
+                        .id("gap")
+                        .name("load_skill_through_path")
+                        .input(
+                                Map.of(
+                                        "skillId",
+                                        "enrich-context_filesystem-wren_skills_content",
+                                        "path",
+                                        "references/gap_catalog.md"))
+                        .build();
+        middleware
+                .onActing(
+                        null,
+                        context,
+                        new ActingInput(List.of(cube, gap)),
+                        input -> {
+                            forwarded.addAll(input.toolCalls());
+                            return Flux.empty();
+                        })
+                .collectList()
+                .block();
+        assertThat(forwarded).extracting(ToolUseBlock::getId).containsExactly("gap");
+        assertThat(
+                        state.getContext().stream()
+                                .flatMap(m -> m.getContent().stream())
+                                .filter(ToolResultBlock.class::isInstance)
+                                .map(ToolResultBlock.class::cast)
+                                .toList())
+                .singleElement()
+                .satisfies(
+                        result -> {
+                            assertThat(result.getId()).isEqualTo("cube");
+                            assertThat(result.getState()).isEqualTo(ToolResultState.ERROR);
+                            assertThat(
+                                            result.getOutput().stream()
+                                                    .filter(
+                                                            io.agentscope.core.message.TextBlock
+                                                                            .class
+                                                                    ::isInstance)
+                                                    .map(
+                                                            b ->
+                                                                    ((io.agentscope.core.message
+                                                                                            .TextBlock)
+                                                                                    b)
+                                                                            .getText())
+                                                    .toList())
+                                    .anySatisfy(text -> assertThat(text).contains("不读取 Cube 提案参考"));
+                        });
     }
 
     @Test
@@ -117,7 +187,7 @@ class ModelingHitlMiddlewareTest {
                                                                 index == 0
                                                                         ? "invalid-native"
                                                                         : "valid-native",
-                                                                "write_file",
+                                                                "add_relation",
                                                                 ToolCallState.PENDING)))
                                         .build());
                     }
@@ -155,7 +225,7 @@ class ModelingHitlMiddlewareTest {
 
     @Test
     void failedPreflightProducesRecoverableErrorWithoutHumanConfirmation() {
-        ToolUseBlock write = tool("bad-plan", "write_file", ToolCallState.PENDING);
+        ToolUseBlock write = tool("bad-plan", "add_relation", ToolCallState.PENDING);
         ToolUseBlock read = tool("read", "list_files", ToolCallState.PENDING);
         AgentState state = AgentState.builder().sessionId("preflight").build();
         RuntimeContext context = RuntimeContext.builder().agentState(state).build();
@@ -200,7 +270,7 @@ class ModelingHitlMiddlewareTest {
                         null,
                         context,
                         new ActingInput(
-                                List.of(tool("invalid", "write_file", ToolCallState.PENDING))),
+                                List.of(tool("invalid", "add_relation", ToolCallState.PENDING))),
                         input -> Flux.empty())
                 .blockLast();
         assertThat(((ToolResultBlock) state.getContext().get(0).getContent().get(0)).getState())
@@ -214,7 +284,7 @@ class ModelingHitlMiddlewareTest {
                                         List.of(
                                                 tool(
                                                         "fixed",
-                                                        "write_file",
+                                                        "add_relation",
                                                         ToolCallState.PENDING))),
                                 input -> Flux.empty())
                         .collectList()
@@ -338,7 +408,7 @@ class ModelingHitlMiddlewareTest {
 
     @Test
     void pausesBeforeFirstMutationAndPersistsAskingState() {
-        ToolUseBlock first = tool("write-1", "write_file", ToolCallState.PENDING);
+        ToolUseBlock first = tool("write-1", "add_relation", ToolCallState.PENDING);
         ToolUseBlock second = tool("write-2", "patch_file", ToolCallState.PENDING);
         AgentState state =
                 AgentState.builder()
@@ -472,6 +542,91 @@ class ModelingHitlMiddlewareTest {
         assertThat(ModelingHitlMiddleware.WRITE_TOOL_NAMES).doesNotContain("suggest_relations");
     }
 
+    @Test
+    void absoluteProjectModelPathIsTechnicalAndSkipsConfirmation() {
+        ToolUseBlock write =
+                ToolUseBlock.builder()
+                        .id("model-write")
+                        .name("edit_file")
+                        .input(Map.of("path", "/project/models/orders/metadata.yml"))
+                        .state(ToolCallState.PENDING)
+                        .build();
+        AtomicBoolean delegated = new AtomicBoolean();
+        middleware
+                .onActing(
+                        null,
+                        RuntimeContext.builder().build(),
+                        new ActingInput(List.of(write)),
+                        input -> {
+                            delegated.set(true);
+                            return Flux.empty();
+                        })
+                .blockLast();
+        assertThat(delegated).isTrue();
+    }
+
+    @Test
+    void everyDraftFileWriteGoesStraightToTheDraftWithoutACard() {
+        // ADR0111: relationships, rules and caveats are reviewed as a diff before publication,
+        // so no file write pauses the turn and no preflight runs here.
+        var preflight = new AtomicBoolean();
+        var gate =
+                new ModelingHitlMiddleware(
+                        (ctx, call) -> {
+                            preflight.set(true);
+                            return "should not run";
+                        });
+        for (String path :
+                List.of(
+                        "/project/relationships.yml",
+                        "/project/knowledge/rules/general.md",
+                        "knowledge/caveats/pending.md")) {
+            for (String name : List.of("write_file", "edit_file", "delete_file")) {
+                ToolUseBlock write =
+                        ToolUseBlock.builder()
+                                .id(name + path)
+                                .name(name)
+                                .input(Map.of("path", path))
+                                .state(ToolCallState.PENDING)
+                                .build();
+                AtomicBoolean delegated = new AtomicBoolean();
+                var events =
+                        gate.onActing(
+                                        null,
+                                        RuntimeContext.builder().build(),
+                                        new ActingInput(List.of(write)),
+                                        input -> {
+                                            delegated.set(true);
+                                            return Flux.empty();
+                                        })
+                                .collectList()
+                                .block();
+                assertThat(events).isEmpty();
+                assertThat(delegated).isTrue();
+            }
+        }
+        assertThat(preflight).isFalse();
+    }
+
+    @Test
+    void relationDecisionToolStillRequiresConfirmation() {
+        var events =
+                middleware
+                        .onActing(
+                                null,
+                                RuntimeContext.builder().build(),
+                                new ActingInput(
+                                        List.of(
+                                                tool(
+                                                        "relation",
+                                                        "decide_relation",
+                                                        ToolCallState.PENDING))),
+                                input -> Flux.empty())
+                        .collectList()
+                        .block();
+        assertThat(events).filteredOn(RequireUserConfirmEvent.class::isInstance).hasSize(1);
+    }
+
     private static ToolUseBlock tool(String id, String name, ToolCallState state) {
         return ToolUseBlock.builder()
                 .id(id)
@@ -532,9 +687,7 @@ class ModelingHitlMiddlewareTest {
                                 input -> Flux.empty())
                         .collectList()
                         .block();
-        assertThat(events).filteredOn(RequireUserConfirmEvent.class::isInstance).singleElement();
-        var confirmation = (RequireUserConfirmEvent) events.get(0);
-        assertThat(confirmation.getToolCalls().get(0).getState()).isEqualTo(ToolCallState.ASKING);
+        assertThat(events).filteredOn(RequireUserConfirmEvent.class::isInstance).isEmpty();
         ToolUseBlock allowed =
                 ToolUseBlock.builder()
                         .id("store")

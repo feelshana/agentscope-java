@@ -16,6 +16,7 @@
 package io.agentscope.dataagent.tools.data;
 
 import io.agentscope.dataagent.dataset.DatasetGroupService;
+import io.agentscope.dataagent.dataset.FactQueryWindowPolicy;
 import io.agentscope.dataagent.dataset.MdlPublishService;
 import io.agentscope.dataagent.dataset.MdlQuestionService;
 import io.agentscope.dataagent.dataset.MdlSuggestionService;
@@ -23,6 +24,7 @@ import io.agentscope.dataagent.dataset.MdlWorkspaceReader;
 import io.agentscope.dataagent.dataset.MdlWorkspaceService;
 import io.agentscope.dataagent.dataset.WrenCli;
 import io.agentscope.dataagent.dataset.WrenProperties;
+import io.agentscope.dataagent.dataset.WrenSkillsLocator;
 import io.agentscope.dataagent.runtime.DataAgentBootstrap;
 import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
 import io.agentscope.harness.agent.HarnessAgent;
@@ -49,6 +51,7 @@ public class ModelingToolkitRegistrar {
     private final ModelingToolkit toolkit;
     private final WrenProjectFilesystem projectFilesystem;
     private final OfficialWrenToolkit officialTools;
+    private final ModelingConfirmationTool confirmationTool;
 
     public ModelingToolkitRegistrar(
             DataAgentBootstrap bootstrap,
@@ -63,11 +66,30 @@ public class ModelingToolkitRegistrar {
             MdlQuestionService questions,
             io.agentscope.dataagent.dataset.ModelingWorkflowService workflow,
             io.agentscope.dataagent.dataset.WrenProjectAccess projectAccess,
-            io.agentscope.dataagent.dataset.ModelingWorkflowStore checks) {
+            io.agentscope.dataagent.dataset.ModelingWorkflowStore checks,
+            FactQueryWindowPolicy windowPolicy,
+            WrenSkillsLocator skillsLocator,
+            io.agentscope.dataagent.web.persistence.jpa.DatasetRepository datasets,
+            io.agentscope.dataagent.dataset.ModelingConfirmationService confirmations) {
         this.bootstrap = bootstrap;
+        this.confirmationTool = new ModelingConfirmationTool(projectAccess, confirmations);
         this.projectFilesystem = new WrenProjectFilesystem(projectAccess);
+        // Same locator DataAgentConfig mounts from; when present the CLI skills channel closes.
+        // Upload tables come from the same origin field as the runtime probe-boundary context.
         this.officialTools =
-                new OfficialWrenToolkit(projectAccess, wrenCli, wrenProps, mdlPublish, checks);
+                new OfficialWrenToolkit(
+                        projectAccess,
+                        wrenCli,
+                        wrenProps,
+                        mdlPublish,
+                        checks,
+                        windowPolicy,
+                        skillsLocator.locate().isPresent(),
+                        groupId ->
+                                datasets.findByGroupId(groupId).stream()
+                                        .filter(d -> "upload".equals(d.getOrigin()))
+                                        .map(d -> d.getName())
+                                        .collect(java.util.stream.Collectors.toSet()));
         this.toolkit =
                 new ModelingToolkit(
                         suggestions,
@@ -105,9 +127,19 @@ public class ModelingToolkitRegistrar {
             io.agentscope.core.tool.Toolkit target,
             WrenProjectFilesystem files,
             OfficialWrenToolkit commands) {
+        registerOfficialTools(target, files, commands, null);
+    }
+
+    static void registerOfficialTools(
+            io.agentscope.core.tool.Toolkit target,
+            WrenProjectFilesystem files,
+            OfficialWrenToolkit commands,
+            ModelingConfirmationTool confirmations) {
         target.registerTool(new io.agentscope.harness.agent.tool.FilesystemTool(files));
         target.registerTool(files);
         target.registerTool(commands);
+        // spec092: the assistant asks the user only for genuinely ambiguous business choices.
+        if (confirmations != null) target.registerTool(confirmations);
     }
 
     @PostConstruct
@@ -122,7 +154,10 @@ public class ModelingToolkitRegistrar {
         }
         try {
             registerOfficialTools(
-                    modeling.getDelegate().getToolkit(), projectFilesystem, officialTools);
+                    modeling.getDelegate().getToolkit(),
+                    projectFilesystem,
+                    officialTools,
+                    confirmationTool);
             log.info(
                     "Registered native file tools and official Wren CLI onto agent '{}'",
                     modeling.getName());

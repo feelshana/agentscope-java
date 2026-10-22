@@ -120,6 +120,7 @@ public class ChatController {
     private io.agentscope.dataagent.dataset.KnowledgeBaseOperations knowledgeBaseOperations;
 
     private ChatCapacity chatCapacity;
+    private io.agentscope.dataagent.dataset.ModelingActivity modelingActivity;
 
     /**
      * AgentStateStore keys for which we have already recorded a RUN_SESSION event. Each (userId, agentId)
@@ -166,9 +167,21 @@ public class ChatController {
      * to the legacy single-session behaviour by deferring to the gateway's deterministic key.
      */
     public record ChatRequest(
-            String message, String sessionKey, java.util.List<String> groupIds, Boolean allGroups) {
+            String message,
+            String sessionKey,
+            java.util.List<String> groupIds,
+            Boolean allGroups,
+            String purpose) {
         public ChatRequest(String message, String sessionKey, java.util.List<String> groupIds) {
-            this(message, sessionKey, groupIds, false);
+            this(message, sessionKey, groupIds, false, null);
+        }
+
+        public ChatRequest(
+                String message,
+                String sessionKey,
+                java.util.List<String> groupIds,
+                Boolean allGroups) {
+            this(message, sessionKey, groupIds, allGroups, null);
         }
     }
 
@@ -274,9 +287,19 @@ public class ChatController {
                                                         state.equals("queued")
                                                                 ? "排队中，正在等待执行名额…"
                                                                 : "正在处理你的问题…")));
+        final String purposeConversation = conversation;
         return Flux.defer(
                         () -> {
                             guard.require((String) auth.getPrincipal(), agentId, Tier.RUN);
+                            // Read by buildInbound for this turn and any confirmation resume.
+                            if (ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId)) {
+                                conversationScopes.putModelingPurpose(
+                                        (String) auth.getPrincipal(),
+                                        purposeConversation,
+                                        io.agentscope.dataagent.dataset.ModelingTurnPurpose
+                                                .normalize(req.purpose()));
+                                return trackModeling(req.groupIds(), execution);
+                            }
                             return execution;
                         })
                 .onErrorResume(
@@ -1094,6 +1117,12 @@ public class ChatController {
         if (requestId != null) {
             runtimeContextBuilder.put(ToolEventBus.REQUEST_ID_CONTEXT_KEY, requestId);
         }
+        String purpose = conversationScopes.modelingPurpose(userId, conversationId);
+        if (purpose != null && ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId)) {
+            runtimeContextBuilder.put(
+                    io.agentscope.dataagent.dataset.ModelingTurnPurpose.class,
+                    new io.agentscope.dataagent.dataset.ModelingTurnPurpose(purpose));
+        }
         RuntimeContext runtimeContext = runtimeContextBuilder.build();
         if (agentId == null || agentId.isBlank()) {
             return InboundMessage.dm(ChatUiChannel.CHANNEL_ID, userId, List.copyOf(msgs))
@@ -1308,6 +1337,17 @@ public class ChatController {
                 .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
 
+    /** ADR0111: publish and revert wait while a modeling turn may still change the draft. */
+    private <T> Flux<T> trackModeling(List<String> groupIds, Flux<T> execution) {
+        if (modelingActivity == null || groupIds == null || groupIds.isEmpty()) return execution;
+        List<String> groups = List.copyOf(groupIds);
+        return Flux.defer(
+                () -> {
+                    groups.forEach(modelingActivity::begin);
+                    return execution.doFinally(signal -> groups.forEach(modelingActivity::end));
+                });
+    }
+
     private ServerSentEvent<String> sse(String eventType, Object data) {
         String json;
         try {
@@ -1332,7 +1372,8 @@ public class ChatController {
             ConversationScopeRegistry conversationScopes,
             DatasetGroupService datasetGroupService,
             io.agentscope.dataagent.dataset.KnowledgeBaseOperations knowledgeBaseOperations,
-            ChatCapacity chatCapacity) {
+            ChatCapacity chatCapacity,
+            io.agentscope.dataagent.dataset.ModelingActivity modelingActivity) {
         this(
                 chatUiChannel,
                 builderBootstrap,
@@ -1347,5 +1388,6 @@ public class ChatController {
                 datasetGroupService);
         this.knowledgeBaseOperations = knowledgeBaseOperations;
         this.chatCapacity = chatCapacity;
+        this.modelingActivity = modelingActivity;
     }
 }

@@ -57,7 +57,8 @@ public class ModelingWorkflowService {
             List<Change> changedAssets,
             List<Blocker> blockers,
             Action nextAction,
-            boolean canPublish) {}
+            boolean canPublish,
+            List<String> affectedQuestionIds) {}
 
     public Workflow snapshot(DatasetScope scope, String groupId) {
         if (scope == null || scope.ownerId() == null || scope.ownerId().isBlank())
@@ -73,9 +74,21 @@ public class ModelingWorkflowService {
         boolean hasData = !groups.listDatasets(scope.ownerId(), groupId).isEmpty();
         var preview = publisher.preview(groupId);
         boolean available =
-                hasData && group.getMdlVersion() > 0 && catalog.load(groupId).isPresent();
+                hasData
+                        && !group.isModelingPending()
+                        && group.getMdlVersion() > 0
+                        && catalog.load(groupId).isPresent();
         List<Change> changes = changes(preview);
         var reviews = questions.list(groupId);
+        // spec092: confirmations bind to the question; a model changed since confirmation only
+        // suggests a re-check and never blocks publication.
+        String modelHash = questions.modelHash(workspace.workspaceRoot(groupId));
+        List<String> affected =
+                reviews.stream()
+                        .filter(r -> "CONFIRMED".equals(r.status()) && r.validation() != null)
+                        .filter(r -> !modelHash.equals(r.validation().modelHash()))
+                        .map(r -> r.question().id())
+                        .toList();
         List<Blocker> blockers = new ArrayList<>();
         int confirmed = 0, incomplete = 0, needsValidation = 0, awaiting = 0;
         for (var review : reviews) {
@@ -124,10 +137,13 @@ public class ModelingWorkflowService {
         Action action;
         if (!hasData) {
             stage = "DATA_PREPARATION";
-            action = new Action("PREPARE_DATA", "选择表或上传数据", "接入数据后系统自动生成基础模型，成功后即可问数。");
-        } else if (!available) {
+            action = new Action("PREPARE_DATA", "选择表或上传数据", "采样后进入语义建模，完成并发布后才能问数。");
+        } else if (preview.files().isEmpty()) {
             stage = "DATA_PREPARATION";
             action = new Action("INITIALIZE", "生成或重试基础模型", "基础模型尚不可查询，请先完成初始化；已有草稿问题可能需要先处理。");
+        } else if (!available) {
+            stage = "PASSED".equals(engineering) ? "PUBLICATION" : "VALIDATION";
+            action = new Action("MODEL", "完成基础语义建模", "可上传业务文档并与助手完善模型，检查并显式发布后开放问数。");
         } else if (!preview.changed()) {
             stage = "COMPLETE";
             action =
@@ -160,7 +176,8 @@ public class ModelingWorkflowService {
                 changes,
                 blockers,
                 action,
-                hasData && !preview.files().isEmpty() && blockers.isEmpty());
+                hasData && !preview.files().isEmpty() && blockers.isEmpty(),
+                affected);
     }
 
     private static List<Change> changes(MdlPublishService.MdlPreview preview) {

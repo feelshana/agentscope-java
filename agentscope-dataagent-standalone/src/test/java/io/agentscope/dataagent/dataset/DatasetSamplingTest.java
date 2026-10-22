@@ -118,15 +118,14 @@ class DatasetSamplingTest {
                                                 2,
                                                 true,
                                                 false)))));
+        Files.createDirectories(root.resolve("raw"));
+        Files.createDirectories(root.resolve("knowledge/rules"));
+        Files.writeString(root.resolve("raw/data-samples.md"), "old samples");
+        Files.writeString(root.resolve("knowledge/rules/data-sampling.md"), "old rules");
         assertThat(DatasetSampleDocuments.sync(root, List.of(entity))).isTrue();
         assertThat(DatasetSampleDocuments.sync(root, List.of(entity))).isFalse();
-        assertThat(DatasetSampleDocuments.context(root))
-                .hasSizeLessThanOrEqualTo(6000)
-                .contains("摘要截断");
-        assertThat(Files.readString(root.resolve("knowledge/rules/data-sampling.md")))
-                .contains("不能用样本代替", "PAID");
-        DatasetSampleDocuments.sync(root, List.of());
-        assertThat(Files.readString(root.resolve("raw/data-samples.md")))
-                .doesNotContain("dataset-1", "PAID");
+        assertThat(DatasetSampleDocuments.context(root)).contains("初始 MDL 列描述");
+        assertThat(Files.exists(root.resolve("raw/data-samples.md"))).isFalse();
+        assertThat(Files.exists(root.resolve("knowledge/rules/data-sampling.md"))).isFalse();
     }
 }

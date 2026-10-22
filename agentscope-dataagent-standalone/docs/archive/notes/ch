@@ -1,0 +1,285 @@
+能不能对于语义建模的agent 修改下enrich_context中的内容，去掉建cube和view部分，其它的沿用，深度建模的时候再用原始的，其他都不改
+
+思考了 40s
+可以，而且我认为这就是你目前最合适的改造方式。
+
+不需要重新开发 Document Knowledge Agent，也不需要 Fork Wren Engine。只需基于官方 enrich-context Skill 维护一个轻量修改版：
+
+普通语义建模：enrich-context-lite，去掉创建 Cube 和 View 的流程，其余尽量沿用官方。
+
+深度语义建模：enrich-context，原封不动使用 Wren 官方 Skill。
+
+普通问数：usage，仍然使用官方 Skill。
+
+我重新查看了官方 enrich-context/SKILL.md。它确实可以这样拆分，但不能只删除创建 Cube/View 的两段文字，因为其判断流程、写入路由和用户确认逻辑中还有多处引用。
+
+GitHub
+
+一、最终 Skill 结构
+AgentScope HarnessAgent
+
+语义建模模式选择
+
+普通建模
+
+默认
+enrich-context-lite
+
+MDL 字段描述
+
+枚举与单位
+
+业务规则
+
+SQL 问答对
+
+不新建 Cube/View
+
+深度建模
+
+按需
+enrich-context
+
+全部官方流程
+
+指标建模
+
+Cube 创建
+
+View 创建
+
+人工确认
+
+同一个 Wren Project / MCP Client
+
+MDL · knowledge/rules · knowledge/sql · CLI
+
+关键是：只是切换 Agent 加载的 Skill，不切换 Wren 数据模型、知识库格式，也不改变官方 MCP 的底层实现。
+
+二、官方文件具体需要改哪里？
+根据当前官方源码，我建议只修改以下位置：
+
+官方位置
+
+Lite 版本如何处理
+
+YAML frontmatter
+
+改名为 enrich-context-lite，调整描述
+
+Hard Rules
+
+增加不创建 Cube/View 的硬规则，删除相关创建要求
+
+Step 0–3
+
+保留
+
+Step 4
+
+保留文档、MDL、知识读取；可以继续读取已有 Cube
+
+Step 4.5
+
+保留原有数据探测规则
+
+Step 5 Lane 1
+
+保留结构性语义检查
+
+Step 5 Lane 2
+
+保留文档事实与已有 MDL 差异分析
+
+Step 5 Lane 3
+
+删除 Cube/View 推断及“聚合优先 Cube”的规则
+
+Step 6
+
+保留 Grill / Auto-pilot，移除 Cube/View 提议的确认分支
+
+Step 7
+
+删除 Cube/View 写入 Sink
+
+Step 8
+
+完整保留 validate、build、memory index
+
+Step 9
+
+去掉新建 Cube/View 统计，其他审核报告保留
+
+Things to avoid
+
+清理 Cube/View 创建、校验和重复检查的相关规则
+
+references
+
+保留 gap_catalog.md，不再加载 cube_proposals.md
+
+官方 enrich-context 不只是单个 SKILL.md，还包括 references/gap_catalog.md 和 references/cube_proposals.md。其中后者负责决定何时创建 Cube 或 View，因此 Lite 版本必须停止引用它。
+
+GitHub
++1
+
+需要保留的重要行为
+特别是这些，不建议修改：
+
+读取 raw/ 里的 PDF、Word、数据字典等资料。
+
+从现有 MDL 识别字段描述、枚举、NULL、单位等语义缺口。
+
+将明确业务规则写入 knowledge/rules/。
+
+使用 wren memory store 写入经过确认的 SQL 问答对。
+
+每次修改 MDL 后执行 wren context validate。
+
+对冲突项提示人工处理，不覆盖已有定义。
+
+保留 Grill 和 Auto-pilot 两种交互模式。
+
+这样 Lite 的实际输出与官方保持兼容。
+
+三、最关键的修改：Step 5 和 Step 7
+1. Step 5：不再主动推断 Cube/View
+官方当前的 Lane 3 会根据文档中出现的 SUM、COUNT、AVG 等聚合语义提出 Cube，甚至根据尚未明确的业务概念建议 View。
+
+GitHub
+
+Lite 版本建议替换为以下内容：
+
+### Lane 3 — Inference (Lite mode)
+
+Preserve the original inference workflow for
+non-structural business semantics.
+
+Allowed proposals:
+- Model and column descriptions
+- Enum meanings
+- Units and NULL semantics
+- Default filters
+- Business synonyms
+- Time conventions
+- External identifiers
+- Currency rules
+- Canonical-table preferences
+- Verified NL-to-SQL examples
+
+Do not propose, create, or modify Views or Cubes.
+
+When encountering aggregation metrics:
+- Preserve business definitions as knowledge
+  when an existing supported sink is appropriate.
+- Do not create a Cube automatically.
+- Do not create a View as a replacement.
+- Do not invent SQL examples without validation.
+- Report metrics requiring structured modeling
+  as deferred deep-modeling candidates.
+
+Keep the original evidence, conflict,
+validation and confirmation rules.
+这里不是把聚合指标相关知识全部丢掉。
+
+比如上传文档中写了“营收是支付成功订单的实付金额”，仍然要保留这条业务口径。
+
+只是不再因为出现“营收”就创建 revenue_cube。
+
+2. Step 7：删除 Cube/View 写入路径
+Lite 中保留如下路由：
+
+发现的知识
+
+写入目标
+
+字段枚举、单位、NULL 语义
+
+MDL column description
+
+表用途、字段业务解释
+
+MDL model / column description
+
+默认过滤、业务同义词、货币规则
+
+knowledge/rules/*.md
+
+已验证的自然语言 SQL 对
+
+knowledge/sql/*.md
+
+新 Cube / View 需求
+
+仅汇总为待深度建模事项，不写入项目
+
+这一点非常重要：不要把原本应该建立 Cube 的所有聚合定义，直接强行塞到 MDL Expression 字段里。
+
+否则只是把过度建模从 Cube 转移到了 Expression，问题仍然存在。
+
+四、在 AgentScope 中怎么加载两个版本？
+考虑到你正在使用 HarnessAgent + Wren MCP，我建议让两种 Skill 显式注册，避免 Agent 自行选择版本。
+
+项目结构：
+
+skills/
+├── enrich-context-lite/
+│   ├── SKILL.md
+│   └── references/
+│       └── gap_catalog.md
+│
+└── wren/
+    └── SKILL.md
+加载策略：
+
+平台模式
+
+Skill 来源
+
+普通建模
+
+本地 enrich-context-lite/SKILL.md
+
+深度建模
+
+wren skills get enrich-context --full
+
+问数
+
+wren skills get usage --full
+
+Wren 0.8 以来，官方 Skill 内容主要通过 wren skills get 从已安装 CLI 版本动态获得。自定义 Lite Skill 不会自动成为官方 wren skills get 命令支持的新名称，所以需要让 AgentScope 从你自己的 Skill 目录加载它。
+
+GitHub
+
+运行逻辑可以非常简单：
+
+enum ModelingMode {
+    STANDARD,
+    DEEP
+}
+
+String resolveSkill(ModelingMode mode) {
+    return switch (mode) {
+        case STANDARD -> "enrich-context-lite";
+        case DEEP -> "enrich-context";
+    };
+}
+
+这里是平台路由示意，真正加载时分别使用本地 Skill Loader 和官方 Wren CLI Skill Loader。
+
+一个必须注意的细节
+你的 HarnessAgent 不能在 Lite 模式下，同时把完整的官方 enrich-context 作为另一个可自由发现的 Skill 提供给 LLM。
+
+否则模型仍可能自己加载官方完整版，绕回创建 Cube/View 的流程。
+
+因此：
+
+Standard Agent 只能发现 Lite。
+
+Deep Agent 使用原版。
+
+一次建模任务开始后，模式固定。
+
+两种模式都操作对应 group_id 的草稿项目，正式发布流程不变。

@@ -99,26 +99,9 @@ public class DataToolkitRegistrar {
             main.getDelegate().getToolkit().registerTool(new DataAgentToolkit(chartOptions));
             log.info("Registered DataAgent toolkit onto main agent '{}'", main.getName());
 
-            // Official Wren MCP channel. The WrenToolkit instance below is retained only as the
-            // result-file handoff helper; it is never registered as an AgentScope toolkit, so its
-            // legacy semantic tools cannot compete with the official Wren schema.
-            WrenToolkit resultHandoff =
-                    new WrenToolkit(
-                            wrenGateway,
-                            datasetGroupService,
-                            conversationScopes,
-                            mdlCatalog,
-                            new SandboxBackedFilesystem(),
-                            artifactStore);
-            main.getDelegate()
-                    .getToolkit()
-                    .registerTool(
-                            new WrenMcpToolkit(
-                                    wrenGateway,
-                                    queryAccess,
-                                    publishedProject,
-                                    resultHandoff.withAnswerMemory(answerMemory)));
-            log.info("Registered official Wren MCP adapter onto main agent '{}'", main.getName());
+            // Wren MCP tools are registered per invocation by WrenScopedToolkitMiddleware. A
+            // project-bound client must never be placed on this shared startup toolkit.
+            log.info("Wren MCP tools are invocation-scoped; no shared semantic wrapper registered");
 
             // Register the Python sandbox-execution tool. See the class javadoc for why a
             // standalone proxy (instead of the agent's own filesystem instance) is sufficient.

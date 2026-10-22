@@ -60,4 +60,4 @@
 - specs/010 M4；ADR 0018（双通道总纲）、ADR 0020（M3 运行期）
 - wrenai 源码：`core/wren/src/wren/connector/mysql.py#_apply_limit`、
   `core/wren/src/wren/mcp_server.py`（DEFAULT_ROW_LIMIT/MAX_ROW_LIMIT）
-- 诊断记录：`logs/LLM.log`（2026-09-28 会话，三错误叠加）
+- 诊断记录：`../../logs/archive-20261020/LLM.log`（2026-09-28 会话，三错误叠加）

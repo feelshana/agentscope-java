@@ -104,11 +104,13 @@ export default function AssociateTablesModal({
   groupId,
   onClose,
   onAssociated,
+  onError,
   onAssociateStart,
 }: {
   groupId: string;
   onClose: () => void;
   onAssociated: () => void;
+  onError?: (message: string) => void;
   onAssociateStart?: (tables: string[]) => void;
 }) {
   const [sources, setSources] = useState<ExternalDataSource[]>([]);
@@ -196,6 +198,7 @@ export default function AssociateTablesModal({
         onAssociated();
       })
       .catch(e => {
+        onError?.(e instanceof Error ? e.message : String(e));
         if (mountedRef.current) {
           setError(e instanceof Error ? e.message : String(e));
         }

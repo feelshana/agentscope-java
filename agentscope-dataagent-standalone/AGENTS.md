@@ -1,104 +1,121 @@
 # AGENTS.md — agentscope-dataagent
 
-> 本文件是 AI 编码助手在本仓库工作的「宪法」。每次对话自动生效。
-> 系统详解见 [ARCHITECTURE_zh.md](ARCHITECTURE_zh.md)（动手前先读相关章节）；
-> 架构取舍见 [docs/adr/](docs/adr/)；新功能先写 [docs/specs/](docs/specs/) 中的一页纸需求。
+> AI 编码助手在本仓库工作的「宪法」，每次对话自动生效。只写**当前有效**的规则；历史演变见 ADR 索引。
+> 动手前先读 [ARCHITECTURE_zh.md](ARCHITECTURE_zh.md) 相关章节；新功能先写 spec，架构取舍写 ADR。
 
-## 项目定位
+## 1. 项目定位
 
-基于 AgentScope（HarnessAgent + ReActAgent）的多租户数据分析 Agent 平台。
-核心流程是**通过 Wren 进行语义建模 + 问数**（数据集组 == wren project，ADR 0029）：
+基于 AgentScope（HarnessAgent + ReActAgent）的多租户数据分析 Agent 平台，核心流程是**通过 Wren 语义建模 + 问数**（数据集组即 Wren project）：
 
-- 问数助手 `data-agent`：在授权的已发布工程上使用官方 Wren skills，通过
-  `WrenMcpToolkit` 的 `wren_list_tools` / `wren_call_tool` 发现并调用官方 MCP，
-  配合 `render_chart` / `run_python`。`WrenQueryContextMiddleware` 只提供轻量发布目录；
-  不注册旧 `WrenToolkit`、`retrieve_evidence` 或平台自定义 SQL/Cube/召回路由。
-- 建模助手 `modeling-agent`：使用同版本官方 Wren skills、原生文件工具与受权限约束的
-  `wren_cli`；通用文件写授权、工程 YAML、官方校验/编译/查询和页面显式发布构成主流程。
-  旧 `ModelingToolkit` 和阶段工具保留兼容源码，退出主 Agent 运行时。
-- Wren-only：不存在物理 SQL 直查回退；知识图谱构建链路已停用（ADR 0040），
-  不要向 KG 方向新增功能。
+- 问数助手 `data-agent`：在授权的已发布工程上使用官方 Wren usage 技能；`WrenScopedToolkitMiddleware` 为每次调用注册受权限约束的官方 MCP 工具（`run_sql`、`recall_queries`、`get_instructions` 等，只读），配合 `render_chart` / `run_python`。
+- 建模助手 `modeling-agent`：通用 AgentScope Agent，使用同版本官方 Wren skills、原生文件工具和受权限约束的 `wren_cli`；工程 YAML 是唯一事实源，页面显式发布后才用于问数。
+- Wren-only：没有物理 SQL 直查回退；知识图谱链路已停用，不要向 KG 方向新增功能。
 
-## 技术栈
+## 2. 文档地图
 
-- 后端：Java 17 编译基线（根 pom.xml）+ Spring Boot 4.0.4 WebFlux + Spring Data JPA；JDBC 等阻塞调用必须 `subscribeOn(Schedulers.boundedElastic())`，禁止阻塞事件循环
-- 前端：React 18 + TypeScript + Vite（`frontend/`，构建进 `classpath:/static/`）
-- 存储：当前 application.yml 默认 MySQL 平台库，`h2` profile 切换文件 H2；其他 JDBC 后端须明确配置驱动、SQL 初始化和方言。上传物理表在独立的数据集 MySQL；可选 Redis 会话协调
-- 构建：本 IDEA 项目为 standalone，根 pom.xml 直接构建；通过 Maven 依赖同仓库的 harness/core/OpenAI 扩展，框架变更需先构建安装对应依赖。格式门禁为 Spotless
+| 位置 | 内容 | 何时读/写 |
+|---|---|---|
+| [ARCHITECTURE_zh.md](ARCHITECTURE_zh.md) | 当前实现：装配、主流程、工具链、数据模型；第 14 章为建模与问数的当前运行约束 | 改代码前读；改主流程/装配/工具链/数据模型后同步更新 |
+| [docs/adr/README.md](docs/adr/README.md) | ADR 索引与"当前有效主线" | 做架构取舍时追加新 ADR（只增不改） |
+| [docs/specs/README.md](docs/specs/README.md) | spec 索引；顶层为进行中，`done/` 为历史 | 中大功能先写 spec，确认后再写代码 |
+| [docs/guides/](docs/guides/) | 部署、发布、并发与容量 | 运维与发布操作 |
+| [docs/reference/](docs/reference/) | Agent 定义、会话历史与附件等专题参考 | 查专题细节 |
+| [docs/ai/](docs/ai/) | 多 Agent 共享记忆（当前任务、决策、会话日志） | 每次开始/阶段完成时按 shared-memory 流程读写 |
+| [docs/test-reports/](docs/test-reports/) | 日期命名的验证与复盘报告 | 记录真实验收结果 |
+| `docs/migrations/`、`docs/fixtures/`、`docs/samples/` | SQL 迁移、验收脚本、样例业务资料 | 按需使用 |
+| [docs/archive/](docs/archive/) | 历史资料（旧评审、旧计划、导入分支、原型） | **不作为当前依据** |
 
-## 分层纪律（最重要）
+## 3. 技术栈
 
-1. 业务代码只写在本模块四个包：`web/`（API+权限+审计）、`tools/data/`（问数与建模工具）、`dataset/`（数据资产）、`runtime/`（装配+网关+通道）。
+- 后端：Java 17 + Spring Boot 4.0.4 WebFlux + Spring Data JPA；JDBC 等阻塞调用必须 `subscribeOn(Schedulers.boundedElastic())`，禁止阻塞事件循环。
+- 前端：React 18 + TypeScript + Vite（`frontend/`，构建进 `classpath:/static/`）。
+- 存储：默认 MySQL 平台库（`h2` profile 切换文件 H2）；上传物理表在独立的数据集 MySQL；可选 Redis 会话协调。
+- 构建：standalone 项目，根 `pom.xml` 直接构建，依赖同仓库 harness/core/OpenAI 扩展；格式门禁为 Spotless。框架变更后先在上层仓库执行 `mvn -pl agentscope-harness,agentscope-extensions/agentscope-extensions-model/agentscope-extensions-model-openai -am install -DskipTests`。
+
+## 4. 分层纪律（最重要）
+
+1. 业务代码只写在四个包：`web/`（API、权限、审计）、`tools/data/`（问数与建模工具）、`dataset/`（数据资产）、`runtime/`（装配、网关、通道）。
 2. ReAct 循环、沙箱生命周期、会话路由、工具反射执行一律复用 `agentscope-core` / `agentscope-harness`，**禁止在业务层重新实现**。
-3. 不确定框架内部行为时，先 SearchCodebase 查 harness/core 源码，禁止臆测框架 API。
+3. 不确定框架内部行为时先查 harness/core 源码，禁止臆测框架 API。
 
-## 硬性规则
+## 5. 硬性规则
 
 ### 后端
 
-1. **多租户与显式共享**：资源归属用 `ownerId`；知识库可见性经 `KnowledgeBaseAccessService` 的 QUERY/MANAGE 校验，创建者与全局管理员天然管理。`DatasetScope` 表示当前请求用户及本轮选库，不能把共享库 owner 当运行用户。历史、沙箱、附件和反馈仍私有；库内点赞资料按库串行更新。null scope 不得扩大到其他用户资源。共享写入必须受权限及相应资源锁约束。
-2. **新 HTTP 端点**：参照 `ChatController` 模式 —— `(String) auth.getPrincipal()` 取 userId → `AgentAccessGuard.require(userId, agentId, Tier.X)` 鉴权 → 需要时记审计/用量。数据集类接口在服务层再做 ownerId 校验（参照 `DatasetService#get`）。
-3. **工具与查询边界**：`@Tool`/`@ToolParam` 描述用中文，入参校验；租户上下文由框架注入。语义查询只经官方 MCP/CLI，保持只读与 strict_mode 已声明模型边界，允许官方 SQL 的 LIMIT/OFFSET，不改写官方 MDL。`WrenQueryAccess` 校验本轮范围和 QUERY，实际调用前及排队后复核撤权；工具发现同样受门锁及授权约束。禁止恢复物理 SQL 回退或增加平台业务路由。
-4. **建模写面**：工程 YAML 为唯一事实源；使用原生 `write_file`/`edit_file` 并经 `ModelingHitlMiddleware` 通用文件写确认。`WrenProjectAccess` 校验 MANAGE 并绑定单库工程；禁写 `wren_project.yml` 等平台文件，禁止路径逃逸和任意 shell/profile 切换。普通/ref_sql 模型、关系、视图、Cube、knowledge 按官方契约支持；编译成功不代替页面显式发布。
-5. **上传数据集物理表**：一律 `ds_` 前缀落在数据集 MySQL，不得散落多库（跨数据集 JOIN 依赖同库）。
-6. **知识库范围**：每轮零/单/多/全选的有效授权范围同时写 `ConversationScopeRegistry` 和 RuntimeContext 的 `DatasetScope`，建模限定单库；不能因 null/空选择扩大权限。带外调用通过会话范围恢复上下文；`done.sessionKey` 是 conversationId。
-7. **代码注释/Javadoc 用英文**（跟随现状）；**面向 LLM 的文本用简体中文**（@Tool 描述、系统提示词、SKILL.md、图表标题/轴标签、返回给模型的错误信息）。两者不得混用。
-8. Spring Bean 注入用构造器或 `@Bean` 方法参数；本类内定义的 Bean 不得字段 `@Autowired` 自注入（`DataAgentConfig` 的 Model 循环依赖教训）。
+1. **多租户与共享**：资源归属用 `ownerId`；知识库可见性经 `KnowledgeBaseAccessService` 的 QUERY/MANAGE 校验。`DatasetScope` 表示当前请求用户及本轮选库，不能把共享库 owner 当运行用户；null scope 不得扩大权限；共享写入受权限与资源锁约束，排队后复核撤权。
+2. **新 HTTP 端点**：参照 `ChatController` —— `(String) auth.getPrincipal()` 取 userId → `AgentAccessGuard.require(userId, agentId, Tier.X)` → 需要时记审计/用量；数据集类接口在服务层再做 owner 校验（参照 `DatasetService#get`）。
+3. **查询边界**：语义查询只经官方 MCP/CLI，只读、遵守 strict_mode 已声明模型边界，允许官方 LIMIT/OFFSET，不改写官方 MDL；禁止物理 SQL 回退或平台业务路由。`WrenQueryAccess` 校验本轮范围和 QUERY，调用前及排队后复核撤权。
+4. **建模写面**：只通过原生 `write_file`/`edit_file` 和 `wren_cli` 修改当前用户有 MANAGE 的单库草稿；禁写平台文件、禁止路径逃逸、任意 shell 与 profile 切换。基础建模维护模型、ref_sql、关系与 knowledge；Cube/View 不读不写；问答对不由建模生成。
+5. **上传数据集物理表**：一律 `ds_` 前缀落在数据集 MySQL。
+6. **知识库范围**：每轮有效授权范围同时写 `ConversationScopeRegistry` 和 RuntimeContext 的 `DatasetScope`，建模限定单库；`done.sessionKey` 是 conversationId。
+7. **语言**：代码注释/Javadoc 用英文；面向 LLM 的文本（`@Tool` 描述、系统提示词、SKILL.md、图表标题、返回给模型的错误信息）用简体中文。
+8. **Spring 注入**：用构造器或 `@Bean` 方法参数；多构造器时只给完整构造器标 `@Autowired`；本类内定义的 Bean 不得字段自注入。
 
 ### 前端
 
-1. 函数组件 + TS 严格类型；新页面先看 `frontend/src/pages/` 同类页与 `components/` 复用件；禁止引入新 UI 组件库/图表库（图表统一 ECharts）。
-2. API 调用统一走 `frontend/src/api/*.ts` 的 `apiFetch`；同源 API 401 清理对应失效令牌并返回登录页，403/网络错误不退出。SSE 协议（含 `capacity`、`tool_call/tool_result/token/done/error`）改动必须前后端同步。
-3. `done` 帧的 `sessionKey` 是 conversationId 而非存储层 sessionKey，前端不得混用（会话分裂教训，见 ChatController 注释）。
+1. 函数组件 + TS 严格类型；新页面先看 `frontend/src/pages/` 同类页与 `components/` 复用件；不引入新 UI 组件库/图表库（图表统一 ECharts）。
+2. API 调用统一走 `frontend/src/api/*.ts` 的 `apiFetch`；SSE 协议（`capacity`、`tool_call/tool_result/token/done/error`）改动必须前后端同步。
+3. `done` 帧的 `sessionKey` 是 conversationId，不是存储层 sessionKey。
 
 ### 文档
 
-1. 改主流程/装配/工具链/数据模型 → 同步更新 `ARCHITECTURE_zh.md` 对应章节；引用代码用「类名+方法名」，**禁止写行号**。
-2. 做架构取舍 → 在 `docs/adr/` 追加一条（只增不改）。
-3. 改 `application.yml` 配置项 → 同步 README 配置表与 `ARCHITECTURE_zh.md` 第 12 章。
-4. 中大功能 → 先写 `docs/specs/NNN-<name>.md`（模板见 `000-template.md`），计划确认后再写代码。
+1. 改主流程/装配/工具链/数据模型 → 同步更新 ARCHITECTURE_zh.md 对应章节，引用代码用「类名#方法名」，禁止写行号。
+2. 架构取舍按第 7 节判断表写 ADR 并更新 [ADR 索引](docs/adr/README.md)；ADR 正文只增不改，被取代时只改状态行。
+3. 改 `application.yml` 配置项 → 同步 README 配置表与 ARCHITECTURE_zh.md 第 12 章。
+4. 中大功能 → 先写 `docs/specs/NNN-<name>.md`（模板 `000-template.md`），确认后再写代码；完成并验收后移入 `docs/specs/done/`。
+5. 本文件只写当前有效规则，不按 ADR 逐段追加历史；过期内容直接改写或删除。
+6. 规模上限（`DocsConsistencyTest` 检查）：AGENTS.md ≤ 150 行；`docs/ai/CURRENT_TASK.md` ≤ 80 行；ARCHITECTURE_zh.md 单章 ≤ 250 行。超出时先合并或删减，不提高上限。
 
-## 验证命令（提交前必须全绿）
+## 6. 当前有效边界（只列稳定边界，细节见 ARCHITECTURE_zh.md 第 14 章）
+
+- 建模：官方技能 Auto-pilot，不改官方技能文件；Cube/View 不读不写；问答对不由建模生成；SQL 只读且禁止笛卡尔积；单轮查询有硬上限。
+- 建模变更治理：修改直接进入草稿，在每轮"AI 建模结果"中逐条查看、编辑，草稿栏统一发布，不逐项确认（ADR0111、spec092 §7）；无业务文档的自动建模不写业务规则；业务文档多份、只由用户上传。
+- 问答：只来自用户逐题确认与问数点赞，发布后可被召回。
+- 时间门禁：外部数据源事实表窗口存平台数据库，不写入 MDL；建模、问数、问题验证共用逐表检查；上传表不设门禁。
+- 问数：只有登记了受限事实表的库才"缺日期先问"；统计必须来自 SQL 返回值。
+- 容量默认值均为单进程预算，不能描述为分布式全局容量。
+
+## 7. 每个任务的工作流（Codex 与 Claude 通用）
+
+**开工时**先用一两句话报告：变更类型、本次文档要求（spec 要/不要、ADR 要/不要，以及理由）。用户可当场纠正。
+
+| 变更类型 | spec | ADR | 必须同步 |
+|---|---|---|---|
+| 修 bug、调提示词、加校验、小优化（**默认归入此类**） | 不写 | 不写 | 测试；受影响的 ARCHITECTURE 描述；提交说明 |
+| 新功能或改变用户流程，跨模块且需要验收标准 | 先写，用户确认后再写代码 | 一般不写 | 完成并验收后移入 `docs/specs/done/`，更新 spec 索引 |
+| 多方案取舍且影响长期；改变系统边界、产品方向、安全/多租户、数据模型；推翻旧 ADR | 视规模 | 写（模板 `docs/adr/0000-template.md`） | 旧 ADR 只改"状态"行为"已被 ADR-xxxx 取代"；更新 ADR 索引主线 |
+| 改 `application.yml` 配置项 | — | — | README 配置表、ARCHITECTURE 第 12 章 |
+
+- **需求调整**：进行中的 spec 直接修改并说明变化；已完成的功能被推翻时，写新 spec，必要时写新 ADR 取代旧决策，不改旧 ADR 正文。
+- **规则落地**：同一条规则被违反两次，就改成代码约束或测试，不在文档里加强语气。
+- **文档分层**：文档写结构、边界与原因；易变的数值和细节写在代码常量与测试里。
+- **完成时**：运行第 8 节验证命令（含文档一致性测试 `DocsConsistencyTest`），执行共享记忆 Checkpoint，在最终回复中说明改了什么、验证结果、未验证的部分。
+- **定期清理**：用户说"整理文档"或一个里程碑结束时，按 [doc-maintenance](.agents/skills/doc-maintenance/SKILL.md) 清理。
+
+## 8. 验证命令（提交前必须全绿）
 
 ```bash
+mvn spotless:check
 mvn test
 mvn package -DskipTests
 cd frontend && npm run build
 ```
 
-## 测试约定
+真实 LLM / Docker / Wren 相关测试为条件启用，跳过时须在报告中注明；真实 Agent 行为以重启后的日志验收为准，不能以提示词断言代替。
 
-- 后端测试在 `src/test/java/...` 镜像被测包结构；工具/解析器/安全相关改动必须补 JUnit 用例（参照 `WrenToolkitTest`、`ModelingToolkitTest`、`MdlPublishServiceTest`、`WebhookSignatureTest`）。
-- 多租户/越权类逻辑（WrenQueryAccess、WrenProjectAccess、DatasetScope、QUERY/MANAGE、visible、ACL）变更必须覆盖「看不到别人的数据」及排队撤权。
+## 9. 测试约定
 
-## 提交约定
+- 后端测试在 `src/test/java/...` 镜像被测包结构；工具、解析器、安全相关改动必须补 JUnit 用例。
+- 多租户/越权逻辑（WrenQueryAccess、WrenProjectAccess、DatasetScope、QUERY/MANAGE、ACL）变更必须覆盖「看不到别人的数据」及排队撤权。
 
-Conventional Commits：`feat|fix|refactor|docs|test|chore|perf(<scope>): 摘要`，
-scope ∈ `web|runtime|tools|dataset|frontend|marketplace|docs`。
-正文写：动机（为什么改）→ 方案要点 → 影响面 → 已执行的验证命令。
+## 10. 提交约定
 
-## 当前运行边界（ADR 0069、0074、0077、0078）
+Conventional Commits：`feat|fix|refactor|docs|test|chore|perf(<scope>): 摘要`，scope ∈ `web|runtime|tools|dataset|frontend|marketplace|docs`。正文写：动机 → 方案要点 → 影响面 → 已执行的验证命令。
 
-- modeling-agent 是通用 AgentScope Agent；建模流程、模式选择和语义规则来自安装版官方 Wren skills。运行时仅注册原生文件工具与受当前知识库权限约束的 wren_cli，不再注册旧 ModelingToolkit 或平台模式、关系、视图、问题阶段工具。
-- 工程文件通过原生 write_file/edit_file 修改并经 ModelingHitlMiddleware 授权；memory store 同样确认。通用预览只检查权限和变更内容，技术校验/编译/查询由 Agent 调用官方 CLI 完成。历史 patch_file/批量预检接口仅为旧页面兼容，不恢复为新 Agent 工具链。
-- 草稿文件限定当前用户有 MANAGE 的单知识库 project，归属路径由库 owner 决定；禁止宿主路径、跨工程、任意 shell、profile 切换与平台文件写入。业务文档映射 raw/business-document.md。官方 build 不能代替页面显式发布；KG 和物理查询回退禁用，Cube 按官方契约支持。
-- 上传使用 DatasetUploadProperties/Admission/Intake 的单进程预算、磁盘暂存与失败清理。ChatCapacity 约束 ChatController 问数，建模与其他通道不计入；Wren 实例预算只覆盖 MCP，沙箱只驱逐无活动租约的实例。不得把单进程默认值描述成分布式全局容量或已完成负载验收。
-- 框架变更后先在上层仓库执行 `mvn -pl agentscope-harness,agentscope-extensions/agentscope-extensions-model/agentscope-extensions-model-openai -am install -DskipTests`，再构建 standalone。Docker 取消实测为 opt-in，条件跳过须记录；发布需同步新沙箱镜像。
+## 11. 共享记忆协作
 
-## 项目共享记忆协作规范
-
-### 当前官方 Wren 运行边界（ADR 0069 / spec 058）
-
-- 用户已确认建模与问数都使用同版本官方 Wren skills/CLI/MCP，本项目只提供通用 AgentScope 执行和平台服务，不建设本体/KG，不自研领域流程或 SQL/Cube 路由。
-- 历史 ADR 中 Cube 一律禁用、旧平台 SQL 流程和 SQL LIMIT/OFFSET 一律禁用等规则已被替代；当前保留只读查询、Wren strict_mode 已声明模型边界、租户/路径/profile 隔离和显式发布。
-- 普通模型、ref_sql、关系、视图、Cube、knowledge 均按官方契约支持。官方技能不得修改，官方编译 target/mdl.json 不经平台语义改写；展示目录仅为衍生信息。
-- 问题可选，点赞后用官方 memory 保存成功且用于答案的业务查询，点踩只记录反馈。保留通用文件写授权，不叠加平台业务审阅。
-- 本 IDEA 项目是 standalone：使用根目录 mvn test / mvn package -DskipTests；前端命令在 frontend/ 执行。当前根 pom.xml Java 属性 17，具体能力依实际框架源码，不假设旧多模块命令有效。
-
-- 项目级 Skill：[shared-memory](.agents/skills/shared-memory/SKILL.md)。共享文件位于 [docs/ai/](docs/ai/)，两个 Codex 账号使用同一份项目文件，不依赖账号专属 CODEX_HOME。
-- 每次开始新的开发任务前，先读取本文件与 docs/ai/PROJECT_CONTEXT.md、CURRENT_TASK.md、DECISIONS.md、SESSION_LOG.md，再检查 Git 状态和相关代码，核对记忆与实际进度。
-- 每完成一个重要开发阶段后，执行 shared-memory 的 Checkpoint：更新当前任务、修改文件、测试结果、未完成工作、阻塞及具体下一步；重要决定记录到 DECISIONS.md，简要记录追加到 SESSION_LOG.md。
-- 用户要求“继续任务”时，优先恢复 CURRENT_TASK.md 的未完成事项；用户明确切换任务时保留旧任务为待续。
-- 用户要求“保存进度”或“交接任务”时，读取并执行 shared-memory Skill 对应流程。
-- 不得假设可以直接访问另一个账号的聊天记录；共享文件、实际代码和可核查的验证结果是交接依据。建议、待确认方案和历史测试必须标明状态，不能记作已实施或本次验证。
-- 更新前重新读取并合并共享记忆，保留其他 Agent 的新增内容；不自动提交 Git，不覆盖、删除或回滚其他 Agent 的未提交修改，不记录密钥和令牌。
+- 项目级 Skill：[shared-memory](.agents/skills/shared-memory/SKILL.md)；共享文件在 [docs/ai/](docs/ai/)，多个账号使用同一份项目文件。
+- 开始新任务前读本文件与 `docs/ai/` 下 PROJECT_CONTEXT、CURRENT_TASK、DECISIONS、SESSION_LOG，再核对 Git 状态和代码。
+- 重要阶段完成后执行 Checkpoint：更新 CURRENT_TASK（只保留当前任务）、DECISIONS，追加 SESSION_LOG。
+- "继续任务"优先恢复 CURRENT_TASK 的未完成事项；"保存进度/交接任务"按 Skill 流程执行。
+- 建议、待确认方案和历史测试必须标明状态；不自动提交 Git，不覆盖或回滚他人未提交修改，不记录密钥和令牌。

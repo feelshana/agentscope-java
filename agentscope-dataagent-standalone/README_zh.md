@@ -1,10 +1,14 @@
 # agentscope-dataagent
 
+当前问数由 Agent 按原生会话历史理解日期；平台不解析自然语言日期、不生成或注入日期范围。官方 Wren MCP 执行前会依据已发布 MDL 拦截带日期字段的事实/指标查询中缺少日期条件的聚合或去重 SQL，避免触达数据源。基础建模不自动创建视图，用户明确要求并确认结构后才通过原生文件确认创建；历史视图不处理。逐步耗时见 `logs/archive-20261020/execution-timing.log`。
+
+
+
 > 🇬🇧 English version: [README.md](README.md)
 
 ## 项目概览
 
-外部表关联每表最多读取1000行，在内存提取列样例，不执行全表 COUNT 或逐列 DISTINCT。总行数显示“未统计”，上传文件仍显示准确导入行数；管理者可在数据集详情刷新样本。建模系统上下文包含限长摘要，问数读取已发布的官方工程规则。样本不代表完整枚举、唯一性或精确统计。详见 [ADR 0080](docs/adr/0080-bounded-sampling-and-wren-context.md) 与 [spec 068](docs/specs/068-bounded-sampling-and-wren-context.md)。
+外部表关联每表最多读取1000行，在内存提取列样例，不执行全表 COUNT 或逐列 DISTINCT。总行数显示“未统计”，上传文件仍显示准确导入行数；管理者可在数据集详情刷新样本。建模系统上下文包含限长摘要，问数读取已发布的官方工程规则。样本不代表完整枚举、唯一性或精确统计。详见 [ADR 0080](docs/adr/0080-bounded-sampling-and-wren-context.md) 与 [spec 068](docs/specs/done/068-bounded-sampling-and-wren-context.md)。
 
 升级需要平台表新增可空 `sample_summary_json LONGTEXT` 列。默认 JPA `update` 自动补列；使用 `validate` 的部署须先执行 [MySQL 迁移脚本](docs/migrations/0080-dataset-sampling-mysql.sql)。历史数据不在启动时自动采样，外部表可由管理者手动刷新。
 
@@ -16,7 +20,7 @@ dataagent 让公司里**每位数据分析师都有一个属于自己的数据 a
 - **能力市场，不是大杂烩。** 当某个人确实磨出了一份值得共享的东西 —— 一项 SQL 技能、一个子智能体、一段 memory 备忘 —— 可以把它提名出来；管理员审完通过后，这份内容会进到一个共享库里，下一次别人的 agent 启动就会自动看到。知识自下而上流动，但中间有道闸。
 - **应用管理沙箱。** Python 脚本在每用户 Docker 沙箱内执行，UserSandboxRegistry 管理租约、懒启动、空闲回收和容量驱逐；部署配置镜像、资源规格与实例标签。建模 Agent 使用受工程权限约束的宿主文件系统。
 
-Redis 可协调会话及共享状态；Docker 沙箱、MCP 池和容量预算仍在各进程内。多副本需粘性路由、持久目录共享和容量规划，见 [集群部署边界](docs/cluster-deploy.md)。
+Redis 可协调会话及共享状态；Docker 沙箱、MCP 池和容量预算仍在各进程内。多副本需粘性路由、持久目录共享和容量规划，见 [集群部署边界](docs/guides/cluster-deploy.md)。
 
 ### 一览
 
@@ -68,7 +72,7 @@ dataagent 跑在 **HarnessAgent + `SandboxFilesystem`** 之上，sandbox 生命�
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
-设置 `dataagent.session.redis.enabled=true` 后，per-用户的 `RemoteFilesystem`、`Session`、`ToolEventBus` 全部走 Redis —— 任意副本都能服务任意用户。详见 [`docs/cluster-deploy.md`](docs/cluster-deploy.md)。
+设置 `dataagent.session.redis.enabled=true` 后，per-用户的 `RemoteFilesystem`、`Session`、`ToolEventBus` 全部走 Redis —— 任意副本都能服务任意用户。详见 [`docs/guides/cluster-deploy.md`](docs/guides/cluster-deploy.md)。
 
 ---
 
@@ -79,7 +83,7 @@ dataagent 跑在 **HarnessAgent + `SandboxFilesystem`** 之上，sandbox 生命�
 - **通道（v1）** —— `chatui`（默认开启、主用）、`dingtalk`（可选，原样从 agentscope-builder 移植）以及全新的**通用 Webhook** 通道（HMAC 签名入站，回调 / 长轮询出站）。
 - **能力市场** —— 用户从自己 workspace 中提名 skill / 子智能体 / memory 片段作为 *contributions*。管理员在 Approvals 页审批，通过后内容落到运行态 `shared/` 目录（由 `src/main/resources/shared` 物化、已 gitignore），下次构建时所有租户都能看到。
 - **当前 Wren 工具链** —— 问数使用 `wren_list_tools` / `wren_call_tool` 发现并透传官方 MCP，配合 `render_chart` 和沙箱 `run_python`；建模使用官方 skills、原生文件工具及 `wren_cli`。不注册旧 WrenToolkit、retrieve_evidence 或旧 ModelingToolkit。普通/ref_sql 模型、关系、视图、Cube 和 knowledge 遵循官方契约，SQL 支持 LIMIT/OFFSET，平台不改写 MDL。问题可选，建模完成后页面显式发布；上传或关联表可发布基础 MDL。
-- **知识库共享与容量** —— QUERY 使用已发布模型，MANAGE 管理建模/发布/成员；运行用户、私有会话和附件不随库共享改变。上传采用大小/解析限制、准入和失败回滚；问数有全局/每用户执行与等待名额及 SSE 排队提示，预算均为单进程。配置与发布见 [平台并发说明](docs/platform-concurrency-and-release.md)。
+- **知识库共享与容量** —— QUERY 使用已发布模型，MANAGE 管理建模/发布/成员；运行用户、私有会话和附件不随库共享改变。上传采用大小/解析限制、准入和失败回滚；问数有全局/每用户执行与等待名额及 SSE 排队提示，预算均为单进程。配置与发布见 [平台并发说明](docs/guides/platform-concurrency-and-release.md)。
 
 ---
 
@@ -93,7 +97,7 @@ dataagent 跑在 **HarnessAgent + `SandboxFilesystem`** 之上，sandbox 生命�
 | `skills/`、`subagents/` | `OverlayFilesystem` —— 上层是 per-用户 `RemoteFilesystem`，下层是共享目录 `shared/{skills,subagents}/` |
 | `knowledge/`、`AGENTS.md` | 磁盘上的共享根目录，对租户只读挂载（变更只能走能力市场贡献流程） |
 
-当 `dataagent.session.redis.enabled=true` 时，同一份 `RemoteFilesystem` 由 Redis 后端支撑（跨副本重启可恢复）；否则是本机文件存储。详见 [`docs/cluster-deploy.md`](docs/cluster-deploy.md)。
+当 `dataagent.session.redis.enabled=true` 时，同一份 `RemoteFilesystem` 由 Redis 后端支撑（跨副本重启可恢复）；否则是本机文件存储。详见 [`docs/guides/cluster-deploy.md`](docs/guides/cluster-deploy.md)。
 
 ---
 
@@ -156,7 +160,7 @@ dataagent:
 - `ToolEventBus` 切成 Redis Pub/Sub —— R2 上的 SSE 消费方能收到 R1 在同一 session 触发的 tool-call 事件。
 - 启动前置检查：如果 `dataagent.workspace` 指向临时路径（`/tmp/`、`/var/tmp/` 等），会拒绝启动。
 
-3 副本部署详见 [`docs/cluster-deploy.md`](docs/cluster-deploy.md)。
+3 副本部署详见 [`docs/guides/cluster-deploy.md`](docs/guides/cluster-deploy.md)。
 
 ### 3.（可选）启用 Webhook 侧通道
 
@@ -294,7 +298,7 @@ java -jar target/agentscope-dataagent-*-exec.jar
 
 ## 构建
 
-本项目是 standalone，根 pom.xml 的 Java 编译基线为 17。执行根目录 `mvn test`、`mvn package -DskipTests`，前端在 frontend 下 `npm run build`。框架代码变更须先安装同版本 harness/OpenAI 扩展，沙箱取消机制须配套新镜像，详见 [发布说明](docs/platform-concurrency-and-release.md)。
+本项目是 standalone，根 pom.xml 的 Java 编译基线为 17。执行根目录 `mvn test`、`mvn package -DskipTests`，前端在 frontend 下 `npm run build`。框架代码变更须先安装同版本 harness/OpenAI 扩展，沙箱取消机制须配套新镜像，详见 [发布说明](docs/guides/platform-concurrency-and-release.md)。
 
 ```bash
 mvn package -DskipTests
@@ -306,10 +310,21 @@ mvn package -DskipTests
 - `target/agentscope-dataagent-<version>.jar` —— thin 库 JAR
 - `target/dataagent-<version>.tar.gz` —— Linux 单机发布包（bin/conf/lib）
 
-默认构建当前前端。公共默认配置与 h2 profile 保留在 JAR；本地 application-dev/prod 的 yml/yaml/properties 不进入 JAR 或发布包。分发仅提供无凭据配置样例；部署时创建外置配置。Linux 脚本检查 Wren 依赖并等待应用健康，持久状态位于版本目录外。操作步骤见[单机发布](docs/single-host-release.md)。
+默认构建当前前端。公共默认配置与 h2 profile 保留在 JAR；本地 application-dev/prod 的 yml/yaml/properties 不进入 JAR 或发布包。分发仅提供无凭据配置样例；部署时创建外置配置。Linux 脚本检查 Wren 依赖并等待应用健康，持久状态位于版本目录外。操作步骤见[单机发布](docs/guides/single-host-release.md)。
 
 格式检查（CI 会卡）：
 
 ```bash
 mvn spotless:check
 ```
+
+## 当前运行约束
+
+建模、用户确认问答、SQL 时间门禁与问数准备的有效规则统一维护在：
+
+- [ARCHITECTURE_zh.md 第 14 章](ARCHITECTURE_zh.md#14-建模与问数的当前运行约束)：当前代码行为
+- [AGENTS.md 第 6 节](AGENTS.md)：AI 编码助手遵循的精简清单
+- [ADR 索引](docs/adr/README.md)：决策原因与取代关系
+- [spec 索引](docs/specs/README.md)：进行中与已完成的功能需求
+
+部署、单机发布与并发容量等运维说明见 [docs/guides/](docs/guides/)。

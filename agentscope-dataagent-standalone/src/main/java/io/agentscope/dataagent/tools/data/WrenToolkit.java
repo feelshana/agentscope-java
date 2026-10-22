@@ -876,7 +876,7 @@ public final class WrenToolkit {
     private static String renderTable(String payload) {
         JsonNode root;
         try {
-            root = MAPPER.readTree(payload);
+            root = MAPPER.readTree(stripQueryReceipt(payload));
         } catch (Exception e) {
             return rawPayload(payload);
         }
@@ -909,6 +909,20 @@ public final class WrenToolkit {
             sb.append("\n(结果已截断，仅返回前 ").append(rows.size()).append(" 行；请加聚合或筛选条件，或调整 limit 后重试)");
         }
         return sb.toString();
+    }
+
+    /** Removes the transport receipt before parsing the official Wren JSON payload. */
+    private static String stripQueryReceipt(String payload) {
+        if (payload == null) {
+            return "";
+        }
+        String marker = "[WREN_QUERY_RECEIPT]";
+        String text = payload.trim();
+        if (!text.startsWith(marker)) {
+            return text;
+        }
+        int newline = text.indexOf('\n', marker.length());
+        return newline < 0 ? "" : text.substring(newline + 1).trim();
     }
 
     private static String rawPayload(String payload) {

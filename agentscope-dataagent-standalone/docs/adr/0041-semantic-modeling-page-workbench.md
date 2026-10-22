@@ -1,6 +1,6 @@
 # ADR 0041 — 语义建模页工作台化：资产独立展示与对话驱动更新发布
 
-日期：2026-10-05 · 状态：Accepted（讨论稿经 docs/prototypes/0041-modeling-workbench.html 可交互原型
+日期：2026-10-05 · 状态：Accepted（讨论稿经 docs/archive/prototypes/0041-modeling-workbench.html 可交互原型
 多轮迭代定稿；实施明细见 docs/specs/030）
 
 ## 背景

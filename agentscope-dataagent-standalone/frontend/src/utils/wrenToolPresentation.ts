@@ -24,9 +24,14 @@ export function officialToolName(name: string, input?: string): string {
 export function wrenToolLabel(name: string, input?: string): string | undefined {
   if (name === 'wren_list_tools') return '查看可用工具';
   if (name === 'wren_read_knowledge') return '读取知识内容';
-  if (name !== 'wren_call_tool') return undefined;
+  if (name !== 'wren_call_tool') return WREN_LABELS[name];
   const actual = officialToolName(name, input);
   return WREN_LABELS[actual] ?? (actual === name ? '调用知识库工具' : `知识库工具 · ${actual}`);
+}
+
+export function isWrenTool(name: string): boolean {
+  return Object.prototype.hasOwnProperty.call(WREN_LABELS, name)
+    || ['wren_call_tool', 'wren_list_tools', 'wren_read_knowledge'].includes(name);
 }
 
 // Parse JSON strings without replacing escapes inside SQL or other source text.
@@ -63,7 +68,8 @@ export function parseWrenResult(raw: string): WrenDisplayResult {
     } catch { /* Preserve malformed receipts in the original text. */ }
   }
   text = unwrap(text).trim();
-  if (text.startsWith('error:')) return { receipt, note: text.slice(6).trim(), error: true };
+  if (/^(?:error:|\[error\])/i.test(text))
+    return { receipt, note: text.replace(/^(?:error:|\[error\])/i, '').trim(), error: true };
   try { return { receipt, data: JSON.parse(text) as unknown, note: '', error: false }; }
   catch { /* A query can append an artifact note after its JSON payload. */ }
   if (text.startsWith('{') || text.startsWith('[')) {
@@ -89,4 +95,26 @@ export function parseWrenResult(raw: string): WrenDisplayResult {
     }
   }
   return { receipt, note: text, error: false };
+}
+
+/** Confirmation-card view of a wren_cli call; only memory store/index ever ask for approval. */
+export interface WrenCliProposal {
+  kind: 'store' | 'index' | 'other';
+  title: string;
+  question: string;
+  sql: string;
+}
+
+export function wrenCliProposal(args: string[]): WrenCliProposal {
+  const valueOf = (flag: string) => {
+    const at = args.indexOf(flag);
+    return at >= 0 && at + 1 < args.length ? args[at + 1] : '';
+  };
+  if (args[0] === 'memory' && args[1] === 'store') {
+    return { kind: 'store', title: '保存 Wren 问题与 SQL 示例', question: valueOf('--nl'), sql: valueOf('--sql') };
+  }
+  if (args[0] === 'memory' && args[1] === 'index') {
+    return { kind: 'index', title: '重建 Wren 索引（含自动生成的种子示例）', question: '', sql: '' };
+  }
+  return { kind: 'other', title: '执行 Wren 命令', question: '', sql: '' };
 }

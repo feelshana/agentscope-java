@@ -53,6 +53,15 @@ public class ProcessWrenCli implements WrenCli {
                 () -> runProcess(projectHome, timeout, args));
     }
 
+    /**
+     * Kills children before the parent: on Windows the wren launcher spawns python, and once the
+     * launcher is gone its orphaned children are no longer reachable through descendants().
+     */
+    static void destroyTree(Process process) {
+        process.descendants().forEach(ProcessHandle::destroyForcibly);
+        process.destroyForcibly();
+    }
+
     private Result runProcess(Path projectHome, Duration timeout, List<String> args) {
         List<String> command = new ArrayList<>();
         command.add(props.resolveExecutable());
@@ -86,7 +95,7 @@ public class ProcessWrenCli implements WrenCli {
             process.getOutputStream().close();
 
             if (!process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
-                process.destroyForcibly();
+                destroyTree(process);
                 return new Result(
                         -1,
                         "wren " + String.join(" ", args) + " 执行超时（" + timeout.toSeconds() + "s）");
@@ -99,10 +108,7 @@ public class ProcessWrenCli implements WrenCli {
             Thread.currentThread().interrupt();
             return new Result(-1, "wren 命令执行被中断");
         } finally {
-            if (process != null && process.isAlive()) {
-                process.descendants().forEach(ProcessHandle::destroyForcibly);
-                process.destroyForcibly();
-            }
+            if (process != null && process.isAlive()) destroyTree(process);
             if (outFile != null) {
                 try {
                     Files.deleteIfExists(outFile);

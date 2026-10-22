@@ -399,7 +399,8 @@ class ModelingToolkitTest {
                                 new ModelingWorkflowService.Blocker(
                                         "QUESTION_CONFIRMATION", "sales", "请确认结果")),
                         new ModelingWorkflowService.Action("CONFIRM", "审阅结果", "执行成功仍需确认"),
-                        false);
+                        false,
+                        List.of());
         when(workflow.snapshot(any(), eq(GROUP))).thenReturn(state);
         var guided =
                 new ModelingToolkit(
