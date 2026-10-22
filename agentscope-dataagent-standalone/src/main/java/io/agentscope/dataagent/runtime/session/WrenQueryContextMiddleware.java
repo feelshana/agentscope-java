@@ -59,7 +59,14 @@ public final class WrenQueryContextMiddleware implements HarnessRuntimeMiddlewar
                             text.append(serviceTime(clock));
                             text.append("\n\n# 已授权 Wren 知识库\n");
                             java.util.List<String> limitedTables = new java.util.ArrayList<>();
-                            for (var group : access.visible(context)) {
+                            var visible = access.visible(context);
+                            if (visible.isEmpty())
+                                // 2026-10-22 log: with no knowledge base selected the model tried
+                                // the wren CLI through run_python and blamed the sandbox.
+                                text.append(
+                                        "本轮未选择知识库，没有可查询的数据。用户问到数据时，直接请用户先在问数页面选择一个已发布的知识库；"
+                                                + "不要用 run_python、命令行或其它方式自行连接 Wren 或数据库。\n");
+                            for (var group : visible) {
                                 text.append("- ")
                                         .append(group.getName())
                                         .append("：group_id=")
@@ -130,7 +137,7 @@ public final class WrenQueryContextMiddleware implements HarnessRuntimeMiddlewar
         return "\n# 问数最高优先级：受限事实表缺少日期先询问\n受限事实表："
                 + String.join("、", new java.util.LinkedHashSet<>(limitedTables))
                 + "\n"
-                + "分析涉及以上表时，先根据用户问题和已有对话判断是否已提供日期。未提供时直接询问日期范围，本轮不执行分析SQL或日期探查SQL；这一约束优先于自主探索、技能加载和样例召回。禁止为补足用户未提供的日期执行MIN/MAX、日期排序取首尾记录或其它数据探查，也不得自行选一个日期范围代替用户决定。用户已写明月日或相对日期即视为已提供日期，未写年份按当前年份理解，不再确认。用户给出的范围超过该表时间策略的最大天数（例如整年）时，本轮不执行分析SQL，直接回复：该表单次查询最多多少天，请给出不超过上限的具体日期范围；不提出拆分成多次查询再汇总的方案。只涉及其它表、结构查询或业务规则解释时不强制询问日期。直接给出面向用户的回复，不输出推理过程。\n";
+                + "分析涉及以上表时，先根据用户问题和已有对话判断是否已提供日期。未提供时直接询问日期范围，本轮不执行分析SQL或日期探查SQL；这一约束优先于自主探索、技能加载和样例召回。禁止为补足用户未提供的日期执行MIN/MAX、日期排序取首尾记录或其它数据探查，也不得自行选一个日期范围代替用户决定。用户已写明月日、月份（如\"10月\"即该月整月）或相对日期即视为已提供日期，未写年份按当前年份理解，不再确认。用户给出的范围超过该表时间策略的最大天数（例如整年）时，本轮不执行分析SQL，直接回复：该表单次查询最多多少天，请给出不超过上限的具体日期范围；不提出拆分成多次查询再汇总的方案。只涉及其它表、结构查询或业务规则解释时不强制询问日期。直接给出面向用户的回复，不输出推理过程。\n";
     }
 
     /** Service clock block shared by query and modeling contexts; matches the SQL gate's zone. */

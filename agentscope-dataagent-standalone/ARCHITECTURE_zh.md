@@ -209,7 +209,7 @@ main 线程）同步执行，每个 server 经 `McpClientBuilder.buildAsync().bl
 
 `DataAgentConfig#dataAgentBootstrap` 对主 data-agent 挂载安装版官方 skills，使用原生 HarnessAgent/ReActAgent。
 `WrenQueryContextMiddleware#onSystemPrompt` 仅给出鉴权用户可用的项目 ID/名称与发布状态，不注入草稿、业务规则或自研 SQL 剧本。
-`DataToolkitRegistrar#register` 只注册平台通用结果工具；`WrenScopedToolkitMiddleware` 按本轮 RuntimeContext 复制 Toolkit，并通过 `Toolkit#registerMcpClient` 注册绑定当前已发布 project 的 MCP client。Agent 加载官方 usage，通过 listTools 发现官方 schema，
+`DataToolkitRegistrar#register` 只注册平台通用结果工具；问数 Agent 与其 Toolkit 由全体用户共用，只使用框架公开的中间件契约实现按次绑定，不修改 agentscope-core：`WrenQueryToolRegistrar#register` 启动时在共享 Toolkit 上为只读官方工具各注册一个不含知识库信息的 `WrenToolForwarder`；`WrenScopedToolkitMiddleware#onModelCall` 为本次调用新建只含官方 MCP 工具的 Toolkit（`Toolkit#registerMcpClient` 注册绑定当前已发布 project 的 `WrenScopedMcpClient`）存入 RuntimeContext，并把传给模型的工具列表改为"共享工具（去掉转发工具）+ 本次官方 schema"，未选库时不提供官方工具；框架从共享 Toolkit 执行转发工具，转发工具把调用交给本次作用域内的同名官方工具，权限、只读与时间门禁仍在 `WrenScopedMcpClient` 中校验。Agent 加载官方 usage，通过 listTools 发现官方 schema，
 再以原始 arguments 调用 get_instructions/get_context/describe_schema/recall_queries/run_sql/query_cube 等官方工具。
 只有官方已提供的工具可调用；问数服务不使用 --allow-write，store_query 不对 Agent 开放。
 
@@ -850,7 +850,7 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 
 ## 13. 关键类与文件索引
 
-> ADR 0081 新入口：WrenQueryAccess（权限选择）、WrenPublishedProject（发布部署/官方索引）、WrenQueryContextMiddleware（项目目录）、WrenScopedToolkitMiddleware（调用作用域 Toolkit）、WrenScopedMcpClient（原始 MCP 透传）、WrenInstanceRegistry#listTools（原生发现）。验收 fixtures 位于 docs/fixtures/wren-native/，30 个固定 SQL/标准结果用于执行对照，不能等同真实 LLM 准确率。
+> ADR 0081 新入口：WrenQueryAccess（权限选择）、WrenPublishedProject（发布部署/官方索引）、WrenQueryContextMiddleware（项目目录）、WrenScopedToolkitMiddleware（调用作用域 Toolkit，经 WrenToolForwarder 执行）、WrenScopedMcpClient（原始 MCP 透传）、WrenInstanceRegistry#listTools（原生发现）。验收 fixtures 位于 docs/fixtures/wren-native/，30 个固定 SQL/标准结果用于执行对照，不能等同真实 LLM 准确率。
 
 | 关注点 | 类（锚点） |
 |---|---|

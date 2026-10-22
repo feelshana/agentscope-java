@@ -30,8 +30,9 @@ class RuntimeWindowContextTest {
         when(access.visible(context)).thenReturn(List.of());
         var middleware = new WrenQueryContextMiddleware(access, null, clock);
         assertThat(middleware.onSystemPrompt(null, context, "base").block())
-                .contains(
-                        "当前时间：2026-10-20T23:59:59+08:00", "当前日期：2026-10-20", "服务时区：Asia/Shanghai");
+                .contains("当前时间：2026-10-20T23:59:59+08:00", "当前日期：2026-10-20", "服务时区：Asia/Shanghai")
+                // No knowledge base selected: ask the user to pick one, never work around it.
+                .contains("本轮未选择知识库", "不要用 run_python");
         assertThat(middleware.onSystemPrompt(null, context, "base").block())
                 .contains("当前时间：2026-10-21T00:00:01+08:00", "当前日期：2026-10-21", "服务时区：Asia/Shanghai")
                 .doesNotContain("当前日期：2026-10-20");

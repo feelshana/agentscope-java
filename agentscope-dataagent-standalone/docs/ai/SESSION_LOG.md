@@ -398,3 +398,4 @@
 - 2026-10-22（Asia/Shanghai）｜实施checkpoint｜16:38 日志：访问次数口径与关系已改为提问，问数用 STR_TO_DATE 与 SUM(visit_count)，确认正确命中门禁复用；问题 SQL 因 MAX(project_name) 被外部表极值规则误拒两次，已改为只限制时间列极值。推荐问题改简单、试问打开时才生成，"设为示例"改为"确认正确"。未提交。
 - 2026-10-22（Asia/Shanghai）｜实施checkpoint｜17:05 新库测试：自动建模未运行（切换标签丢失 start=1，只跑了文档更新），已改为记住开始意图；推荐问题出现"各项目的项目数量"，提示词要求围绕事实表度量；问数按报表过滤、STR_TO_DATE、SUM 正确；门禁 CACHE_HIT 生效。"已设为示例"为旧页面缓存，需刷新。未提交。
 - 2026-10-22（Asia/Shanghai）｜实施checkpoint｜17:21 重建测试：自动建模正常运行，规则依据真实，三个口径问题合理，推荐问题简单，问数遵循用户确认口径；但三个问题名额全用于口径、外部表零关系，已给关系问题单独名额；dry-plan 不再调用门禁模型。未提交。
+- 2026-10-22（Asia/Shanghai）｜实施checkpoint｜去除对 agentscope-core 修改的依赖：新增 WrenToolForwarder/WrenQueryToolRegistrar，中间件改写模型工具列表并按次绑定官方工具；ReActAgent.java 已还原为提交版本（原修改备份为会话 scratchpad 中的 reactagent-callToolkit.patch），框架重新安装后 standalone 全量测试通过。未提交。

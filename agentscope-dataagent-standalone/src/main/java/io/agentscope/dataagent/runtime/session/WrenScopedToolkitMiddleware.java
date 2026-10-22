@@ -17,12 +17,14 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 /**
- * Creates an invocation-scoped AgentScope Toolkit containing the official Wren MCP tools.
+ * Creates an invocation-scoped toolkit holding the official Wren MCP tools of the selected
+ * knowledge base, using only the framework's public middleware contract.
  *
- * <p>The base agent toolkit is shared by concurrent sessions and therefore never receives a
- * project-bound MCP client. The scoped toolkit is copied from that base and attached to the
- * RuntimeContext; the AgentScope core resolves it for both model schema generation and tool
- * execution.
+ * <p>The query agent and its toolkit serve every user, so the shared toolkit never receives a
+ * project-bound MCP client. Instead: the model call's tool list is rewritten here (shared tools
+ * plus this invocation's official schemas), and the shared toolkit carries {@link
+ * WrenToolForwarder} stand-ins that hand each execution to the scoped toolkit kept in the
+ * RuntimeContext.
  */
 public final class WrenScopedToolkitMiddleware implements HarnessRuntimeMiddleware {
     private final WrenQueryAccess access;
@@ -69,9 +71,8 @@ public final class WrenScopedToolkitMiddleware implements HarnessRuntimeMiddlewa
                         signal -> {
                             Scoped scoped = context.get(Scoped.class);
                             if (scoped != null) {
-                                context.put(Toolkit.class, null);
                                 context.put(Scoped.class, null);
-                                scoped.client().close();
+                                if (scoped.client() != null) scoped.client().close();
                             }
                         });
     }
@@ -86,38 +87,46 @@ public final class WrenScopedToolkitMiddleware implements HarnessRuntimeMiddlewa
                             Flux<io.agentscope.core.event.AgentEvent>>
                     next) {
         Scoped existing = context.get(Scoped.class);
-        if (existing != null) return next.apply(withTools(context, input, existing));
+        if (existing != null) return next.apply(withTools(input, existing));
         long start = System.nanoTime();
         return Mono.fromCallable(
                         () -> java.util.Optional.ofNullable(createScopedToolkit(agent, context)))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMapMany(
                         optional -> {
-                            if (optional.isEmpty()) return next.apply(input);
+                            if (optional.isEmpty()) return next.apply(withTools(input, null));
                             Scoped scoped = optional.get();
-                            context.put(Toolkit.class, scoped.toolkit());
                             context.put(Scoped.class, scoped);
                             io.agentscope.dataagent.web.middleware.ExecutionTimingMiddleware.record(
                                     context, "wren.registration", "", start, "SUCCESS");
-                            return next.apply(withTools(context, input, scoped));
+                            return next.apply(withTools(input, scoped));
                         });
     }
 
+    /**
+     * Shared tools without the stand-ins, plus the selected knowledge base's official schemas.
+     * With no knowledge base selected the official tools are simply not offered.
+     */
     private io.agentscope.core.middleware.ModelCallInput withTools(
-            RuntimeContext context,
-            io.agentscope.core.middleware.ModelCallInput input,
-            Scoped scoped) {
+            io.agentscope.core.middleware.ModelCallInput input, Scoped scoped) {
+        java.util.List<io.agentscope.core.model.ToolSchema> tools = new java.util.ArrayList<>();
+        if (input.tools() != null)
+            for (var tool : input.tools())
+                if (!WrenScopedMcpClient.READ_TOOLS.contains(tool.getName())) tools.add(tool);
+        if (scoped != null) tools.addAll(scoped.toolkit().getToolSchemas());
         return new io.agentscope.core.middleware.ModelCallInput(
-                input.messages(),
-                scoped.toolkit()
-                        .getToolSchemas(
-                                context.getAgentState() == null
-                                        ? java.util.Set.of()
-                                        : context.getAgentState()
-                                                .getToolContext()
-                                                .getActivatedGroups()),
-                input.options(),
-                input.model());
+                input.messages(), tools, input.options(), input.model());
+    }
+
+    /** Binds a scoped toolkit without an MCP client; tests of the forwarding path only. */
+    static void attach(RuntimeContext context, Toolkit toolkit) {
+        context.put(Scoped.class, new Scoped(toolkit, null));
+    }
+
+    /** The invocation's scoped toolkit, or null when no knowledge base is bound this turn. */
+    public static Toolkit scopedToolkit(RuntimeContext context) {
+        Scoped scoped = context == null ? null : context.get(Scoped.class);
+        return scoped == null ? null : scoped.toolkit();
     }
 
     private Scoped createScopedToolkit(Agent agent, RuntimeContext context) {
@@ -131,7 +140,8 @@ public final class WrenScopedToolkitMiddleware implements HarnessRuntimeMiddlewa
         WrenScopedMcpClient client =
                 new WrenScopedMcpClient(
                         context, groupId, access, gateway, projects, mdlCatalog, windowPolicy);
-        Toolkit toolkit = agent.getToolkit().copy();
+        // Only the official tools: the shared tools stay on the agent's own toolkit.
+        Toolkit toolkit = new Toolkit();
         toolkit.registerMcpClient(client).block();
         return new Scoped(toolkit, client);
     }

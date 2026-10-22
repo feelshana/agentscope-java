@@ -23,7 +23,7 @@ import reactor.core.scheduler.Schedulers;
 public final class WrenScopedMcpClient extends McpClientWrapper {
     private static final Logger log = LoggerFactory.getLogger(WrenScopedMcpClient.class);
     private static final ObjectMapper JSON = new ObjectMapper();
-    private static final Set<String> READ_TOOLS =
+    public static final Set<String> READ_TOOLS =
             Set.of(
                     "run_sql",
                     "query_cube",
