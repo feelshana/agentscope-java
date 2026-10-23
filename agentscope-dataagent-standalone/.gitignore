@@ -20,3 +20,6 @@ logs/
 
 # Version the project guide even when the parent repository ignores AGENTS.md.
 !/AGENTS.md
+
+# Version the Claude Code entry (it imports AGENTS.md) even when the parent ignores CLAUDE.md.
+!/CLAUDE.md
