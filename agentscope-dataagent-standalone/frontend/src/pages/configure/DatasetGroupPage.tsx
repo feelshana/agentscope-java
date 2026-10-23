@@ -2,6 +2,8 @@ import { FactQueryWindowSettings } from '../../components/FactQueryWindowSetting
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import KnowledgeBaseMembersModal from '../../components/KnowledgeBaseMembersModal';
+import AssociationProgress from '../../components/AssociationProgress';
+import type { AssociationState } from '../../components/AssociationProgress';
 import AssociateTablesModal from '../../components/AssociateTablesModal';
 import EmptyIllustration from '../../components/EmptyIllustration';
 import Icon, { IconName } from '../../components/Icon';
@@ -77,6 +79,7 @@ export default function DatasetGroupPage() {
   const [membersOpen, setMembersOpen] = useState(false);
   const [associateOpen, setAssociateOpen] = useState(false);
   const [associatingTables, setAssociatingTables] = useState<Set<string>>(new Set());
+  const [association, setAssociation] = useState<AssociationState | null>(null);
   /** 多工作表选择弹窗。 */
   interface SheetPick {
     file: File;
@@ -362,9 +365,9 @@ export default function DatasetGroupPage() {
         </div>}
         <div className="kw-tabs" role="tablist" aria-label="知识库内容">{NAV_ITEMS.map(n => <button key={n.key} role="tab" aria-selected={view === n.key} className={view === n.key ? 'active' : ''} onClick={() => n.key === 'modeling' ? navigate(`/configure/modeling/${groupId}`) : setView(n.key)}>{n.label}{n.key === 'files' && <span className="kw-badge">{fileCount}</span>}</button>)}</div>
         <input ref={fileRef} type="file" multiple accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={e => { if (e.target.files?.length) uploadFiles(e.target.files); e.target.value = ''; }} />
-        <details className="kw-progress" open={uploadStatuses.some(s => s.status !== 'ready') || associatingTables.size > 0} hidden={uploadStatuses.length === 0 && associatingTables.size === 0}>
+        {association && <div style={{ margin: '12px 0' }}><AssociationProgress state={association} /></div>}
+        <details className="kw-progress" open={uploadStatuses.some(s => s.status !== 'ready') || associatingTables.size > 0} hidden={uploadStatuses.length === 0}>
           <summary>导入与关联进度{uploadStatuses.length > 0 && ` · 已完成 ${uploadStatuses.filter(s => s.status === 'ready').length}/${uploadStatuses.length} 个文件`}</summary>
-          {Array.from(associatingTables).map(name => <div className="da-small" key={name}>{name} · 关联中…</div>)}
           {uploadStatuses.length > 0 && (
             <div className="da-card" style={{ marginTop: 8, padding: 8 }}>
               {uploadStatuses.map((s, i) => (
@@ -453,6 +456,7 @@ export default function DatasetGroupPage() {
           onClose={() => setAssociateOpen(false)}
           onAssociated={() => { if (activeGroup.current === groupId) { void refresh(); navigate(`/configure/modeling/${groupId}?asset=modeling&start=1`); } }}
           onError={(message) => { setError(message); setAssociatingTables(new Set()); }}
+          onProgress={state => { if (activeGroup.current === groupId) setAssociation(state); }}
           onAssociateStart={(tables) => {
             setAssociatingTables(new Set(tables));
             setAssociateOpen(false);

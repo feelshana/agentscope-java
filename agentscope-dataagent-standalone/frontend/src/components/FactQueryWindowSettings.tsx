@@ -1,10 +1,12 @@
 import { factWindowSetup } from '../utils/factWindowSetup';
 import { useEffect, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { getFactQueryWindowCandidates, saveFactQueryWindow, confirmTableRole } from '../api/modelingWorkflow';
 import type { FactQueryWindowCandidate } from '../api/modelingWorkflow';
 
 type Draft = { mode: 'LIMITED' | 'UNLIMITED'; days: number; timeColumn: string };
 const message = (error: unknown) => error instanceof Error ? error.message : '时间范围配置失败';
+const DAYS = [7, 14, 31, 90];
 
 export function FactQueryWindowSettings({ groupId, automatic = false, onReady }: {
   groupId: string;
@@ -76,45 +78,82 @@ export function FactQueryWindowSettings({ groupId, automatic = false, onReady }:
     finally { if (current === generation.current) setBusy(false); }
   }
 
+  const chip = (active: boolean): CSSProperties => ({
+    padding: '4px 12px', borderRadius: 999, fontSize: 13, cursor: busy ? 'default' : 'pointer',
+    border: `1px solid ${active ? 'var(--da-primary)' : 'var(--da-border)'}`,
+    background: active ? 'color-mix(in srgb, var(--da-primary) 10%, var(--da-surface))' : 'var(--da-surface)',
+    color: active ? 'var(--da-primary)' : 'var(--da-text)', fontWeight: active ? 600 : 400,
+  });
+  const label: CSSProperties = { fontSize: 12, color: 'var(--da-text-muted)', marginBottom: 6 };
+
   return <div>
-    <button className="da-btn" disabled={busy} onClick={() => void load()}>事实表时间范围配置</button>
-    {error && <div role="alert">{error}</div>}
-    {unknown.length > 0 && <div className="da-card">
-      <p>以下表的角色尚未确定，请先确认。维度表不会弹出时间配置。</p>
-      {unknown.map(table => <div key={table.datasetId}>
-        <strong>{table.tableName}</strong>
-        <button className="da-btn" disabled={busy} onClick={() => void setRole(table.datasetId, 'FACT')}>事实表</button>
-        <button className="da-btn" disabled={busy} onClick={() => void setRole(table.datasetId, 'DIMENSION')}>维度表</button>
+    <button className="da-btn da-btn-sm" disabled={busy} onClick={() => void load()}>事实表时间范围</button>
+    {error && !open && <div role="alert" className="da-small" style={{ color: 'var(--da-danger)' }}>{error}</div>}
+    {unknown.length > 0 && <div className="da-card" style={{ marginTop: 8 }}>
+      <div style={{ fontWeight: 600, marginBottom: 4 }}>请先确认表的角色</div>
+      <div className="da-small" style={{ marginBottom: 8 }}>事实表（如访问明细、订单）需要配置查询时间范围；维度表（如用户、项目）不需要。</div>
+      {unknown.map(table => <div key={table.datasetId} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid var(--da-border)' }}>
+        <code style={{ flex: 1 }}>{table.tableName}</code>
+        <button className="da-btn da-btn-sm" disabled={busy} onClick={() => void setRole(table.datasetId, 'FACT')}>事实表</button>
+        <button className="da-btn da-btn-sm" disabled={busy} onClick={() => void setRole(table.datasetId, 'DIMENSION')}>维度表</button>
       </div>)}
     </div>}
-    {open && <div role="dialog" aria-modal="true" aria-label="事实表时间范围配置" className="da-card"
-      style={{ position: 'fixed', inset: '12% 18%', zIndex: 20, overflowY: 'auto', boxShadow: '0 12px 40px #0008' }}>
-      <h2>事实表时间范围配置</h2>
-      {automatic && <p>采样已完成。请先确认事实表的时间字段与查询窗口，保存后自动继续语义建模。</p>}
-      <p>配置独立保存在知识库数据库中，保存后立即生效，无需建模或发布。只检查已登记表；不限制的表跳过。</p>
-      {tables.length === 0 && <p>暂无包含采样时间字段的外部表。</p>}
-      {tables.map(table => {
-        const value = draft[table.datasetId];
-        const update = (change: Partial<Draft>) => setDraft(previous => ({
-          ...previous, [table.datasetId]: { ...previous[table.datasetId], ...change },
-        }));
-        return <div key={table.datasetId} className="da-card" style={{ margin: '10px 0' }}>
-          <strong>{table.tableName}</strong>
-          <button className="da-btn" disabled={busy} onClick={() => void setRole(table.datasetId, 'DIMENSION')}>这是维度表，跳过配置</button>
-          <label>数据时间字段：<select disabled={busy} value={value.timeColumn} onChange={e => update({ timeColumn: e.target.value })}>
-            {table.temporalColumns.map(column => <option key={column} value={column}>{column}</option>)}
-          </select></label>
-          <label>查询限制：<select disabled={busy} value={value.mode} onChange={e => update({ mode: e.target.value as Draft['mode'] })}>
-            <option value="LIMITED">限制查询窗口</option><option value="UNLIMITED">不限制</option>
-          </select></label>
-          {value.mode === 'LIMITED' && <label>最大窗口：<select disabled={busy} value={value.days} onChange={e => update({ days: Number(e.target.value) })}>
-            {[7, 14, 31, 90].map(days => <option key={days} value={days}>{days} 天</option>)}
-          </select></label>}
-        </div>;
-      })}
-      {error && <div role="alert">{error}</div>}
-      <button className="da-btn da-btn-primary" disabled={busy || !tables.length} onClick={() => void save()}>{busy ? '保存中…' : '确认并保存'}</button>
-      <button className="da-btn" disabled={busy} onClick={() => setOpen(false)}>关闭</button>
+    {open && <div className="da-modal-overlay" onClick={() => { if (!busy) setOpen(false); }}>
+      <div role="dialog" aria-modal="true" aria-label="事实表查询时间范围" className="da-modal-shell"
+        style={{ width: 'min(640px, 94vw)', maxHeight: '86vh', display: 'flex', flexDirection: 'column' }}
+        onClick={e => e.stopPropagation()}>
+        <div className="da-modal-head">
+          <div className="da-modal-title">确认事实表的查询时间范围</div>
+          <div className="da-small" style={{ marginTop: 6 }}>
+            {automatic ? '采样已完成。' : ''}为大表限定单次查询可覆盖的天数，避免全表扫描拖慢数据库。保存后立即生效，不需要发布。
+          </div>
+        </div>
+        <div className="da-modal-body" style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {tables.map(table => {
+            const value = draft[table.datasetId];
+            const update = (change: Partial<Draft>) => setDraft(previous => ({
+              ...previous, [table.datasetId]: { ...previous[table.datasetId], ...change },
+            }));
+            return <section key={table.datasetId} style={{ border: '1px solid var(--da-border)', borderRadius: 10, padding: '12px 14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                <code style={{ fontSize: 14, fontWeight: 600 }}>{table.tableName}</code>
+                <span className="da-badge">事实表</span>
+                <span style={{ flex: 1 }} />
+                <button type="button" disabled={busy} onClick={() => void setRole(table.datasetId, 'DIMENSION')}
+                  style={{ background: 'none', border: 'none', color: 'var(--da-text-muted)', fontSize: 12, cursor: 'pointer' }}>不是事实表？标为维度表</button>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.5fr)', gap: 16 }}>
+                <div>
+                  <div style={label}>按哪个时间字段限定</div>
+                  <select className="da-input" disabled={busy} value={value.timeColumn} onChange={e => update({ timeColumn: e.target.value })}
+                    style={{ width: '100%', boxSizing: 'border-box' }}>
+                    {table.temporalColumns.map(column => <option key={column} value={column}>{column}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <div style={label}>单次查询最多覆盖</div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {DAYS.map(d => <button key={d} type="button" disabled={busy} style={chip(value.mode === 'LIMITED' && value.days === d)}
+                      onClick={() => update({ mode: 'LIMITED', days: d })}>{d} 天</button>)}
+                    <button type="button" disabled={busy} style={chip(value.mode === 'UNLIMITED')}
+                      onClick={() => update({ mode: 'UNLIMITED' })}>不限制</button>
+                  </div>
+                </div>
+              </div>
+              <div className="da-small" style={{ marginTop: 10 }}>
+                {value.mode === 'LIMITED'
+                  ? `问数时 ${value.timeColumn || '时间字段'} 的范围不能超过 ${value.days} 天，超出时会请用户缩小范围。`
+                  : '不限制查询范围，适合数据量较小的表。'}
+              </div>
+            </section>;
+          })}
+          {error && <div role="alert" className="da-small" style={{ color: 'var(--da-danger)' }}>{error}</div>}
+        </div>
+        <div className="da-modal-foot" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button className="da-btn" disabled={busy} onClick={() => setOpen(false)}>稍后配置</button>
+          <button className="da-btn da-btn-primary" disabled={busy || !tables.length} onClick={() => void save()}>{busy ? '保存中…' : '保存'}</button>
+        </div>
+      </div>
     </div>}
   </div>;
 }

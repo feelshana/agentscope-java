@@ -358,13 +358,23 @@ public class DatasetGroupController {
         return a.compareTo(b) <= 0 ? a + "|" + b : b + "|" + a;
     }
 
-    /** Associates existing tables of an external data source into this KB as read-only datasets. */
+    /**
+     * Associates existing tables of an external data source into this KB as read-only datasets.
+     * The page associates one table per request to show sampling progress, with {@code publish}
+     * false, then sends an empty table list with {@code publish} true to rebuild the base MDL once.
+     */
     @PostMapping("/{id}/associate")
     public Mono<List<DatasetController.DatasetVO>> associate(
             @PathVariable String id, @RequestBody AssociateRequest req, Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
                         () -> {
+                            boolean publish = req.publish() == null || req.publish();
+                            if (req.tables() == null || req.tables().isEmpty()) {
+                                if (!publish) throw new DatasetException("请选择至少一张表", 400);
+                                baselineMdlService.publishAfterDatasetChange(userId, id);
+                                return List.<DatasetController.DatasetVO>of();
+                            }
                             List<DatasetEntity> datasets =
                                     datasetService.associateTables(
                                             userId,
@@ -373,7 +383,7 @@ public class DatasetGroupController {
                                             req.schema(),
                                             req.tables(),
                                             req.sampling() == null || req.sampling());
-                            baselineMdlService.publishAfterDatasetChange(userId, id);
+                            if (publish) baselineMdlService.publishAfterDatasetChange(userId, id);
                             return datasets.stream()
                                     .map(
                                             d ->
@@ -386,7 +396,11 @@ public class DatasetGroupController {
     }
 
     public record AssociateRequest(
-            String dataSourceId, String schema, List<String> tables, Boolean sampling) {}
+            String dataSourceId,
+            String schema,
+            List<String> tables,
+            Boolean sampling,
+            Boolean publish) {}
 
     private GroupVO toVO(DatasetGroupEntity g, int datasetCount) {
         return toVO(

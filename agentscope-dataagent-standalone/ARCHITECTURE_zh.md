@@ -343,7 +343,7 @@ ADR 0078 / spec 067：`DatasetUploadProperties` 统一大小、文件数量、�
 `ExternalDataSourceController`（`/api/datasources`）管理用户级 JDBC 连接；
 `DatasetService#associateTables` 把外部库已有表关联进知识库：`DataSourceIntrospector`
 读取列元数据/表注释，可选通过 `DatasetSampling#read` 每表一次 LIMIT 1000 有界读取，在内存提取每列最多20个观察值，再经
-`SchemaGenerationService` 生成 AI 描述。`origin=datasource`，删除时不 drop 物理表。
+`SchemaGenerationService` 生成 AI 描述。`origin=datasource`，删除时不 drop 物理表。页面逐表调用 `DatasetGroupController#associate`（`publish=false`）以显示真实采样进度，全部完成后以空表列表、`publish=true` 统一生成一次基础 MDL。
 
 Wren 知识库当前只允许关联同一个 MySQL 外部数据源，拒绝与上传表混合、跨多个外部源或关联
 PostgreSQL。`DatasetService#prepareAssociatedTables` 在任何 repository/registry 写入前完成整批表名、
@@ -909,9 +909,9 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 | 业务文档 | 每库多份，存于草稿 `raw/docs/<名称>.md`，随快照发布；新增、替换（旧版本存 `.platform/docs-history/`）、删除均为草稿修改；只能由用户上传，助手只读；修改后页面自动排队一条 `document` 请求，连续修改合并为一条；问数不直接读取文档 | `BusinessDocumentService`、前端 `BusinessDocumentsPanel` |
 | 入口与增量建模 | 采样与时间配置完成后（`?start=1`）先提示上传业务文档，用户点"开始自动建模"才发送 `purpose=auto` 请求；上传数据弹窗不再附文档；已发布过的库新增表时，运行上下文列出"本次新增的表"，助手只处理新表 | `SemanticModelingPage#startModeling`、`WrenProjectContextMiddleware#newTables` |
 | SQL 词法 | 单条只读 SELECT/WITH，拒绝笛卡尔积写法，允许官方 LIMIT/OFFSET；建模、问数、问题验证共用 | `OfficialWrenToolkit#requireReadOnly` |
-| 运行上下文 | 授权工程、服务时间、编译状态、按表来源的探查边界（上传表有限探查，外部表禁止）、外部受限表时间策略 | `WrenProjectContextMiddleware#onSystemPrompt` |
+| 运行上下文 | 授权工程、服务时间、编译状态、工程文件清单（免逐级列目录）、按表来源的探查边界（上传表有限探查，外部表禁止）、外部受限表时间策略 | `WrenProjectContextMiddleware#onSystemPrompt` |
 | 外部表探查硬约束 | 基础建模轮次不查询非上传表；只有 `purpose=question` 的问题生成、重试、修复轮次可以查询；问题轮次内仍禁止 MIN/MAX，且外部表返回空结果后同轮换日期重试直接拒绝（极值限制只针对时间列，MAX(属性列) 这类分组带出属性不受限）；该检查在时间门禁之前，被拒的查询不调用门禁模型；`dry-plan` 只编译不读数据，不过时间门禁。受限事实表的时间条件写法由平台按采样识别的列格式（`temporal_columns.format`）与数据源生成并注入建模、问数上下文：不补零文本用 `STR_TO_DATE`/`TO_TIMESTAMP` 转换后 `>=`/`<`，补零文本、原生类型与数字日期键直接比较，不用 LIKE；门禁放行结果在进程内按知识库、规则与 SQL 复用（1 小时、500 条），同一 SQL 在试运行、确认正确与问数间判断一致 | `OfficialWrenToolkit#guardExternalProbe`、`isEmptyResult` |
-| 建模页与入口 | 左侧导航"语义建模"打开知识库列表；页头一行（返回、版本、助手状态、标签建模对话/资料/语义模型、试问、去问数）。建模对话页以对话为主，连续工具步骤完成后折叠为一行；"试问"为按需打开的右侧栏（只在用户点击时打开）；底部草稿栏为一行，"查看全部"向上展开抽屉，可发布时按钮高亮；对话在用户位于底部时随内容（含异步加载的结果卡）自动跟随；助手空闲且无待确定问题时，对话末尾显示"下一步"卡（试问、检查并发布，发布后去问数）；页面请求按序排队，助手忙时提示排队数；提交问题不跳页。试问：推荐 3 个问题（`QuestionSuggestionService#MAX_SUGGESTIONS`）或自由提问，以 `purpose=question` 让助手写 `knowledge/questions/<ID>.yml`，助手空闲后平台自动试运行；"确认正确"写入草稿 `knowledge/sql/<ID>.md`（source: user-confirmed），发布后可召回；"不正确，告诉助手"转给对话。试运行与确认正确都过时间门禁；推荐问题在用户打开试问时才生成，要求单指标、至多一个维度的简单问题 | `ModelingHubPage`、`SemanticModelingPage`、`TrialPanel`、`MdlQuestionService#validate/decide` |
+| 建模页与入口 | 左侧导航"语义建模"打开知识库列表；页头一行（返回、版本、助手状态、标签建模对话/资料/语义模型、试问、去问数）。建模对话页以对话为主，连续工具步骤完成后折叠为一行；"试问"为按需打开的右侧栏（只在用户点击时打开）；底部草稿栏为一行，"查看全部"向上展开抽屉，可发布时按钮高亮；对话在用户位于底部时随内容（含异步加载的结果卡）自动跟随；每轮回复的叙述与工具步骤折叠为一行"建模过程"（运行中显示读取资料、确定口径、写入草稿、校验编译四个阶段与最新步骤），AI 建模结果在写入时即出现，最终说明完整展示；助手空闲且无待确定问题时，对话末尾显示"下一步"卡（试问、检查并发布，发布后去问数）；页面请求按序排队，助手忙时提示排队数；提交问题不跳页。试问：推荐 3 个问题（`QuestionSuggestionService#MAX_SUGGESTIONS`）或自由提问，以 `purpose=question` 让助手写 `knowledge/questions/<ID>.yml`，助手空闲后平台自动试运行；"确认正确"写入草稿 `knowledge/sql/<ID>.md`（source: user-confirmed），发布后可召回；"不正确，告诉助手"转给对话。试运行与确认正确都过时间门禁；推荐问题在用户打开试问时才生成，要求单指标、至多一个维度的简单问题 | `ModelingHubPage`、`SemanticModelingPage`、`TrialPanel`、`MdlQuestionService#validate/decide` |
 
 ### 14.2 用户问题验证与问答召回
 

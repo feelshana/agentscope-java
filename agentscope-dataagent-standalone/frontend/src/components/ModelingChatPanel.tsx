@@ -177,6 +177,78 @@ function ToolGroup({ frames }: { frames: ToolFrame[] }) {
   </div>;
 }
 
+/**
+ * spec092 §7: a reply is its result, not its process. Narration and tool steps fold into one
+ * line with live counts (the latest step while running); the final text is shown in full. Steps
+ * waiting for a decision stay visible.
+ */
+function ReplyBody({ segments, pending }: { segments: Segment[]; pending: boolean }) {
+  const [open, setOpen] = useState(false);
+  const parts = groupSegments(segments);
+  let last = -1;
+  if (!pending)
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const part = parts[i];
+      if (part.kind === 'text' && part.text.trim()) { last = i; break; }
+    }
+  const process = parts.filter((_, i) => i !== last);
+  const frames = process.flatMap(p => p.kind === 'tools' ? p.frames : []);
+  const waiting = frames.filter(f => f.state === 'waiting');
+  const counts = new Map<string, number>();
+  frames.forEach(f => { const k = TOOL_KIND[f.name] ?? '其他'; counts.set(k, (counts.get(k) ?? 0) + 1); });
+  const failed = frames.filter(f => f.state === 'failed').length;
+  const running = [...frames].reverse().find(f => f.state === 'running');
+  const narration = [...process].reverse().find(p => p.kind === 'text' && p.text.trim());
+  const latest = running ? taskLabel(running.name, running.input)
+    : narration && narration.kind === 'text' ? narration.text.trim().split(/\r?\n/)[0].slice(0, 60) : '';
+  const stats = [...counts].map(([k, n]) => `${k} ${n}`).join(' · ');
+  const hasProcess = process.some(p => p.kind === 'tools' || p.text.trim());
+  // Milestones read from the tool calls, so a minute of work shows where it is.
+  const did = (names: string[]) => frames.some(f => names.includes(f.name));
+  const command = (word: string) => frames.some(f => f.name === 'wren_cli' && (f.input ?? '').includes(word));
+  const stages = [
+    { label: '读取资料', done: did(['read_file', 'load_skill_through_path', 'list_files', 'glob_files']) },
+    { label: '确定口径', done: did(['request_user_confirmation']) },
+    { label: '写入草稿', done: did(['write_file', 'edit_file']) },
+    { label: '校验编译', done: command('build') },
+  ];
+  const reached = stages.reduce((n, stage, i) => stage.done ? i + 1 : n, 0);
+  return <>
+    {pending && frames.length > 0 && <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', margin: '2px 0 4px', fontSize: 12 }}>
+      {stages.map((stage, i) => {
+        const state = i < reached - 1 ? 'done' : i === reached - 1 ? 'current' : 'todo';
+        return <span key={stage.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 4,
+          color: state === 'todo' ? 'var(--da-text-muted)' : state === 'current' ? 'var(--da-primary)' : 'var(--da-success)',
+          fontWeight: state === 'current' ? 600 : 400 }}>
+          {i > 0 && <span style={{ color: 'var(--da-border)' }}>—</span>}
+          {state === 'done' ? '✓' : state === 'current' ? '●' : '○'} {stage.label}
+        </span>;
+      })}
+    </div>}
+    {hasProcess && <div style={{ margin: '2px 0 6px' }}>
+      <button type="button" onClick={() => setOpen(v => !v)}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', background: 'none', border: 'none', padding: '2px 0',
+          cursor: 'pointer', fontSize: 12, color: 'var(--da-text-muted)', textAlign: 'left' }}>
+        {pending ? <span className="da-spinner da-spinner-sm" style={{ borderColor: 'var(--da-border)', borderTopColor: 'var(--da-primary)' }} />
+          : <span>{open ? '▾' : '▸'}</span>}
+        <span style={{ whiteSpace: 'nowrap' }}>{pending ? '正在建模' : '建模过程'}</span>
+        {frames.length > 0 && <span style={{ whiteSpace: 'nowrap' }}>· {frames.length} 步{stats ? `（${stats}）` : ''}</span>}
+        {failed > 0 && <span style={{ color: 'var(--da-danger)', whiteSpace: 'nowrap' }}>· {failed} 步失败</span>}
+        {pending && latest && <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>· {latest}</span>}
+      </button>
+      {open && <div style={{ borderLeft: '2px solid var(--da-border)', paddingLeft: 10, marginTop: 4 }}>
+        {process.map((part, i) => part.kind === 'text'
+          ? (part.text.trim() ? <div key={i} style={{ fontSize: 12.5, color: 'var(--da-text-muted)' }}><Markdown fontSize={12.5}>{part.text}</Markdown></div> : null)
+          : <ToolGroup key={part.frames[0].id} frames={part.frames} />)}
+      </div>}
+    </div>}
+    {!open && waiting.map(f => <TaskRow key={f.id} frame={f} />)}
+    {last >= 0 && parts[last].kind === 'text' && <div style={{ color: 'var(--da-text)' }}>
+      <Markdown fontSize={14}>{(parts[last] as { kind: 'text'; text: string }).text}</Markdown>
+    </div>}
+  </>;
+}
+
 function TaskRow({ frame }: { frame: ToolFrame }) {
   const [open, setOpen] = useState(false);
   const label = taskLabel(frame.name, frame.input);
@@ -719,17 +791,7 @@ export default function ModelingChatPanel({
               <div style={m.role === 'user' ? S.userBubble : S.botBubble}>
                 {m.role === 'assistant' ? (
                   <>
-                    {groupSegments(m.segments).map((part, i) =>
-                      part.kind === 'text' ? (
-                        part.text ? (
-                          <Markdown key={i} fontSize={14}>
-                            {part.text}
-                          </Markdown>
-                        ) : null
-                      ) : (
-                        <ToolGroup key={part.frames[0].id} frames={part.frames} />
-                      ),
-                    )}
+                    <ReplyBody segments={m.segments} pending={!!m.pending} />
                     {m.hitl && m.hitl.toolCalls.length > 1 && <div style={{ padding: '12px', border: '1px solid #cbd5e1', borderRadius: 8 }}>
                       <strong>本次工程变更：{m.hitl.toolCalls.length} 项</strong>
                       <p>下面列出本次全部变更，可以一次授权。相同文件的多条变更会按列表顺序依次应用，全部授权会全部执行，不会自动在两条内容中择一；写入后助手继续官方检查，发布仍需单独操作。</p>
@@ -753,7 +815,7 @@ export default function ModelingChatPanel({
                         />
                       </div>;
                     })}
-                    {!m.pending && m.startedAt && renderTurnResult?.(m.startedAt)}
+                    {m.startedAt && renderTurnResult?.(m.startedAt)}
                     {m.pending && m.segments.length === 0 && !m.hitl && (
                       <span className="da-typing">
                         <span />

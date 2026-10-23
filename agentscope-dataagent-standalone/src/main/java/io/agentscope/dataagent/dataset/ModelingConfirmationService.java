@@ -62,8 +62,7 @@ public class ModelingConfirmationService {
             throw new DatasetException("每个问题需要 2–4 个选项，第一个为推荐项", 400);
         List<Option> options = new ArrayList<>();
         for (int i = 0; i < labels.size(); i++)
-            options.add(
-                    new Option(text(labels.get(i), 40, "选项名称"), text(rules.get(i), 500, "规则原文")));
+            options.add(new Option(label(labels.get(i)), text(rules.get(i), 500, "规则原文")));
         return workspace.withWorkspaceLock(
                 groupId,
                 () -> {
@@ -165,6 +164,16 @@ public class ModelingConfirmationService {
         } catch (IOException e) {
             throw new DatasetException("删除待确认问题失败：" + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Option labels are short names shown on the card; the rule carries the full text. A long
+     * label is shortened instead of refused: the 2026-10-22 run spent a whole model round
+     * re-asking two relationship questions only to trim their labels.
+     */
+    public static String label(String value) {
+        String trimmed = text(value, Integer.MAX_VALUE, "选项名称");
+        return trimmed.length() <= 40 ? trimmed : trimmed.substring(0, 39) + "…";
     }
 
     private static String text(String value, int max, String name) {

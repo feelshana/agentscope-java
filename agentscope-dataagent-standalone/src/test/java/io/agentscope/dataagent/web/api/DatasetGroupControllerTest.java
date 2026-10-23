@@ -107,7 +107,7 @@ class DatasetGroupControllerTest {
     void associatePublishesBaselineOnceForTheWholeBatch() {
         DatasetGroupController.AssociateRequest request =
                 new DatasetGroupController.AssociateRequest(
-                        "source-1", "retail", List.of("orders", "customers"), false);
+                        "source-1", "retail", List.of("orders", "customers"), false, null);
         when(datasetService.associateTables(
                         "alice",
                         "group-1",
@@ -128,10 +128,36 @@ class DatasetGroupControllerTest {
     }
 
     @Test
+    void tablesCanBeAssociatedOneByOneAndPublishedOnceAtTheEnd() {
+        // Per-table requests show sampling progress; only the final empty request publishes.
+        when(datasetService.associateTables(
+                        "alice", "group-1", "source-1", "retail", List.of("orders"), true))
+                .thenReturn(List.of(dataset("dataset-1", "orders")));
+        controller
+                .associate(
+                        "group-1",
+                        new DatasetGroupController.AssociateRequest(
+                                "source-1", "retail", List.of("orders"), true, false),
+                        alice)
+                .block();
+        org.mockito.Mockito.verifyNoInteractions(baselineMdlService);
+        assertThat(
+                        controller
+                                .associate(
+                                        "group-1",
+                                        new DatasetGroupController.AssociateRequest(
+                                                "source-1", "retail", List.of(), true, true),
+                                        alice)
+                                .block())
+                .isEmpty();
+        verify(baselineMdlService).publishAfterDatasetChange("alice", "group-1");
+    }
+
+    @Test
     void associationFailureDoesNotAttemptBaselinePublication() {
         DatasetGroupController.AssociateRequest request =
                 new DatasetGroupController.AssociateRequest(
-                        "source-1", "retail", List.of("orders", "customers"), false);
+                        "source-1", "retail", List.of("orders", "customers"), false, null);
         when(datasetService.associateTables(
                         "alice",
                         "group-1",

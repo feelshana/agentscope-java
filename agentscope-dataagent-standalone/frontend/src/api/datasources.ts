@@ -154,7 +154,7 @@ export async function listColumns(
 
 export async function associateTables(
   groupId: string,
-  payload: { dataSourceId: string; schema: string; tables: string[]; sampling?: boolean },
+  payload: { dataSourceId: string; schema: string; tables: string[]; sampling?: boolean; publish?: boolean },
 ): Promise<unknown[]> {
   const res = await apiFetch(`/api/dataset-groups/${encodeURIComponent(groupId)}/associate`, {
     method: 'POST',

@@ -95,6 +95,39 @@ public final class WrenProjectContextMiddleware implements HarnessRuntimeMiddlew
      * spec092: once a version is published, tables added later are modeled on their own; existing
      * models, relationships and rules stay as reviewed unless the user asks otherwise.
      */
+    /**
+     * The draft's modeling files, so the assistant reads what it needs in one round instead of
+     * listing directories turn by turn (the 2026-10-22 run spent six model rounds doing that).
+     */
+    static String projectFiles(java.nio.file.Path root) {
+        if (root == null || !java.nio.file.Files.isDirectory(root)) return "";
+        java.util.List<String> files = new java.util.ArrayList<>();
+        try (var walk = java.nio.file.Files.walk(root)) {
+            walk.filter(p -> java.nio.file.Files.isRegularFile(p))
+                    .map(p -> root.relativize(p).toString().replace('\\', '/'))
+                    .filter(
+                            p ->
+                                    p.matches("models/[^/]+/.+")
+                                            || p.equals("relationships.yml")
+                                            || p.equals("wren_project.yml")
+                                            || p.matches(
+                                                    "knowledge/(rules|caveats|glossary|metrics|questions)/[^/]+")
+                                            || p.equals("knowledge/knowledge.yml")
+                                            || p.matches("raw/docs/[^/]+"))
+                    .filter(p -> !p.endsWith(".gitkeep"))
+                    .sorted()
+                    .limit(200)
+                    .forEach(files::add);
+        } catch (java.io.IOException e) {
+            return "";
+        }
+        if (files.isEmpty()) return "";
+        return "\n\n# 当前工程文件清单\n"
+                + String.join("\n", files)
+                + "\n以上为草稿工程中的建模文件（相对 /project），无需再 list_files 或 glob 查找；"
+                + "需要的文件在同一轮中一次性并行 read_file。\n";
+    }
+
     static String newTables(java.nio.file.Path root) {
         if (root == null) return "";
         java.nio.file.Path published = root.getParent().resolve("published/models");
@@ -164,6 +197,7 @@ public final class WrenProjectContextMiddleware implements HarnessRuntimeMiddlew
                                     + WrenQueryContextMiddleware.serviceTime(clock)
                                     + buildState(project.root())
                                     + newTables(project.root())
+                                    + projectFiles(project.root())
                                     + probeContext
                                     + windowContext;
                         })

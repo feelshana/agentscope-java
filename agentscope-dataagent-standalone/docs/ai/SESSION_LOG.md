@@ -399,3 +399,5 @@
 - 2026-10-22（Asia/Shanghai）｜实施checkpoint｜17:05 新库测试：自动建模未运行（切换标签丢失 start=1，只跑了文档更新），已改为记住开始意图；推荐问题出现"各项目的项目数量"，提示词要求围绕事实表度量；问数按报表过滤、STR_TO_DATE、SUM 正确；门禁 CACHE_HIT 生效。"已设为示例"为旧页面缓存，需刷新。未提交。
 - 2026-10-22（Asia/Shanghai）｜实施checkpoint｜17:21 重建测试：自动建模正常运行，规则依据真实，三个口径问题合理，推荐问题简单，问数遵循用户确认口径；但三个问题名额全用于口径、外部表零关系，已给关系问题单独名额；dry-plan 不再调用门禁模型。未提交。
 - 2026-10-22（Asia/Shanghai）｜实施checkpoint｜去除对 agentscope-core 修改的依赖：新增 WrenToolForwarder/WrenQueryToolRegistrar，中间件改写模型工具列表并按次绑定官方工具；ReActAgent.java 已还原为提交版本（原修改备份为会话 scratchpad 中的 reactagent-callToolkit.patch），框架重新安装后 standalone 全量测试通过。未提交。
+- 2026-10-22（Asia/Shanghai）｜实施checkpoint｜界面优化：外部表逐表关联采样进度条（associate 增加 publish 参数，最后统一发布）；事实表时间范围弹窗改为标准弹窗与天数选择；建模回复折叠过程为一行统计、突出最终说明与结果。未提交。
+- 2026-10-22（Asia/Shanghai）｜实施checkpoint｜21:01 建模 63 秒分析：6 轮逐个列目录读文件约 13 秒、选项名超长被拒重提约 6 秒。上下文注入工程文件清单、选项名超长改为截断；前端建模阶段进度、结果边写边出、最终说明用正文色。未提交。

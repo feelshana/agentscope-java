@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import type { AssociationState } from './AssociationProgress';
 import {
   associateTables,
   ExternalDataSource,
@@ -106,12 +107,15 @@ export default function AssociateTablesModal({
   onAssociated,
   onError,
   onAssociateStart,
+  onProgress,
 }: {
   groupId: string;
   onClose: () => void;
   onAssociated: () => void;
   onError?: (message: string) => void;
   onAssociateStart?: (tables: string[]) => void;
+  /** Per-table sampling progress; tables are associated one request at a time. */
+  onProgress?: (state: AssociationState) => void;
 }) {
   const [sources, setSources] = useState<ExternalDataSource[]>([]);
   const [sourceId, setSourceId] = useState<string | null>(null);
@@ -189,25 +193,42 @@ export default function AssociateTablesModal({
     onClose();
     setBusy(true);
     setError(null);
-    associateTables(groupId, {
-      dataSourceId: sourceId,
-      schema,
-      tables: tableNames,
-    })
-      .then(() => {
-        onAssociated();
-      })
-      .catch(e => {
-        onError?.(e instanceof Error ? e.message : String(e));
-        if (mountedRef.current) {
-          setError(e instanceof Error ? e.message : String(e));
-        }
-      })
-      .finally(() => {
-        if (mountedRef.current) {
-          setBusy(false);
-        }
-      });
+    void associateWithProgress(sourceId, schema, tableNames).finally(() => {
+      if (mountedRef.current) setBusy(false);
+    });
+  }
+
+  /** One request per table so the page can show real sampling progress; publish once at the end. */
+  async function associateWithProgress(dataSourceId: string, schemaName: string, tableNames: string[]) {
+    const state: AssociationState = { tables: tableNames.map(name => ({ name, status: 'waiting' })), phase: 'sampling' };
+    const report = () => onProgress?.({ phase: state.phase, tables: state.tables.map(t => ({ ...t })) });
+    report();
+    for (const step of state.tables) {
+      step.status = 'sampling'; report();
+      try {
+        await associateTables(groupId, { dataSourceId, schema: schemaName, tables: [step.name], publish: false });
+        step.status = 'done';
+      } catch (e) {
+        step.status = 'failed'; step.error = e instanceof Error ? e.message : String(e);
+      }
+      report();
+    }
+    const failures = state.tables.filter(t => t.status === 'failed');
+    if (failures.length === state.tables.length) {
+      state.phase = 'done'; report();
+      onError?.(failures.map(f => `${f.name}：${f.error}`).join('；'));
+      return;
+    }
+    state.phase = 'publishing'; report();
+    try {
+      await associateTables(groupId, { dataSourceId, schema: schemaName, tables: [], publish: true });
+    } catch (e) {
+      state.phase = 'done'; report();
+      onError?.(`表已关联，但基础模型生成失败：${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
+    state.phase = 'done'; report();
+    onAssociated();
   }
 
   return (
