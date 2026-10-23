@@ -29,13 +29,15 @@ try:
     with sync_playwright() as pw:
         browser = pw.chromium.launch(channel='msedge', headless=True)
         context = browser.new_context()
-        context.add_init_script("localStorage.setItem('claw_token', 'test-sampling-token')")
+        context.add_init_script("sessionStorage.setItem('dataagent_token', 'test-sampling-token')")
         page = context.new_page()
         page.on('pageerror', lambda error: errors.append(str(error)))
 
         def respond(route):
             path = route.request.url.split('/api/', 1)[1].split('?')[0]
-            if path == 'auth/me':
+            if path == 'auth/options':
+                route.fulfill(json={'passwordLoginEnabled': True, 'biLoginEnabled': False})
+            elif path == 'auth/me':
                 route.fulfill(json={'userId': 'admin', 'username': 'admin', 'roles': ['admin']})
             elif path == 'dataset-groups/g':
                 route.fulfill(json={'group': {'id': 'g', 'name': '测试知识库', 'role': 'MANAGE',

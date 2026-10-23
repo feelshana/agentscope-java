@@ -23,17 +23,19 @@ checks = []
 try:
     with sync_playwright() as pw:
         browser = pw.chromium.launch(channel='msedge', headless=True)
-        for scenario in ['cached401', 'api401', 'network', 'no-token']:
+        for scenario in ['cached401', 'api401', 'network', 'options-network', 'no-token']:
             context = browser.new_context()
             if scenario != 'no-token':
-                context.add_init_script("localStorage.setItem('claw_token', 'test-cached-token')")
+                context.add_init_script("sessionStorage.setItem('dataagent_token', 'test-cached-token')")
             page = context.new_page()
             calls = []
 
             def respond(route):
                 path = route.request.url.split('/api/', 1)[1]
                 calls.append(path)
-                if scenario == 'network':
+                if path == 'auth/options' and scenario != 'options-network':
+                    route.fulfill(json={'passwordLoginEnabled': True, 'biLoginEnabled': False})
+                elif scenario in ['network', 'options-network']:
                     route.abort('failed')
                 elif scenario == 'api401' and path == 'auth/me':
                     route.fulfill(json={'userId': 'admin', 'username': 'admin', 'roles': ['admin']})
@@ -42,26 +44,29 @@ try:
 
             page.route('**/api/**', respond)
             page.goto(f'http://127.0.0.1:{server.server_port}/configure/datasets')
-            if scenario == 'network':
+            if scenario in ['network', 'options-network']:
                 expect(page.get_by_role('button', name='重试', exact=True)).to_be_visible()
-                assert page.evaluate("localStorage.getItem('claw_token')") == 'test-cached-token'
+                assert page.evaluate("sessionStorage.getItem('dataagent_token')") == 'test-cached-token'
                 assert '/configure/datasets' in page.url
+                if scenario == 'options-network':
+                    expect(page.get_by_role('textbox', name='用户名')).to_have_count(0)
             else:
                 expect(page).to_have_url(f'http://127.0.0.1:{server.server_port}/login')
-                assert page.evaluate("localStorage.getItem('claw_token')") is None
+                assert page.evaluate("sessionStorage.getItem('dataagent_token')") is None
                 if scenario != 'no-token':
                     expect(page.get_by_text('登录状态已失效，请重新登录', exact=True)).to_be_visible()
                 else:
                     expect(page.get_by_text('登录状态已失效，请重新登录', exact=True)).to_have_count(0)
                 if scenario == 'cached401':
-                    assert all(path == 'auth/me' for path in calls), calls
+                    assert all(path in ['auth/options', 'auth/me'] for path in calls), calls
                 if scenario == 'api401':
-                    assert any(path != 'auth/me' for path in calls), calls
+                    assert any(path not in ['auth/options', 'auth/me'] for path in calls), calls
             page.screenshot(path=str(output / f'{scenario}.png'))
             checks.append(scenario)
             context.close()
         browser.close()
 finally:
     server.shutdown()
+    server.server_close()
 (output / 'report.json').write_text(json.dumps({'passed': True, 'checks': checks}, indent=2), encoding='utf-8')
 print(json.dumps({'passed': True, 'checks': len(checks)}))

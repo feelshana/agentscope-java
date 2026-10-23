@@ -77,6 +77,10 @@ export DATAAGENT_WREN_PYTHON="$(cd ../wren-venv/bin && pwd)/python"
 
 首次空平台库须额外准备**完整schema**：本仓库现有增量迁移不是完整初始化DDL，不能只执行0081/0083/0084再启动prod。当前需从同一候选版本在隔离空库生成/核对并导出纯结构，经DBA审核后初始化目标库，再使用validate启动；完整首次DDL及流程尚未完成独立验收。已有环境先核对结构，禁止为省事直接在生产改update或重复ALTER。
 
+两个数据库的初始化不同：平台库预先建立完整元数据表；上传库先建空库并配置应用账号权限，后续上传时由程序动态创建并写入`ds_`表，不预先为每个Excel/CSV建表。上传库保存解析后的表数据，不代表所有持久文件都在MySQL，仍需保留版本外的data目录。两个库可在同一MySQL实例，连接信息分别通过平台库与上传库配置提供。
+
+BI普通用户默认在首次免登时按真实username匹配或自动创建，不要求先导入BI整张用户表，更不导入BI密码。管理员可以先从BI进入一次，再按真实username维护roles_csv，随后重新进入取得新JWT。只有提前分配授权等明确需求才预导入用户，保留已有user_id；步骤见[BI配置及数据库](integration/bi-login.md#配置及数据库)。
+
 ## 生产配置清单
 
 发布包样例在源码 `src/main/distribution/conf/application-prod.yml.example`，解包后为 `conf/application-prod.yml.example`；它只覆盖部分生产开关，实际模型和上传库连接还需显式配置。敏感值通过目标环境变量或受权限保护的外置配置提供，以下不填写凭据。
@@ -93,7 +97,7 @@ export DATAAGENT_WREN_PYTHON="$(cd ../wren-venv/bin && pwd)/python"
 
 上述变量使用运行应用的同一账号注入；不能把管理员shell里设置过变量等同于应用已收到。新服务器按目标环境创建配置，不直接复制本机私有配置、开发用户或整个开发HOME。
 
-生产公司模型按OpenAI兼容服务配置URL、完整凭据与model name；公司的签名凭据有效期及最终接口路径须核实，Supersonic的存储密文不能直接当Bearer。公司/公网主备的管理员手动切换是[待确认建议](specs/080-company-and-public-model-switching-proposal.md)，当前没有动态双源或故障自动回退。公司聊天模型和Wren的本地向量嵌入模型是两类依赖。
+生产公司模型按OpenAI兼容服务配置URL、完整凭据与model name；公司的签名凭据有效期及最终接口路径须核实，Supersonic的存储密文不能直接当Bearer。[spec080](specs/080-company-and-public-model-switching-proposal.md)管理员多连接配置、测试及手动热切换已实现并提交，原application模型只作为首次应用页面配置前的兼容启动源；没有故障自动回退，目标公司服务仍需真实联调。公司聊天模型和Wren的本地向量嵌入模型是两类依赖。
 
 Wren 依赖固定在 requirements-wren.txt；脚本验证 CLI、对应 Python 的包版本及 MCP/MySQL/ONNX/LanceDB 导入。可执行文件优先使用 DATAAGENT_WREN_EXECUTABLE，Python 优先使用 DATAAGENT_WREN_PYTHON，其次取 CLI 同目录 python，再回退 python3。首次向量召回仍可能下载多语言模型；缓存需对部署账号可读，可通过 HF_HOME 指定持久缓存。预检不下载模型、不验证业务数据库或大模型答案。安装及启动应使用同一部署账号。依赖导入通过不代表嵌入模型可用；上线前须在应用实际HOME/HF_HOME下做一次离线向量加载检查。模型未缓存且下载网络不可达会使memory store/index/recall等待到CLI超时，文件可能已写入而索引未完成。2026-10-19云端实测及已准备的离线缓存材料见[建模与问答耗时专项](test-reports/20261019-cloud-modeling-latency.md)；用户已完成云端模型安装及离线预检，真实保存/召回/发布后问答/点赞回归通过；首次或发布后索引仍约20秒，不据此承诺并发性能。详见该专项的修复后记录。
 
@@ -127,10 +131,32 @@ runuser -u dataagent -- docker run --rm --network none agentscope/dataagent-sand
 
 持久目录为父目录 `data/home`（含Agent配置和默认模型缓存）、`state`、`workspace`、`artifacts`、`mdl`、`run`；日志在各版本 `logs/`。root执行且存在dataagent用户时，会创建运行目录并切换到该账号；版本文件和Wren环境须允许该账号读取/执行。
 
-升级前暂停新任务，等待或取消执行，备份平台元数据库、共享授权、上述持久目录。先stop旧版本，再将新版本解包为同一父目录下的相邻目录，配置目标环境并start。回滚同样先stop再切旧版本；持久数据与schema兼容性需要单独核验。源码Maven SNAPSHOT版本不变时，请先在其他位置备份旧版本，勿直接覆盖正在运行的目录。多版本共用PID记录，禁止同时启动。
+升级前暂停新任务，等待或取消执行，备份平台元数据库、上传数据集数据库、上述持久目录、外置配置及模型配置主密钥。先stop旧版本，再将新版本解包为同一父目录下的相邻目录，按需执行适用迁移，配置目标环境并start。回滚同样先stop再切旧版本；持久数据与schema兼容性需要单独核验。源码Maven SNAPSHOT版本不变时，请先在其他位置备份旧版本，勿直接覆盖正在运行的目录。多版本共用PID记录，禁止同时启动。
+
+只有确认本次仅JAR变化，配置、数据库结构、启动脚本、Wren依赖和沙箱镜像都兼容时，才可在停止服务并备份后仅替换JAR；默认交付完整tar包更便于追溯和回退。Jenkins应执行同样的验证/备份/迁移/启停/验收流程，不只做文件覆盖。dataagent.sh是当前启停脚本，不等同开机自启或进程崩溃后的自动托管；按公司现有运维方式另行配置。
 
 生产首次验收：应用健康、登录与共享权限、上传/发布/问数、问答对保存召回、Docker取消；只有包版本正确和HTTP健康不能代替这些业务检查。
 
+
+## 日志查看
+
+在实际运行版本目录查看以下文件；若改用其他进程托管或自定义日志配置，以实际配置为准。
+
+| 文件 | 用途 |
+| --- | --- |
+| `logs/launcher.log` | 启动脚本重定向的Java标准输出/错误，包含启动、运行异常、HTTP及Wren阶段日志；启动失败或一般故障先看它 |
+| `logs/LLM.log` | 问数及其他通用Agent的模型交互和工具内容，按需定位回答问题 |
+| `logs/LLM-modeling.log` | 建模助手及建模AI建议的交互记录，按需定位建模问题 |
+
+```bash
+# 在实际运行版本目录执行；-n先显示最后200行，-f继续跟踪。
+tail -n 200 -f logs/launcher.log
+# 需要时另开终端查看对应Agent记录。
+tail -n 200 -f logs/LLM.log
+tail -n 200 -f logs/LLM-modeling.log
+```
+
+当前Logback对两种LLM日志按日/大小轮转；launcher.log由脚本追加，须由运维日志策略负责轮转/保留，不能假定采用同样设置。LLM日志包含业务问答与工具内容，按生产访问及保留要求管理。
 
 ## Wren分段耗时诊断
 
