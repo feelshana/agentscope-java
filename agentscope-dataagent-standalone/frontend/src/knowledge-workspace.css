@@ -66,3 +66,25 @@
 .da-user-turn .da-bubble.user { max-width: 100%; }
 .da-turn-scope { display: flex; align-items: center; gap: 5px; color: #9992a5; font-size: 11px; padding-right: 3px; }
 .da-turn-scope .da-icon { width: 12px; height: 12px; }
+
+/* 2026-10-25 readability pass: knowledge base and modeling pages read at 13–14px body text. */
+.kw-heading h1{font-size:26px}.kw-heading p{font-size:14px}.kw-eyebrow{font-size:12px}.kw-infochips{font-size:13px}
+.kw-page .da-btn{font-size:13px;min-height:36px}.kw-page .da-btn-sm{font-size:13px;min-height:32px;padding:6px 12px}
+.kw-tabs button{font-size:14px}.kw-badge{font-size:12px;padding:1px 6px}
+.kw-search input{font-size:14px}.kw-count{font-size:13px}.kw-select{font-size:13px}
+.kw-table{font-size:14px}.kw-table th{font-size:13px;color:#6b7382}.kw-table td{padding:15px 18px}
+.kw-source{font-size:12px;padding:3px 8px}.kw-tablebottom{font-size:13px}.kw-empty{font-size:14px}
+.kw-cardtop h2{font-size:16px}.kw-description{font-size:13px;height:47px}.kw-cardmeta{font-size:12px}.kw-cardcreator{font-size:12px}.kw-cardfoot button{font-size:13px}
+.kw-technical>div{font-size:14px}.kw-code{font-size:12px}.kw-type{font-size:11px}.kw-preview .rownum{font-size:12px}.kw-preview th small{font-size:11px}
+.kw-progress-text{font-size:14px;color:var(--kw-secondary)}.kw-progress>summary{font-size:14px}.kw-alert{font-size:14px}
+.kw-menu button{font-size:13px}.kw-pagination{font-size:13px}.kw-permission{font-size:12px}
+/* Semantic modeling list */
+.mh-table tbody tr{cursor:pointer}.mh-table td{white-space:normal;vertical-align:middle}
+.mh-name{display:flex;align-items:center;gap:12px;min-width:0;max-width:520px}
+.mh-name strong{display:block;font-size:15px;font-weight:600;color:var(--kw-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mh-name small{display:block;margin-top:3px;font-size:13px;color:var(--kw-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mh-icon{width:34px;height:34px;flex:none;border-radius:9px;display:grid;place-items:center;background:#f6f4fc;border:1px solid #e8e4f5;color:#786ab4}
+.mh-status{display:inline-block;font-size:13px;padding:3px 10px;border-radius:999px;white-space:nowrap}
+.mh-ok{background:rgba(22,163,74,.1);color:var(--da-success)}.mh-warn{background:rgba(234,179,8,.15);color:#a16207}
+.mh-live{background:var(--da-primary-subtle);color:var(--da-primary)}.mh-muted{background:#f1f2f5;color:#6b7382}
+.mh-sub{display:block;margin-top:4px;font-size:12px;color:var(--kw-muted)}

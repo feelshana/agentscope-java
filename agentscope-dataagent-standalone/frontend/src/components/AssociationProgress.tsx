@@ -26,27 +26,27 @@ export default function AssociationProgress({ state }: { state: AssociationState
     : current ? `正在读取并采样 ${current.name}（${state.tables.indexOf(current) + 1}/${state.tables.length}）` : '准备中…';
   const seconds = Math.round((now - startedAt) / 1000);
 
-  return <div className="da-card" style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }} role="status" aria-live="polite">
+  return <div className="da-card" style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }} role="status" aria-live="polite">
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       {state.phase !== 'done' && <span className="da-spinner da-spinner-sm" style={{ borderColor: 'var(--da-border)', borderTopColor: 'var(--da-primary)' }} />}
-      <strong style={{ flex: 1 }}>{title}</strong>
-      <span className="da-small">{percent}% · 已用 {seconds} 秒</span>
+      <strong style={{ flex: 1, fontSize: 15 }}>{title}</strong>
+      <span style={{ fontSize: 13, color: 'var(--da-text-muted)' }}>{percent}% · 已用 {seconds} 秒</span>
     </div>
     <div style={{ height: 8, borderRadius: 4, background: 'var(--da-surface-sunken, #eef2f7)', overflow: 'hidden' }}>
       <div style={{ width: `${percent}%`, height: '100%', borderRadius: 4, transition: 'width .4s ease',
         background: failed ? 'var(--da-warn)' : 'var(--da-primary)' }} />
     </div>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      {state.tables.map(t => <div key={t.name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+      {state.tables.map(t => <div key={t.name} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, lineHeight: 1.8 }}>
         <span style={{ width: 16, textAlign: 'center', color: t.status === 'done' ? 'var(--da-success)' : t.status === 'failed' ? 'var(--da-danger)' : 'var(--da-text-muted)' }}>
           {t.status === 'done' ? '✓' : t.status === 'failed' ? '✕' : t.status === 'sampling' ? '…' : '○'}
         </span>
-        <code style={{ flex: '0 0 auto' }}>{t.name}</code>
-        <span className="da-small" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: t.status === 'failed' ? 'var(--da-danger)' : undefined }}>
+        <span style={{ flex: '0 0 auto', fontWeight: 500 }}>{t.name}</span>
+        <span style={{ fontSize: 13, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: t.status === 'failed' ? 'var(--da-danger)' : 'var(--da-text-muted)' }}>
           {t.status === 'done' ? '字段与样例已读取' : t.status === 'sampling' ? '读取字段、采样数据中' : t.status === 'failed' ? t.error : '等待'}
         </span>
       </div>)}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, lineHeight: 1.8 }}>
         <span style={{ width: 16, textAlign: 'center', color: state.phase === 'done' ? 'var(--da-success)' : 'var(--da-text-muted)' }}>
           {state.phase === 'done' ? '✓' : state.phase === 'publishing' ? '…' : '○'}
         </span>

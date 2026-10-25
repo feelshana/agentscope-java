@@ -10,7 +10,7 @@
 
 外部表关联每表最多读取1000行，在内存提取列样例，不执行全表 COUNT 或逐列 DISTINCT。总行数显示“未统计”，上传文件仍显示准确导入行数；管理者可在数据集详情刷新样本。建模系统上下文包含限长摘要，问数读取已发布的官方工程规则。样本不代表完整枚举、唯一性或精确统计。详见 [ADR 0080](docs/adr/0080-bounded-sampling-and-wren-context.md) 与 [spec 068](docs/specs/done/068-bounded-sampling-and-wren-context.md)。
 
-升级需要平台表新增可空 `sample_summary_json LONGTEXT` 列。默认 JPA `update` 自动补列；使用 `validate` 的部署须先执行 [MySQL 迁移脚本](docs/migrations/0080-dataset-sampling-mysql.sql)。历史数据不在启动时自动采样，外部表可由管理者手动刷新。之后的表结构变更同样只在 `validate` 下需要手动执行：[建模版本列](docs/migrations/0093-modeling-revision-mysql.sql)、[事实表查询时间范围](docs/migrations/0094-fact-query-window-mysql.sql)（新表 `dataagent_fact_query_window` 与列 `dataagent_dataset_group.fact_query_window_days`）。
+升级需要平台表新增可空 `sample_summary_json LONGTEXT` 列。默认 JPA `update` 自动补列；使用 `validate` 的部署须先执行 [MySQL 迁移脚本](docs/migrations/0080-dataset-sampling-mysql.sql)。历史数据不在启动时自动采样，外部表可由管理者手动刷新。之后的表结构变更同样只在 `validate` 下需要手动执行：[建模版本列](docs/migrations/0093-modeling-revision-mysql.sql)、[事实表查询时间范围](docs/migrations/0094-fact-query-window-mysql.sql)（新表 `dataagent_fact_query_window` 与列 `dataagent_dataset_group.fact_query_window_days`）、[字段整理](docs/migrations/0095-field-screening-mysql.sql)（列 `dataagent_dataset.field_screening_confirmed`）。
 
 dataagent 让公司里**每位数据分析师都有一个属于自己的数据 agent** —— 它会摸熟你们组用的数据源、习惯的报表风格、踩过的坑，越用越顺手。
 

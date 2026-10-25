@@ -17,7 +17,7 @@ ADR 记录"为什么这样做"。规则：
 | 建模文件边界 | [0107](0107-basic-modeling-closes-cube-and-view-files.md)、[0108](0108-yaml-write-guard-model-file-layout-and-cli-timing.md)、[0110](0110-platform-handles-build-overwrite-and-conditional-date-rules.md) | Cube/View 不读不写；YAML 语法检查；models 目录限制；整文件替换；自动补编译 |
 | 问答对来源 | [0109](0109-user-confirmed-questions-replace-generated-qa-pairs.md) | 只来自用户逐题确认与问数点赞；建模不生成 |
 | 建模变更治理 | [0111](0111-draft-changes-reviewed-before-publish.md) | 修改直接进入草稿，发布前统一审阅；取消逐项确认卡；无文档的自动建模不写规则 |
-| SQL 时间门禁 | [0097](0097-llm-per-table-sql-window.md)、[0098](0098-post-sampling-fact-window-confirmation.md)、[0099](0099-runtime-window-policy-and-verifiable-sql-gate.md)、[0103](0103-source-tiered-probing-and-row-based-gate-verdict.md) | 数据库独立配置；逐表 LLM 检查；明细重算结论；上传表不设门禁 |
+| SQL 时间门禁 | [0097](0097-llm-per-table-sql-window.md)、[0098](0098-post-sampling-fact-window-confirmation.md)、[0099](0099-runtime-window-policy-and-verifiable-sql-gate.md)、[0103](0103-source-tiered-probing-and-row-based-gate-verdict.md)、[0112](0112-rule-first-sql-window-gate.md)、[0113](0113-mysql8-or-doris-sources-and-literal-date-ranges.md) | 数据库独立配置；逐表检查，普通写法由规则判断、其余交 LLM；日期范围要求写成常量；明细重算结论；上传表不设门禁 |
 | 问数日期与统计 | [0102](0102-query-date-clarification-and-modeling-samples.md)、[0104](0104-upload-probe-scope-and-sql-side-aggregation.md)、[0105](0105-build-state-context-and-ranking-granularity.md)、[0110](0110-platform-handles-build-overwrite-and-conditional-date-rules.md) | 仅受限表缺日期先问；统计来自 SQL；排名按主体分组 |
 | 问数准备与性能 | [0100](0100-published-query-index-preparation.md)、[0101](0101-reuse-published-mcp-for-recall-warmup.md) | 发布后后台索引、召回预热、分段计时 |
 | 会话与附件 | [0060](0060-durable-session-history-and-artifact-lifecycle.md)、[0061](0061-configurable-history-retention.md) | 持久历史、附件生命周期、保留策略 |
@@ -139,3 +139,5 @@ ADR 记录"为什么这样做"。规则：
 | [0109](0109-user-confirmed-questions-replace-generated-qa-pairs.md) | 问答对只来自用户确认，基础建模不生成问答 | 已接受，2026-10-20。实施 spec090。补充 ADR0069/0103，取代 MODELING_SCRIPT |  |
 | [0110](0110-platform-handles-build-overwrite-and-conditional-date-rules.md) | 自动补编译、允许整文件替换、日期优先规则按受限表条件注入 | 已接受，2026-10-20。补充 ADR0102/0105/0108。 |  |
 | [0111](0111-draft-changes-reviewed-before-publish.md) | 建模修改直接进入草稿，发布前统一审阅，取消逐项确认卡 | 已接受，2026-10-21。取代 ADR0031，修改 ADR0069/0094 确认条款。 |  |
+| [0112](0112-rule-first-sql-window-gate.md) | SQL 时间门禁规则优先，模型只判断规则无法确定的 SQL | 已接受，2026-10-25。补充 ADR0097/0103：ADR0097 中"检查器仅将原始 SQL 交给无工具 LLM"改为规则优先、模型兜底；登记配置 |  |
+| [0113](0113-mysql8-or-doris-sources-and-literal-date-ranges.md) | 外部数据源限定 MySQL 8.0+ 或 Doris，SQL 用 MySQL 8.0 语法与日期常量范围 | 已接受，2026-10-25。补充 ADR0021（外部源只发布 MySQL）与 ADR0112（规则优先的时间门禁）。 |  |

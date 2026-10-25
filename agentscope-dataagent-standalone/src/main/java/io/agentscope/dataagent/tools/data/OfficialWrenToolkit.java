@@ -142,8 +142,9 @@ public final class OfficialWrenToolkit {
             // Argument, Cube and time-window checks run before the project lock: refusals need no
             // lock and the window gate's model call must not hold other calls on this project.
             List<String> command = command(p, arguments);
+            refuseQueryInQuestionTurn(context, command);
             // The external-table refusal needs no model call, so it runs before the window gate.
-            String externalShape = guardExternalProbe(context, p, command);
+            refuseExternalQuery(p, command);
             validateQueryBoundary(context, p, command);
             reserveQuery(context, p, command);
             String op = operation(command);
@@ -154,10 +155,11 @@ public final class OfficialWrenToolkit {
                         timed(context, "wren_cli.lock_wait", op, waitingAt, "SUCCESS");
                         access.checkTree(p);
                         String autoBuilt = "";
-                        if (needsCompiledMdl(command)
-                                && !Files.isRegularFile(p.root().resolve("target/mdl.json"))) {
-                            // Query-class commands always fail without a draft build; build once
-                            // here instead of letting the agent discover it by failing.
+                        boolean missing = !Files.isRegularFile(p.root().resolve("target/mdl.json"));
+                        if (needsCompiledMdl(command) && (missing || compiledMdlStale(p.root()))) {
+                            // Query-class commands need the current draft compiled; build here so
+                            // the agent never runs a separate context build (each CLI run costs
+                            // seconds) and never plans against an outdated MDL.
                             List<String> buildArgs = List.of("context", "build");
                             long buildingAt = System.nanoTime();
                             WrenCli.Result built =
@@ -170,7 +172,10 @@ public final class OfficialWrenToolkit {
                                         + buildWarning
                                         + "\n"
                                         + built.output();
-                            autoBuilt = "\n（草稿此前未编译，平台已先自动执行 context build）";
+                            autoBuilt =
+                                    missing
+                                            ? "\n（草稿此前未编译，平台已先自动执行 context build）"
+                                            : "\n（草稿已修改，平台已先自动重新执行 context build）";
                         }
                         boolean bindConnection =
                                 !arguments.contains("--help")
@@ -208,10 +213,6 @@ public final class OfficialWrenToolkit {
                             long executingAt = System.nanoTime();
                             WrenCli.Result result = cli.run(p.root(), props.timeout(), command);
                             timed(context, "wren_cli.execute", op, executingAt, status(result));
-                            if (externalShape != null
-                                    && result.ok()
-                                    && isEmptyResult(result.output()))
-                                rememberEmptyShape(context, p, externalShape);
                             if (result.ok() && isStore(arguments)) access.changed(p);
                             String stateWarning = syncDisplayState(p, arguments, result);
                             log.info(
@@ -576,66 +577,65 @@ public final class OfficialWrenToolkit {
     private static final java.util.regex.Pattern TABLE_REF =
             java.util.regex.Pattern.compile(
                     "(?i)\\b(?:FROM|JOIN)\\s+[\\\"`]?([\\p{L}_][\\p{L}\\p{N}_]*(?:\\.[\\p{L}_][\\p{L}\\p{N}_]*)*)");
-    private static final java.util.regex.Pattern MIN_MAX =
-            java.util.regex.Pattern.compile("(?i)\\b(?:MIN|MAX)\\s*\\(");
-    private static final java.util.regex.Pattern IDENTIFIER =
-            java.util.regex.Pattern.compile("[\\p{L}_][\\p{L}\\p{N}_]*");
-    private static final java.util.regex.Pattern TIME_NAME =
-            java.util.regex.Pattern.compile("(?i)(time|date|day|month|日期|时间|(^|_)dt($|_)|_at$)");
-    private static final java.util.regex.Pattern DATE_LITERAL =
-            java.util.regex.Pattern.compile("'\\d{4}-\\d{1,2}-\\d{1,2}[^']*'");
 
-    /** Registered time columns of the project's limited tables, lower-cased. */
-    private Set<String> timeColumns(Project project) {
-        Set<String> out = new java.util.HashSet<>();
-        if (windowPolicy == null) return out;
+    /**
+     * True when a build input (model, view, relationship or knowledge file) is newer than the
+     * compiled draft, so query-class commands rebuild instead of using an old MDL. wren_project.yml
+     * is left out: every query rewrites it to pin the connection profile, which no build reads.
+     */
+    static boolean compiledMdlStale(java.nio.file.Path root) {
+        java.nio.file.Path compiled = root.resolve("target/mdl.json");
         try {
-            for (var rule : windowPolicy.rules(project.groupId()))
-                rule.timeColumns().forEach(c -> out.add(c.toLowerCase()));
-        } catch (RuntimeException e) {
-            // Unreadable configuration: the name heuristic below still applies.
+            var builtAt = Files.getLastModifiedTime(compiled);
+            for (String input : List.of("relationships.yml")) {
+                java.nio.file.Path file = root.resolve(input);
+                if (Files.isRegularFile(file)
+                        && Files.getLastModifiedTime(file).compareTo(builtAt) > 0) return true;
+            }
+            for (String dir : List.of("models", "views", "knowledge")) {
+                java.nio.file.Path folder = root.resolve(dir);
+                if (!Files.isDirectory(folder)) continue;
+                try (var files = Files.walk(folder)) {
+                    if (files.filter(Files::isRegularFile)
+                            .anyMatch(
+                                    f -> {
+                                        try {
+                                            return Files.getLastModifiedTime(f).compareTo(builtAt)
+                                                    > 0;
+                                        } catch (java.io.IOException e) {
+                                            return true;
+                                        }
+                                    })) return true;
+                }
+            }
+            return false;
+        } catch (java.io.IOException e) {
+            return true;
         }
-        return out;
     }
 
     /**
-     * True when a MIN/MAX argument is a time column (a time-range probe). Other extremes, such as
-     * MAX(project_name) carrying an attribute through a GROUP BY, are ordinary query shapes: the
-     * 2026-10-22 log refused a valid question SQL twice for that.
+     * Trial questions are checked by reading the SQL, not by running it (2026-10-25): the
+     * assistant plans the SQL with dry-plan, which never touches the database, and the user
+     * confirms it in the trial panel.
      */
-    static boolean extremeOfTime(String code, Set<String> timeColumns) {
-        var m = MIN_MAX.matcher(code);
-        while (m.find()) {
-            int depth = 1;
-            int i = m.end();
-            while (i < code.length() && depth > 0) {
-                char c = code.charAt(i++);
-                if (c == '(') depth++;
-                else if (c == ')') depth--;
-            }
-            String argument = code.substring(m.end(), Math.max(m.end(), i - 1));
-            var names = IDENTIFIER.matcher(argument);
-            while (names.find()) {
-                String name = names.group().toLowerCase();
-                if (timeColumns.contains(name) || TIME_NAME.matcher(name).find()) return true;
-            }
-        }
-        return false;
+    static void refuseQueryInQuestionTurn(RuntimeContext context, List<String> command) {
+        if (context == null || command.isEmpty() || !command.get(0).equals("query")) return;
+        var purpose = context.get(io.agentscope.dataagent.dataset.ModelingTurnPurpose.class);
+        if (purpose != null && purpose.question())
+            throw new DatasetException(
+                    "试问不查询数据，未执行查询。请用 dry-plan 检查 SQL 能否生成，写入问题文件后由用户在试问面板核对。", 403);
     }
 
     /**
-     * External-source tables may not be profiled (rule violated repeatedly by prompt alone, so it
-     * is enforced here): outside {@link io.agentscope.dataagent.dataset.ModelingTurnPurpose}
-     * question turns they are not queried at all; inside them, no MIN/MAX, and once a query came
-     * back empty the same query with other dates is refused for the rest of the turn. Returns the
-     * date-agnostic shape of an allowed external query so an empty result can be remembered.
+     * External-source tables are never queried while modeling (rule violated repeatedly by
+     * prompt alone, so it is enforced here): basic modeling reuses sampling and metadata, and
+     * trial questions are only planned with dry-plan. Uploaded tables keep their limited probes.
      */
-    private String guardExternalProbe(
-            RuntimeContext context, Project project, List<String> command) {
-        if (uploadTables == null || command.isEmpty() || !command.get(0).equals("query"))
-            return null;
+    private void refuseExternalQuery(Project project, List<String> command) {
+        if (uploadTables == null || command.isEmpty() || !command.get(0).equals("query")) return;
         String sql = sqlOf(command);
-        if (sql == null) return null;
+        if (sql == null) return;
         String code = sql.replaceAll("(?s)'(?:''|[^'])*'|/\\*.*?\\*/|--[^\\r\\n]*", " ");
         Set<String> uploads = new java.util.HashSet<>();
         for (String name : uploadTables.apply(project.groupId())) uploads.add(name.toLowerCase());
@@ -646,93 +646,19 @@ public final class OfficialWrenToolkit {
             name = name.substring(name.lastIndexOf('.') + 1).toLowerCase();
             if (!uploads.contains(name)) external.add(name);
         }
-        if (external.isEmpty()) return null;
-        String tables = String.join("、", external);
-        // Basic modeling generates no Q&A and may not verify relationships on external data, so
-        // only user-question turns (generate, retry or repair a question's SQL) query them.
-        io.agentscope.dataagent.dataset.ModelingTurnPurpose purpose =
-                context == null
-                        ? null
-                        : context.get(io.agentscope.dataagent.dataset.ModelingTurnPurpose.class);
-        boolean questionTurn = purpose != null && purpose.question();
-        if (!questionTurn)
-            throw new DatasetException(
-                    "基础建模只使用采样资料与元数据，不查询外部数据源表（"
-                            + tables
-                            + "），未执行查询。候选关系用 request_user_confirmation"
-                            + " 请用户确定后再写入；无法验证的唯一性、空值或样例写为未确认并记入 caveat；业务 SQL 在用户提交问题后再验证。",
-                    403);
-        if (extremeOfTime(code, timeColumns(project)))
-            throw new DatasetException(
-                    "外部数据源表（"
-                            + tables
-                            + "）禁止探查时间范围或取值极值，未执行查询。样例使用自选的固定日期范围；没有数据时说明该样例尚未验证，继续完成其余建模。",
-                    403);
-        String shape = shapeOf(sql);
-        if (context == null) return shape;
-        synchronized (context) {
-            if (context.get(emptyShapesKey(project)) instanceof Set<?> empty
-                    && empty.contains(shape))
-                throw new DatasetException(
-                        "同一查询在其它日期上已返回空结果，外部数据源表（"
-                                + tables
-                                + "）不允许换日期重试寻找数据，未执行查询。请说明该样例在所选日期无数据、尚未验证，继续完成其余工作。",
-                        403);
-        }
-        return shape;
+        if (external.isEmpty()) return;
+        throw new DatasetException(
+                "基础建模只使用采样资料与元数据，不查询外部数据源表（"
+                        + String.join("、", external)
+                        + "），未执行查询。候选关系用 request_user_confirmation 请用户确定后再写入；无法验证的唯一性、空值或样例写为未确认并记入"
+                        + " caveat；试问 SQL 用 dry-plan 检查，由用户在试问面板核对。",
+                403);
     }
 
     private static String sqlOf(List<String> command) {
         for (int i = 0; i + 1 < command.size(); i++)
             if (Set.of("--sql", "-s").contains(command.get(i))) return command.get(i + 1);
         return null;
-    }
-
-    /** Date literals blanked so retries that only move the window share one shape. */
-    static String shapeOf(String sql) {
-        return DATE_LITERAL
-                .matcher(sql)
-                .replaceAll("'?'")
-                .replaceAll("\\s+", " ")
-                .trim()
-                .toLowerCase();
-    }
-
-    private static String emptyShapesKey(Project project) {
-        return "wrenCli.emptyExternalShapes." + project.groupId();
-    }
-
-    @SuppressWarnings("unchecked")
-    private static void rememberEmptyShape(RuntimeContext context, Project project, String shape) {
-        if (context == null) return;
-        synchronized (context) {
-            Object current = context.get(emptyShapesKey(project));
-            Set<String> shapes =
-                    current instanceof Set<?> set ? (Set<String>) set : new java.util.HashSet<>();
-            shapes.add(shape);
-            context.put(emptyShapesKey(project), shapes);
-        }
-    }
-
-    /**
-     * True when the official table output has no rows, or a single aggregate row whose values are
-     * all zero or null-like (e.g. {@code 0 NaT NaT}).
-     */
-    static boolean isEmptyResult(String output) {
-        if (output.contains("Empty DataFrame")) return true;
-        List<String> lines = new ArrayList<>();
-        for (String line : output.split("\\R")) {
-            if (line.startsWith("Wren 官方 CLI") || line.startsWith("退出码") || line.startsWith("（"))
-                continue;
-            if (line.startsWith("#")) break;
-            if (!line.isBlank()) lines.add(line.trim());
-        }
-        if (lines.size() == 1) return true;
-        if (lines.size() != 2) return false;
-        for (String value : lines.get(1).split("\\s+"))
-            if (!Set.of("0", "0.0", "NaT", "None", "NaN", "null", "NULL", "<NA>").contains(value))
-                return false;
-        return true;
     }
 
     private void validateQueryBoundary(

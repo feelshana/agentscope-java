@@ -121,6 +121,7 @@ public class ChatController {
 
     private ChatCapacity chatCapacity;
     private io.agentscope.dataagent.dataset.ModelingActivity modelingActivity;
+    private io.agentscope.dataagent.dataset.FieldScreeningService fieldScreening;
 
     /**
      * AgentStateStore keys for which we have already recorded a RUN_SESSION event. Each (userId, agentId)
@@ -293,11 +294,17 @@ public class ChatController {
                             guard.require((String) auth.getPrincipal(), agentId, Tier.RUN);
                             // Read by buildInbound for this turn and any confirmation resume.
                             if (ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId)) {
-                                conversationScopes.putModelingPurpose(
-                                        (String) auth.getPrincipal(),
-                                        purposeConversation,
+                                String purpose =
                                         io.agentscope.dataagent.dataset.ModelingTurnPurpose
-                                                .normalize(req.purpose()));
+                                                .normalize(req.purpose());
+                                // spec093: automatic modeling waits for field screening.
+                                if (io.agentscope.dataagent.dataset.ModelingTurnPurpose.AUTO.equals(
+                                                purpose)
+                                        && fieldScreening != null
+                                        && req.groupIds() != null)
+                                    req.groupIds().forEach(fieldScreening::requireConfirmed);
+                                conversationScopes.putModelingPurpose(
+                                        (String) auth.getPrincipal(), purposeConversation, purpose);
                                 return trackModeling(req.groupIds(), execution);
                             }
                             return execution;
@@ -1359,6 +1366,40 @@ public class ChatController {
     }
 
     @org.springframework.beans.factory.annotation.Autowired
+    public ChatController(
+            ChatUiChannel chatUiChannel,
+            DataAgentBootstrap builderBootstrap,
+            AgentCatalogService catalogService,
+            IdentityLinkStore identityLinks,
+            UsageStore usageStore,
+            ToolEventBus toolEventBus,
+            AgentAccessGuard guard,
+            AgentActivityStore activity,
+            ObjectProvider<Model> modelProvider,
+            ConversationScopeRegistry conversationScopes,
+            DatasetGroupService datasetGroupService,
+            io.agentscope.dataagent.dataset.KnowledgeBaseOperations knowledgeBaseOperations,
+            ChatCapacity chatCapacity,
+            io.agentscope.dataagent.dataset.ModelingActivity modelingActivity,
+            io.agentscope.dataagent.dataset.FieldScreeningService fieldScreening) {
+        this(
+                chatUiChannel,
+                builderBootstrap,
+                catalogService,
+                identityLinks,
+                usageStore,
+                toolEventBus,
+                guard,
+                activity,
+                modelProvider,
+                conversationScopes,
+                datasetGroupService,
+                knowledgeBaseOperations,
+                chatCapacity,
+                modelingActivity);
+        this.fieldScreening = fieldScreening;
+    }
+
     public ChatController(
             ChatUiChannel chatUiChannel,
             DataAgentBootstrap builderBootstrap,

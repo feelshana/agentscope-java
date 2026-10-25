@@ -18,6 +18,7 @@ package io.agentscope.dataagent.web.config;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.agentscope.core.tool.Tool;
+import io.agentscope.dataagent.runtime.session.ModelingTurnRules;
 import io.agentscope.dataagent.tools.data.DataAgentToolkit;
 import io.agentscope.dataagent.tools.data.WrenMcpToolkit;
 import io.agentscope.harness.agent.gateway.channel.ChannelConfig;
@@ -151,24 +152,36 @@ class DataAgentConfigTest {
         // 2026-10-22: rules must cite a real source, and date conditions come from the platform's
         // per-column formats rather than a prompt-taught LIKE technique.
         assertThat(DataAgentConfig.MODELING_SCRIPT)
-                .contains("所注依据必须能在该来源中找到", "必须用 request_user_confirmation 提问")
+                .contains(
+                        "所注依据必须能在该来源中找到",
+                        "必须用 request_user_confirmation 提问",
+                        "description_source: user",
+                        "不要重新加入")
                 .doesNotContain("LIKE");
         assertThat(DataAgentConfig.QUERY_EFFICIENCY_RULES).doesNotContain("LIKE");
-        assertThat(DataAgentConfig.MODELING_PROBE_RULES)
-                .contains("外部数据源及其他来源表（含未列出的表）禁止自动探测", "每张事实表一次 MIN/MAX", "不执行 SELECT DISTINCT")
-                .doesNotContain("上传表可按官方技能需要");
+        // Modeling replies are for business users: short, Chinese only, no files or commands.
+        assertThat(DataAgentConfig.MODELING_SCRIPT)
+                .contains("不要输出任何英文句子", "不列文件路径、YAML 键名、命令", "不提及平台内部机制", "不在回复正文里提问")
+                .doesNotContain("最终说明实际修改、检查结果");
+        // Reply length and turn-specific rules follow the page-declared purpose.
+        assertThat(ModelingTurnRules.forPurpose("auto"))
+                .contains("3–6 行", "可以声明 MANY_TO_ONE", "非数据库约束")
+                .doesNotContain("试问 SQL");
+        assertThat(ModelingTurnRules.forPurpose("confirm"))
+                .contains("写入 knowledge/rules/（指标定义、默认过滤、术语）或对应模型的列描述", "1–2 行");
+        assertThat(ModelingTurnRules.forPurpose("question"))
+                .contains("knowledge/questions/<ID>.yml", "不要执行 query", "dry-plan", "不擅自新增业务条件")
+                .doesNotContain("3–6 行");
+        assertThat(ModelingTurnRules.forPurpose(null)).contains("用户对话", "试问 SQL");
         assertThat(DataAgentConfig.MODELING_SCRIPT)
                 .contains(
                         "整体替换可直接用 write_file",
                         "由平台自动先执行 context build",
-                        "可以声明 MANY_TO_ONE",
-                        "非数据库约束",
                         "不读取、不写入 cubes/ 与 views/",
                         "由用户在发布前统一审阅",
                         "不要在对话中用文字列出方案等待回复",
                         "request_user_confirmation",
-                        "不要向用户确认",
-                        "写入 knowledge/rules/（指标定义、默认过滤、术语）或对应模型的列描述");
+                        "不要向用户确认");
         assertThat(DataAgentConfig.QUERY_EFFICIENCY_RULES)
                 .contains(
                         "不为年份向用户提问",
@@ -277,5 +290,25 @@ class DataAgentConfigTest {
         assertThat(DataAgentConfig.DEFAULT_AGENT_SYS_PROMPT)
                 .contains("官方指导", "原样遵循官方 schema")
                 .doesNotContain("[DATA_SOURCES_OVERVIEW]", "query_type");
+    }
+
+    /** 2026-10-25: sources are MySQL 8.0+ or Doris; date ranges are literal so rules gate them. */
+    @Test
+    void sqlIsMysqlEightWithLiteralDateRanges() {
+        assertThat(DataAgentConfig.QUERY_EFFICIENCY_RULES)
+                .contains(
+                        "MySQL 8.0 语法",
+                        "不要用 CURDATE()、NOW()、DATE_SUB",
+                        "log_time >= '2026-09-26' AND log_time < '2026-10-26'")
+                .doesNotContain("平台不会解析或生成日期范围");
+        assertThat(DataAgentConfig.MODELING_SCRIPT).contains("MySQL 8.0 语法", "不用 CURDATE()");
+    }
+
+    /** Every listed skill is rendered into each model call, so each agent lists only its own. */
+    @Test
+    void eachAgentListsOnlyTheOfficialSkillsItUses() {
+        assertThat(DataAgentConfig.QUERY_SKILLS).containsExactly("usage");
+        assertThat(DataAgentConfig.MODELING_SKILLS)
+                .containsExactlyInAnyOrder("generate-mdl", "enrich-context");
     }
 }

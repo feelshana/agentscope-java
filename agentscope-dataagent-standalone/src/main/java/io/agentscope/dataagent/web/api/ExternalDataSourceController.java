@@ -115,21 +115,29 @@ public class ExternalDataSourceController {
                                         HttpStatus.CONFLICT,
                                         "data source name already exists: " + req.name());
                             }
-                            return toVO(
-                                    repository.save(
-                                            new ExternalDataSourceEntity(
-                                                    UUID.randomUUID().toString(),
-                                                    userId,
-                                                    req.name().trim(),
-                                                    req.kind() == null || req.kind().isBlank()
-                                                            ? "mysql"
-                                                            : req.kind(),
-                                                    url,
-                                                    req.username(),
-                                                    req.password(),
-                                                    req.sampling() == null || req.sampling())));
+                            ExternalDataSourceEntity created =
+                                    new ExternalDataSourceEntity(
+                                            UUID.randomUUID().toString(),
+                                            userId,
+                                            req.name().trim(),
+                                            req.kind() == null || req.kind().isBlank()
+                                                    ? "mysql"
+                                                    : req.kind(),
+                                            url,
+                                            req.username(),
+                                            req.password(),
+                                            req.sampling() == null || req.sampling());
+                            requireSupported(created);
+                            return toVO(repository.save(created));
                         })
                 .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    /** A source is saved only when reachable and MySQL 8.0+ or Doris (queries use that SQL). */
+    private void requireSupported(ExternalDataSourceEntity source) {
+        String error = introspector.connectionError(source);
+        if (error != null)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "数据源不可用：" + error);
     }
 
     @PostMapping("/test-connection")
@@ -188,6 +196,7 @@ public class ExternalDataSourceController {
                                 e.setSampling(req.sampling());
                             }
                             e.setUpdatedAt(Instant.now());
+                            requireSupported(e);
                             return toVO(repository.save(e));
                         })
                 .subscribeOn(Schedulers.boundedElastic());

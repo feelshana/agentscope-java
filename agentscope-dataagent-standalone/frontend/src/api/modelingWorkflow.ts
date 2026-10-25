@@ -70,6 +70,14 @@ export interface QueryPreparationStatus {
   message: string;
 }
 
+/** User-facing text for a preparation that is still running; null once it is ready or failed. */
+export function preparationPhase(state: QueryPreparationStatus['state']): string | null {
+  if (state === 'QUEUED') return '排队准备';
+  if (state === 'INDEXING') return '正在建立检索索引';
+  if (state === 'WARMING') return '正在预热检索';
+  return null;
+}
+
 export async function getQueryPreparation(groupId: string): Promise<QueryPreparationStatus> {
   const token = getToken();
   const response = await apiFetch(`/api/dataset-groups/${encodeURIComponent(groupId)}/query-preparation`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });

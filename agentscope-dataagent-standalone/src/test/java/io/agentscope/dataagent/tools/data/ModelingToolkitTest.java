@@ -1769,8 +1769,8 @@ class ModelingToolkitTest {
                     "load_skill_through_path",
                     "generate-mdl",
                     "enrich-context",
-                    "usage",
-                    "onboarding",
+                    // usage and onboarding are not mounted for modeling
+                    // (DataAgentConfig#MODELING_SKILLS).
                     "草稿",
                     "发布"
                 }) {

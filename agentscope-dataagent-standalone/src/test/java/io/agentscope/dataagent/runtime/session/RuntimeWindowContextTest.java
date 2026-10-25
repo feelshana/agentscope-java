@@ -121,12 +121,10 @@ class RuntimeWindowContextTest {
     @Test
     void modelingPromptSeparatesOperationalWindowsAndBusinessDefinitions() {
         assertThat(DataAgentConfig.MODELING_SCRIPT)
-                .contains(
-                        "具体天数、maxWindowDays和配置值禁止写进",
-                        "保留真正的业务时间口径",
-                        "建模样例日期可自行选择，无需用户确认",
-                        "逐项核对名称、已确认口径与SQL过滤一致",
-                        "不擅自新增业务条件");
+                .contains("具体天数和 maxWindowDays 禁止写进", "保留真正的业务时间口径");
+        // SQL-writing rules are sent on the turns that write SQL (trial questions and chat).
+        assertThat(ModelingTurnRules.forPurpose("question"))
+                .contains("自选符合各表时间配置的近期有限范围", "逐项核对名称、已确认口径与 SQL 过滤一致", "不擅自新增业务条件");
         assertThat(DataAgentConfig.QUERY_EFFICIENCY_RULES).contains("不能要求修改MDL", "不得伪称已经调用工具门禁");
     }
 }

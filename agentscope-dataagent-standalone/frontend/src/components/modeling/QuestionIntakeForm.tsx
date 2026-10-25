@@ -13,12 +13,16 @@ export function questionIds(count: number, now = Date.now()): string[] {
   return Array.from({ length: count }, (_, i) => `q-${stamp}-${i + 1}`);
 }
 
+/** How a question's definition is written, so the trial panel can show it as short labelled lines. */
+export const DEFINITION_FORMAT = 'definition 分五行书写，每行以“指标：”“粒度：”“时间范围：”“过滤：”“假设：”开头，各用一句业务语言、不超过 40 字，'
+  + '不写 SQL 片段、列名格式或时间门禁细节';
+
 export function questionRequest(questions: string[], ids = questionIds(questions.length)): string {
-  return '请为以下业务问题逐题生成验证用 SQL，不要保存问答对。每题：读取当前草稿模型、关系与业务规则确定口径；写一条只读 SQL（多表必须 JOIN … ON，Top N 可用 LIMIT），'
-    + '用 wren_cli query 实际执行一次确认可运行（遵守时间门禁与单轮查询上限，语法错误最多修正一次）；'
-    + '然后用 write_file 写入 knowledge/questions/<ID>.yml，字段为 question（原问题，不改写）、definition（指标、粒度、时间范围、过滤及你所作的假设）、sql。'
+  return '请为以下业务问题逐题生成 SQL，不要保存问答对。每题：读取当前草稿模型、关系与业务规则确定口径；写一条只读 SQL（多表必须 JOIN … ON，Top N 可用 LIMIT），'
+    + '不查询数据，只用 wren_cli dry-plan 检查 SQL 能否生成（失败时最多修正一次）；'
+    + '然后用 write_file 写入 knowledge/questions/<ID>.yml，字段为 question（原问题，不改写）、definition、sql；' + DEFINITION_FORMAT + '。'
     + '问题缺少日期时，选择符合时间配置的近期有限范围并在 definition 中写明。不要调用 memory store，不要写 knowledge/sql/。'
-    + '全部处理完后简要说明每题的口径；平台会试运行，用户在试问面板判断对错，确认正确的问答发布后才会在问数中被召回。\n'
+    + '全部处理完后每题用一行说明已生成；用户在试问面板核对 SQL，确认正确的问答发布后才会在问数中被召回。\n'
     + questions.map((q, i) => `${i + 1}. [ID: ${ids[i]}] ${q}`).join('\n');
 }
 

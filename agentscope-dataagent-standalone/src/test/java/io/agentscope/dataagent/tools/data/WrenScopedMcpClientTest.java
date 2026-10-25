@@ -259,4 +259,28 @@ class WrenScopedMcpClientTest {
         assertThat(((McpSchema.TextContent) results.getT2().content().get(0)).text())
                 .isEqualTo("B error");
     }
+
+    @Test
+    void queryRowsReachTheModelAsCompactArraysWithTheSameValues() {
+        String official =
+                """
+                {
+                  "columns": ["department", "user_count"],
+                  "rows": [
+                    {"department": "市场经营部", "user_count": 12},
+                    {"department": null, "user_count": 1}
+                  ],
+                  "row_count": 2,
+                  "truncated": false
+                }\
+                """;
+        assertThat(WrenScopedMcpClient.compactRows(official))
+                .isEqualTo(
+                        "{\"columns\":[\"department\",\"user_count\"],"
+                                + "\"rows\":[[\"市场经营部\",12],[null,1]],"
+                                + "\"row_count\":2,\"truncated\":false}");
+        assertThat(WrenScopedMcpClient.compactRows("{\"rows\": []}")).isEqualTo("{\"rows\": []}");
+        assertThat(WrenScopedMcpClient.compactRows("{\"rows\":[{\"a\":1}]}\n备注")).endsWith("备注");
+        assertThat(WrenScopedMcpClient.compactRows("error: x")).isEqualTo("error: x");
+    }
 }

@@ -40,7 +40,10 @@ class SqlWindowGateTest {
                 .thenReturn(Flux.<ChatResponse>never().doOnCancel(() -> cancelled.set(true)));
         assertThat(
                         new SqlWindowGate(provider, java.time.Duration.ofMillis(10))
-                                .check("SELECT SUM(x) FROM a", RULES)
+                                .check(
+                                        "SELECT SUM(x) FROM a WHERE time1 >= NOW() - INTERVAL 7"
+                                                + " DAY",
+                                        RULES)
                                 .allowed())
                 .isFalse();
         assertThat(cancelled).isTrue();
@@ -159,7 +162,10 @@ class SqlWindowGateTest {
                         invocation -> {
                             List<Msg> messages = invocation.getArgument(0);
                             assertThat(messages.get(1).getTextContent())
-                                    .contains("SELECT SUM(x.amount) FROM `订单` x", "业务日期");
+                                    .contains(
+                                            "SELECT SUM(x.amount) FROM `订单` x WHERE x.业务日期 >="
+                                                    + " NOW()",
+                                            "业务日期");
                             return Flux.just(
                                     ChatResponse.builder()
                                             .content(
@@ -173,7 +179,8 @@ class SqlWindowGateTest {
         assertThat(
                         new SqlWindowGate(provider)
                                 .check(
-                                        "SELECT SUM(x.amount) FROM `订单` x",
+                                        "SELECT SUM(x.amount) FROM `订单` x WHERE x.业务日期 >= NOW() -"
+                                                + " INTERVAL 19 DAY",
                                         List.of(new SqlWindowGate.Rule("订单", List.of("业务日期"), 30)))
                                 .allowed())
                 .isTrue();
@@ -185,11 +192,21 @@ class SqlWindowGateTest {
         var gate = new SqlWindowGate(provider);
         assertThat(gate.check("SELECT 1", List.of()).allowed()).isTrue();
         verifyNoInteractions(provider);
-        assertThat(gate.check("SELECT 1", RULES).allowed()).isFalse();
+        // SQL the rules cannot decide fails closed while the model gate is unavailable.
+        String relative = "SELECT 1 FROM a WHERE time1 >= NOW() - INTERVAL 7 DAY";
+        assertThat(gate.check(relative, RULES).allowed()).isFalse();
         Model model = mock(Model.class);
         when(provider.getIfAvailable()).thenReturn(model);
         when(model.stream(anyList(), anyList(), isNull()))
                 .thenReturn(Flux.error(new IllegalStateException("offline")));
-        assertThat(gate.check("SELECT 1", RULES).allowed()).isFalse();
+        assertThat(gate.check(relative, RULES).allowed()).isFalse();
+        // Plain literal ranges never reach the model.
+        assertThat(
+                        gate.check(
+                                        "SELECT 1 FROM a WHERE time1 >= '2026-10-01' AND time1 <"
+                                                + " '2026-10-08'",
+                                        RULES)
+                                .allowed())
+                .isTrue();
     }
 }

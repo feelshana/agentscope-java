@@ -290,7 +290,8 @@ class OfficialWrenToolkitTest {
                                 List.of("query", "--sql", "SELECT COUNT(*) FROM uploads")))
                 .contains("退出码：0");
 
-        // Question turns may query external tables, still without profiling or date hunting.
+        // 2026-10-25: trial questions are only planned; no query runs in a question turn, on
+        // external or uploaded tables, while dry-plan (no data access) still does.
         var turn =
                 RuntimeContext.builder()
                         .userId("alice")
@@ -308,74 +309,19 @@ class OfficialWrenToolkitTest {
                                 List.of(
                                         "query",
                                         "--sql",
-                                        "SELECT MIN(order_time), MAX(order_time) FROM orders WHERE"
-                                                + " order_time >= '2025-01-01' AND order_time <"
-                                                + " '2025-01-15'")))
-                .startsWith("error:")
-                .contains("外部数据源表（orders）禁止探查");
-        assertThat(invocations).hasSize(before);
-        // 2026-10-22 log: MAX(project_name) carrying an attribute is not a time probe, while an
-        // extreme over a parsed time column still is.
-        assertThat(
-                        OfficialWrenToolkit.extremeOfTime(
-                                "SELECT asset_name, MAX(project_name) FROM report_visit GROUP BY"
-                                        + " asset_name",
-                                java.util.Set.of("visit_time")))
-                .isFalse();
-        assertThat(
-                        OfficialWrenToolkit.extremeOfTime(
-                                "SELECT MAX(STR_TO_DATE(visit_time, '%Y/%c/%e')) FROM report_visit",
-                                java.util.Set.of("visit_time")))
-                .isTrue();
-        assertThat(
-                        OfficialWrenToolkit.extremeOfTime(
-                                "SELECT MIN(created_at) FROM t", java.util.Set.of()))
-                .isTrue();
-        // Upload tables keep their limited MIN/MAX probe.
-        assertThat(
-                        adapter.execute(
-                                turn,
-                                List.of("query", "--sql", "SELECT MIN(t), MAX(t) FROM uploads")))
-                .contains("退出码：0");
-
-        String january =
-                "SELECT COUNT(*) AS n FROM orders o JOIN uploads u ON o.k = u.k WHERE o.order_time"
-                        + " >= '2026-01-01 00:00:00' AND o.order_time < '2026-01-31 00:00:00'";
-        output[0] = "n\n0\n";
-        assertThat(adapter.execute(turn, List.of("query", "--sql", january))).contains("退出码：0");
-        before = invocations.size();
-        assertThat(
-                        adapter.execute(
-                                turn,
-                                List.of(
-                                        "query",
-                                        "--sql",
-                                        january.replace("2026-01-01", "2025-06-01")
-                                                .replace("2026-01-31", "2025-06-15"))))
-                .startsWith("error:")
-                .contains("不允许换日期重试");
-        assertThat(invocations).hasSize(before);
-        // A different question on the same table still runs, and a new turn starts fresh.
-        assertThat(
-                        adapter.execute(
-                                turn,
-                                List.of(
-                                        "query",
-                                        "--sql",
                                         "SELECT SUM(amount) FROM orders WHERE order_time >="
                                                 + " '2026-09-01' AND order_time < '2026-10-01'")))
+                .startsWith("error:")
+                .contains("试问不查询数据", "dry-plan");
+        assertThat(adapter.execute(turn, List.of("query", "--sql", "SELECT COUNT(*) FROM uploads")))
+                .startsWith("error:")
+                .contains("试问不查询数据");
+        assertThat(invocations).hasSize(before);
+        assertThat(
+                        adapter.execute(
+                                turn,
+                                List.of("dry-plan", "--sql", "SELECT SUM(amount) FROM orders")))
                 .contains("退出码：0");
-        var nextTurn =
-                RuntimeContext.builder()
-                        .userId("alice")
-                        .put(
-                                io.agentscope.dataagent.dataset.ModelingTurnPurpose.class,
-                                new io.agentscope.dataagent.dataset.ModelingTurnPurpose(
-                                        io.agentscope.dataagent.dataset.ModelingTurnPurpose
-                                                .QUESTION))
-                        .build();
-        nextTurn.put(DatasetScope.class, new DatasetScope("alice", List.of("a")));
-        assertThat(adapter.execute(nextTurn, List.of("query", "--sql", january))).contains("退出码：0");
         // Unknown purposes grant nothing.
         org.junit.jupiter.api.Assertions.assertNull(
                 io.agentscope.dataagent.dataset.ModelingTurnPurpose.normalize("probe"));
@@ -418,18 +364,6 @@ class OfficialWrenToolkitTest {
                         "knowledge/rules/user.md|chat|alice");
         // Documents are uploaded by users only; the agent cannot write them.
         assertThat(files.write(chat, "raw/docs/伪造.md", "x").isSuccess()).isFalse();
-    }
-
-    @Test
-    void emptyResultDetectionCoversNoRowsAndAllNullAggregates() {
-        assertThat(OfficialWrenToolkit.isEmptyResult("Empty DataFrame\nColumns: [a]\nIndex: []"))
-                .isTrue();
-        assertThat(OfficialWrenToolkit.isEmptyResult("a b\n0 None\n\n# To save this query:\n"))
-                .isTrue();
-        assertThat(OfficialWrenToolkit.isEmptyResult("valid_revenue\n99.0\n")).isFalse();
-        assertThat(OfficialWrenToolkit.isEmptyResult("a\n0\n1\n")).isFalse();
-        assertThat(OfficialWrenToolkit.shapeOf("SELECT 1 WHERE d >= '2025-01-01 00:00:00'"))
-                .isEqualTo(OfficialWrenToolkit.shapeOf("select 1  where d >= '2026-09-01'"));
     }
 
     @Test
@@ -862,5 +796,27 @@ class OfficialWrenToolkitTest {
                 .name("wren_cli")
                 .input(Map.of("arguments", args))
                 .build();
+    }
+
+    /**
+     * 2026-10-25: the agent no longer runs context build itself; query-class commands rebuild
+     * when any build input changed after the last compile, so plans never use an old MDL.
+     */
+    @Test
+    void compiledDraftIsStaleOnceAnyBuildInputChangesAfterIt() throws Exception {
+        java.nio.file.Path root = Files.createTempDirectory("stale-mdl");
+        Files.createDirectories(root.resolve("target"));
+        Files.createDirectories(root.resolve("models/orders"));
+        java.nio.file.Path model = root.resolve("models/orders/metadata.yml");
+        Files.writeString(model, "name: orders\n");
+        java.nio.file.Path compiled = root.resolve("target/mdl.json");
+        Files.writeString(compiled, "{}");
+        var later =
+                java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() + 60_000);
+        Files.setLastModifiedTime(compiled, later);
+        assertThat(OfficialWrenToolkit.compiledMdlStale(root)).isFalse();
+        Files.setLastModifiedTime(
+                model, java.nio.file.attribute.FileTime.fromMillis(later.toMillis() + 1_000));
+        assertThat(OfficialWrenToolkit.compiledMdlStale(root)).isTrue();
     }
 }

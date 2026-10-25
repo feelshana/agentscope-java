@@ -32,6 +32,7 @@ import {
 
 import { settleUploads } from '../../api/uploadQueue';
 import { getToken } from '../../api/auth';
+import { useQueryReadiness } from '../../components/useQueryReadiness';
 
 type View = 'files' | 'modeling';
 
@@ -64,7 +65,9 @@ export default function DatasetGroupPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [detail, setDetail] = useState<GroupDetail | null>(null);
   const [workflow, setWorkflow] = useState<ModelingWorkflow | null>(null);
+  const [windowSignal, setWindowSignal] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const preparing = useQueryReadiness(workflow?.queryAvailable ? groupId : undefined, workflow?.publishedVersion);
   const [busy, setBusy] = useState(false);
   const [uploadPolicy, setUploadPolicy] = useState<UploadPolicy | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -347,19 +350,21 @@ export default function DatasetGroupPage() {
 
   return (
     <div className="kw-page">
-      <FactQueryWindowSettings key={groupId} groupId={groupId} />
+      <FactQueryWindowSettings key={groupId} groupId={groupId} hideButton openSignal={windowSignal} />
       <KnowledgeBreadcrumb items={[{ label: '返回对话', to: '/chat' }, { label: '知识库', to: '/configure/datasets' }, { label: detail?.group.name ?? '加载中…' }]} />
       <div className="kw-scroll"><div className="kw-content">
         <div className="kw-pagehead">
           <div className="kw-heading"><div className="kw-eyebrow"><Icon name="book" size="sm" />知识库</div><h1>{detail?.group.name ?? '知识库'}</h1><p>{detail?.group.description || '暂无说明'}</p>
             <div className="kw-infochips"><span><Icon name="table" size="sm" />{fileCount} 个数据集</span>{detail?.group.createdAt && <span><Icon name="clock" size="sm" />创建于 {new Date(detail.group.createdAt).toLocaleDateString('zh-CN')}</span>}</div>
           </div>
-          <div className="kw-actions"><button className="da-btn" disabled={!detail} onClick={() => setMembersOpen(true)}><Icon name="user" size="sm" />成员与权限</button><button className="da-btn da-btn-ghost" disabled={!detail || busy} onClick={() => { setGroupName(detail?.group.name ?? ''); setGroupDescription(detail?.group.description ?? ''); setError(null); setEditingGroup(true); }}><Icon name="edit" size="sm" />编辑信息</button><button className="da-btn da-btn-primary" disabled={!detail} onClick={() => navigate(`/chat?groups=${encodeURIComponent(groupId)}`)}><Icon name="chat" size="sm" />基于此库提问</button></div>
+          <div className="kw-actions"><button className="da-btn" disabled={!detail} onClick={() => setMembersOpen(true)}><Icon name="user" size="sm" />成员与权限</button><button className="da-btn da-btn-ghost" disabled={!detail || busy} onClick={() => { setGroupName(detail?.group.name ?? ''); setGroupDescription(detail?.group.description ?? ''); setError(null); setEditingGroup(true); }}><Icon name="edit" size="sm" />编辑信息</button><button className="da-btn" disabled={!detail} onClick={() => setWindowSignal(n => n + 1)}><Icon name="clock" size="sm" />事实表时间范围</button><button className="da-btn da-btn-primary" disabled={!detail || !!preparing} title={preparing ? `问数准备中（${preparing}），约半分钟后可用` : undefined} onClick={() => navigate(`/chat?groups=${encodeURIComponent(groupId)}`)}><Icon name="chat" size="sm" />{preparing ? '问数准备中…' : '基于此库提问'}</button></div>
         </div>
         {error && <div className="kw-alert" role="alert">{error}</div>}
         {workflow && <div className="kw-progress" style={{ display: 'flex', alignItems: 'center', gap: 16, justifyContent: 'space-between', flexWrap: 'wrap' }}>
-          <span className="da-small">{workflow.queryAvailable
-            ? `基础模型已发布 v${workflow.publishedVersion}，可以问数；业务口径可继续完善。`
+          <span className="kw-progress-text">{workflow.queryAvailable
+            ? preparing
+              ? `已发布 v${workflow.publishedVersion}，问数准备中（${preparing}），约半分钟后可以问数。`
+              : `基础模型已发布 v${workflow.publishedVersion}，可以问数；业务口径可继续完善。`
             : '采样完成后请进行语义建模并发布，之后才能问数。'}</span>
           <button className="da-btn da-btn-sm" onClick={() => navigate(`/configure/modeling/${groupId}`)}>{workflow.queryAvailable ? '完善业务模型' : '查看建模进度'}</button>
         </div>}
@@ -371,7 +376,7 @@ export default function DatasetGroupPage() {
           {uploadStatuses.length > 0 && (
             <div className="da-card" style={{ marginTop: 8, padding: 8 }}>
               {uploadStatuses.map((s, i) => (
-                <div key={`up-${s.name}-${i}`} className="da-small" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div key={`up-${s.name}-${i}`} style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 14, padding: '6px 4px' }}>
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {s.name}{s.error && <span style={{ display: 'block', color: 'var(--da-danger)', whiteSpace: 'normal' }}>{s.error}</span>}
                   </span>
@@ -393,8 +398,7 @@ export default function DatasetGroupPage() {
                   {s.status === 'failed' && (
                     <>
                       <button
-                        className="da-btn"
-                        style={{ fontSize: '0.7rem', padding: '1px 6px' }}
+                        className="da-btn da-btn-sm"
                         disabled={!s.file || busy}
                         title={!s.file ? '请重新选择原文件后上传' : '重新导入此文件'}
                         onClick={async () => {
@@ -415,8 +419,9 @@ export default function DatasetGroupPage() {
                         重试
                       </button>
                       <button
-                        className="da-btn"
-                        style={{ fontSize: '0.7rem', padding: '1px 6px', color: 'var(--da-text-3)' }}
+                        className="da-btn da-btn-sm"
+                        aria-label="移除这条记录"
+                        style={{ color: 'var(--da-text-3)' }}
                         onClick={() => {
                           mutateUploadStatuses(uploadScope, prev => prev.filter(x => x.name !== s.name));
                         }}

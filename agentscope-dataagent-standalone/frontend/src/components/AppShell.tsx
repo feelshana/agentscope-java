@@ -4,14 +4,12 @@ import { ACTIVE_AGENT_ID } from '../api/activeAgent';
 import { AgentDefinition, getAgent } from '../api/agents';
 import SessionsSidebar from './SessionsSidebar';
 import { ToastHost } from './Toast';
+import NewVersionBanner from './NewVersionBanner';
 import { ShellOutletContext } from './EditTierGate';
 
 export default function AppShell() {
-  const location = useLocation();
-  // specs/030: the semantic-modeling workbench owns the entire viewport — hide the global
-  // chat sidebar there so the asset view gets the full width.
-  // The modeling list page (spec092) keeps the sidebar; only a knowledge base's workbench is fullscreen.
-  const fullscreen = location.pathname.startsWith('/configure/modeling/');
+  // The modeling workbench keeps the global navigation like every other page, so it reads as
+  // part of the product rather than a separate tool.
   const [agent, setAgent] = useState<AgentDefinition | null>(null);
   const [agentLoading, setAgentLoading] = useState(true);
   const [agentError, setAgentError] = useState<string | null>(null);
@@ -28,6 +26,13 @@ export default function AppShell() {
     return () => { cancelled = true; };
   }, []);
 
+  // The modeling workbench (one knowledge base) starts with the navigation collapsed to an icon
+  // rail; the user's own toggle wins until they move to another kind of page.
+  const { pathname } = useLocation();
+  const workbench = /^\/configure\/modeling\/[^/]+/.test(pathname);
+  const [collapsed, setCollapsed] = useState(workbench);
+  useEffect(() => { setCollapsed(workbench); }, [workbench]);
+
   const bumpSidebar = useCallback(() => setRefreshTick(t => t + 1), []);
 
   const ctx: ShellOutletContext = { agent, agentLoading, agentError, bumpSidebar };
@@ -43,12 +48,13 @@ export default function AppShell() {
         跳到主内容
       </a>
       <aside style={{ display: 'contents' }}>
-        {!fullscreen && <SessionsSidebar refreshKey={refreshTick} />}
+        <SessionsSidebar refreshKey={refreshTick} collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} />
       </aside>
       <main id="main-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
         <Outlet context={ctx} />
       </main>
       <ToastHost />
+      <NewVersionBanner />
     </div>
   );
 }

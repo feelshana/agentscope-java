@@ -59,15 +59,37 @@ public class DataSourceIntrospector {
         }
     }
 
+    /** Null when the source is reachable and its engine is supported; otherwise the reason. */
     public String connectionError(ExternalDataSourceEntity ds) {
+        if (!"mysql".equals(ds.getKind())) return UNSUPPORTED;
         try (Connection c = open(ds)) {
-            if (c.isValid(5)) {
-                return null;
+            if (!c.isValid(5)) return "connection invalid";
+            try (Statement st = c.createStatement();
+                    ResultSet rs = st.executeQuery("SELECT VERSION(), @@version_comment")) {
+                return rs.next() ? engineError(rs.getString(1), rs.getString(2)) : UNSUPPORTED;
             }
-            return "connection invalid";
         } catch (SQLException e) {
             return e.getMessage();
         }
+    }
+
+    static final String UNSUPPORTED = "外部数据源仅支持 MySQL 8.0 及以上或 Doris";
+
+    /**
+     * Queries are written in MySQL 8.0 SQL (CTEs, window functions), so a source must be MySQL 8.0
+     * or later, or Doris, which speaks it while reporting a 5.7-compatible version number.
+     */
+    static String engineError(String version, String comment) {
+        if (containsDoris(comment) || containsDoris(version)) return null;
+        var major = version == null ? null : Pattern.compile("^(\\d+)\\.").matcher(version.trim());
+        if (major == null || !major.find()) return "无法识别数据库版本（" + version + "），" + UNSUPPORTED;
+        return Integer.parseInt(major.group(1)) >= 8
+                ? null
+                : "当前 MySQL 版本 " + version + " 低于 8.0，" + UNSUPPORTED;
+    }
+
+    private static boolean containsDoris(String text) {
+        return text != null && text.toLowerCase(java.util.Locale.ROOT).contains("doris");
     }
 
     public List<String> listSchemas(ExternalDataSourceEntity ds) {

@@ -148,6 +148,48 @@ class MdlSeederTest {
     }
 
     @Test
+    void excludedColumnsAreNeverSeededAndNewColumnsAppendToTheSeedLayout() throws Exception {
+        // spec093: field screening excludes columns; the seeder must not bring them back.
+        DatasetEntity d = new DatasetEntity();
+        d.setId("o1");
+        d.setGroupId("g1");
+        d.setOwnerId("owner");
+        d.setName("orders");
+        d.setTableName("ds_o1");
+        d.setSchemaName("data_agent");
+        d.setCreatedAt(Instant.parse("2026-09-01T00:00:00Z"));
+        List<ColumnSchema> cols =
+                new ArrayList<>(
+                        List.of(
+                                new ColumnSchema("id", "id", "bigint", true, "订单ID")
+                                        .withDescription("订单编号", ColumnSchema.SOURCE_USER),
+                                new ColumnSchema("etl_batch", "etl_batch", "bigint", true, null)
+                                        .withScreening(false, "TECHNICAL", "ETL批次")));
+        d.setColumnSchemaJson(mapper.writeValueAsString(cols));
+        datasetsById.put("o1", d);
+        MdlSeeder.SeedResult first = reconcile();
+        assertTrue(first.issues().isEmpty(), String.valueOf(first.issues()));
+        String yml = modelYml("orders");
+        assertFalse(yml.contains("etl_batch"));
+        assertTrue(yml.contains("description_source: user"));
+        assertFalse(reconcile().changed());
+
+        // A column added later is appended at the seed's column-0 entry indent: valid YAML.
+        cols.add(new ColumnSchema("amount", "amount", "decimal", true, "金额"));
+        d.setColumnSchemaJson(mapper.writeValueAsString(cols));
+        MdlSeeder.SeedResult second = reconcile();
+        assertTrue(second.issues().isEmpty(), String.valueOf(second.issues()));
+        String appended = modelYml("orders");
+        assertTrue(appended.contains("\n- name: amount\n"), appended);
+        assertEquals(
+                2,
+                new ObjectMapper(new com.fasterxml.jackson.dataformat.yaml.YAMLFactory())
+                        .readTree(appended)
+                        .path("columns")
+                        .size());
+    }
+
+    @Test
     void reconcileIsIdempotent() throws IOException {
         registerDataset(
                 "o1",
@@ -342,7 +384,7 @@ class MdlSeederTest {
     }
 
     /** Scriptable wren CLI: records every call, fakes init and parse-types. */
-    private static final class FakeCli implements WrenCli {
+    static final class FakeCli implements WrenCli {
 
         final List<List<String>> calls = new ArrayList<>();
 

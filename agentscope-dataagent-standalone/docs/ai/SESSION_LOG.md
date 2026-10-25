@@ -401,3 +401,7 @@
 - 2026-10-22（Asia/Shanghai）｜实施checkpoint｜去除对 agentscope-core 修改的依赖：新增 WrenToolForwarder/WrenQueryToolRegistrar，中间件改写模型工具列表并按次绑定官方工具；ReActAgent.java 已还原为提交版本（原修改备份为会话 scratchpad 中的 reactagent-callToolkit.patch），框架重新安装后 standalone 全量测试通过。未提交。
 - 2026-10-22（Asia/Shanghai）｜实施checkpoint｜界面优化：外部表逐表关联采样进度条（associate 增加 publish 参数，最后统一发布）；事实表时间范围弹窗改为标准弹窗与天数选择；建模回复折叠过程为一行统计、突出最终说明与结果。未提交。
 - 2026-10-22（Asia/Shanghai）｜实施checkpoint｜21:01 建模 63 秒分析：6 轮逐个列目录读文件约 13 秒、选项名超长被拒重提约 6 秒。上下文注入工程文件清单、选项名超长改为截断；前端建模阶段进度、结果边写边出、最终说明用正文色。未提交。
+- 2026-10-23（Asia/Shanghai）｜实施checkpoint｜试问"不正确"：原流程先弹确认、答复以 confirm 发送导致外部表查询被拒、SQL 未执行且旧结果不刷新；改为卡片内填写原因交助手（question 轮次）或自行改 SQL，SQL 变化后自动重跑。字段筛选中间步骤待用户确认后写 spec。模型切换到 model-router（qwen/deepseek-v4.1-flash，仅本机启动配置）。未提交。
+- 2026-10-23（Asia/Shanghai）｜实施checkpoint｜spec093 字段整理：FieldScreeningService/Controller、ColumnSchema 增加纳入与来源字段、DatasetEntity.fieldScreeningConfirmed（迁移 0095）、MdlSeeder 只处理纳入字段并修复追加列缩进识别（matches→lookingAt、列 0 条目）、自动建模前置校验、提示词保留用户说明；前端 FieldScreeningPanel、建模准备五步、资料页字段调整与单表重建。未提交，待真实验收。
+- 2026-10-23（Asia/Shanghai）｜实施checkpoint｜界面改版第一批：建模页保留左侧导航、统一页头（面包屑、状态胶囊、操作区）与下划线标签、对话区居中阅读宽度与助手头像、欢迎卡与输入框、试问栏固定宽度；建模回复写法约束（中文、短过程说明、按轮次控制篇幅、不列文件与命令）。未提交。
+- 2026-10-25（Asia/Shanghai）｜实施checkpoint｜试问改为只生成并 dry-plan 检查 SQL、用户核对后确认（工具拒绝试问轮次 query）；确认与发布竞态修复（修订号在工作区锁内递增、发布在锁内读取），草稿栏"重新发布"兜底；建模提示词精简并按轮次分段；技能按助手挂载；查询结果紧凑格式；命名候选关系；外部表描述不再拼接样例；建模不单独 build、编译过期自动重建；时间门禁规则优先（ADR0112）；数据源仅 MySQL 8.0+/Doris、SQL 用日期常量（ADR0113）；问数准备进度、按钮置灰、新版本刷新提示；知识库与语义建模页字号、列表倒序改版。后端 796 项 0 失败 20 跳过，前端 build 与 19 项测试通过。已提交（application.yml 密钥修改除外）。

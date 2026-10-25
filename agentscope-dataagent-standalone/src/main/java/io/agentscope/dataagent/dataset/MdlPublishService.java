@@ -688,6 +688,10 @@ public class MdlPublishService {
 
     private MdlPublishResult doPublishLocked(DatasetGroupEntity group, String groupId) {
         long assembleStartTick = System.nanoTime();
+        // Read under the workspace lock: the group entity was loaded before waiting for it, and
+        // a change committed meanwhile (e.g. a question confirmed during the wait) is part of
+        // this snapshot, so it must also be covered by it.
+        long coveredRevision = requireGroup(groupId).getModelingRevision();
         List<MdlIssue> issues = new ArrayList<>();
         List<DatasetEntity> datasets = datasetRepository.findByGroupId(groupId);
         if (datasets.isEmpty()) {
@@ -771,7 +775,7 @@ public class MdlPublishService {
         markPublished(group);
         // The draft now equals the snapshot; its change annotations are spent (ADR0111).
         DraftChangeLog.clear(workspace.workspaceRoot(groupId));
-        groupRepository.coverModelingRevision(groupId, group.getModelingRevision());
+        groupRepository.coverModelingRevision(groupId, coveredRevision);
         // From here the snapshot reflects every change committed before this run began; automatic
         // baseline requests that entered before this tick can skip their own run.
         assembledAtTicks.merge(groupId, assembleStartTick, Math::max);

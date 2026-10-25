@@ -99,24 +99,37 @@ public class MdlQuestionService {
     public MdlQuestionStore.Review correctSql(
             DatasetScope scope, String groupId, String questionId, String revision, String sql) {
         requireScope(scope, groupId);
-        var result = store.correctSql(groupId, questionId, revision, sql);
-        groups.markMdlDirty(scope.ownerId(), groupId);
-        return result;
+        return store.locked(
+                groupId,
+                () -> {
+                    var result = store.correctSql(groupId, questionId, revision, sql);
+                    groups.markMdlDirty(scope.ownerId(), groupId);
+                    return result;
+                });
     }
 
     public void archive(DatasetScope scope, String groupId, String questionId, String revision) {
         requireScope(scope, groupId);
-        store.archive(groupId, questionId, revision);
-        groups.markMdlDirty(scope.ownerId(), groupId);
+        store.locked(
+                groupId,
+                () -> {
+                    store.archive(groupId, questionId, revision);
+                    groups.markMdlDirty(scope.ownerId(), groupId);
+                    return null;
+                });
     }
 
     public MdlQuestionStore.Review decide(
             DatasetScope scope, String groupId, String questionId, boolean accepted) {
         requireScope(scope, groupId);
         if (accepted) requireWindow(scope, groupId, questionId, "question confirm");
-        MdlQuestionStore.Review result =
-                store.decide(groupId, questionId, accepted, scope.ownerId());
-        groups.markMdlDirty(scope.ownerId(), groupId);
-        return result;
+        return store.locked(
+                groupId,
+                () -> {
+                    MdlQuestionStore.Review result =
+                            store.decide(groupId, questionId, accepted, scope.ownerId());
+                    groups.markMdlDirty(scope.ownerId(), groupId);
+                    return result;
+                });
     }
 }

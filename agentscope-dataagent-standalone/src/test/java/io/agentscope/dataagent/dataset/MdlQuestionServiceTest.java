@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 
 import io.agentscope.dataagent.runtime.wren.WrenQueryGateway;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 class MdlQuestionServiceTest {
@@ -15,6 +16,43 @@ class MdlQuestionServiceTest {
     private final MdlPublishService publisher = mock(MdlPublishService.class);
     private final MdlQuestionService service =
             new MdlQuestionService(groups, store, publisher, mock(WrenQueryGateway.class));
+
+    /** Tracks whether the workspace lock is held while the store's locked section runs. */
+    private boolean insideLock;
+
+    @BeforeEach
+    void runLockedSectionsInline() {
+        when(store.locked(
+                        org.mockito.ArgumentMatchers.anyString(),
+                        org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(
+                        call -> {
+                            insideLock = true;
+                            try {
+                                return ((java.util.function.Supplier<?>) call.getArgument(1)).get();
+                            } finally {
+                                insideLock = false;
+                            }
+                        });
+    }
+
+    /**
+     * 2026-10-25: a question confirmed while a publish waited for the workspace lock bumped the
+     * modeling revision after the lock was released, so the publish covered the old revision and
+     * querying stayed blocked with nothing left to publish. The bump now happens inside the lock.
+     */
+    @Test
+    void questionChangesBumpTheModelingRevisionInsideTheWorkspaceLock() {
+        var scope = new DatasetScope("alice");
+        java.util.List<Boolean> locked = new java.util.ArrayList<>();
+        org.mockito.Mockito.doAnswer(call -> locked.add(insideLock))
+                .when(groups)
+                .markMdlDirty("alice", "a");
+        service.decide(scope, "a", "q-1", true);
+        service.correctSql(scope, "a", "q-1", "r1", "SELECT 1");
+        service.archive(scope, "a", "q-1", "r1");
+        org.assertj.core.api.Assertions.assertThat(locked).containsExactly(true, true, true);
+    }
 
     @Test
     void questionValidationPassesTheSameTimeWindowGateBeforeExecution() {

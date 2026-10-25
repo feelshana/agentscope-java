@@ -8,10 +8,13 @@ type Draft = { mode: 'LIMITED' | 'UNLIMITED'; days: number; timeColumn: string }
 const message = (error: unknown) => error instanceof Error ? error.message : '时间范围配置失败';
 const DAYS = [7, 14, 31, 90];
 
-export function FactQueryWindowSettings({ groupId, automatic = false, onReady }: {
+export function FactQueryWindowSettings({ groupId, automatic = false, onReady, hideButton = false, openSignal = 0 }: {
   groupId: string;
   automatic?: boolean;
   onReady?: (ready: boolean) => void;
+  /** The page shows its own trigger (e.g. in its header) and bumps {@code openSignal}. */
+  hideButton?: boolean;
+  openSignal?: number;
 }) {
   const [tables, setTables] = useState<FactQueryWindowCandidate[]>([]);
   const [unknown, setUnknown] = useState<FactQueryWindowCandidate[]>([]);
@@ -27,6 +30,8 @@ export function FactQueryWindowSettings({ groupId, automatic = false, onReady }:
     if (automatic) { onReady?.(false); void load(true); }
     return () => { generation.current++; };
   }, [groupId, automatic]);
+
+  useEffect(() => { if (openSignal > 0) void load(false); }, [openSignal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function load(pendingOnly = automatic) {
     const current = ++generation.current;
@@ -87,7 +92,7 @@ export function FactQueryWindowSettings({ groupId, automatic = false, onReady }:
   const label: CSSProperties = { fontSize: 12, color: 'var(--da-text-muted)', marginBottom: 6 };
 
   return <div>
-    <button className="da-btn da-btn-sm" disabled={busy} onClick={() => void load()}>事实表时间范围</button>
+    {!hideButton && <button className="da-btn da-btn-sm" disabled={busy} onClick={() => void load()}>事实表时间范围</button>}
     {error && !open && <div role="alert" className="da-small" style={{ color: 'var(--da-danger)' }}>{error}</div>}
     {unknown.length > 0 && <div className="da-card" style={{ marginTop: 8 }}>
       <div style={{ fontWeight: 600, marginBottom: 4 }}>请先确认表的角色</div>

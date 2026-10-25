@@ -69,9 +69,12 @@ function relTime(ms: number): string {
 
 export interface SessionsSidebarProps {
   refreshKey: number;
+  /** Icon-only rail; the modeling workbench starts collapsed to give the work area the width. */
+  collapsed?: boolean;
+  onToggle?: () => void;
 }
 
-export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
+export default function SessionsSidebar({ refreshKey, collapsed = false, onToggle }: SessionsSidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -232,6 +235,23 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
     } finally {
       setBatchDeleting(false);
     }
+  }
+
+  if (collapsed) {
+    const rail = (label: string, icon: IconName, active: boolean, onClick: () => void) =>
+      <button key={label} title={label} aria-label={label} onClick={onClick}
+        className={active ? 'da-navitem da-navitem-active' : 'da-navitem'} style={S.railItem}><Icon name={icon} /></button>;
+    return (
+      <div style={S.rail}>
+        <div style={{ ...S.brand, padding: 0, justifyContent: 'center' }}><span className="da-logo">DA</span></div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '8px 0' }}>
+          {rail('新建对话', 'plus', location.pathname === '/chat' && !activeKey, handleNewChat)}
+          {NAV_ITEMS.map(item => rail(item.label, item.icon, location.pathname.startsWith(item.path), () => navigate(item.path)))}
+        </div>
+        <span style={{ flex: 1 }} />
+        <button title="展开侧边栏" aria-label="展开侧边栏" className="da-navitem" style={{ ...S.railItem, margin: '0 auto 8px' }} onClick={onToggle}>»</button>
+      </div>
+    );
   }
 
   return (
@@ -407,6 +427,7 @@ export default function SessionsSidebar({ refreshKey }: SessionsSidebarProps) {
 
       <div style={S.footer}>
         <UserMenu username={getUsername()} />
+        {onToggle && <button title="收起侧边栏" aria-label="收起侧边栏" className="da-btn da-btn-ghost da-btn-sm" style={{ marginLeft: 'auto' }} onClick={onToggle}>«</button>}
       </div>
     </div>
   );
@@ -526,6 +547,12 @@ const S: Record<string, React.CSSProperties> = {
     background: 'var(--da-sidebar-bg)', borderRight: '1px solid var(--da-border)',
     display: 'flex', flexDirection: 'column', minHeight: 0,
   },
+  rail: {
+    width: 60, flexShrink: 0,
+    background: 'var(--da-sidebar-bg)', borderRight: '1px solid var(--da-border)',
+    display: 'flex', flexDirection: 'column', minHeight: 0,
+  },
+  railItem: { width: 40, height: 40, padding: 0, justifyContent: 'center', fontSize: 16 },
   brand: {
     display: 'flex', alignItems: 'center', gap: 12,
     height: 'var(--da-shell-header-height)', boxSizing: 'border-box',
@@ -591,6 +618,6 @@ const S: Record<string, React.CSSProperties> = {
     fontSize: '0.75rem', color: 'var(--da-text-muted)', flexShrink: 0,
   },
   footer: {
-    padding: '12px 14px', flexShrink: 0,
+    padding: '12px 14px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8,
   },
 };

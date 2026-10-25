@@ -229,6 +229,8 @@ public class DatasetService implements DatasetContextProvider {
             }
 
             DatasetEntity entity = new DatasetEntity();
+            // spec093: new tables wait for the modeler to choose their columns.
+            entity.setFieldScreeningConfirmed(false);
             entity.setId(id);
             entity.setOwnerId(ownerId);
             entity.setGroupId(group.getId());
@@ -317,6 +319,8 @@ public class DatasetService implements DatasetContextProvider {
         List<DataSource> registrations = new ArrayList<>();
         for (AssociatedTableMetadata metadata : prepared) {
             DatasetEntity e = new DatasetEntity();
+            // spec093: new tables wait for the modeler to choose their columns.
+            e.setFieldScreeningConfirmed(false);
             e.setId(UUID.randomUUID().toString());
             e.setOwnerId(ownerId);
             e.setGroupId(groupId);
@@ -418,19 +422,9 @@ public class DatasetService implements DatasetContextProvider {
                                 columnNames.get(i),
                                 columnTypes.get(i),
                                 true,
-                                schemaResult.columns().get(i).description()
-                                        + (columnSamples
-                                                        .getOrDefault(columnNames.get(i), List.of())
-                                                        .isEmpty()
-                                                ? ""
-                                                : "；采样观察值："
-                                                        + writeJson(
-                                                                columnSamples
-                                                                        .get(columnNames.get(i))
-                                                                        .stream()
-                                                                        .limit(3)
-                                                                        .toList())
-                                                        + "（非完整枚举，业务含义须确认；刷新后的样本以采样摘要为准）")));
+                                // Sample values live in the sampling summary; repeating them here
+                                // only made the assistant rewrite every description.
+                                schemaResult.columns().get(i).description()));
             }
             String tableDescription = schemaResult.tableDescription();
             if (tableDescription == null || tableDescription.isBlank()) {
@@ -691,14 +685,7 @@ public class DatasetService implements DatasetContextProvider {
             for (int i = 0; i < cols.size(); i++) {
                 ColumnSchema c = cols.get(i);
                 if (c.name().equals(u.name())) {
-                    cols.set(
-                            i,
-                            new ColumnSchema(
-                                    c.name(),
-                                    c.originalName(),
-                                    c.sqlType(),
-                                    c.nullable(),
-                                    u.description()));
+                    cols.set(i, c.withDescription(u.description(), ColumnSchema.SOURCE_USER));
                 }
             }
         }

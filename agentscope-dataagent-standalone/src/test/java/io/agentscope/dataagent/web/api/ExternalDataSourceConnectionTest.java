@@ -70,6 +70,24 @@ class ExternalDataSourceConnectionTest {
         verifyNoInteractions(introspector);
     }
 
+    /** 2026-10-25: queries use MySQL 8.0 SQL, so an older or unknown engine is never saved. */
+    @Test
+    void unsupportedSourceIsRefusedBeforeItIsSaved() {
+        when(introspector.connectionError(any()))
+                .thenReturn("当前 MySQL 版本 5.7.44 低于 8.0，外部数据源仅支持 MySQL 8.0 及以上或 Doris");
+        assertThatThrownBy(() -> controller.create(request("pw"), auth).block())
+                .isInstanceOfSatisfying(
+                        ResponseStatusException.class,
+                        error -> {
+                            assertThat(error.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+                            assertThat(error.getReason()).contains("低于 8.0");
+                        });
+        when(sources.findById("source")).thenReturn(Optional.of(saved("alice")));
+        assertThatThrownBy(() -> controller.update("source", request("pw"), auth).block())
+                .isInstanceOf(ResponseStatusException.class);
+        verify(sources, never()).save(any());
+    }
+
     private ExternalDataSourceController.DataSourceRequest request(String password) {
         return new ExternalDataSourceController.DataSourceRequest(
                 "销售库",

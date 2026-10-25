@@ -153,11 +153,15 @@ public class MdlSeeder {
         Set<String> live = new HashSet<>();
         Set<String> usedDirs = new LinkedHashSet<>(listModelDirs(groupId));
         for (DatasetEntity d : datasets) {
-            List<ColumnSchema> cols = physical.get(d.getId());
-            if (cols == null) {
+            List<ColumnSchema> all = physical.get(d.getId());
+            if (all == null) {
                 continue; // already reported above
             }
             live.add(d.getId());
+            // spec093: excluded columns never enter the model and are never appended back.
+            List<ColumnSchema> cols = all.stream().filter(ColumnSchema::includedInModel).toList();
+            Set<String> excluded = new HashSet<>();
+            for (ColumnSchema c : all) if (!c.includedInModel()) excluded.add(c.name());
             String modelDirName = mapping.get(d.getId());
             Path modelFile =
                     modelDirName == null
@@ -184,7 +188,8 @@ public class MdlSeeder {
                 continue;
             }
             SeedResult existing =
-                    reconcileExistingModel(groupId, modelDirName, modelFile, d, cols, typeByRaw);
+                    reconcileExistingModel(
+                            groupId, modelDirName, modelFile, d, cols, excluded, typeByRaw);
             if (!existing.hasErrors()) {
                 changed |= ModelTemporalMetadata.enrich(modelFile, d.getSampleSummaryJson());
             }
@@ -229,6 +234,7 @@ public class MdlSeeder {
             Path modelFile,
             DatasetEntity dataset,
             List<ColumnSchema> physicalCols,
+            Set<String> excluded,
             Map<String, String> typeByRaw) {
         List<MdlPublishService.MdlIssue> issues = new ArrayList<>();
         String content;
@@ -316,7 +322,8 @@ public class MdlSeeder {
             }
         }
         for (String removed : physicalDeclared) {
-            if (!physicalTypes.containsKey(removed)) {
+            // Excluded columns are removed by field screening itself, not reported as broken.
+            if (!physicalTypes.containsKey(removed) && !excluded.contains(removed)) {
                 issues.add(
                         issue(
                                 "error",
@@ -395,12 +402,13 @@ public class MdlSeeder {
             if (line.isBlank()) {
                 continue;
             }
-            if (!line.startsWith(" ")) {
+            // Entries may sit at column 0 ("- name:"), the layout the seed model itself uses.
+            if (!line.startsWith(" ") && !line.startsWith("- ")) {
                 break;
             }
             if (entryIndent == null) {
                 Matcher m = ENTRY_INDENT.matcher(line);
-                if (m.matches()) {
+                if (m.lookingAt()) {
                     entryIndent = m.group(1);
                 }
             }
@@ -427,6 +435,7 @@ public class MdlSeeder {
                         indent
                                 + "    description: "
                                 + MdlPublishService.yamlScalar(c.description()));
+                if (c.userDescribed()) out.add(indent + "    description_source: user");
             }
         }
         return out;
@@ -466,6 +475,7 @@ public class MdlSeeder {
                 sb.append("    description: ")
                         .append(MdlPublishService.yamlScalar(c.description()))
                         .append('\n');
+                if (c.userDescribed()) sb.append("    description_source: user\n");
             }
         }
         if (dataset.getDescription() != null && !dataset.getDescription().isBlank()) {
@@ -569,6 +579,11 @@ public class MdlSeeder {
             log.warn("MdlSeeder: could not scan cubes for group {}: {}", groupId, e.getMessage());
         }
         return issues;
+    }
+
+    /** The draft model directory seeded for a dataset, or null before it was seeded. */
+    public String modelDir(String groupId, String datasetId) {
+        return readMapping(groupId).get(datasetId);
     }
 
     private Map<String, String> readMapping(String groupId) {

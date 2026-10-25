@@ -85,6 +85,14 @@ public class MdlQuestionStore {
         }
     }
 
+    /**
+     * Runs a question change and its modeling-revision bump under one workspace lock, so a
+     * publish can never snapshot the change without also covering its revision.
+     */
+    public <T> T locked(String groupId, java.util.function.Supplier<T> action) {
+        return workspace.withWorkspaceLock(groupId, action);
+    }
+
     public String revision(String groupId, String id) {
         return workspace.withWorkspaceLock(
                 groupId, () -> questionHash(requireQuestion(groupId, id)));

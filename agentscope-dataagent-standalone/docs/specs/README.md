@@ -13,6 +13,7 @@ spec 是一页纸的需求与验收标准，写代码之前先写（模板：[00
 | [090](090-user-confirmed-modeling-questions.md) | spec090：基础建模不生成问答对，用户问题逐题确认后保存 | 已实施并验收；交互由 spec091 调整 |
 | [091](091-modeling-interaction-flow.md) | spec091：建模全流程交互重设计（推荐问题预填、问题直接确认、流程连贯） | 已实施，待真实验收 |
 | [092](092-draft-and-review-modeling-workflow.md) | spec092：建模改为"草稿 + 发布前审阅"，多业务文档，入口与增量建模 | 已实施，待真实验收 |
+| [093](093-field-screening-before-modeling.md) | spec093：建模前字段整理（筛选纳入字段、补充说明） | 已实施，待真实验收 |
 
 ## 已完成或已关闭（done/）
 

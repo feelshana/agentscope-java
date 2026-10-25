@@ -35,8 +35,9 @@ export default function ReadOnlyRelationGraph({
       container: containerRef.current,
       autoFit: 'view',
       data,
-      layout: compact
-        ? { type: 'antv-dagre', rankdir: 'LR', ranksep: 50, nodesep: 20 }
+      // Small schemas read best as a layered layout; force layout only spreads large ones.
+      layout: compact || data.nodes.length <= 12
+        ? { type: 'antv-dagre', rankdir: compact ? 'LR' : 'TB', ranksep: compact ? 50 : 90, nodesep: compact ? 20 : 60 }
         : {
             type: 'd3-force',
             alphaDecay: 0.1,
@@ -50,13 +51,27 @@ export default function ReadOnlyRelationGraph({
       node: {
         type: 'rect',
         style: {
-          size: compact ? [118, 38] : [140, 42],
-          radius: 8,
+          size: (d: any) => {
+            const text = `${d.data?.label ?? d.id}`;
+            return [Math.min(260, Math.max(compact ? 118 : 150, text.length * (compact ? 7 : 8) + 36)), compact ? 38 : 52];
+          },
+          radius: 10,
           fill: '#5B8FF9',
-          labelText: (d: any) => `${d.data?.label ?? d.id}`,
-          labelFontSize: compact ? 11 : 12,
-          labelFontWeight: 'bold',
-          labelFill: '#1e293b',
+          stroke: '#4a7ae0',
+          lineWidth: 1,
+          shadowColor: 'rgba(15,23,42,0.12)',
+          shadowBlur: 8,
+          shadowOffsetY: 2,
+          labelText: (d: any) => compact || d.data?.columnCount === undefined
+            ? `${d.data?.label ?? d.id}` : `${d.data?.label ?? d.id}\n${d.data.columnCount} 个字段`,
+          labelPlacement: 'center',
+          labelFontSize: compact ? 11 : 13,
+          labelLineHeight: 18,
+          labelFontWeight: 600,
+          labelFill: '#ffffff',
+          labelWordWrap: true,
+          labelMaxLines: 2,
+          labelMaxWidth: '100%',
         },
       },
       edge: {
@@ -66,8 +81,10 @@ export default function ReadOnlyRelationGraph({
           stroke: '#8ea2c0',
           lineWidth: 1.5,
           labelText: (d: any) => d.data?.label ?? '',
-          labelFontSize: 9,
-          labelFill: '#64748b',
+          labelFontSize: 11,
+          labelFill: '#475569',
+          labelMaxWidth: 160,
+          labelAutoRotate: false,
           labelBackground: true,
           labelBackgroundFill: 'rgba(255,255,255,0.9)',
           labelBackgroundLineWidth: 0,
@@ -97,7 +114,7 @@ export default function ReadOnlyRelationGraph({
           ],
       behaviors: compact ? [] : ['drag-canvas', 'zoom-canvas', 'hover-activate'],
     } as any);
-    graph.render();
+    void graph.render();
     const observer = new ResizeObserver(() => {
       try {
         graph.resize();

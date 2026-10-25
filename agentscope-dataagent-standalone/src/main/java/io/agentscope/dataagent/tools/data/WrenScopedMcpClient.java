@@ -207,7 +207,10 @@ public final class WrenScopedMcpClient extends McpClientWrapper {
                                                 "",
                                                 started,
                                                 result.ok() ? "SUCCESS" : "ERROR");
-                                String payload = result.payload();
+                                String payload =
+                                        query && result.ok()
+                                                ? compactRows(result.payload())
+                                                : result.payload();
                                 if (query && result.ok())
                                     successfulQueries.put(
                                             cacheKey,
@@ -238,6 +241,43 @@ public final class WrenScopedMcpClient extends McpClientWrapper {
                             }
                         })
                 .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    /**
+     * Rewrites a query result's object rows as arrays in column order, without indentation. The
+     * values and row count are unchanged; only repeated keys and whitespace go, which were most of
+     * what the model read. Anything that is not a plain {@code {columns, rows}} object is kept.
+     */
+    static String compactRows(String payload) {
+        if (payload == null || !payload.stripLeading().startsWith("{")) return payload;
+        try {
+            com.fasterxml.jackson.databind.JsonNode root =
+                    JSON.reader()
+                            .with(
+                                    com.fasterxml.jackson.databind.DeserializationFeature
+                                            .FAIL_ON_TRAILING_TOKENS)
+                            .readTree(payload);
+            com.fasterxml.jackson.databind.JsonNode rows = root.path("rows");
+            if (!root.isObject() || !rows.isArray() || rows.isEmpty()) return payload;
+            List<String> columns = new java.util.ArrayList<>();
+            for (com.fasterxml.jackson.databind.JsonNode column : root.path("columns"))
+                columns.add(column.isTextual() ? column.asText() : column.path("name").asText());
+            if (columns.isEmpty()) rows.get(0).fieldNames().forEachRemaining(columns::add);
+            com.fasterxml.jackson.databind.node.ArrayNode arrays = JSON.createArrayNode();
+            for (com.fasterxml.jackson.databind.JsonNode row : rows) {
+                if (!row.isObject()) return payload;
+                com.fasterxml.jackson.databind.node.ArrayNode values = arrays.addArray();
+                for (String column : columns) values.add(row.get(column));
+            }
+            com.fasterxml.jackson.databind.node.ObjectNode compact =
+                    ((com.fasterxml.jackson.databind.node.ObjectNode) root).deepCopy();
+            compact.set("columns", JSON.valueToTree(columns));
+            compact.set("rows", arrays);
+            return JSON.writeValueAsString(compact);
+        } catch (Exception e) {
+            // A result followed by a free-text note is not plain JSON; keep it as returned.
+            return payload;
+        }
     }
 
     private void validateQueryBoundary(String tool, String sql) {

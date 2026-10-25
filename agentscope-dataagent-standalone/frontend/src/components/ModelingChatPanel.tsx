@@ -76,6 +76,20 @@ function baseName(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
+/** Project paths in the modeler's words; platform and skill internals stay generic. */
+function pathLabel(path: string, verb: 'read' | 'write'): string {
+  const model = path.match(/models\/([^/]+)\//)?.[1];
+  if (/skills?\//i.test(path) || /SKILL\.md$/i.test(path)) return '学习建模方法';
+  if (path.includes('raw/docs/')) return `阅读业务文档 ${baseName(path)}`;
+  if (/gap_catalog|sampl|profile/i.test(path)) return '阅读采样资料';
+  if (model) return `${verb === 'read' ? '查看' : '完善'}模型 ${model}`;
+  if (path.includes('relationships')) return verb === 'read' ? '查看表关系' : '整理表关系';
+  if (path.includes('knowledge/rules')) return verb === 'read' ? '查看业务规则' : '写入业务规则';
+  if (path.includes('knowledge/caveats')) return verb === 'read' ? '查看待确认说明' : '记录待确认说明';
+  if (path.includes('knowledge/')) return verb === 'read' ? '查看业务知识' : '写入业务知识';
+  return verb === 'read' ? `读取 ${baseName(path)}` : `修改 ${baseName(path)}`;
+}
+
 /** 工具名 + 关键参数 → 中文任务标签（specs/021）。 */
 function taskLabel(name: string, inputJson?: string): string {
   const input = parseToolInput(inputJson);
@@ -85,29 +99,33 @@ function taskLabel(name: string, inputJson?: string): string {
       const args = Array.isArray(input.arguments) ? input.arguments.filter((value): value is string => typeof value === 'string') : [];
       const operation = args.slice(0, 2).join(' ');
       const labels: Record<string, string> = {
-        'context show': '查看 Wren 工程', 'context validate': 'Wren 校验工程',
-        'context build': 'Wren 编译草稿', 'context instructions': '读取业务规则',
-        'memory store': '保存问题与 SQL 示例', 'memory recall': '召回 SQL 示例',
-        'memory fetch': '检索语义上下文', 'memory index': '更新 Wren 索引',
-        'memory status': '查看 Wren 记忆状态', 'skills get': '读取官方技能',
+        'context show': '查看模型现状', 'context validate': '校验模型',
+        'context build': '编译检查', 'context instructions': '读取业务规则',
+        'memory store': '保存问题与 SQL 示例', 'memory recall': '查找相似问题',
+        'memory fetch': '检索语义上下文', 'memory index': '更新检索索引',
+        'memory status': '查看检索状态', 'skills get': '学习建模方法',
       };
-      return labels[operation] || (args[0] === 'query' ? '执行 Wren 草稿查询' : args[0] === 'dry-plan' ? '预览 Wren SQL 计划' : args[0] === 'dry-run' ? 'Wren 查询检查' : `官方 Wren：${operation}`);
+      return labels[operation] || (args[0] === 'query' ? '查询数据验证口径' : args[0] === 'dry-plan' ? '检查查询计划' : args[0] === 'dry-run' ? '试跑查询' : '检查模型');
     }
+    case 'load_skill_through_path':
+      return '学习建模方法';
+    case 'request_user_confirmation':
+      return '整理需要你确定的口径';
     case 'glob_files':
     case 'grep_files':
-      return '搜索工程文件';
+      return '查找资料';
     case 'list_modeling_state':
       return '盘点建模现状';
     case 'list_files':
       return '列出工程文件';
     case 'read_file':
-      return path ? `读取 ${baseName(path)}` : '读取工程文件';
+      return path ? pathLabel(path, 'read') : '读取资料';
     case 'write_file':
       if (typeof input.files_json === 'string') return '提交完整业务方案';
-      return path ? `写入 ${path}` : '写入工程文件';
+      return path ? pathLabel(path, 'write') : '写入草稿';
     case 'patch_file':
     case 'edit_file':
-      return path ? `修改 ${path}` : '修改工程文件';
+      return path ? pathLabel(path, 'write') : '修改草稿';
     case 'validate_mdl':
       return '校验工程文件';
     case 'suggest_relations':
@@ -151,8 +169,8 @@ function groupSegments(segments: Segment[]): Part[] {
 }
 
 const TOOL_KIND: Record<string, string> = {
-  read_file: '读取', list_files: '读取', glob_files: '读取', grep_files: '读取', load_skill_through_path: '加载技能',
-  write_file: '修改', edit_file: '修改', delete_file: '修改', wren_cli: '命令', request_user_confirmation: '提问',
+  read_file: '读取', list_files: '读取', glob_files: '读取', grep_files: '读取', load_skill_through_path: '读取',
+  write_file: '修改', edit_file: '修改', delete_file: '修改', wren_cli: '检查', request_user_confirmation: '提问',
 };
 
 /**
@@ -182,7 +200,7 @@ function ToolGroup({ frames }: { frames: ToolFrame[] }) {
  * line with live counts (the latest step while running); the final text is shown in full. Steps
  * waiting for a decision stay visible.
  */
-function ReplyBody({ segments, pending }: { segments: Segment[]; pending: boolean }) {
+function ReplyBody({ segments, pending, startedAt }: { segments: Segment[]; pending: boolean; startedAt?: string }) {
   const [open, setOpen] = useState(false);
   const parts = groupSegments(segments);
   let last = -1;
@@ -199,7 +217,9 @@ function ReplyBody({ segments, pending }: { segments: Segment[]; pending: boolea
   const failed = frames.filter(f => f.state === 'failed').length;
   const running = [...frames].reverse().find(f => f.state === 'running');
   const narration = [...process].reverse().find(p => p.kind === 'text' && p.text.trim());
-  const latest = running ? taskLabel(running.name, running.input)
+  // The step in progress (or the last one) reads better than the model's own narration.
+  const lastFrame = running ?? frames[frames.length - 1];
+  const latest = lastFrame ? taskLabel(lastFrame.name, lastFrame.input)
     : narration && narration.kind === 'text' ? narration.text.trim().split(/\r?\n/)[0].slice(0, 60) : '';
   const stats = [...counts].map(([k, n]) => `${k} ${n}`).join(' · ');
   const hasProcess = process.some(p => p.kind === 'tools' || p.text.trim());
@@ -214,27 +234,15 @@ function ReplyBody({ segments, pending }: { segments: Segment[]; pending: boolea
   ];
   const reached = stages.reduce((n, stage, i) => stage.done ? i + 1 : n, 0);
   return <>
-    {pending && frames.length > 0 && <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', margin: '2px 0 4px', fontSize: 12 }}>
-      {stages.map((stage, i) => {
-        const state = i < reached - 1 ? 'done' : i === reached - 1 ? 'current' : 'todo';
-        return <span key={stage.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 4,
-          color: state === 'todo' ? 'var(--da-text-muted)' : state === 'current' ? 'var(--da-primary)' : 'var(--da-success)',
-          fontWeight: state === 'current' ? 600 : 400 }}>
-          {i > 0 && <span style={{ color: 'var(--da-border)' }}>—</span>}
-          {state === 'done' ? '✓' : state === 'current' ? '●' : '○'} {stage.label}
-        </span>;
-      })}
-    </div>}
+    {pending && <ProgressCard stages={stages} reached={reached} latest={latest || '正在理解你的数据'} steps={frames.length} failed={failed} startedAt={startedAt} />}
     {hasProcess && <div style={{ margin: '2px 0 6px' }}>
       <button type="button" onClick={() => setOpen(v => !v)}
         style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', background: 'none', border: 'none', padding: '2px 0',
           cursor: 'pointer', fontSize: 12, color: 'var(--da-text-muted)', textAlign: 'left' }}>
-        {pending ? <span className="da-spinner da-spinner-sm" style={{ borderColor: 'var(--da-border)', borderTopColor: 'var(--da-primary)' }} />
-          : <span>{open ? '▾' : '▸'}</span>}
-        <span style={{ whiteSpace: 'nowrap' }}>{pending ? '正在建模' : '建模过程'}</span>
-        {frames.length > 0 && <span style={{ whiteSpace: 'nowrap' }}>· {frames.length} 步{stats ? `（${stats}）` : ''}</span>}
-        {failed > 0 && <span style={{ color: 'var(--da-danger)', whiteSpace: 'nowrap' }}>· {failed} 步失败</span>}
-        {pending && latest && <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>· {latest}</span>}
+        <span>{open ? '▾' : '▸'}</span>
+        <span style={{ whiteSpace: 'nowrap' }}>{pending ? (open ? '收起过程明细' : '查看过程明细') : '建模过程'}</span>
+        {!pending && frames.length > 0 && <span style={{ whiteSpace: 'nowrap' }}>· {frames.length} 步{stats ? `（${stats}）` : ''}</span>}
+        {!pending && failed > 0 && <span style={{ color: 'var(--da-danger)', whiteSpace: 'nowrap' }}>· {failed} 步失败</span>}
       </button>
       {open && <div style={{ borderLeft: '2px solid var(--da-border)', paddingLeft: 10, marginTop: 4 }}>
         {process.map((part, i) => part.kind === 'text'
@@ -247,6 +255,45 @@ function ReplyBody({ segments, pending }: { segments: Segment[]; pending: boolea
       <Markdown fontSize={14}>{(parts[last] as { kind: 'text'; text: string }).text}</Markdown>
     </div>}
   </>;
+}
+
+/** spec092 §7: a running turn shows where modeling is and what it is doing now. */
+function ProgressCard({ stages, reached, latest, steps, failed, startedAt }: {
+  stages: { label: string; done: boolean }[]; reached: number; latest: string; steps: number; failed: number; startedAt?: string;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const t = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(t); }, []);
+  const seconds = startedAt ? Math.max(0, Math.round((now - Date.parse(startedAt)) / 1000) - 2) : 0;
+  const elapsed = seconds >= 60 ? `${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒` : `${seconds} 秒`;
+  const current = Math.max(reached - 1, 0);
+  return <div aria-live="polite" style={{ margin: '2px 0 8px' }}>
+    <ol style={{ display: 'flex', listStyle: 'none', margin: 0, padding: 0 }}>
+      {stages.map((stage, i) => {
+        const state = i < current ? 'done' : i === current ? 'current' : 'todo';
+        const color = state === 'done' ? 'var(--da-success)' : state === 'current' ? 'var(--da-primary)' : 'var(--da-text-muted)';
+        return <li key={stage.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <span style={{ width: 22, height: 22, borderRadius: 11, flex: 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 12, fontWeight: 600, boxSizing: 'border-box',
+              background: state === 'done' ? 'var(--da-success)' : state === 'current' ? 'var(--da-primary)' : 'var(--da-surface)',
+              color: state === 'todo' ? 'var(--da-text-muted)' : '#fff', border: state === 'todo' ? '1.5px solid var(--da-border)' : 'none',
+              boxShadow: state === 'current' ? '0 0 0 4px color-mix(in srgb, var(--da-primary) 18%, transparent)' : undefined }}>
+              {state === 'done' ? '✓' : i + 1}</span>
+            {i < stages.length - 1 && <span style={{ flex: 1, height: 2, margin: '0 8px', borderRadius: 1,
+              background: i < current ? 'var(--da-success)' : 'var(--da-border)' }} />}
+          </div>
+          <span style={{ fontSize: 12.5, color, fontWeight: state === 'current' ? 600 : 400 }}>{stage.label}</span>
+        </li>;
+      })}
+    </ol>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, padding: '10px 12px', borderRadius: 10,
+      background: 'color-mix(in srgb, var(--da-primary) 6%, var(--da-surface))' }}>
+      <span className="da-spinner da-spinner-sm" style={{ flex: 'none', borderColor: 'var(--da-border)', borderTopColor: 'var(--da-primary)' }} />
+      <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 500, color: 'var(--da-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{latest}</span>
+      <span style={{ flex: 'none', fontSize: 12, color: 'var(--da-text-muted)' }}>
+        已用 {elapsed}{steps ? ` · ${steps} 步` : ''}{failed ? <span style={{ color: 'var(--da-danger)' }}> · {failed} 步失败</span> : null}</span>
+    </div>
+  </div>;
 }
 
 function TaskRow({ frame }: { frame: ToolFrame }) {
@@ -345,6 +392,7 @@ export default function ModelingChatPanel({
   onDraftSubmitted,
   onTurnDone,
   draftPurpose,
+  draftLabel,
   onActivityChange,
   renderTurnResult,
   footer,
@@ -365,6 +413,8 @@ export default function ModelingChatPanel({
   onTurnDone?: (awaitingConfirmation: boolean) => void;
   /** Sent with the draft so the server can label and gate the turn (spec092). */
   draftPurpose?: TurnPurpose;
+  /** What the conversation shows for a platform-written draft; the full text goes to the assistant. */
+  draftLabel?: string;
   /** Running turn or undecided confirmation card; drafts sent meanwhile queue behind it. */
   onActivityChange?: (state: AssistantState) => void;
   /** spec092 §7: "AI 建模结果" under a finished reply, given the turn's start time. */
@@ -606,14 +656,14 @@ export default function ModelingChatPanel({
   }
 
   /** Sends a user message and reconciles persisted native confirmation state. */
-  async function sendText(raw: string, purpose?: TurnPurpose) {
+  async function sendText(raw: string, purpose?: TurnPurpose, label?: string) {
     const text = raw.trim();
     if (!text || busy || awaitingDecision) return;
     setInput('');
     setBusy(true);
     pinned.current = true;
     turnCompleted.current = false;
-    const userMsg: PanelMessage = { id: nextId(), role: 'user', segments: [{ kind: 'text', text }] };
+    const userMsg: PanelMessage = { id: nextId(), role: 'user', segments: [{ kind: 'text', text: label?.trim() || text }] };
     const replyMsg: PanelMessage = {
       id: nextId(),
       role: 'assistant',
@@ -730,9 +780,9 @@ export default function ModelingChatPanel({
     if (submitDraft && draftPrompt && sessionReady && !busy && !awaitingDecision && consumedSubmission.current !== key) {
       consumedSubmission.current = key;
       onDraftSubmitted?.();
-      void sendText(draftPrompt, draftPurpose);
+      void sendText(draftPrompt, draftPurpose, draftLabel);
     }
-  }, [submitDraft, draftPrompt, draftPromptId, draftPurpose, sessionReady, busy, awaitingDecision, groupId]);
+  }, [submitDraft, draftPrompt, draftPromptId, draftPurpose, draftLabel, sessionReady, busy, awaitingDecision, groupId]);
 
   // Lets the page show that a request will queue behind the running turn or pending cards.
   const activity = useRef(onActivityChange);
@@ -779,19 +829,27 @@ export default function ModelingChatPanel({
           {messages.length === 0 && (
             <div style={S.welcome}>
               <div style={S.welcomeTitle}>
-                <Icon name="model" size="sm" /> 我是建模助手
+                <Icon name="model" size="sm" /> 建模助手
               </div>
-              <div style={S.welcomeDesc}>助手通过官方 Wren 完善模型、关系和业务语义。</div>
-              <p style={S.welcomeDesc}>业务文档和常用问题均为可选。可以直接描述业务，或让助手根据现有资料提出建议。</p>
-              <div style={S.welcomeDesc}>每轮修改列在回复下方的"AI建模结果"中，可直接编辑；右侧试问验证口径，满意后在底部草稿栏发布。</div>
+              <div style={S.welcomeDesc}>把数据表整理成业务人员能直接提问的语义模型：字段含义、表间关系和统计口径。</div>
+              {[
+                ['理解数据', '读取字段、样例和业务文档，补全字段说明，识别表间关系。'],
+                ['确定口径', '只在会影响统计结果的地方问你，你的选择会写进业务语义。'],
+                ['试问并发布', '用常见问题验证口径，满意后在底部草稿栏发布，问数即可使用。'],
+              ].map(([title, text], i) => <div key={title} style={S.welcomeStep}>
+                <span style={S.welcomeNum}>{i + 1}</span>
+                <span><strong style={{ color: 'var(--da-text)' }}>{title}</strong>　{text}</span>
+              </div>)}
+              <div style={S.welcomeDesc}>也可以直接在下方描述业务，比如"访问次数按记录行数统计，不去重"。</div>
             </div>
           )}
           {messages.map(m => (
-            <div key={m.id} style={S.row}>
+            <div key={m.id} style={m.role === 'user' ? S.row : S.botRow}>
+              {m.role === 'assistant' && <span style={S.avatar} aria-hidden="true">AI</span>}
               <div style={m.role === 'user' ? S.userBubble : S.botBubble}>
                 {m.role === 'assistant' ? (
                   <>
-                    <ReplyBody segments={m.segments} pending={!!m.pending} />
+                    <ReplyBody segments={m.segments} pending={!!m.pending} startedAt={m.startedAt} />
                     {m.hitl && m.hitl.toolCalls.length > 1 && <div style={{ padding: '12px', border: '1px solid #cbd5e1', borderRadius: 8 }}>
                       <strong>本次工程变更：{m.hitl.toolCalls.length} 项</strong>
                       <p>下面列出本次全部变更，可以一次授权。相同文件的多条变更会按列表顺序依次应用，全部授权会全部执行，不会自动在两条内容中择一；写入后助手继续官方检查，发布仍需单独操作。</p>
@@ -900,9 +958,7 @@ const S: Record<string, CSSProperties> = {
     height: '100%',
     minWidth: 0,
     overflow: 'hidden',
-    background: 'var(--da-canvas-bg, #fafafa)',
-    border: '1px solid var(--da-border)',
-    borderRadius: 12,
+    background: 'transparent',
   },
   dockShell: {
     display: 'flex',
@@ -957,24 +1013,30 @@ const S: Record<string, CSSProperties> = {
     padding: 4,
     display: 'inline-flex',
   },
-  thread: { flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 },
+  // Messages keep a comfortable reading width and stay centered on wide screens.
+  thread: { flex: 1, overflowY: 'auto', padding: '20px max(20px, calc((100% - 1100px) / 2)) 12px', display: 'flex', flexDirection: 'column', gap: 18 },
   welcome: {
     display: 'flex',
     flexDirection: 'column',
-    gap: 10,
+    gap: 12,
     background: 'var(--da-surface, #fff)',
     border: '1px solid var(--da-border)',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 14,
+    padding: '18px 20px',
+    boxShadow: 'var(--da-shadow-card)',
   },
   welcomeTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: 600,
     display: 'inline-flex',
     alignItems: 'center',
     gap: 6,
   },
-  welcomeDesc: { fontSize: 12.5, color: 'var(--da-text-muted)', lineHeight: 1.7 },
+  welcomeDesc: { fontSize: 13, color: 'var(--da-text-3)', lineHeight: 1.7 },
+  welcomeStep: { display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 13, color: 'var(--da-text-2)', lineHeight: 1.6 },
+  welcomeNum: { flex: '0 0 20px', height: 20, borderRadius: 10, background: 'var(--da-primary-subtle)', color: 'var(--da-primary)', fontSize: 12, fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' },
+  botRow: { display: 'flex', gap: 10, alignItems: 'flex-start' },
+  avatar: { flex: '0 0 28px', height: 28, borderRadius: 8, background: 'var(--da-primary-subtle)', color: 'var(--da-primary)', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginTop: 2 },
   steps: { margin: 0, paddingLeft: 18, fontSize: 12.5, color: 'var(--da-text)', lineHeight: 1.9 },
   quickCol: { display: 'flex', flexDirection: 'column', gap: 8 },
   quickPrimary: {
@@ -1020,13 +1082,15 @@ const S: Record<string, CSSProperties> = {
   row: { display: 'flex', flexDirection: 'column' },
   userBubble: {
     alignSelf: 'flex-end',
-    maxWidth: '85%',
-    background: 'var(--da-primary)',
-    color: '#fff',
-    borderRadius: 12,
+    maxWidth: '70%',
+    background: 'color-mix(in srgb, var(--da-primary) 9%, var(--da-surface))',
+    border: '1px solid color-mix(in srgb, var(--da-primary) 18%, transparent)',
+    color: 'var(--da-text)',
+    borderRadius: 14,
     borderBottomRightRadius: 4,
-    padding: '8px 12px',
-    fontSize: 13,
+    padding: '9px 14px',
+    fontSize: 13.5,
+    lineHeight: 1.6,
     whiteSpace: 'pre-wrap',
   },
   botBubble: {
@@ -1037,10 +1101,12 @@ const S: Record<string, CSSProperties> = {
     minWidth: 0,
     background: 'var(--da-surface, #fff)',
     border: '1px solid var(--da-border)',
-    borderRadius: 12,
-    borderBottomLeftRadius: 4,
-    padding: '8px 12px',
-    fontSize: 13,
+    borderRadius: 14,
+    borderTopLeftRadius: 4,
+    padding: '12px 16px',
+    fontSize: 13.5,
+    color: 'var(--da-text)',
+    boxShadow: 'var(--da-shadow-card)',
   },
   tools: { display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 },
   task: { display: 'flex', flexDirection: 'column', gap: 0, marginBottom: 4 },
@@ -1099,9 +1165,8 @@ const S: Record<string, CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     gap: 8,
-    padding: 12,
-    borderTop: '1px solid var(--da-border)',
-    background: 'var(--da-surface, #fff)',
+    padding: '10px max(20px, calc((100% - 1100px) / 2)) 16px',
+    background: 'transparent',
     flexShrink: 0,
   },
   composerRow: { display: 'flex', alignItems: 'flex-end', gap: 8 },
@@ -1109,20 +1174,21 @@ const S: Record<string, CSSProperties> = {
     flex: 1,
     resize: 'none',
     border: '1px solid var(--da-border)',
-    borderRadius: 10,
-    padding: '8px 10px',
-    fontSize: 13,
-    minHeight: 60,
-    maxHeight: 140,
+    borderRadius: 14,
+    padding: '12px 14px',
+    fontSize: 13.5,
+    minHeight: 56,
+    maxHeight: 160,
     outline: 'none',
     fontFamily: 'inherit',
     color: 'var(--da-text)',
-    background: 'var(--da-canvas-bg, #fafafa)',
+    background: 'var(--da-surface, #fff)',
+    boxShadow: 'var(--da-shadow-card)',
   },
   send: {
-    width: 34,
-    height: 34,
-    borderRadius: 999,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     border: 'none',
     background: 'var(--da-primary)',
     color: '#fff',

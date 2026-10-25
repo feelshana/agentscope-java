@@ -20,6 +20,7 @@ import AnswerFeedback from './AnswerFeedback';
 import { extractVegaSpec } from '../utils/charts';
 import { listGroupPage, listGroupCards, DatasetGroup, GroupPage } from '../api/datasets';
 import { listOntologies, OntologyEntry } from '../api/ontologies';
+import { getQueryPreparation, preparationPhase } from '../api/modelingWorkflow';
 
 type Role = 'user' | 'assistant' | 'system';
 
@@ -51,6 +52,8 @@ interface Message {
   trace: TraceNode[];
   pending?: boolean;
   capacityMessage?: string;
+  /** The selected knowledge base's query engine is still preparing after a publish. */
+  preparingMessage?: string;
   /** True only when the turn was interrupted and produced no usable answer. */
   failed?: boolean;
   interrupted?: boolean;
@@ -686,6 +689,32 @@ export default function ChatPanel({
     [busy, restoring, scopeRestoring, effectiveAgentId, input],
   );
 
+  /**
+   * The first question after a publish waits while the knowledge base's query engine prepares
+   * (index, start, warm-up, about half a minute). The reply says so instead of a silent spinner;
+   * the status is advisory and never affects the stream.
+   */
+  async function watchPreparation(convId: string, replyId: string, groupIds: string[], signal: AbortSignal) {
+    const setPreparing = (text: string | undefined) => setSessionMsgs(prev => {
+      const cur = prev.get(convId);
+      if (!cur) return prev;
+      const next = new Map(prev);
+      next.set(convId, { ...cur, messages: cur.messages.map(m => m.id === replyId ? { ...m, preparingMessage: text } : m) });
+      return next;
+    });
+    for (let round = 0; round < 60 && !signal.aborted; round++) {
+      let phase: string | null = null;
+      try {
+        const states = await Promise.all(groupIds.map(id => getQueryPreparation(id)));
+        phase = states.map(s => preparationPhase(s.state)).find(Boolean) ?? null;
+      } catch { return; }
+      if (signal.aborted) return;
+      if (!phase) { if (round > 0) setPreparing(undefined); return; }
+      setPreparing(`正在加载最新发布的知识库（${phase}），发布后的首次问数约需半分钟…`);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+  }
+
   async function handleSend() {
     if (!canSend) return;
     setGroupPickerOpen(false);
@@ -717,6 +746,8 @@ export default function ChatPanel({
       return next;
     });
     let lastToolEventSeq = -1;
+    if (effectiveAgentId === 'data-agent' && !selectAllGroups && selectedGroups.length)
+      void watchPreparation(convId, replyMsg.id, selectedGroups, ac.signal);
 
     // Bump sidebar after a short delay so the new session entry is picked up while streaming.
     // The backend creates the session synchronously before streaming starts, so 500ms is safe.
@@ -1113,8 +1144,8 @@ export default function ChatPanel({
                     {m.text
                       ? <Markdown>{m.text}</Markdown>
                       : m.pending
-                        ? m.capacityMessage
-                          ? <div role="status" style={{ color: 'var(--da-text-muted)', fontSize: 14 }}>{m.capacityMessage}</div>
+                        ? m.capacityMessage || m.preparingMessage
+                          ? <div role="status" style={{ color: 'var(--da-text-muted)', fontSize: 14 }}>{m.capacityMessage || m.preparingMessage}</div>
                           : <div className="da-typing"><span /><span /><span /></div>
                         : null}
                     {answer}

@@ -108,6 +108,21 @@ public class DatasetEntity {
     @Column(name = "external_datasource_id", length = 64)
     private String externalDataSourceId;
 
+    /**
+     * spec093: whether the modeler confirmed which columns enter the semantic model. Null for
+     * datasets created before field screening existed, which count as confirmed.
+     */
+    @Column(name = "field_screening_confirmed")
+    private Boolean fieldScreeningConfirmed;
+
+    public boolean isFieldScreeningConfirmed() {
+        return fieldScreeningConfirmed == null || fieldScreeningConfirmed;
+    }
+
+    public void setFieldScreeningConfirmed(Boolean fieldScreeningConfirmed) {
+        this.fieldScreeningConfirmed = fieldScreeningConfirmed;
+    }
+
     public String getOrigin() {
         return origin == null ? "upload" : origin;
     }

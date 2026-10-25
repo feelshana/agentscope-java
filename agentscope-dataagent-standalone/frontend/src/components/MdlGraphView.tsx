@@ -89,28 +89,15 @@ export default function MdlGraphView({ groupId }: { groupId: string }) {
     return () => { cancelled = true; window.removeEventListener('modeling:updated', update); };
   }, [groupId]);
 
-  const modelLabels = useMemo(() => {
-    const labels = new Map<string, string>();
-    for (const model of view?.models ?? []) {
-      const description = model.description?.trim();
-      const meaning =
-        description && description !== model.datasetName.trim()
-          ? description
-          : '业务含义待补充';
-      labels.set(model.modelName, `${model.datasetName} — ${meaning}`);
-    }
-    return labels;
-  }, [view]);
-
   const graphData = useMemo(() => {
     if (!view) return null;
     const nodes: ReadOnlyGraphNode[] = view.models.map(m => ({
       id: m.modelName,
       data: {
-        label: modelLabels.get(m.modelName) ?? '未知表',
+        label: m.datasetName || m.modelName,
         modelName: m.modelName,
         columnCount: m.columns.length,
-        description: m.description ?? '',
+        description: m.description?.trim() || '业务含义待补充',
       },
     }));
     const edges: ReadOnlyGraphEdge[] = view.relations.map(r => ({
@@ -124,7 +111,7 @@ export default function MdlGraphView({ groupId }: { groupId: string }) {
       },
     }));
     return { nodes, edges };
-  }, [modelLabels, view]);
+  }, [view]);
 
   if (error) {
     return <div style={{ color: 'var(--da-danger)', fontSize: '0.85rem' }}>MDL 视图加载失败：{error}</div>;

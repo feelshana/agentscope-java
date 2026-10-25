@@ -98,7 +98,31 @@ class WrenSamplingContextTest {
         assertThat(
                         WrenProjectContextMiddleware.probeBoundary(
                                 java.util.List.of(table("订单", "datasource"))))
-                .contains("上传表：无", "外部数据源及其他来源表：订单", "在基础建模中不执行任何 query（工具会直接拒绝）", "只有用户提交问题后");
+                .contains("上传表：无", "外部数据源及其他来源表：订单", "在基础建模中不执行任何 query（工具会直接拒绝）", "试问 SQL 也不查询数据");
+    }
+
+    @Test
+    void relationCandidatesComeFromColumnNamesNotTypes() {
+        var log = table("dashboard_log", "datasource");
+        log.setColumnSchemaJson(
+                "[{\"name\":\"operator_id\",\"sqlType\":\"BIGINT\"},{\"name\":\"dashboard_id\",\"sqlType\":\"VARCHAR\"},"
+                    + "{\"name\":\"login_system\",\"sqlType\":\"BIGINT\",\"included\":false}]");
+        var users = table("sys_operator", "datasource");
+        users.setColumnSchemaJson(
+                "[{\"name\":\"id\",\"sqlType\":\"VARCHAR\"},{\"name\":\"user_name\"}]");
+        var excluded = table("orders", "upload");
+        excluded.setColumnSchemaJson("[{\"name\":\"id\",\"included\":false}]");
+        var candidates =
+                WrenProjectContextMiddleware.relationCandidates(
+                        java.util.List.of(log, users, excluded));
+        assertThat(candidates)
+                .contains(
+                        "dashboard_log.operator_id → sys_operator.id",
+                        "与列类型、采样值格式无关",
+                        "request_user_confirmation")
+                .doesNotContain("dashboard_id →", "orders");
+        assertThat(WrenProjectContextMiddleware.relationCandidates(java.util.List.of(users)))
+                .isEmpty();
     }
 
     private static io.agentscope.dataagent.web.persistence.jpa.DatasetEntity table(
@@ -127,5 +151,46 @@ class WrenSamplingContextTest {
                 .contains("订单", "支付日期", "maxWindowDays", "建模可自行选择有限样例日期", "禁止把具体窗口天数复制");
         assertThat(middleware.onSystemPrompt(null, null, "base").block())
                 .doesNotContain("订单", "支付日期");
+    }
+
+    @Test
+    void turnPurposeSelectsTheContextSections() throws Exception {
+        var access = mock(WrenProjectAccess.class);
+        var repository = mock(io.agentscope.dataagent.web.persistence.jpa.DatasetRepository.class);
+        when(repository.findByGroupId("g"))
+                .thenReturn(java.util.List.of(table("订单", "datasource")));
+        var windows = mock(io.agentscope.dataagent.dataset.FactQueryWindowPolicy.class);
+        when(windows.rules("g"))
+                .thenReturn(
+                        java.util.List.of(
+                                new io.agentscope.dataagent.dataset.SqlWindowGate.Rule(
+                                        "订单", java.util.List.of("支付日期"), 7)));
+        var middleware = new WrenProjectContextMiddleware(access, windows, repository);
+        java.util.function.Function<String, String> promptFor =
+                purpose -> {
+                    var context =
+                            purpose == null
+                                    ? io.agentscope.core.agent.RuntimeContext.builder().build()
+                                    : io.agentscope.core.agent.RuntimeContext.builder()
+                                            .put(
+                                                    io.agentscope.dataagent.dataset
+                                                            .ModelingTurnPurpose.class,
+                                                    new io.agentscope.dataagent.dataset
+                                                            .ModelingTurnPurpose(purpose))
+                                            .build();
+                    when(access.resolve(context))
+                            .thenReturn(new WrenProjectAccess.Project("alice", "g", "g", root));
+                    return middleware.onSystemPrompt(null, context, "base").block();
+                };
+        assertThat(promptFor.apply("auto"))
+                .contains("表来源与探查边界", "本轮任务要求：自动建模")
+                .doesNotContain("maxWindowDays", "本轮任务要求：试问 SQL");
+        assertThat(promptFor.apply("question"))
+                .contains("maxWindowDays", "本轮任务要求：试问 SQL")
+                .doesNotContain("表来源与探查边界");
+        assertThat(promptFor.apply("confirm"))
+                .contains("本轮任务要求：写入用户的确定")
+                .doesNotContain("表来源与探查边界", "maxWindowDays");
+        assertThat(promptFor.apply(null)).contains("表来源与探查边界", "maxWindowDays", "用户对话");
     }
 }

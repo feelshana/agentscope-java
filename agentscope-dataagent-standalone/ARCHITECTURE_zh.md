@@ -134,7 +134,8 @@ dataagent 为每位数据分析师提供专属的数据 Agent，核心流程是*
      原生文件工具与官方 CLI 权限适配由 ModelingToolkitRegistrar 后置挂载（见 2.5）；
      官方 wren skills 经 FileSystemSkillRepository 原生挂载（specs/022、ADR 0035）：
      WrenSkillsLocator 从已安装 wrenai 包 skills_content 解析目录（dataagent.wren.skills-dir 可显式指定），
-     SkillFilter 白名单只放 generate-mdl/enrich-context/usage/onboarding，
+     SkillFilter 白名单按 Agent 区分（DataAgentConfig#mountWrenSkills）：建模只挂 generate-mdl/enrich-context，问数只挂 usage，
+     因为列出的技能会渲染进每次模型调用的系统提示词；
      load_skill_through_path 与 CLI 通道同源同文；包缺失仅 warn 降级（fail-soft，见 5.6）
 5. builder.build()             → DataAgentBootstrap.Builder.build() 三阶段（见 2.4）
 6. bootstrap.gateway().setUserSandboxRegistry(userSandboxRegistry)
@@ -253,7 +254,7 @@ ref_sql 的内容和依赖是否可执行由官方引擎判断。任何检查失
 
 ### 4.1 原始官方调用与通用产物
 
-`WrenScopedMcpClient#listTools` 返回原始官方工具 schema，AgentScope 将其转换为原生 `McpTool`；`WrenScopedMcpClient#callTool` 原样透传官方参数与输出。共享 Agent Toolkit 不保存用户或 project 绑定。
+`WrenScopedMcpClient#listTools` 返回原始官方工具 schema，AgentScope 将其转换为原生 `McpTool`；`WrenScopedMcpClient#callTool` 原样透传官方参数与输出，唯一例外是查询结果：`WrenScopedMcpClient#compactRows` 把对象行改写为按列顺序的数组并去掉缩进，值、行数和其他字段不变，减少模型读取的字符数。共享 Agent Toolkit 不保存用户或 project 绑定。
 run_sql/query_cube 成功结果可经通用 CSV 产物交给 run_python/render_chart。get_instructions、list_knowledge、
 recall_queries、describe_model 与 describe_cube 均由官方 MCP 提供，平台不再提供第二套知识读取或召回工具。
 问题范围、时间粒度、JOIN、DISTINCT、视图与 Cube 的选择遵循官方技能，不由平台正则路由。
@@ -340,7 +341,7 @@ ADR 0078 / spec 067：`DatasetUploadProperties` 统一大小、文件数量、�
 
 ### 5.3 外部数据源关联
 
-`ExternalDataSourceController`（`/api/datasources`）管理用户级 JDBC 连接；
+`ExternalDataSourceController`（`/api/datasources`）管理用户级 JDBC 连接；测试连接、新建和修改时由 `DataSourceIntrospector#connectionError` 检查引擎，只接受 MySQL 8.0 及以上或 Doris（按 `@@version_comment` 识别），否则拒绝保存（ADR0113）；问数与建模提示要求 SQL 用 MySQL 8.0 语法、日期范围写成日期常量，以便时间门禁由规则判断；
 `DatasetService#associateTables` 把外部库已有表关联进知识库：`DataSourceIntrospector`
 读取列元数据/表注释，可选通过 `DatasetSampling#read` 每表一次 LIMIT 1000 有界读取，在内存提取每列最多20个观察值，再经
 `SchemaGenerationService` 生成 AI 描述。`origin=datasource`，删除时不 drop 物理表。页面逐表调用 `DatasetGroupController#associate`（`publish=false`）以显示真实采样进度，全部完成后以空表列表、`publish=true` 统一生成一次基础 MDL。
@@ -354,9 +355,9 @@ ADR 0080/spec 068：关联不再执行 COUNT(*) 或逐列 DISTINCT。外部表 A
 
 `DatasetService#refreshSample` 提供 MANAGE 受限的 POST /api/datasets/{id}/sample-refresh，先鉴权，再取得数据集悲观锁并复核权限，采样完成后再次复核；源采样关闭时拒绝刷新。失败保留旧摘要，成功标记草稿待发布。新资料在下一次草稿读取或 reconcile 时生成，不直接改变已发布版本。
 
-`DatasetSampleDocuments#sync` 生成官方目录内 数据库中的结构化采样摘要；不生成 knowledge/rules/data-sampling.md 或 get_instructions 采样注入；平台文件禁止原生或兼容写入口覆盖，不修改安装版 skills 或 target/mdl.json。`MdlSeeder#reconcile` 在发布前同步资料；`WrenProjectAccess#resolve` 在当前授权库的工作区锁内同步。列 description 保存简短样例提示，业务含义充分确认后才由官方建模流程写 [enum]，样本不证明完整枚举或关系唯一性。
+`DatasetSampleDocuments#sync` 生成官方目录内 数据库中的结构化采样摘要；不生成 knowledge/rules/data-sampling.md 或 get_instructions 采样注入；平台文件禁止原生或兼容写入口覆盖，不修改安装版 skills 或 target/mdl.json。`MdlSeeder#reconcile` 在发布前同步资料；`WrenProjectAccess#resolve` 在当前授权库的工作区锁内同步。列 description 只保存生成的业务含义，不再拼接样例值（样例在采样摘要中），业务含义充分确认后才由官方建模流程写 [enum]，样本不证明完整枚举或关系唯一性。
 
-`WrenProjectContextMiddleware#onSystemPrompt` 每次构造上下文时提供通用约束及最多6000字符摘要，完整资料按需读取；不会用“首次已发送”进程标记丢失恢复会话上下文。`WrenQueryContextMiddleware#onSystemPrompt` 仅注入通用约束，官方 get_instructions 读取已发布的采样规则和限长摘要（24000字符）；不注入草稿资料。提示约束不能保证模型必然遵循，也不是数据库端成本硬限制。必要的准确聚合和业务验证仍通过官方 Wren 运行。
+`WrenProjectContextMiddleware#onSystemPrompt` 每次构造上下文时提供通用约束及最多6000字符摘要，完整资料按需读取；`WrenProjectContextMiddleware#relationCandidates` 按字段命名（`xxx_id` → 名为 xxx 或以 _xxx 结尾的表的 id）列出候选关系，与类型和采样值格式无关，由建模助手逐条向用户确认；不会用“首次已发送”进程标记丢失恢复会话上下文。`WrenQueryContextMiddleware#onSystemPrompt` 仅注入通用约束，官方 get_instructions 读取已发布的采样规则和限长摘要（24000字符）；不注入草稿资料。提示约束不能保证模型必然遵循，也不是数据库端成本硬限制。必要的准确聚合和业务验证仍通过官方 Wren 运行。
 
 ### 5.4 历史台账与兼容接口
 
@@ -457,7 +458,7 @@ DocEnhance 规则采纳双写（见 5.7）。守卫：`MdlSuggestionServiceTest`
 `ModelingToolkitTest`（listBusinessRules 读文件 + 外组拒绝 + 退役守卫）、
 `DataDynamicContextMiddlewareTest`（标题与空源回归）。
 
-**对话式建模入口（ADR 0069/spec 058）**：modeling-agent 是通用 AgentScope 执行器。DataAgentConfig#MODELING_SCRIPT 只声明官方技能、当前工程、中文、权限和发布边界；WrenProjectContextMiddleware#onSystemPrompt 仅注入项目身份和资料位置，不注入平台建模状态/阶段。WrenSkillsLocator 挂载安装版官方技能，技能不可用时经 wren_cli skills list/get 读取官方内容。文件预览由 SemanticModelingController#workspacePreview 分派原生 write_file/edit_file 与历史 patch_file/批量卡；确认卡展示实际前后内容与 diff，不宣称写入前已完成官方语义检查。ChatController#confirmModeling 复用原生 ConfirmResult 恢复工具执行。模型、关系、视图、SQL 定义模型与 Cube 由官方契约和技能指导，平台不强制资产推荐路由。最终发布是页面显式动作，草稿 build 不更新线上版本；原生 edit_file 展示实际变更内容。
+**对话式建模入口（ADR 0069/spec 058）**：modeling-agent 是通用 AgentScope 执行器。DataAgentConfig#MODELING_SCRIPT 每轮都发送，只放官方技能入口、覆盖官方默认行为的平台规则（Cube/View、问答对、Auto-pilot、用户描述、规则来源、关系基数、时间窗口）、文件与校验方式、工具已强制的边界（各一句）以及中文与回复写法；WrenProjectContextMiddleware#onSystemPrompt 注入项目身份与资料位置，并按 `ModelingTurnPurpose` 选择上下文：`ModelingTurnRules#forPurpose` 给出本轮任务要求与回复篇幅，自动建模和用户对话才附表来源与探查边界、命名候选关系和新增表，试问和用户对话才附逐表时间策略与时间条件写法，不注入平台建模状态/阶段。WrenSkillsLocator 挂载安装版官方技能，技能不可用时经 wren_cli skills list/get 读取官方内容。文件预览由 SemanticModelingController#workspacePreview 分派原生 write_file/edit_file 与历史 patch_file/批量卡；确认卡展示实际前后内容与 diff，不宣称写入前已完成官方语义检查。ChatController#confirmModeling 复用原生 ConfirmResult 恢复工具执行。模型、关系、视图、SQL 定义模型与 Cube 由官方契约和技能指导，平台不强制资产推荐路由。最终发布是页面显式动作，草稿 build 不更新线上版本；原生 edit_file 展示实际变更内容。
 
 以下遗留 HTTP 能力及历史 ADR 说明不代表当前 Agent 注册工具或固定步骤：
 
@@ -735,7 +736,7 @@ React 18 + TypeScript + Vite SPA（`frontend/`），构建产物进 `classpath:/
 
 ### 当前建模工作台（ADR 0069、0075、0076）
 
-`SemanticModelingPage` 组织建模对话、资料、语义模型三区（spec092 §7）。建模对话页以对话为中心：每轮回复下方列出 AI 建模结果，待确定的口径以对话内卡片出现，右侧试问验证口径，底部草稿栏统一发布。文档修改后自动排队一条文档更新请求。助手按官方技能直接修改草稿，发布为显式操作，官方工程校验失败保留旧快照。问数始终使用已发布工程。
+`SemanticModelingPage` 组织建模对话、资料、语义模型三区（spec092 §7）。建模对话页以对话为中心：每轮回复下方列出 AI 建模结果，待确定的口径以对话内卡片出现，右侧试问展示助手写出的 SQL 与口径，用户核对后确认（不自动试运行、不查询数据），底部草稿栏统一发布；确认、改写或归档问题时，修订号在工作区锁内递增，发布在工作区锁内读取要覆盖的修订号（`MdlQuestionStore#locked`、`MdlPublishService#doPublishLocked`），避免发布期间确认的变更留下"待发布"却无差异可发布；若仍出现该状态，草稿栏提供"重新发布"。文档修改后自动排队一条文档更新请求。助手按官方技能直接修改草稿，发布为显式操作，官方工程校验失败保留旧快照。问数始终使用已发布工程。
 
 语义资产展示普通/ref_sql 模型、关系、视图、Cube、knowledge 及 MDL/工程快照；SQL 问答对区由 SqlQaExamplesPanel 管理建模与点赞来源，修改/删除遵循来源生命周期，详情见第 4.2 节及 ADR 0075/0076。工具返回通过 WrenToolResult 中文结构化展示，原文可查看。
 
@@ -902,16 +903,17 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 | 技能 | 同版本官方技能，默认 Auto-pilot；挂载后关闭 CLI skills 通道；不加载 Cube 提案参考 | `DataAgentConfig.mountWrenSkills`、`OfficialWrenToolkit#command`、`ModelingHitlMiddleware#onActing` |
 | 文件范围 | `cubes/`、`views/` 不读不写；`models/<模型>/` 只允许官方文件；`knowledge/sql/` 不可写；平台文件与路径逃逸拒绝 | `WrenProjectAccess#path` |
 | 文件写入 | YAML 先做语法检查，失败不落盘；可整体替换已有文件；所有工程文件写入直接进入草稿，不再弹出确认卡（ADR0111）；每次写入记入 `DraftChangeLog`（来源、用户、时间）；自动建模轮次在没有业务文档时拒绝写 `knowledge/rules/`，推断只能写 `knowledge/caveats/` | `WrenProjectFilesystem#write/edit/delete/rulesGuard`、`ModelingHitlMiddleware#onActing` |
-| CLI 执行 | 参数、Cube、memory store、时间门禁在工程锁前检查；未编译时先自动 `context build`；单轮 query 上限 `MAX_QUERIES_PER_TURN`；超时结束进程树 | `OfficialWrenToolkit#execute`、`ProcessWrenCli#destroyTree` |
+| CLI 执行 | 参数、Cube、memory store、时间门禁在工程锁前检查；未编译或模型/视图/关系/knowledge 文件比编译结果新时先自动 `context build`（`OfficialWrenToolkit#compiledMdlStale`），助手不单独执行 build、修改前不校验，改完只执行一次 `context validate --strict`；单轮 query 上限 `MAX_QUERIES_PER_TURN`；超时结束进程树 | `OfficialWrenToolkit#execute`、`ProcessWrenCli#destroyTree` |
 | 草稿与建模结果 | 修改先进草稿，不单独审阅（spec092 §7）。每轮回复下方显示"AI 建模结果"：`DraftItemService` 把本轮写入（`DraftChangeLog` 中该轮开始后的文件）与已发布快照的差异拆成条目——模型（表/列说明的前后对比）、关系（按 name）、业务语义（rules/glossary/metrics 的 Markdown 条目）、注意事项（caveats 条目），依据为来源小字；可逐条编辑，关系、业务语义、注意事项可逐条删除，模型只能编辑；无法拆分的整段内容按整段显示。底部草稿栏汇总全部条目、待你确定数和新示例数，发布前自动检查，仍有待确定项时提示并可定位或跳过；可放弃全部草稿；助手运行中不可发布或编辑；多人共用一份草稿 | `DraftItemService#items/updateModel/updateRelationship/updateBullet`、`DraftReviewService#review/discard`、`ModelingActivity`、`DraftReviewController`、前端 `TurnResultCard`、`DraftItemsList`、`DraftBar` |
 | 需要你确定的部分 | 能确定的直接写入；只有会改变统计结果的歧义才经 `request_user_confirmation` 提问（2–4 个选项、首项推荐，每轮最多 3 题，待确定上限 10）。问题存于 `.platform/confirmations/`，不发布、问数不可见；助手空闲时以对话内卡片逐题展示（选项、自己写、不采用、稍后），最后一题后一起交还，不弹窗；去掉括号说明、空白与标点后相同的问题视为重复；只有实际创建的问题计入每轮上限，选项名多于规则原文时多出的（如"其他"）被忽略；外部表的候选关系也经此由用户确定后写入 `relationships.yml`，关系问题（`topic=relationship`）另有每轮 3 个名额；答复以 `purpose=confirm` 交还助手写入规则或列描述；未确定不生效、不阻止发布 | `ModelingConfirmationTool`、`ModelingConfirmationService`、前端 `ConfirmationCards` |
-| 轮次用途 | 页面随请求发送 `purpose`：`auto` 自动建模、`document` 文档更新、`question` 问题处理、`confirm` 确认答复，无用途为用户对话；`ChatController#stream` 写入 `ConversationScopeRegistry#putModelingPurpose`，`buildInbound` 放入 `ModelingTurnPurpose`，用于修改来源、外部表查询许可与规则写入约束 | `ModelingTurnPurpose`、`ChatController#trackModeling` |
+| 轮次用途 | 页面随请求发送 `purpose`：`auto` 自动建模、`document` 文档更新、`question` 问题处理、`confirm` 确认答复，无用途为用户对话；`ChatController#stream` 写入 `ConversationScopeRegistry#putModelingPurpose`，`buildInbound` 放入 `ModelingTurnPurpose`，用于修改来源、外部表查询许可、规则写入约束与本轮提示词分段（`ModelingTurnRules`） | `ModelingTurnPurpose`、`ChatController#trackModeling` |
 | 业务文档 | 每库多份，存于草稿 `raw/docs/<名称>.md`，随快照发布；新增、替换（旧版本存 `.platform/docs-history/`）、删除均为草稿修改；只能由用户上传，助手只读；修改后页面自动排队一条 `document` 请求，连续修改合并为一条；问数不直接读取文档 | `BusinessDocumentService`、前端 `BusinessDocumentsPanel` |
 | 入口与增量建模 | 采样与时间配置完成后（`?start=1`）先提示上传业务文档，用户点"开始自动建模"才发送 `purpose=auto` 请求；上传数据弹窗不再附文档；已发布过的库新增表时，运行上下文列出"本次新增的表"，助手只处理新表 | `SemanticModelingPage#startModeling`、`WrenProjectContextMiddleware#newTables` |
+| 字段整理 | spec093：采样后、时间范围之前每张新表必须完成字段整理（`DatasetEntity.fieldScreeningConfirmed=false`，历史数据为 null 视为已确认）。`FieldScreeningService#fields` 首次打开时用一次模型调用按字段名、类型、采样值把字段判为业务、技术或不确定（模型不可用时全部为不确定并纳入）；纳入状态、判断理由与用户说明存于 `column_schema_json`（`ColumnSchema.included/role/roleReason/descriptionSource`）。事实表时间字段锁定纳入，多表同名字段提示为关联键，每表至少纳入 1 个字段。未确认时 `ChatController` 拒绝 `purpose=auto`。`MdlSeeder#reconcile` 只写入、只补回纳入字段；用户说明写为列 `description_source: user`，提示词要求原样保留。建模后在"资料"中按表调整：草稿模型即时删列、写说明，新纳入字段由 seeder 追加，记入 `DraftChangeLog`；删除前列出引用该字段的规则、关系与问题，保存后排队一条只重建该表的请求 | `FieldScreeningService`、`FieldScreeningController`、`MdlSeeder#reconcile`、前端 `FieldScreeningPanel` |
 | SQL 词法 | 单条只读 SELECT/WITH，拒绝笛卡尔积写法，允许官方 LIMIT/OFFSET；建模、问数、问题验证共用 | `OfficialWrenToolkit#requireReadOnly` |
 | 运行上下文 | 授权工程、服务时间、编译状态、工程文件清单（免逐级列目录）、按表来源的探查边界（上传表有限探查，外部表禁止）、外部受限表时间策略 | `WrenProjectContextMiddleware#onSystemPrompt` |
-| 外部表探查硬约束 | 基础建模轮次不查询非上传表；只有 `purpose=question` 的问题生成、重试、修复轮次可以查询；问题轮次内仍禁止 MIN/MAX，且外部表返回空结果后同轮换日期重试直接拒绝（极值限制只针对时间列，MAX(属性列) 这类分组带出属性不受限）；该检查在时间门禁之前，被拒的查询不调用门禁模型；`dry-plan` 只编译不读数据，不过时间门禁。受限事实表的时间条件写法由平台按采样识别的列格式（`temporal_columns.format`）与数据源生成并注入建模、问数上下文：不补零文本用 `STR_TO_DATE`/`TO_TIMESTAMP` 转换后 `>=`/`<`，补零文本、原生类型与数字日期键直接比较，不用 LIKE；门禁放行结果在进程内按知识库、规则与 SQL 复用（1 小时、500 条），同一 SQL 在试运行、确认正确与问数间判断一致 | `OfficialWrenToolkit#guardExternalProbe`、`isEmptyResult` |
-| 建模页与入口 | 左侧导航"语义建模"打开知识库列表；页头一行（返回、版本、助手状态、标签建模对话/资料/语义模型、试问、去问数）。建模对话页以对话为主，连续工具步骤完成后折叠为一行；"试问"为按需打开的右侧栏（只在用户点击时打开）；底部草稿栏为一行，"查看全部"向上展开抽屉，可发布时按钮高亮；对话在用户位于底部时随内容（含异步加载的结果卡）自动跟随；每轮回复的叙述与工具步骤折叠为一行"建模过程"（运行中显示读取资料、确定口径、写入草稿、校验编译四个阶段与最新步骤），AI 建模结果在写入时即出现，最终说明完整展示；助手空闲且无待确定问题时，对话末尾显示"下一步"卡（试问、检查并发布，发布后去问数）；页面请求按序排队，助手忙时提示排队数；提交问题不跳页。试问：推荐 3 个问题（`QuestionSuggestionService#MAX_SUGGESTIONS`）或自由提问，以 `purpose=question` 让助手写 `knowledge/questions/<ID>.yml`，助手空闲后平台自动试运行；"确认正确"写入草稿 `knowledge/sql/<ID>.md`（source: user-confirmed），发布后可召回；"不正确，告诉助手"转给对话。试运行与确认正确都过时间门禁；推荐问题在用户打开试问时才生成，要求单指标、至多一个维度的简单问题 | `ModelingHubPage`、`SemanticModelingPage`、`TrialPanel`、`MdlQuestionService#validate/decide` |
+| 外部表探查硬约束 | 建模的任何轮次都不查询非上传表；`purpose=question` 的试问轮次不执行任何 query（含上传表），只用 `dry-plan` 检查 SQL 能否生成，由用户在试问面板核对 SQL 后确认；该检查在时间门禁之前，被拒的查询不调用门禁模型；`dry-plan` 只编译不读数据，不过时间门禁。受限事实表的时间条件写法由平台按采样识别的列格式（`temporal_columns.format`）与数据源生成并注入建模、问数上下文：不补零文本用 `STR_TO_DATE`/`TO_TIMESTAMP` 转换后 `>=`/`<`，补零文本、原生类型与数字日期键直接比较，不用 LIKE；门禁放行结果在进程内按知识库、规则与 SQL 复用（1 小时、500 条），同一 SQL 在试运行、确认正确与问数间判断一致 | `OfficialWrenToolkit#refuseExternalQuery`、`OfficialWrenToolkit#refuseQueryInQuestionTurn` |
+| 建模页与入口 | 左侧导航"语义建模"打开知识库列表，进入建模页后左侧导航保留；建模助手回复面向业务人员：只用中文、过程说明一句话、最终回复按轮次控制篇幅且不列文件路径与命令（`DataAgentConfig.MODELING_SCRIPT` 回复写法）；页头一行（返回、版本、助手状态、标签建模对话/资料/语义模型、试问、去问数）。建模对话页以对话为主，连续工具步骤完成后折叠为一行；"试问"为按需打开的右侧栏（只在用户点击时打开）；底部草稿栏为一行，"查看全部"向上展开抽屉，可发布时按钮高亮；对话在用户位于底部时随内容（含异步加载的结果卡）自动跟随；每轮回复的叙述与工具步骤折叠为一行"建模过程"（运行中显示读取资料、确定口径、写入草稿、校验编译四个阶段与最新步骤），AI 建模结果在写入时即出现，最终说明完整展示；助手空闲且无待确定问题时，对话末尾显示"下一步"卡（试问、检查并发布，发布后去问数）；页面请求按序排队，助手忙时提示排队数；提交问题不跳页。试问：推荐 3 个问题（`QuestionSuggestionService#MAX_SUGGESTIONS`）或自由提问，以 `purpose=question` 让助手写 `knowledge/questions/<ID>.yml`，助手空闲后平台自动试运行；"确认正确"写入草稿 `knowledge/sql/<ID>.md`（source: user-confirmed），发布后可召回；"不正确"时可填写原因交给助手（以 `purpose=question` 发送，允许查询外部表，助手修正口径并重写、执行本题 SQL），或自行修改本题 SQL（`MdlQuestionService#correctSql`）；SQL 变化后题目为 STALE，平台自动重新试运行并隐藏旧结果。试运行与确认正确都过时间门禁；推荐问题在用户打开试问时才生成，要求单指标、至多一个维度的简单问题 | `ModelingHubPage`、`SemanticModelingPage`、`TrialPanel`、`MdlQuestionService#validate/decide` |
 
 ### 14.2 用户问题验证与问答召回
 
@@ -927,7 +929,7 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 ### 14.3 SQL 时间门禁
 
 - 外部数据源事实表的时间窗口保存在平台数据库，不属于 MDL，保存即生效；上传表不设门禁（`FactTableWindowService`、`FactQueryWindowPolicy#rules`）。
-- `SqlWindowGate` 把原始 SQL 与登记配置交给无工具 LLM 逐表判断，`parse` 按逐表明细重算结论；未登记表与 `query_cube` 不覆盖。
+- `SqlWindowGate#check` 先由 `SqlWindowRules#evaluate` 判断普通写法（单个 SELECT、登记表各出现一次、时间条件为 WHERE 顶层 AND 中的字面量比较/BETWEEN/平台日期解析包装），口径与模型门禁一致；规则无法确定的 SQL（OR、NOT、子查询、CTE、相对日期、ON 中的时间条件等）才把原始 SQL 与登记配置交给无工具 LLM 逐表判断，`parse` 按逐表明细重算结论；未登记表与 `query_cube` 不覆盖（ADR0112）。
 - 建模 CLI、问数 MCP（`WrenScopedMcpClient#callTool`）、问题验证共用 `FactQueryWindowPolicy#requireAllowed`；拒绝后本轮阻止后续 SQL；判断写入 `logs/sql-window-gate.log`。
 
 ### 14.4 问数提示
@@ -937,5 +939,5 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 
 ### 14.5 发布后问数准备与可观测性
 
-- 发布成功后，`WrenQueryPreparation` 在事务提交后后台准备索引并做一次只读召回预热；`QueryPreparationController#status` 供发布页显示准备状态（进程内建议值）。
+- 发布成功后，`WrenQueryPreparation` 在事务提交后后台准备索引并做一次只读召回预热；`QueryPreparationController#status` 返回准备状态（进程内建议值）：建模页"已发布"卡片、建模页顶部与知识库详情页轮询显示"问数准备中"直至就绪（`useQueryReadiness`），准备期间"去问数/基于此库提问"置灰；问数页在所选知识库仍在准备时于回答处显示加载提示（`ChatPanel#watchPreparation`），不影响对话流。
 - `logs/execution-timing.log` 记录工具、索引、Wren 队列、门禁与 `wren_cli.*` 分段耗时；嵌套耗时不可相加。

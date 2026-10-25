@@ -10,7 +10,10 @@ import java.util.List;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
-/** Evaluates SQL against registered table windows without catalog or lineage access. */
+/**
+ * Evaluates SQL against registered table windows without catalog or lineage access: rules decide
+ * plain literal ranges ({@link SqlWindowRules}), the model reads everything else.
+ */
 @Service
 public class SqlWindowGate {
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -40,6 +43,10 @@ public class SqlWindowGate {
 
     public Decision check(String sql, List<Rule> rules) {
         if (rules.isEmpty()) return new Decision(true, List.of(), "没有需要检查的已登记事实表");
+        // Plain shapes are decided by rules in microseconds; the model only reads SQL the rules
+        // cannot decide (relative dates, OR branches, subqueries), so it never widens the gate.
+        var decided = SqlWindowRules.evaluate(sql, rules);
+        if (decided.isPresent()) return decided.get();
         try {
             Model model = models.getIfAvailable();
             if (model == null) return failure("时间门禁模型不可用，请稍后重试");
