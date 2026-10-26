@@ -51,6 +51,36 @@ public final class WrenQueryContextMiddleware implements HarnessRuntimeMiddlewar
         this.publishedRoot = publishedRoot;
     }
 
+    /**
+     * Reminder sent as the last message of every query model call. The Chinese-only rule in the
+     * system prompt was ignored repeatedly once the English official usage skill filled the
+     * context (2026-10-25/26 logs: step narration in English), so it is restated where recency
+     * gives it priority.
+     */
+    static final String LANGUAGE_REMINDER =
+            "语言要求：接下来面向用户的所有文字（包括调用工具前后的一句话说明）只用简体中文，不输出任何英文句子；" + "表名、字段名、SQL 可以保留原文。";
+
+    @Override
+    public reactor.core.publisher.Flux<io.agentscope.core.event.AgentEvent> onModelCall(
+            Agent agent,
+            RuntimeContext context,
+            io.agentscope.core.middleware.ModelCallInput input,
+            java.util.function.Function<
+                            io.agentscope.core.middleware.ModelCallInput,
+                            reactor.core.publisher.Flux<io.agentscope.core.event.AgentEvent>>
+                    next) {
+        java.util.List<io.agentscope.core.message.Msg> messages =
+                new java.util.ArrayList<>(input.messages());
+        messages.add(
+                io.agentscope.core.message.Msg.builder()
+                        .role(io.agentscope.core.message.MsgRole.SYSTEM)
+                        .textContent(LANGUAGE_REMINDER)
+                        .build());
+        return next.apply(
+                new io.agentscope.core.middleware.ModelCallInput(
+                        messages, input.tools(), input.options(), input.model()));
+    }
+
     @Override
     public Mono<String> onSystemPrompt(Agent agent, RuntimeContext context, String prompt) {
         return Mono.fromCallable(

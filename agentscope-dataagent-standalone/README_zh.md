@@ -217,6 +217,7 @@ java -jar target/agentscope-dataagent-*-exec.jar
 | `dataagent.openai.base-url` | `https://api.deepseek.com` | 任意 OpenAI 兼容端点的 base URL（DeepSeek、vLLM、one-api、DashScope compatible-mode 等），尾部 `/v1` 可写可不写。环境变量：`DATAAGENT_OPENAI_BASE_URL` 或 `OPENAI_BASE_URL`。 |
 | `dataagent.openai.model-name` | `deepseek-flash` | OpenAI 兼容模型 id。环境变量：`DATAAGENT_OPENAI_MODEL_NAME` 或 `OPENAI_MODEL_NAME`。 |
 | `dataagent.openai.stream` | `true` | 是否以 SSE 流式输出。 |
+| `dataagent.web-search.api-key` | _空_ | 问数助手 `web_search` 使用的 DeepSeek 搜索 API Key（spec094）。只从环境变量 `DEEPSEEK_API_KEY` 读取，为空则不提供联网搜索。相关：`dataagent.web-search.enabled`（`true`）、`base-url`（`https://api.deepseek.com`）、`timeout-seconds`（`20`）、`max-results`（`5`）。 |
 | `dataagent.dashscope.api-key` | _空_ | DashScope API key（未配置 OpenAI key 时的回落）。环境变量：`DASHSCOPE_API_KEY`。 |
 | `dataagent.dashscope.model-name` | `qwen3.8-max` | DashScope 模型 id。 |
 | `dataagent.agent.name` | `data-agent` | 自动生成 `~/.agentscope/dataagent/agentscope.json` 时的 agent 名 |

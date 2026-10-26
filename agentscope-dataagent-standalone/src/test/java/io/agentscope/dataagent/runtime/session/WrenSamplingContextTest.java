@@ -193,4 +193,28 @@ class WrenSamplingContextTest {
                 .doesNotContain("表来源与探查边界", "maxWindowDays");
         assertThat(promptFor.apply(null)).contains("表来源与探查边界", "maxWindowDays", "用户对话");
     }
+
+    @Test
+    void everyModelingModelCallEndsWithTheChineseOnlyReminder() {
+        var middleware =
+                new WrenProjectContextMiddleware(
+                        mock(io.agentscope.dataagent.dataset.WrenProjectAccess.class));
+        var sent =
+                new java.util.concurrent.atomic.AtomicReference<
+                        io.agentscope.core.middleware.ModelCallInput>();
+        middleware
+                .onModelCall(
+                        null,
+                        null,
+                        new io.agentscope.core.middleware.ModelCallInput(
+                                java.util.List.of(), java.util.List.of(), null, null),
+                        input -> {
+                            sent.set(input);
+                            return reactor.core.publisher.Flux.empty();
+                        })
+                .blockLast();
+        assertThat(sent.get().messages())
+                .singleElement()
+                .satisfies(m -> assertThat(m.getTextContent()).contains("只用简体中文"));
+    }
 }

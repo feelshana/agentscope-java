@@ -44,13 +44,13 @@ const assetLabels: Record<Asset, string> = {
 };
 const message = (e: unknown) => e instanceof Error ? e.message : String(e);
 const AUTO_MODELING_REQUEST = '请加载官方 Wren 技能，按官方 Auto-pilot 完善当前采样后的语义模型。事实表时间范围已独立保存到数据库，必要业务 SQL 遵守工具时间门禁；数据探查遵守运行上下文中的表来源与探查边界；运行上下文列出"本次新增的表"时只处理这些表。'
-  + '业务文档位于 raw/docs/（只读，可能没有）。完成校验、编译后按回复写法简短说明（不列文件与命令）；修改进入草稿，由我在对话中查看后统一发布。';
+  + '业务文档位于 raw/docs/（只读，可能没有）。完成校验后按回复写法简短说明（不列文件与命令）；修改进入草稿，由我在对话中查看后统一发布。';
 /** spec092: sent automatically after documents change; the assistant reconciles, never regenerates. */
 const documentRequest = (changes: string[]) => `业务文档有变化：${changes.join('；')}。文档位于 raw/docs/（只读）。`
   + '请读取有变化的文档，与当前模型描述、knowledge/rules 和 knowledge/caveats 对比后更新：文档写清楚的指标定义、默认过滤、术语直接写入 knowledge/rules/（注明来源文档），'
   + '字段含义写入对应模型的列描述，不要向我确认；只有文档有歧义、且不同理解会改变统计结果时，才用 request_user_confirmation 提问。'
   + '文档被删除时，把可能来自该文档的规则改为待确认说明写入 knowledge/caveats/。不要重新生成模型，不要重新加载已加载的技能，不要写 Cube/View。'
-  + '只修改与文档有差异的内容，完成后执行校验与编译，按回复写法简短说明。';
+  + '只修改与文档有差异的内容，完成后执行校验，按回复写法简短说明。';
 /** spec092: hands the user's answers to the assistant to write where queries read them. */
 const confirmRequest = (decisions: ConfirmationDecision[]) => '我确定了以下口径，请整理后写入草稿：指标定义、默认过滤、术语写入 knowledge/rules/，'
   + '字段含义写入对应模型的列描述，确定建立的关系写入 relationships.yml；不要再次向我确认这些内容，完成后用一两行说明更新了哪些口径。\n'
@@ -61,7 +61,7 @@ const remodelRequest = (c: FieldAdjustment) => `建模人员调整了表 ${c.tab
   + (c.added.length ? `新纳入 ${c.added.join('、')}；` : '') + (c.removed.length ? `取消纳入 ${c.removed.join('、')}；` : '')
   + (c.described.length ? `改写了 ${c.described.join('、')} 的说明；` : '')
   + `草稿模型已按此更新。请只处理这张表：为新纳入且没有说明的字段补充列描述；检查 knowledge/rules、relationships.yml 与 knowledge/questions 中引用被取消字段的内容并修正，无法修正的写入 knowledge/caveats 说明；`
-  + '不要修改带 description_source: user 的说明，不要改动其他表。完成后执行校验与编译，按回复写法简短说明。';
+  + '不要修改带 description_source: user 的说明，不要改动其他表。完成后执行校验，按回复写法简短说明。';
 
 /** Short texts the conversation shows for the requests above. */
 const documentLabel = (changes: string[]) => `业务文档有变化，请同步到模型：${changes.join('；')}`;

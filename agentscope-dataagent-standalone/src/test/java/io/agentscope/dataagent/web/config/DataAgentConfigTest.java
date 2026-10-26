@@ -167,6 +167,12 @@ class DataAgentConfigTest {
         assertThat(ModelingTurnRules.forPurpose("auto"))
                 .contains("3–6 行", "可以声明 MANY_TO_ONE", "非数据库约束")
                 .doesNotContain("试问 SQL");
+        // 2026-10-26: skip the official preflight the context already answers, in auto and
+        // document turns alike; documents are read, never searched for.
+        assertThat(ModelingTurnRules.forPurpose("auto"))
+                .contains("不执行 context show、memory status", "raw/docs/ 下的业务文档");
+        assertThat(ModelingTurnRules.forPurpose("document"))
+                .contains("不执行 context show、memory status", "只读有变化的文档");
         assertThat(ModelingTurnRules.forPurpose("confirm"))
                 .contains("写入 knowledge/rules/（指标定义、默认过滤、术语）或对应模型的列描述", "1–2 行");
         assertThat(ModelingTurnRules.forPurpose("question"))
@@ -302,6 +308,34 @@ class DataAgentConfigTest {
                         "log_time >= '2026-09-26' AND log_time < '2026-10-26'")
                 .doesNotContain("平台不会解析或生成日期范围");
         assertThat(DataAgentConfig.MODELING_SCRIPT).contains("MySQL 8.0 语法", "不用 CURDATE()");
+    }
+
+    /**
+     * 2026-10-26 end-to-end run: without a document the assistant recommended guessed status
+     * codes, and the recommended answers wrote a wrong definition the document then contradicted.
+     */
+    @Test
+    void confirmationsDoNotRecommendGuesses() {
+        assertThat(
+                        toolDescription(
+                                io.agentscope.dataagent.tools.data.ModelingConfirmationTool.class,
+                                "request_user_confirmation"))
+                .contains("没有依据时", "暂不确定，先记为待确认");
+        assertThat(DataAgentConfig.MODELING_COMPACT_TOKENS).isLessThan(128_000);
+        assertThat(DataAgentConfig.MODELING_COMPACT_MESSAGES).isGreaterThan(80);
+    }
+
+    /** spec094: external questions go online; knowledge-base numbers stay with SQL. */
+    @Test
+    void queryPromptKeepsWebSearchToExternalInformation() {
+        assertThat(DataAgentConfig.QUERY_EFFICIENCY_RULES)
+                .contains(
+                        "# 联网搜索",
+                        "不走问数流程：不召回问答、不读取模型、不执行 SQL，也不因缺少日期先询问",
+                        "只能来自 SQL，不用搜索结果代替或补充统计值",
+                        "不写内部数据、查询结果、客户或员工名称",
+                        "注明来源网址",
+                        "只针对知识库数据查询");
     }
 
     /** Every listed skill is rendered into each model call, so each agent lists only its own. */

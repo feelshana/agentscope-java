@@ -172,6 +172,17 @@ dataagent:
     model-name: ${DATAAGENT_OPENAI_MODEL_NAME:${OPENAI_MODEL_NAME:deepseek-flash}}
     stream: ${DATAAGENT_OPENAI_STREAM:true}
 
+  # ---- Query web search (spec094) ----
+  # The query agent searches public information through the DeepSeek Search API. The key comes
+  # from the environment only (no default); without it the tool is not registered. Modeling never
+  # searches, and neither agent can fetch arbitrary URLs.
+  web-search:
+    enabled: ${DATAAGENT_WEB_SEARCH_ENABLED:true}
+    api-key: ${DEEPSEEK_API_KEY:}
+    base-url: ${DATAAGENT_WEB_SEARCH_BASE_URL:https://api.deepseek.com}
+    timeout-seconds: ${DATAAGENT_WEB_SEARCH_TIMEOUT_SECONDS:20}
+    max-results: ${DATAAGENT_WEB_SEARCH_MAX_RESULTS:5}
+
   # ---- DashScope model (fallback when no OpenAI key is configured) ----
   # Set DASHSCOPE_API_KEY env var or override api-key below.
   dashscope:

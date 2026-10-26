@@ -455,12 +455,24 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
         env.put("WREN_HOME", home.toAbsolutePath().toString());
         WrenProcessEnvironment.configure(env);
 
-        McpClientWrapper client =
-                McpClientBuilder.create("wren-" + groupId)
-                        .stdioTransport(props.resolveExecutable(), args, env)
-                        .timeout(props.timeout())
-                        .initializationTimeout(INIT_TIMEOUT)
-                        .buildSync();
+        // The MCP SDK finds its JSON mapper through ServiceLoader on the thread's context class
+        // loader. A Reactor worker can carry the system loader, which cannot see the jar's
+        // nested libraries, so the first spawn after a restart failed with "No default
+        // McpJsonMapper implementation found" unless a publish had spawned one on another thread.
+        McpClientWrapper client;
+        Thread thread = Thread.currentThread();
+        ClassLoader previous = thread.getContextClassLoader();
+        thread.setContextClassLoader(WrenInstanceRegistry.class.getClassLoader());
+        try {
+            client =
+                    McpClientBuilder.create("wren-" + groupId)
+                            .stdioTransport(props.resolveExecutable(), args, env)
+                            .timeout(props.timeout())
+                            .initializationTimeout(INIT_TIMEOUT)
+                            .buildSync();
+        } finally {
+            thread.setContextClassLoader(previous);
+        }
         try {
             client.initialize().block(INIT_BLOCK);
         } catch (RuntimeException e) {

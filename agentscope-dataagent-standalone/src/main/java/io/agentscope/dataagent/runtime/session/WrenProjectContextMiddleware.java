@@ -163,9 +163,9 @@ public final class WrenProjectContextMiddleware implements HarnessRuntimeMiddlew
                 + "每条候选关系一次合并查询，同时得出被连接侧键的全表唯一性与两侧匹配率。维度候选取值已在采样中提取，不执行 SELECT DISTINCT 或分布统计，"
                 + "不导出明细行，不重复统计；不得把时间范围扩大到 100 年绕过规则。每轮建模最多执行 "
                 + io.agentscope.dataagent.tools.data.OfficialWrenToolkit.MAX_QUERIES_PER_TURN
-                + " 条 query。发现复合值、脏数据时写入列描述或 caveat，不连续查询去量化它。候选关系用 request_user_confirmation"
-                + " 请用户确定（每条关系一题，选项写明两侧列与 join_type），确定后写入 relationships.yml；无法验证的唯一性、空值写为未确认并记入"
-                + " caveat。\n";
+                + " 条 query；需要的探查在同一轮一次性发起，不逐条等待。发现复合值、脏数据时写入列描述或 caveat，不连续查询去量化它。候选关系用"
+                + " request_user_confirmation 请用户确定（每条关系一题，选项写明两侧列与 join_type），确定后写入"
+                + " relationships.yml；无法验证的唯一性、空值写为未确认并记入 caveat。\n";
     }
 
     /**
@@ -199,10 +199,21 @@ public final class WrenProjectContextMiddleware implements HarnessRuntimeMiddlew
             return "";
         }
         if (files.isEmpty()) return "";
+        // 2026-10-26 log: without these facts the model spent ~45 s listing empty folders and
+        // globbing for sampling files that do not exist.
+        java.util.List<String> empty = new java.util.ArrayList<>();
+        for (String dir :
+                java.util.List.of("rules", "caveats", "glossary", "metrics", "sql", "questions"))
+            if (files.stream().noneMatch(f -> f.startsWith("knowledge/" + dir + "/")))
+                empty.add("knowledge/" + dir);
+        boolean documents = files.stream().anyMatch(f -> f.startsWith("raw/docs/"));
         return "\n\n# 当前工程文件清单\n"
                 + String.join("\n", files)
-                + "\n以上为草稿工程中的建模文件（相对 /project），无需再 list_files 或 glob 查找；"
-                + "需要的文件在同一轮中一次性并行 read_file。\n";
+                + "\n以上为草稿工程中的全部建模文件（相对 /project），无需再 list_files、glob 或 grep 查找；"
+                + "需要的文件在同一轮中一次性并行 read_file。"
+                + (empty.isEmpty() ? "" : "\n空目录（无需查看）：" + String.join("、", empty) + "。")
+                + (documents ? "" : "\n没有业务文档：raw/docs/ 不存在或为空。")
+                + "\n没有单独的采样文件：采样结论已写在各模型的列描述和 properties（含 temporal_columns）中。\n";
     }
 
     static String newTables(java.nio.file.Path root) {
@@ -233,6 +244,27 @@ public final class WrenProjectContextMiddleware implements HarnessRuntimeMiddlew
                         ? "已编译：target/mdl.json 存在；文件修改后无需手动 build，查询类命令前平台会自动重新编译。\n"
                         : "尚未编译：target/mdl.json 不存在。首次执行 query、dry-plan、dry-run 或 memory describe"
                                 + " 时平台会自动先执行 context build。\n");
+    }
+
+    /** Same as querying: the English official skill pulls step narration into English. */
+    @Override
+    public reactor.core.publisher.Flux<io.agentscope.core.event.AgentEvent> onModelCall(
+            Agent agent,
+            RuntimeContext context,
+            io.agentscope.core.middleware.ModelCallInput input,
+            java.util.function.Function<
+                            io.agentscope.core.middleware.ModelCallInput,
+                            reactor.core.publisher.Flux<io.agentscope.core.event.AgentEvent>>
+                    next) {
+        List<io.agentscope.core.message.Msg> messages = new ArrayList<>(input.messages());
+        messages.add(
+                io.agentscope.core.message.Msg.builder()
+                        .role(io.agentscope.core.message.MsgRole.SYSTEM)
+                        .textContent(WrenQueryContextMiddleware.LANGUAGE_REMINDER)
+                        .build());
+        return next.apply(
+                new io.agentscope.core.middleware.ModelCallInput(
+                        messages, input.tools(), input.options(), input.model()));
     }
 
     @Override

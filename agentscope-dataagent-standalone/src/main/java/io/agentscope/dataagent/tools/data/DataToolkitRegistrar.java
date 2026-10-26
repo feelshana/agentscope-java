@@ -58,6 +58,7 @@ public class DataToolkitRegistrar {
     private final io.agentscope.dataagent.dataset.AnswerQueryMemory answerMemory;
     private final io.agentscope.dataagent.dataset.WrenQueryAccess queryAccess;
     private final io.agentscope.dataagent.dataset.WrenPublishedProject publishedProject;
+    private final org.springframework.core.env.Environment environment;
 
     public DataToolkitRegistrar(
             DataAgentBootstrap bootstrap,
@@ -69,8 +70,10 @@ public class DataToolkitRegistrar {
             io.agentscope.dataagent.web.artifact.ArtifactStore artifactStore,
             io.agentscope.dataagent.dataset.AnswerQueryMemory answerMemory,
             io.agentscope.dataagent.dataset.WrenQueryAccess queryAccess,
-            io.agentscope.dataagent.dataset.WrenPublishedProject publishedProject) {
+            io.agentscope.dataagent.dataset.WrenPublishedProject publishedProject,
+            org.springframework.core.env.Environment environment) {
         this.bootstrap = bootstrap;
+        this.environment = environment;
         this.chartOptions = chartOptions;
         this.conversationScopes = conversationScopes;
         this.wrenGateway = wrenGateway;
@@ -109,8 +112,45 @@ public class DataToolkitRegistrar {
                     .getToolkit()
                     .registerTool(new RunPythonTool(new SandboxBackedFilesystem(), artifactStore));
             log.info("Registered RunPythonTool onto main agent '{}'", main.getName());
+
+            WebSearchTool search = webSearch(environment);
+            configureQueryWebTools(main.getDelegate().getToolkit(), search);
+            log.info(
+                    "Query web search {} on main agent '{}'",
+                    search == null ? "disabled (no DEEPSEEK_API_KEY)" : "enabled",
+                    main.getName());
         } catch (RuntimeException e) {
             log.warn("Failed to register DataAgent toolkit onto main agent: {}", e.getMessage());
         }
+    }
+
+    /** The harness tools every agent receives: a foreign search service and a fetch of any URL. */
+    static final java.util.List<String> HARNESS_WEB_TOOLS =
+            java.util.List.of("web_search", "web_fetch");
+
+    /**
+     * spec094: the query agent searches through the DeepSeek Search API only when a key is
+     * configured, and never fetches arbitrary URLs (internal addresses included).
+     */
+    static void configureQueryWebTools(
+            io.agentscope.core.tool.Toolkit toolkit, WebSearchTool search) {
+        HARNESS_WEB_TOOLS.forEach(toolkit::removeTool);
+        if (search != null) toolkit.registerTool(search);
+    }
+
+    /** Null when disabled or when no key is configured. */
+    static WebSearchTool webSearch(org.springframework.core.env.PropertyResolver properties) {
+        if (properties == null
+                || !properties.getProperty("dataagent.web-search.enabled", Boolean.class, true))
+            return null;
+        String key = properties.getProperty("dataagent.web-search.api-key", "");
+        if (key == null || key.isBlank()) return null;
+        return new WebSearchTool(
+                properties.getProperty("dataagent.web-search.base-url", "https://api.deepseek.com"),
+                key.strip(),
+                java.time.Duration.ofSeconds(
+                        properties.getProperty(
+                                "dataagent.web-search.timeout-seconds", Integer.class, 20)),
+                properties.getProperty("dataagent.web-search.max-results", Integer.class, 5));
     }
 }

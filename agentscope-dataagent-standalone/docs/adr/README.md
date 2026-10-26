@@ -141,3 +141,4 @@ ADR 记录"为什么这样做"。规则：
 | [0111](0111-draft-changes-reviewed-before-publish.md) | 建模修改直接进入草稿，发布前统一审阅，取消逐项确认卡 | 已接受，2026-10-21。取代 ADR0031，修改 ADR0069/0094 确认条款。 |  |
 | [0112](0112-rule-first-sql-window-gate.md) | SQL 时间门禁规则优先，模型只判断规则无法确定的 SQL | 已接受，2026-10-25。补充 ADR0097/0103：ADR0097 中"检查器仅将原始 SQL 交给无工具 LLM"改为规则优先、模型兜底；登记配置 |  |
 | [0113](0113-mysql8-or-doris-sources-and-literal-date-ranges.md) | 外部数据源限定 MySQL 8.0+ 或 Doris，SQL 用 MySQL 8.0 语法与日期常量范围 | 已接受，2026-10-25。补充 ADR0021（外部源只发布 MySQL）与 ADR0112（规则优先的时间门禁）。 |  |
+| [0114](0114-query-web-search-via-deepseek.md) | 问数助手经 DeepSeek 官方搜索 API 联网，移除 harness 默认联网工具 | 已接受，2026-10-26。实施 spec094。 |  |

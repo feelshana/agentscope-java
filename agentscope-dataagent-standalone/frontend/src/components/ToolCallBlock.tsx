@@ -70,6 +70,7 @@ const TC_TOOL_LABELS: Record<string, string> = {
   fetch_query_result: '复用查询结果',
   render_chart: '生成图表',
   run_python: '沙箱中执行 Python',
+  web_search: '联网搜索',
 };
 
 const TC_TOOL_ICONS: Record<string, IconName> = {
@@ -81,6 +82,7 @@ const TC_TOOL_ICONS: Record<string, IconName> = {
   fetch_query_result: 'search',
   render_chart: 'chart',
   run_python: 'code',
+  web_search: 'search',
 };
 
 function toolLabel(name: string): string {

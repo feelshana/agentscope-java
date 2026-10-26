@@ -210,7 +210,7 @@ main 线程）同步执行，每个 server 经 `McpClientBuilder.buildAsync().bl
 
 `DataAgentConfig#dataAgentBootstrap` 对主 data-agent 挂载安装版官方 skills，使用原生 HarnessAgent/ReActAgent。
 `WrenQueryContextMiddleware#onSystemPrompt` 仅给出鉴权用户可用的项目 ID/名称与发布状态，不注入草稿、业务规则或自研 SQL 剧本。
-`DataToolkitRegistrar#register` 只注册平台通用结果工具；问数 Agent 与其 Toolkit 由全体用户共用，只使用框架公开的中间件契约实现按次绑定，不修改 agentscope-core：`WrenQueryToolRegistrar#register` 启动时在共享 Toolkit 上为只读官方工具各注册一个不含知识库信息的 `WrenToolForwarder`；`WrenScopedToolkitMiddleware#onModelCall` 为本次调用新建只含官方 MCP 工具的 Toolkit（`Toolkit#registerMcpClient` 注册绑定当前已发布 project 的 `WrenScopedMcpClient`）存入 RuntimeContext，并把传给模型的工具列表改为"共享工具（去掉转发工具）+ 本次官方 schema"，未选库时不提供官方工具；框架从共享 Toolkit 执行转发工具，转发工具把调用交给本次作用域内的同名官方工具，权限、只读与时间门禁仍在 `WrenScopedMcpClient` 中校验。Agent 加载官方 usage，通过 listTools 发现官方 schema，
+`DataToolkitRegistrar#register` 只注册平台通用结果工具，并移除 harness 默认给每个 Agent 的 `web_search`（Tavily）与 `web_fetch`，配置了 DeepSeek Key 时改注册平台 `WebSearchTool`（`web_search`，只发送搜索词，不发用户原话、不取正文；建模 Agent 由 `ModelingToolkitRegistrar#registerOfficialTools` 移除两者，见 ADR0114）；问数 Agent 与其 Toolkit 由全体用户共用，只使用框架公开的中间件契约实现按次绑定，不修改 agentscope-core：`WrenQueryToolRegistrar#register` 启动时在共享 Toolkit 上为只读官方工具各注册一个不含知识库信息的 `WrenToolForwarder`；`WrenScopedToolkitMiddleware#onModelCall` 为本次调用新建只含官方 MCP 工具的 Toolkit（`Toolkit#registerMcpClient` 注册绑定当前已发布 project 的 `WrenScopedMcpClient`）存入 RuntimeContext，并把传给模型的工具列表改为"共享工具（去掉转发工具）+ 本次官方 schema"，未选库时不提供官方工具；框架从共享 Toolkit 执行转发工具，转发工具把调用交给本次作用域内的同名官方工具，权限、只读与时间门禁仍在 `WrenScopedMcpClient` 中校验。Agent 加载官方 usage，通过 listTools 发现官方 schema，
 再以原始 arguments 调用 get_instructions/get_context/describe_schema/recall_queries/run_sql/query_cube 等官方工具。
 只有官方已提供的工具可调用；问数服务不使用 --allow-write，store_query 不对 Agent 开放。
 
@@ -458,7 +458,7 @@ DocEnhance 规则采纳双写（见 5.7）。守卫：`MdlSuggestionServiceTest`
 `ModelingToolkitTest`（listBusinessRules 读文件 + 外组拒绝 + 退役守卫）、
 `DataDynamicContextMiddlewareTest`（标题与空源回归）。
 
-**对话式建模入口（ADR 0069/spec 058）**：modeling-agent 是通用 AgentScope 执行器。DataAgentConfig#MODELING_SCRIPT 每轮都发送，只放官方技能入口、覆盖官方默认行为的平台规则（Cube/View、问答对、Auto-pilot、用户描述、规则来源、关系基数、时间窗口）、文件与校验方式、工具已强制的边界（各一句）以及中文与回复写法；WrenProjectContextMiddleware#onSystemPrompt 注入项目身份与资料位置，并按 `ModelingTurnPurpose` 选择上下文：`ModelingTurnRules#forPurpose` 给出本轮任务要求与回复篇幅，自动建模和用户对话才附表来源与探查边界、命名候选关系和新增表，试问和用户对话才附逐表时间策略与时间条件写法，不注入平台建模状态/阶段。WrenSkillsLocator 挂载安装版官方技能，技能不可用时经 wren_cli skills list/get 读取官方内容。文件预览由 SemanticModelingController#workspacePreview 分派原生 write_file/edit_file 与历史 patch_file/批量卡；确认卡展示实际前后内容与 diff，不宣称写入前已完成官方语义检查。ChatController#confirmModeling 复用原生 ConfirmResult 恢复工具执行。模型、关系、视图、SQL 定义模型与 Cube 由官方契约和技能指导，平台不强制资产推荐路由。最终发布是页面显式动作，草稿 build 不更新线上版本；原生 edit_file 展示实际变更内容。
+**对话式建模入口（ADR 0069/spec 058）**：modeling-agent 是通用 AgentScope 执行器。DataAgentConfig#MODELING_SCRIPT 每轮都发送，只放官方技能入口、覆盖官方默认行为的平台规则（Cube/View、问答对、Auto-pilot、用户描述、规则来源、关系基数、时间窗口）、文件与校验方式、工具已强制的边界（各一句）以及中文与回复写法；WrenProjectContextMiddleware#onSystemPrompt 注入项目身份与资料位置，并按 `ModelingTurnPurpose` 选择上下文：`ModelingTurnRules#forPurpose` 给出本轮任务要求与回复篇幅，自动建模和用户对话才附表来源与探查边界、命名候选关系和新增表，试问和用户对话才附逐表时间策略与时间条件写法，不注入平台建模状态/阶段。工程文件清单同时说明空目录、有无业务文档、采样结论所在位置，自动建模与文档更新轮次据此跳过官方技能 Step 1–4 中的工程检查（context show、memory status、翻找 raw/）；建模与问数的每次模型调用末尾追加中文输出提醒（`WrenQueryContextMiddleware#LANGUAGE_REMINDER`）；建模 Agent 的会话压缩按消息数与 token 数单独设置（`DataAgentConfig#MODELING_COMPACT_TOKENS`），避免多轮建模在轮次中途触发摘要。WrenSkillsLocator 挂载安装版官方技能，技能不可用时经 wren_cli skills list/get 读取官方内容。文件预览由 SemanticModelingController#workspacePreview 分派原生 write_file/edit_file 与历史 patch_file/批量卡；确认卡展示实际前后内容与 diff，不宣称写入前已完成官方语义检查。ChatController#confirmModeling 复用原生 ConfirmResult 恢复工具执行。模型、关系、视图、SQL 定义模型与 Cube 由官方契约和技能指导，平台不强制资产推荐路由。最终发布是页面显式动作，草稿 build 不更新线上版本；原生 edit_file 展示实际变更内容。
 
 以下遗留 HTTP 能力及历史 ADR 说明不代表当前 Agent 注册工具或固定步骤：
 
@@ -779,6 +779,7 @@ spec 045 / ADR 0055：无已登记问题、无待确认原生 HITL 时，页面�
 | `dataagent.agent.subagents-enabled` | false | 子代理编排（harness `agent_spawn` / `agent_send` / `task_*`）。关闭可省下每轮固定约 6.2k 字符的 `## Subagents` 提示词段与相应工具 schema；**不影响网关、会话路由与聊天**（`buildSubagentEntries` 不读该开关），内置定义也不删（ADR 0009） |
 | `dataagent.openai.*` | DeepSeek 默认值 | 主模型（任意 OpenAI 兼容端点） |
 | `dataagent.openai.stream` | `true` | `DATAAGENT_OPENAI_STREAM` 可切换模型流式/非流式请求以定位上游 EOF；前端 SSE 协议不变，关闭流式不表示连接问题已解决 |
+| `dataagent.web-search.*` | Key 为空即关闭 | 问数联网搜索（spec094、ADR0114）：`api-key` 只读 `DEEPSEEK_API_KEY`，另有 `enabled`、`base-url`、`timeout-seconds`、`max-results` |
 | `dataagent.dashscope.*` | — | 兜底模型 |
 | `dataagent.sandbox.image` | `agentscope/dataagent-sandbox:latest` | 沙箱镜像（`docker/sandbox.Dockerfile` 构建） |
 | `dataagent.sandbox.max-containers` | `16` | 单进程容器上限，满额驱逐空闲实例；环境变量 DATAAGENT_SANDBOX_MAX_CONTAINERS |

@@ -296,6 +296,7 @@ to false; existing users and grants are retained.
 | `dataagent.openai.base-url` | `https://api.deepseek.com` | Current application.yml fallback; override with DATAAGENT_OPENAI_BASE_URL or OPENAI_BASE_URL for the deployed provider. |
 | `dataagent.openai.model-name` | `deepseek-flash` | Current application.yml fallback; override with DATAAGENT_OPENAI_MODEL_NAME or OPENAI_MODEL_NAME. |
 | `dataagent.openai.stream` | `true` | Stream model completions over SSE. Env: `DATAAGENT_OPENAI_STREAM`. Set `false` to compare non-streaming model requests when diagnosing upstream EOF; browser chat still uses SSE. |
+| `dataagent.web-search.api-key` | _(empty)_ | DeepSeek Search API key for the query agent's `web_search` (spec094). Env only: `DEEPSEEK_API_KEY`; empty disables the tool. Related: `dataagent.web-search.enabled` (`true`), `base-url` (`https://api.deepseek.com`), `timeout-seconds` (`20`), `max-results` (`5`). |
 | `dataagent.dashscope.api-key` | _(empty)_ | DashScope API key (fallback when no OpenAI key is set). Env: `DASHSCOPE_API_KEY`. |
 | `dataagent.dashscope.model-name` | `qwen3.8-max` | Current application.yml fallback; DATAAGENT_MODEL_NAME. |
 | `dataagent.agent.name` | `data-agent` | Used when auto-generating `~/.agentscope/dataagent/agentscope.json`. |
