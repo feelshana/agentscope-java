@@ -2,6 +2,7 @@ package io.agentscope.dataagent.dataset;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -38,7 +39,7 @@ class SqlWindowAuditTest {
                                 new FactQueryWindowEntity(
                                         "w", "g", "a", "a", "[\"t\"]", "LIMITED", 30, "alice")));
         when(repository.findByGroupId("empty")).thenReturn(List.of());
-        when(gate.check(anyString(), anyList()))
+        when(gate.check(anyString(), anyList(), any()))
                 .thenReturn(
                         new SqlWindowGate.Decision(
                                 true,
@@ -56,7 +57,7 @@ class SqlWindowAuditTest {
             policy.requireAllowed(ctx, "g", sql, "run_sql");
             policy.requireAllowed(ctx, "g", sql, "wren_cli memory store");
             policy.requireAllowed(ctx, "empty", "SELECT 1", "run_sql");
-            when(gate.check(anyString(), anyList()))
+            when(gate.check(anyString(), anyList(), any()))
                     .thenReturn(
                             new SqlWindowGate.Decision(
                                     false,

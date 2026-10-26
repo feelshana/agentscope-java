@@ -416,7 +416,9 @@ public class FieldScreeningService {
     List<ColumnSchema> suggest(DatasetEntity d, List<ColumnSchema> cols) {
         Map<String, String[]> roles = Map.of();
         try {
-            Model model = models == null ? null : models.getIfAvailable();
+            Model model =
+                    io.agentscope.dataagent.runtime.model.SwitchingModel.forCall(
+                            models == null ? null : models.getIfAvailable(), null);
             if (model != null) roles = parse(ask(model, d, cols));
         } catch (Exception e) {
             log.warn(

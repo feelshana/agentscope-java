@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { login, saveToken } from '../api/auth';
+import { getEntryOptions, login, saveToken } from '../api/auth';
+import BiEntryPage from './BiEntryPage';
 
 /**
  * Split-brand login: a deep-blue gradient brand pane (product name, tagline, capability bullets)
@@ -29,6 +30,7 @@ export default function LoginPage() {
     }
   }
 
+  if (!getEntryOptions().passwordLoginEnabled) return <BiEntryPage receive={false} />;
   return (
     <div style={{ minHeight: '100vh', display: 'flex', background: 'var(--da-app-bg)' }}>
       <div className="da-brandpane">

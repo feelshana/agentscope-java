@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>数据分析智能体 · 分析云</title>
+  <link rel="stylesheet" href="./bi-simulator.css">
+  <script type="module" src="./bi-simulator.mjs"></script>
+</head>
+<body data-page="entry" class="bi-entry-body">
+  <header class="bi-header">
+    <a class="bi-brand" href="./bi-simulator.html"><span class="bi-logo" aria-hidden="true">▥</span><strong>红海数据中台</strong><span class="bi-env">数据分析智能体</span></a>
+    <div class="bi-account"><label for="bi-user">当前用户</label><select id="bi-user" disabled aria-label="当前用户"></select><button class="bi-reenter" id="bi-reenter" disabled>重新进入</button></div>
+  </header>
+  <div class="bi-entry-status"><a href="./bi-simulator.html">← 返回工作台</a><span id="bi-status" role="status">正在准备登录…</span></div>
+  <div id="bi-error" class="bi-error bi-entry-error" role="alert" hidden></div>
+  <main class="bi-frame-host" id="bi-frame-host" aria-label="DataAgent页面"></main>
+</body>
+</html>

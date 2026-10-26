@@ -82,7 +82,7 @@ dataagent 为每位数据分析师提供专属的数据 Agent，核心流程是*
 - `web/DataAgentApp.java` — `@SpringBootApplication(scanBasePackages = "io.agentscope.dataagent")`，仅启动类，无装配逻辑。
 - `web/config/DataAgentConfig.java` — 全部 Spring 装配的核心。
 
-### 2.2 模型装配（优先级从高到低）
+### 2.2 模型装配与管理员选择
 
 `DataAgentConfig` 中：
 
@@ -90,6 +90,8 @@ dataagent 为每位数据分析师提供专属的数据 Agent，核心流程是*
 2. `dataagent.openai.api-key` 非空 → 创建 `OpenAIChatModel`（任意 OpenAI 兼容端点：DeepSeek/vLLM/one-api/DashScope 兼容模式），默认关闭 thinking；
 3. 否则 `dataagent.dashscope.api-key` 非空 → 创建 `DashScopeChatModel`；
 4. 都没有 → 应用照常启动，但聊天端点返回「未配置模型」错误（`ChatController.NO_MODEL_MESSAGE`）。
+
+上述顺序决定启动配置源。`ManagedModelFactory` 支持 OpenAI 兼容、DeepSeek 和 DashScope 连接；全局管理员通过 `AdminModelServiceController` 保存、测试并手动激活连接，普通用户不可访问。`ModelServiceRegistry` 将加密配置与激活版本存平台库，`SwitchingModel#onAgent` 为每轮固定快照；窗口检查等独立订阅经 `SwitchingModel#forCall` 复用该轮快照，新轮次或独立后台任务读取最新激活服务。没有故障自动切公网，失败不静默改用启动配置。
 
 注意：Model 注入采用 `@Bean` 方法参数注入（非字段 `@Autowired`），避免与本类中 Model Bean 定义的循环依赖。
 
@@ -120,7 +122,7 @@ dataagent 为每位数据分析师提供专属的数据 Agent，核心流程是*
    - middleware: 主 data-agent 使用 WrenQueryContextMiddleware 注入本轮授权发布工程目录；
      modeling-agent 使用 WrenProjectContextMiddleware 注入单库工程身份与资料位置。
      DataDynamicContextMiddleware 仅为非主问数兼容装配保留，不能恢复平台语义路由。
-   - stateStore: AgentStateStore（默认 InMemoryAgentStateStore；生产应提供分布式实现）
+   - stateStore: AgentStateConfig 选取框架 MySQL 状态存储；H2 使用持久 JSON 文件
    - filesystem: DockerFilesystemSpec(IsolationScope.USER)，镜像 dataagent.sandbox.image
      —— 仅问数 agent；sandboxlessAgents（当前 = modeling-agent）显式设 LocalFilesystemSpec +
      GroupScopedMemoryNamespace（specs/029、ADR 0039：长时记忆按知识库分域——单库对话
@@ -581,9 +583,9 @@ ADR 0078：`ChatController#stream/send` 在问数执行前经 `ChatCapacity#exec
 
 ### 7.2 会话状态持久化
 
-- 对话上下文：每轮结束由 ReActAgent 写入 `AgentStateStore`（默认 `InMemoryAgentStateStore`；
-  生产应提供分布式实现，见 `DataAgentConfig` 注释与 `dataagent.session.redis.*`）。建模 HITL 的
+- 对话上下文：每轮结束由 ReActAgent 写入框架 `AgentStateStore`。`AgentStateConfig` 在 MySQL 使用平台库 `dataagent_agent_state`，生产缺表或身份列非 binary 排序规则时拒绝启动；H2 使用实际 HOME 下按数据库 URL 摘要隔离的 JSON 文件。自定义 Bean 可替换默认存储，Redis 协调不是默认状态存储。建模 HITL 的
   `replyId` 和 `ToolCallState.ASKING` 同样保存在该状态中，刷新后由 session 探测接口恢复卡片。
+- 重置/删除：`SessionAgentManager` 清理框架状态，展示历史不能替代 Agent 上下文；重启时必须保留匹配的平台库、持久 HOME、工作区、附件和模型主密钥。
 - 会话元数据：`SessionStore` 落平台库 `session_registry` 表（JPA；网关启动时经 `restorePersistedMainSessions` 恢复 MAIN 会话路由）。
 - 长会话控制：toolResultEviction（4000 字符驱逐大结果，run_python 豁免）+ compaction（80 触发/保留 20）。
 - 斜杠命令：`/new`（新 conversationId）、`/reset`（清当前会话历史）、`/identity`、`/dock_<channel> <id>`（身份链接）。
@@ -691,7 +693,7 @@ manifest 尚不存在时（首次升级到该策略）执行一次性「采纳�
 
 `KnowledgeBaseAccessService#requireQuery/requireManage` 统一 QUERY/使用与 MANAGE/管理权限；创建者和当前全局管理员拥有管理权限。列表先按 ACL 过滤再分页，成员变更与审计同事务提交。QUERY 只能获取查询卡片和调用已发布工程，草稿、原始数据预览、建模、发布、问答对管理及成员管理需要 MANAGE。
 
-`ConversationScopeRegistry` 按用户和会话持久化最近选择，并按用户消息保存实际范围快照。`ChatController#resolveGroupScope` 支持普通问答零/单/多/全选，建模保持单库；`ChatTurnScope#accept` 在框架会话锁内复核并接受范围。`WrenQueryAccess` 查询共享库而不替换操作者；官方 MCP 调用与工具发现经 `WrenInstanceRegistry#callAuthorized/listToolsAuthorized` 在排队结束后再次授权。
+`ConversationScopeRegistry` 按用户和会话持久化最近选择，并按用户消息保存实际范围快照。`ChatController#resolveGroupScope` 限定普通问答零/单库、建模单库；多库或全选拒绝（普通接口 400，SSE 返回 error 帧），历史多库必须重新选择，零库对话不提供 Wren 工具；`ChatTurnScope#accept` 在框架会话锁内复核并接受范围。`WrenQueryAccess` 查询共享库而不替换操作者；官方 MCP 调用与工具发现经 `WrenInstanceRegistry#callAuthorized/listToolsAuthorized` 在排队结束后再次授权。
 
 知识库模型和数据归创建者，会话、历史、沙箱、附件及反馈状态归操作者。点赞 SQL 样例进入该库的官方 memory，保存和索引通过 `WrenPublishedProject#locked` 按知识库串行执行；不把草稿混入已发布查询工程。当前官方 Wren 建模、问数语义边界不变。
 
@@ -738,6 +740,8 @@ React 18 + TypeScript + Vite SPA（`frontend/`），构建产物进 `classpath:/
 
 `SemanticModelingPage` 组织建模对话、资料、语义模型三区（spec092 §7）。建模对话页以对话为中心：每轮回复下方列出 AI 建模结果，待确定的口径以对话内卡片出现，右侧试问展示助手写出的 SQL 与口径，用户核对后确认（不自动试运行、不查询数据），底部草稿栏统一发布；确认、改写或归档问题时，修订号在工作区锁内递增，发布在工作区锁内读取要覆盖的修订号（`MdlQuestionStore#locked`、`MdlPublishService#doPublishLocked`），避免发布期间确认的变更留下"待发布"却无差异可发布；若仍出现该状态，草稿栏提供"重新发布"。文档修改后自动排队一条文档更新请求。助手按官方技能直接修改草稿，发布为显式操作，官方工程校验失败保留旧快照。问数始终使用已发布工程。
 
+`SqlQaExampleService` 保留独立 SQL 示例的结构化编辑和点赞索引失败回滚；草稿修改/删除在工作区锁内递增修订号。已有 `knowledge/questions/<id>.yml` 的 SQL 是确认结果投影，只读展示并提示回到问题列表修正/移除，禁止旧接口绕过版本检查与重新确认。
+
 语义资产展示普通/ref_sql 模型、关系、视图、Cube、knowledge 及 MDL/工程快照；SQL 问答对区由 SqlQaExamplesPanel 管理建模与点赞来源，修改/删除遵循来源生命周期，详情见第 4.2 节及 ADR 0075/0076。工具返回通过 WrenToolResult 中文结构化展示，原文可查看。
 
 ### 历史引导界面与兼容接口（ADR 0050—0055）
@@ -777,9 +781,11 @@ spec 045 / ADR 0055：无已登记问题、无待确认原生 HITL 时，页面�
 | `dataagent.workspace` | JVM cwd | 运行态工作目录 |
 | `dataagent.agent.name` | `data-agent` | 自动生成 `agentscope.json` 时的 agent 名；系统提示词默认用内置常量，覆盖用 `DATAAGENT_AGENT_SYS_PROMPT`（见 4.5） |
 | `dataagent.agent.subagents-enabled` | false | 子代理编排（harness `agent_spawn` / `agent_send` / `task_*`）。关闭可省下每轮固定约 6.2k 字符的 `## Subagents` 提示词段与相应工具 schema；**不影响网关、会话路由与聊天**（`buildSubagentEntries` 不读该开关），内置定义也不删（ADR 0009） |
-| `dataagent.openai.*` | DeepSeek 默认值 | 主模型（任意 OpenAI 兼容端点） |
+| `dataagent.openai.*` | DeepSeek 地址/名称，Key 为空 | 启动模型（任意 OpenAI 兼容端点）；页面激活连接后以管理员选择为准 |
 | `dataagent.openai.stream` | `true` | `DATAAGENT_OPENAI_STREAM` 可切换模型流式/非流式请求以定位上游 EOF；前端 SSE 协议不变，关闭流式不表示连接问题已解决 |
-| `dataagent.dashscope.*` | — | 兜底模型 |
+| `dataagent.dashscope.*` | Key 为空 | 没有 OpenAI 启动 Key 时的启动配置源；不是运行时故障回退 |
+| `dataagent.model-services.encryption-key` | 空 | `DATAAGENT_MODEL_ENCRYPTION_KEY`：独立 32 字节 Base64 主密钥；未提供时在实际 HOME 自动生成 model-services.key，必须与库匹配备份 |
+| `dataagent.auth.password-login-enabled` / `auth.bi.enabled` / `auth.bi.shared-key` | true / false / 空 | `DATAAGENT_PASSWORD_LOGIN_ENABLED`、`DATAAGENT_BI_LOGIN_ENABLED`、`DATAAGENT_BI_SHARED_KEY`；prod 强制关闭密码、启用 BI，BI 与 JWT 采用独立密钥 |
 | `dataagent.sandbox.image` | `agentscope/dataagent-sandbox:latest` | 沙箱镜像（`docker/sandbox.Dockerfile` 构建） |
 | `dataagent.sandbox.max-containers` | `16` | 单进程容器上限，满额驱逐空闲实例；环境变量 DATAAGENT_SANDBOX_MAX_CONTAINERS |
 | `dataagent.upload.max-file-size` / `max-selection-size` / `max-files` | `50MB` / `100MB` / `10` | 上传单文件、整批及数量上限 |
@@ -819,7 +825,7 @@ java -jar target/agentscope-dataagent-*-exec.jar   # → http://localhost:8080
 
 H2 种子账号：`bob/bob`、`alice/alice`（`data-h2.sql`，幂等 MERGE）。
 
-根 pom.xml 的编译基线为 Java 17，本项目不依赖旧多模块 `-pl agentscope-examples/...` 路径。框架改动后先安装配套 harness/OpenAI 扩展，再构建本项目；默认 Maven 流程会构建前端，已有前端构建时可使用 skip.npm/skip.installnodenpm 参数跳过。保留原 Boot exec JAR，同时按 ADR0080 生成 dataagent-<version>.tar.gz，包含 bin/conf/lib。公共默认配置及 h2 profile 保留；私有 dev/prod 的 YAML/properties 同时由 Maven resources 和 jar 插件排除，分发仅带无凭据样例。dataagent.sh 通过共享启停锁、PID/启动时间/JAR 身份管理单实例，启动前用 check-wren.py 校验固定 Wren 依赖，再等待 HTTP 健康；停止不依赖 Wren。数据位于版本父目录 data/，日志位于当前版本 log/。发布默认重建前端，可选 frontend/build.ps1 只是提前构建包装。步骤及脚本环境变量见 [单机发布](docs/guides/single-host-release.md)。部署步骤见 [并发与发布说明](docs/guides/platform-concurrency-and-release.md)。
+根 pom.xml 的编译基线为 Java 17，本项目不依赖旧多模块 `-pl agentscope-examples/...` 路径。框架改动后先安装配套 harness/OpenAI 扩展，再构建本项目；默认 Maven 流程会构建前端，已有前端构建时可使用 skip.npm/skip.installnodenpm 参数跳过。保留原 Boot exec JAR，同时按 ADR0080 生成 dataagent-<version>.tar.gz，包含 bin/conf/lib。公共默认配置及 h2 profile 保留；私有 dev/prod 的 YAML/properties 同时由 Maven resources 和 jar 插件排除，分发仅带无凭据样例。dataagent.sh 通过共享启停锁、PID/启动时间/JAR 身份管理单实例，启动前用 check-wren.py 校验固定 Wren 依赖，再等待 HTTP 健康；停止不依赖 Wren。数据位于版本父目录 data/，日志位于当前版本 logs/。发布默认重建前端，可选 frontend/build.ps1 只是提前构建包装。步骤及脚本环境变量见 [单机发布](docs/guides/single-host-release.md)。部署步骤见 [并发与发布说明](docs/guides/platform-concurrency-and-release.md)。
 
 SQL 演示账号初始化与 Java 管理员初始化是独立开关；`dataagent.seed-demo-users` 默认 false，不代表禁用 SQL 初始化。生产环境须明确设置初始化策略和数据库配置，不能根据旧文档假设默认 H2 或自动创建管理员。
 

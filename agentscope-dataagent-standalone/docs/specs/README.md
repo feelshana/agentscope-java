@@ -109,3 +109,5 @@ spec 是一页纸的需求与验收标准，写代码之前先写（模板：[00
 | [087](done/087-mcp-recall-warmup-and-preparation-status.md) | spec087：实际MCP召回预热与准备状态 | — |
 | [088](done/088-query-date-clarification-and-modeling-samples.md) | spec088：问数日期优先澄清与建模样例约束 | — |
 | [089](done/089-source-tiered-probing-and-cli-contract.md) | spec089：按表来源分层探查、门禁明细为准与 CLI 契约对齐 | — |
+
+| [094](done/094-native-boundary-engineering-integration.md) | 原生建模问数与工程能力整合 | 已实施并完成隔离组合验收，2026-10-26 |

@@ -1,10 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import ts from 'typescript';
-const source = readFileSync(new URL('../src/utils/factWindowSetup.ts', import.meta.url), 'utf8');
-const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } });
-const { factWindowSetup } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
+import { factWindowSetup } from '../src/utils/factWindowSetup.ts';
 const table = (id, tableRole, mode = null, timeColumn = 'date') => ({ datasetId: id, tableRole, mode, timeColumn, temporalColumns: ['date'] });
 test('dated dimensions never open the time window dialog', () => {
   assert.deepEqual(factWindowSetup([table('customer', 'DIMENSION')], true), { facts: [], unknown: [], ready: true });

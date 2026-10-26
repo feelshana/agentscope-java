@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { ACTIVE_AGENT_ID } from '../api/activeAgent';
-import { getToken } from '../api/auth';
+import { getToken, isAdmin } from '../api/auth';
 import { InboxEntry, deleteSession, inboxPage } from '../api/sessions';
 import Icon, { IconName } from './Icon';
 
@@ -21,13 +20,11 @@ const NAV_ITEMS: UtilityItem[] = [
   { label: '例行任务', path: '/configure/scheduled-tasks', icon: 'clock' },
 ];
 
-/** Overflow menu items (TC-style 更多); currently only Workspace. */
-const MORE_ITEMS: UtilityItem[] = [
-  { label: '工作区', path: '/workspace', icon: 'folder' },
-];
-
 function decodeJwt(token: string): Record<string, unknown> {
-  try { return JSON.parse(atob(token.split('.')[1])); } catch { return {}; }
+  try {
+    const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(payload), c => c.charCodeAt(0))));
+  } catch { return {}; }
 }
 
 function getUsername(): string {
@@ -83,29 +80,6 @@ export default function SessionsSidebar({ refreshKey, collapsed = false, onToggl
   const [entries, setEntries] = useState<InboxEntry[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [moreOpen, setMoreOpen] = useState(false);
-  const moreButton = useRef<HTMLButtonElement>(null);
-  const moreMenu = useRef<HTMLDivElement>(null);
-  const [morePosition, setMorePosition] = useState({ left: 0, top: 0 });
-  useEffect(() => {
-    if (!moreOpen) return;
-    const outside = (e: PointerEvent) => {
-      if (!moreButton.current?.contains(e.target as Node) && !moreMenu.current?.contains(e.target as Node)) setMoreOpen(false);
-    };
-    const escape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setMoreOpen(false); moreButton.current?.focus(); }
-    };
-    const close = () => setMoreOpen(false);
-    document.addEventListener('pointerdown', outside);
-    document.addEventListener('keydown', escape);
-    window.addEventListener('resize', close);
-    return () => {
-      document.removeEventListener('pointerdown', outside);
-      document.removeEventListener('keydown', escape);
-      window.removeEventListener('resize', close);
-    };
-  }, [moreOpen]);
-  useEffect(() => { setMoreOpen(false); }, [location.pathname]);
   const [retryNonce, setRetryNonce] = useState(0);
   const [batchMode, setBatchMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -247,6 +221,7 @@ export default function SessionsSidebar({ refreshKey, collapsed = false, onToggl
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '8px 0' }}>
           {rail('新建对话', 'plus', location.pathname === '/chat' && !activeKey, handleNewChat)}
           {NAV_ITEMS.map(item => rail(item.label, item.icon, location.pathname.startsWith(item.path), () => navigate(item.path)))}
+          {rail('更多', 'moreHorizontal', ['/more', '/workspace', '/admin/models'].includes(location.pathname), () => navigate('/more'))}
         </div>
         <span style={{ flex: 1 }} />
         <button title="展开侧边栏" aria-label="展开侧边栏" className="da-navitem" style={{ ...S.railItem, margin: '0 auto 8px' }} onClick={onToggle}>»</button>
@@ -255,87 +230,35 @@ export default function SessionsSidebar({ refreshKey, collapsed = false, onToggl
   }
 
   return (
-    <div style={S.root}>
-      <div style={S.brand}>
-        <span className="da-logo">DA</span>
+    <div className="app-rail">
+      <div className="rail-brand">
+        <span className="rail-mark">DA</span>
         <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          <span style={S.brandName}>红海DataAgent</span>
-          <span style={S.brandTag}>企业级数据智能体</span>
+          <span className="rail-brand-name">红海DataAgent</span>
+          <span className="rail-brand-tag">企业级数据智能体</span>
         </span>
       </div>
 
-      <div
-        style={{
-          padding: '8px 10px',
-          borderBottom: '1px solid var(--da-border)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 2,
-          flexShrink: 0,
-          position: 'relative',
-        }}
-      >
-        <button
-          onClick={handleNewChat}
-          className={
-            location.pathname === '/chat' && !activeKey
-              ? 'da-navitem da-navitem-active'
-              : 'da-navitem'
-          }
-        >
-          <Icon name="plus" /> 新建对话
-        </button>
+      <nav className="rail-nav" aria-label="主导航">
+        <button onClick={handleNewChat} className="rail-nav-item rail-new-chat"><Icon name="plus" />新建对话</button>
         {NAV_ITEMS.map(item => {
-          const active = location.pathname.startsWith(item.path);
-          return (
-            <button
-              key={item.path}
-              onClick={() => navigate(item.path)}
-              className={active ? 'da-navitem da-navitem-active' : 'da-navitem'}
-            >
-              <Icon name={item.icon} />
-              {item.label}
-            </button>
-          );
+          const active = location.pathname.startsWith(item.path)
+            || (item.path === '/configure/datasets' && location.pathname === '/configure/datasources');
+          return <button key={item.path} onClick={() => navigate(item.path)} aria-current={active ? 'page' : undefined}
+            className={`rail-nav-item${active ? ' is-active' : ''}`}><Icon name={item.icon} />{item.label}</button>;
         })}
-        <button
-          ref={moreButton}
-          aria-expanded={moreOpen}
-          aria-controls="sidebar-more-menu"
-          onClick={() => {
-            const rect = moreButton.current?.getBoundingClientRect();
-            if (rect) setMorePosition({ left: Math.min(rect.right + 12, window.innerWidth - 196), top: Math.max(8, Math.min(rect.top, window.innerHeight - 68)) });
-            setMoreOpen(o => !o);
-          }}
-          className={moreOpen ? 'da-navitem da-navitem-active' : 'da-navitem'}
-        >
-          <Icon name="moreHorizontal" /> 更多
-        </button>
-        {moreOpen && createPortal(
-          <div ref={moreMenu} id="sidebar-more-menu" aria-label="更多选项" style={{ ...S.moreMenu, ...morePosition }}>
-            {MORE_ITEMS.map(m => (
-              <button
-                key={m.path}
-                className="da-navitem"
-                onClick={() => {
-                  setMoreOpen(false);
-                  navigate(m.path);
-                }}
-              >
-                <Icon name={m.icon} /> {m.label}
-              </button>
-            ))}
-          </div>, document.body
-        )}
-      </div>
+        <button className={`rail-nav-item${['/more', '/workspace', '/admin/models'].includes(location.pathname) ? ' is-active' : ''}`}
+          aria-current={['/more', '/workspace', '/admin/models'].includes(location.pathname) ? 'page' : undefined} onClick={() => navigate('/more')}><Icon name="moreHorizontal" />更多</button>
+      </nav>
 
-      <div style={S.scroll} onScroll={e => {
+      <div className="rail-history" onScroll={e => {
         const el = e.currentTarget;
         if (!pageError && el.scrollHeight - el.scrollTop - el.clientHeight < 120) void loadMore();
       }}>
+        {entries.length === 0 && <div className="rail-history-label">历史会话</div>}
         {entries.length > 0 && (
-          <div style={S.listHeader}>
-            <span style={S.listHeaderTitle}>历史会话</span>
+          <div className="rail-history-head">
+            <span className="rail-history-label">历史会话</span>
             {batchMode ? (
               <>
                 <button
@@ -400,8 +323,8 @@ export default function SessionsSidebar({ refreshKey, collapsed = false, onToggl
           const list = grouped[b];
           if (list.length === 0) return null;
           return (
-            <div key={b} style={S.group}>
-              <div style={S.groupLabel}>{BUCKET_LABEL[b]}</div>
+            <div key={b} className="rail-history-group">
+              <div className="rail-history-day">{BUCKET_LABEL[b]}</div>
               {list.map(e => {
                 const isActive = entryNavKey(e) === activeKey && location.pathname === '/chat';
                 const isSelected = selected.has(entryNavKey(e));
@@ -425,7 +348,7 @@ export default function SessionsSidebar({ refreshKey, collapsed = false, onToggl
           onClick={() => void loadMore()}>{loadingMore ? '加载中…' : pageError ?? '加载更多'}</button>}
       </div>
 
-      <div style={S.footer}>
+      <div className="rail-footer">
         <UserMenu username={getUsername()} />
         {onToggle && <button title="收起侧边栏" aria-label="收起侧边栏" className="da-btn da-btn-ghost da-btn-sm" style={{ marginLeft: 'auto' }} onClick={onToggle}>«</button>}
       </div>
@@ -444,101 +367,35 @@ interface RowProps {
 }
 
 function SessionRow({ entry, active, batchMode, selected, onOpen, onDelete, onToggleSelect }: RowProps) {
-  return (
-    <div
-      onClick={batchMode ? onToggleSelect : onOpen}
-      className={
-        'da-row' +
-        (active ? ' da-row-active' : '') +
-        (entry.unread && !active ? ' da-row-unread' : '') +
-        (batchMode && selected ? ' da-row-selected' : '')
-      }
-      title={`${entry.title ?? entry.label ?? '新对话'} · ${relTime(entry.lastActivityMs)}`}
-    >
-      {batchMode && (
-        <span style={S.checkbox}>
-          <input
-            type="checkbox"
-            checked={selected}
-            onChange={onToggleSelect}
-            onClick={e => e.stopPropagation()}
-          />
-        </span>
-      )}
-      <div style={S.rowMain}>
-        <div style={S.rowTitle}>{entry.title ?? entry.label ?? '新对话'}</div>
-      </div>
-      <div style={S.rowMeta}>
-        {!batchMode && (
-          <button
-            onClick={onDelete}
-            title="删除对话"
-            className="da-btn da-btn-ghost da-btn-sm da-session-delete"
-          >×</button>
-        )}
-      </div>
-    </div>
-  );
+  const title = entry.title ?? entry.label ?? '新对话';
+  return <div className={`rail-session${active ? ' is-active' : ''}${selected && batchMode ? ' is-selected' : ''}${entry.unread && !active ? ' is-unread' : ''}`}>
+    {batchMode && <input type="checkbox" aria-label={`选择对话：${title}`} checked={selected} onChange={onToggleSelect} />}
+    <button className="rail-session-open" title={`${title} · ${relTime(entry.lastActivityMs)}`} aria-current={active ? 'page' : undefined}
+      onClick={batchMode ? onToggleSelect : onOpen}>{title}</button>
+    {!batchMode && <button className="rail-session-delete" onClick={onDelete} aria-label={`删除对话：${title}`}><Icon name="trash" size="sm" /></button>}
+  </div>;
 }
 
 function UserMenu({ username }: { username: string }) {
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-
+  const trigger = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    if (open) document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
+    if (!open) return;
+    const outside = (event: PointerEvent) => { if (!ref.current?.contains(event.target as Node)) setOpen(false); };
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { setOpen(false); trigger.current?.focus(); } };
+    document.addEventListener('pointerdown', outside); document.addEventListener('keydown', escape);
+    return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); };
   }, [open]);
-
   useEffect(() => { setOpen(false); }, [location.pathname]);
-
-  const initial = username.charAt(0).toUpperCase() || '用';
-
-  return (
-    <div ref={ref} style={{ position: 'relative' as const }}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        type="button"
-        aria-label="查看当前用户"
-        aria-expanded={open}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 9,
-          maxWidth: '100%', minHeight: 36, padding: '0 6px 0 0',
-          background: 'var(--da-sidebar-bg)', border: 'none', borderRadius: 8,
-          cursor: 'pointer', color: 'var(--da-text)', fontSize: '0.88rem', fontWeight: 500,
-        }}
-      >
-        <div style={{
-          width: 28, height: 28, borderRadius: '50%',
-          background: 'var(--da-primary)',
-          color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: '0.78rem', fontWeight: 700, userSelect: 'none' as const,
-        }}>{initial}</div>
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {username || '用户'}
-        </span>
-      </button>
-
-      {open && (
-        <div style={{
-          position: 'absolute' as const, bottom: 'calc(100% + 6px)', left: 0,
-          minWidth: 120, maxWidth: 240,
-          background: 'var(--da-surface)',
-          border: '1px solid var(--da-border)', borderRadius: 10,
-          boxShadow: 'var(--da-shadow-pop)', padding: '10px 14px',
-          overflow: 'hidden', zIndex: 100,
-        }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--da-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {username || '用户'}
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  return <div ref={ref} className="rail-account">
+    <button ref={trigger} type="button" className="rail-account-button" onClick={() => setOpen(value => !value)} aria-label="查看当前用户" aria-expanded={open}>
+      <span className="rail-avatar">{username.charAt(0).toUpperCase() || '用'}</span>
+      <span className="rail-account-copy"><span>{username || '用户'}</span><small>{isAdmin() ? '全局管理员' : '用户'}</small></span>
+    </button>
+    {open && <div className="rail-account-popover" role="status">{username || '用户'}</div>}
+  </div>;
 }
 
 const S: Record<string, React.CSSProperties> = {
@@ -597,9 +454,6 @@ const S: Record<string, React.CSSProperties> = {
     background: 'transparent', border: 'none', cursor: 'pointer',
     color: 'var(--da-text-muted)', padding: '4px 6px', borderRadius: 6,
     display: 'inline-flex', alignItems: 'center',
-  },
-  checkbox: {
-    display: 'inline-flex', alignItems: 'center', flexShrink: 0, marginRight: 8,
   },
   muted: { padding: '8px 12px', fontSize: '0.9rem', color: 'var(--da-text-muted)' },
   error: { padding: '8px 12px', fontSize: '0.9rem', color: 'var(--da-danger)' },

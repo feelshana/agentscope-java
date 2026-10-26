@@ -75,21 +75,31 @@ spring:
 # Property prefix is `dataagent.*`. Env vars use `DATAAGENT_*`.
 # --------------------------------------------------------------------------
 dataagent:
+  model-services:
+    encryption-key: ${DATAAGENT_MODEL_ENCRYPTION_KEY:}
+
   # Uploaded Excel/CSV limits; the UI reads the same policy from the upload-policy endpoint.
   upload:
     max-file-size: 50MB
     max-selection-size: 100MB
     max-files: 10
-    max-rows: 100000
+    max-rows: 500000
     max-columns: 100
-    max-cells: 2000000
+    max-cells: 10000000
     concurrent-files: 8
   external-datasource:
     allowed-endpoints: ${DATAAGENT_EXTERNAL_DATASOURCE_ALLOWED_ENDPOINTS:}
 
   # JWT signing secret (>= 32 chars). MUST be overridden in production.
   jwt:
+    ttl-seconds: ${DATAAGENT_JWT_TTL_SECONDS:1800}
     secret: ${DATAAGENT_JWT_SECRET:dataagent-dev-secret-for-local-only-do-not-use-in-prod-2026}
+
+  auth:
+    password-login-enabled: ${DATAAGENT_PASSWORD_LOGIN_ENABLED:true}
+    bi:
+      enabled: ${DATAAGENT_BI_LOGIN_ENABLED:false}
+      shared-key: ${DATAAGENT_BI_SHARED_KEY:}
 
   # Working directory. If blank, defaults to the JVM's current working
   # directory. .agentscope/agentscope.json is read from (or auto-created in)
@@ -167,7 +177,7 @@ dataagent:
   openai:
     # Avoid cross-stream disconnects observed on shared HTTP/2 model connections.
     http-version: ${DATAAGENT_OPENAI_HTTP_VERSION:HTTP_1_1}
-    api-key: ${DATAAGENT_OPENAI_API_KEY:${OPENAI_API_KEY:sk-7708c665bc024a35bb6c5f1f1a7fc25f}}
+    api-key: ${DATAAGENT_OPENAI_API_KEY:${OPENAI_API_KEY:}}
     base-url: ${DATAAGENT_OPENAI_BASE_URL:${OPENAI_BASE_URL:https://api.deepseek.com}}
     model-name: ${DATAAGENT_OPENAI_MODEL_NAME:${OPENAI_MODEL_NAME:deepseek-flash}}
     stream: ${DATAAGENT_OPENAI_STREAM:true}
@@ -175,7 +185,7 @@ dataagent:
   # ---- DashScope model (fallback when no OpenAI key is configured) ----
   # Set DASHSCOPE_API_KEY env var or override api-key below.
   dashscope:
-    api-key: ${DASHSCOPE_API_KEY:sk-16fb25f43dfa6ba3f5372c61e048ac2653e00eb48a995377}
+    api-key: ${DASHSCOPE_API_KEY:}
     model-name: ${DATAAGENT_MODEL_NAME:qwen3.8-max}
     stream: true
     enable-thinking: false
@@ -202,10 +212,10 @@ dataagent:
     chatui:
       enabled: true
 
-  # ---- Distributed session backend (optional, required for HA) ----
-  # When enabled, RedisSession is auto-wired into SandboxDistributedOptions
-  # so multiple DataAgent replicas share session + sandbox state. Falls back
-  # to local file store when disabled.
+  # Conversation checkpoints automatically use the platform MySQL DataSource.
+  # H2 development uses the framework JSON file store under persistent user.home.
+  # The legacy Redis block below is not wired by the default state configuration;
+  # an explicit AgentStateStore bean may override the default. See ADR 0084.
   session:
     redis:
       enabled: false

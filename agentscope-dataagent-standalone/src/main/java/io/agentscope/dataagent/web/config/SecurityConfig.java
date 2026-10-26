@@ -65,15 +65,32 @@ public class SecurityConfig {
     public SecurityWebFilterChain securityWebFilterChain(
             ServerHttpSecurity http, JwtService jwtService) {
         return http.csrf(ServerHttpSecurity.CsrfSpec::disable)
+                .headers(
+                        headers ->
+                                headers.frameOptions(
+                                        frame ->
+                                                frame.mode(
+                                                        org.springframework.security.web.server
+                                                                .header
+                                                                .XFrameOptionsServerHttpHeadersWriter
+                                                                .Mode.SAMEORIGIN)))
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeExchange(
                         auth ->
-                                auth.pathMatchers(HttpMethod.POST, "/api/auth/login")
+                                auth.pathMatchers(HttpMethod.GET, "/api/auth/options")
+                                        .permitAll()
+                                        .pathMatchers(
+                                                HttpMethod.POST,
+                                                "/api/auth/login",
+                                                "/api/auth/bi-login")
                                         .permitAll()
                                         .pathMatchers("/actuator/health", "/actuator/info")
                                         .permitAll()
                                         .pathMatchers("/api/webhook/**")
                                         .permitAll()
+                                        .pathMatchers(
+                                                "/api/scheduled-tasks", "/api/scheduled-tasks/**")
+                                        .denyAll()
                                         .pathMatchers("/api/**")
                                         .authenticated()
                                         .anyExchange()
@@ -112,6 +129,9 @@ public class SecurityConfig {
 
         @Override
         public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
+            if (exchange.getRequest().getPath().value().startsWith("/api/auth/")) {
+                exchange.getResponse().getHeaders().setCacheControl("no-store");
+            }
             String header = exchange.getRequest().getHeaders().getFirst("Authorization");
             String token = null;
             if (header != null && header.startsWith("Bearer ")) {

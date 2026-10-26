@@ -8,6 +8,25 @@
     <baseDirectory>${release.name}</baseDirectory>
     <fileSets>
         <fileSet>
+            <directory>${project.basedir}/docs</directory>
+            <outputDirectory>docs</outputDirectory>
+            <includes>
+                <include>guides/**/*.md</include>
+                <include>integration/**/*.md</include>
+                <include>integration/*.mjs</include>
+                <include>integration/*.html</include>
+                <include>integration/*.css</include>
+                <include>integration/*.nginx.conf</include>
+                <include>integration/*.example.json</include>
+                <include>migrations/*.sql</include>
+                <include>migrations/README.md</include>
+                <include>adr/0114-native-query-and-engineering-integration.md</include>
+                <include>specs/done/094-native-boundary-engineering-integration.md</include>
+            </includes>
+            <fileMode>0644</fileMode>
+            <lineEnding>unix</lineEnding>
+        </fileSet>
+        <fileSet>
             <directory>${project.basedir}/src/main/distribution/conf</directory>
             <outputDirectory>conf</outputDirectory>
             <fileMode>0644</fileMode>
@@ -33,7 +52,7 @@
             <fileMode>0644</fileMode>
         </file>
         <file>
-            <source>${project.basedir}/docs/guides/single-host-release.md</source>
+            <source>${project.basedir}/src/main/distribution/README.md</source>
             <outputDirectory>/</outputDirectory>
             <destName>README.md</destName>
             <fileMode>0644</fileMode>

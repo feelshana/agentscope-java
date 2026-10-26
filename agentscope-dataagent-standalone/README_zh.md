@@ -328,3 +328,15 @@ mvn spotless:check
 - [spec 索引](docs/specs/README.md)：进行中与已完成的功能需求
 
 部署、单机发布与并发容量等运维说明见 [docs/guides/](docs/guides/)。
+
+## 当前工程配置 / Runtime administration
+
+当前问数仅支持单知识库；零库为普通对话，历史多库需重新选择。全局管理员在“更多 → 大模型服务”配置 OpenAI 兼容、DeepSeek、DashScope 并人工激活；页面激活后不必重启，新轮次使用新服务，在途轮次保持原快照，无自动故障回退。application 的模型项仍为未激活页面配置时的启动源。
+
+| 配置 | 默认与用途 |
+| --- | --- |
+| `dataagent.model-services.encryption-key` | `DATAAGENT_MODEL_ENCRYPTION_KEY`，空值时在实际 HOME 生成独立主密钥文件；需与平台库配套备份 |
+| `dataagent.auth.password-login-enabled` | `DATAAGENT_PASSWORD_LOGIN_ENABLED=true`；prod 强制关闭密码入口 |
+| `dataagent.auth.bi.enabled` / `shared-key` | `DATAAGENT_BI_LOGIN_ENABLED=false`、`DATAAGENT_BI_SHARED_KEY`；prod 启用 BI，独立于 JWT 密钥 |
+
+MySQL Agent 上下文保存于平台库 `dataagent_agent_state`；H2 使用实际 HOME 下按数据库隔离的 JSON 文件。需同时保留工作区、附件、数据库与模型主密钥。图表按操作者私有校验。生产首次建库和升级见[单机发布手册](docs/guides/single-host-release.md)；整合边界见[ADR0114](docs/adr/0114-native-query-and-engineering-integration.md)。

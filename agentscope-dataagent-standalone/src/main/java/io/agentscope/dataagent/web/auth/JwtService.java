@@ -42,13 +42,19 @@ import org.springframework.stereotype.Service;
 @Service
 public class JwtService {
 
-    private static final long TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1_000L; // 7 days
     private static final String DEV_DEFAULT_SECRET =
             "dataagent-default-dev-secret-change-in-production-32chars";
 
     private final SecretKey signingKey;
+    private final long ttlMillis;
 
-    public JwtService(@Value("${dataagent.jwt.secret}") String secret) {
+    @org.springframework.beans.factory.annotation.Autowired
+    public JwtService(
+            @Value("${dataagent.jwt.secret}") String secret,
+            @Value("${dataagent.jwt.ttl-seconds:1800}") long ttlSeconds) {
+        if (ttlSeconds <= 0 || ttlSeconds > 604800)
+            throw new IllegalArgumentException("JWT有效期需为1到604800秒");
+        ttlMillis = ttlSeconds * 1000;
         if (secret == null || secret.isBlank() || DEV_DEFAULT_SECRET.equals(secret)) {
             throw new IllegalStateException(
                     "JWT secret 未配置，请在 application.yml 中设置 dataagent.jwt.secret（>=32字符）");
@@ -71,7 +77,7 @@ public class JwtService {
                 .claim("username", username)
                 .claim("roles", roles)
                 .issuedAt(new Date(now))
-                .expiration(new Date(now + TOKEN_TTL_MS))
+                .expiration(new Date(now + ttlMillis))
                 .signWith(signingKey)
                 .compact();
     }

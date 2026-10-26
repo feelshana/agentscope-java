@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>分析云 · 数据分析智能体体验</title>
+  <link rel="stylesheet" href="./bi-simulator.css">
+  <script type="module" src="./bi-simulator.mjs"></script>
+</head>
+<body data-page="portal">
+  <header class="bi-header">
+    <a class="bi-brand" href="./bi-simulator.html"><span class="bi-logo" aria-hidden="true">▥</span><strong>红海数据中台</strong><span class="bi-env">模拟工作台</span></a>
+    <div class="bi-account"><label for="bi-user">当前用户</label><select id="bi-user" disabled aria-label="当前用户"></select></div>
+  </header>
+  <main class="bi-portal">
+    <section class="bi-welcome"><p class="bi-date" id="bi-date"></p><h1>让数据，回答你的问题。</h1><p>从熟悉的工作台出发，开始一次数据分析。</p></section>
+    <div id="bi-error" class="bi-error" role="alert" hidden></div>
+    <section class="bi-workspace" aria-labelledby="bi-entries-title">
+      <div class="bi-section-heading"><h2 id="bi-entries-title">快捷入口</h2><span>以当前用户身份打开</span></div>
+      <a id="bi-launch" class="bi-launch" href="./bi-simulator-entry.html" target="_blank" rel="noopener" aria-disabled="true">
+        <span class="bi-agent-icon" aria-hidden="true"><svg viewBox="0 0 48 48" fill="none"><path d="M12 34V24m12 10V14m12 20V20" stroke="currentColor" stroke-width="5" stroke-linecap="round"/><path d="M9 40h30" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity=".45"/></svg></span>
+        <span class="bi-launch-copy"><strong>数据分析智能体</strong><span>连接知识库，用自然语言查询、分析与可视化。</span><span class="bi-launch-action">进入红海DataAgent <span aria-hidden="true">↗</span></span></span>
+      </a>
+      <p class="bi-entry-note">将在新页面打开，自动使用当前用户身份进入。</p>
+    </section>
+    <section class="bi-guide" aria-labelledby="bi-guide-title"><h2 id="bi-guide-title">开始体验</h2><ol><li><span>01</span><div><strong>选择测试身份</strong><p>右上角切换用户，体验各自的历史与知识库权限。</p></div></li><li><span>02</span><div><strong>点击智能体入口</strong><p>自动完成免登，进入对话页面。</p></div></li><li><span>03</span><div><strong>从一个问题开始</strong><p>普通聊天，或选择知识库查询数据、创建分析图表。</p></div></li></ol></section>
+    <details class="bi-custom"><summary>使用其他测试用户名</summary><form id="bi-add-user"><label for="bi-username">用户名</label><input id="bi-username" maxlength="128" autocomplete="off" placeholder="例如 bi_sim_new_user"><button type="submit">切换身份</button><p>新用户首次进入后自动创建为普通用户，权限以DataAgent中的设置为准。</p></form></details>
+    <footer class="bi-footer">本页面用于联调体验，接入真实DataAgent服务。测试账号与数据会保留。</footer>
+  </main>
+</body>
+</html>

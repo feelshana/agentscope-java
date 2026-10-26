@@ -17,6 +17,49 @@ import org.springframework.beans.factory.ObjectProvider;
 import reactor.core.publisher.Flux;
 
 class SqlWindowGateTest {
+    @Test
+    void independentGateSubscriptionUsesTheParentTurnsModelSnapshot() {
+        var registry = mock(io.agentscope.dataagent.runtime.model.ModelServiceRegistry.class);
+        Model parent = mock(Model.class);
+        Model newlyActivated = mock(Model.class);
+        Model startup = mock(Model.class);
+        var active =
+                new io.agentscope.dataagent.runtime.model.ModelServiceRegistry.Snapshot(
+                        "new", 2, "new", newlyActivated, null);
+        when(registry.capture(startup)).thenReturn(active);
+        var switching = new io.agentscope.dataagent.runtime.model.SwitchingModel(registry, startup);
+        var context = io.agentscope.core.agent.RuntimeContext.builder().userId("user").build();
+        context.put(
+                io.agentscope.dataagent.runtime.model.ModelServiceRegistry.Snapshot.class,
+                new io.agentscope.dataagent.runtime.model.ModelServiceRegistry.Snapshot(
+                        "parent", 1, "parent", parent, null));
+        ObjectProvider<Model> provider = mock(ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(switching);
+        when(parent.stream(anyList(), anyList(), isNull()))
+                .thenReturn(
+                        Flux.just(
+                                ChatResponse.builder()
+                                        .content(
+                                                List.of(
+                                                        TextBlock.builder()
+                                                                .text(
+                                                                        "{\"allowed\":true,\"tables\":[{\"table\":\"orders\",\"timeColumn\":\"day\",\"hasCondition\":true,\"windowDays\":7,\"maxWindowDays\":30}],\"reason\":\"符合\"}")
+                                                                .build()))
+                                        .build()));
+        assertThat(
+                        new SqlWindowGate(provider)
+                                .check(
+                                        "SELECT SUM(amount) FROM orders WHERE day >= NOW() -"
+                                                + " INTERVAL 7 DAY",
+                                        List.of(
+                                                new SqlWindowGate.Rule(
+                                                        "orders", List.of("day"), 30)),
+                                        context)
+                                .allowed())
+                .isTrue();
+        verifyNoInteractions(newlyActivated);
+    }
+
     private static final List<SqlWindowGate.Rule> RULES =
             List.of(
                     new SqlWindowGate.Rule("a", List.of("time1"), 30),

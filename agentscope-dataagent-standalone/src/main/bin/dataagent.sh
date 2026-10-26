@@ -13,7 +13,7 @@ ACTION="${1:-}"
 if (( EUID == 0 )) && id dataagent >/dev/null 2>&1; then
     install -d -o dataagent -g "$(id -gn dataagent)" -m 0750 "$BASE_DIR/data" "$RUN_DIR" \
         "$BASE_DIR/data/home" "$BASE_DIR/data/state" "$BASE_DIR/data/workspace" \
-        "$BASE_DIR/data/artifacts" "$BASE_DIR/data/mdl" "$RELEASE_DIR/log"
+        "$BASE_DIR/data/artifacts" "$BASE_DIR/data/mdl" "$RELEASE_DIR/logs"
     exec runuser -u dataagent -- env \
         DATAAGENT_JAVA="$JAVA_BIN" JAVA_OPTS="${JAVA_OPTS:-}" \
         "$RELEASE_DIR/bin/dataagent.sh" "$ACTION"
@@ -93,7 +93,7 @@ if [[ -z "$WREN_PYTHON" ]]; then
 fi
 export DATAAGENT_WREN_EXECUTABLE="$WREN_BIN"
 mkdir -p -- "$BASE_DIR/data/home" "$BASE_DIR/data/state" "$BASE_DIR/data/workspace" \
-    "$BASE_DIR/data/artifacts" "$BASE_DIR/data/mdl" "$RELEASE_DIR/log"
+    "$BASE_DIR/data/artifacts" "$BASE_DIR/data/mdl" "$RELEASE_DIR/logs"
 export HOME="$BASE_DIR/data/home"
 "$WREN_PYTHON" "$RELEASE_DIR/bin/check-wren.py" dependencies "$WREN_BIN" || {
     echo '请在Wren使用的Python环境安装 requirements-wren.txt；可设置 DATAAGENT_WREN_PYTHON'; exit 1;
@@ -107,28 +107,28 @@ nohup "$JAVA_BIN" "${JVM[@]}" -Dfile.encoding=UTF-8 -Duser.timezone=Asia/Shangha
     -jar "${JARS[0]}" "--spring.profiles.active=$PROFILE" \
     "--spring.config.additional-location=file:$RELEASE_DIR/conf/" "--server.port=$PORT" \
     "--dataagent.wren.executable=$WREN_BIN" \
-    "--dataagent.log-directory=$RELEASE_DIR/log" \
+    "--dataagent.log-directory=$RELEASE_DIR/logs" \
     "--dataagent.workspace=$BASE_DIR/data/workspace" \
     "--dataagent.artifacts.directory=$BASE_DIR/data/artifacts" \
     "--dataagent.wren.mdl-home=$BASE_DIR/data/mdl" \
-    >> "$RELEASE_DIR/log/launcher.log" 2>&1 < /dev/null 9>&- &
+    >> "$RELEASE_DIR/logs/launcher.log" 2>&1 < /dev/null 9>&- &
 PID=$!
-[[ -r "/proc/$PID/stat" ]] || { echo '启动失败，请查看 log/launcher.log'; exit 1; }
+[[ -r "/proc/$PID/stat" ]] || { echo '启动失败，请查看 logs/launcher.log'; exit 1; }
 printf '%s\n%s\n%s\n' "$PID" "$(awk '{print $22}' "/proc/$PID/stat")" "${JARS[0]}" > "$PID_FILE"
 HEALTH_URL="${DATAAGENT_HEALTH_URL:-http://127.0.0.1:$PORT/actuator/health}"
 DEADLINE=$((SECONDS + START_TIMEOUT))
 while (( SECONDS < DEADLINE )); do
     if ! running; then
         rm -f -- "$PID_FILE"
-        echo '应用启动失败，请查看 log/launcher.log'; exit 1
+        echo '应用启动失败，请查看 logs/launcher.log'; exit 1
     fi
     if "$WREN_PYTHON" "$RELEASE_DIR/bin/check-wren.py" health "$HEALTH_URL"; then
         running || { echo '应用已退出'; exit 1; }
-        echo "应用已就绪 PID=$PID；日志：$RELEASE_DIR/log"
+        echo "应用已就绪 PID=$PID；日志：$RELEASE_DIR/logs"
         exit 0
     fi
     sleep 1
 done
-echo '等待应用健康检查超时，停止本次启动的进程；请查看 log/launcher.log'
+echo '等待应用健康检查超时，停止本次启动的进程；请查看 logs/launcher.log'
 if running; then stop_process; else rm -f -- "$PID_FILE"; fi
 exit 1

@@ -1,0 +1,30 @@
+.ms-current { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 21px; background: #faf9fe; border: 1px solid #e7e4f2; border-radius: 10px; }
+.ms-eyebrow { color: #777285; font-size: 12px; }
+.ms-current h2 { margin: 8px 0; font-size: 17px; font-weight: 650; }
+.ms-current h2 .ds-status { margin-left: 8px; vertical-align: middle; }
+.ms-current p { margin: 0; color: #777285; font-size: 12px; }
+.ms-current-meta { color: #939aa8; font-size: 11px; line-height: 1.9; text-align: right; overflow-wrap: anywhere; }
+.ms-page .secondary-notice { margin-top: 16px; }
+.ms-listhead { display: flex; align-items: center; justify-content: space-between; margin: 26px 0 14px; }
+.ms-listhead h2 { font-size: 14px; margin: 0; }
+.ms-listhead h2 span { color: #939aa8; font-size: 12px; font-weight: 400; margin-left: 6px; }
+.ms-tablebox { overflow: auto; }
+.ms-table { min-width: 850px; }
+.ms-table td { padding-top: 16px; padding-bottom: 16px; }
+.ms-table th:first-child { width: 25%; }
+.ms-table th:nth-child(2) { width: 23%; }
+.ms-table th:nth-child(3) { width: 24%; }
+.ms-table strong { font-weight: 600; }
+.ms-table .ds-row-actions { white-space: nowrap; }
+.ms-table .ds-meta { max-width: 260px; }
+.ms-pending { font-size: 11px; color: #99743b; margin-top: 6px; }
+.ms-test-error { font-size: 11px; color: #ad414b; max-width: 230px; margin-top: 6px; white-space: normal; }
+.ms-notice { padding: 12px 15px; border-radius: 8px; background: #edf7f2; color: #34725a; font-size: 12px; }
+.ms-check { display: flex; align-items: center; gap: 8px; color: #626a79; font-size: 12px; }
+.ms-check input { accent-color: #6654cc; }
+.ds-field small { overflow-wrap: anywhere; }
+.ms-history { color: #939aa8; font-size: 12px; margin-top: 24px; }
+.ms-history summary { cursor: pointer; }
+.ms-history li { margin-top: 9px; overflow-wrap: anywhere; }
+.ms-entry { border-top: 1px solid #e7eaf0; }
+@media (max-width: 760px) { .ms-current { align-items: flex-start; flex-direction: column; gap: 12px; padding: 16px; } .ms-current-meta { text-align: left; } }

@@ -18,6 +18,7 @@ package io.agentscope.dataagent.runtime.session;
 import io.agentscope.core.agent.Agent;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.message.Msg;
+import io.agentscope.core.state.AgentStateStore;
 import io.agentscope.dataagent.runtime.session.tool.SessionsTool;
 import io.agentscope.harness.agent.subagent.DefaultAgentManager;
 import io.agentscope.harness.agent.subagent.SubagentFactory;
@@ -90,6 +91,7 @@ public class SessionAgentManager {
     private final AgentManagerConfig config;
     private final SubagentRunRegistry runRegistry;
     private final SessionStore sessionStore;
+    private final AgentStateStore agentStateStore;
 
     // AgentStateStore registry
     private final ConcurrentHashMap<String, SessionEntry> sessionsByKey = new ConcurrentHashMap<>();
@@ -124,10 +126,20 @@ public class SessionAgentManager {
             AgentManagerConfig config,
             SubagentRunRegistry runRegistry,
             SessionStore sessionStore) {
+        this(delegate, config, runRegistry, sessionStore, null);
+    }
+
+    public SessionAgentManager(
+            DefaultAgentManager delegate,
+            AgentManagerConfig config,
+            SubagentRunRegistry runRegistry,
+            SessionStore sessionStore,
+            AgentStateStore agentStateStore) {
         this.delegate = Objects.requireNonNull(delegate, "delegate");
         this.config = Objects.requireNonNull(config, "config");
         this.runRegistry = Objects.requireNonNull(runRegistry, "runRegistry");
         this.sessionStore = sessionStore;
+        this.agentStateStore = agentStateStore;
         this.subagentLane = new Semaphore(config.maxConcurrentSubagentRuns());
         this.nestedLane = new Semaphore(config.maxConcurrentNestedRuns());
         if (sessionStore != null) {
@@ -611,6 +623,7 @@ public class SessionAgentManager {
         if (sessionKey == null) return false;
         SessionEntry e = sessionsByKey.get(sessionKey);
         if (e == null) return false;
+        deleteAgentState(e);
         String newSessionId =
                 e.kind() == SessionKind.MAIN
                         ? "main-" + UUID.randomUUID()
@@ -732,10 +745,13 @@ public class SessionAgentManager {
      * sweep.
      */
     public void removeSession(String sessionKey) {
-        SessionEntry entry = sessionsByKey.remove(sessionKey);
+        SessionEntry entry = sessionsByKey.get(sessionKey);
         if (entry == null) {
             return;
         }
+        // Keep the routing/ownership record available for a retry if storage is unavailable.
+        deleteAgentState(entry);
+        sessionsByKey.remove(sessionKey);
         if (entry.label() != null) {
             labelToSessionKey.remove(entry.label().toLowerCase());
         }
@@ -751,6 +767,12 @@ public class SessionAgentManager {
         childrenByParent.remove(sessionKey);
         if (sessionStore != null) {
             sessionStore.remove(sessionKey);
+        }
+    }
+
+    private void deleteAgentState(SessionEntry entry) {
+        if (agentStateStore != null) {
+            agentStateStore.delete(entry.userId(), entry.sessionId());
         }
     }
 

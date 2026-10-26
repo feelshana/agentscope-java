@@ -1,3 +1,4 @@
+import { singleKnowledgeSelection, SINGLE_KNOWLEDGE_NOTICE } from '../utils/singleKnowledgeSelection';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
@@ -378,9 +379,10 @@ export default function ChatPanel({
   const [groupNames, setGroupNames] = useState<Record<string, string>>({});
   const [selectedGroups, setSelectedGroups] = useState<string[]>(() => {
     const raw = searchParams.get('groups');
-    return raw ? [...new Set(raw.split(',').filter(Boolean))] : [];
+    return singleKnowledgeSelection(raw?.split(',')).groupIds;
   });
-  const [selectAllGroups, setSelectAllGroups] = useState(false);
+  const selectAllGroups = false;
+  const [scopeNotice, setScopeNotice] = useState<string | null>(() => singleKnowledgeSelection(searchParams.get('groups')?.split(',')).needsSelection ? SINGLE_KNOWLEDGE_NOTICE : null);
   const selectionByConversation = useRef(new Map<string, string[]>());
   const allSelectionByConversation = useRef(new Map<string, boolean>());
   const [scopeRestoring, setScopeRestoring] = useState(false);
@@ -452,7 +454,7 @@ export default function ChatPanel({
 
   // Mutual exclusivity: switching mode clears the other side's selection.
   useEffect(() => {
-    if (chatMode === 'ontology') { setSelectedGroups([]); setSelectAllGroups(false); setGroupPickerOpen(false); }
+    if (chatMode === 'ontology') { setSelectedGroups([]); setScopeNotice(null); setGroupPickerOpen(false); }
   }, [chatMode]);
   useEffect(() => {
     if (chatMode === 'kb') { setSelectedOntology(null); setOntologyPickerOpen(false); }
@@ -571,8 +573,9 @@ export default function ChatPanel({
   const urlGroups = searchParams.get('groups');
   useEffect(() => {
     if (!urlSession) {
-      setSelectedGroups(urlGroups ? [...new Set(urlGroups.split(',').filter(Boolean))] : []);
-      setSelectAllGroups(false);
+      const restored = singleKnowledgeSelection(urlGroups?.split(','));
+      setSelectedGroups(restored.groupIds);
+      setScopeNotice(restored.needsSelection ? SINGLE_KNOWLEDGE_NOTICE : null);
     }
   }, [urlSession, urlGroups]);
   useEffect(() => {
@@ -582,9 +585,11 @@ export default function ChatPanel({
     currentSession(effectiveAgentId, urlSession, controller.signal).then(session => {
       if (controller.signal.aborted) return;
       const scope = session.groupIds ?? selectionByConversation.current.get(urlSession) ?? [];
-      selectionByConversation.current.set(urlSession, scope);
-      setSelectedGroups(scope);
-      setSelectAllGroups(session.allGroups ?? allSelectionByConversation.current.get(urlSession) ?? false);
+      const restored = singleKnowledgeSelection(scope, session.allGroups ?? allSelectionByConversation.current.get(urlSession) ?? false);
+      selectionByConversation.current.set(urlSession, restored.groupIds);
+      allSelectionByConversation.current.set(urlSession, false);
+      setSelectedGroups(restored.groupIds);
+      setScopeNotice(restored.needsSelection ? SINGLE_KNOWLEDGE_NOTICE : null);
     }).catch(() => { /* History stays readable; the server checks scope again when sending. */ })
       .finally(() => { if (!controller.signal.aborted) setScopeRestoring(false); });
     return () => controller.abort();
@@ -685,8 +690,8 @@ export default function ChatPanel({
   const kbSelectionLocked = effectiveAgentId === 'modeling-agent' && !!urlSession && messages.length > 0;
   const ordinaryChat = effectiveAgentId === 'data-agent' && !selectAllGroups && selectedGroups.length === 0;
   const canSend = useMemo(
-    () => !busy && !restoring && !scopeRestoring && !!effectiveAgentId && input.trim().length > 0,
-    [busy, restoring, scopeRestoring, effectiveAgentId, input],
+    () => !busy && !restoring && !scopeRestoring && !scopeNotice && !!effectiveAgentId && input.trim().length > 0,
+    [busy, restoring, scopeRestoring, scopeNotice, effectiveAgentId, input],
   );
 
   /**
@@ -889,7 +894,8 @@ export default function ChatPanel({
             selectionByConversation.current.set(convId, evt.groupIds);
             allSelectionByConversation.current.set(convId, evt.allGroups ?? false);
             if (activeHistoryKey.current === convId) {
-              setSelectedGroups(evt.groupIds); setSelectAllGroups(evt.allGroups ?? false);
+              const restored = singleKnowledgeSelection(evt.groupIds, evt.allGroups ?? false);
+              setSelectedGroups(restored.groupIds); setScopeNotice(restored.needsSelection ? SINGLE_KNOWLEDGE_NOTICE : null);
             }
           }
           setSessionMsgs(prev => {
@@ -1016,20 +1022,20 @@ export default function ChatPanel({
           </button>
           {groupPickerOpen && createPortal(
             <div ref={groupPopoverRef} id="chat-knowledge-picker" className="da-kb-picker" style={groupPickerPosition} role="dialog" aria-label="选择本轮知识库" onKeyDown={e => { if (e.key === 'Escape') { setGroupPickerOpen(false); groupPickerRef.current?.querySelector('button')?.focus(); } }}>
-              <div className="da-kb-picker-heading"><span>查询范围</span><small>可多选</small></div>
+              {scopeNotice && <div className="da-small" role="alert" style={{ padding: 8, color: 'var(--da-danger)' }}>{scopeNotice}</div>}
+              <div className="da-kb-picker-heading"><span>查询范围</span><small>单知识库</small></div>
               <div className="da-kb-picker-search"><Icon name="search" size="sm" /><input autoFocus aria-label="搜索可使用的知识库" placeholder="搜索知识库" value={groupSearch} onChange={e => { setGroupSearch(e.target.value); setGroupPage(0); }} /></div>
               {groupError && <div className="da-small" role="alert" style={{ padding: 8, color: 'var(--da-danger)' }}>{groupError}</div>}
-              <label className={`da-kb-picker-all${selectAllGroups ? ' is-checked' : ''}`}><input type="checkbox" checked={selectAllGroups} onChange={e => { setSelectAllGroups(e.target.checked); setSelectedGroups([]); }} /><span>全部可用知识库<small>每次发送时更新可用范围</small></span></label>
               <div className="da-kb-picker-list">
               {!groupLoading && groups.map(g => (
                 <label key={g.id} className={`da-kb-picker-item${selectAllGroups || selectedGroups.includes(g.id) ? ' is-checked' : ''}`}>
                   <input
-                    type="checkbox"
+                    type="radio"
+                    name="chat-knowledge-scope"
                     checked={g.canQuery && (selectAllGroups || selectedGroups.includes(g.id))}
                     disabled={!g.canQuery || selectAllGroups}
                     onChange={e => {
-                      if (selectAllGroups) return;
-                      setSelectedGroups(prev => e.target.checked ? [...new Set([...prev, g.id])] : prev.filter(id => id !== g.id));
+                      if (e.target.checked) { setSelectedGroups([g.id]); setScopeNotice(null); }
                     }}
                   />
                   <span className="da-kb-picker-item-icon"><Icon name="book" size="sm" /></span>
@@ -1047,13 +1053,14 @@ export default function ChatPanel({
               )}
               </div>
               <div className="da-kb-picker-footer">
-                <button className="da-kb-picker-clear" onClick={() => { setSelectedGroups([]); setSelectAllGroups(false); }}>清空选择</button>
+                <button className="da-kb-picker-clear" onClick={() => { setSelectedGroups([]); setScopeNotice(null); }}>清空选择</button>
                 <span>{selectAllGroups ? '全部可用' : selectedGroups.length ? `已选 ${selectedGroups.length} 个` : '普通聊天'}</span>
                 <button className="da-btn da-btn-primary da-btn-sm" onClick={() => setGroupPickerOpen(false)}>完成</button>
               </div>
             </div>
           , document.body)}
         </div>
+        {scopeNotice && <button className="da-btn da-btn-sm" onClick={() => setGroupPickerOpen(true)}>重新选择知识库</button>}
         <span style={{ flex: 1 }} />
         <button
           style={{

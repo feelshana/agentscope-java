@@ -36,6 +36,10 @@ public class ChartOptionEntity {
     @Column(name = "chart_id", length = 64, nullable = false)
     private String chartId;
 
+    // Null is retained only for legacy rows, which are not readable through the API.
+    @Column(name = "owner_id", length = 128)
+    private String ownerId;
+
     @Lob
     @Column(name = "option_json", columnDefinition = "TEXT")
     private String optionJson;
@@ -45,8 +49,9 @@ public class ChartOptionEntity {
 
     public ChartOptionEntity() {}
 
-    public ChartOptionEntity(String chartId, String optionJson) {
+    public ChartOptionEntity(String chartId, String ownerId, String optionJson) {
         this.chartId = chartId;
+        this.ownerId = ownerId;
         this.optionJson = optionJson;
         this.createdAt = Instant.now();
     }
@@ -61,6 +66,14 @@ public class ChartOptionEntity {
 
     public String getOptionJson() {
         return optionJson;
+    }
+
+    public String getOwnerId() {
+        return ownerId;
+    }
+
+    public void setOwnerId(String ownerId) {
+        this.ownerId = ownerId;
     }
 
     public void setOptionJson(String optionJson) {

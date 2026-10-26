@@ -47,7 +47,7 @@
 3. **查询边界**：语义查询只经官方 MCP/CLI，只读、遵守 strict_mode 已声明模型边界，允许官方 LIMIT/OFFSET，不改写官方 MDL；禁止物理 SQL 回退或平台业务路由。`WrenQueryAccess` 校验本轮范围和 QUERY，调用前及排队后复核撤权。
 4. **建模写面**：只通过原生 `write_file`/`edit_file` 和 `wren_cli` 修改当前用户有 MANAGE 的单库草稿；禁写平台文件、禁止路径逃逸、任意 shell 与 profile 切换。基础建模维护模型、ref_sql、关系与 knowledge；Cube/View 不读不写；问答对不由建模生成。
 5. **上传数据集物理表**：一律 `ds_` 前缀落在数据集 MySQL。
-6. **知识库范围**：每轮有效授权范围同时写 `ConversationScopeRegistry` 和 RuntimeContext 的 `DatasetScope`，建模限定单库；`done.sessionKey` 是 conversationId。
+6. **知识库范围**：每轮有效授权范围同时写 `ConversationScopeRegistry` 和 RuntimeContext 的 `DatasetScope`，问数仅零/单库、建模限定单库，多库/全选拒绝；历史多库重新选择；`done.sessionKey` 是 conversationId。
 7. **语言**：代码注释/Javadoc 用英文；面向 LLM 的文本（`@Tool` 描述、系统提示词、SKILL.md、图表标题、返回给模型的错误信息）用简体中文。
 8. **Spring 注入**：用构造器或 `@Bean` 方法参数；多构造器时只给完整构造器标 `@Autowired`；本类内定义的 Bean 不得字段自注入。
 
@@ -73,6 +73,7 @@
 - 问答：只来自用户逐题确认与问数点赞，发布后可被召回。
 - 时间门禁：外部数据源事实表窗口存平台数据库，不写入 MDL；建模、问数、问题验证共用逐表检查；上传表不设门禁。
 - 问数：只有登记了受限事实表的库才"缺日期先问"；统计必须来自 SQL 返回值。
+- 工程整合：模型切换为全局管理员手动操作，每轮及辅助调用固定快照；不自动切公网；会话使用框架持久存储。SQL 问题投影仅在问题列表按修订流程维护，不绕过确认。
 - 容量默认值均为单进程预算，不能描述为分布式全局容量。
 
 ## 7. 每个任务的工作流（Codex 与 Claude 通用）

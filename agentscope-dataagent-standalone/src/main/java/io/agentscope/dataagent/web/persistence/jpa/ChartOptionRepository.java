@@ -21,5 +21,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 /** Spring Data repository for {@link ChartOptionEntity}. */
 public interface ChartOptionRepository extends JpaRepository<ChartOptionEntity, String> {
 
-    Optional<ChartOptionEntity> findByChartId(String chartId);
+    Optional<ChartOptionEntity> findByChartIdAndOwnerId(String chartId, String ownerId);
 }

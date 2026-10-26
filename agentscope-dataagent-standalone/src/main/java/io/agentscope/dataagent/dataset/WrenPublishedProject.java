@@ -56,6 +56,8 @@ public final class WrenPublishedProject {
                         String expectedMarker = hash + "\nbackend=lancedb";
                         if (!Files.isRegularFile(marker)
                                 || !expectedMarker.equals(Files.readString(marker))) {
+                            // A failed rebuild must not leave the previous success marker valid.
+                            Files.deleteIfExists(marker);
                             var result =
                                     measured(
                                             context,
@@ -243,6 +245,23 @@ public final class WrenPublishedProject {
         synchronized (locks.computeIfAbsent(group, ignored -> new Object())) {
             return action.get();
         }
+    }
+
+    /** Reprojects a restored source and rebuilds official memory before claiming recovery. */
+    public void restoreIndex(String owner, String group) {
+        locked(
+                group,
+                () -> {
+                    Path project = props.groupRoot(group).resolve("runtime/query-project");
+                    check(project);
+                    try {
+                        Files.deleteIfExists(project.resolve(".indexed-source"));
+                    } catch (IOException e) {
+                        throw new DatasetException("无法使失败的记忆索引失效", e);
+                    }
+                    indexed(owner, group);
+                    return null;
+                });
     }
 
     private static void mergeExamples(Path published, Path liked, Path to) throws IOException {

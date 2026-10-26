@@ -42,17 +42,56 @@ public class AuthController {
 
     private final UserStore userStore;
     private final JwtService jwtService;
-    private final boolean aiAvailable;
+    private final Optional<Model> model;
+    private final AuthSettings settings;
+    private final BiLoginService biLogin;
 
-    public AuthController(UserStore userStore, JwtService jwtService, Optional<Model> modelOpt) {
+    public AuthController(
+            UserStore userStore,
+            JwtService jwtService,
+            Optional<Model> modelOpt,
+            AuthSettings settings,
+            BiLoginService biLogin) {
         this.userStore = userStore;
         this.jwtService = jwtService;
-        this.aiAvailable = modelOpt.isPresent();
+        this.model = modelOpt;
+        this.settings = settings;
+        this.biLogin = biLogin;
     }
 
     public record LoginRequest(String username, String password) {}
 
-    public record LoginResponse(String token, String userId, String username, List<String> roles) {}
+    public record LoginResponse(
+            String token, String userId, String username, List<String> roles, long expiresAt) {}
+
+    public record EntryOptions(boolean passwordLoginEnabled, boolean biLoginEnabled) {}
+
+    public record BiLoginRequest(String ticket) {}
+
+    @GetMapping("/options")
+    public EntryOptions options() {
+        return new EntryOptions(settings.passwordLogin(), settings.biLogin());
+    }
+
+    private LoginResponse issue(UserStore.UserRecord user) {
+        String token = jwtService.generate(user.userId(), user.username(), user.roles());
+        return new LoginResponse(
+                token,
+                user.userId(),
+                user.username(),
+                user.roles(),
+                jwtService.parse(token).getExpiration().getTime());
+    }
+
+    @PostMapping("/bi-login")
+    public Mono<LoginResponse> biLogin(@RequestBody BiLoginRequest req) {
+        if (!settings.biLogin())
+            return Mono.error(
+                    new org.springframework.web.server.ResponseStatusException(
+                            HttpStatus.NOT_FOUND));
+        return Mono.fromCallable(() -> issue(biLogin.login(req.ticket())))
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+    }
 
     public record MeResponse(
             String userId,
@@ -63,6 +102,8 @@ public class AuthController {
 
     @PostMapping("/login")
     public Mono<ResponseEntity<LoginResponse>> login(@RequestBody LoginRequest req) {
+        if (!settings.passwordLogin())
+            return Mono.just(ResponseEntity.status(HttpStatus.FORBIDDEN).build());
         return Mono.fromCallable(
                         () -> {
                             if (req.username() == null || req.password() == null) {
@@ -73,17 +114,7 @@ public class AuthController {
                                     .filter(u -> userStore.verifyPassword(u, req.password()))
                                     .map(
                                             u -> {
-                                                String token =
-                                                        jwtService.generate(
-                                                                u.userId(),
-                                                                u.username(),
-                                                                u.roles());
-                                                return ResponseEntity.ok(
-                                                        new LoginResponse(
-                                                                token,
-                                                                u.userId(),
-                                                                u.username(),
-                                                                u.roles()));
+                                                return ResponseEntity.ok(issue(u));
                                             })
                                     .orElse(
                                             ResponseEntity.status(HttpStatus.UNAUTHORIZED)
@@ -105,15 +136,27 @@ public class AuthController {
                                                                 u.userId(),
                                                                 u.username(),
                                                                 u.roles(),
-                                                                aiAvailable,
+                                                                aiAvailable(),
                                                                 u.hasRole("admin")))
                                         .orElse(
                                                 new MeResponse(
                                                         userId,
                                                         userId,
                                                         List.of("user"),
-                                                        aiAvailable,
+                                                        aiAvailable(),
                                                         false)))
                 .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+    }
+
+    private boolean aiAvailable() {
+        return model.map(
+                        value ->
+                                value
+                                                instanceof
+                                                io.agentscope.dataagent.runtime.model.SwitchingModel
+                                                        switching
+                                        ? switching.isAvailable()
+                                        : true)
+                .orElse(false);
     }
 }

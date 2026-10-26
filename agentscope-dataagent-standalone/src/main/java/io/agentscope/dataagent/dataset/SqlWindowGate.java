@@ -42,13 +42,20 @@ public class SqlWindowGate {
     public record Decision(boolean allowed, List<TableCheck> tables, String reason) {}
 
     public Decision check(String sql, List<Rule> rules) {
+        return check(sql, rules, null);
+    }
+
+    public Decision check(
+            String sql, List<Rule> rules, io.agentscope.core.agent.RuntimeContext context) {
         if (rules.isEmpty()) return new Decision(true, List.of(), "没有需要检查的已登记事实表");
         // Plain shapes are decided by rules in microseconds; the model only reads SQL the rules
         // cannot decide (relative dates, OR branches, subqueries), so it never widens the gate.
         var decided = SqlWindowRules.evaluate(sql, rules);
         if (decided.isPresent()) return decided.get();
         try {
-            Model model = models.getIfAvailable();
+            Model model =
+                    io.agentscope.dataagent.runtime.model.SwitchingModel.forCall(
+                            models.getIfAvailable(), context);
             if (model == null) return failure("时间门禁模型不可用，请稍后重试");
             String input =
                     JSON.writeValueAsString(

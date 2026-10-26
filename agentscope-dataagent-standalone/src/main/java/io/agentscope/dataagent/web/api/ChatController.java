@@ -1152,6 +1152,8 @@ public class ChatController {
             List<String> groupIds,
             boolean allGroups) {
         boolean modeling = ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId);
+        if (allGroups || (groupIds != null && groupIds.stream().distinct().count() > 1))
+            throw new DatasetException("本次只支持单知识库问数，请重新选择一个知识库", 400);
         if (allGroups && modeling) throw new DatasetException("建模会话必须选择一个知识库", 400);
         if (allGroups && groupIds != null && !groupIds.isEmpty())
             throw new DatasetException("全选不能同时指定知识库列表", 400);
@@ -1168,6 +1170,7 @@ public class ChatController {
         if (requested.stream().anyMatch(id -> id == null || id.isBlank()))
             throw new DatasetException("知识库 ID 不能为空", 400);
         List<String> normalized = requested.stream().distinct().sorted().toList();
+        if (normalized.size() > 1) throw new DatasetException("此会话原先选择了多个知识库，请重新选择一个知识库", 400);
         if (modeling
                 && previous != null
                 && !new java.util.HashSet<>(previous).equals(new java.util.HashSet<>(normalized)))

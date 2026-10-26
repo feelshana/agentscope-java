@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { KnowledgeBreadcrumb, WorkspaceMenu } from '../../components/KnowledgeWorkspace';
 import KnowledgeBaseMembersModal from '../../components/KnowledgeBaseMembersModal';
-import DataSourceManagerModal from '../../components/DataSourceManagerModal';
 import EmptyIllustration from '../../components/EmptyIllustration';
 import Icon from '../../components/Icon';
 import { toast } from '../../components/Toast';
@@ -18,7 +17,6 @@ export default function DatasetsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editGroup, setEditGroup] = useState<DatasetGroup | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
-  const [dsOpen, setDsOpen] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [busy, setBusy] = useState(false);
@@ -140,7 +138,7 @@ export default function DatasetsPage() {
         <div className="kw-pagehead">
           <div className="kw-heading"><h1>知识库</h1><p>组织你的业务数据，让每一次分析都有清晰的依据。</p></div>
           <div className="kw-actions">
-            <button className="da-btn" onClick={() => setDsOpen(true)}><Icon name="database" size="sm" />数据源管理</button>
+            <button className="da-btn" onClick={() => navigate('/configure/datasources')}><Icon name="database" size="sm" />数据源管理</button>
             <button className="da-btn da-btn-primary" onClick={openCreate} disabled={busy}><Icon name="plus" size="sm" />创建知识库</button>
           </div>
         </div>
@@ -234,7 +232,6 @@ export default function DatasetsPage() {
         </div>
       )}
       {memberGroup && <KnowledgeBaseMembersModal groupId={memberGroup.id} name={memberGroup.name} onClose={() => setMemberGroup(null)} onChanged={() => void refresh()} />}
-      {dsOpen && <DataSourceManagerModal open={dsOpen} onClose={() => setDsOpen(false)} />}
     </div>
   );
 }

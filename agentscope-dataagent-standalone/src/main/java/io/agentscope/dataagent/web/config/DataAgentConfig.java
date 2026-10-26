@@ -21,7 +21,6 @@ import io.agentscope.core.model.Model;
 import io.agentscope.core.skill.SkillFilter;
 import io.agentscope.core.skill.repository.FileSystemSkillRepository;
 import io.agentscope.core.state.AgentStateStore;
-import io.agentscope.core.state.InMemoryAgentStateStore;
 import io.agentscope.dataagent.dataset.DatasetContextProvider;
 import io.agentscope.dataagent.dataset.MdlCatalog;
 import io.agentscope.dataagent.dataset.WrenSkillsLocator;
@@ -292,9 +291,9 @@ public class DataAgentConfig {
 
     // -----------------------------------------------------------------
     //  Model bean — OpenAI-compatible first, DashScope fallback. Only
-    //  created when the matching api-key is set AND no other Model bean is
-    //  already present in the context. Both are skipped when the property is
-    //  blank so Optional<Model> injection sites receive Optional.empty().
+    //  created when the matching api-key is set AND no custom startup Model
+    //  is present. The primary SwitchingModel delegates to this startup source
+    //  until an administrator activates a managed connection.
     // -----------------------------------------------------------------
 
     /**
@@ -305,7 +304,9 @@ public class DataAgentConfig {
      * handled by the client. Blank base URL falls back to the official OpenAI endpoint.
      */
     @Bean
-    @ConditionalOnMissingBean(Model.class)
+    @ConditionalOnMissingBean(
+            value = Model.class,
+            ignored = io.agentscope.dataagent.runtime.model.SwitchingModel.class)
     @ConditionalOnExpression("'${dataagent.openai.api-key:}' != ''")
     public Model openaiModel() {
         String baseUrl =
@@ -345,7 +346,9 @@ public class DataAgentConfig {
      * null-valued bean.
      */
     @Bean
-    @ConditionalOnMissingBean(Model.class)
+    @ConditionalOnMissingBean(
+            value = Model.class,
+            ignored = io.agentscope.dataagent.runtime.model.SwitchingModel.class)
     @ConditionalOnExpression(
             "'${dataagent.openai.api-key:}' == '' && '${dataagent.dashscope.api-key:}' != ''")
     public Model dashscopeModel() {
@@ -356,6 +359,21 @@ public class DataAgentConfig {
                 .stream(dashscopeStream)
                 .enableThinking(false)
                 .build();
+    }
+
+    /** All model consumers share one stable runtime delegate, including non-agent helpers. */
+    @Bean
+    @org.springframework.context.annotation.Primary
+    public io.agentscope.dataagent.runtime.model.SwitchingModel managedModel(
+            io.agentscope.dataagent.runtime.model.ModelServiceRegistry registry,
+            org.springframework.beans.factory.config.ConfigurableListableBeanFactory beans) {
+        Model startup = null;
+        for (String name : beans.getBeanNamesForType(Model.class)) {
+            if ("managedModel".equals(name)) continue;
+            if (startup != null) throw new IllegalStateException("请只提供一个启动Model Bean。");
+            startup = beans.getBean(name, Model.class);
+        }
+        return new io.agentscope.dataagent.runtime.model.SwitchingModel(registry, startup);
     }
 
     // -----------------------------------------------------------------
@@ -405,7 +423,7 @@ public class DataAgentConfig {
             ToolEventBus toolEventBus,
             SandboxClient<DockerSandboxClientOptions> sandboxClient,
             UserSandboxRegistry userSandboxRegistry,
-            Optional<AgentStateStore> sessionOpt,
+            AgentStateStore stateStore,
             DataSourceRegistry dataSourceRegistry,
             Optional<DatasetContextProvider> contextProviderOpt,
             MdlCatalog mdlCatalog,
@@ -430,31 +448,11 @@ public class DataAgentConfig {
                         .cwd(cwd)
                         .sessionStoreRepository(sessionRegistryRepository);
 
-        if (modelOpt.isPresent()) {
-            builder.model(modelOpt.get());
-        } else {
-            log.warn(
-                    "No model configured. Set dataagent.openai.api-key (env"
-                            + " DATAAGENT_OPENAI_API_KEY or OPENAI_API_KEY) or"
-                            + " dataagent.dashscope.api-key in application.yml, or provide a Model"
-                            + " bean. Agent calls will fail until a model is available.");
-        }
+        var switchingModel =
+                (io.agentscope.dataagent.runtime.model.SwitchingModel) modelOpt.orElseThrow();
+        builder.model(switchingModel);
 
-        // AgentStateStore backend selection is independent of the workspace filesystem now that
-        // workspaces
-        // are sandbox-backed: each user's sandbox is reached through the in-memory
-        // UserSandboxRegistry under sticky load-balancing. Operators should still provide a
-        // distributed AgentStateStore bean for production so conversation state survives pod
-        // restarts.
-        AgentStateStore stateStore = sessionOpt.orElseGet(InMemoryAgentStateStore::new);
-        if (sessionOpt.isEmpty()) {
-            log.warn(
-                    "No distributed AgentStateStore bean configured ({}); using"
-                            + " InMemoryAgentStateStore. For multi-replica deployments, provide"
-                            + " a DistributedStore or a distributed AgentStateStore bean"
-                            + " (e.g. from agentscope-extensions-redis).",
-                    AgentStateStore.class.getName());
-        }
+        // Checkpoints survive process restarts independently of sandbox workspaces.
 
         // The modeling assistant is a metadata-only agent (relations / cubes / MDL validation)
         // and must run without the per-user Docker sandbox: it is exempt from the sandbox
@@ -470,6 +468,8 @@ public class DataAgentConfig {
 
         builder.configureAllAgents(
                 (agentId, b) -> {
+                    b.model(switchingModel);
+                    b.middleware(switchingModel);
                     if ("data-agent".equals(agentId)) {
                         configureQueryPrompt(b, QUERY_EFFICIENCY_RULES + "\n" + agentSysPrompt);
                         mountWrenSkills(b, wrenSkillsLocator, QUERY_SKILLS);
@@ -629,7 +629,7 @@ public class DataAgentConfig {
                     mountWrenSkills(b, wrenSkillsLocator, MODELING_SKILLS);
                 });
 
-        DataAgentBootstrap bootstrap = builder.build();
+        DataAgentBootstrap bootstrap = builder.agentStateStore(stateStore).build();
 
         // Hand the gateway a reference to the per-user sandbox registry so every run(...) turn
         // injects the user's live container as SandboxContext.externalSandbox (Priority-1 acquire

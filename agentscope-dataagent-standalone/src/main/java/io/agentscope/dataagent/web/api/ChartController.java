@@ -18,7 +18,10 @@ package io.agentscope.dataagent.web.api;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agentscope.dataagent.web.persistence.jpa.ChartOptionRepository;
 import java.util.Map;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -45,12 +48,17 @@ public class ChartController {
     }
 
     @GetMapping("/{id}")
-    public Mono<Map<String, Object>> get(@PathVariable String id) {
+    public Mono<ResponseEntity<Map<String, Object>>> get(
+            @PathVariable String id, Authentication auth) {
+        if (auth == null || !(auth.getPrincipal() instanceof String user) || user.isBlank()) {
+            return Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+        }
         return Mono.fromCallable(
                         () -> {
                             String json =
                                     repository
-                                            .findById(id)
+                                            .findByChartIdAndOwnerId(id, user)
+                                            .filter(chart -> user.equals(chart.getOwnerId()))
                                             .orElseThrow(
                                                     () ->
                                                             new ResponseStatusException(
@@ -59,7 +67,9 @@ public class ChartController {
                                             .getOptionJson();
                             @SuppressWarnings("unchecked")
                             Map<String, Object> option = MAPPER.readValue(json, Map.class);
-                            return Map.<String, Object>of("option", option);
+                            return ResponseEntity.ok()
+                                    .cacheControl(CacheControl.noStore().cachePrivate())
+                                    .body(Map.<String, Object>of("option", option));
                         })
                 .subscribeOn(Schedulers.boundedElastic());
     }

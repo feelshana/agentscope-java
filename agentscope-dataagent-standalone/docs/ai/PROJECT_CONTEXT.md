@@ -30,3 +30,8 @@ LLM 转录没有时间戳，需要单独分析一次运行时，先停服务把�
 ## 验证方式
 
 自动化：`mvn spotless:check`、`mvn test`、`mvn package -DskipTests`、`cd frontend && npm run build`。真实 LLM、Docker、Wren 相关测试为条件启用。Agent 的实际行为只能通过重启加载新包后的日志确认，提示词或单测断言不能代替。
+
+
+## 当前工程补充（2026-10-26）
+
+单知识库问数；零库为普通对话。管理员手动激活页面模型配置，新轮次/独立任务使用当前服务，在途与同轮辅助调用固定快照。Agent上下文使用框架MySQL存储，H2使用持久JSON；数据库、工作区、附件和独立模型加密主密钥须配套保留。BI正式环境禁密码登录；私有图表归操作者。完整首次DDL与升级条件见[迁移指引](../migrations/README.md)，当前整合边界见[ADR0114](../adr/0114-native-query-and-engineering-integration.md)。上述本机 roylin 路径是原观察机的历史记录，不代表所有开发者环境。

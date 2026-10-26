@@ -1,4 +1,4 @@
-import { apiFetch } from '../api/auth';
+import { apiFetch, getToken } from '../api/auth';
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UserView, getProfile, changePassword } from '../api/users';
@@ -8,7 +8,7 @@ interface UsageSummary { totalTurns: number; todayTurns: number; avgDurationMs: 
 interface BucketCount  { epochMs: number; label: string; count: number; }
 
 function authHeader(): Record<string, string> {
-  const t = localStorage.getItem('claw_token') ?? '';
+  const t = getToken() ?? '';
   return { Authorization: `Bearer ${t}` };
 }
 

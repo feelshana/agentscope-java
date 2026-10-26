@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import Icon from './Icon';
+import { ShellNavigationToggle } from './ShellNavigation';
 
 export interface BackToChatHeaderProps {
   title: string;
@@ -19,6 +20,7 @@ export default function BackToChatHeader({
   const navigate = useNavigate();
   return (
     <header style={S.root}>
+      <ShellNavigationToggle />
       <button type="button" className="da-header-back" onClick={() => navigate(backTo)} aria-label={backLabel}>
         <Icon name="back" size="sm" />
         <span>{backLabel}</span>

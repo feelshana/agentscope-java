@@ -1,56 +1,38 @@
-# 当前任务与接手入口
+# 当前任务：两分支工程整合（2026-10-26）
 
-> 只保留当前任务。2026-10-21 及之前的详细检查点见 [archive/CURRENT_TASK-until-20261021.md](archive/CURRENT_TASK-until-20261021.md)。
+- 分支：`codex/integrate-boundary-lyf-v2`，来源 `f1ad7772` + `boundary-lyf@b67a179a`。
+- 用户已授权合并；本次交付本地合并提交，不推送；具体提交与工作区状态须用 Git 核对。
+- 规则：[spec094](../specs/done/094-native-boundary-engineering-integration.md)、[ADR0114](../adr/0114-native-query-and-engineering-integration.md)。
+- 旧整合已按要求丢弃，没有复用旧适配结论；同事旧检查点保留在 f1ad7772 历史中。
 
-## 最新检查点：2026-10-25｜建模与问数提速、试问只核对 SQL、数据源限定 MySQL 8.0+/Doris（已提交）
+## 已完成
 
-- 已完成：spec093 字段整理；试问不查数据（只 dry-plan，用户核对 SQL）；发布竞态修复与"重新发布"兜底；建模提示词按轮次分段（`ModelingTurnRules`）；两个助手只挂各自技能；查询结果紧凑化；门禁规则优先（ADR0112）；数据源 MySQL 8.0+/Doris 与日期常量（ADR0113）；问数准备提示与按钮置灰；知识库/语义建模页字号与列表改版。
-- 实测（flash 模型 2026-10-25）：自动建模 44 秒、问数 8–19 秒、门禁全部规则判断（毫秒级）；关系按命名候选直接提问。
-- 本机模型：`qwen/deepseek-v4.1-flash`（仅 `.claude/launch.json`）；`application.yml` 中默认 API Key 的本地修改未提交，建议改为无默认值并轮换密钥。
-- 未完成：spec093 验收标准 1–8 正式验收；"报表/仪表盘"口径由用户在建模对话补规则；无 MySQL 5.7/Doris 实例，版本检查只做了单元测试。
+- 源码冲突清零；建模、字段、草稿修订、SQL-only 核对、发布与原生 Wren 沿同事主线。
+- 单库问数；零库普通聊天；多库/全选拒绝，历史多库需重选，不恢复旧包装工具或自动查询 CSV。
+- 接入 BI、私有图表、框架持久状态、管理员人工模型热切换、通用页面与发布配套。
+- 同轮辅助门禁复用模型快照，独立任务读最新服务；无自动切公网。
+- 独立 SQL 示例结构化编辑，草稿修改递增修订；已确认问题投影只读，回问题列表修正/移除。
+- 点赞索引失败恢复；受限只读断连恢复与当前预热缓存衔接；不重放写操作，保留进程树清理。
+- 文档按同事组织；个人设计放 imported-boundary-lyf 归档，旧整合讨论/旧验收报告不导入。
+- 完整37表初始化SQL、增量并集与首次/升级指引；发布包携带运维/BI/SQL文档，私有配置继续排除。
 
-## 上一检查点：2026-10-22｜spec092 §7 对话为中心的建模页已实施，待真实验收
+## 本次验证
 
-- 建模页改为"建模对话｜资料｜语义模型"：左对话、右试问、底部草稿栏；取消审阅与发布页、示例问题弹窗、确认弹窗（未提交）。
-  - 后端：`DraftItemService` + `GET/POST /modeling/draft/items`（模型说明、关系、Markdown 条目逐条编辑/删除，`since` 按轮次过滤）；推荐问题改为 3 个；`TemporalSamples` 支持不补零、无分隔符日期与数字日期键。
-  - 前端：`TurnResultCard`/`DraftItemsList`（AI 建模结果）、`ConfirmationCards`（需要你确定的部分，助手空闲时出现）、`TrialPanel`（试问，自动试运行，答对设为示例写 knowledge/sql）、`DraftBar`（自动检查、软提示待处理项）；开始建模前提示上传文档，点按钮才开始；上传数据弹窗去掉文档；页面请求按序排队。删除 `DraftReviewPanel`、`ModelingQuestionsPanel`、`AddQuestionsDialog`、`ConfirmationDialog`、`VerifyQuestionsPrompt`。
+- Java 927项，失败0、错误0、跳过28；含原有禁用和需额外开关项目，不宣称全部已执行。
+- 前端 / 与 /dataagent/ 各45项通过；TypeScript/Vite构建与JAR/tar.gz打包通过；Python发布脚本11项通过。
+- 合并JAR独立MySQL、Wren、Docker、真实DeepSeek：上传18行→字段确认→自动建模→SQL dry-plan→确认→发布→查询/Python→CSV/中文图表；下载汇总精确核对、跨用户404。
+- SQL通用入口六次保真保存；新问题旧修订409、旧确认失效；问题投影旧编辑/删除接口409。
+- 模型在途4次全A、下一轮3次全B；重启保留B；管理鉴权、版本检查、脱敏与密文存储通过。
+- 会话代号重启后恢复、reset后清除；私有图表所属用户200、其他用户404。
+- 受控断开自身测试库闲置连接后，单轮恢复并返回30429/16245/18。
+- 完整DDL在另一空库执行，prod/validate/SQL-init-never启动成功；密码403，BI合法/重放/过期/篡改及管理权限通过。
+- 浏览器单选、历史多库阻止发送、模型页与建模导航实测；补齐折叠更多，保留底部收起入口。
 
-- 2026-10-22 下午：按原型细化页面（页头一行、工具步骤折叠、建模结果紧凑行与字段表、逐题确定、试问按需打开、草稿栏一行上拉）；修日志问题：确认工具失败不计数并忽略多余"其他"选项、外部表候选关系改为让用户确定、外部表拒绝先于时间门禁、不补零文本时间不按字符串比较范围。
+## 限制与下一步
 
-- 2026-10-22 傍晚：时间条件由平台按列格式生成（`TemporalCondition`，撤销 LIKE 提示词）；门禁放行跨请求复用；确认问题归一化去重；规则依据要求；对话自动跟随；"下一步"卡与草稿栏可发布高亮。
-
-## 上一检查点：2026-10-21 晚｜spec092 已实施
-
-### 当前任务
-
-- 建模交互改为"草稿 + 发布前审阅"：[spec092](../specs/092-draft-and-review-modeling-workflow.md) 与 [ADR0111](../adr/0111-draft-changes-reviewed-before-publish.md) 已实施（未提交）。
-  - 后端：`DraftChangeLog`、`DraftReviewService`（差异、撤销、放弃）、`BusinessDocumentService`（raw/docs 多文档）、`ModelingActivity`（运行中禁止发布/撤销）、`DraftReviewController`；`ModelingHitlMiddleware` 不再拦截文件写入；`WrenProjectFilesystem#rulesGuard`；`ModelingTurnPurpose` 增加 auto/document；`WrenProjectContextMiddleware#newTables`；workflow `affectedQuestionIds`；模型指纹排除 raw/。
-  - 前端：建模页四标签与顶部"审阅并发布（N）"、`DraftReviewPanel`、`BusinessDocumentsPanel`、知识库上传弹窗可附文档；删除 `MdlPublishPanel`、`BusinessDocumentGuide`。
-  - 验证：spotless、`mvn test` 751 项 0 失败 20 条件跳过、`npm run build` 通过；真实验收待做（spec092 验收标准 1–10）。
-  - 补充（晚）：只问真正需要确认的——`request_user_confirmation` 工具 + `ModelingConfirmationService`（.platform/confirmations，每轮≤3）+ 弹窗 `ConfirmationDialog`，答复以 purpose=confirm 交助手写入规则或列描述；审阅页"本次修改"只展示、可编辑/撤销；左侧"语义建模"入口 `ModelingHubPage`；文档上传即刷新、助手修改实时刷新。`mvn test` 757 项 0 失败。
-- 用户已确认的决定（2026-10-21）：
-  - 取消逐项确认卡，修改直接进草稿，发布前统一审阅、按文件撤销、可放弃全部草稿；
-  - 无业务文档的自动建模不得写 `knowledge/rules/`，推断只进 `knowledge/caveats/`（代码约束）；
-  - 多人共用一份草稿，不做分支，审阅显示作者；助手运行中不可发布；
-  - 多业务文档：新增、替换（保留历史）、删除，均为草稿修改，上传后自动排队交给助手；问数不直接读文档；
-  - 上传数据弹窗可附业务文档；采样后自动建模；已建模库新增表只处理新表；
-  - 点踩只记录反馈，不跳转、不生成问答；暂不做问数反馈列表；
-  - 不提供"停止建模"按钮；
-  - 派生资产（计算字段、视图、ref_sql、Cube）不预先生成，以后从已确认问答沉淀，另立 spec；基础建模继续使用 Wren；不单独做"文档直给 vs Wren"对比评测。
-
-### 已实施、未提交、待真实验收
-
-- spec091：推荐问题预填、问题直接确认、发布时 dry-plan 退回（738→742 项测试通过）。
-- 外部表约束：基础建模轮次禁止查询外部表，只有 `purpose=question` 轮次可查；问题轮次禁 MIN/MAX、空结果后换日期重试拒绝。
-- 问数：超窗口直接请用户给范围、不提拆分；问答 frontmatter `source: user-confirmed`。
-- 前端：确认卡/排队状态提示、问题弹窗在排队请求后才出现（这些在 spec092 实施后会被替换）。
-- 服务 17:26 重启；最近日志归档在 `logs/archive-20261021-run6-stuck/`。
-
-### 未完成 / 下一步
-
-1. 按 spec092 验收标准 1–10 真实验收；旧单文档接口 `PUT /dataset-groups/{id}/knowledge` 已无前端使用，待确认后删除。
-2. 问数侧是否去掉 Cube 工具（`list_cubes` 等）待用户决定。
-3. 业务口径待定："报表"是否仅指 `object_type='报表'`。
-4. Docker（Mihomo TUN）待用户处理，`run_python` 沙箱不可用。
-5. 首次"整理文档"时：压缩 ARCHITECTURE 5.6；给与当前规则冲突的旧 ADR 补状态行。
-6. 所有修改尚未提交 Git。
+- 本轮未运行公司真实BI/模型、Doris/外部源完整流程、大结果、混合负载及长稳；按上线条件验收。
+- A/B为两个本地代理入口转发同一DeepSeek，不代表两个真实供应商均已验证；窗口门禁辅助快照由自动化验证。
+- 发布前按 docs/guides/release-checklist.md 实际配置与演练；不自行合并到同事分支或推送。
+- 方案讨论与实际证据目录由用户指定保留在本机桌面，不在项目新增临时实测报告。
+- 独立测试端口18827/18828及代理18831保留；新整合18829、prod结构验证18830使用隔离库。
+- 临时服务运行具体PID、加载制品哈希见桌面 launch-info.json；不将源码存在等同于运行已更新。

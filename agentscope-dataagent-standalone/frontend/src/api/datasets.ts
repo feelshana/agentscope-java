@@ -113,7 +113,7 @@ export class DatasetUploadError extends Error {
 let uploadPolicyPromise: Promise<UploadPolicy> | undefined;
 export function getUploadPolicy(): Promise<UploadPolicy> {
   return uploadPolicyPromise ??= (async () => {
-    const res = await fetch('/api/datasets/upload-policy', { headers: authHeaders() });
+    const res = await apiFetch('/api/datasets/upload-policy', { headers: authHeaders() });
     // Allows the development UI to remain usable until the local backend is restarted.
     if (res.status === 404 || res.status === 405) return { maxFileBytes: 50 * 1024 ** 2, maxSelectionBytes: 100 * 1024 ** 2,
       maxFiles: 10, maxRows: 100000, maxColumns: 100, maxCells: 2000000, concurrentFiles: 8, statusAvailable: false };
@@ -125,7 +125,7 @@ export interface ServerUploadStatus {
   uploadId: string; name: string; fileName: string; phase: string; datasetId?: string; error?: string; active: boolean;
 }
 export async function getServerUploadStatuses(groupId: string): Promise<ServerUploadStatus[]> {
-  const res = await fetch(`/api/datasets/upload-status?groupId=${encodeURIComponent(groupId)}`, { headers: authHeaders() });
+  const res = await apiFetch(`/api/datasets/upload-status?groupId=${encodeURIComponent(groupId)}`, { headers: authHeaders() });
   if (!res.ok) throw new Error(await errorMessage(res, '读取上传状态失败'));
   return res.json();
 }

@@ -96,7 +96,9 @@ public class QuestionSuggestionService {
     /** Callers have already checked that the user may manage {@code groupId}. */
     public List<String> suggest(String groupId, List<String> existing) {
         try {
-            Model model = models.getIfAvailable();
+            Model model =
+                    io.agentscope.dataagent.runtime.model.SwitchingModel.forCall(
+                            models.getIfAvailable(), null);
             if (model == null) return List.of();
             MdlWorkspaceReader.Snapshot snapshot = reader.read(groupId);
             if (snapshot.models().isEmpty()) return List.of();

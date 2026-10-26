@@ -2,6 +2,7 @@ package io.agentscope.dataagent.dataset;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -65,7 +66,7 @@ class FactQueryWindowPolicyTest {
         var row = entry("g", "a", "LIMITED", 30);
         when(windows.findByGroupId("g")).thenReturn(List.of(row));
         when(windows.findByGroupId("other")).thenReturn(List.of());
-        when(gate.check(anyString(), anyList()))
+        when(gate.check(anyString(), anyList(), any()))
                 .thenReturn(new SqlWindowGate.Decision(false, List.of(), "请指定日期"));
         var ctx = context();
         assertThatThrownBy(() -> policy.requireAllowed(ctx, "g", "SELECT COUNT(*) FROM 逻辑a"))
@@ -73,27 +74,27 @@ class FactQueryWindowPolicyTest {
                 .hasMessageContaining("SQL_TIME_WINDOW_REJECTED");
         assertThatThrownBy(() -> policy.requireAllowed(ctx, "g", "SELECT SUM(x) FROM 逻辑a"))
                 .isInstanceOf(DatasetException.class);
-        verify(gate, times(1)).check(anyString(), anyList());
+        verify(gate, times(1)).check(anyString(), anyList(), any());
         policy.requireAllowed(ctx, "other", "SELECT 1");
-        when(gate.check(anyString(), anyList()))
+        when(gate.check(anyString(), anyList(), any()))
                 .thenReturn(new SqlWindowGate.Decision(true, List.of(), "符合"));
         policy.requireAllowed(context(), "g", "SELECT COUNT(*) FROM 逻辑a");
-        verify(gate, times(2)).check(anyString(), anyList());
+        verify(gate, times(2)).check(anyString(), anyList(), any());
     }
 
     @Test
     void sameSqlApprovalIsReusedOnlyUntilConfigurationChanges() {
         var row = entry("g", "a", "LIMITED", 30);
         when(windows.findByGroupId("g")).thenReturn(List.of(row));
-        when(gate.check(anyString(), anyList()))
+        when(gate.check(anyString(), anyList(), any()))
                 .thenReturn(new SqlWindowGate.Decision(true, List.of(), "符合"));
         var ctx = context();
         policy.requireAllowed(ctx, "g", "SELECT 1");
         policy.requireAllowed(ctx, "g", "SELECT 1");
-        verify(gate, times(1)).check(anyString(), anyList());
+        verify(gate, times(1)).check(anyString(), anyList(), any());
         row.update("[\"时间\"]", "LIMITED", 7, "alice");
         policy.requireAllowed(ctx, "g", "SELECT 1");
-        verify(gate, times(2)).check(anyString(), anyList());
+        verify(gate, times(2)).check(anyString(), anyList(), any());
     }
 
     @Test
@@ -102,19 +103,19 @@ class FactQueryWindowPolicyTest {
         // and ALLOWED again on retry, because every request asked the gate model anew.
         var row = entry("g", "a", "LIMITED", 30);
         when(windows.findByGroupId("g")).thenReturn(List.of(row));
-        when(gate.check(anyString(), anyList()))
+        when(gate.check(anyString(), anyList(), any()))
                 .thenReturn(new SqlWindowGate.Decision(true, List.of(), "符合"))
                 .thenReturn(new SqlWindowGate.Decision(false, List.of(), "不应再被调用"));
         policy.requireAllowed(context(), "g", "SELECT 1", "question validate");
         policy.requireAllowed(context(), "g", "SELECT 1", "question confirm");
-        verify(gate, times(1)).check(anyString(), anyList());
+        verify(gate, times(1)).check(anyString(), anyList(), any());
         // A refusal is never remembered across requests.
         assertThatThrownBy(() -> policy.requireAllowed(context(), "g", "SELECT 2"))
                 .isInstanceOf(DatasetException.class);
-        when(gate.check(anyString(), anyList()))
+        when(gate.check(anyString(), anyList(), any()))
                 .thenReturn(new SqlWindowGate.Decision(true, List.of(), "符合"));
         policy.requireAllowed(context(), "g", "SELECT 2");
-        verify(gate, times(3)).check(anyString(), anyList());
+        verify(gate, times(3)).check(anyString(), anyList(), any());
     }
 
     @Test

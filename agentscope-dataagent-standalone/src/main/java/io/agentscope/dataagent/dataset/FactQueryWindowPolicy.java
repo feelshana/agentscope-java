@@ -125,7 +125,7 @@ public class FactQueryWindowPolicy {
                 context.put(cacheKey, shared);
                 return;
             }
-            SqlWindowGate.Decision decision = gate.check(sql, registered);
+            SqlWindowGate.Decision decision = gate.check(sql, registered, context);
             audit(
                     context,
                     groupId,

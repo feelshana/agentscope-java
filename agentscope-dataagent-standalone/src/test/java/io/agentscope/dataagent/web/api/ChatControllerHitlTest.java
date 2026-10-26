@@ -146,51 +146,54 @@ class ChatControllerHitlTest {
     }
 
     @Test
-    void normalChatAcceptsMultipleGroupsAndNormalizesSelection() {
-        when(groupService.queryGroups("alice", List.of("g1", "g2")))
-                .thenReturn(
-                        List.of(
-                                new DatasetGroupEntity("g2", "bob", "共享库", null),
-                                new DatasetGroupEntity("g1", "alice", "自己的库", null)));
+    void normalChatAcceptsOneGroupAndRejectsMultipleGroups() {
+        when(groupService.queryGroups("alice", List.of("g1")))
+                .thenReturn(List.of(new DatasetGroupEntity("g1", "bob", "共享库", null)));
         assertThat(
                         controller.resolveGroupScope(
-                                "alice", "data-agent", "multi", List.of("g2", "g1", "g2"), false))
-                .containsExactly("g1", "g2");
+                                "alice", "data-agent", "single", List.of("g1", "g1"), false))
+                .containsExactly("g1");
+        assertThatThrownBy(
+                        () ->
+                                controller.resolveGroupScope(
+                                        "alice", "data-agent", "multi", List.of("g1", "g2"), false))
+                .isInstanceOf(DatasetException.class)
+                .hasMessageContaining("单知识库");
         verify(groupService, never()).getGroup(anyString(), anyString());
     }
 
     @Test
-    void allGroupsExpandsOnlyAuthorizedGroupsAndConflictingSelectionIsRejected() {
-        var groups =
-                List.of(
-                        new DatasetGroupEntity("g1", "alice", "自己的库", null),
-                        new DatasetGroupEntity("g2", "bob", "共享库", null));
-        when(groupService.listGroups("alice")).thenReturn(groups);
-        when(groupService.queryGroups("alice", List.of("g1", "g2"))).thenReturn(groups);
-        assertThat(controller.resolveGroupScope("alice", "data-agent", "all", null, true))
-                .containsExactly("g1", "g2");
+    void allGroupsIsRejectedWithoutExpandingAuthorization() {
+        assertThatThrownBy(
+                        () ->
+                                controller.resolveGroupScope(
+                                        "alice", "data-agent", "all", null, true))
+                .isInstanceOf(DatasetException.class);
         assertThatThrownBy(
                         () ->
                                 controller.resolveGroupScope(
                                         "alice", "data-agent", "all", List.of("g1"), true))
                 .isInstanceOf(DatasetException.class);
+        verify(groupService, never()).listGroups(anyString());
     }
 
     @Test
-    void continuationUsesSavedRangeAndReorderingIsAllowed() {
-        when(conversationScopes.get("alice", "multi")).thenReturn(List.of("g2", "g1"));
-        var groups =
-                List.of(
-                        new DatasetGroupEntity("g1", "alice", "一", null),
-                        new DatasetGroupEntity("g2", "bob", "二", null));
-        when(groupService.queryGroups("alice", List.of("g1", "g2"))).thenReturn(groups);
-        assertThat(controller.resolveGroupScope("alice", "data-agent", "multi", null, false))
-                .containsExactly("g1", "g2");
+    void continuationPreservesOneLibraryAndRequiresReselectionForOldMultiScopes() {
+        when(conversationScopes.get("alice", "single")).thenReturn(List.of("g1"));
+        when(conversationScopes.get("alice", "old-multi")).thenReturn(List.of("g2", "g1"));
+        when(groupService.queryGroups("alice", List.of("g1")))
+                .thenReturn(List.of(new DatasetGroupEntity("g1", "alice", "一", null)));
+        assertThat(controller.resolveGroupScope("alice", "data-agent", "single", null, false))
+                .containsExactly("g1");
+        assertThatThrownBy(
+                        () ->
+                                controller.resolveGroupScope(
+                                        "alice", "data-agent", "old-multi", null, false))
+                .isInstanceOf(DatasetException.class)
+                .hasMessageContaining("重新选择");
         assertThat(
                         controller.resolveGroupScope(
-                                "alice", "data-agent", "multi", List.of("g1", "g2"), false))
-                .containsExactly("g1", "g2");
-        assertThat(controller.resolveGroupScope("alice", "data-agent", "multi", List.of(), false))
+                                "alice", "data-agent", "old-multi", List.of(), false))
                 .isEmpty();
     }
 
@@ -246,21 +249,19 @@ class ChatControllerHitlTest {
     }
 
     @Test
-    void allSelectionExpandsLatestAuthorizationEachTurn() {
+    void explicitSingleSelectionStillRechecksRevocationEachTurn() {
         var g1 = new DatasetGroupEntity("g1", "alice", "一", null);
-        var g2 = new DatasetGroupEntity("g2", "bob", "二", null);
-        when(conversationScopes.get("alice", "all")).thenReturn(List.of("g1"));
-        when(groupService.listGroups("alice"))
-                .thenReturn(List.of(g1), List.of(g1, g2), List.of(g2));
-        when(groupService.queryGroups("alice", List.of("g1"))).thenReturn(List.of(g1));
-        when(groupService.queryGroups("alice", List.of("g1", "g2"))).thenReturn(List.of(g1, g2));
-        when(groupService.queryGroups("alice", List.of("g2"))).thenReturn(List.of(g2));
-        assertThat(controller.resolveGroupScope("alice", "data-agent", "all", null, true))
+        when(groupService.queryGroups("alice", List.of("g1")))
+                .thenReturn(List.of(g1))
+                .thenThrow(new DatasetException("已撤权", 404));
+        assertThat(controller.resolveGroupScope("alice", "data-agent", "one", List.of("g1"), false))
                 .containsExactly("g1");
-        assertThat(controller.resolveGroupScope("alice", "data-agent", "all", null, true))
-                .containsExactly("g1", "g2");
-        assertThat(controller.resolveGroupScope("alice", "data-agent", "all", null, true))
-                .containsExactly("g2");
+        assertThatThrownBy(
+                        () ->
+                                controller.resolveGroupScope(
+                                        "alice", "data-agent", "one", List.of("g1"), false))
+                .isInstanceOf(DatasetException.class);
+        verify(groupService, never()).listGroups(anyString());
     }
 
     @Test

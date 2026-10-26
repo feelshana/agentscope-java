@@ -94,6 +94,12 @@
             <artifactId>agentscope-harness</artifactId>
         </dependency>
 
+        <!-- Durable conversation checkpoints use the framework's MySQL store. -->
+        <dependency>
+            <groupId>io.agentscope</groupId>
+            <artifactId>agentscope-extensions-mysql</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>io.agentscope</groupId>
             <artifactId>agentscope-extensions-model-dashscope</artifactId>
@@ -448,6 +454,16 @@
                         <phase>generate-resources</phase>
                         <configuration>
                             <arguments>install</arguments>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>npm-test</id>
+                        <goals>
+                            <goal>npm</goal>
+                        </goals>
+                        <phase>generate-resources</phase>
+                        <configuration>
+                            <arguments>test</arguments>
                         </configuration>
                     </execution>
                     <execution>

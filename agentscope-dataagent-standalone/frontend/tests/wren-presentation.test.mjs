@@ -1,14 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import ts from 'typescript';
-
-const source = readFileSync(new URL('../src/utils/wrenToolPresentation.ts', import.meta.url), 'utf8');
-const { outputText } = ts.transpileModule(source, {
-  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-});
-const { isWrenTool, wrenToolLabel, parseWrenResult } = await import(
-  `data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
+import { isWrenTool, wrenToolLabel, parseWrenResult } from '../src/utils/wrenToolPresentation.ts';
 
 test('native names use the same presentation as the legacy gateway', () => {
   for (const name of ['run_sql', 'query_cube', 'get_mdl', 'recall_queries', 'describe_model', 'wren_call_tool'])

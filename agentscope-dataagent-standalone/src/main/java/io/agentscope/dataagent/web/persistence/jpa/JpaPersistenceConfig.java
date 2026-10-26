@@ -71,7 +71,9 @@ public class JpaPersistenceConfig {
         log.info("Persistence: user store backed by JPA");
         return new JpaUserStore(
                 repository,
-                environment.getProperty("dataagent.seed-demo-users", Boolean.class, false));
+                !environment.acceptsProfiles(org.springframework.core.env.Profiles.of("prod"))
+                        && environment.getProperty(
+                                "dataagent.seed-demo-users", Boolean.class, false));
     }
 
     @Bean

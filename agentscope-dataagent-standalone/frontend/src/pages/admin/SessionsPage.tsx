@@ -1,4 +1,4 @@
-import { apiFetch } from '../../api/auth';
+import { apiFetch, getToken } from '../../api/auth';
 import React, { useEffect, useState } from 'react';
 import AdminPageLayout from '../../components/admin/AdminPageLayout';
 
@@ -34,7 +34,7 @@ interface SessionTreeNode {
 }
 
 function authH(): Record<string, string> {
-  const t = localStorage.getItem('claw_token') ?? '';
+  const t = getToken() ?? '';
   return { Authorization: `Bearer ${t}` };
 }
 

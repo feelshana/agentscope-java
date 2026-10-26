@@ -5,6 +5,10 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import './global.css';
 
 import LoginPage from './pages/LoginPage';
+import BiEntryPage from './pages/BiEntryPage';
+import AuthBootstrap from './components/AuthBootstrap';
+import { getToken, isAdmin } from './api/auth';
+import { APP_BASE } from './api/paths';
 import AppShell from './components/AppShell';
 import SessionGate from './components/SessionGate';
 import EditTierGate from './components/EditTierGate';
@@ -12,11 +16,13 @@ import EditTierGate from './components/EditTierGate';
 import ChatPage from './pages/ChatPage';
 import OntologyChatPage from './pages/OntologyChatPage';
 import WorkspacePage from './pages/WorkspacePage';
+import MorePage from './pages/MorePage';
 import SkillsPage from './pages/configure/SkillsPage';
 import SubagentsPage from './pages/configure/SubagentsPage';
 import ChannelsPage from './pages/configure/ChannelsPage';
 import ToolsPage from './pages/configure/ToolsPage';
 import DatasetsPage from './pages/configure/DatasetsPage';
+import DataSourcesPage from './pages/configure/DataSourcesPage';
 import DatasetGroupPage from './pages/configure/DatasetGroupPage';
 import DatasetDetailPage from './pages/configure/DatasetDetailPage';
 import SemanticModelingPage from './pages/configure/SemanticModelingPage';
@@ -36,6 +42,7 @@ import ApprovalsPage from './pages/admin/ApprovalsPage';
 import InstancesPage from './pages/admin/InstancesPage';
 import AdminChannelsPage from './pages/admin/ChannelsPage';
 import ConfigPage from './pages/admin/ConfigPage';
+import ModelServicesPage from './pages/admin/ModelServicesPage';
 import DebugPage from './pages/admin/DebugPage';
 import AdminUsagePage from './pages/admin/UsagePage';
 import UsersPage from './pages/admin/UsersPage';
@@ -43,22 +50,6 @@ import AdminSessionsPage from './pages/admin/SessionsPage';
 import AdminAgentsPage from './pages/admin/AgentsPage';
 import AdminAgentDetailPage from './pages/admin/AgentDetailPage';
 import AdminChannelDetailPage from './pages/admin/ChannelDetailPage';
-
-function getToken(): string | null {
-  return localStorage.getItem('claw_token');
-}
-
-function decodeJwt(token: string): Record<string, unknown> {
-  try { return JSON.parse(atob(token.split('.')[1])); } catch { return {}; }
-}
-
-function isAdmin(): boolean {
-  const token = getToken();
-  if (!token) return false;
-  const p = decodeJwt(token);
-  const roles = Array.isArray(p.roles) ? (p.roles as string[]) : [];
-  return roles.some((r: string) => r.toLowerCase() === 'admin');
-}
 
 function PrivateRoute({ children }: { children: React.ReactElement }) {
   return <SessionGate>{children}</SessionGate>;
@@ -72,9 +63,10 @@ function AdminRoute({ children }: { children: React.ReactElement }) {
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <BrowserRouter>
+    <AuthBootstrap><BrowserRouter basename={APP_BASE || '/'}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/bi-entry" element={<BiEntryPage />} />
 
         <Route element={<PrivateRoute><AppShell /></PrivateRoute>}>
           <Route index element={<Navigate to="/chat" replace />} />
@@ -87,6 +79,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 
           {/* Workspace browser (RUN-tier read-only allowed) */}
           <Route path="/workspace" element={<WorkspacePage />} />
+          <Route path="/more" element={<MorePage />} />
 
           {/* Configuration pages — EDIT tier only */}
           <Route path="/configure/skills"    element={<EditTierGate><SkillsPage /></EditTierGate>} />
@@ -95,6 +88,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="/configure/tools"     element={<EditTierGate><ToolsPage /></EditTierGate>} />
           {/* Datasets are per-user data, not agent config — no EDIT-tier gate. */}
           <Route path="/configure/datasets"  element={<DatasetsPage />} />
+          <Route path="/configure/datasources" element={<DataSourcesPage />} />
           <Route path="/configure/datasets/:groupId" element={<DatasetGroupPage />} />
           {/* specs/030 fullscreen workbench: owns the whole viewport, AppShell hides the global sidebar here. */}
           <Route path="/configure/modeling" element={<ModelingHubPage />} />
@@ -126,11 +120,12 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="/admin/users"           element={<AdminRoute><UsersPage /></AdminRoute>} />
           <Route path="/admin/usage"           element={<AdminRoute><AdminUsagePage /></AdminRoute>} />
           <Route path="/admin/config"          element={<AdminRoute><ConfigPage /></AdminRoute>} />
+          <Route path="/admin/models"          element={<AdminRoute><ModelServicesPage /></AdminRoute>} />
           <Route path="/admin/debug"           element={<AdminRoute><DebugPage /></AdminRoute>} />
         </Route>
 
         <Route path="*" element={<Navigate to="/chat" replace />} />
       </Routes>
-    </BrowserRouter>
+    </BrowserRouter></AuthBootstrap>
   </React.StrictMode>,
 );
