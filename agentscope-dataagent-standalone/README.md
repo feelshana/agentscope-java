@@ -313,7 +313,7 @@ to false; existing users and grants are retained.
 | `dataagent.wren.profile` / `data-source` / `timeout-seconds` / `instance-idle-seconds` | `dataagent` / `mysql` / `180` / `1800` | Default wren connection profile (M4: a group whose datasets all come from one MySQL external datasource binds its own `ext-<datasourceId>` profile, resolved at publish time and pinned into the snapshot; this setting is the fallback for uploaded-only groups and pre-M4 snapshots), project dialect (written into `wren_project.yml`, passed to parse-types), per-command subprocess timeout (seconds) and the per-group instance-pool idle TTL in seconds (M3: an unused wren instance is closed and respawned on demand). Env: `DATAAGENT_WREN_PROFILE` / `DATAAGENT_WREN_DATA_SOURCE` / `DATAAGENT_WREN_TIMEOUT_SECONDS` / `DATAAGENT_WREN_INSTANCE_IDLE_SECONDS`. |
 | `server.port` | `8080` | HTTP port. |
 | `dataagent.upload.max-file-size` / `max-selection-size` / `max-files` | `50MB` / `100MB` / `10` | 单文件、整批选择大小及文件数量；前端从上传策略 API 读取。 |
-| `dataagent.upload.max-rows` / `max-columns` / `max-cells` | `100000` / `100` / `2000000` | 每文件解析规模限制。 |
+| `dataagent.upload.max-rows` / `max-columns` / `max-cells` | `500000` / `100` / `10000000` | 每文件解析规模限制。 |
 | `dataagent.upload.concurrent-files` | `8` | 单进程在途上传预算（1—32）；超额 429，前端有限调度。 |
 | `dataagent.chat.max-active` / `max-active-per-user` | `16` / `2` | ChatController 问数执行预算，建模豁免。 |
 | `dataagent.chat.max-waiting` / `max-waiting-per-user` | `16` / `1` | 问数等待名额；排队通过 SSE capacity 提示。 |
@@ -463,3 +463,5 @@ Operational guides (deployment, single-host release, concurrency) live in [docs/
 | `dataagent.auth.bi.enabled` / `shared-key` | `DATAAGENT_BI_LOGIN_ENABLED=false`、`DATAAGENT_BI_SHARED_KEY`；prod 启用 BI，独立于 JWT 密钥 |
 
 MySQL Agent 上下文保存于平台库 `dataagent_agent_state`；H2 使用实际 HOME 下按数据库隔离的 JSON 文件。需同时保留工作区、附件、数据库与模型主密钥。图表按操作者私有校验。生产首次建库和升级见[单机发布手册](docs/guides/single-host-release.md)；整合边界见[ADR0114](docs/adr/0114-native-query-and-engineering-integration.md)。
+
+Spring Boot 4 uses `spring.web.error.include-message=always` to retain actionable validation messages; the old `server.error.include-message` setting no longer applies. Error responses do not include stack traces. Read the effective upload policy from `/api/datasets/upload-policy`: the current application.yml sets 500,000 rows, 100 columns and 10,000,000 cells per file. Java fallback values do not represent the effective deployment policy.

@@ -1,11 +1,12 @@
 server:
   port: 8080
-  error:
-    include-message: always
 
 spring:
   application:
     name: agentscope-dataagent
+  web:
+    error:
+      include-message: always
   webflux:
     static-path-pattern: /**
   resources:

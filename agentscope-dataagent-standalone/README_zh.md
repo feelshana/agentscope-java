@@ -234,7 +234,7 @@ java -jar target/agentscope-dataagent-*-exec.jar
 | `server.port` | `8080` | HTTP 端口 |
 | `dataagent.seed-demo-users` / `cors.allowed-origins` | `false` / `*` | Java 管理员初始化需启用；CORS 按部署配置允许来源。SQL 初始化是独立开关。 |
 | `dataagent.upload.max-file-size` / `max-selection-size` / `max-files` | `50MB` / `100MB` / `10` | 单文件、整批选择和文件数限制，前端读取服务端策略。 |
-| `dataagent.upload.max-rows` / `max-columns` / `max-cells` | `100000` / `100` / `2000000` | 解析规模限制。 |
+| `dataagent.upload.max-rows` / `max-columns` / `max-cells` | `500000` / `100` / `10000000` | 解析规模限制。 |
 | `dataagent.upload.concurrent-files` | `8` | 单进程在途文件预算，允许 1—32，满额 429。 |
 | `dataagent.chat.max-active` / `max-active-per-user` | `16` / `2` | ChatController 问数执行名额，建模豁免。 |
 | `dataagent.chat.max-waiting` / `max-waiting-per-user` | `16` / `1` | 全局/每用户等待名额。 |
@@ -340,3 +340,5 @@ mvn spotless:check
 | `dataagent.auth.bi.enabled` / `shared-key` | `DATAAGENT_BI_LOGIN_ENABLED=false`、`DATAAGENT_BI_SHARED_KEY`；prod 启用 BI，独立于 JWT 密钥 |
 
 MySQL Agent 上下文保存于平台库 `dataagent_agent_state`；H2 使用实际 HOME 下按数据库隔离的 JSON 文件。需同时保留工作区、附件、数据库与模型主密钥。图表按操作者私有校验。生产首次建库和升级见[单机发布手册](docs/guides/single-host-release.md)；整合边界见[ADR0114](docs/adr/0114-native-query-and-engineering-integration.md)。
+
+Spring Boot 4 使用 `spring.web.error.include-message=always` 保留业务校验原因，旧 `server.error.include-message` 已停用；错误响应不包含堆栈。运行中的上传策略以 `/api/datasets/upload-policy` 为准，当前 application.yml 为50万行、100列、1000万单元格，类的缺省值不代表部署后的实际策略。

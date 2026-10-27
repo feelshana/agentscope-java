@@ -777,6 +777,7 @@ spec 045 / ADR 0055：无已登记问题、无待确认原生 HITL 时，页面�
 
 | 配置 | 默认 | 说明 |
 |---|---|---|
+| `spring.web.error.include-message` | `always` | Boot 4 错误响应保留可操作原因；旧 server.error 配置已失效，不返回堆栈 |
 | `dataagent.jwt.secret` | dev 占位 | 生产必须覆盖（≥32 字符） |
 | `dataagent.workspace` | JVM cwd | 运行态工作目录 |
 | `dataagent.agent.name` | `data-agent` | 自动生成 `agentscope.json` 时的 agent 名；系统提示词默认用内置常量，覆盖用 `DATAAGENT_AGENT_SYS_PROMPT`（见 4.5） |
@@ -789,7 +790,7 @@ spec 045 / ADR 0055：无已登记问题、无待确认原生 HITL 时，页面�
 | `dataagent.sandbox.image` | `agentscope/dataagent-sandbox:latest` | 沙箱镜像（`docker/sandbox.Dockerfile` 构建） |
 | `dataagent.sandbox.max-containers` | `16` | 单进程容器上限，满额驱逐空闲实例；环境变量 DATAAGENT_SANDBOX_MAX_CONTAINERS |
 | `dataagent.upload.max-file-size` / `max-selection-size` / `max-files` | `50MB` / `100MB` / `10` | 上传单文件、整批及数量上限 |
-| `dataagent.upload.max-rows` / `max-columns` / `max-cells` | `100000` / `100` / `2000000` | 解析规模上限 |
+| `dataagent.upload.max-rows` / `max-columns` / `max-cells` | `500000` / `100` / `10000000` | 解析规模上限 |
 | `dataagent.upload.concurrent-files` | `8` | 单进程在途文件准入，允许 1—32 |
 | `dataagent.chat.max-active` / `max-active-per-user` | `16` / `2` | 问数全局/每用户执行数 |
 | `dataagent.chat.max-waiting` / `max-waiting-per-user` | `16` / `1` | 全局/每用户等待数 |
@@ -942,6 +943,8 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 
 - `WrenQueryContextMiddleware`：每轮注入服务时间、授权库与时间策略；`dateRules` 只在所选库登记了受限事实表时要求"缺日期先问"；范围超过表的最大天数（如整年）时直接请用户给出不超上限的范围，不提出拆分多次查询再汇总的方案。
 - `DataAgentConfig.QUERY_EFFICIENCY_RULES`：已写月日即视为给了日期；统计结果必须来自 SQL 返回值；排名只按主体分组。
+
+- 指标与回答保真：`DataAgentConfig` 提示建模保留文档公式、阈值、分子分母及指标专属过滤，未验证标记列等价性不替代公式，不扩大为整表过滤；问数不以正确对照掩盖错误主口径，不新增未经工具计算的统计，不无证据归因。这是提示约束，不能保证模型总是遵循；独立验收方法见 [回答内容校验](docs/fixtures/answer-quality/README.md)。
 
 ### 14.5 发布后问数准备与可观测性
 

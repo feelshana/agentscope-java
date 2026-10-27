@@ -109,6 +109,15 @@ class BiAuthHttpTest {
     }
 
     @Test
+    void productionValidationResponsesKeepTheActionableReasonWithoutStackTraces() throws Exception {
+        var response = post("/api/auth/bi-login", "{\"ticket\":\"bad\"}");
+        assertThat(response.statusCode()).isEqualTo(401);
+        var body = new com.fasterxml.jackson.databind.ObjectMapper().readTree(response.body());
+        assertThat(body.path("message").asText()).contains("免登验证失败");
+        assertThat(response.body()).doesNotContain("BiTicketCodec", "java.lang.", "\"trace\"");
+    }
+
+    @Test
     void prodEntryPolicyAndActualHttpAuthentication() throws Exception {
         var options = get("/api/auth/options", null);
         assertThat(options.statusCode()).isEqualTo(200);

@@ -21,8 +21,8 @@
 框架变更后先安装配套 harness/OpenAI 依赖；随后在 standalone 模块运行：
 
 ```bash
-mvn test
-mvn package -DskipTests
+mvn spotless:check
+mvn clean package
 ```
 
 默认在前端构建前运行 `npm test`（根路径和 `/dataagent/` 两组模块回归），失败即停止 Maven；`-DskipTests` 只跳过 Java 测试。只验前端时在 frontend 执行 `npm test` 和 `npm run build`；发布时不使用 skip.npm 绕过门禁。模块测试不代替真实 BI/浏览器联调。
@@ -30,6 +30,12 @@ mvn package -DskipTests
 默认自动构建当前前端，产出原有 `agentscope-dataagent-<version>-exec.jar` 及 `dataagent-<version>.tar.gz`。公共 application.yml 和 h2 profile 保留在 JAR；私有 application-dev/prod 的 yml/yaml/properties 不进入资源/JAR/发布包。即使旧 target/classes 有这些文件，JAR 也会排除。分发包只携带无凭据 prod 样例。
 
 前端已经编译为JAR内static静态文件，由同一个Java应用提供；65不需要另起前端服务或安装Node/Maven。/dataagent/构建前缀必须与BI入口代理一致，上传tar后按运行手册启动Java即可同时提供前后端。私有prod配置仍需在服务器单独创建。
+
+### 应用包与环境材料的区别
+
+常规应用更新使用项目标准Maven构建生成的`dataagent-<version>.tar.gz`，部署验收应覆盖实际打包、上传和启动流程。SHA256和版本清单用于校验、追溯，不是额外运行依赖。
+
+Docker沙箱镜像、Python/Wren环境和向量模型缓存属于服务器环境。首次安装或相应依赖变更时单独准备；服务器已有且经核对满足要求时复用，不要求每次更新应用都重新上传镜像或安装依赖。镜像ID不同需要核对版本/功能，不能仅凭ID不同判定旧镜像必不可用。Maven应用包不包含Docker Engine、Python安装程序或本机Docker镜像。
 
 本机仍可使用原来的私有配置文件，但通过外置目录显式加载，不依赖打入JAR：
 
@@ -78,6 +84,8 @@ export DATAAGENT_WREN_PYTHON="$(cd ../wren-venv/bin && pwd)/python"
 首次空平台库执行[完整初始化结构](../migrations/0000-initial-platform-mysql.sql)，再以 SQL 初始化 never、DDL validate 启动。该 SQL 包含整合候选的 37 张平台表，已在隔离空库实际执行并完整启动校验；不包含用户/业务数据，也不用于已有环境升级。首次安装后不要再重复执行旧增量 ALTER；已有环境按[初始化与升级指引](../migrations/README.md)对照缺失结构选择迁移，禁止直接改生产 update。
 
 两个数据库的初始化不同：平台库预先建立完整元数据表；上传库先建空库并配置应用账号权限，后续上传时由程序动态创建并写入`ds_`表，不预先为每个Excel/CSV建表。上传库保存解析后的表数据，不代表所有持久文件都在MySQL，仍需保留版本外的data目录。两个库可在同一MySQL实例，连接信息分别通过平台库与上传库配置提供。
+
+“启动自动建表”有配置前提：公共application默认`spring.jpa.hibernate.ddl-auto=update`，Hibernate会尝试创建缺失的平台表并更新结构；分发包prod样例明确设为`validate`，只校验已有结构，不创建平台表。因此按本手册首次生产部署时，两库建立后，平台库仍须先执行完整初始化SQL，上传库保持空库。`spring.sql.init.mode=never`关闭SQL初始化脚本，与Hibernate的DDL模式是两个独立设置。当前没有自动执行本目录升级SQL的启动迁移流程；已有库升级由部署者核对并执行适用增量。
 
 BI普通用户默认在首次免登时按真实username匹配或自动创建，不要求先导入BI整张用户表，更不导入BI密码。管理员可以先从BI进入一次，再按真实username维护roles_csv，随后重新进入取得新JWT。只有提前分配授权等明确需求才预导入用户，保留已有user_id；步骤见[BI配置及数据库](../integration/bi-login.md#配置及数据库)。
 

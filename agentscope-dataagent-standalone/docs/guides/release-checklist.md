@@ -1,15 +1,15 @@
 # DataAgent 上线执行清单
 
-维护日期：2026-10-21。本文只维护执行顺序和验收要求；当前分支、提交、修改及本轮验证见[当前任务](../ai/CURRENT_TASK.md)，已知风险与发布待办见[上线总账](../archive/go-live-gap-review-20261012.md)。具体安装、启停命令统一引用 [Linux 单机发布手册](single-host-release.md)，不另建一套部署实现。
+维护日期：2026-10-27。本文只维护执行顺序和验收要求；当前分支、提交、修改及本轮验证见[当前任务](../ai/CURRENT_TASK.md)，此前发布过程见[历史上线总账](../archive/go-live-gap-review-20261012.md)。具体安装、启停命令统一引用 [Linux 单机发布手册](single-host-release.md)，不另建一套部署实现。
 
 交运维的环境采集/条件安装与数据库命令见[65准备单](65-server-preparation.md)。系统版本未知，32CPU/252GiB不是应用配额；BI入口网关与65可以分机，但浏览器仍使用同源/dataagent/。
 
-当前结论：主功能已实现且有分阶段真实验收，处于云端试运行及正式上线收口。最新 UI 已提交并完成构建及接口桩验证；尚未在真实后端/Nginx/BI重验。本文没有执行部署、备份、迁移或生产测试，也未重新探测云端运行版本。
+当前结论：两分支已按ADR0114整合，并完成本地隔离BI/后端/建模/问数/恢复测试及110题内容、多用户容量补测，仍有内容和慢请求问题；不等于生产验收完成。当前正在指引用户重新演练云端升级，云机依赖和旧服务已有用户输出，当前候选尚未部署，数据库/持久文件备份与升级仍须实际执行和核实。公司真实BI/模型及65环境另验。
 
 ## 0. 先确定发布范围
 
-- [ ] 与同事确认性能优化、事实表时间范围限制的交付提交和配套框架依赖，核对实际代码与验收结果。当前基线不包含可确认的这两项交付。
-- [ ] 确认建模工具非零退出的失败显示和同批工具结束通知由谁修复，避免两人重复改框架。
+- [ ] 固定ADR0114整合后的候选源码、未提交补丁和配套框架依赖，核对实际制品；事实表时间范围等同事方案已纳入整合，不再把当前候选描述为尚未接收其分支。性能结论仍按同一制品和目标资源验证。
+- [ ] 核对本轮仍存在的工具失败/慢调用及已知业务结果问题，区分错误后恢复与最终失败，不用历史修复清单代替当前验收。
 - [ ] 首发保持例行任务占位，不开放调度API；业务术语维护不会自动改写已发布模型。
 - [ ] 明确目标服务器实际分配给本项目的CPU、内存、磁盘、Docker及数据库连接预算；整机总资源不等于项目配额。当前仅支持单机单实例的预算与锁语义。
 - [ ] 选定真实BI同域前缀（现有方案 `/dataagent/`）、域名/HTTPS、服务运行账号、管理员名单和灰度人员。明确可接受的首问/暖问/并发等待指标；当前没有已验收的生产SLO。
@@ -18,27 +18,27 @@
 
 ## 1. 冻结候选版本并构建
 
-在干净的候选源码副本执行。以下为 PowerShell 示例，路径为本项目目录；先安装匹配框架依赖的说明见 [发布手册](single-host-release.md#构建)。尚未接到同事提交时，不把当前包命名为“包含性能修复”。
+由发布者在已确认的候选源码上直接执行标准Maven构建，优先使用已提交版本并记录提交号；使用独立副本是可选方式，不是额外打包要求。子路径构建会重新生成static，构建后应检查差异。以下为本项目目录的PowerShell示例；配套框架依赖安装见[发布手册](single-host-release.md#构建)。
 
 ```powershell
 Set-Location D:\code\agentscope\agentscope-java\agentscope-dataagent-standalone
 git rev-parse HEAD
 $env:DATAAGENT_BASE_PATH = '/dataagent/'
-mvn clean test
+mvn spotless:check
 # 仅当前一条命令成功时继续
-mvn package -DskipTests
+mvn clean package
 # 仅构建成功时记录并交付产物
 Get-FileHash target/agentscope-dataagent-2.0.3-SNAPSHOT-exec.jar -Algorithm SHA256
 Get-FileHash target/dataagent-2.0.3-SNAPSHOT.tar.gz -Algorithm SHA256
 Remove-Item Env:\DATAAGENT_BASE_PATH
 ```
 
-- [ ] 两条Maven命令都退出0，记录通过、失败和条件跳过项。默认构建前端，Spotless也是门禁；不能跳过失败后仍交付。
+- [ ] 两条Maven命令都退出0，记录通过、失败和条件跳过项。`clean package`执行Java测试和前端构建，Spotless单独检查；不能跳过失败后仍交付。
 - [ ] 前端统一入口为 frontend 下的 `npm test`，自动覆盖根路径与 `/dataagent/`；默认 Maven 在前端构建前执行，失败即停止。`-DskipTests` 不跳过此前端检查。旧的直接 Node 命令/data URL 编译不是当前入口；历史加载失败保留在对应报告，不代表当前模块测试仍失败。
 - [ ] 核对候选JAR中的static/index.html引用实际部署前缀 `/dataagent/`，不能用根路径构建包替代。测试覆盖两种前缀不等于应用包同时支持两种前缀；clean构建可避免target/classes中的历史散列资源带入新包。
 - [ ] 包内不带私有application-dev/prod配置、密钥或本机运行数据。按现有布局交付tar.gz、对应沙箱镜像及校验值；模型缓存另行交付或准备。
 - [ ] spec080已移除公共application两项模型Key默认值；正式候选重新打包后检查产物，并由凭据负责人确认历史凭据是否需轮换；不能用私有配置排除检查代替整个候选凭据检查。旧包不会自动更新。
-- [ ] **配套材料另行交付**：当前assembly只放bin/conf/lib、requirements与根README，迁移SQL、BI脚本和完整docs并未内置。请从同一候选提交导出受版本管理的正式docs资料并保持层级，使用其中docs/single-host-release.md及本清单；不复制工作区中的忽略文件、个人交接或私有运行材料。包根README的相对文档链接不能当作所有附件均已携带。
+- [ ] **核对包内配套材料**：当前assembly已携带选定的`docs/guides/`、`docs/integration/`、`docs/migrations/`及ADR0114/spec094，具体以解包清单为准；手册路径为`docs/guides/single-host-release.md`。包内不包含完整源码文档、个人交接或私有运行配置，不整目录复制忽略文件；另需的正式资料从同一候选导出。
 
 记录提交号、匹配框架版本/制品、JAR与tar SHA256、镜像imageId/归档SHA256、Wren依赖版本、前缀和外置配置版本（不记录密钥值）。构建前缀会改本地生成的static，勿因此未经审阅又提交生成结果。
 
