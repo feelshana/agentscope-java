@@ -221,7 +221,7 @@ public class DataAgentConfig {
             """
             # 日期理解
 
-            是否因缺少日期而先询问，只由运行上下文的"受限事实表日期约束"决定：上下文列出受限事实表时按其执行；未列出时不因缺少日期追问。
+            是否因缺少日期而先询问，只针对知识库数据查询，并只由运行上下文的"受限事实表日期约束"决定：上下文列出受限事实表时按其执行；未列出时不因缺少日期追问。
             只查询回答当前问题所必需的信息。用户已提供日期也不代表可以额外探查时间覆盖、数据分布或寻找有数据的区间；禁止把这类探查单独执行或附加在业务SQL中。日期列的MIN/MAX、日期排序取首尾记录等操作，仅在用户问题本身明确要求对应日期信息时，才在其指定范围和门禁内使用。
             用户已写明月日（如“10月7日”）或相对日期（如“最近30天”）即视为已提供日期：未写年份按当前年份理解，不为年份或日期再向用户确认，在答案中说明所用日期。指标口径（如“访问量”）先按已发布的业务规则和召回示例理解，规则未定义且存在实质歧义时才询问。
             用户补充日期后通过已有对话历史继续原问题；相对日期由你结合运行时当前时间理解，不需要探查数据库最新日期来解释“最近30天”。表结构查询、业务规则解释及不受时间限制的表查询不强制询问日期。
@@ -243,6 +243,14 @@ public class DataAgentConfig {
             表格列名和图表标题必须与 SQL 字段的实际含义一致；回答中描述的执行过程必须与实际工具调用一致，执行了查询就不能声称未重新统计。
             答案中的计数、合计、分组分布和排名必须来自工具实际返回的数值；不得对多行结果心算或手工汇总，需要新的统计时补一条聚合 SQL（例如按工作区、负责人分组计数），沙箱不可用时同样如此。
             只查询到分组明细时就忠实展示明细，不自行补合计、平均值、占比或其它衍生数字；确有需要先用SQL或Python计算并核对后再展示。复制数值时只按展示精度舍入，不改写原数。数据范围不同、字段非空或日期覆盖差异都不能直接证明因果；未核对源文件与入库结果前不能断言脏数据由上传解析、导出或接口造成。
+
+            # 联网搜索
+
+            问题涉及知识库数据以外的外部信息（新闻、赛事、活动、政策法规、节假日、行业概念、公开数据等）时，用 web_search 联网搜索；没有 web_search 工具时如实说明当前无法联网。
+            这类外部问题不走问数流程：不召回问答、不读取模型、不执行 SQL，也不因缺少日期先询问；"最近""本周"等按运行上下文的当前日期换算后写进搜索词（可用 after:YYYY-MM-DD）。
+            知识库内的业务数据、指标与统计只能来自 SQL，不用搜索结果代替或补充统计值。搜索词只写公开概念，不写内部数据、查询结果、客户或员工名称、知识库名称。
+            回答中引用网上信息时注明来源网址，并与内部数据结论分开表述；每个问题最多搜索 2 次。
+            同一会话中可前后混合两类问题，各按其类型处理；需要结合时（例如"世界杯期间报表访问量有没有变化"），先搜索得到日期，再按日期常量执行 SQL。
             """;
 
     @Value("${dataagent.openai.api-key:}")
@@ -629,7 +637,25 @@ public class DataAgentConfig {
                             // Sandbox-free posture (see the sandboxlessAgents note above): the
                             // dedicated empty workspace above keeps this agent off the main
                             // agent's shared workspace content.
-                            .workspace(modelingWorkspace);
+                            .workspace(modelingWorkspace)
+                            // One modeling conversation spans many turns of reads and writes;
+                            // the shared 80-message trigger summarized it mid-turn after two or
+                            // three turns (24 s in the 2026-10-26 run) and dropped the loaded
+                            // official skill. Compact on size instead, well inside the context.
+                            .compaction(
+                                    io.agentscope.harness.agent.memory.compaction.CompactionConfig
+                                            .builder()
+                                            .triggerMessages(MODELING_COMPACT_MESSAGES)
+                                            .triggerTokens(MODELING_COMPACT_TOKENS)
+                                            .keepMessages(40)
+                                            .prune(
+                                                    io.agentscope.harness.agent.memory.compaction
+                                                            .CompactionConfig.PruneConfig.builder()
+                                                            .protectTokens(10_000)
+                                                            .minimumTokens(5_000)
+                                                            .maxOutputChars(1_000)
+                                                            .build())
+                                            .build());
                     mountWrenSkills(b, wrenSkillsLocator, MODELING_SKILLS);
                 });
 
@@ -692,6 +718,11 @@ public class DataAgentConfig {
      * channel. Each agent lists only the skills its task uses: every listed skill is rendered
      * into the system prompt of every model call.
      */
+    /** Modeling compaction triggers; the token trigger normally fires first. */
+    static final int MODELING_COMPACT_MESSAGES = 240;
+
+    static final int MODELING_COMPACT_TOKENS = 80_000;
+
     /** Querying answers with the official usage skill only. */
     static final List<String> QUERY_SKILLS = List.of("usage");
 

@@ -1,6 +1,6 @@
 import { appPath } from './paths';
 const BASE = '';
-export interface EntryOptions { passwordLoginEnabled: boolean; biLoginEnabled: boolean }
+export interface EntryOptions { passwordLoginEnabled: boolean; biLoginEnabled: boolean; biAccountLoginEnabled?: boolean }
 let entryOptions: EntryOptions = { passwordLoginEnabled: false, biLoginEnabled: false };
 export function getEntryOptions(): EntryOptions { return entryOptions; }
 export async function loadEntryOptions(): Promise<void> {
@@ -29,7 +29,7 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Pr
   const response = await fetch(target, init);
   if (response.status === 401 && url.origin === window.location.origin
       && (url.pathname.startsWith('/api/') || url.pathname.startsWith(appPath('/api/')))
-      && !url.pathname.endsWith('/api/auth/login') && !url.pathname.endsWith('/api/auth/bi-login')) {
+      && !url.pathname.endsWith('/api/auth/login') && !url.pathname.endsWith('/api/auth/bi-login') && !url.pathname.endsWith('/api/auth/bi-account-login')) {
     const current = getToken();
     if (current && credential === `Bearer ${current}`) {
       clearToken();

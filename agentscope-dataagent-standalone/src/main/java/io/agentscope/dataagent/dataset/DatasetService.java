@@ -605,6 +605,22 @@ public class DatasetService implements DatasetContextProvider {
     /** Read-only sample of the dataset's physical table for the detail page. */
     public Preview preview(String ownerId, String datasetId, int limit) {
         DatasetEntity entity = get(ownerId, datasetId);
+        return previewEntity(entity, limit);
+    }
+
+    public Preview previewReadable(String actor, String groupId, String datasetId) {
+        access.requireQuery(actor, groupId);
+        var entity =
+                repository
+                        .findById(datasetId)
+                        .filter(d -> groupId.equals(d.getGroupId()))
+                        .orElseThrow(() -> new DatasetException("数据集不存在或未授权", 404));
+        var result = previewEntity(entity, 20);
+        access.requireQuery(actor, groupId);
+        return result;
+    }
+
+    private Preview previewEntity(DatasetEntity entity, int limit) {
         int n = limit <= 0 ? 20 : Math.min(limit, 100);
         List<List<String>> rows = new ArrayList<>();
         String sql = "SELECT * FROM " + qualifiedTable(entity) + " LIMIT " + n;

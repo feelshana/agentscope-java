@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { ACTIVE_AGENT_ID } from '../api/activeAgent';
-import { getToken, isAdmin } from '../api/auth';
+import { apiFetch, getToken, isAdmin } from '../api/auth';
 import { InboxEntry, deleteSession, inboxPage } from '../api/sessions';
 import Icon, { IconName } from './Icon';
 
@@ -74,6 +74,8 @@ export interface SessionsSidebarProps {
 export default function SessionsSidebar({ refreshKey, collapsed = false, onToggle }: SessionsSidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const navigationItems = location.pathname.startsWith('/knowledge-bases/')
+    ? NAV_ITEMS.filter(item => item.path !== '/configure/modeling') : NAV_ITEMS;
   const [searchParams] = useSearchParams();
   const activeKey = searchParams.get('session');
 
@@ -220,8 +222,8 @@ export default function SessionsSidebar({ refreshKey, collapsed = false, onToggl
         <div style={{ ...S.brand, padding: 0, justifyContent: 'center' }}><span className="da-logo">DA</span></div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '8px 0' }}>
           {rail('新建对话', 'plus', location.pathname === '/chat' && !activeKey, handleNewChat)}
-          {NAV_ITEMS.map(item => rail(item.label, item.icon, location.pathname.startsWith(item.path), () => navigate(item.path)))}
-          {rail('更多', 'moreHorizontal', ['/more', '/workspace', '/admin/models'].includes(location.pathname), () => navigate('/more'))}
+          {navigationItems.map(item => rail(item.label, item.icon, location.pathname.startsWith(item.path), () => navigate(item.path)))}
+          {rail('更多', 'moreHorizontal', ['/more', '/workspace', '/admin/models', '/admin/public-knowledge-bases'].includes(location.pathname), () => navigate('/more'))}
         </div>
         <span style={{ flex: 1 }} />
         <button title="展开侧边栏" aria-label="展开侧边栏" className="da-navitem" style={{ ...S.railItem, margin: '0 auto 8px' }} onClick={onToggle}>»</button>
@@ -241,14 +243,14 @@ export default function SessionsSidebar({ refreshKey, collapsed = false, onToggl
 
       <nav className="rail-nav" aria-label="主导航">
         <button onClick={handleNewChat} className="rail-nav-item rail-new-chat"><Icon name="plus" />新建对话</button>
-        {NAV_ITEMS.map(item => {
+        {navigationItems.map(item => {
           const active = location.pathname.startsWith(item.path)
             || (item.path === '/configure/datasets' && location.pathname === '/configure/datasources');
           return <button key={item.path} onClick={() => navigate(item.path)} aria-current={active ? 'page' : undefined}
             className={`rail-nav-item${active ? ' is-active' : ''}`}><Icon name={item.icon} />{item.label}</button>;
         })}
-        <button className={`rail-nav-item${['/more', '/workspace', '/admin/models'].includes(location.pathname) ? ' is-active' : ''}`}
-          aria-current={['/more', '/workspace', '/admin/models'].includes(location.pathname) ? 'page' : undefined} onClick={() => navigate('/more')}><Icon name="moreHorizontal" />更多</button>
+        <button className={`rail-nav-item${['/more', '/workspace', '/admin/models', '/admin/public-knowledge-bases'].includes(location.pathname) ? ' is-active' : ''}`}
+          aria-current={['/more', '/workspace', '/admin/models', '/admin/public-knowledge-bases'].includes(location.pathname) ? 'page' : undefined} onClick={() => navigate('/more')}><Icon name="moreHorizontal" />更多</button>
       </nav>
 
       <div className="rail-history" onScroll={e => {
@@ -377,6 +379,10 @@ function SessionRow({ entry, active, batchMode, selected, onOpen, onDelete, onTo
 }
 
 function UserMenu({ username }: { username: string }) {
+  const [profile, setProfile] = useState<{ displayName?: string; company?: string; department?: string } | null>(null);
+  useEffect(() => { const controller = new AbortController(); void apiFetch('/api/auth/profile', { signal: controller.signal, headers: { Authorization: `Bearer ${getToken()}` } })
+    .then(r => r.ok ? r.json() : null).then(p => { if (!controller.signal.aborted) setProfile(p); }).catch(() => {});
+    return () => controller.abort(); }, [username]);
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -392,9 +398,9 @@ function UserMenu({ username }: { username: string }) {
   return <div ref={ref} className="rail-account">
     <button ref={trigger} type="button" className="rail-account-button" onClick={() => setOpen(value => !value)} aria-label="查看当前用户" aria-expanded={open}>
       <span className="rail-avatar">{username.charAt(0).toUpperCase() || '用'}</span>
-      <span className="rail-account-copy"><span>{username || '用户'}</span><small>{isAdmin() ? '全局管理员' : '用户'}</small></span>
+      <span className="rail-account-copy"><span>{profile?.displayName || username || '用户'}</span><small>{profile?.company || (isAdmin() ? '全局管理员' : '用户')}</small></span>
     </button>
-    {open && <div className="rail-account-popover" role="status">{username || '用户'}</div>}
+    {open && <div className="rail-account-popover" role="status">{profile?.displayName || username} · {username}<br />{profile?.company} {profile?.department}<br />{isAdmin() ? '全局管理员' : '普通用户'}</div>}
   </div>;
 }
 

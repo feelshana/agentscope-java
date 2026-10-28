@@ -40,6 +40,12 @@ public class BiLoginService {
         return user;
     }
 
+    public UserStore.UserRecord account(String username) {
+        if (username == null || !username.matches("[\\p{L}\\p{N}_.@-]{1,191}"))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "登录账号格式不正确");
+        return users.findByUsername(username).orElseGet(() -> createUser(username));
+    }
+
     private UserStore.UserRecord createUser(String username) {
         try {
             return users.createUser(

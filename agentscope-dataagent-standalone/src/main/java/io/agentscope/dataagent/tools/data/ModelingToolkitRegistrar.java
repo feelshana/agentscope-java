@@ -135,6 +135,8 @@ public class ModelingToolkitRegistrar {
             WrenProjectFilesystem files,
             OfficialWrenToolkit commands,
             ModelingConfirmationTool confirmations) {
+        // spec095: modeling never goes online; rules come from documents and the user only.
+        DataToolkitRegistrar.HARNESS_WEB_TOOLS.forEach(target::removeTool);
         target.registerTool(new io.agentscope.harness.agent.tool.FilesystemTool(files));
         target.registerTool(files);
         target.registerTool(commands);

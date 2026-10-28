@@ -42,7 +42,7 @@ public interface DatasetGroupRepository extends JpaRepository<DatasetGroupEntity
     @Query(
             """
             select g from DatasetGroupEntity g
-            where (:admin = true or g.ownerId = :userId or exists
+            where (:admin = true or g.ownerId = :userId or (:manageOnly = false and g.publicQuery = true) or exists
               (select m.id from KnowledgeBaseGrantEntity m where m.groupId = g.id and m.userId = :userId
                and (:manageOnly = false or m.role = 'MANAGE')))
               and (:search = '' or lower(g.name) like concat('%', :search, '%')

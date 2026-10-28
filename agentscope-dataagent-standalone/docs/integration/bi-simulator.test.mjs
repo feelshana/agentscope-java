@@ -120,3 +120,9 @@ test('the streaming proxy forwards the first SSE event before upstream completes
 test('the local helper rejects remote upstreams and relative base paths', async () => {
   await assert.rejects(createSimulatorServer({ backend: 'http://remote.invalid:8080', configFile: 'unused' }), /loopback/);
 });
+
+test('account mode supports the production prefix without an AES key', () => {
+  const value = validateConfig({ accountLogin: true, basePath: '/dify/dataagent', users: config.users });
+  assert.equal(value.accountLogin, true);
+  assert.equal(value.basePath, '/dify/dataagent');
+});

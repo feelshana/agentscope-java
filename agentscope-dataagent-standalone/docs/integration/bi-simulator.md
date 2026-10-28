@@ -53,3 +53,6 @@ node docs/integration/bi-simulator-server.mjs --config "D:/private/bi-simulator.
 基础回归：`node --test docs/integration/bi-simulator.test.mjs`。该测试包含代理协议夹具，不能替代实际后端验收。真实浏览器/MySQL结果、首次失败与修复、保留测试数据及环境状态记录在本轮报告（来源 `boundary-lyf@b67a179a:docs/test-reports/20261019-bi-simulator.md`）。
 
 实际BI仍需最终确认用户名读取、路由生命周期、同源和嵌入策略。前端持钥的既有风险接受仍按ADR0081记录，本模拟入口不改变认证协议的可信边界。
+
+## Local Storage账号模式
+配置增加`"accountLogin": true`，后端显式设置`DATAAGENT_BI_ACCOUNT_LOGIN_ENABLED=true`。该模式无需sharedKey，宿主写入测试username/account后iframe加载应用bi-entry，模拟线上取账号；不修改真实BI存储或生产配置。旧配置默认票据模式不变。

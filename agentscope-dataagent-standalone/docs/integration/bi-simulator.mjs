@@ -11,11 +11,13 @@ export function normalizeUser(value) {
 }
 
 export function validateConfig(value) {
-  if (!value || typeof value.sharedKey !== 'string') throw new Error('缺少模拟入口配置。');
+  if (!value || (!value.accountLogin && typeof value.sharedKey !== 'string')) throw new Error('缺少模拟入口配置。');
   let bytes;
+  if (!value.accountLogin) {
   try { bytes = Uint8Array.from(atob(value.sharedKey), c => c.charCodeAt(0)); }
   catch { throw new Error('模拟入口密钥格式不正确，请检查外置配置。'); }
   if (bytes.length !== 32) throw new Error('请在外置配置中填写与后端一致的32字节Base64密钥。');
+  }
   const basePath = String(value.basePath ?? '/dataagent').replace(/\/+$/, '');
   if (basePath && !/^\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+$/.test(basePath))
     throw new Error('应用路径格式不正确。');
@@ -24,7 +26,7 @@ export function validateConfig(value) {
     username: normalizeUser(user.username), label: String(user.label || user.username),
   })).filter(user => { if (seen.has(user.username)) return false; seen.add(user.username); return true; });
   if (!users.length) throw new Error('请至少配置一个测试用户。');
-  return { sharedKey: value.sharedKey, basePath, users };
+  return { sharedKey: value.sharedKey, basePath, users, accountLogin: Boolean(value.accountLogin) };
 }
 
 export function entryUsername({ reload, cached, selected, fallback }) {
@@ -35,11 +37,11 @@ async function boot() {
   const error = document.querySelector('#bi-error');
   const showError = message => { error.textContent = message; error.hidden = false; };
   try {
-    if (!globalThis.isSecureContext || !globalThis.crypto?.subtle)
-      throw new Error('请使用HTTPS或localhost访问此页面，以启用浏览器加密。');
     const response = await fetch(new URL('./bi-simulator.config.json', import.meta.url), { cache: 'no-store' });
     if (!response.ok) throw new Error('无法读取模拟入口配置，请检查本地服务或Nginx静态目录。');
     const config = validateConfig(await response.json());
+    if (!config.accountLogin && (!globalThis.isSecureContext || !globalThis.crypto?.subtle))
+      throw new Error('票据模式请使用HTTPS或localhost访问此页面，以启用浏览器加密。');
     const select = document.querySelector('#bi-user');
     const options = [...config.users];
     const addOption = username => {
@@ -82,6 +84,13 @@ async function boot() {
       status.textContent = `正在以 ${selected} 进入…`;
       frame = document.createElement('iframe'); frame.title = '红海DataAgent';
       host.replaceChildren(frame);
+      localStorage.setItem('username', selected); localStorage.setItem('account', selected);
+      if (config.accountLogin) {
+        frame.src = `${config.basePath}/bi-entry`;
+        status.textContent = `正在通过本地存储以 ${selected} 登录…`;
+        dispose = () => {};
+        return;
+      }
       dispose = mountDataAgent({ iframe: frame, username: selected, sharedKey: config.sharedKey,
         basePath: config.basePath, newEntry, onError: message => { showError(message); status.textContent = '进入失败'; } });
     };

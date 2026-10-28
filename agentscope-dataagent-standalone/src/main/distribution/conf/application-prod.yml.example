@@ -18,8 +18,9 @@ dataagent:
   auth:
     password-login-enabled: false
     bi:
-      enabled: true
-      shared-key: ${DATAAGENT_BI_SHARED_KEY}
+      account-login-enabled: ${DATAAGENT_BI_ACCOUNT_LOGIN_ENABLED:true}
+      enabled: false
+      shared-key: ${DATAAGENT_BI_SHARED_KEY:}
   seed-demo-users: false
   cors:
     allowed-origins: ${DATAAGENT_CORS_ALLOWED_ORIGINS}

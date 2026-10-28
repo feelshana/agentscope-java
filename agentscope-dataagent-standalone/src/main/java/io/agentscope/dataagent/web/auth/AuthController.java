@@ -64,13 +64,15 @@ public class AuthController {
     public record LoginResponse(
             String token, String userId, String username, List<String> roles, long expiresAt) {}
 
-    public record EntryOptions(boolean passwordLoginEnabled, boolean biLoginEnabled) {}
+    public record EntryOptions(
+            boolean passwordLoginEnabled, boolean biLoginEnabled, boolean biAccountLoginEnabled) {}
 
     public record BiLoginRequest(String ticket) {}
 
     @GetMapping("/options")
     public EntryOptions options() {
-        return new EntryOptions(settings.passwordLogin(), settings.biLogin());
+        return new EntryOptions(
+                settings.passwordLogin(), settings.biLogin(), settings.accountLogin());
     }
 
     private LoginResponse issue(UserStore.UserRecord user) {
@@ -90,6 +92,18 @@ public class AuthController {
                     new org.springframework.web.server.ResponseStatusException(
                             HttpStatus.NOT_FOUND));
         return Mono.fromCallable(() -> issue(biLogin.login(req.ticket())))
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+    }
+
+    public record AccountLoginRequest(String username) {}
+
+    @PostMapping("/bi-account-login")
+    public Mono<LoginResponse> accountLogin(@RequestBody AccountLoginRequest request) {
+        if (!settings.accountLogin())
+            return Mono.error(
+                    new org.springframework.web.server.ResponseStatusException(
+                            HttpStatus.NOT_FOUND));
+        return Mono.fromCallable(() -> issue(biLogin.account(request.username())))
                 .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
 

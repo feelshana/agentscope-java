@@ -430,3 +430,10 @@
 - 2026-10-27（Asia/Shanghai）｜提交前整理｜用户授权有用修改一次提交。审查15个文件，保留Boot4修复/HTTP回归、4条通用提示、回答验收夹具及有效配置/发布说明；精简CURRENT_TASK过时重复状态，归档标明历史，统一发布者标准Maven流程。未删除业务文件/测试证据/私有配置或输出资源，未部署；验证及最终提交见Git与本轮回复。
 
 - 2026-10-27（Asia/Shanghai）｜提交验证｜本次Spotless、DocsConsistencyTest/BiAuthHttpTest共8项、Python15项、diff空白检查通过；运行/测试源码与同日完整verify快照一致，当前编译类/配置亦一致。显式暂存15个审查文件一次提交，不推送，私有配置/个人交接/输出包保持忽略。
+- 2026-10-26（Asia/Shanghai）｜实施checkpoint｜spec094 问数联网搜索：WebSearchTool（DeepSeek /v1/tools/search，只发 query/count/need_content，错误转中文说明），DataToolkitRegistrar 收敛 harness web_search/web_fetch 并按 Key 注册，建模移除两者，问数提示词联网搜索一节，ADR0114，README/ARCHITECTURE 配置表。804 项 0 失败 20 跳过，前端 build 通过。真实搜索待 DEEPSEEK_API_KEY。未提交。
+
+- 2026-10-28（Asia/Shanghai）｜实施进行中｜用户批准整合ec6cb3d8及BI/目录/只读/批量授权/公共库；实际--no-commit合并，保留799a2b82修复，未提交推送或操作生产。新增spec096/ADR0116，专项与全量验证进行中；现场BI/66未验，不把历史测试当本轮完成。
+
+- 2026-10-28（Asia/Shanghai）｜本地验收完成｜整合ec6cb3d8并完成spec096/ADR0116；最终Java944/0失败/0错误/28跳过，前端三路径各46、Python17、模拟器9及双路径构建通过。新HTTP补足Boot4 JSON树与大导入缓冲问题并修复；浏览器UI用隔离夹具，不冒充公司接入。未提交推送/打发布包/部署/导入真实数据，既有服务未重启；见20261028验收报告，下一步用户体验及现场环境核对。
+
+- 2026-10-28（Asia/Shanghai）｜提交检查点｜用户明确授权先将当前整合及改造一次提交，再自行测试。提交前核对87个暂存文件，无未解决冲突或未暂存差异，私有配置/个人交接/名单未入暂存；复核既有944项Java及三路径前端等验收记录，仅提交状态文档有更新，不重复打发布包、不推送，最终提交号以Git为准。

@@ -17,6 +17,8 @@ import ChatPage from './pages/ChatPage';
 import OntologyChatPage from './pages/OntologyChatPage';
 import WorkspacePage from './pages/WorkspacePage';
 import MorePage from './pages/MorePage';
+import PublicKnowledgeBasesPage from './pages/PublicKnowledgeBasesPage';
+import KnowledgeBaseBrowsePage from './pages/KnowledgeBaseBrowsePage';
 import SkillsPage from './pages/configure/SkillsPage';
 import SubagentsPage from './pages/configure/SubagentsPage';
 import ChannelsPage from './pages/configure/ChannelsPage';
@@ -120,6 +122,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="/admin/users"           element={<AdminRoute><UsersPage /></AdminRoute>} />
           <Route path="/admin/usage"           element={<AdminRoute><AdminUsagePage /></AdminRoute>} />
           <Route path="/admin/config"          element={<AdminRoute><ConfigPage /></AdminRoute>} />
+          <Route path="/knowledge-bases/:groupId" element={<KnowledgeBaseBrowsePage />} />
+          <Route path="/admin/public-knowledge-bases" element={<AdminRoute><PublicKnowledgeBasesPage /></AdminRoute>} />
           <Route path="/admin/models"          element={<AdminRoute><ModelServicesPage /></AdminRoute>} />
           <Route path="/admin/debug"           element={<AdminRoute><DebugPage /></AdminRoute>} />
         </Route>

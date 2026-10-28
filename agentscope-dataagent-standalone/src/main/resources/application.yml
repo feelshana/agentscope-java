@@ -17,8 +17,9 @@ spring:
   # Multipart upload limits for dataset files (Excel/CSV).
   # Default Spring limit is 1MB which is too small for typical datasets.
   # --------------------------------------------------------------------------
-  codec:
-    max-in-memory-size: 50MB
+  http:
+    codecs:
+      max-in-memory-size: 50MB
 
   servlet:
     multipart:
@@ -99,6 +100,7 @@ dataagent:
   auth:
     password-login-enabled: ${DATAAGENT_PASSWORD_LOGIN_ENABLED:true}
     bi:
+      account-login-enabled: ${DATAAGENT_BI_ACCOUNT_LOGIN_ENABLED:false}
       enabled: ${DATAAGENT_BI_LOGIN_ENABLED:false}
       shared-key: ${DATAAGENT_BI_SHARED_KEY:}
 
@@ -182,6 +184,17 @@ dataagent:
     base-url: ${DATAAGENT_OPENAI_BASE_URL:${OPENAI_BASE_URL:https://api.deepseek.com}}
     model-name: ${DATAAGENT_OPENAI_MODEL_NAME:${OPENAI_MODEL_NAME:deepseek-flash}}
     stream: ${DATAAGENT_OPENAI_STREAM:true}
+
+  # ---- Query web search (spec094) ----
+  # The query agent searches public information through the DeepSeek Search API. The key comes
+  # from the environment only (no default); without it the tool is not registered. Modeling never
+  # searches, and neither agent can fetch arbitrary URLs.
+  web-search:
+    enabled: ${DATAAGENT_WEB_SEARCH_ENABLED:true}
+    api-key: ${DEEPSEEK_API_KEY:}
+    base-url: ${DATAAGENT_WEB_SEARCH_BASE_URL:https://api.deepseek.com}
+    timeout-seconds: ${DATAAGENT_WEB_SEARCH_TIMEOUT_SECONDS:20}
+    max-results: ${DATAAGENT_WEB_SEARCH_MAX_RESULTS:5}
 
   # ---- DashScope model (fallback when no OpenAI key is configured) ----
   # Set DASHSCOPE_API_KEY env var or override api-key below.

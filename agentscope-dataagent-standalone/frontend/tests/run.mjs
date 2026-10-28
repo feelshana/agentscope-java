@@ -15,7 +15,7 @@ if (files.length === 0) throw new Error('No frontend test files found');
 // Neither the application config nor private .env files are loaded for these tests.
 const temporaryRoot = mkdtempSync(join(tmpdir(), 'dataagent-frontend-tests-'));
 try {
-  for (const [name, base] of [['root', '/'], ['prefixed', '/dataagent/']]) {
+  for (const [name, base] of [['root', '/'], ['prefixed', '/dataagent/'], ['bi-prefixed', '/dify/dataagent/']]) {
     const outDir = join(temporaryRoot, name);
     console.log(`\nFrontend regression: base=${base}, files=${files.length}`);
     await build({

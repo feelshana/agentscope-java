@@ -296,6 +296,7 @@ to false; existing users and grants are retained.
 | `dataagent.openai.base-url` | `https://api.deepseek.com` | Current application.yml fallback; override with DATAAGENT_OPENAI_BASE_URL or OPENAI_BASE_URL for the deployed provider. |
 | `dataagent.openai.model-name` | `deepseek-flash` | Current application.yml fallback; override with DATAAGENT_OPENAI_MODEL_NAME or OPENAI_MODEL_NAME. |
 | `dataagent.openai.stream` | `true` | Stream model completions over SSE. Env: `DATAAGENT_OPENAI_STREAM`. Set `false` to compare non-streaming model requests when diagnosing upstream EOF; browser chat still uses SSE. |
+| `dataagent.web-search.api-key` | _(empty)_ | DeepSeek Search API key for the query agent's `web_search` (spec094). Env only: `DEEPSEEK_API_KEY`; empty disables the tool. Related: `dataagent.web-search.enabled` (`true`), `base-url` (`https://api.deepseek.com`), `timeout-seconds` (`20`), `max-results` (`5`). |
 | `dataagent.dashscope.api-key` | _(empty)_ | DashScope API key (fallback when no OpenAI key is set). Env: `DASHSCOPE_API_KEY`. |
 | `dataagent.dashscope.model-name` | `qwen3.8-max` | Current application.yml fallback; DATAAGENT_MODEL_NAME. |
 | `dataagent.agent.name` | `data-agent` | Used when auto-generating `~/.agentscope/dataagent/agentscope.json`. |
@@ -465,3 +466,9 @@ Operational guides (deployment, single-host release, concurrency) live in [docs/
 MySQL Agent 上下文保存于平台库 `dataagent_agent_state`；H2 使用实际 HOME 下按数据库隔离的 JSON 文件。需同时保留工作区、附件、数据库与模型主密钥。图表按操作者私有校验。生产首次建库和升级见[单机发布手册](docs/guides/single-host-release.md)；整合边界见[ADR0114](docs/adr/0114-native-query-and-engineering-integration.md)。
 
 Spring Boot 4 uses `spring.web.error.include-message=always` to retain actionable validation messages; the old `server.error.include-message` setting no longer applies. Error responses do not include stack traces. Read the effective upload policy from `/api/datasets/upload-policy`: the current application.yml sets 500,000 rows, 100 columns and 10,000,000 cells per file. Java fallback values do not represent the effective deployment policy.
+
+## BI账号入口与公共知识库
+
+`DATAAGENT_BI_ACCOUNT_LOGIN_ENABLED=false`：默认关闭，显式开启后从同源BI Local Storage读取username/account，关闭旧票据入口；这是已接受客户端身份信任前提的接入，不是可信SSO。平台角色只取数据库。浏览器路径计划 `/dify/dataagent/`，打包前设置 `DATAAGENT_BASE_PATH`。人员导入、公共库、首次DDL/已有库升级及部署验收见[BI生产接入指引](docs/integration/bi-account-production.md)。
+
+Boot 4的JSON缓冲使用`spring.http.codecs.max-in-memory-size=50MB`，替代旧`spring.codec`名称；导入请求仍受5000条和字段长度校验。

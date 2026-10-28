@@ -102,8 +102,8 @@ test('credentials use session storage and saving or clearing removes the legacy 
 
 test('same-origin requests use the deployment prefix exactly once and retain query and headers', async () => {
   setup();
-  assert.ok(expectedBase === '/' || expectedBase === '/dataagent/');
-  assert.equal(APP_BASE, expectedBase === '/' ? '' : '/dataagent');
+  assert.ok(expectedBase === '/' || expectedBase === '/dataagent/' || expectedBase === '/dify/dataagent/');
+  assert.equal(APP_BASE, expectedBase === '/' ? '' : expectedBase.replace(/\/$/, ''));
   const calls = [];
   globalThis.fetch = async (input, init) => {
     calls.push(new Request(new URL(String(input), window.location.href), init));

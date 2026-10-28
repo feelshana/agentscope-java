@@ -212,7 +212,7 @@ main 线程）同步执行，每个 server 经 `McpClientBuilder.buildAsync().bl
 
 `DataAgentConfig#dataAgentBootstrap` 对主 data-agent 挂载安装版官方 skills，使用原生 HarnessAgent/ReActAgent。
 `WrenQueryContextMiddleware#onSystemPrompt` 仅给出鉴权用户可用的项目 ID/名称与发布状态，不注入草稿、业务规则或自研 SQL 剧本。
-`DataToolkitRegistrar#register` 只注册平台通用结果工具；问数 Agent 与其 Toolkit 由全体用户共用，只使用框架公开的中间件契约实现按次绑定，不修改 agentscope-core：`WrenQueryToolRegistrar#register` 启动时在共享 Toolkit 上为只读官方工具各注册一个不含知识库信息的 `WrenToolForwarder`；`WrenScopedToolkitMiddleware#onModelCall` 为本次调用新建只含官方 MCP 工具的 Toolkit（`Toolkit#registerMcpClient` 注册绑定当前已发布 project 的 `WrenScopedMcpClient`）存入 RuntimeContext，并把传给模型的工具列表改为"共享工具（去掉转发工具）+ 本次官方 schema"，未选库时不提供官方工具；框架从共享 Toolkit 执行转发工具，转发工具把调用交给本次作用域内的同名官方工具，权限、只读与时间门禁仍在 `WrenScopedMcpClient` 中校验。Agent 加载官方 usage，通过 listTools 发现官方 schema，
+`DataToolkitRegistrar#register` 只注册平台通用结果工具，并移除 harness 默认给每个 Agent 的 `web_search`（Tavily）与 `web_fetch`，配置了 DeepSeek Key 时改注册平台 `WebSearchTool`（`web_search`，只发送搜索词，不发用户原话、不取正文；建模 Agent 由 `ModelingToolkitRegistrar#registerOfficialTools` 移除两者，见 ADR0114）；问数 Agent 与其 Toolkit 由全体用户共用，只使用框架公开的中间件契约实现按次绑定，不修改 agentscope-core：`WrenQueryToolRegistrar#register` 启动时在共享 Toolkit 上为只读官方工具各注册一个不含知识库信息的 `WrenToolForwarder`；`WrenScopedToolkitMiddleware#onModelCall` 为本次调用新建只含官方 MCP 工具的 Toolkit（`Toolkit#registerMcpClient` 注册绑定当前已发布 project 的 `WrenScopedMcpClient`）存入 RuntimeContext，并把传给模型的工具列表改为"共享工具（去掉转发工具）+ 本次官方 schema"，未选库时不提供官方工具；框架从共享 Toolkit 执行转发工具，转发工具把调用交给本次作用域内的同名官方工具，权限、只读与时间门禁仍在 `WrenScopedMcpClient` 中校验。Agent 加载官方 usage，通过 listTools 发现官方 schema，
 再以原始 arguments 调用 get_instructions/get_context/describe_schema/recall_queries/run_sql/query_cube 等官方工具。
 只有官方已提供的工具可调用；问数服务不使用 --allow-write，store_query 不对 Agent 开放。
 
@@ -460,7 +460,7 @@ DocEnhance 规则采纳双写（见 5.7）。守卫：`MdlSuggestionServiceTest`
 `ModelingToolkitTest`（listBusinessRules 读文件 + 外组拒绝 + 退役守卫）、
 `DataDynamicContextMiddlewareTest`（标题与空源回归）。
 
-**对话式建模入口（ADR 0069/spec 058）**：modeling-agent 是通用 AgentScope 执行器。DataAgentConfig#MODELING_SCRIPT 每轮都发送，只放官方技能入口、覆盖官方默认行为的平台规则（Cube/View、问答对、Auto-pilot、用户描述、规则来源、关系基数、时间窗口）、文件与校验方式、工具已强制的边界（各一句）以及中文与回复写法；WrenProjectContextMiddleware#onSystemPrompt 注入项目身份与资料位置，并按 `ModelingTurnPurpose` 选择上下文：`ModelingTurnRules#forPurpose` 给出本轮任务要求与回复篇幅，自动建模和用户对话才附表来源与探查边界、命名候选关系和新增表，试问和用户对话才附逐表时间策略与时间条件写法，不注入平台建模状态/阶段。WrenSkillsLocator 挂载安装版官方技能，技能不可用时经 wren_cli skills list/get 读取官方内容。文件预览由 SemanticModelingController#workspacePreview 分派原生 write_file/edit_file 与历史 patch_file/批量卡；确认卡展示实际前后内容与 diff，不宣称写入前已完成官方语义检查。ChatController#confirmModeling 复用原生 ConfirmResult 恢复工具执行。模型、关系、视图、SQL 定义模型与 Cube 由官方契约和技能指导，平台不强制资产推荐路由。最终发布是页面显式动作，草稿 build 不更新线上版本；原生 edit_file 展示实际变更内容。
+**对话式建模入口（ADR 0069/spec 058）**：modeling-agent 是通用 AgentScope 执行器。DataAgentConfig#MODELING_SCRIPT 每轮都发送，只放官方技能入口、覆盖官方默认行为的平台规则（Cube/View、问答对、Auto-pilot、用户描述、规则来源、关系基数、时间窗口）、文件与校验方式、工具已强制的边界（各一句）以及中文与回复写法；WrenProjectContextMiddleware#onSystemPrompt 注入项目身份与资料位置，并按 `ModelingTurnPurpose` 选择上下文：`ModelingTurnRules#forPurpose` 给出本轮任务要求与回复篇幅，自动建模和用户对话才附表来源与探查边界、命名候选关系和新增表，试问和用户对话才附逐表时间策略与时间条件写法，不注入平台建模状态/阶段。工程文件清单同时说明空目录、有无业务文档、采样结论所在位置，自动建模与文档更新轮次据此跳过官方技能 Step 1–4 中的工程检查（context show、memory status、翻找 raw/）；建模与问数的每次模型调用末尾追加中文输出提醒（`WrenQueryContextMiddleware#LANGUAGE_REMINDER`）；建模 Agent 的会话压缩按消息数与 token 数单独设置（`DataAgentConfig#MODELING_COMPACT_TOKENS`），避免多轮建模在轮次中途触发摘要。WrenSkillsLocator 挂载安装版官方技能，技能不可用时经 wren_cli skills list/get 读取官方内容。文件预览由 SemanticModelingController#workspacePreview 分派原生 write_file/edit_file 与历史 patch_file/批量卡；确认卡展示实际前后内容与 diff，不宣称写入前已完成官方语义检查。ChatController#confirmModeling 复用原生 ConfirmResult 恢复工具执行。模型、关系、视图、SQL 定义模型与 Cube 由官方契约和技能指导，平台不强制资产推荐路由。最终发布是页面显式动作，草稿 build 不更新线上版本；原生 edit_file 展示实际变更内容。
 
 以下遗留 HTTP 能力及历史 ADR 说明不代表当前 Agent 注册工具或固定步骤：
 
@@ -689,9 +689,15 @@ manifest 尚不存在时（首次升级到该策略）执行一次性「采纳�
 
 ## 10. 认证、权限、审计与用量
 
-### 知识库共享（ADR 0077）
+### 知识库共享（ADR 0077、0116）
 
-`KnowledgeBaseAccessService#requireQuery/requireManage` 统一 QUERY/使用与 MANAGE/管理权限；创建者和当前全局管理员拥有管理权限。列表先按 ACL 过滤再分页，成员变更与审计同事务提交。QUERY 只能获取查询卡片和调用已发布工程，草稿、原始数据预览、建模、发布、问答对管理及成员管理需要 MANAGE。
+`PublicKnowledgeBaseService` 仅允许当前全局管理员设置库的publicQuery，默认关闭，配置与审计同事务；已登录用户获得QUERY，显式MANAGE优先，统一列表与Wren排队后复核。关闭全员使用不删除显式成员授权。公司部门筛选由KnowledgeBaseMembershipService提供，批量授权保存具体人员快照，不随调岗自动变化。
+
+`UserDirectoryImportService` 只按唯一账号补姓名公司部门，预览为默认，不导入密码/BI角色；保留平台ID与权限。`UserProfileController` 仅返回本人显示资料。新用户由BI首登按普通角色创建。
+
+`AuthController#accountLogin` 在DATAAGENT_BI_ACCOUNT_LOGIN_ENABLED显式开启时接收客户端账号并签发平台JWT，不校验BI会话；用户已明确接受该信任边界，不能称作可信SSO。新模式关闭票据入口；未开启时保留原prod票据行为，生产仍禁密码。前端仅显式BI入口或无旧凭证的首次进入读取同源username/account，userName不作为账号，已有过期凭证不静默续签。
+
+`KnowledgeBaseAccessService#requireQuery/requireManage` 统一 QUERY/使用与 MANAGE/管理权限；创建者和当前全局管理员拥有管理权限。列表先按 ACL 过滤再分页，成员变更与审计同事务提交。QUERY 可通过 KnowledgeBaseBrowseService 的独立投影获取详情、20行预览及已发布模型和业务口径；草稿、连接配置、建模、发布、问答对管理及成员管理仍需 MANAGE。
 
 `ConversationScopeRegistry` 按用户和会话持久化最近选择，并按用户消息保存实际范围快照。`ChatController#resolveGroupScope` 限定普通问答零/单库、建模单库；多库或全选拒绝（普通接口 400，SSE 返回 error 帧），历史多库必须重新选择，零库对话不提供 Wren 工具；`ChatTurnScope#accept` 在框架会话锁内复核并接受范围。`WrenQueryAccess` 查询共享库而不替换操作者；官方 MCP 调用与工具发现经 `WrenInstanceRegistry#callAuthorized/listToolsAuthorized` 在排队结束后再次授权。
 
@@ -787,6 +793,8 @@ spec 045 / ADR 0055：无已登记问题、无待确认原生 HITL 时，页面�
 | `dataagent.dashscope.*` | Key 为空 | 没有 OpenAI 启动 Key 时的启动配置源；不是运行时故障回退 |
 | `dataagent.model-services.encryption-key` | 空 | `DATAAGENT_MODEL_ENCRYPTION_KEY`：独立 32 字节 Base64 主密钥；未提供时在实际 HOME 自动生成 model-services.key，必须与库匹配备份 |
 | `dataagent.auth.password-login-enabled` / `auth.bi.enabled` / `auth.bi.shared-key` | true / false / 空 | `DATAAGENT_PASSWORD_LOGIN_ENABLED`、`DATAAGENT_BI_LOGIN_ENABLED`、`DATAAGENT_BI_SHARED_KEY`；prod 强制关闭密码、启用 BI，BI 与 JWT 采用独立密钥 |
+| `dataagent.web-search.*` | Key 为空即关闭 | 问数联网搜索（spec094、ADR0114）：`api-key` 只读 `DEEPSEEK_API_KEY`，另有 `enabled`、`base-url`、`timeout-seconds`、`max-results` |
+| `dataagent.dashscope.*` | — | 兜底模型 |
 | `dataagent.sandbox.image` | `agentscope/dataagent-sandbox:latest` | 沙箱镜像（`docker/sandbox.Dockerfile` 构建） |
 | `dataagent.sandbox.max-containers` | `16` | 单进程容器上限，满额驱逐空闲实例；环境变量 DATAAGENT_SANDBOX_MAX_CONTAINERS |
 | `dataagent.upload.max-file-size` / `max-selection-size` / `max-files` | `50MB` / `100MB` / `10` | 上传单文件、整批及数量上限 |
@@ -803,6 +811,10 @@ spec 045 / ADR 0055：无已登记问题、无待确认原生 HITL 时，页面�
 | `dataagent.expose-app-db` | false | 是否把平台元数据库暴露为数据源 |
 | `dataagent.session.redis.*` | 关闭 | 分布式会话（HA 必需；多副本另需 sticky LB，见 7.3） |
 | `spring.datasource.*` | 本地 MySQL `dataagent_platform` | 平台元数据（JPA）；h2 profile 切文件 H2，其他数据库需同步驱动和初始化 SQL |
+
+Boot 4 HTTP JSON缓冲使用`spring.http.codecs.max-in-memory-size=50MB`；人员导入另有5000条和字段长度校验。只读模型先转成标准集合，避免Jackson2树节点跨Boot4 HTTP序列化器变形。
+
+`DATAAGENT_BI_ACCOUNT_LOGIN_ENABLED`（默认false）启用同源客户端账号入口，替代票据入口；`username`/`account`读取不构成BI会话验证。私有prod配置应设置该开关，浏览器前缀在构建时用DATAAGENT_BASE_PATH确定。
 
 ### Wren 记忆依赖
 

@@ -36,7 +36,14 @@ class ProjectFilesContextTest {
                         "knowledge/rules/general.md",
                         "raw/docs/业务规则.md",
                         "无需再 list_files")
-                .doesNotContain(".platform", "target/", "cubes/", ".gitkeep");
+                .doesNotContain(".platform", "target/", "cubes/", ".gitkeep", "没有业务文档");
+        // 2026-10-26: say which folders are empty and that no sampling file exists, so the
+        // assistant stops listing folders and globbing for them.
+        assertThat(text)
+                .contains("空目录（无需查看）：knowledge/caveats、knowledge/glossary", "没有单独的采样文件")
+                .doesNotContain("knowledge/rules、");
+        Files.delete(root.resolve("raw/docs/业务规则.md"));
+        assertThat(WrenProjectContextMiddleware.projectFiles(root)).contains("没有业务文档");
         assertThat(WrenProjectContextMiddleware.projectFiles(root.resolve("missing"))).isEmpty();
     }
 

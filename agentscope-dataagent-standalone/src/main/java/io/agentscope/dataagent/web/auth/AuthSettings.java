@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class AuthSettings {
     private final boolean passwordLogin;
+    private final boolean accountLogin;
     private final boolean biLogin;
     private final String sharedKey;
 
@@ -17,11 +18,19 @@ public class AuthSettings {
                 !production
                         && environment.getProperty(
                                 "dataagent.auth.password-login-enabled", Boolean.class, true);
+        accountLogin =
+                environment.getProperty(
+                        "dataagent.auth.bi.account-login-enabled", Boolean.class, false);
         biLogin =
-                production
-                        || environment.getProperty(
-                                "dataagent.auth.bi.enabled", Boolean.class, false);
+                !accountLogin
+                        && (production
+                                || environment.getProperty(
+                                        "dataagent.auth.bi.enabled", Boolean.class, false));
         sharedKey = environment.getProperty("dataagent.auth.bi.shared-key", "");
+    }
+
+    public boolean accountLogin() {
+        return accountLogin;
     }
 
     public boolean passwordLogin() {

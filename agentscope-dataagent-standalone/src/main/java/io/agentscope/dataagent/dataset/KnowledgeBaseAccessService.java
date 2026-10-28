@@ -52,7 +52,7 @@ public class KnowledgeBaseAccessService {
         if (group.getOwnerId().equals(userId) || isAdmin(userId)) return Role.MANAGE;
         return grants.findByGroupIdAndUserId(group.getId(), userId)
                 .map(g -> Role.valueOf(g.getRole()))
-                .orElse(null);
+                .orElse(group.isPublicQuery() ? Role.QUERY : null);
     }
 
     public DatasetGroupEntity requireQuery(String userId, String groupId) {
@@ -126,6 +126,9 @@ public class KnowledgeBaseAccessService {
         page.stream()
                 .filter(g -> admin || userId.equals(g.getOwnerId()))
                 .forEach(g -> result.put(g.getId(), Role.MANAGE));
+        page.stream()
+                .filter(DatasetGroupEntity::isPublicQuery)
+                .forEach(g -> result.putIfAbsent(g.getId(), Role.QUERY));
         return result;
     }
 }

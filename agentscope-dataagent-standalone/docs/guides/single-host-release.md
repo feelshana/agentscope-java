@@ -97,7 +97,7 @@ BI普通用户默认在首次免登时按真实username匹配或自动创建，�
 | --- | --- |
 | 平台元数据库 | DATAAGENT_DB_URL、DATAAGENT_DB_USER、DATAAGENT_DB_PASSWORD；与最终schema一致 |
 | 上传数据集MySQL | DATAAGENT_DATASET_DB_URL、DATAAGENT_DATASET_DB_USER、DATAAGENT_DATASET_DB_PASSWORD；不要沿用开发默认值 |
-| JWT与BI | DATAAGENT_JWT_SECRET、独立的DATAAGENT_BI_SHARED_KEY、DATAAGENT_CORS_ALLOWED_ORIGINS；prod禁密码和演示种子，SQL初始化never，DDL validate |
+| JWT与BI | DATAAGENT_JWT_SECRET、旧票据模式所需的DATAAGENT_BI_SHARED_KEY（新账号模式无需）、DATAAGENT_CORS_ALLOWED_ORIGINS；prod禁密码和演示种子，SQL初始化never，DDL validate |
 | 大模型 | DATAAGENT_OPENAI_API_KEY、DATAAGENT_OPENAI_BASE_URL、DATAAGENT_OPENAI_MODEL_NAME，或既有DASHSCOPE_API_KEY路径；同时核对持久HOME中的实际agentscope.json配置，避免旧配置与环境不一致 |
 | Wren与模型缓存 | DATAAGENT_WREN_EXECUTABLE、DATAAGENT_WREN_PYTHON、实际HOME/HF_HOME的模型文件与权限；固定requirements-wren版本 |
 | 沙箱与容量 | DATAAGENT_SANDBOX_IMAGE及memory/cpus/max-containers；外置dataagent.chat、dataagent.wren.max-instances等预算按项目实际配额配置，建模不计入问答预算 |
@@ -202,3 +202,7 @@ ADR0085：明确的MySQL/Doris兼容断连错误会在当前知识库自动重�
 公司网关选择OpenAI兼容，提供方的完整Bearer凭据填API Key；这不等于Supersonic自身数据库AES密文。Base URL与高级接口路径共同决定最终地址（客户端对末尾`/v数字`去重），按提供方合同确认路径、签名有效期、SSE和工具调用。公司密钥若需每次动态签名，当前不具备该签名适配，需单独联调。部署前确认允许发送到公网的数据范围；勾选公网标识仅用于提示，不替代公司出网政策。
 
 未应用任何页面连接时仍用application中的启动模型。公共application的两处模型Key默认值已移除；候选应重新打包并再次检查，旧JAR不会随源码变更而自动消失。是否需要撤销/轮换历史凭据由凭据负责人处理，本文不记录值。单实例功能和本地桩验证不等于公司真实接入或生产容量验收，详见专项报告（历史来源：`boundary-lyf@b67a179a:docs/test-reports/20261021-admin-model-services.md`，不作为整合候选验收）。
+
+## 10.194.2.66 与同源BI新入口
+
+本轮新增人员资料/公共库列，空库使用最终0000，旧库一次执行0116。原有票据流程仍为未启用新模式时的兼容路径；生产新入口按[BI账号生产接入](../integration/bi-account-production.md)显式开启、管理员首登赋权后导入资料。应用包仍由发布者本地Maven构建上传；实际系统、数据库、代理及模型现场验收未完成，不把私人云环境当66环境。

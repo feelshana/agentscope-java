@@ -1,5 +1,6 @@
 {
-  "basePath": "/dataagent",
+  "basePath": "/dify/dataagent",
+  "accountLogin": true,
   "sharedKey": "",
   "users": [
     { "username": "bi_sim_admin_1019", "label": "管理员体验" },

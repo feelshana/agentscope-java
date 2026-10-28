@@ -26,7 +26,20 @@ public class KnowledgeBaseMembershipService {
             String role,
             boolean owner,
             boolean admin,
-            String updatedAt) {}
+            String updatedAt,
+            String displayName,
+            String company,
+            String department) {
+        public Member(
+                String userId,
+                String username,
+                String role,
+                boolean owner,
+                boolean admin,
+                String updatedAt) {
+            this(userId, username, role, owner, admin, updatedAt, null, null, null);
+        }
+    }
 
     public record Members(Member creator, List<Member> items, long total, int page, int size) {}
 
@@ -85,7 +98,10 @@ public class KnowledgeBaseMembershipService {
                                             g.getRole(),
                                             false,
                                             admin(u),
-                                            g.getUpdatedAt().toString());
+                                            g.getUpdatedAt().toString(),
+                                            u == null ? null : u.getDisplayName(),
+                                            u == null ? null : u.getCompany(),
+                                            u == null ? null : u.getDepartment());
                                 })
                         .toList();
         return new Members(creator, items, entries.getTotalElements(), page, size);
@@ -123,6 +139,68 @@ public class KnowledgeBaseMembershipService {
                                 })
                         .toList();
         return new Directory(result, found.getTotalElements(), page, size);
+    }
+
+    public Directory filteredDirectory(
+            String actor,
+            String groupId,
+            String search,
+            String company,
+            String department,
+            int page,
+            int size) {
+        access.requireManage(actor, groupId);
+        if (search.length() > 100 || company.length() > 191 || department.length() > 191)
+            throw new DatasetException("筛选内容过长", 400);
+        var found =
+                users.searchDirectory(
+                        search.trim().toLowerCase(java.util.Locale.ROOT),
+                        company,
+                        department,
+                        pagination(page, size)
+                                .withSort(org.springframework.data.domain.Sort.by("username")));
+        var group = access.requireManage(actor, groupId);
+        return new Directory(
+                found.stream()
+                        .map(
+                                u ->
+                                        new Member(
+                                                u.getUserId(),
+                                                u.getUsername(),
+                                                group.getOwnerId().equals(u.getUserId()) || admin(u)
+                                                        ? "MANAGE"
+                                                        : grants.findByGroupIdAndUserId(
+                                                                        groupId, u.getUserId())
+                                                                .map(
+                                                                        KnowledgeBaseGrantEntity
+                                                                                ::getRole)
+                                                                .orElse(null),
+                                                group.getOwnerId().equals(u.getUserId()),
+                                                admin(u),
+                                                null,
+                                                u.getDisplayName(),
+                                                u.getCompany(),
+                                                u.getDepartment()))
+                        .toList(),
+                found.getTotalElements(),
+                page,
+                size);
+    }
+
+    public record Filters(List<String> companies, List<String> departments) {}
+
+    public Filters filters(String actor, String groupId, String company) {
+        access.requireManage(actor, groupId);
+        return new Filters(users.companies(), users.departments(company));
+    }
+
+    @Transactional
+    public void batchGrant(String actor, String groupId, List<String> ids, String role) {
+        if (ids == null || ids.isEmpty() || ids.size() > 2000)
+            throw new DatasetException("请选择1至2000名用户", 400);
+        groups.findByIdForUpdate(groupId).orElseThrow(() -> new DatasetException("知识库不存在", 404));
+        access.requireManage(actor, groupId);
+        for (String id : new java.util.TreeSet<>(ids)) grant(actor, groupId, id, role);
     }
 
     @Transactional

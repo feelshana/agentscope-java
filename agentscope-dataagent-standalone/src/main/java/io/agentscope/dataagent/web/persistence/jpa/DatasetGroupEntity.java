@@ -97,6 +97,18 @@ public class DatasetGroupEntity {
     @Column(name = "mdl_published_at")
     private Instant mdlPublishedAt;
 
+    @Column(name = "public_query", nullable = false)
+    @org.hibernate.annotations.ColumnDefault("false")
+    private boolean publicQuery;
+
+    public boolean isPublicQuery() {
+        return publicQuery;
+    }
+
+    public void setPublicQuery(boolean value) {
+        publicQuery = value;
+    }
+
     public DatasetGroupEntity() {}
 
     public DatasetGroupEntity(String id, String ownerId, String name, String description) {

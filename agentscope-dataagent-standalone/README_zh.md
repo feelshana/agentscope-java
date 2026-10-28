@@ -217,6 +217,7 @@ java -jar target/agentscope-dataagent-*-exec.jar
 | `dataagent.openai.base-url` | `https://api.deepseek.com` | 任意 OpenAI 兼容端点的 base URL（DeepSeek、vLLM、one-api、DashScope compatible-mode 等），尾部 `/v1` 可写可不写。环境变量：`DATAAGENT_OPENAI_BASE_URL` 或 `OPENAI_BASE_URL`。 |
 | `dataagent.openai.model-name` | `deepseek-flash` | OpenAI 兼容模型 id。环境变量：`DATAAGENT_OPENAI_MODEL_NAME` 或 `OPENAI_MODEL_NAME`。 |
 | `dataagent.openai.stream` | `true` | 是否以 SSE 流式输出。 |
+| `dataagent.web-search.api-key` | _空_ | 问数助手 `web_search` 使用的 DeepSeek 搜索 API Key（spec094）。只从环境变量 `DEEPSEEK_API_KEY` 读取，为空则不提供联网搜索。相关：`dataagent.web-search.enabled`（`true`）、`base-url`（`https://api.deepseek.com`）、`timeout-seconds`（`20`）、`max-results`（`5`）。 |
 | `dataagent.dashscope.api-key` | _空_ | DashScope API key（未配置 OpenAI key 时的回落）。环境变量：`DASHSCOPE_API_KEY`。 |
 | `dataagent.dashscope.model-name` | `qwen3.8-max` | DashScope 模型 id。 |
 | `dataagent.agent.name` | `data-agent` | 自动生成 `~/.agentscope/dataagent/agentscope.json` 时的 agent 名 |
@@ -342,3 +343,9 @@ mvn spotless:check
 MySQL Agent 上下文保存于平台库 `dataagent_agent_state`；H2 使用实际 HOME 下按数据库隔离的 JSON 文件。需同时保留工作区、附件、数据库与模型主密钥。图表按操作者私有校验。生产首次建库和升级见[单机发布手册](docs/guides/single-host-release.md)；整合边界见[ADR0114](docs/adr/0114-native-query-and-engineering-integration.md)。
 
 Spring Boot 4 使用 `spring.web.error.include-message=always` 保留业务校验原因，旧 `server.error.include-message` 已停用；错误响应不包含堆栈。运行中的上传策略以 `/api/datasets/upload-policy` 为准，当前 application.yml 为50万行、100列、1000万单元格，类的缺省值不代表部署后的实际策略。
+
+## BI账号入口与公共知识库
+
+`DATAAGENT_BI_ACCOUNT_LOGIN_ENABLED=false`：默认关闭，显式开启后从同源BI Local Storage读取username/account，关闭旧票据入口；这是已接受客户端身份信任前提的接入，不是可信SSO。平台角色只取数据库。浏览器路径计划 `/dify/dataagent/`，打包前设置 `DATAAGENT_BASE_PATH`。人员导入、公共库、首次DDL/已有库升级及部署验收见[BI生产接入指引](docs/integration/bi-account-production.md)。
+
+Boot 4的JSON缓冲使用`spring.http.codecs.max-in-memory-size=50MB`，替代旧`spring.codec`名称；导入请求仍受5000条和字段长度校验。

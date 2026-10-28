@@ -33,6 +33,28 @@ public interface UserEntityRepository extends JpaRepository<UserEntity, String> 
 
     boolean existsByUsernameIgnoreCase(String username);
 
+    @Query(
+            "select u from UserEntity u where (:search = '' or lower(u.username) like"
+                + " concat('%',:search,'%') or lower(u.displayName) like concat('%',:search,'%'))"
+                + " and (:company = '' or u.company = :company) and (:department = '' or"
+                + " u.department = :department)")
+    org.springframework.data.domain.Page<UserEntity> searchDirectory(
+            String search,
+            String company,
+            String department,
+            org.springframework.data.domain.Pageable pageable);
+
+    @Query(
+            "select distinct u.company from UserEntity u where u.company is not null and u.company"
+                    + " <> '' order by u.company")
+    java.util.List<String> companies();
+
+    @Query(
+            "select distinct u.department from UserEntity u where u.department is not null and"
+                    + " u.department <> '' and (:company = '' or u.company = :company) order by"
+                    + " u.department")
+    java.util.List<String> departments(String company);
+
     org.springframework.data.domain.Page<UserEntity> findByUsernameContainingIgnoreCase(
             String username, org.springframework.data.domain.Pageable pageable);
 }

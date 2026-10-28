@@ -64,6 +64,39 @@ public class UserEntity {
     @Column(name = "bindings_json", columnDefinition = "TEXT")
     private String bindingsJson;
 
+    @Column(name = "display_name", length = 191)
+    private String displayName;
+
+    public String getDisplayName() {
+        return displayName;
+    }
+
+    public void setDisplayName(String value) {
+        displayName = value;
+    }
+
+    @Column(name = "company", length = 191)
+    private String company;
+
+    public String getCompany() {
+        return company;
+    }
+
+    public void setCompany(String value) {
+        company = value;
+    }
+
+    @Column(name = "department", length = 191)
+    private String department;
+
+    public String getDepartment() {
+        return department;
+    }
+
+    public void setDepartment(String value) {
+        department = value;
+    }
+
     public UserEntity() {}
 
     public UserEntity(String userId, String username, String passwordHash, String rolesCsv) {

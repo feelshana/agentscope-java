@@ -14,6 +14,7 @@ spec 是一页纸的需求与验收标准，写代码之前先写（模板：[00
 | [091](091-modeling-interaction-flow.md) | spec091：建模全流程交互重设计（推荐问题预填、问题直接确认、流程连贯） | 已实施，待真实验收 |
 | [092](092-draft-and-review-modeling-workflow.md) | spec092：建模改为"草稿 + 发布前审阅"，多业务文档，入口与增量建模 | 已实施，待真实验收 |
 | [093](093-field-screening-before-modeling.md) | spec093：建模前字段整理（筛选纳入字段、补充说明） | 已实施，待真实验收 |
+| [095](095-web-search-for-query.md) | spec095：问数助手联网搜索（DeepSeek 官方搜索 API） | 已实施，待真实验收 |
 
 ## 已完成或已关闭（done/）
 
@@ -111,3 +112,5 @@ spec 是一页纸的需求与验收标准，写代码之前先写（模板：[00
 | [089](done/089-source-tiered-probing-and-cli-contract.md) | spec089：按表来源分层探查、门禁明细为准与 CLI 契约对齐 | — |
 
 | [094](done/094-native-boundary-engineering-integration.md) | 原生建模问数与工程能力整合 | 已实施并完成隔离组合验收，2026-10-26 |
+
+- [096 BI人员与公共库](done/096-bi-directory-and-public-knowledge.md)（本地验收完成，现场BI待验）

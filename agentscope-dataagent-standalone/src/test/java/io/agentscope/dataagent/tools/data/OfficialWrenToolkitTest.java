@@ -540,6 +540,9 @@ class OfficialWrenToolkitTest {
     @Test
     void registrationContainsOnlyNativeFilesAndOfficialCli() {
         var target = new Toolkit();
+        // spec094: the harness web tools every agent receives are removed from modeling.
+        target.registerTool(new io.agentscope.harness.agent.tool.WebTools.WebSearchTool());
+        target.registerTool(new io.agentscope.harness.agent.tool.WebTools.WebFetchTool());
         ModelingToolkitRegistrar.registerOfficialTools(target, files, commands);
         assertThat(target.getToolNames())
                 .containsExactlyInAnyOrder(

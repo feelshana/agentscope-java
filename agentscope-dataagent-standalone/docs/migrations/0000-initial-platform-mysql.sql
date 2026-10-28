@@ -147,6 +147,7 @@ CREATE TABLE `dataagent_dataset` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE `dataagent_dataset_group` (
+  `public_query` bit(1) NOT NULL DEFAULT b'0',
   `group_id` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL,
   `created_at` datetime(6) DEFAULT NULL,
   `description` varchar(1000) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -415,6 +416,9 @@ CREATE TABLE `dataagent_semantic_view` (
 
 CREATE TABLE `dataagent_user` (
   `user_id` varchar(128) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `display_name` varchar(191) DEFAULT NULL,
+  `company` varchar(191) DEFAULT NULL,
+  `department` varchar(191) DEFAULT NULL,
   `bindings_json` text COLLATE utf8mb4_unicode_ci,
   `created_at` datetime(6) DEFAULT NULL,
   `password_hash` varchar(200) COLLATE utf8mb4_unicode_ci NOT NULL,

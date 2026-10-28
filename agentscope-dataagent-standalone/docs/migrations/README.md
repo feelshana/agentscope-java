@@ -26,3 +26,7 @@
 | [0095](0095-field-screening-mysql.sql) | 字段整理确认状态 |
 
 每份 SQL 的适用条件优先。`dataagent_agent_state` 的身份列必须采用 binary 排序规则。数据库、发布工程、附件、HOME 下的模型加密主密钥须匹配备份；只有数据库备份不能恢复完整服务。
+
+## BI目录与公共库（ADR0116）
+
+已有平台库在启动新版本前一次执行[0116迁移](0116-bi-directory-public-knowledge-mysql.sql)，增加用户资料及public_query。空库执行更新后的[0000完整DDL](0000-initial-platform-mysql.sql)，不再叠加0116。上传库无需执行平台DDL。管理员首登后通过SQL赋权并重新进入，再按[导入说明](../integration/bi-account-production.md)运行预览/导入。此流程不会导入BI密码。

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { appPath } from '../api/paths';
 
 const SCRIPT = /assets\/index-[\w-]+\.js/;
 
@@ -24,7 +25,7 @@ export default function NewVersionBanner() {
     let stopped = false;
     const check = async () => {
       try {
-        const html = await (await fetch('/', { cache: 'no-store' })).text();
+        const html = await (await fetch(appPath('/'), { cache: 'no-store' })).text();
         const served = html.match(SCRIPT)?.[0];
         if (!stopped && served && served !== current) setStale(true);
       } catch { /* Offline or restarting: try again later. */ }

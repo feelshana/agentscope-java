@@ -127,4 +127,36 @@ class RuntimeWindowContextTest {
                 .contains("自选符合各表时间配置的近期有限范围", "逐项核对名称、已确认口径与 SQL 过滤一致", "不擅自新增业务条件");
         assertThat(DataAgentConfig.QUERY_EFFICIENCY_RULES).contains("不能要求修改MDL", "不得伪称已经调用工具门禁");
     }
+
+    /** 2026-10-26: query step narration drifted to English; every model call ends with the rule. */
+    @Test
+    void everyQueryModelCallEndsWithTheChineseOnlyReminder() {
+        var middleware =
+                new WrenQueryContextMiddleware(
+                        org.mockito.Mockito.mock(
+                                io.agentscope.dataagent.dataset.WrenQueryAccess.class));
+        var sent =
+                new java.util.concurrent.atomic.AtomicReference<
+                        io.agentscope.core.middleware.ModelCallInput>();
+        var question =
+                io.agentscope.core.message.Msg.builder()
+                        .role(io.agentscope.core.message.MsgRole.USER)
+                        .textContent("10月访问最多的报表")
+                        .build();
+        middleware
+                .onModelCall(
+                        null,
+                        null,
+                        new io.agentscope.core.middleware.ModelCallInput(
+                                java.util.List.of(question), java.util.List.of(), null, null),
+                        input -> {
+                            sent.set(input);
+                            return reactor.core.publisher.Flux.empty();
+                        })
+                .blockLast();
+        var messages = sent.get().messages();
+        assertThat(messages).hasSize(2);
+        assertThat(messages.get(0)).isSameAs(question);
+        assertThat(messages.get(1).getTextContent()).contains("只用简体中文", "不输出任何英文句子");
+    }
 }

@@ -82,7 +82,8 @@ public class SecurityConfig {
                                         .pathMatchers(
                                                 HttpMethod.POST,
                                                 "/api/auth/login",
-                                                "/api/auth/bi-login")
+                                                "/api/auth/bi-login",
+                                                "/api/auth/bi-account-login")
                                         .permitAll()
                                         .pathMatchers("/actuator/health", "/actuator/info")
                                         .permitAll()

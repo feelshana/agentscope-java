@@ -20,6 +20,7 @@ ADR 记录"为什么这样做"。规则：
 | SQL 时间门禁 | [0097](0097-llm-per-table-sql-window.md)、[0098](0098-post-sampling-fact-window-confirmation.md)、[0099](0099-runtime-window-policy-and-verifiable-sql-gate.md)、[0103](0103-source-tiered-probing-and-row-based-gate-verdict.md)、[0112](0112-rule-first-sql-window-gate.md)、[0113](0113-mysql8-or-doris-sources-and-literal-date-ranges.md) | 数据库独立配置；逐表检查，普通写法由规则判断、其余交 LLM；日期范围要求写成常量；明细重算结论；上传表不设门禁 |
 | 问数日期与统计 | [0102](0102-query-date-clarification-and-modeling-samples.md)、[0104](0104-upload-probe-scope-and-sql-side-aggregation.md)、[0105](0105-build-state-context-and-ranking-granularity.md)、[0110](0110-platform-handles-build-overwrite-and-conditional-date-rules.md) | 仅受限表缺日期先问；统计来自 SQL；排名按主体分组 |
 | 问数准备与性能 | [0100](0100-published-query-index-preparation.md)、[0101](0101-reuse-published-mcp-for-recall-warmup.md) | 发布后后台索引、召回预热、分段计时 |
+| BI账号、用户目录与全员库 | [0116](0116-bi-account-and-public-knowledge.md) | 客户端账号信任；只读投影；管理员集中配置全员QUERY |
 | 工程整合、单库与管理员 | [0114](0114-native-query-and-engineering-integration.md) | 原生建模问数优先；BI、私有图表、持久状态、人工模型切换与受限恢复 |
 | 会话与附件 | [0060](0060-durable-session-history-and-artifact-lifecycle.md)、[0061](0061-configurable-history-retention.md) | 持久历史、附件生命周期、保留策略 |
 
@@ -144,3 +145,6 @@ ADR 记录"为什么这样做"。规则：
 | [0113](0113-mysql8-or-doris-sources-and-literal-date-ranges.md) | 外部数据源限定 MySQL 8.0+ 或 Doris，SQL 用 MySQL 8.0 语法与日期常量范围 | 已接受，2026-10-25。补充 ADR0021（外部源只发布 MySQL）与 ADR0112（规则优先的时间门禁）。 |  |
 
 | [0114](0114-native-query-and-engineering-integration.md) | 单库原生问数与工程能力整合 | 已接受，2026-10-26；组合验收见 spec094 |  |
+| [0115](0115-query-web-search-via-deepseek.md) | 问数助手经 DeepSeek 官方搜索 API 联网，移除 harness 默认联网工具 | 已接受，2026-10-26。实施 spec095。 |  |
+
+- [0116 BI账号与公共库](0116-bi-account-and-public-knowledge.md)（已接受）

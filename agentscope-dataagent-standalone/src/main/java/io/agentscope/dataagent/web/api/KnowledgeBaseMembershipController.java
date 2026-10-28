@@ -40,10 +40,44 @@ public class KnowledgeBaseMembershipController {
             @PathVariable String groupId,
             Authentication auth,
             @RequestParam(defaultValue = "") String search,
+            @RequestParam(defaultValue = "") String company,
+            @RequestParam(defaultValue = "") String department,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return call(
-                () -> service.directory((String) auth.getPrincipal(), groupId, search, page, size));
+                () ->
+                        service.filteredDirectory(
+                                (String) auth.getPrincipal(),
+                                groupId,
+                                search,
+                                company,
+                                department,
+                                page,
+                                size));
+    }
+
+    public record BatchRequest(java.util.List<String> userIds, String role) {}
+
+    @PutMapping("/batch")
+    public Mono<Void> batch(
+            @PathVariable String groupId, @RequestBody BatchRequest request, Authentication auth) {
+        return call(() -> {
+                    service.batchGrant(
+                            (String) auth.getPrincipal(),
+                            groupId,
+                            request.userIds(),
+                            request.role());
+                    return true;
+                })
+                .then();
+    }
+
+    @GetMapping("/filters")
+    public Mono<KnowledgeBaseMembershipService.Filters> filters(
+            @PathVariable String groupId,
+            @RequestParam(defaultValue = "") String company,
+            Authentication auth) {
+        return call(() -> service.filters((String) auth.getPrincipal(), groupId, company));
     }
 
     @PutMapping("/{userId}")
