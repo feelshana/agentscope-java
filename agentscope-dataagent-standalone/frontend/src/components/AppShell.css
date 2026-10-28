@@ -28,13 +28,17 @@
 .rail-session-delete:hover { color: #b44651; background: #fff2f3; }
 .rail-session:hover .rail-session-delete, .rail-session:focus-within .rail-session-delete { opacity: 1; }
 .rail-session > input { accent-color: #6654ce; width: 14px; height: 14px; flex-shrink: 0; }
-.rail-footer { border-top: 1px solid #e7e9f0; padding: 15px 7px 0; flex-shrink: 0; }
-.rail-account { position: relative; }
+.rail-footer { border-top: 1px solid #e7e9f0; padding: 15px 0 0 7px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; }
+.rail-account { position: relative; flex: 1; min-width: 0; }
+.rail-collapse-toggle { width: 32px; height: 32px; flex-shrink: 0; display: grid; place-items: center; padding: 0; border: 1px solid #e2e4ee; border-radius: 7px; background: transparent; color: #818898; cursor: pointer; }
+.rail-collapse-toggle:hover { background: #eae6f8; border-color: #d8d0f2; color: #6654ce; }
+.rail-collapse-toggle:focus-visible { outline: 2px solid #b5a7ee; outline-offset: 2px; }
+.rail-collapse-toggle.is-expanded .da-icon { transform: rotate(180deg); }
 .rail-account-button { border: 0; background: transparent; padding: 0; display: flex; align-items: center; gap: 10px; cursor: pointer; width: 100%; text-align: left; color: #555d6b; }
 .rail-avatar { width: 31px; height: 31px; border-radius: 50%; background: #e7e3f9; color: #6654ce; display: grid; place-items: center; font-size: 14px; font-weight: 600; flex-shrink: 0; }
 .rail-account-copy { display: flex; flex-direction: column; min-width: 0; font-size: 12px; }
 .rail-account-copy > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rail-account-copy small { font-size: 10px; color: #949bab; }
+.rail-account-copy small { font-size: 10px; color: #949bab; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rail-account-popover { position: absolute; left: 0; bottom: calc(100% + 12px); padding: 12px 16px; min-width: 140px; max-width: 100%; border: 1px solid #e7e9f0; border-radius: 8px; background: #fff; box-shadow: 0 8px 24px #25293614; overflow-wrap: anywhere; font-size: 12px; }
 .app-rail :focus-visible { outline: 2px solid #b5a7ee; outline-offset: 2px; }
 .app-shell .kw-breadcrumb { height: 54px; min-height: 54px; padding: 0 30px; gap: 11px; font-size: 12px; border-color: #e7e9f0; color: #949bab; }

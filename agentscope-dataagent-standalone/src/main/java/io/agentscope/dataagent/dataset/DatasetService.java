@@ -483,6 +483,29 @@ public class DatasetService implements DatasetContextProvider {
         return ids.isEmpty() ? List.of() : repository.findByGroupIdInOrderByCreatedAtDesc(ids);
     }
 
+    public List<DatasetEntity> listReadableForGroup(String userId, String groupId) {
+        access.requireQuery(userId, groupId);
+        return repository.findByGroupId(groupId);
+    }
+
+    public DatasetEntity getReadable(String actor, String datasetId) {
+        var entity =
+                repository
+                        .findById(datasetId)
+                        .orElseThrow(() -> new DatasetException("数据集不存在或未授权", 404));
+        access.requireQuery(actor, entity.getGroupId());
+        return entity;
+    }
+
+    public Preview previewForBrowsing(String actor, String datasetId, int limit) {
+        var entity = getReadable(actor, datasetId);
+        var group = access.requireQuery(actor, entity.getGroupId());
+        boolean manager = access.role(actor, group) == KnowledgeBaseAccessService.Role.MANAGE;
+        var result = previewEntity(entity, manager ? limit : 20);
+        access.requireQuery(actor, entity.getGroupId());
+        return result;
+    }
+
     public List<DatasetEntity> listForGroup(String userId, String groupId) {
         access.requireManage(userId, groupId);
         return repository.findByGroupId(groupId);

@@ -124,7 +124,15 @@ public class DatasetGroupController {
     public record UpdateGroupRequest(String name, String description) {}
 
     public record GroupDetailVO(
-            GroupVO group, List<DatasetController.DatasetVO> datasets, String knowledge) {}
+            GroupVO group,
+            List<DatasetController.DatasetVO> datasets,
+            String knowledge,
+            int publishedVersion) {
+        public GroupDetailVO(
+                GroupVO group, List<DatasetController.DatasetVO> datasets, String knowledge) {
+            this(group, datasets, knowledge, 0);
+        }
+    }
 
     @PostMapping
     public Mono<GroupVO> create(@RequestBody CreateGroupRequest req, Authentication auth) {
@@ -201,10 +209,23 @@ public class DatasetGroupController {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
                         () -> {
-                            DatasetGroupEntity group = groupService.getGroup(userId, id);
-                            var datasets = groupService.listDatasets(userId, id);
+                            DatasetGroupEntity group = groupService.queryGroup(userId, id);
+                            var role =
+                                    groupService.roles(userId, List.of(group)).get(group.getId());
+                            boolean manager =
+                                    role
+                                            == io.agentscope.dataagent.dataset
+                                                    .KnowledgeBaseAccessService.Role.MANAGE;
+                            var datasets = datasetService.listReadableForGroup(userId, id);
                             return new GroupDetailVO(
-                                    toVO(group, datasets.size()),
+                                    toVO(
+                                            group,
+                                            datasets.size(),
+                                            userRepository
+                                                    .findById(group.getOwnerId())
+                                                    .map(UserEntity::getUsername)
+                                                    .orElse(null),
+                                            role),
                                     datasets.stream()
                                             .map(
                                                     d ->
@@ -212,7 +233,8 @@ public class DatasetGroupController {
                                                                     d,
                                                                     datasetService.readColumns(d)))
                                             .toList(),
-                                    datasetService.knowledgeText(id));
+                                    manager ? datasetService.knowledgeText(id) : "",
+                                    group.getMdlVersion());
                         })
                 .subscribeOn(Schedulers.boundedElastic())
                 .onErrorMap(this::toStatus);

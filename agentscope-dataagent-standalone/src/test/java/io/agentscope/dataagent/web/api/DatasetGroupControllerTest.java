@@ -31,6 +31,7 @@ import io.agentscope.dataagent.dataset.DocEnhanceService;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetEntity;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.buffer.DefaultDataBufferFactory;
@@ -67,6 +68,53 @@ class DatasetGroupControllerTest {
                                 io.agentscope.dataagent.web.persistence.jpa.UserEntityRepository
                                         .class));
         when(datasetService.readColumns(any())).thenReturn(List.of());
+    }
+
+    @Test
+    void queryAndManageUseTheSameDatasetProjectionWithoutExposingDraftKnowledge() {
+        var group =
+                new io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity(
+                        "group-1", "owner", "销售", "说明");
+        group.setMdlVersion(3);
+        var datasets = List.of(dataset("dataset-1", "orders"));
+        when(groupService.queryGroup("alice", "group-1")).thenReturn(group);
+        when(datasetService.listReadableForGroup("alice", "group-1")).thenReturn(datasets);
+        when(datasetService.knowledgeText("group-1")).thenReturn("unpublished business draft");
+        when(groupService.roles("alice", List.of(group)))
+                .thenReturn(
+                        Map.of(
+                                "group-1",
+                                io.agentscope.dataagent.dataset.KnowledgeBaseAccessService.Role
+                                        .QUERY));
+
+        var reader = controller.detail("group-1", alice).block();
+        assertThat(reader.group().canManage()).isFalse();
+        assertThat(reader.group().canQuery()).isTrue();
+        assertThat(reader.publishedVersion()).isEqualTo(3);
+        assertThat(reader.knowledge()).isEmpty();
+        verify(datasetService, never()).knowledgeText("group-1");
+
+        when(groupService.roles("alice", List.of(group)))
+                .thenReturn(
+                        Map.of(
+                                "group-1",
+                                io.agentscope.dataagent.dataset.KnowledgeBaseAccessService.Role
+                                        .MANAGE));
+        var manager = controller.detail("group-1", alice).block();
+        assertThat(manager.group().canManage()).isTrue();
+        assertThat(manager.datasets()).isEqualTo(reader.datasets());
+        assertThat(manager.knowledge()).isEqualTo("unpublished business draft");
+        verify(groupService, never()).getGroup(any(), any());
+    }
+
+    @Test
+    void unauthorizedDetailDoesNotReadDatasetMetadata() {
+        when(groupService.queryGroup("alice", "other"))
+                .thenThrow(new DatasetException("知识库不存在或未授权", 404));
+        StepVerifier.create(controller.detail("other", alice))
+                .expectError(ResponseStatusException.class)
+                .verify();
+        verifyNoInteractions(datasetService);
     }
 
     @Test

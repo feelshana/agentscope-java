@@ -45,6 +45,7 @@ export interface DatasetGroup {
 }
 
 export interface GroupDetail {
+  publishedVersion?: number;
   group: DatasetGroup;
   datasets: Dataset[];
   knowledge: string;

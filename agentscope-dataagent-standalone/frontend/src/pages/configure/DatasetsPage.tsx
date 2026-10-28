@@ -129,7 +129,7 @@ export default function DatasetsPage() {
   const pages = Math.max(1, Math.ceil(total / 20));
   const openCard = (group: DatasetGroup) => {
     if (group.deletionPending) return;
-    navigate(group.canManage ? `/configure/datasets/${group.id}` : `/knowledge-bases/${group.id}`);
+    navigate(`/configure/datasets/${group.id}`);
   };
   return (
     <div className="kw-page">
@@ -160,13 +160,13 @@ export default function DatasetsPage() {
                 { label: '编辑名称和说明', icon: 'edit', disabled: busy || g.deletionPending, onClick: () => openEdit(g) },
                 { label: '成员与权限', icon: 'user', disabled: g.deletionPending, onClick: () => setMemberGroup(g) },
                 { label: g.deletionPending ? '重试删除' : '删除知识库', icon: 'trash', danger: true, disabled: busy, onClick: () => void handleDelete(g.id) },
-              ] : [{ label: '只读查看详情', icon: 'book', disabled: g.deletionPending, onClick: () => navigate(`/knowledge-bases/${g.id}`) }]} />
+              ] : [{ label: '查看详情', icon: 'book', disabled: g.deletionPending, onClick: () => navigate(`/configure/datasets/${g.id}`) }]} />
             </div>
             <p className="kw-description" title={g.description ?? ''} style={!g.description ? { color: 'var(--kw-muted)' } : undefined}>{g.description || '暂无说明'}</p>
             <div className="kw-cardcreator" title={`创建人：${g.ownerUsername || '已移除用户'}`}><span>创建人：{g.ownerUsername || '已移除用户'}</span><span className="kw-permission">{g.canManage ? '管理' : '使用'}</span></div>
             {g.deletionPending && <p className="da-small" role="status">删除待完成，后台正在重试清理。</p>}
             <div className="kw-cardmeta"><Icon name="table" size="sm" /><span>{g.datasetCount} 个数据集</span><span>·</span><span>{g.createdAt ? new Date(g.createdAt).toLocaleDateString('zh-CN') : '创建时间未知'}</span></div>
-            <div className="kw-cardfoot">{g.deletionPending ? g.canManage && <button disabled={busy} onClick={e => handleDelete(g.id, e)}>重试删除</button> : <>{g.canManage ? <button onClick={e => { e.stopPropagation(); navigate(`/configure/datasets/${g.id}`); }}>查看详情 →</button> : <button onClick={e => { e.stopPropagation(); navigate(`/knowledge-bases/${g.id}`); }}>只读查看详情 →</button>}<button disabled={!g.canQuery} onClick={e => { e.stopPropagation(); navigate(`/chat?groups=${encodeURIComponent(g.id)}`); }}><Icon name="chat" size="sm" />基于此库提问</button></>}</div>
+            <div className="kw-cardfoot">{g.deletionPending ? g.canManage && <button disabled={busy} onClick={e => handleDelete(g.id, e)}>重试删除</button> : <><button onClick={e => { e.stopPropagation(); navigate(`/configure/datasets/${g.id}`); }}>查看详情 →</button><button disabled={!g.canQuery} onClick={e => { e.stopPropagation(); navigate(`/chat?groups=${encodeURIComponent(g.id)}`); }}><Icon name="chat" size="sm" />基于此库提问</button></>}</div>
           </article>)}
         </div>
         {!loading && !error && filtered.length === 0 && <div className="kw-empty">{query ? '没有匹配的知识库，试试其他关键词。' : <EmptyIllustration variant="table" caption="还没有知识库，点击「创建知识库」开始" />}</div>}

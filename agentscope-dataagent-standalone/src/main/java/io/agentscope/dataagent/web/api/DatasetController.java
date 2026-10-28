@@ -486,7 +486,8 @@ public class DatasetController {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
                         () -> {
-                            DatasetService.Preview p = datasetService.preview(userId, id, limit);
+                            DatasetService.Preview p =
+                                    datasetService.previewForBrowsing(userId, id, limit);
                             return new PreviewVO(
                                     p.columns().stream()
                                             .map(DatasetController::toColumnVO)

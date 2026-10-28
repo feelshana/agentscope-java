@@ -282,7 +282,7 @@ SQL 原样保存，不二次添加 LIMIT。`WrenPublishedProject#prepare` 合并
 
 `AnswerQueryMemory#candidates` 优先匹配调用 ID；历史回合缺 ID 时按业务问题、工具类型与实际 SQL 核对所有候选，不因同题的首条 SQL 不同而漏存。有调用但内容不匹配、诊断、失败及其他用户知识库回执均排除；完全缺失调用输入时才采用服务端成功回执。显式再次点赞可重试此前空候选，已保存状态仍保持幂等。
 
-问数工具展示由 `ToolCallBlock`/`ToolInspector` 解析外层调用的 `tool_name` 显示中文操作名；`WrenToolResult` 展示官方 `nl_query/sql_query` 问答卡、查询行表格及模型/Cube结构，并保留空值、截断提示、SQL回执和产物说明。原始响应可展开复制，JSON字符串只按 JSON 语义解码，不修改 SQL 转义；SSE 与存储原文不变。参见 spec 063。
+问数工具展示由 `ToolCallBlock`/`ToolInspector` 解析外层调用的 `tool_name` 显示中文操作名；`WrenToolResult` 展示官方 `nl_query/sql_query` 问答卡、查询行表格及模型/Cube结构，并保留空值、截断提示、SQL回执和产物说明。ToolCallBlock 与 ToolInspector 共用 inspectResult 判断调用错误，Python非零退出码不会在轨迹中标成功。详情按工具类型展示：模型目录/字段表、Markdown业务规则、SQL行表、Python输出与文件、图表预览及输入数据表；数值仅对齐不重算，未知字段/原始回执仍可查。原始响应可展开复制，JSON字符串只按 JSON 语义解码，不修改 SQL 转义；SSE 与存储原文不变。参见 spec 063。
 线上 recall_queries/get_context 使用该同一工程的官方 memory；无平台评分、中文词项算法或可信等级扩展。
 CLI/依赖/多语言模型不可用时明确返回错误；普通 SQL 查询仍可执行。
 
@@ -697,7 +697,7 @@ manifest 尚不存在时（首次升级到该策略）执行一次性「采纳�
 
 `AuthController#accountLogin` 在DATAAGENT_BI_ACCOUNT_LOGIN_ENABLED显式开启时接收客户端账号并签发平台JWT，不校验BI会话；用户已明确接受该信任边界，不能称作可信SSO。新模式关闭票据入口；未开启时保留原prod票据行为，生产仍禁密码。前端仅显式BI入口或无旧凭证的首次进入读取同源username/account，userName不作为账号，已有过期凭证不静默续签。
 
-`KnowledgeBaseAccessService#requireQuery/requireManage` 统一 QUERY/使用与 MANAGE/管理权限；创建者和当前全局管理员拥有管理权限。列表先按 ACL 过滤再分页，成员变更与审计同事务提交。QUERY 可通过 KnowledgeBaseBrowseService 的独立投影获取详情、20行预览及已发布模型和业务口径；草稿、连接配置、建模、发布、问答对管理及成员管理仍需 MANAGE。
+`KnowledgeBaseAccessService#requireQuery/requireManage` 统一 QUERY/使用与 MANAGE/管理权限；创建者和当前全局管理员拥有管理权限。列表先按 ACL 过滤再分页，成员变更与审计同事务提交。QUERY 与 MANAGE 共用 DatasetGroupPage、DatasetDetailPage 和详情路由；DatasetGroupController#detail 使用 QUERY 投影返回相同的数据集/字段结构及服务端 canManage，QUERY 不读取未发布业务文档，DatasetService#previewForBrowsing 限制 QUERY 预览为20行并在读取后复核授权。写按钮仅管理用户显示，原 getGroup/get 与写接口继续要求 MANAGE；建模、发布、连接配置、问答对管理及成员管理不放宽。旧只读页面地址重定向到统一详情，KnowledgeBaseBrowseService 的已发布投影保留兼容。
 
 `ConversationScopeRegistry` 按用户和会话持久化最近选择，并按用户消息保存实际范围快照。`ChatController#resolveGroupScope` 限定普通问答零/单库、建模单库；多库或全选拒绝（普通接口 400，SSE 返回 error 帧），历史多库必须重新选择，零库对话不提供 Wren 工具；`ChatTurnScope#accept` 在框架会话锁内复核并接受范围。`WrenQueryAccess` 查询共享库而不替换操作者；官方 MCP 调用与工具发现经 `WrenInstanceRegistry#callAuthorized/listToolsAuthorized` 在排队结束后再次授权。
 
@@ -723,7 +723,7 @@ manifest 尚不存在时（首次升级到该策略）执行一次性「采纳�
 
 ADR 0063：建模页面移除 Cube 标签、推荐、编辑和图谱卡片，展示模型、关系、视图、规则与 MDL；问题录入/验证保持可选。
 
-**当前交互（specs/054）**：SemanticModelingPage 直接提供对话，QuestionIntakeForm 为可展开的可选表格；验证与发布面板说明问题状态不阻碍发布。ChatPanel 最终答案展示 AnswerFeedback 的醒目点赞/点踩、选择态和持久化反馈结果，不逐条确认工具 SQL，不阻塞下一轮问数。SSE `done.answerId` 取自原生 `AgentResultEvent` 的结果消息 ID，刷新后使用历史消息 ID 恢复反馈；`sessionKey` 仍是 conversationId。内部答案查询声明工具不展示在用户轨迹中。具体存储及权限见第 3 章。
+**当前交互（specs/054）**：SemanticModelingPage 直接提供对话，QuestionIntakeForm 为可展开的可选表格；验证与发布面板说明问题状态不阻碍发布。ChatPanel 最终答案下方展示 AnswerFeedback 的轻量图标反馈条（正确/不正确）、主题紫色选择态和持久化反馈结果；不使用整块卡片和表情符号，状态、样例保存失败及重试均保留，不逐条确认工具 SQL，不阻塞下一轮问数。SSE `done.answerId` 取自原生 `AgentResultEvent` 的结果消息 ID，刷新后使用历史消息 ID 恢复反馈；`sessionKey` 仍是 conversationId。内部答案查询声明工具不展示在用户轨迹中。具体存储及权限见第 3 章。
 
 `ModelingHitlCard` 对 `write_file.files_json` 展示一个业务方案卡，业务说明优先、逐文件完整内容折叠且复用 `ReadableCode`；按钮一次采纳整套方案或退回调整。批量卡不调用单文件 preview 接口，不提供未预检的直接编辑；调整由 agent 重新提交完整方案。单文件卡保留既有预检和编辑。采纳仅写入草稿，卡片明确引导后续问题验证、结果确认和发布，不把文档定义说成人员已验收。SSE 协议不变。
 

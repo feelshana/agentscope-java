@@ -4,7 +4,7 @@ import Markdown from './Markdown';
 import AttachmentImage from './AttachmentImage';
 import { ArtifactInfo, artifactSrc, downloadArtifact, parseResult } from './PythonCodeBlock';
 import { downloadFile } from '../api/artifacts';
-import { ToolInspectPayload } from './ToolCallBlock';
+import { toolIcon, type ToolInspectPayload } from './ToolCallBlock';
 import { officialToolName, record, wrenToolLabel } from '../utils/wrenToolPresentation';
 import { decodeToolValue, displayText, inputFields, inspectResult, tableData, valueText } from '../utils/toolInspectorPresentation';
 import './ToolInspector.css';
@@ -14,7 +14,7 @@ export interface ToolInspectorProps { tool: ToolInspectPayload; onClose: () => v
 const TABS = [['result', '结果'], ['input', '输入'], ['raw', '原始内容']] as const;
 type Tab = typeof TABS[number][0];
 const LABELS: Record<string, string> = {
-  run_python: '执行 Python', render_chart: '生成图表', wren_cli: '官方 CLI',
+  run_python: '执行 Python', render_chart: '生成图表', web_search: '联网搜索', wren_cli: '官方 CLI',
   read_file: '读取文件', write_file: '写入文件', edit_file: '修改文件',
   delete_file: '撤回文件', list_files: '查看文件目录', load_skill_through_path: '读取技能',
 };
@@ -42,13 +42,15 @@ function Code({ text, label }: { text: string; label?: string }) {
     {text.length > limit && <button className="da-ti-text-button" type="button" onClick={() => setLimit(n => n + 50000)}>展开更多原文（已显示 {limit.toLocaleString()} / {text.length.toLocaleString()} 字符）</button>}</>;
 }
 
-function ResultTable({ data }: { data: NonNullable<ReturnType<typeof tableData>> }) {
+function ResultTable({ data, sourceLabel = '返回' }: { data: NonNullable<ReturnType<typeof tableData>>; sourceLabel?: string }) {
   const [limit, setLimit] = useState(50);
-  return <><div className="da-ti-caption"><strong>返回 {data.rows.length.toLocaleString()} 行 · {data.columns.length} 列</strong>
+  const numeric = data.columns.map((_, i) => data.rows.some(row => typeof row[i] === 'number')
+    && data.rows.every(row => row[i] == null || typeof row[i] === 'number'));
+  return <><div className="da-ti-caption"><strong>{sourceLabel} {data.rows.length.toLocaleString()} 行 · {data.columns.length} 列</strong>
     {data.rows.length > limit && <small>当前显示前 {limit} 行</small>}</div>
     {data.truncated && <div className="da-ti-notice">接口标记结果已截断，这里仅展示已返回的数据，不能据此推断完整总量。</div>}
-    {data.rows.length ? <div className="da-ti-table-scroll"><table><thead><tr>{data.columns.map((c, i) => <th key={i}>{c}</th>)}</tr></thead>
-      <tbody>{data.rows.slice(0, limit).map((row, i) => <tr key={i}>{row.map((v, j) => <td key={j}>{valueText(v)}</td>)}</tr>)}</tbody></table></div>
+    {data.rows.length ? <div className="da-ti-table-scroll" role="region" aria-label="查询结果表格，可横向滚动" tabIndex={0}><table><thead><tr>{data.columns.map((c, i) => <th className={numeric[i] ? 'is-numeric' : undefined} key={i}>{c}</th>)}</tr></thead>
+      <tbody>{data.rows.slice(0, limit).map((row, i) => <tr key={i}>{row.map((v, j) => <td className={numeric[j] ? 'is-numeric' : undefined} key={j}>{valueText(v)}</td>)}</tr>)}</tbody></table></div>
       : <div className="da-ti-empty"><Icon name="table" size="lg" /><h3>查询成功，未返回数据行</h3><p>不等同于业务指标为 0。可核对日期、筛选条件和数据覆盖范围。</p></div>}
     {data.rows.length > limit && <button type="button" className="da-ti-text-button" onClick={() => setLimit(n => n + 50)}>显示更多（仅展开本次返回）</button>}</>;
 }
@@ -62,6 +64,47 @@ function Structured({ value, depth = 0 }: { value: unknown; depth?: number }) {
     {['sql', 'sql_query', 'expression', 'statement'].includes(k) && typeof v === 'string' ? <Code text={v} label="SQL" /> : <Structured value={v} depth={depth + 1} />}
   </dd></div>)}{Object.keys(value).length > 50 && <p>其余字段可在原始内容中查看。</p>}</dl>;
   return <span>{valueText(value)}</span>;
+}
+
+function ModelDirectory({ models }: { models: unknown[] }) {
+  const [limit, setLimit] = useState(50);
+  return <><div className="da-ti-caption"><strong>模型目录 · {models.length} 个</strong></div>
+    {!models.length && <p className="da-ti-muted">当前没有返回可用模型。</p>}
+    <div className="da-ti-model-list">{models.slice(0, limit).map((model, i) => record(model) ? <article key={i}>
+      <div className="da-ti-model-title"><code>{valueText(model.name)}</code>{model.column_count != null && <span>{valueText(model.column_count)} 个字段</span>}</div>
+      {model.description != null && <p>{valueText(model.description)}</p>}
+      {Object.keys(model).some(k => !['name', 'description', 'column_count'].includes(k)) && <details className="da-ti-extra"><summary>其他属性</summary><Structured value={Object.fromEntries(Object.entries(model).filter(([k]) => !['name', 'description', 'column_count'].includes(k)))} /></details>}
+    </article> : <Structured key={i} value={model} />)}</div>
+    {models.length > limit && <button type="button" className="da-ti-text-button" onClick={() => setLimit(n => n + 50)}>显示更多模型</button>}</>;
+}
+
+function ModelSchema({ model }: { model: Record<string, unknown> }) {
+  const columns = model.columns as unknown[];
+  const [limit, setLimit] = useState(50);
+  const extras = Object.fromEntries(Object.entries(model).filter(([k, v]) => !['name', 'description', 'columns', 'relationships'].includes(k) && v != null));
+  return <><h3 className="da-ti-model-name">{valueText(model.name)}</h3>
+    {model.description != null && <p className="da-ti-model-description">{valueText(model.description)}</p>}
+    <div className="da-ti-caption"><strong>字段信息 · {columns.length} 个</strong>{columns.length > limit && <small>当前显示前 {limit} 个</small>}</div>
+    {columns.length ? <div className="da-ti-table-scroll" role="region" aria-label="模型字段信息" tabIndex={0}><table className="da-ti-schema-table"><colgroup><col style={{ width: '31%' }} /><col style={{ width: '19%' }} /><col style={{ width: '50%' }} /></colgroup>
+      <thead><tr><th>字段</th><th>类型</th><th>说明</th></tr></thead><tbody>{columns.slice(0, limit).map((column, i) => {
+        if (!record(column)) return <tr key={i}><td colSpan={3}>{valueText(column)}</td></tr>;
+        const extra = Object.fromEntries(Object.entries(column).filter(([k]) => !['name', 'type', 'sqlType', 'description'].includes(k)));
+        return <tr key={i}><td><code>{valueText(column.name)}</code></td><td><code>{valueText(column.type ?? column.sqlType)}</code></td><td>{valueText(column.description)}
+          {Object.keys(extra).length > 0 && <details className="da-ti-extra"><summary>更多属性</summary><Structured value={extra} /></details>}</td></tr>;
+      })}</tbody></table></div> : <p className="da-ti-muted">当前没有返回字段。</p>}
+    {columns.length > limit && <button type="button" className="da-ti-text-button" onClick={() => setLimit(n => n + 50)}>显示更多字段</button>}
+    {Array.isArray(model.relationships) && model.relationships.length > 0 && <details className="da-ti-extra da-ti-model-extra"><summary>模型关系 · {model.relationships.length} 条</summary><Structured value={model.relationships} /></details>}
+    {Object.keys(extras).length > 0 && <details className="da-ti-extra da-ti-model-extra"><summary>其他模型信息</summary><Structured value={extras} /></details>}</>;
+}
+
+function BusinessRules({ data }: { data: Record<string, unknown> & { instructions: string } }) {
+  const [limit, setLimit] = useState(20000);
+  const text = data.instructions;
+  const extra = Object.fromEntries(Object.entries(data).filter(([key]) => key !== 'instructions'));
+  return <><div className="da-ti-caption"><strong>已发布业务规则</strong><CopyButton text={text} label="复制规则" /></div>
+    {text.trim() ? <Markdown>{text.slice(0, limit)}</Markdown> : <p className="da-ti-muted">本次调用没有返回业务规则。</p>}
+    {text.length > limit && <button type="button" className="da-ti-text-button" onClick={() => setLimit(n => n + 50000)}>展开更多规则（已显示 {limit.toLocaleString()} / {text.length.toLocaleString()} 字符）</button>}
+    {Object.keys(extra).length > 0 && <Structured value={extra} />}</>;
 }
 
 function ArtifactList({ artifacts }: { artifacts: ArtifactInfo[] }) {
@@ -93,7 +136,7 @@ function PythonResult({ raw }: { raw: string }) {
   const parsed = useMemo(() => parseResult(raw), [raw]);
   if (!raw.includes('### stdout') && !raw.includes('### artifact:')) return <Code text={raw} label="返回文本" />;
   return <><div className="da-ti-caption"><strong>标准输出</strong><CopyButton text={parsed.stdout} label="复制输出" /></div>
-    <pre className="da-ti-stdout">{parsed.stdout || '没有标准输出。'}</pre><ArtifactList artifacts={parsed.artifacts} /></>;
+    <pre className="da-ti-stdout" tabIndex={0} aria-label="Python标准输出，可横向滚动">{parsed.stdout || '没有标准输出。'}</pre><ArtifactList artifacts={parsed.artifacts} /></>;
 }
 
 function ResultContent({ tool, display, onInput }: { tool: ToolInspectPayload; display: ReturnType<typeof inspectResult>; onInput: () => void }) {
@@ -126,6 +169,10 @@ function ResultContent({ tool, display, onInput }: { tool: ToolInspectPayload; d
       }} /></Suspense> : <div className="da-ti-notice">当前回执没有可用的图表标识或配置，可查看原始内容。</div>}
       <button type="button" className="da-ti-text-button" onClick={onInput}>查看图表配置</button></>;
   }
+  const actualTool = officialToolName(tool.name, tool.input);
+  if (actualTool === 'get_instructions' && record(display.data) && typeof display.data.instructions === 'string') return <BusinessRules data={display.data as Record<string, unknown> & { instructions: string }} />;
+  if (actualTool === 'list_models' && record(display.data) && Array.isArray(display.data.models)) return <ModelDirectory models={display.data.models} />;
+  if (actualTool === 'describe_model' && record(display.data) && Array.isArray(display.data.columns)) return <ModelSchema model={display.data} />;
   const matches = record(display.data) ? display.data.matches ?? display.data.queries : undefined;
   if (Array.isArray(matches)) return <><h3>相似问答</h3><p className="da-ti-muted">{matches.length ? `返回 ${matches.length} 条参考问答，参考示例不等于本次查询结果。` : '未找到相似问答，可依据已发布模型继续查询。'}</p>
     {matches.map((m, i) => <article className="da-ti-match" key={i}><h3>{i + 1}. {record(m) ? valueText(m.nl_query ?? m.nl ?? m.question) : valueText(m)}</h3>
@@ -152,6 +199,8 @@ function Inspector({ tool, onClose }: ToolInspectorProps) {
   const args = record(input.arguments) ? input.arguments : {};
   const code = tool.name === 'run_python' ? input.code : args.sql ?? input.sql;
   const otherInput = { ...input };
+  const chartData = tool.name === 'render_chart' ? tableData(input) : null;
+  if (chartData) { delete otherInput.columns; delete otherInput.rows; }
   for (const k of ['code', 'sql', 'answer_question', 'description', 'query_type', 'path']) delete otherInput[k];
   if (record(otherInput.arguments)) {
     const rest = { ...otherInput.arguments }; delete rest.sql;
@@ -186,7 +235,7 @@ function Inspector({ tool, onClose }: ToolInspectorProps) {
     };
   }, []);
   return <aside ref={root} className={`da-ti ${expanded ? 'da-ti-expanded' : ''}`} role={expanded || narrow ? 'dialog' : 'complementary'} aria-modal={expanded || narrow ? true : undefined} aria-label="工具调用详情">
-    <header className="da-ti-head"><span className="da-ti-tool-icon"><Icon name={tool.name === 'run_python' ? 'code' : tool.name === 'render_chart' ? 'chart' : 'database'} /></span>
+    <header className="da-ti-head"><span className="da-ti-tool-icon"><Icon name={toolIcon(tool.name, tool.input)} /></span>
       <h2 title={title}>{title}</h2><span className={`da-ti-state da-ti-state-${state}`}>{stateLabel}</span>
       {!narrow && <button type="button" className="da-ti-icon-button" aria-label={expanded ? '恢复侧栏' : '放大阅读工具详情'} title={expanded ? '恢复侧栏' : '放大阅读'} onClick={() => setExpanded(v => !v)}><Icon name={expanded ? 'back' : 'fit'} size="sm" /></button>}
       <button ref={close} type="button" className="da-ti-icon-button" aria-label="关闭工具详情" title="关闭" onClick={onClose}><Icon name="close" size="sm" /></button></header>
@@ -203,6 +252,7 @@ function Inspector({ tool, onClose }: ToolInspectorProps) {
         <dl className="da-ti-fields">{['answer_question', 'description', 'query_type', 'path'].filter(k => input[k] !== undefined).map(k => <div key={k}><dt>{{ answer_question: '查询问题', description: '任务说明', query_type: '查询用途', path: '文件路径' }[k]}</dt><dd>{valueText(input[k])}</dd></div>)}</dl>
         {typeof code === 'string' ? <Code text={code} label={tool.name === 'run_python' ? '代码' : 'SQL'} /> : null}
         {Object.keys(otherInput).length ? <Structured value={otherInput} /> : null}
+        {chartData && <div className="da-ti-chart-input"><ResultTable data={chartData} sourceLabel="输入" /></div>}
         {tool.input !== undefined && !record(decodeToolValue(tool.input)) ? <Code text={displayText(decodeToolValue(tool.input))} label="参数" /> : null}
         {tool.input === undefined ? <p className="da-ti-muted">当前记录没有保存输入参数。</p> : null}
         <button type="button" className="da-ti-text-button" onClick={() => { setRawPart('input'); setTab('raw'); tabs.current[2]?.focus(); }}>查看完整原始输入</button>

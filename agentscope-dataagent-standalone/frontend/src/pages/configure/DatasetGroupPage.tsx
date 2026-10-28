@@ -64,6 +64,7 @@ export default function DatasetGroupPage() {
   const uploadScope = `${getToken() ?? ''}:${groupId}`;
   const [searchParams, setSearchParams] = useSearchParams();
   const [detail, setDetail] = useState<GroupDetail | null>(null);
+  const canManage = detail?.group.canManage === true;
   const [workflow, setWorkflow] = useState<ModelingWorkflow | null>(null);
   const [windowSignal, setWindowSignal] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -96,7 +97,7 @@ export default function DatasetGroupPage() {
   const hasPendingUploads = uploadStatuses.some(item => ['uploading', 'importing', 'publishing', 'uncertain'].includes(item.status));
   useEffect(() => { getUploadPolicy().then(setUploadPolicy).catch(e => setError(String(e))); }, []);
   useEffect(() => {
-    if (!uploadPolicy?.statusAvailable) return;
+    if (!canManage || !uploadPolicy?.statusAvailable) return;
     let cancelled = false;
     let fetching = false;
     const poll = async () => {
@@ -129,10 +130,10 @@ export default function DatasetGroupPage() {
     void poll();
     const timer = busy || hasPendingUploads ? window.setInterval(() => void poll(), 1500) : undefined;
     return () => { cancelled = true; if (timer) window.clearInterval(timer); };
-  }, [groupId, uploadScope, busy, hasPendingUploads, uploadPolicy?.statusAvailable]);
+  }, [groupId, uploadScope, busy, hasPendingUploads, uploadPolicy?.statusAvailable, canManage]);
 
   // Retired graph/tree deep links show datasets without mounting their components.
-  const view: View = searchParams.get('view') === 'modeling' ? 'modeling' : 'files';
+  const view: View = canManage && searchParams.get('view') === 'modeling' ? 'modeling' : 'files';
   const setView = (v: View) => {
     const next = new URLSearchParams(searchParams);
     next.set('view', v);
@@ -141,8 +142,9 @@ export default function DatasetGroupPage() {
 
   const refresh = useCallback(async () => {
     try {
-      setDetail(await getGroupDetail(groupId));
-      setWorkflow(await getModelingWorkflow(groupId).catch(() => null));
+      const next = await getGroupDetail(groupId);
+      setDetail(next);
+      setWorkflow(next.group.canManage ? await getModelingWorkflow(groupId).catch(() => null) : null);
       setError(null);
       setAssociatingTables(new Set());
     } catch (e) {
@@ -350,25 +352,25 @@ export default function DatasetGroupPage() {
 
   return (
     <div className="kw-page">
-      <FactQueryWindowSettings key={groupId} groupId={groupId} hideButton openSignal={windowSignal} />
+      {canManage && <FactQueryWindowSettings key={groupId} groupId={groupId} hideButton openSignal={windowSignal} />}
       <KnowledgeBreadcrumb items={[{ label: '返回对话', to: '/chat' }, { label: '知识库', to: '/configure/datasets' }, { label: detail?.group.name ?? '加载中…' }]} />
       <div className="kw-scroll"><div className="kw-content">
         <div className="kw-pagehead">
           <div className="kw-heading"><div className="kw-eyebrow"><Icon name="book" size="sm" />知识库</div><h1>{detail?.group.name ?? '知识库'}</h1><p>{detail?.group.description || '暂无说明'}</p>
             <div className="kw-infochips"><span><Icon name="table" size="sm" />{fileCount} 个数据集</span>{detail?.group.createdAt && <span><Icon name="clock" size="sm" />创建于 {new Date(detail.group.createdAt).toLocaleDateString('zh-CN')}</span>}</div>
           </div>
-          <div className="kw-actions"><button className="da-btn" disabled={!detail} onClick={() => setMembersOpen(true)}><Icon name="user" size="sm" />成员与权限</button><button className="da-btn da-btn-ghost" disabled={!detail || busy} onClick={() => { setGroupName(detail?.group.name ?? ''); setGroupDescription(detail?.group.description ?? ''); setError(null); setEditingGroup(true); }}><Icon name="edit" size="sm" />编辑信息</button><button className="da-btn" disabled={!detail} onClick={() => setWindowSignal(n => n + 1)}><Icon name="clock" size="sm" />事实表时间范围</button><button className="da-btn da-btn-primary" disabled={!detail || !!preparing} title={preparing ? `问数准备中（${preparing}），约半分钟后可用` : undefined} onClick={() => navigate(`/chat?groups=${encodeURIComponent(groupId)}`)}><Icon name="chat" size="sm" />{preparing ? '问数准备中…' : '基于此库提问'}</button></div>
+          <div className="kw-actions">{canManage && <><button className="da-btn" disabled={!detail} onClick={() => setMembersOpen(true)}><Icon name="user" size="sm" />成员与权限</button><button className="da-btn da-btn-ghost" disabled={!detail || busy} onClick={() => { setGroupName(detail?.group.name ?? ''); setGroupDescription(detail?.group.description ?? ''); setError(null); setEditingGroup(true); }}><Icon name="edit" size="sm" />编辑信息</button><button className="da-btn" disabled={!detail} onClick={() => setWindowSignal(n => n + 1)}><Icon name="clock" size="sm" />事实表时间范围</button></>}<button className="da-btn da-btn-primary" disabled={!detail || !!preparing} title={preparing ? `问数准备中（${preparing}），约半分钟后可用` : undefined} onClick={() => navigate(`/chat?groups=${encodeURIComponent(groupId)}`)}><Icon name="chat" size="sm" />{preparing ? '问数准备中…' : '基于此库提问'}</button></div>
         </div>
         {error && <div className="kw-alert" role="alert">{error}</div>}
-        {workflow && <div className="kw-progress" style={{ display: 'flex', alignItems: 'center', gap: 16, justifyContent: 'space-between', flexWrap: 'wrap' }}>
-          <span className="kw-progress-text">{workflow.queryAvailable
+        {(workflow || detail) && <div className="kw-progress" style={{ display: 'flex', alignItems: 'center', gap: 16, justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <span className="kw-progress-text">{(workflow?.queryAvailable ?? ((detail?.publishedVersion ?? 0) > 0))
             ? preparing
-              ? `已发布 v${workflow.publishedVersion}，问数准备中（${preparing}），约半分钟后可以问数。`
-              : `基础模型已发布 v${workflow.publishedVersion}，可以问数；业务口径可继续完善。`
+              ? `已发布 v${workflow?.publishedVersion ?? detail?.publishedVersion ?? 0}，问数准备中（${preparing}），约半分钟后可以问数。`
+              : `基础模型已发布 v${workflow?.publishedVersion ?? detail?.publishedVersion ?? 0}，可以问数；业务口径可继续完善。`
             : '采样完成后请进行语义建模并发布，之后才能问数。'}</span>
-          <button className="da-btn da-btn-sm" onClick={() => navigate(`/configure/modeling/${groupId}`)}>{workflow.queryAvailable ? '完善业务模型' : '查看建模进度'}</button>
+          {canManage && <button className="da-btn da-btn-sm" onClick={() => navigate(`/configure/modeling/${groupId}`)}>{workflow?.queryAvailable ? '完善业务模型' : '查看建模进度'}</button>}
         </div>}
-        <div className="kw-tabs" role="tablist" aria-label="知识库内容">{NAV_ITEMS.map(n => <button key={n.key} role="tab" aria-selected={view === n.key} className={view === n.key ? 'active' : ''} onClick={() => n.key === 'modeling' ? navigate(`/configure/modeling/${groupId}`) : setView(n.key)}>{n.label}{n.key === 'files' && <span className="kw-badge">{fileCount}</span>}</button>)}</div>
+        <div className="kw-tabs" role="tablist" aria-label="知识库内容">{NAV_ITEMS.filter(n => canManage || n.key === 'files').map(n => <button key={n.key} role="tab" aria-selected={view === n.key} className={view === n.key ? 'active' : ''} onClick={() => n.key === 'modeling' ? navigate(`/configure/modeling/${groupId}`) : setView(n.key)}>{n.label}{n.key === 'files' && <span className="kw-badge">{fileCount}</span>}</button>)}</div>
         <input ref={fileRef} type="file" multiple accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={e => { if (e.target.files?.length) uploadFiles(e.target.files); e.target.value = ''; }} />
         {association && <div style={{ margin: '12px 0' }}><AssociationProgress state={association} /></div>}
         <details className="kw-progress" open={uploadStatuses.some(s => s.status !== 'ready') || associatingTables.size > 0} hidden={uploadStatuses.length === 0}>
@@ -438,24 +440,24 @@ export default function DatasetGroupPage() {
 
         </details>
         {view === 'files' && <>
-          <div className="kw-toolbar"><label className="kw-search"><Icon name="search" size="sm" /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="搜索数据集" aria-label="搜索数据集" /></label><span className="kw-spacer" /><button className="da-btn" disabled={busy || !detail} onClick={() => setAssociateOpen(true)}><Icon name="database" size="sm" />关联数据源</button><button className="da-btn" disabled={busy || !detail} onClick={() => setUploadOpen(true)}><Icon name="upload" size="sm" />上传文件</button></div>
+          <div className="kw-toolbar"><label className="kw-search"><Icon name="search" size="sm" /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="搜索数据集" aria-label="搜索数据集" /></label><span className="kw-spacer" />{canManage && <><button className="da-btn" disabled={busy || !detail} onClick={() => setAssociateOpen(true)}><Icon name="database" size="sm" />关联数据源</button><button className="da-btn" disabled={busy || !detail} onClick={() => setUploadOpen(true)}><Icon name="upload" size="sm" />上传文件</button></>}</div>
           {!detail && !error && <div className="kw-empty">加载知识库…</div>}
-          {detail && fileCount === 0 && <div className="kw-empty"><EmptyIllustration variant="table" caption="添加第一份数据，开始分析" /><button className="da-btn da-btn-primary" disabled={busy} onClick={() => setUploadOpen(true)}>上传文件</button></div>}
+          {detail && fileCount === 0 && <div className="kw-empty"><EmptyIllustration variant="table" caption="添加第一份数据，开始分析" />{canManage && <button className="da-btn da-btn-primary" disabled={busy} onClick={() => setUploadOpen(true)}>上传文件</button>}</div>}
           {detail && fileCount > 0 && <div className="kw-tablebox"><div className="kw-table-scroll"><table className="kw-table"><thead><tr><th>数据集名称</th><th>来源</th><th className="numeric">行数</th><th className="numeric">字段数</th><th>来源文件</th><th className="end">操作</th></tr></thead><tbody>
             {detail.datasets.filter(d => `${d.name} ${d.sourceFileName ?? ''}`.toLowerCase().includes(query.trim().toLowerCase())).map(d => <tr key={d.id}>
               <td><button className="kw-namecell" onClick={() => navigate(`/configure/datasets/${groupId}/table/${d.id}`)}><Icon name="table" size="sm" />{d.name}{(d.currentVersion ?? 1) > 1 && <span className="kw-badge">v{d.currentVersion}</span>}</button></td>
               <td><span className="kw-source">{d.origin === 'datasource' ? '数据源关联' : d.origin === 'derived' ? '派生数据' : '文件上传'}</span></td><td className="numeric">{(d.rowCount?.toLocaleString() ?? '未统计')}</td><td className="numeric">{d.columns.length}</td><td title={d.sourceFileName ?? ''}>{d.sourceFileName ?? '—'}</td>
-              <td className="end"><WorkspaceMenu label={`${d.name}的更多操作`} items={[{ label: '查看数据集', icon: 'table', onClick: () => navigate(`/configure/datasets/${groupId}/table/${d.id}`) }, { label: '删除数据集', icon: 'trash', danger: true, disabled: busy, onClick: () => void handleDeleteDataset(d.id) }]} /></td>
+              <td className="end"><WorkspaceMenu label={`${d.name}的更多操作`} items={[{ label: '查看数据集', icon: 'table', onClick: () => navigate(`/configure/datasets/${groupId}/table/${d.id}`) }, ...(canManage ? [{ label: '删除数据集' as const, icon: 'trash' as const, danger: true, disabled: busy, onClick: () => void handleDeleteDataset(d.id) }] : [])]} /></td>
             </tr>)}
             {detail.datasets.every(d => !`${d.name} ${d.sourceFileName ?? ''}`.toLowerCase().includes(query.trim().toLowerCase())) && <tr><td colSpan={6} className="kw-empty">没有匹配的数据集</td></tr>}
           </tbody></table></div><div className="kw-tablebottom"><span>共 {fileCount} 个数据集</span><span>点击名称查看数据与字段</span></div></div>}
         </>}
         {view === 'modeling' && <Navigate to={`/configure/modeling/${groupId}`} replace />}
       </div></div>
-      {editingGroup && <div className="da-modal-overlay" onClick={() => { if (!busy) setEditingGroup(false); }}><div className="da-modal-shell" style={{ width: 'min(520px, 92vw)' }} onClick={e => e.stopPropagation()}><div className="da-modal-head"><div className="da-modal-title">编辑知识库</div></div><div className="da-modal-body">{error && <div className="kw-alert" role="alert">{error}</div>}<label className="da-label">名称</label><input className="da-input" value={groupName} onChange={e => setGroupName(e.target.value)} maxLength={100} /><label className="da-label" style={{ marginTop: 16 }}>说明</label><textarea className="da-input" value={groupDescription} onChange={e => setGroupDescription(e.target.value)} maxLength={1000} rows={4} /></div><div className="da-modal-foot"><button className="da-btn" disabled={busy} onClick={() => setEditingGroup(false)}>取消</button><button className="da-btn da-btn-primary" disabled={busy} onClick={saveGroupInfo}>{busy ? '保存中…' : '保存'}</button></div></div></div>}
-      {uploadOpen && <div className="da-modal-overlay" onClick={() => setUploadOpen(false)}><div className="da-modal-shell" style={{ width: 'min(560px, 92vw)' }} onClick={e => e.stopPropagation()}><div className="da-modal-head"><div className="da-modal-title">上传数据文件</div></div><div className="da-modal-body">{error && <div className="kw-alert" role="alert">{error}</div>}<div className="da-dropzone" role="button" tabIndex={0} style={dragOver ? { borderColor: 'var(--da-primary)' } : undefined} onClick={() => fileRef.current?.click()} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileRef.current?.click(); } }} onDragOver={e => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={e => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files); }}><Icon name="upload" /><div style={{ marginTop: 12 }}>点击选择或拖入 Excel / CSV 文件</div><div className="da-small" style={{ marginTop: 8 }}>支持 .xlsx / .xls / .csv；单文件 {uploadPolicy ? uploadPolicy.maxFileBytes / 1024 ** 2 : 50} MB，最多 {uploadPolicy?.maxFiles ?? 10} 个，总计 {uploadPolicy ? uploadPolicy.maxSelectionBytes / 1024 ** 2 : 100} MB</div>{(busy || sheetPickerBusy) && <div className="da-small" style={{ marginTop: 12 }}>{sheetPickerBusy ? '检测工作表…' : '上传并解析中…'}</div>}</div></div><div className="da-modal-foot"><button className="da-btn" onClick={() => setUploadOpen(false)}>关闭</button></div></div></div>}
-      {membersOpen && detail && <KnowledgeBaseMembersModal groupId={groupId} name={detail.group.name} onClose={() => setMembersOpen(false)} />}
-      {associateOpen && (
+      {canManage && editingGroup && <div className="da-modal-overlay" onClick={() => { if (!busy) setEditingGroup(false); }}><div className="da-modal-shell" style={{ width: 'min(520px, 92vw)' }} onClick={e => e.stopPropagation()}><div className="da-modal-head"><div className="da-modal-title">编辑知识库</div></div><div className="da-modal-body">{error && <div className="kw-alert" role="alert">{error}</div>}<label className="da-label">名称</label><input className="da-input" value={groupName} onChange={e => setGroupName(e.target.value)} maxLength={100} /><label className="da-label" style={{ marginTop: 16 }}>说明</label><textarea className="da-input" value={groupDescription} onChange={e => setGroupDescription(e.target.value)} maxLength={1000} rows={4} /></div><div className="da-modal-foot"><button className="da-btn" disabled={busy} onClick={() => setEditingGroup(false)}>取消</button><button className="da-btn da-btn-primary" disabled={busy} onClick={saveGroupInfo}>{busy ? '保存中…' : '保存'}</button></div></div></div>}
+      {canManage && uploadOpen && <div className="da-modal-overlay" onClick={() => setUploadOpen(false)}><div className="da-modal-shell" style={{ width: 'min(560px, 92vw)' }} onClick={e => e.stopPropagation()}><div className="da-modal-head"><div className="da-modal-title">上传数据文件</div></div><div className="da-modal-body">{error && <div className="kw-alert" role="alert">{error}</div>}<div className="da-dropzone" role="button" tabIndex={0} style={dragOver ? { borderColor: 'var(--da-primary)' } : undefined} onClick={() => fileRef.current?.click()} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileRef.current?.click(); } }} onDragOver={e => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={e => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files); }}><Icon name="upload" /><div style={{ marginTop: 12 }}>点击选择或拖入 Excel / CSV 文件</div><div className="da-small" style={{ marginTop: 8 }}>支持 .xlsx / .xls / .csv；单文件 {uploadPolicy ? uploadPolicy.maxFileBytes / 1024 ** 2 : 50} MB，最多 {uploadPolicy?.maxFiles ?? 10} 个，总计 {uploadPolicy ? uploadPolicy.maxSelectionBytes / 1024 ** 2 : 100} MB</div>{(busy || sheetPickerBusy) && <div className="da-small" style={{ marginTop: 12 }}>{sheetPickerBusy ? '检测工作表…' : '上传并解析中…'}</div>}</div></div><div className="da-modal-foot"><button className="da-btn" onClick={() => setUploadOpen(false)}>关闭</button></div></div></div>}
+      {canManage && membersOpen && detail && <KnowledgeBaseMembersModal groupId={groupId} name={detail.group.name} onClose={() => setMembersOpen(false)} />}
+      {canManage && associateOpen && (
         <AssociateTablesModal
           groupId={groupId}
           onClose={() => setAssociateOpen(false)}

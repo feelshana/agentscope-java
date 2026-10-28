@@ -83,9 +83,27 @@ class KnowledgeBaseBrowseTest {
         assertThatThrownBy(() -> service.previewReadable("reader", "other", "d"))
                 .isInstanceOf(DatasetException.class);
         var group = new DatasetGroupEntity("g", "owner", "库", null);
+        when(access.requireQuery("reader", "g")).thenReturn(group);
+        when(access.role("reader", group)).thenReturn(KnowledgeBaseAccessService.Role.QUERY);
+        assertThat(service.previewForBrowsing("reader", "d", 100).rows()).hasSize(20);
+        when(access.requireQuery("owner", "g")).thenReturn(group);
+        when(access.role("owner", group)).thenReturn(KnowledgeBaseAccessService.Role.MANAGE);
+        assertThat(service.previewForBrowsing("owner", "d", 30).rows()).hasSize(30);
+        when(access.requireQuery("outsider", "g")).thenThrow(new DatasetException("未授权", 404));
+        assertThatThrownBy(() -> service.previewForBrowsing("outsider", "d", 20))
+                .isInstanceOf(DatasetException.class)
+                .hasMessageContaining("未授权");
         when(access.requireQuery("reader", "g"))
                 .thenReturn(group)
+                .thenReturn(group)
                 .thenThrow(new DatasetException("已撤权", 404));
+        assertThatThrownBy(() -> service.previewForBrowsing("reader", "d", 20))
+                .isInstanceOf(DatasetException.class)
+                .hasMessageContaining("撤权");
+        doReturn(group)
+                .doThrow(new DatasetException("已撤权", 404))
+                .when(access)
+                .requireQuery("reader", "g");
         assertThatThrownBy(() -> service.previewReadable("reader", "g", "d"))
                 .isInstanceOf(DatasetException.class)
                 .hasMessageContaining("撤权");

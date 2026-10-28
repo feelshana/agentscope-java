@@ -1057,11 +1057,20 @@ button:focus-visible {
 }
 .da-bubble.user {
   max-width: 78%;
-  background: linear-gradient(135deg, var(--da-primary) 0%, var(--da-primary-hover) 100%);
-  color: #fff;
-  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.22);
+  border: 1px solid #e9e5f3;
+  border-radius: 16px 16px 6px 16px;
+  background: #f3f1f9;
+  color: #3f3b4b;
+  box-shadow: none;
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
+  cursor: text;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.da-bubble.user::selection {
+  background: #d5c9f4;
+  color: #292139;
 }
 .da-bubble.agent {
   max-width: 100%;

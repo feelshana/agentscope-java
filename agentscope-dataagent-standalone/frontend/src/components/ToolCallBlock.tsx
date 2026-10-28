@@ -1,6 +1,7 @@
 import React from 'react';
 import Icon, { IconName } from './Icon';
-import { wrenToolLabel, parseWrenResult, isWrenTool } from '../utils/wrenToolPresentation';
+import { officialToolName, wrenToolLabel } from '../utils/wrenToolPresentation';
+import { inspectResult } from '../utils/toolInspectorPresentation';
 
 export interface ToolInspectPayload {
   id: string;
@@ -74,6 +75,16 @@ const TC_TOOL_LABELS: Record<string, string> = {
 };
 
 const TC_TOOL_ICONS: Record<string, IconName> = {
+  run_sql: 'database',
+  describe_model: 'model',
+  list_models: 'list',
+  get_instructions: 'file',
+  recall_queries: 'search',
+  load_skill_through_path: 'file',
+  read_file: 'file',
+  write_file: 'edit',
+  edit_file: 'edit',
+  list_files: 'folder',
   wren_run_sql: 'database',
   wren_query_cube: 'database',
   wren_describe_model: 'search',
@@ -89,12 +100,8 @@ function toolLabel(name: string): string {
   return TC_TOOL_LABELS[name] ?? name;
 }
 
-function toolIcon(name: string): IconName {
-  return TC_TOOL_ICONS[name] ?? 'settings';
-}
-
-function isToolError(result: string | undefined): boolean {
-  return typeof result === 'string' && result.startsWith('error:');
+export function toolIcon(name: string, input?: string): IconName {
+  return TC_TOOL_ICONS[officialToolName(name, input)] ?? TC_TOOL_ICONS[name] ?? 'settings';
 }
 
 export default function ToolCallBlock({
@@ -107,7 +114,7 @@ export default function ToolCallBlock({
 }: Props) {
   const unconfirmed = finished && result === undefined;
   const running = !finished && result === undefined;
-  const failed = !running && (isToolError(result) || (isWrenTool(toolName) && parseWrenResult(result ?? '').error));
+  const failed = !running && inspectResult(toolName, result).state === 'error';
   const label = wrenToolLabel(toolName, input) ?? toolLabel(toolName);
 
   return (
@@ -120,7 +127,7 @@ export default function ToolCallBlock({
         aria-label={`查看 ${label} 工具详情`}
       >
         <span style={{ color: 'var(--da-text-muted)', display: 'inline-flex' }}>
-          <Icon name={toolIcon(toolName)} size="sm" />
+          <Icon name={toolIcon(toolName, input)} size="sm" />
         </span>
         <span className="da-toolcall-name">{label}</span>
         <span className={`da-toolcall-status${failed ? ' failed' : ''}`}>

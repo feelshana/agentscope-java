@@ -50,7 +50,10 @@ def main():
     parser.add_argument("--url", help="Application URL including /dify/dataagent/ prefix")
     parser.add_argument("--apply", action="store_true", help="Write changes; default is server-side dry run")
     parser.add_argument("--check-only", action="store_true", help="Inspect local structure without network access")
+    parser.add_argument("--timeout-seconds", type=int, default=900, help="HTTP timeout for large first imports (default 900 seconds)")
     args = parser.parse_args()
+    if args.timeout_seconds < 1:
+        parser.error("--timeout-seconds must be positive")
     users = read_users(args.xlsx)
     if args.check_only:
         accounts = [u["username"].casefold() for u in users]
@@ -63,7 +66,7 @@ def main():
     payload = json.dumps({"users": users, "dryRun": not args.apply}).encode()
     request = urllib.request.Request(args.url.rstrip("/") + "/api/admin/user-directory/import", payload,
                                     {"Authorization": "Bearer " + token, "Content-Type": "application/json"})
-    with urllib.request.urlopen(request, timeout=120) as response:
+    with urllib.request.urlopen(request, timeout=args.timeout_seconds) as response:
         print(response.read().decode())
 
 

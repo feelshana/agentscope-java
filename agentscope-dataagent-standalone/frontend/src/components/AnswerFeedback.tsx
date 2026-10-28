@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { answerFeedback, AnswerFeedbackResult } from '../api/chat';
 import { messagePage } from '../api/sessions';
+import Icon from './Icon';
+import './AnswerFeedback.css';
 
 export default function AnswerFeedback({ agentId, session, answerId, text }: {
   agentId: string; session: string; answerId?: string; text: string;
@@ -32,16 +34,23 @@ export default function AnswerFeedback({ agentId, session, answerId, text }: {
     catch (e) { setError(e instanceof Error ? e.message : '反馈未保存，请重试'); }
     finally { setBusy(false); }
   }
-  return <div style={{ marginTop: 16, padding: 12, border: '1px solid var(--da-border)', borderRadius: 8 }}>
-    <strong>这次答案的口径和结果正确吗？</strong>
-    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-      <button className="da-btn" disabled={busy || !resolved} aria-pressed={feedback?.vote === 'UP'}
-        onClick={() => void submit('UP')}>{feedback?.vote === 'UP' ? '👍 已确认正确' : '👍 正确'}</button>
-      <button className="da-btn" disabled={busy || !resolved} aria-pressed={feedback?.vote === 'DOWN'}
-        onClick={() => void submit('DOWN')}>{feedback?.vote === 'DOWN' ? '👎 已反馈不正确' : '👎 不正确'}</button>
+  return <div className="answer-feedback" aria-busy={busy}>
+    <div className="answer-feedback-toolbar" role="group" aria-label="这次答案的口径和结果正确吗？">
+      <span className="answer-feedback-label">评价回答</span>
+      <div className="answer-feedback-actions">
+        <button type="button" className="answer-feedback-vote" disabled={busy || !resolved}
+          aria-pressed={feedback?.vote === 'UP'} title="确认口径和结果正确；成功查询将保存为后续问数的参考样例"
+          onClick={() => void submit('UP')}><Icon name="thumbsUp" size="sm" /><span>{feedback?.vote === 'UP' ? '已确认正确' : '正确'}</span></button>
+        <button type="button" className="answer-feedback-vote" disabled={busy || !resolved}
+          aria-pressed={feedback?.vote === 'DOWN'} title="反馈本次回答的口径或结果不正确"
+          onClick={() => void submit('DOWN')}><Icon name="thumbsDown" size="sm" /><span>{feedback?.vote === 'DOWN' ? '已反馈不正确' : '不正确'}</span></button>
+      </div>
     </div>
-    <p className="da-small" role="status">{busy ? '正在处理…' : feedback?.vote ? feedback.message
-      : '反馈可选。只有点击“正确”才会保存本轮成功业务查询的中文问题—SQL 样例，供后续问数参考。'}</p>
-    {error && <div role="alert">{error} <button className="da-btn da-btn-sm" onClick={() => setRetry(v => v + 1)}>重试</button></div>}
+    <p className={`answer-feedback-note${feedback?.memoryStatus === 'FAILED' ? ' is-warning' : ''}`} role="status" aria-live="polite">
+      {!busy && feedback?.vote && <Icon name={feedback.memoryStatus === 'FAILED' ? 'info' : 'check'} size="sm" />}
+      <span>{busy ? '正在处理反馈…' : feedback?.vote ? feedback.message
+        : '反馈可选 · 确认正确后，成功查询会保留为后续问数的参考样例。'}</span>
+    </p>
+    {error && <div className="answer-feedback-error" role="alert"><Icon name="warn" size="sm" /><span>{error}</span><button type="button" onClick={() => setRetry(v => v + 1)}>重试</button></div>}
   </div>;
 }

@@ -35,7 +35,9 @@ export type IconName =
   | 'clock'
   | 'type'
   | 'menu'
-  | 'info';
+  | 'info'
+  | 'thumbsUp'
+  | 'thumbsDown';
 
 /** Lucide-style 24x24 line paths; rendered with currentColor stroke via .da-icon classes. */
 const PATHS: Record<IconName, React.ReactNode> = {
@@ -194,6 +196,8 @@ const PATHS: Record<IconName, React.ReactNode> = {
   type: <path d="M5 4h14M12 4v16M8 20h8" />,
   menu: <path d="M4 6h16M4 12h16M4 18h16" />,
   info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7h.01" /></>,
+  thumbsUp: <><path d="M7 10v11H3V10h4ZM7 10l5-7a2 2 0 0 1 2 2v5h5a2 2 0 0 1 2 2l-1 7a2 2 0 0 1-2 2H7" /></>,
+  thumbsDown: <><path d="M7 14V3H3v11h4ZM7 14l5 7a2 2 0 0 0 2-2v-5h5a2 2 0 0 0 2-2l-1-7a2 2 0 0 0-2-2H7" /></>,
   clock: (
     <>
       <circle cx="12" cy="12" r="10" />

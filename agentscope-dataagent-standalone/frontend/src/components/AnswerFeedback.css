@@ -1,0 +1,18 @@
+.answer-feedback { margin-top: 18px; padding: 2px 0; color: var(--da-text-3); font-size: 12px; }
+.answer-feedback-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; min-height: 32px; }
+.answer-feedback-label { color: var(--da-text-3); line-height: 20px; }
+.answer-feedback-actions { display: inline-flex; align-items: center; gap: 4px; }
+.answer-feedback-vote { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 5px 9px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--da-text-3); font: inherit; line-height: 20px; cursor: pointer; }
+.answer-feedback-vote .da-icon { width: 16px; height: 16px; flex-shrink: 0; }
+.answer-feedback-vote:hover:not(:disabled) { background: var(--da-primary-subtle); color: var(--da-primary); }
+.answer-feedback-vote[aria-pressed="true"] { border-color: #e1dcf6; background: var(--da-primary-subtle); color: var(--da-primary); font-weight: 500; }
+.answer-feedback-vote:focus-visible, .answer-feedback-error button:focus-visible { outline: 2px solid var(--da-primary); outline-offset: 2px; }
+.answer-feedback-vote:disabled { cursor: default; opacity: .5; }
+.answer-feedback-note { display: flex; align-items: flex-start; gap: 5px; margin: 5px 0 0; color: var(--da-text-3); font-size: 12px; line-height: 20px; overflow-wrap: anywhere; }
+.answer-feedback-note .da-icon, .answer-feedback-error > .da-icon { width: 14px; height: 14px; margin-top: 3px; flex-shrink: 0; }
+.answer-feedback-note.is-warning { color: #946200; }
+.answer-feedback-error { display: flex; align-items: flex-start; gap: 6px; flex-wrap: wrap; margin-top: 6px; color: var(--da-danger); line-height: 20px; overflow-wrap: anywhere; }
+.answer-feedback-error button { padding: 0; border: 0; background: transparent; color: var(--da-primary); font: inherit; line-height: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+@media (prefers-reduced-motion: no-preference) {
+  .answer-feedback-vote { transition: color .15s ease, background-color .15s ease, border-color .15s ease; }
+}

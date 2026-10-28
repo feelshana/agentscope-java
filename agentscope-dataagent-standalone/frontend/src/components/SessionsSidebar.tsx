@@ -226,7 +226,7 @@ export default function SessionsSidebar({ refreshKey, collapsed = false, onToggl
           {rail('更多', 'moreHorizontal', ['/more', '/workspace', '/admin/models', '/admin/public-knowledge-bases'].includes(location.pathname), () => navigate('/more'))}
         </div>
         <span style={{ flex: 1 }} />
-        <button title="展开侧边栏" aria-label="展开侧边栏" className="da-navitem" style={{ ...S.railItem, margin: '0 auto 8px' }} onClick={onToggle}>»</button>
+        {onToggle && <button type="button" title="展开侧边栏" aria-label="展开侧边栏" aria-expanded={false} className="rail-collapse-toggle" style={{ margin: '0 auto 8px' }} onClick={onToggle}><Icon name="chevron" size="sm" /></button>}
       </div>
     );
   }
@@ -352,7 +352,7 @@ export default function SessionsSidebar({ refreshKey, collapsed = false, onToggl
 
       <div className="rail-footer">
         <UserMenu username={getUsername()} />
-        {onToggle && <button title="收起侧边栏" aria-label="收起侧边栏" className="da-btn da-btn-ghost da-btn-sm" style={{ marginLeft: 'auto' }} onClick={onToggle}>«</button>}
+        {onToggle && <button type="button" title="收起侧边栏" aria-label="收起侧边栏" aria-expanded={true} className="rail-collapse-toggle is-expanded" onClick={onToggle}><Icon name="chevron" size="sm" /></button>}
       </div>
     </div>
   );

@@ -114,3 +114,5 @@ spec 是一页纸的需求与验收标准，写代码之前先写（模板：[00
 | [094](done/094-native-boundary-engineering-integration.md) | 原生建模问数与工程能力整合 | 已实施并完成隔离组合验收，2026-10-26 |
 
 - [096 BI人员与公共库](done/096-bi-directory-and-public-knowledge.md)（本地验收完成，现场BI待验）
+
+- [097 同一知识库详情](done/097-unified-knowledge-detail.md)（本地回归及浏览器对照完成）
