@@ -2,12 +2,17 @@
 
 > 只保留当前任务。2026-10-21 及之前的详细检查点见 [archive/CURRENT_TASK-until-20261021.md](archive/CURRENT_TASK-until-20261021.md)。
 
-## 最新检查点：2026-10-29｜spec095 业务术语改为官方 Naming conventions（未提交）
+## 最新检查点：2026-10-29｜spec096 结果文件与可视化分层、spec097 问数分析技能（未提交）
 
-- 已完成：术语存于各库工程 `knowledge/rules/naming.md` 的 `## Naming conventions`（ADR0115），`BusinessTermService`/`BusinessTermController`（`/api/dataset-groups/{id}/terms`），编辑进草稿、与建模共用草稿栏发布，QUERY 只读已发布版本；平台术语表、旧接口、旧注入与旧术语工具下线，旧数据不迁移（`docs/migrations/0096` 删表）；建模提示词要求 Naming conventions 写入同一文件；业务术语页改版。
-- 另含已提交的 237a2bec：试问 SQL 保存/确认前 dry-plan、发布撤下问答提示、SQL 编辑器。
-- 验证：spotless、`mvn test` 801 项 0 失败 20 跳过、package、前端 build；浏览器确认术语页加载与接口 200。
-- 未完成：spec095 真实验收（添加术语→发布→新会话问数 `get_instructions` 含术语；QUERY 用户只读）；平台库执行 0096 删表。
+- spec096：官方 run_sql/query_cube 结果经 `QueryDataFiles` 落会话 CSV 并附「数据文件」行；`run_python` 拒绝超过 20 行的数据字面量；可视化三层写入提示词；`render_chart` 支持 chart_type/x/y/y2/series/labels，日期列优先折线、ID 列视为维度。已在真实服务验证（数据文件行、折线、未调用 Python）。
+- spec097/ADR0117：归因/异常/预测三个技能（`classpath:analysis-skills/`，numpy+matplotlib 固定脚本）；输入框"分析方法"、参数确认卡（`propose_analysis`，确认前平台拒绝查询）、"继续分析"按钮（前端固定规则，SSE 不变）；分析回执 `queryType=ANALYSIS` 不进召回；`analysis-capabilities` 接口按时间字段置灰。
+- 验证：spotless、`mvn test` 831 项 0 失败 20 跳过（脚本测试用本机 Python 实跑）、package、前端 build；浏览器验证参数卡与降级回答（本机 Docker 未运行，沙箱计算未实测）。
+- spec098：推荐问题发布后后台生成 1 个（平台定日期，问“每天的指标”），问数页新会话回填；分析入口改为“分析 ▾”菜单；归因支持去重指标（additive=false 长表）。
+- 未完成：启动 Docker 后按 spec097 验收 1–4 真实验收（出图与报告）；旧种子技能因技能市场使用而保留。平台库执行 `docs/migrations/0097`（ddl-auto 关闭的环境）。
+
+## 上一检查点：2026-10-29｜spec095 业务术语、caveats 停用（已提交 9ec35a3b 并推送）
+
+- 未完成：spec095 真实验收；平台库执行 `docs/migrations/0096` 删表。
 
 ## 上一检查点：2026-10-26｜问数联网搜索（spec094、ADR0114）与建模提速（未提交）
 

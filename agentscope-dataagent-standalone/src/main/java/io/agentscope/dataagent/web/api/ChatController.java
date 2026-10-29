@@ -172,7 +172,9 @@ public class ChatController {
             String sessionKey,
             java.util.List<String> groupIds,
             Boolean allGroups,
-            String purpose) {
+            String purpose,
+            String analysis,
+            Map<String, Object> analysisParams) {
         public ChatRequest(String message, String sessionKey, java.util.List<String> groupIds) {
             this(message, sessionKey, groupIds, false, null);
         }
@@ -184,6 +186,37 @@ public class ChatController {
                 Boolean allGroups) {
             this(message, sessionKey, groupIds, allGroups, null);
         }
+
+        public ChatRequest(
+                String message,
+                String sessionKey,
+                java.util.List<String> groupIds,
+                Boolean allGroups,
+                String purpose) {
+            this(message, sessionKey, groupIds, allGroups, purpose, null, null);
+        }
+    }
+
+    /**
+     * spec097: the analysis choice of a query request. An unknown method is ignored (ordinary
+     * query); confirmed parameters are kept as JSON for the prompt.
+     */
+    static io.agentscope.dataagent.tools.data.AnalysisTurn analysisTurn(ChatRequest req) {
+        String method = io.agentscope.dataagent.tools.data.AnalysisSkills.normalize(req.analysis());
+        if (method == null) return null;
+        String params = null;
+        if (req.analysisParams() != null && !req.analysisParams().isEmpty()) {
+            try {
+                params =
+                        new com.fasterxml.jackson.databind.ObjectMapper()
+                                .writeValueAsString(req.analysisParams());
+            } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                params = null;
+            }
+            if (params != null && params.length() > 4000)
+                throw new IllegalArgumentException("分析参数过长");
+        }
+        return new io.agentscope.dataagent.tools.data.AnalysisTurn(method, params);
     }
 
     /** Request body used to resume one native AgentScope modeling confirmation. */
@@ -307,6 +340,12 @@ public class ChatController {
                                         (String) auth.getPrincipal(), purposeConversation, purpose);
                                 return trackModeling(req.groupIds(), execution);
                             }
+                            // spec097: every query request replaces the analysis choice, so it
+                            // never carries over into the next turn.
+                            conversationScopes.putAnalysis(
+                                    (String) auth.getPrincipal(),
+                                    purposeConversation,
+                                    analysisTurn(req));
                             return execution;
                         })
                 .onErrorResume(
@@ -669,6 +708,8 @@ public class ChatController {
                         () -> {
                             String userId = (String) auth.getPrincipal();
                             guard.require(userId, agentId, Tier.RUN);
+                            // spec097: /send never analyses; drop a choice left by /stream.
+                            conversationScopes.putAnalysis(userId, normalized.sessionKey(), null);
                             return chatCapacity
                                     .execute(
                                             userId,
@@ -1129,6 +1170,11 @@ public class ChatController {
             runtimeContextBuilder.put(
                     io.agentscope.dataagent.dataset.ModelingTurnPurpose.class,
                     new io.agentscope.dataagent.dataset.ModelingTurnPurpose(purpose));
+        }
+        var analysis = conversationScopes.analysis(userId, conversationId);
+        if (analysis != null && !ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId)) {
+            runtimeContextBuilder.put(
+                    io.agentscope.dataagent.tools.data.AnalysisTurn.class, analysis);
         }
         RuntimeContext runtimeContext = runtimeContextBuilder.build();
         if (agentId == null || agentId.isBlank()) {

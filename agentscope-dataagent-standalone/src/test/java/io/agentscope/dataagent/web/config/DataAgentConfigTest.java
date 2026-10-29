@@ -304,6 +304,27 @@ class DataAgentConfigTest {
                 .doesNotContain("[DATA_SOURCES_OVERVIEW]", "query_type");
     }
 
+    /** spec096: tables, then render_chart by default, then run_python only for computation. */
+    @Test
+    void visualizationIsTieredAndPythonReadsDataFiles() throws Exception {
+        assertThat(DataAgentConfig.DEFAULT_AGENT_SYS_PROMPT)
+                .contains("可视化分三层", "默认用 render_chart", "同一问题最多 2 次", "读取查询返回的数据文件")
+                .contains("不要 import")
+                .doesNotContain("根据用户需要使用 run_python 或 render_chart");
+        String python =
+                io.agentscope.dataagent.tools.data.RunPythonTool.class
+                        .getMethod(
+                                "runPython",
+                                io.agentscope.core.agent.RuntimeContext.class,
+                                String.class,
+                                String.class)
+                        .getAnnotation(io.agentscope.core.tool.Tool.class)
+                        .description();
+        assertThat(python)
+                .contains("render_chart", "最多调用 2 次", "超过 20 行的数据字面量会被拒绝")
+                .doesNotContain("应主动可视化", "_insights.md");
+    }
+
     /** 2026-10-25: sources are MySQL 8.0+ or Doris; date ranges are literal so rules gate them. */
     @Test
     void sqlIsMysqlEightWithLiteralDateRanges() {

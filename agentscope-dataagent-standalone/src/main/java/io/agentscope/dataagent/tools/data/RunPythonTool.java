@@ -123,21 +123,17 @@ public final class RunPythonTool {
             name = "run_python",
             description =
                     """
-                    在沙箱中执行 Python 数据分析代码。适用于：考核指标达成分析（目标参考线+\
-                    达成率+数据标签+统计摘要）、多指标双 Y 轴对比图、需要逐点数据标签或文字标注的图表、\
-                    堆叠柱状图/多子图等组合图表、pandas 数据透视等复杂数据转换、\
-                    scipy 统计回归与趋势线、直方图等分布分析、CSV 数据导出。\
-                    用户问趋势/对比/构成/完成得怎么样等视觉分析问题时，无需明说"画图"也应主动可视化：\
-                    查到数据后直接用本工具（或 render_chart）生成图表，由问题性质判定而非字面提示。\
-                    建议分两次调用：先传探查代码（shape/dtypes/head）确认列名与取值范围，再传正式分析代码。\
+                    在沙箱中执行 Python 数据分析代码。只在需要对 SQL 结果再做统计计算时使用：\
+                    回归与趋势线、预测、分布与分位数、异常识别、多个查询结果合并后派生指标，\
+                    或用户明确要求导出文件、制作多图报告。只需展示 SQL 结果（趋势、排行、对比、占比、\
+                    堆叠、双轴、参考线、数据标签）时用 render_chart，不用本工具。每个问题最多调用 2 次。\
                     官方 run_sql / query_cube 返回带「数据文件： data/<文件名>.csv」行时，\
-                    直接用 pd.read_csv('data/<文件名>.csv') 读取（工作目录即沙箱会话目录），\
-                    禁止把查询结果抄写成 Python 字面量——数据行必须走文件通道。\
+                    直接用 pd.read_csv('data/<文件名>.csv') 读取（工作目录即沙箱会话目录）；\
+                    禁止把查询结果抄写成 Python 字面量，超过 20 行的数据字面量会被拒绝执行。\
+                    沙箱中没有 wren 包，不要 import wren，也不要连接数据库。\
                     默认仅自动恢复最近的有限数量分析输入；历史文件缺失时调用 restore_artifact 后重试。\
-                    产物保存到 outputs/ 下并用主题命名（如 outputs/活跃用户趋势.png、\
-                    outputs/活跃用户趋势_data.csv、outputs/活跃用户趋势_insights.md）。\
-                    返回包含代码、执行输出和产物列表的结构化报告。\
-                    只要一张无标注的简单图表时用 render_chart。\
+                    产物保存到 outputs/ 下并用主题命名（如 outputs/活跃用户趋势.png）。\
+                    回答中由 Python 计算得出的数值须注明计算方法。返回包含代码、执行输出和产物列表的结构化报告。\
                     【重要】当产物中有图片时，你必须从下面的"图片引用"行中复制完整的 ![...](...)\
                     到你的最终分析回复中，不要自行猜测文件名或路径。\
                     【强制】图表中所有可见文字（标题、坐标轴标签、图例、注释、参考线标注等）必须使用中文，\
@@ -166,6 +162,12 @@ public final class RunPythonTool {
 
         if (code == null || code.isBlank()) {
             return "error: code 不能为空";
+        }
+        if (literalRows(code) > MAX_LITERAL_ROWS) {
+            return "error: 代码中写入了超过 "
+                    + MAX_LITERAL_ROWS
+                    + " 行的数据字面量，未执行。请用 pd.read_csv('data/<文件名>.csv') 读取查询返回的数据文件；"
+                    + "没有数据文件时重新执行查询获取。";
         }
 
         String sessionId = rc != null && rc.getSessionId() != null ? rc.getSessionId() : "default";
@@ -223,6 +225,8 @@ public final class RunPythonTool {
             // Ensure output directory exists even when upload succeeded
             filesystem.execute(rc, "mkdir -p " + workDir + "/" + OUTPUT_DIR, 10);
         }
+        String skillsNotice = installAnalysisScripts(rc, code, sessionDir, workDir);
+        if (skillsNotice != null) return skillsNotice;
 
         // ── Step 2: Execute the script ──
         ExecuteResponse execResp =
@@ -359,6 +363,51 @@ public final class RunPythonTool {
 
     private static String sanitize(String s) {
         return s.replaceAll("[^a-zA-Z0-9_\\-]", "_");
+    }
+
+    /**
+     * spec097: when the code calls a built-in analysis script, the platform copies the scripts into
+     * the session ({@code skills/<id>/<id>.py}) so the model never writes or alters them. Ordinary
+     * Python runs skip this. Returns an error text when the scripts cannot be installed.
+     */
+    private String installAnalysisScripts(
+            RuntimeContext rc, String code, String sessionDir, String workDir) {
+        if (!code.contains("skills/")) return null;
+        var scripts = AnalysisSkills.scripts();
+        if (scripts.isEmpty()) return "error: 分析脚本不可用，请联系管理员";
+        StringBuilder dirs = new StringBuilder("mkdir -p");
+        for (String id : AnalysisSkills.IDS)
+            dirs.append(' ').append(sessionDir).append("/skills/").append(id);
+        filesystem.execute(rc, dirs.toString(), 10);
+        List<java.util.Map.Entry<String, byte[]>> files = new java.util.ArrayList<>();
+        scripts.forEach(
+                (path, bytes) ->
+                        files.add(
+                                new AbstractMap.SimpleEntry<>(
+                                        sessionDir + "/skills/" + path, bytes)));
+        List<FileUploadResponse> uploaded = filesystem.uploadFiles(rc, files);
+        if (uploaded.stream().anyMatch(r -> !r.isSuccess())) return "error: 无法安装分析脚本，请稍后重试";
+        filesystem.execute(rc, "ln -sfn " + sessionDir + "/skills " + workDir + "/skills", 10);
+        return null;
+    }
+
+    /** spec096: more rows than this in literals means query results were copied into code. */
+    static final int MAX_LITERAL_ROWS = 20;
+
+    /** Innermost comma-separated list, or dict with a key, on one line: one copied data row. */
+    private static final java.util.regex.Pattern LITERAL_ROW =
+            java.util.regex.Pattern.compile(
+                    "\\[[^\\[\\]\\n]*,[^\\[\\]\\n]*\\]|\\{[^{}\\n]*:[^{}\\n]*,[^{}\\n]*\\}");
+
+    /**
+     * Counts row-shaped literals (innermost lists or dicts with at least two values). Purely
+     * lexical: a few constants such as a font list stay far below {@link #MAX_LITERAL_ROWS}.
+     */
+    static int literalRows(String code) {
+        var matcher = LITERAL_ROW.matcher(code);
+        int rows = 0;
+        while (matcher.find()) rows++;
+        return rows;
     }
 
     /**

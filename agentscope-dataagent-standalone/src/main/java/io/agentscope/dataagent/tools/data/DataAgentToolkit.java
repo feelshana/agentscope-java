@@ -47,9 +47,12 @@ public final class DataAgentToolkit {
             name = "render_chart",
             description =
                     """
-                    渲染图表。传入查询结果的列和数据，图表类型由服务端根据数据形态自动推断。\
-                    返回 JSON payload {chart:"echarts", chartType, title, option} 供 UI 渲染。\
-                    不要自己构造图表配置，只传数据即可。\
+                    渲染图表（默认的出图方式）：传入查询结果的列和数据，服务端生成可交互的 ECharts 图表。\
+                    不传 chart_type 时按数据形态自动推断：有日期列画折线，排行画横向条形图，少量占比画饼图。\
+                    需要时可显式指定 chart_type（line/bar/hbar/pie/scatter/stacked_bar/dual_axis/heatmap）\
+                    以及 x（维度列）、y（指标列）、y2（双轴图右轴指标）、series（堆叠分组列或热力图第二维度）、\
+                    labels（显示数据标签）。列名必须与查询结果一致。不要自己构造图表配置。\
+                    返回 JSON payload {chart:"echarts", chartType, title, chartId} 供 UI 渲染。\
                     """)
     public String renderChart(
             @ToolParam(name = "question", description = "本图表回答的用户问题（中文）", required = false)
@@ -67,8 +70,58 @@ public final class DataAgentToolkit {
                             name = "mark_line_label",
                             description = "参考线的标签，如 日均目标2000万",
                             required = false)
+                    String markLineLabel,
+            @ToolParam(
+                            name = "chart_type",
+                            description =
+                                    "可选图表类型：line/bar/hbar/pie/scatter/stacked_bar/dual_axis/heatmap；省略时自动推断",
+                            required = false)
+                    String chartType,
+            @ToolParam(name = "x", description = "可选：作为横轴或分类的列名", required = false) String x,
+            @ToolParam(name = "y", description = "可选：指标列名列表", required = false) List<String> y,
+            @ToolParam(name = "y2", description = "可选：双轴图右轴的指标列名列表", required = false)
+                    List<String> y2,
+            @ToolParam(name = "series", description = "可选：堆叠柱状图的分组列，或热力图的第二个维度列", required = false)
+                    String series,
+            @ToolParam(name = "labels", description = "可选：true 时显示数据标签", required = false)
+                    Boolean labels) {
+        ChartBuilder.BuiltChart chart;
+        try {
+            chart =
+                    ChartBuilder.build(
+                            columns,
+                            rows,
+                            question,
+                            new ChartBuilder.Spec(chartType, x, y, y2, series, labels));
+        } catch (IllegalArgumentException e) {
+            return "error: " + e.getMessage();
+        }
+        return render(chart, markLineValue, markLineLabel);
+    }
+
+    /** Inferred chart without an explicit spec; kept for existing callers. */
+    public String renderChart(
+            @ToolParam(name = "question", description = "本图表回答的用户问题（中文）", required = false)
+                    String question,
+            @ToolParam(name = "columns", description = "查询结果的列名，按顺序排列") List<String> columns,
+            @ToolParam(name = "rows", description = "结果数据行；每行是一个列表，单元格值为字符串")
+                    List<List<String>> rows,
+            @ToolParam(
+                            name = "mark_line_value",
+                            description =
+                                    "可选的 KPI 目标/参考值，以红色虚线水平线呈现" + "（如知识文档中的 20000000）。无目标时省略。",
+                            required = false)
+                    String markLineValue,
+            @ToolParam(
+                            name = "mark_line_label",
+                            description = "参考线的标签，如 日均目标2000万",
+                            required = false)
                     String markLineLabel) {
-        ChartBuilder.BuiltChart chart = ChartBuilder.build(columns, rows, question);
+        return render(ChartBuilder.build(columns, rows, question), markLineValue, markLineLabel);
+    }
+
+    private String render(
+            ChartBuilder.BuiltChart chart, String markLineValue, String markLineLabel) {
         if (chart == null) {
             return "error: 数据不适合绘制图表（需要至少1列数值且多于1行）";
         }

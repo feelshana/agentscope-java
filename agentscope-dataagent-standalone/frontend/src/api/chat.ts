@@ -7,6 +7,42 @@ export interface ChatRequest {
   allGroups?: boolean;
   /** Modeling only: why the turn runs; labels draft changes and gates capabilities (spec092). */
   purpose?: TurnPurpose;
+  /** Query only (spec097): the analysis method chosen for this turn; omitted for a plain query. */
+  analysis?: AnalysisMethod;
+  /** Query only: the parameters the user confirmed in the card; absent while proposing them. */
+  analysisParams?: Record<string, unknown>;
+}
+
+export type AnalysisMethod = 'attribution' | 'anomaly' | 'forecast';
+
+export const ANALYSIS_NAMES: Record<AnalysisMethod, string> = {
+  attribution: '指标归因', anomaly: '异常检测', forecast: '趋势预测',
+};
+
+export interface AnalysisCapabilities {
+  hasTimeField: boolean;
+  methods: AnalysisMethod[];
+  /** Why methods are unavailable; null when all can run. */
+  reason: string | null;
+}
+
+/** spec098: the knowledge base's recommended question; null until generated or on failure. */
+export async function recommendedQuestion(groupId: string, signal?: AbortSignal): Promise<string | null> {
+  const res = await apiFetch(`/api/dataset-groups/${encodeURIComponent(groupId)}/recommended-question`, {
+    headers: authHeaders(), signal,
+  });
+  if (!res.ok) return null;
+  const body = (await res.json()) as { question?: string | null };
+  return body.question?.trim() || null;
+}
+
+/** spec097: which analysis methods a knowledge base supports (greys out the others). */
+export async function analysisCapabilities(groupId: string, signal?: AbortSignal): Promise<AnalysisCapabilities> {
+  const res = await apiFetch(`/api/dataset-groups/${encodeURIComponent(groupId)}/analysis-capabilities`, {
+    headers: authHeaders(), signal,
+  });
+  if (!res.ok) throw new Error(`读取分析能力失败：${res.status}`);
+  return res.json();
 }
 
 /** 'question': user-question SQL (may query external tables); 'auto': automatic modeling

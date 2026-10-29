@@ -101,6 +101,30 @@ public class MdlQuestionService {
         return suggestions.suggest(groupId, existing);
     }
 
+    /**
+     * spec098: the one recommended question of the draft model for the trial panel (not stored).
+     * Same access as {@link #suggestions}.
+     */
+    public RecommendedQuestionService.Recommendation recommended(
+            DatasetScope scope, String groupId, RecommendedQuestionService recommended) {
+        requireScope(scope, groupId);
+        return recommended == null
+                ? new RecommendedQuestionService.Recommendation(null, false)
+                : recommended.trial(groupId);
+    }
+
+    /** spec098: the modeler edits the question ({@code regenerate} asks for a new one). */
+    public RecommendedQuestionService.Recommendation changeRecommended(
+            DatasetScope scope,
+            String groupId,
+            RecommendedQuestionService recommended,
+            String question,
+            boolean regenerate) {
+        requireScope(scope, groupId);
+        if (recommended == null) throw new DatasetException("推荐问题不可用", 503);
+        return regenerate ? recommended.regenerate(groupId) : recommended.edit(groupId, question);
+    }
+
     public String revision(DatasetScope scope, String groupId, String questionId) {
         requireScope(scope, groupId);
         return store.revision(groupId, questionId);

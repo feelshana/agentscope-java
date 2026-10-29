@@ -1,8 +1,11 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
-import { currentSession, stream } from '../api/chat';
-import type { KnowledgeScope } from '../api/chat';
+import { analysisCapabilities, ANALYSIS_NAMES, currentSession, recommendedQuestion, stream } from '../api/chat';
+import type { AnalysisCapabilities, AnalysisMethod, KnowledgeScope } from '../api/chat';
+import { AnalysisFollowUps, AnalysisMenu, AnalysisParamsCard, METHOD_PLACEHOLDERS } from './AnalysisPanel';
+import type { MethodChoice } from './AnalysisPanel';
+import { analysisSuggestions } from '../utils/analysisSuggestions';
 import { TurnEntry, messagePage } from '../api/sessions';
 import ToolCallBlock, { ToolInspectPayload } from './ToolCallBlock';
 import TaskTrace from './TaskTrace';
@@ -689,6 +692,44 @@ export default function ChatPanel({
     [busy, restoring, scopeRestoring, effectiveAgentId, input],
   );
 
+  // spec097: analysis methods run on one knowledge base whose model has a time field.
+  const [analysisMethod, setAnalysisMethod] = useState<MethodChoice>('auto');
+  const [analysisCaps, setAnalysisCaps] = useState<{ groupId: string; caps: AnalysisCapabilities | null } | null>(null);
+  const analysisGroup = effectiveAgentId === 'data-agent' && !selectAllGroups && selectedGroups.length === 1 ? selectedGroups[0] : null;
+  useEffect(() => {
+    if (!analysisGroup) return;
+    const ac = new AbortController();
+    analysisCapabilities(analysisGroup, ac.signal)
+      .then(caps => setAnalysisCaps({ groupId: analysisGroup, caps }))
+      .catch(() => { if (!ac.signal.aborted) setAnalysisCaps({ groupId: analysisGroup, caps: null }); });
+    return () => ac.abort();
+  }, [analysisGroup]);
+  const analysisDisabledReason = !analysisGroup
+    ? '分析方法一次只针对一个知识库，请只选择一个知识库'
+    : analysisCaps?.groupId !== analysisGroup ? '正在读取知识库信息…'
+      : !analysisCaps.caps ? '暂时无法读取知识库信息'
+        : analysisCaps.caps.reason;
+  useEffect(() => { if (analysisDisabledReason) setAnalysisMethod('auto'); }, [analysisDisabledReason]);
+
+  // spec098: a new conversation on one knowledge base starts with its recommended question in the
+  // input. Only an empty input (or the previous recommendation) is replaced; typing wins.
+  const prefilled = useRef<string | null>(null);
+  const freshConversation = messages.length === 0;
+  useEffect(() => {
+    if (!analysisGroup || !freshConversation || restoring) return;
+    const ac = new AbortController();
+    recommendedQuestion(analysisGroup, ac.signal).then(question => {
+      if (!question || ac.signal.aborted) return;
+      setInput(current => {
+        if (current.trim() !== '' && current !== prefilled.current) return current;
+        prefilled.current = question;
+        return question;
+      });
+    }).catch(() => undefined);
+    return () => ac.abort();
+  }, [analysisGroup, freshConversation, restoring]);
+  const showingRecommendation = freshConversation && !!input && input === prefilled.current;
+
   /**
    * The first question after a publish waits while the knowledge base's query engine prepares
    * (index, start, warm-up, about half a minute). The reply says so instead of a silent spinner;
@@ -715,11 +756,19 @@ export default function ChatPanel({
     }
   }
 
-  async function handleSend() {
-    if (!canSend) return;
+  /**
+   * Sends the composer text, or — from an analysis card or follow-up button (spec097) — a fixed
+   * text with that turn's analysis choice. A plain send carries the composer's method once.
+   */
+  async function handleSend(override?: { text: string; analysis?: AnalysisMethod; analysisParams?: Record<string, unknown> }) {
+    if (override ? busy || restoring || scopeRestoring || !effectiveAgentId : !canSend) return;
     setGroupPickerOpen(false);
-    const text = input.trim();
-    setInput('');
+    const text = override ? override.text : input.trim();
+    if (!override) setInput('');
+    const analysis = effectiveAgentId !== 'data-agent' ? undefined
+      : override ? override.analysis : analysisMethod !== 'auto' && !analysisDisabledReason ? analysisMethod : undefined;
+    const analysisParams = override?.analysisParams;
+    if (!override) setAnalysisMethod('auto');
     const nowMs = Date.now();
     const userMsg: Message = { id: nextId(), role: 'user', text, tools: [], trace: [], knowledgeScope: { groupIds: selectedGroups, allGroups: selectAllGroups, groupNames } };
     const replyMsg: Message = { id: nextId(), role: 'assistant', text: '', tools: [], trace: [], pending: true, startedAtMs: nowMs };
@@ -759,6 +808,7 @@ export default function ChatPanel({
         sessionKey: convId,
         groupIds: selectAllGroups ? undefined : selectedGroups,
         allGroups: selectAllGroups,
+        ...(analysis ? { analysis, analysisParams } : {}),
       }, ac.signal)) {
         const isToolEvent = evt.type === 'tool_call' || evt.type === 'tool_result';
         if (isToolEvent) {
@@ -988,9 +1038,14 @@ export default function ChatPanel({
         value={input}
         onChange={e => setInput(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder={restoring ? '加载会话…' : ordinaryChat ? '输入问题；选择知识库后可查询数据…' : '输入查询、分析、预测数据问题…'}
+        placeholder={restoring ? '加载会话…' : ordinaryChat ? '输入问题；选择知识库后可查询数据…' : METHOD_PLACEHOLDERS[analysisMethod] ?? '输入查询、分析、预测数据问题…'}
         disabled={restoring}
       />
+      {showingRecommendation && (
+        <div style={{ fontSize: 12, color: 'var(--da-text-muted, #5C6370)', padding: '0 2px 6px' }}>
+          推荐问题，可直接发送或修改
+        </div>
+      )}
       <div style={S.composerBar}>
         <div ref={groupPickerRef} style={{ position: 'relative' }}>
           <button
@@ -1054,6 +1109,12 @@ export default function ChatPanel({
             </div>
           , document.body)}
         </div>
+        {effectiveAgentId === 'data-agent' && !ordinaryChat && (
+          <span style={{ marginLeft: 8 }}>
+            <AnalysisMenu value={analysisMethod} onChange={setAnalysisMethod} disabledReason={analysisDisabledReason}
+              disabled={busy || restoring} />
+          </span>
+        )}
         <span style={{ flex: 1 }} />
         <button
           style={{
@@ -1062,7 +1123,7 @@ export default function ChatPanel({
               ? { background: 'var(--da-danger)', cursor: 'pointer' }
               : canSend ? {} : S.sendDisabled),
           }}
-          onClick={busy && curKey ? () => abortRef.current.get(curKey)?.abort() : handleSend}
+          onClick={busy && curKey ? () => abortRef.current.get(curKey)?.abort() : () => handleSend()}
           disabled={!busy && !canSend}
           title={busy ? '停止回答' : '发送'}
         >
@@ -1149,8 +1210,23 @@ export default function ChatPanel({
                           : <div className="da-typing"><span /><span /><span /></div>
                         : null}
                     {answer}
-                    {agentId === 'data-agent' && curKey && !m.pending && !m.failed && m.text.trim() && (
-                      <AnswerFeedback agentId={agentId} session={curKey} answerId={m.answerId} text={m.text} />
+                    {agentId === 'data-agent' && !m.pending && (() => {
+                      // spec097: an analysis proposal renders as its card; other answers may get
+                      // follow-up analyses chosen by a fixed rule on their last query result.
+                      const proposal = [...m.tools].reverse().find(t => t.name === 'propose_analysis' && t.result && !t.result.startsWith('error:'));
+                      if (proposal) return (
+                        <AnalysisParamsCard input={proposal.input} disabled={busy || m.id !== messages[messages.length - 1]?.id}
+                          onStart={(method, params) => handleSend({ text: `按确认的参数开始${ANALYSIS_NAMES[method]}`, analysis: method, analysisParams: params })}
+                          onCancel={() => handleSend({ text: '不做分析，按普通问数回答我上面的问题' })} />
+                      );
+                      if (m.failed || !curKey) return null;
+                      return <AnalysisFollowUps methods={analysisSuggestions(m.tools)} disabled={busy || !!analysisDisabledReason}
+                        onPick={method => handleSend({ text: `对上面的结果做${ANALYSIS_NAMES[method]}`, analysis: method })} />;
+                    })()}
+                    {agentId === 'data-agent' && curKey && !m.pending && !m.failed && m.text.trim()
+                      && !m.tools.some(t => t.name === 'propose_analysis' && t.result && !t.result.startsWith('error:')) && (
+                      <AnswerFeedback agentId={agentId} session={curKey} answerId={m.answerId} text={m.text}
+                        analysis={m.tools.some(t => t.result?.includes('"queryType":"ANALYSIS"') === true)} />
                     )}
                     {!m.pending && m.tools.some(t => t.name === 'run_python' && t.result) && (
                       <PythonArtifactsPanel tools={m.tools} onInspect={onInspect} />

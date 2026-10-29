@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { correctModelingQuestionSql, decideModelingQuestion, getModelingQuestions, getQuestionSuggestions } from '../../api/modelingQuestions';
+import { correctModelingQuestionSql, decideModelingQuestion, getModelingQuestions, getQuestionSuggestions, getRecommendedTrialQuestion, editRecommendedQuestion, regenerateRecommendedQuestion } from '../../api/modelingQuestions';
+import type { RecommendedQuestion } from '../../api/modelingQuestions';
 import type { QuestionReview } from '../../api/modelingQuestions';
 import { DEFINITION_FORMAT, questionIds, questionRequest } from './QuestionIntakeForm';
 import type { SubmittedQuestion } from './QuestionIntakeForm';
@@ -26,8 +27,10 @@ export default function TrialPanel({ groupId, assistantIdle, onAsk, onWrong, onC
   /** Confirmed examples, and answered questions not confirmed yet (they are not published as examples). */
   onExamples?: (count: number, unconfirmed: number) => void;
 }) {
-  const [suggestions, setSuggestions] = useState<string[] | null>(null);
-  const [showSuggestions, setShowSuggestions] = useState(true);
+  // spec098: one recommended question (dates fixed by the platform); undefined while loading.
+  const [recommended, setRecommended] = useState<RecommendedQuestion | undefined>(undefined);
+  const [extra, setExtra] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [input, setInput] = useState('');
   const [reviews, setReviews] = useState<QuestionReview[]>([]);
   const [pending, setPending] = useState<SubmittedQuestion[]>([]);
@@ -44,7 +47,7 @@ export default function TrialPanel({ groupId, assistantIdle, onAsk, onWrong, onC
     } catch (e) { if (active.current === groupId) setError(message(e)); }
   }, [groupId]);
   useEffect(() => {
-    setReviews([]); setPending([]); setSuggestions(null); setError(null); setFixing({});
+    setReviews([]); setPending([]); setRecommended(undefined); setExtra([]); setMore('none'); setError(null); setFixing({});
     void load();
     const update = (event: Event) => {
       if ((event as CustomEvent<{ groupId: string }>).detail?.groupId === groupId) void load();
@@ -54,11 +57,35 @@ export default function TrialPanel({ groupId, assistantIdle, onAsk, onWrong, onC
   }, [groupId, load]);
 
   // spec092 §7: suggestions cost a model call and take space, so they wait for the user to open 试问.
+  // spec098: the recommended question sits on top, editable; other ideas only on request.
+  const [more, setMore] = useState<'none' | 'available' | 'loading' | 'done'>('none');
+  const requested = useRef<string | null>(null);
+  const loadMore = useCallback(() => {
+    setMore('loading');
+    setShowSuggestions(true);
+    void getQuestionSuggestions(groupId).then(list => {
+      if (active.current !== groupId) return;
+      setExtra(prev => [...new Set([...prev, ...list.slice(0, 3)])]);
+      setMore('done');
+    }).catch(() => setMore('available'));
+  }, [groupId]);
   useEffect(() => {
-    if (!open || suggestions !== null) return;
-    setSuggestions([]);
-    void getQuestionSuggestions(groupId).then(list => { if (active.current === groupId) setSuggestions(list.slice(0, 3)); }).catch(() => undefined);
-  }, [open, suggestions, groupId]);
+    if (!open || requested.current === groupId) return;
+    requested.current = groupId;
+    void getRecommendedTrialQuestion(groupId).then(r => {
+      if (active.current !== groupId) return;
+      setRecommended(r);
+      setMore('available');
+    }).catch(() => { if (active.current === groupId) { setRecommended({ question: null, manual: false }); setMore('available'); } });
+  }, [open, groupId]);
+  const changeRecommended = async (action: () => Promise<RecommendedQuestion>) => {
+    setError(null);
+    try {
+      const r = await action();
+      if (active.current === groupId) setRecommended(r);
+      return true;
+    } catch (e) { if (active.current === groupId) setError(message(e)); return false; }
+  };
 
   // A fix is done once the question's revision changed (the assistant rewrote it).
   useEffect(() => {
@@ -80,7 +107,7 @@ export default function TrialPanel({ groupId, assistantIdle, onAsk, onWrong, onC
     const [id] = questionIds(1);
     if (onAsk(questionRequest([question], [id]), { id, question })) {
       setPending(p => [...p, { id, question }]);
-      setSuggestions(s => s && s.filter(x => x !== question));
+      setExtra(s => s.filter(x => x !== question));
       setShowSuggestions(false);
       setInput('');
     }
@@ -125,13 +152,19 @@ export default function TrialPanel({ groupId, assistantIdle, onAsk, onWrong, onC
       <div style={{ flex: 1 }}><strong>试问</strong><div className="da-small">助手按草稿口径写出 SQL，你核对 SQL 是否正确。确认正确的问答发布后，问数时会参考。</div></div>
       <button className="da-btn da-btn-sm" aria-label="收起试问" onClick={onClose}>×</button>
     </div>
-    {!!suggestions?.length && <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+    <RecommendedCard value={recommended} disabled={!assistantIdle}
+      onAsk={q => ask(q)}
+      onSave={text => changeRecommended(() => editRecommendedQuestion(groupId, text))}
+      onRegenerate={() => changeRecommended(() => regenerateRecommendedQuestion(groupId))} />
+    {extra.length > 0 && <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <button type="button" className="da-small" onClick={() => setShowSuggestions(!showSuggestions)}
         style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', color: 'var(--da-text-muted)' }}>
-        {showSuggestions ? '▾' : '▸'} 推荐问题（{suggestions.length}）</button>
-      {showSuggestions && suggestions.map(s => <button key={s} className="da-btn da-btn-sm" style={{ textAlign: 'left', whiteSpace: 'normal' }} onClick={() => ask(s)}>{s}</button>)}
+        {showSuggestions ? '▾' : '▸'} 其他问题建议（{extra.length}）</button>
+      {showSuggestions && extra.map(s => <button key={s} className="da-btn da-btn-sm" style={{ textAlign: 'left', whiteSpace: 'normal' }} onClick={() => ask(s)}>{s}</button>)}
     </div>}
-    {suggestions !== null && suggestions.length === 0 && open && !reviews.length && <div className="da-small" role="status">正在生成推荐问题…</div>}
+    {(more === 'available' || more === 'loading') && <button type="button" className="da-small" disabled={more === 'loading'} onClick={loadMore}
+      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', color: 'var(--da-primary)', alignSelf: 'flex-start' }}>
+      {more === 'loading' ? '正在生成其他问题建议…' : '其他问题建议'}</button>}
     <div style={{ display: 'flex', gap: 6 }}>
       <input className="da-input" style={{ flex: 1, minWidth: 0 }} value={input} maxLength={1000} placeholder="输入一个业务问题"
         onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) ask(input); }} />
@@ -142,13 +175,16 @@ export default function TrialPanel({ groupId, assistantIdle, onAsk, onWrong, onC
       <strong>{p.question}</strong><div className="da-small" role="status">{assistantIdle ? '排队中…' : '助手生成 SQL 中…'}</div>
     </div>)}
     {ordered.map(r => <TrialAnswer key={`${r.question.id}:${r.revision}`} review={r} busy={busy === r.question.id}
+      recommended={!!recommended?.question && r.question.question.trim() === recommended.question.trim()}
       fixing={r.question.id in fixing} assistantIdle={assistantIdle}
       onAccept={() => void accept(r)} onAskFix={reason => askFix(r, reason)} onSaveSql={sql => saveSql(r, sql)} />)}
   </aside>;
 }
 
-function TrialAnswer({ review, busy, fixing, assistantIdle, onAccept, onAskFix, onSaveSql }: {
+function TrialAnswer({ review, busy, fixing, assistantIdle, onAccept, onAskFix, onSaveSql, recommended = false }: {
   review: QuestionReview;
+  /** spec098: this trial asks the knowledge base's recommended question. */
+  recommended?: boolean;
   busy: boolean;
   fixing: boolean;
   assistantIdle: boolean;
@@ -167,7 +203,10 @@ function TrialAnswer({ review, busy, fixing, assistantIdle, onAccept, onAskFix, 
   const small = { fontSize: 12, color: 'var(--da-text-muted)' } as const;
   return <div className="da-card" style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
     <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-      <strong style={{ flex: 1, minWidth: 0 }}>{q.question}</strong>
+      <strong style={{ flex: 1, minWidth: 0 }}>
+        {recommended && <span title="问数页选中该知识库时会预填这个问题" style={{ fontSize: 11, fontWeight: 600, padding: '1px 7px', borderRadius: 999, marginRight: 6, verticalAlign: 'middle',
+          background: 'var(--da-primary-soft, #EEECFD)', color: 'var(--da-primary-strong, #3A2FB0)' }}>推荐问题</span>}
+        {q.question}</strong>
       <span style={{ flex: 'none', fontSize: 11, padding: '1px 7px', borderRadius: 999,
         background: confirmed ? 'rgba(22,163,74,.12)' : 'var(--da-surface-sunken, #f1f5f9)',
         color: confirmed ? 'var(--da-success)' : 'var(--da-text-muted)' }}>{confirmed ? '已确认' : stale ? '待重新运行' : '待确认'}</span>
@@ -244,4 +283,53 @@ function Definition({ text }: { text: string }) {
       style={{ alignSelf: 'flex-start', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12, color: 'var(--da-primary)' }}>
       {more ? '收起' : `更多口径（${hidden.map(i => i.key).join('、')}）`}</button>}
   </div>;
+}
+
+/**
+ * spec098: the knowledge base's recommended question, always on top of the trial: ask it, edit it
+ * (the modeler's text is kept across publishes) or get another generated one.
+ */
+function RecommendedCard({ value, disabled, onAsk, onSave, onRegenerate }: {
+  value: RecommendedQuestion | undefined;
+  disabled: boolean;
+  onAsk: (question: string) => void;
+  onSave: (text: string) => Promise<boolean>;
+  onRegenerate: () => Promise<boolean>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState('');
+  const [working, setWorking] = useState<null | 'save' | 'regenerate'>(null);
+  const run = async (kind: 'save' | 'regenerate', action: () => Promise<boolean>) => {
+    setWorking(kind);
+    try { if (await action()) setEditing(false); } finally { setWorking(null); }
+  };
+  const question = value?.question ?? null;
+  return <section aria-label="推荐问题" style={{ border: '1px solid var(--da-primary-soft-border, #C9C3F7)', borderRadius: 10, padding: 10, background: 'var(--da-primary-soft, #F7F6FE)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+      <strong style={{ fontSize: 13 }}>推荐问题</strong>
+      {value?.manual && <span className="da-small" style={{ color: 'var(--da-text-muted)' }}>· 已手动修改</span>}
+      <span className="da-small" style={{ color: 'var(--da-text-muted)' }}>问数页选中该知识库时预填，修改立即生效</span>
+    </div>
+    {value === undefined || working === 'regenerate'
+      ? <div className="da-small" role="status">正在生成推荐问题…</div>
+      : editing
+        ? <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <input className="da-input" aria-label="修改推荐问题" autoFocus value={text} maxLength={200}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) void run('save', () => onSave(text)); if (e.key === 'Escape') setEditing(false); }} />
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button className="da-btn da-btn-sm da-btn-primary" disabled={working !== null} onClick={() => void run('save', () => onSave(text))}>保存</button>
+            <button className="da-btn da-btn-sm" disabled={working !== null} onClick={() => setEditing(false)}>取消</button>
+            <span className="da-small" style={{ color: 'var(--da-text-muted)' }}>清空后保存会重新自动生成</span>
+          </div>
+        </div>
+        : <>
+          <div style={{ fontSize: 14, lineHeight: 1.6 }}>{question ?? '暂未生成推荐问题，可点“换一个”或手动填写。'}</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {question && <button className="da-btn da-btn-sm da-btn-primary" disabled={disabled} title={disabled ? '助手空闲后可试问' : undefined} onClick={() => onAsk(question)}>试问</button>}
+            <button className="da-btn da-btn-sm" onClick={() => { setText(question ?? ''); setEditing(true); }}>修改</button>
+            <button className="da-btn da-btn-sm" disabled={working !== null} onClick={() => void run('regenerate', onRegenerate)}>换一个</button>
+          </div>
+        </>}
+  </section>;
 }

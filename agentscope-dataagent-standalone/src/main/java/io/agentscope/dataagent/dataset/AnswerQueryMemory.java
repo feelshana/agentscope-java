@@ -285,7 +285,12 @@ public class AnswerQueryMemory {
                     boolean owned =
                             groups.listGroups(owner).stream()
                                     .anyMatch(g -> group.equals(g.getId()));
+                    // spec097: analysis queries (queryType ANALYSIS) are never saved as examples.
+                    boolean business =
+                            "BUSINESS"
+                                    .equalsIgnoreCase(receipt.path("queryType").asText("BUSINESS"));
                     if (owned
+                            && business
                             && hasChinese(question)
                             && !sql.isBlank()
                             && limit > 0

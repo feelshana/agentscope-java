@@ -49,6 +49,14 @@ public final class WrenScopedMcpClient extends McpClientWrapper {
     private final WrenPublishedProject projects;
     private final FactQueryWindowPolicy windowPolicy;
     private volatile boolean closed;
+    private QueryDataFiles dataFiles;
+
+    /** Attaches the CSV handoff for {@code run_python}; without it results carry no data file. */
+    public WrenScopedMcpClient withDataFiles(QueryDataFiles files) {
+        this.dataFiles = files;
+        return this;
+    }
+
     private final Map<String, McpSchema.CallToolResult> successfulQueries =
             new java.util.HashMap<>();
 
@@ -156,6 +164,18 @@ public final class WrenScopedMcpClient extends McpClientWrapper {
                                     });
                             if (!READ_TOOLS.contains(tool))
                                 throw new DatasetException("问数仅开放只读官方工具；样例写入需要最终答案点赞", 403);
+                            // spec097: an analysis turn queries only after the user confirmed
+                            // the parameter card.
+                            AnalysisTurn analysis = context.get(AnalysisTurn.class);
+                            if (analysis != null
+                                    && !analysis.confirmed()
+                                    && Set.of("run_sql", "query_cube").contains(tool))
+                                throw new DatasetException(
+                                        "本轮为《"
+                                                + analysis.name()
+                                                + "》参数确认，用户确认参数前不执行查询；请调用 propose_analysis"
+                                                + " 提交预填参数后结束本轮。",
+                                        409);
                             if (measured(
                                             "tool.discovery",
                                             () ->
@@ -211,6 +231,11 @@ public final class WrenScopedMcpClient extends McpClientWrapper {
                                         query && result.ok()
                                                 ? compactRows(result.payload())
                                                 : result.payload();
+                                // spec096: hand the rows to run_python as a session CSV; the
+                                // note is best-effort and never turns a successful query into
+                                // an error.
+                                if (query && result.ok() && dataFiles != null)
+                                    payload += dataFiles.note(context, result.payload());
                                 if (query && result.ok())
                                     successfulQueries.put(
                                             cacheKey,
@@ -227,7 +252,10 @@ public final class WrenScopedMcpClient extends McpClientWrapper {
                                     receipt.put("tool", tool);
                                     receipt.put("sql", args.getOrDefault("sql", ""));
                                     receipt.put("limit", args.getOrDefault("limit", 1000));
-                                    receipt.put("queryType", "BUSINESS");
+                                    // Analysis answers are feedback only, never recalled examples.
+                                    receipt.put(
+                                            "queryType",
+                                            analysis != null ? "ANALYSIS" : "BUSINESS");
                                     payload =
                                             "[WREN_QUERY_RECEIPT]"
                                                     + JSON.writeValueAsString(receipt)

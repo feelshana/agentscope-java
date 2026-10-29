@@ -16,6 +16,9 @@ spec 是一页纸的需求与验收标准，写代码之前先写（模板：[00
 | [093](093-field-screening-before-modeling.md) | spec093：建模前字段整理（筛选纳入字段、补充说明） | 已实施，待真实验收 |
 | [094](094-web-search-for-query.md) | spec094：问数助手联网搜索（DeepSeek 官方搜索 API） | 已实施，待真实验收 |
 | [095](095-business-terms-in-wren-naming-conventions.md) | spec095：业务术语改为知识库工程内的官方 Naming conventions | 已实施，待真实验收 |
+| [096](096-query-data-files-and-visualization-tiers.md) | spec096：问数结果文件通道与可视化分层 | 已实施，待真实验收 |
+| [097](097-query-analysis-skills.md) | spec097：问数分析技能（归因、异常检测、预测） | 已实施，待真实验收 |
+| [098](098-recommended-question-prefill.md) | spec098：推荐问题按日期规则生成，并在问数页首次回填 | 已实施，待真实验收 |
 
 ## 已完成或已关闭（done/）
 

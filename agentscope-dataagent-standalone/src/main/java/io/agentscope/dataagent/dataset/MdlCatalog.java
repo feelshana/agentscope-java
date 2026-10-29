@@ -96,6 +96,33 @@ public class MdlCatalog {
         }
     }
 
+    private static final java.util.regex.Pattern TIME_TYPE =
+            java.util.regex.Pattern.compile(
+                    "(?i)\\b(date|datetime|timestamp|time)\\b|timestamp_|datetime_");
+
+    /**
+     * spec097: whether the published model has a time column the analysis methods can use — a
+     * date/time typed column, or a column the platform registered as temporal (text dates such
+     * as {@code yyyy/M/d HH:mm} in uploaded data). No published model means no time column.
+     */
+    public boolean hasTimeColumn(String groupId) {
+        var mdl = load(groupId);
+        if (mdl.isEmpty()) return false;
+        for (Model m : mdl.get().models())
+            for (Column c : m.columns())
+                if (c.type() != null && TIME_TYPE.matcher(c.type()).find()) return true;
+        try {
+            for (Object model : (List<?>) dateGateContext(groupId).get("models"))
+                if (model instanceof java.util.Map<?, ?> map
+                        && map.get("temporalColumns") instanceof JsonNode temporal
+                        && temporal.isArray()
+                        && !temporal.isEmpty()) return true;
+        } catch (DatasetException e) {
+            return false;
+        }
+        return false;
+    }
+
     /** Reads the published source metadata, never draft properties or sample row values. */
     public java.util.Map<String, Object> dateGateContext(String groupId) {
         var manifest = load(groupId).orElseThrow(() -> new DatasetException("已发布模型目录不可用", 409));

@@ -56,6 +56,9 @@ public final class ChartBuilder {
     private static final Pattern PCT_COLUMN =
             Pattern.compile("pct|percent|ratio|rate|占比|比例|百分比|%", Pattern.CASE_INSENSITIVE);
 
+    /** spec096: numeric identifiers (project_id, 编号) are dimensions, never metrics. */
+    private static final Pattern ID_COLUMN = Pattern.compile("(?i)(^|_)id$|[a-z]Id$|编号|编码|代码|账号");
+
     public record BuiltChart(String chartType, String title, Map<String, Object> option) {}
 
     private ChartBuilder() {}
@@ -117,7 +120,7 @@ public final class ChartBuilder {
         List<Integer> numericCols = new ArrayList<>();
         List<Integer> categoricalCols = new ArrayList<>();
         for (int i = 0; i < columns.size(); i++) {
-            if (isNumericColumn(rows, i)) {
+            if (isMetricColumn(columns, rows, i)) {
                 numericCols.add(i);
             } else {
                 categoricalCols.add(i);
@@ -187,6 +190,10 @@ public final class ChartBuilder {
     }
 
     // ------------------------------------------------------------------ heuristics
+
+    private static boolean isMetricColumn(List<String> columns, List<List<String>> rows, int i) {
+        return isNumericColumn(rows, i) && !ID_COLUMN.matcher(columns.get(i)).find();
+    }
 
     private static boolean isNumericColumn(List<List<String>> rows, int colIdx) {
         List<String> sample = new ArrayList<>();
@@ -264,6 +271,9 @@ public final class ChartBuilder {
         boolean multiMetric = numericCols.size() >= 2;
 
         if ("correlation".equals(hint) && multiMetric) return "scatter";
+        // spec096: a date dimension is a time series whatever the wording ("每天" also matches
+        // the comparison hint), so it is drawn as a line rather than a ranking bar.
+        if (hasTime && rowCount >= 3) return "line";
         if ("trend".equals(hint) && (hasTime || rowCount >= 3)) return "line";
         if ("ranking".equals(hint) && singleMetric && rowCount >= 3) return "hbar";
         if ("proportion".equals(hint)
@@ -286,6 +296,17 @@ public final class ChartBuilder {
     }
 
     private static String makeTitle(String question, String chartType, String dimCol) {
+        return makeTitle(question, chartType, dimCol, null);
+    }
+
+    /** Without a short question the title names the metric (spec096), not just the dimension. */
+    private static String makeTitle(
+            String question, String chartType, String dimCol, String metric) {
+        if ((question == null || question.isBlank() || question.length() > 30)
+                && metric != null
+                && !metric.isBlank()) {
+            return metric + "（按" + dimCol + "）";
+        }
         Map<String, String> label = new LinkedHashMap<>();
         label.put("bar", "对比图");
         label.put("line", "趋势图");
@@ -558,7 +579,12 @@ public final class ChartBuilder {
             series.add(s);
         }
 
-        String title = makeTitle(question, chartType, dimName);
+        String title =
+                makeTitle(
+                        question,
+                        chartType,
+                        dimName,
+                        String.join("、", seriesCols.stream().limit(2).map(columns::get).toList()));
         Map<String, Object> label = categoryLabel(categories, false);
         boolean hasLegend = seriesCols.size() > 1;
 
@@ -611,7 +637,7 @@ public final class ChartBuilder {
             categories.add(String.valueOf(catIdx < r.size() ? r.get(catIdx) : ""));
             data.add(toNum(numIdx < r.size() ? r.get(numIdx) : null));
         }
-        String title = makeTitle(question, "hbar", columns.get(catIdx));
+        String title = makeTitle(question, "hbar", columns.get(catIdx), columns.get(numIdx));
 
         Map<String, Object> yAxis = new LinkedHashMap<>();
         yAxis.put("type", "category");
@@ -653,7 +679,7 @@ public final class ChartBuilder {
             }
             if (data.size() == MAX_SERIES_ITEMS) break;
         }
-        String title = makeTitle(question, "pie", columns.get(catIdx));
+        String title = makeTitle(question, "pie", columns.get(catIdx), columns.get(numIdx));
         boolean dense = data.size() > 7;
 
         Map<String, Object> legend = new LinkedHashMap<>();
@@ -736,5 +762,419 @@ public final class ChartBuilder {
         option.put("yAxis", yAxis);
         option.put("series", List.of(series));
         return new BuiltChart("scatter", title, option);
+    }
+
+    // ------------------------------------------------------------------ explicit specs (spec096)
+
+    /** Supported explicit chart types; anything else is refused with a readable message. */
+    public static final List<String> CHART_TYPES =
+            List.of("line", "bar", "hbar", "pie", "scatter", "stacked_bar", "dual_axis", "heatmap");
+
+    /**
+     * What the agent may state about a chart. Every field is optional; an empty spec keeps the
+     * inferred chart. {@code series} is the grouping column of a stacked bar or the second
+     * dimension of a heatmap; {@code y2} are the right-axis metrics of a dual-axis chart.
+     */
+    public record Spec(
+            String chartType,
+            String x,
+            List<String> y,
+            List<String> y2,
+            String series,
+            Boolean labels) {
+        boolean isEmpty() {
+            return blank(chartType)
+                    && blank(x)
+                    && (y == null || y.isEmpty())
+                    && (y2 == null || y2.isEmpty())
+                    && blank(series);
+        }
+    }
+
+    /**
+     * Builds from an explicit spec when one is given, otherwise infers as before. An invalid spec
+     * (unknown column or type, no metric) raises {@link IllegalArgumentException} with a Chinese
+     * message the tool returns to the model.
+     */
+    public static BuiltChart build(
+            List<String> columns, List<List<String>> rows, String question, Spec spec) {
+        if (columns == null || rows == null || columns.isEmpty() || rows.isEmpty()) {
+            return null;
+        }
+        BuiltChart chart =
+                spec == null || spec.isEmpty()
+                        ? build(columns, rows, question)
+                        : buildExplicit(columns, rows, question, spec);
+        if (chart != null && spec != null && Boolean.TRUE.equals(spec.labels())) {
+            showLabels(chart.option());
+        }
+        return chart;
+    }
+
+    private static BuiltChart buildExplicit(
+            List<String> columns, List<List<String>> rows, String question, Spec spec) {
+        Integer seriesIdx = blank(spec.series()) ? null : index(columns, spec.series());
+        List<Integer> y2 = indexes(columns, spec.y2());
+        int x =
+                blank(spec.x())
+                        ? firstDimension(columns, rows, seriesIdx)
+                        : index(columns, spec.x());
+        List<Integer> ys = indexes(columns, spec.y());
+        if (ys.isEmpty()) {
+            for (int i = 0; i < columns.size(); i++) {
+                if (i != x
+                        && (seriesIdx == null || i != seriesIdx)
+                        && !y2.contains(i)
+                        && isMetricColumn(columns, rows, i)) {
+                    ys.add(i);
+                }
+            }
+        }
+        for (int idx : concat(ys, y2)) {
+            if (!isNumericColumn(rows, idx)) {
+                throw new IllegalArgumentException("列「" + columns.get(idx) + "」不是数值，不能作为指标");
+            }
+        }
+        if (ys.isEmpty() && y2.isEmpty()) {
+            throw new IllegalArgumentException("没有可作为指标的数值列，请在 y 中指定");
+        }
+        String type = blank(spec.chartType()) ? null : spec.chartType().strip().toLowerCase();
+        if (type == null) {
+            type =
+                    !y2.isEmpty()
+                            ? "dual_axis"
+                            : seriesIdx != null
+                                    ? "stacked_bar"
+                                    : isDateColumn(rows, x)
+                                            ? "line"
+                                            : rows.size() > 8 ? "hbar" : "bar";
+        }
+        if (ys.isEmpty() && !"dual_axis".equals(type)) {
+            throw new IllegalArgumentException("请在 y 中指定至少一个指标列");
+        }
+        return switch (type) {
+            case "line", "bar" ->
+                    buildCategoryChart(
+                            type,
+                            columns,
+                            rows,
+                            List.of(x),
+                            ys,
+                            "line".equals(type) ? x : null,
+                            question);
+            case "hbar" -> buildHBar(columns, rows, x, ys.get(0), question);
+            case "pie" -> buildPie(columns, rows, x, ys.get(0), question);
+            case "scatter" -> {
+                if (!isNumericColumn(rows, x)) {
+                    throw new IllegalArgumentException("散点图的 x 必须是数值列");
+                }
+                yield buildScatter(columns, rows, x, ys.get(0), question);
+            }
+            case "stacked_bar" -> buildStacked(columns, rows, x, ys, seriesIdx, question);
+            case "dual_axis" -> {
+                List<Integer> left = new ArrayList<>(ys);
+                List<Integer> right = new ArrayList<>(y2);
+                if (right.isEmpty() && left.size() >= 2) right.add(left.remove(left.size() - 1));
+                if (left.isEmpty() || right.isEmpty()) {
+                    throw new IllegalArgumentException("双轴图需要左轴指标 y 和右轴指标 y2 各至少一个");
+                }
+                yield buildDualAxis(columns, rows, x, left, right, question);
+            }
+            case "heatmap" -> {
+                if (seriesIdx == null) {
+                    throw new IllegalArgumentException("热力图需要用 series 指定第二个维度列");
+                }
+                yield buildHeatmap(columns, rows, x, seriesIdx, ys.get(0), question);
+            }
+            default ->
+                    throw new IllegalArgumentException(
+                            "不支持的图表类型：" + type + "，可选：" + String.join("、", CHART_TYPES));
+        };
+    }
+
+    private static BuiltChart buildStacked(
+            List<String> columns,
+            List<List<String>> rows,
+            int x,
+            List<Integer> ys,
+            Integer seriesIdx,
+            String question) {
+        List<String> categories = categories(rows, x);
+        List<Map<String, Object>> series = new ArrayList<>();
+        if (seriesIdx != null) {
+            int metric = ys.get(0);
+            List<String> groups = distinct(rows, seriesIdx, 12);
+            for (String group : groups) {
+                Map<String, Double> sums = new LinkedHashMap<>();
+                for (List<String> r : rows) {
+                    if (group.equals(cell(r, seriesIdx))) {
+                        Double v = toNum(cell(r, metric));
+                        if (v != null) sums.merge(cell(r, x), v, Double::sum);
+                    }
+                }
+                series.add(stackSeries(group, categories, sums));
+            }
+        } else {
+            for (int metric : ys.subList(0, Math.min(6, ys.size()))) {
+                Map<String, Double> sums = new LinkedHashMap<>();
+                for (List<String> r : rows) {
+                    Double v = toNum(cell(r, metric));
+                    if (v != null) sums.merge(cell(r, x), v, Double::sum);
+                }
+                series.add(stackSeries(columns.get(metric), categories, sums));
+            }
+        }
+        String title = makeTitle(question, "bar", columns.get(x), columns.get(ys.get(0)));
+        Map<String, Object> label = categoryLabel(categories, false);
+        Map<String, Object> xAxis = new LinkedHashMap<>();
+        xAxis.put("type", "category");
+        xAxis.put("data", categories);
+        xAxis.put("axisLabel", label);
+        Map<String, Object> option = new LinkedHashMap<>();
+        option.put("title", titleBlock(title));
+        option.put("tooltip", Map.of("trigger", "axis", "axisPointer", Map.of("type", "shadow")));
+        option.put("legend", Map.of("bottom", 8, "type", "scroll", "itemGap", 16));
+        option.put("grid", gridBlock(((Number) label.get("rotate")).intValue() > 0, true, false));
+        option.put("xAxis", xAxis);
+        option.put("yAxis", Map.of("type", "value"));
+        option.put("series", series);
+        return new BuiltChart("stacked_bar", title, option);
+    }
+
+    private static Map<String, Object> stackSeries(
+            String name, List<String> categories, Map<String, Double> sums) {
+        List<Double> data = new ArrayList<>();
+        for (String c : categories) data.add(sums.getOrDefault(c, 0.0));
+        Map<String, Object> s = new LinkedHashMap<>();
+        s.put("name", name);
+        s.put("type", "bar");
+        s.put("stack", "total");
+        s.put("barMaxWidth", 38);
+        s.put("emphasis", Map.of("focus", "series"));
+        s.put("data", data);
+        return s;
+    }
+
+    private static BuiltChart buildDualAxis(
+            List<String> columns,
+            List<List<String>> rows,
+            int x,
+            List<Integer> left,
+            List<Integer> right,
+            String question) {
+        boolean time = isDateColumn(rows, x);
+        List<List<String>> ordered = time ? sortByDimAsc(rows, x) : rows;
+        ordered = ordered.subList(0, Math.min(time ? 400 : MAX_SERIES_ITEMS, ordered.size()));
+        List<String> categories = new ArrayList<>();
+        for (List<String> r : ordered) categories.add(cell(r, x));
+        List<Map<String, Object>> series = new ArrayList<>();
+        for (int metric : left)
+            series.add(axisSeries(columns, ordered, metric, time ? "line" : "bar", 0));
+        for (int metric : right) series.add(axisSeries(columns, ordered, metric, "line", 1));
+        String title =
+                makeTitle(
+                        question,
+                        "line",
+                        columns.get(x),
+                        columns.get(left.get(0)) + "与" + columns.get(right.get(0)));
+        Map<String, Object> label = categoryLabel(categories, false);
+        Map<String, Object> xAxis = new LinkedHashMap<>();
+        xAxis.put("type", "category");
+        xAxis.put("data", categories);
+        xAxis.put("boundaryGap", !time);
+        xAxis.put("axisLabel", label);
+        Map<String, Object> option = new LinkedHashMap<>();
+        option.put("title", titleBlock(title));
+        option.put("tooltip", Map.of("trigger", "axis"));
+        option.put("legend", Map.of("bottom", 8, "type", "scroll", "itemGap", 16));
+        option.put("grid", gridBlock(((Number) label.get("rotate")).intValue() > 0, true, false));
+        option.put("xAxis", xAxis);
+        option.put(
+                "yAxis",
+                List.of(
+                        Map.of("type", "value", "name", columns.get(left.get(0))),
+                        Map.of(
+                                "type",
+                                "value",
+                                "name",
+                                columns.get(right.get(0)),
+                                "splitLine",
+                                Map.of("show", false))));
+        option.put("series", series);
+        return new BuiltChart("dual_axis", title, option);
+    }
+
+    private static Map<String, Object> axisSeries(
+            List<String> columns, List<List<String>> rows, int metric, String type, int axis) {
+        List<Double> data = new ArrayList<>();
+        for (List<String> r : rows) data.add(toNum(cell(r, metric)));
+        Map<String, Object> s = new LinkedHashMap<>();
+        s.put("name", columns.get(metric));
+        s.put("type", type);
+        s.put("yAxisIndex", axis);
+        s.put("data", data);
+        if ("line".equals(type)) {
+            s.put("smooth", true);
+            s.put("showSymbol", data.size() <= 24);
+        } else {
+            s.put("barMaxWidth", 38);
+        }
+        return s;
+    }
+
+    private static BuiltChart buildHeatmap(
+            List<String> columns,
+            List<List<String>> rows,
+            int x,
+            int y,
+            int metric,
+            String question) {
+        List<String> xs = categories(rows, x);
+        List<String> ys = categories(rows, y);
+        List<List<Object>> data = new ArrayList<>();
+        double min = Double.POSITIVE_INFINITY;
+        double max = Double.NEGATIVE_INFINITY;
+        for (List<String> r : rows) {
+            Double v = toNum(cell(r, metric));
+            int xi = xs.indexOf(cell(r, x));
+            int yi = ys.indexOf(cell(r, y));
+            if (v == null || xi < 0 || yi < 0) continue;
+            data.add(List.of(xi, yi, v));
+            min = Math.min(min, v);
+            max = Math.max(max, v);
+        }
+        if (data.isEmpty()) return null;
+        String title =
+                makeTitle(
+                        question,
+                        "bar",
+                        columns.get(x) + "×" + columns.get(y),
+                        columns.get(metric));
+        Map<String, Object> visualMap = new LinkedHashMap<>();
+        visualMap.put("min", min);
+        visualMap.put("max", max);
+        visualMap.put("calculable", true);
+        visualMap.put("orient", "horizontal");
+        visualMap.put("left", "center");
+        visualMap.put("bottom", 4);
+        Map<String, Object> series = new LinkedHashMap<>();
+        series.put("name", columns.get(metric));
+        series.put("type", "heatmap");
+        series.put("data", data);
+        series.put("label", Map.of("show", data.size() <= 60, "fontSize", 10));
+        Map<String, Object> grid = gridBlock(false, true, false);
+        grid.put("bottom", 64);
+        Map<String, Object> option = new LinkedHashMap<>();
+        option.put("title", titleBlock(title));
+        option.put("tooltip", Map.of("position", "top"));
+        option.put("grid", grid);
+        option.put(
+                "xAxis",
+                Map.of(
+                        "type",
+                        "category",
+                        "data",
+                        xs,
+                        "splitArea",
+                        Map.of("show", true),
+                        "axisLabel",
+                        categoryLabel(xs, false)));
+        option.put(
+                "yAxis", Map.of("type", "category", "data", ys, "splitArea", Map.of("show", true)));
+        option.put("visualMap", visualMap);
+        option.put("series", List.of(series));
+        return new BuiltChart("heatmap", title, option);
+    }
+
+    /** Turns on value labels for every bar/line series (the agent asked for data labels). */
+    @SuppressWarnings("unchecked")
+    private static void showLabels(Map<String, Object> option) {
+        boolean horizontal =
+                option.get("yAxis") instanceof Map<?, ?> axis
+                        && "category".equals(axis.get("type"));
+        if (!(option.get("series") instanceof List<?> list)) return;
+        for (Object o : list) {
+            if (o instanceof Map<?, ?> m) {
+                Map<String, Object> s = (Map<String, Object>) m;
+                Object type = s.get("type");
+                if ("bar".equals(type) || "line".equals(type)) {
+                    s.put(
+                            "label",
+                            Map.of(
+                                    "show",
+                                    true,
+                                    "position",
+                                    horizontal
+                                            ? "right"
+                                            : s.containsKey("stack") ? "inside" : "top",
+                                    "fontSize",
+                                    10));
+                }
+            }
+        }
+    }
+
+    /** Distinct values in first-seen order, ascending when the column holds dates. */
+    private static List<String> categories(List<List<String>> rows, int idx) {
+        List<String> values = distinct(rows, idx, 400);
+        if (isDateColumn(rows, idx)) values.sort(Comparator.naturalOrder());
+        return values;
+    }
+
+    private static List<String> distinct(List<List<String>> rows, int idx, int cap) {
+        List<String> values = new ArrayList<>();
+        for (List<String> r : rows) {
+            String v = cell(r, idx);
+            if (!values.contains(v)) {
+                values.add(v);
+                if (values.size() == cap) break;
+            }
+        }
+        return values;
+    }
+
+    private static int firstDimension(List<String> columns, List<List<String>> rows, Integer skip) {
+        for (int i = 0; i < columns.size(); i++) {
+            if ((skip == null || i != skip) && isDateColumn(rows, i)) return i;
+        }
+        for (int i = 0; i < columns.size(); i++) {
+            if ((skip == null || i != skip) && !isMetricColumn(columns, rows, i)) return i;
+        }
+        return 0;
+    }
+
+    private static int index(List<String> columns, String name) {
+        String wanted = name.strip();
+        for (int i = 0; i < columns.size(); i++) {
+            if (columns.get(i).equals(wanted)) return i;
+        }
+        for (int i = 0; i < columns.size(); i++) {
+            if (columns.get(i).equalsIgnoreCase(wanted)) return i;
+        }
+        throw new IllegalArgumentException(
+                "列「" + wanted + "」不在查询结果中，可用列：" + String.join("、", columns));
+    }
+
+    private static List<Integer> indexes(List<String> columns, List<String> names) {
+        List<Integer> out = new ArrayList<>();
+        if (names == null) return out;
+        for (String name : names) {
+            if (!blank(name)) out.add(index(columns, name));
+        }
+        return out;
+    }
+
+    private static List<Integer> concat(List<Integer> a, List<Integer> b) {
+        List<Integer> out = new ArrayList<>(a);
+        out.addAll(b);
+        return out;
+    }
+
+    private static String cell(List<String> r, int idx) {
+        return String.valueOf(idx < r.size() ? r.get(idx) : "");
+    }
+
+    private static boolean blank(String s) {
+        return s == null || s.isBlank();
     }
 }

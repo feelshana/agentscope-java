@@ -154,7 +154,8 @@ public class DataAgentConfig {
             仅对准备实际用于最终答案的业务查询填写对应问题，诊断查询不要填写。
             一条 SQL 只回答子问题时标注该子问题，不让局部 SQL 冒充完整原问题。
             只有用户点赞后才保存成功的业务样例；执行成功不代表业务正确，不自动修改语义资产。
-            根据用户需要使用 run_python 或 render_chart 分析 Wren 返回的数据文件。
+            可视化分三层：单个数值、不超过 2 行或明细清单只给表格；其余默认用 render_chart 出图（趋势、排行、对比、占比、堆叠、双轴、参考线、数据标签都由它完成）；只有需要在 SQL 结果之上再做统计计算（回归、预测、分布与分位数、异常识别、多个结果合并后派生指标）或用户要求导出文件、多图报告时才用 run_python，同一问题最多 2 次，并读取查询返回的数据文件，Python 算出的数值在回答中注明计算方法。
+            官方 usage 技能里的 wren 命令行在本环境对应同名 MCP 工具（如 wren --sql 对应 run_sql、wren memory recall 对应 recall_queries）；Python 沙箱中没有 wren 包，不要 import。
             不编造结果，真实说明歧义、失败和截断；已有结果足够时给出完整最终答案。
             保留证据中的空值与空结果，不擅自补零；不补造未声明的单位或时间范围。查询成功但结果为空时如实回答无数据，不改日期或追加探查寻找有数据的时间。
             只呈现最终结论、必要口径和可核实依据，不呈现内部草稿推理。
@@ -429,7 +430,10 @@ public class DataAgentConfig {
             io.agentscope.dataagent.runtime.wren.WrenQueryGateway wrenQueryGateway,
             io.agentscope.dataagent.dataset.WrenPublishedProject wrenPublishedProject,
             io.agentscope.dataagent.dataset.FactQueryWindowPolicy windowPolicy,
-            io.agentscope.dataagent.web.persistence.jpa.DatasetRepository datasetRepository)
+            io.agentscope.dataagent.web.persistence.jpa.DatasetRepository datasetRepository,
+            org.springframework.beans.factory.ObjectProvider<
+                            io.agentscope.dataagent.web.artifact.ArtifactStore>
+                    artifactStore)
             throws IOException {
         Path cwd = resolveCwd();
         ensureAgentscopeConfig();
@@ -482,6 +486,7 @@ public class DataAgentConfig {
                     if ("data-agent".equals(agentId)) {
                         configureQueryPrompt(b, QUERY_EFFICIENCY_RULES + "\n" + agentSysPrompt);
                         mountWrenSkills(b, wrenSkillsLocator, QUERY_SKILLS);
+                        mountAnalysisSkills(b, wrenSkillsLocator.locate().isPresent());
                     }
                     if (ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId)) {
                         // Register before tool notifications so a paused call never looks executed.
@@ -594,17 +599,26 @@ public class DataAgentConfig {
                     } else if ("data-agent".equals(agentId)) {
                         b.middleware(
                                 new WrenScopedToolkitMiddleware(
-                                        wrenQueryAccess,
-                                        wrenQueryGateway,
-                                        wrenPublishedProject,
-                                        mdlCatalog,
-                                        windowPolicy));
+                                                wrenQueryAccess,
+                                                wrenQueryGateway,
+                                                wrenPublishedProject,
+                                                mdlCatalog,
+                                                windowPolicy)
+                                        .withDataFiles(
+                                                new io.agentscope.dataagent.tools.data
+                                                        .QueryDataFiles(
+                                                        new io.agentscope.harness.agent.filesystem
+                                                                .sandbox.SandboxBackedFilesystem(),
+                                                        artifactStore.getIfAvailable())));
                         b.middleware(
                                 new io.agentscope.dataagent.runtime.session
                                         .WrenQueryContextMiddleware(
                                         wrenQueryAccess,
                                         windowPolicy,
                                         wrenPublishedProject::publishedRoot));
+                        b.middleware(
+                                new io.agentscope.dataagent.runtime.session
+                                        .AnalysisSkillMiddleware());
                     } else {
                         b.middleware(
                                 new DataDynamicContextMiddleware(
@@ -722,6 +736,26 @@ public class DataAgentConfig {
 
     /** Querying answers with the official usage skill only. */
     static final List<String> QUERY_SKILLS = List.of("usage");
+
+    /**
+     * spec097: the built-in analysis skills sit beside the official usage skill on the query agent
+     * only. They are copied from the classpath on every start, so the mounted text always matches
+     * this build; the allowlist keeps every other skill off as before.
+     */
+    private static void mountAnalysisSkills(
+            io.agentscope.harness.agent.HarnessAgent.Builder b, boolean wrenMounted) {
+        Path dir =
+                io.agentscope.dataagent.tools.data.AnalysisSkills.materialize(
+                        DataAgentBootstrap.DEFAULT_WORKSPACE_ROOT.resolveSibling(
+                                "analysis-skills"));
+        if (dir == null) return;
+        b.skillRepository(new FileSystemSkillRepository(dir, false));
+        List<String> allowed = new java.util.ArrayList<>();
+        if (wrenMounted) allowed.addAll(QUERY_SKILLS);
+        allowed.addAll(io.agentscope.dataagent.tools.data.AnalysisSkills.IDS);
+        b.skillFilter(SkillFilter.only(allowed.toArray(String[]::new)));
+        log.info("Mounted analysis skills from {} (allowlist: {})", dir, allowed);
+    }
 
     /** Modeling enriches a platform-created project; it never initializes one or needs usage. */
     static final List<String> MODELING_SKILLS = List.of("generate-mdl", "enrich-context");

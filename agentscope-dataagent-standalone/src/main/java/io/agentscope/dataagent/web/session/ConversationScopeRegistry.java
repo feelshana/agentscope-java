@@ -61,6 +61,29 @@ public class ConversationScopeRegistry {
         return modelingPurposes.get(ConversationDatasetScopeEntity.key(userId, sessionKey));
     }
 
+    /**
+     * spec097: the analysis choice of the latest query request per conversation (in memory). Every
+     * query request replaces it, so a choice never leaks into the next turn.
+     */
+    private final ConcurrentHashMap<String, io.agentscope.dataagent.tools.data.AnalysisTurn>
+            analysisTurns = new ConcurrentHashMap<>();
+
+    public void putAnalysis(
+            String userId,
+            String sessionKey,
+            io.agentscope.dataagent.tools.data.AnalysisTurn turn) {
+        if (userId == null || sessionKey == null || sessionKey.isBlank()) return;
+        String key = ConversationDatasetScopeEntity.key(userId, sessionKey);
+        if (turn == null) analysisTurns.remove(key);
+        else analysisTurns.put(key, turn);
+    }
+
+    public io.agentscope.dataagent.tools.data.AnalysisTurn analysis(
+            String userId, String sessionKey) {
+        if (userId == null || sessionKey == null || sessionKey.isBlank()) return null;
+        return analysisTurns.get(ConversationDatasetScopeEntity.key(userId, sessionKey));
+    }
+
     private ConversationDatasetScopeRepository repository;
 
     private final com.fasterxml.jackson.databind.ObjectMapper mapper =

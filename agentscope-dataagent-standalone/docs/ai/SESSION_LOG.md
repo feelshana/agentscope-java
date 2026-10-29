@@ -408,3 +408,9 @@
 - 2026-10-26（Asia/Shanghai）｜实施checkpoint｜spec094 问数联网搜索：WebSearchTool（DeepSeek /v1/tools/search，只发 query/count/need_content，错误转中文说明），DataToolkitRegistrar 收敛 harness web_search/web_fetch 并按 Key 注册，建模移除两者，问数提示词联网搜索一节，ADR0114，README/ARCHITECTURE 配置表。804 项 0 失败 20 跳过，前端 build 通过。真实搜索待 DEEPSEEK_API_KEY。未提交。
 - 2026-10-29（Asia/Shanghai）｜实施checkpoint｜spec095/ADR0115：业务术语改为工程 knowledge/rules/naming.md 的官方 Naming conventions，草稿发布、QUERY 只读、MANAGE 编辑；下线 semantic_term 表与旧接口/注入/工具，旧数据不迁移。801 项 0 失败 20 跳过，前端 build 通过。未提交。
 - 2026-10-29（Asia/Shanghai）｜实施checkpoint｜修复术语与草稿条目保存 400（请求体 delete 改为 Boolean，Jackson 3 拒绝缺失的基本类型）；ADR0116 停用 caveats（WrenProjectFilesystem 拒绝写入、提示词与确认上限提示改去向、建模页文档变更指令更新）；语义模型页隐藏 .gitkeep。mvn test 802/0 失败。
+- 2026-10-29（Asia/Shanghai）｜实施checkpoint｜spec096：QueryDataFiles 恢复官方查询数据文件、run_python 字面量拦截、可视化三层、render_chart 显式参数与推断修正（真实服务验证）。spec097/ADR0117：三项分析技能与固定脚本、propose_analysis 参数卡、确认前拒绝查询、ANALYSIS 回执不进召回、analysis-capabilities、前端方法选择/参数卡/继续分析；mvn test 831/0 失败；浏览器验证参数卡与沙箱不可用降级。
+- 2026-10-29（Asia/Shanghai）｜实施checkpoint｜问数入口改为输入框底栏“分析 ▾”菜单（默认收起，选中后为可取消标签，去掉“自动”）；归因脚本支持去重指标（additive=false 长表，各维度单独去重 + 合计行，不做加和拆解与下钻），SKILL.md 与 spec097 同步；浏览器验证菜单。
+- 2026-10-29（Asia/Shanghai）｜实施checkpoint｜spec098：推荐问题发布后后台生成 1 个（上传表实际日期范围、外部表最近一个月或更短窗口、无日期表退回原方式），平台拼“日期 每天的指标”，存 recommended_question（迁移 0097）；问数页新会话单知识库回填并提示；试问显示同一条加“更多推荐”。真实服务验证“测试”库生成“2026-09-20 至 2026-10-07 每天的报表访问次数”并回填；mvn test 840/0 失败。
+- 2026-10-29（Asia/Shanghai）｜修正｜试问推荐问题：改为草稿模型按 spec098 同一规则生成 1 个并标明“推荐问题”（发布前也可用），其他建议单列；指标名含分组/排名类词时丢弃，保证只有日期维度。真实验证“报表访问”（未发布）返回“2026-09-20 至 2026-10-07 每天的报表访问次数”；mvn test 847/0 失败。
+- 2026-10-29（Asia/Shanghai）｜修正｜试问推荐问题改为顶部固定卡片（试问/修改/换一个），试问卡片带“推荐问题”标记；修改立即生效并标记手动、发布不覆盖，清空或换一个恢复自动（新增列 recommended_question_manual，迁移 0097 追加）。浏览器验证卡片、标记、修改与恢复；mvn test 0 失败。
+- 2026-10-29（Asia/Shanghai）｜修正｜归因瀑布图标签重叠：长名称或多于 6 项时改为横向瀑布图（标签在左、逐行），超长名称截断加“…”，期间标签简写为“MM-DD 至 MM-DD（对比期）”；下钻图同样截断。

@@ -122,6 +122,26 @@ class MdlCatalogTest {
                         new WrenProperties("wren", tmp.toString(), "dataagent", "mysql", 10));
     }
 
+    /** spec097: analysis needs a typed time column or a column registered as temporal. */
+    @Test
+    void timeColumnsComeFromTypesOrRegisteredTemporalColumns() throws Exception {
+        writeManifest("gA", FULL_MANIFEST);
+        assertThat(catalog.hasTimeColumn("gA")).isFalse();
+
+        Path model = tmp.resolve("gA/published/models/订单/metadata.yml");
+        Files.createDirectories(model.getParent());
+        Files.writeString(
+                model,
+                "name: 订单\nproperties:\n  temporal_columns:\n  - column: \"下单时间\"\n"
+                        + "    format: \"yyyy/M/d HH:mm\"\n");
+        assertThat(catalog.hasTimeColumn("gA")).isTrue();
+
+        writeManifest(
+                "gB", FULL_MANIFEST.replace("\"type\": \"VARCHAR\"", "\"type\": \"DATETIME\""));
+        assertThat(catalog.hasTimeColumn("gB")).isTrue();
+        assertThat(catalog.hasTimeColumn("missing")).isFalse();
+    }
+
     @Test
     void loadParsesEveryManifestSection() throws Exception {
         writeManifest("gA", FULL_MANIFEST);

@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { answerFeedback, AnswerFeedbackResult } from '../api/chat';
 import { messagePage } from '../api/sessions';
 
-export default function AnswerFeedback({ agentId, session, answerId, text }: {
+export default function AnswerFeedback({ agentId, session, answerId, text, analysis = false }: {
   agentId: string; session: string; answerId?: string; text: string;
+  /** spec097: analysis answers record feedback only; their queries never become examples. */
+  analysis?: boolean;
 }) {
   const [resolved, setResolved] = useState<string | null>(answerId ?? null);
   const [feedback, setFeedback] = useState<AnswerFeedbackResult | null>(null);
@@ -41,7 +43,8 @@ export default function AnswerFeedback({ agentId, session, answerId, text }: {
         onClick={() => void submit('DOWN')}>{feedback?.vote === 'DOWN' ? '👎 已反馈不正确' : '👎 不正确'}</button>
     </div>
     <p className="da-small" role="status">{busy ? '正在处理…' : feedback?.vote ? feedback.message
-      : '反馈可选。只有点击“正确”才会保存本轮成功业务查询的中文问题—SQL 样例，供后续问数参考。'}</p>
+      : analysis ? '反馈可选。分析类回答只记录反馈，不保存为问答样例。'
+        : '反馈可选。只有点击“正确”才会保存本轮成功业务查询的中文问题—SQL 样例，供后续问数参考。'}</p>
     {error && <div role="alert">{error} <button className="da-btn da-btn-sm" onClick={() => setRetry(v => v + 1)}>重试</button></div>}
   </div>;
 }

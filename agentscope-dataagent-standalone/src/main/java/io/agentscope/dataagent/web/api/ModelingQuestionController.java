@@ -26,10 +26,20 @@ import reactor.core.scheduler.Schedulers;
 public class ModelingQuestionController {
     private final MdlQuestionService service;
     private final AgentAccessGuard guard;
+    private final io.agentscope.dataagent.dataset.RecommendedQuestionService recommended;
 
     public ModelingQuestionController(MdlQuestionService service, AgentAccessGuard guard) {
+        this(service, guard, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public ModelingQuestionController(
+            MdlQuestionService service,
+            AgentAccessGuard guard,
+            io.agentscope.dataagent.dataset.RecommendedQuestionService recommended) {
         this.service = service;
         this.guard = guard;
+        this.recommended = recommended;
     }
 
     /** {@code validationId} is accepted for old clients and ignored (spec091). */
@@ -90,6 +100,57 @@ public class ModelingQuestionController {
                             questionId,
                             archive.revision());
                     return java.util.Map.of("archived", true);
+                });
+    }
+
+    /** spec098: the draft's recommended question for the trial panel; {@code question} may be null. */
+    @GetMapping("/recommended")
+    public Mono<io.agentscope.dataagent.dataset.RecommendedQuestionService.Recommendation>
+            recommended(@PathVariable String groupId, Authentication auth) {
+        String owner = (String) auth.getPrincipal();
+        return blocking(
+                () -> {
+                    guard.require(owner, "modeling-agent", Tier.RUN);
+                    return service.recommended(
+                            new DatasetScope(owner, List.of(groupId)), groupId, recommended);
+                });
+    }
+
+    public record RecommendedEdit(String question) {}
+
+    /** spec098: the modeler's own recommended question; blank text returns it to generation. */
+    @PostMapping("/recommended")
+    public Mono<io.agentscope.dataagent.dataset.RecommendedQuestionService.Recommendation>
+            editRecommended(
+                    @PathVariable String groupId,
+                    @RequestBody RecommendedEdit body,
+                    Authentication auth) {
+        String owner = (String) auth.getPrincipal();
+        return blocking(
+                () -> {
+                    guard.require(owner, "modeling-agent", Tier.RUN);
+                    return service.changeRecommended(
+                            new DatasetScope(owner, List.of(groupId)),
+                            groupId,
+                            recommended,
+                            body == null ? null : body.question(),
+                            false);
+                });
+    }
+
+    @PostMapping("/recommended/regenerate")
+    public Mono<io.agentscope.dataagent.dataset.RecommendedQuestionService.Recommendation>
+            regenerateRecommended(@PathVariable String groupId, Authentication auth) {
+        String owner = (String) auth.getPrincipal();
+        return blocking(
+                () -> {
+                    guard.require(owner, "modeling-agent", Tier.RUN);
+                    return service.changeRecommended(
+                            new DatasetScope(owner, List.of(groupId)),
+                            groupId,
+                            recommended,
+                            null,
+                            true);
                 });
     }
 

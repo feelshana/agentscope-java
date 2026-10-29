@@ -255,8 +255,11 @@ ref_sql 的内容和依赖是否可执行由官方引擎判断。任何检查失
 ### 4.1 原始官方调用与通用产物
 
 `WrenScopedMcpClient#listTools` 返回原始官方工具 schema，AgentScope 将其转换为原生 `McpTool`；`WrenScopedMcpClient#callTool` 原样透传官方参数与输出，唯一例外是查询结果：`WrenScopedMcpClient#compactRows` 把对象行改写为按列顺序的数组并去掉缩进，值、行数和其他字段不变，减少模型读取的字符数。共享 Agent Toolkit 不保存用户或 project 绑定。
-run_sql/query_cube 成功结果可经通用 CSV 产物交给 run_python/render_chart。get_instructions、list_knowledge、
+run_sql/query_cube 成功结果由 `WrenScopedMcpClient#callTool` 经 `QueryDataFiles#note` 写成会话沙箱 `data/<sha12>.csv`（经 ArtifactStore 按需恢复，失败只降级提示），并在结果末尾附「数据文件」行，回执仍在首行（spec096）。`RunPythonTool#literalRows` 统计代码中的行形字面量，超过 `MAX_LITERAL_ROWS` 时拒绝执行，迫使 Python 读取数据文件而不是抄写结果。
+可视化分三层（spec096，写入问数提示词）：单值/≤2 行/明细只给表格；默认 `render_chart`；只有在 SQL 结果上再做统计计算或用户要求导出、多图报告时才用 `run_python`（每题最多 2 次）。`ChartBuilder#build(columns, rows, question, Spec)` 接受可选的图表类型、x/y/y2/series/labels，未指定时推断：日期列且≥3 行优先折线，ID 类数值列视为维度，无问题时标题取指标名。get_instructions、list_knowledge、
 recall_queries、describe_model 与 describe_cube 均由官方 MCP 提供，平台不再提供第二套知识读取或召回工具。
+推荐问题（spec098）：`RecommendedQuestionService` 在发布后后台为每个知识库生成 1 个推荐问题，存于 `dataagent_dataset_group.recommended_question`。带日期的事实表由平台确定日期：上传表经 `TableProvisioner#dateRange`（时间列按 `TemporalCondition#sortable` 转换）取实际起止日期，外部表取"最近一个月"或更短的查询窗口；模型只选表和指标名，平台拼成"`日期` 每天的`指标`"；没有带日期事实表时退回 `QuestionSuggestionService`。`GET /api/dataset-groups/{id}/recommended-question`（需 QUERY）供问数页在新会话、单知识库、输入为空时回填，建模试问面板显示同一条。
+分析技能（spec097/ADR0117）：`AnalysisSkills#materialize` 启动时把 `classpath:analysis-skills/` 复制为只读技能仓库挂到问数助手（白名单 usage + attribution/anomaly/forecast）。问数请求可带 `analysis`/`analysisParams`，`ChatController#analysisTurn` 校验后经 `ConversationScopeRegistry#putAnalysis` 写入本轮 `AnalysisTurn`；`AnalysisSkillMiddleware#onSystemPrompt` 按"待确认 / 已确认"注入本轮指令。待确认轮次助手调用 `propose_analysis`（`AnalysisToolkit`，页面渲染为参数确认卡），`WrenScopedMcpClient#callTool` 拒绝查询；已确认轮次取数后由 `RunPythonTool` 安装固定脚本并在沙箱运行，回执 `queryType=ANALYSIS`，`AnswerQueryMemory` 不保存为样例。`GET /api/dataset-groups/{id}/analysis-capabilities`（`AnalysisController`，需 QUERY）按 `MdlCatalog#hasTimeColumn` 决定方法是否可用；"继续分析"按钮由前端 `analysisSuggestions` 按最后一次查询结果的固定规则计算。
 问题范围、时间粒度、JOIN、DISTINCT、视图与 Cube 的选择遵循官方技能，不由平台正则路由。
 
 ### 4.2 点赞与官方 memory
