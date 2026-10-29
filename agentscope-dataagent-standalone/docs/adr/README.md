@@ -23,6 +23,8 @@ ADR 记录"为什么这样做"。规则：
 | BI账号、用户目录与全员库 | [0116](0116-bi-account-and-public-knowledge.md) | 客户端账号信任；只读投影；管理员集中配置全员QUERY |
 | 工程整合、单库与管理员 | [0114](0114-native-query-and-engineering-integration.md) | 原生建模问数优先；BI、私有图表、持久状态、人工模型切换与受限恢复 |
 | 会话与附件 | [0060](0060-durable-session-history-and-artifact-lifecycle.md)、[0061](0061-configurable-history-retention.md) | 持久历史、附件生命周期、保留策略 |
+| 旧系统容器部署 | [0117](0117-single-host-container-runtime.md) | Java/Python/Wren同容器，宿主持久路径与独立兄弟分析沙箱 |
+| 源码构建交付 | [0118](0118-source-build-on-deployment-host.md) | GitHub明确提交，66构建容器生成应用镜像；选型已接受、实现待完成 |
 
 知识图谱链路已停用（[0040](0040-kg-build-chain-retired-wren-semantic-core.md)），不要向该方向新增功能。
 
@@ -148,3 +150,5 @@ ADR 记录"为什么这样做"。规则：
 | [0115](0115-query-web-search-via-deepseek.md) | 问数助手经 DeepSeek 官方搜索 API 联网，移除 harness 默认联网工具 | 已接受，2026-10-26。实施 spec095。 |  |
 
 - [0116 BI账号与公共库](0116-bi-account-and-public-knowledge.md)（已接受）
+- [0117 旧系统单机运行容器](0117-single-host-container-runtime.md)（已接受，实施与安装验收中）
+- [0118 GitHub源码交付与服务器容器化构建](0118-source-build-on-deployment-host.md)（选型已接受，实现待完成）

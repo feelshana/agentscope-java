@@ -110,7 +110,7 @@ sudo -u dataagent /opt/dataagent/wren-venv/bin/python \
 ```bash
 sudo docker load -i /opt/dataagent/delivery/dataagent-sandbox.tar.gz
 sudo docker image inspect agentscope/dataagent-sandbox:latest --format '{{.Id}} {{.Architecture}}'
-sudo -u dataagent -H docker run --rm --network none agentscope/dataagent-sandbox:latest \
+sudo -u dataagent -H docker run --name dataagent-sandbox-check --network none agentscope/dataagent-sandbox:latest \
   python -c "import pandas,numpy,scipy,matplotlib,shutil; assert shutil.which('setsid'); print('OK')"
 ```
 

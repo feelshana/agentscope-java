@@ -451,3 +451,70 @@
 - 2026-10-28（Asia/Shanghai）｜工具详情验收收尾｜Spotless/DocsConsistencyTest5项与diff检查通过；HTTP核对8080静态产物已加载，独立Chromium关闭，IAB测试视口复原。Java/Wren、测试会话及产物保留，未提交；仅确认本轮前端加载，不据此推断上轮后端热加载。
 
 - 2026-10-28（Asia/Shanghai）｜本批提交授权｜用户要求提交当前代码。核对a9ccfdc2后统一详情/用户导入超时/对话与工具展示等有效修改，无合并冲突；本次一次提交，不推送。沿用同批Java946/0失败/28条件跳过及最终前端三路径各48、Python17、双路径构建与7题17工具真实验收；补做提交前门禁。不打发布包、不包含私有配置/名单/个人交接/output；提交号以Git为准。下一步建议固定候选后盘点66及两库，推进部署联调。
+
+- 2026-10-28（Asia/Shanghai）｜固定链接BI演练checkpoint｜基线b82bb7f4，未改业务代码。独立18860完整后端/H2、目标前缀构建、18766同源代理与无脚本iframe宿主，真实浏览器11组＋3项检查通过；覆盖首登普通用户、已有管理员、重复与切换、账号字段/跨origin反例、无效令牌重新进入。真实Excel1484只做检查和服务端预览，3条合成资料实际导入幂等及角色保护通过。补充bi-account-production指引和专项报告；不新增spec/ADR、不打发布包/生产部署/再次写入本地业务MySQL。保留演练18766/PID32420、18860/PID15932供体验，IDEA8080/PID28860保留；真实BI和66未验，本轮文档未提交。
+
+- 2026-10-28（Asia/Shanghai）｜数据库SQL交付checkpoint｜用户选择BI数据开发执行SQL。桌面材料00建库、01完整37表、02真实1484资料、03管理员、04核对及执行说明已生成；真实名单不入Git。MySQL8.0.41独立两库实测37表、1484人逐条、重复保留身份密码角色绑定时间/名单外用户、管理员幂等及当前应用validate启动/BI登录通过。测试后仅停止18861并删除本轮自建两库，已有IDEA和演练资源保留。只新增通用SQL/文档，不改应用、不打包/部署/提交；首次SQL导入不需要先启动应用或管理员JWT，API脚本仍备选。来源和结果见20261028-production-database-sql.md。
+
+- 2026-10-28（Asia/Shanghai）｜66环境安装预案checkpoint｜用户要求按Java/Python/Docker/Wren均缺失准备命令，表示内存磁盘充足。核对当前requirements/check-wren/启动脚本和官方发行版/Docker安装来源，新增66-server-installation.md，Ubuntu24.04与Rocky9均限定x86_64，附公共账号/目录、Wren/MCP/ONNX/LanceDB、向量模型在线准备/离线检查、沙箱导入或构建和验证。桌面安装材料含源文件相同的requirements、check-wren.py、Dockerfile；Git Bash对16个命令块仅bash -n通过。未连接或修改66、未实际安装/构建镜像/下载模型，不新增spec/ADR或改业务代码。先获取OS版本和架构，再选章节；其他系统/ARM须适配。本轮文档未提交。
+
+- 2026-10-28（Asia/Shanghai）｜Anolis实机信息checkpoint｜用户截图确认66为Anolis7.9/x86_64、Java8、无python3命令、无Wren；Docker26.1.4仅客户端，普通账号socket permission denied，不能判定服务端故障或资源为0。当前内存available154GiB，/data为本机大容量XFS。新增Anolis下一步并醒目标记原Ubuntu/Rocky单不适用，同步桌面材料。PyPI文件核对：Wren Core0.8支持manylinux2.17；DuckDB1.5/当前ONNX/LanceDB有更高glibc门槛，已纠正交流中误归Core的说法。等待glibc/内核/sudo/Docker服务端信息；现代Linux应用容器仅建议，未实施。未连接生产、安装、变更权限、重启、改代码、打包或提交。
+
+- 2026-10-28（Asia/Shanghai）｜Anolis补充结果checkpoint｜截图确认glibc2.17、内核3.10.0-1160.an7.x86_64、sudo docker成功访问26.1.4服务端，多套既有业务容器运行；sudo明确禁止若干命令，不绕过其限制。更新原指引为官方python:3.12-slim-bookworm临时容器pull/run检查，无挂载/端口、网络none、512m、退出自动删除；尚未执行，成功也不等于Wren完整兼容。无业务代码或生产变更，容器化仅待确认方案。
+
+- 2026-10-28（Asia/Shanghai）｜离线检查镜像交付checkpoint｜66访问DockerHub返回503，尚未运行容器，不能归因Python兼容。助手本机成功拉取官方python3.12-slim-bookworm/amd64并验证Python3.12.16/glibc2.36/SSL，导出专用dataagent/runtime-probe标签，43MiB gzip包与SHA256SUMS、image-info和说明在桌面单独交付；检查manifest.json/配置imageId/层文件。没有修改66镜像源、代理或运行资源，没有打业务包。下一步用户上传并在Docker26执行load/run，无load --platform；本机WSL2结果不代替旧内核验收。新临时检查容器均自动退出删除，本机镜像保留。
+
+- 2026-10-28（Asia/Shanghai）｜无法传包的替代入口checkpoint｜用户称运维无法上传离线镜像、66可访问公网。核对ECR公共Docker Python仓库并在本机实际manifest/pull/run通过，amd64配置imageId与原官方镜像完全一致，ECR路径public.ecr.aws/docker/library/python:3.12-slim-bookworm。更新原Anolis指引优先走该入口，保留离线备选，失败时仅返回curl状态而不输出代理凭据。未操作生产Docker配置/重启/登录凭据、未打业务包；66入口可达及旧内核运行未验。
+
+- 2026-10-28（Asia/Shanghai）｜生产删除审查约束checkpoint｜用户说明生产不能随意执行删除、会审查，询问Docker自动移除参数。确认该参数确有删除容器行为，不替公司判合规。更新66/Anolis/发布及旧准备单的人工检查命令为具名保留容器，桌面副本与离线README同步；不执行任何生产删除。不改历史本地测试事实。代码核对DockerSandbox#shutdown有自管理容器移除，doDestroyWorkspace有容器内工作区清理，正式上线需运维确认允许范围，本轮未改/禁用回收代码。
+
+- 2026-10-28（Asia/Shanghai）｜脚本执行范围澄清checkpoint｜用户明确只将刚才Python检查docker run自动移除命令放脚本执行，服务自身清理容器没有问题。替代上一临时保留建议，更新Anolis指引为SSH cat创建脚本、普通bash执行、内部sudo docker；不使用sudo bash或提供额外维护清理脚本，不修改正式回收。桌面脚本供审阅，无需上传也可复制文本创建。生产检查尚未运行，不代表容器兼容已验。
+
+- 2026-10-28（Asia/Shanghai）｜66基础容器验收checkpoint｜用户截图证明DaoCloud镜像全部层下载、配置imageId与官方一致，并按脚本执行Python3.12.16/glibc2.36/OpenSSL3.0.22成功，宿主仍3.10.0-1160.an7内核。更新同一Anolis指引和桌面副本，准备国内源Wren依赖检查Dockerfile/构建脚本（未在66执行，不含模型预热或业务验收）。未连接生产、打业务包、改业务代码、重启其他服务或提交。
+
+  本次本地校验：Anolis指引7个bash块经Git Bash语法检查通过；DocsConsistencyTest 5项通过（0失败/错误/跳过）；git diff --check通过。仅验证操作文本及文档一致性，未在本机或66执行新Wren镜像构建。
+
+- 2026-10-28（Asia/Shanghai）｜Wren依赖构建checkpoint｜用户截图8/8成功（87.2秒），确认依赖安装及原生导入/CLI命令成功；BuildKit未展开RUN输出，不冒称截图显示了具体版本行。更新原Anolis指引与桌面材料，准备公共默认向量模型HF-Mirror缓存及无网络只读复测脚本，检查2×384/finite/归一化和耗时；待用户执行。没有连接66、安装宿主软件、打业务包或改应用代码。
+
+  本次校验：8个bash块及内嵌Python语法通过；mvn surefire:test -Dtest=DocsConsistencyTest 5项通过（0失败/错误/跳过），git diff --check通过。HF-Mirror小配置HTTP200仅代表助手本机，不代替66下载权重或运行结果。
+
+- 2026-10-28（Asia/Shanghai）｜模型下载超时checkpoint｜用户截图显示HF-Mirror脚本在cas-bridge.xethub.hf.co下载tokenizer.json超时重试，无向量输出；纠正disable Xet不能阻止HTTP跳转，指导Ctrl+C。助手核实ModelScope同名仓库固定修订，四文件与HF对象信息比对，完整下载分词器9MB与两配置通过，ONNX470MB仅range返回206/国内CDN/大小及SHA256元数据一致。准备显式curl进度/续传/校验/新HF缓存/无网络计算脚本，不清理旧资源、不改生产或业务代码；66直下及计算待验。
+
+  本轮校验：新脚本及指引8个bash块/内嵌Python语法通过；DocsConsistencyTest 5项通过（surefire:test，0失败/错误/跳过）；git diff --check通过。四文件完整校验与向量断网计算尚待66执行，不把局部下载检查记成全模型通过。
+
+- 2026-10-28（Asia/Shanghai）｜向量模型通过checkpoint｜用户回传最后出现断网向量计算通过(2,384)，按脚本前置校验意味着四文件SHA256及ONNX计算/归一化通过；未提供耗时，不猜测。更新原Anolis指引并准备分析沙箱国内源Dockerfile/构建检查脚本：依项目现有设计、固定bookworm、新镜像tag、断网1CPU/1GiB验证setsid/分组/CSV/SciPy/中文字体与PNG，记录freeze/imageId；本机/66未构建新沙箱，未改业务代码、生产配置或运行资源。
+
+- 2026-10-29（Asia/Shanghai）｜正式容器环境材料checkpoint｜用户已授权按建议完成环境部署。新增ADR0117/spec098、镜像/前台入口/宿主controller/安装及检查脚本；assembly白名单附无密钥材料，原业务/前端/原生bin不改，不代打业务JAR。实际构建两环境镜像、原脚本断网向量及兄弟沙箱共享/真实限制下分析/中文PNG均通过；11项Docker集成含TERM、非root、标签保护、start-stop-replace及持久目录通过。桌面66环境部署-复制执行.txt由源码逐字生成，cat创建透明脚本后bash执行；等待用户66结果，不冒称生产已安装。旧CURRENT_TASK已归档，其他未提交改动保留。
+
+  最终验证：Spotless和DocsConsistencyTest5项通过；Python默认28项中17通过/11条件跳过，11项Docker另行实际通过。shell/复制文本语法、assembly白名单和diff检查通过。按用户要求未Maven package，未打业务归档，不重跑无改动的业务Java/前端全量；66执行仍待用户回传。
+
+- 2026-10-29（Asia/Shanghai）｜66环境实机通过checkpoint｜用户截图安装检查全部成功：OpenJDK17.0.21、Wren0.15、pip check、Docker26.1.4→26.1.4、断网向量、兄弟沙箱共享及只读根/tmpfs/1CPU/1GiB分析/CSV/SciPy/中文字体/PNG/setsid。未提供总耗时/镜像编号，不猜测。用户回答生产两库信息尚未取得；更新同一指引/共享记录，下一步仅prepare正式目录及只读端口检查，数据库/私有配置/JAR/BI等继续待验。助手未连接生产或代打业务包。
+
+- 2026-10-29（Asia/Shanghai）｜66目录与端口checkpoint｜用户截图prepare成功，/data/dataagent属当前账号wangchao_yy1、operation组、0750，内有data目录；ss查询18080仅表头，无当前监听。更新同一指引和共享记录，追加用户本机按/dify/dataagent/打包示例，未执行Maven package或任何生产命令。两库信息继续等待，生产配置/真实业务/BI尚未验；不重复环境安装。
+
+- 2026-10-29（Asia/Shanghai）｜环境阶段收口与沟通材料checkpoint｜用户确认本次仅66环境部署，数据库/业务包/启动不做。明确今日任务完成，第三种同容器方案已选且镜像/分项验收完成，常驻应用未启动。新增同事沟通说明及桌面副本：旧系统glibc与原生依赖兼容、保留本地CLI子进程、真实已验范围、配额和未测性能、普通JAR发布复用镜像及依赖/schema/配置例外。未继续生产命令、打包或业务开发。
+
+  沟通材料本轮校验：DocsConsistencyTest 5项通过、相对链接与diff检查通过；仅文档及本地桌面副本更新，未新增部署操作、业务测试或性能测量。
+
+- 2026-10-29（Asia/Shanghai）｜部署入口解释checkpoint｜核对当前assembly和实际脚本，向用户澄清安装/检查/日常controller/镜像entrypoint的用途和位置：当前66 home已有材料，新业务包ops/container按白名单附同套文本，旧包无此目录；正式Java在容器内启动挂载JAR，随后本地调用Wren。补同一指引和桌面副本，未启动业务、打包或改启停实现。
+
+- 2026-10-29（Asia/Shanghai）｜镜像/容器/网络说明补记｜按真实controller核对ps与images区别、主应用常驻与独立沙箱创建/复用、应用在66容器内运行、预设10.194.2.66:18080映射容器18080及Nginx上游。仅解释现有机制，Nginx/防火墙/真实业务未联调，不执行部署或网络配置。沟通说明及桌面副本已同步。
+
+
+## 2026-10-29 03:11 +08:00｜容器部署A/B中途checkpoint
+用户明确授权测试专用包及个人云隔离测试。相同真实JAR/数据/模型/预算：本机两模式及云原生闭环通过，原生110题完成；发现tmpfs附件保护和原生提取插件路径问题已修正。原生同库10/15并发失败，捕获MCP门闩/RPC等待，同依赖最小调度实验sync0/2、async2/2；业务代码未修改，云容器110题仍在进行。详情CURRENT_TASK与进行中报告；66及旧云服务未动，未提交/推送。
+
+## 2026-10-29 09:49 +08:00｜容器A/B回归收口
+完成云原版本两组110题、实际上传建模/外部时间门禁/权限/附件/恢复/NginxSSE，以及隔离诊断原生/容器各131请求和5轮15混合。原版本并发缺陷仍在正式代码；两class实验改善并发但容器4个内容错误另有2错误CSV，已逐项追踪。补11场景及5库10用户；不冒称整份正确率/长稳/66现场通过。证据报告已更新、正式业务Java无改动、无提交推送。仅停止本轮新服务/隧道，保留所有测试材料和旧服务。Spotless、前端48测试/构建、DocsConsistencyTest5通过；946基线Java测试含28条件跳过，实验待正式修复专项回归。后续优先正式修复调度阻塞，再做结果传递核对和生产现场验收。
+
+## 2026-10-29 Asia/Shanghai｜切换到GitHub源码构建方案
+用户选择66拉GitHub源码构建镜像，助手核对origin/分支/pom/未跟踪部署文件，发现当前Dockerfile仅运行环境且新文件尚未提交。记录spec099/ADR0118与66-source-build分步指引，先交付只读检查与隔离clone命令，构建入口/空缓存/资源预算/正式镜像待实施。未连接66执行，未改脚本/业务、未提交推送；原A/B任务归档，保留正式并发缺陷待修事实。
+
+## 2026-10-29 Asia/Shanghai｜66源码检查回传与Dify脚本评估
+用户截图证实Git1.8.3.1、Docker26.1.4、Compose2.27.1及两镜像存在，实际GitHub ls-remote读取目标b82bb7f4成功。静态阅读同事Dify参考脚本（未执行），记录有限重试/构建流程可借鉴及root、分支拉取顺序、重写配置、全局prune、缺健康回退等不适配点。修正旧Git不支持git -C的指引，提供180秒浅clone与cd后核对命令。源码构建入口仍待实现，未声称已构建，未改业务/脚本，未提交推送或操作66。
+
+## 2026-10-29 Asia/Shanghai｜源码构建阶段本地验收
+已实现更新/基础检查/只构建/应用镜像入口及Maven前端ci覆盖参数；空缓存完整模块安装与Java946（28条件跳过）/前端48通过，经典builder COPY --chmod问题修正后再跑全流程镜像预检成功。10仓库保护+4真实镜像契约检查通过（外层5项）。仅隔离副本测试提交，正式仓库未提交推送，未操作66或业务服务。下一步66 builder基础检查、明确授权提交推送、66实际构建，再处理生产DB与Compose健康/回退。
+
+## 2026-10-29 Asia/Shanghai｜整理并一次本地提交
+用户授权将当前需要的修改整理后一次提交，明确自己push。审阅范围为源码构建/已有66环境脚本、数据库通用SQL、文档与验证；两份重复中途检查点转移到本地忽略output，保留有效历史和最终报告。修正旧文档主路线，tar/原生方式标为备选；私有交接、人员SQL、日志和实验JAR不提交。完成本地提交后由用户push，助手不push；66后续先构建基础检查与镜像，不启动业务。

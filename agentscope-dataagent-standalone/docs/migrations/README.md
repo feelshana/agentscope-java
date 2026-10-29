@@ -2,12 +2,14 @@
 
 平台元数据库和上传数据集库应分别配置。上传库先建空库，由程序按上传文件动态创建 `ds_` 表；这里的 SQL 只针对平台元数据库。
 
+本次首次上线采用SQL人员导入，按[数据库准备指引](../guides/production-database-setup.md)执行。默认库名为dataagent_platform/data_agent；通用[建库](0000-create-databases-mysql.sql)、[管理员赋权](0000-set-global-admin-mysql.sql)、[核对](0000-verify-platform-mysql.sql)SQL与完整DDL配套使用，不属于需要依次叠加的升级迁移。真实人员导入SQL单独本地交付，不入Git。
+
 ## 首次安装：空平台库
 
 1. DBA 在目标 MySQL 建立两个逻辑库和应用账号，分别授予平台表读写、上传库建表及数据读写权限；连接变量见[单机发布手册](../guides/single-host-release.md)。
 2. 在**空平台库**执行 [0000-initial-platform-mysql.sql](0000-initial-platform-mysql.sql)。该文件为 2026-10-26 合并候选在隔离空库生成的 37 张表结构，不包含用户、业务数据或凭据；不是增量升级脚本，不重复执行。
 3. 配置 `DATAAGENT_SQL_INIT_MODE=never`、`DATAAGENT_JPA_DDL_AUTO=validate`，启动同一版本程序校验。已在独立 MySQL 空库应用此 SQL 并以 `validate` 完整启动验证；生产数据库版本、权限与备份仍需现场核对。
-4. BI 首次免登按真实用户名创建用户；管理员角色按 [BI 接入说明](../integration/bi-login.md) 配置，重新进入取得新角色。没有预置生产管理员或演示账号。
+4. 可在启动前执行单独交付的BI人员SQL并为指定账号赋权；也可先由BI首次免登创建普通用户，再按[新账号接入说明](../integration/bi-account-production.md)准备管理员并通过接口导入。没有预置生产管理员或演示账号；已有页面须从BI入口重新进入取得新角色。
 
 首次安装完成后**不要再执行本目录旧增量 ALTER**，完整结构已包含这些字段和表。不要将开发库数据、示例账号或模型凭据导入生产。
 

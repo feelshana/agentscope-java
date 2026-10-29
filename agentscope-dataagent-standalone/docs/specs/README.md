@@ -15,6 +15,8 @@ spec 是一页纸的需求与验收标准，写代码之前先写（模板：[00
 | [092](092-draft-and-review-modeling-workflow.md) | spec092：建模改为"草稿 + 发布前审阅"，多业务文档，入口与增量建模 | 已实施，待真实验收 |
 | [093](093-field-screening-before-modeling.md) | spec093：建模前字段整理（筛选纳入字段、补充说明） | 已实施，待真实验收 |
 | [095](095-web-search-for-query.md) | spec095：问数助手联网搜索（DeepSeek 官方搜索 API） | 已实施，待真实验收 |
+| [098](098-single-host-container-runtime.md) | 旧系统单机容器运行环境 | 66环境阶段已验收；业务发布验收另行安排 |
+| [099](099-source-build-deployment.md) | 服务器拉取源码并构建应用镜像 | 已选型；连通性检查与设计阶段，待实施 |
 
 ## 已完成或已关闭（done/）
 

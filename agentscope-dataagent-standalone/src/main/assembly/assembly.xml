@@ -21,7 +21,25 @@
                 <include>migrations/*.sql</include>
                 <include>migrations/README.md</include>
                 <include>adr/0114-native-query-and-engineering-integration.md</include>
+                <include>adr/0117-single-host-container-runtime.md</include>
+                <include>specs/098-single-host-container-runtime.md</include>
                 <include>specs/done/094-native-boundary-engineering-integration.md</include>
+            </includes>
+            <fileMode>0644</fileMode>
+            <lineEnding>unix</lineEnding>
+        </fileSet>
+        <fileSet>
+            <directory>${project.basedir}/docker</directory>
+            <outputDirectory>ops/container</outputDirectory>
+            <includes>
+                <include>runtime.Dockerfile</include>
+                <include>runtime-entrypoint.sh</include>
+                <include>sandbox-anolis79.Dockerfile</include>
+                <include>install-66-environment.sh</include>
+                <include>check-environment.sh</include>
+                <include>dataagent-container.sh</include>
+                <include>runtime.env.example</include>
+                <include>.dockerignore</include>
             </includes>
             <fileMode>0644</fileMode>
             <lineEnding>unix</lineEnding>

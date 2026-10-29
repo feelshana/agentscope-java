@@ -1,8 +1,16 @@
 # Linux 单机发布
 
+当前66主交付入口为[GitHub源码构建](66-source-build.md)，本手册保留通用发布、数据库和原生/tar备选说明。
+
 按顺序部署前，先打开[上线执行清单](release-checklist.md)逐项核对候选版本、配置/schema、BI、验收及回退；本页负责具体安装和启停步骤。当前整合边界见[ADR0114](../adr/0114-native-query-and-engineering-integration.md)，合并隔离验收见[spec094](../specs/done/094-native-boundary-engineering-integration.md)；历史云端演练不能替代本次目标环境验证。
 
 交运维先看配套的[65服务器运维准备命令单](65-server-preparation.md)：环境采集、条件安装、Wren/镜像、两个数据库和管理员SQL、网络及交付分工。65操作系统未确认，截图32CPU/252GiB只是整机信息；Ubuntu24.04安装示例不能作为65已确认可执行的最终脚本。BI与应用分机时，入口路由按[跨服务器说明](../integration/bi-login.md#bi与dataagent在不同服务器)配置在BI域名的网关上。
+
+当前应用部署目标已改为10.194.2.66；首次数据库与BI资料SQL准备按[数据库专用指引](production-database-setup.md)，新BI账号入口按[当前接入指引](../integration/bi-account-production.md)。下文保留的65和旧票据段落属于早期路径，不替代这两个当前指引。
+
+66从零安装Java/Python/Docker/Wren、持久目录、向量模型与分析沙箱的条件命令见[66环境安装单](66-server-installation.md)：先确认发行版/版本和架构，再选择对应章节，未在目标主机执行。
+
+截图已确认66为Anolis7.9/x86_64、glibc2.17、内核3.10，已有Java8，Docker26.1.4服务端可通过sudo访问；实际适配先看[Anolis下一步](66-anolis79-next-steps.md)，不是套用Ubuntu/Rocky章节。Python/Wren/向量断网检查已通过；用户已选Java/Python/Wren同容器，按[66正式容器指引](66-container-runtime.md)准备运行环境和发布操作。下方原生bin步骤保留给具备原生依赖的机器，66本次不在宿主直接套用。
 
 2026-10-21后续更新：spec080已移除公共application两项模型Key默认值并重新构建；旧包和历史凭据仍需由负责人核实是否作废/轮换，不复述值。“私有dev/prod未打包”检查不等于整个包内无凭据；正式候选仍须逐包核对。
 
@@ -119,10 +127,12 @@ Wren 依赖固定在 requirements-wren.txt；脚本验证 CLI、对应 Python �
 ```bash
 # 目标主机：归档由可信构建环境提供，先核对平台与SHA256。
 docker load -i /root/dataagent-sandbox-linux-amd64.tar.gz
-runuser -u dataagent -- docker run --rm --network none agentscope/dataagent-sandbox:latest python -c "import pandas, numpy, scipy, matplotlib, shutil; assert shutil.which('setsid'); print('沙箱依赖和setsid检查通过')"
+runuser -u dataagent -- docker run --name dataagent-sandbox-check --network none agentscope/dataagent-sandbox:latest python -c "import pandas, numpy, scipy, matplotlib, shutil; assert shutil.which('setsid'); print('沙箱依赖和setsid检查通过')"
 ```
 
 离线镜像与应用配置使用同一tag；保存构建环境、平台、imageId及依赖版本，后续正式部署应使用已验证的同一制品。导入通过仍需验证应用沙箱租约、Python执行和取消等业务链路，不替代完整验收。
+
+用户补充生产删除操作受审查，上述其他沙箱检查示例结束后仍保留容器，同名存在时先查看记录。随后已明确本次Python临时检查自动移除命令应放脚本执行、服务自身清理容器没有问题，按Anolis指引操作；本轮不改正式应用回收代码，不把该说明扩大为任意删除权限。
 
 ## 启停与升级
 
