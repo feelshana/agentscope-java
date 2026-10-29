@@ -42,7 +42,6 @@ public class KnowledgeBaseDeletionService {
                     "DatasetRelationEntity",
                     "SemanticCubeEntity",
                     "SemanticViewEntity",
-                    "SemanticTermEntity",
                     "SemanticBusinessRuleEntity",
                     "DatasetKnowledgeEntity",
                     "KnowledgeBaseGrantEntity",

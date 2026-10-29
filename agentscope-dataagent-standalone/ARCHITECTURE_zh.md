@@ -314,7 +314,6 @@ DatasetGroup（知识库，ownerId 隔离）
  │    knowledge/rules/*.md，specs/019 §7）
  ├── DocEnhanceTask / DocEnhanceProposal（文档差异分析任务与待审提案）
  └── KnowledgeGraph（历史 KG 表：已停用，见第 6 章）
-SemanticTerm（语义术语：全局业务词典，term→解释/同义词/范围）
 SemanticView（命名 SQL 视图：单条 SELECT/WITH，工作区 views/<name>/ 文件，见 5.6）
 ExternalDataSource（用户配置的外部 JDBC 连接，可选采样）
 ```
@@ -477,7 +476,7 @@ DocEnhance 规则采纳双写（见 5.7）。守卫：`MdlSuggestionServiceTest`
 「语义视图」小节；specs/019 §7 起以工作区文件为事实源；specs/037 起 REST 写侧与对话写侧同权——
 `createView` 等 CRUD 在工作区锁内镜像写/删对应工程文件（文件写先于 DB 落库，
 绝不单边写，ADR 0045））；
-语义建模页视图卡片与术语只读卡片（管理在「语义配置」页）不变。
+语义建模页视图卡片不变；业务术语不再是平台实体，见 14.1"业务术语"。
 
 **派生模型（ref_sql 模型，specs/034 → specs/035 降级人工载体，ADR 0043）**：手工精修载体——
 `models/<name>/{metadata.yml, ref_sql.sql}` 双文件（文件优先于 metadata.yml 内联 `ref_sql` 键），
@@ -517,9 +516,9 @@ refSql/refSqlPath（models/、views/ 缺 metadata.yml 的静默跳过已改 erro
 以下为旧版手动兼容流程：增强失败只把任务置为 FAILED，不回滚文档。手动重跑和审阅端点位于
 `/api/dataset-groups/{id}/modeling/enhance`，所有入口先以 ownerId + groupId 校验租户归属。
 
-`DocEnhanceService#buildPrompt` 把当前表结构、关系、View、术语和组级业务规则与文档原文
+`DocEnhanceService#buildPrompt` 把当前表结构、关系、View 和组级业务规则与文档原文
 同时交给模型；模型逐条返回 `NEW` / `PARTIAL` / `CONFLICT` / `COVERED`。`COVERED` 不落提案，
-其余保存为 `DocEnhanceProposalEntity`，类型为 `TERM` / `BUSINESS_RULE` / `RELATIONSHIP` /
+其余保存为 `DocEnhanceProposalEntity`（spec095 起不再产生 `TERM`），类型为 `BUSINESS_RULE` / `RELATIONSHIP` /
 `CUBE` / `VIEW` / `MANUAL_FIX`。表和列引用在服务端重新解析；无法安全解析的 payload 降级为
 `MANUAL_FIX`。同一 ownerId + groupId 下，PENDING 或 ADOPTED 指纹用于抑制重复提案。
 
@@ -903,13 +902,14 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 |---|---|---|
 | 技能 | 同版本官方技能，默认 Auto-pilot；挂载后关闭 CLI skills 通道；不加载 Cube 提案参考 | `DataAgentConfig.mountWrenSkills`、`OfficialWrenToolkit#command`、`ModelingHitlMiddleware#onActing` |
 | 文件范围 | `cubes/`、`views/` 不读不写；`models/<模型>/` 只允许官方文件；`knowledge/sql/` 不可写；平台文件与路径逃逸拒绝 | `WrenProjectAccess#path` |
-| 文件写入 | YAML 先做语法检查，失败不落盘；可整体替换已有文件；所有工程文件写入直接进入草稿，不再弹出确认卡（ADR0111）；每次写入记入 `DraftChangeLog`（来源、用户、时间）；自动建模轮次在没有业务文档时拒绝写 `knowledge/rules/`，推断只能写 `knowledge/caveats/` | `WrenProjectFilesystem#write/edit/delete/rulesGuard`、`ModelingHitlMiddleware#onActing` |
+| 文件写入 | YAML 先做语法检查，失败不落盘；可整体替换已有文件；所有工程文件写入直接进入草稿，不再弹出确认卡（ADR0111）；每次写入记入 `DraftChangeLog`（来源、用户、时间）；自动建模轮次在没有业务文档时拒绝写 `knowledge/rules/`；`knowledge/caveats/` 已停用（ADR0116），写入与编辑一律拒绝、允许删除，数据事实写入表或列描述，其余推断只在当轮回复列出 | `WrenProjectFilesystem#write/edit/delete/rulesGuard`、`ModelingHitlMiddleware#onActing` |
 | CLI 执行 | 参数、Cube、memory store、时间门禁在工程锁前检查；未编译或模型/视图/关系/knowledge 文件比编译结果新时先自动 `context build`（`OfficialWrenToolkit#compiledMdlStale`），助手不单独执行 build、修改前不校验，改完只执行一次 `context validate --strict`；单轮 query 上限 `MAX_QUERIES_PER_TURN`；超时结束进程树 | `OfficialWrenToolkit#execute`、`ProcessWrenCli#destroyTree` |
 | 草稿与建模结果 | 修改先进草稿，不单独审阅（spec092 §7）。每轮回复下方显示"AI 建模结果"：`DraftItemService` 把本轮写入（`DraftChangeLog` 中该轮开始后的文件）与已发布快照的差异拆成条目——模型（表/列说明的前后对比）、关系（按 name）、业务语义（rules/glossary/metrics 的 Markdown 条目）、注意事项（caveats 条目），依据为来源小字；可逐条编辑，关系、业务语义、注意事项可逐条删除，模型只能编辑；无法拆分的整段内容按整段显示。底部草稿栏汇总全部条目、待你确定数和新示例数，发布前自动检查，仍有待确定项时提示并可定位或跳过；可放弃全部草稿；助手运行中不可发布或编辑；多人共用一份草稿 | `DraftItemService#items/updateModel/updateRelationship/updateBullet`、`DraftReviewService#review/discard`、`ModelingActivity`、`DraftReviewController`、前端 `TurnResultCard`、`DraftItemsList`、`DraftBar` |
 | 需要你确定的部分 | 能确定的直接写入；只有会改变统计结果的歧义才经 `request_user_confirmation` 提问（2–4 个选项、首项推荐，每轮最多 3 题，待确定上限 10）。问题存于 `.platform/confirmations/`，不发布、问数不可见；助手空闲时以对话内卡片逐题展示（选项、自己写、不采用、稍后），最后一题后一起交还，不弹窗；去掉括号说明、空白与标点后相同的问题视为重复；只有实际创建的问题计入每轮上限，选项名多于规则原文时多出的（如"其他"）被忽略；外部表的候选关系也经此由用户确定后写入 `relationships.yml`，关系问题（`topic=relationship`）另有每轮 3 个名额；答复以 `purpose=confirm` 交还助手写入规则或列描述；未确定不生效、不阻止发布 | `ModelingConfirmationTool`、`ModelingConfirmationService`、前端 `ConfirmationCards` |
 | 轮次用途 | 页面随请求发送 `purpose`：`auto` 自动建模、`document` 文档更新、`question` 问题处理、`confirm` 确认答复，无用途为用户对话；`ChatController#stream` 写入 `ConversationScopeRegistry#putModelingPurpose`，`buildInbound` 放入 `ModelingTurnPurpose`，用于修改来源、外部表查询许可、规则写入约束与本轮提示词分段（`ModelingTurnRules`） | `ModelingTurnPurpose`、`ChatController#trackModeling` |
 | 业务文档 | 每库多份，存于草稿 `raw/docs/<名称>.md`，随快照发布；新增、替换（旧版本存 `.platform/docs-history/`）、删除均为草稿修改；只能由用户上传，助手只读；修改后页面自动排队一条 `document` 请求，连续修改合并为一条；问数不直接读取文档 | `BusinessDocumentService`、前端 `BusinessDocumentsPanel` |
 | 入口与增量建模 | 采样与时间配置完成后（`?start=1`）先提示上传业务文档，用户点"开始自动建模"才发送 `purpose=auto` 请求；上传数据弹窗不再附文档；已发布过的库新增表时，运行上下文列出"本次新增的表"，助手只处理新表 | `SemanticModelingPage#startModeling`、`WrenProjectContextMiddleware#newTables` |
+| 业务术语 | spec095/ADR0115：每库术语即工程 `knowledge/rules/naming.md` 的官方 `## Naming conventions`，约定写法 `- "术语"（同义词："甲"、"乙"）= 解释`。`BusinessTermService` 解析并经 `DraftItemService#appendBullet`/`#updateBullet` 写草稿（运行中拒绝、锁内复核 MANAGE），`BusinessTermController` 提供 `/api/dataset-groups/{id}/terms`；QUERY 只读已发布版本，MANAGE 看草稿对照并经同一草稿栏发布。问数随官方 `get_instructions` 读取，平台不注入；建模提示词要求 Naming conventions 写入同一文件且不改写已有条目。平台术语表已退役（`docs/migrations/0096`），旧数据不迁移。 | `BusinessTermService` |
 | 字段整理 | spec093：采样后、时间范围之前每张新表必须完成字段整理（`DatasetEntity.fieldScreeningConfirmed=false`，历史数据为 null 视为已确认）。`FieldScreeningService#fields` 首次打开时用一次模型调用按字段名、类型、采样值把字段判为业务、技术或不确定（模型不可用时全部为不确定并纳入）；纳入状态、判断理由与用户说明存于 `column_schema_json`（`ColumnSchema.included/role/roleReason/descriptionSource`）。事实表时间字段锁定纳入，多表同名字段提示为关联键，每表至少纳入 1 个字段。未确认时 `ChatController` 拒绝 `purpose=auto`。`MdlSeeder#reconcile` 只写入、只补回纳入字段；用户说明写为列 `description_source: user`，提示词要求原样保留。建模后在"资料"中按表调整：草稿模型即时删列、写说明，新纳入字段由 seeder 追加，记入 `DraftChangeLog`；删除前列出引用该字段的规则、关系与问题，保存后排队一条只重建该表的请求 | `FieldScreeningService`、`FieldScreeningController`、`MdlSeeder#reconcile`、前端 `FieldScreeningPanel` |
 | SQL 词法 | 单条只读 SELECT/WITH，拒绝笛卡尔积写法，允许官方 LIMIT/OFFSET；建模、问数、问题验证共用 | `OfficialWrenToolkit#requireReadOnly` |
 | 运行上下文 | 授权工程、服务时间、编译状态、工程文件清单（免逐级列目录）、按表来源的探查边界（上传表有限探查，外部表禁止）、外部受限表时间策略 | `WrenProjectContextMiddleware#onSystemPrompt` |

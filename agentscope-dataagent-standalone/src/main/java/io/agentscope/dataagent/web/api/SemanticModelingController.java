@@ -224,16 +224,12 @@ public class SemanticModelingController {
             String createdAt,
             String updatedAt) {}
 
-    /** One business term bound to the knowledge base; read-only here (managed via SemanticTermController). */
-    public record TermVO(String id, String term, String explanation, String synonyms) {}
-
     public record OverviewVO(
             GroupStateVO group,
             List<DatasetController.DatasetVO> datasets,
             List<RelationVO> relations,
             List<CubeVO> cubes,
-            List<ViewVO> views,
-            List<TermVO> terms) {}
+            List<ViewVO> views) {}
 
     public record EnhanceTaskVO(
             String id,
@@ -321,15 +317,6 @@ public class SemanticModelingController {
                                             .toList(),
                                     modelingService.listViews(groupId).stream()
                                             .map(this::toViewVO)
-                                            .toList(),
-                                    modelingService.listTerms(groupId).stream()
-                                            .map(
-                                                    t ->
-                                                            new TermVO(
-                                                                    t.getId(),
-                                                                    t.getTerm(),
-                                                                    t.getExplanation(),
-                                                                    t.getSynonyms()))
                                             .toList());
                         })
                 .subscribeOn(Schedulers.boundedElastic())

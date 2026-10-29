@@ -2,7 +2,14 @@
 
 > 只保留当前任务。2026-10-21 及之前的详细检查点见 [archive/CURRENT_TASK-until-20261021.md](archive/CURRENT_TASK-until-20261021.md)。
 
-## 最新检查点：2026-10-26｜问数联网搜索（spec094、ADR0114）与建模提速（未提交）
+## 最新检查点：2026-10-29｜spec095 业务术语改为官方 Naming conventions（未提交）
+
+- 已完成：术语存于各库工程 `knowledge/rules/naming.md` 的 `## Naming conventions`（ADR0115），`BusinessTermService`/`BusinessTermController`（`/api/dataset-groups/{id}/terms`），编辑进草稿、与建模共用草稿栏发布，QUERY 只读已发布版本；平台术语表、旧接口、旧注入与旧术语工具下线，旧数据不迁移（`docs/migrations/0096` 删表）；建模提示词要求 Naming conventions 写入同一文件；业务术语页改版。
+- 另含已提交的 237a2bec：试问 SQL 保存/确认前 dry-plan、发布撤下问答提示、SQL 编辑器。
+- 验证：spotless、`mvn test` 801 项 0 失败 20 跳过、package、前端 build；浏览器确认术语页加载与接口 200。
+- 未完成：spec095 真实验收（添加术语→发布→新会话问数 `get_instructions` 含术语；QUERY 用户只读）；平台库执行 0096 删表。
+
+## 上一检查点：2026-10-26｜问数联网搜索（spec094、ADR0114）与建模提速（未提交）
 
 - 已完成：问数助手新增 `web_search`（DeepSeek 官方搜索 API，`WebSearchTool`），只发搜索词；问数与建模移除 harness 的 `web_search`/`web_fetch`；问数提示词"联网搜索"一节（外部问题不走问数流程）；前端"联网搜索"标签。另含 10-25 提交后的建模提速：工程现状注入、跳过官方预检、语言提醒、建模压缩阈值 240 条/8 万 token、MCP 启动类加载器修复。
 - 验证：spotless、`mvn test` 804 项 0 失败 20 跳过、package、前端 build 与 19 项测试通过。
@@ -36,7 +43,7 @@
   - 补充（晚）：只问真正需要确认的——`request_user_confirmation` 工具 + `ModelingConfirmationService`（.platform/confirmations，每轮≤3）+ 弹窗 `ConfirmationDialog`，答复以 purpose=confirm 交助手写入规则或列描述；审阅页"本次修改"只展示、可编辑/撤销；左侧"语义建模"入口 `ModelingHubPage`；文档上传即刷新、助手修改实时刷新。`mvn test` 757 项 0 失败。
 - 用户已确认的决定（2026-10-21）：
   - 取消逐项确认卡，修改直接进草稿，发布前统一审阅、按文件撤销、可放弃全部草稿；
-  - 无业务文档的自动建模不得写 `knowledge/rules/`，推断只进 `knowledge/caveats/`（代码约束）；
+  - 无业务文档的自动建模不得写 `knowledge/rules/`（代码约束）；`knowledge/caveats/` 已停用（ADR0116），数据事实写表/列描述，其余推断只在回复列出；
   - 多人共用一份草稿，不做分支，审阅显示作者；助手运行中不可发布；
   - 多业务文档：新增、替换（保留历史）、删除，均为草稿修改，上传后自动排队交给助手；问数不直接读文档；
   - 上传数据弹窗可附业务文档；采样后自动建模；已建模库新增表只处理新表；

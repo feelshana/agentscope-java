@@ -15,6 +15,7 @@ spec 是一页纸的需求与验收标准，写代码之前先写（模板：[00
 | [092](092-draft-and-review-modeling-workflow.md) | spec092：建模改为"草稿 + 发布前审阅"，多业务文档，入口与增量建模 | 已实施，待真实验收 |
 | [093](093-field-screening-before-modeling.md) | spec093：建模前字段整理（筛选纳入字段、补充说明） | 已实施，待真实验收 |
 | [094](094-web-search-for-query.md) | spec094：问数助手联网搜索（DeepSeek 官方搜索 API） | 已实施，待真实验收 |
+| [095](095-business-terms-in-wren-naming-conventions.md) | spec095：业务术语改为知识库工程内的官方 Naming conventions | 已实施，待真实验收 |
 
 ## 已完成或已关闭（done/）
 

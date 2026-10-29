@@ -162,7 +162,6 @@ class DocEnhanceServiceTest {
         when(modelingService.listRelations("g1")).thenReturn(List.of());
         when(modelingService.listCubes("g1")).thenReturn(List.of());
         when(modelingService.listViews("g1")).thenReturn(List.of());
-        when(modelingService.listTerms("g1")).thenReturn(List.of());
         when(ruleRepository.findByOwnerIdAndGroupIdOrderByCreatedAtAsc("alice", "g1"))
                 .thenReturn(List.of());
         when(agentDraftService.modelAvailable()).thenReturn(true);
@@ -176,12 +175,14 @@ class DocEnhanceServiceTest {
         String reply =
                 """
                 {"proposals":[
-                  {"type":"TERM","classification":"NEW","title":"VIP",\
+                  {"type":"BUSINESS_RULE","classification":"NEW","title":"VIP",\
                    "summary":"累计消费达到一万元的客户",\
-                   "payload":{"term":"VIP","explanation":"累计消费达到一万元的客户","synonyms":"贵宾"},\
+                   "payload":{"name":"VIP","content":"累计消费达到一万元的客户"},\
                    "source_quote":"VIP 指累计消费达到一万元的客户","confidence":"HIGH"},
-                  {"type":"TERM","classification":"COVERED","title":"老术语",\
-                   "payload":{"term":"老术语","explanation":"已经存在"}},
+                  {"type":"BUSINESS_RULE","classification":"COVERED","title":"老规则",\
+                   "payload":{"name":"老规则","content":"已经存在"}},
+                  {"type":"TERM","classification":"NEW","title":"已退役的术语提案",\
+                   "payload":{"term":"贵宾","explanation":"spec095 起术语不再是提案"}},
                   {"type":"RELATIONSHIP","classification":"NEW","title":"无法解析的关系",\
                    "summary":"文档有关系但表名错误",\
                    "payload":{"sourceDatasetId":"missing","sourceColumns":["id"],\
@@ -194,7 +195,7 @@ class DocEnhanceServiceTest {
 
         assertThat(task.getStatus()).isEqualTo(DocEnhanceTaskEntity.STATUS_READY);
         assertThat(savedProposals).hasSize(2);
-        assertThat(savedProposals.get(0).getProposalType()).isEqualTo("TERM");
+        assertThat(savedProposals.get(0).getProposalType()).isEqualTo("BUSINESS_RULE");
         assertThat(savedProposals.get(1).getProposalType()).isEqualTo("MANUAL_FIX");
         assertThat(savedProposals).allMatch(p -> p.getFingerprint().length() == 64);
     }
@@ -203,8 +204,8 @@ class DocEnhanceServiceTest {
     void duplicateItemsAndRepeatedAnalysisDoNotCreateDuplicateProposals() {
         DocEnhanceTaskEntity first = task("t-dup-1");
         String item =
-                "{\"type\":\"TERM\",\"classification\":\"NEW\",\"title\":\"VIP\","
-                        + "\"payload\":{\"term\":\"VIP\",\"explanation\":\"高价值客户\"}}";
+                "{\"type\":\"BUSINESS_RULE\",\"classification\":\"NEW\",\"title\":\"VIP\","
+                        + "\"payload\":{\"name\":\"VIP\",\"content\":\"高价值客户\"}}";
         when(agentDraftService.chatBlockingModeling(anyString()))
                 .thenReturn("{\"proposals\":[" + item + "," + item + "]}");
 
@@ -228,22 +229,6 @@ class DocEnhanceServiceTest {
         assertThat(task.getStatus()).isEqualTo(DocEnhanceTaskEntity.STATUS_FAILED);
         assertThat(task.getErrorMessage()).contains("provider unavailable");
         assertThat(savedProposals).isEmpty();
-    }
-
-    @Test
-    void termAdoptionUsesExistingWritePathAndClosesProposal() {
-        DocEnhanceProposalEntity proposal =
-                proposal(
-                        "p1",
-                        "TERM",
-                        "NEW",
-                        "{\"term\":\"VIP\",\"explanation\":\"累计消费达到一万元的客户\",\"synonyms\":\"贵宾\"}");
-
-        DocEnhanceProposalEntity result = service.adopt("alice", "g1", proposal.getId());
-
-        verify(modelingService).createTerm("g1", "VIP", "累计消费达到一万元的客户", "贵宾");
-        assertThat(result.getStatus()).isEqualTo(DocEnhanceProposalEntity.STATUS_ADOPTED);
-        assertThat(result.getDecidedAt()).isNotNull();
     }
 
     @Test
@@ -303,7 +288,7 @@ class DocEnhanceServiceTest {
 
     @Test
     void conflictCannotBeAdoptedAndForeignTenantCannotProbe() {
-        DocEnhanceProposalEntity conflict = proposal("p3", "TERM", "CONFLICT", "{}");
+        DocEnhanceProposalEntity conflict = proposal("p3", "BUSINESS_RULE", "CONFLICT", "{}");
 
         assertThatThrownBy(() -> service.adopt("alice", "g1", conflict.getId()))
                 .isInstanceOf(DatasetException.class)

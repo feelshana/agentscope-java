@@ -37,8 +37,6 @@ import io.agentscope.dataagent.web.persistence.jpa.DatasetRelationRepository;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetRepository;
 import io.agentscope.dataagent.web.persistence.jpa.SemanticCubeEntity;
 import io.agentscope.dataagent.web.persistence.jpa.SemanticCubeRepository;
-import io.agentscope.dataagent.web.persistence.jpa.SemanticTermEntity;
-import io.agentscope.dataagent.web.persistence.jpa.SemanticTermRepository;
 import io.agentscope.dataagent.web.persistence.jpa.SemanticViewEntity;
 import io.agentscope.dataagent.web.persistence.jpa.SemanticViewRepository;
 import java.io.IOException;
@@ -69,7 +67,6 @@ class MdlSuggestionServiceTest {
     private DatasetService datasetService;
     private DatasetRelationRepository relationRepository;
     private SemanticCubeRepository cubeRepository;
-    private SemanticTermRepository termRepository;
     private SemanticViewRepository viewRepository;
     private AgentDraftService agentDraftService;
     private MdlWorkspaceService workspace;
@@ -92,7 +89,6 @@ class MdlSuggestionServiceTest {
         datasetService = mock(DatasetService.class);
         relationRepository = mock(DatasetRelationRepository.class);
         cubeRepository = mock(SemanticCubeRepository.class);
-        termRepository = mock(SemanticTermRepository.class);
         viewRepository = mock(SemanticViewRepository.class);
         agentDraftService = mock(AgentDraftService.class);
         workspace = mock(MdlWorkspaceService.class);
@@ -103,7 +99,6 @@ class MdlSuggestionServiceTest {
                         datasetService,
                         relationRepository,
                         cubeRepository,
-                        termRepository,
                         viewRepository,
                         agentDraftService,
                         workspace,
@@ -810,50 +805,6 @@ class MdlSuggestionServiceTest {
         assertEquals(1, cube.measures().size(), "unknown column must be filtered out");
         assertEquals("amount", cube.measures().get(0).get("column"));
         assertEquals(1, cube.dimensions().size());
-    }
-
-    @Test
-    void termCreateValidatesLengthAndUniqueness() {
-        when(termRepository.findByGroupIdAndTerm(anyString(), anyString()))
-                .thenReturn(Optional.empty());
-        when(termRepository.save(any(SemanticTermEntity.class)))
-                .thenAnswer(inv -> inv.getArgument(0));
-
-        SemanticTermEntity created = service.createTerm("g1", "高频用户", "近30天访问次数大于30的用户", null);
-        assertEquals("高频用户", created.getTerm());
-        assertEquals("g1", created.getGroupId());
-
-        when(termRepository.findByGroupIdAndTerm("g1", "高频用户")).thenReturn(Optional.of(created));
-        DatasetException duplicate =
-                assertThrows(
-                        DatasetException.class,
-                        () -> service.createTerm("g1", "高频用户", "另一个口径", null));
-        assertEquals(409, duplicate.status());
-
-        // specs/026: every term must belong to exactly one knowledge base.
-        DatasetException noGroup =
-                assertThrows(
-                        DatasetException.class, () -> service.createTerm(" ", "好用户", "口径", null));
-        assertEquals(400, noGroup.status());
-
-        DatasetException tooLong =
-                assertThrows(
-                        DatasetException.class,
-                        () -> service.createTerm("g1", "x".repeat(31), "y", null));
-        assertEquals(400, tooLong.status());
-
-        DatasetException blankExp =
-                assertThrows(
-                        DatasetException.class, () -> service.createTerm("g1", "好用户", "  ", null));
-        assertEquals(400, blankExp.status());
-    }
-
-    @Test
-    void termDeleteRequiresExistence() {
-        when(termRepository.findById("t_missing")).thenReturn(Optional.empty());
-        DatasetException missing =
-                assertThrows(DatasetException.class, () -> service.deleteTerm("g1", "t_missing"));
-        assertEquals(404, missing.status());
     }
 
     @Test

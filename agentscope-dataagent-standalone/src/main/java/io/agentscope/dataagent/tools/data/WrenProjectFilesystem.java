@@ -107,13 +107,21 @@ public final class WrenProjectFilesystem implements AbstractFilesystem {
 
     static final String RULES_NEED_EVIDENCE =
             "自动建模没有业务文档依据，不能写入业务规则（knowledge/rules/），未保存本次修改。确实需要用户决定、且会改变统计结果的口径，用"
-                    + " request_user_confirmation 向用户提问；其余不确定之处写入 knowledge/caveats/ 说明。";
+                    + " request_user_confirmation 向用户提问；数据事实写入相关表或列的描述；其余推断不写入工程，在本轮回复中列出。";
+
+    static final String CAVEATS_RETIRED =
+            "knowledge/caveats/ 已停用，问数不会读取，未保存本次修改。数据事实（格式、取值范围、覆盖时间段、重复行、跨表关联情况）写入相关表或列的描述；"
+                    + "会改变统计结果的口径用 request_user_confirmation 向用户提问；其余推断不写入工程，在本轮回复中列出。";
 
     /**
      * ADR0111: with no confirmation card, inference must not become a business rule. Turns the
      * page started as automatic modeling may write rules only when a business document exists.
+     * ADR0116: knowledge/caveats/ is retired (queries never read it); existing files may still be
+     * deleted, but nothing new is written there.
      */
     private static String rulesGuard(RuntimeContext context, Project p, String relative) {
+        if (relative.toLowerCase(java.util.Locale.ROOT).startsWith("knowledge/caveats/"))
+            return CAVEATS_RETIRED;
         if (!relative.toLowerCase(java.util.Locale.ROOT).startsWith("knowledge/rules/"))
             return null;
         var purpose =

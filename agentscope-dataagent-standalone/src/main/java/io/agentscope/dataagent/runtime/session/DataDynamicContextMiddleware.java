@@ -297,10 +297,9 @@ public class DataDynamicContextMiddleware implements HarnessRuntimeMiddleware {
             return "";
         }
         String text = contextProvider.relationshipsText(userId, groupIds);
-        String terms = contextProvider.semanticTermsText(groupIds);
         String views = contextProvider.semanticViewsText(groupIds);
         String rules = contextProvider.semanticBusinessRulesText(userId, groupIds);
-        if (blank(text) && blank(terms) && blank(views) && blank(rules)) {
+        if (blank(text) && blank(views) && blank(rules)) {
             return "";
         }
 
@@ -311,10 +310,6 @@ public class DataDynamicContextMiddleware implements HarnessRuntimeMiddleware {
             sb.append('\n').append(text).append("\n");
         }
 
-        if (terms != null && !terms.isBlank()) {
-            sb.append("\n## 业务术语（语义配置）\n");
-            sb.append(terms).append("\n");
-        }
         if (views != null && !views.isBlank()) {
             sb.append("\n## 语义视图（工程 views/ 文件，官方 run_sql 可直接按视图名查询）\n");
             sb.append("视图口径已经建模审阅，能直接覆盖问题时优先通过官方 run_sql 按视图名查询。\n");

@@ -16,7 +16,7 @@ ADR 记录"为什么这样做"。规则：
 | 建模探查与查询 | [0104](0104-upload-probe-scope-and-sql-side-aggregation.md)、[0106](0106-modeling-query-cap-cartesian-ban-and-cli-timeout-cleanup.md) | 上传表两类有限探查；单轮 10 条 query；禁止笛卡尔积 |
 | 建模文件边界 | [0107](0107-basic-modeling-closes-cube-and-view-files.md)、[0108](0108-yaml-write-guard-model-file-layout-and-cli-timing.md)、[0110](0110-platform-handles-build-overwrite-and-conditional-date-rules.md) | Cube/View 不读不写；YAML 语法检查；models 目录限制；整文件替换；自动补编译 |
 | 问答对来源 | [0109](0109-user-confirmed-questions-replace-generated-qa-pairs.md) | 只来自用户逐题确认与问数点赞；建模不生成 |
-| 建模变更治理 | [0111](0111-draft-changes-reviewed-before-publish.md) | 修改直接进入草稿，发布前统一审阅；取消逐项确认卡；无文档的自动建模不写规则 |
+| 建模变更治理 | [0111](0111-draft-changes-reviewed-before-publish.md) | 修改直接进入草稿，发布前统一审阅；取消逐项确认卡；无文档的自动建模不写规则；caveats 已停用（[0116](0116-retire-knowledge-caveats.md)） |
 | SQL 时间门禁 | [0097](0097-llm-per-table-sql-window.md)、[0098](0098-post-sampling-fact-window-confirmation.md)、[0099](0099-runtime-window-policy-and-verifiable-sql-gate.md)、[0103](0103-source-tiered-probing-and-row-based-gate-verdict.md)、[0112](0112-rule-first-sql-window-gate.md)、[0113](0113-mysql8-or-doris-sources-and-literal-date-ranges.md) | 数据库独立配置；逐表检查，普通写法由规则判断、其余交 LLM；日期范围要求写成常量；明细重算结论；上传表不设门禁 |
 | 问数日期与统计 | [0102](0102-query-date-clarification-and-modeling-samples.md)、[0104](0104-upload-probe-scope-and-sql-side-aggregation.md)、[0105](0105-build-state-context-and-ranking-granularity.md)、[0110](0110-platform-handles-build-overwrite-and-conditional-date-rules.md) | 仅受限表缺日期先问；统计来自 SQL；排名按主体分组 |
 | 问数准备与性能 | [0100](0100-published-query-index-preparation.md)、[0101](0101-reuse-published-mcp-for-recall-warmup.md) | 发布后后台索引、召回预热、分段计时 |
@@ -142,3 +142,5 @@ ADR 记录"为什么这样做"。规则：
 | [0112](0112-rule-first-sql-window-gate.md) | SQL 时间门禁规则优先，模型只判断规则无法确定的 SQL | 已接受，2026-10-25。补充 ADR0097/0103：ADR0097 中"检查器仅将原始 SQL 交给无工具 LLM"改为规则优先、模型兜底；登记配置 |  |
 | [0113](0113-mysql8-or-doris-sources-and-literal-date-ranges.md) | 外部数据源限定 MySQL 8.0+ 或 Doris，SQL 用 MySQL 8.0 语法与日期常量范围 | 已接受，2026-10-25。补充 ADR0021（外部源只发布 MySQL）与 ADR0112（规则优先的时间门禁）。 |  |
 | [0114](0114-query-web-search-via-deepseek.md) | 问数助手经 DeepSeek 官方搜索 API 联网，移除 harness 默认联网工具 | 已接受，2026-10-26。实施 spec094。 |  |
+| [0115](0115-business-terms-in-wren-naming-conventions.md) | 业务术语存入知识库工程的官方 Naming conventions，随草稿发布 | 已接受，2026-10-29。实施 spec095。 |  |
+| [0116](0116-retire-knowledge-caveats.md) | 停用 knowledge/caveats/，推断不再写入工程 | 已接受，2026-10-29。修改 ADR0111 第 4 条推断去向。 |  |

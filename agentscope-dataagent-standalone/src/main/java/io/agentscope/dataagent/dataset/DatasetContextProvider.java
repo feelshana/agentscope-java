@@ -35,13 +35,6 @@ public interface DatasetContextProvider {
     String relationshipsText(String ownerId, java.util.List<String> onlyGroups);
 
     /**
-     * Business-term dictionary text (term → explanation/synonyms) for the given knowledge bases
-     * (specs/026); empty when none. Terms bind to one knowledge base, so without an explicit
-     * boundary nothing is injected — another tenant's terms can never leak into the prompt.
-     */
-    String semanticTermsText(java.util.List<String> onlyGroups);
-
-    /**
      * Published named-SQL views for the given knowledge bases (specs/011 M2), one line per view
      * as query-ready hints for the agent; empty when none are published yet. Draft views are
      * deliberately omitted — they cannot be queried until a publish.

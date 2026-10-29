@@ -156,8 +156,14 @@ class DataAgentConfigTest {
                         "所注依据必须能在该来源中找到",
                         "必须用 request_user_confirmation 提问",
                         "description_source: user",
-                        "不要重新加入")
-                .doesNotContain("LIKE");
+                        "不要重新加入",
+                        // spec095: business terms share the page-maintained Naming conventions.
+                        "knowledge/rules/naming.md",
+                        "已有条目不改写、不删除",
+                        // ADR0116: data facts go to descriptions, caveats are retired.
+                        "写入相关表或列的描述",
+                        "knowledge/caveats/ 已停用")
+                .doesNotContain("LIKE", "其余推断写入 knowledge/caveats/");
         assertThat(DataAgentConfig.QUERY_EFFICIENCY_RULES).doesNotContain("LIKE");
         // Modeling replies are for business users: short, Chinese only, no files or commands.
         assertThat(DataAgentConfig.MODELING_SCRIPT)

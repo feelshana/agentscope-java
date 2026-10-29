@@ -28,8 +28,6 @@ import io.agentscope.dataagent.web.persistence.jpa.DatasetRelationRepository;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetRepository;
 import io.agentscope.dataagent.web.persistence.jpa.SemanticCubeEntity;
 import io.agentscope.dataagent.web.persistence.jpa.SemanticCubeRepository;
-import io.agentscope.dataagent.web.persistence.jpa.SemanticTermEntity;
-import io.agentscope.dataagent.web.persistence.jpa.SemanticTermRepository;
 import io.agentscope.dataagent.web.persistence.jpa.SemanticViewEntity;
 import io.agentscope.dataagent.web.persistence.jpa.SemanticViewRepository;
 import java.io.IOException;
@@ -107,7 +105,6 @@ public class MdlSuggestionService {
     private final DatasetService datasetService;
     private final DatasetRelationRepository relationRepository;
     private final SemanticCubeRepository cubeRepository;
-    private final SemanticTermRepository termRepository;
     private final SemanticViewRepository viewRepository;
     private final AgentDraftService agentDraftService;
     private final MdlWorkspaceService workspace;
@@ -130,7 +127,6 @@ public class MdlSuggestionService {
             DatasetService datasetService,
             DatasetRelationRepository relationRepository,
             SemanticCubeRepository cubeRepository,
-            SemanticTermRepository termRepository,
             SemanticViewRepository viewRepository,
             AgentDraftService agentDraftService,
             MdlWorkspaceService workspace,
@@ -140,7 +136,6 @@ public class MdlSuggestionService {
         this.datasetService = datasetService;
         this.relationRepository = relationRepository;
         this.cubeRepository = cubeRepository;
-        this.termRepository = termRepository;
         this.viewRepository = viewRepository;
         this.agentDraftService = agentDraftService;
         this.workspace = workspace;
@@ -1147,59 +1142,6 @@ public class MdlSuggestionService {
 
     private static String text(Object value) {
         return value == null ? "" : String.valueOf(value).strip();
-    }
-
-    // ------------------------------------------------------------------ semantic terms
-
-    /**
-     * Group-scoped term dictionary (specs/026): terms bind to one knowledge base. A blank group
-     * renders nothing rather than leaking other tenants' entries.
-     */
-    public List<SemanticTermEntity> listTerms(String groupId) {
-        return groupId == null || groupId.isBlank()
-                ? List.of()
-                : termRepository.findByGroupIdOrderByCreatedAtDesc(groupId);
-    }
-
-    /**
-     * Creates a business term bound to {@code groupId} (specs/026). Duplicates are rejected with
-     * 409 so a conversational create can never silently overwrite a curated entry; the same noun
-     * may exist in different knowledge bases with different definitions.
-     */
-    @Transactional
-    public SemanticTermEntity createTerm(
-            String groupId, String term, String explanation, String synonyms) {
-        if (groupId == null || groupId.isBlank()) {
-            throw new DatasetException("Term requires a knowledge base (group_id)", 400);
-        }
-        String t = requireBounded(term, 30, "Term");
-        String exp = requireBounded(explanation, 100, "Explanation");
-        if (termRepository.findByGroupIdAndTerm(groupId, t).isPresent()) {
-            throw new DatasetException("Term already exists: " + t, 409);
-        }
-        return termRepository.save(
-                new SemanticTermEntity(
-                        UUID.randomUUID().toString(), groupId, t, exp, blankToNull(synonyms)));
-    }
-
-    @Transactional
-    public void deleteTerm(String groupId, String termId) {
-        termRepository.delete(getTerm(groupId, termId));
-    }
-
-    private SemanticTermEntity getTerm(String groupId, String termId) {
-        return termRepository
-                .findById(termId)
-                .filter(e -> groupId != null && groupId.equals(e.getGroupId()))
-                .orElseThrow(() -> new DatasetException("Term not found: " + termId, 404));
-    }
-
-    private static String requireBounded(String value, int max, String label) {
-        String v = value == null ? "" : value.trim();
-        if (v.isEmpty() || v.length() > max) {
-            throw new DatasetException(label + " must be 1-" + max + " chars", 400);
-        }
-        return v;
     }
 
     private static String blankToNull(String value) {

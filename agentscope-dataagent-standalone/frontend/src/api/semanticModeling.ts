@@ -66,21 +66,12 @@ export interface ModelingView {
   updatedAt: string | null;
 }
 
-/** One business term bound to this knowledge base (specs/026; managed via the semantic-config page). */
-export interface ModelingTerm {
-  id: string;
-  term: string;
-  explanation: string;
-  synonyms: string | null;
-}
-
 export interface ModelingOverview {
   group: ModelingGroupState;
   datasets: Dataset[];
   relations: ModelingRelation[];
   cubes: ModelingCube[];
   views: ModelingView[];
-  terms: ModelingTerm[];
 }
 
 export interface RelationUpdateRequest {

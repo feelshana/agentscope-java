@@ -37,7 +37,6 @@ import io.agentscope.dataagent.dataset.parser.ColumnSchema;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetRelationEntity;
-import io.agentscope.dataagent.web.persistence.jpa.SemanticTermEntity;
 import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -1818,36 +1817,6 @@ public final class ModelingToolkit {
     // -----------------------------------------------------------------
     //  Read-only dictionaries (write sides moved to knowledge/ files)
     // -----------------------------------------------------------------
-
-    @Tool(
-            name = "list_terms",
-            description =
-                    "列出当前知识库的业务术语。提议新术语前先调用查重；也可用于开场盘点时向用户复述已有口径。新术语请写入工程 knowledge/"
-                            + " 文件（write_file）。")
-    public String listTerms(
-            DatasetScope scope,
-            RuntimeContext rc,
-            @ToolParam(name = "group_id", description = "知识库 ID；会话仅绑定一个知识库时可省略", required = false)
-                    String groupId) {
-        Ctx c = resolve(scope, rc, groupId);
-        if (c.error() != null) {
-            return c.error();
-        }
-        List<SemanticTermEntity> terms = suggestions.listTerms(c.gid());
-        if (terms.isEmpty()) {
-            return "（暂无业务术语）";
-        }
-        StringBuilder sb = new StringBuilder("## 业务术语\n\n");
-        for (SemanticTermEntity t : terms) {
-            sb.append("- `").append(t.getId()).append("` ").append(t.getTerm());
-            if (t.getSynonyms() != null && !t.getSynonyms().isBlank()) {
-                sb.append("（同义：").append(t.getSynonyms()).append("）");
-            }
-            sb.append("：").append(t.getExplanation());
-            sb.append('\n');
-        }
-        return sb.toString();
-    }
 
     @Tool(
             name = "list_business_rules",
