@@ -8,3 +8,15 @@
 *.zip binary
 *.gz binary
 *.jar binary
+
+# Font and media fixtures must remain byte-for-byte unchanged, including on old Git.
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.eot binary
+*.wav binary
+*.mp3 binary
+*.mp4 binary
+*.pdf binary
+*.pb binary

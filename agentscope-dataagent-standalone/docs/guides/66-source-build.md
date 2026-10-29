@@ -1,6 +1,8 @@
 # 66拉取GitHub源码并构建镜像：分步指引
 
-2026-10-29：用户选择本方案。用户已反馈源码拉取完成；源码更新、只构建和应用镜像入口已实现并通过本地验证；部署文件经本次提交统一交付；用户push后，66更新至新提交再调用这些脚本。原环境镜像已经准备，生产库信息仍未确认，不启动业务。
+2026-10-29现场进展：用户已将9d378d8b推送并在66克隆，固定Maven镜像基础检查通过；最新截图确认Java946项（0失败、0错误、28条件跳过）、Maven BUILD SUCCESS、应用镜像封装与静态预检通过。作业日志/镜像引用保留在66的~/dataagent-build/jobs下。此结果不代表数据库连接、模型缓存运行或业务启动通过，助手未远程执行。
+
+生产数据库信息仍待取得。用户已选择先使用独立MySQL8.0容器演练，MySQL准备/启动脚本已在本地验证，待提交推送后供66执行；应用Compose及业务验收仍待完成。下文早期检查是可重现步骤，现场已经通过的构建无需重跑。
 
 用户本轮截图已确认：Git1.8.3.1、Docker客户端/服务端26.1.4、Compose2.27.1；runtime/sandbox两镜像均存在。GitHub HTTPS200，实际git ls-remote读取目标分支成功，提交为b82bb7f48220889436e0efd49d515651f900d717。默认HEAD为另一提交，不以默认分支代替目标分支。此结果不代表clone、构建依赖或新应用镜像已验。
 
@@ -97,8 +99,37 @@ build-from-source.sh拒绝脏源码、未提交控制文件或不同于HEAD的�
 
 后续更新可以执行bash docker/update-source.sh：仅fetch指定分支并快进，三次重试、单次90秒，有本地修改/错误分支/历史分叉就停止，不自动merge、reset、清理或启停服务。然后独立执行只构建脚本。
 
-## 五、正式启动仍待后续实施
+## 五、独立MySQL8.0演练
 
-需要生产两库及初始化、外置runtime.env与/data/dataagent/conf/application-prod.yml、持久data/logs和离线模型缓存。新应用入口已支持外置路径；Compose启停、健康检查和回退仍待实现及实测，不自行套用旧tar入口或Dify脚本。
+2026-10-29现场截图确认mysql:8.0已下载，linux/amd64，来源摘要7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b，本地同一镜像Id为6cd09145362dfe6831b14545de3d5fd6cc75c37cfd6ef8561429c1fc73518b39。镜像下载不代表数据库已启动。
+
+新增docker/rehearsal-mysql.sh目前须先在开发机提交并push，不能直接在66的旧9d378d8b中调用。该脚本不改变应用JAR，无需因这批运维文件重建已经通过预检的应用镜像。用户push后，在66执行：
+
+```bash
+cd "$HOME/dataagent-source/agentscope-java/agentscope-dataagent-standalone"
+bash docker/update-source.sh
+bash docker/rehearsal-mysql.sh prepare
+bash docker/rehearsal-mysql.sh start
+```
+
+prepare先用已下载镜像断网运行mysql --version，然后只在新/data/dataagent/rehearsal-db目录生成专属Compose、两库DDL和随机密码。已标记的完整配置重复执行不会重置密码；其他已有目录拒绝覆盖。仅创建/自动移除这一个版本检查容器，符合此前人工检查通过脚本执行的约定。
+
+start只启动dataagent66-rehearsal-db项目的mysql服务，等待健康并核对37表/两个账号；不运行应用、不处理BI用户、不停止Dify。MySQL数据在演练目录mysql下，密码保存在mysql.env和app-db.env（600），初始化文件不含密码。Compose固定使用准备时已下载的image ID，启动不自动拉新镜像；2CPU/2GiB预算，不发布宿主端口。
+
+平台账号dataagent_platform仅有平台库DML权限，上传账号dataagent_dataset仅对data_agent授权。后续应用需要加入dataagent66-rehearsal-db_default网络，读取私有app-db.env，使用mysql:3306；该名称不在宿主DNS上，不使用localhost或66:3306。SQL初次建表只由官方MySQL入口对空数据目录执行，之后应用保持ddl-auto=validate及sql.init.mode=never。
+
+只读检查/定位命令：
+
+```bash
+bash docker/rehearsal-mysql.sh status
+bash docker/rehearsal-mysql.sh verify
+bash docker/rehearsal-mysql.sh logs
+```
+
+失败时保留数据/密码/日志定位，不删除数据目录、不重放完整DDL，不用compose down -v或全局prune。此入口不包含删除动作。实际初始化及旧内核MySQL兼容仍以66启动结果为准；本地Linux首次初始化、37表、权限隔离、Wren Python MySQLdb通过Docker DNS连接、停启数据保留、无宿主端口及拒绝覆盖已实测通过。
+
+## 六、应用启动仍待后续实施
+
+正式上线需要生产两库及初始化、外置runtime.env与application-prod.yml、持久data/logs和离线模型缓存。临时数据库仅用于当前演练。新应用入口已支持外置路径；应用Compose启停、健康检查和回退仍待实现及实测，不自行套用旧tar入口或Dify脚本。管理员与模型服务也需在应用就绪后配置，数据库启动不代表问答可用。
 
 正式方案：[spec099](../specs/099-source-build-deployment.md)、[ADR0118](../adr/0118-source-build-on-deployment-host.md)。验证见[构建报告](../test-reports/20261029-source-build-validation.md)。助手未连接66执行构建；用户自行push。

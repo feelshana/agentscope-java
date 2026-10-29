@@ -8,8 +8,8 @@
 
 ## 66已核实
 - 用户截图：Git1.8.3.1、Docker客户端/daemon26.1.4、Compose2.27.1，runtime/sandbox两镜像在；GitHub HTTPS200且ls-remote目标分支b82bb7f4可读，默认HEAD不同。
-- 用户反馈已clone，尚未回传实际本地HEAD；不将默认分支代替codex/integrate-boundary-lyf-v2。旧Git用cd方式，不用git -C/switch/worktree，不升级宿主。
-- 已给66拉取m.daocloud.io/docker.io/library/maven:3.9.9-eclipse-temurin-17命令，未收到拉取/旧内核运行结果。
+- 最新截图确认clone为9d378d8b，固定摘要Maven镜像的JDK17.0.15/javac/Maven3.9.9在66旧内核上基础检查通过。旧Git用cd，不升级宿主。
+- 2026-10-29最新现场截图：Java946/0失败/0错误/28跳过，Maven BUILD SUCCESS（3:06），应用镜像已封装并完成Java17.0.21/Wren及包内容静态预检；未启动业务。镜像引用及完整SHA以66本次jobs/*/build-result.txt为准。
 
 ## 本轮实现（随本次本地提交交付，待用户push）
 - [spec099](../specs/099-source-build-deployment.md)、[ADR0118](../adr/0118-source-build-on-deployment-host.md)，只构建阶段完成，完整部署未完成。
@@ -30,12 +30,18 @@
 - 未启停业务服务，测试容器正常自动退出，镜像/作业文件保留；本地原18766/18860及其他Docker项目保留。
 
 ## 下一步
-1. 用户在66拉Maven镜像后执行构建工具基础检查，确认旧内核JVM/javac/Maven可运行；用透明脚本创建并自动移除本轮检查容器，遵守此前运维要求。
-2. 用户已明确授权本地一次提交所有当前项目需要的改动，由用户自己push。已审阅为构建/环境、数据库SQL、文档和验证配套；两份重复中途检查点移至Git忽略output/precommit-cleanup-20261029，私有交接/日志/实验JAR/真实人员SQL不入提交。66旧b82没有新入口，等用户push再更新。
-3. 66更新目标分支，check-builder→build-from-source明确HEAD，回传本次日志/镜像标识，构建失败不碰旧服务。
-4. 在取得生产两库后，继续实现/验证Compose启动、健康验收/回退、持久目录和生产配置；新镜像不能套旧tar的runtime-entrypoint。
+1. 66源码构建和镜像静态预检已通过，不需重复构建；保留本次作业目录、镜像和日志。工作区修复的逐文件哈希输出未单独回传，不能把构建成功等同于已获得该项完整证据。
+2. 本地9d378d8b由用户push且66已取得；此后.gitattributes二进制属性修复及共享记录仍未提交，助手不自动提交/推送。
+3. 66截图确认MySQL8.0镜像6cd09145…/来源index7dcddc01…已拉取。新增docker/rehearsal-mysql.sh及真实集成测试在本地通过：37表、分库账号、Docker DNS/MySQLdb、重复不改密码、停启数据保留、不映射宿主端口、拒绝未标记目录。待用户提交push，再66 update-source→prepare→start，不需重建原应用镜像；生产两库继续等待。
+4. 应用Compose启动、配置生成、健康验收/回退和持久目录/离线缓存挂载尚未实现/验证；65同源Nginx/真实BI后续联调。新镜像不能套旧tar入口。演练库根/data/dataagent/rehearsal-db、项目dataagent66-rehearsal-db，不复用Dify。
 5. 正式并发修复单独落地并回归；本次只构建测试不等于10–15并发、66业务或上线验收。
 
 ## 本次提交收口
 - 更新主入口为66-source-build，旧安装/tar文档注明备选，复用已验环境，不删除有用的历史安装材料。固定摘要拉Maven避免标签漂移。
 - 本次提交父版本为b82bb7f4；提交号以git log为准。用户自行push后按指引更新源码→check-builder→build-from-source，不直接启动服务。
+
+## 66现场旧Git二进制换行判定（构建阻塞已解除）
+- 用户截图确认66已成功clone 9d378d8b，固定builder镜像拉取及Java17.0.15/javac/Maven3.9.9基础检查在内核3.10上通过。实际构建尚未进入编译，被干净工作区检查拦截。
+- git status显示字体、wav/mp4/pdf/pb等二进制资源被标修改；根.gitattributes仅自动text/eol与部分binary，遗漏这些类型。截图仍在分页器，原始哈希未完整回传，不能断言磁盘字节已被改。
+- 本地已补根.gitattributes对应binary声明（未提交/未push），git check-attr确认text/diff/merge unset，未改资源字节。给66的局部修复必须先逐一验证所有dirty文件原始哈希等于HEAD、无暂存/模式变化，再仅追加.git/info/attributes；有真实差异则停止。
+- 最新截图已越过工作区保护并完成镜像构建，原阻塞解除；66业务启动/数据库/离线模型运行及BI尚未验。MySQL配套本地已验，说明见66-source-build与构建报告；正式并发问题仍独立待修。

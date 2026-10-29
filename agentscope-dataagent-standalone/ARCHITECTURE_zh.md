@@ -822,7 +822,7 @@ Boot 4 HTTP JSON缓冲使用`spring.http.codecs.max-in-memory-size=50MB`；人�
 
 ### 12.2 构建与运行
 
-ADR0118/spec099新增源码构建交付选项：docker/update-source.sh有限重试并仅快进指定分支；docker/build-from-source.sh从干净明确提交归档源码，在独立Maven/JDK17容器中构建全部本地依赖及前后端，封装应用镜像并静态预检，不启停业务。最终镜像使用application-entrypoint.sh从/opt/dataagent/app运行JAR，配置与data/logs在宿主持久根，构建/运行分离；Compose业务更新与回退仍待实施。前端安装命令支持构建参数覆盖，原默认install保持不变，源码发布使用ci。详见[源码构建指引](docs/guides/66-source-build.md)。
+ADR0118/spec099新增源码构建交付选项：docker/update-source.sh有限重试并仅快进指定分支；docker/build-from-source.sh从干净明确提交归档源码，在独立Maven/JDK17容器中构建全部本地依赖及前后端，封装应用镜像并静态预检，不启停业务。最终镜像使用application-entrypoint.sh从/opt/dataagent/app运行JAR，配置与data/logs在宿主持久根，构建/运行分离；Compose业务更新与回退仍待实施。前端安装命令支持构建参数覆盖，原默认install保持不变，源码发布使用ci。临时库演练由rehearsal-mysql.sh生成独立Compose、随机密码和初次完整DDL，MySQL不发布宿主端口，应用后续通过专属网络连接，配置/数据不随更新重置，不复用Dify数据库；不替代正式两库交付。详见[源码构建指引](docs/guides/66-source-build.md)。
 
 生产旧系统可选用ADR0117/spec098的同容器运行环境：docker/runtime.Dockerfile提供Java17/Python/Wren与Docker客户端，docker/runtime-entrypoint.sh复用发布包依赖预检并exec前台Java；业务tar仍由操作者构建上传，原生bin/dataagent.sh保持不变。docker/dataagent-container.sh准备/挂载宿主持久根、独立模型缓存和宿主Docker socket，以操作者UID/GID及socket附加组运行应用，分析容器仍由现有框架管理。宿主与应用项目绝对路径必须相同，供宿主daemon解析shared绑定；不启动嵌套Docker，不把socket挂载当作宿主权限隔离。停止/替换仅针对项目路径标签匹配的应用容器，不清理业务目录。隔离演练可显式覆盖沙箱镜像和实例标识，默认生产值不变；持久根需核对实际挂载与可用磁盘，不能把小容量tmpfs当业务目录。该选项当前实施与本地验证中，66完整应用/BI/并发尚未验收，操作见[66指引](docs/guides/66-anolis79-next-steps.md)。
 
