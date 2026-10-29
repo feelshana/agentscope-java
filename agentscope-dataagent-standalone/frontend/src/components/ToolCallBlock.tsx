@@ -72,6 +72,7 @@ const TC_TOOL_LABELS: Record<string, string> = {
   render_chart: '生成图表',
   run_python: '沙箱中执行 Python',
   web_search: '联网搜索',
+  propose_analysis: '确认分析参数',
 };
 
 const TC_TOOL_ICONS: Record<string, IconName> = {
@@ -94,6 +95,7 @@ const TC_TOOL_ICONS: Record<string, IconName> = {
   render_chart: 'chart',
   run_python: 'code',
   web_search: 'search',
+  propose_analysis: 'chart',
 };
 
 function toolLabel(name: string): string {

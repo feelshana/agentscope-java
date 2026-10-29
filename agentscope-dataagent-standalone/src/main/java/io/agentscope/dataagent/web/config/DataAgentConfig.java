@@ -153,7 +153,8 @@ public class DataAgentConfig {
             仅对准备实际用于最终答案的业务查询填写对应问题，诊断查询不要填写。
             一条 SQL 只回答子问题时标注该子问题，不让局部 SQL 冒充完整原问题。
             只有用户点赞后才保存成功的业务样例；执行成功不代表业务正确，不自动修改语义资产。
-            根据用户需要使用 run_python 或 render_chart 分析 Wren 返回的数据文件。
+            可视化分三层：单个数值、不超过 2 行或明细清单只给表格；其余默认用 render_chart 出图（趋势、排行、对比、占比、堆叠、双轴、参考线、数据标签都由它完成）；只有需要在 SQL 结果之上再做统计计算（回归、预测、分布与分位数、异常识别、多个结果合并后派生指标）或用户要求导出文件、多图报告时才用 run_python，同一问题最多 2 次，并读取查询返回的数据文件，Python 算出的数值在回答中注明计算方法。
+            官方 usage 技能里的 wren 命令行在本环境对应同名 MCP 工具（如 wren --sql 对应 run_sql、wren memory recall 对应 recall_queries）；Python 沙箱中没有 wren 包，不要 import。
             不编造结果，真实说明歧义、失败和截断；已有结果足够时给出完整最终答案。
             保留证据中的空值与空结果，不擅自补零；不补造未声明的单位或时间范围。查询成功但结果为空时如实回答无数据，不改日期或追加探查寻找有数据的时间。
             只呈现最终结论、必要口径和可核实依据，不呈现内部草稿推理。
@@ -182,7 +183,8 @@ public class DataAgentConfig {
             - Cube/View 不在基础建模范围：不读取、不写入 cubes/ 与 views/ 下的任何文件，不调用 cube 命令，不读取 Cube 提案参考；官方技能中创建或检查 Cube/View 的步骤一律跳过，发现的需求只在最终说明中记为提案。
             - 问答对不由建模生成：不调用 memory store，不写 knowledge/sql/；官方覆盖检查中"knowledge/sql 至少有几条问答对"一项跳过，也不为此自拟样例问题。问答只来自用户提交的问题，写入 knowledge/questions/<ID>.yml，由用户在试问面板确认，页面发布后可被问数召回。仅重建本地索引时使用 ["memory","index","--no-seed"]。
             - 列 properties 中带 description_source: user 的描述由建模人员在字段整理时填写，必须原样保留，不得改写、删减或用 edit_file 覆盖；模型中没有的字段是建模人员排除的字段，不要重新加入，也不要在规则或 SQL 中引用。
-            - knowledge/rules/ 中每条规则只能来自业务文档原句、用户对话或用户的确定，所注依据必须能在该来源中找到。采样和表结构能确定的列含义直接写入，不要向用户确认；文档没写、但不同理解会改变统计结果的口径（例如"访问次数"按记录行数还是按 visit_count 求和）必须用 request_user_confirmation 提问，不得自行选定后标注为文档依据；其余推断写入 knowledge/caveats/。
+            - knowledge/rules/ 中每条规则只能来自业务文档原句、用户对话或用户的确定，所注依据必须能在该来源中找到。采样和表结构能确定的列含义直接写入，不要向用户确认；文档没写、但不同理解会改变统计结果的口径（例如"访问次数"按记录行数还是按 visit_count 求和）必须用 request_user_confirmation 提问，不得自行选定后标注为文档依据；数据事实（格式、取值范围、覆盖时间段、重复行、跨表关联情况）写入相关表或列的描述；其余推断不写入工程，在本轮回复中列出。knowledge/caveats/ 已停用，不要写入。
+            - 官方 Naming conventions（业务名词、同义词与别名）只写入 knowledge/rules/naming.md 的"## Naming conventions"小节，每条一行，写成 - "术语"（同义词："甲"、"乙"）= 解释（含义及对应的表、字段或条件）；该文件同时是用户在"业务术语"页面维护的术语，已有条目不改写、不删除。
             - 指标定义逐项忠实保留文档中的公式、阈值、分子、分母和适用过滤：只对明确指定的指标应用过滤，不扩展成整张表的默认条件。看似同义的标记列不等于文档公式，未验证等价不得替代；发现不一致时保留文档公式并注明差异。不要自行增加在职、有效状态等未确定的限制。
             - 需要用户决定的事项只能用 request_user_confirmation 提出（第一个选项为推荐），不在回复正文里提问或列待办；提交后不等待，继续完成其余工作。
             - 每道确认题的选项只改变该题真正待定的内容，不顺带改写文档或用户已确定的其他指标定义；依据不足的推荐也不能表述为既定业务事实。
@@ -450,7 +452,10 @@ public class DataAgentConfig {
             io.agentscope.dataagent.runtime.wren.WrenQueryGateway wrenQueryGateway,
             io.agentscope.dataagent.dataset.WrenPublishedProject wrenPublishedProject,
             io.agentscope.dataagent.dataset.FactQueryWindowPolicy windowPolicy,
-            io.agentscope.dataagent.web.persistence.jpa.DatasetRepository datasetRepository)
+            io.agentscope.dataagent.web.persistence.jpa.DatasetRepository datasetRepository,
+            org.springframework.beans.factory.ObjectProvider<
+                            io.agentscope.dataagent.web.artifact.ArtifactStore>
+                    artifactStore)
             throws IOException {
         Path cwd = resolveCwd();
         ensureAgentscopeConfig();
@@ -485,6 +490,7 @@ public class DataAgentConfig {
                     if ("data-agent".equals(agentId)) {
                         configureQueryPrompt(b, QUERY_EFFICIENCY_RULES + "\n" + agentSysPrompt);
                         mountWrenSkills(b, wrenSkillsLocator, QUERY_SKILLS);
+                        mountAnalysisSkills(b, wrenSkillsLocator.locate().isPresent());
                     }
                     if (ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId)) {
                         // Register before tool notifications so a paused call never looks executed.
@@ -597,17 +603,26 @@ public class DataAgentConfig {
                     } else if ("data-agent".equals(agentId)) {
                         b.middleware(
                                 new WrenScopedToolkitMiddleware(
-                                        wrenQueryAccess,
-                                        wrenQueryGateway,
-                                        wrenPublishedProject,
-                                        mdlCatalog,
-                                        windowPolicy));
+                                                wrenQueryAccess,
+                                                wrenQueryGateway,
+                                                wrenPublishedProject,
+                                                mdlCatalog,
+                                                windowPolicy)
+                                        .withDataFiles(
+                                                new io.agentscope.dataagent.tools.data
+                                                        .QueryDataFiles(
+                                                        new io.agentscope.harness.agent.filesystem
+                                                                .sandbox.SandboxBackedFilesystem(),
+                                                        artifactStore.getIfAvailable())));
                         b.middleware(
                                 new io.agentscope.dataagent.runtime.session
                                         .WrenQueryContextMiddleware(
                                         wrenQueryAccess,
                                         windowPolicy,
                                         wrenPublishedProject::publishedRoot));
+                        b.middleware(
+                                new io.agentscope.dataagent.runtime.session
+                                        .AnalysisSkillMiddleware());
                     } else {
                         b.middleware(
                                 new DataDynamicContextMiddleware(
@@ -725,6 +740,26 @@ public class DataAgentConfig {
 
     /** Querying answers with the official usage skill only. */
     static final List<String> QUERY_SKILLS = List.of("usage");
+
+    /**
+     * spec102: the built-in analysis skills sit beside the official usage skill on the query agent
+     * only. They are copied from the classpath on every start, so the mounted text always matches
+     * this build; the allowlist keeps every other skill off as before.
+     */
+    private static void mountAnalysisSkills(
+            io.agentscope.harness.agent.HarnessAgent.Builder b, boolean wrenMounted) {
+        Path dir =
+                io.agentscope.dataagent.tools.data.AnalysisSkills.materialize(
+                        DataAgentBootstrap.DEFAULT_WORKSPACE_ROOT.resolveSibling(
+                                "analysis-skills"));
+        if (dir == null) return;
+        b.skillRepository(new FileSystemSkillRepository(dir, false));
+        List<String> allowed = new java.util.ArrayList<>();
+        if (wrenMounted) allowed.addAll(QUERY_SKILLS);
+        allowed.addAll(io.agentscope.dataagent.tools.data.AnalysisSkills.IDS);
+        b.skillFilter(SkillFilter.only(allowed.toArray(String[]::new)));
+        log.info("Mounted analysis skills from {} (allowlist: {})", dir, allowed);
+    }
 
     /** Modeling enriches a platform-created project; it never initializes one or needs usage. */
     static final List<String> MODELING_SKILLS = List.of("generate-mdl", "enrich-context");

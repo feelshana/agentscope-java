@@ -71,7 +71,11 @@ public class DraftReviewController {
             String condition,
             String original,
             String text,
-            boolean delete) {}
+            Boolean delete) {
+        boolean deleting() {
+            return Boolean.TRUE.equals(delete);
+        }
+    }
 
     public record Resolve(List<ModelingConfirmationService.Answer> answers) {}
 
@@ -109,7 +113,7 @@ public class DraftReviewController {
                         throw new DatasetException("请提供要修改的条目", 400);
                     return switch (body.category()) {
                         case "MODEL" -> {
-                            if (body.delete()) throw new DatasetException("模型只能编辑，不能删除", 400);
+                            if (body.deleting()) throw new DatasetException("模型只能编辑，不能删除", 400);
                             yield items.updateModel(
                                     user,
                                     groupId,
@@ -124,14 +128,14 @@ public class DraftReviewController {
                                         body.name(),
                                         body.joinType(),
                                         body.condition(),
-                                        body.delete());
+                                        body.deleting());
                         case "SEMANTIC", "NOTE" ->
                                 items.updateBullet(
                                         user,
                                         groupId,
                                         body.path(),
                                         body.original(),
-                                        body.delete() ? null : body.text());
+                                        body.deleting() ? null : body.text());
                         default -> throw new DatasetException("不支持的条目类型", 400);
                     };
                 });

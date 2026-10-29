@@ -202,8 +202,7 @@ public final class WrenProjectContextMiddleware implements HarnessRuntimeMiddlew
         // 2026-10-26 log: without these facts the model spent ~45 s listing empty folders and
         // globbing for sampling files that do not exist.
         java.util.List<String> empty = new java.util.ArrayList<>();
-        for (String dir :
-                java.util.List.of("rules", "caveats", "glossary", "metrics", "sql", "questions"))
+        for (String dir : java.util.List.of("rules", "glossary", "metrics", "sql", "questions"))
             if (files.stream().noneMatch(f -> f.startsWith("knowledge/" + dir + "/")))
                 empty.add("knowledge/" + dir);
         boolean documents = files.stream().anyMatch(f -> f.startsWith("raw/docs/"));

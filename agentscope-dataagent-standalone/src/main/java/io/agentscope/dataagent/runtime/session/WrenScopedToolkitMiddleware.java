@@ -32,6 +32,14 @@ public final class WrenScopedToolkitMiddleware implements HarnessRuntimeMiddlewa
     private final WrenPublishedProject projects;
     private final MdlCatalog mdlCatalog;
     private final FactQueryWindowPolicy windowPolicy;
+    private io.agentscope.dataagent.tools.data.QueryDataFiles dataFiles;
+
+    /** spec096: official query results also hand their rows to {@code run_python} as a CSV. */
+    public WrenScopedToolkitMiddleware withDataFiles(
+            io.agentscope.dataagent.tools.data.QueryDataFiles files) {
+        this.dataFiles = files;
+        return this;
+    }
 
     public WrenScopedToolkitMiddleware(
             WrenQueryAccess access,
@@ -139,7 +147,14 @@ public final class WrenScopedToolkitMiddleware implements HarnessRuntimeMiddlewa
         access.resolve(context, groupId);
         WrenScopedMcpClient client =
                 new WrenScopedMcpClient(
-                        context, groupId, access, gateway, projects, mdlCatalog, windowPolicy);
+                                context,
+                                groupId,
+                                access,
+                                gateway,
+                                projects,
+                                mdlCatalog,
+                                windowPolicy)
+                        .withDataFiles(dataFiles);
         // Only the official tools: the shared tools stay on the agent's own toolkit.
         Toolkit toolkit = new Toolkit();
         toolkit.registerMcpClient(client).block();

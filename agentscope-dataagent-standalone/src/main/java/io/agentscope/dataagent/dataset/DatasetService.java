@@ -33,8 +33,6 @@ import io.agentscope.dataagent.web.persistence.jpa.DatasetRepository;
 import io.agentscope.dataagent.web.persistence.jpa.ExternalDataSourceEntity;
 import io.agentscope.dataagent.web.persistence.jpa.ExternalDataSourceRepository;
 import io.agentscope.dataagent.web.persistence.jpa.SemanticBusinessRuleRepository;
-import io.agentscope.dataagent.web.persistence.jpa.SemanticTermEntity;
-import io.agentscope.dataagent.web.persistence.jpa.SemanticTermRepository;
 import io.agentscope.dataagent.web.persistence.jpa.SemanticViewRepository;
 import jakarta.annotation.PostConstruct;
 import java.io.InputStream;
@@ -72,7 +70,6 @@ public class DatasetService implements DatasetContextProvider {
     private final DatasetRepository repository;
     private final DatasetGroupRepository groupRepository;
     private final DatasetKnowledgeRepository knowledgeRepository;
-    private final SemanticTermRepository semanticTerms;
     private final SemanticViewRepository semanticViews;
     private final SemanticBusinessRuleRepository semanticBusinessRules;
     private final ExternalDataSourceRepository externalSources;
@@ -91,7 +88,6 @@ public class DatasetService implements DatasetContextProvider {
             DatasetRepository repository,
             DatasetGroupRepository groupRepository,
             DatasetKnowledgeRepository knowledgeRepository,
-            SemanticTermRepository semanticTerms,
             SemanticViewRepository semanticViews,
             SemanticBusinessRuleRepository semanticBusinessRules,
             ExternalDataSourceRepository externalSources,
@@ -108,7 +104,6 @@ public class DatasetService implements DatasetContextProvider {
         this.repository = repository;
         this.groupRepository = groupRepository;
         this.knowledgeRepository = knowledgeRepository;
-        this.semanticTerms = semanticTerms;
         this.semanticViews = semanticViews;
         this.semanticBusinessRules = semanticBusinessRules;
         this.externalSources = externalSources;
@@ -838,34 +833,6 @@ public class DatasetService implements DatasetContextProvider {
     }
 
     @Override
-    public String semanticTermsText(java.util.List<String> onlyGroups) {
-        // specs/026: terms bind to one knowledge base. Without an explicit group boundary we
-        // render nothing, so another tenant's terms can never leak into the prompt.
-        if (onlyGroups == null || onlyGroups.isEmpty()) {
-            return "";
-        }
-        StringBuilder sb = new StringBuilder();
-        for (String gid : new java.util.LinkedHashSet<>(onlyGroups)) {
-            if (gid == null || gid.isBlank()) {
-                continue;
-            }
-            for (SemanticTermEntity t : semanticTerms.findByGroupIdOrderByCreatedAtDesc(gid)) {
-                if (sb.length() > 0) {
-                    sb.append('\n');
-                }
-                sb.append(t.getTerm());
-                if (t.getExplanation() != null && !t.getExplanation().isBlank()) {
-                    sb.append("：").append(t.getExplanation());
-                }
-                if (t.getSynonyms() != null && !t.getSynonyms().isBlank()) {
-                    sb.append("（同义词：").append(t.getSynonyms().replace("\n", ",")).append("）");
-                }
-            }
-        }
-        return sb.toString();
-    }
-
-    @Override
     public String semanticViewsText(java.util.List<String> onlyGroups) {
         // specs/019 §7: views live as workspace files now. Without an explicit group boundary we
         // render nothing, so another tenant's workspace can never leak into the prompt.
@@ -1176,7 +1143,6 @@ public class DatasetService implements DatasetContextProvider {
             DatasetRepository repository,
             DatasetGroupRepository groupRepository,
             DatasetKnowledgeRepository knowledgeRepository,
-            SemanticTermRepository semanticTerms,
             SemanticViewRepository semanticViews,
             SemanticBusinessRuleRepository semanticBusinessRules,
             ExternalDataSourceRepository externalSources,
@@ -1196,7 +1162,6 @@ public class DatasetService implements DatasetContextProvider {
                 repository,
                 groupRepository,
                 knowledgeRepository,
-                semanticTerms,
                 semanticViews,
                 semanticBusinessRules,
                 externalSources,

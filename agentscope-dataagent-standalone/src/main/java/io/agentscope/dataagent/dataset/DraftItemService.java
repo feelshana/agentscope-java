@@ -201,6 +201,49 @@ public class DraftItemService {
                 });
     }
 
+    /**
+     * Appends one bullet under {@code ## heading} of a Markdown knowledge file, creating the file
+     * or the section when missing (spec100 business terms).
+     */
+    public void appendBullet(
+            String userId, String groupId, String path, String heading, String text) {
+        if (path == null || !path.matches("knowledge/(rules|caveats|glossary|metrics)/[^/]+\\.md"))
+            throw new DatasetException("只能修改业务语义或注意事项的条目", 400);
+        if (text == null || text.isBlank()) throw new DatasetException("条目内容不能为空", 400);
+        List<String> bullet = new ArrayList<>();
+        String[] parts = text.trim().split("\n");
+        bullet.add("- " + parts[0]);
+        for (int k = 1; k < parts.length; k++) bullet.add("  " + parts[k].trim());
+        mutate(
+                userId,
+                groupId,
+                path,
+                content -> {
+                    String title = "## " + heading;
+                    if (content == null || content.isBlank())
+                        return title + "\n\n" + String.join("\n", bullet) + "\n";
+                    List<String> lines = new ArrayList<>(List.of(content.split("\n", -1)));
+                    int start = -1;
+                    for (int i = 0; i < lines.size(); i++)
+                        if (lines.get(i).strip().equals(title)) start = i;
+                    if (start < 0) {
+                        String body = content.endsWith("\n") ? content : content + "\n";
+                        return body + "\n" + title + "\n\n" + String.join("\n", bullet) + "\n";
+                    }
+                    int end = lines.size();
+                    for (int i = start + 1; i < lines.size(); i++)
+                        if (lines.get(i).startsWith("#")) {
+                            end = i;
+                            break;
+                        }
+                    int at = end;
+                    while (at > start + 1 && lines.get(at - 1).isBlank()) at--;
+                    if (at == start + 1) lines.add(at++, "");
+                    lines.addAll(at, bullet);
+                    return String.join("\n", lines);
+                });
+    }
+
     private interface Change {
         String apply(String content) throws IOException;
     }
@@ -211,6 +254,8 @@ public class DraftItemService {
         workspace.withWorkspaceLock(
                 groupId,
                 () -> {
+                    // Re-check after waiting for the lock: access may have been revoked meanwhile.
+                    groups.getGroup(userId, groupId);
                     Path file = workspace.resolveWritable(groupId, path);
                     try {
                         String next = change.apply(read(file));
@@ -430,15 +475,15 @@ public class DraftItemService {
         return out;
     }
 
-    private static boolean isBullet(String line) {
+    static boolean isBullet(String line) {
         return line.startsWith("- ") || line.startsWith("* ");
     }
 
-    private static boolean isContinuation(String line) {
+    static boolean isContinuation(String line) {
         return line.startsWith("  ") && !line.isBlank();
     }
 
-    private static String bulletText(List<String> lines) {
+    static String bulletText(List<String> lines) {
         StringBuilder text = new StringBuilder(lines.get(0).substring(2).trim());
         for (int i = 1; i < lines.size(); i++) text.append('\n').append(lines.get(i).trim());
         return text.toString();

@@ -40,8 +40,8 @@ class ProjectFilesContextTest {
         // 2026-10-26: say which folders are empty and that no sampling file exists, so the
         // assistant stops listing folders and globbing for them.
         assertThat(text)
-                .contains("空目录（无需查看）：knowledge/caveats、knowledge/glossary", "没有单独的采样文件")
-                .doesNotContain("knowledge/rules、");
+                .contains("空目录（无需查看）：knowledge/glossary", "没有单独的采样文件")
+                .doesNotContain("knowledge/rules、", "knowledge/caveats");
         Files.delete(root.resolve("raw/docs/业务规则.md"));
         assertThat(WrenProjectContextMiddleware.projectFiles(root)).contains("没有业务文档");
         assertThat(WrenProjectContextMiddleware.projectFiles(root.resolve("missing"))).isEmpty();

@@ -4,8 +4,10 @@ import { messagePage } from '../api/sessions';
 import Icon from './Icon';
 import './AnswerFeedback.css';
 
-export default function AnswerFeedback({ agentId, session, answerId, text }: {
+export default function AnswerFeedback({ agentId, session, answerId, text, analysis = false }: {
   agentId: string; session: string; answerId?: string; text: string;
+  /** spec102: analysis answers record feedback only; their queries never become examples. */
+  analysis?: boolean;
 }) {
   const [resolved, setResolved] = useState<string | null>(answerId ?? null);
   const [feedback, setFeedback] = useState<AnswerFeedbackResult | null>(null);
@@ -39,7 +41,7 @@ export default function AnswerFeedback({ agentId, session, answerId, text }: {
       <span className="answer-feedback-label">评价回答</span>
       <div className="answer-feedback-actions">
         <button type="button" className="answer-feedback-vote" disabled={busy || !resolved}
-          aria-pressed={feedback?.vote === 'UP'} title="确认口径和结果正确；成功查询将保存为后续问数的参考样例"
+          aria-pressed={feedback?.vote === 'UP'} title={analysis ? "确认本次分析正确；只记录反馈" : "确认口径和结果正确；成功查询将保存为后续问数的参考样例"}
           onClick={() => void submit('UP')}><Icon name="thumbsUp" size="sm" /><span>{feedback?.vote === 'UP' ? '已确认正确' : '正确'}</span></button>
         <button type="button" className="answer-feedback-vote" disabled={busy || !resolved}
           aria-pressed={feedback?.vote === 'DOWN'} title="反馈本次回答的口径或结果不正确"
@@ -49,7 +51,7 @@ export default function AnswerFeedback({ agentId, session, answerId, text }: {
     <p className={`answer-feedback-note${feedback?.memoryStatus === 'FAILED' ? ' is-warning' : ''}`} role="status" aria-live="polite">
       {!busy && feedback?.vote && <Icon name={feedback.memoryStatus === 'FAILED' ? 'info' : 'check'} size="sm" />}
       <span>{busy ? '正在处理反馈…' : feedback?.vote ? feedback.message
-        : '反馈可选 · 确认正确后，成功查询会保留为后续问数的参考样例。'}</span>
+        : analysis ? '反馈可选 · 分析类回答只记录反馈，不保存为问答样例。' : '反馈可选 · 确认正确后，成功查询会保留为后续问数的参考样例。'}</span>
     </p>
     {error && <div className="answer-feedback-error" role="alert"><Icon name="warn" size="sm" /><span>{error}</span><button type="button" onClick={() => setRetry(v => v + 1)}>重试</button></div>}
   </div>;

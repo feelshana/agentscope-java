@@ -47,9 +47,9 @@ const AUTO_MODELING_REQUEST = '请加载官方 Wren 技能，按官方 Auto-pilo
   + '业务文档位于 raw/docs/（只读，可能没有）。完成校验后按回复写法简短说明（不列文件与命令）；修改进入草稿，由我在对话中查看后统一发布。';
 /** spec092: sent automatically after documents change; the assistant reconciles, never regenerates. */
 const documentRequest = (changes: string[]) => `业务文档有变化：${changes.join('；')}。文档位于 raw/docs/（只读）。`
-  + '请读取有变化的文档，与当前模型描述、knowledge/rules 和 knowledge/caveats 对比后更新：文档写清楚的指标定义、默认过滤、术语直接写入 knowledge/rules/（注明来源文档），'
+  + '请读取有变化的文档，与当前模型描述和 knowledge/rules 对比后更新：文档写清楚的指标定义、默认过滤、术语直接写入 knowledge/rules/（注明来源文档），'
   + '字段含义写入对应模型的列描述，不要向我确认；只有文档有歧义、且不同理解会改变统计结果时，才用 request_user_confirmation 提问。'
-  + '文档被删除时，把可能来自该文档的规则改为待确认说明写入 knowledge/caveats/。不要重新生成模型，不要重新加载已加载的技能，不要写 Cube/View。'
+  + '文档被删除时，不要自行删除规则，在回复中列出可能来自该文档的规则，由我决定是否删除。不要重新生成模型，不要重新加载已加载的技能，不要写 Cube/View。'
   + '只修改与文档有差异的内容，完成后执行校验，按回复写法简短说明。';
 /** spec092: hands the user's answers to the assistant to write where queries read them. */
 const confirmRequest = (decisions: ConfirmationDecision[]) => '我确定了以下口径，请整理后写入草稿：指标定义、默认过滤、术语写入 knowledge/rules/，'
@@ -60,7 +60,7 @@ const confirmRequest = (decisions: ConfirmationDecision[]) => '我确定了以�
 const remodelRequest = (c: FieldAdjustment) => `建模人员调整了表 ${c.table} 的字段：`
   + (c.added.length ? `新纳入 ${c.added.join('、')}；` : '') + (c.removed.length ? `取消纳入 ${c.removed.join('、')}；` : '')
   + (c.described.length ? `改写了 ${c.described.join('、')} 的说明；` : '')
-  + `草稿模型已按此更新。请只处理这张表：为新纳入且没有说明的字段补充列描述；检查 knowledge/rules、relationships.yml 与 knowledge/questions 中引用被取消字段的内容并修正，无法修正的写入 knowledge/caveats 说明；`
+  + `草稿模型已按此更新。请只处理这张表：为新纳入且没有说明的字段补充列描述；检查 knowledge/rules、relationships.yml 与 knowledge/questions 中引用被取消字段的内容并修正，无法修正的在回复中列出；`
   + '不要修改带 description_source: user 的说明，不要改动其他表。完成后执行校验，按回复写法简短说明。';
 
 /** Short texts the conversation shows for the requests above. */
@@ -201,7 +201,7 @@ export default function SemanticModelingPage() {
     key: v.name, title: v.name, subtitle: v.description || undefined, file: v.path, dirty: dirty(v.path),
   })) : asset === 'cubes' ? (view?.cubes || []).map(c => ({
     key: c.name, title: c.name, subtitle: `${c.baseModel} · ${c.measures.length} 个指标`, file: c.path, dirty: dirty(c.path),
-  })) : files.filter(f => f.path.startsWith('knowledge/')).map(f => ({ key: f.path, title: f.path, file: f.path, dirty: dirty(f.path) }));
+  })) : files.filter(f => f.path.startsWith('knowledge/') && !f.path.endsWith('/.gitkeep')).map(f => ({ key: f.path, title: f.path, file: f.path, dirty: dirty(f.path) }));
   const selected = params.get('selected') || entries[0]?.key || null;
   const waiting = pending.length;
   const assistantLabel = assistantState !== 'idle' ? (waiting ? `助手运行中 · ${waiting} 个请求排队` : '助手运行中')

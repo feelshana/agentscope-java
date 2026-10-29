@@ -62,7 +62,8 @@ public class DocEnhanceService {
 
     private static final Logger log = LoggerFactory.getLogger(DocEnhanceService.class);
     private static final Set<String> TYPES =
-            Set.of("TERM", "BUSINESS_RULE", "RELATIONSHIP", "VIEW", "MANUAL_FIX");
+            // Business terms are edited as the project's Naming conventions (spec100).
+            Set.of("BUSINESS_RULE", "RELATIONSHIP", "VIEW", "MANUAL_FIX");
     private static final Set<String> CLASSIFICATIONS = Set.of("NEW", "PARTIAL", "CONFLICT");
     private static final Set<String> CONFIDENCES = Set.of("HIGH", "MEDIUM", "LOW");
 
@@ -295,14 +296,6 @@ public class DocEnhanceService {
     private boolean applyProposal(
             String ownerId, String groupId, DocEnhanceProposalEntity proposal, JsonNode payload) {
         return switch (proposal.getProposalType()) {
-            case "TERM" -> {
-                modelingService.createTerm(
-                        groupId,
-                        text(payload, "term"),
-                        text(payload, "explanation"),
-                        nullableText(payload, "synonyms"));
-                yield false;
-            }
             case "BUSINESS_RULE" -> {
                 createBusinessRule(
                         ownerId,
@@ -498,10 +491,6 @@ public class DocEnhanceService {
         ObjectNode p = ((ObjectNode) raw).deepCopy();
         try {
             switch (type) {
-                case "TERM" -> {
-                    required(text(p, "term"), 30, "术语");
-                    required(text(p, "explanation"), 100, "术语解释");
-                }
                 case "BUSINESS_RULE" -> {
                     required(text(p, "name"), 100, "规则名称");
                     required(text(p, "content"), 2000, "规则内容");
@@ -610,16 +599,6 @@ public class DocEnhanceService {
                                         .append(" SQL=")
                                         .append(v.getSqlText())
                                         .append('\n'));
-        sb.append("\n# 当前术语\n");
-        modelingService
-                .listTerms(task.getGroupId())
-                .forEach(
-                        t ->
-                                sb.append("- ")
-                                        .append(t.getTerm())
-                                        .append(": ")
-                                        .append(t.getExplanation())
-                                        .append('\n'));
         sb.append("\n# 当前业务规则\n");
         ruleRepository
                 .findByOwnerIdAndGroupIdOrderByCreatedAtAsc(task.getOwnerId(), task.getGroupId())
@@ -634,9 +613,9 @@ public class DocEnhanceService {
                 .append(trim(sourceText, 20000))
                 .append("\n\n")
                 .append(
-                        "仅输出：{\"proposals\":[{\"type\":\"TERM|BUSINESS_RULE|RELATIONSHIP|VIEW|MANUAL_FIX\",\"classification\":\"NEW|PARTIAL|CONFLICT|COVERED\",\"title\":\"短标题\",\"summary\":\"自包含说明\",\"payload\":{},\"source_quote\":\"原文\",\"confidence\":\"HIGH|MEDIUM|LOW\"}]}\n")
+                        "仅输出：{\"proposals\":[{\"type\":\"BUSINESS_RULE|RELATIONSHIP|VIEW|MANUAL_FIX\",\"classification\":\"NEW|PARTIAL|CONFLICT|COVERED\",\"title\":\"短标题\",\"summary\":\"自包含说明\",\"payload\":{},\"source_quote\":\"原文\",\"confidence\":\"HIGH|MEDIUM|LOW\"}]}\n")
                 .append(
-                        "TERM payload={term,explanation,synonyms}; BUSINESS_RULE={name,content};"
+                        "BUSINESS_RULE payload={name,content};"
                             + " RELATIONSHIP={sourceDatasetId,sourceColumns,targetDatasetId,targetColumns,joinType};"
                             + " VIEW={name,baseDatasetId,sqlText,description}。");
         return sb.toString();

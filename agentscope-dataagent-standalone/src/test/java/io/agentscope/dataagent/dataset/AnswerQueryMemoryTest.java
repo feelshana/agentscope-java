@@ -98,6 +98,34 @@ class AnswerQueryMemoryTest {
                 new TurnEntry("a", null, "ASSISTANT", "查询结果", 1, null, null, null));
     }
 
+    /** spec102: analysis answers are feedback only; their queries never become examples. */
+    @Test
+    void officialAnalysisQueriesAreNeverSavedAsExamples() throws Exception {
+        var service = service(new ArrayList<>());
+        java.util.function.Function<String, List<TurnEntry>> turns =
+                type -> {
+                    try {
+                        return List.of(
+                                new TurnEntry("u", null, "USER", "全年营收是多少", 1, null, null, null),
+                                new TurnEntry(
+                                        "r",
+                                        null,
+                                        "TOOL",
+                                        null,
+                                        1,
+                                        "run_sql",
+                                        "{\"sql\":\"SELECT 1\"}",
+                                        receipt("g", "SELECT 1", type),
+                                        "c1"),
+                                new TurnEntry("a", null, "ASSISTANT", "结果", 1, null, null, null));
+                    } catch (Exception e) {
+                        throw new IllegalStateException(e);
+                    }
+                };
+        assertEquals(1, service.candidates("alice", "a", turns.apply("BUSINESS")).size());
+        assertTrue(service.candidates("alice", "a", turns.apply("ANALYSIS")).isEmpty());
+    }
+
     @Test
     void missingResultIdFindsTheMatchingSqlAmongRepeatedQuestions() throws Exception {
         var service = service(new ArrayList<>());

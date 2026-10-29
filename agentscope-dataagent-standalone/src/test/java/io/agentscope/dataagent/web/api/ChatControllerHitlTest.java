@@ -110,6 +110,37 @@ class ChatControllerHitlTest {
     }
 
     @Test
+    void streamingEntryBindsConfirmedAnalysisAndClearsItOnTheNextOrdinaryTurn() {
+        when(modelProvider.getIfAvailable()).thenReturn(null);
+        var capture =
+                org.mockito.ArgumentCaptor.forClass(
+                        io.agentscope.dataagent.tools.data.AnalysisTurn.class);
+        var confirmed =
+                new ChatController.ChatRequest(
+                        "未来七天趋势",
+                        "conversation",
+                        List.of("g1"),
+                        false,
+                        null,
+                        "forecast",
+                        Map.of("horizon", 7, "metric", "次数"));
+        controller.stream("data-agent", confirmed, authentication)
+                .collectList()
+                .block(java.time.Duration.ofSeconds(5));
+        verify(conversationScopes).putAnalysis(eq("alice"), eq("conversation"), capture.capture());
+        assertThat(capture.getValue().method()).isEqualTo("forecast");
+        assertThat(capture.getValue().confirmedParams()).contains("horizon", "7", "次数");
+        controller.stream(
+                        "data-agent",
+                        new ChatController.ChatRequest(
+                                "普通问题", "conversation", List.of("g1"), false),
+                        authentication)
+                .collectList()
+                .block(java.time.Duration.ofSeconds(5));
+        verify(conversationScopes).putAnalysis("alice", "conversation", null);
+    }
+
+    @Test
     void ordinaryChatDoesNotExpandToUserKnowledgeBases() {
         assertThat(controller.resolveGroupScope("alice", "data-agent", "plain", null, false))
                 .isEmpty();

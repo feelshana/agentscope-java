@@ -30,7 +30,6 @@ import io.agentscope.dataagent.web.persistence.jpa.DatasetRelationRepository;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetRepository;
 import io.agentscope.dataagent.web.persistence.jpa.ExternalDataSourceRepository;
 import io.agentscope.dataagent.web.persistence.jpa.SemanticBusinessRuleRepository;
-import io.agentscope.dataagent.web.persistence.jpa.SemanticTermRepository;
 import io.agentscope.dataagent.web.persistence.jpa.SemanticViewRepository;
 import java.io.ByteArrayInputStream;
 import java.util.List;
@@ -59,7 +58,6 @@ class DatasetImportRollbackTest {
                         repository,
                         mock(DatasetGroupRepository.class),
                         mock(DatasetKnowledgeRepository.class),
-                        mock(SemanticTermRepository.class),
                         mock(SemanticViewRepository.class),
                         mock(SemanticBusinessRuleRepository.class),
                         mock(ExternalDataSourceRepository.class),

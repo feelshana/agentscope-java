@@ -109,7 +109,30 @@ public class DatasetGroupEntity {
         publicQuery = value;
     }
 
+    /**
+     * spec103: the default question the query page prefills for this knowledge base, generated in
+     * the background after each publish; null until generated.
+     */
+    @Column(name = "recommended_question", length = 500)
+    private String recommendedQuestion;
+
+    /** spec098: true once the modeler edited the question; generation never overwrites it then. */
+    @Column(name = "recommended_question_manual")
+    private Boolean recommendedQuestionManual;
+
     public DatasetGroupEntity() {}
+
+    public boolean isRecommendedQuestionManual() {
+        return Boolean.TRUE.equals(recommendedQuestionManual);
+    }
+
+    public String getRecommendedQuestion() {
+        return recommendedQuestion;
+    }
+
+    public void setRecommendedQuestion(String recommendedQuestion) {
+        this.recommendedQuestion = recommendedQuestion;
+    }
 
     public DatasetGroupEntity(String id, String ownerId, String name, String description) {
         this.id = id;

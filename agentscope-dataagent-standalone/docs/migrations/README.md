@@ -7,7 +7,7 @@
 ## 首次安装：空平台库
 
 1. DBA 在目标 MySQL 建立两个逻辑库和应用账号，分别授予平台表读写、上传库建表及数据读写权限；连接变量见[单机发布手册](../guides/single-host-release.md)。
-2. 在**空平台库**执行 [0000-initial-platform-mysql.sql](0000-initial-platform-mysql.sql)。该文件为 2026-10-26 合并候选在隔离空库生成的 37 张表结构，不包含用户、业务数据或凭据；不是增量升级脚本，不重复执行。
+2. 在**空平台库**执行 [0000-initial-platform-mysql.sql](0000-initial-platform-mysql.sql)。该文件最初为 2026-10-26 合并候选在隔离空库生成的 37 张表结构；2026-10-30 补入推荐问题两字段，仍保留旧术语表，不包含用户、业务数据或凭据；不是增量升级脚本，不重复执行。
 3. 配置 `DATAAGENT_SQL_INIT_MODE=never`、`DATAAGENT_JPA_DDL_AUTO=validate`，启动同一版本程序校验。已在独立 MySQL 空库应用此 SQL 并以 `validate` 完整启动验证；生产数据库版本、权限与备份仍需现场核对。
 4. 可在启动前执行单独交付的BI人员SQL并为指定账号赋权；也可先由BI首次免登创建普通用户，再按[新账号接入说明](../integration/bi-account-production.md)准备管理员并通过接口导入。没有预置生产管理员或演示账号；已有页面须从BI入口重新进入取得新角色。
 
@@ -32,3 +32,10 @@
 ## BI目录与公共库（ADR0116）
 
 已有平台库在启动新版本前一次执行[0116迁移](0116-bi-directory-public-knowledge-mysql.sql)，增加用户资料及public_query。空库执行更新后的[0000完整DDL](0000-initial-platform-mysql.sql)，不再叠加0116。上传库无需执行平台DDL。管理员首登后通过SQL赋权并重新进入，再按[导入说明](../integration/bi-account-production.md)运行预览/导入。此流程不会导入BI密码。
+
+## 2026-10-30 同事新增能力整合
+
+- 已有库在升级应用前先检查 `dataagent_dataset_group` 的 `recommended_question`（VARCHAR(500)）和 `recommended_question_manual`（BIT(1)），只对缺少的列执行[0097](0097-recommended-question-mysql.sql)中的对应 ALTER。两个字段都存在时跳过，不重复执行 ALTER。
+- 空库使用本目录更新后的完整DDL，不叠加0097；表数仍为37，其中包含不再被应用读取的旧 `dataagent_semantic_term`。
+- 用户确认保留旧术语表及数据，暂不迁移测试术语。[0096](0096-retire-semantic-term-mysql.sql)现为停用说明，不执行删除；新页面仅显示每库工程的 Naming conventions。
+- `ddl-auto=validate` 不会自动加列；66当前运行旧镜像，本轮只修改本地代码/材料，未对66执行SQL或升级镜像。

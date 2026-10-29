@@ -184,7 +184,6 @@ class SemanticModelingControllerTest {
         when(modelingService.listRelations("gA")).thenReturn(List.of());
         when(modelingService.listCubes("gA")).thenReturn(List.of());
         when(modelingService.listViews("gA")).thenReturn(List.of());
-        when(modelingService.listTerms("gA")).thenReturn(List.of());
 
         SemanticModelingController.OverviewVO vo = controller.overview("gA", alice).block();
 
@@ -333,7 +332,6 @@ class SemanticModelingControllerTest {
         when(groupService.listDatasets("alice", "gA")).thenReturn(List.of());
         when(modelingService.listRelations("gA")).thenReturn(List.of());
         when(modelingService.listViews("gA")).thenReturn(List.of());
-        when(modelingService.listTerms("gA")).thenReturn(List.of());
         SemanticCubeEntity cube = new SemanticCubeEntity("c1", "gA", "销售额", "ds_orders", "销售指标");
         cube.setMeasuresJson(
                 """
@@ -386,7 +384,6 @@ class SemanticModelingControllerTest {
         when(groupService.listDatasets("alice", "gA")).thenReturn(List.of());
         when(modelingService.listRelations("gA")).thenReturn(List.of());
         when(modelingService.listViews("gA")).thenReturn(List.of());
-        when(modelingService.listTerms("gA")).thenReturn(List.of());
         SemanticCubeEntity cube = new SemanticCubeEntity("c1", "gA", "销售额", "ds_orders", null);
         cube.setMeasuresJson(json);
         cube.setDimensionsJson(json);

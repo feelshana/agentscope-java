@@ -158,6 +158,35 @@ public class TableProvisioner {
         }
     }
 
+    /**
+     * spec098: earliest and latest day of an uploaded table's time column, as {@code yyyy-MM-dd}.
+     * {@code expression} comes from {@link TemporalCondition#sortable} over a backtick-quoted
+     * column. Read-only and best-effort: returns null when the table is empty or unreadable.
+     */
+    public String[] dateRange(String table, String expression) {
+        if (table == null || !table.matches("[A-Za-z0-9_]{1,128}") || expression == null)
+            return null;
+        String sql =
+                "SELECT DATE_FORMAT(MIN("
+                        + expression
+                        + "), '%Y-%m-%d'), DATE_FORMAT(MAX("
+                        + expression
+                        + "), '%Y-%m-%d') FROM `"
+                        + table
+                        + "`";
+        try (Connection c = connect();
+                Statement st = c.createStatement()) {
+            st.setQueryTimeout(30);
+            try (var rs = st.executeQuery(sql)) {
+                if (!rs.next() || rs.getString(1) == null || rs.getString(2) == null) return null;
+                return new String[] {rs.getString(1), rs.getString(2)};
+            }
+        } catch (SQLException e) {
+            log.warn("Date range of dataset table {} unavailable: {}", table, e.getMessage());
+            return null;
+        }
+    }
+
     public void dropTable(String table) {
         String sql = "DROP TABLE IF EXISTS `" + table + "`";
         try (Connection c = connect();

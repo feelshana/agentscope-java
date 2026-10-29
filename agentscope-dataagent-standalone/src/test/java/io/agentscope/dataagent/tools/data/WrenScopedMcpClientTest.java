@@ -260,6 +260,113 @@ class WrenScopedMcpClientTest {
                 .isEqualTo("B error");
     }
 
+    /** spec102: no query before the user confirms the card; analysis receipts are not examples. */
+    @Test
+    void analysisTurnsQueryOnlyAfterConfirmationAndAreReceiptedAsAnalysis() {
+        grant("alice", "a");
+        var args = Map.<String, Object>of("sql", "SELECT 1");
+        when(gateway.call("a", "run_sql", args))
+                .thenReturn(new WrenQueryGateway.WrenCallResult(true, "{\"rows\":[[1]]}"));
+
+        RuntimeContext pending = mock(RuntimeContext.class);
+        when(pending.getUserId()).thenReturn("alice");
+        when(pending.get(DatasetScope.class)).thenReturn(new DatasetScope("alice", List.of("a")));
+        when(pending.get(AnalysisTurn.class)).thenReturn(new AnalysisTurn("attribution", null));
+        var refused = new WrenScopedMcpClient(pending, "a", access, gateway, projects);
+        assertThatThrownBy(() -> refused.callTool("run_sql", args).block())
+                .isInstanceOf(DatasetException.class)
+                .hasMessageContaining("用户确认参数前不执行查询");
+        verify(gateway, never()).call("a", "run_sql", args);
+
+        RuntimeContext confirmed = mock(RuntimeContext.class);
+        when(confirmed.getUserId()).thenReturn("alice");
+        when(confirmed.get(DatasetScope.class)).thenReturn(new DatasetScope("alice", List.of("a")));
+        when(confirmed.get(AnalysisTurn.class))
+                .thenReturn(new AnalysisTurn("attribution", "{\"metric\":\"x\"}"));
+        String text =
+                ((McpSchema.TextContent)
+                                new WrenScopedMcpClient(confirmed, "a", access, gateway, projects)
+                                        .callTool("run_sql", args)
+                                        .block()
+                                        .content()
+                                        .get(0))
+                        .text();
+        assertThat(text).contains("\"queryType\":\"ANALYSIS\"");
+        when(gateway.call("a", "run_sql", Map.of("sql", "SELECT 2")))
+                .thenReturn(new WrenQueryGateway.WrenCallResult(true, "{\"rows\":[[2]]}"));
+        assertThat(
+                        ((McpSchema.TextContent)
+                                        client("alice", "a")
+                                                .callTool("run_sql", Map.of("sql", "SELECT 2"))
+                                                .block()
+                                                .content()
+                                                .get(0))
+                                .text())
+                .doesNotContain("ANALYSIS");
+    }
+
+    /** spec096: official query rows reach run_python as a session CSV; the receipt stays first. */
+    @Test
+    void successfulQueryHandsRowsToPythonAsADataFile() {
+        grant("alice", "a");
+        var fs =
+                mock(
+                        io.agentscope.harness.agent.filesystem.sandbox.AbstractSandboxFilesystem
+                                .class);
+        List<String> paths = new java.util.ArrayList<>();
+        List<String> contents = new java.util.ArrayList<>();
+        when(fs.uploadFiles(any(), any()))
+                .thenAnswer(
+                        invocation -> {
+                            for (Object entry : (List<?>) invocation.getArgument(1)) {
+                                @SuppressWarnings("unchecked")
+                                Map.Entry<String, byte[]> file = (Map.Entry<String, byte[]>) entry;
+                                paths.add(file.getKey());
+                                contents.add(
+                                        new String(
+                                                file.getValue(),
+                                                java.nio.charset.StandardCharsets.UTF_8));
+                            }
+                            return List.of(
+                                    io.agentscope.harness.agent.filesystem.model.FileUploadResponse
+                                            .success("uploaded"));
+                        });
+        RuntimeContext context = mock(RuntimeContext.class);
+        when(context.getUserId()).thenReturn("alice");
+        when(context.getSessionId()).thenReturn("s-1");
+        when(context.get(DatasetScope.class)).thenReturn(new DatasetScope("alice", List.of("a")));
+        var client =
+                new WrenScopedMcpClient(context, "a", access, gateway, projects)
+                        .withDataFiles(new QueryDataFiles(fs, null));
+        var args = Map.<String, Object>of("sql", "SELECT 部门, 次数 FROM t");
+        when(gateway.call("a", "run_sql", args))
+                .thenReturn(
+                        new WrenQueryGateway.WrenCallResult(
+                                true,
+                                "{\"columns\":[\"部门\",\"次数\"],\"rows\":[{\"部门\":\"市场,经营部\",\"次数\":3}]}"));
+
+        String first =
+                ((McpSchema.TextContent) client.callTool("run_sql", args).block().content().get(0))
+                        .text();
+        assertThat(first).startsWith("[WREN_QUERY_RECEIPT]").contains("**数据文件：** data/");
+        assertThat(paths).singleElement().asString().startsWith("/workspace/runpython/s-1/data/");
+        assertThat(contents).containsExactly("部门,次数\n\"市场,经营部\",3\n");
+        // A repeated identical query is served from the cache and still names the file.
+        String second =
+                ((McpSchema.TextContent) client.callTool("run_sql", args).block().content().get(0))
+                        .text();
+        assertThat(second).contains("**数据文件：** data/").doesNotContain("WREN_QUERY_RECEIPT");
+
+        var failed = Map.<String, Object>of("sql", "SELECT 2");
+        when(gateway.call("a", "run_sql", failed))
+                .thenReturn(new WrenQueryGateway.WrenCallResult(false, "boom"));
+        assertThat(
+                        ((McpSchema.TextContent)
+                                        client.callTool("run_sql", failed).block().content().get(0))
+                                .text())
+                .doesNotContain("数据文件");
+    }
+
     @Test
     void queryRowsReachTheModelAsCompactArraysWithTheSameValues() {
         String official =

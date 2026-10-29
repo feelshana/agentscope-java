@@ -341,10 +341,15 @@ class OfficialWrenToolkitTest {
         var root = access.resolve(auto).root();
         var refused = files.write(auto, "knowledge/rules/inferred.md", "- 只统计正式账号\n");
         assertThat(refused.isSuccess()).isFalse();
-        assertThat(refused.error()).contains("knowledge/caveats/");
+        assertThat(refused.error()).contains("写入相关表或列的描述").doesNotContain("caveats");
         assertThat(Files.exists(root.resolve("knowledge/rules/inferred.md"))).isFalse();
-        assertThat(files.write(auto, "knowledge/caveats/inferred.md", "待确认\n").isSuccess())
-                .isTrue();
+        // ADR0116: caveats are retired for every turn, so inference has no side channel.
+        var userTurn = RuntimeContext.builder().userId("alice").build();
+        userTurn.put(DatasetScope.class, new DatasetScope("alice", List.of("a")));
+        var caveat = files.write(userTurn, "knowledge/caveats/inferred.md", "待确认\n");
+        assertThat(caveat.isSuccess()).isFalse();
+        assertThat(caveat.error()).contains("已停用");
+        assertThat(Files.exists(root.resolve("knowledge/caveats/inferred.md"))).isFalse();
 
         // A business document grounds the rule, and the user's own chat request always may.
         Files.createDirectories(root.resolve("raw/docs"));
@@ -359,7 +364,6 @@ class OfficialWrenToolkitTest {
         assertThat(io.agentscope.dataagent.dataset.DraftChangeLog.read(root))
                 .extracting(e -> e.path() + "|" + e.source() + "|" + e.userId())
                 .containsExactly(
-                        "knowledge/caveats/inferred.md|auto|alice",
                         "knowledge/rules/inferred.md|auto|alice",
                         "knowledge/rules/user.md|chat|alice");
         // Documents are uploaded by users only; the agent cannot write them.

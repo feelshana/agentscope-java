@@ -44,7 +44,6 @@ import io.agentscope.dataagent.web.persistence.jpa.DatasetEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetRelationEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetRepository;
-import io.agentscope.dataagent.web.persistence.jpa.SemanticTermEntity;
 import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
 import java.io.IOException;
 import java.lang.reflect.Method;
@@ -1570,47 +1569,6 @@ class ModelingToolkitTest {
     }
 
     @Test
-    void listTermsRendersDictionary() {
-        when(suggestions.listTerms(GROUP))
-                .thenReturn(
-                        List.of(
-                                new SemanticTermEntity(
-                                        "t1", GROUP, "高频用户", "近30天访问次数大于30的用户", "重度用户")));
-
-        String out = toolkit.listTerms(singleGroupScope(), null, null);
-
-        assertFalse(out.startsWith("error"));
-        assertTrue(out.contains("高频用户"));
-        assertTrue(out.contains("同义：重度用户"));
-    }
-
-    @Test
-    void listTermsHandlesEmptyDictionary() {
-        when(suggestions.listTerms(GROUP)).thenReturn(List.of());
-
-        assertTrue(toolkit.listTerms(singleGroupScope(), null, null).contains("暂无"));
-    }
-
-    /** specs/026: terms bind to one KB; an unpinned conversation must be told to pass group_id. */
-    @Test
-    void listTermsRequiresResolvableGroup() {
-        String out = toolkit.listTerms(new DatasetScope(OWNER), null, null);
-
-        assertTrue(out.startsWith("error"), out);
-        assertTrue(out.contains("无法确定知识库"), out);
-        verify(suggestions, never()).listTerms(anyString());
-    }
-
-    /** specs/026: a group outside the conversation boundary must never leak its terms. */
-    @Test
-    void listTermsRejectsForeignGroup() {
-        String out = toolkit.listTerms(singleGroupScope(), null, "g2");
-
-        assertTrue(out.startsWith("error: 未知或无权访问"), out);
-        verify(suggestions, never()).listTerms(anyString());
-    }
-
-    @Test
     void listBusinessRulesReadsWorkspaceRuleFilesAndRejectsForeignGroup() throws Exception {
         seed("knowledge/rules/refund.md", "有效订单：默认排除 deleted_at 非空的订单。\n");
 
@@ -1747,7 +1705,8 @@ class ModelingToolkitTest {
             assertTrue(findMethod(name) == null, "retired tool must be gone: " + name);
         }
         // Read-only dictionary tools: M4 flipped their sources to the workspace files.
-        assertTrue(findMethod("listTerms") != null);
+        // spec100: terms are the project's Naming conventions, read with the rule files.
+        assertTrue(findMethod("listTerms") == null);
         assertTrue(findMethod("listBusinessRules") != null);
     }
 

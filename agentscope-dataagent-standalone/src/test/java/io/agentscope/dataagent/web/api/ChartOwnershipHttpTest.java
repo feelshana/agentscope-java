@@ -76,7 +76,13 @@ class ChartOwnershipHttpTest {
                         List.of("品类", "数量"),
                         List.of(List.of("甲", "1"), List.of("乙", "2")),
                         null,
-                        null);
+                        null,
+                        "bar",
+                        "品类",
+                        List.of("数量"),
+                        null,
+                        null,
+                        true);
         return new ObjectMapper().readTree(result).path("chartId").asText();
     }
 

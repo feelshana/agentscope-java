@@ -53,6 +53,15 @@ export const validateModelingQuestion = (groupId: string, id: string) =>
 /** spec091: confirmation needs no prior trial run; the server re-checks SQL policy and time window. */
 export const decideModelingQuestion = (groupId: string, id: string, accepted: boolean) =>
   request<QuestionReview>(groupId, `/${encodeURIComponent(id)}/decision`, { accepted });
+/** spec103: the knowledge base's recommended question; {@code manual} once the modeler edited it. */
+export interface RecommendedQuestion { question: string | null; manual: boolean }
+export const getRecommendedTrialQuestion = (groupId: string) =>
+  request<RecommendedQuestion>(groupId, '/recommended');
+/** Saves the modeler's own question; an empty text returns it to generation. */
+export const editRecommendedQuestion = (groupId: string, question: string) =>
+  request<RecommendedQuestion>(groupId, '/recommended', { question });
+export const regenerateRecommendedQuestion = (groupId: string) =>
+  request<RecommendedQuestion>(groupId, '/recommended/regenerate', {});
 /** Suggested question texts for prefilling the question form; empty when unavailable. */
 export const getQuestionSuggestions = (groupId: string) =>
   request<{ questions: string[] }>(groupId, '/suggestions').then(r => r.questions ?? []);

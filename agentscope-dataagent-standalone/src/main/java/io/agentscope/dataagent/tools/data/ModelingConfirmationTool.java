@@ -92,10 +92,8 @@ public final class ModelingConfirmationTool {
             if (used >= limit)
                 throw new IllegalStateException(
                         relationship
-                                ? "本轮已提出 " + limit + " 个关系问题，不再提问；其余候选关系写入 knowledge/caveats/ 说明即可"
-                                : "本轮已提出 "
-                                        + limit
-                                        + " 个口径问题，不再提问；其余不确定之处写入 knowledge/caveats/ 说明即可");
+                                ? "本轮已提出 " + limit + " 个关系问题，不再提问；其余候选关系不写入工程，在本轮回复中列出"
+                                : "本轮已提出 " + limit + " 个口径问题，不再提问；其余不确定之处不写入工程，在本轮回复中列出");
         }
     }
 

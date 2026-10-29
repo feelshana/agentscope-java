@@ -796,6 +796,48 @@ public class MdlPublishService {
                 group.getMdlPublishedAt() == null ? null : group.getMdlPublishedAt().toString());
     }
 
+    /**
+     * Plans one question SQL against the current draft, compiled in scratch, with the same
+     * dry-plan publish applies to confirmed questions. Returns null when it plans (or when the
+     * draft itself does not build, which publish validation reports), else the official error.
+     */
+    public String planDraftSql(String groupId, String sql) {
+        return workspace.withWorkspaceLock(
+                groupId,
+                () -> {
+                    try {
+                        Path scratch = workspace.copyToScratch(groupId);
+                        WrenCli.Result build =
+                                wrenCli.run(scratch, props.timeout(), List.of("context", "build"));
+                        if (!build.ok()) return null;
+                        WrenCli.Result plan =
+                                wrenCli.run(
+                                        scratch,
+                                        props.timeout(),
+                                        List.of(
+                                                "dry-plan",
+                                                "--sql",
+                                                sql,
+                                                "-d",
+                                                props.dataSource()));
+                        return plan.ok() ? null : planError(plan.output());
+                    } finally {
+                        workspace.deleteScratchQuietly(groupId);
+                    }
+                });
+    }
+
+    /** The official "Error: ..." line, skipping notes the CLI prints before it. */
+    static String planError(String output) {
+        if (output != null) {
+            for (String line : output.split("\\R")) {
+                String t = line.strip();
+                if (t.startsWith("Error")) return t.length() > 300 ? t.substring(0, 300) + "…" : t;
+            }
+        }
+        return firstLine(output);
+    }
+
     private List<MdlIssue> dryPlanConfirmedQuestions(String groupId, Path projectDir) {
         List<MdlIssue> issues = new ArrayList<>();
         for (Map.Entry<String, String> entry : questionStore.confirmedSql(groupId).entrySet()) {
@@ -810,14 +852,15 @@ public class MdlPublishService {
                                     "-d",
                                     props.dataSource()));
             if (result.ok()) continue;
-            String reason = "发布检查未通过，未进入本次发布：" + firstLine(result.output());
+            String reason = "发布检查未通过，未进入本次发布：" + planError(result.output());
             try {
                 Files.deleteIfExists(projectDir.resolve("knowledge/sql/" + entry.getKey() + ".md"));
             } catch (IOException e) {
                 throw new DatasetException("移除未通过检查的问答失败：" + e.getMessage(), e);
             }
             questionStore.revokeConfirmation(groupId, entry.getKey(), reason);
-            issues.add(issue("warning", "问题 " + entry.getKey() + " " + reason, "questions"));
+            String text = questionStore.requireQuestion(groupId, entry.getKey()).question();
+            issues.add(issue("warning", "「" + text + "」" + reason, "questions"));
         }
         return issues;
     }

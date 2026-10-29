@@ -1,0 +1,4 @@
+-- ADR0119/spec100: business terms now live in knowledge/rules/naming.md.
+-- Integration decision (2026-10-30): retain the legacy table and all rows.
+-- No DROP, data rewrite or automatic migration is required. The new UI does not read this table.
+-- This file intentionally contains no executable SQL.

@@ -1,22 +1,40 @@
 import { apiFetch, getToken } from './auth';
 
-export interface SemanticTerm {
-  id: string;
-  term: string;
+/** spec095: one Naming-conventions entry of a knowledge base, draft against the published one. */
+export type TermStatus = 'PUBLISHED' | 'ADDED' | 'MODIFIED' | 'DELETED';
+
+export interface BusinessTerm {
+  /** Null when the entry does not follow the "术语"（同义词：…）= 解释 format. */
+  term: string | null;
+  synonyms: string[];
   explanation: string | null;
-  synonyms: string | null;
+  /** The bullet text; sent back as `original` to edit or delete the entry. */
+  text: string;
+  structured: boolean;
+  status: TermStatus;
+  /** The published text of a modified or deleted entry. */
+  publishedText: string | null;
 }
 
-export interface SemanticTermRequest {
-  term: string;
-  explanation?: string;
+export interface BusinessTerms {
+  /** True with knowledge-base MANAGE: the draft is shown and can be edited. */
+  editable: boolean;
+  publishedVersion: number;
+  rows: BusinessTerm[];
+}
+
+export interface TermChange {
+  original?: string;
+  term?: string;
   synonyms?: string;
+  explanation?: string;
+  /** Free-form entry text, used for entries that are not in the structured format. */
+  text?: string;
+  delete?: boolean;
 }
 
-/** specs/026: terms bind to one knowledge base; every call is group-scoped. */
-function termsUrl(groupId: string, id?: string): string {
-  const base = `/api/groups/${encodeURIComponent(groupId)}/semantic-terms`;
-  return id ? `${base}/${encodeURIComponent(id)}` : base;
+function termsUrl(groupId: string): string {
+  return `/api/dataset-groups/${encodeURIComponent(groupId)}/terms`;
 }
 
 function jsonHeaders(): Record<string, string> {
@@ -36,43 +54,19 @@ async function errorMessage(res: Response, fallback: string): Promise<string> {
   }
 }
 
-export async function listSemanticTerms(groupId: string, signal?: AbortSignal): Promise<SemanticTerm[]> {
+export async function listBusinessTerms(groupId: string, signal?: AbortSignal): Promise<BusinessTerms> {
   const res = await apiFetch(termsUrl(groupId), { headers: jsonHeaders(), signal });
-  if (!res.ok) throw new Error(await errorMessage(res, `Failed to list terms: ${res.status}`));
+  if (!res.ok) throw new Error(await errorMessage(res, `读取业务术语失败：${res.status}`));
   return res.json();
 }
 
-export async function createSemanticTerm(
-  groupId: string,
-  req: SemanticTermRequest,
-): Promise<SemanticTerm> {
+/** Adds (no `original`), edits or deletes one entry in the draft; returns the refreshed list. */
+export async function changeBusinessTerm(groupId: string, change: TermChange): Promise<BusinessTerms> {
   const res = await apiFetch(termsUrl(groupId), {
     method: 'POST',
     headers: jsonHeaders(),
-    body: JSON.stringify(req),
+    body: JSON.stringify(change),
   });
-  if (!res.ok) throw new Error(await errorMessage(res, `Failed to create term: ${res.status}`));
+  if (!res.ok) throw new Error(await errorMessage(res, `保存业务术语失败：${res.status}`));
   return res.json();
-}
-
-export async function updateSemanticTerm(
-  groupId: string,
-  id: string,
-  req: SemanticTermRequest,
-): Promise<SemanticTerm> {
-  const res = await apiFetch(termsUrl(groupId, id), {
-    method: 'PUT',
-    headers: jsonHeaders(),
-    body: JSON.stringify(req),
-  });
-  if (!res.ok) throw new Error(await errorMessage(res, `Failed to update term: ${res.status}`));
-  return res.json();
-}
-
-export async function deleteSemanticTerm(groupId: string, id: string): Promise<void> {
-  const res = await apiFetch(termsUrl(groupId, id), {
-    method: 'DELETE',
-    headers: jsonHeaders(),
-  });
-  if (!res.ok) throw new Error(await errorMessage(res, `Failed to delete term: ${res.status}`));
 }

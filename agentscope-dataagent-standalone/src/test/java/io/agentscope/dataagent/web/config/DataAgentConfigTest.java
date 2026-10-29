@@ -156,8 +156,14 @@ class DataAgentConfigTest {
                         "所注依据必须能在该来源中找到",
                         "必须用 request_user_confirmation 提问",
                         "description_source: user",
-                        "不要重新加入")
-                .doesNotContain("LIKE");
+                        "不要重新加入",
+                        // spec100: business terms share the page-maintained Naming conventions.
+                        "knowledge/rules/naming.md",
+                        "已有条目不改写、不删除",
+                        // ADR0116: data facts go to descriptions, caveats are retired.
+                        "写入相关表或列的描述",
+                        "knowledge/caveats/ 已停用")
+                .doesNotContain("LIKE", "其余推断写入 knowledge/caveats/");
         assertThat(DataAgentConfig.QUERY_EFFICIENCY_RULES).doesNotContain("LIKE");
         // Modeling replies are for business users: short, Chinese only, no files or commands.
         assertThat(DataAgentConfig.MODELING_SCRIPT)
@@ -296,6 +302,27 @@ class DataAgentConfigTest {
         assertThat(DataAgentConfig.DEFAULT_AGENT_SYS_PROMPT)
                 .contains("官方指导", "原样遵循官方 schema")
                 .doesNotContain("[DATA_SOURCES_OVERVIEW]", "query_type");
+    }
+
+    /** spec096: tables, then render_chart by default, then run_python only for computation. */
+    @Test
+    void visualizationIsTieredAndPythonReadsDataFiles() throws Exception {
+        assertThat(DataAgentConfig.DEFAULT_AGENT_SYS_PROMPT)
+                .contains("可视化分三层", "默认用 render_chart", "同一问题最多 2 次", "读取查询返回的数据文件")
+                .contains("不要 import")
+                .doesNotContain("根据用户需要使用 run_python 或 render_chart");
+        String python =
+                io.agentscope.dataagent.tools.data.RunPythonTool.class
+                        .getMethod(
+                                "runPython",
+                                io.agentscope.core.agent.RuntimeContext.class,
+                                String.class,
+                                String.class)
+                        .getAnnotation(io.agentscope.core.tool.Tool.class)
+                        .description();
+        assertThat(python)
+                .contains("render_chart", "最多调用 2 次", "超过 20 行的数据字面量会被拒绝")
+                .doesNotContain("应主动可视化", "_insights.md");
     }
 
     /** 2026-10-25: sources are MySQL 8.0+ or Doris; date ranges are literal so rules gate them. */

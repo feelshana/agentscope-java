@@ -62,6 +62,26 @@ public final class TemporalCondition {
         return parsed + " >= " + start + " AND " + parsed + " < " + end;
     }
 
+    /**
+     * spec098: an expression on {@code column} whose MIN/MAX are the earliest and latest times —
+     * the column itself for native, numeric and padded values, the parsed value for text dates
+     * without zero padding (which do not sort as strings). Null when the format is unknown.
+     */
+    public static String sortable(String column, String format, String type, String dataSource) {
+        if (column == null || format == null || format.isBlank()) return null;
+        if (format.equals("NATIVE")) return column;
+        try {
+            DateTimeFormatter.ofPattern(format, Locale.ROOT);
+        } catch (RuntimeException e) {
+            return null;
+        }
+        boolean numeric =
+                type != null
+                        && type.toLowerCase(Locale.ROOT).matches(".*(int|number|numeric|long).*");
+        if (numeric || padded(format)) return column;
+        return parse(column, format, dataSource);
+    }
+
     /** Padded fields with a fixed layout sort the same as the times they hold. */
     static boolean padded(String format) {
         Matcher m = TOKEN.matcher(format);

@@ -25,6 +25,20 @@ class TemporalConditionTest {
         assertThat(TemporalCondition.of("d", "uuuu-M-d", "TEXT", "bigquery")).isNull();
     }
 
+    /** spec098: MIN/MAX must see times, so unpadded text dates are parsed first. */
+    @Test
+    void sortableExpressionsParseOnlyTextThatDoesNotSortAsTime() {
+        assertThat(TemporalCondition.sortable("`t`", "NATIVE", "DATETIME", "mysql"))
+                .isEqualTo("`t`");
+        assertThat(TemporalCondition.sortable("`t`", "uuuu-MM-dd HH:mm:ss", "VARCHAR", "mysql"))
+                .isEqualTo("`t`");
+        assertThat(TemporalCondition.sortable("`d`", "uuuuMMdd", "INT", "mysql")).isEqualTo("`d`");
+        assertThat(TemporalCondition.sortable("`v`", "uuuu/M/d H:mm", "VARCHAR", "mysql"))
+                .isEqualTo("STR_TO_DATE(`v`, '%Y/%c/%e %k:%i')");
+        assertThat(TemporalCondition.sortable("`v`", "", "VARCHAR", "mysql")).isNull();
+        assertThat(TemporalCondition.sortable("`v`", "not a [format", "VARCHAR", "mysql")).isNull();
+    }
+
     @Test
     void paddedNativeAndNumericColumnsCompareDirectlyAndNeverUseLike() {
         assertThat(TemporalCondition.of("t", "uuuu-MM-dd HH:mm:ss", "VARCHAR", "mysql"))

@@ -39,6 +39,26 @@ public interface DatasetGroupRepository extends JpaRepository<DatasetGroupEntity
                     + " :id and coalesce(g.publishedModelingRevision, 0) <= :revision")
     void coverModelingRevision(String id, long revision);
 
+    /**
+     * spec098: stores a generated question without touching the rest of the row, unless the
+     * modeler edited the current one.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Transactional
+    @Query(
+            "update DatasetGroupEntity g set g.recommendedQuestion = :question where g.id = :id"
+                    + " and (g.recommendedQuestionManual is null or g.recommendedQuestionManual ="
+                    + " false)")
+    void updateRecommendedQuestion(String id, String question);
+
+    /** spec098: the modeler's own question ({@code manual}) or a fresh generated one. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Transactional
+    @Query(
+            "update DatasetGroupEntity g set g.recommendedQuestion = :question,"
+                    + " g.recommendedQuestionManual = :manual where g.id = :id")
+    void saveRecommendedQuestion(String id, String question, boolean manual);
+
     @Query(
             """
             select g from DatasetGroupEntity g

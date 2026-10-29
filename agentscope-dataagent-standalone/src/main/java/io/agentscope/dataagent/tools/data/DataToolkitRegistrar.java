@@ -101,6 +101,8 @@ public class DataToolkitRegistrar {
         try {
             main.getDelegate().getToolkit().registerTool(new DataAgentToolkit(chartOptions));
             log.info("Registered DataAgent toolkit onto main agent '{}'", main.getName());
+            // spec102: the parameter card of an analysis turn; refused outside such a turn.
+            main.getDelegate().getToolkit().registerTool(new AnalysisToolkit());
 
             // Wren MCP tools are registered per invocation by WrenScopedToolkitMiddleware. A
             // project-bound client must never be placed on this shared startup toolkit.

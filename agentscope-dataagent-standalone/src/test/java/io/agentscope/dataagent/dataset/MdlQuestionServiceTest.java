@@ -54,6 +54,57 @@ class MdlQuestionServiceTest {
         org.assertj.core.api.Assertions.assertThat(locked).containsExactly(true, true, true);
     }
 
+    /**
+     * 2026-10-28: "department is not like '%x%'" was saved and confirmed, then dropped by the
+     * publish dry-plan without notice. Saving and confirming now refuse it up front.
+     */
+    @Test
+    void sqlThatDoesNotPlanIsRefusedOnSaveAndConfirm() {
+        String bad = "SELECT 1 FROM t WHERE d is not like '%x%'";
+        String error =
+                "Error: [INVALID_SQL] Invalid expression / Unexpected token. Line 1, Col: 27.";
+        when(publisher.planDraftSql("a", bad)).thenReturn(error);
+        when(store.requireQuestion("a", "q-1"))
+                .thenReturn(new MdlQuestionStore.Question("q-1", "访问量", "口径", bad));
+        var scope = new DatasetScope("alice");
+
+        var save =
+                assertThrows(
+                        DatasetException.class,
+                        () -> service.correctSql(scope, "a", "q-1", "r1", bad));
+        org.assertj.core.api.Assertions.assertThat(save.getMessage())
+                .startsWith("SQL 检查未通过，未保存：")
+                .contains("Col: 27");
+        var confirm =
+                assertThrows(DatasetException.class, () -> service.decide(scope, "a", "q-1", true));
+        org.assertj.core.api.Assertions.assertThat(confirm.getMessage())
+                .startsWith("SQL 检查未通过，不能确认：");
+        org.mockito.Mockito.verify(store, org.mockito.Mockito.never())
+                .correctSql(
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any());
+        org.mockito.Mockito.verify(store, org.mockito.Mockito.never())
+                .decide("a", "q-1", true, "alice");
+
+        // Returning a question needs no plan.
+        service.decide(scope, "a", "q-1", false);
+        org.mockito.Mockito.verify(store).decide("a", "q-1", false, "alice");
+    }
+
+    @Test
+    void planErrorsSkipCliNotesBeforeTheOfficialError() {
+        org.assertj.core.api.Assertions.assertThat(
+                        MdlPublishService.planError(
+                                "Note: no profile bound to this project.\n"
+                                        + "Error: [INVALID_SQL] Unexpected token. Line 1, Col: 9.\n"
+                                        + "  SELECT ... phase=SQL_PLANNING"))
+                .isEqualTo("Error: [INVALID_SQL] Unexpected token. Line 1, Col: 9.");
+        org.assertj.core.api.Assertions.assertThat(MdlPublishService.planError("boom\nmore"))
+                .isEqualTo("boom");
+    }
+
     @Test
     void questionValidationPassesTheSameTimeWindowGateBeforeExecution() {
         var windows = mock(FactQueryWindowPolicy.class);

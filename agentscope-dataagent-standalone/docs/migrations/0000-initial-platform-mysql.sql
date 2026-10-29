@@ -1,5 +1,7 @@
 -- Fresh installation only: select an EMPTY platform database before execution.
--- Generated from the merged candidate (f1ad7772 + b67a179a), verified with ddl-auto=validate.
+-- Baseline: merged candidate (f1ad7772 + b67a179a), originally verified with ddl-auto=validate.
+-- Updated 2026-10-30: recommended-question columns; legacy semantic-term table retained.
+-- Fresh/upgrade DDL equivalence verified on isolated MySQL 8.0.46.
 -- Structure only: no user rows, business data or credentials; upload database stays empty.
 -- Do not run incremental migrations on top of this complete schema.
 
@@ -154,6 +156,8 @@ CREATE TABLE `dataagent_dataset_group` (
   `fact_query_window_days` int DEFAULT NULL,
   `mdl_last_error` varchar(2000) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `mdl_published_at` datetime(6) DEFAULT NULL,
+  `recommended_question` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `recommended_question_manual` bit(1) DEFAULT NULL,
   `mdl_state` varchar(16) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `mdl_version` int DEFAULT NULL,
   `modeling_revision` bigint DEFAULT NULL,
