@@ -1,0 +1,50 @@
+services:
+  app:
+    image: ${APP_IMAGE:?}
+    pull_policy: never
+    platform: linux/amd64
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 90s
+    user: ${APP_UID:?}:${APP_GID:?}
+    group_add: ['${SOCKET_GID:?}']
+    cpus: ${APP_CPUS:-8}
+    mem_limit: ${APP_MEMORY:-16g}
+    pids_limit: 2048
+    read_only: true
+    tmpfs: ['/tmp:rw,nosuid,size=536870912,mode=1777']
+    env_file: ['${DB_ENV:?}', runtime.env]
+    environment:
+      HOME: ${APP_BASE}/data/home
+      DATAAGENT_BASE_DIR: ${APP_BASE:?}
+      DATAAGENT_PORT: ${APP_PORT:?}
+      HF_HOME: ${APP_BASE}/data/home/.cache/huggingface
+    ports: ['${APP_BIND_IP:?}:${APP_PORT}:${APP_PORT}']
+    labels:
+      dataagent.rehearsal.app: ${APP_BASE}
+    volumes:
+      - type: bind
+        source: ${APP_BASE}
+        target: ${APP_BASE}
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${APP_CACHE:?}
+        target: ${APP_BASE}/data/home/.cache/huggingface
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+        bind: {create_host_path: false}
+    healthcheck:
+      interval: 5s
+      timeout: 5s
+      start_period: 120s
+      retries: 12
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: '3'}
+networks:
+  default:
+    external: true
+    name: ${DB_NETWORK:?}

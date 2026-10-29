@@ -2,7 +2,7 @@
 
 2026-10-29现场进展：用户已将9d378d8b推送并在66克隆，固定Maven镜像基础检查通过；最新截图确认Java946项（0失败、0错误、28条件跳过）、Maven BUILD SUCCESS、应用镜像封装与静态预检通过。作业日志/镜像引用保留在66的~/dataagent-build/jobs下。此结果不代表数据库连接、模型缓存运行或业务启动通过，助手未远程执行。
 
-生产数据库信息仍待取得。用户已选择先使用独立MySQL8.0容器演练，MySQL准备/启动脚本已在本地验证，待提交推送后供66执行；应用Compose及业务验收仍待完成。下文早期检查是可重现步骤，现场已经通过的构建无需重跑。
+2026-10-30用户回传66演练库核对通过；MySQL配套已由用户随47e431df提交。应用Compose与更新/恢复控制已在本地真实镜像验证，尚未提交推送或在66启动；生产数据库及65/BI/模型业务验收仍待完成。下文早期检查是可重现步骤，现场已经通过的构建无需重跑。
 
 用户本轮截图已确认：Git1.8.3.1、Docker客户端/服务端26.1.4、Compose2.27.1；runtime/sandbox两镜像均存在。GitHub HTTPS200，实际git ls-remote读取目标分支成功，提交为b82bb7f48220889436e0efd49d515651f900d717。默认HEAD为另一提交，不以默认分支代替目标分支。此结果不代表clone、构建依赖或新应用镜像已验。
 
@@ -128,8 +128,52 @@ bash docker/rehearsal-mysql.sh logs
 
 失败时保留数据/密码/日志定位，不删除数据目录、不重放完整DDL，不用compose down -v或全局prune。此入口不包含删除动作。实际初始化及旧内核MySQL兼容仍以66启动结果为准；本地Linux首次初始化、37表、权限隔离、Wren Python MySQLdb通过Docker DNS连接、停启数据保留、无宿主端口及拒绝覆盖已实测通过。
 
-## 六、应用启动仍待后续实施
+## 六、启动演练应用
 
-正式上线需要生产两库及初始化、外置runtime.env与application-prod.yml、持久data/logs和离线模型缓存。临时数据库仅用于当前演练。新应用入口已支持外置路径；应用Compose启停、健康检查和回退仍待实现及实测，不自行套用旧tar入口或Dify脚本。管理员与模型服务也需在应用就绪后配置，数据库启动不代表问答可用。
+用户已回传66的“演练库核对通过”，正式数据库仍在等待。新增rehearsal-app.sh与compose.rehearsal-app.yml须先由开发者本地提交/push；66更新控制文件即可，应用JAR未变时无需重建9d378d8b对应的镜像。
+
+```bash
+cd "$HOME/dataagent-source/agentscope-java/agentscope-dataagent-standalone"
+bash docker/update-source.sh
+bash docker/rehearsal-mysql.sh status
+bash docker/rehearsal-app.sh prepare
+bash docker/rehearsal-app.sh start
+```
+
+prepare默认在~/dataagent-build/jobs中仅存在一份image-reference.txt时读取它；多份时明确停止，使用prepare 'dataagent/app:具体标签'指定，不默取latest。标签必须是本项目linux/amd64应用镜像，实际固定image ID；不重建或拉镜像。仅准备新/data/dataagent/rehearsal-app目录，已有完整配置再次执行保留密钥和数据，其他目录拒绝覆盖。
+
+- 主应用项目dataagent66-rehearsal-app，加入既有dataagent66-rehearsal-db_default网络，读取演练库app-db.env。MySQL无宿主端口不影响Java/Wren同网络访问mysql:3306。
+- 默认当前UID/GID及socket附加组，宿主/容器应用目录绝对路径相同，Docker socket供框架创建独立分析沙箱。已下载的~/dataagent-env/hf-cache-modelscope以只读方式挂载；宿主Java8/glibc不修改。
+- conf/application-prod.yml使用validate/never，runtime.env生成独立JWT和模型加密密钥，默认关闭密码/旧票据入口、开启BI账号入口，CORS默认https://dc.migu.cn。未自动导入人员或创建管理员，也不复制开发机模型密钥。配置与两库、持久文件需一致保留。
+- 默认8CPU/16GiB、JVM沿用镜像默认256MiB—1GiB，主进程在容器中运行，18080绑定10.194.2.66。演练可在prepare前明确覆盖DATAAGENT_BIND_IP、DATAAGENT_PORT、DATAAGENT_RUNTIME_CPUS/MEMORY，不改变既有部署。预算不是并发能力保证。
+- start先执行应用依赖/socket检查、两库网络连接、离线向量(2,384)及断网兄弟沙箱同路径读写，再启动真实Java并等健康和BI账号入口。每次检查只移除本次临时检查容器，持久目录和业务容器不删除。
+
+正常输出“服务健康和BI账号入口通过”后，可在66检查：
+
+```bash
+curl --noproxy '*' --connect-timeout 5 --max-time 10 http://10.194.2.66:18080/actuator/health
+bash docker/rehearsal-app.sh status
+bash docker/rehearsal-app.sh logs
+```
+
+本阶段后端路径为根路径，前端已经按/dify/dataagent/构建；需要65代理剥离此前缀后转发。不要把66裸端口直接加载前端的资源404误判为服务启动失败，也不以健康UP代替65/BI/模型验收。
+
+后续接通65同源代理与BI图标，用本人的BI英文账号首次进入、按现有管理员SQL赋权并重新进入，再到管理员模型服务页面配置与测试激活服务；未配置模型时应用可以启动，问答/建模尚不可验。真实BI跨层Nginx/iframe/LocalStorage同源联调与用户资料导入另外执行。不得把临时数据库切换成正式库而省略数据/文件/密钥迁移核对。
+
+## 七、日志、停启与镜像更新
+
+启动异常先看rehearsal-app.sh logs的Java控制台；问数/建模转录分别在演练应用logs/LLM.log、LLM-modeling.log，耗时和时间门禁为execution-timing.log、sql-window-gate.log。日志可能含业务数据，外发前需去除敏感内容。数据库问题另用rehearsal-mysql.sh logs；不要输出私有env全文。
+
+```bash
+bash docker/rehearsal-app.sh stop
+bash docker/rehearsal-app.sh start
+# 后续先独立构建并预检新镜像，再显式选择：
+bash docker/rehearsal-app.sh upgrade 'dataagent/app:新镜像标签'
+bash docker/rehearsal-app.sh rollback
+```
+
+stop只停止本项目应用；数据库、配置、文件和镜像保留。upgrade先检查候选镜像，失败不停止旧服务；候选启动或健康验收失败时保留失败日志、恢复旧镜像并再验健康，最终仍返回失败提示。rollback使用previous-image.txt，只回退应用镜像；不会逆向迁移数据库、模型、工作区或人员数据。所有操作核对项目路径标签，不执行全局清理或操作Dify。
+
+本次修正MySQL首次初始化配套：02-users.sh以可执行子进程运行，避免严格模式泄漏到官方入口；健康用TCP127.0.0.1，防止临时初始化socket进程被误判就绪。仅生成新目录时生效，不清空或重放66已经完成的初始化，也不因更新源码自动替换其现有Compose/私有配置。现有库成功核对后继续使用；需要变更已有控制配置时另行审阅，不删库重建。
 
 正式方案：[spec099](../specs/099-source-build-deployment.md)、[ADR0118](../adr/0118-source-build-on-deployment-host.md)。验证见[构建报告](../test-reports/20261029-source-build-validation.md)。助手未连接66执行构建；用户自行push。

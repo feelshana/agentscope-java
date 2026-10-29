@@ -58,6 +58,8 @@ GRANT ALL PRIVILEGES ON data_agent.* TO 'dataagent_dataset'@'%';
 SQL
 INIT
     chmod 0644 "$base"/init/*
+    # Execute in a child shell so strict options never leak into the official entrypoint.
+    chmod 0755 "$base/init/02-users.sh"
     cat > "$base/compose.yml" <<'COMPOSE'
 services:
   mysql:
@@ -84,7 +86,7 @@ services:
         read_only: true
         bind: {create_host_path: false}
     healthcheck:
-      test: [CMD-SHELL, 'test "$$(MYSQL_PWD="$$MYSQL_ROOT_PASSWORD" mysql --protocol=socket -uroot --connect-timeout=3 -Nse "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=''dataagent_platform''")" = 37']
+      test: [CMD-SHELL, 'test "$$(MYSQL_PWD="$$MYSQL_ROOT_PASSWORD" mysql --protocol=TCP -h127.0.0.1 -uroot --connect-timeout=3 -Nse "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=''dataagent_platform''")" = 37']
       interval: 5s
       timeout: 5s
       retries: 40

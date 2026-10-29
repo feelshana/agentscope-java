@@ -59,6 +59,9 @@ class RehearsalMysqlTest(unittest.TestCase):
             self.assertFalse(info["HostConfig"]["PortBindings"])
             self.assertEqual(info["Config"]["Labels"]["dataagent.rehearsal.base"], folder + "/db")
             self.assertEqual(info["State"]["Health"]["Status"], "healthy")
+            logs = subprocess.check_output(["docker", "logs", container], stderr=subprocess.STDOUT).decode()
+            self.assertIn("MySQL init process done", logs)
+            self.assertNotIn("unbound variable", logs)
             remote_probe = 'import MySQLdb,os; ' \
                 'c=MySQLdb.connect(host="mysql",user=os.environ["DATAAGENT_DATASET_DB_USER"],passwd=os.environ["DATAAGENT_DATASET_DB_PASSWORD"],db="data_agent"); ' \
                 'q=c.cursor(); q.execute("SELECT VERSION(),CURRENT_USER()"); print(q.fetchone()); c.close()'

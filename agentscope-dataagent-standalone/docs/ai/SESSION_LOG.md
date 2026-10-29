@@ -527,3 +527,6 @@
 
 ## 2026-10-29 Asia/Shanghai｜临时MySQL演练配套本地通过
 66截图确认MySQL8.0/amd64镜像已下载（6cd09145…，index7dcddc01…），未启动。沿spec099补rehearsal-mysql.sh：普通账号prepare/start/verify/status/logs，独立Compose与目录、随机密码、首次37表/分库授权、不映射宿主端口，不清理或操作Dify。本地同镜像两轮真实集成通过，最后30.334秒，覆盖Wren MySQLdb跨容器DNS、重启数据/密码保留及拒绝覆盖；只停止本轮测试库，保留文件/网络。源码/指引/架构/构建报告同步，仍未提交推送。下一步用户提交push后66更新脚本、prepare/start回传，再补应用Compose/配置/健康和BI；业务镜像无需因本批运维脚本重建。
+
+## 2026-10-30 Asia/Shanghai｜应用Compose与回退本地验收
+用户回传66演练库核对通过，本地HEAD已由用户提交47e431df。新增rehearsal-app.sh/Compose模板及真实集成；非root真实镜像+MySQL37表prod validate启动，向量/沙箱、BI首登、JWT/用户/文件停启保留、预检失败不停旧服务、坏JVM候选失败自动恢复、成功更新及显式回退通过，最终197.469秒。修复MySQL初始化shell严格模式泄漏与临时socket健康误判，以及Compose run参数兼容，保留失败记录；66已有库不清理重建。仅停止本轮独立测试应用/库，材料保留；未自动提交push或操作66。下一步用户提交push，66更新脚本→prepare/start回传，再接65/BI/管理员/模型与真实业务。

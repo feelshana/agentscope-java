@@ -1,6 +1,6 @@
 # 2026-10-29 源码构建阶段验证
 
-状态：源码构建已随9d378d8b提交；用户最新截图确认66 builder检查、Java946项0失败/0错误/28跳过及应用镜像封装/静态预检通过，业务未启动。后续二进制属性修复和临时MySQL脚本在本地验证，尚未提交推送。
+状态：源码构建已随9d378d8b提交；用户截图确认66 builder检查、Java946项0失败/0错误/28跳过及应用镜像封装/静态预检通过。MySQL配套/属性修复已由用户随47e431df提交，演练库核对通过；本轮应用控制、初始化修正及测试/文档尚未提交推送，66应用未启动。
 
 ## 实现范围
 
@@ -40,3 +40,21 @@ update-source.sh兼容旧Git的cd方式，三次fetch/单次90秒/退避，仅�
 运行条件测试：DATAAGENT_MYSQL_REHEARSAL_TESTS=1，指定已下载MySQL镜像和Linux Compose插件路径后运行src/test/python/test_rehearsal_mysql.py；默认跳过真实Docker用例。此次不改Java/前端，不要求因部署脚本重建应用镜像。应用首次启动、真实问答/BI、并发和回退未验。
 
 收口验证：Bash语法、Spotless、DocsConsistencyTest通过；Python默认34项，17通过/17条件跳过（新MySQL真实用例已单独显式启用通过）。未重跑Java946或前端构建，因本批无Java/前端/POM变更；66截图946属于前一提交的现场构建结果。
+
+## 2026-10-30：真实应用Compose、故障恢复与初始化修正
+
+用户文字回传66演练库核对通过，应用未启动。源码本地HEAD为用户已提交的47e431df；本轮新增应用控制/模板与测试，Java/前端/POM及application-entrypoint未变，不需因控制脚本重建66已有镜像。
+
+本地使用既有源码构建应用镜像dataagent/app:1b22b798a58d-20261029091351-MCFKCY（不是66现场镜像）、相同MySQL8.0.46镜像，独立根/var/lib/dataagent-app-test-9dd088fb、UID1000/实际socket组、2CPU/6GiB运行，离线模型从既有缓存复制到本轮专属目录。最终真实集成外层1项197.469秒通过：
+
+- 平台37表和DML账号下prod validate/never成功启动，未用root业务连接或自动建表；普通UID能运行Java/Wren，主应用只读根+同路径持久挂载及只读缓存。
+- 应用预检实际两库连接、离线向量(2,384)、宿主Docker及断网只读根兄弟沙箱读写通过；不调用真实大模型。
+- 实际POST /api/auth/bi-account-login首次创建user；停启后同一userId、旧JWT有效、附件文件及runtime.env哈希保留，密码入口关闭。
+- 不存在候选镜像被拒绝且旧容器ID不变；故意注入坏JAVA_OPTS的候选镜像通过静态预检但JVM启动失败，控制器返回失败并恢复原镜像/健康；另一个有效候选升级后显式rollback，image ID回到原值。
+- 自建应用和MySQL最终均停止，数据/配置/网络/试验镜像保留；没有操作既有Dify、其他MySQL或66。证据output/app-rehearsal-20261029/test-3.log与test-final.log，前者首轮基础启动91.484秒通过，后者增加更新/恢复覆盖。
+
+联测保留两次失败：首次非root准备路径下，官方MySQL入口source 02-users.sh后受到set -u影响，报MYSQL_ONETIME_PASSWORD未定义且重启；早期socket健康可能过早通过。已把生成脚本设可执行，子进程不污染官方入口，健康改TCP127.0.0.1排除临时socket进程。其次Compose run不支持--pull参数，已移除并由模板pull_policy=never约束；本地插件2.29.1。日志test.log/test-2.log保留，不把此前只检查表/账号的通过当作初始化从未报错。新增MySQL回归断言要求官方init process done且无unbound variable。
+
+修正只作用于之后新建的演练目录，prepare不覆盖现有66配置/密码/数据；用户已成功核对的库不重建、不重放DDL。实际66 Compose2.27.1/旧内核应用启动、65前缀/真实BI、管理员/模型/LLM及并发仍未本轮验收，不能从本地健康推断上线全流程通过。
+
+收口：修正后的MySQL真实回归30.837秒通过（含init process done/no unbound variable断言），证据mysql-regression.log；Bash语法、Spotless、DocsConsistencyTest和Python默认35项（17通过、18条件跳过）通过；真实应用/MySQL两项已分别显式开启验证。不重复未改动Java/前端的946项或构建，不把默认跳过当真实通过。
