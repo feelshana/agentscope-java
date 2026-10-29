@@ -105,6 +105,8 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
     finally { if (active.current === groupId) setBusy(null); }
   };
 
+  // Confirmed questions whose SQL failed the publish dry-plan are left out of the release.
+  const droppedQuestions = result?.ok ? result.issues.filter(i => i.source === 'questions' && i.severity !== 'error') : [];
   const label = busy === 'publish' ? '检查并发布中…' : republish ? '重新发布' : `发布 v${(workflow?.publishedVersion ?? 0) + 1}`;
   const notices = <>
     {confirming === 'pending' && <div role="alert" style={{ ...note, background: 'rgba(234,179,8,.14)', color: 'var(--da-warn)' }}>
@@ -120,6 +122,11 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
     {error && <div role="alert" style={{ ...note, color: 'var(--da-danger)' }}>{error}</div>}
     {issues.length > 0 && <div role="alert" style={{ ...note, color: 'var(--da-danger)', display: 'block' }}>
       检查未通过，请在对话中让助手修复：<ul style={{ margin: '4px 0 0' }}>{issues.map((i, n) => <li key={n}>{i.message}</li>)}</ul>
+    </div>}
+    {droppedQuestions.length > 0 && <div role="alert" style={{ ...note, background: 'rgba(234,179,8,.14)', color: 'var(--da-warn)', display: 'block' }}>
+      已发布 v{result?.mdlVersion}，但以下问答的 SQL 未通过检查，没有进入本次发布，已退回为未确认。请在试问中修改 SQL 后重新确认并发布：
+      <ul style={{ margin: '4px 0 0' }}>{droppedQuestions.map((i, n) => <li key={n}>{i.message}</li>)}</ul>
+      <button className="da-btn da-btn-sm" onClick={() => setResult(r => r && { ...r, issues: r.issues.filter(i => i.source !== 'questions') })}>知道了</button>
     </div>}
   </>;
   return <footer aria-label="草稿栏" style={{ position: 'relative', flex: '0 0 auto' }}>

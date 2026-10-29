@@ -288,7 +288,8 @@ class MdlPublishServiceTest {
                         .anyMatch(
                                 i ->
                                         "warning".equals(i.severity())
-                                                && i.message().contains("bad")));
+                                                && "questions".equals(i.source())
+                                                && i.message().startsWith("「退款额」发布检查未通过")));
         var bad =
                 questions.list("g1").stream()
                         .filter(r -> r.question().id().equals("bad"))

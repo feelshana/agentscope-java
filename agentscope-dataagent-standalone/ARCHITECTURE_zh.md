@@ -924,7 +924,7 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 2. 提交后页面立即切到"检查与发布"，未写入的问题显示"生成 SQL 中"；请求仍排在运行中的轮次或待确认卡之后时显示排队原因和"去处理确认卡"入口（`ModelingChatPanel#onActivityChange` 的 `AssistantState`）；Agent 为每题生成并试运行 SQL，写入 `knowledge/questions/<ID>.yml`，`ModelingChatPanel` 在该文件写入成功时即刷新列表。
 3. `ModelingQuestionsPanel` 左列表右明细；确认按钮在明细中，不要求先试运行（spec091）。试运行可选：`MdlQuestionService#validate`（先过时间门禁）→ `MdlPublishService#validateQuestion`。
 4. 确认 → `MdlQuestionService#decide`（时间门禁）→ `MdlQuestionStore#decide`（只读/笛卡尔积检查与资产覆盖，写 `knowledge/sql/<ID>.md`，frontmatter `source: user-confirmed`；官方索引只把 `source` 转成标签、忽略 `tags` 列表，召回结果因此显示 `source:user-confirmed`）；确认只绑定问题与 SQL 哈希，模型变化不使其失效。撤销、删除时移除问答。
-5. 发布时 `MdlPublishService#dryPlanConfirmedQuestions` 对已确认 SQL 做官方 `dry-plan`：失败的题不进入快照，经 `MdlQuestionStore#revokeConfirmation` 退回并显示原因，不阻止模型发布。
+5. 发布时 `MdlPublishService#dryPlanConfirmedQuestions` 对已确认 SQL 做官方 `dry-plan`：失败的题不进入快照，经 `MdlQuestionStore#revokeConfirmation` 退回并显示原因，不阻止模型发布；草稿栏以提醒列出被撤下的问题。用户手改 SQL 保存与点击确认前，`MdlQuestionService` 先经 `MdlPublishService#planDraftSql` 在草稿副本上做同样的 dry-plan，不通过即拒绝。
 6. 发布快照 → 问数 `WrenPublishedProject#prepare` 合并点赞问答并索引 → `recall_queries` 召回。
 
 ### 14.3 SQL 时间门禁

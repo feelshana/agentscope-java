@@ -5,6 +5,11 @@ import 'prismjs/components/prism-yaml';
 import 'prismjs/components/prism-sql';
 import 'prismjs/components/prism-json';
 
+/** Coloured spans for Prism tokens; shared with the SQL editor so both read the same. */
+export function highlightTokens(value: string | Prism.Token | (string | Prism.Token)[]): ReactNode {
+  return tokens(value);
+}
+
 function tokens(value: string | Prism.Token | (string | Prism.Token)[]): ReactNode {
   if (typeof value === 'string') return value;
   if (Array.isArray(value)) return value.map((item, index) => <span key={index}>{tokens(item)}</span>);

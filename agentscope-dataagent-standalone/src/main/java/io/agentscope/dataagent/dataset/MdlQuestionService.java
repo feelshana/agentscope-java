@@ -82,6 +82,16 @@ public class MdlQuestionService {
                     operation);
     }
 
+    /**
+     * 2026-10-28: a hand-edited SQL with a syntax error was saved and confirmed, then silently
+     * dropped by the publish-time dry-plan. Saving and confirming now run the same check first.
+     */
+    private void requirePlans(String groupId, String sql, String prefix) {
+        if (publisher == null || sql == null || sql.isBlank()) return;
+        String error = publisher.planDraftSql(groupId, sql);
+        if (error != null) throw new DatasetException(prefix + error, 400);
+    }
+
     /** Suggested question texts for the post-modeling dialog; empty when unavailable. */
     public List<String> suggestions(DatasetScope scope, String groupId) {
         requireScope(scope, groupId);
@@ -99,6 +109,7 @@ public class MdlQuestionService {
     public MdlQuestionStore.Review correctSql(
             DatasetScope scope, String groupId, String questionId, String revision, String sql) {
         requireScope(scope, groupId);
+        requirePlans(groupId, sql, "SQL 检查未通过，未保存：");
         return store.locked(
                 groupId,
                 () -> {
@@ -122,7 +133,11 @@ public class MdlQuestionService {
     public MdlQuestionStore.Review decide(
             DatasetScope scope, String groupId, String questionId, boolean accepted) {
         requireScope(scope, groupId);
-        if (accepted) requireWindow(scope, groupId, questionId, "question confirm");
+        if (accepted) {
+            requireWindow(scope, groupId, questionId, "question confirm");
+            MdlQuestionStore.Question question = store.requireQuestion(groupId, questionId);
+            if (question != null) requirePlans(groupId, question.sql(), "SQL 检查未通过，不能确认：");
+        }
         return store.locked(
                 groupId,
                 () -> {

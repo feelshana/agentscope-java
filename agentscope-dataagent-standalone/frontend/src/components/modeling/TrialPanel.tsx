@@ -4,6 +4,7 @@ import type { QuestionReview } from '../../api/modelingQuestions';
 import { DEFINITION_FORMAT, questionIds, questionRequest } from './QuestionIntakeForm';
 import type { SubmittedQuestion } from './QuestionIntakeForm';
 import ReadableCode from '../ReadableCode';
+import SqlEditor from '../SqlEditor';
 
 const message = (e: unknown) => e instanceof Error ? e.message : String(e);
 
@@ -204,8 +205,7 @@ function TrialAnswer({ review, busy, fixing, assistantIdle, onAccept, onAskFix, 
       <span style={small}>助手会按你的说明更新口径（规则或字段说明）并重写这道题的 SQL，完成后在这里刷新。</span>
     </div>}
     {mode === 'edit' && <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <textarea className="da-input" rows={8} autoFocus value={sql} maxLength={16000} onChange={e => setSql(e.target.value)}
-        style={{ width: '100%', boxSizing: 'border-box', fontFamily: 'var(--da-mono, monospace)', fontSize: 12.5 }} />
+      <SqlEditor rows={10} autoFocus value={sql} maxLength={16000} onChange={setSql} ariaLabel="修改 SQL" />
       <div style={{ display: 'flex', gap: 6 }}>
         <button className="da-btn da-btn-primary da-btn-sm" disabled={busy || !sql.trim() || sql.trim() === q.sql.trim()}
           onClick={() => void onSaveSql(sql).then(ok => { if (ok) setMode(null); })}>{busy ? '保存中…' : '保存'}</button>
