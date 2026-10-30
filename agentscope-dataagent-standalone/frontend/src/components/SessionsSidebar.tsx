@@ -406,6 +406,7 @@ function UserMenu({ username }: { username: string }) {
   </div>;
 }
 
+// The expanded rail uses AppShell.css; update its rail-* classes for visual changes.
 const S: Record<string, React.CSSProperties> = {
   root: {
     width: 280, flexShrink: 0,
