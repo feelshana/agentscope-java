@@ -6,14 +6,16 @@ import {
   refreshOnboarding, reopenOnboarding, setHelpOpen, useHelpOpen, useOnboarding,
 } from '../api/onboarding';
 import Icon from './Icon';
+import type { IconName } from './Icon';
+import './Onboarding.css';
 
 /** spec099: new-user checklist, starter questions, empty state, one-time tips and help. */
 
-const STEPS: Record<OnboardingTaskId, { title: string; desc: string; cta: string }> = {
-  data: { title: '准备数据', desc: '创建知识库，上传文件或关联外部数据表', cta: '去准备数据' },
-  publish: { title: '完成建模并发布', desc: '建模助手自动整理字段与口径，你确认后发布', cta: '去建模' },
-  ask: { title: '问第一个问题', desc: '选中知识库，直接用中文提问，推荐问题可一键发送', cta: '去问数' },
-  analyze: { title: '用“继续分析”做一次深入分析', desc: '在有日期的回答下方点“为什么变化 / 有没有异常 / 未来走势”', cta: '了解' },
+const STEPS: Record<OnboardingTaskId, { title: string; desc: string; cta: string; icon: IconName }> = {
+  data: { title: '准备数据', desc: '创建知识库，上传文件或关联外部数据表', cta: '去准备数据', icon: 'database' },
+  publish: { title: '完成建模并发布', desc: '建模助手整理字段与口径，你确认后发布', cta: '去建模', icon: 'model' },
+  ask: { title: '问第一个问题', desc: '选中知识库，用中文直接提问，推荐问题可一键发送', cta: '去问数', icon: 'chat' },
+  analyze: { title: '完成一次深入分析', desc: '在有日期的回答下方点“继续分析”，看归因、异常或走势', cta: '了解', icon: 'chart' },
 };
 
 export const UPLOAD_PATH = '/configure/datasets?create=1';
@@ -33,12 +35,12 @@ function useStepAction(onAsk?: () => void) {
 }
 
 function Progress({ status }: { status: OnboardingStatus }) {
-  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-    <span style={{ fontSize: 13, color: 'var(--da-primary)', fontWeight: 600 }}>{status.completed} / {status.tasks.length}</span>
-    <span aria-hidden="true" style={{ width: 96, height: 6, borderRadius: 3, background: 'var(--da-surface-sunken)' }}>
-      <span style={{ display: 'block', width: `${Math.max(4, (status.completed / status.tasks.length) * 100)}%`, height: 6, borderRadius: 3, background: 'var(--da-primary)' }} />
+  return <div className="da-ob-progress" aria-label={`已完成 ${status.completed} / ${status.tasks.length}`}>
+    <span><strong>{status.completed}</strong> / {status.tasks.length} 已完成</span>
+    <span className="da-ob-segs" aria-hidden="true">
+      {status.tasks.map(t => <span key={t.id} className={t.done ? 'is-done' : undefined} />)}
     </span>
-  </span>;
+  </div>;
 }
 
 function Dot({ index, done, current }: { index: number; done: boolean; current: boolean }) {
@@ -51,21 +53,23 @@ function Dot({ index, done, current }: { index: number; done: boolean; current: 
 /** The two ways to prepare data, side by side; uploading needs nothing outside the platform. */
 export function DataSourceChoices({ compact = false }: { compact?: boolean }) {
   const navigate = useNavigate();
-  const card: React.CSSProperties = { border: '1px solid var(--da-border)', borderRadius: 12, padding: 14, display: 'flex', flexDirection: 'column', gap: 8, textAlign: 'left', minWidth: 0 };
-  return <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
-    <div style={{ ...card, borderColor: 'var(--da-primary)', background: 'var(--da-primary-subtle)' }}>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><strong style={{ fontSize: 14 }}>上传文件</strong>
-        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--da-primary)', border: '1px solid var(--da-primary)', padding: '0 6px', borderRadius: 4 }}>推荐新手</span></span>
-      {!compact && <span style={{ fontSize: 13, color: 'var(--da-text-2)', lineHeight: 1.6 }}>Excel 或 CSV 直接上传，不依赖网络和外部系统，几分钟就能开始问数。</span>}
-      <button type="button" className="da-btn da-btn-primary da-btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => navigate(UPLOAD_PATH)}>
-        <Icon name="upload" size="sm" />创建知识库并上传</button>
+  return <div className="da-ob-choices">
+    <div className="da-ob-choice is-recommended">
+      <span className="da-ob-choice-icon" aria-hidden="true"><Icon name="upload" /></span>
+      <div className="da-ob-choice-body">
+        <span className="da-ob-choice-title">上传文件<span className="da-ob-badge">推荐新手</span></span>
+        {!compact && <p>Excel 或 CSV 直接上传，不依赖网络和外部系统，几分钟就能开始问数。</p>}
+        <button type="button" className="da-btn da-btn-primary da-btn-sm" onClick={() => navigate(UPLOAD_PATH)}>创建知识库并上传</button>
+      </div>
     </div>
-    <div style={card}>
-      <strong style={{ fontSize: 14 }}>关联外部数据表</strong>
-      {!compact && <span style={{ fontSize: 13, color: 'var(--da-text-2)', lineHeight: 1.6 }}>先<strong>新建数据源</strong>（MySQL 8.0+ 或 Doris，连接测试通过），再在知识库里选择要关联的表。</span>}
-      <span style={{ fontSize: 12, color: 'var(--da-warn)', lineHeight: 1.5 }}>需要平台能访问到的数据库；没有时请先用上传文件体验。</span>
-      <button type="button" className="da-btn da-btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => navigate(DATASOURCE_PATH)}>
-        <Icon name="database" size="sm" />新建数据源</button>
+    <div className="da-ob-choice">
+      <span className="da-ob-choice-icon" aria-hidden="true"><Icon name="database" /></span>
+      <div className="da-ob-choice-body">
+        <span className="da-ob-choice-title">关联外部数据表</span>
+        {!compact && <p>先新建数据源（MySQL 8.0+ 或 Doris，连接测试通过），再在知识库里选择要关联的表。</p>}
+        <p className="da-ob-note"><Icon name="warn" size="sm" />需要平台能访问到的数据库，没有时请先上传文件体验。</p>
+        <button type="button" className="da-btn da-btn-sm" onClick={() => navigate(DATASOURCE_PATH)}>新建数据源</button>
+      </div>
     </div>
   </div>;
 }
@@ -78,67 +82,64 @@ export function OnboardingChecklist({ status, onAsk }: { status: OnboardingStatu
 
 /** All steps done: stays as a short completion card for the rest of that day. */
 function OnboardingCompleted({ status }: { status: OnboardingStatus }) {
-  return <section aria-label="新手任务已完成" style={{ width: '100%', maxWidth: 880, marginTop: 24, flexShrink: 0, background: 'var(--da-surface)', border: '1px solid var(--da-border)', borderRadius: 16, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'left' }}>
-    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
-      <span aria-hidden="true" style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--da-primary-subtle)', color: 'var(--da-success)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}><Icon name="check" size="sm" /></span>
-      <strong style={{ fontSize: 16 }}>新手任务已全部完成</strong>
-      <span style={{ flex: 1 }} />
-      <Progress status={status} />
-    </div>
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', fontSize: 13, color: 'var(--da-text-muted)' }}>
-      {status.tasks.map(t => <span key={t.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="check" size="sm" />{STEPS[t.id].title}</span>)}
-    </div>
-    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, fontSize: 13, color: 'var(--da-text-2)' }}>
-      <span style={{ flex: 1, minWidth: 240, lineHeight: 1.6 }}>你已经走通了从准备数据、建模发布到问数和深入分析的全过程。明天起这里不再显示，说明可在“更多 › 帮助与引导”查看。</span>
-      <button type="button" className="da-btn da-btn-sm" onClick={() => void dismissOnboarding()}>关闭</button>
+  return <section aria-label="新手任务已完成" className="da-ob-card">
+    <div className="da-ob-banner">
+      <span className="da-ob-banner-icon" aria-hidden="true"><Icon name="check" /></span>
+      <div className="da-ob-banner-body">
+        <h2>新手任务已全部完成</h2>
+        <p>你已经走通了从准备数据、建模发布到问数和深入分析的全过程。明天起这里不再显示，说明可在“更多 › 帮助与引导”查看。</p>
+        <div className="da-ob-done-list">
+          {status.tasks.map(t => <span key={t.id}><Icon name="check" size="sm" />{STEPS[t.id].title}</span>)}
+        </div>
+      </div>
+      <button type="button" className="da-btn da-btn-ghost da-btn-sm" onClick={() => void dismissOnboarding()}>关闭</button>
     </div>
   </section>;
 }
 
 function OnboardingSteps({ status, onAsk }: { status: OnboardingStatus; onAsk?: () => void }) {
   const next = nextStep(status);
-  const [open, setOpen] = useState<OnboardingTaskId | null>(next === 'data' ? 'data' : null);
+  const [dataOpen, setDataOpen] = useState(next === 'data');
   const act = useStepAction(onAsk);
-  return <section aria-label="新手任务" style={{ width: '100%', maxWidth: 880, marginTop: 24, flexShrink: 0, background: 'var(--da-surface)', border: '1px solid var(--da-border)', borderRadius: 16, overflow: 'hidden', textAlign: 'left' }}>
-    <header style={{ padding: '14px 20px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, borderBottom: '1px solid var(--da-border)' }}>
-      <strong style={{ fontSize: 16 }}>开始使用 DataAgent</strong>
-      <span style={{ fontSize: 13, color: 'var(--da-text-muted)' }}>完成 4 步，学会从数据到分析</span>
-      <span style={{ flex: 1 }} />
+  const dataDone = status.tasks.some(t => t.id === 'data' && t.done);
+  return <section aria-label="新手任务" className="da-ob-card">
+    <header className="da-ob-head">
+      <div className="da-ob-head-text">
+        <h2>开始使用 DataAgent</h2>
+        <p>4 步走通从准备数据到深入分析，完成的步骤会自动打勾</p>
+      </div>
       <Progress status={status} />
     </header>
-    <ol style={{ listStyle: 'none', margin: 0, padding: '4px 20px' }}>
+    <ol className="da-ob-steps">
       {status.tasks.map((t, i) => {
         const step = STEPS[t.id];
         const current = t.id === next;
-        const expandable = t.id === 'data' && !t.done;
-        return <li key={t.id} style={{ borderBottom: i < status.tasks.length - 1 ? '1px solid var(--da-border)' : undefined }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0' }}>
-            <Dot index={i + 1} done={t.done} current={current} />
-            <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <span style={{ fontSize: 15, fontWeight: current ? 700 : 400, color: t.done ? 'var(--da-text-muted)' : 'var(--da-text)', textDecoration: t.done ? 'line-through' : undefined }}>{step.title}</span>
-              {!t.done && <span style={{ fontSize: 12, color: 'var(--da-text-muted)' }}>{step.desc}</span>}
-            </span>
-            {t.done
-              ? <span style={{ fontSize: 12, color: 'var(--da-success)' }}>已完成</span>
-              : expandable
-                ? <button type="button" className={`da-btn da-btn-sm${current ? ' da-btn-primary' : ''}`} aria-expanded={open === 'data'}
-                  onClick={() => setOpen(open === 'data' ? null : 'data')}>{open === 'data' ? '收起' : '选择方式'}</button>
-                : <button type="button" className={`da-btn da-btn-sm${current ? ' da-btn-primary' : ' da-btn-ghost'}`} onClick={() => act(t.id)}>{step.cta}</button>}
+        return <li key={t.id} className={`da-ob-step${current ? ' is-current' : ''}${t.done ? ' is-done' : ''}`} aria-current={current ? 'step' : undefined}>
+          <div className="da-ob-step-top">
+            <span className="da-ob-step-no">第 {i + 1} 步</span>
+            <span className="da-ob-step-icon" aria-hidden="true"><Icon name={t.done ? 'check' : step.icon} size="sm" /></span>
           </div>
-          {expandable && open === 'data' && <div style={{ padding: '0 0 16px 38px' }}><DataSourceChoices /></div>}
+          <span className="da-ob-step-title">{step.title}</span>
+          <p className="da-ob-step-desc">{step.desc}</p>
+          {t.done
+            ? <span className="da-ob-step-state">已完成</span>
+            : t.id === 'data'
+              ? <button type="button" className="da-ob-step-action" aria-expanded={dataOpen} aria-controls="onboarding-data-choices"
+                onClick={() => setDataOpen(o => !o)}>{dataOpen ? '收起方式' : '选择方式'}<span className={`da-ob-chevron${dataOpen ? ' is-open' : ''}`}><Icon name="chevron" size="sm" /></span></button>
+              : <button type="button" className="da-ob-step-action" onClick={() => act(t.id)}>{step.cta}<Icon name="chevron" size="sm" /></button>}
         </li>;
       })}
     </ol>
-    <footer style={{ padding: '10px 20px 14px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, fontSize: 12, color: 'var(--da-text-muted)' }}>
-      <span>明天起这里会收起到侧栏底部，{status.daysLeft} 天后自动隐藏；随时可在“更多 › 帮助与引导”重新打开。</span>
-      <span style={{ flex: 1 }} />
-      <button type="button" className="da-btn da-btn-ghost da-btn-sm" onClick={() => void dismissOnboarding()}>不再显示</button>
+    {dataOpen && !dataDone && <div id="onboarding-data-choices" className="da-ob-expand"><DataSourceChoices /></div>}
+    <footer className="da-ob-foot">
+      <span>明天起收起到侧栏底部，{status.daysLeft} 天后自动隐藏；可在“更多 › 帮助与引导”重新打开。</span>
+      <button type="button" className="da-ob-link" onClick={() => void dismissOnboarding()}>不再显示</button>
     </footer>
   </section>;
 }
 
-const STARTER_FILLERS: { title: string; desc: string; path: string; icon: 'upload' | 'database' | 'book' }[] = [
-  { title: '上传新数据', desc: '新建知识库，上传 Excel / CSV，建模发布后即可问数', path: UPLOAD_PATH, icon: 'upload' },
+const STARTER_FILLERS: { title: string; desc: string; path: string; icon: 'upload' | 'database' }[] = [
+  { title: '上传新数据', desc: '新建知识库并上传 Excel / CSV，建模发布后即可问数', path: UPLOAD_PATH, icon: 'upload' },
   { title: '关联外部数据表', desc: '新建数据源，选择要分析的数据库表', path: DATASOURCE_PATH, icon: 'database' },
 ];
 
@@ -152,21 +153,21 @@ export function StarterQuestions({ starters, onPick }: {
   // Fewer than three questions: the remaining slots point to adding data, so the home page never
   // looks unfinished.
   const fillers = STARTER_FILLERS.slice(0, Math.max(0, 3 - starters.length));
-  return <section aria-label="从这些问题开始" style={{ width: '100%', maxWidth: 880, marginTop: 24, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'left' }}>
-    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-      <strong style={{ fontSize: 15 }}>从这些问题开始</strong>
-      <span style={{ fontSize: 12, color: 'var(--da-text-muted)' }}>来自你能使用的知识库，点一下即选中知识库并填入问题</span>
+  return <section aria-label="从这些问题开始" className="da-ob-section">
+    <div className="da-ob-section-head">
+      <h2>从这些问题开始</h2>
+      <span>来自你能使用的知识库，点一下即选中知识库并填入问题</span>
     </div>
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-      {starters.map(s => <button key={s.groupId} type="button" onClick={() => onPick(s)}
-        style={{ textAlign: 'left', background: 'var(--da-surface)', border: '1px solid var(--da-border)', borderRadius: 12, padding: 14, display: 'flex', flexDirection: 'column', gap: 8, cursor: 'pointer', color: 'var(--da-text)', font: 'inherit' }}>
-        <span style={{ fontSize: 12, color: 'var(--da-primary)', fontWeight: 600 }}>{s.groupName}{s.shared ? ' · 同事共享' : ''}</span>
-        <span style={{ fontSize: 14, lineHeight: 1.6 }}>{s.question}</span>
+    <div className="da-ob-grid">
+      {starters.map(s => <button key={s.groupId} type="button" className="da-ob-starter" onClick={() => onPick(s)}>
+        <span className="da-ob-starter-kb"><Icon name="book" size="sm" /><b>{s.groupName}</b>{s.shared && <em>同事共享</em>}</span>
+        <span className="da-ob-starter-q">{s.question}</span>
+        <span className="da-ob-starter-go">填入问题<Icon name="chevron" size="sm" /></span>
       </button>)}
-      {fillers.map(f => <button key={f.title} type="button" onClick={() => navigate(f.path)}
-        style={{ textAlign: 'left', background: 'transparent', border: '1px dashed var(--da-border-strong)', borderRadius: 12, padding: 14, display: 'flex', flexDirection: 'column', gap: 8, cursor: 'pointer', color: 'var(--da-text)', font: 'inherit' }}>
-        <span style={{ fontSize: 12, color: 'var(--da-text-muted)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name={f.icon} size="sm" />{f.title}</span>
-        <span style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--da-text-2)' }}>{f.desc}</span>
+      {fillers.map(f => <button key={f.title} type="button" className="da-ob-starter is-filler" onClick={() => navigate(f.path)}>
+        <span className="da-ob-starter-kb"><Icon name={f.icon} size="sm" />{f.title}</span>
+        <span className="da-ob-starter-q">{f.desc}</span>
+        <span className="da-ob-starter-go">去添加<Icon name="chevron" size="sm" /></span>
       </button>)}
     </div>
   </section>;
@@ -175,15 +176,20 @@ export function StarterQuestions({ starters, onPick }: {
 /** Shown on the home page when no published knowledge base can be queried yet. */
 export function NoKnowledgeBaseNotice({ unpublished }: { unpublished: string[] }) {
   const navigate = useNavigate();
-  return <section aria-label="还没有可以问数的知识库" style={{ width: '100%', maxWidth: 880, marginTop: 24, flexShrink: 0, background: 'var(--da-surface)', border: '1px dashed var(--da-border-strong)', borderRadius: 16, padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 12, textAlign: 'left' }}>
-    <strong style={{ fontSize: 16 }}>还没有可以问数的知识库</strong>
-    <span style={{ fontSize: 13, color: 'var(--da-text-2)', lineHeight: 1.7 }}>问数需要一个<strong>已发布</strong>的知识库。可以自己准备数据并建模，也可以请同事把知识库共享给你，共享后会直接出现在“选择知识库”里。未选择知识库时只能普通对话，回答不会查询数据。</span>
-    {unpublished.length > 0
-      ? <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 13 }}>
-        <span>“{unpublished.join('”“')}”还没有发布，完成建模后点击“发布”即可问数。</span>
-        <button type="button" className="da-btn da-btn-primary da-btn-sm" onClick={() => navigate('/configure/modeling')}>去建模</button>
+  return <section aria-label="还没有可以问数的知识库" className="da-ob-card">
+    <div className="da-ob-banner">
+      <span className="da-ob-banner-icon is-neutral" aria-hidden="true"><Icon name="book" /></span>
+      <div className="da-ob-banner-body">
+        <h2>还没有可以问数的知识库</h2>
+        <p>问数需要一个已发布的知识库。可以自己准备数据并建模，也可以请同事共享知识库给你，共享后会直接出现在“选择知识库”里。未选择知识库时只能普通对话，回答不会查询数据。</p>
+        {unpublished.length > 0
+          ? <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 13, color: 'var(--da-text-2)' }}>
+            <span>“{unpublished.join('”“')}”还没有发布，完成建模后点击“发布”即可问数。</span>
+            <button type="button" className="da-btn da-btn-primary da-btn-sm" onClick={() => navigate('/configure/modeling')}>去建模</button>
+          </div>
+          : <DataSourceChoices compact />}
       </div>
-      : <DataSourceChoices compact />}
+    </div>
   </section>;
 }
 
