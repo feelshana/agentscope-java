@@ -3,7 +3,7 @@
 .da-ob-card,
 .da-ob-section {
   width: 100%;
-  max-width: 880px;
+  max-width: var(--da-landing-max, 880px);
   margin-top: 28px;
   flex-shrink: 0;
   text-align: left;

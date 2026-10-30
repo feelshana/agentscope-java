@@ -17,7 +17,7 @@ import EmptyIllustration from './EmptyIllustration';
 import LandingExamples from './LandingExamples';
 import { NoKnowledgeBaseNotice, OnboardingChecklist, OnboardingTip, StarterQuestions } from './Onboarding';
 import { refreshOnboarding, useOnboarding } from '../api/onboarding';
-import { getToken } from '../api/auth';
+import { currentUserProfile, getToken } from '../api/auth';
 import type { OnboardingStatus } from '../api/onboarding';
 import Icon from './Icon';
 import OntologyGraphView from './OntologyGraphView';
@@ -169,16 +169,18 @@ const nextId = () => `m${Date.now().toString(36)}-${counter++}`;
 const STORAGE_PREFIX = 'claw_chat_session:';
 const storageKey = (agentId: string) => `${STORAGE_PREFIX}${agentId}`;
 
-/** Home-page greeting by local time of day, with the signed-in user's name from the token. */
-function landingGreeting(): string {
+/** Prefer the current profile's display name; fall back to the account when unavailable. */
+function landingGreeting(displayName?: string): string {
   const hour = new Date().getHours();
   const part = hour < 6 ? '夜深了' : hour < 11 ? '早上好' : hour < 13 ? '中午好' : hour < 18 ? '下午好' : '晚上好';
-  let name = '';
-  try {
-    const bytes = atob((getToken() ?? '').split('.')[1].replace(/-/g, '+').replace(/_/g, '/'));
-    const payload = JSON.parse(new TextDecoder().decode(Uint8Array.from(bytes, c => c.charCodeAt(0))));
-    name = (payload.username as string) || (payload.sub as string) || '';
-  } catch { /* no name: greeting only */ }
+  let name = displayName?.trim() || '';
+  if (!name) {
+    try {
+      const bytes = atob((getToken() ?? '').split('.')[1].replace(/-/g, '+').replace(/_/g, '/'));
+      const payload = JSON.parse(new TextDecoder().decode(Uint8Array.from(bytes, c => c.charCodeAt(0))));
+      name = (payload.username as string) || (payload.sub as string) || '';
+    } catch { /* no name: greeting only */ }
+  }
   return name ? `${part}，${name}` : part;
 }
 
@@ -370,6 +372,18 @@ export default function ChatPanel({
   inspectorId,
   onToolResolved,
 }: ChatPanelProps) {
+  const token = getToken();
+  const [greetingProfile, setGreetingProfile] = useState<{ token: string; displayName?: string } | null>(null);
+  useEffect(() => {
+    if (!token) return;
+    const controller = new AbortController();
+    void currentUserProfile(controller.signal).then(profile => {
+      if (!controller.signal.aborted && getToken() === token) {
+        setGreetingProfile({ token, displayName: profile.displayName });
+      }
+    }).catch(() => {});
+    return () => controller.abort();
+  }, [token]);
   const [searchParams, setSearchParams] = useSearchParams();
   const [sessionMsgs, setSessionMsgs] = useState<Map<string, SessionMsgs>>(new Map());
   const [input, setInput] = useState('');
@@ -1180,7 +1194,7 @@ export default function ChatPanel({
         <div className="da-landing-wrap">
           <div className="da-landing-greeting">
             <span className="da-landing-eyebrow"><span className="da-landing-eyebrow-dot" aria-hidden="true" />红海DataAgent · 你的大数据智囊团</span>
-            <h1 className="da-landing-title">{landingGreeting()}</h1>
+            <h1 className="da-landing-title">{landingGreeting(greetingProfile?.token === token ? greetingProfile.displayName : undefined)}</h1>
             <p>选择知识库，用自然语言查询数据、分析变化或生成报告</p>
           </div>
           <div className="da-composer-glow">

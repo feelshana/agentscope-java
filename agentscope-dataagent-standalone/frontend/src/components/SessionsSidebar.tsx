@@ -424,7 +424,7 @@ const S: Record<string, React.CSSProperties> = {
     padding: '0 16px', flexShrink: 0,
   },
   brandName: { fontSize: 16, fontWeight: 700, color: 'var(--da-text)', letterSpacing: '-0.01em' },
-  brandTag: { fontSize: 12, color: 'var(--da-text-muted)', marginTop: 1 },
+  brandTag: { fontSize: 12, color: 'var(--da-text-3)', marginTop: 1 },
   moreMenu: {
     position: 'fixed', width: 180, zIndex: 1100,
     background: 'var(--da-surface)', border: '1px solid var(--da-border)',
@@ -437,7 +437,7 @@ const S: Record<string, React.CSSProperties> = {
     padding: '4px 6px 8px',
   },
   listHeaderTitle: {
-    flex: 1, fontSize: '0.78rem', fontWeight: 600, color: 'var(--da-text-muted)',
+    flex: 1, fontSize: '0.78rem', fontWeight: 600, color: 'var(--da-text-3)',
   },
   dotsBtn: {
     marginLeft: 'auto',
@@ -468,11 +468,11 @@ const S: Record<string, React.CSSProperties> = {
   group: { marginBottom: 18 },
   groupLabel: {
     fontSize: '0.72rem', fontWeight: 500,
-    color: 'var(--da-text-muted)', textTransform: 'uppercase', padding: '8px 12px 6px',
+    color: 'var(--da-text-3)', textTransform: 'uppercase', padding: '8px 12px 6px',
   },
   rowMain: { flex: 1, minWidth: 0 },
   rowTitle: {
-    fontSize: '0.88rem', fontWeight: 400, color: 'var(--da-text-2)',
+    fontSize: '0.88rem', fontWeight: 400, color: 'var(--da-text)',
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   },
   rowMeta: {

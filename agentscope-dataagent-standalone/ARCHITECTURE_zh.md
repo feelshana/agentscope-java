@@ -834,6 +834,8 @@ ADR0118/spec104新增源码构建交付选项：docker/update-source.sh有限重
 
 rehearsal-app.sh与compose.rehearsal-app.yml提供演练应用控制：固定应用image ID、当前UID/GID及socket附加组，加入已有演练库网络，宿主同路径持久目录和只读离线缓存挂载；prod validate/never、独立JWT/模型密钥，不复制开发凭据。start在真实Java前验证数据库/离线向量/兄弟沙箱读写，再等HTTP健康与账号入口；upgrade候选预检失败不停止旧服务，启动失败恢复旧镜像。回退仅应用镜像，数据库/文件/配置不回退；实际现场与正式并发能力另行验收。
 
+`docker/user-admin.sh`提供该独立MySQL部署的固定人员搜索、账号/管理员查询和角色授予/撤销。校验项目与容器标签，通过容器内现有凭据执行；角色修改使用事务行锁、最后管理员保护与本地操作审计，不改变账号ID/密码/资料。已有JWT角色不会立即失效，必须重新登录取得新角色；保护范围仅为本脚本。操作见[用户管理指引](docs/guides/user-admin.md)。
+
 生产旧系统可选用ADR0117/spec103的同容器运行环境：docker/runtime.Dockerfile提供Java17/Python/Wren与Docker客户端，docker/runtime-entrypoint.sh复用发布包依赖预检并exec前台Java；业务tar仍由操作者构建上传，原生bin/dataagent.sh保持不变。docker/dataagent-container.sh准备/挂载宿主持久根、独立模型缓存和宿主Docker socket，以操作者UID/GID及socket附加组运行应用，分析容器仍由现有框架管理。宿主与应用项目绝对路径必须相同，供宿主daemon解析shared绑定；不启动嵌套Docker，不把socket挂载当作宿主权限隔离。停止/替换仅针对项目路径标签匹配的应用容器，不清理业务目录。隔离演练可显式覆盖沙箱镜像和实例标识，默认生产值不变；持久根需核对实际挂载与可用磁盘，不能把小容量tmpfs当业务目录。该选项当前实施与本地验证中，66完整应用/BI/并发尚未验收，操作见[66指引](docs/guides/66-anolis79-next-steps.md)。
 
 ```bash

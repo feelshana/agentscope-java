@@ -162,6 +162,8 @@ bash docker/rehearsal-app.sh logs
 
 ## 七、日志、停启与镜像更新
 
+人员查询和管理员授权可直接在源码目录执行`bash docker/user-admin.sh`，详见[用户管理指引](user-admin.md)。仅改变已有账号角色，不需要重构或重启应用；修改后重新从BI登录，旧令牌不会立即失效。
+
 启动异常先看rehearsal-app.sh logs的Java控制台；问数/建模转录分别在演练应用logs/LLM.log、LLM-modeling.log，耗时和时间门禁为execution-timing.log、sql-window-gate.log。日志可能含业务数据，外发前需去除敏感内容。数据库问题另用rehearsal-mysql.sh logs；不要输出私有env全文。
 
 ```bash

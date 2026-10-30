@@ -47,6 +47,8 @@ const STATUS_LABEL: Record<UploadStatus['status'], string> = {
   failed: '失败',
 };
 
+const ACTIVE_UPLOAD: UploadStatus['status'][] = ['uploading', 'queued', 'importing', 'publishing'];
+
 const NAV_ITEMS: { key: View; icon: IconName; label: string }[] = [
   { key: 'files', icon: 'list', label: '数据集' },
   { key: 'modeling', icon: 'model', label: '语义建模' },
@@ -373,32 +375,42 @@ export default function DatasetGroupPage() {
         <div className="kw-tabs" role="tablist" aria-label="知识库内容">{NAV_ITEMS.filter(n => canManage || n.key === 'files').map(n => <button key={n.key} role="tab" aria-selected={view === n.key} className={view === n.key ? 'active' : ''} onClick={() => n.key === 'modeling' ? navigate(`/configure/modeling/${groupId}`) : setView(n.key)}>{n.label}{n.key === 'files' && <span className="kw-badge">{fileCount}</span>}</button>)}</div>
         <input ref={fileRef} type="file" multiple accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={e => { if (e.target.files?.length) uploadFiles(e.target.files); e.target.value = ''; }} />
         {association && <div style={{ margin: '12px 0' }}><AssociationProgress state={association} /></div>}
-        <details className="kw-progress" open={uploadStatuses.some(s => s.status !== 'ready') || associatingTables.size > 0} hidden={uploadStatuses.length === 0}>
-          <summary>导入与关联进度{uploadStatuses.length > 0 && ` · 已完成 ${uploadStatuses.filter(s => s.status === 'ready').length}/${uploadStatuses.length} 个文件`}</summary>
-          {uploadStatuses.length > 0 && (
-            <div className="da-card" style={{ marginTop: 8, padding: 8 }}>
+        {uploadStatuses.length > 0 && (() => {
+          const doneCount = uploadStatuses.filter(s => s.status === 'ready').length;
+          const failedCount = uploadStatuses.filter(s => s.status === 'failed').length;
+          const running = uploadStatuses.some(s => ACTIVE_UPLOAD.includes(s.status));
+          const uncertain = uploadStatuses.some(s => s.status === 'uncertain');
+          const pending = uploadStatuses.some(s => s.status === 'model_pending');
+          const needsAttention = failedCount > 0 || uncertain || pending;
+          const progressTitle = running ? '正在导入文件' : failedCount ? '部分文件导入失败' : uncertain ? '导入结果待确认' : pending ? '文件已导入，模型待检查' : '文件已全部导入';
+          return <details className="kw-up" open={uploadStatuses.some(s => s.status !== 'ready') || associatingTables.size > 0}>
+            <summary className="kw-up-head">
+              <span className={`kw-up-headicon${running ? ' is-running' : needsAttention ? ' is-attention' : ' is-done'}`} aria-hidden="true">
+                {running ? <span className="da-spinner da-spinner-sm" /> : <Icon name={needsAttention ? 'warn' : 'check'} size="sm" />}
+              </span>
+              <span className="kw-up-title">{progressTitle}</span>
+              <span className="kw-up-count">已完成 {doneCount}/{uploadStatuses.length}{failedCount > 0 && `，失败 ${failedCount}`}</span>
+              <span className="kw-up-bar" aria-hidden="true"><span style={{ width: `${Math.round(doneCount * 100 / uploadStatuses.length)}%` }} /></span>
+              <Icon name="chevron" size="sm" className="kw-up-chevron" />
+            </summary>
+            <ul className="kw-up-list">
               {uploadStatuses.map((s, i) => (
-                <div key={`up-${s.name}-${i}`} style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 14, padding: '6px 4px' }}>
-                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {s.name}{s.error && <span style={{ display: 'block', color: 'var(--da-danger)', whiteSpace: 'normal' }}>{s.error}</span>}
+                <li key={`up-${s.name}-${i}`} className={`kw-up-row is-${s.status}`}>
+                  <span className="kw-up-file" aria-hidden="true"><Icon name="file" size="sm" /></span>
+                  <span className="kw-up-name">
+                    <span title={s.name}>{s.name}</span>
+                    {s.error && <small>{s.error}</small>}
                   </span>
-                  {['uploading', 'queued', 'importing', 'publishing'].includes(s.status) && (
-                    <span className="da-spinner da-spinner-sm" style={{ borderColor: 'var(--da-border)', borderTopColor: 'var(--da-primary)' }} />
-                  )}
-                  <span
-                    style={{
-                      color:
-                        s.status === 'failed'
-                          ? 'var(--da-danger)'
-                          : 'var(--da-primary)',
-                    }}
-                  >
+                  <span className="kw-up-status">
+                    {ACTIVE_UPLOAD.includes(s.status) && <span className="da-spinner da-spinner-sm" aria-hidden="true" />}
+                    {s.status === 'ready' && <Icon name="check" size="sm" />}
+                    {s.status === 'failed' && <Icon name="warn" size="sm" />}
                     {STATUS_LABEL[s.status]}
                   </span>
-                  {s.status === 'model_pending' && <button className="da-btn" onClick={() => navigate(`/configure/modeling/${groupId}?asset=publish`)}>检查与发布</button>}
-                  {s.status === 'uncertain' && <button className="da-btn" onClick={() => void refresh()}>刷新确认结果</button>}
-                  {s.status === 'failed' && (
-                    <>
+                  <span className="kw-up-actions">
+                    {s.status === 'model_pending' && <button className="da-btn da-btn-sm" onClick={() => navigate(`/configure/modeling/${groupId}?asset=publish`)}>检查与发布</button>}
+                    {s.status === 'uncertain' && <button className="da-btn da-btn-sm" onClick={() => void refresh()}>刷新确认结果</button>}
+                    {s.status === 'failed' && <>
                       <button
                         className="da-btn da-btn-sm"
                         disabled={!s.file || busy}
@@ -421,24 +433,20 @@ export default function DatasetGroupPage() {
                         重试
                       </button>
                       <button
-                        className="da-btn da-btn-sm"
+                        className="da-btn da-btn-sm da-btn-ghost"
                         aria-label="移除这条记录"
-                        style={{ color: 'var(--da-text-3)' }}
-                        onClick={() => {
-                          mutateUploadStatuses(uploadScope, prev => prev.filter(x => x.name !== s.name));
-                        }}
+                        title="移除这条记录"
+                        onClick={() => mutateUploadStatuses(uploadScope, prev => prev.filter(x => x.name !== s.name))}
                       >
-                        ✕
+                        <Icon name="close" size="sm" />
                       </button>
-                    </>
-                  )}
-                </div>
+                    </>}
+                  </span>
+                </li>
               ))}
-
-            </div>
-          )}
-
-        </details>
+            </ul>
+          </details>;
+        })()}
         {view === 'files' && <>
           <div className="kw-toolbar"><label className="kw-search"><Icon name="search" size="sm" /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="搜索数据集" aria-label="搜索数据集" /></label><span className="kw-spacer" />{canManage && <><button className="da-btn" disabled={busy || !detail} onClick={() => setAssociateOpen(true)}><Icon name="database" size="sm" />关联数据源</button><button className="da-btn" disabled={busy || !detail} onClick={() => setUploadOpen(true)}><Icon name="upload" size="sm" />上传文件</button></>}</div>
           {!detail && !error && <div className="kw-empty">加载知识库…</div>}

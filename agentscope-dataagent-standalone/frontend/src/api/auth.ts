@@ -54,6 +54,20 @@ export interface MeResponse {
   roles: string[];
 }
 
+export interface CurrentUserProfile {
+  displayName?: string;
+  company?: string;
+  department?: string;
+}
+
+export async function currentUserProfile(signal?: AbortSignal): Promise<CurrentUserProfile> {
+  const res = await apiFetch('/api/auth/profile', {
+    signal, headers: { Authorization: `Bearer ${getToken()}` },
+  });
+  if (!res.ok) throw new Error('暂时无法读取用户资料');
+  return res.json();
+}
+
 export async function login(username: string, password: string): Promise<LoginResponse> {
   const res = await fetch(appPath(`${BASE}/api/auth/login`), {
     method: 'POST',
