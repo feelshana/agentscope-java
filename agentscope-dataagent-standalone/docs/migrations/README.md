@@ -39,3 +39,10 @@
 - 空库使用本目录更新后的完整DDL，不叠加0097；表数仍为37，其中包含不再被应用读取的旧 `dataagent_semantic_term`。
 - 用户确认保留旧术语表及数据，暂不迁移测试术语。[0096](0096-retire-semantic-term-mysql.sql)现为停用说明，不执行删除；新页面仅显示每库工程的 Naming conventions。
 - `ddl-auto=validate` 不会自动加列；66当前运行旧镜像，本轮只修改本地代码/材料，未对66执行SQL或升级镜像。
+
+
+## 2026-10-30 新手引导整合（spec104）
+
+- 已有平台库在升级镜像前检查用户表的 `onboarding_started_at`、`onboarding_dismissed_at`、`onboarding_completed_at`（DATETIME(6)）、`onboarding_milestones`、`onboarding_tips_seen`（VARCHAR(200)），仅对缺少列执行[0098](0098-onboarding-mysql.sql)对应ALTER。已有正确字段不重复添加。
+- 空库使用当前完整DDL，已包含推荐问题2列和引导5列，不再叠加0097/0098；仍37表。不删用户、不重建已有库、不修改BI资料或角色。
+- BI人员导入SQL显式列出原字段，新引导列可空，因此现有1484人SQL继续可用，不需要重生成或改哈希。66外置prod的validate不会自动补列。

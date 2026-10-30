@@ -1,6 +1,7 @@
 -- Fresh installation only: select an EMPTY platform database before execution.
 -- Baseline: merged candidate (f1ad7772 + b67a179a), originally verified with ddl-auto=validate.
 -- Updated 2026-10-30: recommended-question columns; legacy semantic-term table retained.
+-- Updated 2026-10-30: five nullable onboarding columns on dataagent_user (spec104).
 -- Fresh/upgrade DDL equivalence verified on isolated MySQL 8.0.46.
 -- Structure only: no user rows, business data or credentials; upload database stays empty.
 -- Do not run incremental migrations on top of this complete schema.
@@ -420,6 +421,11 @@ CREATE TABLE `dataagent_semantic_view` (
 
 CREATE TABLE `dataagent_user` (
   `user_id` varchar(128) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `onboarding_started_at` datetime(6) DEFAULT NULL,
+  `onboarding_dismissed_at` datetime(6) DEFAULT NULL,
+  `onboarding_completed_at` datetime(6) DEFAULT NULL,
+  `onboarding_milestones` varchar(200) DEFAULT NULL,
+  `onboarding_tips_seen` varchar(200) DEFAULT NULL,
   `display_name` varchar(191) DEFAULT NULL,
   `company` varchar(191) DEFAULT NULL,
   `department` varchar(191) DEFAULT NULL,

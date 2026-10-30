@@ -4,6 +4,7 @@ import { ACTIVE_AGENT_ID } from '../api/activeAgent';
 import { apiFetch, getToken, isAdmin } from '../api/auth';
 import { InboxEntry, deleteSession, inboxPage } from '../api/sessions';
 import Icon, { IconName } from './Icon';
+import { OnboardingSidebarEntry } from './Onboarding';
 
 interface UtilityItem {
   label: string;
@@ -350,6 +351,7 @@ export default function SessionsSidebar({ refreshKey, collapsed = false, onToggl
           onClick={() => void loadMore()}>{loadingMore ? '加载中…' : pageError ?? '加载更多'}</button>}
       </div>
 
+      <OnboardingSidebarEntry />
       <div className="rail-footer">
         <UserMenu username={getUsername()} />
         {onToggle && <button type="button" title="收起侧边栏" aria-label="收起侧边栏" aria-expanded={true} className="rail-collapse-toggle is-expanded" onClick={onToggle}><Icon name="chevron" size="sm" /></button>}

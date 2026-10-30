@@ -113,6 +113,7 @@ export default function DataSourceFormModal({ source, onClose, onSaved }: {
         {error && <div className="ds-feedback ds-failed" role="alert"><Icon name="warn" size="sm" />{error}</div>}
         {testResult && <div className={`ds-feedback ${testResult.connected ? 'ds-connected' : 'ds-failed'}`} role={testResult.connected ? 'status' : 'alert'}>
           <Icon name={testResult.connected ? 'check' : 'warn'} size="sm" />{testResult.connected ? '连接成功，可以保存' : `连接失败：${testResult.error || '请检查连接配置'}`}
+          {!testResult.connected && <div style={{ marginTop: 6, color: 'var(--da-text-muted)' }}>没有平台能访问到的数据库时，可以先在知识库里上传 Excel / CSV 文件体验问数。</div>}
         </div>}
       </div>
       <footer className="ds-dialog-foot"><button type="button" className="da-btn" onClick={test} disabled={busy || testing}><Icon name="refresh" size="sm" />{testing ? '检测中…' : '检测连接'}</button>

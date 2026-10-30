@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { deleteDataSource, ExternalDataSource, getDataSourceStatus, listDataSources } from '../../api/datasources';
 import { KnowledgeBreadcrumb, WorkspaceMenu } from '../../components/KnowledgeWorkspace';
 import DataSourceDialog from '../../components/DataSourceDialog';
@@ -12,6 +13,14 @@ import '../../components/DataSources.css';
 type ConnectionState = { state: 'checking' | 'connected' | 'disconnected' | 'error'; error?: string | null };
 
 export default function DataSourcesPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get('create') !== '1') return;
+    setEditor({ source: null });
+    const next = new URLSearchParams(searchParams);
+    next.delete('create');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [items, setItems] = useState<ExternalDataSource[]>([]);
   const [statuses, setStatuses] = useState<Record<string, ConnectionState>>({});
   const [loading, setLoading] = useState(true);

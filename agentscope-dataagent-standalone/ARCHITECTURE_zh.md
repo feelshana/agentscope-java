@@ -744,6 +744,12 @@ React 18 + TypeScript + Vite SPA（`frontend/`），构建产物进 `classpath:/
 
 ---
 
+### 新手引导（spec104）
+
+所有用户同一套 4 项新手任务：准备数据、完成建模并发布、问第一个问题、用"继续分析"完成一次分析。`OnboardingService#status` 每次按当前用户可查询的知识库（`KnowledgeBaseAccessService#visible`，自建与共享均算）判定前两项；后两项是 `ChatController#recordOnboarding` 在带知识库的问数请求、已确认参数的分析请求开始时于 boundedElastic 上记录的里程碑，失败不影响对话。状态存于 `dataagent_user` 的 `onboarding_*` 列：首次读取时记开始时间；按 Asia/Shanghai 自然日，当天为 `full`，次日起 `collapsed`，满 7 天或"不再显示"后 `hidden`；首次全部完成时记 `onboarding_completed_at`，当天保持 `full` 显示完成卡片，次日起 `hidden`；"重新打开"清除关闭标记并重计 7 天，保留首次完成时间和里程碑；已完成用户重开当天可见完成卡、次日隐藏。`OnboardingController`（`/api/onboarding`）只读写当前登录用户自己的状态，一次性提示 id 仅限 `follow_ups`、`analysis_params`。
+
+前端 `api/onboarding.ts` 仅为同一登录令牌复用在途请求，按请求修订忽略迟到响应，以登录令牌为键缓存一份状态，供 `ChatPanel` 首页的清单与起步问题（可查询的已发布知识库的 spec103 推荐问题，最多 3 个，点击即选库并填入问题，不足 3 个时用上传数据、关联外部表入口卡补足；没有可查询知识库时显示空状态）、`SessionsSidebar` 底部折叠入口、`AppShell` 挂载的 `HelpPanel`（现有更多页中的"帮助与引导"入口）以及回答下方的 `OnboardingTip` 共用。清单第 1 步并列"上传文件"和"新建数据源"，分别深链到 `/configure/datasets?create=1`、`/configure/datasources?create=1`；数据源连接测试失败时提示可先上传文件。
+
 ### 当前建模工作台（ADR 0069、0075、0076）
 
 `SemanticModelingPage` 组织建模对话、资料、语义模型三区（spec092 §7）。建模对话页以对话为中心：每轮回复下方列出 AI 建模结果，待确定的口径以对话内卡片出现，右侧试问展示助手写出的 SQL 与口径，用户核对后确认（不自动试运行、不查询数据），底部草稿栏统一发布；确认、改写或归档问题时，修订号在工作区锁内递增，发布在工作区锁内读取要覆盖的修订号（`MdlQuestionStore#locked`、`MdlPublishService#doPublishLocked`），避免发布期间确认的变更留下"待发布"却无差异可发布；若仍出现该状态，草稿栏提供"重新发布"。文档修改后自动排队一条文档更新请求。助手按官方技能直接修改草稿，发布为显式操作，官方工程校验失败保留旧快照。问数始终使用已发布工程。
@@ -824,11 +830,11 @@ Boot 4 HTTP JSON缓冲使用`spring.http.codecs.max-in-memory-size=50MB`；人�
 
 ### 12.2 构建与运行
 
-ADR0118/spec099新增源码构建交付选项：docker/update-source.sh有限重试并仅快进指定分支；docker/build-from-source.sh从干净明确提交归档源码，在独立Maven/JDK17容器中构建全部本地依赖及前后端，封装应用镜像并静态预检，不启停业务。最终镜像使用application-entrypoint.sh从/opt/dataagent/app运行JAR，配置与data/logs在宿主持久根，构建/运行分离；业务控制见下述演练Compose入口。前端安装命令支持构建参数覆盖，原默认install保持不变，源码发布使用ci。临时库演练由rehearsal-mysql.sh生成独立Compose、随机密码和初次完整DDL，MySQL不发布宿主端口，应用后续通过专属网络连接，配置/数据不随更新重置，不复用Dify数据库；不替代正式两库交付。详见[源码构建指引](docs/guides/66-source-build.md)。
+ADR0118/spec104新增源码构建交付选项：docker/update-source.sh有限重试并仅快进指定分支；docker/build-from-source.sh从干净明确提交归档源码，在独立Maven/JDK17容器中构建全部本地依赖及前后端，封装应用镜像并静态预检，不启停业务。最终镜像使用application-entrypoint.sh从/opt/dataagent/app运行JAR，配置与data/logs在宿主持久根，构建/运行分离；业务控制见下述演练Compose入口。前端安装命令支持构建参数覆盖，原默认install保持不变，源码发布使用ci。临时库演练由rehearsal-mysql.sh生成独立Compose、随机密码和初次完整DDL，MySQL不发布宿主端口，应用后续通过专属网络连接，配置/数据不随更新重置，不复用Dify数据库；不替代正式两库交付。详见[源码构建指引](docs/guides/66-source-build.md)。
 
 rehearsal-app.sh与compose.rehearsal-app.yml提供演练应用控制：固定应用image ID、当前UID/GID及socket附加组，加入已有演练库网络，宿主同路径持久目录和只读离线缓存挂载；prod validate/never、独立JWT/模型密钥，不复制开发凭据。start在真实Java前验证数据库/离线向量/兄弟沙箱读写，再等HTTP健康与账号入口；upgrade候选预检失败不停止旧服务，启动失败恢复旧镜像。回退仅应用镜像，数据库/文件/配置不回退；实际现场与正式并发能力另行验收。
 
-生产旧系统可选用ADR0117/spec098的同容器运行环境：docker/runtime.Dockerfile提供Java17/Python/Wren与Docker客户端，docker/runtime-entrypoint.sh复用发布包依赖预检并exec前台Java；业务tar仍由操作者构建上传，原生bin/dataagent.sh保持不变。docker/dataagent-container.sh准备/挂载宿主持久根、独立模型缓存和宿主Docker socket，以操作者UID/GID及socket附加组运行应用，分析容器仍由现有框架管理。宿主与应用项目绝对路径必须相同，供宿主daemon解析shared绑定；不启动嵌套Docker，不把socket挂载当作宿主权限隔离。停止/替换仅针对项目路径标签匹配的应用容器，不清理业务目录。隔离演练可显式覆盖沙箱镜像和实例标识，默认生产值不变；持久根需核对实际挂载与可用磁盘，不能把小容量tmpfs当业务目录。该选项当前实施与本地验证中，66完整应用/BI/并发尚未验收，操作见[66指引](docs/guides/66-anolis79-next-steps.md)。
+生产旧系统可选用ADR0117/spec103的同容器运行环境：docker/runtime.Dockerfile提供Java17/Python/Wren与Docker客户端，docker/runtime-entrypoint.sh复用发布包依赖预检并exec前台Java；业务tar仍由操作者构建上传，原生bin/dataagent.sh保持不变。docker/dataagent-container.sh准备/挂载宿主持久根、独立模型缓存和宿主Docker socket，以操作者UID/GID及socket附加组运行应用，分析容器仍由现有框架管理。宿主与应用项目绝对路径必须相同，供宿主daemon解析shared绑定；不启动嵌套Docker，不把socket挂载当作宿主权限隔离。停止/替换仅针对项目路径标签匹配的应用容器，不清理业务目录。隔离演练可显式覆盖沙箱镜像和实例标识，默认生产值不变；持久根需核对实际挂载与可用磁盘，不能把小容量tmpfs当业务目录。该选项当前实施与本地验证中，66完整应用/BI/并发尚未验收，操作见[66指引](docs/guides/66-anolis79-next-steps.md)。
 
 ```bash
 # 构建（含前端：自动安装 Node → npm build → 后端打包）

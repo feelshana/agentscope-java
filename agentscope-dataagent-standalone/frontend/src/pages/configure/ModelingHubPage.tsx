@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { DataSourceChoices } from '../../components/Onboarding';
 import { useNavigate } from 'react-router-dom';
 import { KnowledgeBreadcrumb } from '../../components/KnowledgeWorkspace';
 import Icon from '../../components/Icon';
@@ -80,7 +81,10 @@ export default function ModelingHubPage() {
         {rows && <span className="kw-count">共 {rows.length} 个 · 按创建时间从新到旧</span>}
       </div>
       {rows === null && !error && <div className="kw-empty">加载中…</div>}
-      {rows?.length === 0 && <div className="kw-empty">你还没有可以管理的知识库。先在"知识库"中创建并上传数据。</div>}
+      {rows?.length === 0 && <div className="kw-empty" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+        <span>你还没有可以管理的知识库。先创建知识库并上传数据，或新建数据源关联外部表。</span>
+        <div style={{ width: '100%', maxWidth: 640 }}><DataSourceChoices compact /></div>
+      </div>}
       {shown && shown.length > 0 && <div className="kw-tablebox"><div className="kw-table-scroll"><table className="kw-table mh-table">
         <thead><tr><th>知识库</th><th>当前状态</th><th className="numeric">数据集</th><th>创建时间</th><th className="end">操作</th></tr></thead>
         <tbody>{shown.map(row => {

@@ -4,6 +4,7 @@ import { ACTIVE_AGENT_ID } from '../api/activeAgent';
 import { AgentDefinition, getAgent } from '../api/agents';
 import SessionsSidebar from './SessionsSidebar';
 import { ToastHost } from './Toast';
+import { HelpPanel } from './Onboarding';
 import { ShellOutletContext } from './EditTierGate';
 import { ShellNavigationContext } from './ShellNavigation';
 import Icon from './Icon';
@@ -88,6 +89,7 @@ export default function AppShell() {
         <Outlet context={ctx} />
       </main>
       <ToastHost />
+      <HelpPanel />
       <NewVersionBanner />
     </div>
     </ShellNavigationContext.Provider>
