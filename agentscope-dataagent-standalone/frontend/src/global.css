@@ -1115,7 +1115,10 @@ button:focus-visible {
   /* TC-style hero: block anchored toward the top, not vertically centred */
   justify-content: flex-start;
   width: 100%;
-  padding: clamp(32px, 7vh, 88px) 24px 32px;
+  /* One content column for the whole home page; wide enough that embedded (iframe) hosts don't
+     show large empty gutters, narrow enough to keep lines readable. */
+  --da-landing-max: 1080px;
+  padding: clamp(32px, 7vh, 88px) 32px 32px;
   overflow-y: auto;
   animation: da-fade-up 0.45s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
@@ -1135,7 +1138,7 @@ button:focus-visible {
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.06);
 }
 .da-landing-wrap .da-composer-glow {
-  max-width: 880px;
+  max-width: var(--da-landing-max);
 }
 .da-composerwrap .da-composer-glow {
   max-width: 960px;
@@ -1177,9 +1180,9 @@ button:focus-visible {
 }
 
 .da-landing-greeting {
-  /* left-aligned inside the same 880px column as the composer (TC-style hero) */
+  /* left-aligned inside the same column as the composer (TC-style hero) */
   width: 100%;
-  max-width: 880px;
+  max-width: var(--da-landing-max, 880px);
   /* TC stacks title + tagline as a flex column with a 10px gap */
   display: flex;
   flex-direction: column;
@@ -1240,7 +1243,7 @@ button:focus-visible {
 /* ---------- landing example cards (TC-style hero suggestions) ---------- */
 .da-landing-examples {
   width: 100%;
-  max-width: 880px;
+  max-width: var(--da-landing-max, 880px);
   margin-top: 28px;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
