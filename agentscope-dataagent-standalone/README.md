@@ -314,7 +314,7 @@ to false; existing users and grants are retained.
 | `dataagent.wren.profile` / `data-source` / `timeout-seconds` / `instance-idle-seconds` | `dataagent` / `mysql` / `180` / `1800` | Default wren connection profile (M4: a group whose datasets all come from one MySQL external datasource binds its own `ext-<datasourceId>` profile, resolved at publish time and pinned into the snapshot; this setting is the fallback for uploaded-only groups and pre-M4 snapshots), project dialect (written into `wren_project.yml`, passed to parse-types), per-command subprocess timeout (seconds) and the per-group instance-pool idle TTL in seconds (M3: an unused wren instance is closed and respawned on demand). Env: `DATAAGENT_WREN_PROFILE` / `DATAAGENT_WREN_DATA_SOURCE` / `DATAAGENT_WREN_TIMEOUT_SECONDS` / `DATAAGENT_WREN_INSTANCE_IDLE_SECONDS`. |
 | `server.port` | `8080` | HTTP port. |
 | `dataagent.upload.max-file-size` / `max-selection-size` / `max-files` | `50MB` / `100MB` / `10` | 单文件、整批选择大小及文件数量；前端从上传策略 API 读取。 |
-| `dataagent.upload.max-rows` / `max-columns` / `max-cells` | `100000` / `100` / `2000000` | 每文件解析规模限制。 |
+| `dataagent.upload.max-rows` / `max-columns` / `max-cells` | `200000` / `100` / `2000000` | 每文件解析规模限制。 |
 | `dataagent.upload.concurrent-files` | `8` | 单进程在途上传预算（1—32）；超额 429，前端有限调度。 |
 | `dataagent.chat.max-active` / `max-active-per-user` | `16` / `2` | ChatController 问数执行预算，建模豁免。 |
 | `dataagent.chat.max-waiting` / `max-waiting-per-user` | `16` / `1` | 问数等待名额；排队通过 SSE capacity 提示。 |

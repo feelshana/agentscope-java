@@ -26,7 +26,7 @@ public class DatasetUploadProperties {
     private DataSize maxFileSize = DataSize.ofMegabytes(50);
     private DataSize maxSelectionSize = DataSize.ofMegabytes(100);
     private int maxFiles = 10;
-    private long maxRows = 100000;
+    private long maxRows = 200000;
     private int maxColumns = 100;
     private long maxCells = 2000000;
     private int concurrentFiles = 8;

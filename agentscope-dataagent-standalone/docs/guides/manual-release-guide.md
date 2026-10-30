@@ -59,7 +59,7 @@ target/dataagent-2.0.3-SNAPSHOT.tar.gz
 
 ## 上传限制（2026-10-14）
 
-公共 application.yml 的 `dataagent.upload` 集中配置：`max-file-size: 50MB`、`max-selection-size: 100MB`、`max-files: 10`、`max-rows: 100000`、`max-columns: 100`、`max-cells: 2000000`、`concurrent-files: 8`。前端读取后端策略，不另写一套正式限制；修改后重启后端并刷新页面。
+公共 application.yml 的 `dataagent.upload` 集中配置：`max-file-size: 50MB`、`max-selection-size: 100MB`、`max-files: 10`、`max-rows: 200000`、`max-columns: 100`、`max-cells: 2000000`、`concurrent-files: 8`。前端读取后端策略，不另写一套正式限制；修改后重启后端并刷新页面。
 
 这里的 8 是单进程上传处理名额，可按机器与数据库情况调整；不是已承诺的生产并发容量。每文件仍最多 4 个写入工作线程，未完成批次最多 4 个。WebFlux multipart 大内容和应用接收文件均使用系统临时目录，需留出临时磁盘空间；Nginx 请求体限制也要匹配文件大小并留出 multipart 开销。若把单批文件数调整到 12 以上，也要同步调整 `spring.webflux.multipart.max-parts`（默认 12）。
 
