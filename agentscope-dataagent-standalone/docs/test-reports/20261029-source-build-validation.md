@@ -58,3 +58,7 @@ update-source.sh兼容旧Git的cd方式，三次fetch/单次90秒/退避，仅�
 修正只作用于之后新建的演练目录，prepare不覆盖现有66配置/密码/数据；用户已成功核对的库不重建、不重放DDL。实际66 Compose2.27.1/旧内核应用启动、65前缀/真实BI、管理员/模型/LLM及并发仍未本轮验收，不能从本地健康推断上线全流程通过。
 
 收口：修正后的MySQL真实回归30.837秒通过（含init process done/no unbound variable断言），证据mysql-regression.log；Bash语法、Spotless、DocsConsistencyTest和Python默认35项（17通过、18条件跳过）通过；真实应用/MySQL两项已分别显式开启验证。不重复未改动Java/前端的946项或构建，不把默认跳过当真实通过。
+
+## 2026-10-30：66应用现场启动回传
+用户截图确认rehearsal-app.sh prepare/start成功：Java17.0.21/Wren、两库连接、离线向量(2,384)、Docker26.1.4和兄弟沙箱同路径读写通过；dataagent66-rehearsal-app-app-1 Healthy，curl10.194.2.66:18080/actuator/health返回groups=[liveness,readiness]及status=UP。本地HEAD122d2b7e由用户提交；助手未连接66，不推断66镜像SHA等于当前控制脚本提交。
+这是66旧系统上的基础应用启动/环境验收，不等同模型、真实BI/65代理、问答正确率或并发通过。下一步65只读核对可达性及实际Nginx实例，再定位BI原origin的server；本轮无业务代码、自动提交/push或远程操作。

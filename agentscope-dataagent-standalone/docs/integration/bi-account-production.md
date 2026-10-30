@@ -1,7 +1,7 @@
 # BI账号接入、用户导入与公共库发布
 
 ## 状态与前提
-代码候选验收中，真实BI、10.194.2.66、代理和公司模型未验。用户已接受客户端Local Storage账号信任，不增加BI会话验证。只启用当前方案的入口，不需要BI向我们主动传参。
+2026-10-30截图确认66演练应用Healthy、18080健康UP及两库/向量/沙箱预检通过；真实BI、65代理和公司模型未验。用户已接受客户端Local Storage账号信任，不增加BI会话验证。只启用当前方案的入口，不需要BI向我们主动传参。
 
 ## 首次初始化
 
@@ -48,7 +48,7 @@ BI图标只配置上述固定地址，不需要传账号、调用登录接口或
 以下仅是最后一层代理的示例，假定该层收到完整前缀；若上层已剥离/dify，必须按实际请求修改location。现网配置尚未获取，禁止直接覆盖：
 ```nginx
 location /dify/dataagent/ {
-    proxy_pass http://10.194.2.66:8080/;
+    proxy_pass http://10.194.2.66:18080/;
     proxy_set_header Host $http_host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -59,7 +59,7 @@ location /dify/dataagent/ {
     client_max_body_size 120m;
 }
 ```
-8080及上传限制按实际端口/应用限制核对；每层代理的SSE超时/缓冲及上传上限都需检查。保留外部HTTPS地址，不302跳到内网IP，不占用根/api以免影响BI。Dify容器配置应挂载管理，避免重建丢失。iframe同源限制与前缀刷新、附件下载均需验收。
+当前演练端口为18080，上传限制按应用限制核对；每层代理的SSE超时/缓冲及上传上限都需检查。保留外部HTTPS地址，不302跳到内网IP，不占用根/api以免影响BI。Dify容器配置应挂载管理，避免重建丢失。iframe同源限制与前缀刷新、附件下载均需验收。
 
 ## 管理与授权
 普通用户拥有单库使用/管理权限，全局管理员配置模型及公共库。更多页提供管理员系统入口；分析文件仍在对话中预览下载。

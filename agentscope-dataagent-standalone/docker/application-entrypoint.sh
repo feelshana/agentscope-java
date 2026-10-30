@@ -5,7 +5,10 @@ fail() { echo "启动检查失败：$*" >&2; exit 1; }
 action="${1:-run}"
 [[ "$action" == run || "$action" == check || "$action" == image-check ]] || fail '参数只能为run/check/image-check'
 app="${DATAAGENT_APP_HOME:-/opt/dataagent/app}"
-[[ -r "$app/lib/dataagent-exec.jar" && -r "$app/bin/check-wren.py" && -r "$app/requirements-wren.txt" ]] || fail '镜像缺少应用或预检文件'
+for required in "$app/lib/dataagent-exec.jar" "$app/bin/check-wren.py" "$app/requirements-wren.txt"; do
+    [[ -f "$required" ]] || fail "镜像缺少应用或预检文件：$required"
+    [[ -r "$required" ]] || fail "当前运行账号无读取权限：$required"
+done
 java_bin="${DATAAGENT_JAVA:-java}"
 python_bin="${DATAAGENT_WREN_PYTHON:-python3}"
 wren_bin="${DATAAGENT_WREN_EXECUTABLE:-wren}"

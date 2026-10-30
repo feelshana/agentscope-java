@@ -177,3 +177,18 @@ stop只停止本项目应用；数据库、配置、文件和镜像保留。upgr
 本次修正MySQL首次初始化配套：02-users.sh以可执行子进程运行，避免严格模式泄漏到官方入口；健康用TCP127.0.0.1，防止临时初始化socket进程被误判就绪。仅生成新目录时生效，不清空或重放66已经完成的初始化，也不因更新源码自动替换其现有Compose/私有配置。现有库成功核对后继续使用；需要变更已有控制配置时另行审阅，不删库重建。
 
 正式方案：[spec099](../specs/099-source-build-deployment.md)、[ADR0118](../adr/0118-source-build-on-deployment-host.md)。验证见[构建报告](../test-reports/20261029-source-build-validation.md)。助手未连接66执行构建；用户自行push。
+
+## 2026-10-30现场启动通过，转65入口只读盘点
+用户最新截图确认66应用prepare/start、两库连接、离线向量(2,384)、宿主Docker和兄弟沙箱同路径读写通过，应用Healthy，18080/actuator/health返回UP。应用控制已由用户随122d2b7e提交；上述未提交/未启动段落是此前状态，以本段为准。无需重复构建或启动，不把基础UP等同模型/BI/正式数据库验收。
+
+下一步在65执行，只读，不安装/启停或改配置：
+```bash
+hostname -I
+command -v nginx docker curl
+ps -eo pid,user,comm | grep '[n]ginx'
+sudo docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}'
+curl --noproxy '*' --connect-timeout 5 --max-time 10 http://10.194.2.66:18080/actuator/health
+```
+没有某个命令或无权限也是定位结果，不据此重装。根据结果确认实际Nginx实例、配置挂载和承接BI访问域名的server，再备份原配置、增量添加location、nginx -t通过后按既有方式reload；不替换整个server，不要求外发全量nginx -T/私有env。
+
+目标为BI原origin下/dify/dataagent/反向代理到66:18080，BI图标使用/dify/dataagent/bi-entry，不能302到66内网IP。若65只接其他Dify域名，需核对BI入口到65路由；多层仅剥前缀一次，逐层保留SSE。确认这些事实后再提供对应实例的修改/reload命令。
