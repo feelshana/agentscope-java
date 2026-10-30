@@ -397,6 +397,7 @@ export default function DataSourceManagerModal({
               {testResult && (
                 <div role={testResult.connected ? 'status' : 'alert'} style={{ marginTop: 16, fontSize: '0.85rem', color: testResult.connected ? 'var(--da-success)' : 'var(--da-danger)' }}>
                   {testResult.connected ? '连接成功，可以保存' : `连接失败：${testResult.error || '请检查连接配置'}`}
+                  {!testResult.connected && <div style={{ marginTop: 6, color: 'var(--da-text-muted)' }}>没有平台能访问到的数据库时，可以先在知识库里上传 Excel / CSV 文件体验问数。</div>}
                 </div>
               )}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginTop: 20 }}>

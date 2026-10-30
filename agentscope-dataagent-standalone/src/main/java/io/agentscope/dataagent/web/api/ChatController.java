@@ -122,6 +122,7 @@ public class ChatController {
     private ChatCapacity chatCapacity;
     private io.agentscope.dataagent.dataset.ModelingActivity modelingActivity;
     private io.agentscope.dataagent.dataset.FieldScreeningService fieldScreening;
+    private io.agentscope.dataagent.web.onboarding.OnboardingService onboarding;
 
     /**
      * AgentStateStore keys for which we have already recorded a RUN_SESSION event. Each (userId, agentId)
@@ -217,6 +218,37 @@ public class ChatController {
                 throw new IllegalArgumentException("分析参数过长");
         }
         return new io.agentscope.dataagent.tools.data.AnalysisTurn(method, params);
+    }
+
+    /**
+     * spec099: a query with a knowledge base completes "问第一个问题", a confirmed analysis
+     * "继续分析". Recorded off the event loop; a failure never affects the chat.
+     */
+    private void recordOnboarding(
+            String userId,
+            ChatRequest req,
+            io.agentscope.dataagent.tools.data.AnalysisTurn analysis) {
+        List<String> milestones = onboardingMilestones(req, analysis);
+        if (onboarding == null || milestones.isEmpty()) return;
+        Mono.fromRunnable(() -> milestones.forEach(m -> onboarding.record(userId, m)))
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
+                .doOnError(e -> log.warn("Onboarding milestone not recorded: {}", e.toString()))
+                .onErrorResume(e -> Mono.empty())
+                .subscribe();
+    }
+
+    /** spec099: only a query with a knowledge base counts; analysis only once confirmed. */
+    static List<String> onboardingMilestones(
+            ChatRequest req, io.agentscope.dataagent.tools.data.AnalysisTurn analysis) {
+        boolean scoped =
+                Boolean.TRUE.equals(req.allGroups())
+                        || (req.groupIds() != null && !req.groupIds().isEmpty());
+        if (!scoped) return List.of();
+        if (analysis != null && analysis.confirmed())
+            return List.of(
+                    io.agentscope.dataagent.web.onboarding.OnboardingService.ASK,
+                    io.agentscope.dataagent.web.onboarding.OnboardingService.ANALYZE);
+        return List.of(io.agentscope.dataagent.web.onboarding.OnboardingService.ASK);
     }
 
     /** Request body used to resume one native AgentScope modeling confirmation. */
@@ -342,10 +374,10 @@ public class ChatController {
                             }
                             // spec097: every query request replaces the analysis choice, so it
                             // never carries over into the next turn.
+                            var analysis = analysisTurn(req);
                             conversationScopes.putAnalysis(
-                                    (String) auth.getPrincipal(),
-                                    purposeConversation,
-                                    analysisTurn(req));
+                                    (String) auth.getPrincipal(), purposeConversation, analysis);
+                            recordOnboarding((String) auth.getPrincipal(), req, analysis);
                             return execution;
                         })
                 .onErrorResume(
@@ -1412,6 +1444,42 @@ public class ChatController {
     }
 
     @org.springframework.beans.factory.annotation.Autowired
+    public ChatController(
+            ChatUiChannel chatUiChannel,
+            DataAgentBootstrap builderBootstrap,
+            AgentCatalogService catalogService,
+            IdentityLinkStore identityLinks,
+            UsageStore usageStore,
+            ToolEventBus toolEventBus,
+            AgentAccessGuard guard,
+            AgentActivityStore activity,
+            ObjectProvider<Model> modelProvider,
+            ConversationScopeRegistry conversationScopes,
+            DatasetGroupService datasetGroupService,
+            io.agentscope.dataagent.dataset.KnowledgeBaseOperations knowledgeBaseOperations,
+            ChatCapacity chatCapacity,
+            io.agentscope.dataagent.dataset.ModelingActivity modelingActivity,
+            io.agentscope.dataagent.dataset.FieldScreeningService fieldScreening,
+            io.agentscope.dataagent.web.onboarding.OnboardingService onboarding) {
+        this(
+                chatUiChannel,
+                builderBootstrap,
+                catalogService,
+                identityLinks,
+                usageStore,
+                toolEventBus,
+                guard,
+                activity,
+                modelProvider,
+                conversationScopes,
+                datasetGroupService,
+                knowledgeBaseOperations,
+                chatCapacity,
+                modelingActivity,
+                fieldScreening);
+        this.onboarding = onboarding;
+    }
+
     public ChatController(
             ChatUiChannel chatUiChannel,
             DataAgentBootstrap builderBootstrap,

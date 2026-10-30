@@ -19,6 +19,7 @@ spec 是一页纸的需求与验收标准，写代码之前先写（模板：[00
 | [096](096-query-data-files-and-visualization-tiers.md) | spec096：问数结果文件通道与可视化分层 | 已实施，待真实验收 |
 | [097](097-query-analysis-skills.md) | spec097：问数分析技能（归因、异常检测、预测） | 已实施，待真实验收 |
 | [098](098-recommended-question-prefill.md) | spec098：推荐问题按日期规则生成，并在问数页首次回填 | 已实施，待真实验收 |
+| [099](099-new-user-onboarding.md) | spec099：新手引导（入门清单、起步问题、空状态与一次性提示） | 已实施，待真实验收 |
 
 ## 已完成或已关闭（done/）
 

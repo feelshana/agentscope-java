@@ -4,6 +4,8 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { ACTIVE_AGENT_ID } from '../api/activeAgent';
 import { getToken } from '../api/auth';
 import { InboxEntry, deleteSession, inboxPage } from '../api/sessions';
+import { OnboardingSidebarEntry } from './Onboarding';
+import { setHelpOpen } from '../api/onboarding';
 import Icon, { IconName } from './Icon';
 
 interface UtilityItem {
@@ -304,7 +306,7 @@ export default function SessionsSidebar({ refreshKey, collapsed = false, onToggl
           aria-controls="sidebar-more-menu"
           onClick={() => {
             const rect = moreButton.current?.getBoundingClientRect();
-            if (rect) setMorePosition({ left: Math.min(rect.right + 12, window.innerWidth - 196), top: Math.max(8, Math.min(rect.top, window.innerHeight - 68)) });
+            if (rect) setMorePosition({ left: Math.min(rect.right + 12, window.innerWidth - 196), top: Math.max(8, Math.min(rect.top, window.innerHeight - 110)) });
             setMoreOpen(o => !o);
           }}
           className={moreOpen ? 'da-navitem da-navitem-active' : 'da-navitem'}
@@ -313,6 +315,15 @@ export default function SessionsSidebar({ refreshKey, collapsed = false, onToggl
         </button>
         {moreOpen && createPortal(
           <div ref={moreMenu} id="sidebar-more-menu" aria-label="更多选项" style={{ ...S.moreMenu, ...morePosition }}>
+            <button
+              className="da-navitem"
+              onClick={() => {
+                setMoreOpen(false);
+                setHelpOpen(true);
+              }}
+            >
+              <Icon name="book" /> 帮助与引导
+            </button>
             {MORE_ITEMS.map(m => (
               <button
                 key={m.path}
@@ -425,6 +436,7 @@ export default function SessionsSidebar({ refreshKey, collapsed = false, onToggl
           onClick={() => void loadMore()}>{loadingMore ? '加载中…' : pageError ?? '加载更多'}</button>}
       </div>
 
+      <OnboardingSidebarEntry />
       <div style={S.footer}>
         <UserMenu username={getUsername()} />
         {onToggle && <button title="收起侧边栏" aria-label="收起侧边栏" className="da-btn da-btn-ghost da-btn-sm" style={{ marginLeft: 'auto' }} onClick={onToggle}>«</button>}

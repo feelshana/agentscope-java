@@ -39,6 +39,21 @@ class ChatControllerAnalysisTest {
                 .hasMessageContaining("分析参数过长");
     }
 
+    /** spec099: a scoped query completes "问第一个问题"; a confirmed analysis also "继续分析". */
+    @Test
+    void onboardingMilestonesNeedAKnowledgeBaseAndAConfirmedAnalysis() {
+        assertThat(ChatController.onboardingMilestones(request(null, null), null))
+                .containsExactly("ask");
+        var pending = ChatController.analysisTurn(request("attribution", null));
+        assertThat(ChatController.onboardingMilestones(request("attribution", null), pending))
+                .containsExactly("ask");
+        var confirmed = ChatController.analysisTurn(request("forecast", Map.of("horizon", 7)));
+        assertThat(ChatController.onboardingMilestones(request("forecast", null), confirmed))
+                .containsExactly("ask", "analyze");
+        var unscoped = new ChatController.ChatRequest("你好", "conv", List.of());
+        assertThat(ChatController.onboardingMilestones(unscoped, confirmed)).isEmpty();
+    }
+
     /** Existing pages send no analysis fields; the body must still bind (Jackson 3). */
     @Test
     void requestsWithoutAnalysisFieldsStillBind() {

@@ -2,13 +2,17 @@
 
 > 只保留当前任务。2026-10-21 及之前的详细检查点见 [archive/CURRENT_TASK-until-20261021.md](archive/CURRENT_TASK-until-20261021.md)。
 
-## 最新检查点：2026-10-29｜spec096 结果文件与可视化分层、spec097 问数分析技能（未提交）
+## 最新检查点：2026-10-29｜spec099 新手引导已实施（未提交）
 
-- spec096：官方 run_sql/query_cube 结果经 `QueryDataFiles` 落会话 CSV 并附「数据文件」行；`run_python` 拒绝超过 20 行的数据字面量；可视化三层写入提示词；`render_chart` 支持 chart_type/x/y/y2/series/labels，日期列优先折线、ID 列视为维度。已在真实服务验证（数据文件行、折线、未调用 Python）。
-- spec097/ADR0117：归因/异常/预测三个技能（`classpath:analysis-skills/`，numpy+matplotlib 固定脚本）；输入框"分析方法"、参数确认卡（`propose_analysis`，确认前平台拒绝查询）、"继续分析"按钮（前端固定规则，SSE 不变）；分析回执 `queryType=ANALYSIS` 不进召回；`analysis-capabilities` 接口按时间字段置灰。
-- 验证：spotless、`mvn test` 831 项 0 失败 20 跳过（脚本测试用本机 Python 实跑）、package、前端 build；浏览器验证参数卡与降级回答（本机 Docker 未运行，沙箱计算未实测）。
-- spec098：推荐问题发布后后台生成 1 个（平台定日期，问“每天的指标”），问数页新会话回填；分析入口改为“分析 ▾”菜单；归因支持去重指标（additive=false 长表）。
-- 未完成：启动 Docker 后按 spec097 验收 1–4 真实验收（出图与报告）；旧种子技能因技能市场使用而保留。平台库执行 `docs/migrations/0097`（ddl-auto 关闭的环境）。
+- 后端：`OnboardingService`/`OnboardingController`（`/api/onboarding`，只操作当前用户）；`dataagent_user` 增加 `onboarding_*` 五列（迁移 0098，含完成时间：完成当天保留完成卡片）；`ChatController#recordOnboarding` 记录"问数/分析"里程碑。
+- 前端：`api/onboarding.ts`（按令牌缓存）、`components/Onboarding.tsx`（清单、起步问题、空状态、侧栏折叠入口、帮助面板、一次性提示）；接入 ChatPanel 首页、SessionsSidebar、AppShell、ModelingHubPage；知识库页 `?create=1`/`?datasource=1` 深链；数据源连接失败提示改用上传。
+- 验证：后端新增测试 13 项通过；浏览器验收 admin（2/4→问数 3/4→确认分析 4/4、折叠入口、帮助面板、两个提示及"知道了"持久化）与新测试账号（0/4 完整清单、两种准备方式深链、连接失败提示、不再显示后空状态、建模页空状态）。
+- 测试残留：本地库新增两个测试账号 `onboard-test-*`（其一创建时密码字段错误无法登录）；admin 的引导开始时间被改早一天用于验收折叠态。
+- 未完成：spec099 移入 done 待用户确认；提交时排除 `application.yml` 本地密钥改动。
+
+## 上一检查点：2026-10-29｜spec096–098（已提交 dfa71bef 并推送）
+
+- 未完成：启动 Docker 后按 spec097 验收 1–4（出图与报告）；平台库执行 `docs/migrations/0097`（ddl-auto 关闭的环境）。
 
 ## 上一检查点：2026-10-29｜spec095 业务术语、caveats 停用（已提交 9ec35a3b 并推送）
 
@@ -19,13 +23,6 @@
 - 已完成：问数助手新增 `web_search`（DeepSeek 官方搜索 API，`WebSearchTool`），只发搜索词；问数与建模移除 harness 的 `web_search`/`web_fetch`；问数提示词"联网搜索"一节（外部问题不走问数流程）；前端"联网搜索"标签。另含 10-25 提交后的建模提速：工程现状注入、跳过官方预检、语言提醒、建模压缩阈值 240 条/8 万 token、MCP 启动类加载器修复。
 - 验证：spotless、`mvn test` 804 项 0 失败 20 跳过、package、前端 build 与 19 项测试通过。
 - 未完成：用户在 `.claude/launch.json` 配置 `DEEPSEEK_API_KEY` 后重启，按 spec094 三问真实验收；提交时排除 `application.yml` 本地密钥改动；E2E 测试知识库（E2E-A/B）是否删除待用户答复。
-
-## 上一检查点：2026-10-25｜建模与问数提速、试问只核对 SQL、数据源限定 MySQL 8.0+/Doris（已提交）
-
-- 已完成：spec093 字段整理；试问不查数据（只 dry-plan，用户核对 SQL）；发布竞态修复与"重新发布"兜底；建模提示词按轮次分段（`ModelingTurnRules`）；两个助手只挂各自技能；查询结果紧凑化；门禁规则优先（ADR0112）；数据源 MySQL 8.0+/Doris 与日期常量（ADR0113）；问数准备提示与按钮置灰；知识库/语义建模页字号与列表改版。
-- 实测（flash 模型 2026-10-25）：自动建模 44 秒、问数 8–19 秒、门禁全部规则判断（毫秒级）；关系按命名候选直接提问。
-- 本机模型：`qwen/deepseek-v4.1-flash`（仅 `.claude/launch.json`）；`application.yml` 中默认 API Key 的本地修改未提交，建议改为无默认值并轮换密钥。
-- 未完成：spec093 验收标准 1–8 正式验收；"报表/仪表盘"口径由用户在建模对话补规则；无 MySQL 5.7/Doris 实例，版本检查只做了单元测试。
 
 ## 上一检查点：2026-10-22｜spec092 §7 对话为中心的建模页已实施，待真实验收
 

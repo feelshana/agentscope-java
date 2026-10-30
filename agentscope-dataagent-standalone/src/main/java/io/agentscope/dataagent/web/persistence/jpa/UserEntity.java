@@ -64,6 +64,26 @@ public class UserEntity {
     @Column(name = "bindings_json", columnDefinition = "TEXT")
     private String bindingsJson;
 
+    /** spec099: when the new-user checklist started counting days; null before first shown. */
+    @Column(name = "onboarding_started_at")
+    private Instant onboardingStartedAt;
+
+    /** spec099: set by "不再显示"; cleared when reopened from help. */
+    @Column(name = "onboarding_dismissed_at")
+    private Instant onboardingDismissedAt;
+
+    /** spec099: when every checklist step was first seen done; hidden from the next day. */
+    @Column(name = "onboarding_completed_at")
+    private Instant onboardingCompletedAt;
+
+    /** spec099: comma-separated milestones recorded by the chat endpoint (ask, analyze). */
+    @Column(name = "onboarding_milestones", length = 200)
+    private String onboardingMilestones;
+
+    /** spec099: comma-separated one-time tips the user has closed. */
+    @Column(name = "onboarding_tips_seen", length = 200)
+    private String onboardingTipsSeen;
+
     public UserEntity() {}
 
     public UserEntity(String userId, String username, String passwordHash, String rolesCsv) {
@@ -119,5 +139,45 @@ public class UserEntity {
 
     public void setBindingsJson(String bindingsJson) {
         this.bindingsJson = bindingsJson;
+    }
+
+    public Instant getOnboardingStartedAt() {
+        return onboardingStartedAt;
+    }
+
+    public void setOnboardingStartedAt(Instant onboardingStartedAt) {
+        this.onboardingStartedAt = onboardingStartedAt;
+    }
+
+    public Instant getOnboardingDismissedAt() {
+        return onboardingDismissedAt;
+    }
+
+    public void setOnboardingDismissedAt(Instant onboardingDismissedAt) {
+        this.onboardingDismissedAt = onboardingDismissedAt;
+    }
+
+    public Instant getOnboardingCompletedAt() {
+        return onboardingCompletedAt;
+    }
+
+    public void setOnboardingCompletedAt(Instant onboardingCompletedAt) {
+        this.onboardingCompletedAt = onboardingCompletedAt;
+    }
+
+    public String getOnboardingMilestones() {
+        return onboardingMilestones;
+    }
+
+    public void setOnboardingMilestones(String onboardingMilestones) {
+        this.onboardingMilestones = onboardingMilestones;
+    }
+
+    public String getOnboardingTipsSeen() {
+        return onboardingTipsSeen;
+    }
+
+    public void setOnboardingTipsSeen(String onboardingTipsSeen) {
+        this.onboardingTipsSeen = onboardingTipsSeen;
     }
 }

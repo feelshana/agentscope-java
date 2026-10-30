@@ -736,6 +736,12 @@ React 18 + TypeScript + Vite SPA（`frontend/`），构建产物进 `classpath:/
 
 ---
 
+### 新手引导（spec099）
+
+所有用户同一套 4 项新手任务：准备数据、完成建模并发布、问第一个问题、用"继续分析"完成一次分析。`OnboardingService#status` 每次按当前用户可查询的知识库（`KnowledgeBaseAccessService#visible`，自建与共享均算）判定前两项；后两项是 `ChatController#recordOnboarding` 在带知识库的问数请求、已确认参数的分析请求开始时于 boundedElastic 上记录的里程碑，失败不影响对话。状态存于 `dataagent_user` 的 `onboarding_*` 列：首次读取时记开始时间；按 Asia/Shanghai 自然日，当天为 `full`，次日起 `collapsed`，满 7 天或"不再显示"后 `hidden`；首次全部完成时记 `onboarding_completed_at`，当天保持 `full` 显示完成卡片，次日起 `hidden`；"重新打开"清除关闭标记并重计 7 天。`OnboardingController`（`/api/onboarding`）只读写当前登录用户自己的状态，一次性提示 id 仅限 `follow_ups`、`analysis_params`。
+
+前端 `api/onboarding.ts` 以登录令牌为键缓存一份状态，供 `ChatPanel` 首页的清单与起步问题（可查询的已发布知识库的 spec098 推荐问题，最多 3 个，点击即选库并填入问题，不足 3 个时用上传数据、关联外部表入口卡补足；没有可查询知识库时显示空状态）、`SessionsSidebar` 底部折叠入口、`AppShell` 挂载的 `HelpPanel`（"更多 › 帮助与引导"）以及回答下方的 `OnboardingTip` 共用。清单第 1 步并列"上传文件"和"新建数据源"，分别深链到 `/configure/datasets?create=1`、`?datasource=1`；数据源连接测试失败时提示可先上传文件。
+
 ### 当前建模工作台（ADR 0069、0075、0076）
 
 `SemanticModelingPage` 组织建模对话、资料、语义模型三区（spec092 §7）。建模对话页以对话为中心：每轮回复下方列出 AI 建模结果，待确定的口径以对话内卡片出现，右侧试问展示助手写出的 SQL 与口径，用户核对后确认（不自动试运行、不查询数据），底部草稿栏统一发布；确认、改写或归档问题时，修订号在工作区锁内递增，发布在工作区锁内读取要覆盖的修订号（`MdlQuestionStore#locked`、`MdlPublishService#doPublishLocked`），避免发布期间确认的变更留下"待发布"却无差异可发布；若仍出现该状态，草稿栏提供"重新发布"。文档修改后自动排队一条文档更新请求。助手按官方技能直接修改草稿，发布为显式操作，官方工程校验失败保留旧快照。问数始终使用已发布工程。

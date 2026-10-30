@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { KnowledgeBreadcrumb, WorkspaceMenu } from '../../components/KnowledgeWorkspace';
 import KnowledgeBaseMembersModal from '../../components/KnowledgeBaseMembersModal';
 import DataSourceManagerModal from '../../components/DataSourceManagerModal';
@@ -61,6 +61,17 @@ export default function DatasetsPage() {
     refresh();
     return () => request.current?.abort();
   }, [refresh]);
+
+  // spec099: the new-user checklist links here to create a knowledge base or a data source.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const create = searchParams.get('create') === '1';
+    const datasource = searchParams.get('datasource') === '1';
+    if (!create && !datasource) return;
+    if (create) openCreate();
+    if (datasource) setDsOpen(true);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   function openCreate() {
     setEditGroup(null);

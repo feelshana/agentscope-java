@@ -5,6 +5,7 @@ import { AgentDefinition, getAgent } from '../api/agents';
 import SessionsSidebar from './SessionsSidebar';
 import { ToastHost } from './Toast';
 import NewVersionBanner from './NewVersionBanner';
+import { HelpPanel } from './Onboarding';
 import { ShellOutletContext } from './EditTierGate';
 
 export default function AppShell() {
@@ -54,6 +55,7 @@ export default function AppShell() {
         <Outlet context={ctx} />
       </main>
       <ToastHost />
+      <HelpPanel />
       <NewVersionBanner />
     </div>
   );

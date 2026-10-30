@@ -1,0 +1,81 @@
+# spec099：新手引导（入门清单、起步问题、空状态与一次性提示）
+
+> 状态：已实施（2026-10-29），待真实验收。原型见 Design 画布"新手引导原型"（6 个画板）。
+
+## 背景与目标
+
+DataAgent 首次上线面对新手。现状：问数首页三张示例卡片写死且与用户数据无关；没有知识库的用户在问数页得不到任何提示，会悄悄变成普通对话；后端没有任何"新手"状态。目标是让所有新用户（不区分角色，功能对所有人开放，仅数据隔离）在几分钟内走通"准备数据 → 建模发布 → 问数 → 分析"，且引导会自然退场、不长期打扰。
+
+参考：Notion / Linear / Asana 的 Getting started 清单（3–4 项、自动打勾、可折叠）；ChatGPT / Claude 的起步问题卡片；ThoughtSpot Spotter、Quick BI 小Q 基于用户自己数据的推荐问题；关键时刻的一次性上下文提示。不做长篇遮罩式逐步导览（多数被直接跳过）。
+
+## 方案概述
+
+**新手任务**（所有人同一套，按已有数据自动打勾，只高亮下一步，每项有直达按钮）：
+
+| 任务 | 完成条件 |
+|---|---|
+| 1. 准备数据 | 当前用户有 QUERY 权限的知识库中有任一数据集（上传或外部表，自建或共享均算） |
+| 2. 完成建模并发布 | 当前用户有 QUERY 权限的知识库中有已发布的（`mdlVersion > 0`）；用共享知识库的用户随之完成 |
+| 3. 问第一个问题 | `ChatController` 收到带知识库（选库或全部可用）的问数请求时记录里程碑 |
+| 4. 用"继续分析"完成一次分析 | `ChatController` 收到已确认参数的分析轮次时记录里程碑 |
+
+第 1 步展开为两种方式并列：**上传文件（推荐新手）**，不依赖网络和外部系统；**关联外部数据表**，需先在知识库里新建数据源（MySQL 8.0+ 或 Doris，连接测试通过）再选表，卡片写明"需要平台能访问到的数据库；没有时请先用上传文件体验"，连接测试失败时同样提示改用上传。
+
+**显示阶段**（按 Asia/Shanghai 自然日，起点为引导开始时间）：
+
+- 完整：起始当天，问数首页输入框下方显示清单卡片；
+- 折叠：第 2 个自然日起，只保留侧栏底部"新手任务 n/4"入口，点开为浮层；
+- 全部完成：当天首页保留为完成卡片（4/4、一句收尾、"关闭"按钮），次日起隐藏；
+- 隐藏：满 7 天、完成次日起或点"不再显示"；
+- "更多 › 帮助与引导"可重新打开，重开后从当天重新计 7 天。
+
+**起步问题**：问数首页显示当前用户可查询的已发布知识库的推荐问题（复用 spec098），最多 3 个，点击即选中该知识库并填入问题；替换写死的示例卡片；没有可用知识库时不显示；不足 3 个时用"上传新数据""关联外部数据表"入口卡补足。不受新手阶段影响，始终可用。
+
+**空状态**：问数页没有可查询的已发布知识库时，显示带行动按钮的空状态（创建知识库并上传 / 新建数据源），并说明可请同事共享；有未发布的自建知识库时额外提示"去建模"。`ModelingHubPage` 空状态增加"创建知识库"按钮。
+
+**一次性提示**（最多 2 个，关掉即记录，不再出现）：首次出现"继续分析"按钮；首次看到分析参数确认卡。
+
+**状态存储**：`dataagent_user` 新增 `onboarding_started_at`、`onboarding_dismissed_at`、`onboarding_completed_at`（首次全部完成的时间）、`onboarding_milestones`（已记录里程碑，逗号分隔）、`onboarding_tips_seen`；首次 `GET` 时写入开始时间。跨设备一致，不用浏览器本地存储。
+
+**接口**（只读写当前用户自己的状态，`(String) auth.getPrincipal()` 取 userId）：
+
+- `GET /api/onboarding`：4 项任务完成情况、阶段（`full|collapsed|hidden`）、剩余天数、已看过的提示；
+- `POST /api/onboarding/dismiss`、`POST /api/onboarding/reopen`；
+- `POST /api/onboarding/tips/{id}`：`id` 只接受 `follow_ups`、`analysis_params`。
+
+## 影响面
+
+- 后端：新增 `web/onboarding/OnboardingService`（里程碑判定、阶段计算，注入 `Clock`）、`OnboardingController`；`UserEntity` 新字段；`ChatController` 在已确认分析轮次记录里程碑；起步问题复用 `RecommendedQuestionController`。
+- 前端：`api/onboarding.ts`；组件 `OnboardingChecklist`、`StarterQuestions`、`OnboardingTip`、`HelpPanel`；改造 `ChatPanel` 首页区、`SessionsSidebar`、`ModelingHubPage`，`AnalysisPanel` 挂提示。
+- 数据：迁移 `docs/migrations/0098-onboarding-mysql.sql`（H2 由 JPA 自动建列）。
+- 文档：ARCHITECTURE_zh.md 前端与 Web 层相关章节；本 spec 索引。无新配置项。
+
+## 验收标准
+
+1. Given 新账号且无任何知识库，When 打开问数首页，Then 显示 0/4 清单，第 1 步高亮并展开两种准备方式，不显示起步问题，问数页显示空状态。
+2. Given 用户上传文件建立数据集，When 回到首页，Then 第 1 步自动打勾，第 2 步高亮。
+3. Given 用户被共享了一个已发布知识库，When 打开首页，Then 第 1、2 步已打勾，起步问题显示该库推荐问题，点击后选中知识库并填入问题。
+4. Given 用户完成一次绑定知识库的问数，Then 第 3 步打勾；完成一次已确认参数的分析，Then 第 4 步打勾，全部完成后当天显示完成卡片，次日隐藏。
+5. Given 引导开始于 D 日，When 时钟为 D+1 日，Then 阶段为 `collapsed`，首页不显示清单，侧栏显示"新手任务 n/4"；When 时钟为 D+7 日，Then 阶段为 `hidden`。
+6. Given 用户点"不再显示"，Then 阶段为 `hidden`；When 在帮助面板点"重新打开"，Then 阶段为 `full` 且从当天重新计 7 天。
+7. Given 提示已关闭，When 换设备登录，Then 不再出现。
+8. Given 用户 A，When 调用引导接口，Then 只能读写 A 自己的状态；A 的任务完成情况不受他人不可见的知识库影响。
+9. Given 外部数据库连接测试失败，Then 提示可改用上传文件（本机无外部库，仅验证入口与提示，关联外部表打勾以单元测试覆盖）。
+
+## 不做的事
+
+- 示例知识库（二期再议）；逐步遮罩式长导览；按角色区分引导或隐藏菜单。
+- 邮件、消息推送；引导数据统计看板。
+- 不改建模页的欢迎卡片与建模流程。
+
+## 测试要求
+
+- `OnboardingServiceTest`：里程碑判定（上传数据集、外部数据集、共享知识库、他人私有库不计入）；D、D+1、D+7 阶段边界（固定 `Clock`、Asia/Shanghai 跨日）；dismiss / reopen；全部完成即隐藏。
+- `OnboardingControllerTest`：只操作当前用户；非法提示 id 返回 400。
+- `ChatControllerAnalysisTest`：已确认的分析轮次记录里程碑，未确认的不记录。
+- 前端 `npm run build`；浏览器按验收标准 1–7 实测，9 只验证入口与提示。
+
+## 关联
+
+- 原型：Design 画布"新手引导原型"
+- 相关：spec097（分析技能）、spec098（推荐问题）

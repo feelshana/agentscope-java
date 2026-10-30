@@ -14,6 +14,9 @@ import EChartsBlock, { ChartPayload } from './EChartsBlock';
 import CitationPanel from './CitationPanel';
 import EmptyIllustration from './EmptyIllustration';
 import LandingExamples from './LandingExamples';
+import { NoKnowledgeBaseNotice, OnboardingChecklist, OnboardingTip, StarterQuestions } from './Onboarding';
+import { refreshOnboarding, useOnboarding } from '../api/onboarding';
+import type { OnboardingStatus } from '../api/onboarding';
 import Icon from './Icon';
 import OntologyGraphView from './OntologyGraphView';
 import type { OntologyGraphData } from '../api/ontology';
@@ -730,6 +733,24 @@ export default function ChatPanel({
   }, [analysisGroup, freshConversation, restoring]);
   const showingRecommendation = freshConversation && !!input && input === prefilled.current;
 
+  // spec099: the home page shows the new-user checklist and starter questions from the user's own
+  // knowledge bases; picking one selects its knowledge base and fills its question.
+  const onboarding = useOnboarding();
+  // Milestones are recorded server-side when a turn starts; re-read once the turn has finished.
+  const wasBusy = useRef(false);
+  useEffect(() => {
+    if (wasBusy.current && !busy) void refreshOnboarding(true);
+    wasBusy.current = busy;
+  }, [busy]);
+  const pickStarter = (starter: OnboardingStatus['starters'][number]) => {
+    setSelectedGroups([starter.groupId]);
+    setSelectAllGroups(false);
+    setGroupNames(prev => ({ ...prev, [starter.groupId]: starter.groupName }));
+    prefilled.current = starter.question;
+    setInput(starter.question);
+    inputRef.current?.focus();
+  };
+
   /**
    * The first question after a publish waits while the knowledge base's query engine prepares
    * (index, start, warm-up, about half a minute). The reply says so instead of a silent spinner;
@@ -1147,7 +1168,13 @@ export default function ChatPanel({
               {composerContent}
             </div>
           </div>
-          <LandingExamples />
+          {agentId === 'data-agent' ? onboarding && <>
+            {onboarding.stage === 'full' && <OnboardingChecklist status={onboarding}
+              onAsk={onboarding.starters.length ? () => pickStarter(onboarding.starters[0]) : () => inputRef.current?.focus()} />}
+            {onboarding.queryable
+              ? <StarterQuestions starters={onboarding.starters} onPick={pickStarter} />
+              : onboarding.stage !== 'full' && <NoKnowledgeBaseNotice unpublished={onboarding.unpublished} />}
+          </> : <LandingExamples />}
         </div>
       </div>
     );
@@ -1214,14 +1241,20 @@ export default function ChatPanel({
                       // spec097: an analysis proposal renders as its card; other answers may get
                       // follow-up analyses chosen by a fixed rule on their last query result.
                       const proposal = [...m.tools].reverse().find(t => t.name === 'propose_analysis' && t.result && !t.result.startsWith('error:'));
-                      if (proposal) return (
-                        <AnalysisParamsCard input={proposal.input} disabled={busy || m.id !== messages[messages.length - 1]?.id}
+                      const latest = m.id === messages[messages.length - 1]?.id;
+                      if (proposal) return (<>
+                        <AnalysisParamsCard input={proposal.input} disabled={busy || !latest}
                           onStart={(method, params) => handleSend({ text: `按确认的参数开始${ANALYSIS_NAMES[method]}`, analysis: method, analysisParams: params })}
                           onCancel={() => handleSend({ text: '不做分析，按普通问数回答我上面的问题' })} />
-                      );
+                        {latest && <OnboardingTip tip="analysis_params">参数已按你的问题预填。不确定时直接点“开始分析”，结果里会说明用了哪些参数。</OnboardingTip>}
+                      </>);
                       if (m.failed || !curKey) return null;
-                      return <AnalysisFollowUps methods={analysisSuggestions(m.tools)} disabled={busy || !!analysisDisabledReason}
-                        onPick={method => handleSend({ text: `对上面的结果做${ANALYSIS_NAMES[method]}`, analysis: method })} />;
+                      const methods = analysisSuggestions(m.tools);
+                      return <>
+                        <AnalysisFollowUps methods={methods} disabled={busy || !!analysisDisabledReason}
+                          onPick={method => handleSend({ text: `对上面的结果做${ANALYSIS_NAMES[method]}`, analysis: method })} />
+                        {latest && methods.length > 0 && !analysisDisabledReason && <OnboardingTip tip="follow_ups">想知道为什么变化、有没有异常或未来走势？点上面的按钮，系统会先让你确认参数，再用 Python 计算并画图。</OnboardingTip>}
+                      </>;
                     })()}
                     {agentId === 'data-agent' && curKey && !m.pending && !m.failed && m.text.trim()
                       && !m.tools.some(t => t.name === 'propose_analysis' && t.result && !t.result.startsWith('error:')) && (
