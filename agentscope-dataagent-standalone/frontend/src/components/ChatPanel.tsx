@@ -17,6 +17,7 @@ import EmptyIllustration from './EmptyIllustration';
 import LandingExamples from './LandingExamples';
 import { NoKnowledgeBaseNotice, OnboardingChecklist, OnboardingTip, StarterQuestions } from './Onboarding';
 import { refreshOnboarding, useOnboarding } from '../api/onboarding';
+import { getToken } from '../api/auth';
 import type { OnboardingStatus } from '../api/onboarding';
 import Icon from './Icon';
 import OntologyGraphView from './OntologyGraphView';
@@ -167,6 +168,19 @@ const nextId = () => `m${Date.now().toString(36)}-${counter++}`;
 
 const STORAGE_PREFIX = 'claw_chat_session:';
 const storageKey = (agentId: string) => `${STORAGE_PREFIX}${agentId}`;
+
+/** Home-page greeting by local time of day, with the signed-in user's name from the token. */
+function landingGreeting(): string {
+  const hour = new Date().getHours();
+  const part = hour < 6 ? '夜深了' : hour < 11 ? '早上好' : hour < 13 ? '中午好' : hour < 18 ? '下午好' : '晚上好';
+  let name = '';
+  try {
+    const bytes = atob((getToken() ?? '').split('.')[1].replace(/-/g, '+').replace(/_/g, '/'));
+    const payload = JSON.parse(new TextDecoder().decode(Uint8Array.from(bytes, c => c.charCodeAt(0))));
+    name = (payload.username as string) || (payload.sub as string) || '';
+  } catch { /* no name: greeting only */ }
+  return name ? `${part}，${name}` : part;
+}
 
 /** Tool names that should never be shown in the UI (framework plumbing, not user-facing). */
 const HIDDEN_TOOL_PATTERNS = ['load_skill_through_path'];
@@ -1165,9 +1179,9 @@ export default function ChatPanel({
       <div style={S.root}>
         <div className="da-landing-wrap">
           <div className="da-landing-greeting">
-            <h1 className="da-landing-title">红海DataAgent</h1>
-            <div className="da-landing-tagline">你的大数据智囊团</div>
-            <p>选择知识库，查询数据、分析变化或生成报告</p>
+            <span className="da-landing-eyebrow"><span className="da-landing-eyebrow-dot" aria-hidden="true" />红海DataAgent · 你的大数据智囊团</span>
+            <h1 className="da-landing-title">{landingGreeting()}</h1>
+            <p>选择知识库，用自然语言查询数据、分析变化或生成报告</p>
           </div>
           <div className="da-composer-glow">
             <div className="da-composer-shell da-composer">
