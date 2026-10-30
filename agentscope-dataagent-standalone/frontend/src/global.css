@@ -1005,7 +1005,7 @@ button:focus-visible {
   border-radius: var(--da-radius-md);
   font-size: 14px;
   font-weight: 500;
-  color: var(--da-text-2);
+  color: var(--da-text);
   background: transparent;
   border: 1px solid transparent;
   cursor: pointer;
