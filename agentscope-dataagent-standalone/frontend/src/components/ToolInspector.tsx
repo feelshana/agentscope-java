@@ -1,6 +1,7 @@
 import React, { lazy, Suspense, useEffect, useId, useMemo, useRef, useState } from 'react';
 import Icon from './Icon';
 import Markdown from './Markdown';
+import ErrorNotice from './ErrorNotice';
 import AttachmentImage from './AttachmentImage';
 import { ArtifactInfo, artifactSrc, downloadArtifact, parseResult } from './PythonCodeBlock';
 import { downloadFile } from '../api/artifacts';
@@ -112,7 +113,7 @@ function ArtifactList({ artifacts }: { artifacts: ArtifactInfo[] }) {
   const [busy, setBusy] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [imageError, setImageError] = useState(false);
-  return <><div className="da-ti-caption"><strong>本次调用产物 · {artifacts.length} 个文件</strong></div>
+  return <><div className="da-ti-caption"><strong>分析文件 · {artifacts.length} 个文件</strong></div>
     {!artifacts.length && <p className="da-ti-muted">本次调用未生成文件。</p>}
     {artifacts.map((a, i) => {
       const src = ['image', 'svg'].includes(a.type) ? artifactSrc(a) : null;
@@ -129,14 +130,14 @@ function ArtifactList({ artifacts }: { artifacts: ArtifactInfo[] }) {
         {src && preview === i && <div className="da-ti-preview">{imageError ? <p role="alert">图片加载失败，可重新预览或尝试下载。</p>
           : <AttachmentImage src={src} alt={a.name} onError={() => setImageError(true)} />}</div>}
       </div>;
-    })}{error && <p role="alert" className="da-ti-download-error">{error}</p>}</>;
+    })}{error && <ErrorNotice error={error} context="file" />}</>;
 }
 
 function PythonResult({ raw }: { raw: string }) {
   const parsed = useMemo(() => parseResult(raw), [raw]);
   if (!raw.includes('### stdout') && !raw.includes('### artifact:')) return <Code text={raw} label="返回文本" />;
-  return <><div className="da-ti-caption"><strong>标准输出</strong><CopyButton text={parsed.stdout} label="复制输出" /></div>
-    <pre className="da-ti-stdout" tabIndex={0} aria-label="Python标准输出，可横向滚动">{parsed.stdout || '没有标准输出。'}</pre><ArtifactList artifacts={parsed.artifacts} /></>;
+  return <><div className="da-ti-caption"><strong>运行结果</strong><CopyButton text={parsed.stdout} label="复制结果" /></div>
+    <pre className="da-ti-stdout" tabIndex={0} aria-label="分析运行结果，可横向滚动">{parsed.stdout || '本次分析没有文本结果。'}</pre><ArtifactList artifacts={parsed.artifacts} /></>;
 }
 
 function ResultContent({ tool, display, onInput }: { tool: ToolInspectPayload; display: ReturnType<typeof inspectResult>; onInput: () => void }) {
@@ -145,18 +146,18 @@ function ResultContent({ tool, display, onInput }: { tool: ToolInspectPayload; d
   const args = record(input.arguments) ? input.arguments : {};
   const sql = display.receipt?.sql ?? (record(display.data) ? display.data.sql : undefined) ?? args.sql ?? input.sql;
   if (tool.id === '__python_artifacts__') return <>{(tool.pythonTools ?? []).map((t, i) => <section className="da-ti-call-files" key={i}>
-    <h3>Python 调用 {i + 1}</h3>{t.result === undefined ? <p className="da-ti-muted">本次调用没有保存结果回执。</p> : <>
+    <h3>分析步骤 {i + 1}</h3>{t.result === undefined ? <p className="da-ti-muted">本次调用没有保存结果回执。</p> : <>
       {inspectResult('run_python', t.result).state === 'error' && <p className="da-ti-notice">本次执行失败，已保存文件可能不完整。</p>}
       <ArtifactList artifacts={parseResult(displayText(decodeToolValue(t.result))).artifacts} /></>}</section>)}
-    {!tool.pythonTools?.length && <p className="da-ti-muted">当前记录中没有生成文件。</p>}<p className="da-ti-muted">文件按调用分别保留，同名产物不会跨调用合并。</p></>;
+    {!tool.pythonTools?.length && <p className="da-ti-muted">当前记录中没有分析文件。</p>}<p className="da-ti-muted">文件按分析步骤分别保留，同名文件不会跨步骤合并。</p></>;
   if (display.state === 'unconfirmed') return <div className="da-ti-empty"><Icon name="clock" size="lg" /><h3>结果未确认</h3><p>尚未收到该调用的结果回执。可先查看输入；有新返回时这里会更新。</p><button type="button" onClick={onInput}>查看输入</button></div>;
   if (display.state === 'error' && tool.name === 'run_python') {
     const failed = parseResult(display.text);
-    return <><div role="alert" className="da-ti-error"><h3>本次 Python 执行失败</h3><pre>{failed.stdout || display.text || '工具未成功返回。'}</pre></div>
+    return <><ErrorNotice error={failed.stdout || display.text || '本次分析未能完成'} context="chat" />
       {failed.artifacts.length > 0 && <><p className="da-ti-notice">执行中断前已保存以下文件，内容可能不完整，请核对后使用。</p><ArtifactList artifacts={failed.artifacts} /></>}
       <button type="button" className="da-ti-text-button" onClick={onInput}>查看本次代码</button></>;
   }
-  if (display.state === 'error') return <><div role="alert" className="da-ti-error"><h3>本次调用返回错误</h3><pre>{display.note || display.text || '工具未成功返回。'}</pre></div>
+  if (display.state === 'error') return <><ErrorNotice error={display.note || display.text || '本次处理未能完成'} context="chat" />
     <p className="da-ti-muted">保留本次错误供核对。重新执行请通过正常对话发起。</p></>;
   if (display.historyTruncated) return <><div className="da-ti-notice">已保存的返回包含截断或驱逐标记，当前记录无法恢复缺失部分。</div><Code text={display.text} label="已保存内容" /></>;
   if (tool.name === 'run_python') return <><PythonResult raw={display.text} /><button type="button" className="da-ti-text-button" onClick={onInput}><Icon name="code" size="sm" />查看本次代码</button></>;
@@ -195,7 +196,7 @@ function Inspector({ tool, onClose }: ToolInspectorProps) {
   const id = useId();
   const display = useMemo(() => inspectResult(tool.name, tool.result), [tool.name, tool.result]);
   const input = useMemo(() => inputFields(tool.input), [tool.input]);
-  const title = tool.id === '__python_artifacts__' ? '生成产物' : wrenToolLabel(tool.name, tool.input) ?? LABELS[tool.name] ?? tool.name;
+  const title = tool.id === '__python_artifacts__' ? '分析文件' : wrenToolLabel(tool.name, tool.input) ?? LABELS[tool.name] ?? tool.name;
   const args = record(input.arguments) ? input.arguments : {};
   const code = tool.name === 'run_python' ? input.code : args.sql ?? input.sql;
   const otherInput = { ...input };

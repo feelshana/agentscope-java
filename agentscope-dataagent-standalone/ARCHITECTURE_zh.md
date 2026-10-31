@@ -722,6 +722,8 @@ manifest 尚不存在时（首次升级到该策略）执行一次性「采纳�
 
 ## 11. 前端结构
 
+上线前交互小修：`ChatPanel`只在用户停留底部时跟随回答，向上阅读保留位置并提供“回到最新”，历史分页保持原阅读锚点；内容和视口尺寸变化由局部观察器处理。问数和建模输入均保护中文组合输入，完成的回答可复制。附件称为“分析文件”，仍在原右侧栏预览/下载；表格保持居中、只改善可读性，不改值或精度。`EChartsBlock`对读取和渲染失败显式提示，已有表格结果才提供对应入口，重载仅GET已保存图表，不重新执行SQL。`ErrorNotice`在聊天、数据源和文件入口先显示可行动的中文提示，常见凭据脱敏的技术详情默认折叠；不改后端错误原文或SSE协议。
+
 > 当前 SemanticModelingPage 使用四个显性入口：数据与资料、对话建模、检查与发布、查看语义模型。移除主页面独立关系推断/文档增强/DB 视图编辑；可选问题使用可增加行数的表格。聊天占主体宽度，文档紧凑显示保存状态；资产只读浏览包含模型、关系、ref_sql、视图、Cube、knowledge 和 MDL/发布快照。
 
 ADR 0063：建模页面移除 Cube 标签、推荐、编辑和图谱卡片，展示模型、关系、视图、规则与 MDL；问题录入/验证保持可选。
@@ -842,7 +844,7 @@ Boot 4 HTTP JSON缓冲使用`spring.http.codecs.max-in-memory-size=50MB`；人�
 
 ### 12.2 构建与运行
 
-ADR0118/spec104新增源码构建交付选项：docker/update-source.sh有限重试并仅快进指定分支；docker/build-from-source.sh从干净明确提交归档源码，在独立Maven/JDK17容器中构建全部本地依赖及前后端，封装应用镜像并静态预检，不启停业务。最终镜像使用application-entrypoint.sh从/opt/dataagent/app运行JAR，配置与data/logs在宿主持久根，构建/运行分离；业务控制见下述演练Compose入口。前端安装命令支持构建参数覆盖，原默认install保持不变，源码发布使用ci。临时库演练由rehearsal-mysql.sh生成独立Compose、随机密码和初次完整DDL，MySQL不发布宿主端口，应用后续通过专属网络连接，配置/数据不随更新重置，不复用Dify数据库；不替代正式两库交付。详见[源码构建指引](docs/guides/66-source-build.md)。
+ADR0118/spec104新增源码构建交付选项：docker/update-source.sh有限重试并仅快进指定分支，默认develop-2.0，可显式设置DATAAGENT_SOURCE_BRANCH，不自动切换分支；docker/build-from-source.sh从干净明确提交归档源码，在独立Maven/JDK17容器中构建全部本地依赖及前后端，封装应用镜像并静态预检，不启停业务。最终镜像使用application-entrypoint.sh从/opt/dataagent/app运行JAR，配置与data/logs在宿主持久根，构建/运行分离；业务控制见下述演练Compose入口。前端安装命令支持构建参数覆盖，原默认install保持不变，源码发布使用ci。临时库演练由rehearsal-mysql.sh生成独立Compose、随机密码和初次完整DDL，MySQL不发布宿主端口，应用后续通过专属网络连接，配置/数据不随更新重置，不复用Dify数据库；不替代正式两库交付。详见[源码构建指引](docs/guides/66-source-build.md)。
 
 rehearsal-app.sh与compose.rehearsal-app.yml提供演练应用控制：固定应用image ID、当前UID/GID及socket附加组，加入已有演练库网络，宿主同路径持久目录和只读离线缓存挂载；prod validate/never、独立JWT/模型密钥，不复制开发凭据。start在真实Java前验证数据库/离线向量/兄弟沙箱读写，再等HTTP健康与账号入口；upgrade候选预检失败不停止旧服务，启动失败恢复旧镜像。回退仅应用镜像，数据库/文件/配置不回退；实际现场与正式并发能力另行验收。
 

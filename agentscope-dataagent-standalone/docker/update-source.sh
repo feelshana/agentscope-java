@@ -5,7 +5,7 @@ fail() { echo "更新源码失败：$*" >&2; exit 1; }
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 repo="$(cd -- "$script_dir/../.." && pwd -P)"
 cd -- "$repo"
-branch="${DATAAGENT_SOURCE_BRANCH:-codex/integrate-boundary-lyf-v2}"
+branch="${DATAAGENT_SOURCE_BRANCH:-develop-2.0}"
 [[ "$(git symbolic-ref --short HEAD)" == "$branch" ]] || fail '当前不是指定部署分支，不自动切换'
 [[ -z "$(git status --porcelain)" ]] || fail '源码目录有本地修改或未跟踪文件，不覆盖'
 exec 8>"$(git rev-parse --git-dir)/dataagent-source.lock"

@@ -2,6 +2,10 @@
 
 > 只记录跨任务稳定、且不适合写进 AGENTS.md / ARCHITECTURE_zh.md 的背景与本机环境事实。规则看 [AGENTS.md](../../AGENTS.md)，实现看 [ARCHITECTURE_zh.md](../../ARCHITECTURE_zh.md)，决策演变看 [ADR 索引](../adr/README.md)。2026-10-21 之前的逐条背景记录见 [archive/PROJECT_CONTEXT-until-20261021.md](archive/PROJECT_CONTEXT-until-20261021.md)。
 
+## 分支协作（2026-10-31起）
+
+共同主线为`develop-2.0`，个人开发使用`liyufan_dev`和`wangchao_dev`，修改合并回主线。旧`codex/integrate-boundary-lyf-v2`保留历史用途；部署默认使用主线，不因本机切分支而自动切换66源码或运行服务。历史报告中的分支名代表当时基线，不全局替换。
+
 ## 产品主流程
 
 上传或关联数据 → 采样（字段说明、表角色；外部数据源事实表确认时间窗口）→ 自动基础建模（官方 enrich-context Auto-pilot）→ 可选：用户填写最多 5 个待验证问题，逐题确认 SQL → 页面显式发布 → 在已发布模型上问数（官方 MCP + Python/ECharts）→ 点赞保存业务问答。

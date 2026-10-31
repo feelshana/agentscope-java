@@ -3,6 +3,7 @@ import { ExternalDataSource, listColumns, listSchemas, listTables, SchemaColumn,
 import DataSourceDialog from './DataSourceDialog';
 import { dataSourceConnection, dataSourceKind } from './dataSourceConnection';
 import Icon from './Icon';
+import ErrorNotice from './ErrorNotice';
 
 export default function DataSourceDetailModal({ dataSource, onClose }: { dataSource: ExternalDataSource; onClose: () => void }) {
   const connection = dataSourceConnection(dataSource);
@@ -66,7 +67,7 @@ export default function DataSourceDetailModal({ dataSource, onClose }: { dataSou
       </dl>
       <button type="button" className="ds-browse-toggle" aria-expanded={browse} onClick={() => setBrowse(value => !value)}><Icon name="table" size="sm" />{browse ? '收起库表结构' : '浏览库表结构'}<Icon name="chevron" size="sm" /></button>
       {browse && <section className="ds-schema-browser" aria-label="库表结构">
-        {error && <div className="ds-feedback ds-failed" role="alert"><span>{error}</span><button className="da-btn da-btn-sm" onClick={() => setAttempt(value => value + 1)}>重试</button></div>}
+        {error && <ErrorNotice error={error} context="datasource"><button className="da-btn da-btn-sm" onClick={() => setAttempt(value => value + 1)}>重试</button></ErrorNotice>}
         <div className="ds-fields">
           <label className="ds-field">数据库<select value={schema} disabled={schemaLoading || !schemas.length} onChange={e => { setSchema(e.target.value); setTable(''); setColumns([]); }}>
             {!schemas.length && <option value="">{schemaLoading ? '加载中…' : schemaError ? '加载失败' : '暂无数据库'}</option>}

@@ -7,6 +7,8 @@ export type IconName =
   | 'plus'
   | 'database'
   | 'file'
+  | 'copy'
+  | 'arrowDown'
   | 'table'
   | 'graph'
   | 'list'
@@ -41,6 +43,8 @@ export type IconName =
 
 /** Lucide-style 24x24 line paths; rendered with currentColor stroke via .da-icon classes. */
 const PATHS: Record<IconName, React.ReactNode> = {
+  arrowDown: <path d="M12 5v14m-6-6 6 6 6-6" />,
+  copy: <><rect x="8" y="8" width="12" height="13" rx="2" /><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" /></>,
   chat: <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />,
   book: (
     <>

@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import embed, { VisualizationSpec } from 'vega-embed';
 import { VegaSpec } from '../utils/charts';
+import ErrorNotice from './ErrorNotice';
 
 interface Props {
   spec: VegaSpec;
+  onInspect?: () => void;
 }
 
 const s: Record<string, React.CSSProperties> = {
@@ -42,7 +44,7 @@ const s: Record<string, React.CSSProperties> = {
  * `tool_call` event (client-side rendering is the intended architecture for
  * `render_chart`), so the chart shows up while the tool is still running.
  */
-export default function ChartBlock({ spec }: Props) {
+export default function ChartBlock({ spec, onInspect }: Props) {
   const ref = useRef<HTMLDivElement | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,12 +92,9 @@ export default function ChartBlock({ spec }: Props) {
 
   return (
     <div style={s.wrapper}>
-      <div style={s.header}>图表: Vega-Lite</div>
-      {error ? (
-        <div style={s.error}>{`图表渲染失败: ${error}`}</div>
-      ) : (
-        <div style={s.canvas} ref={ref} />
-      )}
+      <div style={s.header}>图表</div>
+      {error && <ErrorNotice error={error} context="chart">{onInspect && <button type="button" className="da-btn da-btn-sm" onClick={onInspect}>查看图表详情</button>}</ErrorNotice>}
+      <div style={{ ...s.canvas, display: error ? 'none' : undefined }} ref={ref} />
     </div>
   );
 }

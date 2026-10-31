@@ -7,6 +7,7 @@ import DataSourceFormModal from '../../components/DataSourceFormModal';
 import DataSourceDetailModal from '../../components/DataSourceDetailModal';
 import { dataSourceConnection, dataSourceKind } from '../../components/dataSourceConnection';
 import Icon from '../../components/Icon';
+import ErrorNotice from '../../components/ErrorNotice';
 import { toast } from '../../components/Toast';
 import '../../components/DataSources.css';
 
@@ -104,7 +105,7 @@ export default function DataSourcesPage() {
       <div className="kw-pagehead"><div className="kw-heading"><h1>数据源管理</h1><p>配置用于关联业务表的外部连接。</p></div>
         <div className="kw-actions"><button className="da-btn da-btn-primary" onClick={() => setEditor({ source: null })}><Icon name="plus" size="sm" />添加数据源</button></div>
       </div>
-      {error && <div className="ds-feedback ds-failed" role="alert"><Icon name="warn" size="sm" /><span>{error}</span><button className="da-btn da-btn-sm" onClick={refresh}>重试</button></div>}
+      {error && <ErrorNotice error={error} context="datasource"><button className="da-btn da-btn-sm" onClick={refresh}>重试</button></ErrorNotice>}
       <div className="kw-tablebox"><div className="kw-table-scroll" tabIndex={0} role="region" aria-label="数据源列表，可横向滚动">
         <table className="kw-table ds-table" aria-label="数据源列表" aria-busy={loading}>
           <thead><tr><th scope="col">数据源名称</th><th scope="col">连接类型</th><th scope="col">连接状态</th><th scope="col">操作</th></tr></thead>
@@ -119,9 +120,9 @@ export default function DataSourcesPage() {
                 return <tr key={source.id}>
                   <td><strong className="ds-name" title={source.name}>{source.name}</strong><div className="ds-meta" title={connection?.database || undefined}>{connection?.database || '未指定数据库'}</div></td>
                   <td><span className="ds-type">{dataSourceKind(source.kind)}</span></td>
-                  <td><span className={`ds-status ${status?.state === 'connected' ? 'ds-connected' : checking ? '' : 'ds-failed'}`} role="status" title={status?.error || undefined}>
+                  <td><span className={`ds-status ${status?.state === 'connected' ? 'ds-connected' : checking ? '' : 'ds-failed'}`} role="status">
                     {status?.state === 'connected' ? '已连通' : checking ? '检测中…' : status?.state === 'error' ? '检测失败' : '未连通'}
-                  </span>{status?.error && <div className="ds-meta ds-status-error" title={status.error}>{status.error}</div>}</td>
+                  </span>{status?.error && <ErrorNotice error={status.error} context="datasource" />}</td>
                   <td><div className="ds-row-actions"><button className="da-btn da-btn-sm" onClick={() => setDetail(source)}>详情</button>
                     <button className="da-btn da-btn-ghost da-btn-sm" onClick={() => edit(source)}>配置</button>
                     <button className="da-btn da-btn-ghost da-btn-sm" disabled={checking} onClick={() => void check(source.id, generation.current)}><Icon name="refresh" size="sm" />{checking ? '检测中…' : '检测连接'}</button>
@@ -137,7 +138,7 @@ export default function DataSourcesPage() {
     {editor && <DataSourceFormModal source={editor.source} onClose={() => setEditor(null)} onSaved={() => { setEditor(null); toast(editor.source ? '数据源已更新' : '数据源已添加', 'success'); void refresh(); }} />}
     {detail && <DataSourceDetailModal dataSource={detail} onClose={() => setDetail(null)} />}
     {deleting && <DataSourceDialog title="删除数据源" description={deleting.name} onClose={() => setDeleting(null)} busy={busy}>
-      <div className="ds-dialog-body"><p>确认删除该数据源？已关联的库表需先解除关联。</p>{deleteError && <div className="ds-feedback ds-failed" role="alert">{deleteError}</div>}</div>
+      <div className="ds-dialog-body"><p>确认删除该数据源？已关联的库表需先解除关联。</p>{deleteError && <ErrorNotice error={deleteError} context="datasource" />}</div>
       <footer className="ds-dialog-foot"><button className="da-btn" onClick={() => setDeleting(null)} disabled={busy}>取消</button><button className="da-btn da-btn-danger" onClick={remove} disabled={busy}>{busy ? '删除中…' : '确认删除'}</button></footer>
     </DataSourceDialog>}
   </div>;

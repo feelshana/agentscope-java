@@ -3,6 +3,7 @@ import { createDataSource, DataSourceRequest, DataSourceStatus, ExternalDataSour
 import DataSourceDialog from './DataSourceDialog';
 import { dataSourceConnection } from './dataSourceConnection';
 import Icon from './Icon';
+import ErrorNotice from './ErrorNotice';
 
 interface FormState {
   name: string; kind: string; host: string; port: string; database: string;
@@ -110,11 +111,12 @@ export default function DataSourceFormModal({ source, onClose, onSaved }: {
           <label className="ds-sampling ds-full"><input type="checkbox" checked={form.sampling} onChange={e => update({ sampling: e.target.checked })} /><span>数据采样<small>每表最多 1000 行，用于观察列样例，非完整枚举。</small></span></label>
           </div></details>
         </fieldset>
-        {error && <div className="ds-feedback ds-failed" role="alert"><Icon name="warn" size="sm" />{error}</div>}
-        {testResult && <div className={`ds-feedback ${testResult.connected ? 'ds-connected' : 'ds-failed'}`} role={testResult.connected ? 'status' : 'alert'}>
-          <Icon name={testResult.connected ? 'check' : 'warn'} size="sm" />{testResult.connected ? '连接成功，可以保存' : `连接失败：${testResult.error || '请检查连接配置'}`}
-          {!testResult.connected && <div style={{ marginTop: 6, color: 'var(--da-text-muted)' }}>没有平台能访问到的数据库时，可以先在知识库里上传 Excel / CSV 文件体验问数。</div>}
-        </div>}
+        {error && <ErrorNotice error={error} context="datasource" secrets={[form.password]} />}
+        {testResult && (testResult.connected
+          ? <div className="ds-feedback ds-connected" role="status"><Icon name="check" size="sm" />连接成功，可以保存</div>
+          : <ErrorNotice error={testResult.error || '请检查连接配置'} context="datasource" secrets={[form.password]}>
+            <span>没有平台能访问到的数据库时，可以先在知识库里上传 Excel / CSV 文件体验问数。</span>
+          </ErrorNotice>)}
       </div>
       <footer className="ds-dialog-foot"><button type="button" className="da-btn" onClick={test} disabled={busy || testing}><Icon name="refresh" size="sm" />{testing ? '检测中…' : '检测连接'}</button>
         <button type="button" className="da-btn" onClick={onClose} disabled={busy}>取消</button><button className="da-btn da-btn-primary" type="submit" disabled={busy || testing || !testResult?.connected}>{busy ? '保存中…' : '保存'}</button>
