@@ -29,3 +29,8 @@
 ## 已确认的临时分发安排
 - 本次先提交两Excel并由用户push；66复制到持久目录、校验并确认应用可读后，下次提交再删除仓库Excel副本，不提前删。Git历史仍保留原内容。
 - 保留66持久路径及runtime.env配置，后续正常拉取/upgrade不影响文件；源码README/SHA256SUMS可保留。新服务器仍需另行准备示例文件。
+
+## 2026-10-31 问数分析与发布修复（wangchao_dev）
+- 分析轮次run_sql固定官方上限，500行以上模型只看摘要，截断结果不生成文件；归因默认单维度；发布在问答确认后才执行。
+- 本地用newuser08走通：v1发布1次、索引1次、首问不等待。建模耗时未见改善，66实测待回传。
+- 提交static须按/dify/dataagent/构建；Git Bash会改写该路径，用PowerShell。66校验后删除deploy/demo-samples的Excel。

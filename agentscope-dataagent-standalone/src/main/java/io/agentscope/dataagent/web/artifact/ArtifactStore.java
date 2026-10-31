@@ -418,7 +418,7 @@ public class ArtifactStore {
                     .append("; ");
         var check = fs.execute(rc, command.toString(), 10);
         if (check == null || check.exitCode() != 0 || check.output() == null)
-            throw new IOException("无法检查分析输入");
+            throw new IOException("分析计算环境暂不可用，请确认 Docker 已启动后重试");
         var missing =
                 new java.util.HashSet<>(
                         java.util.Arrays.asList(check.output().strip().split("\\s+")));

@@ -262,7 +262,7 @@ function TrialAnswer({ review, busy, fixing, assistantIdle, onAccept, onAskFix, 
     {q.sql && mode !== 'edit' && <ReadableCode text={q.sql} language="sql" title="SQL" />}
     {confirmed && <div className="da-small" style={{ color: 'var(--da-success)' }}>{review.published?.current ? '✓ 已确认正确并发布，问数时会参考' : '✓ 已确认正确，发布后问数时会参考'}</div>}
     {!confirmed && q.sql && !fixing && mode === null && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-      <button className="da-btn da-btn-primary da-btn-sm" data-tour="trial-confirm" disabled={busy} onClick={() => { onAccept(); tourSignal('trial-confirmed'); }}>确认 SQL 正确</button>
+      <button className="da-btn da-btn-primary da-btn-sm" data-tour="trial-confirm" disabled={busy} onClick={onAccept}>{busy ? '确认中…' : '确认 SQL 正确'}</button>
       <button className="da-btn da-btn-sm" disabled={busy} onClick={() => setMode('choose')}>不正确</button>
       <span style={{ ...small, alignSelf: 'center' }}>确认正确后才会作为示例</span>
     </div>}

@@ -14,8 +14,8 @@ description: 指标归因：比较两个时间段某个指标的变化，找出�
    - `method`: `attribution`
    - `metric`: 指标及口径，如“访问次数（报表访问明细记录行数）”；`metric_note` 写口径来源。去重指标（人数、用户数）在 `metric_note` 中注明“去重指标，按维度分别去重，各项不可相加”
    - `current_period` / `base_period`: `YYYY-MM-DD 至 YYYY-MM-DD`；用户只说了当前期时，对比期默认取紧邻的上一个等长周期
-   - `dimensions`: 预选 2 个最可能解释变化的维度；`candidate_dimensions`: 可分组字段（中文名，最多 8 个）
-   - `depth`: 2；`filters`: 业务规则中的默认过滤（中文描述）
+   - `dimensions`: 预选 1 个最可能解释变化的维度，其余放进候选，由用户决定是否增加；`candidate_dimensions`: 可分组字段（中文名，最多 8 个）
+   - `depth`: 1；`filters`: 业务规则中的默认过滤（中文描述）
 3. 用一句话请用户确认参数，结束本轮。本轮不执行查询。
 
 ## 二、执行分析（参数已确认的轮次）
@@ -25,17 +25,18 @@ description: 指标归因：比较两个时间段某个指标的变化，找出�
    ```sql
    SELECT CASE WHEN access_time >= '2026-10-01' THEN '2026-10-01 至 2026-10-07'
                ELSE '2026-09-24 至 2026-09-30' END AS 期间,
-          u.department_name AS 部门, v.project_name AS 项目, COUNT(*) AS 访问次数
+          v.project_name AS 项目, COUNT(*) AS 访问次数
    FROM ... WHERE access_time >= '2026-09-24' AND access_time < '2026-10-08' ...
-   GROUP BY 1, 2, 3
+   GROUP BY 1, 2
    ```
+   行数上限由平台设置，不用传 `limit`。结果超过 500 行时你只会看到前几行和总行数，完整数据在「数据文件」里，这是正常的，不要因此改写 SQL。结果被截断时平台不生成数据文件，这时减少维度或缩小时间范围后重新取数，不要用不完整的数据计算。
 2. **计算：一次 `run_python`**，读取查询结果末尾「数据文件」给出的 CSV：
 
    ```python
    import json, subprocess, sys
    params = {"metric": "访问次数", "period": "期间",
              "current": "2026-10-01 至 2026-10-07", "base": "2026-09-24 至 2026-09-30",
-             "dimensions": ["部门", "项目"], "depth": 2, "title": "访问次数变化拆解"}
+             "dimensions": ["项目"], "depth": 1, "title": "访问次数变化拆解"}
    r = subprocess.run([sys.executable, "skills/attribution/attribution.py", "--input", "data/<文件名>.csv",
                        "--params", json.dumps(params, ensure_ascii=False)], capture_output=True, text=True)
    print(r.stdout or r.stderr)

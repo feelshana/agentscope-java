@@ -263,6 +263,8 @@ run_sql/query_cube 成功结果由 `WrenScopedMcpClient#callTool` 经 `QueryData
 recall_queries、describe_model 与 describe_cube 均由官方 MCP 提供，平台不再提供第二套知识读取或召回工具。
 推荐问题（spec103）：`RecommendedQuestionService` 在发布后后台为每个知识库生成 1 个推荐问题，存于 `dataagent_dataset_group.recommended_question`。带日期的事实表由平台确定日期：上传表经 `TableProvisioner#dateRange`（时间列按 `TemporalCondition#sortable` 转换）取实际起止日期，外部表取"最近一个月"或更短的查询窗口；模型只选表和指标名，平台拼成"`日期` 每天的`指标`"；没有带日期事实表时退回 `QuestionSuggestionService`。`GET /api/dataset-groups/{id}/recommended-question`（需 QUERY）供问数页在新会话、单知识库、输入为空时回填，建模试问面板显示同一条。
 分析技能（spec102/ADR0121）：`AnalysisSkills#materialize` 启动时把 `classpath:analysis-skills/` 复制为只读技能仓库挂到问数助手（白名单 usage + attribution/anomaly/forecast）。问数请求可带 `analysis`/`analysisParams`，`ChatController#analysisTurn` 校验后经 `ConversationScopeRegistry#putAnalysis` 写入本轮 `AnalysisTurn`；`AnalysisSkillMiddleware#onSystemPrompt` 按"待确认 / 已确认"注入本轮指令。待确认轮次助手调用 `propose_analysis`（`AnalysisToolkit`，页面渲染为参数确认卡），`WrenScopedMcpClient#callTool` 与 `RunPythonTool#runPython` 拒绝查询和计算；已确认轮次取数后由 `RunPythonTool` 安装固定脚本并在沙箱运行，回执 `queryType=ANALYSIS`，`AnswerQueryMemory` 不保存为样例。`GET /api/dataset-groups/{id}/analysis-capabilities`（`AnalysisController`，需 QUERY）按 `MdlCatalog#hasTimeColumn` 决定方法是否可用；"继续分析"按钮由前端 `analysisSuggestions` 按最后一次查询结果的固定规则计算。
+
+分析轮次的 `run_sql` 由 `WrenScopedMcpClient#callTool` 固定使用官方最大行数；结果超过阈值时模型只看摘要，完整数据写入文件；被截断的结果不生成文件，脚本不会用不完整的数据计算。普通问数不受影响。
 问题范围、时间粒度、JOIN、DISTINCT、视图与 Cube 的选择遵循官方技能，不由平台正则路由。
 
 ### 4.2 点赞与官方 memory
@@ -766,6 +768,8 @@ React 18 + TypeScript + Vite SPA（`frontend/`），构建产物进 `classpath:/
 ### 当前建模工作台（ADR 0069、0075、0076）
 
 `SemanticModelingPage` 组织建模对话、资料、语义模型三区（spec092 §7）。建模对话页以对话为中心：每轮回复下方列出 AI 建模结果，待确定的口径以对话内卡片出现，右侧试问展示助手写出的 SQL 与口径，用户核对后确认（不自动试运行、不查询数据），底部草稿栏统一发布；确认、改写或归档问题时，修订号在工作区锁内递增，发布在工作区锁内读取要覆盖的修订号（`MdlQuestionStore#locked`、`MdlPublishService#doPublishLocked`），避免发布期间确认的变更留下"待发布"却无差异可发布；若仍出现该状态，草稿栏提供"重新发布"。文档修改后自动排队一条文档更新请求。助手按官方技能直接修改草稿，发布为显式操作，官方工程校验失败保留旧快照。问数始终使用已发布工程。
+
+`MdlQuestionService#decide` 在发布锁内完成确认，发布会等确认结束，确认的问答一定进入这次发布。
 
 `SqlQaExampleService` 保留独立 SQL 示例的结构化编辑和点赞索引失败回滚；草稿修改/删除在工作区锁内递增修订号。已有 `knowledge/questions/<id>.yml` 的 SQL 是确认结果投影，只读展示并提示回到问题列表修正/移除，禁止旧接口绕过版本检查与重新确认。
 

@@ -457,6 +457,11 @@ public class MdlPublishService {
                 });
     }
 
+    /** Lets a change that must land in the next snapshot finish before a publish can start. */
+    public <T> T beforeNextPublish(String groupId, Supplier<T> action) {
+        return withPublishLock(groupId, action);
+    }
+
     /** Runs the action while holding the group's publish mutex (see {@link #publishLocks}). */
     private <T> T withPublishLock(String groupId, Supplier<T> action) {
         ReentrantLock lock = publishLocks.computeIfAbsent(groupId, key -> new ReentrantLock());

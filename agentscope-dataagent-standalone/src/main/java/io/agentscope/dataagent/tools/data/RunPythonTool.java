@@ -183,7 +183,7 @@ public final class RunPythonTool {
             try {
                 restoreNotice = artifactStore.restoreInputs(rc, filesystem);
             } catch (Exception e) {
-                return "error: 无法恢复分析输入：" + e.getMessage();
+                return "error: 分析无法开始：" + e.getMessage();
             }
         }
 

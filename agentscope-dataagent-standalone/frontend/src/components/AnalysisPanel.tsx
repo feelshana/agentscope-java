@@ -141,8 +141,9 @@ export function AnalysisParamsCard({ input, disabled, onStart, onCancel }: {
   const [current, setCurrent] = useState(proposal?.current_period ?? '');
   const [base, setBase] = useState(proposal?.base_period ?? '');
   const [granularity, setGranularity] = useState(proposal?.granularity ?? 'day');
-  const [dims, setDims] = useState<string[]>((proposal?.dimensions ?? []).slice(0, 4));
-  const [depth, setDepth] = useState(proposal?.depth === 1 ? 1 : 2);
+  // One dimension by default; more multiply the result rows, so adding them is the user's choice.
+  const [dims, setDims] = useState<string[]>((proposal?.dimensions ?? []).slice(0, 1));
+  const [depth, setDepth] = useState(proposal?.depth === 2 ? 2 : 1);
   const [horizon, setHorizon] = useState(proposal?.horizon ?? 7);
   const [filters, setFilters] = useState<string[]>(proposal?.filters ?? []);
   const [started, setStarted] = useState(false);
@@ -155,7 +156,7 @@ export function AnalysisParamsCard({ input, disabled, onStart, onCancel }: {
     if (locked || missing) return;
     setStarted(true);
     const params: Record<string, unknown> = { metric: metric.trim(), metric_note: proposal?.metric_note, current_period: current.trim(), filters };
-    if (method === 'attribution') Object.assign(params, { base_period: base.trim(), dimensions: dims, depth });
+    if (method === 'attribution') Object.assign(params, { base_period: base.trim(), dimensions: dims, depth: dims.length > 1 ? depth : 1 });
     else Object.assign(params, { granularity });
     if (method === 'forecast') params.horizon = horizon;
     onStart(method, params);
