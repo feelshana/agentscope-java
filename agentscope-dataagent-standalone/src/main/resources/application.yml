@@ -92,6 +92,15 @@ dataagent:
   external-datasource:
     allowed-endpoints: ${DATAAGENT_EXTERNAL_DATASOURCE_ALLOWED_ENDPOINTS:}
 
+  # spec105: built-in demo files (kept in samples-dir, not in the repository) and the read-only
+  # demo_data source loaded from them. Off by default; needs a password for the reader account.
+  demo:
+    enabled: ${DATAAGENT_DEMO_ENABLED:false}
+    samples-dir: ${DATAAGENT_DEMO_SAMPLES_DIR:data/demo-samples}
+    jdbc-url: ${DATAAGENT_DEMO_JDBC_URL:jdbc:mysql://localhost:3306/demo_data}
+    username: ${DATAAGENT_DEMO_USERNAME:demo_reader}
+    password: ${DATAAGENT_DEMO_PASSWORD:}
+
   # JWT signing secret (>= 32 chars). MUST be overridden in production.
   jwt:
     ttl-seconds: ${DATAAGENT_JWT_TTL_SECONDS:1800}

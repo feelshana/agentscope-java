@@ -1,3 +1,4 @@
+import { retryTrialQuestion, tourSignal, useTour } from '../../state/guidedTour';
 import { FactQueryWindowSettings } from '../../components/FactQueryWindowSettings';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -184,7 +185,40 @@ export default function SemanticModelingPage() {
     startOffered.current = groupId;
     setStartOffer(groupId);
   }, [windowReady, groupId, params]);
+  // spec105: the guided tour follows what this page really reports.
+  useEffect(() => { tourSignal('data-ready', { groupId }); }, [groupId]);
+  useEffect(() => { if (screening !== null && !screeningPending) tourSignal('screening-done', { groupId }); }, [screening, screeningPending, groupId]);
+  useEffect(() => { if (windowReady) tourSignal('window-ready', { groupId }); }, [windowReady, groupId]);
+  useEffect(() => { if (trialOpen) tourSignal('trial-opened', { groupId }); }, [trialOpen, groupId]);
+  // A queued request is not a run: idle flickers on between handing it over and the run starting.
+  const assistantRan = useRef(false);
+  useEffect(() => {
+    if (assistantState !== 'idle') assistantRan.current = true;
+    else if (assistantRan.current && !head) { assistantRan.current = false; tourSignal('model-idle', { groupId }); }
+  }, [assistantState, head, groupId]);
+  // Open questions are settled before trying the model. The wait outlasts the moment an answered
+  // request has left the queue but its run has not started, which also reads as idle.
+  const tourStep = useTour()?.step;
+  useEffect(() => {
+    if (tourStep !== 'confirm' || !idle || !workflow || confirmations.length > 0) return;
+    const timer = window.setTimeout(() => tourSignal('confirm-done', { groupId }), 2000);
+    return () => window.clearTimeout(timer);
+  }, [tourStep, idle, workflow, confirmations.length, groupId]);
+  // No skip buttons in the tour, so after a reload it recovers from what the page shows.
+  useEffect(() => {
+    if (tourStep !== 'modeling' || !idle || !(draftSummary.changes > 0 || workflow?.queryAvailable)) return;
+    const timer = window.setTimeout(() => tourSignal('model-idle', { groupId }), 4000);
+    return () => window.clearTimeout(timer);
+  }, [tourStep, idle, draftSummary.changes, workflow?.queryAvailable, groupId]);
+  useEffect(() => { if (!trialOpen && (tourStep === 'trial_ask' || tourStep === 'trial_confirm')) setTrialOpen(true); }, [tourStep, trialOpen]);
+  useEffect(() => { if (tourStep === 'trial_confirm' && examples > 0) tourSignal('trial-confirmed', { groupId }); }, [tourStep, examples, groupId]);
+  useEffect(() => {
+    if (tourStep !== 'trial_confirm' || !idle || examples > 0 || unconfirmedTrials > 0) return;
+    const timer = window.setTimeout(retryTrialQuestion, 6000);
+    return () => window.clearTimeout(timer);
+  }, [tourStep, idle, examples, unconfirmedTrials]);
   const startModeling = () => {
+    tourSignal('model-started', { groupId });
     setStartOffer(null);
     setParams({ asset: 'modeling' }, { replace: true });
     request(AUTO_MODELING_REQUEST, 'auto', '开始建模');
@@ -208,6 +242,12 @@ export default function SemanticModelingPage() {
     : waiting ? '请求排队中' : '助手空闲';
   const toQuery = workflow?.queryAvailable ? () => navigate(`/chat?groups=${encodeURIComponent(groupId)}`) : undefined;
   const preparing = useQueryReadiness(groupId, workflow?.publishedVersion);
+  // Indexing and warm-up run right after publishing; the first question should not wait for them.
+  useEffect(() => {
+    if (tourStep !== 'preparing' || preparing !== null) return;
+    const timer = window.setTimeout(() => tourSignal('query-ready', { groupId }), 3000);
+    return () => window.clearTimeout(timer);
+  }, [tourStep, preparing, groupId]);
   // Any turn may rewrite drafts or trial questions; every panel listening for updates reloads.
   const turnDone = () => {
     window.dispatchEvent(new CustomEvent('modeling:updated', { detail: { groupId } }));
@@ -229,7 +269,7 @@ export default function SemanticModelingPage() {
       <div className="mw-actions">
         {!screeningPending && screening !== null && <button className="da-btn da-btn-sm" onClick={() => setWindowSignal(n => n + 1)}>事实表时间范围</button>}
         <button className="da-btn da-btn-sm" onClick={() => navigate(`/configure/datasets/${groupId}`)}>知识库</button>
-        {tab === 'modeling' && windowReady && <button className={`da-btn da-btn-sm ${trialOpen ? 'da-btn-primary' : ''}`} onClick={() => setTrialOpen(!trialOpen)}>
+        {tab === 'modeling' && windowReady && <button data-tour="trial-open" className={`da-btn da-btn-sm ${trialOpen ? 'da-btn-primary' : ''}`} onClick={() => setTrialOpen(!trialOpen)}>
           试问{examples ? ` · ${examples}` : ''}</button>}
         {toQuery && <button className="da-btn da-btn-primary da-btn-sm" disabled={!!preparing} title={preparing ? `问数准备中（${preparing}），约半分钟后可用` : undefined}
           onClick={toQuery}>{preparing ? '问数准备中…' : '去问数 →'}</button>}
@@ -268,7 +308,7 @@ export default function SemanticModelingPage() {
       <BusinessDocumentsPanel groupId={groupId} onChanged={documentsChanged} />
       <div style={{ display: 'flex', gap: 8 }}>
         <button className="da-btn da-btn-primary" onClick={startModeling}>开始自动建模</button>
-        <button className="da-btn" onClick={startModeling}>没有文档，直接开始</button>
+        <button className="da-btn" data-tour="model-start" onClick={startModeling}>没有文档，直接开始</button>
       </div>
     </div>}
     <main className="modeling-workbench-body" style={{ flex: 1, minHeight: 0, display: screeningPending ? 'none' : 'flex', gap: 16 }}>
@@ -299,7 +339,7 @@ export default function SemanticModelingPage() {
             onActivityChange={setAssistantState}
             renderTurnResult={since => <TurnResultCard groupId={groupId} since={since} disabled={!idle} />}
             // Before modeling starts there is nothing to try or publish yet.
-            footer={!idle || startOffer === groupId ? null : confirmations.length > 0 ? <div ref={confirmAnchor}>
+            footer={!idle || startOffer === groupId ? null : confirmations.length > 0 ? <div ref={confirmAnchor} data-tour="confirm-cards">
               <ConfirmationCards key={confirmations.map(c => c.id).join(',')} questions={confirmations} onSubmit={answers => void answered(answers)} />
             </div> : <NextStepCard groupId={groupId} summary={draftSummary} unconfirmedTrials={unconfirmedTrials} nextVersion={(workflow?.publishedVersion ?? 0) + 1}
               onTrial={() => setTrialOpen(true)} onPublish={() => setPublishSignal(n => n + 1)} onQuery={toQuery} />} /> : <div className="da-card">事实表时间配置完成后，建模助手会在此继续。</div>}</div>

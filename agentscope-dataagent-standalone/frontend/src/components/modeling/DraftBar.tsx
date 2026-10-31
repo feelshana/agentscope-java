@@ -1,7 +1,8 @@
+import { tourSignal } from '../../state/guidedTour';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { discardDraft, getDraftItems, getDraftReview } from '../../api/draftReview';
 import type { DraftItem, DraftReview } from '../../api/draftReview';
-import { publishMdl, validateMdl } from '../../api/semanticModeling';
+import { publishMdl } from '../../api/semanticModeling';
 import type { MdlIssue, MdlPublishResult } from '../../api/semanticModeling';
 import type { ModelingWorkflow } from '../../api/modelingWorkflow';
 import DraftItemsList from './DraftItemsList';
@@ -81,14 +82,12 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
     if (!includeOthers && (review?.changesByOthers ?? 0) > 0) { setConfirming('others'); return; }
     setConfirming(null); setBusy('publish'); setError(null); setResult(null);
     try {
-      const validation = await validateMdl(groupId);
-      if (active.current !== groupId) return;
-      const errors = validation.issues.filter(i => i.severity === 'error');
-      setIssues(errors);
-      if (errors.length) return;
+      // Publishing runs the full check itself and reports its issues; checking first only doubles it.
+      setIssues([]);
       const published = await publishMdl(groupId);
       if (active.current !== groupId) return;
       setResult(published);
+      if (published.ok) tourSignal('published', { groupId });
       setIssues(published.issues.filter(i => i.severity === 'error'));
       window.dispatchEvent(new CustomEvent('modeling:updated', { detail: { groupId } }));
       onPublished();
@@ -109,12 +108,12 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
   const droppedQuestions = result?.ok ? result.issues.filter(i => i.source === 'questions' && i.severity !== 'error') : [];
   const label = busy === 'publish' ? '检查并发布中…' : republish ? '重新发布' : `发布 v${(workflow?.publishedVersion ?? 0) + 1}`;
   const notices = <>
-    {confirming === 'pending' && <div role="alert" style={{ ...note, background: 'rgba(234,179,8,.14)', color: 'var(--da-warn)' }}>
+    {confirming === 'pending' && <div role="alert" data-tour="draft-confirm" style={{ ...note, background: 'rgba(234,179,8,.14)', color: 'var(--da-warn)' }}>
       还有 {pendingConfirmations} 项需要你确定，未确定的口径不会生效。
       <button className="da-btn da-btn-sm" onClick={() => { setConfirming(null); setOpen(false); onLocate(); }}>去处理</button>
       <button className="da-btn da-btn-sm" onClick={() => void publish(true)}>跳过并发布</button>
     </div>}
-    {confirming === 'others' && <div role="alert" style={note}>
+    {confirming === 'others' && <div role="alert" data-tour="draft-confirm" style={note}>
       本次发布包含其他成员的 {review?.changesByOthers} 项修改，确认一起发布？
       <button className="da-btn da-btn-primary da-btn-sm" onClick={() => void publish(true, true)}>确认发布</button>
       <button className="da-btn da-btn-sm" onClick={() => setConfirming(null)}>取消</button>
@@ -158,7 +157,7 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
       {blocked && changes.length > 0 && <span style={{ fontSize: 12, color: 'var(--da-text-muted)' }}>{blocked}</span>}
       {republish && !running && <span style={{ fontSize: 12, color: 'var(--da-warn)' }}>有修改尚未生效，重新发布后才能问数</span>}
       {ready && <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 4, background: 'rgba(22,163,74,.12)', color: 'var(--da-success)' }}>可发布</span>}
-      <button className={`da-btn ${ready ? 'da-btn-primary' : ''} da-btn-sm`} disabled={busy !== null || !!blocked} onClick={() => void publish()}>{label}</button>
+      <button className={`da-btn ${ready ? 'da-btn-primary' : ''} da-btn-sm`} data-tour="draft-publish" disabled={busy !== null || !!blocked} onClick={() => void publish()}>{label}</button>
     </div>
   </footer>;
 }

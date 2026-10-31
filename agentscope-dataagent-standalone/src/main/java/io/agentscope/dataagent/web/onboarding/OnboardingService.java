@@ -16,6 +16,7 @@
 package io.agentscope.dataagent.web.onboarding;
 
 import io.agentscope.dataagent.dataset.DatasetException;
+import io.agentscope.dataagent.dataset.DemoDataService;
 import io.agentscope.dataagent.dataset.KnowledgeBaseAccessService;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetRepository;
@@ -29,6 +30,7 @@ import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -51,7 +53,9 @@ public class OnboardingService {
     public static final String PUBLISH = "publish";
     public static final String ASK = "ask";
     public static final String ANALYZE = "analyze";
-    static final List<String> TASKS = List.of(DATA, PUBLISH, ASK, ANALYZE);
+    private static final Pattern TOUR_STEP = Pattern.compile("[a-z_]{1,32}");
+    private static final Pattern TOUR_GROUP = Pattern.compile("[A-Za-z0-9-]{0,64}");
+    private static final Set<String> TOUR_ROUTES = Set.of("", "upload", "datasource");
     static final Set<String> TIPS = Set.of("follow_ups", "analysis_params");
 
     public enum Stage {
@@ -62,6 +66,9 @@ public class OnboardingService {
 
     public record Task(String id, boolean done) {}
 
+    /** spec105: where a running guided tour is; the route is chosen at the "data source" step. */
+    public record Tour(String step, String groupId, String route, boolean paused) {}
+
     /** A published knowledge base's recommended question for the query home page. */
     public record Starter(String groupId, String groupName, String question, boolean shared) {}
 
@@ -69,6 +76,9 @@ public class OnboardingService {
      * @param daysLeft days until the checklist hides by itself; 0 once hidden
      * @param queryable whether the user can query at least one published knowledge base
      * @param unpublished names of the user's own knowledge bases that are not published yet
+     * @param tour the running guided tour, null when there is none
+     * @param samples demo files available for one-click upload
+     * @param demoSource whether the built-in read-only data source can be chosen
      */
     public record Status(
             Stage stage,
@@ -79,29 +89,36 @@ public class OnboardingService {
             List<String> tipsSeen,
             List<Starter> starters,
             boolean queryable,
-            List<String> unpublished) {}
+            List<String> unpublished,
+            Tour tour,
+            List<String> samples,
+            boolean demoSource) {}
 
     private final UserEntityRepository users;
     private final KnowledgeBaseAccessService access;
     private final DatasetRepository datasets;
+    private final DemoDataService demo;
     private final Clock clock;
 
     @Autowired
     public OnboardingService(
             UserEntityRepository users,
             KnowledgeBaseAccessService access,
-            DatasetRepository datasets) {
-        this(users, access, datasets, Clock.systemUTC());
+            DatasetRepository datasets,
+            DemoDataService demo) {
+        this(users, access, datasets, demo, Clock.systemUTC());
     }
 
     OnboardingService(
             UserEntityRepository users,
             KnowledgeBaseAccessService access,
             DatasetRepository datasets,
+            DemoDataService demo,
             Clock clock) {
         this.users = users;
         this.access = access;
         this.datasets = datasets;
+        this.demo = demo;
         this.clock = clock;
     }
 
@@ -135,6 +152,24 @@ public class OnboardingService {
         return view(user);
     }
 
+    /**
+     * spec105: starts the new-user experience over for the caller. Knowledge bases and data stay;
+     * ones that already exist simply stop counting towards the checklist.
+     */
+    @Transactional
+    public Status reset(String userId) {
+        UserEntity user = lock(userId);
+        user.setOnboardingStartedAt(clock.instant());
+        user.setOnboardingResetAt(clock.instant());
+        user.setOnboardingDismissedAt(null);
+        user.setOnboardingCompletedAt(null);
+        user.setOnboardingMilestones(null);
+        user.setOnboardingTipsSeen(null);
+        user.setOnboardingTour(null);
+        users.save(user);
+        return view(user);
+    }
+
     @Transactional
     public Status tipSeen(String userId, String tip) {
         if (!TIPS.contains(tip)) throw new DatasetException("未知的提示", 400);
@@ -142,6 +177,38 @@ public class OnboardingService {
         user.setOnboardingTipsSeen(add(user.getOnboardingTipsSeen(), tip));
         users.save(user);
         return view(user);
+    }
+
+    /** Saves the tour position; a null tour ends it. Only ever touches the caller's own row. */
+    @Transactional
+    public Status saveTour(String userId, Tour tour) {
+        UserEntity user = lock(userId);
+        user.setOnboardingTour(tour == null ? null : encode(tour));
+        users.save(user);
+        return view(user);
+    }
+
+    private static String encode(Tour tour) {
+        String group = tour.groupId() == null ? "" : tour.groupId();
+        String route = tour.route() == null ? "" : tour.route();
+        if (tour.step() == null
+                || !TOUR_STEP.matcher(tour.step()).matches()
+                || !TOUR_GROUP.matcher(group).matches()
+                || !TOUR_ROUTES.contains(route)) {
+            throw new DatasetException("引导进度无效", 400);
+        }
+        return tour.step() + "|" + group + "|" + route + "|" + tour.paused();
+    }
+
+    private static Tour decode(String value) {
+        if (value == null) return null;
+        String[] parts = value.split("\\|", -1);
+        if (parts.length != 4) return null;
+        return new Tour(
+                parts[0],
+                parts[1].isEmpty() ? null : parts[1],
+                parts[2],
+                Boolean.parseBoolean(parts[3]));
     }
 
     /** Called by the chat endpoint; unknown users and repeated milestones are ignored. */
@@ -165,24 +232,44 @@ public class OnboardingService {
     private Status view(UserEntity user) {
         String userId = user.getUserId();
         List<DatasetGroupEntity> groups = access.visible(userId, null);
-        List<String> ids = groups.stream().map(DatasetGroupEntity::getId).toList();
+        // spec105: preparing data is judged on the user's own knowledge bases only, so enabling a
+        // public one never ticks those steps for people who have done nothing.
+        List<DatasetGroupEntity> own =
+                groups.stream().filter(g -> userId.equals(g.getOwnerId())).toList();
+        var resetAt = user.getOnboardingResetAt();
+        List<DatasetGroupEntity> counted =
+                own.stream()
+                        .filter(
+                                g ->
+                                        resetAt == null
+                                                || g.getCreatedAt() == null
+                                                || g.getCreatedAt().isAfter(resetAt))
+                        .toList();
+        List<String> ids = counted.stream().map(DatasetGroupEntity::getId).toList();
         boolean data =
                 !ids.isEmpty()
                         && datasets.countForGroups(ids).stream().anyMatch(c -> c.getTotal() > 0);
         List<DatasetGroupEntity> published =
                 groups.stream().filter(g -> g.getMdlVersion() > 0).toList();
         Set<String> milestones = split(user.getOnboardingMilestones());
+        Task ask = new Task(ASK, milestones.contains(ASK));
+        Task analyze = new Task(ANALYZE, milestones.contains(ANALYZE));
+        // Someone who can already query but owns nothing only has the asking steps left.
         List<Task> tasks =
-                List.of(
-                        new Task(DATA, data),
-                        new Task(PUBLISH, !published.isEmpty()),
-                        new Task(ASK, milestones.contains(ASK)),
-                        new Task(ANALYZE, milestones.contains(ANALYZE)));
+                own.isEmpty() && !published.isEmpty()
+                        ? List.of(ask, analyze)
+                        : List.of(
+                                new Task(DATA, data),
+                                new Task(
+                                        PUBLISH,
+                                        counted.stream().anyMatch(g -> g.getMdlVersion() > 0)),
+                                ask,
+                                analyze);
         int completed = (int) tasks.stream().filter(Task::done).count();
 
         // The first time every step is seen done is the completion day; the finished checklist
         // stays on the home page for the rest of that day.
-        boolean allDone = completed == TASKS.size();
+        boolean allDone = completed == tasks.size();
         if (allDone && user.getOnboardingCompletedAt() == null) {
             user.setOnboardingCompletedAt(clock.instant());
             users.save(user);
@@ -239,7 +326,10 @@ public class OnboardingService {
                 List.copyOf(split(user.getOnboardingTipsSeen())),
                 starters,
                 !published.isEmpty(),
-                unpublished);
+                unpublished,
+                decode(user.getOnboardingTour()),
+                demo.samples(),
+                demo.sourceAvailable());
     }
 
     private static Set<String> split(String csv) {

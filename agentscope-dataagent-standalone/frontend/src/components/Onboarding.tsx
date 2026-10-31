@@ -3,8 +3,9 @@ import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   dismissOnboarding, markTipSeen, OnboardingStatus, OnboardingTaskId, OnboardingTipId,
-  refreshOnboarding, reopenOnboarding, setHelpOpen, useHelpOpen, useOnboarding,
+  refreshOnboarding, reopenOnboarding, resetOnboarding, setHelpOpen, useHelpOpen, useOnboarding,
 } from '../api/onboarding';
+import { forgetTour, resumeTour, startTour, useTour } from '../state/guidedTour';
 import Icon from './Icon';
 import type { IconName } from './Icon';
 import './Onboarding.css';
@@ -31,6 +32,17 @@ function useStepAction(onAsk?: () => void) {
     else if (id === 'publish') navigate('/configure/modeling');
     else if (id === 'ask') { if (onAsk) onAsk(); else navigate('/chat'); }
     else setHelpOpen(true);
+  };
+}
+
+/** spec105: the first step opens the guided tour, resuming it when the user left halfway. */
+function useBeginTour() {
+  const navigate = useNavigate();
+  const tour = useTour();
+  return () => {
+    if (tour) { resumeTour(); return; }
+    startTour();
+    navigate(UPLOAD_PATH);
   };
 }
 
@@ -99,14 +111,13 @@ function OnboardingCompleted({ status }: { status: OnboardingStatus }) {
 
 function OnboardingSteps({ status, onAsk }: { status: OnboardingStatus; onAsk?: () => void }) {
   const next = nextStep(status);
-  const [dataOpen, setDataOpen] = useState(next === 'data');
   const act = useStepAction(onAsk);
-  const dataDone = status.tasks.some(t => t.id === 'data' && t.done);
+  const begin = useBeginTour();
   return <section aria-label="新手任务" className="da-ob-card">
     <header className="da-ob-head">
       <div className="da-ob-head-text">
         <h2>开始使用 DataAgent</h2>
-        <p>4 步走通从准备数据到深入分析，完成的步骤会自动打勾</p>
+        <p>{status.tasks.length} 步走通{status.tasks[0]?.id === 'data' ? '从准备数据到深入分析' : '提问和深入分析'}，可以全程使用示例数据，完成的步骤会自动打勾</p>
       </div>
       <Progress status={status} />
     </header>
@@ -124,13 +135,11 @@ function OnboardingSteps({ status, onAsk }: { status: OnboardingStatus; onAsk?: 
           {t.done
             ? <span className="da-ob-step-state">已完成</span>
             : t.id === 'data'
-              ? <button type="button" className="da-ob-step-action" aria-expanded={dataOpen} aria-controls="onboarding-data-choices"
-                onClick={() => setDataOpen(o => !o)}>{dataOpen ? '收起方式' : '选择方式'}<span className={`da-ob-chevron${dataOpen ? ' is-open' : ''}`}><Icon name="chevron" size="sm" /></span></button>
+              ? <button type="button" className="da-ob-step-action" onClick={begin}>开始第一步<Icon name="chevron" size="sm" /></button>
               : <button type="button" className="da-ob-step-action" onClick={() => act(t.id)}>{step.cta}<Icon name="chevron" size="sm" /></button>}
         </li>;
       })}
     </ol>
-    {dataOpen && !dataDone && <div id="onboarding-data-choices" className="da-ob-expand"><DataSourceChoices /></div>}
     <footer className="da-ob-foot">
       <span>明天起收起到侧栏底部，{status.daysLeft} 天后自动隐藏；可在“更多 › 帮助与引导”重新打开。</span>
       <button type="button" className="da-ob-link" onClick={() => void dismissOnboarding()}>不再显示</button>
@@ -252,10 +261,19 @@ export function HelpPanel() {
   const open = useHelpOpen();
   const status = useOnboarding();
   const navigate = useNavigate();
+  const tour = useTour();
+  const begin = useBeginTour();
   useEffect(() => { if (open) void refreshOnboarding(true); }, [open]);
   if (!open) return null;
   const close = () => setHelpOpen(false);
   const allDone = !!status && status.completed === status.tasks.length;
+  const reset = async () => {
+    if (!window.confirm('重置后新手任务回到第一步，可以重新体验一遍。已有的知识库和数据都会保留，也照常可用，只是不再计入新手任务。确定重置吗？')) return;
+    forgetTour();
+    await resetOnboarding();
+    close();
+    navigate('/chat');
+  };
   return createPortal(<div className="da-modal-overlay" onClick={close} style={{ justifyContent: 'flex-end', alignItems: 'stretch' }}>
     <aside role="dialog" aria-modal="true" aria-label="帮助与引导" onClick={e => e.stopPropagation()}
       onKeyDown={e => { if (e.key === 'Escape') close(); }}
@@ -272,8 +290,11 @@ export function HelpPanel() {
         <>
             {allDone && <span style={{ fontSize: 12, color: 'var(--da-text-2)' }}>你已经走通了从数据到分析的全部步骤，重新打开会保留已有完成记录。</span>}
             <span style={{ fontSize: 12, color: 'var(--da-text-2)' }}>重新打开后，问数首页会再次显示清单，并从今天起重新计 7 天。</span>
+            {!allDone && <button type="button" className="da-btn da-btn-sm" style={{ alignSelf: 'flex-start' }}
+              onClick={() => { close(); begin(); }}>{tour?.paused ? '继续逐步指引' : '开始逐步指引'}</button>}
             <button type="button" className="da-btn da-btn-primary da-btn-sm" style={{ alignSelf: 'flex-start' }}
               onClick={() => { void reopenOnboarding(); close(); navigate('/chat'); }}>{status.stage === 'full' ? '查看新手任务' : '重新打开新手任务'}</button>
+            <button type="button" className="da-btn da-btn-ghost da-btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => void reset()}>重置新手任务</button>
           </>
       </div>}
       {HELP_SECTIONS.map(s => <section key={s.title} style={{ display: 'flex', flexDirection: 'column', gap: 6, borderBottom: '1px solid var(--da-border)', paddingBottom: 14 }}>

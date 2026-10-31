@@ -117,6 +117,14 @@ public class UserEntity {
     @Column(name = "onboarding_tips_seen", length = 200)
     private String onboardingTipsSeen;
 
+    /** spec105: guided tour position, {@code step|groupId|route|paused}; null when no tour is running. */
+    @Column(name = "onboarding_tour", length = 200)
+    private String onboardingTour;
+
+    /** spec105: only knowledge bases created after this count towards the first two steps. */
+    @Column(name = "onboarding_reset_at")
+    private Instant onboardingResetAt;
+
     public UserEntity() {}
 
     public UserEntity(String userId, String username, String passwordHash, String rolesCsv) {
@@ -212,5 +220,21 @@ public class UserEntity {
 
     public void setOnboardingTipsSeen(String onboardingTipsSeen) {
         this.onboardingTipsSeen = onboardingTipsSeen;
+    }
+
+    public String getOnboardingTour() {
+        return onboardingTour;
+    }
+
+    public void setOnboardingTour(String onboardingTour) {
+        this.onboardingTour = onboardingTour;
+    }
+
+    public Instant getOnboardingResetAt() {
+        return onboardingResetAt;
+    }
+
+    public void setOnboardingResetAt(Instant onboardingResetAt) {
+        this.onboardingResetAt = onboardingResetAt;
     }
 }

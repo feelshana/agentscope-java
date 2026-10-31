@@ -228,9 +228,10 @@ export default function FieldScreeningPanel({ groupId, mode, datasetId, onDone, 
         : '保存后会让助手按新字段重新建模这张表'}</span>
       <span style={{ flex: 1 }} />
       {table && (mode === 'adjust' || !table.confirmed || dirty) && <button
+        data-tour="screening-confirm"
         className={`da-btn ${mode === 'setup' && allConfirmed && table.confirmed ? '' : 'da-btn-primary'}`}
         disabled={busy !== null || included === 0} onClick={() => void save()}>{saveLabel}</button>}
-      {mode === 'setup' && allConfirmed && <button className="da-btn da-btn-primary" disabled={busy !== null || dirty} onClick={onDone}>完成整理，配置时间范围 →</button>}
+      {mode === 'setup' && allConfirmed && <button className="da-btn da-btn-primary" data-tour="screening-confirm" disabled={busy !== null || dirty} onClick={onDone}>完成整理，配置时间范围 →</button>}
     </footer>
   </section>;
 }

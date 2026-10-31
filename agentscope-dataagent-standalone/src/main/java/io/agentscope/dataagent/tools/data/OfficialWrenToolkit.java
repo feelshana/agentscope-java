@@ -36,11 +36,14 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /** Permission-only argv adapter to the installed official CLI; never implements Wren operations. */
 public final class OfficialWrenToolkit {
+    private final Map<String, BoundConfig> boundConfigs = new ConcurrentHashMap<>();
+
     private static final Logger log = LoggerFactory.getLogger(OfficialWrenToolkit.class);
     private final WrenProjectAccess access;
     private final WrenCli cli;
@@ -128,6 +131,7 @@ public final class OfficialWrenToolkit {
                     memory index --no-seed；memory recall -q "问题" [-l N] [-o json]；memory status/check/describe/list/fetch；
                     utils parse-type --type 类型 / parse-types --input 工程内文件；技能挂载不可用时才用 skills list/get。
                     基础语义建模阶段不开放 cube 命令。SQL 中使用模型名（models/<模型>/metadata.yml 的 name），不要使用 table_reference 中的物理库表名。每轮建模最多执行 10 条 query；SQL 禁止 CROSS JOIN 和 FROM 后逗号并列多表的笛卡尔积，多表必须 JOIN … ON。
+                    命令在同一知识库上逐条排队执行：不要在同一轮同时发多条；数据探查尽量合并为一条 SQL，一次核对多项。
                     使用官方技能决定步骤和文件内容。工程/MDL/连接/记忆路径由服务端绑定，不能切换 profile 或指定其他路径。
                     SQL 仅允许单条只读 SELECT/WITH，参数契约遵循安装版官方 CLI。
                     基础语义建模不开放 memory store：问答对只在用户逐题确认后由平台保存，用户问题写入 knowledge/questions/<ID>.yml。
@@ -190,19 +194,36 @@ public final class OfficialWrenToolkit {
                             if (bindConnection) {
                                 String profile = publish.draftCliProfile(p.ownerId(), p.groupId());
                                 long bindingAt = System.nanoTime();
-                                WrenCli.Result pinned =
-                                        cli.run(
-                                                p.root(),
-                                                props.timeout(),
-                                                List.of("context", "set-profile", profile));
-                                timed(
-                                        context,
-                                        "wren_cli.bind_profile",
-                                        op,
-                                        bindingAt,
-                                        status(pinned));
-                                if (!pinned.ok())
-                                    return "error: 当前知识库连接绑定失败，未执行查询\n" + pinned.output();
+                                BoundConfig known = boundConfigs.get(p.groupId());
+                                if (known != null && known.matches(originalConfig, profile)) {
+                                    projectConfig(p, known.bound());
+                                    timed(
+                                            context,
+                                            "wren_cli.bind_profile",
+                                            op,
+                                            bindingAt,
+                                            "CACHED");
+                                } else {
+                                    WrenCli.Result pinned =
+                                            cli.run(
+                                                    p.root(),
+                                                    props.timeout(),
+                                                    List.of("context", "set-profile", profile));
+                                    timed(
+                                            context,
+                                            "wren_cli.bind_profile",
+                                            op,
+                                            bindingAt,
+                                            status(pinned));
+                                    if (!pinned.ok())
+                                        return "error: 当前知识库连接绑定失败，未执行查询\n" + pinned.output();
+                                    boundConfigs.put(
+                                            p.groupId(),
+                                            new BoundConfig(
+                                                    originalConfig,
+                                                    profile,
+                                                    projectConfig(p, null)));
+                                }
                             }
                             log.info(
                                     "[official-wren] owner={} group={} operation={} project={}",
@@ -237,6 +258,16 @@ public final class OfficialWrenToolkit {
                     });
         } catch (RuntimeException e) {
             return "error: " + e.getMessage();
+        }
+    }
+
+    /**
+     * What the official {@code set-profile} wrote for this project and profile. Each query restores
+     * the project afterwards, so without this every query starts a CLI process just to bind again.
+     */
+    private record BoundConfig(String original, String profile, String bound) {
+        boolean matches(String currentConfig, String currentProfile) {
+            return original.equals(currentConfig) && profile.equals(currentProfile);
         }
     }
 

@@ -33,6 +33,8 @@ import {
 import { settleUploads } from '../../api/uploadQueue';
 import { getToken } from '../../api/auth';
 import { useQueryReadiness } from '../../components/useQueryReadiness';
+import { fetchSample, useOnboarding } from '../../api/onboarding';
+import { tourActive, tourSignal } from '../../state/guidedTour';
 
 type View = 'files' | 'modeling';
 
@@ -75,6 +77,11 @@ export default function DatasetGroupPage() {
   const [uploadPolicy, setUploadPolicy] = useState<UploadPolicy | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [sampleBusy, setSampleBusy] = useState(false);
+  const onboarding = useOnboarding();
+  const tourActiveNow = tourActive();
+  const openUpload = () => { tourSignal('source-chosen', { groupId, route: 'upload' }); setUploadOpen(true); };
+  const openAssociate = () => { tourSignal('source-chosen', { groupId, route: 'datasource' }); setAssociateOpen(true); };
   const [query, setQuery] = useState('');
   const [editingGroup, setEditingGroup] = useState(false);
   const [groupName, setGroupName] = useState('');
@@ -177,6 +184,7 @@ export default function DatasetGroupPage() {
     const batchErrors: string[] = [];
     const policy = await getUploadPolicy();
     setUploadOpen(false);
+    tourSignal('sample-started', { groupId });
     mutateUploadStatuses(uploadScope, prev => [
       ...prev.filter(row => !files.some(file => file.name === row.name)),
       ...files.map(f => ({ name: f.name, status: 'queued' as const, file: f, selectedSheet: sheetMap.get(f.name) })),
@@ -245,6 +253,22 @@ export default function DatasetGroupPage() {
     setBusy(false);
     await refresh();
     if (prepared > 0 && activeGroup.current === groupId) navigate(`/configure/modeling/${groupId}?asset=modeling&start=1`, { state: { intakeErrors: batchErrors } });
+  }
+
+  // spec105: the built-in files take the normal upload path; each uses its first worksheet.
+  async function uploadSamples() {
+    if (busy || !onboarding?.samples.length) return;
+    setSampleBusy(true);
+    setError(null);
+    try {
+      const files = await Promise.all(onboarding.samples.map(fetchSample));
+      setUploadOpen(false);
+      await doUpload(files, new Map());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSampleBusy(false);
+    }
   }
 
   async function uploadFiles(files: FileList | File[]) {
@@ -364,7 +388,7 @@ export default function DatasetGroupPage() {
           <div className="kw-actions">{canManage && <><button className="da-btn" disabled={!detail} onClick={() => setMembersOpen(true)}><Icon name="user" size="sm" />成员与权限</button><button className="da-btn da-btn-ghost" disabled={!detail || busy} onClick={() => { setGroupName(detail?.group.name ?? ''); setGroupDescription(detail?.group.description ?? ''); setError(null); setEditingGroup(true); }}><Icon name="edit" size="sm" />编辑信息</button><button className="da-btn" disabled={!detail} onClick={() => setWindowSignal(n => n + 1)}><Icon name="clock" size="sm" />事实表时间范围</button></>}<button className="da-btn da-btn-primary" disabled={!detail || !!preparing} title={preparing ? `问数准备中（${preparing}），约半分钟后可用` : undefined} onClick={() => navigate(`/chat?groups=${encodeURIComponent(groupId)}`)}><Icon name="chat" size="sm" />{preparing ? '问数准备中…' : '基于此库提问'}</button></div>
         </div>
         {error && <div className="kw-alert" role="alert">{error}</div>}
-        {(workflow || detail) && <div className="kw-progress" style={{ display: 'flex', alignItems: 'center', gap: 16, justifyContent: 'space-between', flexWrap: 'wrap' }}>
+        {(workflow || detail) && fileCount > 0 && <div className="kw-progress" style={{ display: 'flex', alignItems: 'center', gap: 16, justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <span className="kw-progress-text">{(workflow?.queryAvailable ?? ((detail?.publishedVersion ?? 0) > 0))
             ? preparing
               ? `已发布 v${workflow?.publishedVersion ?? detail?.publishedVersion ?? 0}，问数准备中（${preparing}），约半分钟后可以问数。`
@@ -448,9 +472,20 @@ export default function DatasetGroupPage() {
           </details>;
         })()}
         {view === 'files' && <>
-          <div className="kw-toolbar"><label className="kw-search"><Icon name="search" size="sm" /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="搜索数据集" aria-label="搜索数据集" /></label><span className="kw-spacer" />{canManage && <><button className="da-btn" disabled={busy || !detail} onClick={() => setAssociateOpen(true)}><Icon name="database" size="sm" />关联数据源</button><button className="da-btn" disabled={busy || !detail} onClick={() => setUploadOpen(true)}><Icon name="upload" size="sm" />上传文件</button></>}</div>
+          {fileCount > 0 && <div className="kw-toolbar"><label className="kw-search"><Icon name="search" size="sm" /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="搜索数据集" aria-label="搜索数据集" /></label><span className="kw-spacer" />{canManage && <><button className="da-btn" disabled={busy || !detail} onClick={openAssociate}><Icon name="database" size="sm" />关联数据源</button><button className="da-btn" disabled={busy || !detail} onClick={openUpload}><Icon name="upload" size="sm" />上传文件</button></>}</div>}
           {!detail && !error && <div className="kw-empty">加载知识库…</div>}
-          {detail && fileCount === 0 && <div className="kw-empty"><EmptyIllustration variant="table" caption="添加第一份数据，开始分析" />{canManage && <button className="da-btn da-btn-primary" disabled={busy} onClick={() => setUploadOpen(true)}>上传文件</button>}</div>}
+          {detail && fileCount === 0 && (canManage ? <div className="kw-source-grid" data-tour="kb-source">
+            <button type="button" className="kw-source is-first" disabled={busy} onClick={openUpload}>
+              <span className="kw-source-icon"><Icon name="upload" /></span>
+              <strong>上传文件</strong>
+              <span>Excel 或 CSV{onboarding?.samples.length ? '，内置示例文件点一下就能用' : ''}</span>
+            </button>
+            <button type="button" className="kw-source" disabled={busy} onClick={openAssociate}>
+              <span className="kw-source-icon"><Icon name="database" /></span>
+              <strong>关联数据源</strong>
+              <span>连接数据库中的表{onboarding?.demoSource ? '，内置示例库可直接选择' : ''}</span>
+            </button>
+          </div> : <div className="kw-empty"><EmptyIllustration variant="table" caption="这个知识库还没有数据" /></div>)}
           {detail && fileCount > 0 && <div className="kw-tablebox"><div className="kw-table-scroll"><table className="kw-table"><thead><tr><th>数据集名称</th><th>来源</th><th className="numeric">行数</th><th className="numeric">字段数</th><th>来源文件</th><th className="end">操作</th></tr></thead><tbody>
             {detail.datasets.filter(d => `${d.name} ${d.sourceFileName ?? ''}`.toLowerCase().includes(query.trim().toLowerCase())).map(d => <tr key={d.id}>
               <td><button className="kw-namecell" onClick={() => navigate(`/configure/datasets/${groupId}/table/${d.id}`)}><Icon name="table" size="sm" />{d.name}{(d.currentVersion ?? 1) > 1 && <span className="kw-badge">v{d.currentVersion}</span>}</button></td>
@@ -463,11 +498,12 @@ export default function DatasetGroupPage() {
         {view === 'modeling' && <Navigate to={`/configure/modeling/${groupId}`} replace />}
       </div></div>
       {canManage && editingGroup && <div className="da-modal-overlay" onClick={() => { if (!busy) setEditingGroup(false); }}><div className="da-modal-shell" style={{ width: 'min(520px, 92vw)' }} onClick={e => e.stopPropagation()}><div className="da-modal-head"><div className="da-modal-title">编辑知识库</div></div><div className="da-modal-body">{error && <div className="kw-alert" role="alert">{error}</div>}<label className="da-label">名称</label><input className="da-input" value={groupName} onChange={e => setGroupName(e.target.value)} maxLength={100} /><label className="da-label" style={{ marginTop: 16 }}>说明</label><textarea className="da-input" value={groupDescription} onChange={e => setGroupDescription(e.target.value)} maxLength={1000} rows={4} /></div><div className="da-modal-foot"><button className="da-btn" disabled={busy} onClick={() => setEditingGroup(false)}>取消</button><button className="da-btn da-btn-primary" disabled={busy} onClick={saveGroupInfo}>{busy ? '保存中…' : '保存'}</button></div></div></div>}
-      {canManage && uploadOpen && <div className="da-modal-overlay" onClick={() => setUploadOpen(false)}><div className="da-modal-shell" style={{ width: 'min(560px, 92vw)' }} onClick={e => e.stopPropagation()}><div className="da-modal-head"><div className="da-modal-title">上传数据文件</div></div><div className="da-modal-body">{error && <div className="kw-alert" role="alert">{error}</div>}<div className="da-dropzone" role="button" tabIndex={0} style={dragOver ? { borderColor: 'var(--da-primary)' } : undefined} onClick={() => fileRef.current?.click()} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileRef.current?.click(); } }} onDragOver={e => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={e => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files); }}><Icon name="upload" /><div style={{ marginTop: 12 }}>点击选择或拖入 Excel / CSV 文件</div><div className="da-small" style={{ marginTop: 8 }}>支持 .xlsx / .xls / .csv；单文件 {uploadPolicy ? uploadPolicy.maxFileBytes / 1024 ** 2 : 50} MB，最多 {uploadPolicy?.maxFiles ?? 10} 个，总计 {uploadPolicy ? uploadPolicy.maxSelectionBytes / 1024 ** 2 : 100} MB</div>{(busy || sheetPickerBusy) && <div className="da-small" style={{ marginTop: 12 }}>{sheetPickerBusy ? '检测工作表…' : '上传并解析中…'}</div>}</div></div><div className="da-modal-foot"><button className="da-btn" onClick={() => setUploadOpen(false)}>关闭</button></div></div></div>}
+      {canManage && uploadOpen && <div className="da-modal-overlay" onClick={() => setUploadOpen(false)}><div className="da-modal-shell" style={{ width: 'min(560px, 92vw)' }} onClick={e => e.stopPropagation()}><div className="da-modal-head"><div className="da-modal-title">上传数据文件</div></div><div className="da-modal-body">{error && <div className="kw-alert" role="alert">{error}</div>}<div className="da-dropzone" role="button" tabIndex={0} style={dragOver ? { borderColor: 'var(--da-primary)' } : undefined} onClick={() => fileRef.current?.click()} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileRef.current?.click(); } }} onDragOver={e => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={e => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files); }}><Icon name="upload" /><div style={{ marginTop: 12 }}>点击选择或拖入 Excel / CSV 文件</div><div className="da-small" style={{ marginTop: 8 }}>支持 .xlsx / .xls / .csv；单文件 {uploadPolicy ? uploadPolicy.maxFileBytes / 1024 ** 2 : 50} MB，最多 {uploadPolicy?.maxFiles ?? 10} 个，总计 {uploadPolicy ? uploadPolicy.maxSelectionBytes / 1024 ** 2 : 100} MB</div>{(busy || sheetPickerBusy) && <div className="da-small" style={{ marginTop: 12 }}>{sheetPickerBusy ? '检测工作表…' : '上传并解析中…'}</div>}</div>{!!onboarding?.samples.length && <div className="kw-samples"><strong>没有文件？用示例数据</strong><span className="da-small">系统内置，不用下载，点一下就会导入到这个知识库</span><ul>{onboarding.samples.map(name => <li key={name}><Icon name="file" size="sm" />{name}</li>)}</ul><button type="button" className="da-btn da-btn-primary" data-tour="sample-use" disabled={busy || sampleBusy} onClick={() => void uploadSamples()}>{sampleBusy ? '正在读取示例文件…' : '使用示例文件'}</button></div>}</div><div className="da-modal-foot"><button className="da-btn" onClick={() => setUploadOpen(false)}>关闭</button></div></div></div>}
       {canManage && membersOpen && detail && <KnowledgeBaseMembersModal groupId={groupId} name={detail.group.name} onClose={() => setMembersOpen(false)} />}
       {canManage && associateOpen && (
         <AssociateTablesModal
           groupId={groupId}
+          preferBuiltin={tourActiveNow}
           onClose={() => setAssociateOpen(false)}
           onAssociated={() => { if (activeGroup.current === groupId) { void refresh(); navigate(`/configure/modeling/${groupId}?asset=modeling&start=1`); } }}
           onError={(message) => { setError(message); setAssociatingTables(new Set()); }}

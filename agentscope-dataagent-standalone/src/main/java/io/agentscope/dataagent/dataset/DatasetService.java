@@ -300,7 +300,11 @@ public class DatasetService implements DatasetContextProvider {
         ExternalDataSourceEntity ds =
                 externalSources
                         .findById(dataSourceId)
-                        .filter(d -> d.getOwnerId().equals(actorId))
+                        .filter(
+                                d ->
+                                        d.getOwnerId().equals(actorId)
+                                                || (DemoDataService.isBuiltin(d)
+                                                        && DemoDataService.SCHEMA.equals(schema)))
                         .orElseThrow(
                                 () ->
                                         new DatasetException(

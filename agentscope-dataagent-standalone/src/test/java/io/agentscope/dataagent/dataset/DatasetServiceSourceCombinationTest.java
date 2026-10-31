@@ -106,6 +106,52 @@ class DatasetServiceSourceCombinationTest {
                 .thenAnswer(inv -> groupRepository.findById(inv.getArgument(1)).orElseThrow());
     }
 
+    /** spec105: anyone may associate the built-in source, but only its demo schema. */
+    @Test
+    void builtinSourceIsAssociatedOnlyFromTheDemoSchema() {
+        source.setOwnerId(DemoDataService.OWNER);
+        when(introspector.validatedUrl(source)).thenReturn(source.getJdbcUrl());
+        when(introspector.listColumns(source, DemoDataService.SCHEMA, "report_visits"))
+                .thenReturn(List.of(new DataSourceIntrospector.ColumnInfo("id", "BIGINT", "")));
+
+        assertThat(
+                        service.associateTables(
+                                "alice",
+                                "group-1",
+                                "source-1",
+                                DemoDataService.SCHEMA,
+                                List.of("report_visits"),
+                                false))
+                .hasSize(1);
+        assertThatThrownBy(
+                        () ->
+                                service.associateTables(
+                                        "alice",
+                                        "group-1",
+                                        "source-1",
+                                        "mysql",
+                                        List.of("user"),
+                                        false))
+                .isInstanceOf(DatasetException.class);
+        verify(introspector, never()).listColumns(source, "mysql", "user");
+    }
+
+    @Test
+    void anotherUsersSourceCannotBeAssociated() {
+        source.setOwnerId("bob");
+        assertThatThrownBy(
+                        () ->
+                                service.associateTables(
+                                        "alice",
+                                        "group-1",
+                                        "source-1",
+                                        "retail",
+                                        List.of("orders"),
+                                        false))
+                .isInstanceOf(DatasetException.class);
+        verify(introspector, never()).listColumns(any(), any(), any());
+    }
+
     @Test
     void rejectsNonMysqlSourceBeforeWriting() {
         source.setKind("postgresql");

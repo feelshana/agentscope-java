@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import io.agentscope.dataagent.dataset.DataSourceIntrospector;
+import io.agentscope.dataagent.dataset.DemoDataService;
 import io.agentscope.dataagent.dataset.ExternalDataSourcePolicy;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetRepository;
 import io.agentscope.dataagent.web.persistence.jpa.ExternalDataSourceEntity;
@@ -25,12 +26,14 @@ import org.springframework.web.server.ResponseStatusException;
 class ExternalDataSourceConnectionTest {
     private final ExternalDataSourceRepository sources = mock(ExternalDataSourceRepository.class);
     private final DataSourceIntrospector introspector = mock(DataSourceIntrospector.class);
+    private final DemoDataService demo = mock(DemoDataService.class);
     private final ExternalDataSourceController controller =
             new ExternalDataSourceController(
                     sources,
                     mock(DatasetRepository.class),
                     introspector,
-                    new ExternalDataSourcePolicy(""));
+                    new ExternalDataSourcePolicy(""),
+                    demo);
     private final Authentication auth = new UsernamePasswordAuthenticationToken("alice", "unused");
 
     @Test
@@ -68,6 +71,70 @@ class ExternalDataSourceConnectionTest {
                         ResponseStatusException.class,
                         error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
         verifyNoInteractions(introspector);
+    }
+
+    private ExternalDataSourceEntity builtin() {
+        when(demo.sourceAvailable()).thenReturn(true);
+        var source =
+                new ExternalDataSourceEntity(
+                        DemoDataService.SOURCE_ID,
+                        DemoDataService.OWNER,
+                        DemoDataService.SOURCE_NAME,
+                        "mysql",
+                        "jdbc:mysql://db.internal:3306/demo_data",
+                        "demo_reader",
+                        "reader-secret",
+                        true);
+        when(sources.findById(DemoDataService.SOURCE_ID)).thenReturn(Optional.of(source));
+        return source;
+    }
+
+    /** spec105: everyone sees the demo source, and never its address or account. */
+    @Test
+    void builtinSourceIsListedForEveryoneWithoutConnectionDetails() {
+        builtin();
+        var listed = controller.list(auth).block();
+        assertThat(listed).hasSize(1);
+        assertThat(listed.get(0).builtin()).isTrue();
+        assertThat(listed.get(0).jdbcUrl()).isNull();
+        assertThat(listed.get(0).username()).isNull();
+    }
+
+    @Test
+    void builtinSourceIsHiddenWhenItIsNotAvailable() {
+        builtin();
+        when(demo.sourceAvailable()).thenReturn(false);
+        assertThat(controller.list(auth).block()).isEmpty();
+        assertThatThrownBy(() -> controller.schemas(DemoDataService.SOURCE_ID, auth).block())
+                .isInstanceOf(ResponseStatusException.class);
+    }
+
+    @Test
+    void builtinSourceOnlyBrowsesTheDemoSchema() {
+        builtin();
+        assertThat(controller.schemas(DemoDataService.SOURCE_ID, auth).block())
+                .containsExactly(DemoDataService.SCHEMA);
+        assertThatThrownBy(
+                        () -> controller.tables(DemoDataService.SOURCE_ID, "mysql", auth).block())
+                .isInstanceOfSatisfying(
+                        ResponseStatusException.class,
+                        error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+        verifyNoInteractions(introspector);
+    }
+
+    @Test
+    void builtinSourceCannotBeEditedOrDeleted() {
+        builtin();
+        assertThatThrownBy(
+                        () ->
+                                controller
+                                        .update(DemoDataService.SOURCE_ID, request("pw"), auth)
+                                        .block())
+                .isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> controller.delete(DemoDataService.SOURCE_ID, auth).block())
+                .isInstanceOf(ResponseStatusException.class);
+        verify(sources, never()).save(any());
+        verify(sources, never()).deleteById(any());
     }
 
     /** 2026-10-25: queries use MySQL 8.0 SQL, so an older or unknown engine is never saved. */

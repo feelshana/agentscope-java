@@ -46,3 +46,7 @@
 - 已有平台库在升级镜像前检查用户表的 `onboarding_started_at`、`onboarding_dismissed_at`、`onboarding_completed_at`（DATETIME(6)）、`onboarding_milestones`、`onboarding_tips_seen`（VARCHAR(200)），仅对缺少列执行[0098](0098-onboarding-mysql.sql)对应ALTER。已有正确字段不重复添加。
 - 空库使用当前完整DDL，已包含推荐问题2列和引导5列，不再叠加0097/0098；仍37表。不删用户、不重建已有库、不修改BI资料或角色。
 - BI人员导入SQL显式列出原字段，新引导列可空，因此现有1484人SQL继续可用，不需要重生成或改哈希。66外置prod的validate不会自动补列。
+
+## 2026-10-31 页面逐步指引（spec105）
+
+- 已有平台库升级前执行 `0105-guided-tour-mysql.sql`，增加 `onboarding_tour`、`onboarding_reset_at`；空库的完整 DDL 已包含，不再叠加。

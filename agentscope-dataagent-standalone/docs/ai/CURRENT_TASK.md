@@ -22,3 +22,8 @@
 - 已给用户liyufanwx补姓名/授予管理员命令，尚无数据库结果回传；不要假称资料/公司已补齐，不撤销其他管理员。
 - 真实BI图标/模型、搜索Key配置后新会话、权限/恢复与生产并发按现场继续验收；不因本轮更新重建库或重复导人。
 - 66 Git1.8.3.1不接受-c remote.origin.proxy=空值；此前代理CONNECT503而直连200，临时子shell清代理变量并设NO_PROXY=*后拉取，不改永久配置。
+
+## 进行中：页面逐步指引与内置示例数据（2026-10-31，分支wangchao_dev）
+- spec105与ADR0122已实施，待真实验收；原型见Design画布"新手引导原型 v2"。建模助手、草稿栏、试问、发布逻辑未改，只加指引。
+- 示例文件用用户提供的两份Excel原样放部署目录（dataagent.demo.samples-dir），不入仓库；demo_data由DemoDataService启动时导入。
+- 本机用onboard-demo走完外部表11步（含真实建模、试问、发布、问数），用onboard-upload验证上传路线。未提交。

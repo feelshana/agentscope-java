@@ -9,6 +9,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import io.agentscope.dataagent.dataset.DatasetException;
+import io.agentscope.dataagent.dataset.DemoDataService;
 import io.agentscope.dataagent.dataset.KnowledgeBaseAccessService;
 import io.agentscope.dataagent.web.onboarding.OnboardingService.Stage;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity;
@@ -32,6 +33,7 @@ class OnboardingServiceTest {
     private final UserEntityRepository users = mock(UserEntityRepository.class);
     private final KnowledgeBaseAccessService access = mock(KnowledgeBaseAccessService.class);
     private final DatasetRepository datasets = mock(DatasetRepository.class);
+    private final DemoDataService demo = mock(DemoDataService.class);
     private final Map<String, UserEntity> rows = new java.util.HashMap<>();
 
     @BeforeEach
@@ -47,7 +49,8 @@ class OnboardingServiceTest {
     }
 
     private OnboardingService at(Instant now) {
-        return new OnboardingService(users, access, datasets, Clock.fixed(now, ZoneOffset.UTC));
+        return new OnboardingService(
+                users, access, datasets, demo, Clock.fixed(now, ZoneOffset.UTC));
     }
 
     private static DatasetGroupEntity group(String id, String owner, int version, String question) {
@@ -92,18 +95,90 @@ class OnboardingServiceTest {
         assertThat(status.unpublished()).containsExactly("库g1");
     }
 
-    /** A shared published knowledge base completes the first two steps and offers its question. */
+    /** spec105: a public or shared knowledge base offers its question but ticks nothing. */
     @Test
-    void aSharedPublishedKnowledgeBaseCountsAndOffersItsQuestion() {
+    void someoneElsesPublishedKnowledgeBaseLeavesOnlyTheAskingSteps() {
         var shared = group("g2", "carol", 3, "最近一个月每天的访问次数");
         when(access.visible("bob", null)).thenReturn(List.of(shared));
         var counted = List.of(count("g2", 2));
         when(datasets.countForGroups(List.of("g2"))).thenReturn(counted);
         var status = at(DAY_ONE).status("bob");
-        assertThat(done(status)).containsExactly(true, true, false, false);
+        assertThat(status.tasks())
+                .extracting(OnboardingService.Task::id)
+                .containsExactly(OnboardingService.ASK, OnboardingService.ANALYZE);
+        assertThat(status.completed()).isZero();
         assertThat(status.queryable()).isTrue();
         assertThat(status.starters())
                 .containsExactly(new OnboardingService.Starter("g2", "库g2", "最近一个月每天的访问次数", true));
+    }
+
+    /** Owning a knowledge base keeps all four steps, judged on the user's own ones. */
+    @Test
+    void ownKnowledgeBaseKeepsFourStepsEvenWhenAPublicOneIsPublished() {
+        var mine = group("g1", "bob", 0, null);
+        var open = group("g2", "carol", 3, "最近一个月每天的访问次数");
+        when(access.visible("bob", null)).thenReturn(List.of(mine, open));
+        var counted = List.of(count("g1", 1));
+        when(datasets.countForGroups(List.of("g1"))).thenReturn(counted);
+        assertThat(done(at(DAY_ONE).status("bob"))).containsExactly(true, false, false, false);
+    }
+
+    /** spec105: resetting starts over without touching knowledge bases or anyone else. */
+    @Test
+    void resetStartsOverAndOnlyNewKnowledgeBasesCount() {
+        var old = group("g1", "bob", 2, null);
+        when(old.getCreatedAt()).thenReturn(DAY_ONE.minusSeconds(3600));
+        when(access.visible("bob", null)).thenReturn(List.of(old));
+        var counted = List.of(count("g1", 1));
+        when(datasets.countForGroups(List.of("g1"))).thenReturn(counted);
+        var service = at(DAY_ONE);
+        service.record("bob", OnboardingService.ASK);
+        service.record("alice", OnboardingService.ASK);
+        service.saveTour("bob", new OnboardingService.Tour("publish", "g1", "upload", false));
+        service.dismiss("bob");
+        assertThat(done(service.status("bob"))).containsExactly(true, true, true, false);
+
+        var status = service.reset("bob");
+        assertThat(status.tasks()).hasSize(4);
+        assertThat(status.completed()).isZero();
+        assertThat(status.stage()).isEqualTo(Stage.full);
+        assertThat(status.tour()).isNull();
+        assertThat(status.dismissed()).isFalse();
+        assertThat(rows.get("alice").getOnboardingMilestones()).contains(OnboardingService.ASK);
+
+        var fresh = group("g2", "bob", 1, null);
+        when(fresh.getCreatedAt()).thenReturn(DAY_ONE.plusSeconds(60));
+        when(access.visible("bob", null)).thenReturn(List.of(old, fresh));
+        var both = List.of(count("g2", 1));
+        when(datasets.countForGroups(List.of("g2"))).thenReturn(both);
+        assertThat(done(at(DAY_ONE.plusSeconds(120)).status("bob")))
+                .containsExactly(true, true, false, false);
+    }
+
+    @Test
+    void tourPositionIsSavedForTheCallerAndClearedWhenItEnds() {
+        var service = at(DAY_ONE);
+        var tour = new OnboardingService.Tour("sample", "g-1", "upload", true);
+        assertThat(service.saveTour("bob", tour).tour()).isEqualTo(tour);
+        assertThat(rows.get("alice").getOnboardingTour()).isNull();
+        assertThat(service.status("bob").tour()).isEqualTo(tour);
+        assertThat(service.saveTour("bob", null).tour()).isNull();
+    }
+
+    @Test
+    void malformedTourPositionIsRejected() {
+        var service = at(DAY_ONE);
+        assertThatThrownBy(
+                        () ->
+                                service.saveTour(
+                                        "bob", new OnboardingService.Tour("a|b", null, "", false)))
+                .isInstanceOf(DatasetException.class);
+        assertThatThrownBy(
+                        () ->
+                                service.saveTour(
+                                        "bob",
+                                        new OnboardingService.Tour("home", null, "other", false)))
+                .isInstanceOf(DatasetException.class);
     }
 
     /** Only knowledge bases the user may query count; another user's private one does not. */
@@ -149,8 +224,8 @@ class OnboardingServiceTest {
     /** The finished checklist stays for the rest of the completion day, then hides. */
     @Test
     void finishingEveryStepKeepsTheChecklistUntilTheDayEnds() {
-        var shared = group("g2", "carol", 1, null);
-        when(access.visible("alice", null)).thenReturn(List.of(shared));
+        var own = group("g2", "alice", 1, null);
+        when(access.visible("alice", null)).thenReturn(List.of(own));
         var counted = List.of(count("g2", 1));
         when(datasets.countForGroups(List.of("g2"))).thenReturn(counted);
         at(DAY_ONE).status("alice");

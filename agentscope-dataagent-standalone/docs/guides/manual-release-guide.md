@@ -67,6 +67,17 @@ target/dataagent-2.0.3-SNAPSHOT.tar.gz
 
 接口兼容性：`POST /api/datasets/batch` 改为逐文件结果（fileName/status/dataset/error），以便返回部分成功；如果有外部调用脚本需同步读取新结构。当前页面使用单文件上传接口配合前端并发队列，不依赖旧的 batch 返回结构。
 
+## 内置示例数据（2026-10-31，spec105）
+
+默认关闭。开启步骤：
+
+1. 把 `报表访问明细.xlsx`、`用户列表.xlsx` 放到服务器目录，由 `DATAAGENT_DEMO_SAMPLES_DIR` 指定，默认是工作目录下的 `data/demo-samples`。这两个文件不进代码仓库。
+2. 配置 `DATAAGENT_DEMO_ENABLED=true` 和 `DATAAGENT_DEMO_PASSWORD`；数据库不在本机时配置 `DATAAGENT_DEMO_JDBC_URL`。配置了 `allowed-endpoints` 的环境要把这个地址加进去。
+3. 重启后，程序用数据集库账号建 `demo_data` 库、导入两张表、创建只读账号 `demo_reader`。账号权限不足时，由 DBA 建好库、表和只读账号，表为空时才会导入。
+4. 看日志 `Demo data source ready: demo_data` 确认可用；失败只影响内置数据源，指引会只走上传路线。
+
+已有平台库升级前先执行 `docs/migrations/0105-guided-tour-mysql.sql`。
+
 ## 问答容量与运行记录（2026-10-14）
 
 公共 `application.yml` 的 `dataagent.chat` 为单进程普通问答预算：同时执行 16 个、每用户 2 个；额外等待最多 16 个、每用户 1 个；等待最多 30 秒，实际执行最多 600 秒。等待页面显示“排队中”，可以停止；超额或超时明确报错。同一会话一轮尚未结束/停止时重复发送会被拒绝，不叠加隐式等待。这些数字限制同时进行的任务，不限制注册人数或浏览人数。

@@ -7,6 +7,8 @@ export interface ExternalDataSource {
   jdbcUrl: string;
   username: string | null;
   sampling: boolean;
+  /** spec105: the shared read-only demo source; no connection details are returned for it. */
+  builtin?: boolean;
   createdAt: string | null;
 }
 

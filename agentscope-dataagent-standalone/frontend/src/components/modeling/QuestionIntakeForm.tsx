@@ -18,11 +18,11 @@ export const DEFINITION_FORMAT = 'definition 分五行书写，每行以“指�
   + '不写 SQL 片段、列名格式或时间门禁细节';
 
 export function questionRequest(questions: string[], ids = questionIds(questions.length)): string {
-  return '请为以下业务问题逐题生成 SQL，不要保存问答对。每题：读取当前草稿模型、关系与业务规则确定口径；写一条只读 SQL（多表必须 JOIN … ON，Top N 可用 LIMIT），'
+  return '请为以下业务问题逐题生成 SQL 并写入试问文件，每题都必须写入文件才算完成。每题：读取当前草稿模型、关系与业务规则确定口径；写一条只读 SQL（多表必须 JOIN … ON，Top N 可用 LIMIT），'
     + '不查询数据，只用 wren_cli dry-plan 检查 SQL 能否生成（失败时最多修正一次）；'
     + '然后用 write_file 写入 knowledge/questions/<ID>.yml，字段为 question（原问题，不改写）、definition、sql；' + DEFINITION_FORMAT + '。'
     + '问题缺少日期时，选择符合时间配置的近期有限范围并在 definition 中写明。不要调用 memory store，不要写 knowledge/sql/。'
-    + '全部处理完后每题用一行说明已生成；用户在试问面板核对 SQL，确认正确的问答发布后才会在问数中被召回。\n'
+    + '全部 write_file 成功后，每题用一行说明已生成，没有写入文件时不要说已生成；用户在试问面板核对 SQL，确认正确的问答发布后才会在问数中被召回。\n'
     + questions.map((q, i) => `${i + 1}. [ID: ${ids[i]}] ${q}`).join('\n');
 }
 

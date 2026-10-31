@@ -28,7 +28,7 @@ export default function TurnResultCard({ groupId, since, disabled }: { groupId: 
   const count = (c: DraftItem['category']) => items.filter(i => i.category === c).length;
   const parts = [['模型', count('MODEL')], ['关系', count('RELATIONSHIP')], ['业务语义', count('SEMANTIC')], ['注意事项', count('NOTE')]]
     .filter(([, n]) => n).map(([label, n]) => `${label} ${n}`);
-  return <section aria-label="AI建模结果" style={{ marginTop: 10, border: '1px solid var(--da-border)', borderRadius: 8, overflow: 'hidden' }}>
+  return <section aria-label="AI建模结果" data-tour="turn-result" style={{ marginTop: 10, border: '1px solid var(--da-border)', borderRadius: 8, overflow: 'hidden' }}>
     <button type="button" onClick={() => setExpanded(!expanded)}
       style={{ width: '100%', background: 'var(--da-surface-sunken, #f8fafc)', border: 'none', padding: '6px 10px', cursor: 'pointer', color: 'var(--da-text)', display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
       <strong>AI建模结果</strong><span style={{ fontSize: 12, color: 'var(--da-text-muted)' }}>{parts.join(' · ')}</span>

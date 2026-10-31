@@ -1,3 +1,4 @@
+import { tourActive, tourSignal } from '../../state/guidedTour';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { KnowledgeBreadcrumb, WorkspaceMenu } from '../../components/KnowledgeWorkspace';
@@ -8,6 +9,8 @@ import { toast } from '../../components/Toast';
 import { createGroup, DatasetGroup, deleteGroup, listGroupPage, updateGroup } from '../../api/datasets';
 
 const NAME_RE = /^[一-龥A-Za-z0-9_-]{1,100}$/;
+
+const TOUR_GROUP_NAME = '我的第一个知识库';
 
 export default function DatasetsPage() {
   const navigate = useNavigate();
@@ -66,7 +69,7 @@ export default function DatasetsPage() {
     const create = searchParams.get('create') === '1';
     const datasource = searchParams.get('datasource') === '1';
     if (!create && !datasource) return;
-    if (create) openCreate();
+    if (create) { openCreate(); if (tourActive()) setName(TOUR_GROUP_NAME); }
     if (datasource) { navigate('/configure/datasources?create=1', { replace: true }); return; }
     setSearchParams({}, { replace: true });
   }, [searchParams, setSearchParams, navigate]);
@@ -110,9 +113,14 @@ export default function DatasetsPage() {
       setDescription('');
       toast(editGroup ? '知识库已更新' : '知识库已创建', 'success');
       await refresh();
-      if (!editGroup) navigate(`/configure/datasets/${g.id}`);
+      if (!editGroup) { tourSignal('kb-created', { groupId: g.id }); navigate(`/configure/datasets/${g.id}`); }
     } catch (e) {
-      setFormError(e instanceof Error ? e.message : String(e));
+      const text = e instanceof Error ? e.message : String(e);
+      // The tour's suggested name may be taken; a new one lets the user just click again.
+      if (tourActive() && text.includes('already exists')) {
+        setName(`${TOUR_GROUP_NAME}-${Math.floor(Math.random() * 900) + 100}`);
+        setFormError('这个名称已经用过，已换一个新名称，再点一次“创建”。');
+      } else setFormError(text);
     } finally {
       creating.current = false;
       setBusy(false);
@@ -235,7 +243,7 @@ export default function DatasetsPage() {
               <button className="da-btn" onClick={() => setFormOpen(false)} disabled={busy}>
                 取消
               </button>
-              <button className="da-btn da-btn-primary" onClick={handleSave} disabled={busy}>
+              <button className="da-btn da-btn-primary" data-tour="kb-create" onClick={handleSave} disabled={busy}>
                 {busy ? '保存中…' : editGroup ? '保存' : '创建'}
               </button>
             </div>

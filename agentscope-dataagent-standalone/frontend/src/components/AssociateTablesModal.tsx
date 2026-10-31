@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { AssociationState } from './AssociationProgress';
+import { tourSignal } from '../state/guidedTour';
 import {
   associateTables,
   ExternalDataSource,
@@ -108,8 +109,11 @@ export default function AssociateTablesModal({
   onError,
   onAssociateStart,
   onProgress,
+  preferBuiltin = false,
 }: {
   groupId: string;
+  /** spec105: during the guided tour the demo source and its tables start out selected. */
+  preferBuiltin?: boolean;
   onClose: () => void;
   onAssociated: () => void;
   onError?: (message: string) => void;
@@ -137,7 +141,11 @@ export default function AssociateTablesModal({
 
   useEffect(() => {
     listDataSources()
-      .then(setSources)
+      .then(list => {
+        setSources(list);
+        const demo = preferBuiltin ? list.find(s => s.builtin) : undefined;
+        if (demo) setSourceId(demo.id);
+      })
       .catch(e => setError(e instanceof Error ? e.message : String(e)));
   }, []);
 
@@ -160,7 +168,10 @@ export default function AssociateTablesModal({
     setSelected(new Set());
     setViewTable(null);
     listTables(sourceId, schema)
-      .then(setTables)
+      .then(list => {
+        setTables(list);
+        if (preferBuiltin && sources.find(s => s.id === sourceId)?.builtin) setSelected(new Set(list.map(t => t.name)));
+      })
       .catch(e => setError(e instanceof Error ? e.message : String(e)));
   }, [sourceId, schema]);
 
@@ -189,6 +200,7 @@ export default function AssociateTablesModal({
       return;
     }
     const tableNames = Array.from(selected);
+    tourSignal('sample-started', { groupId });
     onAssociateStart?.(tableNames);
     onClose();
     setBusy(true);
@@ -277,7 +289,7 @@ export default function AssociateTablesModal({
               <option value="">请选择数据源…</option>
               {sources.map(s => (
                 <option key={s.id} value={s.id}>
-                  {s.name} ({s.kind.toUpperCase()})
+                  {s.builtin ? `${s.name}（系统内置，只读）` : `${s.name} (${s.kind.toUpperCase()})`}
                 </option>
               ))}
             </select>
@@ -537,6 +549,7 @@ export default function AssociateTablesModal({
         <div style={footStyle}>
           <button
             className="da-btn da-btn-primary"
+            data-tour="demo-associate"
             onClick={handleAssociate}
             disabled={busy}
             style={{

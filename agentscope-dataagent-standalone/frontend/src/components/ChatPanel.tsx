@@ -17,6 +17,7 @@ import EmptyIllustration from './EmptyIllustration';
 import LandingExamples from './LandingExamples';
 import { NoKnowledgeBaseNotice, OnboardingChecklist, OnboardingTip, StarterQuestions } from './Onboarding';
 import { refreshOnboarding, useOnboarding } from '../api/onboarding';
+import { tourSignal } from '../state/guidedTour';
 import { currentUserProfile, getToken } from '../api/auth';
 import type { OnboardingStatus } from '../api/onboarding';
 import Icon from './Icon';
@@ -816,6 +817,7 @@ export default function ChatPanel({
   async function handleSend(override?: { text: string; analysis?: AnalysisMethod; analysisParams?: Record<string, unknown> }) {
     if (override ? busy || restoring || scopeRestoring || !effectiveAgentId : !canSend) return;
     setGroupPickerOpen(false);
+    tourSignal('asked');
     const text = override ? override.text : input.trim();
     if (!override) setInput('');
     const analysis = effectiveAgentId !== 'data-agent' ? undefined
@@ -1178,6 +1180,7 @@ export default function ChatPanel({
               ? { background: 'var(--da-danger)', cursor: 'pointer' }
               : canSend ? {} : S.sendDisabled),
           }}
+          data-tour="chat-send"
           onClick={busy && curKey ? () => abortRef.current.get(curKey)?.abort() : () => handleSend()}
           disabled={!busy && !canSend}
           title={busy ? '停止回答' : '发送'}

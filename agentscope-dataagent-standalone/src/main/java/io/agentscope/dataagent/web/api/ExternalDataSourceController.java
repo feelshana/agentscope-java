@@ -17,6 +17,7 @@ package io.agentscope.dataagent.web.api;
 
 import io.agentscope.dataagent.dataset.DataSourceIntrospector;
 import io.agentscope.dataagent.dataset.DatasetException;
+import io.agentscope.dataagent.dataset.DemoDataService;
 import io.agentscope.dataagent.dataset.ExternalDataSourcePolicy;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetRepository;
 import io.agentscope.dataagent.web.persistence.jpa.ExternalDataSourceEntity;
@@ -55,7 +56,8 @@ public class ExternalDataSourceController {
             String jdbcUrl,
             String username,
             boolean sampling,
-            String createdAt) {}
+            String createdAt,
+            boolean builtin) {}
 
     public record DataSourceRequest(
             String name,
@@ -79,26 +81,38 @@ public class ExternalDataSourceController {
     private final DatasetRepository datasetRepository;
     private final DataSourceIntrospector introspector;
     private final ExternalDataSourcePolicy policy;
+    private final DemoDataService demo;
 
     public ExternalDataSourceController(
             ExternalDataSourceRepository repository,
             DatasetRepository datasetRepository,
             DataSourceIntrospector introspector,
-            ExternalDataSourcePolicy policy) {
+            ExternalDataSourcePolicy policy,
+            DemoDataService demo) {
         this.repository = repository;
         this.datasetRepository = datasetRepository;
         this.introspector = introspector;
         this.policy = policy;
+        this.demo = demo;
     }
 
     @GetMapping
     public Mono<List<DataSourceVO>> list(Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
-                        () ->
-                                repository.findByOwnerIdOrderByCreatedAtDesc(userId).stream()
-                                        .map(ExternalDataSourceController::toVO)
-                                        .toList())
+                        () -> {
+                            List<DataSourceVO> owned =
+                                    repository.findByOwnerIdOrderByCreatedAtDesc(userId).stream()
+                                            .map(ExternalDataSourceController::toVO)
+                                            .toList();
+                            // spec105: everyone can pick the read-only demo source.
+                            if (!demo.sourceAvailable()) return owned;
+                            List<DataSourceVO> all = new java.util.ArrayList<>(owned);
+                            repository
+                                    .findById(DemoDataService.SOURCE_ID)
+                                    .ifPresent(s -> all.add(toVO(s)));
+                            return all;
+                        })
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
@@ -239,7 +253,7 @@ public class ExternalDataSourceController {
     @GetMapping("/{id}/schemas")
     public Mono<List<String>> schemas(@PathVariable String id, Authentication auth) {
         String userId = (String) auth.getPrincipal();
-        return Mono.fromCallable(() -> introspector.listSchemas(owned(userId, id)))
+        return Mono.fromCallable(() -> schemasOf(userId, id))
                 .subscribeOn(Schedulers.boundedElastic())
                 .onErrorMap(ExternalDataSourceController::toStatus);
     }
@@ -250,7 +264,9 @@ public class ExternalDataSourceController {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
                         () ->
-                                introspector.listTables(owned(userId, id), schema).stream()
+                                introspector
+                                        .listTables(readable(userId, id, schema), schema)
+                                        .stream()
                                         .map(t -> new TableVO(t.name(), t.type()))
                                         .toList())
                 .subscribeOn(Schedulers.boundedElastic())
@@ -266,7 +282,9 @@ public class ExternalDataSourceController {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
                         () ->
-                                introspector.listColumns(owned(userId, id), schema, table).stream()
+                                introspector
+                                        .listColumns(readable(userId, id, schema), schema, table)
+                                        .stream()
                                         .map(c -> new ColumnVO(c.name(), c.type(), c.description()))
                                         .toList())
                 .subscribeOn(Schedulers.boundedElastic())
@@ -281,6 +299,34 @@ public class ExternalDataSourceController {
                         () ->
                                 new ResponseStatusException(
                                         HttpStatus.NOT_FOUND, "data source not found: " + id));
+    }
+
+    private List<String> schemasOf(String userId, String id) {
+        ExternalDataSourceEntity source = readable(userId, id);
+        return DemoDataService.isBuiltin(source)
+                ? List.of(DemoDataService.SCHEMA)
+                : introspector.listSchemas(source);
+    }
+
+    /** Browsing also accepts the built-in source; editing and deleting still use {@link #owned}. */
+    private ExternalDataSourceEntity readable(String userId, String id) {
+        if (DemoDataService.SOURCE_ID.equals(id) && demo.sourceAvailable()) {
+            return repository
+                    .findById(id)
+                    .orElseThrow(
+                            () ->
+                                    new ResponseStatusException(
+                                            HttpStatus.NOT_FOUND, "data source not found: " + id));
+        }
+        return owned(userId, id);
+    }
+
+    private ExternalDataSourceEntity readable(String userId, String id, String schema) {
+        ExternalDataSourceEntity source = readable(userId, id);
+        if (DemoDataService.isBuiltin(source) && !DemoDataService.SCHEMA.equals(schema)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "schema not found: " + schema);
+        }
+        return source;
     }
 
     private String validate(DataSourceRequest req) {
@@ -312,13 +358,15 @@ public class ExternalDataSourceController {
     }
 
     private static DataSourceVO toVO(ExternalDataSourceEntity e) {
+        boolean builtin = DemoDataService.isBuiltin(e);
         return new DataSourceVO(
                 e.getId(),
                 e.getName(),
                 e.getKind(),
-                e.getJdbcUrl(),
-                e.getUsername(),
+                builtin ? null : e.getJdbcUrl(),
+                builtin ? null : e.getUsername(),
                 e.isSampling(),
-                e.getCreatedAt() == null ? null : e.getCreatedAt().toString());
+                e.getCreatedAt() == null ? null : e.getCreatedAt().toString(),
+                builtin);
     }
 }

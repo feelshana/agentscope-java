@@ -722,6 +722,32 @@ class OfficialWrenToolkitTest {
         verify(publish).draftCliProfile("alice", "a");
     }
 
+    private long bindings() {
+        return invocations.stream().filter(args -> args.contains("set-profile")).count();
+    }
+
+    /** Binding costs a CLI process; repeated queries on an unchanged project reuse its result. */
+    @Test
+    void repeatedQueriesReuseTheBindingUntilTheProfileChanges() {
+        commands.execute(alice, List.of("query", "--sql", "SELECT 1"));
+        commands.execute(alice, List.of("query", "--sql", "SELECT 2"));
+        assertThat(bindings()).isEqualTo(1);
+        verify(publish, org.mockito.Mockito.times(2)).draftCliProfile("alice", "a");
+
+        when(publish.draftCliProfile("alice", "a")).thenReturn("other-source");
+        commands.execute(alice, List.of("query", "--sql", "SELECT 3"));
+        assertThat(bindings()).isEqualTo(2);
+    }
+
+    /** A revoked user must still fail before any cached binding is used. */
+    @Test
+    void cachedBindingDoesNotSkipTheAuthorizationCheck() {
+        commands.execute(alice, List.of("query", "--sql", "SELECT 1"));
+        when(publish.draftCliProfile("alice", "a")).thenThrow(new DatasetException("无权使用该连接", 403));
+        assertThat(commands.execute(alice, List.of("query", "--sql", "SELECT 2")))
+                .contains("error:", "无权使用该连接");
+    }
+
     @Test
     void onlySourceWritingMemoryCommandsRequireCliConfirmation() {
         assertThat(

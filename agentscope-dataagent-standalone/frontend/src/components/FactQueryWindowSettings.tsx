@@ -104,7 +104,7 @@ export function FactQueryWindowSettings({ groupId, automatic = false, onReady, h
       </div>)}
     </div>}
     {open && <div className="da-modal-overlay" onClick={() => { if (!busy) setOpen(false); }}>
-      <div role="dialog" aria-modal="true" aria-label="事实表查询时间范围" className="da-modal-shell"
+      <div role="dialog" aria-modal="true" aria-label="事实表查询时间范围" className="da-modal-shell" data-tour="window-modal"
         style={{ width: 'min(640px, 94vw)', maxHeight: '86vh', display: 'flex', flexDirection: 'column' }}
         onClick={e => e.stopPropagation()}>
         <div className="da-modal-head">

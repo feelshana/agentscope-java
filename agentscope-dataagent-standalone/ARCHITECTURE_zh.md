@@ -176,6 +176,7 @@ dataagent 为每位数据分析师提供专属的数据 Agent，核心流程是*
   RuntimeContext 上，工具调用拿到的就是同一个上下文。
 - `ModelingToolkitRegistrar#registerOfficialTools` 向 modeling-agent 挂载 AgentScope 原生 FilesystemTool（list_files/read_file/write_file/edit_file/grep_files/glob_files）与 OfficialWrenToolkit 的单一 wren_cli 工具。旧 ModelingToolkit 不再注册，set/get_enrich_context_mode、关系/视图/问题专用工具与阶段剧本退出 Agent 运行时；遗留 HTTP 服务保留（ADR 0068/spec 057）。
 - `WrenProjectAccess#resolve` 校验当前用户 MANAGE，从 DatasetScope/ConversationScopeRegistry 绑定单个草稿工程；`WrenProjectFilesystem` 只做路径和权限映射，委托 LocalFilesystem 执行文件操作。禁止穿越、宿主路径、符号链接和平台文件（含 `raw/docs/` 业务文档，只能由用户上传）；根目录搜索过滤平台目录，文件写入后标记草稿 DIRTY 并记入 `DraftChangeLog`（见第 14.1 节）。
+- 查询前的连接绑定每次都恢复工程配置；`OfficialWrenToolkit#execute` 在工程配置和连接都未变化时复用官方 `set-profile` 的结果，权限校验每次照常执行。
 - `OfficialWrenToolkit#execute` 将参数数组传给真实官方 CLI，强制 cwd/project/MDL/memory 路径；不开放任意 shell、profile 切换、连接参数或发布命令。query/dry-run 及需要执行的 Cube query 通过 `MdlPublishService#draftCliProfile` 在工作区锁内再次校验当前操作者的 MANAGE 权限，再按知识库数据集绑定连接；创建者、共享管理员与全局管理员遵循同一权限规则，排队期间撤权则拒绝执行，操作者身份不替换为库创建者；ProcessWrenCli 的 WREN_HOME 指向平台维护的 profiles，避免宿主账号的 active profile。返回退出码与原始输出；校验/编译/SQL 计划和 memory 均没有平台第二实现。 官方 build 退出码同步现有 ModelingWorkflowStore 页面记录，validate 成功单独不表示已编译；失败原样显示。query/dry-run 的临时连接绑定在调用后恢复平台工程文件。memory 索引位于知识库 runtime/modeling-memory，源示例仍在 knowledge/sql，派生二进制不进入发布。
 - `ModelingHitlMiddleware#onActing` 不再拦截工程文件写入（ADR0111，修改进入草稿、发布前统一审阅），只对会生成种子样例的 memory index 等遗留写工具请求确认；显式 --no-seed 的索引仅更新派生产物。建模不允许 memory store（见第 14.2 节）。预览检查路径、内容和精确替换，不运行平台业务语义规则。Agent 写入后按官方技能执行 validate/build/dry-plan/dry-run，技术失败进入原生循环修复；build 不代替显式发布。历史 patch_file/批量卡只由兼容 HTTP 预览处理。
 
@@ -750,6 +751,16 @@ React 18 + TypeScript + Vite SPA（`frontend/`），构建产物进 `classpath:/
 
 前端 `api/onboarding.ts` 仅为同一登录令牌复用在途请求，按请求修订忽略迟到响应，以登录令牌为键缓存一份状态，供 `ChatPanel` 首页的清单与起步问题（可查询的已发布知识库的 spec103 推荐问题，最多 3 个，点击即选库并填入问题，不足 3 个时用上传数据、关联外部表入口卡补足；没有可查询知识库时显示空状态）、`SessionsSidebar` 底部折叠入口、`AppShell` 挂载的 `HelpPanel`（现有更多页中的"帮助与引导"入口）以及回答下方的 `OnboardingTip` 共用。清单第 1 步并列"上传文件"和"新建数据源"，分别深链到 `/configure/datasets?create=1`、`/configure/datasources?create=1`；数据源连接测试失败时提示可先上传文件。
 
+### 页面逐步指引与内置示例数据（spec105、ADR0122）
+
+第 1、2 步只按用户自己拥有的知识库判定；没有自有知识库但能查询公共或共享知识库的用户只有提问、深入分析两步。首页第 1 步只有"开始第一步"，由它进入逐步指引。
+
+`state/guidedTour.ts` 保存指引位置，页面用 `tourSignal` 上报真实发生的事，每一步等待一个信号，已经发生过的信号会跳过对应步骤（如没有待整理字段）；不使用定时器，也不代替用户点击。`GuidedTour` 按 `data-tour` 标记找目标控件，遮罩只留出目标；目标不在屏幕上或处于等待阶段时只显示状态卡，不遮挡页面。位置经 `OnboardingService#saveTour` 存入 `dataagent_user.onboarding_tour`，退出后保留，可从帮助面板继续。
+
+`DemoDataService` 在 `dataagent.demo.enabled` 打开时于启动后异步工作：用数据集库连接建 `demo_data`，从 `samples-dir` 的两份 Excel 导入 `report_visits`、`platform_users`（表非空则跳过），创建只读账号，并同步 `owner_id=__system__` 的数据源记录。这条记录让 Wren 连接、采样、发布沿用外部数据源的现有链路；只有 `ExternalDataSourceController` 的列表和只读浏览、`DatasetService#associateTables` 放开归属校验，且限定 `demo_data`，编辑和删除仍按个人归属拒绝。准备失败只让内置数据源不可用。内置 Excel 由 `OnboardingController#sample` 按固定文件名提供，前端取回后走现有上传流程。
+
+`OnboardingService#reset` 只重置调用者自己：清除进度并写入 `onboarding_reset_at`，此后第 1、2 步只计这之后创建的知识库，已有知识库和数据不动。
+
 ### 当前建模工作台（ADR 0069、0075、0076）
 
 `SemanticModelingPage` 组织建模对话、资料、语义模型三区（spec092 §7）。建模对话页以对话为中心：每轮回复下方列出 AI 建模结果，待确定的口径以对话内卡片出现，右侧试问展示助手写出的 SQL 与口径，用户核对后确认（不自动试运行、不查询数据），底部草稿栏统一发布；确认、改写或归档问题时，修订号在工作区锁内递增，发布在工作区锁内读取要覆盖的修订号（`MdlQuestionStore#locked`、`MdlPublishService#doPublishLocked`），避免发布期间确认的变更留下"待发布"却无差异可发布；若仍出现该状态，草稿栏提供"重新发布"。文档修改后自动排队一条文档更新请求。助手按官方技能直接修改草稿，发布为显式操作，官方工程校验失败保留旧快照。问数始终使用已发布工程。
@@ -807,6 +818,7 @@ spec 045 / ADR 0055：无已登记问题、无待确认原生 HITL 时，页面�
 | `dataagent.sandbox.max-containers` | `16` | 单进程容器上限，满额驱逐空闲实例；环境变量 DATAAGENT_SANDBOX_MAX_CONTAINERS |
 | `dataagent.upload.max-file-size` / `max-selection-size` / `max-files` | `50MB` / `100MB` / `10` | 上传单文件、整批及数量上限 |
 | `dataagent.upload.max-rows` / `max-columns` / `max-cells` | `500000` / `100` / `10000000` | 解析规模上限 |
+| `dataagent.demo.enabled` / `samples-dir` / `jdbc-url` / `username` / `password` | `false` / `data/demo-samples` / `jdbc:mysql://localhost:3306/demo_data` / `demo_reader` / 空 | 内置示例文件与只读 `demo_data` 数据源（spec105）。文件放部署目录，不入仓库；数据源必须配置只读账号密码。 |
 | `dataagent.upload.concurrent-files` | `8` | 单进程在途文件准入，允许 1—32 |
 | `dataagent.chat.max-active` / `max-active-per-user` | `16` / `2` | 问数全局/每用户执行数 |
 | `dataagent.chat.max-waiting` / `max-waiting-per-user` | `16` / `1` | 全局/每用户等待数 |

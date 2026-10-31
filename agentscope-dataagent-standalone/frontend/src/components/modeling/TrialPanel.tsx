@@ -1,3 +1,4 @@
+import { tourSignal } from '../../state/guidedTour';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { correctModelingQuestionSql, decideModelingQuestion, getModelingQuestions, getQuestionSuggestions, getRecommendedTrialQuestion, editRecommendedQuestion, regenerateRecommendedQuestion } from '../../api/modelingQuestions';
 import type { RecommendedQuestion } from '../../api/modelingQuestions';
@@ -34,6 +35,7 @@ export default function TrialPanel({ groupId, assistantIdle, onAsk, onWrong, onC
   const [input, setInput] = useState('');
   const [reviews, setReviews] = useState<QuestionReview[]>([]);
   const [pending, setPending] = useState<SubmittedQuestion[]>([]);
+  const [lost, setLost] = useState<SubmittedQuestion[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Questions handed to the assistant for fixing, with the revision they had at that moment.
@@ -47,7 +49,7 @@ export default function TrialPanel({ groupId, assistantIdle, onAsk, onWrong, onC
     } catch (e) { if (active.current === groupId) setError(message(e)); }
   }, [groupId]);
   useEffect(() => {
-    setReviews([]); setPending([]); setRecommended(undefined); setExtra([]); setMore('none'); setError(null); setFixing({});
+    setReviews([]); setPending([]); setLost([]); setRecommended(undefined); setExtra([]); setMore('none'); setError(null); setFixing({});
     void load();
     const update = (event: Event) => {
       if ((event as CustomEvent<{ groupId: string }>).detail?.groupId === groupId) void load();
@@ -102,6 +104,7 @@ export default function TrialPanel({ groupId, assistantIdle, onAsk, onWrong, onC
   useEffect(() => { reportExamples.current?.(examples, unconfirmed); }, [examples, unconfirmed]);
 
   const ask = (text: string) => {
+    tourSignal('trial-asked', { groupId });
     const question = text.trim();
     if (!question) return;
     const [id] = questionIds(1);
@@ -112,6 +115,37 @@ export default function TrialPanel({ groupId, assistantIdle, onAsk, onWrong, onC
       setInput('');
     }
   };
+  // A turn can end without writing the question's file. Ask once more, then let the user decide,
+  // so the panel never waits for an answer that is not coming.
+  const pendingNow = useRef(pending); pendingNow.current = pending;
+  const askNow = useRef(onAsk); askNow.current = onAsk;
+  const retried = useRef(new Set<string>());
+  const assistantRan = useRef(false);
+  useEffect(() => {
+    if (!assistantIdle) { assistantRan.current = true; return; }
+    if (!assistantRan.current) return;
+    const timer = window.setTimeout(() => {
+      assistantRan.current = false;
+      void getModelingQuestions(groupId).then(list => {
+        if (active.current !== groupId) return;
+        setReviews(list);
+        const missing = pendingNow.current.filter(p => !list.some(r => r.question.id === p.id));
+        const again = missing.filter(p => !retried.current.has(p.id));
+        const giveUp = missing.filter(p => retried.current.has(p.id));
+        again.forEach(p => { retried.current.add(p.id); askNow.current(questionRequest([p.question], [p.id]), p); });
+        if (giveUp.length) {
+          setPending(all => all.filter(p => !giveUp.includes(p)));
+          setLost(all => [...all, ...giveUp]);
+        }
+      }).catch(() => undefined);
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [assistantIdle, groupId]);
+  const askAgain = (item: SubmittedQuestion) => {
+    setLost(all => all.filter(p => p !== item));
+    ask(item.question);
+  };
+
   const accept = async (review: QuestionReview) => {
     setBusy(review.question.id); setError(null);
     try {
@@ -147,7 +181,7 @@ export default function TrialPanel({ groupId, assistantIdle, onAsk, onWrong, onC
   const known = new Set(reviews.map(r => r.question.id));
   const waiting = pending.filter(p => !known.has(p.id));
   const ordered = [...reviews].reverse();
-  return <aside aria-label="试问" className="da-card" style={{ display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto', minHeight: 0, width: '100%', boxSizing: 'border-box' }}>
+  return <aside aria-label="试问" data-tour="trial-panel" className="da-card" style={{ display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto', minHeight: 0, width: '100%', boxSizing: 'border-box' }}>
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
       <div style={{ flex: 1 }}><strong>试问</strong><div className="da-small">助手按草稿口径写出 SQL，你核对 SQL 是否正确。确认正确的问答发布后，问数时会参考。</div></div>
       <button className="da-btn da-btn-sm" aria-label="收起试问" onClick={onClose}>×</button>
@@ -171,6 +205,11 @@ export default function TrialPanel({ groupId, assistantIdle, onAsk, onWrong, onC
       <button className="da-btn da-btn-primary" disabled={!input.trim()} onClick={() => ask(input)}>试问</button>
     </div>
     {error && <div role="alert" className="da-small" style={{ color: 'var(--da-danger)', whiteSpace: 'pre-wrap' }}>{error}</div>}
+    {lost.map(p => <div key={p.id} className="da-card" style={{ padding: 10 }}>
+      <strong>{p.question}</strong>
+      <div className="da-small" role="alert" style={{ margin: '6px 0' }}>助手这次没有生成 SQL，可以重新试问。</div>
+      <button className="da-btn da-btn-primary da-btn-sm" disabled={!assistantIdle} onClick={() => askAgain(p)}>重新试问</button>
+    </div>)}
     {waiting.map(p => <div key={p.id} className="da-card" style={{ padding: 10 }}>
       <strong>{p.question}</strong><div className="da-small" role="status">{assistantIdle ? '排队中…' : '助手生成 SQL 中…'}</div>
     </div>)}
@@ -223,7 +262,7 @@ function TrialAnswer({ review, busy, fixing, assistantIdle, onAccept, onAskFix, 
     {q.sql && mode !== 'edit' && <ReadableCode text={q.sql} language="sql" title="SQL" />}
     {confirmed && <div className="da-small" style={{ color: 'var(--da-success)' }}>{review.published?.current ? '✓ 已确认正确并发布，问数时会参考' : '✓ 已确认正确，发布后问数时会参考'}</div>}
     {!confirmed && q.sql && !fixing && mode === null && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-      <button className="da-btn da-btn-primary da-btn-sm" disabled={busy} onClick={onAccept}>确认 SQL 正确</button>
+      <button className="da-btn da-btn-primary da-btn-sm" data-tour="trial-confirm" disabled={busy} onClick={() => { onAccept(); tourSignal('trial-confirmed'); }}>确认 SQL 正确</button>
       <button className="da-btn da-btn-sm" disabled={busy} onClick={() => setMode('choose')}>不正确</button>
       <span style={{ ...small, alignSelf: 'center' }}>确认正确后才会作为示例</span>
     </div>}

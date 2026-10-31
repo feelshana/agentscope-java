@@ -426,6 +426,8 @@ CREATE TABLE `dataagent_user` (
   `onboarding_completed_at` datetime(6) DEFAULT NULL,
   `onboarding_milestones` varchar(200) DEFAULT NULL,
   `onboarding_tips_seen` varchar(200) DEFAULT NULL,
+  `onboarding_tour` varchar(200) DEFAULT NULL,
+  `onboarding_reset_at` datetime(6) DEFAULT NULL,
   `display_name` varchar(191) DEFAULT NULL,
   `company` varchar(191) DEFAULT NULL,
   `department` varchar(191) DEFAULT NULL,

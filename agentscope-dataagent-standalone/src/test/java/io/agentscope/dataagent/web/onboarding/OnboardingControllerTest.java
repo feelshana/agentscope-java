@@ -6,6 +6,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.agentscope.dataagent.dataset.DatasetException;
+import io.agentscope.dataagent.dataset.DemoDataService;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -14,7 +15,8 @@ import org.springframework.web.server.ResponseStatusException;
 /** spec104: every endpoint acts on the authenticated user only. */
 class OnboardingControllerTest {
     private final OnboardingService service = mock(OnboardingService.class);
-    private final OnboardingController controller = new OnboardingController(service);
+    private final DemoDataService demo = mock(DemoDataService.class);
+    private final OnboardingController controller = new OnboardingController(service, demo);
     private final UsernamePasswordAuthenticationToken bob =
             new UsernamePasswordAuthenticationToken("bob", null, List.of());
 
@@ -24,10 +26,17 @@ class OnboardingControllerTest {
         controller.dismiss(bob).block();
         controller.reopen(bob).block();
         controller.tip("follow_ups", bob).block();
+        var tour = new OnboardingService.Tour("home", null, "", false);
+        controller.tour(tour, bob).block();
+        controller.endTour(bob).block();
+        controller.reset(bob).block();
         verify(service).status("bob");
         verify(service).dismiss("bob");
         verify(service).reopen("bob");
         verify(service).tipSeen("bob", "follow_ups");
+        verify(service).saveTour("bob", tour);
+        verify(service).saveTour("bob", null);
+        verify(service).reset("bob");
     }
 
     @Test

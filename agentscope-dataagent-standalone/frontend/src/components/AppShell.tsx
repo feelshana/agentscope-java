@@ -5,6 +5,8 @@ import { AgentDefinition, getAgent } from '../api/agents';
 import SessionsSidebar from './SessionsSidebar';
 import { ToastHost } from './Toast';
 import { HelpPanel } from './Onboarding';
+import { useOnboarding } from '../api/onboarding';
+import GuidedTour from './GuidedTour';
 import { ShellOutletContext } from './EditTierGate';
 import { ShellNavigationContext } from './ShellNavigation';
 import Icon from './Icon';
@@ -23,6 +25,14 @@ export default function AppShell() {
     setNavigationOpen(value => !value);
   }, []);
   useEffect(() => { setNavigationOpen(false); }, [location.pathname, location.search]);
+  // spec105: someone still learning the product needs the menu's words, not just its icons.
+  const onboarding = useOnboarding();
+  const expandedForNewUser = useRef(false);
+  useEffect(() => {
+    if (expandedForNewUser.current || !onboarding) return;
+    expandedForNewUser.current = true;
+    if (onboarding.stage === 'full' && onboarding.completed < onboarding.tasks.length) setCollapsed(false);
+  }, [onboarding]);
   useEffect(() => {
     if (content.current) content.current.inert = navigationOpen;
     return () => { if (content.current) content.current.inert = false; };
@@ -90,6 +100,7 @@ export default function AppShell() {
       </main>
       <ToastHost />
       <HelpPanel />
+      <GuidedTour />
       <NewVersionBanner />
     </div>
     </ShellNavigationContext.Provider>
