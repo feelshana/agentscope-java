@@ -117,7 +117,7 @@ export function getUploadPolicy(): Promise<UploadPolicy> {
     const res = await apiFetch('/api/datasets/upload-policy', { headers: authHeaders() });
     // Allows the development UI to remain usable until the local backend is restarted.
     if (res.status === 404 || res.status === 405) return { maxFileBytes: 50 * 1024 ** 2, maxSelectionBytes: 100 * 1024 ** 2,
-      maxFiles: 10, maxRows: 100000, maxColumns: 100, maxCells: 2000000, concurrentFiles: 8, statusAvailable: false };
+      maxFiles: 10, maxRows: 500000, maxColumns: 100, maxCells: 10000000, concurrentFiles: 8, statusAvailable: false };
     if (!res.ok) throw new Error(await errorMessage(res, '读取上传限制失败'));
     return { ...await res.json(), statusAvailable: true };
   })().catch(error => { uploadPolicyPromise = undefined; throw error; });

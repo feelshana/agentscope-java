@@ -343,7 +343,7 @@ mvn spotless:check
 
 MySQL Agent 上下文保存于平台库 `dataagent_agent_state`；H2 使用实际 HOME 下按数据库隔离的 JSON 文件。需同时保留工作区、附件、数据库与模型主密钥。图表按操作者私有校验。生产首次建库和升级见[单机发布手册](docs/guides/single-host-release.md)；整合边界见[ADR0114](docs/adr/0114-native-query-and-engineering-integration.md)。
 
-Spring Boot 4 使用 `spring.web.error.include-message=always` 保留业务校验原因，旧 `server.error.include-message` 已停用；错误响应不包含堆栈。运行中的上传策略以 `/api/datasets/upload-policy` 为准，当前 application.yml 为50万行、100列、1000万单元格，类的缺省值不代表部署后的实际策略。
+Spring Boot 4 使用 `spring.web.error.include-message=always` 保留业务校验原因，旧 `server.error.include-message` 已停用；错误响应不包含堆栈。运行中的上传策略以 `/api/datasets/upload-policy` 为准，当前 application.yml 为50万行、100列、1000万单元格，Java缺省值与前端备用值与此一致；环境覆盖后的实际策略仍以后端接口为准。
 
 ## BI账号入口与公共知识库
 
