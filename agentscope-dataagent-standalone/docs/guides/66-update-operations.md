@@ -2,7 +2,7 @@
 
 适用服务器：10.194.2.66；部署主线：`develop-2.0`。个人分支`liyufan_dev`/`wangchao_dev`的修改须先合并并push到主线，再登录66执行本文命令。适用于现有Docker运行环境、数据库和应用都已就绪的日常更新，不是首次安装。
 
-流程：**更新源码 → 构建新镜像 → upgrade替换并重启 → 查看状态和本次改动**。更新源码、构建镜像不会停止旧应用；upgrade时有短暂中断。
+流程：**更新源码 → 构建新镜像 → 按版本核对增量字段 → upgrade替换并重启 → 查看状态和本次改动**。更新源码、构建镜像不会停止旧应用；upgrade时有短暂中断。
 
 ## 一、登录66并进入源码目录
 
@@ -27,19 +27,21 @@ pwd
   test -z "$(git status --porcelain)" || { echo '源码有未提交修改，停止切换'; exit 1; }
   unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
   export NO_PROXY='*' no_proxy='*'
-  timeout 90s git fetch origin refs/heads/develop-2.0:refs/remotes/origin/develop-2.0
+  timeout 1800s git fetch origin refs/heads/develop-2.0:refs/remotes/origin/develop-2.0
   if git show-ref --verify --quiet refs/heads/develop-2.0; then
     git checkout develop-2.0
   else
-    git checkout -b develop-2.0 --track origin/develop-2.0
+    git checkout --no-track -b develop-2.0 origin/develop-2.0
   fi
+  git config branch.develop-2.0.remote origin
+  git config branch.develop-2.0.merge refs/heads/develop-2.0
   git merge --ff-only origin/develop-2.0
   git rev-parse --abbrev-ref HEAD
   git rev-parse HEAD
 )
 ```
 
-显式fetch目标引用兼容此前`--single-branch`克隆。必须看到`develop-2.0`及预期主线提交后再构建；任一步失败即停止，不强制切换或reset。后续更新脚本默认`develop-2.0`，`DATAAGENT_SOURCE_BRANCH`仅用于明确指定其他部署分支；普通开发不从个人分支部署。
+显式fetch目标引用并单独配置主线跟踪，兼容此前`--single-branch`克隆（其原fetch规则可能只认识旧分支）。必须看到`develop-2.0`及预期主线提交后再构建；任一步失败即停止，不强制切换或reset。后续更新脚本默认`develop-2.0`，`DATAAGENT_SOURCE_BRANCH`仅用于明确指定其他部署分支；普通开发不从个人分支部署。
 
 ## 二、拉取已push的代码
 
@@ -81,6 +83,94 @@ bash docker/build-from-source.sh "$(git rev-parse HEAD)"
 复制这一行完整的`dataagent/app:……`标签。每次构建标签不同，不复用上一次截图里的旧标签，也不猜测latest。只看到Maven BUILD SUCCESS或Docker镜像导出完成，还不能代替最后的静态预检通过。
 
 构建记录保存在本次输出的`$HOME/dataagent-build/jobs/...`目录，包含build.log、image-build.log、image-check.log和build-result.txt。构建失败时原应用继续运行，保留错误输出再处理。
+
+### 本次版本额外步骤：两个用户表字段（2026-10-31）
+
+本次整合版本为 `b6105aa1d08f32ff37626ba2c69fe17b8efa4fff`；2026-10-31已核对GitHub主线包含此提交。以66实际fetch结果为准，不用旧个人分支构建。构建完成后、upgrade之前执行以下检查。现有66保持 `ddl-auto=validate`，不改成update，不执行初始化SQL，不重新导用户。
+
+在Linux的 `$` 提示符执行下面整段，进入已有平台库（容器内部读取现有凭据，不在命令里填密码）：
+
+```bash
+sudo docker compose -p dataagent66-rehearsal-db \
+  --project-directory /data/dataagent/rehearsal-db \
+  --env-file /data/dataagent/rehearsal-db/compose.env \
+  -f /data/dataagent/rehearsal-db/compose.yml \
+  exec mysql sh -ec '
+    export MYSQL_PWD="$MYSQL_ROOT_PASSWORD"
+    exec mysql --protocol=socket --default-character-set=utf8mb4 --table -uroot dataagent_platform
+  '
+```
+
+看到 `mysql>` 后执行：
+
+```sql
+SELECT DATABASE();
+SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE
+FROM information_schema.COLUMNS
+WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'dataagent_user'
+  AND COLUMN_NAME IN ('onboarding_tour', 'onboarding_reset_at');
+```
+
+确认当前库为 `dataagent_platform`。结果为0行时，执行下面两句；若已有其中一列，只执行缺失那列对应的一句；若两列都已有且类型分别为varchar(200)、datetime(6)，跳过ALTER。已有列类型不同或报错时先停止核对，不删除重建字段：
+
+```sql
+ALTER TABLE dataagent_user ADD COLUMN onboarding_tour VARCHAR(200) NULL;
+ALTER TABLE dataagent_user ADD COLUMN onboarding_reset_at DATETIME(6) NULL;
+```
+
+再次执行上面的列查询，确认两列存在且允许NULL，然后退出：
+
+```sql
+exit;
+```
+
+对应仓库增量脚本为 `docs/migrations/0105-guided-tour-mysql.sql`，它没有重复执行保护，不能不检查就反复执行。这两列只用于指引进度与重置时间，不重置账号、知识库或已有引导记录。
+
+`0106-demo-data-visit-time-mysql.sql` 仅适用于此前已启用并导入过文本时间的 `demo_data.report_visits`。没有启用内置示例时本次跳过，不新建demo_data。已有示例库的维护由对应环境单独核对字段类型后按该脚本执行，不对真实业务表套用。开启内置示例还需部署两份Excel、挂载内可读路径及只读账号配置，见项目 `docs/guides/manual-release-guide.md` 的“内置示例数据”一节；本次不默认开启。
+
+### 如本次同时启用新手内置Excel与示例数据源
+
+用户于2026-10-31确认66只能通过GitHub接收文件，因此两份指定Excel改为本次临时随仓库 `deploy/demo-samples/` 分发。应用仍从持久目录读取，不打入JAR。先由用户提交并push本次文件到develop-2.0，66再拉取；b6105aa1本身不含本目录，不能在旧版本上直接复制。
+
+在66拉取包含本目录的新提交后执行（不需要Xftp）：
+
+```bash
+(
+  set -e
+  cd "$HOME/dataagent-source/agentscope-java/agentscope-dataagent-standalone"
+  demo_source="$PWD/deploy/demo-samples"
+  (cd "$demo_source" && sha256sum -c SHA256SUMS)
+  mkdir -p /data/dataagent/rehearsal-app/data/demo-samples
+  cp -- "$demo_source/报表访问明细.xlsx" "$demo_source/用户列表.xlsx" "$demo_source/SHA256SUMS" \
+    /data/dataagent/rehearsal-app/data/demo-samples/
+  (cd /data/dataagent/rehearsal-app/data/demo-samples && sha256sum -c "$demo_source/SHA256SUMS")
+)
+```
+
+两次校验均应显示两个文件OK；应用运行账号需要有目录访问和文件读取权限。该目录位于已有应用持久目录挂载内，不修改Compose挂载。
+
+这是本次首次传输步骤。用户确认66持久目录的文件复制/校验/应用读取成功后，下次提交可删除仓库内的两份Excel并push，README和SHA256SUMS可保留。正常git拉取只删除受版本管理的源码副本，现有upgrade保留上述持久目录；以后无需每次重新复制，也不能把样例配置改指向源码目录。删除后Git历史仍包含原文件，不代表历史内容清除。
+
+编辑服务器私有 `/data/dataagent/rehearsal-app/runtime.env`，在现有内容中逐项新增或修改，不覆盖整个文件、不保留重复键。示意值如下（密码由管理员设置，不将占位值直接用于生产）：
+
+```dotenv
+DATAAGENT_DEMO_ENABLED=true
+DATAAGENT_DEMO_SAMPLES_DIR=/data/dataagent/rehearsal-app/data/demo-samples
+DATAAGENT_DEMO_JDBC_URL=jdbc:mysql://mysql:3306/demo_data
+DATAAGENT_DEMO_USERNAME=demo_reader
+DATAAGENT_DEMO_PASSWORD=替换为示例只读账号的实际密码
+```
+
+`mysql` 是66已有Docker网络里的数据库服务名，不使用容器自己的localhost。已有数据源地址白名单的环境也应按原规则允许该地址。只修改私有配置和部署文件，不需要为此重新编译镜像；随本次upgrade重建应用容器后读取新配置。
+
+两种用途分别验收：
+- 内置Excel上传：文件及enabled配置生效后，用户可在新手上传入口取用文件，后续沿原上传、建模、发布流程。此项不依赖外部示例库准备成功。
+- 内置外部数据源：还要准备 `demo_data.report_visits`、`demo_data.platform_users` 的表和Excel数据，并配置只拥有该示例库SELECT的 `demo_reader`。
+
+**66权限前提**：当前初始化脚本只给 `dataagent_dataset` 对 `data_agent.*` 的权限，不能凭空创建另一个demo_data库或创建数据库用户。`DemoDataService` 的自动准备先做建库/表，再导入，最后创建只读账号；受限账号会在这些步骤失败。不能只在env启用就假称初始化完成，也不应把常驻应用账号改为root。应由管理员在升级前另行完成示例库首次建表/导入/只读账号准备，并确认行数、时间类型及只读连接；本指引没有远程执行这些操作。
+
+首次示例初始化时使用当前代码的DATETIME建表和时间归一化逻辑，原始Excel不改。0106只处理已存在的旧文本时间列，不负责首次建库/导入Excel。外部示例源成功后日志应有 `Demo data source ready: demo_data`，且页面可选“示例数据源”；只有上传文件成功或应用Healthy不能替代此项验收。
 
 ## 四、升级并重启应用
 

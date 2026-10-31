@@ -236,7 +236,7 @@ java -jar target/agentscope-dataagent-*-exec.jar
 | `dataagent.seed-demo-users` / `cors.allowed-origins` | `false` / `*` | Java 管理员初始化需启用；CORS 按部署配置允许来源。SQL 初始化是独立开关。 |
 | `dataagent.upload.max-file-size` / `max-selection-size` / `max-files` | `50MB` / `100MB` / `10` | 单文件、整批选择和文件数限制，前端读取服务端策略。 |
 | `dataagent.upload.max-rows` / `max-columns` / `max-cells` | `500000` / `100` / `10000000` | 解析规模限制。 |
-| `dataagent.demo.enabled` / `samples-dir` / `jdbc-url` / `username` / `password` | `false` / `data/demo-samples` / `jdbc:mysql://localhost:3306/demo_data` / `demo_reader` / 空 | 内置示例文件与只读 `demo_data` 数据源（spec105）。文件放部署目录，不入仓库；数据源必须配置只读账号密码。 |
+| `dataagent.demo.enabled` / `samples-dir` / `jdbc-url` / `username` / `password` | `false` / `data/demo-samples` / `jdbc:mysql://localhost:3306/demo_data` / `demo_reader` / 空 | 内置示例文件与只读 `demo_data` 数据源（spec105）。指定两份Excel随deploy/demo-samples分发，复制到部署目录；数据源必须配置只读账号密码。 |
 | `dataagent.upload.concurrent-files` | `8` | 单进程在途文件预算，允许 1—32，满额 429。 |
 | `dataagent.chat.max-active` / `max-active-per-user` | `16` / `2` | ChatController 问数执行名额，建模豁免。 |
 | `dataagent.chat.max-waiting` / `max-waiting-per-user` | `16` / `1` | 全局/每用户等待名额。 |

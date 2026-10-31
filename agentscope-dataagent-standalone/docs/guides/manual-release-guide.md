@@ -71,7 +71,7 @@ target/dataagent-2.0.3-SNAPSHOT.tar.gz
 
 默认关闭。开启步骤：
 
-1. 把 `报表访问明细.xlsx`、`用户列表.xlsx` 放到服务器目录，由 `DATAAGENT_DEMO_SAMPLES_DIR` 指定，默认是工作目录下的 `data/demo-samples`。这两个文件不进代码仓库。
+1. 把 `报表访问明细.xlsx`、`用户列表.xlsx` 放到服务器目录，由 `DATAAGENT_DEMO_SAMPLES_DIR` 指定，默认是工作目录下的 `data/demo-samples`。用户于2026-10-31确认改为GitHub分发，原文件位于仓库 `deploy/demo-samples/`，拉取后按66更新指引校验并复制到配置目录；不打入JAR。
 2. 配置 `DATAAGENT_DEMO_ENABLED=true` 和 `DATAAGENT_DEMO_PASSWORD`；数据库不在本机时配置 `DATAAGENT_DEMO_JDBC_URL`。配置了 `allowed-endpoints` 的环境要把这个地址加进去。
 3. 重启后，程序用数据集库账号建 `demo_data` 库、导入两张表、创建只读账号 `demo_reader`。账号权限不足时，由 DBA 建好库、表和只读账号，表为空时才会导入。
 4. 看日志 `Demo data source ready: demo_data` 确认可用；失败只影响内置数据源，指引会只走上传路线。
