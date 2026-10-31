@@ -157,18 +157,27 @@ public class MdlQuestionService {
     public MdlQuestionStore.Review decide(
             DatasetScope scope, String groupId, String questionId, boolean accepted) {
         requireScope(scope, groupId);
-        if (accepted) {
-            requireWindow(scope, groupId, questionId, "question confirm");
-            MdlQuestionStore.Question question = store.requireQuestion(groupId, questionId);
-            if (question != null) requirePlans(groupId, question.sql(), "SQL 检查未通过，不能确认：");
-        }
-        return store.locked(
-                groupId,
+        // A publish waits for this whole decision, so a confirmed question is never left out of
+        // the version being published (2026-10-31: it forced a second publish straight after).
+        java.util.function.Supplier<MdlQuestionStore.Review> decision =
                 () -> {
-                    MdlQuestionStore.Review result =
-                            store.decide(groupId, questionId, accepted, scope.ownerId());
-                    groups.markMdlDirty(scope.ownerId(), groupId);
-                    return result;
-                });
+                    if (accepted) {
+                        requireWindow(scope, groupId, questionId, "question confirm");
+                        MdlQuestionStore.Question question =
+                                store.requireQuestion(groupId, questionId);
+                        if (question != null)
+                            requirePlans(groupId, question.sql(), "SQL 检查未通过，不能确认：");
+                    }
+                    return store.locked(
+                            groupId,
+                            () -> {
+                                MdlQuestionStore.Review result =
+                                        store.decide(
+                                                groupId, questionId, accepted, scope.ownerId());
+                                groups.markMdlDirty(scope.ownerId(), groupId);
+                                return result;
+                            });
+                };
+        return publisher == null ? decision.get() : publisher.beforeNextPublish(groupId, decision);
     }
 }

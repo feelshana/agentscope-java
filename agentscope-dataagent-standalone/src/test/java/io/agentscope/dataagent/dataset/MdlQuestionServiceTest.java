@@ -20,8 +20,23 @@ class MdlQuestionServiceTest {
     /** Tracks whether the workspace lock is held while the store's locked section runs. */
     private boolean insideLock;
 
+    /** Tracks whether a decision runs while a publish is held off. */
+    private boolean publishHeldOff;
+
     @BeforeEach
     void runLockedSectionsInline() {
+        when(publisher.beforeNextPublish(
+                        org.mockito.ArgumentMatchers.anyString(),
+                        org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(
+                        call -> {
+                            publishHeldOff = true;
+                            try {
+                                return ((java.util.function.Supplier<?>) call.getArgument(1)).get();
+                            } finally {
+                                publishHeldOff = false;
+                            }
+                        });
         when(store.locked(
                         org.mockito.ArgumentMatchers.anyString(),
                         org.mockito.ArgumentMatchers.any()))
@@ -52,6 +67,29 @@ class MdlQuestionServiceTest {
         service.correctSql(scope, "a", "q-1", "r1", "SELECT 1");
         service.archive(scope, "a", "q-1", "r1");
         org.assertj.core.api.Assertions.assertThat(locked).containsExactly(true, true, true);
+    }
+
+    /**
+     * 2026-10-31: confirming took 16 seconds; a publish clicked meanwhile shipped without the
+     * question and left a change that forced a second publish. Publishing now waits for it.
+     */
+    @Test
+    void aPublishCannotStartWhileAQuestionIsBeingDecided() {
+        var scope = new DatasetScope("alice");
+        java.util.List<Boolean> checking = new java.util.ArrayList<>();
+        java.util.List<Boolean> writing = new java.util.ArrayList<>();
+        when(store.requireQuestion("a", "q-1"))
+                .thenAnswer(
+                        call -> {
+                            checking.add(publishHeldOff);
+                            return new MdlQuestionStore.Question("q-1", "营收", "全部订单", "SELECT 1");
+                        });
+        org.mockito.Mockito.doAnswer(call -> writing.add(publishHeldOff))
+                .when(groups)
+                .markMdlDirty("alice", "a");
+        service.decide(scope, "a", "q-1", true);
+        org.assertj.core.api.Assertions.assertThat(checking).isNotEmpty().doesNotContain(false);
+        org.assertj.core.api.Assertions.assertThat(writing).containsExactly(true);
     }
 
     /**

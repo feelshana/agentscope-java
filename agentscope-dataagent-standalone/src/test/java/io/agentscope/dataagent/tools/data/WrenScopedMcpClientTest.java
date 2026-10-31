@@ -265,7 +265,7 @@ class WrenScopedMcpClientTest {
     void analysisTurnsQueryOnlyAfterConfirmationAndAreReceiptedAsAnalysis() {
         grant("alice", "a");
         var args = Map.<String, Object>of("sql", "SELECT 1");
-        when(gateway.call("a", "run_sql", args))
+        when(gateway.call("a", "run_sql", Map.of("sql", "SELECT 1", "limit", 10000)))
                 .thenReturn(new WrenQueryGateway.WrenCallResult(true, "{\"rows\":[[1]]}"));
 
         RuntimeContext pending = mock(RuntimeContext.class);
@@ -276,7 +276,7 @@ class WrenScopedMcpClientTest {
         assertThatThrownBy(() -> refused.callTool("run_sql", args).block())
                 .isInstanceOf(DatasetException.class)
                 .hasMessageContaining("用户确认参数前不执行查询");
-        verify(gateway, never()).call("a", "run_sql", args);
+        verify(gateway, never()).call("a", "run_sql", Map.of("sql", "SELECT 1", "limit", 10000));
 
         RuntimeContext confirmed = mock(RuntimeContext.class);
         when(confirmed.getUserId()).thenReturn("alice");
@@ -303,6 +303,121 @@ class WrenScopedMcpClientTest {
                                                 .get(0))
                                 .text())
                 .doesNotContain("ANALYSIS");
+    }
+
+    private WrenScopedMcpClient analysisClient(
+            io.agentscope.harness.agent.filesystem.sandbox.AbstractSandboxFilesystem fs) {
+        grant("alice", "a");
+        RuntimeContext context = mock(RuntimeContext.class);
+        when(context.getUserId()).thenReturn("alice");
+        when(context.getSessionId()).thenReturn("s-1");
+        when(context.get(DatasetScope.class)).thenReturn(new DatasetScope("alice", List.of("a")));
+        when(context.get(AnalysisTurn.class))
+                .thenReturn(new AnalysisTurn("attribution", "{\"metric\":\"x\"}"));
+        return new WrenScopedMcpClient(context, "a", access, gateway, projects)
+                .withDataFiles(new QueryDataFiles(fs, null));
+    }
+
+    private io.agentscope.harness.agent.filesystem.sandbox.AbstractSandboxFilesystem acceptingFs() {
+        var fs =
+                mock(
+                        io.agentscope.harness.agent.filesystem.sandbox.AbstractSandboxFilesystem
+                                .class);
+        when(fs.uploadFiles(any(), any()))
+                .thenReturn(
+                        List.of(
+                                io.agentscope.harness.agent.filesystem.model.FileUploadResponse
+                                        .success("uploaded")));
+        return fs;
+    }
+
+    private static String rows(int count, boolean truncated) {
+        StringBuilder rows = new StringBuilder();
+        for (int i = 0; i < count; i++)
+            rows.append(i == 0 ? "" : ",").append("{\"项目\":\"p" + i + "\"}");
+        return "{\"columns\":[\"项目\"],\"rows\":["
+                + rows
+                + "],\"row_count\":"
+                + count
+                + ",\"truncated\":"
+                + truncated
+                + "}";
+    }
+
+    private String run(WrenScopedMcpClient client, String sql, String result) {
+        when(gateway.call("a", "run_sql", Map.of("sql", sql, "limit", 10000)))
+                .thenReturn(new WrenQueryGateway.WrenCallResult(true, result));
+        return ((McpSchema.TextContent)
+                        client.callTool("run_sql", Map.of("sql", sql, "limit", 1000))
+                                .block()
+                                .content()
+                                .get(0))
+                .text();
+    }
+
+    /** The model's own limit is replaced: 2026-10-31 it guessed 1000, then 2000, of 3806 rows. */
+    @Test
+    void analysisQueriesAlwaysAskForTheFullLimit() {
+        var client = analysisClient(acceptingFs());
+        assertThat(run(client, "SELECT 1", rows(3, false))).contains("\"limit\":10000");
+    }
+
+    @Test
+    void largeAnalysisResultsReachTheModelAsASummaryAndTheFileStaysComplete() {
+        var fs = acceptingFs();
+        List<String> files = new java.util.ArrayList<>();
+        when(fs.uploadFiles(any(), any()))
+                .thenAnswer(
+                        invocation -> {
+                            for (Object entry : (List<?>) invocation.getArgument(1)) {
+                                @SuppressWarnings("unchecked")
+                                Map.Entry<String, byte[]> file = (Map.Entry<String, byte[]>) entry;
+                                files.add(
+                                        new String(
+                                                file.getValue(),
+                                                java.nio.charset.StandardCharsets.UTF_8));
+                            }
+                            return List.of(
+                                    io.agentscope.harness.agent.filesystem.model.FileUploadResponse
+                                            .success("uploaded"));
+                        });
+        String text = run(analysisClient(fs), "SELECT 2", rows(501, false));
+        assertThat(text)
+                .contains("\"row_count\":501", "p4", "**数据文件：** data/", "只显示前 5 行")
+                .doesNotContain("p5");
+        assertThat(files).singleElement().satisfies(csv -> assertThat(csv).contains("p500"));
+    }
+
+    @Test
+    void smallAnalysisResultsReachTheModelWhole() {
+        String text = run(analysisClient(acceptingFs()), "SELECT 3", rows(500, false));
+        assertThat(text).contains("p499", "**数据文件：** data/").doesNotContain("只显示前");
+    }
+
+    /** A cut-off result must not become script input, or attribution is silently wrong. */
+    @Test
+    void truncatedAnalysisResultsProduceNoDataFile() {
+        var fs = acceptingFs();
+        String text = run(analysisClient(fs), "SELECT 4", rows(10000, true));
+        assertThat(text).contains("已被截断", "未生成数据文件").doesNotContain("**数据文件：**");
+        verify(fs, never()).uploadFiles(any(), any());
+    }
+
+    @Test
+    void ordinaryQueriesKeepWhatTheModelAskedForAndAllRows() {
+        grant("alice", "a");
+        var args = Map.<String, Object>of("sql", "SELECT 5", "limit", 1000);
+        when(gateway.call("a", "run_sql", args))
+                .thenReturn(new WrenQueryGateway.WrenCallResult(true, rows(600, true)));
+        String text =
+                ((McpSchema.TextContent)
+                                client("alice", "a")
+                                        .callTool("run_sql", args)
+                                        .block()
+                                        .content()
+                                        .get(0))
+                        .text();
+        assertThat(text).contains("p599").doesNotContain("已被截断", "只显示前");
     }
 
     /** spec096: official query rows reach run_python as a session CSV; the receipt stays first. */

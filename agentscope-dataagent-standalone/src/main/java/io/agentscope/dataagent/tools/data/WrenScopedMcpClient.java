@@ -23,6 +23,22 @@ import reactor.core.scheduler.Schedulers;
 public final class WrenScopedMcpClient extends McpClientWrapper {
     private static final Logger log = LoggerFactory.getLogger(WrenScopedMcpClient.class);
     private static final ObjectMapper JSON = new ObjectMapper();
+
+    /** The official query's own ceiling; analysis turns always ask for all of it. */
+    static final int ANALYSIS_QUERY_LIMIT = 10000;
+
+    /** Analysis results above this reach the model as a summary, never smaller queries. */
+    static final int ANALYSIS_INLINE_ROWS = 500;
+
+    private static final int ANALYSIS_SAMPLE_ROWS = 5;
+
+    /** A cut-off result would silently misattribute, so it never becomes an analysis input. */
+    private static final String ANALYSIS_TRUNCATED_NOTE =
+            "\n*(结果超过 "
+                    + ANALYSIS_QUERY_LIMIT
+                    + " 行已被截断，不完整的数据不能用于分析，未生成数据文件。"
+                    + "请减少维度或缩小时间范围后重新取数，不要用这份结果计算。)*\n";
+
     public static final Set<String> READ_TOOLS =
             Set.of(
                     "run_sql",
@@ -194,6 +210,10 @@ public final class WrenScopedMcpClient extends McpClientWrapper {
                                 OfficialWrenToolkit.requireReadOnly(sql);
                                 validateQueryBoundary(tool, sql);
                             }
+                            // Analysis scripts need the whole result, so the row limit is not
+                            // left to the model's guess.
+                            if (analysis != null && "run_sql".equals(tool))
+                                args.put("limit", ANALYSIS_QUERY_LIMIT);
 
                             if (Set.of("recall_queries", "get_context").contains(tool))
                                 measured(
@@ -231,10 +251,18 @@ public final class WrenScopedMcpClient extends McpClientWrapper {
                                         query && result.ok()
                                                 ? compactRows(result.payload())
                                                 : result.payload();
+                                boolean partial =
+                                        analysis != null
+                                                && query
+                                                && result.ok()
+                                                && truncated(result.payload());
+                                if (analysis != null && query && result.ok())
+                                    payload = summarizeForAnalysis(payload);
                                 // spec096: hand the rows to run_python as a session CSV; the
                                 // note is best-effort and never turns a successful query into
                                 // an error.
-                                if (query && result.ok() && dataFiles != null)
+                                if (partial) payload += ANALYSIS_TRUNCATED_NOTE;
+                                else if (query && result.ok() && dataFiles != null)
                                     payload += dataFiles.note(context, result.payload());
                                 if (query && result.ok())
                                     successfulQueries.put(
@@ -269,6 +297,43 @@ public final class WrenScopedMcpClient extends McpClientWrapper {
                             }
                         })
                 .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    /**
+     * Large analysis results stay out of the conversation: scripts read the whole data file, and
+     * the model only needs the shape of the result. Small ones arrive whole.
+     */
+    static String summarizeForAnalysis(String payload) {
+        try {
+            com.fasterxml.jackson.databind.JsonNode root = JSON.readTree(payload);
+            com.fasterxml.jackson.databind.JsonNode rows = root.path("rows");
+            if (!root.isObject() || !rows.isArray() || rows.size() <= ANALYSIS_INLINE_ROWS)
+                return payload;
+            com.fasterxml.jackson.databind.node.ArrayNode sample = JSON.createArrayNode();
+            for (int i = 0; i < ANALYSIS_SAMPLE_ROWS; i++) sample.add(rows.get(i));
+            com.fasterxml.jackson.databind.node.ObjectNode summary =
+                    ((com.fasterxml.jackson.databind.node.ObjectNode) root).deepCopy();
+            summary.set("rows", sample);
+            summary.put("row_count", rows.size());
+            summary.put(
+                    "note",
+                    "结果共 "
+                            + rows.size()
+                            + " 行，这里只显示前 "
+                            + ANALYSIS_SAMPLE_ROWS
+                            + " 行，完整数据在下方数据文件中，由脚本读取计算。");
+            return JSON.writeValueAsString(summary);
+        } catch (Exception e) {
+            return payload;
+        }
+    }
+
+    private static boolean truncated(String payload) {
+        try {
+            return JSON.readTree(payload).path("truncated").asBoolean(false);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**
