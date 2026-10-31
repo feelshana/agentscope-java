@@ -37,7 +37,8 @@
 .da-ti th { background:#f8f7fb; color:#797283; font-weight:550; position:sticky; top:0; }
 .da-ti tbody tr:last-child td { border-bottom:0; }
 .da-ti tbody tr:nth-child(even) { background:#fdfcfe; }
-.da-ti th.is-numeric,.da-ti td.is-numeric { text-align:right; font-variant-numeric:tabular-nums; }
+.da-ti th.is-numeric,.da-ti td.is-numeric { font-variant-numeric:tabular-nums; }
+.da-ti table th,.da-ti table td { text-align:center; vertical-align:middle; font-variant-numeric:tabular-nums; }
 .da-ti-schema-table { table-layout:fixed; white-space:normal !important; }
 .da-ti-schema-table td { white-space:pre-wrap; }
 .da-ti-schema-table th:nth-child(2),.da-ti-schema-table td:nth-child(2) { padding-left:6px; padding-right:6px; }

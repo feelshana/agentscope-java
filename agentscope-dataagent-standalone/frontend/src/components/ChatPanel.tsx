@@ -25,6 +25,10 @@ import type { OntologyGraphData } from '../api/ontology';
 import Markdown from './Markdown';
 import PythonArtifactsPanel from './PythonArtifactsPanel';
 import AnswerFeedback from './AnswerFeedback';
+import CopyAnswerButton from './CopyAnswerButton';
+import ErrorNotice from './ErrorNotice';
+import { isNearBottom, isSendKey, splitFailedAnswer } from '../utils/chatInteraction';
+import { inspectResult, tableData } from '../utils/toolInspectorPresentation';
 import { extractVegaSpec } from '../utils/charts';
 import { listGroupPage, listGroupCards, DatasetGroup, GroupPage } from '../api/datasets';
 import { listOntologies, OntologyEntry } from '../api/ontologies';
@@ -223,6 +227,18 @@ function ontologyGraphPayload(t: ToolEntry): OntologyGraphData | null {
 }
 
 /** Splits a turn's ordered trace into gray trace rows and answer-area visuals (charts). */
+function AnswerChart({ payload, tool, tools, onInspect }: {
+  payload: ChartPayload; tool: ToolEntry; tools: ToolEntry[]; onInspect?: (tool: ToolInspectPayload) => void;
+}) {
+  const query = useMemo(() => onInspect ? [...tools].reverse().find(item => {
+    if (!item.result) return false;
+    const result = inspectResult(item.name, item.result);
+    return result.state !== 'error' && !result.historyTruncated && !!tableData(result.data);
+  }) : undefined, [tools, onInspect]);
+  return <EChartsBlock payload={payload} onViewData={query && onInspect ? () => onInspect(query) : undefined}
+    onInspect={onInspect ? () => onInspect(tool) : undefined} />;
+}
+
 function splitToolRender(
   m: Message,
   onInspect?: (t: ToolInspectPayload) => void,
@@ -255,20 +271,14 @@ function splitToolRender(
         />
       </div>,
     );
-    if (isChartTool && !chartPayload && !spec) {
-      trace.push(
-        <div
-          key={`${key}-warn`}
-          style={{
-            background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 6,
-            padding: '0.4rem 0.7rem', color: '#92400e', fontSize: '0.78rem',
-          }}
-        >
-          图表解析失败 — 点击工具行查看原始参数
-        </div>,
-      );
+    if (isChartTool && t.result && !chartPayload && !spec) {
+      answer.push(<ErrorNotice key={`${key}-warn`} error="图表返回的内容无法显示" context="chart">
+        {onInspect && <button type="button" className="da-btn da-btn-sm" onClick={() => onInspect(t)}>查看图表详情</button>}
+      </ErrorNotice>);
     }
-    if (chartPayload) answer.push(<EChartsBlock key={`${key}-chart`} payload={chartPayload} />);
+    if (chartPayload) {
+      answer.push(<AnswerChart key={`${key}-chart`} payload={chartPayload} tool={t} tools={m.tools} onInspect={onInspect} />);
+    }
     if (ontologyPayload) {
       answer.push(
         <OntologyGraphView
@@ -278,7 +288,7 @@ function splitToolRender(
         />,
       );
     }
-    if (!chartPayload && !ontologyPayload && spec) answer.push(<ChartBlock key={`${key}-spec`} spec={spec} />);
+    if (!chartPayload && !ontologyPayload && spec) answer.push(<ChartBlock key={`${key}-spec`} spec={spec} onInspect={onInspect ? () => onInspect(t) : undefined} />);
   }
   return { trace, answer };
 }
@@ -394,6 +404,11 @@ export default function ChatPanel({
   const historyTurns = useRef(new Map<string, TurnEntry[]>());
   const olderRequest = useRef(false);
   const preserveScroll = useRef<{ height: number; top: number } | null>(null);
+  const followBottom = useRef(true);
+  const lastScroll = useRef({ top: 0, height: 0, client: 0 });
+  const composing = useRef(false);
+  const threadContentRef = useRef<HTMLDivElement | null>(null);
+  const [showLatest, setShowLatest] = useState(false);
   const curKey = searchParams.get('session');
   const messages = curKey ? (sessionMsgs.get(curKey)?.messages ?? []) : [];
   const activeHistoryKey = useRef(curKey);
@@ -672,14 +687,42 @@ export default function ChatPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveAgentId, urlSession]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    followBottom.current = true;
+    lastScroll.current = { top: 0, height: 0, client: 0 };
+    composing.current = false;
+    preserveScroll.current = null;
+    setShowLatest(false);
+  }, [effectiveAgentId, curKey]);
+
+  useLayoutEffect(() => {
     const node = threadRef.current;
     if (!node) return;
     if (preserveScroll.current) {
       node.scrollTop = preserveScroll.current.top + node.scrollHeight - preserveScroll.current.height;
       preserveScroll.current = null;
-    } else node.scrollTo({ top: node.scrollHeight });
+      followBottom.current = isNearBottom(node);
+    } else if (followBottom.current) node.scrollTo({ top: node.scrollHeight });
+    lastScroll.current = { top: node.scrollTop, height: node.scrollHeight, client: node.clientHeight };
+    setShowLatest(!isNearBottom(node));
   }, [messages]);
+
+  useEffect(() => {
+    const thread = threadRef.current;
+    const content = threadContentRef.current;
+    if (!thread || !content) return;
+    // Images, charts and late result cards may grow without changing message state.
+    const observer = new ResizeObserver(() => {
+      if (followBottom.current) {
+        thread.scrollTo({ top: thread.scrollHeight });
+        lastScroll.current = { top: thread.scrollTop, height: thread.scrollHeight, client: thread.clientHeight };
+      }
+      setShowLatest(!isNearBottom(thread));
+    });
+    observer.observe(content);
+    observer.observe(thread);
+    return () => observer.disconnect();
+  }, [curKey, isLanding]);
 
   async function loadOlderMessages() {
     const key = curKey;
@@ -804,7 +847,7 @@ export default function ChatPanel({
       } catch { return; }
       if (signal.aborted) return;
       if (!phase) { if (round > 0) setPreparing(undefined); return; }
-      setPreparing(`正在加载最新发布的知识库（${phase}），发布后的首次问数约需半分钟…`);
+      setPreparing(`正在加载最新发布的知识库（${phase}），准备完成后继续问数…`);
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
   }
@@ -815,6 +858,8 @@ export default function ChatPanel({
    */
   async function handleSend(override?: { text: string; analysis?: AnalysisMethod; analysisParams?: Record<string, unknown> }) {
     if (override ? busy || restoring || scopeRestoring || !effectiveAgentId : !canSend) return;
+    followBottom.current = true;
+    setShowLatest(false);
     setGroupPickerOpen(false);
     const text = override ? override.text : input.trim();
     if (!override) setInput('');
@@ -1068,7 +1113,7 @@ export default function ChatPanel({
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (isSendKey({ key: e.key, shiftKey: e.shiftKey, isComposing: e.nativeEvent.isComposing, keyCode: e.nativeEvent.keyCode }, composing.current)) {
       e.preventDefault();
       handleSend();
     }
@@ -1092,6 +1137,9 @@ export default function ChatPanel({
         value={input}
         onChange={e => setInput(e.target.value)}
         onKeyDown={handleKeyDown}
+        onCompositionStart={() => { composing.current = true; }}
+        onCompositionEnd={() => { composing.current = false; }}
+        onBlur={() => { composing.current = false; }}
         placeholder={restoring ? '加载会话…' : ordinaryChat ? '输入问题；选择知识库后可查询数据…' : METHOD_PLACEHOLDERS[analysisMethod] ?? '输入查询、分析、预测数据问题…'}
         disabled={restoring}
       />
@@ -1200,6 +1248,7 @@ export default function ChatPanel({
           <div className="da-composer-glow">
             <div className="da-composer-shell da-composer">
               {composerContent}
+              <small className="da-composer-hint">Enter 发送 · Shift + Enter 换行</small>
             </div>
           </div>
           {agentId === 'data-agent' ? onboarding && <>
@@ -1216,10 +1265,18 @@ export default function ChatPanel({
 
   return (
     <div style={S.root}>
+      <div className="da-chat-thread-region">
       <div style={S.thread} ref={threadRef} onScroll={e => {
+        const node = e.currentTarget;
+        const previous = lastScroll.current;
+        // Content removal or a larger viewport can clamp scrollTop without user input.
+        if (node.scrollTop < previous.top - 1 && node.scrollHeight >= previous.height && node.clientHeight <= previous.client) followBottom.current = false;
+        else if (isNearBottom(node)) followBottom.current = true;
+        lastScroll.current = { top: node.scrollTop, height: node.scrollHeight, client: node.clientHeight };
+        setShowLatest(!isNearBottom(node));
         if (e.currentTarget.scrollTop < 80 && !historyError) void loadOlderMessages();
       }}>
-        <div style={S.threadInner}>
+        <div style={S.threadInner} ref={threadContentRef}>
         {historyError && <div role="alert">{historyError}</div>}
         {curKey && historyCursors[curKey] != null && <button className="da-btn da-btn-ghost da-btn-sm"
           disabled={olderLoading || busy} onClick={() => void loadOlderMessages()}>
@@ -1239,6 +1296,8 @@ export default function ChatPanel({
         )}
         {messages.map(m => {
           const { trace, answer } = splitToolRender(m, onInspect);
+          const failure = m.failed ? splitFailedAnswer(m.text) : null;
+          const answerText = failure ? failure.answer : m.text;
           return (
             <div
               key={m.id}
@@ -1263,13 +1322,14 @@ export default function ChatPanel({
                     {trace}
                   </TaskTrace>
                   <div className="da-answer">
-                    {m.text
-                      ? <Markdown>{m.text}</Markdown>
+                    {answerText
+                      ? <Markdown>{answerText}</Markdown>
                       : m.pending
                         ? m.capacityMessage || m.preparingMessage
                           ? <div role="status" style={{ color: 'var(--da-text-muted)', fontSize: 14 }}>{m.capacityMessage || m.preparingMessage}</div>
                           : <div className="da-typing"><span /><span /><span /></div>
                         : null}
+                    {failure && <ErrorNotice error={failure.error} context="chat" />}
                     {answer}
                     {agentId === 'data-agent' && !m.pending && (() => {
                       // spec102: an analysis proposal renders as its card; other answers may get
@@ -1287,7 +1347,7 @@ export default function ChatPanel({
                       return <>
                         <AnalysisFollowUps methods={methods} disabled={busy || !!analysisDisabledReason}
                           onPick={method => handleSend({ text: `对上面的结果做${ANALYSIS_NAMES[method]}`, analysis: method })} />
-                        {latest && methods.length > 0 && !analysisDisabledReason && <OnboardingTip tip="follow_ups">想知道为什么变化、有没有异常或未来走势？点上面的按钮，系统会先让你确认参数，再用 Python 计算并画图。</OnboardingTip>}
+                        {latest && methods.length > 0 && !analysisDisabledReason && <OnboardingTip tip="follow_ups">想知道为什么变化、有没有异常或未来走势？点上面的按钮，确认参数后即可继续分析并生成图表。</OnboardingTip>}
                       </>;
                     })()}
                     {agentId === 'data-agent' && curKey && !m.pending && !m.failed && m.text.trim()
@@ -1295,6 +1355,7 @@ export default function ChatPanel({
                       <AnswerFeedback agentId={agentId} session={curKey} answerId={m.answerId} text={m.text}
                         analysis={m.tools.some(t => t.result?.includes('"queryType":"ANALYSIS"') === true)} />
                     )}
+                    {!m.pending && !m.failed && answerText.trim() && <CopyAnswerButton text={answerText} />}
                     {!m.pending && m.tools.some(t => t.name === 'run_python' && t.result) && (
                       <PythonArtifactsPanel tools={m.tools} onInspect={onInspect} />
                     )}
@@ -1309,10 +1370,17 @@ export default function ChatPanel({
         })}
         </div>
       </div>
+      {showLatest && <div className="da-chat-jump"><button type="button" className="da-chat-jump-button" aria-label="回到最新" onClick={() => {
+        followBottom.current = true;
+        threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight });
+        setShowLatest(false);
+      }}><Icon name="arrowDown" /></button><span className="da-chat-jump-hint" aria-hidden="true">回到最新</span></div>}
+      </div>
       <div style={S.composerWrap} className="da-composerwrap">
         <div className="da-composer-glow">
           <div className="da-composer-shell da-composer">
             {composerContent}
+            <small className="da-composer-hint">Enter 发送 · Shift + Enter 换行</small>
           </div>
         </div>
       </div>

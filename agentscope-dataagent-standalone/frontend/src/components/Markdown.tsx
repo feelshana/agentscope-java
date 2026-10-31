@@ -4,6 +4,7 @@ import ReactMarkdown, { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { fileUrl, downloadFile } from '../api/artifacts';
 import AttachmentImage from './AttachmentImage';
+import ErrorNotice from './ErrorNotice';
 
 /**
  * Styles for rendered markdown inside chat bubbles. Kept light-themed on
@@ -78,6 +79,9 @@ const MD_STYLE = `
   border-bottom: 1px solid #eef1f5;
   padding: 0.65em 0.9em;
   text-align: center !important;
+  vertical-align: middle;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.65;
   overflow-wrap: anywhere;
 }
 .claw-md th {
@@ -105,14 +109,17 @@ const MD_STYLE = `
  *  fontSize overrides the default size for compact panels (e.g. the modeling drawer). */
 export default function Markdown({ children, fontSize }: { children: string; fontSize?: number | string }) {
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   const components: Components = {
-    table: ({ children }) => <div className="claw-md-table-wrap"><table>{children}</table></div>,
+    table: ({ children }) => <div className="claw-md-table-wrap" tabIndex={0} role="region" aria-label="回答表格，可横向滚动"><table>{children}</table></div>,
+    th: ({ children }) => <th scope="col">{children}</th>,
     a: ({ href, children, title }) => {
       const attachment = fileUrl(href ?? '');
       return <a title={title} href={attachment ?? href} rel="noopener noreferrer" onClick={attachment ? e => {
         e.preventDefault();
-        void downloadFile(attachment).catch(error => window.alert(error.message));
+        setDownloadError(null);
+        void downloadFile(attachment).catch(error => setDownloadError(error instanceof Error ? error.message : String(error)));
       } : undefined}>{children}</a>;
     },
     img: ({ src, alt }) => {
@@ -141,6 +148,7 @@ export default function Markdown({ children, fontSize }: { children: string; fon
       <div className="claw-md" style={fontSize != null ? { fontSize } : undefined}>
         <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{children}</ReactMarkdown>
       </div>
+      {downloadError && <ErrorNotice error={downloadError} context="file" />}
       {lightbox && createPortal(
         <div
           style={{

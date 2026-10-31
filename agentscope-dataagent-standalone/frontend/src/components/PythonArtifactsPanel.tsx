@@ -38,13 +38,14 @@ export default function PythonArtifactsPanel({ tools, onInspect }: Props) {
         type="button"
         className="da-toolcall-head"
         onClick={() => onInspect?.({ id: '__python_artifacts__', name: 'run_python', pythonTools })}
-        title="在侧栏查看并下载产物"
-        aria-label="查看 Python 生成产物"
+        title="在右侧栏预览或下载分析文件"
+        aria-label="查看分析文件"
+        disabled={!onInspect}
       >
         <span style={{ color: 'var(--da-text-muted)', display: 'inline-flex' }}>
           <Icon name="file" size="sm" />
         </span>
-        <span className="da-toolcall-name">生成产物（{allArtifacts.length} 个文件）</span>
+        <span className="da-toolcall-name">分析文件（{allArtifacts.length} 个文件）</span>
         <span className="da-toolcall-status">
           <Icon name="check" size="sm" />
         </span>

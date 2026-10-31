@@ -2,6 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import Icon from './Icon';
 import Markdown from './Markdown';
+import CopyAnswerButton from './CopyAnswerButton';
+import { isSendKey, splitFailedAnswer } from '../utils/chatInteraction';
+import ErrorNotice from './ErrorNotice';
 import ModelingHitlCard from './ModelingHitlCard';
 import ReadableCode from './ReadableCode';
 import { confirmModeling, currentSession, stream } from '../api/chat';
@@ -210,6 +213,8 @@ function ReplyBody({ segments, pending, startedAt }: { segments: Segment[]; pend
       if (part.kind === 'text' && part.text.trim()) { last = i; break; }
     }
   const process = parts.filter((_, i) => i !== last);
+  const finalText = last >= 0 && parts[last].kind === 'text' ? (parts[last] as { kind: 'text'; text: string }).text : '';
+  const failure = /\[(?:错误|error)\]/.test(finalText) ? splitFailedAnswer(finalText) : null;
   const frames = process.flatMap(p => p.kind === 'tools' ? p.frames : []);
   const waiting = frames.filter(f => f.state === 'waiting');
   const counts = new Map<string, number>();
@@ -252,7 +257,9 @@ function ReplyBody({ segments, pending, startedAt }: { segments: Segment[]; pend
     </div>}
     {!open && waiting.map(f => <TaskRow key={f.id} frame={f} />)}
     {last >= 0 && parts[last].kind === 'text' && <div style={{ color: 'var(--da-text)' }}>
-      <Markdown fontSize={14}>{(parts[last] as { kind: 'text'; text: string }).text}</Markdown>
+      {(!failure || failure.answer) && <Markdown fontSize={14}>{failure ? failure.answer : finalText}</Markdown>}
+      {failure && <ErrorNotice error={failure.error} context="chat" />}
+      {!pending && !failure && <CopyAnswerButton text={finalText} />}
     </div>}
   </>;
 }
@@ -431,6 +438,7 @@ export default function ModelingChatPanel({
   const [overview, setOverview] = useState<ModelingOverview | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const composing = useRef(false);
   const consumedDraft = useRef<string | null>(null);
   const turnDone = useRef(onTurnDone);
   turnDone.current = onTurnDone;
@@ -791,7 +799,7 @@ export default function ModelingChatPanel({
   useEffect(() => { activity.current?.(state); }, [state]);
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (isSendKey({ key: e.key, shiftKey: e.shiftKey, isComposing: e.nativeEvent.isComposing, keyCode: e.nativeEvent.keyCode }, composing.current)) {
       e.preventDefault();
       handleSend();
     }
@@ -904,6 +912,9 @@ export default function ModelingChatPanel({
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
+              onCompositionStart={() => { composing.current = true; }}
+              onCompositionEnd={() => { composing.current = false; }}
+              onBlur={() => { composing.current = false; }}
               placeholder={
                 messages.some(message => message.hitl)
                   ? '请先处理上方待确认提案…'
