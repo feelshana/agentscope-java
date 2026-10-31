@@ -49,4 +49,5 @@
 
 ## 2026-10-31 页面逐步指引（spec105）
 
+- 已导入过 `demo_data` 的环境执行 `0106-demo-data-visit-time-mysql.sql`，把 `visit_time` 改为 DATETIME；程序账号有改表权限时启动会自动完成，新环境不需要。
 - 已有平台库升级前执行 `0105-guided-tour-mysql.sql`，增加 `onboarding_tour`、`onboarding_reset_at`；空库的完整 DDL 已包含，不再叠加。

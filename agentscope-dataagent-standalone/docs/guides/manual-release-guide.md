@@ -76,7 +76,7 @@ target/dataagent-2.0.3-SNAPSHOT.tar.gz
 3. 重启后，程序用数据集库账号建 `demo_data` 库、导入两张表、创建只读账号 `demo_reader`。账号权限不足时，由 DBA 建好库、表和只读账号，表为空时才会导入。
 4. 看日志 `Demo data source ready: demo_data` 确认可用；失败只影响内置数据源，指引会只走上传路线。
 
-已有平台库升级前先执行 `docs/migrations/0105-guided-tour-mysql.sql`。
+已有平台库升级前先执行 `docs/migrations/0105-guided-tour-mysql.sql`。已导入过文本版 `demo_data` 的环境，再执行 `0106-demo-data-visit-time-mysql.sql`，或由程序启动时自动升级；已经关联它的知识库要重新建模后才会按时间类型使用。
 
 ## 问答容量与运行记录（2026-10-14）
 

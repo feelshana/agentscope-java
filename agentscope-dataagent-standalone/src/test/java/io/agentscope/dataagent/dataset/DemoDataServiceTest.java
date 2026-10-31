@@ -59,6 +59,22 @@ class DemoDataServiceTest {
                 .isInstanceOf(DatasetException.class);
     }
 
+    /** The file's 2026/9/31 does not exist; those rows move to the month's last day. */
+    @Test
+    void visitTimesBecomeStandardDateTimes() {
+        assertThat(DemoDataService.standardVisitTime("2026/9/31 23:59"))
+                .isEqualTo("2026-09-30 23:59:00");
+        assertThat(DemoDataService.standardVisitTime("2026/9/31 0:15"))
+                .isEqualTo("2026-09-30 00:15:00");
+        assertThat(DemoDataService.standardVisitTime("2026/10/7 16:31"))
+                .isEqualTo("2026-10-07 16:31:00");
+        assertThat(DemoDataService.standardVisitTime("2026-10-07 16:31:00"))
+                .isEqualTo("2026-10-07 16:31:00");
+        assertThat(DemoDataService.standardVisitTime("2026-10-07"))
+                .isEqualTo("2026-10-07 00:00:00");
+        assertThat(DemoDataService.standardVisitTime(" ")).isNull();
+    }
+
     @Test
     void nothingIsOfferedWhenDisabled() throws Exception {
         Files.writeString(dir.resolve(DemoDataService.SAMPLE_FILES.get(0)), "x");
