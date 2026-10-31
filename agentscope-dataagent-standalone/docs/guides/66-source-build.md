@@ -1,5 +1,7 @@
 # 66拉取GitHub源码并构建镜像：分步指引
 
+2026-10-31主线调整：后续从`develop-2.0`构建部署，个人分支先合入主线。66此前已部署启动并通过BI进入；下面早期准备状态属于历史记录，不要求重做。现有66源码目录的一次性分支切换及日常操作见[更新手册](66-update-operations.md)。助手此次只切换本机开发分支，未修改66运行环境。
+
 2026-10-29现场进展：用户已将9d378d8b推送并在66克隆，固定Maven镜像基础检查通过；最新截图确认Java946项（0失败、0错误、28条件跳过）、Maven BUILD SUCCESS、应用镜像封装与静态预检通过。作业日志/镜像引用保留在66的~/dataagent-build/jobs下。此结果不代表数据库连接、模型缓存运行或业务启动通过，助手未远程执行。
 
 2026-10-30用户回传66演练库核对通过；MySQL配套已由用户随47e431df提交。应用Compose与更新/恢复控制已在本地真实镜像验证，尚未提交推送或在66启动；生产数据库及65/BI/模型业务验收仍待完成。下文早期检查是可重现步骤，现场已经通过的构建无需重跑。
@@ -19,7 +21,7 @@ sudo docker compose version
 sudo docker image inspect dataagent/runtime:20261028 --format '{{.Id}}'
 sudo docker image inspect agentscope/dataagent-sandbox:20261028 --format '{{.Id}}'
 curl -I --connect-timeout 10 --max-time 20 https://github.com
-GIT_TERMINAL_PROMPT=0 timeout 30s git ls-remote https://github.com/feelshana/agentscope-java.git HEAD refs/heads/codex/integrate-boundary-lyf-v2
+GIT_TERMINAL_PROMPT=0 timeout 30s git ls-remote https://github.com/feelshana/agentscope-java.git HEAD refs/heads/develop-2.0
 ```
 
 最后一条返回提交哈希及分支才证明Git读取成功；HTTP成功不等于Git成功。私有仓库报认证错误时需配置只读凭据，不能关闭TLS验证。不要把Token放URL或聊天中。Compose缺失不阻碍本次网络/源码检查，后续再确定是否安装。
@@ -33,7 +35,7 @@ mkdir -p "$HOME/dataagent-source"
 if [ -e "$HOME/dataagent-source/agentscope-java" ]; then
   echo '目录已存在，先核对现有内容；本次不覆盖'
 else
-  timeout 180s git clone --depth 1 --single-branch --branch codex/integrate-boundary-lyf-v2 \
+  timeout 180s git clone --depth 1 --single-branch --branch develop-2.0 \
     https://github.com/feelshana/agentscope-java.git \
     "$HOME/dataagent-source/agentscope-java"
 fi
@@ -83,7 +85,7 @@ cd "$HOME/dataagent-source/agentscope-java"
 git status --short
 git rev-parse --abbrev-ref HEAD
 # 确认为目标分支且无本地修改后才执行：
-timeout 90s git pull --ff-only origin codex/integrate-boundary-lyf-v2
+timeout 90s git pull --ff-only origin develop-2.0
 cd agentscope-dataagent-standalone
 bash docker/check-builder.sh
 bash docker/build-from-source.sh "$(git rev-parse HEAD)"
@@ -161,6 +163,8 @@ bash docker/rehearsal-app.sh logs
 后续接通65同源代理与BI图标，用本人的BI英文账号首次进入、按现有管理员SQL赋权并重新进入，再到管理员模型服务页面配置与测试激活服务；未配置模型时应用可以启动，问答/建模尚不可验。真实BI跨层Nginx/iframe/LocalStorage同源联调与用户资料导入另外执行。不得把临时数据库切换成正式库而省略数据/文件/密钥迁移核对。
 
 ## 七、日志、停启与镜像更新
+
+已完成首次部署后，日常push后的操作速查见[66更新与重启命令](66-update-operations.md)，包含本次临时直连拉取、构建、upgrade、运行版本核对和回退入口。
 
 人员查询和管理员授权可直接在源码目录执行`bash docker/user-admin.sh`，详见[用户管理指引](user-admin.md)。仅改变已有账号角色，不需要重构或重启应用；修改后重新从BI登录，旧令牌不会立即失效。
 

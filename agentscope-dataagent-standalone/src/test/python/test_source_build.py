@@ -123,6 +123,7 @@ exit 1
         self.assertEqual(self.git('rev-parse', 'HEAD'), before)
 
     def test_update_fast_forwards_without_merging(self):
+        self.git('checkout', '-qb', 'develop-2.0')
         remote = self.base/'remote.git'
         subprocess.check_call(['git', 'clone', '--bare', '-q', str(self.repo), str(remote)])
         self.git('remote', 'add', 'origin', str(remote))
@@ -133,9 +134,13 @@ exit 1
         subprocess.check_call(['git', '-c', 'user.name=fixture', '-c', 'user.email=fixture@localhost',
                                'commit', '-qm', 'next'], cwd=other)
         subprocess.check_call(['git', 'push', '-q', 'origin', 'HEAD'], cwd=other)
-        r = self.update()
+        env = dict(self.env)
+        env.pop('DATAAGENT_SOURCE_BRANCH', None)
+        r = subprocess.run(['bash', str(self.scripts/'update-source.sh')], env=env,
+                           capture_output=True, text=True, timeout=25)
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual((self.repo/'new-release').read_text(), 'next')
+        self.assertEqual(self.git('symbolic-ref', '--short', 'HEAD'), 'develop-2.0')
 
     def test_update_does_not_switch_branches(self):
         self.env['DATAAGENT_SOURCE_BRANCH'] = 'another-branch'
