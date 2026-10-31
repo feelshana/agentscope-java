@@ -31,5 +31,5 @@ logs/
 # BI simulation keeps the shared key in external, deployment-local configuration.
 /docs/integration/bi-simulator.config.json
 
-# Runtime demo copies remain local; approved source files are versioned in deploy/demo-samples.
+# Runtime demo files stay local; deploy/demo-samples keeps recovery tooling and checksums.
 /data/demo-samples/

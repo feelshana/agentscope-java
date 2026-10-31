@@ -820,7 +820,7 @@ spec 045 / ADR 0055：无已登记问题、无待确认原生 HITL 时，页面�
 | `dataagent.sandbox.max-containers` | `16` | 单进程容器上限，满额驱逐空闲实例；环境变量 DATAAGENT_SANDBOX_MAX_CONTAINERS |
 | `dataagent.upload.max-file-size` / `max-selection-size` / `max-files` | `50MB` / `100MB` / `10` | 上传单文件、整批及数量上限 |
 | `dataagent.upload.max-rows` / `max-columns` / `max-cells` | `500000` / `100` / `10000000` | 解析规模上限 |
-| `dataagent.demo.enabled` / `samples-dir` / `jdbc-url` / `username` / `password` | `false` / `data/demo-samples` / `jdbc:mysql://localhost:3306/demo_data` / `demo_reader` / 空 | 内置示例文件与只读 `demo_data` 数据源（spec105）。指定两份Excel随deploy/demo-samples分发，复制到部署目录；数据源必须配置只读账号密码。 |
+| `dataagent.demo.enabled` / `samples-dir` / `jdbc-url` / `username` / `password` | `false` / `data/demo-samples` / `jdbc:mysql://localhost:3306/demo_data` / `demo_reader` / 空 | 内置示例文件与只读 `demo_data` 数据源（spec105）。Excel保存在忽略的samples-dir；deploy/demo-samples保留历史恢复脚本与校验清单；数据源必须配置只读账号密码。 |
 | `dataagent.upload.concurrent-files` | `8` | 单进程在途文件准入，允许 1—32 |
 | `dataagent.chat.max-active` / `max-active-per-user` | `16` / `2` | 问数全局/每用户执行数 |
 | `dataagent.chat.max-waiting` / `max-waiting-per-user` | `16` / `1` | 全局/每用户等待数 |

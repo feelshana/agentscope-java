@@ -92,8 +92,8 @@ dataagent:
   external-datasource:
     allowed-endpoints: ${DATAAGENT_EXTERNAL_DATASOURCE_ALLOWED_ENDPOINTS:}
 
-  # spec105: approved files ship in deploy/demo-samples; copy to samples-dir before enabling. The read-only
-  # demo_data source loaded from them. Off by default; needs a password for the reader account.
+  # spec105: samples-dir holds local/deployed files; deploy/demo-samples has recovery tooling.
+  # The read-only demo_data source is off by default and needs a reader account password.
   demo:
     enabled: ${DATAAGENT_DEMO_ENABLED:false}
     samples-dir: ${DATAAGENT_DEMO_SAMPLES_DIR:data/demo-samples}

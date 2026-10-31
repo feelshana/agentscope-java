@@ -1,17 +1,25 @@
-# 新手任务示例Excel
+# 新手示例文件：本地与服务器各自持久保存
 
-2026-10-31，用户说明66只能通过GitHub拉取文件，明确调整为将这两份指定示例文件临时随仓库分发。本目录保存用户提供的原始字节，不改名、不重新保存Excel。原先“仅部署目录、不进仓库”的分发约定由本次用户要求替代；应用仍从dataagent.demo.samples-dir读取，不通过静态站点公开这些文件。
+66已部署并由用户确认线上可用。两份Excel曾在提交 `011d06b97fb6ebcbfd42f87213864f65e4779259` 中临时通过GitHub传输，随后从当前源码树删除；Git历史仍保留原字节。当前目录保留恢复脚本、校验清单和二进制属性。
 
-- 报表访问明细.xlsx
-- 用户列表.xlsx
-- SHA256SUMS：文件完整性校验，不包含账号密码。
+## 本地开发
 
-在66拉取包含本目录的提交后，按[66更新指引](../../docs/guides/66-update-operations.md)复制到/data/dataagent/rehearsal-app/data/demo-samples，并设置runtime.env。文件不加入JAR，不因拉取自动启用或导入数据库。外部示例源首次初始化、只读账号及0105/0106按指引分别处理。
+在项目模块目录执行（Python 3，无额外依赖）：
 
-校验方式：进入本目录执行sha256sum -c SHA256SUMS。只将这两份已指定的示例文件纳入版本管理；部署配置、凭据和其他业务上传不放此目录。
+```bash
+python deploy/demo-samples/restore-local.py
+```
 
-## 本次传输后的保留方式
+脚本从上述历史提交按二进制读取两份原文件，验证SHA256后写入模块 `data/demo-samples/`。该目录被Git忽略，切换develop-2.0/liyufan_dev和正常pull不会删除本地文件。已存在且校验相同则直接通过；不同则停止且不覆盖，不需要每次手工复制。脚本同时保存SHA256SUMS。
 
-用户已确认：66拉取、复制到持久目录、校验及应用读取通过后，下一次提交再删除仓库内的两份Excel。暂不提前删除；删除时仅处理仓库副本，保留66的持久目录与配置。
+IDEA后端Working directory设为项目模块目录，在本地运行配置设置 `DATAAGENT_DEMO_ENABLED=true`；默认samples-dir即data/demo-samples。工作目录不同的启动方式可设置 `DATAAGENT_DEMO_SAMPLES_DIR` 为本机绝对目录。
 
-运行目录固定为/data/dataagent/rehearsal-app/data/demo-samples，后续正常代码拉取和upgrade保留该目录。仓库README和校验清单可以保留作记录。删除最新分支中的文件不会清除Git历史中的内容；新服务器仍需另行准备文件。
+这就可以测试内置Excel上传。外部示例数据源还需要本机demo_data与独立只读账号：`DATAAGENT_DEMO_JDBC_URL` 指向本机MySQL，`DATAAGENT_DEMO_USERNAME` / `DATAAGENT_DEMO_PASSWORD` 放IDEA环境变量或本地忽略配置。不开启时功能保持默认关闭。不能将66私有凭据提交到仓库。
+
+恢复脚本需要本地Git历史包含011d06b；缺少历史（如浅克隆）时会明确停止，先获取完整主线历史或将原文件复制到目标目录再校验。Windows不要用旧PowerShell的文本重定向导出xlsx，脚本始终按原始字节写入。
+
+## 66及后续更新
+
+66持久目录固定为 `/data/dataagent/rehearsal-app/data/demo-samples`，runtime.env中的 `DATAAGENT_DEMO_SAMPLES_DIR` 指向这里。两份Excel和SHA256SUMS已在该目录校验通过；示例源已导入并经demo_reader验证。正常源码更新只删除源码目录受Git管理的副本，现有upgrade保留服务器持久目录与配置，不需要重新复制、导入或重启仅为删除仓库副本。
+
+新服务器仍需单独恢复/提供文件并配置示例库，不把既有66准备完成理解为其他环境自动就绪。详见[66更新指引](../../docs/guides/66-update-operations.md)。

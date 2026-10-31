@@ -129,66 +129,35 @@ exit;
 
 `0106-demo-data-visit-time-mysql.sql` 仅适用于此前已启用并导入过文本时间的 `demo_data.report_visits`。没有启用内置示例时本次跳过，不新建demo_data。已有示例库的维护由对应环境单独核对字段类型后按该脚本执行，不对真实业务表套用。开启内置示例还需部署两份Excel、挂载内可读路径及只读账号配置，见项目 `docs/guides/manual-release-guide.md` 的“内置示例数据”一节；本次不默认开启。
 
-### 如本次同时启用新手内置Excel与示例数据源
+### 示例文件与数据库：66已完成，后续更新沿用
 
-用户于2026-10-31确认66只能通过GitHub接收文件，因此两份指定Excel改为本次临时随仓库 `deploy/demo-samples/` 分发。应用仍从持久目录读取，不打入JAR。先由用户提交并push本次文件到develop-2.0，66再拉取；b6105aa1本身不含本目录，不能在旧版本上直接复制。
+用户已确认a85ccec6在线可用。66已完成0105两列升级，两个Excel及SHA256SUMS保存在 `/data/dataagent/rehearsal-app/data/demo-samples`；demo_data两表为98819条访问记录、2046条用户记录，visit_time为DATETIME。demo_reader只有该示例库SELECT，初始化时的上传账号临时权限已撤销。数据实际时间范围为2026-09-20 16:35至2026-10-07 16:31。
 
-在66拉取包含本目录的新提交后执行（不需要Xftp）：
-
-```bash
-(
-  set -e
-  cd "$HOME/dataagent-source/agentscope-java/agentscope-dataagent-standalone"
-  demo_source="$PWD/deploy/demo-samples"
-  (cd "$demo_source" && sha256sum -c SHA256SUMS)
-  mkdir -p /data/dataagent/rehearsal-app/data/demo-samples
-  cp -- "$demo_source/报表访问明细.xlsx" "$demo_source/用户列表.xlsx" "$demo_source/SHA256SUMS" \
-    /data/dataagent/rehearsal-app/data/demo-samples/
-  (cd /data/dataagent/rehearsal-app/data/demo-samples && sha256sum -c "$demo_source/SHA256SUMS")
-)
-```
-
-两次校验均应显示两个文件OK；应用运行账号需要有目录访问和文件读取权限。该目录位于已有应用持久目录挂载内，不修改Compose挂载。
-
-旧Git兼容：011d06b版本发布后，66曾出现Excel校验OK，但Git提示CRLF转换且将两文件标为M。仓库文件原字节正确；这是旧Git1.8与通用text=auto/eol规则的兼容问题。本目录已补.gitattributes将xlsx声明为binary。尚未拉到该修复时，可以在仓库根目录添加仅针对本示例目录的本地属性，保留已有属性，不重置或删除文件：
+临时GitHub传输完成后，源码中的两份Excel已删除；这只删除受Git管理的源码副本，现有upgrade保留上述持久目录、runtime.env及已有数据库。后续无需重复导入、重复加列或创建账号。线上配置继续指向上述绝对路径。要检查文件时在66执行：
 
 ```bash
-(
-  set -e
-  cd "$HOME/dataagent-source/agentscope-java"
-  printf '\n# Preserve onboarding Excel bytes on old Git.\nagentscope-dataagent-standalone/deploy/demo-samples/*.xlsx binary\n' \
-    >> "$(git rev-parse --git-dir)/info/attributes"
-  git check-attr text diff merge -- \
-    'agentscope-dataagent-standalone/deploy/demo-samples/报表访问明细.xlsx' \
-    'agentscope-dataagent-standalone/deploy/demo-samples/用户列表.xlsx'
-  git status --short
-)
+(cd /data/dataagent/rehearsal-app/data/demo-samples && sha256sum -c SHA256SUMS)
 ```
 
-预期text/diff/merge均显示unset，git status无输出。该规则不使用assume-unchanged，也不屏蔽真实文件内容变化；若仍有修改输出，停止核对。再执行文件复制/校验。不要把Excel作为文本重新保存，不执行reset/clean。
+本地开发在模块目录执行一次（Python 3）：
 
+```bash
+python deploy/demo-samples/restore-local.py
+```
 
-这是本次首次传输步骤。用户确认66持久目录的文件复制/校验/应用读取成功后，下次提交可删除仓库内的两份Excel并push，README和SHA256SUMS可保留。正常git拉取只删除受版本管理的源码副本，现有upgrade保留上述持久目录；以后无需每次重新复制，也不能把样例配置改指向源码目录。删除后Git历史仍包含原文件，不代表历史内容清除。
+恢复到模块 `data/demo-samples/`（被Git忽略），文件已存在且一致时直接通过，不同则停止而不覆盖。切换/同步个人分支不会删除忽略副本。IDEA Working directory设为模块目录并设置 `DATAAGENT_DEMO_ENABLED=true` 即可测试示例上传；工作目录不同则设置本机绝对 `DATAAGENT_DEMO_SAMPLES_DIR`。外部示例源测试还需本机demo_data及只读账号，凭据放本地忽略配置/IDEA环境变量，不复用或提交66凭据。完整说明见项目deploy/demo-samples/README.md。
 
-编辑服务器私有 `/data/dataagent/rehearsal-app/runtime.env`，在现有内容中逐项新增或修改，不覆盖整个文件、不保留重复键。示意值如下（密码由管理员设置，不将占位值直接用于生产）：
+新机器或新服务器仍需恢复/提供Excel并配置其自己的示例数据库。恢复脚本依赖原传输提交011d06b的历史，不包含历史的浅克隆要先补齐历史。示例配置格式如下，66现有配置已完成，普通更新不重复修改：
 
 ```dotenv
 DATAAGENT_DEMO_ENABLED=true
 DATAAGENT_DEMO_SAMPLES_DIR=/data/dataagent/rehearsal-app/data/demo-samples
 DATAAGENT_DEMO_JDBC_URL=jdbc:mysql://mysql:3306/demo_data
 DATAAGENT_DEMO_USERNAME=demo_reader
-DATAAGENT_DEMO_PASSWORD=替换为示例只读账号的实际密码
+DATAAGENT_DEMO_PASSWORD=使用现有私有配置中的实际密码
 ```
 
-`mysql` 是66已有Docker网络里的数据库服务名，不使用容器自己的localhost。已有数据源地址白名单的环境也应按原规则允许该地址。只修改私有配置和部署文件，不需要为此重新编译镜像；随本次upgrade重建应用容器后读取新配置。
-
-两种用途分别验收：
-- 内置Excel上传：文件及enabled配置生效后，用户可在新手上传入口取用文件，后续沿原上传、建模、发布流程。此项不依赖外部示例库准备成功。
-- 内置外部数据源：还要准备 `demo_data.report_visits`、`demo_data.platform_users` 的表和Excel数据，并配置只拥有该示例库SELECT的 `demo_reader`。
-
-**66权限前提**：当前初始化脚本只给 `dataagent_dataset` 对 `data_agent.*` 的权限，不能凭空创建另一个demo_data库或创建数据库用户。`DemoDataService` 的自动准备先做建库/表，再导入，最后创建只读账号；受限账号会在这些步骤失败。不能只在env启用就假称初始化完成，也不应把常驻应用账号改为root。应由管理员在升级前另行完成示例库首次建表/导入/只读账号准备，并确认行数、时间类型及只读连接；本指引没有远程执行这些操作。
-
-首次示例初始化时使用当前代码的DATETIME建表和时间归一化逻辑，原始Excel不改。0106只处理已存在的旧文本时间列，不负责首次建库/导入Excel。外部示例源成功后日志应有 `Demo data source ready: demo_data`，且页面可选“示例数据源”；只有上传文件成功或应用Healthy不能替代此项验收。
+旧Git1.8的Excel文本误判已通过66本地info/attributes规则修正；源码目录另保留xlsx binary属性。后续仅删除源码Excel无需清理本地规则，也不要对持久目录执行Git清理。
 
 ## 四、升级并重启应用
 

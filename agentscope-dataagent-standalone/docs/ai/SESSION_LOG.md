@@ -306,3 +306,12 @@ fetch确认同事wangchao_dev已完整进入develop-2.0@3bb64fc9；liyufan_dev@b
 
 ## 2026-10-31 Asia/Shanghai｜66旧Git的Excel属性兼容
 用户截图确认011d06b已到66，两Excel校验OK，但旧Git对其提示CRLF并标M。复核本地HEAD原字节与用户文件一致，未损坏；通用text=auto/eol=lf缺少Excel显式binary属性。新增示例目录.gitattributes，补本地info/attributes仅对示例xlsx的临时规则，无reset/clean/assume-unchanged。作为上批已授权提交文件的兼容收尾补本地修复提交，push仍由用户执行；尚未收到66执行修复或复制/构建结果。
+
+## 2026-10-31 Asia/Shanghai｜66更新到a85ccec6与示例数据核对通过
+用户截图确认持久目录两Excel校验、0105两新字段及随机只读账号/配置准备完成。中途同事主线新增a85ccec6，助手fetch审阅后建议在upgrade前重构建，迁移/示例准备沿用；用户截图确认新镜像构建预检、upgrade及Healthy/UP通过。随后容器实际版本a85ccec6，demo_reader查询report_visits98819、platform_users2046，visit_time为datetime，USAGE+SELECT权限通过。最后须撤销dataagent_dataset在demo_data的6项临时导入权限，尚未收到执行结果；之后BI业务入口验收及仓库Excel后续删除仍待续。本地c903 binary修复与远端a85分叉，保留共享WIP不擅自合并，无助手远程操作或push。
+
+## 2026-10-31 Asia/Shanghai｜66示例临时权限撤销完成
+用户截图确认REVOKE执行后dataagent_dataset仅有USAGE及data_agent.* ALL，demo_reader仅有USAGE及demo_data.* SELECT；临时demo导入权限全部撤销，保留数据、不需重启。SQL实际时间范围2026-09-20 16:35:00至2026-10-07 16:31:00。结合前述a85ccec6 Healthy/UP、运行版本、98819/2046行和DATETIME验证，服务器部署与示例数据准备完成；BI新手入口/实际建模问数仍待用户。仓库Excel保持至页面可用确认后再按用户约定下次提交删除，持久目录保留。未替用户执行远程操作或push。
+
+## 2026-10-31 Asia/Shanghai｜线上验收确认与本地分支同步开始
+用户明确线上已验证可用，要求完成主线pull/push并讨论删除源码Excel后的本地开发；随后确认切回liyufan_dev同步主线。fetch核对本地c903与远端a85分叉各一笔，个人分支本地/远端bc3无独有新工作。先将两Excel原字节恢复至忽略的data/demo-samples并校验，再移除源码副本；补历史恢复工具与本地/66持久方案文档。新恢复/重复不重写/冲突不覆盖验证通过，待合并推送和个人快进。保留既有共享WIP与运行资源，不执行线上操作。
