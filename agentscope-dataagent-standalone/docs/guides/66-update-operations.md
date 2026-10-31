@@ -150,6 +150,24 @@ exit;
 
 两次校验均应显示两个文件OK；应用运行账号需要有目录访问和文件读取权限。该目录位于已有应用持久目录挂载内，不修改Compose挂载。
 
+旧Git兼容：011d06b版本发布后，66曾出现Excel校验OK，但Git提示CRLF转换且将两文件标为M。仓库文件原字节正确；这是旧Git1.8与通用text=auto/eol规则的兼容问题。本目录已补.gitattributes将xlsx声明为binary。尚未拉到该修复时，可以在仓库根目录添加仅针对本示例目录的本地属性，保留已有属性，不重置或删除文件：
+
+```bash
+(
+  set -e
+  cd "$HOME/dataagent-source/agentscope-java"
+  printf '\n# Preserve onboarding Excel bytes on old Git.\nagentscope-dataagent-standalone/deploy/demo-samples/*.xlsx binary\n' \
+    >> "$(git rev-parse --git-dir)/info/attributes"
+  git check-attr text diff merge -- \
+    'agentscope-dataagent-standalone/deploy/demo-samples/报表访问明细.xlsx' \
+    'agentscope-dataagent-standalone/deploy/demo-samples/用户列表.xlsx'
+  git status --short
+)
+```
+
+预期text/diff/merge均显示unset，git status无输出。该规则不使用assume-unchanged，也不屏蔽真实文件内容变化；若仍有修改输出，停止核对。再执行文件复制/校验。不要把Excel作为文本重新保存，不执行reset/clean。
+
+
 这是本次首次传输步骤。用户确认66持久目录的文件复制/校验/应用读取成功后，下次提交可删除仓库内的两份Excel并push，README和SHA256SUMS可保留。正常git拉取只删除受版本管理的源码副本，现有upgrade保留上述持久目录；以后无需每次重新复制，也不能把样例配置改指向源码目录。删除后Git历史仍包含原文件，不代表历史内容清除。
 
 编辑服务器私有 `/data/dataagent/rehearsal-app/runtime.env`，在现有内容中逐项新增或修改，不覆盖整个文件、不保留重复键。示意值如下（密码由管理员设置，不将占位值直接用于生产）：

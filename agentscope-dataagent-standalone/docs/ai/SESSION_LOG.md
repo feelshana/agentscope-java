@@ -303,3 +303,6 @@ fetch确认同事wangchao_dev已完整进入develop-2.0@3bb64fc9；liyufan_dev@b
 
 ## 2026-10-31 Asia/Shanghai｜临时传输方案确认与本地提交
 用户确认先经GitHub传输至66，持久目录复制/校验/读取成功后下次再删除仓库Excel，正常迭代保留服务器文件，已说明Git历史仍有内容。用户要求助手完成本地提交。将两份原始Excel、校验清单及66主线切换/30分钟首次拉取/字段迁移/示例配置指引和共享记录作一次本地提交；保持文件原字节，不执行push/远程SQL或删除资源。提交前复核文件哈希、Bash语法、文档检查与范围，结果及提交号以Git/最终回复为准。
+
+## 2026-10-31 Asia/Shanghai｜66旧Git的Excel属性兼容
+用户截图确认011d06b已到66，两Excel校验OK，但旧Git对其提示CRLF并标M。复核本地HEAD原字节与用户文件一致，未损坏；通用text=auto/eol=lf缺少Excel显式binary属性。新增示例目录.gitattributes，补本地info/attributes仅对示例xlsx的临时规则，无reset/clean/assume-unchanged。作为上批已授权提交文件的兼容收尾补本地修复提交，push仍由用户执行；尚未收到66执行修复或复制/构建结果。

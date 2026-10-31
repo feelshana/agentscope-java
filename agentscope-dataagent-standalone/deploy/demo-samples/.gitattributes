@@ -1,0 +1,2 @@
+# Preserve Excel bytes on all Git versions, including Git 1.8 on server 66.
+*.xlsx binary
