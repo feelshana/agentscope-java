@@ -21,7 +21,7 @@ function renderValue(rest: string): ReactNode[] {
 function renderLine(line: string, index: number): ReactNode {
   if (/^\s*#/.test(line)) {
     return (
-      <div key={index} style={{ color: 'var(--da-success, #16a34a)' }}>
+      <div key={index} style={{ color: 'var(--da-success)' }}>
         {line}
       </div>
     );
@@ -32,7 +32,7 @@ function renderLine(line: string, index: number): ReactNode {
     return (
       <div key={index}>
         {dash}
-        <span style={{ color: 'var(--da-primary, #3b6cf6)', fontWeight: 600 }}>{key}</span>
+        <span style={{ color: 'var(--da-primary)', fontWeight: 600 }}>{key}</span>
         {colon}
         {renderValue(rest)}
       </div>

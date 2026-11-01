@@ -10,24 +10,24 @@ const S: Record<string, React.CSSProperties> = {
     fontSize: '0.88rem', color: '#475569', fontWeight: 500,
     display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer',
   },
-  empty: { padding: '60px 0', color: '#94a3b8', fontSize: '0.95rem', textAlign: 'center' },
+  empty: { padding: '60px 0', color: 'var(--da-text-muted)', fontSize: '0.95rem', textAlign: 'center' },
   card: {
     background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12,
     padding: '18px 20px', marginBottom: 12, cursor: 'pointer',
     boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
     transition: 'border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease',
   },
-  cardUnread: { borderLeft: '3px solid #4f46e5' },
+  cardUnread: { borderLeft: '3px solid var(--da-primary)' },
   cardHeader: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 },
   label: { fontSize: '0.98rem', color: '#0f172a', fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  time: { fontSize: '0.8rem', color: '#94a3b8', flexShrink: 0 },
+  time: { fontSize: '0.8rem', color: 'var(--da-text-muted)', flexShrink: 0 },
   msg: { fontSize: '0.88rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   cardFooter: {
     display: 'flex', alignItems: 'center', gap: 10, marginTop: 10,
-    fontSize: '0.78rem', color: '#94a3b8',
+    fontSize: '0.78rem', color: 'var(--da-text-muted)',
   },
   transcriptLink: {
-    color: '#4f46e5', cursor: 'pointer', fontWeight: 500, textDecoration: 'none',
+    color: 'var(--da-primary)', cursor: 'pointer', fontWeight: 500, textDecoration: 'none',
   },
   err: { color: '#dc2626', fontSize: '0.9rem' },
 };
@@ -76,7 +76,7 @@ export default function SessionInboxList({ agentId }: { agentId: string }) {
             onClick={() => navigate(`/agents/${encodeURIComponent(aid)}/chat?session=${encodeURIComponent(e.sessionKey)}`)}
             title="Resume this conversation in Chat"
             onMouseEnter={ev => {
-              ev.currentTarget.style.borderColor = '#c7d2fe';
+              ev.currentTarget.style.borderColor = 'var(--da-primary-line)';
               ev.currentTarget.style.boxShadow = '0 4px 12px rgba(15,23,42,0.06)';
             }}
             onMouseLeave={ev => {

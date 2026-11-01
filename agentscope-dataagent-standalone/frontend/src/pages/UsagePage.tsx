@@ -44,7 +44,7 @@ function TopList({ title, items, color }: { title: string; items: GroupCount[]; 
       <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#7c8bad', marginBottom: 10 }}>{title}</div>
       {items.map(item => (
         <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-          <div style={{ width: 130, fontSize: '0.78rem', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 }} title={item.key}>
+          <div style={{ width: 130, fontSize: '0.78rem', color: 'var(--da-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 }} title={item.key}>
             {item.key}
           </div>
           <div style={{ flex: 1, background: '#1a1d2e', borderRadius: 3, height: 8 }}>
@@ -195,15 +195,15 @@ const S: Record<string, React.CSSProperties> = {
   content: { maxWidth: 1000 },
   heading: { fontSize: '1.3rem', fontWeight: 700, color: 'var(--da-text)', marginBottom: '1.5rem' },
   cards: { display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: '2rem' },
-  card: { background: 'var(--da-surface)', border: '1px solid var(--da-border)', borderRadius: 10, padding: '1.1rem 1.4rem', flex: '1 1 160px' },
+  card: { background: 'var(--da-surface)', border: '1px solid var(--da-border)', borderRadius: 8, padding: '1.1rem 1.4rem', flex: '1 1 160px' },
   cardLabel: { fontSize: '0.72rem', color: '#374056', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' },
   cardValue: { fontSize: '1.8rem', fontWeight: 700, color: 'var(--da-primary)' },
-  chartCard: { background: 'var(--da-surface)', border: '1px solid var(--da-border)', borderRadius: 10, padding: '1.25rem 1.4rem', marginBottom: 16 },
+  chartCard: { background: 'var(--da-surface)', border: '1px solid var(--da-border)', borderRadius: 8, padding: '1.25rem 1.4rem', marginBottom: 16 },
   chartTitle: { fontSize: '0.85rem', fontWeight: 600, color: '#7c8bad', marginBottom: 12 },
   tabs: { display: 'flex', gap: 8, marginBottom: 16 },
   refreshBtn: {
     background: 'transparent', border: '1px solid var(--da-border-strong)', color: '#7c8bad',
-    borderRadius: 6, padding: '4px 12px', cursor: 'pointer', fontSize: '0.8rem', marginLeft: 12,
+    borderRadius: 8, padding: '4px 12px', cursor: 'pointer', fontSize: '0.8rem', marginLeft: 12,
   },
   err: { color: 'var(--da-danger)', fontSize: '0.85rem', padding: '1rem', background: '#1f1520', borderRadius: 8, border: '1px solid #5b2030' },
 };
@@ -213,7 +213,7 @@ function tabBtnStyle(active: boolean): React.CSSProperties {
     background: active ? 'var(--da-border)' : 'transparent',
     border: `1px solid ${active ? '#3d4168' : 'var(--da-border-strong)'}`,
     color: active ? 'var(--da-primary)' : '#7c8bad',
-    borderRadius: 6, padding: '4px 12px', cursor: 'pointer', fontSize: '0.8rem',
+    borderRadius: 8, padding: '4px 12px', cursor: 'pointer', fontSize: '0.8rem',
   };
 }
 

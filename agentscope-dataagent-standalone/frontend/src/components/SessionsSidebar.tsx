@@ -17,7 +17,6 @@ const NAV_ITEMS: UtilityItem[] = [
   { label: '知识库', path: '/configure/datasets', icon: 'book' },
   // spec092: modeling is reviewed and published per knowledge base; give it its own entry.
   { label: '语义建模', path: '/configure/modeling', icon: 'model' },
-  { label: '业务术语', path: '/configure/semantic', icon: 'settings' },
   { label: '例行任务', path: '/configure/scheduled-tasks', icon: 'clock' },
 ];
 
@@ -443,12 +442,12 @@ const S: Record<string, React.CSSProperties> = {
   dotsBtn: {
     marginLeft: 'auto',
     background: 'transparent', border: 'none', cursor: 'pointer',
-    color: 'var(--da-text-muted)', padding: '4px 6px', borderRadius: 6,
+    color: 'var(--da-text-muted)', padding: '4px 6px', borderRadius: 8,
     display: 'inline-flex', alignItems: 'center',
     transition: 'var(--da-transition)',
   },
   batchBtn: {
-    fontSize: '0.78rem', padding: '4px 10px', borderRadius: 6,
+    fontSize: '0.78rem', padding: '4px 10px', borderRadius: 8,
     border: '1px solid var(--da-border)', background: 'var(--da-surface)',
     color: 'var(--da-text)', cursor: 'pointer', fontWeight: 500,
   },
@@ -461,7 +460,7 @@ const S: Record<string, React.CSSProperties> = {
   batchCancelBtn: {
     marginLeft: 'auto',
     background: 'transparent', border: 'none', cursor: 'pointer',
-    color: 'var(--da-text-muted)', padding: '4px 6px', borderRadius: 6,
+    color: 'var(--da-text-muted)', padding: '4px 6px', borderRadius: 8,
     display: 'inline-flex', alignItems: 'center',
   },
   muted: { padding: '8px 12px', fontSize: '0.9rem', color: 'var(--da-text-muted)' },

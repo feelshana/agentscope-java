@@ -104,7 +104,7 @@ export default function ReadOnlyRelationGraph({
                 if (item.source && item.target) {
                   return `<div style="font-size:12px;line-height:1.5"><b>${escapeHtml(d.label ?? '')}</b><br/>${
                     d.columns ? `关联列：${escapeHtml(d.columns)}<br/>` : ''
-                  }<span style="color:#94a3b8">${escapeHtml(d.condition ?? '')}</span></div>`;
+                  }<span style="color:var(--da-text-muted)">${escapeHtml(d.condition ?? '')}</span></div>`;
                 }
                 return `<div style="font-size:12px;line-height:1.5"><b>${escapeHtml(d.label ?? item.id)}</b><br/>${
                   d.modelName ? `逻辑模型：${escapeHtml(d.modelName)}<br/>` : ''

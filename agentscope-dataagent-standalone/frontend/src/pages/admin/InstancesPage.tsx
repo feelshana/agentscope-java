@@ -28,7 +28,7 @@ const S: Record<string, React.CSSProperties> = {
   td:    { padding: '12px 16px', borderBottom: '1px solid #f1f5f9', color: '#334155', verticalAlign: 'middle' as const },
   mono:  { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.82rem', color: '#64748b' },
   agentPill: { display: 'inline-block', padding: '2px 10px', borderRadius: 999, fontSize: '0.8rem', background: '#dbeafe', color: '#1d4ed8', fontWeight: 500 },
-  viewBtn: { background: '#eef2ff', border: '1px solid #c7d2fe', color: '#4338ca', borderRadius: 6, padding: '5px 12px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 500 },
+  viewBtn: { background: 'var(--da-primary-soft)', border: '1px solid var(--da-primary-line)', color: 'var(--da-primary-hover)', borderRadius: 6, padding: '5px 12px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 500 },
   err: { color: '#dc2626', fontSize: '0.9rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 16px', marginBottom: 16 },
   stat: { fontSize: '0.86rem', color: '#64748b', marginLeft: 'auto' },
   hint: { fontSize: '0.85rem', color: '#64748b', marginBottom: 18, lineHeight: 1.6 },
@@ -120,7 +120,7 @@ export default function InstancesPage() {
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <span style={{ fontSize: '0.82rem', color: '#64748b', marginRight: 4, fontWeight: 500 }}>Sort:</span>
             {(['lastActivity', 'sessions', 'agentId'] as SortKey[]).map(k => (
-              <button key={k} style={{ ...S.sortBtnBase, background: sortKey === k ? '#eef2ff' : '#ffffff', border: `1px solid ${sortKey === k ? '#c7d2fe' : '#d1d5db'}`, color: sortKey === k ? '#4338ca' : '#475569' }} onClick={() => setSortKey(k)}>
+              <button key={k} style={{ ...S.sortBtnBase, background: sortKey === k ? 'var(--da-primary-soft)' : '#ffffff', border: `1px solid ${sortKey === k ? 'var(--da-primary-line)' : '#d1d5db'}`, color: sortKey === k ? 'var(--da-primary-hover)' : '#475569' }} onClick={() => setSortKey(k)}>
                 {k === 'lastActivity' ? 'Recent' : k === 'sessions' ? 'Busiest' : 'Agent'}
               </button>
             ))}
@@ -151,7 +151,7 @@ export default function InstancesPage() {
           <tbody>
             {displayed.length === 0 && !loading && (
               <tr>
-                <td style={{ ...S.td, color: '#94a3b8' }} colSpan={5}>
+                <td style={{ ...S.td, color: 'var(--da-text-muted)' }} colSpan={5}>
                   {rows.length === 0 ? 'No registered agents.' : 'No agents match the current filter.'}
                 </td>
               </tr>
@@ -162,7 +162,7 @@ export default function InstancesPage() {
                   <span style={S.agentPill}>{r.agentId}</span>
                 </td>
                 <td style={{ ...S.td, ...S.mono }}>{r.className}</td>
-                <td style={{ ...S.td, textAlign: 'center' as const, color: r.liveSessionCount > 0 ? '#4f46e5' : '#94a3b8', fontWeight: r.liveSessionCount > 0 ? 600 : 400 }}>
+                <td style={{ ...S.td, textAlign: 'center' as const, color: r.liveSessionCount > 0 ? 'var(--da-primary)' : '#94a3b8', fontWeight: r.liveSessionCount > 0 ? 600 : 400 }}>
                   {r.liveSessionCount}
                 </td>
                 <td style={{ ...S.td, fontSize: '0.85rem' }}>{timeAgo(r.lastActivityMs)}</td>

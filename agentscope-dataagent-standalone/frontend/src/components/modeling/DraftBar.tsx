@@ -1,4 +1,4 @@
-import { tourSignal } from '../../state/guidedTour';
+import { tourActive, tourSignal } from '../../state/guidedTour';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { discardDraft, getDraftItems, getDraftReview } from '../../api/draftReview';
 import type { DraftItem, DraftReview } from '../../api/draftReview';
@@ -62,7 +62,7 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
   // querying then waits for a publish, so the bar must still offer one.
   const republish = changes.length === 0 && !!workflow && workflow.publishedVersion > 0 && !workflow.queryAvailable;
   const blocked = running ? '助手正在修改草稿，完成后才能发布'
-    : changes.length === 0 && !republish ? '草稿与线上版本一致' : null;
+    : changes.length === 0 && !republish ? '当前没有待发布的修改' : null;
 
   const ready = !blocked && pendingConfirmations === 0;
   const summary = useRef(onSummary); summary.current = onSummary;
@@ -111,7 +111,7 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
     {confirming === 'pending' && <div role="alert" data-tour="draft-confirm" style={{ ...note, background: 'rgba(234,179,8,.14)', color: 'var(--da-warn)' }}>
       还有 {pendingConfirmations} 项需要你确定，未确定的口径不会生效。
       <button className="da-btn da-btn-sm" onClick={() => { setConfirming(null); setOpen(false); onLocate(); }}>去处理</button>
-      <button className="da-btn da-btn-sm" onClick={() => void publish(true)}>跳过并发布</button>
+      {!tourActive() && <button className="da-btn da-btn-sm" onClick={() => void publish(true)}>跳过并发布</button>}
     </div>}
     {confirming === 'others' && <div role="alert" data-tour="draft-confirm" style={note}>
       本次发布包含其他成员的 {review?.changesByOthers} 项修改，确认一起发布？
@@ -130,7 +130,7 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
   </>;
   return <footer aria-label="草稿栏" style={{ position: 'relative', flex: '0 0 auto' }}>
     {open && <div role="dialog" aria-label="草稿修改" style={{ position: 'absolute', left: 0, right: 0, bottom: '100%', marginBottom: 6, maxHeight: '60vh', overflowY: 'auto', zIndex: 20,
-      background: 'var(--da-surface, #fff)', border: '1px solid var(--da-border)', borderRadius: 10, boxShadow: '0 -8px 24px rgba(15,23,42,.12)' }}>
+      background: 'var(--da-surface)', border: '1px solid var(--da-border)', borderRadius: 8, boxShadow: '0 -8px 24px rgba(15,23,42,.12)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--da-border)', position: 'sticky', top: 0, background: 'inherit' }}>
         <strong>相对{workflow?.queryAvailable ? `线上 v${workflow.publishedVersion}` : '空白工程'}的修改</strong>
         <span style={{ fontSize: 12, color: 'var(--da-text-muted)' }}>业务文档 {changes.filter(c => c.category === 'DOCUMENT').length} · 已确认问答 {examples}</span>
@@ -148,18 +148,18 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
       </div>
     </div>}
     {notices}
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px', border: '1px solid var(--da-border)', borderRadius: 12, background: 'var(--da-surface, #fff)', fontSize: 13, boxShadow: 'var(--da-shadow-card)' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px', border: '1px solid var(--da-border)', borderRadius: 12, background: 'var(--da-surface)', fontSize: 13, boxShadow: 'var(--da-shadow-card)' }}>
       <strong>草稿</strong>
       <span style={{ fontSize: 12, color: 'var(--da-text-muted)' }}>建模结果 {items.length} · 待你确定 {pendingConfirmations} · 已确认问答 {examples}</span>
       <button className="da-btn da-btn-sm" onClick={() => setOpen(!open)}>{open ? '收起' : '查看全部 ↑'}</button>
       <span style={{ flex: 1 }} />
       {result?.ok && <span role="status" style={{ fontSize: 12, color: 'var(--da-success)' }}>已发布 v{result.mdlVersion}</span>}
-      {blocked && changes.length > 0 && <span style={{ fontSize: 12, color: 'var(--da-text-muted)' }}>{blocked}</span>}
+      {blocked && <span style={{ fontSize: 12, color: 'var(--da-text-muted)' }}>{blocked}</span>}
       {republish && !running && <span style={{ fontSize: 12, color: 'var(--da-warn)' }}>有修改尚未生效，重新发布后才能问数</span>}
-      {ready && <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 4, background: 'rgba(22,163,74,.12)', color: 'var(--da-success)' }}>可发布</span>}
+      {ready && <span style={{ fontSize: 12, padding: '1px 6px', borderRadius: 4, background: 'rgba(22,163,74,.12)', color: 'var(--da-success)' }}>可发布</span>}
       <button className={`da-btn ${ready ? 'da-btn-primary' : ''} da-btn-sm`} data-tour="draft-publish" disabled={busy !== null || !!blocked} onClick={() => void publish()}>{label}</button>
     </div>
   </footer>;
 }
 
-const note = { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' as const, fontSize: 12, padding: '6px 10px', marginBottom: 6, borderRadius: 8, border: '1px solid var(--da-border)', background: 'var(--da-surface, #fff)' };
+const note = { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' as const, fontSize: 12, padding: '6px 10px', marginBottom: 6, borderRadius: 8, border: '1px solid var(--da-border)', background: 'var(--da-surface)' };

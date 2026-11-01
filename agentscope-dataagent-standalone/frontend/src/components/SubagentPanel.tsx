@@ -25,7 +25,7 @@ const S: Record<string, React.CSSProperties> = {
     display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0,
   },
   title: {
-    flex: 1, fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700,
+    flex: 1, fontSize: '0.78rem', color: 'var(--da-text-muted)', fontWeight: 700,
     textTransform: 'uppercase' as const, letterSpacing: '0.1em',
   },
   btn: {
@@ -34,10 +34,10 @@ const S: Record<string, React.CSSProperties> = {
   },
   primaryBtn: {
     padding: '7px 14px',
-    background: 'linear-gradient(135deg,#4f46e5 0%,#4338ca 100%)',
+    background: 'var(--da-primary)',
     color: '#ffffff', border: 'none', borderRadius: 8, cursor: 'pointer',
     fontSize: '0.82rem', fontWeight: 600,
-    boxShadow: '0 1px 3px rgba(99,102,241,0.3)',
+    boxShadow: '0 1px 3px rgba(91, 61, 245,0.3)',
   },
   dangerBtn: {
     padding: '7px 14px', background: '#ffffff', color: '#dc2626',
@@ -50,17 +50,17 @@ const S: Record<string, React.CSSProperties> = {
     padding: '16px 20px', marginBottom: 10, cursor: 'pointer',
     boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
   },
-  cardActive: { borderColor: '#818cf8', background: '#eef2ff' },
+  cardActive: { borderColor: '#818cf8', background: 'var(--da-primary-soft)' },
   cardName: { fontWeight: 600, fontSize: '0.95rem', color: '#1e293b' },
   cardDesc: { fontSize: '0.85rem', color: '#64748b', marginTop: 4 },
   badge: {
-    display: 'inline-block', padding: '2px 8px', borderRadius: 6,
+    display: 'inline-block', padding: '2px 8px', borderRadius: 8,
     fontSize: '0.75rem', fontWeight: 600, marginLeft: 8,
   },
   badgeShared: { background: '#dbeafe', color: '#2563eb' },
   badgeIsolated: { background: '#f1f5f9', color: '#64748b' },
   badgeModel: { background: '#fef3c7', color: '#92400e' },
-  empty: { padding: 40, textAlign: 'center' as const, color: '#94a3b8', fontSize: '0.92rem' },
+  empty: { padding: 40, textAlign: 'center' as const, color: 'var(--da-text-muted)', fontSize: '0.92rem' },
   err: { padding: 14, color: '#dc2626', fontSize: '0.88rem' },
   fieldLabel: {
     display: 'block', fontSize: '0.85rem', fontWeight: 500,
@@ -84,7 +84,7 @@ const S: Record<string, React.CSSProperties> = {
     display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
   },
   dialog: {
-    background: '#ffffff', borderRadius: 14, padding: '24px 28px',
+    background: '#ffffff', borderRadius: 12, padding: '24px 28px',
     width: 480, maxHeight: '80vh', display: 'flex', flexDirection: 'column' as const,
     boxShadow: '0 10px 40px rgba(15,23,42,0.2)',
   },

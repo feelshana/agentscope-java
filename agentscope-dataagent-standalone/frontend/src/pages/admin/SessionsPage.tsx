@@ -87,7 +87,7 @@ function kindBadgeStyle(kind: string | null): React.CSSProperties {
     fontSize: '0.78rem', fontWeight: 600,
   };
   if (kind === 'CREATE') return { ...base, background: '#dcfce7', color: '#15803d', border: '1px solid #86efac' };
-  if (kind === 'EDIT')   return { ...base, background: '#eef2ff', color: '#4338ca', border: '1px solid #c7d2fe' };
+  if (kind === 'EDIT')   return { ...base, background: 'var(--da-primary-soft)', color: 'var(--da-primary-hover)', border: '1px solid var(--da-primary-line)' };
   if (kind === 'DELETE') return { ...base, background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca' };
   return { ...base, background: '#f1f5f9', color: '#475569', border: '1px solid #e5e7eb' };
 }
@@ -121,7 +121,7 @@ function TreeRow({ node, depth }: { node: SessionTreeNode; depth: number }) {
         <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: '#475569', fontSize: '0.82rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.sessionKey}>
           {s.sessionKey.slice(0, 40)}…
         </span>
-        <span style={{ color: '#94a3b8', marginLeft: 'auto', flexShrink: 0, fontSize: '0.82rem' }}>{timeAgo(s.lastActivityMs)}</span>
+        <span style={{ color: 'var(--da-text-muted)', marginLeft: 'auto', flexShrink: 0, fontSize: '0.82rem' }}>{timeAgo(s.lastActivityMs)}</span>
       </div>
       {node.children.map(c => <TreeRow key={c.session.sessionKey} node={c} depth={depth + 1} />)}
     </>
@@ -139,7 +139,7 @@ const S: Record<string, React.CSSProperties> = {
   th: { textAlign: 'left' as const, padding: '12px 16px', background: '#f8fafc', color: '#64748b', borderBottom: '1px solid #e5e7eb', fontWeight: 600, fontSize: '0.78rem', textTransform: 'uppercase' as const, letterSpacing: '0.04em' },
   td: { padding: '12px 16px', borderBottom: '1px solid #f1f5f9', color: '#334155', verticalAlign: 'top' as const },
   mono: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.82rem', color: '#64748b' },
-  viewBtn: { background: '#eef2ff', border: '1px solid #c7d2fe', color: '#4338ca', borderRadius: 6, padding: '5px 12px', cursor: 'pointer', fontSize: '0.84rem', fontWeight: 500 },
+  viewBtn: { background: 'var(--da-primary-soft)', border: '1px solid var(--da-primary-line)', color: 'var(--da-primary-hover)', borderRadius: 6, padding: '5px 12px', cursor: 'pointer', fontSize: '0.84rem', fontWeight: 500 },
   kindBadgeBase: { display: 'inline-block', padding: '2px 9px', borderRadius: 999, fontSize: '0.78rem', fontWeight: 500 } as React.CSSProperties,
   modal: { position: 'fixed' as const, inset: 0, background: 'rgba(15,23,42,0.4)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: '1rem' },
   modalBox: { background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 14, width: '85vw', maxWidth: 1200, maxHeight: '88vh', display: 'flex', flexDirection: 'column' as const, boxShadow: '0 24px 60px rgba(15,23,42,0.18), 0 4px 12px rgba(15,23,42,0.06)' },
@@ -150,7 +150,7 @@ const S: Record<string, React.CSSProperties> = {
     display: 'grid', gridTemplateColumns: '140px 1fr', rowGap: 10, columnGap: 16,
     fontSize: '0.88rem', marginBottom: 22,
   },
-  detailKey: { color: '#94a3b8', fontWeight: 500, textTransform: 'uppercase' as const, letterSpacing: '0.04em', fontSize: '0.78rem' },
+  detailKey: { color: 'var(--da-text-muted)', fontWeight: 500, textTransform: 'uppercase' as const, letterSpacing: '0.04em', fontSize: '0.78rem' },
   detailVal: { color: '#0f172a', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.84rem', wordBreak: 'break-all' as const },
 };
 
@@ -277,7 +277,7 @@ export default function AdminSessionsPage() {
                   {s.sessionKey.slice(0, 36)}{s.sessionKey.length > 36 ? '…' : ''}
                 </td>
                 <td style={{ ...S.td, ...S.mono }}>{s.userId ?? '—'}</td>
-                <td style={{ ...S.td, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.86rem', color: '#4f46e5', fontWeight: 500 }}>{s.agentId}</td>
+                <td style={{ ...S.td, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.86rem', color: 'var(--da-primary)', fontWeight: 500 }}>{s.agentId}</td>
                 <td style={S.td}><span style={{ ...S.kindBadgeBase, background: s.kind === 'MAIN' ? '#dbeafe' : '#f1f5f9', color: s.kind === 'MAIN' ? '#1d4ed8' : '#64748b' }}>{s.kind}</span></td>
                 <td style={S.td}>{timeAgo(s.lastActivityMs)}</td>
                 <td style={S.td}>
@@ -289,7 +289,7 @@ export default function AdminSessionsPage() {
         </table>
 
         {!loading && displayed.length === 0 && (
-          <p style={{ color: '#94a3b8', fontSize: '0.92rem', marginTop: 20 }}>No sessions found.</p>
+          <p style={{ color: 'var(--da-text-muted)', fontSize: '0.92rem', marginTop: 20 }}>No sessions found.</p>
         )}
       </div>
 
@@ -309,8 +309,8 @@ export default function AdminSessionsPage() {
                 style={{
                   background: 'transparent', border: 'none', padding: '12px 18px',
                   cursor: 'pointer', fontSize: '0.9rem',
-                  color: modalTab === 'tree' ? '#4338ca' : '#64748b',
-                  borderBottom: modalTab === 'tree' ? '2px solid #4f46e5' : '2px solid transparent',
+                  color: modalTab === 'tree' ? 'var(--da-primary-hover)' : '#64748b',
+                  borderBottom: modalTab === 'tree' ? '2px solid var(--da-primary)' : '2px solid transparent',
                   fontWeight: modalTab === 'tree' ? 600 : 500,
                 }}
               >
@@ -321,8 +321,8 @@ export default function AdminSessionsPage() {
                 style={{
                   background: 'transparent', border: 'none', padding: '12px 18px',
                   cursor: 'pointer', fontSize: '0.9rem',
-                  color: modalTab === 'workspace' ? '#4338ca' : '#64748b',
-                  borderBottom: modalTab === 'workspace' ? '2px solid #4f46e5' : '2px solid transparent',
+                  color: modalTab === 'workspace' ? 'var(--da-primary-hover)' : '#64748b',
+                  borderBottom: modalTab === 'workspace' ? '2px solid var(--da-primary)' : '2px solid transparent',
                   fontWeight: modalTab === 'workspace' ? 600 : 500,
                 }}
               >
@@ -377,10 +377,10 @@ export default function AdminSessionsPage() {
                           <tr key={`${m.toolCallId ?? i}-${m.path ?? i}-${m.ts}`}>
                             <td style={S.td}>
                               {new Date(m.ts).toLocaleTimeString()}
-                              <div style={{ color: '#94a3b8', fontSize: '0.76rem' }}>{timeAgo(m.ts)}</div>
+                              <div style={{ color: 'var(--da-text-muted)', fontSize: '0.76rem' }}>{timeAgo(m.ts)}</div>
                             </td>
                             <td style={S.td}><span style={kindBadgeStyle(m.kind)}>{m.kind ?? '?'}</span></td>
-                            <td style={{ ...S.td, color: '#6d28d9' }} title={m.path ?? ''}>{m.path ?? '–'}</td>
+                            <td style={{ ...S.td, color: 'var(--da-primary-hover)' }} title={m.path ?? ''}>{m.path ?? '–'}</td>
                             <td style={S.td}>{m.toolName ?? '–'}</td>
                             <td style={S.td}>
                               <span style={{ color: '#64748b' }}>{formatBytes(m.preSize)}</span>

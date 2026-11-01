@@ -32,7 +32,7 @@ export default function AssociationProgress({ state }: { state: AssociationState
       <strong style={{ flex: 1, fontSize: 15 }}>{title}</strong>
       <span style={{ fontSize: 13, color: 'var(--da-text-muted)' }}>{percent}% · 已用 {seconds} 秒</span>
     </div>
-    <div style={{ height: 8, borderRadius: 4, background: 'var(--da-surface-sunken, #eef2f7)', overflow: 'hidden' }}>
+    <div style={{ height: 8, borderRadius: 4, background: 'var(--da-surface-sunken)', overflow: 'hidden' }}>
       <div style={{ width: `${percent}%`, height: '100%', borderRadius: 4, transition: 'width .4s ease',
         background: failed ? 'var(--da-warn)' : 'var(--da-primary)' }} />
     </div>

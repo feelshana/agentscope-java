@@ -99,7 +99,7 @@ export default function SqlEditor({ value, onChange, rows = 10, autoFocus, maxLe
       <button type="button" className="da-btn da-btn-sm" onClick={() => onChange(formatSql(value))} disabled={disabled || !value.trim()}>格式化</button>
     </div>
     <div style={{ display: 'flex', height }}>
-      <div ref={gutter} aria-hidden style={{ ...FONT, padding: '10px 8px', overflow: 'hidden', textAlign: 'right', color: '#94a3b8', background: '#f1f5f9', userSelect: 'none', minWidth: 40 }}>
+      <div ref={gutter} aria-hidden style={{ ...FONT, padding: '10px 8px', overflow: 'hidden', textAlign: 'right', color: 'var(--da-text-muted)', background: '#f1f5f9', userSelect: 'none', minWidth: 40 }}>
         {Array.from({ length: lines }, (_, n) => <div key={n}>{n + 1}</div>)}
       </div>
       <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>

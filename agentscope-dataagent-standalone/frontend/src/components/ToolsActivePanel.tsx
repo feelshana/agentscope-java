@@ -22,14 +22,14 @@ const S: Record<string, React.CSSProperties> = {
   sub: { fontSize: '0.82rem', color: '#64748b' },
   primaryBtn: {
     padding: '8px 16px',
-    background: 'linear-gradient(135deg,#4f46e5 0%,#4338ca 100%)',
+    background: 'var(--da-primary)',
     color: '#ffffff', border: 'none', borderRadius: 8, cursor: 'pointer',
     fontSize: '0.86rem', fontWeight: 600,
-    boxShadow: '0 1px 3px rgba(99,102,241,0.3)',
+    boxShadow: '0 1px 3px rgba(91, 61, 245,0.3)',
   },
   refreshBtn: {
     background: '#f8fafc', border: '1px solid #e2e8f0', color: '#475569',
-    borderRadius: 7, padding: '6px 12px', cursor: 'pointer',
+    borderRadius: 8, padding: '6px 12px', cursor: 'pointer',
     fontSize: '0.78rem', fontWeight: 500,
   },
   warnings: {
@@ -37,7 +37,7 @@ const S: Record<string, React.CSSProperties> = {
     borderRadius: 8, padding: '10px 14px', fontSize: '0.82rem', lineHeight: 1.5,
   },
   groupHeader: {
-    fontSize: '0.74rem', fontWeight: 700, color: '#94a3b8',
+    fontSize: '0.74rem', fontWeight: 700, color: 'var(--da-text-muted)',
     textTransform: 'uppercase', letterSpacing: '0.1em',
     marginTop: 12, marginBottom: 6,
   },
@@ -46,14 +46,14 @@ const S: Record<string, React.CSSProperties> = {
     overflow: 'auto', flex: 1, minHeight: 0,
   },
   card: {
-    border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px',
+    border: '1px solid #e2e8f0', borderRadius: 8, padding: '12px 14px',
     background: '#ffffff', display: 'flex', alignItems: 'flex-start', gap: 12,
   },
   cardName: { fontWeight: 600, color: '#0f172a', fontSize: '0.92rem' },
   cardDesc: { color: '#64748b', fontSize: '0.82rem', marginTop: 3, lineHeight: 1.45 },
   badge: {
     fontSize: '0.7rem', fontWeight: 600, padding: '2px 8px', borderRadius: 999,
-    background: '#eef2ff', color: '#4338ca', border: '1px solid #c7d2fe',
+    background: 'var(--da-primary-soft)', color: 'var(--da-primary-hover)', border: '1px solid var(--da-primary-line)',
     textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0,
   },
   mcpBadge: {
@@ -63,10 +63,10 @@ const S: Record<string, React.CSSProperties> = {
   },
   disableBtn: {
     background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c',
-    borderRadius: 6, padding: '4px 10px', cursor: 'pointer',
+    borderRadius: 8, padding: '4px 10px', cursor: 'pointer',
     fontSize: '0.74rem', fontWeight: 500, marginLeft: 'auto', flexShrink: 0,
   },
-  empty: { padding: 32, textAlign: 'center', color: '#94a3b8', fontSize: '0.88rem' },
+  empty: { padding: 32, textAlign: 'center', color: 'var(--da-text-muted)', fontSize: '0.88rem' },
   err: { color: '#dc2626', fontSize: '0.85rem' },
 };
 

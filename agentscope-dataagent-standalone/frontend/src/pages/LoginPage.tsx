@@ -50,7 +50,7 @@ export default function LoginPage() {
             你的大数据智囊团
           </h1>
           <p style={{ margin: '16px 0 0', fontSize: 15, lineHeight: 1.7, opacity: 0.85, maxWidth: 420 }}>
-            连接企业数据源与知识文档，用自然语言完成查询、分析与可视化；口径与图谱让每一次回答都可溯源。
+            连接企业数据源与知识文档，用自然语言完成查询、分析与可视化；统一的业务口径让每一次回答都可溯源。
           </p>
           <ul
             style={{
@@ -65,7 +65,7 @@ export default function LoginPage() {
             }}
           >
             <li>· 知识库：表格 / 文本随意传，数据知识一起用</li>
-            <li>· 语义图谱：实体与关系自动构建，问数先查口径</li>
+            <li>· 语义模型：统一字段含义与业务口径，问数先查口径</li>
             <li>· 多租户隔离：每人只见自己的数据与知识</li>
           </ul>
         </div>

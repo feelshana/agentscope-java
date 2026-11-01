@@ -11,23 +11,23 @@ const S: Record<string, React.CSSProperties> = {
   subtitle:{ fontSize: '0.88rem', color: '#64748b', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', marginTop: 4 },
   layout:  { display: 'grid', gridTemplateColumns: '340px 1fr', gap: 28, alignItems: 'flex-start' },
   sideCard:{ background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '1.25rem 1.5rem', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' },
-  sideTitle:{ color: '#4f46e5', fontSize: '0.82rem', textTransform: 'uppercase' as const, letterSpacing: '0.06em', fontWeight: 700, marginBottom: 16 },
+  sideTitle:{ color: 'var(--da-primary)', fontSize: '0.82rem', textTransform: 'uppercase' as const, letterSpacing: '0.06em', fontWeight: 700, marginBottom: 16 },
   kvRow:   { fontSize: '0.9rem', display: 'flex', flexDirection: 'column' as const, gap: 4, marginBottom: 14 },
-  k:       { color: '#94a3b8', fontSize: '0.78rem', textTransform: 'uppercase' as const, letterSpacing: '0.04em', fontWeight: 600 },
+  k:       { color: 'var(--da-text-muted)', fontSize: '0.78rem', textTransform: 'uppercase' as const, letterSpacing: '0.04em', fontWeight: 600 },
   v:       { color: '#0f172a', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.9rem' },
   card:    { background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '1.25rem 1.5rem', marginBottom: 20, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' },
-  sectionTitle: { color: '#4f46e5', fontSize: '0.82rem', textTransform: 'uppercase' as const, letterSpacing: '0.06em', fontWeight: 700, marginBottom: 16 },
+  sectionTitle: { color: 'var(--da-primary)', fontSize: '0.82rem', textTransform: 'uppercase' as const, letterSpacing: '0.06em', fontWeight: 700, marginBottom: 16 },
   topoBox: { background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 10, padding: '1.25rem', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.88rem', color: '#334155', whiteSpace: 'pre-wrap' as const, overflow: 'auto' as const, lineHeight: 1.7 },
   table:   { width: '100%', borderCollapse: 'collapse' as const, fontSize: '0.88rem' },
   th:      { textAlign: 'left' as const, padding: '10px 14px', background: '#f8fafc', color: '#64748b', borderBottom: '1px solid #e5e7eb', fontWeight: 600, fontSize: '0.78rem', textTransform: 'uppercase' as const, letterSpacing: '0.04em' },
   td:      { padding: '10px 14px', borderBottom: '1px solid #f1f5f9', color: '#334155' },
   mono:    { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.84rem' },
-  link:    { color: '#4f46e5', textDecoration: 'none', borderBottom: '1px dashed #4f46e5' },
-  tag:     { background: '#eef2ff', color: '#4338ca', borderRadius: 999, padding: '2px 10px', fontSize: '0.8rem', marginRight: 6, fontWeight: 500, display: 'inline-block', marginBottom: 4 },
+  link:    { color: 'var(--da-primary)', textDecoration: 'none', borderBottom: '1px dashed var(--da-primary)' },
+  tag:     { background: 'var(--da-primary-soft)', color: 'var(--da-primary-hover)', borderRadius: 999, padding: '2px 10px', fontSize: '0.8rem', marginRight: 6, fontWeight: 500, display: 'inline-block', marginBottom: 4 },
   badgeBase:{ display: 'inline-block', padding: '3px 10px', borderRadius: 999, fontSize: '0.76rem', marginRight: 6, fontWeight: 500 } as React.CSSProperties,
-  loading: { color: '#94a3b8', padding: '2rem', textAlign: 'center' as const, fontSize: '0.92rem' },
+  loading: { color: 'var(--da-text-muted)', padding: '2rem', textAlign: 'center' as const, fontSize: '0.92rem' },
   err:     { color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '14px 18px', marginBottom: 18, fontSize: '0.92rem' },
-  empty:   { color: '#94a3b8', fontSize: '0.92rem' },
+  empty:   { color: 'var(--da-text-muted)', fontSize: '0.92rem' },
 };
 
 function fmtAgo(ms: number): string {
@@ -144,7 +144,7 @@ export default function AdminChannelDetailPage() {
                     <div style={S.k}>Reachable agents</div>
                     <div>
                       {detail.agents.length === 0
-                        ? <span style={{ color: '#94a3b8' }}>—</span>
+                        ? <span style={{ color: 'var(--da-text-muted)' }}>—</span>
                         : detail.agents.map(a => (
                             <Link key={a} to={`/admin/agents/${encodeURIComponent(a)}`} style={{ ...S.link, ...S.mono, marginRight: 8, display: 'inline-block', marginBottom: 4 }}>
                               {a}

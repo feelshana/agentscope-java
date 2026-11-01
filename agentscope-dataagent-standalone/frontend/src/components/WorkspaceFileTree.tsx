@@ -18,13 +18,13 @@ const S: Record<string, React.CSSProperties> = {
   header: {
     padding: '14px 14px', borderBottom: '1px solid #f1f5f9',
     display: 'flex', alignItems: 'center', gap: 8,
-    fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700,
+    fontSize: '0.78rem', color: 'var(--da-text-muted)', fontWeight: 700,
     textTransform: 'uppercase', letterSpacing: '0.1em',
   },
   subbar: {
     padding: '6px 14px', borderBottom: '1px solid #f1f5f9',
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    fontSize: '0.74rem', color: '#94a3b8',
+    fontSize: '0.74rem', color: 'var(--da-text-muted)',
   },
   miniToggle: {
     display: 'inline-flex', alignItems: 'center', gap: 5,
@@ -33,7 +33,7 @@ const S: Record<string, React.CSSProperties> = {
   },
   refreshBtn: {
     background: '#f8fafc', border: '1px solid #e2e8f0', color: '#475569',
-    borderRadius: 7, padding: '4px 9px', cursor: 'pointer',
+    borderRadius: 8, padding: '4px 9px', cursor: 'pointer',
     fontSize: '0.78rem', fontWeight: 500, lineHeight: 1,
     display: 'inline-flex', alignItems: 'center', gap: 4,
   },
@@ -41,12 +41,12 @@ const S: Record<string, React.CSSProperties> = {
   row: {
     display: 'flex', alignItems: 'center', gap: 8,
     padding: '7px 10px', cursor: 'pointer', fontSize: '0.9rem',
-    color: '#334155', borderRadius: 7, userSelect: 'none',
+    color: '#334155', borderRadius: 8, userSelect: 'none',
     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
   },
-  rowActive: { background: '#eef2ff', color: '#4338ca', fontWeight: 500 },
+  rowActive: { background: 'var(--da-primary-soft)', color: 'var(--da-primary-hover)', fontWeight: 500 },
   rowHover: { background: '#f8fafc' },
-  caret: { width: 12, color: '#94a3b8', flexShrink: 0 },
+  caret: { width: 12, color: 'var(--da-text-muted)', flexShrink: 0 },
   err: { padding: 14, fontSize: '0.88rem', color: '#dc2626' },
 };
 
@@ -230,7 +230,7 @@ export default function WorkspaceFileTree({ agentId, selectedPath, onSelect, ref
       <div style={S.scroll}>
         {err && <div style={S.err}>{err}</div>}
         {!err && list.length === 0 && (
-          <div style={{ padding: 14, fontSize: '0.88rem', color: '#94a3b8' }}>Empty workspace.</div>
+          <div style={{ padding: 14, fontSize: '0.88rem', color: 'var(--da-text-muted)' }}>Empty workspace.</div>
         )}
         {list.map(n => (
           <NodeView

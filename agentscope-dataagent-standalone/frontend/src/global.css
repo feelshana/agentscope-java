@@ -7,32 +7,35 @@
 
 :root {
   --da-shell-header-height: 64px;
-  --da-app-bg: #f4f5f7;
+  --da-app-bg: #ffffff;
   /* Main canvas (home landing, conversation thread, knowledge-base pages): same brightness as the menu-bar surface. */
   --da-canvas-bg: var(--da-surface);
   --da-surface: #ffffff;
-  --da-sidebar-bg: #f7f9fc;
-  --da-surface-sunken: #eef0f3;
-  --da-border: #d8dce3;
-  --da-border-strong: #b8bec9;
-  --da-text: #1a1d23;
-  --da-text-2: #444b57;
-  --da-text-3: #6b7280;
-  --da-text-muted: #9ca3af;
-  --da-primary: #4f46e5;
-  --da-primary-hover: #4338ca;
-  --da-primary-subtle: rgba(79, 70, 229, 0.08);
-  --da-secondary: #2563eb;
-  --da-accent: #d97706;
-  --da-accent-subtle: rgba(217, 119, 6, 0.12);
-  --da-success: #16a34a;
-  --da-warn: #d97706;
-  --da-danger: #e11d48;
+  --da-sidebar-bg: #f7f8fa;
+  --da-surface-sunken: #f2f3f6;
+  --da-border: #e9eaf0;
+  --da-border-strong: #dddfe7;
+  --da-text: #292c38;
+  --da-text-2: #4f5563;
+  --da-text-3: #646978;
+  /* Weakest text colour; keep at least 4.4:1 on white. */
+  --da-text-muted: #737887;
+  --da-primary: #5b3df5;
+  --da-primary-hover: #4526d6;
+  --da-primary-subtle: rgba(91, 61, 245, 0.12);
+  --da-primary-soft: #ece8ff;
+  --da-primary-line: #c8bdfc;
+  --da-secondary: #4526d6;
+  --da-accent: #b45309;
+  --da-accent-subtle: rgba(180, 83, 9, 0.12);
+  --da-success: #15803d;
+  --da-warn: #b45309;
+  --da-danger: #dc2626;
   --da-radius-sm: 4px;
   --da-radius-md: 8px;
   --da-radius-lg: 12px;
-  --da-radius-xl: 16px;
-  --da-shadow-card: 0 1px 3px rgba(15, 23, 42, 0.05), 0 1px 2px rgba(15, 23, 42, 0.03);
+  --da-radius-xl: 12px;
+  --da-shadow-card: none;
   --da-shadow-pop: 0 12px 40px rgba(15, 23, 42, 0.1), 0 2px 8px rgba(15, 23, 42, 0.04);
   --da-transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease,
     box-shadow 0.15s ease, transform 0.15s ease;
@@ -50,11 +53,6 @@ body,
 body {
   margin: 0;
   background-color: var(--da-app-bg);
-  /* very subtle mesh gradient + noise to remove the flat "plastic" feel */
-  background-image: radial-gradient(800px 400px at 100% 0%, rgba(79, 70, 229, 0.05), transparent 50%),
-    radial-gradient(600px 300px at 0% 100%, rgba(37, 99, 235, 0.04), transparent 50%),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.02'/%3E%3C/svg%3E");
-  background-attachment: fixed;
   color: var(--da-text);
   font-family: var(--da-font);
   font-size: 14px;
@@ -64,7 +62,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 ::selection {
-  background: rgba(79, 70, 229, 0.18);
+  background: rgba(91, 61, 245, 0.18);
 }
 
 *::-webkit-scrollbar {
@@ -97,7 +95,7 @@ button:active:not(:disabled) {
   transform: translateY(0.5px);
 }
 button:focus-visible {
-  outline: 2px solid rgba(79, 70, 229, 0.45);
+  outline: 2px solid rgba(91, 61, 245, 0.45);
   outline-offset: 1px;
 }
 
@@ -130,7 +128,7 @@ button:focus-visible {
   transform: translateY(0.5px);
 }
 .da-btn:focus-visible {
-  outline: 2px solid rgba(79, 70, 229, 0.45);
+  outline: 2px solid rgba(91, 61, 245, 0.45);
   outline-offset: 1px;
 }
 .da-btn:disabled {
@@ -256,7 +254,7 @@ button:focus-visible {
 }
 .da-input:focus {
   border-color: var(--da-primary);
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.14);
+  box-shadow: 0 0 0 3px rgba(91, 61, 245, 0.14);
 }
 
 .da-label {
@@ -312,7 +310,7 @@ button:focus-visible {
 .da-badge-primary {
   color: var(--da-primary);
   background: var(--da-primary-subtle);
-  border-color: rgba(79, 70, 229, 0.2);
+  border-color: rgba(91, 61, 245, 0.2);
 }
 
 .da-tabbar {
@@ -441,8 +439,8 @@ button:focus-visible {
 }
 .da-row-selected,
 .da-row-selected:hover {
-  background: rgba(79, 70, 229, 0.08);
-  border-color: rgba(79, 70, 229, 0.18);
+  background: rgba(91, 61, 245, 0.08);
+  border-color: rgba(91, 61, 245, 0.18);
 }
 .da-row-unread {
   border-left-color: transparent;
@@ -594,7 +592,7 @@ button:focus-visible {
 
 .da-eyebrow {
   display: block;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -635,7 +633,7 @@ button:focus-visible {
   bottom: 10%;
   width: 3px;
   border-radius: 999px;
-  background: linear-gradient(180deg, var(--da-primary) 0%, var(--da-primary-hover) 100%);
+  background: var(--da-primary);
 }
 
 .da-icon {
@@ -769,7 +767,7 @@ button:focus-visible {
   background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
 }
 .da-msg-avatar.agent {
-  background: linear-gradient(135deg, var(--da-primary) 0%, var(--da-primary-hover) 100%);
+  background: var(--da-primary);
 }
 .da-msg-body {
   flex: 1;
@@ -784,7 +782,7 @@ button:focus-visible {
   color: var(--da-text);
 }
 .da-msg-time {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--da-text-muted);
   font-weight: 400;
   margin-left: 6px;
@@ -868,7 +866,7 @@ button:focus-visible {
   border-radius: var(--da-radius-sm);
   background: var(--da-surface-sunken);
   border: 1px solid transparent;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--da-text-3);
   cursor: pointer;
   transition: var(--da-transition);
@@ -889,7 +887,7 @@ button:focus-visible {
 .da-chip-active {
   background: var(--da-primary-subtle);
   color: var(--da-primary);
-  border-color: rgba(79, 70, 229, 0.25);
+  border-color: rgba(91, 61, 245, 0.25);
 }
 .da-chip-frozen {
   color: var(--da-text-muted);
@@ -907,7 +905,7 @@ button:focus-visible {
   background: var(--da-surface-sunken);
   border: 1px solid var(--da-border);
   font-family: var(--da-mono);
-  font-size: 10px;
+  font-size: 12px;
   color: var(--da-text-3);
 }
 @keyframes da-pulse {
@@ -1080,7 +1078,7 @@ button:focus-visible {
   box-shadow: var(--da-shadow-card);
 }
 .da-bubble-meta {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--da-text-muted);
   margin-bottom: 4px;
 }
@@ -1088,7 +1086,7 @@ button:focus-visible {
 /* ---------- composer focus ring ---------- */
 .da-composer:focus-within {
   border-color: var(--da-primary);
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12), var(--da-shadow-pop);
+  box-shadow: 0 0 0 3px rgba(91, 61, 245, 0.12), var(--da-shadow-pop);
 }
 
 /* ---------- landing page and compact conversation composer ---------- */
@@ -1144,7 +1142,7 @@ button:focus-visible {
 }
 .da-composer-glow:focus-within {
   background: var(--da-primary);
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.06);
+  box-shadow: 0 0 0 3px rgba(91, 61, 245, 0.06);
 }
 .da-landing-wrap .da-composer-glow {
   max-width: var(--da-landing-max);
@@ -1184,7 +1182,7 @@ button:focus-visible {
 .da-composer-shell .da-chip-active,
 .da-composer-shell .da-chip-active:hover {
   background: var(--da-primary-subtle);
-  border-color: rgba(79, 70, 229, 0.18);
+  border-color: rgba(91, 61, 245, 0.18);
   color: var(--da-primary);
 }
 
@@ -1322,7 +1320,7 @@ button:focus-visible {
   pointer-events: none;
 }
 .da-example-donut-label {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--da-text-3);
 }
 .da-example-donut-value {
@@ -1380,14 +1378,14 @@ button:focus-visible {
   justify-content: center;
   width: 26px;
   height: 26px;
-  border-radius: 7px;
-  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 40%, #a78bfa 70%, #6366f1 100%);
+  border-radius: 8px;
+  background: var(--da-primary);
   color: #fff;
   font-size: 0.62rem;
   font-weight: 700;
   flex-shrink: 0;
   letter-spacing: 0.02em;
-  box-shadow: 0 1px 3px rgba(99, 102, 241, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  box-shadow: 0 1px 3px rgba(91, 61, 245, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 .da-agent-name {
   font-size: 0.88rem;
@@ -1468,8 +1466,8 @@ button:focus-visible {
   justify-content: center;
   width: 22px;
   height: 22px;
-  border-radius: 6px;
-  background: linear-gradient(135deg, var(--da-primary) 0%, var(--da-primary-hover) 100%);
+  border-radius: 8px;
+  background: var(--da-primary);
   color: #fff;
   font-size: 0.6rem;
   font-weight: 700;
@@ -1511,7 +1509,7 @@ button:focus-visible {
 }
 .da-sem-tab {
   padding: 3px 10px;
-  font-size: 11px;
+  font-size: 12px;
   border: 1px solid var(--da-border);
   border-radius: var(--da-radius-sm);
   background: transparent;
@@ -1522,7 +1520,7 @@ button:focus-visible {
 .da-sem-tab.active {
   background: var(--da-primary-subtle);
   color: var(--da-primary);
-  border-color: rgba(79, 70, 229, 0.25);
+  border-color: rgba(91, 61, 245, 0.25);
 }
 .da-sem-sql-pre {
   margin: 0;
@@ -1530,7 +1528,7 @@ button:focus-visible {
   background: var(--da-surface-sunken);
   border-radius: var(--da-radius-md);
   font-family: var(--da-mono);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-all;
@@ -1546,7 +1544,7 @@ button:focus-visible {
 .da-chip-model {
   background: var(--da-primary-subtle);
   color: var(--da-primary);
-  border-color: rgba(79, 70, 229, 0.2);
+  border-color: rgba(91, 61, 245, 0.2);
 }
 .da-chip-rel {
   background: rgba(217, 119, 6, 0.1);
@@ -1559,14 +1557,14 @@ button:focus-visible {
   border-color: rgba(22, 163, 74, 0.2);
 }
 .da-sem-warn {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--da-warn);
   padding: 4px 8px;
   background: rgba(217, 119, 6, 0.07);
   border-radius: var(--da-radius-sm);
 }
 .da-sem-note {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--da-text-muted);
   font-style: italic;
 }
@@ -1575,7 +1573,7 @@ button:focus-visible {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--da-text-3);
 }
 .da-sem-meta-item {
@@ -1597,7 +1595,7 @@ button:focus-visible {
 .da-sem-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 11px;
+  font-size: 12px;
   font-family: var(--da-mono);
 }
 .da-sem-table th {
@@ -1664,7 +1662,7 @@ button:focus-visible {
 }
 .da-sem-list-label {
   color: var(--da-text-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .da-sem-model-name {
   font-family: var(--da-mono);
@@ -1673,7 +1671,7 @@ button:focus-visible {
   color: var(--da-text);
 }
 .da-sem-bound {
-  font-size: 10px;
+  font-size: 12px;
   padding: 1px 5px;
   border-radius: 3px;
 }
@@ -1686,11 +1684,11 @@ button:focus-visible {
   color: var(--da-danger);
 }
 .da-sem-err-text {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--da-danger);
 }
 .da-sem-err-badge {
-  font-size: 10px;
+  font-size: 12px;
   padding: 2px 6px;
   border-radius: var(--da-radius-sm);
   background: rgba(225, 29, 72, 0.12);
@@ -1711,7 +1709,7 @@ button:focus-visible {
 }
 .da-sem-diag-code {
   font-family: var(--da-mono);
-  font-size: 10px;
+  font-size: 12px;
   color: var(--da-danger);
   font-weight: 600;
 }
@@ -1721,7 +1719,7 @@ button:focus-visible {
   margin-top: 2px;
 }
 .da-sem-diag-hint {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--da-text-muted);
   margin-top: 3px;
 }
@@ -1776,7 +1774,7 @@ button:focus-visible {
   place-items: center;
   flex-shrink: 0;
   color: #fff;
-  background: linear-gradient(135deg, var(--da-primary) 0%, var(--da-primary-hover) 100%);
+  background: var(--da-primary);
 }
 .da-insp-icon.da-insp-icon--query {
   background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
@@ -1788,7 +1786,7 @@ button:focus-visible {
   background: linear-gradient(135deg, var(--da-accent) 0%, #b45309 100%);
 }
 .da-insp-icon.da-insp-icon--knowledge {
-  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+  background: var(--da-primary);
 }
 .da-insp-icon.da-insp-icon--error {
   background: linear-gradient(135deg, var(--da-danger) 0%, #be123c 100%);
@@ -1813,7 +1811,7 @@ button:focus-visible {
 }
 
 .da-insp-subtitle {
-  font-size: 11px;
+  font-size: 12px;
   font-family: var(--da-mono);
   color: var(--da-text-muted);
   overflow: hidden;
@@ -1860,7 +1858,7 @@ button:focus-visible {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -1916,7 +1914,7 @@ button:focus-visible {
 }
 
 .da-insp-meta-row .da-chip {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .da-insp-divider {
@@ -1933,7 +1931,7 @@ button:focus-visible {
   padding: 0;
   border: none;
   background: transparent;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -1989,7 +1987,7 @@ button:focus-visible {
 }
 .da-insp-artifact-meta {
   color: var(--da-text-muted);
-  font-size: 11px;
+  font-size: 12px;
   margin-left: 4px;
 }
 
@@ -2007,7 +2005,7 @@ button:focus-visible {
   padding: 0;
   border: none;
   background: transparent;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -2021,7 +2019,7 @@ button:focus-visible {
 
 .da-json-chevron {
   display: inline-block;
-  font-size: 10px;
+  font-size: 12px;
   transition: transform 0.15s ease;
 }
 .da-json-chevron.open {
@@ -2054,7 +2052,7 @@ button:focus-visible {
   color: var(--da-accent);
 }
 .da-json-bool {
-  color: #7c3aed;
+  color: var(--da-primary);
 }
 .da-json-null {
   color: var(--da-text-muted);

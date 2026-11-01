@@ -217,7 +217,8 @@ public class MdlPublishService {
             String description,
             boolean relationship,
             boolean calculated,
-            String expression) {}
+            String expression,
+            boolean primaryKey) {}
 
     /**
      * One logical model with its full column list; {@code tableName} is the physical table.
@@ -232,7 +233,9 @@ public class MdlPublishService {
             String description,
             List<MdlColumnView> columns,
             String path,
-            String refSqlPath) {}
+            String refSqlPath,
+            String primaryKey,
+            String tableRole) {}
 
     /** One relation edge with its (possibly composite) column pair list. */
     public record MdlRelationView(
@@ -242,7 +245,8 @@ public class MdlPublishService {
             String joinType,
             String condition,
             List<String> sourceColumns,
-            List<String> targetColumns) {}
+            List<String> targetColumns,
+            String description) {}
 
     /** One cube member rendered from the workspace file. */
     public record MdlCubeMemberView(
@@ -311,7 +315,8 @@ public class MdlPublishService {
                                 c.description(),
                                 c.relationship() != null,
                                 c.calculated(),
-                                c.expression()));
+                                c.expression(),
+                                c.primaryKey()));
             }
             MdlModelView mv =
                     new MdlModelView(
@@ -322,7 +327,9 @@ public class MdlPublishService {
                             m.description(),
                             cols,
                             m.path(),
-                            m.refSqlPath());
+                            m.refSqlPath(),
+                            m.primaryKey(),
+                            m.tableRole());
             // Derived (ref_sql) models get their own tab — the schema tab stays physical-only.
             if (m.refSql() != null) {
                 derivedModels.add(mv);
@@ -340,7 +347,8 @@ public class MdlPublishService {
                             r.joinType(),
                             r.condition(),
                             r.sourceColumns(),
-                            r.targetColumns()));
+                            r.targetColumns(),
+                            r.description()));
         }
         List<MdlCubeView> cubes = new ArrayList<>();
         for (MdlWorkspaceReader.WorkspaceCube c : snapshot.cubes()) {

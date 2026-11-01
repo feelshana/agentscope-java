@@ -34,10 +34,10 @@ const S: Record<string, React.CSSProperties> = {
     boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
   },
   kpiHover: {
-    background: '#ffffff', border: '1px solid #c7d2fe', borderRadius: 14,
+    background: '#ffffff', border: '1px solid var(--da-primary-line)', borderRadius: 14,
     padding: '22px 24px', cursor: 'pointer',
     position: 'relative' as const,
-    boxShadow: '0 8px 24px rgba(79,70,229,0.10), 0 2px 6px rgba(15,23,42,0.04)',
+    boxShadow: '0 8px 24px rgba(91, 61, 245,0.10), 0 2px 6px rgba(15,23,42,0.04)',
     transform: 'translateY(-1px)',
   },
   kpiIcon: { fontSize: '1.5rem', marginBottom: 10, display: 'block' },
@@ -45,8 +45,8 @@ const S: Record<string, React.CSSProperties> = {
     fontSize: '0.78rem', fontWeight: 700, letterSpacing: '0.08em',
     textTransform: 'uppercase' as const, color: '#64748b', marginBottom: 8,
   },
-  kpiValue: { fontSize: '2.4rem', fontWeight: 700, color: '#4f46e5', lineHeight: 1, letterSpacing: '-0.02em' },
-  kpiSub:   { fontSize: '0.82rem', color: '#94a3b8', marginTop: 8 },
+  kpiValue: { fontSize: '2.4rem', fontWeight: 700, color: 'var(--da-primary)', lineHeight: 1, letterSpacing: '-0.02em' },
+  kpiSub:   { fontSize: '0.82rem', color: 'var(--da-text-muted)', marginTop: 8 },
   kpiArrow: {
     position: 'absolute' as const, right: 16, top: '50%', transform: 'translateY(-50%)',
     color: '#cbd5e1', fontSize: '1rem',
@@ -62,7 +62,7 @@ const S: Record<string, React.CSSProperties> = {
   },
   sectionTitle: { fontSize: '0.95rem', fontWeight: 600, color: '#0f172a' },
   seeAll: {
-    fontSize: '0.82rem', color: '#4f46e5', cursor: 'pointer',
+    fontSize: '0.82rem', color: 'var(--da-primary)', cursor: 'pointer',
     background: 'none', border: 'none', padding: 0, fontWeight: 500,
   },
   table:  { width: '100%', borderCollapse: 'collapse' as const, fontSize: '0.9rem' },
@@ -151,7 +151,7 @@ export default function OverviewPage() {
           <button style={S.refreshBtn} onClick={load} disabled={loading}>
             {loading ? '…' : '↺ Refresh'}
           </button>
-          <span style={{ marginLeft: 'auto', fontSize: '0.85rem', color: '#94a3b8' }}>
+          <span style={{ marginLeft: 'auto', fontSize: '0.85rem', color: 'var(--da-text-muted)' }}>
             Uptime: {uptime(now - startMs)}
           </span>
         </div>
@@ -218,7 +218,7 @@ export default function OverviewPage() {
               </thead>
               <tbody>
                 {instances.length === 0 && (
-                  <tr><td style={{ ...S.td, color: '#94a3b8' }} colSpan={2}>No registered agents.</td></tr>
+                  <tr><td style={{ ...S.td, color: 'var(--da-text-muted)' }} colSpan={2}>No registered agents.</td></tr>
                 )}
                 {instances.slice(0, 5).map(i => (
                   <tr key={i.agentId} style={{ cursor: 'pointer' }}
@@ -250,7 +250,7 @@ export default function OverviewPage() {
               </thead>
               <tbody>
                 {recentActivity.length === 0 && (
-                  <tr><td style={{ ...S.td, color: '#94a3b8' }} colSpan={3}>No recent activity.</td></tr>
+                  <tr><td style={{ ...S.td, color: 'var(--da-text-muted)' }} colSpan={3}>No recent activity.</td></tr>
                 )}
                 {recentActivity.map(a => (
                   <tr key={a.sessionKey} style={{ cursor: 'pointer' }}
@@ -280,7 +280,7 @@ export default function OverviewPage() {
             { label: 'Debug Logs',  path: '/debug'    },
           ].map(l => (
             <button key={l.path} onClick={() => navigate(l.path)} style={{
-              background: '#eef2ff', border: '1px solid #c7d2fe', color: '#4338ca',
+              background: 'var(--da-primary-soft)', border: '1px solid var(--da-primary-line)', color: 'var(--da-primary-hover)',
               borderRadius: 8, padding: '7px 16px', cursor: 'pointer', fontSize: '0.86rem', fontWeight: 500,
               transition: 'background 0.12s, border-color 0.12s',
             }}>

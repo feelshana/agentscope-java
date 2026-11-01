@@ -40,6 +40,8 @@ export interface DatasetGroup {
   name: string;
   description: string | null;
   datasetCount: number;
+  /** 0 until the first publish. */
+  publishedVersion?: number;
   hasDescription: boolean;
   createdAt: string | null;
 }

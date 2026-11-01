@@ -27,7 +27,7 @@ export default function ModelSnapshotPanel({ groupId }: { groupId: string }) {
   const previous = preview?.publishedFiles.find(f => f.path === file?.path);
   return <section className="da-card">
     <h3>工程定义与发布快照</h3>
-    <p className="da-small">上方为当前草稿的 MDL 结构可视化。下方展示工程 YAML；草稿用于建模验证，已发布版本用于问数。</p>
+    <p className="da-small">这里展示工程 YAML；草稿用于建模验证，已发布版本用于问数。</p>
     <select className="da-input" aria-label="工程版本" value={version} onChange={e => setVersion(e.target.value as 'draft' | 'published')}>
       <option value="draft">当前草稿</option><option value="published">已发布 v{preview?.mdlVersion ?? 0}</option>
     </select>

@@ -33,12 +33,12 @@ function IdentityLinksPanel() {
     refresh: { background: '#ffffff', border: '1px solid #d1d5db', color: '#475569', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', fontSize: '0.86rem', fontWeight: 500 },
     intro: { color: '#475569', fontSize: '0.9rem', marginBottom: 22, lineHeight: 1.7 },
     card: { background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '1.25rem 1.5rem', marginBottom: 16, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' },
-    userId: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '1rem', color: '#4f46e5', fontWeight: 600, marginBottom: 14 },
+    userId: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '1rem', color: 'var(--da-primary)', fontWeight: 600, marginBottom: 14 },
     table: { width: '100%', borderCollapse: 'collapse' as const, fontSize: '0.88rem' },
     th: { textAlign: 'left' as const, padding: '8px 12px', color: '#64748b', borderBottom: '1px solid #e5e7eb', fontWeight: 600, fontSize: '0.78rem', textTransform: 'uppercase' as const, letterSpacing: '0.04em' },
     td: { padding: '8px 12px', borderBottom: '1px solid #f1f5f9', color: '#334155', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.84rem' },
     err: { color: '#dc2626', fontSize: '0.9rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 16px', marginBottom: 16 },
-    empty: { color: '#94a3b8', fontSize: '0.92rem' },
+    empty: { color: 'var(--da-text-muted)', fontSize: '0.92rem' },
   };
 
   return (
@@ -67,7 +67,7 @@ function IdentityLinksPanel() {
               {Object.entries(links).map(([ch, ext]) => (
                 <tr key={ch}>
                   <td style={IS.td}>{ch}</td>
-                  <td style={{ ...IS.td, color: '#6d28d9' }}>{ext}</td>
+                  <td style={{ ...IS.td, color: 'var(--da-primary-hover)' }}>{ext}</td>
                 </tr>
               ))}
             </tbody>
@@ -87,8 +87,8 @@ const S: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     background: '#f8fafc',
   },
-  channelId: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontWeight: 600, color: '#4f46e5', fontSize: '1rem' },
-  channelLink: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontWeight: 600, color: '#4f46e5', fontSize: '1rem', textDecoration: 'none', borderBottom: '1px dashed #4f46e5' },
+  channelId: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontWeight: 600, color: 'var(--da-primary)', fontSize: '1rem' },
+  channelLink: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontWeight: 600, color: 'var(--da-primary)', fontSize: '1rem', textDecoration: 'none', borderBottom: '1px dashed var(--da-primary)' },
   statusDot: {
     width: 10, height: 10, borderRadius: '50%',
     background: '#16a34a',
@@ -101,15 +101,15 @@ const S: Record<string, React.CSSProperties> = {
     borderBottom: '1px solid #f1f5f9', fontSize: '0.88rem', color: '#475569', flexWrap: 'wrap',
   },
   metaItem: { display: 'flex', gap: 8, alignItems: 'center' },
-  metaLabel: { color: '#94a3b8', fontWeight: 500 },
+  metaLabel: { color: 'var(--da-text-muted)', fontWeight: 500 },
   bindingsSection: { padding: '1rem 1.5rem' },
   bindingHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
   bindingLabel: { fontSize: '0.82rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' },
-  addBtn: { background: '#4f46e5', color: '#fff', border: 'none', borderRadius: 8, padding: '6px 16px', cursor: 'pointer', fontSize: '0.84rem', fontWeight: 600, boxShadow: '0 1px 3px rgba(79,70,229,0.25)' },
+  addBtn: { background: 'var(--da-primary)', color: '#fff', border: 'none', borderRadius: 8, padding: '6px 16px', cursor: 'pointer', fontSize: '0.84rem', fontWeight: 600, boxShadow: '0 1px 3px rgba(91, 61, 245,0.25)' },
   table: { width: '100%', borderCollapse: 'collapse' as const, fontSize: '0.86rem' },
   th: { textAlign: 'left' as const, padding: '0.5rem 0.85rem', color: '#64748b', fontWeight: 600, borderBottom: '1px solid #e5e7eb', fontSize: '0.76rem', textTransform: 'uppercase' as const, letterSpacing: '0.04em' },
   td: { padding: '0.55rem 0.85rem', borderBottom: '1px solid #f1f5f9', color: '#475569', verticalAlign: 'top' as const },
-  empty: { color: '#94a3b8', fontSize: '0.88rem', padding: '0.75rem 0' },
+  empty: { color: 'var(--da-text-muted)', fontSize: '0.88rem', padding: '0.75rem 0' },
   refreshBtn: {
     background: '#ffffff',
     border: '1px solid #d1d5db',
@@ -125,20 +125,20 @@ const S: Record<string, React.CSSProperties> = {
   warn: { color: '#92400e', fontSize: '0.86rem', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8, padding: '8px 14px', marginBottom: 12 },
   tierBadgeBase: {
     display: 'inline-block', padding: '2px 9px', borderRadius: 999, fontSize: '0.76rem',
-    background: '#eef2ff', color: '#4338ca', fontWeight: 600,
+    background: 'var(--da-primary-soft)', color: 'var(--da-primary-hover)', fontWeight: 600,
   } as React.CSSProperties,
-  rowBtn: { background: '#eef2ff', border: '1px solid #c7d2fe', color: '#4338ca', borderRadius: 6, padding: '3px 10px', cursor: 'pointer', fontSize: '0.78rem', marginRight: 6, fontWeight: 500 },
+  rowBtn: { background: 'var(--da-primary-soft)', border: '1px solid var(--da-primary-line)', color: 'var(--da-primary-hover)', borderRadius: 6, padding: '3px 10px', cursor: 'pointer', fontSize: '0.78rem', marginRight: 6, fontWeight: 500 },
   delBtn:  { background: '#ffffff', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 6, padding: '3px 10px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 500 },
   modal:     { position: 'fixed' as const, inset: 0, background: 'rgba(15,23,42,0.4)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 },
   modalBox:  { background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '1.6rem 1.75rem', width: 600, maxHeight: '88vh', overflowY: 'auto' as const, boxShadow: '0 24px 60px rgba(15,23,42,0.18), 0 4px 12px rgba(15,23,42,0.06)' },
   modalTitle: { fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', marginBottom: 18 },
   label: { display: 'block', fontSize: '0.85rem', color: '#475569', fontWeight: 500, marginBottom: 6 },
-  hint:  { display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginTop: -6, marginBottom: 12 },
+  hint:  { display: 'block', fontSize: '0.78rem', color: 'var(--da-text-muted)', marginTop: -6, marginBottom: 12 },
   input: { width: '100%', boxSizing: 'border-box' as const, padding: '8px 12px', background: '#ffffff', border: '1px solid #d1d5db', borderRadius: 7, color: '#0f172a', fontSize: '0.9rem', marginBottom: 12, outline: 'none' },
   select: { width: '100%', boxSizing: 'border-box' as const, padding: '8px 12px', background: '#ffffff', border: '1px solid #d1d5db', borderRadius: 7, color: '#0f172a', fontSize: '0.9rem', marginBottom: 12, outline: 'none' },
   row2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 },
   btnRow: { display: 'flex', gap: 10, marginTop: 12 },
-  saveBtn:   { background: '#4f46e5', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 22px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600, boxShadow: '0 1px 3px rgba(79,70,229,0.25)' },
+  saveBtn:   { background: 'var(--da-primary)', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 22px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600, boxShadow: '0 1px 3px rgba(91, 61, 245,0.25)' },
   cancelBtn: { background: '#ffffff', border: '1px solid #d1d5db', color: '#475569', borderRadius: 8, padding: '9px 18px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 500 },
 };
 
@@ -300,10 +300,10 @@ function ChannelCard({ ch, onChanged }: { ch: ChannelView; onChanged: () => void
           {ch.channelId}
         </Link>
         <span style={S.badge}>{ch.dmScope}</span>
-        <span style={{ color: '#94a3b8', fontSize: '0.86rem' }}>
+        <span style={{ color: 'var(--da-text-muted)', fontSize: '0.86rem' }}>
           {ch.bindingCount} binding{ch.bindingCount !== 1 ? 's' : ''}
         </span>
-        <span style={{ color: '#94a3b8', fontSize: '0.86rem', marginLeft: 'auto' }}>
+        <span style={{ color: 'var(--da-text-muted)', fontSize: '0.86rem', marginLeft: 'auto' }}>
           {ch.outboundQueueSize > 0 ? `⚡ ${ch.outboundQueueSize} outbound` : ''}
           {expanded ? ' ▾' : ' ▸'}
         </span>
@@ -336,7 +336,7 @@ function ChannelCard({ ch, onChanged }: { ch: ChannelView; onChanged: () => void
                 <tbody>
                   {ch.bindings.map((b: BindingView, i: number) => (
                     <tr key={i}>
-                      <td style={S.td}><span style={{ color: '#4f46e5', fontWeight: 500 }}>{cellVal(b.agentId)}</span></td>
+                      <td style={S.td}><span style={{ color: 'var(--da-primary)', fontWeight: 500 }}>{cellVal(b.agentId)}</span></td>
                       <td style={S.td}>{cellVal(b.peerId)}</td>
                       <td style={S.td}>{cellVal(b.guildId)}</td>
                       <td style={S.td}>{cellVal(b.roomId)}</td>
@@ -377,7 +377,7 @@ function ChannelCard({ ch, onChanged }: { ch: ChannelView; onChanged: () => void
                     <tr key={b.index}>
                       <td style={S.td}>{b.index}</td>
                       <td style={S.td}><span style={S.tierBadgeBase}>{b.tier}</span></td>
-                      <td style={S.td}><span style={{ color: '#4f46e5', fontWeight: 500 }}>{cellVal(b.agentId)}</span></td>
+                      <td style={S.td}><span style={{ color: 'var(--da-primary)', fontWeight: 500 }}>{cellVal(b.agentId)}</span></td>
                       <td style={S.td}>
                         {summarizeMatch(b)}
                       </td>
@@ -392,7 +392,7 @@ function ChannelCard({ ch, onChanged }: { ch: ChannelView; onChanged: () => void
               </table>
             )}
             <div style={{ ...S.hint, marginTop: 10 }}>
-              Changes to configured bindings are written to <code style={{ color: '#4f46e5', background: '#f1f5f9', padding: '1px 6px', borderRadius: 4 }}>agentscope.json</code> immediately
+              Changes to configured bindings are written to <code style={{ color: 'var(--da-primary)', background: '#f1f5f9', padding: '1px 6px', borderRadius: 4 }}>agentscope.json</code> immediately
               but only take effect for the running router after a server restart.
             </div>
           </div>
@@ -420,7 +420,7 @@ function summarizeMatch(b: EditableBinding): React.ReactNode {
   if (b.team) parts.push(`team=${b.team}`);
   if (b.account) parts.push(`account=${b.account}`);
   if (b.channel) parts.push(`channel=${b.channel}`);
-  if (!parts.length) return <span style={{ color: '#94a3b8' }}>(matches everything)</span>;
+  if (!parts.length) return <span style={{ color: 'var(--da-text-muted)' }}>(matches everything)</span>;
   return <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.82rem', color: '#475569' }}>{parts.join(' · ')}</span>;
 }
 
@@ -466,7 +466,7 @@ export default function ChannelsPage() {
           <>
             {error && <div style={S.err}>{error}</div>}
             {!loading && channels.length === 0 && !error && (
-              <p style={{ color: '#94a3b8', fontSize: '0.92rem' }}>No channels registered.</p>
+              <p style={{ color: 'var(--da-text-muted)', fontSize: '0.92rem' }}>No channels registered.</p>
             )}
             {channels.map(ch => (
               <ChannelCard key={ch.channelId} ch={ch} onChanged={() => setTick(t => t + 1)} />

@@ -14,10 +14,10 @@ const S: Record<string, CSSProperties> = {
   icon: { width: 16, textAlign: 'center', color: 'var(--da-text-muted)', flex: '0 0 16px' },
   title: { fontWeight: 500, whiteSpace: 'nowrap' },
   sub: { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--da-text-muted)', fontSize: 12 },
-  pill: { fontSize: 11, padding: '1px 6px', borderRadius: 4, whiteSpace: 'nowrap' },
-  basis: { fontSize: 11, color: 'var(--da-text-muted)', whiteSpace: 'nowrap' },
+  pill: { fontSize: 12, padding: '1px 6px', borderRadius: 4, whiteSpace: 'nowrap' },
+  basis: { fontSize: 12, color: 'var(--da-text-muted)', whiteSpace: 'nowrap' },
   link: { background: 'none', border: 'none', padding: '0 2px', cursor: 'pointer', color: 'var(--da-primary)', fontSize: 12 },
-  tag: { fontSize: 11, padding: '0 5px', borderRadius: 4, background: 'var(--da-surface-sunken, #f1f5f9)', color: 'var(--da-text-muted)', marginRight: 4 },
+  tag: { fontSize: 12, padding: '0 5px', borderRadius: 4, background: 'var(--da-surface-sunken)', color: 'var(--da-text-muted)', marginRight: 4 },
   detail: { padding: '2px 10px 8px 34px', fontSize: 12.5 },
 };
 

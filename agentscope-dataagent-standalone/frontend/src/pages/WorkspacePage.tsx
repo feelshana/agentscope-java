@@ -12,7 +12,7 @@ const pathBar: React.CSSProperties = {
   fontSize: '0.78rem', color: '#64748b',
 };
 const pathLabel: React.CSSProperties = {
-  fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em',
+  fontWeight: 600, color: 'var(--da-text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
 };
 const pathValue: React.CSSProperties = {
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
@@ -59,7 +59,7 @@ export default function WorkspacePage() {
             onClick={copyPath}
             style={{
               background: '#ffffff', border: '1px solid #e2e8f0', color: '#475569',
-              borderRadius: 6, padding: '3px 10px', cursor: 'pointer',
+              borderRadius: 8, padding: '3px 10px', cursor: 'pointer',
               fontSize: '0.75rem', fontWeight: 500,
             }}
             title="Copy path"

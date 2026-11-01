@@ -71,8 +71,8 @@ const skillRowStyle: React.CSSProperties = {
 const installButtonStyle: React.CSSProperties = {
   padding: '6px 14px',
   borderRadius: 8,
-  border: '1px solid #4f46e5',
-  background: '#4f46e5',
+  border: '1px solid var(--da-primary)',
+  background: 'var(--da-primary)',
   color: '#ffffff',
   fontSize: '0.82rem',
   fontWeight: 600,
@@ -91,8 +91,8 @@ const previewButtonStyle: React.CSSProperties = {
 const addButtonStyle: React.CSSProperties = {
   padding: '8px 14px',
   borderRadius: 8,
-  border: '1px solid #4f46e5',
-  background: '#4f46e5',
+  border: '1px solid var(--da-primary)',
+  background: 'var(--da-primary)',
   color: '#ffffff',
   fontSize: '0.85rem',
   fontWeight: 600,
@@ -105,7 +105,7 @@ const iconButtonStyle: React.CSSProperties = {
   fontSize: '0.95rem',
   cursor: 'pointer',
   color: '#64748b',
-  borderRadius: 6,
+  borderRadius: 8,
   lineHeight: 1,
 };
 
@@ -344,7 +344,7 @@ export default function SkillsMarketplacesPanel({ agentId, onInstalled }: Props)
                 <div
                   style={{
                     fontSize: '0.75rem',
-                    color: '#94a3b8',
+                    color: 'var(--da-text-muted)',
                     marginTop: 2,
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
@@ -377,12 +377,12 @@ export default function SkillsMarketplacesPanel({ agentId, onInstalled }: Props)
               >
                 🗑
               </button>
-              <span style={{ color: '#94a3b8', fontSize: '0.85rem' }}>{open ? '▼' : '▶'}</span>
+              <span style={{ color: 'var(--da-text-muted)', fontSize: '0.85rem' }}>{open ? '▼' : '▶'}</span>
             </div>
             {open && (
               <div>
                 {state?.loading && (
-                  <div style={{ padding: 16, color: '#94a3b8', fontSize: '0.85rem' }}>
+                  <div style={{ padding: 16, color: 'var(--da-text-muted)', fontSize: '0.85rem' }}>
                     Loading skills…
                   </div>
                 )}
@@ -399,7 +399,7 @@ export default function SkillsMarketplacesPanel({ agentId, onInstalled }: Props)
                   </div>
                 )}
                 {state?.loaded && state.skills.length === 0 && !state.error && (
-                  <div style={{ padding: 16, color: '#94a3b8', fontSize: '0.85rem' }}>
+                  <div style={{ padding: 16, color: 'var(--da-text-muted)', fontSize: '0.85rem' }}>
                     No skills found in this marketplace.
                   </div>
                 )}
@@ -415,7 +415,7 @@ export default function SkillsMarketplacesPanel({ agentId, onInstalled }: Props)
                               style={{
                                 marginLeft: 8,
                                 fontSize: '0.72rem',
-                                color: '#94a3b8',
+                                color: 'var(--da-text-muted)',
                                 fontWeight: 500,
                               }}
                             >
