@@ -75,7 +75,8 @@ public class MdlWorkspaceReader {
             String description,
             String relationship,
             boolean calculated,
-            String expression) {}
+            String expression,
+            boolean primaryKey) {}
 
     /**
      * One logical model. A derived (ref_sql) model has no {@code table_reference}: {@code
@@ -93,7 +94,9 @@ public class MdlWorkspaceReader {
             List<WorkspaceColumn> columns,
             String path,
             String refSql,
-            String refSqlPath) {}
+            String refSqlPath,
+            String primaryKey,
+            String tableRole) {}
 
     public record WorkspaceRelation(
             String name,
@@ -102,7 +105,8 @@ public class MdlWorkspaceReader {
             String joinType,
             String condition,
             List<String> sourceColumns,
-            List<String> targetColumns) {}
+            List<String> targetColumns,
+            String description) {}
 
     public record WorkspaceMember(
             String name, String expression, String type, String description) {}
@@ -347,6 +351,7 @@ public class MdlWorkspaceReader {
         Map<String, Object> tableRef = asMap(root.get("table_reference"));
         String schemaName = tableRef == null ? "" : text(tableRef.get("schema"), "");
         String tableName = tableRef == null ? "" : text(tableRef.get("table"), "");
+        String primaryKey = text(root.get("primary_key"), null);
         List<WorkspaceColumn> columns = new ArrayList<>();
         if (root.get("columns") instanceof List<?> entries) {
             for (Object entry : entries) {
@@ -365,7 +370,9 @@ public class MdlWorkspaceReader {
                                 propertiesDescription(col),
                                 text(col.get("relationship"), null),
                                 Boolean.TRUE.equals(col.get("is_calculated")),
-                                text(col.get("expression"), null)));
+                                text(col.get("expression"), null),
+                                cname.equals(primaryKey)
+                                        || Boolean.TRUE.equals(col.get("is_primary_key"))));
             }
         }
         return new WorkspaceModel(
@@ -378,7 +385,9 @@ public class MdlWorkspaceReader {
                 columns,
                 "models/" + dirName + "/metadata.yml",
                 refSql,
-                refSqlPath);
+                refSqlPath,
+                primaryKey,
+                tableRole(root));
     }
 
     private WorkspaceRelation parseRelation(Map<?, ?> rel) {
@@ -413,7 +422,8 @@ public class MdlWorkspaceReader {
                 text(rel.get("join_type"), ""),
                 condition,
                 sourceColumns,
-                targetColumns);
+                targetColumns,
+                propertiesDescription(asMap(rel)));
     }
 
     private static List<WorkspaceMember> members(Object value) {
@@ -465,6 +475,11 @@ public class MdlWorkspaceReader {
                 .map(DatasetEntity::getName)
                 .filter(n -> n != null && !n.isBlank())
                 .orElse(fallback);
+    }
+
+    private static String tableRole(Map<String, Object> owner) {
+        Map<String, Object> props = asMap(owner.get("properties"));
+        return props == null ? null : text(props.get("tableRole"), null);
     }
 
     private static String propertiesDescription(Map<String, Object> owner) {

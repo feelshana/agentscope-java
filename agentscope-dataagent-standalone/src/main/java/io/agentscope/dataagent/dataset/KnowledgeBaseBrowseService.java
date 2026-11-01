@@ -49,6 +49,36 @@ public class KnowledgeBaseBrowseService {
             List<java.util.Map<String, Object>> relationships,
             List<Knowledge> knowledge) {}
 
+    /** Published model counts for the modeling list; {@code unrelated} models have no relation. */
+    public record Summary(String groupId, int models, int relations, int unrelated) {}
+
+    /** One request for every knowledge base the actor can see, never another owner's. */
+    public List<Summary> summaries(String actor) throws java.io.IOException {
+        var result = new java.util.ArrayList<Summary>();
+        for (var group : access.visible(actor, null)) {
+            var file = wren.groupRoot(group.getId()).resolve("published/target/mdl.json");
+            if (group.getMdlVersion() <= 0 || !Files.isRegularFile(file)) continue;
+            JsonNode mdl = json.readTree(Files.readString(file));
+            var related = new java.util.HashSet<String>();
+            for (JsonNode relation : mdl.path("relationships"))
+                for (JsonNode model : relation.path("models")) related.add(model.asText());
+            int unrelated = 0;
+            for (JsonNode model : mdl.path("models"))
+                if (!related.contains(model.path("name").asText())) unrelated++;
+            result.add(
+                    new Summary(
+                            group.getId(),
+                            mdl.path("models").size(),
+                            mdl.path("relationships").size(),
+                            unrelated));
+        }
+        var allowed =
+                access.visible(actor, null).stream()
+                        .map(io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity::getId)
+                        .collect(java.util.stream.Collectors.toSet());
+        return result.stream().filter(s -> allowed.contains(s.groupId())).toList();
+    }
+
     public Browse browse(String actor, String groupId) throws java.io.IOException {
         var group = access.requireQuery(actor, groupId);
         var tables =
@@ -71,7 +101,8 @@ public class KnowledgeBaseBrowseService {
         int remaining = 500_000;
         if (group.getMdlVersion() > 0 && Files.isDirectory(published)) {
             var realRoot = published.toRealPath();
-            for (String section : List.of("rules", "glossary", "metrics", "caveats")) {
+            for (String section :
+                    List.of("rules", "glossary", "metrics", "caveats", "questions", "sql")) {
                 var directory = published.resolve("knowledge").resolve(section);
                 if (!Files.isDirectory(directory) || Files.isSymbolicLink(directory)) continue;
                 try (var paths = Files.walk(directory)) {
@@ -101,10 +132,7 @@ public class KnowledgeBaseBrowseService {
                 group.isPublicQuery(),
                 tables,
                 plain(projectModels(mdl.path("models"))),
-                plain(
-                        project(
-                                mdl.path("relationships"),
-                                List.of("name", "models", "joinType", "condition"))),
+                plain(projectRelationships(mdl.path("relationships"))),
                 knowledge);
     }
 
@@ -120,19 +148,46 @@ public class KnowledgeBaseBrowseService {
         if (!values.isArray()) return result;
         for (JsonNode model : values) {
             var item = json.createObjectNode();
-            for (String field : List.of("name", "description", "primaryKey"))
+            for (String field : List.of("name", "primaryKey"))
                 if (model.has(field)) item.set(field, model.get(field));
-            item.set(
-                    "columns",
-                    project(
-                            model.path("columns"),
-                            List.of("name", "type", "description", "expression", "isCalculated")));
+            described(model, item);
+            if (model.path("properties").hasNonNull("tableRole"))
+                item.set("tableRole", model.path("properties").get("tableRole"));
+            item.put("derived", model.hasNonNull("refSql"));
+            var columns = json.createArrayNode();
+            for (JsonNode column : model.path("columns")) {
+                var projected = json.createObjectNode();
+                for (String field :
+                        List.of("name", "type", "expression", "isCalculated", "isPrimaryKey"))
+                    if (column.has(field)) projected.set(field, column.get(field));
+                described(column, projected);
+                columns.add(projected);
+            }
+            item.set("columns", columns);
             result.add(item);
         }
         return result;
     }
 
-    private JsonNode project(JsonNode values, List<String> fields) {
+    private JsonNode projectRelationships(JsonNode values) {
+        var result = project(values, List.of("name", "models", "joinType", "condition"));
+        for (int i = 0; i < result.size(); i++)
+            described(
+                    values.get(i), (com.fasterxml.jackson.databind.node.ObjectNode) result.get(i));
+        return result;
+    }
+
+    /** Descriptions live under properties, where the other keys stay private to the platform. */
+    private static void described(
+            JsonNode source, com.fasterxml.jackson.databind.node.ObjectNode target) {
+        if (source.path("properties").hasNonNull("description"))
+            target.set("description", source.path("properties").get("description"));
+        else if (source.hasNonNull("description"))
+            target.set("description", source.get("description"));
+    }
+
+    private com.fasterxml.jackson.databind.node.ArrayNode project(
+            JsonNode values, List<String> fields) {
         var result = json.createArrayNode();
         if (!values.isArray()) return result;
         for (JsonNode value : values) {

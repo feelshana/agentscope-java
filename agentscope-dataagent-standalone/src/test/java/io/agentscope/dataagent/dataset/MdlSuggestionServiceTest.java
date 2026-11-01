@@ -701,6 +701,8 @@ class MdlSuggestionServiceTest {
                             workspaceColumns(d.getId()),
                             "models/" + d.getName() + "/metadata.yml",
                             null,
+                            null,
+                            null,
                             null));
         }
         return new MdlWorkspaceReader.Snapshot(
@@ -716,7 +718,7 @@ class MdlSuggestionServiceTest {
         for (ColumnSchema c : colsOf.getOrDefault(datasetId, List.of())) {
             out.add(
                     new MdlWorkspaceReader.WorkspaceColumn(
-                            c.name(), c.sqlType(), c.description(), null, false, null));
+                            c.name(), c.sqlType(), c.description(), null, false, null, false));
         }
         return out;
     }

@@ -7,6 +7,8 @@ import { listGroups } from '../../api/datasets';
 import type { DatasetGroup } from '../../api/datasets';
 import { getModelingWorkflow } from '../../api/modelingWorkflow';
 import { getDraftReview, listConfirmations } from '../../api/draftReview';
+import { listModelSummaries } from '../../api/semanticModeling';
+import type { ModelSummary } from '../../api/semanticModeling';
 
 type Row = {
   group: DatasetGroup;
@@ -15,6 +17,7 @@ type Row = {
   confirmations: number;
   running: boolean;
   failed: boolean;
+  summary: ModelSummary | undefined;
 };
 
 /** The one thing each knowledge base needs next, in the modeler's words. */
@@ -27,8 +30,8 @@ function status(row: Row): { label: string; tone: 'warn' | 'live' | 'ok' | 'mute
 }
 
 /**
- * spec092: standalone entry to semantic modeling. Lists the knowledge bases the user manages,
- * newest first, each with the next thing it needs.
+ * spec092: standalone entry to semantic modeling, newest first, each with the next thing it needs.
+ * spec106: QUERY users come here too, for the published models; the counts are the published ones.
  */
 export default function ModelingHubPage() {
   const navigate = useNavigate();
@@ -40,8 +43,14 @@ export default function ModelingHubPage() {
     const controller = new AbortController();
     void (async () => {
       try {
-        const groups = (await listGroups(controller.signal, true)).filter(g => !g.deletionPending);
+        const [groups, summaries] = await Promise.all([
+          listGroups(controller.signal).then(list => list.filter(g => !g.deletionPending)),
+          listModelSummaries(controller.signal).catch(() => [] as ModelSummary[]),
+        ]);
+        const counted = new Map(summaries.map(s => [s.groupId, s]));
         const loaded = await Promise.all(groups.map(async group => {
+          const summary = counted.get(group.id);
+          if (!group.canManage) return { group, published: group.publishedVersion || null, changes: 0, running: false, confirmations: 0, failed: false, summary };
           const [workflow, draft, questions] = await Promise.allSettled([
             getModelingWorkflow(group.id), getDraftReview(group.id), listConfirmations(group.id),
           ]);
@@ -52,6 +61,7 @@ export default function ModelingHubPage() {
             running: draft.status === 'fulfilled' && draft.value.assistantRunning,
             confirmations: questions.status === 'fulfilled' ? questions.value.length : 0,
             failed: workflow.status === 'rejected',
+            summary,
           };
         }));
         if (controller.signal.aborted) return;
@@ -82,11 +92,11 @@ export default function ModelingHubPage() {
       </div>
       {rows === null && !error && <div className="kw-empty">加载中…</div>}
       {rows?.length === 0 && <div className="kw-empty" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-        <span>你还没有可以管理的知识库。先创建知识库并上传数据，或新建数据源关联外部表。</span>
+        <span>还没有知识库。先创建知识库并上传数据，或新建数据源关联外部表。</span>
         <div style={{ width: '100%', maxWidth: 640 }}><DataSourceChoices compact /></div>
       </div>}
       {shown && shown.length > 0 && <div className="kw-tablebox"><div className="kw-table-scroll"><table className="kw-table mh-table">
-        <thead><tr><th>知识库</th><th>当前状态</th><th className="numeric">数据集</th><th>创建时间</th><th className="end">操作</th></tr></thead>
+        <thead><tr><th>知识库</th><th>当前状态</th><th className="numeric">模型</th><th className="numeric">关系</th><th>需要关注</th><th>创建时间</th><th className="end">操作</th></tr></thead>
         <tbody>{shown.map(row => {
           const s = status(row);
           return <tr key={row.group.id} tabIndex={0} aria-label={`打开${row.group.name}的语义建模`} onClick={() => open(row)}
@@ -96,9 +106,11 @@ export default function ModelingHubPage() {
                 <small>{row.group.description || '暂无说明'}</small></span></div></td>
             <td>{row.failed ? <span className="mh-status mh-muted">状态读取失败</span> : <span className={`mh-status mh-${s.tone}`}>{s.label}</span>}
               {row.published && (row.changes > 0 || row.confirmations > 0) && <span className="mh-sub">线上 v{row.published}</span>}</td>
-            <td className="numeric">{row.group.datasetCount}</td>
+            <td className="numeric">{row.summary?.models ?? '—'}</td>
+            <td className="numeric">{row.summary?.relations ?? '—'}</td>
+            <td>{row.summary?.unrelated ? <span className="mh-status mh-warn">{row.summary.unrelated} 个模型未关联</span> : '—'}</td>
             <td>{row.group.createdAt ? new Date(row.group.createdAt).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
-            <td className="end"><button className="da-btn da-btn-sm" onClick={e => { e.stopPropagation(); open(row); }}>进入建模</button></td>
+            <td className="end"><button className="da-btn da-btn-sm" onClick={e => { e.stopPropagation(); open(row); }}>{row.group.canManage ? '进入建模' : '查看模型'}</button></td>
           </tr>;
         })}</tbody></table></div></div>}
       {shown && rows && rows.length > 0 && shown.length === 0 && <div className="kw-empty">没有匹配的知识库</div>}
