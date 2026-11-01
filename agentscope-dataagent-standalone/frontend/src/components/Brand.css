@@ -1,0 +1,9 @@
+.brand { display: inline-flex; align-items: center; gap: 9px; color: #252936; white-space: nowrap; }
+.brand-mark { display: block; width: 30px; height: 36px; flex: 0 0 auto; object-fit: contain; }
+.brand-wordmark { font-family: var(--da-font); font-size: 16px; font-weight: 650; letter-spacing: -.5px; line-height: 1.2; }
+.brand-wordmark-latin { font-weight: 680; letter-spacing: -.6px; }
+.brand.da-agent-brand { gap: 8px; }
+.da-agent-brand .brand-mark { width: 24px; height: 29px; }
+.da-agent-brand .brand-wordmark { font-size: 14px; font-weight: 600; }
+.brand.brand-inverse { color: #fff; }
+.brand-inverse .brand-mark { filter: brightness(1.2); }

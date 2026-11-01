@@ -12,12 +12,12 @@ export default function CopyAnswerButton({ text }: { text: string }) {
     return () => clearTimeout(timer);
   }, [status]);
   return <div className="da-answer-copy">
-    <button type="button" className="da-btn da-btn-ghost da-btn-sm" disabled={busy || !text.trim()} onClick={async () => {
+    <button type="button" className="answer-action-button" aria-label={status === 'copied' ? '已复制' : '复制回答'} data-tooltip={status === 'copied' ? '已复制' : '复制回答'} disabled={busy || !text.trim()} onClick={async () => {
       setBusy(true);
       try { await navigator.clipboard.writeText(text); setStatus('copied'); }
       catch { setStatus('failed'); }
       finally { setBusy(false); }
-    }}><Icon name={status === 'copied' ? 'check' : 'copy'} size="sm" />{status === 'copied' ? '已复制' : '复制回答'}</button>
-    <span role="status" aria-live="polite">{status === 'failed' ? '浏览器未允许复制，请选择回答文字手动复制。' : status === 'copied' ? '回答已复制到剪贴板' : ''}</span>
+    }}><Icon name={status === 'copied' ? 'check' : 'copy'} /></button>
+    <span className={status === 'failed' ? 'da-copy-error' : 'da-visually-hidden'} role="status" aria-live="polite">{status === 'failed' ? '浏览器未允许复制，请选择回答文字手动复制。' : status === 'copied' ? '回答已复制到剪贴板' : ''}</span>
   </div>;
 }

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { getEntryOptions, login, saveToken } from '../api/auth';
 import BiEntryPage from './BiEntryPage';
+import Brand from '../components/Brand';
 
 /**
  * Split-brand login: a deep-blue gradient brand pane (product name, tagline, capability bullets)
@@ -35,9 +36,7 @@ export default function LoginPage() {
     <div style={{ minHeight: '100vh', display: 'flex', background: 'var(--da-app-bg)' }}>
       <div className="da-brandpane">
         <div className="da-enter" style={{ position: 'relative', zIndex: 1 }}>
-          <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.06em', opacity: 0.8 }}>
-            红海DataAgent
-          </span>
+          <Brand className="brand-inverse" />
           <h1
             style={{
               margin: '12px 0 0',

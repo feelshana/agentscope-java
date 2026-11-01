@@ -35,6 +35,7 @@ import { getToken } from '../../api/auth';
 import { useQueryReadiness } from '../../components/useQueryReadiness';
 import { fetchSample, useOnboarding } from '../../api/onboarding';
 import { tourActive, tourSignal } from '../../state/guidedTour';
+import './DatasetGroupPage.css';
 
 type View = 'files' | 'modeling';
 
@@ -367,6 +368,17 @@ export default function DatasetGroupPage() {
   }
 
   const fileCount = detail?.datasets.length ?? 0;
+  const publishedVersion = workflow?.publishedVersion ?? detail?.publishedVersion ?? 0;
+  const queryAvailable = workflow?.queryAvailable ?? publishedVersion > 0;
+  const visibleDatasets = detail?.datasets.filter(d => `${d.name} ${d.sourceFileName ?? ''}`.toLowerCase().includes(query.trim().toLowerCase())) ?? [];
+  const hasUncountedExternalTables = detail?.datasets.some(d => d.origin === 'datasource' && d.rowCount == null);
+
+  function openGroupEditor() {
+    setGroupName(detail?.group.name ?? '');
+    setGroupDescription(detail?.group.description ?? '');
+    setError(null);
+    setEditingGroup(true);
+  }
 
   async function saveGroupInfo() {
     if (!/^[一-龥A-Za-z0-9_-]{1,100}$/.test(groupName.trim()) || groupDescription.length > 1000) { setError('名称需为 1-100 个中文、字母、数字、- 或 _；说明不能超过 1000 字'); return; }
@@ -377,24 +389,22 @@ export default function DatasetGroupPage() {
   }
 
   return (
-    <div className="kw-page">
+    <div className="kw-page dataset-workspace">
       {canManage && <FactQueryWindowSettings key={groupId} groupId={groupId} hideButton openSignal={windowSignal} />}
       <KnowledgeBreadcrumb items={[{ label: '返回对话', to: '/chat' }, { label: '知识库', to: '/configure/datasets' }, { label: detail?.group.name ?? '加载中…' }]} />
       <div className="kw-scroll"><div className="kw-content">
-        <div className="kw-pagehead">
-          <div className="kw-heading"><div className="kw-eyebrow"><Icon name="book" size="sm" />知识库</div><h1>{detail?.group.name ?? '知识库'}</h1><p>{detail?.group.description || '暂无说明'}</p>
-            <div className="kw-infochips"><span><Icon name="table" size="sm" />{fileCount} 个数据集</span>{detail?.group.createdAt && <span><Icon name="clock" size="sm" />创建于 {new Date(detail.group.createdAt).toLocaleDateString('zh-CN')}</span>}</div>
-          </div>
-          <div className="kw-actions">{canManage && <><button className="da-btn" disabled={!detail} onClick={() => setMembersOpen(true)}><Icon name="user" size="sm" />成员与权限</button><button className="da-btn da-btn-ghost" disabled={!detail || busy} onClick={() => { setGroupName(detail?.group.name ?? ''); setGroupDescription(detail?.group.description ?? ''); setError(null); setEditingGroup(true); }}><Icon name="edit" size="sm" />编辑信息</button><button className="da-btn" disabled={!detail} onClick={() => setWindowSignal(n => n + 1)}><Icon name="clock" size="sm" />事实表时间范围</button></>}<button className="da-btn da-btn-primary" disabled={!detail || !!preparing} title={preparing ? `问数准备中（${preparing}），约半分钟后可用` : undefined} onClick={() => navigate(`/chat?groups=${encodeURIComponent(groupId)}`)}><Icon name="chat" size="sm" />{preparing ? '问数准备中…' : '基于此库提问'}</button></div>
+        <div className="dw-header">
+          <div className="dw-identity"><span className="dw-book" aria-hidden="true"><Icon name="book" variant="solid" /></span><div className="dw-heading"><h1>{detail?.group.name ?? '知识库'}</h1>
+            <div className="dw-meta"><span>{fileCount} 个数据集</span>{detail?.group.createdAt && <><span aria-hidden="true">·</span><span>创建于 {new Date(detail.group.createdAt).toLocaleDateString('zh-CN')}</span></>}{canManage && !detail?.group.description && <button className="dw-text" disabled={!detail || busy} onClick={openGroupEditor}>添加业务说明</button>}</div>
+            {detail?.group.description && <p>{detail.group.description}</p>}
+          </div></div>
+          <div className="dw-header-actions">{canManage && <><button className="da-btn" disabled={!detail} onClick={() => setMembersOpen(true)}><Icon name="user" size="sm" />成员与权限</button><WorkspaceMenu label="知识库设置" items={[{ label: '编辑信息', icon: 'edit', disabled: busy, onClick: openGroupEditor }, { label: '事实表时间范围', icon: 'clock', onClick: () => setWindowSignal(n => n + 1) }]} /></>}<button className="da-btn da-btn-primary" disabled={!detail || !!preparing} title={preparing ? `问数准备中（${preparing}），约半分钟后可用` : undefined} onClick={() => navigate(`/chat?groups=${encodeURIComponent(groupId)}`)}><Icon name="chat" size="sm" />{preparing ? '问数准备中…' : '基于此库提问'}</button></div>
         </div>
         {error && <div className="kw-alert" role="alert">{error}</div>}
-        {(workflow || detail) && fileCount > 0 && <div className="kw-progress" style={{ display: 'flex', alignItems: 'center', gap: 16, justifyContent: 'space-between', flexWrap: 'wrap' }}>
-          <span className="kw-progress-text">{(workflow?.queryAvailable ?? ((detail?.publishedVersion ?? 0) > 0))
-            ? preparing
-              ? `已发布 v${workflow?.publishedVersion ?? detail?.publishedVersion ?? 0}，问数准备中（${preparing}），约半分钟后可以问数。`
-              : `基础模型已发布 v${workflow?.publishedVersion ?? detail?.publishedVersion ?? 0}，可以问数；业务口径可继续完善。`
-            : '采样完成后请进行语义建模并发布，之后才能问数。'}</span>
-          {canManage && <button className="da-btn da-btn-sm" onClick={() => navigate(`/configure/modeling/${groupId}`)}>{workflow?.queryAvailable ? '完善业务模型' : '查看建模进度'}</button>}
+        {(workflow || detail) && fileCount > 0 && <div className={`dw-model-status${queryAvailable && !preparing ? ' is-ready' : ''}`}>
+          <span className="dw-status-icon" aria-hidden="true"><Icon name={queryAvailable && !preparing ? 'check' : 'clock'} size="sm" /></span>
+          <div className="dw-status-copy"><strong>{queryAvailable ? `已发布 v${publishedVersion}` : '模型待发布'}</strong><span>{queryAvailable ? preparing ? `问数准备中（${preparing}），约半分钟后可以问数。` : '可直接提问，业务口径可继续完善。' : '采样完成后请进行语义建模并发布，之后才能问数。'}</span></div>
+          {canManage && <button className="dw-text dw-model-link" onClick={() => navigate(`/configure/modeling/${groupId}`)}>{queryAvailable ? '完善业务模型' : '查看建模进度'}<Icon name="chevron" size="sm" /></button>}
         </div>}
         <div className="kw-tabs" role="tablist" aria-label="知识库内容">{NAV_ITEMS.filter(n => canManage || n.key === 'files').map(n => <button key={n.key} role="tab" aria-selected={view === n.key} className={view === n.key ? 'active' : ''} onClick={() => n.key === 'modeling' ? navigate(`/configure/modeling/${groupId}`) : setView(n.key)}>{n.label}{n.key === 'files' && <span className="kw-badge">{fileCount}</span>}</button>)}</div>
         <input ref={fileRef} type="file" multiple accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={e => { if (e.target.files?.length) uploadFiles(e.target.files); e.target.value = ''; }} />
@@ -472,7 +482,7 @@ export default function DatasetGroupPage() {
           </details>;
         })()}
         {view === 'files' && <>
-          {fileCount > 0 && <div className="kw-toolbar"><label className="kw-search"><Icon name="search" size="sm" /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="搜索数据集" aria-label="搜索数据集" /></label><span className="kw-spacer" />{canManage && <><button className="da-btn" disabled={busy || !detail} onClick={openAssociate}><Icon name="database" size="sm" />关联数据源</button><button className="da-btn" disabled={busy || !detail} onClick={openUpload}><Icon name="upload" size="sm" />上传文件</button></>}</div>}
+          {fileCount > 0 && <div className="kw-toolbar dw-toolbar"><label className="kw-search"><Icon name="search" size="sm" /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="搜索数据集" aria-label="搜索数据集" /></label><span className="kw-spacer" />{canManage && <div className="dw-data-actions"><button className="da-btn" disabled={busy || !detail} onClick={openAssociate}><Icon name="database" size="sm" />关联数据源</button><button className="da-btn dw-upload" disabled={busy || !detail} onClick={openUpload}><Icon name="upload" size="sm" />上传文件</button></div>}</div>}
           {!detail && !error && <div className="kw-empty">加载知识库…</div>}
           {detail && fileCount === 0 && (canManage ? <div className="kw-source-grid" data-tour="kb-source">
             <button type="button" className="kw-source is-first" disabled={busy} onClick={openUpload}>
@@ -486,14 +496,14 @@ export default function DatasetGroupPage() {
               <span>连接数据库中的表{onboarding?.demoSource ? '，内置示例库可直接选择' : ''}</span>
             </button>
           </div> : <div className="kw-empty"><EmptyIllustration variant="table" caption="这个知识库还没有数据" /></div>)}
-          {detail && fileCount > 0 && <div className="kw-tablebox"><div className="kw-table-scroll"><table className="kw-table"><thead><tr><th>数据集名称</th><th>来源</th><th className="numeric">行数</th><th className="numeric">字段数</th><th>来源文件</th><th className="end">操作</th></tr></thead><tbody>
-            {detail.datasets.filter(d => `${d.name} ${d.sourceFileName ?? ''}`.toLowerCase().includes(query.trim().toLowerCase())).map(d => <tr key={d.id}>
-              <td><button className="kw-namecell" onClick={() => navigate(`/configure/datasets/${groupId}/table/${d.id}`)}><Icon name="table" size="sm" />{d.name}{(d.currentVersion ?? 1) > 1 && <span className="kw-badge">v{d.currentVersion}</span>}</button></td>
-              <td><span className="kw-source">{d.origin === 'datasource' ? '数据源关联' : d.origin === 'derived' ? '派生数据' : '文件上传'}</span></td><td className="numeric">{(d.rowCount?.toLocaleString() ?? '未统计')}</td><td className="numeric">{d.columns.length}</td><td title={d.sourceFileName ?? ''}>{d.sourceFileName ?? '—'}</td>
-              <td className="end"><WorkspaceMenu label={`${d.name}的更多操作`} items={[{ label: '查看数据集', icon: 'table', onClick: () => navigate(`/configure/datasets/${groupId}/table/${d.id}`) }, ...(canManage ? [{ label: '删除数据集' as const, icon: 'trash' as const, danger: true, disabled: busy, onClick: () => void handleDeleteDataset(d.id) }] : [])]} /></td>
+          {detail && fileCount > 0 && <div className="kw-tablebox dw-tablebox"><div className="kw-table-scroll"><table className="kw-table dw-table" aria-label="知识库数据集"><thead><tr><th scope="col">数据集</th><th scope="col">数据来源</th><th scope="col" className="numeric">行数</th><th scope="col" className="numeric">字段数</th><th scope="col" className="end">操作</th></tr></thead><tbody>
+            {visibleDatasets.map(d => <tr key={d.id}>
+              <td><button className="dw-name" title={d.name} onClick={() => navigate(`/configure/datasets/${groupId}/table/${d.id}`)}><span className="dw-table-icon" aria-hidden="true"><Icon name="table" size="sm" /></span><span className="dw-name-text">{d.name}</span>{(d.currentVersion ?? 1) > 1 && <span className="kw-badge">v{d.currentVersion}</span>}</button></td>
+              <td><div className="dw-source"><Icon name={d.origin === 'datasource' ? 'database' : 'file'} size="sm" /><div><span>{d.origin === 'datasource' ? '数据库关联' : d.origin === 'derived' ? '派生数据' : '文件上传'}</span><small title={d.sourceFileName ?? ''}>{d.sourceFileName ?? '—'}</small></div></div></td><td className={`numeric${d.rowCount == null ? ' dw-unknown' : ''}`}>{d.rowCount?.toLocaleString() ?? '未统计'}</td><td className="numeric">{d.columns.length}</td>
+              <td className="end"><div className="dw-row-actions"><button className="dw-text" aria-label={`查看 ${d.name} 的数据`} onClick={() => navigate(`/configure/datasets/${groupId}/table/${d.id}`)}>查看数据<Icon name="back" size="sm" className="dw-forward" /></button><WorkspaceMenu label={`${d.name}的更多操作`} items={[{ label: '查看数据集', icon: 'table', onClick: () => navigate(`/configure/datasets/${groupId}/table/${d.id}`) }, ...(canManage ? [{ label: '删除数据集' as const, icon: 'trash' as const, danger: true, disabled: busy, onClick: () => void handleDeleteDataset(d.id) }] : [])]} /></div></td>
             </tr>)}
-            {detail.datasets.every(d => !`${d.name} ${d.sourceFileName ?? ''}`.toLowerCase().includes(query.trim().toLowerCase())) && <tr><td colSpan={6} className="kw-empty">没有匹配的数据集</td></tr>}
-          </tbody></table></div><div className="kw-tablebottom"><span>共 {fileCount} 个数据集</span><span>点击名称查看数据与字段</span></div></div>}
+            {visibleDatasets.length === 0 && <tr><td colSpan={5} className="kw-empty">没有匹配的数据集</td></tr>}
+          </tbody></table></div><div className="kw-tablebottom"><span>{query.trim() ? `找到 ${visibleDatasets.length} 个，共 ${fileCount} 个数据集` : `共 ${fileCount} 个数据集`}</span><span className="dw-table-note"><Icon name="info" size="sm" />{hasUncountedExternalTables ? '外部数据表暂未统计总行数' : '点击名称查看数据与字段'}</span></div></div>}
         </>}
         {view === 'modeling' && <Navigate to={`/configure/modeling/${groupId}`} replace />}
       </div></div>

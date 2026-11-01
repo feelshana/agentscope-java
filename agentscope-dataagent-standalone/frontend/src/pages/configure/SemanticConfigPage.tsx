@@ -8,19 +8,12 @@ import type { BusinessTerm, BusinessTerms, TermChange, TermStatus } from '../../
 import { DatasetGroup, listGroups } from '../../api/datasets';
 import { getModelingWorkflow } from '../../api/modelingWorkflow';
 import type { ModelingWorkflow } from '../../api/modelingWorkflow';
+import './SemanticConfigPage.css';
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-const panelStyle: React.CSSProperties = {
-  flex: 1, minHeight: 0, overflow: 'auto', padding: '34px 36px 48px', maxWidth: 1480, width: '100%', boxSizing: 'border-box', margin: '0 auto',
-};
-const linkBtn: React.CSSProperties = { background: 'transparent', border: 'none', color: 'var(--da-primary)', cursor: 'pointer', fontSize: 13, padding: 0 };
-
-const STATUS: Record<TermStatus, { label: string; color: string; background: string }> = {
-  PUBLISHED: { label: '已发布', color: 'var(--da-success)', background: 'rgba(22,163,74,.10)' },
-  ADDED: { label: '新增未发布', color: 'var(--da-primary)', background: 'rgba(37,99,235,.10)' },
-  MODIFIED: { label: '修改未发布', color: 'var(--da-warn)', background: 'rgba(234,179,8,.14)' },
-  DELETED: { label: '删除未发布', color: 'var(--da-danger)', background: 'rgba(225,29,72,.08)' },
+const STATUS: Record<TermStatus, string> = {
+  PUBLISHED: '已发布', ADDED: '新增未发布', MODIFIED: '修改未发布', DELETED: '删除未发布',
 };
 
 /** Editing state of one row: the structured fields, or the raw text of a free-form entry. */
@@ -40,6 +33,7 @@ export default function SemanticConfigPage() {
   const [workflow, setWorkflow] = useState<ModelingWorkflow | null>(null);
   const [editing, setEditing] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -56,6 +50,7 @@ export default function SemanticConfigPage() {
     const controller = new AbortController();
     request.current = controller;
     if (!groupId) { setData(null); return; }
+    setLoading(true);
     try {
       const terms = await listBusinessTerms(groupId, controller.signal);
       if (controller.signal.aborted) return;
@@ -63,6 +58,7 @@ export default function SemanticConfigPage() {
       if (terms.editable) getModelingWorkflow(groupId).then(w => { if (!controller.signal.aborted) setWorkflow(w); }).catch(() => undefined);
       else setWorkflow(null);
     } catch (e) { if (!controller.signal.aborted) setError(message(e)); }
+    finally { if (!controller.signal.aborted) setLoading(false); }
   }, [groupId]);
   useEffect(() => { void refresh(); return () => request.current?.abort(); }, [refresh]);
   // Publishing from the draft bar, or a modeling turn elsewhere, changes what is online.
@@ -96,7 +92,7 @@ export default function SemanticConfigPage() {
   const pending = rows.filter(r => r.status !== 'PUBLISHED').length;
   const canSave = !!editing && !busy && (editing.free ? editing.text.trim() !== '' : editing.term.trim() !== '' && editing.explanation.trim() !== '');
 
-  const editor = editing && <tr>
+  const editor = editing && <tr className="terms-editor">
     {editing.free ? <td colSpan={4}>
       <textarea className="da-input" rows={3} aria-label="条目内容" value={editing.text} onChange={e => setEditing({ ...editing, text: e.target.value })} />
       <div className="da-small">该条目不是"术语 = 解释"的格式，按原文编辑。</div>
@@ -106,74 +102,79 @@ export default function SemanticConfigPage() {
       <td><input className="da-input" aria-label="同义词" placeholder="多个用顿号或逗号分隔" value={editing.synonyms} onChange={e => setEditing({ ...editing, synonyms: e.target.value })} /></td>
       <td />
     </>}
-    <td><span style={{ display: 'inline-flex', gap: 14 }}>
-      <button style={{ ...linkBtn, opacity: canSave ? 1 : 0.5 }} disabled={!canSave} onClick={save}>{busy ? '保存中…' : '保存'}</button>
-      <button style={linkBtn} onClick={() => setEditing(null)}>取消</button>
+    <td><span className="terms-row-actions">
+      <button className="terms-text-button" disabled={!canSave} onClick={save}>{busy ? '保存中…' : '保存'}</button>
+      <button className="terms-text-button" disabled={busy} onClick={() => setEditing(null)}>取消</button>
     </span></td>
   </tr>;
 
   return (
-    <div className="kw-page kw-secondary-page">
-      <KnowledgeBreadcrumb items={[{ label: '返回对话', to: '/chat' }, { label: '业务术语' }]} />
-      <div style={panelStyle}>
-        <div className="kw-pagehead"><div className="kw-heading"><h1>业务术语</h1>
-          <p>统一业务名词与常用说法。术语保存在知识库的语义模型中，修改先进入草稿，发布后问数生效。</p></div></div>
-        {error && <div role="alert" style={{ color: 'var(--da-danger)', background: 'rgba(225,29,72,.06)', border: '1px solid rgba(225,29,72,.25)', borderRadius: 8, padding: '8px 12px', fontSize: '0.85rem', marginBottom: 12 }}>{error}</div>}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-          <span className="da-small" style={{ color: 'var(--da-text-3)', fontWeight: 600 }}>知识库</span>
-          <select className="da-input" style={{ width: 240, padding: '4px 8px' }} value={groupId} aria-label="知识库"
-            onChange={e => { setGroupId(e.target.value); setEditing(null); setData(null); }}>
+    <div className="kw-page kw-secondary-page terms-page">
+      <KnowledgeBreadcrumb items={[{ label: '对话', to: '/chat' }, { label: '业务术语' }]} />
+      <div className="terms-scroll"><div className="terms-content">
+        <header className="terms-pagehead"><div className="kw-heading"><h1>业务术语</h1>
+          <p>让同一个业务概念，始终对应同一种含义。</p></div>
+          <div className="terms-head-actions">
+            <button className="da-btn terms-refresh" title="刷新术语" aria-label="刷新术语" onClick={() => void refresh()} disabled={busy || loading}><Icon name="refresh" /></button>
+            {editable && <button className="da-btn da-btn-primary" disabled={busy || !!editing}
+              onClick={() => setEditing({ ...emptyDraft })}><Icon name="plus" size="sm" />添加术语</button>}
+          </div>
+        </header>
+        {error && <div role="alert" className="terms-error">{error}</div>}
+        <div className="terms-context">
+          <div className="terms-knowledge"><Icon name="book" />
+          <select value={groupId} aria-label="知识库" disabled={busy}
+            onChange={e => { setGroupId(e.target.value); setEditing(null); setData(null); setWorkflow(null); }}>
             {groups.length === 0 && <option value="">（暂无知识库）</option>}
             {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
           </select>
-          {data && <span className="da-small">线上版本 {data.publishedVersion > 0 ? `v${data.publishedVersion}` : '未发布'}{editable && pending > 0 ? ` · ${pending} 项修改未发布` : ''}</span>}
-          {data && !editable && <span className="da-badge">只读</span>}
-          <span style={{ flex: 1 }} />
-          {editable && <button className="da-btn da-btn-primary" disabled={busy || !!editing}
-            onClick={() => setEditing({ ...emptyDraft })}>添加术语</button>}
-          <button className="da-btn da-btn-ghost da-btn-sm" title="刷新" onClick={() => void refresh()} disabled={busy}><Icon name="refresh" size="sm" /></button>
+          </div>
+          {data && <span className={`terms-context-status${data.publishedVersion > 0 ? ' is-published' : ''}`}>{data.publishedVersion > 0 ? `线上 v${data.publishedVersion}` : '尚未发布'}</span>}
+          {editable && pending > 0 && <span className="terms-context-status is-pending">{pending} 项修改待发布</span>}
+          {data && !editable && <span className="terms-readonly">只读</span>}
+          <span className="terms-count" role="status">{loading ? '加载中…' : `共 ${rows.length} 条术语`}</span>
         </div>
-        {data && !editable && <div className="da-small" style={{ marginBottom: 10 }}>你对该知识库只有查询权限，只能查看已发布的术语。</div>}
-        <div className="kw-tablebox"><div className="kw-table-scroll"><table className="kw-table kw-terms-table">
+        {data && !editable && <p className="terms-permission">你对该知识库只有查询权限，只能查看已发布的术语。</p>}
+        <div className="terms-table-scroll"><table className="terms-table" aria-label="业务术语" aria-busy={loading}>
           <thead><tr>
-            <th style={{ width: '18%' }}>业务术语</th><th style={{ width: '40%' }}>业务定义</th><th style={{ width: '18%' }}>同义词</th>
-            <th style={{ width: '10%' }}>状态</th><th style={{ width: '14%' }}>{editable ? '操作' : ''}</th>
+            <th style={{ width: '18%' }}>业务术语</th><th style={{ width: '36%' }}>业务定义</th><th style={{ width: '18%' }}>同义词</th>
+            <th style={{ width: '15%' }}>状态</th><th style={{ width: '13%' }}>{editable ? '操作' : ''}</th>
           </tr></thead>
           <tbody>
             {editing && !editing.original && editor}
             {rows.map(t => editing?.original === t.text ? <React.Fragment key={t.text}>{editor}</React.Fragment> : (
-              <tr key={`${t.status}:${t.text}`} style={t.status === 'DELETED' ? { opacity: 0.6 } : undefined}>
-                <td style={{ fontWeight: 500, color: 'var(--da-text)', textDecoration: t.status === 'DELETED' ? 'line-through' : undefined }}>
+              <tr key={`${t.status}:${t.text}`} className={`terms-row is-${t.status.toLowerCase()}`}>
+                <td className="terms-name">
                   {t.structured ? t.term : <span className="da-small">（自由格式）</span>}</td>
-                <td style={{ whiteSpace: 'pre-wrap' }}>
+                <td className="terms-definition">
                   {t.structured ? t.explanation : t.text}
-                  {t.status === 'MODIFIED' && t.publishedText && <div className="da-small" style={{ marginTop: 4 }}>线上：{t.publishedText}</div>}
+                  {t.status === 'MODIFIED' && t.publishedText && <div className="terms-previous">线上：{t.publishedText}</div>}
                 </td>
-                <td><span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 4 }}>
-                  {t.synonyms.length ? t.synonyms.map(s => <span key={s} className="da-badge">{s}</span>) : '-'}</span></td>
-                <td><span style={{ fontSize: 12, padding: '1px 6px', borderRadius: 4, whiteSpace: 'nowrap', color: STATUS[t.status].color, background: STATUS[t.status].background }}>{STATUS[t.status].label}</span></td>
-                <td>{editable && <span style={{ display: 'inline-flex', gap: 14 }}>
+                <td><span className="terms-synonyms">
+                  {t.synonyms.length ? t.synonyms.map(s => <span key={s}>{s}</span>) : <span className="terms-no-synonym">—</span>}</span></td>
+                <td><span className={`terms-status is-${t.status.toLowerCase()}`}>{STATUS[t.status]}</span></td>
+                <td>{editable && <span className="terms-row-actions">
                   {t.status === 'DELETED'
-                    ? <button style={linkBtn} disabled={busy || !!editing} onClick={() => void submit({ text: t.publishedText ?? t.text })}>恢复</button>
+                    ? <button className="terms-text-button" disabled={busy || !!editing} onClick={() => void submit({ text: t.publishedText ?? t.text })}>恢复</button>
                     : <>
-                      <button style={linkBtn} disabled={busy || !!editing} onClick={() => startEdit(t)}>编辑</button>
-                      <button style={linkBtn} disabled={busy || !!editing} onClick={() => void submit({ original: t.text, delete: true }, '删除该术语？删除进入草稿，发布后生效。')}>删除</button>
+                      <button className="terms-text-button" aria-label={`编辑术语：${t.term ?? t.text}`} disabled={busy || !!editing} onClick={() => startEdit(t)}>编辑</button>
+                      <button className="terms-delete-button" title="删除术语" aria-label={`删除术语：${t.term ?? t.text}`} disabled={busy || !!editing} onClick={() => void submit({ original: t.text, delete: true }, '删除该术语？删除进入草稿，发布后生效。')}><Icon name="trash" size="sm" /></button>
                     </>}
                 </span>}</td>
               </tr>
             ))}
-            {!editing && rows.length === 0 && <tr><td colSpan={5} style={{ textAlign: 'center', padding: '64px 20px', color: 'var(--da-text-muted)', fontSize: 13 }}>
+            {!editing && rows.length === 0 && <tr><td colSpan={5} className="terms-empty">
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="file" size="sm" />
-                {!groupId ? '请先选择上方知识库' : editable ? '暂无业务术语，添加术语来说明你的业务说法' : '该知识库还没有已发布的业务术语'}</span>
+                {loading ? '正在加载业务术语…' : !groupId ? '请先选择上方知识库' : editable ? '暂无业务术语，添加术语来说明你的业务说法' : '该知识库还没有已发布的业务术语'}</span>
             </td></tr>}
           </tbody>
-        </table></div></div>
-        {editable && <div style={{ marginTop: 16 }}>
-          <DraftBar groupId={groupId} workflow={workflow} assistantActive={false} pendingConfirmations={0}
+        </table></div>
+        {editable && <div className="terms-draft">
+          <DraftBar key={groupId} groupId={groupId} workflow={workflow} assistantActive={false} pendingConfirmations={0}
+            terms={{ pending, editing: busy || !!editing }}
             onLocate={() => navigate(`/configure/modeling/${groupId}`)} onPublished={() => void refresh()} />
-          <div className="da-small" style={{ marginTop: 6 }}>草稿与建模共用：发布会一并发布该知识库草稿中的其他建模修改。</div>
         </div>}
-      </div>
+      </div></div>
     </div>
   );
 }

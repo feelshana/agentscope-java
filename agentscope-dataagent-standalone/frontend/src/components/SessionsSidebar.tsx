@@ -5,6 +5,7 @@ import { apiFetch, getToken, isAdmin } from '../api/auth';
 import { InboxEntry, deleteSession, inboxPage } from '../api/sessions';
 import Icon, { IconName } from './Icon';
 import { OnboardingSidebarEntry } from './Onboarding';
+import Brand, { BrandMark } from './Brand';
 
 interface UtilityItem {
   label: string;
@@ -17,8 +18,8 @@ const NAV_ITEMS: UtilityItem[] = [
   { label: '知识库', path: '/configure/datasets', icon: 'book' },
   // spec092: modeling is reviewed and published per knowledge base; give it its own entry.
   { label: '语义建模', path: '/configure/modeling', icon: 'model' },
-  { label: '业务术语', path: '/configure/semantic', icon: 'settings' },
-  { label: '例行任务', path: '/configure/scheduled-tasks', icon: 'clock' },
+  { label: '业务术语', path: '/configure/semantic', icon: 'terms' },
+  { label: '例行任务', path: '/configure/scheduled-tasks', icon: 'calendar' },
 ];
 
 function decodeJwt(token: string): Record<string, unknown> {
@@ -77,6 +78,9 @@ export default function SessionsSidebar({ refreshKey, collapsed = false, onToggl
   const location = useLocation();
   const navigationItems = location.pathname.startsWith('/knowledge-bases/')
     ? NAV_ITEMS.filter(item => item.path !== '/configure/modeling') : NAV_ITEMS;
+  const moreActive = ['/more', '/workspace', '/admin/models', '/admin/public-knowledge-bases'].includes(location.pathname);
+  const isNavigationActive = (path: string) => location.pathname.startsWith(path)
+    || (path === '/configure/datasets' && location.pathname === '/configure/datasources');
   const [searchParams] = useSearchParams();
   const activeKey = searchParams.get('session');
 
@@ -216,15 +220,15 @@ export default function SessionsSidebar({ refreshKey, collapsed = false, onToggl
 
   if (collapsed) {
     const rail = (label: string, icon: IconName, active: boolean, onClick: () => void) =>
-      <button key={label} title={label} aria-label={label} onClick={onClick}
-        className={active ? 'da-navitem da-navitem-active' : 'da-navitem'} style={S.railItem}><Icon name={icon} /></button>;
+      <button key={label} title={label} aria-label={label} aria-current={active ? 'page' : undefined} onClick={onClick}
+        className={active ? 'da-navitem da-navitem-active' : 'da-navitem'} style={S.railItem}><Icon name={icon} size="lg" variant={active ? 'solid' : 'outline'} /></button>;
     return (
       <div style={S.rail}>
-        <div style={{ ...S.brand, padding: 0, justifyContent: 'center' }}><span className="da-logo">DA</span></div>
+        <div style={{ ...S.brand, padding: 0, justifyContent: 'center' }}><BrandMark label="红海 DataAgent" /></div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '8px 0' }}>
-          {rail('新建对话', 'plus', location.pathname === '/chat' && !activeKey, handleNewChat)}
-          {navigationItems.map(item => rail(item.label, item.icon, location.pathname.startsWith(item.path), () => navigate(item.path)))}
-          {rail('更多', 'moreHorizontal', ['/more', '/workspace', '/admin/models', '/admin/public-knowledge-bases'].includes(location.pathname), () => navigate('/more'))}
+          {rail('新建对话', 'compose', location.pathname === '/chat' && !activeKey, handleNewChat)}
+          {navigationItems.map(item => rail(item.label, item.icon, isNavigationActive(item.path), () => navigate(item.path)))}
+          {rail('更多', 'moreHorizontal', moreActive, () => navigate('/more'))}
         </div>
         <span style={{ flex: 1 }} />
         {onToggle && <button type="button" title="展开侧边栏" aria-label="展开侧边栏" aria-expanded={false} className="rail-collapse-toggle" style={{ margin: '0 auto 8px' }} onClick={onToggle}><Icon name="chevron" size="sm" /></button>}
@@ -235,75 +239,48 @@ export default function SessionsSidebar({ refreshKey, collapsed = false, onToggl
   return (
     <div className="app-rail">
       <div className="rail-brand">
-        <span className="rail-mark">DA</span>
-        <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          <span className="rail-brand-name">红海DataAgent</span>
-          <span className="rail-brand-tag">企业级数据智能体</span>
-        </span>
+        <Brand />
       </div>
 
       <nav className="rail-nav" aria-label="主导航">
-        <button onClick={handleNewChat} className="rail-nav-item rail-new-chat"><Icon name="plus" />新建对话</button>
+        <button onClick={handleNewChat} className="rail-nav-item rail-new-chat"><span>新建对话</span><Icon name="compose" /></button>
         {navigationItems.map(item => {
-          const active = location.pathname.startsWith(item.path)
-            || (item.path === '/configure/datasets' && location.pathname === '/configure/datasources');
+          const active = isNavigationActive(item.path);
           return <button key={item.path} onClick={() => navigate(item.path)} aria-current={active ? 'page' : undefined}
-            className={`rail-nav-item${active ? ' is-active' : ''}`}><Icon name={item.icon} />{item.label}</button>;
+            className={`rail-nav-item${active ? ' is-active' : ''}`}><Icon name={item.icon} variant={active ? 'solid' : 'outline'} />{item.label}</button>;
         })}
-        <button className={`rail-nav-item${['/more', '/workspace', '/admin/models', '/admin/public-knowledge-bases'].includes(location.pathname) ? ' is-active' : ''}`}
-          aria-current={['/more', '/workspace', '/admin/models', '/admin/public-knowledge-bases'].includes(location.pathname) ? 'page' : undefined} onClick={() => navigate('/more')}><Icon name="moreHorizontal" />更多</button>
+        <button className={`rail-nav-item${moreActive ? ' is-active' : ''}`}
+          aria-current={moreActive ? 'page' : undefined} onClick={() => navigate('/more')}><Icon name="moreHorizontal" variant={moreActive ? 'solid' : 'outline'} />更多</button>
       </nav>
 
-      <div className="rail-history" onScroll={e => {
-        const el = e.currentTarget;
-        if (!pageError && el.scrollHeight - el.scrollTop - el.clientHeight < 120) void loadMore();
-      }}>
-        {entries.length === 0 && <div className="rail-history-label">历史会话</div>}
-        {entries.length > 0 && (
+      <section className="rail-history" aria-label="历史会话">
           <div className="rail-history-head">
-            <span className="rail-history-label">历史会话</span>
+            <span className="rail-history-label">{batchMode ? '选择会话' : '历史会话'}</span>
             {batchMode ? (
-              <>
-                <button
-                  type="button"
-                  onClick={toggleSelectAll}
-                  style={S.batchBtn}
-                >
-                  {entries.every(e => selected.has(entryNavKey(e))) ? '取消全选' : '全选'}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleBatchDelete}
-                  disabled={selected.size === 0 || batchDeleting}
-                  style={{
-                    ...S.batchBtn,
-                    ...S.batchDeleteBtn,
-                    ...(selected.size === 0 || batchDeleting ? S.batchBtnDisabled : {}),
-                  }}
-                >
-                  {batchDeleting ? '删除中…' : `删除已选（${selected.size}）`}
-                </button>
-                <button
-                  type="button"
-                  onClick={toggleBatchMode}
-                  style={S.batchCancelBtn}
-                  title="取消"
-                >
-                  <Icon name="close" size="sm" />
-                </button>
-              </>
-            ) : (
+              <button type="button" className="rail-history-cancel" disabled={batchDeleting} onClick={toggleBatchMode}>取消</button>
+            ) : entries.length > 0 && (
               <button
                 type="button"
                 onClick={toggleBatchMode}
-                style={S.dotsBtn}
+                className="rail-history-more"
                 title="批量管理"
+                aria-label="批量管理历史会话"
               >
                 <Icon name="moreHorizontal" size="sm" />
               </button>
             )}
           </div>
-        )}
+        {batchMode && <label className="rail-select-all">
+          <input type="checkbox" disabled={batchDeleting || entries.length === 0}
+            checked={entries.length > 0 && entries.every(e => selected.has(entryNavKey(e)))}
+            ref={el => { if (el) el.indeterminate = entries.some(e => selected.has(entryNavKey(e))) && !entries.every(e => selected.has(entryNavKey(e))); }}
+            onChange={toggleSelectAll} />
+          <span>全选已加载</span><small aria-live="polite">已选 {selected.size}</small>
+        </label>}
+        <div className="rail-history-scroll" onScroll={e => {
+          const el = e.currentTarget;
+          if (!pageError && el.scrollHeight - el.scrollTop - el.clientHeight < 120) void loadMore();
+        }}>
         {loading && <div style={S.muted}>加载中…</div>}
         {err && (
           <div style={S.error}>
@@ -338,6 +315,7 @@ export default function SessionsSidebar({ refreshKey, collapsed = false, onToggl
                     active={isActive}
                     batchMode={batchMode}
                     selected={isSelected}
+                    disabled={batchDeleting}
                     onOpen={() => openSession(e)}
                     onDelete={ev => handleDelete(e, ev)}
                     onToggleSelect={() => toggleSelect(entryNavKey(e))}
@@ -349,7 +327,14 @@ export default function SessionsSidebar({ refreshKey, collapsed = false, onToggl
         })}
         {nextCursor && <button className="da-btn da-btn-ghost da-btn-sm" disabled={loadingMore}
           onClick={() => void loadMore()}>{loadingMore ? '加载中…' : pageError ?? '加载更多'}</button>}
-      </div>
+        </div>
+        {batchMode && <div className="rail-batch-actions">
+          <span aria-live="polite">已选 {selected.size} 项</span>
+          <button type="button" className="rail-batch-delete" onClick={handleBatchDelete} disabled={selected.size === 0 || batchDeleting}>
+            <Icon name="trash" size="sm" />{batchDeleting ? '删除中…' : '删除'}
+          </button>
+        </div>}
+      </section>
 
       <OnboardingSidebarEntry />
       <div className="rail-footer">
@@ -365,17 +350,18 @@ interface RowProps {
   active: boolean;
   batchMode: boolean;
   selected: boolean;
+  disabled: boolean;
   onOpen: () => void;
   onDelete: (e: React.MouseEvent) => void;
   onToggleSelect: () => void;
 }
 
-function SessionRow({ entry, active, batchMode, selected, onOpen, onDelete, onToggleSelect }: RowProps) {
+function SessionRow({ entry, active, batchMode, selected, disabled, onOpen, onDelete, onToggleSelect }: RowProps) {
   const title = entry.title ?? entry.label ?? '新对话';
-  return <div className={`rail-session${active ? ' is-active' : ''}${selected && batchMode ? ' is-selected' : ''}${entry.unread && !active ? ' is-unread' : ''}`}>
-    {batchMode && <input type="checkbox" aria-label={`选择对话：${title}`} checked={selected} onChange={onToggleSelect} />}
+  return <div className={`rail-session${active ? ' is-active' : ''}${selected && batchMode ? ' is-selected' : ''}`}>
+    {batchMode && <input type="checkbox" aria-label={`选择对话：${title}`} checked={selected} disabled={disabled} onChange={onToggleSelect} />}
     <button className="rail-session-open" title={`${title} · ${relTime(entry.lastActivityMs)}`} aria-current={active ? 'page' : undefined}
-      onClick={batchMode ? onToggleSelect : onOpen}>{title}</button>
+      disabled={disabled} onClick={batchMode ? onToggleSelect : onOpen}>{title}</button>
     {!batchMode && <button className="rail-session-delete" onClick={onDelete} aria-label={`删除对话：${title}`}><Icon name="trash" size="sm" /></button>}
   </div>;
 }
@@ -439,30 +425,6 @@ const S: Record<string, React.CSSProperties> = {
   },
   listHeaderTitle: {
     flex: 1, fontSize: '0.78rem', fontWeight: 600, color: 'var(--da-text-3)',
-  },
-  dotsBtn: {
-    marginLeft: 'auto',
-    background: 'transparent', border: 'none', cursor: 'pointer',
-    color: 'var(--da-text-muted)', padding: '4px 6px', borderRadius: 6,
-    display: 'inline-flex', alignItems: 'center',
-    transition: 'var(--da-transition)',
-  },
-  batchBtn: {
-    fontSize: '0.78rem', padding: '4px 10px', borderRadius: 6,
-    border: '1px solid var(--da-border)', background: 'var(--da-surface)',
-    color: 'var(--da-text)', cursor: 'pointer', fontWeight: 500,
-  },
-  batchDeleteBtn: {
-    background: 'var(--da-danger)', color: '#fff', border: 'none',
-  },
-  batchBtnDisabled: {
-    opacity: 0.5, cursor: 'not-allowed',
-  },
-  batchCancelBtn: {
-    marginLeft: 'auto',
-    background: 'transparent', border: 'none', cursor: 'pointer',
-    color: 'var(--da-text-muted)', padding: '4px 6px', borderRadius: 6,
-    display: 'inline-flex', alignItems: 'center',
   },
   muted: { padding: '8px 12px', fontSize: '0.9rem', color: 'var(--da-text-muted)' },
   error: { padding: '8px 12px', fontSize: '0.9rem', color: 'var(--da-danger)' },

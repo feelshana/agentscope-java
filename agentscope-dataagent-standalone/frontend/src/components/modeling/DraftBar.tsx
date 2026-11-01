@@ -6,6 +6,7 @@ import { publishMdl } from '../../api/semanticModeling';
 import type { MdlIssue, MdlPublishResult } from '../../api/semanticModeling';
 import type { ModelingWorkflow } from '../../api/modelingWorkflow';
 import DraftItemsList from './DraftItemsList';
+import Icon from '../Icon';
 
 const message = (e: unknown) => e instanceof Error ? e.message : String(e);
 
@@ -16,7 +17,7 @@ const message = (e: unknown) => e instanceof Error ? e.message : String(e);
 /** What the page needs to guide the next step (spec092 §7). */
 export type DraftSummary = { changes: number; examples: number; publishing: boolean; publishedVersion: number | null; error: string | null };
 
-export default function DraftBar({ groupId, workflow, assistantActive, pendingConfirmations, onLocate, onPublished, publishSignal = 0, onSummary }: {
+export default function DraftBar({ groupId, workflow, assistantActive, pendingConfirmations, onLocate, onPublished, publishSignal = 0, onSummary, terms }: {
   groupId: string;
   workflow: ModelingWorkflow | null;
   assistantActive: boolean;
@@ -27,6 +28,8 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
   /** Incremented by the page's "下一步" card to publish through this bar's checks. */
   publishSignal?: number;
   onSummary?: (summary: DraftSummary) => void;
+  /** A quieter presentation for the terms page; all publish checks remain shared. */
+  terms?: { pending: number; editing: boolean };
 }) {
   const [items, setItems] = useState<DraftItem[]>([]);
   const [review, setReview] = useState<DraftReview | null>(null);
@@ -148,7 +151,23 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
       </div>
     </div>}
     {notices}
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px', border: '1px solid var(--da-border)', borderRadius: 12, background: 'var(--da-surface, #fff)', fontSize: 13, boxShadow: 'var(--da-shadow-card)' }}>
+    {terms ? <div className="terms-publish-bar">
+      <span className="terms-publish-icon"><Icon name="file" /></span>
+      <div className="terms-publish-copy">
+        <strong>{terms.pending > 0 ? `有 ${terms.pending} 项术语修改待发布` : changes.length > 0 || republish ? '知识库有修改待发布' : review ? (workflow?.publishedVersion ? '术语已与线上版本同步' : '暂无待发布修改') : error ? '暂时无法读取草稿状态' : '正在检查知识库草稿…'}</strong>
+        <p>发布会一并包含该知识库的其他建模修改。</p>
+        {terms.editing && <p role="status">请先保存或取消正在编辑的术语。</p>}
+        {blocked && changes.length > 0 && <p role="status">{blocked}</p>}
+        {republish && !running && <p role="status">有修改尚未生效，重新发布后才能问数。</p>}
+        {result?.ok && <p className="terms-publish-success" role="status">已发布 v{result.mdlVersion}</p>}
+      </div>
+      <div className="terms-publish-actions">
+        <button className="da-btn" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? '收起建模草稿' : '查看建模草稿'}</button>
+        <button className="da-btn da-btn-primary" data-tour="draft-publish" disabled={busy !== null || !!blocked || terms.editing || !review} onClick={() => void publish()}>
+          {busy === 'publish' ? '检查并发布中…' : republish ? '重新发布知识库' : '发布知识库'}
+        </button>
+      </div>
+    </div> : <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px', border: '1px solid var(--da-border)', borderRadius: 12, background: 'var(--da-surface, #fff)', fontSize: 13, boxShadow: 'var(--da-shadow-card)' }}>
       <strong>草稿</strong>
       <span style={{ fontSize: 12, color: 'var(--da-text-muted)' }}>建模结果 {items.length} · 待你确定 {pendingConfirmations} · 已确认问答 {examples}</span>
       <button className="da-btn da-btn-sm" onClick={() => setOpen(!open)}>{open ? '收起' : '查看全部 ↑'}</button>
@@ -158,7 +177,7 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
       {republish && !running && <span style={{ fontSize: 12, color: 'var(--da-warn)' }}>有修改尚未生效，重新发布后才能问数</span>}
       {ready && <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 4, background: 'rgba(22,163,74,.12)', color: 'var(--da-success)' }}>可发布</span>}
       <button className={`da-btn ${ready ? 'da-btn-primary' : ''} da-btn-sm`} data-tour="draft-publish" disabled={busy !== null || !!blocked} onClick={() => void publish()}>{label}</button>
-    </div>
+    </div>}
   </footer>;
 }
 

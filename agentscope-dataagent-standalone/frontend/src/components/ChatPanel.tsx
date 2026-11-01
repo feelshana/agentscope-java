@@ -21,6 +21,7 @@ import { tourSignal } from '../state/guidedTour';
 import { currentUserProfile, getToken } from '../api/auth';
 import type { OnboardingStatus } from '../api/onboarding';
 import Icon from './Icon';
+import Brand from './Brand';
 import OntologyGraphView from './OntologyGraphView';
 import type { OntologyGraphData } from '../api/ontology';
 import Markdown from './Markdown';
@@ -151,21 +152,7 @@ const S: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     gap: 2,
   },
-  send: {
-    width: 34,
-    height: 34,
-    borderRadius: 999,
-    padding: 0,
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: 'var(--da-primary)',
-    color: '#ffffff',
-    border: 'none',
-    cursor: 'pointer',
-    flexShrink: 0,
-  },
-  sendDisabled: { background: 'var(--da-surface-sunken)', color: 'var(--da-text-muted)', cursor: 'not-allowed' },
+
 };
 
 let counter = 0;
@@ -1222,18 +1209,15 @@ export default function ChatPanel({
         )}
         <span style={{ flex: 1 }} />
         <button
-          style={{
-            ...S.send,
-            ...(busy
-              ? { background: 'var(--da-danger)', cursor: 'pointer' }
-              : canSend ? {} : S.sendDisabled),
-          }}
+          className="da-composer-submit"
+          data-state={busy ? 'stop' : 'send'}
+          aria-label={busy ? '停止生成' : '发送'}
+          data-tooltip={busy ? '停止生成' : '发送'}
           data-tour="chat-send"
           onClick={busy && curKey ? () => abortRef.current.get(curKey)?.abort() : () => handleSend()}
           disabled={!busy && !canSend}
-          title={busy ? '停止回答' : '发送'}
         >
-          {busy ? <Icon name="stop" size="sm" /> : <Icon name="send" size="sm" />}
+          <span className="da-composer-submit-face">{busy ? <Icon name="stop" /> : <Icon name="arrowUp" />}</span>
         </button>
       </div>
     </>
@@ -1244,14 +1228,13 @@ export default function ChatPanel({
       <div style={S.root}>
         <div className="da-landing-wrap">
           <div className="da-landing-greeting">
-            <span className="da-landing-eyebrow"><span className="da-landing-eyebrow-dot" aria-hidden="true" />红海DataAgent · 你的大数据智囊团</span>
+            <span className="da-landing-eyebrow"><span className="da-landing-eyebrow-dot" aria-hidden="true" />红海 DataAgent · 你的大数据智囊团</span>
             <h1 className="da-landing-title">{landingGreeting(greetingProfile?.token === token ? greetingProfile.displayName : undefined)}</h1>
             <p>选择知识库，用自然语言查询数据、分析变化或生成报告</p>
           </div>
           <div className="da-composer-glow">
             <div className="da-composer-shell da-composer">
               {composerContent}
-              <small className="da-composer-hint">Enter 发送 · Shift + Enter 换行</small>
             </div>
           </div>
           {agentId === 'data-agent' ? onboarding && <>
@@ -1311,8 +1294,7 @@ export default function ChatPanel({
               ) : (
                 <div className="da-agent-turn">
                   <div className="da-agent-header">
-                    <span className="da-agent-avatar">DA</span>
-                    <span className="da-agent-name">红海DataAgent</span>
+                    <Brand className="da-agent-brand" />
                   </div>
                   <TaskTrace
                     interrupted={m.interrupted}
@@ -1353,12 +1335,14 @@ export default function ChatPanel({
                         {latest && methods.length > 0 && !analysisDisabledReason && <OnboardingTip tip="follow_ups">想知道为什么变化、有没有异常或未来走势？点上面的按钮，确认参数后即可继续分析并生成图表。</OnboardingTip>}
                       </>;
                     })()}
-                    {agentId === 'data-agent' && curKey && !m.pending && !m.failed && m.text.trim()
-                      && !m.tools.some(t => t.name === 'propose_analysis' && t.result && !t.result.startsWith('error:')) && (
-                      <AnswerFeedback agentId={agentId} session={curKey} answerId={m.answerId} text={m.text}
-                        analysis={m.tools.some(t => t.result?.includes('"queryType":"ANALYSIS"') === true)} />
+                    {!m.pending && !m.failed && answerText.trim() && (
+                      agentId === 'data-agent' && curKey && m.text.trim()
+                        && !m.tools.some(t => t.name === 'propose_analysis' && t.result && !t.result.startsWith('error:'))
+                        ? <AnswerFeedback agentId={agentId} session={curKey} answerId={m.answerId} text={m.text}
+                            analysis={m.tools.some(t => t.result?.includes('"queryType":"ANALYSIS"') === true)}
+                            copyAction={<CopyAnswerButton text={answerText} />} />
+                        : <div className="da-answer-tools"><CopyAnswerButton text={answerText} /></div>
                     )}
-                    {!m.pending && !m.failed && answerText.trim() && <CopyAnswerButton text={answerText} />}
                     {!m.pending && m.tools.some(t => t.name === 'run_python' && t.result) && (
                       <PythonArtifactsPanel tools={m.tools} onInspect={onInspect} />
                     )}
@@ -1383,7 +1367,6 @@ export default function ChatPanel({
         <div className="da-composer-glow">
           <div className="da-composer-shell da-composer">
             {composerContent}
-            <small className="da-composer-hint">Enter 发送 · Shift + Enter 换行</small>
           </div>
         </div>
       </div>

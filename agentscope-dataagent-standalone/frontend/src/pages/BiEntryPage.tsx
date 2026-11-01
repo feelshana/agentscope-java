@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { apiFetch, clearToken, getEntryOptions, saveToken, tokenExpiresAt } from '../api/auth';
 import { readBiAccount } from '../utils/biAccount';
 import { appPath } from '../api/paths';
+import Brand from '../components/Brand';
 
 /** The explicit BI entry alone accepts credentials; expired pages never auto-renew. */
 export default function BiEntryPage({ receive = true }: { receive?: boolean }) {
@@ -58,7 +59,7 @@ export default function BiEntryPage({ receive = true }: { receive?: boolean }) {
   }, [receive]);
   return <main style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', background: 'var(--da-app-bg)' }}>
     <section role="status" style={{ padding: 32, textAlign: 'center' }}>
-      <h1 style={{ fontSize: 24 }}>红海DataAgent</h1><p>{message}</p>
+      <h1 style={{ marginBottom: 16 }}><Brand /></h1><p>{message}</p>
     </section>
   </main>;
 }
