@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { deleteDataSource, ExternalDataSource, getDataSourceStatus, listDataSources } from '../../api/datasources';
 import { KnowledgeBreadcrumb, WorkspaceMenu } from '../../components/KnowledgeWorkspace';
@@ -24,6 +24,8 @@ export default function DataSourcesPage() {
   }, [searchParams, setSearchParams]);
   const [items, setItems] = useState<ExternalDataSource[]>([]);
   const [statuses, setStatuses] = useState<Record<string, ConnectionState>>({});
+  const [query, setQuery] = useState('');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editor, setEditor] = useState<{ source: ExternalDataSource | null } | null>(null);
@@ -35,6 +37,10 @@ export default function DataSourcesPage() {
   const active = useRef(false);
   const requests = useRef(new Set<string>());
   const deletePending = useRef(false);
+  const filtered = useMemo(() => {
+    const term = query.trim().toLocaleLowerCase();
+    return term ? items.filter(source => source.name.toLocaleLowerCase().includes(term)) : items;
+  }, [items, query]);
 
   const check = useCallback(async (id: string, current: number) => {
     const key = `${current}:${id}`;
@@ -58,6 +64,7 @@ export default function DataSourcesPage() {
       const list = await listDataSources();
       if (generation.current !== current) return;
       setStatuses({});
+      setExpandedId(null);
       setItems(list);
       list.forEach(source => { void check(source.id, current); });
     } catch (e) {
@@ -105,30 +112,40 @@ export default function DataSourcesPage() {
       <div className="kw-pagehead"><div className="kw-heading"><h1>数据源管理</h1><p>配置用于关联业务表的外部连接。</p></div>
         <div className="kw-actions"><button className="da-btn da-btn-primary" onClick={() => setEditor({ source: null })}><Icon name="plus" size="sm" />添加数据源</button></div>
       </div>
+      <p className="ds-connection-note"><Icon name="info" size="sm" /><span>连接由应用服务器发起，请填写服务器可访问的数据库地址。</span></p>
       {error && <ErrorNotice error={error} context="datasource"><button className="da-btn da-btn-sm" onClick={refresh}>重试</button></ErrorNotice>}
+      <div className="ds-list-toolbar">
+        <label className="kw-search"><Icon name="search" size="sm" /><input aria-label="搜索数据源" placeholder="搜索数据源名称" value={query} onChange={event => setQuery(event.target.value)} /></label>
+        <span className="kw-count">{loading ? '加载中…' : `${filtered.length} 个数据源`}</span>
+        <span className="ds-check-hint">检测结果仅代表本次检测</span>
+      </div>
       <div className="kw-tablebox"><div className="kw-table-scroll" tabIndex={0} role="region" aria-label="数据源列表，可横向滚动">
         <table className="kw-table ds-table" aria-label="数据源列表" aria-busy={loading}>
-          <thead><tr><th scope="col">数据源名称</th><th scope="col">连接类型</th><th scope="col">连接状态</th><th scope="col">操作</th></tr></thead>
+          <thead><tr><th scope="col">数据源</th><th scope="col">接入方式</th><th scope="col">本次检测</th><th scope="col">操作</th></tr></thead>
           <tbody>
             {loading ? <tr><td colSpan={4} className="ds-empty" role="status">正在加载数据源…</td></tr>
               : error && items.length === 0 ? <tr><td colSpan={4} className="ds-empty">数据源加载失败，请重试。</td></tr>
               : items.length === 0 ? <tr><td colSpan={4}><div className="ds-empty"><Icon name="database" /><h2>暂无数据源</h2><p>添加一个外部连接，用于关联业务表。</p><button className="da-btn" onClick={() => setEditor({ source: null })}><Icon name="plus" size="sm" />添加数据源</button></div></td></tr>
-              : items.map(source => {
+              : filtered.length === 0 ? <tr><td colSpan={4} className="ds-empty">没有匹配的数据源，请更换关键词。</td></tr>
+              : filtered.map(source => {
                 const connection = dataSourceConnection(source);
                 const status = statuses[source.id];
                 const checking = !status || status.state === 'checking';
-                return <tr key={source.id}>
+                const failed = !checking && status.state !== 'connected';
+                const expanded = failed && expandedId === source.id;
+                const reasonId = `ds-reason-${source.id}`;
+                return <React.Fragment key={source.id}><tr className="ds-source-row">
                   <td><strong className="ds-name" title={source.name}>{source.name}</strong><div className="ds-meta" title={connection?.database || undefined}>{connection?.database || '未指定数据库'}</div></td>
                   <td><span className="ds-type">{dataSourceKind(source.kind)}</span></td>
-                  <td><span className={`ds-status ${status?.state === 'connected' ? 'ds-connected' : checking ? '' : 'ds-failed'}`} role="status">
+                  <td><div className="ds-status-cell"><span className={`ds-status ${status?.state === 'connected' ? 'ds-connected' : checking ? '' : 'ds-failed'}`} role="status">
+                    <Icon name={status?.state === 'connected' ? 'check' : checking ? 'refresh' : 'circleAlert'} size="sm" />
                     {status?.state === 'connected' ? '已连通' : checking ? '检测中…' : status?.state === 'error' ? '检测失败' : '未连通'}
-                  </span>{status?.error && <ErrorNotice error={status.error} context="datasource" />}</td>
-                  <td><div className="ds-row-actions"><button className="da-btn da-btn-sm" onClick={() => setDetail(source)}>详情</button>
-                    <button className="da-btn da-btn-ghost da-btn-sm" onClick={() => edit(source)}>配置</button>
-                    <button className="da-btn da-btn-ghost da-btn-sm" disabled={checking} onClick={() => void check(source.id, generation.current)}><Icon name="refresh" size="sm" />{checking ? '检测中…' : '检测连接'}</button>
-                    <WorkspaceMenu label={`${source.name}的更多操作`} items={[{ label: '删除数据源', icon: 'trash', danger: true, onClick: () => { setDeleting(source); setDeleteError(null); } }]} />
+                  </span>{failed && <button type="button" className="ds-reason-toggle" aria-label={`${source.name}：${expanded ? '收起' : '查看'}连接失败原因`} aria-expanded={expanded} aria-controls={expanded ? reasonId : undefined} onClick={() => setExpandedId(previous => previous === source.id ? null : source.id)}>{expanded ? '收起原因' : '查看原因'}</button>}</div></td>
+                  <td><div className="ds-row-actions"><button type="button" className="ds-row-link ds-view-link" aria-label={`查看${source.name}`} onClick={() => setDetail(source)}>查看</button>
+                    <button type="button" className="ds-row-link" disabled={checking} onClick={() => void check(source.id, generation.current)}><Icon name="refresh" size="sm" />{checking ? '检测中…' : '检测连接'}</button>
+                    <WorkspaceMenu label={`${source.name}的更多操作`} items={[{ label: '配置连接', icon: 'edit', onClick: () => edit(source) }, { label: '删除数据源', icon: 'trash', danger: true, onClick: () => { setDeleting(source); setDeleteError(null); } }]} />
                   </div></td>
-                </tr>;
+                </tr>{expanded && <tr className="ds-reason-row"><td colSpan={4}><div id={reasonId} className="ds-reason-detail"><ErrorNotice error={status.error || '连接未成功，请检查数据库连接配置'} context="datasource" /></div></td></tr>}</React.Fragment>;
               })}
           </tbody>
         </table>

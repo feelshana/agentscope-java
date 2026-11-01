@@ -3,12 +3,13 @@ import Icon from './Icon';
 import './DataSources.css';
 
 /** Native modal behavior provides focus containment, Escape handling and focus restoration. */
-export default function DataSourceDialog({ title, description, onClose, busy = false, wide = false, children }: {
+export default function DataSourceDialog({ title, description, onClose, busy = false, wide = false, className = '', children }: {
   title: string;
   description?: string;
   onClose: () => void;
   busy?: boolean;
   wide?: boolean;
+  className?: string;
   children: React.ReactNode;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -23,7 +24,7 @@ export default function DataSourceDialog({ title, description, onClose, busy = f
       if (returnFocus.current?.isConnected) returnFocus.current.focus();
     };
   }, []);
-  return <dialog ref={dialog} className={`ds-dialog${wide ? ' ds-dialog-wide' : ''}`} aria-labelledby={`${id}-title`}
+  return <dialog ref={dialog} className={`ds-dialog${wide ? ' ds-dialog-wide' : ''}${className ? ` ${className}` : ''}`} aria-labelledby={`${id}-title`}
     aria-describedby={description ? `${id}-description` : undefined}
     onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}
     onClick={event => { if (event.target === event.currentTarget && !busy) onClose(); }}>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { PRODUCT_ICONS } from './ProductIconPaths';
 
 export type IconName =
   | 'chat'
@@ -9,6 +10,7 @@ export type IconName =
   | 'file'
   | 'copy'
   | 'arrowDown'
+  | 'arrowUp'
   | 'table'
   | 'graph'
   | 'list'
@@ -20,6 +22,7 @@ export type IconName =
   | 'close'
   | 'trash'
   | 'edit'
+  | 'compose'
   | 'upload'
   | 'link'
   | 'chevron'
@@ -34,24 +37,30 @@ export type IconName =
   | 'model'
   | 'moreHorizontal'
   | 'stop'
+  | 'terms'
+  | 'calendar'
   | 'clock'
   | 'type'
   | 'menu'
   | 'info'
   | 'thumbsUp'
-  | 'thumbsDown';
+  | 'thumbsDown'
+  | 'sliders'
+  | 'shield'
+  | 'circleAlert';
 
-/** Lucide-style 24x24 line paths; rendered with currentColor stroke via .da-icon classes. */
+/** Shared 24px glyphs; product icons add matching outline and solid variants. */
 const PATHS: Record<IconName, React.ReactNode> = {
+  circleAlert: <><circle cx="12" cy="12" r="9" /><path d="M12 6v7M12 17h.01" /></>,
+  sliders: <><path d="M3 6h11m4 0h3M3 12h3m4 0h11M3 18h10m4 0h4" /><circle cx="16" cy="6" r="2" /><circle cx="8" cy="12" r="2" /><circle cx="15" cy="18" r="2" /></>,
+  shield: <><path d="m12 3 8 4v6c0 4-8 8-8 8s-8-4-8-8V7z" /><rect x="9" y="10" width="6" height="5" rx="1" /><path d="M10 10V8a2 2 0 0 1 4 0v2" /></>,
+  terms: PRODUCT_ICONS.terms.outline,
+  calendar: PRODUCT_ICONS.calendar.outline,
+  arrowUp: <path d="M12 20V4m-6 6 6-6 6 6" />,
   arrowDown: <path d="M12 5v14m-6-6 6 6 6-6" />,
   copy: <><rect x="8" y="8" width="12" height="13" rx="2" /><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" /></>,
   chat: <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />,
-  book: (
-    <>
-      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-    </>
-  ),
+  book: PRODUCT_ICONS.book.outline,
   settings: (
     <>
       <circle cx="12" cy="12" r="3" />
@@ -64,13 +73,7 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M5 12h14" />
     </>
   ),
-  database: (
-    <>
-      <ellipse cx="12" cy="5" rx="9" ry="3" />
-      <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
-      <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
-    </>
-  ),
+  database: PRODUCT_ICONS.database.outline,
   file: (
     <>
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -78,12 +81,7 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M9 13h6M9 17h6" />
     </>
   ),
-  table: (
-    <>
-      <rect x="3" y="3" width="18" height="18" rx="2" />
-      <path d="M3 9h18M3 15h18M9 3v18" />
-    </>
-  ),
+  table: PRODUCT_ICONS.table.outline,
   graph: (
     <>
       <circle cx="18" cy="5" r="3" />
@@ -139,6 +137,7 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z" />
     </>
   ),
+  compose: PRODUCT_ICONS.compose.outline,
   upload: (
     <>
       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -180,22 +179,8 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M12 19l-7-7 7-7" />
     </>
   ),
-  model: (
-    <>
-      <rect x="3" y="3" width="7" height="7" rx="1" />
-      <rect x="14" y="3" width="7" height="7" rx="1" />
-      <rect x="3" y="14" width="7" height="7" rx="1" />
-      <rect x="14" y="14" width="7" height="7" rx="1" />
-      <path d="M10 6.5h4M6.5 10v4M17.5 10v4M10 17.5h4" />
-    </>
-  ),
-  moreHorizontal: (
-    <>
-      <circle cx="12" cy="12" r="1" />
-      <circle cx="19" cy="12" r="1" />
-      <circle cx="5" cy="12" r="1" />
-    </>
-  ),
+  model: PRODUCT_ICONS.model.outline,
+  moreHorizontal: PRODUCT_ICONS.moreHorizontal.outline,
   stop: <rect x="6" y="6" width="12" height="12" rx="2" />,
   type: <path d="M5 4h14M12 4v16M8 20h8" />,
   menu: <path d="M4 6h16M4 12h16M4 18h16" />,
@@ -214,15 +199,19 @@ export default function Icon({
   name,
   size = 'md',
   className = '',
+  variant = 'outline',
 }: {
   name: IconName;
   size?: 'sm' | 'md' | 'lg';
   className?: string;
+  variant?: 'outline' | 'solid';
 }) {
+  const product = PRODUCT_ICONS[name as keyof typeof PRODUCT_ICONS];
+  const glyphClass = product ? ` da-icon-product${variant === 'solid' ? ' da-icon-solid' : ''}` : '';
   const sz = size === 'sm' ? ' da-icon-sm' : size === 'lg' ? ' da-icon-lg' : '';
   return (
-    <svg viewBox="0 0 24 24" className={`da-icon${sz} ${className}`} aria-hidden="true">
-      {PATHS[name]}
+    <svg viewBox="0 0 24 24" className={`da-icon${sz}${glyphClass} ${className}`} aria-hidden="true" focusable="false">
+      {product?.[variant] ?? PATHS[name]}
     </svg>
   );
 }

@@ -143,5 +143,3 @@
 .kw-samples li{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--kw-line);border-radius:8px;font-size:13px}
 .kw-samples .da-btn{align-self:flex-start}
 @media(max-width:760px){.kw-source-grid{grid-template-columns:1fr}}
-.kw-status{flex:none;font-size:12px;padding:2px 8px;border-radius:4px;background:#fbf5e9;color:var(--da-warn)}.kw-status.is-published{background:#edf7f2;color:var(--da-success)}
-.kw-cardbadges{display:inline-flex;align-items:center;gap:6px;flex:none}

@@ -1,17 +1,19 @@
-# 当前任务：同步主线与个人分支，示例文件改为本地持久副本（2026-10-31）
+# 当前批次：前端体验改造归档与本地提交（2026-11-01 Asia/Shanghai）
 
-## 用户授权与起点
-- 用户确认66线上已验证可用；应用版本a85ccec6，Health UP、98819/2046行及datetime/只读账号、临时授权撤销已现场回传，BI可用由用户确认。
-- 用户授权完成本地develop-2.0需要的pull/push，并确认最后切回liyufan_dev、同步主线，后续在个人分支开发。
-- 起点本地develop=c903c321、origin/develop=a85ccec6，双方各一笔独有提交；个人本地/远端均bc3bc14d，没有独有新工作。已有部署共享记录WIP保留本次提交。
+## 授权与范围
+- 用户授权“把本地修改整理后提交了”；仅本地提交，不push、合并、切分支或部署。
+- 分支liyufan_dev，整理前HEAD为5b1079a6；本批提交标识以git log -1为准。
+- 本批包含前面已认可实施的品牌/侧栏/图标、业务术语、例行任务、更多、回答操作、数据源、知识库卡片及数据集工作台。
+- 收录源代码、部署前缀静态包、原型/设计图、验收报告和共享记录；被否决或未实施的探索仍明确为提案，不当作已实现功能。
+- 个人交接、data/demo-samples、配置/凭据、output临时脚本/日志仍忽略；未加入示例Excel或数据库文件。
 
-## 本轮方案与进度
-- 本地两Excel已先恢复到模块data/demo-samples，SHA256与历史原字节一致；该目录被模块.gitignore和本机.git/info/exclude排除，切分支不受版本文件删除影响。
-- 源码deploy/demo-samples中的两Excel已移除；保留SHA256SUMS、README、binary属性及restore-local.py，从011d06b历史按二进制恢复，不覆盖不同的现有文件。
-- 本地在模块目录执行python deploy/demo-samples/restore-local.py即可准备，重复执行只校验；IDEA模块工作目录+DATAAGENT_DEMO_ENABLED=true可测示例上传。外部示例仍需本机数据库/只读账号的私有配置，未替用户初始化本机DB或启用IDEA。
-- 66持久目录/data/dataagent/rehearsal-app/data/demo-samples及runtime.env、demo_data不改变；删除源码副本与切本地分支不影响线上，不因本轮重启/重部署或清理资源。
-- 同步当前README/架构配置注释/spec105/ADR0122状态及桌面指引；无新业务流程，不新增spec或ADR，不改ADR正文。
-- 本地持久样例及部署记录已提交97889a47；远端a85ccec6源码已自动合并，共享记录保留双方，远端原CURRENT_TASK归档archive/20261031-mainline-a85-checkpoint.md；最终验证后普通push，再切个人分支快进同步并推送。
+## 验证
+- 提交整理时重新执行npm test：64项×3base通过。
+- spotless:check通过；DocsConsistencyTest5项通过；最终暂存检查/提交回读见Git与会话交付。
+- 同一工作树已完成最终/dify/dataagent/生产构建：index-Dc0uOz-q/index-BqA6_klR/ontology-C8YLhVBW。
+- 各页面真实/模拟浏览器验收详见20261031/20261101专项报告；最近数据集真实10项、模拟28项通过。
+- 按用户“普通修改只验证涉及内容”范围，无Java后端改动，不为本地提交追加后端全量、真实导入/LLM/66操作。
+- 本地upload-status原接口400已在数据集报告记录，未改后端。既有ECharts/大包构建提示保留。
 
 ## 验证与完成状态
 - 本轮恢复工具：从历史恢复两文件原字节、重复运行不重写、已有不同文件时拒绝覆盖/不恢复其余文件，均通过；指南Bash块语法与桌面相同检查通过。
@@ -28,3 +30,7 @@
 - 2026-11-01重启验收：线上字段、列表统计、卡片状态、QUERY只读与撤权、术语增删已通过。结论先行规则已移到QUERY_EFFICIENCY_RULES（application.yml的sys-prompt会覆盖默认提示词），需再重启后用真实问题验收；新手指引两条路线未走。
 - 已知问题，暂缓：草稿改动经markMdlDirty拦截问数至重新发布。用户2026-11-01判断同时改动和问数几率小，先不修；放弃草稿后需点重新发布。
 - newuser09走完指引，日志无错误、发布一次；用户认为#7560b5过暗，主色改#5b3df5并提高状态色；指引手势改为指向真实按钮，下一步也带手势。待重启确认。
+## 下一步
+- 用户可继续在5173验收；需要push或合并主线时另按明确指令执行。
+- 所有原服务/用户浏览器保留；未变更数据库、资源、部署状态。
+- 各批实施细节与前检查点见archive/20261101-before-ui-batch-commit.md及各专项报告。
