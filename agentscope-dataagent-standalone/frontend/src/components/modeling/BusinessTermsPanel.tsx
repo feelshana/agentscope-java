@@ -2,10 +2,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Icon from '../Icon';
 import { changeBusinessTerm, listBusinessTerms } from '../../api/semantic';
 import type { BusinessTerm, BusinessTerms, TermChange, TermStatus } from '../../api/semantic';
+import '../../pages/configure/SemanticConfigPage.css';
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
-
-const linkBtn: React.CSSProperties = { background: 'transparent', border: 'none', color: 'var(--da-primary)', cursor: 'pointer', fontSize: 13, padding: 0 };
 
 const STATUS: Record<TermStatus, { label: string; color: string; background: string }> = {
   PUBLISHED: { label: '已发布', color: 'var(--da-success)', background: 'rgba(22,163,74,.10)' },
@@ -23,11 +22,13 @@ const emptyDraft: Draft = { free: false, term: '', synonyms: '', explanation: ''
  * Edits enter the draft and take effect for querying after a publish; QUERY users see the
  * published version read-only. spec106 moved it into the 业务知识 tab of semantic modeling.
  */
-export default function BusinessTermsPanel({ groupId }: { groupId: string }) {
+export default function BusinessTermsPanel({ groupId, onEditingChange }: { groupId: string; onEditingChange?: (editing: boolean) => void }) {
   const [data, setData] = useState<BusinessTerms | null>(null);
   const [editing, setEditing] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useEffect(() => { onEditingChange?.(busy || editing !== null); }, [busy, editing, onEditingChange]);
+  useEffect(() => () => onEditingChange?.(false), [groupId, onEditingChange]);
 
   const request = useRef<AbortController | null>(null);
   const refresh = useCallback(async () => {
@@ -72,7 +73,7 @@ export default function BusinessTermsPanel({ groupId }: { groupId: string }) {
   const pending = rows.filter(r => r.status !== 'PUBLISHED').length;
   const canSave = !!editing && !busy && (editing.free ? editing.text.trim() !== '' : editing.term.trim() !== '' && editing.explanation.trim() !== '');
 
-  const editor = editing && <tr>
+  const editor = editing && <tr className="terms-editor">
     {editing.free ? <td colSpan={4}>
       <textarea className="da-input" rows={3} aria-label="条目内容" value={editing.text} onChange={e => setEditing({ ...editing, text: e.target.value })} />
       <div className="da-small">该条目不是"术语 = 解释"的格式，按原文编辑。</div>
@@ -82,13 +83,13 @@ export default function BusinessTermsPanel({ groupId }: { groupId: string }) {
       <td><input className="da-input" aria-label="同义词" placeholder="多个用顿号或逗号分隔" value={editing.synonyms} onChange={e => setEditing({ ...editing, synonyms: e.target.value })} /></td>
       <td />
     </>}
-    <td><span style={{ display: 'inline-flex', gap: 14 }}>
-      <button style={{ ...linkBtn, opacity: canSave ? 1 : 0.5 }} disabled={!canSave} onClick={save}>{busy ? '保存中…' : '保存'}</button>
-      <button style={linkBtn} onClick={() => setEditing(null)}>取消</button>
+    <td><span className="terms-row-actions">
+      <button className="terms-text-button" disabled={!canSave} onClick={save}>{busy ? '保存中…' : '保存'}</button>
+      <button className="terms-text-button" disabled={busy} onClick={() => setEditing(null)}>取消</button>
     </span></td>
   </tr>;
 
-  return <section aria-label="业务术语" className="kw-page sm-terms">
+  return <section aria-label="业务术语" className="kw-page sm-terms terms-page">
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
       <h3 style={{ margin: 0 }}>业务术语</h3>
       {data && <span className="da-small">线上版本 {data.publishedVersion > 0 ? `v${data.publishedVersion}` : '未发布'}{editable && pending > 0 ? ` · ${pending} 项修改未发布` : ''}</span>}
@@ -99,7 +100,7 @@ export default function BusinessTermsPanel({ groupId }: { groupId: string }) {
     </div>
     <p className="da-small" style={{ margin: '0 0 10px' }}>统一业务名词与常用说法。修改先进入草稿，发布后问数生效。</p>
     {error && <div role="alert" className="da-alert da-alert-error">{error}</div>}
-    <div className="kw-tablebox"><div className="kw-table-scroll"><table className="kw-table kw-terms-table">
+    <div className="terms-table-scroll"><table className="terms-table" aria-label="业务术语表格">
       <thead><tr>
         <th style={{ width: '18%' }}>业务术语</th><th style={{ width: '40%' }}>业务定义</th><th style={{ width: '18%' }}>同义词</th>
         <th style={{ width: '10%' }}>状态</th><th style={{ width: '14%' }}>{editable ? '操作' : ''}</th>
@@ -107,22 +108,22 @@ export default function BusinessTermsPanel({ groupId }: { groupId: string }) {
       <tbody>
         {editing && !editing.original && editor}
         {rows.map(t => editing?.original === t.text ? <React.Fragment key={t.text}>{editor}</React.Fragment> : (
-          <tr key={`${t.status}:${t.text}`} style={t.status === 'DELETED' ? { opacity: 0.6 } : undefined}>
-            <td style={{ fontWeight: 500, color: 'var(--da-text)', textDecoration: t.status === 'DELETED' ? 'line-through' : undefined }}>
+          <tr key={`${t.status}:${t.text}`} className={`terms-row is-${t.status.toLowerCase()}`}>
+            <td className="terms-name">
               {t.structured ? t.term : <span className="da-small">（自由格式）</span>}</td>
-            <td style={{ whiteSpace: 'pre-wrap' }}>
+            <td className="terms-definition">
               {t.structured ? t.explanation : t.text}
-              {t.status === 'MODIFIED' && t.publishedText && <div className="da-small" style={{ marginTop: 4 }}>线上：{t.publishedText}</div>}
+              {t.status === 'MODIFIED' && t.publishedText && <div className="terms-previous">线上：{t.publishedText}</div>}
             </td>
-            <td><span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 4 }}>
-              {t.synonyms.length ? t.synonyms.map(s => <span key={s} className="da-badge">{s}</span>) : '-'}</span></td>
-            <td><span style={{ fontSize: 12, padding: '1px 6px', borderRadius: 4, whiteSpace: 'nowrap', color: STATUS[t.status].color, background: STATUS[t.status].background }}>{STATUS[t.status].label}</span></td>
-            <td>{editable && <span style={{ display: 'inline-flex', gap: 14 }}>
+            <td><span className="terms-synonyms">
+              {t.synonyms.length ? t.synonyms.map(s => <span key={s}>{s}</span>) : <span className="terms-no-synonym">—</span>}</span></td>
+            <td><span className={`terms-status is-${t.status.toLowerCase()}`}>{STATUS[t.status].label}</span></td>
+            <td>{editable && <span className="terms-row-actions">
               {t.status === 'DELETED'
-                ? <button style={linkBtn} disabled={busy || !!editing} onClick={() => void submit({ text: t.publishedText ?? t.text })}>恢复</button>
+                ? <button className="terms-text-button" disabled={busy || !!editing} onClick={() => void submit({ text: t.publishedText ?? t.text })}>恢复</button>
                 : <>
-                  <button style={linkBtn} disabled={busy || !!editing} onClick={() => startEdit(t)}>编辑</button>
-                  <button style={linkBtn} disabled={busy || !!editing} onClick={() => void submit({ original: t.text, delete: true }, '删除该术语？删除进入草稿，发布后生效。')}>删除</button>
+                  <button className="terms-text-button" aria-label={`编辑术语：${t.term ?? t.text}`} disabled={busy || !!editing} onClick={() => startEdit(t)}>编辑</button>
+                  <button className="terms-delete-button" aria-label={`删除术语：${t.term ?? t.text}`} disabled={busy || !!editing} onClick={() => void submit({ original: t.text, delete: true }, '删除该术语？删除进入草稿，发布后生效。')}><Icon name="trash" size="sm" /></button>
                 </>}
             </span>}</td>
           </tr>
@@ -132,6 +133,6 @@ export default function BusinessTermsPanel({ groupId }: { groupId: string }) {
             {editable ? '暂无业务术语，添加术语来说明你的业务说法' : '该知识库还没有已发布的业务术语'}</span>
         </td></tr>}
       </tbody>
-    </table></div></div>
+    </table></div>
   </section>;
 }

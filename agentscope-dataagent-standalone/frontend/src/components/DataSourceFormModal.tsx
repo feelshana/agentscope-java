@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { createDataSource, DataSourceRequest, DataSourceStatus, ExternalDataSource, testDataSourceConnection, updateDataSource } from '../api/datasources';
 import DataSourceDialog from './DataSourceDialog';
 import { dataSourceConnection } from './dataSourceConnection';
@@ -33,6 +33,7 @@ export default function DataSourceFormModal({ source, onClose, onSaved }: {
   const revision = useRef(0);
   const active = useRef(true);
   const saving = useRef(false);
+  const id = useId();
   useEffect(() => {
     active.current = true;
     return () => { active.current = false; revision.current += 1; };
@@ -88,19 +89,24 @@ export default function DataSourceFormModal({ source, onClose, onSaved }: {
     }
   }
 
-  return <DataSourceDialog title={source ? '配置数据源' : '添加数据源'} description="填写连接参数，检测通过后保存。" onClose={onClose} busy={busy}>
+  return <DataSourceDialog title={source ? '配置数据源' : '添加数据源'} description="填写连接参数，检测通过后保存。" onClose={onClose} busy={busy} className="ds-form-dialog">
     <form onSubmit={save} noValidate>
       <div className="ds-dialog-body">
-        <fieldset className="ds-fields" disabled={busy}>
-          <label className="ds-field ds-full">数据源名称<input autoFocus value={form.name} maxLength={64} required onChange={e => update({ name: e.target.value })} /></label>
-          <label className="ds-field">接入方式<select value={form.kind} onChange={e => update({ kind: e.target.value, port: e.target.value === 'mysql' ? '3306' : '5432', sslMode: e.target.value === 'mysql' ? 'DISABLED' : 'disable' })}>
+        <fieldset className="ds-form-fields" disabled={busy}>
+          <section className="ds-form-section" aria-labelledby={`${id}-connection`}><h3 id={`${id}-connection`}>连接信息</h3><div className="ds-fields">
+          <label className="ds-field ds-full">数据源名称<input autoFocus value={form.name} placeholder="例如：业务报表数据库" maxLength={64} required onChange={e => update({ name: e.target.value })} /></label>
+          <label className="ds-field ds-full">接入方式<select value={form.kind} onChange={e => update({ kind: e.target.value, port: e.target.value === 'mysql' ? '3306' : '5432', sslMode: e.target.value === 'mysql' ? 'DISABLED' : 'disable' })}>
             <option value="mysql">MySQL（含 Doris MySQL 协议）</option><option value="postgresql">PostgreSQL</option>
           </select></label>
-          <label className="ds-field">端口<input value={form.port} inputMode="numeric" required onChange={e => update({ port: e.target.value })} /></label>
-          <label className="ds-field ds-full">主机地址<input value={form.host} placeholder="mysql.example.internal" required onChange={e => update({ host: e.target.value })} /></label>
-          <label className="ds-field ds-full">数据库<span className="ds-label-hint">可选</span><input value={form.database} onChange={e => update({ database: e.target.value })} /></label>
-          <label className="ds-field">用户名<input value={form.username} autoComplete="off" onChange={e => update({ username: e.target.value })} /></label>
-          <label className="ds-field">密码<input type="password" value={form.password} autoComplete="new-password" placeholder={source ? '留空保留原密码' : ''} onChange={e => update({ password: e.target.value })} /></label>
+          <div className="ds-hostport ds-full"><label className="ds-field">主机地址<input value={form.host} placeholder="mysql.example.internal" aria-describedby={`${id}-server-hint`} required onChange={e => update({ host: e.target.value })} /></label>
+          <label className="ds-field">端口<input value={form.port} inputMode="numeric" required onChange={e => update({ port: e.target.value })} /></label></div>
+          <p id={`${id}-server-hint`} className="ds-host-hint ds-full"><Icon name="info" size="sm" /><span>由部署 DataAgent 的服务器发起连接，localhost 指服务器自身。</span></p>
+          <label className="ds-field ds-full">数据库<span className="ds-label-hint">可选</span><input value={form.database} placeholder="可不填，关联表时再选择" onChange={e => update({ database: e.target.value })} /></label>
+          </div></section>
+          <section className="ds-form-section ds-credentials" aria-labelledby={`${id}-credentials`}><h3 id={`${id}-credentials`}>访问凭据</h3><div className="ds-fields">
+          <label className="ds-field">用户名<input value={form.username} aria-label="用户名" placeholder="例如：demo_reader" autoComplete="off" aria-describedby={`${id}-reader-hint`} onChange={e => update({ username: e.target.value })} /><small id={`${id}-reader-hint`}>建议使用仅有业务表读取权限的账号。</small></label>
+          <label className="ds-field">密码<input type="password" value={form.password} autoComplete="new-password" placeholder={source ? '留空保留原密码' : '请输入数据库密码'} onChange={e => update({ password: e.target.value })} /></label>
+          </div></section>
           <details className="ds-advanced ds-full"><summary>更多连接选项<span>连接加密与数据采样</span></summary><div className="ds-fields">
           <label className="ds-field ds-full">连接加密<select value={form.sslMode} onChange={e => update({ sslMode: e.target.value })}>
             {(form.kind === 'mysql'
@@ -118,7 +124,7 @@ export default function DataSourceFormModal({ source, onClose, onSaved }: {
             <span>没有平台能访问到的数据库时，可以先在知识库里上传 Excel / CSV 文件体验问数。</span>
           </ErrorNotice>)}
       </div>
-      <footer className="ds-dialog-foot"><button type="button" className="da-btn" onClick={test} disabled={busy || testing}><Icon name="refresh" size="sm" />{testing ? '检测中…' : '检测连接'}</button>
+      <footer className="ds-dialog-foot"><span className={`ds-test-state${testResult?.connected ? ' is-connected' : ''}`} role="status">{testing ? '正在检测连接…' : testResult?.connected ? '连接成功，可以保存' : testResult ? '连接未成功' : '尚未检测连接'}</span><button type="button" className="da-btn" onClick={test} disabled={busy || testing}><Icon name="refresh" size="sm" />{testing ? '检测中…' : '检测连接'}</button>
         <button type="button" className="da-btn" onClick={onClose} disabled={busy}>取消</button><button className="da-btn da-btn-primary" type="submit" disabled={busy || testing || !testResult?.connected}>{busy ? '保存中…' : '保存'}</button>
       </footer>
     </form>

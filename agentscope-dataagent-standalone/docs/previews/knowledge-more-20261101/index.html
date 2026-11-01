@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>红海 DataAgent · 知识库与更多设计方案</title><link rel="icon" href="assets/brand.svg"><link rel="stylesheet" href="preview.css"></head>
+<body>
+<aside class="sidebar">
+  <div class="brand"><img src="assets/brand.svg" alt=""><strong>红海 <span>DataAgent</span></strong></div>
+  <button class="new" data-demo="新建对话"><span>新建对话</span><i data-icon="compose"></i></button>
+  <nav aria-label="主导航"><a href="#knowledge" data-page="knowledge"><i data-icon="knowledge"></i>知识库</a><button data-demo="语义建模"><i data-icon="modeling"></i>语义建模</button><button data-demo="业务术语"><i data-icon="terms"></i>业务术语</button><button data-demo="例行任务"><i data-icon="scheduled"></i>例行任务</button><a href="#more" data-page="more"><i data-icon="more"></i>更多</a></nav>
+  <section class="history"><header>历史会话<button aria-label="管理历史会话" data-demo="管理历史会话"><i data-icon="more"></i></button></header><small>今天</small><button data-demo="历史会话">最近一个月每天的订单金额</button><button data-demo="历史会话">各部门报表使用情况</button><small>昨天</small><button data-demo="历史会话">本月访问趋势分析</button><button data-demo="历史会话">平台使用情况汇总</button></section>
+  <div class="account"><div class="avatar">A</div><div>admin<small>全局管理员</small></div><button aria-label="收起侧栏" data-demo="收起侧栏">‹</button></div>
+</aside>
+<div class="workspace"><header class="top"><div>对话<span>›</span><b id="crumb">知识库</b></div><div class="review"><span>方案预览 · 示例内容</span><a href="#knowledge">知识库</a><a href="#more">更多</a></div></header><main id="main"></main></div>
+<div id="toast" role="status"></div>
+<dialog id="empty"><form method="dialog"><header><h2>无数据时的卡片</h2><button aria-label="关闭">×</button></header><p class="muted">这是独立的设计状态，未创建真实知识库。</p><article class="kb empty-card"><div class="card-title"><i data-icon="knowledge"></i><h2>我的第一个知识库</h2></div><p>尚未添加数据集</p><p class="muted">上传文件或关联外部表，开始准备数据。</p><footer><span></span><button type="button" class="text accent" data-demo="添加数据">＋ 添加数据</button></footer></article></form></dialog>
+<script src="product-glyphs.js"></script><script src="preview.js"></script></body></html>

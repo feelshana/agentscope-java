@@ -16,8 +16,9 @@ export function KnowledgeBreadcrumb({ items }: { items: { label: string; to?: st
   </header>;
 }
 
-export function WorkspaceMenu({ label, items }: {
+export function WorkspaceMenu({ label, items, triggerLabel }: {
   label: string;
+  triggerLabel?: string;
   items: { label: string; icon: IconName; danger?: boolean; disabled?: boolean; onClick: () => void }[];
 }) {
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
@@ -57,9 +58,9 @@ export function WorkspaceMenu({ label, items }: {
     };
   }, [position]);
   return <>
-    <button ref={trigger} className="kw-more" type="button" aria-label={label} aria-haspopup="menu" aria-expanded={!!position}
+    <button ref={trigger} className={triggerLabel ? 'da-btn kw-menu-trigger' : 'kw-more'} type="button" aria-label={label} aria-haspopup="menu" aria-expanded={!!position}
       onClick={e => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setPosition(position ? null : { top: r.bottom + 6, left: Math.max(8, Math.min(window.innerWidth - 188, r.right - 180)) }); }}>
-      <Icon name="moreHorizontal" size="sm" />
+      {triggerLabel ? <><Icon name="settings" size="sm" />{triggerLabel}<Icon name="chevron" size="sm" className="kw-menu-trigger-chevron" /></> : <Icon name="moreHorizontal" size="sm" />}
     </button>
     {position && createPortal(<div ref={panel} className="kw-menu" role="menu" aria-label={label} style={position} onClick={e => e.stopPropagation()}>
       {items.map(item => <button role="menuitem" key={item.label} disabled={item.disabled} className={item.danger ? 'danger' : ''}

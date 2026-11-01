@@ -226,10 +226,10 @@ export function OnboardingSidebarEntry() {
   if (!status || status.stage !== 'collapsed') return null;
   const next = nextStep(status);
   const rect = button.current?.getBoundingClientRect();
-  return <div style={{ padding: '0 10px 8px', flexShrink: 0 }}>
+  return <div className="rail-onboarding">
     <button ref={button} type="button" aria-expanded={open} aria-controls="onboarding-popover" onClick={() => setOpen(o => !o)}
-      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', borderRadius: 8, border: '1px solid var(--da-primary)', background: 'var(--da-primary-subtle)', color: 'var(--da-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', font: 'inherit' }}>
-      <Icon name="list" size="sm" /><span style={{ flex: 1, textAlign: 'left' }}>新手任务</span><span>{status.completed}/{status.tasks.length}</span>
+      className="rail-onboarding-trigger">
+      <Icon name="list" size="sm" /><span style={{ flex: 1, textAlign: 'left' }}>新手任务</span><span>{status.completed}/{status.tasks.length}</span><Icon name="chevron" size="sm" />
     </button>
     {open && createPortal(<div ref={popover} id="onboarding-popover" role="dialog" aria-label="新手任务"
       style={{ position: 'fixed', left: rect ? rect.right + 12 : 260, bottom: rect ? Math.max(8, window.innerHeight - rect.bottom) : 20, width: 340, maxWidth: 'calc(100vw - 24px)', background: 'var(--da-surface)', border: '1px solid var(--da-border)', borderRadius: 12, boxShadow: 'var(--da-shadow-pop)', padding: 16, display: 'flex', flexDirection: 'column', gap: 10, zIndex: 1000, color: 'var(--da-text)' }}>

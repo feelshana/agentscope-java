@@ -11,21 +11,21 @@
   /* Main canvas (home landing, conversation thread, knowledge-base pages): same brightness as the menu-bar surface. */
   --da-canvas-bg: var(--da-surface);
   --da-surface: #ffffff;
-  --da-sidebar-bg: #f7f8fa;
+  --da-sidebar-bg: #f6f7fa;
   --da-surface-sunken: #f2f3f6;
-  --da-border: #e9eaf0;
+  --da-border: #e5e7ef;
   --da-border-strong: #dddfe7;
-  --da-text: #292c38;
+  --da-text: #303442;
   --da-text-2: #4f5563;
-  --da-text-3: #646978;
+  --da-text-3: #667085;
   /* Weakest text colour; keep at least 4.4:1 on white. */
   --da-text-muted: #737887;
-  --da-primary: #5b3df5;
-  --da-primary-hover: #4526d6;
-  --da-primary-subtle: rgba(91, 61, 245, 0.12);
-  --da-primary-soft: #ece8ff;
-  --da-primary-line: #c8bdfc;
-  --da-secondary: #4526d6;
+  --da-primary: #6654ce;
+  --da-primary-hover: #5542b7;
+  --da-primary-subtle: #f3f0fc;
+  --da-primary-soft: #eeebfa;
+  --da-primary-line: #d5cdee;
+  --da-secondary: #5542b7;
   --da-accent: #b45309;
   --da-accent-subtle: rgba(180, 83, 9, 0.12);
   --da-success: #15803d;
@@ -39,7 +39,7 @@
   --da-shadow-pop: 0 12px 40px rgba(15, 23, 42, 0.1), 0 2px 8px rgba(15, 23, 42, 0.04);
   --da-transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease,
     box-shadow 0.15s ease, transform 0.15s ease;
-  --da-font: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC',
+  --da-font: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC',
     sans-serif;
   --da-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
@@ -62,7 +62,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 ::selection {
-  background: rgba(91, 61, 245, 0.18);
+  background: var(--da-primary-soft);
 }
 
 *::-webkit-scrollbar {
@@ -646,6 +646,13 @@ button:focus-visible {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+.da-icon-product {
+  stroke-width: 1.65;
+}
+.da-icon-solid {
+  fill: currentColor;
+  stroke: none;
+}
 .da-icon-sm {
   width: 14px;
   height: 14px;
@@ -1134,7 +1141,7 @@ button:focus-visible {
 .da-composer-glow {
   position: relative;
   width: 100%;
-  border-radius: 18px;
+  border-radius: 16px;
   padding: 1px;
   background: var(--da-border);
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
@@ -1153,7 +1160,7 @@ button:focus-visible {
 
 .da-composer-shell {
   background: var(--da-surface);
-  border-radius: 17px;
+  border-radius: 15px;
   padding: 14px 18px 10px;
   display: flex;
   flex-direction: column;
@@ -1371,27 +1378,6 @@ button:focus-visible {
   align-items: center;
   gap: 8px;
   padding-bottom: 2px;
-}
-.da-agent-avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  background: var(--da-primary);
-  color: #fff;
-  font-size: 0.62rem;
-  font-weight: 700;
-  flex-shrink: 0;
-  letter-spacing: 0.02em;
-  box-shadow: 0 1px 3px rgba(91, 61, 245, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
-}
-.da-agent-name {
-  font-size: 0.88rem;
-  font-weight: 700;
-  color: var(--da-text-3);
-  flex-shrink: 0;
 }
 .da-trace {
   margin: 4px 0 8px;
