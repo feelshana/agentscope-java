@@ -109,7 +109,7 @@ const s: Record<string, React.CSSProperties> = {
   },
   chevron: {
     fontSize: '0.65rem',
-    color: '#94a3b8',
+    color: 'var(--da-text-muted)',
     transition: 'transform 0.15s ease',
     display: 'inline-block',
     width: 12,
@@ -177,7 +177,7 @@ function Section({ title, icon, defaultOpen = false, error, badge, children }: {
       >
         <span style={{
           width: 14, height: 14, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          color: '#94a3b8', flexShrink: 0,
+          color: 'var(--da-text-muted)', flexShrink: 0,
           transition: 'transform 0.2s ease', transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
         }}>
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
@@ -468,7 +468,7 @@ export default function PythonCodeBlock({ code, result, defaultOpen = false }: P
               <div key={i} style={s.artifactRow}>
                 <span style={{ flex: 1, minWidth: 0, wordBreak: 'break-all' }}>
                   {a.name}
-                  <span style={{ color: '#94a3b8', fontSize: '0.72rem', marginLeft: 4 }}>
+                  <span style={{ color: 'var(--da-text-muted)', fontSize: '0.72rem', marginLeft: 4 }}>
                     ({a.type}, {(a.size / 1024).toFixed(1)} KB)
                   </span>
                 </span>

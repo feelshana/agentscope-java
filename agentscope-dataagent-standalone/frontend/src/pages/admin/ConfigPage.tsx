@@ -26,7 +26,7 @@ const S: Record<string, React.CSSProperties> = {
   },
   row: { display: 'flex', gap: 12, marginTop: 14, alignItems: 'center' },
   saveBtn: {
-    background: '#4f46e5',
+    background: 'var(--da-primary)',
     color: '#fff',
     border: 'none',
     borderRadius: 8,
@@ -34,7 +34,7 @@ const S: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     fontWeight: 600,
     fontSize: '0.92rem',
-    boxShadow: '0 1px 3px rgba(79,70,229,0.25)',
+    boxShadow: '0 1px 3px rgba(91, 61, 245,0.25)',
   },
   reloadBtn: {
     background: '#ffffff',
@@ -56,9 +56,9 @@ const S: Record<string, React.CSSProperties> = {
 
 function tabBtnStyle(active: boolean): React.CSSProperties {
   return {
-    background: active ? '#eef2ff' : '#ffffff',
-    border: `1px solid ${active ? '#c7d2fe' : '#d1d5db'}`,
-    color: active ? '#4338ca' : '#475569',
+    background: active ? 'var(--da-primary-soft)' : '#ffffff',
+    border: `1px solid ${active ? 'var(--da-primary-line)' : '#d1d5db'}`,
+    color: active ? 'var(--da-primary-hover)' : '#475569',
     borderRadius: 8,
     padding: '7px 18px',
     cursor: 'pointer',

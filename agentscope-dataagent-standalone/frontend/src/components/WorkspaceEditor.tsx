@@ -13,10 +13,10 @@ const S: Record<string, React.CSSProperties> = {
     height: 48, padding: '0 18px', display: 'flex', alignItems: 'center', gap: 12,
     borderBottom: '1px solid #e2e8f0', background: '#ffffff', flexShrink: 0,
   },
-  pathTxt: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.88rem', color: '#4338ca', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 },
+  pathTxt: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.88rem', color: 'var(--da-primary-hover)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 },
   readonlyBadge: {
     background: '#f1f5f9', color: '#64748b',
-    border: '1px solid #e2e8f0', borderRadius: 6,
+    border: '1px solid #e2e8f0', borderRadius: 8,
     padding: '3px 9px', fontSize: '0.72rem', fontWeight: 600,
     textTransform: 'uppercase', letterSpacing: '0.06em',
   },
@@ -29,14 +29,14 @@ const S: Record<string, React.CSSProperties> = {
   },
   wrapToggle: {
     background: '#f8fafc', border: '1px solid #e2e8f0', color: '#475569',
-    borderRadius: 6, padding: '3px 9px', cursor: 'pointer',
+    borderRadius: 8, padding: '3px 9px', cursor: 'pointer',
     fontSize: '0.75rem', fontWeight: 500,
   },
   wrapToggleActive: {
-    background: '#eef2ff', borderColor: '#c7d2fe', color: '#4338ca',
+    background: 'var(--da-primary-soft)', borderColor: 'var(--da-primary-line)', color: 'var(--da-primary-hover)',
   },
-  empty: { padding: 60, color: '#94a3b8', fontSize: '0.95rem', textAlign: 'center' },
-  status: { fontSize: '0.82rem', color: '#94a3b8' },
+  empty: { padding: 60, color: 'var(--da-text-muted)', fontSize: '0.95rem', textAlign: 'center' },
+  status: { fontSize: '0.82rem', color: 'var(--da-text-muted)' },
   err: { color: '#dc2626' },
 };
 

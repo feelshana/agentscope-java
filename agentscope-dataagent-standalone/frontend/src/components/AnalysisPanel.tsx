@@ -25,9 +25,9 @@ export const METHOD_PLACEHOLDERS: Record<MethodChoice, string | null> = {
 };
 
 const trigger: CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', gap: 6, height: 36, padding: '0 10px', borderRadius: 10,
-  border: '1px solid var(--da-border, #E3E6EB)', background: 'var(--da-surface, #FFFFFF)',
-  color: 'var(--da-text, #3D434C)', fontSize: 13, cursor: 'pointer',
+  display: 'inline-flex', alignItems: 'center', gap: 6, height: 36, padding: '0 10px', borderRadius: 8,
+  border: '1px solid var(--da-border)', background: 'var(--da-surface)',
+  color: 'var(--da-text)', fontSize: 13, cursor: 'pointer',
 };
 
 /**
@@ -54,13 +54,13 @@ export function AnalysisMenu({ value, onChange, disabledReason, disabled }: {
     <div ref={root} style={{ position: 'relative', display: 'inline-flex' }}
       onKeyDown={e => { if (e.key === 'Escape') setOpen(false); }}>
       {chosen ? (
-        <span style={{ ...trigger, cursor: 'default', borderColor: 'var(--da-primary, #4B3FD0)', background: 'var(--da-primary-soft, #F1EFFE)', color: 'var(--da-primary-strong, #3A2FB0)', paddingRight: 4 }}>
+        <span style={{ ...trigger, cursor: 'default', borderColor: 'var(--da-primary)', background: 'var(--da-primary-soft)', color: 'var(--da-primary-strong)', paddingRight: 4 }}>
           <button type="button" disabled={disabled} onClick={() => setOpen(o => !o)} aria-haspopup="menu" aria-expanded={open}
             style={{ border: 'none', background: 'none', color: 'inherit', font: 'inherit', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, padding: 0 }}>
             <Icon name="chart" size="sm" />{ANALYSIS_NAMES[chosen]}
           </button>
           <button type="button" aria-label="取消分析方法" disabled={disabled} onClick={() => onChange('auto')}
-            style={{ border: 'none', background: 'none', color: 'inherit', cursor: 'pointer', width: 24, height: 24, borderRadius: 6, fontSize: 15, lineHeight: '24px' }}>×</button>
+            style={{ border: 'none', background: 'none', color: 'inherit', cursor: 'pointer', width: 24, height: 24, borderRadius: 8, fontSize: 15, lineHeight: '24px' }}>×</button>
         </span>
       ) : (
         <button type="button" disabled={disabled} onClick={() => setOpen(o => !o)} aria-haspopup="menu" aria-expanded={open} style={trigger}
@@ -69,8 +69,8 @@ export function AnalysisMenu({ value, onChange, disabledReason, disabled }: {
         </button>
       )}
       {open && (
-        <div role="menu" aria-label="分析方法" style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, zIndex: 20, width: 300, background: 'var(--da-surface, #FFFFFF)', border: '1px solid var(--da-border, #E3E6EB)', borderRadius: 12, boxShadow: '0 8px 24px rgba(20,24,31,0.12)', padding: 6 }}>
-          <div style={{ fontSize: 12, color: 'var(--da-text-muted, #5C6370)', padding: '6px 10px 4px' }}>
+        <div role="menu" aria-label="分析方法" style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, zIndex: 20, width: 300, background: 'var(--da-surface)', border: '1px solid var(--da-border)', borderRadius: 12, boxShadow: '0 8px 24px rgba(20,24,31,0.12)', padding: 6 }}>
+          <div style={{ fontSize: 12, color: 'var(--da-text-muted)', padding: '6px 10px 4px' }}>
             {disabledReason ? `暂不可用：${disabledReason}` : '选择后提问，先确认参数再分析'}
           </div>
           {METHODS.map(m => {
@@ -78,9 +78,9 @@ export function AnalysisMenu({ value, onChange, disabledReason, disabled }: {
             return (
               <button key={m} type="button" role="menuitemradio" aria-checked={value === m} aria-disabled={off}
                 onClick={() => { if (!off) { onChange(m); setOpen(false); } }}
-                style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, width: '100%', textAlign: 'left', border: 'none', borderRadius: 8, padding: '8px 10px', cursor: off ? 'not-allowed' : 'pointer', background: value === m ? 'var(--da-primary-soft, #F1EFFE)' : 'transparent', opacity: off ? 0.55 : 1, font: 'inherit' }}>
-                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--da-text, #1F2329)' }}>{ANALYSIS_NAMES[m]}</span>
-                <span style={{ fontSize: 12, color: 'var(--da-text-muted, #5C6370)' }}>{HINTS[m]}</span>
+                style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, width: '100%', textAlign: 'left', border: 'none', borderRadius: 8, padding: '8px 10px', cursor: off ? 'not-allowed' : 'pointer', background: value === m ? 'var(--da-primary-soft)' : 'transparent', opacity: off ? 0.55 : 1, font: 'inherit' }}>
+                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--da-text)' }}>{ANALYSIS_NAMES[m]}</span>
+                <span style={{ fontSize: 12, color: 'var(--da-text-muted)' }}>{HINTS[m]}</span>
               </button>
             );
           })}
@@ -115,10 +115,10 @@ function parseProposal(input?: string): Proposal | null {
 }
 
 const field: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 };
-const label: CSSProperties = { fontSize: 13, fontWeight: 600, color: 'var(--da-text, #3D434C)' };
+const label: CSSProperties = { fontSize: 13, fontWeight: 600, color: 'var(--da-text)' };
 const control: CSSProperties = {
-  height: 40, border: '1px solid var(--da-border, #D5D9E0)', borderRadius: 8, padding: '0 10px',
-  fontSize: 14, background: 'var(--da-surface, #FFFFFF)', color: 'var(--da-text, #1F2329)', minWidth: 0,
+  height: 40, border: '1px solid var(--da-border)', borderRadius: 8, padding: '0 10px',
+  fontSize: 14, background: 'var(--da-surface)', color: 'var(--da-text)', minWidth: 0,
 };
 
 /**
@@ -166,15 +166,15 @@ export function AnalysisParamsCard({ input, disabled, onStart, onCancel }: {
   const grains = method === 'anomaly' ? [['day', '按天'], ['hour', '按小时']] : [['day', '按天'], ['week', '按周'], ['month', '按月']];
 
   return (
-    <section aria-label="确认分析参数" style={{ border: '1px solid var(--da-border, #E3E6EB)', borderRadius: 12, overflow: 'hidden', background: 'var(--da-surface, #FFFFFF)', marginTop: 12 }}>
-      <header style={{ padding: '14px 18px', borderBottom: '1px solid var(--da-border-soft, #EEF0F3)', display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 10 }}>
+    <section aria-label="确认分析参数" style={{ border: '1px solid var(--da-border)', borderRadius: 12, overflow: 'hidden', background: 'var(--da-surface)', marginTop: 12 }}>
+      <header style={{ padding: '14px 18px', borderBottom: '1px solid var(--da-border-soft)', display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 10 }}>
         <strong style={{ fontSize: 15 }}>确认分析参数 · {ANALYSIS_NAMES[method]}</strong>
-        <span style={{ fontSize: 12, color: 'var(--da-text-muted, #5C6370)' }}>已根据问题和语义模型预填，可修改后开始</span>
+        <span style={{ fontSize: 12, color: 'var(--da-text-muted)' }}>已根据问题和语义模型预填，可修改后开始</span>
       </header>
       <fieldset disabled={locked} style={{ border: 'none', margin: 0, padding: '16px 18px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px 20px' }}>
         <label style={field}><span style={label}>分析指标</span>
           <input style={control} value={metric} onChange={e => setMetric(e.target.value)} />
-          {proposal?.metric_note && <span style={{ fontSize: 12, color: 'var(--da-text-muted, #5C6370)' }}>{proposal.metric_note}</span>}
+          {proposal?.metric_note && <span style={{ fontSize: 12, color: 'var(--da-text-muted)' }}>{proposal.metric_note}</span>}
         </label>
         <label style={field}><span style={label}>{method === 'attribution' ? '当前期' : '时间范围'}</span>
           <input style={control} value={current} onChange={e => setCurrent(e.target.value)} placeholder="YYYY-MM-DD 至 YYYY-MM-DD" />
@@ -185,18 +185,18 @@ export function AnalysisParamsCard({ input, disabled, onStart, onCancel }: {
           </label>
           <label style={field}><span style={label}>下钻层级</span>
             <select style={control} value={depth} onChange={e => setDepth(Number(e.target.value))}>
-              <option value={2}>2 层（推荐）</option><option value={1}>1 层</option>
+              <option value={1}>1 层（推荐）</option><option value={2}>2 层</option>
             </select>
           </label>
           <div style={{ ...field, gridColumn: '1 / -1' }}>
             <span style={label}>归因维度（最多 4 个）</span>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               {candidates.map(d => (
-                <label key={d} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, padding: '6px 10px', borderRadius: 8, border: `1px solid ${dims.includes(d) ? 'var(--da-primary, #4B3FD0)' : 'var(--da-border, #D5D9E0)'}` }}>
+                <label key={d} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, padding: '6px 10px', borderRadius: 8, border: `1px solid ${dims.includes(d) ? 'var(--da-primary)' : 'var(--da-border)'}` }}>
                   <input type="checkbox" checked={dims.includes(d)} onChange={() => toggleDim(d)} /> {d}
                 </label>
               ))}
-              {candidates.length === 0 && <span style={{ fontSize: 13, color: 'var(--da-text-muted, #5C6370)' }}>助手没有提供候选维度，请取消后在问题中说明按什么维度分析</span>}
+              {candidates.length === 0 && <span style={{ fontSize: 13, color: 'var(--da-text-muted)' }}>助手没有提供候选维度，请取消后在问题中说明按什么维度分析</span>}
             </div>
           </div>
         </>}
@@ -213,7 +213,7 @@ export function AnalysisParamsCard({ input, disabled, onStart, onCancel }: {
           </label>
         )}
         {(proposal?.filters?.length ?? 0) > 0 && (
-          <div style={{ ...field, gridColumn: '1 / -1', background: 'var(--da-surface-muted, #F8F9FB)', borderRadius: 8, padding: '10px 12px' }}>
+          <div style={{ ...field, gridColumn: '1 / -1', background: 'var(--da-surface-muted)', borderRadius: 8, padding: '10px 12px' }}>
             <span style={label}>默认过滤（来自知识库业务规则）</span>
             {proposal!.filters!.map(f => (
               <label key={f} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
@@ -223,10 +223,10 @@ export function AnalysisParamsCard({ input, disabled, onStart, onCancel }: {
           </div>
         )}
       </fieldset>
-      <footer style={{ padding: '12px 18px', borderTop: '1px solid var(--da-border-soft, #EEF0F3)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
+      <footer style={{ padding: '12px 18px', borderTop: '1px solid var(--da-border-soft)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
         <button type="button" className="da-btn da-btn-primary" disabled={locked || missing} onClick={start}>{started ? '已开始分析' : '开始分析'}</button>
         <button type="button" className="da-btn" disabled={locked} onClick={() => { setStarted(true); onCancel(); }}>取消，按普通问数回答</button>
-        <span style={{ fontSize: 12, color: 'var(--da-text-muted, #5C6370)' }}>预计 20–60 秒：取数后在沙箱中运行分析脚本</span>
+        <span style={{ fontSize: 12, color: 'var(--da-text-muted)' }}>预计 20–60 秒：取数后在沙箱中运行分析脚本</span>
       </footer>
     </section>
   );
@@ -246,11 +246,11 @@ export function AnalysisFollowUps({ methods, disabled, onPick }: {
 }) {
   if (methods.length === 0) return null;
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 12, paddingTop: 10, borderTop: '1px dashed var(--da-border, #E3E6EB)' }}>
-      <span style={{ fontSize: 12, color: 'var(--da-text-muted, #5C6370)' }}>继续分析</span>
+    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 12, paddingTop: 10, borderTop: '1px dashed var(--da-border)' }}>
+      <span style={{ fontSize: 12, color: 'var(--da-text-muted)' }}>继续分析</span>
       {methods.map(m => (
         <button key={m} type="button" disabled={disabled} onClick={() => onPick(m)}
-          style={{ fontSize: 13, padding: '6px 12px', borderRadius: 999, border: '1px solid var(--da-primary-soft-border, #C9C3F7)', background: 'var(--da-primary-soft, #F7F6FE)', color: 'var(--da-primary-strong, #3A2FB0)', cursor: disabled ? 'not-allowed' : 'pointer' }}>
+          style={{ fontSize: 13, padding: '6px 12px', borderRadius: 999, border: '1px solid var(--da-primary-soft-border)', background: 'var(--da-primary-soft)', color: 'var(--da-primary-strong)', cursor: disabled ? 'not-allowed' : 'pointer' }}>
           {FOLLOW_UP_LABELS[m]}
         </button>
       ))}

@@ -62,9 +62,9 @@ const S: Record<string, React.CSSProperties> = {
     color: '#475569',
   },
   fileTabActive: {
-    background: '#4338ca',
+    background: 'var(--da-primary-hover)',
     color: '#ffffff',
-    border: '1px solid #4338ca',
+    border: '1px solid var(--da-primary-hover)',
   },
   fileTabEdited: { borderColor: '#f59e0b', color: '#b45309' },
   payload: {
@@ -92,8 +92,8 @@ const S: Record<string, React.CSSProperties> = {
   },
   editRow: { display: 'flex', gap: 8, alignItems: 'center', fontSize: '0.78rem' },
   smallBtn: {
-    background: '#e0e7ff',
-    color: '#4338ca',
+    background: 'var(--da-primary-soft)',
+    color: 'var(--da-primary-hover)',
     border: 'none',
     borderRadius: 6,
     padding: '4px 10px',
@@ -135,9 +135,9 @@ const S: Record<string, React.CSSProperties> = {
 
 function filterBtnStyle(active: boolean): React.CSSProperties {
   return {
-    background: active ? '#4338ca' : '#ffffff',
+    background: active ? 'var(--da-primary-hover)' : '#ffffff',
     color: active ? '#ffffff' : '#475569',
-    border: '1px solid ' + (active ? '#4338ca' : '#e5e7eb'),
+    border: '1px solid ' + (active ? 'var(--da-primary-hover)' : '#e5e7eb'),
     borderRadius: 6,
     padding: '6px 14px',
     cursor: 'pointer',
@@ -154,8 +154,8 @@ function badgeStyle(status: string): React.CSSProperties {
     fontSize: '0.72rem',
     fontWeight: 700,
     background:
-      status === 'APPROVED' ? '#dcfce7' : status === 'REJECTED' ? '#fee2e2' : '#e0e7ff',
-    color: status === 'APPROVED' ? '#166534' : status === 'REJECTED' ? '#991b1b' : '#4338ca',
+      status === 'APPROVED' ? '#dcfce7' : status === 'REJECTED' ? '#fee2e2' : 'var(--da-primary-soft)',
+    color: status === 'APPROVED' ? '#166534' : status === 'REJECTED' ? '#991b1b' : 'var(--da-primary-hover)',
   };
 }
 

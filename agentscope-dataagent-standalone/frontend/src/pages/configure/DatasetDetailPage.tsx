@@ -25,7 +25,7 @@ const overlayStyle: React.CSSProperties = {
 
 const modalStyle: React.CSSProperties = {
   background: 'var(--da-surface)',
-  borderRadius: 16,
+  borderRadius: 12,
   width: 'min(1120px, 94vw)',
   maxHeight: '80vh',
   display: 'flex',
@@ -131,7 +131,7 @@ function FieldEditModal({ columns, edits, typeEdits, onChange, onSave, onClose, 
                         value={currentType}
                         onChange={e => onChange(c.name, edits[c.name] ?? c.description ?? '', e.target.value)}
                         style={{
-                          width: '100%', padding: '6px 8px', borderRadius: 6,
+                          width: '100%', padding: '6px 8px', borderRadius: 8,
                           border: '1px solid var(--da-border-strong)', fontSize: '0.82rem',
                           background: 'var(--da-surface)', color: 'var(--da-text)',
                         }}
@@ -150,7 +150,7 @@ function FieldEditModal({ columns, edits, typeEdits, onChange, onSave, onClose, 
                         onChange={e => onChange(c.name, e.target.value, typeEdits[c.name] ?? c.sqlType)}
                         placeholder="请输入字段描述"
                         style={{
-                          width: '100%', padding: '6px 8px', borderRadius: 6,
+                          width: '100%', padding: '6px 8px', borderRadius: 8,
                           border: '1px solid var(--da-border-strong)', fontSize: '0.82rem',
                           boxSizing: 'border-box', resize: 'vertical', lineHeight: 1.6,
                         }}

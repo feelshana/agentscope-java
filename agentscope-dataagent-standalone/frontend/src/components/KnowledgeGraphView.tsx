@@ -75,7 +75,7 @@ const toolbarStyle: React.CSSProperties = {
 const toolBtnStyle: React.CSSProperties = {
   background: 'rgba(255,255,255,0.94)',
   border: '1px solid var(--da-border)',
-  borderRadius: 6,
+  borderRadius: 8,
   padding: '4px 8px',
   fontSize: '0.72rem',
   color: 'var(--da-text-2)',
@@ -202,7 +202,7 @@ export default function KnowledgeGraphView({ groupId }: { groupId: string }) {
           fill: (d: any) => NODE_COLORS[hash(d.data?.type ?? 'Entity') % NODE_COLORS.length],
           labelText: (d: any) => d.data?.label ?? d.id,
           labelFontSize: 11,
-          labelFill: '#1a1d23',
+          labelFill: 'var(--da-text)',
           labelBackground: true,
           labelBackgroundFill: '#ffffff',
           labelBackgroundOpacity: 0.85,
@@ -351,7 +351,7 @@ export default function KnowledgeGraphView({ groupId }: { groupId: string }) {
               fontSize: '0.75rem',
               background: 'rgba(255,255,255,0.94)',
               padding: '4px 10px',
-              borderRadius: 6,
+              borderRadius: 8,
             }}
           >
             {error}

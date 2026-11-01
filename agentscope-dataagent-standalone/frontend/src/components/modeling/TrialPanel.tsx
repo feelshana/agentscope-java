@@ -243,11 +243,11 @@ function TrialAnswer({ review, busy, fixing, assistantIdle, onAccept, onAskFix, 
   return <div className="da-card" style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
     <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
       <strong style={{ flex: 1, minWidth: 0 }}>
-        {recommended && <span title="问数页选中该知识库时会预填这个问题" style={{ fontSize: 11, fontWeight: 600, padding: '1px 7px', borderRadius: 999, marginRight: 6, verticalAlign: 'middle',
-          background: 'var(--da-primary-soft, #EEECFD)', color: 'var(--da-primary-strong, #3A2FB0)' }}>推荐问题</span>}
+        {recommended && <span title="问数页选中该知识库时会预填这个问题" style={{ fontSize: 12, fontWeight: 600, padding: '1px 7px', borderRadius: 999, marginRight: 6, verticalAlign: 'middle',
+          background: 'var(--da-primary-soft)', color: 'var(--da-primary-strong)' }}>推荐问题</span>}
         {q.question}</strong>
-      <span style={{ flex: 'none', fontSize: 11, padding: '1px 7px', borderRadius: 999,
-        background: confirmed ? 'rgba(22,163,74,.12)' : 'var(--da-surface-sunken, #f1f5f9)',
+      <span style={{ flex: 'none', fontSize: 12, padding: '1px 7px', borderRadius: 999,
+        background: confirmed ? 'rgba(22,163,74,.12)' : 'var(--da-surface-sunken)',
         color: confirmed ? 'var(--da-success)' : 'var(--da-text-muted)' }}>{confirmed ? '已确认' : stale ? '待重新运行' : '待确认'}</span>
     </div>
     {q.definition && <Definition text={q.definition} />}
@@ -313,10 +313,10 @@ function Definition({ text }: { text: string }) {
   items.sort((a, b) => DEFINITION_KEYS.indexOf(a.key) - DEFINITION_KEYS.indexOf(b.key));
   const hidden = items.filter(i => !PRIMARY_KEYS.has(i.key));
   const shown = more ? items : items.filter(i => PRIMARY_KEYS.has(i.key));
-  return <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '8px 10px', borderRadius: 8, background: 'var(--da-surface-sunken, #f8fafc)' }}>
+  return <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '8px 10px', borderRadius: 8, background: 'var(--da-surface-sunken)' }}>
     {shown.map(i => <div key={i.key} style={{ display: 'flex', gap: 8, fontSize: 12, lineHeight: 1.55 }}>
       <span style={{ flex: '0 0 52px', color: 'var(--da-text-muted)' }}>{i.key}</span>
-      <span title={i.value} style={{ flex: 1, minWidth: 0, color: 'var(--da-text-2, #334155)', ...(more ? {} : clamp) }}>{i.value || '无'}</span>
+      <span title={i.value} style={{ flex: 1, minWidth: 0, color: 'var(--da-text-2)', ...(more ? {} : clamp) }}>{i.value || '无'}</span>
     </div>)}
     {hidden.length > 0 && <button type="button" onClick={() => setMore(v => !v)}
       style={{ alignSelf: 'flex-start', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12, color: 'var(--da-primary)' }}>
@@ -343,7 +343,7 @@ function RecommendedCard({ value, disabled, onAsk, onSave, onRegenerate }: {
     try { if (await action()) setEditing(false); } finally { setWorking(null); }
   };
   const question = value?.question ?? null;
-  return <section aria-label="推荐问题" style={{ border: '1px solid var(--da-primary-soft-border, #C9C3F7)', borderRadius: 10, padding: 10, background: 'var(--da-primary-soft, #F7F6FE)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+  return <section aria-label="推荐问题" style={{ border: '1px solid var(--da-primary-soft-border)', borderRadius: 8, padding: 10, background: 'var(--da-primary-soft)', display: 'flex', flexDirection: 'column', gap: 6 }}>
     <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
       <strong style={{ fontSize: 13 }}>推荐问题</strong>
       {value?.manual && <span className="da-small" style={{ color: 'var(--da-text-muted)' }}>· 已手动修改</span>}

@@ -157,7 +157,7 @@ export default function DebugPage() {
                   </div>
                 </div>
               ) : (
-                !infoErr && <p style={{ color: '#94a3b8', padding: '0 32px' }}>Loading…</p>
+                !infoErr && <p style={{ color: 'var(--da-text-muted)', padding: '0 32px' }}>Loading…</p>
               )}
             </>
           )}
@@ -185,7 +185,7 @@ export default function DebugPage() {
                   <div key={i} style={logLineColor(line)}>{line}</div>
                 ))}
               </div>
-              <div style={{ marginTop: 10, fontSize: '0.82rem', color: '#94a3b8', padding: '0 32px' }}>
+              <div style={{ marginTop: 10, fontSize: '0.82rem', color: 'var(--da-text-muted)', padding: '0 32px' }}>
                 {autoScroll ? 'Auto-scroll: on (scroll up to pause)' : 'Auto-scroll: off (scroll to bottom to resume)'}
                 {' · '}{logs.length} lines
               </div>

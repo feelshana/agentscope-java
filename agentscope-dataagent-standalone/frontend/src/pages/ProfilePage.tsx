@@ -76,10 +76,10 @@ const S: Record<string, React.CSSProperties> = {
     display: 'inline-block', padding: '2px 9px', borderRadius: 12, fontSize: '0.72rem',
     fontWeight: 600,
   } as React.CSSProperties,
-  fieldLabel: { display: 'block', fontSize: '0.78rem', fontWeight: 500, color: '#94a3b8', marginBottom: 5 },
+  fieldLabel: { display: 'block', fontSize: '0.78rem', fontWeight: 500, color: 'var(--da-text-muted)', marginBottom: 5 },
   input: {
     width: '100%', boxSizing: 'border-box' as const, padding: '8px 11px',
-    background: 'var(--da-surface)', border: '1px solid var(--da-border-strong)', borderRadius: 7,
+    background: 'var(--da-surface)', border: '1px solid var(--da-border-strong)', borderRadius: 8,
     color: 'var(--da-text)', fontSize: '0.85rem',
   },
   saveBtn: {

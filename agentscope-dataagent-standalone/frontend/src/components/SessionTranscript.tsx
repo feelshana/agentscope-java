@@ -18,16 +18,16 @@ const S: Record<string, React.CSSProperties> = {
   },
   danger: { color: '#dc2626', borderColor: '#fca5a5' },
   primary: {
-    background: 'linear-gradient(135deg,#4f46e5 0%,#4338ca 100%)',
+    background: 'var(--da-primary)',
     color: '#ffffff', border: 'none',
-    boxShadow: '0 2px 6px rgba(99,102,241,0.25), inset 0 1px 0 rgba(255,255,255,0.18)',
+    boxShadow: '0 2px 6px rgba(91, 61, 245,0.25), inset 0 1px 0 rgba(255,255,255,0.18)',
   },
-  meta: { fontSize: '0.82rem', color: '#94a3b8', fontFamily: 'monospace', marginBottom: 22 },
+  meta: { fontSize: '0.82rem', color: 'var(--da-text-muted)', fontFamily: 'monospace', marginBottom: 22 },
   msg: { padding: '14px 18px', borderRadius: 12, marginBottom: 14, fontSize: '0.95rem', lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' },
-  user: { background: '#eef2ff', color: '#312e81', borderLeft: '3px solid #4f46e5' },
+  user: { background: 'var(--da-primary-soft)', color: '#312e81', borderLeft: '3px solid var(--da-primary)' },
   assistant: { background: '#ffffff', color: '#0f172a', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(15,23,42,0.04)' },
   tool: { background: '#f8fafc', border: '1px dashed #cbd5e1', color: '#475569' },
-  role: { fontSize: '0.74rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 600, marginBottom: 6 },
+  role: { fontSize: '0.74rem', color: 'var(--da-text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 600, marginBottom: 6 },
   err: { color: '#dc2626', fontSize: '0.9rem' },
 };
 
@@ -86,7 +86,7 @@ export default function SessionTranscript({ agentId, sessionKey }: { agentId: st
       <div style={S.meta}>{sessionKey}</div>
       {err && <div style={S.err}>{err}</div>}
       {!err && entries.length === 0 && (
-        <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>No turns recorded.</div>
+        <div style={{ color: 'var(--da-text-muted)', fontSize: '0.85rem' }}>No turns recorded.</div>
       )}
       {entries.map(t => {
         const role = String(t.role).toUpperCase();

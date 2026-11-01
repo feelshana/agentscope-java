@@ -37,7 +37,7 @@ const getTopUsers   = (days: number)  => apiFetch<GroupCount[]>(`/api/admin/usag
 const getTopAgents  = (days: number)  => apiFetch<GroupCount[]>(`/api/admin/usage/top-agents?days=${days}&n=10`);
 
 function TopList({ title, items, color }: { title: string; items: GroupCount[]; color: string }) {
-  if (!items.length) return <div style={{ color: '#94a3b8', fontSize: '0.88rem' }}>(no data yet)</div>;
+  if (!items.length) return <div style={{ color: 'var(--da-text-muted)', fontSize: '0.88rem' }}>(no data yet)</div>;
   const max = Math.max(...items.map(i => i.count), 1);
   return (
     <div>
@@ -50,7 +50,7 @@ function TopList({ title, items, color }: { title: string; items: GroupCount[]; 
           <div style={{ flex: 1, background: '#f1f5f9', borderRadius: 4, height: 10 }}>
             <div style={{ width: `${(item.count / max) * 100}%`, background: color, height: 10, borderRadius: 4, minWidth: 4 }} />
           </div>
-          <div style={{ width: 40, fontSize: '0.88rem', color: '#4f46e5', textAlign: 'right', flexShrink: 0, fontWeight: 600 }}>{item.count}</div>
+          <div style={{ width: 40, fontSize: '0.88rem', color: 'var(--da-primary)', textAlign: 'right', flexShrink: 0, fontWeight: 600 }}>{item.count}</div>
         </div>
       ))}
     </div>
@@ -69,8 +69,8 @@ interface BarChartProps {
   labelStep?: number;
 }
 
-function BarChart({ data, width = 600, height = 140, color = '#4f46e5', labelStep = 4 }: BarChartProps) {
-  if (!data.length) return <div style={{ color: '#94a3b8', fontSize: '0.88rem' }}>(no data yet)</div>;
+function BarChart({ data, width = 600, height = 140, color = 'var(--da-primary)', labelStep = 4 }: BarChartProps) {
+  if (!data.length) return <div style={{ color: 'var(--da-text-muted)', fontSize: '0.88rem' }}>(no data yet)</div>;
 
   const maxCount = Math.max(...data.map(d => d.count), 1);
   const barW = (width - 20) / data.length;
@@ -155,7 +155,7 @@ interface SparklineProps {
   color?: string;
 }
 
-function Sparkline({ data, width = 600, height = 72, color = '#4f46e5' }: SparklineProps) {
+function Sparkline({ data, width = 600, height = 72, color = 'var(--da-primary)' }: SparklineProps) {
   if (data.length < 2) return null;
   const maxCount = Math.max(...data.map(d => d.count), 1);
   const step = (width - 20) / (data.length - 1);
@@ -207,7 +207,7 @@ const S: Record<string, React.CSSProperties> = {
   cards: { display: 'flex', gap: 18, flexWrap: 'wrap', marginBottom: '2.25rem' },
   card: { background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '1.25rem 1.6rem', flex: '1 1 180px', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' },
   cardLabel: { fontSize: '0.78rem', color: '#64748b', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 },
-  cardValue: { fontSize: '2.1rem', fontWeight: 700, color: '#4f46e5', lineHeight: 1, letterSpacing: '-0.02em' },
+  cardValue: { fontSize: '2.1rem', fontWeight: 700, color: 'var(--da-primary)', lineHeight: 1, letterSpacing: '-0.02em' },
   chartCard: { background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '1.5rem 1.75rem', marginBottom: 20, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' },
   chartTitle: { fontSize: '0.95rem', fontWeight: 600, color: '#0f172a', marginBottom: 14 },
   tabs: { display: 'flex', gap: 8, marginBottom: 0 },
@@ -220,9 +220,9 @@ const S: Record<string, React.CSSProperties> = {
 
 function tabBtnStyle(active: boolean): React.CSSProperties {
   return {
-    background: active ? '#eef2ff' : '#ffffff',
-    border: `1px solid ${active ? '#c7d2fe' : '#d1d5db'}`,
-    color: active ? '#4338ca' : '#475569',
+    background: active ? 'var(--da-primary-soft)' : '#ffffff',
+    border: `1px solid ${active ? 'var(--da-primary-line)' : '#d1d5db'}`,
+    color: active ? 'var(--da-primary-hover)' : '#475569',
     borderRadius: 6, padding: '5px 14px', cursor: 'pointer', fontSize: '0.84rem', fontWeight: active ? 600 : 500,
   };
 }
@@ -311,7 +311,7 @@ export default function UsagePage() {
               ))}
             </div>
           </div>
-          <Sparkline data={hourly} width={840} height={80} color="#4f46e5" />
+          <Sparkline data={hourly} width={840} height={80} color="var(--da-primary)" />
         </div>
 
         {/* Daily bar chart */}
@@ -324,7 +324,7 @@ export default function UsagePage() {
               ))}
             </div>
           </div>
-          <BarChart data={daily} width={840} height={150} color="#4f46e5" labelStep={2} />
+          <BarChart data={daily} width={840} height={150} color="var(--da-primary)" labelStep={2} />
         </div>
 
         {/* Top users / agents */}
@@ -338,18 +338,18 @@ export default function UsagePage() {
                 ))}
               </div>
             </div>
-            <TopList title="" items={topUsers} color="#4f46e5" />
+            <TopList title="" items={topUsers} color="var(--da-primary)" />
           </div>
           <div style={S.chartCard}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
               <span style={S.chartTitle}>Top Agents by Turns</span>
             </div>
-            <TopList title="" items={topAgents} color="#4f46e5" />
+            <TopList title="" items={topAgents} color="var(--da-primary)" />
           </div>
         </div>
 
         {summary?.totalTurns === 0 && (
-          <p style={{ color: '#94a3b8', fontSize: '0.9rem', textAlign: 'center', marginTop: '1.5rem' }}>
+          <p style={{ color: 'var(--da-text-muted)', fontSize: '0.9rem', textAlign: 'center', marginTop: '1.5rem' }}>
             No usage data yet. Start some conversations and come back here.
           </p>
         )}

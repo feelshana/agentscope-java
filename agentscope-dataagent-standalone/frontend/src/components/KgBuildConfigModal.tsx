@@ -180,7 +180,7 @@ export default function KgBuildConfigModal({
               style={{
                 width: '100%',
                 border: '1px solid var(--da-border)',
-                borderRadius: 6,
+                borderRadius: 8,
                 padding: '6px 8px',
                 fontSize: '0.8rem',
                 marginBottom: 8,

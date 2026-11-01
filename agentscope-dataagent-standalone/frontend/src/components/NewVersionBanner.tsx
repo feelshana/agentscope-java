@@ -36,8 +36,8 @@ export default function NewVersionBanner() {
   }, []);
   if (!stale) return null;
   return <div role="alert" style={{ position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 2000,
-    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderRadius: 10, fontSize: 13,
-    background: 'var(--da-surface, #fff)', border: '1px solid var(--da-primary)', boxShadow: 'var(--da-shadow-pop)' }}>
+    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderRadius: 8, fontSize: 13,
+    background: 'var(--da-surface)', border: '1px solid var(--da-primary)', boxShadow: 'var(--da-shadow-pop)' }}>
     页面已更新到新版本，刷新后生效
     <button className="da-btn da-btn-primary da-btn-sm" onClick={() => window.location.reload()}>刷新</button>
   </div>;

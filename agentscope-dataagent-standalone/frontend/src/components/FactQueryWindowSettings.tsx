@@ -119,7 +119,7 @@ export function FactQueryWindowSettings({ groupId, automatic = false, onReady, h
             const update = (change: Partial<Draft>) => setDraft(previous => ({
               ...previous, [table.datasetId]: { ...previous[table.datasetId], ...change },
             }));
-            return <section key={table.datasetId} style={{ border: '1px solid var(--da-border)', borderRadius: 10, padding: '12px 14px' }}>
+            return <section key={table.datasetId} style={{ border: '1px solid var(--da-border)', borderRadius: 8, padding: '12px 14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                 <code style={{ fontSize: 14, fontWeight: 600 }}>{table.tableName}</code>
                 <span className="da-badge">事实表</span>

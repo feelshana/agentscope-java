@@ -86,7 +86,7 @@ const SF: Record<string, React.CSSProperties> = {
   checkRow: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 },
   hint:     { fontSize: '0.8rem', color: C.dimmed, marginTop: -10, marginBottom: 12 },
   btnRow:   { display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 },
-  saveBtn:  { background: 'var(--da-primary)', color: 'var(--da-surface)', border: 'none', borderRadius: 8, padding: '10px 28px', cursor: 'pointer', fontSize: '0.92rem', fontWeight: 600, boxShadow: '0 1px 3px rgba(79,70,229,0.25)' } as React.CSSProperties,
+  saveBtn:  { background: 'var(--da-primary)', color: 'var(--da-surface)', border: 'none', borderRadius: 8, padding: '10px 28px', cursor: 'pointer', fontSize: '0.92rem', fontWeight: 600, boxShadow: '0 1px 3px rgba(91, 61, 245,0.25)' } as React.CSSProperties,
   msgOk:    { color: C.green, fontSize: '0.88rem', fontWeight: 500 },
   msgErr:   { color: C.red, fontSize: '0.88rem', fontWeight: 500 },
   msgWarn:  { color: C.yellow, fontSize: '0.88rem', fontWeight: 500 },
@@ -154,7 +154,7 @@ function ConfigPanel({ detail, agentId }: { detail: AgentDetailView; agentId: st
             <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.84rem', color: C.dimmed }}>{d.id}</div>
           </div>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, fontSize: '0.78rem' }}>
-            {d.isMain && <span style={{ background: C.accentBg, color: C.accent, borderRadius: 999, padding: '3px 12px', fontWeight: 600, border: '1px solid rgba(79, 70, 229, 0.22)' }}>main</span>}
+            {d.isMain && <span style={{ background: C.accentBg, color: C.accent, borderRadius: 999, padding: '3px 12px', fontWeight: 600, border: '1px solid rgba(91, 61, 245, 0.22)' }}>main</span>}
             {d.liveInGateway
               ? <span style={{ background: C.greenBg, color: '#15803d', borderRadius: 999, padding: '3px 12px', fontWeight: 600, border: '1px solid #86efac' }}>● live</span>
               : <span style={{ background: '#fffbeb', color: '#92400e', borderRadius: 999, padding: '3px 12px', border: '1px solid #fcd34d', fontWeight: 600 }}>○ pending restart</span>}
@@ -321,7 +321,7 @@ const SW: Record<string, React.CSSProperties> = {
   editor:     { flex: 1, display: 'flex', flexDirection: 'column' as const, minHeight: 0, overflow: 'hidden' },
   edHead:     { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 18px', borderBottom: `1px solid ${C.border}`, background: 'var(--da-app-bg)', flexShrink: 0 },
   edPath:     { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.88rem', color: 'var(--da-text-2)', flex: 1, fontWeight: 500 },
-  edSaveBtn:  { background: 'var(--da-primary)', color: 'var(--da-surface)', border: 'none', borderRadius: 6, padding: '6px 18px', cursor: 'pointer', fontSize: '0.86rem', fontWeight: 600, boxShadow: '0 1px 3px rgba(79,70,229,0.25)' } as React.CSSProperties,
+  edSaveBtn:  { background: 'var(--da-primary)', color: 'var(--da-surface)', border: 'none', borderRadius: 6, padding: '6px 18px', cursor: 'pointer', fontSize: '0.86rem', fontWeight: 600, boxShadow: '0 1px 3px rgba(91, 61, 245,0.25)' } as React.CSSProperties,
   edDelBtn:   { background: 'var(--da-surface)', color: C.red, border: '1px solid #fecaca', borderRadius: 6, padding: '6px 14px', cursor: 'pointer', fontSize: '0.86rem', fontWeight: 500 } as React.CSSProperties,
   edStatus:   { fontSize: '0.82rem', color: C.dimmed },
   textarea:   { flex: 1, background: 'var(--da-surface)', color: C.text, border: 'none', outline: 'none', padding: '20px 22px', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.9rem', resize: 'none' as const, lineHeight: 1.7 } as React.CSSProperties,
@@ -331,7 +331,7 @@ const SW: Record<string, React.CSSProperties> = {
   errBox:     { color: C.red, background: '#fef2f2', border: `1px solid #fecaca`, borderRadius: 10, padding: '10px 14px', margin: '10px 18px', fontSize: '0.88rem' },
   // Init banner
   initBanner: { display: 'flex', flexDirection: 'column' as const, alignItems: 'center', justifyContent: 'center', flex: 1, gap: 14, color: C.muted, textAlign: 'center' as const },
-  initBtn:    { background: 'var(--da-primary)', color: 'var(--da-surface)', border: 'none', borderRadius: 10, padding: '11px 28px', cursor: 'pointer', fontSize: '0.92rem', fontWeight: 600, marginTop: 10, boxShadow: '0 2px 6px rgba(79,70,229,0.25)' } as React.CSSProperties,
+  initBtn:    { background: 'var(--da-primary)', color: 'var(--da-surface)', border: 'none', borderRadius: 10, padding: '11px 28px', cursor: 'pointer', fontSize: '0.92rem', fontWeight: 600, marginTop: 10, boxShadow: '0 2px 6px rgba(91, 61, 245,0.25)' } as React.CSSProperties,
 };
 
 // Small tree item component

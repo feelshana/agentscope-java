@@ -12,7 +12,7 @@ import {
 // ── styles ────────────────────────────────────────────────────────────
 function badge(isAdmin: boolean): React.CSSProperties {
   return { display: 'inline-block', padding: '2px 10px', borderRadius: 999, fontSize: '0.76rem', marginRight: 6, fontWeight: 500,
-    background: isAdmin ? '#e0e7ff' : '#f1f5f9', color: isAdmin ? '#4338ca' : '#64748b' };
+    background: isAdmin ? 'var(--da-primary-soft)' : '#f1f5f9', color: isAdmin ? 'var(--da-primary-hover)' : '#64748b' };
 }
 function actionBtn(danger?: boolean): React.CSSProperties {
   return { padding: '5px 12px', fontSize: '0.82rem', marginRight: 6, fontWeight: 500,
@@ -33,7 +33,7 @@ const S: Record<string, React.CSSProperties> = {
   label:    { display: 'block', fontSize: '0.85rem', color: '#475569', fontWeight: 500, marginBottom: 6 },
   input:    { width: '100%', boxSizing: 'border-box' as const, padding: '9px 12px', background: '#ffffff', border: '1px solid #d1d5db', borderRadius: 8, color: '#0f172a', fontSize: '0.92rem', outline: 'none', marginBottom: 18 },
   checkRow: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 },
-  saveBtn:  { background: '#4f46e5', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 24px', cursor: 'pointer', fontSize: '0.92rem', fontWeight: 600, marginRight: 10, boxShadow: '0 1px 3px rgba(79,70,229,0.25)' },
+  saveBtn:  { background: 'var(--da-primary)', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 24px', cursor: 'pointer', fontSize: '0.92rem', fontWeight: 600, marginRight: 10, boxShadow: '0 1px 3px rgba(91, 61, 245,0.25)' },
   cancelBtn:{ background: '#ffffff', border: '1px solid #d1d5db', color: '#475569', borderRadius: 8, padding: '9px 18px', cursor: 'pointer', fontSize: '0.92rem', fontWeight: 500 },
   // Modals (for edit roles / reset password — kept as overlay since user-specific)
   modal:    { position: 'fixed' as const, inset: 0, background: 'rgba(15,23,42,0.35)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
@@ -41,7 +41,7 @@ const S: Record<string, React.CSSProperties> = {
   modalTitle:{ margin: '0 0 22px', fontSize: '1.1rem', fontWeight: 600, color: '#0f172a' } as React.CSSProperties,
   modalInput:{ width: '100%', boxSizing: 'border-box' as const, padding: '9px 12px', background: '#ffffff', border: '1px solid #d1d5db', borderRadius: 8, color: '#0f172a', fontSize: '0.92rem', outline: 'none', marginBottom: 18 },
   modalActions:{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 10 } as React.CSSProperties,
-  primaryBtn:  { padding: '8px 20px', background: '#4f46e5', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600, boxShadow: '0 1px 3px rgba(79,70,229,0.25)' } as React.CSSProperties,
+  primaryBtn:  { padding: '8px 20px', background: 'var(--da-primary)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600, boxShadow: '0 1px 3px rgba(91, 61, 245,0.25)' } as React.CSSProperties,
   secBtn:      { padding: '8px 16px', background: '#ffffff', border: '1px solid #d1d5db', color: '#475569', borderRadius: 8, cursor: 'pointer', fontSize: '0.9rem', fontWeight: 500 } as React.CSSProperties,
 };
 
@@ -152,7 +152,7 @@ export default function UsersPage() {
                 ))}
               </tbody>
             </table>
-            {!loading && users.length === 0 && <p style={{ color: '#94a3b8', fontSize: '0.92rem', marginTop: 16 }}>No users found.</p>}
+            {!loading && users.length === 0 && <p style={{ color: 'var(--da-text-muted)', fontSize: '0.92rem', marginTop: 16 }}>No users found.</p>}
           </>
         )}
 
