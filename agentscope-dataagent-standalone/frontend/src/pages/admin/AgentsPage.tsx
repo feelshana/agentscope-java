@@ -26,7 +26,7 @@ const S: Record<string, React.CSSProperties> = {
   th:         { textAlign: 'left' as const, padding: '12px 16px', background: '#f8fafc', color: '#64748b', borderBottom: '1px solid #e5e7eb', fontWeight: 600, fontSize: '0.78rem', textTransform: 'uppercase' as const, letterSpacing: '0.04em' },
   td:         { padding: '14px 16px', borderBottom: '1px solid #f1f5f9', color: '#334155', verticalAlign: 'top' as const },
   mono:       { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.86rem' },
-  detailLink: { color: '#4f46e5', textDecoration: 'none', borderBottom: '1px dashed #4f46e5', fontWeight: 500 },
+  detailLink: { color: 'var(--da-primary)', textDecoration: 'none', borderBottom: '1px dashed var(--da-primary)', fontWeight: 500 },
   refreshBtn: { background: '#ffffff', border: '1px solid #d1d5db', color: '#475569', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', fontSize: '0.86rem', fontWeight: 500 },
   hint:       { fontSize: '0.9rem', color: '#64748b', marginBottom: 22, lineHeight: 1.7, background: '#f8fafc', padding: '14px 18px', border: '1px solid #e5e7eb', borderRadius: 10 },
 };
@@ -63,8 +63,8 @@ export default function AdminAgentsPage() {
         </div>
 
         <div style={S.hint}>
-          Global agents are declared in <code style={{ color: '#4f46e5', background: '#eef2ff', padding: '1px 6px', borderRadius: 4 }}>agentscope.json</code> under each
-          <code style={{ color: '#4f46e5', background: '#eef2ff', padding: '1px 6px', borderRadius: 4, marginLeft: 4 }}> .agentscope/</code> workspace. This view is read-only —
+          Global agents are declared in <code style={{ color: 'var(--da-primary)', background: 'var(--da-primary-soft)', padding: '1px 6px', borderRadius: 4 }}>agentscope.json</code> under each
+          <code style={{ color: 'var(--da-primary)', background: 'var(--da-primary-soft)', padding: '1px 6px', borderRadius: 4, marginLeft: 4 }}> .agentscope/</code> workspace. This view is read-only —
           edit the JSON on the deployment host and restart claw to add or remove agents.
         </div>
 
@@ -84,14 +84,14 @@ export default function AdminAgentsPage() {
                   <Link to={`/admin/agents/${encodeURIComponent(a.id)}`} style={S.detailLink}>{a.id}</Link>
                 </td>
                 <td style={{ ...S.td, fontWeight: 600, color: '#0f172a' }}>{a.name}</td>
-                <td style={S.td}>{a.description ?? <span style={{ color: '#94a3b8' }}>—</span>}</td>
+                <td style={S.td}>{a.description ?? <span style={{ color: 'var(--da-text-muted)' }}>—</span>}</td>
                 <td style={{ ...S.td, ...S.mono, textAlign: 'right' as const }}>{a.maxIters ?? '—'}</td>
               </tr>
             ))}
           </tbody>
         </table>
         {!loading && agents.length === 0 && (
-          <p style={{ color: '#94a3b8', fontSize: '0.92rem', marginTop: 16 }}>No global agents found.</p>
+          <p style={{ color: 'var(--da-text-muted)', fontSize: '0.92rem', marginTop: 16 }}>No global agents found.</p>
         )}
       </AdminPageLayout>
     </>

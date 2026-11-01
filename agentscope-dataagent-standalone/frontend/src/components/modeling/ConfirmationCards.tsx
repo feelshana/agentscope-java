@@ -34,14 +34,14 @@ export default function ConfirmationCards({ questions, onSubmit }: {
     });
   };
   const option = (key: Choice, title: string, detail?: string, recommended = false) => <label key={String(key)}
-    style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '5px 8px', borderRadius: 6, cursor: 'pointer',
+    style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '5px 8px', borderRadius: 8, cursor: 'pointer',
       background: choice === key ? 'color-mix(in srgb, var(--da-primary) 8%, transparent)' : undefined }}>
     <input type="radio" name={`confirm-${current.id}`} checked={choice === key} onChange={() => { setChoice(key); setError(null); }} style={{ marginTop: 3 }} />
     <span style={{ flex: 1, minWidth: 0 }}>{title}{recommended && <span className="da-badge" style={{ marginLeft: 6 }}>推荐</span>}
       {detail && <span style={{ display: 'block', fontSize: 12, color: 'var(--da-text-muted)' }}>{detail}</span>}</span>
   </label>;
 
-  return <section aria-label="需要你确定的部分" style={{ border: '1px solid var(--da-primary)', borderRadius: 10, padding: '10px 12px', background: 'var(--da-surface, #fff)', fontSize: 13 }}>
+  return <section aria-label="需要你确定的部分" style={{ border: '1px solid var(--da-primary)', borderRadius: 8, padding: '10px 12px', background: 'var(--da-surface)', fontSize: 13 }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       <strong>需要你确定</strong>
       <span style={{ fontSize: 12, color: 'var(--da-text-muted)' }}>{index + 1}/{questions.length} · 会影响统计结果</span>

@@ -55,6 +55,72 @@ class KnowledgeBaseBrowseTest {
     }
 
     @Test
+    void projectsRolesKeysAndDescriptionsWithoutOtherProperties() throws Exception {
+        var result = browseOver("reader", "g").browse("reader", "g");
+        assertThat(result.models().get(0))
+                .containsEntry("tableRole", "FACT")
+                .containsEntry("description", "访问日志");
+        assertThat(result.relationships().get(0)).containsEntry("description", "多对一");
+        assertThat(new ObjectMapper().writeValueAsString(result)).doesNotContain("temporalColumns");
+    }
+
+    /** Counts come from the published model; a knowledge base outside the list is never read. */
+    @Test
+    void summariesCoverOnlyVisibleKnowledgeBases() throws Exception {
+        var browse = browseOver("reader", "g");
+        assertThat(browse.summaries("reader"))
+                .containsExactly(new KnowledgeBaseBrowseService.Summary("g", 2, 1, 0));
+        assertThat(browse.summaries("stranger")).isEmpty();
+    }
+
+    /** Revoked while the files were being read: the row must not come back. */
+    @Test
+    void summariesDropAKnowledgeBaseRevokedWhileReading() throws Exception {
+        var access = mock(KnowledgeBaseAccessService.class);
+        var group = published();
+        when(access.visible("reader", null)).thenReturn(List.of(group)).thenReturn(List.of());
+        var browse =
+                new KnowledgeBaseBrowseService(
+                        access,
+                        mock(DatasetRepository.class),
+                        mock(DatasetService.class),
+                        rootProperties(),
+                        new ObjectMapper());
+        assertThat(browse.summaries("reader")).isEmpty();
+    }
+
+    private DatasetGroupEntity published() throws Exception {
+        var group = new DatasetGroupEntity("g", "owner", "库", null);
+        group.setMdlVersion(1);
+        Files.createDirectories(root.resolve("published/target"));
+        Files.writeString(
+                root.resolve("published/target/mdl.json"),
+                "{\"models\":[{\"name\":\"log\",\"properties\":{\"tableRole\":\"FACT\","
+                    + "\"description\":\"访问日志\",\"temporalColumns\":[\"t\"]}},"
+                    + "{\"name\":\"user\"}],\"relationships\":[{\"name\":\"r\","
+                    + "\"models\":[\"log\",\"user\"],\"properties\":{\"description\":\"多对一\"}}]}");
+        return group;
+    }
+
+    private WrenProperties rootProperties() {
+        var properties = mock(WrenProperties.class);
+        when(properties.groupRoot("g")).thenReturn(root);
+        return properties;
+    }
+
+    private KnowledgeBaseBrowseService browseOver(String actor, String groupId) throws Exception {
+        var access = mock(KnowledgeBaseAccessService.class);
+        var datasets = mock(DatasetRepository.class);
+        var group = published();
+        when(access.requireQuery(actor, groupId)).thenReturn(group);
+        when(access.visible(actor, null)).thenReturn(List.of(group));
+        when(access.visible("stranger", null)).thenReturn(List.of());
+        when(datasets.findByGroupId(groupId)).thenReturn(List.of());
+        return new KnowledgeBaseBrowseService(
+                access, datasets, mock(DatasetService.class), rootProperties(), new ObjectMapper());
+    }
+
+    @Test
     void readablePreviewIsBoundedAndRechecksAccessAfterReading() throws Exception {
         var access = mock(KnowledgeBaseAccessService.class);
         var repository = mock(DatasetRepository.class);

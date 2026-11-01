@@ -8,7 +8,7 @@
 .answer-action-button:hover:not(:disabled) { color:var(--da-text); background:var(--da-surface-sunken); }
 .answer-action-button:disabled { opacity:.45; cursor:default; }
 .answer-action-button:focus-visible,.da-composer-submit:focus-visible { outline:2px solid var(--da-primary); outline-offset:2px; }
-.answer-action-button::after,.da-composer-submit::after { content:attr(data-tooltip); position:absolute; z-index:6; left:50%; bottom:calc(100% + 7px); transform:translateX(-50%); padding:5px 8px; border-radius:5px; background:#303541; color:#fff; font-family:inherit; font-size:11px; line-height:1.5; white-space:nowrap; pointer-events:none; visibility:hidden; opacity:0; }
+.answer-action-button::after,.da-composer-submit::after { content:attr(data-tooltip); position:absolute; z-index:6; left:50%; bottom:calc(100% + 7px); transform:translateX(-50%); padding:5px 8px; border-radius:5px; background:#303541; color:#fff; font-family:inherit; font-size:12px; line-height:1.5; white-space:nowrap; pointer-events:none; visibility:hidden; opacity:0; }
 .answer-action-button:hover:not(:disabled)::after,.answer-action-button:focus-visible::after,.da-composer-submit:hover:not(:disabled)::after,.da-composer-submit:focus-visible::after { visibility:visible; opacity:1; }
 .da-composer-submit { position:relative; display:grid; place-items:center; width:44px; height:44px; flex:none; padding:0; border:0; border-radius:50%; background:transparent; cursor:pointer; }
 .da-composer-submit-face { display:grid; place-items:center; width:36px; height:36px; border-radius:50%; background:#282c36; color:#fff; }
@@ -20,12 +20,12 @@
 @media (max-width:760px),(pointer:coarse) { .answer-action-button { width:44px; height:44px; } }
 .da-chat-thread-region { position:relative; flex:1; min-height:0; display:flex; min-width:0; }
 .da-chat-jump { position:absolute; bottom:18px; left:50%; transform:translateX(-50%); z-index:2; }
-.da-chat-jump-button { display:grid; place-items:center; width:40px; height:40px; padding:0; border:1px solid #e4e5ec; border-radius:50%; background:var(--da-surface,#fff); color:#555968; cursor:pointer; box-shadow:0 2px 5px #20233808,0 7px 20px #20233812; }
+.da-chat-jump-button { display:grid; place-items:center; width:40px; height:40px; padding:0; border:1px solid #e4e5ec; border-radius:50%; background:var(--da-surface); color:#555968; cursor:pointer; box-shadow:0 2px 5px #20233808,0 7px 20px #20233812; }
 .da-chat-jump-button .da-icon { width:18px; height:18px; }
 .da-chat-jump-button:hover { color:var(--da-primary); border-color:#d7d2e6; box-shadow:0 3px 7px #2023380a,0 9px 24px #20233816; }
 .da-chat-jump-button:active { transform:translateY(1px); }
 .da-chat-jump-button:focus-visible { outline:2px solid var(--da-primary); outline-offset:3px; }
-.da-chat-jump-hint { position:absolute; bottom:calc(100% + 8px); left:50%; transform:translate(-50%,4px); padding:5px 9px; border-radius:6px; background:#303340; color:#fff; font-size:12px; line-height:1.5; font-family:inherit; white-space:nowrap; pointer-events:none; opacity:0; visibility:hidden; }
+.da-chat-jump-hint { position:absolute; bottom:calc(100% + 8px); left:50%; transform:translate(-50%,4px); padding:5px 9px; border-radius:8px; background:#303340; color:#fff; font-size:12px; line-height:1.5; font-family:inherit; white-space:nowrap; pointer-events:none; opacity:0; visibility:hidden; }
 .da-chat-jump:hover .da-chat-jump-hint,.da-chat-jump:focus-within .da-chat-jump-hint { opacity:1; visibility:visible; transform:translate(-50%,0); }
 @media (prefers-reduced-motion:no-preference) {
   .da-chat-jump-button { transition:color .16s,border-color .16s,box-shadow .16s; }

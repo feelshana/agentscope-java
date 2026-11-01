@@ -35,7 +35,7 @@ const S: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     height: '100%',
-    color: '#94a3b8',
+    color: 'var(--da-text-muted)',
     fontSize: '0.9rem',
   },
   item: {
@@ -56,13 +56,13 @@ const S: Record<string, React.CSSProperties> = {
   badge: {
     fontSize: '0.65rem',
     padding: '1px 6px',
-    borderRadius: 10,
+    borderRadius: 8,
     color: '#fff',
     whiteSpace: 'nowrap',
   },
   card: {
     border: '1px solid #e2e8f0',
-    borderRadius: 10,
+    borderRadius: 8,
     padding: '14px 18px',
     marginBottom: 16,
     background: '#fff',
@@ -101,7 +101,7 @@ const S: Record<string, React.CSSProperties> = {
   codeBlock: {
     background: '#f8fafc',
     border: '1px solid #e2e8f0',
-    borderRadius: 6,
+    borderRadius: 8,
     padding: '8px 12px',
     fontSize: '0.78rem',
     fontFamily: 'monospace',
@@ -199,7 +199,7 @@ export default function ObjectCatalogView({ groupId }: Props) {
                 {obj.label ?? key}
               </span>
               {count > 0 && (
-                <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>{count}↔</span>
+                <span style={{ fontSize: '0.68rem', color: 'var(--da-text-muted)' }}>{count}↔</span>
               )}
             </div>
           );
@@ -216,7 +216,7 @@ export default function ObjectCatalogView({ groupId }: Props) {
             <div style={S.card}>
               <div style={S.cardTitle}>
                 {selObj.label ?? selected}
-                <span style={{ color: '#94a3b8', fontWeight: 400, marginLeft: 8 }}>
+                <span style={{ color: 'var(--da-text-muted)', fontWeight: 400, marginLeft: 8 }}>
                   {selected}
                 </span>
               </div>
@@ -260,7 +260,7 @@ export default function ObjectCatalogView({ groupId }: Props) {
                       <td style={{ ...S.td, color: '#64748b', fontFamily: 'monospace' }}>
                         {prop.type ?? 'string'}
                       </td>
-                      <td style={{ ...S.td, color: '#94a3b8', fontSize: '0.78rem' }}>
+                      <td style={{ ...S.td, color: 'var(--da-text-muted)', fontSize: '0.78rem' }}>
                         {prop.note ?? ''}
                       </td>
                     </tr>
@@ -297,7 +297,7 @@ export default function ObjectCatalogView({ groupId }: Props) {
                       >
                         {model.objects[other]?.label ?? other}
                       </span>
-                      <span style={{ color: '#94a3b8', fontSize: '0.75rem' }}>
+                      <span style={{ color: 'var(--da-text-muted)', fontSize: '0.75rem' }}>
                         [{rel.cardinality ?? 'many_to_many'}]
                       </span>
                       <span style={{ fontSize: '0.78rem', color: '#64748b' }}>{joinText}</span>
@@ -324,7 +324,7 @@ export default function ObjectCatalogView({ groupId }: Props) {
                     .map(([key, m]) => (
                       <div key={key} style={{ fontSize: '0.82rem', padding: '4px 0' }}>
                         <b>{m.label ?? key}</b> = {m.aggregate}({m.column ?? '*'})
-                        {m.unit && <span style={{ color: '#94a3b8' }}> [{m.unit}]</span>}
+                        {m.unit && <span style={{ color: 'var(--da-text-muted)' }}> [{m.unit}]</span>}
                         {m.description && (
                           <div style={{ color: '#64748b', fontSize: '0.78rem' }}>{m.description}</div>
                         )}

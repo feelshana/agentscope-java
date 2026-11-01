@@ -13,7 +13,7 @@
 .more-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 15px; }
 .more-section-heading h2 { display: flex; align-items: center; gap: 8px; margin: 0; color: #5f6674; font-size: 13px; font-weight: 600; }
 .more-section-heading .da-icon { width: 16px; height: 16px; color: #9296a5; }
-.more-section-heading > span { color: #8c92a0; font-size: 11px; }
+.more-section-heading > span { color: #8c92a0; font-size: 12px; }
 .more-entries { border-top: 1px solid #e6e8ee; border-bottom: 1px solid #e6e8ee; }
 .more-entry { display: flex; align-items: center; gap: 16px; width: 100%; min-height: 90px; padding: 20px 13px; border: 0; background: #fff; color: #272a33; font: inherit; text-align: left; cursor: pointer; }
 .more-entry + .more-entry { border-top: 1px solid #eff0f4; }
@@ -25,7 +25,7 @@
 .more-entry-go .da-icon { width: 13px; height: 13px; }
 .more-entry:hover { background: #fafafd; }
 .more-entry:focus-visible, .more-help-action:focus-visible { outline: 2px solid #8b7bc7; outline-offset: 3px; }
-.more-note { display: flex; align-items: center; gap: 7px; margin: 22px 0 0; color: #8c93a1; font-size: 11px; line-height: 1.8; }
+.more-note { display: flex; align-items: center; gap: 7px; margin: 22px 0 0; color: #8c93a1; font-size: 12px; line-height: 1.8; }
 .more-note .da-icon { width: 14px; height: 14px; flex-shrink: 0; }
 @media (min-width: 1600px) { .more-page .more-content { padding-top: 54px; } }
 @media (max-width: 1050px) { .more-page .more-content { padding: 34px 27px; } }
@@ -37,10 +37,10 @@
   .more-help h2 { font-size: 16px; }
   .more-help p { line-height: 1.8; }
   .more-page .more-help .more-help-action { grid-column: 2; justify-self: start; min-height: 44px; margin: 4px 0 0; }
-  .more-section-heading > span { font-size: 10px; }
+  .more-section-heading > span { font-size: 12px; }
   .more-entry { gap: 11px; padding: 20px 4px; }
   .more-entry-go { gap: 6px; }
-  .more-entry-description { font-size: 11px; }
+  .more-entry-description { font-size: 12px; }
   .more-note { align-items: flex-start; }
   .more-note .da-icon { margin-top: 3px; }
 }

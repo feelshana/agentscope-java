@@ -90,9 +90,9 @@
   transition: var(--da-transition);
 }
 .da-ob-step.is-current {
-  border-color: rgba(79, 70, 229, 0.45);
-  background: linear-gradient(180deg, rgba(79, 70, 229, 0.06), rgba(79, 70, 229, 0.015));
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.06);
+  border-color: rgba(91, 61, 245, 0.45);
+  background: linear-gradient(180deg, rgba(91, 61, 245, 0.06), rgba(91, 61, 245, 0.015));
+  box-shadow: 0 0 0 3px rgba(91, 61, 245, 0.06);
 }
 .da-ob-step.is-done {
   background: var(--da-sidebar-bg);
@@ -104,7 +104,7 @@
   margin-bottom: 4px;
 }
 .da-ob-step-no {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--da-text-muted);
@@ -243,13 +243,13 @@
   min-width: 0;
 }
 .da-ob-choice.is-recommended {
-  border-color: rgba(79, 70, 229, 0.4);
+  border-color: rgba(91, 61, 245, 0.4);
 }
 .da-ob-choice-icon {
   flex: none;
   width: 36px;
   height: 36px;
-  border-radius: 10px;
+  border-radius: 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -276,7 +276,7 @@
   color: var(--da-text);
 }
 .da-ob-badge {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   padding: 1px 7px;
   border-radius: 999px;
@@ -339,7 +339,7 @@
   transition: var(--da-transition);
 }
 .da-ob-starter:hover {
-  border-color: rgba(79, 70, 229, 0.45);
+  border-color: rgba(91, 61, 245, 0.45);
   box-shadow: 0 6px 20px rgba(15, 23, 42, 0.07);
   transform: translateY(-1px);
 }

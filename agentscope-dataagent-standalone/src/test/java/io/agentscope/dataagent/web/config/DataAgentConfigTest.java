@@ -129,6 +129,13 @@ class DataAgentConfigTest {
                 .contains("官方 MCP", "run_sql", "LIMIT/OFFSET");
     }
 
+    @Test
+    void questionAnswersLeadWithTheConclusion() {
+        // dataagent.agent.sys-prompt replaces the default prompt, so the rule lives where it
+        // cannot.
+        assertThat(DataAgentConfig.QUERY_EFFICIENCY_RULES).contains("第一句直接给出结论", "不用问题原文作标题");
+    }
+
     /**
      * The prompt must keep the gates that only work while always-on: a "do not chart unless asked"
      * rule is useless inside the charting skill (which is loaded only after the model already

@@ -734,7 +734,7 @@ manifest 尚不存在时（首次升级到该策略）执行一次性「采纳�
 
 `ScheduledTasksPage`当前仅展示未开放说明、日历插画及既有对话/知识库入口，不展示任务配置空表格，不调用任务API；不代表已经支持周期调度。
 
-品牌由`Brand`/`BrandMark`复用同一SVG，侧栏（含收起态）、助手回答、登录入口与浏览器favicon一致；favicon由Vite处理部署前缀和内容哈希。`SessionsSidebar`历史列表独立滚动，批量模式的全选仅作用于已加载会话，底部删除栏固定并保留原确认/部分失败处理。`SemanticConfigPage`以知识库上下文条、术语表及`DraftBar`术语展示变体呈现，QUERY只读、MANAGE改草稿和整个知识库显式发布边界不变；编辑中禁用发布，不把术语拆成独立发布流程。 功能图标由`Icon`/`ProductIconPaths`统一，导航默认线性、选中实心，使用`currentColor`和24px网格；术语/任务用独立terms/calendar，设置和耗时图标含义保持。
+品牌由`Brand`/`BrandMark`复用同一SVG，侧栏（含收起态）、助手回答、登录入口与浏览器favicon一致；favicon由Vite处理部署前缀和内容哈希。`SessionsSidebar`历史列表独立滚动，批量模式的全选仅作用于已加载会话，底部删除栏固定并保留原确认/部分失败处理。业务术语按spec106并入语义建模“业务知识”的`BusinessTermsPanel`，复用原术语表格样式；旧`SemanticConfigPage`仅跳转，侧栏不再保留独立术语项。QUERY只读线上版本，MANAGE改草稿并经整个知识库草稿栏发布；编辑状态通过onEditingChange传给共享`DraftBar`的editingBlocked，保存/取消或离开编辑页后解除，不拆成独立发布流程。功能图标由`Icon`/`ProductIconPaths`统一，导航默认线性、选中实心，使用`currentColor`和24px网格；任务用calendar，设置和耗时图标含义保持。
 
 上线前交互小修：`ChatPanel`只在用户停留底部时跟随回答，向上阅读保留位置并提供“回到最新”，历史分页保持原阅读锚点；内容和视口尺寸变化由局部观察器处理。问数和建模输入均保护中文组合输入，完成的回答可复制。附件称为“分析文件”，仍在原右侧栏预览/下载；表格保持居中、只改善可读性，不改值或精度。`EChartsBlock`对读取和渲染失败显式提示，已有表格结果才提供对应入口，重载仅GET已保存图表，不重新执行SQL。`ErrorNotice`在聊天、数据源和文件入口先显示可行动的中文提示，常见凭据脱敏的技术详情默认折叠；不改后端错误原文或SSE协议。
 
@@ -755,7 +755,7 @@ React 18 + TypeScript + Vite SPA（`frontend/`），构建产物进 `classpath:/
   - 配置：`configure/`（DatasetsPage、DatasetDetailPage、DatasetGroupPage（左侧导航：文件/知识图谱（已停用，历史展示）/树结构目录/语义建模；独立「关系说明文档」视图已删除，上传统一为建模页「上传语义文档」，specs/028。第五 Tab「语义建模」= 独立全屏路由 `/configure/modeling/:groupId`；`AppShell` 隐藏全局会话侧栏。specs/041 / ADR 0050 将聊天置于建模主区域，右侧为问题清单及阶段引导，顶部固定“查看模型”切换资产工作区；旧资产 URL 与选中位置保留。模型/派生模型/视图复用 `AssetYamlBrowser`，MDL 页提供当前结构图及草稿/发布工程快照。文档语义增强提案移入术语与规则详情）、SemanticConfigPage、SkillsPage、SubagentsPage、ToolsPage、ChannelsPage、SettingsPage）
   - 管理：`admin/`（Overview、Agents、Users、Channels、Instances、Sessions、Usage、Config、Debug）
   - 其他：Login、Profile、Workspace、Usage、Appearance、UserBindings
-- **MDL 可视化与确认**：`MdlPublishPanel`（YAML diff + 验证/发布）、`MdlGraphView`（G6 只读 ERD）与 `ModelingHitlCard`（写工具确认/调整；文件写工具 `write_file`/`patch_file` 走专用变更卡——服务端预检结论、行级 diff 折叠、全文/替换文本编辑、重新预检，specs/019 §5，行级 diff 由 `utils/diff.ts` 自实现）；`MdlGraphView` 和关系确认卡复用 `ReadOnlyRelationGraph`，保持只读语义。
+- **MDL 可视化与确认**：`MdlPublishPanel`（YAML diff + 验证/发布）、`RelationsPanel`（字段级只读 ER 图，spec106）与 `ModelingHitlCard`（写工具确认/调整；文件写工具 `write_file`/`patch_file` 走专用变更卡——服务端预检结论、行级 diff 折叠、全文/替换文本编辑、重新预检，specs/019 §5，行级 diff 由 `utils/diff.ts` 自实现）；关系确认卡使用 `ReadOnlyRelationGraph`，保持只读语义。
 - **API 层**：`frontend/src/api/*.ts` 一一对应后端控制器（chat/datasets/datasources/knowledgeGraph/semantic/semanticModeling/ontology/sessions/…）。
 - **工作区**：`WorkspaceFileTree` + `WorkspaceEditor` 经 `AgentWorkspaceController` 读写用户沙箱文件。
 
@@ -779,7 +779,7 @@ React 18 + TypeScript + Vite SPA（`frontend/`），构建产物进 `classpath:/
 
 ### 当前建模工作台（ADR 0069、0075、0076）
 
-`SemanticModelingPage` 组织建模对话、资料、语义模型三区（spec092 §7）。建模对话页以对话为中心：每轮回复下方列出 AI 建模结果，待确定的口径以对话内卡片出现，右侧试问展示助手写出的 SQL 与口径，用户核对后确认（不自动试运行、不查询数据），底部草稿栏统一发布；确认、改写或归档问题时，修订号在工作区锁内递增，发布在工作区锁内读取要覆盖的修订号（`MdlQuestionStore#locked`、`MdlPublishService#doPublishLocked`），避免发布期间确认的变更留下"待发布"却无差异可发布；若仍出现该状态，草稿栏提供"重新发布"。文档修改后自动排队一条文档更新请求。助手按官方技能直接修改草稿，发布为显式操作，官方工程校验失败保留旧快照。问数始终使用已发布工程。
+`SemanticModelingPage` 按权限分流：MANAGE 进工作台，页签为建模对话、资料、模型、关系、业务知识、问答（spec092 §7、spec106），已发布默认进模型、未发布默认进建模对话，草稿栏在各页签常驻；只有 QUERY 时进 `SemanticReadOnlyWorkspace`，只读线上版本。模型与关系经 `semanticSnapshot` 统一草稿（`/mdl/view`，仅 MANAGE）和线上（`KnowledgeBaseBrowseService#browse`，校验 QUERY）两种数据；页面只读，修改经“让建模助手修改”预填到对话。建模对话页以对话为中心：每轮回复下方列出 AI 建模结果，待确定的口径以对话内卡片出现，右侧试问展示助手写出的 SQL 与口径，用户核对后确认（不自动试运行、不查询数据），底部草稿栏统一发布；确认、改写或归档问题时，修订号在工作区锁内递增，发布在工作区锁内读取要覆盖的修订号（`MdlQuestionStore#locked`、`MdlPublishService#doPublishLocked`），避免发布期间确认的变更留下"待发布"却无差异可发布；若仍出现该状态，草稿栏提供"重新发布"。文档修改后自动排队一条文档更新请求。助手按官方技能直接修改草稿，发布为显式操作，官方工程校验失败保留旧快照。问数始终使用已发布工程。
 
 `MdlQuestionService#decide` 在发布锁内完成确认，发布会等确认结束，确认的问答一定进入这次发布。
 
@@ -807,7 +807,7 @@ spec 045 / ADR 0055：无已登记问题、无待确认原生 HITL 时，页面�
 
 `ModelingWorkflowService#snapshot` 将所有问题计入不完整、待验证、待审阅进度，所有未确认项进入发布阻断；`ModelingQuestionsPanel` 批量验证全部完整待验问题，各结果仍逐项人工确认。服务端重新核验所有未归档问题及工程结构；忽略历史分类，内容未变化的旧确认哈希兼容有效。模型/问题变化会使旧结果失效。
 
-`ModelSnapshotPanel` 在 MDL 详情展示草稿和已发布工程文件及差异；上方 `MdlGraphView` 是当前草稿的结构可视化，工程 YAML 明确标注为工程定义，不冒充编译 JSON。`MdlPublishPanel` 展示业务变更和全部问题确认，技术差异折叠。阶段接口及问题查询/验证/确认接口沿用 `api/modelingWorkflow.ts`、`api/modelingQuestions.ts`，无 SSE 变更。问数始终使用已发布版本，HITL 文件修改确认与业务结果确认分开。
+`ModelSnapshotPanel` 在 MDL 详情展示草稿和已发布工程文件及差异；现位于模型页的高级查看，工程 YAML 明确标注为工程定义，不冒充编译 JSON。`MdlPublishPanel` 展示业务变更和全部问题确认，技术差异折叠。阶段接口及问题查询/验证/确认接口沿用 `api/modelingWorkflow.ts`、`api/modelingQuestions.ts`，无 SSE 变更。问数始终使用已发布版本，HITL 文件修改确认与业务结果确认分开。
 
 
 ## 12. 配置与启动
@@ -939,7 +939,7 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 | 语义建模（M1） | `dataset/MdlSuggestionService`（`refreshRelations`、`confirmRelation`、`addManualRelation`、`suggestCubes`、`createView` 及 specs/037 工作区镜像写、`persistConfirmedRelation`）、`web/api/SemanticModelingController` |
 | 当前建模与通用 HITL | `ModelingToolkitRegistrar#registerOfficialTools`、`OfficialWrenToolkit#execute`、`WrenProjectAccess#resolve`、`WrenProjectFilesystem`、`ModelingHitlMiddleware`；前端 ModelingChatPanel/ModelingHitlCard。旧 ModelingToolkit 仅兼容源码，不是当前注册工具链 |
 | 文档语义增强（specs/014） | `dataset/DocEnhanceService`（`triggerAnalyzeQuietly`、`adopt`）、`web/api/SemanticModelingController`（enhance 端点）、`web/persistence/jpa/{DocEnhanceTaskEntity,DocEnhanceProposalEntity,SemanticBusinessRuleEntity}`、前端 `pages/configure/SemanticModelingPage` |
-| MDL 拼装/发布（M2 → specs/019 v2） | `dataset/MdlPublishService`（`preview`、`validate`、`publish`、`deleteArtifacts`、`view` 只读视图）、`dataset/{MdlSeeder,MdlWorkspaceService,MdlWorkspaceReader,WrenTypeNormalizer}`（播种/工作区/读面）、`dataset/{WrenCli,WrenProperties}`、前端 `components/{MdlPublishPanel,MdlGraphView}` |
+| MDL 拼装/发布（M2 → specs/019 v2） | `dataset/MdlPublishService`（`preview`、`validate`、`publish`、`deleteArtifacts`、`view` 只读视图）、`dataset/{MdlSeeder,MdlWorkspaceService,MdlWorkspaceReader,WrenTypeNormalizer}`（播种/工作区/读面）、`dataset/{WrenCli,WrenProperties}`、前端 `components/MdlPublishPanel`、`components/modeling/{ModelsPanel,RelationsPanel,relationLayout,semanticSnapshot}` |
 | Wren 运行期（M3） | `tools/data/WrenToolkit`（`wrenRunSql`）、`runtime/wren/{WrenQueryGateway,WrenInstanceRegistry}`（`call`、`invalidate`、`resolveSnapshotProfile`）、`dataset/{WrenProfileHome,MdlCatalog}` |
 | 外部源发布链（M4） | `dataset/MdlPublishService`（`selectWrenSource`、`writeWrenSourceProperties`）、`dataset/{WrenSourceProber,JdbcWrenSourceProber}` |
 | 知识图谱（已停用） | `dataset/KnowledgeGraphService`、`dataset/SchemaTripleExtractor`（链路停用，见第 6 章） |
@@ -974,7 +974,7 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 | 轮次用途 | 页面随请求发送 `purpose`：`auto` 自动建模、`document` 文档更新、`question` 问题处理、`confirm` 确认答复，无用途为用户对话；`ChatController#stream` 写入 `ConversationScopeRegistry#putModelingPurpose`，`buildInbound` 放入 `ModelingTurnPurpose`，用于修改来源、外部表查询许可、规则写入约束与本轮提示词分段（`ModelingTurnRules`） | `ModelingTurnPurpose`、`ChatController#trackModeling` |
 | 业务文档 | 每库多份，存于草稿 `raw/docs/<名称>.md`，随快照发布；新增、替换（旧版本存 `.platform/docs-history/`）、删除均为草稿修改；只能由用户上传，助手只读；修改后页面自动排队一条 `document` 请求，连续修改合并为一条；问数不直接读取文档 | `BusinessDocumentService`、前端 `BusinessDocumentsPanel` |
 | 入口与增量建模 | 采样与时间配置完成后（`?start=1`）先提示上传业务文档，用户点"开始自动建模"才发送 `purpose=auto` 请求；上传数据弹窗不再附文档；已发布过的库新增表时，运行上下文列出"本次新增的表"，助手只处理新表 | `SemanticModelingPage#startModeling`、`WrenProjectContextMiddleware#newTables` |
-| 业务术语 | spec100/ADR0119：每库术语即工程 `knowledge/rules/naming.md` 的官方 `## Naming conventions`，约定写法 `- "术语"（同义词："甲"、"乙"）= 解释`。`BusinessTermService` 解析并经 `DraftItemService#appendBullet`/`#updateBullet` 写草稿（运行中拒绝、锁内复核 MANAGE），`BusinessTermController` 提供 `/api/dataset-groups/{id}/terms`；QUERY 只读已发布版本，MANAGE 看草稿对照并经同一草稿栏发布。问数随官方 `get_instructions` 读取，平台不注入；建模提示词要求 Naming conventions 写入同一文件且不改写已有条目。平台术语表的业务读写已退役，旧物理表及数据保留，测试术语暂不迁移（`docs/migrations/0096`）。 | `BusinessTermService` |
+| 业务术语 | spec100/ADR0119：每库术语即工程 `knowledge/rules/naming.md` 的官方 `## Naming conventions`，约定写法 `- "术语"（同义词："甲"、"乙"）= 解释`。`BusinessTermService` 解析并经 `DraftItemService#appendBullet`/`#updateBullet` 写草稿（运行中拒绝、锁内复核 MANAGE），`BusinessTermController` 提供 `/api/dataset-groups/{id}/terms`；页面在语义建模的“业务知识”页签（`BusinessTermsPanel`，spec106）；QUERY 只读已发布版本，MANAGE 看草稿对照并经同一草稿栏发布。问数随官方 `get_instructions` 读取，平台不注入；建模提示词要求 Naming conventions 写入同一文件且不改写已有条目。平台术语表的业务读写已退役，旧物理表及数据保留，测试术语暂不迁移（`docs/migrations/0096`）。 | `BusinessTermService` |
 | 字段整理 | spec093：采样后、时间范围之前每张新表必须完成字段整理（`DatasetEntity.fieldScreeningConfirmed=false`，历史数据为 null 视为已确认）。`FieldScreeningService#fields` 首次打开时用一次模型调用按字段名、类型、采样值把字段判为业务、技术或不确定（模型不可用时全部为不确定并纳入）；纳入状态、判断理由与用户说明存于 `column_schema_json`（`ColumnSchema.included/role/roleReason/descriptionSource`）。事实表时间字段锁定纳入，多表同名字段提示为关联键，每表至少纳入 1 个字段。未确认时 `ChatController` 拒绝 `purpose=auto`。`MdlSeeder#reconcile` 只写入、只补回纳入字段；用户说明写为列 `description_source: user`，提示词要求原样保留。建模后在"资料"中按表调整：草稿模型即时删列、写说明，新纳入字段由 seeder 追加，记入 `DraftChangeLog`；删除前列出引用该字段的规则、关系与问题，保存后排队一条只重建该表的请求 | `FieldScreeningService`、`FieldScreeningController`、`MdlSeeder#reconcile`、前端 `FieldScreeningPanel` |
 | SQL 词法 | 单条只读 SELECT/WITH，拒绝笛卡尔积写法，允许官方 LIMIT/OFFSET；建模、问数、问题验证共用 | `OfficialWrenToolkit#requireReadOnly` |
 | 运行上下文 | 授权工程、服务时间、编译状态、工程文件清单（免逐级列目录）、按表来源的探查边界（上传表有限探查，外部表禁止）、外部受限表时间策略 | `WrenProjectContextMiddleware#onSystemPrompt` |

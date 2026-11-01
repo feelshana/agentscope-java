@@ -91,7 +91,7 @@ const S: Record<string, React.CSSProperties> = {
   },
   empty: { color: 'var(--da-text-muted)', fontSize: '0.95rem', textAlign: 'center', marginTop: 100 },
   bubble: {
-    maxWidth: '78%', padding: '12px 16px', borderRadius: 10,
+    maxWidth: '78%', padding: '12px 16px', borderRadius: 8,
     fontSize: '0.95rem', lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
   },
   user: {
@@ -1133,7 +1133,7 @@ export default function ChatPanel({
         disabled={restoring}
       />
       {showingRecommendation && (
-        <div style={{ fontSize: 12, color: 'var(--da-text-muted, #5C6370)', padding: '0 2px 6px' }}>
+        <div style={{ fontSize: 12, color: 'var(--da-text-muted)', padding: '0 2px 6px' }}>
           推荐问题，可直接发送或修改
         </div>
       )}
@@ -1146,7 +1146,7 @@ export default function ChatPanel({
             disabled={kbSelectionLocked || restoring || scopeRestoring || busy}
             aria-expanded={groupPickerOpen}
             aria-controls="chat-knowledge-picker"
-            title={kbSelectionLocked ? '建模会话使用当前知识库' : busy ? '回答完成后可调整知识库' : kbFrozen ? '点击切换回知识库模式' : '可选一个、多个或全部知识库；未选时仅普通聊天'}
+            title={kbSelectionLocked ? '建模会话使用当前知识库' : busy ? '回答完成后可调整知识库' : kbFrozen ? '点击切换回知识库模式' : '最多选一个知识库；未选时仅普通聊天'}
           >
             <span className="da-kb-select-icon"><Icon name="book" size="sm" /></span>
             <span className="da-kb-select-label">

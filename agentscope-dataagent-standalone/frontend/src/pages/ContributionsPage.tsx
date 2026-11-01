@@ -21,7 +21,7 @@ const S: Record<string, React.CSSProperties> = {
   h1: { fontSize: '1.05rem', fontWeight: 600, color: 'var(--da-text)' },
   sub: { fontSize: '0.78rem', color: '#7c8bad' },
   panel: { background: '#0d0f18', border: '1px solid #1a1d2e', borderRadius: 8, padding: 16 },
-  panelTitle: { fontSize: '0.85rem', fontWeight: 600, color: '#c4caff', marginBottom: 10 },
+  panelTitle: { fontSize: '0.85rem', fontWeight: 600, color: 'var(--da-primary-line)', marginBottom: 10 },
   submitGrid: {
     display: 'grid',
     gridTemplateColumns: 'minmax(280px, 1fr) minmax(320px, 1fr)',
@@ -30,7 +30,7 @@ const S: Record<string, React.CSSProperties> = {
   treeBox: {
     background: 'var(--da-surface)',
     border: '1px solid var(--da-border)',
-    borderRadius: 6,
+    borderRadius: 8,
     maxHeight: 360,
     overflowY: 'auto',
     padding: '6px 4px',
@@ -42,7 +42,7 @@ const S: Record<string, React.CSSProperties> = {
     background: 'var(--da-surface)',
     color: 'var(--da-text)',
     border: '1px solid var(--da-border-strong)',
-    borderRadius: 6,
+    borderRadius: 8,
     padding: '6px 8px',
     fontSize: '0.8rem',
   },
@@ -50,7 +50,7 @@ const S: Record<string, React.CSSProperties> = {
     background: 'var(--da-primary)',
     color: '#fff',
     border: 'none',
-    borderRadius: 6,
+    borderRadius: 8,
     padding: '6px 14px',
     cursor: 'pointer',
     fontSize: '0.8rem',
@@ -58,7 +58,7 @@ const S: Record<string, React.CSSProperties> = {
   },
   btnDisabled: {
     background: 'var(--da-primary-subtle)',
-    color: '#94a3b8',
+    color: 'var(--da-text-muted)',
     cursor: 'not-allowed',
   },
   table: { width: '100%', borderCollapse: 'collapse' as const, fontSize: '0.78rem' },
@@ -84,7 +84,7 @@ const S: Record<string, React.CSSProperties> = {
     padding: '1px 6px',
     borderRadius: 4,
     background: 'var(--da-border)',
-    color: '#c4caff',
+    color: 'var(--da-primary-line)',
     fontSize: '0.68rem',
     fontWeight: 600,
     marginLeft: 6,
@@ -112,7 +112,7 @@ function badgeStyle(status: string): React.CSSProperties {
     fontWeight: 600,
     background:
       status === 'APPROVED' ? '#1e3a2b' : status === 'REJECTED' ? '#3a1e1e' : 'var(--da-border)',
-    color: status === 'APPROVED' ? '#86efac' : status === 'REJECTED' ? '#fca5a5' : '#c4caff',
+    color: status === 'APPROVED' ? '#86efac' : status === 'REJECTED' ? '#fca5a5' : 'var(--da-primary-line)',
   };
 }
 

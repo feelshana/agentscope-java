@@ -14,8 +14,8 @@ const S: Record<string, React.CSSProperties> = {
     transition: 'border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease',
   },
   cardActive: {
-    border: '1px solid #4f46e5', background: '#eef2ff',
-    boxShadow: '0 0 0 3px rgba(99,102,241,0.12)',
+    border: '1px solid var(--da-primary)', background: 'var(--da-primary-soft)',
+    boxShadow: '0 0 0 3px rgba(91, 61, 245,0.12)',
   },
   head: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 },
   name: { fontSize: '1rem', fontWeight: 600, color: '#0f172a' },
@@ -43,7 +43,7 @@ export default function TemplatePicker({ selected, onSelect }: Props) {
   }, []);
 
   if (err) return <div style={S.err}>{err}</div>;
-  if (list.length === 0) return <div style={{ color: '#94a3b8', fontSize: '0.82rem' }}>No templates available.</div>;
+  if (list.length === 0) return <div style={{ color: 'var(--da-text-muted)', fontSize: '0.82rem' }}>No templates available.</div>;
 
   return (
     <div style={S.list}>

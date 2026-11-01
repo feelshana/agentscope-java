@@ -29,10 +29,10 @@ const S: Record<string, React.CSSProperties> = {
   title: { margin: '0 0 18px', fontSize: '1.4rem', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.01em' },
   banner: {
     padding: '12px 16px', background: '#fef3c7', border: '1px solid #fcd34d',
-    color: '#92400e', fontSize: '0.88rem', borderRadius: 10, marginBottom: 20,
+    color: '#92400e', fontSize: '0.88rem', borderRadius: 8, marginBottom: 20,
   },
   section: {
-    background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 14,
+    background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12,
     padding: '20px 22px', marginBottom: 16,
     boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
   },
@@ -44,16 +44,16 @@ const S: Record<string, React.CSSProperties> = {
   },
   defaultMark: {
     padding: '3px 10px', borderRadius: 999, fontSize: '0.76rem', fontWeight: 600,
-    background: '#eef2ff', color: '#4338ca', border: '1px solid #c7d2fe',
+    background: 'var(--da-primary-soft)', color: 'var(--da-primary-hover)', border: '1px solid var(--da-primary-line)',
   },
   btnSm: {
     padding: '7px 14px', fontSize: '0.84rem', fontWeight: 500, borderRadius: 8, cursor: 'pointer',
     border: '1px solid #cbd5e1', background: '#ffffff', color: '#475569',
   },
   btnPrimary: {
-    background: 'linear-gradient(135deg,#4f46e5 0%,#4338ca 100%)',
+    background: 'var(--da-primary)',
     color: '#ffffff', border: 'none',
-    boxShadow: '0 1px 4px rgba(99,102,241,0.3), inset 0 1px 0 rgba(255,255,255,0.18)',
+    boxShadow: '0 1px 4px rgba(91, 61, 245,0.3), inset 0 1px 0 rgba(255,255,255,0.18)',
   },
   bindingRow: {
     display: 'flex', alignItems: 'center', gap: 12,
@@ -205,7 +205,7 @@ export default function ChannelBindingTable({ agentId }: Props) {
         </div>
       )}
       {err && <div style={{ ...S.err, marginBottom: 8 }}>{err}</div>}
-      {channels.length === 0 && <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>No channels registered.</div>}
+      {channels.length === 0 && <div style={{ color: 'var(--da-text-muted)', fontSize: '0.85rem' }}>No channels registered.</div>}
       {channels.map(c => {
         const isDefault = c.defaultAgentId === agentId;
         const myBindings = byChannel[c.channelId] ?? [];
@@ -226,10 +226,10 @@ export default function ChannelBindingTable({ agentId }: Props) {
               >+ Add binding</button>
             </div>
             {myBindings.length === 0 ? (
-              <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>No bindings on this channel.</div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--da-text-muted)' }}>No bindings on this channel.</div>
             ) : myBindings.map(b => (
               <div key={`${b.channelId}-${b.index}`} style={S.bindingRow}>
-                <span style={{ ...S.badge, background: '#eef2ff', color: '#4338ca', borderColor: '#c7d2fe' }}>{b.tier}</span>
+                <span style={{ ...S.badge, background: 'var(--da-primary-soft)', color: 'var(--da-primary-hover)', borderColor: 'var(--da-primary-line)' }}>{b.tier}</span>
                 <span style={{ flex: 1, fontFamily: 'monospace', fontSize: '0.86rem', color: '#475569' }}>{describe(b)}</span>
                 {b.sessionScope && <span style={S.badge}>{b.sessionScope}</span>}
                 <button style={S.btnSm} onClick={() => setEditing({ form: bindingToForm(b), index: b.index })}>Edit</button>
@@ -268,7 +268,7 @@ const D: Record<string, React.CSSProperties> = {
     backdropFilter: 'blur(2px)',
   },
   modal: {
-    background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 16,
+    background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12,
     padding: '28px 30px', width: 600, maxWidth: '92vw',
     boxShadow: '0 24px 60px rgba(15,23,42,0.18), 0 4px 12px rgba(15,23,42,0.06)',
   },

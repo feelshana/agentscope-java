@@ -58,7 +58,7 @@ const MD_STYLE = `
   margin: 0.9em 0;
   overflow: auto;
   border: 1px solid #e5e9f0;
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--da-surface);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
@@ -128,7 +128,7 @@ export default function Markdown({ children, fontSize }: { children: string; fon
         <AttachmentImage
           src={url}
           alt={alt ?? ''}
-          style={{ maxWidth: '100%', cursor: 'zoom-in', borderRadius: 6 }}
+          style={{ maxWidth: '100%', cursor: 'zoom-in', borderRadius: 8 }}
           onClick={() => setLightbox(url)}
           onError={(e) => {
             const img = e.currentTarget;

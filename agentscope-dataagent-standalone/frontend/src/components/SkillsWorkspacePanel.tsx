@@ -40,8 +40,8 @@ const itemStyle = (active: boolean): React.CSSProperties => ({
   padding: '10px 16px',
   borderBottom: '1px solid #f1f5f9',
   cursor: 'pointer',
-  background: active ? '#eef2ff' : 'transparent',
-  borderLeft: active ? '3px solid #4f46e5' : '3px solid transparent',
+  background: active ? 'var(--da-primary-soft)' : 'transparent',
+  borderLeft: active ? '3px solid var(--da-primary)' : '3px solid transparent',
 });
 const detailStyle: React.CSSProperties = {
   flex: 1,
@@ -61,9 +61,9 @@ const toolbarStyle: React.CSSProperties = {
 const buttonStyle: React.CSSProperties = {
   padding: '6px 14px',
   borderRadius: 8,
-  border: '1px solid #c7d2fe',
-  background: '#eef2ff',
-  color: '#4338ca',
+  border: '1px solid var(--da-primary-line)',
+  background: 'var(--da-primary-soft)',
+  color: 'var(--da-primary-hover)',
   fontSize: '0.85rem',
   fontWeight: 600,
   cursor: 'pointer',
@@ -219,7 +219,7 @@ export default function SkillsWorkspacePanel({
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {skills.length === 0 ? (
-            <div style={{ padding: 16, color: '#94a3b8', fontSize: '0.85rem' }}>
+            <div style={{ padding: 16, color: 'var(--da-text-muted)', fontSize: '0.85rem' }}>
               <div style={{ fontWeight: 600, color: '#475569', marginBottom: 6 }}>
                 No skills installed.
               </div>
@@ -276,7 +276,7 @@ export default function SkillsWorkspacePanel({
                     display: 'flex',
                     gap: 8,
                     fontSize: '0.72rem',
-                    color: '#94a3b8',
+                    color: 'var(--da-text-muted)',
                   }}
                 >
                   <span>{(s.sizeBytes / 1024).toFixed(1)} KB</span>
@@ -291,9 +291,9 @@ export default function SkillsWorkspacePanel({
       </div>
       <div style={detailStyle}>
         {!selectedDir ? (
-          <div style={{ padding: 24, color: '#94a3b8' }}>Select a skill to view or edit.</div>
+          <div style={{ padding: 24, color: 'var(--da-text-muted)' }}>Select a skill to view or edit.</div>
         ) : !detail ? (
-          <div style={{ padding: 24, color: '#94a3b8' }}>Loading…</div>
+          <div style={{ padding: 24, color: 'var(--da-text-muted)' }}>Loading…</div>
         ) : (
           <>
             <div style={toolbarStyle}>
@@ -315,9 +315,9 @@ export default function SkillsWorkspacePanel({
                 onClick={handleSave}
                 style={{
                   ...buttonStyle,
-                  background: dirty ? '#4f46e5' : '#e0e7ff',
-                  color: dirty ? '#ffffff' : '#4f46e5',
-                  border: dirty ? '1px solid #4f46e5' : '1px solid #c7d2fe',
+                  background: dirty ? 'var(--da-primary)' : 'var(--da-primary-soft)',
+                  color: dirty ? '#ffffff' : 'var(--da-primary)',
+                  border: dirty ? '1px solid var(--da-primary)' : '1px solid var(--da-primary-line)',
                 }}
                 disabled={!dirty || busy}
               >

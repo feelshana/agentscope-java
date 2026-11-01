@@ -17,25 +17,25 @@ const S: Record<string, React.CSSProperties> = {
   },
   btn: {
     alignSelf: 'flex-start', padding: '10px 22px',
-    background: 'linear-gradient(135deg,#4f46e5 0%,#4338ca 100%)',
+    background: 'var(--da-primary)',
     color: '#ffffff',
     border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: '0.92rem', fontWeight: 600,
-    boxShadow: '0 2px 6px rgba(99,102,241,0.35), inset 0 1px 0 rgba(255,255,255,0.18)',
+    boxShadow: '0 2px 6px rgba(91, 61, 245,0.35), inset 0 1px 0 rgba(255,255,255,0.18)',
   },
-  btnDisabled: { background: '#e2e8f0', color: '#94a3b8', cursor: 'not-allowed', boxShadow: 'none' },
+  btnDisabled: { background: '#e2e8f0', color: 'var(--da-text-muted)', cursor: 'not-allowed', boxShadow: 'none' },
   err: { color: '#dc2626', fontSize: '0.9rem' },
   draftCard: {
     background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12,
     padding: '18px 20px',
   },
   draftLabel: {
-    fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700,
+    fontSize: '0.78rem', color: 'var(--da-text-muted)', fontWeight: 700,
     textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10, display: 'block',
   },
   draftField: { fontSize: '0.95rem', color: '#0f172a', marginBottom: 10, lineHeight: 1.55 },
   bullet: { fontSize: '0.88rem', color: '#475569', lineHeight: 1.55 },
   unavailable: {
-    padding: '16px 20px', background: '#f1f5f9', borderRadius: 10,
+    padding: '16px 20px', background: '#f1f5f9', borderRadius: 8,
     color: '#475569', fontSize: '0.92rem', border: '1px solid #cbd5e1',
   },
 };

@@ -495,6 +495,8 @@ class SemanticModelingControllerTest {
                                         null,
                                         List.of(),
                                         "models/order/metadata.yml",
+                                        null,
+                                        null,
                                         null)),
                         List.of(),
                         List.of(),

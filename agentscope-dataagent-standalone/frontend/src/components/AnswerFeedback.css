@@ -18,7 +18,7 @@
 .answer-feedback-error button { padding:0; border:0; background:transparent; color:var(--da-primary); font:inherit; line-height:inherit; cursor:pointer; text-decoration:underline; text-underline-offset:3px; }
 .answer-feedback-error button:focus-visible,.answer-feedback-help-trigger:focus-visible { outline:2px solid var(--da-primary); outline-offset:2px; }
 .answer-feedback-help { display:inline-flex; margin-left:6px; }
-.answer-feedback-help-trigger { display:inline-flex; align-items:center; gap:5px; min-height:32px; border:0; padding:4px 6px; border-radius:6px; color:var(--da-text-3); background:transparent; font:inherit; font-size:11px; cursor:pointer; }
+.answer-feedback-help-trigger { display:inline-flex; align-items:center; gap:5px; min-height:32px; border:0; padding:4px 6px; border-radius:6px; color:var(--da-text-3); background:transparent; font:inherit; font-size:12px; cursor:pointer; }
 .answer-feedback-help-trigger:hover,.answer-feedback-help-trigger[aria-expanded="true"] { background:var(--da-surface-sunken); color:var(--da-text-2); }
 .answer-feedback-help-trigger .da-icon { width:14px; height:14px; }
 .answer-feedback-help-content { position:absolute; z-index:5; left:0; bottom:calc(100% + 8px); width:min(280px,100%); box-sizing:border-box; padding:12px 14px; border:1px solid var(--da-border); border-radius:9px; background:var(--da-surface,#fff); color:var(--da-text-2); box-shadow:0 4px 18px #20233812; font-size:12px; line-height:1.8; overflow-wrap:anywhere; }

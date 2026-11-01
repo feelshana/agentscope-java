@@ -96,12 +96,23 @@ function findTarget(names: string): HTMLElement | null {
 }
 
 type Box = { top: number; left: number; width: number; height: number };
+type Point = { x: number; y: number; top: number };
 const PAD = 6;
 const CARD_WIDTH = 320;
 const CARD_HEIGHT = 200;
 
-function useTargetBox(name: string | undefined): { box: Box | null; matched: string | null } {
+/** Where the user should really click: a highlighted area may hold its button deep inside. */
+function clickPoint(el: HTMLElement): Point {
+  const control = el.matches('button,a,input,textarea,select') ? el
+    : el.querySelector<HTMLElement>('button.da-btn-primary:not(:disabled)') ?? el.querySelector<HTMLElement>('button:not(:disabled),input,textarea,select') ?? el;
+  const r = control.getBoundingClientRect();
+  // The lower edge, so the hand never covers the label it is pointing at.
+  return { x: r.left + r.width / 2, y: r.bottom - 3, top: r.top + 3 };
+}
+
+function useTargetBox(name: string | undefined): { box: Box | null; point: Point | null; matched: string | null } {
   const [box, setBox] = useState<Box | null>(null);
+  const [point, setPoint] = useState<Point | null>(null);
   const [matched, setMatched] = useState<string | null>(null);
   const scrolled = useRef<HTMLElement | null>(null);
   useEffect(() => {
@@ -111,24 +122,27 @@ function useTargetBox(name: string | undefined): { box: Box | null; matched: str
     const measure = () => {
       const el = findTarget(name);
       setMatched(el?.getAttribute('data-tour') ?? null);
-      if (!el) { setBox(b => (b ? null : b)); return; }
+      if (!el) { setBox(b => (b ? null : b)); setPoint(p => (p ? null : p)); return; }
       if (scrolled.current !== el) { scrolled.current = el; el.scrollIntoView({ block: 'nearest' }); }
       const r = el.getBoundingClientRect();
-      const top = Math.max(r.top - PAD, 0);
-      const left = Math.max(r.left - PAD, 0);
+      // Whole pixels: the four shade panels would otherwise show hairline seams between them.
+      const top = Math.max(Math.floor(r.top - PAD), 0);
+      const left = Math.max(Math.floor(r.left - PAD), 0);
       const next = {
         top, left,
-        width: Math.min(r.width + PAD * 2, window.innerWidth - left),
-        height: Math.min(r.height + PAD * 2, window.innerHeight - top),
+        width: Math.min(Math.ceil(r.width + PAD * 2), window.innerWidth - left),
+        height: Math.min(Math.ceil(r.height + PAD * 2), window.innerHeight - top),
       };
       setBox(b => (b && b.top === next.top && b.left === next.left && b.width === next.width && b.height === next.height ? b : next));
+      const at = clickPoint(el);
+      setPoint(p => (p && p.x === at.x && p.y === at.y && p.top === at.top ? p : at));
     };
     measure();
     const timer = window.setInterval(measure, 200);
     window.addEventListener('resize', measure);
     return () => { window.clearInterval(timer); window.removeEventListener('resize', measure); };
   }, [name]);
-  return { box, matched };
+  return { box, point, matched };
 }
 
 /** Prefers below, then above, then beside the target; stays on screen. */
@@ -152,11 +166,27 @@ function Progress({ no, total }: { no: number; total: number }) {
   </div>;
 }
 
-function Hand({ box }: { box: Box }) {
-  return <span className="da-tour-hand" aria-hidden="true" style={{ top: box.top + box.height - 16, left: box.left + box.width - 22 }}>
-    <svg width="44" height="44" viewBox="0 0 24 24" fill="#fff" stroke="#312e81" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15V4a2 2 0 0 1 4 0v5.5V9a2 2 0 0 1 4 0v1a2 2 0 0 1 3 1Z" />
-    </svg>
+const HAND_SIZE = 56;
+function HandIcon({ size = HAND_SIZE, flip = false }: { size?: number; flip?: boolean }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="#ffc233" stroke="#24135f" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" style={flip ? { transform: 'rotate(180deg)' } : undefined}>
+    <path d="M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15V4a2 2 0 0 1 4 0v5.5V9a2 2 0 0 1 4 0v1a2 2 0 0 1 3 1Z" />
+  </svg>;
+}
+
+/** The fingertip rests on the control; near the bottom edge the hand points down from above. */
+function Hand({ point }: { point: Point }) {
+  const flip = point.y + HAND_SIZE > window.innerHeight - 4;
+  // Flipped, the fingertip reaches the control from above instead of from its lower edge.
+  const left = Math.min(Math.max(point.x - HAND_SIZE * (flip ? 0.62 : 0.38), 4), window.innerWidth - HAND_SIZE - 4);
+  const top = flip ? point.top - HAND_SIZE * 0.92 : point.y - HAND_SIZE * 0.08;
+  return <span className="da-tour-hand" aria-hidden="true" style={{ top, left }}><HandIcon flip={flip} /></span>;
+}
+
+/** Marks a button inside the card, for steps whose click is 下一步 rather than the page. */
+function TapButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  return <span className="da-tour-tap">
+    <button type="button" className="da-btn da-btn-primary da-btn-sm" onClick={onClick}>{children}</button>
+    <span className="da-tour-hand-inline" aria-hidden="true"><HandIcon size={40} /></span>
   </span>;
 }
 
@@ -170,7 +200,7 @@ export default function GuidedTour() {
   const active = tour && !tour.paused ? tour : null;
   const base = active ? copyFor(active) : null;
   const here = !!active && onPage(active, pathname);
-  const { box, matched } = useTargetBox(here ? base?.target : undefined);
+  const { box, point, matched } = useTargetBox(here ? base?.target : undefined);
   const copy = base && active?.step === 'publish' && matched ? { ...base, ...FOR_TARGET[matched] } : base;
 
   // The last step lives on another page; finishing publishing takes the user there.
@@ -207,8 +237,8 @@ export default function GuidedTour() {
       <div className="da-tour-foot">
         {exit}
         <span className="da-tour-actions">
-          {!here && goBack && <button type="button" className="da-btn da-btn-primary da-btn-sm" onClick={() => navigate(goBack)}>回到这一步</button>}
-          {here && copy.next && <button type="button" className="da-btn da-btn-primary da-btn-sm" onClick={next}>下一步</button>}
+          {!here && goBack && <TapButton onClick={() => navigate(goBack)}>回到这一步</TapButton>}
+          {here && copy.next && <TapButton onClick={next}>下一步</TapButton>}
         </span>
       </div>
     </section>, document.body);
@@ -221,7 +251,7 @@ export default function GuidedTour() {
     <div className="da-tour-shade" style={{ ...shade, top: box.top, left: 0, width: box.left, height: box.height }} />
     <div className="da-tour-shade" style={{ ...shade, top: box.top, left: box.left + box.width, right: 0, height: box.height }} />
     <div className="da-tour-ring" style={{ top: box.top - 3, left: box.left - 3, width: box.width + 6, height: box.height + 6 }} />
-    <Hand box={box} />
+    {!copy.next && point && <Hand point={point} />}
     <section className="da-tour-card" role="dialog" aria-label="操作指引" style={placeCard(box)}>
       <Progress {...number} />
       <strong>{copy.head}</strong>
@@ -230,7 +260,7 @@ export default function GuidedTour() {
         {exit}
         <span className="da-tour-actions">
           {copy.next
-            ? <button type="button" className="da-btn da-btn-primary da-btn-sm" onClick={next}>下一步</button>
+            ? <TapButton onClick={next}>下一步</TapButton>
             : <span className="da-tour-hint">点击高亮处继续</span>}
         </span>
       </div>

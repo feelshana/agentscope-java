@@ -5,12 +5,12 @@ import { useNavigate } from 'react-router-dom';
 const S: Record<string, React.CSSProperties> = {
   page: { padding: '32px 36px', maxWidth: 820 },
   card: {
-    background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 14,
+    background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12,
     padding: '24px 28px', marginBottom: 20,
     boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
   },
   cardLabel: {
-    fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700,
+    fontSize: '0.78rem', color: 'var(--da-text-muted)', fontWeight: 700,
     textTransform: 'uppercase', letterSpacing: '0.1em',
     marginBottom: 18, display: 'block',
   },
@@ -32,11 +32,11 @@ const S: Record<string, React.CSSProperties> = {
   row: { marginBottom: 18 },
   saveBtn: {
     padding: '11px 24px',
-    background: 'linear-gradient(135deg,#4f46e5 0%,#4338ca 100%)',
+    background: 'var(--da-primary)',
     color: '#ffffff',
     border: 'none', borderRadius: 9, cursor: 'pointer',
     fontSize: '0.95rem', fontWeight: 600,
-    boxShadow: '0 2px 6px rgba(99,102,241,0.35), inset 0 1px 0 rgba(255,255,255,0.18)',
+    boxShadow: '0 2px 6px rgba(91, 61, 245,0.35), inset 0 1px 0 rgba(255,255,255,0.18)',
   },
   dangerBtn: {
     padding: '11px 20px', background: '#ffffff', color: '#dc2626',
@@ -44,9 +44,9 @@ const S: Record<string, React.CSSProperties> = {
     fontSize: '0.92rem', fontWeight: 500,
   },
   banner: {
-    padding: '14px 18px', borderRadius: 10, marginBottom: 20,
-    background: '#eef2ff', color: '#4338ca', fontSize: '0.9rem',
-    border: '1px solid #c7d2fe',
+    padding: '14px 18px', borderRadius: 8, marginBottom: 20,
+    background: 'var(--da-primary-soft)', color: 'var(--da-primary-hover)', fontSize: '0.9rem',
+    border: '1px solid var(--da-primary-line)',
   },
   success: { color: '#059669', fontSize: '0.9rem', marginTop: 10 },
   error: { color: '#dc2626', fontSize: '0.9rem', marginTop: 10 },

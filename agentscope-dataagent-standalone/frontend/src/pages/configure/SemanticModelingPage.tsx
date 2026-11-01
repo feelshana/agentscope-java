@@ -1,10 +1,14 @@
 import { retryTrialQuestion, tourSignal, useTour } from '../../state/guidedTour';
 import { FactQueryWindowSettings } from '../../components/FactQueryWindowSettings';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import ModelingChatPanel from '../../components/ModelingChatPanel';
 import type { AssistantState } from '../../components/ModelingChatPanel';
-import MdlGraphView from '../../components/MdlGraphView';
+import BusinessTermsPanel from '../../components/modeling/BusinessTermsPanel';
+import ModelsPanel from '../../components/modeling/ModelsPanel';
+import RelationsPanel from '../../components/modeling/RelationsPanel';
+import SemanticReadOnlyWorkspace from '../../components/modeling/SemanticReadOnlyWorkspace';
+import { draftSnapshot, publishedSnapshot } from '../../components/modeling/semanticSnapshot';
 import BusinessDocumentsPanel from '../../components/modeling/BusinessDocumentsPanel';
 import FieldScreeningPanel from '../../components/modeling/FieldScreeningPanel';
 import type { FieldAdjustment } from '../../components/modeling/FieldScreeningPanel';
@@ -21,8 +25,8 @@ import AssetYamlBrowser from '../../components/modeling/AssetYamlBrowser';
 import SqlQaExamplesPanel from '../../components/modeling/SqlQaExamplesPanel';
 import type { AssetEntry } from '../../components/modeling/AssetYamlBrowser';
 import { getGroupDetail } from '../../api/datasets';
-import { getMdlView, getMdlPreview } from '../../api/semanticModeling';
-import type { MdlView, MdlPreview } from '../../api/semanticModeling';
+import { getKnowledgeBaseBrowse, getMdlView, getMdlPreview } from '../../api/semanticModeling';
+import type { KnowledgeBaseBrowse, MdlView, MdlPreview } from '../../api/semanticModeling';
 import { getModelingWorkflow } from '../../api/modelingWorkflow';
 import type { ModelingWorkflow } from '../../api/modelingWorkflow';
 import { listConfirmations, resolveConfirmations } from '../../api/draftReview';
@@ -31,17 +35,18 @@ import type { TurnPurpose } from '../../api/chat';
 import { useQueryReadiness } from '../../components/useQueryReadiness';
 import './SemanticModelingPage.css';
 
-type Tab = 'modeling' | 'overview' | 'assets';
-type Asset = 'schema' | 'derived' | 'views' | 'cubes' | 'glossary' | 'sql' | 'mdl';
+type Tab = 'modeling' | 'overview' | 'models' | 'relations' | 'knowledge' | 'qa';
 // spec092 §7: the conversation is the workspace; review happens inline, publishing in the draft bar.
-const tabs: { key: Tab; label: string }[] = [
-  { key: 'modeling', label: '建模对话' },
-  { key: 'overview', label: '资料' },
-  { key: 'assets', label: '语义模型' },
-];
-const assetLabels: Record<Asset, string> = {
-  schema: '模型与关系', derived: 'SQL 定义模型', views: '视图', cubes: 'Cube',
-  glossary: '业务知识与样例', sql: 'SQL 问答对', mdl: 'MDL 与工程快照',
+// spec106: every semantic asset is one tab here; these are the addresses used before that.
+const LEGACY_TABS: Record<string, Tab> = {
+  schema: 'models', derived: 'models', views: 'models', cubes: 'models', mdl: 'models', glossary: 'knowledge', sql: 'qa',
+};
+const TAB_KEYS: Tab[] = ['modeling', 'overview', 'models', 'relations', 'knowledge', 'qa'];
+const ADVANCED = new Set(['views', 'cubes', 'mdl']);
+const tabOf = (asset: string | null, kind: string | null): Tab | null => {
+  if (asset === 'assets') return LEGACY_TABS[kind ?? ''] ?? 'models';
+  if (asset && (TAB_KEYS as string[]).includes(asset)) return asset as Tab;
+  return asset ? LEGACY_TABS[asset] ?? 'modeling' : null;
 };
 const message = (e: unknown) => e instanceof Error ? e.message : String(e);
 const AUTO_MODELING_REQUEST = '请加载官方 Wren 技能，按官方 Auto-pilot 完善当前采样后的语义模型。事实表时间范围已独立保存到数据库，必要业务 SQL 遵守工具时间门禁；数据探查遵守运行上下文中的表来源与探查边界；运行上下文列出"本次新增的表"时只处理这些表。'
@@ -76,20 +81,37 @@ const remodelLabel = (c: FieldAdjustment) => {
 /** A request waiting for the assistant; requests run one after another in the conversation. */
 type Request = { id: number; text: string; purpose?: TurnPurpose; documents?: string[]; label?: string };
 
+/** spec106: managers get the workbench; a QUERY user gets the published version read-only. */
 export default function SemanticModelingPage() {
+  const { groupId = '' } = useParams();
+  const [params] = useSearchParams();
+  const [access, setAccess] = useState<{ groupId: string; manage: boolean } | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    setAccess(null); setError('');
+    void getGroupDetail(groupId).then(detail => { if (!cancelled) setAccess({ groupId, manage: detail.group.canManage }); })
+      .catch(e => { if (!cancelled) setError(message(e)); });
+    return () => { cancelled = true; };
+  }, [groupId]);
+  if (error) return <div className="mw-content"><div role="alert" className="da-alert da-alert-error">{error}</div></div>;
+  if (access?.groupId !== groupId) return <div className="mw-content"><div className="da-small">加载中…</div></div>;
+  return access.manage ? <ModelingWorkbench /> : <SemanticReadOnlyWorkspace groupId={groupId} requested={tabOf(params.get('asset'), params.get('kind'))} />;
+}
+
+function ModelingWorkbench() {
   const { groupId = '' } = useParams();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const requested = params.get('asset') || 'modeling';
-  const tab: Tab = tabs.some(t => t.key === requested) ? requested as Tab
-    : Object.prototype.hasOwnProperty.call(assetLabels, requested) ? 'assets' : 'modeling';
-  const asset: Asset = Object.prototype.hasOwnProperty.call(assetLabels, requested) ? requested as Asset
-    : Object.prototype.hasOwnProperty.call(assetLabels, params.get('kind') || '') ? params.get('kind') as Asset : 'schema';
+  const asset = params.get('asset');
+  const legacyAsset = asset === 'assets' ? params.get('kind') : asset;
+  const explicitTab = tabOf(asset, params.get('kind'));
   const [name, setName] = useState('语义模型');
   const [view, setView] = useState<MdlView | null>(null);
   const [preview, setPreview] = useState<MdlPreview | null>(null);
   const [workflow, setWorkflow] = useState<ModelingWorkflow | null>(null);
   const [confirmations, setConfirmations] = useState<Confirmation[]>([]);
+  const [termsEditing, setTermsEditing] = useState(false);
   const [error, setError] = useState('');
   const [queue, setQueue] = useState<{ groupId: string; items: Request[] }>({ groupId, items: [] });
   const pending = queue.groupId === groupId ? queue.items : [];
@@ -118,6 +140,13 @@ export default function SemanticModelingPage() {
   const [unconfirmedTrials, setUnconfirmedTrials] = useState(0);
   const [draftSummary, setDraftSummary] = useState<DraftSummary>({ changes: 0, examples: 0, publishing: false, publishedVersion: null, error: null });
   const [publishSignal, setPublishSignal] = useState(0);
+  const [prefill, setPrefill] = useState<{ id: number; text: string } | null>(null);
+  const [focusRelation, setFocusRelation] = useState<string | null>(null);
+  const [versionChoice, setVersionChoice] = useState<'draft' | 'published' | null>(null);
+  const [browse, setBrowse] = useState<KnowledgeBaseBrowse | null>(null);
+  // Published knowledge bases open on what they contain; anything unfinished opens the conversation.
+  const tab: Tab = explicitTab ?? (params.get('start') === '1' || !workflow?.publishedVersion ? 'modeling' : 'models');
+  const resolving = !explicitTab && !workflow;
 
   const activeGroup = useRef(groupId); activeGroup.current = groupId;
   const generation = useRef(0);
@@ -170,6 +199,7 @@ export default function SemanticModelingPage() {
     setReadyGroup(null); setStartOffer(null); startOffered.current = null;
     if (startIntent.current !== groupId) startIntent.current = null; setTrialOpen(false); setExamples(0); setUnconfirmedTrials(0);
     setView(null); setPreview(null); setWorkflow(null); setName('语义模型'); setConfirmations([]); setScreening(null); setAdjusting(null);
+    setPrefill(null); setFocusRelation(null); setVersionChoice(null); setBrowse(null);
     let cancelled = false;
     void getGroupDetail(groupId).then(detail => { if (!cancelled) setName(detail.group.name); })
       .catch(e => { if (!cancelled) setError(message(e)); });
@@ -227,16 +257,44 @@ export default function SemanticModelingPage() {
   const files = preview?.files || [];
   const published = new Map(preview?.publishedFiles.map(f => [f.path, f.content]) || []);
   const dirty = (path: string | null) => !!path && files.some(f => f.path === path && published.get(path) !== f.content);
-  const entries: AssetEntry[] = asset === 'schema' ? (view?.models || []).map(m => ({
-    key: m.modelName, title: m.modelName, subtitle: m.description || `${m.columns.length} 列`, file: m.path, dirty: dirty(m.path),
-  })) : asset === 'derived' ? (view?.derivedModels || []).map(m => ({
-    key: m.modelName, title: m.modelName, subtitle: m.description || undefined, file: m.refSqlPath || m.path, dirty: dirty(m.path) || dirty(m.refSqlPath),
-  })) : asset === 'views' ? (view?.views || []).map(v => ({
-    key: v.name, title: v.name, subtitle: v.description || undefined, file: v.path, dirty: dirty(v.path),
-  })) : asset === 'cubes' ? (view?.cubes || []).map(c => ({
-    key: c.name, title: c.name, subtitle: `${c.baseModel} · ${c.measures.length} 个指标`, file: c.path, dirty: dirty(c.path),
-  })) : files.filter(f => f.path.startsWith('knowledge/') && !f.path.endsWith('/.gitkeep')).map(f => ({ key: f.path, title: f.path, file: f.path, dirty: dirty(f.path) }));
-  const selected = params.get('selected') || entries[0]?.key || null;
+  const viewEntries: AssetEntry[] = (view?.views || []).map(v => ({ key: v.name, title: v.name, subtitle: v.description || undefined, file: v.path, dirty: dirty(v.path) }));
+  const cubeEntries: AssetEntry[] = (view?.cubes || []).map(c => ({ key: c.name, title: c.name, subtitle: `${c.baseModel} · ${c.measures.length} 个指标`, file: c.path, dirty: dirty(c.path) }));
+  const knowledgeEntries: AssetEntry[] = files.filter(f => /^knowledge\/(rules|glossary|metrics|caveats)\//.test(f.path) && !f.path.endsWith('/.gitkeep'))
+    .map(f => ({ key: f.path, title: f.path, file: f.path, dirty: dirty(f.path) }));
+  const selected = params.get('selected');
+  const hasPublished = (workflow?.publishedVersion ?? 0) > 0;
+  // spec106: the draft shows when it differs; otherwise the version people are actually using.
+  const version = !hasPublished ? 'draft' : versionChoice ?? (view?.changed ? 'draft' : 'published');
+  useEffect(() => {
+    if (version !== 'published' || (tab !== 'models' && tab !== 'relations')) return undefined;
+    let cancelled = false;
+    void getKnowledgeBaseBrowse(groupId).then(value => { if (!cancelled) setBrowse(value); })
+      .catch(e => { if (!cancelled) setError(message(e)); });
+    return () => { cancelled = true; };
+  }, [groupId, version, tab, workflow?.publishedVersion]);
+  const snapshot = useMemo(() => version === 'published'
+    ? (browse ? publishedSnapshot(browse) : null)
+    : (view ? draftSnapshot(view) : null), [version, browse, view]);
+  const snapshotFiles = useMemo(() => new Map((version === 'published' ? preview?.publishedFiles : preview?.files)?.map(f => [f.path, f.content]) ?? []), [version, preview]);
+  const counts = view ? draftSnapshot(view) : null;
+  const tabs: { key: Tab; label: string }[] = [
+    { key: 'modeling', label: '建模对话' }, { key: 'overview', label: '资料' },
+    { key: 'models', label: `模型${(snapshot ?? counts) ? ` ${(snapshot ?? counts)?.models.length}` : ''}` },
+    { key: 'relations', label: `关系${(snapshot ?? counts) ? ` ${(snapshot ?? counts)?.relations.length}` : ''}` },
+    { key: 'knowledge', label: '业务知识' }, { key: 'qa', label: '问答' },
+  ];
+  /** Fills the conversation's input; the user reads it and decides whether to send. */
+  const askAssistant = (text: string) => { setPrefill({ id: ++sequence.current, text }); selectTab('modeling'); };
+  const openModel = (model: string) => setParams({ asset: 'models', selected: model }, { replace: true });
+  const openRelation = (relation: string) => { setFocusRelation(relation); selectTab('relations'); };
+  const versionBar = <div className="sm-version">
+    <div role="group" aria-label="查看版本" className="sm-switch">
+      <button type="button" aria-pressed={version === 'published'} disabled={!hasPublished} title={hasPublished ? '' : '还没有发布过'} className={version === 'published' ? 'sm-switch-on' : ''} onClick={() => setVersionChoice('published')}>线上{hasPublished ? ` v${workflow?.publishedVersion}` : ''}</button>
+      <button type="button" aria-pressed={version === 'draft'} className={version === 'draft' ? 'sm-switch-on' : ''} onClick={() => setVersionChoice('draft')}>草稿{view?.changed ? '（有修改）' : ''}</button>
+    </div>
+    <span className="da-small">{version !== 'published' ? '发布后才用于问数' : workflow?.queryAvailable ? '问数正在使用这个版本' : '有修改待发布，发布前不能问数'}</span>
+    {view?.publishedAt && <span className="da-small">发布于 {view.publishedAt.slice(0, 19).replace('T', ' ')}</span>}
+  </div>;
   const waiting = pending.length;
   const assistantLabel = assistantState !== 'idle' ? (waiting ? `助手运行中 · ${waiting} 个请求排队` : '助手运行中')
     : waiting ? '请求排队中' : '助手空闲';
@@ -275,8 +333,8 @@ export default function SemanticModelingPage() {
           onClick={toQuery}>{preparing ? '问数准备中…' : '去问数 →'}</button>}
       </div>
     </header>
-    <nav aria-label="建模页面" className="mw-tabs">
-      {tabs.map(item => <button key={item.key} type="button" className={`mw-tab ${tab === item.key ? 'mw-tab-on' : ''}`} onClick={() => selectTab(item.key)}>{item.label}</button>)}
+    <nav aria-label="语义建模页面" className="mw-tabs">
+      {tabs.map(item => <button key={item.key} type="button" aria-current={tab === item.key ? 'page' : undefined} className={`mw-tab ${tab === item.key ? 'mw-tab-on' : ''}`} onClick={() => selectTab(item.key)}>{item.label}</button>)}
     </nav>
     <div className="mw-content">
     {error && <div role="alert" className="da-alert da-alert-error">{error}<button className="da-btn" onClick={() => void refresh()}>刷新</button></div>}
@@ -311,7 +369,7 @@ export default function SemanticModelingPage() {
         <button className="da-btn" data-tour="model-start" onClick={startModeling}>没有文档，直接开始</button>
       </div>
     </div>}
-    <main className="modeling-workbench-body" style={{ flex: 1, minHeight: 0, display: screeningPending ? 'none' : 'flex', gap: 16 }}>
+    <main className="modeling-workbench-body" style={{ flex: 1, minHeight: 0, display: screeningPending || resolving ? 'none' : 'flex', gap: 16 }}>
       {tab === 'overview' && <section style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div className="da-card"><h3 style={{ marginTop: 0 }}>数据</h3>
           <p className="da-small">在知识库页上传 CSV / Excel 或关联外部表；采样后回到这里开始建模，新加的表只处理新表，修改进入草稿。</p>
@@ -330,7 +388,7 @@ export default function SemanticModelingPage() {
       <section aria-label="建模对话工作区" style={{ display: tab === 'modeling' ? 'flex' : 'none', flex: 1, minWidth: 0, minHeight: 0, flexDirection: 'column', gap: 8 }}>
         <div className="modeling-chat-row" style={{ flex: 1, minHeight: 0, display: 'flex', gap: 12 }}>
           <div className="modeling-chat-main" style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex' }}>{windowReady ? <ModelingChatPanel key={groupId} groupId={groupId} variant="dock"
-            draftPrompt={head?.text} draftPromptId={head?.id} submitDraft={!!head && startOffer !== groupId}
+            draftPrompt={head?.text ?? prefill?.text} draftPromptId={head?.id ?? prefill?.id} submitDraft={!!head && startOffer !== groupId}
             onAttachDocument={() => selectTab('overview')} onClose={() => undefined}
             onDraftSubmitted={() => {
               setQueue(previous => ({ groupId, items: (previous.groupId === groupId ? previous.items : []).slice(1) }));
@@ -348,21 +406,32 @@ export default function SemanticModelingPage() {
               onAsk={text => request(text, 'question')} onWrong={text => request(text, 'question')} />
           </div>}
         </div>
-        <DraftBar groupId={groupId} workflow={workflow} assistantActive={!idle} pendingConfirmations={confirmations.length}
-          onLocate={locateConfirmations} onPublished={() => void refresh()}
-          publishSignal={publishSignal} onSummary={setDraftSummary} />
       </section>
-      {tab === 'assets' && <section style={{ flex: 1, overflowY: 'auto' }}>
-        <p>当前草稿只读展示；问数使用已发布版本。修改请到"建模对话"。</p>
-        <select className="da-input" aria-label="语义资产类型" value={asset} onChange={e => setParams({ asset: 'assets', kind: e.target.value }, { replace: true })}>
-          {Object.entries(assetLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-        </select>
-        {asset === 'sql' ? <SqlQaExamplesPanel groupId={groupId} /> : asset === 'mdl' ? <><MdlGraphView groupId={groupId} /><ModelSnapshotPanel groupId={groupId} /></>
-          : <><AssetYamlBrowser groupId={groupId} entries={entries} selectedKey={selected}
-            onSelect={key => setParams({ asset: 'assets', kind: asset, selected: key }, { replace: true })} emptyText="当前草稿暂无此类资产" />
-            {asset === 'schema' && <MdlGraphView groupId={groupId} />}</>}
+      {(tab === 'models' || tab === 'relations') && <section className="sm-pane">
+        {versionBar}
+        {view?.issues.map((issue, index) => <div key={index} className="sm-issue">{issue.message}</div>)}
+        {!snapshot ? <div className="da-small">加载中…</div> : tab === 'models' ? <>
+          <ModelsPanel snapshot={snapshot} selected={selected} onSelect={openModel} files={snapshotFiles} onOpenRelation={openRelation}
+            onAsk={askAssistant} emptyText="暂无模型，请先上传数据或关联数据表" />
+          <details className="sm-advanced" open={ADVANCED.has(legacyAsset ?? '')}>
+            <summary>高级：视图、Cube 与工程快照</summary>
+            {legacyAsset !== 'cubes' && viewEntries.length > 0 && <AssetYamlBrowser groupId={groupId} entries={viewEntries} selectedKey={selected ?? viewEntries[0].key} onSelect={openModel} emptyText="暂无视图" />}
+            {legacyAsset !== 'views' && cubeEntries.length > 0 && <AssetYamlBrowser groupId={groupId} entries={cubeEntries} selectedKey={selected ?? cubeEntries[0].key} onSelect={openModel} emptyText="暂无 Cube" />}
+            <ModelSnapshotPanel groupId={groupId} />
+          </details>
+        </> : <RelationsPanel snapshot={snapshot} focus={focusRelation} onOpenModel={openModel} onAsk={askAssistant} emptyText="暂无模型，请先上传数据或关联数据表" />}
       </section>}
+      {tab === 'knowledge' && <section className="sm-scroll">
+        <BusinessTermsPanel groupId={groupId} onEditingChange={setTermsEditing} />
+        <h3>业务规则与说明</h3>
+        <AssetYamlBrowser groupId={groupId} entries={knowledgeEntries} selectedKey={selected ?? knowledgeEntries[0]?.key ?? null}
+          onSelect={key => setParams({ asset: 'knowledge', selected: key }, { replace: true })} emptyText="当前草稿暂无业务规则" />
+      </section>}
+      {tab === 'qa' && <section className="sm-scroll"><SqlQaExamplesPanel groupId={groupId} /></section>}
     </main>
+    {!screeningPending && !resolving && <DraftBar groupId={groupId} workflow={workflow} assistantActive={!idle} pendingConfirmations={confirmations.length} editingBlocked={termsEditing}
+      onLocate={locateConfirmations} onPublished={() => void refresh()}
+      publishSignal={publishSignal} onSummary={setDraftSummary} />}
     </div>
   </div>;
 }

@@ -27,18 +27,18 @@ function load(): Appearance {
 const S: Record<string, React.CSSProperties> = {
   content: { padding: '2rem 1.75rem', maxWidth: 640, margin: '0 auto' },
   heading: { fontSize: '1.3rem', fontWeight: 700, color: 'var(--da-text)', marginBottom: '1.5rem' },
-  section: { background: 'var(--da-surface)', border: '1px solid var(--da-border)', borderRadius: 10, padding: '1.4rem', marginBottom: 16 },
+  section: { background: 'var(--da-surface)', border: '1px solid var(--da-border)', borderRadius: 8, padding: '1.4rem', marginBottom: 16 },
   sectionTitle: { fontSize: '0.85rem', fontWeight: 600, color: '#7c8bad', marginBottom: 16 },
   row: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
-  label: { fontSize: '0.85rem', color: '#94a3b8' },
+  label: { fontSize: '0.85rem', color: 'var(--da-text-muted)' },
   sub: { fontSize: '0.75rem', color: '#374056', marginTop: 2 },
   input: {
-    background: '#0d0f18', border: '1px solid var(--da-border-strong)', borderRadius: 6,
+    background: '#0d0f18', border: '1px solid var(--da-border-strong)', borderRadius: 8,
     color: 'var(--da-text)', fontSize: '0.85rem', padding: '5px 10px', outline: 'none',
     width: 220,
   },
   colorInput: {
-    width: 48, height: 32, border: '1px solid var(--da-border-strong)', borderRadius: 6,
+    width: 48, height: 32, border: '1px solid var(--da-border-strong)', borderRadius: 8,
     background: 'none', cursor: 'pointer', padding: 2,
   },
   toggle: {
@@ -54,12 +54,12 @@ const S: Record<string, React.CSSProperties> = {
   },
   rangeInput: { width: 160, accentColor: 'var(--da-primary)' },
   saveBtn: {
-    background: 'var(--da-primary)', color: '#fff', border: 'none', borderRadius: 7,
+    background: 'var(--da-primary)', color: '#fff', border: 'none', borderRadius: 8,
     padding: '8px 22px', cursor: 'pointer', fontWeight: 600, fontSize: '0.88rem',
   },
   resetBtn: {
     background: 'transparent', border: '1px solid var(--da-border-strong)', color: '#7c8bad',
-    borderRadius: 7, padding: '8px 16px', cursor: 'pointer', fontSize: '0.88rem', marginLeft: 10,
+    borderRadius: 8, padding: '8px 16px', cursor: 'pointer', fontSize: '0.88rem', marginLeft: 10,
   },
   saved: { color: '#4ade80', fontSize: '0.82rem', marginLeft: 12 },
 };

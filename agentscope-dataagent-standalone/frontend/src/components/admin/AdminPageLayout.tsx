@@ -62,7 +62,7 @@ export default function AdminPageLayout({
           flexShrink: 0,
           margin: '10px 0',
           alignSelf: 'center',
-          boxShadow: '0 1px 2px rgba(99,102,241,0.06)',
+          boxShadow: '0 1px 2px rgba(91, 61, 245,0.06)',
         }}>
           <span style={{ fontSize: '0.85rem' }}>🛡</span>
           <span style={{
@@ -86,7 +86,7 @@ export default function AdminPageLayout({
                   key={tab.key}
                   onClick={() => onTabChange?.(tab.key)}
                   style={{
-                    background: active ? 'rgba(99,102,241,0.10)' : 'transparent',
+                    background: active ? 'rgba(91, 61, 245,0.10)' : 'transparent',
                     border: 'none',
                     borderBottom: active ? '2px solid var(--da-primary)' : '2px solid transparent',
                     borderTop: '2px solid transparent',
@@ -106,7 +106,7 @@ export default function AdminPageLayout({
                   {tab.label}
                   {tab.badge != null && (
                     <span style={{
-                      background: active ? 'rgba(99,102,241,0.18)' : '#f1f5f9',
+                      background: active ? 'rgba(91, 61, 245,0.18)' : '#f1f5f9',
                       color: active ? 'var(--da-primary-hover)' : '#64748b',
                       borderRadius: 999,
                       padding: '1px 8px',

@@ -59,7 +59,7 @@ const S: Record<string, React.CSSProperties> = {
     color: '#0f172a',
   },
   tableMeta: {
-    color: '#94a3b8',
+    color: 'var(--da-text-muted)',
     fontSize: '0.75rem',
     marginLeft: 8,
   },
@@ -70,10 +70,10 @@ const S: Record<string, React.CSSProperties> = {
     fontSize: '0.8rem',
   },
   fieldType: {
-    color: '#6366f1',
+    color: 'var(--da-primary)',
     fontSize: '0.75rem',
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-    background: '#eef2ff',
+    background: 'var(--da-primary-soft)',
     padding: '2px 6px',
     borderRadius: 4,
     whiteSpace: 'nowrap' as const,
@@ -88,7 +88,7 @@ const S: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     height: '100%',
-    color: '#94a3b8',
+    color: 'var(--da-text-muted)',
     fontSize: '0.9rem',
   },
 };

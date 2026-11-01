@@ -20,7 +20,7 @@ type Tab = 'builtin' | 'mcp';
 function tabStyle(active: boolean): React.CSSProperties {
   return {
     background: 'transparent', border: 'none',
-    borderBottom: `2px solid ${active ? '#4f46e5' : 'transparent'}`,
+    borderBottom: `2px solid ${active ? 'var(--da-primary)' : 'transparent'}`,
     padding: '10px 16px', cursor: 'pointer',
     fontSize: '0.88rem', color: active ? '#0f172a' : '#64748b',
     fontWeight: active ? 600 : 500, marginBottom: -1,
@@ -35,13 +35,13 @@ const S: Record<string, React.CSSProperties> = {
   },
   body: { flex: 1, overflow: 'auto', padding: 20, background: '#f8fafc' },
   groupHeader: {
-    fontSize: '0.74rem', fontWeight: 700, color: '#94a3b8',
+    fontSize: '0.74rem', fontWeight: 700, color: 'var(--da-text-muted)',
     textTransform: 'uppercase', letterSpacing: '0.1em',
     marginTop: 8, marginBottom: 6,
   },
   row: {
     display: 'flex', alignItems: 'flex-start', gap: 12,
-    background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10,
+    background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8,
     padding: '12px 14px', marginBottom: 8,
   },
   cb: { marginTop: 4 },
@@ -49,8 +49,8 @@ const S: Record<string, React.CSSProperties> = {
   rowDesc: { color: '#64748b', fontSize: '0.82rem', marginTop: 2, lineHeight: 1.45 },
   addBtn: {
     marginLeft: 'auto', flexShrink: 0,
-    padding: '6px 14px', borderRadius: 7, border: '1px solid #c7d2fe',
-    background: '#eef2ff', color: '#4338ca',
+    padding: '6px 14px', borderRadius: 8, border: '1px solid var(--da-primary-line)',
+    background: 'var(--da-primary-soft)', color: 'var(--da-primary-hover)',
     fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer',
   },
   installedTag: {
@@ -65,11 +65,11 @@ const S: Record<string, React.CSSProperties> = {
   },
   status: { fontSize: '0.82rem', color: '#64748b', flex: 1 },
   saveBtn: {
-    padding: '8px 18px', background: 'linear-gradient(135deg,#4f46e5 0%,#4338ca 100%)',
+    padding: '8px 18px', background: 'var(--da-primary)',
     color: '#ffffff', border: 'none', borderRadius: 8, cursor: 'pointer',
     fontSize: '0.86rem', fontWeight: 600,
   },
-  saveBtnDisabled: { background: '#e2e8f0', color: '#94a3b8', cursor: 'not-allowed' },
+  saveBtnDisabled: { background: '#e2e8f0', color: 'var(--da-text-muted)', cursor: 'not-allowed' },
   err: { color: '#dc2626', fontSize: '0.82rem' },
   formOverlay: {
     position: 'absolute', inset: 0, background: 'rgba(15,23,42,0.45)',
@@ -86,7 +86,7 @@ const S: Record<string, React.CSSProperties> = {
   },
   formInput: {
     width: '100%', boxSizing: 'border-box',
-    padding: '8px 11px', border: '1px solid #cbd5e1', borderRadius: 7,
+    padding: '8px 11px', border: '1px solid #cbd5e1', borderRadius: 8,
     fontSize: '0.86rem', outline: 'none',
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
   },
@@ -284,7 +284,7 @@ function McpTab({ agentId, onSaved }: { agentId: string; onSaved: () => void }) 
         {loading && <div style={{ color: '#64748b' }}>Loading…</div>}
         {err && <div style={S.err}>{err}</div>}
         {!loading && catalog.length === 0 && (
-          <div style={{ color: '#94a3b8', padding: 24, textAlign: 'center' }}>
+          <div style={{ color: 'var(--da-text-muted)', padding: 24, textAlign: 'center' }}>
             No MCP servers in the catalog. You can still add servers by editing
             <code> workspace/tools.json</code> directly.
           </div>
@@ -301,7 +301,7 @@ function McpTab({ agentId, onSaved }: { agentId: string; onSaved: () => void }) 
                     href={entry.docsUrl}
                     target="_blank"
                     rel="noreferrer"
-                    style={{ fontSize: '0.78rem', color: '#4338ca', marginTop: 4, display: 'inline-block' }}
+                    style={{ fontSize: '0.78rem', color: 'var(--da-primary-hover)', marginTop: 4, display: 'inline-block' }}
                   >
                     docs ↗
                   </a>
@@ -426,7 +426,7 @@ function McpAddForm({ entry, existingNames, onCancel, onSubmit }: AddFormProps) 
             disabled={busy}
             style={{
               padding: '7px 14px', border: '1px solid #cbd5e1', background: '#ffffff',
-              color: '#475569', borderRadius: 7, cursor: busy ? 'not-allowed' : 'pointer',
+              color: '#475569', borderRadius: 8, cursor: busy ? 'not-allowed' : 'pointer',
               fontSize: '0.86rem', fontWeight: 500,
             }}
           >
@@ -436,8 +436,8 @@ function McpAddForm({ entry, existingNames, onCancel, onSubmit }: AddFormProps) 
             onClick={submit}
             disabled={busy || !name.trim()}
             style={{
-              padding: '7px 18px', border: 'none', borderRadius: 7,
-              background: 'linear-gradient(135deg,#4f46e5 0%,#4338ca 100%)',
+              padding: '7px 18px', border: 'none', borderRadius: 8,
+              background: 'var(--da-primary)',
               color: '#ffffff', cursor: busy ? 'not-allowed' : 'pointer',
               fontSize: '0.86rem', fontWeight: 600,
               opacity: busy || !name.trim() ? 0.6 : 1,

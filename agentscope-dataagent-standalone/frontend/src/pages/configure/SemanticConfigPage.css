@@ -6,8 +6,8 @@
 .terms-head-actions { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 .terms-page .da-btn { min-height: 38px; padding: 8px 15px; font-size: 13px; border-radius: 8px; }
 .terms-page .terms-refresh { padding: 8px 10px; color: #667085; }
-.terms-page .da-btn-primary { background: #6550df; border-color: #6550df; }
-.terms-page .da-btn-primary:hover:not(:disabled) { background: #5742ce; }
+.terms-page .da-btn-primary { background: var(--da-primary); border-color: var(--da-primary); }
+.terms-page .da-btn-primary:hover:not(:disabled) { background: var(--da-primary-hover); }
 .terms-error { margin-bottom: 16px; padding: 12px 16px; border: 1px solid #f2ccd2; border-radius: 8px; color: #b63f53; background: #fff7f8; font-size: 13px; overflow-wrap: anywhere; }
 .terms-context { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; min-height: 56px; padding: 0 0 16px; border-bottom: 1px solid #e8eaf0; font-size: 13px; color: #687287; }
 .terms-knowledge { display: flex; align-items: center; gap: 9px; color: #343a49; min-width: 0; }
@@ -34,7 +34,7 @@
 .terms-synonyms { display: inline-flex; flex-wrap: wrap; gap: 5px; }
 .terms-synonyms > span { padding: 2px 8px; border-radius: 5px; background: #f1f3f7; color: #647086; font-size: 12px; }
 .terms-synonyms > .terms-no-synonym { background: transparent; color: #939bab; }
-.terms-status { display: inline-flex; align-items: center; gap: 7px; padding: 4px 9px; border-radius: 7px; font-size: 11px; white-space: nowrap; }
+.terms-status { display: inline-flex; align-items: center; gap: 7px; padding: 4px 9px; border-radius: 7px; font-size: 12px; white-space: nowrap; }
 .terms-status.is-published { background: #eaf7f1; color: #298263; }
 .terms-status.is-added { background: #f0ecff; color: #6a51d2; }
 .terms-status.is-added::before { background: #8565db; }
@@ -42,7 +42,7 @@
 .terms-status.is-deleted { background: #fff0f2; color: #b65365; }
 .terms-status.is-deleted::before { background: #c86677; }
 .terms-row-actions { display: inline-flex; align-items: center; justify-content: center; gap: 10px; }
-.terms-text-button, .terms-delete-button { display: inline-flex; align-items: center; justify-content: center; min-height: 30px; padding: 4px; border: 0; border-radius: 5px; background: transparent; color: #6953cc; font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer; }
+.terms-text-button, .terms-delete-button { display: inline-flex; align-items: center; justify-content: center; min-height: 30px; padding: 4px; border: 0; border-radius: 5px; background: transparent; color: var(--da-primary); font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer; }
 .terms-text-button:hover:not(:disabled) { background: #eeebfb; }
 .terms-delete-button { color: #8992a3; }
 .terms-delete-button:hover:not(:disabled) { color: #b54557; background: #fff0f2; }

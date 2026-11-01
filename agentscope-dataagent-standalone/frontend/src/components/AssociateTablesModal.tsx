@@ -24,7 +24,7 @@ const overlayStyle: React.CSSProperties = {
 
 const shellStyle: React.CSSProperties = {
   background: 'var(--da-surface)',
-  borderRadius: 16,
+  borderRadius: 12,
   width: 'min(1400px, 96vw)',
   maxHeight: '90vh',
   minHeight: 650,
@@ -95,7 +95,7 @@ const itemStyle = (active: boolean): React.CSSProperties => ({
   borderRadius: 8,
   cursor: 'pointer',
   fontSize: '0.85rem',
-  background: active ? 'rgba(79, 70, 229, 0.06)' : 'transparent',
+  background: active ? 'rgba(91, 61, 245, 0.06)' : 'transparent',
   color: active ? 'var(--da-primary)' : 'var(--da-text)',
   fontWeight: active ? 500 : 400,
   transition: 'background 0.12s ease',

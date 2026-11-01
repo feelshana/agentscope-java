@@ -2,7 +2,7 @@
 .dataset-workspace .kw-content { max-width: 1600px; padding: 42px 40px 48px; }
 .dw-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 30px; }
 .dw-identity { display: flex; align-items: flex-start; gap: 18px; min-width: 0; }
-.dw-book { display: grid; place-items: center; width: 64px; height: 64px; flex-shrink: 0; border-radius: 11px; background: #efebff; color: #6a52dc; }
+.dw-book { display: grid; place-items: center; width: 64px; height: 64px; flex-shrink: 0; border-radius: 11px; background: #efebff; color: var(--da-primary); }
 .dw-book .da-icon { width: 29px; height: 29px; }
 .dw-heading { min-width: 0; }
 .dw-heading h1 { margin: 0 0 13px; color: #242730; font-size: 28px; font-weight: 650; line-height: 1.35; letter-spacing: -.7px; overflow-wrap: anywhere; }
@@ -11,11 +11,11 @@
 .dw-heading p { max-width: 760px; margin: 12px 0 0; color: #6b7587; font-size: 13px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
 .dw-header-actions { display: flex; flex-shrink: 0; align-items: center; gap: 12px; }
 .dataset-workspace .da-btn { min-height: 44px; border-radius: 8px; padding: 10px 16px; font-size: 14px; line-height: 1.5; }
-.dataset-workspace .da-btn-primary { background: #6250e5; border-color: #6250e5; }
+.dataset-workspace .da-btn-primary { background: var(--da-primary); border-color: var(--da-primary); }
 .dataset-workspace .da-btn:disabled { opacity: .5; cursor: not-allowed; }
 .dw-header-actions > .kw-more { width: 44px; height: 44px; border: 1px solid #e1e5ee; border-radius: 8px; color: #454c5c; }
-.dw-text { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 28px; padding: 0; border: 0; background: transparent; color: #6550d9; font: inherit; font-size: 13px; line-height: 1.6; cursor: pointer; white-space: nowrap; }
-.dw-text:hover { color: #4835b7; }
+.dw-text { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 28px; padding: 0; border: 0; background: transparent; color: var(--da-primary); font: inherit; font-size: 13px; line-height: 1.6; cursor: pointer; white-space: nowrap; }
+.dw-text:hover { color: var(--da-primary-hover); }
 .dw-text:disabled { opacity: .5; cursor: not-allowed; }
 .dw-text .da-icon { width: 15px; height: 15px; }
 .dw-forward { transform: rotate(180deg); }
@@ -45,7 +45,7 @@
 .dataset-workspace .dw-table .dw-unknown { color: #8490a3; font-size: 13px; }
 .dataset-workspace .dw-table td.kw-empty { height: 140px; text-align: center; }
 .dw-name { display: flex; align-items: center; gap: 12px; max-width: 100%; padding: 0; border: 0; background: transparent; color: #293141; font: inherit; font-size: 15px; font-weight: 550; cursor: pointer; }
-.dw-name:hover .dw-name-text { color: #6550d9; }
+.dw-name:hover .dw-name-text { color: var(--da-primary); }
 .dw-name-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dw-table-icon { display: grid; place-items: center; flex-shrink: 0; width: 34px; height: 34px; border: 1px solid #e8ebf2; border-radius: 8px; background: #f9faff; color: #78869e; }
 .dw-table-icon .da-icon { width: 19px; height: 19px; }

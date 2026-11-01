@@ -18,7 +18,7 @@ export default function NextStepCard({ groupId, summary, unconfirmedTrials = 0, 
 }) {
   // A question asked while the query engine prepares only waits, so 去问数 waits with it.
   const phase = useQueryReadiness(groupId, summary.publishedVersion);
-  const box = { border: '1px solid var(--da-success)', borderRadius: 14, padding: '12px 16px', background: 'var(--da-surface, #fff)', fontSize: 13, boxShadow: 'var(--da-shadow-card)' };
+  const box = { border: '1px solid var(--da-success)', borderRadius: 12, padding: '12px 16px', background: 'var(--da-surface)', fontSize: 13, boxShadow: 'var(--da-shadow-card)' };
   if (summary.publishedVersion !== null && summary.changes === 0)
     return <section aria-label="下一步" style={box}>
       <strong style={{ color: 'var(--da-success)' }}>已发布 v{summary.publishedVersion}</strong>
@@ -34,7 +34,7 @@ export default function NextStepCard({ groupId, summary, unconfirmedTrials = 0, 
     </section>;
   if (summary.changes === 0) return null;
   const step = (n: number, title: string, detail: string, action: ReactNode) => <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0' }}>
-    <span style={{ width: 20, height: 20, borderRadius: 10, background: 'var(--da-surface-sunken, #f1f5f9)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>{n}</span>
+    <span style={{ width: 20, height: 20, borderRadius: 8, background: 'var(--da-surface-sunken)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>{n}</span>
     <span style={{ flex: 1 }}><span style={{ fontWeight: 500 }}>{title}</span>
       <span style={{ display: 'block', fontSize: 12, color: 'var(--da-text-muted)' }}>{detail}</span></span>
     {action}

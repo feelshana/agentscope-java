@@ -232,7 +232,7 @@ export function OnboardingSidebarEntry() {
       <Icon name="list" size="sm" /><span style={{ flex: 1, textAlign: 'left' }}>新手任务</span><span>{status.completed}/{status.tasks.length}</span><Icon name="chevron" size="sm" />
     </button>
     {open && createPortal(<div ref={popover} id="onboarding-popover" role="dialog" aria-label="新手任务"
-      style={{ position: 'fixed', left: rect ? rect.right + 12 : 260, bottom: rect ? Math.max(8, window.innerHeight - rect.bottom) : 20, width: 340, maxWidth: 'calc(100vw - 24px)', background: 'var(--da-surface)', border: '1px solid var(--da-border)', borderRadius: 14, boxShadow: 'var(--da-shadow-pop)', padding: 16, display: 'flex', flexDirection: 'column', gap: 10, zIndex: 1000, color: 'var(--da-text)' }}>
+      style={{ position: 'fixed', left: rect ? rect.right + 12 : 260, bottom: rect ? Math.max(8, window.innerHeight - rect.bottom) : 20, width: 340, maxWidth: 'calc(100vw - 24px)', background: 'var(--da-surface)', border: '1px solid var(--da-border)', borderRadius: 12, boxShadow: 'var(--da-shadow-pop)', padding: 16, display: 'flex', flexDirection: 'column', gap: 10, zIndex: 1000, color: 'var(--da-text)' }}>
       <div style={{ display: 'flex', alignItems: 'center' }}>
         <strong style={{ fontSize: 15, flex: 1 }}>新手任务 {status.completed}/{status.tasks.length}</strong>
         <button type="button" className="da-btn da-btn-ghost da-btn-sm" aria-label="收起" onClick={() => setOpen(false)}><Icon name="close" size="sm" /></button>
@@ -310,7 +310,7 @@ export function HelpPanel() {
 export function OnboardingTip({ tip, children }: { tip: OnboardingTipId; children: React.ReactNode }) {
   const status = useOnboarding();
   if (!status || status.dismissed || status.tipsSeen.includes(tip)) return null;
-  return <div role="note" style={{ marginTop: 8, background: 'var(--da-text)', color: 'var(--da-surface)', borderRadius: 10, padding: '10px 12px', display: 'flex', alignItems: 'flex-start', gap: 10, maxWidth: 420, fontSize: 13, lineHeight: 1.6 }}>
+  return <div role="note" style={{ marginTop: 8, background: 'var(--da-text)', color: 'var(--da-surface)', borderRadius: 8, padding: '10px 12px', display: 'flex', alignItems: 'flex-start', gap: 10, maxWidth: 420, fontSize: 13, lineHeight: 1.6 }}>
     <span style={{ flex: 1 }}>{children}</span>
     <button type="button" className="da-btn da-btn-primary da-btn-sm" style={{ flex: 'none' }} onClick={() => void markTipSeen(tip)}>知道了</button>
   </div>;

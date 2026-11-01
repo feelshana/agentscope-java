@@ -36,7 +36,7 @@ const s: Record<string, React.CSSProperties> = {
   sectionHeader: {
     padding: '1rem 1rem 0.5rem',
     fontSize: '0.74rem',
-    color: '#94a3b8',
+    color: 'var(--da-text-muted)',
     letterSpacing: '0.1em',
     textTransform: 'uppercase' as const,
     fontWeight: 700,
@@ -56,7 +56,7 @@ const s: Record<string, React.CSSProperties> = {
     fontWeight: 600,
   },
   divider: { height: 1, background: '#e5e7eb', margin: '0.6rem 0.75rem' },
-  emptyHint: { padding: '0.4rem 1rem', color: '#94a3b8', fontSize: '0.85rem' },
+  emptyHint: { padding: '0.4rem 1rem', color: 'var(--da-text-muted)', fontSize: '0.85rem' },
   errorHint: { padding: '0.4rem 1rem', color: '#dc2626', fontSize: '0.85rem' },
   newConvBtn: {
     display: 'block',
@@ -378,7 +378,7 @@ export default function AgentSidebar({ selectedAgentId, onSelectAgent, userId, r
               <span style={{ fontSize: '0.9rem', color: active ? 'var(--da-primary-hover)' : '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: active ? 600 : 500 }}>
                 {label}
               </span>
-              <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
+              <span style={{ fontSize: '0.78rem', color: 'var(--da-text-muted)' }}>
                 {timeAgo(sess.lastActivityMs)}
               </span>
             </div>

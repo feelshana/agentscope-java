@@ -357,6 +357,7 @@ export interface MdlColumnView {
   relationship: boolean;
   calculated: boolean;
   expression: string | null;
+  primaryKey: boolean;
 }
 
 export interface MdlModelView {
@@ -373,6 +374,9 @@ export interface MdlModelView {
    * (specs/034 — the model is defined by SQL, not a physical table).
    */
   refSqlPath: string | null;
+  primaryKey: string | null;
+  /** FACT or DIMENSION as recorded in the model; anything else is left unlabelled. */
+  tableRole: string | null;
 }
 
 export interface MdlRelationView {
@@ -383,6 +387,7 @@ export interface MdlRelationView {
   condition: string;
   sourceColumns: string[];
   targetColumns: string[];
+  description: string | null;
 }
 
 export interface MdlCubeMemberView {
@@ -431,6 +436,34 @@ export interface MdlView {
 export async function getMdlView(groupId: string): Promise<MdlView> {
   const res = await apiFetch(`${base(groupId)}/mdl/view`, { headers: authHeaders() });
   if (!res.ok) throw new Error(await errorMessage(res, `MDL 视图加载失败: ${res.status}`));
+  return res.json();
+}
+
+/** Published projection any QUERY user may read (spec106); never the draft. */
+export interface KnowledgeBaseBrowse {
+  id: string;
+  name: string;
+  description: string | null;
+  publishedVersion: number;
+  models: {
+    name: string; description?: string | null; primaryKey?: string | null; tableRole?: string | null; derived?: boolean;
+    columns?: { name: string; type?: string | null; description?: string | null; expression?: string | null; isCalculated?: boolean; isPrimaryKey?: boolean }[];
+  }[];
+  relationships: { name: string; models?: string[]; joinType?: string; condition?: string; description?: string | null }[];
+  knowledge: { path: string; content: string }[];
+}
+
+export async function getKnowledgeBaseBrowse(groupId: string): Promise<KnowledgeBaseBrowse> {
+  const res = await apiFetch(`/api/knowledge-bases/${encodeURIComponent(groupId)}/browse`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(await errorMessage(res, `加载线上版本失败: ${res.status}`));
+  return res.json();
+}
+
+export interface ModelSummary { groupId: string; models: number; relations: number; unrelated: number }
+
+export async function listModelSummaries(signal?: AbortSignal): Promise<ModelSummary[]> {
+  const res = await apiFetch('/api/knowledge-bases/summaries', { headers: authHeaders(), signal });
+  if (!res.ok) throw new Error(await errorMessage(res, `加载模型统计失败: ${res.status}`));
   return res.json();
 }
 

@@ -13,7 +13,7 @@ export function highlightTokens(value: string | Prism.Token | (string | Prism.To
 function tokens(value: string | Prism.Token | (string | Prism.Token)[]): ReactNode {
   if (typeof value === 'string') return value;
   if (Array.isArray(value)) return value.map((item, index) => <span key={index}>{tokens(item)}</span>);
-  const color = ['keyword', 'atrule'].includes(value.type) ? '#7c3aed' : ['string', 'scalar'].includes(value.type) ? '#047857' : value.type === 'comment' ? '#64748b' : value.type === 'number' ? '#b45309' : undefined;
+  const color = ['keyword', 'atrule'].includes(value.type) ? 'var(--da-primary)' : ['string', 'scalar'].includes(value.type) ? '#047857' : value.type === 'comment' ? '#64748b' : value.type === 'number' ? '#b45309' : undefined;
   return <span style={{ color }}>{tokens(value.content)}</span>;
 }
 

@@ -119,7 +119,7 @@ function UserMenu({ username, onLogout, onSwitchToChat }: {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: '0.92rem', fontWeight: 700, color: '#ffffff',
           userSelect: 'none' as const,
-          boxShadow: '0 2px 6px rgba(99,102,241,0.25)',
+          boxShadow: '0 2px 6px rgba(91, 61, 245,0.25)',
         }}>
           {username.charAt(0).toUpperCase() || '?'}
         </div>
@@ -127,7 +127,7 @@ function UserMenu({ username, onLogout, onSwitchToChat }: {
           <div style={{ fontSize: '0.92rem', fontWeight: 600, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{username}</div>
           <div style={{ fontSize: '0.76rem', color: 'var(--da-primary)', fontWeight: 500 }}>🛡 admin</div>
         </div>
-        <span style={{ fontSize: '0.72rem', color: '#94a3b8', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>▲</span>
+        <span style={{ fontSize: '0.72rem', color: 'var(--da-text-muted)', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>▲</span>
       </button>
 
       {open && (
@@ -197,13 +197,13 @@ export default function AdminAppShell({ children }: AppShellProps) {
           <span style={{ fontWeight: 700, color: 'var(--da-primary)', fontSize: '1.15rem', letterSpacing: '-0.02em', display: 'block' }}>
             ⚙ AgentScope
           </span>
-          <span style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: 4, display: 'block', fontWeight: 500 }}>
+          <span style={{ fontSize: '0.78rem', color: 'var(--da-text-muted)', marginTop: 4, display: 'block', fontWeight: 500 }}>
             Admin Console
           </span>
         </div>
 
         <div style={{ padding: '16px 12px 8px' }}>
-          <span style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.1em', color: '#94a3b8', textTransform: 'uppercase' as const, padding: '0 10px', marginBottom: 8, display: 'block' }}>
+          <span style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--da-text-muted)', textTransform: 'uppercase' as const, padding: '0 10px', marginBottom: 8, display: 'block' }}>
             Administration
           </span>
           {ADMIN_NAV.map(item => (
@@ -228,7 +228,7 @@ export default function AdminAppShell({ children }: AppShellProps) {
           display: 'flex', alignItems: 'center', padding: '0 28px', flexShrink: 0,
         }}>
           <span style={{ fontSize: '1rem', color: '#0f172a', fontWeight: 600, flex: 1 }}>{pageTitle}</span>
-          <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 500 }}>Admin Console</span>
+          <span style={{ fontSize: '0.8rem', color: 'var(--da-text-muted)', fontWeight: 500 }}>Admin Console</span>
         </div>
         <div style={{ flex: 1, overflow: 'auto' }}>{children}</div>
       </div>
