@@ -394,11 +394,11 @@ export default function DatasetGroupPage() {
       <KnowledgeBreadcrumb items={[{ label: '返回对话', to: '/chat' }, { label: '知识库', to: '/configure/datasets' }, { label: detail?.group.name ?? '加载中…' }]} />
       <div className="kw-scroll"><div className="kw-content">
         <div className="dw-header">
-          <div className="dw-identity"><span className="dw-book" aria-hidden="true"><Icon name="book" variant="solid" /></span><div className="dw-heading"><h1>{detail?.group.name ?? '知识库'}</h1>
+          <div className="dw-identity"><div className="dw-heading"><h1>{detail?.group.name ?? '知识库'}</h1>
             <div className="dw-meta"><span>{fileCount} 个数据集</span>{detail?.group.createdAt && <><span aria-hidden="true">·</span><span>创建于 {new Date(detail.group.createdAt).toLocaleDateString('zh-CN')}</span></>}{canManage && !detail?.group.description && <button className="dw-text" disabled={!detail || busy} onClick={openGroupEditor}>添加业务说明</button>}</div>
             {detail?.group.description && <p>{detail.group.description}</p>}
           </div></div>
-          <div className="dw-header-actions">{canManage && <><button className="da-btn" disabled={!detail} onClick={() => setMembersOpen(true)}><Icon name="user" size="sm" />成员与权限</button><WorkspaceMenu label="知识库设置" items={[{ label: '编辑信息', icon: 'edit', disabled: busy, onClick: openGroupEditor }, { label: '事实表时间范围', icon: 'clock', onClick: () => setWindowSignal(n => n + 1) }]} /></>}<button className="da-btn da-btn-primary" disabled={!detail || !!preparing} title={preparing ? `问数准备中（${preparing}），约半分钟后可用` : undefined} onClick={() => navigate(`/chat?groups=${encodeURIComponent(groupId)}`)}><Icon name="chat" size="sm" />{preparing ? '问数准备中…' : '基于此库提问'}</button></div>
+          <div className="dw-header-actions">{canManage && <><button className="da-btn" disabled={!detail} onClick={() => setMembersOpen(true)}><Icon name="user" size="sm" />成员与权限</button><WorkspaceMenu label="知识库设置" triggerLabel="设置" items={[{ label: '编辑信息', icon: 'edit', disabled: busy, onClick: openGroupEditor }, { label: '事实表时间范围', icon: 'clock', onClick: () => setWindowSignal(n => n + 1) }]} /></>}<button className="da-btn da-btn-primary" disabled={!detail || !!preparing} title={preparing ? `问数准备中（${preparing}），约半分钟后可用` : undefined} onClick={() => navigate(`/chat?groups=${encodeURIComponent(groupId)}`)}><Icon name="chat" size="sm" />{preparing ? '问数准备中…' : '基于此库提问'}</button></div>
         </div>
         {error && <div className="kw-alert" role="alert">{error}</div>}
         {(workflow || detail) && fileCount > 0 && <div className={`dw-model-status${queryAvailable && !preparing ? ' is-ready' : ''}`}>
@@ -417,7 +417,7 @@ export default function DatasetGroupPage() {
           const pending = uploadStatuses.some(s => s.status === 'model_pending');
           const needsAttention = failedCount > 0 || uncertain || pending;
           const progressTitle = running ? '正在导入文件' : failedCount ? '部分文件导入失败' : uncertain ? '导入结果待确认' : pending ? '文件已导入，模型待检查' : '文件已全部导入';
-          return <details className="kw-up" open={uploadStatuses.some(s => s.status !== 'ready') || associatingTables.size > 0}>
+          return <details className={`kw-up${doneCount === uploadStatuses.length ? ' is-complete' : ''}`} open={uploadStatuses.some(s => s.status !== 'ready') || associatingTables.size > 0}>
             <summary className="kw-up-head">
               <span className={`kw-up-headicon${running ? ' is-running' : needsAttention ? ' is-attention' : ' is-done'}`} aria-hidden="true">
                 {running ? <span className="da-spinner da-spinner-sm" /> : <Icon name={needsAttention ? 'warn' : 'check'} size="sm" />}

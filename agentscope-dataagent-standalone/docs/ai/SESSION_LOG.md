@@ -403,3 +403,29 @@ DatasetsPage/独立CSS按认可图实现，创建人纯文字，原权限/菜单
 前两条来自主线合并记录，代表其历史时点；其内容现已包含于10bde604。用户确认先合并再优化，继续原b1a71a20/10bde604 merge，备份22冲突stage后逐块处理，未abort或回滚。主线spec106/后端/指引保留，本地品牌/交互保留并消费主线配色/字号；术语迁入业务知识并补共享发布编辑限制，卡片补发布状态，静态包重建。双方原CURRENT_TASK分别归档。tsc/npm64×3、spotless/相关Java82、最终前缀build及package通过；模拟UI25+25+27+19共96项通过，未改真实资源。后端及测试与MERGE_HEAD一致，未重启或部署；Git最终门禁/本地merge提交回读另记，不push。
 
 合并收尾门禁：git ls-files -u为空，暂存区无冲突标记及空白错误；最终静态入口的3处assets引用均存在，后端/测试与10bde604一致；更新记忆后DocsConsistencyTest再次5项通过。本地merge提交号及双亲包含关系以git log/本次交付回读为准。独立QA浏览器及19141合成服务关闭，用户原有服务和浏览器保留。
+
+## 2026-11-01 Asia/Shanghai｜UI风格协调提案
+以用户8张截图及同事分支/主线/HEAD的只读比较为依据，识别大标题、图标独立行、灰底统计块、黑色按钮和状态带叠加造成的比例失衡。built-in image_gen迭代并view_image检查知识库四列和数据集详情图；保留Logo，提议温和紫与轻量布局。图稿/提示词/建议规格保存docs/previews/style-harmony-20261101；CURRENT_TASK归档上轮merge并切换到待评审提案。正式代码/静态包/服务/数据未改，不提交推送；本轮检查结果另记。
+
+提案收尾：DocsConsistencyTest本轮5项通过，git diff --check通过；生产frontend/src及src无差异，暂存为空，liyufan_dev/d6ad3ba3未变。只留下评审图、提示词及共享记录；无提交、推送、服务或业务数据操作。
+
+## 2026-11-01 Asia/Shanghai｜协调风格落地
+用户认可后局部实施AppShell、知识库卡片/列表和数据集详情，主色#6654ce同步共享变量；设置触发器复用原WorkspaceMenu，现有权限/API/恢复流程保留。图稿和真实组件多尺寸、最终包已view_image对照；1600视口卡片247.56px，表格64px。TypeScript、npm64×3base、build、spotless与DocsConsistencyTest5项通过；独立Vite隔离26项+最终/dify/dataagent/包6项通过，无业务写入。报告和8张合成UI证据已归档；原方案README标记已实施。保留liyufan_dev/d6ad3ba3和全部既有文档，无提交推送部署。收尾关闭本轮浏览器/两服务并清理本轮临时QA文件，原用户资源保留；最终门禁另记。
+
+收尾：最终DocsConsistencyTest再次5项通过，git diff --check通过；暂存为空，liyufan_dev/d6ad3ba3未变。本轮独立浏览器与19142/19143已关闭，临时CLI文件已按明确文件路径清理；用户服务和旧预览资源保留。实际组件截图已归档，无提交、推送或部署。
+
+## 2026-11-01 Asia/Shanghai｜卡片信息位置微调
+按用户截图反馈，仅改DatasetsPage信息结构/CSS：左数据量、右用户名与日期，状态权限在上，移除创建人前缀；宽屏5列按260px最小宽度触发，窄些4/3/2/1列。TypeScript及独立隔离UI6场景通过，1920五列294.39px/1600四列316px，均无页面溢出；长名/列表/手机已view_image。报告与截图已归档card-metadata-20261101；保留前批WIP，无真实资源写入。最终构建、文档与独立QA收尾另记。
+
+卡片微调收尾：/dify/dataagent/最终build通过（index-r7Nc2CEO.js/index-BHOZPzNz.css/ontology-Bihmp9Ve.js），保留既有ECharts/大包提示；DocsConsistencyTest5项、git diff --check通过，暂存为空，liyufan_dev/d6ad3ba3未变。独立metadata19144浏览器及19144服务已关闭，临时文件按明确路径清理，4张持久截图保留。无提交、推送、部署或真实业务写入。
+
+## 2026-11-01 Asia/Shanghai｜发送和停止按钮配色
+仅ConversationPolish.css使用共享主色/淡紫，保持原尺寸与点击/输入法逻辑。最终前缀build通过（index-BtJyAZ5G/index-DFxa2lLP/ontology-C7BOwsdv），独立最终CSS状态台6项、view_image通过；不等于真实发送/停止验收，无LLM或业务写入。报告与状态截图已保存。所有既有WIP保留，无提交推送部署；收尾门禁另记。
+
+按钮配色收尾：DocsConsistencyTest5项与git diff --check通过，暂存为空，liyufan_dev/d6ad3ba3未变。独立composer19146浏览器与19146预览服务已关闭，本轮临时QA文件按明确路径清理，状态图持久归档。无提交、推送或部署，原用户服务与全部WIP保留。
+
+## 2026-11-01 Asia/Shanghai｜上线前小优化候选分析
+只读核对ChatPanel/CitationPanel/TaskTrace/Markdown/ECharts与既有新手能力，浏览ChatGPT/飞书/Claude/Linear官方资料。识别来源旧工具名、缺修改重试、内存草稿及表格复用等缺口；候选/粗估/范围保存docs/design/20261101-prelaunch-polish-candidates.md。只更新建议与共享记录，未修改业务源码或构建资源，无新增实施/提交/推送/部署。
+
+## 2026-11-01 Asia/Shanghai｜本地UI批次提交整理
+用户授权一次本地提交：统一配色/侧栏、卡片五列与左右信息、数据集紧凑布局和发送/停止按钮，包含配套静态包与图稿/合成UI验收/候选记录。起点liyufan_dev/d6ad3ba3，无新增业务实现；候选建议仍未实施。整理时npm64×3base、spotless、DocsConsistencyTest5项通过，diff及生产入口资产检查通过，PNG为binary。前轮最终build/44项局部UI证据沿用；不重复无关后端或真实业务验收。提交执行结果/哈希与工作区以本次git log/status回读为准，不push。
