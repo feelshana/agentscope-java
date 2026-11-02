@@ -46,6 +46,15 @@ export interface TourState {
   paused: boolean;
 }
 
+const MODEL_SPOTLIGHT_STEPS = new Set<TourStepId>([
+  'screening', 'window', 'start', 'review', 'confirm', 'trial_open', 'trial_ask', 'trial_confirm', 'publish',
+]);
+
+/** Keep the draft drawer from covering the real control required by the current modeling step. */
+export function tourLocksDraftDrawer(tour: TourState | null, groupId: string): boolean {
+  return !!tour && !tour.paused && tour.groupId === groupId && MODEL_SPOTLIGHT_STEPS.has(tour.step);
+}
+
 let state: TourState | null = null;
 let stateToken: string | null = null;
 let finished = false;

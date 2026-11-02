@@ -17,6 +17,8 @@ class DataSourceEngineTest {
                 .isNull();
         assertThat(DataSourceIntrospector.engineError("5.7.44-log", "MySQL Community Server (GPL)"))
                 .contains("5.7.44-log", "低于 8.0", "MySQL 8.0 及以上或 Doris");
+        assertThat(DataSourceIntrospector.engineError("5.7.28-log", "MySQL Community Server (GPL)"))
+                .contains("5.7.28-log", "低于 8.0");
         assertThat(DataSourceIntrospector.engineError("unknown", null)).contains("无法识别数据库版本");
     }
 

@@ -771,7 +771,7 @@ React 18 + TypeScript + Vite SPA（`frontend/`），构建产物进 `classpath:/
 
 第 1、2 步只按用户自己拥有的知识库判定；没有自有知识库但能查询公共或共享知识库的用户只有提问、深入分析两步。首页第 1 步只有"开始第一步"，由它进入逐步指引。
 
-`state/guidedTour.ts` 保存指引位置，页面用 `tourSignal` 上报真实发生的事，每一步等待一个信号，已经发生过的信号会跳过对应步骤（如没有待整理字段）；不使用定时器，也不代替用户点击。`GuidedTour` 按 `data-tour` 标记找目标控件，遮罩只留出目标；目标不在屏幕上或处于等待阶段时只显示状态卡，不遮挡页面。位置经 `OnboardingService#saveTour` 存入 `dataagent_user.onboarding_tour`，退出后保留，可从帮助面板继续。
+`state/guidedTour.ts` 保存指引位置，页面用 `tourSignal` 上报真实发生的事，每一步等待一个信号，已经发生过的信号会跳过对应步骤（如没有待整理字段）；不使用定时器，也不代替用户点击。`GuidedTour` 按 `data-tour` 标记找目标控件，遮罩只留出目标；目标不在屏幕上或处于等待阶段时只显示状态卡，不遮挡页面。建模点击步骤由 `tourLocksDraftDrawer` 按当前账号、知识库和步骤约束 `DraftBar`：收起并限制重开草稿浮层，避免覆盖目标；等待或退出引导后恢复正常查看，不改确认和发布状态。位置经 `OnboardingService#saveTour` 存入 `dataagent_user.onboarding_tour`，退出后保留，可从帮助面板继续。
 
 `DemoDataService` 在 `dataagent.demo.enabled` 打开时于启动后异步工作：用数据集库连接建 `demo_data`，从 `samples-dir` 的两份 Excel 导入 `report_visits`、`platform_users`（表非空则跳过），创建只读账号，并同步 `owner_id=__system__` 的数据源记录。这条记录让 Wren 连接、采样、发布沿用外部数据源的现有链路；只有 `ExternalDataSourceController` 的列表和只读浏览、`DatasetService#associateTables` 放开归属校验，且限定 `demo_data`，编辑和删除仍按个人归属拒绝。准备失败只让内置数据源不可用。内置 Excel 由 `OnboardingController#sample` 按固定文件名提供，前端取回后走现有上传流程。
 

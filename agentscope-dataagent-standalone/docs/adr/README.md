@@ -146,7 +146,7 @@ ADR 记录"为什么这样做"。规则：
 | [0110](0110-platform-handles-build-overwrite-and-conditional-date-rules.md) | 自动补编译、允许整文件替换、日期优先规则按受限表条件注入 | 已接受，2026-10-20。补充 ADR0102/0105/0108。 |  |
 | [0111](0111-draft-changes-reviewed-before-publish.md) | 建模修改直接进入草稿，发布前统一审阅，取消逐项确认卡 | 已接受，2026-10-21。取代 ADR0031，修改 ADR0069/0094 确认条款。 |  |
 | [0112](0112-rule-first-sql-window-gate.md) | SQL 时间门禁规则优先，模型只判断规则无法确定的 SQL | 已接受，2026-10-25。补充 ADR0097/0103：ADR0097 中"检查器仅将原始 SQL 交给无工具 LLM"改为规则优先、模型兜底；登记配置 |  |
-| [0113](0113-mysql8-or-doris-sources-and-literal-date-ranges.md) | 外部数据源限定 MySQL 8.0+ 或 Doris，SQL 用 MySQL 8.0 语法与日期常量范围 | 已接受，2026-10-25。补充 ADR0021（外部源只发布 MySQL）与 ADR0112（规则优先的时间门禁）。 |  |
+| [0113](0113-mysql8-or-doris-sources-and-literal-date-ranges.md) | 外部数据源限定 MySQL 8.0+ 或 Doris，SQL 用 MySQL 8.0 语法与日期常量范围 | 已接受，完整有效；2026-11-02撤销ADR0123并回退5.7放开。 |  |
 | [0114](0114-native-query-and-engineering-integration.md) | 单库原生问数与工程能力整合 | 已接受，2026-10-26；组合验收见 spec094 |  |
 | [0115](0115-query-web-search-via-deepseek.md) | 问数助手经 DeepSeek 官方搜索 API 联网，移除 harness 默认联网工具 | 已接受，2026-10-26。实施 spec095。 |  |
 | [0116](0116-bi-account-and-public-knowledge.md) | BI账号与公共库 | 已接受 | |
@@ -155,3 +155,4 @@ ADR 记录"为什么这样做"。规则：
 | [0119](0119-business-terms-in-wren-naming-conventions.md) | 业务术语存入知识库工程的官方 Naming conventions，随草稿发布 | 已接受，2026-10-29。实施 spec100。 |  |
 | [0120](0120-retire-knowledge-caveats.md) | 停用 knowledge/caveats/，推断不再写入工程 | 已接受，2026-10-29。修改 ADR0111 第 4 条推断去向。 |  |
 | [0121](0121-query-analysis-skills.md) | 问数分析技能以固定脚本执行，参数先确认再取数 | 已接受，2026-10-29。实施 spec102。 |  |
+| [0123](0123-mysql57-connection-admission-only.md) | 仅放开MySQL 5.7数据源接入 | 已撤销，2026-11-02；5.7问数WITH失败，恢复ADR0113。 | |
