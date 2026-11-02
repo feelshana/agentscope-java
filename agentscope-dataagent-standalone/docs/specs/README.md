@@ -25,6 +25,7 @@ spec 是一页纸的需求与验收标准，写代码之前先写（模板：[00
 | [104](104-new-user-onboarding.md) | 新手引导：入门清单、起步问题、帮助与一次性提示 | 已实施，整合验收中 |
 | [105](105-guided-tour-and-demo-data.md) | 页面逐步指引与内置示例数据 | 已实施，待真实验收 |
 | [106](106-semantic-modeling-workspace.md) | 语义建模工作台（模型、关系分开与新关系图） | 已实施，待真实验收 |
+| [107](107-mysql57-external-source-compatibility.md) | 仅放开MySQL 5.7数据源接入并实测流程 | 已撤销并回退；WITH不兼容证据保留，完整兼容仅后续候选 |
 
 ## 已完成或已关闭（done/）
 

@@ -1,27 +1,25 @@
-# 当前任务：个人UI合入develop-2.0（2026-11-01 Asia/Shanghai）
+# 当前任务：提交个人分支并合入主线（2026-11-02 Asia/Shanghai）
 
 ## 授权与起点
-- 用户已push liyufan_dev，授权切到主线合入并核对wangchao_dev；主线push及66部署由用户后续执行。
-- 起点liyufan_dev@0fbc0fae，本地/远程一致，工作区和暂存为空。
-- 明确fetch远程develop-2.0@10bde604、liyufan_dev@0fbc0fae、wangchao_dev@a85ccec6。
-- 本地主线先由5b1079a6快进到10bde604，再--no-ff合入个人分支；无新spec/ADR。
-- 旧入口归档archive/20261101-before-mainline-ui-integration.md。
+- 用户授权整理本地修改，提交并push个人liyufan_dev，再合入develop-2.0并push；不操作生产。
+- 起点两条本地分支同为0e9f25ee；fetch后origin主线相同，origin个人0fbc0fae，同事a85ccec6已包含在主线。
+- 本轮为既有修改整理与Git整合，不新增spec/ADR或业务功能。
 
-## 已核对与整合
-- wangchao_dev是origin/develop-2.0祖先（merge-base退出0、主线/同事6/0），没有漏合提交。
-- 同事后续31365282与2623052b已在10bde604主线，个人远程较早不代表主线缺少这些改造。
-- 个人比原主线多3条提交b1a71a20、d6ad3ba3、0fbc0fae，本轮无冲突完整合入。
-- 自动合并树最初与个人分支全树相同；本轮只再补共享记录及整合报告。
-- frontend/src/pom与个人分支相同；后端Java、测试、application.yml和SQL迁移与原主线相同。
-- 沿用已验证静态包index-BtJyAZ5G.js/index-DFxa2lLP.css/ontology-C7BOwsdv.js。
+## 本批内容
+- 新手引导确认等建模点击步骤自动收起/限制展开草稿，避免遮挡；退出或等待时可查看，不自动确认/发布。
+- 配套真实组件UI报告、截图、状态迁移回归和生产前缀静态包。
+- 用户撤销MySQL5.7接入放开，生产业务代码与原主线相同；增加5.7拒绝的回归。
+- ADR0123撤销、0113恢复有效，历史WITH/1064验收和完整兼容候选仅留记录，不实施Wren改写。
+- 细节和已验证证据见archive/20261102-before-release-branch-sync.md及两份20261102专项报告。
 
-## 验证
-- 本轮npm64项×3base通过；格式、文档和Git最终检查见SESSION_LOG及提交回读。
-- 前轮build/TypeScript与各UI验收是历史同树证据，本轮不重复构建/浏览器/无关后端全量或真实LLM业务。
-- 报告docs/test-reports/20261101-mainline-ui-integration.md。
+## 验证与状态
+- 本轮再次npm67项×3base、局部Java/文档31项、Spotless通过，生产入口资产存在。
+- 合并工作树的业务源码/测试/静态包与个人提交一致；本地已切主线，后续日常开发回个人分支。
+- 前轮npm67项×3base、TypeScript、/dify/dataagent/生产build、桌面/窄屏/iframe实际组件UI已通过。
+- 前轮MySQL回退局部31项、格式/文档检查通过；本轮提交前局部复核结果见SESSION_LOG。
+- 本地示例Excel保留忽略目录；私有配置、临时target、凭据和本地交接不提交。
+- 用户IDEA服务与5.7测试容器保留，不自动重启/清理；线上版本尚未由本轮验证。
 
 ## 下一步
-- 当前保留develop-2.0，本地merge提交号、是否干净及ahead数以Git回读为准，助手不push。
-- 用户push origin develop-2.0后，66拉取并核对本次提交，再依66-update-operations.md构建/upgrade。
-- 没有新SQL迁移或配置变化；不因此重复初始化DB/示例导入，未验证66当前运行状态。
-- 上线前候选仍待选择，未把记录的建议当作实施授权。
+- 个人提交19fcdbde14c63cd80da0f7a93a7f8ee41f41d67d已push；主线从0e9f25ee无冲突合入，正式merge提交和push结果以Git回读为准。
+- 完成后由用户登录66，按更新指引构建指定完整提交并升级，不重建数据库。

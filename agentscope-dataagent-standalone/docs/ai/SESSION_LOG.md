@@ -434,3 +434,35 @@ DatasetsPage/独立CSS按认可图实现，创建人纯文字，原权限/菜单
 用户授权后核对/fetch远程main10bde604、个人0fbc0fae、同事a85ccec6；同事已是原主线祖先，没有主线未包含提交。切主线从5b1079a6快进10bde604，再--no-ff合入个人0fbc0fae，无冲突，初始合并树与个人全树一致。仅新增整合报告/共享记录；后端Java/测试/配置/迁移与原主线相同，前端与包沿用个人。npm64×3base本轮通过；最终格式/文档门禁与merge提交以Git回读为准。不push、不操作66。
 
 主线整合收尾门禁：本轮spotless:check、DocsConsistencyTest5项、npm64×3base通过；frontend/src/pom与个人分支逐字节一致，无冲突条目。合并提交保留双亲10bde604和0fbc0fae，报告/记录一并纳入；最终哈希、三个祖先包含关系及工作区由提交后Git回读确认，未push或部署。
+
+## 2026-11-02 Asia/Shanghai｜MySQL 5.7兼容调研与方案
+读取AGENTS/共享记忆及ADR0113，核对Introspector、提示词、CLI/MCP兼容入口和本机官方Python引擎。wrenai 0.15.0本机dry_plan对COUNT/SUM自动生成WITH，未连接数据库；官方架构资料交叉核对。形成spec107并登记索引，先5.7、能力识别/AST内联/生成提示/保守拒绝/真实回归方案待确认；不把删除校验或只改提示词当成支持。旧CURRENT_TASK归档，更新当前入口与决策。本轮无业务源码、外部Python、静态包、分支、提交、push或66操作；文档检查另记。
+
+方案检查：本轮DocsConsistencyTest共5项通过，Maven退出0，git diff --check通过。Maven test生命周期连带重建了前端资源，已仅撤回本轮生成的3处受控产物变化并删除2个本轮新bundle，最终src/frontend无差异。业务兼容实现及真实5.7/8.0/Doris验收尚未开始；没有提交推送或66操作。
+
+## 2026-11-02 Asia/Shanghai｜MySQL 5.7最小接入改造与真实流程
+用户明确只改连接准入并要求全流程实测。修改Introspector门禁/Controller注释/相关测试，spec107缩小范围，ADR0123部分取代0113，架构与索引同步。32项相关Java/文档测试、Spotless和package通过；构建skip.npm，前端原包保持。
+DockerDesktop此前未运行，启动后专属mysql:5.7.44及独立应用/H2/工作区完成真实HTTP/SSE测试，使用配置的真实模型和官方Wren。合成6订单599元；接入、关联、采样、基础建模和发布通过，问数8.89秒在MCP run_sql失败1064。物理SQL参考成功，常量WITH和实际发布模型生成的WITH计划失败，根因已对照确认。回答错误归因为orders关键字但未编造结果，未超范围修复。报告/脱敏证据已保存，原始日志/凭据仅忽略target。未操作66/现有业务库、提交、push或切分支；进程收尾另记。
+
+收尾：最终Spotless与DocsConsistencyTest5项再次通过，git diff --check通过。确认frontend、src/main/resources和DataAgentConfig无差异；暂存区为空，分支/HEAD未变。仅核对本轮进程/容器所有权后终止隔离Java及其Wren子进程，专属MySQL容器已exited；容器数据/镜像/报告/原日志保留，未清理其他用户资源。无提交、push或66操作。
+
+## 2026-11-02 Asia/Shanghai｜用户亲自界面验收准备
+用户已用IDEA启动前后端，希望手动测试5.7。已核对专属容器标签并重新启动dataagent-mysql57-acceptance-20261102，绑定127.0.0.1:64223，acceptance57/reader57，仅合成测试表。读账号凭据已为此次本地测试调整并更新忽略的private-state，不在共享文档保存密码；重新认证和原生查询确认5.7.44、orders6/599、customers3。本轮容器保持运行供用户测试，未启动额外Java应用、未创建用户本地知识库或操作66。
+
+## 2026-11-02 Asia/Shanghai｜携带现有修改切回个人分支
+用户要求回liyufan_dev开发，保留当前未提交修改。核对无暂存/冲突，个人分支是主线祖先（0/1）；先备份16个修改/未跟踪文件到忽略target/branch-transfer-20261102，再以非强制本地fetch将个人分支快进0fbc0fae→0e9f25ee，switch成功。逐文件SHA256核对16份原内容均未变化，随后仅补当前入口/本条分支记录。当前liyufan_dev比origin/liyufan_dev多1个已有主线整合提交，不是本轮新增commit；develop-2.0提交位置未变。没有stash、提交、push或生产操作。
+
+## 2026-11-02 Asia/Shanghai｜引导确认步骤草稿遮挡修复
+用户要求暂放MySQL5.7，处理引导7/10按钮被草稿浮层覆盖。保留既有WIP，在liyufan_dev@0e9f25ee新增tourLocksDraftDrawer和DraftBar同步隐藏/禁止重开/退出恢复；不加z-index或自动点击，不改确认发布状态。真实tour迁移/暂停/账号隔离回归67项×3base通过，TypeScript和/dify/dataagent/最终build通过（index-CWMytUr8/ontology-BEAl0AAh，CSS不变）。
+Playwright CLI隔离加载真实组件，HEAD旧组件复现遮挡；桌面8项、390窄屏恢复、1180×680 iframe及发布待确认“去处理”路径通过，真实DOM命中与实际点击推进已核对，业务写请求为零。截图4张已view_image并归档，报告20261102-tour-draft-drawer。首轮窄屏测试入口被等待状态卡挡住、iframe选错顶层均属测试路径问题，已调整并重新验证；未用强制点击。未跑66/真实LLM/现有知识库，用户服务与5.7测试容器不动，无提交推送；独立QA收尾和最终门禁另记。
+
+引导修复收尾：Spotless、DocsConsistencyTest5项、git diff --check最终通过；前轮5.7的4个Java/测试文件与切分支备份SHA256一致，正式静态入口3个assets引用存在。独立Playwright会话关闭，19147 Vite及子进程已核对归属后停止；CLI快照和临时截图仅归档到本轮忽略target，报告4张图保留。用户IDEA服务、浏览器及MySQL5.7测试容器未动。liyufan_dev@0e9f25ee保持，暂存为空，无提交推送部署。
+
+## 2026-11-02 Asia/Shanghai｜撤销MySQL5.7连接放开
+用户和同事决定暂不支持5.7，授权仅回退本轮准入改动。核对Git差异后将Introspector和Controller恢复HEAD原实现/注释，恢复拒绝5.7的测试并补现场5.7.28及连接检测false断言；不改Wren和提示词。ADR0123仅状态改撤销、0113完整恢复有效，spec107标历史撤销、失败报告保留WITH/1064及6/599参考与后续候选。新手引导源码/静态包等既有WIP保持，未清理测试容器/数据源/知识库，未修改IDEA配置或重启用户服务。Spotless及4类相关测试共31项通过，diff检查通过；Maven跳过npm避免重复生成前端，不跑生产/真实LLM或无关全量测试。liyufan_dev不变，暂存为空，无提交、push或部署；用户需重启IDEA后端加载门禁。
+
+## 2026-11-02 Asia/Shanghai｜个人批次提交前整理
+用户授权提交/push个人并合入/push主线。fetch核对origin/develop-2.0=0e9f25ee、origin/liyufan_dev=0fbc0fae、origin/wangchao_dev=a85ccec6，同事已是主线祖先。本批含引导草稿遮挡修复/静态包/真实组件截图与回归，以及5.7放开撤销的文档及拒绝回归；业务Java与HEAD无差异。当前入口归档并重写为发布同步。本轮npm67项×3base、局部Java/文档31项及Spotless通过；前轮TypeScript/生产build/UI证据沿用，未做新业务变更，无需重复全量/LLM压测。正式commit/push/merge结果与哈希以Git回读及后续记录为准，不操作66。
+
+## 2026-11-02 Asia/Shanghai｜个人推送完成与主线无冲突整合
+个人提交19fcdbde14c63cd80da0f7a93a7f8ee41f41d67d已push到origin/liyufan_dev。再次fetch主线仍0e9f25ee，切develop-2.0并--no-ff合入个人，无冲突；工作树与个人仅共享记录不同，源码/测试/静态包一致。同事origin/wangchao_dev=a85ccec6已包含。合并记录和当前入口同步后执行文档检查；merge正式哈希及主线push结果以Git回读/最终回复为准。未操作66、用户服务或数据库资源。

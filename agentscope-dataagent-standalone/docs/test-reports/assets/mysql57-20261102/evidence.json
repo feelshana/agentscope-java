@@ -1,0 +1,194 @@
+{
+  "date": "2026-11-02 Asia/Shanghai",
+  "execution": "real isolated HTTP/SSE application with H2 metadata and MySQL 5.7.44 synthetic business data",
+  "uiBrowserTest": false,
+  "llmAndOfficialWren": true,
+  "oracle": {
+    "databaseVersion": "5.7.44",
+    "orderCount": 6,
+    "orderAmount": "599.00",
+    "readOnlyUser": "reader57",
+    "syntheticData": true
+  },
+  "stages": [
+    {
+      "path": "/api/datasources/test-connection",
+      "status": 200,
+      "seconds": 0.215,
+      "connected": true
+    },
+    {
+      "path": "/api/datasources/test-connection",
+      "status": 200,
+      "seconds": 0.289,
+      "connected": false
+    },
+    {
+      "path": "/api/datasources/test-connection",
+      "status": 200,
+      "seconds": 0.045,
+      "connected": true
+    },
+    {
+      "path": "/api/datasources/test-connection",
+      "status": 200,
+      "seconds": 0.031,
+      "connected": false
+    },
+    {
+      "path": "/api/datasources/e173a2dd-26d9-4375-b444-10ec42cb8f3f/schemas/acceptance57/tables/orders/columns",
+      "status": 200,
+      "seconds": 0.02
+    },
+    {
+      "path": "/api/dataset-groups",
+      "status": 400,
+      "seconds": 0.016
+    },
+    {
+      "path": "/api/datasources/test-connection",
+      "status": 200,
+      "seconds": 0.021,
+      "connected": true
+    },
+    {
+      "path": "/api/datasources/test-connection",
+      "status": 200,
+      "seconds": 0.01,
+      "connected": false
+    },
+    {
+      "path": "/api/datasources/e173a2dd-26d9-4375-b444-10ec42cb8f3f/schemas/acceptance57/tables/orders/columns",
+      "status": 200,
+      "seconds": 0.03
+    },
+    {
+      "path": "/api/dataset-groups",
+      "status": 200,
+      "seconds": 0.027
+    },
+    {
+      "path": "/api/dataset-groups/63d63e56-2970-44da-9e76-9d18a8a96d08/associate",
+      "status": 200,
+      "seconds": 1.515
+    },
+    {
+      "path": "/api/dataset-groups/63d63e56-2970-44da-9e76-9d18a8a96d08/associate",
+      "status": 200,
+      "seconds": 1.367
+    },
+    {
+      "path": "/api/dataset-groups/63d63e56-2970-44da-9e76-9d18a8a96d08/associate",
+      "status": 200,
+      "seconds": 5.736
+    },
+    {
+      "path": "/api/dataset-groups/63d63e56-2970-44da-9e76-9d18a8a96d08/modeling/mdl/view",
+      "status": 200,
+      "seconds": 0.14,
+      "state": "DIRTY",
+      "version": 0,
+      "models": [
+        "customers",
+        "orders"
+      ],
+      "relationshipCount": 0
+    },
+    {
+      "stage": "model",
+      "seconds": 18.339,
+      "eventCount": 333
+    },
+    {
+      "path": "/api/dataset-groups/63d63e56-2970-44da-9e76-9d18a8a96d08/modeling/mdl/view",
+      "status": 200,
+      "seconds": 0.049,
+      "state": "DIRTY",
+      "version": 0,
+      "models": [
+        "customers",
+        "orders"
+      ],
+      "relationshipCount": 0
+    },
+    {
+      "path": "/api/dataset-groups/63d63e56-2970-44da-9e76-9d18a8a96d08/modeling/mdl/validate",
+      "status": 200,
+      "seconds": 1.615,
+      "ok": true
+    },
+    {
+      "path": "/api/dataset-groups/63d63e56-2970-44da-9e76-9d18a8a96d08/modeling/mdl/publish",
+      "status": 200,
+      "seconds": 1.579,
+      "ok": true,
+      "mdlState": "PUBLISHED",
+      "mdlVersion": 1
+    },
+    {
+      "stage": "query",
+      "seconds": 8.887,
+      "eventCount": 514
+    }
+  ],
+  "queryCalls": [
+    {
+      "type": "tool_call",
+      "toolName": "run_sql",
+      "toolInput": "{\"sql\":\"SELECT COUNT(*) AS order_count, SUM(amount) AS total_amount FROM orders\"}"
+    },
+    {
+      "type": "tool_result",
+      "toolName": "run_sql",
+      "toolResult": "Error: Error executing tool run_sql: [GENERIC_USER_ERROR] (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'orders AS (SELECT `wren_src_orders`.amount AS amount FROM (SELECT orders.amount ' at line 1\") phase=SQL_EXECUTION"
+    },
+    {
+      "type": "tool_call",
+      "toolName": "run_sql",
+      "toolInput": "{\"sql\":\"SELECT COUNT(*) AS order_count, SUM(amount) AS total_amount FROM `orders`\"}"
+    },
+    {
+      "type": "tool_result",
+      "toolName": "run_sql",
+      "toolResult": "Error: Error executing tool run_sql: [GENERIC_USER_ERROR] (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '`orders` AS (SELECT `wren_src_orders`.amount AS amount FROM (SELECT orders.amoun' at line 1\") phase=SQL_EXECUTION"
+    }
+  ],
+  "sqlComparison": {
+    "databaseVersion": "5.7.44",
+    "strictMode": true,
+    "queries": [
+      {
+        "label": "physical_oracle",
+        "sql": "SELECT COUNT(*) AS order_count, SUM(amount) AS total_amount FROM orders",
+        "ok": true,
+        "rows": [
+          [
+            "6",
+            "599.00"
+          ]
+        ]
+      },
+      {
+        "label": "constant_cte",
+        "sql": "WITH sample AS (SELECT 1 AS n) SELECT n FROM sample",
+        "ok": false,
+        "errorCode": 1064,
+        "error": "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'sample AS (SELECT 1 AS n) SELECT n FROM sample' at line 1"
+      },
+      {
+        "label": "official_planned_sql",
+        "sql": "WITH orders AS (SELECT `wren_src_orders`.amount AS amount FROM (SELECT orders.amount FROM (SELECT __source.amount AS amount FROM acceptance57.orders AS __source) AS orders) AS `wren_src_orders`) SELECT COUNT(*) AS order_count, SUM(amount) AS total_amount FROM orders",
+        "ok": false,
+        "errorCode": 1064,
+        "error": "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'orders AS (SELECT `wren_src_orders`.amount AS amount FROM (SELECT orders.amount ' at line 1"
+      }
+    ],
+    "readerGrants": [
+      "GRANT USAGE ON *.* TO 'reader57'@'%'",
+      "GRANT SELECT ON `acceptance57`.* TO 'reader57'@'%'"
+    ]
+  },
+  "conclusion": "connection/association/base modeling/publish passed; actual semantic question failed with MySQL 1064 because the official plan contains WITH",
+  "modelingLimitations": "two models and no relationships; a proposed many-to-one relation awaited confirmation; validation/build did not execute the SQL",
+  "answerQualityLimitation": "the answer correctly withheld numbers but incorrectly attributed the syntax error to the orders name; constant-CTE and physical-SQL probes establish WITH incompatibility"
+}

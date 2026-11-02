@@ -142,6 +142,9 @@ class ExternalDataSourceConnectionTest {
     void unsupportedSourceIsRefusedBeforeItIsSaved() {
         when(introspector.connectionError(any()))
                 .thenReturn("当前 MySQL 版本 5.7.44 低于 8.0，外部数据源仅支持 MySQL 8.0 及以上或 Doris");
+        var result = controller.testConnection(request("pw"), null, auth).block();
+        assertThat(result.connected()).isFalse();
+        assertThat(result.error()).contains("5.7.44", "低于 8.0");
         assertThatThrownBy(() -> controller.create(request("pw"), auth).block())
                 .isInstanceOfSatisfying(
                         ResponseStatusException.class,
