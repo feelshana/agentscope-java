@@ -1,0 +1,10 @@
+-- DBA only, AFTER the mirror tables exist. Replace the host with the approved client source.
+-- Create the reader account separately using the organization's password procedure.
+-- No password, CREATE USER, or global privilege is bundled here.
+GRANT SELECT ON data_agent.bi_project TO 'dataagent_bi_reader'@'REPLACE_CLIENT_HOST';
+GRANT SELECT ON data_agent.bi_project_operator TO 'dataagent_bi_reader'@'REPLACE_CLIENT_HOST';
+GRANT SELECT ON data_agent.bi_operator TO 'dataagent_bi_reader'@'REPLACE_CLIENT_HOST';
+GRANT SELECT ON data_agent.bi_report TO 'dataagent_bi_reader'@'REPLACE_CLIENT_HOST';
+GRANT SELECT ON data_agent.bi_dashboard TO 'dataagent_bi_reader'@'REPLACE_CLIENT_HOST';
+GRANT SELECT ON data_agent.bi_report_log TO 'dataagent_bi_reader'@'REPLACE_CLIENT_HOST';
+GRANT SELECT ON data_agent.bi_dashboard_log TO 'dataagent_bi_reader'@'REPLACE_CLIENT_HOST';

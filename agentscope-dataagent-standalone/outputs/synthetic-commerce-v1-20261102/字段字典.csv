@@ -1,0 +1,26 @@
+﻿数据表,Excel表头,建议字段名,类型,含义
+演示订单,order_id 订单编号,order_id,VARCHAR,订单主键；一行一订单，每订单仅一种SKU，可购买多件。
+演示订单,customer_id 客户编号,customer_id,VARCHAR,客户关联键。订单多对一关联客户；客户表唯一且非空。
+演示订单,order_time 下单时间,order_time,DATETIME,Asia/Shanghai下单时间；唯一默认订单事实时间。
+演示订单,product_id 商品编号,product_id,VARCHAR,商品编号，同SKU的名称、品类、单价一致；无独立商品维表。
+演示订单,product_name 商品名称,product_name,VARCHAR,虚构商品通用名称，均不对应真实品牌。
+演示订单,category 商品品类,category,VARCHAR,6个品类。
+演示订单,sales_channel 销售渠道,sales_channel,VARCHAR,5个订单成交渠道；不同于客户获客渠道。
+演示订单,campaign 活动名称,campaign,VARCHAR,订单活动归属标签，不代表营销因果效果证据。
+演示订单,order_status 订单状态,order_status,VARCHAR,已完成、已取消、已退款、部分退款；截至2026-10-31的最终快照。
+演示订单,quantity 购买数量,quantity,INTEGER,原始购买件数；取消及退货不修改原始购买件数。
+演示订单,unit_price 商品单价,unit_price,"DECIMAL(14,2)",每件原价，人民币元。
+演示订单,gross_amount 商品原价金额,gross_amount,"DECIMAL(14,2)",quantity × unit_price，取消单也保留原始报价。
+演示订单,discount_amount 优惠金额,discount_amount,"DECIMAL(14,2)",成交时优惠，取消单为0；成交单原价金额减优惠金额等于实付金额。
+演示订单,paid_amount 实付金额,paid_amount,"DECIMAL(14,2)",实付金额，取消单为0；退款前口径。
+演示订单,refund_amount 退款金额,refund_amount,"DECIMAL(14,2)",累计退款金额；不超过实付；无退款发生时间。
+演示订单,retained_cost 留存商品成本,retained_cost,"DECIMAL(14,2)",退款退货回冲后留存商品成本；全退、取消为0。不含广告、运费、税费等。
+演示订单,net_revenue 净销售额,net_revenue,"DECIMAL(14,2)",实付减累计退款，可加总；取消、全退为0。
+演示订单,gross_profit 毛利额,gross_profit,"DECIMAL(14,2)",净销售额减留存商品成本，可加总；不是净利润。
+演示订单,refunded_quantity 退款数量,refunded_quantity,INTEGER,累计退货件数；本数据每次退款都伴随退货并按成交件价退回。
+演示客户,customer_id 客户编号,customer_id,VARCHAR,客户关联键。订单多对一关联客户；客户表唯一且非空。
+演示客户,customer_name 虚拟客户名称,customer_name,VARCHAR,虚构中文姓名，允许重名；以customer_id唯一识别，不含电话或地址。
+演示客户,registered_at 注册时间,registered_at,DATETIME,客户注册时间；全部不晚于该客户首次下单。
+演示客户,region 客户地区,region,VARCHAR,客户地区快照，4个大区；订单地区分析经客户表关联得到。
+演示客户,member_level 客户等级,member_level,VARCHAR,截至2026-10-31客户等级快照；无历史等级，不能当作订单时点等级。
+演示客户,acquisition_channel 获客渠道,acquisition_channel,VARCHAR,客户首次获客来源，与订单销售渠道分开。

@@ -22,6 +22,9 @@ export default function MorePage() {
       {admin && <section className="more-admin" aria-labelledby="more-admin-title">
         <div className="more-section-heading"><h2 id="more-admin-title"><Icon name="shield" size="sm" />管理</h2><span>仅全局管理员可见</span></div>
         <div className="more-entries">
+          <button type="button" className="more-entry" onClick={() => navigate('/admin/bi-sync')}>
+            <Icon name="database" /><span className="more-entry-copy"><span className="more-entry-title">BI数据同步</span><span className="more-entry-description">查看数据截止日期、最近执行结果与异常提示。</span></span><span className="more-entry-go">查看<Icon name="chevron" size="sm" /></span>
+          </button>
           <button type="button" className="more-entry" onClick={() => navigate('/admin/models')}>
             <Icon name="sliders" /><span className="more-entry-copy"><span className="more-entry-title">大模型服务</span><span className="more-entry-description">管理服务连接，手动切换当前使用的模型。</span></span><span className="more-entry-go">管理<Icon name="chevron" size="sm" /></span>
           </button>

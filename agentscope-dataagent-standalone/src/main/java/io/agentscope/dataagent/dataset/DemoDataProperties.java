@@ -24,8 +24,8 @@ import org.springframework.stereotype.Component;
 public class DemoDataProperties {
     private boolean enabled;
     private String samplesDir = "data/demo-samples";
-    private String jdbcUrl = "jdbc:mysql://localhost:3306/demo_data";
-    private String username = "demo_reader";
+    private String jdbcUrl = "jdbc:mysql://localhost:3306/demo_commerce_v1";
+    private String username = "demo_commerce_reader";
     private String password = "";
 
     public boolean isEnabled() {

@@ -45,6 +45,7 @@ import InstancesPage from './pages/admin/InstancesPage';
 import AdminChannelsPage from './pages/admin/ChannelsPage';
 import ConfigPage from './pages/admin/ConfigPage';
 import ModelServicesPage from './pages/admin/ModelServicesPage';
+import BiSyncPage from './pages/admin/BiSyncPage';
 import DebugPage from './pages/admin/DebugPage';
 import AdminUsagePage from './pages/admin/UsagePage';
 import UsersPage from './pages/admin/UsersPage';
@@ -125,6 +126,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="/knowledge-bases/:groupId" element={<KnowledgeBaseBrowsePage />} />
           <Route path="/admin/public-knowledge-bases" element={<AdminRoute><PublicKnowledgeBasesPage /></AdminRoute>} />
           <Route path="/admin/models"          element={<AdminRoute><ModelServicesPage /></AdminRoute>} />
+          <Route path="/admin/bi-sync"         element={<AdminRoute><BiSyncPage /></AdminRoute>} />
           <Route path="/admin/debug"           element={<AdminRoute><DebugPage /></AdminRoute>} />
         </Route>
 

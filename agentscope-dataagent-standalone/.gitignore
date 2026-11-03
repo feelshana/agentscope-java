@@ -33,3 +33,12 @@ logs/
 
 # Runtime demo files stay local; deploy/demo-samples keeps recovery tooling and checksums.
 /data/demo-samples/
+
+# BI mirror credentials are deployment-local, never source artifacts.
+/deploy/bi-sync/*.local.json
+/deploy/bi-sync/database.env
+
+# Browser scratch files and redundant local delivery archives are not source artifacts.
+/.playwright-cli/
+/output/
+/outputs/*.zip

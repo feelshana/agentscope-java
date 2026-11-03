@@ -1,0 +1,22 @@
+[
+  {
+    "file": "演示订单.xlsx",
+    "data_rows": 48000,
+    "columns": 19,
+    "sheets": 1,
+    "formulas": 0,
+    "iso_date_cells": 0,
+    "native_excel_table": true,
+    "frozen_header": true
+  },
+  {
+    "file": "演示客户.xlsx",
+    "data_rows": 2000,
+    "columns": 6,
+    "sheets": 1,
+    "formulas": 0,
+    "iso_date_cells": 0,
+    "native_excel_table": true,
+    "frozen_header": true
+  }
+]

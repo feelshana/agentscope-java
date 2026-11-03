@@ -29,10 +29,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Instant;
-import java.time.YearMonth;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -41,7 +38,7 @@ import org.springframework.stereotype.Service;
 import reactor.core.scheduler.Schedulers;
 
 /**
- * spec105 / ADR0122: the demo files read from the deployment directory, the {@code demo_data}
+ * spec108 / ADR0124: the demo files read from the deployment directory, the {@code demo_commerce_v1}
  * database loaded from them, and the built-in read-only data source pointing at it.
  *
  * <p>The source is a row owned by {@link #OWNER} so Wren profiles, sampling and publishing treat it
@@ -52,17 +49,78 @@ public class DemoDataService {
     private static final Logger log = LoggerFactory.getLogger(DemoDataService.class);
 
     public static final String OWNER = "__system__";
-    public static final String SOURCE_ID = "builtin-demo-data";
-    public static final String SOURCE_NAME = "示例数据源";
-    public static final String SCHEMA = "demo_data";
-    public static final List<String> SAMPLE_FILES = List.of("报表访问明细.xlsx", "用户列表.xlsx");
-
+    public static final String SOURCE_ID = "builtin-demo-commerce-v1";
+    public static final String SOURCE_NAME = "虚构零售示例数据源";
+    public static final String SCHEMA = "demo_commerce_v1";
+    public static final List<String> SAMPLE_FILES = List.of("演示订单.xlsx", "演示客户.xlsx");
+    public static final List<String> TABLE_NAMES = List.of("demo_orders", "demo_customers");
     private static final int BATCH = 1000;
-    private static final String VISITS = "report_visits";
-    private static final String USERS = "platform_users";
-    private static final int VISIT_TIME_COLUMN = 5;
-    private static final Pattern SLASHED_TIME =
-            Pattern.compile("(\\d{4})/(\\d{1,2})/(\\d{1,2}) (\\d{1,2}):(\\d{2})");
+
+    private record DemoTable(
+            String name, String file, int rows, List<String> columns, String ddl) {}
+
+    private static final DemoTable CUSTOMERS =
+            new DemoTable(
+                    "demo_customers",
+                    SAMPLE_FILES.get(1),
+                    2000,
+                    List.of(
+                            "customer_id",
+                            "customer_name",
+                            "registered_at",
+                            "region",
+                            "member_level",
+                            "acquisition_channel"),
+                    "customer_id VARCHAR(16) PRIMARY KEY COMMENT '客户唯一编号',"
+                            + "customer_name VARCHAR(32) NOT NULL COMMENT '虚构中文姓名，允许重名，不作关联键',"
+                            + "registered_at DATETIME NOT NULL COMMENT '注册时间，北京时间',"
+                            + "region VARCHAR(32) NOT NULL COMMENT '客户地区快照',"
+                            + "member_level VARCHAR(32) NOT NULL COMMENT '客户等级快照',"
+                            + "acquisition_channel VARCHAR(32) NOT NULL COMMENT '首次获客来源，不是订单销售渠道'");
+    private static final DemoTable ORDERS =
+            new DemoTable(
+                    "demo_orders",
+                    SAMPLE_FILES.get(0),
+                    48000,
+                    List.of(
+                            "order_id",
+                            "customer_id",
+                            "order_time",
+                            "product_id",
+                            "product_name",
+                            "category",
+                            "sales_channel",
+                            "campaign",
+                            "order_status",
+                            "quantity",
+                            "unit_price",
+                            "gross_amount",
+                            "discount_amount",
+                            "paid_amount",
+                            "refund_amount",
+                            "retained_cost",
+                            "net_revenue",
+                            "gross_profit",
+                            "refunded_quantity"),
+                    "order_id VARCHAR(16) PRIMARY KEY COMMENT '订单唯一编号，一行一订单，每单一种SKU',customer_id"
+                        + " VARCHAR(16) NOT NULL COMMENT"
+                        + " '多对一关联demo_customers.customer_id',order_time DATETIME NOT NULL COMMENT"
+                        + " '下单时间，北京时间，2026年5月至10月',product_id VARCHAR(16) NOT NULL COMMENT"
+                        + " '商品编号',product_name VARCHAR(64) NOT NULL COMMENT '虚构商品名称',category"
+                        + " VARCHAR(32) NOT NULL COMMENT '商品品类',sales_channel VARCHAR(32) NOT NULL"
+                        + " COMMENT '订单销售渠道',campaign VARCHAR(32) NOT NULL COMMENT"
+                        + " '活动名称，不代表因果效果',order_status VARCHAR(16) NOT NULL COMMENT"
+                        + " '已完成、已取消、已退款、部分退款',quantity INT NOT NULL COMMENT '原始购买件数',unit_price"
+                        + " DECIMAL(14,2) NOT NULL COMMENT '原价单价，元',gross_amount DECIMAL(14,2) NOT"
+                        + " NULL COMMENT '原价金额，元',discount_amount DECIMAL(14,2) NOT NULL COMMENT"
+                        + " '优惠金额，元',paid_amount DECIMAL(14,2) NOT NULL COMMENT"
+                        + " '退款前实付金额，元，取消为零',refund_amount DECIMAL(14,2) NOT NULL COMMENT"
+                        + " '截至快照累计退款，元，没有退款发生日期',retained_cost DECIMAL(14,2) NOT NULL COMMENT"
+                        + " '退货回冲后的留存商品成本，元',net_revenue DECIMAL(14,2) NOT NULL COMMENT"
+                        + " '净销售额=实付减退款，元，不可再次扣退款',gross_profit DECIMAL(14,2) NOT NULL COMMENT"
+                        + " '毛利=净销售额减留存成本，元，不是净利润',refunded_quantity INT NOT NULL COMMENT"
+                        + " '退货件数',INDEX idx_order_time (order_time), INDEX idx_customer"
+                        + " (customer_id)");
 
     private final DemoDataProperties properties;
     private final DatasetStoreProperties store;
@@ -86,6 +144,10 @@ public class DemoDataService {
 
     public static boolean isBuiltin(ExternalDataSourceEntity source) {
         return OWNER.equals(source.getOwnerId());
+    }
+
+    public static boolean isCurrentBuiltin(ExternalDataSourceEntity source) {
+        return isBuiltin(source) && SOURCE_ID.equals(source.getId());
     }
 
     /** Whether users can pick the built-in source right now. */
@@ -121,9 +183,16 @@ public class DemoDataService {
 
     /** A failure only leaves the built-in source unavailable; upload samples keep working. */
     void prepare() {
+        sourceReady = false;
         try {
             if (properties.getPassword() == null || properties.getPassword().isBlank()) {
                 log.warn("Demo data source skipped: dataagent.demo.password is not set");
+                return;
+            }
+            if (!usesCurrentSchema(properties.getJdbcUrl())) {
+                log.warn(
+                        "Demo data source skipped: configure dataagent.demo.jdbc-url for {}",
+                        SCHEMA);
                 return;
             }
             try (Connection admin =
@@ -131,17 +200,23 @@ public class DemoDataService {
                 seed(admin);
                 grantReader(admin);
             } catch (SQLException | IOException e) {
-                // A DBA may have prepared demo_data; the connection check below has the last word.
+                // A DBA may have prepared the versioned synthetic database; the connection check
+                // below has the last word.
                 log.warn("Demo database not prepared here: {}", e.getMessage());
             }
             ExternalDataSourceEntity source = saveSource();
             String error = introspector.connectionError(source);
-            sourceReady = error == null;
+            sourceReady = error == null && complete(source);
             if (error != null) log.warn("Demo data source unavailable: {}", error);
-            else log.info("Demo data source ready: {}", SCHEMA);
-        } catch (RuntimeException e) {
+            else if (sourceReady) log.info("Demo data source ready: {}", SCHEMA);
+            else log.warn("Demo data source unavailable: synthetic tables are incomplete");
+        } catch (RuntimeException | SQLException e) {
             log.warn("Demo data source unavailable: {}", e.getMessage());
         }
+    }
+
+    static boolean usesCurrentSchema(String url) {
+        return url != null && url.matches("jdbc:mysql://[^/]+/" + SCHEMA + "(?:\\?.*)?");
     }
 
     private void seed(Connection admin) throws SQLException, IOException {
@@ -150,111 +225,65 @@ public class DemoDataService {
                     "CREATE DATABASE IF NOT EXISTS "
                             + SCHEMA
                             + " CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci");
-            st.execute(
-                    "CREATE TABLE IF NOT EXISTS "
-                            + SCHEMA
-                            + "."
-                            + VISITS
-                            + " (project_name VARCHAR(191) COMMENT '项目名称',"
-                            + " report_name VARCHAR(512) COMMENT '报表名称',"
-                            + " directory VARCHAR(512) COMMENT '目录',"
-                            + " asset_type VARCHAR(32) COMMENT '类型',"
-                            + " user_account VARCHAR(128) COMMENT '用户账号',"
-                            + " visit_time DATETIME COMMENT '访问时间',"
-                            + " INDEX idx_visit_time (visit_time),"
-                            + " INDEX idx_user_account (user_account))"
-                            + " COMMENT='报表访问明细'");
-            st.execute(
-                    "CREATE TABLE IF NOT EXISTS "
-                            + SCHEMA
-                            + "."
-                            + USERS
-                            + " (user_id VARCHAR(32) COMMENT '用户ID',"
-                            + " account VARCHAR(128) COMMENT '账号',"
-                            + " company VARCHAR(191) COMMENT '公司',"
-                            + " department VARCHAR(191) COMMENT '部门',"
-                            + " title VARCHAR(64) COMMENT '职位',"
-                            + " INDEX idx_account (account))"
-                            + " COMMENT='用户列表'");
-        }
-        upgradeVisitTime(admin);
-        load(admin, VISITS, SAMPLE_FILES.get(0), 6);
-        load(admin, USERS, SAMPLE_FILES.get(1), 5);
-    }
-
-    /** Tables loaded before visit_time became DATETIME; same steps as migration 0106. */
-    private void upgradeVisitTime(Connection admin) throws SQLException {
-        try (PreparedStatement type =
-                admin.prepareStatement(
-                        "SELECT DATA_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ?"
-                                + " AND TABLE_NAME = ? AND COLUMN_NAME = 'visit_time'")) {
-            type.setString(1, SCHEMA);
-            type.setString(2, VISITS);
-            try (ResultSet rs = type.executeQuery()) {
-                if (!rs.next() || "datetime".equalsIgnoreCase(rs.getString(1))) return;
+            for (DemoTable table : List.of(CUSTOMERS, ORDERS)) {
+                st.execute(
+                        "CREATE TABLE IF NOT EXISTS "
+                                + SCHEMA
+                                + "."
+                                + table.name()
+                                + " ("
+                                + table.ddl()
+                                + ") COMMENT='完全虚构的零售示例，2026-10-31快照'");
             }
         }
-        String table = SCHEMA + "." + VISITS;
-        try (Statement st = admin.createStatement()) {
-            st.executeUpdate(
-                    "UPDATE "
-                            + table
-                            + " SET visit_time = CONCAT('2026-09-30 ',"
-                            + " LPAD(SUBSTRING_INDEX(visit_time, ' ', -1), 5, '0'), ':00')"
-                            + " WHERE visit_time LIKE '2026/9/31 %'");
-            st.execute("ALTER TABLE " + table + " MODIFY visit_time DATETIME COMMENT '访问时间'");
-        }
-        log.info("Demo table {} upgraded: visit_time is DATETIME", VISITS);
+        load(admin, CUSTOMERS);
+        load(admin, ORDERS);
     }
 
-    /**
-     * The file writes visit times as text in two shapes, including a day past the end of the month
-     * (2026/9/31); that one moves to the month's last day so every row keeps a real time.
-     */
-    static String standardVisitTime(String value) {
-        if (value == null || value.isBlank()) return null;
-        Matcher slashed = SLASHED_TIME.matcher(value.trim());
-        if (slashed.matches()) {
-            YearMonth month =
-                    YearMonth.of(
-                            Integer.parseInt(slashed.group(1)), Integer.parseInt(slashed.group(2)));
-            int day = Math.min(Integer.parseInt(slashed.group(3)), month.lengthOfMonth());
-            return String.format(
-                    "%s %02d:%s:00",
-                    month.atDay(day), Integer.parseInt(slashed.group(4)), slashed.group(5));
-        }
-        return value.trim().length() == 10 ? value.trim() + " 00:00:00" : value.trim();
-    }
-
-    /** Loads a table once; columns follow file order and only visit_time is normalised. */
-    private void load(Connection admin, String table, String file, int columns)
-            throws SQLException, IOException {
+    /** Load the known schema once; never overwrite a partially populated deployment. */
+    private void load(Connection admin, DemoTable table) throws SQLException, IOException {
         try (Statement st = admin.createStatement();
                 ResultSet rs =
-                        st.executeQuery("SELECT 1 FROM " + SCHEMA + "." + table + " LIMIT 1")) {
-            if (rs.next()) return;
+                        st.executeQuery("SELECT COUNT(*) FROM " + SCHEMA + "." + table.name())) {
+            rs.next();
+            long count = rs.getLong(1);
+            if (count == table.rows()) return;
+            if (count != 0) throw new SQLException("示例表行数不完整，保留现有数据：" + table.name());
         }
-        if (!Files.isRegularFile(path(file))) {
-            log.warn("Demo table {} left empty: {} not found", table, file);
-            return;
-        }
+        if (!Files.isRegularFile(path(table.file())))
+            throw new IOException("缺少示例文件：" + table.file());
         List<List<String>> rows;
-        try (InputStream in = Files.newInputStream(path(file))) {
-            rows = parser.parse(in, file, Integer.MAX_VALUE).rows();
+        try (InputStream in = Files.newInputStream(path(table.file()))) {
+            var parsed = parser.parse(in, table.file(), table.rows() + 1);
+            if (parsed.totalRows() != table.rows()
+                    || parsed.truncated()
+                    || !parsed.columns().stream()
+                            .map(c -> c.name())
+                            .toList()
+                            .equals(table.columns())) {
+                throw new IOException("示例文件结构或行数不匹配：" + table.file());
+            }
+            rows = parsed.rows();
         }
-        String holders = String.join(",", java.util.Collections.nCopies(columns, "?"));
+        String holders =
+                String.join(",", java.util.Collections.nCopies(table.columns().size(), "?"));
         boolean autoCommit = admin.getAutoCommit();
         admin.setAutoCommit(false);
         try (PreparedStatement insert =
                 admin.prepareStatement(
-                        "INSERT INTO " + SCHEMA + "." + table + " VALUES (" + holders + ")")) {
+                        "INSERT INTO "
+                                + SCHEMA
+                                + "."
+                                + table.name()
+                                + " ("
+                                + String.join(",", table.columns())
+                                + ") VALUES ("
+                                + holders
+                                + ")")) {
             int pending = 0;
             for (List<String> row : rows) {
-                for (int i = 0; i < columns; i++) {
-                    String value = i < row.size() ? row.get(i) : null;
-                    boolean time = VISITS.equals(table) && i == VISIT_TIME_COLUMN;
-                    insert.setString(i + 1, time ? standardVisitTime(value) : value);
-                }
+                for (int i = 0; i < table.columns().size(); i++)
+                    insert.setString(i + 1, row.get(i));
                 insert.addBatch();
                 if (++pending == BATCH) {
                     insert.executeBatch();
@@ -269,10 +298,27 @@ public class DemoDataService {
         } finally {
             admin.setAutoCommit(autoCommit);
         }
-        log.info("Demo table {} loaded: {} rows", table, rows.size());
+        log.info("Synthetic demo table {} loaded: {} rows", table.name(), rows.size());
     }
 
-    /** The reader sees demo_data only, so the shared source cannot reach platform data. */
+    private boolean complete(ExternalDataSourceEntity source) throws SQLException {
+        try (Connection connection =
+                        DriverManager.getConnection(
+                                introspector.validatedUrl(source),
+                                source.getUsername(),
+                                source.getPassword());
+                Statement st = connection.createStatement()) {
+            for (DemoTable table : List.of(CUSTOMERS, ORDERS)) {
+                try (ResultSet rs =
+                        st.executeQuery("SELECT COUNT(*) FROM " + SCHEMA + "." + table.name())) {
+                    if (!rs.next() || rs.getLong(1) != table.rows()) return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /** The reader sees the synthetic database only, so the shared source cannot reach platform data. */
     private void grantReader(Connection admin) throws SQLException {
         String user = properties.getUsername();
         if (user == null || !user.matches("[A-Za-z0-9_]{1,32}")) {

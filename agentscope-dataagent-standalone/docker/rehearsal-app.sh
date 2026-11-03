@@ -28,12 +28,29 @@ if [[ "$action" == prepare ]]; then
         done
         echo "配置已存在，保留原密钥/数据库/文件：$base"; exit 0
     fi
-    db="${DATAAGENT_REHEARSAL_DB_DIR:-/data/dataagent/rehearsal-db}"
-    db="$(cd -- "$db" && pwd -P)"
-    db_project="${DATAAGENT_REHEARSAL_DB_PROJECT:-dataagent66-rehearsal-db}"
-    [[ -f "$db/.dataagent-rehearsal" && "$(cat "$db/.dataagent-rehearsal")" == "$db|$db_project" && -r "$db/app-db.env" ]] || fail '演练数据库标记或连接文件无效'
-    network="${db_project}_default"
-    [[ "$(d network inspect --format '{{index .Labels "dataagent.rehearsal.base"}}' "$network")" == "$db" ]] || fail '数据库网络标签不匹配'
+    db_mode="${DATAAGENT_DB_MODE:-rehearsal}"
+    if [[ "$db_mode" == external ]]; then
+        db="$base"
+        db_env="${DATAAGENT_EXTERNAL_DB_ENV:?请指定私有数据库env文件}"
+        [[ "$db_env" =~ ^/[a-zA-Z0-9_./-]+$ && -f "$db_env" && ! -L "$db_env" && -r "$db_env" ]] || fail '正式数据库env文件无效'
+        [[ "$(stat -c %a "$db_env")" == 600 ]] || fail '正式数据库env必须为600权限'
+        network="${project}_default"
+        if d network inspect "$network" >/dev/null 2>&1; then
+            [[ "$(d network inspect --format '{{index .Labels "dataagent.rehearsal.base"}}' "$network")" == "$base" ]] || fail '同名网络不属于正式应用目录'
+        else
+            d network create --label "dataagent.rehearsal.base=$base" "$network" >/dev/null
+        fi
+    elif [[ "$db_mode" == rehearsal ]]; then
+        db="${DATAAGENT_REHEARSAL_DB_DIR:-/data/dataagent/rehearsal-db}"
+        db="$(cd -- "$db" && pwd -P)"
+        db_project="${DATAAGENT_REHEARSAL_DB_PROJECT:-dataagent66-rehearsal-db}"
+        [[ -f "$db/.dataagent-rehearsal" && "$(cat "$db/.dataagent-rehearsal")" == "$db|$db_project" && -r "$db/app-db.env" ]] || fail '演练数据库标记或连接文件无效'
+        db_env="$db/app-db.env"
+        network="${db_project}_default"
+        [[ "$(d network inspect --format '{{index .Labels "dataagent.rehearsal.base"}}' "$network")" == "$db" ]] || fail '数据库网络标签不匹配'
+    else
+        fail '数据库模式只允许rehearsal或external'
+    fi
     cache="${DATAAGENT_MODEL_CACHE:-$HOME/dataagent-env/hf-cache-modelscope}"
     [[ -d "$cache/hub" ]] || fail '缺少已下载的离线模型缓存'
     cache="$(cd -- "$cache" && pwd -P)"
@@ -61,7 +78,8 @@ if [[ "$action" == prepare ]]; then
     cp -- "$here/../src/main/distribution/conf/application-prod.yml.example" "$base/conf/application-prod.yml"
     {
         printf 'APP_BASE=%s\nAPP_IMAGE=%s\nAPP_UID=%s\nAPP_GID=%s\nSOCKET_GID=%s\nAPP_CACHE=%s\nDB_ENV=%s\nDB_NETWORK=%s\nDB_DIR=%s\n' \
-            "$base" "$selected" "$(id -u)" "$(id -g)" "$(stat -c %g /var/run/docker.sock)" "$cache" "$db/app-db.env" "$network" "$db"
+            "$base" "$selected" "$(id -u)" "$(id -g)" "$(stat -c %g /var/run/docker.sock)" "$cache" "$db_env" "$network" "$db"
+        printf 'DB_MODE=%s\n' "$db_mode"
         printf 'APP_BIND_IP=%s\nAPP_PORT=%s\nAPP_CPUS=%s\nAPP_MEMORY=%s\n' "$bind_ip" "$port" "${DATAAGENT_RUNTIME_CPUS:-8}" "${DATAAGENT_RUNTIME_MEMORY:-16g}"
     } > "$base/compose.env"
     {
@@ -91,16 +109,11 @@ esac
 preflight() {
     local candidate="$1"
     APP_IMAGE="$candidate" c run --rm --no-deps -T app check
+    APP_IMAGE="$candidate" c run --rm --no-deps -T --entrypoint python app - < "$here/database-preflight.py"
     APP_IMAGE="$candidate" c run --rm --no-deps -T --entrypoint python app - <<'PY'
 import os, pathlib, subprocess, uuid
-import MySQLdb, numpy as np
+import numpy as np
 from wren.memory.embeddings import get_embedding_function
-for prefix, database in [('DATAAGENT_', 'dataagent_platform'), ('DATAAGENT_DATASET_', 'data_agent')]:
-    con = MySQLdb.connect(host='mysql', port=3306, user=os.environ[prefix+'DB_USER'], passwd=os.environ[prefix+'DB_PASSWORD'], db=database)
-    cursor = con.cursor()
-    cursor.execute('SELECT 1')
-    assert cursor.fetchone()[0] == 1
-    con.close()
 vectors = np.asarray(get_embedding_function().compute_source_embeddings(['部署离线检查','销售收入']), dtype=np.float32)
 assert vectors.shape == (2,384) and np.isfinite(vectors).all()
 folder = pathlib.Path(os.environ['DATAAGENT_BASE_DIR']) / 'data/deployment-probe' / uuid.uuid4().hex
