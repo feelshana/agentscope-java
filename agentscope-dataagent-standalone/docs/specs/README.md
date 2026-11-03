@@ -8,6 +8,9 @@ spec 是一页纸的需求与验收标准，写代码之前先写（模板：[00
 
 ## 进行中
 
+- [110 管理员BI同步状态与服务器停用](110-bi-sync-status-and-pause.md)：已授权只读页面及服务器暂停/恢复/移除任务，待现场验收。
+- [109 正式两库与BI七表镜像](109-formal-database-and-bi-mirror.md)：39列基础投影/既有项目索引分段已本地验证，待66执行验收。
+
 | 编号 | 标题 | 状态 |
 |---|---|---|
 | [090](090-user-confirmed-modeling-questions.md) | spec090：基础建模不生成问答对，用户问题逐题确认后保存 | 已实施并验收；交互由 spec091 调整 |
@@ -25,6 +28,9 @@ spec 是一页纸的需求与验收标准，写代码之前先写（模板：[00
 | [104](104-new-user-onboarding.md) | 新手引导：入门清单、起步问题、帮助与一次性提示 | 已实施，整合验收中 |
 | [105](105-guided-tour-and-demo-data.md) | 页面逐步指引与内置示例数据 | 已实施，待真实验收 |
 | [106](106-semantic-modeling-workspace.md) | 语义建模工作台（模型、关系分开与新关系图） | 已实施，待真实验收 |
+| [107](107-mysql57-external-source-compatibility.md) | 仅放开MySQL 5.7数据源接入并实测流程 | 已撤销并回退；WITH不兼容证据保留，完整兼容仅后续候选 |
+
+| [108](108-synthetic-onboarding-demo.md) | 新手引导改用虚构订单与客户 | 已确认，实施中 |
 | [111](111-conversational-semantic-assets.md) | 对话建设语义资产（View、ref_sql、Cube），核查和问题验证后发布 | P0、P1 已验收，后续分期进行中 |
 | [112](112-question-review-on-context-change.md) | 口径变更后问答复核，资产验证通过的问题存为问答 | 已实施，验收见 test-reports/20261103-spec112-acceptance.md |
 | [113](113-single-entry-asset-proposals.md) | 建模对话统一说需求，资产先提议后起草，按官方去处选型 | 已实施，验收见 test-reports/20261103-spec113-pre-tests.md |

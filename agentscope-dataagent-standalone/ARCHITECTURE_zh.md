@@ -738,7 +738,7 @@ manifest 尚不存在时（首次升级到该策略）执行一次性「采纳�
 
 `ScheduledTasksPage`当前仅展示未开放说明、日历插画及既有对话/知识库入口，不展示任务配置空表格，不调用任务API；不代表已经支持周期调度。
 
-品牌由`Brand`/`BrandMark`复用同一SVG，侧栏（含收起态）、助手回答、登录入口与浏览器favicon一致；favicon由Vite处理部署前缀和内容哈希。`SessionsSidebar`历史列表独立滚动，批量模式的全选仅作用于已加载会话，底部删除栏固定并保留原确认/部分失败处理。`SemanticConfigPage`以知识库上下文条、术语表及`DraftBar`术语展示变体呈现，QUERY只读、MANAGE改草稿和整个知识库显式发布边界不变；编辑中禁用发布，不把术语拆成独立发布流程。 功能图标由`Icon`/`ProductIconPaths`统一，导航默认线性、选中实心，使用`currentColor`和24px网格；术语/任务用独立terms/calendar，设置和耗时图标含义保持。
+品牌由`Brand`/`BrandMark`复用同一SVG，侧栏（含收起态）、助手回答、登录入口与浏览器favicon一致；favicon由Vite处理部署前缀和内容哈希。`SessionsSidebar`历史列表独立滚动，批量模式的全选仅作用于已加载会话，底部删除栏固定并保留原确认/部分失败处理。业务术语按spec106并入语义建模“业务知识”的`BusinessTermsPanel`，复用原术语表格样式；旧`SemanticConfigPage`仅跳转，侧栏不再保留独立术语项。QUERY只读线上版本，MANAGE改草稿并经整个知识库草稿栏发布；编辑状态通过onEditingChange传给共享`DraftBar`的editingBlocked，保存/取消或离开编辑页后解除，不拆成独立发布流程。功能图标由`Icon`/`ProductIconPaths`统一，导航默认线性、选中实心，使用`currentColor`和24px网格；任务用calendar，设置和耗时图标含义保持。
 
 上线前交互小修：`ChatPanel`只在用户停留底部时跟随回答，向上阅读保留位置并提供“回到最新”，历史分页保持原阅读锚点；内容和视口尺寸变化由局部观察器处理。问数和建模输入均保护中文组合输入，完成的回答可复制。附件称为“分析文件”，仍在原右侧栏预览/下载；表格保持居中、只改善可读性，不改值或精度。`EChartsBlock`对读取和渲染失败显式提示，已有表格结果才提供对应入口，重载仅GET已保存图表，不重新执行SQL。`ErrorNotice`在聊天、数据源和文件入口先显示可行动的中文提示，常见凭据脱敏的技术详情默认折叠；不改后端错误原文或SSE协议。
 
@@ -775,9 +775,9 @@ React 18 + TypeScript + Vite SPA（`frontend/`），构建产物进 `classpath:/
 
 第 1、2 步只按用户自己拥有的知识库判定；没有自有知识库但能查询公共或共享知识库的用户只有提问、深入分析两步。首页第 1 步只有"开始第一步"，由它进入逐步指引。
 
-`state/guidedTour.ts` 保存指引位置，页面用 `tourSignal` 上报真实发生的事，每一步等待一个信号，已经发生过的信号会跳过对应步骤（如没有待整理字段）；不使用定时器，也不代替用户点击。`GuidedTour` 按 `data-tour` 标记找目标控件，遮罩只留出目标；目标不在屏幕上或处于等待阶段时只显示状态卡，不遮挡页面。位置经 `OnboardingService#saveTour` 存入 `dataagent_user.onboarding_tour`，退出后保留，可从帮助面板继续。
+`state/guidedTour.ts` 保存指引位置，页面用 `tourSignal` 上报真实发生的事，每一步等待一个信号，已经发生过的信号会跳过对应步骤（如没有待整理字段）；不使用定时器，也不代替用户点击。`GuidedTour` 按 `data-tour` 标记找目标控件，遮罩只留出目标；目标不在屏幕上或处于等待阶段时只显示状态卡，不遮挡页面。建模点击步骤由 `tourLocksDraftDrawer` 按当前账号、知识库和步骤约束 `DraftBar`：收起并限制重开草稿浮层，避免覆盖目标；等待或退出引导后恢复正常查看，不改确认和发布状态。位置经 `OnboardingService#saveTour` 存入 `dataagent_user.onboarding_tour`，退出后保留，可从帮助面板继续。
 
-`DemoDataService` 在 `dataagent.demo.enabled` 打开时于启动后异步工作：用数据集库连接建 `demo_data`，从 `samples-dir` 的两份 Excel 导入 `report_visits`、`platform_users`（表非空则跳过），创建只读账号，并同步 `owner_id=__system__` 的数据源记录。这条记录让 Wren 连接、采样、发布沿用外部数据源的现有链路；只有 `ExternalDataSourceController` 的列表和只读浏览、`DatasetService#associateTables` 放开归属校验，且限定 `demo_data`，编辑和删除仍按个人归属拒绝。准备失败只让内置数据源不可用。内置 Excel 由 `OnboardingController#sample` 按固定文件名提供，前端取回后走现有上传流程。
+`DemoDataService`（spec108/ADR0124）只提供虚构的演示订单/演示客户Excel，固定名单不再包含旧真实素材；文件保存在samples-dir，仓库deploy/demo-samples/synthetic-v1与恢复脚本用于校验分发。enabled打开时异步准备独立`demo_commerce_v1`的`demo_orders`/`demo_customers`，仅空表导入，行数不完整停止而不覆盖；客户编号唯一、姓名可重名。系统源标识为`builtin-demo-commerce-v1`，JDBC必须指向新库，两表数量校验通过才就绪；缺密码/准备失败不影响示例文件上传。旧demo_data及旧知识库不迁移、不删除，也不作为新示例提供；已有旧知识库的退役需要单独处理。`ExternalDataSourceController`和`DatasetService#associateTables`只允许当前系统源、新库及两张已声明表作为共享示例，其他QUERY/MANAGE和只读边界保持；编辑/删除仍按个人归属拒绝。前端取回文件后复用现有上传、建模、确认与发布，不自动灌入标准答案。
 
 `OnboardingService#reset` 只重置调用者自己：清除进度并写入 `onboarding_reset_at`，此后第 1、2 步只计这之后创建的知识库，已有知识库和数据不动。
 
@@ -840,7 +840,7 @@ spec 045 / ADR 0055：无已登记问题、无待确认原生 HITL 时，页面�
 | `dataagent.sandbox.max-containers` | `16` | 单进程容器上限，满额驱逐空闲实例；环境变量 DATAAGENT_SANDBOX_MAX_CONTAINERS |
 | `dataagent.upload.max-file-size` / `max-selection-size` / `max-files` | `50MB` / `100MB` / `10` | 上传单文件、整批及数量上限 |
 | `dataagent.upload.max-rows` / `max-columns` / `max-cells` | `500000` / `100` / `10000000` | 解析规模上限 |
-| `dataagent.demo.enabled` / `samples-dir` / `jdbc-url` / `username` / `password` | `false` / `data/demo-samples` / `jdbc:mysql://localhost:3306/demo_data` / `demo_reader` / 空 | 内置示例文件与只读 `demo_data` 数据源（spec105）。Excel保存在忽略的samples-dir；deploy/demo-samples保留历史恢复脚本与校验清单；数据源必须配置只读账号密码。 |
+| `dataagent.demo.enabled` / `samples-dir` / `jdbc-url` / `username` / `password` | `false` / `data/demo-samples` / `jdbc:mysql://localhost:3306/demo_commerce_v1` / `demo_commerce_reader` / 空 | 内置示例文件与只读 `demo_commerce_v1` 数据源（spec105）。Excel保存在忽略的samples-dir；deploy/demo-samples提供合成文件、恢复脚本与校验清单；数据源必须配置只读账号密码。 |
 | `dataagent.upload.concurrent-files` | `8` | 单进程在途文件准入，允许 1—32 |
 | `dataagent.chat.max-active` / `max-active-per-user` | `16` / `2` | 问数全局/每用户执行数 |
 | `dataagent.chat.max-waiting` / `max-waiting-per-user` | `16` / `1` | 全局/每用户等待数 |
@@ -863,6 +863,10 @@ Boot 4 HTTP JSON缓冲使用`spring.http.codecs.max-in-memory-size=50MB`；人�
 `requirements-wren.txt` 固定官方 CLI 与 memory-onnx 依赖。在配置的 Wren Python 环境安装该文件；Wren 默认自动选择多语言 ONNX/lancedb，首次使用需要下载模型。可由进程环境设置 WREN_MEMORY_BACKEND=lancedb、WREN_EMBEDDING_BACKEND=onnx、WREN_EMBEDDING_MODEL=paraphrase-multilingual-MiniLM-L12-v2；实际后端以 memory status 为准，依赖缺失时即使设置 lancedb 也会降级。应用不修改外部 Python 环境，不自动安装依赖。
 
 ### 12.2 构建与运行
+
+ADR0127/spec110补充轻量同步观测与退役：AdminBiSyncController只允许全局管理员读取GET /api/admin/bi-sync，BiSyncStatusService#view在boundedElastic上复用数据集连接，只读固定控制键和运行锁，输出截止日/最近作业/固定失败摘要，不访问源库、密码文件或Shell。任务持久化last_run及暂停标记，独立观察连接在安全点检查暂停并回滚未提交部分；pause/status/resume不依赖BI源连接。cron安装器remove仅移除自己的精确任务，不能等同于正在运行的任务已停止；知识库权限/删除与同步生命周期分开，数据和进度保留，恢复无需重新初始化。没有新增应用配置项。
+
+ADR0125/spec109增加正式外置数据库模式：rehearsal-app.sh的external准备分支使用私有DB_ENV和独立应用网络，database-preflight.py按两JDBC地址验证，不假设mysql主机或旧平台库名；旧演练模式保留。formal-app.py创建独立正式目录/候选18081，经容器健康及预检后显式接替18080，失败尝试恢复旧服务，revert-service恢复环境而非数据库数据；正式模型配置重新设置，不复制旧测试工程。deploy/bi-sync独立任务固定7业务表与私有控制表，源只读、5维表事务刷新；ADR0126细化39列基础投影及日志既有项目+时间索引分段，日数据/计数账本/项目进度同事务，汇总核对后前进表截止日。全部操作类型同步，目标日志四列不能区分查看/导出，业务口径只称操作记录数。问数仍只经已发布Wren，sync不写平台元数据或语义工程；每日任务需人工验收后安装，详见[正式切换与BI同步](docs/guides/66-formal-database-and-bi-sync.md)。
 
 ADR0118/spec104新增源码构建交付选项：docker/update-source.sh有限重试并仅快进指定分支，默认develop-2.0，可显式设置DATAAGENT_SOURCE_BRANCH，不自动切换分支；docker/build-from-source.sh从干净明确提交归档源码，在独立Maven/JDK17容器中构建全部本地依赖及前后端，封装应用镜像并静态预检，不启停业务。最终镜像使用application-entrypoint.sh从/opt/dataagent/app运行JAR，配置与data/logs在宿主持久根，构建/运行分离；业务控制见下述演练Compose入口。前端安装命令支持构建参数覆盖，原默认install保持不变，源码发布使用ci。临时库演练由rehearsal-mysql.sh生成独立Compose、随机密码和初次完整DDL，MySQL不发布宿主端口，应用后续通过专属网络连接，配置/数据不随更新重置，不复用Dify数据库；不替代正式两库交付。详见[源码构建指引](docs/guides/66-source-build.md)。
 

@@ -118,6 +118,7 @@ function ModelingWorkbench() {
   const [preview, setPreview] = useState<MdlPreview | null>(null);
   const [workflow, setWorkflow] = useState<ModelingWorkflow | null>(null);
   const [confirmations, setConfirmations] = useState<Confirmation[]>([]);
+  const [termsEditing, setTermsEditing] = useState(false);
   const [error, setError] = useState('');
   const [queue, setQueue] = useState<{ groupId: string; items: Request[] }>({ groupId, items: [] });
   const pending = queue.groupId === groupId ? queue.items : [];
@@ -439,7 +440,7 @@ function ModelingWorkbench() {
         </> : <RelationsPanel snapshot={snapshot} focus={focusRelation} onOpenModel={openModel} onAsk={askAssistant} emptyText="暂无模型，请先上传数据或关联数据表" />}
       </section>}
       {tab === 'knowledge' && <section className="sm-scroll">
-        <BusinessTermsPanel groupId={groupId} />
+        <BusinessTermsPanel groupId={groupId} onEditingChange={setTermsEditing} />
         <h3>业务规则与说明</h3>
         <AssetYamlBrowser groupId={groupId} entries={knowledgeEntries} selectedKey={selected ?? knowledgeEntries[0]?.key ?? null}
           onSelect={key => setParams({ asset: 'knowledge', selected: key }, { replace: true })} emptyText="当前草稿暂无业务规则" />
@@ -450,7 +451,7 @@ function ModelingWorkbench() {
       {tab === 'coach' && <QueryCoachPanel groupId={groupId} assistantIdle={idle} available={hasPublished} onRequest={request}
         confirmations={confirmations} onAnswer={answers => void answered(answers)} onOpenDocuments={() => selectTab('overview')} />}
     </main>
-    {!screeningPending && !resolving && <DraftBar groupId={groupId} workflow={workflow} assistantActive={!idle} pendingConfirmations={confirmations.length}
+    {!screeningPending && !resolving && <DraftBar groupId={groupId} workflow={workflow} assistantActive={!idle} pendingConfirmations={confirmations.length} editingBlocked={termsEditing}
       onLocate={locateConfirmations} onPublished={() => void refresh()}
       publishSignal={publishSignal} onSummary={setDraftSummary} />}
     </div>

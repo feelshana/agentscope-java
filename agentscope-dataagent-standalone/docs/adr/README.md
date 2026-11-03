@@ -8,6 +8,8 @@ ADR 记录"为什么这样做"。规则：
 
 ## 当前有效主线（按主题）
 
+正式双库/离线BI镜像补充：[ADR0125](0125-formal-database-and-bi-mirror.md)、[ADR0126](0126-bi-basic-fields-and-project-sync.md)；39列基础投影与既有项目索引分段，保持Wren-only与公共库权限边界。
+
 | 主题 | 当前有效 ADR | 要点 |
 |---|---|---|
 | 总体路线 | [0069](0069-wren-native-modeling-and-query-agents.md)、[0068](0068-generic-modeling-agent-with-official-wren.md) | 建模与问数统一使用同版本官方 Wren skills/CLI/MCP；建模 Agent 是通用 Agent，平台只提供执行环境与服务 |
@@ -21,7 +23,7 @@ ADR 记录"为什么这样做"。规则：
 | SQL 时间门禁 | [0097](0097-llm-per-table-sql-window.md)、[0098](0098-post-sampling-fact-window-confirmation.md)、[0099](0099-runtime-window-policy-and-verifiable-sql-gate.md)、[0103](0103-source-tiered-probing-and-row-based-gate-verdict.md)、[0112](0112-rule-first-sql-window-gate.md)、[0113](0113-mysql8-or-doris-sources-and-literal-date-ranges.md) | 数据库独立配置；逐表检查，普通写法由规则判断、其余交 LLM；日期范围要求写成常量；明细重算结论；上传表不设门禁 |
 | 问数日期与统计 | [0102](0102-query-date-clarification-and-modeling-samples.md)、[0104](0104-upload-probe-scope-and-sql-side-aggregation.md)、[0105](0105-build-state-context-and-ranking-granularity.md)、[0110](0110-platform-handles-build-overwrite-and-conditional-date-rules.md) | 仅受限表缺日期先问；统计来自 SQL；排名按主体分组 |
 | 问数分析技能 | [0121](0121-query-analysis-skills.md) | 归因/异常/预测以固定脚本执行；先确认参数再取数；派生值注明来源；分析回答不进召回 |
-| [0122](0122-builtin-demo-datasource.md) | 内置只读示例数据源 | 已接受，2026-10-31 | |
+| 内置示例数据源 | [0122](0122-builtin-demo-datasource.md)、[0124](0124-synthetic-demo-version-isolation.md) | 合成零售示例独立版本库；保留只读和权限边界 |
 | 问数准备与性能 | [0100](0100-published-query-index-preparation.md)、[0101](0101-reuse-published-mcp-for-recall-warmup.md) | 发布后后台索引、召回预热、分段计时 |
 | BI账号、用户目录与全员库 | [0116](0116-bi-account-and-public-knowledge.md) | 客户端账号信任；只读投影；管理员集中配置全员QUERY |
 | 工程整合、单库与管理员 | [0114](0114-native-query-and-engineering-integration.md) | 原生建模问数优先；BI、私有图表、持久状态、人工模型切换与受限恢复 |
@@ -147,7 +149,7 @@ ADR 记录"为什么这样做"。规则：
 | [0110](0110-platform-handles-build-overwrite-and-conditional-date-rules.md) | 自动补编译、允许整文件替换、日期优先规则按受限表条件注入 | 已接受，2026-10-20。补充 ADR0102/0105/0108。 |  |
 | [0111](0111-draft-changes-reviewed-before-publish.md) | 建模修改直接进入草稿，发布前统一审阅，取消逐项确认卡 | 已接受，2026-10-21。取代 ADR0031，修改 ADR0069/0094 确认条款。 |  |
 | [0112](0112-rule-first-sql-window-gate.md) | SQL 时间门禁规则优先，模型只判断规则无法确定的 SQL | 已接受，2026-10-25。补充 ADR0097/0103：ADR0097 中"检查器仅将原始 SQL 交给无工具 LLM"改为规则优先、模型兜底；登记配置 |  |
-| [0113](0113-mysql8-or-doris-sources-and-literal-date-ranges.md) | 外部数据源限定 MySQL 8.0+ 或 Doris，SQL 用 MySQL 8.0 语法与日期常量范围 | 已接受，2026-10-25。补充 ADR0021（外部源只发布 MySQL）与 ADR0112（规则优先的时间门禁）。 |  |
+| [0113](0113-mysql8-or-doris-sources-and-literal-date-ranges.md) | 外部数据源限定 MySQL 8.0+ 或 Doris，SQL 用 MySQL 8.0 语法与日期常量范围 | 已接受，完整有效；2026-11-02撤销ADR0123并回退5.7放开。 |  |
 | [0114](0114-native-query-and-engineering-integration.md) | 单库原生问数与工程能力整合 | 已接受，2026-10-26；组合验收见 spec094 |  |
 | [0115](0115-query-web-search-via-deepseek.md) | 问数助手经 DeepSeek 官方搜索 API 联网，移除 harness 默认联网工具 | 已接受，2026-10-26。实施 spec095。 |  |
 | [0116](0116-bi-account-and-public-knowledge.md) | BI账号与公共库 | 已接受 | |
@@ -156,6 +158,12 @@ ADR 记录"为什么这样做"。规则：
 | [0119](0119-business-terms-in-wren-naming-conventions.md) | 业务术语存入知识库工程的官方 Naming conventions，随草稿发布 | 已接受，2026-10-29。实施 spec100。 |  |
 | [0120](0120-retire-knowledge-caveats.md) | 停用 knowledge/caveats/，推断不再写入工程 | 已接受，2026-10-29。修改 ADR0111 第 4 条推断去向。 |  |
 | [0121](0121-query-analysis-skills.md) | 问数分析技能以固定脚本执行，参数先确认再取数 | 已接受，2026-10-29。实施 spec102。 |  |
+| [0123](0123-mysql57-connection-admission-only.md) | 仅放开MySQL 5.7数据源接入 | 已撤销，2026-11-02；5.7问数WITH失败，恢复ADR0113。 | |
+
+| [0124](0124-synthetic-demo-version-isolation.md) | 通用示例改合成订单并隔离旧库 | 已接受，2026-11-02，部分取代0122。 | |
+| [0125](0125-formal-database-and-bi-mirror.md) | 独立正式运行环境与离线BI镜像 | 已接受，待现场 | 0126局部补充 |
+| [0126](0126-bi-basic-fields-and-project-sync.md) | BI39列基础投影与既有项目索引同步 | 已接受，2026-11-03，现场待验 | |
+| [0127](0127-bi-sync-observation-and-retirement.md) | 同步观测与停用不进入Web执行面 | 已接受，2026-11-03，补充0125/0126 | |
 | [0128](0128-conversational-semantic-assets.md) | 数据开发通过对话建设语义资产，核查和问题验证后才能发布 | 已接受，2026-11-01。实施 spec111。第 2 条已被 0129 取代。 |  |
 | [0129](0129-asset-kind-by-purpose-with-default-use-rule.md) | 语义资产按用途选型，并配官方默认使用规则 | 已接受，2026-11-02。调整 spec111 P1。第 1 条已被 ADR0131 取代。 | 0131 |
 | [0130](0130-question-review-on-context-change-and-asset-verified-questions.md) | 口径变更后按依赖复核问答，资产验证通过的问题可存为问答 | 已接受，2026-11-03。实施 spec112。 |  |

@@ -1,13 +1,16 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Icon from '../Icon';
-import './BusinessTermsPanel.css';
 import { changeBusinessTerm, listBusinessTerms } from '../../api/semantic';
 import type { BusinessTerm, BusinessTerms, TermChange, TermStatus } from '../../api/semantic';
+import '../../pages/configure/SemanticConfigPage.css';
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-const STATUS: Record<TermStatus, string> = {
-  PUBLISHED: '已发布', ADDED: '新增未发布', MODIFIED: '修改未发布', DELETED: '删除未发布',
+const STATUS: Record<TermStatus, { label: string; color: string; background: string }> = {
+  PUBLISHED: { label: '已发布', color: 'var(--da-success)', background: 'rgba(22,163,74,.10)' },
+  ADDED: { label: '新增未发布', color: 'var(--da-primary)', background: 'rgba(37,99,235,.10)' },
+  MODIFIED: { label: '修改未发布', color: 'var(--da-warn)', background: 'rgba(234,179,8,.14)' },
+  DELETED: { label: '删除未发布', color: 'var(--da-danger)', background: 'rgba(225,29,72,.08)' },
 };
 
 /** Editing state of one row: the structured fields, or the raw text of a free-form entry. */
@@ -19,25 +22,24 @@ const emptyDraft: Draft = { free: false, term: '', synonyms: '', explanation: ''
  * Edits enter the draft and take effect for querying after a publish; QUERY users see the
  * published version read-only. spec106 moved it into the 业务知识 tab of semantic modeling.
  */
-export default function BusinessTermsPanel({ groupId }: { groupId: string }) {
+export default function BusinessTermsPanel({ groupId, onEditingChange }: { groupId: string; onEditingChange?: (editing: boolean) => void }) {
   const [data, setData] = useState<BusinessTerms | null>(null);
   const [editing, setEditing] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useEffect(() => { onEditingChange?.(busy || editing !== null); }, [busy, editing, onEditingChange]);
+  useEffect(() => () => onEditingChange?.(false), [groupId, onEditingChange]);
 
   const request = useRef<AbortController | null>(null);
   const refresh = useCallback(async () => {
     request.current?.abort();
     const controller = new AbortController();
     request.current = controller;
-    setLoading(true);
     try {
       const terms = await listBusinessTerms(groupId, controller.signal);
       if (controller.signal.aborted) return;
       setData(terms); setError(null);
     } catch (e) { if (!controller.signal.aborted) setError(message(e)); }
-    finally { if (!controller.signal.aborted) setLoading(false); }
   }, [groupId]);
   useEffect(() => { setData(null); setEditing(null); void refresh(); return () => request.current?.abort(); }, [refresh]);
   // Publishing from the draft bar, or a modeling turn, changes what is online.
@@ -87,51 +89,48 @@ export default function BusinessTermsPanel({ groupId }: { groupId: string }) {
     </span></td>
   </tr>;
 
-  return <section aria-label="业务术语" className="terms-page">
-    <header className="terms-pagehead">
-      <div><h3>业务术语</h3><p>让同一个业务概念，始终对应同一种含义。修改先进入草稿，发布后问数生效。</p></div>
-      <div className="terms-head-actions">
-        <button className="da-btn terms-refresh" title="刷新术语" aria-label="刷新术语" onClick={() => void refresh()} disabled={busy || loading}><Icon name="refresh" /></button>
-        {editable && <button className="da-btn da-btn-primary" disabled={busy || !!editing} onClick={() => setEditing({ ...emptyDraft })}><Icon name="plus" size="sm" />添加术语</button>}
-      </div>
-    </header>
-    {error && <div role="alert" className="terms-error">{error}</div>}
-    <div className="terms-context">
-      {data && <span className={`terms-context-status${data.publishedVersion > 0 ? ' is-published' : ''}`}>{data.publishedVersion > 0 ? `线上 v${data.publishedVersion}` : '尚未发布'}</span>}
-      {editable && pending > 0 && <span className="terms-context-status is-pending">{pending} 项修改待发布</span>}
-      {data && !editable && <span className="terms-readonly">只读</span>}
-      <span className="terms-count" role="status">{loading ? '加载中…' : `共 ${rows.length} 条术语`}</span>
+  return <section aria-label="业务术语" className="kw-page sm-terms terms-page">
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+      <h3 style={{ margin: 0 }}>业务术语</h3>
+      {data && <span className="da-small">线上版本 {data.publishedVersion > 0 ? `v${data.publishedVersion}` : '未发布'}{editable && pending > 0 ? ` · ${pending} 项修改未发布` : ''}</span>}
+      {data && !editable && <span className="da-badge">只读</span>}
+      <span style={{ flex: 1 }} />
+      {editable && <button className="da-btn da-btn-primary" disabled={busy || !!editing} onClick={() => setEditing({ ...emptyDraft })}>添加术语</button>}
+      <button className="da-btn da-btn-ghost da-btn-sm" title="刷新" aria-label="刷新业务术语" onClick={() => void refresh()} disabled={busy}><Icon name="refresh" size="sm" /></button>
     </div>
-    <div className="terms-table-scroll"><table className="terms-table" aria-label="业务术语" aria-busy={loading}>
+    <p className="da-small" style={{ margin: '0 0 10px' }}>统一业务名词与常用说法。修改先进入草稿，发布后问数生效。</p>
+    {error && <div role="alert" className="da-alert da-alert-error">{error}</div>}
+    <div className="terms-table-scroll"><table className="terms-table" aria-label="业务术语表格">
       <thead><tr>
-        <th style={{ width: '18%' }}>业务术语</th><th style={{ width: '36%' }}>业务定义</th><th style={{ width: '18%' }}>同义词</th>
-        <th style={{ width: '15%' }}>状态</th><th style={{ width: '13%' }}>{editable ? '操作' : ''}</th>
+        <th style={{ width: '18%' }}>业务术语</th><th style={{ width: '40%' }}>业务定义</th><th style={{ width: '18%' }}>同义词</th>
+        <th style={{ width: '10%' }}>状态</th><th style={{ width: '14%' }}>{editable ? '操作' : ''}</th>
       </tr></thead>
       <tbody>
         {editing && !editing.original && editor}
         {rows.map(t => editing?.original === t.text ? <React.Fragment key={t.text}>{editor}</React.Fragment> : (
           <tr key={`${t.status}:${t.text}`} className={`terms-row is-${t.status.toLowerCase()}`}>
-            <td className="terms-name">{t.structured ? t.term : <span className="da-small">（自由格式）</span>}</td>
+            <td className="terms-name">
+              {t.structured ? t.term : <span className="da-small">（自由格式）</span>}</td>
             <td className="terms-definition">
               {t.structured ? t.explanation : t.text}
               {t.status === 'MODIFIED' && t.publishedText && <div className="terms-previous">线上：{t.publishedText}</div>}
             </td>
             <td><span className="terms-synonyms">
               {t.synonyms.length ? t.synonyms.map(s => <span key={s}>{s}</span>) : <span className="terms-no-synonym">—</span>}</span></td>
-            <td><span className={`terms-status is-${t.status.toLowerCase()}`}>{STATUS[t.status]}</span></td>
+            <td><span className={`terms-status is-${t.status.toLowerCase()}`}>{STATUS[t.status].label}</span></td>
             <td>{editable && <span className="terms-row-actions">
               {t.status === 'DELETED'
                 ? <button className="terms-text-button" disabled={busy || !!editing} onClick={() => void submit({ text: t.publishedText ?? t.text })}>恢复</button>
                 : <>
                   <button className="terms-text-button" aria-label={`编辑术语：${t.term ?? t.text}`} disabled={busy || !!editing} onClick={() => startEdit(t)}>编辑</button>
-                  <button className="terms-delete-button" title="删除术语" aria-label={`删除术语：${t.term ?? t.text}`} disabled={busy || !!editing} onClick={() => void submit({ original: t.text, delete: true }, '删除该术语？删除进入草稿，发布后生效。')}><Icon name="trash" size="sm" /></button>
+                  <button className="terms-delete-button" aria-label={`删除术语：${t.term ?? t.text}`} disabled={busy || !!editing} onClick={() => void submit({ original: t.text, delete: true }, '删除该术语？删除进入草稿，发布后生效。')}><Icon name="trash" size="sm" /></button>
                 </>}
             </span>}</td>
           </tr>
         ))}
-        {!editing && rows.length === 0 && <tr><td colSpan={5} className="terms-empty">
+        {!editing && rows.length === 0 && <tr><td colSpan={5} style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--da-text-muted)', fontSize: 13 }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="file" size="sm" />
-            {loading ? '正在加载业务术语…' : editable ? '暂无业务术语，添加术语来说明你的业务说法' : '该知识库还没有已发布的业务术语'}</span>
+            {editable ? '暂无业务术语，添加术语来说明你的业务说法' : '该知识库还没有已发布的业务术语'}</span>
         </td></tr>}
       </tbody>
     </table></div>

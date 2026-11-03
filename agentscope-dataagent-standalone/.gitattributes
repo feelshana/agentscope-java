@@ -1,0 +1,5 @@
+# Excel workbooks must remain byte-for-byte unchanged when distributed through Git.
+*.xlsx binary
+
+# Preserve validated delivery bytes and EOFs; recognize CRLF while checking stray spaces.
+/outputs/synthetic-commerce-v1-20261102/** -text whitespace=blank-at-eol,-blank-at-eof,space-before-tab,cr-at-eol

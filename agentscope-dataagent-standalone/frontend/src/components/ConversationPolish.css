@@ -11,12 +11,15 @@
 .answer-action-button::after,.da-composer-submit::after { content:attr(data-tooltip); position:absolute; z-index:6; left:50%; bottom:calc(100% + 7px); transform:translateX(-50%); padding:5px 8px; border-radius:5px; background:#303541; color:#fff; font-family:inherit; font-size:12px; line-height:1.5; white-space:nowrap; pointer-events:none; visibility:hidden; opacity:0; }
 .answer-action-button:hover:not(:disabled)::after,.answer-action-button:focus-visible::after,.da-composer-submit:hover:not(:disabled)::after,.da-composer-submit:focus-visible::after { visibility:visible; opacity:1; }
 .da-composer-submit { position:relative; display:grid; place-items:center; width:44px; height:44px; flex:none; padding:0; border:0; border-radius:50%; background:transparent; cursor:pointer; }
-.da-composer-submit-face { display:grid; place-items:center; width:36px; height:36px; border-radius:50%; background:#282c36; color:#fff; }
-.da-composer-submit:hover:not(:disabled) .da-composer-submit-face { background:#3b414d; }
+.da-composer-submit-face { display:grid; place-items:center; width:36px; height:36px; border:1px solid transparent; border-radius:50%; background:var(--da-primary); color:#fff; transition:background .15s, border-color .15s; }
+.da-composer-submit:hover:not(:disabled) .da-composer-submit-face { background:var(--da-primary-hover); }
+.da-composer-submit[data-state="stop"] .da-composer-submit-face { background:var(--da-primary-subtle); border-color:var(--da-primary-line); color:var(--da-primary); }
+.da-composer-submit[data-state="stop"]:hover:not(:disabled) .da-composer-submit-face { background:var(--da-primary-soft); }
 .da-composer-submit:disabled { cursor:not-allowed; }
 .da-composer-submit:disabled .da-composer-submit-face { background:#eceef2; color:#a2a9b5; }
 .da-composer-submit .da-icon { width:20px; height:20px; stroke-width:2; }
 .da-composer-submit[data-state="stop"] .da-icon { width:24px; height:24px; fill:currentColor; stroke:none; }
+@media (prefers-reduced-motion:reduce) { .da-composer-submit-face { transition:none; } }
 @media (max-width:760px),(pointer:coarse) { .answer-action-button { width:44px; height:44px; } }
 .da-chat-thread-region { position:relative; flex:1; min-height:0; display:flex; min-width:0; }
 .da-chat-jump { position:absolute; bottom:18px; left:50%; transform:translateX(-50%); z-index:2; }

@@ -15,6 +15,7 @@ import io.agentscope.dataagent.dataset.ExternalDataSourcePolicy;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetRepository;
 import io.agentscope.dataagent.web.persistence.jpa.ExternalDataSourceEntity;
 import io.agentscope.dataagent.web.persistence.jpa.ExternalDataSourceRepository;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -137,11 +138,54 @@ class ExternalDataSourceConnectionTest {
         verify(sources, never()).deleteById(any());
     }
 
+    @Test
+    void builtinOnlyExposesCurrentTablesAndLegacyIdentityIsNotShared() {
+        var source = builtin();
+        when(introspector.listTables(source, DemoDataService.SCHEMA))
+                .thenReturn(
+                        List.of(
+                                new DataSourceIntrospector.TableInfo("demo_orders", "TABLE", ""),
+                                new DataSourceIntrospector.TableInfo(
+                                        "private_table", "TABLE", "")));
+        assertThat(
+                        controller
+                                .tables(DemoDataService.SOURCE_ID, DemoDataService.SCHEMA, auth)
+                                .block())
+                .extracting(ExternalDataSourceController.TableVO::name)
+                .containsExactly("demo_orders");
+        assertThatThrownBy(
+                        () ->
+                                controller
+                                        .columns(
+                                                DemoDataService.SOURCE_ID,
+                                                DemoDataService.SCHEMA,
+                                                "private_table",
+                                                auth)
+                                        .block())
+                .isInstanceOf(ResponseStatusException.class);
+        var legacy =
+                new ExternalDataSourceEntity(
+                        "builtin-demo-data",
+                        DemoDataService.OWNER,
+                        "旧示例",
+                        "mysql",
+                        "jdbc:mysql://db.internal/demo_data",
+                        "old",
+                        "old",
+                        true);
+        when(sources.findById("builtin-demo-data")).thenReturn(Optional.of(legacy));
+        assertThatThrownBy(() -> controller.schemas("builtin-demo-data", auth).block())
+                .isInstanceOf(ResponseStatusException.class);
+    }
+
     /** 2026-10-25: queries use MySQL 8.0 SQL, so an older or unknown engine is never saved. */
     @Test
     void unsupportedSourceIsRefusedBeforeItIsSaved() {
         when(introspector.connectionError(any()))
                 .thenReturn("当前 MySQL 版本 5.7.44 低于 8.0，外部数据源仅支持 MySQL 8.0 及以上或 Doris");
+        var result = controller.testConnection(request("pw"), null, auth).block();
+        assertThat(result.connected()).isFalse();
+        assertThat(result.error()).contains("5.7.44", "低于 8.0");
         assertThatThrownBy(() -> controller.create(request("pw"), auth).block())
                 .isInstanceOfSatisfying(
                         ResponseStatusException.class,

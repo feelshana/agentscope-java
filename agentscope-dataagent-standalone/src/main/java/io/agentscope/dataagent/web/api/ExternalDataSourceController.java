@@ -267,6 +267,11 @@ public class ExternalDataSourceController {
                                 introspector
                                         .listTables(readable(userId, id, schema), schema)
                                         .stream()
+                                        .filter(
+                                                t ->
+                                                        !DemoDataService.SOURCE_ID.equals(id)
+                                                                || DemoDataService.TABLE_NAMES
+                                                                        .contains(t.name()))
                                         .map(t -> new TableVO(t.name(), t.type()))
                                         .toList())
                 .subscribeOn(Schedulers.boundedElastic())
@@ -280,6 +285,9 @@ public class ExternalDataSourceController {
             @PathVariable String table,
             Authentication auth) {
         String userId = (String) auth.getPrincipal();
+        if (DemoDataService.SOURCE_ID.equals(id) && !DemoDataService.TABLE_NAMES.contains(table)) {
+            return Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "table not found"));
+        }
         return Mono.fromCallable(
                         () ->
                                 introspector

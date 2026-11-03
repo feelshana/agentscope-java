@@ -110,17 +110,19 @@ class DatasetServiceSourceCombinationTest {
     @Test
     void builtinSourceIsAssociatedOnlyFromTheDemoSchema() {
         source.setOwnerId(DemoDataService.OWNER);
+        source.setId(DemoDataService.SOURCE_ID);
+        when(externalSources.findById(DemoDataService.SOURCE_ID)).thenReturn(Optional.of(source));
         when(introspector.validatedUrl(source)).thenReturn(source.getJdbcUrl());
-        when(introspector.listColumns(source, DemoDataService.SCHEMA, "report_visits"))
+        when(introspector.listColumns(source, DemoDataService.SCHEMA, "demo_orders"))
                 .thenReturn(List.of(new DataSourceIntrospector.ColumnInfo("id", "BIGINT", "")));
 
         assertThat(
                         service.associateTables(
                                 "alice",
                                 "group-1",
-                                "source-1",
+                                DemoDataService.SOURCE_ID,
                                 DemoDataService.SCHEMA,
-                                List.of("report_visits"),
+                                List.of("demo_orders"),
                                 false))
                 .hasSize(1);
         assertThatThrownBy(
@@ -128,12 +130,29 @@ class DatasetServiceSourceCombinationTest {
                                 service.associateTables(
                                         "alice",
                                         "group-1",
-                                        "source-1",
+                                        DemoDataService.SOURCE_ID,
                                         "mysql",
                                         List.of("user"),
                                         false))
                 .isInstanceOf(DatasetException.class);
         verify(introspector, never()).listColumns(source, "mysql", "user");
+    }
+
+    @Test
+    void retiredBuiltinIdentityCannotBeAssociatedAsTheNewDemo() {
+        source.setOwnerId(DemoDataService.OWNER);
+        source.setId("builtin-demo-data");
+        assertThatThrownBy(
+                        () ->
+                                service.associateTables(
+                                        "alice",
+                                        "group-1",
+                                        "source-1",
+                                        DemoDataService.SCHEMA,
+                                        List.of("demo_orders"),
+                                        false))
+                .isInstanceOf(DatasetException.class);
+        verify(introspector, never()).listColumns(any(), any(), any());
     }
 
     @Test

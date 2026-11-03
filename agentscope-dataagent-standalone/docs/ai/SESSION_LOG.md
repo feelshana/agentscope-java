@@ -329,6 +329,7 @@ fetch确认同事wangchao_dev已完整进入develop-2.0@3bb64fc9；liyufan_dev@b
 
 ## 2026-10-31 Asia/Shanghai｜本地持久样例与远端整合收尾
 97889a47先保存并校验本地忽略副本、移除临时源码Excel和补恢复工具；随后合入origin/develop-2.0@a85，冲突仅CURRENT_TASK/SESSION_LOG，远端当前记录独立归档且双方历史保留。合并业务源码/前端/资源与远端完全一致；恢复三场景、忽略副本、指南语法及文档5项通过。按用户授权普通push主线，然后切liyufan_dev快进到主线并同步远端，最终状态以Git/最终回复为准。未执行任何66操作或清理既有资源。
+
 ## 2026-11-01 第一批体验与样式优化
 - 对照20261030原型完成首批文案、状态和基础样式调整；状态：未提交，等待用户确认样式后继续。
 
@@ -398,6 +399,160 @@ DatasetsPage/独立CSS按认可图实现，创建人纯文字，原权限/菜单
 ## 2026-11-01 Asia/Shanghai｜前端体验批次整理提交
 用户授权全部本地修改整理后本地提交；范围为已认可UI源代码、静态包及设计/验收记录，分支liyufan_dev，前HEAD5b1079a6，不push。检查忽略规则，个人交接/样例Excel/配置/output临时文件不纳入。提交整理时npm64项×3base、spotless与DocsConsistencyTest5项通过；同树最终构建与各专项浏览器验证见前记录。按用户局部验证要求不跑无关后端全量/真实LLM/66；提交hash及提交后状态以Git回读和本次交付为准。
 
+## 2026-11-01 第一批体验与样式优化
+- 对照20261030原型完成首批文案、状态和基础样式调整；状态：未提交，等待用户确认样式后继续。
+
+## 2026-11-01 spec106语义建模工作台
+- 按用户确认的方案实施（术语并入、关系只读）；关系图改用SVG加React卡片。状态：未提交，待重启后验收。
+
+## 2026-11-01 Asia/Shanghai｜develop主线合入个人分支冲突整合
+前两条来自主线合并记录，代表其历史时点；其内容现已包含于10bde604。用户确认先合并再优化，继续原b1a71a20/10bde604 merge，备份22冲突stage后逐块处理，未abort或回滚。主线spec106/后端/指引保留，本地品牌/交互保留并消费主线配色/字号；术语迁入业务知识并补共享发布编辑限制，卡片补发布状态，静态包重建。双方原CURRENT_TASK分别归档。tsc/npm64×3、spotless/相关Java82、最终前缀build及package通过；模拟UI25+25+27+19共96项通过，未改真实资源。后端及测试与MERGE_HEAD一致，未重启或部署；Git最终门禁/本地merge提交回读另记，不push。
+
+合并收尾门禁：git ls-files -u为空，暂存区无冲突标记及空白错误；最终静态入口的3处assets引用均存在，后端/测试与10bde604一致；更新记忆后DocsConsistencyTest再次5项通过。本地merge提交号及双亲包含关系以git log/本次交付回读为准。独立QA浏览器及19141合成服务关闭，用户原有服务和浏览器保留。
+
+## 2026-11-01 Asia/Shanghai｜UI风格协调提案
+以用户8张截图及同事分支/主线/HEAD的只读比较为依据，识别大标题、图标独立行、灰底统计块、黑色按钮和状态带叠加造成的比例失衡。built-in image_gen迭代并view_image检查知识库四列和数据集详情图；保留Logo，提议温和紫与轻量布局。图稿/提示词/建议规格保存docs/previews/style-harmony-20261101；CURRENT_TASK归档上轮merge并切换到待评审提案。正式代码/静态包/服务/数据未改，不提交推送；本轮检查结果另记。
+
+提案收尾：DocsConsistencyTest本轮5项通过，git diff --check通过；生产frontend/src及src无差异，暂存为空，liyufan_dev/d6ad3ba3未变。只留下评审图、提示词及共享记录；无提交、推送、服务或业务数据操作。
+
+## 2026-11-01 Asia/Shanghai｜协调风格落地
+用户认可后局部实施AppShell、知识库卡片/列表和数据集详情，主色#6654ce同步共享变量；设置触发器复用原WorkspaceMenu，现有权限/API/恢复流程保留。图稿和真实组件多尺寸、最终包已view_image对照；1600视口卡片247.56px，表格64px。TypeScript、npm64×3base、build、spotless与DocsConsistencyTest5项通过；独立Vite隔离26项+最终/dify/dataagent/包6项通过，无业务写入。报告和8张合成UI证据已归档；原方案README标记已实施。保留liyufan_dev/d6ad3ba3和全部既有文档，无提交推送部署。收尾关闭本轮浏览器/两服务并清理本轮临时QA文件，原用户资源保留；最终门禁另记。
+
+收尾：最终DocsConsistencyTest再次5项通过，git diff --check通过；暂存为空，liyufan_dev/d6ad3ba3未变。本轮独立浏览器与19142/19143已关闭，临时CLI文件已按明确文件路径清理；用户服务和旧预览资源保留。实际组件截图已归档，无提交、推送或部署。
+
+## 2026-11-01 Asia/Shanghai｜卡片信息位置微调
+按用户截图反馈，仅改DatasetsPage信息结构/CSS：左数据量、右用户名与日期，状态权限在上，移除创建人前缀；宽屏5列按260px最小宽度触发，窄些4/3/2/1列。TypeScript及独立隔离UI6场景通过，1920五列294.39px/1600四列316px，均无页面溢出；长名/列表/手机已view_image。报告与截图已归档card-metadata-20261101；保留前批WIP，无真实资源写入。最终构建、文档与独立QA收尾另记。
+
+卡片微调收尾：/dify/dataagent/最终build通过（index-r7Nc2CEO.js/index-BHOZPzNz.css/ontology-Bihmp9Ve.js），保留既有ECharts/大包提示；DocsConsistencyTest5项、git diff --check通过，暂存为空，liyufan_dev/d6ad3ba3未变。独立metadata19144浏览器及19144服务已关闭，临时文件按明确路径清理，4张持久截图保留。无提交、推送、部署或真实业务写入。
+
+## 2026-11-01 Asia/Shanghai｜发送和停止按钮配色
+仅ConversationPolish.css使用共享主色/淡紫，保持原尺寸与点击/输入法逻辑。最终前缀build通过（index-BtJyAZ5G/index-DFxa2lLP/ontology-C7BOwsdv），独立最终CSS状态台6项、view_image通过；不等于真实发送/停止验收，无LLM或业务写入。报告与状态截图已保存。所有既有WIP保留，无提交推送部署；收尾门禁另记。
+
+按钮配色收尾：DocsConsistencyTest5项与git diff --check通过，暂存为空，liyufan_dev/d6ad3ba3未变。独立composer19146浏览器与19146预览服务已关闭，本轮临时QA文件按明确路径清理，状态图持久归档。无提交、推送或部署，原用户服务与全部WIP保留。
+
+## 2026-11-01 Asia/Shanghai｜上线前小优化候选分析
+只读核对ChatPanel/CitationPanel/TaskTrace/Markdown/ECharts与既有新手能力，浏览ChatGPT/飞书/Claude/Linear官方资料。识别来源旧工具名、缺修改重试、内存草稿及表格复用等缺口；候选/粗估/范围保存docs/design/20261101-prelaunch-polish-candidates.md。只更新建议与共享记录，未修改业务源码或构建资源，无新增实施/提交/推送/部署。
+
+## 2026-11-01 Asia/Shanghai｜本地UI批次提交整理
+用户授权一次本地提交：统一配色/侧栏、卡片五列与左右信息、数据集紧凑布局和发送/停止按钮，包含配套静态包与图稿/合成UI验收/候选记录。起点liyufan_dev/d6ad3ba3，无新增业务实现；候选建议仍未实施。整理时npm64×3base、spotless、DocsConsistencyTest5项通过，diff及生产入口资产检查通过，PNG为binary。前轮最终build/44项局部UI证据沿用；不重复无关后端或真实业务验收。提交执行结果/哈希与工作区以本次git log/status回读为准，不push。
+
+## 2026-11-01 Asia/Shanghai｜个人UI整合进develop-2.0
+用户授权后核对/fetch远程main10bde604、个人0fbc0fae、同事a85ccec6；同事已是原主线祖先，没有主线未包含提交。切主线从5b1079a6快进10bde604，再--no-ff合入个人0fbc0fae，无冲突，初始合并树与个人全树一致。仅新增整合报告/共享记录；后端Java/测试/配置/迁移与原主线相同，前端与包沿用个人。npm64×3base本轮通过；最终格式/文档门禁与merge提交以Git回读为准。不push、不操作66。
+
+主线整合收尾门禁：本轮spotless:check、DocsConsistencyTest5项、npm64×3base通过；frontend/src/pom与个人分支逐字节一致，无冲突条目。合并提交保留双亲10bde604和0fbc0fae，报告/记录一并纳入；最终哈希、三个祖先包含关系及工作区由提交后Git回读确认，未push或部署。
+
+## 2026-11-02 Asia/Shanghai｜MySQL 5.7兼容调研与方案
+读取AGENTS/共享记忆及ADR0113，核对Introspector、提示词、CLI/MCP兼容入口和本机官方Python引擎。wrenai 0.15.0本机dry_plan对COUNT/SUM自动生成WITH，未连接数据库；官方架构资料交叉核对。形成spec107并登记索引，先5.7、能力识别/AST内联/生成提示/保守拒绝/真实回归方案待确认；不把删除校验或只改提示词当成支持。旧CURRENT_TASK归档，更新当前入口与决策。本轮无业务源码、外部Python、静态包、分支、提交、push或66操作；文档检查另记。
+
+方案检查：本轮DocsConsistencyTest共5项通过，Maven退出0，git diff --check通过。Maven test生命周期连带重建了前端资源，已仅撤回本轮生成的3处受控产物变化并删除2个本轮新bundle，最终src/frontend无差异。业务兼容实现及真实5.7/8.0/Doris验收尚未开始；没有提交推送或66操作。
+
+## 2026-11-02 Asia/Shanghai｜MySQL 5.7最小接入改造与真实流程
+用户明确只改连接准入并要求全流程实测。修改Introspector门禁/Controller注释/相关测试，spec107缩小范围，ADR0123部分取代0113，架构与索引同步。32项相关Java/文档测试、Spotless和package通过；构建skip.npm，前端原包保持。
+DockerDesktop此前未运行，启动后专属mysql:5.7.44及独立应用/H2/工作区完成真实HTTP/SSE测试，使用配置的真实模型和官方Wren。合成6订单599元；接入、关联、采样、基础建模和发布通过，问数8.89秒在MCP run_sql失败1064。物理SQL参考成功，常量WITH和实际发布模型生成的WITH计划失败，根因已对照确认。回答错误归因为orders关键字但未编造结果，未超范围修复。报告/脱敏证据已保存，原始日志/凭据仅忽略target。未操作66/现有业务库、提交、push或切分支；进程收尾另记。
+
+收尾：最终Spotless与DocsConsistencyTest5项再次通过，git diff --check通过。确认frontend、src/main/resources和DataAgentConfig无差异；暂存区为空，分支/HEAD未变。仅核对本轮进程/容器所有权后终止隔离Java及其Wren子进程，专属MySQL容器已exited；容器数据/镜像/报告/原日志保留，未清理其他用户资源。无提交、push或66操作。
+
+## 2026-11-02 Asia/Shanghai｜用户亲自界面验收准备
+用户已用IDEA启动前后端，希望手动测试5.7。已核对专属容器标签并重新启动dataagent-mysql57-acceptance-20261102，绑定127.0.0.1:64223，acceptance57/reader57，仅合成测试表。读账号凭据已为此次本地测试调整并更新忽略的private-state，不在共享文档保存密码；重新认证和原生查询确认5.7.44、orders6/599、customers3。本轮容器保持运行供用户测试，未启动额外Java应用、未创建用户本地知识库或操作66。
+
+## 2026-11-02 Asia/Shanghai｜携带现有修改切回个人分支
+用户要求回liyufan_dev开发，保留当前未提交修改。核对无暂存/冲突，个人分支是主线祖先（0/1）；先备份16个修改/未跟踪文件到忽略target/branch-transfer-20261102，再以非强制本地fetch将个人分支快进0fbc0fae→0e9f25ee，switch成功。逐文件SHA256核对16份原内容均未变化，随后仅补当前入口/本条分支记录。当前liyufan_dev比origin/liyufan_dev多1个已有主线整合提交，不是本轮新增commit；develop-2.0提交位置未变。没有stash、提交、push或生产操作。
+
+## 2026-11-02 Asia/Shanghai｜引导确认步骤草稿遮挡修复
+用户要求暂放MySQL5.7，处理引导7/10按钮被草稿浮层覆盖。保留既有WIP，在liyufan_dev@0e9f25ee新增tourLocksDraftDrawer和DraftBar同步隐藏/禁止重开/退出恢复；不加z-index或自动点击，不改确认发布状态。真实tour迁移/暂停/账号隔离回归67项×3base通过，TypeScript和/dify/dataagent/最终build通过（index-CWMytUr8/ontology-BEAl0AAh，CSS不变）。
+Playwright CLI隔离加载真实组件，HEAD旧组件复现遮挡；桌面8项、390窄屏恢复、1180×680 iframe及发布待确认“去处理”路径通过，真实DOM命中与实际点击推进已核对，业务写请求为零。截图4张已view_image并归档，报告20261102-tour-draft-drawer。首轮窄屏测试入口被等待状态卡挡住、iframe选错顶层均属测试路径问题，已调整并重新验证；未用强制点击。未跑66/真实LLM/现有知识库，用户服务与5.7测试容器不动，无提交推送；独立QA收尾和最终门禁另记。
+
+引导修复收尾：Spotless、DocsConsistencyTest5项、git diff --check最终通过；前轮5.7的4个Java/测试文件与切分支备份SHA256一致，正式静态入口3个assets引用存在。独立Playwright会话关闭，19147 Vite及子进程已核对归属后停止；CLI快照和临时截图仅归档到本轮忽略target，报告4张图保留。用户IDEA服务、浏览器及MySQL5.7测试容器未动。liyufan_dev@0e9f25ee保持，暂存为空，无提交推送部署。
+
+## 2026-11-02 Asia/Shanghai｜撤销MySQL5.7连接放开
+用户和同事决定暂不支持5.7，授权仅回退本轮准入改动。核对Git差异后将Introspector和Controller恢复HEAD原实现/注释，恢复拒绝5.7的测试并补现场5.7.28及连接检测false断言；不改Wren和提示词。ADR0123仅状态改撤销、0113完整恢复有效，spec107标历史撤销、失败报告保留WITH/1064及6/599参考与后续候选。新手引导源码/静态包等既有WIP保持，未清理测试容器/数据源/知识库，未修改IDEA配置或重启用户服务。Spotless及4类相关测试共31项通过，diff检查通过；Maven跳过npm避免重复生成前端，不跑生产/真实LLM或无关全量测试。liyufan_dev不变，暂存为空，无提交、push或部署；用户需重启IDEA后端加载门禁。
+
+## 2026-11-02 Asia/Shanghai｜个人批次提交前整理
+用户授权提交/push个人并合入/push主线。fetch核对origin/develop-2.0=0e9f25ee、origin/liyufan_dev=0fbc0fae、origin/wangchao_dev=a85ccec6，同事已是主线祖先。本批含引导草稿遮挡修复/静态包/真实组件截图与回归，以及5.7放开撤销的文档及拒绝回归；业务Java与HEAD无差异。当前入口归档并重写为发布同步。本轮npm67项×3base、局部Java/文档31项及Spotless通过；前轮TypeScript/生产build/UI证据沿用，未做新业务变更，无需重复全量/LLM压测。正式commit/push/merge结果与哈希以Git回读及后续记录为准，不操作66。
+
+## 2026-11-02 Asia/Shanghai｜个人推送完成与主线无冲突整合
+个人提交19fcdbde14c63cd80da0f7a93a7f8ee41f41d67d已push到origin/liyufan_dev。再次fetch主线仍0e9f25ee，切develop-2.0并--no-ff合入个人，无冲突；工作树与个人仅共享记录不同，源码/测试/静态包一致。同事origin/wangchao_dev=a85ccec6已包含。合并记录和当前入口同步后执行文档检查；merge正式哈希及主线push结果以Git回读/最终回复为准。未操作66、用户服务或数据库资源。
+
+## 2026-11-02 Asia/Shanghai｜虚构零售示例数据包完成
+用户暂停66部署并要求替换真实示例素材。本轮只生成50000行虚构材料，无应用代码或环境变更。起点17c0029a主线，期间工作区观察已切liyufan_dev@19fcdbde，本轮未执行切分支/merge/commit/push。独立Python/SQLite验证关系、金额与26题；原项目三种分析脚本在既有沙箱镜像、无网络实跑通过（容器--rm）。Artifact Tool两Excel导出渲染通过，初次ISO日期被POI拒绝后仅改输出为数值日期，最终实际ExcelParser全量48000/2000行、DATETIME、关键金额精确对账通过。一次临时验证误用TIMESTAMP断言也已按真实DATETIME修正重跑。完整数据/口径/问题与独立管理员答案、图表、工具在outputs，约5MB ZIP另存桌面；生成原始数据/日志/中间文件仅target。最终结构/哈希/ZIP通过，文档门禁另记。未进行真实Agent或页面全流程验收，旧内置示例/线上数据/用户服务及5.7容器均未动。
+
+数据包收尾：DocsConsistencyTest5项通过，git diff --check通过；最终清单29个文件逐项SHA256一致，ZIP结构与桌面副本一致。工作区仅新增数据包与设计/共享文档，源码/配置/静态资源无差异，暂存为空，无本轮提交推送或线上操作。桌面包约5MB，真实LLM/页面流程仍待验收；旧内置数据尚未切换。
+
+## 2026-11-02 Asia/Shanghai｜中文姓名及本地新手示例切换完成
+用户确认中文姓名并选择新手引导入口。两千客户1915个不同中文姓名，原订单SHA与金额不变；新素材安装到本地忽略目录，旧文件保留、清单备份。spec108/ADR0124先记录范围，DemoDataService改新文件/版本库/源及空表导入、完整性门禁，系统源关联和浏览仅新ID/库/声明表；旧JDBC不冒充新源。恢复工具改读仓库合成素材，文案/配置表/架构/生产包同步。50项相关测试含实际Controller+ExcelParser和专属MySQL8.4首次/重复准备、只读及旧库哨兵隔离通过；npm67×3base、类型和生产build通过。用户IDEA配置DataAgentApp(1)已存在开关及目录，未修改或重启；真实LLM/页面/生产未验。输出及桌面ZIP已更新。最终门禁及专属容器收尾另记，未提交push部署。
+
+本地示例切换收尾：Spotless及DocsConsistencyTest5项最终通过，diff检查通过；新素材在仓库/输出/本地目录逐份SHA一致，原两份真实文件与备份SHA一致。仅核对本轮标签后停止dataagent-synthetic-seed-20261102，容器数据保留，其他服务/5.7容器不动。未提交推送，当前liyufan_dev不变。
+
+## 2026-11-02 Asia/Shanghai｜用户本地无文档建模耗时诊断
+
+只读实际Java工作目录和根logs，首轮17:42:42至17:44:38耗时115.458秒，10模型/20工具，模型调用合计98.625秒，其中两次82.064秒；合并全表探查含首次build5.478秒，校验0.686秒，索引7.106秒。日志证实48000订单/2000客户、键唯一及多对一、基础校验通过；技能加载失败补取/错误参数及无文档写规则被拒产生多余交互。无文档可继续引导，泛称销售额已提出确认，复杂指标需明确或确认；未认定完整问答准确率验收。建议先优化交互与推荐问法，未改业务代码/数据/用户服务，未操作生产。报告及CURRENT_TASK已补事实；DocsConsistencyTest通过，diff检查通过。首次Maven调用被PowerShell拆分带点参数而失败，随后所有-D参数显式引用后重跑通过。
+
+
+## 2026-11-02 Asia/Shanghai｜BI同步与正式两库只读分析
+
+读取会议2页纪要/4页原文（未另转写MP3），对照公共库ACL、上传表、采样/连接及66脚本。用户明确接受正式库同步后关联，补7表DDL，并确认全员可读分析字段、两日志仅追加、迟到暂不考虑、log_type=0查看。产出待实施设计及只读源关联/EXPLAIN/可选日志采样SQL，不含凭据。发现新平台库带data_agent下划线、旧桌面DDL过时、部署/管理员脚本硬编码Docker mysql、空平台丢模型服务配置、源日志无时间前导索引及桥表放大/导出混算风险。没有连接生产或源库，没有改业务代码、Git分支/提交或资源；保留虚构示例WIP。文档和SQL静态检查结果以随后工具结果为准。
+
+BI同步方案收尾：DocsConsistencyTest通过；只读SQL静态检查10条且仅SELECT/EXPLAIN，无DDL/DML或数据库执行；共享记录diff检查通过。当前仅方案/核对材料新增，未实现同步或外置部署模式。
+
+
+## 2026-11-02 Asia/Shanghai｜正式库只读前置核对回传
+
+用户BI截图：报表9218/仪表盘4610项目匹配缺失0；正式8.0.36、data_agent/data_agent_platform均0表；data_agent@%对两库ALL。按用户希望单步引导，桌面准备当前37表的正式库限定DDL及核对SQL，静态去限定后与源结构一致，无人员/凭据、无执行。移除会话级外键开关，唯一外键父表创建顺序正确，适配BI逐语句连接。生产初始化、人员导入、脚本实施、容器连通仍未执行；不把双库ALL当全局建用户/GRANT权限。
+
+2026-11-02：用户明确回复“开始初始化”，授权正式空平台库建表。交付01文件SHA与前次一致，37张表/显式库限定/唯一外键已再次静态核对；现在仅指导用户BI执行，尚无执行结果，不记为已创建。用户导入、同步和服务切库尚未执行。
+
+2026-11-02：用户回传正式MySQL8.0.36/data_agent_platform=37表，平台DDL创建完成（用户现场证据）。本地原1484人私有导入SQL仅替换显式目标库，单INSERT、1484元组及重复仅更新姓名公司部门验证通过，桌面交付03，SHA256=486541121058fc317b403269d37b6e9e0911d78ac7776db5d0d8fe8a40ab7923。没有向正式库代执行、没有把人员文件放Git，人员导入及管理员赋权仍待现场结果。
+
+2026-11-02：按用户要求把正式库1484人SQL拆成10份独立INSERT（4×149+6×148，每份约52–54KB），位于桌面初始化目录/03-用户分批导入-10次，另有说明与SHA清单。原逐行表达式拼接等同、1484个唯一username、目标库及ON DUPLICATE资料更新语义不变，源文件未改，真实人员文件只在桌面，不进Git；未执行数据库。
+
+2026-11-02：用户回传total_users=1484；查询两拟任管理员仅wangchao_yy1/王超/user，liyufanwx缺失。桌面04准备补建本人及两账号管理员SQL，目标库显式限定，UPSERT/UPDATE仅追加缺少的admin，不改已有ID/密码/资料；新账号随机口令不保留明文，用Spring Security7.0.4 BCrypt本地生成且自验证。首次生成随机口令超过BCrypt72字节限制失败未产物，改32随机字节后通过；仅在忽略target保留生成辅助和哈希。正式SQL仍待用户执行，不假称角色已更新，未连接生产、未提交Git。
+
+2026-11-02：用户截图确认liyufanwx/李雨繁、wangchao_yy1/王超均user,admin，正式库人员及管理员初始化完成。下一步只读检查66应用容器到正式MySQL端口；未据BI编辑器连接成功推定容器网络/正式账号认证通过。尚未切库、重启、创建同步任务或迁移模型配置。
+
+
+## 2026-11-03 Asia/Shanghai｜正式切库与BI同步本地准备完成
+
+用户授权离线准备并确认模型重配/字段口径。新增spec109/ADR0125、formal-app外置候选/健康后切换/失败恢复/环境回退，控制器JDBC预检兼容旧模式，私有交互配置、7表+控制表只读源幂等同步/逐日水位/故障续跑/verify/status、cron显式门禁和文档；fetch默认1800秒。Linux准备/故障模拟12项、真实5.7.44→8.4.5数据库6项、Compose实际值3组、源码更新防护10项通过；当前7表46字段中文DDL再实跑通过。测试观察事务1412和dotenv末尾反斜杠问题已纠正重跑。专属测试库核标签后停止、保留数据，未连接生产或改用户资源。桌面指引及最终门禁另记；未提交推送或部署，既有示例WIP保留。
+
+本地准备最终检查点：目录/密码输入及正式base路径硬化后，Linux准备12项、真实Compose1项3组、DocsConsistencyTest5项再次通过，无跳过；rehearsal-app/update-source/bi-sync的bash语法及diff检查通过。桌面DataAgent-66正式库切换与BI同步操作.md与仓库主指引逐字节一致；分支检查采用兼容66旧Git的rev-parse。当前liyufan_dev@19fcdbde不变、暂存为空；没有提交push/merge、生产连接或任务安装。主机Python3.9+、正式8.0.36候选/JPA/BI模型重配及真实问答仍需下次登录现场确认，不能用本地模拟打印认定已切换。
+
+## 2026-11-03 Asia/Shanghai｜现场日志计划及禁止源索引约束
+
+用户截图五基础表264/6067/5299/9218/4610，共25458行；纯时间日志EXPLAIN两表ALL/filesort，估算扫描7768212/803004，非实际事件计数或取数耗时。用户明确不允许新增源索引。只读核对当前sync/daily_counts/verify仍纯时间路径，记录项目+时间既有索引分段候选，尚未改同步代码；需覆盖日志中的历史/已删除项目，不能只遍历当前项目或仅切小日期。CURRENT/spec109/运行指引标明旧同步和cron待适配，桌面副本同步条件检查后更新；无源DDL、真实查询、部署或Git提交推送。下一步先用小基础表选代表项目，再核对项目+时间及项目枚举的执行计划。文档门禁结果见本轮工具输出。
+
+## 2026-11-03 Asia/Shanghai｜39列基础投影与项目索引分段已实现
+
+用户回传833项目范围及日志项目枚举计划均走既有索引，随后确认不筛选日志类型/只存四列、人员排除密码电话邮箱，并确认39列清单继续。沿用spec109并补ADR0126细化进度/口径：日志项目索引枚举含历史/空项目，项目+时间流式读和源计数，日写入/计数账本/项目进度原子提交，目标核对后推进表水位。人员18列显式投影不SELECT *扩权，目标只称操作记录数，按对象当前项目归属；旧任务归属/结构拒绝、不自动清理。真实隔离5.7.44→8.4.5的12项通过，无跳过，标签af0f057a5e，核标签后停止并保留数据。字段参考SQL、业务口径、架构、指引及共享记录更新，最终门禁/桌面副本另记。保留全部既有WIP，分支liyufan_dev不变，没有提交推送、66连接、生产DDL/同步或安装cron。
+
+本轮收尾：追加项目分段进度打印后Linux准备测试12项通过(隔离/故障模拟，无真实切换或任务安装)，DocsConsistencyTest5项及diff检查通过。桌面主指引核对仅本轮4段变化后同步，逐字节一致。字段/数据/失败重跑的12项真实数据库验证见20261103-bi-basic-project-sync报告；当前39列不同于前次46列，相关旧记录只作为历史。无本轮提交推送或生产操作，待用户要求发布及66现场实际验收。
+
+## 2026-11-03 Asia/Shanghai｜BI同步只读状态与退役机制
+
+用户同意轻量管理员页面及预留停用，不引入Web作业系统。spec110/ADR0127先记录后实现：固定GET鉴权/no-store/boundedElastic，目标控制表白名单安全投影、日期与运行锁判断；任务last_run、源故障可读状态、独立目标观察连接协作暂停/回滚/续跑；cron安装器精确remove保留其他任务。更多入口、状态卡片/刷新重试/窄屏、生命周期说明和服务器H阶段文档同步。保留既有合成示例/正式切库WIP，liyufan_dev@19fcdbde不变，无提交推送或真实源/正式库/66连接。
+
+真实隔离5.7.44→8.4.5数据库15项、无网络Linux准备14项、相关Java7项与DocsConsistency5项通过。前端最终70项×3base、TypeScript及生产build通过，产物index-CaaiVgvw/index-DSzTn00t/ontology-DKONHXbQ。Playwright19146独立模拟接口验实际组件成功/失败/暂停/重试及1440桌面/390窄屏，截图已视觉核对，未访问用户知识库或业务API。SSR模块解析、模拟reset缺失/内层裁剪、一次错误按钮ref、文档索引及局部Spotless问题均修正，不用强制点击或全库格式化。专属数据库容器a0fc63c1a2核标签停止、数据保留。报告20261103-bi-sync-status-and-retirement；桌面副本和最终门禁随后核对，不把模拟输出记为已部署或装cron。
+
+最终收尾：限定四个新增Java文件的Spotless及相关Java7项/DocsConsistency5项再次通过；前端最终70×3base和构建通过。git diff --check通过，暂存仍为空，HEAD/分支未变。桌面DataAgent-66正式库切换与BI同步操作.md在校验旧副本未被另改后更新，与仓库逐字节一致，SHA256=cca61cfc56b9163b27703d9533137cc9db3fc6750c311931e1afc27645dda077。本轮Playwright命名浏览器bi-sync-ui和19146独立模拟Vite已关闭，截图保留；两数据库测试容器a0fc63c1a2均Exited，其他用户服务/资源未操作。未做真实模型、问答或服务器验收。
+
+## 2026-11-03 Asia/Shanghai｜知识库卡片悬停微动效
+用户明确要求复制首页问题卡片的上浮/浅灰悬停，其余不变。仅DatasetsPage.css新增网格正常卡片transform -1px、背景#f7f7f7、6px/20px阴影和共享150ms过渡；列表视图/骨架/删除态不增加新效果，prefers-reduced-motion关闭位移与过渡。不写spec/ADR，不改JS/权限/API。TypeScript及生产build通过，产物index-DQknCHdd/index-CMIhV0_A/ontology-lJ9MFYhC，已有大包警告不扩展处理。19148本地隔离HTML引用实际CSS，Playwright真实hover证实matrix y=-1、背景247、阴影0.07，移开恢复none、列表none/白底；减少动效为true时none/0s。截图output/playwright/knowledge-card-hover.png已视觉核对。CLI不支持file协议，改用常规127.0.0.1 HTTP预览，无业务接口请求。未添加镜像实现的测试文件，不跑无关Java/LLM或真实知识库操作；原WIP保留，暂存为空，无提交推送部署。
+
+卡片收尾修正：第一次减少动效实测发现:hover选择器权重高于媒体覆盖，已改为相同精度覆盖transform并禁用transition；再次实际hover证实reduce=true、transform=none、transition=0s。用户新要求无业务说明就留白，因此DatasetsPage.tsx去除管理员“添加业务说明”和只读“暂无说明”占位，保留原描述min-height/实际说明/菜单编辑，删除仅此入口使用的CSS。最终构建通过，未跑无关后端或新增镜像实现测试。独立knowledge-hover浏览器及19148 HTTP服务已停止，用户服务未动，HEAD/分支和既有WIP保留，无提交push。
+
+## 2026-11-03 Asia/Shanghai｜用户授权整批本地提交
+
+整理起点liyufan_dev@19fcdbde，暂存原为空，用户要求当前修改整理后提交，不授权本轮push/merge/部署。纳入虚构示例/生成参考材料、正式外置两库与BI七表同步/状态/暂停、卡片微调和对应文档测试静态包；浏览器快照/output及重复ZIP忽略但保留原文件，三张状态图复制到报告assets。模块新增Excel binary与校验控制交付包-text属性；首次发现15项文本会被Git规范化导致SHA变化，修正后实际暂存部署2项和交付29项全部SHA一致。
+
+本次完整Spotless及Java1048项通过，0失败0错误33条件跳过；Maven package -DskipTests、前端70项×3base和最终build通过；最后DocsConsistency5项、diff检查通过。15项真实BI数据库、14项Linux及新示例专属库实证沿用此前报告，不重复启用真实LLM/生产连接。105个候选文本的密钥/令牌/URL扫描无命中，凭据相关行逐项核对均为变量/环境/请求读取，暂存无私有配置/临时路径。详见20261103-local-batch-precommit。正在按此范围创建一次本地提交，是否成功及提交哈希以Git回读为准，未执行push、主线合并或66操作。
+
+暂存收尾：普通工作区diff未检查到新文件的EOF问题，cached检查识别一处新组件多余空行，已移除；校验控制交付包的CRLF按原始字节归档，属性显式识别CRLF并保留原EOF，同时仍检查行尾空格和缩进空格，不修改已验证包内容或SHA。再次cached检查通过后执行本地commit；未降低业务测试或权限门禁。
+
+
+## 2026-11-03 Asia/Shanghai｜个人演示与BI批次合入主线
+
+用户确认已push个人并授权合入develop-2.0。fetch确认origin/liyufan_dev=8b98f31c、origin/develop-2.0=17c0029a、origin/wangchao_dev=a85ccec6；同事已是主线祖先。工作区/暂存起初均干净，切主线后--no-ff合并个人；只有CURRENT_TASK和SESSION_LOG两份交接文档冲突，主线相对共同基线只有旧整合记录，业务无冲突。保留主线旧入口归档及两边SESSION追加历史，更新当前主线发布状态，不改个人业务树。源码/测试/静态包/示例应与个人8b98f31c一致；仅文档检查和差异/校验门禁，沿用刚通过的1048项/33条件跳过、前端70×3base/构建及数据库专项证据，不重复真实LLM或数据库测试。最终验证及merge提交以工具/Git回读为准。没有push、生产连接或资源清理。
+
+整合收尾：DocsConsistencyTest5项通过；业务/测试/示例/静态树与个人8b98f31c一致，仅CURRENT_TASK/SESSION_LOG/主线旧入口归档三份共享记录不同。两部署素材与29项交付包工作区SHA256、静态引用完整性、cached diff检查通过。保留主线17c0029a及个人8b98f31c两条父历史，创建本地merge提交；主线远端仍待用户push，未操作66。
 ## 2026-11-01 Asia/Shanghai｜spec107与ADR0123草稿
 用户要求基于develop-2.0拉feature分支并先写ADR和spec。已建feature/semantic-asset-modeling（d0d3be67），写ADR0128、spec107并更新索引与共享记忆，未改业务代码、未提交。待用户确认后实施。
 

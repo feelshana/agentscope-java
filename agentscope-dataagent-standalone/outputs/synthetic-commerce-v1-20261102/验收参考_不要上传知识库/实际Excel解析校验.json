@@ -1,0 +1,70 @@
+{
+  "parser" : "Actual project ExcelParser using Apache POI and TypeInferrer, no application server/database",
+  "passed" : true,
+  "orderRows" : 48000,
+  "customerRows" : 2000,
+  "joinKey" : "customer_id",
+  "orderTimeType" : "DATETIME",
+  "orderColumns" : [ {
+    "name" : "order_id",
+    "type" : "VARCHAR(1024)"
+  }, {
+    "name" : "customer_id",
+    "type" : "VARCHAR(1024)"
+  }, {
+    "name" : "order_time",
+    "type" : "DATETIME"
+  }, {
+    "name" : "product_id",
+    "type" : "VARCHAR(1024)"
+  }, {
+    "name" : "product_name",
+    "type" : "VARCHAR(1024)"
+  }, {
+    "name" : "category",
+    "type" : "VARCHAR(1024)"
+  }, {
+    "name" : "sales_channel",
+    "type" : "VARCHAR(1024)"
+  }, {
+    "name" : "campaign",
+    "type" : "VARCHAR(1024)"
+  }, {
+    "name" : "order_status",
+    "type" : "VARCHAR(1024)"
+  }, {
+    "name" : "quantity",
+    "type" : "BIGINT"
+  }, {
+    "name" : "unit_price",
+    "type" : "BIGINT"
+  }, {
+    "name" : "gross_amount",
+    "type" : "BIGINT"
+  }, {
+    "name" : "discount_amount",
+    "type" : "DECIMAL(18,6)"
+  }, {
+    "name" : "paid_amount",
+    "type" : "DECIMAL(18,6)"
+  }, {
+    "name" : "refund_amount",
+    "type" : "DECIMAL(18,6)"
+  }, {
+    "name" : "retained_cost",
+    "type" : "BIGINT"
+  }, {
+    "name" : "net_revenue",
+    "type" : "DECIMAL(18,6)"
+  }, {
+    "name" : "gross_profit",
+    "type" : "DECIMAL(18,6)"
+  }, {
+    "name" : "refunded_quantity",
+    "type" : "BIGINT"
+  } ],
+  "netRevenueCents" : 964081045,
+  "grossProfitCents" : 409928845,
+  "orphans" : 0,
+  "days" : 184
+}

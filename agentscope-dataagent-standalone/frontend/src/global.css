@@ -11,21 +11,21 @@
   /* Main canvas (home landing, conversation thread, knowledge-base pages): same brightness as the menu-bar surface. */
   --da-canvas-bg: var(--da-surface);
   --da-surface: #ffffff;
-  --da-sidebar-bg: #f7f8fa;
+  --da-sidebar-bg: #f6f7fa;
   --da-surface-sunken: #f2f3f6;
-  --da-border: #e9eaf0;
+  --da-border: #e5e7ef;
   --da-border-strong: #dddfe7;
-  --da-text: #292c38;
+  --da-text: #303442;
   --da-text-2: #4f5563;
-  --da-text-3: #646978;
+  --da-text-3: #667085;
   /* Weakest text colour; keep at least 4.4:1 on white. */
   --da-text-muted: #737887;
-  --da-primary: #5b3df5;
-  --da-primary-hover: #4526d6;
-  --da-primary-subtle: rgba(91, 61, 245, 0.12);
-  --da-primary-soft: #ece8ff;
-  --da-primary-line: #c8bdfc;
-  --da-secondary: #4526d6;
+  --da-primary: #6654ce;
+  --da-primary-hover: #5542b7;
+  --da-primary-subtle: #f3f0fc;
+  --da-primary-soft: #eeebfa;
+  --da-primary-line: #d5cdee;
+  --da-secondary: #5542b7;
   --da-accent: #b45309;
   --da-accent-subtle: rgba(180, 83, 9, 0.12);
   --da-success: #15803d;
@@ -62,7 +62,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 ::selection {
-  background: rgba(91, 61, 245, 0.18);
+  background: var(--da-primary-soft);
 }
 
 *::-webkit-scrollbar {

@@ -3,19 +3,17 @@
 
 import argparse
 import hashlib
-import subprocess
 import sys
 from pathlib import Path
 
 
 MODULE_DIR = Path(__file__).resolve().parents[2]
-SOURCE_REVISION = "011d06b97fb6ebcbfd42f87213864f65e4779259"
-SOURCE_DIR = "agentscope-dataagent-standalone/deploy/demo-samples"
-FILES = ("报表访问明细.xlsx", "用户列表.xlsx")
+SOURCE_DIR = Path(__file__).with_name("synthetic-v1")
+FILES = ("演示订单.xlsx", "演示客户.xlsx")
 
 
 def restore(directory):
-    manifest = Path(__file__).with_name("SHA256SUMS").read_bytes()
+    manifest = (SOURCE_DIR / "SHA256SUMS").read_bytes()
     expected = dict(
         (name, digest)
         for digest, name in (
@@ -27,25 +25,17 @@ def restore(directory):
     if set(expected) != set(FILES):
         raise ValueError("示例校验清单与指定的两份文件不一致")
 
-    # Validate every existing and historical file before writing anything.
+    # Validate every existing and bundled synthetic file before writing anything.
     pending = {}
     for name in FILES:
         target = directory / name
         if target.exists():
             data = target.read_bytes()
         else:
-            result = subprocess.run(
-                ["git", "show", f"{SOURCE_REVISION}:{SOURCE_DIR}/{name}"],
-                cwd=MODULE_DIR,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
-            if result.returncode:
-                raise RuntimeError(
-                    "本地缺少示例文件的历史提交，请先获取完整主线历史，"
-                    "或将原始文件手工复制到目标目录后重试"
-                )
-            data = result.stdout
+            source = SOURCE_DIR / name
+            if not source.is_file():
+                raise RuntimeError("缺少通用示例文件，请同步包含synthetic-v1的项目代码")
+            data = source.read_bytes()
             pending[target] = data
         if hashlib.sha256(data).hexdigest() != expected[name]:
             raise ValueError(f"{name} 校验不一致，保留现有文件，未覆盖或恢复其他文件")
