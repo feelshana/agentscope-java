@@ -61,7 +61,7 @@ public class MdlQuestionStore {
             String confirmedBy,
             String confirmedAt,
             Evidence evidence,
-            // spec108: what the confirmed SQL depended on, and where the confirmation came from.
+            // spec112: what the confirmed SQL depended on, and where the confirmation came from.
             Map<String, String> dependencies,
             String origin) {
         Receipt(
@@ -98,7 +98,7 @@ public class MdlQuestionStore {
 
     static final int MAX_FINDINGS = 5;
 
-    /** spec108: a confirmation that came from a semantic asset's question verification. */
+    /** spec112: a confirmation that came from a semantic asset's question verification. */
     public static final String ORIGIN_ASSET_VERIFY = "asset-verify";
 
     public record Evidence(String sql, List<MdlWorkspaceReader.WorkspaceView> views) {}
@@ -110,9 +110,9 @@ public class MdlQuestionStore {
             Coverage coverage,
             Publication published,
             String revision,
-            // spec108: why a confirmed question needs review (status REVIEW); empty otherwise.
+            // spec112: why a confirmed question needs review (status REVIEW); empty otherwise.
             List<String> reviewReasons,
-            // spec110 §8: the assistant's per-question analysis; kept out of Question so that
+            // spec114 §8: the assistant's per-question analysis; kept out of Question so that
             // re-analysing never invalidates a confirmation.
             List<Finding> analysis) {
         public Review(
@@ -271,12 +271,12 @@ public class MdlQuestionStore {
             if (receipt != null && !matchesQuestionHash(question, receipt.questionHash())) {
                 status = "STALE";
             } else if ("CONFIRMED".equals(status)) {
-                // spec108: a confirmation also binds to what its SQL depends on; when that
+                // spec112: a confirmation also binds to what its SQL depends on; when that
                 // changed in the draft, the question needs review before it is an example again.
                 if (draft == null) draft = QuestionDependencies.read(root);
                 Map<String, String> before = receipt.dependencies();
                 if (before == null) {
-                    // Confirmed before spec108: the published version is the baseline.
+                    // Confirmed before spec112: the published version is the baseline.
                     if (published == null)
                         published =
                                 QuestionDependencies.read(root.getParent().resolve("published"));
@@ -645,7 +645,7 @@ public class MdlQuestionStore {
     }
 
     /**
-     * spec108: writes a question verified against a semantic asset, ready to be confirmed. A
+     * spec112: writes a question verified against a semantic asset, ready to be confirmed. A
      * question with the same text is updated in place instead of duplicated; returns its id.
      */
     public String saveVerifiedQuestion(
@@ -770,7 +770,7 @@ public class MdlQuestionStore {
 
     /**
      * A question's pair is shipped only while the question is confirmed: a changed SQL (STALE) or
-     * a changed dependency (REVIEW, spec108) keeps the old pair out of the snapshot. Pairs that
+     * a changed dependency (REVIEW, spec112) keeps the old pair out of the snapshot. Pairs that
      * belong to no question (standalone SQL examples) are left alone. Returns the questions held
      * back for review.
      */

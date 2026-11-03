@@ -69,7 +69,7 @@ public final class WrenProjectAccess {
             String name,
             Path root,
             boolean assetTurn,
-            // spec110 §8: the coach reads existing query templates to judge reuse, never writes.
+            // spec114 §8: the coach reads existing query templates to judge reuse, never writes.
             boolean coachTurn) {
         public Project(String ownerId, String groupId, String name, Path root) {
             this(ownerId, groupId, name, root, false, false);
@@ -149,7 +149,7 @@ public final class WrenProjectAccess {
     public Path path(Project project, String path, boolean write) {
         String relative = relative(path);
         String first = relative.split("/", 2)[0].toLowerCase(Locale.ROOT);
-        // ADR0123: only the turn a data developer started for assets opens views/.
+        // ADR0128: only the turn a data developer started for assets opens views/.
         boolean openView =
                 first.equals("views") && (project.assetTurn() || (project.coachTurn() && !write));
         if (CLOSED_ROOTS.contains(first) && !openView) {
@@ -181,7 +181,7 @@ public final class WrenProjectAccess {
                                 + " ref_sql.sql，不要创建副本或临时文件；请直接在原文件上用 edit_file 修正。",
                         403);
             }
-            // spec109: a ref_sql model is a semantic asset, drafted only in a declared asset turn.
+            // spec113: a ref_sql model is a semantic asset, drafted only in a declared asset turn.
             if (!project.assetTurn()
                     && relative.toLowerCase(Locale.ROOT).matches("models/[^/]+/ref_sql\\.sql")) {
                 throw new DatasetException(

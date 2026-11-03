@@ -195,22 +195,22 @@ class DataAgentConfigTest {
                 .contains("建设语义资产", "cubes/ 仍不读不写", "物理全限定名", "不声明资产已核查", "资产定义不写固定的日期范围")
                 // Users never name the asset kind; every asset gets an official default-use rule.
                 .contains("不会说出资产类型", "称为\"加工表\"", "## Default filters", "## Canonical tables")
-                // ADR0126: filters are rules, ref_sql is not a default, templates keep filter
+                // ADR0131: filters are rules, ref_sql is not a default, templates keep filter
                 // columns.
                 .contains("不再作为默认选项", "这类需求写成规则即可", "IFNULL")
-                // spec108: a new default-use rule contradicting an existing one is asked first.
+                // spec112: a new default-use rule contradicting an existing one is asked first.
                 .contains("说法相反", "未经选择不要写入两条相反的规则");
-        // spec109: outside asset turns the assistant proposes, and filters go to Default filters.
+        // spec113: outside asset turns the assistant proposes, and filters go to Default filters.
         assertThat(DataAgentConfig.MODELING_SCRIPT)
                 .contains("propose_modeling_change", "\"## Default filters\"小节下，不自建小节", "问数优化")
                 .doesNotContain("发现的需求只在最终说明中记为提案");
-        // spec110: the coach only analyses and proposes; asset turns never touch the database.
+        // spec114: the coach only analyses and proposes; asset turns never touch the database.
         assertThat(ModelingTurnRules.forPurpose("coach"))
                 .contains("问数优化", "只分析和提议", "propose_modeling_change", "question_ids", "dry-plan")
                 .contains(
                         "raw/docs/", "先定口径再写 SQL", "注明出处", "同一口径不再用 propose_modeling_change 重复提议规则")
                 .doesNotContain("dry-run 检查")
-                // spec110 §8 / ADR0128: aggregation is written in SQL; the coach never proposes
+                // spec114 §8 / ADR0133: aggregation is written in SQL; the coach never proposes
                 // views.
                 .contains("不算缺口；本轮不提议 view", "analysis 列表", "只写本轮已用确认卡提问或已提议的缺口")
                 .doesNotContain("只有聚合、窗口函数、多步计算才用 view");

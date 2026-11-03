@@ -73,7 +73,7 @@ class MdlQuestionStoreTest {
                 truncated);
     }
 
-    /** spec110 §8: the coach's analysis is shown as-is and never invalidates a confirmation. */
+    /** spec114 §8: the coach's analysis is shown as-is and never invalidates a confirmation. */
     @Test
     void analysisIsReadLenientlyAndKeptOutOfTheConfirmation() throws Exception {
         store.decide("g1", "sales", true, "alice");
@@ -339,7 +339,7 @@ class MdlQuestionStoreTest {
         }
     }
 
-    /** spec108 revises spec091: a change to a model the SQL reads now asks for a review. */
+    /** spec112 revises spec091: a change to a model the SQL reads now asks for a review. */
     @Test
     void changeToAModelTheSqlReadsNeedsReviewAndLeavesThePublishDryPlan() throws Exception {
         store.decide("g1", "sales", true, "alice");
@@ -567,7 +567,7 @@ class MdlQuestionStoreTest {
     }
 
     /**
-     * spec108 / 2026-11-03: a question confirmed on the raw table kept being "confirmed" after a
+     * spec112 / 2026-11-03: a question confirmed on the raw table kept being "confirmed" after a
      * derived table and a rule preferring it were added; it now needs review, with reasons.
      */
     @Test

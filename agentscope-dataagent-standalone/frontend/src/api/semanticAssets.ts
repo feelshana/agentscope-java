@@ -33,7 +33,7 @@ export interface AssetDetail {
   needsTimeColumn: boolean;
   fixedDates: string[];
   outputColumns: { name: string; type: string }[];
-  /** spec110: risks the reviewer must see before passing the asset. */
+  /** spec114: risks the reviewer must see before passing the asset. */
   warnings: string[];
 }
 
@@ -56,7 +56,7 @@ export interface AssetCheck {
   draft: AssetTable | null;
   published: AssetTable | null;
   error: string | null;
-  /** spec110: the SQL as Wren would expand it on the draft; verification never executes. */
+  /** spec114: the SQL as Wren would expand it on the draft; verification never executes. */
   expanded: string | null;
 }
 
@@ -90,15 +90,15 @@ export const generateAssetSql = (groupId: string, asset: SemanticAsset, question
   request<{ sql: string }>(groupId, `${path(asset)}/generate`, 'POST', { question });
 export const verifyAsset = (groupId: string, asset: SemanticAsset, cases: VerifyCase[]) =>
   request<AssetCheck[]>(groupId, `${path(asset)}/verify`, 'POST', { cases });
-/** {@code save}: cases judged as expected to keep as confirmed questions (spec108). */
+/** {@code save}: cases judged as expected to keep as confirmed questions (spec112). */
 export const judgeAsset = (groupId: string, asset: SemanticAsset, verdicts: Record<string, Verdict>, save: VerifyCase[] = []) =>
   request<AssetDetail>(groupId, `${path(asset)}/verdict`, 'POST', { verdicts, save });
 
-/** spec109: a query template the assistant proposed in the modeling conversation. */
+/** spec113: a query template the assistant proposed in the modeling conversation. */
 export interface AssetProposal {
   id: string; kind: string; name: string; need: string; outline: string; reason: string;
   status: 'PENDING' | 'DRAFTED' | 'DISMISSED'; createdAt: string; decidedBy: string | null; decidedAt: string | null;
-  /** spec110: coach questions the proposal answers; explicit marks a template the user asked for. */
+  /** spec114: coach questions the proposal answers; explicit marks a template the user asked for. */
   questionIds: string[] | null; explicit: boolean | null;
 }
 export const listAssetProposals = (groupId: string) => request<AssetProposal[]>(groupId, '/proposals');

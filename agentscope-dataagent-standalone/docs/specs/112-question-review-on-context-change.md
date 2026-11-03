@@ -1,6 +1,6 @@
-# spec108：口径变更后问答复核，资产验证通过的问题存为问答
+# spec112：口径变更后问答复核，资产验证通过的问题存为问答
 
-> 状态：已实施（2026-11-03），验收见 [报告](../test-reports/20261103-spec108-acceptance.md)；验收 11 未实测。决策见 [ADR0125](../adr/0125-question-review-on-context-change-and-asset-verified-questions.md)。
+> 状态：已实施（2026-11-03），验收见 [报告](../test-reports/20261103-spec112-acceptance.md)；验收 11 未实测。决策见 [ADR0130](../adr/0130-question-review-on-context-change-and-asset-verified-questions.md)。
 
 ## 背景与目标
 
@@ -84,7 +84,7 @@
 - 文档：
   - ARCHITECTURE_zh.md 第 3.3 节（语义资产）、第 14.2 节（问答确认与发布）；
   - AGENTS.md 第 6 节"问答"一行：增加资产验证来源与待复核；
-  - spec107 关联本 spec；ADR 与 spec 索引。
+  - spec111 关联本 spec；ADR 与 spec 索引。
 
 ## 验收标准（Given-When-Then）
 
@@ -123,5 +123,5 @@
 
 ## 关联
 
-- ADR：[ADR0125](../adr/0125-question-review-on-context-change-and-asset-verified-questions.md)；相关 [ADR0109](../adr/0109-user-confirmed-questions-replace-generated-qa-pairs.md)、[ADR0123](../adr/0123-conversational-semantic-assets.md)、[ADR0124](../adr/0124-asset-kind-by-purpose-with-default-use-rule.md)
-- spec：[spec091](091-modeling-interaction-flow.md)（确认绑定方式）、[spec107](107-conversational-semantic-assets.md)（资产验证）
+- ADR：[ADR0130](../adr/0130-question-review-on-context-change-and-asset-verified-questions.md)；相关 [ADR0109](../adr/0109-user-confirmed-questions-replace-generated-qa-pairs.md)、[ADR0128](../adr/0128-conversational-semantic-assets.md)、[ADR0129](../adr/0129-asset-kind-by-purpose-with-default-use-rule.md)
+- spec：[spec091](091-modeling-interaction-flow.md)（确认绑定方式）、[spec111](111-conversational-semantic-assets.md)（资产验证）

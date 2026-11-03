@@ -568,7 +568,7 @@ public class MdlPublishService {
     public record AssetRun(String key, String draft, String published, String error) {}
 
     /**
-     * Runs each SQL on one scratch build of the draft and on the published snapshot (ADR0123).
+     * Runs each SQL on one scratch build of the draft and on the published snapshot (ADR0128).
      * Authorization is rechecked before every call, because each one can wait in a queue.
      */
     public List<AssetRun> verifyAssets(
@@ -826,7 +826,7 @@ public class MdlPublishService {
         // lock nested inside the publish lock — the only nesting direction.
         MdlSeeder.SeedResult seed = seeder.reconcile(groupId);
         issues.addAll(seed.issues());
-        // ADR0123: changed Views and ref_sql models need a person's review and verification.
+        // ADR0128: changed Views and ref_sql models need a person's review and verification.
         if (assetReviews != null) issues.addAll(assetReviews.publishIssues(groupId));
         // Optional questions do not gate publication; engineering validation still applies.
         if (hasErrors(issues)) {
@@ -893,7 +893,7 @@ public class MdlPublishService {
         Path preparedDir = groupRoot.resolve("published.next");
         Path preparedManifest = groupRoot.resolve("mdl.json.next");
         prepareSnapshot(projectDir, preparedDir);
-        // spec108: only confirmed questions ship as examples; those awaiting review stay out
+        // spec112: only confirmed questions ship as examples; those awaiting review stay out
         // without blocking the release.
         for (var held : questionStore.filterPublishedExamples(groupId, preparedDir))
             issues.add(
@@ -965,7 +965,7 @@ public class MdlPublishService {
     public record DraftPlan(String sql, String expanded, String error) {}
 
     /**
-     * spec110 / ADR0127: verification only reads SQL. Each SQL is planned with the official
+     * spec114 / ADR0132: verification only reads SQL. Each SQL is planned with the official
      * {@code dry-plan} on one scratch build of the draft; nothing reaches the database.
      */
     public List<DraftPlan> planDraft(String groupId, List<String> sqls) {

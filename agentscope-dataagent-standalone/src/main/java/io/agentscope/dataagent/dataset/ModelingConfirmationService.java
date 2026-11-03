@@ -37,7 +37,7 @@ public class ModelingConfirmationService {
     /** {@code rule} is the exact text the answer would establish; the first option is recommended. */
     public record Option(String label, String rule) {}
 
-    /** {@code questionIds}: the coach or trial questions the answer settles (spec110). */
+    /** {@code questionIds}: the coach or trial questions the answer settles (spec114). */
     public record Confirmation(
             String id,
             String question,
@@ -51,7 +51,7 @@ public class ModelingConfirmationService {
 
     /**
      * A decided question handed back to the assistant to write into rules or descriptions; the
-     * page regenerates the SQL of {@code questionIds} once the rule is written (spec110).
+     * page regenerates the SQL of {@code questionIds} once the rule is written (spec114).
      */
     public record Decision(String question, String answer, List<String> questionIds) {}
 
@@ -113,7 +113,7 @@ public class ModelingConfirmationService {
                                     Instant.now().toString(),
                                     linked);
                     write(groupId, created);
-                    // spec110: the meaning comes first. The assistant kept writing SQL on its own
+                    // spec114: the meaning comes first. The assistant kept writing SQL on its own
                     // guess before asking (2026-11-03, twice), so the platform withdraws it here.
                     for (String id : linked)
                         withdrawGuessedSql(workspace.workspaceRoot(groupId), id);

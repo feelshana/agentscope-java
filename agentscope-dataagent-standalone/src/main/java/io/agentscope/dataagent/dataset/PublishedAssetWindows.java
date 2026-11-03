@@ -20,7 +20,7 @@ import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;
 
 /**
- * Time-window rules for published Views and ref_sql models (ADR0123). Their SQL hides the fact
+ * Time-window rules for published Views and ref_sql models (ADR0128). Their SQL hides the fact
  * tables from the window gate, so dependencies are read from the published manifest and each
  * asset inherits the tightest window of what it reads. Time columns are platform data confirmed
  * at review and never enter the MDL; window sizes stay live in the database.

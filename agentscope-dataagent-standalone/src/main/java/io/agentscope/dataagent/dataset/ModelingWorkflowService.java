@@ -83,7 +83,7 @@ public class ModelingWorkflowService {
         // spec092: confirmations bind to the question; a model changed since confirmation only
         // suggests a re-check and never blocks publication.
         String modelHash = questions.modelHash(workspace.workspaceRoot(groupId));
-        // spec108: a confirmation whose dependencies changed (REVIEW) is affected by definition.
+        // spec112: a confirmation whose dependencies changed (REVIEW) is affected by definition.
         List<String> affected =
                 reviews.stream()
                         .filter(

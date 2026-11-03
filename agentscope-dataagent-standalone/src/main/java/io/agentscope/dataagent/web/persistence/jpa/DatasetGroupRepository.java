@@ -34,7 +34,7 @@ public interface DatasetGroupRepository extends JpaRepository<DatasetGroupEntity
 
     /**
      * A semantic draft changed: publishing is due, but the published snapshot stays valid, so the
-     * modeling revision (which stops querying) is left alone (ADR0123).
+     * modeling revision (which stops querying) is left alone (ADR0128).
      */
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Transactional

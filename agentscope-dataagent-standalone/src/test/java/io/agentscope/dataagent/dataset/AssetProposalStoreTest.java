@@ -9,7 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/** spec109: proposals are recorded, never written as assets, and decided once by the user. */
+/** spec113: proposals are recorded, never written as assets, and decided once by the user. */
 class AssetProposalStoreTest {
     @TempDir Path home;
     private AssetProposalStore store;

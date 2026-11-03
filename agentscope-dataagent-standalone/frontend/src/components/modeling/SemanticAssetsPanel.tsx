@@ -5,7 +5,7 @@ import type { AssetCheck, AssetDetail, AssetExample, AssetStatus, SemanticAsset,
 import { getModelingQuestions } from '../../api/modelingQuestions';
 import type { QuestionReview } from '../../api/modelingQuestions';
 
-/** Business names for the two kinds; the technical terms stay out of the page (spec107). */
+/** Business names for the two kinds; the technical terms stay out of the page (spec111). */
 const KIND_LABEL = { view: '查询模板', ref_sql: '加工表' } as const;
 const STATUS: Record<AssetStatus, { label: string; tone: string }> = {
   PUBLISHED: { label: '已发布', tone: 'sm-tag-plain' },
@@ -15,10 +15,10 @@ const STATUS: Record<AssetStatus, { label: string; tone: string }> = {
 };
 const message = (e: unknown) => e instanceof Error ? e.message : String(e);
 const isTimeColumn = (c: { name: string; type: string }) => /date|time/i.test(c.type) || /date|time|日期|时间/i.test(c.name);
-/** Sent as a declared asset turn: only this purpose opens views/ for the assistant (ADR0123). */
+/** Sent as a declared asset turn: only this purpose opens views/ for the assistant (ADR0128). */
 const assetRequest = (need: string) => `请建设语义资产。需求或已有 SQL 如下：\n${need}`;
 
-/** spec107: reviews and verifies Views and ref_sql models the assistant or a developer drafted. */
+/** spec111: reviews and verifies Views and ref_sql models the assistant or a developer drafted. */
 export default function SemanticAssetsPanel({ groupId, assistantIdle, onDraft }: {
   groupId: string;
   assistantIdle: boolean;
@@ -37,7 +37,7 @@ export default function SemanticAssetsPanel({ groupId, assistantIdle, onDraft }:
   const [cases, setCases] = useState<VerifyCase[]>([]);
   const [checks, setChecks] = useState<AssetCheck[]>([]);
   const [verdicts, setVerdicts] = useState<Record<string, Verdict>>({});
-  // spec108: expected cases are saved as questions unless the user unticks them.
+  // spec112: expected cases are saved as questions unless the user unticks them.
   const [skipSave, setSkipSave] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
@@ -104,7 +104,7 @@ export default function SemanticAssetsPanel({ groupId, assistantIdle, onDraft }:
         <li><b>4</b><div><strong>用原来的问题核对</strong><span>这些问题改用公共视图后重新写 SQL，新旧对照确认后再发布</span></div></li>
       </ol>
       <div className="da-small">自动整理功能正在建设中。在此之前，规则、关系、字段含义照常在"建模对话"和"问数优化"里补充；确实需要建视图时，在建模对话里直接说"建一个视图……"，也可以用下面的快捷入口。</div>
-      {/* spec109: every need can be said in the modeling chat; this page drafts on request and reviews. */}
+      {/* spec113: every need can be said in the modeling chat; this page drafts on request and reviews. */}
       <details className="sa-where da-small">
         <summary>现在就要建一个视图</summary>
         <table className="da-table">
@@ -145,7 +145,7 @@ export default function SemanticAssetsPanel({ groupId, assistantIdle, onDraft }:
           <div className="da-card sa-section">
             <h3>{asset.name} <span className={`sm-tag ${STATUS[asset.status].tone}`}>{STATUS[asset.status].label}</span>
               <button type="button" className="da-btn da-btn-sm sa-delete" disabled={!!busy} onClick={() => void run('delete', async () => {
-                // spec109: rule entries naming the asset go with it; questions using it need review.
+                // spec113: rule entries naming the asset go with it; questions using it need review.
                 const impact = await assetImpact(groupId, asset);
                 const lines = [
                   `确认从草稿中删除${KIND_LABEL[asset.kind]}「${asset.name}」？发布后才在线上生效。`,
@@ -225,7 +225,7 @@ export default function SemanticAssetsPanel({ groupId, assistantIdle, onDraft }:
               {checks.map(check => <div key={check.key} className="sa-check">
                 <strong>{check.label}</strong>
                 {check.error ? <div role="alert" className="sm-issue">{check.error}</div> : <>
-                  {/* spec110: nothing runs; the reviewer reads the SQL as Wren would expand it. */}
+                  {/* spec114: nothing runs; the reviewer reads the SQL as Wren would expand it. */}
                   {check.expanded && <ReadableCode text={check.expanded} language="sql" title="展开后的 SQL（Wren 实际发给数据库的语句，未执行）" />}
                   <div className="sa-verdict" role="radiogroup" aria-label={`判定：${check.label}`}>
                     {(['EXPECTED', 'PROBLEM'] as Verdict[]).map(v => <label key={v}><input type="radio" name={check.key} checked={verdicts[check.key] === v}

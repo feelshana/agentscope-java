@@ -16,7 +16,7 @@ import java.util.Map;
 import org.springframework.stereotype.Component;
 
 /**
- * Human review of Views and ref_sql models (ADR0123). Records live in the workspace's
+ * Human review of Views and ref_sql models (ADR0128). Records live in the workspace's
  * {@code .platform/}, which is never published or shown to the agent, so only the page can write
  * them. A record binds to the asset's content hash: editing an asset silently voids it. Callers
  * hold the workspace lock.

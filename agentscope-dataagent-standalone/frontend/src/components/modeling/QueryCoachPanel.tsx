@@ -28,7 +28,7 @@ const message = (e: unknown) => e instanceof Error ? e.message : String(e);
 
 /** The coach turn request: analyse each question, write its file, and propose what is missing. */
 export function coachRequest(questions: string[], ids: string[], documents: string[] = []): string {
-  // spec110: the documents are named outright; a prompt-only "also read raw/docs/" was skipped.
+  // spec114: the documents are named outright; a prompt-only "also read raw/docs/" was skipped.
   const docs = documents.length
     ? `本知识库有 ${documents.length} 份业务文档：${documents.map(d => `raw/docs/${d}`).join('、')}。分析前先用 read_file 逐份读取；口径在文档里写明的，按文档提议规则并注明出处，不要再提问。\n`
     : '';
@@ -49,7 +49,7 @@ function applyRequest(items: AssetProposal[]): string {
 interface QuestionState { label: string; group: Group; step: Step; conclusion: string }
 
 /**
- * spec110 §8: one status line for every question, and the conclusion derived from what the
+ * spec114 §8: one status line for every question, and the conclusion derived from what the
  * question is linked to (cards, proposals, SQL) — the assistant never writes the conclusion.
  */
 export function questionState(r: QuestionReview | undefined, cards: number, linked: AssetProposal[]): QuestionState {
@@ -67,7 +67,7 @@ export function questionState(r: QuestionReview | undefined, cards: number, link
 }
 
 /**
- * spec110 / ADR0127 "问数优化": the data developer lists frequent questions; the assistant analyses
+ * spec114 / ADR0132 "问数优化": the data developer lists frequent questions; the assistant analyses
  * gaps and proposes rules, relationships, calculated fields or (for logic reused across the batch)
  * query templates; approved items are drafted and each question's SQL is read and confirmed — nothing
  * is executed. One question at a time on the right, publishing stays in the draft bar.
@@ -78,7 +78,7 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
   /** The knowledge base has been published once; the coach builds on the basic model. */
   available: boolean;
   onRequest: (text: string, purpose?: TurnPurpose, label?: string) => boolean;
-  /** spec110: open confirmation cards; those linked to a coach question are answered here too. */
+  /** spec114: open confirmation cards; those linked to a coach question are answered here too. */
   confirmations?: Confirmation[];
   onAnswer?: (answers: ConfirmationAnswer[]) => void;
   /** Business documents live on the "资料" tab; the coach only links to it. */
@@ -192,7 +192,7 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
   const fix = async (r: QuestionReview) => {
     if (!reason.trim()) return;
     const q = r.question;
-    // spec110: explaining the meaning here answers the open card, so it must not linger.
+    // spec114: explaining the meaning here answers the open card, so it must not linger.
     const open = waitingFor(q.id);
     if (open.length) {
       try { await resolveConfirmations(groupId, open.map(c => ({ id: c.id, answer: null, dismissed: true }))); }

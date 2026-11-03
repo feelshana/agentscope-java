@@ -14,9 +14,9 @@ ADR 记录"为什么这样做"。规则：
 | 知识库共享与权限 | [0077](0077-shared-knowledge-official-wren-integration.md) | QUERY/MANAGE、操作者范围与官方 Wren 入口集成 |
 | 建模技能与模式 | [0094](0094-official-enrich-context-and-technical-modeling-confirmation.md)、[0103](0103-source-tiered-probing-and-row-based-gate-verdict.md) | 官方 enrich-context Auto-pilot；技能挂载后关闭 CLI skills 通道 |
 | 建模探查与查询 | [0104](0104-upload-probe-scope-and-sql-side-aggregation.md)、[0106](0106-modeling-query-cap-cartesian-ban-and-cli-timeout-cleanup.md) | 上传表两类有限探查；单轮 10 条 query；禁止笛卡尔积 |
-| 语义资产 | [0123](0123-conversational-semantic-assets.md)、[0124](0124-asset-kind-by-purpose-with-default-use-rule.md)、[0126](0126-single-modeling-conversation-and-official-asset-sinks.md)、[0127](0127-query-coach.md)、[0128](0128-query-optimization-proposes-no-views.md) | 初次建模只做基础；问数优化按常用问题分析缺口，只提议规则、关系、计算字段，查询模板（公共视图）只在用户明确要求时起草、日后从已确认问答提炼，用户批准后起草，对话中仅明确要求时起草；验证只核对展开后的 SQL、不执行；按官方去处选型（默认过滤只写规则，跨模型拼接用查询模板，指标用 Cube），加工表不作默认；写官方默认使用规则；人工核查和问题验证后发布；草稿不拦截问数；门禁覆盖资产 |
+| 语义资产 | [0128](0128-conversational-semantic-assets.md)、[0129](0129-asset-kind-by-purpose-with-default-use-rule.md)、[0131](0131-single-modeling-conversation-and-official-asset-sinks.md)、[0132](0132-query-coach.md)、[0133](0133-query-optimization-proposes-no-views.md) | 初次建模只做基础；问数优化按常用问题分析缺口，只提议规则、关系、计算字段，查询模板（公共视图）只在用户明确要求时起草、日后从已确认问答提炼，用户批准后起草，对话中仅明确要求时起草；验证只核对展开后的 SQL、不执行；按官方去处选型（默认过滤只写规则，跨模型拼接用查询模板，指标用 Cube），加工表不作默认；写官方默认使用规则；人工核查和问题验证后发布；草稿不拦截问数；门禁覆盖资产 |
 | 建模文件边界 | [0107](0107-basic-modeling-closes-cube-and-view-files.md)、[0108](0108-yaml-write-guard-model-file-layout-and-cli-timing.md)、[0110](0110-platform-handles-build-overwrite-and-conditional-date-rules.md) | Cube/View 不读不写；YAML 语法检查；models 目录限制；整文件替换；自动补编译 |
-| 问答对来源 | [0109](0109-user-confirmed-questions-replace-generated-qa-pairs.md)、[0125](0125-question-review-on-context-change-and-asset-verified-questions.md) | 只来自用户逐题确认、问数点赞与资产验证确认；建模不生成；依赖口径变化的问答待复核，复核前不作示例 |
+| 问答对来源 | [0109](0109-user-confirmed-questions-replace-generated-qa-pairs.md)、[0130](0130-question-review-on-context-change-and-asset-verified-questions.md) | 只来自用户逐题确认、问数点赞与资产验证确认；建模不生成；依赖口径变化的问答待复核，复核前不作示例 |
 | 建模变更治理 | [0111](0111-draft-changes-reviewed-before-publish.md) | 修改直接进入草稿，发布前统一审阅；取消逐项确认卡；无文档的自动建模不写规则；caveats 已停用（[0120](0120-retire-knowledge-caveats.md)） |
 | SQL 时间门禁 | [0097](0097-llm-per-table-sql-window.md)、[0098](0098-post-sampling-fact-window-confirmation.md)、[0099](0099-runtime-window-policy-and-verifiable-sql-gate.md)、[0103](0103-source-tiered-probing-and-row-based-gate-verdict.md)、[0112](0112-rule-first-sql-window-gate.md)、[0113](0113-mysql8-or-doris-sources-and-literal-date-ranges.md) | 数据库独立配置；逐表检查，普通写法由规则判断、其余交 LLM；日期范围要求写成常量；明细重算结论；上传表不设门禁 |
 | 问数日期与统计 | [0102](0102-query-date-clarification-and-modeling-samples.md)、[0104](0104-upload-probe-scope-and-sql-side-aggregation.md)、[0105](0105-build-state-context-and-ranking-granularity.md)、[0110](0110-platform-handles-build-overwrite-and-conditional-date-rules.md) | 仅受限表缺日期先问；统计来自 SQL；排名按主体分组 |
@@ -156,9 +156,9 @@ ADR 记录"为什么这样做"。规则：
 | [0119](0119-business-terms-in-wren-naming-conventions.md) | 业务术语存入知识库工程的官方 Naming conventions，随草稿发布 | 已接受，2026-10-29。实施 spec100。 |  |
 | [0120](0120-retire-knowledge-caveats.md) | 停用 knowledge/caveats/，推断不再写入工程 | 已接受，2026-10-29。修改 ADR0111 第 4 条推断去向。 |  |
 | [0121](0121-query-analysis-skills.md) | 问数分析技能以固定脚本执行，参数先确认再取数 | 已接受，2026-10-29。实施 spec102。 |  |
-| [0123](0123-conversational-semantic-assets.md) | 数据开发通过对话建设语义资产，核查和问题验证后才能发布 | 已接受，2026-11-01。实施 spec107。第 2 条已被 0124 取代。 |  |
-| [0124](0124-asset-kind-by-purpose-with-default-use-rule.md) | 语义资产按用途选型，并配官方默认使用规则 | 已接受，2026-11-02。调整 spec107 P1。第 1 条已被 ADR0126 取代。 | 0126 |
-| [0125](0125-question-review-on-context-change-and-asset-verified-questions.md) | 口径变更后按依赖复核问答，资产验证通过的问题可存为问答 | 已接受，2026-11-03。实施 spec108。 |  |
-| [0126](0126-single-modeling-conversation-and-official-asset-sinks.md) | 建模对话作为唯一说需求的入口，资产按官方去处选型 | 已接受，2026-11-03。实施 spec109；取代 ADR0124 第 1 条。 |  |
-| [0127](0127-query-coach.md) | 问数教练：用常用问题驱动语义建设，提议只在这里产生 | 已接受，2026-11-03。实施 spec110 一期；取代 ADR0126 第 2 条与 ADR0123 第 5 条的执行验证。第 1、4 条提议查询模板已被 ADR0128 取代。 | 0128 |
-| [0128](0128-query-optimization-proposes-no-views.md) | 问数优化不提议查询模板，公共视图改从全部已确认问答中提炼 | 已接受，2026-11-03。调整 spec110 第 8 节；取代 ADR0127 提议查询模板部分。 |  |
+| [0128](0128-conversational-semantic-assets.md) | 数据开发通过对话建设语义资产，核查和问题验证后才能发布 | 已接受，2026-11-01。实施 spec111。第 2 条已被 0129 取代。 |  |
+| [0129](0129-asset-kind-by-purpose-with-default-use-rule.md) | 语义资产按用途选型，并配官方默认使用规则 | 已接受，2026-11-02。调整 spec111 P1。第 1 条已被 ADR0131 取代。 | 0131 |
+| [0130](0130-question-review-on-context-change-and-asset-verified-questions.md) | 口径变更后按依赖复核问答，资产验证通过的问题可存为问答 | 已接受，2026-11-03。实施 spec112。 |  |
+| [0131](0131-single-modeling-conversation-and-official-asset-sinks.md) | 建模对话作为唯一说需求的入口，资产按官方去处选型 | 已接受，2026-11-03。实施 spec113；取代 ADR0129 第 1 条。 |  |
+| [0132](0132-query-coach.md) | 问数教练：用常用问题驱动语义建设，提议只在这里产生 | 已接受，2026-11-03。实施 spec114 一期；取代 ADR0131 第 2 条与 ADR0128 第 5 条的执行验证。第 1、4 条提议查询模板已被 ADR0133 取代。 | 0133 |
+| [0133](0133-query-optimization-proposes-no-views.md) | 问数优化不提议查询模板，公共视图改从全部已确认问答中提炼 | 已接受，2026-11-03。调整 spec114 第 8 节；取代 ADR0132 提议查询模板部分。 |  |

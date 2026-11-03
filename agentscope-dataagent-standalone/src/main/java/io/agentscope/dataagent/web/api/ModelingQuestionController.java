@@ -191,7 +191,7 @@ public class ModelingQuestionController {
                 });
     }
 
-    /** spec110: the question's SQL as Wren would expand it on the draft; nothing is executed. */
+    /** spec114: the question's SQL as Wren would expand it on the draft; nothing is executed. */
     @PostMapping("/{questionId}/plan")
     public Mono<io.agentscope.dataagent.dataset.MdlPublishService.DraftPlan> plan(
             @PathVariable String groupId, @PathVariable String questionId, Authentication auth) {

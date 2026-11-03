@@ -146,7 +146,7 @@ public class ModelingToolkitRegistrar {
         target.registerTool(commands);
         // spec092: the assistant asks the user only for genuinely ambiguous business choices.
         if (confirmations != null) target.registerTool(confirmations);
-        // spec109: assets are proposed in ordinary turns and drafted only after the user agrees.
+        // spec113: assets are proposed in ordinary turns and drafted only after the user agrees.
         if (proposals != null) target.registerTool(proposals);
     }
 

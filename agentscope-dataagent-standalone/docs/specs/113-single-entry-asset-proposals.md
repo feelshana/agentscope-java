@@ -1,10 +1,10 @@
-# spec109：建模对话统一说需求，资产先提议后起草，按官方去处选型
+# spec113：建模对话统一说需求，资产先提议后起草，按官方去处选型
 
-> 状态：已实施（2026-11-03），实施前实测与实施后验收见 [报告](../test-reports/20261103-spec109-pre-tests.md)；验收 10 沿用现有权限校验未单独实测。决策见 [ADR0126](../adr/0126-single-modeling-conversation-and-official-asset-sinks.md)。
+> 状态：已实施（2026-11-03），实施前实测与实施后验收见 [报告](../test-reports/20261103-spec113-pre-tests.md)；验收 10 沿用现有权限校验未单独实测。决策见 [ADR0131](../adr/0131-single-modeling-conversation-and-official-asset-sinks.md)。
 
 ## 背景与目标
 
-现在有两个地方可以说需求：建模对话和语义资产页。用户要先判断需求属于哪一类，分错了还要换地方说。同时，"排除测试账号"这类默认过滤被做成加工表（ref_sql），这与官方不一致，也带来了重复逻辑、依赖不实等问题（ADR0126 背景）。
+现在有两个地方可以说需求：建模对话和语义资产页。用户要先判断需求属于哪一类，分错了还要换地方说。同时，"排除测试账号"这类默认过滤被做成加工表（ref_sql），这与官方不一致，也带来了重复逻辑、依赖不实等问题（ADR0131 背景）。
 
 目标：
 - 用户只在建模对话里用业务语言说需求；
@@ -52,14 +52,14 @@
   - 默认过滤一律写在官方 `## Default filters` 小节下，不自建小节（实测中助手写成了"## 测试账号口径"）；
   - 查询模板用逻辑模型名，可以引用已有加工表；保留应用已有默认过滤所需的列（如用户列表的账号列），不用 `IFNULL` 等默认值掩盖空值的含义；窗口函数列在描述中写明统计范围（实测发现问数用"公司 <> '未知公司'"代替账号存在判断，误排除公司为空的账号）；
   - 加工表只在用户明确要求、且 View 无法表达时起草，并在描述中写明原因与实际读取的物理表；
-  - 默认使用规则、规则冲突时先问（spec108）保持不变。
+  - 默认使用规则、规则冲突时先问（spec112）保持不变。
 - 写入边界不变：`WrenProjectAccess` 仍只在资产轮次开放 `views/`、加工表文件。
 
 **3. 语义资产页**
 - 顶部的说明和示例改为两种资产：查询模板、指标（指标标注"即将开放"）。示例按当前模型生成（`AssetExampleService`），不再生成默认过滤类示例。
 - "什么需求在这里说"的对照表改为"所有需求都可以在建模对话里说，这里负责核查和验证"，并列出去处判断。
 - 新增"待处理提议"列表。
-- **删除资产**：查询模板与加工表都可以删除。删除前列出提到该资产的规则条目和依赖它的问答，确认后删除资产文件和对应规则条目，依赖它的问答按 spec108 进入待复核。删除只进草稿，发布后生效。
+- **删除资产**：查询模板与加工表都可以删除。删除前列出提到该资产的规则条目和依赖它的问答，确认后删除资产文件和对应规则条目，依赖它的问答按 spec112 进入待复核。删除只进草稿，发布后生效。
 
 **4. 上线前必须先做的两项实测**（结果写入验收报告，不通过时回到本 spec 调整）
 - **只写规则时，问数能否稳定加上过滤**：只用 `## Default filters`"默认排除用户列表里找不到的账号"，连续问 5 个不提过滤的问题，看是否每次都加上条件；明确要求包含时，是否去掉条件。
@@ -79,7 +79,7 @@
 - 文档：
   - ARCHITECTURE_zh.md 第 3.3 节、第 14 章；
   - AGENTS.md 第 5 节第 4 条、第 6 节"建模变更治理"；
-  - ADR0124 状态行；spec107 关联本 spec；索引。
+  - ADR0129 状态行；spec111 关联本 spec；索引。
 
 ## 验收标准（Given-When-Then）
 
@@ -88,7 +88,7 @@
 3. Given 建模对话，When 用户说"以后按公司、部门分析访问时直接用拼好的结果"，Then 助手调用 `propose_semantic_asset`，对话中出现提议卡，`views/` 下没有新文件。
 4. Given 提议卡，When 用户点"起草"，Then 发起资产轮次，起草查询模板（使用逻辑模型名）和 `## Canonical tables` 规则，语义资产页出现该资产，状态为"待核查"。
 5. Given 提议卡，When 用户点"不需要"，Then 不发消息、不写文件，语义资产页的提议标为已忽略。
-6. Given 普通建模轮次或自动建模轮次，When 助手尝试写 `views/` 或加工表文件，Then 被拒绝（ADR0123 边界不变）。
+6. Given 普通建模轮次或自动建模轮次，When 助手尝试写 `views/` 或加工表文件，Then 被拒绝（ADR0128 边界不变）。
 7. Given 语义资产页输入框，When 用户输入只是默认过滤，Then 本轮写规则并说明没有建资产；When 输入固定拼接需求，Then 直接起草查询模板。
 8. Given 已发布加工表与提到它的规则，When 用户在语义资产页删除它，Then 草稿中的资产文件与对应规则条目一起删除，依赖它的问答进入"口径变更待复核"；发布前线上不受影响。
 9. Given 查询模板使用 MySQL 函数和窗口函数，When dry-run 与问数查询，Then 都成功；不成功时记录限制，并在资产提示词中写明可用的写法。
@@ -98,8 +98,8 @@
 
 - 不迁移或自动删除已有加工表。
 - 不做建议收件箱的自动发现（从文档、重复 SQL、点踩中识别），另写 spec。
-- 不开放指标（Cube），等 spec107 P4。
-- 不允许助手在任意轮次直接写资产；不改 ADR0123 的写入边界。
+- 不开放指标（Cube），等 spec111 P4。
+- 不允许助手在任意轮次直接写资产；不改 ADR0128 的写入边界。
 - 不改基础建模的自动流程和官方技能文件。
 
 ## 测试要求
@@ -116,5 +116,5 @@
 
 ## 关联
 
-- ADR：[ADR0126](../adr/0126-single-modeling-conversation-and-official-asset-sinks.md)；相关 [ADR0123](../adr/0123-conversational-semantic-assets.md)、[ADR0124](../adr/0124-asset-kind-by-purpose-with-default-use-rule.md)、[ADR0125](../adr/0125-question-review-on-context-change-and-asset-verified-questions.md)
-- spec：[spec107](107-conversational-semantic-assets.md)、[spec108](108-question-review-on-context-change.md)
+- ADR：[ADR0131](../adr/0131-single-modeling-conversation-and-official-asset-sinks.md)；相关 [ADR0128](../adr/0128-conversational-semantic-assets.md)、[ADR0129](../adr/0129-asset-kind-by-purpose-with-default-use-rule.md)、[ADR0130](../adr/0130-question-review-on-context-change-and-asset-verified-questions.md)
+- spec：[spec111](111-conversational-semantic-assets.md)、[spec112](112-question-review-on-context-change.md)

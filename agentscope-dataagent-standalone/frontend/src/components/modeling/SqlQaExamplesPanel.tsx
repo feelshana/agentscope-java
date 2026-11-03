@@ -11,7 +11,7 @@ export default function SqlQaExamplesPanel({ groupId }: { groupId: string }) {
   const [sql, setSql] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-  // spec108: a modeling pair whose question awaits review is not shipped as an example until then.
+  // spec112: a modeling pair whose question awaits review is not shipped as an example until then.
   const [held, setHeld] = useState<Record<string, string>>({});
   const refresh = async () => {
     try { const next = await listSqlQaExamples(groupId); setItems(next); if (!selected && next[0]) select(next[0]); } catch (e) { setError(e instanceof Error ? e.message : String(e)); }

@@ -7,7 +7,7 @@ export const proposalRequest = (p: AssetProposal) =>
   `请建设语义资产。需求或已有 SQL 如下：\n建议建一个查询模板「${p.name}」。\n要解决的问题：${p.need}\n起草要点：${p.outline}`;
 
 /**
- * ADR0127: in the modeling chat a query template is drafted only when the user asked for it in so
+ * ADR0132: in the modeling chat a query template is drafted only when the user asked for it in so
  * many words. The assistant records it as an explicit proposal and this component starts the
  * declared asset turn once the assistant is idle, so the user needs no further click. Everything
  * else is proposed in the query coach.

@@ -239,7 +239,7 @@ function TrialAnswer({ review, busy, fixing, assistantIdle, onAccept, onAskFix, 
   // An old result belongs to the previous SQL; hide it until the new SQL has run.
   const result = stale ? null : review.validation?.result;
   const confirmed = review.status === 'CONFIRMED';
-  // spec108: confirmed, but what its SQL depends on changed in the draft since.
+  // spec112: confirmed, but what its SQL depends on changed in the draft since.
   const needsReview = review.status === 'REVIEW';
   const reasons = review.reviewReasons ?? [];
   const small = { fontSize: 12, color: 'var(--da-text-muted)' } as const;

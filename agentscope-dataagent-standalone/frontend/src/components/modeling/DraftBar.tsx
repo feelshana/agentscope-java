@@ -106,7 +106,7 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
 
   // Confirmed questions whose SQL failed the publish dry-plan are left out of the release.
   const droppedQuestions = result?.ok ? result.issues.filter(i => i.source === 'questions' && i.severity !== 'error') : [];
-  // spec108: confirmed questions whose dependencies changed stay out as examples until reviewed.
+  // spec112: confirmed questions whose dependencies changed stay out as examples until reviewed.
   const heldQuestions = result?.ok ? result.issues.filter(i => i.source === 'questions-review') : [];
   const label = busy === 'publish' ? '检查并发布中…' : republish ? '重新发布' : `发布 v${(workflow?.publishedVersion ?? 0) + 1}`;
   const notices = <>

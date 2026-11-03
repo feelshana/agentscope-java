@@ -10,7 +10,7 @@ import ReadableCode from '../ReadableCode';
 const OFFICIAL_SECTIONS = new Set(['Default filters', 'Naming conventions', 'External identifiers', 'Currency', 'Canonical tables', 'Metrics']);
 
 /**
- * spec110: what the query assistant actually works from — the compiled MDL (wren://mdl), the
+ * spec114: what the query assistant actually works from — the compiled MDL (wren://mdl), the
  * business rules (get_instructions) and the confirmed examples (recall_queries) — for the draft
  * or the online version. Draft rule lines missing online are highlighted as new.
  */

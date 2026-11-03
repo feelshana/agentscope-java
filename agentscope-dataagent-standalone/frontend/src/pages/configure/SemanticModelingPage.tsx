@@ -50,7 +50,7 @@ const LEGACY_TABS: Record<string, Tab> = {
 const TAB_KEYS: Tab[] = ['modeling', 'coach', 'overview', 'models', 'relations', 'assets', 'knowledge', 'qa'];
 const ADVANCED = new Set(['views', 'cubes', 'mdl']);
 const tabOf = (asset: string | null, kind: string | null): Tab | null => {
-  // spec107: a bare ?asset=assets is the new page; with a kind it is the older address.
+  // spec111: a bare ?asset=assets is the new page; with a kind it is the older address.
   if (asset === 'assets') return kind ? LEGACY_TABS[kind] ?? 'models' : 'assets';
   if (asset && (TAB_KEYS as string[]).includes(asset)) return asset as Tab;
   return asset ? LEGACY_TABS[asset] ?? 'modeling' : null;
@@ -186,7 +186,7 @@ function ModelingWorkbench() {
       const decisions = await resolveConfirmations(groupId, answers);
       if (activeGroup.current !== groupId) return;
       if (decisions.length) request(confirmRequest(decisions), 'confirm', confirmLabel(decisions));
-      // spec110: once the rule is written, the questions that waited for it get their SQL.
+      // spec114: once the rule is written, the questions that waited for it get their SQL.
       const linked = [...new Set(decisions.flatMap(d => d.questionIds ?? []))];
       if (linked.length) {
         const waiting = (await getModelingQuestions(groupId)).filter(r => linked.includes(r.question.id));
@@ -410,7 +410,7 @@ function ModelingWorkbench() {
             renderTurnResult={since => <TurnResultCard groupId={groupId} since={since} disabled={!idle} />}
             // Before modeling starts there is nothing to try or publish yet.
             footer={!idle || startOffer === groupId ? null : <>
-              {/* spec109: assets proposed in this conversation start drafting only when the user agrees. */}
+              {/* spec113: assets proposed in this conversation start drafting only when the user agrees. */}
               <AssetProposalCards groupId={groupId} disabled={!idle} refreshKey={assistantState}
                 onDraft={(text, label) => request(text, 'asset', label)} />
               {confirmations.length > 0 ? <div ref={confirmAnchor} data-tour="confirm-cards">

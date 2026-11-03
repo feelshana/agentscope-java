@@ -15,7 +15,7 @@ import java.util.UUID;
 import org.springframework.stereotype.Component;
 
 /**
- * Semantic asset proposals (spec109, ADR0126): the assistant suggests a query template or a
+ * Semantic asset proposals (spec113, ADR0131): the assistant suggests a query template or a
  * metric in an ordinary modeling turn, and nothing is drafted until the user chooses to. Kept in
  * the project's platform directory, which the assistant cannot write.
  */
@@ -25,7 +25,7 @@ public class AssetProposalStore {
     public static final String DRAFTED = "DRAFTED";
     public static final String DISMISSED = "DISMISSED";
 
-    /** spec110: rules, relationships and calculated fields are proposed alongside templates. */
+    /** spec114: rules, relationships and calculated fields are proposed alongside templates. */
     static final Set<String> KINDS = Set.of("rule", "relationship", "calculated_field", "view");
 
     static final int MAX_PENDING = 20;
@@ -33,7 +33,7 @@ public class AssetProposalStore {
     private static final String FILE = ".platform/asset-proposals.json";
 
     /**
-     * One proposal. {@code questionIds} are the coach questions it answers (spec110);
+     * One proposal. {@code questionIds} are the coach questions it answers (spec114);
      * {@code explicit} marks a query template the user asked for in so many words, which the
      * page drafts without a further click.
      */

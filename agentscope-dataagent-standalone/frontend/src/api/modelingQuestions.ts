@@ -19,18 +19,18 @@ export interface QuestionValidation {
   confirmedAt: string | null;
   modelHash: string;
   evidence?: { sql: string; views: { name: string; sql: string; description: string | null; path: string }[] } | null;
-  /** spec108: 'asset-verify' when confirmed from a semantic asset's question verification. */
+  /** spec112: 'asset-verify' when confirmed from a semantic asset's question verification. */
   origin?: string | null;
 }
 
 export interface QuestionReview {
   revision: string;
   question: ModelingQuestion;
-  /** REVIEW (spec108): confirmed, but what its SQL depends on changed in the draft since. */
+  /** REVIEW (spec112): confirmed, but what its SQL depends on changed in the draft since. */
   status: 'DRAFT' | 'EXECUTED' | 'CONFIRMED' | 'REVIEW' | 'STALE' | 'FAILED' | 'REJECTED';
   /** Why a REVIEW question needs review; empty otherwise. */
   reviewReasons?: string[];
-  /** spec110 §8: the assistant's per-question analysis — reusable items (ok) and gaps. */
+  /** spec114 §8: the assistant's per-question analysis — reusable items (ok) and gaps. */
   analysis?: { ok: boolean; text: string }[];
   validation: QuestionValidation | null;
   coverage?: { strategy: string; ready: boolean; message: string; assets: { kind: string; name: string }[] };
@@ -58,7 +58,7 @@ export const getModelingQuestions = (groupId: string) => request<QuestionReview[
 export const validateModelingQuestion = (groupId: string, id: string) =>
   request<QuestionReview>(groupId, `/${encodeURIComponent(id)}/validate`, {});
 /** spec091: confirmation needs no prior trial run; the server re-checks SQL policy and time window. */
-/** spec110: the question's SQL expanded by the official dry-plan on the draft; never executed. */
+/** spec114: the question's SQL expanded by the official dry-plan on the draft; never executed. */
 export interface DraftPlan { sql: string; expanded: string | null; error: string | null }
 export const planModelingQuestion = (groupId: string, id: string) =>
   request<DraftPlan>(groupId, `/${encodeURIComponent(id)}/plan`, {});

@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** Examples on the asset page stay inside the knowledge base's own model (spec107). */
+/** Examples on the asset page stay inside the knowledge base's own model (spec111). */
 class AssetExampleServiceTest {
     private static final List<MdlWorkspaceReader.WorkspaceModel> MODELS =
             List.of(model("报表访问明细", "ds_a_data"), model("用户列表", "ds_b_data"));
@@ -34,7 +34,7 @@ class AssetExampleServiceTest {
                     + " u.company, COUNT(*) FROM data_agent.ds_a_data a JOIN data_agent.ds_b_data u"
                     + " ON a.user_account = u.account GROUP BY u.company\"}";
         var examples = AssetExampleService.accept(raw, MODELS, RELATIONS);
-        // ADR0126: a default filter is a rule, never an asset example.
+        // ADR0131: a default filter is a rule, never an asset example.
         assertThat(examples)
                 .extracting(AssetExampleService.Example::kind)
                 .containsExactly("查询模板", "已有 SQL");

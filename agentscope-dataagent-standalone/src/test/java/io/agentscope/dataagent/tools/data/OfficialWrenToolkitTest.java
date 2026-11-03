@@ -480,7 +480,7 @@ class OfficialWrenToolkitTest {
                         "models/notes.md")) {
             assertThat(files.write(alice, path, "name: x\n").isSuccess()).as(path).isFalse();
         }
-        // spec109: ref_sql.sql is an official model file, but only an asset turn may write it.
+        // spec113: ref_sql.sql is an official model file, but only an asset turn may write it.
         assertThat(files.write(alice, "models/derived/ref_sql.sql", "SELECT 1\n").isSuccess())
                 .isFalse();
         assertThat(files.write(alice, "models/derived/metadata.yml", "name: derived\n").isSuccess())
@@ -660,7 +660,7 @@ class OfficialWrenToolkitTest {
     }
 
     /**
-     * spec110: the coach writes question files only, and a question with an open card keeps an
+     * spec114: the coach writes question files only, and a question with an open card keeps an
      * empty SQL until the answer (2026-11-03: rule and SQL written on an invented confirmation).
      */
     @Test
@@ -712,7 +712,7 @@ class OfficialWrenToolkitTest {
         assertThat(files.write(alice, "knowledge/rules/general.md", "# r\n").isSuccess()).isTrue();
     }
 
-    /** spec110 §8: the coach reads existing query templates to judge reuse but never writes. */
+    /** spec114 §8: the coach reads existing query templates to judge reuse but never writes. */
     @Test
     void coachTurnReadsViewsButCannotWriteThem() throws Exception {
         var root = access.resolve(alice).root();
@@ -735,7 +735,7 @@ class OfficialWrenToolkitTest {
     }
 
     /**
-     * spec110 / ADR0127: proposals come from the query coach; elsewhere only a template the user
+     * spec114 / ADR0132: proposals come from the query coach; elsewhere only a template the user
      * asked for explicitly. No proposal writes a file, and ref_sql is written in asset turns only.
      */
     @Test
@@ -778,7 +778,7 @@ class OfficialWrenToolkitTest {
                 .contains("已提议（rule）");
         assertThat(store.list("a").get(1).questionIds()).containsExactly("q-1");
         assertThat(Files.exists(root.resolve("views"))).isFalse();
-        // ADR0128: query templates are not proposed from a coach batch.
+        // ADR0133: query templates are not proposed from a coach batch.
         assertThat(tool.propose(alice, "view", "首次访问", "a", "b", "c", List.of("q-1"), null))
                 .startsWith("error:")
                 .contains("公共视图");

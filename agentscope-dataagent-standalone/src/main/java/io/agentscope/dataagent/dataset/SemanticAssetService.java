@@ -22,7 +22,7 @@ import java.util.Set;
 import org.springframework.stereotype.Service;
 
 /**
- * Review, edit and question verification of Views and ref_sql models (ADR0123, spec107). The
+ * Review, edit and question verification of Views and ref_sql models (ADR0128, spec111). The
  * assistant drafts these files; everything here is driven by a person holding MANAGE.
  */
 @Service
@@ -46,7 +46,7 @@ public class SemanticAssetService {
     private final MdlQuestionService questions;
     private final AssetProposalStore proposals;
 
-    /** spec109: what deleting an asset would touch — rule entries naming it, questions using it. */
+    /** spec113: what deleting an asset would touch — rule entries naming it, questions using it. */
     public record Impact(List<String> rules, List<String> questions) {}
 
     public List<AssetProposalStore.Proposal> proposals(String actor, String groupId) {
@@ -79,7 +79,7 @@ public class SemanticAssetService {
     /**
      * Deletes an asset from the draft together with the rule entries naming it, so the query
      * assistant is never pointed at a missing model. Questions using it then need review
-     * (spec108). Nothing changes online until the draft is published.
+     * (spec112). Nothing changes online until the draft is published.
      */
     public void delete(String actor, String groupId, String kind, String name) {
         groups.getGroup(actor, groupId);
@@ -220,7 +220,7 @@ public class SemanticAssetService {
             boolean needsTimeColumn,
             List<String> fixedDates,
             List<OutputColumn> outputColumns,
-            // spec110: risks the reviewer must see, e.g. window or aggregation over a limited
+            // spec114: risks the reviewer must see, e.g. window or aggregation over a limited
             // table.
             List<String> warnings) {}
 
@@ -230,7 +230,7 @@ public class SemanticAssetService {
 
     /**
      * A query's outer date filter cannot reach inside a window or aggregation, so such an asset
-     * over a limited fact table computes over all of it (ADR0127: allowed after a warning).
+     * over a limited fact table computes over all of it (ADR0132: allowed after a warning).
      */
     static List<String> warnings(String sql, boolean limited) {
         if (!limited || sql == null || !WINDOW_OR_AGGREGATE.matcher(sql).find()) return List.of();
@@ -247,7 +247,7 @@ public class SemanticAssetService {
 
     /**
      * One verification: {@code expanded} is the SQL Wren would send after expanding the asset
-     * (spec110: nothing is executed, so {@code draft}/{@code published} stay null).
+     * (spec114: nothing is executed, so {@code draft}/{@code published} stay null).
      */
     public record Check(
             String key,
@@ -470,7 +470,7 @@ public class SemanticAssetService {
             }
         }
         if (!runnable.isEmpty()) {
-            // spec110 / ADR0127: verification reads SQL only; the plan never reaches the database.
+            // spec114 / ADR0132: verification reads SQL only; the plan never reaches the database.
             groups.getGroup(actor, groupId);
             var plans = publisher.planDraft(groupId, runnable.stream().map(Check::sql).toList());
             for (int i = 0; i < runnable.size(); i++) {
@@ -517,7 +517,7 @@ public class SemanticAssetService {
     }
 
     /**
-     * Records the verdicts, then (spec108) saves each listed case the user judged as expected as
+     * Records the verdicts, then (spec112) saves each listed case the user judged as expected as
      * a confirmed question. A listed case must be one of this run's SQL, so a client cannot store
      * SQL that never ran against the asset. Saving failures leave the verdicts recorded.
      */

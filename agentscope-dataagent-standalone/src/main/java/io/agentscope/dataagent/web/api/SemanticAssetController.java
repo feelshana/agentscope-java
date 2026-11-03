@@ -23,7 +23,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 /**
- * Views and ref_sql models of one knowledge base (ADR0123, spec107). Every call requires MANAGE
+ * Views and ref_sql models of one knowledge base (ADR0128, spec111). Every call requires MANAGE
  * in {@link SemanticAssetService}, so query-only users never see draft content.
  */
 @RestController
@@ -47,7 +47,7 @@ public class SemanticAssetController {
 
     public record VerifyRequest(List<SemanticAssetService.VerifyCase> cases) {}
 
-    /** {@code save}: cases judged as expected to keep as confirmed questions (spec108). */
+    /** {@code save}: cases judged as expected to keep as confirmed questions (spec112). */
     public record VerdictRequest(
             Map<String, String> verdicts, List<SemanticAssetService.VerifyCase> save) {}
 
@@ -60,7 +60,7 @@ public class SemanticAssetController {
 
     public record ProposalDecision(String status) {}
 
-    /** spec109: query template proposals the assistant made in the modeling conversation. */
+    /** spec113: query template proposals the assistant made in the modeling conversation. */
     @GetMapping("/proposals")
     public Mono<List<AssetProposalStore.Proposal>> proposals(
             @PathVariable String groupId, Authentication auth) {

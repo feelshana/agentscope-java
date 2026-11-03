@@ -9,7 +9,7 @@ import io.agentscope.dataagent.dataset.WrenProjectAccess;
 import java.util.List;
 
 /**
- * spec110 / ADR0127: modeling changes are proposed in the query coach, where the data developer
+ * spec114 / ADR0132: modeling changes are proposed in the query coach, where the data developer
  * lists frequent questions and approves each proposal before anything is drafted. Outside the
  * coach the only proposal allowed is a query template the user asked for in so many words, which
  * the page then drafts in a declared asset turn.

@@ -15,11 +15,11 @@ public record ModelingTurnPurpose(String value) {
     /** The page hands the user's confirmation answers to the assistant to write down. */
     public static final String CONFIRM = "confirm";
 
-    /** A data developer drafts Views or ref_sql models; only this turn may open views/ (ADR0123). */
+    /** A data developer drafts Views or ref_sql models; only this turn may open views/ (ADR0128). */
     public static final String ASSET = "asset";
 
     /**
-     * The query coach (spec110, ADR0127): the data developer lists frequent questions, the
+     * The query coach (spec114, ADR0132): the data developer lists frequent questions, the
      * assistant analyses gaps and proposes changes; only this turn may propose them.
      */
     public static final String COACH = "coach";

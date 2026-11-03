@@ -7,7 +7,7 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/** What a confirmed question depends on, and how its changes read (spec108). */
+/** What a confirmed question depends on, and how its changes read (spec112). */
 class QuestionDependenciesTest {
     @TempDir Path root;
 

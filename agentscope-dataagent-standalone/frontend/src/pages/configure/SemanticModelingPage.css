@@ -154,7 +154,7 @@
   .fs-row-head > span:nth-child(n+3) { display: none; }
 }
 
-/* spec107 reviewed assets. */
+/* spec111 reviewed assets. */
 .sa-draft { display: flex; flex-direction: column; gap: 8px; flex: none; }
 .sa-layout { display: flex; gap: 12px; flex: 1; min-height: 0; }
 .sa-list { flex: 0 0 240px; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }

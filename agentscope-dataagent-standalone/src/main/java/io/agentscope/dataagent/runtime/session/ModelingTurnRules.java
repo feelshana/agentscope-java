@@ -46,7 +46,7 @@ public final class ModelingTurnRules {
             # 本轮任务要求：建设语义资产
             本轮例外：可以读写 views/，用于建设用户要求的语义资产。cubes/ 仍不读不写。不写问答对，不发布，不声明资产已核查或已验证。
             用户用业务语言描述需求，不会说出资产类型。面向用户的回复把 View 称为"查询模板"，不出现 View、ref_sql、statement 等技术名词。
-            按官方 enrich-context 的去处选择（ADR0126）：
+            按官方 enrich-context 的去处选择（ADR0131）：
             - 默认过滤（默认排除、只保留某些记录，例如排除测试账号、只算已支付订单）不建资产：在 knowledge/rules/general.md 的"## Default filters"小节下追加规则，写清判断条件，以及用户明确要求包含时改为不过滤；回复中说明"这类需求写成规则即可，没有建资产"。
             - 单行计算用计算字段，不建资产：写在对应模型的 columns 里（is_calculated: true 和 expression），描述列出全部取值。
             - 查询模板（View）：把多个模型固定地拼接，或用窗口函数、CTE 算出一个可以直接查询的结果，例如访问明细拼上访问人的公司、部门。写 views/<名称>/metadata.yml，statement 用逻辑模型名，可以使用计算字段，不能引用其他查询模板。保留应用已有默认过滤所需的列（例如判断账号是否存在所需的关联表账号列），不要用 IFNULL、COALESCE 等默认值把"关联不上"和"值为空"合成同一个值；窗口函数列在描述中写明统计范围（例如"按全部数据计算的第几次访问"）。
@@ -55,11 +55,11 @@ public final class ModelingTurnRules {
             用户粘贴已有 SQL 时，保留其业务逻辑，按上面的去处选择；写查询模板时把物理表换成对应逻辑模型，换不了时说明原因并请用户决定是否改用加工表。先确定粒度、口径和过滤条件：文档、规则或用户说明里没有依据时，用 request_user_confirmation 提问，不自行选定。一对多关联必须先聚合明细再 JOIN，避免重复计算。
             资产的 properties.description 按以下小节写，供用户核查：用途、粒度（一行代表什么）、依赖（用到的模型）、JOIN（连接键与基数）、口径（每个 CASE WHEN 或过滤的含义和来源）、时间列、风险（可能丢行或放大的地方）。依赖事实表的资产必须输出明确的日期或时间列。
             资产定义不写固定的日期范围或当前日期：不要在 statement 或 ref_sql 里加起止日期，除非用户明确要求这是业务口径；时间过滤留给查询时按输出的时间列添加。检查用的 SQL 可以带日期条件，资产本身不带。
-            不查询任何表数据，也不执行 dry-run，只用 dry-plan 检查（不连接数据库），由用户在公共视图页用问题核对 SQL（ADR0127）。写完执行 context validate --strict，再用 dry-plan 检查 SELECT * FROM 资产名。依赖事实表且含窗口函数或聚合时，在描述的风险小节写明：问数在外层加的时间条件推不进内部计算，会先计算全部数据，窗口或聚合的统计范围是全部数据而不是查询的日期范围。
+            不查询任何表数据，也不执行 dry-run，只用 dry-plan 检查（不连接数据库），由用户在公共视图页用问题核对 SQL（ADR0132）。写完执行 context validate --strict，再用 dry-plan 检查 SELECT * FROM 资产名。依赖事实表且含窗口函数或聚合时，在描述的风险小节写明：问数在外层加的时间条件推不进内部计算，会先计算全部数据，窗口或聚合的统计范围是全部数据而不是查询的日期范围。
             最终回复 3–6 行：做了什么（查询模板、规则或计算字段）、粒度、关键口径、写了哪条默认使用规则、还需要用户确认什么。建了查询模板或加工表时提示到公共视图页核查，默认使用规则在草稿栏查看；只写规则或计算字段时提示在草稿栏审阅后发布，它们不进公共视图页。
             """;
 
-    /** spec110 / ADR0127: the only turn that proposes modeling changes, from listed questions. */
+    /** spec114 / ADR0132: the only turn that proposes modeling changes, from listed questions. */
     static final String COACH =
             """
             # 本轮任务要求：问数优化

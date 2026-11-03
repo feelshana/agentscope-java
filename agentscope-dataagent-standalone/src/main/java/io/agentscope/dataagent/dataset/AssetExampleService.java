@@ -25,7 +25,7 @@ import org.springframework.stereotype.Service;
 
 /**
  * Example requests on the semantic asset page, written from the knowledge base's own draft model
- * so a developer sees what to ask for in terms of their tables (spec107). The model drafts them;
+ * so a developer sees what to ask for in terms of their tables (spec111). The model drafts them;
  * the platform keeps only examples that name real models, follow a declared relationship, or read
  * the knowledge base's own physical tables. Results are cached until the draft model changes.
  */
@@ -51,7 +51,7 @@ public class AssetExampleService {
             只输出 JSON：{"join":"…","sql":"…"}
             - join：一句话。把一条已有关系两端的两个模型固定拼在一起，说明以后按哪些属性分析时直接用。没有关系时输出空字符串。
             - sql：一条只读 SELECT，只用输入里的物理表名（库名.表名），可以关联、分组、用窗口函数，体现一个有业务意义的统计；不写日期函数，不写说明文字。没有合适内容时输出空字符串。
-            join 不超过 80 字。默认排除或只保留部分记录的需求写成业务规则即可，不作为示例（ADR0126）。
+            join 不超过 80 字。默认排除或只保留部分记录的需求写成业务规则即可，不作为示例（ADR0131）。
             existing_assets 是已经建好的加工表和查询模板：示例要提出它们没有覆盖的新需求，不要重复它们已有的拼接。
             """;
 
@@ -148,7 +148,7 @@ public class AssetExampleService {
      * Keeps the examples that stay inside the knowledge base: a join naming both ends of a
      * declared relationship, and SQL that reads only its physical tables. Without a usable join
      * from the model, the first relationship gives a plain one. Default filters are rules, not
-     * assets (ADR0126), so they are never offered as examples.
+     * assets (ADR0131), so they are never offered as examples.
      */
     static List<Example> accept(
             String raw,

@@ -159,7 +159,7 @@ public class MdlQuestionService {
         return decide(scope, groupId, questionId, accepted, null);
     }
 
-    /** spec110: the question's SQL expanded by the official dry-plan on the draft; not executed. */
+    /** spec114: the question's SQL expanded by the official dry-plan on the draft; not executed. */
     public MdlPublishService.DraftPlan plan(DatasetScope scope, String groupId, String questionId) {
         requireScope(scope, groupId);
         MdlQuestionStore.Question question = store.requireQuestion(groupId, questionId);
@@ -169,7 +169,7 @@ public class MdlQuestionService {
     }
 
     /**
-     * spec108: a question the user judged as expected while verifying a semantic asset becomes a
+     * spec112: a question the user judged as expected while verifying a semantic asset becomes a
      * confirmed question, through the same checks as a confirmation in the trial panel.
      */
     public MdlQuestionStore.Review confirmVerified(

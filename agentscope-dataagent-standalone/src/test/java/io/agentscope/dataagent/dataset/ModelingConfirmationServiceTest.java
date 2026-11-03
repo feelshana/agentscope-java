@@ -76,7 +76,7 @@ class ModelingConfirmationServiceTest {
         assertThrows(DatasetException.class, () -> ask("再多一个"));
     }
 
-    /** spec110: asking about a question's meaning withdraws the SQL written on a guess. */
+    /** spec114: asking about a question's meaning withdraws the SQL written on a guess. */
     @Test
     void askingAboutAQuestionWithdrawsItsGuessedSql() throws Exception {
         Path question = workspace.workspaceRoot("g1").resolve("knowledge/questions/q-coach-2.yml");
@@ -98,7 +98,7 @@ class ModelingConfirmationServiceTest {
         assertFalse(written.contains("全部访问人"), written);
     }
 
-    /** spec110: a card asked for coach questions hands their ids back with the decision. */
+    /** spec114: a card asked for coach questions hands their ids back with the decision. */
     @Test
     void linkedQuestionsTravelWithTheCardAndItsDecision() {
         var linked =

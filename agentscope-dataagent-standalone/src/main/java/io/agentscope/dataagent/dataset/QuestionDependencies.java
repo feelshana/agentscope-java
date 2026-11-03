@@ -20,7 +20,7 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 /**
- * What a confirmed question's SQL depends on (spec108, ADR0125): the models and assets it reads,
+ * What a confirmed question's SQL depends on (spec112, ADR0130): the models and assets it reads,
  * the assets built on them, the relationships touching them and the rule entries naming them.
  * A confirmation stores this snapshot; when the draft no longer matches, the question needs
  * review and each difference becomes a reason the user can read.

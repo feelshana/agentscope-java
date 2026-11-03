@@ -1,6 +1,6 @@
-# spec107：对话建设语义资产（View、ref_sql、Cube），核查和问题验证后发布
+# spec111：对话建设语义资产（View、ref_sql、Cube），核查和问题验证后发布
 
-> 状态：P0、P1 已实施；验证方式已按 2026-11-02 用户反馈调整，P2 已实施未实测，P4 未开始。2026-11-02 起资产按用途选型并配默认使用规则（[ADR0124](../adr/0124-asset-kind-by-purpose-with-default-use-rule.md)）。决策见 [ADR0123](../adr/0123-conversational-semantic-assets.md)，验收见 [报告](../test-reports/20261101-spec107-p0-p1-acceptance.md)。
+> 状态：P0、P1 已实施；验证方式已按 2026-11-02 用户反馈调整，P2 已实施未实测，P4 未开始。2026-11-02 起资产按用途选型并配默认使用规则（[ADR0129](../adr/0129-asset-kind-by-purpose-with-default-use-rule.md)）。决策见 [ADR0128](../adr/0128-conversational-semantic-assets.md)，验收见 [报告](../test-reports/20261101-spec111-p0-p1-acceptance.md)。
 
 ## 背景与目标
 
@@ -29,7 +29,7 @@
 
    每个加工表或查询模板都配一条默认使用规则：按官方 enrich-context 写回路由追加到 `knowledge/rules/` 的 `## Default filters` 或 `## Canonical tables`，写明哪些统计默认使用该资产、什么情况改用原模型。规则在草稿栏查看，随资产一起发布。问数助手通过 `get_instructions` 读到规则后选表，平台不做路由。
 4. **核查**：核查卡展示用途、粒度、依赖、JOIN 键和基数、CASE WHEN 口径及来源、时间列、风险提示和 SQL 差异。依赖受限事实表时，用户必须从资产输出列里选择时间列；不依赖时不显示这一项。提供核查通过、对话修改、手工编辑三个操作。
-5. **验证**：在资产页右侧输入业务问题，也可以点选已确认问题，只取问题文字。助手只基于当前资产生成 SQL，页面展示 SQL，用户可修改后运行。结果来自草稿副本；线上已有该资产时同时展示线上结果。用户判定“符合预期”或“有问题”。SQL 没有引用当前资产时拒绝运行，不能算验证通过。判定为“符合预期”的题默认同时保存为问答（[spec108](108-question-review-on-context-change.md)）。
+5. **验证**：在资产页右侧输入业务问题，也可以点选已确认问题，只取问题文字。助手只基于当前资产生成 SQL，页面展示 SQL，用户可修改后运行。结果来自草稿副本；线上已有该资产时同时展示线上结果。用户判定“符合预期”或“有问题”。SQL 没有引用当前资产时拒绝运行，不能算验证通过。判定为“符合预期”的题默认同时保存为问答（[spec112](112-question-review-on-context-change.md)）。
 
 6. **发布**：沿用草稿栏。新增或修改的高级资产未通过验证时，发布被拒绝并列出原因。
 
@@ -122,5 +122,5 @@
 
 ## 关联
 
-- ADR：[ADR0123](../adr/0123-conversational-semantic-assets.md)；相关 [ADR0069](../adr/0069-wren-native-modeling-and-query-agents.md)、[ADR0107](../adr/0107-basic-modeling-closes-cube-and-view-files.md)、[ADR0111](../adr/0111-draft-changes-reviewed-before-publish.md)、[ADR0112](../adr/0112-rule-first-sql-window-gate.md)
+- ADR：[ADR0128](../adr/0128-conversational-semantic-assets.md)；相关 [ADR0069](../adr/0069-wren-native-modeling-and-query-agents.md)、[ADR0107](../adr/0107-basic-modeling-closes-cube-and-view-files.md)、[ADR0111](../adr/0111-draft-changes-reviewed-before-publish.md)、[ADR0112](../adr/0112-rule-first-sql-window-gate.md)
 - 调研：`reports/Wren 语义层渐进建模路线.md`（未提交）

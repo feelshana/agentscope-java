@@ -88,7 +88,7 @@ class SemanticAssetServiceTest {
     }
 
     private void run() {
-        // spec110: verification only plans the SQL; nothing is executed.
+        // spec114: verification only plans the SQL; nothing is executed.
         when(publisher.planDraft(eq(GROUP), anyList()))
                 .thenReturn(
                         List.of(
@@ -184,7 +184,7 @@ class SemanticAssetServiceTest {
         assertThat(asset().status()).isEqualTo(AssetReviewStore.VERIFY_PENDING);
     }
 
-    /** spec110 / ADR0127: windows or aggregation over a limited fact table warn, never block. */
+    /** spec114 / ADR0132: windows or aggregation over a limited fact table warn, never block. */
     @Test
     void windowOrAggregationOverALimitedTableWarns() {
         String window =
@@ -205,7 +205,7 @@ class SemanticAssetServiceTest {
                 .isEmpty();
     }
 
-    /** spec109: deleting an asset also removes the rule entries naming it, in the draft only. */
+    /** spec113: deleting an asset also removes the rule entries naming it, in the draft only. */
     @Test
     void deletingAnAssetRemovesItsRuleEntriesAndKeepsOtherRules() throws Exception {
         Path rules = draft.resolve("knowledge/rules/general.md");
@@ -230,7 +230,7 @@ class SemanticAssetServiceTest {
                 .isInstanceOf(DatasetException.class);
     }
 
-    /** spec108: expected verification cases can become confirmed questions, only as they ran. */
+    /** spec112: expected verification cases can become confirmed questions, only as they ran. */
     @Test
     void expectedCasesAreSavedAsQuestionsOnlyForTheSqlThatRan() {
         var questions = org.mockito.Mockito.mock(MdlQuestionService.class);

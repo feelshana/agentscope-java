@@ -14,7 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
- * Writes one SQL that answers a verification question from a single semantic asset (spec107).
+ * Writes one SQL that answers a verification question from a single semantic asset (spec111).
  * The asset is the thing under test, so it is the only table the model is offered; the result is
  * shown to the developer, who can edit it before anything runs.
  */

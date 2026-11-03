@@ -98,7 +98,7 @@ export interface Confirmation {
   basis: string;
   options: { label: string; rule: string }[];
   createdAt: string;
-  /** spec110: coach or trial questions whose SQL waits for this answer. */
+  /** spec114: coach or trial questions whose SQL waits for this answer. */
   questionIds?: string[] | null;
 }
 

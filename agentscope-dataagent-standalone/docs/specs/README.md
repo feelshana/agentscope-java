@@ -25,10 +25,10 @@ spec 是一页纸的需求与验收标准，写代码之前先写（模板：[00
 | [104](104-new-user-onboarding.md) | 新手引导：入门清单、起步问题、帮助与一次性提示 | 已实施，整合验收中 |
 | [105](105-guided-tour-and-demo-data.md) | 页面逐步指引与内置示例数据 | 已实施，待真实验收 |
 | [106](106-semantic-modeling-workspace.md) | 语义建模工作台（模型、关系分开与新关系图） | 已实施，待真实验收 |
-| [107](107-conversational-semantic-assets.md) | 对话建设语义资产（View、ref_sql、Cube），核查和问题验证后发布 | P0、P1 已验收，后续分期进行中 |
-| [108](108-question-review-on-context-change.md) | 口径变更后问答复核，资产验证通过的问题存为问答 | 已实施，验收见 test-reports/20261103-spec108-acceptance.md |
-| [109](109-single-entry-asset-proposals.md) | 建模对话统一说需求，资产先提议后起草，按官方去处选型 | 已实施，验收见 test-reports/20261103-spec109-pre-tests.md |
-| [110](110-query-coach.md) | 问数教练：列出常用问题，助手分析缺口并提议，批准后起草和核对 | 一期已实施，验收见 test-reports/20261103-spec110-phase1-acceptance.md；第 8 节问数优化交互调整已实施（20261103-spec110-section8-acceptance.md）；二期待做 |
+| [111](111-conversational-semantic-assets.md) | 对话建设语义资产（View、ref_sql、Cube），核查和问题验证后发布 | P0、P1 已验收，后续分期进行中 |
+| [112](112-question-review-on-context-change.md) | 口径变更后问答复核，资产验证通过的问题存为问答 | 已实施，验收见 test-reports/20261103-spec112-acceptance.md |
+| [113](113-single-entry-asset-proposals.md) | 建模对话统一说需求，资产先提议后起草，按官方去处选型 | 已实施，验收见 test-reports/20261103-spec113-pre-tests.md |
+| [114](114-query-coach.md) | 问数教练：列出常用问题，助手分析缺口并提议，批准后起草和核对 | 一期已实施，验收见 test-reports/20261103-spec114-phase1-acceptance.md；第 8 节问数优化交互调整已实施（20261103-spec114-section8-acceptance.md）；二期待做 |
 
 ## 已完成或已关闭（done/）
 

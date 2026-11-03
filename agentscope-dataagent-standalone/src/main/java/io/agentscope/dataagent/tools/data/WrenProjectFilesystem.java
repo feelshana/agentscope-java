@@ -137,7 +137,7 @@ public final class WrenProjectFilesystem implements AbstractFilesystem {
     /**
      * A date range inside an asset silently limits every query built on it. The assistant kept
      * copying dates from examples despite the prompt, so its writes are refused here; a person
-     * who really means a fixed business period can still edit the asset by hand (ADR0123).
+     * who really means a fixed business period can still edit the asset by hand (ADR0128).
      */
     private static String assetDateGuard(Project p, String relative, String content) {
         if (!p.assetTurn()) return null;
@@ -160,7 +160,7 @@ public final class WrenProjectFilesystem implements AbstractFilesystem {
             "未写入：这道题的口径还在等用户答复确认卡，sql 保持为空，definition 的\"假设\"行写\"待确认口径\"；用户答复后平台会自动重新生成 SQL。";
 
     /**
-     * spec110: the coach only analyses and proposes. On 2026-11-03 it wrote a business rule on a
+     * spec114: the coach only analyses and proposes. On 2026-11-03 it wrote a business rule on a
      * confirmation it claimed to have received four seconds after asking, so writes are limited.
      */
     private static String coachGuard(Project p, String relative) {
@@ -171,7 +171,7 @@ public final class WrenProjectFilesystem implements AbstractFilesystem {
     }
 
     /**
-     * spec110: the meaning comes before the SQL. The card withdraws a guessed SQL, but the
+     * spec114: the meaning comes before the SQL. The card withdraws a guessed SQL, but the
      * assistant wrote it back in the same turn (2026-11-03), so a linked question keeps an empty
      * SQL until the card is answered or dismissed.
      */
