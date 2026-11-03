@@ -762,6 +762,20 @@ public class SemanticModelingController {
                 .onErrorMap(this::toStatus);
     }
 
+    /** The official compiled MDL of the published version and of the draft's last build. */
+    @GetMapping("/mdl/compiled")
+    public Mono<MdlPublishService.CompiledMdl> mdlCompiled(
+            @PathVariable String groupId, Authentication auth) {
+        String userId = (String) auth.getPrincipal();
+        return Mono.fromCallable(
+                        () -> {
+                            groupService.getGroup(userId, groupId);
+                            return mdlPublishService.compiled(groupId);
+                        })
+                .subscribeOn(Schedulers.boundedElastic())
+                .onErrorMap(this::toStatus);
+    }
+
     /** Read-only structured MDL view for visualization (specs/013 M2): draft + publish state. */
     @GetMapping("/mdl/view")
     public Mono<MdlPublishService.MdlView> mdlView(

@@ -191,6 +191,19 @@ public class ModelingQuestionController {
                 });
     }
 
+    /** spec110: the question's SQL as Wren would expand it on the draft; nothing is executed. */
+    @PostMapping("/{questionId}/plan")
+    public Mono<io.agentscope.dataagent.dataset.MdlPublishService.DraftPlan> plan(
+            @PathVariable String groupId, @PathVariable String questionId, Authentication auth) {
+        String owner = (String) auth.getPrincipal();
+        return blocking(
+                () -> {
+                    guard.require(owner, "modeling-agent", Tier.RUN);
+                    return service.plan(
+                            new DatasetScope(owner, List.of(groupId)), groupId, questionId);
+                });
+    }
+
     @PostMapping("/{questionId}/decision")
     public Mono<MdlQuestionStore.Review> decide(
             @PathVariable String groupId,

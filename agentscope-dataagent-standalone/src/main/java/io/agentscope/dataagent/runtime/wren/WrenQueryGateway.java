@@ -91,6 +91,22 @@ public interface WrenQueryGateway {
      */
     void invalidate(String groupId);
 
+    /**
+     * The official {@code wren_workflow} prompt served by the group's MCP instance, verbatim; empty
+     * when the adapter cannot read MCP prompts.
+     */
+    default String workflowPrompt(String groupId) {
+        return "";
+    }
+
+    /**
+     * The official {@code wren://mdl} resource (compiled MDL JSON) served by the group's MCP
+     * instance, verbatim; empty when the adapter cannot read MCP resources.
+     */
+    default String mdlResource(String groupId) {
+        return "";
+    }
+
     /** Deletion requires a confirmed close, rather than best-effort invalidation. */
     default void closeForDeletion(String groupId) {
         invalidate(groupId);

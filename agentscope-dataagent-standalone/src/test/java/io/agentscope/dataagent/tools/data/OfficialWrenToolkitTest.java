@@ -480,8 +480,9 @@ class OfficialWrenToolkitTest {
                         "models/notes.md")) {
             assertThat(files.write(alice, path, "name: x\n").isSuccess()).as(path).isFalse();
         }
+        // spec109: ref_sql.sql is an official model file, but only an asset turn may write it.
         assertThat(files.write(alice, "models/derived/ref_sql.sql", "SELECT 1\n").isSuccess())
-                .isTrue();
+                .isFalse();
         assertThat(files.write(alice, "models/derived/metadata.yml", "name: derived\n").isSuccess())
                 .isTrue();
     }
@@ -620,6 +621,185 @@ class OfficialWrenToolkitTest {
         assertThat(invocations)
                 .allSatisfy(args -> assertThat(args).doesNotContain("validate", "build"));
         verify(groups, never()).markMdlDirty("alice", "a");
+    }
+
+    @Test
+    void assetTurnOpensViewsOnlyAndKeepsEveryOtherBoundary() throws Exception {
+        when(alice.get(io.agentscope.dataagent.dataset.ModelingTurnPurpose.class))
+                .thenReturn(
+                        new io.agentscope.dataagent.dataset.ModelingTurnPurpose(
+                                io.agentscope.dataagent.dataset.ModelingTurnPurpose.ASSET));
+        var root = access.resolve(alice).root();
+
+        assertThat(files.write(alice, "views/sales/metadata.yml", "name: sales\n").isSuccess())
+                .isTrue();
+        assertThat(files.read(alice, "views/sales/metadata.yml", 0, 100).isSuccess()).isTrue();
+        assertThat(Files.isRegularFile(root.resolve("views/sales/metadata.yml"))).isTrue();
+
+        assertThat(files.write(alice, "views/sales/notes.yml", "x: 1\n").isSuccess()).isFalse();
+        String dated = "name: dated\nstatement: SELECT 1 FROM t WHERE d >= '2026-09-20 00:00:00'\n";
+        assertThat(files.write(alice, "views/dated/metadata.yml", dated).error())
+                .contains("不能写固定日期", "2026-09-20");
+        assertThat(
+                        files.edit(
+                                        alice,
+                                        "views/sales/metadata.yml",
+                                        "sales",
+                                        "'2026-01-01'",
+                                        false)
+                                .isSuccess())
+                .isFalse();
+        assertThat(Files.readString(root.resolve("views/sales/metadata.yml")))
+                .isEqualTo("name: sales\n");
+        assertThat(files.write(alice, "cubes/sales/metadata.yml", "name: sales\n").isSuccess())
+                .isFalse();
+        assertThat(files.write(alice, "views/../../escape.yml", "x: 1\n").isSuccess()).isFalse();
+        assertThat(files.write(alice, ".platform/asset-reviews.json", "{}").isSuccess()).isFalse();
+        assertThat(files.read(alice, ".platform/asset-reviews.json", 0, 100).isSuccess()).isFalse();
+        assertThat(files.write(alice, "knowledge/sql/a.md", "x").isSuccess()).isFalse();
+    }
+
+    /**
+     * spec110: the coach writes question files only, and a question with an open card keeps an
+     * empty SQL until the answer (2026-11-03: rule and SQL written on an invented confirmation).
+     */
+    @Test
+    void coachWritesQuestionsOnlyAndAwaitingQuestionsKeepEmptySql() throws Exception {
+        var root = access.resolve(alice).root();
+        Files.createDirectories(root.resolve(".platform/confirmations"));
+        Files.writeString(
+                root.resolve(".platform/confirmations/c1.json"),
+                "{\"id\":\"c1\",\"question\":\"上周怎么算\",\"basis\":\"\",\"options\":[],"
+                    + "\"createdAt\":\"2026-11-03T00:00:00Z\",\"questionIds\":[\"q-coach-1\"]}");
+        when(alice.get(io.agentscope.dataagent.dataset.ModelingTurnPurpose.class))
+                .thenReturn(
+                        new io.agentscope.dataagent.dataset.ModelingTurnPurpose(
+                                io.agentscope.dataagent.dataset.ModelingTurnPurpose.COACH));
+
+        assertThat(files.write(alice, "knowledge/rules/general.md", "# r\n").error())
+                .contains("只分析和提议");
+        assertThat(files.write(alice, "relationships.yml", "relationships: []\n").isSuccess())
+                .isFalse();
+        String guessed = "question: 上周 top10\ndefinition: 假设：上周为自然周\nsql: SELECT 1\n";
+        assertThat(files.write(alice, "knowledge/questions/q-coach-1.yml", guessed).error())
+                .contains("等用户答复确认卡");
+        String waiting = "question: 上周 top10\ndefinition: 假设：待确认口径\nsql: ''\n";
+        assertThat(files.write(alice, "knowledge/questions/q-coach-1.yml", waiting).isSuccess())
+                .isTrue();
+        assertThat(
+                        files.edit(
+                                        alice,
+                                        "knowledge/questions/q-coach-1.yml",
+                                        "sql: ''",
+                                        "sql: SELECT 1",
+                                        false)
+                                .isSuccess())
+                .isFalse();
+        assertThat(Files.readString(root.resolve("knowledge/questions/q-coach-1.yml")))
+                .isEqualTo(waiting);
+        // Other questions are written normally.
+        assertThat(files.write(alice, "knowledge/questions/q-coach-2.yml", guessed).isSuccess())
+                .isTrue();
+
+        // Once the card is answered the guard lifts, in whatever turn writes the SQL.
+        Files.delete(root.resolve(".platform/confirmations/c1.json"));
+        when(alice.get(io.agentscope.dataagent.dataset.ModelingTurnPurpose.class))
+                .thenReturn(
+                        new io.agentscope.dataagent.dataset.ModelingTurnPurpose(
+                                io.agentscope.dataagent.dataset.ModelingTurnPurpose.QUESTION));
+        assertThat(files.write(alice, "knowledge/questions/q-coach-1.yml", guessed).isSuccess())
+                .isTrue();
+        assertThat(files.write(alice, "knowledge/rules/general.md", "# r\n").isSuccess()).isTrue();
+    }
+
+    /** spec110 §8: the coach reads existing query templates to judge reuse but never writes. */
+    @Test
+    void coachTurnReadsViewsButCannotWriteThem() throws Exception {
+        var root = access.resolve(alice).root();
+        Files.createDirectories(root.resolve("views/sales"));
+        Files.writeString(root.resolve("views/sales/metadata.yml"), "name: sales\n");
+        assertThat(files.read(alice, "views/sales/metadata.yml", 0, 100).isSuccess()).isFalse();
+
+        when(alice.get(io.agentscope.dataagent.dataset.ModelingTurnPurpose.class))
+                .thenReturn(
+                        new io.agentscope.dataagent.dataset.ModelingTurnPurpose(
+                                io.agentscope.dataagent.dataset.ModelingTurnPurpose.COACH));
+        assertThat(files.read(alice, "views/sales/metadata.yml", 0, 100).isSuccess()).isTrue();
+        assertThat(files.write(alice, "views/sales/metadata.yml", "name: x\n").isSuccess())
+                .isFalse();
+        assertThat(files.write(alice, "views/new/metadata.yml", "name: new\n").isSuccess())
+                .isFalse();
+        assertThat(files.read(alice, "cubes/sales/metadata.yml", 0, 100).isSuccess()).isFalse();
+        assertThat(Files.readString(root.resolve("views/sales/metadata.yml")))
+                .isEqualTo("name: sales\n");
+    }
+
+    /**
+     * spec110 / ADR0127: proposals come from the query coach; elsewhere only a template the user
+     * asked for explicitly. No proposal writes a file, and ref_sql is written in asset turns only.
+     */
+    @Test
+    void proposalsComeFromTheCoachAndRefSqlOnlyFromAssetTurns() throws Exception {
+        var root = access.resolve(alice).root();
+        assertThat(files.write(alice, "models/有效访问/ref_sql.sql", "SELECT 1").error())
+                .contains("问数优化");
+        assertThat(Files.exists(root.resolve("models/有效访问/ref_sql.sql"))).isFalse();
+
+        var store =
+                new io.agentscope.dataagent.dataset.AssetProposalStore(
+                        new MdlWorkspaceService(
+                                props, (cwd, timeout, args) -> new WrenCli.Result(0, "")));
+        var tool = new SemanticAssetProposalTool(access, store);
+        // Chat turn: nothing unless the user asked for a template in so many words.
+        assertThat(tool.propose(alice, "view", "访问宽表", "按公司分析", "拼用户列表", "固定拼接", null, null))
+                .startsWith("error:")
+                .contains("问数优化");
+        assertThat(tool.propose(alice, "rule", "外协口径", "排除外协", "wx 结尾", "口径", null, true))
+                .startsWith("error:");
+        assertThat(tool.propose(alice, "view", "访问宽表", "按公司分析", "拼用户列表", "固定拼接", null, true))
+                .contains("已按你的要求提议查询模板「访问宽表」");
+        assertThat(store.list("a").get(0).explicit()).isTrue();
+
+        var purpose = io.agentscope.dataagent.dataset.ModelingTurnPurpose.class;
+        when(alice.get(purpose))
+                .thenReturn(
+                        new io.agentscope.dataagent.dataset.ModelingTurnPurpose(
+                                io.agentscope.dataagent.dataset.ModelingTurnPurpose.COACH));
+        assertThat(
+                        tool.propose(
+                                alice,
+                                "rule",
+                                "流失用户定义",
+                                "流失用户有哪些",
+                                "术语定义",
+                                "无定义",
+                                List.of("q-1"),
+                                null))
+                .contains("已提议（rule）");
+        assertThat(store.list("a").get(1).questionIds()).containsExactly("q-1");
+        assertThat(Files.exists(root.resolve("views"))).isFalse();
+        // ADR0128: query templates are not proposed from a coach batch.
+        assertThat(tool.propose(alice, "view", "首次访问", "a", "b", "c", List.of("q-1"), null))
+                .startsWith("error:")
+                .contains("公共视图");
+        assertThat(store.list("a")).hasSize(2);
+
+        when(alice.get(purpose))
+                .thenReturn(
+                        new io.agentscope.dataagent.dataset.ModelingTurnPurpose(
+                                io.agentscope.dataagent.dataset.ModelingTurnPurpose.AUTO));
+        assertThat(tool.propose(alice, "view", "访问宽表3", "a", "b", "c", null, true))
+                .startsWith("error:");
+
+        when(alice.get(purpose))
+                .thenReturn(
+                        new io.agentscope.dataagent.dataset.ModelingTurnPurpose(
+                                io.agentscope.dataagent.dataset.ModelingTurnPurpose.ASSET));
+        assertThat(tool.propose(alice, "view", "访问宽表2", "a", "b", "c", null, true))
+                .startsWith("error:");
+        assertThat(files.write(alice, "models/有效访问/metadata.yml", "name: 有效访问\n").isSuccess())
+                .isTrue();
+        assertThat(files.write(alice, "models/有效访问/ref_sql.sql", "SELECT 1").isSuccess()).isTrue();
     }
 
     @Test

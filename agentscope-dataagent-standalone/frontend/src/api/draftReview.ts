@@ -1,7 +1,7 @@
 import { apiFetch, getToken } from './auth';
 
 /** Where a draft change came from (spec092); "platform" means no recorded writer. */
-export type ChangeSource = 'auto' | 'document' | 'question' | 'chat' | 'confirm' | 'edit' | 'upload' | 'platform';
+export type ChangeSource = 'auto' | 'document' | 'question' | 'chat' | 'confirm' | 'asset' | 'edit' | 'upload' | 'platform';
 
 export interface DraftChange {
   path: string;
@@ -81,7 +81,7 @@ export async function deleteDocument(groupId: string, name: string): Promise<voi
 
 export const SOURCE_LABEL: Record<ChangeSource, string> = {
   auto: '自动建模', document: '文档更新', question: '问题处理', chat: '你的对话', confirm: '你的确认',
-  edit: '你的编辑', upload: '上传', platform: '平台',
+  asset: '语义资产', edit: '你的编辑', upload: '上传', platform: '平台',
 };
 
 /** The user's own edit of a drafted text file in the review page. */
@@ -98,11 +98,13 @@ export interface Confirmation {
   basis: string;
   options: { label: string; rule: string }[];
   createdAt: string;
+  /** spec110: coach or trial questions whose SQL waits for this answer. */
+  questionIds?: string[] | null;
 }
 
 export interface ConfirmationAnswer { id: string; answer: string | null; dismissed: boolean }
 
-export interface ConfirmationDecision { question: string; answer: string }
+export interface ConfirmationDecision { question: string; answer: string; questionIds?: string[] | null }
 
 export async function listConfirmations(groupId: string): Promise<Confirmation[]> {
   return read(await apiFetch(`${base(groupId)}/confirmations`, { headers: headers() }), '读取待确认问题失败');

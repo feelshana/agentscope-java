@@ -54,7 +54,12 @@ public final class ModelingConfirmationTool {
                             name = "topic",
                             description = "问题类型：relationship 表示表间关系，其余口径问题留空",
                             required = false)
-                    String topic) {
+                    String topic,
+            @ToolParam(
+                            name = "question_ids",
+                            description = "这个口径服务的问题 ID（问数优化、试问中提问时必填），答复后平台会为这些问题重新生成 SQL",
+                            required = false)
+                    List<String> questionIds) {
         try {
             var project = access.resolve(context);
             List<String> labels = withoutPageOptions(optionLabels, optionRules);
@@ -65,13 +70,25 @@ public final class ModelingConfirmationTool {
                             + project.groupId();
             requireCapacity(context, key, relationship);
             var created =
-                    confirmations.create(project.groupId(), question, basis, labels, optionRules);
+                    confirmations.create(
+                            project.groupId(), question, basis, labels, optionRules, questionIds);
             // Only questions that were actually created use up this turn's allowance.
             count(context, key);
             return "已提交给用户确认（" + created.question() + "）。不要等待，继续完成其余工作；用户确认后会发来消息。";
         } catch (RuntimeException e) {
             return "error: " + e.getMessage();
         }
+    }
+
+    /** The tool without linked questions, as callers outside the coach and trial use it. */
+    public String request(
+            RuntimeContext context,
+            String question,
+            String basis,
+            List<String> optionLabels,
+            List<String> optionRules,
+            String topic) {
+        return request(context, question, basis, optionLabels, optionRules, topic, null);
     }
 
     /**

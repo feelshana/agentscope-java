@@ -548,4 +548,55 @@ class WrenInstanceRegistryTest {
         ctor.setAccessible(true);
         instances.put(groupId, ctor.newInstance(null, client));
     }
+
+    @org.junit.jupiter.api.Test
+    void workflowPromptKeepsEveryTextPartInOrder() {
+        var result =
+                new io.modelcontextprotocol.spec.McpSchema.GetPromptResult(
+                        "SOP",
+                        java.util.List.of(
+                                new io.modelcontextprotocol.spec.McpSchema.PromptMessage(
+                                        io.modelcontextprotocol.spec.McpSchema.Role.USER,
+                                        new io.modelcontextprotocol.spec.McpSchema.TextContent(
+                                                "step 1")),
+                                new io.modelcontextprotocol.spec.McpSchema.PromptMessage(
+                                        io.modelcontextprotocol.spec.McpSchema.Role.USER,
+                                        new io.modelcontextprotocol.spec.McpSchema.TextContent(
+                                                "step 2"))));
+        org.assertj.core.api.Assertions.assertThat(WrenInstanceRegistry.promptText(result))
+                .isEqualTo("step 1\nstep 2");
+        org.assertj.core.api.Assertions.assertThat(WrenInstanceRegistry.promptText(null)).isEmpty();
+    }
+
+    @Test
+    void mdlResourceTextKeepsOnlyTextContents() {
+        var result =
+                new io.modelcontextprotocol.spec.McpSchema.ReadResourceResult(
+                        List.of(
+                                new io.modelcontextprotocol.spec.McpSchema.TextResourceContents(
+                                        "wren://mdl", "application/json", "{\"models\":[]}"),
+                                new io.modelcontextprotocol.spec.McpSchema.BlobResourceContents(
+                                        "wren://mdl", "application/octet-stream", "AA==")));
+        org.assertj.core.api.Assertions.assertThat(WrenInstanceRegistry.resourceText(result))
+                .isEqualTo("{\"models\":[]}");
+        org.assertj.core.api.Assertions.assertThat(WrenInstanceRegistry.resourceText(null))
+                .isEmpty();
+    }
+
+    /** 2026-11-03 log: every Chinese name and description reached the model as \\uXXXX. */
+    @Test
+    void mdlResourceIsReadableChineseWithTheSameJsonValue() throws Exception {
+        String escaped =
+                "{\"models\": [{\"name\": \"\\u62a5\\u8868\", \"properties\": {\"description\":"
+                        + " \"say \\\"hi\\\"\"}}], \"views\": []}";
+        String readable = WrenInstanceRegistry.unescapedJson(escaped);
+        org.assertj.core.api.Assertions.assertThat(readable)
+                .contains("\"报表\"")
+                .doesNotContain("\\u62a5");
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        org.assertj.core.api.Assertions.assertThat(mapper.readTree(readable))
+                .isEqualTo(mapper.readTree(escaped));
+        org.assertj.core.api.Assertions.assertThat(WrenInstanceRegistry.unescapedJson("not json"))
+                .isEqualTo("not json");
+    }
 }

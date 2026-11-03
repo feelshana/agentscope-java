@@ -32,6 +32,15 @@ public interface DatasetGroupRepository extends JpaRepository<DatasetGroupEntity
                     + " 1, g.mdlState = 'DIRTY' where g.id = :id")
     void requireModeling(String id);
 
+    /**
+     * A semantic draft changed: publishing is due, but the published snapshot stays valid, so the
+     * modeling revision (which stops querying) is left alone (ADR0123).
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Transactional
+    @Query("update DatasetGroupEntity g set g.mdlState = 'DIRTY' where g.id = :id")
+    void markDraftChanged(String id);
+
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Transactional
     @Query(

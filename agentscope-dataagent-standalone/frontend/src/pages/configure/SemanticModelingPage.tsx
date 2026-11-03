@@ -15,6 +15,8 @@ import type { FieldAdjustment } from '../../components/modeling/FieldScreeningPa
 import { getScreeningStatus } from '../../api/fieldScreening';
 import type { ScreeningStatus } from '../../api/fieldScreening';
 import ConfirmationCards from '../../components/modeling/ConfirmationCards';
+import { questionRequest } from '../../components/modeling/QuestionIntakeForm';
+import { getModelingQuestions } from '../../api/modelingQuestions';
 import DraftBar from '../../components/modeling/DraftBar';
 import type { DraftSummary } from '../../components/modeling/DraftBar';
 import NextStepCard from '../../components/modeling/NextStepCard';
@@ -23,6 +25,9 @@ import TurnResultCard from '../../components/modeling/TurnResultCard';
 import ModelSnapshotPanel from '../../components/modeling/ModelSnapshotPanel';
 import AssetYamlBrowser from '../../components/modeling/AssetYamlBrowser';
 import SqlQaExamplesPanel from '../../components/modeling/SqlQaExamplesPanel';
+import CompiledMdlPanel from '../../components/modeling/CompiledMdlPanel';
+import AssetProposalCards from '../../components/modeling/AssetProposalCards';
+import QueryCoachPanel from '../../components/modeling/QueryCoachPanel';
 import type { AssetEntry } from '../../components/modeling/AssetYamlBrowser';
 import { getGroupDetail } from '../../api/datasets';
 import { getKnowledgeBaseBrowse, getMdlView, getMdlPreview } from '../../api/semanticModeling';
@@ -33,18 +38,20 @@ import { listConfirmations, resolveConfirmations } from '../../api/draftReview';
 import type { Confirmation, ConfirmationAnswer, ConfirmationDecision } from '../../api/draftReview';
 import type { TurnPurpose } from '../../api/chat';
 import { useQueryReadiness } from '../../components/useQueryReadiness';
+import SemanticAssetsPanel from '../../components/modeling/SemanticAssetsPanel';
 import './SemanticModelingPage.css';
 
-type Tab = 'modeling' | 'overview' | 'models' | 'relations' | 'knowledge' | 'qa';
+type Tab = 'modeling' | 'coach' | 'overview' | 'models' | 'relations' | 'assets' | 'knowledge' | 'qa';
 // spec092 §7: the conversation is the workspace; review happens inline, publishing in the draft bar.
 // spec106: every semantic asset is one tab here; these are the addresses used before that.
 const LEGACY_TABS: Record<string, Tab> = {
   schema: 'models', derived: 'models', views: 'models', cubes: 'models', mdl: 'models', glossary: 'knowledge', sql: 'qa',
 };
-const TAB_KEYS: Tab[] = ['modeling', 'overview', 'models', 'relations', 'knowledge', 'qa'];
+const TAB_KEYS: Tab[] = ['modeling', 'coach', 'overview', 'models', 'relations', 'assets', 'knowledge', 'qa'];
 const ADVANCED = new Set(['views', 'cubes', 'mdl']);
 const tabOf = (asset: string | null, kind: string | null): Tab | null => {
-  if (asset === 'assets') return LEGACY_TABS[kind ?? ''] ?? 'models';
+  // spec107: a bare ?asset=assets is the new page; with a kind it is the older address.
+  if (asset === 'assets') return kind ? LEGACY_TABS[kind] ?? 'models' : 'assets';
   if (asset && (TAB_KEYS as string[]).includes(asset)) return asset as Tab;
   return asset ? LEGACY_TABS[asset] ?? 'modeling' : null;
 };
@@ -179,6 +186,12 @@ function ModelingWorkbench() {
       const decisions = await resolveConfirmations(groupId, answers);
       if (activeGroup.current !== groupId) return;
       if (decisions.length) request(confirmRequest(decisions), 'confirm', confirmLabel(decisions));
+      // spec110: once the rule is written, the questions that waited for it get their SQL.
+      const linked = [...new Set(decisions.flatMap(d => d.questionIds ?? []))];
+      if (linked.length) {
+        const waiting = (await getModelingQuestions(groupId)).filter(r => linked.includes(r.question.id));
+        if (waiting.length) request(questionRequest(waiting.map(r => r.question.question), waiting.map(r => r.question.id)), 'question', `按确认的口径生成 ${waiting.length} 题 SQL`);
+      }
       await refresh();
     } catch (e) { if (activeGroup.current === groupId) setError(message(e)); }
   };
@@ -277,10 +290,10 @@ function ModelingWorkbench() {
   const snapshotFiles = useMemo(() => new Map((version === 'published' ? preview?.publishedFiles : preview?.files)?.map(f => [f.path, f.content]) ?? []), [version, preview]);
   const counts = view ? draftSnapshot(view) : null;
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'modeling', label: '建模对话' }, { key: 'overview', label: '资料' },
+    { key: 'modeling', label: '建模对话' }, { key: 'coach', label: '问数优化' }, { key: 'overview', label: '资料' },
     { key: 'models', label: `模型${(snapshot ?? counts) ? ` ${(snapshot ?? counts)?.models.length}` : ''}` },
     { key: 'relations', label: `关系${(snapshot ?? counts) ? ` ${(snapshot ?? counts)?.relations.length}` : ''}` },
-    { key: 'knowledge', label: '业务知识' }, { key: 'qa', label: '问答' },
+    { key: 'assets', label: '公共视图' }, { key: 'knowledge', label: '业务知识' }, { key: 'qa', label: '问答' },
   ];
   /** Fills the conversation's input; the user reads it and decides whether to send. */
   const askAssistant = (text: string) => { setPrefill({ id: ++sequence.current, text }); selectTab('modeling'); };
@@ -396,10 +409,14 @@ function ModelingWorkbench() {
             onActivityChange={setAssistantState}
             renderTurnResult={since => <TurnResultCard groupId={groupId} since={since} disabled={!idle} />}
             // Before modeling starts there is nothing to try or publish yet.
-            footer={!idle || startOffer === groupId ? null : confirmations.length > 0 ? <div ref={confirmAnchor} data-tour="confirm-cards">
+            footer={!idle || startOffer === groupId ? null : <>
+              {/* spec109: assets proposed in this conversation start drafting only when the user agrees. */}
+              <AssetProposalCards groupId={groupId} disabled={!idle} refreshKey={assistantState}
+                onDraft={(text, label) => request(text, 'asset', label)} />
+              {confirmations.length > 0 ? <div ref={confirmAnchor} data-tour="confirm-cards">
               <ConfirmationCards key={confirmations.map(c => c.id).join(',')} questions={confirmations} onSubmit={answers => void answered(answers)} />
             </div> : <NextStepCard groupId={groupId} summary={draftSummary} unconfirmedTrials={unconfirmedTrials} nextVersion={(workflow?.publishedVersion ?? 0) + 1}
-              onTrial={() => setTrialOpen(true)} onPublish={() => setPublishSignal(n => n + 1)} onQuery={toQuery} />} /> : <div className="da-card">事实表时间配置完成后，建模助手会在此继续。</div>}</div>
+              onTrial={() => setTrialOpen(true)} onPublish={() => setPublishSignal(n => n + 1)} onQuery={toQuery} />}</>} /> : <div className="da-card">事实表时间配置完成后，建模助手会在此继续。</div>}</div>
           {windowReady && <div className="modeling-trial-column" style={{ flex: '0 0 380px', minHeight: 0, display: trialOpen ? 'flex' : 'none' }}>
             <TrialPanel groupId={groupId} assistantIdle={idle} open={trialOpen} onClose={() => setTrialOpen(false)} onExamples={(count, unconfirmed) => { setExamples(count); setUnconfirmedTrials(unconfirmed); }}
               onAsk={text => request(text, 'question')} onWrong={text => request(text, 'question')} />
@@ -412,6 +429,7 @@ function ModelingWorkbench() {
         {!snapshot ? <div className="da-small">加载中…</div> : tab === 'models' ? <>
           <ModelsPanel snapshot={snapshot} selected={selected} onSelect={openModel} files={snapshotFiles} onOpenRelation={openRelation}
             onAsk={askAssistant} emptyText="暂无模型，请先上传数据或关联数据表" />
+          <CompiledMdlPanel groupId={groupId} version={version} />
           <details className="sm-advanced" open={ADVANCED.has(legacyAsset ?? '')}>
             <summary>高级：视图、Cube 与工程快照</summary>
             {legacyAsset !== 'cubes' && viewEntries.length > 0 && <AssetYamlBrowser groupId={groupId} entries={viewEntries} selectedKey={selected ?? viewEntries[0].key} onSelect={openModel} emptyText="暂无视图" />}
@@ -426,7 +444,11 @@ function ModelingWorkbench() {
         <AssetYamlBrowser groupId={groupId} entries={knowledgeEntries} selectedKey={selected ?? knowledgeEntries[0]?.key ?? null}
           onSelect={key => setParams({ asset: 'knowledge', selected: key }, { replace: true })} emptyText="当前草稿暂无业务规则" />
       </section>}
+      {tab === 'assets' && <SemanticAssetsPanel groupId={groupId} assistantIdle={idle}
+        onDraft={(text, label) => { const sent = request(text, 'asset', label); if (sent) selectTab('modeling'); return sent; }} />}
       {tab === 'qa' && <section className="sm-scroll"><SqlQaExamplesPanel groupId={groupId} /></section>}
+      {tab === 'coach' && <QueryCoachPanel groupId={groupId} assistantIdle={idle} available={hasPublished} onRequest={request}
+        confirmations={confirmations} onAnswer={answers => void answered(answers)} onOpenDocuments={() => selectTab('overview')} />}
     </main>
     {!screeningPending && !resolving && <DraftBar groupId={groupId} workflow={workflow} assistantActive={!idle} pendingConfirmations={confirmations.length}
       onLocate={locateConfirmations} onPublished={() => void refresh()}

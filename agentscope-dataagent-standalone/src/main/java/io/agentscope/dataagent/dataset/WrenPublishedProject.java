@@ -212,7 +212,8 @@ public final class WrenPublishedProject {
                                             "target",
                                             "relationships.yml",
                                             "wren_project.yml",
-                                            "wren-source.properties")) {
+                                            "wren-source.properties",
+                                            PublishedAssetWindows.FILE)) {
                                 remove(runtime.resolve(name), runtime);
                             }
                             copy(published, runtime);

@@ -83,10 +83,16 @@ public class ModelingWorkflowService {
         // spec092: confirmations bind to the question; a model changed since confirmation only
         // suggests a re-check and never blocks publication.
         String modelHash = questions.modelHash(workspace.workspaceRoot(groupId));
+        // spec108: a confirmation whose dependencies changed (REVIEW) is affected by definition.
         List<String> affected =
                 reviews.stream()
-                        .filter(r -> "CONFIRMED".equals(r.status()) && r.validation() != null)
-                        .filter(r -> !modelHash.equals(r.validation().modelHash()))
+                        .filter(
+                                r ->
+                                        "REVIEW".equals(r.status())
+                                                || ("CONFIRMED".equals(r.status())
+                                                        && r.validation() != null
+                                                        && !modelHash.equals(
+                                                                r.validation().modelHash())))
                         .map(r -> r.question().id())
                         .toList();
         List<Blocker> blockers = new ArrayList<>();
@@ -97,7 +103,8 @@ public class ModelingWorkflowService {
                 incomplete++;
                 continue;
             }
-            if ("CONFIRMED".equals(review.status())) {
+            // A question awaiting review is still confirmed; `affected` asks for the re-check.
+            if ("CONFIRMED".equals(review.status()) || "REVIEW".equals(review.status())) {
                 confirmed++;
                 continue;
             }

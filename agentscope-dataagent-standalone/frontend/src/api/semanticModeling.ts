@@ -570,3 +570,12 @@ export async function previewWorkspaceChange(
   if (!res.ok) throw new Error(await errorMessage(res, `变更预检失败: ${res.status}`));
   return res.json();
 }
+
+/** The official compiled MDL text of the published version and of the draft's last build. */
+export interface CompiledMdl { published: string | null; publishedBuiltAt: string | null; draft: string | null; draftBuiltAt: string | null }
+
+export async function getCompiledMdl(groupId: string): Promise<CompiledMdl> {
+  const res = await apiFetch(`${base(groupId)}/mdl/compiled`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(await errorMessage(res, `读取编译后的 MDL 失败: ${res.status}`));
+  return res.json();
+}

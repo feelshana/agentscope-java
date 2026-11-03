@@ -76,6 +76,52 @@ class ModelingConfirmationServiceTest {
         assertThrows(DatasetException.class, () -> ask("再多一个"));
     }
 
+    /** spec110: asking about a question's meaning withdraws the SQL written on a guess. */
+    @Test
+    void askingAboutAQuestionWithdrawsItsGuessedSql() throws Exception {
+        Path question = workspace.workspaceRoot("g1").resolve("knowledge/questions/q-coach-2.yml");
+        Files.createDirectories(question.getParent());
+        Files.writeString(
+                question,
+                "question: 活跃用户最常看哪些报表\ndefinition: |-\n  指标：访问次数。\n  假设：活跃用户指全部访问人。\n"
+                        + "sql: SELECT report_name, COUNT(*) FROM visits GROUP BY 1\n");
+        service.create(
+                "g1",
+                "活跃用户如何界定？",
+                "规则和文档都没有定义",
+                List.of("暂不确定，先记为待确认", "区间内有访问的全部用户"),
+                List.of("活跃用户定义待确认。", "活跃用户 = 区间内有访问记录的用户。"),
+                List.of("q-coach-2"));
+        String written = Files.readString(question);
+        assertTrue(written.contains("sql: \"\""), written);
+        assertTrue(written.contains("假设：待确认口径"), written);
+        assertFalse(written.contains("全部访问人"), written);
+    }
+
+    /** spec110: a card asked for coach questions hands their ids back with the decision. */
+    @Test
+    void linkedQuestionsTravelWithTheCardAndItsDecision() {
+        var linked =
+                service.create(
+                        "g1",
+                        "高频用户如何界定？",
+                        "规则和文档都没有定义",
+                        List.of("暂不确定，先记为待确认", "最近 30 天访问超过 10 次"),
+                        List.of("高频用户定义待确认。", "高频用户 = 最近 30 天访问次数大于 10 的账号。"),
+                        List.of("q-coach-1", "q-coach-1", "../bad"));
+        assertEquals(List.of("q-coach-1"), service.list("alice", "g1").get(0).questionIds());
+        var decisions =
+                service.resolve(
+                        "alice",
+                        "g1",
+                        List.of(
+                                new ModelingConfirmationService.Answer(
+                                        linked.id(), "高频用户 = 最近 30 天访问次数大于 10 的账号。", false)));
+        assertEquals(List.of("q-coach-1"), decisions.get(0).questionIds());
+        // Cards asked outside the coach carry no linked questions.
+        assertEquals(List.of(), ask("报表是否只算报表类型？").questionIds());
+    }
+
     @Test
     void resolvingReturnsDecisionsAndRemovesQuestions() {
         var chosen = ask("一般统计是否排除外协人員？");

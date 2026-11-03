@@ -222,7 +222,7 @@ public class DatasetGroupService {
     @Transactional
     public void markMdlDirty(String ownerId, String groupId) {
         getGroup(ownerId, groupId);
-        datasetService.markMdlDirty(groupId);
+        datasetService.markDraftChanged(groupId);
     }
 
     private String ensureDefaultGroupId(String ownerId) {

@@ -52,6 +52,10 @@ class ModelingRevisionTest {
             var ready = em.find(DatasetGroupEntity.class, "g");
             assertThat(ready.isModelingPending()).isFalse();
             assertThat(ready.getPublishedModelingRevision()).isEqualTo(2);
+            repo.markDraftChanged("g");
+            var edited = em.find(DatasetGroupEntity.class, "g");
+            assertThat(edited.getMdlState()).isEqualTo("DIRTY");
+            assertThat(edited.isModelingPending()).isFalse();
             em.getTransaction().commit();
         }
     }

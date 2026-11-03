@@ -60,7 +60,46 @@ public class MdlQuestionStore {
             boolean truncated,
             String confirmedBy,
             String confirmedAt,
-            Evidence evidence) {}
+            Evidence evidence,
+            // spec108: what the confirmed SQL depended on, and where the confirmation came from.
+            Map<String, String> dependencies,
+            String origin) {
+        Receipt(
+                String validationId,
+                String questionHash,
+                String modelHash,
+                String status,
+                String executedAt,
+                Map<String, Object> result,
+                String error,
+                boolean truncated,
+                String confirmedBy,
+                String confirmedAt,
+                Evidence evidence) {
+            this(
+                    validationId,
+                    questionHash,
+                    modelHash,
+                    status,
+                    executedAt,
+                    result,
+                    error,
+                    truncated,
+                    confirmedBy,
+                    confirmedAt,
+                    evidence,
+                    null,
+                    null);
+        }
+    }
+
+    /** One line of a question's analysis: something reusable ({@code ok}) or a gap. */
+    public record Finding(boolean ok, String text) {}
+
+    static final int MAX_FINDINGS = 5;
+
+    /** spec108: a confirmation that came from a semantic asset's question verification. */
+    public static final String ORIGIN_ASSET_VERIFY = "asset-verify";
 
     public record Evidence(String sql, List<MdlWorkspaceReader.WorkspaceView> views) {}
 
@@ -70,9 +109,33 @@ public class MdlQuestionStore {
             Receipt validation,
             Coverage coverage,
             Publication published,
-            String revision) {
+            String revision,
+            // spec108: why a confirmed question needs review (status REVIEW); empty otherwise.
+            List<String> reviewReasons,
+            // spec110 §8: the assistant's per-question analysis; kept out of Question so that
+            // re-analysing never invalidates a confirmation.
+            List<Finding> analysis) {
+        public Review(
+                Question question,
+                String status,
+                Receipt validation,
+                Coverage coverage,
+                Publication published,
+                String revision,
+                List<String> reviewReasons) {
+            this(
+                    question,
+                    status,
+                    validation,
+                    coverage,
+                    published,
+                    revision,
+                    reviewReasons,
+                    List.of());
+        }
+
         public Review(Question question, String status, Receipt validation) {
-            this(question, status, validation, null, null, questionHash(question));
+            this(question, status, validation, null, null, questionHash(question), List.of());
         }
 
         public Review(
@@ -81,7 +144,24 @@ public class MdlQuestionStore {
                 Receipt validation,
                 Coverage coverage,
                 Publication published) {
-            this(question, status, validation, coverage, published, questionHash(question));
+            this(
+                    question,
+                    status,
+                    validation,
+                    coverage,
+                    published,
+                    questionHash(question),
+                    List.of());
+        }
+
+        public Review(
+                Question question,
+                String status,
+                Receipt validation,
+                Coverage coverage,
+                Publication published,
+                String revision) {
+            this(question, status, validation, coverage, published, revision, List.of());
         }
     }
 
@@ -182,17 +262,72 @@ public class MdlQuestionStore {
     private List<Review> listLocked(String groupId) {
         Path root = workspace.workspaceRoot(groupId);
         List<Review> out = new ArrayList<>();
+        QuestionDependencies.Project draft = null;
+        QuestionDependencies.Project published = null;
         for (Question question : readQuestions(root)) {
             Receipt receipt = readReceipt(groupId, question.id());
             String status = receipt == null ? "DRAFT" : receipt.status();
-            // spec091: decisions bind to the question and its SQL only; model drift is caught by
-            // the publish-time dry-plan instead of invalidating every confirmation.
+            List<String> reasons = List.of();
             if (receipt != null && !matchesQuestionHash(question, receipt.questionHash())) {
                 status = "STALE";
+            } else if ("CONFIRMED".equals(status)) {
+                // spec108: a confirmation also binds to what its SQL depends on; when that
+                // changed in the draft, the question needs review before it is an example again.
+                if (draft == null) draft = QuestionDependencies.read(root);
+                Map<String, String> before = receipt.dependencies();
+                if (before == null) {
+                    // Confirmed before spec108: the published version is the baseline.
+                    if (published == null)
+                        published =
+                                QuestionDependencies.read(root.getParent().resolve("published"));
+                    before =
+                            published.nodes().isEmpty()
+                                    ? null
+                                    : QuestionDependencies.snapshot(published, question.sql());
+                }
+                if (before != null) {
+                    reasons =
+                            QuestionDependencies.changes(
+                                    before, QuestionDependencies.snapshot(draft, question.sql()));
+                    if (!reasons.isEmpty()) status = "REVIEW";
+                }
             }
-            out.add(review(groupId, question, status, receipt));
+            Review review = review(groupId, question, status, receipt);
+            out.add(
+                    new Review(
+                            review.question(),
+                            review.status(),
+                            review.validation(),
+                            review.coverage(),
+                            review.published(),
+                            review.revision(),
+                            reasons,
+                            readAnalysis(root, question.id())));
         }
         return out;
+    }
+
+    /**
+     * Reads the optional {@code analysis} list the coach writes into a question file. The page
+     * only shows it, so anything malformed is dropped instead of failing the question list.
+     */
+    static List<Finding> readAnalysis(Path root, String id) {
+        Path file = root.resolve("knowledge/questions/" + id + ".yml");
+        try {
+            JsonNode items =
+                    YAML.readTree(Files.readString(file, StandardCharsets.UTF_8)).path("analysis");
+            if (!items.isArray()) return List.of();
+            List<Finding> out = new ArrayList<>();
+            for (JsonNode item : items) {
+                if (out.size() >= MAX_FINDINGS) break;
+                String text = item.path("text").asText("").strip();
+                if (!item.path("ok").isBoolean() || text.isEmpty() || text.length() > 200) continue;
+                out.add(new Finding(item.path("ok").asBoolean(), text));
+            }
+            return List.copyOf(out);
+        } catch (IOException | RuntimeException e) {
+            return List.of();
+        }
     }
 
     public Question requireQuestion(String groupId, String id) {
@@ -446,6 +581,12 @@ public class MdlQuestionStore {
      * re-checks the SQL policy and asset coverage; time-window gating is the caller's job.
      */
     public Review decide(String groupId, String id, boolean accepted, String ownerId) {
+        return decide(groupId, id, accepted, ownerId, null);
+    }
+
+    /** {@code origin} marks where an accepted confirmation came from; null for the trial panel. */
+    public Review decide(
+            String groupId, String id, boolean accepted, String ownerId, String origin) {
         return workspace.withWorkspaceLock(
                 groupId,
                 () -> {
@@ -474,7 +615,19 @@ public class MdlQuestionStore {
                                     sameQuestion && previous.truncated(),
                                     accepted ? ownerId : null,
                                     accepted ? Instant.now().toString() : null,
-                                    sameQuestion ? previous.evidence() : null);
+                                    sameQuestion ? previous.evidence() : null,
+                                    accepted
+                                            ? QuestionDependencies.snapshot(
+                                                    QuestionDependencies.read(
+                                                            workspace.workspaceRoot(groupId)),
+                                                    question.sql())
+                                            : null,
+                                    // Re-confirming after a review keeps where it came from.
+                                    !accepted
+                                            ? null
+                                            : origin != null
+                                                    ? origin
+                                                    : previous == null ? null : previous.origin());
                     Path pair =
                             workspace.workspaceRoot(groupId).resolve("knowledge/sql/" + id + ".md");
                     if (accepted) {
@@ -488,6 +641,62 @@ public class MdlQuestionStore {
                     }
                     writeReceipt(groupId, id, decided);
                     return review(groupId, question, decided.status(), decided);
+                });
+    }
+
+    /**
+     * spec108: writes a question verified against a semantic asset, ready to be confirmed. A
+     * question with the same text is updated in place instead of duplicated; returns its id.
+     */
+    public String saveVerifiedQuestion(
+            String groupId, String question, String definition, String sql) {
+        String text = question == null ? "" : question.strip();
+        if (text.isEmpty() || text.length() > 1000)
+            throw new DatasetException("验证问题不能为空且不超过 1000 字", 400);
+        requireReadSql(sql);
+        return workspace.withWorkspaceLock(
+                groupId,
+                () -> {
+                    Path root = workspace.workspaceRoot(groupId);
+                    List<Question> existing = readQuestions(root);
+                    String id =
+                            existing.stream()
+                                    .filter(q -> q.question().equals(text))
+                                    .map(Question::id)
+                                    .findFirst()
+                                    .orElse(null);
+                    if (id == null) {
+                        if (existing.size() >= 50)
+                            throw new DatasetException("每个知识库最多设置 50 个常用问题", 400);
+                        String stamp = Long.toString(System.currentTimeMillis(), 36);
+                        int n = 1;
+                        while (Files.exists(
+                                root.resolve(
+                                        "knowledge/questions/q-asset-" + stamp + "-" + n + ".yml")))
+                            n++;
+                        id = "q-asset-" + stamp + "-" + n;
+                    }
+                    Path source = root.resolve("knowledge/questions/" + id + ".yml");
+                    try {
+                        var node =
+                                Files.isRegularFile(source)
+                                        ? (com.fasterxml.jackson.databind.node.ObjectNode)
+                                                YAML.readTree(
+                                                        Files.readString(
+                                                                source, StandardCharsets.UTF_8))
+                                        : YAML.createObjectNode();
+                        node.put("question", text);
+                        node.put("definition", definition == null ? "" : definition.strip());
+                        node.put("sql", sql.strip());
+                        var plan = node.putObject("modeling");
+                        plan.put("strategy", "EXAMPLE");
+                        plan.put("reason", "语义资产问题验证符合预期，由用户确认保存");
+                        plan.putArray("assets");
+                        write(source, YAML.writeValueAsString(node));
+                    } catch (IOException e) {
+                        throw new DatasetException("保存验证问题失败：" + e.getMessage(), e);
+                    }
+                    return id;
                 });
     }
 
@@ -559,22 +768,24 @@ public class MdlQuestionStore {
         return issues;
     }
 
-    /** Only currently confirmed pairs are shipped; stale requirements never leak examples. */
-    public void filterPublishedExamples(String groupId, Path preparedDir) {
-        java.util.Set<String> confirmed =
-                list(groupId).stream()
-                        .filter(r -> "CONFIRMED".equals(r.status()))
-                        .map(r -> r.question().id() + ".md")
-                        .collect(java.util.stream.Collectors.toSet());
+    /**
+     * A question's pair is shipped only while the question is confirmed: a changed SQL (STALE) or
+     * a changed dependency (REVIEW, spec108) keeps the old pair out of the snapshot. Pairs that
+     * belong to no question (standalone SQL examples) are left alone. Returns the questions held
+     * back for review.
+     */
+    public List<Review> filterPublishedExamples(String groupId, Path preparedDir) {
+        List<Review> reviews = list(groupId);
         Path directory = preparedDir.resolve("knowledge/sql");
-        if (!Files.isDirectory(directory)) return;
-        try (var files = Files.list(directory)) {
-            for (Path file : files.filter(p -> p.toString().endsWith(".md")).toList()) {
-                if (!confirmed.contains(file.getFileName().toString())) Files.delete(file);
+        try {
+            for (Review review : reviews) {
+                if ("CONFIRMED".equals(review.status())) continue;
+                Files.deleteIfExists(directory.resolve(review.question().id() + ".md"));
             }
         } catch (IOException e) {
             throw new DatasetException("筛选发布示例失败：" + e.getMessage(), e);
         }
+        return reviews.stream().filter(r -> "REVIEW".equals(r.status())).toList();
     }
 
     /**
@@ -593,6 +804,7 @@ public class MdlQuestionStore {
                 if (relative.startsWith(".platform/")
                         || relative.startsWith("target/")
                         || relative.equals("wren-source.properties")
+                        || relative.equals(PublishedAssetWindows.FILE)
                         || relative.startsWith(".wren/")
                         // Source material (documents, samples) never compiles into the MDL.
                         || relative.startsWith("raw/")

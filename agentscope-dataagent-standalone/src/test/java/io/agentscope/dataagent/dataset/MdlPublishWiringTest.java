@@ -33,6 +33,7 @@ class MdlPublishWiringTest {
                     KnowledgeBaseOperations.class, () -> mock(KnowledgeBaseOperations.class));
             context.registerBean(
                     KnowledgeBaseAccessService.class, () -> mock(KnowledgeBaseAccessService.class));
+            context.registerBean(AssetReviewStore.class, () -> mock(AssetReviewStore.class));
             context.register(MdlPublishService.class);
             context.refresh();
             var service = context.getBean(MdlPublishService.class);
@@ -41,6 +42,8 @@ class MdlPublishWiringTest {
             assertThat(ReflectionTestUtils.getField(service, "access"))
                     .isSameAs(context.getBean(KnowledgeBaseAccessService.class));
             assertThat(ReflectionTestUtils.getField(service, "events")).isSameAs(context);
+            assertThat(ReflectionTestUtils.getField(service, "assetReviews"))
+                    .isSameAs(context.getBean(AssetReviewStore.class));
         }
     }
 }

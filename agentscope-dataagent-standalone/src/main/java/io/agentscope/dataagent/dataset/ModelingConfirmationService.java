@@ -37,14 +37,23 @@ public class ModelingConfirmationService {
     /** {@code rule} is the exact text the answer would establish; the first option is recommended. */
     public record Option(String label, String rule) {}
 
+    /** {@code questionIds}: the coach or trial questions the answer settles (spec110). */
     public record Confirmation(
-            String id, String question, String basis, List<Option> options, String createdAt) {}
+            String id,
+            String question,
+            String basis,
+            List<Option> options,
+            String createdAt,
+            List<String> questionIds) {}
 
     /** One user decision: an option's rule or the user's own text, or dismissed (no rule). */
     public record Answer(String id, String answer, boolean dismissed) {}
 
-    /** A decided question handed back to the assistant to write into rules or descriptions. */
-    public record Decision(String question, String answer) {}
+    /**
+     * A decided question handed back to the assistant to write into rules or descriptions; the
+     * page regenerates the SQL of {@code questionIds} once the rule is written (spec110).
+     */
+    public record Decision(String question, String answer, List<String> questionIds) {}
 
     /** Called by the assistant's tool; the caller has resolved the project with MANAGE. */
     public Confirmation create(
@@ -53,6 +62,23 @@ public class ModelingConfirmationService {
             String basis,
             List<String> labels,
             List<String> rules) {
+        return create(groupId, question, basis, labels, rules, List.of());
+    }
+
+    public Confirmation create(
+            String groupId,
+            String question,
+            String basis,
+            List<String> labels,
+            List<String> rules,
+            List<String> questionIds) {
+        List<String> linked =
+                questionIds == null
+                        ? List.of()
+                        : questionIds.stream()
+                                .filter(id -> id != null && id.matches("[A-Za-z0-9_-]{1,64}"))
+                                .distinct()
+                                .toList();
         String q = text(question, 300, "问题");
         String b = basis == null ? "" : basis.trim();
         if (b.length() > 500) throw new DatasetException("依据说明不能超过 500 字", 400);
@@ -84,10 +110,63 @@ public class ModelingConfirmationService {
                                     q,
                                     b,
                                     List.copyOf(options),
-                                    Instant.now().toString());
+                                    Instant.now().toString(),
+                                    linked);
                     write(groupId, created);
+                    // spec110: the meaning comes first. The assistant kept writing SQL on its own
+                    // guess before asking (2026-11-03, twice), so the platform withdraws it here.
+                    for (String id : linked)
+                        withdrawGuessedSql(workspace.workspaceRoot(groupId), id);
                     return created;
                 });
+    }
+
+    static final String AWAITING = "待确认口径（见确认卡），确认后生成 SQL。";
+
+    /** Empties a linked question's SQL and marks its assumption as awaiting the answer. */
+    static void withdrawGuessedSql(Path root, String questionId) {
+        Path file = root.resolve("knowledge/questions/" + questionId + ".yml");
+        if (!Files.isRegularFile(file)) return;
+        try {
+            var yaml = new ObjectMapper(new com.fasterxml.jackson.dataformat.yaml.YAMLFactory());
+            var node =
+                    (com.fasterxml.jackson.databind.node.ObjectNode) yaml.readTree(file.toFile());
+            if (node.path("sql").asText("").isBlank()) return;
+            node.put("sql", "");
+            List<String> lines = new ArrayList<>();
+            boolean replaced = false;
+            for (String line : node.path("definition").asText("").split("\\R")) {
+                if (line.strip().startsWith("假设：")) {
+                    lines.add("假设：" + AWAITING);
+                    replaced = true;
+                } else if (!line.isBlank()) lines.add(line);
+            }
+            if (!replaced) lines.add("假设：" + AWAITING);
+            node.put("definition", String.join("\n", lines));
+            Files.writeString(file, yaml.writeValueAsString(node), StandardCharsets.UTF_8);
+        } catch (IOException | ClassCastException e) {
+            throw new DatasetException("更新待确认问题失败：" + e.getMessage(), e);
+        }
+    }
+
+    /** Ids of the questions an open card was asked for; their SQL waits for the answer. */
+    public static java.util.Set<String> awaitingQuestions(Path root) {
+        Path directory = root.resolve(DIRECTORY);
+        if (!Files.isDirectory(directory)) return java.util.Set.of();
+        java.util.Set<String> out = new java.util.HashSet<>();
+        try (Stream<Path> files = Files.list(directory)) {
+            for (Path file : files.filter(f -> f.toString().endsWith(".json")).toList()) {
+                try {
+                    var ids = JSON.readValue(file.toFile(), Confirmation.class).questionIds();
+                    if (ids != null) out.addAll(ids);
+                } catch (IOException ignored) {
+                    // A torn card links nothing.
+                }
+            }
+        } catch (IOException e) {
+            return java.util.Set.of();
+        }
+        return out;
     }
 
     public List<Confirmation> list(String userId, String groupId) {
@@ -116,7 +195,10 @@ public class ModelingConfirmationService {
                             out.add(
                                     new Decision(
                                             question.question(),
-                                            text(answer.answer(), 500, "确认内容")));
+                                            text(answer.answer(), 500, "确认内容"),
+                                            question.questionIds() == null
+                                                    ? List.of()
+                                                    : question.questionIds()));
                         delete(groupId, question.id());
                     }
                     return out;

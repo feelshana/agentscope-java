@@ -505,4 +505,52 @@ class WrenScopedMcpClientTest {
         assertThat(WrenScopedMcpClient.compactRows("{\"rows\":[{\"a\":1}]}\n备注")).endsWith("备注");
         assertThat(WrenScopedMcpClient.compactRows("error: x")).isEqualTo("error: x");
     }
+
+    /** 2026-11-03 log: 18 daily counts summing to 98819 were added up in prose as 98941. */
+    @Test
+    void distinctCountsAveragesAndRatiosAreNotTotalled() {
+        // 2026-11-03 log: daily distinct visitors were summed into a meaningless 2673.
+        String daily =
+                "{\"columns\":[\"访问日期\",\"访问人数\",\"访问次数\",\"人均\",\"占比\"],"
+                    + "\"rows\":[[\"2026-10-01\",521,900,1.7,0.4],[\"2026-10-02\",512,800,1.6,0.6]],"
+                    + "\"truncated\":false}";
+        String sql =
+                "SELECT DATE_FORMAT(visit_time, '%Y-%m-%d') AS 访问日期,"
+                        + " COUNT(DISTINCT user_account) AS 访问人数, COUNT(*) AS `访问次数`,"
+                        + " AVG(n) 人均, SUM(a) / SUM(b) AS 占比"
+                        + " FROM (SELECT * FROM t WHERE x IN (SELECT y FROM u)) s GROUP BY 1";
+        assertThat(WrenScopedMcpClient.nonAdditiveColumns(sql))
+                .containsExactlyInAnyOrder("访问人数", "人均", "占比");
+        assertThat(WrenScopedMcpClient.columnTotals(daily, sql))
+                .contains("访问次数=1700")
+                .doesNotContain("访问人数=", "人均=", "占比=");
+        // The outermost select of a CTE query decides; unparseable SQL removes nothing.
+        assertThat(
+                        WrenScopedMcpClient.nonAdditiveColumns(
+                                "WITH d AS (SELECT AVG(x) AS a FROM t) SELECT day, COUNT(*) AS n"
+                                        + " FROM d"))
+                .isEmpty();
+        assertThat(WrenScopedMcpClient.nonAdditiveColumns("not sql")).isEmpty();
+    }
+
+    @Test
+    void completeMultiRowResultsCarryPlatformColumnTotals() {
+        String daily =
+                "{\"columns\":[\"日期\",\"访问次数\",\"占比\"],"
+                        + "\"rows\":[[\"2026-09-20\",1732,0.5],[\"2026-09-21\",7536,null],"
+                        + "[\"2026-09-22\",644,0.25]],\"row_count\":3,\"truncated\":false}";
+        assertThat(WrenScopedMcpClient.columnTotals(daily))
+                .contains("按本次返回的 3 行计算", "访问次数=9912", "占比=0.75", "不要自己相加")
+                .doesNotContain("日期=");
+        // Truncated, single-row and non-tabular results get no totals.
+        assertThat(
+                        WrenScopedMcpClient.columnTotals(
+                                daily.replace("\"truncated\":false", "\"truncated\":true")))
+                .isEmpty();
+        assertThat(
+                        WrenScopedMcpClient.columnTotals(
+                                "{\"columns\":[\"n\"],\"rows\":[[98819]],\"truncated\":false}"))
+                .isEmpty();
+        assertThat(WrenScopedMcpClient.columnTotals("error: x")).isEmpty();
+    }
 }

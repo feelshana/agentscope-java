@@ -39,6 +39,41 @@ class RuntimeWindowContextTest {
     }
 
     @Test
+    void officialWorkflowPromptIsPassedThroughVerbatimAndNeverBlocksTheTurn() {
+        var access = mock(WrenQueryAccess.class);
+        var policy = mock(FactQueryWindowPolicy.class);
+        var gateway = mock(io.agentscope.dataagent.runtime.wren.WrenQueryGateway.class);
+        var ctx = RuntimeContext.builder().userId("alice").build();
+        var group = new DatasetGroupEntity("g", "owner", "uploads", "");
+        when(access.visible(ctx)).thenReturn(List.of(group));
+        when(policy.rules("g")).thenReturn(List.of());
+        String official =
+                "Follow this workflow to answer a data question:\n1. Read the `wren://mdl`";
+        when(gateway.workflowPrompt("g")).thenReturn(official);
+        String mdl = "{\"models\":[{\"name\":\"orders\"}],\"views\":[]}";
+        when(gateway.mdlResource("g")).thenReturn(mdl);
+
+        assertThat(
+                        new WrenQueryContextMiddleware(access, policy, p -> null, gateway)
+                                .onSystemPrompt(null, ctx, "base")
+                                .block())
+                .contains("wren_workflow 原文", official, "资源 wren://mdl", mdl)
+                // 2026-11-03 log: the official step 2 was skipped because the prompt made
+                // get_instructions optional.
+                .contains("第一次进入实际分析前，必须先调用一次官方 get_instructions")
+                .doesNotContain("不必每个问题重新 load_skill、get_instructions");
+
+        when(gateway.workflowPrompt("g")).thenThrow(new RuntimeException("instance down"));
+        when(gateway.mdlResource("g")).thenThrow(new RuntimeException("instance down"));
+        assertThat(
+                        new WrenQueryContextMiddleware(access, policy, p -> null, gateway)
+                                .onSystemPrompt(null, ctx, "base")
+                                .block())
+                .contains("已授权 Wren 知识库")
+                .doesNotContain("wren_workflow 原文", "资源 wren://mdl");
+    }
+
+    @Test
     void dateFirstRuleAppearsOnlyForRegisteredLimitedTables() {
         String none = WrenQueryContextMiddleware.dateRules(List.of());
         assertThat(none)

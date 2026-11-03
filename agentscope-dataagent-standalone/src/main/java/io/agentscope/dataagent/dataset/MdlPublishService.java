@@ -28,6 +28,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Instant;
@@ -103,6 +104,7 @@ public class MdlPublishService {
     private final MdlWorkspaceReader reader;
     private final MdlQuestionStore questionStore;
     private final org.springframework.context.ApplicationEventPublisher events;
+    private AssetReviewStore assetReviews;
 
     /**
      * Per-group mutex serialising the whole validate/publish flow (reconcile → staging copy →
@@ -297,6 +299,44 @@ public class MdlPublishService {
                 group.getMdlVersion(),
                 group.getMdlPublishedAt() == null ? null : group.getMdlPublishedAt().toString(),
                 !sameFiles(files, published));
+    }
+
+    /** The official compiled MDL text of one version and when it was built; null when absent. */
+    public record CompiledMdl(
+            String published, String publishedBuiltAt, String draft, String draftBuiltAt) {}
+
+    private static final long MAX_COMPILED_BYTES = 4L * 1024 * 1024;
+
+    /**
+     * The official compiled MDL ({@code target/mdl.json}): the published one is exactly what the
+     * query agent reads as {@code wren://mdl}; the draft one is from the draft's last build.
+     */
+    public CompiledMdl compiled(String groupId) {
+        Path published = props.groupRoot(groupId).resolve("published/target/mdl.json");
+        Path draft = workspace.workspaceRoot(groupId).resolve("target/mdl.json");
+        return new CompiledMdl(
+                compiledText(published), builtAt(published), compiledText(draft), builtAt(draft));
+    }
+
+    private static String compiledText(Path file) {
+        try {
+            if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) return null;
+            if (Files.size(file) > MAX_COMPILED_BYTES)
+                throw new DatasetException("编译后的 MDL 过大，无法在页面显示", 413);
+            return Files.readString(file, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new DatasetException("读取编译后的 MDL 失败：" + e.getMessage(), e);
+        }
+    }
+
+    private static String builtAt(Path file) {
+        try {
+            return Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)
+                    ? Files.getLastModifiedTime(file).toInstant().toString()
+                    : null;
+        } catch (IOException e) {
+            return null;
+        }
     }
 
     /** Renders the workspace as a structured view; never touches the staging directory. */
@@ -521,6 +561,76 @@ public class MdlPublishService {
                 });
     }
 
+    /** One SQL to compare between the draft and the published snapshot. */
+    public record AssetCheck(String key, String sql) {}
+
+    /** Raw engine replies; {@code published} is null when the snapshot cannot answer. */
+    public record AssetRun(String key, String draft, String published, String error) {}
+
+    /**
+     * Runs each SQL on one scratch build of the draft and on the published snapshot (ADR0123).
+     * Authorization is rechecked before every call, because each one can wait in a queue.
+     */
+    public List<AssetRun> verifyAssets(
+            String groupId,
+            List<AssetCheck> checks,
+            io.agentscope.dataagent.runtime.wren.WrenQueryGateway gateway,
+            Runnable authorization) {
+        return withPublishLock(
+                groupId,
+                () ->
+                        workspace.withWorkspaceLock(
+                                groupId,
+                                () -> {
+                                    try {
+                                        return runAssetChecks(
+                                                groupId, checks, gateway, authorization);
+                                    } finally {
+                                        workspace.deleteScratchQuietly(groupId);
+                                    }
+                                }));
+    }
+
+    private List<AssetRun> runAssetChecks(
+            String groupId,
+            List<AssetCheck> checks,
+            io.agentscope.dataagent.runtime.wren.WrenQueryGateway gateway,
+            Runnable authorization) {
+        MdlSeeder.SeedResult seed = seeder.reconcile(groupId);
+        if (hasErrors(seed.issues())) throw new DatasetException("模型播种存在问题，请先修复");
+        WrenSourceSelection selection = selectWrenSource(datasetRepository.findByGroupId(groupId));
+        if (selection.error() != null) throw new DatasetException(selection.error());
+        Path scratch = workspace.copyToScratch(groupId);
+        for (List<String> step :
+                List.of(List.of("context", "validate", "--strict"), List.of("context", "build"))) {
+            WrenCli.Result result = wrenCli.run(scratch, props.timeout(), step);
+            if (!result.ok()) throw new DatasetException(result.output());
+        }
+        boolean published = requireGroup(groupId).getMdlVersion() > 0;
+        List<AssetRun> runs = new ArrayList<>();
+        for (AssetCheck check : checks) {
+            authorization.run();
+            String error = null;
+            String draft = null;
+            String live = null;
+            var call = gateway.callDraft(groupId, scratch, selection.profile(), check.sql(), 1000);
+            if (call.ok()) draft = call.payload();
+            else error = call.payload();
+            if (published && error == null) {
+                var online =
+                        gateway.callAuthorized(
+                                groupId,
+                                "run_sql",
+                                java.util.Map.of("sql", check.sql(), "limit", 1000),
+                                authorization);
+                // A new asset is unknown to the snapshot: the draft result stands alone.
+                if (online.ok()) live = online.payload();
+            }
+            runs.add(new AssetRun(check.key(), draft, live, error));
+        }
+        return runs;
+    }
+
     /** Executes a requirement against a fresh draft without replacing any published artifact. */
     public MdlQuestionStore.Review validateQuestion(
             String groupId,
@@ -716,6 +826,8 @@ public class MdlPublishService {
         // lock nested inside the publish lock — the only nesting direction.
         MdlSeeder.SeedResult seed = seeder.reconcile(groupId);
         issues.addAll(seed.issues());
+        // ADR0123: changed Views and ref_sql models need a person's review and verification.
+        if (assetReviews != null) issues.addAll(assetReviews.publishIssues(groupId));
         // Optional questions do not gate publication; engineering validation still applies.
         if (hasErrors(issues)) {
             return failure(group, issues, "");
@@ -781,8 +893,17 @@ public class MdlPublishService {
         Path preparedDir = groupRoot.resolve("published.next");
         Path preparedManifest = groupRoot.resolve("mdl.json.next");
         prepareSnapshot(projectDir, preparedDir);
+        // spec108: only confirmed questions ship as examples; those awaiting review stay out
+        // without blocking the release.
+        for (var held : questionStore.filterPublishedExamples(groupId, preparedDir))
+            issues.add(
+                    issue(
+                            "warning",
+                            "「" + held.question().question() + "」口径变更待复核，暂不作为问数示例",
+                            "questions-review"));
 
         writeWrenSourceProperties(preparedDir, selection.profile());
+        if (assetReviews != null) assetReviews.writeWindows(groupId, preparedDir);
         writeMetaJson(preparedManifest, group, snapshot);
         replacePublishedArtifacts(groupRoot, preparedDir, preparedManifest);
         markPublished(group);
@@ -834,6 +955,56 @@ public class MdlPublishService {
                                                 "-d",
                                                 props.dataSource()));
                         return plan.ok() ? null : planError(plan.output());
+                    } finally {
+                        workspace.deleteScratchQuietly(groupId);
+                    }
+                });
+    }
+
+    /** One SQL planned against the draft: the expanded SQL Wren would send, or the error. */
+    public record DraftPlan(String sql, String expanded, String error) {}
+
+    /**
+     * spec110 / ADR0127: verification only reads SQL. Each SQL is planned with the official
+     * {@code dry-plan} on one scratch build of the draft; nothing reaches the database.
+     */
+    public List<DraftPlan> planDraft(String groupId, List<String> sqls) {
+        return workspace.withWorkspaceLock(
+                groupId,
+                () -> {
+                    try {
+                        Path scratch = workspace.copyToScratch(groupId);
+                        WrenCli.Result build =
+                                wrenCli.run(scratch, props.timeout(), List.of("context", "build"));
+                        List<DraftPlan> out = new ArrayList<>();
+                        for (String sql : sqls) {
+                            if (!build.ok()) {
+                                out.add(
+                                        new DraftPlan(
+                                                sql, null, "草稿编译失败：" + planError(build.output())));
+                                continue;
+                            }
+                            WrenCli.Result plan =
+                                    wrenCli.run(
+                                            scratch,
+                                            props.timeout(),
+                                            List.of(
+                                                    "dry-plan",
+                                                    "--sql",
+                                                    sql,
+                                                    "-d",
+                                                    props.dataSource()));
+                            out.add(
+                                    plan.ok()
+                                            ? new DraftPlan(
+                                                    sql,
+                                                    plan.output() == null
+                                                            ? ""
+                                                            : plan.output().strip(),
+                                                    null)
+                                            : new DraftPlan(sql, null, planError(plan.output())));
+                        }
+                        return out;
                     } finally {
                         workspace.deleteScratchQuietly(groupId);
                     }
@@ -1202,8 +1373,10 @@ public class MdlPublishService {
                             .filter(p -> !p.startsWith(published.resolve("target")))
                             .filter(
                                     p ->
-                                            !"wren-source.properties"
-                                                    .equals(p.getFileName().toString()))
+                                            !Set.of(
+                                                            "wren-source.properties",
+                                                            PublishedAssetWindows.FILE)
+                                                    .contains(p.getFileName().toString()))
                             .sorted()
                             .toList();
             for (Path p : files) {
@@ -1642,7 +1815,6 @@ public class MdlPublishService {
                 event -> {});
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
     public MdlPublishService(
             DatasetRepository datasetRepository,
             DatasetGroupRepository groupRepository,
@@ -1670,8 +1842,44 @@ public class MdlPublishService {
                 seeder,
                 workspace,
                 reader,
+                operations,
+                access,
+                events,
+                null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public MdlPublishService(
+            DatasetRepository datasetRepository,
+            DatasetGroupRepository groupRepository,
+            ExternalDataSourceRepository externalSources,
+            ObjectMapper mapper,
+            WrenProperties props,
+            WrenCli wrenCli,
+            WrenProfileHome profileHome,
+            WrenSourceProber sourceProber,
+            MdlSeeder seeder,
+            MdlWorkspaceService workspace,
+            MdlWorkspaceReader reader,
+            KnowledgeBaseOperations operations,
+            KnowledgeBaseAccessService access,
+            org.springframework.context.ApplicationEventPublisher events,
+            AssetReviewStore assetReviews) {
+        this(
+                datasetRepository,
+                groupRepository,
+                externalSources,
+                mapper,
+                props,
+                wrenCli,
+                profileHome,
+                sourceProber,
+                seeder,
+                workspace,
+                reader,
                 events);
         this.operations = operations;
         this.access = access;
+        this.assetReviews = assetReviews;
     }
 }

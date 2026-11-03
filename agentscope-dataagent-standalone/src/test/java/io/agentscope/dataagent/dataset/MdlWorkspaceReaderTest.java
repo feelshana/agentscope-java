@@ -82,6 +82,15 @@ class MdlWorkspaceReaderTest {
     }
 
     @Test
+    void readsAViewStatementWrittenInlineInMetadata() throws IOException {
+        write(
+                ws.resolve("views").resolve("inline").resolve("metadata.yml"),
+                "name: inline\nstatement: SELECT 1\n");
+        var view = reader.read("g1").views().get(0);
+        assertEquals("SELECT 1", view.sql());
+    }
+
+    @Test
     void readsModelsRelationsCubesViews() throws IOException {
         registerDataset("o1", "orders");
         write(ws.resolve(".platform").resolve("datasets.json"), "{\"o1\": \"orders\"}");

@@ -124,11 +124,11 @@ class MdlQuestionServiceTest {
                         org.mockito.ArgumentMatchers.any(),
                         org.mockito.ArgumentMatchers.any());
         org.mockito.Mockito.verify(store, org.mockito.Mockito.never())
-                .decide("a", "q-1", true, "alice");
+                .decide("a", "q-1", true, "alice", null);
 
         // Returning a question needs no plan.
         service.decide(scope, "a", "q-1", false);
-        org.mockito.Mockito.verify(store).decide("a", "q-1", false, "alice");
+        org.mockito.Mockito.verify(store).decide("a", "q-1", false, "alice", null);
     }
 
     @Test
@@ -187,9 +187,9 @@ class MdlQuestionServiceTest {
         DatasetScope scope = new DatasetScope("alice", List.of("a"));
         assertThrows(DatasetException.class, () -> gated.decide(scope, "a", "q-1", true));
         org.mockito.Mockito.verify(store, org.mockito.Mockito.never())
-                .decide("a", "q-1", true, "alice");
+                .decide("a", "q-1", true, "alice", null);
         gated.decide(scope, "a", "q-1", false);
-        org.mockito.Mockito.verify(store).decide("a", "q-1", false, "alice");
+        org.mockito.Mockito.verify(store).decide("a", "q-1", false, "alice", null);
     }
 
     @Test

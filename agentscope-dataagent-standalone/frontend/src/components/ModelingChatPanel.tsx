@@ -114,6 +114,8 @@ function taskLabel(name: string, inputJson?: string): string {
       return '学习建模方法';
     case 'request_user_confirmation':
       return '整理需要你确定的口径';
+    case 'propose_modeling_change':
+      return '提议建设查询模板';
     case 'glob_files':
     case 'grep_files':
       return '查找资料';
@@ -173,7 +175,7 @@ function groupSegments(segments: Segment[]): Part[] {
 
 const TOOL_KIND: Record<string, string> = {
   read_file: '读取', list_files: '读取', glob_files: '读取', grep_files: '读取', load_skill_through_path: '读取',
-  write_file: '修改', edit_file: '修改', delete_file: '修改', wren_cli: '检查', request_user_confirmation: '提问',
+  write_file: '修改', edit_file: '修改', delete_file: '修改', wren_cli: '检查', request_user_confirmation: '提问', propose_modeling_change: '提议',
 };
 
 /**

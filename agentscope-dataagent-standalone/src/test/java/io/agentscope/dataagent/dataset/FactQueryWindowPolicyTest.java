@@ -128,4 +128,43 @@ class FactQueryWindowPolicyTest {
         policy.requireAllowed(context(), "g", "SELECT COUNT(*) FROM 逻辑a");
         verifyNoInteractions(gate);
     }
+
+    @Test
+    void publishedAssetsJoinTheRulesAndReachTheGate() {
+        var assets = mock(PublishedAssetWindows.class);
+        var withAssets = new FactQueryWindowPolicy(windows, datasets, gate, assets);
+        var row = entry("g", "a", "LIMITED", 30);
+        when(windows.findByGroupId("g")).thenReturn(List.of(row));
+        var dataset = datasets.findById("a").orElseThrow();
+        when(datasets.findByGroupId("g")).thenReturn(List.of(dataset));
+        var rule = new SqlWindowGate.Rule("sales_valid", List.of("day"), 30);
+        when(assets.derive(anyString(), anyList()))
+                .thenReturn(new PublishedAssetWindows.Derived(List.of(rule), List.of()));
+        when(gate.check(anyString(), anyList(), any()))
+                .thenReturn(new SqlWindowGate.Decision(true, List.of(), "符合"));
+
+        assertThat(withAssets.rules("g")).contains(rule);
+        withAssets.requireAllowed(context(), "g", "SELECT * FROM sales_valid");
+        verify(gate)
+                .check(
+                        anyString(),
+                        org.mockito.ArgumentMatchers.argThat(rules -> rules.contains(rule)),
+                        any());
+    }
+
+    @Test
+    void assetWithoutTimeColumnIsRefusedWithoutAskingTheModel() {
+        var assets = mock(PublishedAssetWindows.class);
+        var withAssets = new FactQueryWindowPolicy(windows, datasets, gate, assets);
+        var row = entry("g", "a", "LIMITED", 30);
+        when(windows.findByGroupId("g")).thenReturn(List.of(row));
+        when(assets.derive(anyString(), anyList()))
+                .thenReturn(new PublishedAssetWindows.Derived(List.of(), List.of("totals")));
+        var ctx = context();
+        assertThatThrownBy(() -> withAssets.requireAllowed(ctx, "g", "SELECT * FROM Totals"))
+                .isInstanceOf(DatasetException.class)
+                .hasMessageContaining("SQL_TIME_WINDOW_REJECTED")
+                .hasMessageContaining("totals");
+        verifyNoInteractions(gate);
+    }
 }

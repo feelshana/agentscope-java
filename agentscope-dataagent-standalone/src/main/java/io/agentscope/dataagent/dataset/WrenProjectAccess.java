@@ -63,7 +63,22 @@ public final class WrenProjectAccess {
         this(groups, workspace, knowledge, scopes, null);
     }
 
-    public record Project(String ownerId, String groupId, String name, Path root) {}
+    public record Project(
+            String ownerId,
+            String groupId,
+            String name,
+            Path root,
+            boolean assetTurn,
+            // spec110 §8: the coach reads existing query templates to judge reuse, never writes.
+            boolean coachTurn) {
+        public Project(String ownerId, String groupId, String name, Path root) {
+            this(ownerId, groupId, name, root, false, false);
+        }
+
+        public Project(String ownerId, String groupId, String name, Path root, boolean assetTurn) {
+            this(ownerId, groupId, name, root, assetTurn, false);
+        }
+    }
 
     public Project resolve(RuntimeContext context) {
         if (context == null) throw new DatasetException("缺少建模会话上下文", 403);
@@ -83,7 +98,16 @@ public final class WrenProjectAccess {
         if (selected == null || selected.size() != 1) {
             throw new DatasetException("建模会话必须绑定一个知识库，请在当前知识库重新开始会话", 400);
         }
-        return resolve(scope.ownerId(), selected.get(0));
+        Project project = resolve(scope.ownerId(), selected.get(0));
+        ModelingTurnPurpose purpose = context.get(ModelingTurnPurpose.class);
+        if (purpose == null || !(purpose.asset() || purpose.coach())) return project;
+        return new Project(
+                project.ownerId(),
+                project.groupId(),
+                project.name(),
+                project.root(),
+                purpose.asset(),
+                purpose.coach());
     }
 
     public Project resolve(String owner, String group) {
@@ -125,11 +149,14 @@ public final class WrenProjectAccess {
     public Path path(Project project, String path, boolean write) {
         String relative = relative(path);
         String first = relative.split("/", 2)[0].toLowerCase(Locale.ROOT);
-        if (CLOSED_ROOTS.contains(first)) {
+        // ADR0123: only the turn a data developer started for assets opens views/.
+        boolean openView =
+                first.equals("views") && (project.assetTurn() || (project.coachTurn() && !write));
+        if (CLOSED_ROOTS.contains(first) && !openView) {
             throw new DatasetException(
                     "基础语义建模不读取也不写入 Cube/View 资产，它们由独立模块处理；已有资产仍会参与官方校验与编译，无需读取，请继续当前建模。", 403);
         }
-        if (!relative.equals(".") && !READ_ROOTS.contains(first)) {
+        if (!relative.equals(".") && !READ_ROOTS.contains(first) && !openView) {
             throw new DatasetException("只能访问当前 Wren 工程的模型、关系、知识、资料与产物", 403);
         }
         Path resolved = project.root().resolve(relative).normalize();
@@ -153,6 +180,20 @@ public final class WrenProjectAccess {
                         "models/ 下只能写 models/<模型名>/metadata.yml 或官方"
                                 + " ref_sql.sql，不要创建副本或临时文件；请直接在原文件上用 edit_file 修正。",
                         403);
+            }
+            // spec109: a ref_sql model is a semantic asset, drafted only in a declared asset turn.
+            if (!project.assetTurn()
+                    && relative.toLowerCase(Locale.ROOT).matches("models/[^/]+/ref_sql\\.sql")) {
+                throw new DatasetException(
+                        "加工表只在建设语义资产轮次中起草，不要在本轮写入；需要时提示用户在问数优化中讨论，用户明确要求时用 propose_modeling_change"
+                                + " 提议。",
+                        403);
+            }
+            if (openView
+                    && !relative.toLowerCase(Locale.ROOT)
+                            .matches("views/[^/]+/(metadata\\.yml|sql\\.yml)")) {
+                throw new DatasetException(
+                        "views/ 下只能写 views/<视图名>/metadata.yml 或 sql.yml，不要创建副本或临时文件。", 403);
             }
             String lower = relative.toLowerCase(Locale.ROOT);
             if (relative.equals(".")

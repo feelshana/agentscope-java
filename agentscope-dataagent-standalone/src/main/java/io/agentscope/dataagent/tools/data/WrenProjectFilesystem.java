@@ -134,6 +134,65 @@ public final class WrenProjectFilesystem implements AbstractFilesystem {
                 : RULES_NEED_EVIDENCE;
     }
 
+    /**
+     * A date range inside an asset silently limits every query built on it. The assistant kept
+     * copying dates from examples despite the prompt, so its writes are refused here; a person
+     * who really means a fixed business period can still edit the asset by hand (ADR0123).
+     */
+    private static String assetDateGuard(Project p, String relative, String content) {
+        if (!p.assetTurn()) return null;
+        if (!relative.toLowerCase(java.util.Locale.ROOT)
+                .matches("views/.*|models/[^/]+/ref_sql\\.sql")) return null;
+        var dates = io.agentscope.dataagent.dataset.AssetReviewStore.fixedDates(content);
+        return dates.isEmpty()
+                ? null
+                : "未写入：资产定义不能写固定日期（"
+                        + String.join("、", dates)
+                        + "），否则所有查询都只能看到这段时间。请去掉日期条件，并输出时间列，由查询时过滤；"
+                        + "如果这确实是业务口径，在回复中说明，由用户在公共视图页手工修改。";
+    }
+
+    static final String COACH_WRITES_QUESTIONS_ONLY =
+            "未写入：问数优化本轮只分析和提议，只能写 knowledge/questions/<ID>.yml；规则、关系、计算字段用 propose_modeling_change"
+                    + " 提议，口径不明用 request_user_confirmation 提问，用户批准或答复后由后续轮次写入。";
+
+    static final String AWAITING_ANSWER =
+            "未写入：这道题的口径还在等用户答复确认卡，sql 保持为空，definition 的\"假设\"行写\"待确认口径\"；用户答复后平台会自动重新生成 SQL。";
+
+    /**
+     * spec110: the coach only analyses and proposes. On 2026-11-03 it wrote a business rule on a
+     * confirmation it claimed to have received four seconds after asking, so writes are limited.
+     */
+    private static String coachGuard(Project p, String relative) {
+        if (!p.coachTurn()) return null;
+        return relative.matches("knowledge/questions/[A-Za-z0-9_-]{1,64}\\.yml")
+                ? null
+                : COACH_WRITES_QUESTIONS_ONLY;
+    }
+
+    /**
+     * spec110: the meaning comes before the SQL. The card withdraws a guessed SQL, but the
+     * assistant wrote it back in the same turn (2026-11-03), so a linked question keeps an empty
+     * SQL until the card is answered or dismissed.
+     */
+    private static String awaitingGuard(Project p, String relative, String content) {
+        var match =
+                java.util.regex.Pattern.compile("knowledge/questions/([A-Za-z0-9_-]{1,64})\\.yml")
+                        .matcher(relative);
+        if (!match.matches() || content == null) return null;
+        if (!io.agentscope.dataagent.dataset.ModelingConfirmationService.awaitingQuestions(p.root())
+                .contains(match.group(1))) return null;
+        try {
+            var node =
+                    new com.fasterxml.jackson.databind.ObjectMapper(
+                                    new com.fasterxml.jackson.dataformat.yaml.YAMLFactory())
+                            .readTree(content);
+            return node != null && !node.path("sql").asText("").isBlank() ? AWAITING_ANSWER : null;
+        } catch (java.io.IOException e) {
+            return null;
+        }
+    }
+
     /** Annotates the draft diff with the turn's source and user (never blocks the write). */
     private static void recordChange(RuntimeContext context, Project p, String relative) {
         var purpose =
@@ -159,7 +218,10 @@ public final class WrenProjectFilesystem implements AbstractFilesystem {
                     p,
                     () -> {
                         String relative = checked(p, path, true);
-                        String refused = rulesGuard(context, p, relative);
+                        String refused = coachGuard(p, relative);
+                        if (refused == null) refused = rulesGuard(context, p, relative);
+                        if (refused == null) refused = assetDateGuard(p, relative, content);
+                        if (refused == null) refused = awaitingGuard(p, relative, content);
                         if (refused != null) return WriteResult.fail(refused);
                         Path file = p.root().resolve(relative);
                         WriteResult result;
@@ -196,14 +258,18 @@ public final class WrenProjectFilesystem implements AbstractFilesystem {
                     p,
                     () -> {
                         String relative = checked(p, path, true);
-                        String refused = rulesGuard(context, p, relative);
+                        String refused = coachGuard(p, relative);
+                        if (refused == null) refused = rulesGuard(context, p, relative);
                         if (refused != null) return EditResult.fail(refused);
                         Path file = p.root().resolve(relative);
                         String original = readQuietly(file);
                         EditResult result =
                                 delegate(p).edit(context, relative, oldString, newString, all);
                         if (!result.isSuccess()) return result;
-                        String invalid = yamlError(relative, readQuietly(file));
+                        String edited = readQuietly(file);
+                        String invalid = yamlError(relative, edited);
+                        if (invalid == null) invalid = assetDateGuard(p, relative, edited);
+                        if (invalid == null) invalid = awaitingGuard(p, relative, edited);
                         if (invalid != null) {
                             // Restore the previous bytes so a broken edit never lands on disk.
                             try {
@@ -390,7 +456,8 @@ public final class WrenProjectFilesystem implements AbstractFilesystem {
                                 }
                             }
                             String relative = checked(p, path, true);
-                            String refused = rulesGuard(c, p, relative);
+                            String refused = coachGuard(p, relative);
+                            if (refused == null) refused = rulesGuard(c, p, relative);
                             if (refused != null) return WriteResult.fail(refused);
                             WriteResult result = delegate(p).delete(c, relative);
                             if (result.isSuccess()) {

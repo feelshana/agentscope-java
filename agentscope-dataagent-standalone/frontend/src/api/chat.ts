@@ -47,7 +47,7 @@ export async function analysisCapabilities(groupId: string, signal?: AbortSignal
 
 /** 'question': user-question SQL (may query external tables); 'auto': automatic modeling
  *  (no business rules without a document); 'document': reconcile changed business documents. */
-export type TurnPurpose = 'question' | 'auto' | 'document' | 'confirm';
+export type TurnPurpose = 'question' | 'auto' | 'document' | 'confirm' | 'asset' | 'coach';
 
 export interface KnowledgeScope {
   groupIds: string[];

@@ -1027,6 +1027,14 @@ public class DatasetService implements DatasetContextProvider {
         groupRepository.requireModeling(groupId);
     }
 
+    /** Records an unpublished semantic edit; querying keeps using the published snapshot. */
+    void markDraftChanged(String groupId) {
+        if (groupId == null || groupId.isBlank()) {
+            return;
+        }
+        groupRepository.markDraftChanged(groupId);
+    }
+
     public String knowledgeText(String groupId) {
         return knowledgeRepository
                 .findById(groupId)

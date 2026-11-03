@@ -156,6 +156,35 @@ public class MdlQuestionService {
 
     public MdlQuestionStore.Review decide(
             DatasetScope scope, String groupId, String questionId, boolean accepted) {
+        return decide(scope, groupId, questionId, accepted, null);
+    }
+
+    /** spec110: the question's SQL expanded by the official dry-plan on the draft; not executed. */
+    public MdlPublishService.DraftPlan plan(DatasetScope scope, String groupId, String questionId) {
+        requireScope(scope, groupId);
+        MdlQuestionStore.Question question = store.requireQuestion(groupId, questionId);
+        if (question.sql().isBlank()) throw new DatasetException("本题尚未生成 SQL", 409);
+        if (publisher == null) throw new DatasetException("发布服务不可用", 503);
+        return publisher.planDraft(groupId, List.of(question.sql())).get(0);
+    }
+
+    /**
+     * spec108: a question the user judged as expected while verifying a semantic asset becomes a
+     * confirmed question, through the same checks as a confirmation in the trial panel.
+     */
+    public MdlQuestionStore.Review confirmVerified(
+            DatasetScope scope, String groupId, String question, String definition, String sql) {
+        requireScope(scope, groupId);
+        String id = store.saveVerifiedQuestion(groupId, question, definition, sql);
+        return decide(scope, groupId, id, true, MdlQuestionStore.ORIGIN_ASSET_VERIFY);
+    }
+
+    private MdlQuestionStore.Review decide(
+            DatasetScope scope,
+            String groupId,
+            String questionId,
+            boolean accepted,
+            String origin) {
         requireScope(scope, groupId);
         // A publish waits for this whole decision, so a confirmed question is never left out of
         // the version being published (2026-10-31: it forced a second publish straight after).
@@ -173,7 +202,11 @@ public class MdlQuestionService {
                             () -> {
                                 MdlQuestionStore.Review result =
                                         store.decide(
-                                                groupId, questionId, accepted, scope.ownerId());
+                                                groupId,
+                                                questionId,
+                                                accepted,
+                                                scope.ownerId(),
+                                                origin);
                                 groups.markMdlDirty(scope.ownerId(), groupId);
                                 return result;
                             });

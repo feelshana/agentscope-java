@@ -106,6 +106,8 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
 
   // Confirmed questions whose SQL failed the publish dry-plan are left out of the release.
   const droppedQuestions = result?.ok ? result.issues.filter(i => i.source === 'questions' && i.severity !== 'error') : [];
+  // spec108: confirmed questions whose dependencies changed stay out as examples until reviewed.
+  const heldQuestions = result?.ok ? result.issues.filter(i => i.source === 'questions-review') : [];
   const label = busy === 'publish' ? '检查并发布中…' : republish ? '重新发布' : `发布 v${(workflow?.publishedVersion ?? 0) + 1}`;
   const notices = <>
     {confirming === 'pending' && <div role="alert" data-tour="draft-confirm" style={{ ...note, background: 'rgba(234,179,8,.14)', color: 'var(--da-warn)' }}>
@@ -126,6 +128,11 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
       已发布 v{result?.mdlVersion}，但以下问答的 SQL 未通过检查，没有进入本次发布，已退回为未确认。请在试问中修改 SQL 后重新确认并发布：
       <ul style={{ margin: '4px 0 0' }}>{droppedQuestions.map((i, n) => <li key={n}>{i.message}</li>)}</ul>
       <button className="da-btn da-btn-sm" onClick={() => setResult(r => r && { ...r, issues: r.issues.filter(i => i.source !== 'questions') })}>知道了</button>
+    </div>}
+    {heldQuestions.length > 0 && <div role="status" style={{ ...note, background: 'rgba(234,179,8,.14)', color: 'var(--da-warn)', display: 'block' }}>
+      已发布 v{result?.mdlVersion}。有 {heldQuestions.length} 条问答因口径变更待复核，这次没有作为问数示例发布；在试问中复核后，下次发布即可恢复：
+      <ul style={{ margin: '4px 0 0' }}>{heldQuestions.map((i, n) => <li key={n}>{i.message}</li>)}</ul>
+      <button className="da-btn da-btn-sm" onClick={() => setResult(r => r && { ...r, issues: r.issues.filter(i => i.source !== 'questions-review') })}>知道了</button>
     </div>}
   </>;
   return <footer aria-label="草稿栏" style={{ position: 'relative', flex: '0 0 auto' }}>

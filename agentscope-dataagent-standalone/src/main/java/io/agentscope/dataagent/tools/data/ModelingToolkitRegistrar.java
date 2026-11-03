@@ -52,6 +52,7 @@ public class ModelingToolkitRegistrar {
     private final WrenProjectFilesystem projectFilesystem;
     private final OfficialWrenToolkit officialTools;
     private final ModelingConfirmationTool confirmationTool;
+    private final SemanticAssetProposalTool proposalTool;
 
     public ModelingToolkitRegistrar(
             DataAgentBootstrap bootstrap,
@@ -70,9 +71,11 @@ public class ModelingToolkitRegistrar {
             FactQueryWindowPolicy windowPolicy,
             WrenSkillsLocator skillsLocator,
             io.agentscope.dataagent.web.persistence.jpa.DatasetRepository datasets,
-            io.agentscope.dataagent.dataset.ModelingConfirmationService confirmations) {
+            io.agentscope.dataagent.dataset.ModelingConfirmationService confirmations,
+            io.agentscope.dataagent.dataset.AssetProposalStore proposals) {
         this.bootstrap = bootstrap;
         this.confirmationTool = new ModelingConfirmationTool(projectAccess, confirmations);
+        this.proposalTool = new SemanticAssetProposalTool(projectAccess, proposals);
         this.projectFilesystem = new WrenProjectFilesystem(projectAccess);
         // Same locator DataAgentConfig mounts from; when present the CLI skills channel closes.
         // Upload tables come from the same origin field as the runtime probe-boundary context.
@@ -127,14 +130,15 @@ public class ModelingToolkitRegistrar {
             io.agentscope.core.tool.Toolkit target,
             WrenProjectFilesystem files,
             OfficialWrenToolkit commands) {
-        registerOfficialTools(target, files, commands, null);
+        registerOfficialTools(target, files, commands, null, null);
     }
 
     static void registerOfficialTools(
             io.agentscope.core.tool.Toolkit target,
             WrenProjectFilesystem files,
             OfficialWrenToolkit commands,
-            ModelingConfirmationTool confirmations) {
+            ModelingConfirmationTool confirmations,
+            SemanticAssetProposalTool proposals) {
         // spec095: modeling never goes online; rules come from documents and the user only.
         DataToolkitRegistrar.HARNESS_WEB_TOOLS.forEach(target::removeTool);
         target.registerTool(new io.agentscope.harness.agent.tool.FilesystemTool(files));
@@ -142,6 +146,8 @@ public class ModelingToolkitRegistrar {
         target.registerTool(commands);
         // spec092: the assistant asks the user only for genuinely ambiguous business choices.
         if (confirmations != null) target.registerTool(confirmations);
+        // spec109: assets are proposed in ordinary turns and drafted only after the user agrees.
+        if (proposals != null) target.registerTool(proposals);
     }
 
     @PostConstruct
@@ -159,7 +165,8 @@ public class ModelingToolkitRegistrar {
                     modeling.getDelegate().getToolkit(),
                     projectFilesystem,
                     officialTools,
-                    confirmationTool);
+                    confirmationTool,
+                    proposalTool);
             log.info(
                     "Registered native file tools and official Wren CLI onto agent '{}'",
                     modeling.getName());

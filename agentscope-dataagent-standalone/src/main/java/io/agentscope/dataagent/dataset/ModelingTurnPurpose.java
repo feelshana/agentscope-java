@@ -15,6 +15,15 @@ public record ModelingTurnPurpose(String value) {
     /** The page hands the user's confirmation answers to the assistant to write down. */
     public static final String CONFIRM = "confirm";
 
+    /** A data developer drafts Views or ref_sql models; only this turn may open views/ (ADR0123). */
+    public static final String ASSET = "asset";
+
+    /**
+     * The query coach (spec110, ADR0127): the data developer lists frequent questions, the
+     * assistant analyses gaps and proposes changes; only this turn may propose them.
+     */
+    public static final String COACH = "coach";
+
     /** Draft-change source for a turn without a declared purpose: the user's own chat request. */
     public static final String CHAT = "chat";
 
@@ -30,6 +39,8 @@ public record ModelingTurnPurpose(String value) {
                         || AUTO.equals(value)
                         || DOCUMENT.equals(value)
                         || CONFIRM.equals(value)
+                        || ASSET.equals(value)
+                        || COACH.equals(value)
                 ? value
                 : null;
     }
@@ -40,5 +51,13 @@ public record ModelingTurnPurpose(String value) {
 
     public boolean auto() {
         return AUTO.equals(value);
+    }
+
+    public boolean asset() {
+        return ASSET.equals(value);
+    }
+
+    public boolean coach() {
+        return COACH.equals(value);
     }
 }

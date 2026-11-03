@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { deleteSqlQaExample, listSqlQaExamples, updateSqlQaExample } from '../../api/semanticModeling';
 import type { SqlQaExample } from '../../api/semanticModeling';
+import { getModelingQuestions } from '../../api/modelingQuestions';
 import SqlEditor from '../SqlEditor';
 
 export default function SqlQaExamplesPanel({ groupId }: { groupId: string }) {
@@ -10,7 +11,14 @@ export default function SqlQaExamplesPanel({ groupId }: { groupId: string }) {
   const [sql, setSql] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-  const refresh = async () => { try { const next = await listSqlQaExamples(groupId); setItems(next); if (!selected && next[0]) select(next[0]); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } };
+  // spec108: a modeling pair whose question awaits review is not shipped as an example until then.
+  const [held, setHeld] = useState<Record<string, string>>({});
+  const refresh = async () => {
+    try { const next = await listSqlQaExamples(groupId); setItems(next); if (!selected && next[0]) select(next[0]); } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    void getModelingQuestions(groupId).then(list => setHeld(Object.fromEntries(list
+      .filter(r => r.status === 'REVIEW').map(r => [`${r.question.id}.md`, (r.reviewReasons ?? []).join('；')])))).catch(() => setHeld({}));
+  };
+  const heldNote = (item: SqlQaExample) => item.source === 'modeling' ? held[item.file] : undefined;
   const select = (item: SqlQaExample) => { setSelected(item); setQuestion(item.question); setSql(item.sql); setError(''); };
   useEffect(() => { void refresh(); }, [groupId]);
   const save = async () => {
@@ -29,8 +37,10 @@ export default function SqlQaExamplesPanel({ groupId }: { groupId: string }) {
     <h3>SQL 问答对</h3><p className="da-small">统一管理建模生成并发布的样例，以及问数点赞后保存的样例。</p>
     {error && <div role="alert" className="da-alert da-alert-error">{error}</div>}
     {items.length === 0 ? <div className="da-small">当前知识库暂无 SQL 问答对。</div> : <div style={{ display: 'flex', gap: 12 }}>
-      <div style={{ width: 260, maxHeight: 360, overflowY: 'auto' }}>{items.map(item => <button key={item.id} className={`da-btn ${selected?.id === item.id ? 'da-btn-primary' : ''}`} style={{ display: 'block', width: '100%', textAlign: 'left', marginBottom: 4 }} onClick={() => select(item)}><strong>{item.question}</strong><br /><span className="da-small">{item.source === 'liked' ? '点赞保存' : '建模样例'} · {item.message}</span></button>)}</div>
-      {selected && <div style={{ flex: 1, minWidth: 0 }}>{!selected.editable && <div role="alert" className="da-alert">{selected.message}</div>}<label>问题<input className="da-input" disabled={!selected.editable || saving} value={question} onChange={e => setQuestion(e.target.value)} /></label><div style={{ margin: '8px 0' }}><SqlEditor rows={12} disabled={!selected.editable || saving} value={sql} onChange={setSql} /></div><button className="da-btn da-btn-primary" disabled={saving || !selected.editable} onClick={() => void save()}>{saving ? '保存中…' : '保存问答对'}</button>{' '}<button className="da-btn" disabled={saving || !selected.editable} onClick={() => void remove()}>删除问答对</button></div>}
+      <div style={{ width: 260, maxHeight: 360, overflowY: 'auto' }}>{items.map(item => <button key={item.id} className={`da-btn ${selected?.id === item.id ? 'da-btn-primary' : ''}`} style={{ display: 'block', width: '100%', textAlign: 'left', marginBottom: 4 }} onClick={() => select(item)}><strong>{item.question}</strong><br /><span className="da-small">{item.source === 'liked' ? '点赞保存' : '建模样例'} · {heldNote(item) !== undefined ? '口径变更待复核' : item.message}</span></button>)}</div>
+      {selected && <div style={{ flex: 1, minWidth: 0 }}>{heldNote(selected) !== undefined && <div role="status" className="da-alert">
+        口径变更待复核：{heldNote(selected) || '它用到的模型或规则有变化'}。请在建模对话的"试问"中复核，复核前不会作为问数示例发布。</div>}
+        {!selected.editable && <div role="alert" className="da-alert">{selected.message}</div>}<label>问题<input className="da-input" disabled={!selected.editable || saving} value={question} onChange={e => setQuestion(e.target.value)} /></label><div style={{ margin: '8px 0' }}><SqlEditor rows={12} disabled={!selected.editable || saving} value={sql} onChange={setSql} /></div><button className="da-btn da-btn-primary" disabled={saving || !selected.editable} onClick={() => void save()}>{saving ? '保存中…' : '保存问答对'}</button>{' '}<button className="da-btn" disabled={saving || !selected.editable} onClick={() => void remove()}>删除问答对</button></div>}
     </div>}
   </div>;
 }

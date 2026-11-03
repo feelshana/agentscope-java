@@ -15,11 +15,16 @@
  */
 package io.agentscope.dataagent.runtime.wren;
 
-import io.agentscope.core.tool.mcp.McpClientBuilder;
 import io.agentscope.core.tool.mcp.McpClientWrapper;
+import io.agentscope.core.tool.mcp.McpSyncClientWrapper;
 import io.agentscope.dataagent.dataset.DatasetException;
 import io.agentscope.dataagent.dataset.WrenProfileHome;
 import io.agentscope.dataagent.dataset.WrenProperties;
+import io.modelcontextprotocol.client.McpClient;
+import io.modelcontextprotocol.client.McpSyncClient;
+import io.modelcontextprotocol.client.transport.ServerParameters;
+import io.modelcontextprotocol.client.transport.StdioClientTransport;
+import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.spec.McpSchema;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -106,6 +111,13 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
 
     private final Object capacityLock = new Object();
     private final Map<Instance, String> pendingCleanup = new ConcurrentHashMap<>();
+
+    /**
+     * The framework wrapper only exposes tools; prompts are read from the SDK client it wraps,
+     * which is kept here for as long as that wrapper is open.
+     */
+    private final Map<McpClientWrapper, McpSyncClient> promptClients = new ConcurrentHashMap<>();
+
     private final Semaphore slots;
 
     private final ScheduledExecutorService reaper =
@@ -165,12 +177,94 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
                 });
     }
 
+    @Override
+    public String workflowPrompt(String groupId) {
+        return withGate(
+                groupId,
+                () -> {
+                    requireRecoveryReady(groupId);
+                    Instance instance = acquire(groupId);
+                    instance.touch();
+                    if (instance.workflow == null) {
+                        McpSyncClient raw = promptClients.get(instance.client);
+                        instance.workflow =
+                                raw == null
+                                        ? ""
+                                        : promptText(
+                                                raw.getPrompt(
+                                                        new McpSchema.GetPromptRequest(
+                                                                "wren_workflow", Map.of())));
+                    }
+                    return instance.workflow;
+                });
+    }
+
+    @Override
+    public String mdlResource(String groupId) {
+        return withGate(
+                groupId,
+                () -> {
+                    requireRecoveryReady(groupId);
+                    Instance instance = acquire(groupId);
+                    instance.touch();
+                    if (instance.mdl == null) {
+                        McpSyncClient raw = promptClients.get(instance.client);
+                        instance.mdl =
+                                raw == null
+                                        ? ""
+                                        : unescapedJson(
+                                                resourceText(
+                                                        raw.readResource(
+                                                                new McpSchema.ReadResourceRequest(
+                                                                        "wren://mdl"))));
+                    }
+                    return instance.mdl;
+                });
+    }
+
+    /**
+     * The official resource is Python {@code json.dumps} output, which escapes every Chinese
+     * character as {@code \\uXXXX} (about six times the characters for the model to read).
+     * Re-serialising keeps the same JSON value with the characters written out; text that is not
+     * JSON is returned unchanged.
+     */
+    static String unescapedJson(String text) {
+        if (text == null || text.isBlank()) return text;
+        try {
+            var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            return mapper.writeValueAsString(mapper.readTree(text));
+        } catch (Exception e) {
+            return text;
+        }
+    }
+
+    /** Text contents of an MCP resource, in order. */
+    static String resourceText(McpSchema.ReadResourceResult result) {
+        if (result == null || result.contents() == null) return "";
+        return result.contents().stream()
+                .filter(McpSchema.TextResourceContents.class::isInstance)
+                .map(c -> ((McpSchema.TextResourceContents) c).text())
+                .collect(Collectors.joining("\n"));
+    }
+
+    /** Text parts of an MCP prompt, in order. */
+    static String promptText(McpSchema.GetPromptResult result) {
+        if (result == null || result.messages() == null) return "";
+        return result.messages().stream()
+                .map(McpSchema.PromptMessage::content)
+                .filter(McpSchema.TextContent.class::isInstance)
+                .map(c -> ((McpSchema.TextContent) c).text())
+                .collect(Collectors.joining("\n"));
+    }
+
     /** A live subprocess bound to one group's published snapshot. */
     private static final class Instance {
         private final Path projectDir;
         private final McpClientWrapper client;
         // Accessed under the per-group gate; discarded together with this subprocess.
         private List<McpSchema.Tool> tools;
+        private String workflow;
+        private String mdl;
         private WrenCallResult instructions;
         private volatile boolean recallWarm;
         private final AtomicLong lastUsed = new AtomicLong(System.currentTimeMillis());
@@ -413,6 +507,7 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
                     if (instance == null) return null;
                     // Retain the instance on failure so a retry can close it again.
                     instance.client.close();
+                    promptClients.remove(instance.client);
                     instances.remove(groupId, instance);
                     if (instance.reserved.compareAndSet(true, false)) slots.release();
                     log.info("wren instance closed for deleted group {}", groupId);
@@ -546,12 +641,27 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
         env.put("WREN_HOME", home.toAbsolutePath().toString());
         WrenProcessEnvironment.configure(env);
 
-        McpClientWrapper client =
-                McpClientBuilder.create("wren-" + groupId)
-                        .stdioTransport(props.resolveExecutable(), args, env)
-                        .timeout(props.timeout())
+        // Same stdio client the framework builder creates, built here so the SDK client stays
+        // reachable for MCP prompts.
+        McpSyncClient raw =
+                McpClient.sync(
+                                new StdioClientTransport(
+                                        ServerParameters.builder(props.resolveExecutable())
+                                                .args(args)
+                                                .env(env)
+                                                .build(),
+                                        McpJsonMapper.getDefault()))
+                        .requestTimeout(props.timeout())
                         .initializationTimeout(INIT_TIMEOUT)
-                        .buildSync();
+                        .clientInfo(
+                                new McpSchema.Implementation(
+                                        "agentscope-java",
+                                        "AgentScope Java Framework",
+                                        "dataagent"))
+                        .capabilities(McpSchema.ClientCapabilities.builder().build())
+                        .build();
+        McpClientWrapper client = new McpSyncClientWrapper("wren-" + groupId, raw);
+        promptClients.put(client, raw);
         try {
             client.initialize().block(INIT_BLOCK);
         } catch (RuntimeException e) {
@@ -594,6 +704,7 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
         synchronized (inst) {
             try {
                 inst.client.close();
+                promptClients.remove(inst.client);
                 if (inst.reserved.compareAndSet(true, false)) slots.release();
                 pendingCleanup.remove(inst);
             } catch (RuntimeException e) {

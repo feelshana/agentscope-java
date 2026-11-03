@@ -194,6 +194,15 @@ class MdlPublishServiceTest {
     }
 
     @Test
+    void assetTimeColumnsBesideTheSnapshotAreNotADraftChange() throws IOException {
+        registerGroup("g1");
+        registerDataset("ds_a", "g1", "orders", new String[][] {{"amount", "BIGINT"}});
+        assertTrue(service.publish("g1").ok());
+        Files.writeString(groupRoot.resolve("published").resolve(PublishedAssetWindows.FILE), "{}");
+        org.junit.jupiter.api.Assertions.assertFalse(service.preview("g1").changed());
+    }
+
+    @Test
     void questionVerificationDoesNotPublishAndUnconfirmedQuestionDoesNotBlockPublication()
             throws IOException {
         registerGroup("g1");

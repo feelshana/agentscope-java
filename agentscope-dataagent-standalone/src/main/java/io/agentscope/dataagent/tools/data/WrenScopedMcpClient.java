@@ -264,6 +264,11 @@ public final class WrenScopedMcpClient extends McpClientWrapper {
                                 if (partial) payload += ANALYSIS_TRUNCATED_NOTE;
                                 else if (query && result.ok() && dataFiles != null)
                                     payload += dataFiles.note(context, result.payload());
+                                if (!partial && query && result.ok())
+                                    payload +=
+                                            columnTotals(
+                                                    compactRows(result.payload()),
+                                                    String.valueOf(args.getOrDefault("sql", "")));
                                 if (query && result.ok())
                                     successfulQueries.put(
                                             cacheKey,
@@ -326,6 +331,121 @@ public final class WrenScopedMcpClient extends McpClientWrapper {
         } catch (Exception e) {
             return payload;
         }
+    }
+
+    /**
+     * Sums every all-numeric column of a complete multi-row result, so an answer quoting a total
+     * copies it instead of adding rows in prose (2026-11-02/03 logs: 98,806 written as 93,806, and
+     * 98,819 as 98,941, despite the prompt forbidding hand totals). Truncated, single-row and
+     * non-tabular results get nothing. Columns the SQL computes as distinct counts, averages,
+     * extremes or ratios are left out (2026-11-03: daily distinct visitors were totalled as 2673).
+     */
+    static String columnTotals(String payload) {
+        return columnTotals(payload, null);
+    }
+
+    static String columnTotals(String payload, String sql) {
+        java.util.Set<String> skipped = nonAdditiveColumns(sql);
+        try {
+            com.fasterxml.jackson.databind.JsonNode root = JSON.readTree(payload);
+            com.fasterxml.jackson.databind.JsonNode rows = root.path("rows");
+            com.fasterxml.jackson.databind.JsonNode columns = root.path("columns");
+            if (!root.isObject()
+                    || root.path("truncated").asBoolean(false)
+                    || !rows.isArray()
+                    || rows.size() < 2
+                    || !columns.isArray()) return "";
+            List<String> totals = new java.util.ArrayList<>();
+            for (int i = 0; i < columns.size(); i++) {
+                if (skipped.contains(columns.get(i).asText().toLowerCase(java.util.Locale.ROOT)))
+                    continue;
+                java.math.BigDecimal sum = java.math.BigDecimal.ZERO;
+                boolean numeric = true;
+                int values = 0;
+                for (com.fasterxml.jackson.databind.JsonNode row : rows) {
+                    com.fasterxml.jackson.databind.JsonNode cell = row.path(i);
+                    if (cell.isNull() || cell.isMissingNode()) continue;
+                    if (!cell.isNumber()) {
+                        numeric = false;
+                        break;
+                    }
+                    sum = sum.add(cell.decimalValue());
+                    values++;
+                }
+                if (numeric && values > 0)
+                    totals.add(
+                            columns.get(i).asText()
+                                    + "="
+                                    + sum.stripTrailingZeros().toPlainString());
+            }
+            if (totals.isEmpty()) return "";
+            return "\n**返回行逐列合计（平台按本次返回的 "
+                    + rows.size()
+                    + " 行计算）：** "
+                    + String.join("，", totals)
+                    + "\n只有计数、金额等可相加的列才能引用此合计；去重数、比率、平均值、编号、年份等列相加没有意义。"
+                    + "答案中的合计只能引用这里或聚合 SQL 返回的数值，不要自己相加。\n";
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private static final java.util.regex.Pattern NON_ADDITIVE =
+            java.util.regex.Pattern.compile(
+                    "(?is).*(count\\s*\\(\\s*distinct\\b|\\b(avg|min|max|stddev\\w*|variance)\\s*\\(|/).*");
+    private static final java.util.regex.Pattern ALIAS =
+            java.util.regex.Pattern.compile(
+                    "(?is)^(.*?)\\s+(?:as\\s+)?[`\"]?([\\p{L}\\p{N}_]+)[`\"]?\\s*$");
+
+    /**
+     * Lower-cased output names of the outermost SELECT whose expression is a distinct count, an
+     * average, an extreme or a ratio, which do not add up across rows. Unparseable SQL yields none.
+     */
+    static java.util.Set<String> nonAdditiveColumns(String sql) {
+        java.util.Set<String> out = new java.util.HashSet<>();
+        if (sql == null || sql.isBlank()) return out;
+        String text = sql.replaceAll("(?s)/\\*.*?\\*/|--[^\\r\\n]*", " ");
+        String lower = text.toLowerCase(java.util.Locale.ROOT);
+        int depth = 0, select = -1, from = -1;
+        boolean quoted = false;
+        for (int i = 0; i < lower.length(); i++) {
+            char c = lower.charAt(i);
+            if (c == '\'') quoted = !quoted;
+            if (quoted) continue;
+            if (c == '(') depth++;
+            else if (c == ')') depth--;
+            else if (depth == 0 && word(lower, i, "select")) {
+                select = i + 6;
+                from = -1;
+            } else if (depth == 0 && select >= 0 && from < 0 && word(lower, i, "from")) from = i;
+        }
+        if (select < 0 || from < 0) return out;
+        String list = text.substring(select, from);
+        depth = 0;
+        int start = 0;
+        quoted = false;
+        for (int i = 0; i <= list.length(); i++) {
+            char c = i < list.length() ? list.charAt(i) : ',';
+            if (c == '\'') quoted = !quoted;
+            if (quoted) continue;
+            if (c == '(') depth++;
+            else if (c == ')') depth--;
+            else if (c == ',' && depth == 0) {
+                java.util.regex.Matcher item = ALIAS.matcher(list.substring(start, i).strip());
+                if (item.matches() && NON_ADDITIVE.matcher(item.group(1)).matches())
+                    out.add(item.group(2).toLowerCase(java.util.Locale.ROOT));
+                start = i + 1;
+            }
+        }
+        return out;
+    }
+
+    private static boolean word(String text, int at, String word) {
+        if (!text.startsWith(word, at)) return false;
+        boolean before = at == 0 || !Character.isLetterOrDigit(text.charAt(at - 1));
+        int end = at + word.length();
+        boolean after = end >= text.length() || !Character.isLetterOrDigit(text.charAt(end));
+        return before && after;
     }
 
     private static boolean truncated(String payload) {

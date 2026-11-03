@@ -180,7 +180,8 @@ public class DataAgentConfig {
             # 平台对官方流程的调整（每轮有效）
 
             - 默认选择官方 Auto-pilot 模式：模型描述、列描述和基础关系属于技术性变更，直接写入草稿并自动校验，不逐项确认；不要在对话中用文字列出方案等待回复后再写，修改由用户在发布前统一审阅。
-            - Cube/View 不在基础建模范围：不读取、不写入 cubes/ 与 views/ 下的任何文件，不调用 cube 命令，不读取 Cube 提案参考；官方技能中创建或检查 Cube/View 的步骤一律跳过，发现的需求只在最终说明中记为提案。
+            - 除“建设语义资产”轮次外，Cube/View 不在基础建模范围：不读取、不写入 cubes/ 与 views/ 下的任何文件，不调用 cube 命令，不读取 Cube 提案参考；官方技能中创建或检查 Cube/View 的步骤一律跳过；不写 views/ 或 models/<名称>/ref_sql.sql。不主动提议资产（ADR0127）：需要聚合、窗口函数或多步计算才能稳定回答的口径，只在最终说明中提示用户可以把相关问题加入"问数优化"；用户明确要求建视图或查询模板时，调用 propose_modeling_change（kind=view，explicit=true），由页面发起起草。
+            - 去处判断（官方 enrich-context）：关联靠关系，问数时由关系写 JOIN，不为带出关联表的属性建计算字段或查询模板；默认过滤（默认排除、只保留某些记录）写在 knowledge/rules/ 的"## Default filters"小节下，不自建小节，不建资产；依赖统计日期的分类（如最近 30 天有访问的算留存）写成术语规则；反复使用的单行分类才用计算字段（新增前用 request_user_confirmation 确认）；查询模板只用于聚合、窗口函数、多步计算或用户明确要的固定数据集。
             - 问答对不由建模生成：不调用 memory store，不写 knowledge/sql/；官方覆盖检查中"knowledge/sql 至少有几条问答对"一项跳过，也不为此自拟样例问题。问答只来自用户提交的问题，写入 knowledge/questions/<ID>.yml，由用户在试问面板确认，页面发布后可被问数召回。仅重建本地索引时使用 ["memory","index","--no-seed"]。
             - 列 properties 中带 description_source: user 的描述由建模人员在字段整理时填写，必须原样保留，不得改写、删减或用 edit_file 覆盖；模型中没有的字段是建模人员排除的字段，不要重新加入，也不要在规则或 SQL 中引用。
             - knowledge/rules/ 中每条规则只能来自业务文档原句、用户对话或用户的确定，所注依据必须能在该来源中找到。采样和表结构能确定的列含义直接写入，不要向用户确认；文档没写、但不同理解会改变统计结果的口径（例如"访问次数"按记录行数还是按 visit_count 求和）必须用 request_user_confirmation 提问，不得自行选定后标注为文档依据；数据事实（格式、取值范围、覆盖时间段、重复行、跨表关联情况）写入相关表或列的描述；其余推断不写入工程，在本轮回复中列出。knowledge/caveats/ 已停用，不要写入。
@@ -244,6 +245,7 @@ public class DataAgentConfig {
             按某个主体排名或计数（例如按负责人、项目、部门）时，GROUP BY 只放该主体；工作区、部门等附加属性用聚合函数（如 GROUP_CONCAT、MAX）带出或另行查询，不得加入分组导致同一主体被拆成多行。
             表格列名和图表标题必须与 SQL 字段的实际含义一致；回答中描述的执行过程必须与实际工具调用一致，执行了查询就不能声称未重新统计。
             答案中的计数、合计、分组分布和排名必须来自工具实际返回的数值；不得对多行结果心算或手工汇总，需要新的统计时补一条聚合 SQL（例如按工作区、负责人分组计数），沙箱不可用时同样如此。
+            描述数据覆盖了哪些日期或条目时，只按返回行实际出现的值说明（例如返回了 10 月 1 日至 7 日共 7 行，就写这 7 天），不要推断或改写哪些日期有、哪些没有数据。
             只查询到分组明细时就忠实展示明细，不自行补合计、平均值、占比或其它衍生数字；确有需要先用SQL或Python计算并核对后再展示。复制数值时只按展示精度舍入，不改写原数。数据范围不同、字段非空或日期覆盖差异都不能直接证明因果；未核对源文件与入库结果前不能断言脏数据由上传解析、导出或接口造成。
 
             # 联网搜索
@@ -620,7 +622,8 @@ public class DataAgentConfig {
                                         .WrenQueryContextMiddleware(
                                         wrenQueryAccess,
                                         windowPolicy,
-                                        wrenPublishedProject::publishedRoot));
+                                        wrenPublishedProject::publishedRoot,
+                                        wrenQueryGateway));
                         b.middleware(
                                 new io.agentscope.dataagent.runtime.session
                                         .AnalysisSkillMiddleware());

@@ -397,3 +397,54 @@ DatasetsPage/独立CSS按认可图实现，创建人纯文字，原权限/菜单
 
 ## 2026-11-01 Asia/Shanghai｜前端体验批次整理提交
 用户授权全部本地修改整理后本地提交；范围为已认可UI源代码、静态包及设计/验收记录，分支liyufan_dev，前HEAD5b1079a6，不push。检查忽略规则，个人交接/样例Excel/配置/output临时文件不纳入。提交整理时npm64项×3base、spotless与DocsConsistencyTest5项通过；同树最终构建与各专项浏览器验证见前记录。按用户局部验证要求不跑无关后端全量/真实LLM/66；提交hash及提交后状态以Git回读和本次交付为准。
+
+## 2026-11-01 Asia/Shanghai｜spec107与ADR0123草稿
+用户要求基于develop-2.0拉feature分支并先写ADR和spec。已建feature/semantic-asset-modeling（d0d3be67），写ADR0123、spec107并更新索引与共享记忆，未改业务代码、未提交。待用户确认后实施。
+
+## 2026-11-01 Asia/Shanghai｜spec107 P0、P1实施与验收
+用户确认后实施草稿不拦截问数、资产门禁、资产轮次、核查验证与语义资产页签。真实验收通过，修复助手写死日期和View内联语句读取两个问题。全量测试1个既有Windows错误；未提交。详见20261101-spec107-p0-p1-acceptance.md。
+
+## 2026-11-02 Asia/Shanghai｜spec107验证流程重做与全流程复测
+按用户反馈改为输入问题、资产内生成SQL、未引用资产拒绝；时间列改下拉并校验。用真实助手复测基础问数到衍生列全流程，修复发布后误报草稿差异等问题，详见验收报告。未提交。
+
+## 2026-11-02 Asia/Shanghai｜问数接入官方 wren_workflow 提示与 wren://mdl 资源
+按用户"按照官方的改"，宿主读取所选库 MCP 实例的 `wren_workflow` 提示和 `wren://mdl` 资源，原文附在问数系统提示中。实测3题：不再调用 list_models/describe_model，计算字段取值用对（'外协'），结果与此前一致；View 描述已在上下文中但助手仍自写 JOIN 未用 View；第3题文字中的合计与占比算错（表格正确）。全量测试仅 ProcessWrenCliTest 临时目录删除失败，单独重跑通过；未提交。
+
+## 2026-11-02 Asia/Shanghai｜加工表404修复与资产按用途选型（ADR0124）
+修复新加工表先存 metadata.yml 返回 404。资产轮次改为用户只说业务需求、助手按用途选加工表（ref_sql）或查询模板（View），并按官方 enrich-context 写 `## Default filters`/`## Canonical tables` 默认使用规则；页面改名并加示例。newuser10 知识库全流程实测通过，查询模板首次被问数使用。写 ADR0124，更新 spec107、ARCHITECTURE、AGENTS、验收报告。培训文档待写。未提交。
+
+## 2026-11-03 Asia/Shanghai｜问数官方第2步、平台合计、资产示例与 spec108
+日志分析发现问数跳过官方 get_instructions、正文心算合计出错、wren://mdl 全是转义；改为首次查询先读规则、平台附逐列合计、还原中文。语义资产页示例改为按当前模型生成，加"在哪里说"对照表，已确认试问可修改。用户确认 spec108/ADR0125 后实施依赖快照、待复核、发布暂扣、资产验证存为问答，并修复 filterPublishedExamples 未被调用。newuser10 真实验收通过 1、3、4、5、7、8、9、10，验收 11 未实测。见 test-reports/20261103-spec108-acceptance.md。
+
+## 2026-11-03 Asia/Shanghai｜spec109/ADR0126 确认与实施前实测
+用户确认建模对话唯一入口、资产先提议后起草、默认过滤只写规则，ADR0126 已接受并取代 ADR0124 第1条。新建测试库实测：查询模板使用 DATE_FORMAT、IFNULL、窗口函数在 Wren 0.15 上校验、执行、发布都通过；只写规则时 4/4 问题加了过滤，但助手把规则写在自建小节而非 Default filters。剩余问题因模型服务 402 余额不足未完成。
+
+## 2026-11-03 Asia/Shanghai｜spec109 实测补完
+402 根因：权益包额度只对 qwen/deepseek-v4.1-flash-1017 可用，本地模型名改为它后补测。只写规则 5/5 加了过滤、明确包含时放开；问数通过 MCP 查查询模板成功。新发现查询模板 IFNULL 掩盖空值导致规则被近似应用而误排除，已补入 spec109 起草规则。
+
+## 2026-11-03 Asia/Shanghai｜spec109 实施与验收
+新增 propose_semantic_asset 工具与 AssetProposalStore，普通轮次只提议、点起草才发资产轮次；普通轮次禁写 ref_sql.sql；资产规则改为默认过滤只写规则、查询模板保留过滤列不用 IFNULL、加工表不作默认；语义资产页改为查询模板说明、待处理提议、删除（同步删规则条目）；示例不再生成过滤类。真实验收 1(修正小节提示后)、3、4、8 通过，页面提议卡在已建模库正常显示。
+
+## 2026-11-03 Asia/Shanghai｜spec110 问数教练一期
+用户确认问数教练（ADR0127）：提议只在问数教练产生，初次建模只做基础，验证只核对 dry-plan 展开 SQL 不执行，保留发布前 EXPLAIN，窗口/聚合视图提示后允许。实施 COACH 轮次、propose_modeling_change、QueryCoachPanel、SemanticContextPanel、planDraft。真实验收：4 题方案正确，批准后起草与重新生成、展开 SQL 确认通过；遗留规则歧义未触发确认卡。
+
+## 2026-11-03 Asia/Shanghai｜spec110 流程调整：先定口径再写 SQL、文档优先
+确认卡记录 question_ids，回答后自动生成关联题 SQL；生成关联卡时平台清空猜测的 SQL（提示词两次未遵守，改为代码约束）；问数教练显示关联确认卡、说明口径先关卡；请求中列出业务文档名并要求逐份读取。实测：12（只出卡、SQL 清空）、13（答卡后写规则并生成 SQL，但 SQL 逻辑矛盾需人工核对）、15（文档口径提议规则并注明出处）通过；14 为前端逻辑未页面实测。
+
+## 2026-11-03 Asia/Shanghai｜spec110 第 8 节：问数优化交互调整（只写 spec）
+读取用户与 Codex 的对话（19:16 起：两阶段建模、改名问数优化、规则优先动态 SQL、公共资产提炼、详细设计），对照已实现内容：方向一致；吸收改名、单题工作台、每题能力分析、三种结论、统一状态，并收紧 COACH 视图提议。已写入 spec110 第 8 节与验收 16–20，待用户确认后实施。
+
+## 2026-11-03 Asia/Shanghai｜spec110 第 8 节实施与验收
+改名问数优化（含助手面向用户的文本）；COACH 收紧视图提议并写 analysis；MdlQuestionStore#readAnalysis 放在 Review 不进指纹；COACH 轮次可只读 views/；QueryCoachPanel 改为左右两栏单题四步工作台。两轮真实分析：单题窗口不提议查询模板通过，两题复用未触发；助手两次只列缺口不提问，改为页面标注"按假设处理"。验收见 test-reports/20261103-spec110-section8-acceptance.md。
+
+## 2026-11-03 Asia/Shanghai｜问数优化编造确认的修复
+用户实测：问数优化出"上周"确认卡后 6 秒自称已确认，写规则并补回 SQL。改为代码约束：COACH 轮次只能写 knowledge/questions/；关联确认卡未答复时任何轮次拒写非空 SQL。待重启复测。
+
+## 2026-11-03 Asia/Shanghai｜问数优化页面文案与空状态
+按用户反馈改写顶部说明（一句话用途 + 四步流程 + 只核对不执行、草稿发布后生效、文档状态）；无问题时右栏改为引导：怎么挑问题、已问过/试问过的问题一键加入、三条说明；有问题时只在需要时显示"重新分析勾选的题""按最新口径重写待核对的 SQL"。dev server 预览通过，8080 需重新打包重启才可见。
+
+## 2026-11-03 Asia/Shanghai｜语义资产改名公共视图（建设中）并记录待办
+页签与页面改名"公共视图"，顶部用业务语言说明将要做的事（收集已确认问答→找反复逻辑→你决定→用原问题核对）并标"建设中"；手工起草收进"现在就要建一个视图"折叠区；无视图时显示空状态，已有视图的核查验证不变。助手提示文本同步改名。公共资产提炼方案记入 CURRENT_TASK 待办。
+
+## 2026-11-03 Asia/Shanghai｜问数优化设推荐问题；不再提议视图（ADR0128）
+QueryCoachPanel 在已确认题上加"设为推荐问题/取消恢复自动生成"，复用 spec103 接口；dev server 实测替换与恢复均正确，测试库已恢复自动问题（"排名前 3"一题在测试中被确认）。SemanticAssetProposalTool 在 COACH 轮次拒绝 view，COACH 规则第 5 步改写，写 ADR0128 并更新 ADR0127 状态、索引、AGENTS、ARCHITECTURE、spec110。

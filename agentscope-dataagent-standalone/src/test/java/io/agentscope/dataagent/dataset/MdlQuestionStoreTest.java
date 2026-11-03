@@ -73,6 +73,29 @@ class MdlQuestionStoreTest {
                 truncated);
     }
 
+    /** spec110 §8: the coach's analysis is shown as-is and never invalidates a confirmation. */
+    @Test
+    void analysisIsReadLenientlyAndKeptOutOfTheConfirmation() throws Exception {
+        store.decide("g1", "sales", true, "alice");
+        Path source = root.resolve("knowledge/questions/sales.yml");
+        Files.writeString(
+                source,
+                Files.readString(source)
+                        + "analysis:\n"
+                        + "  - {ok: true, text: 可复用订单模型}\n"
+                        + "  - {ok: false, text: 有效订单口径未定义}\n"
+                        + "  - {ok: maybe, text: 格式不对}\n"
+                        + "  - 只有文字\n"
+                        + "  - {ok: true, text: c}\n  - {ok: true, text: d}\n"
+                        + "  - {ok: true, text: e}\n  - {ok: true, text: f}\n");
+        var review = store.list("g1").get(0);
+        assertEquals("CONFIRMED", review.status());
+        assertEquals(5, review.analysis().size());
+        assertEquals(new MdlQuestionStore.Finding(false, "有效订单口径未定义"), review.analysis().get(1));
+        Files.writeString(source, Files.readString(source).replace("analysis:", "analysis: 坏\nx:"));
+        assertEquals(List.of(), store.list("g1").get(0).analysis());
+    }
+
     @Test
     void archivedQuestionsLeaveReviewAndPublishGateButKeepSourceAndReceipt() throws Exception {
         var receipt = execute(false, null);
@@ -316,17 +339,17 @@ class MdlQuestionStoreTest {
         }
     }
 
+    /** spec108 revises spec091: a change to a model the SQL reads now asks for a review. */
     @Test
-    void modelChangesKeepConfirmationForThePublishDryPlanToCheck() throws Exception {
+    void changeToAModelTheSqlReadsNeedsReviewAndLeavesThePublishDryPlan() throws Exception {
         store.decide("g1", "sales", true, "alice");
         Files.writeString(
                 root.resolve("models/order/metadata.yml"),
                 "name: order\nproperties:\n  description: 新口径\n");
-        assertEquals("CONFIRMED", store.list("g1").get(0).status());
-        assertTrue(store.publishIssues("g1").isEmpty());
-        assertEquals(
-                java.util.Map.of("sales", "SELECT SUM(amount) AS total FROM order"),
-                store.confirmedSql("g1"));
+        var review = store.list("g1").get(0);
+        assertEquals("REVIEW", review.status());
+        assertEquals(List.of("模型「order」的定义已修改"), review.reviewReasons());
+        assertTrue(store.confirmedSql("g1").isEmpty());
     }
 
     @Test
@@ -392,10 +415,12 @@ class MdlQuestionStoreTest {
         Path prepared = home.resolve("prepared/knowledge/sql");
         Files.createDirectories(prepared);
         Files.writeString(prepared.resolve("sales.md"), "trusted");
-        Files.writeString(prepared.resolve("unverified.md"), "untrusted");
         store.filterPublishedExamples("g1", home.resolve("prepared"));
         assertTrue(Files.exists(prepared.resolve("sales.md")));
-        assertFalse(Files.exists(prepared.resolve("unverified.md")));
+        // A changed SQL keeps the old pair out of the snapshot.
+        question("sales", "SELECT COUNT(*) AS total FROM order");
+        store.filterPublishedExamples("g1", home.resolve("prepared"));
+        assertFalse(Files.exists(prepared.resolve("sales.md")));
     }
 
     @Test
@@ -539,5 +564,114 @@ class MdlQuestionStoreTest {
         question("sales", "SELECT COUNT(*) FROM order");
         assertTrue(store.list("g1").get(0).published().available());
         assertFalse(store.list("g1").get(0).published().current());
+    }
+
+    /**
+     * spec108 / 2026-11-03: a question confirmed on the raw table kept being "confirmed" after a
+     * derived table and a rule preferring it were added; it now needs review, with reasons.
+     */
+    @Test
+    void confirmedQuestionNeedsReviewWhenWhatItReadsChanges() throws Exception {
+        Files.createDirectories(root.resolve("models/customer"));
+        Files.writeString(root.resolve("models/customer/metadata.yml"), "name: customer\n");
+        store.decide("g1", "sales", true, "alice");
+        assertEquals("CONFIRMED", store.list("g1").get(0).status());
+
+        // Unrelated change: the SQL never reads customer.
+        Files.writeString(
+                root.resolve("models/customer/metadata.yml"), "name: customer\ndescription: x\n");
+        assertEquals("CONFIRMED", store.list("g1").get(0).status());
+
+        Files.createDirectories(root.resolve("models/valid_order"));
+        Files.writeString(root.resolve("models/valid_order/metadata.yml"), "name: valid_order\n");
+        Files.writeString(
+                root.resolve("models/valid_order/ref_sql.sql"),
+                "SELECT * FROM order WHERE refunded = 0");
+        Files.createDirectories(root.resolve("knowledge/rules"));
+        Files.writeString(
+                root.resolve("knowledge/rules/general.md"),
+                "## Canonical tables\n- 统计销售额默认使用 `valid_order`，不再直接用 `order`。\n");
+        var review = store.list("g1").get(0);
+        assertEquals("REVIEW", review.status());
+        assertTrue(
+                review.reviewReasons().stream().anyMatch(r -> r.startsWith("新建了加工表「valid_order」")));
+        assertTrue(review.reviewReasons().stream().anyMatch(r -> r.startsWith("新增规则：统计销售额")));
+        assertFalse(review.published().current());
+
+        // "Still correct" re-confirms against the current draft.
+        store.decide("g1", "sales", true, "alice");
+        assertEquals("CONFIRMED", store.list("g1").get(0).status());
+        assertTrue(store.list("g1").get(0).reviewReasons().isEmpty());
+
+        // An asset the SQL reads changes while the SQL text stays the same.
+        question("sales", "SELECT SUM(amount) AS total FROM valid_order");
+        store.decide("g1", "sales", true, "alice");
+        Files.writeString(
+                root.resolve("models/valid_order/ref_sql.sql"),
+                "SELECT * FROM order WHERE refunded = 0 AND test = 0");
+        assertEquals(List.of("加工表「valid_order」的定义已修改"), store.list("g1").get(0).reviewReasons());
+    }
+
+    @Test
+    void questionsConfirmedBeforeSpec108UseThePublishedVersionAsBaseline() throws Exception {
+        store.decide("g1", "sales", true, "alice");
+        Path receipt = root.resolve(".platform/questions/sales.json");
+        var node =
+                (com.fasterxml.jackson.databind.node.ObjectNode)
+                        new ObjectMapper().readTree(Files.readString(receipt));
+        node.remove("dependencies");
+        Files.writeString(receipt, node.toString());
+        Files.createDirectories(root.resolve("knowledge/rules"));
+        Files.writeString(root.resolve("knowledge/rules/general.md"), "- order 默认排除测试订单\n");
+        // Never published: nothing to compare with, so the confirmation stands.
+        assertEquals("CONFIRMED", store.list("g1").get(0).status());
+
+        Path published = root.getParent().resolve("published");
+        Files.createDirectories(published.resolve("models/order"));
+        Files.writeString(published.resolve("models/order/metadata.yml"), "name: order\n");
+        var review = store.list("g1").get(0);
+        assertEquals("REVIEW", review.status());
+        assertEquals(List.of("新增规则：order 默认排除测试订单"), review.reviewReasons());
+    }
+
+    @Test
+    void onlyConfirmedQuestionsShipWhileStandaloneExamplesStay() throws Exception {
+        store.decide("g1", "sales", true, "alice");
+        Path prepared = home.resolve("prepared");
+        Files.createDirectories(prepared.resolve("knowledge/sql"));
+        Files.writeString(prepared.resolve("knowledge/sql/sales.md"), "pair");
+        Files.writeString(prepared.resolve("knowledge/sql/standalone.md"), "pair");
+        assertTrue(store.filterPublishedExamples("g1", prepared).isEmpty());
+        assertTrue(Files.exists(prepared.resolve("knowledge/sql/sales.md")));
+
+        Files.createDirectories(root.resolve("knowledge/rules"));
+        Files.writeString(root.resolve("knowledge/rules/general.md"), "- order 只算已支付订单\n");
+        var held = store.filterPublishedExamples("g1", prepared);
+        assertEquals(List.of("sales"), held.stream().map(r -> r.question().id()).toList());
+        assertFalse(Files.exists(prepared.resolve("knowledge/sql/sales.md")));
+        assertTrue(Files.exists(prepared.resolve("knowledge/sql/standalone.md")));
+    }
+
+    @Test
+    void assetVerifiedQuestionsReplaceTheSameQuestionAndKeepTheirOrigin() throws Exception {
+        String same =
+                store.saveVerifiedQuestion(
+                        "g1", "总销售额是多少", "来源：资产验证", "SELECT SUM(amount) FROM valid_order");
+        assertEquals("sales", same);
+        assertEquals(
+                "SELECT SUM(amount) FROM valid_order", store.requireQuestion("g1", "sales").sql());
+        store.decide("g1", "sales", true, "alice", MdlQuestionStore.ORIGIN_ASSET_VERIFY);
+        // Re-confirming after a review keeps where the question came from.
+        store.decide("g1", "sales", true, "alice");
+        assertEquals(
+                MdlQuestionStore.ORIGIN_ASSET_VERIFY,
+                store.list("g1").get(0).validation().origin());
+
+        String added = store.saveVerifiedQuestion("g1", "每天的订单数", "", "SELECT COUNT(*) FROM order");
+        assertTrue(added.startsWith("q-asset-"));
+        assertEquals(2, store.list("g1").size());
+        assertThrows(
+                DatasetException.class,
+                () -> store.saveVerifiedQuestion("g1", "删除", "", "DELETE FROM order"));
     }
 }

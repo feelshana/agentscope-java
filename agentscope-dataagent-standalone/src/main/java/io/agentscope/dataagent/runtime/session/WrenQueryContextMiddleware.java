@@ -15,6 +15,7 @@ public final class WrenQueryContextMiddleware implements HarnessRuntimeMiddlewar
     private final io.agentscope.dataagent.dataset.FactQueryWindowPolicy windows;
     private final Clock clock;
     private final java.util.function.Function<String, java.nio.file.Path> publishedRoot;
+    private final io.agentscope.dataagent.runtime.wren.WrenQueryGateway gateway;
 
     public WrenQueryContextMiddleware(WrenQueryAccess access) {
         this(access, null);
@@ -45,10 +46,69 @@ public final class WrenQueryContextMiddleware implements HarnessRuntimeMiddlewar
             io.agentscope.dataagent.dataset.FactQueryWindowPolicy windows,
             Clock clock,
             java.util.function.Function<String, java.nio.file.Path> publishedRoot) {
+        this(access, windows, clock, publishedRoot, null);
+    }
+
+    /** {@code gateway} supplies the official {@code wren_workflow} prompt of the selected group. */
+    public WrenQueryContextMiddleware(
+            WrenQueryAccess access,
+            io.agentscope.dataagent.dataset.FactQueryWindowPolicy windows,
+            java.util.function.Function<String, java.nio.file.Path> publishedRoot,
+            io.agentscope.dataagent.runtime.wren.WrenQueryGateway gateway) {
+        this(access, windows, Clock.systemDefaultZone(), publishedRoot, gateway);
+    }
+
+    WrenQueryContextMiddleware(
+            WrenQueryAccess access,
+            io.agentscope.dataagent.dataset.FactQueryWindowPolicy windows,
+            Clock clock,
+            java.util.function.Function<String, java.nio.file.Path> publishedRoot,
+            io.agentscope.dataagent.runtime.wren.WrenQueryGateway gateway) {
         this.access = access;
         this.windows = windows;
         this.clock = clock;
         this.publishedRoot = publishedRoot;
+        this.gateway = gateway;
+    }
+
+    /** The official MCP workflow prompt, passed through unchanged; never blocks the turn. */
+    private String officialWorkflow(
+            java.util.List<io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity>
+                    visible) {
+        if (gateway == null || visible.isEmpty()) return "";
+        try {
+            String id = visible.get(0).getId();
+            String text = gateway.workflowPrompt(id);
+            return text == null || text.isBlank()
+                    ? ""
+                    : "\n# 官方问数流程（Wren MCP 服务提供的 wren_workflow 原文）\n" + text + "\n";
+        } catch (RuntimeException e) {
+            org.slf4j.LoggerFactory.getLogger(WrenQueryContextMiddleware.class)
+                    .warn("wren_workflow prompt unavailable: {}", e.getMessage());
+            return "";
+        }
+    }
+
+    /**
+     * The official {@code wren://mdl} resource the workflow's first step reads, attached unchanged
+     * as an MCP host does; never blocks the turn.
+     */
+    private String officialMdl(
+            java.util.List<io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity>
+                    visible) {
+        if (gateway == null || visible.isEmpty()) return "";
+        try {
+            String text = gateway.mdlResource(visible.get(0).getId());
+            return text == null || text.isBlank()
+                    ? ""
+                    : "\n# 资源 wren://mdl（Wren MCP 服务提供的编译后 MDL，内容未改，仅把 \\uXXXX 转义还原为中文）\n"
+                            + text
+                            + "\n";
+        } catch (RuntimeException e) {
+            org.slf4j.LoggerFactory.getLogger(WrenQueryContextMiddleware.class)
+                    .warn("wren://mdl resource unavailable: {}", e.getMessage());
+            return "";
+        }
     }
 
     /**
@@ -124,6 +184,8 @@ public final class WrenQueryContextMiddleware implements HarnessRuntimeMiddlewar
                                 }
                             }
                             text.append(dateRules(limitedTables));
+                            text.append(officialWorkflow(visible));
+                            text.append(officialMdl(visible));
                             text.append(
                                     "数据库策略是当前平台窗口唯一来源，历史MDL或描述中的固定天数不能覆盖它。策略列表为空表示没有登记的受限表，不能凭历史描述推断限制。修改窗口到知识库事实表时间配置，无需修改MDL或重新发布。\n");
                             text.append("字段、业务口径、视图、Cube 与示例按需从官方工具读取；DIRTY 表示草稿未发布，问数仍使用已发布版本。\n");
@@ -131,10 +193,10 @@ public final class WrenQueryContextMiddleware implements HarnessRuntimeMiddlewar
                                     """
                                     本轮只能查询当前选中的已授权知识库。未选库时作为普通聊天，不查询历史曾选的库；历史不能扩大本轮查询范围。
                                     多库问题分别按 group_id 调用各库工具并说明来源，不把不同工程模型写入同一 SQL，不猜测关联键。
-                                    日期明确或问题不需要日期后，调用节奏遵循官方 usage。当前会话中已有的技能正文、工具 schema、工程说明和模型字段可以复用，
-                                    不必每个问题重新 load_skill、get_instructions 或列出全部模型/Cube。
-                                    仅在上下文缺失、知识库/发布版本变化或工具明确报告失效时重新获取；不同知识库的信息不能混用。
-                                    进入实际分析的新问题通过官方 recall_queries 召回相关示例，按需调用官方 get_instructions、describe_model 或 describe_cube；不要用旧查询结果替代本次执行。
+                                    日期明确或问题不需要日期后，按上面的官方问数流程执行。当前会话中某个知识库第一次进入实际分析前，必须先调用一次官方 get_instructions 读取业务规则（默认过滤、默认使用的表、指标口径），
+                                    之后同一知识库、同一发布版本内可复用已读规则；知识库或发布版本变化、或工具报告失效时重新调用。不同知识库的规则不能混用。
+                                    上下文已有的技能正文、工具 schema、wren://mdl 与模型字段可以复用，不必每个问题重新 load_skill、describe_model 或列出全部模型/Cube。
+                                    进入实际分析的新问题通过官方 recall_queries 召回相关示例，按需调用官方 describe_model 或 describe_cube；不要用旧查询结果替代本次执行。
                                     结果已足够支持答案时直接回答或分析；仅在错误、疑点、缺失证据或用户要求核验时增加诊断查询。
                                     不为凑步骤查询全表统计，也不省略会影响答案正确性的必要验证。
                                     SQL执行成功但结果为空是正常结果，不因无数据而改日期或追加探查。可选探查被时间门禁拒绝时停止本轮SQL尝试，根据已有证据回答或说明限制，不要求用户替探查选择日期。

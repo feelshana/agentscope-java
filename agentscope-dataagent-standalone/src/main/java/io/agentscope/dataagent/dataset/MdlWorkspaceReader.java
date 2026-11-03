@@ -268,7 +268,9 @@ public class MdlWorkspaceReader {
             try {
                 Map<String, Object> parsed =
                         yaml.readValue(Files.readString(meta, StandardCharsets.UTF_8), MAP_TYPE);
-                String statement = "";
+                // Official layout: an inline statement, overridden by sql.yml when that file
+                // exists.
+                String statement = text(parsed.get("statement"), "");
                 if (Files.isRegularFile(sqlFile)) {
                     Map<String, Object> sql =
                             yaml.readValue(

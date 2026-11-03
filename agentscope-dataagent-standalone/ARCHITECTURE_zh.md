@@ -217,7 +217,7 @@ main 线程）同步执行，每个 server 经 `McpClientBuilder.buildAsync().bl
 再以原始 arguments 调用 get_instructions/get_context/describe_schema/recall_queries/run_sql/query_cube 等官方工具。
 只有官方已提供的工具可调用；问数服务不使用 --allow-write，store_query 不对 Agent 开放。
 
-`WrenQueryAccess#resolve` 检查 ownerId、DatasetScope 与当前会话范围并要求已发布版本。
+`WrenQueryAccess#resolve` 检查 ownerId、DatasetScope 与当前会话范围并要求已发布版本。数据集或表结构变化经 `DatasetService#markMdlDirty` 递增修订号，发布前拒绝问数；语义草稿修改经 `DatasetGroupService#markMdlDirty` 只标记待发布，问数继续使用已发布快照（ADR0123）。
 `WrenInstanceRegistry#spawn` 使用 `WrenPublishedProject#prepare` 的运行工程与发布时锁定的 profile，继续复用框架 MCP ClientWrapper。
 
 ADR 0072 / spec 061：`ProcessWrenCli#run` 与 `WrenInstanceRegistry#spawnProject` 共用
@@ -239,6 +239,8 @@ SELECT/WITH 只读检查保留；LIMIT/OFFSET 遵循官方参数，strict_mode �
 普通/ref_sql 模型、关系、视图、Cube 和 knowledge 按同版本官方契约维护，不构建本体/KG，不修改官方 skill。
 禁止越界路径、链接、宿主 shell、连接覆盖及平台配置写入。
 
+语义资产（ADR0123、spec107、ADR0126、spec109）：页面声明 `ModelingTurnPurpose#ASSET` 的轮次才开放 `views/` 与 `models/<名称>/ref_sql.sql`，`WrenProjectAccess#path` 在其他轮次拒绝写 `ref_sql.sql`；`cubes/` 仍关闭，外部表查询拒绝规则不变。问数教练（spec110、ADR0127）：`ModelingTurnPurpose#COACH` 轮次按 `ModelingTurnRules#COACH` 逐题判断能否答对、写入 `knowledge/questions/q-coach-*.yml`，对缺口用 `SemanticAssetProposalTool`（`propose_modeling_change`，kind 为 rule/relationship/calculated_field/view）登记到 `AssetProposalStore`（`.platform/asset-proposals.json`，记录关联问题）；`QueryCoachPanel` 展示方案表，批准后规则、关系、计算字段以普通轮次写入，查询模板以资产轮次起草，再以试问轮次重新生成 SQL；`SemanticContextPanel` 并列展示编译后 MDL、规则原文（草稿新增行高亮、非官方小节标注）与已确认问答。问数教练查口径先规则、后 `raw/docs/` 文档：文档有依据时提议规则并注明出处；都没有时只用确认卡（`ModelingConfirmationService` 记录 `questionIds`），题目 SQL 留空，回答后页面先发写入确认轮次、再为关联题目发试问轮次，在题目上说明口径会先关闭关联卡。问数优化（页签名，原问数教练，spec110 第 8 节）：聚合、窗口在各题 SQL 里写，不提议查询模板（ADR0128，`SemanticAssetProposalTool` 在 COACH 轮次拒绝 kind=view）；问数优化单题工作台的保存问答步骤可把已确认问题设为知识库推荐问题（复用 spec103 接口，手动设置，取消后恢复自动生成）；COACH 轮次可只读 `views/`（`WrenProjectAccess.Project#coachTurn`）判断复用，写入只限 `knowledge/questions/`（`WrenProjectFilesystem#coachGuard`）；题目关联的确认卡未答复时任何轮次都不能写入非空 SQL（`WrenProjectFilesystem#awaitingGuard`，`ModelingConfirmationService#awaitingQuestions`）；每题写 `analysis` 列表，`MdlQuestionStore#readAnalysis` 容错读取并放在 `Review#analysis`（不进 `Question`，重新分析不使确认失效）；`QueryCoachPanel#questionState` 按关联确认卡、提议和 SQL 推出统一状态与三种结论，页面为左侧问题清单、右侧单题四步工作台（分析 → 口径/方案 → SQL → 保存问答），发布仍在草稿栏。其他轮次不提议，建模对话中用户明确要求时以 explicit 提议，`AssetProposalCards` 在助手空闲后自动发起资产轮次。资产与问答的验证只经 `MdlPublishService#planDraft`（官方 dry-plan）展开 SQL，不执行；`SemanticAssetService#warnings` 对依赖受限事实表、含窗口或聚合的资产给出风险提示，发布前仍保留 EXPLAIN 检查。`ModelingTurnRules#ASSET` 中默认过滤只写规则、查询模板用逻辑模型名并保留默认过滤所需列，加工表只在用户明确要求时起草；建好后在 `## Canonical tables` 追加默认使用规则，问数助手经 `get_instructions` 读到后自行选表。`SemanticAssetService#delete` 删除资产文件及提到它的规则条目（`SemanticAssetService#impact` 先列出受影响的规则和问答），只改草稿。`AssetReviewStore#assets` 把没有 `table_reference` 的模型视为加工表，SQL 未写时也列出；`SemanticAssetService#save` 要求先有 `metadata.yml`。`SemanticAssetController` 提供列表、手工编辑、核查、验证和判定，全部要求 MANAGE。页面上该页签名为"公共视图"（`SemanticAssetsPanel`），顶部说明待建设的公共资产提炼并标"建设中"，手工起草收在折叠区，已有资产的核查与验证不变。页面上的需求示例由 `AssetExampleService#examples` 按当前草稿的物理模型、字段描述、关系和已有资产让模型起草，`AssetExampleService#accept` 只保留提到本库模型的过滤、两端是已有关系的拼接，以及只读本库物理表的 SQL；结果按草稿内容缓存。`AssetReviewStore` 把结论存在工程 `.platform/asset-reviews.json` 并绑定内容哈希，内容一变即失效，不发布也不暴露给 Agent。`AssetSqlGenerator#generate` 只基于当前资产把用户问题写成 SQL，用户可修改；`SemanticAssetService#verify` 拒绝未引用资产的 SQL，先过时间门禁（使用草稿依赖），再由 `MdlPublishService#planDraft` 在一次编译的草稿副本上逐题 dry-plan，返回展开后的 SQL，不执行查询（ADR0127），只保存结论。
+
 `ModelingHitlMiddleware#onActing` 对工程文件写入直接放行（ADR0111），遗留写工具仍使用原生 RequireUserConfirmEvent/ConfirmResult。
 同批合法写操作一次展示并可一次授权；失败操作各自返回错误，不把一个文件的失败复制给其他调用。
 write_file/edit_file/delete_file 与会生成种子样例的 memory index 需写权限（`models/`、`knowledge/questions/` 为技术写入不弹卡）；--no-seed 的派生索引重建不需人确认；建模不允许 memory store。
@@ -248,7 +250,8 @@ write_file/edit_file/delete_file 与会生成种子样例的 memory index 需写
 
 `MdlPublishService#publish` 从工程 YAML 组装官方输入，执行官方 strict validate/build 与 view/ref_sql/Cube 查询检查，再复制快照并提升版本。
 官方 target/mdl.json 是引擎事实；不调用 RefSqlMaterializer，不物理化 ref_sql，不禁止官方允许的资产依赖。
-ref_sql 的内容和依赖是否可执行由官方引擎判断。任何检查失败保留旧发布快照，官方 build 不自动替换在线版本。
+ref_sql 的内容和依赖是否可执行由官方引擎判断，须写物理全限定名。任何检查失败保留旧发布快照，官方 build 不自动替换在线版本。
+新增或修改的 View、ref_sql 模型未通过人工核查和问题验证时，`AssetReviewStore#publishIssues` 拒绝发布；发布时 `AssetReviewStore#writeWindows` 在快照旁写入确认的时间列。
 模型目录与 MDL 可视化属于只读投影，元数据旧实体与旧 HTTP 为兼容保留，不参与主 Agent 的语义决策。
 
 ---
@@ -258,9 +261,10 @@ ref_sql 的内容和依赖是否可执行由官方引擎判断。任何检查失
 ### 4.1 原始官方调用与通用产物
 
 `WrenScopedMcpClient#listTools` 返回原始官方工具 schema，AgentScope 将其转换为原生 `McpTool`；`WrenScopedMcpClient#callTool` 原样透传官方参数与输出，唯一例外是查询结果：`WrenScopedMcpClient#compactRows` 把对象行改写为按列顺序的数组并去掉缩进，值、行数和其他字段不变，减少模型读取的字符数。共享 Agent Toolkit 不保存用户或 project 绑定。
-run_sql/query_cube 成功结果由 `WrenScopedMcpClient#callTool` 经 `QueryDataFiles#note` 写成会话沙箱 `data/<sha12>.csv`（经 ArtifactStore 按需恢复，失败只降级提示），并在结果末尾附「数据文件」行，回执仍在首行（spec101）。CSV不超过10MiB并提供下载链接，普通查询也会保存；只保存附件，不因此创建沙箱。`RunPythonTool#literalRows` 统计代码中的行形字面量，超过 `MAX_LITERAL_ROWS` 时拒绝执行，迫使 Python 读取数据文件而不是抄写结果。
+run_sql/query_cube 成功结果由 `WrenScopedMcpClient#callTool` 经 `QueryDataFiles#note` 写成会话沙箱 `data/<sha12>.csv`（经 ArtifactStore 按需恢复，失败只降级提示），并在结果末尾附「数据文件」行，回执仍在首行（spec101）。未截断的多行结果还由 `WrenScopedMcpClient#columnTotals` 附上各数值列的逐列合计（`WrenScopedMcpClient#nonAdditiveColumns` 按 SQL 最外层 SELECT 排除去重计数、平均、极值和比率列），回答中的合计只能引用它或聚合 SQL，模型不在正文里自行相加。CSV不超过10MiB并提供下载链接，普通查询也会保存；只保存附件，不因此创建沙箱。`RunPythonTool#literalRows` 统计代码中的行形字面量，超过 `MAX_LITERAL_ROWS` 时拒绝执行，迫使 Python 读取数据文件而不是抄写结果。
 可视化分三层（spec101，写入问数提示词）：单值/≤2 行/明细只给表格；默认 `render_chart`；只有在 SQL 结果上再做统计计算或用户要求导出、多图报告时才用 `run_python`（每题最多 2 次）。`ChartBuilder#build(columns, rows, question, Spec)` 接受可选的图表类型、x/y/y2/series/labels，未指定时推断：日期列且≥3 行优先折线，ID 类数值列视为维度，无问题时标题取指标名。get_instructions、list_knowledge、
 recall_queries、describe_model 与 describe_cube 均由官方 MCP 提供，平台不再提供第二套知识读取或召回工具。
+`WrenQueryContextMiddleware#onSystemPrompt` 经 `WrenQueryGateway#workflowPrompt` 读取所选库 MCP 实例的官方 `wren_workflow` 提示，原文附在问数系统提示中；官方提示第 1 步要读取的 `wren://mdl` 资源（编译后 MDL JSON）经 `WrenQueryGateway#mdlResource` 读出，也附在其后，与 MCP 宿主附加资源的做法一致，只由 `WrenInstanceRegistry#unescapedJson` 把 `\uXXXX` 转义还原为中文，JSON 内容不变（建模页"模型"页签的"编译后的 MDL"经 `MdlPublishService#compiled` 只读展示同一份 `published/target/mdl.json`，草稿看 `workspace/target/mdl.json`）；提示要求每个会话首次查询某库前先调用官方 `get_instructions`（官方第 2 步），读取默认过滤与默认用表规则；`WrenInstanceRegistry` 自建与框架相同的 stdio 客户端以保留 SDK 的提示与资源读取能力，两者按实例缓存、重新发布后随实例重建，读取失败不阻断本轮。
 推荐问题（spec103）：`RecommendedQuestionService` 在发布后后台为每个知识库生成 1 个推荐问题，存于 `dataagent_dataset_group.recommended_question`。带日期的事实表由平台确定日期：上传表经 `TableProvisioner#dateRange`（时间列按 `TemporalCondition#sortable` 转换）取实际起止日期，外部表取"最近一个月"或更短的查询窗口；模型只选表和指标名，平台拼成"`日期` 每天的`指标`"；没有带日期事实表时退回 `QuestionSuggestionService`。`GET /api/dataset-groups/{id}/recommended-question`（需 QUERY）供问数页在新会话、单知识库、输入为空时回填，建模试问面板显示同一条。
 分析技能（spec102/ADR0121）：`AnalysisSkills#materialize` 启动时把 `classpath:analysis-skills/` 复制为只读技能仓库挂到问数助手（白名单 usage + attribution/anomaly/forecast）。问数请求可带 `analysis`/`analysisParams`，`ChatController#analysisTurn` 校验后经 `ConversationScopeRegistry#putAnalysis` 写入本轮 `AnalysisTurn`；`AnalysisSkillMiddleware#onSystemPrompt` 按"待确认 / 已确认"注入本轮指令。待确认轮次助手调用 `propose_analysis`（`AnalysisToolkit`，页面渲染为参数确认卡），`WrenScopedMcpClient#callTool` 与 `RunPythonTool#runPython` 拒绝查询和计算；已确认轮次取数后由 `RunPythonTool` 安装固定脚本并在沙箱运行，回执 `queryType=ANALYSIS`，`AnswerQueryMemory` 不保存为样例。`GET /api/dataset-groups/{id}/analysis-capabilities`（`AnalysisController`，需 QUERY）按 `MdlCatalog#hasTimeColumn` 决定方法是否可用；"继续分析"按钮由前端 `analysisSuggestions` 按最后一次查询结果的固定规则计算。
 
@@ -486,7 +490,7 @@ DocEnhance 规则采纳双写（见 5.7）。守卫：`MdlSuggestionServiceTest`
 绝不单边写，ADR 0045））；
 语义建模页视图卡片不变；业务术语不再是平台实体，见 14.1"业务术语"。
 
-**派生模型（ref_sql 模型，specs/034 → specs/035 降级人工载体，ADR 0043）**：手工精修载体——
+**派生模型（ref_sql 模型，specs/034 → specs/035 降级人工载体，ADR 0043；下述物化是历史实现，ADR0069 起发布链不再调用，当前规则见 3.3）**：手工精修载体——
 `models/<name>/{metadata.yml, ref_sql.sql}` 双文件（文件优先于 metadata.yml 内联 `ref_sql` 键），
 模型不指物理表而是一段 SQL，走 sqlglot 直查路径、无视图那种 DuckDB 规划期函数绑定，用于承载
 view 函数表达力覆盖不到的极端口径；官方实验证伪「引擎自解析内层逻辑名」假设——ref_sql 体内
@@ -988,14 +992,16 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 1. 自动建模轮结束、流结束并从服务端会话恢复确认状态后仍没有待处理的确认卡（`ModelingChatPanel#finishTurn` → `onTurnDone(awaitingConfirmation)`；批量确认中途的 `done` 不触发；页面还有排队的请求，如"按新文档更新口径"，时推迟到该请求完成后）且编译成功 → `SemanticModelingPage` 弹出 `VerifyQuestionsPrompt`。表单预填平台推荐问题（`QuestionSuggestionService#suggest`，接口 `GET .../modeling/questions/suggestions`，只生成问题文本，失败返回空；受限表的日期优先取采样中时间列的观察范围 `sampledRanges`，外部表无需探查也能落在有数据的区间），可编辑、删除、新增；批量上限见 `QuestionIntakeForm.MAX_QUESTIONS`。
 2. 提交后页面立即切到"检查与发布"，未写入的问题显示"生成 SQL 中"；请求仍排在运行中的轮次或待确认卡之后时显示排队原因和"去处理确认卡"入口（`ModelingChatPanel#onActivityChange` 的 `AssistantState`）；Agent 为每题生成并试运行 SQL，写入 `knowledge/questions/<ID>.yml`，`ModelingChatPanel` 在该文件写入成功时即刷新列表。
 3. `ModelingQuestionsPanel` 左列表右明细；确认按钮在明细中，不要求先试运行（spec091）。试运行可选：`MdlQuestionService#validate`（先过时间门禁）→ `MdlPublishService#validateQuestion`。
-4. 确认 → `MdlQuestionService#decide`（时间门禁）→ `MdlQuestionStore#decide`（只读/笛卡尔积检查与资产覆盖，写 `knowledge/sql/<ID>.md`，frontmatter `source: user-confirmed`；官方索引只把 `source` 转成标签、忽略 `tags` 列表，召回结果因此显示 `source:user-confirmed`）；确认只绑定问题与 SQL 哈希，模型变化不使其失效。撤销、删除时移除问答。
+4. 确认 → `MdlQuestionService#decide`（时间门禁）→ `MdlQuestionStore#decide`（只读/笛卡尔积检查与资产覆盖，写 `knowledge/sql/<ID>.md`，frontmatter `source: user-confirmed`；官方索引只把 `source` 转成标签、忽略 `tags` 列表，召回结果因此显示 `source:user-confirmed`）；确认绑定问题与 SQL 哈希，并由 `QuestionDependencies#snapshot` 在收据中记下 SQL 读到的模型和资产、基于它们的资产、相关关系和提到它们的规则条目（spec108、ADR0125）。`MdlQuestionStore#list` 把快照与当前草稿比对，有差异的已确认问答状态为 `REVIEW`（口径变更待复核），`QuestionDependencies#changes` 给出原因；没有快照的历史收据以已发布版本为基线。试问面板提供"仍然正确"（重新确认）、"按新口径让助手重写"、"自己修改 SQL"。撤销、删除时移除问答。
+   资产验证判定"符合预期"且勾选保存的题，经 `SemanticAssetService#verdict` → `MdlQuestionService#confirmVerified` → `MdlQuestionStore#saveVerifiedQuestion`（同名问题更新原问答）走同一确认链路，收据 `origin` 为 `asset-verify`。
 5. 发布时 `MdlPublishService#dryPlanConfirmedQuestions` 对已确认 SQL 做官方 `dry-plan`：失败的题不进入快照，经 `MdlQuestionStore#revokeConfirmation` 退回并显示原因，不阻止模型发布；草稿栏以提醒列出被撤下的问题。用户手改 SQL 保存与点击确认前，`MdlQuestionService` 先经 `MdlPublishService#planDraftSql` 在草稿副本上做同样的 dry-plan，不通过即拒绝。
+   快照准备好后，`MdlQuestionStore#filterPublishedExamples` 删掉状态不是"已确认"的问题对应的问答文件（`STALE`、`REVIEW` 等），不属于任何问题的独立 SQL 示例保留；`REVIEW` 问题以 `questions-review` 提醒列在发布结果中，不阻止发布。
 6. 发布快照 → 问数 `WrenPublishedProject#prepare` 合并点赞问答并索引 → `recall_queries` 召回。
 
 ### 14.3 SQL 时间门禁
 
 - 外部数据源事实表的时间窗口保存在平台数据库，不属于 MDL，保存即生效；上传表不设门禁（`FactTableWindowService`、`FactQueryWindowPolicy#rules`）。
-- `SqlWindowGate#check` 先由 `SqlWindowRules#evaluate` 判断普通写法（单个 SELECT、登记表各出现一次、时间条件为 WHERE 顶层 AND 中的字面量比较/BETWEEN/平台日期解析包装），口径与模型门禁一致；规则无法确定的 SQL（OR、NOT、子查询、CTE、相对日期、ON 中的时间条件等）才把原始 SQL 与登记配置交给无工具 LLM 逐表判断，`parse` 按逐表明细重算结论；未登记表与 `query_cube` 不覆盖（ADR0112）。
+- `SqlWindowGate#check` 先由 `SqlWindowRules#evaluate` 判断普通写法（单个 SELECT、登记表各出现一次、时间条件为 WHERE 顶层 AND 中的字面量比较/BETWEEN/平台日期解析包装），口径与模型门禁一致；规则无法确定的 SQL（OR、NOT、子查询、CTE、相对日期、ON 中的时间条件等）才把原始 SQL 与登记配置交给无工具 LLM 逐表判断，`parse` 按逐表明细重算结论；未登记表与 `query_cube` 不覆盖（ADR0112）。已发布 View、ref_sql 模型由 `PublishedAssetWindows#derive` 按已发布 `target/mdl.json` 的依赖派生规则，窗口取依赖表最小值并实时读取配置，时间列来自核查记录；依赖受限表却没有时间列的资产直接拒绝查询，不交给模型猜测（ADR0123）。
 - 建模 CLI、问数 MCP（`WrenScopedMcpClient#callTool`）、问题验证共用 `FactQueryWindowPolicy#requireAllowed`；拒绝后本轮阻止后续 SQL；判断写入 `logs/sql-window-gate.log`。
 
 ### 14.4 问数提示

@@ -239,6 +239,9 @@ function TrialAnswer({ review, busy, fixing, assistantIdle, onAccept, onAskFix, 
   // An old result belongs to the previous SQL; hide it until the new SQL has run.
   const result = stale ? null : review.validation?.result;
   const confirmed = review.status === 'CONFIRMED';
+  // spec108: confirmed, but what its SQL depends on changed in the draft since.
+  const needsReview = review.status === 'REVIEW';
+  const reasons = review.reviewReasons ?? [];
   const small = { fontSize: 12, color: 'var(--da-text-muted)' } as const;
   return <div className="da-card" style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
     <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
@@ -247,9 +250,12 @@ function TrialAnswer({ review, busy, fixing, assistantIdle, onAccept, onAskFix, 
           background: 'var(--da-primary-soft)', color: 'var(--da-primary-strong)' }}>推荐问题</span>}
         {q.question}</strong>
       <span style={{ flex: 'none', fontSize: 12, padding: '1px 7px', borderRadius: 999,
-        background: confirmed ? 'rgba(22,163,74,.12)' : 'var(--da-surface-sunken)',
-        color: confirmed ? 'var(--da-success)' : 'var(--da-text-muted)' }}>{confirmed ? '已确认' : stale ? '待重新运行' : '待确认'}</span>
+        background: confirmed ? 'rgba(22,163,74,.12)' : needsReview ? 'rgba(234,179,8,.14)' : 'var(--da-surface-sunken)',
+        color: confirmed ? 'var(--da-success)' : needsReview ? 'var(--da-warn)' : 'var(--da-text-muted)' }}>
+        {confirmed ? '已确认' : needsReview ? '口径变更待复核' : stale ? '待重新运行' : '待确认'}</span>
     </div>
+    {review.validation?.origin === 'asset-verify' && (confirmed || needsReview)
+      && <span style={small}>来自公共视图的问题验证</span>}
     {q.definition && <Definition text={q.definition} />}
     {fixing && <div role="status" style={{ ...small, color: 'var(--da-primary)' }}>{assistantIdle ? '已交给助手，排队中…' : '助手正在按你的说明修正口径并重写 SQL…'}</div>}
     {stale && !fixing && <div role="status" style={{ ...small, color: 'var(--da-primary)' }}>SQL 已修改，请重新核对后确认</div>}
@@ -261,7 +267,22 @@ function TrialAnswer({ review, busy, fixing, assistantIdle, onAccept, onAskFix, 
     </div>}
     {q.sql && mode !== 'edit' && <ReadableCode text={q.sql} language="sql" title="SQL" />}
     {confirmed && <div className="da-small" style={{ color: 'var(--da-success)' }}>{review.published?.current ? '✓ 已确认正确并发布，问数时会参考' : '✓ 已确认正确，发布后问数时会参考'}</div>}
-    {!confirmed && q.sql && !fixing && mode === null && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+    {needsReview && !fixing && mode === null && <div role="status" className="da-small"
+      style={{ padding: 8, borderRadius: 6, background: 'rgba(234,179,8,.10)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <span>这道题确认之后，它用到的模型、资产或规则在草稿里有变化：</span>
+      <ul style={{ margin: 0, paddingLeft: 18 }}>{reasons.map(r => <li key={r}>{r}</li>)}</ul>
+      <span>请复核这条 SQL 是否还符合当前口径。复核前它不会作为问数示例发布。</span>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <button className="da-btn da-btn-primary da-btn-sm" disabled={busy} onClick={onAccept}>{busy ? '确认中…' : '仍然正确'}</button>
+        <button className="da-btn da-btn-sm" disabled={!assistantIdle} title={assistantIdle ? undefined : '助手空闲后可重写'}
+          onClick={() => onAskFix(`这道题确认之后，草稿中有以下变化：${reasons.join('；')}。请读取当前草稿的业务规则和模型，按当前口径（包括默认使用规则）重写这道题的 SQL；当前口径不影响这道题时保持原 SQL 不变。`)}>
+          按新口径让助手重写</button>
+        <button className="da-btn da-btn-sm" onClick={() => { setSql(q.sql); setMode('edit'); }}>自己修改 SQL</button>
+      </div>
+    </div>}
+    {confirmed && !fixing && mode === null && <div><button className="da-btn da-btn-sm" onClick={() => setMode('choose')}>修改</button>
+      <span style={{ ...small, marginLeft: 6 }}>修改后需要重新确认</span></div>}
+    {!confirmed && !needsReview && q.sql && !fixing && mode === null && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
       <button className="da-btn da-btn-primary da-btn-sm" data-tour="trial-confirm" disabled={busy} onClick={onAccept}>{busy ? '确认中…' : '确认 SQL 正确'}</button>
       <button className="da-btn da-btn-sm" disabled={busy} onClick={() => setMode('choose')}>不正确</button>
       <span style={{ ...small, alignSelf: 'center' }}>确认正确后才会作为示例</span>
