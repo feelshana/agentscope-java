@@ -4,6 +4,7 @@
 
 | 需要做什么 | 指引 |
 | --- | --- |
+| 66切到正式两库、保留旧环境回退、同步BI七表并设置公共库 | [正式库切换与BI同步](66-formal-database-and-bi-sync.md) |
 | 在66查询用户、批量授予/撤销全局管理员、补人员资料 | [66数据库常用命令](user-admin.md) |
 | 已部署后，每次push代码再更新、构建、重启、查版本 | [66日常更新与重启命令](66-update-operations.md) |
 | 首次建库、建表及BI用户导入 | [首次上线数据库准备](production-database-setup.md) |

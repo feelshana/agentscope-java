@@ -1,0 +1,275 @@
+{
+  "ok": true,
+  "method": "季节分解（滚动中位数趋势 + 星期季节项）+ 稳健残差阈值",
+  "metric": "订单数",
+  "granularity": "day",
+  "points_count": 31,
+  "sigma": 28.91,
+  "threshold": 3.0,
+  "anomalies": [
+    {
+      "time": "2026-10-28",
+      "value": 1048.0,
+      "expected": 251.25,
+      "deviation": 796.75,
+      "deviation_pct": 3.1711,
+      "sigma_multiple": 27.6,
+      "direction": "偏高"
+    }
+  ],
+  "points": [
+    {
+      "time": "2026-10-01",
+      "value": 254.0,
+      "expected": 276.0,
+      "lower": 189.27,
+      "upper": 362.73,
+      "anomaly": false
+    },
+    {
+      "time": "2026-10-02",
+      "value": 285.0,
+      "expected": 304.5,
+      "lower": 217.77,
+      "upper": 391.23,
+      "anomaly": false
+    },
+    {
+      "time": "2026-10-03",
+      "value": 314.0,
+      "expected": 337.0,
+      "lower": 250.27,
+      "upper": 423.73,
+      "anomaly": false
+    },
+    {
+      "time": "2026-10-04",
+      "value": 303.0,
+      "expected": 324.0,
+      "lower": 237.27,
+      "upper": 410.73,
+      "anomaly": false
+    },
+    {
+      "time": "2026-10-05",
+      "value": 306.0,
+      "expected": 290.75,
+      "lower": 204.02,
+      "upper": 377.48,
+      "anomaly": false
+    },
+    {
+      "time": "2026-10-06",
+      "value": 308.0,
+      "expected": 271.0,
+      "lower": 184.27,
+      "upper": 357.73,
+      "anomaly": false
+    },
+    {
+      "time": "2026-10-07",
+      "value": 302.0,
+      "expected": 277.25,
+      "lower": 190.52,
+      "upper": 363.98,
+      "anomaly": false
+    },
+    {
+      "time": "2026-10-08",
+      "value": 291.0,
+      "expected": 267.0,
+      "lower": 180.27,
+      "upper": 353.73,
+      "anomaly": false
+    },
+    {
+      "time": "2026-10-09",
+      "value": 336.0,
+      "expected": 297.0,
+      "lower": 210.27,
+      "upper": 383.73,
+      "anomaly": false
+    },
+    {
+      "time": "2026-10-10",
+      "value": 372.0,
+      "expected": 328.0,
+      "lower": 241.27,
+      "upper": 414.73,
+      "anomaly": false
+    },
+    {
+      "time": "2026-10-11",
+      "value": 346.0,
+      "expected": 312.5,
+      "lower": 225.77,
+      "upper": 399.23,
+      "anomaly": false
+    },
+    {
+      "time": "2026-10-12",
+      "value": 263.0,
+      "expected": 277.25,
+      "lower": 190.52,
+      "upper": 363.98,
+      "anomaly": false
+    },
+    {
+      "time": "2026-10-13",
+      "value": 256.0,
+      "expected": 258.5,
+      "lower": 171.77,
+      "upper": 345.23,
+      "anomaly": false
+    },
+    {
+      "time": "2026-10-14",
+      "value": 246.0,
+      "expected": 270.75,
+      "lower": 184.02,
+      "upper": 357.48,
+      "anomaly": false
+    },
+    {
+      "time": "2026-10-15",
+      "value": 260.0,
+      "expected": 260.0,
+      "lower": 173.27,
+      "upper": 346.73,
+      "anomaly": false
+    },
+    {
+      "time": "2026-10-16",
+      "value": 295.0,
+      "expected": 295.0,
+      "lower": 208.27,
+      "upper": 381.73,
+      "anomaly": false
+    },
+    {
+      "time": "2026-10-17",
+      "value": 326.0,
+      "expected": 326.0,
+      "lower": 239.27,
+      "upper": 412.73,
+      "anomaly": false
+    },
+    {
+      "time": "2026-10-18",
+      "value": 316.0,
+      "expected": 311.5,
+      "lower": 224.77,
+      "upper": 398.23,
+      "anomaly": false
+    },
+    {
+      "time": "2026-10-19",
+      "value": 248.0,
+      "expected": 277.75,
+      "lower": 191.02,
+      "upper": 364.48,
+      "anomaly": false
+    },
+    {
+      "time": "2026-10-20",
+      "value": 234.0,
+      "expected": 260.0,
+      "lower": 173.27,
+      "upper": 346.73,
+      "anomaly": false
+    },
+    {
+      "time": "2026-10-21",
+      "value": 222.0,
+      "expected": 268.25,
+      "lower": 181.52,
+      "upper": 354.98,
+      "anomaly": false
+    },
+    {
+      "time": "2026-10-22",
+      "value": 235.0,
+      "expected": 251.5,
+      "lower": 164.77,
+      "upper": 338.23,
+      "anomaly": false
+    },
+    {
+      "time": "2026-10-23",
+      "value": 269.0,
+      "expected": 275.0,
+      "lower": 188.27,
+      "upper": 361.73,
+      "anomaly": false
+    },
+    {
+      "time": "2026-10-24",
+      "value": 300.0,
+      "expected": 304.0,
+      "lower": 217.27,
+      "upper": 390.73,
+      "anomaly": false
+    },
+    {
+      "time": "2026-10-25",
+      "value": 286.0,
+      "expected": 290.5,
+      "lower": 203.77,
+      "upper": 377.23,
+      "anomaly": false
+    },
+    {
+      "time": "2026-10-26",
+      "value": 269.0,
+      "expected": 254.75,
+      "lower": 168.02,
+      "upper": 341.48,
+      "anomaly": false
+    },
+    {
+      "time": "2026-10-27",
+      "value": 244.0,
+      "expected": 241.5,
+      "lower": 154.77,
+      "upper": 328.23,
+      "anomaly": false
+    },
+    {
+      "time": "2026-10-28",
+      "value": 1048.0,
+      "expected": 251.25,
+      "lower": 164.52,
+      "upper": 337.98,
+      "anomaly": true
+    },
+    {
+      "time": "2026-10-29",
+      "value": 262.0,
+      "expected": 243.0,
+      "lower": 156.27,
+      "upper": 329.73,
+      "anomaly": false
+    },
+    {
+      "time": "2026-10-30",
+      "value": 289.0,
+      "expected": 283.5,
+      "lower": 196.77,
+      "upper": 370.23,
+      "anomaly": false
+    },
+    {
+      "time": "2026-10-31",
+      "value": 333.0,
+      "expected": 304.0,
+      "lower": 217.27,
+      "upper": 390.73,
+      "anomaly": false
+    }
+  ],
+  "files": {
+    "chart": "/results/分析脚本结果/十月每日订单异常.png",
+    "table": "/results/分析脚本结果/十月每日订单异常_结果.csv"
+  },
+  "notes": []
+}

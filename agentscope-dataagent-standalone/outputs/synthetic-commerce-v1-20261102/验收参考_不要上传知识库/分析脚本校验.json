@@ -1,0 +1,75 @@
+{
+  "execution": "Unchanged project scripts in the existing analysis sandbox image, no network, no LLM or database connection.",
+  "attribution": {
+    "main_dimension": "销售渠道",
+    "total": {
+      "base": 399558.2,
+      "current": 362259.1,
+      "delta": -37299.100000000035,
+      "delta_pct": -0.0934
+    },
+    "leader": {
+      "value": "短视频商城",
+      "base": 145827.1,
+      "current": 102905.74999999999,
+      "delta": -42921.35000000002,
+      "contribution": 1.1507
+    },
+    "drilldown": {
+      "parent_dimension": "销售渠道",
+      "parent_value": "短视频商城",
+      "dimension": "客户地区",
+      "items": [
+        {
+          "value": "华东",
+          "base": 59916.4,
+          "current": 16995.05,
+          "delta": -42921.350000000006,
+          "contribution": 1.0
+        },
+        {
+          "value": "华北",
+          "base": 27662.9,
+          "current": 27662.9,
+          "delta": 0.0,
+          "contribution": -0.0
+        },
+        {
+          "value": "华南",
+          "base": 35198.85,
+          "current": 35198.85,
+          "delta": 0.0,
+          "contribution": -0.0
+        },
+        {
+          "value": "西部",
+          "base": 23048.95,
+          "current": 23048.95,
+          "delta": 0.0,
+          "contribution": -0.0
+        }
+      ]
+    },
+    "contribution_reconciles": true
+  },
+  "anomaly": {
+    "points": 31,
+    "anomalies": [
+      {
+        "time": "2026-10-28",
+        "value": 1048.0,
+        "expected": 251.25,
+        "deviation": 796.75,
+        "deviation_pct": 3.1711,
+        "sigma_multiple": 27.6,
+        "direction": "偏高"
+      }
+    ]
+  },
+  "forecast": {
+    "history_points": 150,
+    "forecast_points": 7,
+    "total": 1890.8,
+    "intervals_ordered": true
+  }
+}

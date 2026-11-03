@@ -1,0 +1,84 @@
+{
+  "synthetic": true,
+  "seed": 20261102,
+  "orders": 48000,
+  "customers": 2000,
+  "business_rows": 50000,
+  "days": 184,
+  "date_range": [
+    "2026-05-01",
+    "2026-10-31"
+  ],
+  "active_customers": 1800,
+  "never_ordered_customers": 200,
+  "order_pk_unique": true,
+  "customer_pk_unique": true,
+  "orphan_fk_count": 0,
+  "joined_fact_rows": 48000,
+  "money_identity_errors": 0,
+  "negative_net_revenue_rows": 0,
+  "first_1000_months": [
+    "2026-05",
+    "2026-06",
+    "2026-07",
+    "2026-08",
+    "2026-09",
+    "2026-10"
+  ],
+  "totals": {
+    "order_count": 48000,
+    "paid_gmv": 10221437.65,
+    "refunds": 580627.2,
+    "net_revenue": 9640810.45,
+    "gross_profit": 4099288.45,
+    "gross_margin": 0.4252016437062094,
+    "net_order_count": 43698
+  },
+  "attribution_periods": {
+    "对比期": {
+      "period": "对比期",
+      "order_count": 1962,
+      "paid_gmv": 419922.2,
+      "refunds": 20364.0,
+      "net_revenue": 399558.2,
+      "gross_profit": 169921.2,
+      "gross_margin": 0.42527271371229525,
+      "net_order_count": 1787
+    },
+    "当前期": {
+      "period": "当前期",
+      "order_count": 1794,
+      "paid_gmv": 380751.1,
+      "refunds": 18492.0,
+      "net_revenue": 362259.1,
+      "gross_profit": 154213.1,
+      "gross_margin": 0.4256983468462214,
+      "net_order_count": 1635
+    }
+  },
+  "promotion_periods": {
+    "对比期": {
+      "period": "对比期",
+      "order_count": 1930,
+      "paid_gmv": 433545.55,
+      "refunds": 26679.35,
+      "net_revenue": 406866.2,
+      "gross_profit": 173255.2,
+      "gross_margin": 0.4258284418808935,
+      "net_order_count": 1770
+    },
+    "当前期": {
+      "period": "当前期",
+      "order_count": 2261,
+      "paid_gmv": 468629.8,
+      "refunds": 28689.35,
+      "net_revenue": 439940.45,
+      "gross_profit": 159054.45,
+      "gross_margin": 0.36153631701745087,
+      "net_order_count": 2075
+    }
+  },
+  "fact_money_storage": "integer cents in oracle CSV; numeric RMB in final Excel",
+  "not_run": "No real application upload, Wren modeling, LLM question-answering or production replacement in this step.",
+  "customer_names": "2000名虚构中文姓名，1915个不同姓名，允许重名；唯一customer_id和订单保持不变"
+}

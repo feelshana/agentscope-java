@@ -1,0 +1,2911 @@
+[
+  {
+    "id": "Q01",
+    "level": "入门",
+    "question": "2026年5月1日至10月31日一共有多少笔订单、多少名注册客户？",
+    "sql_cents": "SELECT (SELECT COUNT(*) FROM demo_orders) AS orders,(SELECT COUNT(*) FROM demo_customers) AS customers",
+    "expected": [
+      {
+        "orders": 48000,
+        "customers": 2000
+      }
+    ],
+    "note": ""
+  },
+  {
+    "id": "Q02",
+    "level": "入门",
+    "question": "2026年10月实付GMV、退款金额、净销售额和毛利额各是多少？",
+    "sql_cents": "SELECT COUNT(*) AS order_count,SUM(paid_amount)/100.0 AS paid_gmv,SUM(refund_amount)/100.0 AS refunds,SUM(net_revenue)/100.0 AS net_revenue,SUM(gross_profit)/100.0 AS gross_profit,SUM(gross_profit)*1.0/NULLIF(SUM(net_revenue),0) AS gross_margin,SUM(CASE WHEN net_revenue>0 THEN 1 ELSE 0 END) AS net_order_count FROM demo_orders WHERE order_time >= '2026-10-01' AND order_time < '2026-11-01'",
+    "expected": [
+      {
+        "order_count": 9618,
+        "paid_gmv": 2031175.45,
+        "refunds": 112221.8,
+        "net_revenue": 1918953.65,
+        "gross_profit": 789614.65,
+        "gross_margin": 0.4114818771156875,
+        "net_order_count": 8771
+      }
+    ],
+    "note": ""
+  },
+  {
+    "id": "Q03",
+    "level": "趋势图",
+    "question": "按月画出2026年5月至10月的净销售额和毛利额趋势。",
+    "sql_cents": "SELECT SUBSTR(order_time,1,7) AS month,COUNT(*) AS order_count,SUM(paid_amount)/100.0 AS paid_gmv,SUM(refund_amount)/100.0 AS refunds,SUM(net_revenue)/100.0 AS net_revenue,SUM(gross_profit)/100.0 AS gross_profit,SUM(gross_profit)*1.0/NULLIF(SUM(net_revenue),0) AS gross_margin,SUM(CASE WHEN net_revenue>0 THEN 1 ELSE 0 END) AS net_order_count FROM demo_orders GROUP BY 1 ORDER BY 1",
+    "expected": [
+      {
+        "month": "2026-05",
+        "order_count": 7390,
+        "paid_gmv": 1578030.1,
+        "refunds": 88413.05,
+        "net_revenue": 1489617.05,
+        "gross_profit": 638472.05,
+        "gross_margin": 0.42861489132391445,
+        "net_order_count": 6705
+      },
+      {
+        "month": "2026-06",
+        "order_count": 7281,
+        "paid_gmv": 1538125.8,
+        "refunds": 80562.85,
+        "net_revenue": 1457562.95,
+        "gross_profit": 625021.95,
+        "gross_margin": 0.42881300598372096,
+        "net_order_count": 6639
+      },
+      {
+        "month": "2026-07",
+        "order_count": 7725,
+        "paid_gmv": 1651400.85,
+        "refunds": 101273.8,
+        "net_revenue": 1550127.05,
+        "gross_profit": 665960.05,
+        "gross_margin": 0.4296164304725861,
+        "net_order_count": 7040
+      },
+      {
+        "month": "2026-08",
+        "order_count": 8031,
+        "paid_gmv": 1701387.05,
+        "refunds": 96870.25,
+        "net_revenue": 1604516.8,
+        "gross_profit": 688202.8,
+        "gross_margin": 0.4289159203568327,
+        "net_order_count": 7327
+      },
+      {
+        "month": "2026-09",
+        "order_count": 7955,
+        "paid_gmv": 1721318.4,
+        "refunds": 101285.45,
+        "net_revenue": 1620032.95,
+        "gross_profit": 692016.95,
+        "gross_margin": 0.4271622685205261,
+        "net_order_count": 7216
+      },
+      {
+        "month": "2026-10",
+        "order_count": 9618,
+        "paid_gmv": 2031175.45,
+        "refunds": 112221.8,
+        "net_revenue": 1918953.65,
+        "gross_profit": 789614.65,
+        "gross_margin": 0.4114818771156875,
+        "net_order_count": 8771
+      }
+    ],
+    "note": ""
+  },
+  {
+    "id": "Q04",
+    "level": "趋势图",
+    "question": "2026年10月每天有多少笔订单？画折线图。",
+    "sql_cents": "SELECT SUBSTR(order_time,1,10) AS day,COUNT(*) AS orders FROM demo_orders WHERE order_time >= '2026-10-01' AND order_time < '2026-11-01' GROUP BY 1 ORDER BY 1",
+    "expected": [
+      {
+        "day": "2026-10-01",
+        "orders": 254
+      },
+      {
+        "day": "2026-10-02",
+        "orders": 285
+      },
+      {
+        "day": "2026-10-03",
+        "orders": 314
+      },
+      {
+        "day": "2026-10-04",
+        "orders": 303
+      },
+      {
+        "day": "2026-10-05",
+        "orders": 306
+      },
+      {
+        "day": "2026-10-06",
+        "orders": 308
+      },
+      {
+        "day": "2026-10-07",
+        "orders": 302
+      },
+      {
+        "day": "2026-10-08",
+        "orders": 291
+      },
+      {
+        "day": "2026-10-09",
+        "orders": 336
+      },
+      {
+        "day": "2026-10-10",
+        "orders": 372
+      },
+      {
+        "day": "2026-10-11",
+        "orders": 346
+      },
+      {
+        "day": "2026-10-12",
+        "orders": 263
+      },
+      {
+        "day": "2026-10-13",
+        "orders": 256
+      },
+      {
+        "day": "2026-10-14",
+        "orders": 246
+      },
+      {
+        "day": "2026-10-15",
+        "orders": 260
+      },
+      {
+        "day": "2026-10-16",
+        "orders": 295
+      },
+      {
+        "day": "2026-10-17",
+        "orders": 326
+      },
+      {
+        "day": "2026-10-18",
+        "orders": 316
+      },
+      {
+        "day": "2026-10-19",
+        "orders": 248
+      },
+      {
+        "day": "2026-10-20",
+        "orders": 234
+      },
+      {
+        "day": "2026-10-21",
+        "orders": 222
+      },
+      {
+        "day": "2026-10-22",
+        "orders": 235
+      },
+      {
+        "day": "2026-10-23",
+        "orders": 269
+      },
+      {
+        "day": "2026-10-24",
+        "orders": 300
+      },
+      {
+        "day": "2026-10-25",
+        "orders": 286
+      },
+      {
+        "day": "2026-10-26",
+        "orders": 269
+      },
+      {
+        "day": "2026-10-27",
+        "orders": 244
+      },
+      {
+        "day": "2026-10-28",
+        "orders": 1048
+      },
+      {
+        "day": "2026-10-29",
+        "orders": 262
+      },
+      {
+        "day": "2026-10-30",
+        "orders": 289
+      },
+      {
+        "day": "2026-10-31",
+        "orders": 333
+      }
+    ],
+    "note": ""
+  },
+  {
+    "id": "Q05",
+    "level": "分类汇总",
+    "question": "2026年10月各销售渠道的净销售额排名和占比是多少？",
+    "sql_cents": "SELECT sales_channel,SUM(net_revenue)/100.0 AS net_revenue,SUM(net_revenue)*1.0/(SELECT SUM(net_revenue) FROM demo_orders WHERE order_time >= '2026-10-01' AND order_time < '2026-11-01') AS share FROM demo_orders WHERE order_time >= '2026-10-01' AND order_time < '2026-11-01' GROUP BY 1 ORDER BY net_revenue DESC",
+    "expected": [
+      {
+        "sales_channel": "短视频商城",
+        "net_revenue": 662321.7,
+        "share": 0.3451473150484901
+      },
+      {
+        "sales_channel": "自营App",
+        "net_revenue": 449182.85,
+        "share": 0.23407696689286894
+      },
+      {
+        "sales_channel": "微信小程序",
+        "net_revenue": 409564.3,
+        "share": 0.21343105394963552
+      },
+      {
+        "sales_channel": "品牌官网",
+        "net_revenue": 301787.5,
+        "share": 0.15726669583707767
+      },
+      {
+        "sales_channel": "线下门店",
+        "net_revenue": 96097.3,
+        "share": 0.05007796827192778
+      }
+    ],
+    "note": ""
+  },
+  {
+    "id": "Q06",
+    "level": "关联汇总",
+    "question": "2026年10月各客户地区的净销售额、成交客户数和毛利率是多少？",
+    "sql_cents": "SELECT c.region,SUM(o.net_revenue)/100.0 AS net_revenue,COUNT(DISTINCT CASE WHEN o.net_revenue>0 THEN o.customer_id END) AS buyers,SUM(o.gross_profit)*1.0/NULLIF(SUM(o.net_revenue),0) AS gross_margin FROM demo_orders o JOIN demo_customers c ON o.customer_id=c.customer_id WHERE order_time >= '2026-10-01' AND order_time < '2026-11-01' GROUP BY 1 ORDER BY net_revenue DESC",
+    "expected": [
+      {
+        "region": "华东",
+        "net_revenue": 795178.4,
+        "buyers": 705,
+        "gross_margin": 0.4056377788933905
+      },
+      {
+        "region": "华南",
+        "net_revenue": 476236.3,
+        "buyers": 429,
+        "gross_margin": 0.4124534396055068
+      },
+      {
+        "region": "华北",
+        "net_revenue": 342273.65,
+        "buyers": 325,
+        "gross_margin": 0.4205425980060107
+      },
+      {
+        "region": "西部",
+        "net_revenue": 305265.3,
+        "buyers": 270,
+        "gross_margin": 0.41503013935747035
+      }
+    ],
+    "note": ""
+  },
+  {
+    "id": "Q07",
+    "level": "关联汇总",
+    "question": "2026年10月普通会员、银卡会员和金卡会员分别贡献了多少净销售额？",
+    "sql_cents": "SELECT c.member_level,SUM(o.net_revenue)/100.0 AS net_revenue FROM demo_orders o JOIN demo_customers c ON o.customer_id=c.customer_id WHERE order_time >= '2026-10-01' AND order_time < '2026-11-01' GROUP BY 1 ORDER BY net_revenue DESC",
+    "expected": [
+      {
+        "member_level": "普通会员",
+        "net_revenue": 998035.95
+      },
+      {
+        "member_level": "银卡会员",
+        "net_revenue": 639841.1
+      },
+      {
+        "member_level": "金卡会员",
+        "net_revenue": 281076.6
+      }
+    ],
+    "note": "等级为2026-10-31快照，不代表下单时等级。"
+  },
+  {
+    "id": "Q08",
+    "level": "排名",
+    "question": "2026年10月净销售额最高的5款商品是什么？",
+    "sql_cents": "SELECT product_id,product_name,SUM(net_revenue)/100.0 AS net_revenue FROM demo_orders WHERE order_time >= '2026-10-01' AND order_time < '2026-11-01' GROUP BY 1,2 ORDER BY net_revenue DESC,product_id LIMIT 5",
+    "expected": [
+      {
+        "product_id": "P021",
+        "product_name": "空气炸锅",
+        "net_revenue": 259754.45
+      },
+      {
+        "product_id": "P002",
+        "product_name": "纯棉床品",
+        "net_revenue": 199911.4
+      },
+      {
+        "product_id": "P024",
+        "product_name": "早餐烤盘",
+        "net_revenue": 151114.6
+      },
+      {
+        "product_id": "P019",
+        "product_name": "轻便背包",
+        "net_revenue": 122950.1
+      },
+      {
+        "product_id": "P013",
+        "product_name": "无线耳机",
+        "net_revenue": 110375.35
+      }
+    ],
+    "note": ""
+  },
+  {
+    "id": "Q09",
+    "level": "口径",
+    "question": "2026年10月订单数、成交订单数和净成交订单数分别是多少？",
+    "sql_cents": "SELECT COUNT(*) AS all_orders,SUM(CASE WHEN paid_amount>0 THEN 1 ELSE 0 END) AS paid_orders,SUM(CASE WHEN net_revenue>0 THEN 1 ELSE 0 END) AS net_orders FROM demo_orders WHERE order_time >= '2026-10-01' AND order_time < '2026-11-01'",
+    "expected": [
+      {
+        "all_orders": 9618,
+        "paid_orders": 9149,
+        "net_orders": 8771
+      }
+    ],
+    "note": ""
+  },
+  {
+    "id": "Q10",
+    "level": "口径",
+    "question": "2026年10月退款金额率和退款订单率分别是多少？",
+    "sql_cents": "SELECT SUM(refund_amount)*1.0/NULLIF(SUM(paid_amount),0) AS refund_amount_rate,SUM(CASE WHEN refund_amount>0 THEN 1 ELSE 0 END)*1.0/NULLIF(SUM(CASE WHEN paid_amount>0 THEN 1 ELSE 0 END),0) AS refund_order_rate FROM demo_orders WHERE order_time >= '2026-10-01' AND order_time < '2026-11-01'",
+    "expected": [
+      {
+        "refund_amount_rate": 0.05524968313298588,
+        "refund_order_rate": 0.062083287791015414
+      }
+    ],
+    "note": ""
+  },
+  {
+    "id": "Q11",
+    "level": "口径",
+    "question": "2026年10月净销售客单价是多少？",
+    "sql_cents": "SELECT SUM(net_revenue)/100.0/NULLIF(SUM(CASE WHEN net_revenue>0 THEN 1 ELSE 0 END),0) AS net_aov FROM demo_orders WHERE order_time >= '2026-10-01' AND order_time < '2026-11-01'",
+    "expected": [
+      {
+        "net_aov": 218.78390719416257
+      }
+    ],
+    "note": "分母为净销售额>0的订单数。"
+  },
+  {
+    "id": "Q12",
+    "level": "左关联",
+    "question": "截至2026年10月31日，哪些注册客户从未下单？一共有多少名？",
+    "sql_cents": "SELECT c.customer_id,c.customer_name FROM demo_customers c LEFT JOIN demo_orders o ON c.customer_id=o.customer_id WHERE o.order_id IS NULL ORDER BY c.customer_id",
+    "expected": [
+      {
+        "customer_id": "C01801",
+        "customer_name": "韦思彤"
+      },
+      {
+        "customer_id": "C01802",
+        "customer_name": "韦思彤"
+      },
+      {
+        "customer_id": "C01803",
+        "customer_name": "黎若辰"
+      },
+      {
+        "customer_id": "C01804",
+        "customer_name": "郭强"
+      },
+      {
+        "customer_id": "C01805",
+        "customer_name": "赵子凡"
+      },
+      {
+        "customer_id": "C01806",
+        "customer_name": "蒋欣"
+      },
+      {
+        "customer_id": "C01807",
+        "customer_name": "金安凡"
+      },
+      {
+        "customer_id": "C01808",
+        "customer_name": "朱若妍"
+      },
+      {
+        "customer_id": "C01809",
+        "customer_name": "田俊航"
+      },
+      {
+        "customer_id": "C01810",
+        "customer_name": "梁若远"
+      },
+      {
+        "customer_id": "C01811",
+        "customer_name": "范欣"
+      },
+      {
+        "customer_id": "C01812",
+        "customer_name": "罗欣睿"
+      },
+      {
+        "customer_id": "C01813",
+        "customer_name": "武亦然"
+      },
+      {
+        "customer_id": "C01814",
+        "customer_name": "龚宇凡"
+      },
+      {
+        "customer_id": "C01815",
+        "customer_name": "钱景悦"
+      },
+      {
+        "customer_id": "C01816",
+        "customer_name": "韦子萱"
+      },
+      {
+        "customer_id": "C01817",
+        "customer_name": "程超"
+      },
+      {
+        "customer_id": "C01818",
+        "customer_name": "钱欣"
+      },
+      {
+        "customer_id": "C01819",
+        "customer_name": "秦雨然"
+      },
+      {
+        "customer_id": "C01820",
+        "customer_name": "夏婷"
+      },
+      {
+        "customer_id": "C01821",
+        "customer_name": "袁明"
+      },
+      {
+        "customer_id": "C01822",
+        "customer_name": "赵泽轩"
+      },
+      {
+        "customer_id": "C01823",
+        "customer_name": "韩启悦"
+      },
+      {
+        "customer_id": "C01824",
+        "customer_name": "潘刚"
+      },
+      {
+        "customer_id": "C01825",
+        "customer_name": "龚子萱"
+      },
+      {
+        "customer_id": "C01826",
+        "customer_name": "付安涵"
+      },
+      {
+        "customer_id": "C01827",
+        "customer_name": "黄佳然"
+      },
+      {
+        "customer_id": "C01828",
+        "customer_name": "郝欣涵"
+      },
+      {
+        "customer_id": "C01829",
+        "customer_name": "戴梓妍"
+      },
+      {
+        "customer_id": "C01830",
+        "customer_name": "吴雨涵"
+      },
+      {
+        "customer_id": "C01831",
+        "customer_name": "付飞"
+      },
+      {
+        "customer_id": "C01832",
+        "customer_name": "孙嘉辰"
+      },
+      {
+        "customer_id": "C01833",
+        "customer_name": "蔡瑞"
+      },
+      {
+        "customer_id": "C01834",
+        "customer_name": "熊欣悦"
+      },
+      {
+        "customer_id": "C01835",
+        "customer_name": "杨嘉彤"
+      },
+      {
+        "customer_id": "C01836",
+        "customer_name": "袁若晴"
+      },
+      {
+        "customer_id": "C01837",
+        "customer_name": "田若远"
+      },
+      {
+        "customer_id": "C01838",
+        "customer_name": "姜文然"
+      },
+      {
+        "customer_id": "C01839",
+        "customer_name": "龚梓睿"
+      },
+      {
+        "customer_id": "C01840",
+        "customer_name": "邱若然"
+      },
+      {
+        "customer_id": "C01841",
+        "customer_name": "程宇妍"
+      },
+      {
+        "customer_id": "C01842",
+        "customer_name": "朱子萱"
+      },
+      {
+        "customer_id": "C01843",
+        "customer_name": "尹文然"
+      },
+      {
+        "customer_id": "C01844",
+        "customer_name": "杨娜"
+      },
+      {
+        "customer_id": "C01845",
+        "customer_name": "苏芳"
+      },
+      {
+        "customer_id": "C01846",
+        "customer_name": "邓颖"
+      },
+      {
+        "customer_id": "C01847",
+        "customer_name": "史明妍"
+      },
+      {
+        "customer_id": "C01848",
+        "customer_name": "陶俊睿"
+      },
+      {
+        "customer_id": "C01849",
+        "customer_name": "孙婷"
+      },
+      {
+        "customer_id": "C01850",
+        "customer_name": "田浩哲"
+      },
+      {
+        "customer_id": "C01851",
+        "customer_name": "邵晓辰"
+      },
+      {
+        "customer_id": "C01852",
+        "customer_name": "吕文言"
+      },
+      {
+        "customer_id": "C01853",
+        "customer_name": "雷磊"
+      },
+      {
+        "customer_id": "C01854",
+        "customer_name": "唐梓萱"
+      },
+      {
+        "customer_id": "C01855",
+        "customer_name": "李雨涵"
+      },
+      {
+        "customer_id": "C01856",
+        "customer_name": "莫诗凡"
+      },
+      {
+        "customer_id": "C01857",
+        "customer_name": "莫亦涵"
+      },
+      {
+        "customer_id": "C01858",
+        "customer_name": "苏文琳"
+      },
+      {
+        "customer_id": "C01859",
+        "customer_name": "韦思睿"
+      },
+      {
+        "customer_id": "C01860",
+        "customer_name": "龙俊睿"
+      },
+      {
+        "customer_id": "C01861",
+        "customer_name": "王泽萱"
+      },
+      {
+        "customer_id": "C01862",
+        "customer_name": "孙俊然"
+      },
+      {
+        "customer_id": "C01863",
+        "customer_name": "郝佳涵"
+      },
+      {
+        "customer_id": "C01864",
+        "customer_name": "沈鹏"
+      },
+      {
+        "customer_id": "C01865",
+        "customer_name": "许宇悦"
+      },
+      {
+        "customer_id": "C01866",
+        "customer_name": "高佳涵"
+      },
+      {
+        "customer_id": "C01867",
+        "customer_name": "薛俊瑜"
+      },
+      {
+        "customer_id": "C01868",
+        "customer_name": "何泽远"
+      },
+      {
+        "customer_id": "C01869",
+        "customer_name": "唐思萱"
+      },
+      {
+        "customer_id": "C01870",
+        "customer_name": "周诗哲"
+      },
+      {
+        "customer_id": "C01871",
+        "customer_name": "黄若彤"
+      },
+      {
+        "customer_id": "C01872",
+        "customer_name": "苏梓宁"
+      },
+      {
+        "customer_id": "C01873",
+        "customer_name": "崔泽晨"
+      },
+      {
+        "customer_id": "C01874",
+        "customer_name": "顾芳"
+      },
+      {
+        "customer_id": "C01875",
+        "customer_name": "朱鹏"
+      },
+      {
+        "customer_id": "C01876",
+        "customer_name": "廖晓萱"
+      },
+      {
+        "customer_id": "C01877",
+        "customer_name": "阎若言"
+      },
+      {
+        "customer_id": "C01878",
+        "customer_name": "秦平"
+      },
+      {
+        "customer_id": "C01879",
+        "customer_name": "杜佳涵"
+      },
+      {
+        "customer_id": "C01880",
+        "customer_name": "赵晓妍"
+      },
+      {
+        "customer_id": "C01881",
+        "customer_name": "毛思轩"
+      },
+      {
+        "customer_id": "C01882",
+        "customer_name": "周俊航"
+      },
+      {
+        "customer_id": "C01883",
+        "customer_name": "顾雨悦"
+      },
+      {
+        "customer_id": "C01884",
+        "customer_name": "陆宁"
+      },
+      {
+        "customer_id": "C01885",
+        "customer_name": "邓刚"
+      },
+      {
+        "customer_id": "C01886",
+        "customer_name": "曾欣悦"
+      },
+      {
+        "customer_id": "C01887",
+        "customer_name": "邹佳凡"
+      },
+      {
+        "customer_id": "C01888",
+        "customer_name": "罗嘉晨"
+      },
+      {
+        "customer_id": "C01889",
+        "customer_name": "袁诗悦"
+      },
+      {
+        "customer_id": "C01890",
+        "customer_name": "毛景彤"
+      },
+      {
+        "customer_id": "C01891",
+        "customer_name": "龙琳"
+      },
+      {
+        "customer_id": "C01892",
+        "customer_name": "张子宁"
+      },
+      {
+        "customer_id": "C01893",
+        "customer_name": "韦明瑜"
+      },
+      {
+        "customer_id": "C01894",
+        "customer_name": "梁晓彤"
+      },
+      {
+        "customer_id": "C01895",
+        "customer_name": "汤嘉航"
+      },
+      {
+        "customer_id": "C01896",
+        "customer_name": "姜梓哲"
+      },
+      {
+        "customer_id": "C01897",
+        "customer_name": "夏宇萱"
+      },
+      {
+        "customer_id": "C01898",
+        "customer_name": "姚俊宁"
+      },
+      {
+        "customer_id": "C01899",
+        "customer_name": "薛俊睿"
+      },
+      {
+        "customer_id": "C01900",
+        "customer_name": "董佳航"
+      },
+      {
+        "customer_id": "C01901",
+        "customer_name": "江泽航"
+      },
+      {
+        "customer_id": "C01902",
+        "customer_name": "江泽航"
+      },
+      {
+        "customer_id": "C01903",
+        "customer_name": "白平"
+      },
+      {
+        "customer_id": "C01904",
+        "customer_name": "何亦然"
+      },
+      {
+        "customer_id": "C01905",
+        "customer_name": "黄晓然"
+      },
+      {
+        "customer_id": "C01906",
+        "customer_name": "陶安辰"
+      },
+      {
+        "customer_id": "C01907",
+        "customer_name": "沈若远"
+      },
+      {
+        "customer_id": "C01908",
+        "customer_name": "顾欣萱"
+      },
+      {
+        "customer_id": "C01909",
+        "customer_name": "郭佳妍"
+      },
+      {
+        "customer_id": "C01910",
+        "customer_name": "肖浩涵"
+      },
+      {
+        "customer_id": "C01911",
+        "customer_name": "韦启悦"
+      },
+      {
+        "customer_id": "C01912",
+        "customer_name": "贾勇"
+      },
+      {
+        "customer_id": "C01913",
+        "customer_name": "蒋诗萱"
+      },
+      {
+        "customer_id": "C01914",
+        "customer_name": "崔雨宁"
+      },
+      {
+        "customer_id": "C01915",
+        "customer_name": "龙佳凡"
+      },
+      {
+        "customer_id": "C01916",
+        "customer_name": "顾刚"
+      },
+      {
+        "customer_id": "C01917",
+        "customer_name": "丁娟"
+      },
+      {
+        "customer_id": "C01918",
+        "customer_name": "曾泽言"
+      },
+      {
+        "customer_id": "C01919",
+        "customer_name": "丁思琳"
+      },
+      {
+        "customer_id": "C01920",
+        "customer_name": "罗雨涵"
+      },
+      {
+        "customer_id": "C01921",
+        "customer_name": "江明彤"
+      },
+      {
+        "customer_id": "C01922",
+        "customer_name": "肖若轩"
+      },
+      {
+        "customer_id": "C01923",
+        "customer_name": "熊明悦"
+      },
+      {
+        "customer_id": "C01924",
+        "customer_name": "谢亦凡"
+      },
+      {
+        "customer_id": "C01925",
+        "customer_name": "侯敏"
+      },
+      {
+        "customer_id": "C01926",
+        "customer_name": "彭诗萱"
+      },
+      {
+        "customer_id": "C01927",
+        "customer_name": "顾强"
+      },
+      {
+        "customer_id": "C01928",
+        "customer_name": "莫文然"
+      },
+      {
+        "customer_id": "C01929",
+        "customer_name": "龙洋"
+      },
+      {
+        "customer_id": "C01930",
+        "customer_name": "夏若宁"
+      },
+      {
+        "customer_id": "C01931",
+        "customer_name": "谢俊远"
+      },
+      {
+        "customer_id": "C01932",
+        "customer_name": "杜嘉轩"
+      },
+      {
+        "customer_id": "C01933",
+        "customer_name": "段宇晨"
+      },
+      {
+        "customer_id": "C01934",
+        "customer_name": "覃亦轩"
+      },
+      {
+        "customer_id": "C01935",
+        "customer_name": "李明"
+      },
+      {
+        "customer_id": "C01936",
+        "customer_name": "刘若辰"
+      },
+      {
+        "customer_id": "C01937",
+        "customer_name": "顾嘉然"
+      },
+      {
+        "customer_id": "C01938",
+        "customer_name": "孙安琳"
+      },
+      {
+        "customer_id": "C01939",
+        "customer_name": "侯文瑜"
+      },
+      {
+        "customer_id": "C01940",
+        "customer_name": "何娜"
+      },
+      {
+        "customer_id": "C01941",
+        "customer_name": "程静"
+      },
+      {
+        "customer_id": "C01942",
+        "customer_name": "郝景哲"
+      },
+      {
+        "customer_id": "C01943",
+        "customer_name": "莫欣晨"
+      },
+      {
+        "customer_id": "C01944",
+        "customer_name": "夏芳"
+      },
+      {
+        "customer_id": "C01945",
+        "customer_name": "石佳晴"
+      },
+      {
+        "customer_id": "C01946",
+        "customer_name": "林颖"
+      },
+      {
+        "customer_id": "C01947",
+        "customer_name": "陶梓辰"
+      },
+      {
+        "customer_id": "C01948",
+        "customer_name": "韩欣悦"
+      },
+      {
+        "customer_id": "C01949",
+        "customer_name": "秦勇"
+      },
+      {
+        "customer_id": "C01950",
+        "customer_name": "袁洋"
+      },
+      {
+        "customer_id": "C01951",
+        "customer_name": "卢磊"
+      },
+      {
+        "customer_id": "C01952",
+        "customer_name": "陈欣瑜"
+      },
+      {
+        "customer_id": "C01953",
+        "customer_name": "田泽彤"
+      },
+      {
+        "customer_id": "C01954",
+        "customer_name": "龚泽琳"
+      },
+      {
+        "customer_id": "C01955",
+        "customer_name": "于晓宁"
+      },
+      {
+        "customer_id": "C01956",
+        "customer_name": "贾思涵"
+      },
+      {
+        "customer_id": "C01957",
+        "customer_name": "高婷"
+      },
+      {
+        "customer_id": "C01958",
+        "customer_name": "龙若瑶"
+      },
+      {
+        "customer_id": "C01959",
+        "customer_name": "赵敏"
+      },
+      {
+        "customer_id": "C01960",
+        "customer_name": "向子哲"
+      },
+      {
+        "customer_id": "C01961",
+        "customer_name": "邓瑞"
+      },
+      {
+        "customer_id": "C01962",
+        "customer_name": "徐霞"
+      },
+      {
+        "customer_id": "C01963",
+        "customer_name": "曹嘉远"
+      },
+      {
+        "customer_id": "C01964",
+        "customer_name": "肖泽悦"
+      },
+      {
+        "customer_id": "C01965",
+        "customer_name": "姚晓辰"
+      },
+      {
+        "customer_id": "C01966",
+        "customer_name": "杨俊远"
+      },
+      {
+        "customer_id": "C01967",
+        "customer_name": "罗娜"
+      },
+      {
+        "customer_id": "C01968",
+        "customer_name": "姜晓凡"
+      },
+      {
+        "customer_id": "C01969",
+        "customer_name": "熊安凡"
+      },
+      {
+        "customer_id": "C01970",
+        "customer_name": "万俊悦"
+      },
+      {
+        "customer_id": "C01971",
+        "customer_name": "覃佳然"
+      },
+      {
+        "customer_id": "C01972",
+        "customer_name": "范若悦"
+      },
+      {
+        "customer_id": "C01973",
+        "customer_name": "韦佳远"
+      },
+      {
+        "customer_id": "C01974",
+        "customer_name": "张刚"
+      },
+      {
+        "customer_id": "C01975",
+        "customer_name": "宋思晴"
+      },
+      {
+        "customer_id": "C01976",
+        "customer_name": "付明"
+      },
+      {
+        "customer_id": "C01977",
+        "customer_name": "邓雨睿"
+      },
+      {
+        "customer_id": "C01978",
+        "customer_name": "邓晓凡"
+      },
+      {
+        "customer_id": "C01979",
+        "customer_name": "雷艳"
+      },
+      {
+        "customer_id": "C01980",
+        "customer_name": "龚明辰"
+      },
+      {
+        "customer_id": "C01981",
+        "customer_name": "任泽宁"
+      },
+      {
+        "customer_id": "C01982",
+        "customer_name": "叶宇涵"
+      },
+      {
+        "customer_id": "C01983",
+        "customer_name": "谭霞"
+      },
+      {
+        "customer_id": "C01984",
+        "customer_name": "姜俊萱"
+      },
+      {
+        "customer_id": "C01985",
+        "customer_name": "龚思言"
+      },
+      {
+        "customer_id": "C01986",
+        "customer_name": "吴雨涵"
+      },
+      {
+        "customer_id": "C01987",
+        "customer_name": "程梓涵"
+      },
+      {
+        "customer_id": "C01988",
+        "customer_name": "丁浩悦"
+      },
+      {
+        "customer_id": "C01989",
+        "customer_name": "钱思哲"
+      },
+      {
+        "customer_id": "C01990",
+        "customer_name": "胡颖"
+      },
+      {
+        "customer_id": "C01991",
+        "customer_name": "袁泽凡"
+      },
+      {
+        "customer_id": "C01992",
+        "customer_name": "顾琳"
+      },
+      {
+        "customer_id": "C01993",
+        "customer_name": "曾刚"
+      },
+      {
+        "customer_id": "C01994",
+        "customer_name": "廖俊彤"
+      },
+      {
+        "customer_id": "C01995",
+        "customer_name": "潘宁"
+      },
+      {
+        "customer_id": "C01996",
+        "customer_name": "董飞"
+      },
+      {
+        "customer_id": "C01997",
+        "customer_name": "潘伟"
+      },
+      {
+        "customer_id": "C01998",
+        "customer_name": "蔡若萱"
+      },
+      {
+        "customer_id": "C01999",
+        "customer_name": "万安凡"
+      },
+      {
+        "customer_id": "C02000",
+        "customer_name": "汪佳晴"
+      }
+    ],
+    "note": "应为200名，C01801至C02000；这里只统计完全没有订单，不含只有取消单。"
+  },
+  {
+    "id": "Q13",
+    "level": "复购",
+    "question": "2026年10月成交客户中，有至少2笔净成交订单的客户占比是多少？",
+    "sql_cents": "SELECT COUNT(*) AS buyers,SUM(CASE WHEN n>=2 THEN 1 ELSE 0 END) AS repeat_buyers,SUM(CASE WHEN n>=2 THEN 1 ELSE 0 END)*1.0/COUNT(*) AS repeat_rate FROM (SELECT customer_id,COUNT(*) n FROM demo_orders WHERE order_time >= '2026-10-01' AND order_time < '2026-11-01' AND net_revenue>0 GROUP BY customer_id)",
+    "expected": [
+      {
+        "buyers": 1729,
+        "repeat_buyers": 1608,
+        "repeat_rate": 0.9300173510699826
+      }
+    ],
+    "note": ""
+  },
+  {
+    "id": "Q14",
+    "level": "关联排名",
+    "question": "2026年10月净销售额最高的10名客户是谁？列出客户地区与等级。",
+    "sql_cents": "SELECT c.customer_id,c.customer_name,c.region,c.member_level,SUM(o.net_revenue)/100.0 AS net_revenue FROM demo_orders o JOIN demo_customers c ON o.customer_id=c.customer_id WHERE order_time >= '2026-10-01' AND order_time < '2026-11-01' GROUP BY c.customer_id,c.customer_name,c.region,c.member_level ORDER BY net_revenue DESC,c.customer_id LIMIT 10",
+    "expected": [
+      {
+        "customer_id": "C00953",
+        "customer_name": "许景哲",
+        "region": "西部",
+        "member_level": "银卡会员",
+        "net_revenue": 5191.45
+      },
+      {
+        "customer_id": "C01564",
+        "customer_name": "向婷",
+        "region": "华东",
+        "member_level": "普通会员",
+        "net_revenue": 5130.0
+      },
+      {
+        "customer_id": "C00508",
+        "customer_name": "吴佳航",
+        "region": "华东",
+        "member_level": "银卡会员",
+        "net_revenue": 4947.35
+      },
+      {
+        "customer_id": "C00600",
+        "customer_name": "蔡晓言",
+        "region": "华东",
+        "member_level": "银卡会员",
+        "net_revenue": 4907.45
+      },
+      {
+        "customer_id": "C01591",
+        "customer_name": "雷雨萱",
+        "region": "华东",
+        "member_level": "银卡会员",
+        "net_revenue": 4635.9
+      },
+      {
+        "customer_id": "C00830",
+        "customer_name": "毛婷",
+        "region": "华北",
+        "member_level": "金卡会员",
+        "net_revenue": 4478.8
+      },
+      {
+        "customer_id": "C01581",
+        "customer_name": "曾诗航",
+        "region": "华南",
+        "member_level": "银卡会员",
+        "net_revenue": 4416.7
+      },
+      {
+        "customer_id": "C01177",
+        "customer_name": "潘泽萱",
+        "region": "华南",
+        "member_level": "银卡会员",
+        "net_revenue": 4401.7
+      },
+      {
+        "customer_id": "C00332",
+        "customer_name": "贾思航",
+        "region": "华东",
+        "member_level": "银卡会员",
+        "net_revenue": 4396.2
+      },
+      {
+        "customer_id": "C01622",
+        "customer_name": "杨俊哲",
+        "region": "华东",
+        "member_level": "银卡会员",
+        "net_revenue": 4326.9
+      }
+    ],
+    "note": ""
+  },
+  {
+    "id": "Q15",
+    "level": "指标归因",
+    "question": "对比2026年10月12日至18日，10月19日至25日净销售额为什么下降？先按销售渠道拆解，再看客户地区。",
+    "sql_cents": "SELECT CASE WHEN order_time<'2026-10-19' THEN '对比期' ELSE '当前期' END AS period,o.sales_channel,c.region,SUM(o.net_revenue)/100.0 AS net_revenue FROM demo_orders o JOIN demo_customers c ON o.customer_id=c.customer_id WHERE order_time>='2026-10-12' AND order_time<'2026-10-26' GROUP BY 1,2,3 ORDER BY 1,2,3",
+    "expected": [
+      {
+        "period": "对比期",
+        "sales_channel": "品牌官网",
+        "region": "华东",
+        "net_revenue": 30123.9
+      },
+      {
+        "period": "对比期",
+        "sales_channel": "品牌官网",
+        "region": "华北",
+        "net_revenue": 8077.95
+      },
+      {
+        "period": "对比期",
+        "sales_channel": "品牌官网",
+        "region": "华南",
+        "net_revenue": 12520.05
+      },
+      {
+        "period": "对比期",
+        "sales_channel": "品牌官网",
+        "region": "西部",
+        "net_revenue": 9519.6
+      },
+      {
+        "period": "对比期",
+        "sales_channel": "微信小程序",
+        "region": "华东",
+        "net_revenue": 32553.25
+      },
+      {
+        "period": "对比期",
+        "sales_channel": "微信小程序",
+        "region": "华北",
+        "net_revenue": 15311.35
+      },
+      {
+        "period": "对比期",
+        "sales_channel": "微信小程序",
+        "region": "华南",
+        "net_revenue": 19383.55
+      },
+      {
+        "period": "对比期",
+        "sales_channel": "微信小程序",
+        "region": "西部",
+        "net_revenue": 13261.2
+      },
+      {
+        "period": "对比期",
+        "sales_channel": "短视频商城",
+        "region": "华东",
+        "net_revenue": 59916.4
+      },
+      {
+        "period": "对比期",
+        "sales_channel": "短视频商城",
+        "region": "华北",
+        "net_revenue": 27662.9
+      },
+      {
+        "period": "对比期",
+        "sales_channel": "短视频商城",
+        "region": "华南",
+        "net_revenue": 35198.85
+      },
+      {
+        "period": "对比期",
+        "sales_channel": "短视频商城",
+        "region": "西部",
+        "net_revenue": 23048.95
+      },
+      {
+        "period": "对比期",
+        "sales_channel": "线下门店",
+        "region": "华东",
+        "net_revenue": 8044.6
+      },
+      {
+        "period": "对比期",
+        "sales_channel": "线下门店",
+        "region": "华北",
+        "net_revenue": 2566.3
+      },
+      {
+        "period": "对比期",
+        "sales_channel": "线下门店",
+        "region": "华南",
+        "net_revenue": 5253.55
+      },
+      {
+        "period": "对比期",
+        "sales_channel": "线下门店",
+        "region": "西部",
+        "net_revenue": 4702.8
+      },
+      {
+        "period": "对比期",
+        "sales_channel": "自营App",
+        "region": "华东",
+        "net_revenue": 45074.15
+      },
+      {
+        "period": "对比期",
+        "sales_channel": "自营App",
+        "region": "华北",
+        "net_revenue": 14588.05
+      },
+      {
+        "period": "对比期",
+        "sales_channel": "自营App",
+        "region": "华南",
+        "net_revenue": 20287.95
+      },
+      {
+        "period": "对比期",
+        "sales_channel": "自营App",
+        "region": "西部",
+        "net_revenue": 12462.85
+      },
+      {
+        "period": "当前期",
+        "sales_channel": "品牌官网",
+        "region": "华东",
+        "net_revenue": 30123.9
+      },
+      {
+        "period": "当前期",
+        "sales_channel": "品牌官网",
+        "region": "华北",
+        "net_revenue": 8077.95
+      },
+      {
+        "period": "当前期",
+        "sales_channel": "品牌官网",
+        "region": "华南",
+        "net_revenue": 12520.05
+      },
+      {
+        "period": "当前期",
+        "sales_channel": "品牌官网",
+        "region": "西部",
+        "net_revenue": 9519.6
+      },
+      {
+        "period": "当前期",
+        "sales_channel": "微信小程序",
+        "region": "华东",
+        "net_revenue": 32553.25
+      },
+      {
+        "period": "当前期",
+        "sales_channel": "微信小程序",
+        "region": "华北",
+        "net_revenue": 15311.35
+      },
+      {
+        "period": "当前期",
+        "sales_channel": "微信小程序",
+        "region": "华南",
+        "net_revenue": 19383.55
+      },
+      {
+        "period": "当前期",
+        "sales_channel": "微信小程序",
+        "region": "西部",
+        "net_revenue": 13261.2
+      },
+      {
+        "period": "当前期",
+        "sales_channel": "短视频商城",
+        "region": "华东",
+        "net_revenue": 16995.05
+      },
+      {
+        "period": "当前期",
+        "sales_channel": "短视频商城",
+        "region": "华北",
+        "net_revenue": 27662.9
+      },
+      {
+        "period": "当前期",
+        "sales_channel": "短视频商城",
+        "region": "华南",
+        "net_revenue": 35198.85
+      },
+      {
+        "period": "当前期",
+        "sales_channel": "短视频商城",
+        "region": "西部",
+        "net_revenue": 23048.95
+      },
+      {
+        "period": "当前期",
+        "sales_channel": "线下门店",
+        "region": "华东",
+        "net_revenue": 8044.6
+      },
+      {
+        "period": "当前期",
+        "sales_channel": "线下门店",
+        "region": "华北",
+        "net_revenue": 2566.3
+      },
+      {
+        "period": "当前期",
+        "sales_channel": "线下门店",
+        "region": "华南",
+        "net_revenue": 5253.55
+      },
+      {
+        "period": "当前期",
+        "sales_channel": "线下门店",
+        "region": "西部",
+        "net_revenue": 4702.8
+      },
+      {
+        "period": "当前期",
+        "sales_channel": "自营App",
+        "region": "华东",
+        "net_revenue": 45074.15
+      },
+      {
+        "period": "当前期",
+        "sales_channel": "自营App",
+        "region": "华北",
+        "net_revenue": 14588.05
+      },
+      {
+        "period": "当前期",
+        "sales_channel": "自营App",
+        "region": "华南",
+        "net_revenue": 20287.95
+      },
+      {
+        "period": "当前期",
+        "sales_channel": "自营App",
+        "region": "西部",
+        "net_revenue": 18085.1
+      }
+    ],
+    "note": "选择指标归因，确认净销售额、两期日期及维度；贡献是统计拆解，不等于因果识别。"
+  },
+  {
+    "id": "Q16",
+    "level": "交叉分析",
+    "question": "10月19日至25日，华东短视频商城的净销售额比10月12日至18日下降多少？",
+    "sql_cents": "SELECT CASE WHEN order_time<'2026-10-19' THEN '对比期' ELSE '当前期' END AS period,COUNT(*) AS order_count,SUM(paid_amount)/100.0 AS paid_gmv,SUM(refund_amount)/100.0 AS refunds,SUM(net_revenue)/100.0 AS net_revenue,SUM(gross_profit)/100.0 AS gross_profit,SUM(gross_profit)*1.0/NULLIF(SUM(net_revenue),0) AS gross_margin,SUM(CASE WHEN net_revenue>0 THEN 1 ELSE 0 END) AS net_order_count FROM demo_orders o JOIN demo_customers c ON o.customer_id=c.customer_id WHERE order_time>='2026-10-12' AND order_time<'2026-10-26' AND c.region='华东' AND sales_channel='短视频商城' GROUP BY 1",
+    "expected": [
+      {
+        "period": "对比期",
+        "order_count": 292,
+        "paid_gmv": 63056.6,
+        "refunds": 3140.2,
+        "net_revenue": 59916.4,
+        "gross_profit": 25411.4,
+        "gross_margin": 0.42411426587712214,
+        "net_order_count": 263
+      },
+      {
+        "period": "当前期",
+        "order_count": 89,
+        "paid_gmv": 18134.25,
+        "refunds": 1139.2,
+        "net_revenue": 16995.05,
+        "gross_profit": 7239.05,
+        "gross_margin": 0.4259504973506992,
+        "net_order_count": 80
+      }
+    ],
+    "note": ""
+  },
+  {
+    "id": "Q17",
+    "level": "经营分析",
+    "question": "10月5日至11日居家焕新周，相比9月28日至10月4日，净销售额和毛利率如何变化？增收是否同时增利？",
+    "sql_cents": "SELECT CASE WHEN order_time<'2026-10-05' THEN '对比期' ELSE '当前期' END AS period,COUNT(*) AS order_count,SUM(paid_amount)/100.0 AS paid_gmv,SUM(refund_amount)/100.0 AS refunds,SUM(net_revenue)/100.0 AS net_revenue,SUM(gross_profit)/100.0 AS gross_profit,SUM(gross_profit)*1.0/NULLIF(SUM(net_revenue),0) AS gross_margin,SUM(CASE WHEN net_revenue>0 THEN 1 ELSE 0 END) AS net_order_count FROM demo_orders WHERE order_time>='2026-09-28' AND order_time<'2026-10-12' GROUP BY 1",
+    "expected": [
+      {
+        "period": "对比期",
+        "order_count": 1930,
+        "paid_gmv": 433545.55,
+        "refunds": 26679.35,
+        "net_revenue": 406866.2,
+        "gross_profit": 173255.2,
+        "gross_margin": 0.4258284418808935,
+        "net_order_count": 1770
+      },
+      {
+        "period": "当前期",
+        "order_count": 2261,
+        "paid_gmv": 468629.8,
+        "refunds": 28689.35,
+        "net_revenue": 439940.45,
+        "gross_profit": 159054.45,
+        "gross_margin": 0.36153631701745087,
+        "net_order_count": 2075
+      }
+    ],
+    "note": "活动名称可证明活动订单归属，不能仅凭同期变化估计活动真实增量效果。"
+  },
+  {
+    "id": "Q18",
+    "level": "经营下钻",
+    "question": "同一促销对比期内，各商品品类净销售额与毛利额分别变化多少？",
+    "sql_cents": "SELECT CASE WHEN order_time<'2026-10-05' THEN '对比期' ELSE '当前期' END AS period,category,SUM(net_revenue)/100.0 AS net_revenue,SUM(gross_profit)/100.0 AS gross_profit FROM demo_orders WHERE order_time>='2026-09-28' AND order_time<'2026-10-12' GROUP BY 1,2 ORDER BY 2,1",
+    "expected": [
+      {
+        "period": "对比期",
+        "category": "个护清洁",
+        "net_revenue": 43562.25,
+        "gross_profit": 23360.25
+      },
+      {
+        "period": "当前期",
+        "category": "个护清洁",
+        "net_revenue": 43562.25,
+        "gross_profit": 23360.25
+      },
+      {
+        "period": "对比期",
+        "category": "厨房小电",
+        "net_revenue": 136876.1,
+        "gross_profit": 50204.1
+      },
+      {
+        "period": "当前期",
+        "category": "厨房小电",
+        "net_revenue": 136876.1,
+        "gross_profit": 50204.1
+      },
+      {
+        "period": "对比期",
+        "category": "居家生活",
+        "net_revenue": 73923.55,
+        "gross_profit": 26648.55
+      },
+      {
+        "period": "当前期",
+        "category": "居家生活",
+        "net_revenue": 106997.8,
+        "gross_profit": 12447.8
+      },
+      {
+        "period": "对比期",
+        "category": "数码配件",
+        "net_revenue": 54588.95,
+        "gross_profit": 23757.95
+      },
+      {
+        "period": "当前期",
+        "category": "数码配件",
+        "net_revenue": 54588.95,
+        "gross_profit": 23757.95
+      },
+      {
+        "period": "对比期",
+        "category": "运动户外",
+        "net_revenue": 61181.35,
+        "gross_profit": 30893.35
+      },
+      {
+        "period": "当前期",
+        "category": "运动户外",
+        "net_revenue": 61181.35,
+        "gross_profit": 30893.35
+      },
+      {
+        "period": "对比期",
+        "category": "食品饮料",
+        "net_revenue": 36734.0,
+        "gross_profit": 18391.0
+      },
+      {
+        "period": "当前期",
+        "category": "食品饮料",
+        "net_revenue": 36734.0,
+        "gross_profit": 18391.0
+      }
+    ],
+    "note": ""
+  },
+  {
+    "id": "Q19",
+    "level": "异常检测",
+    "question": "检测2026年10月每日订单数的异常点，并画图。",
+    "sql_cents": "SELECT SUBSTR(order_time,1,10) AS day,COUNT(*) AS orders FROM demo_orders WHERE order_time >= '2026-10-01' AND order_time < '2026-11-01' GROUP BY 1 ORDER BY 1",
+    "expected": [
+      {
+        "day": "2026-10-01",
+        "orders": 254
+      },
+      {
+        "day": "2026-10-02",
+        "orders": 285
+      },
+      {
+        "day": "2026-10-03",
+        "orders": 314
+      },
+      {
+        "day": "2026-10-04",
+        "orders": 303
+      },
+      {
+        "day": "2026-10-05",
+        "orders": 306
+      },
+      {
+        "day": "2026-10-06",
+        "orders": 308
+      },
+      {
+        "day": "2026-10-07",
+        "orders": 302
+      },
+      {
+        "day": "2026-10-08",
+        "orders": 291
+      },
+      {
+        "day": "2026-10-09",
+        "orders": 336
+      },
+      {
+        "day": "2026-10-10",
+        "orders": 372
+      },
+      {
+        "day": "2026-10-11",
+        "orders": 346
+      },
+      {
+        "day": "2026-10-12",
+        "orders": 263
+      },
+      {
+        "day": "2026-10-13",
+        "orders": 256
+      },
+      {
+        "day": "2026-10-14",
+        "orders": 246
+      },
+      {
+        "day": "2026-10-15",
+        "orders": 260
+      },
+      {
+        "day": "2026-10-16",
+        "orders": 295
+      },
+      {
+        "day": "2026-10-17",
+        "orders": 326
+      },
+      {
+        "day": "2026-10-18",
+        "orders": 316
+      },
+      {
+        "day": "2026-10-19",
+        "orders": 248
+      },
+      {
+        "day": "2026-10-20",
+        "orders": 234
+      },
+      {
+        "day": "2026-10-21",
+        "orders": 222
+      },
+      {
+        "day": "2026-10-22",
+        "orders": 235
+      },
+      {
+        "day": "2026-10-23",
+        "orders": 269
+      },
+      {
+        "day": "2026-10-24",
+        "orders": 300
+      },
+      {
+        "day": "2026-10-25",
+        "orders": 286
+      },
+      {
+        "day": "2026-10-26",
+        "orders": 269
+      },
+      {
+        "day": "2026-10-27",
+        "orders": 244
+      },
+      {
+        "day": "2026-10-28",
+        "orders": 1048
+      },
+      {
+        "day": "2026-10-29",
+        "orders": 262
+      },
+      {
+        "day": "2026-10-30",
+        "orders": 289
+      },
+      {
+        "day": "2026-10-31",
+        "orders": 333
+      }
+    ],
+    "note": "选择异常检测；是否异常、阈值和数量以项目固定脚本输出为准。"
+  },
+  {
+    "id": "Q20",
+    "level": "异常解释",
+    "question": "2026年10月28日订单数最高时，秋日闪购订单占多少？",
+    "sql_cents": "SELECT campaign,COUNT(*) AS orders,SUM(net_revenue)/100.0 AS net_revenue FROM demo_orders WHERE order_time>='2026-10-28' AND order_time<'2026-10-29' GROUP BY campaign",
+    "expected": [
+      {
+        "campaign": "秋日闪购",
+        "orders": 1048,
+        "net_revenue": 205374.15
+      }
+    ],
+    "note": ""
+  },
+  {
+    "id": "Q21",
+    "level": "退款分析",
+    "question": "2026年9月15日至21日，哪个渠道和品类组合退款金额率最高？至少有10笔成交单。",
+    "sql_cents": "SELECT sales_channel,category,SUM(refund_amount)/100.0 AS refunds,SUM(paid_amount)/100.0 AS paid_gmv,SUM(refund_amount)*1.0/NULLIF(SUM(paid_amount),0) AS refund_rate,SUM(CASE WHEN paid_amount>0 THEN 1 ELSE 0 END) AS paid_orders FROM demo_orders WHERE order_time>='2026-09-15' AND order_time<'2026-09-22' GROUP BY 1,2 HAVING paid_orders>=10 ORDER BY refund_rate DESC",
+    "expected": [
+      {
+        "sales_channel": "短视频商城",
+        "category": "数码配件",
+        "refunds": 8722.25,
+        "paid_gmv": 24447.8,
+        "refund_rate": 0.35677034334377733,
+        "paid_orders": 127
+      },
+      {
+        "sales_channel": "自营App",
+        "category": "运动户外",
+        "refunds": 2299.2,
+        "paid_gmv": 13791.95,
+        "refund_rate": 0.1667059407842981,
+        "paid_orders": 65
+      },
+      {
+        "sales_channel": "品牌官网",
+        "category": "运动户外",
+        "refunds": 608.3,
+        "paid_gmv": 5026.0,
+        "refund_rate": 0.12103064066852368,
+        "paid_orders": 30
+      },
+      {
+        "sales_channel": "品牌官网",
+        "category": "食品饮料",
+        "refunds": 583.3,
+        "paid_gmv": 5795.3,
+        "refund_rate": 0.10065052715131227,
+        "paid_orders": 41
+      },
+      {
+        "sales_channel": "线下门店",
+        "category": "运动户外",
+        "refunds": 132.05,
+        "paid_gmv": 1410.7,
+        "refund_rate": 0.09360601120011341,
+        "paid_orders": 10
+      },
+      {
+        "sales_channel": "微信小程序",
+        "category": "居家生活",
+        "refunds": 1161.2,
+        "paid_gmv": 13386.6,
+        "refund_rate": 0.08674345987778824,
+        "paid_orders": 64
+      },
+      {
+        "sales_channel": "短视频商城",
+        "category": "运动户外",
+        "refunds": 1806.4,
+        "paid_gmv": 20870.3,
+        "refund_rate": 0.08655361925798863,
+        "paid_orders": 98
+      },
+      {
+        "sales_channel": "自营App",
+        "category": "厨房小电",
+        "refunds": 2771.1,
+        "paid_gmv": 33453.45,
+        "refund_rate": 0.08283450585814019,
+        "paid_orders": 84
+      },
+      {
+        "sales_channel": "自营App",
+        "category": "数码配件",
+        "refunds": 1172.2,
+        "paid_gmv": 14914.45,
+        "refund_rate": 0.07859491969197657,
+        "paid_orders": 65
+      },
+      {
+        "sales_channel": "自营App",
+        "category": "个护清洁",
+        "refunds": 813.75,
+        "paid_gmv": 11395.9,
+        "refund_rate": 0.07140726050597145,
+        "paid_orders": 74
+      },
+      {
+        "sales_channel": "线下门店",
+        "category": "食品饮料",
+        "refunds": 169.1,
+        "paid_gmv": 2387.65,
+        "refund_rate": 0.07082277553242729,
+        "paid_orders": 17
+      },
+      {
+        "sales_channel": "短视频商城",
+        "category": "食品饮料",
+        "refunds": 916.6,
+        "paid_gmv": 13689.9,
+        "refund_rate": 0.0669544700837844,
+        "paid_orders": 106
+      },
+      {
+        "sales_channel": "微信小程序",
+        "category": "厨房小电",
+        "refunds": 1594.7,
+        "paid_gmv": 25281.55,
+        "refund_rate": 0.0630776198453022,
+        "paid_orders": 53
+      },
+      {
+        "sales_channel": "微信小程序",
+        "category": "运动户外",
+        "refunds": 628.05,
+        "paid_gmv": 10281.55,
+        "refund_rate": 0.061085147667423685,
+        "paid_orders": 57
+      },
+      {
+        "sales_channel": "微信小程序",
+        "category": "个护清洁",
+        "refunds": 474.0,
+        "paid_gmv": 7907.35,
+        "refund_rate": 0.059944229103302625,
+        "paid_orders": 61
+      },
+      {
+        "sales_channel": "短视频商城",
+        "category": "居家生活",
+        "refunds": 1318.7,
+        "paid_gmv": 23281.35,
+        "refund_rate": 0.05664190435692088,
+        "paid_orders": 107
+      },
+      {
+        "sales_channel": "品牌官网",
+        "category": "居家生活",
+        "refunds": 497.0,
+        "paid_gmv": 9127.8,
+        "refund_rate": 0.054449045772256184,
+        "paid_orders": 43
+      },
+      {
+        "sales_channel": "品牌官网",
+        "category": "厨房小电",
+        "refunds": 1654.1,
+        "paid_gmv": 31404.45,
+        "refund_rate": 0.05267087944542891,
+        "paid_orders": 61
+      },
+      {
+        "sales_channel": "品牌官网",
+        "category": "数码配件",
+        "refunds": 351.1,
+        "paid_gmv": 6983.6,
+        "refund_rate": 0.05027492983561487,
+        "paid_orders": 42
+      },
+      {
+        "sales_channel": "线下门店",
+        "category": "居家生活",
+        "refunds": 99.0,
+        "paid_gmv": 2135.5,
+        "refund_rate": 0.04635916647155233,
+        "paid_orders": 13
+      },
+      {
+        "sales_channel": "微信小程序",
+        "category": "食品饮料",
+        "refunds": 358.7,
+        "paid_gmv": 8347.9,
+        "refund_rate": 0.04296889037961643,
+        "paid_orders": 57
+      },
+      {
+        "sales_channel": "微信小程序",
+        "category": "数码配件",
+        "refunds": 460.1,
+        "paid_gmv": 10973.0,
+        "refund_rate": 0.04193019229016677,
+        "paid_orders": 60
+      },
+      {
+        "sales_channel": "短视频商城",
+        "category": "个护清洁",
+        "refunds": 503.25,
+        "paid_gmv": 16482.05,
+        "refund_rate": 0.030533216438489143,
+        "paid_orders": 111
+      },
+      {
+        "sales_channel": "短视频商城",
+        "category": "厨房小电",
+        "refunds": 1365.7,
+        "paid_gmv": 44979.6,
+        "refund_rate": 0.030362653291714465,
+        "paid_orders": 106
+      },
+      {
+        "sales_channel": "自营App",
+        "category": "食品饮料",
+        "refunds": 173.55,
+        "paid_gmv": 7893.75,
+        "refund_rate": 0.021985748218527317,
+        "paid_orders": 68
+      },
+      {
+        "sales_channel": "自营App",
+        "category": "居家生活",
+        "refunds": 299.0,
+        "paid_gmv": 14957.8,
+        "refund_rate": 0.01998957065878672,
+        "paid_orders": 67
+      },
+      {
+        "sales_channel": "品牌官网",
+        "category": "个护清洁",
+        "refunds": 124.2,
+        "paid_gmv": 7661.0,
+        "refund_rate": 0.016211982769873384,
+        "paid_orders": 51
+      },
+      {
+        "sales_channel": "线下门店",
+        "category": "个护清洁",
+        "refunds": 0.0,
+        "paid_gmv": 2083.4,
+        "refund_rate": 0.0,
+        "paid_orders": 13
+      },
+      {
+        "sales_channel": "线下门店",
+        "category": "厨房小电",
+        "refunds": 0.0,
+        "paid_gmv": 3834.75,
+        "refund_rate": 0.0,
+        "paid_orders": 10
+      },
+      {
+        "sales_channel": "线下门店",
+        "category": "数码配件",
+        "refunds": 0.0,
+        "paid_gmv": 2676.2,
+        "refund_rate": 0.0,
+        "paid_orders": 17
+      }
+    ],
+    "note": ""
+  },
+  {
+    "id": "Q22",
+    "level": "趋势预测",
+    "question": "根据2026年5月1日至9月27日的每日订单数，预测随后7天订单数并给出区间。",
+    "sql_cents": "SELECT SUBSTR(order_time,1,10) AS day,COUNT(*) AS orders FROM demo_orders WHERE order_time>='2026-05-01' AND order_time<'2026-09-28' GROUP BY 1 ORDER BY 1",
+    "expected": [
+      {
+        "day": "2026-05-01",
+        "orders": 243
+      },
+      {
+        "day": "2026-05-02",
+        "orders": 271
+      },
+      {
+        "day": "2026-05-03",
+        "orders": 251
+      },
+      {
+        "day": "2026-05-04",
+        "orders": 223
+      },
+      {
+        "day": "2026-05-05",
+        "orders": 203
+      },
+      {
+        "day": "2026-05-06",
+        "orders": 222
+      },
+      {
+        "day": "2026-05-07",
+        "orders": 221
+      },
+      {
+        "day": "2026-05-08",
+        "orders": 245
+      },
+      {
+        "day": "2026-05-09",
+        "orders": 263
+      },
+      {
+        "day": "2026-05-10",
+        "orders": 267
+      },
+      {
+        "day": "2026-05-11",
+        "orders": 214
+      },
+      {
+        "day": "2026-05-12",
+        "orders": 214
+      },
+      {
+        "day": "2026-05-13",
+        "orders": 217
+      },
+      {
+        "day": "2026-05-14",
+        "orders": 230
+      },
+      {
+        "day": "2026-05-15",
+        "orders": 246
+      },
+      {
+        "day": "2026-05-16",
+        "orders": 266
+      },
+      {
+        "day": "2026-05-17",
+        "orders": 264
+      },
+      {
+        "day": "2026-05-18",
+        "orders": 225
+      },
+      {
+        "day": "2026-05-19",
+        "orders": 205
+      },
+      {
+        "day": "2026-05-20",
+        "orders": 220
+      },
+      {
+        "day": "2026-05-21",
+        "orders": 226
+      },
+      {
+        "day": "2026-05-22",
+        "orders": 246
+      },
+      {
+        "day": "2026-05-23",
+        "orders": 277
+      },
+      {
+        "day": "2026-05-24",
+        "orders": 265
+      },
+      {
+        "day": "2026-05-25",
+        "orders": 234
+      },
+      {
+        "day": "2026-05-26",
+        "orders": 202
+      },
+      {
+        "day": "2026-05-27",
+        "orders": 212
+      },
+      {
+        "day": "2026-05-28",
+        "orders": 221
+      },
+      {
+        "day": "2026-05-29",
+        "orders": 247
+      },
+      {
+        "day": "2026-05-30",
+        "orders": 278
+      },
+      {
+        "day": "2026-05-31",
+        "orders": 272
+      },
+      {
+        "day": "2026-06-01",
+        "orders": 233
+      },
+      {
+        "day": "2026-06-02",
+        "orders": 215
+      },
+      {
+        "day": "2026-06-03",
+        "orders": 217
+      },
+      {
+        "day": "2026-06-04",
+        "orders": 234
+      },
+      {
+        "day": "2026-06-05",
+        "orders": 245
+      },
+      {
+        "day": "2026-06-06",
+        "orders": 280
+      },
+      {
+        "day": "2026-06-07",
+        "orders": 274
+      },
+      {
+        "day": "2026-06-08",
+        "orders": 232
+      },
+      {
+        "day": "2026-06-09",
+        "orders": 218
+      },
+      {
+        "day": "2026-06-10",
+        "orders": 218
+      },
+      {
+        "day": "2026-06-11",
+        "orders": 236
+      },
+      {
+        "day": "2026-06-12",
+        "orders": 255
+      },
+      {
+        "day": "2026-06-13",
+        "orders": 285
+      },
+      {
+        "day": "2026-06-14",
+        "orders": 265
+      },
+      {
+        "day": "2026-06-15",
+        "orders": 237
+      },
+      {
+        "day": "2026-06-16",
+        "orders": 213
+      },
+      {
+        "day": "2026-06-17",
+        "orders": 226
+      },
+      {
+        "day": "2026-06-18",
+        "orders": 233
+      },
+      {
+        "day": "2026-06-19",
+        "orders": 254
+      },
+      {
+        "day": "2026-06-20",
+        "orders": 282
+      },
+      {
+        "day": "2026-06-21",
+        "orders": 262
+      },
+      {
+        "day": "2026-06-22",
+        "orders": 226
+      },
+      {
+        "day": "2026-06-23",
+        "orders": 224
+      },
+      {
+        "day": "2026-06-24",
+        "orders": 223
+      },
+      {
+        "day": "2026-06-25",
+        "orders": 232
+      },
+      {
+        "day": "2026-06-26",
+        "orders": 252
+      },
+      {
+        "day": "2026-06-27",
+        "orders": 278
+      },
+      {
+        "day": "2026-06-28",
+        "orders": 277
+      },
+      {
+        "day": "2026-06-29",
+        "orders": 229
+      },
+      {
+        "day": "2026-06-30",
+        "orders": 226
+      },
+      {
+        "day": "2026-07-01",
+        "orders": 216
+      },
+      {
+        "day": "2026-07-02",
+        "orders": 236
+      },
+      {
+        "day": "2026-07-03",
+        "orders": 256
+      },
+      {
+        "day": "2026-07-04",
+        "orders": 289
+      },
+      {
+        "day": "2026-07-05",
+        "orders": 269
+      },
+      {
+        "day": "2026-07-06",
+        "orders": 226
+      },
+      {
+        "day": "2026-07-07",
+        "orders": 218
+      },
+      {
+        "day": "2026-07-08",
+        "orders": 229
+      },
+      {
+        "day": "2026-07-09",
+        "orders": 236
+      },
+      {
+        "day": "2026-07-10",
+        "orders": 257
+      },
+      {
+        "day": "2026-07-11",
+        "orders": 288
+      },
+      {
+        "day": "2026-07-12",
+        "orders": 282
+      },
+      {
+        "day": "2026-07-13",
+        "orders": 228
+      },
+      {
+        "day": "2026-07-14",
+        "orders": 224
+      },
+      {
+        "day": "2026-07-15",
+        "orders": 235
+      },
+      {
+        "day": "2026-07-16",
+        "orders": 244
+      },
+      {
+        "day": "2026-07-17",
+        "orders": 267
+      },
+      {
+        "day": "2026-07-18",
+        "orders": 292
+      },
+      {
+        "day": "2026-07-19",
+        "orders": 285
+      },
+      {
+        "day": "2026-07-20",
+        "orders": 229
+      },
+      {
+        "day": "2026-07-21",
+        "orders": 233
+      },
+      {
+        "day": "2026-07-22",
+        "orders": 229
+      },
+      {
+        "day": "2026-07-23",
+        "orders": 244
+      },
+      {
+        "day": "2026-07-24",
+        "orders": 255
+      },
+      {
+        "day": "2026-07-25",
+        "orders": 291
+      },
+      {
+        "day": "2026-07-26",
+        "orders": 284
+      },
+      {
+        "day": "2026-07-27",
+        "orders": 232
+      },
+      {
+        "day": "2026-07-28",
+        "orders": 221
+      },
+      {
+        "day": "2026-07-29",
+        "orders": 226
+      },
+      {
+        "day": "2026-07-30",
+        "orders": 249
+      },
+      {
+        "day": "2026-07-31",
+        "orders": 255
+      },
+      {
+        "day": "2026-08-01",
+        "orders": 288
+      },
+      {
+        "day": "2026-08-02",
+        "orders": 277
+      },
+      {
+        "day": "2026-08-03",
+        "orders": 239
+      },
+      {
+        "day": "2026-08-04",
+        "orders": 229
+      },
+      {
+        "day": "2026-08-05",
+        "orders": 235
+      },
+      {
+        "day": "2026-08-06",
+        "orders": 232
+      },
+      {
+        "day": "2026-08-07",
+        "orders": 261
+      },
+      {
+        "day": "2026-08-08",
+        "orders": 303
+      },
+      {
+        "day": "2026-08-09",
+        "orders": 291
+      },
+      {
+        "day": "2026-08-10",
+        "orders": 249
+      },
+      {
+        "day": "2026-08-11",
+        "orders": 229
+      },
+      {
+        "day": "2026-08-12",
+        "orders": 241
+      },
+      {
+        "day": "2026-08-13",
+        "orders": 237
+      },
+      {
+        "day": "2026-08-14",
+        "orders": 256
+      },
+      {
+        "day": "2026-08-15",
+        "orders": 293
+      },
+      {
+        "day": "2026-08-16",
+        "orders": 286
+      },
+      {
+        "day": "2026-08-17",
+        "orders": 240
+      },
+      {
+        "day": "2026-08-18",
+        "orders": 238
+      },
+      {
+        "day": "2026-08-19",
+        "orders": 241
+      },
+      {
+        "day": "2026-08-20",
+        "orders": 253
+      },
+      {
+        "day": "2026-08-21",
+        "orders": 264
+      },
+      {
+        "day": "2026-08-22",
+        "orders": 295
+      },
+      {
+        "day": "2026-08-23",
+        "orders": 293
+      },
+      {
+        "day": "2026-08-24",
+        "orders": 241
+      },
+      {
+        "day": "2026-08-25",
+        "orders": 241
+      },
+      {
+        "day": "2026-08-26",
+        "orders": 233
+      },
+      {
+        "day": "2026-08-27",
+        "orders": 242
+      },
+      {
+        "day": "2026-08-28",
+        "orders": 265
+      },
+      {
+        "day": "2026-08-29",
+        "orders": 295
+      },
+      {
+        "day": "2026-08-30",
+        "orders": 297
+      },
+      {
+        "day": "2026-08-31",
+        "orders": 247
+      },
+      {
+        "day": "2026-09-01",
+        "orders": 235
+      },
+      {
+        "day": "2026-09-02",
+        "orders": 237
+      },
+      {
+        "day": "2026-09-03",
+        "orders": 257
+      },
+      {
+        "day": "2026-09-04",
+        "orders": 274
+      },
+      {
+        "day": "2026-09-05",
+        "orders": 303
+      },
+      {
+        "day": "2026-09-06",
+        "orders": 288
+      },
+      {
+        "day": "2026-09-07",
+        "orders": 242
+      },
+      {
+        "day": "2026-09-08",
+        "orders": 235
+      },
+      {
+        "day": "2026-09-09",
+        "orders": 250
+      },
+      {
+        "day": "2026-09-10",
+        "orders": 252
+      },
+      {
+        "day": "2026-09-11",
+        "orders": 276
+      },
+      {
+        "day": "2026-09-12",
+        "orders": 310
+      },
+      {
+        "day": "2026-09-13",
+        "orders": 292
+      },
+      {
+        "day": "2026-09-14",
+        "orders": 243
+      },
+      {
+        "day": "2026-09-15",
+        "orders": 233
+      },
+      {
+        "day": "2026-09-16",
+        "orders": 240
+      },
+      {
+        "day": "2026-09-17",
+        "orders": 249
+      },
+      {
+        "day": "2026-09-18",
+        "orders": 275
+      },
+      {
+        "day": "2026-09-19",
+        "orders": 306
+      },
+      {
+        "day": "2026-09-20",
+        "orders": 302
+      },
+      {
+        "day": "2026-09-21",
+        "orders": 255
+      },
+      {
+        "day": "2026-09-22",
+        "orders": 240
+      },
+      {
+        "day": "2026-09-23",
+        "orders": 249
+      },
+      {
+        "day": "2026-09-24",
+        "orders": 256
+      },
+      {
+        "day": "2026-09-25",
+        "orders": 270
+      },
+      {
+        "day": "2026-09-26",
+        "orders": 314
+      },
+      {
+        "day": "2026-09-27",
+        "orders": 298
+      }
+    ],
+    "note": "选择趋势预测；随后7天为9月28日至10月4日，这是历史回测，预测不读取实际值，实际值仅供管理员比对。"
+  },
+  {
+    "id": "Q23",
+    "level": "四象限分析",
+    "question": "用2026年10月销售额和毛利率做四象限，比较各品类、各渠道。",
+    "sql_cents": "SELECT category,sales_channel,SUM(net_revenue)/100.0 AS net_revenue,SUM(gross_profit)*1.0/NULLIF(SUM(net_revenue),0) AS gross_margin FROM demo_orders WHERE order_time >= '2026-10-01' AND order_time < '2026-11-01' GROUP BY 1,2",
+    "expected": [
+      {
+        "category": "个护清洁",
+        "sales_channel": "品牌官网",
+        "net_revenue": 30586.3,
+        "gross_margin": 0.5339089723176716
+      },
+      {
+        "category": "个护清洁",
+        "sales_channel": "微信小程序",
+        "net_revenue": 41593.85,
+        "gross_margin": 0.5355082542250837
+      },
+      {
+        "category": "个护清洁",
+        "sales_channel": "短视频商城",
+        "net_revenue": 62959.3,
+        "gross_margin": 0.5348423505343929
+      },
+      {
+        "category": "个护清洁",
+        "sales_channel": "线下门店",
+        "net_revenue": 11117.7,
+        "gross_margin": 0.5337165061118757
+      },
+      {
+        "category": "个护清洁",
+        "sales_channel": "自营App",
+        "net_revenue": 50584.35,
+        "gross_margin": 0.5350933638566078
+      },
+      {
+        "category": "厨房小电",
+        "sales_channel": "品牌官网",
+        "net_revenue": 91143.0,
+        "gross_margin": 0.3674335933642737
+      },
+      {
+        "category": "厨房小电",
+        "sales_channel": "微信小程序",
+        "net_revenue": 126753.15,
+        "gross_margin": 0.35856426447784534
+      },
+      {
+        "category": "厨房小电",
+        "sales_channel": "短视频商城",
+        "net_revenue": 218005.75,
+        "gross_margin": 0.3662552478547011
+      },
+      {
+        "category": "厨房小电",
+        "sales_channel": "线下门店",
+        "net_revenue": 32753.95,
+        "gross_margin": 0.3661222539571563
+      },
+      {
+        "category": "厨房小电",
+        "sales_channel": "自营App",
+        "net_revenue": 137582.85,
+        "gross_margin": 0.36868585001691706
+      },
+      {
+        "category": "居家生活",
+        "sales_channel": "品牌官网",
+        "net_revenue": 60691.0,
+        "gross_margin": 0.29999505692771583
+      },
+      {
+        "category": "居家生活",
+        "sales_channel": "微信小程序",
+        "net_revenue": 92260.2,
+        "gross_margin": 0.2910052221868151
+      },
+      {
+        "category": "居家生活",
+        "sales_channel": "短视频商城",
+        "net_revenue": 131209.05,
+        "gross_margin": 0.2890810504305915
+      },
+      {
+        "category": "居家生活",
+        "sales_channel": "线下门店",
+        "net_revenue": 16312.4,
+        "gross_margin": 0.3034746573159069
+      },
+      {
+        "category": "居家生活",
+        "sales_channel": "自营App",
+        "net_revenue": 88197.6,
+        "gross_margin": 0.29891516322439615
+      },
+      {
+        "category": "数码配件",
+        "sales_channel": "品牌官网",
+        "net_revenue": 43778.0,
+        "gross_margin": 0.4297820823244552
+      },
+      {
+        "category": "数码配件",
+        "sales_channel": "微信小程序",
+        "net_revenue": 55306.2,
+        "gross_margin": 0.4417262440739013
+      },
+      {
+        "category": "数码配件",
+        "sales_channel": "短视频商城",
+        "net_revenue": 97931.1,
+        "gross_margin": 0.43680812326217106
+      },
+      {
+        "category": "数码配件",
+        "sales_channel": "线下门店",
+        "net_revenue": 14191.0,
+        "gross_margin": 0.4351349446832499
+      },
+      {
+        "category": "数码配件",
+        "sales_channel": "自营App",
+        "net_revenue": 59188.1,
+        "gross_margin": 0.4394650275984531
+      },
+      {
+        "category": "运动户外",
+        "sales_channel": "品牌官网",
+        "net_revenue": 47879.5,
+        "gross_margin": 0.49886694723211394
+      },
+      {
+        "category": "运动户外",
+        "sales_channel": "微信小程序",
+        "net_revenue": 57340.2,
+        "gross_margin": 0.503995451707528
+      },
+      {
+        "category": "运动户外",
+        "sales_channel": "短视频商城",
+        "net_revenue": 94613.2,
+        "gross_margin": 0.5077008282142449
+      },
+      {
+        "category": "运动户外",
+        "sales_channel": "线下门店",
+        "net_revenue": 12694.6,
+        "gross_margin": 0.5027807099081499
+      },
+      {
+        "category": "运动户外",
+        "sales_channel": "自营App",
+        "net_revenue": 70284.75,
+        "gross_margin": 0.5073042160639399
+      },
+      {
+        "category": "食品饮料",
+        "sales_channel": "品牌官网",
+        "net_revenue": 27709.7,
+        "gross_margin": 0.5033869006160298
+      },
+      {
+        "category": "食品饮料",
+        "sales_channel": "微信小程序",
+        "net_revenue": 36310.7,
+        "gross_margin": 0.5022954666255401
+      },
+      {
+        "category": "食品饮料",
+        "sales_channel": "短视频商城",
+        "net_revenue": 57603.3,
+        "gross_margin": 0.5051325184494638
+      },
+      {
+        "category": "食品饮料",
+        "sales_channel": "线下门店",
+        "net_revenue": 9027.65,
+        "gross_margin": 0.4993159903186322
+      },
+      {
+        "category": "食品饮料",
+        "sales_channel": "自营App",
+        "net_revenue": 43345.2,
+        "gross_margin": 0.5001061247842898
+      }
+    ],
+    "note": "普通分析；本项目无独立四象限专用技能，依现有Python/图表能力。"
+  },
+  {
+    "id": "Q24",
+    "level": "边界",
+    "question": "2026年11月订单金额是多少？",
+    "sql_cents": "SELECT COUNT(*) AS orders,COALESCE(SUM(net_revenue),0)/100.0 AS net_revenue FROM demo_orders WHERE order_time>='2026-11-01' AND order_time<'2026-12-01'",
+    "expected": [
+      {
+        "orders": 0,
+        "net_revenue": 0.0
+      }
+    ],
+    "note": "必须说明没有11月覆盖数据，不能把0解读为11月真实业务无销售。"
+  },
+  {
+    "id": "Q25",
+    "level": "边界",
+    "question": "2026年10月短视频的广告转化率和投放ROI是多少？",
+    "sql_cents": null,
+    "expected": null,
+    "note": "数据没有曝光、点击、广告消耗，无法计算转化率/投放ROI；应明确说明缺少输入，不执行无意义查询。",
+    "expected_behavior": "说明缺少字段，不能给出数字；允许建议可计算的替代问题。"
+  },
+  {
+    "id": "Q26",
+    "level": "口径边界",
+    "question": "2026年10月每一天实际收到多少退款？",
+    "sql_cents": null,
+    "expected": null,
+    "note": "只有订单时间和累计退款，没有退款发生时间；可以按下单日分组退款金额，不能称为每日实际到账退款。",
+    "expected_behavior": "说明缺少字段，不能给出数字；允许建议可计算的替代问题。"
+  }
+]

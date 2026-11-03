@@ -59,20 +59,39 @@ class DemoDataServiceTest {
                 .isInstanceOf(DatasetException.class);
     }
 
-    /** The file's 2026/9/31 does not exist; those rows move to the month's last day. */
     @Test
-    void visitTimesBecomeStandardDateTimes() {
-        assertThat(DemoDataService.standardVisitTime("2026/9/31 23:59"))
-                .isEqualTo("2026-09-30 23:59:00");
-        assertThat(DemoDataService.standardVisitTime("2026/9/31 0:15"))
-                .isEqualTo("2026-09-30 00:15:00");
-        assertThat(DemoDataService.standardVisitTime("2026/10/7 16:31"))
-                .isEqualTo("2026-10-07 16:31:00");
-        assertThat(DemoDataService.standardVisitTime("2026-10-07 16:31:00"))
-                .isEqualTo("2026-10-07 16:31:00");
-        assertThat(DemoDataService.standardVisitTime("2026-10-07"))
-                .isEqualTo("2026-10-07 00:00:00");
-        assertThat(DemoDataService.standardVisitTime(" ")).isNull();
+    void legacyFilesAreNotOfferedAndOldSchemaIsNotAccepted() throws Exception {
+        Files.writeString(dir.resolve("报表访问明细.xlsx"), "legacy");
+        Files.writeString(dir.resolve("用户列表.xlsx"), "legacy");
+        assertThat(service(true, "pw").samples()).isEmpty();
+        assertThat(DemoDataService.usesCurrentSchema("jdbc:mysql://localhost:3306/demo_data"))
+                .isFalse();
+        assertThat(
+                        DemoDataService.usesCurrentSchema(
+                                "jdbc:mysql://localhost:3306/"
+                                        + DemoDataService.SCHEMA
+                                        + "?useSSL=false"))
+                .isTrue();
+        assertThatThrownBy(() -> service(true, "pw").sample("用户列表.xlsx"))
+                .isInstanceOf(DatasetException.class);
+    }
+
+    @Test
+    void legacyJdbcConfigurationDoesNotExposeOrChangeOldDemoSource() {
+        DemoDataProperties properties = new DemoDataProperties();
+        properties.setEnabled(true);
+        properties.setPassword("reader-password");
+        properties.setJdbcUrl("jdbc:mysql://localhost:3306/demo_data");
+        var service =
+                new DemoDataService(
+                        properties,
+                        mock(DatasetStoreProperties.class),
+                        sources,
+                        mock(DataSourceIntrospector.class),
+                        mock(ExcelParser.class));
+        service.prepare();
+        assertThat(service.sourceAvailable()).isFalse();
+        verifyNoInteractions(sources);
     }
 
     @Test

@@ -1,25 +1,27 @@
-# 新手示例文件：本地与服务器各自持久保存
+# 新手通用示例：虚构订单与客户
 
-66已部署并由用户确认线上可用。两份Excel曾在提交 `011d06b97fb6ebcbfd42f87213864f65e4779259` 中临时通过GitHub传输，随后从当前源码树删除；Git历史仍保留原字节。当前目录保留恢复脚本、校验清单和二进制属性。
+当前示例为完全合成的48000笔订单和2000名虚构中文姓名客户，保留重名，以customer_id关联。源码素材在synthetic-v1/，不含真实人员/业务资料或凭据，可以随Git分发。旧报表访问/用户列表仅为历史材料，不再由示例API提供，恢复脚本也不再从历史提取它们。
 
 ## 本地开发
 
-在项目模块目录执行（Python 3，无额外依赖）：
+在模块目录执行一次：
 
 ```bash
 python deploy/demo-samples/restore-local.py
 ```
 
-脚本从上述历史提交按二进制读取两份原文件，验证SHA256后写入模块 `data/demo-samples/`。该目录被Git忽略，切换develop-2.0/liyufan_dev和正常pull不会删除本地文件。已存在且校验相同则直接通过；不同则停止且不覆盖，不需要每次手工复制。脚本同时保存SHA256SUMS。
+默认复制并校验到被Git忽略的data/demo-samples。相同文件直接通过，内容或清单不一致则停止，不覆盖。旧环境清单不同可选独立目录，例如`--directory data/demo-samples-commerce-v1`，并同步设置DATAAGENT_DEMO_SAMPLES_DIR；不要删除或覆盖旧资源来绕过检查。
 
-IDEA后端Working directory设为项目模块目录，在本地运行配置设置 `DATAAGENT_DEMO_ENABLED=true`；默认samples-dir即data/demo-samples。工作目录不同的启动方式可设置 `DATAAGENT_DEMO_SAMPLES_DIR` 为本机绝对目录。
+本轮用户本机的data/demo-samples已经安装新文件，原文件保留、原清单备份在忽略的target/local-demo-switch-20261102/backup，无需再手工复制。IDEA环境变量DATAAGENT_DEMO_ENABLED=true，DATAAGENT_DEMO_SAMPLES_DIR指向该目录。重启后端、刷新前端，在新手引导上传弹窗点“使用示例文件”，应看到演示订单.xlsx、演示客户.xlsx。
 
-这就可以测试内置Excel上传。外部示例数据源还需要本机demo_data与独立只读账号：`DATAAGENT_DEMO_JDBC_URL` 指向本机MySQL，`DATAAGENT_DEMO_USERNAME` / `DATAAGENT_DEMO_PASSWORD` 放IDEA环境变量或本地忽略配置。不开启时功能保持默认关闭。不能将66私有凭据提交到仓库。
+文件上传不需要示例数据库或只读密码。业务口径可从synthetic-v1/业务口径.md在知识库资料中手动补充；不会自动上传管理员参考答案。
 
-恢复脚本需要本地Git历史包含011d06b；缺少历史（如浅克隆）时会明确停止，先获取完整主线历史或将原文件复制到目标目录再校验。Windows不要用旧PowerShell的文本重定向导出xlsx，脚本始终按原始字节写入。
+## 外部示例源
 
-## 66及后续更新
+同一批Excel可由DemoDataService准备为独立demo_commerce_v1库，表demo_orders/demo_customers，系统源builtin-demo-commerce-v1。默认JDBC为jdbc:mysql://localhost:3306/demo_commerce_v1，默认只读账号demo_commerce_reader，需要本地DATAAGENT_DEMO_PASSWORD；启用时数据集库连接还需准备该独立库的权限，或由DBA提前准备。仅空表导入、数量不完整则停止；重复启动不追加。
 
-66持久目录固定为 `/data/dataagent/rehearsal-app/data/demo-samples`，runtime.env中的 `DATAAGENT_DEMO_SAMPLES_DIR` 指向这里。两份Excel和SHA256SUMS已在该目录校验通过；示例源已导入并经demo_reader验证。正常源码更新只删除源码目录受Git管理的副本，现有upgrade保留服务器持久目录与配置，不需要重新复制、导入或重启仅为删除仓库副本。
+显式配置旧demo_data的环境不会被自动改指向或迁移，旧源不会当作新示例展示。旧库、旧知识库、账号与历史文件不自动删除；正式退役另行处理。
 
-新服务器仍需单独恢复/提供文件并配置示例库，不把既有66准备完成理解为其他环境自动就绪。详见[66更新指引](../../docs/guides/66-update-operations.md)。
+## 66切换（本轮未执行）
+
+现有66持久目录仍可能是旧素材。本次仅本地试用，不应直接沿用旧升级指南假定换镜像就换了数据。将来需将synthetic-v1两Excel及清单复制到新的持久目录、修改DATAAGENT_DEMO_SAMPLES_DIR，以及需要外部示例时配置新库URL/只读账号；验证两条引导路线后再决定旧数据公开范围和旧库退役。不重建平台库、不重复导用户。

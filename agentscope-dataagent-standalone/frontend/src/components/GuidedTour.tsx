@@ -23,7 +23,7 @@ interface Copy {
 const COPY: Record<TourStepId, Copy> = {
   create: { no: 2, target: 'kb-create', head: '名称已填好，直接创建', text: '知识库是一份数据的家。名称可以改，以后也能在知识库详情里修改。' },
   source: { no: 3, target: 'kb-source', head: '选一种方式放入数据', text: '两种方式都内置了示例，不需要自己准备文件或数据库。第一次体验建议选“上传文件”。' },
-  sample: { no: 4, target: 'sample-use', head: '点一下，直接用内置示例', text: '示例数据是报表访问明细和用户列表，两张表通过账号关联，适合体验多表分析。', waiting: '点击“上传文件”，就能使用内置示例' },
+  sample: { no: 4, target: 'sample-use', head: '点一下，直接用内置示例', text: '示例是完全虚构的订单和客户，共5万行，通过客户编号关联，可分析销售趋势、地区贡献和会员复购。', waiting: '点击“上传文件”，就能使用内置示例' },
   importing: { no: 4, head: '正在准备数据', text: '可以继续看看其他页面，完成后这里会带你进入下一步。' },
   screening: { no: 5, target: 'screening-confirm', head: '确认字段，告诉助手该看什么', text: '系统已给出建议，示例数据直接确认即可。真实数据可以在这里去掉敏感或无关的字段。', waiting: '正在读取字段' },
   window: { no: 6, target: 'window-modal', head: '确认事实表的时间范围', text: '为大表限定单次查询的天数，避免全表扫描。选一个范围后保存；这一步只有外部表才有。', waiting: '正在确认事实表的时间范围' },

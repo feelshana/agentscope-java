@@ -93,12 +93,12 @@ dataagent:
     allowed-endpoints: ${DATAAGENT_EXTERNAL_DATASOURCE_ALLOWED_ENDPOINTS:}
 
   # spec105: samples-dir holds local/deployed files; deploy/demo-samples has recovery tooling.
-  # The read-only demo_data source is off by default and needs a reader account password.
+  # The read-only synthetic demo_commerce_v1 source is off by default and needs a reader account password.
   demo:
     enabled: ${DATAAGENT_DEMO_ENABLED:false}
     samples-dir: ${DATAAGENT_DEMO_SAMPLES_DIR:data/demo-samples}
-    jdbc-url: ${DATAAGENT_DEMO_JDBC_URL:jdbc:mysql://localhost:3306/demo_data}
-    username: ${DATAAGENT_DEMO_USERNAME:demo_reader}
+    jdbc-url: ${DATAAGENT_DEMO_JDBC_URL:jdbc:mysql://localhost:3306/demo_commerce_v1}
+    username: ${DATAAGENT_DEMO_USERNAME:demo_commerce_reader}
     password: ${DATAAGENT_DEMO_PASSWORD:}
 
   # JWT signing secret (>= 32 chars). MUST be overridden in production.

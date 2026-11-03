@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "start_date": "2026-01-01",
+  "batch_size": 1000,
+  "source": {
+    "host": "REPLACE_SOURCE_HOST",
+    "port": 3664,
+    "database": "easybi",
+    "user": "easybi",
+    "password": "REPLACE_IN_PRIVATE_FILE_ONLY"
+  },
+  "target": {
+    "host": "REPLACE_TARGET_HOST",
+    "port": 3322,
+    "database": "data_agent",
+    "user": "data_agent",
+    "password": "REPLACE_IN_PRIVATE_FILE_ONLY"
+  }
+}

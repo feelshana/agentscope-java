@@ -185,9 +185,7 @@ export default function DatasetsPage() {
                 { label: g.deletionPending ? '重试删除' : '删除知识库', icon: 'trash', danger: true, disabled: busy, onClick: () => void handleDelete(g.id) },
               ] : [{ label: '查看详情', icon: 'book', disabled: g.deletionPending, onClick: () => navigate(`/configure/datasets/${g.id}`) }]} />
             </div></div>
-            <div className="kb-card-description" title={g.description || undefined}>{g.description?.trim() ? <p>{g.description}</p> : g.canManage
-              ? <button type="button" className="kb-add-description" aria-label={`为${g.name}添加业务说明`} disabled={busy || g.deletionPending} onClick={e => openEdit(g, e)}><Icon name="edit" size="sm" />添加业务说明</button>
-              : <p className="kb-missing-description">暂无说明</p>}</div>
+            <div className="kb-card-description" title={g.description?.trim() ? g.description : undefined}>{g.description?.trim() ? <p>{g.description}</p> : null}</div>
             <div className="kb-card-state"><span className={`kw-status${g.publishedVersion ? ' is-published' : ''}`}>{g.publishedVersion ? `已发布 v${g.publishedVersion}` : '待建模'}</span><span className="kb-permission">{g.canManage ? '可管理' : '仅可使用'}</span></div>
             <div className="kb-card-info"><span className="kb-dataset-count">{g.datasetCount} 个数据集</span>
               <div className="kb-card-owner"><span title={g.ownerUsername || '已移除用户'}>{g.ownerUsername || '已移除用户'}</span><small className="kb-card-date">{g.createdAt ? `创建于 ${new Date(g.createdAt).toLocaleDateString('zh-CN')}` : '创建时间未知'}</small></div>

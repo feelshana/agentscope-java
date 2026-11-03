@@ -1,0 +1,101 @@
+{
+  "ok": true,
+  "method": "指标归因（加法分解：贡献度 = 维度值变化 ÷ 总变化）",
+  "metric": "净销售额",
+  "periods": {
+    "current": "当前期",
+    "base": "对比期"
+  },
+  "total": {
+    "base": 399558.2,
+    "current": 362259.1,
+    "delta": -37299.100000000035,
+    "delta_pct": -0.0934
+  },
+  "dimension": "销售渠道",
+  "dimension_scores": {
+    "销售渠道": 0.003808,
+    "客户地区": 0.002899
+  },
+  "items": [
+    {
+      "value": "短视频商城",
+      "base": 145827.1,
+      "current": 102905.74999999999,
+      "delta": -42921.35000000002,
+      "contribution": 1.1507
+    },
+    {
+      "value": "自营App",
+      "base": 92413.0,
+      "current": 98035.25,
+      "delta": 5622.25,
+      "contribution": -0.1507
+    },
+    {
+      "value": "品牌官网",
+      "base": 60241.49999999999,
+      "current": 60241.49999999999,
+      "delta": 0.0,
+      "contribution": -0.0
+    },
+    {
+      "value": "微信小程序",
+      "base": 80509.34999999999,
+      "current": 80509.34999999999,
+      "delta": 0.0,
+      "contribution": -0.0
+    },
+    {
+      "value": "线下门店",
+      "base": 20567.25,
+      "current": 20567.25,
+      "delta": 0.0,
+      "contribution": -0.0
+    }
+  ],
+  "drilldown": {
+    "parent_dimension": "销售渠道",
+    "parent_value": "短视频商城",
+    "dimension": "客户地区",
+    "items": [
+      {
+        "value": "华东",
+        "base": 59916.4,
+        "current": 16995.05,
+        "delta": -42921.350000000006,
+        "contribution": 1.0
+      },
+      {
+        "value": "华北",
+        "base": 27662.9,
+        "current": 27662.9,
+        "delta": 0.0,
+        "contribution": -0.0
+      },
+      {
+        "value": "华南",
+        "base": 35198.85,
+        "current": 35198.85,
+        "delta": 0.0,
+        "contribution": -0.0
+      },
+      {
+        "value": "西部",
+        "base": 23048.95,
+        "current": 23048.95,
+        "delta": 0.0,
+        "contribution": -0.0
+      }
+    ]
+  },
+  "checks": {
+    "items_sum_to_total_delta": true
+  },
+  "files": {
+    "chart": "/results/分析脚本结果/净销售额变化拆解.png",
+    "drill_chart": "/results/分析脚本结果/净销售额变化拆解_下钻.png",
+    "table": "/results/分析脚本结果/净销售额变化拆解_结果.csv"
+  },
+  "notes": []
+}

@@ -303,8 +303,10 @@ public class DatasetService implements DatasetContextProvider {
                         .filter(
                                 d ->
                                         d.getOwnerId().equals(actorId)
-                                                || (DemoDataService.isBuiltin(d)
-                                                        && DemoDataService.SCHEMA.equals(schema)))
+                                                || (DemoDataService.isCurrentBuiltin(d)
+                                                        && DemoDataService.SCHEMA.equals(schema)
+                                                        && DemoDataService.TABLE_NAMES.containsAll(
+                                                                tables)))
                         .orElseThrow(
                                 () ->
                                         new DatasetException(
