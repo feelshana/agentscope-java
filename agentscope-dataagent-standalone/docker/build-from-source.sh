@@ -16,6 +16,10 @@ requested="${1:-HEAD}"
 [[ "$requested" == HEAD || "$requested" =~ ^[a-fA-F0-9]{40}$ ]] || fail '只接受HEAD或完整提交号'
 revision="$(git rev-parse --verify "$requested^{commit}")"
 [[ "$revision" == "$(git rev-parse HEAD)" ]] || fail '指定提交与当前HEAD不同，请在独立干净源码目录构建该提交'
+result_file="${DATAAGENT_BUILD_RESULT_FILE:-}"
+if [[ -n "$result_file" ]]; then
+    [[ "$result_file" == /* && ! -e "$result_file" && ! -L "$result_file" && -d "$(dirname -- "$result_file")" ]] || fail '本次结果文件必须为尚不存在的绝对路径'
+fi
 docker_cmd=(docker)
 [[ "${DATAAGENT_DOCKER_SUDO:-true}" == false ]] || docker_cmd=(sudo docker)
 d() { "${docker_cmd[@]}" "$@"; }
@@ -80,5 +84,10 @@ printf '%s\n' "$image" > "$job/image-reference.txt"
     d image inspect --format 'runtimeId={{.Id}}' "$runtime"
     cat "$job/image/jar.sha256"
 } > "$job/build-result.txt"
+
+if [[ -n "$result_file" ]]; then
+    # Publish only after all checks succeed; never reuse or overwrite a previous result.
+    (set -C; { cat "$job/build-result.txt"; printf 'record=%s\n' "$job/build-result.txt"; } > "$result_file") || fail '本次构建结果发布失败'
+fi
 echo "镜像构建及静态预检完成：$image"
 echo "记录：$job/build-result.txt；未启动或替换业务服务"
