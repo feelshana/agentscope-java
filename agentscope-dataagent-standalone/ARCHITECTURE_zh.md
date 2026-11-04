@@ -864,6 +864,8 @@ Boot 4 HTTP JSON缓冲使用`spring.http.codecs.max-in-memory-size=50MB`；人�
 
 ### 12.2 构建与运行
 
+spec115新增`docker/deploy-formal.sh`编排既有正式发布：整轮发布锁与拉取后源码锁、目标提交入口交接、`build-from-source.sh`本次结果文件及镜像ID/revision校验、容器Python/宿主Compose适配，再调用`formal-app.py upgrade`；同版本且健康时跳过构建/重启。网络直连仅在更新子进程内生效，构建沿用原代理；默认正式18080及持久配置不变。日志记录阶段与脱敏版本，不自动初始化、迁移或安装cron，不替代页面问答验收；操作及验证状态见[日常发布](docs/guides/66-daily-release.md)。
+
 ADR0127/spec110补充轻量同步观测与退役：AdminBiSyncController只允许全局管理员读取GET /api/admin/bi-sync，BiSyncStatusService#view在boundedElastic上复用数据集连接，只读固定控制键和运行锁，输出截止日/最近作业/固定失败摘要，不访问源库、密码文件或Shell。任务持久化last_run及暂停标记，独立观察连接在安全点检查暂停并回滚未提交部分；pause/status/resume不依赖BI源连接。cron安装器remove仅移除自己的精确任务，不能等同于正在运行的任务已停止；知识库权限/删除与同步生命周期分开，数据和进度保留，恢复无需重新初始化。没有新增应用配置项。
 
 ADR0125/spec109增加正式外置数据库模式：rehearsal-app.sh的external准备分支使用私有DB_ENV和独立应用网络，database-preflight.py按两JDBC地址验证，不假设mysql主机或旧平台库名；旧演练模式保留。formal-app.py创建独立正式目录/候选18081，经容器健康及预检后显式接替18080，失败尝试恢复旧服务，revert-service恢复环境而非数据库数据；正式模型配置重新设置，不复制旧测试工程。deploy/bi-sync独立任务固定7业务表与私有控制表，源只读、5维表事务刷新；ADR0126细化39列基础投影及日志既有项目+时间索引分段，日数据/计数账本/项目进度同事务，汇总核对后前进表截止日。全部操作类型同步，目标日志四列不能区分查看/导出，业务口径只称操作记录数。问数仍只经已发布Wren，sync不写平台元数据或语义工程；每日任务需人工验收后安装，详见[正式切换与BI同步](docs/guides/66-formal-database-and-bi-sync.md)。
