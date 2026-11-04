@@ -1,6 +1,6 @@
 # spec108：新手引导改用虚构订单与客户
 
-> 下文记录初版素材及验收。当前新手引导使用随包的 10,000 条订单和 200 位客户，见 [ADR0134](../adr/0134-bundled-onboarding-sample-files.md)。
+> 下文记录初版素材及验收。当前新手引导使用随包的 1,000 条订单和 20 位客户，打包方式见 [ADR0134](../adr/0134-bundled-onboarding-sample-files.md)。
 
 ## 状态与授权
 

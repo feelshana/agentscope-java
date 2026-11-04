@@ -32,8 +32,8 @@ class DemoSampleFilesTest {
         assertThat(service.samples()).containsExactly("示例订单.xlsx", "示例客户.xlsx");
         var controller = new OnboardingController(mock(OnboardingService.class), service);
         var customerBytes = controller.sample("示例客户.xlsx").block().getBody();
-        var customers = parser.parse(new ByteArrayInputStream(customerBytes), "示例客户.xlsx", 201);
-        assertThat(customers.totalRows()).isEqualTo(200);
+        var customers = parser.parse(new ByteArrayInputStream(customerBytes), "示例客户.xlsx", 21);
+        assertThat(customers.totalRows()).isEqualTo(20);
         var keys = new HashSet<String>();
         var names = new HashSet<String>();
         for (var row : customers.rows()) {
@@ -45,8 +45,8 @@ class DemoSampleFilesTest {
         assertThat(customers.rows().get(0).get(1)).isEqualTo("张明");
         assertThat(customers.rows().get(1).get(1)).isEqualTo("张明");
         var bytes = controller.sample("示例订单.xlsx").block().getBody();
-        var orders = parser.parse(new ByteArrayInputStream(bytes), "示例订单.xlsx", 10001);
-        assertThat(orders.totalRows()).isEqualTo(10000);
+        var orders = parser.parse(new ByteArrayInputStream(bytes), "示例订单.xlsx", 1001);
+        assertThat(orders.totalRows()).isEqualTo(1000);
         assertThat(orders.columns().get(2).sqlType()).isEqualTo("DATETIME");
         var orderIds = new HashSet<String>();
         var buyers = new HashSet<String>();
@@ -57,8 +57,8 @@ class DemoSampleFilesTest {
             buyers.add(row.get(1));
             revenue = revenue.add(new BigDecimal(row.get(16)));
         }
-        assertThat(buyers).hasSize(180);
-        assertThat(revenue).isEqualByComparingTo("1992581.55");
+        assertThat(buyers).containsExactlyInAnyOrderElementsOf(keys);
+        assertThat(revenue).isEqualByComparingTo("202014.50");
         assertThatThrownBy(() -> controller.sample("用户列表.xlsx").block())
                 .isInstanceOf(ResponseStatusException.class);
     }
