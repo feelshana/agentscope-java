@@ -26,7 +26,15 @@ class ExecutionTimingMiddlewareTest {
         logger.addAppender(appender);
         try {
             var middleware = new ExecutionTimingMiddleware();
-            var ctx = RuntimeContext.builder().userId("a").sessionId("session").build();
+            var ctx =
+                    RuntimeContext.builder()
+                            .userId("a")
+                            .sessionId("session")
+                            .put(
+                                    io.agentscope.dataagent.web.toolbus.ToolEventBus
+                                            .REQUEST_ID_CONTEXT_KEY,
+                                    "request-test")
+                            .build();
             var tool =
                     ToolUseBlock.builder()
                             .id("tool-1")
@@ -62,8 +70,25 @@ class ExecutionTimingMiddlewareTest {
                                                                                     ToolResultState
                                                                                             .ERROR)))))
                     .blockLast();
+            io.agentscope.core.util.CallTiming.run(ctx, "completion.state.save", () -> {});
+            io.agentscope.core.util.CallTiming.record(
+                    ctx,
+                    "completion.transcript.segment_sync",
+                    System.nanoTime(),
+                    "SUCCESS",
+                    java.util.Map.of("entriesMerged", 0));
             var records = appender.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
             assertThat(records).anyMatch(s -> s.contains("model.first_output"));
+            assertThat(records).anyMatch(s -> s.contains("completion.model.tail"));
+            assertThat(records)
+                    .anyMatch(
+                            s ->
+                                    s.contains("completion.transcript.segment_sync")
+                                            && s.contains("request-test")
+                                            && s.contains("\"entriesMerged\":0"));
+            assertThat(records)
+                    .anyMatch(
+                            s -> s.contains("completion.state.save") && s.contains("request-test"));
             assertThat(records)
                     .anyMatch(s -> s.contains("tool.run_sql.end") && s.contains("ERROR"));
             assertThat(records)

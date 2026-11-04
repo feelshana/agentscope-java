@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as auth from '../src/api/auth.ts';
 import { APP_BASE } from '../src/api/paths.ts';
 
-const originalGlobals = Object.fromEntries(['window', 'localStorage', 'sessionStorage', 'fetch']
+const originalGlobals = Object.fromEntries(['window', 'document', 'localStorage', 'sessionStorage', 'fetch']
   .map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
 afterEach(() => {
   for (const [key, descriptor] of Object.entries(originalGlobals)) {
@@ -169,4 +169,105 @@ test('login options use the deployment prefix and failed loads preserve the last
   globalThis.fetch = async () => { throw new TypeError('offline'); };
   await assert.rejects(auth.loadEntryOptions(), /offline/);
   assert.deepEqual(auth.getEntryOptions(), { passwordLoginEnabled: false, biLoginEnabled: true });
+});
+
+function fixtureToken(expiresAt, marker) {
+  return 'header.' + Buffer.from(JSON.stringify({ exp: expiresAt / 1000, marker }))
+    .toString('base64url') + '.signature';
+}
+
+function activityPage(token) {
+  const expired = setup(token);
+  const events = new Map();
+  window.addEventListener = (name, listener) => events.set(name, listener);
+  window.removeEventListener = name => events.delete(name);
+  globalThis.document = { visibilityState: 'visible', addEventListener() {}, removeEventListener() {} };
+  return { expired, fire: (name = 'pointerdown', isTrusted = true) => events.get(name)?.({ isTrusted }) };
+}
+
+const flushNetwork = () => new Promise(resolve => setImmediate(resolve));
+
+test('only foreground user activity renews, and the renewed credential expires when idle', async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 });
+  const original = fixtureToken(Date.now() + 1_800_000, 'original');
+  const page = activityPage(original);
+  const requests = [];
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url, init });
+    return String(url).endsWith('/api/auth/renew')
+      ? Response.json({ token: fixtureToken(Date.now() + 1_800_000, 'renewed') })
+      : new Response('{}');
+  };
+  const stop = auth.watchSessionActivity();
+  try {
+    await auth.apiFetch('/api/sessions', { headers: { Authorization: `Bearer ${original}` } });
+    page.fire('pointerdown', false);
+    document.visibilityState = 'hidden';
+    page.fire();
+    document.visibilityState = 'visible';
+    assert.equal(requests.length, 1);
+    t.mock.timers.tick(1_700_000);
+    page.fire();
+    await flushNetwork();
+    assert.equal(requests.length, 2);
+    assert.ok(String(requests[1].url).endsWith('/api/auth/renew'));
+    t.mock.timers.tick(100_000);
+    assert.notEqual(auth.getToken(), original);
+    assert.equal(page.expired(), 0);
+    t.mock.timers.tick(1_700_000);
+    assert.equal(auth.getToken(), null);
+    assert.equal(page.expired(), 1);
+    assert.equal(requests.length, 2);
+  } finally { stop(); }
+});
+
+test('concurrent activity shares renewal and a late response cannot replace another login', async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 });
+  const original = fixtureToken(Date.now() + 5000, 'original');
+  const page = activityPage(original);
+  let finish;
+  const requests = [];
+  globalThis.fetch = (url, init) => {
+    requests.push({ url, init });
+    return String(url).endsWith('/api/auth/renew')
+      ? new Promise(resolve => { finish = resolve; })
+      : Promise.resolve(new Response('{}'));
+  };
+  const stop = auth.watchSessionActivity();
+  try {
+    page.fire();
+    page.fire('keydown');
+    const pending = auth.apiFetch('/api/sessions', { headers: { Authorization: `Bearer ${original}` } });
+    assert.equal(requests.length, 1);
+    const replacement = fixtureToken(Date.now() + 1_800_000, 'replacement');
+    finish(Response.json({ token: replacement }));
+    await pending;
+    assert.equal(new Headers(requests[1].init.headers).get('Authorization'), `Bearer ${replacement}`);
+    t.mock.timers.tick(5000);
+    assert.equal(requests.length, 3);
+    const otherLogin = fixtureToken(Date.now() + 1_800_000, 'other');
+    auth.saveToken(otherLogin);
+    finish(Response.json({ token: fixtureToken(Date.now() + 1_800_000, 'late') }));
+    await flushNetwork();
+    assert.equal(auth.getToken(), otherLogin);
+  } finally { stop(); }
+});
+
+test('a renewal started before expiry can finish across the old deadline', async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 });
+  const original = fixtureToken(Date.now() + 1000, 'original');
+  const page = activityPage(original);
+  let finish;
+  globalThis.fetch = () => new Promise(resolve => { finish = resolve; });
+  const stop = auth.watchSessionActivity();
+  try {
+    page.fire();
+    t.mock.timers.tick(1100);
+    assert.equal(page.expired(), 0);
+    const replacement = fixtureToken(Date.now() + 1_800_000, 'replacement');
+    finish(Response.json({ token: replacement }));
+    await flushNetwork();
+    assert.equal(auth.getToken(), replacement);
+    assert.equal(page.expired(), 0);
+  } finally { stop(); }
 });

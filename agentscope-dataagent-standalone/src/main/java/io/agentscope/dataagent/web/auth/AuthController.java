@@ -16,16 +16,20 @@
 package io.agentscope.dataagent.web.auth;
 
 import io.agentscope.core.model.Model;
+import io.jsonwebtoken.JwtException;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 
 /**
@@ -76,7 +80,11 @@ public class AuthController {
     }
 
     private LoginResponse issue(UserStore.UserRecord user) {
-        String token = jwtService.generate(user.userId(), user.username(), user.roles());
+        return loginResponse(
+                jwtService.generate(user.userId(), user.username(), user.roles()), user);
+    }
+
+    private LoginResponse loginResponse(String token, UserStore.UserRecord user) {
         return new LoginResponse(
                 token,
                 user.userId(),
@@ -133,6 +141,33 @@ public class AuthController {
                                     .orElse(
                                             ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                                                     .<LoginResponse>build());
+                        })
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+    }
+
+    @PostMapping("/renew")
+    public Mono<LoginResponse> renew(
+            @RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false) String bearer) {
+        if (bearer == null || !bearer.startsWith("Bearer ")) {
+            return Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+        }
+        return Mono.fromCallable(
+                        () -> {
+                            try {
+                                var claims = jwtService.parse(bearer.substring(7));
+                                var user =
+                                        userStore
+                                                .findById(claims.getSubject())
+                                                .orElseThrow(
+                                                        () ->
+                                                                new ResponseStatusException(
+                                                                        HttpStatus.UNAUTHORIZED));
+                                return loginResponse(
+                                        jwtService.renew(claims, user.username(), user.roles()),
+                                        user);
+                            } catch (JwtException e) {
+                                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+                            }
                         })
                 .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }

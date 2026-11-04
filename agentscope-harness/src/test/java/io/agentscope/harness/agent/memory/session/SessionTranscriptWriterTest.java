@@ -45,7 +45,14 @@ class SessionTranscriptWriterTest {
 
     @Test
     void appendMessages_isIdempotent_andKeepsChain() throws Exception {
-        RuntimeContext rc = RuntimeContext.builder().sessionId("session-1").build();
+        var phases = new java.util.ArrayList<String>();
+        RuntimeContext rc =
+                RuntimeContext.builder()
+                        .sessionId("session-1")
+                        .put(
+                                io.agentscope.core.util.CallTiming.Observer.class,
+                                (phase, start, status, counts) -> phases.add(phase + ":" + status))
+                        .build();
         try (WorkspaceManager wm = new WorkspaceManager(workspace)) {
             SessionTranscriptWriter writer = new SessionTranscriptWriter(wm);
             writer.appendMessages(
@@ -67,6 +74,9 @@ class SessionTranscriptWriterTest {
 
         Path context = workspace.resolve("agents/agent-a/sessions/session-1.jsonl");
         assertEquals(3, Files.readAllLines(context).size());
+        assertTrue(phases.contains("completion.transcript.remote_read:SUCCESS"));
+        assertTrue(phases.contains("completion.transcript.local_append:SUCCESS"));
+        assertTrue(phases.contains("completion.transcript.index:SUCCESS"));
         SessionTree tree = new SessionTree(context, workspace, null);
         tree.load();
         assertEquals(3, tree.getMessageEntries().size());
@@ -176,6 +186,69 @@ class SessionTranscriptWriterTest {
             }
         }
         assertTrue(totalLines >= 2, "segments should contain both entries across flushes");
+    }
+
+    @Test
+    void segmentDiagnosticsDistinguishNewEntriesFromDuplicates() throws Exception {
+        var metrics = new java.util.ArrayList<Map<String, Integer>>();
+        RuntimeContext rc =
+                RuntimeContext.builder()
+                        .put(
+                                io.agentscope.core.util.CallTiming.Observer.class,
+                                (phase, start, status, counts) -> {
+                                    assertEquals("completion.transcript.segment_sync", phase);
+                                    assertEquals("SUCCESS", status);
+                                    metrics.add(counts);
+                                })
+                        .build();
+        var local =
+                SessionTranscriptWriter.deriveEntries(text("local", MsgRole.USER, "first"), null)
+                        .get(0);
+        var remote =
+                SessionTranscriptWriter.deriveEntries(
+                                text("remote", MsgRole.ASSISTANT, "second"), local.getId())
+                        .get(0);
+        var store = new FilesystemTranscriptStore(workspace.resolve("segments"));
+        var ref = new TranscriptRef("tenant", "agent", "session");
+        String segment =
+                io.agentscope.core.util.JsonUtils.getJsonCodec().toJson(local)
+                        + "\n"
+                        + io.agentscope.core.util.JsonUtils.getJsonCodec().toJson(remote)
+                        + "\n";
+        store.appendSegment(
+                ref, 0, 1, "test", segment.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        var tree =
+                new SessionTree(workspace.resolve("session.jsonl"), workspace, null)
+                        .setRuntimeContext(rc);
+        tree.load();
+        tree.append(local);
+        tree.flush();
+        tree.setTranscriptStore(store, ref);
+        tree.syncFromRemote();
+        tree.syncFromRemote();
+
+        assertEquals(2, tree.getAllEntries().size());
+        assertEquals(
+                List.of(
+                        Map.of(
+                                "segmentsListed",
+                                1,
+                                "segmentReadFailures",
+                                0,
+                                "uniqueEntriesRead",
+                                2,
+                                "entriesMerged",
+                                1),
+                        Map.of(
+                                "segmentsListed",
+                                1,
+                                "segmentReadFailures",
+                                0,
+                                "uniqueEntriesRead",
+                                2,
+                                "entriesMerged",
+                                0)),
+                metrics);
     }
 
     private static Msg text(String id, MsgRole role, String text) {

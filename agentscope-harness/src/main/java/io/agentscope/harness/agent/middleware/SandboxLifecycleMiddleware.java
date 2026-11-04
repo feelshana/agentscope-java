@@ -164,12 +164,16 @@ public class SandboxLifecycleMiddleware implements HarnessRuntimeMiddleware {
         filesystemProxy.clearSandboxIfCurrent(result.getSandbox());
         SandboxContext sandboxContext = ctx.get(SandboxContext.class);
         try {
-            sandboxManager.persistState(result, sandboxContext, ctx);
+            io.agentscope.core.util.CallTiming.run(
+                    ctx,
+                    "completion.sandbox.persist",
+                    () -> sandboxManager.persistState(result, sandboxContext, ctx));
         } catch (Exception e) {
             log.warn("[sandbox-mw] Failed to persist sandbox state: {}", e.getMessage(), e);
         }
         try {
-            sandboxManager.release(result);
+            io.agentscope.core.util.CallTiming.run(
+                    ctx, "completion.sandbox.release", () -> sandboxManager.release(result));
         } catch (Exception e) {
             log.warn("[sandbox-mw] Failed to release sandbox session: {}", e.getMessage(), e);
         }

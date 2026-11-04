@@ -15,26 +15,46 @@ export async function loadEntryOptions(): Promise<void> {
 export const AUTH_EXPIRED_EVENT = 'dataagent:auth-expired';
 export const SESSION_EXPIRED_MESSAGE = '登录状态已失效，请重新进入';
 
+const RENEW_PATH = '/api/auth/renew';
+const RENEW_INTERVAL_MS = 5_000;
+const RENEW_TIMEOUT_MS = 10_000;
+let pendingRenewal: { token: string; result: Promise<string | null> } | undefined;
+
+function expireToken(expected: string) {
+  if (getToken() !== expected) return;
+  clearToken();
+  window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+}
+
 /** Only the server's rejection of the current credential can end this browser session. */
 export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const request = input instanceof Request ? input : null;
   const url = new URL(request ? request.url : String(input), window.location.href);
   const headers = new Headers(init?.headers ?? request?.headers);
-  const credential = headers.get('Authorization');
+  let credential = headers.get('Authorization');
   let target = input;
   if (url.origin === window.location.origin && url.pathname.startsWith('/api/')) {
     const prefixed = new URL(appPath(url.pathname) + url.search, url.origin);
     target = request ? new Request(prefixed, request) : prefixed;
   }
+  const ownApi = url.origin === window.location.origin
+    && (url.pathname.startsWith('/api/') || url.pathname.startsWith(appPath('/api/')));
+  const renewal = pendingRenewal;
+  if (ownApi && !url.pathname.endsWith(RENEW_PATH) && renewal
+      && credential === `Bearer ${renewal.token}`
+      && tokenExpiresAt(renewal.token) - Date.now() <= RENEW_TIMEOUT_MS) {
+    const replacement = await renewal.result.catch(() => null);
+    if (replacement && getToken() === replacement) {
+      credential = `Bearer ${replacement}`;
+      headers.set('Authorization', credential);
+      init = { ...init, headers };
+    }
+  }
   const response = await fetch(target, init);
-  if (response.status === 401 && url.origin === window.location.origin
-      && (url.pathname.startsWith('/api/') || url.pathname.startsWith(appPath('/api/')))
+  if (response.status === 401 && ownApi
       && !url.pathname.endsWith('/api/auth/login') && !url.pathname.endsWith('/api/auth/bi-login') && !url.pathname.endsWith('/api/auth/bi-account-login')) {
     const current = getToken();
-    if (current && credential === `Bearer ${current}`) {
-      clearToken();
-      window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
-    }
+    if (current && credential === `Bearer ${current}`) expireToken(current);
     throw new Error(SESSION_EXPIRED_MESSAGE);
   }
   return response;
@@ -107,6 +127,101 @@ export function tokenExpiresAt(token: string): number {
     const exp: unknown = JSON.parse(atob(text)).exp;
     return typeof exp === 'number' ? exp * 1000 : 0;
   } catch { return 0; }
+}
+
+/** Only activity in the ready page calls this endpoint. */
+function renewSession(token: string, lifetime: AbortSignal): Promise<string | null> {
+  if (pendingRenewal?.token === token) return pendingRenewal.result;
+  const signal = AbortSignal.any([lifetime, AbortSignal.timeout(RENEW_TIMEOUT_MS)]);
+  const result = apiFetch(RENEW_PATH, {
+    method: 'POST', signal, cache: 'no-store', headers: { Authorization: `Bearer ${token}` },
+  }).then(async response => {
+    if (!response.ok) return null;
+    const { token: replacement } = await response.json() as LoginResponse;
+    if (signal.aborted || getToken() !== token || typeof replacement !== 'string'
+        || tokenExpiresAt(replacement) <= Date.now()) return null;
+    saveToken(replacement);
+    return replacement;
+  }).finally(() => {
+    if (pendingRenewal?.result === result) pendingRenewal = undefined;
+  });
+  pendingRenewal = { token, result };
+  return result;
+}
+
+/** Attach once while the protected page is ready. A timer alone cannot renew a session. */
+export function watchSessionActivity(): () => void {
+  const lifetime = new AbortController();
+  const events = ['pointerdown', 'keydown', 'wheel', 'touchmove'];
+  let activityAt: number | undefined;
+  let renewAfter = 0;
+  let busy = false;
+  let expiryTimer: ReturnType<typeof setTimeout> | undefined;
+  let renewalTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function checkExpiry() {
+    clearTimeout(expiryTimer);
+    const token = getToken();
+    if (!token) return;
+    const remaining = tokenExpiresAt(token) - Date.now();
+    if (remaining > 0) expiryTimer = setTimeout(checkExpiry, remaining);
+    else if (pendingRenewal?.token !== token) expireToken(token);
+  }
+
+  function renewAfterActivity() {
+    clearTimeout(renewalTimer);
+    const now = Date.now();
+    if (lifetime.signal.aborted || busy || activityAt === undefined
+        || document.visibilityState !== 'visible') return;
+    if (now - activityAt > RENEW_TIMEOUT_MS) {
+      activityAt = undefined;
+      return;
+    }
+    const token = getToken();
+    if (!token) return;
+    if (tokenExpiresAt(token) <= now) {
+      expireToken(token);
+      return;
+    }
+    if (now < renewAfter && tokenExpiresAt(token) - now > RENEW_INTERVAL_MS) {
+      renewalTimer = setTimeout(renewAfterActivity, renewAfter - now);
+      return;
+    }
+    activityAt = undefined;
+    busy = true;
+    renewAfter = now + RENEW_INTERVAL_MS;
+    void renewSession(token, lifetime.signal).catch(() => null).finally(() => {
+      busy = false;
+      if (!lifetime.signal.aborted) {
+        checkExpiry();
+        renewAfterActivity();
+      }
+    });
+  }
+
+  function onActivity(event: Event) {
+    if (!event.isTrusted || document.visibilityState !== 'visible') return;
+    activityAt = Date.now();
+    renewAfterActivity();
+  }
+
+  function onVisibilityChange() {
+    if (document.visibilityState !== 'visible') activityAt = undefined;
+    checkExpiry();
+  }
+
+  checkExpiry();
+  document.addEventListener('visibilitychange', onVisibilityChange);
+  for (const event of events) {
+    window.addEventListener(event, onActivity, { capture: true, passive: true });
+  }
+  return () => {
+    lifetime.abort();
+    clearTimeout(expiryTimer);
+    clearTimeout(renewalTimer);
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+    for (const event of events) window.removeEventListener(event, onActivity, true);
+  };
 }
 
 /**

@@ -62,6 +62,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -448,7 +449,9 @@ public class ChatController {
         // Always echo the conversationId, NOT the storage key — otherwise the FE would persist
         // the storage key and use it as the next turn's conversationId, splintering the session.
         doneFrame.put("sessionKey", resolvedConversationId);
+        doneFrame.put("requestId", requestId);
 
+        AtomicLong lastTokenAt = new AtomicLong();
         Sinks.One<ServerSentEvent<String>> scopeFrame = Sinks.one();
         Flux<ServerSentEvent<String>> agentEvents =
                 executeChatStream(
@@ -481,10 +484,31 @@ public class ChatController {
                                     }
                                 })
                         .flatMap(this::toAgentFrame)
+                        .doOnNext(
+                                frame -> {
+                                    if ("token".equals(frame.event()))
+                                        lastTokenAt.set(System.nanoTime());
+                                })
                         .concatWith(
                                 Mono.fromSupplier(
                                         () -> {
-                                            return sse("done", doneFrame);
+                                            var timingContext =
+                                                    RuntimeContext.builder()
+                                                            .put(
+                                                                    ToolEventBus
+                                                                            .REQUEST_ID_CONTEXT_KEY,
+                                                                    requestId)
+                                                            .build();
+                                            long lastToken = lastTokenAt.get();
+                                            var frame = sse("done", doneFrame);
+                                            io.agentscope.dataagent.web.middleware
+                                                    .ExecutionTimingMiddleware.record(
+                                                    timingContext,
+                                                    "completion.sse.done",
+                                                    "",
+                                                    lastToken == 0 ? System.nanoTime() : lastToken,
+                                                    lastToken == 0 ? "NO_TOKEN" : "SUCCESS");
+                                            return frame;
                                         }))
                         .doOnComplete(() -> done.tryEmitValue(true))
                         .onErrorResume(
