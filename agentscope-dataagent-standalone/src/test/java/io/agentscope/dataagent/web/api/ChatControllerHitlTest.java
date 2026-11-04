@@ -29,6 +29,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agentscope.core.ReActAgent;
 import io.agentscope.core.event.RequireUserConfirmEvent;
+import io.agentscope.core.event.TextBlockDeltaEvent;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.ToolCallState;
@@ -65,6 +66,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.server.ResponseStatusException;
+import reactor.core.publisher.Flux;
 
 class ChatControllerHitlTest {
 
@@ -77,6 +79,7 @@ class ChatControllerHitlTest {
             mock(ConversationScopeRegistry.class);
     private final DatasetGroupService groupService = mock(DatasetGroupService.class);
     private final ChatUiChannel channel = mock(ChatUiChannel.class);
+    private final ToolEventBus toolBus = mock(ToolEventBus.class);
     private final HarnessGateway gateway = mock(HarnessGateway.class);
     private final SessionAgentManager sessions = mock(SessionAgentManager.class);
     private final AgentCatalogService catalogService = mock(AgentCatalogService.class);
@@ -101,7 +104,7 @@ class ChatControllerHitlTest {
                         catalogService,
                         mock(IdentityLinkStore.class),
                         mock(UsageStore.class),
-                        mock(ToolEventBus.class),
+                        toolBus,
                         guard,
                         mock(AgentActivityStore.class),
                         modelProvider,
@@ -138,6 +141,40 @@ class ChatControllerHitlTest {
                 .collectList()
                 .block(java.time.Duration.ofSeconds(5));
         verify(conversationScopes).putAnalysis("alice", "conversation", null);
+    }
+
+    @Test
+    void streamingDoneEchoesTheInboundRequestId() throws Exception {
+        when(toolBus.subscribeRequest(anyString())).thenReturn(Flux.empty());
+        when(channel.dispatchStream(any()))
+                .thenReturn(Flux.just(new TextBlockDeltaEvent("reply", "block", "answer")));
+        var frames =
+                controller.stream(
+                                "data-agent",
+                                new ChatController.ChatRequest(
+                                        "普通问题", "conversation", List.of(), false),
+                                authentication)
+                        .collectList()
+                        .block(java.time.Duration.ofSeconds(5));
+
+        var request =
+                org.mockito.ArgumentCaptor.forClass(
+                        io.agentscope.harness.agent.gateway.channel.InboundMessage.class);
+        verify(channel).dispatchStream(request.capture());
+        String requestId =
+                request.getValue().runtimeContext().get(ToolEventBus.REQUEST_ID_CONTEXT_KEY);
+        assertThat(requestId).isNotBlank();
+        var reply =
+                frames.stream()
+                        .filter(
+                                frame ->
+                                        "token".equals(frame.event())
+                                                || "done".equals(frame.event()))
+                        .toList();
+        assertThat(reply).extracting(ServerSentEvent::event).containsExactly("token", "done");
+        var done = new ObjectMapper().readTree(reply.get(1).data());
+        assertThat(done.path("requestId").asText()).isEqualTo(requestId);
+        assertThat(done.path("sessionKey").asText()).isEqualTo("conversation");
     }
 
     @Test

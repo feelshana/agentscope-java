@@ -83,6 +83,45 @@ class BiAuthHttpTest {
     }
 
     @Test
+    void renewalRequiresBearerAndUsesCurrentPlatformRoles() throws Exception {
+        var user = users.createUser("renew-http", "renew-http", "unused", List.of("user"));
+        String original = jwt.generate(user.userId(), user.username(), List.of("user", "admin"));
+        var uri = URI.create("http://127.0.0.1:" + port + "/api/auth/renew");
+        var unauthenticated =
+                HttpRequest.newBuilder(uri).POST(HttpRequest.BodyPublishers.noBody()).build();
+        assertThat(
+                        client.send(unauthenticated, HttpResponse.BodyHandlers.discarding())
+                                .statusCode())
+                .isEqualTo(401);
+        var queryToken =
+                HttpRequest.newBuilder(URI.create(uri + "?token=" + original))
+                        .POST(HttpRequest.BodyPublishers.noBody())
+                        .build();
+        assertThat(client.send(queryToken, HttpResponse.BodyHandlers.discarding()).statusCode())
+                .isEqualTo(401);
+        var authorized =
+                HttpRequest.newBuilder(uri)
+                        .header("Authorization", "Bearer " + original)
+                        .POST(HttpRequest.BodyPublishers.noBody())
+                        .build();
+        var response = client.send(authorized, HttpResponse.BodyHandlers.ofString());
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.headers().firstValue("cache-control")).contains("no-store");
+        String replacement =
+                new com.fasterxml.jackson.databind.ObjectMapper()
+                        .readTree(response.body())
+                        .path("token")
+                        .asText();
+        assertThat(replacement).isNotEqualTo(original);
+        assertThat(jwt.parse(replacement).getSubject()).isEqualTo(user.userId());
+        assertThat(jwt.extractRoles(jwt.parse(replacement))).containsExactly("user");
+
+        assertThat(users.deleteUser(user.userId())).isTrue();
+        assertThat(client.send(authorized, HttpResponse.BodyHandlers.discarding()).statusCode())
+                .isEqualTo(401);
+    }
+
+    @Test
     void scheduledTaskEndpointsAreClosedForEveryRole() throws Exception {
         for (var roles : List.of(List.of("user"), List.of("user", "admin"))) {
             String token = jwt.generate("closed-task-user", "closed-task-user", roles);

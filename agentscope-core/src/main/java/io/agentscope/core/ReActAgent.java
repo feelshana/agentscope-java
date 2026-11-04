@@ -480,19 +480,23 @@ public class ReActAgent extends AgentBase implements AutoCloseable {
         SlotRef ref = SlotRef.parse(scope.slotKey);
         AgentState toSave = scope.state;
         return Mono.<Void>fromRunnable(
-                        () -> {
-                            long newVersion =
-                                    persistAgentStateCas(
-                                            ref.userId,
-                                            ref.sessionId,
-                                            scope.slotKey,
-                                            toSave,
-                                            scope.loadedVersion,
-                                            scope.loadedContextSize);
-                            if (newVersion != AgentStateStore.UNVERSIONED) {
-                                scope.loadedVersion = newVersion;
-                            }
-                        })
+                        () ->
+                                io.agentscope.core.util.CallTiming.run(
+                                        scope.rc,
+                                        "completion.state.save",
+                                        () -> {
+                                            long newVersion =
+                                                    persistAgentStateCas(
+                                                            ref.userId,
+                                                            ref.sessionId,
+                                                            scope.slotKey,
+                                                            toSave,
+                                                            scope.loadedVersion,
+                                                            scope.loadedContextSize);
+                                            if (newVersion != AgentStateStore.UNVERSIONED) {
+                                                scope.loadedVersion = newVersion;
+                                            }
+                                        }))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 

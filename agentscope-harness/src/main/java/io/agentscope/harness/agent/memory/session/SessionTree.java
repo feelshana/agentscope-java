@@ -16,6 +16,7 @@
 package io.agentscope.harness.agent.memory.session;
 
 import io.agentscope.core.agent.RuntimeContext;
+import io.agentscope.core.util.CallTiming;
 import io.agentscope.core.util.JsonUtils;
 import io.agentscope.harness.agent.filesystem.AbstractFilesystem;
 import io.agentscope.harness.agent.filesystem.model.ReadResult;
@@ -477,9 +478,16 @@ public class SessionTree {
     // -------------------------------------------------------------------------
 
     private void syncFromTranscriptStore() {
+        long start = System.nanoTime();
+        int before = appendOrder.size();
+        int segmentsListed = 0;
+        int segmentReadFailures = 0;
+        int uniqueEntriesRead = 0;
+        String status = "SUCCESS";
         try {
             TranscriptStore scopedStore = transcriptStore.withRuntimeContext(fsRc);
             List<TranscriptStore.SegmentInfo> segments = scopedStore.listSegments(transcriptRef);
+            segmentsListed = segments.size();
             if (segments.isEmpty()) {
                 return;
             }
@@ -494,14 +502,29 @@ public class SessionTree {
                         }
                     }
                 } catch (Exception e) {
+                    segmentReadFailures++;
+                    status = "PARTIAL";
                     log.warn("Failed to read transcript segment {}: {}", seg.key(), e.getMessage());
                 }
             }
+            uniqueEntriesRead = remoteEntries.size();
             if (!remoteEntries.isEmpty()) {
                 mergeRemoteEntries(remoteEntries);
             }
         } catch (Exception e) {
+            status = "ERROR";
             log.warn("syncFromTranscriptStore failed: {}", e.getMessage());
+        } finally {
+            CallTiming.record(
+                    fsRc,
+                    "completion.transcript.segment_sync",
+                    start,
+                    status,
+                    Map.of(
+                            "segmentsListed", segmentsListed,
+                            "segmentReadFailures", segmentReadFailures,
+                            "uniqueEntriesRead", uniqueEntriesRead,
+                            "entriesMerged", appendOrder.size() - before));
         }
     }
 

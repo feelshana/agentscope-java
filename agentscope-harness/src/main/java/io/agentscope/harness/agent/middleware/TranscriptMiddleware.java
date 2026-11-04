@@ -101,7 +101,12 @@ public class TranscriptMiddleware implements HarnessRuntimeMiddleware {
         SessionTranscriptWriter writer =
                 new SessionTranscriptWriter(workspaceManager, transcriptStore, tenant);
         final String key = agentId;
-        return Mono.fromRunnable(() -> writer.appendMessages(rc, messages, key, sessionId))
+        return Mono.fromRunnable(
+                        () ->
+                                io.agentscope.core.util.CallTiming.run(
+                                        rc,
+                                        "completion.transcript.total",
+                                        () -> writer.appendMessages(rc, messages, key, sessionId)))
                 .then()
                 .doOnSuccess(v -> log.debug("Transcript append completed"))
                 .onErrorResume(

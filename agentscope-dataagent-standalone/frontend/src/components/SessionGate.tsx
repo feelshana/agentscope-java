@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { AUTH_EXPIRED_EVENT, getEntryOptions, getToken, me, clearToken } from '../api/auth';
+import { AUTH_EXPIRED_EVENT, getEntryOptions, getToken, me, clearToken, watchSessionActivity } from '../api/auth';
 import { appPath } from '../api/paths';
 import { readBiAccount } from '../utils/biAccount';
 import BiEntryPage from '../pages/BiEntryPage';
@@ -33,6 +33,7 @@ export default function SessionGate({ children }: { children: React.ReactElement
     } else expire();
     return () => { active = false; window.removeEventListener(AUTH_EXPIRED_EVENT, expire); };
   }, [attempt]);
+  useEffect(() => state === 'ready' ? watchSessionActivity() : undefined, [state]);
   if (state === 'expired') return getEntryOptions().passwordLoginEnabled
     ? <Navigate to="/login" replace state={{ sessionExpired: hadToken }} />
     : <BiEntryPage receive={!hadToken && Boolean(getEntryOptions().biAccountLoginEnabled)} />;

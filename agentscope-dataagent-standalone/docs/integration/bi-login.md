@@ -32,9 +32,9 @@ POST `/dataagent/api/auth/bi-login`（代理剥离/dataagent，应用实际路�
 
 每次新请求重新生成IV、UUID、时间。服务端允许过去60秒、未来30秒；客户端需正确校时。元数据表唯一requestId保证原子消费，重启不失效，保留到issuedAt+120秒后每5分钟清理。用户创建与消费各自提交事务，首次用户并发冲突后重新读取已有记录；若数据库/网络在登录中途失败，重新生成ticket，不复用旧请求。此情形可能已创建普通用户但未完成登录，不给失败请求发JWT。
 
-200：`{token,userId,username,roles,expiresAt}`，expiresAt为毫秒时间戳。JWT默认1800秒固定到期，roles来自本地。GET `/api/auth/options`公开返回passwordLoginEnabled/biLoginEnabled，不返回密钥。认证响应no-store。POST密码登录在prod返回403，未启用BI时免登返回404；ticket无效/过期/已使用返回401，参数解析失败400，数据库/服务异常5xx。前端统一显示失败提示，不打印请求密文或JWT。
+200：`{token,userId,username,roles,expiresAt}`，expiresAt为毫秒时间戳。JWT默认空闲1800秒到期，单次登录最长24小时，roles来自本地。GET `/api/auth/options`公开返回passwordLoginEnabled/biLoginEnabled，不返回密钥。认证响应no-store。POST密码登录在prod返回403，未启用BI时免登返回404；ticket无效/过期/已使用返回401，参数解析失败400，数据库/服务异常5xx。前端统一显示失败提示，不打印请求密文或JWT。
 
-`dataagent:ready`/`dataagent:login`/`dataagent:accepted`带handshakeId，双方校验同源与source窗口。JWT不进URL。DataAgent只在/bi-entry接收消息，过期页不触发续期；之后接口使用Authorization Bearer。前端sessionStorage，旧localStorage令牌不迁移。关闭页面不删除历史，不撤销已签发JWT；浏览器恢复标签页可能恢复存储，服务端仍按JWT到期时间校验。
+`dataagent:ready`/`dataagent:login`/`dataagent:accepted`带handshakeId，双方校验同源与source窗口。JWT不进URL。DataAgent只在/bi-entry接收消息；活跃时由页面触发受保护的 POST `/api/auth/renew`，校验有效 Bearer 并按平台当前身份和角色签发新 JWT。过期页面须重新进入。之后接口使用Authorization Bearer。前端sessionStorage，旧localStorage令牌不迁移。关闭页面不删除历史，不撤销已签发JWT；浏览器恢复标签页可能恢复存储，服务端仍按JWT到期时间校验。
 
 ## 配置及数据库
 
