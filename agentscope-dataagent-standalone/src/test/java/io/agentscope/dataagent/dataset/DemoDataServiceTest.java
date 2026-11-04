@@ -22,21 +22,16 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 import io.agentscope.dataagent.dataset.parser.ExcelParser;
 import io.agentscope.dataagent.web.persistence.jpa.ExternalDataSourceRepository;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
-/** spec105: demo files come only from the configured directory, under fixed names. */
+/** Bundled files are served by fixed name and independently of the optional source. */
 class DemoDataServiceTest {
     private final ExternalDataSourceRepository sources = mock(ExternalDataSourceRepository.class);
-
-    @TempDir Path dir;
 
     private DemoDataService service(boolean enabled, String password) {
         DemoDataProperties properties = new DemoDataProperties();
         properties.setEnabled(enabled);
-        properties.setSamplesDir(dir.toString());
+        properties.setSamplesEnabled(enabled);
         properties.setPassword(password);
         return new DemoDataService(
                 properties,
@@ -47,12 +42,10 @@ class DemoDataServiceTest {
     }
 
     @Test
-    void onlyKnownFilesPresentInTheDirectoryAreOffered() throws Exception {
-        Files.writeString(dir.resolve(DemoDataService.SAMPLE_FILES.get(1)), "x");
-        Files.writeString(dir.resolve("private.xlsx"), "x");
+    void onlyKnownBundledFilesAreOffered() {
         var service = service(true, "pw");
-        assertThat(service.samples()).containsExactly(DemoDataService.SAMPLE_FILES.get(1));
-        assertThat(service.sample(DemoDataService.SAMPLE_FILES.get(1))).hasSize(1);
+        assertThat(service.samples()).containsExactly("示例订单.xlsx", "示例客户.xlsx");
+        assertThat(service.sample("示例客户.xlsx")).isNotEmpty();
         assertThatThrownBy(() -> service.sample("private.xlsx"))
                 .isInstanceOf(DatasetException.class);
         assertThatThrownBy(() -> service.sample("../secret.xlsx"))
@@ -60,10 +53,9 @@ class DemoDataServiceTest {
     }
 
     @Test
-    void legacyFilesAreNotOfferedAndOldSchemaIsNotAccepted() throws Exception {
-        Files.writeString(dir.resolve("报表访问明细.xlsx"), "legacy");
-        Files.writeString(dir.resolve("用户列表.xlsx"), "legacy");
-        assertThat(service(true, "pw").samples()).isEmpty();
+    void legacyFilesAreNotOfferedAndOldSchemaIsNotAccepted() {
+        assertThatThrownBy(() -> service(true, "pw").sample("演示订单.xlsx"))
+                .isInstanceOf(DatasetException.class);
         assertThat(DemoDataService.usesCurrentSchema("jdbc:mysql://localhost:3306/demo_data"))
                 .isFalse();
         assertThat(
@@ -95,10 +87,10 @@ class DemoDataServiceTest {
     }
 
     @Test
-    void nothingIsOfferedWhenDisabled() throws Exception {
-        Files.writeString(dir.resolve(DemoDataService.SAMPLE_FILES.get(0)), "x");
+    void nothingIsOfferedWhenDisabled() {
         var service = service(false, "pw");
         assertThat(service.samples()).isEmpty();
+        assertThatThrownBy(() -> service.sample("示例订单.xlsx")).isInstanceOf(DatasetException.class);
         assertThat(service.sourceAvailable()).isFalse();
     }
 

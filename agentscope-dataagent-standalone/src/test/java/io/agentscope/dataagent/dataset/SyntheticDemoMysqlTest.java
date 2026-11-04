@@ -8,7 +8,6 @@ import static org.mockito.Mockito.when;
 
 import io.agentscope.dataagent.dataset.parser.ExcelParser;
 import io.agentscope.dataagent.web.persistence.jpa.ExternalDataSourceRepository;
-import java.nio.file.Path;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Optional;
@@ -38,8 +37,6 @@ class SyntheticDemoMysqlTest {
         }
         var properties = new DemoDataProperties();
         properties.setEnabled(true);
-        properties.setSamplesDir(
-                Path.of("deploy/demo-samples/synthetic-v1").toAbsolutePath().toString());
         properties.setPassword(readerPassword);
         properties.setJdbcUrl(base + "/" + DemoDataService.SCHEMA + options);
         var sources = mock(ExternalDataSourceRepository.class);
@@ -62,15 +59,15 @@ class SyntheticDemoMysqlTest {
                 var st = c.createStatement()) {
             try (var rs = st.executeQuery("SELECT COUNT(*), SUM(net_revenue) FROM demo_orders")) {
                 rs.next();
-                assertThat(rs.getInt(1)).isEqualTo(48000);
-                assertThat(rs.getBigDecimal(2)).isEqualByComparingTo("9640810.45");
+                assertThat(rs.getInt(1)).isEqualTo(10000);
+                assertThat(rs.getBigDecimal(2)).isEqualByComparingTo("1992581.55");
             }
             try (var rs =
                     st.executeQuery(
                             "SELECT COUNT(*), COUNT(DISTINCT customer_name) FROM demo_customers")) {
                 rs.next();
-                assertThat(rs.getInt(1)).isEqualTo(2000);
-                assertThat(rs.getInt(2)).isEqualTo(1915);
+                assertThat(rs.getInt(1)).isEqualTo(200);
+                assertThat(rs.getInt(2)).isEqualTo(196);
             }
             assertThatThrownBy(() -> st.executeQuery("SELECT * FROM demo_data.legacy_sentinel"))
                     .isInstanceOf(SQLException.class);

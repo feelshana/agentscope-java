@@ -603,3 +603,6 @@ BI同步方案收尾：DocsConsistencyTest通过；只读SQL静态检查10条且
 
 ## 2026-11-03 Asia/Shanghai｜问数优化设推荐问题；不再提议视图（ADR0133）
 QueryCoachPanel 在已确认题上加"设为推荐问题/取消恢复自动生成"，复用 spec103 接口；dev server 实测替换与恢复均正确，测试库已恢复自动问题（"排名前 3"一题在测试中被确认）。SemanticAssetProposalTool 在 COACH 轮次拒绝 view，COACH 规则第 5 步改写，写 ADR0133 并更新 ADR0132 状态、索引、AGENTS、ARCHITECTURE、spec114。
+
+## 2026-11-04 Asia/Shanghai｜Checkpoint：应用内置新手引导示例
+在liyufan_dev@2948807f完成两个随包模板、类路径读取和正式准备调整。固定种子抽样保留184天，按原地区与注册日期约束映射订单客户，180位有订单、20位无订单。已归档旧deploy/demo-samples及校验相同的本地副本，保留本地历史资料、BI和服务器资源。30项聚焦测试通过，包含实际ExcelParser、独立MySQL8.4首次/重复导入和文档检查；Maven package、JAR内容校验、正式prepare隔离检查通过。未重启IDEA、运行66或提交推送；回答延迟优化仍暂停。

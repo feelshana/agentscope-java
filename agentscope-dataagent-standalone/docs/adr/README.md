@@ -23,7 +23,7 @@ ADR 记录"为什么这样做"。规则：
 | SQL 时间门禁 | [0097](0097-llm-per-table-sql-window.md)、[0098](0098-post-sampling-fact-window-confirmation.md)、[0099](0099-runtime-window-policy-and-verifiable-sql-gate.md)、[0103](0103-source-tiered-probing-and-row-based-gate-verdict.md)、[0112](0112-rule-first-sql-window-gate.md)、[0113](0113-mysql8-or-doris-sources-and-literal-date-ranges.md) | 数据库独立配置；逐表检查，普通写法由规则判断、其余交 LLM；日期范围要求写成常量；明细重算结论；上传表不设门禁 |
 | 问数日期与统计 | [0102](0102-query-date-clarification-and-modeling-samples.md)、[0104](0104-upload-probe-scope-and-sql-side-aggregation.md)、[0105](0105-build-state-context-and-ranking-granularity.md)、[0110](0110-platform-handles-build-overwrite-and-conditional-date-rules.md) | 仅受限表缺日期先问；统计来自 SQL；排名按主体分组 |
 | 问数分析技能 | [0121](0121-query-analysis-skills.md) | 归因/异常/预测以固定脚本执行；先确认参数再取数；派生值注明来源；分析回答不进召回 |
-| 内置示例数据源 | [0122](0122-builtin-demo-datasource.md)、[0124](0124-synthetic-demo-version-isolation.md) | 合成零售示例独立版本库；保留只读和权限边界 |
+| 内置示例数据 | [0134](0134-bundled-onboarding-sample-files.md)、[0122](0122-builtin-demo-datasource.md)、[0124](0124-synthetic-demo-version-isolation.md) | 上传示例随应用发布；可选的合成零售示例独立版本库保留只读和权限边界 |
 | 问数准备与性能 | [0100](0100-published-query-index-preparation.md)、[0101](0101-reuse-published-mcp-for-recall-warmup.md) | 发布后后台索引、召回预热、分段计时 |
 | BI账号、用户目录与全员库 | [0116](0116-bi-account-and-public-knowledge.md) | 客户端账号信任；只读投影；管理员集中配置全员QUERY |
 | 工程整合、单库与管理员 | [0114](0114-native-query-and-engineering-integration.md) | 原生建模问数优先；BI、私有图表、持久状态、人工模型切换与受限恢复 |
@@ -170,3 +170,4 @@ ADR 记录"为什么这样做"。规则：
 | [0131](0131-single-modeling-conversation-and-official-asset-sinks.md) | 建模对话作为唯一说需求的入口，资产按官方去处选型 | 已接受，2026-11-03。实施 spec113；取代 ADR0129 第 1 条。 |  |
 | [0132](0132-query-coach.md) | 问数教练：用常用问题驱动语义建设，提议只在这里产生 | 已接受，2026-11-03。实施 spec114 一期；取代 ADR0131 第 2 条与 ADR0128 第 5 条的执行验证。第 1、4 条提议查询模板已被 ADR0133 取代。 | 0133 |
 | [0133](0133-query-optimization-proposes-no-views.md) | 问数优化不提议查询模板，公共视图改从全部已确认问答中提炼 | 已接受，2026-11-03。调整 spec114 第 8 节；取代 ADR0132 提议查询模板部分。 |  |
+| [0134](0134-bundled-onboarding-sample-files.md) | 新手引导示例随应用发布 | 已接受，2026-11-04；取代 ADR0124 的上传素材与分发约定。 | |

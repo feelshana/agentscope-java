@@ -67,16 +67,13 @@ target/dataagent-2.0.3-SNAPSHOT.tar.gz
 
 接口兼容性：`POST /api/datasets/batch` 改为逐文件结果（fileName/status/dataset/error），以便返回部分成功；如果有外部调用脚本需同步读取新结构。当前页面使用单文件上传接口配合前端并发队列，不依赖旧的 batch 返回结构。
 
-## 内置示例数据（2026-10-31，spec105）
+## 内置示例数据
 
-默认关闭。开启步骤：
+新手引导的「使用示例文件」默认可用。IDEA 和发布镜像都从应用类路径加载 `src/main/resources/demo-samples/` 中的示例订单、示例客户，随应用构建生效。点击后通过普通上传导入知识库的物理表。业务口径见 [虚构零售示例](../samples/onboarding-demo-business-rules.md)。
 
-1. 当前通用素材改为 `deploy/demo-samples/synthetic-v1/` 的 `演示订单.xlsx`、`演示客户.xlsx`。以下旧部署记录不应直接重放；新示例使用独立 `demo_commerce_v1`，详见 `deploy/demo-samples/README.md`。原流程曾把 `报表访问明细.xlsx`、`用户列表.xlsx` 放到服务器目录，由 `DATAAGENT_DEMO_SAMPLES_DIR` 指定，默认是工作目录下的 `data/demo-samples`。2026-10-31临时GitHub传输已完成，当前源码不再包含Excel。本地执行 `python deploy/demo-samples/restore-local.py` 可从历史提交恢复到忽略目录并校验；66已有持久副本保持使用，详见66更新指引。不打入JAR。
-2. 配置 `DATAAGENT_DEMO_ENABLED=true` 和 `DATAAGENT_DEMO_PASSWORD`；数据库不在本机时配置 `DATAAGENT_DEMO_JDBC_URL`。配置了 `allowed-endpoints` 的环境要把这个地址加进去。
-3. 重启后，程序用数据集库账号建 `demo_data` 库、导入两张表、创建只读账号 `demo_reader`。账号权限不足时，由 DBA 建好库、表和只读账号，表为空时才会导入。
-4. 看日志 `Demo data source ready: demo_data` 确认可用；失败只影响内置数据源，指引会只走上传路线。
+单独关闭文件入口可设置 `DATAAGENT_DEMO_SAMPLES_ENABLED=false`。旧环境显式设置的 `DATAAGENT_DEMO_ENABLED` 仍可作为文件开关的兼容默认值。旧 `DATAAGENT_DEMO_SAMPLES_DIR` 已退出新版本的读取流程。
 
-已有平台库升级前先执行 `docs/migrations/0105-guided-tour-mysql.sql`。已导入过文本版 `demo_data` 的环境，再执行 `0106-demo-data-visit-time-mysql.sql`，或由程序启动时自动升级；已经关联它的知识库要重新建模后才会按时间类型使用。
+如另外需要只读示例数据源，再设置 `DATAAGENT_DEMO_ENABLED=true`、`DATAAGENT_DEMO_PASSWORD` 和适用的 `DATAAGENT_DEMO_JDBC_URL`，指向独立的 `demo_commerce_v1`。配置了允许端点的环境也需允许该地址。上传示例无需准备此库。旧演练库 `demo_data` 的时间类型迁移仅适用于旧环境。
 
 ## 问答容量与运行记录（2026-10-14）
 

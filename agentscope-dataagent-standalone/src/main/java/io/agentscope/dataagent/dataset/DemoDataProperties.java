@@ -18,12 +18,12 @@ package io.agentscope.dataagent.dataset;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
-/** spec105: built-in demo files and the read-only demo database. Off by default. */
+/** Bundled upload samples and an optional read-only demo database. */
 @Component
 @ConfigurationProperties(prefix = "dataagent.demo")
 public class DemoDataProperties {
     private boolean enabled;
-    private String samplesDir = "data/demo-samples";
+    private boolean samplesEnabled = true;
     private String jdbcUrl = "jdbc:mysql://localhost:3306/demo_commerce_v1";
     private String username = "demo_commerce_reader";
     private String password = "";
@@ -36,12 +36,12 @@ public class DemoDataProperties {
         this.enabled = enabled;
     }
 
-    public String getSamplesDir() {
-        return samplesDir;
+    public boolean isSamplesEnabled() {
+        return samplesEnabled;
     }
 
-    public void setSamplesDir(String samplesDir) {
-        this.samplesDir = samplesDir;
+    public void setSamplesEnabled(boolean samplesEnabled) {
+        this.samplesEnabled = samplesEnabled;
     }
 
     public String getJdbcUrl() {

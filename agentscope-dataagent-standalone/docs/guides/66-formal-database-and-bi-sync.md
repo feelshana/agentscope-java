@@ -48,7 +48,7 @@ python3 deploy/bi-sync/configure.py
 
 ## C. 准备正式候选环境，保留旧服务
 
-把下面的镜像占位符替换为A阶段构建记录中的完整镜像名，执行前必须替换。prepare复用原配置中APP_CACHE，但创建全新业务HOME/state/workspace/mdl/artifacts、独立网络和新加密密钥，不复制旧测试工程或模型配置；自动校验安装虚构订单/客户文件，禁用需要第三库/建只读账号的外部示例准备。
+把下面的镜像占位符替换为A阶段构建记录中的完整镜像名，执行前必须替换。prepare复用原配置中APP_CACHE，但创建全新业务HOME/state/workspace/mdl/artifacts、独立网络和新加密密钥，不复制旧测试工程或模型配置；启用镜像内置的虚构订单和客户文件，外部示例源保持关闭。
 
 ```bash
 python3 docker/formal-app.py prepare 'REPLACE_WITH_BUILT_IMAGE'

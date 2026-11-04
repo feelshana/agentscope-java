@@ -777,7 +777,7 @@ React 18 + TypeScript + Vite SPA（`frontend/`），构建产物进 `classpath:/
 
 `state/guidedTour.ts` 保存指引位置，页面用 `tourSignal` 上报真实发生的事，每一步等待一个信号，已经发生过的信号会跳过对应步骤（如没有待整理字段）；不使用定时器，也不代替用户点击。`GuidedTour` 按 `data-tour` 标记找目标控件，遮罩只留出目标；目标不在屏幕上或处于等待阶段时只显示状态卡，不遮挡页面。建模点击步骤由 `tourLocksDraftDrawer` 按当前账号、知识库和步骤约束 `DraftBar`：收起并限制重开草稿浮层，避免覆盖目标；等待或退出引导后恢复正常查看，不改确认和发布状态。位置经 `OnboardingService#saveTour` 存入 `dataagent_user.onboarding_tour`，退出后保留，可从帮助面板继续。
 
-`DemoDataService`（spec108/ADR0124）只提供虚构的演示订单/演示客户Excel，固定名单不再包含旧真实素材；文件保存在samples-dir，仓库deploy/demo-samples/synthetic-v1与恢复脚本用于校验分发。enabled打开时异步准备独立`demo_commerce_v1`的`demo_orders`/`demo_customers`，仅空表导入，行数不完整停止而不覆盖；客户编号唯一、姓名可重名。系统源标识为`builtin-demo-commerce-v1`，JDBC必须指向新库，两表数量校验通过才就绪；缺密码/准备失败不影响示例文件上传。旧demo_data及旧知识库不迁移、不删除，也不作为新示例提供；已有旧知识库的退役需要单独处理。`ExternalDataSourceController`和`DatasetService#associateTables`只允许当前系统源、新库及两张已声明表作为共享示例，其他QUERY/MANAGE和只读边界保持；编辑/删除仍按个人归属拒绝。前端取回文件后复用现有上传、建模、确认与发布，不自动灌入标准答案。
+`DemoDataService`（ADR0134）从应用类路径提供固定的示例订单、示例客户 Excel，默认可用。IDEA 和镜像共用模板，前端取文件后复用普通上传、建模、确认与发布。可选的只读 `demo_commerce_v1` 源由 `enabled` 和密码启用，和上传示例独立。新空库导入当前模板，已有完整旧批次保留且仍可使用，不向不完整的旧批次补入新数据。系统源仅允许两张已声明的表，归属与 QUERY/MANAGE 边界沿用 ADR0122/0124。
 
 `OnboardingService#reset` 只重置调用者自己：清除进度并写入 `onboarding_reset_at`，此后第 1、2 步只计这之后创建的知识库，已有知识库和数据不动。
 
@@ -840,7 +840,7 @@ spec 045 / ADR 0055：无已登记问题、无待确认原生 HITL 时，页面�
 | `dataagent.sandbox.max-containers` | `16` | 单进程容器上限，满额驱逐空闲实例；环境变量 DATAAGENT_SANDBOX_MAX_CONTAINERS |
 | `dataagent.upload.max-file-size` / `max-selection-size` / `max-files` | `50MB` / `100MB` / `10` | 上传单文件、整批及数量上限 |
 | `dataagent.upload.max-rows` / `max-columns` / `max-cells` | `500000` / `100` / `10000000` | 解析规模上限 |
-| `dataagent.demo.enabled` / `samples-dir` / `jdbc-url` / `username` / `password` | `false` / `data/demo-samples` / `jdbc:mysql://localhost:3306/demo_commerce_v1` / `demo_commerce_reader` / 空 | 内置示例文件与只读 `demo_commerce_v1` 数据源（spec105）。Excel保存在忽略的samples-dir；deploy/demo-samples提供合成文件、恢复脚本与校验清单；数据源必须配置只读账号密码。 |
+| `dataagent.demo.enabled` / `samples-enabled` / `jdbc-url` / `username` / `password` | `false` / `true` / `jdbc:mysql://localhost:3306/demo_commerce_v1` / `demo_commerce_reader` / 空 | 示例文件随包，默认可用；显式设置的 `DATAAGENT_DEMO_ENABLED` 环境变量兼容控制文件开关，可用 `DATAAGENT_DEMO_SAMPLES_ENABLED` 覆盖。只读源需独立启用和密码。 |
 | `dataagent.upload.concurrent-files` | `8` | 单进程在途文件准入，允许 1—32 |
 | `dataagent.chat.max-active` / `max-active-per-user` | `16` / `2` | 问数全局/每用户执行数 |
 | `dataagent.chat.max-waiting` / `max-waiting-per-user` | `16` / `1` | 全局/每用户等待数 |

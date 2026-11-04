@@ -20,8 +20,6 @@ import io.agentscope.dataagent.web.persistence.jpa.ExternalDataSourceEntity;
 import io.agentscope.dataagent.web.persistence.jpa.ExternalDataSourceRepository;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -34,12 +32,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 import reactor.core.scheduler.Schedulers;
 
 /**
- * spec108 / ADR0124: the demo files read from the deployment directory, the {@code demo_commerce_v1}
- * database loaded from them, and the built-in read-only data source pointing at it.
+ * Bundled Excel upload samples and the optional read-only source in {@code demo_commerce_v1}.
  *
  * <p>The source is a row owned by {@link #OWNER} so Wren profiles, sampling and publishing treat it
  * like any other external source; only listing and association know it is shared.
@@ -52,9 +50,11 @@ public class DemoDataService {
     public static final String SOURCE_ID = "builtin-demo-commerce-v1";
     public static final String SOURCE_NAME = "虚构零售示例数据源";
     public static final String SCHEMA = "demo_commerce_v1";
-    public static final List<String> SAMPLE_FILES = List.of("演示订单.xlsx", "演示客户.xlsx");
+    public static final List<String> SAMPLE_FILES = List.of("示例订单.xlsx", "示例客户.xlsx");
     public static final List<String> TABLE_NAMES = List.of("demo_orders", "demo_customers");
     private static final int BATCH = 1000;
+    private static final int LEGACY_CUSTOMER_COUNT = 2000;
+    private static final int LEGACY_ORDER_COUNT = 48000;
 
     private record DemoTable(
             String name, String file, int rows, List<String> columns, String ddl) {}
@@ -63,7 +63,7 @@ public class DemoDataService {
             new DemoTable(
                     "demo_customers",
                     SAMPLE_FILES.get(1),
-                    2000,
+                    200,
                     List.of(
                             "customer_id",
                             "customer_name",
@@ -81,7 +81,7 @@ public class DemoDataService {
             new DemoTable(
                     "demo_orders",
                     SAMPLE_FILES.get(0),
-                    48000,
+                    10000,
                     List.of(
                             "order_id",
                             "customer_id",
@@ -155,24 +155,24 @@ public class DemoDataService {
         return properties.isEnabled() && sourceReady;
     }
 
-    /** The demo files present in the deployment directory, in display order. */
+    /** The bundled demo files, in display order. */
     public List<String> samples() {
-        if (!properties.isEnabled()) return List.of();
-        return SAMPLE_FILES.stream().filter(name -> Files.isRegularFile(path(name))).toList();
+        if (!properties.isSamplesEnabled()) return List.of();
+        return SAMPLE_FILES.stream().filter(name -> resource(name).exists()).toList();
     }
 
     /** A demo file's bytes; only the fixed names are served, so no path comes from the caller. */
     public byte[] sample(String name) {
         if (!samples().contains(name)) throw new DatasetException("示例文件不存在", 404);
-        try {
-            return Files.readAllBytes(path(name));
+        try (InputStream in = resource(name).getInputStream()) {
+            return in.readAllBytes();
         } catch (IOException e) {
             throw new DatasetException("示例文件读取失败", 500);
         }
     }
 
-    private Path path(String name) {
-        return Path.of(properties.getSamplesDir()).resolve(name);
+    private ClassPathResource resource(String name) {
+        return new ClassPathResource("demo-samples/" + name);
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -235,6 +235,13 @@ public class DemoDataService {
                                 + table.ddl()
                                 + ") COMMENT='完全虚构的零售示例，2026-10-31快照'");
             }
+            long customers = rowCount(st, CUSTOMERS);
+            long orders = rowCount(st, ORDERS);
+            if (completeCounts(customers, orders)) return;
+            // The customer import commits first. Resume it only if no orders have been imported.
+            if (orders != 0 || (customers != 0 && customers != CUSTOMERS.rows())) {
+                throw new SQLException("示例表行数不完整，保留现有数据");
+            }
         }
         load(admin, CUSTOMERS);
         load(admin, ORDERS);
@@ -242,18 +249,13 @@ public class DemoDataService {
 
     /** Load the known schema once; never overwrite a partially populated deployment. */
     private void load(Connection admin, DemoTable table) throws SQLException, IOException {
-        try (Statement st = admin.createStatement();
-                ResultSet rs =
-                        st.executeQuery("SELECT COUNT(*) FROM " + SCHEMA + "." + table.name())) {
-            rs.next();
-            long count = rs.getLong(1);
+        try (Statement st = admin.createStatement()) {
+            long count = rowCount(st, table);
             if (count == table.rows()) return;
             if (count != 0) throw new SQLException("示例表行数不完整，保留现有数据：" + table.name());
         }
-        if (!Files.isRegularFile(path(table.file())))
-            throw new IOException("缺少示例文件：" + table.file());
         List<List<String>> rows;
-        try (InputStream in = Files.newInputStream(path(table.file()))) {
+        try (InputStream in = resource(table.file()).getInputStream()) {
             var parsed = parser.parse(in, table.file(), table.rows() + 1);
             if (parsed.totalRows() != table.rows()
                     || parsed.truncated()
@@ -308,14 +310,21 @@ public class DemoDataService {
                                 source.getUsername(),
                                 source.getPassword());
                 Statement st = connection.createStatement()) {
-            for (DemoTable table : List.of(CUSTOMERS, ORDERS)) {
-                try (ResultSet rs =
-                        st.executeQuery("SELECT COUNT(*) FROM " + SCHEMA + "." + table.name())) {
-                    if (!rs.next() || rs.getLong(1) != table.rows()) return false;
-                }
-            }
+            return completeCounts(rowCount(st, CUSTOMERS), rowCount(st, ORDERS));
         }
-        return true;
+    }
+
+    private long rowCount(Statement statement, DemoTable table) throws SQLException {
+        try (ResultSet rows =
+                statement.executeQuery("SELECT COUNT(*) FROM " + SCHEMA + "." + table.name())) {
+            rows.next();
+            return rows.getLong(1);
+        }
+    }
+
+    private boolean completeCounts(long customers, long orders) {
+        return (customers == CUSTOMERS.rows() && orders == ORDERS.rows())
+                || (customers == LEGACY_CUSTOMER_COUNT && orders == LEGACY_ORDER_COUNT);
     }
 
     /** The reader sees the synthetic database only, so the shared source cannot reach platform data. */

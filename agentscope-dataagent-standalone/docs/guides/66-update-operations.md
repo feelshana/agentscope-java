@@ -129,37 +129,11 @@ exit;
 
 对应仓库增量脚本为 `docs/migrations/0105-guided-tour-mysql.sql`，它没有重复执行保护，不能不检查就反复执行。这两列只用于指引进度与重置时间，不重置账号、知识库或已有引导记录。
 
-`0106-demo-data-visit-time-mysql.sql` 仅适用于此前已启用并导入过文本时间的 `demo_data.report_visits`。没有启用内置示例时本次跳过，不新建demo_data。已有示例库的维护由对应环境单独核对字段类型后按该脚本执行，不对真实业务表套用。开启内置示例还需部署两份Excel、挂载内可读路径及只读账号配置，见项目 `docs/guides/manual-release-guide.md` 的“内置示例数据”一节；本次不默认开启。
+`0106-demo-data-visit-time-mysql.sql` 仅适用于此前已启用并导入过文本时间的 `demo_data.report_visits`。没有启用内置示例时本次跳过，不新建demo_data。已有示例库的维护由对应环境单独核对字段类型后按该脚本执行，不对真实业务表套用。当前示例文件上传无需此迁移，见[内置示例数据](manual-release-guide.md#内置示例数据)。
 
-### 示例文件与数据库：66已完成，后续更新沿用
+### 新手引导示例文件
 
-用户已确认a85ccec6在线可用。66已完成0105两列升级，两个Excel及SHA256SUMS保存在 `/data/dataagent/rehearsal-app/data/demo-samples`；demo_data两表为98819条访问记录、2046条用户记录，visit_time为DATETIME。demo_reader只有该示例库SELECT，初始化时的上传账号临时权限已撤销。数据实际时间范围为2026-09-20 16:35至2026-10-07 16:31。
-
-临时GitHub传输完成后，源码中的两份Excel已删除；这只删除受Git管理的源码副本，现有upgrade保留上述持久目录、runtime.env及已有数据库。后续无需重复导入、重复加列或创建账号。线上配置继续指向上述绝对路径。要检查文件时在66执行：
-
-```bash
-(cd /data/dataagent/rehearsal-app/data/demo-samples && sha256sum -c SHA256SUMS)
-```
-
-本地开发在模块目录执行一次（Python 3）：
-
-```bash
-python deploy/demo-samples/restore-local.py
-```
-
-恢复到模块 `data/demo-samples/`（被Git忽略），文件已存在且一致时直接通过，不同则停止而不覆盖。切换/同步个人分支不会删除忽略副本。IDEA Working directory设为模块目录并设置 `DATAAGENT_DEMO_ENABLED=true` 即可测试示例上传；工作目录不同则设置本机绝对 `DATAAGENT_DEMO_SAMPLES_DIR`。外部示例源测试还需本机demo_data及只读账号，凭据放本地忽略配置/IDEA环境变量，不复用或提交66凭据。完整说明见项目deploy/demo-samples/README.md。
-
-新机器或新服务器仍需恢复/提供Excel并配置其自己的示例数据库。恢复脚本依赖原传输提交011d06b的历史，不包含历史的浅克隆要先补齐历史。示例配置格式如下，66现有配置已完成，普通更新不重复修改：
-
-```dotenv
-DATAAGENT_DEMO_ENABLED=true
-DATAAGENT_DEMO_SAMPLES_DIR=/data/dataagent/rehearsal-app/data/demo-samples
-DATAAGENT_DEMO_JDBC_URL=jdbc:mysql://mysql:3306/demo_data
-DATAAGENT_DEMO_USERNAME=demo_reader
-DATAAGENT_DEMO_PASSWORD=使用现有私有配置中的实际密码
-```
-
-旧Git1.8的Excel文本误判已通过66本地info/attributes规则修正；源码目录另保留xlsx binary属性。后续仅删除源码Excel无需清理本地规则，也不要对持久目录执行Git清理。
+应用从镜像内置资源读取「示例订单.xlsx」和「示例客户.xlsx」。日常更新随应用构建发布，无需复制 Excel、配置目录或初始化示例库。原正式环境里的 `DATAAGENT_DEMO_SAMPLES_DIR` 对新版本无效，已有持久副本可保留供旧镜像回退。
 
 ## 四、升级并重启应用
 

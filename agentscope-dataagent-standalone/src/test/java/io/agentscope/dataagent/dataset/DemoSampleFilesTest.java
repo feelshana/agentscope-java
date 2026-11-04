@@ -10,7 +10,6 @@ import io.agentscope.dataagent.web.onboarding.OnboardingService;
 import io.agentscope.dataagent.web.persistence.jpa.ExternalDataSourceRepository;
 import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
-import java.nio.file.Path;
 import java.util.HashSet;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.server.ResponseStatusException;
@@ -20,9 +19,6 @@ class DemoSampleFilesTest {
     @Test
     void bundledSamplesWorkWithoutADatabaseAndKeepKeysAndMoney() throws Exception {
         var properties = new DemoDataProperties();
-        properties.setEnabled(true);
-        properties.setSamplesDir(
-                Path.of("deploy/demo-samples/synthetic-v1").toAbsolutePath().toString());
         var parser = new ExcelParser();
         var service =
                 new DemoDataService(
@@ -33,11 +29,11 @@ class DemoSampleFilesTest {
                         parser);
         service.prepare();
         assertThat(service.sourceAvailable()).isFalse();
-        assertThat(service.samples()).containsExactly("演示订单.xlsx", "演示客户.xlsx");
+        assertThat(service.samples()).containsExactly("示例订单.xlsx", "示例客户.xlsx");
         var controller = new OnboardingController(mock(OnboardingService.class), service);
-        var customerBytes = controller.sample("演示客户.xlsx").block().getBody();
-        var customers = parser.parse(new ByteArrayInputStream(customerBytes), "演示客户.xlsx", 3000);
-        assertThat(customers.totalRows()).isEqualTo(2000);
+        var customerBytes = controller.sample("示例客户.xlsx").block().getBody();
+        var customers = parser.parse(new ByteArrayInputStream(customerBytes), "示例客户.xlsx", 201);
+        assertThat(customers.totalRows()).isEqualTo(200);
         var keys = new HashSet<String>();
         var names = new HashSet<String>();
         for (var row : customers.rows()) {
@@ -48,16 +44,21 @@ class DemoSampleFilesTest {
         assertThat(names.size()).isLessThan(keys.size());
         assertThat(customers.rows().get(0).get(1)).isEqualTo("张明");
         assertThat(customers.rows().get(1).get(1)).isEqualTo("张明");
-        var bytes = controller.sample("演示订单.xlsx").block().getBody();
-        var orders = parser.parse(new ByteArrayInputStream(bytes), "演示订单.xlsx", 50000);
-        assertThat(orders.totalRows()).isEqualTo(48000);
+        var bytes = controller.sample("示例订单.xlsx").block().getBody();
+        var orders = parser.parse(new ByteArrayInputStream(bytes), "示例订单.xlsx", 10001);
+        assertThat(orders.totalRows()).isEqualTo(10000);
         assertThat(orders.columns().get(2).sqlType()).isEqualTo("DATETIME");
+        var orderIds = new HashSet<String>();
+        var buyers = new HashSet<String>();
         BigDecimal revenue = BigDecimal.ZERO;
         for (var row : orders.rows()) {
+            assertThat(orderIds.add(row.get(0))).isTrue();
             assertThat(keys).contains(row.get(1));
+            buyers.add(row.get(1));
             revenue = revenue.add(new BigDecimal(row.get(16)));
         }
-        assertThat(revenue).isEqualByComparingTo("9640810.45");
+        assertThat(buyers).hasSize(180);
+        assertThat(revenue).isEqualByComparingTo("1992581.55");
         assertThatThrownBy(() -> controller.sample("用户列表.xlsx").block())
                 .isInstanceOf(ResponseStatusException.class);
     }

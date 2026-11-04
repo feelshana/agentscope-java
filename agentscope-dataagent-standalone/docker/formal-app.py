@@ -81,15 +81,12 @@ def prepare(image):
     # A new environment intentionally has fresh secrets and no copied model configuration.
     path = BASE / "runtime.env"
     content = path.read_text()
-    content = re.sub(r"^DATAAGENT_(DEMO_ENABLED|DEMO_PASSWORD|DEMO_SAMPLES_DIR|REQUIRE_PLATFORM_USERS)=.*\n?",
+    content = re.sub(r"^DATAAGENT_(DEMO_ENABLED|DEMO_PASSWORD|DEMO_SAMPLES_(?:DIR|ENABLED)|REQUIRE_PLATFORM_USERS)=.*\n?",
                      "", content, flags=re.M)
-    content += ("DATAAGENT_DEMO_ENABLED=true\nDATAAGENT_DEMO_PASSWORD=''\n"
-                "DATAAGENT_DEMO_SAMPLES_DIR=" + str(BASE / "data/demo-samples") + "\n"
-                "DATAAGENT_REQUIRE_PLATFORM_USERS=true\n")
+    content += ("DATAAGENT_DEMO_ENABLED=false\nDATAAGENT_DEMO_PASSWORD=''\n"
+                "DATAAGENT_DEMO_SAMPLES_ENABLED=true\nDATAAGENT_REQUIRE_PLATFORM_USERS=true\n")
     path.write_text(content)
     os.chmod(path, 0o600)
-    subprocess.run([sys.executable, str(HERE.parent / "deploy/demo-samples/restore-local.py"),
-                    "--directory", str(BASE / "data/demo-samples")], check=True)
     marker.write_text("formal-v1\n")
     print("正式候选环境已准备：18081；未启动或停止旧服务")
 

@@ -315,7 +315,7 @@ to false; existing users and grants are retained.
 | `server.port` | `8080` | HTTP port. |
 | `dataagent.upload.max-file-size` / `max-selection-size` / `max-files` | `50MB` / `100MB` / `10` | 单文件、整批选择大小及文件数量；前端从上传策略 API 读取。 |
 | `dataagent.upload.max-rows` / `max-columns` / `max-cells` | `500000` / `100` / `10000000` | 每文件解析规模限制。 |
-| `dataagent.demo.enabled` / `samples-dir` / `jdbc-url` / `username` / `password` | `false` / `data/demo-samples` / `jdbc:mysql://localhost:3306/demo_commerce_v1` / `demo_commerce_reader` / empty | Built-in demo files and read-only `demo_commerce_v1` source (spec105). Keep the files in ignored `samples-dir`; `deploy/demo-samples/` provides bundled synthetic samples and verified local-copy tooling; the source needs a reader password. |
+| `dataagent.demo.enabled` / `samples-enabled` / `jdbc-url` / `username` / `password` | `false` / `true` / `jdbc:mysql://localhost:3306/demo_commerce_v1` / `demo_commerce_reader` / empty | Bundled upload samples are available by default. An explicit `DATAAGENT_DEMO_ENABLED` environment value also supplies the legacy samples default, which `DATAAGENT_DEMO_SAMPLES_ENABLED` overrides. The read-only source requires opt-in and a reader password. |
 | `dataagent.upload.concurrent-files` | `8` | 单进程在途上传预算（1—32）；超额 429，前端有限调度。 |
 | `dataagent.chat.max-active` / `max-active-per-user` | `16` / `2` | ChatController 问数执行预算，建模豁免。 |
 | `dataagent.chat.max-waiting` / `max-waiting-per-user` | `16` / `1` | 问数等待名额；排队通过 SSE capacity 提示。 |
