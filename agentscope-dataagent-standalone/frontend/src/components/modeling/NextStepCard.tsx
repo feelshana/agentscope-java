@@ -6,7 +6,7 @@ import { useQueryReadiness } from '../useQueryReadiness';
  * spec092 §7: the end of the conversation says what to do next once the assistant is idle and
  * nothing waits for the user's decision — optionally try questions, then check and publish.
  */
-export default function NextStepCard({ groupId, summary, unconfirmedTrials = 0, nextVersion, onTrial, onPublish, onQuery }: {
+export default function NextStepCard({ groupId, summary, unconfirmedTrials = 0, nextVersion, onTrial, onPublish, onQuery, queryHeldHint }: {
   groupId: string;
   summary: DraftSummary;
   /** Answered trial questions not confirmed yet: they are not published as examples. */
@@ -15,6 +15,8 @@ export default function NextStepCard({ groupId, summary, unconfirmedTrials = 0, 
   onTrial: () => void;
   onPublish: () => void;
   onQuery?: () => void;
+  /** Set while the guided tour will take the user to the query page itself. */
+  queryHeldHint?: string;
 }) {
   // A question asked while the query engine prepares only waits, so 去问数 waits with it.
   const phase = useQueryReadiness(groupId, summary.publishedVersion);
@@ -27,8 +29,8 @@ export default function NextStepCard({ groupId, summary, unconfirmedTrials = 0, 
             <span className="da-spinner da-spinner-sm" style={{ marginRight: 6, verticalAlign: -2, borderColor: 'var(--da-border)', borderTopColor: 'var(--da-primary)' }} />
             问数准备中（{phase}），约半分钟后可问数</span>
         : <span style={{ marginLeft: 8, color: 'var(--da-text-muted)' }}>问数已可使用新版本。</span>}
-      {onQuery && <button className="da-btn da-btn-primary da-btn-sm" style={{ marginLeft: 8 }} disabled={phase !== null}
-        title={phase ? '问数准备完成后可用' : undefined} onClick={onQuery}>去问数</button>}
+      {onQuery && <button className="da-btn da-btn-primary da-btn-sm" style={{ marginLeft: 8 }} disabled={phase !== null || !!queryHeldHint}
+        title={queryHeldHint ?? (phase ? '问数准备完成后可用' : undefined)} onClick={onQuery}>去问数</button>}
       {unconfirmedTrials > 0 && <div style={{ marginTop: 6, fontSize: 12, color: 'var(--da-warn)' }}>
         有 {unconfirmedTrials} 个试问还没确认正确，没有作为示例发布。<button className="da-btn da-btn-sm" style={{ marginLeft: 6 }} onClick={onTrial}>去确认</button></div>}
     </section>;

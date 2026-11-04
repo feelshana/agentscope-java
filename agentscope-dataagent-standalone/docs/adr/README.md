@@ -15,7 +15,7 @@ ADR 记录"为什么这样做"。规则：
 | 总体路线 | [0069](0069-wren-native-modeling-and-query-agents.md)、[0068](0068-generic-modeling-agent-with-official-wren.md) | 建模与问数统一使用同版本官方 Wren skills/CLI/MCP；建模 Agent 是通用 Agent，平台只提供执行环境与服务 |
 | 知识库共享与权限 | [0077](0077-shared-knowledge-official-wren-integration.md) | QUERY/MANAGE、操作者范围与官方 Wren 入口集成 |
 | 建模技能与模式 | [0094](0094-official-enrich-context-and-technical-modeling-confirmation.md)、[0103](0103-source-tiered-probing-and-row-based-gate-verdict.md) | 官方 enrich-context Auto-pilot；技能挂载后关闭 CLI skills 通道 |
-| 建模探查与查询 | [0104](0104-upload-probe-scope-and-sql-side-aggregation.md)、[0106](0106-modeling-query-cap-cartesian-ban-and-cli-timeout-cleanup.md) | 上传表两类有限探查；单轮 10 条 query；禁止笛卡尔积 |
+| 建模探查与查询 | [0106](0106-modeling-query-cap-cartesian-ban-and-cli-timeout-cleanup.md)、[0135](0135-modeling-queries-no-table-data.md) | 建模不查询任何表的数据（上传表与外部表相同）；上传表日期范围在上传时统计写入字段描述；SQL 只用 dry-plan 检查，禁止笛卡尔积 |
 | 语义资产 | [0128](0128-conversational-semantic-assets.md)、[0129](0129-asset-kind-by-purpose-with-default-use-rule.md)、[0131](0131-single-modeling-conversation-and-official-asset-sinks.md)、[0132](0132-query-coach.md)、[0133](0133-query-optimization-proposes-no-views.md) | 初次建模只做基础；问数优化按常用问题分析缺口，只提议规则、关系、计算字段，查询模板（公共视图）只在用户明确要求时起草、日后从已确认问答提炼，用户批准后起草，对话中仅明确要求时起草；验证只核对展开后的 SQL、不执行；按官方去处选型（默认过滤只写规则，跨模型拼接用查询模板，指标用 Cube），加工表不作默认；写官方默认使用规则；人工核查和问题验证后发布；草稿不拦截问数；门禁覆盖资产 |
 | 建模文件边界 | [0107](0107-basic-modeling-closes-cube-and-view-files.md)、[0108](0108-yaml-write-guard-model-file-layout-and-cli-timing.md)、[0110](0110-platform-handles-build-overwrite-and-conditional-date-rules.md) | Cube/View 不读不写；YAML 语法检查；models 目录限制；整文件替换；自动补编译 |
 | 问答对来源 | [0109](0109-user-confirmed-questions-replace-generated-qa-pairs.md)、[0130](0130-question-review-on-context-change-and-asset-verified-questions.md) | 只来自用户逐题确认、问数点赞与资产验证确认；建模不生成；依赖口径变化的问答待复核，复核前不作示例 |
@@ -139,8 +139,8 @@ ADR 记录"为什么这样做"。规则：
 | [0100](0100-published-query-index-preparation.md) | 发布后提前准备官方问数索引 | 接受 |  |
 | [0101](0101-reuse-published-mcp-for-recall-warmup.md) | 在实际查询MCP预热召回并公开准备状态 | 接受 |  |
 | [0102](0102-query-date-clarification-and-modeling-samples.md) | 问数日期优先澄清与建模样例约束 | 已接受，2026-10-20。关联 spec088；补充 ADR0097/0099，保留其数据库配置来源、逐表检查及拒绝 | 部分或全部被 [ADR0103](0103-source-tiered-probing-and-row-based-gate-verdict.md) 取代 |
-| [0103](0103-source-tiered-probing-and-row-based-gate-verdict.md) | 按表来源分层探查、门禁以逐表明细为准与 CLI 契约对齐 | 已接受，2026-10-20。关联 spec089；补充 ADR0098/0099/0102，替代 ADR0102 中“ |  |
-| [0104](0104-upload-probe-scope-and-sql-side-aggregation.md) | 上传表探查按用途限定、全表验证的唯一性与问数统计在 SQL 中完成 | 已接受，2026-10-20。收窄 ADR0103 的上传表探查范围；其余 ADR0103 决策保持不变。 |  |
+| [0103](0103-source-tiered-probing-and-row-based-gate-verdict.md) | 按表来源分层探查、门禁以逐表明细为准与 CLI 契约对齐 | 已接受，2026-10-20。关联 spec089；补充 ADR0098/0099/0102，替代 ADR0102 中“…”的部分；上传表探查部分已被 ADR0135 取代。 | 0135 |
+| [0104](0104-upload-probe-scope-and-sql-side-aggregation.md) | 上传表探查按用途限定、全表验证的唯一性与问数统计在 SQL 中完成 | 已接受，2026-10-20。收窄 ADR0103 的上传表探查范围；其余 ADR0103 决策保持不变。 第 1、2 条已被 ADR0135 取代。 | 0135 |
 | [0105](0105-build-state-context-and-ranking-granularity.md) | 建模上下文注入编译状态、CLI 日期输出说明与问数排名粒度 | 已接受，2026-10-20。补充 ADR0104。 |  |
 | [0106](0106-modeling-query-cap-cartesian-ban-and-cli-timeout-cleanup.md) | 建模查询单轮硬上限、禁止笛卡尔积、超时进程树清理与屏蔽 Cube 参考 | 已接受，2026-10-20。补充 ADR0104/0105。ADR0104 中"探查只用软约束、不新增计数"的部分由本 |  |
 | [0107](0107-basic-modeling-closes-cube-and-view-files.md) | 基础语义建模对 Cube/View 文件既不读也不写，自动建模消息与探查边界一致 | 已接受，2026-10-20。补充 ADR0085/0088/0106。ADR0085、0088 中"已有 Cube/V |  |
@@ -171,3 +171,4 @@ ADR 记录"为什么这样做"。规则：
 | [0132](0132-query-coach.md) | 问数教练：用常用问题驱动语义建设，提议只在这里产生 | 已接受，2026-11-03。实施 spec114 一期；取代 ADR0131 第 2 条与 ADR0128 第 5 条的执行验证。第 1、4 条提议查询模板已被 ADR0133 取代。 | 0133 |
 | [0133](0133-query-optimization-proposes-no-views.md) | 问数优化不提议查询模板，公共视图改从全部已确认问答中提炼 | 已接受，2026-11-03。调整 spec114 第 8 节；取代 ADR0132 提议查询模板部分。 |  |
 | [0134](0134-bundled-onboarding-sample-files.md) | 新手引导示例随应用发布 | 已接受，2026-11-04；取代 ADR0124 的上传素材与分发约定。 | |
+| [0135](0135-modeling-queries-no-table-data.md) | 建模不查询任何表的数据，上传表的日期范围在上传时统计 | 已接受，2026-11-04。取代 ADR0103 上传表探查、ADR0104 第 1、2 条。 |  |

@@ -606,3 +606,8 @@ QueryCoachPanel 在已确认题上加"设为推荐问题/取消恢复自动生�
 
 ## 2026-11-04 Asia/Shanghai｜Checkpoint：应用内置新手引导示例
 在liyufan_dev@2948807f完成两个随包模板、类路径读取和正式准备调整。固定种子抽样保留184天，按原地区与注册日期约束映射订单客户，180位有订单、20位无订单。已归档旧deploy/demo-samples及校验相同的本地副本，保留本地历史资料、BI和服务器资源。30项聚焦测试通过，包含实际ExcelParser、独立MySQL8.4首次/重复导入和文档检查；Maven package、JAR内容校验、正式prepare隔离检查通过。未重启IDEA、运行66或提交推送；回答延迟优化仍暂停。
+## 2026-11-04 Asia/Shanghai｜新手任务建模耗时分析与 ADR0135
+清理并归档日志后用户跑新手任务：自动建模 74.9 秒（9 次模型调用 39.7 秒，查询 32 秒）。实测同一匹配率核对 NOT IN 27.5 秒、LEFT JOIN 1.4 秒。实施 ADR0135：`OfficialWrenToolkit#refuseModelingQuery` 拒绝建模所有 query；`DatasetService#withDateRanges` 上传时直连统计日期列起止写入字段描述；`probeBoundary` 改为查询边界并列出上传表行数；AUTO 规则删去全表验证声明 MANY_TO_ONE。待重启后重跑新手任务验收。
+
+## 2026-11-04 Asia/Shanghai｜ADR0135 验收与引导去问数
+重跑新手任务：自动建模 32.9 秒（原 74.9 秒），7 次模型调用、0 条查询；两个时间列描述带"上传数据覆盖…（平台上传时统计）"；订单-客户关系改由确认卡确定（第一个推荐选项为多对多，待讨论）。引导中"去问数"改为不可点（`tourHoldsQuery`，建模各步到"正在准备问数"），由引导第 10 步带到问数页；前端测试 71 项通过。

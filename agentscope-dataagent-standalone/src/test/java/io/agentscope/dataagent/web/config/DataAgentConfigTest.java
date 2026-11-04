@@ -153,7 +153,8 @@ class DataAgentConfigTest {
                         "不再通过 wren_cli skills list/get 重复获取同一技能",
                         "不调用 cube 命令",
                         "不得声明 MANY_TO_ONE 或 ONE_TO_ONE",
-                        "表来源与探查边界")
+                        "表来源与查询边界",
+                        "建模不查询任何表的数据")
                 .doesNotContain(
                         "禁止对同一路径连续发起多个 edit_file", "\"--tags\",\"source:enrich\"", "不要把问答保存留为");
         // 2026-10-22: rules must cite a real source, and date conditions come from the platform's
@@ -178,7 +179,8 @@ class DataAgentConfigTest {
                 .doesNotContain("最终说明实际修改、检查结果");
         // Reply length and turn-specific rules follow the page-declared purpose.
         assertThat(ModelingTurnRules.forPurpose("auto"))
-                .contains("3–6 行", "可以声明 MANY_TO_ONE", "非数据库约束")
+                .contains("3–6 行", "不查询任何表的数据", "上传表与外部数据源表一样")
+                .doesNotContain("可以声明 MANY_TO_ONE", "全表查询证实")
                 .doesNotContain("试问 SQL");
         // 2026-10-26: skip the official preflight the context already answers, in auto and
         // document turns alike; documents are read, never searched for.

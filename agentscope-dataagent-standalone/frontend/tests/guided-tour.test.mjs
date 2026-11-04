@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { adoptTour, pauseTour, resumeTour, tourLocksDraftDrawer, tourSignal, useTour } from '../src/state/guidedTour.ts';
+import { adoptTour, pauseTour, resumeTour, tourHoldsQuery, tourLocksDraftDrawer, tourSignal, useTour } from '../src/state/guidedTour.ts';
 
 const stored = new Map();
 globalThis.sessionStorage = { getItem: key => stored.get(key) ?? null };
@@ -53,4 +53,19 @@ test('the lock follows the actual account and knowledge base instead of cached t
   stored.set('dataagent_token', 'different-account-without-a-tour');
   assert.equal(current(), null);
   assert.equal(tourLocksDraftDrawer(null, 'demo'), false);
+});
+
+test('the tour, not a manual 去问数, takes the user to the query page once querying is ready', () => {
+  enter('publish');
+  assert.equal(tourHoldsQuery(current(), 'demo'), true);
+  assert.equal(tourHoldsQuery(current(), 'other'), false);
+  tourSignal('published', { groupId: 'demo' });
+  assert.equal(current().step, 'preparing');
+  assert.equal(tourHoldsQuery(current(), 'demo'), true);
+  tourSignal('query-ready', { groupId: 'demo' });
+  assert.equal(current().step, 'ask');
+  assert.equal(tourHoldsQuery(current(), 'demo'), false);
+  enter('preparing');
+  pauseTour();
+  assert.equal(tourHoldsQuery(current(), 'demo'), false);
 });

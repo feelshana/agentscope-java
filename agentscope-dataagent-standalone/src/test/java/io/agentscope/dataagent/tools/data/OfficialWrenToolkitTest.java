@@ -267,7 +267,7 @@ class OfficialWrenToolkitTest {
                         null,
                         false,
                         g -> java.util.Set.of("uploads"));
-        // Basic modeling turns (no purpose): external tables are never queried, uploads are.
+        // ADR0135: no modeling turn queries table data, uploaded or external.
         var modeling = RuntimeContext.builder().userId("alice").build();
         modeling.put(DatasetScope.class, new DatasetScope("alice", List.of("a")));
         access.resolve(modeling); // project scaffolding runs its own CLI init once
@@ -282,12 +282,15 @@ class OfficialWrenToolkitTest {
                                         "SELECT COUNT(*), COUNT(DISTINCT customer_id) FROM"
                                                 + " customers")))
                 .startsWith("error:")
-                .contains("基础建模只使用采样资料与元数据", "customers");
-        assertThat(invocations).hasSize(before);
+                .contains("不查询任何表的数据", "上传表与外部数据源表相同");
         assertThat(
                         adapter.execute(
                                 modeling,
                                 List.of("query", "--sql", "SELECT COUNT(*) FROM uploads")))
+                .startsWith("error:")
+                .contains("不查询任何表的数据");
+        assertThat(invocations).hasSize(before);
+        assertThat(adapter.execute(modeling, List.of("dry-plan", "--sql", "SELECT 1 FROM uploads")))
                 .contains("退出码：0");
 
         // 2026-10-25: trial questions are only planned; no query runs in a question turn, on

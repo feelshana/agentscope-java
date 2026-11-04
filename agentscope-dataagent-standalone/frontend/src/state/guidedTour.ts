@@ -55,6 +55,15 @@ export function tourLocksDraftDrawer(tour: TourState | null, groupId: string): b
   return !!tour && !tour.paused && tour.groupId === groupId && MODEL_SPOTLIGHT_STEPS.has(tour.step);
 }
 
+/**
+ * While the tour walks this knowledge base up to its query-ready step, the tour itself takes the
+ * user to the query page; a manual "去问数" would skip that step and leave the tour behind.
+ */
+export function tourHoldsQuery(tour: TourState | null, groupId: string): boolean {
+  return !!tour && !tour.paused && tour.groupId === groupId
+    && (MODEL_SPOTLIGHT_STEPS.has(tour.step) || tour.step === 'modeling' || tour.step === 'preparing');
+}
+
 let state: TourState | null = null;
 let stateToken: string | null = null;
 let finished = false;
