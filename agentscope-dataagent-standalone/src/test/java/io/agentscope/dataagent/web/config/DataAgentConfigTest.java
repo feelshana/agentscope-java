@@ -238,6 +238,8 @@ class DataAgentConfigTest {
                         "不得对多行结果心算或手工汇总",
                         // 2026-11-03: a 7-row answer claimed only three days had data.
                         "只按返回行实际出现的值说明",
+                        "回答中不写 data/ 文件路径",
+                        "不用代码格式写表名、字段名或 SQL 表达式",
                         "limit 不得小于预期行数",
                         "GROUP BY 只放该主体",
                         "执行了查询就不能声称未重新统计");

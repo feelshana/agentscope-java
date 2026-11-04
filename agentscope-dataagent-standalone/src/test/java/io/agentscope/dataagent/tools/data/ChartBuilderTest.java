@@ -25,6 +25,29 @@ class ChartBuilderTest {
         assertThat(chart.chartType()).isEqualTo("line");
     }
 
+    /** 2026-11-04: a 184-day trend was cut to 20 points and titled with raw column names. */
+    @Test
+    @SuppressWarnings("unchecked")
+    void aLongTrendKeepsEveryDayWithAZoomBarAndTheQuestionAsTitle() {
+        List<List<String>> rows = new ArrayList<>();
+        java.time.LocalDate day = java.time.LocalDate.parse("2026-05-01");
+        for (int i = 0; i < 184; i++)
+            rows.add(List.of(day.plusDays(i).toString(), String.valueOf(40000 + i)));
+        var chart =
+                ChartBuilder.build(
+                        List.of("order_date", "net_revenue_total"),
+                        rows,
+                        "2026-05-01 至 2026-10-31 每天的净销售额");
+        assertThat(chart.chartType()).isEqualTo("line");
+        var xAxis = (java.util.Map<String, Object>) chart.option().get("xAxis");
+        assertThat((List<String>) xAxis.get("data")).hasSize(184).endsWith("2026-10-31");
+        assertThat(chart.option()).containsKey("dataZoom");
+        assertThat(chart.title()).doesNotContain("net_revenue_total").contains("每天的净销售额");
+        // A short trend stays as before: no zoom bar.
+        assertThat(ChartBuilder.build(List.of("日期", "访问次数"), daily(18), "9月每天访问报表的人数").option())
+                .doesNotContainKey("dataZoom");
+    }
+
     @Test
     void numericIdColumnsAreDimensionsNotMetrics() {
         List<List<String>> rows = new ArrayList<>();

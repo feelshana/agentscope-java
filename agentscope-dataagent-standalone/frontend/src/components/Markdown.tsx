@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import ReactMarkdown, { Components } from 'react-markdown';
+import ReactMarkdown, { Components, defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { fileUrl, downloadFile } from '../api/artifacts';
 import AttachmentImage from './AttachmentImage';
 import ErrorNotice from './ErrorNotice';
+import { CHART_REF } from './answerRefs';
 
 /**
  * Styles for rendered markdown inside chat bubbles. Kept light-themed on
@@ -102,12 +103,20 @@ const MD_STYLE = `
 .claw-md a { color: var(--da-primary); }
 .claw-md hr { border: none; border-top: 1px solid var(--da-border); margin: 1em 0; }
 .claw-md img { max-width: 100%; }
+.claw-md .claw-md-chart { margin: 14px 0; }
 `;
 
 /** Renders markdown text (GFM tables/strikethrough included) for assistant replies.
  *  Rewrites /workspace/ image paths to the binary API and supports click-to-zoom.
  *  fontSize overrides the default size for compact panels (e.g. the modeling drawer). */
-export default function Markdown({ children, fontSize }: { children: string; fontSize?: number | string }) {
+const keepChartUrls = (url: string) => (CHART_REF.test(url) ? url : defaultUrlTransform(url));
+
+export default function Markdown({ children, fontSize, charts }: {
+  children: string;
+  fontSize?: number | string;
+  /** Rendered charts by id; a cited id is drawn in place, an unknown one is left out. */
+  charts?: ReadonlyMap<string, React.ReactNode>;
+}) {
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
@@ -122,7 +131,16 @@ export default function Markdown({ children, fontSize }: { children: string; fon
         void downloadFile(attachment).catch(error => setDownloadError(error instanceof Error ? error.message : String(error)));
       } : undefined}>{children}</a>;
     },
+    // A paragraph holding only a chart becomes a block, so the chart is not nested in a <p>.
+    p: ({ node, children }) => {
+      const only = node?.children.length === 1 ? node.children[0] : undefined;
+      const src = only && only.type === 'element' && only.tagName === 'img' ? String(only.properties?.src ?? '') : '';
+      return CHART_REF.test(src) ? <div className="claw-md-chart">{children}</div> : <p>{children}</p>;
+    },
     img: ({ src, alt }) => {
+      const chart = CHART_REF.exec(src ?? '');
+      // Never show a broken "loading" image for a chart; it is drawn here or, if not yet ready, below.
+      if (chart) return <>{charts?.get(chart[1]) ?? null}</>;
       const url = fileUrl(src ?? '') ?? src ?? '';
       return (
         <AttachmentImage
@@ -146,7 +164,7 @@ export default function Markdown({ children, fontSize }: { children: string; fon
     <>
       <style>{MD_STYLE}</style>
       <div className="claw-md" style={fontSize != null ? { fontSize } : undefined}>
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{children}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components} urlTransform={keepChartUrls}>{children}</ReactMarkdown>
       </div>
       {downloadError && <ErrorNotice error={downloadError} context="file" />}
       {lightbox && createPortal(

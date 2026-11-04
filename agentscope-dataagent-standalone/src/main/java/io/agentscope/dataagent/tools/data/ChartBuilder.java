@@ -32,6 +32,14 @@ public final class ChartBuilder {
 
     public static final int MAX_SERIES_ITEMS = 20;
 
+    /** Time points a trend line keeps; beyond {@link #ZOOM_AFTER_POINTS} it gets a zoom bar. */
+    static final int MAX_TREND_POINTS = 400;
+
+    static final int ZOOM_AFTER_POINTS = 62;
+
+    /** A question up to this length becomes the chart title; "2026-05-01 至 2026-10-31 每天的净销售额" is 31. */
+    static final int TITLE_QUESTION_CHARS = 40;
+
     private static final Pattern DATE_PATTERN =
             Pattern.compile("^\\d{4}[-/]\\d{1,2}([-/]\\d{1,2})?");
     private static final Pattern HINT_TREND =
@@ -302,7 +310,7 @@ public final class ChartBuilder {
     /** Without a short question the title names the metric (spec096), not just the dimension. */
     private static String makeTitle(
             String question, String chartType, String dimCol, String metric) {
-        if ((question == null || question.isBlank() || question.length() > 30)
+        if ((question == null || question.isBlank() || question.length() > TITLE_QUESTION_CHARS)
                 && metric != null
                 && !metric.isBlank()) {
             return metric + "（按" + dimCol + "）";
@@ -313,7 +321,7 @@ public final class ChartBuilder {
         label.put("pie", "占比图");
         label.put("scatter", "散点图");
         label.put("hbar", "排行图");
-        if (question != null && !question.isBlank() && question.length() <= 30) {
+        if (question != null && !question.isBlank() && question.length() <= TITLE_QUESTION_CHARS) {
             return question.replaceAll("[?？。.]$", "");
         }
         return dimCol + " " + label.getOrDefault(chartType, "可视化");
@@ -528,8 +536,14 @@ public final class ChartBuilder {
                 "line".equals(chartType)
                         ? sortByDimAsc(rows, dimIdx)
                         : sortByValueDesc(rows, primaryNumIdx);
+        // A trend keeps every time point (2026-11-04: a 184-day trend was cut to its first 20 days,
+        // so the chart contradicted the answer); category charts still show the top items only.
         List<List<String>> limited =
-                orderedRows.subList(0, Math.min(MAX_SERIES_ITEMS, orderedRows.size()));
+                orderedRows.subList(
+                        0,
+                        Math.min(
+                                "line".equals(chartType) ? MAX_TREND_POINTS : MAX_SERIES_ITEMS,
+                                orderedRows.size()));
 
         List<String> categories = new ArrayList<>();
         for (List<String> r : limited) {
@@ -586,6 +600,8 @@ public final class ChartBuilder {
                         dimName,
                         String.join("、", seriesCols.stream().limit(2).map(columns::get).toList()));
         Map<String, Object> label = categoryLabel(categories, false);
+        // Dates of a long trend read better level; overlapping ones are hidden by hideOverlap.
+        if ("line".equals(chartType) && categories.size() > 24) label.put("rotate", 0);
         boolean hasLegend = seriesCols.size() > 1;
 
         Map<String, Object> xAxis = new LinkedHashMap<>();
@@ -617,6 +633,15 @@ public final class ChartBuilder {
         option.put("xAxis", xAxis);
         option.put("yAxis", yAxis);
         option.put("series", series);
+        if ("line".equals(chartType) && categories.size() > ZOOM_AFTER_POINTS) {
+            // Long trends stay readable: drag or scroll to zoom, the whole range is shown first.
+            option.put(
+                    "dataZoom",
+                    List.of(
+                            Map.of("type", "inside"),
+                            Map.of("type", "slider", "height", 18, "bottom", hasLegend ? 36 : 8)));
+            option.put("grid", gridBlock(true, true, false));
+        }
         return new BuiltChart(chartType, title, option);
     }
 

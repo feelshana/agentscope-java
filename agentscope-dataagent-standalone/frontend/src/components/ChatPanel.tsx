@@ -25,6 +25,8 @@ import Brand from './Brand';
 import OntologyGraphView from './OntologyGraphView';
 import type { OntologyGraphData } from '../api/ontology';
 import Markdown from './Markdown';
+import QueryDataDownloads from './QueryDataDownloads';
+import { citedChartIds, queryDataFiles } from './answerRefs';
 import PythonArtifactsPanel from './PythonArtifactsPanel';
 import AnswerFeedback from './AnswerFeedback';
 import CopyAnswerButton from './CopyAnswerButton';
@@ -230,9 +232,11 @@ function AnswerChart({ payload, tool, tools, onInspect }: {
 function splitToolRender(
   m: Message,
   onInspect?: (t: ToolInspectPayload) => void,
-): { trace: React.ReactNode[]; answer: React.ReactNode[] } {
+): { trace: React.ReactNode[]; answer: React.ReactNode[]; charts: Map<string, React.ReactNode> } {
   const trace: React.ReactNode[] = [];
   const answer: React.ReactNode[] = [];
+  // Charts by id: the answer text may cite them in place (![…](chart://id)).
+  const charts = new Map<string, React.ReactNode>();
   for (const node of m.trace) {
     if (node.kind === 'text') {
       trace.push(
@@ -265,7 +269,9 @@ function splitToolRender(
       </ErrorNotice>);
     }
     if (chartPayload) {
-      answer.push(<AnswerChart key={`${key}-chart`} payload={chartPayload} tool={t} tools={m.tools} onInspect={onInspect} />);
+      const chart = <AnswerChart key={`${key}-chart`} payload={chartPayload} tool={t} tools={m.tools} onInspect={onInspect} />;
+      if (chartPayload.chartId) charts.set(chartPayload.chartId, chart);
+      answer.push(chart);
     }
     if (ontologyPayload) {
       answer.push(
@@ -278,7 +284,7 @@ function splitToolRender(
     }
     if (!chartPayload && !ontologyPayload && spec) answer.push(<ChartBlock key={`${key}-spec`} spec={spec} onInspect={onInspect ? () => onInspect(t) : undefined} />);
   }
-  return { trace, answer };
+  return { trace, answer, charts };
 }
 
 function turnsToMessages(turns: TurnEntry[]): Message[] {
@@ -1281,9 +1287,14 @@ export default function ChatPanel({
           />
         )}
         {messages.map(m => {
-          const { trace, answer } = splitToolRender(m, onInspect);
+          const { trace, answer: visuals, charts } = splitToolRender(m, onInspect);
           const failure = m.failed ? splitFailedAnswer(m.text) : null;
           const answerText = failure ? failure.answer : m.text;
+          // A chart the text cites is drawn where it is cited, not again below the answer.
+          const cited = citedChartIds(answerText ?? '');
+          const inlineCharts = new Map([...charts].filter(([id]) => cited.has(id)));
+          const inline = new Set(inlineCharts.values());
+          const answer = visuals.filter(v => !inline.has(v));
           return (
             <div
               key={m.id}
@@ -1308,7 +1319,7 @@ export default function ChatPanel({
                   </TaskTrace>
                   <div className="da-answer">
                     {answerText
-                      ? <Markdown>{answerText}</Markdown>
+                      ? <Markdown charts={inlineCharts}>{answerText}</Markdown>
                       : m.pending
                         ? m.capacityMessage || m.preparingMessage
                           ? <div role="status" style={{ color: 'var(--da-text-muted)', fontSize: 14 }}>{m.capacityMessage || m.preparingMessage}</div>
@@ -1316,6 +1327,7 @@ export default function ChatPanel({
                         : null}
                     {failure && <ErrorNotice error={failure.error} context="chat" />}
                     {answer}
+                    {!m.pending && <QueryDataDownloads files={queryDataFiles(m.tools.map(t => t.result))} />}
                     {agentId === 'data-agent' && !m.pending && (() => {
                       // spec102: an analysis proposal renders as its card; other answers may get
                       // follow-up analyses chosen by a fixed rule on their last query result.
