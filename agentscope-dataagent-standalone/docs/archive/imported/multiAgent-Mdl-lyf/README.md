@@ -21,4 +21,4 @@
 
 上传提交没有单独新增 ADR/spec；实施约束及验收合并到当前 spec 067、ADR 0078 和系统文档。来源云演练/体验/发布记录是历史参考，当前发布使用根 pom.xml 与 README；不照搬来源不同的打包说明。
 
-2026-10-15 全范围核对后，档案包含 11 份 ADR、8 份 spec。另补入 production-readiness-review-20261009、frontend-ui-migration-review-20261009、experience-guide/results-20261010 与 previews/ 设计资料；这些不是当前运行页面。完整逐提交状态见 [集成核对表](../../source-branch-integration-audit-20261015.md)，当前文档事实源见 ADR 0079。
+2026-10-15 全范围核对后，档案包含 11 份 ADR、8 份 spec。另补入 production-readiness-review-20261009、frontend-ui-migration-review-20261009、experience-guide/results-20261010，供历史追溯。完整逐提交状态见 [集成核对表](../../source-branch-integration-audit-20261015.md)，当前文档事实源见 ADR 0079。

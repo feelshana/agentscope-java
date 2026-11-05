@@ -59,15 +59,15 @@ class SyntheticDemoMysqlTest {
                 var st = c.createStatement()) {
             try (var rs = st.executeQuery("SELECT COUNT(*), SUM(net_revenue) FROM demo_orders")) {
                 rs.next();
-                assertThat(rs.getInt(1)).isEqualTo(10000);
-                assertThat(rs.getBigDecimal(2)).isEqualByComparingTo("1992581.55");
+                assertThat(rs.getInt(1)).isEqualTo(1000);
+                assertThat(rs.getBigDecimal(2)).isEqualByComparingTo("202014.50");
             }
             try (var rs =
                     st.executeQuery(
                             "SELECT COUNT(*), COUNT(DISTINCT customer_name) FROM demo_customers")) {
                 rs.next();
-                assertThat(rs.getInt(1)).isEqualTo(200);
-                assertThat(rs.getInt(2)).isEqualTo(196);
+                assertThat(rs.getInt(1)).isEqualTo(20);
+                assertThat(rs.getInt(2)).isEqualTo(19);
             }
             assertThatThrownBy(() -> st.executeQuery("SELECT * FROM demo_data.legacy_sentinel"))
                     .isInstanceOf(SQLException.class);

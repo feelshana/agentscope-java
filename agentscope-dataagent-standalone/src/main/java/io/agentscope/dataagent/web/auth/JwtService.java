@@ -20,9 +20,15 @@ import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.List;
+import java.util.UUID;
 import javax.crypto.SecretKey;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -45,16 +51,18 @@ public class JwtService {
     private static final String DEV_DEFAULT_SECRET =
             "dataagent-default-dev-secret-change-in-production-32chars";
 
-    private final SecretKey signingKey;
-    private final long ttlMillis;
+    private static final Duration TOKEN_LIFETIME = Duration.ofHours(24);
 
-    @org.springframework.beans.factory.annotation.Autowired
-    public JwtService(
-            @Value("${dataagent.jwt.secret}") String secret,
-            @Value("${dataagent.jwt.ttl-seconds:1800}") long ttlSeconds) {
-        if (ttlSeconds <= 0 || ttlSeconds > 604800)
-            throw new IllegalArgumentException("JWT有效期需为1到604800秒");
-        ttlMillis = ttlSeconds * 1000;
+    private final SecretKey signingKey;
+    private final Clock clock;
+
+    @Autowired
+    public JwtService(@Value("${dataagent.jwt.secret}") String secret) {
+        this(secret, Clock.systemUTC());
+    }
+
+    JwtService(String secret, Clock clock) {
+        this.clock = clock;
         if (secret == null || secret.isBlank() || DEV_DEFAULT_SECRET.equals(secret)) {
             throw new IllegalStateException(
                     "JWT secret 未配置，请在 application.yml 中设置 dataagent.jwt.secret（>=32字符）");
@@ -71,13 +79,14 @@ public class JwtService {
      * Generates a signed JWT for the given user.
      */
     public String generate(String userId, String username, List<String> roles) {
-        long now = System.currentTimeMillis();
+        Instant now = clock.instant().truncatedTo(ChronoUnit.SECONDS);
         return Jwts.builder()
+                .id(UUID.randomUUID().toString())
                 .subject(userId)
                 .claim("username", username)
                 .claim("roles", roles)
-                .issuedAt(new Date(now))
-                .expiration(new Date(now + ttlMillis))
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(now.plus(TOKEN_LIFETIME)))
                 .signWith(signingKey)
                 .compact();
     }
@@ -88,7 +97,18 @@ public class JwtService {
      * @throws JwtException if the token is invalid or expired
      */
     public Claims parse(String token) {
-        return Jwts.parser().verifyWith(signingKey).build().parseSignedClaims(token).getPayload();
+        Date now = Date.from(clock.instant());
+        Claims claims =
+                Jwts.parser()
+                        .clock(() -> now)
+                        .verifyWith(signingKey)
+                        .build()
+                        .parseSignedClaims(token)
+                        .getPayload();
+        if (now.equals(claims.getExpiration())) {
+            throw new JwtException("Session has expired");
+        }
+        return claims;
     }
 
     /**

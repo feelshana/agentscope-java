@@ -109,8 +109,9 @@ public class SessionTranscriptWriter {
                             .setRuntimeContext(rc)
                             .setTranscriptStore(
                                     transcriptStore, new TranscriptRef(tenant, agentId, sessionId));
-            tree.load();
-            tree.syncFromRemote();
+            io.agentscope.core.util.CallTiming.run(rc, "completion.transcript.load", tree::load);
+            io.agentscope.core.util.CallTiming.run(
+                    rc, "completion.transcript.remote_read", tree::syncFromRemote);
 
             List<SessionEntry> existingEntries = new ArrayList<>(tree.getAllEntries());
             Set<String> existingIds =
@@ -140,9 +141,18 @@ public class SessionTranscriptWriter {
             }
 
             if (appended > 0) {
-                tree.flush();
-                workspaceManager.updateSessionIndex(
-                        rc, agentId, sessionId, "transcript updated (" + appended + " entries)");
+                io.agentscope.core.util.CallTiming.run(
+                        rc, "completion.transcript.local_append", tree::flush);
+                final int entryCount = appended;
+                io.agentscope.core.util.CallTiming.run(
+                        rc,
+                        "completion.transcript.index",
+                        () ->
+                                workspaceManager.updateSessionIndex(
+                                        rc,
+                                        agentId,
+                                        sessionId,
+                                        "transcript updated (" + entryCount + " entries)"));
             }
             log.debug(
                     "Transcript append agent={} session={} msgs={} newEntries={}",

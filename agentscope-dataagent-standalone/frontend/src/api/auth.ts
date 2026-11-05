@@ -15,7 +15,13 @@ export async function loadEntryOptions(): Promise<void> {
 export const AUTH_EXPIRED_EVENT = 'dataagent:auth-expired';
 export const SESSION_EXPIRED_MESSAGE = '登录状态已失效，请重新进入';
 
-/** Only the server's rejection of the current credential can end this browser session. */
+function expireToken(expected: string) {
+  if (getToken() !== expected) return;
+  clearToken();
+  window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+}
+
+/** Clear the browser session if a protected request rejects its current credential. */
 export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const request = input instanceof Request ? input : null;
   const url = new URL(request ? request.url : String(input), window.location.href);
@@ -26,15 +32,13 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     const prefixed = new URL(appPath(url.pathname) + url.search, url.origin);
     target = request ? new Request(prefixed, request) : prefixed;
   }
+  const ownApi = url.origin === window.location.origin
+    && (url.pathname.startsWith('/api/') || url.pathname.startsWith(appPath('/api/')));
   const response = await fetch(target, init);
-  if (response.status === 401 && url.origin === window.location.origin
-      && (url.pathname.startsWith('/api/') || url.pathname.startsWith(appPath('/api/')))
+  if (response.status === 401 && ownApi
       && !url.pathname.endsWith('/api/auth/login') && !url.pathname.endsWith('/api/auth/bi-login') && !url.pathname.endsWith('/api/auth/bi-account-login')) {
     const current = getToken();
-    if (current && credential === `Bearer ${current}`) {
-      clearToken();
-      window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
-    }
+    if (current && credential === `Bearer ${current}`) expireToken(current);
     throw new Error(SESSION_EXPIRED_MESSAGE);
   }
   return response;
@@ -107,6 +111,14 @@ export function tokenExpiresAt(token: string): number {
     const exp: unknown = JSON.parse(atob(text)).exp;
     return typeof exp === 'number' ? exp * 1000 : 0;
   } catch { return 0; }
+}
+
+/** Show the sign-in entry when the current credential reaches its signed deadline. */
+export function watchSessionExpiry(): () => void {
+  const token = getToken();
+  if (!token) return () => {};
+  const timer = setTimeout(() => expireToken(token), Math.max(0, tokenExpiresAt(token) - Date.now()));
+  return () => clearTimeout(timer);
 }
 
 /**

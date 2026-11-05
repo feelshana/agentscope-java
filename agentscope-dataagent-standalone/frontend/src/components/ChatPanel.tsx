@@ -28,6 +28,7 @@ import Markdown from './Markdown';
 import QueryDataDownloads from './QueryDataDownloads';
 import { citedChartIds, queryDataFiles } from './answerRefs';
 import PythonArtifactsPanel from './PythonArtifactsPanel';
+import { pythonImageResolver } from './PythonCodeBlock';
 import AnswerFeedback from './AnswerFeedback';
 import CopyAnswerButton from './CopyAnswerButton';
 import ErrorNotice from './ErrorNotice';
@@ -1319,7 +1320,10 @@ export default function ChatPanel({
                   </TaskTrace>
                   <div className="da-answer">
                     {answerText
-                      ? <Markdown charts={inlineCharts}>{answerText}</Markdown>
+                      ? <Markdown
+                          charts={inlineCharts}
+                          resolveImage={answerText.includes('![') ? pythonImageResolver(m.tools) : undefined}
+                        >{answerText}</Markdown>
                       : m.pending
                         ? m.capacityMessage || m.preparingMessage
                           ? <div role="status" style={{ color: 'var(--da-text-muted)', fontSize: 14 }}>{m.capacityMessage || m.preparingMessage}</div>

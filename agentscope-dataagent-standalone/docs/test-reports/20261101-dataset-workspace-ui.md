@@ -20,7 +20,7 @@
 - 脚本/中间日志位于本地忽略output/playwright/dataset-workspace-20261101；长期证据为本报告和assets。
 
 ## 视觉对照
-设计图[01-datasets-overview.png](../previews/dataset-workspace-20261101/01-datasets-overview.png)和[真实1663×946截图](assets/dataset-workspace-20261101/real-desktop-native.png)均使用view_image查看，另检查390窄屏和导入恢复状态。
+已查看[实际页面截图](assets/dataset-workspace-20261101/real-desktop-native.png)，另检查了 390px 窄屏和导入恢复状态。
 
 | 检查点 | 结果 |
 |---|---|

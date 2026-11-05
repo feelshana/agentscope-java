@@ -33,5 +33,3 @@
 ## 关联
 
 - [spec 044](../specs/044-knowledge-workspace-layout.md)
-- [第一版 HTML](../previews/knowledge-workspace-preview.html)
-- [第二版 HTML](../previews/knowledge-workspace-preview-refined.html)

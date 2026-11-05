@@ -9,6 +9,7 @@ import io.agentscope.core.middleware.ActingInput;
 import io.agentscope.core.middleware.AgentInput;
 import io.agentscope.core.middleware.MiddlewareBase;
 import io.agentscope.core.middleware.ModelCallInput;
+import io.agentscope.core.util.CallTiming;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -40,16 +41,36 @@ public final class ExecutionTimingMiddleware implements MiddlewareBase {
 
     public static void record(
             RuntimeContext ctx, String phase, String call, long start, String status) {
+        record(ctx, phase, call, start, status, Map.of());
+    }
+
+    private static void record(
+            RuntimeContext ctx,
+            String phase,
+            String call,
+            long start,
+            String status,
+            Map<String, Integer> counts) {
         try {
             Trace trace = ctx == null ? null : ctx.get(Trace.class);
             Map<String, Object> fields = new LinkedHashMap<>();
             fields.put("at", java.time.Instant.now().toString());
             fields.put("traceId", trace == null ? "" : trace.id());
             fields.put("sessionId", ctx == null ? "" : Objects.toString(ctx.getSessionId(), ""));
+            fields.put(
+                    "requestId",
+                    ctx == null
+                            ? ""
+                            : Objects.toString(
+                                    ctx.get(
+                                            io.agentscope.dataagent.web.toolbus.ToolEventBus
+                                                    .REQUEST_ID_CONTEXT_KEY),
+                                    ""));
             fields.put("phase", phase);
             fields.put("callId", call);
             fields.put("durationMs", (System.nanoTime() - start) / 1_000_000);
             fields.put("status", status);
+            if (!counts.isEmpty()) fields.put("counts", counts);
             if (trace != null) {
                 fields.put("modelCalls", trace.models().get());
                 fields.put("toolCalls", trace.tools().get());
@@ -75,6 +96,10 @@ public final class ExecutionTimingMiddleware implements MiddlewareBase {
                                     new AtomicInteger(),
                                     new AtomicInteger()));
                     long start = System.nanoTime();
+                    ctx.put(
+                            CallTiming.Observer.class,
+                            (phase, spanStart, status, counts) ->
+                                    record(ctx, phase, "", spanStart, status, counts));
                     record(ctx, "turn.start", "", start, "START");
                     return Flux.defer(() -> next.apply(input))
                             .doFinally(s -> record(ctx, "turn.end", "", start, s.name()));
@@ -93,13 +118,37 @@ public final class ExecutionTimingMiddleware implements MiddlewareBase {
                     String id = "model-" + (t == null ? 0 : t.models().incrementAndGet());
                     long start = System.nanoTime();
                     var first = new java.util.concurrent.atomic.AtomicBoolean();
+                    var lastOutput = new java.util.concurrent.atomic.AtomicLong();
                     record(ctx, "model.start", id, start, "START");
                     return next.apply(input)
                             .doOnNext(
                                     e -> {
-                                        if (e instanceof TextBlockDeltaEvent
-                                                && first.compareAndSet(false, true))
-                                            record(ctx, "model.first_output", id, start, "OUTPUT");
+                                        if (e instanceof TextBlockDeltaEvent) {
+                                            lastOutput.set(System.nanoTime());
+                                            if (first.compareAndSet(false, true))
+                                                record(
+                                                        ctx,
+                                                        "model.first_output",
+                                                        id,
+                                                        start,
+                                                        "OUTPUT");
+                                        }
+                                    })
+                            .doOnComplete(
+                                    () -> {
+                                        if (lastOutput.get() != 0)
+                                            record(
+                                                    ctx,
+                                                    "completion.model.tail",
+                                                    id,
+                                                    lastOutput.get(),
+                                                    "SUCCESS");
+                                        record(
+                                                ctx,
+                                                "completion.model.stream_end",
+                                                id,
+                                                start,
+                                                "SUCCESS");
                                     })
                             .doFinally(s -> record(ctx, "model.end", id, start, s.name()));
                 });

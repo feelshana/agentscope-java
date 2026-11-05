@@ -13,7 +13,6 @@ spring:
 
 dataagent:
   jwt:
-    ttl-seconds: 1800
     secret: ${DATAAGENT_JWT_SECRET}
   auth:
     password-login-enabled: false

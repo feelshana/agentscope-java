@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as auth from '../src/api/auth.ts';
 import { APP_BASE } from '../src/api/paths.ts';
 
-const originalGlobals = Object.fromEntries(['window', 'localStorage', 'sessionStorage', 'fetch']
+const originalGlobals = Object.fromEntries(['window', 'document', 'localStorage', 'sessionStorage', 'fetch']
   .map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
 afterEach(() => {
   for (const [key, descriptor] of Object.entries(originalGlobals)) {
@@ -169,4 +169,45 @@ test('login options use the deployment prefix and failed loads preserve the last
   globalThis.fetch = async () => { throw new TypeError('offline'); };
   await assert.rejects(auth.loadEntryOptions(), /offline/);
   assert.deepEqual(auth.getEntryOptions(), { passwordLoginEnabled: false, biLoginEnabled: true });
+});
+
+function fixtureToken(expiresAt, marker) {
+  return 'header.' + Buffer.from(JSON.stringify({ exp: expiresAt / 1000, marker }))
+    .toString('base64url') + '.signature';
+}
+
+test('a protected request near the deadline does not extend the fixed session', async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 });
+  const lifetime = 24 * 60 * 60 * 1000;
+  const original = fixtureToken(Date.now() + lifetime, 'original');
+  const expired = setup(original);
+  let requests = 0;
+  globalThis.fetch = async () => {
+    requests++;
+    return new Response('{}');
+  };
+  const stop = auth.watchSessionExpiry();
+  try {
+    t.mock.timers.tick(lifetime - 1000);
+    await auth.apiFetch('/api/sessions', { headers: { Authorization: `Bearer ${original}` } });
+    assert.equal(auth.getToken(), original);
+    assert.equal(expired(), 0);
+    t.mock.timers.tick(1000);
+    assert.equal(auth.getToken(), null);
+    assert.equal(expired(), 1);
+    assert.equal(requests, 1);
+  } finally { stop(); }
+});
+
+test('an old expiry timer cannot clear a new login', t => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 });
+  const expired = setup(fixtureToken(2000, 'original'));
+  const stop = auth.watchSessionExpiry();
+  try {
+    const replacement = fixtureToken(3000, 'new');
+    auth.saveToken(replacement);
+    t.mock.timers.tick(1000);
+    assert.equal(auth.getToken(), replacement);
+    assert.equal(expired(), 0);
+  } finally { stop(); }
 });

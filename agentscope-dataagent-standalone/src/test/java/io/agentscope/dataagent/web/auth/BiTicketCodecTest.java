@@ -124,10 +124,10 @@ class BiTicketCodecTest {
         var dev = new AuthSettings(new MockEnvironment());
         assertThat(dev.passwordLogin()).isTrue();
         assertThat(dev.biLogin()).isFalse();
-        var jwt = new JwtService("test-signing-key-with-at-least-32-bytes", 1800);
+        var jwt = new JwtService("test-signing-key-with-at-least-32-bytes");
         var claims = jwt.parse(jwt.generate("stable-id", "x", java.util.List.of("user")));
         assertThat(claims.getExpiration().getTime() - claims.getIssuedAt().getTime())
-                .isEqualTo(1800000);
+                .isEqualTo(86_400_000L);
         assertThat(claims.getSubject()).isEqualTo("stable-id");
     }
 
@@ -142,7 +142,7 @@ class BiTicketCodecTest {
         var controller =
                 new AuthController(
                         users,
-                        new JwtService("test-signing-key-with-at-least-32-bytes", 1800),
+                        new JwtService("test-signing-key-with-at-least-32-bytes"),
                         java.util.Optional.empty(),
                         new AuthSettings(new MockEnvironment()),
                         org.mockito.Mockito.mock(BiLoginService.class));

@@ -2,7 +2,7 @@
 
 ## 范围与基线
 
-用户认可[两页方案](../previews/style-harmony-20261101/README.md)后授权实施。起点liyufan_dev@d6ad3ba3，既有未提交内容仅上轮方案和共享记录。此次局部前端改造，无后端/API/数据库/权限边界调整，无新spec/ADR，不提交、推送、切分支或部署。
+用户认可知识库和数据集页面的设计方案后授权实施。起点liyufan_dev@d6ad3ba3，既有未提交内容仅上轮方案和共享记录。此次局部前端改造，无后端/API/数据库/权限边界调整，无新spec/ADR，不提交、推送、切分支或部署。
 
 实施AppShell侧栏、DatasetsPage卡片/列表、DatasetGroupPage和WorkspaceMenu可选文字触发器；共享主色在global.css与theme.ts的primary系列同步。原Logo不变，历史圆点不恢复。卡片未发布且有MANAGE时显示添加数据/进入建模；已发布提问仍由canQuery约束，删除中仍走原恢复分支。
 

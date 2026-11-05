@@ -210,7 +210,7 @@ java -jar target/agentscope-dataagent-*-exec.jar
 
 | 配置项 | 默认 | 说明 |
 |---|---|---|
-| `dataagent.jwt.secret` | 部署配置 | HS256 密钥至少 32 UTF-8 字节；所有 profile 都拒绝空值、开发占位值及短密钥。 |
+| `dataagent.jwt.secret` | 部署配置 | HS256 密钥至少 32 UTF-8 字节；所有 profile 都拒绝空值、开发占位值及短密钥。JWT 签发起固定有效 24 小时，到期重新认证。 |
 | `dataagent.workspace` | 为空时使用 JVM 工作目录 | 运行状态目录，与 `~/.agentscope/dataagent/agentscope.json` 分开；部署显式配置持久目录。 |
 | `dataagent.workspace-store.local.max-file-size-mb` | `10` | `RemoteFilesystem` 本地后端的单文件上限。 |
 | `dataagent.openai.api-key` | 部署配置 | OpenAI 兼容 API key（主模型）。环境变量：`DATAAGENT_OPENAI_API_KEY` 或 `OPENAI_API_KEY`。设置后优先于 DashScope。 |

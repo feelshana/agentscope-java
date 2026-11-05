@@ -1,5 +1,6 @@
 import { apiFetch, getToken } from './auth';
 import { ACTIVE_AGENT_ID } from './activeAgent';
+import { APP_BASE } from './paths';
 
 /** Only attach credentials to the two local file endpoints. */
 export function fileUrl(path: string): string | null {
@@ -7,10 +8,14 @@ export function fileUrl(path: string): string | null {
     return `/api/agents/${ACTIVE_AGENT_ID}/workspace/file/binary?path=${encodeURIComponent(path)}`;
   if (!path.startsWith('/') || path.startsWith('//')) return null;
   const url = new URL(path, window.location.origin);
-  if (!/^\/api\/artifacts\/[0-9a-f-]{36}\/content$/.test(url.pathname)
-      && !/^\/api\/agents\/[^/]+\/workspace\/file\/binary$/.test(url.pathname)) return null;
+  if (url.origin !== window.location.origin) return null;
+  const pathname = APP_BASE && url.pathname.startsWith(`${APP_BASE}/api/`)
+    ? url.pathname.slice(APP_BASE.length)
+    : url.pathname;
+  if (!/^\/api\/artifacts\/[0-9a-f-]{36}\/content$/.test(pathname)
+      && !/^\/api\/agents\/[^/]+\/workspace\/file\/binary$/.test(pathname)) return null;
   url.searchParams.delete('token');
-  return url.pathname + url.search;
+  return pathname + url.search;
 }
 
 export async function fetchFile(path: string, signal?: AbortSignal): Promise<Response> {

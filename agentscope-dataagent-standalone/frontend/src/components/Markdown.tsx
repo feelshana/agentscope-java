@@ -111,11 +111,12 @@ const MD_STYLE = `
  *  fontSize overrides the default size for compact panels (e.g. the modeling drawer). */
 const keepChartUrls = (url: string) => (CHART_REF.test(url) ? url : defaultUrlTransform(url));
 
-export default function Markdown({ children, fontSize, charts }: {
+export default function Markdown({ children, fontSize, charts, resolveImage }: {
   children: string;
   fontSize?: number | string;
   /** Rendered charts by id; a cited id is drawn in place, an unknown one is left out. */
   charts?: ReadonlyMap<string, React.ReactNode>;
+  resolveImage?: (src: string) => string | null;
 }) {
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
@@ -138,10 +139,11 @@ export default function Markdown({ children, fontSize, charts }: {
       return CHART_REF.test(src) ? <div className="claw-md-chart">{children}</div> : <p>{children}</p>;
     },
     img: ({ src, alt }) => {
-      const chart = CHART_REF.exec(src ?? '');
+      const reference = src ?? '';
+      const chart = CHART_REF.exec(reference);
       // Never show a broken "loading" image for a chart; it is drawn here or, if not yet ready, below.
       if (chart) return <>{charts?.get(chart[1]) ?? null}</>;
-      const url = fileUrl(src ?? '') ?? src ?? '';
+      const url = resolveImage?.(reference) ?? fileUrl(reference) ?? reference;
       return (
         <AttachmentImage
           src={url}

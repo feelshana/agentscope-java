@@ -25,7 +25,7 @@ try {
       base,
       mode: 'test',
       publicDir: false,
-      ssr: { noExternal: ['react', 'react-dom', 'prismjs'] },
+      ssr: { noExternal: true },
       logLevel: 'error',
       cacheDir: join(temporaryRoot, 'cache'),
       build: {

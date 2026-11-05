@@ -38,6 +38,7 @@ import org.springframework.test.context.TestPropertySource;
             "spring.jpa.hibernate.ddl-auto=create-drop",
             "spring.sql.init.mode=never",
             "dataagent.jwt.secret=test-http-signing-key-at-least-32-bytes",
+            "dataagent.jwt.ttl-seconds=1800",
             "dataagent.auth.bi.shared-key=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
         })
 class BiAuthHttpTest {
@@ -140,7 +141,12 @@ class BiAuthHttpTest {
         assertThat(logged.statusCode()).isEqualTo(200);
         var result = new com.fasterxml.jackson.databind.ObjectMapper().readTree(logged.body());
         assertThat(result.path("roles").toString()).isEqualTo("[\"user\"]");
-        assertThat(get("/api/auth/me", result.path("token").asText()).statusCode()).isEqualTo(200);
+        String loginToken = result.path("token").asText();
+        var claims = jwt.parse(loginToken);
+        assertThat(claims.getExpiration().getTime() - claims.getIssuedAt().getTime())
+                .isEqualTo(86_400_000L);
+        assertThat(result.path("expiresAt").asLong()).isEqualTo(claims.getExpiration().getTime());
+        assertThat(get("/api/auth/me", loginToken).statusCode()).isEqualTo(200);
         assertThat(post("/api/auth/bi-login", body).statusCode()).isEqualTo(401);
         assertThat(get("/api/auth/me", null).statusCode()).isEqualTo(401);
         var user = users.createUser("http-user", "http-user", "unused", List.of("user"));

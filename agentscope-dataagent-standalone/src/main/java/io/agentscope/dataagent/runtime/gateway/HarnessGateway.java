@@ -523,7 +523,21 @@ public final class HarnessGateway implements Gateway {
                             return ha.streamEvents(messages, runtimeContext);
                         })
                 .concatWith(
-                        Mono.fromRunnable(() -> flushHistory(sessionKey))
+                        Mono.fromRunnable(
+                                        () -> {
+                                            long historyStart = System.nanoTime();
+                                            try {
+                                                flushHistory(sessionKey);
+                                            } finally {
+                                                io.agentscope.dataagent.web.middleware
+                                                        .ExecutionTimingMiddleware.record(
+                                                        runtimeContext,
+                                                        "completion.history.projection",
+                                                        "",
+                                                        historyStart,
+                                                        "RETURNED");
+                                            }
+                                        })
                                 .subscribeOn(Schedulers.boundedElastic())
                                 .then(Mono.<AgentEvent>empty()))
                 .doOnNext(event -> notifyHistory(sessionKey))

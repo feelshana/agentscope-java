@@ -43,5 +43,3 @@
 - 令牌/用户停用、长会话投影、原件下载、覆盖上传/多 Sheet、前端按需加载等分别在总览或历史审查中记录；无需同时启动所有改造。
 
 详细规则：[权限 spec 041](specs/041-knowledge-base-sharing-and-bi-identity.md)。安装历史：[云演练记录](cloud-deployment-rehearsal-20261011.md)。早期上线审查和集群设计只作历史参考，不能作为当前未完成清单或单机操作指引。
-
-- 整体 UI 新版：[10 月 14 日交互原型](previews/dataagent-design-preview-20261014.html) / [设计说明与实施边界](previews/dataagent-design-notes-20261014.md)。先评审，确认后再实施；旧版保留。
