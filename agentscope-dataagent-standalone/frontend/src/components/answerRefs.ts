@@ -1,9 +1,11 @@
 /** The assistant cites a rendered chart as ![title](chart://<chartId>) where it belongs in the answer. */
-export const CHART_REF = /^chart:\/\/([A-Za-z0-9-]+)$/;
+// Any chart:// address counts, so an id the assistant made up (e.g. daily_paid_amount) is
+// recognised as a chart and left out, instead of becoming an image stuck on "图片加载中".
+export const CHART_REF = /^chart:\/\/([^\s/?#)]+)$/;
 
 /** Chart ids an answer cites inline, so the page does not show those charts again below it. */
 export function citedChartIds(text: string): Set<string> {
-  return new Set([...text.matchAll(/\]\(chart:\/\/([A-Za-z0-9-]+)\)/g)].map(m => m[1]));
+  return new Set([...text.matchAll(/\]\(chart:\/\/([^\s/?#)]+)\)/g)].map(m => m[1]));
 }
 
 /** spec101: one saved query result, as its tool result announces it. */

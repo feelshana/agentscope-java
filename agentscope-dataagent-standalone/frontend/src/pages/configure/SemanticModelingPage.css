@@ -379,3 +379,91 @@
 .qc-item-action { flex: none; align-self: center; padding: 2px 8px; border: 1px solid var(--da-primary-line); border-radius: 6px; background: none; font: inherit; font-size: 12px; color: var(--da-primary); cursor: pointer; white-space: nowrap; }
 .qc-item-action:hover:not(:disabled) { background: var(--da-primary-soft); }
 .qc-item-action:disabled { opacity: .5; cursor: default; }
+
+/* spec117 §3c: tab content | right panel (assistant or 待确认) | icon bar */
+.mw-body { gap: 0; }
+.mw-main { flex: 1; min-width: 0; min-height: 0; gap: 16px; }
+.mw-coach { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+.mw-dock { width: 440px; flex: none; min-height: 0; flex-direction: column; margin-left: 12px; background: var(--da-surface); border: 1px solid var(--da-border); border-radius: 14px; overflow: hidden; }
+.mw-dock-wide { flex: 1; width: auto; margin-left: 0; }
+.mw-dock-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--da-border); }
+.mw-dock-head strong { font-size: 15px; }
+.mw-dock > section { padding: 8px; }
+.mw-dock-body { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 16px; }
+.mw-rail { width: 56px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 4px 0 0 8px; }
+.mw-rail-btn { position: relative; width: 48px; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 7px 0 6px; border: 1px solid transparent; border-radius: 10px; background: none; color: var(--da-text-muted); font-size: 11px; cursor: pointer; }
+.mw-rail-btn:hover:not(:disabled) { background: var(--da-surface); border-color: var(--da-border); color: var(--da-text); }
+.mw-rail-btn.is-on { background: var(--da-primary-soft); color: var(--da-primary); border-color: transparent; }
+.mw-rail-btn:disabled { opacity: .45; cursor: default; }
+.mw-rail-ico { position: relative; width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font-size: 13px; font-weight: 600; background: var(--da-surface); border: 1px solid var(--da-border); color: inherit; }
+.mw-rail-btn.is-on .mw-rail-ico { border-color: var(--da-primary); }
+.mw-rail-ico-ai { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; border: 0; font-size: 11px; }
+.mw-rail-live { position: absolute; right: -3px; top: -3px; width: 9px; height: 9px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 0 2px var(--da-app-bg, #fff); animation: mw-pulse 1.4s ease-in-out infinite; }
+@keyframes mw-pulse { 50% { opacity: .35; } }
+.mw-rail-badge { position: absolute; top: 2px; right: 2px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 999px; background: var(--da-primary); color: #fff; font-size: 11px; font-style: normal; font-weight: 600; display: grid; place-items: center; }
+.mw-rail-badge-red { background: #e11d48; }
+@media (prefers-reduced-motion: reduce) { .mw-rail-live { animation: none; } }
+@media (max-width: 1100px) {
+  .mw-dock { position: fixed; right: 64px; top: 80px; bottom: 16px; z-index: 50; width: min(440px, calc(100vw - 80px)); box-shadow: var(--da-shadow-pop, 0 12px 32px rgba(0, 0, 0, .18)); }
+}
+
+/* spec117 §3c 待确认 */
+.pp { display: flex; flex-direction: column; gap: 18px; font-size: 14px; }
+.pp-sec h4 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 14px; }
+.pp-grow { flex: 1; }
+.pp-count { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: rgba(100, 116, 139, .14); font-size: 12px; display: inline-grid; place-items: center; }
+.pp-count-red { background: rgba(225, 29, 72, .12); color: #be123c; }
+.pp-link { border: 0; background: none; color: var(--da-primary); font-size: 12px; cursor: pointer; padding: 0; }
+.pp-hint { margin: 0 0 8px; font-size: 12px; color: var(--da-text-muted); line-height: 1.5; }
+.pp-empty { margin: 0; padding: 12px; border: 1px dashed var(--da-border); border-radius: 10px; color: var(--da-text-muted); font-size: 13px; }
+.pp-error { padding: 8px 10px; border-radius: 8px; background: rgba(225, 29, 72, .08); color: var(--da-danger); font-size: 12px; margin-bottom: 8px; }
+.pp-item { border: 1px solid rgba(225, 29, 72, .35); border-left: 3px solid #e11d48; border-radius: 10px; padding: 10px 12px; margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.pp-item-seen { border-color: var(--da-border); border-left-color: #94a3b8; opacity: .8; }
+.pp-item-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.pp-item-head strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; white-space: nowrap; background: rgba(100, 116, 139, .14); }
+.pp-tag-ADDED { background: rgba(22, 163, 74, .12); color: var(--da-success); }
+.pp-tag-REMOVED { background: rgba(225, 29, 72, .1); color: var(--da-danger); }
+.pp-basis { margin-left: auto; font-size: 11px; color: var(--da-text-muted); white-space: nowrap; }
+.pp-summary { font-size: 13px; color: var(--da-text-2, var(--da-text)); }
+.pp-text { font-size: 13px; line-height: 1.55; white-space: pre-wrap; background: var(--da-surface-sunken, rgba(100, 116, 139, .06)); border-radius: 6px; padding: 6px 8px; }
+.pp-diff { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 6px; align-items: baseline; font-size: 12px; }
+.pp-diff-name { font-family: var(--da-mono, monospace); color: var(--da-text-muted); }
+.pp-before { color: var(--da-text-muted); text-decoration: line-through; overflow-wrap: anywhere; }
+.pp-arrow { color: var(--da-text-muted); }
+.pp-after { overflow-wrap: anywhere; }
+.pp-actions { display: flex; gap: 6px; align-items: center; margin-top: 2px; }
+.pp-danger { color: var(--da-danger) !important; }
+
+/* spec117: 待确认 entries fold to one line */
+.pp-item { gap: 4px; padding: 8px 10px; }
+.pp-item-added { border-color: var(--da-primary-line, rgba(79, 70, 229, .35)); border-left-color: var(--da-primary); }
+.pp-toggle { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; border: 0; background: none; padding: 0; text-align: left; cursor: pointer; color: var(--da-text); font-size: 13px; }
+.pp-caret { width: 12px; color: var(--da-text-muted); flex: none; }
+.pp-line { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-mini { border: 1px solid var(--da-border); background: var(--da-surface); border-radius: 6px; padding: 2px 8px; font-size: 12px; cursor: pointer; color: var(--da-text); flex: none; }
+.pp-mini:hover { border-color: var(--da-primary); color: var(--da-primary); }
+.pp-body { display: flex; flex-direction: column; gap: 8px; padding: 6px 0 2px 20px; }
+.pp-fields { width: 100%; border-collapse: collapse; font-size: 12px; }
+.pp-fields th { text-align: left; font-weight: 500; color: var(--da-text-muted); padding: 4px 6px; border-bottom: 1px solid var(--da-border); }
+.pp-fields td { padding: 5px 6px; border-bottom: 1px solid var(--da-border); vertical-align: top; line-height: 1.5; }
+.pp-fields td:first-child { width: 34%; overflow-wrap: anywhere; }
+.pp-mono { font-family: var(--da-mono, monospace); font-size: 12px; color: var(--da-text-muted); }
+.pp-change { display: flex; flex-direction: column; gap: 2px; font-size: 12px; line-height: 1.5; padding: 4px 0; border-bottom: 1px dashed var(--da-border); }
+.pp-change .pp-before { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pp-clamp { font-size: 12px; line-height: 1.55; }
+.pp-clamp-label { color: var(--da-text-muted); margin-right: 6px; }
+.pp-clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* spec117: the draft bar belongs to the main column; the assistant panel spans the full height */
+.mw-main { flex-direction: column; }
+.mw-main > * { flex: 1; min-height: 0; }
+.mw-main > .draft-bar, .mw-main > [aria-label="草稿栏"] { flex: none; }
+.mw-dock { width: 480px; }
+.mw-dock > section { padding: 4px; }
+
+/* spec117: trial questions live in 问数优化 */
+.mw-coach-wrap { flex: 1; min-height: 0; min-width: 0; display: flex; gap: 12px; }
+.mw-coach-bar { display: flex; align-items: center; gap: 12px; justify-content: space-between; padding: 8px 12px; border: 1px solid var(--da-border); border-radius: 10px; background: var(--da-surface); }
+.mw-trial { width: 420px; flex: none; min-height: 0; display: flex; }
+.mw-trial > * { flex: 1; min-width: 0; }

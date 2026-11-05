@@ -8,7 +8,7 @@ ADR 记录"为什么这样做"。规则：
 
 ## 当前有效主线（按主题）
 
-[ADR0138](0138-bi-asset-field-expansion.md) 将报表/仪表盘扩为23/39列（七表95列），显式迁移保留原日志进度；其余沿用ADR0125/0126。
+[ADR0139](0139-bi-asset-field-expansion.md) 将报表/仪表盘扩为23/39列（七表95列），显式迁移保留原日志进度；其余沿用ADR0125/0126。
 
 正式双库/离线BI镜像补充：[ADR0125](0125-formal-database-and-bi-mirror.md)、[ADR0126](0126-bi-basic-fields-and-project-sync.md)；39列基础投影与既有项目索引分段，保持Wren-only与公共库权限边界。
 
@@ -177,3 +177,4 @@ ADR 记录"为什么这样做"。规则：
 | [0135](0135-modeling-queries-no-table-data.md) | 建模不查询任何表的数据，上传表的日期范围在上传时统计 | 已接受，2026-11-04。取代 ADR0103 上传表探查、ADR0104 第 1、2 条。 | |
 | [0136](0136-active-session-renewal.md) | DataAgent 用户活动续期 | 已被 ADR0137 取代。 | 0137 |
 | [0137](0137-fixed-login-token-lifetime.md) | DataAgent 登录凭证固定 24 小时 | 已接受，2026-11-05。到期重新认证。 | |
+| [0138](0138-metrics-as-cubes-and-wren-0-17.md) | 升级 Wren 0.17.1，指标由 Cube 承担，取值与同义词写入 MDL | 提议，暂缓（2026-11-05 用户决定先不做）。实施 spec118；接受后取代 ADR0106、ADR0107 中资产轮次的 Cube 部分。 |  |

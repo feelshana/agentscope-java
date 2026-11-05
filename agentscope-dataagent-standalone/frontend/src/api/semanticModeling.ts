@@ -358,6 +358,12 @@ export interface MdlColumnView {
   calculated: boolean;
   expression: string | null;
   primaryKey: boolean;
+  /** spec117 page-maintained properties; the engine ignores them. */
+  displayName?: string | null;
+  semanticType?: string | null;
+  synonyms?: string[];
+  values?: string[];
+  userDescribed?: boolean;
 }
 
 export interface MdlModelView {

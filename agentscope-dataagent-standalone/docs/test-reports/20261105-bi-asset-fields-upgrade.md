@@ -1,6 +1,6 @@
 # 2026-11-05 BI对象字段扩展：本地验收
 
-范围：ADR0138/spec117；bi_report 23列、bi_dashboard 39列，七表95列。
+范围：ADR0139/spec119；bi_report 23列、bi_dashboard 39列，七表95列。
 用户取消本轮SQL问答页UI，四个相关源码文件恢复HEAD并移除本轮新CSS；保留图片加载优化及另一任务待评审原型。
 用户明确不升级原知识库，将在线上另建知识库关联七表并建模，旧库自行删除；最终没有Java业务源码变更。
 
@@ -23,3 +23,5 @@ DDL隐式提交，不承诺跨表回滚；失败保持暂停重试，不重置ow
 先旧代码pause/status确认running=false，再更新发布，migrate、refresh-basics、resume；
 本次不重新init、不重装cron、不回扫日志、不备份。之后由用户新建知识库并建模。
 见[升级指引](../guides/66-bi-asset-fields-upgrade.md)。
+
+合并补验：纳入同事主线7dea60d5，保留其建模工作台；BI改编号ADR0139/spec119。合并后前端三路径各92项、DraftItem/MdlWorkspaceReader/BusinessDocument/BiSyncStatus/Docs共33项与生产前缀构建通过。已取消的SQL问答UI及Java字段刷新探索均未带入。

@@ -6,6 +6,7 @@ import io.agentscope.dataagent.dataset.DraftItemService;
 import io.agentscope.dataagent.dataset.DraftReviewService;
 import io.agentscope.dataagent.dataset.ModelingConfirmationService;
 import io.agentscope.dataagent.dataset.parser.DocxDescriptionExtractor;
+import io.agentscope.dataagent.tools.data.ModelingToolkitRegistrar;
 import io.agentscope.dataagent.web.share.AgentAccessGuard;
 import io.agentscope.dataagent.web.share.AgentAclService.Tier;
 import java.io.ByteArrayInputStream;
@@ -41,18 +42,38 @@ public class DraftReviewController {
     private final BusinessDocumentService documents;
     private final ModelingConfirmationService confirmations;
     private final AgentAccessGuard guard;
+    private final ModelingToolkitRegistrar modeling;
 
     public DraftReviewController(
             DraftReviewService review,
             DraftItemService items,
             BusinessDocumentService documents,
             ModelingConfirmationService confirmations,
-            AgentAccessGuard guard) {
+            AgentAccessGuard guard,
+            ModelingToolkitRegistrar modeling) {
         this.review = review;
         this.items = items;
         this.documents = documents;
         this.confirmations = confirmations;
         this.guard = guard;
+        this.modeling = modeling;
+    }
+
+    /**
+     * spec117: the agent's write gates (YAML parse, strict validate, build, dry-plan) on a YAML
+     * file's next content, run inside the workspace lock before a page edit is written.
+     */
+    private DraftItemService.Gate gate(String groupId) {
+        return (path, content) -> {
+            if (!path.endsWith(".yml") && !path.endsWith(".yaml")) return null;
+            var result =
+                    modeling.toolkit()
+                            .previewChange(
+                                    groupId,
+                                    "write_file",
+                                    Map.of("path", path, "content", content));
+            return result.ok() ? null : result.error();
+        };
     }
 
     public record Revert(String path) {}
@@ -71,13 +92,49 @@ public class DraftReviewController {
             String condition,
             String original,
             String text,
-            Boolean delete) {
+            Boolean delete,
+            // spec117 page edits
+            String column,
+            String columnType,
+            String displayName,
+            String semanticType,
+            List<String> synonyms,
+            String expression,
+            Boolean create,
+            String heading,
+            String leftModel,
+            String leftColumn,
+            String rightModel,
+            String rightColumn,
+            String description) {
         boolean deleting() {
             return Boolean.TRUE.equals(delete);
         }
     }
 
     public record Resolve(List<ModelingConfirmationService.Answer> answers) {}
+
+    /** A new bullet (no original), a move to another section, or an edit/delete in place. */
+    private List<DraftItemService.Item> bullet(String user, String groupId, ItemEdit body) {
+        boolean hasHeading = body.heading() != null && !body.heading().isBlank();
+        if (body.original() == null || body.original().isBlank()) {
+            if (!hasHeading) throw new DatasetException("请选择小节", 400);
+            items.appendBullet(user, groupId, body.path(), body.heading(), body.text());
+            return items.items(user, groupId, null);
+        }
+        if (hasHeading && !body.deleting()) {
+            String original = body.original();
+            if (body.text() != null
+                    && !body.text().isBlank()
+                    && !body.text().strip().equals(original)) {
+                items.updateBullet(user, groupId, body.path(), original, body.text());
+                original = body.text().strip();
+            }
+            return items.moveBullet(user, groupId, body.path(), original, body.heading());
+        }
+        return items.updateBullet(
+                user, groupId, body.path(), body.original(), body.deleting() ? null : body.text());
+    }
 
     @PostMapping("/draft/edit")
     public Mono<DraftReviewService.Review> edit(
@@ -88,7 +145,7 @@ public class DraftReviewController {
                 () -> {
                     if (body == null || body.path() == null || body.path().isBlank())
                         throw new DatasetException("请提供要修改的文件", 400);
-                    return review.edit(user, groupId, body.path(), body.content());
+                    return review.edit(user, groupId, body.path(), body.content(), gate(groupId));
                 });
     }
 
@@ -121,21 +178,43 @@ public class DraftReviewController {
                                     body.tableDescription(),
                                     body.columns());
                         }
+                        case "COLUMN" ->
+                                items.updateColumn(
+                                        user,
+                                        groupId,
+                                        body.model(),
+                                        new DraftItemService.ColumnChange(
+                                                body.column(),
+                                                body.columnType(),
+                                                body.description(),
+                                                body.displayName(),
+                                                body.semanticType(),
+                                                body.synonyms(),
+                                                body.expression(),
+                                                Boolean.TRUE.equals(body.create()),
+                                                body.deleting()),
+                                        gate(groupId));
                         case "RELATIONSHIP" ->
-                                items.updateRelationship(
-                                        user,
-                                        groupId,
-                                        body.name(),
-                                        body.joinType(),
-                                        body.condition(),
-                                        body.deleting());
-                        case "SEMANTIC", "NOTE" ->
-                                items.updateBullet(
-                                        user,
-                                        groupId,
-                                        body.path(),
-                                        body.original(),
-                                        body.deleting() ? null : body.text());
+                                body.name() == null || body.name().isBlank()
+                                        ? items.addRelationship(
+                                                user,
+                                                groupId,
+                                                body.leftModel(),
+                                                body.leftColumn(),
+                                                body.rightModel(),
+                                                body.rightColumn(),
+                                                body.joinType(),
+                                                body.description(),
+                                                gate(groupId))
+                                        : items.updateRelationship(
+                                                user,
+                                                groupId,
+                                                body.name(),
+                                                body.joinType(),
+                                                body.condition(),
+                                                body.description(),
+                                                body.deleting());
+                        case "SEMANTIC", "NOTE" -> bullet(user, groupId, body);
                         default -> throw new DatasetException("不支持的条目类型", 400);
                     };
                 });
@@ -190,6 +269,13 @@ public class DraftReviewController {
             @PathVariable String groupId, Authentication auth) {
         String user = (String) auth.getPrincipal();
         return blocking(user, () -> documents.list(user, groupId));
+    }
+
+    @GetMapping("/documents/{name}/content")
+    public Mono<BusinessDocumentService.DocumentText> documentContent(
+            @PathVariable String groupId, @PathVariable String name, Authentication auth) {
+        String user = (String) auth.getPrincipal();
+        return blocking(user, () -> documents.content(user, groupId, name));
     }
 
     @PutMapping(value = "/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

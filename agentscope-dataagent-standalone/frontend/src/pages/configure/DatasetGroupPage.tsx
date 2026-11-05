@@ -33,7 +33,7 @@ import {
 import { settleUploads } from '../../api/uploadQueue';
 import { getToken } from '../../api/auth';
 import { useQueryReadiness } from '../../components/useQueryReadiness';
-import { fetchSample, useOnboarding } from '../../api/onboarding';
+import { fetchSample, refreshOnboarding, useOnboarding } from '../../api/onboarding';
 import { tourActive, tourSignal } from '../../state/guidedTour';
 import './DatasetGroupPage.css';
 
@@ -80,6 +80,9 @@ export default function DatasetGroupPage() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [sampleBusy, setSampleBusy] = useState(false);
   const onboarding = useOnboarding();
+  // A status request that failed (e.g. while the service restarted) is never retried by itself; the
+  // upload dialog reloads it so the built-in samples, and the tour step pointing at them, appear.
+  useEffect(() => { if (uploadOpen && !onboarding?.samples.length) void refreshOnboarding(true); }, [uploadOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   const tourActiveNow = tourActive();
   const openUpload = () => { tourSignal('source-chosen', { groupId, route: 'upload' }); setUploadOpen(true); };
   const openAssociate = () => { tourSignal('source-chosen', { groupId, route: 'datasource' }); setAssociateOpen(true); };

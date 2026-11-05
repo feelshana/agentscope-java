@@ -4,7 +4,11 @@ import type { DraftItem } from '../../api/draftReview';
 import DraftItemsList from './DraftItemsList';
 
 /** spec092 §7: "AI 建模结果" under one reply — what that turn wrote and is still unpublished. */
-export default function TurnResultCard({ groupId, since, disabled }: { groupId: string; since: string; disabled?: boolean }) {
+export default function TurnResultCard({ groupId, since, disabled, onView }: {
+  groupId: string; since: string; disabled?: boolean;
+  /** spec117: opens 语义模型 with this turn's changes marked. */
+  onView?: (since: string) => void;
+}) {
   const [items, setItems] = useState<DraftItem[] | null>(null);
   const [expanded, setExpanded] = useState(true);
   const generation = useRef(0);
@@ -29,11 +33,15 @@ export default function TurnResultCard({ groupId, since, disabled }: { groupId: 
   const parts = [['模型', count('MODEL')], ['关系', count('RELATIONSHIP')], ['业务语义', count('SEMANTIC')], ['注意事项', count('NOTE')]]
     .filter(([, n]) => n).map(([label, n]) => `${label} ${n}`);
   return <section aria-label="AI建模结果" data-tour="turn-result" style={{ marginTop: 10, border: '1px solid var(--da-border)', borderRadius: 8, overflow: 'hidden' }}>
-    <button type="button" onClick={() => setExpanded(!expanded)}
-      style={{ width: '100%', background: 'var(--da-surface-sunken)', border: 'none', padding: '6px 10px', cursor: 'pointer', color: 'var(--da-text)', display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
-      <strong>AI建模结果</strong><span style={{ fontSize: 12, color: 'var(--da-text-muted)' }}>{parts.join(' · ')}</span>
-      <span style={{ flex: 1 }} /><span style={{ fontSize: 12, color: 'var(--da-text-muted)' }}>草稿 · 发布后生效 {expanded ? '▾' : '▸'}</span>
-    </button>
+    <div style={{ display: 'flex', alignItems: 'center', background: 'var(--da-surface-sunken)' }}>
+      <button type="button" onClick={() => setExpanded(!expanded)}
+        style={{ flex: 1, minWidth: 0, background: 'none', border: 'none', padding: '6px 10px', cursor: 'pointer', color: 'var(--da-text)', display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
+        <strong>AI建模结果</strong><span style={{ fontSize: 12, color: 'var(--da-text-muted)' }}>{parts.join(' · ')}</span>
+        <span style={{ flex: 1 }} /><span style={{ fontSize: 12, color: 'var(--da-text-muted)' }}>草稿 · 发布后生效 {expanded ? '▾' : '▸'}</span>
+      </button>
+      {onView && <button type="button" onClick={() => onView(since)} title="在关系图和业务规则中标出这一轮的改动"
+        style={{ border: 'none', borderLeft: '1px solid var(--da-border)', background: 'none', color: 'var(--da-primary)', padding: '6px 10px', cursor: 'pointer', fontSize: 12, whiteSpace: 'nowrap' }}>在语义模型中查看 →</button>}
+    </div>
     {expanded && <DraftItemsList groupId={groupId} items={items} disabled={disabled} limit={5} onChanged={() => void load()} />}
   </section>;
 }

@@ -7,7 +7,8 @@ import { ShellNavigationToggle } from './ShellNavigation';
 
 export function KnowledgeBreadcrumb({ items }: { items: { label: string; to?: string }[] }) {
   const navigate = useNavigate();
-  return <header className="kw-breadcrumb" aria-label="当前位置">
+  // A two-level trail (对话 > 知识库) only repeats the menu; embedded pages may drop it (AppShell.css).
+  return <header className={`kw-breadcrumb${items.length <= 2 ? ' kw-breadcrumb-shallow' : ''}`} aria-label="当前位置">
     <ShellNavigationToggle />
     {items.map((item, index) => <React.Fragment key={`${index}-${item.label}`}>
       {index > 0 && <Icon name="chevron" size="sm" />}

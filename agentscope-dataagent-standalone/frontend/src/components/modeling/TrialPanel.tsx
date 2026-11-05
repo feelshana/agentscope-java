@@ -104,7 +104,6 @@ export default function TrialPanel({ groupId, assistantIdle, onAsk, onWrong, onC
   useEffect(() => { reportExamples.current?.(examples, unconfirmed); }, [examples, unconfirmed]);
 
   const ask = (text: string) => {
-    tourSignal('trial-asked', { groupId });
     const question = text.trim();
     if (!question) return;
     const [id] = questionIds(1);

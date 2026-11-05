@@ -163,4 +163,193 @@ class DraftItemServiceTest {
                 DatasetException.class,
                 () -> service.updateModel("u1", "g1", "orders", "t", Map.of()));
     }
+
+    private String read(Path base, String path) throws IOException {
+        return Files.readString(base.resolve(path), StandardCharsets.UTF_8);
+    }
+
+    @Test
+    void columnPropertiesAreWrittenAndMarkedAsUserDescribed() throws Exception {
+        service.updateColumn(
+                "u1",
+                "g1",
+                "orders",
+                new DraftItemService.ColumnChange(
+                        "amount",
+                        null,
+                        "实付金额，单位元",
+                        null,
+                        "MEASURE",
+                        List.of("实付", " 付款金额 ", "实付"),
+                        null,
+                        false,
+                        false),
+                null);
+        String yaml = read(root, "models/orders/metadata.yml");
+        assertTrue(yaml.contains("description: 实付金额，单位元"), yaml);
+        assertTrue(yaml.contains("description_source: user"), yaml);
+        assertTrue(yaml.contains("semanticType: MEASURE"), yaml);
+        assertTrue(yaml.contains("- 实付") && yaml.contains("- 付款金额"), yaml);
+        // An empty value removes the property again.
+        service.updateColumn(
+                "u1",
+                "g1",
+                "orders",
+                new DraftItemService.ColumnChange(
+                        "amount", null, null, null, "", List.of(), null, false, false),
+                null);
+        yaml = read(root, "models/orders/metadata.yml");
+        assertFalse(yaml.contains("semanticType") || yaml.contains("synonyms"), yaml);
+        var orders = item(service.items("u1", "g1", null), "MODEL:orders");
+        assertTrue(orders.fields().stream().anyMatch(f -> f.name().equals("amount")));
+    }
+
+    @Test
+    void onlyCalculatedColumnsAreCreatedOrDeletedAndTheGateCanRefuse() throws Exception {
+        var create =
+                new DraftItemService.ColumnChange(
+                        "net", "DECIMAL", "净额", null, "MEASURE", null, "amount - 1", true, false);
+        assertEquals(
+                400,
+                assertThrows(
+                                DatasetException.class,
+                                () ->
+                                        service.updateColumn(
+                                                "u1",
+                                                "g1",
+                                                "orders",
+                                                create,
+                                                (path, content) -> "expression error"))
+                        .status());
+        assertFalse(
+                read(root, "models/orders/metadata.yml").contains("net"),
+                "a refused write leaves the file unchanged");
+        service.updateColumn("u1", "g1", "orders", create, (path, content) -> null);
+        String yaml = read(root, "models/orders/metadata.yml");
+        assertTrue(
+                yaml.contains("is_calculated: true") && yaml.contains("expression: amount - 1"),
+                yaml);
+        assertEquals(
+                409,
+                assertThrows(
+                                DatasetException.class,
+                                () -> service.updateColumn("u1", "g1", "orders", create, null))
+                        .status());
+        var deletePlain =
+                new DraftItemService.ColumnChange(
+                        "status", null, null, null, null, null, null, false, true);
+        assertThrows(
+                DatasetException.class,
+                () -> service.updateColumn("u1", "g1", "orders", deletePlain, null));
+        var expressionOnPlain =
+                new DraftItemService.ColumnChange(
+                        "status", null, null, null, null, null, "1", false, false);
+        assertThrows(
+                DatasetException.class,
+                () -> service.updateColumn("u1", "g1", "orders", expressionOnPlain, null));
+        service.updateColumn(
+                "u1",
+                "g1",
+                "orders",
+                new DraftItemService.ColumnChange(
+                        "net", null, null, null, null, null, null, false, true),
+                null);
+        assertFalse(read(root, "models/orders/metadata.yml").contains("net"));
+        var badRole =
+                new DraftItemService.ColumnChange(
+                        "amount", null, null, null, "SECRET", null, null, false, false);
+        assertThrows(
+                DatasetException.class,
+                () -> service.updateColumn("u1", "g1", "orders", badRole, null));
+    }
+
+    @Test
+    void relationshipsAreAddedBetweenExistingColumns() throws Exception {
+        write(
+                root,
+                "models/users/metadata.yml",
+                "name: users\ncolumns:\n- name: id\n  type: VARCHAR\n");
+        write(
+                root,
+                "models/orders/metadata.yml",
+                "name: orders\ncolumns:\n- name: user_id\n  type: VARCHAR\n");
+        service.addRelationship(
+                "u1", "g1", "orders", "user_id", "users", "id", "MANY_TO_ONE", "每单一个用户", null);
+        String yaml = read(root, "relationships.yml");
+        assertTrue(yaml.contains("name: orders_users_2"), yaml);
+        assertTrue(yaml.contains("condition: orders.user_id = users.id"), yaml);
+        assertTrue(yaml.contains("description: 每单一个用户"), yaml);
+        assertThrows(
+                DatasetException.class,
+                () ->
+                        service.addRelationship(
+                                "u1", "g1", "orders", "nope", "users", "id", null, null, null));
+        assertThrows(
+                DatasetException.class,
+                () ->
+                        service.addRelationship(
+                                "u1", "g1", "orders", "user_id", "users", "id", "CROSS", null,
+                                null));
+        service.updateRelationship("u1", "g1", "orders_users_2", "ONE_TO_ONE", null, "一对一", false);
+        yaml = read(root, "relationships.yml");
+        assertTrue(
+                yaml.contains("join_type: ONE_TO_ONE") && yaml.contains("description: 一对一"), yaml);
+    }
+
+    @Test
+    void aBulletMovesToAnotherSectionOfTheSameFile() throws Exception {
+        write(
+                root,
+                "knowledge/rules/general.md",
+                "# 规则\n\n## Default filters\n\n- 排除测试订单\n\n## 区域划分\n\n- 华东含上海\n  和江苏\n");
+        service.moveBullet(
+                "u1", "g1", "knowledge/rules/general.md", "华东含上海\n和江苏", "Naming conventions");
+        String md = read(root, "knowledge/rules/general.md");
+        assertFalse(
+                md.substring(md.indexOf("## 区域划分"), md.indexOf("## Naming")).contains("华东"), md);
+        assertTrue(md.contains("## Naming conventions\n\n- 华东含上海\n  和江苏"), md);
+        service.appendBullet(
+                "u1", "g1", "knowledge/rules/general.md", "Default filters", "排除已取消订单");
+        md = read(root, "knowledge/rules/general.md");
+        assertTrue(md.contains("- 排除测试订单\n- 排除已取消订单"), md);
+        assertThrows(
+                DatasetException.class,
+                () ->
+                        service.moveBullet(
+                                "u1",
+                                "g1",
+                                "knowledge/rules/general.md",
+                                "不存在",
+                                "Naming conventions"));
+    }
+
+    @Test
+    void pageEditsNeedManageAndAreRecheckedInsideTheLock() throws Exception {
+        var workspace =
+                new MdlWorkspaceService(
+                        new WrenProperties("wren", home.toString(), "dataagent", "mysql", 30),
+                        (path, timeout, args) -> new WrenCli.Result(0, ""));
+        DatasetGroupService groups = mock(DatasetGroupService.class);
+        var guarded = new DraftItemService(groups, workspace, activity);
+        var change =
+                new DraftItemService.ColumnChange(
+                        "amount", null, "别人改的", null, null, null, null, false, false);
+        String before = read(root, "models/orders/metadata.yml");
+        org.mockito.Mockito.when(groups.getGroup("u2", "g1"))
+                .thenThrow(new DatasetException("无权管理该知识库", 403));
+        assertEquals(
+                403,
+                assertThrows(
+                                DatasetException.class,
+                                () -> guarded.updateColumn("u2", "g1", "orders", change, null))
+                        .status());
+        // Allowed when queued, revoked by the time the lock is held.
+        org.mockito.Mockito.when(groups.getGroup("u3", "g1"))
+                .thenReturn(null)
+                .thenThrow(new DatasetException("无权管理该知识库", 403));
+        assertThrows(
+                DatasetException.class,
+                () -> guarded.updateColumn("u3", "g1", "orders", change, null));
+        assertEquals(before, read(root, "models/orders/metadata.yml"));
+    }
 }

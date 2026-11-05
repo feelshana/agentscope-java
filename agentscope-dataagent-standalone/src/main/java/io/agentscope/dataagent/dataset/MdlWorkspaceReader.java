@@ -76,7 +76,36 @@ public class MdlWorkspaceReader {
             String relationship,
             boolean calculated,
             String expression,
-            boolean primaryKey) {}
+            boolean primaryKey,
+            String displayName,
+            String semanticType,
+            List<String> synonyms,
+            List<String> values,
+            boolean userDescribed) {
+        /** A column without page-maintained properties. */
+        public WorkspaceColumn(
+                String name,
+                String type,
+                String description,
+                String relationship,
+                boolean calculated,
+                String expression,
+                boolean primaryKey) {
+            this(
+                    name,
+                    type,
+                    description,
+                    relationship,
+                    calculated,
+                    expression,
+                    primaryKey,
+                    null,
+                    null,
+                    List.of(),
+                    List.of(),
+                    false);
+        }
+    }
 
     /**
      * One logical model. A derived (ref_sql) model has no {@code table_reference}: {@code
@@ -374,7 +403,12 @@ public class MdlWorkspaceReader {
                                 Boolean.TRUE.equals(col.get("is_calculated")),
                                 text(col.get("expression"), null),
                                 cname.equals(primaryKey)
-                                        || Boolean.TRUE.equals(col.get("is_primary_key"))));
+                                        || Boolean.TRUE.equals(col.get("is_primary_key")),
+                                property(col, "displayName"),
+                                property(col, "semanticType"),
+                                propertyList(col, "synonyms"),
+                                propertyList(col, "values"),
+                                "user".equals(property(col, "description_source"))));
             }
         }
         return new WorkspaceModel(
@@ -482,6 +516,28 @@ public class MdlWorkspaceReader {
     private static String tableRole(Map<String, Object> owner) {
         Map<String, Object> props = asMap(owner.get("properties"));
         return props == null ? null : text(props.get("tableRole"), null);
+    }
+
+    /** One scalar of {@code properties}, or null (spec117 page-maintained properties). */
+    private static String property(Map<String, Object> owner, String key) {
+        Map<String, Object> props = asMap(owner.get("properties"));
+        return props == null ? null : text(props.get(key), null);
+    }
+
+    /** A string list of {@code properties}; a scalar counts as a one-item list. */
+    private static List<String> propertyList(Map<String, Object> owner, String key) {
+        Map<String, Object> props = asMap(owner.get("properties"));
+        Object value = props == null ? null : props.get(key);
+        List<String> out = new ArrayList<>();
+        if (value instanceof List<?> list) {
+            for (Object item : list) {
+                String t = text(item, "");
+                if (!t.isBlank()) out.add(t);
+            }
+        } else if (value != null && !text(value, "").isBlank()) {
+            out.add(text(value, ""));
+        }
+        return out;
     }
 
     private static String propertiesDescription(Map<String, Object> owner) {
