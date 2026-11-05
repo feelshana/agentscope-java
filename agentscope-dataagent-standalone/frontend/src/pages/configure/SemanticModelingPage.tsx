@@ -1,4 +1,4 @@
-import { retryTrialQuestion, tourSignal, useTour } from '../../state/guidedTour';
+import { retryTrialQuestion, tourHoldsQuery, tourSignal, useTour } from '../../state/guidedTour';
 import { FactQueryWindowSettings } from '../../components/FactQueryWindowSettings';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -89,6 +89,9 @@ const remodelLabel = (c: FieldAdjustment) => {
 type Request = { id: number; text: string; purpose?: TurnPurpose; documents?: string[]; label?: string };
 
 /** spec106: managers get the workbench; a QUERY user gets the published version read-only. */
+/** The guided tour takes the user to the query page itself once querying is ready. */
+const TOUR_QUERY_HINT = '引导会在问数准备好后带你去问数';
+
 export default function SemanticModelingPage() {
   const { groupId = '' } = useParams();
   const [params] = useSearchParams();
@@ -241,7 +244,9 @@ function ModelingWorkbench() {
   }, [assistantState, head, groupId]);
   // Open questions are settled before trying the model. The wait outlasts the moment an answered
   // request has left the queue but its run has not started, which also reads as idle.
-  const tourStep = useTour()?.step;
+  const tour = useTour();
+  const tourStep = tour?.step;
+  const queryHeld = tourHoldsQuery(tour, groupId);
   useEffect(() => {
     if (tourStep !== 'confirm' || !idle || !workflow || confirmations.length > 0) return;
     const timer = window.setTimeout(() => tourSignal('confirm-done', { groupId }), 2000);
@@ -342,7 +347,8 @@ function ModelingWorkbench() {
         <button className="da-btn da-btn-sm" onClick={() => navigate(`/configure/datasets/${groupId}`)}>知识库</button>
         {tab === 'modeling' && windowReady && <button data-tour="trial-open" className={`da-btn da-btn-sm ${trialOpen ? 'da-btn-primary' : ''}`} onClick={() => setTrialOpen(!trialOpen)}>
           试问{examples ? ` · ${examples}` : ''}</button>}
-        {toQuery && <button className="da-btn da-btn-primary da-btn-sm" disabled={!!preparing} title={preparing ? `问数准备中（${preparing}），约半分钟后可用` : undefined}
+        {toQuery && <button className="da-btn da-btn-primary da-btn-sm" disabled={!!preparing || queryHeld}
+          title={queryHeld ? TOUR_QUERY_HINT : preparing ? `问数准备中（${preparing}），约半分钟后可用` : undefined}
           onClick={toQuery}>{preparing ? '问数准备中…' : '去问数 →'}</button>}
       </div>
     </header>
@@ -417,7 +423,7 @@ function ModelingWorkbench() {
               {confirmations.length > 0 ? <div ref={confirmAnchor} data-tour="confirm-cards">
               <ConfirmationCards key={confirmations.map(c => c.id).join(',')} questions={confirmations} onSubmit={answers => void answered(answers)} />
             </div> : <NextStepCard groupId={groupId} summary={draftSummary} unconfirmedTrials={unconfirmedTrials} nextVersion={(workflow?.publishedVersion ?? 0) + 1}
-              onTrial={() => setTrialOpen(true)} onPublish={() => setPublishSignal(n => n + 1)} onQuery={toQuery} />}</>} /> : <div className="da-card">事实表时间配置完成后，建模助手会在此继续。</div>}</div>
+              onTrial={() => setTrialOpen(true)} onPublish={() => setPublishSignal(n => n + 1)} onQuery={toQuery} queryHeldHint={queryHeld ? TOUR_QUERY_HINT : undefined} />}</>} /> : <div className="da-card">事实表时间配置完成后，建模助手会在此继续。</div>}</div>
           {windowReady && <div className="modeling-trial-column" style={{ flex: '0 0 380px', minHeight: 0, display: trialOpen ? 'flex' : 'none' }}>
             <TrialPanel groupId={groupId} assistantIdle={idle} open={trialOpen} onClose={() => setTrialOpen(false)} onExamples={(count, unconfirmed) => { setExamples(count); setUnconfirmedTrials(unconfirmed); }}
               onAsk={text => request(text, 'question')} onWrong={text => request(text, 'question')} />

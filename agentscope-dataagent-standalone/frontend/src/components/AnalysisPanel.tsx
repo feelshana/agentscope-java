@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react';
 import { ANALYSIS_NAMES } from '../api/chat';
 import type { AnalysisMethod } from '../api/chat';
 import Icon from './Icon';
+import './AnalysisPanel.css';
 
 /** spec102: analysis menu, parameter card and follow-up buttons of the query page. */
 
@@ -54,7 +55,7 @@ export function AnalysisMenu({ value, onChange, disabledReason, disabled }: {
     <div ref={root} style={{ position: 'relative', display: 'inline-flex' }}
       onKeyDown={e => { if (e.key === 'Escape') setOpen(false); }}>
       {chosen ? (
-        <span style={{ ...trigger, cursor: 'default', borderColor: 'var(--da-primary)', background: 'var(--da-primary-soft)', color: 'var(--da-primary-strong)', paddingRight: 4 }}>
+        <span style={{ ...trigger, cursor: 'default', borderColor: 'var(--da-primary)', background: 'var(--da-primary-soft)', color: 'var(--da-primary)', paddingRight: 4 }}>
           <button type="button" disabled={disabled} onClick={() => setOpen(o => !o)} aria-haspopup="menu" aria-expanded={open}
             style={{ border: 'none', background: 'none', color: 'inherit', font: 'inherit', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, padding: 0 }}>
             <Icon name="chart" size="sm" />{ANALYSIS_NAMES[chosen]}
@@ -114,12 +115,17 @@ function parseProposal(input?: string): Proposal | null {
   }
 }
 
-const field: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 };
-const label: CSSProperties = { fontSize: 13, fontWeight: 600, color: 'var(--da-text)' };
-const control: CSSProperties = {
-  height: 40, border: '1px solid var(--da-border)', borderRadius: 8, padding: '0 10px',
-  fontSize: 14, background: 'var(--da-surface)', color: 'var(--da-text)', minWidth: 0,
-};
+/** "2026-08-01 至 2026-10-31" → 92 (inclusive); null when the text is not a date range. */
+export function periodDays(text: string): number | null {
+  const m = text.match(/(\d{4}-\d{2}-\d{2})\s*(?:至|到|~|-|—)\s*(\d{4}-\d{2}-\d{2})/);
+  if (!m) return null;
+  const from = Date.parse(`${m[1]}T00:00:00Z`);
+  const to = Date.parse(`${m[2]}T00:00:00Z`);
+  if (Number.isNaN(from) || Number.isNaN(to) || to < from) return null;
+  return Math.round((to - from) / 86400000) + 1;
+}
+
+const ICONS: Record<AnalysisMethod, 'chart' | 'warn' | 'arrowUp'> = { attribution: 'chart', anomaly: 'warn', forecast: 'arrowUp' };
 
 /**
  * The editable parameter card of an analysis turn, rendered from the assistant's propose_analysis
@@ -164,69 +170,99 @@ export function AnalysisParamsCard({ input, disabled, onStart, onCancel }: {
   const toggleDim = (d: string) => setDims(prev => prev.includes(d) ? prev.filter(x => x !== d) : prev.length >= 4 ? prev : [...prev, d]);
   const toggleFilter = (f: string) => setFilters(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
   const grains = method === 'anomaly' ? [['day', '按天'], ['hour', '按小时']] : [['day', '按天'], ['week', '按周'], ['month', '按月']];
+  const attribution = method === 'attribution';
+  const days = (text: string) => { const n = periodDays(text); return n ? `共 ${n} 天` : ''; };
+  let step = 0;
+  const head = (title: string, aside?: string) => <div className="ap-section-head">
+    <span className="ap-step">{++step}</span>{title}{aside && <span className="ap-aside">{aside}</span>}
+  </div>;
 
   return (
-    <section aria-label="确认分析参数" style={{ border: '1px solid var(--da-border)', borderRadius: 12, overflow: 'hidden', background: 'var(--da-surface)', marginTop: 12 }}>
-      <header style={{ padding: '14px 18px', borderBottom: '1px solid var(--da-border-soft)', display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 10 }}>
-        <strong style={{ fontSize: 15 }}>确认分析参数 · {ANALYSIS_NAMES[method]}</strong>
-        <span style={{ fontSize: 12, color: 'var(--da-text-muted)' }}>已根据问题和语义模型预填，可修改后开始</span>
+    <section aria-label="确认分析参数" className="ap-card">
+      <header className="ap-head">
+        <span className="ap-badge" aria-hidden="true"><Icon name={ICONS[method]} size="sm" /></span>
+        <div className="ap-title">
+          <strong>{ANALYSIS_NAMES[method]} · 确认分析参数</strong>
+          <span>已根据问题和语义模型预填，确认或修改后开始分析</span>
+        </div>
+        <span className={`ap-state ${started ? 'ap-state-done' : ''}`}>{started ? '已提交' : '待确认'}</span>
       </header>
-      <fieldset disabled={locked} style={{ border: 'none', margin: 0, padding: '16px 18px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px 20px' }}>
-        <label style={field}><span style={label}>分析指标</span>
-          <input style={control} value={metric} onChange={e => setMetric(e.target.value)} />
-          {proposal?.metric_note && <span style={{ fontSize: 12, color: 'var(--da-text-muted)' }}>{proposal.metric_note}</span>}
-        </label>
-        <label style={field}><span style={label}>{method === 'attribution' ? '当前期' : '时间范围'}</span>
-          <input style={control} value={current} onChange={e => setCurrent(e.target.value)} placeholder="YYYY-MM-DD 至 YYYY-MM-DD" />
-        </label>
-        {method === 'attribution' && <>
-          <label style={field}><span style={label}>对比期</span>
-            <input style={control} value={base} onChange={e => setBase(e.target.value)} placeholder="YYYY-MM-DD 至 YYYY-MM-DD" />
-          </label>
-          <label style={field}><span style={label}>下钻层级</span>
-            <select style={control} value={depth} onChange={e => setDepth(Number(e.target.value))}>
-              <option value={1}>1 层（推荐）</option><option value={2}>2 层</option>
-            </select>
-          </label>
-          <div style={{ ...field, gridColumn: '1 / -1' }}>
-            <span style={label}>归因维度（最多 4 个）</span>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {candidates.map(d => (
-                <label key={d} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, padding: '6px 10px', borderRadius: 8, border: `1px solid ${dims.includes(d) ? 'var(--da-primary)' : 'var(--da-border)'}` }}>
-                  <input type="checkbox" checked={dims.includes(d)} onChange={() => toggleDim(d)} /> {d}
-                </label>
-              ))}
-              {candidates.length === 0 && <span style={{ fontSize: 13, color: 'var(--da-text-muted)' }}>助手没有提供候选维度，请取消后在问题中说明按什么维度分析</span>}
-            </div>
+      <fieldset disabled={locked} className="ap-body">
+        <div className="ap-section">
+          {head('分析哪个指标')}
+          <input className="ap-input" aria-label="分析指标" value={metric} onChange={e => setMetric(e.target.value)} title={metric} />
+          {proposal?.metric_note && <div className="ap-note"><Icon name="info" size="sm" />{proposal.metric_note}</div>}
+        </div>
+
+        {attribution ? <div className="ap-section">
+          {head('比较哪两段时间')}
+          <div className="ap-periods">
+            <label className="ap-period ap-period-current">
+              <span className="ap-period-label"><b>当前期</b>{days(current)}</span>
+              <input className="ap-input" value={current} onChange={e => setCurrent(e.target.value)} placeholder="YYYY-MM-DD 至 YYYY-MM-DD" />
+            </label>
+            <span className="ap-vs">对比</span>
+            <label className="ap-period">
+              <span className="ap-period-label"><b>对比期</b>{days(base)}</span>
+              <input className="ap-input" value={base} onChange={e => setBase(e.target.value)} placeholder="YYYY-MM-DD 至 YYYY-MM-DD" />
+            </label>
           </div>
-        </>}
-        {method !== 'attribution' && (
-          <label style={field}><span style={label}>时间粒度</span>
-            <select style={control} value={granularity} onChange={e => setGranularity(e.target.value)}>
-              {grains.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
-            </select>
-          </label>
-        )}
-        {method === 'forecast' && (
-          <label style={field}><span style={label}>预测期数</span>
-            <input style={control} type="number" min={1} max={60} value={horizon} onChange={e => setHorizon(Math.max(1, Math.min(60, Number(e.target.value) || 1)))} />
-          </label>
-        )}
-        {(proposal?.filters?.length ?? 0) > 0 && (
-          <div style={{ ...field, gridColumn: '1 / -1', background: 'var(--da-surface-muted)', borderRadius: 8, padding: '10px 12px' }}>
-            <span style={label}>默认过滤（来自知识库业务规则）</span>
+        </div> : <div className="ap-section">
+          {head('分析哪段时间')}
+          <div className="ap-grid">
+            <label className="ap-field">时间范围{days(current) && `（${days(current)}）`}
+              <input className="ap-input" value={current} onChange={e => setCurrent(e.target.value)} placeholder="YYYY-MM-DD 至 YYYY-MM-DD" />
+            </label>
+            <label className="ap-field">时间粒度
+              <select className="ap-input" value={granularity} onChange={e => setGranularity(e.target.value)}>
+                {grains.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+              </select>
+            </label>
+            {method === 'forecast' && <label className="ap-field">预测期数
+              <input className="ap-input" type="number" min={1} max={60} value={horizon} onChange={e => setHorizon(Math.max(1, Math.min(60, Number(e.target.value) || 1)))} />
+            </label>}
+          </div>
+        </div>}
+
+        {attribution && <div className="ap-section">
+          {head('从哪些维度找原因', `已选 ${dims.length} / 4`)}
+          <div className="ap-chips" role="group" aria-label="归因维度">
+            {candidates.map(d => {
+              const on = dims.includes(d);
+              return <button key={d} type="button" className={`ap-chip ${on ? 'ap-chip-on' : ''}`} aria-pressed={on}
+                disabled={locked || (!on && dims.length >= 4)} onClick={() => toggleDim(d)}>
+                {on && <Icon name="check" size="sm" />}{d}
+              </button>;
+            })}
+            {candidates.length === 0 && <span className="ap-note">助手没有提供候选维度，请取消后在问题中说明按什么维度分析</span>}
+          </div>
+          <div className="ap-depth">
+            <span>下钻层级</span>
+            <span className="ap-segment" role="group" aria-label="下钻层级">
+              {[1, 2].map(n => <button key={n} type="button" aria-pressed={(dims.length > 1 ? depth : 1) === n}
+                disabled={locked || (n === 2 && dims.length < 2)} onClick={() => setDepth(n)}>{n} 层{n === 1 ? '（推荐）' : ''}</button>)}
+            </span>
+            {dims.length < 2 && <span className="ap-note" style={{ marginTop: 0 }}>选 2 个以上维度时可下钻 2 层</span>}
+          </div>
+        </div>}
+
+        {(proposal?.filters?.length ?? 0) > 0 && <div className="ap-section">
+          {head('默认过滤', '来自知识库业务规则')}
+          <div className="ap-filters">
             {proposal!.filters!.map(f => (
-              <label key={f} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
+              <label key={f} className="ap-filter">
                 <input type="checkbox" checked={filters.includes(f)} onChange={() => toggleFilter(f)} /> {f}
               </label>
             ))}
           </div>
-        )}
+        </div>}
       </fieldset>
-      <footer style={{ padding: '12px 18px', borderTop: '1px solid var(--da-border-soft)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
-        <button type="button" className="da-btn da-btn-primary" disabled={locked || missing} onClick={start}>{started ? '已开始分析' : '开始分析'}</button>
+      <footer className="ap-foot">
+        <button type="button" className="da-btn da-btn-primary" disabled={locked || missing} onClick={start}>
+          <Icon name={ICONS[method]} size="sm" />{started ? '已开始分析' : '开始分析'}</button>
         <button type="button" className="da-btn" disabled={locked} onClick={() => { setStarted(true); onCancel(); }}>取消，按普通问数回答</button>
-        <span style={{ fontSize: 12, color: 'var(--da-text-muted)' }}>预计 20–60 秒：取数后在沙箱中运行分析脚本</span>
+        {missing && !started && <span className="ap-missing">{attribution && dims.length === 0 ? '请至少选择 1 个归因维度' : '请填写指标和时间'}</span>}
+        <span className="ap-eta"><Icon name="clock" size="sm" />预计 20–60 秒，取数后在沙箱中运行分析脚本</span>
       </footer>
     </section>
   );
@@ -250,7 +286,7 @@ export function AnalysisFollowUps({ methods, disabled, onPick }: {
       <span style={{ fontSize: 12, color: 'var(--da-text-muted)' }}>继续分析</span>
       {methods.map(m => (
         <button key={m} type="button" disabled={disabled} onClick={() => onPick(m)}
-          style={{ fontSize: 13, padding: '6px 12px', borderRadius: 999, border: '1px solid var(--da-primary-soft-border)', background: 'var(--da-primary-soft)', color: 'var(--da-primary-strong)', cursor: disabled ? 'not-allowed' : 'pointer' }}>
+          style={{ fontSize: 13, padding: '6px 12px', borderRadius: 999, border: '1px solid var(--da-primary-line)', background: 'var(--da-primary-soft)', color: 'var(--da-primary)', cursor: disabled ? 'not-allowed' : 'pointer' }}>
           {FOLLOW_UP_LABELS[m]}
         </button>
       ))}

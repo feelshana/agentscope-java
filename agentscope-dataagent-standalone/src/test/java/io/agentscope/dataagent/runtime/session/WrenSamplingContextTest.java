@@ -54,12 +54,11 @@ class WrenSamplingContextTest {
                         .block();
         assertThat(prompt)
                 .contains(
-                        "上传表：报表访问明细",
+                        "上传表：报表访问明细（共 0 行）",
                         "外部数据源及其他来源表：订单、手工表",
-                        "未出现在以上列表中的表按外部数据源表处理",
-                        "每张事实表一次时间列 MIN/MAX",
-                        "每条候选关系一次合并查询",
-                        "不执行 SELECT DISTINCT",
+                        // ADR0135: uploads are no longer probed; the platform records the facts.
+                        "建模不执行任何 query（工具会直接拒绝），上传表与外部数据源表相同",
+                        "时间列起止日期由平台在上传时统计",
                         "当前时间：2026-10-20T20:00+08:00",
                         "当前日期：2026-10-20",
                         "服务时区：Asia/Shanghai");
@@ -98,7 +97,7 @@ class WrenSamplingContextTest {
         assertThat(
                         WrenProjectContextMiddleware.probeBoundary(
                                 java.util.List.of(table("订单", "datasource"))))
-                .contains("上传表：无", "外部数据源及其他来源表：订单", "在基础建模中不执行任何 query（工具会直接拒绝）", "试问 SQL 也不查询数据");
+                .contains("上传表：无", "外部数据源及其他来源表：订单", "建模不执行任何 query（工具会直接拒绝）", "试问 SQL 也不查询数据");
     }
 
     @Test
@@ -183,15 +182,15 @@ class WrenSamplingContextTest {
                     return middleware.onSystemPrompt(null, context, "base").block();
                 };
         assertThat(promptFor.apply("auto"))
-                .contains("表来源与探查边界", "本轮任务要求：自动建模")
+                .contains("表来源与查询边界", "本轮任务要求：自动建模")
                 .doesNotContain("maxWindowDays", "本轮任务要求：试问 SQL");
         assertThat(promptFor.apply("question"))
                 .contains("maxWindowDays", "本轮任务要求：试问 SQL")
-                .doesNotContain("表来源与探查边界");
+                .doesNotContain("表来源与查询边界");
         assertThat(promptFor.apply("confirm"))
                 .contains("本轮任务要求：写入用户的确定")
-                .doesNotContain("表来源与探查边界", "maxWindowDays");
-        assertThat(promptFor.apply(null)).contains("表来源与探查边界", "maxWindowDays", "用户对话");
+                .doesNotContain("表来源与查询边界", "maxWindowDays");
+        assertThat(promptFor.apply(null)).contains("表来源与查询边界", "maxWindowDays", "用户对话");
     }
 
     @Test

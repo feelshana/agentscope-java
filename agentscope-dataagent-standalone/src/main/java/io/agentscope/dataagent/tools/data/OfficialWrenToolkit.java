@@ -147,8 +147,8 @@ public final class OfficialWrenToolkit {
             // lock and the window gate's model call must not hold other calls on this project.
             List<String> command = command(p, arguments);
             refuseQueryInQuestionTurn(context, command);
-            // The external-table refusal needs no model call, so it runs before the window gate.
-            refuseExternalQuery(p, command);
+            // The modeling query refusal needs no model call, so it runs before the window gate.
+            refuseModelingQuery(command);
             validateQueryBoundary(context, p, command);
             reserveQuery(context, p, command);
             String op = operation(command);
@@ -605,10 +605,6 @@ public final class OfficialWrenToolkit {
         }
     }
 
-    private static final java.util.regex.Pattern TABLE_REF =
-            java.util.regex.Pattern.compile(
-                    "(?i)\\b(?:FROM|JOIN)\\s+[\\\"`]?([\\p{L}_][\\p{L}\\p{N}_]*(?:\\.[\\p{L}_][\\p{L}\\p{N}_]*)*)");
-
     /**
      * True when a build input (model, view, relationship or knowledge file) is newer than the
      * compiled draft, so query-class commands rebuild instead of using an old MDL. wren_project.yml
@@ -658,38 +654,22 @@ public final class OfficialWrenToolkit {
                     "试问不查询数据，未执行查询。请用 dry-plan 检查 SQL 能否生成，写入问题文件后由用户在试问面板核对。", 403);
     }
 
-    /**
-     * External-source tables are never queried while modeling (rule violated repeatedly by
-     * prompt alone, so it is enforced here): basic modeling reuses sampling and metadata, and
-     * trial questions are only planned with dry-plan. Uploaded tables keep their limited probes.
-     */
-    private void refuseExternalQuery(Project project, List<String> command) {
-        if (uploadTables == null || command.isEmpty() || !command.get(0).equals("query")) return;
-        String sql = sqlOf(command);
-        if (sql == null) return;
-        String code = sql.replaceAll("(?s)'(?:''|[^'])*'|/\\*.*?\\*/|--[^\\r\\n]*", " ");
-        Set<String> uploads = new java.util.HashSet<>();
-        for (String name : uploadTables.apply(project.groupId())) uploads.add(name.toLowerCase());
-        Set<String> external = new java.util.TreeSet<>();
-        var refs = TABLE_REF.matcher(code);
-        while (refs.find()) {
-            String name = refs.group(1);
-            name = name.substring(name.lastIndexOf('.') + 1).toLowerCase();
-            if (!uploads.contains(name)) external.add(name);
-        }
-        if (external.isEmpty()) return;
-        throw new DatasetException(
-                "基础建模只使用采样资料与元数据，不查询外部数据源表（"
-                        + String.join("、", external)
-                        + "），未执行查询。候选关系用 request_user_confirmation 请用户确定后再写入；无法验证的唯一性、空值或样例写为未确认并记入"
-                        + " caveat；试问 SQL 用 dry-plan 检查，由用户在试问面板核对。",
-                403);
-    }
+    static final String NO_MODELING_QUERY =
+            "建模只使用采样资料与元数据，不查询任何表的数据（上传表与外部数据源表相同），未执行查询。行数与时间列起止日期已写在表和字段描述中；"
+                    + "候选关系用 request_user_confirmation 请用户确定后再写入；无法验证的唯一性、空值写为未确认并记入 caveat；"
+                    + "试问 SQL 用 dry-plan 检查，由用户在试问面板核对。";
 
-    private static String sqlOf(List<String> command) {
-        for (int i = 0; i + 1 < command.size(); i++)
-            if (Set.of("--sql", "-s").contains(command.get(i))) return command.get(i + 1);
-        return null;
+    /**
+     * The modeling assistant never reads table data (ADR0135). External tables were refused
+     * first because the prompt alone kept failing; uploads followed after a 2026-11-04 onboarding
+     * run spent 32 s of a 75 s turn on probes the platform already had or did not need (a
+     * {@code NOT IN} match-rate query alone took 27 s). Row counts and date ranges are recorded at
+     * upload instead. A null {@code uploadTables} (tests, tooling) disables the guard.
+     */
+    private void refuseModelingQuery(List<String> command) {
+        if (uploadTables == null || command.isEmpty() || !command.get(0).equals("query")) return;
+        if (command.contains("--help")) return;
+        throw new DatasetException(NO_MODELING_QUERY, 403);
     }
 
     private void validateQueryBoundary(

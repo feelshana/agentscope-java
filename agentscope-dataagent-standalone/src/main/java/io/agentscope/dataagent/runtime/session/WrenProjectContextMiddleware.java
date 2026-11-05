@@ -142,29 +142,26 @@ public final class WrenProjectContextMiddleware implements HarnessRuntimeMiddlew
     }
 
     /**
-     * Uploaded tables are small and carry no time gate, so official skill probing is allowed;
-     * every other origin (external datasource, manual, unknown) stays probe-free.
+     * No table is queried while modeling (ADR0135): uploads now follow the same rule as external
+     * sources. The platform records row counts and date ranges at upload instead.
      */
     static String probeBoundary(List<DatasetEntity> tables) {
         List<String> uploaded = new ArrayList<>();
         List<String> guarded = new ArrayList<>();
         for (DatasetEntity table : tables) {
-            ("upload".equals(table.getOrigin()) ? uploaded : guarded).add(table.getName());
+            if ("upload".equals(table.getOrigin()))
+                uploaded.add(table.getName() + "（共 " + table.getRowCount() + " 行）");
+            else guarded.add(table.getName());
         }
-        return "\n\n# 表来源与探查边界（按当前知识库运行时生成）\n"
+        return "\n\n# 表来源与查询边界（按当前知识库运行时生成）\n"
                 + "上传表："
                 + (uploaded.isEmpty() ? "无" : String.join("、", uploaded))
                 + "\n外部数据源及其他来源表："
                 + (guarded.isEmpty() ? "无" : String.join("、", guarded))
-                + "\n未出现在以上列表中的表按外部数据源表处理。外部数据源及其他来源表在基础建模中不执行任何 query（工具会直接拒绝），"
-                + "不为补齐枚举、基数、极值或画像执行 SELECT DISTINCT、COUNT、MIN/MAX、GROUP BY，只复用采样资料和元数据；"
+                + "\n建模不执行任何 query（工具会直接拒绝），上传表与外部数据源表相同：不为补齐枚举、基数、极值、唯一性、匹配率或画像查询数据，"
+                + "只复用采样资料和元数据。上传表的总行数见上面括号，时间列起止日期由平台在上传时统计并写在字段描述中，直接引用即可。"
                 + "试问 SQL 也不查询数据，只用 dry-plan 检查。"
-                + "\n上传表数据量有限且不受时间门禁约束，只允许两类探查：每张事实表一次时间列 MIN/MAX，用于选择样例日期；"
-                + "每条候选关系一次合并查询，同时得出被连接侧键的全表唯一性与两侧匹配率。维度候选取值已在采样中提取，不执行 SELECT DISTINCT 或分布统计，"
-                + "不导出明细行，不重复统计；不得把时间范围扩大到 100 年绕过规则。每轮建模最多执行 "
-                + io.agentscope.dataagent.tools.data.OfficialWrenToolkit.MAX_QUERIES_PER_TURN
-                + " 条 query；需要的探查在同一轮一次性发起，不逐条等待。发现复合值、脏数据时写入列描述或 caveat，不连续查询去量化它。候选关系用"
-                + " request_user_confirmation 请用户确定（每条关系一题，选项写明两侧列与 join_type），确定后写入"
+                + "候选关系用 request_user_confirmation 请用户确定（每条关系一题，选项写明两侧列与 join_type），确定后写入"
                 + " relationships.yml；无法验证的唯一性、空值写为未确认并记入 caveat。\n";
     }
 

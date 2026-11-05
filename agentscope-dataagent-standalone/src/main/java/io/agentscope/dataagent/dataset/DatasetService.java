@@ -233,7 +233,12 @@ public class DatasetService implements DatasetContextProvider {
             entity.setSchemaName(provisioner.databaseName());
             entity.setTableName(tableName);
             entity.setDescription(finalDesc);
-            entity.setColumnSchemaJson(writeJson(importResult.columns()));
+            entity.setColumnSchemaJson(
+                    writeJson(
+                            withDateRanges(
+                                    importResult.columns(),
+                                    column ->
+                                            provisioner.dateRange(tableName, "`" + column + "`"))));
             entity.setRowCount(importResult.totalRows());
             if (importResult.sampling() != null)
                 entity.setSampleSummaryJson(DatasetSampling.encode(importResult.sampling()));
@@ -261,6 +266,36 @@ public class DatasetService implements DatasetContextProvider {
                 }
             throw failure;
         }
+    }
+
+    /**
+     * ADR0135: the span of every date column is measured once, directly on the dataset database,
+     * when the file is uploaded and kept in the column description, so modeling never queries the
+     * table for it. A column whose range cannot be read keeps its description unchanged.
+     */
+    static List<ColumnSchema> withDateRanges(
+            List<ColumnSchema> columns, java.util.function.Function<String, String[]> rangeOf) {
+        List<ColumnSchema> out = new ArrayList<>();
+        for (ColumnSchema column : columns) {
+            String type = column.sqlType() == null ? "" : column.sqlType().toUpperCase();
+            String[] range =
+                    (type.startsWith("DATE") || type.startsWith("TIMESTAMP"))
+                                    && column.name() != null
+                                    && column.name().matches("[A-Za-z0-9_]+")
+                            ? rangeOf.apply(column.name())
+                            : null;
+            if (range == null) {
+                out.add(column);
+                continue;
+            }
+            String base = column.description() == null ? "" : column.description().strip();
+            String span = range[0].equals(range[1]) ? range[0] : range[0] + " 至 " + range[1];
+            out.add(
+                    column.withDescription(
+                            (base.isEmpty() ? "" : base + "。") + "上传数据覆盖 " + span + "（平台上传时统计）",
+                            column.descriptionSource()));
+        }
+        return out;
     }
 
     @Transactional
