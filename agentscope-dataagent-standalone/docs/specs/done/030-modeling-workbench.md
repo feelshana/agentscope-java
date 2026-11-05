@@ -1,6 +1,6 @@
 # spec 030: 语义建模页工作台化
 
-> ADR 0041（Accepted）的实施明细。视觉与交互基准 = `docs/archive/prototypes/0041-modeling-workbench.html`。
+> [ADR 0041](../../adr/0041-semantic-modeling-page-workbench.md) 的实施明细。
 
 ## 背景与目标
 
@@ -108,4 +108,3 @@
 ## 关联
 
 - ADR：docs/adr/0041-semantic-modeling-page-workbench.md（Accepted）
-- 原型：docs/archive/prototypes/0041-modeling-workbench.html（交互与视觉基准）

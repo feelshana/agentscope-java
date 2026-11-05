@@ -1,4 +1,4 @@
-# 更多实施与资源界面第三轮设计
+# 「更多」页面实施与验收
 
 2026-11-01 Asia/Shanghai。liyufan_dev@5b1079a6叠加多轮既有WIP，暂存区为空。用户明确批准“更多”实施，否决上一轮知识库方案，要求实际查看本地UI后重做知识库/数据源方案；没有批准这两页正式实施。
 
@@ -8,13 +8,7 @@ MorePage与独立MorePage.css复用既有HelpPanel、管理员判断和路由。
 
 实际本地Vite页面验收6项通过：管理员两行、帮助弹层打开、两项管理导航、390px无横向溢出、帮助按钮≥44px。没有点击模型激活/公共库配置或重置任务。普通用户分支保留原isAdmin判断，未使用新账号进行真实登录验证。
 
-实际截图在assets/more-20261101/desktop.png与mobile.png；已view_image与获准方案knowledge-more-20261101/06-more-desktop.png比对，白底/帮助框/管理员分组/图标/整行操作/内容宽度符合；视口1440和原1600不同，因此容器居中位置按实际可用宽度变化。
-
-## 资源页面：仅设计
-
-真实观察发现知识库无说明时空洞且层级弱，数据源失败整块提示导致行高不一致。新方案与浏览器图稿见../previews/resources-v3-20261101/README.md。原始本地页面截图仅在忽略的output中；发布提案使用示例地址/库名。
-
-静态预览18项通过；无真实API/DB/LLM。生成探索与浏览器实图均已view_image检查，明确修正品牌/图标及生成图比例。未改DatasetsPage、DataSourcesPage、DataSourceFormModal或DetailModal。
+实际页面截图见[桌面](assets/more-20261101/desktop.png)和[移动端](assets/more-20261101/mobile.png)。
 
 ## 验证与未执行
 

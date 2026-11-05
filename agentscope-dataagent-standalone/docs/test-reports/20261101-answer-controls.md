@@ -4,7 +4,7 @@
 
 用户认可两张方案图并要求实施，补充保留新手友好的反馈说明。基线 `liyufan_dev@5b1079a6` 加已有品牌/图标/术语等WIP；保留原修改，不提交、push、切分支、部署或操作数据库。局部视觉及交互小修，不新增spec/ADR；全流程其余A/B候选仍未授权。
 
-认可图：[工具条](../previews/answer-controls-20261101/01-answer-footer-v2.png)、[发送/停止](../previews/answer-controls-20261101/02-composer-states-v2.png)。本轮使用前端设计、React最佳实践与Playwright技能，未引入运行依赖。
+本轮按已确认的工具条和发送／停止方案实施。本轮使用前端设计、React最佳实践与Playwright技能，未引入运行依赖。
 
 ## 实施
 
