@@ -363,6 +363,30 @@ export function artifactSrc(a: ArtifactInfo): string | null {
   return null;
 }
 
+/** Resolve a filename from answer Markdown against this turn's saved Python images. */
+export function pythonImageResolver(tools: readonly { name: string; result?: string }[]) {
+  const images = new Map<string, string | null>();
+  for (const tool of tools) {
+    if (tool.name !== 'run_python' || !tool.result) continue;
+    for (const artifact of parseResult(tool.result).artifacts) {
+      if (artifact.type !== 'image' && artifact.type !== 'svg') continue;
+      const url = artifactSrc(artifact);
+      if (!url) continue;
+      // Distinct files can have the same name across Python calls in one answer.
+      images.set(artifact.name, images.has(artifact.name) && images.get(artifact.name) !== url ? null : url);
+    }
+  }
+  return (src: string): string | null => {
+    const match = /^(?:\.\/)?(?:outputs\/)?([^/:?#\\]+)$/.exec(src);
+    if (!match) return null;
+    try {
+      return images.get(decodeURIComponent(match[1])) ?? null;
+    } catch {
+      return null;
+    }
+  };
+}
+
 export function downloadArtifact(a: ArtifactInfo) {
   if (a.path) {
     void downloadFile(a.path, a.name).catch(error => window.alert(error.message));

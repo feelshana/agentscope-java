@@ -107,7 +107,11 @@ const MD_STYLE = `
 /** Renders markdown text (GFM tables/strikethrough included) for assistant replies.
  *  Rewrites /workspace/ image paths to the binary API and supports click-to-zoom.
  *  fontSize overrides the default size for compact panels (e.g. the modeling drawer). */
-export default function Markdown({ children, fontSize }: { children: string; fontSize?: number | string }) {
+export default function Markdown({ children, fontSize, resolveImage }: {
+  children: string;
+  fontSize?: number | string;
+  resolveImage?: (src: string) => string | null;
+}) {
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
@@ -123,7 +127,8 @@ export default function Markdown({ children, fontSize }: { children: string; fon
       } : undefined}>{children}</a>;
     },
     img: ({ src, alt }) => {
-      const url = fileUrl(src ?? '') ?? src ?? '';
+      const reference = src ?? '';
+      const url = resolveImage?.(reference) ?? fileUrl(reference) ?? reference;
       return (
         <AttachmentImage
           src={url}
