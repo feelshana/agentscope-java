@@ -8,8 +8,6 @@ spec 是一页纸的需求与验收标准，写代码之前先写（模板：[00
 
 ## 进行中
 
-- [116 活跃会话续期](116-active-session-renewal.md)：已实施，用户主动操作时续期，空闲 30 分钟退出；待现场验收。
-
 - [115 正式环境日常发布一条命令](115-one-command-formal-deployment.md)：已授权并完成本地实现/隔离验证；待66首次现场验收。
 
 - [110 管理员BI同步状态与服务器停用](110-bi-sync-status-and-pause.md)：已授权只读页面及服务器暂停/恢复/移除任务，待现场验收。
@@ -140,3 +138,5 @@ spec 是一页纸的需求与验收标准，写代码之前先写（模板：[00
 - [096 BI人员与公共库](done/096-bi-directory-and-public-knowledge.md)（本地验收完成，现场BI待验）
 
 - [097 同一知识库详情](done/097-unified-knowledge-detail.md)（本地回归及浏览器对照完成）
+
+- [116 活跃会话续期](done/116-active-session-renewal.md)（已由固定 24 小时重新认证方案取代）

@@ -103,7 +103,6 @@ dataagent:
 
   # JWT signing secret (>= 32 chars). MUST be overridden in production.
   jwt:
-    ttl-seconds: ${DATAAGENT_JWT_TTL_SECONDS:1800}
     secret: ${DATAAGENT_JWT_SECRET:dataagent-dev-secret-for-local-only-do-not-use-in-prod-2026}
 
   auth:

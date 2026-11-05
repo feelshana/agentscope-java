@@ -704,7 +704,7 @@ manifest 尚不存在时（首次升级到该策略）执行一次性「采纳�
 
 `UserDirectoryImportService` 只按唯一账号补姓名公司部门，预览为默认，不导入密码/BI角色；保留平台ID与权限。`UserProfileController` 仅返回本人显示资料。新用户由BI首登按普通角色创建。
 
-`AuthController#accountLogin` 在DATAAGENT_BI_ACCOUNT_LOGIN_ENABLED显式开启时接收客户端账号并签发平台JWT，不校验BI会话；用户已明确接受该信任边界，不能称作可信SSO。新模式关闭票据入口；未开启时保留原prod票据行为，生产仍禁密码。前端仅显式BI入口或无旧凭证的首次进入读取同源username/account，userName不作为账号，已有过期凭证需重新登录。活跃会话按 ADR0136 续期：`SessionGate` 就绪后由主动操作触发 `AuthController#renew`，用有效 Bearer 的签名身份重新读取平台角色。JWT 默认空闲 30 分钟，最多至原始登录后 24 小时；后台轮询和流式输出不会续期。
+`AuthController#accountLogin` 在DATAAGENT_BI_ACCOUNT_LOGIN_ENABLED显式开启时接收客户端账号并签发平台JWT，不校验BI会话；用户已明确接受该信任边界，不能称作可信SSO。新模式关闭票据入口；未开启时保留原prod票据行为，生产仍禁密码。前端仅显式BI入口或无旧凭证的首次进入读取同源username/account，userName不作为账号，已有过期凭证需重新登录。按 [ADR0137](docs/adr/0137-fixed-login-token-lifetime.md)，JWT 从签发起固定 24 小时。`SessionGate` 到期后引导用户重新认证，受保护接口按签名中的到期时间校验。
 
 `KnowledgeBaseAccessService#requireQuery/requireManage` 统一 QUERY/使用与 MANAGE/管理权限；创建者和当前全局管理员拥有管理权限。列表先按 ACL 过滤再分页，成员变更与审计同事务提交。QUERY 与 MANAGE 共用 DatasetGroupPage、DatasetDetailPage 和详情路由；DatasetGroupController#detail 使用 QUERY 投影返回相同的数据集/字段结构及服务端 canManage，QUERY 不读取未发布业务文档，DatasetService#previewForBrowsing 限制 QUERY 预览为20行并在读取后复核授权。写按钮仅管理用户显示，原 getGroup/get 与写接口继续要求 MANAGE；建模、发布、连接配置、问答对管理及成员管理不放宽。旧只读页面地址重定向到统一详情，KnowledgeBaseBrowseService 的已发布投影保留兼容。
 
@@ -825,7 +825,7 @@ spec 045 / ADR 0055：无已登记问题、无待确认原生 HITL 时，页面�
 | 配置 | 默认 | 说明 |
 |---|---|---|
 | `spring.web.error.include-message` | `always` | Boot 4 错误响应保留可操作原因；旧 server.error 配置已失效，不返回堆栈 |
-| `dataagent.jwt.secret` | dev 占位 | 生产必须覆盖（≥32 字符） |
+| `dataagent.jwt.secret` | dev 占位 | 生产必须覆盖（≥32 字符）。JWT 签发起固定有效 24 小时，到期重新认证。 |
 | `dataagent.workspace` | JVM cwd | 运行态工作目录 |
 | `dataagent.agent.name` | `data-agent` | 自动生成 `agentscope.json` 时的 agent 名；系统提示词默认用内置常量，覆盖用 `DATAAGENT_AGENT_SYS_PROMPT`（见 4.5） |
 | `dataagent.agent.subagents-enabled` | false | 子代理编排（harness `agent_spawn` / `agent_send` / `task_*`）。关闭可省下每轮固定约 6.2k 字符的 `## Subagents` 提示词段与相应工具 schema；**不影响网关、会话路由与聊天**（`buildSubagentEntries` 不读该开关），内置定义也不删（ADR 0009） |

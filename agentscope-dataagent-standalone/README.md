@@ -287,7 +287,7 @@ to false; existing users and grants are retained.
 
 | Property | Default | Description |
 |---|---|---|
-| `dataagent.jwt.secret` | deployment configuration | HS256 signing key: at least 32 UTF-8 bytes. Empty, development-placeholder and short keys are rejected in every profile. |
+| `dataagent.jwt.secret` | deployment configuration | HS256 signing key: at least 32 UTF-8 bytes. Empty, development-placeholder and short keys are rejected in every profile. Tokens expire 24 hours after issuance and require sign-in again. |
 | `dataagent.seed-demo-users` | `false` | Opt in to Java administrator seeding for local development; does not disable separately configured SQL initialization. |
 | `dataagent.cors.allowed-origins` | `*` | Allowed browser origin patterns; configure explicit origins for deployment. |
 | `dataagent.workspace` | JVM working directory when blank | Runtime workspace, separate from `~/.agentscope/dataagent/agentscope.json`. Set an explicit durable directory in deployments. |

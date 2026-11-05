@@ -28,6 +28,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.UUID;
 import javax.crypto.SecretKey;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -50,24 +51,17 @@ public class JwtService {
     private static final String DEV_DEFAULT_SECRET =
             "dataagent-default-dev-secret-change-in-production-32chars";
 
-    private final SecretKey signingKey;
-    private static final Duration SESSION_LIMIT = Duration.ofHours(24);
-    private static final String SESSION_STARTED_AT = "sessionStartedAt";
+    private static final Duration TOKEN_LIFETIME = Duration.ofHours(24);
 
-    private final Duration idleTimeout;
+    private final SecretKey signingKey;
     private final Clock clock;
 
-    @org.springframework.beans.factory.annotation.Autowired
-    public JwtService(
-            @Value("${dataagent.jwt.secret}") String secret,
-            @Value("${dataagent.jwt.ttl-seconds:1800}") long ttlSeconds) {
-        this(secret, ttlSeconds, Clock.systemUTC());
+    @Autowired
+    public JwtService(@Value("${dataagent.jwt.secret}") String secret) {
+        this(secret, Clock.systemUTC());
     }
 
-    JwtService(String secret, long ttlSeconds, Clock clock) {
-        if (ttlSeconds <= 0 || ttlSeconds > 604800)
-            throw new IllegalArgumentException("JWT有效期需为1到604800秒");
-        this.idleTimeout = Duration.ofSeconds(ttlSeconds);
+    JwtService(String secret, Clock clock) {
         this.clock = clock;
         if (secret == null || secret.isBlank() || DEV_DEFAULT_SECRET.equals(secret)) {
             throw new IllegalStateException(
@@ -86,41 +80,13 @@ public class JwtService {
      */
     public String generate(String userId, String username, List<String> roles) {
         Instant now = clock.instant().truncatedTo(ChronoUnit.SECONDS);
-        return issue(userId, username, roles, now, now);
-    }
-
-    /** Extends an authenticated session while keeping its original sign-in time. */
-    String renew(Claims claims, String username, List<String> roles) {
-        Instant now = clock.instant();
-        if (!now.isBefore(claims.getExpiration().toInstant())) {
-            throw new JwtException("Session has expired");
-        }
-        Long startedAt = claims.get(SESSION_STARTED_AT, Long.class);
-        Instant sessionStart =
-                startedAt == null
-                        ? claims.getIssuedAt().toInstant()
-                        : Instant.ofEpochSecond(startedAt);
-        return issue(
-                claims.getSubject(),
-                username,
-                roles,
-                now.truncatedTo(ChronoUnit.SECONDS),
-                sessionStart);
-    }
-
-    private String issue(
-            String userId, String username, List<String> roles, Instant now, Instant sessionStart) {
-        Instant deadline = sessionStart.plus(SESSION_LIMIT);
-        if (!now.isBefore(deadline)) throw new JwtException("Session limit reached");
-        Instant idleExpiry = now.plus(idleTimeout);
         return Jwts.builder()
                 .id(UUID.randomUUID().toString())
                 .subject(userId)
                 .claim("username", username)
                 .claim("roles", roles)
-                .claim(SESSION_STARTED_AT, sessionStart.getEpochSecond())
                 .issuedAt(Date.from(now))
-                .expiration(Date.from(idleExpiry.isBefore(deadline) ? idleExpiry : deadline))
+                .expiration(Date.from(now.plus(TOKEN_LIFETIME)))
                 .signWith(signingKey)
                 .compact();
     }
@@ -131,12 +97,18 @@ public class JwtService {
      * @throws JwtException if the token is invalid or expired
      */
     public Claims parse(String token) {
-        return Jwts.parser()
-                .clock(() -> Date.from(clock.instant()))
-                .verifyWith(signingKey)
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
+        Date now = Date.from(clock.instant());
+        Claims claims =
+                Jwts.parser()
+                        .clock(() -> now)
+                        .verifyWith(signingKey)
+                        .build()
+                        .parseSignedClaims(token)
+                        .getPayload();
+        if (now.equals(claims.getExpiration())) {
+            throw new JwtException("Session has expired");
+        }
+        return claims;
     }
 
     /**

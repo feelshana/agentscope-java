@@ -26,6 +26,7 @@ ADR 记录"为什么这样做"。规则：
 | 内置示例数据 | [0134](0134-bundled-onboarding-sample-files.md)、[0122](0122-builtin-demo-datasource.md)、[0124](0124-synthetic-demo-version-isolation.md) | 上传示例随应用发布；可选的合成零售示例独立版本库保留只读和权限边界 |
 | 问数准备与性能 | [0100](0100-published-query-index-preparation.md)、[0101](0101-reuse-published-mcp-for-recall-warmup.md) | 发布后后台索引、召回预热、分段计时 |
 | BI账号、用户目录与全员库 | [0116](0116-bi-account-and-public-knowledge.md) | 客户端账号信任；只读投影；管理员集中配置全员QUERY |
+| 登录凭证 | [0137](0137-fixed-login-token-lifetime.md) | 签发起固定 24 小时，到期重新认证 |
 | 工程整合、单库与管理员 | [0114](0114-native-query-and-engineering-integration.md) | 原生建模问数优先；BI、私有图表、持久状态、人工模型切换与受限恢复 |
 | 会话与附件 | [0060](0060-durable-session-history-and-artifact-lifecycle.md)、[0061](0061-configurable-history-retention.md) | 持久历史、附件生命周期、保留策略 |
 | 旧系统容器部署 | [0117](0117-single-host-container-runtime.md) | Java/Python/Wren同容器，宿主持久路径与独立兄弟分析沙箱 |
@@ -171,4 +172,5 @@ ADR 记录"为什么这样做"。规则：
 | [0132](0132-query-coach.md) | 问数教练：用常用问题驱动语义建设，提议只在这里产生 | 已接受，2026-11-03。实施 spec114 一期；取代 ADR0131 第 2 条与 ADR0128 第 5 条的执行验证。第 1、4 条提议查询模板已被 ADR0133 取代。 | 0133 |
 | [0133](0133-query-optimization-proposes-no-views.md) | 问数优化不提议查询模板，公共视图改从全部已确认问答中提炼 | 已接受，2026-11-03。调整 spec114 第 8 节；取代 ADR0132 提议查询模板部分。 |  |
 | [0134](0134-bundled-onboarding-sample-files.md) | 新手引导示例随应用发布 | 已接受，2026-11-04；取代 ADR0124 的上传素材与分发约定。 | |
-| [0136](0136-active-session-renewal.md) | DataAgent 用户活动续期 | 已接受，2026-11-04。空闲 30 分钟、最长 24 小时。 | |
+| [0136](0136-active-session-renewal.md) | DataAgent 用户活动续期 | 已被 ADR0137 取代。 |
+| [0137](0137-fixed-login-token-lifetime.md) | DataAgent 登录凭证固定 24 小时 | 已接受，2026-11-05。到期重新认证。 | |
