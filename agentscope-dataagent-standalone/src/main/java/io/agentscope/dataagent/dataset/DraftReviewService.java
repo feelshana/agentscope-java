@@ -105,6 +105,16 @@ public class DraftReviewService {
      * path must be a writable draft file and YAML must parse; the file is not confirmed again.
      */
     public Review edit(String userId, String groupId, String path, String content) {
+        return edit(userId, groupId, path, content, null);
+    }
+
+    /** spec117: {@code gate} checks the content inside the workspace lock before it is written. */
+    public Review edit(
+            String userId,
+            String groupId,
+            String path,
+            String content,
+            DraftItemService.Gate gate) {
         groups.getGroup(userId, groupId);
         activity.requireIdle(groupId);
         if (content == null || content.length() > 200_000)
@@ -123,6 +133,10 @@ public class DraftReviewService {
         workspace.withWorkspaceLock(
                 groupId,
                 () -> {
+                    // Re-check after waiting for the lock: access may have been revoked meanwhile.
+                    groups.getGroup(userId, groupId);
+                    String rejected = gate == null ? null : gate.check(path, content);
+                    if (rejected != null) throw new DatasetException("Wren 校验未通过：" + rejected, 400);
                     try {
                         Files.writeString(
                                 workspace.resolveWritable(groupId, path),

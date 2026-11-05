@@ -163,6 +163,25 @@ public class BusinessDocumentService {
         }
     }
 
+    /** The converted text of one draft document. */
+    public record DocumentText(String name, String content) {}
+
+    /**
+     * spec117: the draft text of one document, so the workbench can show the passages behind a
+     * model's rules. Only names listed in the directory are readable (no path from the caller).
+     */
+    public DocumentText content(String userId, String groupId, String name) {
+        groups.getGroup(userId, groupId);
+        return workspace.withWorkspaceLock(
+                groupId,
+                () -> {
+                    Path draft = workspace.workspaceRoot(groupId).resolve(DIRECTORY);
+                    if (name == null || !names(draft).contains(name))
+                        throw new DatasetException("文档不存在", 404);
+                    return new DocumentText(name, read(draft.resolve(name)));
+                });
+    }
+
     private static List<String> names(Path directory) {
         if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) return List.of();
         try (Stream<Path> files = Files.list(directory)) {

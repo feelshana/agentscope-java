@@ -8,6 +8,12 @@ export interface SemanticColumn {
   calculated: boolean;
   expression: string | null;
   primaryKey: boolean;
+  /** spec117: page-maintained properties, absent in the published browse projection. */
+  displayName?: string | null;
+  semanticType?: string | null;
+  synonyms?: string[];
+  values?: string[];
+  userDescribed?: boolean;
 }
 
 export interface SemanticModel {
@@ -42,7 +48,10 @@ const fromModelView = (m: MdlModelView, derived: boolean): SemanticModel => ({
   tableRole: m.tableRole,
   derived,
   path: m.path,
-  columns: m.columns.map(c => ({ name: c.name, type: c.type, description: c.description, calculated: c.calculated, expression: c.expression, primaryKey: c.primaryKey })),
+  columns: m.columns.map(c => ({
+    name: c.name, type: c.type, description: c.description, calculated: c.calculated, expression: c.expression, primaryKey: c.primaryKey,
+    displayName: c.displayName ?? null, semanticType: c.semanticType ?? null, synonyms: c.synonyms ?? [], values: c.values ?? [], userDescribed: !!c.userDescribed,
+  })),
 });
 
 export function draftSnapshot(view: MdlView): SemanticSnapshot {

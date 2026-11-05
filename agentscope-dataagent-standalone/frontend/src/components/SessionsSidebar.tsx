@@ -223,7 +223,7 @@ export default function SessionsSidebar({ refreshKey, collapsed = false, onToggl
         className={active ? 'da-navitem da-navitem-active' : 'da-navitem'} style={S.railItem}><Icon name={icon} size="lg" variant={active ? 'solid' : 'outline'} /></button>;
     return (
       <div style={S.rail}>
-        <div style={{ ...S.brand, padding: 0, justifyContent: 'center' }}><BrandMark label="红海 DataAgent" /></div>
+        <div className="rail-brand-mark" style={{ ...S.brand, padding: 0, justifyContent: 'center' }}><BrandMark label="红海 DataAgent" /></div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '8px 0' }}>
           {rail('新建对话', 'compose', location.pathname === '/chat' && !activeKey, handleNewChat)}
           {navigationItems.map(item => rail(item.label, item.icon, isNavigationActive(item.path), () => navigate(item.path)))}

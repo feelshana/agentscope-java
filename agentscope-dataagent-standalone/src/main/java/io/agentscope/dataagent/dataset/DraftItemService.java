@@ -38,6 +38,11 @@ public class DraftItemService {
                             .enable(YAMLGenerator.Feature.LITERAL_BLOCK_STYLE)
                             .build());
     private static final String TABLE = "__table__";
+    private static final String NAME = "[\\p{L}\\p{N}_]{1,64}";
+    private static final Set<String> JOIN_TYPES =
+            Set.of("MANY_TO_ONE", "ONE_TO_MANY", "ONE_TO_ONE", "MANY_TO_MANY");
+    private static final Set<String> SEMANTIC_TYPES =
+            Set.of("IDENTIFIER", "DIMENSION", "TIME", "MEASURE");
 
     private final DatasetGroupService groups;
     private final MdlWorkspaceService workspace;
@@ -138,6 +143,20 @@ public class DraftItemService {
             String joinType,
             String condition,
             boolean delete) {
+        return updateRelationship(userId, groupId, name, joinType, condition, null, delete);
+    }
+
+    /** spec117: also edits the relationship's description; null leaves a value unchanged. */
+    public List<Item> updateRelationship(
+            String userId,
+            String groupId,
+            String name,
+            String joinType,
+            String condition,
+            String description,
+            boolean delete) {
+        if (joinType != null && !JOIN_TYPES.contains(joinType.trim()))
+            throw new DatasetException("不支持的关系类型", 400);
         return mutate(
                 userId,
                 groupId,
@@ -161,12 +180,234 @@ public class DraftItemService {
                         ObjectNode edited = ((ObjectNode) relation).deepCopy();
                         if (joinType != null) edited.put("join_type", joinType.trim());
                         if (condition != null) edited.put("condition", condition.trim());
+                        if (description != null) setOrRemove(edited, "description", description);
                         kept.add(edited);
                     }
                     if (!found) throw new DatasetException("关系已变化，请刷新后再操作", 409);
                     root.set("relationships", kept);
                     return WRITE.writeValueAsString(root);
                 });
+    }
+
+    /**
+     * spec117: adds a relationship between two model columns; the name is derived from the two
+     * models and made unique. {@code gate} checks the new file before it is written.
+     */
+    public List<Item> addRelationship(
+            String userId,
+            String groupId,
+            String left,
+            String leftColumn,
+            String right,
+            String rightColumn,
+            String joinType,
+            String description,
+            Gate gate) {
+        for (String part : new String[] {left, leftColumn, right, rightColumn})
+            if (part == null || !part.matches(NAME)) throw new DatasetException("请选择两端的模型和字段", 400);
+        if (left.equals(right)) throw new DatasetException("关系两端不能是同一个模型", 400);
+        String type = joinType == null ? "MANY_TO_ONE" : joinType.trim();
+        if (!JOIN_TYPES.contains(type)) throw new DatasetException("不支持的关系类型", 400);
+        return mutate(
+                userId,
+                groupId,
+                "relationships.yml",
+                content -> {
+                    requireColumn(groupId, left, leftColumn);
+                    requireColumn(groupId, right, rightColumn);
+                    ObjectNode root =
+                            content == null || content.isBlank()
+                                    ? WRITE.createObjectNode()
+                                    : (ObjectNode) READ.readTree(content);
+                    JsonNode existing = root.path("relationships");
+                    ArrayNode list =
+                            existing.isArray()
+                                    ? (ArrayNode) existing
+                                    : root.putArray("relationships");
+                    Set<String> names = new java.util.HashSet<>();
+                    for (JsonNode r : list) names.add(r.path("name").asText());
+                    String name = left + "_" + right;
+                    for (int n = 2; names.contains(name); n++) name = left + "_" + right + "_" + n;
+                    ObjectNode relation = list.addObject();
+                    relation.put("name", name);
+                    relation.putArray("models").add(left).add(right);
+                    relation.put("join_type", type);
+                    relation.put(
+                            "condition",
+                            left + "." + leftColumn + " = " + right + "." + rightColumn);
+                    if (description != null && !description.isBlank())
+                        relation.putObject("properties").put("description", description.trim());
+                    return WRITE.writeValueAsString(root);
+                },
+                gate);
+    }
+
+    /**
+     * spec117: one column's page edit. A null value leaves that property unchanged; an empty one
+     * removes it. Only calculated columns may be created or deleted, and only they carry an
+     * expression.
+     */
+    public record ColumnChange(
+            String column,
+            String type,
+            String description,
+            String displayName,
+            String semanticType,
+            List<String> synonyms,
+            String expression,
+            boolean create,
+            boolean delete) {}
+
+    /** Checks a file's next content before it is written; returns the error text or null. */
+    @FunctionalInterface
+    public interface Gate {
+        String check(String path, String content);
+    }
+
+    public List<Item> updateColumn(
+            String userId, String groupId, String model, ColumnChange change, Gate gate) {
+        if (model == null || !model.matches(NAME)) throw new DatasetException("模型名不合法", 400);
+        if (change == null || change.column() == null || !change.column().matches(NAME))
+            throw new DatasetException("字段名只能包含中文、字母、数字和下划线", 400);
+        if (change.semanticType() != null
+                && !change.semanticType().isBlank()
+                && !SEMANTIC_TYPES.contains(change.semanticType()))
+            throw new DatasetException("不支持的语义角色", 400);
+        return mutate(
+                userId,
+                groupId,
+                "models/" + model + "/metadata.yml",
+                content -> {
+                    if (content == null) throw new DatasetException("模型不存在", 404);
+                    ObjectNode node = (ObjectNode) READ.readTree(content);
+                    JsonNode existing = node.path("columns");
+                    ArrayNode columns =
+                            existing.isArray() ? (ArrayNode) existing : node.putArray("columns");
+                    int index = -1;
+                    for (int i = 0; i < columns.size(); i++)
+                        if (change.column().equals(columns.get(i).path("name").asText())) index = i;
+                    if (change.create()) {
+                        if (index >= 0) throw new DatasetException("已有同名字段", 409);
+                        if (change.expression() == null || change.expression().isBlank())
+                            throw new DatasetException("请填写衍生字段的表达式", 400);
+                        ObjectNode column = columns.addObject();
+                        column.put("name", change.column());
+                        column.put("type", blankOr(change.type(), "VARCHAR"));
+                        column.put("is_calculated", true);
+                        column.put("expression", change.expression().trim());
+                        applyProperties(column, change);
+                        return WRITE.writeValueAsString(node);
+                    }
+                    if (index < 0) throw new DatasetException("字段已变化，请刷新后再操作", 409);
+                    ObjectNode column = (ObjectNode) columns.get(index);
+                    boolean calculated = column.path("is_calculated").asBoolean(false);
+                    if (change.delete()) {
+                        if (!calculated)
+                            throw new DatasetException("只能删除衍生字段；普通字段请在字段整理中取消纳入", 400);
+                        columns.remove(index);
+                        return WRITE.writeValueAsString(node);
+                    }
+                    if (change.expression() != null) {
+                        if (!calculated) throw new DatasetException("普通字段没有表达式", 400);
+                        if (change.expression().isBlank())
+                            throw new DatasetException("请填写衍生字段的表达式", 400);
+                        column.put("expression", change.expression().trim());
+                    }
+                    if (calculated && change.type() != null && !change.type().isBlank())
+                        column.put("type", change.type().trim());
+                    applyProperties(column, change);
+                    return WRITE.writeValueAsString(node);
+                },
+                gate);
+    }
+
+    private static void applyProperties(ObjectNode column, ColumnChange change) {
+        if (change.description() != null) {
+            setOrRemove(column, "description", change.description());
+            if (change.description().isBlank()) setOrRemove(column, "description_source", "");
+            else
+                setOrRemove(
+                        column,
+                        "description_source",
+                        io.agentscope.dataagent.dataset.parser.ColumnSchema.SOURCE_USER);
+        }
+        if (change.displayName() != null) setOrRemove(column, "displayName", change.displayName());
+        if (change.semanticType() != null)
+            setOrRemove(column, "semanticType", change.semanticType());
+        if (change.synonyms() != null) {
+            List<String> kept =
+                    change.synonyms().stream()
+                            .map(String::trim)
+                            .filter(s -> !s.isEmpty())
+                            .distinct()
+                            .toList();
+            ObjectNode props = propertiesNode(column);
+            if (kept.isEmpty()) props.remove("synonyms");
+            else {
+                ArrayNode list = props.putArray("synonyms");
+                kept.forEach(list::add);
+            }
+            if (props.isEmpty()) column.remove("properties");
+        }
+    }
+
+    /** Sets {@code properties.key}, or removes it (and an empty properties block) when blank. */
+    private static void setOrRemove(ObjectNode owner, String key, String value) {
+        ObjectNode props = propertiesNode(owner);
+        if (value == null || value.isBlank()) props.remove(key);
+        else props.put(key, value.trim());
+        if (props.isEmpty()) owner.remove("properties");
+    }
+
+    private static ObjectNode propertiesNode(ObjectNode owner) {
+        JsonNode existing = owner.get("properties");
+        return existing instanceof ObjectNode o ? o : owner.putObject("properties");
+    }
+
+    private static String blankOr(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value.trim();
+    }
+
+    /** A relationship end must be a column of a draft model (by name). */
+    private void requireColumn(String groupId, String model, String column) throws IOException {
+        String text =
+                read(workspace.workspaceRoot(groupId).resolve("models/" + model + "/metadata.yml"));
+        if (text == null) throw new DatasetException("模型不存在：" + model, 404);
+        for (JsonNode c : READ.readTree(text).path("columns"))
+            if (column.equals(c.path("name").asText())) return;
+        throw new DatasetException("模型 " + model + " 没有字段 " + column, 400);
+    }
+
+    /**
+     * spec117: moves one bullet of a knowledge file under another {@code ## heading} of the same
+     * file (removed from its place, appended to the section, which is created when missing).
+     */
+    public List<Item> moveBullet(
+            String userId, String groupId, String path, String original, String heading) {
+        if (path == null || !path.matches("knowledge/(rules|caveats|glossary|metrics)/[^/]+\\.md"))
+            throw new DatasetException("只能修改业务语义或注意事项的条目", 400);
+        if (heading == null || heading.isBlank() || heading.contains("\n"))
+            throw new DatasetException("请选择要移到的小节", 400);
+        return mutate(
+                userId,
+                groupId,
+                path,
+                content -> {
+                    if (content == null) throw new DatasetException("文件不存在", 404);
+                    List<String> lines = new ArrayList<>(List.of(content.split("\n", -1)));
+                    for (int i = 0; i < lines.size(); i++) {
+                        if (!isBullet(lines.get(i))) continue;
+                        int end = i + 1;
+                        while (end < lines.size() && isContinuation(lines.get(end))) end++;
+                        String text = bulletText(lines.subList(i, end));
+                        if (!text.equals(original)) continue;
+                        lines.subList(i, end).clear();
+                        return appendTo(
+                                String.join("\n", lines), heading.trim(), bulletLines(text));
+                    }
+                    throw new DatasetException("条目已变化，请刷新后再操作", 409);
+                },
+                null);
     }
 
     /** Replaces or deletes one Markdown bullet whose current text equals {@code original}. */
@@ -210,38 +451,43 @@ public class DraftItemService {
         if (path == null || !path.matches("knowledge/(rules|caveats|glossary|metrics)/[^/]+\\.md"))
             throw new DatasetException("只能修改业务语义或注意事项的条目", 400);
         if (text == null || text.isBlank()) throw new DatasetException("条目内容不能为空", 400);
+        if (heading == null || heading.isBlank() || heading.contains("\n"))
+            throw new DatasetException("请选择小节", 400);
+        List<String> bullet = bulletLines(text);
+        mutate(userId, groupId, path, content -> appendTo(content, heading.trim(), bullet));
+    }
+
+    private static List<String> bulletLines(String text) {
         List<String> bullet = new ArrayList<>();
         String[] parts = text.trim().split("\n");
         bullet.add("- " + parts[0]);
         for (int k = 1; k < parts.length; k++) bullet.add("  " + parts[k].trim());
-        mutate(
-                userId,
-                groupId,
-                path,
-                content -> {
-                    String title = "## " + heading;
-                    if (content == null || content.isBlank())
-                        return title + "\n\n" + String.join("\n", bullet) + "\n";
-                    List<String> lines = new ArrayList<>(List.of(content.split("\n", -1)));
-                    int start = -1;
-                    for (int i = 0; i < lines.size(); i++)
-                        if (lines.get(i).strip().equals(title)) start = i;
-                    if (start < 0) {
-                        String body = content.endsWith("\n") ? content : content + "\n";
-                        return body + "\n" + title + "\n\n" + String.join("\n", bullet) + "\n";
-                    }
-                    int end = lines.size();
-                    for (int i = start + 1; i < lines.size(); i++)
-                        if (lines.get(i).startsWith("#")) {
-                            end = i;
-                            break;
-                        }
-                    int at = end;
-                    while (at > start + 1 && lines.get(at - 1).isBlank()) at--;
-                    if (at == start + 1) lines.add(at++, "");
-                    lines.addAll(at, bullet);
-                    return String.join("\n", lines);
-                });
+        return bullet;
+    }
+
+    /** Appends the bullet lines at the end of {@code ## heading}, creating it when missing. */
+    private static String appendTo(String content, String heading, List<String> bullet) {
+        String title = "## " + heading;
+        if (content == null || content.isBlank())
+            return title + "\n\n" + String.join("\n", bullet) + "\n";
+        List<String> lines = new ArrayList<>(List.of(content.split("\n", -1)));
+        int start = -1;
+        for (int i = 0; i < lines.size(); i++) if (lines.get(i).strip().equals(title)) start = i;
+        if (start < 0) {
+            String body = content.endsWith("\n") ? content : content + "\n";
+            return body + "\n" + title + "\n\n" + String.join("\n", bullet) + "\n";
+        }
+        int end = lines.size();
+        for (int i = start + 1; i < lines.size(); i++)
+            if (lines.get(i).startsWith("#")) {
+                end = i;
+                break;
+            }
+        int at = end;
+        while (at > start + 1 && lines.get(at - 1).isBlank()) at--;
+        if (at == start + 1) lines.add(at++, "");
+        lines.addAll(at, bullet);
+        return String.join("\n", lines);
     }
 
     private interface Change {
@@ -249,6 +495,11 @@ public class DraftItemService {
     }
 
     private List<Item> mutate(String userId, String groupId, String path, Change change) {
+        return mutate(userId, groupId, path, change, null);
+    }
+
+    private List<Item> mutate(
+            String userId, String groupId, String path, Change change, Gate gate) {
         groups.getGroup(userId, groupId);
         activity.requireIdle(groupId);
         workspace.withWorkspaceLock(
@@ -264,6 +515,9 @@ public class DraftItemService {
                                         ? DraftReviewService.yamlError(path, next)
                                         : null;
                         if (invalid != null) throw new DatasetException(invalid, 400);
+                        String rejected = gate == null ? null : gate.check(path, next);
+                        if (rejected != null)
+                            throw new DatasetException("Wren 校验未通过：" + rejected, 400);
                         Files.createDirectories(file.getParent());
                         Files.writeString(file, next, StandardCharsets.UTF_8);
                     } catch (IOException e) {
@@ -300,8 +554,12 @@ public class DraftItemService {
                             false,
                             false));
         List<Field> fields = new ArrayList<>();
+        Map<String, String> oldSignature = signatures(before);
+        Map<String, String> nowSignature = signatures(after);
         for (var entry : now.entrySet())
-            if (!Objects.equals(old.get(entry.getKey()), entry.getValue()))
+            if (!Objects.equals(old.get(entry.getKey()), entry.getValue())
+                    || !Objects.equals(
+                            oldSignature.get(entry.getKey()), nowSignature.get(entry.getKey())))
                 fields.add(new Field(entry.getKey(), old.get(entry.getKey()), entry.getValue()));
         long columns = fields.stream().filter(f -> !TABLE.equals(f.name())).count();
         String summary =
@@ -310,7 +568,7 @@ public class DraftItemService {
                         : (fields.stream().anyMatch(f -> TABLE.equals(f.name())) ? "表说明、" : "")
                                 + "补充或修改 "
                                 + columns
-                                + " 个字段说明";
+                                + " 个字段";
         return List.of(
                 new Item(
                         "MODEL:" + model,
@@ -324,6 +582,21 @@ public class DraftItemService {
                         path,
                         true,
                         false));
+    }
+
+    /** Column name to its {@link #columnSummary}; detects changes beyond the description. */
+    private static Map<String, String> signatures(String yaml) {
+        Map<String, String> out = new LinkedHashMap<>();
+        if (yaml == null) return out;
+        try {
+            JsonNode node = READ.readTree(yaml);
+            if (node == null) return out;
+            for (JsonNode column : node.path("columns"))
+                out.put(column.path("name").asText(), columnSummary(column));
+        } catch (IOException e) {
+            // Unparseable YAML shows no field detail; the draft check reports the error.
+        }
+        return out;
     }
 
     private static Map<String, String> descriptions(String yaml) {
@@ -343,6 +616,31 @@ public class DraftItemService {
         }
         return out;
     }
+
+    /**
+     * The description plus what spec117 lets the page maintain, so a role, synonym or expression
+     * change shows up as a field change too.
+     */
+    private static String columnSummary(JsonNode column) {
+        JsonNode props = column.path("properties");
+        StringBuilder text = new StringBuilder(props.path("description").asText("").trim());
+        List<String> extras = new ArrayList<>();
+        String role = props.path("semanticType").asText("");
+        if (!role.isBlank()) extras.add("角色：" + ROLE_LABELS.getOrDefault(role, role));
+        List<String> synonyms = new ArrayList<>();
+        props.path("synonyms").forEach(s -> synonyms.add(s.asText()));
+        if (!synonyms.isEmpty()) extras.add("同义词：" + String.join("、", synonyms));
+        if (column.path("is_calculated").asBoolean(false))
+            extras.add("表达式：" + column.path("expression").asText(""));
+        if (!extras.isEmpty())
+            text.append(text.isEmpty() ? "" : "（")
+                    .append(String.join("；", extras))
+                    .append(text.isEmpty() ? "" : "）");
+        return text.toString();
+    }
+
+    private static final Map<String, String> ROLE_LABELS =
+            Map.of("IDENTIFIER", "标识", "DIMENSION", "维度", "TIME", "时间", "MEASURE", "度量");
 
     private static List<Item> relationItems(String before, String after, List<String> basis) {
         Map<String, JsonNode> old = relations(before);

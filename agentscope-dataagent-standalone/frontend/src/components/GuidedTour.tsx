@@ -31,12 +31,9 @@ const COPY: Record<TourStepId, Copy> = {
   modeling: { no: 7, head: '建模助手正在工作', text: '你可以看着它一步步整理模型，也可以在对话里补充。完成后继续下一步。' },
   review: { no: 8, target: 'turn-result', head: '看看助手改了什么', text: '每一条都能打开查看和编辑。觉得不对，就在对话里告诉助手。这些修改都在草稿里，发布前不影响问数。', next: true, waiting: '建模结果会显示在回复下方' },
   confirm: { no: 8, target: 'confirm-cards', head: '确定这几个口径', text: '助手拿不准的关系和口径需要你来定。选好后提交，助手修改完草稿后再去试问。', waiting: '助手正在按你的选择修改草稿' },
-  trial_open: { no: 9, target: 'trial-open', head: '发布前先试问一次', text: '用一个业务问题检验模型：助手按草稿写出 SQL，由你判断对不对。' },
-  trial_ask: { no: 9, target: 'trial-panel', head: '问一个业务问题', text: '点推荐问题，或输入你想问的，助手会写出 SQL。' },
-  trial_confirm: { no: 9, target: 'trial-confirm', head: '核对 SQL', text: '结果对就确认，发布后问数时会参考这组问答；不对可以点“不正确”让助手修改。', waiting: '助手正在生成 SQL' },
-  publish: { no: 10, target: 'draft-confirm,confirm-cards,draft-publish', head: '发布后才能问数', text: '发布时系统会再检查一遍模型。问数只用已发布的版本，之后改草稿不影响线上，直到再次发布。', waiting: '助手完成后可以发布' },
-  preparing: { no: 10, head: '发布成功，正在准备问数', text: '系统正在建立检索索引并预热，大约半分钟。准备好后会带你去问第一个问题，这样提问时不用再等。' },
-  ask: { no: 11, target: 'chat-send', head: '问第一个问题', text: '知识库已选好，有推荐问题时也已填好。发送后就能看到答案，回答下方还能继续深入分析。', waiting: '选好知识库并输入问题' },
+  publish: { no: 9, target: 'draft-confirm,confirm-cards,draft-publish', head: '发布后才能问数', text: '发布时系统会再检查一遍模型。问数只用已发布的版本，之后改草稿不影响线上，直到再次发布。', waiting: '助手完成后可以发布' },
+  preparing: { no: 9, head: '发布成功，正在准备问数', text: '系统正在建立检索索引并预热，大约半分钟。准备好后会带你去问第一个问题，这样提问时不用再等。' },
+  ask: { no: 10, target: 'chat-send', head: '问第一个问题', text: '知识库已选好，有推荐问题时也已填好。发送后就能看到答案，回答下方还能继续深入分析。', waiting: '选好知识库并输入问题' },
 };
 
 function copyFor(tour: TourState): Copy {

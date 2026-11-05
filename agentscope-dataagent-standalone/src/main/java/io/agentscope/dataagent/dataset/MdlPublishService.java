@@ -212,7 +212,10 @@ public class MdlPublishService {
     // ------------------------------------------------------------- read-only view (specs/013 M2,
     // shapes preserved for the frontend)
 
-    /** One column in a logical model; {@code relationship}/{@code calculated} carry the badges. */
+    /**
+     * One column in a logical model; {@code relationship}/{@code calculated} carry the badges.
+     * The last five are platform-maintained {@code properties} the engine ignores (spec117).
+     */
     public record MdlColumnView(
             String name,
             String type,
@@ -220,7 +223,12 @@ public class MdlPublishService {
             boolean relationship,
             boolean calculated,
             String expression,
-            boolean primaryKey) {}
+            boolean primaryKey,
+            String displayName,
+            String semanticType,
+            List<String> synonyms,
+            List<String> values,
+            boolean userDescribed) {}
 
     /**
      * One logical model with its full column list; {@code tableName} is the physical table.
@@ -356,7 +364,12 @@ public class MdlPublishService {
                                 c.relationship() != null,
                                 c.calculated(),
                                 c.expression(),
-                                c.primaryKey()));
+                                c.primaryKey(),
+                                c.displayName(),
+                                c.semanticType(),
+                                c.synonyms(),
+                                c.values(),
+                                c.userDescribed()));
             }
             MdlModelView mv =
                     new MdlModelView(

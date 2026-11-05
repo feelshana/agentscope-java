@@ -834,23 +834,25 @@ export default function ModelingChatPanel({
           </button>
         </div>}
 
-        <div style={S.thread} ref={threadRef}>
+        <div style={variant === 'dock' ? S.dockThread : S.thread} ref={threadRef}>
           {sessionError && <p role="alert">{sessionError}</p>}
           {messages.length === 0 && (
             <div style={S.welcome}>
               <div style={S.welcomeTitle}>
                 <Icon name="model" size="sm" /> 建模助手
               </div>
-              <div style={S.welcomeDesc}>把数据表整理成业务人员能直接提问的语义模型：字段含义、表间关系和统计口径。</div>
+              <div style={S.welcomeDesc}>用业务语言告诉我要改什么，我会改到语义模型里；改过的地方在图上标红，也会列进"待确认"。比如：</div>
               {[
-                ['理解数据', '读取字段、样例和业务文档，补全字段说明，识别表间关系。'],
-                ['确定口径', '只在会影响统计结果的地方问你，你的选择会写进业务语义。'],
-                ['试问并发布', '用常见问题验证口径，满意后在底部草稿栏发布，问数即可使用。'],
-              ].map(([title, text], i) => <div key={title} style={S.welcomeStep}>
-                <span style={S.welcomeNum}>{i + 1}</span>
-                <span><strong style={{ color: 'var(--da-text)' }}>{title}</strong>　{text}</span>
-              </div>)}
-              <div style={S.welcomeDesc}>也可以直接在下方描述业务，比如"访问次数按记录行数统计，不去重"。</div>
+                ['增加术语', '"金卡客户"指会员等级为金卡会员的客户'],
+                ['增加规则', '统计有效订单时，默认排除已取消的订单'],
+                ['补充字段说明', '给订单表的金额字段补充说明和单位'],
+                ['新增关系', '订单表按客户编号关联客户表，每笔订单对应一个客户'],
+              ].map(([title, text]) => <button key={title} type="button" style={S.welcomeExample}
+                title="填入输入框，可修改后发送" onClick={() => setInput(`${title}：${text}`)}>
+                <strong style={{ color: 'var(--da-text)' }}>{title}</strong>
+                <span>{text}</span>
+              </button>)}
+              <div style={S.welcomeDesc}>只在会影响统计结果的地方我才会问你；改动都进草稿，确认无误后在底部统一发布。</div>
             </div>
           )}
           {messages.map(m => (
@@ -1028,6 +1030,7 @@ const S: Record<string, CSSProperties> = {
   },
   // Messages keep a comfortable reading width and stay centered on wide screens.
   thread: { flex: 1, overflowY: 'auto', padding: '20px max(20px, calc((100% - 1100px) / 2)) 12px', display: 'flex', flexDirection: 'column', gap: 18 },
+  dockThread: { flex: 1, overflowY: 'auto', padding: '12px 10px 8px', display: 'flex', flexDirection: 'column', gap: 14 },
   welcome: {
     display: 'flex',
     flexDirection: 'column',
@@ -1047,6 +1050,7 @@ const S: Record<string, CSSProperties> = {
   },
   welcomeDesc: { fontSize: 13, color: 'var(--da-text-3)', lineHeight: 1.7 },
   welcomeStep: { display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 13, color: 'var(--da-text-2)', lineHeight: 1.6 },
+  welcomeExample: { display: 'flex', flexDirection: 'column', gap: 2, width: '100%', textAlign: 'left', padding: '8px 12px', border: '1px solid var(--da-border)', borderRadius: 10, background: 'var(--da-surface)', color: 'var(--da-text-2)', fontSize: 13, lineHeight: 1.5, cursor: 'pointer' },
   welcomeNum: { flex: '0 0 20px', height: 20, borderRadius: 8, background: 'var(--da-primary-subtle)', color: 'var(--da-primary)', fontSize: 12, fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' },
   botRow: { display: 'flex', gap: 10, alignItems: 'flex-start' },
   avatar: { flex: '0 0 28px', height: 28, borderRadius: 8, background: 'var(--da-primary-subtle)', color: 'var(--da-primary)', fontSize: 12, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginTop: 2 },

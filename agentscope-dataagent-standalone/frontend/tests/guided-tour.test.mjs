@@ -32,7 +32,7 @@ test('finishing modeling protects the review and confirmation controls without a
   tourSignal('confirm-done', { groupId: 'another-kb' });
   assert.equal(current().step, 'confirm');
   tourSignal('confirm-done', { groupId: 'demo' });
-  assert.equal(current().step, 'trial_open');
+  assert.equal(current().step, 'publish');
 });
 
 test('pause restores draft inspection and resume protects the same unfinished step', () => {

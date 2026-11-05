@@ -11,6 +11,7 @@ import { ShellOutletContext } from './EditTierGate';
 import { ShellNavigationContext } from './ShellNavigation';
 import Icon from './Icon';
 import NewVersionBanner from './NewVersionBanner';
+import { embedded, isModelingWorkbench } from '../state/embedded';
 import './AppShell.css';
 
 export default function AppShell() {
@@ -25,6 +26,10 @@ export default function AppShell() {
     setNavigationOpen(value => !value);
   }, []);
   useEffect(() => { setNavigationOpen(false); }, [location.pathname, location.search]);
+  // Entering a modeling workbench folds the menu to its icons; the user may expand it again and
+  // it stays expanded until they leave and come back.
+  const workbench = isModelingWorkbench(location.pathname);
+  useEffect(() => { if (workbench) setCollapsed(true); }, [workbench]);
   // spec105: someone still learning the product needs the menu's words, not just its icons.
   const onboarding = useOnboarding();
   const expandedForNewUser = useRef(false);
@@ -80,7 +85,7 @@ export default function AppShell() {
 
   return (
     <ShellNavigationContext.Provider value={{ enabled: true, open: navigationOpen, toggle: toggleNavigation }}>
-    <div className="app-shell">
+    <div className={`app-shell${embedded ? ' is-embedded' : ''}`}>
       <a
         href="#main-content"
         style={{ position: 'absolute', left: -9999, top: 0, color: 'var(--da-primary)' }}

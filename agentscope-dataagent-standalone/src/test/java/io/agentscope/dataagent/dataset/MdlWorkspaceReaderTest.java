@@ -387,4 +387,36 @@ class MdlWorkspaceReaderTest {
                 String.valueOf(s.issues()));
         assertEquals(0, s.models().size());
     }
+
+    @Test
+    void readsPageMaintainedColumnProperties() throws IOException {
+        write(
+                ws.resolve("models").resolve("orders").resolve("metadata.yml"),
+                """
+                name: orders
+                columns:
+                - name: region
+                  type: VARCHAR
+                  properties:
+                    description: 大区
+                    description_source: user
+                    semanticType: DIMENSION
+                    displayName: 地区
+                    synonyms: [区域, 大区]
+                    values:
+                    - 华东
+                    - 华北
+                - name: amount
+                  type: DECIMAL
+                """);
+        var columns = reader.read("g1").models().get(0).columns();
+        var region = columns.get(0);
+        assertEquals("DIMENSION", region.semanticType());
+        assertEquals("地区", region.displayName());
+        assertEquals(java.util.List.of("区域", "大区"), region.synonyms());
+        assertEquals(java.util.List.of("华东", "华北"), region.values());
+        org.junit.jupiter.api.Assertions.assertTrue(region.userDescribed());
+        org.junit.jupiter.api.Assertions.assertTrue(columns.get(1).synonyms().isEmpty());
+        org.junit.jupiter.api.Assertions.assertFalse(columns.get(1).userDescribed());
+    }
 }

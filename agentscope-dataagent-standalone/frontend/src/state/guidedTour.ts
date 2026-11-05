@@ -8,13 +8,12 @@ import { clearTour, saveTour, TourPosition, TourRoute } from '../api/onboarding'
  */
 export type TourStepId =
   | 'create' | 'source' | 'sample' | 'importing' | 'screening' | 'window' | 'start' | 'modeling'
-  | 'review' | 'confirm' | 'trial_open' | 'trial_ask' | 'trial_confirm' | 'publish' | 'preparing' | 'ask';
+  | 'review' | 'confirm' | 'publish' | 'preparing' | 'ask';
 
 export type TourSignal =
   | 'kb-created' | 'source-chosen' | 'sample-started' | 'data-ready' | 'screening-done'
-  | 'window-ready' | 'model-started' | 'model-idle' | 'review-next' | 'confirm-done' | 'trial-opened'
-  | 'trial-asked'
-  | 'trial-confirmed' | 'published' | 'query-ready' | 'asked';
+  | 'window-ready' | 'model-started' | 'model-idle' | 'review-next' | 'confirm-done'
+  | 'published' | 'query-ready' | 'asked';
 
 /** Each step ends on one signal; a signal already seen skips its step (e.g. nothing to screen). */
 const ORDER: { id: TourStepId; on: TourSignal }[] = [
@@ -28,9 +27,6 @@ const ORDER: { id: TourStepId; on: TourSignal }[] = [
   { id: 'modeling', on: 'model-idle' },
   { id: 'review', on: 'review-next' },
   { id: 'confirm', on: 'confirm-done' },
-  { id: 'trial_open', on: 'trial-opened' },
-  { id: 'trial_ask', on: 'trial-asked' },
-  { id: 'trial_confirm', on: 'trial-confirmed' },
   { id: 'publish', on: 'published' },
   { id: 'preparing', on: 'query-ready' },
   { id: 'ask', on: 'asked' },
@@ -47,7 +43,7 @@ export interface TourState {
 }
 
 const MODEL_SPOTLIGHT_STEPS = new Set<TourStepId>([
-  'screening', 'window', 'start', 'review', 'confirm', 'trial_open', 'trial_ask', 'trial_confirm', 'publish',
+  'screening', 'window', 'start', 'review', 'confirm', 'publish',
 ]);
 
 /** Keep the draft drawer from covering the real control required by the current modeling step. */
@@ -87,8 +83,10 @@ export const tourActive = () => { const t = snapshot(); return !!t && !t.paused;
 export function adoptTour(saved: TourPosition | null) {
   if (finished || stateToken === getToken()) return;
   stateToken = getToken();
-  state = saved && ORDER.some(s => s.id === saved.step)
-    ? { step: saved.step as TourStepId, groupId: saved.groupId, route: saved.route, paused: saved.paused }
+  // spec117: the trial steps left the tour; a position saved on one of them continues at publish.
+  const step = saved && /^trial_/.test(saved.step) ? 'publish' : saved?.step;
+  state = saved && ORDER.some(s => s.id === step)
+    ? { step: step as TourStepId, groupId: saved.groupId, route: saved.route, paused: saved.paused }
     : null;
   seen.clear();
   emit();
@@ -107,15 +105,6 @@ export function forgetTour() {
   state = null;
   stateToken = getToken();
   emit();
-}
-
-/** The question being checked has no SQL and none is coming; go back and ask again. */
-export function retryTrialQuestion() {
-  const t = snapshot();
-  if (!t || t.paused || t.step !== 'trial_confirm') return;
-  seen.delete('trial-asked');
-  seen.delete('trial-confirmed');
-  set({ ...t, step: 'trial_ask' });
 }
 
 export function pauseTour() {

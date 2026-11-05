@@ -139,7 +139,8 @@ export interface DraftItem {
 }
 
 export interface DraftItemEdit {
-  category: DraftItem['category'];
+  /** COLUMN is a spec117 page edit; items themselves are never of that category. */
+  category: DraftItem['category'] | 'COLUMN';
   path?: string;
   model?: string;
   tableDescription?: string;
@@ -150,6 +151,20 @@ export interface DraftItemEdit {
   original?: string;
   text?: string;
   delete?: boolean;
+  /** spec117 page edits. */
+  column?: string;
+  columnType?: string;
+  displayName?: string;
+  semanticType?: string;
+  synonyms?: string[];
+  expression?: string;
+  create?: boolean;
+  heading?: string;
+  leftModel?: string;
+  leftColumn?: string;
+  rightModel?: string;
+  rightColumn?: string;
+  description?: string;
 }
 
 /** {@code since} (ISO time) limits the items to writes from one turn on. */
@@ -163,4 +178,9 @@ export async function editDraftItem(groupId: string, edit: DraftItemEdit): Promi
   return read(await apiFetch(`${base(groupId)}/draft/items`, {
     method: 'POST', headers: headers(true), body: JSON.stringify(edit),
   }), '保存修改失败');
+}
+
+/** spec117: one business document's draft text (MANAGE), for the passages behind a model. */
+export async function getDocumentContent(groupId: string, name: string): Promise<{ name: string; content: string }> {
+  return read(await apiFetch(`${base(groupId)}/documents/${encodeURIComponent(name)}/content`, { headers: headers() }), '读取业务文档失败');
 }

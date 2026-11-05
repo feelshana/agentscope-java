@@ -37,6 +37,8 @@ spec 是一页纸的需求与验收标准，写代码之前先写（模板：[00
 | [112](112-question-review-on-context-change.md) | 口径变更后问答复核，资产验证通过的问题存为问答 | 已实施，验收见 test-reports/20261103-spec112-acceptance.md |
 | [113](113-single-entry-asset-proposals.md) | 建模对话统一说需求，资产先提议后起草，按官方去处选型 | 已实施，验收见 test-reports/20261103-spec113-pre-tests.md |
 | [114](114-query-coach.md) | 问数教练：列出常用问题，助手分析缺口并提议，批准后起草和核对 | 一期已实施，验收见 test-reports/20261103-spec114-phase1-acceptance.md；第 8 节问数优化交互调整已实施（20261103-spec114-section8-acceptance.md）；二期待做 |
+| [116](116-wren-semantic-strengthening.md) | 让 Wren 承担语义：升级 0.17.1、指标（Cube）、取值与同义词、基准评测 | 暂缓（草案保留） |
+| [117](117-semantic-model-workbench.md) | 语义模型工作台：关系图、字段三分类、结构化规则、页面直接修改 | 主体已实现，浏览器验收进行中，见 test-reports/20261105-spec117-semantic-workbench.md |
 
 ## 已完成或已关闭（done/）
 
