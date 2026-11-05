@@ -1,0 +1,58 @@
+{
+  "source": "本机真实问答，测试本地数据源；仅导出渠道聚合，无客户明细",
+  "capturedAt": "2026-11-05T17:41:10.351000+08:00",
+  "sessionId": "267750bc-1f90-46ed-bd4c-76ed83203e30",
+  "toolResultId": "066d86c8-a0aa-49ba-a846-65b456aefb15:result:call_5bfba377721a4ff899ba2d7c",
+  "sql": "SELECT channel AS 销售渠道, COUNT(*) AS 订单数, SUM(total_amount) AS 订单总金额 FROM orders WHERE order_date >= '2025-10-01' AND order_date < '2025-11-01' GROUP BY channel WITH ROLLUP",
+  "result": {
+    "columns": [
+      "销售渠道",
+      "订单数",
+      "订单总金额"
+    ],
+    "rows": [
+      [
+        "APP",
+        36,
+        1416359.71
+      ],
+      [
+        "H5",
+        33,
+        1048901.43
+      ],
+      [
+        "PC端",
+        39,
+        1587723.58
+      ],
+      [
+        "小程序",
+        34,
+        1455309.54
+      ],
+      [
+        null,
+        142,
+        5508294.26
+      ]
+    ],
+    "row_count": 5,
+    "truncated": false
+  },
+  "totalOrders": 142,
+  "totalAmount": 5508294.26,
+  "pcAmount": 1587723.58,
+  "pcShare": "28.82",
+  "limit": 1000,
+  "publishedVersionAtExecution": null,
+  "dataFreshness": null,
+  "proposalOnly": [
+    "逐项结论引用与定位",
+    "业务化依据面板",
+    "份额公式与依赖链",
+    "问题反馈定位"
+  ],
+  "calculationNote": "28.82%为原型根据真实结果使用Decimal计算；不是本轮Agent或Python工具产出",
+  "validation": "四个渠道金额及笔数与ROLLUP汇总行精确一致；汇总行不得再次参与明细求和"
+}

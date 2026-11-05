@@ -4,6 +4,7 @@ from datetime import date, datetime, time, timedelta, timezone
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import stat
 import sys
@@ -23,13 +24,53 @@ TABLES = {
                      "lastloginprojectid:varchar(32),spmsaccount:varchar(50),firstloginflag:int,"
                      "state:int,passwordlastupdate:datetime,company:varchar(50),dept:varchar(50),"
                      "tip_count:int,select_area_tip_count:int,user_type:int,posts:varchar(512)"),
-    "d_report": ("bi_report", "id:varchar(36),name:varchar(100),org_id:varchar(32)"),
-    "d_dashboard": ("bi_dashboard", "id:varchar(36),name:varchar(100),org_id:varchar(32)"),
+    "d_report": ("bi_report", "id:varchar(36),name:varchar(100),org_id:varchar(32),"
+                 "last_heartbeat_time:datetime,editing_session:varchar(64),description:text,"
+                 "creator:varchar(36),create_time:datetime,update_time:datetime,state:int,type:int,"
+                 "org_name:varchar(255),remark:text,assets:varchar(10),is_hot:int,training_status:int,"
+                 "training_time:datetime,agent_id:varchar(50),agent_name:varchar(512),"
+                 "source_id:varchar(50),update_config_time:datetime,pre_shutdown_status:int,requester:varchar(36)"),
+    "d_dashboard": ("bi_dashboard", "id:varchar(36),name:varchar(100),org_id:varchar(32),"
+                    "last_heartbeat_time:datetime,editing_session:varchar(64),editing_operator:varchar(36),"
+                    "description:text,creator:varchar(36),create_time:datetime,update_time:datetime,state:int,"
+                    "org_name:varchar(255),datasource_ids:text,model_ids:varchar(5000),auto_refresh:int,"
+                    "refresh_time:int,is_dark:int,assets:varchar(10),can_download:int,can_subscribe:int,"
+                    "can_comment:int,view_sql:int,show_dashboard_title:int,is_hot:int,title_align:varchar(255),"
+                    "min_height:double,background:varchar(1024),is_template:varchar(5),template_image:varchar(512),"
+                    "hide_top_right:int,is_hide_drill_or_link_btn:int,temp:text,is_mobile:int,dashboard_type:int,"
+                    "pre_shutdown_status:int,ttl:int,unit:varchar(15),subcategory:int,requester:varchar(36)"),
     "d_report_log": ("bi_report_log", "id:varchar(32),log_time:datetime,report_id:varchar(32),"
                      "operator_id:varchar(32)"),
     "d_dashboard_log": ("bi_dashboard_log", "id:varchar(32),log_time:datetime,dashboard_id:varchar(32),"
                         "operator_id:varchar(32)"),
 }
+# The original three columns stay first so an additive migration never rearranges existing data.
+ASSET_TABLES = ("d_report", "d_dashboard")
+ASSET_SCHEMA = "3-assets"
+ASSET_COMMENTS = {
+    "last_heartbeat_time": "上次心跳时间，非访问次数或最近访问时间",
+    "editing_session": "编辑会话标识，不作为登录凭证使用",
+    "editing_operator": "编辑用户原值", "description": "对象描述",
+    "creator": "创建人编号", "create_time": "创建时间，东八区",
+    "update_time": "更新时间，东八区", "org_name": "对象当前项目名",
+    "remark": "备注", "assets": "是否统计到分析云数据资产中：YES是，NO否",
+    "is_hot": "三个月内访问量TOP20标记：1是，0否，非访问次数",
+    "training_status": "数据训练状态，保留源编码", "training_time": "数据训练时间",
+    "agent_id": "助手ID", "agent_name": "助手名称", "source_id": "另存为来源",
+    "update_config_time": "修改配置时间，不含配置内容", "pre_shutdown_status": "预下线状态",
+    "requester": "业务方原值", "datasource_ids": "数据源ID列表，保留源值",
+    "model_ids": "模型ID列表，保留源值", "auto_refresh": "仪表盘是否自动刷新",
+    "refresh_time": "自动刷新时间，单位按源定义", "is_dark": "是否使用深色主题",
+    "can_download": "是否可以下载：1是，0否", "can_subscribe": "是否可以订阅：1是，0否",
+    "can_comment": "是否可以备注：1是，0否", "view_sql": "查看SQL开关，保留源编码",
+    "show_dashboard_title": "是否展示标题：0隐藏，1展示", "title_align": "标题对齐方式",
+    "min_height": "最小高度", "background": "背景地址", "is_template": "是否模板",
+    "template_image": "模板缩略图地址", "hide_top_right": "隐藏组件右上角菜单",
+    "is_hide_drill_or_link_btn": "隐藏下钻、联动按钮", "temp": "临时保存标记原值",
+    "is_mobile": "是否手机端", "dashboard_type": "仪表盘类型，保留源编码",
+    "ttl": "存活时间", "unit": "存活时间单位", "subcategory": "子类：0普通仪表盘，1分析云首页看板",
+}
+
 DIMENSIONS = tuple(TABLES)[:5]
 LOGS = tuple(TABLES)[5:]
 LOG_PROJECTS = {"d_report_log": "report_project_id", "d_dashboard_log": "dashboard_project_id"}
@@ -155,18 +196,23 @@ def require_owner(target, config):
         raise ValueError("既有任务的源地址发生变化，拒绝复用水位")
 
 
+def field_ddl(source, name, kind):
+    comment = ASSET_COMMENTS.get(name, "") if source in ASSET_TABLES else ""
+    comment = comment or FIELD_COMMENTS.get(name, "")
+    if name == "name":
+        comment = {"sys_project": "项目名称", "sys_operator": "人员当前显示姓名，禁用账号可能显示编号",
+                   "d_report": "报表名称，可能重名，以id区分", "d_dashboard": "仪表盘名称，可能重名，以id区分"}[source]
+    if name == "state":
+        comment = "人员状态，保留源值，不自动过滤" if source == "sys_operator" else "对象状态：0待发布，1已发布，不自动过滤"
+    if name == "type" and source == "d_report":
+        comment = "报表类型：0复杂报表，1智能报表，2订制SQL报表"
+    return (quote(name) + " " + kind + (" NOT NULL" if name == "id" else " NULL")
+            + " COMMENT '" + comment.replace("'", "''") + "'")
+
+
 def ddl(source):
     target, spec = TABLES[source]
-    fields = []
-    for name, kind in (x.split(":") for x in spec.split(",")):
-        comment = FIELD_COMMENTS.get(name, "")
-        if name == "name":
-            comment = {"sys_project": "项目名称", "sys_operator": "人员当前显示姓名，禁用账号可能显示编号",
-                       "d_report": "报表名称，可能重名，以id区分", "d_dashboard": "仪表盘名称，可能重名，以id区分"}[source]
-        if name == "state":
-            comment = "人员状态，保留源值，不自动过滤" if source == "sys_operator" else "对象状态：0待发布，1已发布，不自动过滤"
-        fields.append(quote(name) + " " + kind + (" NOT NULL" if name == "id" else " NULL")
-                      + " COMMENT '" + comment.replace("'", "''") + "'")
+    fields = [field_ddl(source, *item.split(":")) for item in spec.split(",")]
     fields.append("PRIMARY KEY (`id`)")
     if source in LOGS:
         obj = "report_id" if source == "d_report_log" else "dashboard_id"
@@ -182,15 +228,53 @@ def ddl(source):
             + TABLE_COMMENTS[source] + "'")
 
 
-def check_schema(target):
+def normalize_type(kind):
+    return re.sub(r"\b(tinyint|smallint|mediumint|int|bigint)\(\d+\)", r"\1", kind.lower())
+
+
+def table_fields(target, table):
+    with target.cursor() as cursor:
+        cursor.execute("SHOW COLUMNS FROM " + quote(table))
+        return cursor.fetchall()
+
+
+def check_schema(target, allow_upgrade=False):
+    pending = {}
     for source, (table, spec) in TABLES.items():
-        with target.cursor() as cursor:
-            cursor.execute("SHOW COLUMNS FROM " + quote(table))
-            actual = cursor.fetchall()
-        expected = [item.split(":") for item in spec.split(",")]
-        normalized = [(r[0].lower(), r[1].lower().replace("int(11)", "int")) for r in actual]
-        if normalized != [(name, kind) for name, kind in expected] or actual[0][3] != "PRI":
+        actual = table_fields(target, table)
+        expected = [tuple(item.split(":")) for item in spec.split(",")]
+        normalized = [(r[0].lower(), normalize_type(r[1])) for r in actual]
+        known_prefix = (allow_upgrade and source in ASSET_TABLES and len(actual) >= 3
+                        and len(actual) <= len(expected) and normalized == expected[:len(actual)])
+        if (normalized != expected and not known_prefix) or not actual or actual[0][3] != "PRI":
             raise ValueError("目标表结构与同步版本不一致：" + table)
+        if known_prefix and len(actual) < len(expected):
+            pending[source] = expected[len(actual):]
+    return pending
+
+
+def require_paused(target):
+    if state(target, "paused") != "true":
+        raise ValueError("请先pause并确认running=false，再升级或刷新基础表")
+
+
+def migrate_assets(source, target, config):
+    require_owner(target, config)
+    require_paused(target)
+    # Validate every table before the first implicitly committed MySQL DDL.
+    pending = check_schema(target, allow_upgrade=True)
+    inspect_source(source)
+    if pending or state(target, "asset_fields_ready") is None:
+        save_state(target, "asset_fields_ready", "false")
+        target.commit()
+    for name, fields in pending.items():
+        with target.cursor() as cursor:
+            cursor.execute("ALTER TABLE " + quote(TABLES[name][0]) + " "
+                           + ",".join("ADD COLUMN " + field_ddl(name, col, kind) for col, kind in fields))
+    check_schema(target)
+    save_state(target, "schema_version", ASSET_SCHEMA)
+    target.commit()
+    print("报表23列/仪表盘39列结构升级完成；数据和日志进度保留。请执行refresh-basics补齐字段。", flush=True)
 
 
 def initialize(target, config):
@@ -220,10 +304,16 @@ def inspect_source(source):
     for table in TABLES:
         with source.cursor() as cursor:
             cursor.execute("SHOW COLUMNS FROM " + quote(table))
-            names = {row[0].lower() for row in cursor.fetchall()}
+            actual = cursor.fetchall()
+            names = {row[0].lower() for row in actual}
         required = set(columns(table)) | ({LOG_PROJECTS[table]} if table in LOGS else set())
         if not required.issubset(names):
             raise ValueError("源表缺少本版字段：" + table)
+        if table in ASSET_TABLES:
+            kinds = {row[0].lower(): normalize_type(row[1]) for row in actual}
+            if any(kinds.get(name) != kind for name, kind in
+                   (item.split(":") for item in TABLES[table][1].split(","))):
+                raise ValueError("源表字段类型与本版定义不一致：" + table)
     for table in LOGS:
         with source.cursor() as cursor:
             cursor.execute("SHOW INDEX FROM " + quote(table))
@@ -254,6 +344,14 @@ class SyncPaused(Exception):
 
 def noop():
     pass
+
+
+def verify_dimensions(source, target):
+    for name in DIMENSIONS:
+        source.rollback()
+        count = scalar(source, "SELECT COUNT(*) FROM " + quote(name))
+        if count != scalar(target, "SELECT COUNT(*) FROM " + quote(TABLES[name][0])):
+            raise ValueError("基础表计数不一致：" + TABLES[name][0])
 
 
 def refresh_dimensions(source, target, batch, checkpoint=noop):
@@ -513,15 +611,21 @@ def run(config, action, until, connect_fn=connect):
         if int(scalar(target, "SELECT VERSION()").split(".")[0]) < 8:
             raise ValueError("同步目标必须为MySQL8及以上")
         if action in ("status", "pause", "resume"):
+            if action == "resume":
+                if scalar(target, "SELECT GET_LOCK('dataagent-bi-sync-v1',0)") != 1:
+                    raise ValueError("已有同步或结构升级运行，暂不能resume")
+                locked = True
             require_owner(target, config)
-            check_schema(target)
+            check_schema(target, allow_upgrade=action != "resume")
+            if action == "resume" and state(target, "asset_fields_ready") == "false":
+                raise ValueError("新增字段尚未补齐，请先执行refresh-basics")
             if action in ("pause", "resume"):
                 save_state(target, "paused", "true" if action == "pause" else "false")
                 target.commit()
                 print("已暂停后续同步；运行中的任务将在安全点退出，请用status确认running=false"
                       if action == "pause" else "已允许同步；未自动运行或安装定时任务", flush=True)
             else:
-                view = {k: state(target, k) for k in ["success_until", "last_success_at"]
+                view = {k: state(target, k) for k in ["success_until", "last_success_at", "schema_version", "asset_fields_ready"]
                         + [TABLES[n][0] for n in LOGS]}
                 view.update(paused=state(target, "paused") == "true",
                             running=scalar(target, "SELECT IS_USED_LOCK('dataagent-bi-sync-v1')") is not None,
@@ -533,7 +637,7 @@ def run(config, action, until, connect_fn=connect):
             inspect_source(source)
             print("两端连接/源字段通过；不写数据库，不代表全量同步已完成", flush=True)
             return
-        if action in ("init", "sync"):
+        if action in ("init", "sync", "migrate", "refresh-basics"):
             if scalar(target, "SELECT GET_LOCK('dataagent-bi-sync-v1',0)") != 1:
                 raise ValueError("已有同步任务运行，本次退出")
             locked = True
@@ -542,8 +646,30 @@ def run(config, action, until, connect_fn=connect):
             inspect_source(source)
             initialize(target, config)
             return
+        if action == "migrate":
+            require_owner(target, config)
+            require_paused(target)
+            source = connect_fn(config["source"], readonly=True)
+            migrate_assets(source, target, config)
+            return
         require_owner(target, config)
+        if action == "sync" and state(target, "paused") == "true":
+            print("同步已暂停，本次跳过；未连接BI源库", flush=True)
+            return
         check_schema(target)
+        if action == "refresh-basics":
+            require_paused(target)
+            monitor = connect_fn(config["target"], readonly=False)
+            monitor.autocommit(True)
+            source = connect_fn(config["source"], readonly=True)
+            inspect_source(source)
+            refresh_dimensions(source, target, config.get("batch_size", 1000),
+                               lambda: require_paused(monitor))
+            verify_dimensions(source, target)
+            save_state(target, "asset_fields_ready", "true")
+            target.commit()
+            print("基础表新增字段已补齐；日志数据、水位和整批截止日未改变，现可resume。", flush=True)
+            return
         start = date.fromisoformat(config["start_date"])
         if action == "verify":
             source = connect_fn(config["source"], readonly=True)
@@ -611,7 +737,7 @@ def run(config, action, until, connect_fn=connect):
 
 def main():
     parser = argparse.ArgumentParser(description="BI7表镜像：只读源，固定目标，幂等和逐日水位")
-    parser.add_argument("action", choices=["check", "init", "sync", "verify", "status", "pause", "resume"])
+    parser.add_argument("action", choices=["check", "init", "sync", "verify", "status", "pause", "resume", "migrate", "refresh-basics"])
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--until", type=date.fromisoformat,
                         default=datetime.now(TZ).date(), help="截止日不包含当天，默认东八区今天")

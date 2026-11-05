@@ -656,6 +656,7 @@ system prompt（空记忆时为空标签）。排查助手"重复犯错"先看�
 - 展示：数据库 `session_history/session_message` 提供列表与消息分页；索引器从本地引擎日志补齐，列表不访问 Docker。
 - 续聊：引擎日志及工作区持久状态继续保留，数据库展示投影不替代引擎上下文。
 - 附件：`session_artifact` 元数据加持久目录，所有者通过请求头认证读取；沙箱回收不影响已保存文件，删除或重置会话会清理附件。
+- 图片展示：`Markdown` 保持渲染组件身份稳定，避免流式文字和滚动状态更新导致图片重新挂载。`AttachmentImage` 通过浏览器内存中的 `imageCache` 复用持久附件的在途下载和对象 URL，正文、右侧预览与放大图共享；超过容量时淘汰未被展示的图片，退出或重新认证时清空并取消在途请求。可覆盖的 workspace 文件仍在新预览挂载时重新读取。
 - 执行：按用户和 agent 懒创建，活动租约保护回收；每次 Python 独立运行目录，最近输入有限恢复；容器资源和数量受限。
 - 维护：容量保护、分段锁和分批孤立文件补偿已实施；正常历史保留任务见 ADR 0061，默认关闭并先试运行；多实例协调和对象存储尚未实施。部署参数与备份范围见 [会话与附件部署说明](docs/reference/session-history-and-artifacts.md)。
 
@@ -868,7 +869,7 @@ spec115新增`docker/deploy-formal.sh`编排既有正式发布：整轮发布锁
 
 ADR0127/spec110补充轻量同步观测与退役：AdminBiSyncController只允许全局管理员读取GET /api/admin/bi-sync，BiSyncStatusService#view在boundedElastic上复用数据集连接，只读固定控制键和运行锁，输出截止日/最近作业/固定失败摘要，不访问源库、密码文件或Shell。任务持久化last_run及暂停标记，独立观察连接在安全点检查暂停并回滚未提交部分；pause/status/resume不依赖BI源连接。cron安装器remove仅移除自己的精确任务，不能等同于正在运行的任务已停止；知识库权限/删除与同步生命周期分开，数据和进度保留，恢复无需重新初始化。没有新增应用配置项。
 
-ADR0125/spec109增加正式外置数据库模式：rehearsal-app.sh的external准备分支使用私有DB_ENV和独立应用网络，database-preflight.py按两JDBC地址验证，不假设mysql主机或旧平台库名；旧演练模式保留。formal-app.py创建独立正式目录/候选18081，经容器健康及预检后显式接替18080，失败尝试恢复旧服务，revert-service恢复环境而非数据库数据；正式模型配置重新设置，不复制旧测试工程。deploy/bi-sync独立任务固定7业务表与私有控制表，源只读、5维表事务刷新；ADR0126细化39列基础投影及日志既有项目+时间索引分段，日数据/计数账本/项目进度同事务，汇总核对后前进表截止日。全部操作类型同步，目标日志四列不能区分查看/导出，业务口径只称操作记录数。问数仍只经已发布Wren，sync不写平台元数据或语义工程；每日任务需人工验收后安装，详见[正式切换与BI同步](docs/guides/66-formal-database-and-bi-sync.md)。
+ADR0125/spec109增加正式外置数据库模式：rehearsal-app.sh的external准备分支使用私有DB_ENV和独立应用网络，database-preflight.py按两JDBC地址验证，不假设mysql主机或旧平台库名；旧演练模式保留。formal-app.py创建独立正式目录/候选18081，经容器健康及预检后显式接替18080，失败尝试恢复旧服务，revert-service恢复环境而非数据库数据；正式模型配置重新设置，不复制旧测试工程。deploy/bi-sync独立任务固定7业务表与私有控制表，源只读、5维表事务刷新；ADR0126确定原39列投影，ADR0138/spec117扩展报表23列/仪表盘39列（七表95列），用持锁且已暂停的显式migrate追加字段、refresh-basics事务刷新五基础表，保留原任务归属与日志进度；源/目标结构异常拒绝，跨表DDL中断可续作，补齐前不允许resume。日志仍按既有项目+时间索引分段，日数据/计数账本/项目进度同事务，汇总核对后前进表截止日。全部操作类型同步，目标日志四列不能区分查看/导出，业务口径只称操作记录数。问数仍只经已发布Wren，sync不写平台元数据或语义工程；每日任务需人工验收后安装，详见[正式切换与BI同步](docs/guides/66-formal-database-and-bi-sync.md)。
 
 ADR0118/spec104新增源码构建交付选项：docker/update-source.sh有限重试并仅快进指定分支，默认develop-2.0，可显式设置DATAAGENT_SOURCE_BRANCH，不自动切换分支；docker/build-from-source.sh从干净明确提交归档源码，在独立Maven/JDK17容器中构建全部本地依赖及前后端，封装应用镜像并静态预检，不启停业务。最终镜像使用application-entrypoint.sh从/opt/dataagent/app运行JAR，配置与data/logs在宿主持久根，构建/运行分离；业务控制见下述演练Compose入口。前端安装命令支持构建参数覆盖，原默认install保持不变，源码发布使用ci。临时库演练由rehearsal-mysql.sh生成独立Compose、随机密码和初次完整DDL，MySQL不发布宿主端口，应用后续通过专属网络连接，配置/数据不随更新重置，不复用Dify数据库；不替代正式两库交付。详见[源码构建指引](docs/guides/66-source-build.md)。
 

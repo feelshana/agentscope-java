@@ -1,4 +1,5 @@
 import { appPath } from './paths';
+import { clearImageCache } from './imageCache';
 const BASE = '';
 export interface EntryOptions { passwordLoginEnabled: boolean; biLoginEnabled: boolean; biAccountLoginEnabled?: boolean }
 let entryOptions: EntryOptions = { passwordLoginEnabled: false, biLoginEnabled: false };
@@ -95,11 +96,13 @@ export function getToken(): string | null {
 }
 
 export function saveToken(token: string) {
+  clearImageCache();
   localStorage.removeItem('claw_token');
   sessionStorage.setItem('dataagent_token', token);
 }
 
 export function clearToken() {
+  clearImageCache();
   localStorage.removeItem('claw_token');
   sessionStorage.removeItem('dataagent_token');
 }

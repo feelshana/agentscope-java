@@ -8,6 +8,8 @@ ADR 记录"为什么这样做"。规则：
 
 ## 当前有效主线（按主题）
 
+[ADR0138](0138-bi-asset-field-expansion.md) 将报表/仪表盘扩为23/39列（七表95列），显式迁移保留原日志进度；其余沿用ADR0125/0126。
+
 正式双库/离线BI镜像补充：[ADR0125](0125-formal-database-and-bi-mirror.md)、[ADR0126](0126-bi-basic-fields-and-project-sync.md)；39列基础投影与既有项目索引分段，保持Wren-only与公共库权限边界。
 
 | 主题 | 当前有效 ADR | 要点 |

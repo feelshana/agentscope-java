@@ -85,12 +85,15 @@ class BiSyncMysqlTest(unittest.TestCase):
                 cursor.execute("USE " + database)
         with self.source.cursor() as cursor:
             for table, (_, spec) in sync.TABLES.items():
-                cols = ["`" + n + "` " + t + (" PRIMARY KEY" if n == "id" else " NULL")
+                cols = ["`" + ("NAME" if table == "d_report" and n == "name" else n) + "` "
+                        + ("int(1)" if n == "state" else t) + (" PRIMARY KEY" if n == "id" else " NULL")
                         for n, t in (part.split(":") for part in spec.split(","))]
                 if table == "sys_operator":
                     cols += ["password varchar(100)", "phone varchar(20)", "email varchar(50)"]
-                if table in ("d_report", "d_dashboard"):
-                    cols += ["creator varchar(36)", "create_time datetime", "update_time datetime", "state int"]
+                if table in sync.ASSET_TABLES:
+                    cols += ["config_info longtext", "page_config_info longtext", "temp_page_config_info longtext"]
+                    if table == "d_dashboard":
+                        cols += ["setting text"]
                 if table in sync.LOGS:
                     project = sync.LOG_PROJECTS[table]
                     cols += [project + " varchar(32)", "operator_project_id varchar(32)",
@@ -138,6 +141,151 @@ class BiSyncMysqlTest(unittest.TestCase):
         finally:
             self.target.rollback()
 
+
+    def legacy_ready(self):
+        legacy = dict(sync.TABLES)
+        for name in sync.ASSET_TABLES:
+            legacy[name] = (sync.TABLES[name][0], "id:varchar(36),name:varchar(100),org_id:varchar(32)")
+        with patch.object(sync, "TABLES", legacy):
+            self.run_sync("init")
+            self.run_sync()
+        self.target.rollback()
+
+    def control_snapshot(self):
+        self.target.rollback()
+        with self.target.cursor() as cursor:
+            cursor.execute("SELECT name,value FROM bi_sync_control ORDER BY name")
+            return dict(cursor.fetchall())
+
+    def test_asset_migration_backfill_preserves_all_log_progress_and_data(self):
+        self.legacy_ready()
+        before = self.control_snapshot()
+        with self.target.cursor() as cursor:
+            cursor.execute("SELECT * FROM bi_report_log ORDER BY id")
+            logs = cursor.fetchall()
+        with self.assertRaises(ValueError):
+            self.run_sync("migrate")
+        self.run_sync("pause")
+        self.run_sync("migrate")
+        self.run_sync("migrate")
+        with self.assertRaises(ValueError):
+            self.run_sync("resume")
+        with self.source.cursor() as cursor:
+            cursor.execute("UPDATE d_report SET description=%s,requester='biz',type=2,agent_name='测试助手',"
+                           "update_config_time='2026-01-02',config_info='EXCLUDED'", ("描述" * 10000,))
+            cursor.execute("UPDATE d_dashboard SET model_ids=%s,min_height=123.5,creator='o1',"
+                           "setting='EXCLUDED',temp='原始标记'", ("m" * 4000,))
+        self.source.commit()
+        with patch.object(sync, "sync_log", side_effect=AssertionError("must not revisit logs")):
+            self.run_sync("refresh-basics")
+        self.run_sync("migrate")  # A completed retry must not invalidate the completed backfill.
+        self.assertEqual(sync.state(self.target, "asset_fields_ready"), "true")
+        self.run_sync("resume")
+        after = self.control_snapshot()
+        self.assertEqual({k: after[k] for k in before}, before)
+        self.assertEqual(after["schema_version"], sync.ASSET_SCHEMA)
+        with self.target.cursor() as cursor:
+            cursor.execute("SELECT * FROM bi_report_log ORDER BY id")
+            self.assertEqual(cursor.fetchall(), logs)
+            cursor.execute("SELECT description,requester,type,agent_name,update_config_time FROM bi_report")
+            row = cursor.fetchone()
+            self.assertEqual(row[:4], ("描述" * 10000, "biz", 2, "测试助手"))
+            self.assertEqual(row[4], datetime(2026, 1, 2))
+            cursor.execute("SELECT model_ids,min_height,temp FROM bi_dashboard")
+            self.assertEqual(cursor.fetchone(), ("m" * 4000, 123.5, "原始标记"))
+            for name, length in (("bi_report", 23), ("bi_dashboard", 39)):
+                cursor.execute("SHOW COLUMNS FROM " + name)
+                fields = cursor.fetchall()
+                self.assertEqual(len(fields), length)
+                self.assertTrue(all(c[2] == "YES" for c in fields[3:]))
+                self.assertFalse({"config_info","page_config_info","temp_page_config_info","setting"}
+                                 .intersection(c[0] for c in fields))
+
+    def test_asset_migration_partial_ddl_retry_and_old_status(self):
+        self.legacy_ready()
+        self.run_sync("pause")
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            self.run_sync("status")
+        self.assertTrue(json.loads(output.getvalue())["paused"])
+        with patch.object(sync, "inspect_source", side_effect=AssertionError("paused old schema must skip")):
+            self.run_sync()
+        original = sync.field_ddl
+        def fail_dashboard(source, name, kind):
+            if source == "d_dashboard":
+                raise RuntimeError("second table DDL failed")
+            return original(source, name, kind)
+        with patch.object(sync, "field_ddl", fail_dashboard), self.assertRaises(RuntimeError):
+            self.run_sync("migrate")
+        self.assertEqual(len(sync.table_fields(self.target, "bi_report")), 23)
+        self.assertEqual(len(sync.table_fields(self.target, "bi_dashboard")), 3)
+        self.assertEqual(sync.state(self.target, "paused"), "true")
+        with self.assertRaises(ValueError):
+            self.run_sync("resume")
+        self.run_sync("migrate")
+        self.run_sync("refresh-basics")
+        self.run_sync("resume")
+
+    def test_asset_migration_checks_source_and_all_targets_before_ddl(self):
+        self.legacy_ready()
+        self.run_sync("pause")
+        with self.source.cursor() as cursor:
+            cursor.execute("ALTER TABLE d_report MODIFY requester int")
+        self.source.commit()
+        with self.assertRaises(ValueError):
+            self.run_sync("migrate")
+        self.assertEqual(len(sync.table_fields(self.target, "bi_report")), 3)
+        with self.source.cursor() as cursor:
+            cursor.execute("ALTER TABLE d_report MODIFY requester varchar(36)")
+            cursor.execute("ALTER TABLE d_dashboard DROP COLUMN description")
+        self.source.commit()
+        with self.assertRaises(ValueError):
+            self.run_sync("migrate")
+        self.assertEqual(len(sync.table_fields(self.target, "bi_report")), 3)
+
+    def test_asset_migration_rejects_unknown_target_wrong_owner_and_concurrency(self):
+        self.legacy_ready()
+        self.run_sync("pause")
+        self.assertEqual(sync.scalar(self.target, "SELECT GET_LOCK('dataagent-bi-sync-v1',0)"), 1)
+        try:
+            with self.assertRaises(ValueError):
+                self.run_sync("migrate")
+            with self.assertRaises(ValueError):
+                self.run_sync("resume")
+        finally:
+            sync.scalar(self.target, "SELECT RELEASE_LOCK('dataagent-bi-sync-v1')")
+        with self.target.cursor() as cursor:
+            cursor.execute("ALTER TABLE bi_dashboard ADD unexpected int")
+        with self.assertRaises(ValueError):
+            self.run_sync("migrate")
+        self.assertEqual(len(sync.table_fields(self.target, "bi_report")), 3)
+        sync.save_state(self.target, "source", "wrong-source")
+        self.target.commit()
+        with self.assertRaises(ValueError):
+            self.run_sync("migrate")
+
+    def test_basic_backfill_failure_keeps_pause_and_all_previous_rows(self):
+        self.legacy_ready()
+        self.run_sync("pause")
+        self.run_sync("migrate")
+        original = sync.write_rows
+        def fail_last(target, source, rows, batch):
+            original(target, source, rows, batch)
+            if source == "sys_project_operator_relation":
+                raise RuntimeError("injected basic refresh failure")
+        with self.source.cursor() as cursor:
+            cursor.execute("UPDATE d_report SET name='未提交的新名字'")
+        self.source.commit()
+        with patch.object(sync, "write_rows", fail_last), self.assertRaises(RuntimeError):
+            self.run_sync("refresh-basics")
+        self.assertEqual(sync.scalar(self.target, "SELECT name FROM bi_report"), "演示对象")
+        self.assertEqual(sync.state(self.target, "asset_fields_ready"), "false")
+        self.assertEqual(sync.state(self.target, "paused"), "true")
+        self.assertEqual(sync.state(self.target, "success_until"), "2026-01-04")
+        with self.assertRaises(ValueError):
+            self.run_sync("resume")
+        self.run_sync("refresh-basics")
+        self.run_sync("resume")
+
     def test_initial_idempotent_incremental_and_verify(self):
         self.run_sync("check")
         self.assertFalse(sync.control_exists(self.target))
@@ -146,7 +294,7 @@ class BiSyncMysqlTest(unittest.TestCase):
         self.run_sync()
         self.run_sync("verify")
         self.assertEqual(sync.scalar(self.target, "SELECT COUNT(*) FROM bi_report_log"), 3)
-        self.assertEqual(sum(len(sync.columns(t)) for t in sync.TABLES), 39)
+        self.assertEqual(sum(len(sync.columns(t)) for t in sync.TABLES), 95)
         with self.target.cursor() as cursor:
             cursor.execute("SHOW COLUMNS FROM bi_report_log")
             self.assertEqual([r[0] for r in cursor.fetchall()], ["id", "log_time", "report_id", "operator_id"])
