@@ -1,5 +1,7 @@
 # BI七表镜像任务
 
+新增六表使用独立 [extra_sync.py](extra_sync.py)，不会加入本脚本或改变旧控制进度/02:00任务。部署和02:15新调度见 [六表指南](../../docs/guides/66-bi-extra-sync.md)，业务字段与单位见 [DDL](extra-schema.sql) 和 [业务口径](extra-business-rules.md)。
+
 入口和完整阶段命令见[66正式库切换与BI同步](../../docs/guides/66-formal-database-and-bi-sync.md)，实施范围见spec109/ADR0125。只作为固定数据同步工具，不提供任意SQL接口或5.7问数兼容。
 
 2026-11-05扩展口径（ADR0139/spec119）：95个业务字段，见本目录source-selects.sql和业务口径.md。项目3列、关系4列、人员18列(原表排除password/phone/email)、报表23列、仪表盘39列（仅排除明确的配置字段）、日志各4列。全部操作类型同步，不存log_type，统计仅称操作记录数，不能区分查看/导出。源库禁止新增索引；利用既有项目+时间索引取数和计数，项目从日志索引枚举，覆盖已删除项目，不依赖当前项目维表。

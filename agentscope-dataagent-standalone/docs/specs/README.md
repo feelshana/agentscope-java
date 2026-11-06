@@ -8,6 +8,8 @@ spec 是一页纸的需求与验收标准，写代码之前先写（模板：[00
 
 ## 进行中
 
+- [123 BI多源六表同步扩展](123-bi-multisource-extension.md)：本地实施和隔离验证完成，待66现场验收。
+
 - [122 在页面维护全局管理员](122-global-administrator-management.md)：已确认，待现场验收。
 - [121 管理员按用户查看对话历史](121-admin-conversation-history.md)：已确认，待现场验收。
 

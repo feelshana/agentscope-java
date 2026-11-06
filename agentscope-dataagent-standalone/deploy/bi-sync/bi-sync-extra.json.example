@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "batch_size": 128,
+  "lookback_days": 3,
+  "sources": {
+    "iam": {"host": "10.194.146.73", "port": 3361, "database": "iam", "user": "", "password": ""},
+    "capacity": {"host": "10.194.146.9", "port": 3661, "database": "dataanalysis1", "user": "", "password": ""},
+    "optimization": {"host": "10.194.146.73", "port": 3368, "database": "platform", "user": "", "password": ""},
+    "click": {"host": "10.194.155.188", "port": 9030, "database": "fenxiyun", "user": "", "password": ""}
+  }
+}
