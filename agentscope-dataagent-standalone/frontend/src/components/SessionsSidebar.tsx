@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import Brand, { BrandMark } from './Brand';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { ACTIVE_AGENT_ID } from '../api/activeAgent';
 import { apiFetch, getToken, isAdmin } from '../api/auth';
 import { InboxEntry, deleteSession, inboxPage } from '../api/sessions';
 import Icon, { IconName } from './Icon';
 import { OnboardingSidebarEntry } from './Onboarding';
-import Brand, { BrandMark } from './Brand';
 
 interface UtilityItem {
   label: string;
@@ -69,10 +69,9 @@ export interface SessionsSidebarProps {
   refreshKey: number;
   /** Icon-only rail; the modeling workbench starts collapsed to give the work area the width. */
   collapsed?: boolean;
-  onToggle?: () => void;
 }
 
-export default function SessionsSidebar({ refreshKey, collapsed = false, onToggle }: SessionsSidebarProps) {
+export default function SessionsSidebar({ refreshKey, collapsed = false }: SessionsSidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const navigationItems = location.pathname.startsWith('/knowledge-bases/')
@@ -150,7 +149,7 @@ export default function SessionsSidebar({ refreshKey, collapsed = false, onToggl
   }, [entries]);
 
   function handleNewChat() {
-    navigate('/chat', { state: { chooseDefaultKnowledgeBase: true } });
+    navigate('/chat');
   }
 
   function entryNavKey(entry: InboxEntry): string {
@@ -219,28 +218,26 @@ export default function SessionsSidebar({ refreshKey, collapsed = false, onToggl
 
   if (collapsed) {
     const rail = (label: string, icon: IconName, active: boolean, onClick: () => void) =>
-      <button key={label} title={label} aria-label={label} aria-current={active ? 'page' : undefined} onClick={onClick}
-        className={active ? 'da-navitem da-navitem-active' : 'da-navitem'} style={S.railItem}><Icon name={icon} size="lg" variant={active ? 'solid' : 'outline'} /></button>;
+      <button key={label} type="button" aria-label={label} aria-current={active ? 'page' : undefined} onClick={onClick}
+        className={`da-navitem rail-icon-button${active ? ' da-navitem-active' : ''}`} style={S.railItem}>
+        <Icon name={icon} size="lg" variant={active ? 'solid' : 'outline'} />
+        <span className="rail-icon-label" aria-hidden="true">{label}</span>
+      </button>;
     return (
-      <div style={S.rail}>
-        <div className="rail-brand-mark" style={{ ...S.brand, padding: 0, justifyContent: 'center' }}><BrandMark label="红海 DataAgent" /></div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '8px 0' }}>
+      <div id="app-sidebar-content">
+        <div className="rail-brand-mark"><BrandMark label="红海 DataAgent" /></div>
+        <nav className="rail-icon-nav" aria-label="主导航">
           {rail('新建对话', 'compose', location.pathname === '/chat' && !activeKey, handleNewChat)}
           {navigationItems.map(item => rail(item.label, item.icon, isNavigationActive(item.path), () => navigate(item.path)))}
           {rail('更多', 'moreHorizontal', moreActive, () => navigate('/more'))}
-        </div>
-        <span style={{ flex: 1 }} />
-        {onToggle && <button type="button" title="展开侧边栏" aria-label="展开侧边栏" aria-expanded={false} className="rail-collapse-toggle" style={{ margin: '0 auto 8px' }} onClick={onToggle}><Icon name="chevron" size="sm" /></button>}
+        </nav>
       </div>
     );
   }
 
   return (
-    <div className="app-rail">
-      <div className="rail-brand">
-        <Brand />
-      </div>
-
+    <div id="app-sidebar-content" className="app-rail">
+      <div className="rail-brand"><Brand /></div>
       <nav className="rail-nav" aria-label="主导航">
         <button onClick={handleNewChat} className="rail-nav-item rail-new-chat"><span>新建对话</span><Icon name="compose" /></button>
         {navigationItems.map(item => {
@@ -338,7 +335,6 @@ export default function SessionsSidebar({ refreshKey, collapsed = false, onToggl
       <OnboardingSidebarEntry />
       <div className="rail-footer">
         <UserMenu username={getUsername()} />
-        {onToggle && <button type="button" title="收起侧边栏" aria-label="收起侧边栏" aria-expanded={true} className="rail-collapse-toggle is-expanded" onClick={onToggle}><Icon name="chevron" size="sm" /></button>}
       </div>
     </div>
   );
@@ -395,11 +391,6 @@ function UserMenu({ username }: { username: string }) {
 const S: Record<string, React.CSSProperties> = {
   root: {
     width: 280, flexShrink: 0,
-    background: 'var(--da-sidebar-bg)', borderRight: '1px solid var(--da-border)',
-    display: 'flex', flexDirection: 'column', minHeight: 0,
-  },
-  rail: {
-    width: 60, flexShrink: 0,
     background: 'var(--da-sidebar-bg)', borderRight: '1px solid var(--da-border)',
     display: 'flex', flexDirection: 'column', minHeight: 0,
   },

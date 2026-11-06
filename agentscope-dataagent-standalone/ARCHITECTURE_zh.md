@@ -211,7 +211,7 @@ main 线程）同步执行，每个 server 经 `McpClientBuilder.buildAsync().bl
 
 ### 3.1 问数（ADR 0069 / spec 058）
 
-联网搜索默认关闭。`DataToolkitRegistrar#registerQueryWebSearch` 独立挂载搜索工具，`ChatOptionsController#options` 按问数助手的实际挂载结果报告可用性。`ChatController` 将授权放入该轮 RuntimeContext。`WrenScopedToolkitMiddleware#onModelCall` 在关闭时移除搜索工具 schema，并按本轮实际工具清单提示助手。开启后在执行计时中记录工具是否提供给模型。`WebSearchTool#webSearch` 在请求发出前复核授权。公开搜索词发送到 DeepSeek，内部指标仍来自 SQL（ADR0115、ADR0140）。
+问数页面在搜索可用时默认开启联网搜索。`DataToolkitRegistrar#registerQueryWebSearch` 独立挂载搜索工具，`ChatOptionsController#options` 按问数助手的实际挂载结果报告可用性。缺省请求仍视为未授权，`ChatController` 将显式授权放入该轮 RuntimeContext。`WrenScopedToolkitMiddleware#onModelCall` 在关闭时移除搜索工具 schema，并按本轮实际工具清单提示助手。开启后在执行计时中记录工具是否提供给模型。`WebSearchTool#webSearch` 在请求发出前复核授权。公开搜索词发送到 DeepSeek，内部指标仍来自 SQL（ADR0115、ADR0140）。
 
 `DataAgentConfig#dataAgentBootstrap` 对主 data-agent 挂载安装版官方 skills，使用原生 HarnessAgent/ReActAgent。
 `WrenQueryContextMiddleware#onSystemPrompt` 仅给出鉴权用户可用的项目 ID/名称与发布状态，不注入草稿、业务规则或自研 SQL 剧本。
@@ -272,6 +272,8 @@ recall_queries、describe_model 与 describe_cube 均由官方 MCP 提供，平�
 
 分析轮次的 `run_sql` 由 `WrenScopedMcpClient#callTool` 固定使用官方最大行数；结果超过阈值时模型只看摘要，完整数据写入文件；被截断的结果不生成文件，脚本不会用不完整的数据计算。普通问数不受影响。
 问题范围、时间粒度、JOIN、DISTINCT、视图与 Cube 的选择遵循官方技能，不由平台正则路由。
+
+问答正文由 `DataAgentConfig#QUERY_EFFICIENCY_RULES` 的回答呈现要求约束。普通问数首段直接给结论，仅对少量关键数字和对应对象、单位加粗，图表与明细之后简述必要口径、并列规则及实际数据边界。用户要求详细报告时按请求展开。前端沿用原有 Markdown 渲染，格式提示在服务重新加载后生效。
 
 ### 4.2 点赞与官方 memory
 
@@ -732,7 +734,7 @@ manifest 尚不存在时（首次升级到该策略）执行一次性「采纳�
 
 ## 11. 前端结构
 
-`SessionsSidebar` 的「新建对话」触发一次默认选库，`ChatOptionsController#options` 按创建时间选择已发布且当前可查的最新库。指定库入口和历史会话按原范围处理，自动选库不预填推荐问题。`ChatPanel#handleSend` 按发送时的联网开关状态提交请求，开关在当前问数页面保持用户选择。网页来源仅显示本轮工具返回且正文引用的链接（spec120）。
+登录后或点击「新建对话」进入未指定库的空白问数页时，`ChatPanel` 触发一次默认选库，`ChatOptionsController#options` 按创建时间选择已发布且当前可查的最新库。指定库入口和历史会话按原范围处理，自动选库不预填推荐问题。`ChatPanel#handleSend` 按发送时的联网开关状态提交请求，开关在当前问数页面保持用户选择。网页来源仅显示本轮工具返回且正文引用的链接（spec120）。
 
 `DatasetsPage`知识库卡片采用按内容区宽度适配的四/三/二/一列布局，创建人仅为文字。权限菜单、无说明管理者的编辑入口、数据量与创建日期信息带、查看数据/提问共用原接口与单库路由；只读和删除待完成状态沿用现有边界，提问只依据canQuery，不从数据集数量推断。单页不显示无用翻页控件，多页仍由原服务端搜索/排序/分页处理；样式独立于`DatasetsPage.css`。
 
@@ -789,7 +791,7 @@ React 18 + TypeScript + Vite SPA（`frontend/`），构建产物进 `classpath:/
 
 ### 当前建模工作台（ADR 0069、0075、0076）
 
-`SemanticModelingPage` 按权限分流：MANAGE 进工作台，页签为语义模型、问数优化（含原问答）、公共视图、资料（spec092 §7、spec117 §3c），草稿栏在各页签常驻；旧地址 `?asset=models|relations|knowledge|modeling` 进语义模型（modeling 同时展开助手），`?asset=qa` 进问数优化。页面最右侧图标栏切换右侧面板：详情（工作台抽屉）、建模助手（原建模对话的同一个 `ModelingChatPanel` 实例，常驻挂载、只切换显示）、待确认（`PendingPanel`：口径确认卡与未看的改动，可定位、标为已看、按文件撤销）；未发布默认展开助手，各处“问助手”与问数优化、公共视图的请求都打开助手面板，引导进行中自动展开。每轮助手结束后页面自动以该轮开始时间标记改动（`/draft/items?since=`，累积到清除），工作台把未看的标红、看过的标灰（已看记录存浏览器），与线上对比仍为黄色；只有 QUERY 时进 `SemanticReadOnlyWorkspace`，以只读模式使用同一工作台看线上版本。模型与关系经 `semanticSnapshot` 统一草稿（`/mdl/view`，仅 MANAGE）和线上（`KnowledgeBaseBrowseService#browse`，校验 QUERY）两种数据。语义模型页签是 `SemanticWorkbench`（spec117）：左栏对象列表，中间为关系图（`workbenchLayout#layoutOverview`：模型为不展开的紧凑节点，连线两端标 N/1，位置只存浏览器；双击进入 `focusOf` 聚焦视图，左侧为多对一指向它的模型、右侧为它指向的模型；字段在抽屉中按普通列、日期列、衍生列、关联分组，关联字段只从 `relationships.yml` 展示；“规则与原文”另读业务文档正文 `BusinessDocumentService#content`）或业务规则视图（`ruleText`：按 `knowledge/rules/*.md` 的二级标题分组，页面句式解析成列，句式外的保留原文，自建标题归“未归类”可移到官方小节），右侧抽屉编辑。MANAGE 在草稿上直接修改：字段说明（写 `description_source: user`）、语义角色 `semanticType`、同义词 `synonyms`、显示名 `displayName`，衍生字段增删改，关系增改删，规则增改删与移动，整份模型 YAML 编辑；均经 `/draft/items`（`COLUMN`/`RELATIONSHIP`/`SEMANTIC`）或 `/draft/edit` 写同一草稿，YAML 文件在工作区锁内先过与助手相同的写入门禁（`DraftReviewController#gate` → `ModelingToolkit#previewChange`），助手运行中拒绝。“问助手”把对象上下文预填到建模对话。建模对话每轮的 `TurnResultCard` 提供“在语义模型中查看”，工作台按 `/draft/items?since=` 标出该轮改动（左栏可标出全部草稿改动）；工作台可全屏。紧凑布局（`AppShell.css`）：两级面包屑在宽屏隐藏、更深的压低，左侧主菜单通常默认展开，单个知识库的建模工作台默认收起（`state/embedded#isModelingWorkbench`）。手动选择保存在当前浏览器，优先于页面默认值。建模页头与页签合为一行；运行在门户 iframe 中时（`state/embedded#embedded`）`AppShell` 加 `is-embedded`，另隐藏重复的品牌行。建模对话页以对话为中心：每轮回复下方列出 AI 建模结果，待确定的口径以对话内卡片出现，试问在问数优化页签（spec117：建模流程不再试问，下一步卡显示推荐问题），助手写出的 SQL 与口径由用户核对后确认，确认正确的才会召回（不自动试运行、不查询数据），底部草稿栏统一发布；确认、改写或归档问题时，修订号在工作区锁内递增，发布在工作区锁内读取要覆盖的修订号（`MdlQuestionStore#locked`、`MdlPublishService#doPublishLocked`），避免发布期间确认的变更留下"待发布"却无差异可发布；若仍出现该状态，草稿栏提供"重新发布"。文档修改后自动排队一条文档更新请求。助手按官方技能直接修改草稿，发布为显式操作，官方工程校验失败保留旧快照。问数始终使用已发布工程。
+`SemanticModelingPage` 按权限分流：MANAGE 进工作台，页签为语义模型、问数优化（含原问答）、公共视图、资料（spec092 §7、spec117 §3c），草稿栏在各页签常驻；旧地址 `?asset=models|relations|knowledge|modeling` 进语义模型（modeling 同时展开助手），`?asset=qa` 进问数优化。页面最右侧图标栏切换右侧面板：详情（工作台抽屉）、建模助手（原建模对话的同一个 `ModelingChatPanel` 实例，常驻挂载、只切换显示）、待确认（`PendingPanel`：口径确认卡与未看的改动，可定位、标为已看、按文件撤销）；未发布默认展开助手，各处“问助手”与问数优化、公共视图的请求都打开助手面板，引导进行中自动展开。每轮助手结束后页面自动以该轮开始时间标记改动（`/draft/items?since=`，累积到清除），工作台把未看的标红、看过的标灰（已看记录存浏览器），与线上对比仍为黄色；只有 QUERY 时进 `SemanticReadOnlyWorkspace`，以只读模式使用同一工作台看线上版本。模型与关系经 `semanticSnapshot` 统一草稿（`/mdl/view`，仅 MANAGE）和线上（`KnowledgeBaseBrowseService#browse`，校验 QUERY）两种数据。语义模型页签是 `SemanticWorkbench`（spec117）：左栏对象列表，中间为关系图（`workbenchLayout#layoutOverview`：模型为不展开的紧凑节点，连线两端标 N/1，位置只存浏览器；双击进入 `focusOf` 聚焦视图，左侧为多对一指向它的模型、右侧为它指向的模型；字段在抽屉中按普通列、日期列、衍生列、关联分组，关联字段只从 `relationships.yml` 展示；“规则与原文”另读业务文档正文 `BusinessDocumentService#content`）或业务规则视图（`ruleText`：按 `knowledge/rules/*.md` 的二级标题分组，页面句式解析成列，句式外的保留原文，自建标题归“未归类”可移到官方小节），右侧抽屉编辑。MANAGE 在草稿上直接修改：字段说明（写 `description_source: user`）、语义角色 `semanticType`、同义词 `synonyms`、显示名 `displayName`，衍生字段增删改，关系增改删，规则增改删与移动，整份模型 YAML 编辑；均经 `/draft/items`（`COLUMN`/`RELATIONSHIP`/`SEMANTIC`）或 `/draft/edit` 写同一草稿，YAML 文件在工作区锁内先过与助手相同的写入门禁（`DraftReviewController#gate` → `ModelingToolkit#previewChange`），助手运行中拒绝。“问助手”把对象上下文预填到建模对话。建模对话每轮的 `TurnResultCard` 提供“在语义模型中查看”，工作台按 `/draft/items?since=` 标出该轮改动（左栏可标出全部草稿改动）；工作台可全屏。紧凑布局（`AppShell.css`）：两级面包屑在宽屏隐藏、更深的压低，左侧主菜单通常默认展开，单个知识库的建模工作台默认收起（`state/embedded#isModelingWorkbench`）。手动选择保存在当前浏览器，优先于页面默认值。桌面侧栏的收放按钮在底部，展开时位于用户名右侧，收起后图标悬停或键盘聚焦会高亮并显示中文标签。建模页头与页签合为一行；运行在门户 iframe 中时（`state/embedded#embedded`）`AppShell` 加 `is-embedded`，另隐藏重复的品牌行。建模对话页以对话为中心：每轮回复下方列出 AI 建模结果，待确定的口径以对话内卡片出现，试问在问数优化页签（spec117：建模流程不再试问，下一步卡显示推荐问题），助手写出的 SQL 与口径由用户核对后确认，确认正确的才会召回（不自动试运行、不查询数据），底部草稿栏统一发布；确认、改写或归档问题时，修订号在工作区锁内递增，发布在工作区锁内读取要覆盖的修订号（`MdlQuestionStore#locked`、`MdlPublishService#doPublishLocked`），避免发布期间确认的变更留下"待发布"却无差异可发布；若仍出现该状态，草稿栏提供"重新发布"。文档修改后自动排队一条文档更新请求。助手按官方技能直接修改草稿，发布为显式操作，官方工程校验失败保留旧快照。问数始终使用已发布工程。
 
 `MdlQuestionService#decide` 在发布锁内完成确认，发布会等确认结束，确认的问答一定进入这次发布。
 

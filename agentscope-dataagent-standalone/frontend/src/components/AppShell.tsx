@@ -24,13 +24,15 @@ export default function AppShell() {
     } catch { /* Storage may be unavailable in an embedded browser. */ }
     return null;
   });
-  const collapsed = sidebarPreference ?? isModelingWorkbench(location.pathname);
-  const toggleSidebar = () => {
-    const next = !collapsed;
-    setSidebarPreference(next);
-    try { localStorage.setItem(SIDEBAR_PREFERENCE_KEY, String(next)); } catch { /* Keep the in-memory choice. */ }
-  };
+  const defaultCollapsed = isModelingWorkbench(location.pathname);
+  const collapsed = sidebarPreference ?? defaultCollapsed;
+  const sidebarAction = collapsed ? '展开侧边栏' : '收起侧边栏';
+  useEffect(() => {
+    if (sidebarPreference === null) return;
+    try { localStorage.setItem(SIDEBAR_PREFERENCE_KEY, String(sidebarPreference)); } catch { /* Keep the in-memory choice. */ }
+  }, [sidebarPreference]);
   const [navigationOpen, setNavigationOpen] = useState(false);
+  const railCollapsed = !navigationOpen && collapsed;
   const navigation = useRef<HTMLElement>(null);
   const content = useRef<HTMLElement>(null);
   const navigationTrigger = useRef<HTMLElement | null>(null);
@@ -96,10 +98,15 @@ export default function AppShell() {
         跳到主内容
       </a>
       {navigationOpen && <button type="button" className="shell-nav-backdrop" aria-label="关闭导航" tabIndex={-1} onClick={() => setNavigationOpen(false)} />}
-      <aside ref={navigation} id="app-navigation" className={`shell-navigation${navigationOpen ? ' is-open' : ''}`}
+      <aside ref={navigation} id="app-navigation" className={`shell-navigation${navigationOpen ? ' is-open' : ''}${railCollapsed ? ' is-collapsed' : ''}`}
         role={navigationOpen ? 'dialog' : undefined} aria-modal={navigationOpen || undefined} aria-label={navigationOpen ? '主导航' : undefined}>
         <button type="button" className="shell-nav-close" aria-label="关闭导航" onClick={() => setNavigationOpen(false)}><Icon name="close" size="sm" /></button>
-        <SessionsSidebar refreshKey={refreshTick} collapsed={!navigationOpen && collapsed} onToggle={navigationOpen ? undefined : toggleSidebar} />
+        <SessionsSidebar refreshKey={refreshTick} collapsed={railCollapsed} />
+        <button type="button" className="rail-collapse-toggle" aria-label={sidebarAction} title={sidebarAction}
+          aria-expanded={!collapsed} aria-controls="app-sidebar-content"
+          onClick={() => setSidebarPreference(previous => !(previous ?? defaultCollapsed))}>
+          <Icon name="chevron" size="sm" />
+        </button>
       </aside>
       <main ref={content} id="main-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
         <Outlet context={ctx} />

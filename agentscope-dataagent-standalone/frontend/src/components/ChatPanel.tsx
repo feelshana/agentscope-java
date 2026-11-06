@@ -619,13 +619,12 @@ export default function ChatPanel({
   // Otherwise fetch from backend. Streaming in other sessions continues undisturbed.
   const urlSession = searchParams.get('session');
   const urlGroups = searchParams.get('groups');
-  const newChatKey = effectiveAgentId === 'data-agent' && !urlSession && !urlGroups
-    && location.state?.chooseDefaultKnowledgeBase === true ? location.key : null;
+  const newChatKey = effectiveAgentId === 'data-agent' && !urlSession && !urlGroups ? location.key : null;
   const [settledNewChatKey, setSettledNewChatKey] = useState<string | null>(null);
   const [automaticSelection, setAutomaticSelection] = useState<{ key: string; groupId: string } | null>(null);
   const manualChoiceKey = useRef<string | null>(null);
   const [webSearchAvailable, setWebSearchAvailable] = useState<boolean | null>(null);
-  const [webSearchPreference, setWebSearchPreference] = useState(false);
+  const [webSearchPreference, setWebSearchPreference] = useState(true);
   const webSearchEnabled = webSearchAvailable === true && webSearchPreference;
   const checkedChatOptions = useRef(false);
   const defaultGroupPending = newChatKey !== null && settledNewChatKey !== newChatKey;
@@ -816,8 +815,9 @@ export default function ChatPanel({
   const kbSelectionLocked = effectiveAgentId === 'modeling-agent' && !!urlSession && messages.length > 0;
   const ordinaryChat = effectiveAgentId === 'data-agent' && !selectAllGroups && selectedGroups.length === 0;
   const canSend = useMemo(
-    () => !busy && !restoring && !scopeRestoring && !defaultGroupPending && !scopeNotice && !!effectiveAgentId && input.trim().length > 0,
-    [busy, restoring, scopeRestoring, defaultGroupPending, scopeNotice, effectiveAgentId, input],
+    () => !busy && !restoring && !scopeRestoring && !defaultGroupPending && !scopeNotice
+      && !!effectiveAgentId && (effectiveAgentId !== 'data-agent' || webSearchAvailable !== null) && input.trim().length > 0,
+    [busy, restoring, scopeRestoring, defaultGroupPending, scopeNotice, effectiveAgentId, webSearchAvailable, input],
   );
 
   // spec102: analysis methods run on one knowledge base whose model has a time field.
