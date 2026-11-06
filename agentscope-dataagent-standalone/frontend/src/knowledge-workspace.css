@@ -36,6 +36,11 @@
 .da-kb-select-count { padding: 1px 6px; border-radius: 5px; background: #eae4f7; font-size: 12px; line-height: 18px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .da-kb-select-chevron { display: flex; color: #a39bad; transform: rotate(90deg); transition: transform .16s; }
 .da-kb-select.is-open .da-kb-select-chevron { transform: rotate(-90deg); }
+.da-web-search { min-width: 0; white-space: nowrap; }
+.da-web-search:not(.is-selected) { color: var(--da-text-muted); }
+.da-web-sources { margin: 8px 0; font-size: .875rem; }
+.da-web-sources summary { cursor: pointer; }
+.da-web-sources ul { margin: 4px 0; padding-left: 20px; overflow-wrap: anywhere; }
 .da-kb-picker {
   position: fixed; z-index: 1200;
   width: min(344px, calc(100vw - 48px)); max-height: min(490px, 65vh); display: flex; flex-direction: column;

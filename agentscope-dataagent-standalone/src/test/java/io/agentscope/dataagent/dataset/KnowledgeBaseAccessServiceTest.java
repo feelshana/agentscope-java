@@ -138,6 +138,7 @@ class KnowledgeBaseAccessServiceTest {
                         eq(false),
                         eq(true),
                         eq("sales"),
+                        eq(false),
                         argThat(p -> p.getPageNumber() == 1 && p.getPageSize() == 20));
         assertThatThrownBy(() -> access.page("reader", 0, 101, "", "date", false))
                 .isInstanceOf(DatasetException.class);

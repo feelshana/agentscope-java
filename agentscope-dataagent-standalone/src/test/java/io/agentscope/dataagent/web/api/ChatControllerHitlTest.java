@@ -44,6 +44,7 @@ import io.agentscope.dataagent.runtime.session.SessionAgentManager;
 import io.agentscope.dataagent.runtime.session.SessionEntry;
 import io.agentscope.dataagent.runtime.session.SessionKind;
 import io.agentscope.dataagent.tools.data.ModelingToolkitRegistrar;
+import io.agentscope.dataagent.tools.data.WebSearchTool;
 import io.agentscope.dataagent.web.audit.AgentActivityStore;
 import io.agentscope.dataagent.web.catalog.AgentCatalogService;
 import io.agentscope.dataagent.web.identity.IdentityLinkStore;
@@ -141,6 +142,31 @@ class ChatControllerHitlTest {
                 .collectList()
                 .block(java.time.Duration.ofSeconds(5));
         verify(conversationScopes).putAnalysis("alice", "conversation", null);
+    }
+
+    @Test
+    void webSearchPermissionIsBoundToTheQueryRequestAndDoesNotCarryOver() {
+        when(toolBus.subscribeRequest(anyString())).thenReturn(Flux.empty());
+        var seen = new java.util.ArrayList<Boolean>();
+        when(channel.dispatchStream(any()))
+                .thenAnswer(
+                        invocation -> {
+                            io.agentscope.harness.agent.gateway.channel.InboundMessage inbound =
+                                    invocation.getArgument(0);
+                            seen.add(WebSearchTool.allowed(inbound.runtimeContext()));
+                            return Flux.just(new TextBlockDeltaEvent("reply", "block", "answer"));
+                        });
+        var enabled =
+                new ChatController.ChatRequest(
+                        "联网查公开资料", "same-session", List.of(), false, null, null, null, true);
+        controller.stream("data-agent", enabled, authentication)
+                .collectList()
+                .block(java.time.Duration.ofSeconds(5));
+        var ordinary = new ChatController.ChatRequest("普通问题", "same-session", List.of());
+        controller.stream("data-agent", ordinary, authentication)
+                .collectList()
+                .block(java.time.Duration.ofSeconds(5));
+        assertThat(seen).containsExactly(true, false);
     }
 
     @Test

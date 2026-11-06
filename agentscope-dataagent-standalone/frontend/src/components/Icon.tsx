@@ -15,6 +15,7 @@ export type IconName =
   | 'graph'
   | 'list'
   | 'search'
+  | 'globe'
   | 'zoomIn'
   | 'zoomOut'
   | 'fit'
@@ -51,6 +52,7 @@ export type IconName =
 
 /** Shared 24px glyphs; product icons add matching outline and solid variants. */
 const PATHS: Record<IconName, React.ReactNode> = {
+  globe: <><circle cx="12" cy="12" r="9" /><ellipse cx="12" cy="12" rx="4" ry="9" /><path d="M3 12h18" /></>,
   circleAlert: <><circle cx="12" cy="12" r="9" /><path d="M12 6v7M12 17h.01" /></>,
   sliders: <><path d="M3 6h11m4 0h3M3 12h3m4 0h11M3 18h10m4 0h4" /><circle cx="16" cy="6" r="2" /><circle cx="8" cy="12" r="2" /><circle cx="15" cy="18" r="2" /></>,
   shield: <><path d="m12 3 8 4v6c0 4-8 8-8 8s-8-4-8-8V7z" /><rect x="9" y="10" width="6" height="5" rx="1" /><path d="M10 10V8a2 2 0 0 1 4 0v2" /></>,

@@ -8,6 +8,8 @@ spec 是一页纸的需求与验收标准，写代码之前先写（模板：[00
 
 ## 进行中
 
+- [120 新对话默认选库与联网开关](120-chat-entry-options.md)：已确认实施，待试用验收。
+
 - [119 BI两对象表字段扩展](119-bi-asset-field-expansion.md)：已授权，已有同步任务显式迁移，待66现场验收。
 
 - [115 正式环境日常发布一条命令](115-one-command-formal-deployment.md)：已授权并完成本地实现/隔离验证；待66首次现场验收。
@@ -21,7 +23,7 @@ spec 是一页纸的需求与验收标准，写代码之前先写（模板：[00
 | [091](091-modeling-interaction-flow.md) | spec091：建模全流程交互重设计（推荐问题预填、问题直接确认、流程连贯） | 已实施，待真实验收 |
 | [092](092-draft-and-review-modeling-workflow.md) | spec092：建模改为"草稿 + 发布前审阅"，多业务文档，入口与增量建模 | 已实施，待真实验收 |
 | [093](093-field-screening-before-modeling.md) | spec093：建模前字段整理（筛选纳入字段、补充说明） | 已实施，待真实验收 |
-| [095](095-web-search-for-query.md) | spec095：问数助手联网搜索（DeepSeek 官方搜索 API） | 已实施，待真实验收 |
+| [095](095-web-search-for-query.md) | spec095：问数助手联网搜索（DeepSeek 官方搜索 API） | 搜索接入沿用，授权交互由 spec120 调整 |
 | [098](098-single-host-container-runtime.md) | 旧系统单机容器运行环境 | 66环境阶段已验收；业务发布验收另行安排 |
 | [099](099-source-build-deployment.md) | 服务器拉取源码并构建应用镜像 | 已选型；连通性检查与设计阶段，待实施 |
 | [100](100-business-terms-in-wren-naming-conventions.md) | spec100：业务术语改为知识库工程内的官方 Naming conventions | 已实施，待真实验收 |

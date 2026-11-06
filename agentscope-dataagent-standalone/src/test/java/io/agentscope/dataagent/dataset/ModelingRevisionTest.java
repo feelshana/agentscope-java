@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import io.agentscope.core.agent.RuntimeContext;
+import io.agentscope.dataagent.web.persistence.jpa.DatasetEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupRepository;
 import io.agentscope.dataagent.web.persistence.jpa.KnowledgeBaseGrantEntity;
@@ -20,6 +21,7 @@ class ModelingRevisionTest {
     void oldPublicationCannotCoverNewMutationAndStaleMergeCannotResetRevision() {
         try (var factory =
                         new Configuration()
+                                .addAnnotatedClass(DatasetEntity.class)
                                 .addAnnotatedClass(DatasetGroupEntity.class)
                                 .addAnnotatedClass(KnowledgeBaseGrantEntity.class)
                                 .setProperty("hibernate.connection.driver_class", "org.h2.Driver")

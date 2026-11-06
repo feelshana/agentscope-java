@@ -18,9 +18,12 @@ package io.agentscope.dataagent.web.persistence.jpa;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.orm.jpa.JpaSystemException;
 import org.springframework.test.context.TestPropertySource;
@@ -38,6 +41,8 @@ import org.springframework.test.context.TestPropertySource;
 class DatasetGroupMdlBackfillTest {
 
     @Autowired private DatasetGroupRepository repository;
+    @Autowired private DatasetRepository datasets;
+    @Autowired private KnowledgeBaseGrantRepository grants;
     @Autowired private JdbcTemplate jdbcTemplate;
 
     /**
@@ -76,5 +81,48 @@ class DatasetGroupMdlBackfillTest {
         DatasetGroupEntity reloaded = repository.findById("legacy-backfill").orElseThrow();
         assertThat(reloaded.getMdlVersion()).isZero();
         assertThat(reloaded.getMdlState()).isEqualTo("NONE");
+    }
+
+    @Test
+    void newestQueryableCandidatesIncludeSharedAndPublicButSkipDraftsAndPrivateGroups() {
+        saveCandidate("owned", "reader", 1, 1, true);
+        saveCandidate("public", "other", 2, 1, true).setPublicQuery(true);
+        saveCandidate("granted", "other", 3, 1, true);
+        var grant = new KnowledgeBaseGrantEntity("granted", "reader");
+        grant.grant("QUERY", "other");
+        grants.save(grant);
+        saveCandidate("private", "other", 4, 1, true);
+        saveCandidate("draft", "reader", 5, 0, true);
+        saveCandidate("empty", "reader", 6, 1, false);
+        saveCandidate("deleting", "reader", 7, 1, true).setMdlState("DELETING");
+        saveCandidate("changed-data", "reader", 8, 1, true);
+        repository.requireModeling("changed-data");
+        repository.markDraftChanged("granted");
+
+        var ordering = Sort.by("createdAt").descending().and(Sort.by("id"));
+        var candidates =
+                repository.findAccessible(
+                        "reader", false, false, "", true, PageRequest.of(0, 20, ordering));
+        assertThat(candidates.getContent())
+                .extracting(DatasetGroupEntity::getId)
+                .containsExactly("granted", "public", "owned");
+    }
+
+    private DatasetGroupEntity saveCandidate(
+            String id, String owner, int created, int version, boolean hasDataset) {
+        var group = new DatasetGroupEntity(id, owner, id, "");
+        group.setCreatedAt(Instant.ofEpochSecond(created));
+        group.setMdlVersion(version);
+        if (hasDataset) {
+            var dataset = new DatasetEntity();
+            dataset.setId(id);
+            dataset.setGroupId(id);
+            dataset.setOwnerId(owner);
+            dataset.setName(id);
+            dataset.setSchemaName("test");
+            dataset.setTableName(id);
+            datasets.save(dataset);
+        }
+        return repository.save(group);
     }
 }

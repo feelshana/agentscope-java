@@ -11,6 +11,21 @@ export interface ChatRequest {
   analysis?: AnalysisMethod;
   /** Query only: the parameters the user confirmed in the card; absent while proposing them. */
   analysisParams?: Record<string, unknown>;
+  /** Query only: allows public web search for this request. */
+  webSearch?: boolean;
+}
+
+export interface ChatOptions {
+  webSearchAvailable: boolean;
+  defaultGroup: { id: string; name: string } | null;
+}
+
+export async function chatOptions(newConversation: boolean, signal: AbortSignal): Promise<ChatOptions> {
+  const res = await apiFetch(`/api/agents/data-agent/chat/options?newConversation=${newConversation}`, {
+    headers: authHeaders(), signal,
+  });
+  if (!res.ok) throw new Error('无法读取问数选项');
+  return res.json();
 }
 
 export type AnalysisMethod = 'attribution' | 'anomaly' | 'forecast';

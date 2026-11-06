@@ -211,6 +211,8 @@ main 线程）同步执行，每个 server 经 `McpClientBuilder.buildAsync().bl
 
 ### 3.1 问数（ADR 0069 / spec 058）
 
+联网搜索默认关闭。`DataToolkitRegistrar#registerQueryWebSearch` 独立挂载搜索工具，`ChatOptionsController#options` 按问数助手的实际挂载结果报告可用性。`ChatController` 将授权放入该轮 RuntimeContext。`WrenScopedToolkitMiddleware#onModelCall` 在关闭时移除搜索工具 schema，并按本轮实际工具清单提示助手。开启后在执行计时中记录工具是否提供给模型。`WebSearchTool#webSearch` 在请求发出前复核授权。公开搜索词发送到 DeepSeek，内部指标仍来自 SQL（ADR0115、ADR0140）。
+
 `DataAgentConfig#dataAgentBootstrap` 对主 data-agent 挂载安装版官方 skills，使用原生 HarnessAgent/ReActAgent。
 `WrenQueryContextMiddleware#onSystemPrompt` 仅给出鉴权用户可用的项目 ID/名称与发布状态，不注入草稿、业务规则或自研 SQL 剧本。
 `DataToolkitRegistrar#register` 只注册平台通用结果工具，并移除 harness 默认给每个 Agent 的 `web_search`（Tavily）与 `web_fetch`，配置了 DeepSeek Key 时改注册平台 `WebSearchTool`（`web_search`，只发送搜索词，不发用户原话、不取正文；建模 Agent 由 `ModelingToolkitRegistrar#registerOfficialTools` 移除两者，见 ADR0114）；问数 Agent 与其 Toolkit 由全体用户共用，只使用框架公开的中间件契约实现按次绑定，不修改 agentscope-core：`WrenQueryToolRegistrar#register` 启动时在共享 Toolkit 上为只读官方工具各注册一个不含知识库信息的 `WrenToolForwarder`；`WrenScopedToolkitMiddleware#onModelCall` 为本次调用新建只含官方 MCP 工具的 Toolkit（`Toolkit#registerMcpClient` 注册绑定当前已发布 project 的 `WrenScopedMcpClient`）存入 RuntimeContext，并把传给模型的工具列表改为"共享工具（去掉转发工具）+ 本次官方 schema"，未选库时不提供官方工具；框架从共享 Toolkit 执行转发工具，转发工具把调用交给本次作用域内的同名官方工具，权限、只读与时间门禁仍在 `WrenScopedMcpClient` 中校验。Agent 加载官方 usage，通过 listTools 发现官方 schema，
@@ -729,6 +731,8 @@ manifest 尚不存在时（首次升级到该策略）执行一次性「采纳�
 
 ## 11. 前端结构
 
+`SessionsSidebar` 的「新建对话」触发一次默认选库，`ChatOptionsController#options` 按创建时间选择已发布且当前可查的最新库。指定库入口和历史会话按原范围处理，自动选库不预填推荐问题。`ChatPanel#handleSend` 按发送时的联网开关状态提交请求，开关在当前问数页面保持用户选择。网页来源仅显示本轮工具返回且正文引用的链接（spec120）。
+
 `DatasetsPage`知识库卡片采用按内容区宽度适配的四/三/二/一列布局，创建人仅为文字。权限菜单、无说明管理者的编辑入口、数据量与创建日期信息带、查看数据/提问共用原接口与单库路由；只读和删除待完成状态沿用现有边界，提问只依据canQuery，不从数据集数量推断。单页不显示无用翻页控件，多页仍由原服务端搜索/排序/分页处理；样式独立于`DatasetsPage.css`。
 
 `DatasetGroupPage`采用紧凑数据工作台：成员管理和单库提问位于页头，编辑信息/事实表时间范围复用原动作并收进设置菜单；模型状态仍取workflow及query preparation。五列表格合并来源类型和来源路径，计数居中、直接查看及删除菜单沿用原路由/确认。独立`DatasetGroupPage.css`和dw-source避免空库导入卡片kw-source覆盖来源标签；未知行数不转成0，QUERY不显示管理入口，上传进度与恢复逻辑不变。
@@ -835,7 +839,7 @@ spec 045 / ADR 0055：无已登记问题、无待确认原生 HITL 时，页面�
 | `dataagent.dashscope.*` | Key 为空 | 没有 OpenAI 启动 Key 时的启动配置源；不是运行时故障回退 |
 | `dataagent.model-services.encryption-key` | 空 | `DATAAGENT_MODEL_ENCRYPTION_KEY`：独立 32 字节 Base64 主密钥；未提供时在实际 HOME 自动生成 model-services.key，必须与库匹配备份 |
 | `dataagent.auth.password-login-enabled` / `auth.bi.enabled` / `auth.bi.shared-key` | true / false / 空 | `DATAAGENT_PASSWORD_LOGIN_ENABLED`、`DATAAGENT_BI_LOGIN_ENABLED`、`DATAAGENT_BI_SHARED_KEY`；prod 强制关闭密码、启用 BI，BI 与 JWT 采用独立密钥 |
-| `dataagent.web-search.*` | Key 为空即关闭 | 问数联网搜索（spec094、ADR0114）：`api-key` 只读 `DEEPSEEK_API_KEY`，另有 `enabled`、`base-url`、`timeout-seconds`、`max-results` |
+| `dataagent.web-search.*` | Key 为空即关闭 | 问数逐轮授权搜索（spec120、ADR0140）：`api-key` 只读 `DEEPSEEK_API_KEY`，另有 `enabled`、`base-url`、`timeout-seconds`、`max-results` |
 | `dataagent.dashscope.*` | — | 兜底模型 |
 | `dataagent.sandbox.image` | `agentscope/dataagent-sandbox:latest` | 沙箱镜像（`docker/sandbox.Dockerfile` 构建） |
 | `dataagent.sandbox.max-containers` | `16` | 单进程容器上限，满额驱逐空闲实例；环境变量 DATAAGENT_SANDBOX_MAX_CONTAINERS |

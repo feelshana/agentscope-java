@@ -15,9 +15,11 @@
  */
 package io.agentscope.dataagent.tools.data;
 
+import io.agentscope.core.tool.AgentTool;
 import io.agentscope.dataagent.dataset.DatasetGroupService;
 import io.agentscope.dataagent.dataset.MdlCatalog;
 import io.agentscope.dataagent.runtime.DataAgentBootstrap;
+import io.agentscope.dataagent.runtime.session.WrenQueryToolRegistrar;
 import io.agentscope.dataagent.runtime.wren.WrenQueryGateway;
 import io.agentscope.dataagent.web.persistence.jpa.ChartOptionRepository;
 import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
@@ -59,6 +61,7 @@ public class DataToolkitRegistrar {
     private final io.agentscope.dataagent.dataset.WrenQueryAccess queryAccess;
     private final io.agentscope.dataagent.dataset.WrenPublishedProject publishedProject;
     private final org.springframework.core.env.Environment environment;
+    private AgentTool registeredWebSearch;
 
     public DataToolkitRegistrar(
             DataAgentBootstrap bootstrap,
@@ -115,15 +118,36 @@ public class DataToolkitRegistrar {
                     .registerTool(new RunPythonTool(new SandboxBackedFilesystem(), artifactStore));
             log.info("Registered RunPythonTool onto main agent '{}'", main.getName());
 
-            WebSearchTool search = webSearch(environment);
-            configureQueryWebTools(main.getDelegate().getToolkit(), search);
-            log.info(
-                    "Query web search {} on main agent '{}'",
-                    search == null ? "disabled (no DEEPSEEK_API_KEY)" : "enabled",
-                    main.getName());
         } catch (RuntimeException e) {
             log.warn("Failed to register DataAgent toolkit onto main agent: {}", e.getMessage());
         }
+        registerQueryWebSearch();
+    }
+
+    private void registerQueryWebSearch() {
+        var query = bootstrap.agents().get(WrenQueryToolRegistrar.QUERY_AGENT_ID);
+        if (query == null) return;
+        var toolkit = query.getDelegate().getToolkit();
+        // Remove framework defaults even if the provider configuration cannot be loaded.
+        configureQueryWebTools(toolkit, null);
+        try {
+            var search = webSearch(environment);
+            if (search != null) {
+                toolkit.registerTool(search);
+                registeredWebSearch = toolkit.getTool(WebSearchTool.NAME);
+            }
+            log.info("Query web search {}", registeredWebSearch == null ? "disabled" : "enabled");
+        } catch (RuntimeException e) {
+            log.warn("Failed to register query web search ({})", e.getClass().getSimpleName());
+        }
+    }
+
+    public boolean isWebSearchAvailable() {
+        if (registeredWebSearch == null) return false;
+        var query = bootstrap.agents().get(WrenQueryToolRegistrar.QUERY_AGENT_ID);
+        return query != null
+                && query.getDelegate().getToolkit().getTool(WebSearchTool.NAME)
+                        == registeredWebSearch;
     }
 
     /** The harness tools every agent receives: a foreign search service and a fetch of any URL. */
@@ -142,11 +166,8 @@ public class DataToolkitRegistrar {
 
     /** Null when disabled or when no key is configured. */
     static WebSearchTool webSearch(org.springframework.core.env.PropertyResolver properties) {
-        if (properties == null
-                || !properties.getProperty("dataagent.web-search.enabled", Boolean.class, true))
-            return null;
+        if (!isWebSearchConfigured(properties)) return null;
         String key = properties.getProperty("dataagent.web-search.api-key", "");
-        if (key == null || key.isBlank()) return null;
         return new WebSearchTool(
                 properties.getProperty("dataagent.web-search.base-url", "https://api.deepseek.com"),
                 key.strip(),
@@ -154,5 +175,12 @@ public class DataToolkitRegistrar {
                         properties.getProperty(
                                 "dataagent.web-search.timeout-seconds", Integer.class, 20)),
                 properties.getProperty("dataagent.web-search.max-results", Integer.class, 5));
+    }
+
+    private static boolean isWebSearchConfigured(
+            org.springframework.core.env.PropertyResolver properties) {
+        return properties != null
+                && properties.getProperty("dataagent.web-search.enabled", Boolean.class, true)
+                && !properties.getProperty("dataagent.web-search.api-key", "").isBlank();
     }
 }

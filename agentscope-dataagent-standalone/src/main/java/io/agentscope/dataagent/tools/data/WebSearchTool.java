@@ -3,6 +3,7 @@ package io.agentscope.dataagent.tools.data;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.tool.Tool;
 import io.agentscope.core.tool.ToolParam;
 import java.net.URI;
@@ -19,6 +20,13 @@ import java.time.Duration;
  * as Chinese notes so a question never breaks on a search problem.
  */
 public final class WebSearchTool {
+    public static final String NAME = "web_search";
+    public static final String ALLOWED_CONTEXT_KEY = "dataagent.webSearchAllowed";
+
+    public static boolean allowed(RuntimeContext context) {
+        return context != null && Boolean.TRUE.equals(context.get(ALLOWED_CONTEXT_KEY));
+    }
+
     static final int MAX_QUERY_CHARS = 128;
     private static final int RESULT_CAP = 10;
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -39,7 +47,7 @@ public final class WebSearchTool {
     }
 
     @Tool(
-            name = "web_search",
+            name = NAME,
             readOnly = true,
             description =
                     "联网搜索公开信息，返回标题、网址、站点、日期和摘要。用于知识库数据以外的外部信息：新闻、赛事、活动、政策法规、节假日、行业概念、公开数据等。"
@@ -47,9 +55,11 @@ public final class WebSearchTool {
                             + "搜索词只写公开概念，不写内部数据、查询结果、客户或员工名称、知识库名称；"
                             + "\"最近\"\"本周\"等先按当前日期换算，可在搜索词中使用 after:YYYY-MM-DD、site:域名。")
     public String webSearch(
+            RuntimeContext context,
             @ToolParam(name = "query", description = "搜索词，不超过 128 个字") String query,
             @ToolParam(name = "count", description = "返回条数，默认 5，最多 10", required = false)
                     Integer count) {
+        if (!allowed(context)) return "本轮未开启联网搜索，未发出搜索请求。";
         if (query == null || query.isBlank()) return "联网搜索未执行：搜索词为空。";
         String words = query.strip();
         if (words.length() > MAX_QUERY_CHARS) words = words.substring(0, MAX_QUERY_CHARS);
@@ -120,6 +130,8 @@ public final class WebSearchTool {
 
     private static String text(JsonNode node, String field) {
         JsonNode value = node.path(field);
-        return value.isMissingNode() || value.isNull() ? "" : value.asText("").strip();
+        return value.isMissingNode() || value.isNull()
+                ? ""
+                : value.asText("").replaceAll("\\R", " ").strip();
     }
 }

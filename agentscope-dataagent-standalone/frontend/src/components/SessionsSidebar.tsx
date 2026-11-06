@@ -150,7 +150,7 @@ export default function SessionsSidebar({ refreshKey, collapsed = false, onToggl
   }, [entries]);
 
   function handleNewChat() {
-    navigate('/chat');
+    navigate('/chat', { state: { chooseDefaultKnowledgeBase: true } });
   }
 
   function entryNavKey(entry: InboxEntry): string {

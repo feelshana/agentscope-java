@@ -96,7 +96,20 @@ public class KnowledgeBaseAccessService {
                 isAdmin(userId),
                 manageOnly,
                 term.toLowerCase(Locale.ROOT),
+                false,
                 PageRequest.of(page, size, ordering));
+    }
+
+    /** Published candidates in creation order, including shared and public query grants. */
+    public Page<DatasetGroupEntity> publishedPage(String userId, int page) {
+        requireUser(userId);
+        return groups.findAccessible(
+                userId,
+                isAdmin(userId),
+                false,
+                "",
+                true,
+                PageRequest.of(page, 20, Sort.by("createdAt").descending().and(Sort.by("id"))));
     }
 
     public List<DatasetGroupEntity> visible(String userId, List<String> selected) {

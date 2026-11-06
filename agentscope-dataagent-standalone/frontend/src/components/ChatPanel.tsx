@@ -1,8 +1,8 @@
 import { singleKnowledgeSelection, SINGLE_KNOWLEDGE_NOTICE } from '../utils/singleKnowledgeSelection';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useSearchParams } from 'react-router-dom';
-import { analysisCapabilities, ANALYSIS_NAMES, currentSession, recommendedQuestion, stream } from '../api/chat';
+import { useLocation, useSearchParams } from 'react-router-dom';
+import { analysisCapabilities, ANALYSIS_NAMES, chatOptions, currentSession, recommendedQuestion, stream } from '../api/chat';
 import type { AnalysisCapabilities, AnalysisMethod, KnowledgeScope } from '../api/chat';
 import { AnalysisFollowUps, AnalysisMenu, AnalysisParamsCard, METHOD_PLACEHOLDERS } from './AnalysisPanel';
 import type { MethodChoice } from './AnalysisPanel';
@@ -38,6 +38,7 @@ import { extractVegaSpec } from '../utils/charts';
 import { listGroupPage, listGroupCards, DatasetGroup, GroupPage } from '../api/datasets';
 import { listOntologies, OntologyEntry } from '../api/ontologies';
 import { getQueryPreparation, preparationPhase } from '../api/modelingWorkflow';
+import { citedWebSources, explicitlyRequestsWebSearch } from '../utils/webSearch';
 
 type Role = 'user' | 'assistant' | 'system';
 
@@ -61,6 +62,7 @@ type TraceNode =
 
 interface Message {
   knowledgeScope?: KnowledgeScope;
+  webSearchRetry?: { text: string; groupIds: string[]; analysis?: AnalysisMethod; analysisParams?: Record<string, unknown> };
   id: string;
   answerId?: string;
   role: Role;
@@ -137,6 +139,7 @@ const S: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     gap: 8,
+    flexWrap: 'wrap',
   },
   picker: {
     position: 'absolute',
@@ -390,6 +393,7 @@ export default function ChatPanel({
     return () => controller.abort();
   }, [token]);
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
   const [sessionMsgs, setSessionMsgs] = useState<Map<string, SessionMsgs>>(new Map());
   const [input, setInput] = useState('');
   const [restoring, setRestoring] = useState(true);
@@ -615,13 +619,63 @@ export default function ChatPanel({
   // Otherwise fetch from backend. Streaming in other sessions continues undisturbed.
   const urlSession = searchParams.get('session');
   const urlGroups = searchParams.get('groups');
+  const newChatKey = effectiveAgentId === 'data-agent' && !urlSession && !urlGroups
+    && location.state?.chooseDefaultKnowledgeBase === true ? location.key : null;
+  const [settledNewChatKey, setSettledNewChatKey] = useState<string | null>(null);
+  const [automaticSelection, setAutomaticSelection] = useState<{ key: string; groupId: string } | null>(null);
+  const manualChoiceKey = useRef<string | null>(null);
+  const [webSearchAvailable, setWebSearchAvailable] = useState<boolean | null>(null);
+  const [webSearchPreference, setWebSearchPreference] = useState(false);
+  const webSearchEnabled = webSearchAvailable === true && webSearchPreference;
+  const checkedChatOptions = useRef(false);
+  const defaultGroupPending = newChatKey !== null && settledNewChatKey !== newChatKey;
+  const automaticGroupId = automaticSelection?.key === newChatKey ? automaticSelection.groupId : null;
+
+  function chooseGroup(groupIds: string[]) {
+    manualChoiceKey.current = newChatKey;
+    setSettledNewChatKey(newChatKey);
+    setAutomaticSelection(null);
+    setSelectedGroups(groupIds);
+    setScopeNotice(null);
+  }
+
   useEffect(() => {
     if (!urlSession) {
       const restored = singleKnowledgeSelection(urlGroups?.split(','));
       setSelectedGroups(restored.groupIds);
       setScopeNotice(restored.needsSelection ? SINGLE_KNOWLEDGE_NOTICE : null);
     }
-  }, [urlSession, urlGroups]);
+  }, [urlSession, urlGroups, newChatKey]);
+  useEffect(() => {
+    if (effectiveAgentId !== 'data-agent' || (!newChatKey && checkedChatOptions.current)) return;
+    const controller = new AbortController();
+    let active = true;
+    const timeout = window.setTimeout(() => controller.abort(), 8000);
+    chatOptions(newChatKey !== null, controller.signal).then(options => {
+      if (!active) return;
+      checkedChatOptions.current = true;
+      setWebSearchAvailable(options.webSearchAvailable);
+      const group = options.defaultGroup;
+      if (newChatKey && group && manualChoiceKey.current !== newChatKey) {
+        setGroupNames(prev => ({ ...prev, [group.id]: group.name }));
+        setAutomaticSelection({ key: newChatKey, groupId: group.id });
+        setSelectedGroups([group.id]);
+      }
+    }).catch(() => {
+      if (active && !checkedChatOptions.current) setWebSearchAvailable(false);
+    }).finally(() => {
+      window.clearTimeout(timeout);
+      if (active && newChatKey) setSettledNewChatKey(newChatKey);
+    });
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [effectiveAgentId, newChatKey]);
+  useEffect(() => {
+    if (newChatKey) setInput('');
+  }, [newChatKey]);
   useEffect(() => {
     if (!urlSession) { setScopeRestoring(false); return; }
     const controller = new AbortController();
@@ -762,8 +816,8 @@ export default function ChatPanel({
   const kbSelectionLocked = effectiveAgentId === 'modeling-agent' && !!urlSession && messages.length > 0;
   const ordinaryChat = effectiveAgentId === 'data-agent' && !selectAllGroups && selectedGroups.length === 0;
   const canSend = useMemo(
-    () => !busy && !restoring && !scopeRestoring && !scopeNotice && !!effectiveAgentId && input.trim().length > 0,
-    [busy, restoring, scopeRestoring, scopeNotice, effectiveAgentId, input],
+    () => !busy && !restoring && !scopeRestoring && !defaultGroupPending && !scopeNotice && !!effectiveAgentId && input.trim().length > 0,
+    [busy, restoring, scopeRestoring, defaultGroupPending, scopeNotice, effectiveAgentId, input],
   );
 
   // spec102: analysis methods run on one knowledge base whose model has a time field.
@@ -790,7 +844,7 @@ export default function ChatPanel({
   const prefilled = useRef<string | null>(null);
   const freshConversation = messages.length === 0;
   useEffect(() => {
-    if (!analysisGroup || !freshConversation || restoring) return;
+    if (!analysisGroup || !freshConversation || restoring || defaultGroupPending || automaticGroupId === analysisGroup) return;
     const ac = new AbortController();
     recommendedQuestion(analysisGroup, ac.signal).then(question => {
       if (!question || ac.signal.aborted) return;
@@ -801,7 +855,7 @@ export default function ChatPanel({
       });
     }).catch(() => undefined);
     return () => ac.abort();
-  }, [analysisGroup, freshConversation, restoring]);
+  }, [analysisGroup, freshConversation, restoring, defaultGroupPending, automaticGroupId]);
   const showingRecommendation = freshConversation && !!input && input === prefilled.current;
 
   // spec104: the home page shows the new-user checklist and starter questions from the user's own
@@ -814,7 +868,7 @@ export default function ChatPanel({
     wasBusy.current = busy;
   }, [busy]);
   const pickStarter = (starter: OnboardingStatus['starters'][number]) => {
-    setSelectedGroups([starter.groupId]);
+    chooseGroup([starter.groupId]);
     setGroupNames(prev => ({ ...prev, [starter.groupId]: starter.groupName }));
     prefilled.current = starter.question;
     setInput(starter.question);
@@ -851,7 +905,7 @@ export default function ChatPanel({
    * Sends the composer text, or — from an analysis card or follow-up button (spec102) — a fixed
    * text with that turn's analysis choice. A plain send carries the composer's method once.
    */
-  async function handleSend(override?: { text: string; analysis?: AnalysisMethod; analysisParams?: Record<string, unknown> }) {
+  async function handleSend(override?: { text: string; analysis?: AnalysisMethod; analysisParams?: Record<string, unknown>; groupIds?: string[]; webSearch?: boolean }) {
     if (override ? busy || restoring || scopeRestoring || !effectiveAgentId : !canSend) return;
     followBottom.current = true;
     setShowLatest(false);
@@ -862,10 +916,15 @@ export default function ChatPanel({
     const analysis = effectiveAgentId !== 'data-agent' ? undefined
       : override ? override.analysis : analysisMethod !== 'auto' && !analysisDisabledReason ? analysisMethod : undefined;
     const analysisParams = override?.analysisParams;
+    const groupIds = override?.groupIds ?? selectedGroups;
+    const webSearch = effectiveAgentId === 'data-agent' && webSearchAvailable === true
+      && (override?.webSearch ?? webSearchEnabled);
     if (!override) setAnalysisMethod('auto');
     const nowMs = Date.now();
-    const userMsg: Message = { id: nextId(), role: 'user', text, tools: [], trace: [], knowledgeScope: { groupIds: selectedGroups, allGroups: selectAllGroups, groupNames } };
-    const replyMsg: Message = { id: nextId(), role: 'assistant', text: '', tools: [], trace: [], pending: true, startedAtMs: nowMs };
+    const userMsg: Message = { id: nextId(), role: 'user', text, tools: [], trace: [], knowledgeScope: { groupIds, allGroups: selectAllGroups, groupNames } };
+    const webSearchRetry = effectiveAgentId === 'data-agent' && webSearchAvailable === true && !webSearch
+      && explicitlyRequestsWebSearch(text) ? { text, groupIds, analysis, analysisParams } : undefined;
+    const replyMsg: Message = { id: nextId(), role: 'assistant', text: '', tools: [], trace: [], pending: true, startedAtMs: nowMs, webSearchRetry };
 
     // Use the URL conversationId as the Map key — stable across session switches.
     let convId = urlSession;
@@ -873,7 +932,7 @@ export default function ChatPanel({
       convId = (typeof crypto !== 'undefined' && crypto.randomUUID)
         ? crypto.randomUUID()
         : `conv-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-      selectionByConversation.current.set(convId, selectedGroups);
+      selectionByConversation.current.set(convId, groupIds);
       allSelectionByConversation.current.set(convId, selectAllGroups);
       const next = new URLSearchParams(searchParams);
       next.set('session', convId);
@@ -889,8 +948,8 @@ export default function ChatPanel({
       return next;
     });
     let lastToolEventSeq = -1;
-    if (effectiveAgentId === 'data-agent' && !selectAllGroups && selectedGroups.length)
-      void watchPreparation(convId, replyMsg.id, selectedGroups, ac.signal);
+    if (effectiveAgentId === 'data-agent' && !selectAllGroups && groupIds.length)
+      void watchPreparation(convId, replyMsg.id, groupIds, ac.signal);
 
     // Bump sidebar after a short delay so the new session entry is picked up while streaming.
     // The backend creates the session synchronously before streaming starts, so 500ms is safe.
@@ -900,8 +959,9 @@ export default function ChatPanel({
       for await (const evt of stream(effectiveAgentId, {
         message: text,
         sessionKey: convId,
-        groupIds: selectAllGroups ? undefined : selectedGroups,
+        groupIds: selectAllGroups ? undefined : groupIds,
         allGroups: selectAllGroups,
+        ...(webSearch ? { webSearch: true } : {}),
         ...(analysis ? { analysis, analysisParams } : {}),
       }, ac.signal)) {
         const isToolEvent = evt.type === 'tool_call' || evt.type === 'tool_result';
@@ -1162,7 +1222,7 @@ export default function ChatPanel({
               : selectAllGroups ? '全部知识库'
                 : selectedGroups.length > 1 ? '知识库'
                   : selectedGroups.length ? groupNames[selectedGroups[0]] || '已选知识库'
-                    : '选择知识库'}</span>
+                  : defaultGroupPending ? '正在选择知识库…' : '选择知识库'}</span>
             {!kbFrozen && !selectAllGroups && selectedGroups.length > 1 && <span className="da-kb-select-count">{selectedGroups.length}</span>}
             {selectAllGroups && <span className="da-kb-select-count">全选</span>}
             <span className="da-kb-select-chevron"><Icon name="chevron" size="sm" /></span>
@@ -1182,7 +1242,7 @@ export default function ChatPanel({
                     checked={g.canQuery && (selectAllGroups || selectedGroups.includes(g.id))}
                     disabled={!g.canQuery || selectAllGroups}
                     onChange={e => {
-                      if (e.target.checked) { setSelectedGroups([g.id]); setScopeNotice(null); }
+                      if (e.target.checked) chooseGroup([g.id]);
                     }}
                   />
                   <span className="da-kb-picker-item-icon"><Icon name="book" size="sm" /></span>
@@ -1200,13 +1260,27 @@ export default function ChatPanel({
               )}
               </div>
               <div className="da-kb-picker-footer">
-                <button className="da-kb-picker-clear" onClick={() => { setSelectedGroups([]); setScopeNotice(null); }}>清空选择</button>
+                <button className="da-kb-picker-clear" onClick={() => chooseGroup([])}>清空选择</button>
                 <span>{selectAllGroups ? '全部可用' : selectedGroups.length ? `已选 ${selectedGroups.length} 个` : '普通聊天'}</span>
                 <button className="da-btn da-btn-primary da-btn-sm" onClick={() => setGroupPickerOpen(false)}>完成</button>
               </div>
             </div>
           , document.body)}
         </div>
+        {effectiveAgentId === 'data-agent' && (
+          <button type="button"
+            className={`da-kb-select da-web-search${webSearchEnabled ? ' is-selected' : ''}`}
+            aria-pressed={webSearchEnabled}
+            disabled={webSearchAvailable !== true}
+            title={webSearchAvailable === null ? '正在检查联网搜索'
+              : !webSearchAvailable ? '联网搜索暂不可用'
+                : '开关保持当前状态。开启时，之后发送的消息允许联网，公开搜索词会发送给 DeepSeek。'}
+            onClick={() => setWebSearchPreference(enabled => !enabled)}
+          >
+            <Icon name="globe" size="sm" />
+            <span>{webSearchAvailable === false ? '联网搜索不可用' : '联网搜索'}</span>
+          </button>
+        )}
         {scopeNotice && <button className="da-btn da-btn-sm" onClick={() => setGroupPickerOpen(true)}>重新选择知识库</button>}
         {effectiveAgentId === 'data-agent' && !ordinaryChat && (
           <span style={{ marginLeft: 8 }}>
@@ -1291,6 +1365,7 @@ export default function ChatPanel({
           const { trace, answer: visuals, charts } = splitToolRender(m, onInspect);
           const failure = m.failed ? splitFailedAnswer(m.text) : null;
           const answerText = failure ? failure.answer : m.text;
+          const webSources = m.pending || m.failed ? [] : citedWebSources(answerText, m.tools);
           // A chart the text cites is drawn where it is cited, not again below the answer.
           const cited = citedChartIds(answerText ?? '');
           const inlineCharts = new Map([...charts].filter(([id]) => cited.has(id)));
@@ -1330,6 +1405,21 @@ export default function ChatPanel({
                           : <div className="da-typing"><span /><span /><span /></div>
                         : null}
                     {failure && <ErrorNotice error={failure.error} context="chat" />}
+                    {m.webSearchRetry && !m.pending && !m.failed && m.id === messages[messages.length - 1]?.id
+                      && webSearchAvailable === true && (
+                      <button type="button" className="da-btn da-btn-sm" disabled={busy || scopeRestoring}
+                        onClick={() => m.webSearchRetry && handleSend({ ...m.webSearchRetry, webSearch: true })}>
+                        仅本次联网重试
+                      </button>
+                    )}
+                    {webSources.length > 0 && (
+                      <details className="da-web-sources">
+                        <summary>网页来源（{webSources.length}）</summary>
+                        <ul>{webSources.map(source => (
+                          <li key={source.url}><a href={source.url} target="_blank" rel="noreferrer">{source.title}</a></li>
+                        ))}</ul>
+                      </details>
+                    )}
                     {answer}
                     {!m.pending && <QueryDataDownloads files={queryDataFiles(m.tools.map(t => t.result))} />}
                     {agentId === 'data-agent' && !m.pending && (() => {

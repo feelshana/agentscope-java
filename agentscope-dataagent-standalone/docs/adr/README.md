@@ -154,7 +154,7 @@ ADR 记录"为什么这样做"。规则：
 | [0112](0112-rule-first-sql-window-gate.md) | SQL 时间门禁规则优先，模型只判断规则无法确定的 SQL | 已接受，2026-10-25。补充 ADR0097/0103：ADR0097 中"检查器仅将原始 SQL 交给无工具 LLM"改为规则优先、模型兜底；登记配置 |  |
 | [0113](0113-mysql8-or-doris-sources-and-literal-date-ranges.md) | 外部数据源限定 MySQL 8.0+ 或 Doris，SQL 用 MySQL 8.0 语法与日期常量范围 | 已接受，完整有效；2026-11-02撤销ADR0123并回退5.7放开。 |  |
 | [0114](0114-native-query-and-engineering-integration.md) | 单库原生问数与工程能力整合 | 已接受，2026-10-26；组合验收见 spec094 |  |
-| [0115](0115-query-web-search-via-deepseek.md) | 问数助手经 DeepSeek 官方搜索 API 联网，移除 harness 默认联网工具 | 已接受，2026-10-26。实施 spec095。 |  |
+| [0115](0115-query-web-search-via-deepseek.md) | 问数助手经 DeepSeek 官方搜索 API 联网，移除 harness 默认联网工具 | 已接受，2026-10-26。实施 spec095。自动搜索的授权行为已被 ADR0140 取代。 | 0140 |
 | [0116](0116-bi-account-and-public-knowledge.md) | BI账号与公共库 | 已接受 | |
 | [0117](0117-single-host-container-runtime.md) | 旧系统单机运行容器 | 66环境已验收；业务验收另行安排 | |
 | [0118](0118-source-build-on-deployment-host.md) | GitHub源码交付与服务器容器化构建 | 构建与演练启动完成；入口与业务待验 | |
@@ -178,3 +178,4 @@ ADR 记录"为什么这样做"。规则：
 | [0136](0136-active-session-renewal.md) | DataAgent 用户活动续期 | 已被 ADR0137 取代。 | 0137 |
 | [0137](0137-fixed-login-token-lifetime.md) | DataAgent 登录凭证固定 24 小时 | 已接受，2026-11-05。到期重新认证。 | |
 | [0138](0138-metrics-as-cubes-and-wren-0-17.md) | 升级 Wren 0.17.1，指标由 Cube 承担，取值与同义词写入 MDL | 提议，暂缓（2026-11-05 用户决定先不做）。实施 spec118；接受后取代 ADR0106、ADR0107 中资产轮次的 Cube 部分。 |  |
+| [0140](0140-per-turn-web-search.md) | 问数联网由用户逐轮授权 | 已接受，2026-11-06。实施 spec120，取代 ADR0115 的自动搜索授权行为。 | |

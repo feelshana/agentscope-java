@@ -1,6 +1,6 @@
 # spec 095: 问数助手联网搜索（DeepSeek 官方搜索 API）
 
-> 状态：已实施，待真实验收（需配置 `DEEPSEEK_API_KEY`）。关联 ADR0115。
+> 状态：搜索接入已实施，待真实验收（需配置 `DEEPSEEK_API_KEY`）。下文记录原方案，搜索授权及界面以 [spec120](120-chat-entry-options.md) 为准。关联 ADR0115、ADR0140。
 
 ## 背景与目标
 

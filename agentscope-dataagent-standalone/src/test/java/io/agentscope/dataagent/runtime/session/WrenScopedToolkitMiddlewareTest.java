@@ -6,18 +6,56 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 import io.agentscope.core.agent.Agent;
 import io.agentscope.core.agent.RuntimeContext;
+import io.agentscope.core.middleware.ModelCallInput;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.dataagent.dataset.DatasetScope;
 import io.agentscope.dataagent.dataset.MdlCatalog;
 import io.agentscope.dataagent.dataset.WrenPublishedProject;
 import io.agentscope.dataagent.dataset.WrenQueryAccess;
 import io.agentscope.dataagent.runtime.wren.WrenQueryGateway;
+import io.agentscope.dataagent.tools.data.WebSearchTool;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 
 class WrenScopedToolkitMiddlewareTest {
+    @Test
+    void onlyAnOptedInInvocationSeesTheWebSearchSchema() {
+        var middleware =
+                new WrenScopedToolkitMiddleware(
+                        mock(WrenQueryAccess.class), mock(WrenQueryGateway.class),
+                        mock(WrenPublishedProject.class), mock(MdlCatalog.class));
+        var toolkit = new Toolkit();
+        toolkit.registerTool(
+                new WebSearchTool(
+                        "https://example.com", "test", java.time.Duration.ofSeconds(1), 5));
+        var input = new ModelCallInput(List.of(), toolkit.getToolSchemas(), null, null);
+        var enabled = RuntimeContext.builder().put(WebSearchTool.ALLOWED_CONTEXT_KEY, true).build();
+        middleware
+                .onModelCall(
+                        mock(Agent.class),
+                        enabled,
+                        input,
+                        forwarded -> {
+                            assertThat(forwarded.tools())
+                                    .extracting(tool -> tool.getName())
+                                    .containsExactly("web_search");
+                            return Flux.empty();
+                        })
+                .blockLast();
+        middleware
+                .onModelCall(
+                        mock(Agent.class),
+                        RuntimeContext.empty(),
+                        input,
+                        forwarded -> {
+                            assertThat(forwarded.tools()).isEmpty();
+                            return Flux.empty();
+                        })
+                .blockLast();
+    }
+
     @Test
     void emptySelectionStillRunsOrdinaryChatWithoutRegisteringWrenTools() {
         var access = mock(WrenQueryAccess.class);

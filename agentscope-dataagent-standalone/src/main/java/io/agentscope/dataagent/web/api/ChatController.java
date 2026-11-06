@@ -36,7 +36,9 @@ import io.agentscope.dataagent.runtime.DataAgentBootstrap;
 import io.agentscope.dataagent.runtime.gateway.HarnessGateway;
 import io.agentscope.dataagent.runtime.session.SessionAgentManager;
 import io.agentscope.dataagent.runtime.session.SessionEntry;
+import io.agentscope.dataagent.runtime.session.WrenQueryToolRegistrar;
 import io.agentscope.dataagent.tools.data.ModelingToolkitRegistrar;
+import io.agentscope.dataagent.tools.data.WebSearchTool;
 import io.agentscope.dataagent.web.audit.ActivityEvent;
 import io.agentscope.dataagent.web.audit.AgentActivityStore;
 import io.agentscope.dataagent.web.catalog.AgentCatalogService;
@@ -176,7 +178,19 @@ public class ChatController {
             Boolean allGroups,
             String purpose,
             String analysis,
-            Map<String, Object> analysisParams) {
+            Map<String, Object> analysisParams,
+            Boolean webSearch) {
+        public ChatRequest(
+                String message,
+                String sessionKey,
+                List<String> groupIds,
+                Boolean allGroups,
+                String purpose,
+                String analysis,
+                Map<String, Object> analysisParams) {
+            this(message, sessionKey, groupIds, allGroups, purpose, analysis, analysisParams, null);
+        }
+
         public ChatRequest(String message, String sessionKey, java.util.List<String> groupIds) {
             this(message, sessionKey, groupIds, false, null);
         }
@@ -341,7 +355,8 @@ public class ChatController {
                         req.allGroups(),
                         req.purpose(),
                         req.analysis(),
-                        req.analysisParams());
+                        req.analysisParams(),
+                        req.webSearch());
         Flux<ServerSentEvent<String>> execution =
                 ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId)
                         ? Flux.defer(() -> streamAdmitted(agentId, normalized, auth))
@@ -475,6 +490,11 @@ public class ChatController {
                                                             "knowledgeScope",
                                                             selection)));
                                 })
+                        .contextWrite(
+                                ctx ->
+                                        ctx.put(
+                                                WebSearchTool.ALLOWED_CONTEXT_KEY,
+                                                allowsWebSearch(agentId, req)))
                         .doFinally(signal -> scopeFrame.tryEmitEmpty())
                         .doOnNext(
                                 event -> {
@@ -770,7 +790,8 @@ public class ChatController {
                         req.allGroups(),
                         req.purpose(),
                         null,
-                        null);
+                        null,
+                        req.webSearch());
         if (ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId))
             return Mono.defer(() -> sendAdmitted(agentId, normalized, auth))
                     .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
@@ -828,6 +849,11 @@ public class ChatController {
                         req.groupIds(),
                         Boolean.TRUE.equals(req.allGroups()),
                         requestId)
+                .contextWrite(
+                        ctx ->
+                                ctx.put(
+                                        WebSearchTool.ALLOWED_CONTEXT_KEY,
+                                        allowsWebSearch(agentId, req)))
                 .map(
                         reply -> {
                             String text =
@@ -1439,12 +1465,23 @@ public class ChatController {
                                         System.currentTimeMillis() - startMs));
     }
 
+    private static boolean allowsWebSearch(String agentId, ChatRequest request) {
+        return WrenQueryToolRegistrar.QUERY_AGENT_ID.equals(agentId)
+                && Boolean.TRUE.equals(request.webSearch());
+    }
+
     private <T> Flux<T> watchKnowledgeBases(
             java.util.function.Supplier<InboundMessage> input,
             java.util.function.Function<InboundMessage, Flux<T>> action) {
         return Flux.deferContextual(
                         reactorContext -> {
                             InboundMessage inbound = input.get();
+                            if (Boolean.TRUE.equals(
+                                    reactorContext.getOrDefault(
+                                            WebSearchTool.ALLOWED_CONTEXT_KEY, false))) {
+                                inbound.runtimeContext()
+                                        .put(WebSearchTool.ALLOWED_CONTEXT_KEY, true);
+                            }
                             if (reactorContext.hasKey(ChatCapacity.Lease.class)) {
                                 inbound.runtimeContext()
                                         .put(
