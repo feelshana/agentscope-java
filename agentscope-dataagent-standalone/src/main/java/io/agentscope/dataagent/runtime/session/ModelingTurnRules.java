@@ -28,7 +28,7 @@ public final class ModelingTurnRules {
     static final String CONFIRM =
             """
             # 本轮任务要求：写入用户的确定
-            把每条答复整理后写入 knowledge/rules/（指标定义、默认过滤、术语）或对应模型的列描述（字段含义），确定建立的关系写入 relationships.yml；不再就这些内容提问。默认排除、只保留某些记录的口径写在 knowledge/rules/general.md 的"## Default filters"小节下（没有就新建），即使文件里已有其他自建小节也不另起标题。
+            按答复的用途写入：指标定义、默认过滤和独立术语写入 knowledge/rules/，字段含义写入对应模型的列描述，确认建立的关系写入 relationships.yml。已确认的单行分类落实到对应模型的计算字段，不在规则中重复记录；不再就已确定的内容提问。默认排除、只保留某些记录的口径写在 knowledge/rules/general.md 的"## Default filters"小节下（没有就新建），即使文件里已有其他自建小节也不另起标题。
             最终回复 1–2 行：按用户的选择更新了哪些口径。
             """;
 
@@ -76,7 +76,7 @@ public final class ModelingTurnRules {
     static final String CHAT =
             """
             # 本轮任务要求：用户对话
-            直接回答或按用户要求修改，修改后校验编译；用户在对话中说明的口径直接写入 knowledge/rules/ 或对应列描述，不再向用户确认。默认排除、只保留某些记录的口径写在 knowledge/rules/general.md 的"## Default filters"小节下（没有就新建），即使文件里已有其他自建小节也不另起标题。不主动提议资产：需要聚合、窗口函数或多步计算才能稳定回答的需求，写下能写的规则，并提示用户可以把相关问题加入"问数优化"；用户明确要求建视图或查询模板时，调用 propose_modeling_change（kind=view，explicit=true），不写 views/。改动影响已有试问问题时，按"试问 SQL"要求同步更新问题文件。回复直接回答，避免技术细节。
+            直接回答或按用户要求修改，修改后校验编译。用户对话中明确提出新增或调整用于单行分类的字段时，按计算字段处理（新增仍走确认卡），不额外写同义规则。用户已明确的其他口径按用途写入规则或字段说明，不重复确认。默认排除、只保留某些记录的口径写在 knowledge/rules/general.md 的"## Default filters"小节下（没有就新建），即使文件里已有其他自建小节也不另起标题。不主动提议资产：需要聚合、窗口函数或多步计算才能稳定回答的需求，写下能写的规则，并提示用户可以把相关问题加入"问数优化"；用户明确要求建视图或查询模板时，调用 propose_modeling_change（kind=view，explicit=true），不写 views/。改动影响已有试问问题时，按"试问 SQL"要求同步更新问题文件。回复直接回答，避免技术细节。
             """;
 
     private ModelingTurnRules() {}

@@ -189,7 +189,11 @@ class DataAgentConfigTest {
         assertThat(ModelingTurnRules.forPurpose("document"))
                 .contains("不执行 context show、memory status", "只读有变化的文档");
         assertThat(ModelingTurnRules.forPurpose("confirm"))
-                .contains("写入 knowledge/rules/（指标定义、默认过滤、术语）或对应模型的列描述", "1–2 行");
+                .contains(
+                        "指标定义、默认过滤和独立术语写入 knowledge/rules/",
+                        "字段含义写入对应模型的列描述",
+                        "已确认的单行分类落实到对应模型的计算字段，不在规则中重复记录",
+                        "1–2 行");
         assertThat(ModelingTurnRules.forPurpose("question"))
                 .contains("knowledge/questions/<ID>.yml", "不要执行 query", "dry-plan", "不擅自新增业务条件")
                 .doesNotContain("3–6 行");

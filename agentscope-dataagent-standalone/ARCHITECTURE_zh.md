@@ -981,6 +981,7 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 | 方面 | 当前行为 | 入口 |
 |---|---|---|
 | 技能 | 同版本官方技能，默认 Auto-pilot；挂载后关闭 CLI skills 通道；不加载 Cube 提案参考 | `DataAgentConfig.mountWrenSkills`、`OfficialWrenToolkit#command`、`ModelingHitlMiddleware#onActing` |
+| 单行分类 | 复用或更新已有计算字段，新增沿用确认卡；表达式与字段说明、别名和取值语义都维护在模型列上，不另写同义规则。独立的业务定义与默认过滤仍按原用途维护 | `DataAgentConfig.MODELING_SCRIPT`、`ModelingTurnRules#CHAT`、`ModelingTurnRules#CONFIRM` |
 | 文件范围 | `cubes/`、`views/` 不读不写；`models/<模型>/` 只允许官方文件；`knowledge/sql/` 不可写；平台文件与路径逃逸拒绝 | `WrenProjectAccess#path` |
 | 文件写入 | YAML 先做语法检查，失败不落盘；可整体替换已有文件；所有工程文件写入直接进入草稿，不再弹出确认卡（ADR0111）；每次写入记入 `DraftChangeLog`（来源、用户、时间）；自动建模轮次在没有业务文档时拒绝写 `knowledge/rules/`；`knowledge/caveats/` 已停用（ADR0120），写入与编辑一律拒绝、允许删除，数据事实写入表或列描述，其余推断只在当轮回复列出 | `WrenProjectFilesystem#write/edit/delete/rulesGuard`、`ModelingHitlMiddleware#onActing` |
 | CLI 执行 | 参数、Cube、memory store、时间门禁在工程锁前检查；未编译或模型/视图/关系/knowledge 文件比编译结果新时先自动 `context build`（`OfficialWrenToolkit#compiledMdlStale`），助手不单独执行 build、修改前不校验，改完只执行一次 `context validate --strict`；单轮 query 上限 `MAX_QUERIES_PER_TURN`；超时结束进程树 | `OfficialWrenToolkit#execute`、`ProcessWrenCli#destroyTree` |
@@ -1018,7 +1019,7 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 ### 14.4 问数提示
 
 - `WrenQueryContextMiddleware`：每轮注入服务时间、授权库与时间策略；`dateRules` 只在所选库登记了受限事实表时要求"缺日期先问"；范围超过表的最大天数（如整年）时直接请用户给出不超上限的范围，不提出拆分多次查询再汇总的方案。
-- `DataAgentConfig.QUERY_EFFICIENCY_RULES`：已写月日即视为给了日期；统计结果必须来自 SQL 返回值；排名只按主体分组。
+- `DataAgentConfig.QUERY_EFFICIENCY_RULES`：生成 SQL 前按已发布 MDL 核对分类与标记，必要时调用官方 `describe_model`。匹配到同口径的计算字段时，语义 SQL 直接引用字段，由 Wren 展开表达式，即使召回示例或规则复述了同一口径；独立指标定义和真正的默认过滤仍按其适用范围处理。已写月日即视为给了日期；统计结果必须来自 SQL 返回值；排名只按主体分组。
 
 - 指标与回答保真：`DataAgentConfig` 提示建模保留文档公式、阈值、分子分母及指标专属过滤，未验证标记列等价性不替代公式，不扩大为整表过滤；问数不以正确对照掩盖错误主口径，不新增未经工具计算的统计，不无证据归因。这是提示约束，不能保证模型总是遵循；独立验收方法见 [回答内容校验](docs/fixtures/answer-quality/README.md)。
 
