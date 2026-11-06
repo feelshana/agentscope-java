@@ -93,7 +93,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="/configure/datasets"  element={<DatasetsPage />} />
           <Route path="/configure/datasources" element={<DataSourcesPage />} />
           <Route path="/configure/datasets/:groupId" element={<DatasetGroupPage />} />
-          {/* specs/030 fullscreen workbench: owns the whole viewport, AppShell hides the global sidebar here. */}
+          {/* Modeling hub and per-knowledge-base workbench. */}
           <Route path="/configure/modeling" element={<ModelingHubPage />} />
           <Route path="/configure/modeling/:groupId" element={<SemanticModelingPage />} />
           <Route path="/configure/semantic"  element={<SemanticConfigPage />} />

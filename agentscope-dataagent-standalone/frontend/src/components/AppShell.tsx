@@ -5,7 +5,6 @@ import { AgentDefinition, getAgent } from '../api/agents';
 import SessionsSidebar from './SessionsSidebar';
 import { ToastHost } from './Toast';
 import { HelpPanel } from './Onboarding';
-import { useOnboarding } from '../api/onboarding';
 import GuidedTour from './GuidedTour';
 import { ShellOutletContext } from './EditTierGate';
 import { ShellNavigationContext } from './ShellNavigation';
@@ -14,9 +13,23 @@ import NewVersionBanner from './NewVersionBanner';
 import { embedded, isModelingWorkbench } from '../state/embedded';
 import './AppShell.css';
 
+const SIDEBAR_PREFERENCE_KEY = 'dataagent.sidebar.collapsed';
+
 export default function AppShell() {
   const location = useLocation();
-  const [collapsed, setCollapsed] = useState(true);
+  const [sidebarPreference, setSidebarPreference] = useState<boolean | null>(() => {
+    try {
+      const saved = localStorage.getItem(SIDEBAR_PREFERENCE_KEY);
+      if (saved === 'true' || saved === 'false') return saved === 'true';
+    } catch { /* Storage may be unavailable in an embedded browser. */ }
+    return null;
+  });
+  const collapsed = sidebarPreference ?? isModelingWorkbench(location.pathname);
+  const toggleSidebar = () => {
+    const next = !collapsed;
+    setSidebarPreference(next);
+    try { localStorage.setItem(SIDEBAR_PREFERENCE_KEY, String(next)); } catch { /* Keep the in-memory choice. */ }
+  };
   const [navigationOpen, setNavigationOpen] = useState(false);
   const navigation = useRef<HTMLElement>(null);
   const content = useRef<HTMLElement>(null);
@@ -26,18 +39,6 @@ export default function AppShell() {
     setNavigationOpen(value => !value);
   }, []);
   useEffect(() => { setNavigationOpen(false); }, [location.pathname, location.search]);
-  // Entering a modeling workbench folds the menu to its icons; the user may expand it again and
-  // it stays expanded until they leave and come back.
-  const workbench = isModelingWorkbench(location.pathname);
-  useEffect(() => { if (workbench) setCollapsed(true); }, [workbench]);
-  // spec105: someone still learning the product needs the menu's words, not just its icons.
-  const onboarding = useOnboarding();
-  const expandedForNewUser = useRef(false);
-  useEffect(() => {
-    if (expandedForNewUser.current || !onboarding) return;
-    expandedForNewUser.current = true;
-    if (onboarding.stage === 'full' && onboarding.completed < onboarding.tasks.length) setCollapsed(false);
-  }, [onboarding]);
   useEffect(() => {
     if (content.current) content.current.inert = navigationOpen;
     return () => { if (content.current) content.current.inert = false; };
@@ -98,7 +99,7 @@ export default function AppShell() {
       <aside ref={navigation} id="app-navigation" className={`shell-navigation${navigationOpen ? ' is-open' : ''}`}
         role={navigationOpen ? 'dialog' : undefined} aria-modal={navigationOpen || undefined} aria-label={navigationOpen ? '主导航' : undefined}>
         <button type="button" className="shell-nav-close" aria-label="关闭导航" onClick={() => setNavigationOpen(false)}><Icon name="close" size="sm" /></button>
-        <SessionsSidebar refreshKey={refreshTick} collapsed={navigationOpen ? false : collapsed} onToggle={() => setCollapsed(value => !value)} />
+        <SessionsSidebar refreshKey={refreshTick} collapsed={!navigationOpen && collapsed} onToggle={navigationOpen ? undefined : toggleSidebar} />
       </aside>
       <main ref={content} id="main-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
         <Outlet context={ctx} />
