@@ -131,27 +131,52 @@ public class JpaUserStore implements UserStore {
 
     @Override
     public Optional<UserRecord> updateRoles(String userId, List<String> newRoles) {
+        var admins = lockAdministrators();
+        String csv = joinRoles(newRoles);
         return repository
-                .findById(userId)
+                .findByIdForUpdate(userId)
                 .map(
                         u -> {
-                            u.setRolesCsv(joinRoles(newRoles));
+                            if (isAdministrator(u)
+                                    && splitRoles(csv).stream().noneMatch("admin"::equalsIgnoreCase)
+                                    && admins.size() <= 1) {
+                                throw new IllegalStateException("不能移除最后一位全局管理员");
+                            }
+                            u.setRolesCsv(csv);
                             return toRecord(repository.save(u));
                         });
     }
 
     @Override
     public boolean deleteUser(String userId) {
-        Optional<UserEntity> target = repository.findById(userId);
+        var admins = lockAdministrators();
+        Optional<UserEntity> target = repository.findByIdForUpdate(userId);
         if (target.isEmpty()) return false;
-        if (hasRole(target.get(), "admin")) {
-            long admins = repository.findAll().stream().filter(u -> hasRole(u, "admin")).count();
-            if (admins <= 1) {
-                throw new IllegalStateException("Cannot delete the last admin user");
-            }
+        if (isAdministrator(target.get()) && admins.size() <= 1) {
+            throw new IllegalStateException("Cannot delete the last admin user");
         }
         repository.deleteById(userId);
         log.info("Deleted user '{}'", userId);
+        return true;
+    }
+
+    @Override
+    public boolean setAdministrator(String actor, String userId, boolean enabled) {
+        var admins = lockAdministrators();
+        if (admins.stream().noneMatch(u -> actor.equals(u.getUserId()))) {
+            throw new SecurityException("需要全局管理员权限");
+        }
+        var target = repository.findByIdForUpdate(userId).orElse(null);
+        if (target == null) return false;
+        if (isAdministrator(target) == enabled) return true;
+        if (!enabled && admins.size() <= 1) {
+            throw new IllegalStateException("不能移除最后一位全局管理员");
+        }
+        var roles = new java.util.ArrayList<>(splitRoles(target.getRolesCsv()));
+        if (enabled) roles.add("admin");
+        else roles.removeIf("admin"::equalsIgnoreCase);
+        target.setRolesCsv(joinRoles(roles));
+        repository.save(target);
         return true;
     }
 
@@ -174,7 +199,13 @@ public class JpaUserStore implements UserStore {
         return String.join(",", roles);
     }
 
-    private static boolean hasRole(UserEntity u, String role) {
-        return splitRoles(u.getRolesCsv()).contains(role);
+    public static boolean isAdministrator(UserEntity user) {
+        return splitRoles(user.getRolesCsv()).stream().anyMatch("admin"::equalsIgnoreCase);
+    }
+
+    private List<UserEntity> lockAdministrators() {
+        return repository.lockAdministratorCandidates().stream()
+                .filter(JpaUserStore::isAdministrator)
+                .toList();
     }
 }

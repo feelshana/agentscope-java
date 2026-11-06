@@ -16,6 +16,7 @@
 package io.agentscope.dataagent.web.persistence.jpa;
 
 import jakarta.persistence.LockModeType;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -24,6 +25,21 @@ import org.springframework.data.repository.query.Param;
 
 /** Spring Data repository for {@link UserEntity}. */
 public interface UserEntityRepository extends JpaRepository<UserEntity, String> {
+
+    String ADMIN_CANDIDATE = "locate('admin', lower(u.rolesCsv)) > 0";
+
+    @Query("select u from UserEntity u where " + ADMIN_CANDIDATE + " order by u.username, u.userId")
+    List<UserEntity> findAdministratorCandidates();
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from UserEntity u where " + ADMIN_CANDIDATE + " order by u.userId")
+    List<UserEntity> lockAdministratorCandidates();
+
+    @Query(
+            "select u from UserEntity u where locate(:term, lower(u.username)) > 0"
+                    + " or locate(:term, lower(u.displayName)) > 0")
+    List<UserEntity> searchAdminDirectory(
+            String term, org.springframework.data.domain.Pageable pageable);
 
     Optional<UserEntity> findByUsernameIgnoreCase(String username);
 

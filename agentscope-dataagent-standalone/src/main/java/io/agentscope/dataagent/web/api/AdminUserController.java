@@ -198,7 +198,7 @@ public class AdminUserController {
     //  Helpers
     // -----------------------------------------------------------------
 
-    private static void requireAdmin(Authentication auth) {
+    static void requireAdmin(Authentication auth) {
         if (auth == null
                 || auth.getAuthorities() == null
                 || auth.getAuthorities().stream()

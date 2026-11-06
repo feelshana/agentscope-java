@@ -50,6 +50,8 @@ import DebugPage from './pages/admin/DebugPage';
 import AdminUsagePage from './pages/admin/UsagePage';
 import UsersPage from './pages/admin/UsersPage';
 import AdminSessionsPage from './pages/admin/SessionsPage';
+import AdminConversationHistoryPage from './pages/admin/AdminConversationHistoryPage';
+import GlobalAdministratorsPage from './pages/admin/GlobalAdministratorsPage';
 import AdminAgentsPage from './pages/admin/AgentsPage';
 import AdminAgentDetailPage from './pages/admin/AgentDetailPage';
 import AdminChannelDetailPage from './pages/admin/ChannelDetailPage';
@@ -115,6 +117,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="/admin/overview"        element={<AdminRoute><OverviewPage /></AdminRoute>} />
           <Route path="/admin/instances"       element={<AdminRoute><InstancesPage /></AdminRoute>} />
           <Route path="/admin/sessions"        element={<AdminRoute><AdminSessionsPage /></AdminRoute>} />
+          <Route path="/admin/conversation-history" element={<AdminRoute><AdminConversationHistoryPage /></AdminRoute>} />
+          <Route path="/admin/administrators"  element={<AdminRoute><GlobalAdministratorsPage /></AdminRoute>} />
           <Route path="/admin/channels"        element={<AdminRoute><AdminChannelsPage /></AdminRoute>} />
           <Route path="/admin/channels/:id"    element={<AdminRoute><AdminChannelDetailPage /></AdminRoute>} />
           <Route path="/admin/agents"          element={<AdminRoute><AdminAgentsPage /></AdminRoute>} />

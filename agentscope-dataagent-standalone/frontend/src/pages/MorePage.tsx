@@ -31,6 +31,12 @@ export default function MorePage() {
           <button type="button" className="more-entry" onClick={() => navigate('/admin/public-knowledge-bases')}>
             <Icon name="book" /><span className="more-entry-copy"><span className="more-entry-title">公共知识库</span><span className="more-entry-description">设置全体已登录用户可使用的知识库。</span></span><span className="more-entry-go">管理<Icon name="chevron" size="sm" /></span>
           </button>
+          <button type="button" className="more-entry" onClick={() => navigate('/admin/conversation-history')}>
+            <Icon name="list" /><span className="more-entry-copy"><span className="more-entry-title">用户对话历史</span><span className="more-entry-description">按用户查看问题和回复正文。</span></span><span className="more-entry-go">查看<Icon name="chevron" size="sm" /></span>
+          </button>
+          <button type="button" className="more-entry" onClick={() => navigate('/admin/administrators')}>
+            <Icon name="shield" /><span className="more-entry-copy"><span className="more-entry-title">全局管理员</span><span className="more-entry-description">查看、添加和移除全局管理员权限。</span></span><span className="more-entry-go">管理<Icon name="chevron" size="sm" /></span>
+          </button>
         </div>
       </section>}
       <p className="more-note"><Icon name="info" size="sm" /><span>个人对话和分析文件仍在对应会话中查看。</span></p>

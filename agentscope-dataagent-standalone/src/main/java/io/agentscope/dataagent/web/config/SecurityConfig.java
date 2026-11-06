@@ -16,11 +16,13 @@
 package io.agentscope.dataagent.web.config;
 
 import io.agentscope.dataagent.web.auth.JwtService;
+import io.agentscope.dataagent.web.auth.UserStore;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -40,6 +42,7 @@ import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebFilter;
 import org.springframework.web.server.WebFilterChain;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 /**
  * WebFlux Security configuration for the agentscope-dataagent web application.
@@ -63,7 +66,7 @@ public class SecurityConfig {
 
     @Bean
     public SecurityWebFilterChain securityWebFilterChain(
-            ServerHttpSecurity http, JwtService jwtService) {
+            ServerHttpSecurity http, JwtService jwtService, ObjectProvider<UserStore> users) {
         return http.csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .headers(
                         headers ->
@@ -101,7 +104,8 @@ public class SecurityConfig {
                                 ex.authenticationEntryPoint(
                                         new HttpStatusServerEntryPoint(HttpStatus.UNAUTHORIZED)))
                 .addFilterBefore(
-                        new JwtAuthFilter(jwtService), SecurityWebFiltersOrder.AUTHENTICATION)
+                        new JwtAuthFilter(jwtService, users),
+                        SecurityWebFiltersOrder.AUTHENTICATION)
                 .build();
     }
 
@@ -123,14 +127,17 @@ public class SecurityConfig {
         private static final Logger log = LoggerFactory.getLogger(JwtAuthFilter.class);
 
         private final JwtService jwtService;
+        private final ObjectProvider<UserStore> users;
 
-        JwtAuthFilter(JwtService jwtService) {
+        JwtAuthFilter(JwtService jwtService, ObjectProvider<UserStore> users) {
             this.jwtService = jwtService;
+            this.users = users;
         }
 
         @Override
         public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
-            if (exchange.getRequest().getPath().value().startsWith("/api/auth/")) {
+            String path = exchange.getRequest().getPath().value();
+            if (path.startsWith("/api/auth/") || path.startsWith("/api/admin/")) {
                 exchange.getResponse().getHeaders().setCacheControl("no-store");
             }
             String header = exchange.getRequest().getHeaders().getFirst("Authorization");
@@ -152,18 +159,60 @@ public class SecurityConfig {
                 Claims claims = jwtService.parse(token);
                 String userId = jwtService.extractUserId(claims);
                 List<String> roles = jwtService.extractRoles(claims);
-                List<SimpleGrantedAuthority> authorities =
-                        roles.stream()
-                                .map(r -> new SimpleGrantedAuthority("ROLE_" + r.toUpperCase()))
-                                .toList();
-                UsernamePasswordAuthenticationToken auth =
-                        new UsernamePasswordAuthenticationToken(userId, null, authorities);
-                return chain.filter(exchange)
-                        .contextWrite(ReactiveSecurityContextHolder.withAuthentication(auth));
+                if (path.startsWith("/api/")
+                        && roles.stream().anyMatch("admin"::equalsIgnoreCase)) {
+                    return Mono.fromCallable(
+                                    () -> {
+                                        UserStore store = users.getIfAvailable();
+                                        return store != null
+                                                && store.findById(userId)
+                                                        .map(
+                                                                u ->
+                                                                        u.roles().stream()
+                                                                                .anyMatch(
+                                                                                        "admin"
+                                                                                                ::equalsIgnoreCase))
+                                                        .orElse(false);
+                                    })
+                            .subscribeOn(Schedulers.boundedElastic())
+                            .flatMap(
+                                    currentAdmin ->
+                                            authenticated(
+                                                    exchange,
+                                                    chain,
+                                                    userId,
+                                                    currentAdmin
+                                                            ? roles
+                                                            : roles.stream()
+                                                                    .filter(
+                                                                            r ->
+                                                                                    !"admin"
+                                                                                            .equalsIgnoreCase(
+                                                                                                    r))
+                                                                    .toList()));
+                }
+                return authenticated(exchange, chain, userId, roles);
             } catch (JwtException e) {
                 log.debug("JWT validation failed: {}", e.getMessage());
                 return chain.filter(exchange);
             }
+        }
+
+        private static Mono<Void> authenticated(
+                ServerWebExchange exchange,
+                WebFilterChain chain,
+                String userId,
+                List<String> roles) {
+            var authorities =
+                    roles.stream()
+                            .map(
+                                    r ->
+                                            new SimpleGrantedAuthority(
+                                                    "ROLE_" + r.toUpperCase(java.util.Locale.ROOT)))
+                            .toList();
+            var auth = new UsernamePasswordAuthenticationToken(userId, null, authorities);
+            return chain.filter(exchange)
+                    .contextWrite(ReactiveSecurityContextHolder.withAuthentication(auth));
         }
     }
 }

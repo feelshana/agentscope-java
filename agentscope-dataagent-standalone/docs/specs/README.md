@@ -8,6 +8,9 @@ spec 是一页纸的需求与验收标准，写代码之前先写（模板：[00
 
 ## 进行中
 
+- [122 在页面维护全局管理员](122-global-administrator-management.md)：已确认，待现场验收。
+- [121 管理员按用户查看对话历史](121-admin-conversation-history.md)：已确认，待现场验收。
+
 - [120 新对话默认选库与联网开关](120-chat-entry-options.md)：已确认实施，待试用验收。
 
 - [119 BI两对象表字段扩展](119-bi-asset-field-expansion.md)：已授权，已有同步任务显式迁移，待66现场验收。

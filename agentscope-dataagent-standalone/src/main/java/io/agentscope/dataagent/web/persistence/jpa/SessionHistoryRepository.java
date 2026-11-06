@@ -24,6 +24,32 @@ import org.springframework.data.repository.query.Param;
 public interface SessionHistoryRepository extends JpaRepository<SessionHistoryEntity, String> {
     @Query(
             """
+            select s.sessionKey, s.agentId, coalesce(h.title, s.label),
+                   coalesce(h.activityMs, s.lastActivityMs), coalesce(h.messageCount, 0),
+                   s.userId, coalesce(u.username, s.userId), u.displayName, u.department
+            from SessionRegistryEntity s
+            left join SessionHistoryEntity h on h.sessionKey = s.sessionKey
+            left join UserEntity u on u.userId = s.userId
+            where s.kind = 'main' and s.userId is not null and s.userId <> ''
+              and (:owner is null or s.userId = :owner)
+              and (:title = '' or locate(:title, lower(coalesce(h.title, s.label, ''))) > 0)
+              and coalesce(h.activityMs, s.lastActivityMs) >= :start
+              and coalesce(h.activityMs, s.lastActivityMs) < :end
+              and (coalesce(h.activityMs, s.lastActivityMs) < :before
+                   or (coalesce(h.activityMs, s.lastActivityMs) = :before and s.sessionKey < :key))
+            order by coalesce(h.activityMs, s.lastActivityMs) desc, s.sessionKey desc
+            """)
+    List<Object[]> adminHistory(
+            String owner,
+            String title,
+            long start,
+            long end,
+            long before,
+            String key,
+            Pageable page);
+
+    @Query(
+            """
             select s, h, r from SessionRegistryEntity s
             left join SessionHistoryEntity h on h.sessionKey = s.sessionKey
             left join SessionReadStateEntity r on r.sessionKey = s.sessionKey and r.userId = s.userId

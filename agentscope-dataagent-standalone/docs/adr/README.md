@@ -179,3 +179,4 @@ ADR 记录"为什么这样做"。规则：
 | [0137](0137-fixed-login-token-lifetime.md) | DataAgent 登录凭证固定 24 小时 | 已接受，2026-11-05。到期重新认证。 | |
 | [0138](0138-metrics-as-cubes-and-wren-0-17.md) | 升级 Wren 0.17.1，指标由 Cube 承担，取值与同义词写入 MDL | 提议，暂缓（2026-11-05 用户决定先不做）。实施 spec118；接受后取代 ADR0106、ADR0107 中资产轮次的 Cube 部分。 |  |
 | [0140](0140-per-turn-web-search.md) | 问数联网由用户逐轮授权 | 已接受，2026-11-06。实施 spec120，取代 ADR0115 的自动搜索授权行为。 | |
+| [0141](0141-admin-conversation-history-read-access.md) | 管理员通过独立接口查阅用户对话正文 | 已接受，2026-11-06。对应 spec121。 | |

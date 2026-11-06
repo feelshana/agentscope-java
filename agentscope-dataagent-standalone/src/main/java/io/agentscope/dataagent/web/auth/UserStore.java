@@ -62,6 +62,9 @@ public interface UserStore {
     /** Updates the roles of an existing user. Returns the updated record, or empty if absent. */
     Optional<UserRecord> updateRoles(String userId, List<String> newRoles);
 
+    /** Changes only the admin role, returning false if the target account does not exist. */
+    boolean setAdministrator(String actor, String userId, boolean enabled);
+
     /**
      * Deletes a user by userId. Returns {@code true} if the user existed and was removed. The
      * last admin cannot be deleted ({@link IllegalStateException}).
