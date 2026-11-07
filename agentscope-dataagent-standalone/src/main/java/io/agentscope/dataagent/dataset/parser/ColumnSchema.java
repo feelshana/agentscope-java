@@ -35,7 +35,8 @@ public record ColumnSchema(
         Boolean included,
         String role,
         String roleReason,
-        String descriptionSource) {
+        String descriptionSource,
+        String displayName) {
 
     public static final String SOURCE_USER = "user";
 
@@ -45,7 +46,27 @@ public record ColumnSchema(
             String sqlType,
             boolean nullable,
             String description) {
-        this(name, originalName, sqlType, nullable, description, null, null, null, null);
+        this(name, originalName, sqlType, nullable, description, null);
+    }
+
+    public ColumnSchema(
+            String name,
+            String originalName,
+            String sqlType,
+            boolean nullable,
+            String description,
+            String displayName) {
+        this(
+                name,
+                originalName,
+                sqlType,
+                nullable,
+                description,
+                null,
+                null,
+                null,
+                null,
+                displayName);
     }
 
     /** Columns stored before field screening existed count as included. */
@@ -59,7 +80,16 @@ public record ColumnSchema(
 
     public ColumnSchema withDescription(String text, String source) {
         return new ColumnSchema(
-                name, originalName, sqlType, nullable, text, included, role, roleReason, source);
+                name,
+                originalName,
+                sqlType,
+                nullable,
+                text,
+                included,
+                role,
+                roleReason,
+                source,
+                displayName);
     }
 
     public ColumnSchema withScreening(Boolean include, String suggestedRole, String reason) {
@@ -72,6 +102,7 @@ public record ColumnSchema(
                 include,
                 suggestedRole,
                 reason,
-                descriptionSource);
+                descriptionSource,
+                displayName);
     }
 }

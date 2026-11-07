@@ -61,7 +61,11 @@ class KnowledgeBaseBrowseTest {
                 .containsEntry("tableRole", "FACT")
                 .containsEntry("description", "访问日志");
         assertThat(result.relationships().get(0)).containsEntry("description", "多对一");
-        assertThat(new ObjectMapper().writeValueAsString(result)).doesNotContain("temporalColumns");
+        var columns = new ObjectMapper().valueToTree(result.models().get(0)).path("columns");
+        assertThat(columns.get(0).path("displayName").asText()).isEqualTo("统计场景");
+        assertThat(columns.get(0).path("name").asText()).isEqualTo("scene_name");
+        assertThat(new ObjectMapper().writeValueAsString(result))
+                .doesNotContain("temporalColumns", "privateProperty");
     }
 
     /** Counts come from the published model; a knowledge base outside the list is never read. */
@@ -96,7 +100,8 @@ class KnowledgeBaseBrowseTest {
         Files.writeString(
                 root.resolve("published/target/mdl.json"),
                 "{\"models\":[{\"name\":\"log\",\"properties\":{\"tableRole\":\"FACT\","
-                    + "\"description\":\"访问日志\",\"temporalColumns\":[\"t\"]}},"
+                    + "\"description\":\"访问日志\",\"temporalColumns\":[\"t\"]},"
+                    + "\"columns\":[{\"name\":\"scene_name\",\"properties\":{\"displayName\":\"统计场景\",\"privateProperty\":\"private\"}}]},"
                     + "{\"name\":\"user\"}],\"relationships\":[{\"name\":\"r\","
                     + "\"models\":[\"log\",\"user\"],\"properties\":{\"description\":\"多对一\"}}]}");
         return group;

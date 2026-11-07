@@ -5,6 +5,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import ModelingChatPanel from '../../components/ModelingChatPanel';
 import type { AssistantState } from '../../components/ModelingChatPanel';
 import SemanticWorkbench from '../../components/modeling/SemanticWorkbench';
+import { WorkspaceMenu } from '../../components/KnowledgeWorkspace';
 import { changeKey } from '../../components/modeling/SemanticWorkbench';
 import type { ChangeMark, WorkbenchView } from '../../components/modeling/SemanticWorkbench';
 import PendingPanel from '../../components/modeling/PendingPanel';
@@ -162,7 +163,9 @@ function ModelingWorkbench() {
   const [prefill, setPrefill] = useState<{ id: number; text: string } | null>(null);
   const [focusRelation, setFocusRelation] = useState<string | null>(null);
   const [changeMark, setChangeMark] = useState<ChangeMark | null>(null);
-  const [versionChoice, setVersionChoice] = useState<'draft' | 'published' | null>(null);
+  const [versionChoice, setVersionChoice] = useState<'draft' | 'published' | 'compare'>('draft');
+  const fieldEditGuard = useRef<(() => boolean) | null>(null);
+  const canLeaveField = () => fieldEditGuard.current?.() ?? true;
   const [browse, setBrowse] = useState<KnowledgeBaseBrowse | null>(null);
   // Published knowledge bases open on what they contain; anything unfinished opens the conversation.
   const tab: Tab = explicitTab ?? 'semantic';
@@ -170,8 +173,10 @@ function ModelingWorkbench() {
   const [panelChoice, setPanelChoice] = useState<Panel | undefined>(undefined);
   const defaultPanel: Panel = asset === 'modeling' || params.get('start') === '1' || (workflow !== null && !workflow.publishedVersion) ? 'assistant' : 'detail';
   const panel: Panel = panelChoice === undefined ? defaultPanel : panelChoice;
-  const openAssistant = () => setPanelChoice('assistant');
-  const togglePanel = (next: Exclude<Panel, null>) => setPanelChoice(panel === next ? null : next);
+  const openAssistant = () => { if (canLeaveField()) setPanelChoice('assistant'); };
+  const togglePanel = (next: Exclude<Panel, null>) => {
+    if (canLeaveField()) setPanelChoice(panel === next ? null : next);
+  };
   const [dockWide, setDockWide] = useState(false);
   const [marked, setMarked] = useState<DraftItem[]>([]);
   const [seen, setSeen] = useState<Set<string>>(new Set());
@@ -181,7 +186,9 @@ function ModelingWorkbench() {
   const activeGroup = useRef(groupId); activeGroup.current = groupId;
   const generation = useRef(0);
   const sequence = useRef(0);
-  const selectTab = (key: Tab) => setParams({ asset: key }, { replace: true });
+  const selectTab = (key: Tab) => {
+    if (key !== tab && canLeaveField()) setParams({ asset: key }, { replace: true });
+  };
   /** {@code label} is what the conversation shows for a request the platform wrote. */
   const request = (text: string, purpose?: TurnPurpose, label?: string) => {
     if (!windowReady) { setError('请先完成事实表时间配置，再开始建模。'); return false; }
@@ -236,7 +243,7 @@ function ModelingWorkbench() {
     if (startIntent.current !== groupId) startIntent.current = null; setTrialOpen(false); setExamples(0); setUnconfirmedTrials(0);
     setView(null); setPreview(null); setWorkflow(null); setName('语义模型'); setConfirmations([]); setScreening(null); setAdjusting(null);
     setPrefill(null); setFocusRelation(null); setChangeMark(null); setPanelChoice(undefined); setMarked([]); setReveal(null);
-    try { setSeen(new Set(JSON.parse(localStorage.getItem(`sw-seen:${groupId}`) ?? '[]') as string[])); } catch { setSeen(new Set()); } setVersionChoice(null); setBrowse(null);
+    try { setSeen(new Set(JSON.parse(localStorage.getItem(`sw-seen:${groupId}`) ?? '[]') as string[])); } catch { setSeen(new Set()); } setVersionChoice('draft'); setBrowse(null);
     let cancelled = false;
     void getGroupDetail(groupId).then(detail => { if (!cancelled) setName(detail.group.name); })
       .catch(e => { if (!cancelled) setError(message(e)); });
@@ -296,8 +303,9 @@ function ModelingWorkbench() {
     .map(f => ({ key: f.path, title: f.path, file: f.path, dirty: dirty(f.path) }));
   const selected = params.get('selected');
   const hasPublished = (workflow?.publishedVersion ?? 0) > 0;
-  // spec106: the draft shows when it differs; otherwise the version people are actually using.
-  const version = !hasPublished ? 'draft' : versionChoice ?? (view?.changed ? 'draft' : 'published');
+  const version = hasPublished && versionChoice === 'published' ? 'published' : 'draft';
+  const comparing = hasPublished && versionChoice === 'compare';
+  const draftChanged = view?.changed ?? workflow?.draftChanged;
   useEffect(() => {
     // The published version is shown, or compared against while viewing the draft (spec117).
     if (tab !== 'semantic' || !hasPublished) return undefined;
@@ -342,6 +350,7 @@ function ModelingWorkbench() {
   const unseenCount = changeMark ? marked.filter(i => !isSeen(i)).length : 0;
   const pendingCount = confirmations.length + unseenCount;
   const revealChange = (item: DraftItem) => {
+    if (!canLeaveField()) return;
     setVersionChoice('draft');
     setParams({ asset: 'semantic', view: item.category === 'MODEL' || item.category === 'RELATIONSHIP' ? 'graph' : 'rules' }, { replace: true });
     setReveal({ id: ++sequence.current, item });
@@ -349,20 +358,31 @@ function ModelingWorkbench() {
   // The guided tour works in the conversation; it opens the assistant while it does.
   useEffect(() => { if (queryHeld) setPanelChoice('assistant'); }, [queryHeld]);
   /** Fills the conversation's input; the user reads it and decides whether to send. */
-  const askAssistant = (text: string) => { setPrefill({ id: ++sequence.current, text }); openAssistant(); };
+  const askAssistant = (text: string) => {
+    if (!canLeaveField()) return;
+    setPrefill({ id: ++sequence.current, text });
+    setPanelChoice('assistant');
+  };
   const setWorkbenchView = (next: WorkbenchView) => setParams({ asset: 'semantic', view: next }, { replace: true });
+  const showVersion = (next: typeof versionChoice) => {
+    if (next !== versionChoice && canLeaveField()) setVersionChoice(next);
+  };
   const versionBar = <div className="sm-version">
-    <div role="group" aria-label="查看版本" className="sm-switch">
-      <button type="button" aria-pressed={version === 'published'} disabled={!hasPublished} title={hasPublished ? '' : '还没有发布过'} className={version === 'published' ? 'sm-switch-on' : ''} onClick={() => setVersionChoice('published')}>线上{hasPublished ? ` v${workflow?.publishedVersion}` : ''}</button>
-      <button type="button" aria-pressed={version === 'draft'} className={version === 'draft' ? 'sm-switch-on' : ''} onClick={() => setVersionChoice('draft')}>草稿{view?.changed ? '（有修改）' : ''}</button>
-    </div>
-    <span className="da-small">{version !== 'published' ? '发布后才用于问数' : workflow?.queryAvailable ? '问数正在使用这个版本' : '有修改待发布，发布前不能问数'}</span>
-    {view?.publishedAt && <span className="da-small">发布于 {view.publishedAt.slice(0, 19).replace('T', ' ')}</span>}
+    {hasPublished && <WorkspaceMenu label="版本" triggerLabel="版本" items={[
+      { label: `查看线上 v${workflow?.publishedVersion}`, icon: 'globe', disabled: !browse || version === 'published', onClick: () => showVersion('published') },
+      { label: '与线上对比', icon: 'graph', disabled: !browse || comparing, onClick: () => showVersion('compare') },
+      ...(version === 'published' || comparing
+        ? [{ label: '返回工作台', icon: 'back' as const, onClick: () => showVersion('draft') }] : []),
+    ]} />}
+    {version === 'published' && <>
+      <span className="sm-version-status">正在查看线上 v{workflow?.publishedVersion}（只读）</span>
+      <button type="button" className="da-btn da-btn-sm" onClick={() => showVersion('draft')}>返回工作台</button>
+    </>}
   </div>;
   const waiting = pending.length;
   const assistantLabel = assistantState !== 'idle' ? (waiting ? `助手运行中 · ${waiting} 个请求排队` : '助手运行中')
     : waiting ? '请求排队中' : '助手空闲';
-  const toQuery = workflow?.queryAvailable ? () => navigate(`/chat?groups=${encodeURIComponent(groupId)}`) : undefined;
+  const toQuery = workflow?.queryAvailable ? () => { if (canLeaveField()) navigate(`/chat?groups=${encodeURIComponent(groupId)}`); } : undefined;
   const preparing = useQueryReadiness(groupId, workflow?.publishedVersion);
   // Indexing and warm-up run right after publishing; the first question should not wait for them.
   useEffect(() => {
@@ -374,21 +394,23 @@ function ModelingWorkbench() {
   const turnDone = () => {
     window.dispatchEvent(new CustomEvent('modeling:updated', { detail: { groupId } }));
   };
-  const locateConfirmations = () => setPanelChoice('pending');
+  const locateConfirmations = () => { if (canLeaveField()) setPanelChoice('pending'); };
 
   return <div className="modeling-workbench mw">
     <div className="mw-top">
     <header className="mw-head">
       <div className="mw-crumb">
-        <button type="button" className="mw-crumb-link" onClick={() => navigate('/configure/modeling')}>语义建模</button>
+        <button type="button" className="mw-crumb-link" onClick={() => { if (canLeaveField()) navigate('/configure/modeling'); }}>语义建模</button>
         <span className="mw-crumb-sep">/</span>
         <h1 className="mw-title">{name}</h1>
-        <span className={`mw-pill ${workflow?.queryAvailable ? 'mw-pill-ok' : ''}`}>{workflow?.queryAvailable ? `线上 v${workflow.publishedVersion}` : '尚未发布'}</span>
+        <span className={`mw-pill ${workflow?.queryAvailable ? 'mw-pill-ok' : ''}`}
+          title={hasPublished && !workflow?.queryAvailable ? '当前不可问数' : undefined}>{hasPublished ? `线上 v${workflow?.publishedVersion}` : '尚未发布'}</span>
+        {draftChanged && <span className="mw-pill sm-version-status">草稿待发布</span>}
         <span className={`mw-pill ${idle ? '' : 'mw-pill-live'}`}><span className="mw-dot" />{assistantLabel}</span>
       </div>
       <div className="mw-actions">
         {!screeningPending && screening !== null && <button className="da-btn da-btn-sm" onClick={() => setWindowSignal(n => n + 1)}>事实表时间范围</button>}
-        <button className="da-btn da-btn-sm" onClick={() => navigate(`/configure/datasets/${groupId}`)}>知识库</button>
+        <button className="da-btn da-btn-sm" onClick={() => { if (canLeaveField()) navigate(`/configure/datasets/${groupId}`); }}>知识库</button>
         {toQuery && <button className="da-btn da-btn-primary da-btn-sm" disabled={!!preparing || queryHeld}
           title={queryHeld ? TOUR_QUERY_HINT : preparing ? `问数准备中（${preparing}），约半分钟后可用` : undefined}
           onClick={toQuery}>{preparing ? '问数准备中…' : '去问数 →'}</button>}
@@ -450,13 +472,13 @@ function ModelingWorkbench() {
       </section>}
       {tab === 'semantic' && <section className="sm-pane">
         {!snapshot ? <div className="da-small">加载中…</div> : <SemanticWorkbench key={groupId} groupId={groupId} snapshot={snapshot}
-          baseline={baseline} files={snapshotFiles} baselineFiles={baselineFiles}
+          baseline={baseline} files={snapshotFiles} baselineFiles={baselineFiles} compareWithBaseline={comparing} fieldEditGuard={fieldEditGuard}
           views={version === 'draft' ? (view?.views ?? []).map(v => ({ name: v.name, sql: v.sql, description: v.description })) : []}
           issues={version === 'draft' ? (view?.issues ?? []).map(i => i.message) : []}
           editable={version === 'draft'} blocked={idle ? null : '建模助手正在运行，完成后才能在页面上修改。'}
           view={workbenchView} onViewChange={setWorkbenchView} focusRelation={focusRelation} focusModel={selected}
           onChanged={turnDone} onAsk={askAssistant} toolbar={versionBar} changes={version === 'draft' ? changeMark : null} onChanges={setChangeMark}
-          marked={marked} isSeen={isSeen} onSeen={item => markSeen([item])} onOpenPending={() => setPanelChoice('pending')} reveal={reveal} showDetail={panel === 'detail'}
+          marked={marked} isSeen={isSeen} onSeen={item => markSeen([item])} onOpenPending={locateConfirmations} reveal={reveal} showDetail={panel === 'detail'}
           firstBuild={!hasPublished && version === 'draft' ? { onPublish: () => setPublishSignal(n => n + 1) } : null} />}
         <details className="sm-advanced" open={ADVANCED.has(legacyAsset ?? '')}>
           <summary>高级：编译后的 MDL、视图、Cube、其他业务知识文件与工程快照</summary>

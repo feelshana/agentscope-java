@@ -460,7 +460,8 @@ public class DatasetService implements DatasetContextProvider {
                                 true,
                                 // Sample values live in the sampling summary; repeating them here
                                 // only made the assistant rewrite every description.
-                                schemaResult.columns().get(i).description()));
+                                schemaResult.columns().get(i).description(),
+                                schemaResult.columns().get(i).displayName()));
             }
             String tableDescription = schemaResult.tableDescription();
             if (tableDescription == null || tableDescription.isBlank()) {

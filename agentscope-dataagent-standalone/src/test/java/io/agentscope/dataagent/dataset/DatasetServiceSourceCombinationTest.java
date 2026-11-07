@@ -24,6 +24,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.agentscope.dataagent.dataset.parser.ColumnSchema;
 import io.agentscope.dataagent.dataset.parser.SchemaGenerationService;
 import io.agentscope.dataagent.tools.data.InMemoryDataSourceRegistry;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetEntity;
@@ -290,7 +291,10 @@ class DatasetServiceSourceCombinationTest {
                         new ExternalDataSourcePolicy("localhost:3306")
                                 .normalize(source.getKind(), source.getJdbcUrl()));
         when(introspector.listColumns(any(), any(), any()))
-                .thenReturn(List.of(new DataSourceIntrospector.ColumnInfo("id", "BIGINT", "主键")));
+                .thenReturn(
+                        List.of(
+                                new DataSourceIntrospector.ColumnInfo(
+                                        "customer_id", "BIGINT", "客户编号，唯一标识")));
 
         List<DatasetEntity> created =
                 service.associateTables(
@@ -305,6 +309,17 @@ class DatasetServiceSourceCombinationTest {
                 .extracting(DatasetEntity::getName)
                 .containsExactly("orders", "customers");
         assertThat(registry.list()).hasSize(2);
+        assertThat(created)
+                .allSatisfy(
+                        dataset ->
+                                assertThat(service.readColumns(dataset))
+                                        .extracting(
+                                                ColumnSchema::name,
+                                                ColumnSchema::displayName,
+                                                ColumnSchema::description)
+                                        .containsExactly(
+                                                org.assertj.core.groups.Tuple.tuple(
+                                                        "customer_id", "客户编号", "客户编号，唯一标识")));
         verify(introspector, never()).countRows(any(), any(), any());
         assertThat(created)
                 .allSatisfy(

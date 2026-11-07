@@ -53,6 +53,8 @@ public class SchemaGenerationService {
     private static final Logger log = LoggerFactory.getLogger(SchemaGenerationService.class);
 
     private static final int SAMPLE_VALUES_FOR_AI = 3;
+    private static final Pattern HAN = Pattern.compile("\\p{IsHan}");
+    private static final Pattern LABEL_BOUNDARY = Pattern.compile("[，。；：,;:\\r\\n]");
 
     private final Optional<Model> model;
 
@@ -142,10 +144,13 @@ public class SchemaGenerationService {
             String tableComment) {
 
         StringBuilder sb = new StringBuilder();
-        sb.append("你是一个数据库建模专家。请根据以下列名和样本值，为每个列生成英文字段名和字段描述。\n\n");
+        sb.append("你是一个数据库建模专家。请根据以下列名和样本值，为每个列生成英文字段名、中文显示名和字段描述。\n\n");
         sb.append("要求：\n");
         sb.append("1. 英文字段名使用 snake_case 格式，简洁明了\n");
         sb.append("2. 字段描述用中文，简明扼要\n");
+        sb.append(
+                "中文显示名 displayName 使用简短名词，例如 customer_id"
+                        + " 对应客户编号。优先采用原中文表头或数据库注释中的名称，不放样本、完整说明或猜测的业务口径，无法判断时留空。\n");
         sb.append("样本值仅为有限观察值，不代表完整枚举；不能仅凭样本确认业务含义、唯一性、全表范围，不要生成 [enum] 标签。\n");
         if (jdbcComments != null && !jdbcComments.isEmpty()) {
             sb.append("3. 如果列有数据库注释，请在描述中融合该注释的信息，不要简单重复\n");
@@ -158,7 +163,7 @@ public class SchemaGenerationService {
                 "6. 同时判断表角色tableRole：FACT表示订单、支付、访问等事件/交易事实；DIMENSION表示客户、产品、组织等实体属性/字典。客户注册时间或创建/更新时间不代表事实表；不能因存在日期列就判FACT。证据不足返回UNKNOWN，不猜测。\n");
         sb.append("请按以下 JSON 格式返回：\n");
         sb.append(
-                "{\"columns\":[{\"original\":\"原始列名\",\"english\":\"english_name\",\"description\":\"字段描述\"}],\"tableDescription\":\"表描述\",\"tableRole\":\"FACT或DIMENSION或UNKNOWN\"}\n\n");
+                "{\"columns\":[{\"original\":\"原始列名\",\"english\":\"english_name\",\"displayName\":\"中文显示名\",\"description\":\"字段描述\"}],\"tableDescription\":\"表描述\",\"tableRole\":\"FACT或DIMENSION或UNKNOWN\"}\n\n");
         if (tableComment != null && !tableComment.isBlank()) {
             sb.append("表注释：").append(tableComment).append("\n\n");
         }
@@ -209,7 +214,7 @@ public class SchemaGenerationService {
             Map<String, Object> parsed = mapper.readValue(json, Map.class);
 
             // Build column info map keyed by original name
-            Map<String, String[]> aiColumns = new LinkedHashMap<>();
+            Map<String, ColumnInfo> aiColumns = new LinkedHashMap<>();
             List<Map<String, String>> cols =
                     (List<Map<String, String>>) parsed.getOrDefault("columns", List.of());
             for (Map<String, String> col : cols) {
@@ -217,9 +222,10 @@ public class SchemaGenerationService {
                 if (orig != null) {
                     aiColumns.put(
                             orig,
-                            new String[] {
-                                col.getOrDefault("english", ""), col.getOrDefault("description", "")
-                            });
+                            new ColumnInfo(
+                                    col.getOrDefault("english", ""),
+                                    col.getOrDefault("description", ""),
+                                    col.get("displayName")));
                 }
             }
 
@@ -228,16 +234,19 @@ public class SchemaGenerationService {
             // Build result aligned with originalHeaders
             List<ColumnInfo> columnInfos = new ArrayList<>();
             for (String header : originalHeaders) {
-                String[] ai = aiColumns.get(header);
-                if (ai != null && ai[0] != null && !ai[0].isBlank()) {
-                    columnInfos.add(new ColumnInfo(ai[0], ai[1]));
+                ColumnInfo ai = aiColumns.get(header);
+                String comment = jdbcComments == null ? null : jdbcComments.get(header);
+                if (ai != null && ai.englishName() != null && !ai.englishName().isBlank()) {
+                    columnInfos.add(
+                            new ColumnInfo(
+                                    ai.englishName(),
+                                    ai.description(),
+                                    displayName(header, ai.displayName(), comment)));
                 } else {
                     // fallback for this column, with real samples
                     ColumnInfo fb =
                             fallbackColumn(
-                                    header,
-                                    columnSamples.getOrDefault(header, List.of()),
-                                    jdbcComments != null ? jdbcComments.get(header) : null);
+                                    header, columnSamples.getOrDefault(header, List.of()), comment);
                     columnInfos.add(fb);
                 }
             }
@@ -304,7 +313,25 @@ public class SchemaGenerationService {
             description += "，包含" + String.join(",", top3) + "等";
         }
 
-        return new ColumnInfo(english, description);
+        return new ColumnInfo(english, description, displayName(header, null, jdbcComment));
+    }
+
+    private static String displayName(String header, String suggested, String comment) {
+        String original = shortChineseName(header);
+        if (original != null) return original;
+        String generated = shortChineseName(suggested);
+        if (generated != null) return generated;
+        return comment == null ? null : shortChineseName(LABEL_BOUNDARY.split(comment, 2)[0]);
+    }
+
+    private static String shortChineseName(String value) {
+        if (value == null) return null;
+        String text = value.strip();
+        return text.length() <= 24
+                        && HAN.matcher(text).find()
+                        && !LABEL_BOUNDARY.matcher(text).find()
+                ? text
+                : null;
     }
 
     private boolean isDateLike(String header, List<String> samples) {
@@ -345,7 +372,11 @@ public class SchemaGenerationService {
     // -----------------------------------------------------------------
 
     /** AI-generated (or fallback) info for a single column. */
-    public record ColumnInfo(String englishName, String description) {}
+    public record ColumnInfo(String englishName, String description, String displayName) {
+        public ColumnInfo(String englishName, String description) {
+            this(englishName, description, null);
+        }
+    }
 
     /** Result of schema generation: per-column info + table description. */
     public record SchemaResult(

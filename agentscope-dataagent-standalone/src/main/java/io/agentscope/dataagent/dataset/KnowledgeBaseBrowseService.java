@@ -161,6 +161,8 @@ public class KnowledgeBaseBrowseService {
                         List.of("name", "type", "expression", "isCalculated", "isPrimaryKey"))
                     if (column.has(field)) projected.set(field, column.get(field));
                 described(column, projected);
+                JsonNode displayName = column.path("properties").path("displayName");
+                if (displayName.isTextual()) projected.set("displayName", displayName);
                 columns.add(projected);
             }
             item.set("columns", columns);
@@ -177,7 +179,7 @@ public class KnowledgeBaseBrowseService {
         return result;
     }
 
-    /** Descriptions live under properties, where the other keys stay private to the platform. */
+    /** Descriptions live under properties. The browse view explicitly projects public fields. */
     private static void described(
             JsonNode source, com.fasterxml.jackson.databind.node.ObjectNode target) {
         if (source.path("properties").hasNonNull("description"))

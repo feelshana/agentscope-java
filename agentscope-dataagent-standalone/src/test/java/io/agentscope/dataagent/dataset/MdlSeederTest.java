@@ -161,7 +161,7 @@ class MdlSeederTest {
         List<ColumnSchema> cols =
                 new ArrayList<>(
                         List.of(
-                                new ColumnSchema("id", "id", "bigint", true, "订单ID")
+                                new ColumnSchema("id", "id", "bigint", true, "订单ID", "订单号")
                                         .withDescription("订单编号", ColumnSchema.SOURCE_USER),
                                 new ColumnSchema("etl_batch", "etl_batch", "bigint", true, null)
                                         .withScreening(false, "TECHNICAL", "ETL批次")));
@@ -172,15 +172,17 @@ class MdlSeederTest {
         String yml = modelYml("orders");
         assertFalse(yml.contains("etl_batch"));
         assertTrue(yml.contains("description_source: user"));
+        assertTrue(yml.contains("displayName: 订单号"));
         assertFalse(reconcile().changed());
 
         // A column added later is appended at the seed's column-0 entry indent: valid YAML.
-        cols.add(new ColumnSchema("amount", "amount", "decimal", true, "金额"));
+        cols.add(new ColumnSchema("amount", "amount", "decimal", true, null, "金额"));
         d.setColumnSchemaJson(mapper.writeValueAsString(cols));
         MdlSeeder.SeedResult second = reconcile();
         assertTrue(second.issues().isEmpty(), String.valueOf(second.issues()));
         String appended = modelYml("orders");
         assertTrue(appended.contains("\n- name: amount\n"), appended);
+        assertTrue(appended.contains("displayName: 金额"));
         assertEquals(
                 2,
                 new ObjectMapper(new com.fasterxml.jackson.dataformat.yaml.YAMLFactory())

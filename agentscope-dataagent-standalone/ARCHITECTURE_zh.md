@@ -275,6 +275,8 @@ recall_queries、describe_model 与 describe_cube 均由官方 MCP 提供，平�
 
 问答正文由 `DataAgentConfig#QUERY_EFFICIENCY_RULES` 的回答呈现要求约束。普通问数首段直接给结论，仅对少量关键数字和对应对象、单位加粗，图表与明细之后简述必要口径、并列规则及实际数据边界。用户要求详细报告时按请求展开。前端沿用原有 Markdown 渲染，格式提示在服务重新加载后生效。
 
+继续分析的日期识别也接受 `dt` 等日期列中的 `yyyyMMdd` 分区值。前端按有效日期归一化后计算点数，决定是否展示归因、异常检测或趋势预测入口。
+
 ### 4.2 点赞与官方 memory
 
 外层可选 answer_question 仅标注用于最终答案的业务查询，不传入官方 arguments；诊断查询省略。
@@ -344,7 +346,7 @@ ExternalDataSource（用户配置的外部 JDBC 连接，可选采样）
 1. 校验知识库归属 + 同名冲突 + 文件类型（.xlsx/.xls/.csv）
 2. DatasetImportService#importFile：EasyExcel/CSV 流式解析 → TypeInferrer 类型推断
    → TableProvisioner 在数据集 MySQL 中建 ds_ 前缀物理表并写入数据
-3. SchemaGenerationService#generateSchema：AI 生成表描述与每列业务描述
+3. SchemaGenerationService#generateSchema：AI 生成表描述、列业务描述与简短中文显示名
    （结合 JDBC 注释、低基数列采样值）
 4. 元数据落 DatasetEntity（含 columnSchemaJson）→ registry.add(toDataSource)
 5. Controller 在单次上传或整批上传完成后调用 BaselineMdlService，一次性发布可查询基础 MDL
@@ -359,7 +361,7 @@ ADR 0078 / spec 067：`DatasetUploadProperties` 统一大小、文件数量、�
 `ExternalDataSourceController`（`/api/datasources`）管理用户级 JDBC 连接；测试连接、新建和修改时由 `DataSourceIntrospector#connectionError` 检查引擎，只接受 MySQL 8.0 及以上或 Doris（按 `@@version_comment` 识别），否则拒绝保存（ADR0113）；问数与建模提示要求 SQL 用 MySQL 8.0 语法、日期范围写成日期常量，以便时间门禁由规则判断；
 `DatasetService#associateTables` 把外部库已有表关联进知识库：`DataSourceIntrospector`
 读取列元数据/表注释，可选通过 `DatasetSampling#read` 每表一次 LIMIT 1000 有界读取，在内存提取每列最多20个观察值，再经
-`SchemaGenerationService` 生成 AI 描述。`origin=datasource`，删除时不 drop 物理表。页面逐表调用 `DatasetGroupController#associate`（`publish=false`）以显示真实采样进度，全部完成后以空表列表、`publish=true` 统一生成一次基础 MDL。
+`SchemaGenerationService` 生成字段说明与中文显示名，生成不可用时可从简短的中文列注释取名。`MdlSeeder` 给新入模列写入 `properties.displayName`，`KnowledgeBaseBrowseService` 从已发布 MDL 投影显示名。SQL 仍使用原字段名。`origin=datasource`，删除时不 drop 物理表。页面逐表调用 `DatasetGroupController#associate`（`publish=false`）以显示真实采样进度，全部完成后以空表列表、`publish=true` 统一生成一次基础 MDL。
 
 Wren 知识库当前只允许关联同一个 MySQL 外部数据源，拒绝与上传表混合、跨多个外部源或关联
 PostgreSQL。`DatasetService#prepareAssociatedTables` 在任何 repository/registry 写入前完成整批表名、
@@ -792,6 +794,8 @@ React 18 + TypeScript + Vite SPA（`frontend/`），构建产物进 `classpath:/
 ### 当前建模工作台（ADR 0069、0075、0076）
 
 `SemanticModelingPage` 按权限分流：MANAGE 进工作台，页签为语义模型、问数优化（含原问答）、公共视图、资料（spec092 §7、spec117 §3c），草稿栏在各页签常驻；旧地址 `?asset=models|relations|knowledge|modeling` 进语义模型（modeling 同时展开助手），`?asset=qa` 进问数优化。页面最右侧图标栏切换右侧面板：详情（工作台抽屉）、建模助手（原建模对话的同一个 `ModelingChatPanel` 实例，常驻挂载、只切换显示）、待确认（`PendingPanel`：口径确认卡与未看的改动，可定位、标为已看、按文件撤销）；未发布默认展开助手，各处“问助手”与问数优化、公共视图的请求都打开助手面板，引导进行中自动展开。每轮助手结束后页面自动以该轮开始时间标记改动（`/draft/items?since=`，累积到清除），工作台把未看的标红、看过的标灰（已看记录存浏览器），与线上对比仍为黄色；只有 QUERY 时进 `SemanticReadOnlyWorkspace`，以只读模式使用同一工作台看线上版本。模型与关系经 `semanticSnapshot` 统一草稿（`/mdl/view`，仅 MANAGE）和线上（`KnowledgeBaseBrowseService#browse`，校验 QUERY）两种数据。语义模型页签是 `SemanticWorkbench`（spec117）：左栏对象列表，中间为关系图（`workbenchLayout#layoutOverview`：模型为不展开的紧凑节点，连线两端标 N/1，位置只存浏览器；双击进入 `focusOf` 聚焦视图，左侧为多对一指向它的模型、右侧为它指向的模型；字段在抽屉中按普通列、日期列、衍生列、关联分组，关联字段只从 `relationships.yml` 展示；“规则与原文”另读业务文档正文 `BusinessDocumentService#content`）或业务规则视图（`ruleText`：按 `knowledge/rules/*.md` 的二级标题分组，页面句式解析成列，句式外的保留原文，自建标题归“未归类”可移到官方小节），右侧抽屉编辑。MANAGE 在草稿上直接修改：字段说明（写 `description_source: user`）、语义角色 `semanticType`、同义词 `synonyms`、显示名 `displayName`，衍生字段增删改，关系增改删，规则增改删与移动，整份模型 YAML 编辑；均经 `/draft/items`（`COLUMN`/`RELATIONSHIP`/`SEMANTIC`）或 `/draft/edit` 写同一草稿，YAML 文件在工作区锁内先过与助手相同的写入门禁（`DraftReviewController#gate` → `ModelingToolkit#previewChange`），助手运行中拒绝。“问助手”把对象上下文预填到建模对话。建模对话每轮的 `TurnResultCard` 提供“在语义模型中查看”，工作台按 `/draft/items?since=` 标出该轮改动（左栏可标出全部草稿改动）；工作台可全屏。紧凑布局（`AppShell.css`）：两级面包屑在宽屏隐藏、更深的压低，左侧主菜单通常默认展开，单个知识库的建模工作台默认收起（`state/embedded#isModelingWorkbench`）。手动选择保存在当前浏览器，优先于页面默认值。桌面侧栏的收放按钮在底部，展开时位于用户名右侧，收起后图标悬停或键盘聚焦会高亮并显示中文标签。建模页头与页签合为一行；运行在门户 iframe 中时（`state/embedded#embedded`）`AppShell` 加 `is-embedded`，另隐藏重复的品牌行。建模对话页以对话为中心：每轮回复下方列出 AI 建模结果，待确定的口径以对话内卡片出现，试问在问数优化页签（spec117：建模流程不再试问，下一步卡显示推荐问题），助手写出的 SQL 与口径由用户核对后确认，确认正确的才会召回（不自动试运行、不查询数据），底部草稿栏统一发布；确认、改写或归档问题时，修订号在工作区锁内递增，发布在工作区锁内读取要覆盖的修订号（`MdlQuestionStore#locked`、`MdlPublishService#doPublishLocked`），避免发布期间确认的变更留下"待发布"却无差异可发布；若仍出现该状态，草稿栏提供"重新发布"。文档修改后自动排队一条文档更新请求。助手按官方技能直接修改草稿，发布为显式操作，官方工程校验失败保留旧快照。问数始终使用已发布工程。
+
+MANAGE 默认打开草稿工作台，版本菜单提供线上只读查看与差异对比。普通列和日期列通过详情中的编辑入口修改，仅提交改动的属性。衍生列新增与编辑共用 `CalculatedColumnDialog`，宽屏在详情左侧居中，空间不足时在页面居中。引用区搜索字段名或显示名，点击插入 SQL 字段名或函数。字段修改沿用 `COLUMN` 草稿编辑和 Wren 校验。
 
 `MdlQuestionService#decide` 在发布锁内完成确认，发布会等确认结束，确认的问答一定进入这次发布。
 

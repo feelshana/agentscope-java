@@ -8,7 +8,7 @@ export interface SemanticColumn {
   calculated: boolean;
   expression: string | null;
   primaryKey: boolean;
-  /** spec117: page-maintained properties, absent in the published browse projection. */
+  /** spec117: page-maintained properties. The published browse includes display names. */
   displayName?: string | null;
   semanticType?: string | null;
   synonyms?: string[];
@@ -86,7 +86,7 @@ export function publishedSnapshot(browse: KnowledgeBaseBrowse): SemanticSnapshot
       derived: !!m.derived,
       path: `models/${m.name}/metadata.yml`,
       columns: (m.columns ?? []).map(c => ({
-        name: c.name, type: c.type ?? null, description: c.description ?? null, calculated: !!c.isCalculated,
+        name: c.name, type: c.type ?? null, displayName: c.displayName ?? null, description: c.description ?? null, calculated: !!c.isCalculated,
         expression: c.expression ?? null, primaryKey: !!c.isPrimaryKey || c.name === m.primaryKey,
       })),
     })),

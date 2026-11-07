@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { MutableRefObject, PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import { editDraftFile, editDraftItem, getDocumentContent, getDraftItems, listDocuments } from '../../api/draftReview';
 import type { DraftItem, DraftItemEdit } from '../../api/draftReview';
+import CalculatedColumnDialog from './CalculatedColumnDialog';
 import YamlContent from './YamlContent';
 import { joinLabel, modelTag, relationsOf, unrelatedModels } from './semanticSnapshot';
 import type { SemanticColumn, SemanticModel, SemanticRelation, SemanticSnapshot } from './semanticSnapshot';
@@ -14,10 +15,10 @@ import type { RuleItem, RuleSection } from './ruleText';
 import './SemanticWorkbench.css';
 
 export type WorkbenchView = 'graph' | 'rules';
+type FieldEditGuard = MutableRefObject<(() => boolean) | null>;
 type Selection =
   | { kind: 'model'; model: string }
   | { kind: 'field'; model: string; column: string }
-  | { kind: 'newCalc'; model: string }
   | { kind: 'relation'; name: string }
   | { kind: 'newRelation'; left: string }
   | { kind: 'rule'; path: string; text: string }
@@ -62,7 +63,6 @@ const JOIN_HINT: Record<string, string> = {
   ONE_TO_ONE: '两边一一对应。',
   MANY_TO_MANY: '多对多关联容易重复计算，尽量避免。',
 };
-const CALC_TYPES = ['DECIMAL', 'BIGINT', 'VARCHAR', 'DATE', 'TIMESTAMP', 'BOOLEAN'];
 const RULE_FILE = 'knowledge/rules/general.md';
 const TERM_FILE = 'knowledge/rules/naming.md';
 const MIN_ZOOM = 0.4;
@@ -89,12 +89,14 @@ function savePositions(groupId: string, positions: Positions) {
 export default function SemanticWorkbench({
   groupId, snapshot, baseline, files, baselineFiles, views, issues, editable, blocked, view, onViewChange,
   focusRelation, focusModel, onChanged, onAsk, toolbar, changes, onChanges,
-  marked, isSeen, onSeen, onOpenPending, reveal, showDetail = true, firstBuild,
+  marked, isSeen, onSeen, onOpenPending, reveal, showDetail = true, firstBuild, compareWithBaseline = false, fieldEditGuard,
 }: {
   groupId: string;
   snapshot: SemanticSnapshot;
   /** The published version, for 与线上对比; null when viewing it or nothing is published. */
   baseline: SemanticSnapshot | null;
+  compareWithBaseline?: boolean;
+  fieldEditGuard?: FieldEditGuard;
   /** Project files of the version shown, by path. */
   files: Map<string, string>;
   baselineFiles: Map<string, string> | null;
@@ -125,8 +127,16 @@ export default function SemanticWorkbench({
   /** Before the first publish: a summary of what was built and what needs a look, not marks. */
   firstBuild?: { onPublish: () => void } | null;
 }) {
-  const [selection, setSelection] = useState<Selection>(focusRelation ? { kind: 'relation', name: focusRelation } : focusModel ? { kind: 'model', model: focusModel } : null);
-  const [diff, setDiff] = useState(false);
+  const [selection, setSelectedObject] = useState<Selection>(focusRelation ? { kind: 'relation', name: focusRelation } : focusModel ? { kind: 'model', model: focusModel } : null);
+  const localFieldEditGuard = useRef<(() => boolean) | null>(null);
+  const editGuard = fieldEditGuard ?? localFieldEditGuard;
+  const selectionKey = JSON.stringify(selection);
+  const setSelection = useCallback((next: Selection) => {
+    if (JSON.stringify(next) === selectionKey) return true;
+    if (editGuard.current?.() === false) return false;
+    setSelectedObject(next);
+    return true;
+  }, [editGuard, selectionKey]);
   const [zoom, setZoom] = useState(1);
   // 聚焦: double-clicking a model shows it with its direct neighbours (spec117).
   const [focus, setFocus] = useState<string | null>(null);
@@ -149,19 +159,20 @@ export default function SemanticWorkbench({
   const marks = unseen;
   const tone = (red: boolean, seen: boolean, diff: boolean, added = false): MarkTone => red ? 'red' : added ? 'added' : diff ? 'diff' : seen ? 'seen' : '';
   // Callers key this component by groupId, so card positions never cross knowledge bases.
-  useEffect(() => { if (focusRelation) setSelection({ kind: 'relation', name: focusRelation }); }, [focusRelation]);
-  useEffect(() => { if (focusModel) setSelection({ kind: 'model', model: focusModel }); }, [focusModel]);
+  useEffect(() => { if (focusRelation) setSelection({ kind: 'relation', name: focusRelation }); }, [focusRelation]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (focusModel) setSelection({ kind: 'model', model: focusModel }); }, [focusModel]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const layout = useMemo(() => layoutOverview(snapshot, positions), [snapshot, positions]);
   const focused = useMemo(() => focus ? focusOf(snapshot, focus) : null, [snapshot, focus]);
   const unrelated = useMemo(() => new Set(unrelatedModels(snapshot).map(m => m.name)), [snapshot]);
   const rules = useMemo(() => [...files.entries()].filter(([p]) => isRuleFile(p)).flatMap(([p, c]) => parseRuleFile(p, c)), [files]);
   const onlineRules = useMemo(() => new Set(baselineFiles ? [...baselineFiles.entries()].filter(([p]) => isRuleFile(p)).flatMap(([p, c]) => parseRuleFile(p, c)).map(r => `${r.path}\n${r.text}`) : []), [baselineFiles]);
-  const comparing = diff && !!baseline;
+  const comparing = compareWithBaseline && !!baseline;
   const differs = (model: string, column: SemanticColumn) => {
     if (!comparing || !baseline) return false;
     const before = baseline.models.find(m => m.name === model)?.columns.find(c => c.name === column.name);
-    return !before || (before.description ?? '') !== (column.description ?? '') || (before.expression ?? '') !== (column.expression ?? '');
+    return !before || (before.displayName ?? '') !== (column.displayName ?? '')
+      || (before.description ?? '') !== (column.description ?? '') || (before.expression ?? '') !== (column.expression ?? '');
   };
   const changedColumn = (model: string, column: SemanticColumn): MarkTone =>
     tone(unseen.columns.has(`${model}.${column.name}`), looked.columns.has(`${model}.${column.name}`), differs(model, column));
@@ -264,10 +275,16 @@ export default function SemanticWorkbench({
     const keyword = query.trim().toLowerCase();
     if (!keyword) return;
     const model = snapshot.models.find(m => m.name.toLowerCase().includes(keyword) || (m.description ?? '').toLowerCase().includes(keyword));
-    if (model) { onViewChange('graph'); setSelection({ kind: 'model', model: model.name }); setTimeout(() => locate(model.name), 0); return; }
+    if (model) {
+      if (setSelection({ kind: 'model', model: model.name })) { onViewChange('graph'); setTimeout(() => locate(model.name), 0); }
+      return;
+    }
     for (const m of snapshot.models) {
       const column = m.columns.find(c => c.name.toLowerCase().includes(keyword) || (c.displayName ?? '').toLowerCase().includes(keyword) || (c.description ?? '').toLowerCase().includes(keyword));
-      if (column) { onViewChange('graph'); setSelection({ kind: 'field', model: m.name, column: column.name }); setTimeout(() => locate(m.name), 0); return; }
+      if (column) {
+        if (setSelection({ kind: 'field', model: m.name, column: column.name })) { onViewChange('graph'); setTimeout(() => locate(m.name), 0); }
+        return;
+      }
     }
     if (rules.some(r => r.text.toLowerCase().includes(keyword))) onViewChange('rules');
   };
@@ -276,7 +293,11 @@ export default function SemanticWorkbench({
   const selectedRelation = selection?.kind === 'relation' ? snapshot.relations.find(r => r.name === selection.name) ?? null : null;
   const hot = (r: SemanticRelation) => selectedRelation ? r.name === selectedRelation.name : selectedModel ? r.left === selectedModel.name || r.right === selectedModel.name : false;
   const pick = (next: Selection) => { if (suppressClick.current) { suppressClick.current = false; return; } setSelection(next); };
-  const go = (p: Problem) => { if (p.view) onViewChange(p.view); if (p.go) setSelection(p.go); if (p.go && 'model' in p.go) setTimeout(() => locate(p.go && 'model' in p.go ? p.go.model : ''), 0); };
+  const go = ({ go: target, view: nextView }: Problem) => {
+    if (!target || !setSelection(target)) return;
+    if (nextView) onViewChange(nextView);
+    if ('model' in target) setTimeout(() => locate(target.model), 0);
+  };
 
   const save = async (edit: DraftItemEdit) => { await editDraftItem(groupId, edit); onChanged(); };
   const canEdit = editable && !blocked;
@@ -288,15 +309,21 @@ export default function SemanticWorkbench({
   const openMark = (item: DraftItem) => {
     if (item.category === 'MODEL') {
       const field = item.fields.find(f => f.name !== '__table__');
+      if (!setSelection(field ? { kind: 'field', model: item.title, column: field.name } : { kind: 'model', model: item.title })) return false;
       onViewChange('graph');
-      setSelection(field ? { kind: 'field', model: item.title, column: field.name } : { kind: 'model', model: item.title });
       setTimeout(() => locate(item.title), 0);
-    } else if (item.category === 'RELATIONSHIP' && item.text) { onViewChange('graph'); setSelection({ kind: 'relation', name: item.text }); }
-    else if (item.text) { onViewChange('rules'); setSelection({ kind: 'rule', path: item.path, text: item.text }); }
+    } else if (item.category === 'RELATIONSHIP' && item.text) {
+      if (!setSelection({ kind: 'relation', name: item.text })) return false;
+      onViewChange('graph');
+    } else if (item.text) {
+      if (!setSelection({ kind: 'rule', path: item.path, text: item.text })) return false;
+      onViewChange('rules');
+    }
+    return true;
   };
 
   return <div className={`sw ${full ? 'sw-full' : ''}`}>
-    <LocateEffect locate={reveal} onLocate={item => { if (focus && item.category === 'MODEL') setFocus(item.title); openMark(item); }} />
+    <LocateEffect locate={reveal} onLocate={item => { if (openMark(item) && focus && item.category === 'MODEL') setFocus(item.title); }} />
     <aside className={`sw-rail ${railOpen ? '' : 'sw-rail-closed'}`} aria-label="对象">
       <div className="sw-rail-top">
         {railOpen && <span className="sw-rail-title">对象</span>}
@@ -308,17 +335,17 @@ export default function SemanticWorkbench({
       {snapshot.models.map(m => {
         const tag = modelTag(m, unrelated.has(m.name));
         return <button key={m.name} type="button" className={`sw-node ${selectedModel?.name === m.name && view === 'graph' ? 'sw-node-on' : ''}`}
-          onClick={() => { onViewChange('graph'); setSelection({ kind: 'model', model: m.name }); if (focus) setFocus(m.name); else setTimeout(() => locate(m.name), 0); }}
-          onDoubleClick={() => { onViewChange('graph'); setFocus(m.name); }}>
+          onClick={() => { if (setSelection({ kind: 'model', model: m.name })) { onViewChange('graph'); if (focus) setFocus(m.name); else setTimeout(() => locate(m.name), 0); } }}
+          onDoubleClick={() => { if (selection?.kind === 'model' && selection.model === m.name) setFocus(m.name); }}>
           <span className={`sw-ico ${m.tableRole === 'FACT' ? 'sw-ico-fact' : m.derived ? 'sw-ico-sql' : 'sw-ico-dim'}`}>{m.tableRole === 'FACT' ? '事' : m.derived ? '算' : '维'}</span>
           <span className="sw-node-name" title={m.name}>{m.name}</span>
           {changedModel(m) && <span className="sw-dot" title="草稿有改动" />}
           {tag.tone === 'warn' ? <small className="sw-warn-text">未关联</small> : <small>{m.columns.length}</small>}
         </button>;
       })}
-      <RailGroup label={`关系 ${snapshot.relations.length}`} action={canEdit && snapshot.models.length > 1 ? () => { onViewChange('graph'); setSelection({ kind: 'newRelation', left: snapshot.models[0].name }); } : undefined} />
+      <RailGroup label={`关系 ${snapshot.relations.length}`} action={canEdit && snapshot.models.length > 1 ? () => { if (setSelection({ kind: 'newRelation', left: snapshot.models[0].name })) onViewChange('graph'); } : undefined} />
       {snapshot.relations.map(r => <button key={r.name} type="button" className={`sw-node ${selectedRelation?.name === r.name ? 'sw-node-on' : ''}`}
-        onClick={() => { onViewChange('graph'); setSelection({ kind: 'relation', name: r.name }); }}>
+        onClick={() => { if (setSelection({ kind: 'relation', name: r.name })) onViewChange('graph'); }}>
         <span className="sw-ico sw-ico-rel">关</span><span className="sw-node-name" title={`${r.left} → ${r.right}`}>{r.left} → {r.right}</span><small>{joinEnds(r.joinType).join(':')}</small>
       </button>)}
       <RailGroup label={`视图 ${views.length}`} action={canEdit && onAsk ? () => onAsk('我想建一个视图：') : undefined} actionLabel="让助手建一个视图" />
@@ -352,7 +379,6 @@ export default function SemanticWorkbench({
         </div>
         {toolbar}
         <span className="sw-grow" />
-        {baseline && <button type="button" className={`da-btn da-btn-sm ${diff ? 'da-btn-primary' : ''}`} aria-pressed={diff} onClick={() => setDiff(!diff)}>{diff ? '退出对比' : '与线上对比'}</button>}
         {view === 'graph' && !focus && <div className="sw-float">
           <button type="button" className="sw-icon-btn" aria-label="缩小" onClick={() => setZoom(z => clampZoom(z - 0.1))}>−</button>
           <span className="sw-zoom">{Math.round(zoom * 100)}%</span>
@@ -379,7 +405,7 @@ export default function SemanticWorkbench({
         {items.length === 0 ? <span className="sw-muted">没有未发布的改动</span> : <>
           <span>{items.length} 处{unseen.items.length ? <>，<b className="sw-red-text">{unseen.items.length} 处未看</b></> : '，都已看过'}</span>
           {unseen.items.slice(0, 6).map(item => <button key={item.id} type="button" className="sw-mark" disabled={item.kind === 'REMOVED' && item.category !== 'MODEL'}
-            onClick={() => { openMark(item); onSeen?.(item); }}>{markLabel(item)}</button>)}
+            onClick={() => { if (openMark(item)) onSeen?.(item); }}>{markLabel(item)}</button>)}
         </>}
         <span className="sw-grow" />
         <span className="sw-muted sw-xs"><span className="sw-swatch sw-swatch-red" />未看 <span className="sw-swatch sw-swatch-seen" />已看</span>
@@ -391,7 +417,7 @@ export default function SemanticWorkbench({
 
       {view === 'graph' && focused ? <FocusView focus={focused} snapshot={snapshot} rules={rules} selection={selection} canEdit={canEdit}
         changedColumn={changedColumn} markedRelation={markedRelation} markedModel={markedModel}
-        onBack={() => { setFocus(null); }} onFocus={name => { setFocus(name); setSelection({ kind: 'model', model: name }); }}
+        onBack={() => { setFocus(null); }} onFocus={name => { if (setSelection({ kind: 'model', model: name })) setFocus(name); }}
         onSelect={setSelection} />
       : view === 'graph' ? <div className="sw-canvas-wrap"><div ref={canvas} className="sw-canvas" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp} onPointerLeave={pointerUp}>
         <div className="sw-sizer" style={{ width: layout.width * zoom, height: layout.height * zoom }}>
@@ -417,8 +443,8 @@ export default function SemanticWorkbench({
               return <div key={m.name} data-card-head={m.name} role="button" tabIndex={0} title="单击查看详情，双击聚焦"
                 className={`sw-onode sw-onode-${tone} ${on ? 'sw-onode-on' : markedModel(m) ? `sw-onode-${markedModel(m)}` : ''} ${unrelated.has(m.name) ? 'sw-onode-warn' : ''}`}
                 style={{ left: node.x, top: node.y, width: NODE_W, height: NODE_H }}
-                onClick={() => pick({ kind: 'model', model: m.name })} onDoubleClick={() => { setFocus(m.name); setSelection({ kind: 'model', model: m.name }); }}
-                onKeyDown={e => { if (e.key === 'Enter') { setFocus(m.name); setSelection({ kind: 'model', model: m.name }); } }}>
+                onClick={() => pick({ kind: 'model', model: m.name })} onDoubleClick={() => { if (selection?.kind === 'model' && selection.model === m.name) setFocus(m.name); }}
+                onKeyDown={e => { if (e.key === 'Enter' && setSelection({ kind: 'model', model: m.name })) setFocus(m.name); }}>
                 <span className={`sw-ico sw-ico-${tone}`}>{tone === 'fact' ? '事' : tone === 'sql' ? '算' : '维'}</span>
                 <span className="sw-onode-text"><strong title={m.name}>{m.name}</strong>
                   <small>{modelTag(m, unrelated.has(m.name)).label} · {m.columns.length - calc} 列{calc ? ` · ${calc} 衍生` : ''}</small></span>
@@ -438,7 +464,7 @@ export default function SemanticWorkbench({
     </main>
 
     {showDetail && <aside className="sw-drawer" aria-label="详情">
-      <Drawer key={selection ? JSON.stringify(selection) : 'none'} {...{ groupId, snapshot, selection, files, views, rules, problems, editable, canEdit, blocked, onAsk, changedColumn, newRule }}
+      <Drawer key={selectionKey} {...{ groupId, snapshot, selection, files, views, rules, problems, editable, canEdit, blocked, onAsk, changedColumn, newRule, editGuard }}
         onSelect={setSelection} onSave={save} onGo={go} onChanged={onChanged} />
     </aside>}
   </div>;
@@ -670,7 +696,7 @@ function RawRule({ text }: { text: string }) {
 
 // ------------------------------------------------------------------ drawer
 
-function Drawer({ groupId, snapshot, selection, files, views, rules, problems, editable, canEdit, blocked, onAsk, changedColumn, newRule, onSelect, onSave, onGo, onChanged }: {
+function Drawer({ groupId, snapshot, selection, files, views, rules, problems, editable, canEdit, blocked, onAsk, changedColumn, newRule, onSelect, onSave, onGo, onChanged, editGuard }: {
   groupId: string;
   snapshot: SemanticSnapshot;
   selection: Selection;
@@ -688,17 +714,20 @@ function Drawer({ groupId, snapshot, selection, files, views, rules, problems, e
   onSave: (edit: DraftItemEdit) => Promise<void>;
   onGo: (p: Problem) => void;
   onChanged: () => void;
+  editGuard: FieldEditGuard;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState('');
+  const [calcOpen, setCalcOpen] = useState(false);
+  const clearFeedback = useCallback(() => { setError(''); setSaved(''); }, []);
   const run = async (action: () => Promise<void>, done: string, after?: () => void) => {
-    setBusy(true); setError(''); setSaved('');
+    setBusy(true); clearFeedback();
     try { await action(); setSaved(done); after?.(); } catch (e) { setError(message(e)); } finally { setBusy(false); }
   };
   const feedback = <>
     {error && <div role="alert" className="sw-error">{error}</div>}
-    {saved && <div className="sw-ok">{saved}</div>}
+    {saved && <div role="status" className="sw-ok">{saved}</div>}
   </>;
   const ask = (text: string) => onAsk && <button type="button" className="da-btn da-btn-sm" onClick={() => onAsk(text)}>问助手</button>;
   const disabledTitle = blocked ?? undefined;
@@ -746,19 +775,22 @@ function Drawer({ groupId, snapshot, selection, files, views, rules, problems, e
     </>;
   }
 
-  if (selection.kind === 'model') {
-    const model = snapshot.models.find(m => m.name === selection.model);
-    if (!model) return <Gone onSelect={onSelect} />;
-    return <ModelDrawer {...{ groupId, model, snapshot, files, rules, editable, canEdit, blocked, onSelect, onChanged, onAsk, changedColumn, newRule }} />;
-  }
-
-  if (selection.kind === 'field' || selection.kind === 'newCalc') {
+  if (selection.kind === 'model' || selection.kind === 'field') {
     const model = snapshot.models.find(m => m.name === selection.model);
     if (!model) return <Gone onSelect={onSelect} />;
     const column = selection.kind === 'field' ? model.columns.find(c => c.name === selection.column) : undefined;
     if (selection.kind === 'field' && !column) return <Gone onSelect={onSelect} />;
-    return <FieldDrawer {...{ model, column, snapshot, rules, editable, canEdit, disabledTitle, onSelect, onAsk }}
-      onSave={(edit, done, after) => run(() => onSave(edit), done, after)} busy={busy} feedback={feedback} />;
+    const openCalc = () => { clearFeedback(); setCalcOpen(true); };
+    const saveField = (edit: DraftItemEdit, done: string, after?: () => void) => run(() => onSave(edit), done, after);
+    return <>
+      {column ? <FieldDrawer {...{ model, column, snapshot, rules, editable, canEdit, disabledTitle, onSelect, onAsk, busy, editGuard }}
+        onEditCalculated={openCalc} onClearFeedback={clearFeedback} onSave={saveField} feedback={calcOpen ? null : feedback} />
+        : <ModelDrawer {...{ groupId, model, snapshot, files, rules, editable, canEdit, blocked, onSelect, onChanged, onAsk, changedColumn, newRule }}
+          onAddCalculated={openCalc} feedback={calcOpen ? null : feedback} />}
+      {calcOpen && editable && <CalculatedColumnDialog model={model} column={column} relations={snapshot.relations}
+        busy={busy} blocked={blocked} feedback={feedback} onClose={() => { setError(''); setCalcOpen(false); }}
+        onSave={edit => void saveField(edit, column ? '衍生列已保存到草稿。' : '衍生列已加入草稿。', () => setCalcOpen(false))} />}
+    </>;
   }
 
   if (selection.kind === 'relation' || selection.kind === 'newRelation') {
@@ -786,10 +818,11 @@ function Gone({ onSelect }: { onSelect: (s: Selection) => void }) {
   return <div className="sw-db"><div className="sw-empty">这个对象已经不在当前版本中。</div><button type="button" className="sw-link" onClick={() => onSelect(null)}>返回</button></div>;
 }
 
-function ModelDrawer({ groupId, model, snapshot, files, rules, editable, canEdit, blocked, onSelect, onChanged, onAsk, changedColumn, newRule }: {
+function ModelDrawer({ groupId, model, snapshot, files, rules, editable, canEdit, blocked, onSelect, onChanged, onAsk, changedColumn, newRule, onAddCalculated, feedback }: {
   groupId: string; model: SemanticModel; snapshot: SemanticSnapshot; files: Map<string, string>; rules: RuleItem[];
   editable: boolean; canEdit: boolean; blocked: string | null; onSelect: (s: Selection) => void; onChanged: () => void; onAsk?: (text: string) => void;
   changedColumn: (model: string, column: SemanticColumn) => MarkTone; newRule: (rule: RuleItem) => MarkTone;
+  onAddCalculated: () => void; feedback: ReactNode;
 }) {
   const [tab, setTab] = useState<'fields' | 'rules' | 'info' | 'yaml'>('fields');
   const [editing, setEditing] = useState<string | null>(null);
@@ -840,7 +873,8 @@ function ModelDrawer({ groupId, model, snapshot, files, rules, editable, canEdit
         {times.map(c => <FieldItem key={c.name} c={c} />)}
         {!times.length && <p className="sw-hint">没有识别到日期列。</p>}
         <h4><span className="sw-k sw-k-calc">衍生</span>衍生列 <span className="sw-muted">{calc.length}</span><span className="sw-grow" />
-          {editable && <button type="button" className="sw-link" disabled={!canEdit} title={blocked ?? undefined} onClick={() => onSelect({ kind: 'newCalc', model: model.name })}>＋ 新增</button>}</h4>
+          {editable && <button type="button" className="sw-link" aria-label="新增衍生列" disabled={!canEdit} title={blocked ?? undefined} onClick={onAddCalculated}>＋ 新增</button>}</h4>
+        {feedback}
         {calc.map(c => <FieldItem key={c.name} c={c} />)}
         {!calc.length && <p className="sw-hint">暂无。反复用到的单行计算（如"净销售额 = 实付 − 退款"）适合做成衍生字段。</p>}
         <h4><span className="sw-k sw-k-rel">关联</span>关联字段 <span className="sw-muted">{relations.length}</span><span className="sw-grow" /><span className="sw-hint">由关系自动带出</span></h4>
@@ -917,69 +951,135 @@ function RuleSources({ groupId, model, rules, editable, onSelect, newRule }: {
 
 const reverse = (type: string) => type === 'MANY_TO_ONE' ? 'ONE_TO_MANY' : type === 'ONE_TO_MANY' ? 'MANY_TO_ONE' : type;
 
-function FieldDrawer({ model, column, snapshot, rules, editable, canEdit, disabledTitle, onSelect, onAsk, onSave, busy, feedback }: {
-  model: SemanticModel; column?: SemanticColumn; snapshot: SemanticSnapshot; rules: RuleItem[]; editable: boolean; canEdit: boolean; disabledTitle?: string;
+function fieldValues(column: SemanticColumn) {
+  return {
+    displayName: column.displayName ?? '',
+    description: column.description ?? '',
+    synonyms: (column.synonyms ?? []).join('、'),
+    semanticType: column.semanticType ?? null,
+  };
+}
+
+type FieldValues = ReturnType<typeof fieldValues>;
+
+function FieldDrawer({ model, column, snapshot, rules, editable, canEdit, disabledTitle, onSelect, onAsk, onEditCalculated, onClearFeedback, onSave, busy, feedback, editGuard }: {
+  model: SemanticModel; column: SemanticColumn; snapshot: SemanticSnapshot; rules: RuleItem[]; editable: boolean; canEdit: boolean; disabledTitle?: string;
   onSelect: (s: Selection) => void; onAsk?: (text: string) => void;
+  onEditCalculated: () => void; onClearFeedback: () => void; editGuard: FieldEditGuard;
   onSave: (edit: DraftItemEdit, done: string, after?: () => void) => Promise<void>; busy: boolean; feedback: ReactNode;
 }) {
-  const creating = !column;
-  const calculated = creating || !!column?.calculated;
-  const inferred = column ? roleOf(model, column, snapshot.relations) : { role: 'MEASURE' as Role, inferred: true };
-  const [name, setName] = useState('');
-  const [displayName, setDisplayName] = useState(column?.displayName ?? '');
-  const [role, setRole] = useState<Role | null>(column?.semanticType && column.semanticType in ROLE_LABEL ? column.semanticType as Role : null);
-  const [description, setDescription] = useState(column?.description ?? '');
-  const [synonyms, setSynonyms] = useState((column?.synonyms ?? []).join('、'));
-  const [expression, setExpression] = useState(column?.expression ?? '');
-  const [type, setType] = useState(column?.type || 'DECIMAL');
-  const shownRole = role ?? inferred.role;
-  const ref = `${model.name}.${column?.name ?? ''}`;
-  const usedBy = column ? rules.filter(r => ruleRefs(r.text, snapshot.models).includes(ref)) : [];
-  const readOnly = !editable;
-  const submit = () => {
-    const edit: DraftItemEdit = {
-      category: 'COLUMN', model: model.name, column: creating ? name.trim() : column?.name,
-      description, displayName, synonyms: splitList(synonyms), semanticType: role ?? (column?.semanticType ? '' : undefined),
+  const calculated = column.calculated;
+  const inferred = roleOf(model, column, snapshot.relations);
+  const [editor, setEditor] = useState<{ initial: FieldValues; values: FieldValues } | null>(null);
+  const currentValues = fieldValues(column);
+  const values = editor?.values ?? currentValues;
+  const initial = editor?.initial ?? currentValues;
+  const displayNameChanged = values.displayName !== initial.displayName;
+  const descriptionChanged = values.description !== initial.description;
+  const synonymsChanged = values.synonyms !== initial.synonyms;
+  const roleChanged = values.semanticType !== initial.semanticType;
+  const dirty = displayNameChanged || descriptionChanged || synonymsChanged || roleChanged;
+  const editing = editable && editor !== null;
+  const inputDisabled = !canEdit || busy;
+  const role = values.semanticType as Role | null;
+  const hasRole = !!role && Object.prototype.hasOwnProperty.call(ROLE_LABEL, role);
+  const shownRole = hasRole ? role : inferred.role;
+  const ref = `${model.name}.${column.name}`;
+  const usedBy = rules.filter(r => ruleRefs(r.text, snapshot.models).includes(ref));
+
+  useLayoutEffect(() => {
+    if (!editing) return;
+    editGuard.current = () => {
+      if (busy) return false;
+      if (dirty && !window.confirm('当前字段有未保存的修改。放弃这些修改并继续？')) return false;
+      onClearFeedback();
+      setEditor(null);
+      return true;
     };
-    if (calculated) { edit.expression = expression; edit.columnType = type; }
-    if (creating) edit.create = true;
-    return onSave(edit, creating ? '已通过 Wren 校验，衍生字段已加入草稿。' : '已保存到草稿，记为"你的编辑"；说明标记为人工填写，建模助手不会改写。',
-      creating ? () => onSelect({ kind: 'field', model: model.name, column: name.trim() }) : undefined);
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    if (dirty) window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => {
+      editGuard.current = null;
+      if (dirty) window.removeEventListener('beforeunload', warnBeforeUnload);
+    };
+  }, [editing, dirty, busy, editGuard, onClearFeedback]);
+
+  const edit = () => {
+    onClearFeedback();
+    setEditor({ initial: currentValues, values: currentValues });
+  };
+  const change = (patch: Partial<FieldValues>) => {
+    setEditor(previous => previous && { ...previous, values: { ...previous.values, ...patch } });
+  };
+  const cancel = () => { onClearFeedback(); setEditor(null); };
+  const submit = () => {
+    if (!editing || !dirty || inputDisabled) return;
+    const patch: DraftItemEdit = {
+      category: 'COLUMN', model: model.name, column: column.name,
+      displayName: displayNameChanged ? values.displayName : undefined,
+      description: descriptionChanged ? values.description : undefined,
+      synonyms: synonymsChanged ? splitList(values.synonyms) : undefined,
+      semanticType: roleChanged ? values.semanticType ?? '' : undefined,
+    };
+    void onSave(patch, '已保存到草稿。', () => setEditor(null));
   };
   return <>
     <div className="sw-dh">
       <button type="button" className="sw-back" onClick={() => onSelect({ kind: 'model', model: model.name })}>← {model.name}</button>
-      <div className="sw-dh-row"><span className={`sw-k ${calculated ? 'sw-k-calc' : column?.primaryKey ? 'sw-k-pk' : 'sw-k-plain'}`}>{calculated ? '衍生' : column?.primaryKey ? '主键' : '普通'}</span>
-        <strong>{creating ? '新增衍生字段' : columnLabel(column!)}</strong>{!creating && <span className="sw-mono sw-muted">{column!.name} · {column!.type || '—'}</span>}</div>
+      <div className="sw-dh-row">
+        <span className={`sw-k ${calculated ? 'sw-k-calc' : column.primaryKey ? 'sw-k-pk' : inferred.role === 'TIME' ? 'sw-k-time' : 'sw-k-plain'}`}>
+          {calculated ? '衍生' : column.primaryKey ? '主键' : inferred.role === 'TIME' ? '日期' : '普通'}
+        </span>
+        <div className="sw-field-title">
+          <strong>{columnLabel(column)}</strong>
+          <span className="sw-mono sw-muted">{column.displayName && column.displayName !== column.name ? `${column.name} · ` : ''}{column.type || '—'}</span>
+        </div>
+        {editable && !editing && <button type="button" className="da-btn da-btn-sm" disabled={inputDisabled} title={disabledTitle}
+          onClick={calculated ? onEditCalculated : edit}>{calculated ? '编辑衍生列' : '编辑'}</button>}
+        {editing && <span className="sw-chip">{dirty ? '未保存' : '编辑中'}</span>}
+      </div>
     </div>
     <div className="sw-db">
-      {creating && <label className="sw-fld"><span>字段名</span><input className="da-input" value={name} onChange={e => setName(e.target.value)} placeholder="例如 net_revenue，只能用中文、字母、数字和下划线" /></label>}
-      <label className="sw-fld"><span>显示名</span><input className="da-input" readOnly={readOnly} value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="例如 净销售额（可不填）" /></label>
+      {editing ? <label className="sw-fld"><span>显示名</span>
+        <input className="da-input" autoFocus disabled={inputDisabled} value={values.displayName} onChange={event => change({ displayName: event.target.value })} placeholder="例如 场景名称（可不填）" />
+      </label> : <div className="sw-fld"><span>显示名</span><div className="sw-field-value">{values.displayName || '—'}</div></div>}
       <div className="sw-fld"><span>语义角色</span>
-        <div role="group" aria-label="语义角色" className="sw-seg">
-          {ROLES.map(r => <button key={r} type="button" aria-pressed={shownRole === r} className={shownRole === r ? 'on' : ''} disabled={readOnly} onClick={() => setRole(r)}>{ROLE_LABEL[r]}</button>)}
-        </div>
-        <span className="sw-hint">{ROLE_HINT[shownRole]}{!role && !creating ? '（按类型推断，保存后才写入）' : ''}</span>
+        {editing ? <div role="group" aria-label="语义角色" className="sw-seg">
+          {ROLES.map(r => <button key={r} type="button" aria-pressed={shownRole === r} className={shownRole === r ? 'on' : ''} disabled={inputDisabled}
+            onClick={() => change({ semanticType: r })}>{ROLE_LABEL[r]}</button>)}
+        </div> : <div className="sw-field-value">{ROLE_LABEL[shownRole]}</div>}
+        <span className="sw-hint">{ROLE_HINT[shownRole]}{!hasRole ? '（推断）' : ''}</span>
       </div>
-      {calculated && <>
-        <label className="sw-fld"><span>表达式</span><textarea className="da-input sw-mono" rows={3} readOnly={readOnly} value={expression} onChange={e => setExpression(e.target.value)} placeholder="例如 paid_amount - COALESCE(refund_amount, 0)" /></label>
-        <label className="sw-fld"><span>结果类型</span><select className="da-input" disabled={readOnly} value={type} onChange={e => setType(e.target.value)}>{CALC_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></label>
-        <span className="sw-hint">表达式只能引用本模型的字段。保存时先跑 Wren 校验（validate、build、dry-plan），不通过不写入。</span>
+      {calculated && <div className="sw-fld"><span>表达式</span><pre className="sw-code">{column.expression || '—'}</pre></div>}
+      {editing ? <>
+        <label className="sw-fld"><span>说明</span>
+          <textarea className="da-input" rows={4} disabled={inputDisabled} value={values.description} onChange={event => change({ description: event.target.value })} placeholder="业务含义、单位、取值说明" />
+        </label>
+        <label className="sw-fld"><span>同义词</span>
+          <input className="da-input" disabled={inputDisabled} value={values.synonyms} onChange={event => change({ synonyms: event.target.value })} placeholder="用顿号分隔" />
+        </label>
+      </> : <>
+        <div className="sw-fld"><span>说明</span><div className="sw-field-value">{values.description || '—'}</div></div>
+        <div className="sw-fld"><span>同义词</span><div className="sw-field-value">{values.synonyms || '—'}</div></div>
       </>}
-      <label className="sw-fld"><span>说明</span><textarea className="da-input" rows={3} readOnly={readOnly} value={description} onChange={e => setDescription(e.target.value)} placeholder="业务含义、单位、取值说明" /></label>
-      <label className="sw-fld"><span>同义词</span><input className="da-input" readOnly={readOnly} value={synonyms} onChange={e => setSynonyms(e.target.value)} placeholder="用顿号分隔，例如 实付、付款金额" /></label>
       {!!column?.values?.length && <div className="sw-fld"><span>取值</span><div className="sw-tags">{column.values.map(v => <span key={v} className="sw-tag">{v}</span>)}</div></div>}
       {usedBy.length > 0 && <div className="sw-fld"><span>引用它的规则</span>{usedBy.map(r => <button key={`${r.path}:${r.text}`} type="button" className="sw-li" onClick={() => onSelect({ kind: 'rule', path: r.path, text: r.text })}>
         <span className="sw-ico sw-ico-rule">规</span><span className="sw-li-main"><span>{ruleSummary(r)}</span></span></button>)}</div>}
       {column?.userDescribed && <p className="sw-hint">说明由人工填写，建模助手不会改写。</p>}
-      <div className="sw-file">写入 <span className="sw-mono">{model.path ?? `models/${model.name}/metadata.yml`}</span></div>
       {feedback}
     </div>
-    {editable && <div className="sw-df">
-      <button type="button" className="da-btn da-btn-primary da-btn-sm" disabled={!canEdit || busy || (creating && (!name.trim() || !expression.trim()))} title={disabledTitle} onClick={() => void submit()}>{busy ? '保存中…' : creating ? '校验并新增' : '保存到草稿'}</button>
-      {onAsk && column && <button type="button" className="da-btn da-btn-sm" onClick={() => onAsk(`请完善 ${model.name}.${column.name} 的说明和同义词：`)}>问助手</button>}
+    {editing ? <div className="sw-df">
       <span className="sw-grow" />
-      {column?.calculated && <button type="button" className="da-btn da-btn-sm sw-danger" disabled={!canEdit || busy} title={disabledTitle}
+      {dirty && <button type="button" className="da-btn da-btn-primary da-btn-sm" disabled={inputDisabled} title={disabledTitle}
+        onClick={submit}>{busy ? '保存中…' : '保存到草稿'}</button>}
+      <button type="button" className="da-btn da-btn-sm" disabled={busy} onClick={cancel}>{dirty ? '取消' : '退出编辑'}</button>
+    </div> : editable && (onAsk || calculated) && <div className="sw-df">
+      {onAsk && <button type="button" className="da-btn da-btn-sm" onClick={() => onAsk(`请完善 ${model.name}.${column.name} 的说明和同义词：`)}>问助手</button>}
+      <span className="sw-grow" />
+      {calculated && <button type="button" className="da-btn da-btn-sm sw-danger" disabled={!canEdit || busy} title={disabledTitle}
         onClick={() => { if (window.confirm(`删除衍生字段 ${column.name}？引用它的规则和问答需要另行检查。`)) void onSave({ category: 'COLUMN', model: model.name, column: column.name, delete: true }, '已删除', () => onSelect({ kind: 'model', model: model.name })); }}>删除</button>}
     </div>}
   </>;

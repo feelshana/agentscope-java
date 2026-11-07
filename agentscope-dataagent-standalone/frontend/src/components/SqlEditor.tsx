@@ -1,5 +1,5 @@
 import { useMemo, useRef } from 'react';
-import type { KeyboardEvent } from 'react';
+import type { KeyboardEvent, RefObject } from 'react';
 import Prism from 'prismjs';
 import 'prismjs/components/prism-sql';
 import { highlightTokens } from './ReadableCode';
@@ -51,7 +51,9 @@ export function formatSql(sql: string): string {
  * SQL text box with syntax colours, line numbers and code-editor keys (Tab indents, Enter keeps
  * the indentation). A transparent textarea sits on top of the highlighted text.
  */
-export default function SqlEditor({ value, onChange, rows = 10, autoFocus, maxLength, disabled = false, ariaLabel = 'SQL' }: {
+export default function SqlEditor({
+  value, onChange, rows = 10, autoFocus, maxLength, disabled = false, ariaLabel = 'SQL', inputRef, indentWithTab = true,
+}: {
   value: string;
   onChange: (value: string) => void;
   rows?: number;
@@ -59,8 +61,11 @@ export default function SqlEditor({ value, onChange, rows = 10, autoFocus, maxLe
   maxLength?: number;
   disabled?: boolean;
   ariaLabel?: string;
+  inputRef?: RefObject<HTMLTextAreaElement>;
+  indentWithTab?: boolean;
 }) {
-  const area = useRef<HTMLTextAreaElement>(null);
+  const ownInputRef = useRef<HTMLTextAreaElement>(null);
+  const area = inputRef ?? ownInputRef;
   const layer = useRef<HTMLPreElement>(null);
   const gutter = useRef<HTMLDivElement>(null);
   const highlighted = useMemo(() => highlightTokens(Prism.tokenize(value, Prism.languages.sql)), [value]);
@@ -81,7 +86,7 @@ export default function SqlEditor({ value, onChange, rows = 10, autoFocus, maxLe
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     const el = e.currentTarget;
     const { selectionStart: start, selectionEnd: end } = el;
-    if (e.key === 'Tab' && !e.shiftKey) {
+    if (indentWithTab && e.key === 'Tab' && !e.shiftKey) {
       e.preventDefault();
       replace(start, end, '  ', start + 2);
     } else if (e.key === 'Enter' && !e.nativeEvent.isComposing) {

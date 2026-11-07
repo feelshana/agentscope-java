@@ -453,7 +453,7 @@ export interface KnowledgeBaseBrowse {
   publishedVersion: number;
   models: {
     name: string; description?: string | null; primaryKey?: string | null; tableRole?: string | null; derived?: boolean;
-    columns?: { name: string; type?: string | null; description?: string | null; expression?: string | null; isCalculated?: boolean; isPrimaryKey?: boolean }[];
+    columns?: { name: string; type?: string | null; displayName?: string | null; description?: string | null; expression?: string | null; isCalculated?: boolean; isPrimaryKey?: boolean }[];
   }[];
   relationships: { name: string; models?: string[]; joinType?: string; condition?: string; description?: string | null }[];
   knowledge: { path: string; content: string }[];

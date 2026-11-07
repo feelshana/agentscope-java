@@ -369,7 +369,12 @@ public class DatasetImportService {
 
                 columns.add(
                         new ColumnSchema(
-                                englishName, originalHeaders.get(i), sqlType, true, description));
+                                englishName,
+                                originalHeaders.get(i),
+                                sqlType,
+                                true,
+                                description,
+                                aiCol.displayName()));
             }
 
             tableDescription = schema.tableDescription();

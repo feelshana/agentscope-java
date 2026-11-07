@@ -427,18 +427,33 @@ public class MdlSeeder {
         List<String> out = new ArrayList<>();
         for (String name : missing) {
             ColumnSchema c = byName.get(name);
-            out.add(indent + "- name: " + MdlPublishService.yamlScalar(name));
-            out.add(indent + "  type: " + MdlPublishService.yamlScalar(typeByRaw.get(c.sqlType())));
-            if (c.description() != null && !c.description().isBlank()) {
-                out.add(indent + "  properties:");
-                out.add(
-                        indent
-                                + "    description: "
-                                + MdlPublishService.yamlScalar(c.description()));
-                if (c.userDescribed()) out.add(indent + "    description_source: user");
-            }
+            out.addAll(renderedColumn(c, typeByRaw.get(c.sqlType()), indent));
         }
         return out;
+    }
+
+    private static List<String> renderedColumn(ColumnSchema column, String type, String indent) {
+        List<String> lines = new ArrayList<>();
+        lines.add(indent + "- name: " + MdlPublishService.yamlScalar(column.name()));
+        lines.add(indent + "  type: " + MdlPublishService.yamlScalar(type));
+        boolean described = column.description() != null && !column.description().isBlank();
+        boolean named = column.displayName() != null && !column.displayName().isBlank();
+        if (described || named) {
+            lines.add(indent + "  properties:");
+            if (described) {
+                lines.add(
+                        indent
+                                + "    description: "
+                                + MdlPublishService.yamlScalar(column.description()));
+                if (column.userDescribed()) lines.add(indent + "    description_source: user");
+            }
+            if (named)
+                lines.add(
+                        indent
+                                + "    displayName: "
+                                + MdlPublishService.yamlScalar(column.displayName()));
+        }
+        return lines;
     }
 
     /** Renders one seed model file for a dataset (the golden probe-verified shape). */
@@ -468,15 +483,7 @@ public class MdlSeeder {
             if (type == null) {
                 continue;
             }
-            sb.append("- name: ").append(MdlPublishService.yamlScalar(c.name())).append('\n');
-            sb.append("  type: ").append(MdlPublishService.yamlScalar(type)).append('\n');
-            if (c.description() != null && !c.description().isBlank()) {
-                sb.append("  properties:\n");
-                sb.append("    description: ")
-                        .append(MdlPublishService.yamlScalar(c.description()))
-                        .append('\n');
-                if (c.userDescribed()) sb.append("    description_source: user\n");
-            }
+            for (String line : renderedColumn(c, type, "")) sb.append(line).append('\n');
         }
         if (dataset.getDescription() != null && !dataset.getDescription().isBlank()) {
             sb.append("properties:\n");

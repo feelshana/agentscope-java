@@ -115,6 +115,9 @@
 .sw-dh > strong { font-size: 15px; }
 .sw-dh-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .sw-dh-row strong { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sw-field-title { display: grid; flex: 1; min-width: 0; gap: 2px; }
+.sw-field-title .sw-mono { font-size: 12px; overflow-wrap: anywhere; }
+.sw-field-value { padding-block: 3px; color: var(--da-text-2); white-space: pre-wrap; overflow-wrap: anywhere; }
 .sw-back { align-self: flex-start; border: 0; background: none; color: var(--da-text-muted); padding: 0; font-size: 12px; cursor: pointer; }
 .sw-dtabs { display: flex; gap: 16px; margin-top: 8px; }
 .sw-dtabs button { border: 0; background: none; padding: 8px 0; color: var(--da-text-muted); border-bottom: 2px solid transparent; cursor: pointer; font-size: 13px; }

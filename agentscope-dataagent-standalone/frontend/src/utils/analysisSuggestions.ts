@@ -12,6 +12,8 @@ import { parseWrenResult } from './wrenToolPresentation';
 export interface QueryTool { name: string; result?: string }
 
 const DATE = /^\d{4}[-/]\d{1,2}(?:[-/]\d{1,2})?(?:[ T](\d{1,2})(?::\d{2}){0,2})?/;
+const COMPACT_DAY = /^(\d{4})(\d{2})(\d{2})$/;
+const DATE_COLUMN = /(?:^|_)(?:dt|date|day|yyyymmdd)(?:_|$)|日期|时间|统计日|分区日/i;
 const ID_COLUMN = /(^|_)id$|[a-z]Id$|编号|编码|代码|账号/i;
 const QUERY_TOOLS = new Set(['run_sql', 'query_cube', 'wren_run_sql', 'wren_query_cube']);
 
@@ -26,6 +28,17 @@ function cell(row: unknown, column: string, index: number): unknown {
 function numeric(values: unknown[]): boolean {
   const present = values.filter(v => v !== null && v !== undefined && String(v).trim() !== '');
   return present.length > 0 && present.every(v => Number.isFinite(Number(String(v).replace(/,/g, ''))));
+}
+
+function dateValue(value: unknown, allowCompactDay: boolean): string | undefined {
+  const text = String(value ?? '').trim();
+  if (DATE.test(text)) return text;
+  const compact = allowCompactDay ? COMPACT_DAY.exec(text) : null;
+  if (!compact) return undefined;
+  const day = `${compact[1]}-${compact[2]}-${compact[3]}`;
+  const timestamp = Date.parse(day);
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === day
+    ? day : undefined;
 }
 
 function grainOf(values: string[]): Grain {
@@ -51,13 +64,17 @@ export function analysisSuggestions(tools: QueryTool[]): AnalysisMethod[] {
   if (rows.length < 2 || columns.length < 2) return [];
   const sample = rows.slice(0, 50);
   const columnValues = columns.map((c, i) => sample.map(r => cell(r, c, i)));
-  const dateIndex = columnValues.findIndex(values => {
-    const text = values.filter(v => v != null).map(String);
-    return text.length > 0 && text.filter(v => DATE.test(v)).length / text.length >= 0.7;
+  const compactDayAllowed = columns.map(name => DATE_COLUMN.test(name));
+  const dateColumns = columnValues.map((values, i) => {
+    const present = values.filter(v => v != null);
+    return present.length > 0 && present.filter(v => dateValue(v, compactDayAllowed[i])).length / present.length >= 0.7;
   });
-  const hasMetric = columns.some((c, i) => i !== dateIndex && !ID_COLUMN.test(c) && numeric(columnValues[i]));
-  if (!hasMetric || dateIndex < 0) return [];
-  const dates = rows.map(r => cell(r, columns[dateIndex], dateIndex)).filter(v => v != null).map(String);
+  const dateIndex = dateColumns.indexOf(true);
+  if (dateIndex < 0 || !columns.some((c, i) => !dateColumns[i] && !ID_COLUMN.test(c) && numeric(columnValues[i]))) return [];
+  const dates = rows.flatMap(r => {
+    const date = dateValue(cell(r, columns[dateIndex], dateIndex), compactDayAllowed[dateIndex]);
+    return date ? [date] : [];
+  });
   const points = new Set(dates).size;
   const grain = grainOf(dates);
   const out: AnalysisMethod[] = [];
