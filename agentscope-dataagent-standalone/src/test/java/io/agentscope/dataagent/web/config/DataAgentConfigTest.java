@@ -131,9 +131,9 @@ class DataAgentConfigTest {
 
     @Test
     void questionAnswersLeadWithTheConclusion() {
-        // dataagent.agent.sys-prompt replaces the default prompt, so the rule lives where it
-        // cannot.
-        assertThat(DataAgentConfig.QUERY_EFFICIENCY_RULES).contains("第一句直接给出结论", "不用问题原文作标题");
+        // This rule must still apply when dataagent.agent.sys-prompt replaces the default prompt.
+        assertThat(DataAgentConfig.QUERY_EFFICIENCY_RULES)
+                .contains("首段用 1—2 句话直接回答问题", "不用问题原文作标题");
     }
 
     /**
