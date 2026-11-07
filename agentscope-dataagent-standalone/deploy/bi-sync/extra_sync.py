@@ -1,6 +1,6 @@
 """Independent, fixed-projection BI extension. Never modifies the original seven-table task."""
 import argparse
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager, suppress
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 import hashlib
@@ -10,6 +10,7 @@ import re
 import stat
 import os
 import sys
+import time
 import uuid
 
 import bi_sync
@@ -25,10 +26,49 @@ CONTROL_DDL = ("CREATE TABLE IF NOT EXISTS " + quote(CONTROL)
                + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin")
 SOURCE_DATABASES = {"iam": "iam", "capacity": "dataanalysis1",
                     "optimization": "platform", "click": "fenxiyun"}
+IO_TIMEOUT = 600
+SOURCE_ATTEMPTS = 3
+SOURCE_DISCONNECT_CODES = {2003, 2006, 2013, 2055}
 
 
 class Paused(Exception):
     pass
+
+
+class SourceReadError(Exception):
+    def __init__(self, code, step):
+        super().__init__(code)
+        self.step = step
+
+
+def source_read(step, operation, *args):
+    """Mark source disconnects only; target failures must never trigger source retries."""
+    try:
+        return operation(*args)
+    except Exception as exc:
+        if exc.args and type(exc.args[0]) is int and exc.args[0] in SOURCE_DISCONNECT_CODES:
+            raise SourceReadError(exc.args[0], step) from None
+        raise
+
+
+def close_connection(con):
+    if con is not None:
+        with suppress(Exception):
+            con.close()
+
+
+@contextmanager
+def source_cursor(source, cursor_type):
+    cursor = source_read("source_cursor", source.cursor, cursor_type)
+    try:
+        yield cursor
+    except BaseException:
+        # A broken streaming cursor can fail again while discarding unread results.
+        with suppress(Exception):
+            cursor.close()
+        raise
+    else:
+        source_read("source_cursor_close", cursor.close)
 
 
 def scalar(con, sql, args=()):
@@ -86,13 +126,16 @@ def connect(endpoint, role):
     import MySQLdb
     opts = dict(host=endpoint["host"], port=endpoint["port"], db=endpoint["database"],
                 user=endpoint["user"], passwd=endpoint["password"], charset="utf8mb4",
-                connect_timeout=10, read_timeout=120, write_timeout=120)
+                connect_timeout=10, read_timeout=IO_TIMEOUT, write_timeout=IO_TIMEOUT)
     if role == "capacity":
         opts["ssl_mode"] = "REQUIRED"
     con = MySQLdb.connect(**opts)
     try:
         with con.cursor() as cur:
             cur.execute("SET time_zone = '+08:00'")
+            if role != "click":
+                cur.execute("SET SESSION net_read_timeout=" + str(IO_TIMEOUT))
+                cur.execute("SET SESSION net_write_timeout=" + str(IO_TIMEOUT))
             if role in ("target", "monitor"):
                 cur.execute("SET SESSION sql_mode="
                             "'STRICT_ALL_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,"
@@ -323,9 +366,9 @@ def rows_digest(con, table, names, suffix="", args=()):
 
 def extract(source, target, job, day, batch, checkpoint):
     import MySQLdb.cursors
-    source.rollback()
+    source_read("source_transaction", source.rollback)
     sql, args = projection(job, day)
-    before = count_query(source, sql, args)
+    before = source_read("source_count_before", count_query, source, sql, args)
     if job.snapshot and before > 100000:
         raise ValueError("全量快照超过10万行，未更新业务表")
     target.begin()
@@ -335,10 +378,10 @@ def extract(source, target, job, day, batch, checkpoint):
     insert = ("INSERT INTO " + quote(job.stage) + " (" + ",".join(map(quote, job.names))
               + ") VALUES (" + ",".join(["%s"] * len(job.names)) + ")")
     extracted = 0
-    with source.cursor(MySQLdb.cursors.SSCursor) as cursor:
-        cursor.execute(sql, args)
+    with source_cursor(source, MySQLdb.cursors.SSCursor) as cursor:
+        source_read("source_execute", cursor.execute, sql, args)
         while True:
-            rows = cursor.fetchmany(batch)
+            rows = source_read("source_fetch", cursor.fetchmany, batch)
             if not rows:
                 break
             checkpoint()
@@ -346,7 +389,7 @@ def extract(source, target, job, day, batch, checkpoint):
                 cur.executemany(insert, [normalize_row(job, r) for r in rows])
             target.commit()
             extracted += len(rows)
-    after = count_query(source, sql, args)
+    after = source_read("source_count_after", count_query, source, sql, args)
     if before != after or after != extracted:
         raise ValueError("抽取期间源计数发生变化或抽取不完整，未发布")
     result = rows_digest(target, job.stage, job.names)
@@ -438,17 +481,40 @@ def publish(target, job, day, floor, result, checkpoint):
         checkpoint()
         target.commit()
     except BaseException:
-        target.rollback()
+        with suppress(Exception):
+            target.rollback()
         raise
 
 
-def sync_job(source, target, job, until, start, batch, lookback, checkpoint):
+def sync_job(source, target, job, until, start, batch, lookback, checkpoint,
+             reconnect_source=None):
+    def read_with_retry(operation, day=None):
+        nonlocal source
+        for attempt in range(1, SOURCE_ATTEMPTS + 1):
+            try:
+                if source is None:
+                    source = source_read("source_reconnect", reconnect_source)
+                return operation(source)
+            except SourceReadError as exc:
+                exc.day = str(day) if day is not None else None
+                print(job.name + ("/" + str(day) if day is not None else "")
+                      + "，源连接中断，阶段=" + exc.step + "，错误码=" + str(exc.args[0])
+                      + "，尝试=" + str(attempt) + "/" + str(SOURCE_ATTEMPTS), flush=True)
+                if attempt == SOURCE_ATTEMPTS or reconnect_source is None:
+                    raise
+                checkpoint()
+                close_connection(source)
+                source = None
+                time.sleep(attempt * 2)
+                checkpoint()
+
     if job.snapshot:
-        result = extract(source, target, job, None, batch, checkpoint)
+        result = read_with_retry(lambda con: extract(con, target, job, None, batch, checkpoint))
         publish(target, job, None, START, result, checkpoint)
         print(job.name + "当前快照已发布，行数=" + str(result["count"]), flush=True)
         return
-    floor, partitions = availability(source, job)
+    floor, partitions = read_with_retry(
+        lambda con: source_read("source_availability", availability, con, job))
     info = state(target, "table:" + job.name, {})
     previous = date.fromisoformat(info.get("success_until", str(START)))
     if start is None and until < previous:
@@ -463,9 +529,11 @@ def sync_job(source, target, job, until, start, batch, lookback, checkpoint):
         checkpoint()
         if partitions is not None and day not in partitions:
             raise ValueError("Doris请求日分区缺失，保留目标历史")
-        result = extract(source, target, job, day, batch, checkpoint)
+        print(job.name + "/" + str(day) + "，开始抽取/核对", flush=True)
+        result = read_with_retry(lambda con: extract(con, target, job, day, batch, checkpoint), day)
         # Refresh metadata immediately before publishing: TTL may move while a backfill runs.
-        if job.source == "click" and day not in doris_days(source):
+        if job.source == "click" and day not in read_with_retry(
+                lambda con: source_read("source_partition_check", doris_days, con), day):
             raise ValueError("Doris分区在抽取期间过期，未发布")
         publish(target, job, day, floor, result, checkpoint)
         print(job.name + "/" + str(day) + "，源结果行数=" + str(result["count"])
@@ -611,9 +679,13 @@ def run(config, action, until, start=None, tables=None, connect_fn=connect, afte
                 phase = name
                 if action == "sync":
                     checkpoint()
-                source = connect_fn(config["sources"][job.source], job.source)
-                stack.callback(source.close)
-                inspect_source(source, job.source)
+                def open_source():
+                    con = connect_fn(config["sources"][job.source], job.source)
+                    stack.callback(close_connection, con)
+                    source_read("source_schema", inspect_source, con, job.source)
+                    return con
+
+                source = open_source()
                 if action == "verify":
                     verify_job(source, target, job, until, start)
                 else:
@@ -622,7 +694,7 @@ def run(config, action, until, start=None, tables=None, connect_fn=connect, afte
                         if after_extract:
                             after_extract(job, target, monitor)
                     sync_job(source, target, job, until, start, config["batch_size"],
-                             config["lookback_days"], publish_hook)
+                             config["lookback_days"], publish_hook, reconnect_source=open_source)
                 # Release each source promptly; no long-lived cross-source global snapshot.
                 stack.pop_all().close()
         result = status(target)
@@ -637,11 +709,16 @@ def run(config, action, until, start=None, tables=None, connect_fn=connect, afte
                                       else "所选范围已完成"), flush=True)
     except BaseException as exc:
         if target is not None:
-            target.rollback()
+            with suppress(Exception):
+                target.rollback()
         if active and monitor is not None:
             try:
                 run_info.update(outcome="PAUSED" if isinstance(exc, Paused) else "FAILED",
                                 failure_phase=phase, finished_at=datetime.now(TZ).isoformat())
+                if isinstance(exc, SourceReadError):
+                    run_info.update(failure_step=exc.step, failure_day=getattr(exc, "day", None))
+                if exc.args and type(exc.args[0]) is int:
+                    run_info["error_code"] = exc.args[0]
                 save(monitor, "last_run", run_info)
                 monitor.commit()
             except Exception:
@@ -652,14 +729,12 @@ def run(config, action, until, start=None, tables=None, connect_fn=connect, afte
             raise
     finally:
         if target is not None:
-            try:
+            with suppress(Exception):
                 target.rollback()
                 if locked:
                     scalar(target, "SELECT RELEASE_LOCK(%s)", (LOCK,))
-            finally:
-                target.close()
-        if monitor is not None:
-            monitor.close()
+            close_connection(target)
+        close_connection(monitor)
 
 
 def main(argv=None):
@@ -686,6 +761,7 @@ def main(argv=None):
         # Driver errors may contain SQL, data or secrets. Never print their messages.
         print("扩展任务未完成；错误类型=" + type(exc).__name__
               + (", 错误码=" + str(code) if code is not None else "")
+              + (", 阶段=" + exc.step if isinstance(exc, SourceReadError) else "")
               + "；请核对参数、私有配置、字段和status", file=sys.stderr)
         return 1
 

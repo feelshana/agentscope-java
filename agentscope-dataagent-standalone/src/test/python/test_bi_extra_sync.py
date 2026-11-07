@@ -13,7 +13,7 @@ import sys
 import tempfile
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 import uuid
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -26,6 +26,40 @@ DAY = date(2026, 1, 1)
 
 
 class ExtraUnitTest(unittest.TestCase):
+    def test_connection_allows_long_queries_and_stream_backpressure(self):
+        import MySQLdb
+        con = MagicMock()
+        endpoint = dict(host="fixture", port=3306, database="platform", user="reader",
+                        password="fixture-only")
+        with patch.object(MySQLdb, "connect", return_value=con) as connect:
+            ext.connect(endpoint, "optimization")
+        self.assertEqual(600, connect.call_args.kwargs["read_timeout"])
+        self.assertEqual(600, connect.call_args.kwargs["write_timeout"])
+        statements = [a.args[0] for a in con.cursor.return_value.__enter__.return_value.execute.call_args_list]
+        self.assertIn("SET SESSION net_write_timeout=600", statements)
+        self.assertIn("SET SESSION TRANSACTION READ ONLY", statements)
+
+    def test_source_retry_is_bounded_and_never_retries_sql_errors(self):
+        import MySQLdb
+        job = schema.JOBS["bi_iam_user"]
+        source, target, reconnect = MagicMock(), MagicMock(), MagicMock()
+        failure = MySQLdb.OperationalError(2013, "private-sentinel")
+        source.rollback.side_effect = failure
+        reconnect.return_value.rollback.side_effect = failure
+        output = io.StringIO()
+        with redirect_stdout(output), patch.object(ext.time, "sleep"), self.assertRaises(ext.SourceReadError):
+            ext.sync_job(source, target, job, DAY + timedelta(days=1), None, 2, 3,
+                         lambda: None, reconnect_source=reconnect)
+        self.assertEqual(2, reconnect.call_count)
+        target.begin.assert_not_called()
+        self.assertNotIn("private-sentinel", output.getvalue())
+        source.rollback.side_effect = MySQLdb.OperationalError(1054, "private-sentinel")
+        reconnect.reset_mock()
+        with self.assertRaises(MySQLdb.OperationalError):
+            ext.sync_job(source, target, job, DAY + timedelta(days=1), None, 2, 3,
+                         lambda: None, reconnect_source=reconnect)
+        reconnect.assert_not_called()
+
     def test_exact_six_table_projection_and_no_eid_uniqueness(self):
         self.assertEqual([5, 18, 22, 10, 14, 10], [len(j.columns) for j in schema.JOBS.values()])
         sql, args = schema.projection(schema.JOBS["bi_page_click_log"], DAY)
@@ -350,6 +384,100 @@ class ExtraMysqlTest(unittest.TestCase):
         self.assertEqual(3, self.count("bi_page_click_log"))
         self.assertEqual(before, ext.state(self.target, "table:bi_page_click_log"))
         self.assertEqual("FAILED", ext.state(self.target, "last_run")["outcome"])
+
+    def test_source_disconnect_after_partial_stage_reconnects_without_duplicate_live_rows(self):
+        self.ready()
+        self.run_job("sync", names=["bi_page_click_log"])
+        real_read = ext.source_read
+        fetched, opened = [], []
+
+        def connection(endpoint, role):
+            con = ext.connect(endpoint, role)
+            if role == "click":
+                opened.append(con)
+            return con
+
+        def interrupted(step, operation, *args):
+            if step == "source_fetch":
+                fetched.append(step)
+                if len(fetched) == 2:
+                    def disconnect():
+                        raise self.driver.OperationalError(2013, "private-sentinel")
+                    return real_read(step, disconnect)
+            return real_read(step, operation, *args)
+
+        output = io.StringIO()
+        with redirect_stdout(output), patch.object(ext, "source_read", side_effect=interrupted), \
+                patch.object(ext.time, "sleep"):
+            ext.run(self.config, "sync", DAY + timedelta(days=1), tables=["bi_page_click_log"],
+                    connect_fn=connection)
+        self.assertEqual(2, len(opened))
+        self.assertEqual(3, self.count("bi_page_click_log"))
+        self.assertEqual(3, self.count(schema.JOBS["bi_page_click_log"].stage))
+        self.assertEqual("2026-01-02", ext.state(self.target, "table:bi_page_click_log")["success_until"])
+        self.assertEqual("SUCCESS", ext.state(self.target, "last_run")["outcome"])
+        self.assertIn("source_fetch", output.getvalue())
+        self.assertNotIn("private-sentinel", output.getvalue())
+
+    def test_actual_killed_source_session_retries_current_day(self):
+        self.ready()
+        real_read = ext.source_read
+        opened, killed = [], []
+
+        def connection(endpoint, role):
+            con = ext.connect(endpoint, role)
+            if role == "optimization":
+                opened.append(con)
+            return con
+
+        def interrupted(step, operation, *args):
+            if step == "source_count_after" and not killed:
+                self.execute(self.source, "KILL CONNECTION " + str(opened[-1].thread_id()))
+                killed.append(True)
+            return real_read(step, operation, *args)
+
+        with redirect_stdout(io.StringIO()), patch.object(ext, "source_read", side_effect=interrupted), \
+                patch.object(ext.time, "sleep"):
+            ext.run(self.config, "sync", DAY + timedelta(days=1),
+                    tables=["bi_tenant_optimization_daily"], connect_fn=connection)
+        self.assertEqual(2, len(opened))
+        self.assertEqual(1, self.count("bi_tenant_optimization_daily"))
+        self.assertEqual("SUCCESS", ext.state(self.target, "last_run")["outcome"])
+
+    def test_target_disconnect_does_not_reconnect_or_mask_error_and_saves_failure(self):
+        self.ready()
+        self.run_job("sync", names=["bi_page_click_log"])
+        before = ext.state(self.target, "table:bi_page_click_log")
+        real_read = ext.source_read
+        opened, targets, fetched = [], [], []
+
+        def connection(endpoint, role):
+            con = ext.connect(endpoint, role)
+            if role == "target":
+                targets.append(con)
+            elif role == "click":
+                opened.append(con)
+            return con
+
+        def interrupted(step, operation, *args):
+            if step == "source_fetch":
+                fetched.append(step)
+                if len(fetched) == 2:
+                    self.execute(self.target, "KILL CONNECTION " + str(targets[-1].thread_id()))
+            return real_read(step, operation, *args)
+
+        with redirect_stdout(io.StringIO()), patch.object(ext, "source_read", side_effect=interrupted), \
+                self.assertRaises(self.driver.OperationalError) as error:
+            ext.run(self.config, "sync", DAY + timedelta(days=1), tables=["bi_page_click_log"],
+                    connect_fn=connection)
+        self.assertIn(error.exception.args[0], {2006, 2013})
+        self.assertEqual(1, len(opened))
+        self.assertEqual(3, self.count("bi_page_click_log"))
+        self.assertEqual(before, ext.state(self.target, "table:bi_page_click_log"))
+        failure = ext.state(self.target, "last_run")
+        self.assertEqual("FAILED", failure["outcome"])
+        self.assertEqual("bi_page_click_log", failure["failure_phase"])
+        self.assertEqual(error.exception.args[0], failure["error_code"])
 
     def test_ttl_roll_forward_does_not_delete_archived_target_rows(self):
         self.ready()

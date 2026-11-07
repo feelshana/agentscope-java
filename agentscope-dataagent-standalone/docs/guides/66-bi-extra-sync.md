@@ -42,6 +42,21 @@ sync的默认until是东八区当天00:00，范围不含该日。用户/大屏�
 
 日常sync默认回刷最近3个完整日，并补上尚未完成的范围；lookback_days允许1至31天。更早迟到/改删需指定日期重跑，不承诺无限期自动捕获。源已过期的日期不回刷、不删除已保存历史；可读范围内真正空的事件日可以更新为0行。生成的技术ID可能随重刷变化，不可用作跨系统业务关联。
 
+源聚合/流式传输及目标写入允许每次网络读写等待600秒；MySQL会话同时设置网络读写超时，Doris不设置MySQL专用会话项。同步抽取遇到源断线错误2003/2006/2013/2055时，最多尝试3次，重新连接并完整重抽当前日/快照，清空的是本任务暂存表。目标或控制连接失败不自动重连，避免丢失任务锁后继续写入；已发布业务数据和进度保留。连续失败时status记录表名、错误码，源断线另记failure_step/failure_day，不输出驱动原文。
+
+若SSH断开或隔夜发现失败，先用status确认running=false，再用sync续作；不用重新configure/init/migrate，也不用手改控制表。`last_run=FAILED`与`last_verify=null`表示同步/核对尚未全部完成；SOURCE_HISTORY_UNAVAILABLE是已识别的源历史缺失，不等于连接错误。网络错误2013仅能判断连接中断，不能仅凭错误码认定是客户端超时或源服务重启。
+
+长时间首次回填可在更新源码后放到服务器后台，固定sync/verify使用同一个排他截止日，避免本地电脑休眠关闭SSH影响启动链：
+
+```bash
+sync_until="$(date +%F)"
+sync_log="/data/dataagent/formal-app/logs/bi-extra-sync/manual-$(date +%Y%m%d-%H%M%S).log"
+nohup bash -c 'bash docker/bi-extra-sync.sh sync --until "$1" && bash docker/bi-extra-sync.sh verify --until "$1" && bash docker/bi-extra-sync.sh status' _ "$sync_until" > "$sync_log" 2>&1 < /dev/null &
+echo "后台任务PID=$!，日志=$sync_log"
+```
+
+从另一个终端用status查看运行状态，或tail对应manual日志；查看日志的tail可用Ctrl+C退出，不会停止后台同步。sync失败会停止后面的verify，修复后重新运行该链；只有成功verify才进入调度安装和后续应用更新。
+
     bash docker/bi-extra-sync.sh sync --tables bi_page_click_log --from 2026-11-01 --until 2026-11-06
     bash docker/bi-extra-sync.sh verify --tables bi_page_click_log --from 2026-11-01 --until 2026-11-06
     bash docker/bi-extra-sync.sh pause
