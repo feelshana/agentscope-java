@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { MutableRefObject, PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import { editDraftFile, editDraftItem, getDocumentContent, getDraftItems, listDocuments } from '../../api/draftReview';
 import type { DraftItem, DraftItemEdit } from '../../api/draftReview';
-import CalculatedColumnDialog from './CalculatedColumnDialog';
 import YamlContent from './YamlContent';
 import { joinLabel, modelTag, relationsOf, unrelatedModels } from './semanticSnapshot';
 import type { SemanticColumn, SemanticModel, SemanticRelation, SemanticSnapshot } from './semanticSnapshot';
@@ -13,6 +12,8 @@ import {
 } from './ruleText';
 import type { RuleItem, RuleSection } from './ruleText';
 import './SemanticWorkbench.css';
+
+const CalculatedColumnDialog = lazy(() => import('./CalculatedColumnDialog'));
 
 export type WorkbenchView = 'graph' | 'rules';
 type FieldEditGuard = MutableRefObject<(() => boolean) | null>;
@@ -774,9 +775,9 @@ function Drawer({ groupId, snapshot, selection, files, views, rules, problems, e
         onEditCalculated={openCalc} onClearFeedback={clearFeedback} onSave={saveField} feedback={calcOpen ? null : feedback} />
         : <ModelDrawer {...{ groupId, model, snapshot, files, rules, editable, canEdit, blocked, onSelect, onChanged, onAsk, changedColumn, newRule }}
           onAddCalculated={openCalc} feedback={calcOpen ? null : feedback} />}
-      {calcOpen && editable && <CalculatedColumnDialog model={model} column={column} relations={snapshot.relations}
+      {calcOpen && editable && <Suspense fallback={null}><CalculatedColumnDialog model={model} column={column} relations={snapshot.relations}
         busy={busy} blocked={blocked} feedback={feedback} onClose={() => { setError(''); setCalcOpen(false); }}
-        onSave={edit => void saveField(edit, column ? '衍生列已保存到草稿。' : '衍生列已加入草稿。', () => setCalcOpen(false))} />}
+        onSave={edit => void saveField(edit, column ? '衍生列已保存到草稿。' : '衍生列已加入草稿。', () => setCalcOpen(false))} /></Suspense>}
     </>;
   }
 
@@ -805,6 +806,8 @@ function Gone({ onSelect }: { onSelect: (s: Selection) => void }) {
   return <div className="sw-db"><div className="sw-empty">这个对象已经不在当前版本中。</div><button type="button" className="sw-link" onClick={() => onSelect(null)}>返回</button></div>;
 }
 
+type FieldGroupKey = 'plain' | 'time' | 'calculated' | 'related';
+
 function ModelDrawer({ groupId, model, snapshot, files, rules, editable, canEdit, blocked, onSelect, onChanged, onAsk, changedColumn, newRule, onAddCalculated, feedback }: {
   groupId: string; model: SemanticModel; snapshot: SemanticSnapshot; files: Map<string, string>; rules: RuleItem[];
   editable: boolean; canEdit: boolean; blocked: string | null; onSelect: (s: Selection) => void; onChanged: () => void; onAsk?: (text: string) => void;
@@ -816,6 +819,23 @@ function ModelDrawer({ groupId, model, snapshot, files, rules, editable, canEdit
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
+  const fieldGroupKey = `sw-field-groups:v1:${JSON.stringify([groupId, model.name])}`;
+  const [collapsed, setCollapsed] = useState<FieldGroupKey[]>(() => {
+    try {
+      const stored: unknown = JSON.parse(sessionStorage.getItem(fieldGroupKey) ?? '[]');
+      return Array.isArray(stored) ? stored : [];
+    } catch { return []; }
+  });
+  useEffect(() => {
+    try { sessionStorage.setItem(fieldGroupKey, JSON.stringify(collapsed)); } catch { /* Optional browser preference. */ }
+  }, [fieldGroupKey, collapsed]);
+  const groupProps = (key: FieldGroupKey) => ({
+    open: !collapsed.includes(key),
+    onToggle: (open: boolean) => setCollapsed(previous => {
+      if (open === !previous.includes(key)) return previous;
+      return open ? previous.filter(group => group !== key) : [...previous, key];
+    }),
+  });
   const text = model.path ? files.get(model.path) : undefined;
   const plainAll = model.columns.filter(c => !c.calculated);
   const times = plainAll.filter(c => roleOf(model, c, snapshot.relations).role === 'TIME');
@@ -854,21 +874,21 @@ function ModelDrawer({ groupId, model, snapshot, files, rules, editable, canEdit
     </div>
     <div className="sw-db">
       {tab === 'fields' && <>
-        <FieldGroup label="普通列" count={plain.length}>
+        <FieldGroup {...groupProps('plain')} label="普通列" count={plain.length}>
           {plain.map(c => <FieldItem key={c.name} c={c} />)}
         </FieldGroup>
-        <FieldGroup label="日期列" count={times.length}>
+        <FieldGroup {...groupProps('time')} label="日期列" count={times.length}>
           {times.map(c => <FieldItem key={c.name} c={c} />)}
           {!times.length && <p className="sw-hint">没有识别到日期列。</p>}
         </FieldGroup>
         {editable && <button type="button" className="sw-link sw-add-calc" aria-label="新增衍生列"
           disabled={!canEdit} title={blocked ?? undefined} onClick={onAddCalculated}>＋ 新增衍生列</button>}
         {feedback}
-        <FieldGroup label="衍生列" count={calc.length}>
+        <FieldGroup {...groupProps('calculated')} label="衍生列" count={calc.length}>
           {calc.map(c => <FieldItem key={c.name} c={c} />)}
           {!calc.length && <p className="sw-hint">暂无衍生列。</p>}
         </FieldGroup>
-        <FieldGroup label="关联字段" count={relations.length}>
+        <FieldGroup {...groupProps('related')} label="关联字段" count={relations.length}>
         {relations.map(r => {
           const target = r.left === model.name ? r.right : r.left;
           const keys = (r.left === model.name ? r.sourceColumns : r.targetColumns).join('、');
@@ -952,9 +972,12 @@ function fieldValues(column: SemanticColumn) {
   };
 }
 
-function FieldGroup({ label, count, children }: { label: string; count: number; children: ReactNode }) {
-  const [open, setOpen] = useState(true);
-  return <details className="sw-field-group" open={open} onToggle={event => setOpen(event.currentTarget.open)}>
+function FieldGroup({ label, count, open, onToggle, children }: {
+  label: string; count: number; open: boolean; onToggle: (open: boolean) => void; children: ReactNode;
+}) {
+  return <details className="sw-field-group" open={open} onToggle={event => {
+    if (event.currentTarget.open !== open) onToggle(event.currentTarget.open);
+  }}>
     <summary>{label} <span className="sw-muted">{count}</span></summary>
     {children}
   </details>;
