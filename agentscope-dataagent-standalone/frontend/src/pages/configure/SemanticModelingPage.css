@@ -468,3 +468,15 @@
 .mw-coach-bar { display: flex; align-items: center; gap: 12px; justify-content: space-between; padding: 8px 12px; border: 1px solid var(--da-border); border-radius: 10px; background: var(--da-surface); }
 .mw-trial { width: 420px; flex: none; min-height: 0; display: flex; }
 .mw-trial > * { flex: 1; min-width: 0; }
+
+.mw-layout-switch, .mw-publish-row { display: flex; align-items: center; gap: 6px; }
+.mw-layout-switch { flex-wrap: wrap; }
+.mw-layout-switch [aria-pressed="true"] { background: var(--da-primary-soft); color: var(--da-primary); }
+.mw-more { position: relative; }
+.mw-more summary { list-style: none; cursor: pointer; }
+.mw-more > div { position: absolute; z-index: 55; right: 0; top: 100%; display: grid; gap: 6px; min-width: max-content; padding: 8px; border: 1px solid var(--da-border); border-radius: 8px; background: var(--da-surface); }
+.mw-publish-row { flex-wrap: wrap; justify-content: flex-end; }
+.mw-publish-row > [aria-label="草稿栏"] { flex: 1 1 380px; min-width: 0; }
+@media (max-width: 1100px) {
+  .mw-dock-wide { position: static; width: auto; box-shadow: none; }
+}

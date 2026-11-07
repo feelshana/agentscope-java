@@ -2044,3 +2044,8 @@ button:focus-visible {
   color: var(--da-text-muted);
   font-style: italic;
 }
+
+.da-field-suggestions { display: grid; max-height: 230px; overflow-y: auto; margin: 0 4px 6px; padding: 4px; border: 1px solid var(--da-border); border-radius: 8px; background: var(--da-surface); }
+.da-field-suggestions button { display: grid; gap: 2px; text-align: left; padding: 6px 10px; border: 0; border-radius: 5px; background: transparent; color: var(--da-text); font: inherit; cursor: pointer; }
+.da-field-suggestions button:hover, .da-field-suggestions button[aria-selected="true"] { background: var(--da-primary-soft); }
+.da-field-suggestions button span { font-size: 12px; color: var(--da-text-muted); overflow-wrap: anywhere; }

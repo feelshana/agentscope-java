@@ -797,6 +797,8 @@ React 18 + TypeScript + Vite SPA（`frontend/`），构建产物进 `classpath:/
 
 MANAGE 默认打开草稿工作台，版本菜单提供线上只读查看与差异对比。普通列和日期列通过详情中的编辑入口修改，仅提交改动的属性。衍生列新增与编辑共用 `CalculatedColumnDialog`，宽屏在详情左侧居中，空间不足时在页面居中。引用区搜索字段名或显示名，点击插入 SQL 字段名或函数。字段修改沿用 `COLUMN` 草稿编辑和 Wren 校验。
 
+spec124 在建模页头提供专注对话、并排查看和专注模型。采样流程的建模入口在现有准备条件满足后默认专注对话，布局切换复用同一个建模对话实例，草稿发布入口独立于布局。模型详情支持独立折叠普通列、日期列、衍生列与关联字段。业务规则沿用既有类别与原文，非结构化规则占整行。问数输入框使用 `KnowledgeBaseBrowseService#browse` 的已发布字段投影，按显示名、字段名和同义词提供当前单库的指标、维度联想。
+
 `MdlQuestionService#decide` 在发布锁内完成确认，发布会等确认结束，确认的问答一定进入这次发布。
 
 `SqlQaExampleService` 保留独立 SQL 示例的结构化编辑和点赞索引失败回滚；草稿修改/删除在工作区锁内递增修订号。已有 `knowledge/questions/<id>.yml` 的 SQL 是确认结果投影，只读展示并提示回到问题列表修正/移除，禁止旧接口绕过版本检查与重新确认。
@@ -1001,7 +1003,7 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 | 轮次用途 | 页面随请求发送 `purpose`：`auto` 自动建模、`document` 文档更新、`question` 问题处理、`confirm` 确认答复，无用途为用户对话；`ChatController#stream` 写入 `ConversationScopeRegistry#putModelingPurpose`，`buildInbound` 放入 `ModelingTurnPurpose`，用于修改来源、外部表查询许可、规则写入约束与本轮提示词分段（`ModelingTurnRules`） | `ModelingTurnPurpose`、`ChatController#trackModeling` |
 | 业务文档 | 每库多份，存于草稿 `raw/docs/<名称>.md`，随快照发布；新增、替换（旧版本存 `.platform/docs-history/`）、删除均为草稿修改；只能由用户上传，助手只读；修改后页面自动排队一条 `document` 请求，连续修改合并为一条；问数不直接读取文档 | `BusinessDocumentService`、前端 `BusinessDocumentsPanel` |
 | 入口与增量建模 | 采样与时间配置完成后（`?start=1`）先提示上传业务文档，用户点"开始自动建模"才发送 `purpose=auto` 请求；上传数据弹窗不再附文档；已发布过的库新增表时，运行上下文列出"本次新增的表"，助手只处理新表 | `SemanticModelingPage#startModeling`、`WrenProjectContextMiddleware#newTables` |
-| 业务术语 | spec100/ADR0119：每库术语即工程 `knowledge/rules/naming.md` 的官方 `## Naming conventions`，约定写法 `- "术语"（同义词："甲"、"乙"）= 解释`。`BusinessTermService` 解析并经 `DraftItemService#appendBullet`/`#updateBullet` 写草稿（运行中拒绝、锁内复核 MANAGE），`BusinessTermController` 提供 `/api/dataset-groups/{id}/terms`；页面在语义建模“语义模型”页签的业务规则视图（spec117，与其他规则同一套条目编辑）；QUERY 只读已发布版本，MANAGE 看草稿对照并经同一草稿栏发布。问数随官方 `get_instructions` 读取，平台不注入；建模提示词要求 Naming conventions 写入同一文件且不改写已有条目。平台术语表的业务读写已退役，旧物理表及数据保留，测试术语暂不迁移（`docs/migrations/0096`）。 | `BusinessTermService` |
+| 业务术语 | spec100/ADR0119：每库术语即工程 `knowledge/rules/naming.md` 的官方 `## Naming conventions`，约定写法 `- "术语"（同义词："甲"、"乙"）= 解释`。`BusinessTermService` 解析并经 `DraftItemService#appendBullet`/`#updateBullet` 写草稿（运行中拒绝、锁内复核 MANAGE），`BusinessTermController` 提供 `/api/dataset-groups/{id}/terms`；页面在语义建模“语义模型”页签的业务规则视图（spec117，与其他规则同一套条目编辑）；QUERY 只读已发布版本，MANAGE 看草稿对照并经同一草稿栏发布。问数随官方 `get_instructions` 读取，平台不注入；建模提示词要求 Naming conventions 写入同一文件且不改写已有条目。来自采样或业务文档的单列名称、别称、含义、单位和示例均留在列元数据，只有会改变查询行为的独立术语或约束才写规则。平台术语表的业务读写已退役，旧物理表及数据保留，测试术语暂不迁移（`docs/migrations/0096`）。 | `BusinessTermService` |
 | 字段整理 | spec093：采样后、时间范围之前每张新表必须完成字段整理（`DatasetEntity.fieldScreeningConfirmed=false`，历史数据为 null 视为已确认）。`FieldScreeningService#fields` 首次打开时用一次模型调用按字段名、类型、采样值把字段判为业务、技术或不确定（模型不可用时全部为不确定并纳入）；纳入状态、判断理由与用户说明存于 `column_schema_json`（`ColumnSchema.included/role/roleReason/descriptionSource`）。事实表时间字段锁定纳入，多表同名字段提示为关联键，每表至少纳入 1 个字段。未确认时 `ChatController` 拒绝 `purpose=auto`。`MdlSeeder#reconcile` 只写入、只补回纳入字段；用户说明写为列 `description_source: user`，提示词要求原样保留。建模后在"资料"中按表调整：草稿模型即时删列、写说明，新纳入字段由 seeder 追加，记入 `DraftChangeLog`；删除前列出引用该字段的规则、关系与问题，保存后排队一条只重建该表的请求 | `FieldScreeningService`、`FieldScreeningController`、`MdlSeeder#reconcile`、前端 `FieldScreeningPanel` |
 | SQL 词法 | 单条只读 SELECT/WITH，拒绝笛卡尔积写法，允许官方 LIMIT/OFFSET；建模、问数、问题验证共用 | `OfficialWrenToolkit#requireReadOnly` |
 | 运行上下文 | 授权工程、服务时间、编译状态、工程文件清单（免逐级列目录）、按表来源的查询边界（上传表与外部表都不查询，上传表附总行数，ADR0135）、外部受限表时间策略 | `WrenProjectContextMiddleware#onSystemPrompt` |

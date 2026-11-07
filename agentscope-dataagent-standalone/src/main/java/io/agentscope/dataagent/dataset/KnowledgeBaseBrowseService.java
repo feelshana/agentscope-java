@@ -161,8 +161,16 @@ public class KnowledgeBaseBrowseService {
                         List.of("name", "type", "expression", "isCalculated", "isPrimaryKey"))
                     if (column.has(field)) projected.set(field, column.get(field));
                 described(column, projected);
-                JsonNode displayName = column.path("properties").path("displayName");
-                if (displayName.isTextual()) projected.set("displayName", displayName);
+                JsonNode properties = column.path("properties");
+                for (String field : List.of("displayName", "semanticType")) {
+                    if (properties.path(field).isTextual())
+                        projected.set(field, properties.get(field));
+                }
+                if (properties.path("synonyms").isArray()) {
+                    var synonyms = projected.putArray("synonyms");
+                    for (JsonNode synonym : properties.path("synonyms"))
+                        if (synonym.isTextual()) synonyms.add(synonym.textValue());
+                }
                 columns.add(projected);
             }
             item.set("columns", columns);

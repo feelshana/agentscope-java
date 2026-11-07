@@ -463,7 +463,7 @@ export default function SemanticWorkbench({
         onSelect={setSelection} onMove={async (rule, heading) => { await save({ category: 'SEMANTIC', path: rule.path, original: rule.text, heading }); }} />}
     </main>
 
-    {showDetail && <aside className="sw-drawer" aria-label="详情">
+    {showDetail && selection && <aside className="sw-drawer" aria-label="详情">
       <Drawer key={selectionKey} {...{ groupId, snapshot, selection, files, views, rules, problems, editable, canEdit, blocked, onAsk, changedColumn, newRule, editGuard }}
         onSelect={setSelection} onSave={save} onGo={go} onChanged={onChanged} />
     </aside>}
@@ -665,15 +665,22 @@ function RulesView({ rules, snapshot, selection, isNew, editable, onSelect, onMo
             : s.kind === 'term' ? <tr><th style={{ width: '16%' }}>业务说法</th><th style={{ width: '16%' }}>同义词</th><th>对应</th><th style={{ width: '20%' }}>涉及字段</th><th style={{ width: 90 }}>文件</th></tr>
               : s.kind === 'canonical' ? <tr><th style={{ width: '24%' }}>适用于</th><th>从哪张表或视图取数</th><th style={{ width: '20%' }}>涉及字段</th><th style={{ width: 90 }}>文件</th></tr>
                 : <tr><th>规则</th><th style={{ width: '20%' }}>涉及字段</th><th style={{ width: 90 }}>文件</th></tr>}</thead>
-          <tbody>{list.map(r => <tr key={`${r.path}:${r.text}`} className={rowClass(r)} onClick={() => onSelect({ kind: 'rule', path: r.path, text: r.text })}>
-            {s.kind === 'filter' && (r.filter ? <><td><strong>{r.filter.scope}</strong></td><td>{r.filter.condition}</td><td className="sw-muted">{r.filter.exception || '—'}</td></>
-              : <td colSpan={3}><RawRule text={r.text} /></td>)}
-            {s.kind === 'term' && (r.term ? <><td><strong>{r.term.term}</strong></td><td className="sw-muted">{r.term.synonyms.join('、') || '—'}</td><td>{r.term.meaning}</td></>
-              : <td colSpan={3}><RawRule text={r.text} /></td>)}
-            {s.kind === 'canonical' && (r.canonical ? <><td><strong>{r.canonical.scope}</strong></td><td>{r.canonical.target}</td></> : <td colSpan={2}><RawRule text={r.text} /></td>)}
-            {s.kind === 'other' && <td><RawRule text={r.text} /></td>}
+          <tbody>{list.map(r => {
+            const structured = s.kind === 'filter' ? r.filter : s.kind === 'term' ? r.term : s.kind === 'canonical' ? r.canonical : null;
+            return <tr key={`${r.path}:${r.text}`} className={rowClass(r)} tabIndex={0} onKeyDown={event => {
+            if (event.target !== event.currentTarget || !['Enter', ' '].includes(event.key)) return;
+            event.preventDefault();
+            onSelect({ kind: 'rule', path: r.path, text: r.text });
+          }} onClick={() => onSelect({ kind: 'rule', path: r.path, text: r.text })}>
+            {!structured ? <td colSpan={s.kind === 'canonical' ? 4 : s.kind === 'other' ? 3 : 5}>
+              <RawRule text={r.text} /><div className="sw-rule-meta"><Refs r={r} /><span>{source(r)}</span></div>
+            </td> : <>
+            {r.filter && s.kind === 'filter' && <><td><strong>{r.filter.scope}</strong></td><td>{r.filter.condition}</td><td className="sw-muted">{r.filter.exception || '—'}</td></>}
+            {r.term && s.kind === 'term' && <><td><strong>{r.term.term}</strong></td><td className="sw-muted">{r.term.synonyms.join('、') || '—'}</td><td>{r.term.meaning}</td></>}
+            {r.canonical && s.kind === 'canonical' && <><td><strong>{r.canonical.scope}</strong></td><td>{r.canonical.target}</td></>}
             <td><Refs r={r} /></td><td className="sw-muted sw-xs">{source(r)}</td>
-          </tr>)}</tbody>
+            </>}
+          </tr>; })}</tbody>
         </table></div>}
       </section>;
     })}
@@ -732,27 +739,7 @@ function Drawer({ groupId, snapshot, selection, files, views, rules, problems, e
   const ask = (text: string) => onAsk && <button type="button" className="da-btn da-btn-sm" onClick={() => onAsk(text)}>问助手</button>;
   const disabledTitle = blocked ?? undefined;
 
-  if (!selection) {
-    const rulesCount = rules.length;
-    return <>
-      <div className="sw-dh"><strong>语义模型</strong><span className="sw-muted sw-xs">选中图上的表、字段或连线，查看和编辑</span></div>
-      <div className="sw-db">
-        <div className="sw-stats">
-          <div><b>{snapshot.models.length}</b><span>模型</span></div><div><b>{snapshot.relations.length}</b><span>关系</span></div>
-          <div><b>{rulesCount}</b><span>业务规则</span></div>
-          <button type="button" onClick={() => onSelect({ kind: 'problems' })}><b className={problems.length ? 'sw-warn-text' : ''}>{problems.length}</b><span>需要处理</span></button>
-        </div>
-        <h4>字段类型</h4>
-        <div className="sw-kv">
-          <span className="sw-k sw-k-plain">普通</span><span>物理表里的列；<span className="sw-k sw-k-pk">主键</span>是每行的唯一标识</span>
-          <span className="sw-k sw-k-time">日期</span><span>日期或时间列，按日、月统计和时间范围都用它</span>
-          <span className="sw-k sw-k-calc">衍生</span><span>用表达式算出的列，例如净销售额</span>
-          <span className="sw-k sw-k-rel">关联</span><span>由关系带出，问数时可以直接使用对方表的字段</span>
-        </div>
-        <p className="sw-note">{editable ? '页面上的修改写回 Wren 工程文件，进入草稿，与对话中的修改一起在底部统一发布。' : '这里显示的是线上版本，只读。'}</p>
-      </div>
-    </>;
-  }
+  if (!selection) return null;
 
   if (selection.kind === 'problems') return <>
     <div className="sw-dh"><strong>需要处理</strong><span className="sw-grow" /><CloseButton onSelect={onSelect} /></div>
@@ -867,17 +854,21 @@ function ModelDrawer({ groupId, model, snapshot, files, rules, editable, canEdit
     </div>
     <div className="sw-db">
       {tab === 'fields' && <>
-        <h4><span className="sw-k sw-k-plain">普通</span>普通列 <span className="sw-muted">{plain.length}</span></h4>
-        {plain.map(c => <FieldItem key={c.name} c={c} />)}
-        <h4><span className="sw-k sw-k-time">日期</span>日期列 <span className="sw-muted">{times.length}</span><span className="sw-grow" /><span className="sw-hint">按类型推断的标"?"，确认角色后写入</span></h4>
-        {times.map(c => <FieldItem key={c.name} c={c} />)}
-        {!times.length && <p className="sw-hint">没有识别到日期列。</p>}
-        <h4><span className="sw-k sw-k-calc">衍生</span>衍生列 <span className="sw-muted">{calc.length}</span><span className="sw-grow" />
-          {editable && <button type="button" className="sw-link" aria-label="新增衍生列" disabled={!canEdit} title={blocked ?? undefined} onClick={onAddCalculated}>＋ 新增</button>}</h4>
+        <FieldGroup label="普通列" count={plain.length}>
+          {plain.map(c => <FieldItem key={c.name} c={c} />)}
+        </FieldGroup>
+        <FieldGroup label="日期列" count={times.length}>
+          {times.map(c => <FieldItem key={c.name} c={c} />)}
+          {!times.length && <p className="sw-hint">没有识别到日期列。</p>}
+        </FieldGroup>
+        {editable && <button type="button" className="sw-link sw-add-calc" aria-label="新增衍生列"
+          disabled={!canEdit} title={blocked ?? undefined} onClick={onAddCalculated}>＋ 新增衍生列</button>}
         {feedback}
-        {calc.map(c => <FieldItem key={c.name} c={c} />)}
-        {!calc.length && <p className="sw-hint">暂无。反复用到的单行计算（如"净销售额 = 实付 − 退款"）适合做成衍生字段。</p>}
-        <h4><span className="sw-k sw-k-rel">关联</span>关联字段 <span className="sw-muted">{relations.length}</span><span className="sw-grow" /><span className="sw-hint">由关系自动带出</span></h4>
+        <FieldGroup label="衍生列" count={calc.length}>
+          {calc.map(c => <FieldItem key={c.name} c={c} />)}
+          {!calc.length && <p className="sw-hint">暂无衍生列。</p>}
+        </FieldGroup>
+        <FieldGroup label="关联字段" count={relations.length}>
         {relations.map(r => {
           const target = r.left === model.name ? r.right : r.left;
           const keys = (r.left === model.name ? r.sourceColumns : r.targetColumns).join('、');
@@ -887,6 +878,7 @@ function ModelDrawer({ groupId, model, snapshot, files, rules, editable, canEdit
           </button>;
         })}
         {!relations.length && <p className="sw-hint">没有关系。{editable && '可以在左侧"关系"旁点 + 新增。'}</p>}
+        </FieldGroup>
       </>}
       {tab === 'info' && <dl className="sw-dl">
         <dt>表角色</dt><dd>{model.tableRole === 'FACT' ? '事实表：记录发生的事（订单、访问）' : model.tableRole === 'DIMENSION' ? '维度表：描述对象（客户、商品）' : model.derived ? '由 SQL 定义的模型' : '未标注'}</dd>
@@ -958,6 +950,14 @@ function fieldValues(column: SemanticColumn) {
     synonyms: (column.synonyms ?? []).join('、'),
     semanticType: column.semanticType ?? null,
   };
+}
+
+function FieldGroup({ label, count, children }: { label: string; count: number; children: ReactNode }) {
+  const [open, setOpen] = useState(true);
+  return <details className="sw-field-group" open={open} onToggle={event => setOpen(event.currentTarget.open)}>
+    <summary>{label} <span className="sw-muted">{count}</span></summary>
+    {children}
+  </details>;
 }
 
 type FieldValues = ReturnType<typeof fieldValues>;
@@ -1053,7 +1053,7 @@ function FieldDrawer({ model, column, snapshot, rules, editable, canEdit, disabl
         </div> : <div className="sw-field-value">{ROLE_LABEL[shownRole]}</div>}
         <span className="sw-hint">{ROLE_HINT[shownRole]}{!hasRole ? '（推断）' : ''}</span>
       </div>
-      {calculated && <div className="sw-fld"><span>表达式</span><pre className="sw-code">{column.expression || '—'}</pre></div>}
+      {calculated && <div className="sw-fld"><span>表达式</span><pre className="sw-code sw-expression">{column.expression || '—'}</pre></div>}
       {editing ? <>
         <label className="sw-fld"><span>说明</span>
           <textarea className="da-input" rows={4} disabled={inputDisabled} value={values.description} onChange={event => change({ description: event.target.value })} placeholder="业务含义、单位、取值说明" />

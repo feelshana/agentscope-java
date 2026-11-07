@@ -355,3 +355,22 @@
 .sw-rail-closed .sw-rail-empty { display: none; }
 .sw-rule-use { flex: none; display: inline-flex; align-items: center; gap: 3px; height: 20px; padding: 0 8px; border-radius: 999px; background: #f59e0b; color: #fff; font-size: 11px; font-weight: 600; white-space: nowrap; box-shadow: 0 1px 2px rgba(245, 158, 11, .35); }
 .sw-rule-use::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #fff; }
+
+.sw-field-group { margin: 10px 0; border-bottom: 1px solid var(--da-border); }
+.sw-field-group summary { cursor: pointer; padding: 9px 0; font-size: 13px; font-weight: 600; }
+.sw-field-group summary .sw-muted { margin-left: 5px; font-weight: 400; }
+.sw-add-calc { float: right; margin-top: 8px; position: relative; z-index: 1; }
+.sw-code.sw-expression { background: var(--da-surface-sunken, #f3f5f8); color: var(--da-text); border: 1px solid var(--da-border); font-size: 13px; overflow-x: auto; white-space: pre; word-break: normal; }
+.sw-rules, .sw-rules .sw-rt { font-size: 13px; }
+.sw-rules .sw-lead, .sw-rules .sw-rt td { line-height: 1.65; overflow-wrap: anywhere; }
+.sw-rules .sw-rsec-head { flex-wrap: wrap; }
+.sw-rule-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; color: var(--da-text-muted); font-size: 12px; }
+.sw-rule-row:focus-visible { outline: 2px solid var(--da-primary); outline-offset: -2px; }
+
+.sw-rules .sw-rt { table-layout: fixed; }
+.sw-rules .sw-rt th { overflow-wrap: anywhere; }
+.sw-ref { display: inline-block; box-sizing: border-box; max-width: 100%; white-space: normal; overflow-wrap: anywhere; vertical-align: top; }
+@media (max-width: 700px) {
+  .sw-rules .sw-rt { min-width: 540px; }
+  .sw-rules .sw-table-box { overflow-x: auto; }
+}

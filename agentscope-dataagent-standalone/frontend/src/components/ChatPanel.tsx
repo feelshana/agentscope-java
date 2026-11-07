@@ -1,3 +1,6 @@
+import { publishedSnapshot } from './modeling/semanticSnapshot';
+import { roleOf } from './modeling/workbenchLayout';
+import { getKnowledgeBaseBrowse, type KnowledgeBaseBrowse } from '../api/semanticModeling';
 import { singleKnowledgeSelection, SINGLE_KNOWLEDGE_NOTICE } from '../utils/singleKnowledgeSelection';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -1185,20 +1188,103 @@ export default function ChatPanel({
     textarea.style.overflowY = textarea.scrollHeight > 200 ? 'auto' : 'hidden';
   }, [input, isLanding, curKey]);
 
+  const suggestionGroup = !kbFrozen && !scopeRestoring ? analysisGroup : null;
+  const [suggestionModel, setSuggestionModel] = useState<KnowledgeBaseBrowse | null>(null);
+  const [suggestionCaret, setSuggestionCaret] = useState<number | null>(null);
+  const [suggestionIndex, setSuggestionIndex] = useState(0);
+  useEffect(() => {
+    let active = true;
+    setSuggestionModel(null);
+    setSuggestionCaret(null);
+    if (suggestionGroup) {
+      void getKnowledgeBaseBrowse(suggestionGroup).then(model => {
+        if (active) setSuggestionModel(model);
+      }).catch(() => {});
+    }
+    return () => { active = false; };
+  }, [suggestionGroup]);
+
+  const suggestionSnapshot = useMemo(() => suggestionModel ? publishedSnapshot(suggestionModel) : null, [suggestionModel]);
+  const prefix = suggestionCaret === null ? '' : input.slice(0, suggestionCaret);
+  const fragment = prefix.match(/[\p{L}\p{N}_]+$/u)?.[0].slice(-32) ?? '';
+  const suggestions = !busy && !restoring && fragment && suggestionModel?.id === suggestionGroup
+    && suggestionModel.publishedVersion > 0 && suggestionSnapshot
+    ? suggestionSnapshot.models.flatMap(model => model.columns.flatMap(column => {
+        const label = column.displayName || column.name;
+        const terms = [label, column.name, ...(column.synonyms ?? [])];
+        const match = Array.from({ length: fragment.length }, (_, i) => fragment.slice(i))
+          .find(suffix => terms.some(term => typeof term === 'string' && term.toLowerCase().startsWith(suffix.toLowerCase())));
+        if (!match || match === label) return [];
+        const metric = roleOf(model, column, suggestionSnapshot.relations).role === 'MEASURE';
+        return [{ model: model.name, field: column.name, label, match, kind: metric ? '指标' : '维度' }];
+      })).sort((left, right) => right.match.length - left.match.length).slice(0, 8)
+    : [];
+  const activeSuggestion = suggestions[suggestionIndex] ?? suggestions[0];
+  function insertSuggestion(item: (typeof suggestions)[number]) {
+    if (suggestionCaret === null) return;
+    const start = suggestionCaret - item.match.length;
+    setInput(input.slice(0, start) + item.label + input.slice(suggestionCaret));
+    setSuggestionCaret(null);
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(start + item.label.length, start + item.label.length);
+    });
+  }
+
   const composerContent = (
     <>
       <textarea
         ref={inputRef}
         style={{ ...S.textarea, ...(isLanding ? { minHeight: 76, fontSize: 15 } : {}) }}
         value={input}
-        onChange={e => setInput(e.target.value)}
-        onKeyDown={handleKeyDown}
-        onCompositionStart={() => { composing.current = true; }}
-        onCompositionEnd={() => { composing.current = false; }}
-        onBlur={() => { composing.current = false; }}
+        aria-autocomplete="list"
+        aria-controls={suggestions.length ? 'chat-field-suggestions' : undefined}
+        aria-activedescendant={activeSuggestion ? `chat-field-option-${suggestions.indexOf(activeSuggestion)}` : undefined}
+        onChange={e => {
+          setInput(e.target.value);
+          setSuggestionCaret(composing.current ? null : e.target.selectionStart);
+          setSuggestionIndex(0);
+        }}
+        onKeyDown={event => {
+          if (!composing.current && !event.nativeEvent.isComposing && activeSuggestion) {
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+              event.preventDefault();
+              const step = event.key === 'ArrowDown' ? 1 : -1;
+              setSuggestionIndex((suggestions.indexOf(activeSuggestion) + step + suggestions.length) % suggestions.length);
+              return;
+            }
+            if (event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault();
+              insertSuggestion(activeSuggestion);
+              return;
+            }
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              setSuggestionCaret(null);
+              return;
+            }
+          }
+          if (event.key.startsWith('Arrow') || event.key === 'Home' || event.key === 'End') setSuggestionCaret(null);
+          handleKeyDown(event);
+        }}
+        onClick={() => setSuggestionCaret(null)}
+        onCompositionStart={() => { composing.current = true; setSuggestionCaret(null); }}
+        onCompositionEnd={event => {
+          composing.current = false;
+          setSuggestionCaret(event.currentTarget.selectionStart);
+          setSuggestionIndex(0);
+        }}
+        onBlur={() => { composing.current = false; setSuggestionCaret(null); }}
         placeholder={restoring ? '加载会话…' : ordinaryChat ? '输入问题；选择知识库后可查询数据…' : METHOD_PLACEHOLDERS[analysisMethod] ?? '输入查询、分析、预测数据问题…'}
         disabled={restoring}
       />
+      {suggestions.length > 0 && <div className="da-field-suggestions" id="chat-field-suggestions" role="listbox" aria-label="指标和维度">
+        {suggestions.map((item, index) => <button key={`${item.model}:${item.field}`} type="button"
+          id={`chat-field-option-${index}`} role="option" tabIndex={-1} aria-selected={item === activeSuggestion}
+          onMouseDown={event => event.preventDefault()} onClick={() => insertSuggestion(item)}>
+          <strong>{item.label}</strong><span>{item.kind} · {item.model}</span>
+        </button>)}
+      </div>}
       {showingRecommendation && (
         <div style={{ fontSize: 12, color: 'var(--da-text-muted)', padding: '0 2px 6px' }}>
           推荐问题，可直接发送或修改

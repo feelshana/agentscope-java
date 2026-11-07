@@ -64,6 +64,9 @@ class KnowledgeBaseBrowseTest {
         var columns = new ObjectMapper().valueToTree(result.models().get(0)).path("columns");
         assertThat(columns.get(0).path("displayName").asText()).isEqualTo("统计场景");
         assertThat(columns.get(0).path("name").asText()).isEqualTo("scene_name");
+        assertThat(columns.get(0).path("semanticType").asText()).isEqualTo("DIMENSION");
+        assertThat(columns.get(0).path("synonyms").size()).isEqualTo(1);
+        assertThat(columns.get(0).path("synonyms").get(0).asText()).isEqualTo("曝光场景");
         assertThat(new ObjectMapper().writeValueAsString(result))
                 .doesNotContain("temporalColumns", "privateProperty");
     }
@@ -101,7 +104,8 @@ class KnowledgeBaseBrowseTest {
                 root.resolve("published/target/mdl.json"),
                 "{\"models\":[{\"name\":\"log\",\"properties\":{\"tableRole\":\"FACT\","
                     + "\"description\":\"访问日志\",\"temporalColumns\":[\"t\"]},"
-                    + "\"columns\":[{\"name\":\"scene_name\",\"properties\":{\"displayName\":\"统计场景\",\"privateProperty\":\"private\"}}]},"
+                    + "\"columns\":[{\"name\":\"scene_name\",\"properties\":{\"displayName\":\"统计场景\","
+                    + "\"semanticType\":\"DIMENSION\",\"synonyms\":[\"曝光场景\",{\"privateProperty\":\"private\"}],\"privateProperty\":\"private\"}}]},"
                     + "{\"name\":\"user\"}],\"relationships\":[{\"name\":\"r\","
                     + "\"models\":[\"log\",\"user\"],\"properties\":{\"description\":\"多对一\"}}]}");
         return group;

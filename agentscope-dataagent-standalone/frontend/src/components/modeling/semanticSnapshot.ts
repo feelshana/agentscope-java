@@ -87,6 +87,7 @@ export function publishedSnapshot(browse: KnowledgeBaseBrowse): SemanticSnapshot
       path: `models/${m.name}/metadata.yml`,
       columns: (m.columns ?? []).map(c => ({
         name: c.name, type: c.type ?? null, displayName: c.displayName ?? null, description: c.description ?? null, calculated: !!c.isCalculated,
+        semanticType: c.semanticType ?? null, synonyms: c.synonyms ?? [],
         expression: c.expression ?? null, primaryKey: !!c.isPrimaryKey || c.name === m.primaryKey,
       })),
     })),
