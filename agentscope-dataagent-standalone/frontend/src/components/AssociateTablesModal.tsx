@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { AssociationState } from './AssociationProgress';
 import { tourSignal } from '../state/guidedTour';
 import {
@@ -11,6 +11,7 @@ import {
   SchemaColumn,
   SchemaTable,
 } from '../api/datasources';
+import './AssociateTablesModal.css';
 
 const overlayStyle: React.CSSProperties = {
   position: 'fixed',
@@ -26,8 +27,7 @@ const shellStyle: React.CSSProperties = {
   background: 'var(--da-surface)',
   borderRadius: 12,
   width: 'min(1400px, 96vw)',
-  maxHeight: '90vh',
-  minHeight: 650,
+  height: 'min(800px, 90dvh)',
   display: 'flex',
   flexDirection: 'column',
   overflow: 'hidden',
@@ -58,29 +58,6 @@ const footStyle: React.CSSProperties = {
   background: 'var(--da-surface-sunken)',
 };
 
-const colStyle: React.CSSProperties = {
-  flex: '0 0 220px',
-  minWidth: 0,
-  overflow: 'auto',
-  padding: '0 20px 20px',
-  borderRight: '1px solid var(--da-border)',
-};
-
-const colMidStyle: React.CSSProperties = {
-  flex: '0 0 300px',
-  minWidth: 0,
-  overflow: 'auto',
-  padding: '0 20px 20px',
-  borderRight: '1px solid var(--da-border)',
-};
-
-const colLastStyle: React.CSSProperties = {
-  flex: 1,
-  minWidth: 0,
-  overflow: 'auto',
-  padding: '0 20px 20px',
-};
-
 const sectionTitleStyle: React.CSSProperties = {
   fontSize: '0.88rem',
   fontWeight: 600,
@@ -88,6 +65,7 @@ const sectionTitleStyle: React.CSSProperties = {
   padding: '16px 0 10px',
   borderBottom: '1px solid var(--da-border)',
   marginBottom: 12,
+  overflowWrap: 'anywhere',
 };
 
 const itemStyle = (active: boolean): React.CSSProperties => ({
@@ -125,62 +103,106 @@ export default function AssociateTablesModal({
   const [sourceId, setSourceId] = useState<string | null>(null);
   const [schemas, setSchemas] = useState<string[]>([]);
   const [schema, setSchema] = useState<string | null>(null);
-  const [tables, setTables] = useState<SchemaTable[]>([]);
+  const [tables, setTables] = useState<SchemaTable[] | null>(null);
+  const [tableSearch, setTableSearch] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [viewTable, setViewTable] = useState<string | null>(null);
-  const [columns, setColumns] = useState<SchemaColumn[]>([]);
+  const [columns, setColumns] = useState<SchemaColumn[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const mountedRef = useRef(true);
+  const columnRequest = useRef(0);
+  const tableSearchRef = useRef<HTMLInputElement>(null);
+  const tableListRef = useRef<HTMLDivElement>(null);
+  const sourceInputId = useId();
+  const searchTerm = tableSearch.trim().toLowerCase();
+  const matchingTables = useMemo(() => {
+    if (!tables) return [];
+    if (!searchTerm) return tables;
+    return tables.filter(table =>
+      table.name.toLowerCase().includes(searchTerm) || table.comment?.toLowerCase().includes(searchTerm),
+    );
+  }, [tables, searchTerm]);
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };
   }, []);
 
   useEffect(() => {
+    let active = true;
     listDataSources()
       .then(list => {
+        if (!active) return;
         setSources(list);
         const demo = preferBuiltin ? list.find(s => s.builtin) : undefined;
         if (demo) setSourceId(demo.id);
       })
-      .catch(e => setError(e instanceof Error ? e.message : String(e)));
-  }, []);
+      .catch(e => { if (active) setError(e instanceof Error ? e.message : String(e)); });
+    return () => { active = false; };
+  }, [preferBuiltin]);
 
   useEffect(() => {
     if (!sourceId) return;
-    setSchema(null);
-    setTables([]);
-    setSelected(new Set());
+    let active = true;
     listSchemas(sourceId)
       .then(s => {
+        if (!active) return;
         setSchemas(s);
-        if (s.length > 0) setSchema(s[0]);
+        setSchema(s[0] ?? null);
       })
-      .catch(e => setError(e instanceof Error ? e.message : String(e)));
+      .catch(e => { if (active) setError(e instanceof Error ? e.message : String(e)); });
+    return () => { active = false; };
   }, [sourceId]);
 
+  const preselectTables = preferBuiltin && sources.some(source => source.id === sourceId && source.builtin);
   useEffect(() => {
     if (!sourceId || !schema) return;
-    setTables([]);
-    setSelected(new Set());
-    setViewTable(null);
+    let active = true;
     listTables(sourceId, schema)
       .then(list => {
+        if (!active) return;
         setTables(list);
-        if (preferBuiltin && sources.find(s => s.id === sourceId)?.builtin) setSelected(new Set(list.map(t => t.name)));
+        if (preselectTables) setSelected(new Set(list.map(t => t.name)));
       })
-      .catch(e => setError(e instanceof Error ? e.message : String(e)));
-  }, [sourceId, schema]);
+      .catch(e => {
+        if (!active) return;
+        setTables([]);
+        setError(e instanceof Error ? e.message : String(e));
+      });
+    return () => { active = false; };
+  }, [sourceId, schema, preselectTables]);
+
+  function changeSchema(nextSchema: string | null) {
+    columnRequest.current++;
+    setSchema(nextSchema);
+    setTables(null);
+    setTableSearch('');
+    setSelected(new Set());
+    setViewTable(null);
+    setColumns(null);
+    setError(null);
+  }
+
+  function changeTableSearch(value: string) {
+    setTableSearch(value);
+    if (tableListRef.current) tableListRef.current.scrollTop = 0;
+  }
 
   async function viewColumns(t: string) {
     if (!sourceId || !schema) return;
+    const request = ++columnRequest.current;
     setViewTable(t);
+    setColumns(null);
+    setError(null);
     try {
-      setColumns(await listColumns(sourceId, schema, t));
+      const result = await listColumns(sourceId, schema, t);
+      if (mountedRef.current && request === columnRequest.current) setColumns(result);
     } catch (e) {
+      if (!mountedRef.current || request !== columnRequest.current) return;
+      setColumns([]);
       setError(e instanceof Error ? e.message : String(e));
     }
   }
@@ -270,6 +292,7 @@ export default function AssociateTablesModal({
         <div style={bodyStyle}>
           <div style={{ padding: '16px 20px 0' }}>
             <label
+              htmlFor={sourceInputId}
               style={{
                 display: 'block',
                 fontSize: '0.8rem',
@@ -281,10 +304,15 @@ export default function AssociateTablesModal({
               选择数据源
             </label>
             <select
+              id={sourceInputId}
               className="da-input"
               value={sourceId ?? ''}
-              onChange={e => setSourceId(e.target.value || null)}
-              style={{ minWidth: 280, padding: '10px 12px', fontSize: '0.85rem' }}
+              onChange={e => {
+                changeSchema(null);
+                setSchemas([]);
+                setSourceId(e.target.value || null);
+              }}
+              style={{ padding: '10px 12px', fontSize: '0.85rem' }}
             >
               <option value="">请选择数据源…</option>
               {sources.map(s => (
@@ -294,8 +322,8 @@ export default function AssociateTablesModal({
               ))}
             </select>
           </div>
-          <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-            <div style={colStyle}>
+          <div className="associate-tables-layout">
+            <div className="associate-tables-pane associate-tables-schemas">
               <div style={sectionTitleStyle}>数据库</div>
               {schemas.length === 0 ? (
                 <div
@@ -309,11 +337,14 @@ export default function AssociateTablesModal({
                   暂无数据库
                 </div>
               ) : (
-                schemas.map(s => (
-                  <div
+                <div className="associate-tables-schema-list">{schemas.map(s => (
+                  <button
                     key={s}
+                    type="button"
+                    className="associate-tables-schema"
+                    aria-pressed={schema === s}
                     style={itemStyle(schema === s)}
-                    onClick={() => setSchema(s)}
+                    onClick={() => { if (schema !== s) changeSchema(s); }}
                     onMouseEnter={e => {
                       if (schema !== s) {
                         e.currentTarget.style.background = 'var(--da-surface-sunken)';
@@ -326,11 +357,11 @@ export default function AssociateTablesModal({
                     }}
                   >
                     {s}
-                  </div>
-                ))
+                  </button>
+                ))}</div>
               )}
             </div>
-            <div style={colMidStyle}>
+            <div className="associate-tables-pane associate-tables-table-pane">
               <div style={sectionTitleStyle}>
                 数据表
                 {schema && (
@@ -340,50 +371,62 @@ export default function AssociateTablesModal({
                   </span>
                 )}
               </div>
-              {tables.length === 0 ? (
-                <div
-                  style={{
-                    color: 'var(--da-text-muted)',
-                    fontSize: '0.85rem',
-                    padding: '32px 0',
-                    textAlign: 'center',
-                  }}
-                >
-                  暂无数据表
-                </div>
-              ) : (
-                tables.map(t => (
-                  <div
-                    key={t.name}
-                    style={{
-                      ...itemStyle(selected.has(t.name)),
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 10,
-                      cursor: 'default',
+              <div className="associate-tables-search">
+                <input
+                  ref={tableSearchRef}
+                  type="text"
+                  className="da-input"
+                  aria-label="搜索当前数据库的表名或备注"
+                  placeholder="搜索表名或备注"
+                  value={tableSearch}
+                  disabled={!schema}
+                  onChange={e => changeTableSearch(e.target.value)}
+                />
+                {tableSearch && (
+                  <button
+                    type="button"
+                    className="da-btn da-btn-sm"
+                    aria-label="清除表搜索"
+                    onClick={() => {
+                      changeTableSearch('');
+                      tableSearchRef.current?.focus();
                     }}
                   >
-                    <input
-                      type="checkbox"
-                      checked={selected.has(t.name)}
-                      onChange={() => toggle(t.name)}
-                      style={{ width: 16, height: 16, cursor: 'pointer' }}
-                    />
-                    <span style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: selected.has(t.name) ? 500 : 400 }}>{t.name}</div>
+                    清除
+                  </button>
+                )}
+              </div>
+              {tables && (
+                <div className="associate-tables-count" role="status">
+                  {searchTerm ? `找到 ${matchingTables.length} 张 · 共 ${tables.length} 张` : `共 ${tables.length} 张表`}
+                </div>
+              )}
+              <div className="associate-tables-list" ref={tableListRef}>
+                {matchingTables.length === 0 ? (
+                  <div className="associate-tables-empty">
+                    {!schema ? '请选择数据库' : !tables ? '正在加载数据表…' : searchTerm ? '没有匹配的数据表' : '暂无数据表'}
+                  </div>
+                ) : matchingTables.map(t => (
+                  <div
+                    key={t.name}
+                    className="associate-tables-row"
+                    style={{ ...itemStyle(selected.has(t.name)), cursor: 'default' }}
+                  >
+                    <label className="associate-tables-choice">
+                      <input
+                        type="checkbox"
+                        aria-label={`选择表 ${t.name}`}
+                        checked={selected.has(t.name)}
+                        onChange={() => toggle(t.name)}
+                      />
+                      <span className="associate-tables-name">{t.name}</span>
                       {t.comment && (
-                        <div
-                          style={{
-                            fontSize: '0.75rem',
-                            color: 'var(--da-text-muted)',
-                            marginTop: 3,
-                          }}
-                        >
-                          {t.comment}
-                        </div>
+                        <span className="associate-tables-comment">{t.comment}</span>
                       )}
-                    </span>
+                    </label>
                     <button
+                      type="button"
+                      aria-label={`查看 ${t.name} 的字段`}
                       style={{
                         background: 'transparent',
                         border: 'none',
@@ -406,10 +449,10 @@ export default function AssociateTablesModal({
                       查看
                     </button>
                   </div>
-                ))
-              )}
+                ))}
+              </div>
             </div>
-            <div style={colLastStyle}>
+            <div className="associate-tables-pane">
               <div style={sectionTitleStyle}>
                 字段信息
                 {viewTable && (
@@ -419,7 +462,7 @@ export default function AssociateTablesModal({
                   </span>
                 )}
               </div>
-              {viewTable ? (
+              {viewTable && columns?.length ? (
                 <div
                   style={{
                     borderRadius: 8,
@@ -428,6 +471,7 @@ export default function AssociateTablesModal({
                   }}
                 >
                   <table
+                    className="associate-tables-fields"
                     style={{
                       width: '100%',
                       borderCollapse: 'collapse',
@@ -511,7 +555,7 @@ export default function AssociateTablesModal({
                                 background: 'var(--da-surface-sunken)',
                                 color: 'var(--da-text-2)',
                                 border: '1px solid var(--da-border)',
-                                whiteSpace: 'nowrap',
+                                display: 'inline-block',
                               }}
                             >
                               {c.type}
@@ -540,7 +584,7 @@ export default function AssociateTablesModal({
                     textAlign: 'center',
                   }}
                 >
-                  点击"查看"查看字段信息
+                  {!viewTable ? '点击「查看」查看字段信息' : !columns ? '正在加载字段…' : '暂无字段信息'}
                 </div>
               )}
             </div>

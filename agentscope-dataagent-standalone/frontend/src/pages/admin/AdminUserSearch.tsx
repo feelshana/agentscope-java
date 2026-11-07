@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AdminDirectoryUser, searchAdminUsers } from '../../api/adminHistory';
+import Icon from '../../components/Icon';
 
 export function adminUserLabel(user: AdminDirectoryUser) {
   return [user.displayName ? `${user.displayName}（${user.username}）` : user.username, user.department]
@@ -35,20 +36,23 @@ export default function AdminUserSearch({ onSelect, excludedIds = [], selectSing
     finally { setLoading(false); }
   }
 
-  return <>
+  return <div className="admin-directory-search">
     <form className="admin-history-form" onSubmit={event => { event.preventDefault(); void search(); }}>
-      <label>姓名或登录账号 <input className="da-input" value={term} maxLength={191}
+      <label>姓名或登录账号 <input className="da-input" type="search" value={term} maxLength={191}
+        placeholder="输入姓名或账号"
         onChange={event => { setTerm(event.target.value); setItems(null); setError(''); }} disabled={loading} /></label>
-      <button className="da-btn" disabled={loading || !term.trim()}>{loading ? '搜索中…' : '搜索'}</button>
+      <button className="da-btn" type="submit" disabled={loading || !term.trim()}>
+        <Icon name="search" size="sm" /> {loading ? '搜索中…' : '搜索'}
+      </button>
     </form>
-    {error && <p role="alert">{error}</p>}
-    {candidates?.length === 0 && <p>没有找到符合条件的用户。可以用完整账号再搜一次。</p>}
-    {selectSingleMatch && (candidates?.length ?? 0) > 1 && <p>找到多个用户，请选择要查看的账号。</p>}
-    {!!candidates?.length && <ul className="admin-history-list">{candidates.map(user => (
+    {error && <p className="admin-search-feedback admin-error" role="alert">{error}</p>}
+    {candidates?.length === 0 && <p className="admin-search-feedback">没有找到符合条件的用户。可以用完整账号再搜一次。</p>}
+    {selectSingleMatch && (candidates?.length ?? 0) > 1 && <p className="admin-search-feedback">找到多个用户，请选择要查看的账号。</p>}
+    {!!candidates?.length && <ul className="admin-search-results">{candidates.map(user => (
       <li key={user.userId}><button className="da-btn" type="button" onClick={() => {
         setItems(null);
         onSelect(user);
       }}>{adminUserLabel(user)}</button></li>
     ))}</ul>}
-  </>;
+  </div>;
 }
