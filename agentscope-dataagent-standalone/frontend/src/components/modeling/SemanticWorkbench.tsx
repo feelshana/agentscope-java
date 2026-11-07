@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { MutableRefObject, PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import { editDraftFile, editDraftItem, getDocumentContent, getDraftItems, listDocuments } from '../../api/draftReview';
 import type { DraftItem, DraftItemEdit } from '../../api/draftReview';
-import CalculatedColumnDialog from './CalculatedColumnDialog';
+import Icon from '../Icon';
 import YamlContent from './YamlContent';
 import { joinLabel, modelTag, relationsOf, unrelatedModels } from './semanticSnapshot';
 import type { SemanticColumn, SemanticModel, SemanticRelation, SemanticSnapshot } from './semanticSnapshot';
@@ -13,6 +13,8 @@ import {
 } from './ruleText';
 import type { RuleItem, RuleSection } from './ruleText';
 import './SemanticWorkbench.css';
+
+const CalculatedColumnDialog = lazy(() => import('./CalculatedColumnDialog'));
 
 export type WorkbenchView = 'graph' | 'rules';
 type FieldEditGuard = MutableRefObject<(() => boolean) | null>;
@@ -787,9 +789,9 @@ function Drawer({ groupId, snapshot, selection, files, views, rules, problems, e
         onEditCalculated={openCalc} onClearFeedback={clearFeedback} onSave={saveField} feedback={calcOpen ? null : feedback} />
         : <ModelDrawer {...{ groupId, model, snapshot, files, rules, editable, canEdit, blocked, onSelect, onChanged, onAsk, changedColumn, newRule }}
           onAddCalculated={openCalc} feedback={calcOpen ? null : feedback} />}
-      {calcOpen && editable && <CalculatedColumnDialog model={model} column={column} relations={snapshot.relations}
+      {calcOpen && editable && <Suspense fallback={null}><CalculatedColumnDialog model={model} column={column} relations={snapshot.relations}
         busy={busy} blocked={blocked} feedback={feedback} onClose={() => { setError(''); setCalcOpen(false); }}
-        onSave={edit => void saveField(edit, column ? '衍生列已保存到草稿。' : '衍生列已加入草稿。', () => setCalcOpen(false))} />}
+        onSave={edit => void saveField(edit, column ? '衍生列已保存到草稿。' : '衍生列已加入草稿。', () => setCalcOpen(false))} /></Suspense>}
     </>;
   }
 
@@ -818,6 +820,27 @@ function Gone({ onSelect }: { onSelect: (s: Selection) => void }) {
   return <div className="sw-db"><div className="sw-empty">这个对象已经不在当前版本中。</div><button type="button" className="sw-link" onClick={() => onSelect(null)}>返回</button></div>;
 }
 
+type FieldGroup = 'plain' | 'time' | 'calculated' | 'related';
+
+function FieldSection({ kind, badge, label, count, collapsed, onToggle, action, children }: {
+  kind: FieldGroup; badge: string; label: string; count: number; collapsed: boolean;
+  onToggle: () => void; action?: ReactNode; children: ReactNode;
+}) {
+  const id = useId();
+  const tone = { plain: 'plain', time: 'time', calculated: 'calc', related: 'rel' }[kind];
+  return <section className="sw-field-section">
+    <div className="sw-field-section-head">
+      <h4><button type="button" className="sw-field-toggle" aria-expanded={!collapsed} aria-controls={id} onClick={onToggle}>
+        <span className={`sw-k sw-k-${tone}`} aria-hidden="true">{badge}</span>
+        {label} <span className="sw-muted">{count}</span>
+        <span className="sw-grow" /><Icon name="chevron" size="sm" />
+      </button></h4>
+      {action}
+    </div>
+    <div id={id} hidden={collapsed}>{!collapsed && children}</div>
+  </section>;
+}
+
 function ModelDrawer({ groupId, model, snapshot, files, rules, editable, canEdit, blocked, onSelect, onChanged, onAsk, changedColumn, newRule, onAddCalculated, feedback }: {
   groupId: string; model: SemanticModel; snapshot: SemanticSnapshot; files: Map<string, string>; rules: RuleItem[];
   editable: boolean; canEdit: boolean; blocked: string | null; onSelect: (s: Selection) => void; onChanged: () => void; onAsk?: (text: string) => void;
@@ -829,6 +852,22 @@ function ModelDrawer({ groupId, model, snapshot, files, rules, editable, canEdit
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
+  const fieldGroupKey = `sw-field-groups:v1:${JSON.stringify([groupId, model.name])}`;
+  const [collapsed, setCollapsed] = useState<FieldGroup[]>(() => {
+    try {
+      const stored: unknown = JSON.parse(sessionStorage.getItem(fieldGroupKey) ?? '[]');
+      return Array.isArray(stored) ? stored : [];
+    } catch { return []; }
+  });
+  const setFieldGroup = (kind: FieldGroup, close: boolean) => {
+    const next = collapsed.filter(group => group !== kind);
+    if (close) next.push(kind);
+    setCollapsed(next);
+    try { sessionStorage.setItem(fieldGroupKey, JSON.stringify(next)); } catch { /* Optional browser preference. */ }
+  };
+  const fieldGroup = (kind: FieldGroup) => ({
+    kind, collapsed: collapsed.includes(kind), onToggle: () => setFieldGroup(kind, !collapsed.includes(kind)),
+  });
   const text = model.path ? files.get(model.path) : undefined;
   const plainAll = model.columns.filter(c => !c.calculated);
   const times = plainAll.filter(c => roleOf(model, c, snapshot.relations).role === 'TIME');
@@ -846,9 +885,9 @@ function ModelDrawer({ groupId, model, snapshot, files, rules, editable, canEdit
   const ruleUse = new Map<string, RuleItem[]>();
   for (const r of rules) for (const ref of ruleRefs(r.text, snapshot.models))
     if (ref.startsWith(`${model.name}.`)) ruleUse.set(ref.slice(model.name.length + 1), [...(ruleUse.get(ref.slice(model.name.length + 1)) ?? []), r]);
-  const FieldItem = ({ c }: { c: SemanticColumn }) => {
+  const fieldItem = (c: SemanticColumn) => {
     const used = ruleUse.get(c.name) ?? [];
-    return <button type="button" className="sw-li" onClick={() => onSelect({ kind: 'field', model: model.name, column: c.name })}>
+    return <button key={c.name} type="button" className="sw-li" onClick={() => onSelect({ kind: 'field', model: model.name, column: c.name })}>
       <span className={`sw-k ${c.calculated ? 'sw-k-calc' : c.primaryKey ? 'sw-k-pk' : 'sw-k-plain'}`}>{c.calculated ? '衍生' : c.primaryKey ? '主键' : roleOf(model, c, snapshot.relations).role === 'TIME' ? '日期' : '普通'}</span>
       <span className="sw-li-main"><span><b>{columnLabel(c)}</b> {c.displayName && <span className="sw-mono sw-muted">{c.name}</span>}</span>
         <span className="sw-li-desc">{c.calculated ? `= ${c.expression ?? ''}` : c.description || '还没有说明'}</span></span>
@@ -867,26 +906,32 @@ function ModelDrawer({ groupId, model, snapshot, files, rules, editable, canEdit
     </div>
     <div className="sw-db">
       {tab === 'fields' && <>
-        <h4><span className="sw-k sw-k-plain">普通</span>普通列 <span className="sw-muted">{plain.length}</span></h4>
-        {plain.map(c => <FieldItem key={c.name} c={c} />)}
-        <h4><span className="sw-k sw-k-time">日期</span>日期列 <span className="sw-muted">{times.length}</span><span className="sw-grow" /><span className="sw-hint">按类型推断的标"?"，确认角色后写入</span></h4>
-        {times.map(c => <FieldItem key={c.name} c={c} />)}
-        {!times.length && <p className="sw-hint">没有识别到日期列。</p>}
-        <h4><span className="sw-k sw-k-calc">衍生</span>衍生列 <span className="sw-muted">{calc.length}</span><span className="sw-grow" />
-          {editable && <button type="button" className="sw-link" aria-label="新增衍生列" disabled={!canEdit} title={blocked ?? undefined} onClick={onAddCalculated}>＋ 新增</button>}</h4>
+        <FieldSection {...fieldGroup('plain')} badge="普通" label="普通列" count={plain.length}>
+          {plain.map(fieldItem)}
+        </FieldSection>
+        <FieldSection {...fieldGroup('time')} badge="日期" label="日期列" count={times.length}>
+          <p className="sw-hint">{times.length ? '按类型推断的标“?”，确认角色后写入。' : '没有识别到日期列。'}</p>
+          {times.map(fieldItem)}
+        </FieldSection>
+        <FieldSection {...fieldGroup('calculated')} badge="衍生" label="衍生列" count={calc.length}
+          action={editable && <button type="button" className="sw-link" aria-label="新增衍生列" disabled={!canEdit}
+            title={blocked ?? undefined} onClick={() => { setFieldGroup('calculated', false); onAddCalculated(); }}>＋ 新增</button>}>
+          {calc.map(fieldItem)}
+          {!calc.length && <p className="sw-hint">暂无。反复用到的单行计算（如"净销售额 = 实付 − 退款"）适合做成衍生字段。</p>}
+        </FieldSection>
         {feedback}
-        {calc.map(c => <FieldItem key={c.name} c={c} />)}
-        {!calc.length && <p className="sw-hint">暂无。反复用到的单行计算（如"净销售额 = 实付 − 退款"）适合做成衍生字段。</p>}
-        <h4><span className="sw-k sw-k-rel">关联</span>关联字段 <span className="sw-muted">{relations.length}</span><span className="sw-grow" /><span className="sw-hint">由关系自动带出</span></h4>
-        {relations.map(r => {
-          const target = r.left === model.name ? r.right : r.left;
-          const keys = (r.left === model.name ? r.sourceColumns : r.targetColumns).join('、');
-          return <button key={r.name} type="button" className="sw-li" onClick={() => onSelect({ kind: 'relation', name: r.name })}>
-            <span className="sw-k sw-k-rel">关联</span><span className="sw-li-main"><span><b>{target}</b></span><span className="sw-li-desc">按 {keys || r.condition} 关联，问数时可直接使用 {target} 的字段</span></span>
-            <span className="sw-role">{joinLabel(r.left === model.name ? r.joinType : reverse(r.joinType))}</span>
-          </button>;
-        })}
-        {!relations.length && <p className="sw-hint">没有关系。{editable && '可以在左侧"关系"旁点 + 新增。'}</p>}
+        <FieldSection {...fieldGroup('related')} badge="关联" label="关联字段" count={relations.length}>
+          {relations.length > 0 && <p className="sw-hint">由关系自动带出。</p>}
+          {relations.map(r => {
+            const target = r.left === model.name ? r.right : r.left;
+            const keys = (r.left === model.name ? r.sourceColumns : r.targetColumns).join('、');
+            return <button key={r.name} type="button" className="sw-li" onClick={() => onSelect({ kind: 'relation', name: r.name })}>
+              <span className="sw-k sw-k-rel">关联</span><span className="sw-li-main"><span><b>{target}</b></span><span className="sw-li-desc">按 {keys || r.condition} 关联，问数时可直接使用 {target} 的字段</span></span>
+              <span className="sw-role">{joinLabel(r.left === model.name ? r.joinType : reverse(r.joinType))}</span>
+            </button>;
+          })}
+          {!relations.length && <p className="sw-hint">没有关系。{editable && '可以在左侧"关系"旁点 + 新增。'}</p>}
+        </FieldSection>
       </>}
       {tab === 'info' && <dl className="sw-dl">
         <dt>表角色</dt><dd>{model.tableRole === 'FACT' ? '事实表：记录发生的事（订单、访问）' : model.tableRole === 'DIMENSION' ? '维度表：描述对象（客户、商品）' : model.derived ? '由 SQL 定义的模型' : '未标注'}</dd>

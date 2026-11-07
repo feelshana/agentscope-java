@@ -1,8 +1,10 @@
-import { useId, useLayoutEffect, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import type { EditorView } from '@codemirror/view';
 import type { DraftItemEdit } from '../../api/draftReview';
 import Icon from '../Icon';
-import SqlEditor from '../SqlEditor';
+import CalculatedExpressionEditor, { insertExpressionReference } from './CalculatedExpressionEditor';
+import type { ExpressionReference } from './CalculatedExpressionEditor';
 import { splitList } from './ruleText';
 import type { SemanticColumn, SemanticModel, SemanticRelation } from './semanticSnapshot';
 import { ROLE_HINT, ROLE_LABEL, roleOf } from './workbenchLayout';
@@ -20,6 +22,9 @@ const FUNCTIONS = [
   { name: 'TRIM', signature: 'TRIM(text)', description: '去除两端空格', tail: ')' },
   { name: 'LENGTH', signature: 'LENGTH(text)', description: '返回字符串长度', tail: ')' },
 ];
+const FUNCTION_REFERENCES: ExpressionReference[] = FUNCTIONS.map(f => ({
+  key: f.name, label: f.signature, detail: f.description, prefix: `${f.name}(`, tail: f.tail,
+}));
 
 export default function CalculatedColumnDialog({
   model, column, relations, busy, blocked, feedback, onClose, onSave,
@@ -35,7 +40,7 @@ export default function CalculatedColumnDialog({
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const nameInput = useRef<HTMLInputElement>(null);
-  const sqlInput = useRef<HTMLTextAreaElement>(null);
+  const sqlEditor = useRef<EditorView | null>(null);
   const titleId = useId();
   const [name, setName] = useState(column?.name ?? '');
   const [displayName, setDisplayName] = useState(column?.displayName ?? '');
@@ -43,7 +48,8 @@ export default function CalculatedColumnDialog({
     ? column.semanticType as Role : '');
   const initialType = column?.type || 'DECIMAL';
   const [resultType, setResultType] = useState(initialType);
-  const [expression, setExpression] = useState(column?.expression ?? '');
+  const [initialExpression] = useState(column?.expression ?? '');
+  const [expression, setExpression] = useState(initialExpression);
   const [description, setDescription] = useState(column?.description ?? '');
   const [synonyms, setSynonyms] = useState((column?.synonyms ?? []).join('、'));
   const [library, setLibrary] = useState<'fields' | 'functions'>('fields');
@@ -56,15 +62,13 @@ export default function CalculatedColumnDialog({
   const fields = library === 'fields';
   const searchLabel = fields ? '搜索字段名或显示名' : '搜索函数名或用途';
   const keyword = query.trim().toLowerCase();
-  const matches = (...values: (string | null | undefined)[]) => values.some(value => value?.toLowerCase().includes(keyword));
-  const references = fields
-    ? model.columns.filter(c => c.name !== column?.name && matches(c.name, c.displayName)).map(c => ({
-      key: c.name, label: c.displayName || c.name, detail: c.displayName !== c.name ? c.displayName && c.name : null,
-      kind: c.calculated ? '衍生' : c.type, prefix: `"${c.name.replace(/"/g, '""')}"`, tail: undefined,
-    }))
-    : FUNCTIONS.filter(f => matches(f.signature, f.description)).map(f => ({
-      key: f.name, label: f.signature, detail: f.description, kind: null, prefix: `${f.name}(`, tail: f.tail,
-    }));
+  const fieldReferences = useMemo<ExpressionReference[]>(() => model.columns.filter(c => c.name !== column?.name).map(c => ({
+    key: c.name, label: c.displayName || c.name, detail: c.displayName && c.displayName !== c.name ? c.name : null,
+    kind: c.calculated ? '衍生' : c.type, prefix: `"${c.name.replace(/"/g, '""')}"`,
+  })), [model.columns, column?.name]);
+  const completions = useMemo(() => [...fieldReferences, ...FUNCTION_REFERENCES], [fieldReferences]);
+  const references = (fields ? fieldReferences : FUNCTION_REFERENCES).filter(reference =>
+    [reference.label, reference.detail].some(value => value?.toLowerCase().includes(keyword)));
 
   useLayoutEffect(() => {
     const node = dialog.current;
@@ -88,28 +92,17 @@ export default function CalculatedColumnDialog({
       observer.observe(drawer);
     }
     node.showModal();
-    const input = creating ? nameInput.current : sqlInput.current;
-    input?.focus();
-    input?.setSelectionRange(input.value.length, input.value.length);
+    if (creating) nameInput.current?.focus();
+    else if (sqlEditor.current) {
+      const view = sqlEditor.current;
+      view.dispatch({ selection: { anchor: view.state.doc.length } });
+      view.focus();
+    }
     return () => {
       observer?.disconnect();
       node.close();
     };
   }, [creating]);
-
-  function insertReference(prefix: string, tail?: string) {
-    const input = sqlInput.current;
-    if (!input || disabled) return;
-    const { selectionStart: start, selectionEnd: end, value } = input;
-    const replacement = tail === undefined ? prefix : prefix + value.slice(start, end) + tail;
-    input.setRangeText(replacement, start, end, 'end');
-    if (tail !== undefined && start === end) {
-      const caret = start + prefix.length;
-      input.setSelectionRange(caret, caret);
-    }
-    setExpression(input.value);
-    input.focus({ preventScroll: true });
-  }
 
   function close() {
     if (busy) return;
@@ -167,9 +160,9 @@ export default function CalculatedColumnDialog({
           </div>
           <div className="sw-fld">
             <span>SQL 表达式</span>
-            <SqlEditor value={expression} onChange={setExpression} rows={6} disabled={disabled}
-              ariaLabel="SQL 表达式" inputRef={sqlInput} indentWithTab={false} />
-            <span className="sw-hint">可直接输入，也可从引用区插入本模型的字段或函数。</span>
+            <CalculatedExpressionEditor initialValue={initialExpression} onChange={setExpression} disabled={disabled}
+              references={completions} editorRef={sqlEditor} />
+            <span className="sw-hint">输入字段名或显示名即可补全，也可从右侧插入。Ctrl + Z 可撤销。</span>
           </div>
           <label className="sw-fld"><span>业务说明</span>
             <textarea className="da-input" rows={2} value={description} disabled={disabled} placeholder="业务含义、单位、取值说明（可不填）"
@@ -200,7 +193,7 @@ export default function CalculatedColumnDialog({
             {references.map(reference => <li key={reference.key}>
               <button type="button" className="calc-column-reference" disabled={disabled}
                 aria-label={`将 ${reference.label}${fields && reference.detail ? `（${reference.detail}）` : ''} 插入 SQL`}
-                onClick={() => insertReference(reference.prefix, reference.tail)}>
+                onClick={() => { if (sqlEditor.current) insertExpressionReference(sqlEditor.current, reference); }}>
                 <span className="calc-column-reference-text">
                   <strong className={fields ? undefined : 'sw-mono'}>{reference.label}</strong>
                   {reference.detail && <small className={fields ? 'sw-mono' : undefined}>{reference.detail}</small>}
