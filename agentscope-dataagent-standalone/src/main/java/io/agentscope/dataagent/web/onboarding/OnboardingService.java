@@ -37,8 +37,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * spec104: the new-user checklist. Data and publish steps are derived from the knowledge bases the
- * user may query (own or shared); ask and analyze are milestones recorded by the chat endpoint.
+ * spec104: the four-step new-user checklist. Data and publish are derived from the user's own
+ * knowledge bases; ask and analyze are milestones recorded by the chat endpoint.
  * The checklist is full on its first day, collapsed from the next calendar day (Asia/Shanghai) and
  * hidden after {@link #DAYS} days or when dismissed. Once every step is done it stays full, as a
  * completion card, until the end of that day and is hidden from the next.
@@ -252,19 +252,12 @@ public class OnboardingService {
         List<DatasetGroupEntity> published =
                 groups.stream().filter(g -> g.getMdlVersion() > 0).toList();
         Set<String> milestones = split(user.getOnboardingMilestones());
-        Task ask = new Task(ASK, milestones.contains(ASK));
-        Task analyze = new Task(ANALYZE, milestones.contains(ANALYZE));
-        // Someone who can already query but owns nothing only has the asking steps left.
         List<Task> tasks =
-                own.isEmpty() && !published.isEmpty()
-                        ? List.of(ask, analyze)
-                        : List.of(
-                                new Task(DATA, data),
-                                new Task(
-                                        PUBLISH,
-                                        counted.stream().anyMatch(g -> g.getMdlVersion() > 0)),
-                                ask,
-                                analyze);
+                List.of(
+                        new Task(DATA, data),
+                        new Task(PUBLISH, counted.stream().anyMatch(g -> g.getMdlVersion() > 0)),
+                        new Task(ASK, milestones.contains(ASK)),
+                        new Task(ANALYZE, milestones.contains(ANALYZE)));
         int completed = (int) tasks.stream().filter(Task::done).count();
 
         // The first time every step is seen done is the completion day; the finished checklist

@@ -259,7 +259,7 @@ class DataAgentConfigTest {
     @Test
     void defaultSysPromptPointsAtWrenOnlyWorkflow() {
         assertThat(DataAgentConfig.DEFAULT_AGENT_SYS_PROMPT)
-                .contains("官方 Wren usage", "官方工具 schema", "run_python", "render_chart")
+                .contains("官方 Wren usage", "官方工具 schema")
                 .doesNotContain(
                         "sql-analysis", "wren_run_sql", "wren_describe_model", "query_type");
     }
@@ -348,13 +348,19 @@ class DataAgentConfigTest {
                 .doesNotContain("[DATA_SOURCES_OVERVIEW]", "query_type");
     }
 
-    /** spec096: tables, then render_chart by default, then run_python only for computation. */
     @Test
-    void visualizationIsTieredAndPythonReadsDataFiles() throws Exception {
+    void queryVisualizationPrefersPythonWithEchartsFallback() throws Exception {
+        assertThat(DataAgentConfig.QUERY_EFFICIENCY_RULES)
+                .contains(
+                        "有查询返回的数据文件时优先用 run_python",
+                        "明确要求交互图或 ECharts 时用 render_chart",
+                        "绘图失败或未返回图片",
+                        "不要仅为换一种绘图工具重查 SQL",
+                        "同一问题最多调用 2 次 run_python",
+                        "原样引用 run_python 返回的「图片引用」");
         assertThat(DataAgentConfig.DEFAULT_AGENT_SYS_PROMPT)
-                .contains("可视化分三层", "默认用 render_chart", "同一问题最多 2 次", "读取查询返回的数据文件")
                 .contains("不要 import")
-                .doesNotContain("根据用户需要使用 run_python 或 render_chart");
+                .doesNotContain("默认用 render_chart");
         String python =
                 io.agentscope.dataagent.tools.data.RunPythonTool.class
                         .getMethod(
@@ -365,7 +371,7 @@ class DataAgentConfigTest {
                         .getAnnotation(io.agentscope.core.tool.Tool.class)
                         .description();
         assertThat(python)
-                .contains("render_chart", "最多调用 2 次", "超过 20 行的数据字面量会被拒绝")
+                .contains("优先使用本工具", "render_chart", "最多调用 2 次", "超过 20 行的数据字面量会被拒绝")
                 .doesNotContain("应主动可视化", "_insights.md");
     }
 

@@ -48,7 +48,8 @@ public final class DataAgentToolkit {
             name = "render_chart",
             description =
                     """
-                    渲染图表（默认的出图方式）：传入查询结果的列和数据，服务端生成可交互的 ECharts 图表。\
+                    传入查询结果的列和数据，生成可交互的 ECharts 图表。主问数中，用户要求交互图或 ECharts，\
+                    或 Python 绘图不可用且已有查询结果足够直接绘图时使用。\
                     不传 chart_type 时按数据形态自动推断：有日期列画折线，排行画横向条形图，少量占比画饼图。\
                     需要时可显式指定 chart_type（line/bar/hbar/pie/scatter/stacked_bar/dual_axis/heatmap）\
                     以及 x（维度列）、y（指标列）、y2（双轴图右轴指标）、series（堆叠分组列或热力图第二维度）、\

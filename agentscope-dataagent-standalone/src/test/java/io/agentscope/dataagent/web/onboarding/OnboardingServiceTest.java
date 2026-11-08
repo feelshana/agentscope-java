@@ -97,19 +97,41 @@ class OnboardingServiceTest {
 
     /** spec105: a public or shared knowledge base offers its question but ticks nothing. */
     @Test
-    void someoneElsesPublishedKnowledgeBaseLeavesOnlyTheAskingSteps() {
+    void someoneElsesPublishedKnowledgeBaseKeepsFourIncompleteSteps() {
         var shared = group("g2", "carol", 3, "最近一个月每天的访问次数");
         when(access.visible("bob", null)).thenReturn(List.of(shared));
         var counted = List.of(count("g2", 2));
         when(datasets.countForGroups(List.of("g2"))).thenReturn(counted);
         var status = at(DAY_ONE).status("bob");
         assertThat(status.tasks())
-                .extracting(OnboardingService.Task::id)
-                .containsExactly(OnboardingService.ASK, OnboardingService.ANALYZE);
+                .containsExactly(
+                        new OnboardingService.Task(OnboardingService.DATA, false),
+                        new OnboardingService.Task(OnboardingService.PUBLISH, false),
+                        new OnboardingService.Task(OnboardingService.ASK, false),
+                        new OnboardingService.Task(OnboardingService.ANALYZE, false));
         assertThat(status.completed()).isZero();
+        assertThat(status.stage()).isEqualTo(Stage.full);
         assertThat(status.queryable()).isTrue();
         assertThat(status.starters())
                 .containsExactly(new OnboardingService.Starter("g2", "库g2", "最近一个月每天的访问次数", true));
+    }
+
+    @Test
+    void resetWithOnlyASharedKnowledgeBaseShowsAllFourStepsAgain() {
+        var shared = group("g2", "carol", 3, "最近一个月每天的访问次数");
+        when(access.visible("bob", null)).thenReturn(List.of(shared));
+        var service = at(DAY_ONE);
+        service.record("bob", OnboardingService.ASK);
+        service.record("bob", OnboardingService.ANALYZE);
+        service.dismiss("bob");
+        assertThat(service.status("bob").completed()).isEqualTo(2);
+
+        var reset = service.reset("bob");
+        assertThat(done(reset)).containsExactly(false, false, false, false);
+        assertThat(reset.stage()).isEqualTo(Stage.full);
+        assertThat(reset.completed()).isZero();
+        assertThat(reset.queryable()).isTrue();
+        assertThat(done(service.status("bob"))).containsExactly(false, false, false, false);
     }
 
     /** Owning a knowledge base keeps all four steps, judged on the user's own ones. */

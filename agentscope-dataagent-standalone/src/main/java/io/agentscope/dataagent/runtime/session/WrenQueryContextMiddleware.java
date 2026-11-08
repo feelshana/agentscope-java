@@ -203,7 +203,7 @@ public final class WrenQueryContextMiddleware implements HarnessRuntimeMiddlewar
                                     简单排名问题直接查询所需排名；结果已回答问题时，不额外统计全库总数、名称去重数或反复改写同一聚合。
                                     复杂比较先确定共同的时间窗口、用户粒度和少量核心指标，已有结果足够时收敛回答。连接明细与分层视图时，两侧都应使用一致时间范围；不要把分层视图的时间范围误当成明细表也已过滤。
                                     占比应在过滤分子之前确定完整分母，不把过滤后分组自身作为分母；保留实际数据覆盖和空值，不将局部Top榜推断为全库结论。
-                                    简单图表使用 render_chart，只有确需程序分析时才使用 run_python。分组、计数、求和、占比等统计在 SQL 中完成，不在回答中手工汇总多行结果。沙箱不可用时不要重复尝试同类操作；需要的统计改用一条聚合 SQL 取得，仍无法取得时说明限制，不手工计算。
+                                    分组、计数、求和、占比等基础统计在 SQL 中完成，不在回答中手工汇总多行结果。沙箱不可用时不要重复尝试同类操作；已有数据足够时直接用来展示，确需补充的基础统计才用聚合 SQL 取得，仍无法取得时说明限制，不手工计算。
                                     Top N 或单条结果优先使用官方 query_cube 的 order_by 与 limit；没有合适 Cube 时使用 run_sql 的标准 SQL（可按官方语法使用 LIMIT/OFFSET）。不要把 View（例如 valid_orders）传给 describe_model；View 用 get_mdl/describe_schema，Cube 用 describe_cube。
                                     """);
                             text.append("\n# 采样使用约束\n")
