@@ -46,6 +46,8 @@ sync的默认until是东八区当天00:00，范围不含该日。用户/大屏�
 
 若SSH断开或隔夜发现失败，先用status确认running=false，再用sync续作；不用重新configure/init/migrate，也不用手改控制表。`last_run=FAILED`与`last_verify=null`表示同步/核对尚未全部完成；SOURCE_HISTORY_UNAVAILABLE是已识别的源历史缺失，不等于连接错误。网络错误2013仅能判断连接中断，不能仅凭错误码认定是客户端超时或源服务重启。
 
+首次回填完成后若全量核对以4031退出，且status显示running=false但last_run仍为RUNNING，先核对各表已提交进度和last_verify。新版verify用持锁目标连接提交最终状态和核对记录。同步容器从66源码目录加载脚本，更新源码即可使用修复。若日期表已到昨天，直接重跑全量verify；若水位落后，先用默认起点增量sync到昨天，再用同一个截止日全量verify。安装调度时仍须满足下文的最新完整日要求。
+
 长时间首次回填可在更新源码后放到服务器后台，固定sync/verify使用同一个排他截止日，避免本地电脑休眠关闭SSH影响启动链：
 
 ```bash

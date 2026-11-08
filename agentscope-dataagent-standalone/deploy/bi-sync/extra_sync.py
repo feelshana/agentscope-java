@@ -603,7 +603,7 @@ def run(config, action, until, start=None, tables=None, connect_fn=connect, afte
     if until > datetime.now(TZ).date() or until <= START or (start and (start < START or start >= until)):
         raise ValueError("日期范围须从2026-01-01起且仅包含已结束日")
     phase, locked, active = "TARGET_CONNECT", False, False
-    target = monitor = None
+    target = monitor = status_writer = None
     run_info = None
     try:
         target = connect_fn(config["target"], "target")
@@ -662,11 +662,15 @@ def run(config, action, until, start=None, tables=None, connect_fn=connect, afte
         if action == "sync" and state(target, "paused", True):
             print("扩展任务暂停中，本轮跳过；未连接源", flush=True)
             return
-        monitor = connect_fn(config["target"], "monitor")
+        if action == "sync":
+            monitor = connect_fn(config["target"], "monitor")
+        # Verification already uses the locked target connection for each day's reads.
+        # A separate status connection would sit idle for the entire verification.
+        status_writer = monitor if monitor is not None else target
         run_info = dict(id=uuid.uuid4().hex, action=action, tables=names,
                         started_at=datetime.now(TZ).isoformat(), outcome="RUNNING")
-        save(monitor, "last_run", run_info)
-        monitor.commit()
+        save(status_writer, "last_run", run_info)
+        status_writer.commit()
         active = True
 
         def checkpoint():
@@ -700,18 +704,18 @@ def run(config, action, until, start=None, tables=None, connect_fn=connect, afte
         result = status(target)
         run_info.update(outcome="SUCCESS_WITH_GAPS" if result["has_gaps"] else "SUCCESS",
                         finished_at=datetime.now(TZ).isoformat())
-        save(monitor, "last_run", run_info)
+        save(status_writer, "last_run", run_info)
         if action == "verify":
-            save(monitor, "last_verify", dict(until=str(until), from_=str(start or START), tables=names,
-                                           at=run_info["finished_at"], has_gaps=result["has_gaps"]))
-        monitor.commit()
+            save(status_writer, "last_verify", dict(until=str(until), from_=str(start or START), tables=names,
+                                                 at=run_info["finished_at"], has_gaps=result["has_gaps"]))
+        status_writer.commit()
         print("扩展任务核对完成；" + ("存在明确缺失范围，请查看status" if result["has_gaps"]
                                       else "所选范围已完成"), flush=True)
     except BaseException as exc:
         if target is not None:
             with suppress(Exception):
                 target.rollback()
-        if active and monitor is not None:
+        if active:
             try:
                 run_info.update(outcome="PAUSED" if isinstance(exc, Paused) else "FAILED",
                                 failure_phase=phase, finished_at=datetime.now(TZ).isoformat())
@@ -719,8 +723,8 @@ def run(config, action, until, start=None, tables=None, connect_fn=connect, afte
                     run_info.update(failure_step=exc.step, failure_day=getattr(exc, "day", None))
                 if exc.args and type(exc.args[0]) is int:
                     run_info["error_code"] = exc.args[0]
-                save(monitor, "last_run", run_info)
-                monitor.commit()
+                save(status_writer, "last_run", run_info)
+                status_writer.commit()
             except Exception:
                 print("状态写入失败，需核对已有提交进度", file=sys.stderr)
         if isinstance(exc, Paused):

@@ -26,6 +26,31 @@ DAY = date(2026, 1, 1)
 
 
 class ExtraUnitTest(unittest.TestCase):
+    def test_verify_persists_result_when_unused_status_connection_would_expire(self):
+        import MySQLdb
+        target, monitor, source = MagicMock(), MagicMock(), MagicMock()
+        connections = {"target": target, "monitor": monitor, "iam": source}
+        config = dict(target={}, sources={"iam": {}})
+        until = DAY + timedelta(days=1)
+
+        def finish_long_verification(*args):
+            monitor.cursor.side_effect = MySQLdb.OperationalError(4031, "idle timeout")
+
+        with (redirect_stdout(io.StringIO()), patch.object(ext, "require_owner"),
+              patch.object(ext, "inspect_schema"), patch.object(ext, "inspect_source"),
+              patch.object(ext, "scalar", side_effect=["8.0.41", 1, 1]),
+              patch.object(ext, "status", return_value={"has_gaps": False}),
+              patch.object(ext, "verify_job", side_effect=finish_long_verification)):
+            ext.run(config, "verify", until, tables=["bi_iam_user"],
+                    connect_fn=lambda endpoint, role: connections[role])
+
+        writes = target.cursor.return_value.__enter__.return_value.execute.call_args_list
+        records = {key: json.loads(value) for _, (key, value) in (call.args for call in writes)}
+        self.assertEqual("SUCCESS", records["last_run"]["outcome"])
+        self.assertEqual(str(until), records["last_verify"]["until"])
+        self.assertEqual(["bi_iam_user"], records["last_verify"]["tables"])
+        self.assertEqual(2, target.commit.call_count)
+
     def test_connection_allows_long_queries_and_stream_backpressure(self):
         import MySQLdb
         con = MagicMock()

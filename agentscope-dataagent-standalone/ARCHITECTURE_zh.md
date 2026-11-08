@@ -882,6 +882,8 @@ ADR0142/spec123新增独立六表离线镜像：deploy/bi-sync/extra_schema.py�
 
 extra_sync#sync_job仅对已标记的源连接中断做有限重连，重抽当前业务日/快照后重新校验发布；不重连持锁目标或控制连接。源和目标网络等待适配大日分组及流式回压，错误清理不覆盖原始错误，状态保留安全的失败阶段/日期/错误码，禁止记录驱动敏感原文。
 
+extra_sync#run 复核沿用逐日读取的持锁目标连接记录运行状态，成功状态与核对记录同事务提交，避免独立状态连接全程空闲后无法写入。同步仍用独立连接读取暂停标记。
+
 spec115新增`docker/deploy-formal.sh`编排既有正式发布：整轮发布锁与拉取后源码锁、目标提交入口交接、`build-from-source.sh`本次结果文件及镜像ID/revision校验、容器Python/宿主Compose适配，再调用`formal-app.py upgrade`；同版本且健康时跳过构建/重启。网络直连仅在更新子进程内生效，构建沿用原代理；默认正式18080及持久配置不变。日志记录阶段与脱敏版本，不自动初始化、迁移或安装cron，不替代页面问答验收；操作及验证状态见[日常发布](docs/guides/66-daily-release.md)。
 
 ADR0127/spec110补充轻量同步观测与退役：AdminBiSyncController只允许全局管理员读取GET /api/admin/bi-sync，BiSyncStatusService#view在boundedElastic上复用数据集连接，只读固定控制键和运行锁，输出截止日/最近作业/固定失败摘要，不访问源库、密码文件或Shell。任务持久化last_run及暂停标记，独立观察连接在安全点检查暂停并回滚未提交部分；pause/status/resume不依赖BI源连接。cron安装器remove仅移除自己的精确任务，不能等同于正在运行的任务已停止；知识库权限/删除与同步生命周期分开，数据和进度保留，恢复无需重新初始化。没有新增应用配置项。
