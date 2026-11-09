@@ -162,7 +162,7 @@ export async function listSheets(file: File): Promise<string[]> {
 // ---------------------------------------------------------------- groups (KB)
 
 export interface GroupPage { items: DatasetGroup[]; total: number; page: number; size: number }
-export interface GroupListOptions { page?: number; size?: number; search?: string; sort?: string; manageOnly?: boolean }
+export interface GroupListOptions { page?: number; size?: number; search?: string; sort?: string; manageOnly?: boolean; activeOnly?: boolean }
 
 export async function listGroupCards(ids: string[], signal?: AbortSignal): Promise<DatasetGroup[]> {
   if (!ids.length) return [];
@@ -180,6 +180,7 @@ export async function listGroupPage(options: GroupListOptions = {}, signal?: Abo
   try {
     const params = new URLSearchParams({ page: String(options.page ?? 0), size: String(options.size ?? 20),
       search: options.search ?? '', sort: options.sort ?? 'date', manageOnly: String(options.manageOnly ?? false) });
+    if (options.activeOnly) params.set('activeOnly', 'true');
     const res = await apiFetch(`/api/dataset-groups/page?${params}`, {
       headers: authHeaders(),
       signal: controller.signal,
@@ -198,11 +199,15 @@ export async function listGroupPage(options: GroupListOptions = {}, signal?: Abo
   }
 }
 
-/** Compatibility for the business-term selector; the card page and chat picker load one page. */
-export async function listGroups(signal?: AbortSignal, manageOnly = false): Promise<DatasetGroup[]> {
+/** Enumerate accessible metadata in bounded batches when the caller needs the complete result. */
+export async function listGroups(
+  signal?: AbortSignal,
+  manageOnly = false,
+  options: Pick<GroupListOptions, 'search' | 'sort'> = {},
+): Promise<DatasetGroup[]> {
   const all: DatasetGroup[] = [];
   for (let page = 0; ; page++) {
-    const result = await listGroupPage({ page, size: 100, manageOnly }, signal);
+    const result = await listGroupPage({ ...options, page, size: 100, manageOnly }, signal);
     all.push(...result.items);
     if (!result.items.length || (page + 1) * result.size >= result.total) return all;
   }

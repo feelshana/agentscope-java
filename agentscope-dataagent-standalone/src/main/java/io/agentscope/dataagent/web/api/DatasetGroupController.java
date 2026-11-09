@@ -169,13 +169,18 @@ public class DatasetGroupController {
             @org.springframework.web.bind.annotation.RequestParam(defaultValue = "date")
                     String sort,
             @org.springframework.web.bind.annotation.RequestParam(defaultValue = "false")
-                    boolean manageOnly) {
+                    boolean manageOnly,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "false")
+                    boolean activeOnly) {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
                         () -> {
                             var result =
-                                    groupService.pageGroups(
-                                            userId, page, size, search, sort, manageOnly);
+                                    activeOnly
+                                            ? groupService.pageActiveGroups(
+                                                    userId, page, size, search, sort, manageOnly)
+                                            : groupService.pageGroups(
+                                                    userId, page, size, search, sort, manageOnly);
                             return new GroupPage(
                                     listVO(userId, result.getContent()),
                                     result.getTotalElements(),

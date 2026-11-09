@@ -480,3 +480,20 @@
 @media (max-width: 1100px) {
   .mw-dock-wide { position: static; width: auto; box-shadow: none; }
 }
+.mw-graph-loading {
+  flex: 1;
+  min-height: 240px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  border: 1px solid var(--da-border);
+  border-radius: 16px;
+  background: var(--da-surface-sunken);
+  color: var(--da-text-muted, #666e84);
+  font-size: 13px;
+}
+.mw-graph-loading > div { display: flex; align-items: center; width: min(360px, 75%); }
+.mw-graph-loading i { flex: 1; height: 48px; border: 1px solid var(--da-border); border-radius: 10px; background: var(--da-surface); }
+.mw-graph-loading b { width: 16%; height: 1px; background: var(--da-border); }

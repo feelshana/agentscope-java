@@ -141,7 +141,6 @@ const S: Record<string, React.CSSProperties> = {
   composerBar: {
     display: 'flex',
     alignItems: 'center',
-    gap: 8,
     flexWrap: 'wrap',
   },
   picker: {
@@ -1181,7 +1180,7 @@ export default function ChatPanel({
   useEffect(() => {
     const textarea = inputRef.current;
     if (!textarea) return;
-    const minimum = isLanding ? 76 : 48;
+    const minimum = isLanding ? 84 : 48;
     textarea.style.height = '0px';
     const height = Math.min(200, Math.max(minimum, textarea.scrollHeight));
     textarea.style.height = `${height}px`;
@@ -1235,7 +1234,7 @@ export default function ChatPanel({
     <>
       <textarea
         ref={inputRef}
-        style={{ ...S.textarea, ...(isLanding ? { minHeight: 76, fontSize: 15 } : {}) }}
+        style={{ ...S.textarea, ...(isLanding ? { minHeight: 84, fontSize: 15 } : {}) }}
         value={input}
         aria-autocomplete="list"
         aria-controls={suggestions.length ? 'chat-field-suggestions' : undefined}
@@ -1290,7 +1289,7 @@ export default function ChatPanel({
           推荐问题，可直接发送或修改
         </div>
       )}
-      <div style={S.composerBar}>
+      <div className="da-chat-composer-bar" style={S.composerBar}>
         <div ref={groupPickerRef} style={{ position: 'relative' }}>
           <button
             type="button"
@@ -1369,12 +1368,11 @@ export default function ChatPanel({
         )}
         {scopeNotice && <button className="da-btn da-btn-sm" onClick={() => setGroupPickerOpen(true)}>重新选择知识库</button>}
         {effectiveAgentId === 'data-agent' && !ordinaryChat && (
-          <span style={{ marginLeft: 8 }}>
+          <span className="da-chat-composer-analysis">
             <AnalysisMenu value={analysisMethod} onChange={setAnalysisMethod} disabledReason={analysisDisabledReason}
               disabled={busy || restoring} />
           </span>
         )}
-        <span style={{ flex: 1 }} />
         <button
           className="da-composer-submit"
           data-state={busy ? 'stop' : 'send'}
@@ -1392,10 +1390,13 @@ export default function ChatPanel({
 
   if (isLanding) {
     return (
-      <div style={S.root}>
-        <div className="da-landing-wrap">
+      <div style={{ ...S.root, background: 'transparent' }}>
+        <div className={`da-landing-wrap${onboarding?.stage === 'full' ? ' has-guide' : ''}`}>
           <div className="da-landing-greeting">
-            <span className="da-landing-eyebrow"><span className="da-landing-eyebrow-dot" aria-hidden="true" />红海 DataAgent · 你的大数据智囊团</span>
+            <div className="da-landing-brand">
+              <Brand />
+              <span className="da-landing-brand-caption">你的大数据智囊团</span>
+            </div>
             <h1 className="da-landing-title">{landingGreeting(greetingProfile?.token === token ? greetingProfile.displayName : undefined)}</h1>
             <p>选择知识库，用自然语言查询数据、分析变化或生成报告</p>
           </div>

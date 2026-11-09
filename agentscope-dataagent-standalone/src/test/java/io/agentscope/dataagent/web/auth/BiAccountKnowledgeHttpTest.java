@@ -4,12 +4,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.agentscope.dataagent.dataset.DraftReviewService;
 import io.agentscope.dataagent.dataset.KnowledgeBaseAccessService;
 import io.agentscope.dataagent.dataset.KnowledgeBaseMembershipService;
 import io.agentscope.dataagent.dataset.KnowledgeBaseOperations;
+import io.agentscope.dataagent.dataset.ModelingConfirmationService;
+import io.agentscope.dataagent.dataset.ModelingHubService;
 import io.agentscope.dataagent.dataset.PublicKnowledgeBaseService;
 import io.agentscope.dataagent.dataset.UserDirectoryImportService;
 import io.agentscope.dataagent.web.api.KnowledgeBaseMembershipController;
+import io.agentscope.dataagent.web.api.KnowledgeBaseSummaryController;
 import io.agentscope.dataagent.web.api.PublicKnowledgeBaseController;
 import io.agentscope.dataagent.web.api.UserDirectoryImportController;
 import io.agentscope.dataagent.web.api.UserProfileController;
@@ -67,6 +71,8 @@ class BiAccountKnowledgeHttpTest {
         UserDirectoryImportService.class,
         io.agentscope.dataagent.dataset.KnowledgeBaseBrowseService.class,
         io.agentscope.dataagent.web.api.KnowledgeBaseBrowseController.class,
+        KnowledgeBaseSummaryController.class,
+        ModelingHubService.class,
         UserProfileController.class,
         KnowledgeBaseMembershipController.class,
         PublicKnowledgeBaseController.class,
@@ -96,6 +102,16 @@ class BiAccountKnowledgeHttpTest {
         @Bean
         KnowledgeBaseOperations operations() {
             return mock(KnowledgeBaseOperations.class);
+        }
+
+        @Bean
+        DraftReviewService draftReview() {
+            return mock(DraftReviewService.class);
+        }
+
+        @Bean
+        ModelingConfirmationService modelingConfirmations() {
+            return mock(ModelingConfirmationService.class);
         }
     }
 
@@ -243,6 +259,8 @@ class BiAccountKnowledgeHttpTest {
                 files.resolve("published/target/mdl.json"),
                 "{\"models\":[{\"name\":\"sales\"}],\"relationships\":[]}");
         String path = "/api/knowledge-bases/" + group.getId() + "/browse";
+        String summary =
+                "/api/knowledge-bases/summaries/modeling?ids=" + group.getId() + "%2Cmissing";
         assertThat(request("GET", path, null, token).statusCode()).isEqualTo(404);
         membership.grant(owner.userId(), group.getId(), reader, "QUERY");
         var response = request("GET", path, null, token);
@@ -250,6 +268,13 @@ class BiAccountKnowledgeHttpTest {
         var data = json.readTree(response.body());
         assertThat(data.path("models").isArray()).isTrue();
         assertThat(data.path("models").get(0).path("name").asText()).isEqualTo("sales");
+        var batchResponse = request("GET", summary, null, token);
+        assertThat(batchResponse.statusCode()).isEqualTo(200);
+        var batch = json.readTree(batchResponse.body());
+        assertThat(batch.size()).isEqualTo(1);
+        assertThat(batch.get(0).path("groupId").asText()).isEqualTo(group.getId());
+        assertThat(batch.get(0).path("published").path("models").asInt()).isEqualTo(1);
+        assertThat(batch.get(0).hasNonNull("draft")).isFalse();
         assertThat(
                         request(
                                         "PUT",
@@ -263,6 +288,7 @@ class BiAccountKnowledgeHttpTest {
                 .isEqualTo(403);
         membership.revoke(owner.userId(), group.getId(), reader);
         assertThat(request("GET", path, null, token).statusCode()).isEqualTo(404);
+        assertThat(json.readTree(request("GET", summary, null, token).body()).isEmpty()).isTrue();
     }
 
     @Test

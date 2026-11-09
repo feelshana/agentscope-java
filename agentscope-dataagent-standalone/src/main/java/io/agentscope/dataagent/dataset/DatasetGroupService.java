@@ -146,6 +146,11 @@ public class DatasetGroupService {
         return access.page(userId, page, size, search, sort, manageOnly);
     }
 
+    public org.springframework.data.domain.Page<DatasetGroupEntity> pageActiveGroups(
+            String userId, int page, int size, String search, String sort, boolean manageOnly) {
+        return access.page(userId, page, size, search, sort, manageOnly, true);
+    }
+
     public Map<String, KnowledgeBaseAccessService.Role> roles(
             String userId, List<DatasetGroupEntity> groups) {
         return access.roles(userId, groups);

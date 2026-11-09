@@ -82,6 +82,17 @@ public class KnowledgeBaseAccessService {
 
     public Page<DatasetGroupEntity> page(
             String userId, int page, int size, String search, String sort, boolean manageOnly) {
+        return page(userId, page, size, search, sort, manageOnly, false);
+    }
+
+    public Page<DatasetGroupEntity> page(
+            String userId,
+            int page,
+            int size,
+            String search,
+            String sort,
+            boolean manageOnly,
+            boolean activeOnly) {
         requireUser(userId);
         if (page < 0 || size < 1 || size > 100)
             throw new DatasetException("分页参数无效，size 为 1-100", 400);
@@ -91,13 +102,18 @@ public class KnowledgeBaseAccessService {
                 "name".equals(sort)
                         ? Sort.by("name").ascending().and(Sort.by("id"))
                         : Sort.by("createdAt").descending().and(Sort.by("id"));
+        var paging = PageRequest.of(page, size, ordering);
+        if (activeOnly)
+            return groups.findAccessible(
+                    userId,
+                    isAdmin(userId),
+                    manageOnly,
+                    term.toLowerCase(Locale.ROOT),
+                    false,
+                    true,
+                    paging);
         return groups.findAccessible(
-                userId,
-                isAdmin(userId),
-                manageOnly,
-                term.toLowerCase(Locale.ROOT),
-                false,
-                PageRequest.of(page, size, ordering));
+                userId, isAdmin(userId), manageOnly, term.toLowerCase(Locale.ROOT), false, paging);
     }
 
     /** Published candidates in creation order, including shared and public query grants. */

@@ -15,8 +15,9 @@
 .rail-nav-item:hover { background: #eef0f4; }
 .rail-nav-item.is-active { color: var(--da-primary); background: var(--da-primary-soft); font-weight: 600; }
 .rail-nav-item.is-active::before { content: ''; position: absolute; left: -1px; top: 10px; bottom: 10px; width: 3px; border-radius: 2px; background: var(--da-primary); }
-.rail-nav-item.rail-new-chat { justify-content: flex-end; flex-direction: row-reverse; margin-bottom: 10px; min-height: 38px; border-radius: 7px; background: #fff; border-color: var(--da-border-strong); color: var(--da-text); font-weight: 500; box-shadow: none; }
+.rail-nav-item.rail-new-chat { justify-content: flex-end; flex-direction: row-reverse; margin-bottom: 10px; min-height: 38px; border-radius: 12px; background: #fff; border-color: var(--da-border-strong); color: var(--da-text); font-weight: 700; box-shadow: none; }
 .rail-nav-item.rail-new-chat:hover { background: #fff; border-color: var(--da-primary-line); color: var(--da-primary); }
+.rail-nav-item.rail-new-chat[aria-current="page"] { background: var(--da-primary-soft); border-color: var(--da-primary-line); color: var(--da-primary-hover); }
 .rail-icon-nav { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0; }
 .rail-icon-nav .rail-icon-button:hover,
 .rail-icon-nav .rail-icon-button:focus-visible {

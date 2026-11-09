@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 import './global.css';
+import './workspace-overview.css';
 
 import LoginPage from './pages/LoginPage';
 import BiEntryPage from './pages/BiEntryPage';

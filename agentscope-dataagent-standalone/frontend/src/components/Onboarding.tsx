@@ -169,8 +169,8 @@ export function StarterQuestions({ starters, onPick }: {
     </div>
     <div className="da-ob-grid">
       {starters.map(s => <button key={s.groupId} type="button" className="da-ob-starter" onClick={() => onPick(s)}>
-        <span className="da-ob-starter-kb"><Icon name="book" size="sm" /><b>{s.groupName}</b>{s.shared && <em>同事共享</em>}</span>
         <span className="da-ob-starter-q">{s.question}</span>
+        <span className="da-ob-starter-kb"><Icon name="book" size="sm" /><b>{s.groupName}</b>{s.shared && <em>同事共享</em>}</span>
         <span className="da-ob-starter-go">填入问题<Icon name="chevron" size="sm" /></span>
       </button>)}
       {fillers.map(f => <button key={f.title} type="button" className="da-ob-starter is-filler" onClick={() => navigate(f.path)}>

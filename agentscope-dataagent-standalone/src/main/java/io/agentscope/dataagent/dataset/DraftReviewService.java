@@ -60,6 +60,25 @@ public class DraftReviewService {
             int changesByOthers,
             boolean assistantRunning) {}
 
+    public record Summary(int changes, boolean assistantRunning) {}
+
+    public Summary summary(String userId, String groupId) {
+        groups.getGroup(userId, groupId);
+        return workspace.withWorkspaceLock(
+                groupId,
+                () -> {
+                    groups.getGroup(userId, groupId);
+                    var preview = publisher.preview(groupId);
+                    var before = fileContents(preview.publishedFiles());
+                    var after = fileContents(preview.files());
+                    int changed = 0;
+                    for (var file : after.entrySet())
+                        if (!Objects.equals(before.get(file.getKey()), file.getValue())) changed++;
+                    for (String path : before.keySet()) if (!after.containsKey(path)) changed++;
+                    return new Summary(changed, activity.running(groupId));
+                });
+    }
+
     public Review review(String userId, String groupId) {
         groups.getGroup(userId, groupId);
         return workspace.withWorkspaceLock(
@@ -194,10 +213,8 @@ public class DraftReviewService {
 
     private List<Change> changes(String groupId) {
         var preview = publisher.preview(groupId);
-        Map<String, String> before = new LinkedHashMap<>();
-        preview.publishedFiles().forEach(f -> before.put(f.path(), f.content()));
-        Map<String, String> after = new LinkedHashMap<>();
-        preview.files().forEach(f -> after.put(f.path(), f.content()));
+        var before = fileContents(preview.publishedFiles());
+        var after = fileContents(preview.files());
         Set<String> paths = new LinkedHashSet<>(after.keySet());
         paths.addAll(before.keySet());
         Map<String, List<DraftChangeLog.Entry>> log = new LinkedHashMap<>();
@@ -231,6 +248,12 @@ public class DraftReviewService {
                             revertible(path)));
         }
         return out;
+    }
+
+    private static Map<String, String> fileContents(List<MdlPublishService.MdlFile> files) {
+        Map<String, String> result = new LinkedHashMap<>();
+        files.forEach(file -> result.put(file.path(), file.content()));
+        return result;
     }
 
     /** A user-directed write later rewritten by an automatic or document turn. */

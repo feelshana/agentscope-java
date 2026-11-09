@@ -76,6 +76,7 @@ public interface DatasetGroupRepository extends JpaRepository<DatasetGroupEntity
                and (:manageOnly = false or m.role = 'MANAGE')))
               and (:search = '' or lower(g.name) like concat('%', :search, '%')
                    or lower(g.description) like concat('%', :search, '%'))
+              and (:activeOnly = false or g.mdlState is null or g.mdlState <> 'DELETING')
               and (:publishedOnly = false or (
                    g.mdlVersion > 0 and (g.mdlState is null or g.mdlState <> 'DELETING')
                    and coalesce(g.modelingRevision, 0) <= coalesce(g.publishedModelingRevision, 0)
@@ -87,7 +88,18 @@ public interface DatasetGroupRepository extends JpaRepository<DatasetGroupEntity
             boolean manageOnly,
             String search,
             boolean publishedOnly,
+            boolean activeOnly,
             org.springframework.data.domain.Pageable pageable);
+
+    default org.springframework.data.domain.Page<DatasetGroupEntity> findAccessible(
+            String userId,
+            boolean admin,
+            boolean manageOnly,
+            String search,
+            boolean publishedOnly,
+            org.springframework.data.domain.Pageable pageable) {
+        return findAccessible(userId, admin, manageOnly, search, publishedOnly, false, pageable);
+    }
 
     @org.springframework.data.jpa.repository.Lock(
             jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)

@@ -2,6 +2,7 @@ package io.agentscope.dataagent.dataset;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetRepository;
 import java.nio.file.Files;
 import java.util.List;
@@ -56,27 +57,31 @@ public class KnowledgeBaseBrowseService {
     public List<Summary> summaries(String actor) throws java.io.IOException {
         var result = new java.util.ArrayList<Summary>();
         for (var group : access.visible(actor, null)) {
-            var file = wren.groupRoot(group.getId()).resolve("published/target/mdl.json");
-            if (group.getMdlVersion() <= 0 || !Files.isRegularFile(file)) continue;
-            JsonNode mdl = json.readTree(Files.readString(file));
-            var related = new java.util.HashSet<String>();
-            for (JsonNode relation : mdl.path("relationships"))
-                for (JsonNode model : relation.path("models")) related.add(model.asText());
-            int unrelated = 0;
-            for (JsonNode model : mdl.path("models"))
-                if (!related.contains(model.path("name").asText())) unrelated++;
-            result.add(
-                    new Summary(
-                            group.getId(),
-                            mdl.path("models").size(),
-                            mdl.path("relationships").size(),
-                            unrelated));
+            Summary summary = publishedSummary(group);
+            if (summary != null) result.add(summary);
         }
         var allowed =
                 access.visible(actor, null).stream()
                         .map(io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity::getId)
                         .collect(java.util.stream.Collectors.toSet());
         return result.stream().filter(s -> allowed.contains(s.groupId())).toList();
+    }
+
+    Summary publishedSummary(DatasetGroupEntity group) throws java.io.IOException {
+        var file = wren.groupRoot(group.getId()).resolve("published/target/mdl.json");
+        if (group.getMdlVersion() <= 0 || !Files.isRegularFile(file)) return null;
+        JsonNode mdl = json.readTree(Files.readString(file));
+        var related = new java.util.HashSet<String>();
+        for (JsonNode relation : mdl.path("relationships"))
+            for (JsonNode model : relation.path("models")) related.add(model.asText());
+        int unrelated = 0;
+        for (JsonNode model : mdl.path("models"))
+            if (!related.contains(model.path("name").asText())) unrelated++;
+        return new Summary(
+                group.getId(),
+                mdl.path("models").size(),
+                mdl.path("relationships").size(),
+                unrelated);
     }
 
     public Browse browse(String actor, String groupId) throws java.io.IOException {

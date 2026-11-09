@@ -17,20 +17,20 @@ const message = (e: unknown) => e instanceof Error ? e.message : String(e);
 /** What the page needs to guide the next step (spec092 §7). */
 export type DraftSummary = { changes: number; examples: number; publishing: boolean; publishedVersion: number | null; error: string | null };
 
-export default function DraftBar({ groupId, workflow, assistantActive, pendingConfirmations, onLocate, onPublished, publishSignal = 0, onSummary, terms, editingBlocked = false }: {
+export default function DraftBar({ groupId, workflow, assistantActive, pendingConfirmations, onLocate, publishSignal = 0, onSummary, terms, editingBlocked = false, checksPending = false }: {
   groupId: string;
   workflow: ModelingWorkflow | null;
   assistantActive: boolean;
   pendingConfirmations: number;
   /** Scrolls to "需要你确定的部分". */
   onLocate: () => void;
-  onPublished: () => void;
   /** Incremented by the page's "下一步" card to publish through this bar's checks. */
   publishSignal?: number;
   onSummary?: (summary: DraftSummary) => void;
   /** A quieter presentation for the terms page; all publish checks remain shared. */
   terms?: { pending: number; editing: boolean };
   editingBlocked?: boolean;
+  checksPending?: boolean;
 }) {
   const [items, setItems] = useState<DraftItem[]>([]);
   const [review, setReview] = useState<DraftReview | null>(null);
@@ -75,7 +75,7 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
   // A change can be recorded without a file difference (e.g. confirmed while a publish ran);
   // querying then waits for a publish, so the bar must still offer one.
   const republish = changes.length === 0 && !!workflow && workflow.publishedVersion > 0 && !workflow.queryAvailable;
-  const blocked = editingBlocked ? '请先保存或取消正在编辑的术语' : running ? '助手正在修改草稿，完成后才能发布'
+  const blocked = checksPending || !review ? '正在读取草稿和待确认状态' : editingBlocked ? '请先保存或取消正在编辑的术语' : running ? '助手正在修改草稿，完成后才能发布'
     : changes.length === 0 && !republish ? '当前没有待发布的修改' : null;
 
   const ready = !blocked && pendingConfirmations === 0;
@@ -92,6 +92,7 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
   }, [publishSignal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const publish = async (skipPending = false, includeOthers = false) => {
+    if (blocked) return;
     if (!skipPending && pendingConfirmations > 0) { setConfirming('pending'); return; }
     if (!includeOthers && (review?.changesByOthers ?? 0) > 0) { setConfirming('others'); return; }
     setConfirming(null); setBusy('publish'); setError(null); setResult(null);
@@ -104,7 +105,6 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
       if (published.ok) tourSignal('published', { groupId });
       setIssues(published.issues.filter(i => i.severity === 'error'));
       window.dispatchEvent(new CustomEvent('modeling:updated', { detail: { groupId } }));
-      onPublished();
     } catch (e) { if (active.current === groupId) setError(message(e)); }
     finally { if (active.current === groupId) setBusy(null); }
   };
@@ -113,7 +113,6 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
     try {
       await discardDraft(groupId);
       window.dispatchEvent(new CustomEvent('modeling:updated', { detail: { groupId } }));
-      onPublished();
     } catch (e) { if (active.current === groupId) setError(message(e)); }
     finally { if (active.current === groupId) setBusy(null); }
   };

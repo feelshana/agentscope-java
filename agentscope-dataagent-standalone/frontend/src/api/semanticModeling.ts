@@ -467,8 +467,16 @@ export async function getKnowledgeBaseBrowse(groupId: string): Promise<Knowledge
 
 export interface ModelSummary { groupId: string; models: number; relations: number; unrelated: number }
 
-export async function listModelSummaries(signal?: AbortSignal): Promise<ModelSummary[]> {
-  const res = await apiFetch('/api/knowledge-bases/summaries', { headers: authHeaders(), signal });
+export interface ModelingHubSummary {
+  groupId: string;
+  published: ModelSummary | null;
+  draft: { changes: number; assistantRunning: boolean } | null;
+  confirmations: number | null;
+}
+
+export async function listModelingHubSummaries(ids: string[], signal?: AbortSignal): Promise<ModelingHubSummary[]> {
+  const params = new URLSearchParams({ ids: ids.join(',') });
+  const res = await apiFetch(`/api/knowledge-bases/summaries/modeling?${params}`, { headers: authHeaders(), signal });
   if (!res.ok) throw new Error(await errorMessage(res, `加载模型统计失败: ${res.status}`));
   return res.json();
 }

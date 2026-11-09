@@ -6,12 +6,31 @@ import KnowledgeBaseMembersModal from '../../components/KnowledgeBaseMembersModa
 import EmptyIllustration from '../../components/EmptyIllustration';
 import Icon from '../../components/Icon';
 import { toast } from '../../components/Toast';
-import { createGroup, DatasetGroup, deleteGroup, listGroupPage, updateGroup } from '../../api/datasets';
+import { createGroup, DatasetGroup, deleteGroup, listGroups, updateGroup } from '../../api/datasets';
 import './DatasetsPage.css';
 
 const NAME_RE = /^[一-龥A-Za-z0-9_-]{1,100}$/;
 
 const TOUR_GROUP_NAME = '我的第一个知识库';
+const PAGE_SIZE = 20;
+const PERMISSIONS = [
+  ['all', '全部'],
+  ['manage', '可管理'],
+  ['use', '仅可使用'],
+] as const;
+type Permission = (typeof PERMISSIONS)[number][0];
+type GroupStatus = 'published' | 'model' | 'data';
+const STATUS_LABELS: Record<GroupStatus, string> = {
+  published: '已发布',
+  model: '待建模',
+  data: '待添加数据',
+};
+const shortDate = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric' });
+
+function groupStatus(group: DatasetGroup): GroupStatus {
+  if (group.publishedVersion) return 'published';
+  return group.datasetCount > 0 ? 'model' : 'data';
+}
 
 export default function DatasetsPage() {
   const navigate = useNavigate();
@@ -28,7 +47,8 @@ export default function DatasetsPage() {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState('date');
   const [page, setPage] = useState(0);
-  const [total, setTotal] = useState(0);
+  const [permission, setPermission] = useState<Permission>('all');
+  const [status, setStatus] = useState('all');
   const [search, setSearch] = useState('');
   const [memberGroup, setMemberGroup] = useState<DatasetGroup | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'rows'>('grid');
@@ -40,11 +60,9 @@ export default function DatasetsPage() {
     request.current = controller;
     setLoading(true);
     try {
-      const result = await listGroupPage({ page, size: 20, search, sort }, controller.signal);
+      const result = await listGroups(controller.signal, false, { search, sort });
       if (controller.signal.aborted) return;
-      setGroups(result.items);
-      setTotal(result.total);
-      if (!result.items.length && page > 0) setPage(Math.max(0, Math.ceil(result.total / 20) - 1));
+      setGroups(result);
       setError(null);
     } catch (e) {
       if (controller.signal.aborted) return;
@@ -52,7 +70,7 @@ export default function DatasetsPage() {
     } finally {
       if (request.current === controller) setLoading(false);
     }
-  }, [page, search, sort]);
+  }, [search, sort]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setSearch(query), 250);
@@ -145,18 +163,33 @@ export default function DatasetsPage() {
     }
   }
 
-  const filtered = groups;
-  const pages = Math.max(1, Math.ceil(total / 20));
+  const matching = status === 'all' ? groups : groups.filter(group => groupStatus(group) === status);
+  const manageable = matching.filter(group => group.canManage).length;
+  const permissionCounts = { all: matching.length, manage: manageable, use: matching.length - manageable };
+  const filtered = permission === 'all' ? matching : matching.filter(group => group.canManage === (permission === 'manage'));
+  const total = filtered.length;
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const currentPage = Math.min(page, pages - 1);
+  const visible = filtered.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  const hasFilters = Boolean(query.trim()) || permission !== 'all' || status !== 'all';
+  const showCreateCard = viewMode === 'grid' && !loading && !error && !hasFilters && currentPage === pages - 1;
+  const clearFilters = () => {
+    setQuery('');
+    setSearch('');
+    setPermission('all');
+    setStatus('all');
+    setPage(0);
+  };
   const openCard = (group: DatasetGroup) => {
     if (group.deletionPending) return;
     navigate(`/configure/datasets/${group.id}`);
   };
   return (
-    <div className="kw-page kb-library">
+    <div className="kw-page workspace-overview kb-library">
       <KnowledgeBreadcrumb items={[{ label: '返回对话', to: '/chat' }, { label: '知识库' }]} />
       <div className="kw-scroll"><div className="kw-content">
         <div className="kw-pagehead">
-          <div className="kw-heading"><h1>知识库</h1><p>组织你的业务数据，让每一次分析都有清晰的依据。</p></div>
+          <div className="kw-heading"><h1>知识库</h1><p>管理业务数据，选择知识库开始问数。</p></div>
           <div className="kw-actions">
             <button className="da-btn" onClick={() => navigate('/configure/datasources')}><Icon name="database" size="sm" />数据源管理</button>
             <button className="da-btn da-btn-primary" onClick={openCreate} disabled={busy}><Icon name="plus" size="sm" />创建知识库</button>
@@ -164,42 +197,131 @@ export default function DatasetsPage() {
         </div>
         {error && <div className="kw-alert" role="alert">{error}<button className="da-btn da-btn-sm" onClick={refresh}>重试</button></div>}
         <div className="kw-toolbar">
-          <label className="kw-search"><Icon name="search" size="sm" /><input aria-label="搜索知识库" placeholder="搜索知识库名称或说明" value={query} onChange={e => { setQuery(e.target.value); setPage(0); }} /></label>
-          <span className="kw-count">{loading ? '加载中…' : `${total} 个知识库`}</span><span className="kw-spacer" />
-          <select className="kw-select" aria-label="知识库排序" value={sort} onChange={e => { setSort(e.target.value); setPage(0); }}><option value="date">最近创建</option><option value="name">名称排序</option></select>
-          <div className="kw-viewtoggle"><button aria-label="卡片视图" aria-pressed={viewMode === 'grid'} className={viewMode === 'grid' ? 'active' : ''} onClick={() => setViewMode('grid')}><Icon name="table" size="sm" /></button><button aria-label="列表视图" aria-pressed={viewMode === 'rows'} className={viewMode === 'rows' ? 'active' : ''} onClick={() => setViewMode('rows')}><Icon name="list" size="sm" /></button></div>
+          <label className="kw-search">
+            <Icon name="search" size="sm" />
+            <input type="search" aria-label="搜索知识库" placeholder="搜索知识库名称或说明…" maxLength={100}
+              value={query} onChange={e => { setQuery(e.target.value); setPage(0); }} />
+          </label>
+          <div className="kb-permission-filter" role="group" aria-label="按知识库权限筛选">
+            {PERMISSIONS.map(([value, label]) => (
+              <button key={value} type="button" aria-pressed={permission === value}
+                onClick={() => { setPermission(value); setPage(0); }}>
+                {label}{!loading && !error && <b>{permissionCounts[value]}</b>}
+              </button>
+            ))}
+          </div>
+          <div className="kb-toolbar-end">
+            <label className="kb-select">
+              <select className="kw-select" aria-label="按知识库状态筛选" value={status}
+                onChange={e => { setStatus(e.target.value); setPage(0); }}>
+                <option value="all">状态 · 全部</option>
+                {Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+              <Icon name="chevron" size="sm" />
+            </label>
+            <label className="kb-select">
+              <select className="kw-select" aria-label="知识库排序" value={sort}
+                onChange={e => { setSort(e.target.value); setPage(0); }}>
+                <option value="date">最近创建</option><option value="name">名称排序</option>
+              </select>
+              <Icon name="chevron" size="sm" />
+            </label>
+            <div className="kw-viewtoggle" role="group" aria-label="知识库视图">
+              <button type="button" aria-label="卡片视图" aria-pressed={viewMode === 'grid'} onClick={() => setViewMode('grid')}><Icon name="table" size="sm" /></button>
+              <button type="button" aria-label="列表视图" aria-pressed={viewMode === 'rows'} onClick={() => setViewMode('rows')}><Icon name="list" size="sm" /></button>
+            </div>
+          </div>
         </div>
-        <div className={viewMode === 'grid' ? 'kw-grid kb-grid' : 'kw-rows kb-list'}>
+        <p className="kb-result-count" role="status">{loading ? '加载中…' : error ? null : <>共 <strong>{total}</strong> 个知识库</>}</p>
+        <div className={viewMode === 'grid' ? 'kw-grid kb-grid' : 'kw-rows kb-list'}
+          hidden={!loading && !total && !showCreateCard}>
           {loading && [0, 1, 2, 3].map(i => <div key={i} className="kw-card kb-card kb-skeleton" aria-hidden="true"><div className="da-skeleton da-skeleton-line" /><div className="da-skeleton da-skeleton-line" style={{ marginTop: 20 }} /></div>)}
-          {!loading && filtered.map(g => {
+          {!loading && visible.map(g => {
+            const state = groupStatus(g);
             const preparing = !g.publishedVersion && g.canManage;
-            const actionLabel = preparing ? g.datasetCount === 0 ? '添加数据' : '进入建模' : '开始提问';
+            const detailPath = `/configure/datasets/${g.id}`;
+            const action = preparing
+              ? state === 'data'
+                ? { label: '添加数据', icon: 'database', path: detailPath } as const
+                : { label: '进入建模', icon: 'model', path: `/configure/modeling/${g.id}` } as const
+              : { label: '开始提问', icon: 'chat', path: `/chat?groups=${encodeURIComponent(g.id)}` } as const;
+            const owner = g.ownerUsername || '已移除用户';
+            const created = g.createdAt ? new Date(g.createdAt) : null;
+            const createdTitle = created ? `创建于 ${created.toLocaleDateString('zh-CN')}` : '创建时间未知';
             return <article key={g.id} className={`kw-card kb-card${g.deletionPending ? ' kb-deleting' : ''}`} tabIndex={g.deletionPending ? -1 : 0} aria-label={`查看${g.name}`}
             onClick={() => openCard(g)}
             onKeyDown={e => { if (!g.deletionPending && e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openCard(g); } }}>
-            <div className="kb-card-header"><div className="kb-symbol"><Icon name="book" /></div><h2 className="kb-card-title" title={g.name}>{g.name}</h2><div className="kb-card-controls">
-              <WorkspaceMenu label={`${g.name}的更多操作`} items={g.canManage ? [
-                { label: '查看详情', icon: 'book', disabled: g.deletionPending, onClick: () => navigate(`/configure/datasets/${g.id}`) },
+            <div className="kb-card-header">
+              <div className="overview-icon kb-symbol"><Icon name="book" /></div>
+              <div className="kb-card-heading">
+                <h2 className="kb-card-title" title={g.name}>{g.name}</h2>
+                <div className="kb-card-state">
+                  <span className={`overview-status${state === 'published' ? ' is-published' : ''}`}>
+                    {STATUS_LABELS[state]}{state === 'published' ? ` v${g.publishedVersion}` : ''}
+                  </span>
+                  <span className="kb-permission">{g.canManage ? '可管理' : '仅可使用'}</span>
+                </div>
+              </div>
+              <div className="kb-card-controls">
+                <WorkspaceMenu label={`${g.name}的更多操作`} items={g.canManage ? [
+                { label: '查看详情', icon: 'book', disabled: g.deletionPending, onClick: () => navigate(detailPath) },
                 { label: '编辑名称和说明', icon: 'edit', disabled: busy || g.deletionPending, onClick: () => openEdit(g) },
                 { label: '成员与权限', icon: 'user', disabled: g.deletionPending, onClick: () => setMemberGroup(g) },
                 { label: g.deletionPending ? '重试删除' : '删除知识库', icon: 'trash', danger: true, disabled: busy, onClick: () => void handleDelete(g.id) },
-              ] : [{ label: '查看详情', icon: 'book', disabled: g.deletionPending, onClick: () => navigate(`/configure/datasets/${g.id}`) }]} />
-            </div></div>
-            <div className="kb-card-description" title={g.description?.trim() ? g.description : undefined}>{g.description?.trim() ? <p>{g.description}</p> : null}</div>
-            <div className="kb-card-state"><span className={`kw-status${g.publishedVersion ? ' is-published' : ''}`}>{g.publishedVersion ? `已发布 v${g.publishedVersion}` : '待建模'}</span><span className="kb-permission">{g.canManage ? '可管理' : '仅可使用'}</span></div>
-            <div className="kb-card-info"><span className="kb-dataset-count">{g.datasetCount} 个数据集</span>
-              <div className="kb-card-owner"><span title={g.ownerUsername || '已移除用户'}>{g.ownerUsername || '已移除用户'}</span><small className="kb-card-date">{g.createdAt ? `创建于 ${new Date(g.createdAt).toLocaleDateString('zh-CN')}` : '创建时间未知'}</small></div>
+                ] : [{ label: '查看详情', icon: 'book', disabled: g.deletionPending, onClick: () => navigate(detailPath) }]} />
+              </div>
+            </div>
+            <div className="kb-card-description">
+              {g.description?.trim() ? <p title={g.description}>{g.description}</p> : <p className="kb-no-description">暂无说明</p>}
+            </div>
+            <div className="kb-card-info">
+              <span>{g.datasetCount} 个数据集</span>
+              <span className="kb-meta-part"><i aria-hidden="true">·</i><span className="kb-card-owner" title={owner}>{owner}</span></span>
+              <span className="kb-meta-part" title={createdTitle}>
+                <i aria-hidden="true">·</i>
+                {created && g.createdAt ? <time dateTime={g.createdAt}>{shortDate.format(created)}</time> : createdTitle}
+              </span>
             </div>
             {g.deletionPending && <p className="kb-delete-status" role="status">删除待完成，后台正在重试清理。</p>}
-            <div className="kb-card-footer">{g.deletionPending ? g.canManage && <button type="button" className="kb-view-data" disabled={busy} onClick={e => handleDelete(g.id, e)}>重试删除</button> : <>
-              <button type="button" className="kb-view-data" onClick={e => { e.stopPropagation(); navigate(`/configure/datasets/${g.id}`); }}>查看数据<span aria-hidden="true">→</span></button>
-              <button type="button" className="kb-ask" aria-label={preparing ? `${actionLabel}：${g.name}` : `基于${g.name}提问`} disabled={!preparing && !g.canQuery} title={!preparing && !g.canQuery ? '当前知识库暂不可提问' : undefined} onClick={e => { e.stopPropagation(); navigate(preparing ? g.datasetCount === 0 ? `/configure/datasets/${g.id}` : `/configure/modeling/${g.id}` : `/chat?groups=${encodeURIComponent(g.id)}`); }}><Icon name={preparing ? g.datasetCount === 0 ? 'database' : 'model' : 'chat'} size="sm" />{actionLabel}</button>
-            </>}</div>
+            <div className="kb-card-footer">
+              {g.deletionPending ? g.canManage && (
+                <button type="button" className="kb-view-data" disabled={busy} onClick={e => handleDelete(g.id, e)}>重试删除</button>
+              ) : <>
+                <button type="button" className="kb-view-data" onClick={e => { e.stopPropagation(); openCard(g); }}>
+                  查看数据<Icon name="chevron" size="sm" />
+                </button>
+                <button type="button" className="kb-ask"
+                  aria-label={preparing ? `${action.label}：${g.name}` : `基于${g.name}提问`}
+                  disabled={!preparing && !g.canQuery}
+                  title={!preparing && !g.canQuery ? '当前知识库暂不可提问' : undefined}
+                  onClick={e => { e.stopPropagation(); navigate(action.path); }}>
+                  <Icon name={action.icon} size="sm" />{action.label}
+                </button>
+              </>}
+            </div>
           </article>;
           })}
+          {showCreateCard && <button type="button" className="kw-card kb-card kb-create-card"
+            aria-labelledby="kb-create-card-label" aria-describedby="kb-create-card-hint" onClick={openCreate} disabled={busy}>
+            <span className="kb-create-card-icon"><Icon name="plus" /></span>
+            <strong id="kb-create-card-label">创建知识库</strong>
+            <small id="kb-create-card-hint">上传 Excel / CSV，或连接数据库</small>
+          </button>}
         </div>
-        {!loading && !error && filtered.length === 0 && <div className="kw-empty">{query ? '没有匹配的知识库，试试其他关键词。' : <EmptyIllustration variant="table" caption="还没有知识库，点击「创建知识库」开始" />}</div>}
-        {!loading && total > 0 && <div className="kw-pagination"><span>共 {total} 个知识库{pages > 1 ? ' · 每页 20 个' : ''}</span>{pages > 1 && <><span className="kw-spacer" /><button className="da-btn da-btn-sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>上一页</button><span>{page + 1} / {pages}</span><button className="da-btn da-btn-sm" disabled={page + 1 >= pages} onClick={() => setPage(p => p + 1)}>下一页</button></>}</div>}
+        {!loading && !error && !total && !showCreateCard && (
+          <div className="kw-empty kb-empty">
+            {hasFilters ? <>
+              <strong>没有匹配的知识库</strong>
+              <p>换个关键词，或清除筛选条件。</p>
+              <button type="button" className="da-btn" onClick={clearFilters}>清除筛选</button>
+            </> : <EmptyIllustration variant="table" caption="还没有知识库，点击「创建知识库」开始" />}
+          </div>
+        )}
+        {!loading && pages > 1 && <div className="kw-pagination"><span>每页 {PAGE_SIZE} 个</span><span className="kw-spacer" />
+          <button type="button" className="da-btn da-btn-sm" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>上一页</button>
+          <span>{currentPage + 1} / {pages}</span>
+          <button type="button" className="da-btn da-btn-sm" disabled={currentPage + 1 >= pages} onClick={() => setPage(currentPage + 1)}>下一页</button>
+        </div>}
       </div></div>
 
       {formOpen && (

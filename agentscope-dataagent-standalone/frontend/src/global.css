@@ -1097,6 +1097,8 @@ button:focus-visible {
 }
 
 /* ---------- landing page and compact conversation composer ---------- */
+.da-chat-header { background: rgba(255, 255, 255, .82); }
+
 @property --da-flow-angle {
   syntax: '<angle>';
   inherits: false;
@@ -1126,15 +1128,19 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   align-items: center;
-  /* TC-style hero: block anchored toward the top, not vertically centred */
   justify-content: flex-start;
   width: 100%;
-  /* One content column for the whole home page; wide enough that embedded (iframe) hosts don't
-     show large empty gutters, narrow enough to keep lines readable. */
+  min-height: 0;
   --da-landing-max: 1080px;
-  padding: clamp(32px, 7vh, 88px) 32px 32px;
+  container: da-chat-landing / inline-size;
+  padding: clamp(42px, 8.5dvh, 80px) 28px 30px;
   overflow-y: auto;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  line-height: 1.5;
   animation: da-fade-up 0.45s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+.da-landing-wrap.has-guide {
+  padding-top: clamp(24px, 4dvh, 40px);
 }
 
 /* Neutral hairline border; brand colour appears only while editing. */
@@ -1153,7 +1159,23 @@ button:focus-visible {
 }
 .da-landing-wrap .da-composer-glow {
   max-width: var(--da-landing-max);
+  flex-shrink: 0;
+  border-radius: 19px;
+  background: #dfe1ee;
+  box-shadow: 0 2px 4px #24254208, 0 10px 28px #3b315d0e;
 }
+.da-landing-wrap .da-composer-glow:focus-within {
+  background: #9c88ee;
+  box-shadow: 0 0 0 3px #5b4bd613, 0 10px 28px #3b315d12;
+}
+.da-landing-wrap .da-composer-shell {
+  border-radius: 18px;
+  padding: 14px 17px 10px;
+}
+.da-chat-composer-bar { gap: 8px; }
+.da-chat-composer-bar .da-composer-submit { margin-inline-start: auto; }
+.da-chat-composer-analysis { margin-inline-start: 8px; }
+.da-analysis-menu { position: relative; display: inline-flex; }
 .da-composerwrap .da-composer-glow {
   max-width: 960px;
 }
@@ -1194,46 +1216,47 @@ button:focus-visible {
 }
 
 .da-landing-greeting {
-  /* left-aligned inside the same column as the composer (TC-style hero) */
   width: 100%;
   max-width: var(--da-landing-max, 880px);
-  /* TC stacks title + tagline as a flex column with a 10px gap */
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  flex-shrink: 0;
+  gap: 8px;
   text-align: left;
-  margin-bottom: 24px;
+  margin-bottom: 23px;
 }
 
-/* TC-style hero: solid ink title and tagline at medium weight (black, not heavy). */
-.da-landing-eyebrow {
+.da-landing-brand {
   align-self: flex-start;
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  padding: 4px 12px 4px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--da-border);
-  background: var(--da-surface);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--da-text-2);
-  margin-bottom: 6px;
+  gap: 4px 10px;
+  margin-bottom: 4px;
 }
-.da-landing-eyebrow-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--da-primary);
-  box-shadow: 0 0 0 3px var(--da-primary-subtle);
+.da-landing-brand .brand { gap: 6px; }
+.da-landing-brand .brand-mark { width: 17px; height: 20px; }
+.da-landing-brand .brand-wordmark {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.da-landing-brand .brand-wordmark-latin { letter-spacing: -.15px; }
+.da-landing-brand-caption {
+  padding-inline-start: 10px;
+  border-inline-start: 1px solid var(--da-border-strong);
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--da-text-3);
 }
 
 .da-landing-title {
   margin: 0;
-  font-size: 30px;
-  font-weight: 600;
-  line-height: 1.25;
-  letter-spacing: -0.01em;
+  font-size: clamp(24px, 2.1vw, 30px);
+  font-weight: 650;
+  line-height: 1.22;
+  letter-spacing: -.6px;
   color: var(--da-text);
 }
 
@@ -1248,10 +1271,34 @@ button:focus-visible {
 }
 
 .da-landing-greeting p {
-  margin: 2px 0 0;
+  margin: 0;
   font-size: 14px;
   line-height: 22px;
   color: var(--da-text-3);
+}
+
+@media (min-width: 761px) and (max-height: 820px) {
+  .da-landing-wrap.has-guide { padding-top: 20px; }
+}
+@media (max-width: 760px) {
+  .da-landing-wrap, .da-landing-wrap.has-guide { padding: 19px 16px 24px; }
+  .da-landing-greeting { margin-bottom: 15px; }
+  .da-landing-greeting p { font-size: 13px; }
+  .da-landing-wrap .da-composer-shell { padding: 11px; }
+  .da-landing-wrap .da-chat-composer-bar { position: relative; gap: 4px; }
+  .da-landing-wrap .da-kb-select:not(.da-web-search) { max-width: 110px; gap: 5px; }
+  .da-landing-wrap .da-web-search { padding-inline: 6px; gap: 5px; }
+  .da-landing-wrap .da-chat-composer-analysis {
+    margin-inline-start: 0;
+    --da-analysis-gap: 4px;
+    --da-analysis-padding: 7px;
+  }
+  .da-landing-wrap .da-analysis-menu { position: static; }
+  .da-landing-wrap .da-analysis-menu [role="menu"] { max-width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .da-landing-wrap { animation: none; }
+  .da-landing-wrap .da-composer-glow { transition: none; }
 }
 
 /* ---------- landing example cards (TC-style hero suggestions) ---------- */

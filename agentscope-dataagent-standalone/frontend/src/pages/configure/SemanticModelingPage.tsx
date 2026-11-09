@@ -33,7 +33,8 @@ import CompiledMdlPanel from '../../components/modeling/CompiledMdlPanel';
 import AssetProposalCards from '../../components/modeling/AssetProposalCards';
 import QueryCoachPanel from '../../components/modeling/QueryCoachPanel';
 import type { AssetEntry } from '../../components/modeling/AssetYamlBrowser';
-import { getGroupDetail } from '../../api/datasets';
+import { listGroupCards } from '../../api/datasets';
+import type { DatasetGroup } from '../../api/datasets';
 import { getKnowledgeBaseBrowse, getMdlView, getMdlPreview } from '../../api/semanticModeling';
 import type { KnowledgeBaseBrowse, MdlView, MdlPreview } from '../../api/semanticModeling';
 import { getModelingWorkflow } from '../../api/modelingWorkflow';
@@ -106,32 +107,43 @@ const TOUR_QUERY_HINT = '引导会在问数准备好后带你去问数';
 export default function SemanticModelingPage() {
   const { groupId = '' } = useParams();
   const [params] = useSearchParams();
-  const [access, setAccess] = useState<{ groupId: string; manage: boolean } | null>(null);
+  const [access, setAccess] = useState<DatasetGroup | null>(null);
   const [error, setError] = useState('');
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     setAccess(null); setError('');
-    void getGroupDetail(groupId).then(detail => { if (!cancelled) setAccess({ groupId, manage: detail.group.canManage }); })
-      .catch(e => { if (!cancelled) setError(message(e)); });
-    return () => { cancelled = true; };
+    void listGroupCards([groupId], controller.signal).then(cards => {
+      if (controller.signal.aborted) return;
+      const card = cards.find(item => item.id === groupId && !item.deletionPending);
+      if (!card) throw new Error('知识库不存在或未授权');
+      setAccess(card);
+    }).catch(e => { if (!controller.signal.aborted) setError(message(e)); });
+    return () => controller.abort();
   }, [groupId]);
   if (error) return <div className="mw-content"><div role="alert" className="da-alert da-alert-error">{error}</div></div>;
-  if (access?.groupId !== groupId) return <div className="mw-content"><div className="da-small">加载中…</div></div>;
-  return access.manage ? <ModelingWorkbench /> : <SemanticReadOnlyWorkspace groupId={groupId} requested={tabOf(params.get('asset'), params.get('kind'))} />;
+  if (access?.id !== groupId) return <div className="modeling-workbench mw"><div className="mw-content"><GraphLoading /></div></div>;
+  return access.canManage ? <ModelingWorkbench key={groupId} group={access} /> : <SemanticReadOnlyWorkspace groupId={groupId} requested={tabOf(params.get('asset'), params.get('kind'))} />;
 }
 
-function ModelingWorkbench() {
-  const { groupId = '' } = useParams();
+function GraphLoading() {
+  return <div className="mw-graph-loading" role="status">
+    <span>正在加载语义模型…</span>
+    <div aria-hidden="true"><i /><b /><i /></div>
+  </div>;
+}
+
+function ModelingWorkbench({ group }: { group: DatasetGroup }) {
+  const groupId = group.id;
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const asset = params.get('asset');
   const legacyAsset = asset === 'assets' ? params.get('kind') : asset;
   const explicitTab = tabOf(asset, params.get('kind'));
-  const [name, setName] = useState('语义模型');
   const [view, setView] = useState<MdlView | null>(null);
   const [preview, setPreview] = useState<MdlPreview | null>(null);
   const [workflow, setWorkflow] = useState<ModelingWorkflow | null>(null);
   const [confirmations, setConfirmations] = useState<Confirmation[]>([]);
+  const [confirmationsReady, setConfirmationsReady] = useState(false);
   const [error, setError] = useState('');
   const [queue, setQueue] = useState<{ groupId: string; items: Request[] }>({ groupId, items: [] });
   const pending = queue.groupId === groupId ? queue.items : [];
@@ -167,11 +179,14 @@ function ModelingWorkbench() {
   const fieldEditGuard = useRef<(() => boolean) | null>(null);
   const canLeaveField = () => fieldEditGuard.current?.() ?? true;
   const [browse, setBrowse] = useState<KnowledgeBaseBrowse | null>(null);
+  const [advancedOpen, setAdvancedOpen] = useState(() => ADVANCED.has(legacyAsset ?? ''));
+  useEffect(() => { if (ADVANCED.has(legacyAsset ?? '')) setAdvancedOpen(true); }, [legacyAsset]);
+  const publishedVersion = workflow?.publishedVersion ?? group.publishedVersion ?? 0;
   // Published knowledge bases open on what they contain; anything unfinished opens the conversation.
   const tab: Tab = explicitTab ?? 'semantic';
   // spec117 §3c: unfinished knowledge bases open with the assistant; published ones with details.
   const [panelChoice, setPanelChoice] = useState<Panel | undefined>(undefined);
-  const defaultPanel: Panel = asset === 'modeling' || params.get('start') === '1' || (workflow !== null && !workflow.publishedVersion) ? 'assistant' : 'detail';
+  const defaultPanel: Panel = asset === 'modeling' || params.get('start') === '1' || !publishedVersion ? 'assistant' : 'detail';
   const panel: Panel = panelChoice === undefined ? defaultPanel : panelChoice;
   const openAssistant = () => { if (canLeaveField()) setPanelChoice('assistant'); };
   const togglePanel = (next: Exclude<Panel, null>) => {
@@ -182,7 +197,6 @@ function ModelingWorkbench() {
   const [marked, setMarked] = useState<DraftItem[]>([]);
   const [seen, setSeen] = useState<Set<string>>(new Set());
   const [reveal, setReveal] = useState<{ id: number; item: DraftItem } | null>(null);
-  const resolving = !explicitTab && !workflow;
 
   const activeGroup = useRef(groupId); activeGroup.current = groupId;
   const generation = useRef(0);
@@ -229,31 +243,39 @@ function ModelingWorkbench() {
   };
   const refresh = useCallback(async () => {
     const current = ++generation.current;
-    const results = await Promise.allSettled([getMdlView(groupId), getMdlPreview(groupId), getModelingWorkflow(groupId), listConfirmations(groupId)]);
-    void getScreeningStatus(groupId).then(list => { if (activeGroup.current === groupId) setScreening(list); }).catch(() => undefined);
-    if (current !== generation.current || activeGroup.current !== groupId) return;
-    if (results[0].status === 'fulfilled') setView(results[0].value);
-    if (results[1].status === 'fulfilled') setPreview(results[1].value);
-    if (results[2].status === 'fulfilled') setWorkflow(results[2].value);
-    if (results[3].status === 'fulfilled') setConfirmations(results[3].value);
-    const failed = results.find(r => r.status === 'rejected');
-    setError(failed?.status === 'rejected' ? message(failed.reason) : '');
+    const isCurrent = () => current === generation.current && activeGroup.current === groupId;
+    setError('');
+    setConfirmationsReady(false);
+    const load = async <T,>(request: Promise<T>, apply: (value: T) => void) => {
+      try {
+        const value = await request;
+        if (isCurrent()) apply(value);
+      } catch (e) {
+        if (isCurrent()) setError(previous => previous || message(e));
+      }
+    };
+    const graph = load(getMdlView(groupId), setView);
+    const checks = [
+      load(getModelingWorkflow(groupId), setWorkflow),
+      load(listConfirmations(groupId), items => { setConfirmations(items); setConfirmationsReady(true); }),
+      load(getScreeningStatus(groupId), setScreening),
+    ];
+    await graph;
+    if (isCurrent()) await load(getMdlPreview(groupId), setPreview);
+    await Promise.all(checks);
   }, [groupId]);
   useEffect(() => {
     setReadyGroup(null); setStartOffer(null); startOffered.current = null;
     if (startIntent.current !== groupId) startIntent.current = null; setTrialOpen(false); setExamples(0); setUnconfirmedTrials(0);
-    setView(null); setPreview(null); setWorkflow(null); setName('语义模型'); setConfirmations([]); setScreening(null); setAdjusting(null);
+    setView(null); setPreview(null); setWorkflow(null); setConfirmations([]); setScreening(null); setAdjusting(null);
     setPrefill(null); setFocusRelation(null); setChangeMark(null); setPanelChoice(undefined); setDockWide(false); setMarked([]); setReveal(null);
     try { setSeen(new Set(JSON.parse(localStorage.getItem(`sw-seen:${groupId}`) ?? '[]') as string[])); } catch { setSeen(new Set()); } setVersionChoice('draft'); setBrowse(null);
-    let cancelled = false;
-    void getGroupDetail(groupId).then(detail => { if (!cancelled) setName(detail.group.name); })
-      .catch(e => { if (!cancelled) setError(message(e)); });
     void refresh();
     const update = (event: Event) => {
       if ((event as CustomEvent<{ groupId: string }>).detail?.groupId === groupId) void refresh();
     };
     window.addEventListener('modeling:updated', update);
-    return () => { cancelled = true; generation.current++; window.removeEventListener('modeling:updated', update); };
+    return () => { generation.current++; window.removeEventListener('modeling:updated', update); };
   }, [groupId, refresh]);
   useEffect(() => {
     if (!windowReady || startIntent.current !== groupId || startOffered.current === groupId) return;
@@ -278,10 +300,10 @@ function ModelingWorkbench() {
   const tourStep = tour?.step;
   const queryHeld = tourHoldsQuery(tour, groupId);
   useEffect(() => {
-    if (tourStep !== 'confirm' || !idle || !workflow || confirmations.length > 0) return;
+    if (tourStep !== 'confirm' || !idle || !workflow || !confirmationsReady || confirmations.length > 0) return;
     const timer = window.setTimeout(() => tourSignal('confirm-done', { groupId }), 2000);
     return () => window.clearTimeout(timer);
-  }, [tourStep, idle, workflow, confirmations.length, groupId]);
+  }, [tourStep, idle, workflow, confirmationsReady, confirmations.length, groupId]);
   // No skip buttons in the tour, so after a reload it recovers from what the page shows.
   useEffect(() => {
     if (tourStep !== 'modeling' || !idle || !(draftSummary.changes > 0 || workflow?.queryAvailable)) return;
@@ -305,24 +327,25 @@ function ModelingWorkbench() {
   const otherKnowledge: AssetEntry[] = files.filter(f => /^knowledge\/(glossary|metrics|caveats)\//.test(f.path) && !f.path.endsWith('/.gitkeep'))
     .map(f => ({ key: f.path, title: f.path, file: f.path, dirty: dirty(f.path) }));
   const selected = params.get('selected');
-  const hasPublished = (workflow?.publishedVersion ?? 0) > 0;
+  const hasPublished = publishedVersion > 0;
   const version = hasPublished && versionChoice === 'published' ? 'published' : 'draft';
   const comparing = hasPublished && versionChoice === 'compare';
   const draftChanged = view?.changed ?? workflow?.draftChanged;
+  const graphReady = view !== null;
   useEffect(() => {
     // The published version is shown, or compared against while viewing the draft (spec117).
-    if (tab !== 'semantic' || !hasPublished) return undefined;
+    if (tab !== 'semantic' || !hasPublished || !graphReady) return undefined;
     let cancelled = false;
     void getKnowledgeBaseBrowse(groupId).then(value => { if (!cancelled) setBrowse(value); })
       .catch(e => { if (!cancelled) setError(message(e)); });
     return () => { cancelled = true; };
-  }, [groupId, tab, hasPublished, workflow?.publishedVersion]);
+  }, [groupId, tab, hasPublished, publishedVersion, graphReady]);
   const snapshot = useMemo(() => version === 'published'
     ? (browse ? publishedSnapshot(browse) : null)
     : (view ? draftSnapshot(view) : null), [version, browse, view]);
   const snapshotFiles = useMemo(() => new Map((version === 'published' ? preview?.publishedFiles : preview?.files)?.map(f => [f.path, f.content]) ?? []), [version, preview]);
   const baseline = useMemo(() => version === 'draft' && browse ? publishedSnapshot(browse) : null, [version, browse]);
-  const baselineFiles = useMemo(() => version === 'draft' && hasPublished ? new Map(preview?.publishedFiles.map(f => [f.path, f.content]) ?? []) : null, [version, hasPublished, preview]);
+  const baselineFiles = useMemo(() => version === 'draft' && hasPublished && preview ? new Map(preview.publishedFiles.map(f => [f.path, f.content])) : null, [version, hasPublished, preview]);
   const workbenchView = workbenchViewOf(asset, params.get('view'));
   const tabs: { key: Tab; label: string }[] = [
     { key: 'semantic', label: '语义模型' }, { key: 'coach', label: '问数优化' }, { key: 'assets', label: '公共视图' }, { key: 'overview', label: '资料' },
@@ -372,13 +395,13 @@ function ModelingWorkbench() {
   };
   const versionBar = <div className="sm-version">
     {hasPublished && <WorkspaceMenu label="版本" triggerLabel="版本" items={[
-      { label: `查看线上 v${workflow?.publishedVersion}`, icon: 'globe', disabled: !browse || version === 'published', onClick: () => showVersion('published') },
+      { label: `查看线上 v${publishedVersion}`, icon: 'globe', disabled: !browse || version === 'published', onClick: () => showVersion('published') },
       { label: '与线上对比', icon: 'graph', disabled: !browse || comparing, onClick: () => showVersion('compare') },
       ...(version === 'published' || comparing
         ? [{ label: '返回工作台', icon: 'back' as const, onClick: () => showVersion('draft') }] : []),
     ]} />}
     {version === 'published' && <>
-      <span className="sm-version-status">正在查看线上 v{workflow?.publishedVersion}（只读）</span>
+      <span className="sm-version-status">正在查看线上 v{publishedVersion}（只读）</span>
       <button type="button" className="da-btn da-btn-sm" onClick={() => showVersion('draft')}>返回工作台</button>
     </>}
   </div>;
@@ -405,9 +428,9 @@ function ModelingWorkbench() {
       <div className="mw-crumb">
         <button type="button" className="mw-crumb-link" onClick={() => { if (canLeaveField()) navigate('/configure/modeling'); }}>语义建模</button>
         <span className="mw-crumb-sep">/</span>
-        <h1 className="mw-title">{name}</h1>
+        <h1 className="mw-title">{group.name}</h1>
         <span className={`mw-pill ${workflow?.queryAvailable ? 'mw-pill-ok' : ''}`}
-          title={hasPublished && !workflow?.queryAvailable ? '当前不可问数' : undefined}>{hasPublished ? `线上 v${workflow?.publishedVersion}` : '尚未发布'}</span>
+          title={hasPublished && workflow && !workflow.queryAvailable ? '当前不可问数' : undefined}>{hasPublished ? `线上 v${publishedVersion}` : '尚未发布'}</span>
         {draftChanged && <span className="mw-pill sm-version-status">草稿待发布</span>}
         <span className={`mw-pill ${idle ? '' : 'mw-pill-live'}`}><span className="mw-dot" />{assistantLabel}</span>
       </div>
@@ -469,7 +492,7 @@ function ModelingWorkbench() {
         <button className="da-btn" data-tour="model-start" onClick={startModeling}>没有文档，直接开始</button>
       </div>
     </div>}
-    <main className="modeling-workbench-body mw-body" style={{ flex: 1, minHeight: 0, display: screeningPending || resolving ? 'none' : 'flex' }}>
+    <main className="modeling-workbench-body mw-body" style={{ flex: 1, minHeight: 0, display: screeningPending ? 'none' : 'flex' }}>
       <div className="mw-main" style={{ display: (panel === 'assistant' || panel === 'pending') && dockWide ? 'none' : 'flex' }}>
       {tab === 'overview' && <section style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div className="da-card"><h3 style={{ marginTop: 0 }}>数据</h3>
@@ -487,23 +510,25 @@ function ModelingWorkbench() {
         {startOffer !== groupId && <BusinessDocumentsPanel groupId={groupId} onChanged={documentsChanged} />}
       </section>}
       {tab === 'semantic' && <section className="sm-pane">
-        {!snapshot ? <div className="da-small">加载中…</div> : <SemanticWorkbench key={groupId} groupId={groupId} snapshot={snapshot}
+        {!snapshot ? <GraphLoading /> : <SemanticWorkbench key={groupId} groupId={groupId} snapshot={snapshot}
           baseline={baseline} files={snapshotFiles} baselineFiles={baselineFiles} compareWithBaseline={comparing} fieldEditGuard={fieldEditGuard}
           views={version === 'draft' ? (view?.views ?? []).map(v => ({ name: v.name, sql: v.sql, description: v.description })) : []}
           issues={version === 'draft' ? (view?.issues ?? []).map(i => i.message) : []}
-          editable={version === 'draft'} blocked={idle ? null : '建模助手正在运行，完成后才能在页面上修改。'}
+          editable={version === 'draft'} blocked={!idle ? '建模助手正在运行，完成后才能在页面上修改。' : screening === null ? '正在读取字段状态…' : null}
           view={workbenchView} onViewChange={setWorkbenchView} focusRelation={focusRelation} focusModel={selected}
           onChanged={turnDone} onAsk={askAssistant} toolbar={versionBar} changes={version === 'draft' ? changeMark : null} onChanges={setChangeMark}
           marked={marked} isSeen={isSeen} onSeen={item => markSeen([item])} onOpenPending={locateConfirmations} reveal={reveal} showDetail={panel === 'detail' || (panel === 'assistant' && !dockWide)}
-          firstBuild={!hasPublished && version === 'draft' ? { onPublish: () => setPublishSignal(n => n + 1) } : null} />}
-        <details className="sm-advanced" open={ADVANCED.has(legacyAsset ?? '')}>
+          firstBuild={!hasPublished && version === 'draft' && confirmationsReady && !!workflow && screening !== null ? { onPublish: () => setPublishSignal(n => n + 1) } : null} />}
+        <details className="sm-advanced" open={advancedOpen} onToggle={e => setAdvancedOpen(e.currentTarget.open)}>
           <summary>高级：编译后的 MDL、视图、Cube、其他业务知识文件与工程快照</summary>
+          {advancedOpen && <>
           <CompiledMdlPanel groupId={groupId} version={version} />
           {legacyAsset !== 'cubes' && viewEntries.length > 0 && <AssetYamlBrowser groupId={groupId} entries={viewEntries} selectedKey={selected ?? viewEntries[0].key} onSelect={key => setParams({ asset: 'semantic', selected: key }, { replace: true })} emptyText="暂无视图" />}
           {legacyAsset !== 'views' && cubeEntries.length > 0 && <AssetYamlBrowser groupId={groupId} entries={cubeEntries} selectedKey={selected ?? cubeEntries[0].key} onSelect={key => setParams({ asset: 'semantic', selected: key }, { replace: true })} emptyText="暂无 Cube" />}
           {otherKnowledge.length > 0 && <AssetYamlBrowser groupId={groupId} entries={otherKnowledge} selectedKey={otherKnowledge.some(e => e.key === selected) ? selected : otherKnowledge[0].key}
             onSelect={key => setParams({ asset: 'semantic', view: 'rules', selected: key }, { replace: true })} emptyText="暂无其他业务知识" />}
-          <ModelSnapshotPanel groupId={groupId} />
+          <ModelSnapshotPanel preview={preview} />
+          </>}
         </details>
       </section>}
       {tab === 'assets' && <SemanticAssetsPanel groupId={groupId} assistantIdle={idle}
@@ -579,8 +604,8 @@ function ModelingWorkbench() {
       </nav>
     </main>
     <div className="mw-publish-row">
-      {!screeningPending && !resolving && <DraftBar groupId={groupId} workflow={workflow} assistantActive={!idle} pendingConfirmations={confirmations.length} editingBlocked={false}
-      onLocate={locateConfirmations} onPublished={() => void refresh()}
+      {!screeningPending && workflow && <DraftBar groupId={groupId} workflow={workflow} assistantActive={!idle} pendingConfirmations={confirmations.length} checksPending={!confirmationsReady || screening === null}
+      onLocate={locateConfirmations}
       publishSignal={publishSignal} onSummary={setDraftSummary} />}
       {toQuery && <button className="da-btn da-btn-primary da-btn-sm" disabled={!!preparing || queryHeld}
         title={queryHeld ? TOUR_QUERY_HINT : undefined} onClick={toQuery}>{preparing ? '问数准备中…' : '去问数 →'}</button>}

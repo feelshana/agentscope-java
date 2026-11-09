@@ -12,7 +12,7 @@ export interface ChatHeaderProps {
  */
 export default function ChatHeader({ title }: ChatHeaderProps) {
   return (
-    <div style={S.root}>
+    <div className="da-chat-header" style={S.root}>
       <ShellNavigationToggle />
       <div style={{ ...S.titleBlock, paddingLeft: 10 }} className="da-keyline">
         <span className="da-eyebrow">对话</span>
@@ -31,7 +31,6 @@ const S: Record<string, React.CSSProperties> = {
     boxSizing: 'border-box',
     padding: '0 24px',
     borderBottom: '1px solid var(--da-border)',
-    background: 'rgba(255, 255, 255, 0.82)',
     backdropFilter: 'blur(8px)',
     WebkitBackdropFilter: 'blur(8px)',
     flexShrink: 0,

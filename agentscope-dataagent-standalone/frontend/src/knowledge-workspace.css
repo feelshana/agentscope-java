@@ -87,15 +87,6 @@
 .kw-progress-text{font-size:14px;color:var(--kw-secondary)}.kw-progress>summary{font-size:14px}.kw-alert{font-size:14px}
 .kw-menu button{font-size:13px}.kw-pagination{font-size:13px}.kw-permission{font-size:12px}
 /* Semantic modeling list */
-.mh-table tbody tr{cursor:pointer}.mh-table td{white-space:normal;vertical-align:middle}
-.mh-name{display:flex;align-items:center;gap:12px;min-width:0;max-width:520px}
-.mh-name strong{display:block;font-size:15px;font-weight:600;color:var(--kw-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.mh-name small{display:block;margin-top:3px;font-size:13px;color:var(--kw-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.mh-icon{width:34px;height:34px;flex:none;border-radius:9px;display:grid;place-items:center;background:#f6f4fc;border:1px solid #e8e4f5;color:var(--da-primary)}
-.mh-status{display:inline-block;font-size:13px;padding:3px 10px;border-radius:999px;white-space:nowrap}
-.mh-ok{background:rgba(22,163,74,.1);color:var(--da-success)}.mh-warn{background:rgba(234,179,8,.15);color:#a16207}
-.mh-live{background:var(--da-primary-subtle);color:var(--da-primary)}.mh-muted{background:#f1f2f5;color:#6b7382}
-.mh-sub{display:block;margin-top:4px;font-size:12px;color:var(--kw-muted)}
 
 /* Upload / import progress panel */
 .kw-menu-trigger-chevron{transform:rotate(90deg)}

@@ -81,6 +81,7 @@ export default function SessionsSidebar({ refreshKey, collapsed = false }: Sessi
     || (path === '/configure/datasets' && location.pathname === '/configure/datasources');
   const [searchParams] = useSearchParams();
   const activeKey = searchParams.get('session');
+  const newChatActive = location.pathname === '/chat' && !activeKey;
 
   const [entries, setEntries] = useState<InboxEntry[]>([]);
   const [err, setErr] = useState<string | null>(null);
@@ -227,7 +228,7 @@ export default function SessionsSidebar({ refreshKey, collapsed = false }: Sessi
       <div id="app-sidebar-content">
         <div className="rail-brand-mark"><BrandMark label="红海 DataAgent" /></div>
         <nav className="rail-icon-nav" aria-label="主导航">
-          {rail('新建对话', 'compose', location.pathname === '/chat' && !activeKey, handleNewChat)}
+          {rail('新建对话', 'compose', newChatActive, handleNewChat)}
           {navigationItems.map(item => rail(item.label, item.icon, isNavigationActive(item.path), () => navigate(item.path)))}
           {rail('更多', 'moreHorizontal', moreActive, () => navigate('/more'))}
         </nav>
@@ -239,7 +240,8 @@ export default function SessionsSidebar({ refreshKey, collapsed = false }: Sessi
     <div id="app-sidebar-content" className="app-rail">
       <div className="rail-brand"><Brand /></div>
       <nav className="rail-nav" aria-label="主导航">
-        <button onClick={handleNewChat} className="rail-nav-item rail-new-chat"><span>新建对话</span><Icon name="compose" /></button>
+        <button type="button" onClick={handleNewChat} className="rail-nav-item rail-new-chat"
+          aria-current={newChatActive ? 'page' : undefined}><span>新建对话</span><Icon name="compose" /></button>
         {navigationItems.map(item => {
           const active = isNavigationActive(item.path);
           return <button key={item.path} onClick={() => navigate(item.path)} aria-current={active ? 'page' : undefined}

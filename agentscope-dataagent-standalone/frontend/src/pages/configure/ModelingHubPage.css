@@ -1,0 +1,73 @@
+.modeling-hub {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  line-height: 1.5;
+}
+.modeling-hub .mh-toolbar { flex-wrap: wrap; justify-content: space-between; gap: 10px; margin-bottom: 13px; }
+.modeling-hub .kw-search .da-icon { width: 18px; height: 18px; flex-shrink: 0; stroke-width: 1.65; }
+.modeling-hub .kw-search input { font-family: inherit; line-height: 1.5; }
+.modeling-hub .kw-search input::placeholder { color: #6c7387; }
+.modeling-hub .kw-count { color: var(--overview-muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.mh-table-scroll { margin: -8px -8px 0; padding: 0 8px 7px; }
+.mh-table-scroll:focus-visible { outline: 2px solid var(--overview-accent); outline-offset: -2px; }
+.modeling-hub .mh-table { min-width: 920px; table-layout: fixed; border-collapse: separate; border-spacing: 0 8px; font-size: 13px; }
+.mh-table th:nth-child(1) { width: 32%; }
+.mh-table th:nth-child(2) { width: 17%; }
+.mh-table th:nth-child(3), .mh-table th:nth-child(4) { width: 6%; }
+.mh-table th:nth-child(5) { width: 14%; }
+.mh-table th:nth-child(6) { width: 12%; }
+.mh-table th:nth-child(7) { width: 13%; }
+.modeling-hub .mh-table th {
+  padding: 11px 15px; border: 0;
+  background: rgba(255, 255, 255, .56); color: var(--overview-muted); font-weight: 600;
+}
+.modeling-hub .mh-table td { padding: 11px 15px; border: 0; background: #fff; color: var(--overview-ink); }
+.modeling-hub .mh-table th:first-child, .modeling-hub .mh-table td:first-child {
+  padding-left: 18px; border-radius: 12px 0 0 12px;
+}
+.modeling-hub .mh-table th:last-child, .modeling-hub .mh-table td:last-child {
+  padding-right: 18px; border-radius: 0 12px 12px 0;
+}
+.mh-table tbody tr {
+  cursor: pointer;
+  filter: drop-shadow(0 1px 1px rgba(38, 32, 72, .05)) drop-shadow(0 3px 5px rgba(38, 32, 72, .055));
+}
+.modeling-hub .mh-table tbody tr:hover { background: transparent; }
+.modeling-hub .mh-table tbody tr:focus-within td { background: #fcfbff; }
+.mh-table tbody tr:focus-visible { outline: 2px solid var(--overview-accent); outline-offset: -2px; border-radius: 12px; }
+@media (hover: hover) {
+  .mh-table tbody tr:hover {
+    filter: drop-shadow(0 2px 2px rgba(38, 32, 72, .07)) drop-shadow(0 6px 8px rgba(38, 32, 72, .11));
+  }
+  .modeling-hub .mh-table tbody tr:hover td { background: #fcfbff; }
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .mh-table tbody tr { transition: filter .42s var(--overview-spring), transform .42s var(--overview-spring); }
+  .mh-table tbody tr:hover { transform: translateY(-3px); }
+}
+.mh-name { display: flex; align-items: center; gap: 10px; }
+.mh-name-copy { min-width: 0; }
+.mh-name strong, .mh-name small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mh-name strong { font-weight: 700; }
+.mh-name small, .mh-sub { margin-top: 3px; color: var(--overview-muted); font-size: 11.5px; }
+.mh-sub { display: block; }
+.mh-icon { --overview-icon-size: 36px; --overview-icon-radius: 11px; }
+.mh-icon .da-icon { width: 20px; height: 20px; }
+.mh-attention { border-radius: 7px; padding: 3px 7px; background: #faf2e4; color: #83551e; font-size: 12px; }
+.modeling-hub .mh-table .overview-action {
+  gap: 7px; min-height: 31px; padding-inline: 10px; border-radius: 9px; font-size: 12px; line-height: 1.5;
+}
+.mh-table .overview-action .da-icon { stroke-width: 1.65; }
+.modeling-hub .mh-empty { display: grid; justify-items: center; gap: 12px; }
+.mh-empty-choices { width: min(100%, 640px); }
+.mh-scroll-hint { display: none; }
+.modeling-hub .mh-table .mh-skeleton-row { pointer-events: none; }
+.mh-skeleton-row td { height: 58px; }
+.mh-skeleton { display: block; max-width: 180px; height: 11px; border-radius: 8px; background: var(--overview-soft); }
+.mh-skeleton-row td.numeric .mh-skeleton, .mh-skeleton-row td:last-child .mh-skeleton { margin-inline-start: auto; }
+@container (max-width: 920px) {
+  .mh-scroll-hint { display: block; margin: 0 0 8px; color: var(--overview-muted); font-size: 12px; }
+}
+@media (max-width: 760px) {
+  .modeling-hub .kw-search { flex-basis: 100%; max-width: none; }
+  .modeling-hub .mh-table .overview-action { min-height: 40px; }
+}

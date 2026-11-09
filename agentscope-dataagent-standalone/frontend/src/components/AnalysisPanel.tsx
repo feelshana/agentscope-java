@@ -26,7 +26,8 @@ export const METHOD_PLACEHOLDERS: Record<MethodChoice, string | null> = {
 };
 
 const trigger: CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', gap: 6, height: 36, padding: '0 10px', borderRadius: 8,
+  display: 'inline-flex', alignItems: 'center', gap: 'var(--da-analysis-gap, 6px)', height: 36,
+  padding: '0 var(--da-analysis-padding, 10px)', borderRadius: 8,
   border: '1px solid var(--da-border)', background: 'var(--da-surface)',
   color: 'var(--da-text)', fontSize: 13, cursor: 'pointer',
 };
@@ -52,7 +53,7 @@ export function AnalysisMenu({ value, onChange, disabledReason, disabled }: {
   }, [open]);
   const chosen = value === 'auto' ? null : value;
   return (
-    <div ref={root} style={{ position: 'relative', display: 'inline-flex' }}
+    <div ref={root} className="da-analysis-menu"
       onKeyDown={e => { if (e.key === 'Escape') setOpen(false); }}>
       {chosen ? (
         <span style={{ ...trigger, cursor: 'default', borderColor: 'var(--da-primary)', background: 'var(--da-primary-soft)', color: 'var(--da-primary)', paddingRight: 4 }}>

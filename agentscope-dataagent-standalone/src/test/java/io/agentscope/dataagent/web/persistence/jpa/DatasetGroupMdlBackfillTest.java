@@ -108,6 +108,41 @@ class DatasetGroupMdlBackfillTest {
                 .containsExactly("granted", "public", "owned");
     }
 
+    @Test
+    void modelingListPaginatesAfterSearchAccessAndDeletionFilters() {
+        for (int i = 1; i <= 12; i++) saveCandidate("sales-" + i, "reader", i, 0, false);
+        saveCandidate("sales-private", "other", 13, 0, false);
+        saveCandidate("sales-deleting", "reader", 14, 0, false).setMdlState("DELETING");
+        saveCandidate("stock", "reader", 15, 0, false);
+
+        var ordering = Sort.by("createdAt").descending().and(Sort.by("id"));
+        var first =
+                repository.findAccessible(
+                        "reader",
+                        false,
+                        false,
+                        "sales",
+                        false,
+                        true,
+                        PageRequest.of(0, 10, ordering));
+        var second =
+                repository.findAccessible(
+                        "reader",
+                        false,
+                        false,
+                        "sales",
+                        false,
+                        true,
+                        PageRequest.of(1, 10, ordering));
+
+        assertThat(first.getTotalElements()).isEqualTo(12);
+        assertThat(first.getContent()).hasSize(10);
+        assertThat(first.getContent().get(0).getId()).isEqualTo("sales-12");
+        assertThat(second.getContent())
+                .extracting(DatasetGroupEntity::getId)
+                .containsExactly("sales-2", "sales-1");
+    }
+
     private DatasetGroupEntity saveCandidate(
             String id, String owner, int created, int version, boolean hasDataset) {
         var group = new DatasetGroupEntity(id, owner, id, "");
