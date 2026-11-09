@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>知识库列表 · 设计方案 20261109</title>
+<style>
+:root{
+  --ink:#22252e; --ink2:#5b6070; --ink3:#8a8fa0; --line:#e9eaf0; --line2:#dfe1ea;
+  --pri:#6654ce; --pri-h:#5542b7; --pri-sub:#f3f0fc; --pri-soft:#eeebfa; --pri-line:#d5cdee;
+  --ok:#2f8f6b; --warn:#a5731f;
+  --shadow:0 10px 28px rgba(34,37,46,.09), 0 2px 6px rgba(34,37,46,.04);
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --ease:cubic-bezier(.22,.61,.36,1);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:#f4f5f8;color:var(--ink);font-family:var(--font);font-size:14px;-webkit-font-smoothing:antialiased;padding-bottom:56px}
+button,input,select{font:inherit;color:inherit}
+button{border:0;background:none;cursor:pointer}
+h1,h2,h3,p{margin:0}
+.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.i.sm{width:15px;height:15px}
+
+/* ---------- 文档头部 ---------- */
+.doc{max-width:1360px;margin:0 auto;padding:34px 32px 0}
+.dochead{display:flex;align-items:flex-start;justify-content:space-between;gap:28px;flex-wrap:wrap}
+.eyebrow{display:inline-flex;align-items:center;gap:7px;font-size:11.5px;color:var(--pri);background:var(--pri-sub);border-radius:999px;padding:3px 10px;letter-spacing:.02em}
+.dochead h1{font-size:27px;font-weight:650;letter-spacing:-.7px;margin:12px 0 8px;line-height:1.35}
+.dochead p{font-size:13px;line-height:1.85;color:#6b7183;max-width:820px}
+.diag{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.diag span{font-size:11.5px;color:#8a6a2a;background:#fdf5e7;border:1px solid #f3e3c4;border-radius:6px;padding:2px 8px}
+.switch{display:flex;gap:3px;padding:4px;background:#fff;border:1px solid var(--line2);border-radius:11px;box-shadow:0 1px 2px rgba(20,24,40,.04);height:fit-content}
+.switch button{height:32px;padding:0 14px;border-radius:8px;font-size:12.5px;color:#6b7183;transition:.15s}
+.switch button:hover{color:var(--ink)}
+.switch button.on{background:var(--ink);color:#fff;font-weight:600}
+
+/* ---------- 画布 ---------- */
+#stage{margin-top:24px}
+.mock{width:1360px;display:flex;background:#fff;border:1px solid #e3e5ec;border-radius:14px;overflow:hidden;box-shadow:0 20px 54px rgba(20,24,40,.10),0 2px 8px rgba(20,24,40,.04);transform-origin:top left;height:782px}
+.mock[data-v="b"]{height:652px}
+.mock[data-v="c"]{height:986px}
+
+/* ---------- 侧栏 ---------- */
+.side{width:236px;flex:none;background:#fafafc;border-right:1px solid var(--line);padding:14px 12px 10px;display:flex;flex-direction:column}
+.brand{display:flex;align-items:center;gap:9px;padding:2px 6px 14px;font-size:14.5px;font-weight:650;letter-spacing:-.2px}
+.brand .mark{width:23px;height:23px;border-radius:7px;background:linear-gradient(145deg,#8b7ae8,#5b47c0);display:grid;place-items:center;color:#fff;box-shadow:0 2px 5px rgba(102,84,206,.32)}
+.brand .mark svg{width:13px;height:13px;stroke-width:2}
+.newchat{display:flex;align-items:center;gap:8px;height:36px;padding:0 12px;border:1px solid var(--line2);border-radius:9px;background:#fff;font-size:13px;color:#5b6070;transition:.15s}
+.newchat:hover{border-color:var(--pri-line);color:var(--pri)}
+.nav{margin-top:14px;display:flex;flex-direction:column;gap:2px}
+.nav a{display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:8px;font-size:13.5px;color:#4c5162;text-decoration:none;transition:.15s}
+.nav a:hover{background:#f1f1f6}
+.nav a.on{background:var(--pri-sub);color:var(--pri);font-weight:600}
+.hist{margin-top:18px;flex:1;min-height:0;overflow:hidden}
+.hist .hh{font-size:11px;color:#a3a8b6;letter-spacing:.05em;padding:0 10px 8px;display:flex;justify-content:space-between}
+.hist .dg{font-size:11px;color:#b0b4c1;padding:10px 10px 5px}
+.hist a{display:block;padding:6px 10px;border-radius:7px;font-size:12.5px;color:#6a7080;text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hist a:hover{background:#f1f1f6;color:var(--ink)}
+.sidefoot{display:flex;align-items:center;gap:9px;border-top:1px solid var(--line);padding:11px 6px 0;font-size:13px;color:#3d4252}
+.ava{width:24px;height:24px;border-radius:50%;background:var(--pri-sub);color:var(--pri);display:grid;place-items:center;font-size:11.5px;font-weight:600;flex:none}
+.sidefoot small{display:block;font-size:10.5px;color:#a3a8b6;font-weight:400;margin-top:1px}
+
+/* ---------- 页面 ---------- */
+.page{flex:1;min-width:0;padding:24px 32px 0;display:flex;flex-direction:column;overflow:hidden}
+.crumb{font-size:12px;color:#a3a8b6;display:flex;gap:8px;align-items:center}
+.crumb b{font-weight:400;color:#c3c7d2}
+.pagehead{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin:10px 0 0}
+.pagehead h1{font-size:26px;font-weight:650;letter-spacing:-.6px}
+.pagehead p{margin-top:7px;font-size:13px;color:#6b7183;line-height:1.7}
+.hactions{display:flex;gap:10px;align-items:center;position:relative;padding-top:22px}
+.ghost{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 13px;border:1px solid var(--line2);background:#fff;border-radius:9px;font-size:13px;color:#4c5162;transition:.15s}
+.ghost:hover{border-color:var(--pri-line);color:var(--pri)}
+.primary{position:relative;display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;border-radius:9px;background:var(--pri);color:#fff;font-size:13px;font-weight:600;box-shadow:0 2px 6px rgba(102,84,206,.26);transition:.15s}
+.primary:hover{background:var(--pri-h)}
+
+/* ---------- 工具栏 ---------- */
+.toolbar{display:flex;align-items:center;gap:10px;margin:21px 0 17px;flex-wrap:nowrap}
+.search{display:flex;align-items:center;gap:8px;width:296px;height:36px;padding:0 10px;border:1px solid var(--line2);border-radius:9px;background:#fff;color:#a3a8b6;transition:.15s}
+.search:focus-within{border-color:var(--pri-line);box-shadow:0 0 0 3px rgba(102,84,206,.10)}
+.search input{flex:1;min-width:0;border:0;outline:0;background:none;font-size:13px;color:var(--ink)}
+.search input::placeholder{color:#a9aebc}
+.search kbd{font-family:var(--font);font-size:10.5px;color:#a3a8b6;border:1px solid var(--line);border-radius:4px;padding:1px 5px;background:#fafafc}
+.seg{display:flex;gap:2px;padding:3px;background:#f4f4f8;border-radius:10px}
+.chip{height:28px;padding:0 10px;border-radius:7px;font-size:12.5px;color:#61667a;display:inline-flex;align-items:center;gap:5px;transition:.15s}
+.chip:hover{color:var(--ink)}
+.chip b{font-weight:500;color:#a3a8b6;font-variant-numeric:tabular-nums;font-size:11.5px}
+.chip.on{background:#fff;color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgba(20,24,40,.09)}
+.chip.on b{color:var(--pri)}
+.spacer{flex:1}
+.sort{height:34px;padding:0 8px;border:1px solid var(--line2);border-radius:8px;background:#fff;font-size:12.5px;color:#5b6070}
+.vt{display:flex;gap:2px;padding:3px;border:1px solid var(--line2);border-radius:8px}
+.vt button{width:26px;height:26px;border-radius:6px;display:grid;place-items:center;color:#9aa0af}
+.vt button.on{background:var(--pri-sub);color:var(--pri)}
+.pagefoot{margin-top:16px;font-size:11.5px;color:#a3a8b6}
+
+/* ---------- 方案 A：工作台卡片 ---------- */
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;position:relative}
+.card{position:relative;display:flex;flex-direction:column;min-width:0;padding:18px 18px 0;border:1px solid var(--line);border-radius:12px;background:#fff;transition:transform .18s var(--ease),border-color .18s,box-shadow .18s}
+.card:hover,.card.hover{transform:translateY(-2px);border-color:var(--pri-line);box-shadow:var(--shadow)}
+.ctop{display:flex;align-items:flex-start;gap:11px}
+.cicon{position:relative;width:40px;height:40px;border-radius:11px;display:grid;place-items:center;flex:none}
+.cicon .i{width:20px;height:20px}
+.h1g{background:linear-gradient(145deg,#efeafd,#e0d7ff);color:#5b47c0}
+.h2g{background:linear-gradient(145deg,#eaf1ff,#d9e6ff);color:#3f6bb5}
+.h3g{background:linear-gradient(145deg,#e9f6f0,#d8efe4);color:#2f7d63}
+.h4g{background:linear-gradient(145deg,#fdf2e9,#f9e3d0);color:#9a6231}
+.h5g{background:linear-gradient(145deg,#f0eef7,#e3e0ee);color:#5f5a70}
+.cname{flex:1;min-width:0}
+.cname h3{font-size:15px;font-weight:600;letter-spacing:-.1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4}
+.cstate{position:relative;display:flex;align-items:center;gap:6px;margin-top:5px;font-size:11.5px;color:#7b8091}
+.dot{width:6px;height:6px;border-radius:50%;background:#c9ccd6;flex:none}
+.dot.ok{background:var(--ok);box-shadow:0 0 0 3px rgba(47,143,107,.13)}
+.dot.wait{background:#d29a3a;box-shadow:0 0 0 3px rgba(210,154,58,.15)}
+.tag-draft{font-size:10.5px;line-height:16px;padding:0 5px;border-radius:4px;background:var(--pri-sub);color:#6b58c4}
+.more{width:26px;height:26px;border-radius:6px;display:grid;place-items:center;color:#a3a8b6;opacity:0;transition:.15s}
+.card:hover .more,.card.hover .more{opacity:1}
+.more:hover{background:#f4f4f8;color:#5b6070}
+.cdesc{margin-top:12px;font-size:12.5px;line-height:1.72;color:#7b8091;min-height:43px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cdesc .none{color:#b6bac6}
+.cmeta{position:relative;display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:12px;font-size:11.5px;color:#8a8fa0;font-variant-numeric:tabular-nums}
+.cmeta i{font-style:normal;color:#d2d5de}
+.owner{display:inline-flex;align-items:center;gap:5px}
+.owner em{width:15px;height:15px;border-radius:50%;background:#edeaf8;color:#6b58c4;font-size:9.5px;font-style:normal;display:grid;place-items:center;font-weight:600}
+.cfoot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:auto;padding:12px 0;border-top:1px solid #f2f3f7}
+.link{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:#6b7183;padding:3px 0}
+.link:hover{color:var(--pri)}
+.btn-sm{position:relative;display:inline-flex;align-items:center;gap:6px;height:31px;padding:0 12px;border-radius:8px;background:var(--pri);color:#fff;font-size:12px;font-weight:600;box-shadow:0 1px 2px rgba(102,84,206,.22)}
+.btn-sm:hover{background:var(--pri-h)}
+.btn-sm.wait{background:var(--pri-sub);color:var(--pri);box-shadow:none;border:1px solid var(--pri-line)}
+.card.add{align-items:center;justify-content:center;gap:7px;min-height:214px;border-style:dashed;border-color:#dcdde7;background:#fcfcfe;text-align:center}
+.card.add:hover{background:#fbfaff;border-color:var(--pri-line);transform:translateY(-2px);box-shadow:none}
+.card.add .circ{width:38px;height:38px;border-radius:50%;border:1px dashed var(--pri-line);display:grid;place-items:center;color:var(--pri);background:#fff}
+.card.add strong{font-size:13px;font-weight:600;color:#4c5162}
+.card.add small{font-size:11.5px;color:#a3a8b6;line-height:1.6}
+
+/* ---------- 方案 B：清单 ---------- */
+.lwrap{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.lrow{display:grid;grid-template-columns:minmax(0,1.9fr) 188px 80px 96px 92px 122px;gap:12px;align-items:center;padding:13px 18px;border-bottom:1px solid var(--line);background:#fff;transition:background .13s}
+.lrow:last-child{border-bottom:0}
+.lrow:hover{background:#fbfaff}
+.lhead{background:#fafafc;font-size:11.5px;color:#9aa0af;letter-spacing:.03em;padding:9px 18px}
+.lmain{display:flex;align-items:center;gap:11px;min-width:0}
+.lmain .cicon{width:32px;height:32px;border-radius:9px}
+.lmain .cicon .i{width:17px;height:17px}
+.lmain h3{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lmain p{font-size:11.5px;color:#9aa0af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.lstate{display:flex;align-items:center;gap:6px;font-size:12px;color:#6b7183;white-space:nowrap}
+.lstate .tag-draft{white-space:nowrap}
+.lnum{font-size:12px;color:#6b7183;font-variant-numeric:tabular-nums}
+.lact{display:flex;gap:6px;justify-content:flex-end;opacity:0;transition:.15s}
+.lrow:hover,.lrow.hov{background:#fbfaff}
+.lrow:hover .lact,.lrow.hov .lact{opacity:1}
+.lact .link{font-size:12px;color:var(--pri)}
+
+/* ---------- 方案 C：画廊 ---------- */
+.gal{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.gcard{position:relative;padding:16px 18px 0;border:1px solid var(--line);border-radius:14px;background:#fff;transition:.18s var(--ease)}
+.gcard .cdesc{min-height:38px}
+.gcard:hover{border-color:var(--pri-line);box-shadow:var(--shadow);transform:translateY(-2px)}
+.gtop{display:flex;align-items:flex-start;gap:12px}
+.gtop .cicon{width:44px;height:44px;border-radius:12px}
+.gstruct{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+.gstruct span{font-size:11px;color:#5f6478;background:#f5f5f9;border:1px solid #ececf3;border-radius:6px;padding:2px 7px;font-family:var(--mono)}
+.gspark{display:flex;align-items:flex-end;gap:4px;height:26px;margin-top:10px}
+.gspark i{flex:1;background:linear-gradient(180deg,#cfc5f5,#e6e0fa);border-radius:3px 3px 0 0}
+.gfoot{display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding:10px 0;border-top:1px solid #f2f3f7}
+
+/* ---------- 标注钉 ---------- */
+.pin{position:absolute;width:18px;height:18px;border-radius:50%;background:#1f2333;color:#fff;font-size:10.5px;font-weight:700;display:none;place-items:center;z-index:9;pointer-events:none;box-shadow:0 0 0 3px rgba(255,255,255,.96),0 2px 6px rgba(0,0,0,.22);font-style:normal}
+.mock[data-v="a"] .pin{display:grid}
+
+/* ---------- 图例 / 说明 ---------- */
+.legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 26px;margin-top:24px}
+.lg{display:flex;gap:11px;padding:13px 15px;background:#fff;border:1px solid #e7e9f0;border-radius:11px}
+.lg .n{width:19px;height:19px;border-radius:50%;background:#1f2333;color:#fff;font-size:10.5px;font-weight:700;display:grid;place-items:center;flex:none;margin-top:1px}
+.lg strong{display:block;font-size:13px;font-weight:600;margin-bottom:3px}
+.lg p{font-size:12px;line-height:1.75;color:#7b8091}
+.lg em{display:inline-block;font-style:normal;font-size:10.5px;color:var(--pri);background:var(--pri-sub);border-radius:4px;padding:1px 6px;margin-top:6px}
+.sec{margin-top:34px}
+.sec h2{font-size:15px;font-weight:650;letter-spacing:-.2px;display:flex;align-items:center;gap:8px}
+.sec h2::before{content:"";width:3px;height:14px;border-radius:2px;background:var(--pri)}
+.cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:14px}
+.box{background:#fff;border:1px solid #e7e9f0;border-radius:12px;padding:16px 17px}
+.box h3{font-size:12.5px;font-weight:650;color:#3d4252;margin-bottom:9px}
+.box ul{margin:0;padding-left:16px}
+.box li{font-size:12px;line-height:1.85;color:#7b8091}
+.box code{font-family:var(--mono);font-size:11px;background:#f5f5f9;border:1px solid #ebebf2;border-radius:4px;padding:0 4px;color:#4f4a86}
+pre{margin:0;font-family:var(--mono);font-size:11px;line-height:1.85;color:#4a4f60;background:#fafafc;border:1px solid #ececf3;border-radius:9px;padding:12px 14px;overflow:auto}
+.refs{display:flex;gap:7px;flex-wrap:wrap;margin-top:14px}
+.refs span{font-size:11.5px;color:#61667a;background:#fff;border:1px solid #e5e7ef;border-radius:999px;padding:3px 10px}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H19v15H6.5A2.5 2.5 0 0 0 4 20.5V5.5Z"/><path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H19v3H6.5A2.5 2.5 0 0 1 4 20.5Z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-db" viewBox="0 0 24 24"><path d="M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3Z"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5 21 21"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.3" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M20 15a2 2 0 0 1-2 2H9l-5 4V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9Z"/></symbol>
+  <symbol id="i-model" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.6"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="4" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="4" cy="18" r="1.2" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3Z"/></symbol>
+  <symbol id="i-task" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2.5"/><path d="M8 3v4M16 3v4M4 10h16M8.5 15l2 2 4-4"/></symbol>
+</svg>
+
+<div class="doc">
+  <header class="dochead">
+    <div>
+      <span class="eyebrow">UI 方案 · 2026.11.09</span>
+      <h1>知识库列表重构</h1>
+      <p>对标 ChatGPT Projects、Linear、Databricks Genie 的卡片规范：让「哪个库能用、哪个还在建、点进去做什么」一眼可辨，而不是读完整张卡片才知道。</p>
+      <div class="diag">
+        <span>现状：≥1364px 排 5 列，卡片仅 200px</span>
+        <span>标题与操作互相挤占</span>
+        <span>状态、权限、负责人权重相同，无法扫读</span>
+      </div>
+    </div>
+    <div class="switch" role="tablist" aria-label="方案切换">
+      <button class="on" data-v="a" role="tab" aria-selected="true">方案 A · 工作台卡片</button>
+      <button data-v="b" role="tab" aria-selected="false">方案 B · 清单</button>
+      <button data-v="c" role="tab" aria-selected="false">方案 C · 画廊</button>
+    </div>
+  </header>
+
+  <div id="stage">
+    <div class="mock" id="mock" data-v="a">
+      <aside class="side">
+        <div class="brand"><span class="mark"><svg class="i" aria-hidden="true"><use href="#i-spark"/></svg></span>红海 DataAgent</div>
+        <button class="newchat"><svg class="i sm"><use href="#i-plus"/></svg>新建对话</button>
+        <nav class="nav">
+          <a class="on"><svg class="i sm"><use href="#i-book"/></svg>知识库</a>
+          <a><svg class="i sm"><use href="#i-model"/></svg>语义建模</a>
+          <a><svg class="i sm"><use href="#i-task"/></svg>例行任务</a>
+          <a><svg class="i sm"><use href="#i-more"/></svg>更多</a>
+        </nav>
+        <div class="hist">
+          <div class="hh"><span>历史会话</span><span>···</span></div>
+          <div class="dg">昨天</div>
+          <a>2026-05-01 至 2026-10-3...</a>
+          <a>2025-01-01 至 2025-09-2...</a>
+          <a>最近一个月每天的订单金额</a>
+          <div class="dg">今天有哪些新</div>
+          <a>今天有哪些新订单</a>
+        </div>
+        <div class="sidefoot"><span class="ava">A</span><span>admin<small>全局管理员</small></span></div>
+      </aside>
+
+      <main class="page">
+        <div class="crumb">返回对话<b>/</b>知识库</div>
+        <div class="pagehead">
+          <div>
+            <h1>知识库</h1>
+            <p>组织你的业务数据，让每一次分析都有清晰的依据。</p>
+          </div>
+          <div class="hactions">
+            <button class="ghost"><svg class="i sm"><use href="#i-db"/></svg>数据源管理</button>
+            <button class="primary"><svg class="i sm"><use href="#i-plus"/></svg>创建知识库<i class="pin" style="right:-9px;top:-9px">7</i></button>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <label class="search"><svg class="i sm"><use href="#i-search"/></svg><input placeholder="搜索知识库名称或说明" aria-label="搜索知识库"><kbd>⌘K</kbd></label>
+          <div class="seg"><i class="pin" style="left:-9px;top:-9px">6</i>
+            <button class="chip on">全部<b>5</b></button>
+            <button class="chip">可管理<b>3</b></button>
+            <button class="chip">可问数<b>5</b></button>
+            <button class="chip">待建模<b>1</b></button>
+          </div>
+          <span class="spacer"></span>
+          <select class="sort" aria-label="排序"><option>最近更新</option><option>最近创建</option><option>名称</option></select>
+          <div class="vt"><button class="on" aria-label="卡片视图"><svg class="i sm"><use href="#i-grid"/></svg></button><button aria-label="列表视图"><svg class="i sm"><use href="#i-list"/></svg></button></div>
+        </div>
+
+        <div id="content"></div>
+        <div class="pagefoot">共 5 个知识库</div>
+      </main>
+    </div>
+  </div>
+
+  <section class="legend" id="legend"></section>
+
+  <section class="sec">
+    <h2>设计原则</h2>
+    <div class="cols">
+      <div class="box">
+        <h3>五层信息，只留一层强调</h3>
+        <ul>
+          <li>标题 → 状态 → 说明 → 元信息 → 动作</li>
+          <li>只有主按钮使用实心紫，其余全部降级为灰阶</li>
+          <li>状态用「颜色点 + 文字」而非彩色底块，避免整屏花</li>
+        </ul>
+      </div>
+      <div class="box">
+        <h3>单一主行动</h3>
+        <ul>
+          <li>已发布库：「开始提问」是唯一主按钮</li>
+          <li>未发布库：主按钮自动变为「继续建模」，不误导用户去问数</li>
+          <li>「查看数据」降为文字链，保留但退居次位（Vercel / Linear 做法）</li>
+        </ul>
+      </div>
+      <div class="box">
+        <h3>宽度决定舒适度</h3>
+        <ul>
+          <li>单卡最小 300px，最多 4 列，<b>不再出现 5 列</b></li>
+          <li>卡片高约 210px，行间距 18px，圆角 12px</li>
+          <li>说明固定 2 行并占位，保证同一行卡片底边对齐</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <h2>落地改动（对应现有 <code style="font-family:var(--mono);font-size:12px;color:#4f4a86">DatasetsPage.tsx / DatasetsPage.css</code>）</h2>
+    <div class="cols" style="grid-template-columns:1.25fr 1fr 1fr">
+      <div class="box">
+        <h3>栅格</h3>
+        <pre>.kb-library .kb-grid{
+  display:grid; gap:18px;
+  grid-template-columns:
+    repeat(auto-fill,minmax(300px,1fr));
+}
+@container (min-width:1560px){
+  .kb-library .kb-grid{
+    grid-template-columns:repeat(4,minmax(0,1fr));
+  }
+}
+/* 删除原 ≥1364px 的 5 列规则 */</pre>
+      </div>
+      <div class="box">
+        <h3>卡片结构</h3>
+        <ul>
+          <li><code>.kb-card</code> padding 16 → 18，圆角 8 → 12</li>
+          <li>新增 <code>.kb-card-titlebar</code>：渐变图标 + 标题 + 状态行</li>
+          <li><code>.kb-card-state</code> 与 <code>.kb-card-info</code> 合并为一行 meta，用 <code>·</code> 分隔</li>
+          <li><code>.kb-permission</code> 从紫底药丸改为灰字，降权</li>
+          <li>按钮高度 30 → 32，「查看数据」改文字链</li>
+        </ul>
+      </div>
+      <div class="box">
+        <h3>状态语义</h3>
+        <ul>
+          <li><span style="color:#2f8f6b">●</span> 已发布 vN — 可问数</li>
+          <li><span style="color:#d29a3a">●</span> 待建模 — 数据已接入，尚未发布</li>
+          <li><span style="color:#6b58c4">▢</span> 草稿待发布 — 附带紫色小标签</li>
+          <li>悬浮：整卡上浮 2px，更多操作（⋯）淡入</li>
+        </ul>
+      </div>
+    </div>
+    <div class="refs">
+      <span>对标：ChatGPT Projects 卡片</span><span>Claude Projects</span><span>Linear 行密度</span><span>Notion 图标语言</span><span>Databricks Genie Space</span><span>Snowflake Intelligence</span><span>Vercel Dashboard</span>
+    </div>
+  </section>
+</div>
+
+<script>
+const LIB = [
+  {n:'我的第一个知识库', d:'', v:1, ds:2, qa:3, owner:'admin', up:'2 小时前', hue:1, manage:true, draft:true},
+  {n:'电商场景', d:'电商销售 - 问答视觉验收', v:2, ds:4, qa:8, owner:'admin', up:'昨天', hue:2, manage:true},
+  {n:'测试本地数据源', d:'本地合成电商订单与客户数据，用于验证问答文字、表格和图表。', v:2, ds:5, qa:12, owner:'admin', up:'3 天前', hue:3, manage:true},
+  {n:'测试数据', d:'', v:2, ds:4, qa:0, owner:'bob', up:'10月26日', hue:4, manage:false},
+  {n:'经营指标', d:'共享给全员的经营口径与指标定义，含订单、客户与区域维度。', v:1, ds:5, qa:6, owner:'admin', up:'10月25日', hue:5, manage:true}
+];
+
+const ico = n => `<svg class="i" aria-hidden="true"><use href="#i-${n}"/></svg>`;
+const statusHTML = x => `<i class="dot ${x.v ? 'ok' : 'wait'}"></i><span>${x.v ? '已发布 v' + x.v : '待建模'}</span>${x.draft ? '<em class="tag-draft">草稿待发布</em>' : ''}`;
+
+function cardA(x, i){
+  return `<article class="card ${i === 1 ? 'hover' : ''}">
+    <div class="ctop">
+      <div class="cicon h${x.hue}g">${ico('book')}<i class="pin" style="left:-8px;top:-8px">2</i></div>
+      <div class="cname">
+        <h3 title="${x.n}">${x.n}</h3>
+        <div class="cstate">${statusHTML(x)}${i === 1 ? '<i class="pin" style="right:-11px;top:-6px">3</i>' : ''}</div>
+      </div>
+      <button class="more" aria-label="${x.n}的更多操作">${ico('more')}</button>
+    </div>
+    <p class="cdesc">${x.d || '<span class="none">暂无说明</span>'}</p>
+    <div class="cmeta"><span>${x.ds} 数据集</span><i>·</i>${x.qa ? `<span>${x.qa} 问答</span><i>·</i>` : ''}<span class="owner"><em>${x.owner[0].toUpperCase()}</em>${x.owner}</span><i>·</i><span>${x.up}更新</span><i class="pin" style="left:-9px;top:-7px">5</i></div>
+    <div class="cfoot">
+      <button class="link">查看数据<span aria-hidden="true">→</span></button>
+      <button class="btn-sm ${x.v ? '' : 'wait'}">${ico(x.v ? 'chat' : 'model')}${x.v ? '开始提问' : '继续建模'}<i class="pin" style="right:-10px;top:-10px">4</i></button>
+    </div>
+  </article>`;
+}
+
+function listB(){
+  const rows = LIB.map((x, i) => `<div class="lrow ${i === 1 ? 'hov' : ''}">
+    <div class="lmain"><div class="cicon h${x.hue}g">${ico('book')}</div><div style="min-width:0"><h3>${x.n}</h3><p>${x.d || '暂无说明'}</p></div></div>
+    <div class="lstate">${statusHTML(x)}</div>
+    <div class="lnum">${x.ds} 个</div>
+    <div class="lnum"><span class="owner"><em>${x.owner[0].toUpperCase()}</em>${x.owner}</span></div>
+    <div class="lnum">${x.up}</div>
+    <div class="lact"><button class="link">查看数据</button><button class="btn-sm ${x.v ? '' : 'wait'}" style="height:28px;font-size:11.5px">${x.v ? '提问' : '建模'}</button></div>
+  </div>`).join('');
+  return `<div class="lwrap">
+    <div class="lrow lhead"><span>名称</span><span>状态</span><span>数据集</span><span>负责人</span><span>最近更新</span><span style="text-align:right">操作</span></div>
+    ${rows}
+  </div>`;
+}
+
+const SPARK = [[34,60,42,72,50,84,64],[48,38,66,52,74,58,80],[28,44,36,58,48,62,70],[40,52,44,64,56,72,60],[30,50,42,60,46,70,58]];
+
+function galleryC(){
+  return `<div class="gal">${LIB.map((x, i) => `<article class="gcard">
+    <div class="gtop">
+      <div class="cicon h${x.hue}g">${ico('book')}</div>
+      <div class="cname"><h3>${x.n}</h3><div class="cstate">${statusHTML(x)}</div></div>
+      <button class="more" style="opacity:1">${ico('more')}</button>
+    </div>
+    <p class="cdesc">${x.d || '<span class="none">暂无说明</span>'}</p>
+    <div class="gstruct"><span>orders</span><span>customers</span><span>${x.ds} 表</span><span>${x.qa} 问答示例</span></div>
+    <div class="gspark">${SPARK[i].map(h => `<i style="height:${h}%"></i>`).join('')}</div>
+    <div class="gfoot">
+      <span style="font-size:11.5px;color:#8a8fa0">近 7 天 · ${12 + i * 7} 次提问</span>
+      <div style="display:flex;gap:8px;align-items:center"><button class="link">查看数据</button><button class="btn-sm ${x.v ? '' : 'wait'}">${x.v ? '开始提问' : '继续建模'}</button></div>
+    </div>
+  </article>`).join('')}<button class="card add" style="min-height:0;border-radius:14px"><span class="circ">${ico('plus')}</span><strong>创建知识库</strong><small>上传 Excel / CSV，或连接数据库</small></button></div>`;
+}
+
+const LEG = {
+  a: [
+    {n:1, t:'三列自适应网格', d:'minmax(300px,1fr) 兜底宽度，1360 以下不再硬挤 5 列；卡片稳定在 330–360px，标题与两个操作才都有呼吸空间。', tag:'对标 Linear 的栅格节奏'},
+    {n:2, t:'渐变身份块', d:'每个库一个低饱和渐变 + 书本图标，替代统一紫色方块。目标不是好看，而是让眼睛在 5 张卡里 0.5 秒锁定目标。', tag:'对标 Notion 图标 / Projects'},
+    {n:3, t:'状态语义化', d:'已发布 = 绿点 + 版本号；待建模 = 琥珀点；有草稿 = 紫色小标签。一列扫下去就知道哪些能用、哪些还没发布。', tag:'对标 Genie Space 状态'},
+    {n:4, t:'唯一主行动', d:'「开始提问」实心紫；「查看数据」降为文字链。未发布的库主行动自动变「继续建模」，避免用户点进去发现不能问。', tag:'对标 Vercel / Linear 单主按钮'},
+    {n:5, t:'元信息收成一行', d:'数据集 / 问答示例 / 负责人 / 更新时间，用 · 分隔、数字等宽。替代原来右侧两行右对齐的挤压式 owner 块。', tag:'对标 Claude Projects 元信息'},
+    {n:6, t:'分面筛选 + ⌘K', d:'全部 / 可管理 / 可问数 / 待建模 带计数，吃掉工具栏右侧的空白；搜索框加 ⌘K 提示，重度用户可键盘直达。', tag:'对标 Linear 过滤器'},
+    {n:7, t:'页头层级', d:'标题 26/650，说明 13 灰；「数据源管理」为 ghost，「创建知识库」实心紫。两档操作一眼可辨。', tag:'对标 ChatGPT 页头'}
+  ],
+  b: [
+    {n:1, t:'列对齐的清单', d:'名称 / 状态 / 数据集 / 负责人 / 更新时间 / 操作 六列固定宽度对齐，20 个以上知识库时扫读效率高于卡片。', tag:'对标 Linear Issues'},
+    {n:2, t:'行高 62px + 分隔线', d:'不用阴影不用圆角堆叠，靠留白与 1px 线分区，长时间浏览不累。', tag:'对标 Notion 数据库'},
+    {n:3, t:'操作悬停出现', d:'平时只有名称与状态，鼠标进入才显示「查看数据 / 提问」，让列表安静。', tag:'对标 GitHub 列表'},
+    {n:4, t:'保留卡片视图', d:'右上角视图切换保留，清单只作为「重度用户」的密度选项，不替换默认。', tag:'—'}
+  ],
+  c: [
+    {n:1, t:'双列宽卡', d:'每张卡 ≥420px，能放下结构预览（表名 chips）与近 7 天提问趋势，突出「这个库里有什么」。', tag:'对标 Databricks Genie 画廊'},
+    {n:2, t:'结构预览', d:'直接露出 orders / customers 等表名，比「5 个数据集」更能让人判断相关性。', tag:'对标 Snowflake Intelligence'},
+    {n:3, t:'活动趋势', d:'7 根细柱表达使用热度，帮助识别「僵尸库」与「高频库」。', tag:'对标「最近使用」信号'},
+    {n:4, t:'适用场景', d:'适合库少（<8）但每库内容丰富的小团队；库多时需配合筛选与搜索，否则一屏信息量不足。', tag:'—'}
+  ]
+};
+
+const mock = document.getElementById('mock');
+const content = document.getElementById('content');
+const legend = document.getElementById('legend');
+
+function render(){
+  const v = mock.dataset.v;
+  content.innerHTML = v === 'a'
+    ? `<div class="grid">${LIB.map(cardA).join('')}<button class="card add"><span class="circ">${ico('plus')}</span><strong>创建知识库</strong><small>上传 Excel / CSV，或连接数据库</small></button><i class="pin" style="left:-10px;top:-10px">1</i></div>`
+    : v === 'b' ? listB() : galleryC();
+  legend.innerHTML = LEG[v].map(x => `<div class="lg"><span class="n">${x.n}</span><div><strong>${x.t}</strong><p>${x.d}</p>${x.tag && x.tag !== '—' ? `<em>${x.tag}</em>` : ''}</div></div>`).join('');
+  fit();
+}
+
+function fit(){
+  const stage = document.getElementById('stage');
+  const s = Math.min(1, (stage.clientWidth - 2) / 1360);
+  mock.style.zoom = s;
+}
+
+document.querySelectorAll('.switch button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.switch button').forEach(b => { b.classList.remove('on'); b.setAttribute('aria-selected', 'false'); });
+    btn.classList.add('on');
+    btn.setAttribute('aria-selected', 'true');
+    mock.dataset.v = btn.dataset.v;
+    render();
+  });
+});
+
+document.addEventListener('click', e => {
+  const chip = e.target.closest('.chip');
+  if (chip) { chip.parentElement.querySelectorAll('.chip').forEach(c => c.classList.remove('on')); chip.classList.add('on'); }
+  const vt = e.target.closest('.vt button');
+  if (vt) { vt.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('on')); vt.classList.add('on'); }
+});
+
+window.addEventListener('resize', fit);
+
+const preset = new URLSearchParams(location.search).get('v');
+if (preset && ['a', 'b', 'c'].includes(preset)) {
+  document.querySelectorAll('.switch button').forEach(b => {
+    const on = b.dataset.v === preset;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-selected', String(on));
+  });
+  mock.dataset.v = preset;
+}
+render();
+</script>
+</body>
+</html>
