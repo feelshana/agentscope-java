@@ -69,9 +69,10 @@ export interface SessionsSidebarProps {
   refreshKey: number;
   /** Icon-only rail; the modeling workbench starts collapsed to give the work area the width. */
   collapsed?: boolean;
+  onNewChat: () => void;
 }
 
-export default function SessionsSidebar({ refreshKey, collapsed = false }: SessionsSidebarProps) {
+export default function SessionsSidebar({ refreshKey, collapsed = false, onNewChat }: SessionsSidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const navigationItems = location.pathname.startsWith('/knowledge-bases/')
@@ -150,6 +151,7 @@ export default function SessionsSidebar({ refreshKey, collapsed = false }: Sessi
   }, [entries]);
 
   function handleNewChat() {
+    onNewChat();
     navigate('/chat');
   }
 

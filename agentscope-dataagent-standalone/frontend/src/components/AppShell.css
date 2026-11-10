@@ -121,11 +121,7 @@
   .rail-session-delete { opacity: 1; }
 }
 
-/* Compact chrome: the shallow breadcrumb only repeats the menu, a deeper one stays for going back,
-   and the modeling workbench header and tabs share one line. Embedded in a portal iframe, the
-   brand is dropped too because the host header already shows it. */
-.app-shell.is-embedded .rail-brand,
-.app-shell.is-embedded .rail-brand-mark { display: none; }
+/* A deeper breadcrumb supports navigation back, and the workbench header shares a line with its tabs. */
 .app-shell .kw-breadcrumb { height: 38px; min-height: 38px; }
 @media (min-width: 761px) {
   .app-shell .kw-breadcrumb-shallow { display: none; }

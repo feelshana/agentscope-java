@@ -1,4 +1,10 @@
-# 当前任务：主界面 HTML 基线
+# 当前任务：对话侧栏
+
+更新：2026-11-10 Asia/Shanghai。分支 `liyufan_dev`。
+
+本地前端在独立页面和门户 iframe 内显示侧栏品牌。登录进入对话首页和点击「新建对话」时展开侧栏，手动收放只在当前页面运行期间有效。前端三个部署路径各 98 项、TypeScript 和 Vite 构建通过。Playwright 用隔离接口验证重新登录、同页新建对话、iframe 品牌及窄屏抽屉。
+
+## 已实现：主界面 HTML 基线
 
 更新：2026-11-10 Asia/Shanghai。分支 `liyufan_dev`。
 

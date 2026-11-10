@@ -506,3 +506,7 @@ Git 核对 8515fd28 到 68b5d7a5 期间 BI 登录链路无差异；Git 内主脚
 ## 2026-11-10 Asia/Shanghai｜Checkpoint：主界面基线
 
 以现有前端为基线更新五个主页面 HTML，核对桌面和窄屏、分页、筛选和帮助抽屉。前端回归与构建、Spotless、Maven 测试及打包通过。现有功能改动与 HTML 文档分别整理为本地提交。
+
+## 2026-11-10 Asia/Shanghai｜Checkpoint：对话侧栏
+
+在本地前端应用品牌显示和侧栏展开规则。Playwright 使用本地 Vite 页面和隔离接口验证重新登录、当前页新建对话、iframe 内展开和收起的品牌，以及窄屏抽屉。前端回归、构建、Spotless、文档检查和 Maven 打包通过。Maven 共运行 1127 项测试，33 项按条件跳过，无失败。源码留在本地。

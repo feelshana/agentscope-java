@@ -10,32 +10,24 @@ import { ShellOutletContext } from './EditTierGate';
 import { ShellNavigationContext } from './ShellNavigation';
 import Icon from './Icon';
 import NewVersionBanner from './NewVersionBanner';
-import { embedded, isModelingWorkbench } from '../state/embedded';
+import { isModelingWorkbench } from '../state/embedded';
 import './AppShell.css';
-
-const SIDEBAR_PREFERENCE_KEY = 'dataagent.sidebar.collapsed';
 
 export default function AppShell() {
   const location = useLocation();
-  const [sidebarPreference, setSidebarPreference] = useState<boolean | null>(() => {
-    try {
-      const saved = localStorage.getItem(SIDEBAR_PREFERENCE_KEY);
-      if (saved === 'true' || saved === 'false') return saved === 'true';
-    } catch { /* Storage may be unavailable in an embedded browser. */ }
-    return null;
-  });
+  const [sidebarPreference, setSidebarPreference] = useState<boolean | null>(null);
   const defaultCollapsed = isModelingWorkbench(location.pathname);
   const collapsed = sidebarPreference ?? defaultCollapsed;
   const sidebarAction = collapsed ? '展开侧边栏' : '收起侧边栏';
-  useEffect(() => {
-    if (sidebarPreference === null) return;
-    try { localStorage.setItem(SIDEBAR_PREFERENCE_KEY, String(sidebarPreference)); } catch { /* Keep the in-memory choice. */ }
-  }, [sidebarPreference]);
   const [navigationOpen, setNavigationOpen] = useState(false);
   const railCollapsed = !navigationOpen && collapsed;
   const navigation = useRef<HTMLElement>(null);
   const content = useRef<HTMLElement>(null);
   const navigationTrigger = useRef<HTMLElement | null>(null);
+  const resetSidebarForNewChat = () => {
+    setSidebarPreference(null);
+    setNavigationOpen(false);
+  };
   const toggleNavigation = useCallback(() => {
     navigationTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setNavigationOpen(value => !value);
@@ -88,7 +80,7 @@ export default function AppShell() {
 
   return (
     <ShellNavigationContext.Provider value={{ enabled: true, open: navigationOpen, toggle: toggleNavigation }}>
-    <div className={`app-shell${embedded ? ' is-embedded' : ''}`}>
+    <div className="app-shell">
       <a
         href="#main-content"
         style={{ position: 'absolute', left: -9999, top: 0, color: 'var(--da-primary)' }}
@@ -101,7 +93,7 @@ export default function AppShell() {
       <aside ref={navigation} id="app-navigation" className={`shell-navigation${navigationOpen ? ' is-open' : ''}${railCollapsed ? ' is-collapsed' : ''}`}
         role={navigationOpen ? 'dialog' : undefined} aria-modal={navigationOpen || undefined} aria-label={navigationOpen ? '主导航' : undefined}>
         <button type="button" className="shell-nav-close" aria-label="关闭导航" onClick={() => setNavigationOpen(false)}><Icon name="close" size="sm" /></button>
-        <SessionsSidebar refreshKey={refreshTick} collapsed={railCollapsed} />
+        <SessionsSidebar refreshKey={refreshTick} collapsed={railCollapsed} onNewChat={resetSidebarForNewChat} />
         <button type="button" className="rail-collapse-toggle" aria-label={sidebarAction} title={sidebarAction}
           aria-expanded={!collapsed} aria-controls="app-sidebar-content"
           onClick={() => setSidebarPreference(previous => !(previous ?? defaultCollapsed))}>
