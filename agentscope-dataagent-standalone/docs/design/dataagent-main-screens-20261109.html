@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#f2f2f7">
 <title>红海 DataAgent · 当前前端基线（示例数据）</title>
+<script>
+const previewParams = new URLSearchParams(location.search);
+const previewMode = previewParams.get('embed') === '1' ? 'embedded' : previewParams.get('standalone') === '1' ? 'standalone' : 'portal';
+const previewRoute = /^(home|chat|knowledge|modeling|tasks|more|sources|group\/\d+|dataset\/\d+\/\d+)$/;
+const previewOrigin = location.protocol === 'file:' ? 'null' : location.origin;
+const previewTarget = location.protocol === 'file:' ? '*' : location.origin;
+document.documentElement.dataset.previewMode = previewMode;
+</script>
 <style>
 :root{
   color-scheme:light;
@@ -196,8 +204,9 @@ dialog::backdrop{background:#28263f45}
 main:focus { outline: none; }
 .screen { min-width: 0; }
 .rail { padding-block: 24px 14px; }
-.rail .brand { margin-bottom: 5px; font-size: 16px; gap: 11px; }
-.rail .brand > svg { width: 28px; height: 34px; }
+.rail .brand { margin-bottom: 5px; color: #252936; font-size: 16px; font-weight: 650; letter-spacing: -.5px; line-height: 1.2; }
+.rail .brand > svg { width: 30px; height: 36px; }
+.rail .brand .rail-brand-latin { font-weight: 680; letter-spacing: -.6px; }
 .rail .new-conversation { display: flex; justify-content: flex-start; padding-left: 11px; gap: 12px; }
 .rail .new-conversation[aria-current="page"] { background: #eeebfa; border-color: #d5cdee; color: #5542b7; }
 .rail .nav { gap: 5px; }
@@ -488,6 +497,168 @@ main:has(> [data-screen="tasks"]:not([hidden])) { display: flex; flex-direction:
 }
 @media(prefers-reduced-motion:reduce){ .starter:hover,.resource-card:hover { transform:none; } }
 
+.kb-crumb { display:flex; align-items:center; flex-wrap:wrap; gap:7px; margin:0 0 16px; color:var(--muted); overflow-wrap:anywhere; }
+.kb-crumb a { text-decoration:none; }
+.kb-crumb a:hover { color:var(--accent-dark); }
+.kb-heading { min-width:0; }
+.kb-heading h1 { overflow-wrap:anywhere; }
+.kb-heading p { margin:5px 0 0; }
+.kb-pills,.kb-actions,.kb-tools { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.kb-pills { margin-top:10px; }
+.kb-pills > span { background:#fff9; border:1px solid var(--card-line); border-radius:8px; padding:3px 9px; font-size:12px; color:var(--muted); overflow-wrap:anywhere; }
+.kb-panel { margin-top:20px; background:var(--surface); border:1px solid var(--card-line); border-radius:18px; box-shadow:var(--shadow); }
+.kb-panel-head { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; padding:16px 18px; }
+.kb-panel-head h2 { margin:0; font-size:17px; }
+.kb-panel-head p { margin:3px 0 0; color:var(--muted); font-size:13px; }
+.kb-tools .search { flex:0 1 auto; width:250px; max-width:100%; }
+.kb-tools > span { white-space:nowrap; }
+.kb-table-scroll { overflow:auto; max-height:540px; }
+.kb-table-scroll:focus-visible { outline-offset:-2px; }
+.kb-table { width:100%; border-collapse:separate; border-spacing:0; text-align:left; }
+.kb-table :is(th,td) { padding:11px 16px; border-bottom:1px solid var(--card-line); vertical-align:middle; }
+.kb-table th { background:#f7f7fb; color:var(--muted); font-size:12px; white-space:nowrap; position:sticky; top:0; z-index:1; }
+.kb-table td small,.kb-file small,.kb-source-note small { display:block; color:var(--muted); }
+.kb-table td,.kb-technical dd { overflow-wrap:anywhere; }
+.kb-table .number { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.kb-table .end { text-align:right; }
+.kb-table .kb-actions { justify-content:flex-end; }
+.kb-work-table { min-width:620px; }
+.kb-preview-table :is(th,td) { white-space:nowrap; }
+.kb-preview-table :is(th,td):first-child { position:sticky; left:0; min-width:42px; text-align:center; background:#f7f7fb; }
+.kb-preview-table th:first-child { z-index:2; }
+.kb-panel-foot { display:flex; flex-wrap:wrap; justify-content:space-between; gap:6px; padding:12px 16px; color:var(--muted); font-size:12px; }
+.kb-entry { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; padding:0 18px 18px; }
+.kb-entry button { display:grid; justify-items:start; gap:6px; text-align:left; border:1px dashed #d6d1e8; border-radius:14px; background:#faf9ff; padding:15px; }
+.kb-entry button:hover { border-color:var(--accent); background:var(--accent-soft); }
+.kb-entry strong { margin-top:2px; }
+.kb-entry small,.kb-note { color:var(--muted); }
+.kb-tabbar { display:flex; flex-wrap:wrap; gap:5px; padding:10px 12px 0; border-bottom:1px solid var(--card-line); }
+.kb-tabbar button { padding:9px 12px; background:none; border:0; border-bottom:2px solid transparent; color:var(--muted); }
+.kb-tabbar button[aria-pressed="true"] { color:var(--accent-dark); border-color:var(--accent); font-weight:650; }
+.kb-empty { padding:24px 16px; text-align:center; color:var(--muted); }
+.kb-technical { margin:0; padding:4px 16px 16px; }
+.kb-technical > div { display:grid; grid-template-columns:minmax(95px,20%) minmax(0,1fr); gap:12px; padding:10px 0; border-bottom:1px solid var(--card-line); }
+.kb-technical dt { color:var(--muted); }
+.kb-technical dd { margin:0; }
+.kb-status { margin:12px 0 0; font-size:13px; color:var(--green-dot); }
+.kb-status:empty { display:none; }
+.kb-alert { margin:0; border-radius:10px; background:#f8f7fc; padding:10px 12px; color:var(--muted); font-size:13px; }
+.kb-dialog { width:min(var(--kb-dialog-width,660px),calc(100% - 24px)); max-width:none; max-height:calc(100dvh - 24px); padding:0; }
+.kb-dialog form { display:flex; flex-direction:column; max-height:calc(100dvh - 26px); }
+.kb-dialog .dialog-head,.kb-dialog .dialog-foot { flex:none; }
+.kb-dialog .dialog-body { min-height:0; overflow:auto; }
+.kb-dialog .dialog-foot { align-items:center; flex-wrap:wrap; }
+.kb-dialog .dialog-body p { margin:0; }
+.kb-dialog .dialog-body select { min-width:0; min-height:36px; width:100%; border:1px solid var(--line); border-radius:8px; background:var(--surface); padding:5px 8px; }
+.kb-dialog .dialog-body input[type="checkbox"] { width:auto; accent-color:var(--accent); }
+.kb-dialog .dialog-body label small { color:var(--muted); font-weight:400; }
+.kb-create-form { display:grid; grid-template-columns:110px minmax(0,1fr); gap:14px 16px; }
+.kb-create-form label { padding-top:7px; }
+.kb-create-form small { display:block; margin-top:4px; color:var(--muted); }
+.kb-create-form textarea { min-height:90px; }
+.kb-drop { display:grid; justify-items:center; gap:5px; width:100%; padding:20px 12px; border:1px dashed #c9c0ea; border-radius:14px; background:#faf8ff; text-align:center; }
+.kb-drop:hover,.kb-drop.dragging { border-color:var(--accent); background:var(--accent-soft); }
+.kb-drop > svg { color:var(--accent); width:24px; height:24px; }
+.kb-drop small { color:var(--muted); }
+.kb-file,.kb-source-note { display:flex; align-items:center; gap:10px; justify-content:space-between; padding:9px 12px; border:1px solid var(--card-line); border-radius:10px; }
+.kb-file + .kb-file { margin-top:6px; }
+.kb-file > div,.kb-source-note > div { min-width:0; overflow-wrap:anywhere; }
+.kb-file label { display:flex; align-items:center; margin-top:5px; font-weight:400; }
+.kb-picker { display:grid; grid-template-columns:minmax(130px,.65fr) minmax(220px,1.5fr) minmax(230px,1.3fr); gap:10px; }
+.kb-picker-pane { min-width:0; border:1px solid var(--line); border-radius:12px; background:var(--surface); overflow:hidden; }
+.kb-picker-pane h3 { margin:0; padding:10px 12px; background:#f8f8fb; font-size:13px; overflow-wrap:anywhere; }
+.kb-picker-controls { display:grid; gap:6px; padding:8px; }
+.kb-picker-list { height:clamp(150px,38vh,340px); overflow:auto; overscroll-behavior:contain; padding:5px 7px; }
+.kb-picker-list button { color:inherit; border:0; background:transparent; text-align:left; overflow-wrap:anywhere; }
+.kb-picker-list button[aria-pressed="true"] { color:var(--accent-dark); background:var(--accent-soft); }
+.kb-picker-list .kb-database { display:block; width:100%; padding:8px; border-radius:8px; }
+.kb-table-option { display:grid; grid-template-columns:auto minmax(0,1fr); gap:5px; align-items:start; padding:4px 0; }
+.kb-table-option input { margin:9px 0 0 3px; }
+.kb-table-option button { display:block; width:100%; border-radius:8px; padding:5px 7px; }
+.kb-table-option small { display:block; color:var(--muted); }
+.kb-table-option button:hover,.kb-picker-list .kb-database:hover { background:#f4f1fd; }
+.kb-picker-pane .kb-table :is(th,td) { padding:8px; }
+.kb-selection { display:flex; gap:6px; align-items:center; flex-wrap:wrap; overflow-wrap:anywhere; }
+.kb-selection details { min-width:0; }
+.kb-selection summary { cursor:pointer; color:var(--accent-dark); }
+.kb-selection details > div { max-height:126px; overflow:auto; margin-top:5px; }
+.kb-dialog-status { margin-right:auto; font-size:12px; color:var(--muted); }
+.kb-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:11px; }
+.kb-form-grid .full { grid-column:1 / -1; }
+.kb-dialog details > summary { cursor:pointer; }
+.kb-source-link { border:0; padding:0; background:none; text-align:left; color:var(--accent-dark); font-weight:650; }
+.kb-source-link:hover { text-decoration:underline; }
+.kb-note-line { display:flex; align-items:flex-start; gap:7px; color:var(--muted); font-size:13px; }
+.kb-danger { color:#a63642; }
+.kb-inline { min-height:32px; padding-inline:6px; background:none; border-color:transparent; font-size:13px; }
+[data-screen="sources"] > .kb-note { margin-top:10px; font-size:12px; }
+@media(max-width:860px) {
+  .kb-picker { grid-template-columns:minmax(115px,.6fr) minmax(0,1.4fr); }
+  .kb-picker-pane:last-child { grid-column:1 / -1; }
+  .kb-picker-pane:last-child .kb-picker-list { height:auto; max-height:190px; }
+}
+@media(max-width:540px) {
+  .kb-entry,.kb-form-grid { grid-template-columns:1fr; }
+  .kb-create-form { grid-template-columns:1fr; gap:5px; }
+  .kb-picker { grid-template-columns:minmax(0,1fr); }
+  #kb-picker-databases { display:flex; gap:4px; height:auto; overflow:auto; }
+  #kb-picker-databases button { width:auto; white-space:nowrap; }
+  #kb-picker-tables { height:clamp(155px,30vh,230px); }
+  .kb-panel-head { padding-inline:12px; }
+  .kb-tools .search { width:100%; min-width:0; }
+  .kb-table :is(th,td) { padding-inline:10px; }
+  .kb-source-note { flex-wrap:wrap; }
+}
+/* Portal layout uses measured CSS pixels. The top edge rounds to one device pixel. */
+.portal-preview { display:none; }
+[data-preview-mode="portal"] { scrollbar-gutter:stable; }
+[data-preview-mode="portal"]::-webkit-scrollbar { width:14px; }
+[data-preview-mode="portal"] body { background:#f4f4f4; }
+[data-preview-mode="portal"] body > :is(.shell,.skip) { display:none; }
+[data-preview-mode="portal"] .portal-preview { display:block; --portal-header:50px; --portal-inset:20px; }
+.portal-bar {
+  position:sticky; top:0; z-index:2; display:flex; align-items:center; justify-content:space-between;
+  gap:12px; height:var(--portal-header); padding:0 16px; background:#e7f3ff; color:#18202d;
+}
+.portal-brand,.portal-meta,.portal-space,.portal-user { display:flex; align-items:center; white-space:nowrap; }
+.portal-brand { gap:8px; font-size:19px; font-weight:750; }
+.portal-brand > svg { width:26px; height:29px; }
+.portal-meta { gap:14px; }
+.portal-security { width:26px; height:29px; }
+.portal-space { gap:7px; padding:5px 13px; background:#d8e8ff; color:#2865dc; border-radius:4px; font-size:13px; }
+.portal-user { gap:6px; margin-inline-start:24px; font-size:14px; }
+.portal-avatar { display:grid; place-items:center; width:24px; height:24px; border-radius:50%; color:#fff; background:#1765fa; }
+.portal-meta .icon { width:12px; height:12px; transform:rotate(90deg); }
+.portal-content { margin:var(--portal-inset); border-top:1px solid transparent; padding-bottom:4.667px; }
+.portal-frame { display:block; width:100%; height:max(500px,calc(100dvh - var(--portal-header) - var(--portal-inset))); border:0; background:white; }
+.portal-tools { display:grid; gap:6px; place-items:center; position:fixed; right:1px; bottom:98px; z-index:1; }
+.portal-tools span { display:grid; place-items:center; width:22px; height:22px; border:1px solid #fff; border-radius:50%; background:#3b97ff; color:white; box-shadow:0 2px 8px #41639f33; }
+.portal-tools span:first-child { width:15px; height:15px; background:#f8faff; color:#7f8ca5; }
+.portal-tools span:last-child { background:#f8faff; color:#7f8ca5; }
+.portal-tools .icon { width:13px; height:13px; }
+.portal-tools span:first-child .icon { width:9px; height:9px; }
+.portal-tools span:last-child .icon { transform:rotate(180deg); }
+.embedded-guide { display:none; }
+[data-preview-mode="embedded"] .rail { background:#f6f7fa; }
+[data-preview-mode="embedded"] .guide-preview { display:none; }
+[data-preview-mode="embedded"] .embedded-guide {
+  display:flex; align-items:center; gap:7px; width:100%; margin-top:auto; min-height:39px; padding:5px 6px;
+  border:0; border-top:1px solid var(--line); background:none; color:var(--accent-dark); font-size:12px;
+}
+.embedded-guide > small { margin-inline-start:auto; font-size:inherit; }
+[data-preview-mode="embedded"] .rail .account { margin-top:0; }
+[data-preview-mode="embedded"] .is-collapsed .embedded-guide { display:none; }
+[data-preview-mode="embedded"] .is-collapsed .rail .account { margin-top:auto; }
+@media (min-width:761px) and (max-width:1100px) {
+  [data-preview-mode="embedded"] .shell:not(.is-collapsed) { grid-template-columns:216px minmax(0,1fr); }
+}
+@media (max-width:760px) {
+  [data-preview-mode="portal"] .portal-preview { --portal-inset:8px; }
+  .portal-bar { padding-inline:10px; }
+  .portal-brand { font-size:16px; }
+  .portal-user { margin-inline-start:0; }
+  .portal-space,.portal-security,.portal-tools { display:none; }
+}
 </style>
 </head>
 <body>
@@ -513,6 +684,9 @@ main:has(> [data-screen="tasks"]:not([hidden])) { display: flex; flex-direction:
   <symbol id="shield" viewBox="0 0 24 24"><path d="m12 3 8 4v6c0 4-8 8-8 8s-8-4-8-8V7z"/><rect x="9" y="10" width="6" height="5" rx="1"/><path d="M10 10V8a2 2 0 0 1 4 0v2"/></symbol>
   <symbol id="sliders" viewBox="0 0 24 24"><path d="M3 6h11m4 0h3M3 12h3m4 0h11M3 18h10m4 0h4"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="15" cy="18" r="2"/></symbol>
   <symbol id="info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></symbol>
+  <symbol id="kb-upload" viewBox="0 0 24 24"><path d="M12 16V3m-5 5 5-5 5 5M4 15v5h16v-5"/></symbol>
+  <symbol id="kb-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6m-6 4h6"/></symbol>
+  <symbol id="kb-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2 6m2-13v7h-7"/></symbol>
   <symbol id="nav-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
   <symbol id="preview-brand-mark" viewBox="0 0 40 48" fill="none">
   <defs>
@@ -531,10 +705,32 @@ main:has(> [data-screen="tasks"]:not([hidden])) { display: flex; flex-direction:
   <path d="m4.5 21.2 7.8-3.5 3.7 1.7v8.3c0 1-.6 1.9-1.5 2.3l-9.6 4.3A1.4 1.4 0 0 1 3 33v-9.5c0-1 .6-1.9 1.5-2.3Z" fill="url(#fold)"/>
   </symbol>
 </svg>
+<div class="portal-preview">
+  <header class="portal-bar">
+    <div class="portal-brand">
+      <svg viewBox="0 0 28 30" aria-hidden="true">
+        <defs><linearGradient id="portal-blue" x2=".3" y2="1" gradientUnits="objectBoundingBox"><stop stop-color="#25b9ff"/><stop offset="1" stop-color="#1547fb"/></linearGradient></defs>
+        <path d="M2 3a2.5 2.5 0 0 1 3.7-2L26 12.7a2.7 2.7 0 0 1 0 4.6L5.7 29A2.5 2.5 0 0 1 2 27Z" fill="url(#portal-blue)"/>
+        <path d="m8 7 11 8-11 8 4-8Z" fill="#b8edff"/><path d="m8 7 4 8-7-3Z" fill="#fff"/>
+      </svg>
+      <span>红海数据中台</span>
+    </div>
+    <div class="portal-meta">
+      <svg class="portal-security" viewBox="0 0 30 32" aria-hidden="true"><path d="M15 2 27 7v9c0 6-5 11-12 14C8 27 3 22 3 16V7Z" fill="#91c8fb"/><path d="m15 5 9 4v7c0 4-3 8-9 11-6-3-9-7-9-11V9Z" fill="#2b77ed"/><path d="M12 15v-3a3 3 0 1 1 6 0v3" fill="none" stroke="#e7f3ff" stroke-width="2"/><rect x="10" y="15" width="10" height="7" rx="2" fill="#ffd15b"/></svg>
+      <span class="portal-space">开发者空间<svg class="icon" aria-hidden="true"><use href="#chevron"/></svg></span>
+      <span class="portal-user"><span class="portal-avatar" aria-hidden="true">李</span>李雨繁<svg class="icon" aria-hidden="true"><use href="#chevron"/></svg></span>
+    </div>
+  </header>
+  <div class="portal-content"><iframe class="portal-frame" id="portal-frame" title="DataAgent · 分析云嵌套预览"></iframe></div>
+  <div class="portal-tools" aria-hidden="true">
+    <span><svg class="icon"><use href="#close"/></svg></span><span><svg class="icon"><use href="#chat"/></svg></span>
+    <span><svg class="icon"><use href="#book"/></svg></span><span><svg class="icon"><use href="#chevron"/></svg></span>
+  </div>
+</div>
 <a class="skip" href="#main">跳到主要内容</a>
 <div class="shell">
   <aside class="rail" id="app-navigation" aria-label="主导航">
-    <div class="brand"><svg aria-hidden="true" viewBox="0 0 40 48"><use href="#preview-brand-mark"/></svg><span>红海 DataAgent</span></div>
+    <div class="brand" role="img" aria-label="红海 DataAgent"><svg aria-hidden="true" viewBox="0 0 40 48"><use href="#preview-brand-mark"/></svg><span>红海 <span class="rail-brand-latin">DataAgent</span></span></div>
     <button type="button" class="btn new-conversation" data-page="chat" data-new aria-label="新建对话"><svg class="icon" aria-hidden="true"><use href="#compose"/></svg><span>新建对话</span></button>
     <nav class="nav" aria-label="应用导航">
       <button type="button" data-page="knowledge" aria-label="知识库"><svg class="icon" aria-hidden="true"><use href="#book"/></svg><span>知识库</span></button>
@@ -550,6 +746,7 @@ main:has(> [data-screen="tasks"]:not([hidden])) { display: flex; flex-direction:
       <p>昨天</p>
       <button type="button" data-question="客服满意度近三月变化？"><span>客服满意度近三月变化？</span></button>
     </section>
+    <button type="button" class="embedded-guide" id="embedded-guide"><svg class="icon small" aria-hidden="true"><use href="#rows"/></svg>新手任务 <small>0/4</small><svg class="icon small" aria-hidden="true"><use href="#chevron"/></svg></button>
     <div class="account"><span class="avatar" aria-hidden="true">A</span><span class="account-copy"><strong>admin</strong><small id="account-role">全局管理员</small></span>
       <button type="button" class="rail-collapse" id="rail-collapse" aria-label="收起导航" aria-expanded="true" aria-controls="app-navigation"><svg class="icon small" aria-hidden="true"><use href="#chevron"/></svg></button>
     </div>
@@ -565,7 +762,7 @@ main:has(> [data-screen="tasks"]:not([hidden])) { display: flex; flex-direction:
     <header class="page-head">
       <div><h1>知识库</h1><p>管理业务数据，选择知识库开始问数。</p></div>
       <div class="head-actions">
-        <button type="button" class="btn" data-preview="数据源管理"><svg class="icon small" aria-hidden="true"><use href="#db"/></svg>数据源管理</button>
+        <button type="button" class="btn" data-page="sources"><svg class="icon small" aria-hidden="true"><use href="#db"/></svg>数据源管理</button>
         <button type="button" class="btn primary" id="create"><svg class="icon small" aria-hidden="true"><use href="#plus"/></svg>创建知识库</button>
       </div>
     </header>
@@ -592,6 +789,9 @@ main:has(> [data-screen="tasks"]:not([hidden])) { display: flex; flex-direction:
       <nav class="pagination" id="knowledge-pagination" aria-label="知识库分页" hidden></nav>
     </section>
   </section>
+  <section class="screen" data-screen="group" id="kb-group" hidden></section>
+  <section class="screen" data-screen="dataset" id="kb-dataset" hidden></section>
+  <section class="screen" data-screen="sources" id="kb-sources" hidden></section>
   <section class="screen conversation" data-screen="conversation" hidden>
     <header class="conversation-bar">
       <button type="button" class="mobile-toggle" aria-label="展开导航" aria-expanded="false" aria-controls="app-navigation"><svg class="icon" aria-hidden="true"><use href="#nav-menu"/></svg></button>
@@ -739,10 +939,26 @@ main:has(> [data-screen="tasks"]:not([hidden])) { display: flex; flex-direction:
   <form id="dialog-form">
     <header class="dialog-head"><h2 id="dialog-title"></h2><button type="button" class="icon-button" id="close-dialog" aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#close"/></svg></button></header>
     <div class="dialog-body" id="dialog-body"></div>
-    <footer class="dialog-foot"><button type="button" class="btn" id="cancel">关闭</button><button type="submit" class="btn primary" id="save" hidden>创建</button></footer>
+    <footer class="dialog-foot"><span class="kb-dialog-status" id="dialog-status" aria-live="polite" hidden></span><button type="button" class="btn" id="cancel">关闭</button><button type="submit" class="btn primary" id="save" hidden>创建</button></footer>
   </form>
 </dialog>
 <script>
+if (previewMode === 'portal') {
+  const frame = document.getElementById('portal-frame');
+  const childUrl = new URL(location.href);
+  childUrl.searchParams.set('embed','1');
+  window.addEventListener('message',event => {
+    if (event.source !== frame.contentWindow || event.origin !== previewOrigin) return;
+    const route = event.data?.dataAgentPreviewRoute;
+    if (typeof route !== 'string' || !previewRoute.test(route)) return;
+    if (location.hash !== '#' + route) history.replaceState(null,'','#' + route);
+  });
+  window.addEventListener('hashchange',() => {
+    const route = location.hash.slice(1) || 'home';
+    if (previewRoute.test(route)) frame.contentWindow.postMessage({dataAgentPreviewOpen:route},previewTarget);
+  });
+  frame.src = childUrl.href;
+} else {
 const $ = id => document.getElementById(id);
 const icon = (name, small = false) => '<svg class="icon' + (small ? ' small' : '') + '" aria-hidden="true"><use href="#' + name + '"/></svg>';
 const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -750,7 +966,7 @@ const formatDate = new Intl.DateTimeFormat('zh-CN', {month:'long',day:'numeric',
 const date = day => new Date('2026-11-' + String(day).padStart(2,'0') + 'T04:00:00Z');
 const libraries = [
   {id:1,name:'电商经营分析',version:2,manage:true,count:4,owner:'admin',date:date(8),description:'订单、客户与商品数据，用于经营指标问数。',tables:['订单','订单明细','商品','客户']},
-  {id:2,name:'视讯冷启动',version:5,manage:true,count:3,owner:'admin',date:date(7),description:'冷启内容、播放与转化指标。',tables:['冷启动日汇总','内容明细','渠道维度']},
+  {id:2,name:'视讯冷启动',version:5,manage:true,count:3,owner:'admin',date:date(7),description:'冷启内容、播放与转化指标。',sourceId:1,tables:['冷启动日汇总','内容明细','渠道维度']},
   {id:3,name:'渠道运营周报',version:0,manage:true,count:2,owner:'admin',date:date(6),description:'已导入渠道流量与转化数据。',tables:['渠道访问','渠道转化']},
   {id:4,name:'新品销售分析',version:0,manage:true,count:0,owner:'admin',date:date(5),description:'上传文件或关联外部数据表。',tables:[]},
   {id:5,name:'全员经营指标',version:3,manage:false,count:4,owner:'运营组',date:date(4),description:'全员共享的订单与客户经营指标。',tables:['订单','客户','区域','商品']},
@@ -845,29 +1061,39 @@ function show(title, content, action = null, label = '保存') {
   $('dialog-title').textContent = title;
   $('dialog-body').innerHTML = content;
   $('save').hidden = !action;
+  $('save').disabled = false;
   $('save').textContent = label;
   $('cancel').textContent = action ? '取消' : '关闭';
+  $('dialog-status').hidden = true;
+  $('dialog-status').textContent = '';
   dialogAction = action;
-  preview.classList.remove('help-drawer');
+  preview.classList.remove('help-drawer','kb-dialog');
+  preview.style.removeProperty('--kb-dialog-width');
   preview.showModal();
 }
 function editor(item) {
   show(item ? '编辑知识库' : '创建知识库',
-    '<label>知识库名称<input id="field-name" name="name" maxlength="70" value="' + escapeHtml(item?.name || '') + '" required></label>' +
-    '<label>说明<textarea id="field-description" name="description" maxlength="180">' + escapeHtml(item?.description || '') + '</textarea></label>' +
-    '<p>预览中的修改仅在当前页面有效。</p>',
+    '<div class="kb-create-form"><label for="field-name">知识库名称 *</label><div><input id="field-name" name="name" maxlength="100" placeholder="请输入知识库名称" value="' + escapeHtml(item?.name || '') + '" aria-describedby="kb-name-hint" required><small id="kb-name-hint">1–100 字符，可使用中文、字母、数字、短横线和下划线。</small></div>' +
+    '<label for="field-description">描述</label><div><textarea id="field-description" name="description" maxlength="1000" rows="4" placeholder="请输入知识库描述" aria-describedby="kb-description-hint">' + escapeHtml(item?.description || '') + '</textarea><small id="kb-description-hint">最多 1000 字符</small></div></div>',
     () => {
       const name = $('field-name').value.trim();
-      if (!name) { $('field-name').setCustomValidity('请输入知识库名称'); $('field-name').reportValidity(); return false; }
+      if (!/^[一-龥A-Za-z0-9_-]{1,100}$/.test(name)) {
+        $('field-name').setCustomValidity('请使用中文、字母、数字、短横线或下划线');
+        $('field-name').reportValidity();
+        return false;
+      }
       const description = $('field-description').value.trim();
-      if (item) Object.assign(item,{name,description});
-      else libraries.push({id:nextId++,name,description,version:0,manage:true,count:0,owner:'admin',date:new Date(),tables:[]});
+      const entry = item || {id:nextId++,version:0,manage:true,count:0,owner:'admin',date:new Date(),tables:[]};
+      Object.assign(entry,{name,description});
+      if (!item) libraries.push(entry);
       $('search').value = '';
       $('status').value = 'all';
       setPermission('all');
+      if (!item || location.hash.startsWith('#group/')) go('group/' + entry.id);
       return true;
     },item ? '保存' : '创建');
   $('field-name').addEventListener('input',event => event.currentTarget.setCustomValidity(''));
+  sizeKbDialog(520);
   $('field-name').focus();
 }
 $('dialog-form').addEventListener('submit',event => {
@@ -876,8 +1102,8 @@ $('dialog-form').addEventListener('submit',event => {
 });
 $('cancel').onclick = $('close-dialog').onclick = () => preview.close();
 preview.addEventListener('close',() => {
-  if (dialogReturn?.isConnected) dialogReturn.focus();
-  else $('create').focus();
+  if (dialogReturn?.isConnected && dialogReturn.getClientRects().length) dialogReturn.focus();
+  else document.querySelector('main').focus({preventScroll:true});
 });
 $('create').onclick = () => editor();
 $('clear').onclick = () => { $('search').value=''; $('status').value='all'; setPermission('all'); };
@@ -920,10 +1146,7 @@ $('collection').onclick = event => {
   }
   if (openMenu) closeMenu(true);
   if (command === 'edit') return editor(item);
-  if (command === 'detail') {
-    const list = item.tables.map(table => '<li>' + escapeHtml(table) + '</li>').join('');
-    return show(item.name + ' · 数据集',list ? '<ul>' + list + '</ul>' : '<p>这个知识库还没有数据集。</p>');
-  }
+  if (command === 'detail') return go('group/' + item.id);
   if (command === 'members') return show(item.name + ' · 成员与权限','<p>示例所有者为 ' + escapeHtml(item.owner) + '。该入口仅向可管理的账号展示。</p>');
   if (command === 'delete') return show('删除知识库', '<p>删除示例知识库「' + escapeHtml(item.name) + '」？</p>', () => {
     libraries.splice(libraries.indexOf(item), 1);
@@ -936,7 +1159,7 @@ $('collection').onclick = event => {
     return;
   }
   if (state === 'model') return openModel(item);
-  return show(item.name + ' · 数据集','<p>这个知识库还没有数据集。可在正式页面上传文件或关联外部数据表。</p>');
+  return go('group/' + item.id);
 };
 document.addEventListener('click',event => {
   const trigger = event.target.closest('[data-preview]');
@@ -948,8 +1171,8 @@ document.addEventListener('keydown',event => {
 });
 render();
 
-const pages = ['home','chat','knowledge','modeling','tasks','more'];
-const pageLabels = {knowledge:'知识库',modeling:'语义建模',tasks:'例行任务',more:'更多'};
+const pages = ['home','chat','knowledge','modeling','tasks','more','group','dataset','sources'];
+const pageLabels = {knowledge:'知识库',modeling:'语义建模',tasks:'例行任务',more:'更多',group:'知识库',dataset:'数据集',sources:'数据源管理'};
 const mobileToggles = document.querySelectorAll('.mobile-toggle');
 const mobileLayout = matchMedia('(max-width:760px)');
 let mobileTrigger = null;
@@ -981,7 +1204,7 @@ const modelExamples = {
   6: { models:2, relations:1, attention:0 },
 };
 const resources = [["BI数据同步","查看数据截止日期、最近执行结果与异常提示。","db"],["大模型服务","管理服务连接，手动切换当前使用的模型。","sliders"],["公共知识库","设置全体已登录用户可使用的知识库。","book"],["用户对话历史","按用户查看问题和回复正文。","rows"],["全局管理员","查看、添加和移除全局管理员权限。","shield"]];
-let guideVisible = true;
+let guideVisible = previewMode !== 'embedded';
 let suggestedQuestion = '';
 const conversation = document.querySelector('[data-screen="conversation"]');
 const question = $('question');
@@ -1055,22 +1278,35 @@ $('model-body').addEventListener('keydown', event => {
 });
 
 function activate(page, focusQuestion = false) {
+  const [route, groupId, datasetId] = page.split('/');
+  page = route;
+  const group = libraries.find(item => item.id === Number(groupId));
+  const dataset = page === 'dataset' && group ? kbDatasets(group).find(item => item.id === Number(datasetId)) : null;
+  if ((page === 'group' && !group) || (page === 'dataset' && !dataset)) page = 'knowledge';
   if (!pages.includes(page)) page = 'home';
+  const navPage = ['group','dataset','sources'].includes(page) ? 'knowledge' : page;
   const screen = page === 'chat' || page === 'home' ? 'conversation' : page;
   $('mobile-page-bar').hidden = screen === 'conversation';
   $('mobile-page-label').textContent = pageLabels[page] || '';
   setMobileNavigation(false);
   document.querySelectorAll('[data-screen]').forEach(panel => { panel.hidden = panel.dataset.screen !== screen; });
-  document.querySelectorAll('nav [data-page], .new-conversation').forEach(button => {
-    if (button.dataset.page === page || (page === 'home' && button.dataset.page === 'chat')) button.setAttribute('aria-current','page');
+  document.querySelectorAll('.rail nav [data-page], .new-conversation').forEach(button => {
+    if (button.dataset.page === navPage || (page === 'home' && button.dataset.page === 'chat')) button.setAttribute('aria-current','page');
     else button.removeAttribute('aria-current');
-    if (button.dataset.page === 'knowledge') button.querySelector('use')?.setAttribute('href',page === 'knowledge' ? '#book-solid' : '#book');
+    if (button.dataset.page === 'knowledge') button.querySelector('use')?.setAttribute('href',navPage === 'knowledge' ? '#book-solid' : '#book');
   });
   if (screen === 'conversation') { renderKbChoices(); renderConversation(); }
   if (page === 'modeling') renderModeling();
   if (page === 'knowledge') render();
+  if (page === 'group') renderKbGroup(group);
+  if (page === 'dataset') renderKbDataset(group,dataset);
+  if (page === 'sources') renderKbSources();
   closeMenu();
   window.scrollTo(0,0);
+  if (previewMode === 'embedded' && window.parent !== window) {
+    const route = page === 'group' ? 'group/' + groupId : page === 'dataset' ? 'dataset/' + groupId + '/' + datasetId : page;
+    window.parent.postMessage({dataAgentPreviewRoute:route},previewTarget);
+  }
   if (focusQuestion) question.focus({preventScroll:true});
 }
 
@@ -1120,10 +1356,20 @@ $('model-clear').addEventListener('click',() => {
   renderModeling();
   $('model-search').focus();
 });
-$('rail-collapse').addEventListener('click', event => {
-  const collapsed = document.querySelector('.shell').classList.toggle('is-collapsed');
-  event.currentTarget.setAttribute('aria-expanded', String(!collapsed));
-  event.currentTarget.setAttribute('aria-label', collapsed ? '展开导航' : '收起导航');
+function setRailCollapsed(collapsed) {
+  document.querySelector('.shell').classList.toggle('is-collapsed',collapsed);
+  const button = $('rail-collapse');
+  button.setAttribute('aria-expanded',String(!collapsed));
+  button.setAttribute('aria-label',collapsed ? '展开导航' : '收起导航');
+}
+$('rail-collapse').addEventListener('click',event => {
+  setRailCollapsed(event.currentTarget.getAttribute('aria-expanded') === 'true');
+});
+$('embedded-guide').addEventListener('click',() => {
+  guideVisible = true;
+  go('home');
+  if (thread.childElementCount) document.querySelector('.rail .new-conversation').click();
+  $('home-guide').scrollIntoView({block:'nearest'});
 });
 
 document.querySelectorAll('[data-guide-mode]').forEach(button => button.addEventListener('click', () => {
@@ -1148,8 +1394,10 @@ document.addEventListener('click',event => {
     return;
   }
   if (data.page) {
+    if (trigger.matches('a')) event.preventDefault();
     if (preview.open && preview.classList.contains('help-drawer')) preview.close();
     if (data.new !== undefined) {
+      setRailCollapsed(false);
       suggestedQuestion = '';
       question.value = '';
       thread.replaceChildren();
@@ -1193,10 +1441,639 @@ document.addEventListener('click',event => {
     '<li><strong>分析</strong>有日期的回答下方可点“为什么变化 / 有没有异常 / 未来走势”，或用输入框旁的“分析 ▾”；先确认参数再运行。</li></ul>');
   preview.classList.add('help-drawer');
 });
+const kbSamples = [
+  {name:'订单.xlsx', size:24576, sheets:['订单','订单明细']},
+  {name:'客户.xlsx', size:16384, sheets:['客户']},
+];
+const kbFields = {
+  orders: [
+    ['order_id','订单编号','BIGINT','每笔订单的唯一编号。'],
+    ['order_date','下单日期','DATE','订单创建日期，按自然日统计。'],
+    ['customer_id','客户编号','BIGINT','关联客户数据集。'],
+    ['order_amount','订单金额','DECIMAL(18,2)','订单实付金额，单位为元。'],
+    ['order_status','订单状态','VARCHAR','待支付、已完成或已取消。'],
+  ],
+  customers: [
+    ['customer_id','客户编号','BIGINT','客户的唯一标识。'],
+    ['customer_name','客户名称','VARCHAR','业务系统中的客户名称。'],
+    ['city','城市','VARCHAR','客户所在城市。'],
+  ],
+  accounts: [
+    ['account_id','作者 ID','VARCHAR','内容作者的唯一标识。'],
+    ['account_name','作者名称','VARCHAR','当前展示名称。'],
+    ['region','地区','VARCHAR','账号归属地区。'],
+  ],
+  video: [
+    ['dt','日期','INT','统计分区，格式为 yyyyMMdd。'],
+    ['account_id','作者 ID','VARCHAR','标识内容所属作者。'],
+    ['project_class_1_type','一级赛道','VARCHAR','内容一级赛道。'],
+    ['cold_sucess_program_num','冷启成功内容数','BIGINT','在所选维度内满足冷启成功条件的内容数。'],
+    ['new_program_num','新发布内容数','BIGINT','统计日期内的新发布内容数。'],
+  ],
+};
+const kbExampleRows = {
+  orders: [[10001,'2026-11-06',145,'268.00','已完成'],[10002,'2026-11-06',24,'129.90','已完成'],[10003,'2026-11-07',38,'389.00','已取消'],[10004,'2026-11-07',145,'69.90','待支付'],[10005,'2026-11-08',52,'158.00','已完成']],
+  customers: [[145,'客户 A','杭州'],[24,'客户 B','北京'],[38,'客户 C','广州'],[52,'客户 D','上海']],
+  accounts: [['A1001','作者 A','杭州'],['A1002','作者 B','北京'],['A1003','作者 C','广州']],
+  video: [[20261106,'A1001','体育',12,30],[20261106,'A1002','动漫',8,21],[20261107,'A1003','资讯',17,45]],
+};
+const kbSources = [
+  {id:1,name:'视讯 Doris',kind:'mysql',host:'doris.example.internal',port:'9030',database:'adm',username:'reader',status:'ok',schemas:{
+    adm:[
+      ['adm_video_cold_start_publish_cnt_1d_delta_daily','视讯冷启动日汇总','video'],
+      ['adm_2ndline_kefu_order_user_id_1d_delta_daily','客服工单用户日汇总','orders'],
+      ['adm_2ndline_kefu_order_user_id_1d_delta_history','客服工单用户历史汇总','orders'],
+      ['adm_activity_games_bet_activity_kb_cnt_1d_delta_daily','活动参与数据汇总','video'],
+      ['adm_video_cold_start_account_channel_daily','作者渠道日汇总','video'],
+    ],
+    dwd_dim:[['dim_account_profile','作者属性','accounts'],['dim_user_region_mapping','用户区域维度','customers']],
+    dwd_ott:[['dwd_video_play_event_daily','视频播放明细','video']],
+  }},
+  {id:2,name:'电商示例数据库',kind:'postgresql',host:'analytics.example.internal',port:'5432',database:'commerce',username:'reader',status:'ok',schemas:{
+    public:[['orders','订单','orders'],['customers','客户','customers']],
+    staging:[['orders_import_daily','订单导入记录','orders']],
+  }},
+  {id:3,name:'运营报表库',kind:'mysql',host:'reports.example.internal',port:'3306',database:'reporting',username:'reader',status:'failed',schemas:{}},
+];
+let kbNextSource = 4;
+const kbDate = new Intl.NumberFormat('zh-CN');
+const kbRows = item => item.rows == null ? '未统计' : kbDate.format(item.rows);
+const kbSourceKind = source => source.kind === 'mysql' ? 'MySQL' : 'PostgreSQL';
+const kbText = escapeHtml;
+
+function sizeKbDialog(width) {
+  preview.classList.add('kb-dialog');
+  preview.style.setProperty('--kb-dialog-width',width + 'px');
+}
+function kbDialog(title,body,action,label,width=660) {
+  show(title,body,action,label);
+  sizeKbDialog(width);
+}
+function kbDialogStatus(message) {
+  $('dialog-status').hidden = !message;
+  $('dialog-status').textContent = message;
+}
+function kbButton(label,command,mark='',variant='',attrs='') {
+  return `<button type="button" class="btn ${variant}" data-kb-action="${command}" ${attrs}>${mark ? icon(mark,true) : ''}${label}</button>`;
+}
+function kbBreadcrumb(...items) {
+  const crumbs = [['知识库','knowledge'],...items];
+  return `<nav class="kb-crumb" aria-label="页面路径">${crumbs.map(([label,path],index) => (
+    (index ? icon('chevron',true) : '') + (path
+      ? `<a href="#${path}" data-page="${path}">${kbText(label)}</a>`
+      : `<span aria-current="page">${kbText(label)}</span>`)
+  )).join('')}</nav>`;
+}
+function kbSearch(id,label) {
+  return `<label class="search">${icon('search-icon',true)}<input type="search" id="${id}" aria-label="${label}" placeholder="${label}…" autocomplete="off"></label>`;
+}
+function kbTable(head,body,label,classes='') {
+  return `<div class="kb-table-scroll" tabindex="0" role="region" aria-label="${label}"><table class="kb-table ${classes}"><thead><tr>${head.map(([name,cls='']) => `<th scope="col" class="${cls}">${name}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`;
+}
+function kbDefinition(items) {
+  return `<dl class="kb-technical">${items.map(([key,value]) => `<div><dt>${key}</dt><dd>${kbText(value)}</dd></div>`).join('')}</dl>`;
+}
+function kbNewDataset(name,origin,source,fieldSet) {
+  return {
+    name, origin, source, description:'',
+    rows:origin === 'database' ? null : kbExampleRows[fieldSet].length,
+    fields:kbFields[fieldSet].map(field => [...field]),
+    sample:kbExampleRows[fieldSet], physical:origin === 'database' ? source : 'demo_data.' + fieldSet,
+  };
+}
+function kbDatasets(group) {
+  if (!group.datasets) {
+    group.datasets = group.tables.map((name,index) => {
+      const fieldSet = group.id === 2 ? 'video' : name === '客户' ? 'customers' : 'orders';
+      const remote = group.id === 2 && index === 0;
+      const source = remote ? 'adm.adm_video_cold_start_publish_cnt_1d_delta_daily' : name + '.xlsx';
+      return {id:index + 1,...kbNewDataset(name,remote ? 'database' : 'file',source,fieldSet)};
+    });
+    group.nextDatasetId = group.datasets.length + 1;
+  }
+  return group.datasets;
+}
+function kbAddDatasets(group,datasets) {
+  kbDatasets(group).push(...datasets.map(item => ({id:group.nextDatasetId++,...item})));
+  group.tables.push(...datasets.map(item => item.name));
+  group.count = group.datasets.length;
+}
+function kbRemoveDataset(group,item) {
+  const index = kbDatasets(group).indexOf(item);
+  group.datasets.splice(index,1);
+  group.tables.splice(index,1);
+  group.count = group.datasets.length;
+  if (!group.datasets.some(dataset => dataset.origin === 'database')) delete group.sourceId;
+}
+function kbFeedback(id,message) {
+  const target = $(id);
+  if (target) target.textContent = message;
+}
+
+function renderKbGroup(group) {
+  const data = kbDatasets(group);
+  const state = getState(group);
+  const status = states[state].label + (group.version ? ' v' + group.version : '');
+  const manage = group.manage;
+  const upload = kbButton('上传文件','upload','kb-upload','primary');
+  const associate = kbButton('关联数据源','associate','db');
+  const groupPage = $('kb-group');
+  groupPage.innerHTML = `${kbBreadcrumb([group.name])}
+    <header class="page-head"><div class="kb-heading"><h1>${kbText(group.name)}</h1>
+      <p>${kbText(group.description || '暂无说明')}</p>
+      <div class="kb-pills"><span><span class="state ${state}">${status}</span></span><span>${data.length} 个数据集</span><span>创建人 ${kbText(group.owner)}</span></div>
+    </div><div class="kb-actions">
+      ${manage ? kbButton('成员与权限','members','shield') + kbButton('设置','settings','sliders') : ''}
+      ${group.version ? kbButton('基于此库提问','ask','chat','primary') : ''}
+    </div></header>
+    <p class="kb-status" id="kb-group-feedback" role="status"></p>
+    <section class="kb-panel"><div class="kb-panel-head"><div><h2>数据集</h2>
+      <p>${data.length ? '查看数据来源、数据样本和字段信息。' : manage ? '先准备数据，再进入语义建模。' : '此知识库暂无数据集。'}</p></div>
+      ${data.length ? `<div class="kb-tools">${kbSearch('kb-group-search','搜索数据集')}${manage ? associate + upload : ''}</div>` : ''}
+    </div>
+    ${data.length ? '<div id="kb-group-table"></div>' : manage ? `<div class="kb-entry">
+      <button type="button" data-kb-action="upload" aria-labelledby="kb-upload-entry" aria-describedby="kb-upload-hint"><span class="tile">${icon('kb-upload')}</span><strong id="kb-upload-entry">上传文件</strong><small id="kb-upload-hint">导入 Excel 或 CSV，也可以直接使用内置示例数据。</small></button>
+      <button type="button" data-kb-action="associate" aria-labelledby="kb-associate-entry" aria-describedby="kb-associate-hint"><span class="tile">${icon('db')}</span><strong id="kb-associate-entry">关联数据源</strong><small id="kb-associate-hint">选择外部数据库，勾选要加入知识库的表。</small></button>
+    </div>` : ''}
+    </section>
+    ${manage && data.length ? `<div class="kb-panel-foot"><span>准备好数据后，可以去语义建模整理字段和业务口径。</span>${kbButton('进入建模','model','model','soft')}</div>` : ''}`;
+
+  function drawTable() {
+    const term = $('kb-group-search').value.trim().toLowerCase();
+    const matches = data.filter(item => `${item.name} ${item.source}`.toLowerCase().includes(term));
+    const rows = matches.map(item => `<tr>
+      <td><button type="button" class="kb-source-link" data-page="dataset/${group.id}/${item.id}">${kbText(item.name)}</button>${item.description ? `<small>${kbText(item.description)}</small>` : ''}</td>
+      <td>${icon(item.origin === 'database' ? 'db' : 'kb-file',true)} ${item.origin === 'database' ? '数据库关联' : '文件上传'}<small>${kbText(item.source)}</small></td>
+      <td class="number">${kbRows(item)}</td><td class="number">${item.fields.length}</td>
+      <td class="end"><div class="kb-actions"><button type="button" class="btn soft" data-page="dataset/${group.id}/${item.id}" aria-label="查看 ${kbText(item.name)} 的数据">查看数据 ${icon('chevron',true)}</button>${manage ? kbButton('删除','delete-dataset','','kb-inline kb-danger',`data-record="${item.id}" aria-label="删除数据集 ${kbText(item.name)}"`) : ''}</div></td></tr>`).join('');
+    $('kb-group-table').innerHTML = kbTable([['数据集'],['数据来源'],['行数','number'],['字段数','number'],['操作','end']],
+      rows || '<tr><td colspan="5" class="kb-empty">没有找到匹配的数据集。</td></tr>','知识库数据集','kb-work-table') +
+      `<div class="kb-panel-foot"><span>${term ? `找到 ${matches.length} 个，共 ${data.length} 个数据集` : `共 ${data.length} 个数据集`}</span><span>${data.some(item => item.rows == null) ? '外部数据表暂未统计总行数' : '点击名称查看数据与字段'}</span></div>`;
+  }
+  if (data.length) {
+    drawTable();
+    $('kb-group-search').oninput = drawTable;
+  }
+  groupPage.onclick = event => {
+    const button = event.target.closest('[data-kb-action]');
+    if (!button) return;
+    switch (button.dataset.kbAction) {
+      case 'upload': return openKbUpload(group);
+      case 'associate': return openKbPicker(group);
+      case 'members': return show(group.name + ' · 成员与权限',`<p>创建人 ${kbText(group.owner)} · 可管理</p>`);
+      case 'settings': return editor(group);
+      case 'model': return openModel(group);
+      case 'ask':
+        document.querySelector('.rail .new-conversation').click();
+        $('question-kb').value = String(group.id);
+        return;
+      case 'delete-dataset': {
+        const item = data.find(entry => entry.id === Number(button.dataset.record));
+        return show('删除数据集',`<p>确认从知识库移除「${kbText(item.name)}」？</p>`,() => {
+          kbRemoveDataset(group,item);
+          renderKbGroup(group);
+          kbFeedback('kb-group-feedback','已移除数据集。');
+        },'确认删除');
+      }
+    }
+  };
+}
+
+function renderKbDataset(group,item) {
+  const page = $('kb-dataset');
+  const origin = item.origin === 'database' ? '数据源关联' : '文件上传';
+  const tabs = [['preview','数据预览'],['fields','字段信息'],['technical','技术信息']];
+  page.innerHTML = `${kbBreadcrumb([group.name,'group/' + group.id],[item.name])}
+    <header class="page-head"><div class="kb-heading"><h1>${kbText(item.name)}</h1>
+      <p>${kbText(item.description || '暂无数据集描述')}</p>
+      <div class="kb-pills"><span>${origin}</span><span>${item.rows == null ? '总行数未统计' : kbRows(item) + ' 行'}</span><span>${item.fields.length} 个字段</span><span>${kbText(item.source)}</span></div></div>
+      <div class="kb-actions">${group.manage ? (item.origin === 'database' ? kbButton('刷新样本','refresh','kb-refresh') : '') + kbButton('编辑数据集描述','description','compose') : ''}</div>
+    </header><p class="kb-status" id="kb-dataset-feedback" role="status"></p>
+    <section class="kb-panel" aria-label="数据集信息">
+      <div class="kb-tabbar" role="group" aria-label="数据集信息">${tabs.map(([key,label]) => `<button type="button" data-kb-tab="${key}" aria-pressed="false">${label}</button>`).join('')}</div>
+      <div id="kb-dataset-tab"></div>
+    </section>`;
+  function drawFields() {
+    const search = $('kb-field-search').value.trim().toLowerCase();
+    const matched = item.fields.filter(([name,original,type,description]) => `${name} ${original} ${type} ${description}`.toLowerCase().includes(search));
+    $('kb-field-table').innerHTML = kbTable([['字段名称'],['原字段名称'],['数据类型'],['业务说明']],
+      matched.map(([name,original,type,description]) => `<tr><td><code>${kbText(name)}</code></td><td>${kbText(original)}</td><td><span class="role">${kbText(type)}</span></td><td>${kbText(description || '暂无说明')}</td></tr>`).join('') ||
+      '<tr><td colspan="4" class="kb-empty">没有找到匹配的字段。</td></tr>','字段信息') +
+      `<div class="kb-panel-foot"><span>${search ? `找到 ${matched.length} 个，共 ${item.fields.length} 个字段` : `共 ${item.fields.length} 个字段`}</span></div>`;
+  }
+  function drawTab(tab) {
+    page.querySelectorAll('[data-kb-tab]').forEach(button => button.setAttribute('aria-pressed',String(button.dataset.kbTab === tab)));
+    const panel = $('kb-dataset-tab');
+    if (tab === 'fields') {
+      panel.innerHTML = `<div class="kb-panel-head"><div><h2>字段信息</h2><p>集中查看字段含义与数据类型。</p></div><div class="kb-tools">${kbSearch('kb-field-search','搜索字段名、类型或说明')}${group.manage ? kbButton('编辑字段说明','edit-fields','compose') : ''}</div></div><div id="kb-field-table"></div>`;
+      $('kb-field-search').oninput = drawFields;
+      drawFields();
+    } else if (tab === 'technical') {
+      panel.innerHTML = kbDefinition([['所属知识库',group.name],['来源类型',origin],['来源文件 / 表',item.source],['物理库表',item.physical],['记录 / 字段',`${kbRows(item)} / ${item.fields.length} 个字段`],['版本','v1']]);
+    } else {
+      const columns = [['#'],...item.fields.map(([name,original,type,description]) => [
+        `<span title="${kbText(`${description || '暂无说明'} · ${type}`)}">${kbText(original)}</span><br><small>${kbText(name)}</small>`,
+      ])];
+      const body = item.sample.map((row,index) => `<tr><td>${index + 1}</td>${row.map(value => `<td>${kbText(value ?? 'NULL')}</td>`).join('')}</tr>`).join('');
+      panel.innerHTML = `<div class="kb-panel-head"><div><h2>数据预览</h2><p>前 ${item.sample.length} 行 · 横向滚动可查看全部字段</p></div><span class="role">示例样本</span></div>
+        ${kbTable(columns,body,'数据预览，可横向滚动','kb-preview-table')}
+        <div class="kb-panel-foot"><span>显示 ${item.sample.length} 行 / ${item.rows == null ? '总行数未统计' : '共 ' + kbRows(item) + ' 行'}</span><span>悬停字段名可查看说明</span></div>`;
+    }
+  }
+  page.onclick = event => {
+    const tab = event.target.closest('[data-kb-tab]');
+    if (tab) return drawTab(tab.dataset.kbTab);
+    switch (event.target.closest('[data-kb-action]')?.dataset.kbAction) {
+      case 'refresh': return kbFeedback('kb-dataset-feedback','已刷新示例样本。');
+      case 'description': return kbDialog('编辑数据集描述',`<p>描述数据集的业务含义，帮助智能体理解和选用数据。</p><label>描述<textarea id="kb-description" maxlength="1000">${kbText(item.description)}</textarea></label>`,() => {
+        item.description = $('kb-description').value.trim();
+        renderKbDataset(group,item);
+        kbFeedback('kb-dataset-feedback','数据集描述已保存。');
+      },'保存',520);
+      case 'edit-fields': return kbDialog('编辑字段说明',item.fields.map(([name,original,type,description],index) =>
+        `<label>${kbText(original)} <small class="kb-note">${kbText(name)} · ${kbText(type)}</small><textarea data-kb-field="${index}" maxlength="500">${kbText(description)}</textarea></label>`).join(''),() => {
+        $('dialog-body').querySelectorAll('[data-kb-field]').forEach(input => { item.fields[Number(input.dataset.kbField)][3] = input.value.trim(); });
+        drawFields();
+        kbFeedback('kb-dataset-feedback','字段说明已保存。');
+      },'保存');
+    }
+  };
+  drawTab('preview');
+}
+
+function openKbUpload(group) {
+  const queue = [];
+  const mb = 1024 ** 2;
+  let notice = '';
+  kbDialog('上传数据文件',`<p>导入到 <strong>${kbText(group.name)}</strong></p>
+    <input id="kb-files" type="file" accept=".xlsx,.xls,.csv" multiple hidden>
+    <button type="button" class="kb-drop" id="kb-drop">${icon('kb-upload')}<strong>点击选择或拖入 Excel / CSV 文件</strong><small>支持 .xlsx / .xls / .csv · 单文件 50 MB · 最多 10 个 · 总计 100 MB</small></button>
+    <div id="kb-upload-notice" class="kb-alert" role="status" hidden></div>
+    <div id="kb-upload-queue" aria-label="待导入文件" hidden></div>
+    <section class="kb-source-note"><div><strong>没有文件？用示例数据</strong><small>订单.xlsx、客户.xlsx，适合演示数据导入与问数。</small></div><button type="button" class="btn soft" id="kb-samples">使用示例文件</button></section>
+    <p class="kb-note-line">${icon('info',true)}预览仅登记所选文件名。工作表选择与导入结果使用示例数据。</p>`,() => {
+    const datasets = queue.flatMap(file => file.sheets.filter(sheet => sheet.selected).map(sheet => (
+      kbNewDataset(sheet.name,'file',file.name,sheet.name.includes('客户') ? 'customers' : 'orders')
+    )));
+    if (!datasets.length) return false;
+    kbAddDatasets(group,datasets);
+    renderKbGroup(group);
+    kbFeedback('kb-group-feedback',`已导入 ${datasets.length} 个示例数据集。`);
+  },'确认上传',610);
+
+  function updateCount() {
+    const count = queue.reduce((total,file) => total + file.sheets.filter(sheet => sheet.selected).length,0);
+    $('save').disabled = count === 0;
+    kbDialogStatus(queue.length ? `${queue.length} 个文件 · 将导入 ${count} 个数据集` : '');
+  }
+  function drawQueue() {
+    const list = $('kb-upload-queue');
+    list.hidden = !queue.length;
+    list.innerHTML = queue.map((file,index) => `<article class="kb-file"><div>
+      <strong>${kbText(file.name)}</strong><small>${file.size < mb ? Math.max(1,Math.round(file.size/1024)) + ' KB' : (file.size/mb).toFixed(1) + ' MB'} · ${file.sheets.length > 1 ? '选择要导入的示例工作表' : '待导入'}</small>
+      ${file.sheets.length > 1 ? file.sheets.map((sheet,sheetIndex) => `<label><input type="checkbox" data-file="${index}" data-sheet="${sheetIndex}" ${sheet.selected ? 'checked' : ''}>${kbText(sheet.name)}</label>`).join('') : ''}</div>
+      <button type="button" class="icon-button" data-remove-file="${index}" aria-label="移除 ${kbText(file.name)}">${icon('close',true)}</button></article>`).join('');
+    $('kb-upload-notice').hidden = !notice;
+    $('kb-upload-notice').textContent = notice;
+    updateCount();
+  }
+  function addFiles(files) {
+    const errors = [];
+    for (const file of files) {
+      const isExcel = /\.(xls|xlsx)$/i.test(file.name);
+      const name = file.name.replace(/\.[^.]+$/,'');
+      if (!isExcel && !/\.csv$/i.test(file.name)) errors.push(`${file.name} 格式不支持`);
+      else if (file.size > 50 * mb) errors.push(`${file.name} 超过 50 MB`);
+      else if (queue.some(item => item.name === file.name)) errors.push(`${file.name} 已在清单中`);
+      else if (queue.length >= 10 || queue.reduce((total,item) => total + item.size,file.size) > 100 * mb) {
+        errors.push(`${file.name} 超出本批文件数量或大小限制`);
+      } else {
+        const sheets = file.sheets || [name];
+        queue.push({name:file.name,size:file.size,sheets:sheets.map(sheet => ({name:sheet,selected:true}))});
+      }
+    }
+    notice = errors.join('。');
+    drawQueue();
+  }
+  const files = $('kb-files');
+  const drop = $('kb-drop');
+  drop.onclick = () => files.click();
+  drop.ondragover = event => { event.preventDefault(); drop.classList.add('dragging'); };
+  drop.ondragleave = () => drop.classList.remove('dragging');
+  drop.ondrop = event => {
+    event.preventDefault();
+    drop.classList.remove('dragging');
+    addFiles(event.dataTransfer.files);
+  };
+  files.onchange = () => { addFiles(files.files); files.value = ''; };
+  $('kb-samples').onclick = () => addFiles(kbSamples);
+  $('kb-upload-queue').onclick = event => {
+    const remove = event.target.closest('[data-remove-file]');
+    if (!remove) return;
+    const index = Number(remove.dataset.removeFile);
+    queue.splice(index,1);
+    notice = '';
+    drawQueue();
+    ($('kb-upload-queue').querySelector(`[data-remove-file="${Math.min(index,queue.length - 1)}"]`) || drop).focus();
+  };
+  $('kb-upload-queue').onchange = event => {
+    const input = event.target;
+    queue[Number(input.dataset.file)].sheets[Number(input.dataset.sheet)].selected = input.checked;
+    updateCount();
+  };
+  drawQueue();
+}
+
+function openKbPicker(group,viewSource) {
+  const readOnly = Boolean(viewSource);
+  const existing = group ? kbDatasets(group) : [];
+  const linked = group?.sourceId;
+  const sources = viewSource ? [viewSource] : kbSources.filter(source => !linked || source.id === linked);
+  let source = sources[0];
+  let schema = Object.keys(source?.schemas || {})[0] || '';
+  let activeTable = null;
+  const selected = new Map();
+  kbDialog(readOnly ? viewSource.name : '从数据源关联',
+    `${readOnly ? kbDefinition([['接入方式',kbSourceKind(viewSource)],['主机与端口',viewSource.host + ':' + viewSource.port],['默认数据库',viewSource.database || '未指定'],['用户名',viewSource.username || '未填写']])
+      : `<p>将数据库表关联到 <strong>${kbText(group.name)}</strong>，可跨数据库勾选同一数据源中的表。</p>
+      <label>选择数据源<select id="kb-picker-source" ${linked ? 'disabled' : ''}>${sources.map(entry => `<option value="${entry.id}">${kbText(entry.name)} · ${kbSourceKind(entry)}</option>`).join('')}</select></label>
+      ${linked ? '<p class="kb-alert">此知识库已关联一个外部数据源，可以继续添加该数据源的其他表。</p>' : ''}`}
+    <div class="kb-picker">
+      <section class="kb-picker-pane"><h3>数据库</h3><div class="kb-picker-list" id="kb-picker-databases"></div></section>
+      <section class="kb-picker-pane"><h3 id="kb-picker-table-title">数据表</h3><div class="kb-picker-controls"><input id="kb-table-search" type="search" aria-label="搜索当前数据库的表名或备注" placeholder="搜索当前数据库的表名或备注"></div><div class="kb-picker-list" id="kb-picker-tables"></div></section>
+      <section class="kb-picker-pane"><h3>字段信息</h3><div class="kb-picker-list" id="kb-picker-fields"></div></section>
+    </div>${readOnly ? '' : '<div id="kb-picker-selection" class="kb-selection"></div>'}`,
+    readOnly ? null : () => {
+      if (!selected.size) return false;
+      const datasets = [...selected].map(([qualified,[name,,fieldSet]]) => kbNewDataset(name,'database',qualified,fieldSet));
+      group.sourceId = source.id;
+      kbAddDatasets(group,datasets);
+      renderKbGroup(group);
+      kbFeedback('kb-group-feedback',`已关联 ${datasets.length} 张示例数据表。`);
+    },'关联所选表',1060);
+  const search = $('kb-table-search');
+  const schemaList = $('kb-picker-databases');
+  const tableList = $('kb-picker-tables');
+  const fieldPanel = $('kb-picker-fields');
+  function drawSchemas() {
+    const schemas = Object.keys(source?.schemas || {});
+    schemaList.innerHTML = schemas.map((name,index) =>
+      `<button type="button" class="kb-database" data-schema-index="${index}" aria-pressed="${schema === name}">${kbText(name)}</button>`).join('') ||
+      '<div class="kb-empty">暂无可浏览的数据库</div>';
+    search.disabled = !schema;
+  }
+  function drawTables() {
+    const term = search.value.trim().toLowerCase();
+    $('kb-picker-table-title').textContent = schema ? '数据表 · ' + schema : '数据表';
+    tableList.innerHTML = (source?.schemas[schema] || []).map((table,index) => {
+      const [name,description] = table;
+      if (!`${name} ${description}`.toLowerCase().includes(term)) return '';
+      const key = `${schema}.${name}`;
+      const alreadyLinked = existing.some(item => item.origin === 'database' && item.source === key);
+      return `<div class="kb-table-option">${readOnly ? '<span></span>' :
+        `<input type="checkbox" data-table-check="${index}" aria-label="选择表 ${kbText(name)}" ${alreadyLinked ? 'checked disabled' : selected.has(key) ? 'checked' : ''}>`}
+        <button type="button" data-table-preview="${index}" aria-pressed="${activeTable?.key === key}" aria-label="查看 ${kbText(name)} 的字段"><strong>${kbText(name)}</strong><small>${kbText(description)}${alreadyLinked ? ' · 已关联' : ''}</small></button></div>`;
+    }).join('') || `<div class="kb-empty">${term ? '没有匹配的数据表' : '暂无数据表'}</div>`;
+  }
+  function drawFields() {
+    if (!activeTable) {
+      fieldPanel.innerHTML = '<div class="kb-empty">点击表名，查看字段与类型。</div>';
+      return;
+    }
+    const [,description,fieldSet] = activeTable.table;
+    fieldPanel.innerHTML = `<p class="kb-alert"><strong>${kbText(activeTable.key)}</strong><br>${kbText(description)}</p>` +
+      kbTable([['字段名称'],['类型']],kbFields[fieldSet].map(([name,original,type]) =>
+        `<tr><td><code>${kbText(name)}</code><small>${kbText(original)}</small></td><td>${kbText(type)}</td></tr>`).join(''),'数据表字段');
+  }
+  function drawSelection() {
+    if (readOnly) return;
+    $('save').disabled = !selected.size;
+    kbDialogStatus(selected.size ? `已选 ${selected.size} 张表` : '勾选数据表后即可关联');
+    const panel = $('kb-picker-selection');
+    const expanded = panel.querySelector('details')?.open;
+    panel.innerHTML = selected.size ? `<details ${expanded ? 'open' : ''}><summary>查看已选的 ${selected.size} 张表</summary>
+      <div>${[...selected.keys()].map((key,index) => `<div class="kb-file"><div>${kbText(key)}</div><button type="button" class="icon-button" data-remove-table="${index}" aria-label="移除 ${kbText(key)}">${icon('close',true)}</button></div>`).join('')}</div></details>` : '';
+  }
+  function drawPicker() {
+    drawSchemas();
+    drawTables();
+    drawFields();
+    drawSelection();
+  }
+  schemaList.onclick = event => {
+    const button = event.target.closest('[data-schema-index]');
+    if (!button) return;
+    const index = Number(button.dataset.schemaIndex);
+    schema = Object.keys(source.schemas)[index];
+    search.value = '';
+    tableList.scrollTop = 0;
+    activeTable = null;
+    drawPicker();
+    schemaList.querySelector(`[data-schema-index="${index}"]`).focus();
+  };
+  search.oninput = () => { tableList.scrollTop = 0; drawTables(); };
+  tableList.onclick = event => {
+    const button = event.target.closest('[data-table-preview]');
+    if (!button) return;
+    const table = source.schemas[schema][Number(button.dataset.tablePreview)];
+    activeTable = {key:`${schema}.${table[0]}`,table};
+    tableList.querySelectorAll('[data-table-preview]').forEach(entry => entry.setAttribute('aria-pressed',String(entry === button)));
+    drawFields();
+  };
+  tableList.onchange = event => {
+    const checkbox = event.target;
+    const table = source.schemas[schema][Number(checkbox.dataset.tableCheck)];
+    const key = `${schema}.${table[0]}`;
+    if (checkbox.checked) selected.set(key,table);
+    else selected.delete(key);
+    drawSelection();
+  };
+  if (!readOnly) {
+    $('kb-picker-source').onchange = event => {
+      source = sources.find(entry => entry.id === Number(event.target.value));
+      schema = Object.keys(source.schemas)[0] || '';
+      activeTable = null;
+      selected.clear();
+      search.value = '';
+      tableList.scrollTop = 0;
+      drawPicker();
+    };
+    $('kb-picker-selection').onclick = event => {
+      const button = event.target.closest('[data-remove-table]');
+      if (!button) return;
+      selected.delete([...selected.keys()][Number(button.dataset.removeTable)]);
+      drawTables();
+      drawSelection();
+      ($('kb-picker-selection').querySelector('summary') || search).focus();
+    };
+  }
+  drawPicker();
+}
+
+function renderKbSources() {
+  const page = $('kb-sources');
+  let expanded = null;
+  page.innerHTML = `${kbBreadcrumb(['数据源管理'])}
+    <header class="page-head"><div class="kb-heading"><h1>数据源管理</h1><p>配置用于关联业务表的外部连接。</p></div>
+    <div class="kb-actions">${kbButton('添加数据源','add-source','plus','primary')}</div></header>
+    <p class="kb-note-line">${icon('info',true)}连接由应用服务器发起，请填写服务器可访问的数据库地址。</p>
+    <p class="kb-status" id="kb-source-feedback" role="status"></p>
+    <section class="kb-panel"><div class="kb-panel-head"><div class="kb-tools">${kbSearch('kb-source-search','搜索数据源名称')}<span id="kb-source-count" class="kb-note" aria-live="polite"></span></div><small class="kb-note">检测结果仅代表本次检测</small></div>
+      <div id="kb-source-table"></div></section>
+    <p class="kb-note">一个知识库关联一个外部数据源。Doris 通过 MySQL 协议接入。</p>`;
+  function drawTable() {
+    const term = $('kb-source-search').value.trim().toLowerCase();
+    const matches = kbSources.filter(source => source.name.toLowerCase().includes(term));
+    kbFeedback('kb-source-count',`${matches.length} 个数据源`);
+    const rows = matches.map(source => {
+      const status = {ok:'已连通',failed:'未连通',checking:'检测中…'}[source.status];
+      const record = `data-record="${source.id}"`;
+      return `<tr><td><button type="button" class="kb-source-link" data-kb-action="view-source" ${record}>${kbText(source.name)}</button><small>${kbText(source.database || '未指定数据库')}</small></td>
+        <td><span class="role">${kbSourceKind(source)}</span></td>
+        <td><span class="state ${source.status === 'ok' ? 'live' : source.status === 'failed' ? 'model' : 'data'}">${status}</span>
+          ${source.status === 'failed' ? `<button type="button" class="text-link" data-kb-action="source-reason" ${record} aria-expanded="${expanded === source.id}">${expanded === source.id ? '收起原因' : '查看原因'}</button>` : ''}</td>
+        <td class="end"><div class="kb-actions">
+          ${kbButton('查看','view-source','','kb-inline',record)}
+          ${kbButton(status === '检测中…' ? status : '检测连接','test-source','kb-refresh','kb-inline',record + (source.status === 'checking' ? ' disabled' : ''))}
+          ${kbButton('配置连接','edit-source','','kb-inline',record)}${kbButton('删除','delete-source','','kb-inline kb-danger',record)}
+        </div></td></tr>${expanded === source.id && source.status === 'failed' ? '<tr><td colspan="4"><p class="kb-alert">示例检测结果 · 服务器连接超时。请检查主机地址、端口和服务器网络后再检测。</p></td></tr>' : ''}`;
+    }).join('');
+    $('kb-source-table').innerHTML = kbTable([['数据源'],['接入方式'],['本次检测'],['操作','end']],rows ||
+      `<tr><td colspan="4" class="kb-empty">${term ? '没有匹配的数据源，请更换关键词。' : '暂无数据源，可以点击「添加数据源」配置连接。'}</td></tr>`,'数据源列表','kb-work-table') +
+      `<div class="kb-panel-foot"><span>共 ${kbSources.length} 个数据源</span></div>`;
+  }
+  $('kb-source-search').oninput = drawTable;
+  page.onclick = event => {
+    const button = event.target.closest('[data-kb-action]');
+    if (!button) return;
+    const source = kbSources.find(entry => entry.id === Number(button.dataset.record));
+    switch (button.dataset.kbAction) {
+      case 'add-source': return openKbSourceEditor();
+      case 'view-source': return openKbPicker(null,source);
+      case 'edit-source': return openKbSourceEditor(source);
+      case 'source-reason':
+        expanded = expanded === source.id ? null : source.id;
+        drawTable();
+        page.querySelector(`[data-kb-action="source-reason"][data-record="${source.id}"]`)?.focus();
+        return;
+      case 'test-source': {
+        const result = source.status;
+        source.status = 'checking';
+        drawTable();
+        setTimeout(() => {
+          if (source.status !== 'checking') return;
+          source.status = result;
+          if (!page.hidden) drawTable();
+        },380);
+        return;
+      }
+      case 'delete-source': {
+        const used = libraries.some(group => group.sourceId === source.id);
+        return kbDialog('删除数据源',`<p>${used ? `「${kbText(source.name)}」已关联到知识库，请先移除关联表。` : `确认删除示例数据源「${kbText(source.name)}」？`}</p>`,used ? null : () => {
+          kbSources.splice(kbSources.indexOf(source),1);
+          drawTable();
+          kbFeedback('kb-source-feedback','已删除示例数据源。');
+        },'确认删除',470);
+      }
+    }
+  };
+  drawTable();
+}
+
+function openKbSourceEditor(source) {
+  const values = source || {name:'',kind:'mysql',host:'',port:'3306',database:'',username:'',sampling:true};
+  const field = (key,label,attributes='') =>
+    `<label>${label}<input name="${key}" value="${kbText(values[key] || '')}" ${attributes}></label>`;
+  kbDialog(source ? '配置数据源' : '添加数据源',`<p>填写连接参数，检测通过后保存。</p>
+    <div class="kb-form-grid">
+      <div class="full">${field('name','数据源名称','maxlength="64" placeholder="例如：业务报表数据库" required')}</div>
+      <label class="full">接入方式<select name="kind"><option value="mysql" ${values.kind === 'mysql' ? 'selected' : ''}>MySQL（含 Doris MySQL 协议）</option><option value="postgresql" ${values.kind === 'postgresql' ? 'selected' : ''}>PostgreSQL</option></select></label>
+      ${field('host','主机地址','placeholder="mysql.example.internal" required')}
+      ${field('port','端口','type="number" min="1" max="65535" required')}
+      <p class="kb-alert full">由部署 DataAgent 的服务器发起连接，localhost 指服务器自身。</p>
+      <div class="full">${field('database','数据库（选填）','placeholder="可不填，关联表时再选择"')}</div>
+      ${field('username','用户名','autocomplete="off" placeholder="例如：demo_reader"')}
+      <label>密码<input name="password" type="password" autocomplete="new-password" placeholder="${source ? '留空保留原密码' : '请输入数据库密码'}"></label>
+      <details class="full"><summary>更多连接选项</summary><div class="kb-form-grid">
+        <label>连接加密<select name="sslMode"></select></label>
+        <label>数据采样 <span><input type="checkbox" name="sampling" ${values.sampling !== false ? 'checked' : ''}> 每表最多 1000 行</span></label>
+      </div></details>
+    </div><p class="kb-alert" id="kb-test-feedback" role="status">尚未检测连接。预览仅模拟检测，请使用示例连接参数。</p>`,() => {
+    if ($('save').disabled) return false;
+    const data = new FormData($('dialog-form'));
+    const config = Object.fromEntries(['name','kind','host','port','database','username','sslMode'].map(key => [key,String(data.get(key)).trim()]));
+    config.sampling = data.has('sampling');
+    config.status = 'ok';
+    if (source) Object.assign(source,config);
+    else kbSources.push({id:kbNextSource++,schemas:{},...config});
+    renderKbSources();
+    kbFeedback('kb-source-feedback',source ? '示例连接配置已更新。' : '已添加示例数据源。');
+  },'保存');
+  const form = $('dialog-form');
+  const body = $('dialog-body');
+  const kind = form.elements.namedItem('kind');
+  const port = form.elements.namedItem('port');
+  const ssl = form.elements.namedItem('sslMode');
+  function fillSsl(initial = '') {
+    const options = kind.value === 'mysql'
+      ? [['DISABLED','不加密'],['PREFERRED','优先加密'],['REQUIRED','要求加密'],['VERIFY_CA','加密并校验证书'],['VERIFY_IDENTITY','加密并校验身份']]
+      : [['disable','不加密'],['require','要求加密'],['verify-ca','加密并校验证书'],['verify-full','加密并校验身份']];
+    ssl.innerHTML = options.map(([value,label]) => `<option value="${value}" ${value === initial ? 'selected' : ''}>${label}</option>`).join('');
+  }
+  fillSsl(values.sslMode);
+  kind.onchange = () => { port.value = kind.value === 'mysql' ? '3306' : '5432'; fillSsl(); };
+  const test = document.createElement('button');
+  test.type = 'button';
+  test.className = 'btn';
+  test.innerHTML = icon('kb-refresh',true) + '检测连接';
+  $('cancel').before(test);
+  preview.addEventListener('close',() => test.remove(),{once:true});
+  $('save').disabled = true;
+  let request = 0;
+  body.oninput = () => {
+    request++;
+    $('save').disabled = true;
+    test.disabled = false;
+    kbFeedback('kb-test-feedback','连接参数已修改，请重新检测。');
+  };
+  preview.addEventListener('close',() => { request++; body.oninput = null; },{once:true});
+  test.onclick = () => {
+    if (!form.reportValidity()) return;
+    if (['name','host'].some(key => !form.elements.namedItem(key).value.trim())) {
+      kbFeedback('kb-test-feedback','请填写数据源名称和主机地址。');
+      return;
+    }
+    const current = ++request;
+    test.disabled = true;
+    kbFeedback('kb-test-feedback','正在模拟检测连接…');
+    setTimeout(() => {
+      if (current !== request || !preview.open || !test.isConnected) return;
+      test.disabled = false;
+      const failed = form.elements.namedItem('host').value.trim() === 'reports.example.internal';
+      $('save').disabled = failed;
+      kbFeedback('kb-test-feedback',failed ? '示例检测未通过。请检查主机地址与端口。' : '示例检测通过，可以保存。');
+    },380);
+  };
+}
+
 window.addEventListener('popstate', () => activate(location.hash.slice(1)));
 window.addEventListener('hashchange', () => activate(location.hash.slice(1)));
+if (previewMode === 'embedded') {
+  document.querySelector('.account .avatar').textContent = '李';
+  document.querySelector('.account-copy strong').textContent = '李雨繁';
+  $('conversation-greeting').querySelector('h1').textContent = '晚上好，李雨繁';
+  window.addEventListener('message',event => {
+    if (event.source !== window.parent || event.origin !== previewOrigin) return;
+    const route = event.data?.dataAgentPreviewOpen;
+    if (typeof route !== 'string' || !previewRoute.test(route) || location.hash === '#' + route) return;
+    history.replaceState(null,'','#' + route);
+    activate(route);
+  });
+}
+setRailCollapsed(false);
 renderKbChoices(true);
 activate(location.hash.slice(1));
+}
 
 </script>
 </body>
