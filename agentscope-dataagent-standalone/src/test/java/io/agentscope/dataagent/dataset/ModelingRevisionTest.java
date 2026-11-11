@@ -79,6 +79,9 @@ class ModelingRevisionTest {
         org.springframework.test.util.ReflectionTestUtils.setField(group, "modelingRevision", 1L);
         assertThatThrownBy(() -> access.resolve(ctx, "g"))
                 .isInstanceOf(DatasetException.class)
+                .hasMessageContaining("数据集或表结构")
+                .hasMessageContaining("管理权限")
+                .hasMessageContaining("语义建模")
                 .hasMessageContaining("发布");
         assertThatThrownBy(() -> access.resolve(ctx, "foreign"))
                 .isInstanceOf(DatasetException.class);

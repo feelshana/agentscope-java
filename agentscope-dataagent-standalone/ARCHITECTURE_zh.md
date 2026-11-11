@@ -219,7 +219,7 @@ main 线程）同步执行，每个 server 经 `McpClientBuilder.buildAsync().bl
 再以原始 arguments 调用 get_instructions/get_context/describe_schema/recall_queries/run_sql/query_cube 等官方工具。
 只有官方已提供的工具可调用；问数服务不使用 --allow-write，store_query 不对 Agent 开放。
 
-`WrenQueryAccess#resolve` 检查 ownerId、DatasetScope 与当前会话范围并要求已发布版本。数据集或表结构变化经 `DatasetService#markMdlDirty` 递增修订号，发布前拒绝问数；语义草稿修改经 `DatasetGroupService#markMdlDirty` 只标记待发布，问数继续使用已发布快照（ADR0128）。
+`WrenQueryAccess#resolve` 检查 ownerId、DatasetScope 与当前会话范围并要求已发布版本。数据集或表结构变化经 `DatasetService#markMdlDirty` 递增修订号，发布前拒绝问数并提示联系管理人员在语义建模检查发布；语义草稿修改经 `DatasetGroupService#markMdlDirty` 只标记待发布，问数继续使用已发布快照（ADR0128）。`DatasetService#updateDescription/updateColumnDescriptions/saveKnowledge`同样只标记草稿；`refreshSample`仅当观测字段名/类型与原记录一致时走草稿标记，变化或无法核对则保留硬门禁。非结构编辑不覆盖旧硬门禁或自动发布，历史误标记不自动清理。
 `WrenInstanceRegistry#spawn` 使用 `WrenPublishedProject#prepare` 的运行工程与发布时锁定的 profile，继续复用框架 MCP ClientWrapper。
 
 ADR 0072 / spec 061：`ProcessWrenCli#run` 与 `WrenInstanceRegistry#spawnProject` 共用

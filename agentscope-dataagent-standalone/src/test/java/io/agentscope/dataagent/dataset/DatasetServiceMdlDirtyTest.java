@@ -46,18 +46,15 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-/**
- * Locks the dirty-marking contract of specs/010 M2.2: dataset mutations (upload, delete, column
- * description edits, knowledge upload) flag a PUBLISHED knowledge base as DIRTY - acceptance #6,
- * where the old MDL snapshot keeps serving until an explicit republish. NONE/DIRTY groups, orphan
- * datasets and blank ids must stay no-ops so nothing is written on every mutation.
- */
+/** Metadata edits preserve published querying; dataset/schema mutations retain the hard gate. */
 class DatasetServiceMdlDirtyTest {
 
     private DatasetRepository repository;
     private DatasetGroupRepository groupRepository;
     private DatasetKnowledgeRepository knowledgeRepository;
     private TableProvisioner provisioner;
+    private ExternalDataSourceRepository externalSources;
+    private DataSourceIntrospector introspector;
     private DatasetService service;
 
     private final ObjectMapper mapper = new ObjectMapper();
@@ -69,6 +66,8 @@ class DatasetServiceMdlDirtyTest {
         groupRepository = mock(DatasetGroupRepository.class);
         knowledgeRepository = mock(DatasetKnowledgeRepository.class);
         provisioner = mock(TableProvisioner.class);
+        externalSources = mock(ExternalDataSourceRepository.class);
+        introspector = mock(DataSourceIntrospector.class);
         DatasetStoreProperties storeProps = mock(DatasetStoreProperties.class);
         // toDataSource feeds these into a Map.copyOf-backed record: nulls are rejected.
         when(storeProps.url()).thenReturn("jdbc:mysql://localhost:3306/data_agent");
@@ -81,8 +80,8 @@ class DatasetServiceMdlDirtyTest {
                         knowledgeRepository,
                         mock(SemanticViewRepository.class),
                         mock(SemanticBusinessRuleRepository.class),
-                        mock(ExternalDataSourceRepository.class),
-                        mock(DataSourceIntrospector.class),
+                        externalSources,
+                        introspector,
                         mock(DatasetRelationRepository.class),
                         new InMemoryDataSourceRegistry(List.of()),
                         provisioner,
@@ -114,6 +113,14 @@ class DatasetServiceMdlDirtyTest {
                         })
                 .when(groupRepository)
                 .requireModeling(anyString());
+        org.mockito.Mockito.doAnswer(
+                        inv -> {
+                            DatasetGroupEntity g = groupsById.get(inv.getArgument(0));
+                            if (g != null) g.setMdlState("DIRTY");
+                            return null;
+                        })
+                .when(groupRepository)
+                .markDraftChanged(anyString());
         when(groupRepository.save(any(DatasetGroupEntity.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
         when(knowledgeRepository.save(any(DatasetKnowledgeEntity.class)))
@@ -212,7 +219,7 @@ class DatasetServiceMdlDirtyTest {
     }
 
     @Test
-    void updateColumnDescriptionsMarksGroupDirty() {
+    void updateColumnDescriptionsLeavesPublishedQueryAvailable() {
         DatasetGroupEntity g = registerGroup("g1", "PUBLISHED");
         DatasetEntity d = dataset("t1", "g1");
         when(repository.findById("t1")).thenReturn(Optional.of(d));
@@ -224,7 +231,9 @@ class DatasetServiceMdlDirtyTest {
                 d.getColumnSchemaJson().contains("新描述"),
                 "the edited description must land on the dataset");
         assertEquals("DIRTY", g.getMdlState());
-        verify(groupRepository).requireModeling(g.getId());
+        verify(groupRepository).markDraftChanged(g.getId());
+        verify(groupRepository, never()).requireModeling(anyString());
+        org.junit.jupiter.api.Assertions.assertFalse(g.isModelingPending());
     }
 
     @Test
@@ -259,7 +268,7 @@ class DatasetServiceMdlDirtyTest {
     }
 
     @Test
-    void saveKnowledgeMarksGroupDirty() {
+    void saveKnowledgeOnlyChangesDraft() {
         DatasetGroupEntity g = registerGroup("g1", "PUBLISHED");
         when(knowledgeRepository.findById("g1")).thenReturn(Optional.empty());
 
@@ -267,6 +276,135 @@ class DatasetServiceMdlDirtyTest {
 
         verify(knowledgeRepository).save(any(DatasetKnowledgeEntity.class));
         assertEquals("DIRTY", g.getMdlState());
-        verify(groupRepository).requireModeling(g.getId());
+        verify(groupRepository).markDraftChanged(g.getId());
+        verify(groupRepository, never()).requireModeling(anyString());
+    }
+
+    @Test
+    void sharedQueryUsesVersion14AfterDescriptionAndLabelEdits() {
+        DatasetGroupEntity g = registerGroup("g1", "PUBLISHED");
+        g.setMdlVersion(14);
+        DatasetEntity d = dataset("t1", "g1");
+        when(repository.findById("t1")).thenReturn(Optional.of(d));
+        var groups = mock(DatasetGroupService.class);
+        when(groups.queryGroups("colleague", List.of("g1"))).thenReturn(List.of(g));
+        var query =
+                new WrenQueryAccess(
+                        groups,
+                        new io.agentscope.dataagent.web.session.ConversationScopeRegistry());
+        var context =
+                io.agentscope.core.agent.RuntimeContext.builder()
+                        .userId("colleague")
+                        .sessionId("shared-query")
+                        .put(DatasetScope.class, new DatasetScope("colleague", List.of("g1")))
+                        .build();
+
+        service.updateColumnDescriptions(
+                "owner", "t1", List.of(new DatasetService.ColumnDescUpdate("c1", "新口径说明", "中文名")));
+        service.updateDescription("owner", "t1", "新表说明");
+        service.saveKnowledge("g1", "新文档");
+
+        assertEquals(14, query.resolve(context, "g1").getMdlVersion());
+        assertEquals("DIRTY", g.getMdlState());
+        assertEquals(0, g.getModelingRevision());
+        verify(provisioner, never()).dropTable(anyString());
+        verify(groupRepository, never()).requireModeling(anyString());
+    }
+
+    @Test
+    void metadataEditsNeverClearAnEarlierPhysicalChangeGate() {
+        DatasetGroupEntity g = registerGroup("g1", "PUBLISHED");
+        g.setMdlVersion(14);
+        DatasetEntity d = dataset("t1", "g1");
+        when(repository.findById("t1")).thenReturn(Optional.of(d));
+        service.markMdlDirty("g1");
+        service.updateColumnDescriptions(
+                "owner", "t1", List.of(new DatasetService.ColumnDescUpdate("c1", "说明")));
+        assertTrue(g.isModelingPending());
+        assertEquals(1, g.getModelingRevision());
+        assertEquals(14, g.getMdlVersion());
+        verify(groupRepository, never())
+                .coverModelingRevision(anyString(), org.mockito.ArgumentMatchers.anyLong());
+    }
+
+    @Test
+    void editingDescriptionsDoesNotPublishANeverPublishedKnowledgeBase() {
+        var g = registerGroup("g1", "NONE");
+        var d = dataset("t1", "g1");
+        when(repository.findById("t1")).thenReturn(Optional.of(d));
+        service.updateColumnDescriptions(
+                "owner", "t1", List.of(new DatasetService.ColumnDescUpdate("c1", "说明")));
+        var groups = mock(DatasetGroupService.class);
+        when(groups.queryGroups("owner", List.of("g1"))).thenReturn(List.of(g));
+        var query =
+                new WrenQueryAccess(
+                        groups,
+                        new io.agentscope.dataagent.web.session.ConversationScopeRegistry());
+        var context =
+                io.agentscope.core.agent.RuntimeContext.builder()
+                        .userId("owner")
+                        .sessionId("unpublished")
+                        .put(DatasetScope.class, new DatasetScope("owner", List.of("g1")))
+                        .build();
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> query.resolve(context, "g1"))
+                .isInstanceOf(DatasetException.class)
+                .hasMessageContaining("尚未发布");
+        assertEquals(0, g.getMdlVersion());
+    }
+
+    private DatasetEntity sampledDataset(List<DataSourceIntrospector.ColumnInfo> columns)
+            throws Exception {
+        DatasetEntity d = dataset("t1", "g1");
+        d.setOrigin("datasource");
+        d.setSchemaName("retail");
+        d.setExternalDataSourceId("source");
+        when(repository.findById("t1")).thenReturn(Optional.of(d));
+        when(repository.lockById("t1")).thenReturn(Optional.of(d));
+        var source = new io.agentscope.dataagent.web.persistence.jpa.ExternalDataSourceEntity();
+        source.setSampling(true);
+        when(externalSources.findById("source")).thenReturn(Optional.of(source));
+        when(introspector.listColumns(source, "retail", "ds_t1")).thenReturn(columns);
+        var connection = mock(java.sql.Connection.class);
+        var statement = mock(java.sql.Statement.class);
+        var rows = mock(java.sql.ResultSet.class);
+        when(introspector.open(source)).thenReturn(connection);
+        when(connection.createStatement()).thenReturn(statement);
+        when(statement.executeQuery(anyString())).thenReturn(rows);
+        return d;
+    }
+
+    @Test
+    void refreshingOnlySamplesKeepsPublishedQueriesAvailable() throws Exception {
+        var g = registerGroup("g1", "PUBLISHED");
+        g.setMdlVersion(14);
+        var d =
+                sampledDataset(
+                        List.of(
+                                new DataSourceIntrospector.ColumnInfo("c2", "BIGINT", "新注释"),
+                                new DataSourceIntrospector.ColumnInfo("c1", "VARCHAR", "新注释")));
+        service.refreshSample("owner", "t1");
+        assertEquals("SUCCESS", DatasetSampling.decode(d.getSampleSummaryJson()).status());
+        org.junit.jupiter.api.Assertions.assertFalse(g.isModelingPending());
+        assertEquals(14, g.getMdlVersion());
+        verify(groupRepository, never()).requireModeling(anyString());
+    }
+
+    @Test
+    void samplingThatObservesRemovedOrRetypedColumnsKeepsTheGate() throws Exception {
+        var g = registerGroup("g1", "PUBLISHED");
+        var d =
+                sampledDataset(
+                        List.of(new DataSourceIntrospector.ColumnInfo("c1", "VARCHAR", null)));
+        service.refreshSample("owner", "t1");
+        assertTrue(g.isModelingPending());
+        assertEquals(2, service.readColumns(d).size());
+        var source = externalSources.findById("source").orElseThrow();
+        when(introspector.listColumns(source, "retail", "ds_t1"))
+                .thenReturn(
+                        List.of(
+                                new DataSourceIntrospector.ColumnInfo("c1", "BIGINT", null),
+                                new DataSourceIntrospector.ColumnInfo("c2", "BIGINT", null)));
+        service.refreshSample("owner", "t1");
+        assertEquals(2, g.getModelingRevision());
     }
 }

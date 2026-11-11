@@ -662,8 +662,23 @@ public class DatasetService implements DatasetContextProvider {
         entity.setSampleSummaryJson(DatasetSampling.encode(summary));
         entity.setUpdatedAt(Instant.now());
         repository.save(entity);
-        markMdlDirty(entity.getGroupId());
+        // Sampling alone leaves the published schema valid; observed schema drift does not.
+        if (sameSampleSchema(readColumns(entity), columns)) markDraftChanged(entity.getGroupId());
+        else markMdlDirty(entity.getGroupId());
         return entity;
+    }
+
+    private static boolean sameSampleSchema(
+            List<ColumnSchema> stored, List<DataSourceIntrospector.ColumnInfo> observed) {
+        if (stored.isEmpty() || stored.size() != observed.size()) return false;
+        Map<String, String> types = new HashMap<>();
+        for (var column : observed) types.put(column.name(), column.type());
+        return stored.stream()
+                .allMatch(
+                        column ->
+                                column.sqlType() != null
+                                        && column.sqlType()
+                                                .equalsIgnoreCase(types.get(column.name())));
     }
 
     /** Read-only sample of the dataset's physical table for the detail page. */
@@ -751,7 +766,7 @@ public class DatasetService implements DatasetContextProvider {
         entity.setUpdatedAt(Instant.now());
         repository.save(entity);
         registry.add(toDataSource(entity));
-        markMdlDirty(entity.getGroupId());
+        markDraftChanged(entity.getGroupId());
         return entity;
     }
 
@@ -786,7 +801,7 @@ public class DatasetService implements DatasetContextProvider {
         entity.setUpdatedAt(Instant.now());
         repository.save(entity);
         registry.add(toDataSource(entity));
-        markMdlDirty(entity.getGroupId());
+        markDraftChanged(entity.getGroupId());
         return entity;
     }
 
@@ -1070,11 +1085,11 @@ public class DatasetService implements DatasetContextProvider {
                                 })
                         .orElseGet(() -> new DatasetKnowledgeEntity(groupId, content));
         knowledgeRepository.save(entity);
-        markMdlDirty(groupId);
+        markDraftChanged(groupId);
         log.info("DatasetService: saved relationship knowledge for group {}", groupId);
     }
 
-    /** Atomically requires publication of every dataset or document change, including dirty drafts. */
+    /** Requires publication after dataset membership or physical schema changes. */
     void markMdlDirty(String groupId) {
         if (groupId == null || groupId.isBlank()) {
             return;
