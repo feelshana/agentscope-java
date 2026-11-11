@@ -25,7 +25,12 @@ import jakarta.persistence.Table;
 @Table(
         name = "session_message",
         indexes = {
-            @Index(name = "ix_message_order", columnList = "session_key,position_no", unique = true)
+            @Index(
+                    name = "ix_message_order",
+                    columnList = "session_key,position_no",
+                    unique = true),
+            @Index(name = "ix_message_role", columnList = "session_key,message_role"),
+            @Index(name = "ix_message_projection", columnList = "message_role")
         })
 public class SessionMessageEntity {
     @Id
@@ -40,4 +45,15 @@ public class SessionMessageEntity {
 
     @Column(columnDefinition = "LONGTEXT", nullable = false)
     public String payload;
+
+    @Column(name = "message_role", length = 16)
+    public String messageRole;
+
+    @Column(name = "user_text", columnDefinition = "LONGTEXT")
+    public String userText;
+
+    public void project(String role, String content) {
+        messageRole = "USER".equalsIgnoreCase(role) ? "USER" : "OTHER";
+        userText = "USER".equals(messageRole) ? content : null;
+    }
 }

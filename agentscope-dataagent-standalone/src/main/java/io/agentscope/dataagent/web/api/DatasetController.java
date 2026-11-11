@@ -133,7 +133,12 @@ public class DatasetController {
                 .onErrorMap(this::toStatus);
     }
 
-    public record ColumnVO(String name, String originalName, String sqlType, String description) {}
+    public record ColumnVO(
+            String name,
+            String originalName,
+            String sqlType,
+            String description,
+            String displayName) {}
 
     public record DatasetVO(
             String id,
@@ -570,7 +575,8 @@ public class DatasetController {
     }
 
     private static ColumnVO toColumnVO(ColumnSchema c) {
-        return new ColumnVO(c.name(), c.originalName(), c.sqlType(), c.description());
+        return new ColumnVO(
+                c.name(), c.originalName(), c.sqlType(), c.description(), c.displayName());
     }
 
     private Throwable toStatus(Throwable t) {

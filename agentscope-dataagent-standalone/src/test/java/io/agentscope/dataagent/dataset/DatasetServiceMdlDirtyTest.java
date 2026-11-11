@@ -228,6 +228,37 @@ class DatasetServiceMdlDirtyTest {
     }
 
     @Test
+    void fieldLabelsRemainSeparateFromPhysicalNamesAndLegacyEditsKeepTheLabel() {
+        DatasetGroupEntity g = registerGroup("g1", "PUBLISHED");
+        g.setMdlVersion(3);
+        DatasetEntity d = dataset("t1", "g1");
+        when(repository.findById("t1")).thenReturn(Optional.of(d));
+        service.updateColumnDescriptions(
+                "owner", "t1", List.of(new DatasetService.ColumnDescUpdate("c1", "业务口径", "销售金额")));
+        var c = service.readColumns(d).get(0);
+        assertEquals("c1", c.name());
+        assertEquals("销售金额", c.displayName());
+        assertEquals("业务口径", c.description());
+        assertTrue(c.userDescribed());
+        assertEquals(3, g.getMdlVersion());
+        service.updateColumnDescriptions(
+                "owner", "t1", List.of(new DatasetService.ColumnDescUpdate("c1", "仅改说明")));
+        assertEquals("销售金额", service.readColumns(d).get(0).displayName());
+        service.updateColumnDescriptions(
+                "owner", "t1", List.of(new DatasetService.ColumnDescUpdate("c1", "清空名称", "")));
+        assertEquals("", service.readColumns(d).get(0).displayName());
+        org.junit.jupiter.api.Assertions.assertThrows(
+                DatasetException.class,
+                () ->
+                        service.updateColumnDescriptions(
+                                "owner",
+                                "t1",
+                                List.of(
+                                        new DatasetService.ColumnDescUpdate(
+                                                "missing", "说明", "错误"))));
+    }
+
+    @Test
     void saveKnowledgeMarksGroupDirty() {
         DatasetGroupEntity g = registerGroup("g1", "PUBLISHED");
         when(knowledgeRepository.findById("g1")).thenReturn(Optional.empty());

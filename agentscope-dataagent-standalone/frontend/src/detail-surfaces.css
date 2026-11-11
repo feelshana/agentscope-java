@@ -1,0 +1,41 @@
+/* Shared tokens from the accepted HTML; scoped so other project screens keep their theme. */
+.kd-page, .kd-field-popover, .ah-page, .ah-user-options, .admin-history-drawer, .ah-info-dialog {
+  --da-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  --da-text: #202233;
+  --da-text-2: #5e6375;
+  --da-text-3: #5e6375;
+  --da-text-muted: #5e6375;
+  --da-primary: #5b4bd6;
+  --da-primary-hover: #4c3cbb;
+  --da-primary-soft: #efecfc;
+  --da-primary-subtle: #efecfc;
+  --da-border: #e0e1e9;
+  --da-border-strong: #e0e1e9;
+  --detail-hairline: rgba(60,60,67,.12);
+  --detail-card-line: rgba(60,60,67,.07);
+  font: 400 14px/1.5 var(--da-font);
+  color: var(--da-text);
+}
+.kd-page, .ah-page {
+  background-color: #f2f2f7;
+  background-image: radial-gradient(1100px 520px at 8% -12%,rgba(120,104,240,.13),transparent 62%), radial-gradient(900px 480px at 96% -6%,rgba(92,168,255,.12),transparent 58%);
+}
+.kd-page *, .ah-page *, .ah-user-options *, .admin-history-drawer * { box-sizing: border-box; }
+.kd-page button, .kd-page input, .kd-page select, .kd-page textarea,
+.ah-page button, .ah-page input, .ah-page select, .ah-page textarea,
+.ah-user-options button, .admin-history-drawer button, .admin-history-drawer input { font-family: inherit; }
+.kd-page .da-btn, .ah-page .da-btn, .admin-history-drawer .da-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  min-height: 39px; height: auto; padding: 0 12px; border: 1px solid var(--da-border); border-radius: 12px;
+  background: #fff; color: var(--da-text); font-size: 14px; font-weight: 600; line-height: 1.5; white-space: nowrap;
+  box-shadow: none; cursor: pointer; transition: transform .3s cubic-bezier(.2,.9,.25,1.05), background-color .2s, border-color .2s;
+}
+.kd-page .da-btn:hover:enabled, .ah-page .da-btn:hover:enabled { border-color: #ada0e5; background: #fbfaff; }
+.kd-page .da-btn-primary, .ah-page .da-btn-primary { color: #fff; background: var(--da-primary); border-color: var(--da-primary); }
+.kd-page .da-btn-primary:hover:enabled, .ah-page .da-btn-primary:hover:enabled { color: #fff; background: var(--da-primary-hover); border-color: var(--da-primary-hover); }
+.kd-page button:disabled, .ah-page button:disabled { cursor: default; opacity: .55; }
+.kd-page .da-btn:active:enabled, .ah-page .da-btn:active:enabled { transform: scale(.965); }
+.kd-page .da-icon, .ah-page .da-icon { width: 18px; height: 18px; flex: none; stroke-width: 1.65; }
+.kd-page .da-icon-sm, .ah-page .da-icon-sm { width: 15px; height: 15px; }
+.kd-page :focus-visible, .ah-page :focus-visible { outline: 2px solid var(--da-primary); outline-offset: 3px; }
+@media(prefers-reduced-motion:reduce) { .kd-page .da-btn, .ah-page .da-btn { transition: none; } }

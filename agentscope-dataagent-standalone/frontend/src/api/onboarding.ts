@@ -52,13 +52,13 @@ const listeners = new Set<() => void>();
 const emit = () => listeners.forEach(l => l());
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; };
 
-function apply(next: Promise<OnboardingStatus>): Promise<void> {
+function apply(next: Promise<OnboardingStatus>, propagateError = false): Promise<void> {
   const token = getToken();
   const requestRevision = ++revision;
   return next.then(s => {
     if (getToken() !== token || requestRevision !== revision) return;
     current = s; currentToken = token; loadedAt = Date.now(); emit();
-  }).catch(() => undefined);
+  }).catch(error => { if (propagateError) throw error; });
 }
 
 const snapshot = () => (current && currentToken === getToken() ? current : null);
@@ -78,8 +78,8 @@ export function refreshOnboarding(force = false): Promise<void> {
 }
 
 export const dismissOnboarding = () => apply(call('/dismiss', 'POST'));
-export const reopenOnboarding = () => apply(call('/reopen', 'POST'));
-export const resetOnboarding = () => apply(call('/reset', 'POST'));
+export const reopenOnboarding = () => apply(call('/reopen', 'POST'), true);
+export const resetOnboarding = () => apply(call('/reset', 'POST'), true);
 export const markTipSeen = (tip: OnboardingTipId) => {
   if (current && snapshot() && !current.tipsSeen.includes(tip)) {
     current = { ...current, tipsSeen: [...current.tipsSeen, tip] };

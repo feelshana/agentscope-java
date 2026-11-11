@@ -1,0 +1,963 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>电商销售仪表盘 · S1+S2 交互稿 · 红海 DataAgent</title>
+<style>
+:root{color-scheme:light;--ink:#202438;--muted:#656d81;--faint:#8a91a3;--line:#e4e7f0;--soft:#f5f6fa;--accent:#5b4bd6;--accent-ink:#4939ba;--tint:#efecfc;--white:#fff;--green:#147451;--amber:#8a5a00;--amber-bg:#fdf4e3;--amber-line:#f0dcb4;--red:#a32d2d;--red-bg:#fbf0f0}
+*{box-sizing:border-box}
+body{margin:0;background:var(--soft);color:var(--ink);font:14px/1.55 "Segoe UI","Microsoft YaHei",sans-serif}
+button,select,textarea,input{font:inherit;color:inherit}
+button,select,input[type=checkbox]{cursor:pointer}
+button:disabled,select:disabled{cursor:default;opacity:.5}
+button:focus-visible,select:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+[hidden]{display:none!important}
+h1,h2,h3,p{margin:0}
+code,.mono{font-family:"Cascadia Mono",Consolas,monospace}
+.top{min-height:64px;background:var(--white);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:16px;padding:10px 24px;position:sticky;top:0;z-index:3}
+.brand{display:flex;align-items:center;gap:9px;font-size:17px;font-weight:720;white-space:nowrap}
+.brand img{width:25px;height:30px}
+.trail{padding-left:16px;border-left:1px solid var(--line);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trail strong{color:var(--ink)}
+.trail .dim{color:var(--faint)}
+.actions{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.btn,select{min-height:34px;border:1px solid var(--line);border-radius:8px;background:#fff;padding:0 11px;white-space:nowrap}
+.btn{font-weight:600}
+.btn:hover:enabled{border-color:#a89ce9;background:#f8f6ff}
+.btn.primary{color:#fff;background:var(--accent);border-color:var(--accent)}
+.btn.primary:hover:enabled{background:var(--accent-ink)}
+.btn.quiet{border-color:transparent;background:transparent;color:var(--accent);font-weight:600}
+.btn.tiny{min-height:26px;padding:0 8px;font-size:12px;border-radius:6px}
+.layout{max-width:1680px;margin:auto;display:grid;grid-template-columns:326px minmax(0,1fr);gap:18px;padding:18px;align-items:start}
+.layout.view{grid-template-columns:minmax(0,1fr);max-width:1360px}
+.assistant,.board{border:1px solid var(--line);background:#fff;border-radius:14px;min-width:0}
+.assistant{position:sticky;top:82px;height:calc(100dvh - 100px);min-height:560px;display:flex;flex-direction:column}
+.assistant>header{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:8px}
+.assistant h2{font-size:15px}
+.caption,.sub,.fine{color:var(--muted);font-size:12px}
+.messages{padding:14px 16px;flex:1;overflow:auto;display:flex;flex-direction:column;gap:11px}
+.bubble{padding:10px 12px;border-radius:10px;max-width:96%;overflow-wrap:anywhere}
+.bubble.user{background:var(--tint);align-self:flex-end}
+.bubble.agent{background:var(--soft);align-self:flex-start}
+.bubble small{display:block;color:var(--muted);font-size:11px;margin-bottom:4px}
+.bubble ul{margin:6px 0 0;padding-left:18px}
+.bubble li{margin-top:2px}
+.composer{padding:11px 12px;border-top:1px solid var(--line)}
+.suggestions{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.suggestions .btn{font-size:12px;min-height:27px;padding:0 8px;font-weight:500}
+textarea{width:100%;resize:vertical;min-height:62px;max-height:150px;padding:8px 10px;border:1px solid var(--line);border-radius:8px}
+.compose-end{display:flex;align-items:center;justify-content:space-between;margin-top:6px;gap:6px}
+.board{padding:22px 24px}
+.board-head,.heading,.filters,.card-head,.barline{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.board-head,.card-head{justify-content:space-between}
+h1{font-size:clamp(22px,2.1vw,32px);letter-spacing:-.03em;line-height:1.25}
+.board-head .sub{margin-top:6px}
+.badge{font-size:12px;font-weight:600;padding:3px 8px;background:var(--tint);color:#5142ba;border-radius:6px;white-space:nowrap}
+.badge.live{color:var(--green);background:#e9f6ef}
+.badge.warn{color:var(--amber);background:var(--amber-bg)}
+.barline{margin-top:16px;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:#fbfbfe;font-size:12.5px;color:var(--muted);gap:8px 14px}
+.barline b{color:var(--ink);font-weight:650}
+.barline .mono{color:#4b4478;font-size:11.5px}
+.barline.busy{border-color:#c9c0f2;background:#f6f4ff}
+.barline .sep{color:#d3d6e2}
+.filters{margin:14px 0 6px;gap:12px}
+.filters label{display:flex;align-items:center;gap:7px;font-size:13px}
+.filters select{min-width:150px}
+.filters .fine{margin-left:auto}
+.filter-lock{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:0 10px;border:1px dashed #d5d8e3;border-radius:8px;color:var(--faint);font-size:13px;background:#fafafb}
+.grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:12px;margin-top:14px}
+.card{border:1px solid var(--line);border-radius:10px;background:#fff;min-width:0;position:relative}
+.kpi{padding:12px 14px 11px}
+.kpi-label{display:flex;align-items:center;gap:7px;font-weight:650;font-size:13px}
+.kpi-label svg{width:17px;height:17px;fill:none;stroke:var(--accent);stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.kpi strong{display:block;font-size:clamp(19px,1.9vw,27px);letter-spacing:-.04em;margin-top:6px;font-variant-numeric:tabular-nums;line-height:1.3}
+.kpi .foot{display:flex;align-items:center;gap:8px;margin-top:5px;flex-wrap:wrap}
+.delta{font-size:12px;font-weight:650;font-variant-numeric:tabular-nums}
+.delta.up{color:var(--green)}
+.delta.down{color:var(--red)}
+.delta.flat,.delta.na{color:var(--faint);font-weight:500}
+.tile{padding:13px 14px;display:flex;flex-direction:column;min-height:200px}
+.tile h3,.tablecard h2,.gap h2{font-size:15px}
+.tile .headright{display:flex;align-items:center;gap:8px}
+.fine{font-size:11.5px;color:var(--faint)}
+.plot{width:100%;height:auto;display:block;flex:1;min-height:0;margin-top:6px}
+.plot text{fill:var(--muted);font-size:12px}
+.plot circle:focus{outline:2px solid var(--accent)}
+.ranking{display:grid;gap:2px;margin-top:9px;flex:1;align-content:start}
+.rank-row{padding:2px 5px;display:grid;grid-template-columns:34px minmax(12px,1fr) 74px;align-items:center;gap:8px;min-height:26px;border:1px solid transparent;background:transparent;border-radius:6px;text-align:left;font-size:12px}
+.rank-row:hover:enabled{border-color:var(--line);background:#faf9ff}
+.rank-row mark{background:none;color:var(--ink);font-weight:600}
+.rank-row b{font-variant-numeric:tabular-nums;text-align:right;font-weight:650;color:var(--ink)}
+.bar{height:10px;min-width:2px;border-radius:3px;background:#b3a5f0}
+.rank-row:first-child .bar{background:#7d6ae2}
+.donut-wrap{display:flex;gap:12px;align-items:center;flex:1;margin-top:6px;min-height:0}
+.donut-wrap svg{width:132px;height:132px;flex:none}
+.legend{display:grid;gap:5px;font-size:12px;min-width:0;flex:1}
+.legend span{display:flex;align-items:center;gap:7px;min-width:0}
+.legend i{width:9px;height:9px;border-radius:2px;flex:none}
+.legend em{font-style:normal;color:var(--muted);margin-left:auto;font-variant-numeric:tabular-nums}
+.legend b{font-weight:550;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tablecard{padding:0;overflow:hidden}
+.tablecard h2{padding:12px 14px}
+.table-wrap{overflow:auto}
+table{border-collapse:collapse;width:100%;font-size:13px;white-space:nowrap}
+th,td{padding:7px 14px;text-align:right;font-variant-numeric:tabular-nums}
+th:first-child,td:first-child{text-align:left}
+th{background:var(--soft);color:var(--muted);font-weight:650;position:sticky;top:0}
+td{border-top:1px solid var(--line)}
+.card-foot{margin-top:auto;padding-top:9px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11.5px;color:var(--faint);border-top:1px dashed var(--line)}
+.card-foot .dot{width:3px;height:3px;border-radius:50%;background:#cfd3de;flex:none}
+.card-foot .spacer{margin-left:auto}
+.tag{display:inline-flex;align-items:center;gap:5px;padding:1px 7px;border-radius:5px;background:var(--tint);color:#5142ba;font-size:11px;font-weight:600}
+.tag.review{background:var(--amber-bg);color:var(--amber)}
+.tag.unverified{background:#f0f1f5;color:#5c6373}
+.tag.snapshot{background:#eaf3fb;color:#1a5b8a}
+.tools{position:absolute;top:8px;right:8px;display:flex;gap:4px;opacity:0;transition:opacity .14s;background:#fff;border:1px solid var(--line);border-radius:7px;padding:3px;box-shadow:0 3px 10px #201a4414}
+.card:hover .tools,.card:focus-within .tools{opacity:1}
+.tools button{min-height:22px;padding:0 6px;border:0;background:transparent;border-radius:5px;color:#5c6373;font-size:11.5px;cursor:pointer}
+.tools button:hover{background:var(--tint);color:var(--accent-ink)}
+.kpi .tools{top:6px}
+.tile.busy::after,.kpi.busy::after{content:"";position:absolute;inset:0;border-radius:9px;background:linear-gradient(100deg,#fff0 40%,#ffffffb8 50%,#fff0 60%);animation:sweep 1.1s linear infinite}
+@keyframes sweep{from{transform:translateX(-60%)}to{transform:translateX(60%)}}
+.sk{background:var(--soft);border-radius:6px;color:transparent!important;animation:pulse 1.3s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.55}}
+.sktop{display:inline-block;width:60%;height:12px}
+.skline{display:block;height:10px;margin-top:9px;width:100%}
+.refused,.degraded{margin:0;padding:13px 14px;display:flex;flex-direction:column;gap:7px;font-size:12.5px}
+.refused{background:var(--red-bg);border-radius:9px;color:#7d2424}
+.degraded{background:var(--amber-bg);border-radius:9px;color:#6c4700}
+.refused p,.degraded p{overflow-wrap:anywhere}
+.refused .mono,.degraded .mono{font-size:11.5px;opacity:.9}
+.gaps{margin-top:14px;border:1px solid var(--amber-line);border-radius:10px;background:#fffdf7;padding:13px 14px}
+.gaps .head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.gaps h2{font-size:14px}
+.gaps ol{margin:8px 0 0;padding-left:20px;display:grid;gap:7px;font-size:12.5px}
+.gaps li .mono{color:#7a5a12;display:block;margin-top:2px;font-size:11.5px}
+.empty{text-align:center;padding:88px 15px;color:var(--muted)}
+.empty h1{margin-bottom:10px;color:var(--ink)}
+.empty .btn{margin-top:14px}
+.denied{text-align:center;padding:92px 16px;color:var(--muted)}
+.denied h1{font-size:21px;color:var(--ink);margin-bottom:8px}
+.denied code{background:var(--soft);padding:2px 6px;border-radius:5px;font-size:12px}
+.board>.fine{margin-top:12px}
+dialog{width:min(540px,calc(100% - 28px));padding:20px 22px;border:1px solid var(--line);border-radius:14px;color:var(--ink);box-shadow:0 16px 55px #201a4433;max-height:calc(100dvh - 40px);overflow:auto}
+dialog::backdrop{background:#1d193b55}
+dialog h2{font-size:19px;margin-bottom:8px}
+dialog h3{font-size:13px;margin:14px 0 4px}
+dialog p{margin:6px 0}
+dialog dl{margin:10px 0}
+dialog dt{font-weight:650;margin-top:9px}
+dialog dd{margin:2px 0 0;color:var(--muted)}
+dialog .sql{margin:8px 0;padding:9px 10px;background:#232134;color:#e8e6ff;border-radius:8px;font-family:"Cascadia Mono",Consolas,monospace;font-size:11.5px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6}
+dialog .sql u{text-decoration:none;background:#4b3f8f;color:#fff;border-radius:3px;padding:0 3px}
+.rows{display:grid;gap:8px;margin:12px 0}
+.row{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:#fcfcfe;font-size:13px}
+.row .n{min-width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;flex:none}
+.row.ok .n{background:#e9f6ef;color:var(--green)}
+.row.warn .n{background:var(--amber-bg);color:var(--amber)}
+.row.bad .n{background:var(--red-bg);color:var(--red)}
+.row .t{flex:1;min-width:0}
+.row .t small{display:block;color:var(--muted);font-size:11.5px}
+.row .tag{flex:none}
+.check{display:flex;align-items:flex-start;gap:9px;margin:12px 0;font-size:13px}
+.check input{margin-top:2px}
+.dialog-end{display:flex;align-items:center;gap:8px;margin-top:16px}
+.dialog-end .right{margin-left:auto;display:flex;gap:8px}
+#notice{position:fixed;bottom:18px;right:20px;z-index:4;background:#24223d;color:#fff;padding:9px 14px;border-radius:9px;box-shadow:0 4px 16px #1d193b22;max-width:min(430px,calc(100% - 40px))}
+.kbd{font-size:11px;color:var(--faint)}
+@media(max-width:1180px){.layout{grid-template-columns:280px minmax(0,1fr)}.board{padding:16px}.filters .fine{width:100%;margin-left:0}.kpi{padding:10px 11px}.kpi strong{font-size:19px}}
+@media(max-width:960px){.grid{grid-template-columns:repeat(6,minmax(0,1fr))}.board{padding:16px}}
+@media(max-width:900px){.top{gap:10px}.donut-wrap{flex-direction:column;align-items:stretch}.donut-wrap svg{width:110px;height:110px}}
+@media(max-width:720px){.top{position:static;flex-wrap:wrap;padding:10px 12px}.actions{width:100%;margin-left:0}.layout{grid-template-columns:1fr;padding:10px;gap:10px}.assistant{position:static;height:auto;min-height:0}.messages{max-height:210px}.board{padding:12px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.card.kpi{grid-column:span 1!important}.card:not(.kpi){grid-column:1/-1!important}}
+@media(prefers-reduced-motion:reduce){.tile.busy::after,.sk{animation:none}}
+</style>
+</head>
+<body>
+<svg aria-hidden="true" width="0" height="0" style="position:absolute">
+  <symbol id="orders" viewBox="0 0 24 24"><path d="M9 5H5v16h14V5h-4M9 3h6v4H9zM8 11h8m-8 4h8"/></symbol>
+  <symbol id="amount" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 4 16 4 16 0V5M4 12c0 4 16 4 16 0"/></symbol>
+  <symbol id="people" viewBox="0 0 24 24"><circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3m2-17a3 3 0 0 1 0 6m0 4a5 5 0 0 1 4 5v2"/></symbol>
+  <symbol id="avg" viewBox="0 0 24 24"><path d="M5 8h14l2 13H3L5 8Zm4 2V6a3 3 0 0 1 6 0v4"/></symbol>
+  <symbol id="lock" viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
+</svg>
+
+<header class="top">
+  <div class="brand"><img alt="" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0MCA0OCIgZmlsbD0ibm9uZSI+CiAgPGRlZnM+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InVwcGVyIiB4MT0iOCIgeTE9IjQiIHgyPSIzNSIgeTI9IjI1IiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+CiAgICAgIDxzdG9wIHN0b3AtY29sb3I9IiM4ODY4RkYiLz48c3RvcCBvZmZzZXQ9Ii41IiBzdG9wLWNvbG9yPSIjNjQ0N0U4Ii8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjNDUzNEI4Ii8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogICAgPGxpbmVhckdyYWRpbnQgaWQ9Imxvd2VyIiB4MT0iMzQiIHkxPSIyNCIgeDI9IjkiIHkyPSI0NCIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgogICAgICA8c3RvcCBzdG9wLWNvbG9yPSIjNEEzREMyIi8+PHN0b3Agb2Zmc2V0PSIuNDgiIHN0b3AtY29sb3I9IiM2NDdERTgiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiM2OUM5RUEiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImZvbGQiIHgxPSIzIiB5MT0iMjAiIHgyPSIxNiIgeTI9IjI5IiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+CiAgICAgIDxzdG9wIHN0b3AtY29sb3I9IiM4ODY4RkYiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiM1ODQxQ0UiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxwYXRoIGQ9Ik0xMCAyLjhhMS40IDEuNCAwIDAgMC0yIDEuM3YxMC4xYzAgMSAuNiAxLjkgMS41IDIuM0wyOSAyNS4ybDctNC4zdi01LjNhNiA2IDAgMCAwLTMuNi01LjVMMTAgMi44WiIgZmlsbD0idXJsKCN1cHBlcikiLz4KICA8cGF0aCBkPSJtMzYgMjAuOS0yNi41IDEyQTIuNSAyLjUgMCAwIDAgOCAzNS4ydjlhMS40IDEuNCAwIDAgMCAyIDEuM2wyMi40LTEwQTYgNiAwIDAgMCAzNiAzMFYyMC45WiIgZmlsbD0idXJsKCNsb3dlcikvPgo8L3N2Zz4K"></div>
+  <div class="trail" id="trail">电商销售 <span class="dim">/</span> 仪表盘 <span class="dim">/</span> <strong>电商销售概览</strong> <span class="dim" id="trail-mode">· 草稿</span></div>
+  <div class="actions">
+    <select id="role" aria-label="演示身份">
+      <option value="manager">库管理者（创建者）</option>
+      <option value="viewer">有权查看的成员</option>
+      <option value="denied">无 QUERY 权限的成员</option>
+    </select>
+    <button class="btn" type="button" id="switch">查看已发布</button>
+    <button class="btn primary" type="button" id="publish">发布</button>
+    <button class="btn quiet" type="button" id="about">本稿边界</button>
+  </div>
+</header>
+
+<main class="layout">
+  <aside class="assistant" id="assistant" aria-label="仪表盘助手">
+    <header>
+      <div><h2>仪表盘助手</h2><p class="caption">模拟后端 · 演示 S1 沉淀 + S2 时间谓词</p></div>
+      <button class="btn quiet" type="button" id="new">新建</button>
+    </header>
+    <div class="messages" role="log" aria-label="生成对话"></div>
+    <form class="composer">
+      <div class="suggestions" aria-label="试用指令"></div>
+      <textarea aria-label="用自然语言描述仪表盘" placeholder="描述想看的数据，或告诉我怎么改"></textarea>
+      <div class="compose-end"><span class="fine">点击示例指令即可试用</span><button class="btn primary" type="submit">发送</button></div>
+    </form>
+  </aside>
+
+  <section class="board" aria-label="仪表盘">
+    <div class="empty" id="empty" hidden></div>
+    <div class="denied" id="denied" hidden>
+      <h1>你没有这个知识库的查看权限</h1>
+      <p>仪表盘归属知识库，打开时按 <code>KnowledgeBaseAccessService.requireQuery</code> 判定。<br>创建者发布的仪表盘，只对已授权成员可见——不会因为拿到链接就可读。</p>
+    </div>
+    <div id="content">
+      <div class="board-head">
+        <div>
+          <div class="heading"><h1 id="dash-title">电商销售概览</h1><span class="badge" id="badge">草稿</span></div>
+          <p class="sub" id="dash-sub">电商销售 · 本地测试数据 · 6 张卡片来自已确认问答对</p>
+        </div>
+        <button class="btn" type="button" id="definitions">指标口径</button>
+      </div>
+
+      <div class="barline" id="barline" role="status"></div>
+
+      <div class="filters">
+        <label>时间范围
+          <select id="timerange" aria-label="全局时间筛选"></select>
+        </label>
+        <button class="filter-lock" type="button" id="lock-region" title="按地区筛选需要带默认过滤的已发布视图">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+          地区
+        </button>
+        <button class="btn quiet" id="reset" type="button">重置筛选</button>
+        <span class="fine" id="coverage"></span>
+      </div>
+
+      <div class="grid" id="grid"></div>
+
+      <section class="gaps" id="gaps" hidden>
+        <div class="head"><h2>无法生成的卡片</h2><span class="fine">未通过 verify，不进入仪表盘</span><button class="btn tiny primary" type="button" id="propose" style="margin-left:auto">提议建模补充</button></div>
+        <ol id="gaplist"></ol>
+      </section>
+
+      <p class="fine">数据来自本地电商测试表；对话、取数、缓存与发布状态均为前端模拟，接口形态按 S1/S2 设计对齐。</p>
+    </div>
+  </section>
+</main>
+
+<dialog id="rules" aria-labelledby="rules-title">
+  <h2 id="rules-title">指标口径</h2>
+  <p class="caption" id="rules-sub">来源：已确认问答对 · knowledge/questions</p>
+  <div id="rules-body"></div>
+  <form class="dialog-end" method="dialog"><button class="btn">关闭</button></form>
+</dialog>
+
+<dialog id="cardinfo" aria-labelledby="card-title">
+  <h2 id="card-title">卡片详情</h2>
+  <div id="card-body"></div>
+  <form class="dialog-end" method="dialog"><button class="btn">关闭</button></form>
+</dialog>
+
+<dialog id="filterhelp" aria-labelledby="fh-title">
+  <h2 id="fh-title">为什么现在只能按时间筛</h2>
+  <p>S2 的筛选下推只做一件事：把卡片查询里那段<b>平台规范时间谓词</b>按新范围重建，再交给官方只读通道执行。全程不请模型改写 SQL，也不由平台拼 WHERE。</p>
+  <div class="sql">-- 卡片存储的查询定义
+SELECT COUNT(DISTINCT o.order_id) AS 订单量
+FROM orders o
+WHERE <u>o.order_date &gt;= '2025-09-01' AND o.order_date &lt; '2025-10-01'</u>
+
+-- 切到「本季度」后重建的同一条
+SELECT COUNT(DISTINCT o.order_id) AS 订单量
+FROM orders o
+WHERE <u>o.order_date &gt;= '2025-07-01' AND o.order_date &lt; '2025-10-01'</u></div>
+  <h3>地区这类维度要怎样才能筛</h3>
+  <dl>
+    <dt>需要一类建模资产</dt>
+    <dd>带 <code>## Default filters</code> 的已发布视图（日后是 Cube 的参数化维度），卡片声明它支持哪一列下推。这不是前端能自己解决的事。</dd>
+    <dt>当前做法</dt>
+    <dd>卡片保持全量并在筛选栏置灰，避免"看起来能筛、其实只筛了已加载的行"这种假交互。</dd>
+    <dt>可点的路径</dt>
+    <dd>缺口清单与这里的「提议补充可筛视图」都会转成一条建模提议，发布后重新生成即可生效。</dd>
+  </dl>
+  <form class="dialog-end" method="dialog">
+    <button class="btn primary" value="propose" type="submit">提议补充可筛视图</button>
+    <div class="right"><button class="btn">关闭</button></div>
+  </form>
+</dialog>
+
+<dialog id="confirmation" aria-labelledby="confirm-title">
+  <h2 id="confirm-title">发布「电商销售概览」</h2>
+  <p class="caption">发布前统一校验，逐条给结论：</p>
+  <div class="rows" id="audit"></div>
+  <label class="check"><input type="checkbox" id="only-verified" checked><span>只发布已通过校验的卡片<br><small class="fine">待复核与口径未确认的卡片留在草稿，不影响已发布版本继续展示上一版。</small></span></label>
+  <p class="caption">发布后，具有此知识库 QUERY 权限的成员可以打开；每个成员按自己的授权实时取数，缓存按「用户 + 筛选 + 查询版本」分键。</p>
+  <form class="dialog-end" method="dialog"><button class="btn" value="cancel">取消</button><button class="btn primary" value="publish">确认发布</button></form>
+</dialog>
+
+<dialog id="aboutbox" aria-labelledby="about-title">
+  <h2 id="about-title">本稿演示的边界</h2>
+  <dl>
+    <dt>S1 · 卡片来源</dt><dd>每张卡引用一条已确认问答对或一段受治理 SQL，卡片不存数据、也不存图表配置，打开时实时取数、服务端确定性生成图表。</dd>
+    <dt>S2 · 全局筛选</dt><dd>只支持时间范围：按平台规范形态重建那一段谓词再过逐表窗口门禁，切筛选零模型调用。</dd>
+    <dt>口径状态可见</dt><dd>已确认 / 待复核 / 口径未确认 / 派生 / 快照表，五种状态在卡片上直接可见，发布前汇总校验。</dd>
+    <dt>降级与缓存</dt><dd>取数失败显示上次成功值、时间和原因；重复打开同一范围命中缓存并标注。</dd>
+    <dt>不做的事</dt><dd>不做拖拽布局（对话 + 卡片按钮改盘）、不做 Wren genbi 式静态应用与公网链接、不把数据打包出域。</dd>
+    <dt>本稿未覆盖</dt><dd>S3 一句话生成的构建指令与 verify 全过程、S5 定时刷新与订阅、卡片级行权限。</dd>
+  </dl>
+  <form class="dialog-end" method="dialog"><button class="btn">关闭</button></form>
+</dialog>
+
+<div id="notice" role="status" hidden></div>
+
+<script type="application/json" id="warehouse">{"from":"2025-01-01","to":"2025-09-28","months":["2025-01","2025-02","2025-03","2025-04","2025-05","2025-06","2025-07","2025-08","2025-09"],"regions":["东北","华东","华中","华北","华南","西北","西南"],"rows":[["2025-01","东北",31,154451977,[23,26,43,47,64,77,80,83,96,105,106,118,145,156,168,178,182,186,188,190,191,193]],["2025-01","华东",25,131164795,[11,32,38,39,42,50,63,69,72,86,97,111,121,135,151,153,154,165,184]],["2025-01","华中",25,140005930,[12,27,95,112,114,116,117,136,137,139,141,147,157,171,197]],["2025-01","华北",16,80238692,[19,40,70,85,94,122,133,140,152,179,195]],["2025-01","华南",19,79281989,[1,16,29,33,45,52,74,75,92,98,102,127,158,196]],["2025-01","西北",22,92476092,[0,4,10,13,15,20,25,65,68,71,91,100,101,120,132,180,192]],["2025-01","西南",20,85549430,[2,14,24,34,57,62,87,93,143,144,161,174,181,185]],["2025-02","东北",24,113316626,[8,26,47,64,73,81,83,96,106,115,123,129,156,168,173,188,191,193]],["2025-02","华东",29,129894256,[7,11,22,39,48,63,86,97,111,121,124,135,149,153,154,159,165,167,199]],["2025-02","华中",18,90314579,[12,56,116,117,119,136,141,147,155,157,160,164,171,176,187]],["2025-02","华北",22,93612364,[19,37,40,66,67,70,94,130,133,142,148,177,179,183,194,195]],["2025-02","华南",22,93070131,[16,33,41,46,49,59,74,75,98,102,109,110,126,150,163]],["2025-02","西北",17,71834220,[4,13,15,35,58,68,84,90,91,100,125,131,146,162,175,180]],["2025-02","西南",15,73765835,[30,36,76,87,93,143,144,161,169,172,198]],["2025-03","东北",31,177769872,[8,23,26,43,47,55,64,73,80,81,83,96,106,118,123,129,145,168,173,178,182,186,188]],["2025-03","华东",22,101463441,[7,11,22,39,63,69,82,86,103,121,151,153,154,165,167]],["2025-03","华中",27,140199486,[12,27,44,51,61,95,107,112,114,116,117,128,136,139,164,170,176,187]],["2025-03","华北",32,155738971,[21,37,66,67,70,79,85,89,122,130,133,142,148,152,177,179,183,195]],["2025-03","华南",22,111414469,[1,3,16,29,46,49,59,74,75,98,102,109,110,126,127,158,196]],["2025-03","西北",27,106763166,[0,10,13,15,20,25,35,53,58,65,71,84,90,91,100,101,131,146,175]],["2025-03","西南",18,73395678,[2,14,28,30,34,36,57,87,134,169,181,185,189]],["2025-04","东北",28,147971500,[5,23,26,43,64,73,80,96,129,138,156,178,188,190,191,193]],["2025-04","华东",18,94879991,[11,17,22,32,38,63,72,82,86,97,124,149,166]],["2025-04","华中",25,128980806,[51,56,61,95,99,107,114,116,117,128,137,139,147,157,160,170,176,187,197]],["2025-04","华北",24,122578251,[6,19,21,67,85,89,94,122,130,133,148,152,179,183,194,195]],["2025-04","华南",19,62545315,[1,3,29,33,41,45,52,59,74,75,92,110,127,158,163]],["2025-04","西北",24,98724396,[4,10,13,15,25,35,53,60,65,71,78,84,100,101,108,125,146]],["2025-04","西南",14,104456610,[2,24,28,34,54,57,62,134,161,181,185,189]],["2025-05","东北",33,154062636,[5,8,23,26,31,43,47,55,73,81,96,106,115,118,129,156,173,182,186,188]],["2025-05","华东",23,101266878,[7,22,32,38,48,63,72,82,121,151,159,184,199]],["2025-05","华中",19,103520419,[27,44,61,95,99,112,139,147,155,157,160,176,187,197]],["2025-05","华北",11,48120026,[6,21,40,67,79,88,89,177,194]],["2025-05","华南",13,80504227,[3,29,41,45,46,92,126,127,158,163]],["2025-05","西北",17,89695824,[10,13,15,25,60,65,125,146,162,180,192]],["2025-05","西南",21,76285804,[2,14,30,36,54,76,93,143,144,161,185,189,198]],["2025-06","东北",27,123937759,[5,26,47,81,83,105,106,115,118,123,129,138,156,168,188,190,191]],["2025-06","华东",19,83387273,[22,38,42,63,72,97,103,124,135,149,165,167,184]],["2025-06","华中",23,113618791,[44,51,56,95,112,117,128,136,137,139,141,147,157,160,164,170,176,187,197]],["2025-06","华北",21,78907796,[6,19,21,40,67,79,88,89,122,140,148,183,194]],["2025-06","华南",26,115718973,[1,3,29,33,41,45,46,52,74,75,92,104,109,110,126,127,150,158,163]],["2025-06","西北",23,107030727,[0,4,10,13,35,53,60,65,71,78,84,100,108,120,175,192]],["2025-06","西南",17,82025324,[2,14,24,28,34,54,93,144,161,189,198]],["2025-07","东北",25,136275652,[8,23,26,31,43,47,64,80,83,96,115,118,129,145,156,168,182,186,191]],["2025-07","华东",31,157001552,[11,17,42,48,63,69,72,86,97,103,111,121,124,135,151,165,166,167,199]],["2025-07","华中",31,141381972,[9,12,27,44,51,56,107,114,116,117,119,128,137,147,155,164,187,197]],["2025-07","华北",17,80035728,[19,37,66,70,88,94,122,133,140,142]],["2025-07","华南",20,90257532,[1,3,16,18,46,49,59,74,92,98,110,126,158,196]],["2025-07","西北",21,94570207,[13,20,35,68,71,84,90,100,131,146,162,180]],["2025-07","西南",18,82901469,[2,24,30,34,57,87,93,134,144,181,185,189,198]],["2025-08","东北",24,106796785,[23,43,47,73,80,96,106,113,115,118,123,129,178,182,186]],["2025-08","华东",20,113253729,[22,38,39,42,50,63,69,72,121,124,149,165,184,199]],["2025-08","华中",17,76281188,[27,95,107,112,116,117,128,136,139,141,157,160,187]],["2025-08","华北",32,172346065,[6,40,66,67,70,79,85,88,89,94,122,130,133,140,152,183,194,195]],["2025-08","华南",20,99824132,[16,29,33,41,45,52,74,75,98,110,126,158,163,196]],["2025-08","西北",21,96754182,[13,15,20,25,60,68,78,84,91,125,146,162,175]],["2025-08","西南",14,56968112,[24,30,34,76,93,143,161,172,174,189,198]],["2025-09","东北",35,146190531,[5,23,26,31,47,55,77,81,83,96,105,113,115,118,123,129,145,156,168,173,178,182,186,190,193]],["2025-09","华东",22,94574417,[7,17,32,39,82,86,103,111,121,124,149,154,159,166,167,199]],["2025-09","华中",19,85628815,[44,56,95,112,114,116,117,119,141,147,157,160,171,187]],["2025-09","华北",22,112015955,[19,21,66,79,94,122,130,133,140,142,148,152,183]],["2025-09","华南",21,111419483,[3,33,46,49,74,75,98,102,104,109,127,150,163,196]],["2025-09","西北",18,109177585,[4,10,15,20,25,35,53,58,60,84,91,100,101,131,132,146]],["2025-09","西南",22,95223469,[2,14,34,36,54,57,62,87,143,144,169,181,185,189]]],"customerSnapshot":{"华东":6412,"华北":4180,"华南":3955,"华中":3620,"西南":2870,"西北":1640,"东北":1338},"categories":["家电数码","服饰鞋包","食品生鲜","家居生活","美妆个护"]}</script>
+
+<script type="application/json" id="semantic">
+{
+  "models": ["orders（订单）", "order_items（订单明细）", "customer（客户快照）"],
+  "window": {"orders": 92, "order_items": 92, "customer": null},
+  "columns": {"orders": ["order_id", "order_date", "customer_id", "region", "amount", "status"], "order_items": ["item_id", "order_id", "sku_id", "category", "qty", "pay_amount", "refund_amount"], "customer": ["customer_id", "region", "channel", "register_date"]}
+}
+</script>
+
+<script>
+const byId = id => document.getElementById(id);
+const WARE = JSON.parse(byId('warehouse').textContent);
+const SEM = JSON.parse(byId('semantic').textContent);
+const W = {from:WARE.from, to:WARE.to, months:WARE.months, regions:WARE.regions, rows:WARE.rows};
+const SNAP_REGION = WARE.customerSnapshot;
+const CATEGORIES = WARE.categories;
+const number = new Intl.NumberFormat('zh-CN');
+const money = new Intl.NumberFormat('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2});
+const clock = d => d.toTimeString().slice(0,8);
+const RANGES = [
+  {id:"m30", label:"最近 30 天", months:["2025-09"], from:"2025-09-01", to:"2025-10-01", days:30, prev:{id:"m30p", months:["2025-08"], label:"对比 8 月"}},
+  {id:"q3",  label:"本季度（7–9 月）", months:["2025-07","2025-08","2025-09"], from:"2025-07-01", to:"2025-10-01", days:92, prev:{id:"q3p", months:["2025-04","2025-05","2025-06"], label:"对比上季度"}},
+  {id:"q2",  label:"上季度（4–6 月）", months:["2025-04","2025-05","2025-06"], from:"2025-04-01", to:"2025-07-01", days:91, prev:{id:"q2p", months:["2025-01","2025-02","2025-03"], label:"对比 1–3 月"}},
+  {id:"all", label:"全部（2025-01 至 09-28）", months:W.months, from:"2025-01-01", to:"2025-09-29", days:271, prev:null},
+];
+const SPANS = {kpi:3, sm:4, md:6, lg:8, full:12};
+const SIZE_CYCLE = ["sm","md","lg","full"];
+const METRIC_SIZES = ["kpi","sm","md"];
+function cycleSize(card, dir = 1) {
+  const sizes = card.chart ? SIZE_CYCLE : METRIC_SIZES;
+  const at = sizes.indexOf(card.size);
+  card.size = sizes[(Math.max(at, 0) + dir + sizes.length) % sizes.length];
+  return card.size;
+}
+const now = () => new Date();
+
+const measure = rows => {
+  const customers = new Set();
+  let orders = 0, cents = 0;
+  for (const r of rows) { orders += r[2]; cents += r[3]; for (const c of r[4]) customers.add(c); }
+  return {orders, sales:cents/100, customers:customers.size, avg:orders ? cents/100/orders : 0};
+};
+const rowsFor = range => W.rows.filter(r => range.months.includes(r[0]));
+const share = (cents, i) => cents * [0.31,0.24,0.19,0.15,0.11][i];
+
+const CARD_DEFS = [
+  {id:"orders", size:"kpi", icon:"orders", title:"订单量", qa:"Q-013", state:"CONFIRMED", tables:["orders"],
+    sqlTpl:"SELECT COUNT(DISTINCT o.order_id) AS 订单量\nFROM orders o\nWHERE o.order_date >= '{from}' AND o.order_date < '{to}'\n  AND o.status <> '已取消'",
+    rule:"按订单 ID 去重，剔除已取消订单。"},
+  {id:"sales", size:"kpi", icon:"amount", title:"销售金额", qa:"Q-014", state:"CONFIRMED", tables:["orders","order_items"],
+    sqlTpl:"SELECT SUM(i.pay_amount) AS 销售金额\nFROM orders o JOIN order_items i ON i.order_id = o.order_id\nWHERE o.order_date >= '{from}' AND o.order_date < '{to}'\n  AND o.status <> '已取消'",
+    rule:"汇总纳入统计的订单明细金额；沿用示例规则，未对退款另行冲减。"},
+  {id:"customers", size:"kpi", icon:"people", title:"下单客户", qa:"Q-015", state:"REVIEW", tables:["orders"],
+    sqlTpl:"SELECT COUNT(DISTINCT o.customer_id) AS 下单客户\nFROM orders o\nWHERE o.order_date >= '{from}' AND o.order_date < '{to}'",
+    rule:"按客户 ID 去重，跨月按所选范围重新去重。",
+    review:"10-28 orders→customer 关系变更后待复核"},
+  {id:"avg", size:"kpi", icon:"avg", title:"平均订单金额", qa:"Q-014 ÷ Q-013", state:"DERIVED", tables:["orders"],
+    sqlTpl:"-- 派生：两条已确认问答对的返回值相除，不单独下发 SQL", rule:"销售金额 ÷ 订单量。"},
+  {id:"trend", size:"lg", chart:"line", title:"销售金额月度趋势", qa:"Q-002", state:"CONFIRMED", tables:["orders","order_items"], unit:"万元",
+    sqlTpl:"SELECT DATE_FORMAT(o.order_date,'%Y-%m') AS 月份, SUM(i.pay_amount) AS 销售金额\nFROM orders o JOIN order_items i ON i.order_id = o.order_id\nWHERE o.order_date >= '{from}' AND o.order_date < '{to}'\nGROUP BY 1 ORDER BY 1",
+    rule:"按月汇总订单明细金额，剔除已取消订单。"},
+  {id:"region", size:"sm", chart:"rank", title:"地区销售金额排行", qa:"Q-007", state:"CONFIRMED", tables:["orders"], unit:"万元",
+    sqlTpl:"SELECT o.region AS 地区, SUM(o.amount) AS 销售金额\nFROM orders o\nWHERE o.order_date >= '{from}' AND o.order_date < '{to}'\nGROUP BY 1 ORDER BY 2 DESC",
+    rule:"按订单归属地区汇总金额。"},
+  {id:"category", size:"md", chart:"pie", title:"品类销售金额占比", qa:"Q-021", state:"UNVERIFIED", tables:["order_items"], unit:"万元",
+    sqlTpl:"SELECT i.category AS 品类, SUM(i.pay_amount) AS 销售金额\nFROM order_items i JOIN orders o ON o.order_id = i.order_id\nWHERE o.order_date >= '{from}' AND o.order_date < '{to}'\nGROUP BY 1 ORDER BY 2 DESC",
+    rule:"口径未确认：退款是否冲减仍未定，来自一次问数临时 SQL。"},
+  {id:"cust_region", size:"sm", chart:"rank", title:"客户地区分布", qa:"A-004", state:"SNAPSHOT", tables:["customer"], unit:"人",
+    sqlTpl:"SELECT c.region AS 地区, COUNT(DISTINCT c.customer_id) AS 客户数\nFROM customer c",
+    rule:"客户快照表，不受事实表时间窗口约束，因此切换时间范围时数值不变。"},
+  {id:"detail", size:"full", chart:"table", title:"月度明细数据", qa:"Q-031", state:"CONFIRMED", tables:["orders","order_items"],
+    sqlTpl:"SELECT DATE_FORMAT(o.order_date,'%Y-%m') AS 月份, COUNT(DISTINCT o.order_id), SUM(i.pay_amount),\n       COUNT(DISTINCT o.customer_id)\nFROM orders o JOIN order_items i ON i.order_id = o.order_id\nWHERE o.order_date >= '{from}' AND o.order_date < '{to}'\nGROUP BY 1 ORDER BY 1",
+    rule:"与趋势卡同一口径，用于核对。"},
+];
+const GAP = {id:"cust_level", title:"客户等级分布", qa:"Q-040",
+  reason:"列 customer.customer_level 不在本库已发布模型中（MDL 无此列，dry_plan 无法展开）",
+  fix:"提议建模：为 customer 补充等级计算字段，或改关联会员表"};
+
+const STATE = {
+  role:"manager", mode:"draft", draft:null, published:null, publishedVersion:0,
+  viewerRange:"m30", run:new Map(), cache:new Map(), gapsProposed:false, seq:0,
+  failOnce:new Set(["category|q3"]), audit:null,
+};
+const editing = () => STATE.mode === "draft";
+const config = () => editing() ? STATE.draft : STATE.viewer;
+const cards = () => (config() && config().cards) || [];
+
+const messages = document.querySelector('.messages'), suggestions = document.querySelector('.suggestions'), input = document.querySelector('textarea');
+const SUGGEST_IDLE = ["用电商销售数据做一张经营仪表盘"];
+const SUGGEST_LIVE = ["把品类占比放到趋势右边", "趋势图改大一点", "删掉月度明细", "把刚才那笔问数结果加入仪表盘", "为什么不能按地区筛", "撤销上次修改"];
+
+function addMessage(who, html) {
+  const b = document.createElement('div');
+  b.className = 'bubble ' + who;
+  const label = document.createElement('small');
+  label.textContent = who === 'user' ? '你' : 'DataAgent';
+  b.append(label);
+  const body = document.createElement('span');
+  body.innerHTML = html;
+  b.append(body);
+  messages.append(b);
+  messages.scrollTop = messages.scrollHeight;
+}
+let noticeTimer;
+function notify(text) {
+  const n = byId('notice');
+  n.textContent = text; n.hidden = false;
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => { n.hidden = true; }, 3200);
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ---- 模拟后端：查询编译 → 门禁 → 缓存 → 取数 ---- */
+function compile(card, range) {
+  return card.sqlTpl.replace("{from}", range.from).replace("{to}", range.to);
+}
+function windowCheck(card, range) {
+  const limited = card.tables.filter(t => SEM.window[t] !== null);
+  const over = limited.find(t => range.days > SEM.window[t]);
+  return over ? {ok:false, table:over, limit:SEM.window[over]} : {ok:true};
+}
+function cacheKey(card, range) { return card.id + "|" + range.id; }
+
+async function runCard(card, range, {silent=false} = {}) {
+  const key = cacheKey(card, range);
+  const gate = windowCheck(card, range);
+  if (!gate.ok) {
+    setRun(card.id, {phase:"refused", card, range, gate, at:now()});
+    return {refused:true, gate};
+  }
+  if (STATE.cache.has(key)) {
+    const hit = STATE.cache.get(key);
+    setRun(card.id, {...hit, cached:true, at:now()});
+    return {ok:true, cached:true};
+  }
+  if (!silent) setRun(card.id, {phase:"loading", card, range, at:now()});
+  await sleep(220 + Math.random() * 420);
+  const failId = card.id + "|" + range.id;
+  if (STATE.failOnce.has(failId)) {
+    STATE.failOnce.delete(failId);
+    const other = range.id === "q3" ? "m30" : "q3";
+    const prev = STATE.cache.get(card.id + "|" + other);
+    setRun(card.id, {phase:"degraded", card, range, at:now(),
+      error:"官方 run_sql 超时（180s）被终止",
+      last: prev ? {text:prev.summary, range:prev.rangeLabel} : null});
+    render();
+    return {error:true};
+  }
+  const result = compute(card, range);
+  const summary = summaryOf(result);
+  const entry = {phase:"ok", card, range, result, summary, at:now(), cached:false, rangeLabel:range.label, executedAt:clock(now())};
+  STATE.cache.set(key, entry);
+  setRun(card.id, entry);
+  return {ok:true};
+}
+function compute(card, range) {
+  const rows = rowsFor(range), m = measure(rows);
+  if (!card.chart) {
+    const map = {orders:()=>number.format(m.orders) + " 单", sales:()=>"¥ " + money.format(m.sales/10000) + " 万",
+      customers:()=>number.format(m.customers) + " 人", avg:()=>"¥ " + money.format(m.avg)};
+    return {kind:"kpi", value:map[card.id]()};
+  }
+  if (card.chart === "line") {
+    return {kind:"line", months:range.months, values:range.months.map(x => measure(rows.filter(r => r[0] === x)).sales / 10000)};
+  }
+  if (card.chart === "rank") {
+    if (card.id === "cust_region") {
+      const items = Object.entries(SNAP_REGION).sort((a,b) => b[1] - a[1]);
+      return {kind:"rank", items, unit:"人", plain:v => number.format(v)};
+    }
+    const ratio = card.id === "region_refund" ? 0.041 : 1;
+    const items = W.regions.map(r => [r, W.rows.filter(x => x[1] === r && range.months.includes(x[0])).reduce((s,x) => s + x[3], 0) / 100 * ratio]).sort((a,b) => b[1] - a[1]);
+    return {kind:"rank", items, unit:"万元", plain:v => money.format(v/10000)};
+  }
+  if (card.chart === "pie") {
+    const cents = rows.reduce((s,r) => s + r[3], 0);
+    return {kind:"pie", items:CATEGORIES.map((n,i) => [n, share(cents, i)/100])};
+  }
+  return {kind:"table", months:range.months.map(x => {const v = measure(rows.filter(r => r[0] === x)); return [x, v.orders, v.sales, v.customers, v.avg];})};
+}
+function summaryOf(result) {
+  if (result.kind === "kpi") return result.value;
+  if (result.kind === "line") return "峰值 " + money.format(Math.max(...result.values)) + " 万元";
+  if (result.kind === "rank") return result.items[0][0] + " 居首";
+  if (result.kind === "pie") return result.items[0][0] + " 领先";
+  return result.months.length + " 行";
+}
+function setRun(cardId, value) { STATE.run.set(cardId + "|" + (config() ? config().range : "m30"), value); }
+function getRun(card) { return STATE.run.get(card.id + "|" + config().range); }
+
+function rebuild(range, note) {
+  const started = now();
+  const body = config();
+  if (!body) return;
+  body.range = range.id;
+  const cardsIn = cards();
+  const refused = cardsIn.filter(c => !windowCheck(c, range).ok);
+  const ok = cardsIn.length - refused.length;
+  let cached = 0;
+  for (const c of cardsIn) if (windowCheck(c, range).ok && STATE.cache.has(cacheKey(c, range))) cached++;
+  const bar = byId('barline');
+  bar.classList.add('busy');
+  bar.innerHTML = `${clock(started)} · <b>${ok + refused.length}</b> 张卡片按 TemporalCondition 重建时间谓词 <span class="mono">&gt;= '${range.from}' AND &lt; '${range.to}'</span> · <b>未调用模型</b>${note ? " · " + note : ""}`;
+  const results = cardsIn.map(c => runCard(c, range));
+  Promise.all(results).then(() => {
+    const took = (now() - started) / 1000;
+    bar.classList.remove('busy');
+    const bits = [
+      `${clock(started)} · 时间切换完成，<b>${cardsIn.length}</b> 张卡片重建谓词，<b>0 次模型调用</b>`,
+      `逐表窗口：<b>${range.days} 天</b> vs orders <b>${SEM.window.orders} 天</b> → ${refused.length ? `<b>${refused.length} 张被拒绝</b>` : "通过"}`,
+      `命中缓存 <b>${cached}</b> / 实查 <b>${Math.max(0, ok - cached)}</b>${refused.length ? ` / 窗口拒绝 <b>${refused.length}</b>（未查库）` : ""} · ${took.toFixed(1)}s`,
+    ];
+    if (refused.length) bits.push(`快照卡不受窗口约束`);
+    bar.innerHTML = bits.join('<span class="sep">|</span>');
+    render();
+  });
+}
+
+/* ---- 渲染 ---- */
+function pack(list) {
+  const rows = []; let cur = [], span = 0;
+  for (const c of list) {
+    const w = SPANS[c.size];
+    if (span + w > 12) { rows.push(cur); cur = []; span = 0; }
+    cur.push({card:c, span:w}); span += w;
+  }
+  if (cur.length) rows.push(cur);
+  for (const r of rows) {
+    const used = r.reduce((s,i) => s + i.span, 0);
+    if (used < 12) r[r.length-1].span += 12 - used;
+  }
+  return rows.flat();
+}
+const STATE_TAG = {CONFIRMED:"已确认口径", REVIEW:"待复核", UNVERIFIED:"口径未确认", DERIVED:"派生口径", SNAPSHOT:"快照表"};
+
+function kpiShell(c) {
+  return `<div class="kpi-label"><svg aria-hidden="true"><use href="#${c.icon}"/></svg>${c.title}</div>
+    <strong><span class="sk sktop">值</span></strong><div class="foot"><span class="sk skline" style="width:70%"></span></div>`;
+}
+function deltaFor(c, range) {
+  if (!range.prev) return '<span class="delta na">环比 —（无对比范围）</span>';
+  const cur = measure(W.rows.filter(r => range.months.includes(r[0])));
+  const prev = measure(W.rows.filter(r => range.prev.months.includes(r[0])));
+  const pick = {orders:"orders", sales:"sales", customers:"customers", avg:"avg"}[c.id];
+  const a = cur[pick], b = prev[pick];
+  if (!b) return '<span class="delta na">环比 —</span>';
+  const pct = (a - b) / b * 100;
+  const cls = pct > 0.05 ? "up" : pct < -0.05 ? "down" : "flat";
+  const sign = pct > 0 ? "▲ " : pct < 0 ? "▼ " : "— ";
+  return `<span class="delta ${cls}">${sign}${Math.abs(pct).toFixed(1)}% vs ${range.prev.label.replace("对比 ","")}</span>`;
+}
+function toolsFor(c) {
+  if (!editing() || STATE.role !== "manager") return "";
+  return `<div class="tools">
+    <button type="button" data-act="top" data-id="${c.id}" title="移到最前">置顶</button>
+    <button type="button" data-act="size" data-id="${c.id}" title="换尺寸档">尺寸</button>
+    <button type="button" data-act="info" data-id="${c.id}" title="口径与 SQL">口径</button>
+    <button type="button" data-act="remove" data-id="${c.id}" title="从仪表盘移除">移除</button>
+  </div>`;
+}
+function footFor(c, run) {
+  const tag = `<span class="tag ${c.state === "REVIEW" ? "review" : c.state === "SNAPSHOT" ? "snapshot" : c.state === "UNVERIFIED" ? "unverified" : ""}">${STATE_TAG[c.state]}</span>`;
+  let time = "";
+  if (run && run.phase === "ok") time = run.cached ? `<span>缓存 ${run.executedAt}</span>` : `<span>查询 ${run.executedAt}</span>`;
+  return `<div class="card-foot">${tag}<span class="dot"></span><span>${c.qa}</span>${time ? `<span class="dot"></span>${time}` : ""}<span class="spacer"></span><span class="mono">${c.tables.join(" · ")}</span></div>`;
+}
+function renderKpi(c, run) {
+  const el = document.createElement('div');
+  el.className = 'card kpi' + (run && run.phase === "loading" ? " busy" : "");
+  el.style.gridColumn = `span ${c.__span}`;
+  let body;
+  if (!run || run.phase === "loading") body = kpiShell(c);
+  else if (run.phase === "refused") body = `<div class="refused"><b>超出时间窗口</b><p>本卡依赖 <code>${run.gate.table}</code>，窗口上限 ${run.gate.limit} 天，当前范围 ${run.range.days} 天。</p><p class="mono">${compile(c, run.range)}</p><button class="btn tiny" type="button" data-act="fixrange" data-id="${c.id}">切回合规范围</button></div>`;
+  else if (run.phase === "degraded") body = `<div class="degraded"><b>本次取数失败</b><p>${run.error}</p>${run.last ? `<p>上次成功：${run.last.range} · <b>${run.last.text}</b></p>` : '<p>无历史成功值</p>'}<button class="btn tiny" type="button" data-act="retry" data-id="${c.id}">重试</button></div>`;
+  else body = `<div class="kpi-label"><svg aria-hidden="true"><use href="#${c.icon}"/></svg>${c.title}</div><strong>${run.result.value}</strong><div class="foot">${deltaFor(c, run.range)}</div>`;
+  el.innerHTML = toolsFor(c) + body + footFor(c, run);
+  return el;
+}
+function drawLine(range, values) {
+  const top = 14, bottom = 176, left = 46, right = 620;
+  const max = Math.max(1, ...values);
+  const step = Math.max(2, Math.ceil(max / 4 / 2) * 2);
+  const x = i => values.length === 1 ? (left + right) / 2 : left + 8 + i * (right - left - 16) / (values.length - 1);
+  const y = v => bottom - v / (step * 4) * (bottom - top);
+  const line = values.map((v,i) => `${i ? "L" : "M"}${x(i)},${y(v)}`).join(" ");
+  const grid = Array.from({length:5}, (_,i) => `<path d="M${left},${y(step*i)}H${right}" stroke="#eaecf4"/><text x="${left-8}" y="${y(step*i)+4}" text-anchor="end">${step*i}</text>`).join("");
+  const labels = range.months.map((m,i) => `<text x="${x(i)}" y="200" text-anchor="middle">${Number(m.slice(5))}月</text>`).join("");
+  const pts = values.map((v,i) => {const lab = `${range.months[i]} · ${money.format(v)} 万元`; return `<circle cx="${x(i)}" cy="${y(v)}" r="4" fill="#fff" stroke="#6650db" stroke-width="2" tabindex="0" aria-label="${lab}"><title>${lab}</title></circle>`;}).join("");
+  const area = values.length > 1 ? `<path d="${line} L${x(values.length-1)},${bottom} H${x(0)} Z" fill="url(#areag)"/>` : "";
+  return `<svg class="plot" viewBox="0 0 640 212" role="img" aria-label="销售金额月度趋势">
+    <defs><linearGradient id="areag" x2="0" y2="1"><stop stop-color="#9e8af0" stop-opacity=".38"/><stop offset="1" stop-color="#9e8af0" stop-opacity=".05"/></linearGradient></defs>
+    ${grid}${area}<path d="${line}" stroke="#6650db" stroke-width="2.6" stroke-linejoin="round" fill="none"/>${pts}${labels}</svg>`;
+}
+function drawRank(run, c) {
+  const {items, plain} = run.result;
+  const top = items.length ? items[0][1] : 1;
+  return `<div class="ranking">` + items.map(([n,v]) => {
+    const clickable = c.id !== "cust_region";
+    return `<button class="rank-row" type="button" ${clickable ? `data-act="drilllock" data-id="${c.id}"` : "disabled"}>
+      <mark>${n}</mark><span class="bar" style="width:${100*v/top}%"></span><b>${plain(v)}</b></button>`;
+  }).join("") + `</div>`;
+}
+function drawPie(run) {
+  const items = run.result.items, total = items.reduce((s,i) => s + i[1], 0) || 1;
+  const colors = ["#6f5cd8","#9d8bec","#c1b5f4","#d8d0f7","#ece8fb"];
+  let acc = 0, cx = 60, cy = 60, r = 44, arcs = "";
+  items.forEach((it,i) => {
+    const a0 = acc/total*Math.PI*2 - Math.PI/2; acc += it[1];
+    const a1 = acc/total*Math.PI*2 - Math.PI/2;
+    const large = a1 - a0 > Math.PI ? 1 : 0;
+    const p = (ang) => [cx + r*Math.cos(ang), cy + r*Math.sin(ang)];
+    const [x0,y0] = p(a0), [x1,y1] = p(a1);
+    arcs += `<path d="M${cx},${cy} L${x0},${y0} A${r},${r} 0 ${large} 1 ${x1},${y1} Z" fill="${colors[i]}" stroke="#fff" stroke-width="1.5"><title>${it[0]} ${money.format(it[1]/10000)} 万元（${(it[1]/total*100).toFixed(1)}%）</title></path>`;
+  });
+  const legend = items.map((it,i) => `<span><i style="background:${colors[i]}"></i><b>${it[0]}</b><em>${(it[1]/total*100).toFixed(1)}%</em></span>`).join("");
+  return `<div class="donut-wrap"><svg viewBox="0 0 120 120" role="img" aria-label="品类销售金额占比"><circle cx="60" cy="60" r="60" fill="none"/>${arcs}<circle cx="60" cy="60" r="24" fill="#fff"/></svg><div class="legend">${legend}</div></div>`;
+}
+function drawTable(run) {
+  return `<div class="table-wrap"><table><thead><tr><th scope="col">月份</th><th scope="col">订单量（单）</th><th scope="col">销售金额（元）</th><th scope="col">下单客户（人）</th><th scope="col">平均订单金额（元）</th></tr></thead><tbody>`
+    + run.result.months.map(r => `<tr><td>${r[0]}</td><td>${number.format(r[1])}</td><td>${money.format(r[2])}</td><td>${number.format(r[3])}</td><td>${money.format(r[4])}</td></tr>`).join("")
+    + `</tbody></table></div>`;
+}
+function renderTile(c, run) {
+  const el = document.createElement('div');
+  const isTable = c.chart === "table";
+  el.className = 'card ' + (isTable ? "tablecard" : "tile") + (run && run.phase === "loading" ? " busy" : "");
+  el.style.gridColumn = `span ${c.__span}`;
+  const head = `<div class="${isTable ? "" : "card-head"}" style="${isTable ? "display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:12px 14px" : ""}">
+    <h${isTable ? "2" : "3"}>${c.title}</h${isTable ? "2" : "3"}>
+    <span class="fine">${c.unit ? "单位：" + c.unit : ""}${c.chart === "rank" && c.id === "region" ? " · 点击行看为何不能筛" : ""}</span></div>`;
+  let body;
+  if (!run || run.phase === "loading") body = `<span class="sk skline" style="height:120px;margin-top:12px"></span>`;
+  else if (run.phase === "refused") body = `<div class="refused"><b>超出时间窗口</b><p>本卡依赖 <code>${run.gate.table}</code>，窗口上限 ${run.gate.limit} 天，当前范围 ${run.range.days} 天。</p><button class="btn tiny" type="button" data-act="fixrange" data-id="${c.id}">切回合规范围</button></div>`;
+  else if (run.phase === "degraded") body = `<div class="degraded"><b>本次取数失败</b><p>${run.error}</p>${run.last ? `<p>上次成功：${run.last.range} · ${run.last.text}</p>` : ""}<button class="btn tiny" type="button" data-act="retry" data-id="${c.id}">重试</button></div>`;
+  else if (run.result.kind === "line") body = drawLine(run.range, run.result.values);
+  else if (run.result.kind === "rank") body = drawRank(run, c);
+  else if (run.result.kind === "pie") body = drawPie(run);
+  else body = drawTable(run);
+  el.innerHTML = toolsFor(c) + head + body + (isTable ? "" : footFor(c, run));
+  return el;
+}
+
+function updateSuggestions() {
+  const list = STATE.draft ? SUGGEST_LIVE : SUGGEST_IDLE;
+  suggestions.replaceChildren(...list.map(text => {
+    const b = document.createElement('button');
+    b.type = "button"; b.className = "btn"; b.textContent = text;
+    b.addEventListener("click", () => { input.value = ""; handleCommand(text); });
+    return b;
+  }));
+}
+function renderGaps() {
+  const box = byId('gaps');
+  if (!editing() || !STATE.draft) { box.hidden = true; return; }
+  box.hidden = false;
+  byId('gaplist').innerHTML = `<li><b>${GAP.title}</b>（${GAP.qa}）—— ${GAP.reason}<span class="mono">${GAP.fix}</span>${STATE.gapsProposed ? '<span class="tag" style="margin-left:8px">已提议</span>' : ""}</li>`;
+  byId('propose').disabled = STATE.gapsProposed;
+  byId('propose').textContent = STATE.gapsProposed ? "已写入建模提议" : "提议建模补充";
+}
+
+function render() {
+  const isEdit = editing();
+  const body = config();
+  document.querySelector('.layout').classList.toggle('view', !isEdit);
+  byId('assistant').hidden = !isEdit || STATE.role !== "manager";
+  byId('denied').hidden = STATE.role !== "denied";
+  byId('content').hidden = STATE.role === "denied" || !body;
+  byId('trail-mode').textContent = isEdit ? "· 草稿预览" : `· 已发布 v${STATE.publishedVersion}`;
+  byId('switch').textContent = isEdit ? "查看已发布" : "返回草稿";
+  byId('switch').hidden = STATE.role !== "manager";
+  byId('publish').hidden = !isEdit || STATE.role !== "manager";
+  byId('publish').disabled = !STATE.draft;
+  byId('about').hidden = false;
+  const empty = byId('empty');
+  empty.hidden = Boolean(body) || STATE.role === "denied";
+  if (!body) {
+    if (!isEdit) empty.innerHTML = '<h1>暂无已发布仪表盘</h1><p>知识库管理者发布后，有权查看的成员即可打开。</p>';
+    else { empty.innerHTML = '<h1>生成你的仪表盘</h1><p>在左侧描述想看的指标与维度；也可以把刚才问数确认过的结果直接沉淀成一张盘。</p><button class="btn primary" type="button" data-act="seed">用示例指令开始</button>'; updateSuggestions(); }
+    renderGaps();
+    return;
+  }
+  byId('dash-title').textContent = body.title;
+  byId('badge').textContent = isEdit ? "草稿 · 待发布" : `已发布 · v${STATE.publishedVersion}`;
+  byId('badge').className = 'badge' + (isEdit ? "" : " live");
+  const confirmed = body.cards.filter(c => c.state === "CONFIRMED").length;
+  byId('dash-sub').textContent = `电商销售 · 本地测试数据 · ${confirmed} / ${body.cards.length} 张卡片来自已确认问答对`;
+  byId('coverage').textContent = `事实表窗口 orders ${SEM.window.orders} 天 · 样本覆盖 ${W.from} 至 ${W.to}`;
+  byId('timerange').value = body.range;
+  byId('reset').hidden = !isEdit && STATE.role === "denied";
+  const grid = byId('grid');
+  grid.replaceChildren(...pack(body.cards).map(({card, span}) => {
+    card.__span = span;
+    return card.chart ? renderTile(card, getRun(card)) : renderKpi(card, getRun(card));
+  }));
+  updateSuggestions();
+  renderGaps();
+}
+
+/* ---- 指令处理 ---- */
+function matchCard(list, phrase) {
+  const clean = (phrase || "").replace(/[「」『』【】]|这张卡|卡片|一下|吧|这张|图|卡/g, "").trim();
+  if (!clean) return null;
+  const tokens = clean.match(/.{1,2}/g) || [];
+  return list.find(c => c.title.includes(clean))
+    || list.find(c => tokens.every(t => c.title.includes(t)))
+    || list.filter(c => clean.includes(c.title)).sort((a, b) => b.title.length - a.title.length)[0]
+    || null;
+}
+function snapshotDraft() {
+  if (!STATE.draft) { STATE.undo = null; return; }
+  STATE.undo = STATE.draft.cards.map(c => ({...c}));
+}
+function newDraft() {
+  STATE.draft = {title:"电商销售概览", range:"m30", cards:CARD_DEFS.map(c => ({...c}))};
+  STATE.run = new Map();
+  STATE.published = STATE.published || null;
+  const range = RANGES.find(r => r.id === "m30");
+  rebuild(range, "");
+}
+function handleCommand(text) {
+  addMessage('user', text.replace(/[<>&]/g, ""));
+  if (/撤销/.test(text)) {
+    if (!STATE.undo || !STATE.draft) { addMessage('agent', "没有可撤销的对话修改——当前草稿还没做过改动。"); return; }
+    STATE.draft.cards = STATE.undo;
+    STATE.undo = null;
+    addMessage('agent', "已撤销上一次对话修改：卡片集合、顺序与尺寸档回到上一版（未重新查询，命中原有缓存）。");
+    render();
+    return;
+  }
+  if (/仪表盘|看板/.test(text) && /生成|做|创建|开始/.test(text)) {
+    snapshotDraft();
+    newDraft();
+    addMessage('agent', "已生成「电商销售概览」草稿：4 张指标卡 + 月度趋势 + 地区排行 + 品类占比 + 客户快照 + 月度明细，共 9 张卡片，默认范围「最近 30 天」。<ul><li>其中 <b>Q-015</b> 状态是「待复核」，发布前会单独提示；</li><li><b>客户等级分布</b> 引用了模型里不存在的列，没进盘，原因在下方缺口清单。</li></ul>");
+    render();
+    return;
+  }
+  if (!STATE.draft) { addMessage('agent', "当前没有仪表盘草稿，先生成一张（说「用电商销售数据做一张经营仪表盘」），再做这些调整。"); return; }
+  if (/加入仪表盘/.test(text)) {
+    snapshotDraft();
+    const fresh = {...CARD_DEFS.find(c => c.id === "region"), id:"region_refund", title:"地区退款金额排行", qa:"Q-044", state:"CONFIRMED",
+      sqlTpl:"SELECT o.region AS 地区, SUM(i.refund_amount) AS 退款金额\nFROM orders o JOIN order_items i ON i.order_id = o.order_id\nWHERE o.order_date >= '{from}' AND o.order_date < '{to}'\nGROUP BY 1 ORDER BY 2 DESC",
+      rule:"刚确认的问答：按地区汇总退款金额。", unit:"万元"};
+    STATE.draft.cards.push(fresh);
+    const range = RANGES.find(r => r.id === STATE.draft.range);
+    runCard(fresh, range).then(render);
+    addMessage('agent', "已把刚确认的 <b>Q-044</b> 作为新卡片沉淀进草稿（第 10 张）。沉淀入口不产生新 SQL——用的就是你逐题确认过的那条口径。");
+    render();
+    return;
+  }
+  if (/放到|移到|挪到|右边|左边|前面|后面|第一位|最后/.test(text)) {
+    const m = text.match(/把(.+?)(?:放到|移到|挪到)(.+)$/);
+    if (!m) { addMessage('agent', "没听清要把哪张卡放到哪——说「把品类占比放到趋势右边」这类话。"); return; }
+    const tail = m[2].trim().replace(/[。！]$/, "");
+    const abs = /^(第一位|最前面|最后)$/;
+    const p = tail.match(/(第一位|最前面|最后|右边|左边|前面|后面)$/);
+    if (!p) { addMessage('agent', "没听清要放到哪儿——可以说「趋势右边」「第一位」「最后」。"); return; }
+    const pos = abs.test(tail) ? tail : p[1];
+    const ref = abs.test(tail) ? "" : tail.slice(0, tail.length - p[1].length);
+    if (!ref && !abs.test(pos)) { addMessage('agent', "这句缺少参照卡片，说「把品类占比放到趋势右边」这类话试试。"); return; }
+    const list = STATE.draft.cards;
+    const moved = matchCard(list, m[1]), anchor = ref ? matchCard(list, ref) : null;
+    if (!moved) { addMessage('agent', `当前草稿里没有「${m[1].trim()}」这张卡。`); return; }
+    if (ref && !anchor) { addMessage('agent', `当前草稿里没有「${ref}」这张卡，没有参照物。`); return; }
+    if (moved === anchor) { addMessage('agent', "参照物和被移动的卡片是同一张，位置保持不变。"); return; }
+    snapshotDraft();
+    list.splice(list.indexOf(moved), 1);
+    let at = pos === "最后" ? list.length : 0;
+    if (anchor) {
+      const base = list.indexOf(anchor);
+      at = (pos === "右边" || pos === "后面") ? base + 1 : base;
+    }
+    list.splice(at, 0, moved);
+    render();
+    addMessage('agent', `已把「${moved.title}」放到${anchor ? `「${anchor.title}」${pos}` : pos}——只改顺序与尺寸档，由确定性布局器重新装箱，不触发任何查询。`);
+    return;
+  }
+  if (/改大|大一点|小一点|尺寸|宽/.test(text)) {
+    const topic = (text.match(/(?:把)?(.+?)(?:改|调|换|变)/) || [])[1] || "";
+    const c = matchCard(STATE.draft.cards, topic) || matchCard(STATE.draft.cards, "趋势");
+    if (!c) { addMessage('agent', "没找到要改尺寸的卡片——说「把趋势图改大一点」这类话。"); return; }
+    snapshotDraft();
+    const size = cycleSize(c, /小|窄/.test(text) ? -1 : 1);
+    addMessage('agent', `「${c.title}」尺寸档改为 <b>${size}</b>（${SPANS[size]} / 12 列），其余卡片按确定性布局器重新装箱。`);
+    render();
+    return;
+  }
+  if (/删掉|移除|去掉/.test(text)) {
+    const hit = matchCard(STATE.draft.cards, text.replace(/^(?:请|帮我)?(?:删掉|移除|去掉)/, ""));
+    if (!hit) { addMessage('agent', "没找到要删的卡片。当前草稿里有这些卡：" + STATE.draft.cards.map(c => c.title).join("、") + "。"); return; }
+    snapshotDraft();
+    STATE.draft.cards = STATE.draft.cards.filter(c => c !== hit);
+    addMessage('agent', `已移除「${hit.title}」。问答对本身没有删除，随时可以再加回来。`);
+    render();
+    return;
+  }
+  if (/为什么.*(不能|无法).*(地区|筛)/.test(text)) {
+    byId('filterhelp').showModal();
+    addMessage('agent', "S2 只把<b>时间谓词</b>下推——那段是平台规范形态，可以确定地重建并过窗口门禁。地区这类维度需要一条带默认过滤的已发布视图才能参数化，我不会让模型去改写你的 SQL。细节看这个说明。");
+    return;
+  }
+  if (/筛地区|补.*可筛|提议/.test(text)) {
+    STATE.gapsProposed = true;
+    addMessage('agent', "已写入建模提议：为 <code>orders.region</code> 建立带 <code>## Default filters</code> 的可筛视图。发布后重新生成即可生效——这条提议走的是问数优化的既有通道，只提议规则、关系和计算字段。");
+    render();
+    notify("已创建建模提议，需在语义建模发布后重新生成");
+    return;
+  }
+  addMessage('agent', "这一步在当前原型里没有对应实现。本稿演示：生成仪表盘、沉淀已确认问答、改顺序与尺寸、删卡、撤销、切时间范围（零模型调用）、看为何不能按地区筛、发布前校验。");
+  render();
+}
+
+/* ---- 卡片详情 ---- */
+function openCard(card) {
+  const run = getRun(card), range = RANGES.find(r => r.id === config().range);
+  const key = cacheKey(card, range);
+  byId('card-title').textContent = card.title;
+  byId('card-body').innerHTML = `
+    <p class="caption">${STATE_TAG[card.state]} · 来源 ${card.qa} · 依赖表 ${card.tables.join(" · ")}</p>
+    <h3>口径</h3><p>${card.rule}</p>
+    ${card.review ? `<p class="tag review">${card.review}</p>` : ""}
+    <h3>卡片存储的查询定义（渲染 spec 由服务端生成，不在此处）</h3>
+    <div class="sql">${compile(card, range).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/(&gt;= '[^']*'|&lt; '[^']*')/g, "<u>$1</u>")}</div>
+    <h3>运行时</h3>
+    <dl>
+      <dt>缓存键</dt><dd class="mono">${key}（用户 + 筛选范围 + 查询版本）</dd>
+      <dt>最近执行</dt><dd>${run && run.phase === "ok" ? (run.cached ? "命中缓存，未查询数据库 · 首次 " : "实时查询 · ") + run.executedAt : "—"}</dd>
+      <dt>逐表窗口</dt><dd>${windowCheck(card, range).ok ? `通过（${range.days} 天 ≤ ${SEM.window[card.tables.find(t => SEM.window[t] !== null)] || "不限"} 天）` : `拒绝：${run && run.gate ? run.gate.table + " 上限 " + run.gate.limit + " 天" : ""}`}</dd>
+      <dt>筛选支持</dt><dd>时间范围（规范谓词重建）；地区等非时间维度需带默认过滤的视图，当前置灰</dd>
+    </dl>`;
+  byId('cardinfo').showModal();
+}
+function openRules() {
+  const body = config();
+  byId('rules-sub').textContent = `来源：已确认问答对 · 当前范围 ${RANGES.find(r => r.id === body.range).label}`;
+  byId('rules-body').innerHTML = `<dl>` + body.cards.map(c =>
+    `<dt>${c.title}<span class="tag ${c.state === "REVIEW" ? "review" : c.state === "SNAPSHOT" ? "snapshot" : c.state === "UNVERIFIED" ? "unverified" : ""}" style="margin-left:8px">${STATE_TAG[c.state]}</span></dt><dd>${c.rule}</dd>`
+  ).join("") + `<dt>统计范围</dt><dd>按下单日期与客户所属地区统计，按场景业务规则排除已取消订单。9 月仅覆盖到 28 日。</dd></dl>`;
+  byId('rules').showModal();
+}
+function openPublish() {
+  const list = STATE.draft.cards;
+  const confirmed = list.filter(c => c.state === "CONFIRMED").length;
+  const review = list.filter(c => c.state === "REVIEW");
+  const unver = list.filter(c => c.state === "UNVERIFIED");
+  const refused = list.filter(c => !windowCheck(c, RANGES.find(r => r.id === STATE.draft.range)).ok);
+  byId('audit').innerHTML = `
+    <div class="row ok"><span class="n">✓</span><span class="t">列与模型存在性、只读与笛卡尔积词法、时间谓词形态<small>${confirmed} 张已确认口径卡片全部通过</small></span></div>
+    ${review.length ? `<div class="warn row"><span class="n">!</span><span class="t">口径待复核<small>${review.map(c => c.title + "（" + c.review + "）").join("；")}</small></span><span class="tag review">待复核</span></div>` : ""}
+    ${unver.length ? `<div class="warn row"><span class="n">!</span><span class="t">口径未确认<small>${unver.map(c => c.title + "：来自一次问数临时 SQL，未逐题确认").join("；")}</small></span><span class="tag unverified">未确认</span></div>` : ""}
+    ${refused.length ? `<div class="bad row"><span class="n">×</span><span class="t">当前筛选范围超出窗口<small>${refused.map(c => c.title).join("；")} 依赖受限事实表</small></span></div>` : ""}
+    <div class="bad row"><span class="n">×</span><span class="t">未进入仪表盘<small>${GAP.title}：${GAP.reason}</small></span></div>`;
+  byId('confirmation').showModal();
+}
+
+/* ---- 事件 ---- */
+const rangeSelect = byId('timerange');
+RANGES.forEach(r => rangeSelect.add(new Option(r.label, r.id)));
+rangeSelect.addEventListener("change", () => {
+  const range = RANGES.find(r => r.id === rangeSelect.value);
+  const limited = cards().filter(c => windowCheck(c, range).ok === false).length;
+  if (editing()) rebuild(range, limited ? `<b>${limited} 张将被窗口门禁拒绝</b>` : "");
+  else { STATE.viewerRange = range.id; rebuild(range, "查看者按自身授权实时取数"); }
+});
+byId('reset').addEventListener("click", () => {
+  const range = RANGES[0];
+  if (editing()) rebuild(range, "已重置"); else rebuild(range, "查看者按自身授权实时取数");
+  notify("已重置为最近 30 天");
+});
+byId('lock-region').addEventListener("click", () => byId('filterhelp').showModal());
+byId('filterhelp').addEventListener("close", () => {
+  if (byId('filterhelp').returnValue !== "propose") return;
+  STATE.gapsProposed = true;
+  addMessage('agent', "已写入建模提议：为 <code>orders.region</code> 建立带 <code>## Default filters</code> 的可筛视图。");
+  notify("已创建建模提议，需在语义建模发布后重新生成");
+  render();
+});
+byId('definitions').addEventListener("click", openRules);
+byId('about').addEventListener("click", () => byId('aboutbox').showModal());
+byId('publish').addEventListener("click", () => { if (STATE.draft) openPublish(); });
+byId('confirmation').addEventListener("close", () => {
+  if (byId('confirmation').returnValue !== "publish" || !STATE.draft) return;
+  const onlyVerified = byId('only-verified').checked;
+  const keep = onlyVerified ? STATE.draft.cards.filter(c => c.state === "CONFIRMED" || c.state === "DERIVED" || c.state === "SNAPSHOT") : [...STATE.draft.cards];
+  STATE.published = {title:STATE.draft.title, range:"m30", cards:keep};
+  STATE.publishedVersion++;
+  STATE.viewer = STATE.published;
+  STATE.mode = "published";
+  STATE.run = new Map();
+  STATE.viewer = STATE.published;
+  rebuild(RANGES[0], "查看者按自身授权实时取数");
+  notify(`已发布 v${STATE.publishedVersion}：${keep.length} 张卡片，QUERY 权限成员可见`);
+  render();
+});
+byId('switch').addEventListener("click", () => {
+  STATE.mode = STATE.mode === "draft" ? "published" : "draft";
+  if (STATE.mode === "published" && !STATE.published) { notify("还没有已发布版本"); STATE.mode = "draft"; render(); return; }
+  STATE.viewer = STATE.published;
+  STATE.run = new Map();
+  if (STATE.mode === "published") rebuild(RANGES.find(r => r.id === STATE.viewerRange) || RANGES[0], "查看者按自身授权实时取数");
+  else rebuild(RANGES.find(r => r.id === STATE.draft.range), "");
+  render();
+});
+byId('role').addEventListener("change", () => {
+  STATE.role = byId('role').value;
+  if (STATE.role === "viewer") {
+    if (!STATE.published) { STATE.mode = "draft"; }
+    else { STATE.mode = "published"; STATE.viewer = STATE.published; STATE.run = new Map(); rebuild(RANGES.find(r => r.id === STATE.viewerRange) || RANGES[0], "查看者按自身授权实时取数"); }
+  } else STATE.mode = "draft";
+  render();
+});
+byId('propose').addEventListener("click", () => handleCommand("提议补充可筛视图"));
+byId('new').addEventListener("click", () => {
+  STATE.draft = null; STATE.undo = null; STATE.run = new Map(); STATE.gapsProposed = false; STATE.mode = "draft";
+  messages.replaceChildren();
+  addMessage('agent', "你想用电商销售数据看什么？可以描述指标、趋势和对比维度，也可以先把刚问过的题沉淀成一张盘。");
+  input.value = ""; render(); input.focus();
+});
+document.querySelector('.composer').addEventListener("submit", e => {
+  e.preventDefault();
+  const t = input.value.trim();
+  if (t) { input.value = ""; handleCommand(t); }
+});
+byId('grid').addEventListener("click", e => {
+  const btn = e.target.closest("[data-act]");
+  if (!btn) return;
+  const act = btn.dataset.act, card = cards().find(c => c.id === btn.dataset.id);
+  if (!card && act !== "seed") return;
+  if (act === "top") { snapshotDraft(); STATE.draft.cards.unshift(...STATE.draft.cards.splice(STATE.draft.cards.indexOf(card), 1)); render(); }
+  if (act === "size") { snapshotDraft(); const size = cycleSize(card); render(); notify(`「${card.title}」尺寸档 → ${size}（${SPANS[size]} / 12 列，服务端重排，不重新查询）`); }
+  if (act === "info") openCard(card);
+  if (act === "remove") { snapshotDraft(); STATE.draft.cards = STATE.draft.cards.filter(c => c !== card); render(); notify(`已移除「${card.title}」，问答对未删除`); }
+  if (act === "retry") { runCard(card, RANGES.find(r => r.id === config().range)).then(render); }
+  if (act === "fixrange") { rangeSelect.value = "m30"; rebuild(RANGES[0], "已切回合规范围"); }
+  if (act === "drilllock") byId('filterhelp').showModal();
+});
+byId('empty').addEventListener("click", e => {
+  if (e.target.dataset.act === "seed") handleCommand("用电商销售数据做一张经营仪表盘");
+});
+
+addMessage('agent', "你想用电商销售数据看什么？可以描述指标、趋势和对比维度，也可以先把刚问过的题沉淀成一张盘。");
+render();
+</script>
+</body>
+</html>

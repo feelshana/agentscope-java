@@ -8,7 +8,7 @@
 <script>
 const previewParams = new URLSearchParams(location.search);
 const previewMode = previewParams.get('embed') === '1' ? 'embedded' : previewParams.get('standalone') === '1' ? 'standalone' : 'portal';
-const previewRoute = /^(home|chat|knowledge|modeling|tasks|more|sources|group\/\d+|dataset\/\d+\/\d+)$/;
+const previewRoute = /^(home|chat|knowledge|modeling|tasks|more|history|sources|group\/\d+|dataset\/\d+\/\d+)$/;
 const previewOrigin = location.protocol === 'file:' ? 'null' : location.origin;
 const previewTarget = location.protocol === 'file:' ? '*' : location.origin;
 document.documentElement.dataset.previewMode = previewMode;
@@ -659,6 +659,349 @@ main:has(> [data-screen="tasks"]:not([hidden])) { display: flex; flex-direction:
   .portal-user { margin-inline-start:0; }
   .portal-space,.portal-security,.portal-tools { display:none; }
 }
+
+/* Knowledge detail proposal: preserve the existing product and portal shell. */
+#kb-group,#kb-dataset { --kd-shadow:0 1px 2px #24243e05,0 8px 28px #24243e09; }
+.kd-head { display:flex; align-items:flex-start; justify-content:space-between; gap:24px; margin-bottom:22px; }
+.kd-head h1 { font-size:27px; line-height:1.3; letter-spacing:-.65px; margin:0 0 7px; overflow-wrap:anywhere; }
+.kd-meta { color:var(--muted); font-size:12.5px; display:flex; gap:7px; align-items:center; flex-wrap:wrap; }
+.kd-description { display:flex; align-items:baseline; gap:10px; margin:12px 0 0; max-width:810px; color:var(--muted); font-size:13px; line-height:1.8; }
+.kd-description p { margin:0; overflow-wrap:anywhere; }
+.kd-description .btn { flex:none; }
+.kd-head .kb-actions { justify-content:flex-end; padding-top:3px; flex:none; }
+.kd-head .btn { min-height:35px; padding:7px 11px; font-size:12.5px; }
+.kd-title { display:flex; gap:13px; align-items:center; min-width:0; }
+.kd-title .tile { width:44px; height:44px; border-radius:13px; background:var(--accent-soft); color:var(--accent); flex:none; }
+.kd-title .tile .icon { width:22px; height:22px; }
+.kd-text.btn { border:0; background:transparent; box-shadow:none; padding:3px 0; color:var(--accent); min-height:24px; font-size:12.5px; }
+.kd-text.btn:hover { color:var(--accent-dark); text-decoration:underline; }
+.kd-process { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)) auto; align-items:center; gap:18px; padding:20px 22px; border-radius:20px; background:var(--surface); box-shadow:var(--kd-shadow); margin:0 0 22px; }
+.kd-step { display:flex; align-items:center; gap:10px; min-width:0; position:relative; }
+.kd-step:not(:nth-child(3))::after { content:''; height:1px; flex:1; background:var(--hairline); margin:0 2px 0 8px; min-width:10px; }
+.kd-step>span:first-child { display:grid; place-items:center; border-radius:50%; width:24px; height:24px; background:#f0f0f5; color:var(--muted); font-size:11px; font-weight:650; flex:none; }
+.kd-step.done>span:first-child { background:#e6f3ed; color:var(--green-dot); }
+.kd-step.current>span:first-child { background:var(--accent); color:#fff; box-shadow:0 2px 7px #5b4bd62b; }
+.kd-step strong { font-size:13px; font-weight:650; display:block; }
+.kd-step small { display:block; color:var(--muted); font-size:11.5px; margin-top:2px; }
+.kd-step-action { margin-left:7px; }
+.kd-process-note { font-size:12px; color:var(--muted); max-width:175px; }
+.kd-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin:18px 0 12px; }
+.kd-toolbar .search { width:270px; min-height:36px; border:0; background:#e7e7eeaa; box-shadow:none; border-radius:11px; }
+.kd-toolbar .search input { font-size:13px; }
+.kd-toolbar .kb-actions { margin-left:auto; }
+.kd-toolbar .btn { min-height:35px; font-size:12.5px; }
+.kd-table-card { background:#fff; border-radius:20px; box-shadow:var(--kd-shadow); border:.5px solid #fff; min-width:0; }
+.kd-table-card .kb-table-scroll { border-radius:20px 20px 0 0; }
+.kd-table-card .kb-table th { background:#fafafe; font-size:12px; font-weight:550; padding:13px 18px; }
+.kd-table-card .kb-table td { padding:16px 18px; font-size:13px; border-color:var(--card-line); }
+.kd-table-card .kb-table tbody tr:last-child td { border-bottom:0; }
+.kd-table-card .kb-table tbody tr:hover td { background:#fbfaff; }
+.kd-table-card .kb-panel-foot { padding:12px 18px; border-top:.5px solid var(--hairline); font-size:11.5px; }
+.kd-name { display:flex; align-items:center; gap:11px; }
+.kd-name .tile { flex:none; width:31px; height:31px; border-radius:9px; background:#f2f2f7; color:#77788a; }
+.kd-name .kb-source-link { font-weight:650; color:var(--ink); text-align:left; }
+.kd-name small { font-size:12px; margin-top:3px; }
+.kd-source { display:flex; align-items:center; gap:8px; min-width:0; max-width:340px; }
+.kd-source span:last-child { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--muted); font-size:12px; }
+.kd-badge { display:inline-flex; align-items:center; gap:4px; padding:2px 6px; border-radius:5px; background:#f0f0f5; color:var(--muted); font-size:11px; white-space:nowrap; }
+.kd-menu-pop { position:fixed; inset:auto; margin:0; min-width:140px; padding:6px; border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow-raised); background:white; }
+.kd-menu-pop .btn { width:100%; border:0; background:none; justify-content:flex-start; }
+.kd-empty-grid { display:grid; grid-template-columns:minmax(0,1fr) 280px; gap:16px; }
+.kd-empty-drop { min-height:330px; padding:40px 24px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:12px; border:1.5px dashed #d9d5e8; border-radius:22px; background:#ffffffde; transition:background .2s,border-color .2s; }
+.kd-empty-drop.dragging { background:var(--accent-soft); border-color:var(--accent); }
+.kd-empty-drop .tile { width:54px; height:54px; border-radius:16px; background:var(--accent-soft); color:var(--accent); }
+.kd-empty-drop h2 { font-size:19px; margin:7px 0 0; letter-spacing:-.3px; }
+.kd-empty-drop p { margin:0; color:var(--muted); font-size:13px; max-width:380px; }
+.kd-empty-drop small { color:var(--muted); font-size:11.5px; margin-top:3px; }
+.kd-empty-aside { display:grid; gap:14px; }
+.kd-empty-aside>section { padding:22px; border-radius:20px; background:white; box-shadow:var(--kd-shadow); }
+.kd-empty-aside h3 { display:flex; gap:8px; align-items:center; font-size:14px; margin:0 0 11px; }
+.kd-empty-aside p { font-size:12.5px; line-height:1.9; color:var(--muted); margin:0 0 14px; }
+.kd-tabline { display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; margin:22px 0 14px; }
+.kd-tabline .kb-tabbar { display:flex; flex-wrap:nowrap; gap:2px; padding:3px; background:#e7e7ee; border:0; border-radius:11px; }
+.kd-tabline .kb-tabbar button { border:0; border-radius:8px; padding:6px 13px; font-size:12.5px; white-space:nowrap; }
+.kd-tabline .kb-tabbar button[aria-pressed=true] { background:white; color:var(--ink); box-shadow:0 1px 4px #21213d16; }
+.kd-tabline .kb-tabbar small { margin-left:5px; background:var(--accent-soft); color:var(--accent); padding:1px 5px; border-radius:8px; font-size:10px; }
+.kd-tabline .kb-note { margin-right:auto; font-size:12px; }
+.kd-tabline .search { width:225px; min-height:33px; background:#e7e7eeaa; border:0; border-radius:10px; }
+.kd-tabline .search input { font-size:12.5px; }
+.kd-preview-table th { min-width:150px; }
+#kd-preview-table { display:flex; flex-direction:column; height:var(--kd-preview-height,560px); min-height:280px; overflow:hidden; }
+#kd-preview-table>.kb-table-scroll { flex:1; min-height:0; max-height:none; }
+#kd-preview-table>.kb-panel-foot { flex:none; }
+.kd-preview-table th strong { color:var(--ink); font-weight:650; font-size:12.5px; }
+.kd-preview-table th small { display:block; margin-top:4px; font-size:10.5px; font-weight:400; font-family:Consolas,monospace; color:var(--muted); }
+.kd-preview-table td { font-variant-numeric:tabular-nums; }
+.kd-preview-table th:first-child { min-width:44px; width:44px; }
+.kd-field-head { display:flex; align-items:start; gap:7px; }
+.kd-field-head .icon-button { min-width:22px; width:22px; height:22px; padding:3px; border:0; background:none; color:var(--muted); }
+.kd-field-pop { width:min(360px,calc(100vw - 32px)); padding:19px; border:1px solid var(--line); border-radius:15px; box-shadow:var(--shadow-raised); color:var(--ink); font:13px/1.7 var(--font); }
+.kd-field-pop::backdrop { background:#19152c12; }
+.kd-field-pop h3 { font-size:15px; margin:0 0 4px; }
+.kd-field-pop code { font-size:12px; color:var(--muted); }
+.kd-field-pop p { white-space:normal; margin:10px 0; }
+.kd-fields-table { min-width:720px; }
+.kd-fields-table th:nth-child(1) { width:22%; }
+.kd-fields-table th:nth-child(2) { width:18%; }
+.kd-fields-table th:nth-child(3) { width:14%; }
+.kd-fields-table code { font-family:Consolas,monospace; color:var(--muted); font-size:12px; }
+.kd-fields-table td:nth-child(2) { font-weight:600; }
+.kd-fields-table .kd-field-description { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:12.5px; line-height:1.8; }
+.kd-edit-field { opacity:.55; border:0; background:none; color:var(--muted); border-radius:6px; padding:5px; }
+.kd-fields-table tr:hover .kd-edit-field,.kd-edit-field:focus-visible { opacity:1; color:var(--accent); }
+.kd-type { display:inline-block; padding:3px 7px; border-radius:5px; background:var(--accent-soft); color:var(--accent); font:10.5px/1.4 Consolas,monospace; }
+.kd-type.temporal { color:#906022; background:#f8f0e3; }
+.kd-field-editor td { background:#fbfaff!important; padding-block:18px!important; }
+.kd-field-editor-grid { display:grid; grid-template-columns:minmax(140px,1fr) minmax(260px,3fr); gap:14px; }
+.kd-field-editor-grid label { display:grid; gap:6px; font-size:12px; font-weight:600; }
+.kd-field-editor-grid input,.kd-field-editor-grid textarea { width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:9px; background:#fff; font-size:13px; font-weight:400; }
+.kd-field-editor-grid textarea { min-height:85px; resize:vertical; }
+.kd-editor-foot { display:flex; gap:12px; justify-content:space-between; align-items:center; margin-top:12px; }
+.kd-editor-foot small { color:var(--muted); font-size:11.5px; }
+.kd-technical-grid { display:grid; grid-template-columns:minmax(0,1fr) 290px; gap:16px; }
+.kd-technical-grid .kb-technical { padding:7px 22px; }
+.kd-technical-grid .kb-technical>div { padding:18px 0; font-size:13px; }
+.kd-technical-grid .kb-technical>div:last-child { border:0; }
+.kd-side-panel { display:grid; align-content:start; gap:14px; }
+.kd-side-panel section { padding:20px; }
+.kd-side-panel h3 { font-size:14px; display:flex; align-items:center; gap:7px; margin:0 0 11px; }
+.kd-side-panel p { font-size:12.5px; color:var(--muted); line-height:1.8; margin:0 0 14px; }
+.kd-side-panel .kd-danger-panel { box-shadow:none; border:1px solid #ead4d8; }
+.kd-danger-panel h3 { color:#b14d58; }
+.kd-proposal-note { margin:19px 0 0; color:var(--muted); font-size:11.5px; }
+.kd-inline-link { color:var(--accent); text-decoration:none; }
+@media(max-width:1100px) {
+  .kd-head { flex-wrap:wrap; gap:12px; }
+  .kd-head .kb-actions { justify-content:flex-start; }
+  .kd-process { grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; padding:18px; }
+  .kd-process-note { grid-column:1/-1; max-width:none; border-top:.5px solid var(--hairline); padding-top:10px; }
+  .kd-empty-grid { grid-template-columns:minmax(0,1fr) 240px; }
+  .kd-technical-grid { grid-template-columns:minmax(0,1fr) 250px; }
+}
+@media(max-width:760px) {
+  .kd-head h1 { font-size:24px; }
+  .kd-head .kb-actions { flex-wrap:wrap; }
+  .kd-process { gap:15px; grid-template-columns:1fr; }
+  .kd-step:not(:nth-child(3))::after { display:none; }
+  .kd-empty-grid,.kd-technical-grid,.kd-field-editor-grid { grid-template-columns:1fr; }
+  .kd-empty-aside { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .kd-empty-aside>section { padding:16px; }
+  .kd-tabline { align-items:stretch; }
+  .kd-tabline .search,.kd-toolbar .search { width:100%; }
+  .kd-editor-foot { align-items:flex-start; flex-direction:column; }
+  .kd-description { display:block; }
+  .kd-empty-drop { min-height:280px; }
+}
+
+
+/* Administrator conversation history proposal. */
+
+main:has(> #admin-history-preview:not([hidden])) { height:100dvh; min-height:0; overflow:hidden; display:flex; flex-direction:column; padding-block:24px 18px; }
+#admin-history-preview:not([hidden]) { display:flex; flex-direction:column; flex:1; min-height:0; }
+.history-pagebar { display:flex; align-items:center; justify-content:space-between; gap:14px; flex:none; margin-bottom:17px; min-height:34px; }
+.history-pagebar .kb-crumb { margin:0; font-size:13px; }
+.history-pagebar .kb-crumb [aria-current] { color:var(--ink); font-weight:580; }
+.history-page-actions { display:flex; align-items:center; gap:7px; }
+.history-page-actions .btn { min-height:32px; padding:6px 10px; font-size:12px; border-radius:9px; }
+.history-page-actions .history-refresh-icon { width:32px; height:32px; padding:7px; background:#ffffff9c; }
+.history-page-actions .history-refresh-icon:hover { background:#fff; color:var(--accent); }
+.history-filters { display:flex; align-items:center; flex-wrap:wrap; gap:9px; margin:0 0 14px; flex:none; }
+.history-filters .search { width:350px; min-height:36px; border:.5px solid var(--card-line); background:#fff; border-radius:10px; flex:0 1 350px; }
+.history-filters .search input { font-size:12.5px; }
+.history-filters select { max-width:240px; min-height:36px; border:.5px solid var(--card-line); border-radius:10px; padding:0 30px 0 11px; background:#fff; font-size:12.5px; }
+
+.history-time-filter { display:flex; align-items:center; background:#fff; border:.5px solid var(--card-line); border-radius:10px; color:var(--muted); }
+.history-time-filter>.icon { width:14px; height:14px; margin-left:11px; }
+.history-time-filter select { border:0; background:transparent; padding-left:7px; min-height:35px; color:var(--ink); }
+.history-filter-reset { margin-left:auto; padding:4px 3px!important; min-height:26px!important; font-size:12px!important; }
+.history-date-custom { display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:12px; margin:0 0 14px; flex:none; }
+.history-date-custom input { min-height:32px; padding:4px 8px; border:1px solid var(--line); border-radius:8px; background:white; }
+.history-date-error { color:#b13c54; font-size:12px; }
+.history-table-card { display:flex; flex-direction:column; flex:1; min-height:0; background:#fff; border-radius:18px; border:.5px solid #ffffffb3; box-shadow:0 1px 2px #24243e04,0 8px 28px #24243e07; }
+.history-overview { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; min-height:45px; padding:8px 18px; border-bottom:.5px solid var(--hairline); flex:none; }
+.history-metrics { display:flex; align-items:center; flex-wrap:wrap; gap:0; font-size:12px; color:var(--muted); }
+.history-metrics>span { display:inline-flex; align-items:baseline; gap:5px; }
+.history-metrics>span+span { border-left:1px solid var(--hairline); padding-left:13px; margin-left:13px; }
+.history-metrics strong { font-size:14px; font-weight:650; font-variant-numeric:tabular-nums; color:var(--ink); }
+.history-overview .kb-actions { gap:10px; }
+.history-overview .btn { font-size:12px; min-height:25px; padding:2px 0; }
+.history-overview .history-scope-info { color:var(--muted); width:23px; min-width:23px; padding:3px; }
+.history-table { border-collapse:separate; border-spacing:0; width:100%; text-align:left; min-width:790px; table-layout:fixed; }
+#history-table { min-height:0; flex:1; display:flex; flex-direction:column; }
+.history-table-scroll { overflow:auto; min-height:0; flex:1; scrollbar-gutter:stable; }
+.history-table th { position:sticky; top:0; z-index:1; padding:11px 18px; background:#fafafe; color:var(--muted); font-size:12px; font-weight:550; border-bottom:.5px solid var(--hairline); }
+.history-table th:first-child { width:43%; }
+.history-table th:nth-child(2) { width:26%; }
+.history-table th:nth-child(3) { width:12%; text-align:center; }
+.history-table th:nth-child(4) { width:19%; }
+.history-table th button { border:0; background:none; padding:0; display:inline-flex; align-items:center; gap:6px; color:inherit; font-size:inherit; font-weight:inherit; white-space:nowrap; }
+.history-table th button:hover { color:var(--accent); }
+.history-table th .icon { width:12px; height:12px; opacity:.4; }
+.history-table th[aria-sort=descending] .icon { transform:rotate(180deg); opacity:1; color:var(--accent); }
+.history-table th[aria-sort=ascending] .icon { opacity:1; color:var(--accent); }
+.history-table td { padding:11px 18px; font-size:13px; border-bottom:.5px solid var(--card-line); vertical-align:middle; }
+.history-table tr:last-child td { border-bottom:0; }
+.history-table tbody tr { cursor:pointer; }
+.history-table tbody tr:hover td,.history-table tbody tr:focus-visible td { background:#faf9ff; }
+.history-title { display:flex; gap:10px; align-items:center; min-width:0; }
+.history-title>.icon { flex:none; color:#8b87a3; width:16px; height:16px; }
+.history-title button { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; text-align:left; font-weight:550; color:var(--ink); border:0; background:none; padding:0; max-width:100%; }
+.history-title button:hover { color:var(--accent); }
+.history-user { display:flex; align-items:center; gap:9px; }
+.history-avatar { width:28px; height:28px; border-radius:50%; background:#eeebfb; color:var(--accent); display:grid; place-items:center; font-size:12px; flex:none; font-weight:600; }
+.history-user small { display:block; color:var(--muted); font-size:11px; margin-top:3px; overflow-wrap:anywhere; }
+.history-turn-count { display:block; text-align:center; font-variant-numeric:tabular-nums; font-size:13px; font-weight:600; }
+.history-time { display:flex; align-items:center; justify-content:space-between; gap:6px; color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums; }
+.history-time .icon { width:13px; height:13px; color:#9a97aa; }
+.history-table-foot { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; padding:10px 18px; border-top:.5px solid var(--hairline); color:var(--muted); font-size:11.5px; flex:none; min-height:48px; }
+.history-table-foot select { border:1px solid var(--line); background:#fff; border-radius:7px; padding:4px 6px; font-size:11.5px; }
+.history-table-foot .pagination { border:0; padding:0; margin:0; }
+.history-table-foot .pagination .btn { font-size:11.5px; min-height:27px; padding:3px 9px; }
+.history-empty { text-align:center; padding:50px 20px; margin:auto; }
+.history-empty>.icon { width:28px; height:28px; color:#9991b5; margin-bottom:12px; }
+.history-empty h3 { font-size:15px; margin:0 0 5px; }
+.history-empty p { font-size:12.5px; color:var(--muted); margin:0 0 15px; }
+.history-meta-footer { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; color:var(--muted); font-size:10.5px; padding-top:10px; flex:none; }
+.history-meta-footer .btn { font-size:10.5px; padding:0; min-height:18px; color:var(--muted); }
+.history-design-notes { font-size:13px; line-height:1.9; }
+.history-design-notes p { margin:0 0 10px; }
+.history-design-notes a { color:var(--accent); }
+@media(max-width:1100px) {
+  .history-filters .search { flex:1; min-width:240px; }
+  .history-filters { gap:8px; }
+}
+@media(max-width:760px) {
+  main:has(> #admin-history-preview:not([hidden])) { height:calc(100dvh - 38px); padding-top:16px; padding-bottom:12px; }
+  .history-pagebar { gap:8px; margin-bottom:12px; }
+  .history-pagebar .kb-crumb { font-size:11.5px; gap:5px; }
+  .history-page-actions { gap:5px; }
+  .history-page-actions .btn { min-height:30px; padding:5px 8px; font-size:11px; }
+  .history-page-actions .history-refresh-icon { width:30px; padding:6px; }
+  .history-filters .search { flex-basis:100%; width:100%; }
+
+  .history-time-filter { flex:1; }
+  .history-time-filter select { width:100%; max-width:none; min-width:0; padding-right:5px; }
+  .history-overview { padding:8px 12px; gap:8px; }
+  .history-metrics { font-size:10.5px; }
+  .history-metrics strong { font-size:13px; }
+  .history-metrics>span+span { padding-left:8px; margin-left:8px; }
+  .history-overview .kb-actions { gap:5px; }
+  .history-overview .btn { font-size:10.5px; }
+  .history-table-foot { padding:10px 12px; }
+  .history-table-foot>.kb-actions { width:100%; justify-content:space-between; }
+  .history-meta-footer { font-size:10px; }
+}
+.hist-drawer { inset:0 0 0 auto; margin:0; width:min(780px,100vw); max-width:none; height:100dvh; max-height:none; border:0; border-left:1px solid var(--line); border-radius:22px 0 0 22px; box-shadow:-12px 0 54px #25213f22; }
+.hist-drawer form { height:100%; display:flex; flex-direction:column; }
+.hist-drawer .dialog-head { padding:20px 25px; flex:none; background:#fff; align-items:flex-start; }
+.hist-drawer .dialog-head h2 { font-size:17px; line-height:1.6; font-weight:650; margin:0; max-width:650px; }
+.hist-drawer .dialog-body { min-height:0; flex:1; padding:0; gap:0; display:flex; flex-direction:column; overflow:hidden; }
+.hist-drawer .dialog-foot { display:none; }
+.hist-context { padding:16px 25px; background:#faf9fe; border-bottom:.5px solid var(--hairline); flex:none; }
+.hist-context-top { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.hist-context .history-user small { font-size:11.5px; }
+.hist-context p { font-size:11.5px; margin:11px 0 0; color:var(--muted); }
+.hist-nav { display:flex; align-items:center; gap:5px; }
+.hist-nav .btn { min-height:29px; padding:5px 9px; font-size:11.5px; border-radius:8px; }
+.hist-find { padding:12px 25px; border-bottom:.5px solid var(--hairline); display:flex; align-items:center; gap:10px; flex:none; }
+.hist-find .search { display:flex; align-items:center; flex:1; min-height:35px; background:#f4f3f9; border:0; }
+.hist-find .search input { border:0; background:transparent; padding:0; font-size:12px; }
+.hist-find>span { font-size:11.5px; color:var(--muted); white-space:nowrap; }
+.hist-turns-scroll { overflow:auto; flex:1; padding:20px 25px 30px; min-height:0; }
+.hist-earlier { display:flex; justify-content:center; margin:0 0 18px; }
+.hist-earlier .btn { font-size:12px; padding:6px 12px; min-height:30px; }
+.hist-turn { padding:0 0 24px; margin:0 0 22px; border-bottom:.5px solid var(--hairline); }
+.hist-turn:last-child { border:0; margin-bottom:0; }
+.hist-role { display:flex; align-items:center; gap:8px; margin-bottom:10px; font-size:12px; font-weight:600; }
+.hist-role time { color:var(--muted); font-size:10.5px; font-weight:400; margin-left:auto; }
+.hist-round { width:22px; height:22px; border-radius:7px; background:#eeeafc; color:var(--accent); display:grid; place-items:center; font-size:11px; }
+.hist-question { font-size:14px; font-weight:580; line-height:1.8; margin:0 0 16px!important; color:var(--ink)!important; white-space:pre-wrap; }
+.hist-answer-label { display:flex; align-items:center; gap:7px; color:var(--muted); font-size:11.5px; margin-bottom:8px; }
+.hist-answer-label>.icon { color:var(--accent); width:14px; height:14px; }
+.hist-answer { padding:14px 16px; border-radius:12px; background:#f6f6fa; font-size:13px; line-height:1.9; white-space:pre-wrap; color:#44485b; overflow-wrap:anywhere; }
+.hist-answer.empty { color:var(--muted); border:1px dashed #dcd9e8; background:transparent; }
+.hist-turn mark { background:#fff0bd; color:inherit; border-radius:2px; padding:0 1px; }
+.hist-readonly { flex:none; font-size:11px; color:var(--muted); padding:12px 25px; border-top:.5px solid var(--hairline); background:#fff; }
+.hist-users-intro { padding:19px 25px; background:#faf9fe; border-bottom:.5px solid var(--hairline); flex:none; }
+.hist-users-intro p { font-size:12px; margin:0; line-height:1.8; }
+.hist-user-stats { overflow:auto; padding:8px 25px 25px; flex:1; }
+.hist-user-row { display:grid; grid-template-columns:minmax(0,1fr) 65px 65px 66px; align-items:center; gap:10px; padding:15px 0; border-bottom:.5px solid var(--hairline); font-size:12px; }
+.hist-user-row>strong { font-variant-numeric:tabular-nums; text-align:center; font-weight:600; }
+.hist-user-row .btn { min-height:29px; padding:4px 7px; font-size:11px; }
+.hist-user-row.heading { color:var(--muted); font-size:11.5px; }
+.hist-user-row.heading>span:not(:first-child) { text-align:center; }
+@media(max-width:760px) {
+  .hist-drawer { border-radius:0; }
+  .hist-drawer .dialog-head,.hist-context,.hist-find,.hist-turns-scroll,.hist-readonly,.hist-users-intro,.hist-user-stats { padding-inline:17px; }
+  .hist-context-top { flex-wrap:wrap; }
+  .hist-user-row { gap:6px; grid-template-columns:minmax(0,1fr) 43px 43px 54px; }
+}
+
+
+/* Separate question search, searchable user picker, and whole-control focus rings. */
+.history-filters form.search { margin:0; padding-left:5px; }
+.history-question-submit { display:grid; place-items:center; flex:none; width:28px; height:28px; padding:6px; border:0; border-radius:7px; background:none; color:var(--muted); }
+.history-question-submit:hover { background:var(--accent-soft); color:var(--accent); }
+.history-user-picker { display:flex; align-items:center; gap:3px; width:245px; min-width:0; height:36px; background:white; border:.5px solid var(--card-line); border-radius:10px; padding:0 5px 0 11px; }
+.history-user-picker:focus-within,.history-time-filter:focus-within { outline:2px solid var(--accent); outline-offset:2px; }
+.history-user-picker input { border:0; outline:none!important; background:transparent; width:100%; min-width:0; flex:1; font-size:12.5px; padding:0; height:32px; }
+.history-user-picker input::placeholder { color:var(--ink); opacity:1; }
+.history-user-picker button { display:grid; place-items:center; width:25px; height:25px; flex:none; padding:5px; color:var(--muted); background:none; border:0; border-radius:6px; }
+.history-user-picker button:hover { background:var(--accent-soft); color:var(--accent); }
+.history-user-picker button .icon { width:13px; height:13px; }
+.history-user-toggle .icon { transform:rotate(90deg); transition:transform .15s ease; }
+.history-user-toggle[aria-expanded=true] .icon { transform:rotate(-90deg); }
+.history-user-options { position:fixed; inset:auto; margin:0; padding:5px; width:320px; max-width:calc(100vw - 16px); border:1px solid #e0ddeb; border-radius:13px; background:#fff; box-shadow:0 3px 9px #24243e0c,0 12px 34px #24243e1d; color:var(--ink); }
+.history-user-options::backdrop { background:transparent; }
+.history-user-list { max-height:280px; overflow:auto; overscroll-behavior:contain; padding:2px; }
+.history-user-option { display:flex; align-items:center; gap:9px; width:100%; text-align:left; padding:9px 10px; border:0; background:transparent; border-radius:9px; }
+.history-user-option strong { display:block; font-size:12.5px; font-weight:580; }
+.history-user-option small { display:block; font-size:11px; color:var(--muted); margin-top:2px; }
+.history-user-option[aria-selected=true] { background:#f6f4fd; }
+.history-user-option[data-active=true],.history-user-option:hover { background:var(--accent-soft); color:var(--accent-dark); }
+.history-user-option>.icon { color:var(--accent); width:16px; height:16px; margin-left:6px; margin-right:6px; }
+.history-user-option .history-avatar { width:27px; height:27px; }
+.history-user-option .history-user-check { margin-left:auto; width:15px; height:15px; color:var(--accent); }
+.history-user-picker-note { font-size:10.5px; color:var(--muted); padding:8px 10px 5px; border-top:.5px solid var(--hairline); }
+.history-user-no-results { margin:0; padding:20px 12px; color:var(--muted); font-size:12px; text-align:center; }
+.history-time-filter { min-width:145px; }
+.history-time-filter select { flex:1; width:100%; min-width:0; max-width:none; outline:none!important; box-shadow:none!important; }
+.history-time-filter select:focus-visible { outline:none; }
+.history-time-filter>.icon { flex:none; pointer-events:none; }
+.history-user-button { display:inline-flex; text-align:left; max-width:100%; min-height:40px; padding:5px 8px; margin:-5px -8px; border:1px solid transparent; border-radius:10px; background:transparent; color:var(--ink); transition:background .18s ease,transform .18s var(--spring),box-shadow .18s ease,border-color .18s ease; }
+.history-user-button strong { font-size:12.5px; font-weight:600; }
+.history-user-button .history-user-copy { min-width:0; }
+.history-user-button:hover,.history-user-button:focus-visible { background:#efecfc; border-color:#ded8f4; box-shadow:0 3px 9px #5947b814; transform:translateY(-1px); }
+.history-user-button:hover strong { color:var(--accent-dark); }
+.history-user-button:hover .history-avatar { background:#e1dafb; }
+.history-user-button:active { transform:translateY(0) scale(.985); }
+@media(max-width:760px) {
+  .history-user-picker { width:calc(56% - 4px); }
+  .history-time-filter { width:calc(44% - 4px); min-width:0; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .history-user-button,.history-user-toggle .icon { transition:none; }
+  .history-user-button:hover,.history-user-button:active { transform:none; }
+}
+
+
+/* Field-feedback refinements, shared with the implemented screens. */
+.kd-process-tail { display:flex; align-items:center; justify-content:flex-end; gap:16px; }
+.kd-model-action { font-weight:700; }
+.kd-technical-grid { align-items:stretch; }
+.kd-technical-grid>.kd-table-card { display:flex; }
+.kd-technical-grid .kb-technical { display:grid; grid-template-rows:repeat(6,1fr); width:100%; }
+.kd-technical-grid .kb-technical>div { align-items:center; }
+.kd-side-panel { align-content:stretch; grid-template-rows:repeat(2,minmax(0,1fr)); }
+.kd-side-panel section { display:flex; flex-direction:column; }
+.kd-side-panel .btn { align-self:flex-start; margin-top:auto; }
+.kd-side-panel section:only-child { grid-row:1/-1; }
+.kd-preview-table th.number .kd-field-head { flex-direction:row-reverse; justify-content:flex-start; }
+.kd-preview-table th.number .kd-field-head>span { text-align:right; }
+.kd-field-pop { position:fixed; inset:auto; margin:0; width:min(360px,calc(100vw - 24px)); max-height:min(320px,calc(100dvh - 24px)); overflow:auto; }
+@media(max-width:1100px) { .kd-process-tail { grid-column:1/-1; padding-top:10px; border-top:.5px solid var(--hairline); } .kd-process-tail .kd-process-note { border:0; padding:0; } }
+@media(max-width:760px) { .kd-process-tail { justify-content:space-between; } .kd-side-panel { grid-template-rows:none; } }
+
 </style>
 </head>
 <body>
@@ -901,6 +1244,7 @@ main:has(> [data-screen="tasks"]:not([hidden])) { display: flex; flex-direction:
       </div>
     </section>
   </section>
+  <section class="screen" data-screen="history" id="admin-history-preview" hidden></section>
   <section class="screen" data-screen="more" hidden>
     <header class="page-head">
       <div><h1>更多</h1><p>使用帮助与管理入口。</p></div>
@@ -1067,7 +1411,7 @@ function show(title, content, action = null, label = '保存') {
   $('dialog-status').hidden = true;
   $('dialog-status').textContent = '';
   dialogAction = action;
-  preview.classList.remove('help-drawer','kb-dialog');
+  preview.classList.remove('help-drawer','kb-dialog','hist-drawer');
   preview.style.removeProperty('--kb-dialog-width');
   preview.showModal();
 }
@@ -1171,8 +1515,8 @@ document.addEventListener('keydown',event => {
 });
 render();
 
-const pages = ['home','chat','knowledge','modeling','tasks','more','group','dataset','sources'];
-const pageLabels = {knowledge:'知识库',modeling:'语义建模',tasks:'例行任务',more:'更多',group:'知识库',dataset:'数据集',sources:'数据源管理'};
+const pages = ['home','chat','knowledge','modeling','tasks','more','group','dataset','sources','history'];
+const pageLabels = {knowledge:'知识库',modeling:'语义建模',tasks:'例行任务',more:'更多',group:'知识库',dataset:'数据集',sources:'数据源管理',history:'用户对话历史'};
 const mobileToggles = document.querySelectorAll('.mobile-toggle');
 const mobileLayout = matchMedia('(max-width:760px)');
 let mobileTrigger = null;
@@ -1284,7 +1628,7 @@ function activate(page, focusQuestion = false) {
   const dataset = page === 'dataset' && group ? kbDatasets(group).find(item => item.id === Number(datasetId)) : null;
   if ((page === 'group' && !group) || (page === 'dataset' && !dataset)) page = 'knowledge';
   if (!pages.includes(page)) page = 'home';
-  const navPage = ['group','dataset','sources'].includes(page) ? 'knowledge' : page;
+  const navPage = page === 'history' ? 'more' : ['group','dataset','sources'].includes(page) ? 'knowledge' : page;
   const screen = page === 'chat' || page === 'home' ? 'conversation' : page;
   $('mobile-page-bar').hidden = screen === 'conversation';
   $('mobile-page-label').textContent = pageLabels[page] || '';
@@ -1301,6 +1645,8 @@ function activate(page, focusQuestion = false) {
   if (page === 'group') renderKbGroup(group);
   if (page === 'dataset') renderKbDataset(group,dataset);
   if (page === 'sources') renderKbSources();
+  if (page === 'history') renderAdminHistory();
+  else $('admin-history-preview').historyUserPicker?.close();
   closeMenu();
   window.scrollTo(0,0);
   if (previewMode === 'embedded' && window.parent !== window) {
@@ -1427,6 +1773,7 @@ document.addEventListener('click',event => {
   }
   if (data.modelOpen) return openModel(libraries.find(entry => String(entry.id) === data.modelOpen));
   if (data.resource !== undefined) {
+    if (data.resource === '3') return go('history');
     const [title,description] = resources[Number(data.resource)];
     return show(title, '<p>' + escapeHtml(description) + '</p><p>这里预览管理入口。详情仍由正式项目提供。</p>');
   }
@@ -1570,138 +1917,177 @@ function kbFeedback(id,message) {
   if (target) target.textContent = message;
 }
 
+
+function kbWorkflow(group,data) {
+  const published = Boolean(group.version);
+  const changed = Boolean(modelExamples[group.id]?.label?.includes('待发布'));
+  const rows = data.every(item => item.rows != null) ? data.reduce((sum,item) => sum + item.rows,0) : null;
+  const step = (number,label,detail,done,current,action='') => '<div class="kd-step ' + (done?'done':current?'current':'') + '"><span>' + (done?'✓':number) + '</span><div><strong>' + label + '</strong><small>' + detail + '</small></div>' + action + '</div>';
+  return '<section class="kd-process" aria-label="知识库准备状态">' +
+    step(1,'数据',data.length ? data.length + ' 个数据集' + (rows == null ? ' · 总行数未统计' : ' · ' + kbDate.format(rows) + ' 行') : '上传文件或关联数据表',Boolean(data.length),!data.length) +
+    step(2,'语义建模',published ? 'v' + group.version + ' 已发布' + (changed?' · 有草稿待发布':'') : data.length?'待建模并发布':'准备数据后开始',published,Boolean(data.length)&&!published) +
+    step(3,'问数',published ? '已发布版本可用' : '发布后可用',false,published) +
+    '<div class="kd-process-tail"><span class="kd-process-note">' + (published ? '业务口径可继续完善，问数使用已发布版本。' : '完成建模并发布后，即可基于此库问数。') + '</span>'+ (group.manage&&data.length?'<button type="button" class="btn primary kd-model-action" data-kb-action="model">'+(published?'完善建模':'去建模')+icon('chevron',true)+'</button>':'')+'</div></section>';
+}
 function renderKbGroup(group) {
   const data = kbDatasets(group);
-  const state = getState(group);
-  const status = states[state].label + (group.version ? ' v' + group.version : '');
+  const page = $('kb-group');
   const manage = group.manage;
-  const upload = kbButton('上传文件','upload','kb-upload','primary');
-  const associate = kbButton('关联数据源','associate','db');
-  const groupPage = $('kb-group');
-  groupPage.innerHTML = `${kbBreadcrumb([group.name])}
-    <header class="page-head"><div class="kb-heading"><h1>${kbText(group.name)}</h1>
-      <p>${kbText(group.description || '暂无说明')}</p>
-      <div class="kb-pills"><span><span class="state ${state}">${status}</span></span><span>${data.length} 个数据集</span><span>创建人 ${kbText(group.owner)}</span></div>
-    </div><div class="kb-actions">
-      ${manage ? kbButton('成员与权限','members','shield') + kbButton('设置','settings','sliders') : ''}
-      ${group.version ? kbButton('基于此库提问','ask','chat','primary') : ''}
-    </div></header>
-    <p class="kb-status" id="kb-group-feedback" role="status"></p>
-    <section class="kb-panel"><div class="kb-panel-head"><div><h2>数据集</h2>
-      <p>${data.length ? '查看数据来源、数据样本和字段信息。' : manage ? '先准备数据，再进入语义建模。' : '此知识库暂无数据集。'}</p></div>
-      ${data.length ? `<div class="kb-tools">${kbSearch('kb-group-search','搜索数据集')}${manage ? associate + upload : ''}</div>` : ''}
-    </div>
-    ${data.length ? '<div id="kb-group-table"></div>' : manage ? `<div class="kb-entry">
-      <button type="button" data-kb-action="upload" aria-labelledby="kb-upload-entry" aria-describedby="kb-upload-hint"><span class="tile">${icon('kb-upload')}</span><strong id="kb-upload-entry">上传文件</strong><small id="kb-upload-hint">导入 Excel 或 CSV，也可以直接使用内置示例数据。</small></button>
-      <button type="button" data-kb-action="associate" aria-labelledby="kb-associate-entry" aria-describedby="kb-associate-hint"><span class="tile">${icon('db')}</span><strong id="kb-associate-entry">关联数据源</strong><small id="kb-associate-hint">选择外部数据库，勾选要加入知识库的表。</small></button>
-    </div>` : ''}
-    </section>
-    ${manage && data.length ? `<div class="kb-panel-foot"><span>准备好数据后，可以去语义建模整理字段和业务口径。</span>${kbButton('进入建模','model','model','soft')}</div>` : ''}`;
-
+  page.innerHTML = kbBreadcrumb([group.name]) +
+    '<header class="kd-head"><div class="kb-heading"><h1>' + kbText(group.name) + '</h1><div class="kd-meta"><span>' + data.length + ' 个数据集</span><span>·</span><span>创建于 ' + group.date.toLocaleDateString('zh-CN') + '</span><span>·</span><span>创建人 ' + kbText(group.owner) + '</span></div><div class="kd-description"><p>' + kbText(group.description || '还没有业务说明。补充这个知识库包含什么数据、用于哪些业务。') + '</p>' + (manage?kbButton(group.description?'编辑':'添加业务说明','settings','','kd-text'):'') + '</div></div><div class="kb-actions">' +
+    (manage?kbButton('成员与权限','members','shield')+kbButton('设置','settings','sliders'):'') + kbButton('基于此库提问','ask','chat','primary',group.version?'':'disabled title="建模并发布后可提问"') + '</div></header>' + kbWorkflow(group,data) +
+    '<p class="kb-status" id="kb-group-feedback" role="status"></p>' + (data.length ?
+      '<div class="kd-toolbar">' + kbSearch('kb-group-search','搜索数据集名称或来源') + (manage?'<div class="kb-actions">' + kbButton('关联数据源','associate','db')+kbButton('上传文件','upload','kb-upload','soft')+'</div>':'') + '</div><section class="kd-table-card" id="kb-group-table"></section>' : manage ?
+      '<div class="kd-empty-grid"><section class="kd-empty-drop" id="kd-empty-drop"><span class="tile">' + icon('kb-upload') + '</span><h2>把 Excel 或 CSV 拖到这里</h2><p>导入业务数据，整理字段与口径，完成建模后即可开始问数。</p>' + kbButton('选择文件','upload','kb-upload','primary') + '<small>.xlsx / .xls / .csv · 单文件 50 MB · 最多 10 个</small></section><aside class="kd-empty-aside"><section><h3>' + icon('db',true) + '或者关联数据库表</h3><p>复用已有数据源，将需要的外部表加入当前知识库。</p>' + kbButton('选择数据源','associate','db','') + '</section><section><h3>' + icon('kb-file',true) + '没有文件？用示例数据</h3><p>订单和客户示例，体验从导入、建模到问数的完整流程。</p>' + kbButton('使用示例文件','samples','','soft') + '</section></aside></div>' : '<div class="kd-table-card kb-empty">此知识库暂无数据集。</div>') +
+    '<p class="kd-proposal-note">交互设计预览 · 示例数据</p>';
   function drawTable() {
     const term = $('kb-group-search').value.trim().toLowerCase();
-    const matches = data.filter(item => `${item.name} ${item.source}`.toLowerCase().includes(term));
-    const rows = matches.map(item => `<tr>
-      <td><button type="button" class="kb-source-link" data-page="dataset/${group.id}/${item.id}">${kbText(item.name)}</button>${item.description ? `<small>${kbText(item.description)}</small>` : ''}</td>
-      <td>${icon(item.origin === 'database' ? 'db' : 'kb-file',true)} ${item.origin === 'database' ? '数据库关联' : '文件上传'}<small>${kbText(item.source)}</small></td>
-      <td class="number">${kbRows(item)}</td><td class="number">${item.fields.length}</td>
-      <td class="end"><div class="kb-actions"><button type="button" class="btn soft" data-page="dataset/${group.id}/${item.id}" aria-label="查看 ${kbText(item.name)} 的数据">查看数据 ${icon('chevron',true)}</button>${manage ? kbButton('删除','delete-dataset','','kb-inline kb-danger',`data-record="${item.id}" aria-label="删除数据集 ${kbText(item.name)}"`) : ''}</div></td></tr>`).join('');
-    $('kb-group-table').innerHTML = kbTable([['数据集'],['数据来源'],['行数','number'],['字段数','number'],['操作','end']],
-      rows || '<tr><td colspan="5" class="kb-empty">没有找到匹配的数据集。</td></tr>','知识库数据集','kb-work-table') +
-      `<div class="kb-panel-foot"><span>${term ? `找到 ${matches.length} 个，共 ${data.length} 个数据集` : `共 ${data.length} 个数据集`}</span><span>${data.some(item => item.rows == null) ? '外部数据表暂未统计总行数' : '点击名称查看数据与字段'}</span></div>`;
+    const matches = data.filter(item => (item.name + ' ' + item.source).toLowerCase().includes(term));
+    const rows = matches.map(item => '<tr><td><div class="kd-name"><span class="tile">' + icon('grid',true) + '</span><div><button type="button" class="kb-source-link" data-page="dataset/' + group.id + '/' + item.id + '">' + kbText(item.name) + '</button>' + (item.description?'<small>'+kbText(item.description)+'</small>':'') + '</div></div></td><td><div class="kd-source"><span class="kd-badge">' + icon(item.origin==='database'?'db':'kb-file',true) + (item.origin==='database'?'数据库':'文件') + '</span><span title="' + kbText(item.source) + '">' + kbText(item.source) + '</span></div></td><td class="number"><strong>' + kbRows(item) + '</strong>' + (item.rows == null?'':' 行') + ' · ' + item.fields.length + ' 字段</td><td class="end"><div class="kb-actions"><button type="button" class="btn kd-text" data-page="dataset/' + group.id + '/' + item.id + '">查看</button>' + (manage?'<button type="button" class="kd-edit-field" popovertarget="kd-menu-'+item.id+'" aria-label="'+kbText(item.name)+'的更多操作">' + icon('more',true) + '</button><div popover class="kd-menu-pop" id="kd-menu-'+item.id+'">' + kbButton(item.origin==='database'?'移除关联':'删除数据集','delete-dataset','','kb-danger','data-record="'+item.id+'"') + '</div>':'') + '</div></td></tr>').join('');
+    $('kb-group-table').innerHTML = kbTable([['数据集'],['数据来源'],['规模','number'],['操作','end']], rows || '<tr><td colspan="4" class="kb-empty">没有找到匹配的数据集。</td></tr>','知识库数据集','kb-work-table') + '<div class="kb-panel-foot"><span>' + (term?'找到 '+matches.length+' 个，共 '+data.length+' 个数据集':'共 '+data.length+' 个数据集') + '</span><span>' + (data.some(item=>item.rows==null)?'外部表总行数未统计':'点击数据集名称查看数据与字段') + '</span></div>';
   }
-  if (data.length) {
-    drawTable();
-    $('kb-group-search').oninput = drawTable;
+  if(page.kdMenuHandler)page.removeEventListener('beforetoggle',page.kdMenuHandler,true);
+  page.kdMenuHandler=event=>{
+    if(!event.target.matches('.kd-menu-pop')||event.newState!=='open')return;
+    const button=page.querySelector('[popovertarget="'+event.target.id+'"]');
+    const rect=button.getBoundingClientRect();
+    event.target.style.left=Math.max(8,Math.min(innerWidth-160,rect.right-150))+'px';
+    event.target.style.top=Math.max(8,Math.min(innerHeight-65,rect.bottom+4))+'px';
+  };
+  page.addEventListener('beforetoggle',page.kdMenuHandler,true);
+  if(data.length) { drawTable(); $('kb-group-search').oninput=drawTable; }
+  const drop=$('kd-empty-drop');
+  if(drop) {
+    drop.ondragover=event=>{event.preventDefault();drop.classList.add('dragging');};
+    drop.ondragleave=()=>drop.classList.remove('dragging');
+    drop.ondrop=event=>{event.preventDefault();drop.classList.remove('dragging');if(event.dataTransfer.files.length)openKbUpload(group,[...event.dataTransfer.files]);};
   }
-  groupPage.onclick = event => {
-    const button = event.target.closest('[data-kb-action]');
-    if (!button) return;
-    switch (button.dataset.kbAction) {
+  page.onclick=event=>{
+    const button=event.target.closest('[data-kb-action]');
+    if(!button)return;
+    switch(button.dataset.kbAction) {
       case 'upload': return openKbUpload(group);
+      case 'samples': openKbUpload(group); $('kb-samples').click(); return;
       case 'associate': return openKbPicker(group);
-      case 'members': return show(group.name + ' · 成员与权限',`<p>创建人 ${kbText(group.owner)} · 可管理</p>`);
+      case 'members': return show(group.name+' · 成员与权限','<p>创建人 '+kbText(group.owner)+' · 可管理</p>');
       case 'settings': return editor(group);
       case 'model': return openModel(group);
-      case 'ask':
-        document.querySelector('.rail .new-conversation').click();
-        $('question-kb').value = String(group.id);
-        return;
-      case 'delete-dataset': {
-        const item = data.find(entry => entry.id === Number(button.dataset.record));
-        return show('删除数据集',`<p>确认从知识库移除「${kbText(item.name)}」？</p>`,() => {
-          kbRemoveDataset(group,item);
-          renderKbGroup(group);
-          kbFeedback('kb-group-feedback','已移除数据集。');
-        },'确认删除');
-      }
+      case 'ask': document.querySelector('.rail .new-conversation').click(); $('question-kb').value=String(group.id); return;
+      case 'delete-dataset': page.querySelectorAll('.kd-menu-pop:popover-open').forEach(menu=>menu.hidePopover()); return kbDeletePreview(group,data.find(item=>item.id===Number(button.dataset.record)),()=>{renderKbGroup(group);kbFeedback('kb-group-feedback','已移除示例数据集。');});
     }
   };
 }
-
+function kbDeletePreview(group,item,after) {
+  const external=item.origin==='database';
+  return show(external?'移除数据表关联':'删除数据集','<p>'+kbText(item.name)+'</p><p>'+(external?'仅从当前知识库移除关联，外部数据库中的原表保留。':'本预览仅移除示例数据集；正式产品删除上传数据集时将删除对应物理表。')+'</p>',()=>{kbRemoveDataset(group,item);after();},external?'确认移除':'确认删除');
+}
+function kbResizePreview() {
+  const card=$('kd-preview-table');
+  if(card&&card.getClientRects().length)card.style.setProperty('--kd-preview-height',Math.max(280,innerHeight-card.getBoundingClientRect().top-(innerWidth<=760?28:56))+'px');
+}
+window.addEventListener('resize',kbResizePreview);
 function renderKbDataset(group,item) {
-  const page = $('kb-dataset');
-  const origin = item.origin === 'database' ? '数据源关联' : '文件上传';
-  const tabs = [['preview','数据预览'],['fields','字段信息'],['technical','技术信息']];
-  page.innerHTML = `${kbBreadcrumb([group.name,'group/' + group.id],[item.name])}
-    <header class="page-head"><div class="kb-heading"><h1>${kbText(item.name)}</h1>
-      <p>${kbText(item.description || '暂无数据集描述')}</p>
-      <div class="kb-pills"><span>${origin}</span><span>${item.rows == null ? '总行数未统计' : kbRows(item) + ' 行'}</span><span>${item.fields.length} 个字段</span><span>${kbText(item.source)}</span></div></div>
-      <div class="kb-actions">${group.manage ? (item.origin === 'database' ? kbButton('刷新样本','refresh','kb-refresh') : '') + kbButton('编辑数据集描述','description','compose') : ''}</div>
-    </header><p class="kb-status" id="kb-dataset-feedback" role="status"></p>
-    <section class="kb-panel" aria-label="数据集信息">
-      <div class="kb-tabbar" role="group" aria-label="数据集信息">${tabs.map(([key,label]) => `<button type="button" data-kb-tab="${key}" aria-pressed="false">${label}</button>`).join('')}</div>
-      <div id="kb-dataset-tab"></div>
-    </section>`;
+  const page=$('kb-dataset');
+  const external=item.origin==='database';
+  const origin=external?'数据源关联':'文件上传';
+  const labels=item.displayNames||(item.displayNames={});
+  const display=(field)=>labels[field[0]]??field[1]??field[0];
+  const tabs=[['preview','数据预览'],['fields','字段信息'],['technical','技术信息']];
+  let editing=null;
+  page.innerHTML=kbBreadcrumb([group.name,'group/'+group.id],[item.name]) +
+    '<header class="kd-head"><div class="kb-heading"><div class="kd-title"><span class="tile">'+icon('grid')+'</span><div><h1>'+kbText(item.name)+'</h1><div class="kd-meta">'+origin+' · v1 · '+(item.rows==null?'总行数未统计':kbRows(item)+' 行')+' · '+item.fields.length+' 个字段</div></div></div><div class="kd-description"><p id="kd-dataset-description">'+kbText(item.description||'还没有业务说明，补充数据集的业务含义与使用范围。')+'</p>'+(group.manage?kbButton(item.description?'编辑':'添加说明','description','','kd-text'):'')+'</div></div><div class="kb-actions">'+(group.manage&&external?kbButton('刷新样本','refresh','kb-refresh'):'')+'</div></header>'+
+    (external?'<p class="kb-alert">已采样 '+item.sample.length+' 行，仅用于观察数据内容；总行数未统计。样本值不代表完整枚举。</p>':'')+
+    '<div class="kd-tabline"><div class="kb-tabbar" role="group" aria-label="数据集信息">'+tabs.map(([key,label])=>'<button type="button" data-kb-tab="'+key+'" aria-pressed="false">'+label+(key==='fields'?'<small>'+item.fields.length+'</small>':'')+'</button>').join('')+'</div><span class="kb-note" id="kd-tab-meta"></span><div id="kd-tab-tools"></div></div><p class="kb-status" id="kb-dataset-feedback" role="status"></p><div id="kb-dataset-tab"></div><p class="kd-proposal-note">交互设计预览 · 示例数据；字段编辑仅在本次预览中生效。</p>';
+  function canLeaveEditor() {
+    if(editing===null)return true;
+    const field=item.fields[editing];
+    const changed=$('kd-edit-description').value!==field[3];
+    if(changed&&!window.confirm('字段修改尚未保存，放弃本次修改？'))return false;
+    editing=null;return true;
+  }
   function drawFields() {
-    const search = $('kb-field-search').value.trim().toLowerCase();
-    const matched = item.fields.filter(([name,original,type,description]) => `${name} ${original} ${type} ${description}`.toLowerCase().includes(search));
-    $('kb-field-table').innerHTML = kbTable([['字段名称'],['原字段名称'],['数据类型'],['业务说明']],
-      matched.map(([name,original,type,description]) => `<tr><td><code>${kbText(name)}</code></td><td>${kbText(original)}</td><td><span class="role">${kbText(type)}</span></td><td>${kbText(description || '暂无说明')}</td></tr>`).join('') ||
-      '<tr><td colspan="4" class="kb-empty">没有找到匹配的字段。</td></tr>','字段信息') +
-      `<div class="kb-panel-foot"><span>${search ? `找到 ${matched.length} 个，共 ${item.fields.length} 个字段` : `共 ${item.fields.length} 个字段`}</span></div>`;
+    const query=$('kb-field-search').value.trim().toLowerCase();
+    const matches=item.fields.map((field,index)=>({field,index})).filter(({field})=>(field.join(' ')+' '+display(field)).toLowerCase().includes(query));
+    const rows=matches.map(({field,index})=>'<tr data-kd-row="'+index+'"><td><code>'+kbText(field[0])+'</code></td><td>'+kbText(field[1]||field[0])+'</td><td><span class="kd-type '+(/DATE|TIME/i.test(field[2])?'temporal':'')+'">'+kbText(field[2])+'</span></td><td><div class="kd-field-description"><span>'+kbText(field[3]||'待补充说明')+'</span>'+(group.manage?'<button type="button" class="kd-edit-field" data-kb-action="edit-field" data-index="'+index+'" aria-label="编辑'+kbText(field[0])+'的业务说明">'+icon('compose',true)+'</button>':'')+'</div></td></tr>').join('');
+    $('kb-field-table').innerHTML=kbTable([['字段名称'],['原字段名称'],['数据类型'],['业务说明']],rows||'<tr><td colspan="4" class="kb-empty">没有匹配的字段。</td></tr>','字段信息','kd-fields-table')+'<div class="kb-panel-foot"><span>'+matches.length+' 个字段</span><span>'+(group.manage?'点击编辑图标修改业务说明':'仅可查看')+'</span></div>';
+    updateFieldMeta();
+  }
+  function updateFieldMeta() {
+    const done=item.fields.filter(field=>field[3]?.trim()).length;
+    $('kd-tab-meta').textContent=done+' 个已有说明 · '+(item.fields.length-done)+' 个待补充';
+  }
+  function editField(index) {
+    if(!canLeaveEditor())return;
+    drawFields();
+    const row=page.querySelector('[data-kd-row="'+index+'"]');
+    if(!row)return;
+    const field=item.fields[index];
+    editing=index;
+    row.className='kd-field-editor';
+    row.innerHTML='<td colspan="4"><div class="kd-field-editor-grid"><div><strong>字段信息</strong><p>字段名称：<code>'+kbText(field[0])+'</code></p><p>原字段名称：'+kbText(field[1]||field[0])+'</p><p>数据类型：<code>'+kbText(field[2])+'</code></p><small>名称和类型只读，仅保存业务说明。</small></div><label>业务说明<textarea id="kd-edit-description" maxlength="10000">'+kbText(field[3])+'</textarea></label></div><div class="kd-editor-foot"><small>Ctrl / ⌘ + Enter 保存，Esc 取消。</small><div class="kb-actions">'+kbButton('取消','cancel-field')+kbButton('保存修改','save-field','','soft')+'</div></div></td>';
+    $('kd-edit-description').focus();
+    row.onkeydown=event=>{
+      if(event.isComposing)return;
+      if(event.key==='Escape'){event.preventDefault();editing=null;drawFields();page.querySelector('[data-kd-row="'+index+'"] .kd-edit-field')?.focus();}
+      if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){event.preventDefault();saveField();}
+    };
+  }
+  function saveField() {
+    const index=editing;if(index===null)return;
+    const field=item.fields[index];
+    field[3]=$('kd-edit-description').value.trim();editing=null;drawFields();
+    kbFeedback('kb-dataset-feedback','已保存「'+display(field)+'」的预览修改。');
+    page.querySelector('[data-kd-row="'+index+'"] .kd-edit-field')?.focus();
+  }
+  function drawPreview() {
+    const query=$('kd-preview-search').value.trim().toLowerCase();
+    const matches=item.sample.map((row,index)=>({row,index})).filter(({row})=>row.some(value=>String(value??'NULL').toLowerCase().includes(query)));
+    const columns=[['#'],...item.fields.map((field,index)=>['<div class="kd-field-head"><span><strong>'+kbText(display(field))+'</strong><small>'+kbText(field[0])+'</small></span><button type="button" class="icon-button" popovertarget="kd-pop-'+index+'" aria-label="查看'+kbText(display(field))+'的说明">'+icon('info',true)+'</button></div>',/^(TINYINT|SMALLINT|INT|BIGINT|DECIMAL|DOUBLE|FLOAT|NUMERIC|REAL)/i.test(field[2])?'number':''])];
+    const body=matches.map(({row,index})=>'<tr><td>'+(index+1)+'</td>'+row.map((value,j)=>'<td class="'+(/^(TINYINT|SMALLINT|INT|BIGINT|DECIMAL|DOUBLE|FLOAT|NUMERIC|REAL)/i.test(item.fields[j]?.[2]||'')?'number':'')+'">'+kbText(value??'NULL')+'</td>').join('')+'</tr>').join('');
+    $('kd-preview-table').innerHTML=kbTable(columns,body||'<tr><td colspan="'+(item.fields.length+1)+'" class="kb-empty">当前样本中没有匹配结果。</td></tr>','数据样本，可横向滚动','kb-preview-table kd-preview-table')+'<div class="kb-panel-foot"><span>'+(query?'匹配 '+matches.length+' 行 / 当前样本 '+item.sample.length+' 行':'显示 '+item.sample.length+' 行 · '+(item.rows==null?'总行数未统计':'共 '+kbRows(item)+' 行'))+'</span><span>保留原始值，未做精度转换</span></div>'+item.fields.map((field,index)=>'<section popover class="kd-field-pop" id="kd-pop-'+index+'"><h3>'+kbText(display(field))+'</h3><code>'+kbText(field[0])+' · '+kbText(field[2])+'</code><p>'+kbText(field[3]||'暂无业务说明，可在字段信息中补充。')+'</p><button type="button" class="btn soft" popovertarget="kd-pop-'+index+'" popovertargetaction="hide">关闭</button></section>').join('');
   }
   function drawTab(tab) {
-    page.querySelectorAll('[data-kb-tab]').forEach(button => button.setAttribute('aria-pressed',String(button.dataset.kbTab === tab)));
-    const panel = $('kb-dataset-tab');
-    if (tab === 'fields') {
-      panel.innerHTML = `<div class="kb-panel-head"><div><h2>字段信息</h2><p>集中查看字段含义与数据类型。</p></div><div class="kb-tools">${kbSearch('kb-field-search','搜索字段名、类型或说明')}${group.manage ? kbButton('编辑字段说明','edit-fields','compose') : ''}</div></div><div id="kb-field-table"></div>`;
-      $('kb-field-search').oninput = drawFields;
-      drawFields();
-    } else if (tab === 'technical') {
-      panel.innerHTML = kbDefinition([['所属知识库',group.name],['来源类型',origin],['来源文件 / 表',item.source],['物理库表',item.physical],['记录 / 字段',`${kbRows(item)} / ${item.fields.length} 个字段`],['版本','v1']]);
+    if(!canLeaveEditor())return;
+    page.querySelectorAll('[data-kb-tab]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.kbTab===tab)));
+    const panel=$('kb-dataset-tab');
+    const tools=$('kd-tab-tools');
+    $('kb-dataset-feedback').textContent='';
+    $('kd-tab-meta').textContent='';
+    if(tab==='fields') {
+      tools.innerHTML=kbSearch('kb-field-search','搜索字段名称、原字段名或说明');
+      panel.innerHTML='<section class="kd-table-card" id="kb-field-table"></section>';
+      $('kb-field-search').oninput=()=>{if(canLeaveEditor())drawFields();};drawFields();
+    } else if(tab==='technical') {
+      tools.innerHTML='';
+      panel.innerHTML='<div class="kd-technical-grid"><section class="kd-table-card">'+kbDefinition([['所属知识库',group.name],['来源类型',origin],['来源文件 / 表',item.source],['物理库表',item.physical],['规模',(item.rows==null?'总行数未统计':kbRows(item)+' 行')+' · '+item.fields.length+' 个字段'],['版本','v1']])+'</section><aside class="kd-side-panel"><section class="kd-table-card"><h3>'+icon('info',true)+'样本与数据</h3><p>'+(external?'当前仅展示采样记录，总行数未统计。刷新样本不会修改外部数据库的原表。':'文件导入后保留原始字段和数据值，当前展示前 '+item.sample.length+' 行。更新数据请在知识库中重新上传文件。')+'</p>'+(group.manage?(external?kbButton('刷新样本','refresh','kb-refresh'):kbButton('上传更新文件','upload','kb-upload')):'')+'</section>'+(group.manage?'<section class="kd-table-card kd-danger-panel"><h3>'+icon('info',true)+(external?'移除关联':'删除数据集')+'</h3><p>'+(external?'从知识库移除关联，外部数据库中的原始表保留。':'删除后将失去该数据集及其字段说明，请先确认相关模型和问答的依赖。')+'</p>'+kbButton(external?'移除关联':'删除数据集','delete-dataset','','kb-danger')+'</section>':'')+'</aside></div>';
     } else {
-      const columns = [['#'],...item.fields.map(([name,original,type,description]) => [
-        `<span title="${kbText(`${description || '暂无说明'} · ${type}`)}">${kbText(original)}</span><br><small>${kbText(name)}</small>`,
-      ])];
-      const body = item.sample.map((row,index) => `<tr><td>${index + 1}</td>${row.map(value => `<td>${kbText(value ?? 'NULL')}</td>`).join('')}</tr>`).join('');
-      panel.innerHTML = `<div class="kb-panel-head"><div><h2>数据预览</h2><p>前 ${item.sample.length} 行 · 横向滚动可查看全部字段</p></div><span class="role">示例样本</span></div>
-        ${kbTable(columns,body,'数据预览，可横向滚动','kb-preview-table')}
-        <div class="kb-panel-foot"><span>显示 ${item.sample.length} 行 / ${item.rows == null ? '总行数未统计' : '共 ' + kbRows(item) + ' 行'}</span><span>悬停字段名可查看说明</span></div>`;
+      $('kd-tab-meta').textContent=item.fields.length+' 个字段 · '+item.source;
+      tools.innerHTML=kbSearch('kd-preview-search','在当前样本中查找');
+      panel.innerHTML='<section class="kd-table-card" id="kd-preview-table"></section>';
+      $('kd-preview-search').oninput=drawPreview;drawPreview();requestAnimationFrame(kbResizePreview);
     }
   }
-  page.onclick = event => {
-    const tab = event.target.closest('[data-kb-tab]');
-    if (tab) return drawTab(tab.dataset.kbTab);
-    switch (event.target.closest('[data-kb-action]')?.dataset.kbAction) {
-      case 'refresh': return kbFeedback('kb-dataset-feedback','已刷新示例样本。');
-      case 'description': return kbDialog('编辑数据集描述',`<p>描述数据集的业务含义，帮助智能体理解和选用数据。</p><label>描述<textarea id="kb-description" maxlength="1000">${kbText(item.description)}</textarea></label>`,() => {
-        item.description = $('kb-description').value.trim();
-        renderKbDataset(group,item);
-        kbFeedback('kb-dataset-feedback','数据集描述已保存。');
-      },'保存',520);
-      case 'edit-fields': return kbDialog('编辑字段说明',item.fields.map(([name,original,type,description],index) =>
-        `<label>${kbText(original)} <small class="kb-note">${kbText(name)} · ${kbText(type)}</small><textarea data-kb-field="${index}" maxlength="500">${kbText(description)}</textarea></label>`).join(''),() => {
-        $('dialog-body').querySelectorAll('[data-kb-field]').forEach(input => { item.fields[Number(input.dataset.kbField)][3] = input.value.trim(); });
-        drawFields();
-        kbFeedback('kb-dataset-feedback','字段说明已保存。');
-      },'保存');
+  page.onclick=event=>{
+    const help=event.target.closest('[popovertarget^="kd-pop-"]');
+    if(help){requestAnimationFrame(()=>{const popup=$(help.getAttribute('popovertarget'));if(!popup?.matches(':popover-open'))return;const r=help.getBoundingClientRect(),box=popup.getBoundingClientRect();popup.style.left=Math.max(Math.min(innerWidth-box.width-12,Math.max(12,page.getBoundingClientRect().left)),Math.min(r.right-box.width,innerWidth-box.width-12))+'px';popup.style.top=Math.max(12,Math.min(innerHeight-r.bottom-12>=box.height?r.bottom+8:r.top-box.height-8,innerHeight-box.height-12))+'px';});return;}
+    const tab=event.target.closest('[data-kb-tab]');
+    if(tab)return drawTab(tab.dataset.kbTab);
+    if(event.target.closest('[data-page]')&&!canLeaveEditor()){event.preventDefault();event.stopPropagation();return;}
+    const button=event.target.closest('[data-kb-action]');if(!button)return;
+    switch(button.dataset.kbAction) {
+      case 'refresh':return kbFeedback('kb-dataset-feedback','示例采样记录已刷新 · '+item.sample.length+' 行。');
+      case 'upload':if(canLeaveEditor())return openKbUpload(group);return;
+      case 'edit-field':return editField(Number(button.dataset.index));
+      case 'cancel-field':{const index=editing;editing=null;drawFields();page.querySelector('[data-kd-row="'+index+'"] .kd-edit-field')?.focus();return;}
+      case 'save-field':return saveField();
+      case 'description': return kbDialog('编辑数据集描述','<p>描述数据集的业务含义与使用范围。</p><label>业务说明<textarea id="kb-description" maxlength="1000">'+kbText(item.description)+'</textarea></label>',()=>{item.description=$('kb-description').value.trim();$('kd-dataset-description').textContent=item.description||'还没有业务说明，补充数据集的业务含义与使用范围。';kbFeedback('kb-dataset-feedback','数据集描述已保存到本次预览。');},'保存',520);
+      case 'delete-dataset':if(canLeaveEditor())return kbDeletePreview(group,item,()=>go('group/'+group.id));return;
     }
   };
   drawTab('preview');
 }
 
-function openKbUpload(group) {
+function openKbUpload(group,initialFiles=[]) {
   const queue = [];
   const mb = 1024 ** 2;
   let notice = '';
@@ -1782,6 +2168,7 @@ function openKbUpload(group) {
     updateCount();
   };
   drawQueue();
+  if(initialFiles.length)addFiles(initialFiles);
 }
 
 function openKbPicker(group,viewSource) {
@@ -2054,6 +2441,241 @@ function openKbSourceEditor(source) {
       kbFeedback('kb-test-feedback',failed ? '示例检测未通过。请检查主机地址与端口。' : '示例检测通过，可以保存。');
     },380);
   };
+}
+
+
+// All records below are synthetic and only demonstrate the proposed administrator UI.
+const historyDemoUsers=[
+  {id:'u1',name:'李雨繁',account:'liyufanwx',department:'数据产品组'},
+  {id:'u2',name:'王超',account:'wangchao_yy1',department:'数据平台组'},
+  {id:'u3',name:'陈晨',account:'chenchenwx',department:'运营分析组'},
+  {id:'u4',name:'刘进广',account:'liujg01wx',department:'经营分析组'},
+  {id:'u5',name:'刘进广',account:'liujg02wx',department:'渠道运营组'},
+  {id:'u6',name:'',account:'demo_reader',department:''},
+];
+const historyTopics=[
+  '最近一周冷启动24小时播放次数的情况',
+  '2026年10月各渠道订单实付金额与环比变化',
+  '最近一个月每天的订单金额',
+  '不同会员等级客户的复购表现如何？',
+  '11月各天的订单流水趋势',
+  '当前有哪些可以分析的数据、对象和指标？',
+  '华东区域销售额下降，主要受哪些渠道影响？',
+  '最近7天新增内容与冷启触达成功率',
+  '客服响应时间最近三个月有什么变化？',
+  '按商品分类比较销量、退款率和净销售额',
+  '给我汇总本月经营情况，说明主要变化',
+];
+const historyDemoNow=new Date('2026-11-11T18:00:00+08:00').getTime();
+const historyDemoSessions=Array.from({length:36},(_,i)=>{
+  const last=historyDemoNow-i*9*3600000-((i*11)%60)*60000;
+  const title=i===34?'':historyTopics[i%historyTopics.length];
+  const count=1+(i*5+2)%8;
+  const turns=Array.from({length:count},(_,j)=>({
+    question:j===0?(title||'帮我查看这张表能分析哪些指标'):['按日期展开看一下。','再按渠道拆开，重点说明变化。','这个统计口径包含已取消的数据吗？','能否说明与上期相比的主要差异？','把结论整理得简洁一些。','再看一下其他维度。','请汇总本次分析的主要结论。'][(j-1)%7],
+    answer:i%9===0&&j===count-1?null:j===0?'已按所选知识库中的已发布口径整理本次分析。\n\n可以先观察总体趋势，再按日期、渠道或客户类型拆分，确认变化来自哪些维度。以上是设计稿中的示例回复，正式记录展示实际保存的问答正文。':'已按你的补充要求调整分析维度。\n\n阅读结论时需保持日期范围与统计口径一致，避免将不同范围的数据直接比较。这里保留原有问答记录的阅读方式，重点优化文字层级与间距。',
+    asked:last-(count-j)*150000,answered:last-(count-j)*150000+20000,
+  }));
+  return {id:'demo-session-'+i,user:historyDemoUsers[i%historyDemoUsers.length],title,last,turns};
+});
+const historyDemoState={query:'',user:'all',range:'7',from:'',to:'',sort:'recent',size:10,page:0};
+let historyVisible=[];
+const historyDateFormat=new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});
+const historyFormat=time=>historyDateFormat.format(time);
+const historyUserName=user=>user.name||user.account;
+function historyUserMarkup(user,clickable=true,extra='') {
+  const content='<span class="history-avatar" aria-hidden="true">'+kbText(historyUserName(user).slice(0,1).toUpperCase())+'</span><span class="history-user-copy"><strong>'+kbText(historyUserName(user))+'</strong><small>'+kbText(user.name?user.account:'未设置中文姓名')+(!clickable&&extra?' · '+kbText(extra):'')+'</small></span>';
+  return clickable?'<button type="button" class="history-user history-user-button" data-history-user="'+user.id+'" aria-label="筛选用户 '+kbText(historyUserName(user))+'，账号 '+kbText(user.account)+' 的会话" title="点击筛选此用户的会话">'+content+'</button>':'<div class="history-user">'+content+'</div>';
+}
+function historyMatch(timeOnly=false) {
+  const s=historyDemoState,term=timeOnly?'':s.query.trim().toLowerCase();
+  let start=0,end=Infinity;
+  if(s.range==='today')start=new Date('2026-11-11T00:00:00+08:00').getTime();
+  else if(s.range==='7'||s.range==='30')start=new Date('2026-11-11T00:00:00+08:00').getTime()-(Number(s.range)-1)*86400000;
+  else if(s.range==='custom'){
+    if(s.from)start=new Date(s.from+'T00:00:00+08:00').getTime();
+    if(s.to)end=new Date(s.to+'T00:00:00+08:00').getTime()+86400000;
+  }
+  return historyDemoSessions.filter(session=>(timeOnly||s.user==='all'||session.user.id===s.user)&&session.last>=start&&session.last<end&&(!term||(session.title+' '+session.turns.map(turn=>turn.question).join(' ')).toLowerCase().includes(term))).sort((a,b)=>s.sort==='questions'?b.turns.length-a.turns.length||b.last-a.last:s.sort==='questions-asc'?a.turns.length-b.turns.length||b.last-a.last:s.sort==='oldest'?a.last-b.last:b.last-a.last);
+}
+function historyUserTotals(items) {
+  const map=new Map();
+  items.forEach(session=>{let item=map.get(session.user.id);if(!item){item={user:session.user,sessions:0,questions:0};map.set(session.user.id,item);}item.sessions++;item.questions+=session.turns.length;});
+  return [...map.values()].sort((a,b)=>b.questions-a.questions||b.sessions-a.sessions);
+}
+
+function selectHistoryUser(id) {
+  historyDemoState.user=id;historyDemoState.page=0;
+  $('admin-history-preview').historyUserPicker?.setSelected();
+}
+function setupHistoryUserPicker() {
+  const page=$('admin-history-preview'),input=$('history-user-filter'),popup=$('history-user-options'),list=$('history-user-list'),clear=$('history-user-clear'),toggle=$('history-user-toggle');
+  page.historyPickerEvents?.abort();
+  const events=new AbortController();page.historyPickerEvents=events;
+  let active=-1,options=[],composing=false,suppressOpen=false;
+  const selected=()=>historyDemoUsers.find(user=>user.id===historyDemoState.user);
+  function sync() {
+    const user=selected();input.value=user?historyUserName(user)+' · '+user.account:'';
+    clear.hidden=!user;input.removeAttribute('aria-activedescendant');
+  }
+  function close(restore=true) {
+    if(popup.matches(':popover-open'))popup.hidePopover();
+    input.setAttribute('aria-expanded','false');toggle.setAttribute('aria-expanded','false');
+    if(restore)sync();
+  }
+  function position() {
+    const box=$('history-user-picker').getBoundingClientRect();
+    const width=Math.min(Math.max(box.width,305),innerWidth-16);
+    const space=innerHeight-box.bottom-12;
+    popup.style.width=width+'px';popup.style.left=Math.max(8,Math.min(box.left,innerWidth-width-8))+'px';
+    popup.style.top=(box.bottom+6)+'px';
+    list.style.maxHeight=Math.max(90,Math.min(280,space-45))+'px';
+  }
+  function paintActive() {
+    list.querySelectorAll('[role=option]').forEach((option,index)=>option.dataset.active=String(index===active));
+    if(active>=0){input.setAttribute('aria-activedescendant','history-user-option-'+options[active].id);list.querySelector('[data-active=true]')?.scrollIntoView({block:'nearest'});}else input.removeAttribute('aria-activedescendant');
+  }
+  function draw(term='') {
+    const query=term.trim().toLowerCase();
+    const candidates=query?historyDemoUsers.filter(user=>(user.name+' '+user.account).toLowerCase().includes(query)):historyUserTotals(historyMatch(true)).map(item=>item.user);
+    const users=candidates.slice(0,20);
+    options=query?users:[{id:'all'},...users];active=-1;
+    list.innerHTML=options.map(user=>'<button type="button" role="option" tabindex="-1" id="history-user-option-'+user.id+'" class="history-user-option" data-history-user-option="'+user.id+'" aria-selected="'+String(historyDemoState.user===user.id)+'">'+(user.id==='all'?icon('rows',true)+'<span><strong>全部用户</strong><small>查看所有用户的会话</small></span>':'<span class="history-avatar" aria-hidden="true">'+kbText(historyUserName(user).slice(0,1).toUpperCase())+'</span><span><strong>'+kbText(historyUserName(user))+'</strong><small>'+kbText(user.name?user.account:'未设置中文姓名')+(user.department?' · '+kbText(user.department):'')+'</small></span>')+(historyDemoState.user===user.id?'<svg class="icon history-user-check" aria-hidden="true" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>':'')+'</button>').join('')||'<p class="history-user-no-results" role="status">没有匹配的姓名或账号</p>';
+    list.insertAdjacentHTML('beforeend','<p class="history-user-no-results">'+(candidates.length>20?'先显示 20 位用户；输入更完整的姓名或账号缩小范围':query?'按姓名或账号搜索全部用户':'展示所选时间内有会话的用户；输入姓名或账号可搜索全部用户')+'</p>');
+    clear.hidden=!(selected()||input.value);paintActive();
+  }
+  function open(term='') {
+    draw(term);position();
+    if(!popup.matches(':popover-open'))popup.showPopover();
+    input.setAttribute('aria-expanded','true');toggle.setAttribute('aria-expanded','true');
+  }
+  function choose(id,focus=true) {
+    selectHistoryUser(id);close();drawAdminHistory();
+    if(focus){suppressOpen=true;input.focus({preventScroll:true});suppressOpen=false;}
+  }
+  page.historyUserPicker={setSelected(){close(false);sync();},close};
+  input.onfocus=()=>{if(!suppressOpen){open('');if(selected())input.select();}};
+  input.onclick=()=>{if(!popup.matches(':popover-open'))open(selected()?'':input.value);};
+  input.addEventListener('compositionstart',()=>composing=true);
+  input.addEventListener('compositionend',()=>{composing=false;open(input.value);});
+  input.oninput=event=>{if(!event.isComposing&&!composing)open(input.value);};
+  input.onkeydown=event=>{
+    if(event.isComposing||composing)return;
+    if(event.key==='ArrowDown'||event.key==='ArrowUp'){
+      event.preventDefault();if(!popup.matches(':popover-open'))open('');
+      if(options.length){active=event.key==='ArrowDown'?(active+1)%options.length:(active<=0?options.length-1:active-1);paintActive();}
+    } else if(event.key==='Enter'){
+      event.preventDefault();if(active>=0&&options[active])choose(options[active].id);else if(options.length===1)choose(options[0].id);
+    } else if(event.key==='Escape') {event.preventDefault();event.stopPropagation();close();}
+    else if(event.key==='Tab')close();
+  };
+  list.onpointerdown=event=>event.preventDefault();
+  list.onclick=event=>{const option=event.target.closest('[data-history-user-option]');if(option)choose(option.dataset.historyUserOption);};
+  toggle.onclick=()=>{if(popup.matches(':popover-open'))close();else{open('');suppressOpen=true;input.focus({preventScroll:true});suppressOpen=false;if(selected())input.select();}};
+  clear.onclick=()=>choose('all');
+  document.addEventListener('pointerdown',event=>{if(!popup.contains(event.target)&&!$('history-user-picker')?.contains(event.target))close();},{signal:events.signal});
+  document.addEventListener('keydown',event=>{if(event.key==='Escape'&&popup.matches(':popover-open'))close();},{signal:events.signal});
+  window.addEventListener('resize',()=>{if(popup.matches(':popover-open'))position();},{signal:events.signal});
+  popup.addEventListener('toggle',event=>{if(event.newState==='closed'&&input.isConnected){input.setAttribute('aria-expanded','false');toggle.setAttribute('aria-expanded','false');sync();}});
+  sync();
+}
+
+function renderAdminHistory() {
+  const page=$('admin-history-preview'),s=historyDemoState;
+  page.setAttribute('aria-label','用户对话历史');
+  clearTimeout(page.historySearchTimer);
+  page.historyUserPicker?.close();
+  page.innerHTML='<header class="history-pagebar"><nav class="kb-crumb" aria-label="页面路径"><a href="#more" data-page="more">更多</a>'+icon('chevron',true)+'<span aria-current="page">用户对话历史</span></nav><div class="history-page-actions">'+kbButton('','history-refresh','kb-refresh','history-refresh-icon','aria-label="刷新记录" title="刷新记录"')+kbButton('导出列表','history-export','kb-file')+'</div></header><div class="history-filters" aria-label="会话筛选"><form class="search" id="history-question-search" role="search" aria-label="问题搜索"><button type="submit" class="history-question-submit" aria-label="搜索问题" title="搜索问题">'+icon('search-icon',true)+'</button><input type="search" id="history-query" aria-label="搜索会话标题或提问内容" placeholder="搜索会话标题或提问内容" maxlength="160" value="'+kbText(s.query)+'"></form><div class="history-user-picker" id="history-user-picker"><input type="text" id="history-user-filter" role="combobox" aria-label="搜索并选择用户" aria-haspopup="listbox" aria-expanded="false" aria-autocomplete="list" aria-controls="history-user-list" autocomplete="off" spellcheck="false" placeholder="全部用户"><button type="button" id="history-user-clear" aria-label="清除用户筛选" title="清除用户筛选" hidden>'+icon('close',true)+'</button><button type="button" id="history-user-toggle" class="history-user-toggle" aria-label="展开用户列表" aria-controls="history-user-list" aria-expanded="false">'+icon('chevron',true)+'</button></div><div popover="manual" class="history-user-options" id="history-user-options"><div role="listbox" aria-label="用户候选" class="history-user-list" id="history-user-list"></div><div class="history-user-picker-note">输入姓名或账号查找，选择后筛选会话</div></div><label class="history-time-filter" title="按会话最近活动时间筛选">'+icon('cal',true)+'<select id="history-range" aria-label="会话最近活动时间"><option value="today">今天</option><option value="7">近 7 天</option><option value="30">近 30 天</option><option value="all">全部时间</option><option value="custom">自定义日期</option></select></label><button type="button" class="btn kd-text history-filter-reset" id="history-reset" data-kb-action="history-reset" hidden>重置筛选</button></div><div id="history-custom-dates" class="history-date-custom" hidden><label>开始日期 <input type="date" id="history-from" value="'+kbText(s.from)+'" aria-label="活动开始日期"></label><span>至</span><label>结束日期 <input type="date" id="history-to" value="'+kbText(s.to)+'" aria-label="活动结束日期"></label><span id="history-date-error" class="history-date-error" role="alert"></span></div><section class="history-table-card" aria-label="会话列表"><div class="history-overview"><div class="history-metrics" id="history-metrics" role="status" aria-live="polite"></div><div class="kb-actions">'+kbButton('用户统计','history-users','','kd-text')+kbButton('','history-explain','info','kd-text history-scope-info','aria-label="统计口径说明" title="统计口径说明"')+'</div></div><div id="history-table"></div><footer class="history-table-foot"><span id="history-count"></span><div class="kb-actions"><label>每页 <select id="history-page-size" aria-label="每页会话数"><option>10</option><option>20</option><option>50</option></select> 条</label><nav class="pagination" id="history-pagination" aria-label="会话分页"></nav></div></footer></section><div class="history-meta-footer"><span id="history-refresh-feedback" role="status">交互预览 · 示例数据 · 北京时间</span><button type="button" class="btn kd-text" data-kb-action="history-notes">设计说明与参考</button></div>';
+  $('history-range').value=s.range;$('history-page-size').value=s.size;
+  $('history-custom-dates').hidden=s.range!=='custom';
+  setupHistoryUserPicker();
+  const query=$('history-query');let composing=false;
+  const applyQuery=()=>{clearTimeout(page.historySearchTimer);if(!query.isConnected)return;s.query=query.value;s.page=0;drawAdminHistory();};
+  query.addEventListener('compositionstart',()=>{composing=true;clearTimeout(page.historySearchTimer);});
+  query.oninput=event=>{if(event.isComposing||composing)return;clearTimeout(page.historySearchTimer);page.historySearchTimer=setTimeout(applyQuery,200);};
+  query.addEventListener('compositionend',()=>{composing=false;applyQuery();});
+  $('history-question-search').onsubmit=event=>{event.preventDefault();applyQuery();};
+  for(const [id,key] of [['history-range','range'],['history-page-size','size'],['history-from','from'],['history-to','to']])$(id).onchange=event=>{
+    if(s.query!==query.value)applyQuery();
+    s[key]=key==='size'?Number(event.target.value):event.target.value;s.page=0;
+    $('history-custom-dates').hidden=s.range!=='custom';
+    $('history-from').max=s.to;$('history-to').min=s.from;
+    $('history-date-error').textContent=s.from&&s.to&&s.from>s.to?'开始日期不能晚于结束日期。':'';
+    if(s.range==='custom'&&s.from&&s.to&&s.from>s.to)return;
+    drawAdminHistory();
+  };
+  page.onclick=event=>{
+    const user=event.target.closest('[data-history-user]');
+    if(user){if(s.query!==query.value)applyQuery();selectHistoryUser(user.dataset.historyUser);drawAdminHistory();return;}
+    const sort=event.target.closest('[data-history-sort]');
+    if(sort){s.sort=sort.dataset.historySort==='questions'?(s.sort==='questions'?'questions-asc':'questions'):(s.sort==='recent'?'oldest':'recent');s.page=0;drawAdminHistory();page.querySelector('[data-history-sort="'+sort.dataset.historySort+'"]').focus();return;}
+    const open=event.target.closest('[data-history-open]');
+    if(open)return openHistoryConversation(open.dataset.historyOpen);
+    const action=event.target.closest('[data-kb-action]')?.dataset.kbAction;
+    if(action==='history-reset'){Object.assign(s,{query:'',user:'all',range:'7',from:'',to:'',sort:'recent',page:0});return renderAdminHistory();}
+    if(action==='history-users'){if(s.query!==query.value)applyQuery();return openHistoryUsers();}
+    if(action==='history-export'){if(s.query!==query.value)applyQuery();return exportHistoryPreview();}
+    if(action==='history-refresh'){drawAdminHistory();$('history-refresh-feedback').textContent='已刷新示例记录 · '+new Date().toLocaleTimeString('zh-CN',{hour12:false});}
+    if(action==='history-explain')return show('统计口径','<div class="history-design-notes"><p>日期按会话的最近活动时间筛选，时间显示为北京时间。</p><p><strong>提问数</strong>：统计当前筛选内会话的用户提问，不计 AI 回复和工具消息。它与“该时间段内新发生的提问数”不同。</p><p><strong>用户统计</strong>：汇总每位用户的提问数和会话数。本会话提问列只统计这一条会话。</p><p>列表、摘要、用户统计与导出使用相同筛选条件。</p></div>');
+    if(action==='history-notes')return show('设计说明与参考','<div class="history-design-notes"><p>围绕查找与阅读记录设计：保留面包屑、合并统计摘要、表头排序，列表填充剩余空间，详情沿用只读抽屉。</p><p>参考 <a href="https://linear.app/docs/filters" target="_blank" rel="noopener noreferrer">Linear Filters</a> 的筛选状态设计、<a href="https://langfuse.com/docs/observability/features/filter-search-bar" target="_blank" rel="noopener noreferrer">Langfuse Filter search bar</a> 的统一筛选状态，以及 <a href="https://docs.dify.ai/en/cloud/use-dify/monitor/logs" target="_blank" rel="noopener noreferrer">Dify Logs</a> 的会话列表与详情。</p><p>保留项目的浅紫强调色、渐变底色、图标与门户 iframe。这里仅为交互提案。问题正文搜索、姓名目录核查、服务端聚合计数和正式页面尚未改造。</p></div>');
+  };
+  page.onkeydown=event=>{if(event.target.matches('tr[data-history-open]')&&['Enter',' '].includes(event.key)){event.preventDefault();openHistoryConversation(event.target.dataset.historyOpen);}};
+  drawAdminHistory();
+}
+function drawAdminHistory() {
+  const s=historyDemoState;historyVisible=historyMatch();
+  const totals=historyUserTotals(historyVisible),questions=historyVisible.reduce((sum,session)=>sum+session.turns.length,0);
+  $('history-metrics').innerHTML='<span><strong>'+historyVisible.length+'</strong>条会话</span><span><strong>'+questions.toLocaleString()+'</strong>次提问</span><span><strong>'+totals.length+'</strong>位用户</span>';
+  $('history-reset').hidden=!(s.query.trim()||s.user!=='all'||s.range!=='7');
+  const max=Math.max(1,Math.ceil(historyVisible.length/s.size));s.page=Math.min(s.page,max-1);
+  const rows=historyVisible.slice(s.page*s.size,(s.page+1)*s.size);
+  const countOrder=s.sort==='questions'?'descending':s.sort==='questions-asc'?'ascending':'none';
+  const timeOrder=s.sort==='recent'?'descending':s.sort==='oldest'?'ascending':'none';
+  $('history-table').innerHTML=rows.length?'<div class="history-table-scroll" tabindex="0" role="region" aria-label="会话记录，可横向滚动"><table class="history-table"><thead><tr><th scope="col">会话标题</th><th scope="col">用户</th><th scope="col" aria-sort="'+countOrder+'"><button type="button" data-history-sort="questions" title="按本会话提问数排序">本会话提问'+icon('arrow-up',true)+'</button></th><th scope="col" aria-sort="'+timeOrder+'"><button type="button" data-history-sort="time" title="北京时间；按最近活动时间排序">最近活动时间'+icon('arrow-up',true)+'</button></th></tr></thead><tbody>'+rows.map(session=>'<tr tabindex="0" data-history-open="'+session.id+'" aria-label="查看会话：'+kbText(session.title||'未命名会话')+'"><td><div class="history-title">'+icon('chat',true)+'<button type="button" title="'+kbText(session.title||'未命名会话')+'" data-history-open="'+session.id+'">'+kbText(session.title||'未命名会话')+'</button></div></td><td>'+historyUserMarkup(session.user,true)+'</td><td><span class="history-turn-count">'+session.turns.length+' 问</span></td><td><div class="history-time"><time datetime="'+new Date(session.last).toISOString()+'">'+historyFormat(session.last)+'</time>'+icon('chevron',true)+'</div></td></tr>').join('')+'</tbody></table></div>':'<div class="history-empty">'+icon('search-icon')+'<h3>没有找到符合条件的会话</h3><p>试试其他问题关键词、切换用户，或调整活动时间范围。</p>'+kbButton('重置筛选','history-reset','','soft')+'</div>';
+  $('history-count').textContent=rows.length?'显示 '+(s.page*s.size+1)+'–'+Math.min((s.page+1)*s.size,historyVisible.length)+' 条，共 '+historyVisible.length+' 条会话':'共 0 条会话';
+  renderPagination('history-pagination',s.page,s.size,max,index=>{s.page=index;drawAdminHistory();});
+  $('history-pagination').querySelector('span')?.remove();
+  document.querySelector('#admin-history-preview [data-kb-action="history-export"]').disabled=!rows.length;
+}
+
+function openHistoryUsers() {
+  const items=historyUserTotals(historyVisible);
+  show('用户提问统计','<div class="hist-users-intro"><p>与列表使用相同筛选条件，按用户提问数从多到少排列。点击“查看”返回该用户的会话。</p></div><div class="hist-user-stats"><div class="hist-user-row heading"><span>姓名 / 账号</span><span>提问数</span><span>会话数</span><span></span></div>'+items.map(item=>'<div class="hist-user-row">'+historyUserMarkup(item.user,false)+'<strong>'+item.questions+'</strong><strong>'+item.sessions+'</strong><button type="button" class="btn soft" data-history-stat-user="'+item.user.id+'">查看</button></div>').join('')+(items.length?'':'<p class="kb-empty">暂无符合条件的用户。</p>')+'</div><div class="hist-readonly">问题数仅统计用户提问；同名用户通过账号区分。</div>');
+  preview.classList.add('hist-drawer');
+  $('dialog-body').onclick=event=>{const button=event.target.closest('[data-history-stat-user]');if(!button)return;selectHistoryUser(button.dataset.historyStatUser);drawAdminHistory();preview.close();};
+  preview.addEventListener('close',()=>{$('dialog-body').onclick=null;},{once:true});
+}
+function openHistoryConversation(id) {
+  let index=historyVisible.findIndex(session=>session.id===id);if(index<0)return;
+  let loaded=3,term='';
+  show(historyVisible[index].title||'未命名会话','');preview.classList.add('hist-drawer');
+  function highlight(text) {
+    if(!term)return kbText(text);
+    let rest=String(text),result='';
+    while(rest){const at=rest.toLowerCase().indexOf(term.toLowerCase());if(at<0){result+=kbText(rest);break;}result+=kbText(rest.slice(0,at))+'<mark>'+kbText(rest.slice(at,at+term.length))+'</mark>';rest=rest.slice(at+term.length);}
+    return result;
+  }
+  function drawTurns() {
+    const session=historyVisible[index],offset=Math.max(0,session.turns.length-loaded);
+    const matches=session.turns.map((turn,i)=>({turn,i})).slice(offset).filter(({turn})=>!term||(turn.question+' '+(turn.answer||'')).toLowerCase().includes(term.toLowerCase()));
+    $('hist-find-count').textContent=term?matches.length+' 问匹配':'共 '+session.turns.length+' 问';
+    $('hist-thread-body').innerHTML=(offset?'<div class="hist-earlier"><button type="button" class="btn" data-hist-earlier>加载更早 '+Math.min(offset,3)+' 个问题</button></div>':'')+matches.map(({turn,i})=>'<article class="hist-turn"><div class="hist-role"><span class="hist-round">'+(i+1)+'</span>提问<time datetime="'+new Date(turn.asked).toISOString()+'">'+historyFormat(turn.asked)+'</time></div><p class="hist-question">'+highlight(turn.question)+'</p><div class="hist-answer-label">'+icon('preview-brand-mark',true)+'DataAgent 回复</div><div class="hist-answer '+(turn.answer?'':'empty')+'">'+highlight(turn.answer||'暂无已保存的回复正文。')+'</div></article>').join('')+(matches.length?'':'<p class="kb-empty">已加载的对话中没有匹配内容。</p>');
+    $('hist-thread-body').querySelector('[data-hist-earlier]')?.addEventListener('click',()=>{loaded+=3;drawTurns();});
+  }
+  function draw() {
+    const session=historyVisible[index];$('dialog-title').textContent=session.title||'未命名会话';
+    $('dialog-body').innerHTML='<div class="hist-context"><div class="hist-context-top">'+historyUserMarkup(session.user,false,session.user.department)+'<div class="hist-nav"><button type="button" class="btn" id="hist-prev" '+(index===0?'disabled':'')+'>上一条</button><button type="button" class="btn" id="hist-next" '+(index+1===historyVisible.length?'disabled':'')+'>下一条</button></div></div><p>最近活动 '+historyFormat(session.last)+' · 本会话 '+session.turns.length+' 个问题 · '+(index+1)+' / '+historyVisible.length+' 条</p></div><div class="hist-find"><label class="search">'+icon('search-icon',true)+'<input type="search" id="hist-find-query" aria-label="查找已加载的提问与回复" placeholder="查找已加载的提问与回复"></label><span id="hist-find-count"></span></div><div class="hist-turns-scroll" id="hist-thread-body"></div><div class="hist-readonly">只读历史记录 · 沿用提问与回复正文展示，图片和附件按现有能力显示占位。</div>';
+    $('hist-prev').onclick=()=>{index--;loaded=3;term='';draw();};$('hist-next').onclick=()=>{index++;loaded=3;term='';draw();};
+    $('hist-find-query').oninput=event=>{term=event.target.value.trim();drawTurns();};drawTurns();
+  }
+  draw();
+}
+function exportHistoryPreview() {
+  const cell=value=>'"'+String(/^[=+@\-\t\r]/.test(String(value))?"'"+value:value).replaceAll('"','""')+'"';
+  const rows=[['会话标题','中文姓名','账号','本会话提问数','最近活动时间'],...historyVisible.map(session=>[session.title||'未命名会话',session.user.name,session.user.account,session.turns.length,historyFormat(session.last)])];
+  const url=URL.createObjectURL(new Blob(['\ufeff'+rows.map(row=>row.map(cell).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'}));
+  const a=document.createElement('a');a.href=url;a.download='用户对话历史-示例.csv';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  $('history-refresh-feedback').textContent='已导出当前筛选的 '+historyVisible.length+' 条示例记录。';
 }
 
 window.addEventListener('popstate', () => activate(location.hash.slice(1)));

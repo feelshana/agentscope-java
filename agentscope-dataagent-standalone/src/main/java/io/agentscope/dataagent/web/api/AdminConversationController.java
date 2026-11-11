@@ -175,7 +175,7 @@ public class AdminConversationController {
         }
     }
 
-    private static String publicText(String text) {
+    public static String publicText(String text) {
         return text == null ? null : RESOURCE_REFERENCE.matcher(text).replaceAll("[附件不可查看]");
     }
 

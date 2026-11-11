@@ -9,6 +9,7 @@ import { forgetTour, resumeTour, startTour, useTour } from '../state/guidedTour'
 import Icon from './Icon';
 import type { IconName } from './Icon';
 import './Onboarding.css';
+import '../admin-help.css';
 
 /** spec104: new-user checklist, starter questions, empty state, one-time tips and help. */
 
@@ -250,60 +251,78 @@ export function OnboardingSidebarEntry() {
   </div>;
 }
 
-const HELP_SECTIONS = [
-  { title: '问数', body: '在问数页选择知识库，用中文提问。回答里的数字都来自查询结果；选中知识库时会预填一个推荐问题。', link: '去问数', path: '/chat' },
-  { title: '准备数据与建模', body: '上传文件或关联外部表后，建模助手自动整理字段、口径与关系，在“AI 建模结果”中逐条查看，确认后发布。', link: '去建模', path: '/configure/modeling' },
-  { title: '分析', body: '有日期的回答下方可点“为什么变化 / 有没有异常 / 未来走势”，或用输入框旁的“分析 ▾”；先确认参数再运行。', link: null, path: null },
+const HELP_SECTIONS: { id: string; icon: IconName; title: string; body: string; tags: string; link: string | null; path: string | null }[] = [
+  { id: 'ask', icon: 'chat', title: '问数', body: '在问数页选择知识库，用中文提问。回答里的数字都来自查询结果；选中知识库时会预填一个推荐问题。', tags: '查询 问题 日期 数据来源', link: '去问数', path: '/chat' },
+  { id: 'model', icon: 'model', title: '准备数据与建模', body: '上传文件或关联外部表后，建模助手整理字段、口径与关系。在“AI 建模结果”中逐条查看，确认后统一发布，问数使用已发布版本。', tags: '上传 文件 Excel CSV 数据源 字段 业务说明 口径 关系 模型 发布', link: '去建模', path: '/configure/modeling' },
+  { id: 'analyze', icon: 'chart', title: '分析', body: '有日期的回答下方可点“为什么变化 / 有没有异常 / 未来走势”，或用输入框旁的“分析”；先确认参数再运行。', tags: '归因 异常 预测 趋势 日期 统计', link: null, path: null },
+  { id: 'access', icon: 'shield', title: '权限与共享', body: '知识库的“仅可使用”权限用于问数，“可管理”权限支持维护数据、建模和发布。创建人与全局管理员可以管理知识库，个人会话仍按原有权限访问。', tags: '成员 授权 管理员 共享 QUERY MANAGE', link: '查看知识库', path: '/configure/datasets' },
 ];
 
-/** Drawer opened from 更多 › 帮助与引导 (and from the checklist's last step). */
+/** Searchable help uses the existing checklist and guided-tour actions. */
 export function HelpPanel() {
   const open = useHelpOpen();
+  return open ? createPortal(<HelpDrawer />, document.body) : null;
+}
+function HelpDrawer() {
   const status = useOnboarding();
   const navigate = useNavigate();
   const tour = useTour();
   const begin = useBeginTour();
-  useEffect(() => { if (open) void refreshOnboarding(true); }, [open]);
-  if (!open) return null;
+  const dialog = useRef<HTMLDialogElement>(null);
+  const search = useRef<HTMLInputElement>(null);
+  const body = useRef<HTMLDivElement>(null);
+  const [query, setQuery] = useState('');
+  const [active, setActive] = useState('tasks');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
   const close = () => setHelpOpen(false);
-  const allDone = !!status && status.completed === status.tasks.length;
-  const reset = async () => {
-    if (!window.confirm('重置后新手任务回到第一步，可以重新体验一遍。已有的知识库和数据都会保留，也照常可用，只是不再计入新手任务。确定重置吗？')) return;
-    forgetTour();
-    await resetOnboarding();
-    close();
-    navigate('/chat');
-  };
-  return createPortal(<div className="da-modal-overlay" onClick={close} style={{ justifyContent: 'flex-end', alignItems: 'stretch' }}>
-    <aside role="dialog" aria-modal="true" aria-label="帮助与引导" onClick={e => e.stopPropagation()}
-      onKeyDown={e => { if (e.key === 'Escape') close(); }}
-      style={{ width: 'min(460px, 100vw)', height: '100%', background: 'var(--da-surface)', boxShadow: 'var(--da-shadow-pop)', padding: 24, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 18, overflow: 'auto', color: 'var(--da-text)' }}>
-      <div style={{ display: 'flex', alignItems: 'center' }}>
-        <h2 style={{ margin: 0, fontSize: 18, flex: 1 }}>帮助与引导</h2>
-        <button type="button" className="da-btn da-btn-ghost da-btn-sm" aria-label="关闭" autoFocus onClick={close}><Icon name="close" size="sm" /></button>
-      </div>
-      {status && <div style={{ border: '1px solid var(--da-primary)', background: 'var(--da-primary-subtle)', borderRadius: 12, padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          <strong style={{ fontSize: 14, flex: 1 }}>新手任务</strong>
-          <span style={{ fontSize: 13, color: 'var(--da-primary)' }}>{status.completed} / {status.tasks.length}{allDone ? ' · 已全部完成' : status.stage === 'hidden' ? ' · 已隐藏' : status.stage === 'collapsed' ? ' · 在侧栏底部' : ' · 在问数首页'}</span>
-        </div>
-        <>
-            {allDone && <span style={{ fontSize: 12, color: 'var(--da-text-2)' }}>你已经走通了从数据到分析的全部步骤，重新打开会保留已有完成记录。</span>}
-            <span style={{ fontSize: 12, color: 'var(--da-text-2)' }}>重新打开后，问数首页会再次显示清单，并从今天起重新计 7 天。</span>
-            {!allDone && <button type="button" className="da-btn da-btn-sm" style={{ alignSelf: 'flex-start' }}
-              onClick={() => { close(); begin(); }}>{tour?.paused ? '继续逐步指引' : '开始逐步指引'}</button>}
-            <button type="button" className="da-btn da-btn-primary da-btn-sm" style={{ alignSelf: 'flex-start' }}
-              onClick={() => { void reopenOnboarding(); close(); navigate('/chat'); }}>{status.stage === 'full' ? '查看新手任务' : '重新打开新手任务'}</button>
-            <button type="button" className="da-btn da-btn-ghost da-btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => void reset()}>重置新手任务</button>
-          </>
-      </div>}
-      {HELP_SECTIONS.map(s => <section key={s.title} style={{ display: 'flex', flexDirection: 'column', gap: 6, borderBottom: '1px solid var(--da-border)', paddingBottom: 14 }}>
-        <strong style={{ fontSize: 14 }}>{s.title}</strong>
-        <span style={{ fontSize: 13, color: 'var(--da-text-2)', lineHeight: 1.7 }}>{s.body}</span>
-        {s.path && <button type="button" className="da-btn da-btn-ghost da-btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => { close(); navigate(s.path!); }}>{s.link} ›</button>}
-      </section>)}
-    </aside>
-  </div>, document.body);
+  useEffect(() => {
+    const element = dialog.current;
+    element?.showModal();
+    void refreshOnboarding(true);
+    return () => element?.close();
+  }, []);
+  async function changeTasks(reset: boolean) {
+    if (busy) return;
+    if (reset && !window.confirm('重置后新手任务回到第一步，可以重新体验一遍。已有的知识库和数据都会保留，也照常可用，只是不再计入新手任务。确定重置吗？')) return;
+    setBusy(true); setError('');
+    try {
+      if (reset) { await resetOnboarding(); forgetTour(); }
+      else await reopenOnboarding();
+      close(); navigate('/chat');
+    } catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
+  }
+  const steps = (['data', 'publish', 'ask', 'analyze'] as const);
+  const done = new Set(status?.tasks.filter(task => task.done).map(task => task.id));
+  const next = steps.find(id => !done.has(id));
+  const matches = HELP_SECTIONS.filter(section => [section.title, section.body, section.tags].join(' ').toLowerCase().includes(query.trim().toLowerCase()));
+  function jump(id: string) {
+    setQuery(''); setActive(id);
+    requestAnimationFrame(() => body.current?.querySelector('#help-' + id)?.scrollIntoView({ block: 'start' }));
+  }
+  return <dialog ref={dialog} className="help-drawer" aria-labelledby="help-title"
+    onCancel={e => { e.preventDefault(); if (!busy) close(); }}
+    onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); search.current?.focus(); } }}
+    onClick={e => { const r = e.currentTarget.getBoundingClientRect(); if (!busy && e.target === e.currentTarget && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) close(); }}>
+    <header className="help-head"><div><h2 id="help-title">帮助与引导</h2><p>从准备数据到问数分析，按需找到下一步。</p></div><button className="am-close" aria-label="关闭帮助" disabled={busy} onClick={close}><Icon name="close" /></button></header>
+    <label className="am-search help-search"><Icon name="search" /><input ref={search} autoFocus type="search" placeholder="搜索帮助，例如“口径”“建模”“权限”" aria-label="搜索帮助" maxLength={160} value={query} onChange={e => setQuery(e.target.value)} /><kbd>Ctrl K</kbd></label>
+    <nav className="help-anchors" aria-label="帮助分类">{[{ id: 'tasks', title: '新手任务' }, ...HELP_SECTIONS].map(section => <button key={section.id} className={active === section.id ? 'active' : ''} onClick={() => jump(section.id)}>{section.id === 'model' ? '建模' : section.id === 'access' ? '权限' : section.title}</button>)}</nav>
+    <div ref={body} className="help-body">
+      <section id="help-tasks" className="help-tasks"><header><strong>新手任务</strong><span>{status ? status.completed : '—'} / 4{status?.completed === 4 ? ' · 已全部完成' : status?.stage === 'hidden' ? ' · 已隐藏' : status?.stage === 'collapsed' ? ' · 在侧栏底部' : ''}</span></header>
+        <div className="help-segments" aria-label={status ? '已完成 ' + status.completed + ' / 4 步' : '读取任务进度中'}>{steps.map(id => <span key={id} className={done.has(id) ? 'done' : ''} />)}</div>
+        <ol className="help-steps">{steps.map(id => <li key={id} className={done.has(id) ? 'done' : id === next ? 'current' : ''}><i />{id === 'publish' ? '建模发布' : id === 'ask' ? '去问数' : id === 'analyze' ? '做分析' : '准备数据'}</li>)}</ol>
+        {!status && <p className="help-note">暂未读取到任务进度，<button className="am-text" onClick={() => void refreshOnboarding(true)}>重新加载</button></p>}
+        <div className="help-task-actions"><button className="am-btn primary small" disabled={busy} onClick={() => { close(); begin(); }}>{tour?.paused ? '继续逐步指引' : '开始逐步指引'}<Icon name="chevron" /></button><button className="am-btn small" disabled={busy} onClick={() => void changeTasks(false)}>重新打开新手任务</button><button className="am-text danger" disabled={busy} onClick={() => void changeTasks(true)}>重置新手任务</button></div>
+        <p className="help-note">重新打开会保留已有进度，并从今天起重新计 7 天；重置只重置任务记录，保留已有知识库和数据。</p>
+        {error && <p className="am-error" role="alert">{error}</p>}
+      </section>
+      {query && <p className="help-result-count" role="status">找到 {matches.length} 项使用说明</p>}
+      {matches.map(section => <section key={section.id} id={'help-' + section.id} className="help-section"><header><span className="help-section-icon"><Icon name={section.icon} /></span><h3>{section.title}</h3>{section.path && <button className="am-text help-go" onClick={() => { close(); navigate(section.path!); }}>{section.link}<Icon name="chevron" /></button>}</header><p>{section.body}</p></section>)}
+      {!matches.length && <div className="am-feedback">没有找到相关说明，试试“问数”“建模”或“权限”。</div>}
+      <footer className="help-foot"><Icon name="info" /><span>开始逐步指引，可体验创建知识库、上传示例数据到问答分析的完整流程。</span></footer>
+    </div>
+  </dialog>;
 }
 
 /** A one-time hint next to a feature; never shown again after "知道了" or dismissing the checklist. */

@@ -336,7 +336,7 @@ SemanticView（命名 SQL 视图：单条 SELECT/WITH，工作区 views/<name>/ 
 ExternalDataSource（用户配置的外部 JDBC 连接，可选采样）
 ```
 
-元数据走 JPA；当前 application.yml 默认 MySQL，h2 profile 使用 `~/.agentscope-dataagent/db.*` 文件库。切换其他 JDBC 数据库需匹配驱动、初始化 SQL 和方言；上传物理数据仍落独立的数据集 MySQL。
+知识库详情与空库采用状态条和统一数据表；数据集详情沿用原始资料及预览 API，`DatasetController#toColumnVO` 返回既有 `ColumnSchema.displayName` 别名。`DatasetService#updateColumnDescriptions` 兼容显示名及说明更新；详情字段页只提交业务说明，四列表头区分物理名称、原始表头、类型与说明，不用别名冒充原始表头。资料更新仍标记需建模并显式发布，不改物理名称/类型或线上工程（spec125）。元数据走 JPA；默认 MySQL，h2 profile 使用 `~/.agentscope-dataagent/db.*` 文件库；切换数据库需匹配驱动、SQL和方言，上传表仍落独立的数据集 MySQL。
 
 ### 5.2 上传导入流程
 
@@ -661,6 +661,7 @@ system prompt（空记忆时为空标签）。排查助手"重复犯错"先看�
 
 - 展示：数据库 `session_history/session_message` 提供列表与消息分页；索引器从本地引擎日志补齐，列表不访问 Docker。
 - 管理查阅（spec121、ADR0141）：`AdminConversationController` 默认分页展示全体用户的主会话，可按用户、标题和活动日期筛选。详情按轮返回已保存的提问与最终正文。管理响应不提供工具原始记录或附件访问，查阅不改变已读状态。管理员维护（spec122）经 `GlobalAdministratorController` 单独增减角色，`JpaUserStore` 在事务中保护最后一位管理员。带管理员声明的 API 凭证需通过当前数据库角色校验，撤权后旧凭证不再有管理员权限。
+- 管理检索（spec125、ADR0143）：`SessionHistoryService#indexBatch` 按有界批次补齐 `session_message.message_role/user_text`；正常投影写入时同步更新，仅 USER 保存检索正文。条件更新保护并发改写与删除。`AdminHistoryQueryService#page/users/export` 在数据库统一筛选标题/用户正文、所属用户与会话活动日期，聚合 USER 计数、稳定排序和分页；列表和摘要使用同一只读快照。正文整理尚未完成时返回 indexing 提示。CSV 超限拒绝并要求缩小条件，导出不包含对话正文。新接口仍校验当前全局管理员角色，旧列表 API 保持兼容。
 - 续聊：引擎日志及工作区持久状态继续保留，数据库展示投影不替代引擎上下文。
 - 附件：`session_artifact` 元数据加持久目录，所有者通过请求头认证读取；沙箱回收不影响已保存文件，删除或重置会话会清理附件。
 - 图片展示：`Markdown` 保持渲染组件身份稳定，避免流式文字和滚动状态更新导致图片重新挂载。`AttachmentImage` 通过浏览器内存中的 `imageCache` 复用持久附件的在途下载和对象 URL，正文、右侧预览与放大图共享；超过容量时淘汰未被展示的图片，退出或重新认证时清空并取消在途请求。可覆盖的 workspace 文件仍在新预览挂载时重新读取。
@@ -750,6 +751,8 @@ manifest 尚不存在时（首次升级到该策略）执行一次性「采纳�
 
 `MorePage` 以独立帮助区域与响应式卡片展示入口。帮助打开 `HelpPanel`，五个管理入口使用原路由且只对全局管理员显示。
 
+spec126：`GlobalAdministratorsPage`用现有管理员/目录接口提供本地名单过滤、搜索选择添加和行内移除确认；保留服务端授权及最后一人保护，只展示接口真实成员/部门。`HelpPanel`用原生模态抽屉提供本地搜索/分类、四步任务进度与原三项操作；重新打开和重置失败留在面板提示，成功后才关闭跳转，不修改原新手状态或资源。
+
 `DataSourcesPage`保留原列表与逐连接检测，增加名称本地筛选，主行固定密度，失败原因按单行展开并复用`ErrorNotice`技术详情；配置/删除收于更多菜单。`DataSourceFormModal`按连接信息/访问凭据分组，在主机旁说明服务器连接，保留检测修订、SSL/采样、编辑留空密码及成功后保存规则。`SessionsSidebar`不再展示未可靠跟随主聊天已读状态的圆点；当前会话选中、批量管理和后端既有已读接口保持。
 
 `ScheduledTasksPage` 通过占据标题下方可用空间的白色面板展示未开放说明、日历插画及既有对话与知识库入口。空间不足时页面随内容滚动。页面不调用任务 API。
@@ -789,7 +792,7 @@ React 18 + TypeScript + Vite SPA（`frontend/`），构建产物进 `classpath:/
 
 ### 页面逐步指引与内置示例数据（spec105、ADR0122）
 
-第 1、2 步只按用户自己拥有的知识库判定；没有自有知识库但能查询公共或共享知识库的用户只有提问、深入分析两步。首页第 1 步只有"开始第一步"，由它进入逐步指引。
+第 1、2 步只按用户自己拥有的知识库判定；所有用户首次与重置后均显示完整四步，共享库仍可用于问数。首页第 1 步只有"开始第一步"，由它进入逐步指引。
 
 `state/guidedTour.ts` 保存指引位置，页面用 `tourSignal` 上报真实发生的事，每一步等待一个信号，已经发生过的信号会跳过对应步骤（如没有待整理字段）；不使用定时器，也不代替用户点击。`GuidedTour` 按 `data-tour` 标记找目标控件，遮罩只留出目标；目标不在屏幕上或处于等待阶段时只显示状态卡，不遮挡页面。建模点击步骤由 `tourLocksDraftDrawer` 按当前账号、知识库和步骤约束 `DraftBar`：收起并限制重开草稿浮层，避免覆盖目标；等待或退出引导后恢复正常查看，不改确认和发布状态。位置经 `OnboardingService#saveTour` 存入 `dataagent_user.onboarding_tour`，退出后保留，可从帮助面板继续。
 

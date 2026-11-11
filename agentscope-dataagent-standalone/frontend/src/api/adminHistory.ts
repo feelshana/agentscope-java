@@ -12,7 +12,8 @@ export interface AdminHistorySession {
   agentId: string;
   title: string | null;
   lastActivityMs: number;
-  hasMessages: boolean;
+  hasMessages?: boolean;
+  questionCount?: number;
   owner: AdminDirectoryUser;
 }
 
@@ -28,6 +29,37 @@ export interface AdminHistoryFilters {
   title: string;
   from: string;
   to: string;
+}
+
+export interface HistoryQuery {
+  userId: string; query: string; from: string; to: string;
+  sort: 'activity' | 'questions'; direction: 'asc' | 'desc'; page: number; pageSize: number;
+}
+export interface HistoryOverview {
+  items: AdminHistorySession[];
+  totals: { sessions: number; questions: number; users: number };
+  page: number; pageSize: number; indexing: boolean;
+}
+const queryString = (query: HistoryQuery) => new URLSearchParams(Object.entries(query).map(([k, v]) => [k, String(v)])).toString();
+export async function getHistoryOverview(query: HistoryQuery, signal?: AbortSignal): Promise<HistoryOverview> {
+  return (await request(`${history}/overview?${queryString(query)}`, signal)).json();
+}
+export async function historyDirectory(term: string, signal?: AbortSignal): Promise<AdminDirectoryUser[]> {
+  return (await request(`${history}/directory?q=${encodeURIComponent(term)}`, signal)).json();
+}
+export async function historyUsers(query: HistoryQuery, page: number, signal?: AbortSignal): Promise<{ items: { owner: AdminDirectoryUser; sessions: number; questions: number }[]; hasMore: boolean }> {
+  const params = new URLSearchParams(queryString(query)); params.set('page', String(page));
+  return (await request(`${history}/users?${params}`, signal)).json();
+}
+export async function exportHistory(query: HistoryQuery): Promise<Blob> {
+  const response = await apiFetch(`${history}/export?${queryString(query)}`, { headers: { Authorization: `Bearer ${getToken()}` }, cache: 'no-store' });
+  if (!response.ok) {
+    if (response.status === 400) throw new Error('导出范围过大或参数无效，请缩小日期或用户范围（最多 5000 条会话）。');
+    if (response.status === 403) throw new Error('需要全局管理员权限。');
+    if (response.status === 409) throw new Error('旧会话索引还在整理，请完成后再导出。');
+    throw new Error('导出失败，请稍后重试。');
+  }
+  return response.blob();
 }
 
 const administrators = '/api/admin/administrators';

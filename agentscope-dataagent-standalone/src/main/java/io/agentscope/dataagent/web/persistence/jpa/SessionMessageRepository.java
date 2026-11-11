@@ -18,6 +18,8 @@ package io.agentscope.dataagent.web.persistence.jpa;
 import java.util.List;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
 
 public interface SessionMessageRepository extends JpaRepository<SessionMessageEntity, String> {
     List<SessionMessageEntity> findBySessionKeyOrderByPositionAsc(String key);
@@ -26,4 +28,12 @@ public interface SessionMessageRepository extends JpaRepository<SessionMessageEn
             String key, int before, Pageable page);
 
     void deleteBySessionKey(String key);
+
+    List<SessionMessageEntity> findByMessageRoleIsNull(Pageable page);
+
+    @Modifying
+    @Query(
+            "update SessionMessageEntity m set m.messageRole = :role, m.userText = :text where m.id"
+                    + " = :id and m.messageRole is null and m.payload = :payload")
+    int projectLegacy(String id, String payload, String role, String text);
 }

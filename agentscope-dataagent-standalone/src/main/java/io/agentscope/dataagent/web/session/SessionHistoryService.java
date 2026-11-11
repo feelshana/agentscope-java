@@ -103,6 +103,18 @@ public class SessionHistoryService {
 
     private void indexBatch() {
         try {
+            for (var m : messages.findByMessageRoleIsNull(PageRequest.of(0, 100))) {
+                try {
+                    var turn = mapper.readValue(m.payload, SessionTurnParser.TurnEntry.class);
+                    m.project(turn.role(), turn.content());
+                } catch (Exception invalid) {
+                    m.project(null, null);
+                    log.warn("Unreadable legacy history message {}", m.id);
+                }
+                tx.executeWithoutResult(
+                        status ->
+                                messages.projectLegacy(m.id, m.payload, m.messageRole, m.userText));
+            }
             // Bounded legacy backfill / crash recovery. Stat files; parse only when changed.
             var page =
                     registry.findAll(
@@ -230,6 +242,7 @@ public class SessionHistoryService {
                                 m.position = nextPosition++;
                             }
                             m.payload = payload;
+                            m.project(turn.role(), turn.content());
                             byId.put(id, m);
                             changed.add(m);
                         }

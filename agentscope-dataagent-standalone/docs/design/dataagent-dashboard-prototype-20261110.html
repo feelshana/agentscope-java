@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>电商销售仪表盘 · 红海 DataAgent</title>
+<style>
+:root{color-scheme:light;--ink:#202438;--muted:#656d81;--line:#e4e7f0;--soft:#f5f6fa;--accent:#5b4bd6;--tint:#efecfc;--white:#fff;--green:#147451}
+*{box-sizing:border-box}
+body{margin:0;background:var(--soft);color:var(--ink);font:14px/1.55 "Segoe UI","Microsoft YaHei",sans-serif}
+button,select,textarea{font:inherit;color:inherit}
+button,select{cursor:pointer}
+button:disabled{cursor:default;opacity:.46}
+button:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+[hidden]{display:none!important}
+h1,h2,h3,p{margin:0}
+.top{min-height:64px;background:var(--white);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:20px;padding:10px 24px;position:sticky;top:0;z-index:2}
+.brand{display:flex;align-items:center;gap:9px;font-size:17px;font-weight:720;white-space:nowrap}
+.brand img{width:25px;height:30px}
+.trail{padding-left:20px;border-left:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.trail strong{color:var(--ink)}
+.actions{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.btn,select{min-height:36px;border:1px solid var(--line);border-radius:8px;background:#fff;padding:0 12px;white-space:nowrap}
+.btn{font-weight:600}
+.btn:hover:enabled,.region-row:hover:enabled{border-color:#a89ce9;background:#f8f6ff}
+.btn.primary{color:#fff;background:var(--accent);border-color:var(--accent)}
+.btn.primary:hover:enabled{background:#4939ba}
+.btn.quiet{border-color:transparent;background:transparent;color:var(--accent)}
+.layout{max-width:1680px;margin:auto;display:grid;grid-template-columns:300px minmax(0,1fr);gap:18px;padding:18px;align-items:start}
+.layout.view{grid-template-columns:minmax(0,1fr);max-width:1340px}
+.assistant,.board{border:1px solid var(--line);background:#fff;border-radius:14px;min-width:0}
+.assistant{position:sticky;top:82px;min-height:580px;height:calc(100dvh - 100px);display:flex;flex-direction:column}
+.assistant header{padding:16px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:8px}
+.assistant h2{font-size:16px}
+.caption,.sub,.fine{color:var(--muted);font-size:12px}
+.messages{padding:16px;flex:1;overflow:auto;display:flex;flex-direction:column;gap:12px}
+.bubble{padding:10px 12px;border-radius:10px;max-width:96%;overflow-wrap:anywhere}
+.bubble.user{background:var(--tint);align-self:flex-end}
+.bubble.agent{background:var(--soft);align-self:flex-start}
+.bubble small{display:block;color:var(--muted);font-size:11px;margin-bottom:4px}
+.composer{padding:12px;border-top:1px solid var(--line)}
+.suggestions{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:9px}
+.suggestions .btn{font-size:12px;min-height:29px;padding:0 8px}
+textarea{width:100%;resize:vertical;min-height:68px;max-height:150px;padding:9px 10px;border:1px solid var(--line);border-radius:8px}
+.compose-end{display:flex;align-items:center;justify-content:space-between;margin-top:6px;gap:6px}
+.board{padding:24px}
+.board-head,.heading,.filters,.chart-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.board-head,.chart-head{justify-content:space-between}
+h1{font-size:clamp(23px,2.25vw,34px);letter-spacing:-.03em;line-height:1.25}
+.board-head .sub{margin-top:6px}
+.badge{font-size:12px;font-weight:600;padding:3px 8px;background:var(--tint);color:#5142ba;border-radius:6px}
+.badge.live{color:var(--green);background:#e9f6ef}
+.filters{margin:19px 0 18px;gap:12px}
+.filters label{display:flex;align-items:center;gap:7px;font-size:13px}
+.filters select{min-width:125px}
+.filters .fine{margin-left:auto}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.card{border:1px solid var(--line);border-radius:10px;background:#fff;min-width:0}
+.kpi{padding:13px 14px}
+.kpi-label{display:flex;align-items:center;gap:8px;font-weight:650}
+.kpi-label svg{width:18px;height:18px;fill:none;stroke:var(--accent);stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round}
+.kpi strong{display:block;font-size:clamp(19px,2vw,29px);letter-spacing:-.04em;margin-top:7px;font-variant-numeric:tabular-nums;line-height:1.3}
+.kpi .caption{margin-top:4px}
+.charts{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:12px;margin-top:14px}
+.chart{padding:14px}
+.chart h2,.detail h2{font-size:16px}
+.chart-head .fine{font-size:11px}
+.plot{width:100%;height:auto;display:block;min-height:190px;margin-top:8px}
+.plot text{fill:var(--muted);font-size:12px}
+.plot circle:focus{outline:2px solid var(--accent)}
+.ranking{display:grid;gap:3px;margin-top:10px}
+.region-row{padding:2px 5px;display:grid;grid-template-columns:32px minmax(12px,1fr) 76px;align-items:center;gap:8px;min-height:27px;border:1px solid transparent;background:transparent;border-radius:6px;text-align:left;font-size:12px}
+.region-row[aria-pressed=true]{background:var(--tint)}
+.region-row b{font-variant-numeric:tabular-nums;text-align:right}
+.bar{height:10px;min-width:2px;border-radius:3px;background:#a897ef}
+.region-row:first-child .bar{background:#7865df}
+.detail{margin-top:14px;overflow:hidden}
+.detail h2{padding:11px 14px}
+.table-wrap{overflow:auto}
+table{border-collapse:collapse;width:100%;font-size:13px;white-space:nowrap}
+th,td{padding:8px 14px;text-align:right;font-variant-numeric:tabular-nums}
+th:first-child,td:first-child{text-align:left}
+th{background:var(--soft);color:var(--muted);font-weight:650}
+td{border-top:1px solid var(--line)}
+.board>.fine{margin-top:11px}
+.empty{text-align:center;padding:100px 15px;color:var(--muted)}
+.empty h1{margin-bottom:10px;color:var(--ink)}
+dialog{width:min(470px,calc(100% - 28px));padding:22px;border:1px solid var(--line);border-radius:14px;color:var(--ink);box-shadow:0 16px 55px #201a4433}
+dialog::backdrop{background:#1d193b55}
+dialog h2{font-size:19px;margin-bottom:9px}
+dialog p{margin:6px 0}
+dialog dl{margin:10px 0}
+dialog dt{font-weight:650}
+dialog dd{margin:2px 0 11px;color:var(--muted)}
+.dialog-end{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+#notice{position:fixed;bottom:18px;right:20px;z-index:3;background:#24223d;color:#fff;padding:9px 14px;border-radius:9px;box-shadow:0 4px 16px #1d193b22}
+@media(max-width:1100px){.layout{grid-template-columns:250px minmax(0,1fr)}.board{padding:16px}.filters .fine{width:100%;margin-left:0}.kpi{padding:10px}.kpi-label{gap:5px}.region-row{grid-template-columns:30px minmax(8px,1fr) 65px;gap:4px}}
+@media(max-width:900px){.charts{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.top{gap:12px}.trail{padding-left:12px}}
+@media(max-width:720px){.top{position:static;flex-wrap:wrap;padding:10px 12px}.actions{width:100%;margin-left:0}.layout{grid-template-columns:1fr;padding:10px;gap:10px}.assistant{position:static;min-height:0;height:auto}.messages{max-height:210px}.board{padding:12px}.filters{margin:14px 0}.region-row{grid-template-columns:40px minmax(8px,1fr) 72px}}
+</style>
+</head>
+<body>
+<svg aria-hidden="true" width="0" height="0" style="position:absolute">
+  <symbol id="orders" viewBox="0 0 24 24"><path d="M9 5H5v16h14V5h-4M9 3h6v4H9zM8 11h8m-8 4h8"/></symbol>
+  <symbol id="amount" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 4 16 4 16 0V5M4 12c0 4 16 4 16 0"/></symbol>
+  <symbol id="people" viewBox="0 0 24 24"><circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3m2-17a3 3 0 0 1 0 6m0 4a5 5 0 0 1 4 5v2"/></symbol>
+  <symbol id="avg" viewBox="0 0 24 24"><path d="M5 8h14l2 13H3L5 8Zm4 2V6a3 3 0 0 1 6 0v4"/></symbol>
+</svg>
+<header class="top">
+  <div class="brand"><img alt="" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0MCA0OCIgZmlsbD0ibm9uZSI+CiAgPGRlZnM+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InVwcGVyIiB4MT0iOCIgeTE9IjQiIHgyPSIzNSIgeTI9IjI1IiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+CiAgICAgIDxzdG9wIHN0b3AtY29sb3I9IiM4ODY4RkYiLz48c3RvcCBvZmZzZXQ9Ii41IiBzdG9wLWNvbG9yPSIjNjQ0N0U4Ii8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjNDUzNEI4Ii8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJsb3dlciIgeDE9IjM0IiB5MT0iMjQiIHgyPSI5IiB5Mj0iNDQiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzRBM0RDNCIvPjxzdG9wIG9mZnNldD0iLjQ4IiBzdG9wLWNvbG9yPSIjNjQ3REU4Ii8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjNjlDOUVBIi8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJmb2xkIiB4MT0iMyIgeTE9IjIwIiB4Mj0iMTYiIHkyPSIyOSIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgogICAgICA8c3RvcCBzdG9wLWNvbG9yPSIjODg2OEZGIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjNTg0MUNFIi8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogIDwvZGVmcz4KICA8cGF0aCBkPSJNMTAgMi44YTEuNCAxLjQgMCAwIDAtMiAxLjN2MTAuMWMwIDEgLjYgMS45IDEuNSAyLjNMMjkgMjUuMmw3LTQuM3YtNS4zYTYgNiAwIDAgMC0zLjYtNS41TDEwIDIuOFoiIGZpbGw9InVybCgjdXBwZXIpIi8+CiAgPHBhdGggZD0ibTM2IDIwLjktMjYuNSAxMkEyLjUgMi41IDAgMCAwIDggMzUuMnY5YTEuNCAxLjQgMCAwIDAgMiAxLjNsMjIuNC0xMEE2IDYgMCAwIDAgMzYgMzBWMjAuOVoiIGZpbGw9InVybCgjbG93ZXIpIi8+CiAgPHBhdGggZD0ibTQuNSAyMS4yIDcuOC0zLjUgMy43IDEuN3Y4LjNjMCAxLS42IDEuOS0xLjUgMi4zbC05LjYgNC4zQTEuNCAxLjQgMCAwIDEgMyAzM3YtOS41YzAtMSAuNi0xLjkgMS41LTIuM1oiIGZpbGw9InVybCgjZm9sZCkiLz4KPC9zdmc+Cg==">红海 DataAgent</div>
+  <div class="trail">仪表盘 / <strong id="trail-mode">草稿预览</strong></div>
+  <div class="actions">
+    <select id="role" aria-label="演示角色"><option value="manager">知识库管理者</option><option value="viewer">有权查看的成员</option></select>
+    <button class="btn" type="button" id="switch">查看已发布</button>
+    <button class="btn primary" type="button" id="publish">管理者发布</button>
+  </div>
+</header>
+<main class="layout">
+  <aside class="assistant" aria-label="生成助手">
+    <header><div><h2>生成助手</h2><p class="caption">原型演示 · 本地测试数据</p></div><button class="btn quiet" type="button" id="new">新建</button></header>
+    <div class="messages" role="log" aria-label="生成对话"></div>
+    <form class="composer">
+      <div class="suggestions" aria-label="试用指令"></div>
+      <textarea aria-label="用自然语言描述仪表盘" placeholder="描述想看的数据，或告诉我怎么改"></textarea>
+      <div class="compose-end"><span class="fine">示例指令可直接点击</span><button class="btn primary" type="submit">发送</button></div>
+    </form>
+  </aside>
+  <section class="board" aria-label="仪表盘">
+    <div class="empty" id="empty" hidden></div>
+    <div id="content">
+      <div class="board-head">
+        <div><div class="heading"><h1>电商销售概览</h1><span class="badge" id="badge">草稿</span></div><p class="sub">电商销售 · 本地测试数据</p></div>
+        <button class="btn" type="button" id="definitions">指标口径</button>
+      </div>
+      <div class="filters">
+        <label>月份 <select id="month"></select></label>
+        <label>地区 <select id="region"></select></label>
+        <button class="btn quiet" id="reset" type="button">重置筛选</button>
+        <span class="fine" id="coverage"></span>
+      </div>
+      <div class="kpis" id="kpis"></div>
+      <div class="charts">
+        <section class="card chart"><div class="chart-head"><h2 id="trend-title">销售金额月度趋势</h2><span class="fine" id="trend-unit">单位：万元</span></div><div id="trend"></div></section>
+        <section class="card chart"><div class="chart-head"><h2>地区销售金额排行</h2><span class="fine">点击地区筛选</span></div><div class="ranking" id="ranking"></div></section>
+      </div>
+      <section class="card detail">
+        <h2>月度明细数据</h2>
+        <div class="table-wrap"><table><thead><tr><th scope="col">月份</th><th scope="col">订单量（单）</th><th scope="col">销售金额（元）</th><th scope="col">下单客户（人）</th><th scope="col">平均订单金额（元）</th></tr></thead><tbody id="details"></tbody></table></div>
+      </section>
+      <p class="fine">数据来源为本地电商测试表。对话与发布使用演示状态。</p>
+    </div>
+  </section>
+</main>
+<dialog id="rules" aria-labelledby="rules-title">
+  <h2 id="rules-title">指标口径</h2>
+  <p class="caption">来源：本地订单、订单明细、客户测试表</p>
+  <dl>
+    <dt>统计范围</dt><dd>按下单日期和客户所属地区统计，按场景业务规则排除已取消订单。9 月仅覆盖到 28 日。</dd>
+    <dt>订单量与下单客户</dt><dd>分别按订单 ID 和客户 ID 去重。跨月客户数按所选范围重新去重。</dd>
+    <dt>销售金额</dt><dd>汇总纳入统计的订单明细金额。沿用示例规则，未对退款另行冲减。</dd>
+    <dt>平均订单金额</dt><dd>销售金额除以订单量。</dd>
+  </dl>
+  <form class="dialog-end" method="dialog"><button class="btn">关闭</button></form>
+</dialog>
+<dialog id="confirmation" aria-labelledby="confirm-title">
+  <h2 id="confirm-title">发布「电商销售概览」</h2>
+  <p>发布后，具有此知识库查看权限的成员可以打开仪表盘。</p>
+  <p class="caption">本次操作仅更新当前 HTML 页面的演示状态。</p>
+  <form class="dialog-end" method="dialog"><button class="btn" value="cancel">取消</button><button class="btn primary" value="publish">确认发布</button></form>
+</dialog>
+<div id="notice" role="status" hidden></div>
+<script type="application/json" id="data">{"from":"2025-01-01","to":"2025-09-28","months":["2025-01","2025-02","2025-03","2025-04","2025-05","2025-06","2025-07","2025-08","2025-09"],"regions":["东北","华东","华中","华北","华南","西北","西南"],"rows":[["2025-01","东北",31,154451977,[23,26,43,47,64,77,80,83,96,105,106,118,145,156,168,178,182,186,188,190,191,193]],["2025-01","华东",25,131164795,[11,32,38,39,42,50,63,69,72,86,97,111,121,135,151,153,154,165,184]],["2025-01","华中",25,140005930,[12,27,95,112,114,116,117,136,137,139,141,147,157,171,197]],["2025-01","华北",16,80238692,[19,40,70,85,94,122,133,140,152,179,195]],["2025-01","华南",19,79281989,[1,16,29,33,45,52,74,75,92,98,102,127,158,196]],["2025-01","西北",22,92476092,[0,4,10,13,15,20,25,65,68,71,91,100,101,120,132,180,192]],["2025-01","西南",20,85549430,[2,14,24,34,57,62,87,93,143,144,161,174,181,185]],["2025-02","东北",24,113316626,[8,26,47,64,73,81,83,96,106,115,123,129,156,168,173,188,191,193]],["2025-02","华东",29,129894256,[7,11,22,39,48,63,86,97,111,121,124,135,149,153,154,159,165,167,199]],["2025-02","华中",18,90314579,[12,56,116,117,119,136,141,147,155,157,160,164,171,176,187]],["2025-02","华北",22,93612364,[19,37,40,66,67,70,94,130,133,142,148,177,179,183,194,195]],["2025-02","华南",22,93070131,[16,33,41,46,49,59,74,75,98,102,109,110,126,150,163]],["2025-02","西北",17,71834220,[4,13,15,35,58,68,84,90,91,100,125,131,146,162,175,180]],["2025-02","西南",15,73765835,[30,36,76,87,93,143,144,161,169,172,198]],["2025-03","东北",31,177769872,[8,23,26,43,47,55,64,73,80,81,83,96,106,118,123,129,145,168,173,178,182,186,188]],["2025-03","华东",22,101463441,[7,11,22,39,63,69,82,86,103,121,151,153,154,165,167]],["2025-03","华中",27,140199486,[12,27,44,51,61,95,107,112,114,116,117,128,136,139,164,170,176,187]],["2025-03","华北",32,155738971,[21,37,66,67,70,79,85,89,122,130,133,142,148,152,177,179,183,195]],["2025-03","华南",22,111414469,[1,3,16,29,46,49,59,74,75,98,102,109,110,126,127,158,196]],["2025-03","西北",27,106763166,[0,10,13,15,20,25,35,53,58,65,71,84,90,91,100,101,131,146,175]],["2025-03","西南",18,73395678,[2,14,28,30,34,36,57,87,134,169,181,185,189]],["2025-04","东北",28,147971500,[5,23,26,43,64,73,80,96,129,138,156,178,188,190,191,193]],["2025-04","华东",18,94879991,[11,17,22,32,38,63,72,82,86,97,124,149,166]],["2025-04","华中",25,128980806,[51,56,61,95,99,107,114,116,117,128,137,139,147,157,160,170,176,187,197]],["2025-04","华北",24,122578251,[6,19,21,67,85,89,94,122,130,133,148,152,179,183,194,195]],["2025-04","华南",19,62545315,[1,3,29,33,41,45,52,59,74,75,92,110,127,158,163]],["2025-04","西北",24,98724396,[4,10,13,15,25,35,53,60,65,71,78,84,100,101,108,125,146]],["2025-04","西南",14,104456610,[2,24,28,34,54,57,62,134,161,181,185,189]],["2025-05","东北",33,154062636,[5,8,23,26,31,43,47,55,73,81,96,106,115,118,129,156,173,182,186,188]],["2025-05","华东",23,101266878,[7,22,32,38,48,63,72,82,121,151,159,184,199]],["2025-05","华中",19,103520419,[27,44,61,95,99,112,139,147,155,157,160,176,187,197]],["2025-05","华北",11,48120026,[6,21,40,67,79,88,89,177,194]],["2025-05","华南",13,80504227,[3,29,41,45,46,92,126,127,158,163]],["2025-05","西北",17,89695824,[10,13,15,25,60,65,125,146,162,180,192]],["2025-05","西南",21,76285804,[2,14,30,36,54,76,93,143,144,161,185,189,198]],["2025-06","东北",27,123937759,[5,26,47,81,83,105,106,115,118,123,129,138,156,168,188,190,191]],["2025-06","华东",19,83387273,[22,38,42,63,72,97,103,124,135,149,165,167,184]],["2025-06","华中",23,113618791,[44,51,56,95,112,117,128,136,137,139,141,147,157,160,164,170,176,187,197]],["2025-06","华北",21,78907796,[6,19,21,40,67,79,88,89,122,140,148,183,194]],["2025-06","华南",26,115718973,[1,3,29,33,41,45,46,52,74,75,92,104,109,110,126,127,150,158,163]],["2025-06","西北",23,107030727,[0,4,10,13,35,53,60,65,71,78,84,100,108,120,175,192]],["2025-06","西南",17,82025324,[2,14,24,28,34,54,93,144,161,189,198]],["2025-07","东北",25,136275652,[8,23,26,31,43,47,64,80,83,96,115,118,129,145,156,168,182,186,191]],["2025-07","华东",31,157001552,[11,17,42,48,63,69,72,86,97,103,111,121,124,135,151,165,166,167,199]],["2025-07","华中",31,141381972,[9,12,27,44,51,56,107,114,116,117,119,128,137,147,155,164,187,197]],["2025-07","华北",17,80035728,[19,37,66,70,88,94,122,133,140,142]],["2025-07","华南",20,90257532,[1,3,16,18,46,49,59,74,92,98,110,126,158,196]],["2025-07","西北",21,94570207,[13,20,35,68,71,84,90,100,131,146,162,180]],["2025-07","西南",18,82901469,[2,24,30,34,57,87,93,134,144,181,185,189,198]],["2025-08","东北",24,106796785,[23,43,47,73,80,96,106,113,115,118,123,129,178,182,186]],["2025-08","华东",20,113253729,[22,38,39,42,50,63,69,72,121,124,149,165,184,199]],["2025-08","华中",17,76281188,[27,95,107,112,116,117,128,136,139,141,157,160,187]],["2025-08","华北",32,172346065,[6,40,66,67,70,79,85,88,89,94,122,130,133,140,152,183,194,195]],["2025-08","华南",20,99824132,[16,29,33,41,45,52,74,75,98,110,126,158,163,196]],["2025-08","西北",21,96754182,[13,15,20,25,60,68,78,84,91,125,146,162,175]],["2025-08","西南",14,56968112,[24,30,34,76,93,143,161,172,174,189,198]],["2025-09","东北",35,146190531,[5,23,26,31,47,55,77,81,83,96,105,113,115,118,123,129,145,156,168,173,178,182,186,190,193]],["2025-09","华东",22,94574417,[7,17,32,39,82,86,103,111,121,124,149,154,159,166,167,199]],["2025-09","华中",19,85628815,[44,56,95,112,114,116,117,119,141,147,157,160,171,187]],["2025-09","华北",22,112015955,[19,21,66,79,94,122,130,133,140,142,148,152,183]],["2025-09","华南",21,111419483,[3,33,46,49,74,75,98,102,104,109,127,150,163,196]],["2025-09","西北",18,109177585,[4,10,15,20,25,35,53,58,60,84,91,100,101,131,132,146]],["2025-09","西南",22,95223469,[2,14,34,36,54,57,62,87,143,144,169,181,185,189]]]}</script>
+<script>
+const byId = id => document.getElementById(id);
+const data = JSON.parse(byId('data').textContent);
+const number = new Intl.NumberFormat('zh-CN');
+const money = new Intl.NumberFormat('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2});
+const month = byId('month');
+const region = byId('region');
+const role = byId('role');
+const messages = document.querySelector('.messages');
+const suggestions = document.querySelector('.suggestions');
+const input = document.querySelector('textarea');
+const generate = '用电商销售数据做一张经营仪表盘，看看月度趋势和地区分布';
+const commands = [generate, '趋势改看订单量', '只看华东', '撤销上次修改'];
+const orderMetric = 'orders';
+const initialDraft = () => ({metric:'sales', month:'all', region:'all'});
+let draft = null;
+let published = null;
+let viewFilters = null;
+let mode = 'draft';
+let undo = null;
+let noticeTimer;
+const options = (select, initial, values) => {
+  select.add(new Option(initial, 'all'));
+  values.forEach(value => select.add(new Option(value, value)));
+};
+options(month, '全部月份', data.months);
+options(region, '全部地区', data.regions);
+
+function addMessage(speaker, text) {
+  const message = document.createElement('div');
+  message.className = 'bubble ' + speaker;
+  const label = document.createElement('small');
+  label.textContent = speaker === 'user' ? '你' : 'DataAgent';
+  message.append(label, document.createTextNode(text));
+  messages.append(message);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function notify(text) {
+  const notice = byId('notice');
+  notice.textContent = text;
+  notice.hidden = false;
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => { notice.hidden = true; }, 2800);
+}
+
+function measure(rows) {
+  const customers = new Set();
+  let orders = 0;
+  let cents = 0;
+  for (const row of rows) {
+    orders += row[2];
+    cents += row[3];
+    for (const id of row[4]) customers.add(id);
+  }
+  return {orders, sales:cents / 100, customers:customers.size, avg:orders ? cents / 100 / orders : 0};
+}
+
+function drawTrend(months, summary, metric) {
+  const values = summary.map(row => metric === orderMetric ? row.orders : row.sales / 10000);
+  const isOrders = metric === orderMetric;
+  const upper = Math.max(1, ...values);
+  const stepSize = isOrders ? 25 : 2;
+  const step = Math.max(stepSize, Math.ceil(upper / 4 / stepSize) * stepSize);
+  const top = 16, bottom = 182, left = 48, right = 610;
+  const x = i => values.length === 1 ? (left + right) / 2 : left + 8 + i * (right - left - 16) / (values.length - 1);
+  const y = value => bottom - value / (step * 4) * (bottom - top);
+  const line = values.map((value, i) => `${i ? 'L' : 'M'}${x(i)},${y(value)}`).join(' ');
+  const grid = Array.from({length:5}, (_, i) => `<path d="M${left},${y(step*i)}H${right}" stroke="#eaecf4"/><text x="${left-8}" y="${y(step*i)+4}" text-anchor="end">${step*i}</text>`).join('');
+  const labels = months.map((item, i) => `<text x="${x(i)}" y="206" text-anchor="middle">${Number(item.slice(5))}月</text>`).join('');
+  const points = values.map((value, i) => {
+    const label = `${months[i]} · ${isOrders ? number.format(value) + ' 单' : money.format(value) + ' 万元'}`;
+    return `<circle cx="${x(i)}" cy="${y(value)}" r="4" fill="#fff" stroke="#6650db" stroke-width="2" tabindex="0" aria-label="${label}"><title>${label}</title></circle>`;
+  }).join('');
+  const area = values.length > 1 ? `<path d="${line} L${x(values.length-1)},${bottom} H${x(0)} Z" fill="url(#area)"/>` : '';
+  byId('trend-title').textContent = isOrders ? '订单量月度趋势' : '销售金额月度趋势';
+  byId('trend-unit').textContent = isOrders ? '单位：单' : '单位：万元';
+  byId('trend').innerHTML = `<svg class="plot" viewBox="0 0 630 218" role="group" aria-label="${byId('trend-title').textContent}">
+    <defs><linearGradient id="area" x2="0" y2="1"><stop stop-color="#9e8af0" stop-opacity=".39"/><stop offset="1" stop-color="#9e8af0" stop-opacity=".05"/></linearGradient></defs>
+    ${grid}${area}<path d="${line}" stroke="#6650db" stroke-width="2.6" stroke-linejoin="round" fill="none"/>${points}${labels}</svg>`;
+}
+
+function updateSuggestions() {
+  const available = draft ? commands.slice(1) : commands.slice(0, 1);
+  suggestions.replaceChildren(...available.map(command => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn';
+    button.textContent = command;
+    button.disabled = command === commands[3] && !undo;
+    button.addEventListener('click', () => { input.value = ''; handleCommand(command); });
+    return button;
+  }));
+}
+
+function render() {
+  const editing = mode === 'draft';
+  const config = editing ? draft : viewFilters;
+  document.querySelector('.layout').classList.toggle('view', !editing);
+  document.querySelector('.assistant').hidden = !editing;
+  byId('trail-mode').textContent = editing ? '草稿预览' : '已发布';
+  byId('switch').textContent = editing ? '查看已发布' : '返回草稿';
+  byId('switch').hidden = role.value === 'viewer';
+  byId('publish').hidden = !editing;
+  byId('publish').disabled = !draft;
+  byId('content').hidden = !config;
+  const empty = byId('empty');
+  empty.hidden = Boolean(config);
+  if (!config) {
+    empty.innerHTML = editing
+      ? '<h1>生成你的仪表盘</h1><p>在左侧描述想看的指标与维度，或使用示例指令。</p>'
+      : '<h1>暂无已发布仪表盘</h1><p>知识库管理者发布后，有权查看的成员即可打开。</p>';
+    if (editing) updateSuggestions();
+    return;
+  }
+  const badge = byId('badge');
+  badge.textContent = editing ? '草稿 · 待发布' : '已发布 · v' + published.version;
+  badge.classList.toggle('live', !editing);
+  month.value = config.month;
+  region.value = config.region;
+  const months = config.month === 'all' ? data.months : [config.month];
+  const timeRows = data.rows.filter(row => months.includes(row[0]));
+  const rows = timeRows.filter(row => config.region === 'all' || row[1] === config.region);
+  const summary = measure(rows);
+  byId('coverage').textContent = '样本覆盖 ' + data.from + ' 至 ' + data.to;
+  const metrics = [
+    ['orders','订单量',number.format(summary.orders) + ' 单','按订单去重'],
+    ['amount','销售金额','¥ ' + money.format(summary.sales / 10000) + ' 万','汇总订单明细金额'],
+    ['people','下单客户',number.format(summary.customers) + ' 人','按客户去重'],
+    ['avg','平均订单金额','¥ ' + money.format(summary.avg),'销售金额 ÷ 订单量'],
+  ];
+  byId('kpis').innerHTML = metrics.map(([icon,label,value,description]) => `<div class="card kpi"><div class="kpi-label"><svg aria-hidden="true"><use href="#${icon}"/></svg>${label}</div><strong>${value}</strong><p class="caption">${description}</p></div>`).join('');
+  const monthSummary = months.map(value => measure(rows.filter(row => row[0] === value)));
+  drawTrend(months, monthSummary, config.metric);
+  const rank = data.regions.map(name => [name, measure(timeRows.filter(row => row[1] === name)).sales]).sort((a,b) => b[1] - a[1]);
+  byId('ranking').replaceChildren(...rank.map(([name, sales]) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'region-row';
+    button.setAttribute('aria-pressed', String(config.region === name));
+    const label = document.createElement('span');
+    label.textContent = name;
+    const bar = document.createElement('span');
+    bar.className = 'bar';
+    bar.style.width = 100 * sales / (rank[0][1] || 1) + '%';
+    const amount = document.createElement('b');
+    amount.textContent = money.format(sales / 10000) + ' 万';
+    button.append(label, bar, amount);
+    button.addEventListener('click', () => { config.region = config.region === name ? 'all' : name; render(); });
+    return button;
+  }));
+  byId('details').innerHTML = months.map((value, index) => {
+    const result = monthSummary[index];
+    return `<tr><td>${value}</td><td>${number.format(result.orders)}</td><td>${money.format(result.sales)}</td><td>${number.format(result.customers)}</td><td>${money.format(result.avg)}</td></tr>`;
+  }).join('');
+  if (editing) updateSuggestions();
+}
+
+function handleCommand(command) {
+  addMessage('user', command);
+  let answer;
+  if (/撤销/.test(command) && undo) {
+    draft = undo;
+    undo = null;
+    answer = '已撤销上一次对话修改。';
+  } else if (/仪表盘|看板/.test(command) && /生成|做|创建/.test(command)) {
+    undo = draft ? {...draft} : null;
+    draft = initialDraft();
+    answer = '已生成「电商销售概览」草稿。右侧有四项指标、销售趋势、地区排行和月度明细。';
+  } else if (draft && /订单量|订单数|销售金额/.test(command) && /趋势/.test(command)) {
+    undo = {...draft};
+    draft.metric = /订单量|订单数/.test(command) ? orderMetric : 'sales';
+    answer = draft.metric === orderMetric ? '趋势图已改为按月查看订单量。' : '趋势图已改为按月查看销售金额。';
+  } else if (draft && /只看|筛选/.test(command) && data.regions.some(name => command.includes(name))) {
+    undo = {...draft};
+    draft.region = data.regions.find(name => command.includes(name));
+    answer = '已筛选到' + draft.region + '。可以在右侧重置筛选。';
+  } else {
+    answer = '这个原型支持生成示例仪表盘、切换趋势指标、筛选地区和撤销。可以试试下方的示例指令。';
+  }
+  addMessage('agent', answer);
+  render();
+}
+
+document.querySelector('.composer').addEventListener('submit', event => {
+  event.preventDefault();
+  const command = input.value.trim();
+  if (command) { input.value = ''; handleCommand(command); }
+});
+for (const select of [month, region]) {
+  select.addEventListener('change', () => { (mode === 'draft' ? draft : viewFilters)[select.id] = select.value; render(); });
+}
+byId('reset').addEventListener('click', () => {
+  const config = mode === 'draft' ? draft : viewFilters;
+  config.month = config.region = 'all';
+  render();
+});
+role.addEventListener('change', () => { mode = role.value === 'manager' ? 'draft' : 'published'; render(); });
+byId('switch').addEventListener('click', () => { mode = mode === 'draft' ? 'published' : 'draft'; render(); });
+byId('new').addEventListener('click', () => {
+  draft = null;
+  undo = null;
+  messages.replaceChildren();
+  input.value = '';
+  addMessage('agent', '你想用电商销售数据看什么？可以描述指标、趋势和对比维度。');
+  render();
+  input.focus();
+});
+byId('definitions').addEventListener('click', () => byId('rules').showModal());
+const confirmation = byId('confirmation');
+byId('publish').addEventListener('click', () => {
+  confirmation.returnValue = 'cancel';
+  confirmation.showModal();
+});
+confirmation.addEventListener('close', () => {
+  if (confirmation.returnValue !== 'publish' || !draft || role.value !== 'manager') return;
+  published = {...draft, version:(published?.version ?? 0) + 1};
+  viewFilters = {...published};
+  mode = 'published';
+  render();
+  notify('仪表盘已发布，可切换到成员视角查看。');
+});
+handleCommand(generate);
+</script>
+</body>
+</html>

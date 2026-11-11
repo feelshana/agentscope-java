@@ -105,4 +105,18 @@ public record ColumnSchema(
                 descriptionSource,
                 displayName);
     }
+
+    public ColumnSchema withDisplayName(String value) {
+        return new ColumnSchema(
+                name,
+                originalName,
+                sqlType,
+                nullable,
+                description,
+                included,
+                role,
+                roleReason,
+                descriptionSource,
+                value);
+    }
 }

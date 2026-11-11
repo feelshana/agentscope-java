@@ -51,3 +51,10 @@
 
 - 已导入过 `demo_data` 的环境执行 `0106-demo-data-visit-time-mysql.sql`，把 `visit_time` 改为 DATETIME；程序账号有改表权限时启动会自动完成，新环境不需要。
 - 已有平台库升级前执行 `0105-guided-tour-mysql.sql`，增加 `onboarding_tour`、`onboarding_reset_at`；空库的完整 DDL 已包含，不再叠加。
+
+
+## 2026-11-11 管理员会话检索（spec125）
+
+已有平台库在升级前检查 `session_message` 的 `message_role`、`user_text` 及 `ix_message_role`、`ix_message_projection` 索引，仅补缺少项，见 [0143](0143-history-message-projection-mysql.sql)。空库执行更新后的完整 DDL，不叠加迁移。该变更不涉及上传数据集物理库。
+
+66 使用 `ddl-auto=validate`，须先完成上述平台库迁移再重启新版本。启动后现有历史索引任务分批整理旧 payload；整理完成前历史页明确提示计数和正文检索尚未完整。旧消息和会话上下文保留，导出最大 5000 条，超限须缩小筛选范围。

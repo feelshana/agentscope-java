@@ -496,7 +496,11 @@ CREATE TABLE `session_message` (
   `position_no` int NOT NULL,
   `session_key` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `ix_message_order` (`session_key`,`position_no`)
+  `message_role` varchar(16) DEFAULT NULL,
+  `user_text` longtext COLLATE utf8mb4_unicode_ci,
+  UNIQUE KEY `ix_message_order` (`session_key`,`position_no`),
+  KEY `ix_message_role` (`session_key`,`message_role`),
+  KEY `ix_message_projection` (`message_role`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE `session_read_state` (

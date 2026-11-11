@@ -2,19 +2,21 @@ import { useEffect, useId, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
-  AdminConversationTurn, AdminDirectoryUser, AdminHistoryFilters, AdminHistorySession,
-  getAdminConversation, listAdminHistory,
+  AdminConversationTurn, AdminDirectoryUser, AdminHistorySession,
+  getAdminConversation, getHistoryOverview, historyUsers, exportHistory, HistoryQuery, HistoryOverview,
 } from '../../api/adminHistory';
 import { KnowledgeBreadcrumb } from '../../components/KnowledgeWorkspace';
 import Icon from '../../components/Icon';
-import AdminUserSearch, { adminUserLabel } from './AdminUserSearch';
+import { adminUserLabel } from './AdminUserSearch';
+import HistoryUserPicker, { HistoryUserButton } from './HistoryUserPicker';
+import '../../detail-surfaces.css';
 import './AdminHistory.css';
 
-const emptyFilters: AdminHistoryFilters = { title: '', from: '', to: '' };
+
 const dateFormat = new Intl.DateTimeFormat('sv-SE', {
-  dateStyle: 'short', timeStyle: 'medium', timeZone: 'Asia/Shanghai',
+  dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Shanghai',
 });
-const formatTime = (ms: number) => ms > 0 ? dateFormat.format(ms) : '时间未知';
+const formatTime = (ms: number) => ms > 0 ? dateFormat.format(ms).replace(/-/g, '/') : '时间未知';
 
 function ActivityTime({ value }: { value: number }) {
   if (!(value > 0)) return <>时间未知</>;
@@ -41,6 +43,7 @@ function ConversationDetails({ session, close }: {
   const [error, setError] = useState('');
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  const [find, setFind] = useState('');
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -88,13 +91,14 @@ function ConversationDetails({ session, close }: {
         <Icon name="close" size="sm" />
       </button>
     </header>
+    <div className="ah-detail-search"><Icon name="search" size="sm" /><input className="da-input" aria-label="在已加载对话中查找" placeholder="在已加载对话中查找" value={find} onChange={e => setFind(e.target.value)} /></div>
     <div className="admin-drawer-body">
       {loading && <p className="admin-list-feedback" role="status">正在加载正文…</p>}
       {error && <p className="admin-list-feedback admin-error" role="alert">{error}</p>}
       {!loading && !error && !turns.length && <p className="admin-list-feedback">正文暂不可用。</p>}
       {before !== null && <button className="da-btn da-btn-sm" type="button" disabled={loading}
         onClick={() => void loadEarlier()}>加载更早对话</button>}
-      <ol className="admin-history-list">{turns.map(turn => <li key={turn.position} className="admin-history-turn">
+      <ol className="admin-history-list">{turns.filter(turn => [turn.question, turn.answer].join(' ').toLowerCase().includes(find.trim().toLowerCase())).map(turn => <li key={turn.position} className="admin-history-turn">
         <h3>提问 <span>{formatTime(turn.askedAtMs)}</span></h3>
         <MessageText value={turn.question || '（无文字）'} />
         <h3>回复{turn.answeredAtMs ? <span>{formatTime(turn.answeredAtMs)}</span> : null}</h3>
@@ -104,105 +108,112 @@ function ConversationDetails({ session, close }: {
   </dialog>;
 }
 
-function ConversationList({ userId, filters, selectUser }: {
-  userId?: string;
-  filters: AdminHistoryFilters;
-  selectUser: (user: AdminDirectoryUser) => void;
-}) {
-  const [sessions, setSessions] = useState<AdminHistorySession[]>([]);
-  const [selected, setSelected] = useState<AdminHistorySession | null>(null);
-  const [hasMore, setHasMore] = useState(false);
-  const [loading, setLoading] = useState(true);
+
+function UserStatistics({ query, close, select }: { query: HistoryQuery; close: () => void; select: (u: AdminDirectoryUser) => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [page, setPage] = useState(0);
+  const [data, setData] = useState<Awaited<ReturnType<typeof historyUsers>> | null>(null);
   const [error, setError] = useState('');
-
+  const [loading, setLoading] = useState(true);
+  useEffect(() => { dialog.current?.showModal(); return () => dialog.current?.close(); }, []);
   useEffect(() => {
-    const controller = new AbortController();
-    listAdminHistory(userId, filters, undefined, controller.signal).then(page => {
-      if (controller.signal.aborted) return;
-      setSessions(page.items);
-      setHasMore(page.hasMore);
-    }).catch(e => {
-      if (!controller.signal.aborted) setError((e as Error).message);
-    }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
-  }, [userId, filters]);
-
-  async function loadMore() {
-    setLoading(true);
-    setError('');
-    try {
-      const page = await listAdminHistory(userId, filters, sessions[sessions.length - 1]);
-      setSessions(previous => [...previous, ...page.items]);
-      setHasMore(page.hasMore);
-    } catch (e) { setError((e as Error).message); }
-    finally { setLoading(false); }
-  }
-
-  return <section aria-label="会话列表">
-    <table className="admin-table admin-session-table" aria-label="会话列表" aria-busy={loading}>
-      <thead><tr>
-        <th scope="col">会话标题</th><th scope="col">用户名</th><th scope="col">最近活动时间</th>
-      </tr></thead>
-      <tbody>{sessions.map(session => {
-        const title = session.title || '未命名会话';
-        return <tr key={JSON.stringify([session.owner.userId, session.sessionKey])}>
-          <td><button className="admin-table-link admin-session-title" type="button" title={title}
-            aria-haspopup="dialog" onClick={() => setSelected(session)}>{title}</button></td>
-          <td>{userId ? <span className="admin-username">{session.owner.username}</span>
-            : <button className="admin-table-link admin-username" type="button"
-              onClick={() => selectUser(session.owner)} title="查看该用户的所有会话">{session.owner.username}</button>}</td>
-          <td><ActivityTime value={session.lastActivityMs} /></td>
-        </tr>;
-      })}</tbody>
-    </table>
-    {loading && <p className="admin-list-feedback" role="status">正在加载历史…</p>}
-    {error && <p className="admin-list-feedback admin-error" role="alert">{error}</p>}
-    {!loading && !error && !sessions.length && <p className="admin-list-feedback">没有符合条件的会话。</p>}
-    {sessions.length > 0 && <footer className="admin-list-footer">
-      <span>已显示 {sessions.length} 条会话</span>
-      {hasMore && <button className="da-btn da-btn-sm" type="button" disabled={loading}
-        onClick={() => void loadMore()}>加载更多会话</button>}
-    </footer>}
-    {selected && <ConversationDetails key={selected.sessionKey} session={selected}
-      close={() => setSelected(null)} />}
-  </section>;
+    const c = new AbortController(); setLoading(true); setError('');
+    historyUsers(query, page, c.signal).then(result => { if (!c.signal.aborted) setData(result); })
+      .catch(e => { if (!c.signal.aborted) setError((e as Error).message); })
+      .finally(() => { if (!c.signal.aborted) setLoading(false); });
+    return () => c.abort();
+  }, [query, page]);
+  return <dialog ref={dialog} className="admin-history-drawer ah-stats-drawer" aria-labelledby="ah-stats-title" onCancel={e => { e.preventDefault(); close(); }}>
+    <header className="admin-drawer-header"><div><h2 id="ah-stats-title">用户统计</h2><p>当前筛选内，每位用户的提问与会话数</p></div><button className="da-btn admin-icon-button" aria-label="关闭用户统计" onClick={close}><Icon name="close" size="sm" /></button></header>
+    <div className="admin-drawer-body">{loading ? <p role="status">加载用户统计…</p> : error ? <p role="alert">{error}</p> : data?.items.length ? <table className="admin-table"><thead><tr><th>用户</th><th>提问</th><th>会话</th></tr></thead><tbody>{data.items.map(row => <tr key={row.owner.userId}><td><HistoryUserButton user={row.owner} onClick={() => { select(row.owner); close(); }} /></td><td>{row.questions}</td><td>{row.sessions}</td></tr>)}</tbody></table> : <p>当前筛选没有用户</p>}</div>
+    <footer className="ah-pagination"><span>第 {page + 1} 页</span><button className="da-btn da-btn-sm" disabled={loading || !page} onClick={() => setPage(n => n - 1)}>上一页</button><button className="da-btn da-btn-sm" disabled={loading || !data?.hasMore} onClick={() => setPage(n => n + 1)}>下一页</button></footer>
+  </dialog>;
 }
+
+function dateWindow(range: string) {
+  const today = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
+  if (range === 'all') return { from: '', to: '' };
+  const from = new Date(Date.parse(today + 'T00:00:00Z') - (Number(range) - 1) * 86400000).toISOString().slice(0, 10);
+  return { from, to: today };
+}
+const initialQuery = (): HistoryQuery => ({ userId: '', query: '', ...dateWindow('7'), sort: 'activity', direction: 'desc', page: 0, pageSize: 10 });
 
 export default function AdminConversationHistoryPage() {
   const [user, setUser] = useState<AdminDirectoryUser | null>(null);
-  const [draft, setDraft] = useState(emptyFilters);
-  const [filters, setFilters] = useState(emptyFilters);
-  return <div className="kw-page">
-    <KnowledgeBreadcrumb items={[{ label: '更多', to: '/more' }, { label: '用户对话历史' }]} />
-    <div className="kw-scroll"><div className="kw-content admin-history">
-      <header className="admin-page-header">
-        <div><h1>用户对话历史</h1><p>按用户、会话标题和日期查看提问与回复。</p></div>
-      </header>
-      <div className="admin-history-toolbar">
-        <form className="admin-history-form" onSubmit={event => { event.preventDefault(); setFilters(draft); }}>
-          <label className="admin-history-title-filter">会话标题 <input className="da-input" type="search" maxLength={160}
-            placeholder="搜索会话标题" value={draft.title}
-            onChange={event => setDraft({ ...draft, title: event.target.value })} /></label>
-          <label>活动起始日期 <input className="da-input" type="date" value={draft.from} max={draft.to || undefined}
-            onChange={event => setDraft({ ...draft, from: event.target.value })} /></label>
-          <label>活动结束日期 <input className="da-input" type="date" value={draft.to} min={draft.from || undefined}
-            onChange={event => setDraft({ ...draft, to: event.target.value })} /></label>
-          <div className="admin-form-actions">
-            <button className="da-btn" type="submit">筛选</button>
-            <button className="da-btn da-btn-ghost" type="button" onClick={() => { setDraft(emptyFilters); setFilters(emptyFilters); }}>清空筛选</button>
-          </div>
-        </form>
-        <AdminUserSearch onSelect={setUser} selectSingleMatch />
+  const [draft, setDraft] = useState('');
+  const [composing, setComposing] = useState(false);
+  const [query, setQuery] = useState(initialQuery);
+  const [range, setRange] = useState('7');
+  const [data, setData] = useState<HistoryOverview | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [refresh, setRefresh] = useState(0);
+  const [selected, setSelected] = useState<AdminHistorySession | null>(null);
+  const [statistics, setStatistics] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [info, setInfo] = useState(false);
+  const infoDialog = useRef<HTMLDialogElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const modified = !!(query.query || user || range !== '7');
+  useEffect(() => { if (info) infoDialog.current?.showModal(); }, [info]);
+  useEffect(() => {
+    if (composing) return;
+    const timer = window.setTimeout(() => setQuery(q => q.query === draft.trim() ? q : { ...q, query: draft.trim(), page: 0 }), 200);
+    return () => window.clearTimeout(timer);
+  }, [draft, composing]);
+  useEffect(() => {
+    const controller = new AbortController(); setLoading(true); setError('');
+    let poll: number | undefined;
+    getHistoryOverview(query, controller.signal).then(result => {
+      if (controller.signal.aborted) return;
+      setData(result);
+      if (result.indexing) poll = window.setTimeout(() => setRefresh(n => n + 1), 3000);
+    }).catch(e => { if (!controller.signal.aborted) setError((e as Error).message); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => { controller.abort(); window.clearTimeout(poll); };
+  }, [query, refresh]);
+  function select(u: AdminDirectoryUser | null) { setUser(u); setQuery(q => ({ ...q, userId: u?.userId ?? '', page: 0 })); setNotice(''); }
+  function reset() { setUser(null); setDraft(''); setRange('7'); setQuery(initialQuery()); setNotice(''); }
+  function sort(key: HistoryQuery['sort']) { setQuery(q => ({ ...q, sort: key, direction: q.sort === key && q.direction === 'desc' ? 'asc' : 'desc', page: 0 })); }
+  async function download() {
+    setExporting(true); setNotice('');
+    try {
+      const blob = await exportHistory(query); const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = '用户对话历史.csv'; document.body.appendChild(a); a.click(); a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000); setNotice('已导出当前筛选的会话列表');
+    } catch (e) { setNotice((e as Error).message); }
+    finally { setExporting(false); }
+  }
+  const sessions = !loading && !error ? data?.items ?? [] : [];
+  const total = data?.totals.sessions ?? 0;
+  const page = data?.page ?? query.page;
+  const pages = Math.max(1, Math.ceil(total / query.pageSize));
+  return <div className="kw-page ah-page">
+    <div className="ah-top"><KnowledgeBreadcrumb items={[{ label: '更多', to: '/more' }, { label: '用户对话历史' }]} /><div className="kw-actions"><button className="da-btn ah-icon" aria-label="刷新会话列表" title="刷新会话列表" disabled={loading} onClick={() => setRefresh(n => n + 1)}><Icon name="refresh" size="sm" /></button><button className="da-btn" disabled={loading || exporting || !total || data?.indexing} onClick={() => void download()}><Icon name="file" size="sm" />{exporting ? '导出中…' : '导出列表'}</button></div></div>
+    <div className="ah-content">
+      <div className="ah-filters"><form className="ah-search" role="search" onSubmit={e => { e.preventDefault(); if (!composing) { setQuery(q => ({ ...q, query: draft.trim(), page: 0 })); searchRef.current?.focus(); } }}>
+        <button className="ah-icon" type="submit" aria-label="搜索问题"><Icon name="search" size="sm" /></button><input ref={searchRef} type="search" aria-label="搜索会话标题或提问内容" placeholder="搜索会话标题或提问内容" maxLength={160} value={draft} onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)} onChange={e => setDraft(e.target.value)} />
+      </form><HistoryUserPicker user={user} select={select} from={query.from} to={query.to} />
+        <label className="ah-date"><Icon name="calendar" size="sm" /><select aria-label="活动时间范围" value={range} onChange={e => { setRange(e.target.value); if (e.target.value !== 'custom') setQuery(q => ({ ...q, ...dateWindow(e.target.value), page: 0 })); }}><option value="1">今天</option><option value="7">近 7 天</option><option value="30">近 30 天</option><option value="all">全部时间</option><option value="custom">自定日期</option></select></label>
+        {range === 'custom' && <div className="ah-custom-date"><label>从<input type="date" value={query.from} max={query.to || undefined} onChange={e => setQuery(q => ({ ...q, from: e.target.value, page: 0 }))} /></label><span>—</span><label>至<input type="date" value={query.to} min={query.from || undefined} onChange={e => setQuery(q => ({ ...q, to: e.target.value, page: 0 }))} /></label></div>}
+        {modified && <button className="admin-table-link ah-reset" onClick={reset}>重置筛选</button>}
       </div>
-      <div className="admin-list-meta">
-        <div className="admin-user-scope">
-          <h2>{user ? user.username : '所有用户的会话'}</h2>
-          {user && <button className="admin-table-link" type="button" onClick={() => setUser(null)}>查看所有用户</button>}
+      {notice && <div className="ah-notice" role="status">{notice}</div>}
+      {data?.indexing && <div className="ah-notice" role="status">正在整理旧会话的提问索引，当前计数与正文检索尚未完整，将自动更新。</div>}
+      <section className="ah-list-card" aria-label="会话列表" aria-busy={loading}>
+        <div className="ah-summary"><div aria-live="polite">{loading ? <span>正在加载历史…</span> : error ? <span>列表加载失败</span> : <><span><strong>{total.toLocaleString()}</strong> 条会话</span><span><strong>{data?.totals.questions.toLocaleString() ?? '0'}</strong> 次提问</span><span><strong>{data?.totals.users.toLocaleString() ?? '0'}</strong> 位用户</span></>}</div><button className="admin-table-link" disabled={loading || !!error} onClick={() => setStatistics(true)}>用户统计</button><button className="ah-icon" aria-label="查看统计口径" title="查看统计口径" onClick={() => setInfo(true)}><Icon name="info" size="sm" /></button></div>
+        <div className="ah-table-scroll"><table className="admin-table ah-table"><thead><tr><th>会话标题</th><th>用户</th><th aria-sort={query.sort === 'questions' ? query.direction === 'desc' ? 'descending' : 'ascending' : 'none'}><button onClick={() => sort('questions')}>本会话提问<Icon name={query.sort === 'questions' && query.direction === 'asc' ? 'arrowUp' : 'arrowDown'} size="sm" /></button></th><th aria-sort={query.sort === 'activity' ? query.direction === 'desc' ? 'descending' : 'ascending' : 'none'}><button onClick={() => sort('activity')}>最近活动时间<Icon name={query.sort === 'activity' && query.direction === 'asc' ? 'arrowUp' : 'arrowDown'} size="sm" /></button></th></tr></thead><tbody>{sessions.map(session => <tr key={session.sessionKey} onClick={() => setSelected(session)}><td><button className="admin-table-link ah-session-title" onClick={e => { e.stopPropagation(); setSelected(session); }} aria-haspopup="dialog" title={session.title || '未命名会话'}><Icon name="chat" size="sm" /><span className="ah-title-label">{session.title || '未命名会话'}</span></button></td><td onClick={e => e.stopPropagation()}><HistoryUserButton user={session.owner} onClick={() => select(session.owner)} /></td><td className="ah-number">{session.questionCount ?? 0} 问</td><td><div className="ah-time"><ActivityTime value={session.lastActivityMs} /><Icon name="chevron" size="sm" /></div></td></tr>)}</tbody></table>
+          {loading && <div className="ah-feedback" role="status"><span className="da-spinner da-spinner-sm" />正在加载会话…</div>}
+          {error && <div className="ah-feedback" role="alert"><p>{error}</p><button className="da-btn" onClick={() => setRefresh(n => n + 1)}>重新加载</button></div>}
+          {!loading && !error && !sessions.length && <div className="ah-feedback"><Icon name="search" /><p>没有符合条件的会话</p><button className="admin-table-link" onClick={reset}>清除筛选条件</button></div>}
         </div>
-        <span><Icon name="clock" size="sm" /> 最近活动优先 · 北京时间</span>
-      </div>
-      <ConversationList key={JSON.stringify([user?.userId, filters])} userId={user?.userId}
-        filters={filters} selectUser={setUser} />
-    </div></div>
+        <footer className="ah-pagination"><span>{loading ? '加载中…' : total ? `显示 ${page * query.pageSize + 1}–${Math.min((page + 1) * query.pageSize, total)} 条，共 ${total} 条会话` : '共 0 条会话'}</span><div><label>每页 <select aria-label="每页会话数" value={query.pageSize} onChange={e => setQuery(q => ({ ...q, pageSize: Number(e.target.value), page: 0 }))}><option>10</option><option>20</option><option>50</option></select> 条</label><button className="da-btn da-btn-sm" aria-label="上一页" disabled={loading || !page} onClick={() => setQuery(q => ({ ...q, page: page - 1 }))}><Icon name="back" size="sm" /></button><span>{page + 1} / {pages}</span><button className="da-btn da-btn-sm" aria-label="下一页" disabled={loading || page + 1 >= pages} onClick={() => setQuery(q => ({ ...q, page: page + 1 }))}><Icon name="chevron" size="sm" /></button></div></footer>
+      </section>
+      <small className="ah-footnote">时间为北京时间 · 按会话最近活动筛选</small>
+    </div>
+    {selected && <ConversationDetails key={selected.sessionKey} session={selected} close={() => setSelected(null)} />}
+    {statistics && <UserStatistics query={query} close={() => setStatistics(false)} select={select} />}
+    {info && <dialog ref={infoDialog} className="ah-info-dialog" aria-labelledby="ah-info-title" onCancel={() => setInfo(false)}><header><h2 id="ah-info-title">统计口径</h2><button className="ah-icon" aria-label="关闭统计说明" onClick={() => { infoDialog.current?.close(); setInfo(false); }}><Icon name="close" size="sm" /></button></header><p>时间范围按会话最后活动时间筛选。提问数统计这些会话中的全部用户提问，不计 AI 回复或工具消息，并非仅统计日期范围内新增的提问。</p><p>问题搜索匹配会话标题或用户提问正文；用户筛选独立生效。列表、用户统计和导出使用相同筛选条件。</p><p>对话正文只读，附件与工具原始结果不可查看。</p></dialog>}
   </div>;
 }

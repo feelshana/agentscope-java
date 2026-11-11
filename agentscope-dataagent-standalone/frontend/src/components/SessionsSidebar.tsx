@@ -77,7 +77,7 @@ export default function SessionsSidebar({ refreshKey, collapsed = false, onNewCh
   const location = useLocation();
   const navigationItems = location.pathname.startsWith('/knowledge-bases/')
     ? NAV_ITEMS.filter(item => item.path !== '/configure/modeling') : NAV_ITEMS;
-  const moreActive = ['/more', '/workspace', '/admin/models', '/admin/public-knowledge-bases', '/admin/bi-sync'].includes(location.pathname);
+  const moreActive = ['/more', '/workspace', '/admin/models', '/admin/public-knowledge-bases', '/admin/bi-sync', '/admin/conversation-history', '/admin/global-administrators'].includes(location.pathname);
   const isNavigationActive = (path: string) => location.pathname.startsWith(path)
     || (path === '/configure/datasets' && location.pathname === '/configure/datasources');
   const [searchParams] = useSearchParams();

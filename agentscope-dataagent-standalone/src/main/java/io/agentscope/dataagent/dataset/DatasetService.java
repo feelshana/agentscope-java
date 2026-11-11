@@ -619,7 +619,11 @@ public class DatasetService implements DatasetContextProvider {
 
     public record Preview(List<ColumnSchema> columns, List<List<String>> rows) {}
 
-    public record ColumnDescUpdate(String name, String description) {}
+    public record ColumnDescUpdate(String name, String description, String displayName) {
+        public ColumnDescUpdate(String name, String description) {
+            this(name, description, null);
+        }
+    }
 
     @Transactional
     public DatasetEntity refreshSample(String ownerId, String datasetId) {
@@ -757,11 +761,24 @@ public class DatasetService implements DatasetContextProvider {
             String ownerId, String datasetId, List<ColumnDescUpdate> updates) {
         DatasetEntity entity = get(ownerId, datasetId);
         List<ColumnSchema> cols = new ArrayList<>(readColumns(entity));
+        if (updates == null || updates.size() > cols.size()) {
+            throw new DatasetException("请检查字段更新列表", 400);
+        }
         for (ColumnDescUpdate u : updates) {
+            if (u == null
+                    || u.name() == null
+                    || cols.stream().noneMatch(c -> c.name().equals(u.name()))
+                    || (u.description() != null && u.description().length() > 10000)
+                    || (u.displayName() != null && u.displayName().length() > 191)) {
+                throw new DatasetException("请检查字段名、显示名或说明长度", 400);
+            }
             for (int i = 0; i < cols.size(); i++) {
                 ColumnSchema c = cols.get(i);
                 if (c.name().equals(u.name())) {
-                    cols.set(i, c.withDescription(u.description(), ColumnSchema.SOURCE_USER));
+                    var updated = c.withDescription(u.description(), ColumnSchema.SOURCE_USER);
+                    if (u.displayName() != null)
+                        updated = updated.withDisplayName(u.displayName().strip());
+                    cols.set(i, updated);
                 }
             }
         }

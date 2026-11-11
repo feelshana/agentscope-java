@@ -3,6 +3,7 @@ import { apiFetch, getToken } from './auth';
 export interface DatasetColumn {
   name: string;
   originalName: string;
+  displayName?: string | null;
   sqlType: string;
   description: string | null;
   sourceFormat?: string | null;
@@ -238,9 +239,9 @@ export async function updateGroup(groupId: string, name: string, description: st
   return res.json();
 }
 
-export async function getGroupDetail(groupId: string): Promise<GroupDetail> {
+export async function getGroupDetail(groupId: string, signal?: AbortSignal): Promise<GroupDetail> {
   const res = await apiFetch(`/api/dataset-groups/${encodeURIComponent(groupId)}`, {
-    headers: authHeaders(),
+    headers: authHeaders(), signal,
   });
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to load KB: ${res.status}`));
   return res.json();
@@ -338,9 +339,9 @@ export async function deleteDataset(id: string): Promise<void> {
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to delete dataset: ${res.status}`));
 }
 
-export async function getPreview(id: string, limit = 20): Promise<Preview> {
+export async function getPreview(id: string, limit = 20, signal?: AbortSignal): Promise<Preview> {
   const res = await apiFetch(`/api/datasets/${encodeURIComponent(id)}/preview?limit=${limit}`, {
-    headers: authHeaders(),
+    headers: authHeaders(), signal,
   });
   if (!res.ok) throw new Error(await errorMessage(res, `Failed to preview: ${res.status}`));
   return res.json();
@@ -348,7 +349,7 @@ export async function getPreview(id: string, limit = 20): Promise<Preview> {
 
 export async function updateColumns(
   id: string,
-  updates: { name: string; description: string }[],
+  updates: { name: string; description: string; displayName?: string }[],
 ): Promise<Dataset> {
   const res = await apiFetch(`/api/datasets/${encodeURIComponent(id)}/columns`, {
     method: 'PUT',
