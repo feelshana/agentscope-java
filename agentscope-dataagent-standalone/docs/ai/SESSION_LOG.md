@@ -1,5 +1,9 @@
 # 会话记录
 
+## 2026-11-12 Asia/Shanghai｜Checkpoint：现场验收与同步缺口暂缓
+
+用户反馈0143列/索引已执行且验证存在，66已重启；字段说明保存后正常问答，工作台无待发布改动。代码确认资料保存没有同步已有模型YAML，发布按钮按真实文件差异而非DIRTY判断，新说明未自动用于问数。用户要求记录待优化，因次日演示保持现有版本，不继续改代码或部署。只更新共享记录/测试报告；后续补自动同步及提示准确性，注意数据集说明等同类入口、现有草稿保护和显式发布。未将用户反馈当作助手独立验证生产容器修订或所有业务通过。
+
 ## 2026-11-12 Asia/Shanghai｜Checkpoint：用户授权修复提交及66部署交接
 
 用户明确要求本轮修复提交、push个人分支并合入develop-2.0，然后提供Xshell登录66的操作指引。fetch核对远端与646c69ad基线无分叉，本地只含本轮后端/回归/文档变更。复用已通过1136项（33条件跳过）、构建与封装结果，提交前补文档门禁。正式发布入口仍deploy-formal.sh，不改服务器配置；本修复无新DDL，0143若未部署需先核对，旧误标记不自动解除。最终提交及双远端一致性以Git核对为准，不把指引写成助手已操作66。
@@ -558,3 +562,27 @@ Git 核对 8515fd28 到 68b5d7a5 期间 BI 登录链路无差异；Git 内主脚
 ## 2026-11-11 Asia/Shanghai｜Checkpoint：知识库与历史设计落地
 
 完成spec125页面和真实接口：知识库/空库、数据集三页签及显示名、管理员历史搜索/计数/分页/统计/导出。角色与用户正文投影后台补齐，0143升级迁移已备。全量1131项中33项条件跳过，其余通过；最后历史HTTP4项、前端三个路径各101项、构建、Spotless、打包通过。Chrome隔离数据验字段失败保留/只读、独立搜索与中文组词、用户键盘、统计/正文及窄屏和门户iframe，无脚本错误。未操作66或用户后端，未提交/push。用户重新运行本地后端后试用，正式validate先迁移；详细报告见test-reports/20261111-knowledge-details-history.md。
+
+
+## 2026-11-12 Asia/Shanghai｜Checkpoint：资料同步与双BI任务观测
+
+在liyufan_dev完成spec127：表/字段资料显式保存同步映射模型草稿，锁后MANAGE及PESSIMISTIC_WRITE刷新、最新字段合并，失败/事务回滚恢复文件，不修改published；BI页基础7表/扩展6表切换，只读投影扩展逐表水位、快照、缺口及最近操作，权限/no-store/boundedElastic不变。最终1150项后端测试0失败/错误、33条件跳过，Spotless/package及前端三个前缀各105项和build通过；Chrome隔离API验切换/缺口/未初始化/503/错误隔离/390px及1653×862门户iframe。保留起点4份记录修改，清理本轮生成static差异，target保留新构建；未提交、push、重启用户后端、部署或连接66/源库，无DDL。用户明日启动本地后端验说明→草稿→人工发布及两套同步状态；报告test-reports/20261112-metadata-draft-bi-observation.md。
+
+
+## 2026-11-12 Asia/Shanghai｜Checkpoint：资料保存后的建模入口
+
+按用户意见为字段/数据集说明保存提示补“去建模核对”主按钮，MANAGE可见、忙时禁用、未保存编辑沿用确认，进入本知识库semantic关系图，不自动发布。小优化不新建spec/ADR。前端三个前缀各105项和TypeScript/Vite构建通过，Chrome隔离响应验保存后按钮、正确URL、390px布局与未保存确认框触发；文档检查另行复核。仅新增前端页面/CSS及记录，保留前轮全部修改，不提交/push/部署，生成static差异已清理。
+
+## 2026-11-12 Asia/Shanghai｜Checkpoint：架构与可维护性初评
+
+按用户要求审查standalone实际代码、依赖、构建、迁移及测试，新增test-reports/20261112-architecture-maintainability-assessment.md。确认根CI未构建独立应用、三个集成类显式Disabled（现存报告共12项）、核心职责集中和顶层包双向依赖；跨文件/数据库恢复及迁移治理列为待验证风险，不宣称已复现故障。选定权限/发布/草稿同步/文档44项全通过、Spotless通过；未重跑全量/前端/打包或操作生产。保留spec127原有待验收及未提交改动，整改仅建议，无业务变更、提交、push或部署；补充后文档5项、Spotless及git diff --check通过。
+
+
+## 2026-11-12 Asia/Shanghai｜Checkpoint：功能优化讨论归档
+
+按用户要求新增docs/design/20261112-product-optimization-discussion.md作为持续审阅主记录，归并近几轮建议、两份既有HTML、依据提案与官方资料，区分源码事实、候选F01–F09、未核实主张与实施前待决策。未新增正式spec/ADR，未改业务代码或原报告。上一开发CURRENT_TASK完整存入archive/CURRENT_TASK-before-product-review-record-20261112.md，资料同步与双BI观测仍待用户本地验收。文档检查DocsConsistencyTest通过、主记录和当前任务相对链接检查通过；无业务重测、提交、push、部署。下一步由用户选择优先方向，再讨论范围与实现。
+
+
+## 2026-11-12 Asia/Shanghai｜Checkpoint：个人分支本地提交检查
+
+用户授权保存全部本地修改到liyufan_dev，包含spec127资料同步/建模入口/双BI观测及测试、构建产物、既有产品与架构评审文档。Spotless与本轮后端1150项（0失败/错误、33条件跳过）、前端三前缀各105项、TypeScript/Vite构建、Maven package均通过；测试统计排除target中旧日期遗留XML。无DDL、push、主线合并、66操作或服务重启；产品F01–F09及架构整改仍仅待讨论。提交结果以Git记录为准，用户真实环境验收仍待继续。

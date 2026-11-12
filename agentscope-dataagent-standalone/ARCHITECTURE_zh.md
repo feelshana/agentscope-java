@@ -219,7 +219,7 @@ main 线程）同步执行，每个 server 经 `McpClientBuilder.buildAsync().bl
 再以原始 arguments 调用 get_instructions/get_context/describe_schema/recall_queries/run_sql/query_cube 等官方工具。
 只有官方已提供的工具可调用；问数服务不使用 --allow-write，store_query 不对 Agent 开放。
 
-`WrenQueryAccess#resolve` 检查 ownerId、DatasetScope 与当前会话范围并要求已发布版本。数据集或表结构变化经 `DatasetService#markMdlDirty` 递增修订号，发布前拒绝问数并提示联系管理人员在语义建模检查发布；语义草稿修改经 `DatasetGroupService#markMdlDirty` 只标记待发布，问数继续使用已发布快照（ADR0128）。`DatasetService#updateDescription/updateColumnDescriptions/saveKnowledge`同样只标记草稿；`refreshSample`仅当观测字段名/类型与原记录一致时走草稿标记，变化或无法核对则保留硬门禁。非结构编辑不覆盖旧硬门禁或自动发布，历史误标记不自动清理。
+`WrenQueryAccess#resolve` 检查 ownerId、DatasetScope 与当前会话范围并要求已发布版本。数据集或表结构变化经 `DatasetService#markMdlDirty` 递增修订号，发布前拒绝问数并提示联系管理人员在语义建模检查发布；语义草稿修改经 `DatasetGroupService#markMdlDirty` 只标记待发布，问数继续使用已发布快照（ADR0128）。`DatasetService#updateDescription/updateColumnDescriptions`经`DatasetMetadataDraftSync#update`按平台数据集映射同步已有模型的本次指定说明/显示名，保留公式、关系与其他草稿属性；`MdlWorkspaceService#withWorkspaceTransactionLock`持锁到事务结束，排队后复核MANAGE并以PESSIMISTIC_WRITE刷新数据集行，字段补丁基于锁后最新资料合并，失败/回滚恢复YAML及修改日志；无映射不自动建模。实际文件差异经原流程人工发布，已发布快照不变。`saveKnowledge`仍只标记草稿；`refreshSample`仅当观测字段名/类型与原记录一致时走草稿标记，变化或无法核对则保留硬门禁。非结构编辑不覆盖旧硬门禁或自动发布，历史误标记不自动清理。
 `WrenInstanceRegistry#spawn` 使用 `WrenPublishedProject#prepare` 的运行工程与发布时锁定的 profile，继续复用框架 MCP ClientWrapper。
 
 ADR 0072 / spec 061：`ProcessWrenCli#run` 与 `WrenInstanceRegistry#spawnProject` 共用
@@ -889,7 +889,7 @@ Boot 4 HTTP JSON缓冲使用`spring.http.codecs.max-in-memory-size=50MB`；人�
 
 ### 12.2 构建与运行
 
-ADR0142/spec123新增独立六表离线镜像：deploy/bi-sync/extra_schema.py维护79列DDL及固定SQL，extra_sync.py按源读取当前快照/完整业务日，私有暂存、前后计数和多重集内容校验后事务替换业务数据及账本。独立源指纹、锁、控制表和02:15调度不改旧七表；Doris缺分区或监控空快照保留目标，状态明确源可用下界与缺失区间。新任务只通过docker/bi-extra-sync.sh运维，不加入旧管理员状态页或Wren问数链路，不自动建知识库/安装调度。加列须显式迁移，源只读；配置及现场步骤见[新增六表同步](docs/guides/66-bi-extra-sync.md)。
+ADR0142/spec123新增独立六表离线镜像：deploy/bi-sync/extra_schema.py维护79列DDL及固定SQL，extra_sync.py按源读取当前快照/完整业务日，私有暂存、前后计数和多重集内容校验后事务替换业务数据及账本。独立源指纹、锁、控制表和02:15调度不改旧七表；Doris缺分区或监控空快照保留目标，状态明确源可用下界与缺失区间。新任务通过docker/bi-extra-sync.sh运维，不加入Wren问数链路，不自动建知识库/安装调度。spec127新增独立只读观测：`AdminBiSyncController#extra`在boundedElastic上调用`BiSyncStatusService#extraView`，`BiExtraSyncStatus#read`只读bi_extra_sync_control固定键及独立运行锁，校验owner并投影逐表水位/缺口/快照和最近操作，不读取源或业务数据。BI页面按基础7表、扩展6表切换；核验、部分补跑、带缺口成功不视为六表全量完成。加列须显式迁移，源只读；配置及现场步骤见[新增六表同步](docs/guides/66-bi-extra-sync.md)。
 
 extra_sync#sync_job仅对已标记的源连接中断做有限重连，重抽当前业务日/快照后重新校验发布；不重连持锁目标或控制连接。源和目标网络等待适配大日分组及流式回压，错误清理不覆盖原始错误，状态保留安全的失败阶段/日期/错误码，禁止记录驱动敏感原文。
 

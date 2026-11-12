@@ -49,6 +49,89 @@ import org.junit.jupiter.api.Test;
 /** Metadata edits preserve published querying; dataset/schema mutations retain the hard gate. */
 class DatasetServiceMdlDirtyTest {
 
+    @org.junit.jupiter.api.io.TempDir java.nio.file.Path mdlHome;
+
+    @Test
+    void queuedMetadataSaveMergesLatestOtherFieldInsteadOfWritingItsStaleCopy() throws Exception {
+        registerGroup("g1", "PUBLISHED");
+        var entity = dataset("d1", "g1");
+        when(repository.findById("d1")).thenReturn(Optional.of(entity));
+        var workspace =
+                new MdlWorkspaceService(
+                        new WrenProperties("wren", mdlHome.toString(), "dataagent", "mysql", 10),
+                        mock(WrenCli.class));
+        var entities = mock(jakarta.persistence.EntityManager.class);
+        org.mockito.Mockito.doAnswer(
+                        ignored -> {
+                            entity.setColumnSchemaJson(
+                                    mapper.writeValueAsString(
+                                            List.of(
+                                                    new ColumnSchema(
+                                                            "c1", "c1", "varchar", true, "old"),
+                                                    new ColumnSchema(
+                                                            "c2",
+                                                            "c2",
+                                                            "bigint",
+                                                            true,
+                                                            "同事刚保存的说明"))));
+                            return null;
+                        })
+                .when(entities)
+                .refresh(entity, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        org.springframework.test.util.ReflectionTestUtils.setField(
+                service,
+                "metadataDraftSync",
+                new DatasetMetadataDraftSync(
+                        workspace, mock(KnowledgeBaseAccessService.class), entities));
+        service.updateColumnDescriptions(
+                "owner", "d1", List.of(new DatasetService.ColumnDescUpdate("c1", "我的新说明")));
+        assertEquals("我的新说明", service.readColumns(entity).get(0).description());
+        assertEquals("同事刚保存的说明", service.readColumns(entity).get(1).description());
+        verify(entities).refresh(entity, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+    }
+
+    @Test
+    void datasetPageSaveProducesActualDraftDiffWhilePublishedRevisionRemainsUsable()
+            throws Exception {
+        var group = registerGroup("g1", "PUBLISHED");
+        group.setMdlVersion(14);
+        var entity = dataset("d1", "g1");
+        when(repository.findById("d1")).thenReturn(Optional.of(entity));
+        var workspace =
+                new MdlWorkspaceService(
+                        new WrenProperties("wren", mdlHome.toString(), "dataagent", "mysql", 10),
+                        mock(WrenCli.class));
+        var access = mock(KnowledgeBaseAccessService.class);
+        var sync = new DatasetMetadataDraftSync(workspace, access);
+        org.springframework.test.util.ReflectionTestUtils.setField(
+                service, "metadataDraftSync", sync);
+        var root = workspace.workspaceRoot("g1");
+        java.nio.file.Files.createDirectories(root.resolve(".platform"));
+        java.nio.file.Files.createDirectories(root.resolve("models/orders"));
+        java.nio.file.Files.writeString(
+                root.resolve(".platform/datasets.json"), "{\"d1\":\"orders\"}");
+        var model = root.resolve("models/orders/metadata.yml");
+        java.nio.file.Files.writeString(
+                model,
+                "columns:\n"
+                        + "  - name: c1\n"
+                        + "    type: VARCHAR\n"
+                        + "    properties:\n"
+                        + "      description: old\n");
+        service.updateColumnDescriptions(
+                "owner", "d1", List.of(new DatasetService.ColumnDescUpdate("c1", "资料页新说明")));
+        var yaml = new ObjectMapper(new com.fasterxml.jackson.dataformat.yaml.YAMLFactory());
+        assertEquals(
+                "资料页新说明",
+                yaml.readTree(model.toFile()).at("/columns/0/properties/description").asText());
+        service.updateDescription("owner", "d1", "资料页新表说明");
+        assertEquals(
+                "资料页新表说明", yaml.readTree(model.toFile()).at("/properties/description").asText());
+        assertEquals(14, group.getMdlVersion());
+        verify(groupRepository, never()).requireModeling(anyString());
+        assertEquals("DIRTY", group.getMdlState());
+    }
+
     private DatasetRepository repository;
     private DatasetGroupRepository groupRepository;
     private DatasetKnowledgeRepository knowledgeRepository;

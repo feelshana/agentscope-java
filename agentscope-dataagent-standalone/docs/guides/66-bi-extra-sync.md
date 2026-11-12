@@ -5,7 +5,7 @@
 ## 数据清单及运行边界
 
 - 目标仍为现有data_agent。六张业务表及完整类型/注释见 [DDL](../../deploy/bi-sync/extra-schema.sql)：bi_page_click_log 5列、bi_iam_user 18列、bi_tenant_optimization_daily 22列、bi_project_capacity_daily 10列、bi_screen 14列、bi_screen_visit_log 10列。合计79列，其中页面/优化各一个生成主键，77个业务字段。
-- 新控制表bi_extra_sync_control和六张bi_extra_stage_*是内部元数据，不能关联到知识库或授予问数只读账号。旧七表仍由bi-sync.sh负责；现有管理员“BI数据同步”页面仍只显示旧任务，本任务用下面status命令查看。
+- 新控制表bi_extra_sync_control和六张bi_extra_stage_*是内部元数据，不能关联到知识库或授予问数只读账号。旧七表仍由bi-sync.sh负责；spec127增加管理员“BI数据同步”的“BI业务扩展 · 6表”页签，只读展示本任务控制状态；须应用更新后可用，不安装或改变调度。本轮仅本地修改、待用户验证，未部署；服务器完整状态仍可用下面status命令查看。
 - 字段、源SQL及业务限制见 [资料](../ai/BI_SYNC_EXTENSION_INTAKE_20261106.md)、[规格](../specs/123-bi-multisource-extension.md)及 [业务口径](../../deploy/bi-sync/extra-business-rules.md)。不创建或改动知识库，不假定多个系统的用户/项目ID可以直接关联。
 - 来源分别为IAM、dataanalysis1、platform、Doris和原easybi。源只SELECT/SHOW/EXPLAIN和会话设置，不建表、建索引或改数据；MySQL只读事务，Doris仅固定只读SQL，capacity沿用必需TLS。目标MySQL8/InnoDB及utf8mb4。
 - 源密码只在交互终端输入到外部600权限配置，不出现在命令行、示例、日志或Git中。原easybi/目标连接复用formal-private/bi-sync.json，不重复录入，也不改原文件。

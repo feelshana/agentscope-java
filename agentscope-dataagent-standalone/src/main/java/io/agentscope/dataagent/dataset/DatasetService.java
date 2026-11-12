@@ -64,6 +64,8 @@ public class DatasetService implements DatasetContextProvider {
 
     private KnowledgeBaseOperations operations;
 
+    private DatasetMetadataDraftSync metadataDraftSync;
+
     private static final Logger log = LoggerFactory.getLogger(DatasetService.class);
     private static final Pattern SAFE_IDENTIFIER = Pattern.compile("^[a-zA-Z0-9_]+$");
 
@@ -762,12 +764,18 @@ public class DatasetService implements DatasetContextProvider {
         if (description == null) {
             throw new DatasetException("Dataset description is required", 400);
         }
-        entity.setDescription(description.trim());
-        entity.setUpdatedAt(Instant.now());
-        repository.save(entity);
-        registry.add(toDataSource(entity));
-        markDraftChanged(entity.getGroupId());
-        return entity;
+        java.util.function.Supplier<DatasetEntity> save =
+                () -> {
+                    entity.setDescription(description.trim());
+                    entity.setUpdatedAt(Instant.now());
+                    repository.save(entity);
+                    registry.add(toDataSource(entity));
+                    markDraftChanged(entity.getGroupId());
+                    return entity;
+                };
+        return metadataDraftSync == null
+                ? save.get()
+                : metadataDraftSync.update(ownerId, entity, description, List.of(), save);
     }
 
     /** Updates column business descriptions and re-registers the source so the agent sees them. */
@@ -775,34 +783,49 @@ public class DatasetService implements DatasetContextProvider {
     public DatasetEntity updateColumnDescriptions(
             String ownerId, String datasetId, List<ColumnDescUpdate> updates) {
         DatasetEntity entity = get(ownerId, datasetId);
-        List<ColumnSchema> cols = new ArrayList<>(readColumns(entity));
-        if (updates == null || updates.size() > cols.size()) {
+        if (updates == null
+                || updates.stream()
+                        .anyMatch(
+                                u ->
+                                        u == null
+                                                || u.name() == null
+                                                || (u.description() != null
+                                                        && u.description().length() > 10000)
+                                                || (u.displayName() != null
+                                                        && u.displayName().length() > 191)))
             throw new DatasetException("请检查字段更新列表", 400);
-        }
-        for (ColumnDescUpdate u : updates) {
-            if (u == null
-                    || u.name() == null
-                    || cols.stream().noneMatch(c -> c.name().equals(u.name()))
-                    || (u.description() != null && u.description().length() > 10000)
-                    || (u.displayName() != null && u.displayName().length() > 191)) {
-                throw new DatasetException("请检查字段名、显示名或说明长度", 400);
-            }
-            for (int i = 0; i < cols.size(); i++) {
-                ColumnSchema c = cols.get(i);
-                if (c.name().equals(u.name())) {
-                    var updated = c.withDescription(u.description(), ColumnSchema.SOURCE_USER);
-                    if (u.displayName() != null)
-                        updated = updated.withDisplayName(u.displayName().strip());
-                    cols.set(i, updated);
-                }
-            }
-        }
-        entity.setColumnSchemaJson(writeJson(cols));
-        entity.setUpdatedAt(Instant.now());
-        repository.save(entity);
-        registry.add(toDataSource(entity));
-        markDraftChanged(entity.getGroupId());
-        return entity;
+        java.util.function.Supplier<DatasetEntity> save =
+                () -> {
+                    List<ColumnSchema> cols = new ArrayList<>(readColumns(entity));
+                    if (updates.size() > cols.size()) {
+                        throw new DatasetException("请检查字段更新列表", 400);
+                    }
+                    for (ColumnDescUpdate u : updates) {
+                        if (cols.stream().noneMatch(c -> c.name().equals(u.name()))) {
+                            throw new DatasetException("请检查字段名、显示名或说明长度", 400);
+                        }
+                        for (int i = 0; i < cols.size(); i++) {
+                            ColumnSchema c = cols.get(i);
+                            if (c.name().equals(u.name())) {
+                                var updated =
+                                        c.withDescription(
+                                                u.description(), ColumnSchema.SOURCE_USER);
+                                if (u.displayName() != null)
+                                    updated = updated.withDisplayName(u.displayName().strip());
+                                cols.set(i, updated);
+                            }
+                        }
+                    }
+                    entity.setColumnSchemaJson(writeJson(cols));
+                    entity.setUpdatedAt(Instant.now());
+                    repository.save(entity);
+                    registry.add(toDataSource(entity));
+                    markDraftChanged(entity.getGroupId());
+                    return entity;
+                };
+        return metadataDraftSync == null
+                ? save.get()
+                : metadataDraftSync.update(ownerId, entity, null, updates, save);
     }
 
     private String writeJson(List<?> columns) {
@@ -1239,7 +1262,8 @@ public class DatasetService implements DatasetContextProvider {
             SchemaGenerationService schemaGeneration,
             MdlWorkspaceReader workspaceReader,
             KnowledgeBaseAccessService access,
-            KnowledgeBaseOperations operations) {
+            KnowledgeBaseOperations operations,
+            DatasetMetadataDraftSync metadataDraftSync) {
         this(
                 repository,
                 groupRepository,
@@ -1259,5 +1283,6 @@ public class DatasetService implements DatasetContextProvider {
                 workspaceReader);
         this.access = access;
         this.operations = operations;
+        this.metadataDraftSync = metadataDraftSync;
     }
 }

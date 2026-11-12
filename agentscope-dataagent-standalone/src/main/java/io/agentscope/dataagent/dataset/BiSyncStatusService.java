@@ -73,6 +73,19 @@ public class BiSyncStatusService {
         this.clock = clock;
     }
 
+    public BiExtraSyncStatus.View extraView() {
+        if (properties != null
+                && (properties.url() == null || !properties.url().startsWith("jdbc:mysql:")))
+            return BiExtraSyncStatus.empty("NOT_CONFIGURED", "当前环境未配置MySQL数据集库。");
+        try (var connection = connections.open()) {
+            return BiExtraSyncStatus.read(connection, mapper, clock);
+        } catch (SQLException error) {
+            return BiExtraSyncStatus.empty("UNAVAILABLE", "暂时无法读取扩展任务状态，请检查目标数据库连接或稍后重试。");
+        } catch (Exception error) {
+            return BiExtraSyncStatus.empty("UNAVAILABLE", "扩展状态记录无法解析，请由运维核对任务版本和日志。");
+        }
+    }
+
     public View view() {
         if (properties != null
                 && (properties.url() == null || !properties.url().startsWith("jdbc:mysql:")))

@@ -24,10 +24,7 @@ public class AdminBiSyncController {
 
     @GetMapping
     public Mono<ResponseEntity<BiSyncStatusService.View>> status(Authentication auth) {
-        if (auth == null || !auth.isAuthenticated())
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
-        if (auth.getAuthorities().stream().noneMatch(a -> "ROLE_ADMIN".equals(a.getAuthority())))
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "仅全局管理员可查看BI同步状态。");
+        requireAdmin(auth);
         return Mono.fromCallable(service::view)
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(
@@ -35,5 +32,25 @@ public class AdminBiSyncController {
                                 ResponseEntity.ok()
                                         .header(HttpHeaders.CACHE_CONTROL, "no-store")
                                         .body(value));
+    }
+
+    @GetMapping("/extra")
+    public Mono<ResponseEntity<io.agentscope.dataagent.dataset.BiExtraSyncStatus.View>> extra(
+            Authentication auth) {
+        requireAdmin(auth);
+        return Mono.fromCallable(service::extraView)
+                .subscribeOn(Schedulers.boundedElastic())
+                .map(
+                        value ->
+                                ResponseEntity.ok()
+                                        .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                                        .body(value));
+    }
+
+    private void requireAdmin(Authentication auth) {
+        if (auth == null || !auth.isAuthenticated())
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        if (auth.getAuthorities().stream().noneMatch(a -> "ROLE_ADMIN".equals(a.getAuthority())))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "仅全局管理员可查看BI同步状态。");
     }
 }

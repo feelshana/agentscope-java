@@ -119,6 +119,8 @@
 .kd-edit-row .kw-actions { justify-content:flex-end; }
 .kd-notice { display:flex; gap:9px; padding:12px 15px; border-radius:12px; background:#eeedf6; color:var(--da-text-2); font-size:12px; line-height:1.8; margin:0 0 16px; }
 .kd-notice .da-icon { flex:none; margin-top:3px; }.kd-notice.success { background:#eaf4ee; color:#24754e; }
+.kd-save-notice { align-items:center; flex-wrap:wrap; justify-content:space-between; gap:10px 18px; }
+.kd-save-notice>span { flex:1 1 280px; min-width:0; }.kd-save-notice>.da-btn { flex:none; margin-left:auto; }.kd-save-notice>.da-btn .da-icon { margin-top:0; }
 .kd-field-popover { position:fixed; z-index:1100; box-sizing:border-box; width:min(360px,calc(100vw - 24px)); max-height:min(320px,calc(100dvh - 24px)); overflow:auto; margin:0; padding:18px; border:1px solid var(--da-border); border-radius:15px; background:white; box-shadow:0 6px 24px #29204024; color:var(--da-text); font:13px/1.7 var(--da-font); }
 .kd-field-popover header { display:flex; align-items:center; justify-content:space-between; gap:12px; }.kd-field-popover strong { min-width:0; overflow-wrap:anywhere; }.kd-field-popover code { font:12px/1.7 Consolas,monospace; color:var(--da-text-2); overflow-wrap:anywhere; }.kd-field-popover p { white-space:pre-wrap; overflow-wrap:anywhere; margin:8px 0 0; }.kd-field-popover .da-icon { width:15px; height:15px; }.kd-field-popover:focus { outline:none; }.kd-field-popover button:focus-visible { outline:2px solid var(--da-primary); outline-offset:2px; }
 .kd-technical { display:grid; grid-template-columns:minmax(0,1fr) 290px; gap:16px; align-items:stretch; }

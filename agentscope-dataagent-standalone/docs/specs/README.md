@@ -8,6 +8,8 @@ spec 是一页纸的需求与验收标准，写代码之前先写（模板：[00
 
 ## 进行中
 
+- [127 资料同步草稿与双同步任务观测](127-metadata-draft-and-bi-task-observation.md)：已授权本地实施，待用户运行验收；不提交、push或部署。
+
 - [126 全局管理员与帮助引导设计落地](126-admin-and-help-ios-design.md)：指定HTML已落地，本地构建/回归及隔离浏览器验证通过，待用户试用。
 
 - [125 知识库详情与用户对话历史设计落地](125-knowledge-details-and-history-design.md)：用户已确认 HTML，本地实施及隔离验证完成，待重启后试用。

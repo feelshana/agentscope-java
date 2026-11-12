@@ -23,7 +23,7 @@ export default function DatasetDetailPage() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
   const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState<{ text: string; modeling?: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState('');
   const [editField, setEditField] = useState<DatasetColumn | null>(null);
@@ -41,7 +41,7 @@ export default function DatasetDetailPage() {
     const current = ++generation.current;
     const controller = new AbortController();
     setDataset(null); setPreview(null); setCanManage(false); setLoading(true); setError(''); setBusy(false); setPreviewError('');
-    setTab('preview'); setEditField(null); setDescriptionEdit(false); setInfo(null); setSearch(''); setMessage('');
+    setTab('preview'); setEditField(null); setDescriptionEdit(false); setInfo(null); setSearch(''); setMessage(null);
     getGroupDetail(groupId, controller.signal).then(detail => {
       if (current !== generation.current) return;
       setGroupName(detail.group.name); setCanManage(detail.group.canManage);
@@ -105,14 +105,14 @@ export default function DatasetDetailPage() {
     try {
       const updated = await updateColumns(dataset.id, [{ name: editField.name, description }]);
       if (current !== generation.current) return;
-      setDataset(updated); setEditField(null); setMessage('字段资料已保存。语义模型中的业务口径请在建模工作台核对后发布。');
+      setDataset(updated); setEditField(null); setMessage({ text: '字段资料已保存。语义模型中的业务口径请在建模工作台核对后发布。', modeling: true });
     } catch (e) { if (current === generation.current) setError((e as Error).message); }
     finally { if (current === generation.current) setBusy(false); }
   }
   async function saveDescription() {
     if (!dataset || busy) return;
     setBusy(true); setError(''); const current = generation.current;
-    try { const result = await updateDatasetDescription(dataset.id, descriptionDraft); if (current === generation.current) { setDataset(result); setDescriptionEdit(false); setMessage('数据集描述已保存'); } }
+    try { const result = await updateDatasetDescription(dataset.id, descriptionDraft); if (current === generation.current) { setDataset(result); setDescriptionEdit(false); setMessage({ text: '数据集说明已保存。语义模型中的业务口径请在建模工作台核对后发布。', modeling: true }); } }
     catch (e) { if (current === generation.current) setError((e as Error).message); }
     finally { if (current === generation.current) setBusy(false); }
   }
@@ -124,7 +124,7 @@ export default function DatasetDetailPage() {
       if (current !== generation.current) return;
       setDataset(result);
       const nextPreview = await getPreview(dataset.id, 20);
-      if (current === generation.current) { setPreview(nextPreview); setMessage('样本已刷新，业务模型重新发布后用于问数'); }
+      if (current === generation.current) { setPreview(nextPreview); setMessage({ text: '样本已刷新，业务模型重新发布后用于问数' }); }
     } catch (e) { if (current === generation.current) setError((e as Error).message); }
     finally { if (current === generation.current) setBusy(false); }
   }
@@ -149,7 +149,7 @@ export default function DatasetDetailPage() {
           : <form className="kd-description-form" onSubmit={e => { e.preventDefault(); void saveDescription(); }}><label>业务说明<textarea className="da-input" autoFocus rows={3} maxLength={10000} disabled={busy} value={descriptionDraft} onChange={e => setDescriptionDraft(e.target.value)} /></label><div className="kw-actions"><button type="button" className="da-btn" disabled={busy} onClick={() => { if (abandon()) setDescriptionEdit(false); }}>取消</button><button className="da-btn da-btn-primary" disabled={busy}>保存修改</button></div></form>}
       </div><div className="kw-actions">{canManage && dataset?.origin === 'datasource' && <button className="da-btn" disabled={busy} onClick={() => void refreshSample()}><Icon name="refresh" size="sm" />{busy ? '处理中…' : '刷新样本'}</button>}</div></header>
       {dataset?.origin === 'datasource' && <div className="kd-notice" role="status"><Icon name="info" size="sm" /><span>{dataset.sampling?.status === 'SUCCESS' ? `已采样 ${dataset.sampling.sampledRows} 行，仅为观察值，非完整枚举；采集时间：${new Date(dataset.sampling.sampledAt).toLocaleString('zh-CN')}` : dataset.sampling?.status === 'FAILED' ? '采样失败，已保留表结构，可手动重试' : dataset.sampling?.status === 'DISABLED' ? '采样已关闭' : '尚无有效采样摘要'}。总行数未统计。</span></div>}
-      {error && !editField && <div className="kw-alert" role="alert">{error}</div>}{message && <div className="kd-notice success" role="status">{message}</div>}
+      {error && !editField && <div className="kw-alert" role="alert">{error}</div>}{message && <div className="kd-notice success kd-save-notice" role="status"><span>{message.text}</span>{message.modeling && canManage && dataset && <button type="button" className="da-btn da-btn-sm da-btn-primary" disabled={busy} onClick={() => { if (abandon()) navigate(`/configure/modeling/${encodeURIComponent(groupId)}?asset=semantic&view=graph`); }}>去建模核对<Icon name="chevron" size="sm" /></button>}</div>}
       {dataset && <><div className="kd-tabline"><div className="kd-tabs" role="tablist" aria-label="数据集信息">{([{ key: 'preview', title: '数据预览' }, { key: 'fields', title: '字段信息' }, { key: 'technical', title: '技术信息' }] as const).map(t => <button key={t.key} id={`kd-tab-${t.key}`} role="tab" aria-selected={tab === t.key} aria-controls="kd-panel" onClick={() => switchTab(t.key)}>{t.title}{t.key === 'fields' && <small>{dataset.columns.length}</small>}</button>)}</div>
         {tab !== 'technical' && <><span className="kd-meta">{tab === 'preview' ? `当前样本 ${preview?.rows.length ?? 0} 行` : `共 ${dataset.columns.length} 个字段`}</span><label className="kw-search"><Icon name="search" size="sm" /><input aria-label={tab === 'preview' ? '在当前样本中查找' : '搜索字段'} placeholder={tab === 'preview' ? '在当前样本中查找' : '搜索字段名称、原字段名或说明'} disabled={!!editField || descriptionEdit} value={search} onChange={e => setSearch(e.target.value)} /></label></>}
       </div><section id="kd-panel" role="tabpanel" aria-labelledby={`kd-tab-${tab}`}>

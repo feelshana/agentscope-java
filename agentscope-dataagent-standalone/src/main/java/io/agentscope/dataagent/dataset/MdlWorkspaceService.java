@@ -79,6 +79,29 @@ public class MdlWorkspaceService {
         }
     }
 
+    /** Keep metadata writes and their rollback protected until the caller's transaction ends. */
+    <T> T withWorkspaceTransactionLock(String groupId, Supplier<T> action) {
+        if (!org.springframework.transaction.support.TransactionSynchronizationManager
+                .isSynchronizationActive()) return withWorkspaceLock(groupId, action);
+        ReentrantLock lock = workspaceLocks.computeIfAbsent(groupId, key -> new ReentrantLock());
+        lock.lock();
+        org.springframework.transaction.support.TransactionSynchronizationManager
+                .registerSynchronization(
+                        new org.springframework.transaction.support.TransactionSynchronization() {
+                            @Override
+                            public int getOrder() {
+                                return Integer.MAX_VALUE;
+                            }
+
+                            @Override
+                            public void afterCompletion(int status) {
+                                lock.unlock();
+                            }
+                        });
+        if (operations != null) operations.requireActive(groupId);
+        return action.get();
+    }
+
     /**
      * Creates the official workspace skeleton when missing, then converges {@code
      * wren_project.yml} to the platform-rendered content (group id + datasource). The init never

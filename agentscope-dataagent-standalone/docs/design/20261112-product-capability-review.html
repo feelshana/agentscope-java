@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>从「能问数」到「离不开」· dataagent 产品功能设计评审</title>
+<style>
+:root{
+  --canvas:#f5f5f7; --card:#ffffff; --ink:#1d1d1f; --ink2:#515154; --ink3:#86868b;
+  --tint:#6654ce; --tint-soft:#f0edff; --tint-line:#d9d2ff;
+  --line:#e8e8ed; --warn:#b26a00; --warn-soft:#fff6e6; --warn-line:#f2d9a8;
+  --good:#1d7a5a; --good-soft:#eaf7f1; --good-line:#bfe6d5;
+  --bad:#b23b3b; --bad-soft:#fff0f0; --bad-line:#f2c9c9;
+  --radius:18px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--canvas);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  font-size:15px;line-height:1.75;-webkit-font-smoothing:antialiased}
+a{color:var(--tint);text-decoration:none}
+.wrap{max-width:1180px;margin:0 auto;padding:0 28px 100px;display:grid;grid-template-columns:210px minmax(0,1fr);gap:44px}
+nav{position:sticky;top:0;align-self:start;padding:56px 0 40px;font-size:13px}
+nav .navtitle{color:var(--ink3);letter-spacing:.08em;margin-bottom:14px;font-size:11px}
+nav a{display:block;color:var(--ink2);padding:7px 0 7px 13px;border-left:2px solid transparent}
+nav a:hover{color:var(--tint);border-left-color:var(--tint)}
+main{padding:56px 0 0;min-width:0}
+.hero{padding:38px 40px 34px;background:var(--card);border-radius:var(--radius);border:1px solid var(--line);margin-bottom:26px}
+.eyebrow{font-size:12px;color:var(--tint);letter-spacing:.1em;margin:0 0 12px}
+h1{font-size:31px;line-height:1.35;letter-spacing:-.02em;margin:0 0 16px;font-weight:600}
+.lead{font-size:17px;color:var(--ink2);margin:0;line-height:1.8}
+.lead strong{color:var(--ink);font-weight:600}
+.meta{margin-top:22px;padding-top:18px;border-top:1px solid var(--line);font-size:12px;color:var(--ink3);display:flex;flex-wrap:wrap;gap:20px}
+section{margin:0 0 42px;scroll-margin-top:24px}
+h2{font-size:21px;font-weight:600;letter-spacing:-.01em;margin:0 0 6px;padding-top:8px}
+h2 .num{color:var(--tint);font-size:13px;margin-right:10px;font-variant-numeric:tabular-nums}
+.sub{color:var(--ink3);font-size:13px;margin:0 0 22px}
+h3{font-size:16px;font-weight:600;margin:26px 0 10px}
+p{margin:0 0 14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:26px 30px;margin-bottom:16px}
+.callout{background:var(--tint-soft);border:1px solid var(--tint-line);border-radius:14px;padding:18px 22px;margin:18px 0;font-size:14px;line-height:1.8}
+.callout.warn{background:var(--warn-soft);border-color:var(--warn-line)}
+.callout.good{background:var(--good-soft);border-color:var(--good-line)}
+.baseline{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px;margin:18px 0}
+.baseline .b{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px}
+.baseline .b .k{font-size:11px;color:var(--tint);letter-spacing:.06em;margin-bottom:8px}
+.baseline .b .t{font-size:14px;font-weight:600;margin-bottom:6px;line-height:1.5}
+.baseline .b .d{font-size:12.5px;color:var(--ink2);line-height:1.7}
+.gap{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:18px;overflow:hidden}
+.gap>.top{padding:22px 28px 18px;border-bottom:1px solid var(--line)}
+.gap>.top .tag{display:inline-block;font-size:11px;color:var(--tint);background:var(--tint-soft);border-radius:6px;padding:3px 9px;margin-bottom:10px;letter-spacing:.04em}
+.gap>.top h3{margin:0 0 8px;font-size:18px}
+.quote{background:var(--canvas);border-left:3px solid var(--tint-line);padding:12px 16px;border-radius:0 10px 10px 0;font-size:13.5px;color:var(--ink2);margin:12px 0 0;line-height:1.8}
+.gap>.body{padding:20px 28px 24px}
+.row{display:grid;grid-template-columns:88px minmax(0,1fr);gap:14px;padding:11px 0;border-bottom:1px dashed var(--line);font-size:13.5px;line-height:1.75}
+.row:last-child{border-bottom:0}
+.row .lbl{color:var(--ink3);font-size:12px;padding-top:2px}
+.row .val{color:var(--ink2)}
+.row .val strong{color:var(--ink);font-weight:600}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;background:#f2f2f6;color:#4a4266;padding:1px 5px;border-radius:4px}
+ul{margin:8px 0 14px;padding-left:20px}
+li{margin:5px 0;color:var(--ink2);font-size:13.5px;line-height:1.75}
+li strong{color:var(--ink)}
+table{width:100%;border-collapse:collapse;font-size:13px;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin:14px 0}
+th{background:#fafafd;text-align:left;padding:12px 14px;font-weight:600;color:var(--ink2);font-size:12px;border-bottom:1px solid var(--line)}
+td{padding:12px 14px;border-bottom:1px solid var(--line);color:var(--ink2);vertical-align:top;line-height:1.7}
+tr:last-child td{border-bottom:0}
+td strong{color:var(--ink)}
+.pill{display:inline-block;font-size:11px;padding:2px 8px;border-radius:20px;font-weight:600;white-space:nowrap}
+.p0{background:#fdeaea;color:#a32d2d}
+.p1{background:#fff3dd;color:#96620a}
+.p2{background:#e9f1ff;color:#185fa5}
+.p3{background:#f0f0f4;color:#6b6b70}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:16px 0}
+.mini{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px}
+.mini h4{margin:0 0 10px;font-size:14px;font-weight:600}
+.mini p,.mini li{font-size:13px}
+.mini ul{padding-left:18px;margin-bottom:0}
+.check{list-style:none;padding:0;margin:16px 0}
+.check li{display:grid;grid-template-columns:26px minmax(0,1fr);gap:12px;padding:14px 0;border-bottom:1px solid var(--line);font-size:14px}
+.check li:last-child{border-bottom:0}
+.check .n{width:24px;height:24px;border-radius:8px;background:var(--tint-soft);color:var(--tint);font-size:12px;display:flex;align-items:center;justify-content:center;font-weight:600}
+.src{font-size:12px;color:var(--ink3);line-height:1.9}
+.src a{word-break:break-all}
+.foot{margin-top:36px;padding-top:20px;border-top:1px solid var(--line);font-size:12px;color:var(--ink3)}
+@media(max-width:900px){.wrap{grid-template-columns:1fr;gap:0;padding:0 18px 60px}nav{display:none}main{padding-top:24px}.hero{padding:26px 22px}.two{grid-template-columns:1fr}.gap>.top,.gap>.body{padding-left:20px;padding-right:20px}.row{grid-template-columns:1fr;gap:2px}}
+@media print{body{background:#fff}nav{display:none}.wrap{display:block;max-width:none;padding:0}.card,.gap,.hero{break-inside:avoid;box-shadow:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav>
+  <div class="navtitle">目录</div>
+  <a href="#s0">一句话结论</a>
+  <a href="#s1">01 · 校准参照系</a>
+  <a href="#s2">02 · 六个体验断点</a>
+  <a href="#s2a">　断点 1　会进化，却看不见</a>
+  <a href="#s2b">　断点 2　答错了纠正不了</a>
+  <a href="#s2c">　断点 3　发布后没人知道变差</a>
+  <a href="#s2d">　断点 4　只有打开才有用</a>
+  <a href="#s2e">　断点 5　拿到了数，带不走</a>
+  <a href="#s2f">　断点 6　管理员看不清</a>
+  <a href="#s3">03 · 小但决定手感</a>
+  <a href="#s4">04 · 优先级与路线</a>
+  <a href="#s5">05 · 用什么验收</a>
+  <a href="#s6">附：对标来源</a>
+</nav>
+
+<main>
+<div class="hero" id="s0">
+  <p class="eyebrow">产品功能设计评审 · 2026-11-12</p>
+  <h1>从「能问数」到「离不开」</h1>
+  <p class="lead">我们不缺能力，缺的是<strong>把能力交到用户手里、并让它在用户手里长大</strong>的那一层产品。今天的产品是一条线性流水线：上传 → 建模 → 发布 → 问数。而 2026 年顶级 agent 产品是一个复利飞轮：问 → 教 → 沉淀 → 复用 → 主动找人。建模工作台已经把「造」这一段打磨得相当扎实；真正决定用户是否爱用的，是流水线之后剩下的部分。</p>
+  <div class="meta">
+    <span>范围：agentscope-dataagent-standalone 全产品（不含建模工作台内部交互）</span>
+    <span>依据：本地源码盘点 + 2026 年公开产品资料</span>
+    <span>状态：讨论稿，未实施</span>
+  </div>
+</div>
+
+<div class="callout warn">
+<strong>最尖锐的一条事实。</strong> README 写着「让公司里每位数据分析师都有一个属于自己的数据 agent……越用越顺手」，并把「多人并行进化」「能力市场」「三通道」列为三大设计支点。但主导航只有 5 个入口（新建对话 / 知识库 / 语义建模 / 例行任务 / 更多），另有 <strong>25 条以上已注册路由没有任何可点入口</strong>：技能、子代理、工作区、能力市场提交与审批、通道、用量、用户资料，全都是「有代码、有 API、用户摸不到」。也就是说，<strong>我们最独特、最像顶级 agent 产品的差异化能力，恰恰是用户完全触碰不到的</strong>。用户看到的是一个 ChatBI，不是会长大的 agent。
+</div>
+
+<section id="s1">
+<h2><span class="num">01</span>先把参照系校准</h2>
+<p class="sub">2026 年这个赛道的共识变了：模型能力不再是瓶颈，也不是差异化来源。差距在模型周围。</p>
+<p>把 Databricks Genie One、Snowflake Cortex Agents / CoWork、Microsoft Fabric Data Agent、Google Looker Conversational Analytics、ThoughtSpot Spotter、以及国内快手 / FineBI Next / 阿里云 DataWorks 的公开能力与落地数据放在一起，能抽出五条几乎无争议的基线。它们决定了用户「敢不敢用」和「会不会用第二次」。</p>
+<div class="baseline">
+  <div class="b"><div class="k">基线 1</div><div class="t">信任是被设计出来的功能</div><div class="d">可验证、可挑战、可撤销、可追溯。用户不要求完美，要求看得懂；一个偶尔出错但能解释怎么算的 agent，比黑盒的正确更让人放心。</div></div>
+  <div class="b"><div class="k">基线 2</div><div class="t">复用是核心策略</div><div class="d">快手沉淀上百业务 Skill、Skill 市场 2000+，周人均对话 55 次、分析师渗透率超 80%、NPS 73.5。高频不是功能多，是「同类问题第二次不用从头开始」。</div></div>
+  <div class="b"><div class="k">基线 3</div><div class="t">主动性是留存锚点</div><div class="d">不问也给：自动发现 KPI 异常 → 下钻归因 → 条件触发推送到 IM。停止使用后价值会消失的产品，才不会被弃用。Tableau Pulse 只盯预设指标、阈值告警，被普遍评为「被动」。</div></div>
+  <div class="b"><div class="k">基线 4</div><div class="t">入口在用户已经在的地方</div><div class="d">看板旁的「点我问更细」、Slack / Teams / 钉钉 / 飞书里的卡片与追问、从已验证答案直接起一段对话。不是新建一个网站让用户记住。</div></div>
+  <div class="b"><div class="k">基线 5</div><div class="t">评测是发布门禁，不是仪表盘</div><div class="d">固定问题集 + gold SQL，模型 / schema / 语义层一变就重跑。有自动化评测的 agent 12 个月回滚率 9%，没有的 47%。生产 trace 反过来变成新的回归用例。</div></div>
+</div>
+<div class="callout">
+<strong>一条可直接拿来验收的判据。</strong> 行业里把「把 NL2SQL / 出图 / 跑代码重新包装成 agent」叫 agent washing。真正的测试是：当某个 KPI 异常波动，平台能否<strong>不待用户提问</strong>就检测到、分解归因、量化各因素贡献，并把解释送到人面前。按这个标准，我们今天还是「问了才答」。
+</div>
+</section>
+
+<section id="s2">
+<h2><span class="num">02</span>六个让用户「用着用着就不想用」的断点</h2>
+<p class="sub">每一条都写成真实用户场景；每条都标明「我们其实已经有什么」——多数改进不需要造新后端。</p>
+
+<div class="gap" id="s2a">
+  <div class="top">
+    <span class="tag">断点 1 · 最高优先级</span>
+    <h3>说好的「越用越顺手」，我既看不见，也教不了</h3>
+    <div class="quote">小李用了三周，纠正过五次「GMV 要剔除测试订单」。第四周问同类问题，agent 又答错了。他不知道自己有没有教过它、教了什么、能不能撤回，也不知道同事那份好用的技能去哪领——最后他回去写 SQL 了。</div>
+  </div>
+  <div class="body">
+    <div class="row"><div class="lbl">现状</div><div class="val">私有 workspace / <code>MEMORY.md</code> / skills / subagents 后端齐备；<code>/workspace</code> 是只读文件树且为孤儿页；能力市场提交端 <code>ContributionsPage</code> 与审批端 <code>ApprovalsPage</code> 均为孤儿路由；<code>subagents-enabled=false</code> 默认关闭。用户没有任何一个界面能回答「我的 agent 现在会什么」。</div></div>
+    <div class="row"><div class="lbl">对标</div><div class="val">OpenAI 内部数据 agent 的 continuously learning memory（用户纠正会进入后续上下文）；快手三层 Skill 体系与 Skill 市场；FineBI Next 的「记忆 + Skill，越用越懂企业」；ThoughtSpot Memory 保证业务定义在每次追问中一致。</div></div>
+    <div class="row"><div class="lbl">已有基础</div><div class="val"><code>OverlayFilesystem</code>、<code>MarketContributionController</code> / <code>ContributionApprovalController</code> 全流程、<code>SkillsWorkspacePanel</code> / <code>SkillsMarketplacesPanel</code>、<code>SubagentPanel</code>、<code>AgentWorkspaceController</code>。<strong>几乎是纯前端接线工作。</strong></div></div>
+    <div class="row"><div class="lbl">建议</div><div class="val"><strong>新增「我的 Agent」作为一级入口</strong>，只做三件事：<br>① <strong>它学会了什么</strong>——列出记忆 / 技能 / 子进程，每条标明「哪次对话、谁教的」，可停用、可编辑、可删除；<br>② <strong>教它一句</strong>——用自然语言直接写规则，落成一条可撤销的记忆或技能，下次问同类问题时显示「已按你的口径修正」；<br>③ <strong>能力市场</strong>——浏览共享能力、安装、提名自己的贡献、查看审批状态。<br>关键是<strong>可见 + 可撤销</strong>：可逆性是信任设计里杠杆最高的一个动作，也把 README 的三大支点真正变成产品。</div></div>
+  </div>
+</div>
+
+<div class="gap" id="s2b">
+  <div class="top">
+    <span class="tag">断点 2</span>
+    <h3>答错了只能重开，既纠正不了，也回不来</h3>
+    <div class="quote">「这数不对。」——用户点了踩，什么也没发生。想改问法只能手动复制原问题重发；想说清楚哪里不对，没有地方可说。</div>
+  </div>
+  <div class="body">
+    <div class="row"><div class="lbl">现状</div><div class="val"><code>AnswerFeedback</code> 点赞会把问答存成 SQL 问答对（藏在建模 coach tab 的 <code>&lt;details&gt;</code>「全部已确认问答」里），点踩仅记录；无分支、无撤销、无「从这一步重来」；会话标题是首问截断 40 字。<code>20261101-prelaunch-polish-candidates.md</code> 已提出「失败后修改问题再问」，但只到输入框回填。</div></div>
+    <div class="row"><div class="lbl">对标</div><div class="val">允许挑战假设而非单向接受；反馈带原因分类（口径错 / 数字错 / 没答全 / 结论越界）；错误按五类归因（语义缺失、数据异常、查询错误、权限错误、分析错误）分别路由去修，而不是笼统记「agent 答错了」；每周复盘 bad case，把生产失败变成回归用例。</div></div>
+    <div class="row"><div class="lbl">建议</div><div class="val">把点踩做成<strong>有落点的动作</strong>：选「哪里不对」→ 自动生成一条<strong>待复核的口径修订</strong> → 走已有的建模确认与发布路径 → 发布后回到原会话提示「已修好，要不要重问一次」。这样现有的「问答对 + 确认流 + 发布」三件孤立能力被串成一个闭环，也顺带兑现了 <code>20261105-answer-evidence-proposal.md</code> 第三步「反馈定位到具体结论 / 口径」的设想。</div></div>
+  </div>
+</div>
+
+<div class="gap" id="s2c">
+  <div class="top">
+    <span class="tag">断点 3</span>
+    <h3>发布之后，没人知道它有没有悄悄变差</h3>
+    <div class="quote">业务方最怕的不是「答不出来」，是「自信地答错」。改了一次口径，上周还对的一批问题这周全偏了，直到有人拿去开会才发现。</div>
+  </div>
+  <div class="body">
+    <div class="row"><div class="lbl">现状</div><div class="val">产品内无评测 / 回归 / 准确率看板（前端源码无相关文案）；离线评测素材散在 <code>docs/fixtures/answer-quality/</code>、<code>docs/fixtures/wren-native/</code>，验收靠 70+ 份人工报告。语义模型有 draft / published / compare 与 <code>draft/revert</code>、<code>draft/discard</code>，但<strong>没有「回滚到历史已发布版本」的用户入口</strong>，published 只能只读查看。</div></div>
+    <div class="row"><div class="lbl">对标</div><div class="val">Databricks Genie Benchmarks 用固定测试问题集测准确率（含 Agent mode）、Trusted assets / verified queries；Snowflake 返回 <code>verified_query_used</code> 含确认人与时间；回归是发布门禁。运营指标看的是有效回答率、歧义主动拦截率、用户继续追问率、高频失败问题，不是 DAU 和提问数。</div></div>
+    <div class="row"><div class="lbl">建议</div><div class="val"><strong>「发布前体检」</strong>：发布 MDL 前自动跑一遍已确认问答（现成的 golden set），明确显示「本次改动影响 12 个已确认问题，2 个结果发生变化，是否预期」，未通过则阻断发布；再补一个<strong>一键回滚到 vN-1</strong>。中期加轻量质量看板，并<strong>把「委派深度」纳入监测</strong>——用户开始只问「这表有几行」这类查表问题，说明 agent 已退化成搜索框，这是比使用量下降更早的流失信号。</div></div>
+  </div>
+</div>
+
+<div class="gap" id="s2d">
+  <div class="top">
+    <span class="tag">断点 4 · 性价比最高</span>
+    <h3>它只在我想起来打开它的时候才有用</h3>
+    <div class="quote">周一早上老板问「上周华东怎么掉了」，用户才知道要来问一次。产品从没主动找过他。</div>
+  </div>
+  <div class="body">
+    <div class="row"><div class="lbl">现状</div><div class="val">主导航「例行任务」整页占位，明写「当前版本暂不支持创建和执行例行任务」（<code>ScheduledTasksPage.tsx:8,16</code>）。但 <code>ScheduledTaskController</code> 是完整 CRUD，VO 已含 <code>email</code> / 频率 / 生效日 / <code>runCount</code>；<code>OutboundController</code>、<code>WebhookCallbackController</code>、通道 API 都在，只缺执行器与前端。无订阅、无预警、无推送。</div></div>
+    <div class="row"><div class="lbl">对标</div><div class="val">ThoughtSpot 的 KPI 监控 + 异常检测 + 条件触发（「only sends when the data warrants it」，避免变成骚扰）；FineBI Next 日报周报定时推钉钉 / 企微 / 飞书、按角色分发；Tableau Pulse 摘要 digest；场景 Agent 按周主动做经营体检并下钻归因。</div></div>
+    <div class="row"><div class="lbl">建议</div><div class="val">把「例行任务」从占位改成<strong>「指标守望」</strong>，定位别做成「定时重跑一句话」：选指标 → 设关注条件（异常波动 / 超阈值 / 数据未更新）→ 结果送钉钉 / 企微 / Webhook → <strong>只有条件成立才推送</strong>，且推送里带一句归因与「点进去继续问」的深链。这一条几乎把现有后端件全部用上，却直接命中「agent washing 检验标准」，是让产品从「工具」变成「同事」的分水岭。</div></div>
+  </div>
+</div>
+
+<div class="gap" id="s2e">
+  <div class="top">
+    <span class="tag">断点 5</span>
+    <h3>我拿到了一个数，但没法拿去开会</h3>
+    <div class="quote">答案很好，想发给同事看，只能截图。同事想追问一句，得自己重新建库、重新问。</div>
+  </div>
+  <div class="body">
+    <div class="row"><div class="lbl">现状</div><div class="val">可下载 CSV、复制答案、看图、预览 Python 产物；但<strong>无会话 / 回答分享链接、无评论讨论、无导出成汇报材料</strong>。后端反而已有 <code>AgentAclService</code> / <code>AgentShareGrant</code> / <code>AgentShareEntity</code> 与 <code>GRANT_SHARE</code> 审计事件，前端只用到「知识库成员与权限」；精确搜索「分享 / 协作 / 共享链接」无功能命中。</div></div>
+    <div class="row"><div class="lbl">对标</div><div class="val">ThoughtSpot Connected Slides 把 Liveboard 推进汇报材料、从已验证答案直接开一段 Spotter 对话；Slack / Teams 里渲染可交互卡片；一句被反复引用的产品判断是「让数据在协同流程里找人」，而不是「人在系统里找数据」。</div></div>
+    <div class="row"><div class="lbl">建议</div><div class="val">答案级「分享」：生成<strong>带权限约束的只读链接</strong>（复用现有 ACL 与撤权策略，需明确撤权后历史证据可见性——回答依据提案已把这条列为待决策），接收方可在同一上下文继续追问；再加「推送到群」复用 <code>OutboundController</code>。这是最便宜的自然获客与日活杠杆，也让一次分析变成可复用团队资产。</div></div>
+  </div>
+</div>
+
+<div class="gap" id="s2f">
+  <div class="top">
+    <span class="tag">断点 6 · B 端一票否决项</span>
+    <h3>管理员看不清，也管不住</h3>
+    <div class="quote">采购方问「这个月花了多少、谁在用、答得准不准」，现场打不开一个可信的页面。</div>
+  </div>
+  <div class="body">
+    <div class="row"><div class="lbl">现状</div><div class="val"><code>UsagePage</code> / <code>admin/UsagePage</code> 调用 <code>/api/admin/usage/*</code>，后端<strong>无对应 Controller 映射</strong>，页面本身也是孤儿路由；无 token / 成本 / 配额 / 预算告警。两套 Admin 导航并存（<code>AdminAppShell</code> 只被 <code>ApprovalsPage</code> 引用），中英混排，侧栏高亮指向未注册路径 <code>/admin/global-administrators</code>；<code>ScheduledTaskController:90</code> 有硬编码 <code>createdBy = "当前用户"</code>。</div></div>
+    <div class="row"><div class="lbl">对标</div><div class="val">2026 年 agent 观测的标配是 OpenTelemetry GenAI span + 成本可见性（按 agent / 按任务，不只是按 token）+ 在线评测与告警；审计要能证明「这个动作被允许、谁批准的」。评测 / 治理 / 集成三堵墙，是 92% 失败部署的真正死因。</div></div>
+    <div class="row"><div class="lbl">建议</div><div class="val">先<strong>止血</strong>：修死链与假数据（这是信任底线，比任何新功能都急）、统一 Admin 导航与语言、清掉或显式标注 25 条孤儿路由。再做成本与额度：按用户 / 知识库统计 token、耗时与查询量，超预算告警。中长期把跨会话 trace 做成可查的用户界面——现在只有单次工具检查器与单轮执行摘要。</div></div>
+  </div>
+</div>
+</section>
+
+<section id="s3">
+<h2><span class="num">03</span>小，但决定手感</h2>
+<p class="sub">这些不改变能力版图，却决定用户第一周会不会回来。多数在已有提案里出现过，值得从「候选」升为「必做」。</p>
+<div class="two">
+  <div class="mini"><h4>会话标题自动命名</h4><p>现在标题 = 首问截断 40 字，侧栏一串日期前缀且互相重复。顶级产品用模型生成短标题。历史会话是复用的入口，标题不可用等于历史不可用。</p></div>
+  <div class="mini"><h4>澄清优先于猜测</h4><p>「看下收入」应当反问「毛利还是净额？」，而不是编一个看起来对的数。Snowflake 把意图分类放在生成链最前面；歧义主动拦截率是核心运营指标。</p></div>
+  <div class="mini"><h4>失败要有路由出口</h4><p>不是「重试」，而是给具体下一步：改问题再问 / 换知识库 / 交给人工，并保留已完成的部分状态。检测停滞、说出原因、给出出口，是 agent UX 的基本功。</p></div>
+  <div class="mini"><h4>数据新鲜度与版本</h4><p>每个答案标「数据截至 X · 已发布 vN」。<code>20261105</code> 提案已如实记录：当前查询时的发布版本与源数据更新时间<strong>并未随回执记录</strong>，原型只能显示「未知」。这是信任的最小必补项。</p></div>
+  <div class="mini"><h4>速度感</h4><p>显示真实阶段与已耗时、支持「后台跑完通知我」。Microsoft 2026 年把 Data Agent 端到端响应压了 50% 才让对话「感觉快」。排队提示有了，但用户没有预期，也没有离开的余地。</p></div>
+  <div class="mini"><h4>零 / 单库约束</h4><p>每轮只能选一个知识库，跨库问题直接不可答；对标 Genie One 已可跨 space 并结合 SharePoint / Drive。属架构级，列中长期，但要在产品里<strong>诚实说明边界</strong>，别让用户以为是 agent 不够聪明。</p></div>
+</div>
+</section>
+
+<section id="s4">
+<h2><span class="num">04</span>优先级：先接回来，再补信任，最后拉开差距</h2>
+<p class="sub">按「用户价值 × 现有基础」排，而不是按功能大小排。刻意把「复用已有后端」放在最前，因为它性价比最高。</p>
+<table>
+<thead><tr><th style="width:66px">优先级</th><th style="width:190px">动作</th><th>为什么现在做</th><th style="width:150px">现有基础</th></tr></thead>
+<tbody>
+<tr><td><span class="pill p0">P0 接线</span></td><td><strong>「我的 Agent」</strong>：学到的 / 教一句 / 能力市场</td><td>把 README 的核心承诺变成可触摸的产品；不写新后端，直接决定用户是否觉得这是「agent 产品」而非 ChatBI。</td><td>OverlayFS、贡献审批、技能面板全部就绪</td></tr>
+<tr><td><span class="pill p0">P0 接线</span></td><td><strong>「例行任务」→「指标守望」</strong></td><td>唯一能让产品「不问也给」的入口；后端 CRUD + 出站 + 通道都在，缺执行器与前端页。</td><td>ScheduledTask / Outbound / Webhook</td></tr>
+<tr><td><span class="pill p0">P0 止血</span></td><td><strong>修死链与假数据</strong>：用量端点、Admin 导航、25 条孤儿路由、硬编码</td><td>采购与管理员的信任底线；假数据被发现的代价远大于补齐它的成本。</td><td>页面已在，端点缺失</td></tr>
+<tr><td><span class="pill p1">P1 信任</span></td><td><strong>反馈闭环</strong>：点踩带原因 → 待复核口径 → 发布 → 回会话提示</td><td>用户纠正一次、下次不重犯，是「越用越顺手」的最小可验证形态。</td><td>问答对 / 确认流 / 发布路径</td></tr>
+<tr><td><span class="pill p1">P1 信任</span></td><td><strong>发布前体检 + 一键回滚</strong></td><td>已确认问答就是现成 golden set；阻断「自信地答错」，也让管理员敢放开使用。</td><td>问题集 / draft-published 双态</td></tr>
+<tr><td><span class="pill p1">P1 信任</span></td><td><strong>查看依据（按 20261105 提案落地）</strong> + 数据新鲜度</td><td>已有完整设计与原型，缺的是服务端证据契约；建议与体检合并为一个「可信」里程碑。</td><td>回执解析 / CSV / 引用面板 / 原型</td></tr>
+<tr><td><span class="pill p1">P1 分发</span></td><td><strong>答案级分享与推送</strong></td><td>把一次性回答变成团队资产，最低成本的日活与自然传播。</td><td>AgentAclService / ShareGrant / Outbound</td></tr>
+<tr><td><span class="pill p2">P2 运营</span></td><td><strong>质量与成本看板</strong>：有效回答率、追问率、委派深度、按任务成本</td><td>让团队有办法「持续运营」而不是靠人工验收报告；也是 P1 各闭环的效果度量。</td><td>UsageEvent / ActivityEvent / 审计日志</td></tr>
+<tr><td><span class="pill p2">P2 体验</span></td><td><strong>03 节六项</strong>：自动命名、澄清、失败出口、新鲜度、速度感、边界说明</td><td>第一周留存的关键，单项成本低，可随各里程碑顺手带出。</td><td>多数已有候选方案</td></tr>
+<tr><td><span class="pill p3">P3 架构</span></td><td>跨库问答、IM 内直接问数、跨会话 trace 产品化、本体</td><td>价值高但改动大，建议等 P0/P1 跑出使用数据后再定，避免凭想象排期。</td><td>部分后端能力存在</td></tr>
+</tbody>
+</table>
+<div class="callout good">
+<strong>明确不建议现在做的。</strong> ① 知识图谱（<code>AGENTS.md</code> 已注明链路停用，Controller 与 6 个 Entity 建议清理而非复活）；② 本体 / <code>OntologyChatPage</code>（孤儿页，且与 Wren-only 主线不一致）；③ 再做一份新的仪表盘原型（<code>docs/design/</code> 已有 2 份）；④ 继续打磨 iOS 质感稿（已有 5 份，视觉已不是当前瓶颈）；⑤ 为了「看起来像 agent」而堆多智能体编排——<code>subagents-enabled=false</code> 的现状下，先把单 agent 的成长闭环做出来更有说服力。
+</div>
+</section>
+
+<section id="s5">
+<h2><span class="num">05</span>别用功能数量验收，用这三个问题</h2>
+<p class="sub">建议写进下一轮 spec 的验收条件，每个都能被真实使用数据回答。</p>
+<ul class="check">
+<li><span class="n">1</span><div><strong>第三周来，能不能感觉到它比第一周更懂自己？</strong> 看得见学会了什么、能教、能撤、教完下次真的生效。这是「复利」，也是 README 那句「越用越顺手」唯一诚实的验收方式。</div></li>
+<li><span class="n">2</span><div><strong>老板在会上问「这数准吗」，用户能不能在 10 秒内给出可复核的答案？</strong> 口径、SQL / 条件、结果、数据截至时间、发布版本，一屏之内。做不到，再准也不敢进业务流程。</div></li>
+<li><span class="n">3</span><div><strong>用户一周没打开，产品有没有主动给过他一次有价值的东西？</strong> 一次异常提醒、一份条件触发的周报，就足以把「工具」变成「同事」。</div></li>
+</ul>
+<div class="callout">
+快手周人均 55 次对话、NPS 73.5，不是靠界面好看，是靠两件事：<strong>同类问题第二次不用从头开始</strong>，以及<strong>它会在我需要之前找我</strong>。我们后端已经把最难的地基（语义层、私有 workspace、贡献审批、沙箱、HITL、事件流）都打好了——现在缺的，是让用户看得见、摸得着、并因此愿意把活交给它。
+</div>
+</section>
+
+<section id="s6">
+<h2>附：对标来源与本地事实依据</h2>
+<p class="sub">公开资料为 2026 年 11 月检索所得，用于提炼设计范式，不代表本项目安装版具备对应功能；本地结论均可通过下列文件核查。</p>
+<h3>本地事实依据</h3>
+<p class="src"><code>README_zh.md:15-36,79-86</code>（产品定位与三大支点）· <code>frontend/src/main.tsx:70-142</code>（全量路由）· <code>frontend/src/components/SessionsSidebar.tsx:17-22</code>（5 个导航入口）· <code>frontend/src/pages/MorePage.tsx:10-16</code> · <code>frontend/src/pages/configure/ScheduledTasksPage.tsx:8,16</code> · <code>frontend/src/components/AnswerFeedback.tsx</code> · <code>frontend/src/components/modeling/SqlQaExamplesPanel.tsx</code> · <code>frontend/src/pages/UsagePage.tsx:33-37</code> · <code>src/main/java/.../ScheduledTaskController.java:40-170</code> · <code>web/share/{AgentAclService,AgentShareGrant}</code> · <code>web/usage/UsageStore.java</code> · <code>docs/design/20261105-answer-evidence-proposal.md</code> · <code>docs/design/20261101-prelaunch-polish-candidates.md</code> · <code>docs/specs/</code> 090-127（当前排期，未见自进化 / 评测 / 推送 / 分享相关条目）</p>
+<h3>公开对标资料</h3>
+<p class="src">
+Databricks Genie One / Agent mode GA 与 Benchmarks、Trusted assets：<a href="https://docs.databricks.com/aws/en/genie-agents/monitor/">docs.databricks.com/aws/en/genie-agents/monitor/</a>、<a href="https://docs.databricks.com/aws/en/genie-agents/tune-quality/">tune-quality</a><br>
+Snowflake Cortex Analyst <code>verified_query_used</code>：<a href="https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-analyst/rest-api">Cortex Analyst REST API</a><br>
+ThoughtSpot Spotter / Validate / 监控与条件推送：<a href="https://docs.thoughtspot.com/cloud/26.11.0.cl/spotter-validate">Validate Spotter</a>、<a href="https://www.thoughtspot.com/product/ai-analyst">AI Analyst</a>、<a href="https://www.thoughtspot.com/product//visualize">Liveboards</a><br>
+2026 Conversational Analytics 横向对比：<a href="https://eu1.hubs.ly/H0xLkKd0">Genie vs Cortex Analyst vs Fabric Data Agents</a>、<a href="https://blog.agami.ai/snowflake-cortex-analyst-vs-databricks-genie-vs-bigquery-gemini-warehouse-native-ai-compared/">warehouse-native AI compared</a>、<a href="https://fast.io/resources/best-ai-data-analysis-agents-2026/">Best AI Data Analysis Agents 2026</a><br>
+Agent 观测与评测基线（OTEL GenAI / 评测进 CI / 成本可见）：<a href="https://www.nexastack.io/blog/agent-observability-tools">Agent Observability Tools in 2026</a>、<a href="https://www.groundcover.com/learn/ai-observability-hub/llm-evaluation-tools">LLM Evaluation Tools 2026</a>、<a href="https://grow.cleverbridge.com/blog/trustworthy-agentic-analytics-raw-database-risks">Trustworthy Agentic Analytics in 2026</a><br>
+信任与 agent UX 设计：<a href="https://www.aydesign.ai/blog/how-to-design-agentic-ai-products-2026">Agentic AI products playbook</a>、<a href="https://www.aydesign.ai/blog/designing-trust-in-ai-products-2026">Designing trust in AI products</a>、<a href="https://upsolve.ai/blog/context-engineering-for-analytics">Context Engineering for Analytics（OpenAI 内部 data agent 案例）</a><br>
+国内落地与运营指标：<a href="https://www.finebi.com/blog/article/6ad811a2c1125c24d617a9cd">Data Agent 2026 八个新玩法</a>、<a href="https://aloudata.com/resources/guides/ai-data-intelligence/data-agent-production-deployment-guide">Data Agent 生产落地指南（五类错误归因与运营指标）</a>、<a href="https://www.hengshi.com/blog/data-agent-migration-guide.html">Data Agent 迁移指南（用户习惯与信任危机）</a>、快手 2026-09 技术沙龙公开指标（WAU 10,600 / 周人均 55 次 / NPS 73.5 / 2000+ Skill）<br>
+ROI 与评测覆盖率数据：Gartner Agentic AI Pulse 2026、Forrester / Deloitte 2026 相关公开综述（回滚率 9% vs 47%，评测缺口 64%）
+</p>
+<p class="foot">本文为产品功能设计讨论稿，未修改任何业务代码、未运行产品、未做竞品同题实测。所有「现状」结论来自源码静态盘点，实施前需按对应 spec / ADR 逐项核对行为。</p>
+</section>
+</main>
+</div>
+</body>
+</html>
