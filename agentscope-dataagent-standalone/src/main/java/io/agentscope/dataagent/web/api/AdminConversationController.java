@@ -1,10 +1,10 @@
 package io.agentscope.dataagent.web.api;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.agentscope.dataagent.runtime.session.SessionTurnParser.TurnEntry;
 import io.agentscope.dataagent.web.persistence.jpa.SessionHistoryRepository;
 import io.agentscope.dataagent.web.persistence.jpa.SessionMessageRepository;
 import io.agentscope.dataagent.web.persistence.jpa.SessionRegistryRepository;
-import io.agentscope.dataagent.web.session.SessionTurnParser.TurnEntry;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;

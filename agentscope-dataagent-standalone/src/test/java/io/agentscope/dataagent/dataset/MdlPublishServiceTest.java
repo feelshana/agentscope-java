@@ -148,6 +148,51 @@ class MdlPublishServiceTest {
     // ------------------------------------------------------------------ fixtures
 
     @Test
+    void startupRetainsAnUnrecoverableGroupFenceAndContinuesRecoveringHealthyGroups()
+            throws IOException {
+        registerGroup("g1");
+        registerGroup("g2");
+        Files.createDirectories(groupRoot);
+        Files.writeString(groupRoot.resolve(MdlPublicationStore.JOURNAL), "corrupt intent");
+        var other = mdlHome.resolve("g2");
+        Files.createDirectories(other.resolve("published"));
+        Files.writeString(other.resolve("published/old"), "old snapshot");
+        Files.writeString(other.resolve("mdl.json"), "{\"version\":0}");
+        Files.writeString(
+                other.resolve(MdlPublicationStore.JOURNAL),
+                "{\"format\":1,\"previousVersion\":0,\"nextVersion\":1,\"directory\":true,\"manifest\":true}");
+        service.recoverPublications();
+        assertTrue(MdlPublicationStore.pending(groupRoot));
+        assertFalse(MdlPublicationStore.pending(other));
+        assertEquals("old snapshot", Files.readString(other.resolve("published/old")));
+        var operations =
+                new KnowledgeBaseOperations(
+                        new WrenProperties("wren", mdlHome.toString(), "dataagent", "mysql", 10));
+        org.junit.jupiter.api.Assertions.assertThrows(
+                DatasetException.class, () -> operations.requireQueryReady("g1"));
+        operations.requireQueryReady("g2");
+    }
+
+    @Test
+    void annotationCleanupFailureCannotUndoCommittedPublicationOrSuppressItsEvent()
+            throws IOException {
+        registerGroup("g1");
+        registerDataset("a", "g1", "orders", new String[][] {{"id", "bigint"}});
+        assertTrue(service.prepareModeling("g1").ok());
+        var logDirectory = ws.resolve(".platform/draft-changes.jsonl");
+        Files.createDirectories(logDirectory);
+        Files.writeString(logDirectory.resolve("locked-fixture"), "prevent directory deletion");
+        var result = service.publish("g1");
+        assertTrue(result.ok());
+        assertEquals(1, result.mdlVersion());
+        assertEquals(1, groupsById.get("g1").getMdlVersion());
+        assertEquals(1, publicationEvents.size());
+        assertTrue(result.issues().stream().anyMatch(issue -> "cleanup".equals(issue.source())));
+        assertFalse(Files.exists(groupRoot.resolve(MdlPublicationStore.JOURNAL)));
+        assertTrue(Files.exists(groupRoot.resolve("published/target/mdl.json")));
+    }
+
+    @Test
     void onlySuccessfulPublicationEmitsQueryPreparationEvent() throws IOException {
         registerGroup("g1");
         registerDataset("a", "g1", "orders", new String[][] {{"id", "bigint"}});

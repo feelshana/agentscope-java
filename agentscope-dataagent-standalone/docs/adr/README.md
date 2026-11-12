@@ -8,6 +8,8 @@ ADR 记录"为什么这样做"。规则：
 
 ## 当前有效主线（按主题）
 
+[ADR0145](0145-local-resource-recovery-journals.md) 明确发布快照与单数据集删除的持久意图、提交判定、重启恢复和失败阻断。
+
 [ADR0144](0144-incremental-package-dependency-contracts.md) 以生产字节码约束新增反向依赖，精确登记历史类对，逐次抽取职责；通用计时和上下文键归runtime。
 
 [ADR0143](0143-history-query-projection.md) 为管理员检索复用消息投影，后台分批补齐角色与用户正文，服务端统一分页和统计。

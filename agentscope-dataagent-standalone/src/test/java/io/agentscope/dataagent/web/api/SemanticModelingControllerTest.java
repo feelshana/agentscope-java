@@ -82,6 +82,11 @@ class SemanticModelingControllerTest {
 
     private final TestingAuthenticationToken alice = new TestingAuthenticationToken("alice", "n/a");
 
+    private MdlPublicationController publicationController() {
+        return new MdlPublicationController(
+                groupService, mdlPublishService, baselineMdlService, null);
+    }
+
     @BeforeEach
     void setUp() {
         groupService = mock(DatasetGroupService.class);
@@ -139,11 +144,11 @@ class SemanticModelingControllerTest {
                         controller.enhanceOverview("gA", bob),
                         controller.adoptEnhanceProposal("gA", "p1", bob),
                         controller.ignoreEnhanceProposal("gA", "p1", bob),
-                        controller.mdlPreview("gA", bob),
-                        controller.mdlView("gA", bob),
-                        controller.mdlValidate("gA", bob),
-                        controller.mdlInitialize("gA", bob),
-                        controller.mdlPublish("gA", bob),
+                        publicationController().mdlPreview("gA", bob),
+                        publicationController().mdlView("gA", bob),
+                        publicationController().mdlValidate("gA", bob),
+                        publicationController().mdlInitialize("gA", bob),
+                        publicationController().mdlPublish("gA", bob),
                         controller.workspaceFile("gA", "models/orders.yml", bob),
                         controller.workspacePreview(
                                 "gA",
@@ -454,9 +459,11 @@ class SemanticModelingControllerTest {
         when(mdlPublishService.validate("gA")).thenReturn(validation);
         when(mdlPublishService.publish("gA")).thenReturn(result);
 
-        MdlTypes.MdlPreview gotPreview = controller.mdlPreview("gA", alice).block();
-        MdlTypes.MdlValidation gotValidation = controller.mdlValidate("gA", alice).block();
-        MdlTypes.MdlPublishResult gotPublish = controller.mdlPublish("gA", alice).block();
+        MdlTypes.MdlPreview gotPreview = publicationController().mdlPreview("gA", alice).block();
+        MdlTypes.MdlValidation gotValidation =
+                publicationController().mdlValidate("gA", alice).block();
+        MdlTypes.MdlPublishResult gotPublish =
+                publicationController().mdlPublish("gA", alice).block();
 
         assertThat(gotPreview).isEqualTo(preview);
         assertThat(gotPreview.files()).hasSize(1);
@@ -503,7 +510,7 @@ class SemanticModelingControllerTest {
                         List.of());
         when(mdlPublishService.view("gA")).thenReturn(view);
 
-        MdlTypes.MdlView got = controller.mdlView("gA", alice).block();
+        MdlTypes.MdlView got = publicationController().mdlView("gA", alice).block();
 
         assertThat(got).isNotNull();
         assertThat(got.state()).isEqualTo("DIRTY");

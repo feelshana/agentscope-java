@@ -34,6 +34,9 @@ class MdlPublishWiringTest {
             context.registerBean(
                     KnowledgeBaseAccessService.class, () -> mock(KnowledgeBaseAccessService.class));
             context.registerBean(AssetReviewStore.class, () -> mock(AssetReviewStore.class));
+            context.registerBean(
+                    org.springframework.transaction.PlatformTransactionManager.class,
+                    () -> mock(org.springframework.transaction.PlatformTransactionManager.class));
             context.register(MdlPublishService.class);
             context.refresh();
             var service = context.getBean(MdlPublishService.class);

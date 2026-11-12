@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.agentscope.dataagent.web.session;
+package io.agentscope.dataagent.runtime.session;
 
 import io.agentscope.dataagent.web.persistence.jpa.ConversationDatasetScopeEntity;
 import io.agentscope.dataagent.web.persistence.jpa.ConversationDatasetScopeRepository;

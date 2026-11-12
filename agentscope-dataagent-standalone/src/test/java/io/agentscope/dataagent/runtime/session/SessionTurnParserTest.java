@@ -1,4 +1,4 @@
-package io.agentscope.dataagent.web.session;
+package io.agentscope.dataagent.runtime.session;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 

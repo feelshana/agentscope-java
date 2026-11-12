@@ -120,6 +120,13 @@ public class KnowledgeBaseOperations {
         }
     }
 
+    /** During a snapshot swap, queries must not combine committed metadata and partial files. */
+    public void requireQueryReady(String groupId) {
+        requireActive(groupId);
+        if (MdlPublicationStore.pending(properties.groupRoot(groupId)))
+            throw new DatasetException("知识库发布正在恢复，请稍后重试", 503);
+    }
+
     public String groupForProject(Path project) {
         Path root = properties.mdlRoot().toAbsolutePath().normalize();
         Path target = project.toAbsolutePath().normalize();

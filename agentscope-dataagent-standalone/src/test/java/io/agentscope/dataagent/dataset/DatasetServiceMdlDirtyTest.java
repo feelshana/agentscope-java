@@ -295,7 +295,7 @@ class DatasetServiceMdlDirtyTest {
 
         service.deleteEntity(d);
 
-        verify(provisioner).dropTable("ds_t1");
+        verify(provisioner).dropTableStrict("ds_t1");
         verify(repository).delete(d);
         assertEquals("DIRTY", g.getMdlState());
         verify(groupRepository).requireModeling(g.getId());
@@ -374,7 +374,7 @@ class DatasetServiceMdlDirtyTest {
         var query =
                 new WrenQueryAccess(
                         groups,
-                        new io.agentscope.dataagent.web.session.ConversationScopeRegistry());
+                        new io.agentscope.dataagent.runtime.session.ConversationScopeRegistry());
         var context =
                 io.agentscope.core.agent.RuntimeContext.builder()
                         .userId("colleague")
@@ -422,7 +422,7 @@ class DatasetServiceMdlDirtyTest {
         var query =
                 new WrenQueryAccess(
                         groups,
-                        new io.agentscope.dataagent.web.session.ConversationScopeRegistry());
+                        new io.agentscope.dataagent.runtime.session.ConversationScopeRegistry());
         var context =
                 io.agentscope.core.agent.RuntimeContext.builder()
                         .userId("owner")

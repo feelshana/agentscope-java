@@ -1,6 +1,6 @@
 # 模块依赖契约与主线调用边界
 
-当前依据：[ADR0144](../adr/0144-incremental-package-dependency-contracts.md)、[spec130](../specs/130-architecture-dependency-contracts.md)。这是现有单应用的实际职责清单，不表示已经完成理想分层。历史评估见[初评](../test-reports/20261112-architecture-maintainability-assessment.md)。
+当前依据：ADR0145恢复协议与spec133，分层沿用[ADR0144](../adr/0144-incremental-package-dependency-contracts.md)、[spec130](../specs/130-architecture-dependency-contracts.md)。这是现有单应用的实际职责清单，不表示已经完成理想分层。历史评估见[初评](../test-reports/20261112-architecture-maintainability-assessment.md)。
 
 ## 职责与依赖规则
 
@@ -31,7 +31,7 @@ python scripts/check.py backend --tests ArchitectureDependencyTest
 
 ### 1. 聊天与问数
 
-`ChatController#stream` → ChatCapacity准入/排队 → `streamAdmitted`与`resolveGroupScope` → RuntimeContext/DatasetScope → HarnessGateway/框架Agent → `WrenScopedToolkitMiddleware` → `WrenScopedMcpClient#callTool` → `WrenInstanceRegistry#callAuthorized`。
+`ChatController#stream` → ChatCapacity准入/排队 → `streamAdmitted` → `ChatTurnPreparation#buildInbound/resolveGroupScope` → RuntimeContext/DatasetScope → HarnessGateway/框架Agent → `WrenScopedToolkitMiddleware` → `WrenScopedMcpClient#callTool` → `WrenInstanceRegistry#callAuthorized`。
 
 入口从认证主体取操作者，AgentAccessGuard检查RUN，知识库经QUERY；共享库owner只作资源定位，不替换操作者。零库普通聊天，问数仅单库。MCP调用前及队列取得执行权后复核授权。阻塞准备在boundedElastic上，SSE保持既有协议。
 
@@ -39,9 +39,9 @@ python scripts/check.py backend --tests ArchitectureDependencyTest
 
 ### 2. 建模、发布与准备问数
 
-`SemanticModelingController#mdlPublish` → `DatasetGroupService#getGroup`（MANAGE）与ModelingActivity空闲检查 → `MdlPublishService#publish` → 每库发布锁 → workspace锁 → reconcile/资产核查/来源预检 → staging → 官方validate/build/计划检查 → 快照替换 → 元数据版本更新 → PublishedQueryProjectChanged → WrenQueryPreparation。
+`MdlPublicationController#mdlPublish` → `DatasetGroupService#getGroup`（MANAGE）与ModelingActivity空闲检查 → `MdlPublishService#publish` → 每库发布锁 → workspace锁 → reconcile/资产核查/来源预检 → staging → 官方validate/build/计划检查 → MdlPublicationStore持久意图/快照替换 → 独立平台事务版本条件更新 → 收尾清理 → PublishedQueryProjectChanged → WrenQueryPreparation。
 
-建模文件/CLI入口经WrenProjectAccess检查MANAGE、作用域和路径，工作区锁后再次复核；不扩大为查询用户的写权限。发布协调同时操作平台JPA、文件和Wren子进程，不是统一原子事务。现有replacePublishedArtifacts处理快照切换异常，工程验证失败保留旧发布版本；快照与数据库之间进程中断的重启对账仍需故障注入验收。
+建模文件/CLI入口经WrenProjectAccess检查MANAGE、作用域和路径，工作区锁后再次复核；不扩大为查询用户的写权限。发布协调同时操作平台JPA、文件和Wren子进程，不是统一原子事务。MdlPublicationStore在移动旧副本前写journal，旧副本保留至数据库提交；启动及重试按已提交版本恢复，未知/缺失副本拒绝继续。QUERY在待恢复期间返回503，MANAGE保留修复入口。未将文件系统变成数据库事务，适用单进程；不承诺断电或多实例写入一致性。
 
 spec131已将只读预览/编译展示/结构投影抽到MdlReadService，13个结果record归MdlTypes；MdlPublishService保留委托方法，写链路不变。相关回归包括MdlPublishServiceTest、MdlReadServiceTest、MdlTypesCompatibilityTest、SharedDraftWrenAuthorizationTest、WrenPublishedProjectTest、WrenQueryPreparationTest，不能为了拆类改变锁顺序。
 
@@ -51,7 +51,7 @@ spec131已将只读预览/编译展示/结构投影抽到MdlReadService，13个�
 
 ingest有平台@Transactional，物理数据集库DDL/写入不是同一事务；KnowledgeBaseOperations先登记资源表名，事务未提交时通过同步回调清理导入表/注册表。数据描述同步经DatasetMetadataDraftSync在事务内修改YAML并注册文件补偿，恢复范围不能扩大为任意进程崩溃。
 
-相关回归：DatasetServiceSourceCombinationTest、DatasetServiceTest、DatasetMetadataDraftSyncTest。重启残留表/文件对账及真实MySQL升级不是本轮验收。
+相关回归：DatasetServiceSourceCombinationTest、DatasetServiceTest、DatasetMetadataDraftSyncTest。导入失败清理由DatasetImportRollbackTest验证；整库资源登记与重试另由MdlPublicationTransactionTest验证，不等于任意失败残留会被自动删除。
 
 ### 4. 共享、权限撤销与排队执行
 
@@ -63,17 +63,18 @@ KnowledgeBaseMembershipService维护grant；KnowledgeBaseAccessService的QUERY/M
 
 知识库整体：`DatasetGroupController#delete` → `DatasetGroupService#deleteGroup` → requireManageForDeletion → `KnowledgeBaseDeletionService#delete`。先写持久journal并阻止新操作，等待/关闭现有执行，登记表名后删除上传表、目录，分段平台事务清理元数据，写完成标记；retryPending会读取未完成journal重试。外部关联表不作上传物理表删除。
 
-单数据集：`DatasetController#delete` → `DatasetService#delete/deleteEntity`，平台@Transactional内删除上传物理表、注册表与元数据、标记模型变化。它与知识库整体删除的journal恢复能力不同，不得共用“删除都是可恢复”的结论。
+单数据集：`DatasetController#delete` → `DatasetService#delete/deleteEntity`，事务内先登记DatasetDeletionCleanup持久意图，再删元数据/标记模型变化；提交后移除注册表并严格清理上传物理表。回滚取消意图，重启按数据集行是否仍存在决定取消/完成，失败保留意图后台重试；外部关联表永不drop。
 
-知识库操作/锁主要在单进程；journal不等于跨实例锁。已有异常重试实现不等于进程强杀/跨数据库失败已验收。后续优先设计单数据集删除与发布的重启恢复演练，先用临时库/工作区和明确故障点。相关测试以KnowledgeBaseOperations/删除和导入场景的现有回归为基础，本轮不连接生产。
+知识库操作/锁主要在单进程；journal不等于跨实例锁。故障恢复的已验范围见spec133报告：发布有真实子JVM强制退出+文件H2版本验证；单表/整库删除有真实JPA事务回滚与重新实例化重试，物理DROP失败使用受控替身。未实测生产强杀/真实数据集库故障。
 
 ## 校验执行与后续恢复验证
 
 只读投影已按[spec131](../specs/131-mdl-read-projection-extraction.md)完成第一批抽取；读取组件和解析器不依赖发布/播种命令，MdlTypes不依赖业务服务。新增静态检查只允许已知Files读取API，覆盖调用与方法引用，阻断工作区非路径方法及仓库save/delete；这不是对任意反射、第三方IO或运行时副作用的完整证明。
 
-下一阶段先评估发布校验/计划检查与快照协调的边界、现有失败断言和锁顺序，再选择小批抽取；不能为了减少行数拆开原子步骤或扩大数据库事务。现行单数据集删除/发布跨资源恢复仍待独立故障演练；数据库迁移、备份与灾难恢复另列专项。
+spec132将构建后的View/ref_sql、Cube执行和诊断解析抽入包级MdlBuildChecks；选源/授权、锁、播种/构建和问答状态仍归协调器。spec133进一步将纯元数据投影归MdlManifestRenderer、安装/恢复归MdlPublicationStore；投影门禁阻止Spring/文件/JPA依赖。未为了类行数拆散锁与状态步骤。
 
+## 公共组件与后续边界
 
-spec132将构建后的View/ref_sql、Cube执行和诊断解析抽入包级MdlBuildChecks；依赖只限CLI、超时设置、连接档案、序列化及输入记录。选源/授权、发布锁→工作区锁、播种/构建、快照/版本/事件仍归协调器；问题dry-plan涉及确认状态和问答文件，暂不迁移。新规则约束校验组件无平台仓库/事务/锁/事件依赖，Files仅允许临时连接创建/删除；此静态约束不证明任意反射、第三方IO或跨资源恢复安全。
+ConversationScopeRegistry与SessionTurnParser已归runtime.session；原web.session保留HTTP历史读取服务。精确历史非JPA反向依赖从21对降到13对，身份、辅助LLM、沙箱/工作区、附件与Python容量仍保留原契约，逐项理由见清单及[工程报告](../test-reports/20261112-architecture-six-stage-acceptance.md)。四根包仍不是严格DAG。
 
-本轮后续优先评估纯元数据投影与快照文件切换/恢复的边界，先列故障点及旧断言，不在校验迁移中合并命令、扩大事务或改变失败状态。恢复演练、真实Wren与生产部署仍独立验收。
+主线和数据库演练的具体证据及生产限制以[六阶段验收报告](../test-reports/20261112-architecture-six-stage-acceptance.md)为准；后续优先按真实业务变更拆分大型用例、引入受控迁移台账及实际规模恢复演练，不开展机械加ServiceImpl/DO包/设计模式的重写。

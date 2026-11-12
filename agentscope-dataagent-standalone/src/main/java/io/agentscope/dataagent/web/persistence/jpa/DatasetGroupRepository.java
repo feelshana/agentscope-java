@@ -25,6 +25,41 @@ import org.springframework.transaction.annotation.Transactional;
 /** Spring Data repository for {@link DatasetGroupEntity}. */
 public interface DatasetGroupRepository extends JpaRepository<DatasetGroupEntity, String> {
 
+    /** Waits for an in-flight metadata writer before deciding how to recover its files. */
+    @org.springframework.data.jpa.repository.Lock(
+            jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select g from DatasetGroupEntity g where g.id = :id")
+    java.util.Optional<DatasetGroupEntity> findForPublicationRecovery(
+            @org.springframework.data.repository.query.Param("id") String id);
+
+    /** Failure bookkeeping never merges stale metadata or modeling revisions. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Transactional
+    @Query(
+            "update DatasetGroupEntity g set g.mdlState = case when g.mdlVersion > 0 then"
+                + " 'PUBLISHED' else 'FAILED' end, g.mdlLastError = :error, g.updatedAt = :at where"
+                + " g.id = :id")
+    int recordPublicationFailure(
+            @org.springframework.data.repository.query.Param("id") String id,
+            @org.springframework.data.repository.query.Param("error") String error,
+            @org.springframework.data.repository.query.Param("at") java.time.Instant at);
+
+    /** Commits only publication fields; concurrent metadata/revision changes are not overwritten. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Transactional
+    @Query(
+            "update DatasetGroupEntity g set g.mdlState = 'PUBLISHED', g.mdlVersion = :next,"
+                + " g.mdlPublishedAt = :at, g.mdlLastError = null, g.updatedAt = :at,"
+                + " g.publishedModelingRevision = case when coalesce(g.publishedModelingRevision,"
+                + " 0) <= :revision then :revision else g.publishedModelingRevision end where g.id"
+                + " = :id and g.mdlVersion = :previous")
+    int commitPublication(
+            @org.springframework.data.repository.query.Param("id") String id,
+            @org.springframework.data.repository.query.Param("previous") int previous,
+            @org.springframework.data.repository.query.Param("next") int next,
+            @org.springframework.data.repository.query.Param("at") java.time.Instant at,
+            @org.springframework.data.repository.query.Param("revision") long revision);
+
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Transactional
     @Query(

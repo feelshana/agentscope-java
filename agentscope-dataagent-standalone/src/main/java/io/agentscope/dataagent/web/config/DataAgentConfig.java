@@ -464,7 +464,7 @@ public class DataAgentConfig {
             Optional<DatasetContextProvider> contextProviderOpt,
             MdlCatalog mdlCatalog,
             DatasetGroupRepository datasetGroupRepository,
-            io.agentscope.dataagent.web.session.ConversationScopeRegistry conversationScopes,
+            io.agentscope.dataagent.runtime.session.ConversationScopeRegistry conversationScopes,
             SessionRegistryRepository sessionRegistryRepository,
             org.springframework.beans.factory.ObjectProvider<ModelingToolkitRegistrar>
                     modelingToolkitProvider,

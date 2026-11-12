@@ -48,10 +48,10 @@ import reactor.core.scheduler.Schedulers;
  * official describe_model; physical table names and direct-query fallback instructions are omitted.
  */
 public class DataDynamicContextMiddleware implements HarnessRuntimeMiddleware {
-    private io.agentscope.dataagent.web.session.ConversationScopeRegistry conversationScopes;
+    private io.agentscope.dataagent.runtime.session.ConversationScopeRegistry conversationScopes;
 
     public DataDynamicContextMiddleware withConversationScopes(
-            io.agentscope.dataagent.web.session.ConversationScopeRegistry scopes) {
+            io.agentscope.dataagent.runtime.session.ConversationScopeRegistry scopes) {
         conversationScopes = scopes;
         return this;
     }

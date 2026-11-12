@@ -214,8 +214,8 @@ Windows、Java17.0.14；完整验证使用当前非忽略源码的独立副本�
 | [JpaUserBindingStoreTest](../../src/test/java/io/agentscope/dataagent/web/persistence/jpa/JpaUserBindingStoreTest.java) | 1 | 0 | 0.035 | integration |
 | [ModelServicePersistenceTest](../../src/test/java/io/agentscope/dataagent/web/persistence/jpa/ModelServicePersistenceTest.java) | 1 | 0 | 0.823 | integration |
 | [WorkspaceScaffolderTest](../../src/test/java/io/agentscope/dataagent/web/scaffold/WorkspaceScaffolderTest.java) | 2 | 0 | 0.09 | 本地 |
-| [ConversationScopeRegistryTest](../../src/test/java/io/agentscope/dataagent/web/session/ConversationScopeRegistryTest.java) | 5 | 0 | 0.091 | 本地 |
-| [SessionTurnParserTest](../../src/test/java/io/agentscope/dataagent/web/session/SessionTurnParserTest.java) | 1 | 0 | 0.002 | 本地 |
+| [ConversationScopeRegistryTest](../../src/test/java/io/agentscope/dataagent/runtime/session/ConversationScopeRegistryTest.java) | 5 | 0 | 0.091 | 本地 |
+| [SessionTurnParserTest](../../src/test/java/io/agentscope/dataagent/runtime/session/SessionTurnParserTest.java) | 1 | 0 | 0.002 | 本地 |
 | [RequestEventIsolationTest](../../src/test/java/io/agentscope/dataagent/web/toolbus/RequestEventIsolationTest.java) | 1 | 0 | 0.004 | 本地 |
 | [SharedSkillContentTest](../../src/test/java/io/agentscope/dataagent/web/workspace/SharedSkillContentTest.java) | 12 | 0 | 0.008 | 本地 |
 | [SharedWorkspaceSeederTest](../../src/test/java/io/agentscope/dataagent/web/workspace/SharedWorkspaceSeederTest.java) | 8 | 0 | 0.742 | 本地 |

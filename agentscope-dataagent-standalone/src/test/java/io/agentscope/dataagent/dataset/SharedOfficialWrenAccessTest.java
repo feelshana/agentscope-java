@@ -7,13 +7,13 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import io.agentscope.core.agent.RuntimeContext;
+import io.agentscope.dataagent.runtime.session.ConversationScopeRegistry;
 import io.agentscope.dataagent.web.auth.UserStore;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupRepository;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetKnowledgeRepository;
 import io.agentscope.dataagent.web.persistence.jpa.KnowledgeBaseGrantEntity;
 import io.agentscope.dataagent.web.persistence.jpa.KnowledgeBaseGrantRepository;
-import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;

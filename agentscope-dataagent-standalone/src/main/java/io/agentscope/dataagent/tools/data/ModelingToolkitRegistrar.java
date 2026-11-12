@@ -26,7 +26,7 @@ import io.agentscope.dataagent.dataset.WrenCli;
 import io.agentscope.dataagent.dataset.WrenProperties;
 import io.agentscope.dataagent.dataset.WrenSkillsLocator;
 import io.agentscope.dataagent.runtime.DataAgentBootstrap;
-import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
+import io.agentscope.dataagent.runtime.session.ConversationScopeRegistry;
 import io.agentscope.harness.agent.HarnessAgent;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;

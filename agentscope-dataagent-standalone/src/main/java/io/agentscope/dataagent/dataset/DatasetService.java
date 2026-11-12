@@ -65,6 +65,7 @@ public class DatasetService implements DatasetContextProvider {
     private KnowledgeBaseOperations operations;
 
     private DatasetMetadataDraftSync metadataDraftSync;
+    private DatasetDeletionCleanup deletionCleanup;
 
     private static final Logger log = LoggerFactory.getLogger(DatasetService.class);
     private static final Pattern SAFE_IDENTIFIER = Pattern.compile("^[a-zA-Z0-9_]+$");
@@ -310,12 +311,30 @@ public class DatasetService implements DatasetContextProvider {
     /** Removes a dataset; drops the physical table only for uploaded (copied) datasets. */
     @Transactional
     public void deleteEntity(DatasetEntity entity) {
-        if (!"datasource".equals(entity.getOrigin())) {
-            provisioner.dropTable(entity.getTableName());
+        boolean transactional = TransactionSynchronizationManager.isSynchronizationActive();
+        if (transactional) {
+            if (deletionCleanup == null) throw new DatasetException("删除清理服务未就绪", 503);
+            var intent = deletionCleanup.prepare(entity);
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            deletionCleanup.complete(intent);
+                        }
+
+                        @Override
+                        public void afterCompletion(int status) {
+                            if (status != STATUS_COMMITTED) deletionCleanup.cancel(intent);
+                        }
+                    });
         }
-        registry.remove(entity.getId());
         repository.delete(entity);
         markMdlDirty(entity.getGroupId());
+        if (!transactional) {
+            registry.remove(entity.getId());
+            if (!"datasource".equals(entity.getOrigin()))
+                provisioner.dropTableStrict(entity.getTableName());
+        }
     }
 
     /**
@@ -1186,7 +1205,6 @@ public class DatasetService implements DatasetContextProvider {
         return sb.toString();
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
     public DatasetService(
             DatasetRepository repository,
             DatasetGroupRepository groupRepository,
@@ -1227,5 +1245,50 @@ public class DatasetService implements DatasetContextProvider {
         this.access = access;
         this.operations = operations;
         this.metadataDraftSync = metadataDraftSync;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public DatasetService(
+            DatasetRepository repository,
+            DatasetGroupRepository groupRepository,
+            DatasetKnowledgeRepository knowledgeRepository,
+            SemanticViewRepository semanticViews,
+            SemanticBusinessRuleRepository semanticBusinessRules,
+            ExternalDataSourceRepository externalSources,
+            DataSourceIntrospector introspector,
+            DatasetRelationRepository relationRepository,
+            InMemoryDataSourceRegistry registry,
+            TableProvisioner provisioner,
+            List<FileParser> parsers,
+            DatasetStoreProperties props,
+            ObjectMapper mapper,
+            DatasetImportService importService,
+            SchemaGenerationService schemaGeneration,
+            MdlWorkspaceReader workspaceReader,
+            KnowledgeBaseAccessService access,
+            KnowledgeBaseOperations operations,
+            DatasetMetadataDraftSync metadataDraftSync,
+            DatasetDeletionCleanup deletionCleanup) {
+        this(
+                repository,
+                groupRepository,
+                knowledgeRepository,
+                semanticViews,
+                semanticBusinessRules,
+                externalSources,
+                introspector,
+                relationRepository,
+                registry,
+                provisioner,
+                parsers,
+                props,
+                mapper,
+                importService,
+                schemaGeneration,
+                workspaceReader,
+                access,
+                operations,
+                metadataDraftSync);
+        this.deletionCleanup = deletionCleanup;
     }
 }

@@ -48,7 +48,7 @@ class GatewayTurnLifecycleTest {
                         Optional.of(
                                 io.agentscope.dataagent.runtime.session.SessionView.from(entry)));
         var gateway = HarnessGateway.create(sessions);
-        var scopes = new io.agentscope.dataagent.web.session.ConversationScopeRegistry();
+        var scopes = new io.agentscope.dataagent.runtime.session.ConversationScopeRegistry();
         gateway.setConversationScopes(scopes);
         var firstRunning = new java.util.concurrent.CountDownLatch(1);
         var secondQueued = new java.util.concurrent.CountDownLatch(1);

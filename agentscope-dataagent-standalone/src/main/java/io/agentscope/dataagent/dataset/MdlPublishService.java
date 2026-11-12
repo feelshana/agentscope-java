@@ -16,8 +16,6 @@
 package io.agentscope.dataagent.dataset;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.agentscope.dataagent.dataset.MdlTypes.CompiledMdl;
 import io.agentscope.dataagent.dataset.MdlTypes.MdlIssue;
 import io.agentscope.dataagent.dataset.MdlTypes.MdlPreview;
@@ -32,14 +30,11 @@ import io.agentscope.dataagent.web.persistence.jpa.ExternalDataSourceEntity;
 import io.agentscope.dataagent.web.persistence.jpa.ExternalDataSourceRepository;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -105,6 +100,8 @@ public class MdlPublishService {
     private final MdlWorkspaceReader reader;
     private final MdlReadService readService;
     private final MdlBuildChecks buildChecks;
+    private final MdlPublicationStore publicationStore;
+    private org.springframework.transaction.PlatformTransactionManager publicationTransactions;
     private final MdlQuestionStore questionStore;
     private final org.springframework.context.ApplicationEventPublisher events;
     private AssetReviewStore assetReviews;
@@ -179,8 +176,84 @@ public class MdlPublishService {
         this.reader = reader;
         this.readService = new MdlReadService(groupRepository, props, workspace, reader);
         this.buildChecks = new MdlBuildChecks(props, wrenCli, profileHome, mapper);
+        this.publicationStore = new MdlPublicationStore(mapper);
         this.questionStore = new MdlQuestionStore(workspace);
         this.events = events;
+    }
+
+    private org.springframework.transaction.support.TransactionTemplate publicationTransaction() {
+        var tx =
+                new org.springframework.transaction.support.TransactionTemplate(
+                        publicationTransactions);
+        tx.setPropagationBehavior(
+                org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        return tx;
+    }
+
+    private int committedVersion(String groupId) {
+        if (publicationTransactions == null)
+            return groupRepository
+                    .findById(groupId)
+                    .map(DatasetGroupEntity::getMdlVersion)
+                    .orElse(-1);
+        // A locking read waits for a server-side commit that may outlive a client connection error.
+        return publicationTransaction()
+                .execute(
+                        status ->
+                                groupRepository
+                                        .findForPublicationRecovery(groupId)
+                                        .map(DatasetGroupEntity::getMdlVersion)
+                                        .orElse(-1));
+    }
+
+    private void commitPublication(DatasetGroupEntity group, long revision, Instant at) {
+        int previous = group.getMdlVersion();
+        if (publicationTransactions == null) {
+            applyPublication(group, previous + 1, at);
+            groupRepository.save(group);
+            groupRepository.coverModelingRevision(group.getId(), revision);
+        } else {
+            publicationTransaction()
+                    .executeWithoutResult(
+                            status -> {
+                                if (groupRepository.commitPublication(
+                                                group.getId(), previous, previous + 1, at, revision)
+                                        != 1) throw new DatasetException("发布版本已变化，请重新检查后再发布", 409);
+                            });
+        }
+    }
+
+    private static void applyPublication(DatasetGroupEntity group, int version, Instant at) {
+        group.setMdlState("PUBLISHED");
+        group.setMdlVersion(version);
+        group.setMdlPublishedAt(at);
+        group.setMdlLastError(null);
+        group.setUpdatedAt(at);
+    }
+
+    @jakarta.annotation.PostConstruct
+    void recoverPublications() {
+        Path home = props.mdlRoot();
+        if (!Files.isDirectory(home)) return;
+        try (var directories = Files.list(home)) {
+            for (var root : directories.filter(Files::isDirectory).toList()) {
+                if (root.getFileName().toString().matches("[A-Za-z0-9_-]{1,64}")
+                        && MdlPublicationStore.pending(root)) {
+                    try {
+                        publicationStore.recover(
+                                root, committedVersion(root.getFileName().toString()));
+                    } catch (RuntimeException failure) {
+                        // Keep this group's query fence, without taking healthy groups offline.
+                        log.error(
+                                "Publication recovery pending: group={}, failure={}",
+                                root.getFileName(),
+                                failure.getClass().getSimpleName());
+                    }
+                }
+            }
+        } catch (IOException failure) {
+            throw new DatasetException("无法检查发布恢复记录", failure);
+        }
     }
 
     // ------------------------------------------------------------------ public API
@@ -289,6 +362,8 @@ public class MdlPublishService {
         lock.lock();
         try {
             if (operations != null) operations.requireActive(groupId);
+            if (MdlPublicationStore.pending(props.groupRoot(groupId)))
+                publicationStore.recover(props.groupRoot(groupId), committedVersion(groupId));
             return action.get();
         } finally {
             lock.unlock();
@@ -308,7 +383,8 @@ public class MdlPublishService {
                     try {
                         return doPublish(group, groupId);
                     } catch (RuntimeException e) {
-                        markFailed(group, List.of(issue("error", safeMessage(e), "local")), "");
+                        if (!MdlPublicationStore.pending(props.groupRoot(groupId)))
+                            markFailed(group, List.of(issue("error", safeMessage(e), "local")), "");
                         throw e;
                     }
                 });
@@ -515,7 +591,8 @@ public class MdlPublishService {
                     try {
                         return doPublish(group, groupId);
                     } catch (RuntimeException e) {
-                        markFailed(group, List.of(issue("error", safeMessage(e), "local")), "");
+                        if (!MdlPublicationStore.pending(props.groupRoot(groupId)))
+                            markFailed(group, List.of(issue("error", safeMessage(e), "local")), "");
                         throw e;
                     }
                 });
@@ -677,12 +754,39 @@ public class MdlPublishService {
 
         writeWrenSourceProperties(preparedDir, selection.profile());
         if (assetReviews != null) assetReviews.writeWindows(groupId, preparedDir);
-        writeMetaJson(preparedManifest, group, snapshot);
-        replacePublishedArtifacts(groupRoot, preparedDir, preparedManifest);
-        markPublished(group);
+        Instant publicationTime = Instant.now();
+        writeMetaJson(preparedManifest, group, snapshot, publicationTime);
+        int previousVersion = group.getMdlVersion();
+        String previousState = group.getMdlState();
+        Instant previousPublishedAt = group.getMdlPublishedAt();
+        Instant previousUpdatedAt = group.getUpdatedAt();
+        String previousError = group.getMdlLastError();
+        try {
+            publicationStore.install(
+                    groupRoot,
+                    preparedDir,
+                    preparedManifest,
+                    previousVersion,
+                    () -> commitPublication(group, coveredRevision, publicationTime),
+                    () -> committedVersion(groupId));
+        } catch (RuntimeException failure) {
+            group.setMdlVersion(previousVersion);
+            group.setMdlState(previousState);
+            group.setMdlPublishedAt(previousPublishedAt);
+            group.setUpdatedAt(previousUpdatedAt);
+            group.setMdlLastError(previousError);
+            throw failure;
+        }
+        applyPublication(group, previousVersion + 1, publicationTime);
         // The draft now equals the snapshot; its change annotations are spent (ADR0111).
-        DraftChangeLog.clear(workspace.workspaceRoot(groupId));
-        groupRepository.coverModelingRevision(groupId, coveredRevision);
+        try {
+            DraftChangeLog.clear(workspace.workspaceRoot(groupId));
+        } catch (RuntimeException cleanup) {
+            // Publication is committed; annotation cleanup cannot turn success into a retry.
+            issues.add(issue("warning", "发布已完成，草稿修改记录清理失败，请检查工作区文件权限", "cleanup"));
+            log.warn("Committed publication annotation cleanup pending: {}", groupId);
+        }
+
         // From here the snapshot reflects every change committed before this run began; automatic
         // baseline requests that entered before this tick can skip their own run.
         assembledAtTicks.merge(groupId, assembleStartTick, Math::max);
@@ -969,70 +1073,6 @@ public class MdlPublishService {
     }
 
     /** Swaps the snapshot and manifest together, restoring the previous publication on failure. */
-    private void replacePublishedArtifacts(
-            Path groupRoot, Path preparedDir, Path preparedManifest) {
-        Path publishedDir = groupRoot.resolve("published");
-        Path manifest = groupRoot.resolve("mdl.json");
-        Path publishedBackup = groupRoot.resolve("published.previous");
-        Path manifestBackup = groupRoot.resolve("mdl.json.previous");
-        boolean installedPublished = false;
-        boolean installedManifest = false;
-        try {
-            deleteTree(publishedBackup);
-            Files.deleteIfExists(manifestBackup);
-            if (Files.exists(publishedDir)) {
-                moveReplacing(publishedDir, publishedBackup);
-            }
-            if (Files.exists(manifest)) {
-                moveReplacing(manifest, manifestBackup);
-            }
-            moveReplacing(preparedDir, publishedDir);
-            installedPublished = true;
-            moveReplacing(preparedManifest, manifest);
-            installedManifest = true;
-            deleteTree(publishedBackup);
-            Files.deleteIfExists(manifestBackup);
-        } catch (IOException e) {
-            try {
-                if (installedPublished) {
-                    deleteTree(publishedDir);
-                }
-                if (installedManifest) {
-                    Files.deleteIfExists(manifest);
-                }
-                if (Files.exists(publishedBackup)) {
-                    moveReplacing(publishedBackup, publishedDir);
-                }
-                if (Files.exists(manifestBackup)) {
-                    moveReplacing(manifestBackup, manifest);
-                }
-            } catch (IOException restoreError) {
-                e.addSuppressed(restoreError);
-            }
-            throw new DatasetException("发布快照替换失败：" + e.getMessage(), e);
-        } finally {
-            try {
-                deleteTree(preparedDir);
-                Files.deleteIfExists(preparedManifest);
-            } catch (IOException cleanupError) {
-                log.warn(
-                        "MdlPublishService: could not clean prepared publication: {}",
-                        cleanupError.getMessage());
-            }
-        }
-    }
-
-    private static void moveReplacing(Path source, Path target) throws IOException {
-        try {
-            Files.move(
-                    source,
-                    target,
-                    StandardCopyOption.ATOMIC_MOVE,
-                    StandardCopyOption.REPLACE_EXISTING);
-        } catch (AtomicMoveNotSupportedException e) {
-            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
-        }
-    }
 
     /**
      * Renders the platform manifest from the workspace snapshot. Shape identical to v1 (read by
@@ -1041,106 +1081,29 @@ public class MdlPublishService {
      * views with their members.
      */
     private void writeMetaJson(
-            Path manifestFile, DatasetGroupEntity group, MdlWorkspaceReader.Snapshot snapshot) {
-        ObjectNode root = mapper.createObjectNode();
-        root.put("groupId", group.getId());
-        root.put("groupName", group.getName());
-        root.put("version", group.getMdlVersion() + 1);
-        root.put("publishedAt", Instant.now().toString());
-        root.put("dataSource", props.dataSource());
-        Map<String, String> datasetByModel = new HashMap<>();
-        for (MdlWorkspaceReader.WorkspaceModel m : snapshot.models()) {
-            if (m.datasetId() != null) {
-                datasetByModel.put(m.name(), m.datasetId());
-            }
-        }
-        ArrayNode models = root.putArray("models");
-        for (MdlWorkspaceReader.WorkspaceModel m : snapshot.models()) {
-            ObjectNode node = models.addObject();
-            node.put("name", m.name());
-            node.put("datasetId", m.datasetId() == null ? "" : m.datasetId());
-            node.put("datasetName", m.datasetName());
-            if (m.refSql() != null) {
-                node.put("derived", true);
-            }
-            if (m.description() != null) {
-                node.put("description", m.description());
-            }
-            ArrayNode columns = node.putArray("columns");
-            for (MdlWorkspaceReader.WorkspaceColumn c : m.columns()) {
-                ObjectNode col = columns.addObject();
-                col.put("name", c.name());
-                col.put("type", c.type());
-                if (c.relationship() != null) {
-                    col.put("relationship", c.relationship());
-                }
-                if (c.calculated()) {
-                    col.put("calculated", true);
-                    col.put("expression", c.expression());
-                }
-                if (c.description() != null) {
-                    col.put("description", c.description());
-                }
-            }
-        }
-        ArrayNode relations = root.putArray("relations");
-        for (MdlWorkspaceReader.WorkspaceRelation r : snapshot.relations()) {
-            ObjectNode node = relations.addObject();
-            node.put("name", r.name());
-            node.put("leftModel", r.leftModel());
-            node.put("rightModel", r.rightModel());
-            node.put("joinType", r.joinType());
-            node.put("condition", r.condition());
-            node.put("sourceDatasetId", datasetByModel.getOrDefault(r.leftModel(), ""));
-            node.put("targetDatasetId", datasetByModel.getOrDefault(r.rightModel(), ""));
-            node.put("sourceColumn", r.sourceColumns().isEmpty() ? "" : r.sourceColumns().get(0));
-            node.put("targetColumn", r.targetColumns().isEmpty() ? "" : r.targetColumns().get(0));
-            node.set("sourceColumns", mapper.valueToTree(r.sourceColumns()));
-            node.set("targetColumns", mapper.valueToTree(r.targetColumns()));
-        }
-        ArrayNode cubes = root.putArray("cubes");
-        for (MdlWorkspaceReader.WorkspaceCube c : snapshot.cubes()) {
-            ObjectNode node = cubes.addObject();
-            node.put("name", c.name());
-            node.put("baseModel", c.baseModel());
-            if (c.description() != null) {
-                node.put("description", c.description());
-            }
-            appendMetaMembers(node.putArray("measures"), c.measures());
-            appendMetaMembers(node.putArray("dimensions"), c.dimensions());
-            appendMetaMembers(node.putArray("timeDimensions"), c.timeDimensions());
-        }
-        ArrayNode views = root.putArray("views");
-        for (MdlWorkspaceReader.WorkspaceView v : snapshot.views()) {
-            ObjectNode node = views.addObject();
-            node.put("name", v.name());
-            node.put("sql", v.sql());
-            if (v.description() != null) {
-                node.put("description", v.description());
-            }
-        }
+            Path manifestFile,
+            DatasetGroupEntity group,
+            MdlWorkspaceReader.Snapshot snapshot,
+            Instant publicationTime) {
+        var tree =
+                new MdlManifestRenderer(mapper)
+                        .render(
+                                new MdlManifestRenderer.Header(
+                                        group.getId(),
+                                        group.getName(),
+                                        group.getMdlVersion() + 1,
+                                        publicationTime,
+                                        props.dataSource()),
+                                snapshot);
         try {
             Files.createDirectories(manifestFile.getParent());
             Files.writeString(
                     manifestFile,
-                    mapper.writerWithDefaultPrettyPrinter().writeValueAsString(root)
+                    mapper.writerWithDefaultPrettyPrinter().writeValueAsString(tree)
                             + System.lineSeparator(),
                     StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new DatasetException("写入 mdl.json 失败：" + e.getMessage(), e);
-        }
-    }
-
-    private static void appendMetaMembers(
-            ArrayNode array, List<MdlWorkspaceReader.WorkspaceMember> members) {
-        for (MdlWorkspaceReader.WorkspaceMember m : members) {
-            ObjectNode node = array.addObject();
-            node.put("name", m.name());
-            node.put("expression", m.expression());
-            node.put("type", m.type());
-            if (m.description() != null) {
-                node.put("description", m.description());
-            }
         }
     }
 
@@ -1168,15 +1131,6 @@ public class MdlPublishService {
      * Workspace-as-truth state machine (ADR 0033 D3): a successful publish simply bumps the
      * version; there is no draft tracking left.
      */
-    private void markPublished(DatasetGroupEntity group) {
-        group.setMdlState("PUBLISHED");
-        group.setMdlVersion(group.getMdlVersion() + 1);
-        group.setMdlPublishedAt(Instant.now());
-        group.setMdlLastError(null);
-        group.setUpdatedAt(Instant.now());
-        groupRepository.save(group);
-    }
-
     private MdlPublishResult failure(
             DatasetGroupEntity group, List<MdlIssue> issues, String output) {
         markFailed(group, issues, output);
@@ -1198,7 +1152,15 @@ public class MdlPublishService {
         group.setMdlState(group.getMdlVersion() > 0 ? "PUBLISHED" : "FAILED");
         group.setMdlLastError(failureSummary(issues, output));
         group.setUpdatedAt(Instant.now());
-        groupRepository.save(group);
+        if (publicationTransactions == null) groupRepository.save(group);
+        else
+            publicationTransaction()
+                    .executeWithoutResult(
+                            status ->
+                                    groupRepository.recordPublicationFailure(
+                                            group.getId(),
+                                            group.getMdlLastError(),
+                                            group.getUpdatedAt()));
     }
 
     private static String failureSummary(List<MdlIssue> issues, String output) {
@@ -1387,7 +1349,6 @@ public class MdlPublishService {
                 null);
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
     public MdlPublishService(
             DatasetRepository datasetRepository,
             DatasetGroupRepository groupRepository,
@@ -1420,5 +1381,42 @@ public class MdlPublishService {
         this.operations = operations;
         this.access = access;
         this.assetReviews = assetReviews;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public MdlPublishService(
+            DatasetRepository datasetRepository,
+            DatasetGroupRepository groupRepository,
+            ExternalDataSourceRepository externalSources,
+            ObjectMapper mapper,
+            WrenProperties props,
+            WrenCli wrenCli,
+            WrenProfileHome profileHome,
+            WrenSourceProber sourceProber,
+            MdlSeeder seeder,
+            MdlWorkspaceService workspace,
+            MdlWorkspaceReader reader,
+            KnowledgeBaseOperations operations,
+            KnowledgeBaseAccessService access,
+            org.springframework.context.ApplicationEventPublisher events,
+            AssetReviewStore assetReviews,
+            org.springframework.transaction.PlatformTransactionManager publicationTransactions) {
+        this(
+                datasetRepository,
+                groupRepository,
+                externalSources,
+                mapper,
+                props,
+                wrenCli,
+                profileHome,
+                sourceProber,
+                seeder,
+                workspace,
+                reader,
+                operations,
+                access,
+                events,
+                assetReviews);
+        this.publicationTransactions = publicationTransactions;
     }
 }

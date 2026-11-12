@@ -8,12 +8,12 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agentscope.core.agent.RuntimeContext;
+import io.agentscope.dataagent.runtime.session.ConversationScopeRegistry;
+import io.agentscope.dataagent.runtime.session.SessionTurnParser.TurnEntry;
 import io.agentscope.dataagent.runtime.wren.WrenInstanceRegistry;
 import io.agentscope.dataagent.tools.data.WrenScopedMcpClient;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupRepository;
-import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
-import io.agentscope.dataagent.web.session.SessionTurnParser.TurnEntry;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;

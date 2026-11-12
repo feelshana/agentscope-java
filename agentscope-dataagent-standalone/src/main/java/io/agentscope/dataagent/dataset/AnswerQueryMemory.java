@@ -2,7 +2,7 @@ package io.agentscope.dataagent.dataset;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.agentscope.dataagent.web.session.SessionTurnParser.TurnEntry;
+import io.agentscope.dataagent.runtime.session.SessionTurnParser.TurnEntry;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;

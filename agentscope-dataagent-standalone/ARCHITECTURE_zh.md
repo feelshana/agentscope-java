@@ -75,6 +75,8 @@ dataagent 为每位数据分析师提供专属的数据 Agent，核心流程是*
 
 当前web还承载持久化与公共会话/沙箱能力，四根包存在双向引用；允许方向、历史类对及聊天/发布/导入/撤权/删除边界见[模块依赖契约](docs/reference/architecture-boundaries.md)（ADR0144）。`ArchitectureDependencyTest`按生产字节码阻止新增下层→HTTP/装配依赖及JPA数据叶节点反向依赖。通用`ExecutionTimingMiddleware`已归runtime.observability，上下文关联键归runtime.context；日志与SSE键值不变。
 
+spec133将发布入口归MdlPublicationController，聊天选库/Inbound准备归ChatTurnPreparation；发布快照/恢复归MdlPublicationStore，纯平台清单投影归MdlManifestRenderer。单数据集删除由DatasetDeletionCleanup在平台提交后清理物理表，文件意图支持失败/重启重试。运行会话范围和转录解析归runtime.session。具体契约、故障矩阵及单进程限制见[工程验收](docs/test-reports/20261112-architecture-six-stage-acceptance.md)。
+
 ## 2. 启动装配流程
 
 > 当前主 Agent 装配以 ADR 0069 为准：建模与问数均挂载同版本官方 Wren 技能；问数按 RuntimeContext 创建作用域 Toolkit，并通过 AgentScope 原生 MCP 注册当前授权 project 的官方工具。下述非主 data-agent 的平台能力继续保留。
@@ -977,13 +979,13 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 | 外部源发布链（M4） | `dataset/MdlPublishService`（`selectWrenSource`、`writeWrenSourceProperties`）、`dataset/{WrenSourceProber,JdbcWrenSourceProber}` |
 | 知识图谱（已停用） | `dataset/KnowledgeGraphService`、`dataset/SchemaTripleExtractor`（链路停用，见第 6 章） |
 | 会话管理 | `runtime/session/SessionAgentManager`、`SessionStore`、`SessionEntry` |
-| 会话作用域(知识库) | `web/session/ConversationScopeRegistry` |
+| 会话作用域(知识库) | `runtime/session/ConversationScopeRegistry` |
 | 每用户沙箱 | `web/workspace/UserSandboxRegistry`（`borrow`、`invalidate`）、`DataAgentWorkspaceConfig` |
 | 工作区种子 | `web/scaffold/WorkspaceScaffolder`、`web/workspace/SharedWorkspaceSeeder` |
 | ACL 鉴权 | `web/share/{AgentAclService,AgentAccessGuard}` |
 | Webhook 通道 | `runtime/channel/webhook/WebhookChannel`、`WebhookCallbackController`、`WebhookSignature` |
 | 主动外发 | `runtime/outbound/{OutboundTool,OutboundService,OutboundController}` |
-| 会话/工具事件历史 | `web/session/SessionTurnParser`、`web/toolbus/{ToolEventBus,ToolNotificationMiddleware}` |
+| 会话/工具事件历史 | `runtime/session/SessionTurnParser`、`web/toolbus/{ToolEventBus,ToolNotificationMiddleware}` |
 
 ---
 

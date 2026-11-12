@@ -245,6 +245,30 @@ class ArchitectureDependencyTest {
                 .isEmpty();
     }
 
+    @Test
+    void manifestProjectionCannotAcquireIoStateOrApplicationServices() {
+        var component = production.get(BASE + "dataset.MdlManifestRenderer");
+        var forbidden =
+                component.getDirectDependenciesFromSelf().stream()
+                        .map(d -> d.getTargetClass().getName())
+                        .filter(
+                                name ->
+                                        name.startsWith("org.springframework.")
+                                                || name.startsWith("java.nio.file.")
+                                                || name.startsWith("java.sql.")
+                                                || name.startsWith("jakarta.persistence.")
+                                                || name.equals("java.time.Clock")
+                                                || (name.startsWith(BASE)
+                                                        && !name.startsWith(
+                                                                BASE
+                                                                        + "dataset.MdlManifestRenderer")
+                                                        && !name.startsWith(
+                                                                BASE
+                                                                        + "dataset.MdlWorkspaceReader")))
+                        .toList();
+        assertThat(forbidden).isEmpty();
+    }
+
     private static boolean isHttpOrAssembly(JavaClass type) {
         return type.getPackageName().equals(BASE + "web.api")
                 || type.getPackageName().startsWith(BASE + "web.api.")

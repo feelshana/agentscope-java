@@ -67,3 +67,5 @@ LLM 转录没有时间戳，需要单独分析一次运行时，先停服务把�
 2026-10-29本次环境任务已完成，用户明确暂不处理数据库、打包上传和启动。环境镜像可用不等于常驻业务容器已运行；第三种同运行环境保留Java/Wren本地子进程方式，性能与效果的正式回归留待后续发布，不借本地历史测试替代。
 
 2026-10-29当前主交付已改为GitHub源码构建（spec099/ADR0118）：66现有运行环境继续复用，构建容器内编译框架和应用、封装不可变应用镜像；生产conf/data外置。旧tar方式保留备选，不再要求用户每次本地打tar上传。构建阶段本地验证通过，66 builder/实际构建、Compose启停/回退与生产DB/入口验收仍待；本次仅本地提交，由用户本人push。
+
+2026-11-12 spec133当前工程边界：发布HTTP归MdlPublicationController，聊天Inbound/选库归ChatTurnPreparation；纯清单投影MdlManifestRenderer、文件安装/恢复MdlPublicationStore、单数据集提交后物理清理DatasetDeletionCleanup。会话范围与转录解析归runtime.session。journal需要随mdl-home持久化，适用单进程；实测与限制见[六阶段工程报告](../test-reports/20261112-architecture-six-stage-acceptance.md)，开发服务尚未重启加载。
