@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.agentscope.core.tool.Tool;
 import io.agentscope.dataagent.runtime.session.ModelingTurnRules;
 import io.agentscope.dataagent.tools.data.DataAgentToolkit;
-import io.agentscope.dataagent.tools.data.WrenMcpToolkit;
+import io.agentscope.dataagent.tools.data.WrenScopedMcpClient;
 import io.agentscope.harness.agent.gateway.channel.ChannelConfig;
 import io.agentscope.harness.agent.gateway.channel.DmScope;
 import java.lang.reflect.Method;
@@ -124,9 +124,10 @@ class DataAgentConfigTest {
     }
 
     @Test
-    void wrenToolDescriptionsRequirePublishedLogicalModels() {
-        assertThat(toolDescription(WrenMcpToolkit.class, "wren_call_tool"))
-                .contains("官方 MCP", "run_sql", "LIMIT/OFFSET");
+    void nativeWrenToolsUseReadOnlyOfficialNames() {
+        assertThat(WrenScopedMcpClient.READ_TOOLS)
+                .contains("run_sql", "recall_queries", "get_instructions")
+                .doesNotContain("wren_call_tool", "wren_run_sql", "write_file", "execute");
     }
 
     @Test
@@ -284,14 +285,13 @@ class DataAgentConfigTest {
 
     @Test
     void physicalQueryToolsAreAbsentFromAgentToolkits() {
-        List<String> toolNames =
-                java.util.stream.Stream.concat(
-                                Arrays.stream(DataAgentToolkit.class.getDeclaredMethods()),
-                                Arrays.stream(WrenMcpToolkit.class.getDeclaredMethods()))
+        List<String> toolNames = new java.util.ArrayList<>(WrenScopedMcpClient.READ_TOOLS);
+        toolNames.addAll(
+                Arrays.stream(DataAgentToolkit.class.getDeclaredMethods())
                         .map(method -> method.getAnnotation(Tool.class))
                         .filter(java.util.Objects::nonNull)
                         .map(Tool::name)
-                        .toList();
+                        .toList());
 
         assertThat(toolNames)
                 .doesNotContain(

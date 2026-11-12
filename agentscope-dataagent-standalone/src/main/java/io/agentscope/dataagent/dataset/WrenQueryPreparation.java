@@ -1,7 +1,7 @@
 package io.agentscope.dataagent.dataset;
 
 import io.agentscope.core.agent.RuntimeContext;
-import io.agentscope.dataagent.web.middleware.ExecutionTimingMiddleware;
+import io.agentscope.dataagent.runtime.observability.ExecutionTimingMiddleware;
 import jakarta.annotation.PreDestroy;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;

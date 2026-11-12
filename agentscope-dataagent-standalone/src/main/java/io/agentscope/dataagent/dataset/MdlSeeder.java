@@ -78,7 +78,7 @@ public class MdlSeeder {
     }
 
     /** Outcome of one reconcile run; errors block publishing, warnings only surface. */
-    public record SeedResult(List<MdlPublishService.MdlIssue> issues, boolean changed) {
+    public record SeedResult(List<MdlTypes.MdlIssue> issues, boolean changed) {
 
         public boolean hasErrors() {
             return issues().stream().anyMatch(i -> "error".equals(i.severity()));
@@ -87,7 +87,7 @@ public class MdlSeeder {
         public String errorSummary() {
             return issues().stream()
                     .filter(i -> "error".equals(i.severity()))
-                    .map(MdlPublishService.MdlIssue::message)
+                    .map(MdlTypes.MdlIssue::message)
                     .findFirst()
                     .orElse("播种失败");
         }
@@ -104,7 +104,7 @@ public class MdlSeeder {
 
     private SeedResult doReconcile(String groupId) {
         workspace.ensureWorkspace(groupId);
-        List<MdlPublishService.MdlIssue> issues = new ArrayList<>();
+        List<MdlTypes.MdlIssue> issues = new ArrayList<>();
         boolean changed = false;
         List<DatasetEntity> datasets =
                 datasetRepository.findByGroupId(groupId).stream()
@@ -236,7 +236,7 @@ public class MdlSeeder {
             List<ColumnSchema> physicalCols,
             Set<String> excluded,
             Map<String, String> typeByRaw) {
-        List<MdlPublishService.MdlIssue> issues = new ArrayList<>();
+        List<MdlTypes.MdlIssue> issues = new ArrayList<>();
         String content;
         try {
             content = Files.readString(modelFile, StandardCharsets.UTF_8);
@@ -510,9 +510,8 @@ public class MdlSeeder {
      * relationships.yml} and cubes whose {@code base_object} is the removed model. These need a
      * human/agent decision, so they are errors, not silent rewrites.
      */
-    private List<MdlPublishService.MdlIssue> scanDanglingReferences(
-            String groupId, String removedDir) {
-        List<MdlPublishService.MdlIssue> issues = new ArrayList<>();
+    private List<MdlTypes.MdlIssue> scanDanglingReferences(String groupId, String removedDir) {
+        List<MdlTypes.MdlIssue> issues = new ArrayList<>();
         Path ws = workspace.workspaceRoot(groupId);
         try {
             Path relations = ws.resolve("relationships.yml");
@@ -656,8 +655,7 @@ public class MdlSeeder {
         return value == null ? "" : String.valueOf(value).strip();
     }
 
-    private static MdlPublishService.MdlIssue issue(
-            String severity, String message, String source) {
-        return new MdlPublishService.MdlIssue(severity, message, source);
+    private static MdlTypes.MdlIssue issue(String severity, String message, String source) {
+        return new MdlTypes.MdlIssue(severity, message, source);
     }
 }

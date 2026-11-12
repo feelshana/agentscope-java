@@ -746,16 +746,15 @@ public class MdlQuestionStore {
                 });
     }
 
-    public List<MdlPublishService.MdlIssue> publishIssues(String groupId) {
-        List<MdlPublishService.MdlIssue> issues = new ArrayList<>();
+    public List<MdlTypes.MdlIssue> publishIssues(String groupId) {
+        List<MdlTypes.MdlIssue> issues = new ArrayList<>();
         for (Review review : list(groupId)) {
             if (!review.coverage().ready())
                 issues.add(
-                        new MdlPublishService.MdlIssue(
-                                "error", review.coverage().message(), "questions"));
+                        new MdlTypes.MdlIssue("error", review.coverage().message(), "questions"));
             if (!"CONFIRMED".equals(review.status())) {
                 issues.add(
-                        new MdlPublishService.MdlIssue(
+                        new MdlTypes.MdlIssue(
                                 "error",
                                 "常用问题「"
                                         + review.question().question()

@@ -8,6 +8,16 @@ spec 是一页纸的需求与验收标准，写代码之前先写（模板：[00
 
 ## 进行中
 
+截至spec131的本地成果已统一纳入[架构治理检查点](../test-reports/20261112-architecture-checkpoint.md)，当前完整验证通过；首次远端CI、真实环境/服务验收尚待后续。各spec中的阶段记录保留当时状态。
+
+- [131 发布服务只读预览职责抽取](131-mdl-read-projection-extraction.md)：本地抽取完成，重点83项/干净单元1029项及旧JSON兼容通过，HTTP与发布写链路保留；首次远端CI待后续。
+
+- [130 模块依赖契约与首批反向依赖消减](130-architecture-dependency-contracts.md)：本地实现与重点/单元/架构验证通过；生产字节码门禁、9组计时反向依赖消减与调用边界清单，首次远端CI待推送。
+
+- [129 测试分层、上下文提速与旧链路清理](129-test-lanes-and-legacy-cleanup.md)：本地实现及clean verify通过；日常选测/完整门禁、两个JPA切片和无调用链路清理，首次远端CI待推送。
+
+- [128 架构优化第一阶段：独立应用CI与集成测试恢复](128-architecture-phase1-ci-and-integration-tests.md)：本地实施、clean verify及Java17回归通过，首次GitHub触发待推送后验收；见[报告](../test-reports/20261112-architecture-phase1-ci-and-tests.md)。
+
 - [127 资料同步草稿与双同步任务观测](127-metadata-draft-and-bi-task-observation.md)：已授权本地实施，待用户运行验收；不提交、push或部署。
 
 - [126 全局管理员与帮助引导设计落地](126-admin-and-help-ios-design.md)：指定HTML已落地，本地构建/回归及隔离浏览器验证通过，待用户试用。

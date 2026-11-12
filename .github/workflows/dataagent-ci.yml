@@ -1,0 +1,66 @@
+name: DataAgent CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop-2.0
+      - liyufan_dev
+      - wangchao_dev
+      - 'codex/**'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dataagent-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  standalone:
+    name: DataAgent build and test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          cache-dependency-path: '**/pom.xml'
+
+      - name: Test report checks
+        run: python3 -m unittest discover -s .github/scripts -p 'test_dataagent_test_report.py' -v
+
+      - name: Test standalone Python utilities
+        working-directory: agentscope-dataagent-standalone/src/test/python
+        run: python3 -m unittest test_answer_quality test_check_wren test_profile_wren test_release_logging -v
+
+      - name: Build framework dependencies from this checkout
+        run: bash .github/scripts/build-dataagent-dependencies.sh
+
+      - name: Verify standalone backend and frontend
+        run: >-
+          mvn -B -ntp -f agentscope-dataagent-standalone/pom.xml
+          clean verify -Dfrontend.npm.install.arguments=ci
+
+      - name: Summarize tests and require restored integration suites
+        if: always()
+        run: python3 .github/scripts/dataagent_test_report.py agentscope-dataagent-standalone/target/surefire-reports
+
+      - name: Save backend test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: dataagent-test-reports-${{ github.run_attempt }}
+          path: |
+            agentscope-dataagent-standalone/target/surefire-reports/
+            agentscope-dataagent-standalone/target/architecture/
+          if-no-files-found: warn
+          retention-days: 7

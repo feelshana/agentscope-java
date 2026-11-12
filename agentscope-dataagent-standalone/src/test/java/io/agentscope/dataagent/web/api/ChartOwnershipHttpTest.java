@@ -22,6 +22,7 @@ import java.net.http.HttpResponse;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Executors;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -48,6 +49,7 @@ import org.springframework.web.server.ResponseStatusException;
             "spring.sql.init.mode=never",
             "dataagent.jwt.secret=test-chart-key-at-least-thirty-two-bytes"
         })
+@Tag("integration")
 class ChartOwnershipHttpTest {
     @Configuration
     @EnableAutoConfiguration

@@ -261,14 +261,14 @@ public class FactQueryWindowPolicy {
             SqlWindowGate.Decision decision,
             String status,
             long started) {
-        io.agentscope.dataagent.web.middleware.ExecutionTimingMiddleware.record(
+        io.agentscope.dataagent.runtime.observability.ExecutionTimingMiddleware.record(
                 context, "sql_window_gate", operation, started, status);
         try {
             var event = new java.util.LinkedHashMap<String, Object>();
             event.put("at", java.time.Instant.now().toString());
             event.put(
                     "traceId",
-                    io.agentscope.dataagent.web.middleware.ExecutionTimingMiddleware.traceId(
+                    io.agentscope.dataagent.runtime.observability.ExecutionTimingMiddleware.traceId(
                             context));
             event.put("sessionId", java.util.Objects.toString(context.getSessionId(), ""));
             event.put("groupId", groupId);

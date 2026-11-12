@@ -13,9 +13,11 @@ import io.agentscope.dataagent.web.persistence.jpa.KnowledgeBaseGrantEntity;
 import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
 import java.util.List;
 import org.hibernate.cfg.Configuration;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.jpa.repository.support.JpaRepositoryFactory;
 
+@Tag("integration")
 class ModelingRevisionTest {
     @Test
     void oldPublicationCannotCoverNewMutationAndStaleMergeCannotResetRevision() {

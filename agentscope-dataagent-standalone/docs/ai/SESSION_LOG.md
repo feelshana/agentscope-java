@@ -586,3 +586,35 @@ Git 核对 8515fd28 到 68b5d7a5 期间 BI 登录链路无差异；Git 内主脚
 ## 2026-11-12 Asia/Shanghai｜Checkpoint：个人分支本地提交检查
 
 用户授权保存全部本地修改到liyufan_dev，包含spec127资料同步/建模入口/双BI观测及测试、构建产物、既有产品与架构评审文档。Spotless与本轮后端1150项（0失败/错误、33条件跳过）、前端三前缀各105项、TypeScript/Vite构建、Maven package均通过；测试统计排除target中旧日期遗留XML。无DDL、push、主线合并、66操作或服务重启；产品F01–F09及架构整改仍仅待讨论。提交结果以Git记录为准，用户真实环境验收仍待继续。
+
+## 2026-11-12 Asia/Shanghai｜Checkpoint：架构第一阶段CI与集成测试恢复
+
+在codex/architecture-phase1、基线5479d152按用户授权实施spec128：新增独立应用CI、同checkout框架依赖安装、报告汇总和恢复类漏跑/禁用门禁；三个原Disabled类保留完整应用/JPA/文件验证，隔离外部SandboxClient与测试HOME/目录，12项全执行通过。首次clean verify及隔离源码副本CI同款npm ci/verify通过，后端1150项0失败/错误、21条件跳过，前端三前缀各105项/build和JAR/tar通过；Java17全后端亦1150/0/0/21。Python报告6项、actionlint及Bash检查通过。Windows原目录npm ci曾因esbuild占用EPERM失败，npm install恢复后在隔离副本验证，未停用户进程；原目录Java17最终文档5项、前端三前缀各105项/build/package亦通过，target保留新产物；补充后文档/格式/差异检查通过。无生产代码/DDL变化、提交/push/合并/部署、远端分支保护修改或真实服务验收。详情见test-reports/20261112-architecture-phase1-ci-and-tests.md，后续先验GitHub首次触发，再讨论下一阶段。
+
+## 2026-11-12 Asia/Shanghai｜Checkpoint：全量测试价值与耗时盘点
+
+用户扩大范围为全部测试类。新增test-value-and-development-impact及test-class-inventory两份报告，逐项覆盖168个Java测试类/3辅助、22前端文件、Python15文件内17类122方法及CI自身6项。静态盘点结合上一轮干净Java17报告1150/0/0/21，不重跑全量；7候选81项仅0.355秒，13上下文/持久化类41项占43.647秒。建议优先分层验证/解耦前后端/优化上下文，候选代码与测试配套清理；本轮未删测试或改门禁。补充IDE直接JUnit不自动继承Surefire HOME的限制。保留第一阶段全部未提交修改，旧当前任务归档；仅检查文档/清单完整性，不提交/push/合并/部署。
+
+本轮文档5项、171条Java文件完整性及22前端/15Python文件覆盖、932条相对链接和git diff --check通过；运行统计仍引用上一阶段，Python专项未重跑。
+
+## 2026-11-12 Asia/Shanghai｜Checkpoint：测试分层与安全清理本地完成
+
+用户“按你的建议继续”后按spec129落实后端/前端选测CLI与错误防漏跑、13类integration及外部方法external标签，AGENTS区分日常和完整门禁；两个恢复类改真实JPA切片，一个保留全装配，12场景不减。清理5个旧测试类74项及配套无调用生产链、无引用夹具；3个条件测试迁当前MCP，新增当前CSV边界1项，KG历史保留。CI增加15项Python。首轮切片依赖/接口残留/迁移编译格式问题已修正；重点64项、单元1015项（42.967秒）、CLI4项、前端单文件13项通过。隔离当前源码Java17 clean verify通过：后端1077/0/0/21、前端三前缀各105、类型构建及JAR/tar通过（3分49秒），报告门禁/工作流语法、Python15/报告脚本6项通过。报告记录163类本次耗时；两切片9.006→2.416秒，整体构建未明显缩短，不把减少数量视作覆盖提高。尚未真实LLM/Wren/MySQL/Docker验收、服务重启、提交/push/合并/部署或GitHub首次触发。旧当前任务已归档；当前状态与限制见test-lanes-and-cleanup报告。
+
+本轮收尾：最终DocsConsistencyTest 5项、1174条相对链接、538个Java/pom/测试入口与完整验证副本逐字节一致性、git diff --check通过。未新增服务运行验收。
+
+## 2026-11-12 Asia/Shanghai｜Checkpoint：依赖契约与首批归位
+
+按用户继续指令完成spec130/ADR0144、ArchitectureDependencyTest四项生产字节码门禁、21组精确类对原因、五条主线资源边界清单；通用计时归runtime、上下文键集中并保留事件总线别名，旧字节码核实9个下层计时反向类对消除。Java17重点11类65项通过；临时控制器/实体/新反向依赖探针触发预期3失败后删除，再clean编译，单元138类1021项0失败/跳过（1分18秒，架构3.721秒）。runtime依赖不含ArchUnit，actionlint通过。前后端全量/打包仍引用上轮历史，本轮未重复；真实环境/恢复/服务/远端CI未验，不提交/push/合并/部署。保留全部既有修改，当前任务与阶段2归档已保存，收尾详见本轮依赖契约报告。
+
+本轮收尾：过期类对变异在默认Java21按预期失败，恢复清单后Java17架构/文档9项全通过；1151条相对链接、调用方仅计时类型引用变化及计时逻辑等价对照、git diff --check通过。
+
+## 2026-11-12 Asia/Shanghai｜Checkpoint：发布只读职责抽取本地完成
+
+按用户继续指令完成spec131，MdlReadService承接8个只读方法，MdlTypes承载13个结果record；MdlPublishService保留委托及原构造器，19处内部类型引用同步。首轮71项、重点9类83项（含完整JPA装配）通过；新增读侧6项/JSON兼容1项/架构1项。JSON冻结样本来自阶段2旧编译类，首次夹具误含内部record生成失败，限定迁移清单后成功。临时Files写入探针按预期阻断，源码恢复后clean单元140类1029项0失败/跳过（1分25秒）。52个保留方法/构造器、8个迁移实现、12个其他生产调用方对照无写算法变化；warning日志名随读组件迁移。未重跑完整integration/条件/前端/打包，未运行恢复/生产/服务验收，不提交/push/合并/部署。旧任务归档，报告与当前状态已更新，收尾见后续补记。
+
+本轮收尾：Files读取API白名单与方法引用检查增强后，架构/读取/JSON兼容/文档17项通过；170条相对链接、旧类型/探针残留、方法对照复核及git diff --check通过。生产源码未在验证后改变。
+
+## 2026-11-12 Asia/Shanghai｜Checkpoint：spec128–131本地版本固定
+
+用户询问先提交或继续，选择先做本地检查点。隔离当前非忽略源码Java17 clean verify/npm ci通过：后端166类1091项（1070通过/0失败错误/21条件跳过），必跑12项均执行；前端三前缀各105，Spotless、类型/Vite、JAR/exec JAR/tar通过，Maven3分36秒。Python15/报告脚本6、actionlint/完整报告门禁通过，1855文件源码快照一致。成果及报告随本地检查点提交，父5479d152、新ID以git log核实；不push、合并、部署或启动/停止开发服务，未执行真实条件环境与恢复演练。旧当前任务归档，下一批先评估发布校验/计划检查与快照协调边界。

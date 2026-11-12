@@ -67,9 +67,8 @@ class BaselineMdlServiceTest {
     @Test
     void preparesDraftWithoutPublishingAndInvalidatesRunningInstance() {
         DatasetGroupEntity group = group(0);
-        MdlPublishService.MdlPublishResult published =
-                new MdlPublishService.MdlPublishResult(
-                        true, List.of(), "draft ready", "DIRTY", 0, null);
+        MdlTypes.MdlPublishResult published =
+                new MdlTypes.MdlPublishResult(true, List.of(), "draft ready", "DIRTY", 0, null);
         when(groupRepository.findById("g1")).thenReturn(Optional.of(group));
         when(datasetRepository.countByGroupId("g1")).thenReturn(2L);
         when(publishService.prepareModeling("g1")).thenReturn(published);
@@ -91,8 +90,7 @@ class BaselineMdlServiceTest {
         when(groupRepository.findById("g1")).thenReturn(Optional.of(group));
         when(datasetRepository.countByGroupId("g1")).thenReturn(0L);
 
-        MdlPublishService.MdlPublishResult result =
-                service.publishAfterDatasetChange("alice", "g1");
+        MdlTypes.MdlPublishResult result = service.publishAfterDatasetChange("alice", "g1");
 
         assertThat(result.ok()).isTrue();
         assertThat(result.mdlState()).isEqualTo("NONE");
@@ -114,11 +112,9 @@ class BaselineMdlServiceTest {
         when(datasetRepository.countByGroupId("g1")).thenReturn(1L);
         when(publishService.prepareModeling("g1"))
                 .thenReturn(
-                        new MdlPublishService.MdlPublishResult(
+                        new MdlTypes.MdlPublishResult(
                                 false,
-                                List.of(
-                                        new MdlPublishService.MdlIssue(
-                                                "error", "字段类型不受支持", "model")),
+                                List.of(new MdlTypes.MdlIssue("error", "字段类型不受支持", "model")),
                                 "",
                                 "FAILED",
                                 0,

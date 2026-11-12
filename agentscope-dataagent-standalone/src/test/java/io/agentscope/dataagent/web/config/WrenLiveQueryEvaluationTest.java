@@ -23,7 +23,7 @@ import io.agentscope.dataagent.dataset.WrenPublishedProject;
 import io.agentscope.dataagent.dataset.WrenQueryAccess;
 import io.agentscope.dataagent.runtime.wren.WrenInstanceRegistry;
 import io.agentscope.dataagent.runtime.wren.WrenQueryGateway;
-import io.agentscope.dataagent.tools.data.WrenMcpToolkit;
+import io.agentscope.dataagent.tools.data.WrenScopedMcpClient;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupRepository;
 import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
@@ -39,6 +39,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;
@@ -48,6 +49,7 @@ import org.springframework.core.env.StandardEnvironment;
  * It uses synthetic data only and does not test the running HTTP service, publication UI or Python.
  */
 @EnabledIfSystemProperty(named = "dataagent.test.liveWren", matches = "true")
+@Tag("external")
 class WrenLiveQueryEvaluationTest {
     @TempDir Path home;
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -115,6 +117,8 @@ class WrenLiveQueryEvaluationTest {
         group.setMdlVersion(1);
         var groups = mock(DatasetGroupService.class);
         when(groups.getGroup("fixture-user", "fixture")).thenReturn(group);
+        when(groups.queryGroup("fixture-user", "fixture")).thenReturn(group);
+        when(groups.queryGroups("fixture-user", List.of("fixture"))).thenReturn(List.of(group));
         when(groups.listGroups("fixture-user")).thenReturn(List.of(group));
         var repository = mock(DatasetGroupRepository.class);
         when(repository.findById("fixture")).thenReturn(Optional.of(group));
@@ -149,13 +153,6 @@ class WrenLiveQueryEvaluationTest {
                         registry.invalidate(groupId);
                     }
                 };
-        var toolkit = new Toolkit();
-        toolkit.registerTool(
-                new WrenMcpToolkit(
-                        tracked,
-                        new WrenQueryAccess(groups, new ConversationScopeRegistry()),
-                        projects,
-                        null));
         var questions = new ArrayList<JsonNode>();
         JSON.readTree(source.resolve("questions.json").toFile()).forEach(questions::add);
         var critical = questions.remove(6);
@@ -174,6 +171,23 @@ class WrenLiveQueryEvaluationTest {
         try {
             for (int i = 0; i < count; i++) {
                 traces.clear();
+                var context =
+                        RuntimeContext.builder()
+                                .userId("fixture-user")
+                                .sessionId("case-" + i)
+                                .put(
+                                        DatasetScope.class,
+                                        new DatasetScope("fixture-user", List.of("fixture")))
+                                .build();
+                var client =
+                        new WrenScopedMcpClient(
+                                context,
+                                "fixture",
+                                new WrenQueryAccess(groups, new ConversationScopeRegistry()),
+                                tracked,
+                                projects);
+                var toolkit = new Toolkit();
+                toolkit.registerMcpClient(client).block(Duration.ofSeconds(30));
                 var agent =
                         ReActAgent.builder()
                                 .name("wren-evaluation")
@@ -191,14 +205,6 @@ class WrenLiveQueryEvaluationTest {
                                                 "generate-mdl"))
                                 .maxIters(18)
                                 .build();
-                var context =
-                        RuntimeContext.builder()
-                                .userId("fixture-user")
-                                .sessionId("case-" + i)
-                                .put(
-                                        DatasetScope.class,
-                                        new DatasetScope("fixture-user", List.of("fixture")))
-                                .build();
                 var question = questions.get(i);
                 Map<String, Object> report = new LinkedHashMap<>();
                 report.put("question", question.path("question").asText());
@@ -214,6 +220,7 @@ class WrenLiveQueryEvaluationTest {
                     // request data.
                     report.put("errorType", error.getClass().getName());
                 }
+                client.close();
                 report.put("elapsedMillis", (System.nanoTime() - started) / 1_000_000);
                 report.put("calls", List.copyOf(traces));
                 JsonNode lastRows = null;

@@ -8,14 +8,26 @@ import { build } from 'vite';
 
 const testsDirectory = dirname(fileURLToPath(import.meta.url));
 const frontendDirectory = resolve(testsDirectory, '..');
-const files = readdirSync(testsDirectory).filter(name => name.endsWith('.test.mjs')).sort();
+const availableFiles = readdirSync(testsDirectory).filter(name => name.endsWith('.test.mjs')).sort();
+const availableBases = [['root', '/'], ['prefixed', '/dataagent/'], ['bi-prefixed', '/dify/dataagent/']];
+const selectedFiles = new Set();
+const selectedBases = new Set();
+for (let i = 2; i < process.argv.length; i += 2) {
+  const option = process.argv[i];
+  const value = process.argv[i + 1];
+  if (option === '--file' && availableFiles.includes(value)) selectedFiles.add(value);
+  else if (option === '--base' && availableBases.some(([, base]) => base === value)) selectedBases.add(value);
+  else throw new Error(`Unknown or missing test selector: ${option} ${value ?? ''}`);
+}
+const files = availableFiles.filter(name => selectedFiles.size === 0 || selectedFiles.has(name));
+const bases = availableBases.filter(([, base]) => selectedBases.size === 0 || selectedBases.has(base));
 if (files.length === 0) throw new Error('No frontend test files found');
 
 // Use the existing application compiler, including Vite's import.meta.env handling.
 // Neither the application config nor private .env files are loaded for these tests.
 const temporaryRoot = mkdtempSync(join(tmpdir(), 'dataagent-frontend-tests-'));
 try {
-  for (const [name, base] of [['root', '/'], ['prefixed', '/dataagent/'], ['bi-prefixed', '/dify/dataagent/']]) {
+  for (const [name, base] of bases) {
     const outDir = join(temporaryRoot, name);
     console.log(`\nFrontend regression: base=${base}, files=${files.length}`);
     await build({

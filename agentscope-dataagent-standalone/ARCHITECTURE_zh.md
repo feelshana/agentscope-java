@@ -44,7 +44,7 @@ dataagent 为每位数据分析师提供专属的数据 Agent，核心流程是*
 │  ToolEventBus(SSE) / 审计 / 用量 / AgentCatalog(内置agent目录)        │
 ├─────────────────────────────────────────────────────────────────────┤
 │  Agent 工具层（tools/data/ 包）                                    │
-│  WrenMcpToolkit(官方 MCP 发现与透传) + 原生文件工具                  │
+│  WrenScopedMcpClient(受限官方 MCP) + 原生文件工具                  │
 │  OfficialWrenToolkit(建模) + DataAgentToolkit(render_chart)          │
 │  RunPythonTool(run_python)                                           │
 ├─────────────────────────────────────────────────────────────────────┤
@@ -72,6 +72,8 @@ dataagent 为每位数据分析师提供专属的数据 Agent，核心流程是*
 知识库通过 QUERY/MANAGE 显式共享，创建者与全局管理员天然管理；`DatasetScope` 注入请求用户和本轮授权范围，库 owner 仅用于资源路径。私有会话、沙箱、附件与反馈不随知识库共享扩大，见 ADR 0077。
 
 ---
+
+当前web还承载持久化与公共会话/沙箱能力，四根包存在双向引用；允许方向、历史类对及聊天/发布/导入/撤权/删除边界见[模块依赖契约](docs/reference/architecture-boundaries.md)（ADR0144）。`ArchitectureDependencyTest`按生产字节码阻止新增下层→HTTP/装配依赖及JPA数据叶节点反向依赖。通用`ExecutionTimingMiddleware`已归runtime.observability，上下文关联键归runtime.context；日志与SSE键值不变。
 
 ## 2. 启动装配流程
 
@@ -169,8 +171,7 @@ dataagent 为每位数据分析师提供专属的数据 Agent，核心流程是*
 向主 agent 的 Toolkit 注册（建模助手挂载走同款 `ModelingToolkitRegistrar`，见末条）：
 
 - `DataAgentToolkit` — 仅提供服务端图表工具（`render_chart`）；
-- `WrenMcpToolkit` — 官方 MCP schema 发现与原始调用透传（`wren_list_tools` / `wren_call_tool`），
-  依赖 `WrenQueryGateway`（`WrenInstanceRegistry` 的接口）与当前发布工程；
+- `WrenScopedToolkitMiddleware` — 每轮按授权工程注册 `WrenScopedMcpClient`，保留官方MCP名称与schema；依赖 `WrenQueryGateway` 和当前发布工程，不再注册旧包装工具；
 - `RunPythonTool(new SandboxBackedFilesystem())` — 沙箱 Python 执行工具。
   此处用独立代理实例即可：每轮调用的真实沙箱由 SandboxLifecycleMiddleware 绑定在
   RuntimeContext 上，工具调用拿到的就是同一个上下文。
@@ -251,7 +252,7 @@ write_file/edit_file/delete_file 与会生成种子样例的 memory index 需写
 ### 3.3 发布与 MDL
 
 `MdlPublishService#publish` 从工程 YAML 组装官方输入，执行官方 strict validate/build 与 view/ref_sql/Cube 查询检查，再复制快照并提升版本。
-官方 target/mdl.json 是引擎事实；不调用 RefSqlMaterializer，不物理化 ref_sql，不禁止官方允许的资产依赖。
+官方 target/mdl.json 是引擎事实；不物理化 ref_sql，不禁止官方允许的资产依赖。
 ref_sql 的内容和依赖是否可执行由官方引擎判断，须写物理全限定名。任何检查失败保留旧发布快照，官方 build 不自动替换在线版本。
 新增或修改的 View、ref_sql 模型未通过人工核查和问题验证时，`AssetReviewStore#publishIssues` 拒绝发布；发布时 `AssetReviewStore#writeWindows` 在快照旁写入确认的时间列。
 模型目录与 MDL 可视化属于只读投影，元数据旧实体与旧 HTTP 为兼容保留，不参与主 Agent 的语义决策。
@@ -311,11 +312,13 @@ ADR0087/spec075：前端 `isWrenTool` 同时识别官方原生名称与兼容网
 
 DataAgentToolkit 的 render_chart 与沙箱 run_python 继续复用现有 ArtifactStore、SandboxManager 和 AgentScope 执行。
 MCP 返回的 columns/rows 与截断信息保持原样；CSV 是通用传输，不引入 SQL 编译、指标口径或领域规划。
-历史 WrenToolkit/SqlExampleRecall 源码保留迁移期兼容测试，主 data-agent 不注册这些领域工具；随后的问数技能只引用官方 Wren 工具名。
+spec129已移除无生产装配的旧WrenToolkit/WrenMcpToolkit及证据物化链路，条件集成测试迁到WrenScopedMcpClient；问数技能只引用官方Wren工具名。SqlExampleRecall与KG历史兼容链路本轮保留。
 
 ---
 
 ## 5. 数据集与知识库
+
+只读MDL职责按spec131拆分：`MdlReadService#preview/compiled/view`独立完成文件差异、编译文本与结构投影；`MdlPublishService`保留同名委托入口及原构造器，写链路/锁顺序不变。13个共享结果record归`MdlTypes`，工作区解析器不再依赖发布服务类型，HTTP JSON字段保持。架构检查禁止读组件进入发布/播种及工作区、文件、仓库写入；读取错误、缺失和限额行为沿用原实现。
 
 > 当前语义事实为 workspace 工程 YAML 与 published 官方快照。运行问数工程合并发布 knowledge 和点赞 knowledge/sql；不从平台关系/Cube/术语实体重新构造线上语义。业务文档上传只保存资料，不触发旧 DocEnhanceService；增强在官方对话中进行。历史服务/API 保留兼容，不是主 Agent 流程。
 
@@ -442,8 +445,8 @@ MDL 三端点 `GET /mdl` / `POST /mdl/validate` / `POST /mdl/publish`、前端
 `DatasetGroupRepository#backfillMdlDefaults`（原生 SQL 回填 `mdl_version=0`、
 `mdl_state='NONE'`）再加载任何组实体；守卫 `DatasetGroupMdlBackfillTest`（先证明 NULL
 行必炸，再证明回填后可加载）。
-**M3 + Wren-only 收敛已落地**（ADR 0020、0029）——`WrenToolkit` 提供
-`官方 describe_model` / `官方 run_sql` / `官方 recall_queries`；`WrenInstanceRegistry` 管理 per-group
+**M3 + Wren-only 收敛已落地**（ADR 0020、0029；当前原生MCP见第14章）——`WrenScopedMcpClient` 提供
+官方 `describe_model` / `run_sql` / `recall_queries`；`WrenInstanceRegistry` 管理 per-group
 `wren serve mcp` 实例池（按需 spawn、空闲回收、发布后 invalidate、传输失败重建）；
 `WrenProfileHome` 托管连接档案；`MdlCatalog` + `DataDynamicContextMiddleware` 仅渲染轻量逻辑目录；
 旧物理直查工具与 JDBC connector 已删除。
@@ -457,8 +460,7 @@ spawn 读取（缺失回落默认，M3 存量组零迁移）、`官方 run_sql` 
 （wrenai `_apply_limit` 无条件尾部叠加的 1064 坑，工具描述同步禁止）；守卫：
 `MdlPublishServiceTest`（混合组拒绝/多源拒绝/源删拒绝/非 MySQL 拒绝/预检失败不落快照/
 ext marker 钉入）、`WrenProfileHomeTest`（多条目渲染/无库名空串/非 MySQL 跳过/DB 收敛）、
-`WrenInstanceRegistryTest`（marker 读取/缺失回落/畸形回落）、`WrenToolkitTest`
-（显式 LIMIT 拒绝）。PostgreSQL 外部源发布与跨实例 JOIN 明确不做（ADR 0021）。
+`WrenInstanceRegistryTest`（marker读取/缺失回落/畸形回落）；当前只读SQL与权限由`OfficialWrenToolkitTest`、`WrenScopedMcpClientTest`守卫。PostgreSQL 外部源发布与跨实例 JOIN 明确不做（ADR 0021）。
 
 **specs/019 读面切换已落地（YAML-first，ADR 0033 M4）**——关系确认写面改写工程
 `relationships.yml`：`MdlSuggestionService#persistConfirmedRelation` 按「无序模型对 +
@@ -496,18 +498,7 @@ DocEnhance 规则采纳双写（见 5.7）。守卫：`MdlSuggestionServiceTest`
 绝不单边写，ADR 0045））；
 语义建模页视图卡片不变；业务术语不再是平台实体，见 14.1"业务术语"。
 
-**派生模型（ref_sql 模型，specs/034 → specs/035 降级人工载体，ADR 0043；下述物化是历史实现，ADR0069 起发布链不再调用，当前规则见 3.3）**：手工精修载体——
-`models/<name>/{metadata.yml, ref_sql.sql}` 双文件（文件优先于 metadata.yml 内联 `ref_sql` 键），
-模型不指物理表而是一段 SQL，走 sqlglot 直查路径、无视图那种 DuckDB 规划期函数绑定，用于承载
-view 函数表达力覆盖不到的极端口径；官方实验证伪「引擎自解析内层逻辑名」假设——ref_sql 体内
-裸名按连接默认库直通解析（MySQL 1146），故发布链在 `context build` 后把 staging
-`target/mdl.json` 的 `refSql` 物化为物理全限定名（`RefSqlMaterializer`：词法提取 FROM/JOIN
-引用、CTE/字符串/注释掩码、已限定名跳过；未解析引用报 error 中止发布），工作区文件保持逻辑名。
-当前 Agent 可按官方技能生成 SQL 定义模型，使用原生文件工具维护；不再强制 create_view 路由。旧 propose_derived_model/create_view 领域工具不注册。读取器 `MdlWorkspaceReader` 解析
-refSql/refSqlPath（models/、views/ 缺 metadata.yml 的静默跳过已改 error issue）；`MdlView`
-单列 `derivedModels`（`MdlModelView.refSqlPath` 指向 ref_sql.sql）；发布链逐派生模型
-`dry-run -s 'SELECT * FROM "<name>"'` 兜底；`mdl.json` 带 `derived` 标记。语义建模页「表与
-关系」后保留「派生模型」tab 作为手工资产只读展示面（AssetYamlBrowser 右栏渲染 ref_sql.sql）。
+**派生模型（ref_sql 模型）**：`models/<name>/{metadata.yml, ref_sql.sql}`由官方工程解析；平台读取器解析refSql/refSqlPath，页面展示对应资产。当前发布规则以3.3和14章为准，平台不改写官方`target/mdl.json`，不把逻辑引用物化为物理表。spec129删除已退出发布链的RefSqlMaterializer及其测试；历史方案见specs/034、035和ADR0043，已由ADR0069取代。
 
 **发布语义与状态机（specs/019 M2，发布链 v2）**：
 
@@ -515,12 +506,7 @@ refSql/refSqlPath（models/、views/ 缺 metadata.yml 的静默跳过已改 erro
   BASELINE/SEMANTIC 双模式与 DRAFT 草稿已退役（DB 语义实体停止作为事实源）；specs/037 起读侧同源
   （模型/视图页签同读工作区）且 REST 写侧（视图 CRUD）同步镜像工作区文件，
   文件写先于 DB 落库，DB 与工作区不再分叉（ADR 0045）。
-- 发布链（`MdlPublishService#doPublish`）：`MdlSeeder#reconcile` 播种对账 → staging 拷贝（排除
-  `.platform/`、`target/`）→ `context validate --strict` → `context build` → ref_sql 物化（staging
-  `target/mdl.json` 改写物理全限定名，specs/035/ADR 0043）→ 逐视图 `dry-run`（ADR 0032）
-  → 逐派生模型 `dry-run`（ref_sql 模型全链路解析兜底，ADR 0042）→ 逐 cube `cube query --sql-only`
-  → 原子快照；任一环节失败产生 error issue、中止发布并保留旧快照
-  （`mdlLastError` 记录原因）。
+- 发布链（`MdlPublishService#doPublish`）：工作区对账与资产核查 → 连接选择/预检 → staging → 官方validate/build → SQL资产计划检查 → 存量Cube的SQL转换检查 → 已确认问题dry-plan → 原子快照。工程校验失败保留旧发布版本；失效问题暂不进入问答示例，不阻断模型发布。无平台ref_sql物化步骤；基础建模不生成Cube，存量兼容分支仍保留。
 - 状态为 `NONE → INITIALIZING → PUBLISHED`；首版失败进入 `FAILED`。已有成功快照的重建失败进入
   `DIRTY`（工作区与快照存在待发布差异），保留旧快照、版本和可查询能力。空知识库删除全部工件并回到 `NONE`。
 - 发布使用 `published.next` / `mdl.json.next` 预构建和原子替换；替换异常时恢复 previous 备份。
@@ -889,6 +875,10 @@ Boot 4 HTTP JSON缓冲使用`spring.http.codecs.max-in-memory-size=50MB`；人�
 
 ### 12.2 构建与运行
 
+日常用 `python scripts/check.py backend --tests 类名`、`backend --unit` 或 `frontend --files 文件名` 选测；合并/发布前 `python scripts/check.py full` 保留完整验证。13个integration类独立标记，真实环境方法标记external；CI不按标签过滤。三个恢复类现为一个完整应用测试和两个真实JPA切片，原12项仍执行，详见[spec129](docs/specs/129-test-lanes-and-legacy-cleanup.md)。
+
+独立应用自动验证由仓库 `.github/workflows/dataagent-ci.yml` 定义：同一次 checkout 先安装直接使用的框架模块及 BOM，再对 standalone 执行 `clean verify`，使用 npm ci 并保留测试结果。汇总门禁要求三个恢复的集成类实际执行，区分条件跳过与显式禁用。测试 JVM 的 user.home 隔离至 target/test-home；完整装配集成测试使用临时工作区、H2和外部沙箱客户端替身，不操作开发者容器。触发分支、结果查看及本地复现见[CI指引](docs/guides/dataagent-ci.md)。实际 GitHub 触发和远端必需检查以仓库设置及运行记录为准，不等于自动部署。
+
 ADR0142/spec123新增独立六表离线镜像：deploy/bi-sync/extra_schema.py维护79列DDL及固定SQL，extra_sync.py按源读取当前快照/完整业务日，私有暂存、前后计数和多重集内容校验后事务替换业务数据及账本。独立源指纹、锁、控制表和02:15调度不改旧七表；Doris缺分区或监控空快照保留目标，状态明确源可用下界与缺失区间。新任务通过docker/bi-extra-sync.sh运维，不加入Wren问数链路，不自动建知识库/安装调度。spec127新增独立只读观测：`AdminBiSyncController#extra`在boundedElastic上调用`BiSyncStatusService#extraView`，`BiExtraSyncStatus#read`只读bi_extra_sync_control固定键及独立运行锁，校验owner并投影逐表水位/缺口/快照和最近操作，不读取源或业务数据。BI页面按基础7表、扩展6表切换；核验、部分补跑、带缺口成功不视为六表全量完成。加列须显式迁移，源只读；配置及现场步骤见[新增六表同步](docs/guides/66-bi-extra-sync.md)。
 
 extra_sync#sync_job仅对已标记的源连接中断做有限重连，重抽当前业务日/快照后重新校验发布；不重连持锁目标或控制连接。源和目标网络等待适配大日分组及流式回压，错误清理不覆盖原始错误，状态保留安全的失败阶段/日期/错误码，禁止记录驱动敏感原文。
@@ -968,7 +958,7 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 | 网关/沙箱注入/并发门/announce | `runtime/gateway/HarnessGateway`（`runStream`、`attachUserSandboxContext`、`setSandboxlessAgents`、`withGatedStream`、`tryDispatchAnnounce`） |
 | 聊天端点/SSE/HITL 恢复 | `web/api/ChatController`（`stream`、`confirmModeling`、`currentSession`、`buildInbound`、`toAgentFrame`、`toToolFrame`） |
 | 动态上下文注入 | `runtime/session/DataDynamicContextMiddleware`（`onSystemPrompt`；M3 按组分流读 `MdlCatalog`） |
-| Wren 问数工具 | `tools/data/WrenToolkit`（`wrenDescribeModel`、`wrenRunSql`）与 `tools/data/DataAgentToolkit`（`retrieveEvidence`、`renderChart`） |
+| Wren 问数工具 | `tools/data/WrenScopedMcpClient`（官方MCP只读工具）与 `tools/data/DataAgentToolkit`（`renderChart`） |
 | Python 沙箱工具 | `tools/data/RunPythonTool`（`runPython`） |
 | 图表生成 | `tools/data/ChartBuilder`（`build`、`applyMarkLine`） |
 | 工具注册 | `tools/data/DataToolkitRegistrar` |
@@ -981,7 +971,7 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 | 当前建模与通用 HITL | `ModelingToolkitRegistrar#registerOfficialTools`、`OfficialWrenToolkit#execute`、`WrenProjectAccess#resolve`、`WrenProjectFilesystem`、`ModelingHitlMiddleware`；前端 ModelingChatPanel/ModelingHitlCard。旧 ModelingToolkit 仅兼容源码，不是当前注册工具链 |
 | 文档语义增强（specs/014） | `dataset/DocEnhanceService`（`triggerAnalyzeQuietly`、`adopt`）、`web/api/SemanticModelingController`（enhance 端点）、`web/persistence/jpa/{DocEnhanceTaskEntity,DocEnhanceProposalEntity,SemanticBusinessRuleEntity}`、前端 `pages/configure/SemanticModelingPage` |
 | MDL 拼装/发布（M2 → specs/019 v2） | `dataset/MdlPublishService`（`preview`、`validate`、`publish`、`deleteArtifacts`、`view` 只读视图）、`dataset/{MdlSeeder,MdlWorkspaceService,MdlWorkspaceReader,WrenTypeNormalizer}`（播种/工作区/读面）、`dataset/{WrenCli,WrenProperties}`、前端 `components/MdlPublishPanel`、`components/modeling/{SemanticWorkbench,workbenchLayout,ruleText,semanticSnapshot}`（`ModelsPanel`、`RelationsPanel` 已不挂载） |
-| Wren 运行期（M3） | `tools/data/WrenToolkit`（`wrenRunSql`）、`runtime/wren/{WrenQueryGateway,WrenInstanceRegistry}`（`call`、`invalidate`、`resolveSnapshotProfile`）、`dataset/{WrenProfileHome,MdlCatalog}` |
+| Wren 运行期（M3） | `tools/data/WrenScopedMcpClient`（`callTool`）、`runtime/wren/{WrenQueryGateway,WrenInstanceRegistry}`（`call`、`invalidate`、`resolveSnapshotProfile`）、`dataset/{WrenProfileHome,MdlCatalog}` |
 | 外部源发布链（M4） | `dataset/MdlPublishService`（`selectWrenSource`、`writeWrenSourceProperties`）、`dataset/{WrenSourceProber,JdbcWrenSourceProber}` |
 | 知识图谱（已停用） | `dataset/KnowledgeGraphService`、`dataset/SchemaTripleExtractor`（链路停用，见第 6 章） |
 | 会话管理 | `runtime/session/SessionAgentManager`、`SessionStore`、`SessionEntry` |

@@ -124,11 +124,11 @@ public final class WrenScopedMcpClient extends McpClientWrapper {
         long started = System.nanoTime();
         try {
             T result = action.get();
-            io.agentscope.dataagent.web.middleware.ExecutionTimingMiddleware.record(
+            io.agentscope.dataagent.runtime.observability.ExecutionTimingMiddleware.record(
                     context, phase, "", started, "SUCCESS");
             return result;
         } catch (RuntimeException failure) {
-            io.agentscope.dataagent.web.middleware.ExecutionTimingMiddleware.record(
+            io.agentscope.dataagent.runtime.observability.ExecutionTimingMiddleware.record(
                     context, phase, "", started, "ERROR");
             throw failure;
         }
@@ -240,13 +240,13 @@ public final class WrenScopedMcpClient extends McpClientWrapper {
                                 var result =
                                         gateway.callAuthorized(
                                                 groupId, tool, args, this::authorize);
-                                io.agentscope.dataagent.web.middleware.ExecutionTimingMiddleware
-                                        .record(
-                                                context,
-                                                "wren." + tool,
-                                                "",
-                                                started,
-                                                result.ok() ? "SUCCESS" : "ERROR");
+                                io.agentscope.dataagent.runtime.observability
+                                        .ExecutionTimingMiddleware.record(
+                                        context,
+                                        "wren." + tool,
+                                        "",
+                                        started,
+                                        result.ok() ? "SUCCESS" : "ERROR");
                                 String payload =
                                         query && result.ok()
                                                 ? compactRows(result.payload())

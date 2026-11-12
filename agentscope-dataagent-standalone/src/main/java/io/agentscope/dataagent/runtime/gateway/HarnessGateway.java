@@ -529,7 +529,7 @@ public final class HarnessGateway implements Gateway {
                                             try {
                                                 flushHistory(sessionKey);
                                             } finally {
-                                                io.agentscope.dataagent.web.middleware
+                                                io.agentscope.dataagent.runtime.observability
                                                         .ExecutionTimingMiddleware.record(
                                                         runtimeContext,
                                                         "completion.history.projection",

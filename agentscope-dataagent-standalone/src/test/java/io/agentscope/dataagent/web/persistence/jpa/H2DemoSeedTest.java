@@ -17,35 +17,25 @@ package io.agentscope.dataagent.web.persistence.jpa;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.agentscope.core.message.TextBlock;
-import io.agentscope.core.model.ChatResponse;
-import io.agentscope.core.model.Model;
-import io.agentscope.dataagent.web.DataAgentApp;
 import io.agentscope.dataagent.web.auth.UserStore;
-import io.agentscope.harness.agent.filesystem.remote.store.BaseStore;
-import io.agentscope.harness.agent.filesystem.remote.store.InMemoryStore;
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
-import java.util.Map;
-import org.junit.jupiter.api.Disabled;
+import javax.sql.DataSource;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
+import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
-import reactor.core.publisher.Flux;
 
 /**
  * Verifies that {@code data-h2.sql} executes on top of a <strong>file-mode</strong> H2 DataSource
- * — exactly the production default — and seeds the {@code bob} and {@code alice} demo accounts
+ * with explicitly enabled development seeding, including the {@code bob} and {@code alice} accounts
  * with passwords identical to the usernames.
  *
  * <p>The file-mode coverage matters because Spring Boot 4's {@code spring.sql.init.mode=embedded}
@@ -57,40 +47,58 @@ import reactor.core.publisher.Flux;
  * <ul>
  *   <li>BCrypt hash constants in {@code data-h2.sql} verify against the documented plaintext
  *       passwords ({@code bob} / {@code alice}).
- *   <li>{@code spring.sql.init.mode=always} (our default) makes the seed run for file URLs.
+ *   <li>Explicit {@code spring.sql.init.mode=always} makes the seed run for file URLs.
  *   <li>The {@code @PostConstruct} admin seed is order-safe and still inserts {@code admin}
  *       even when the SQL initializer has already populated other rows.
  * </ul>
  */
-@Disabled("Pending fix for circular dependency between builderBootstrap and userSandboxRegistry")
-@SpringBootTest(classes = DataAgentApp.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
-@Import(H2DemoSeedTest.StubModelConfig.class)
+@DataJpaTest
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+@Import({JpaPersistenceConfig.class, H2DemoSeedTest.JsonConfig.class})
+@ActiveProfiles("integration-test")
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @TestPropertySource(
         properties = {
-            "dataagent.jwt.secret=test-jwt-secret-must-be-at-least-32-characters-long",
-            "dataagent.workspace=${java.io.tmpdir}/agentscope-dataagent-h2-seed-test",
-            "dataagent.dashscope.api-key=",
             "spring.datasource.driver-class-name=org.h2.Driver",
             "spring.datasource.username=sa",
             "spring.datasource.password=",
             "spring.jpa.hibernate.ddl-auto=create-drop",
             "spring.jpa.defer-datasource-initialization=true",
+            "spring.jpa.show-sql=false",
+            "dataagent.seed-demo-users=true",
+            "spring.sql.init.mode=always",
+            "spring.sql.init.platform=h2"
         })
+@Tag("integration")
 class H2DemoSeedTest {
+    @org.springframework.boot.test.context.TestConfiguration(proxyBeanMethods = false)
+    static class JsonConfig {
+        @org.springframework.context.annotation.Bean
+        com.fasterxml.jackson.databind.ObjectMapper objectMapper() {
+            return new com.fasterxml.jackson.databind.ObjectMapper();
+        }
+    }
+
+    @TempDir static Path directory;
+    @Autowired DataSource dataSource;
+
+    @DynamicPropertySource
+    static void fileDatabase(DynamicPropertyRegistry registry) {
+        registry.add(
+                "spring.datasource.url",
+                () ->
+                        "jdbc:h2:file:"
+                                + directory.resolve("db").toString().replace('\\', '/')
+                                + ";MODE=MYSQL");
+    }
 
     @Autowired UserStore userStore;
 
-    @DynamicPropertySource
-    static void h2FileDataSource(DynamicPropertyRegistry registry) throws IOException {
-        Path dir = Files.createTempDirectory("agentscope-dataagent-h2-seed-test-db");
-        String dbPath = dir.resolve("db").toString();
-        registry.add(
-                "spring.datasource.url",
-                () -> "jdbc:h2:file:" + dbPath + ";MODE=MYSQL;DB_CLOSE_DELAY=-1");
-    }
-
     @Test
-    void bobAndAliceSeededWithMatchingPasswords() {
+    void bobAndAliceSeededWithMatchingPasswords() throws Exception {
+        try (var connection = dataSource.getConnection()) {
+            assertThat(connection.getMetaData().getURL()).startsWith("jdbc:h2:file:");
+        }
         UserStore.UserRecord bob =
                 userStore
                         .findByUsername("bob")
@@ -130,30 +138,5 @@ class H2DemoSeedTest {
                                                     + " order-safe with data-h2.sql"));
         assertThat(admin.roles()).contains("admin");
         assertThat(userStore.verifyPassword(admin, "admin")).isTrue();
-    }
-
-    @TestConfiguration
-    static class StubModelConfig {
-        @Bean
-        @Primary
-        Model stubModel() {
-            Model model = Mockito.mock(Model.class);
-            Mockito.when(model.getModelName()).thenReturn("stub-model");
-            ChatResponse chunk =
-                    new ChatResponse(
-                            "stub-id",
-                            List.of(TextBlock.builder().text("ok").build()),
-                            null,
-                            Map.of(),
-                            "stop");
-            Mockito.when(model.stream(Mockito.anyList(), Mockito.any(), Mockito.any()))
-                    .thenReturn(Flux.just(chunk));
-            return model;
-        }
-
-        @Bean
-        BaseStore inMemoryStore() {
-            return new InMemoryStore();
-        }
     }
 }

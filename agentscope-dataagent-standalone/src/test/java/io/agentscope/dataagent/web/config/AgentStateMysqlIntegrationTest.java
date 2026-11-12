@@ -22,12 +22,14 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.mock.env.MockEnvironment;
 
 /** Opt-in verification against a dedicated local database; never uses application defaults. */
 @EnabledIfSystemProperty(named = "dataagent.test.state.config", matches = ".+")
+@Tag("external")
 class AgentStateMysqlIntegrationTest {
     static HikariDataSource source;
 

@@ -24,6 +24,7 @@ import io.agentscope.dataagent.dataset.DatasetService;
 import io.agentscope.dataagent.dataset.DocEnhanceService;
 import io.agentscope.dataagent.dataset.MdlPublishService;
 import io.agentscope.dataagent.dataset.MdlSuggestionService;
+import io.agentscope.dataagent.dataset.MdlTypes;
 import io.agentscope.dataagent.dataset.MdlWorkspaceService;
 import io.agentscope.dataagent.dataset.SqlQaExampleService;
 import io.agentscope.dataagent.runtime.wren.WrenQueryGateway;
@@ -750,8 +751,7 @@ public class SemanticModelingController {
 
     /** YAML preview: freshly assembled files, published snapshot, issues and MDL state. */
     @GetMapping("/mdl")
-    public Mono<MdlPublishService.MdlPreview> mdlPreview(
-            @PathVariable String groupId, Authentication auth) {
+    public Mono<MdlTypes.MdlPreview> mdlPreview(@PathVariable String groupId, Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
                         () -> {
@@ -764,7 +764,7 @@ public class SemanticModelingController {
 
     /** The official compiled MDL of the published version and of the draft's last build. */
     @GetMapping("/mdl/compiled")
-    public Mono<MdlPublishService.CompiledMdl> mdlCompiled(
+    public Mono<MdlTypes.CompiledMdl> mdlCompiled(
             @PathVariable String groupId, Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
@@ -778,8 +778,7 @@ public class SemanticModelingController {
 
     /** Read-only structured MDL view for visualization (specs/013 M2): draft + publish state. */
     @GetMapping("/mdl/view")
-    public Mono<MdlPublishService.MdlView> mdlView(
-            @PathVariable String groupId, Authentication auth) {
+    public Mono<MdlTypes.MdlView> mdlView(@PathVariable String groupId, Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
                         () -> {
@@ -792,7 +791,7 @@ public class SemanticModelingController {
 
     /** Runs assemble + wren context validate --strict; local issues short-circuit the subprocess. */
     @PostMapping("/mdl/validate")
-    public Mono<MdlPublishService.MdlValidation> mdlValidate(
+    public Mono<MdlTypes.MdlValidation> mdlValidate(
             @PathVariable String groupId, Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
@@ -806,7 +805,7 @@ public class SemanticModelingController {
 
     /** Rebuilds the table/column baseline without publishing semantic drafts. */
     @PostMapping("/mdl/initialize")
-    public Mono<MdlPublishService.MdlPublishResult> mdlInitialize(
+    public Mono<MdlTypes.MdlPublishResult> mdlInitialize(
             @PathVariable String groupId, Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
@@ -820,7 +819,7 @@ public class SemanticModelingController {
 
     /** validate -> build -> snapshot -> version+1; any failure keeps the previous snapshot. */
     @PostMapping("/mdl/publish")
-    public Mono<MdlPublishService.MdlPublishResult> mdlPublish(
+    public Mono<MdlTypes.MdlPublishResult> mdlPublish(
             @PathVariable String groupId, Authentication auth) {
         String userId = (String) auth.getPrincipal();
         return Mono.fromCallable(
@@ -828,8 +827,7 @@ public class SemanticModelingController {
                             groupService.getGroup(userId, groupId);
                             // ADR0111: never publish a draft the assistant is still changing.
                             if (modelingActivity != null) modelingActivity.requireIdle(groupId);
-                            MdlPublishService.MdlPublishResult result =
-                                    mdlPublishService.publish(groupId);
+                            MdlTypes.MdlPublishResult result = mdlPublishService.publish(groupId);
                             // Publish = rebuild the instance (ADR 0018 D8): the running wren engine
                             // froze the previous manifest at startup, so it is closed here — the
                             // next query respawns against the fresh snapshot.

@@ -250,7 +250,7 @@ public class DraftReviewService {
         return out;
     }
 
-    private static Map<String, String> fileContents(List<MdlPublishService.MdlFile> files) {
+    private static Map<String, String> fileContents(List<MdlTypes.MdlFile> files) {
         Map<String, String> result = new LinkedHashMap<>();
         files.forEach(file -> result.put(file.path(), file.content()));
         return result;

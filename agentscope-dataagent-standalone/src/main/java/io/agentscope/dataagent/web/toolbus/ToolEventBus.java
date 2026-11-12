@@ -16,6 +16,7 @@
 package io.agentscope.dataagent.web.toolbus;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import io.agentscope.dataagent.runtime.context.InvocationContextKeys;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.stereotype.Component;
@@ -31,9 +32,9 @@ import reactor.core.publisher.Sinks;
 @Component
 public class ToolEventBus {
 
-    public static final String REQUEST_ID_CONTEXT_KEY = "toolEventRequestId";
-    public static final String RUN_ID_CONTEXT_KEY = "toolEventRunId";
-    public static final String PARENT_CALL_CONTEXT_KEY = "toolEventParentCallId";
+    public static final String REQUEST_ID_CONTEXT_KEY = InvocationContextKeys.REQUEST_ID;
+    public static final String RUN_ID_CONTEXT_KEY = InvocationContextKeys.RUN_ID;
+    public static final String PARENT_CALL_CONTEXT_KEY = InvocationContextKeys.PARENT_CALL_ID;
 
     private final Sinks.Many<ToolEvent> sink =
             Sinks.many().multicast().onBackpressureBuffer(256, false);

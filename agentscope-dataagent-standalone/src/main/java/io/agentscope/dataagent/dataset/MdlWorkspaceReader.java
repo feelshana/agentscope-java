@@ -153,29 +153,27 @@ public class MdlWorkspaceReader {
     public record WorkspaceView(String name, String sql, String description, String path) {}
 
     public record Snapshot(
-            List<MdlPublishService.MdlFile> files,
-            List<MdlPublishService.MdlIssue> issues,
+            List<MdlTypes.MdlFile> files,
+            List<MdlTypes.MdlIssue> issues,
             List<WorkspaceModel> models,
             List<WorkspaceRelation> relations,
             List<WorkspaceCube> cubes,
             List<WorkspaceView> views) {}
 
     /** Lists every publishable workspace file; empty when no workspace exists. */
-    public List<MdlPublishService.MdlFile> listFiles(String groupId) {
+    public List<MdlTypes.MdlFile> listFiles(String groupId) {
         Path root = workspace.workspaceRoot(groupId);
         if (!Files.isDirectory(root)) {
             return List.of();
         }
-        List<MdlPublishService.MdlFile> out = new ArrayList<>();
+        List<MdlTypes.MdlFile> out = new ArrayList<>();
         try (Stream<Path> walk = Files.walk(root)) {
             for (Path p : walk.filter(Files::isRegularFile).sorted().toList()) {
                 String rel = root.relativize(p).toString().replace('\\', '/');
                 if (isInternal(rel)) {
                     continue;
                 }
-                out.add(
-                        new MdlPublishService.MdlFile(
-                                rel, Files.readString(p, StandardCharsets.UTF_8)));
+                out.add(new MdlTypes.MdlFile(rel, Files.readString(p, StandardCharsets.UTF_8)));
             }
         } catch (IOException e) {
             log.warn(
@@ -189,7 +187,7 @@ public class MdlWorkspaceReader {
 
     /** Parses the whole workspace; parse failures become error issues, never exceptions. */
     public Snapshot read(String groupId) {
-        List<MdlPublishService.MdlIssue> issues = new ArrayList<>();
+        List<MdlTypes.MdlIssue> issues = new ArrayList<>();
         Path root = workspace.workspaceRoot(groupId);
         if (!Files.isDirectory(root)) {
             return new Snapshot(List.of(), issues, List.of(), List.of(), List.of(), List.of());
@@ -576,8 +574,7 @@ public class MdlWorkspaceReader {
         return s.isEmpty() ? fallback : s;
     }
 
-    private static MdlPublishService.MdlIssue issue(
-            String severity, String message, String source) {
-        return new MdlPublishService.MdlIssue(severity, message, source);
+    private static MdlTypes.MdlIssue issue(String severity, String message, String source) {
+        return new MdlTypes.MdlIssue(severity, message, source);
     }
 }

@@ -521,7 +521,7 @@ public class ChatController {
                                                             .build();
                                             long lastToken = lastTokenAt.get();
                                             var frame = sse("done", doneFrame);
-                                            io.agentscope.dataagent.web.middleware
+                                            io.agentscope.dataagent.runtime.observability
                                                     .ExecutionTimingMiddleware.record(
                                                     timingContext,
                                                     "completion.sse.done",

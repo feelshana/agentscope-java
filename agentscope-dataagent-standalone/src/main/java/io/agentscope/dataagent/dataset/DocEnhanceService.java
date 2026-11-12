@@ -248,7 +248,7 @@ public class DocEnhanceService {
         boolean mdlChanged = applyProposal(ownerId, groupId, proposal, payload);
         if (mdlChanged) {
             groupService.markMdlDirty(ownerId, groupId);
-            MdlPublishService.MdlValidation validation = mdlPublishService.validate(groupId);
+            MdlTypes.MdlValidation validation = mdlPublishService.validate(groupId);
             if (!validation.ok()) {
                 String detail =
                         validation.issues().isEmpty()

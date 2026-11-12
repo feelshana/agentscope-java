@@ -1,4 +1,4 @@
-package io.agentscope.dataagent.web.middleware;
+package io.agentscope.dataagent.runtime.observability;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -18,6 +18,64 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 
 class ExecutionTimingMiddlewareTest {
+    @Test
+    void standaloneRecordsHaveEmptyCorrelationAndNoInventedInvocationCounters() throws Exception {
+        Logger logger = (Logger) LoggerFactory.getLogger("EXECUTION_TIMING");
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            ExecutionTimingMiddleware.record(
+                    null, "index.prepare", "g", System.nanoTime(), "SUCCESS");
+            assertThat(appender.list).hasSize(1);
+            var row =
+                    new com.fasterxml.jackson.databind.ObjectMapper()
+                            .readTree(appender.list.get(0).getFormattedMessage());
+            assertThat(row.path("requestId").asText()).isEmpty();
+            assertThat(row.path("traceId").asText()).isEmpty();
+            assertThat(row.path("sessionId").asText()).isEmpty();
+            assertThat(row.path("phase").asText()).isEqualTo("index.prepare");
+            assertThat(row.path("status").asText()).isEqualTo("SUCCESS");
+            assertThat(row.path("durationMs").asLong()).isGreaterThanOrEqualTo(0);
+            assertThat(row.has("modelCalls")).isFalse();
+            assertThat(row.has("toolCalls")).isFalse();
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+    }
+
+    @Test
+    void unavailableTimingMetadataDoesNotChangeTheAgentOutcome() {
+        var context = org.mockito.Mockito.spy(RuntimeContext.builder().userId("a").build());
+        org.mockito.Mockito.doThrow(new IllegalStateException("unavailable metadata"))
+                .when(context)
+                .getSessionId();
+        var middleware = new ExecutionTimingMiddleware();
+        var output = new TextBlockDeltaEvent("run", "block", "answer");
+        assertThat(
+                        middleware
+                                .onAgent(
+                                        null,
+                                        context,
+                                        new AgentInput(List.of()),
+                                        ignored -> Flux.just(output))
+                                .collectList()
+                                .block())
+                .containsExactly(output);
+        var original = new IllegalArgumentException("original failure");
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () ->
+                                middleware
+                                        .onAgent(
+                                                null,
+                                                context,
+                                                new AgentInput(List.of()),
+                                                ignored -> Flux.error(original))
+                                        .blockLast())
+                .isSameAs(original);
+    }
+
     @Test
     void modelAndToolErrorsHaveCorrelatedTerminalTimings() {
         Logger logger = (Logger) LoggerFactory.getLogger("EXECUTION_TIMING");

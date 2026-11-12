@@ -13,9 +13,11 @@ import io.agentscope.dataagent.dataset.WrenProperties;
 import java.nio.file.Files;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 /** Opt-in read-only check against the reported MySQL knowledge base; no publish or writes. */
+@Tag("external")
 class WrenMysqlLimitIntegrationTest {
     @Test
     void cliAndMcpAcceptSqlLimitsAndPreserveTruncation() throws Exception {

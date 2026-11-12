@@ -187,7 +187,7 @@ public class ModelingWorkflowService {
                 affected);
     }
 
-    private static List<Change> changes(MdlPublishService.MdlPreview preview) {
+    private static List<Change> changes(MdlTypes.MdlPreview preview) {
         Map<String, String> oldFiles = new LinkedHashMap<>();
         preview.publishedFiles().forEach(f -> oldFiles.put(f.path(), f.content()));
         List<Change> changes = new ArrayList<>();

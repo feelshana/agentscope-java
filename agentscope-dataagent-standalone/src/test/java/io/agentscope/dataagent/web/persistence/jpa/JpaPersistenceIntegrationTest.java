@@ -17,31 +17,18 @@ package io.agentscope.dataagent.web.persistence.jpa;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.agentscope.core.message.TextBlock;
-import io.agentscope.core.model.ChatResponse;
-import io.agentscope.core.model.Model;
 import io.agentscope.dataagent.runtime.DataAgentBootstrap;
-import io.agentscope.dataagent.web.DataAgentApp;
+import io.agentscope.dataagent.support.IsolatedApplicationTestSupport;
 import io.agentscope.dataagent.web.auth.UserStore;
 import io.agentscope.dataagent.web.catalog.UserAgentDefinitionStore;
 import io.agentscope.dataagent.web.catalog.UserAgentDefinitionStore.StoredEntry;
 import io.agentscope.dataagent.web.share.AgentShareGrant;
-import io.agentscope.harness.agent.filesystem.remote.store.BaseStore;
-import io.agentscope.harness.agent.filesystem.remote.store.InMemoryStore;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.test.context.TestPropertySource;
-import reactor.core.publisher.Flux;
 
 /**
  * Boots the full Spring Boot context (the JPA-backed persistence path is the only backend the
@@ -50,32 +37,16 @@ import reactor.core.publisher.Flux;
  *
  * <ul>
  *   <li>{@link JpaPersistenceConfig} is active by default and wires both stores;
- *   <li>{@link JpaUserStore} seeds the default {@code admin} user and supports full CRUD;
+ *   <li>{@link JpaUserStore} supports explicit development seeding and full CRUD;
  *   <li>{@link JpaUserAgentDefinitionStore} round-trips agent definitions including share
  *       grants;
  *   <li>The {@link UserStore} / {@link UserAgentDefinitionStore} beans wired into the rest of the
  *       app are the JPA implementations.
  * </ul>
  */
-@Disabled("Pending fix for circular dependency between builderBootstrap and userSandboxRegistry")
-@SpringBootTest(classes = DataAgentApp.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
-@Import(JpaPersistenceIntegrationTest.StubModelConfig.class)
-@TestPropertySource(
-        properties = {
-            "dataagent.jwt.secret=test-jwt-secret-must-be-at-least-32-characters-long",
-            "dataagent.workspace=${java.io.tmpdir}/agentscope-dataagent-jpa-it",
-            "dataagent.dashscope.api-key=",
-            "spring.datasource.url=jdbc:h2:mem:dataagentJpaIT;DB_CLOSE_DELAY=-1;MODE=MYSQL",
-            "spring.datasource.driver-class-name=org.h2.Driver",
-            "spring.datasource.username=sa",
-            "spring.datasource.password=",
-            "spring.jpa.hibernate.ddl-auto=create-drop",
-            "spring.jpa.open-in-view=false",
-            // Skip the dev-only bob/alice demo seed so the assertions about CRUD round-trips
-            // and seeded-admin state aren't perturbed.
-            "spring.sql.init.mode=never"
-        })
-class JpaPersistenceIntegrationTest {
+@TestPropertySource(properties = "dataagent.seed-demo-users=true")
+@Tag("integration")
+class JpaPersistenceIntegrationTest extends IsolatedApplicationTestSupport {
 
     @Autowired UserStore userStore;
     @Autowired UserAgentDefinitionStore agentStore;
@@ -89,7 +60,7 @@ class JpaPersistenceIntegrationTest {
     }
 
     @Test
-    void defaultAdminIsSeededOnEmptyDatabase() {
+    void explicitDevelopmentSeedCreatesAdminOnEmptyDatabase() {
         Optional<UserStore.UserRecord> admin = userStore.findById("admin");
         assertThat(admin).isPresent();
         assertThat(admin.get().roles()).contains("admin");
@@ -167,30 +138,5 @@ class JpaPersistenceIntegrationTest {
 
         assertThat(agentStore.delete("bob-1", "demo")).isTrue();
         assertThat(agentStore.findById("bob-1", "demo")).isEmpty();
-    }
-
-    @TestConfiguration
-    static class StubModelConfig {
-        @Bean
-        @Primary
-        Model stubModel() {
-            Model model = Mockito.mock(Model.class);
-            Mockito.when(model.getModelName()).thenReturn("stub-model");
-            ChatResponse chunk =
-                    new ChatResponse(
-                            "stub-id",
-                            List.of(TextBlock.builder().text("ok").build()),
-                            null,
-                            Map.of(),
-                            "stop");
-            Mockito.when(model.stream(Mockito.anyList(), Mockito.any(), Mockito.any()))
-                    .thenReturn(Flux.just(chunk));
-            return model;
-        }
-
-        @Bean
-        BaseStore inMemoryStore() {
-            return new InMemoryStore();
-        }
     }
 }

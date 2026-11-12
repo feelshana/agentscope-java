@@ -33,7 +33,7 @@ LLM 转录没有时间戳，需要单独分析一次运行时，先停服务把�
 
 ## 验证方式
 
-自动化：`mvn spotless:check`、`mvn test`、`mvn package -DskipTests`、`cd frontend && npm run build`。真实 LLM、Docker、Wren 相关测试为条件启用。Agent 的实际行为只能通过重启加载新包后的日志确认，提示词或单测断言不能代替。
+自动化：日常按改动用`python scripts/check.py backend --tests 类名`、`backend --unit`或`frontend --files 文件名`；合并/发布前完整`clean verify`，详见[CI指引](../guides/dataagent-ci.md)。真实 LLM、Docker、Wren 相关测试为条件启用。Agent 的实际行为只能通过重启加载新包后的日志确认，提示词或单测断言不能代替。
 
 
 ## 当前工程补充（2026-10-26）

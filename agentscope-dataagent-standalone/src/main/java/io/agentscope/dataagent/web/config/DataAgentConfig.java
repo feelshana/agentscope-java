@@ -527,7 +527,8 @@ public class DataAgentConfig {
                     }
                     b.middleware(new ToolNotificationMiddleware(toolEventBus));
                     b.middleware(
-                            new io.agentscope.dataagent.web.middleware.ExecutionTimingMiddleware());
+                            new io.agentscope.dataagent.runtime.observability
+                                    .ExecutionTimingMiddleware());
                     // The modeling assistant's transcript goes to its own file
                     // (logs/LLM-modeling.log) so semantic-modeling sessions stay separate from
                     // data-agent chat traffic; every other agent keeps the shared logs/LLM.log.

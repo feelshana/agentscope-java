@@ -8,6 +8,8 @@ ADR 记录"为什么这样做"。规则：
 
 ## 当前有效主线（按主题）
 
+[ADR0144](0144-incremental-package-dependency-contracts.md) 以生产字节码约束新增反向依赖，精确登记历史类对，逐次抽取职责；通用计时和上下文键归runtime。
+
 [ADR0143](0143-history-query-projection.md) 为管理员检索复用消息投影，后台分批补齐角色与用户正文，服务端统一分页和统计。
 
 [ADR0142](0142-bi-multisource-independent-sync.md) 为新增六表建立独立多源任务，按日原子替换保留真实重复，明确可用历史/缺失区间，不改变旧七表任务。

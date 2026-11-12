@@ -108,7 +108,7 @@ public final class QuestionDateGate implements HarnessRuntimeMiddleware {
                                     .map(QuestionDateGate::parse)
                                     .doFinally(
                                             signal ->
-                                                    io.agentscope.dataagent.web.middleware
+                                                    io.agentscope.dataagent.runtime.observability
                                                             .ExecutionTimingMiddleware.record(
                                                             ctx,
                                                             "date_gate",

@@ -18,6 +18,12 @@ package io.agentscope.dataagent.dataset;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.agentscope.dataagent.dataset.MdlTypes.CompiledMdl;
+import io.agentscope.dataagent.dataset.MdlTypes.MdlIssue;
+import io.agentscope.dataagent.dataset.MdlTypes.MdlPreview;
+import io.agentscope.dataagent.dataset.MdlTypes.MdlPublishResult;
+import io.agentscope.dataagent.dataset.MdlTypes.MdlValidation;
+import io.agentscope.dataagent.dataset.MdlTypes.MdlView;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupRepository;
@@ -28,7 +34,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Instant;
@@ -102,6 +107,7 @@ public class MdlPublishService {
     private final MdlSeeder seeder;
     private final MdlWorkspaceService workspace;
     private final MdlWorkspaceReader reader;
+    private final MdlReadService readService;
     private final MdlQuestionStore questionStore;
     private final org.springframework.context.ApplicationEventPublisher events;
     private AssetReviewStore assetReviews;
@@ -174,272 +180,26 @@ public class MdlPublishService {
         this.seeder = seeder;
         this.workspace = workspace;
         this.reader = reader;
+        this.readService = new MdlReadService(groupRepository, props, workspace, reader);
         this.questionStore = new MdlQuestionStore(workspace);
         this.events = events;
     }
-
-    // ------------------------------------------------------------------ public API result types
-
-    /** One structured problem: {@code severity} = error|warning, {@code source} = local|wren. */
-    public record MdlIssue(String severity, String message, String source) {}
-
-    /** One workspace/snapshot file; {@code path} is project-relative with '/' separators. */
-    public record MdlFile(String path, String content) {}
-
-    /** Workspace preview: current files, the published snapshot, issues and group state. */
-    public record MdlPreview(
-            List<MdlFile> files,
-            List<MdlFile> publishedFiles,
-            List<MdlIssue> issues,
-            String mdlState,
-            int mdlVersion,
-            String mdlPublishedAt,
-            boolean changed) {}
-
-    /** Outcome of a validation run; {@code output} is the trimmed wren CLI transcript. */
-    public record MdlValidation(
-            boolean ok, List<MdlIssue> issues, String output, List<MdlFile> files) {}
-
-    /** Outcome of a publish attempt; on success the group state reflects the new version. */
-    public record MdlPublishResult(
-            boolean ok,
-            List<MdlIssue> issues,
-            String output,
-            String mdlState,
-            int mdlVersion,
-            String mdlPublishedAt) {}
-
-    // ------------------------------------------------------------- read-only view (specs/013 M2,
-    // shapes preserved for the frontend)
-
-    /**
-     * One column in a logical model; {@code relationship}/{@code calculated} carry the badges.
-     * The last five are platform-maintained {@code properties} the engine ignores (spec117).
-     */
-    public record MdlColumnView(
-            String name,
-            String type,
-            String description,
-            boolean relationship,
-            boolean calculated,
-            String expression,
-            boolean primaryKey,
-            String displayName,
-            String semanticType,
-            List<String> synonyms,
-            List<String> values,
-            boolean userDescribed) {}
-
-    /**
-     * One logical model with its full column list; {@code tableName} is the physical table.
-     * {@code refSqlPath} points at the defining SQL file for a derived (ref_sql) model and is
-     * {@code null} for physical models (specs/034).
-     */
-    public record MdlModelView(
-            String datasetId,
-            String datasetName,
-            String tableName,
-            String modelName,
-            String description,
-            List<MdlColumnView> columns,
-            String path,
-            String refSqlPath,
-            String primaryKey,
-            String tableRole) {}
-
-    /** One relation edge with its (possibly composite) column pair list. */
-    public record MdlRelationView(
-            String name,
-            String leftModel,
-            String rightModel,
-            String joinType,
-            String condition,
-            List<String> sourceColumns,
-            List<String> targetColumns,
-            String description) {}
-
-    /** One cube member rendered from the workspace file. */
-    public record MdlCubeMemberView(
-            String name, String expression, String type, String description) {}
-
-    /** One semantic cube with member lists. */
-    public record MdlCubeView(
-            String name,
-            String baseModel,
-            String description,
-            List<MdlCubeMemberView> measures,
-            List<MdlCubeMemberView> dimensions,
-            List<MdlCubeMemberView> timeDimensions,
-            String path) {}
-
-    /** One named SQL view with its statement (specs/011 M2). */
-    public record MdlViewSummary(String name, String sql, String description, String path) {}
-
-    /**
-     * Read-only MDL visualization payload (specs/013 M2, ADR 0024 D5): the workspace as it stands
-     * (what you see is exactly what a publish would ship) plus the publication status and a
-     * {@code changed} flag comparing the workspace against the published snapshot.
-     */
-    public record MdlView(
-            String state,
-            int version,
-            String publishedAt,
-            boolean changed,
-            List<MdlModelView> models,
-            List<MdlRelationView> relations,
-            List<MdlCubeView> cubes,
-            List<MdlViewSummary> views,
-            List<MdlIssue> issues,
-            List<MdlModelView> derivedModels) {}
 
     // ------------------------------------------------------------------ public API
 
     /** Lists workspace and published files for the YAML diff card; never reconciles. */
     public MdlPreview preview(String groupId) {
-        DatasetGroupEntity group = requireGroup(groupId);
-        List<MdlFile> files = reader.listFiles(groupId);
-        List<MdlFile> published = readPublishedFiles(groupId);
-        return new MdlPreview(
-                files,
-                published,
-                List.of(),
-                group.getMdlState(),
-                group.getMdlVersion(),
-                group.getMdlPublishedAt() == null ? null : group.getMdlPublishedAt().toString(),
-                !sameFiles(files, published));
+        return readService.preview(groupId);
     }
 
-    /** The official compiled MDL text of one version and when it was built; null when absent. */
-    public record CompiledMdl(
-            String published, String publishedBuiltAt, String draft, String draftBuiltAt) {}
-
-    private static final long MAX_COMPILED_BYTES = 4L * 1024 * 1024;
-
-    /**
-     * The official compiled MDL ({@code target/mdl.json}): the published one is exactly what the
-     * query agent reads as {@code wren://mdl}; the draft one is from the draft's last build.
-     */
+    /** Reads the current official compiled MDL texts without building either version. */
     public CompiledMdl compiled(String groupId) {
-        Path published = props.groupRoot(groupId).resolve("published/target/mdl.json");
-        Path draft = workspace.workspaceRoot(groupId).resolve("target/mdl.json");
-        return new CompiledMdl(
-                compiledText(published), builtAt(published), compiledText(draft), builtAt(draft));
+        return readService.compiled(groupId);
     }
 
-    private static String compiledText(Path file) {
-        try {
-            if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) return null;
-            if (Files.size(file) > MAX_COMPILED_BYTES)
-                throw new DatasetException("编译后的 MDL 过大，无法在页面显示", 413);
-            return Files.readString(file, StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            throw new DatasetException("读取编译后的 MDL 失败：" + e.getMessage(), e);
-        }
-    }
-
-    private static String builtAt(Path file) {
-        try {
-            return Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)
-                    ? Files.getLastModifiedTime(file).toInstant().toString()
-                    : null;
-        } catch (IOException e) {
-            return null;
-        }
-    }
-
-    /** Renders the workspace as a structured view; never touches the staging directory. */
+    /** Renders the current structured workspace without entering publication. */
     public MdlView view(String groupId) {
-        DatasetGroupEntity group = requireGroup(groupId);
-        MdlWorkspaceReader.Snapshot snapshot = reader.read(groupId);
-        List<MdlModelView> models = new ArrayList<>();
-        List<MdlModelView> derivedModels = new ArrayList<>();
-        for (MdlWorkspaceReader.WorkspaceModel m : snapshot.models()) {
-            List<MdlColumnView> cols = new ArrayList<>();
-            for (MdlWorkspaceReader.WorkspaceColumn c : m.columns()) {
-                cols.add(
-                        new MdlColumnView(
-                                c.name(),
-                                c.type(),
-                                c.description(),
-                                c.relationship() != null,
-                                c.calculated(),
-                                c.expression(),
-                                c.primaryKey(),
-                                c.displayName(),
-                                c.semanticType(),
-                                c.synonyms(),
-                                c.values(),
-                                c.userDescribed()));
-            }
-            MdlModelView mv =
-                    new MdlModelView(
-                            m.datasetId(),
-                            m.datasetName(),
-                            m.tableName(),
-                            m.name(),
-                            m.description(),
-                            cols,
-                            m.path(),
-                            m.refSqlPath(),
-                            m.primaryKey(),
-                            m.tableRole());
-            // Derived (ref_sql) models get their own tab — the schema tab stays physical-only.
-            if (m.refSql() != null) {
-                derivedModels.add(mv);
-            } else {
-                models.add(mv);
-            }
-        }
-        List<MdlRelationView> relations = new ArrayList<>();
-        for (MdlWorkspaceReader.WorkspaceRelation r : snapshot.relations()) {
-            relations.add(
-                    new MdlRelationView(
-                            r.name(),
-                            r.leftModel(),
-                            r.rightModel(),
-                            r.joinType(),
-                            r.condition(),
-                            r.sourceColumns(),
-                            r.targetColumns(),
-                            r.description()));
-        }
-        List<MdlCubeView> cubes = new ArrayList<>();
-        for (MdlWorkspaceReader.WorkspaceCube c : snapshot.cubes()) {
-            cubes.add(
-                    new MdlCubeView(
-                            c.name(),
-                            c.baseModel(),
-                            c.description(),
-                            toMemberViews(c.measures()),
-                            toMemberViews(c.dimensions()),
-                            toMemberViews(c.timeDimensions()),
-                            c.path()));
-        }
-        List<MdlViewSummary> views = new ArrayList<>();
-        for (MdlWorkspaceReader.WorkspaceView v : snapshot.views()) {
-            views.add(new MdlViewSummary(v.name(), v.sql(), v.description(), v.path()));
-        }
-        boolean changed = !sameFiles(snapshot.files(), readPublishedFiles(groupId));
-        return new MdlView(
-                group.getMdlState(),
-                group.getMdlVersion(),
-                group.getMdlPublishedAt() == null ? null : group.getMdlPublishedAt().toString(),
-                changed,
-                models,
-                relations,
-                cubes,
-                views,
-                snapshot.issues(),
-                derivedModels);
-    }
-
-    private static List<MdlCubeMemberView> toMemberViews(
-            List<MdlWorkspaceReader.WorkspaceMember> members) {
-        List<MdlCubeMemberView> out = new ArrayList<>();
-        for (MdlWorkspaceReader.WorkspaceMember m : members) {
-            out.add(new MdlCubeMemberView(m.name(), m.expression(), m.type(), m.description()));
-        }
-        return out;
+        return readService.view(groupId);
     }
 
     /**
@@ -1374,38 +1134,6 @@ public class MdlPublishService {
      * runtime profile marker (neither exists in the workspace, so they would always look
      * "changed").
      */
-    private List<MdlFile> readPublishedFiles(String groupId) {
-        Path published = props.groupRoot(groupId).resolve("published");
-        if (!Files.isDirectory(published)) {
-            return List.of();
-        }
-        List<MdlFile> out = new ArrayList<>();
-        try (Stream<Path> walk = Files.walk(published)) {
-            List<Path> files =
-                    walk.filter(Files::isRegularFile)
-                            .filter(p -> !p.startsWith(published.resolve("target")))
-                            .filter(
-                                    p ->
-                                            !Set.of(
-                                                            "wren-source.properties",
-                                                            PublishedAssetWindows.FILE)
-                                                    .contains(p.getFileName().toString()))
-                            .sorted()
-                            .toList();
-            for (Path p : files) {
-                String rel = published.relativize(p).toString().replace('\\', '/');
-                out.add(new MdlFile(rel, Files.readString(p, StandardCharsets.UTF_8)));
-            }
-        } catch (IOException e) {
-            log.warn(
-                    "MdlPublishService: could not read published snapshot for group {}: {}",
-                    groupId,
-                    e.getMessage());
-            return List.of();
-        }
-        return out;
-    }
-
     private void prepareSnapshot(Path projectDir, Path preparedDir) {
         try {
             deleteTree(preparedDir);
@@ -1683,23 +1411,6 @@ public class MdlPublishService {
 
     private static boolean hasErrors(List<MdlIssue> issues) {
         return issues.stream().anyMatch(i -> "error".equals(i.severity()));
-    }
-
-    private static boolean sameFiles(List<MdlFile> a, List<MdlFile> b) {
-        if (a.size() != b.size()) {
-            return false;
-        }
-        Map<String, String> byPath = new HashMap<>();
-        for (MdlFile f : b) {
-            byPath.put(f.path(), f.content());
-        }
-        for (MdlFile f : a) {
-            String other = byPath.get(f.path());
-            if (other == null || !other.equals(f.content())) {
-                return false;
-            }
-        }
-        return true;
     }
 
     private static String firstLine(String output) {

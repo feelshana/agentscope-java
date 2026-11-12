@@ -1,4 +1,4 @@
-package io.agentscope.dataagent.web.middleware;
+package io.agentscope.dataagent.runtime.observability;
 
 import io.agentscope.core.agent.Agent;
 import io.agentscope.core.agent.RuntimeContext;
@@ -63,8 +63,8 @@ public final class ExecutionTimingMiddleware implements MiddlewareBase {
                             ? ""
                             : Objects.toString(
                                     ctx.get(
-                                            io.agentscope.dataagent.web.toolbus.ToolEventBus
-                                                    .REQUEST_ID_CONTEXT_KEY),
+                                            io.agentscope.dataagent.runtime.context
+                                                    .InvocationContextKeys.REQUEST_ID),
                                     ""));
             fields.put("phase", phase);
             fields.put("callId", call);

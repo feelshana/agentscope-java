@@ -40,12 +40,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;
 
 /** Real model + native HITL against a synthetic, unpublished project only. */
 @EnabledIfSystemProperty(named = "dataagent.test.liveModeling", matches = "true")
+@Tag("external")
 class WrenLiveModelingEvaluationTest {
     @TempDir Path home;
 

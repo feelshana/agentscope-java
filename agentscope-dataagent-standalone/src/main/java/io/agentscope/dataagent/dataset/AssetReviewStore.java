@@ -175,13 +175,13 @@ public class AssetReviewStore {
     }
 
     /** Publishing is refused while a changed asset lacks a person's conclusion. */
-    public List<MdlPublishService.MdlIssue> publishIssues(String groupId) {
-        List<MdlPublishService.MdlIssue> issues = new ArrayList<>();
+    public List<MdlTypes.MdlIssue> publishIssues(String groupId) {
+        List<MdlTypes.MdlIssue> issues = new ArrayList<>();
         for (Asset asset : assets(groupId)) {
             if (!asset.changed() || VERIFIED.equals(asset.status())) continue;
             String step = REVIEW_PENDING.equals(asset.status()) ? "尚未核查" : "尚未通过问题验证";
             issues.add(
-                    new MdlPublishService.MdlIssue(
+                    new MdlTypes.MdlIssue(
                             "error", "语义资产「" + asset.name() + "」" + step + "，不能发布", "local"));
         }
         return issues;

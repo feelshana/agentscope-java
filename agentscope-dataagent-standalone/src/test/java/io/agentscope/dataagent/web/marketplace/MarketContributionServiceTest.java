@@ -18,75 +18,76 @@ package io.agentscope.dataagent.web.marketplace;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.agentscope.core.message.TextBlock;
-import io.agentscope.core.model.ChatResponse;
-import io.agentscope.core.model.Model;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agentscope.dataagent.runtime.DataAgentBootstrap;
-import io.agentscope.dataagent.web.DataAgentApp;
 import io.agentscope.dataagent.web.persistence.jpa.ContributionEntity;
 import io.agentscope.dataagent.web.persistence.jpa.ContributionRepository;
-import io.agentscope.harness.agent.filesystem.remote.store.BaseStore;
-import io.agentscope.harness.agent.filesystem.remote.store.InMemoryStore;
+import io.agentscope.dataagent.web.workspace.UserSandboxRegistry;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
-import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.context.TestPropertySource;
-import reactor.core.publisher.Flux;
+import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Locks the {@code PENDING → APPROVED/REJECTED} contract on {@link MarketContributionService} —
- * the surface the admin-approval workflow exposes to operators. Boots the full Spring context on
+ * the surface the admin-approval workflow exposes to operators. Uses a real JPA slice on
  * H2 because the service composes JPA persistence with a filesystem materialization step, and the
  * thing we want to catch is the two going out of sync.
  *
- * <p>Each run gets a fresh workspace under {@code java.io.tmpdir}/agentscope-dataagent-contrib-it,
- * so {@code bootstrap.cwd().resolve("shared/agents/<agentId>")} resolves to a clean per-agent slice
+ * <p>Each run gets a fresh JUnit temporary workspace,
+ * and {@code bootstrap.cwd().resolve("shared/agents/<agentId>")} resolves to a clean per-agent slice
  * the test fully owns and can read back to confirm the snapshot landed verbatim.
  */
-@Disabled("Pending fix for circular dependency between builderBootstrap and userSandboxRegistry")
-@SpringBootTest(classes = DataAgentApp.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
-@Import(MarketContributionServiceTest.StubModelConfig.class)
-@TestPropertySource(
-        properties = {
-            "dataagent.jwt.secret=test-jwt-secret-must-be-at-least-32-characters-long",
-            "dataagent.dashscope.api-key=",
-            "spring.datasource.url=jdbc:h2:mem:dataagentContribIT;DB_CLOSE_DELAY=-1;MODE=MYSQL",
-            "spring.datasource.driver-class-name=org.h2.Driver",
-            "spring.datasource.username=sa",
-            "spring.datasource.password=",
-            "spring.jpa.hibernate.ddl-auto=create-drop",
-            "spring.jpa.open-in-view=false",
-            // Skip the bob/alice demo seed — the contribution rows are what we assert on.
-            "spring.sql.init.mode=never"
-        })
+@DataJpaTest(properties = {"spring.sql.init.mode=never", "spring.jpa.show-sql=false"})
+@Import({MarketContributionService.class, MarketContributionServiceTest.Dependencies.class})
+@Transactional(propagation = Propagation.NOT_SUPPORTED)
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
+@Tag("integration")
 class MarketContributionServiceTest {
+    @TempDir static Path workspace;
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class Dependencies {
+        @Bean
+        DataAgentBootstrap paths() {
+            // Only cwd is consumed by this service; production assembly is tested separately.
+            var bootstrap = Mockito.mock(DataAgentBootstrap.class);
+            Mockito.when(bootstrap.cwd()).thenReturn(workspace);
+            return bootstrap;
+        }
+
+        @Bean
+        UserSandboxRegistry sandboxes() {
+            return Mockito.mock(UserSandboxRegistry.class);
+        }
+
+        @Bean
+        ObjectMapper objectMapper() {
+            return new ObjectMapper();
+        }
+    }
 
     @Autowired MarketContributionService service;
     @Autowired ContributionRepository repository;
     @Autowired DataAgentBootstrap bootstrap;
 
-    /**
-     * Points {@code dataagent.workspace} at a per-run temp dir so the shared root the service
-     * writes to is isolated from any other test or developer-machine state.
-     */
-    @DynamicPropertySource
-    static void workspaceDir(DynamicPropertyRegistry registry) throws IOException {
-        Path dir = Files.createTempDirectory("agentscope-dataagent-contrib-it");
-        registry.add("dataagent.workspace", dir::toString);
+    /** Each scenario owns its contribution rows, independent of JUnit execution order. */
+    @org.junit.jupiter.api.BeforeEach
+    void clearContributions() {
+        repository.deleteAll();
     }
 
     private static List<FileEntry> body(String content) {
@@ -321,30 +322,5 @@ class MarketContributionServiceTest {
         assertThat(repository.count())
                 .as("no rows must be inserted when validation rejects the submission")
                 .isEqualTo(before);
-    }
-
-    @TestConfiguration
-    static class StubModelConfig {
-        @Bean
-        @Primary
-        Model stubModel() {
-            Model model = Mockito.mock(Model.class);
-            Mockito.when(model.getModelName()).thenReturn("stub-model");
-            ChatResponse chunk =
-                    new ChatResponse(
-                            "stub-id",
-                            List.of(TextBlock.builder().text("ok").build()),
-                            null,
-                            Map.of(),
-                            "stop");
-            Mockito.when(model.stream(Mockito.anyList(), Mockito.any(), Mockito.any()))
-                    .thenReturn(Flux.just(chunk));
-            return model;
-        }
-
-        @Bean
-        BaseStore inMemoryStore() {
-            return new InMemoryStore();
-        }
     }
 }

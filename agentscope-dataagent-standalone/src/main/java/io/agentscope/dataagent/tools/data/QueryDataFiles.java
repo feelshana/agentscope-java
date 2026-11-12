@@ -15,8 +15,8 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Hands a successful query result to {@code run_python} as a CSV in the session sandbox
- * (specs/016, ADR 0030; spec101 restores it for the official Wren tools). Shared by the legacy
- * {@link WrenToolkit} and the invocation-scoped official {@code run_sql}/{@code query_cube}.
+ * (specs/016, ADR 0030; spec101 restores it for the official Wren tools). Used by
+ * the invocation-scoped official {@code run_sql}/{@code query_cube}.
  */
 public final class QueryDataFiles {
     private static final Logger log = LoggerFactory.getLogger(QueryDataFiles.class);

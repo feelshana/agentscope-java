@@ -1,0 +1,22 @@
+# ADR0144: explicit outer-class pairs, reviewed reasons; no automatic baseline update.
+dataset.AnswerQueryMemory	web.session.SessionTurnParser	点赞问答复用现行会话转录投影；后续抽取公共转录契约
+dataset.DocEnhanceService	web.ai.AgentDraftService	遗留文档/关系建议及停用KG共用LLM辅助服务；后续归入运行服务
+dataset.KnowledgeBaseAccessService	web.auth.UserStore	用户身份及管理员权限仍由当前UserStore契约提供
+dataset.KnowledgeGraphService	web.ai.AgentDraftService	遗留文档/关系建议及停用KG共用LLM辅助服务；后续归入运行服务
+dataset.MdlSuggestionService	web.ai.AgentDraftService	遗留文档/关系建议及停用KG共用LLM辅助服务；后续归入运行服务
+dataset.UserDirectoryImportService	web.auth.UserStore	用户身份及管理员权限仍由当前UserStore契约提供
+dataset.WrenProjectAccess	web.session.ConversationScopeRegistry	共用当前调用选库登记；后续归入会话运行上下文
+dataset.WrenQueryAccess	web.session.ConversationScopeRegistry	共用当前调用选库登记；后续归入会话运行上下文
+runtime.gateway.HarnessGateway	web.session.ConversationScopeRegistry	共用当前调用选库登记；后续归入会话运行上下文
+runtime.gateway.HarnessGateway	web.workspace.LazySandbox	网关使用当前延迟沙箱适配；后续随沙箱职责迁移
+runtime.gateway.HarnessGateway	web.workspace.UserSandboxRegistry	网关复用当前按用户沙箱注册表；保留懒启动及权限语义
+runtime.marketplace.UserMarketplaceRegistry	web.workspace.WorkspaceManagerFactory	个人市场复用当前用户工作区工厂；后续归运行适配
+runtime.session.DataDynamicContextMiddleware	web.session.ConversationScopeRegistry	共用当前调用选库登记；后续归入会话运行上下文
+tools.data.DataToolkitRegistrar	web.artifact.ArtifactStore	查询/Python结果复用当前私有附件存储；后续抽取附件契约
+tools.data.DataToolkitRegistrar	web.session.ConversationScopeRegistry	共用当前调用选库登记；后续归入会话运行上下文
+tools.data.ModelingToolkit	web.session.ConversationScopeRegistry	共用当前调用选库登记；后续归入会话运行上下文
+tools.data.ModelingToolkitRegistrar	web.session.ConversationScopeRegistry	共用当前调用选库登记；后续归入会话运行上下文
+tools.data.QueryDataFiles	web.artifact.ArtifactStore	查询/Python结果复用当前私有附件存储；后续抽取附件契约
+tools.data.RunPythonTool	web.artifact.ArtifactStore	查询/Python结果复用当前私有附件存储；后续抽取附件契约
+tools.data.RunPythonTool	web.artifact.SandboxArtifactReader	Python结果回收使用当前沙箱附件读取器
+tools.data.RunPythonTool	web.chat.ChatCapacity	Python工具复用当前容量预算；后续统一运行容量职责

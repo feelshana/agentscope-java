@@ -48,8 +48,7 @@ public class BaselineMdlService {
      * Prepares the current table/column draft without publishing it. The caller must already run on a blocking
      * scheduler because this method performs JPA, filesystem and subprocess work.
      */
-    public MdlPublishService.MdlPublishResult publishAfterDatasetChange(
-            String ownerId, String groupId) {
+    public MdlTypes.MdlPublishResult publishAfterDatasetChange(String ownerId, String groupId) {
         DatasetGroupEntity group = requireOwnedGroup(ownerId, groupId);
         if (datasetRepository.countByGroupId(groupId) == 0) {
             publishService.deleteArtifacts(groupId);
@@ -61,12 +60,11 @@ public class BaselineMdlService {
             group.setUpdatedAt(Instant.now());
             groupRepository.save(group);
             publishService.recordBaselineCoverage(groupId);
-            return new MdlPublishService.MdlPublishResult(
-                    true, java.util.List.of(), "", "NONE", 0, null);
+            return new MdlTypes.MdlPublishResult(true, java.util.List.of(), "", "NONE", 0, null);
         }
 
         boolean hadPublishedSnapshot = group.getMdlVersion() > 0;
-        MdlPublishService.MdlPublishResult result;
+        MdlTypes.MdlPublishResult result;
         try {
             result = publishService.prepareModeling(groupId);
         } catch (RuntimeException error) {
@@ -76,7 +74,7 @@ public class BaselineMdlService {
             String reason =
                     result.issues().stream()
                             .filter(issue -> "error".equals(issue.severity()))
-                            .map(MdlPublishService.MdlIssue::message)
+                            .map(MdlTypes.MdlIssue::message)
                             .findFirst()
                             .orElse("未知错误");
             throw publishFailure(hadPublishedSnapshot, reason, null);

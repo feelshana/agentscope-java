@@ -22,12 +22,9 @@ public class ModelingWorkflowStore {
     }
 
     public record Check(
-            String modelHash,
-            boolean ok,
-            String checkedAt,
-            List<MdlPublishService.MdlIssue> issues) {}
+            String modelHash, boolean ok, String checkedAt, List<MdlTypes.MdlIssue> issues) {}
 
-    public void record(String groupId, MdlPublishService.MdlValidation validation) {
+    public void record(String groupId, MdlTypes.MdlValidation validation) {
         Path target = path(groupId);
         try {
             Files.createDirectories(target.getParent());

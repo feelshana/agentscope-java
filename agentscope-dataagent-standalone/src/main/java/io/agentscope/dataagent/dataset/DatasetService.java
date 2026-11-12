@@ -1186,63 +1186,6 @@ public class DatasetService implements DatasetContextProvider {
         return sb.toString();
     }
 
-    /**
-     * Keyword evidence retrieval ({@link KnowledgeEvidence}): chunks each visible knowledge
-     * document, scores every chunk against the query terms and renders the top {@code limit}
-     * passages with a【知识库「name」› section】citation prefix. Documents short enough for
-     * {@link KnowledgeEvidence#isShortDoc} are injected whole regardless of term overlap (a
-     * compact KPI note beats a keyword miss). {@code null} when the owner has no visible document
-     * or no long document yields a matching chunk, so {@code retrieve_evidence} keeps its stable
-     * "not found" wording.
-     */
-    @Override
-    public String evidenceFor(String ownerId, List<String> onlyGroups, String query, int limit) {
-        if (ownerId == null || query == null || query.isBlank() || limit <= 0) {
-            return null;
-        }
-        Set<String> terms = KnowledgeEvidence.terms(query);
-        Set<String> want =
-                onlyGroups == null || onlyGroups.isEmpty() ? null : new HashSet<>(onlyGroups);
-        record Scored(String group, String title, String text, int score) {}
-        List<Scored> scored = new ArrayList<>();
-        for (DatasetGroupEntity g :
-                access.visible(ownerId, onlyGroups == null ? List.of() : onlyGroups)) {
-            if (!activeGroup(g.getId())) continue;
-            if (want != null && !want.contains(g.getId())) {
-                continue;
-            }
-            String content = knowledgeText(g.getId());
-            if (content == null || content.isBlank()) {
-                continue;
-            }
-            boolean wholeDoc = KnowledgeEvidence.isShortDoc(content);
-            for (KnowledgeEvidence.Chunk c : KnowledgeEvidence.chunks(content)) {
-                int score = KnowledgeEvidence.score(c, terms);
-                if (score > 0 || wholeDoc) {
-                    scored.add(new Scored(g.getName(), c.title(), c.text(), score));
-                }
-            }
-        }
-        if (scored.isEmpty()) {
-            return null;
-        }
-        scored.sort(java.util.Comparator.comparingInt((Scored s) -> s.score()).reversed());
-        StringBuilder sb = new StringBuilder();
-        int take = Math.min(limit, scored.size());
-        for (int i = 0; i < take; i++) {
-            Scored s = scored.get(i);
-            if (sb.length() > 0) {
-                sb.append("\n\n");
-            }
-            sb.append("【知识库「").append(s.group()).append("」");
-            if (s.title() != null && !s.title().isBlank()) {
-                sb.append(" › ").append(s.title());
-            }
-            sb.append("】\n").append(s.text().strip());
-        }
-        return sb.toString();
-    }
-
     @org.springframework.beans.factory.annotation.Autowired
     public DatasetService(
             DatasetRepository repository,

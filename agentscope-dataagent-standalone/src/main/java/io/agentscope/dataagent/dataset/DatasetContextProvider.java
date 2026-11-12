@@ -52,13 +52,4 @@ public interface DatasetContextProvider {
 
     /** Same as {@link #relationsFor(String, String)} but limited to the given knowledge-base ids. */
     String relationsFor(String ownerId, String table, java.util.List<String> onlyGroups);
-
-    /**
-     * Keyword-level evidence retrieval across the owner's visible knowledge documents (optionally
-     * narrowed to {@code onlyGroups}): returns up to {@code limit} cited passages ranked by
-     * relevance. Documents small enough to be a single chunk are injected whole regardless of
-     * term overlap. {@code null} when nothing matches and no such short document exists; callers
-     * keep their own "not found" wording so agent-facing contracts stay stable.
-     */
-    String evidenceFor(String ownerId, java.util.List<String> onlyGroups, String query, int limit);
 }

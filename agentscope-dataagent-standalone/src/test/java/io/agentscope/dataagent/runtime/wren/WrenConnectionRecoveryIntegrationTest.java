@@ -30,10 +30,12 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 /** Opt-in real Wren checks: interrupt only a disposable proxy, never the upstream service. */
+@Tag("external")
 class WrenConnectionRecoveryIntegrationTest {
     private final ObjectMapper json = new ObjectMapper();
 
