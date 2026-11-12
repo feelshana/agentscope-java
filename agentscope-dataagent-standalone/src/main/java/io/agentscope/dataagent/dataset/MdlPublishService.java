@@ -47,7 +47,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.slf4j.Logger;
@@ -82,9 +81,6 @@ public class MdlPublishService {
 
     private static final Logger log = LoggerFactory.getLogger(MdlPublishService.class);
 
-    private static final Pattern SUMMARY =
-            Pattern.compile("(\\d+)\\s+warning\\(s\\),\\s+(\\d+)\\s+error\\(s\\)");
-
     private static final Pattern NUMBER_LIKE =
             Pattern.compile(
                     "[-+]?(\\d+\\.?\\d*|\\.\\d+)([eE][-+]?\\d+)?|0[xX][0-9a-fA-F]+|\\d{4}-\\d{2}-\\d{2}.*");
@@ -108,6 +104,7 @@ public class MdlPublishService {
     private final MdlWorkspaceService workspace;
     private final MdlWorkspaceReader reader;
     private final MdlReadService readService;
+    private final MdlBuildChecks buildChecks;
     private final MdlQuestionStore questionStore;
     private final org.springframework.context.ApplicationEventPublisher events;
     private AssetReviewStore assetReviews;
@@ -181,6 +178,7 @@ public class MdlPublishService {
         this.workspace = workspace;
         this.reader = reader;
         this.readService = new MdlReadService(groupRepository, props, workspace, reader);
+        this.buildChecks = new MdlBuildChecks(props, wrenCli, profileHome, mapper);
         this.questionStore = new MdlQuestionStore(workspace);
         this.events = events;
     }
@@ -253,14 +251,14 @@ public class MdlPublishService {
                                     projectDir,
                                     props.timeout(),
                                     List.of("context", "validate", "--strict"));
-                    issues.addAll(parseWrenOutput(result));
+                    issues.addAll(buildChecks.parseWrenOutput(result));
                     if (hasErrors(issues)) {
                         return new MdlValidation(false, issues, result.output(), snapshot.files());
                     }
                     WrenCli.Result build =
                             wrenCli.run(projectDir, props.timeout(), List.of("context", "build"));
                     if (!build.ok()) {
-                        issues.addAll(parseWrenOutput(build));
+                        issues.addAll(buildChecks.parseWrenOutput(build));
                         if (!hasErrors(issues)) {
                             issues.add(
                                     issue(
@@ -271,8 +269,10 @@ public class MdlPublishService {
                         return new MdlValidation(false, issues, build.output(), snapshot.files());
                     }
 
-                    issues.addAll(dryRunSqlObjects(projectDir, snapshot, selection));
-                    issues.addAll(dryRunCubes(projectDir, snapshot.cubes()));
+                    issues.addAll(
+                            buildChecks.dryRunSqlObjects(
+                                    projectDir, snapshot, selection.external()));
+                    issues.addAll(buildChecks.dryRunCubes(projectDir, snapshot.cubes()));
                     return new MdlValidation(
                             !hasErrors(issues), issues, result.output(), snapshot.files());
                 });
@@ -633,7 +633,7 @@ public class MdlPublishService {
         WrenCli.Result validation =
                 wrenCli.run(
                         projectDir, props.timeout(), List.of("context", "validate", "--strict"));
-        issues.addAll(parseWrenOutput(validation));
+        issues.addAll(buildChecks.parseWrenOutput(validation));
         if (hasErrors(issues)) {
             return failure(group, issues, validation.output());
         }
@@ -641,7 +641,7 @@ public class MdlPublishService {
         WrenCli.Result build =
                 wrenCli.run(projectDir, props.timeout(), List.of("context", "build"));
         if (!build.ok()) {
-            issues.addAll(parseWrenOutput(build));
+            issues.addAll(buildChecks.parseWrenOutput(build));
             if (!hasErrors(issues)) {
                 issues.add(issue("error", "wren build 失败：" + firstLine(build.output()), "wren"));
             }
@@ -651,9 +651,9 @@ public class MdlPublishService {
         // Official build output is immutable semantic input.
         // Same gate as validate(): a view that cannot survive its own dry-run must never be
         // snapshotted; the official engine is the authority for view execution.
-        issues.addAll(dryRunSqlObjects(projectDir, snapshot, selection));
+        issues.addAll(buildChecks.dryRunSqlObjects(projectDir, snapshot, selection.external()));
         // ADR 0033 D6: every cube must survive its own SQL transformation before the snapshot.
-        issues.addAll(dryRunCubes(projectDir, snapshot.cubes()));
+        issues.addAll(buildChecks.dryRunCubes(projectDir, snapshot.cubes()));
         if (hasErrors(issues)) {
             return failure(group, issues, build.output());
         }
@@ -940,191 +940,6 @@ public class MdlPublishService {
         } catch (IOException e) {
             throw new DatasetException("写入 wren-source.properties 失败：" + e.getMessage(), e);
         }
-    }
-
-    // ------------------------------------------------------------------ dry-run gates
-
-    /**
-     * Dry-runs every named view against the freshly built {@code target/mdl.json} (specs/018,
-     * ADR 0032 D2): {@code dry-run} is the only pre-publish step that plans view statements, so
-     * it is the backstop for dialect errors the create/update blocklist cannot foresee. Each
-     * failure becomes an error issue naming the view; the loop continues so one broken view does
-     * not mask the others.
-     */
-    private List<MdlIssue> dryRunSqlObjects(
-            Path projectDir, MdlWorkspaceReader.Snapshot snapshot, WrenSourceSelection selection) {
-        List<MdlWorkspaceReader.WorkspaceModel> derived = derivedModelsOf(snapshot);
-        if (snapshot.views().isEmpty() && derived.isEmpty()) {
-            return List.of();
-        }
-        List<MdlIssue> issues = new ArrayList<>();
-        Path connectionFile = null;
-        try {
-            // The dry-run CLI has no --profile flag. Explicit per-operation connection JSON
-            // prevents fallback to ~/.wren and avoids changing a shared active profile.
-            Map<String, String> connection = profileHome.connectionInfo(selection.external());
-            connectionFile = Files.createTempFile("dataagent-wren-check-", ".json");
-            mapper.writeValue(connectionFile.toFile(), connection);
-            issues.addAll(dryRunViews(projectDir, snapshot.views(), connectionFile));
-            issues.addAll(dryRunDerivedModels(projectDir, derived, connectionFile));
-        } catch (IOException | DatasetException ex) {
-            issues.add(issue("error", "准备 SQL 校验连接失败：" + ex.getMessage(), "local"));
-        } finally {
-            if (connectionFile != null) {
-                try {
-                    Files.deleteIfExists(connectionFile);
-                } catch (IOException ex) {
-                    issues.add(issue("error", "清理 SQL 校验临时连接文件失败", "local"));
-                }
-            }
-        }
-        return issues;
-    }
-
-    private List<MdlIssue> dryRunViews(
-            Path projectDir, List<MdlWorkspaceReader.WorkspaceView> views, Path connectionFile) {
-        List<MdlIssue> issues = new ArrayList<>();
-        for (MdlWorkspaceReader.WorkspaceView view : views) {
-            String quoted = view.name().replace("\"", "\"\"");
-            WrenCli.Result result =
-                    wrenCli.run(
-                            projectDir,
-                            props.timeout(),
-                            List.of(
-                                    "dry-run",
-                                    "-s",
-                                    "SELECT * FROM \"" + quoted + "\"",
-                                    "--connection-file",
-                                    connectionFile.toString()));
-            if (!result.ok()) {
-                issues.add(
-                        issue(
-                                "error",
-                                "视图「" + view.name() + "」试跑失败：" + firstLine(result.output()),
-                                "wren"));
-            }
-        }
-        return issues;
-    }
-
-    /** Dry-runs ref_sql models against the unmodified official manifest. */
-    private List<MdlIssue> dryRunDerivedModels(
-            Path projectDir,
-            List<MdlWorkspaceReader.WorkspaceModel> derivedModels,
-            Path connectionFile) {
-        List<MdlIssue> issues = new ArrayList<>();
-        for (MdlWorkspaceReader.WorkspaceModel model : derivedModels) {
-            String quoted = model.name().replace("\"", "\"\"");
-            WrenCli.Result result =
-                    wrenCli.run(
-                            projectDir,
-                            props.timeout(),
-                            List.of(
-                                    "dry-run",
-                                    "-s",
-                                    "SELECT * FROM \"" + quoted + "\"",
-                                    "--connection-file",
-                                    connectionFile.toString()));
-            if (!result.ok()) {
-                issues.add(
-                        issue(
-                                "error",
-                                "派生模型「" + model.name() + "」试跑失败：" + firstLine(result.output()),
-                                "wren"));
-            }
-        }
-        return issues;
-    }
-
-    /** Derived models of the snapshot: those whose model is defined by SQL, not a table. */
-    private static List<MdlWorkspaceReader.WorkspaceModel> derivedModelsOf(
-            MdlWorkspaceReader.Snapshot snapshot) {
-        List<MdlWorkspaceReader.WorkspaceModel> derived = new ArrayList<>();
-        for (MdlWorkspaceReader.WorkspaceModel m : snapshot.models()) {
-            if (m.refSql() != null) {
-                derived.add(m);
-            }
-        }
-        return derived;
-    }
-
-    /**
-     * Translates every cube's full measure set through wren-core with {@code cube query
-     * --sql-only} (ADR 0033 D6): pure SQL transformation, no database connection. Each failure
-     * becomes an error issue naming the cube; the loop continues so one broken cube does not
-     * mask the others. Cubes without measures are structurally covered by {@code validate
-     * --strict} and skipped here ({@code cube query} requires at least one measure).
-     */
-    private List<MdlIssue> dryRunCubes(
-            Path projectDir, List<MdlWorkspaceReader.WorkspaceCube> cubes) {
-        List<MdlIssue> issues = new ArrayList<>();
-        for (MdlWorkspaceReader.WorkspaceCube cube : cubes) {
-            if (cube.measures().isEmpty()) {
-                continue;
-            }
-            String measures =
-                    cube.measures().stream()
-                            .map(MdlWorkspaceReader.WorkspaceMember::name)
-                            .reduce((a, b) -> a + "," + b)
-                            .orElse("");
-            WrenCli.Result result =
-                    wrenCli.run(
-                            projectDir,
-                            props.timeout(),
-                            List.of(
-                                    "cube",
-                                    "query",
-                                    "--cube",
-                                    cube.name(),
-                                    "--measures",
-                                    measures,
-                                    "--sql-only"));
-            if (!result.ok()) {
-                issues.add(
-                        issue(
-                                "error",
-                                "Cube「" + cube.name() + "」试跑失败：" + firstLine(result.output()),
-                                "wren"));
-            }
-        }
-        return issues;
-    }
-
-    // ------------------------------------------------------------- wren CLI interaction
-
-    /** Parses wren's stdout into structured issues; "0 errors" gates acceptance of rc!=0 runs. */
-    private List<MdlIssue> parseWrenOutput(WrenCli.Result result) {
-        List<MdlIssue> issues = new ArrayList<>();
-        int warnings = 0;
-        int errors = 0;
-        for (String line : result.output().split("\n")) {
-            String t = line.strip();
-            if (t.isEmpty()) {
-                continue;
-            }
-            Matcher summary = SUMMARY.matcher(t);
-            if (summary.find()) {
-                warnings = Math.max(warnings, Integer.parseInt(summary.group(1)));
-                errors = Math.max(errors, Integer.parseInt(summary.group(2)));
-                continue;
-            }
-            if (t.startsWith("[ERROR]")) {
-                errors++;
-                issues.add(issue("error", t.substring("[ERROR]".length()).strip(), "wren"));
-            } else if (t.startsWith("Error:")) {
-                errors++;
-                issues.add(issue("error", t.substring("Error:".length()).strip(), "wren"));
-            } else if (t.startsWith("⚠")) {
-                warnings++;
-                issues.add(issue("warning", t.substring(1).strip(), "wren"));
-            }
-        }
-        if (errors == 0 && !result.ok() && warnings == 0) {
-            // A non-zero exit without any parseable diagnostics: surface the raw output so the
-            // caller never mistakes a broken CLI (missing executable, crash) for success.
-            issues.add(issue("error", "wren 执行失败：" + firstLine(result.output()), "wren"));
-        }
-        return issues;
     }
 
     // ------------------------------------------------------------------ file system

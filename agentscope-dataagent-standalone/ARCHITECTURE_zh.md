@@ -320,6 +320,8 @@ spec129已移除无生产装配的旧WrenToolkit/WrenMcpToolkit及证据物化�
 
 只读MDL职责按spec131拆分：`MdlReadService#preview/compiled/view`独立完成文件差异、编译文本与结构投影；`MdlPublishService`保留同名委托入口及原构造器，写链路/锁顺序不变。13个共享结果record归`MdlTypes`，工作区解析器不再依赖发布服务类型，HTTP JSON字段保持。架构检查禁止读组件进入发布/播种及工作区、文件、仓库写入；读取错误、缺失和限额行为沿用原实现。
 
+构建后校验按spec132由包级`MdlBuildChecks`执行View/ref_sql、Cube检查及CLI诊断；只接收原协调器选定的目录、Snapshot与外部源，不选源、不授权或拿锁。`MdlPublishService`仍按原次序validate/build → SQL资产 → Cube → 已确认问答计划检查 → 快照/版本/事件，临时连接文件沿用finally清理；dry-plan问题状态修改与scratch生命周期保留在原协调流程。
+
 > 当前语义事实为 workspace 工程 YAML 与 published 官方快照。运行问数工程合并发布 knowledge 和点赞 knowledge/sql；不从平台关系/Cube/术语实体重新构造线上语义。业务文档上传只保存资料，不触发旧 DocEnhanceService；增强在官方对话中进行。历史服务/API 保留兼容，不是主 Agent 流程。
 
 ### 5.1 概念模型

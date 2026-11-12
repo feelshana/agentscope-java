@@ -146,6 +146,7 @@ class ArchitectureDependencyTest {
                 Set.of(
                         BASE + "dataset.MdlPublishService",
                         BASE + "dataset.MdlSeeder",
+                        BASE + "dataset.MdlBuildChecks",
                         BASE + "dataset.WrenCli",
                         BASE + "dataset.ModelingWorkflowStore");
         var reverse =
@@ -185,6 +186,62 @@ class ArchitectureDependencyTest {
                         .toList();
         assertThat(mutations)
                 .as("Read operations must not write files, reconcile or persist metadata")
+                .isEmpty();
+    }
+
+    @Test
+    void mdlBuildChecksDoNotOwnPublicationStateOrLocking() {
+        String name = BASE + "dataset.MdlBuildChecks";
+        Set<String> allowed =
+                Set.of(
+                        name,
+                        BASE + "dataset.WrenProperties",
+                        BASE + "dataset.WrenCli",
+                        BASE + "dataset.WrenProfileHome",
+                        BASE + "dataset.MdlTypes",
+                        BASE + "dataset.MdlWorkspaceReader",
+                        BASE + "dataset.DatasetException",
+                        BASE + "web.persistence.jpa.ExternalDataSourceEntity");
+        var component = production.get(name);
+        assertThat(component.getModifiers())
+                .doesNotContain(com.tngtech.archunit.core.domain.JavaModifier.PUBLIC);
+        var forbidden =
+                component.getDirectDependenciesFromSelf().stream()
+                        .filter(
+                                d -> {
+                                    String target = d.getTargetClass().getName();
+                                    return (target.startsWith(BASE)
+                                                    && !allowed.contains(outer(target)))
+                                            || target.startsWith("org.springframework.")
+                                            || target.startsWith("java.sql.")
+                                            || target.startsWith("javax.sql.")
+                                            || target.startsWith("java.util.concurrent.locks.")
+                                            || target.equals("java.lang.ProcessBuilder");
+                                })
+                        .map(Dependency::getDescription)
+                        .toList();
+        assertThat(forbidden)
+                .as("Build checks use selected inputs, not state, repositories or locks")
+                .isEmpty();
+        var unexpected =
+                component.getCodeUnitAccessesFromSelf().stream()
+                        .filter(
+                                call -> {
+                                    String owner = call.getTargetOwner().getName();
+                                    String method = call.getName();
+                                    if (owner.equals("java.nio.file.Files"))
+                                        return !Set.of("createTempFile", "deleteIfExists")
+                                                .contains(method);
+                                    if (owner.equals(BASE + "dataset.WrenProperties"))
+                                        return !method.equals("timeout");
+                                    if (owner.equals(BASE + "dataset.WrenProfileHome"))
+                                        return !method.equals("connectionInfo");
+                                    return false;
+                                })
+                        .map(call -> call.getDescription())
+                        .toList();
+        assertThat(unexpected)
+                .as("Build checks own temporary connection IO only, not project mutations")
                 .isEmpty();
     }
 
