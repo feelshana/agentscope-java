@@ -745,7 +745,7 @@ spec126：`GlobalAdministratorsPage`用现有管理员/目录接口提供本地�
 
 `DataSourcesPage`保留原列表与逐连接检测，增加名称本地筛选，主行固定密度，失败原因按单行展开并复用`ErrorNotice`技术详情；配置/删除收于更多菜单。`DataSourceFormModal`按连接信息/访问凭据分组，在主机旁说明服务器连接，保留检测修订、SSL/采样、编辑留空密码及成功后保存规则。`SessionsSidebar`不再展示未可靠跟随主聊天已读状态的圆点；当前会话选中、批量管理和后端既有已读接口保持。
 
-spec134：`WrenScopedMcpClient#callTool`为成功语义查询补queryId和queriedAt（查询返回完成时间，不是源数据更新时间），同轮去重缓存保留完整回执及原编号，仍逐次授权，不新增查询。`CitationPanel`经`answerQueryRecords`复用官方解析呈现“本轮查询记录”，兼容原生/包装/历史工具名，按queryId去重而非按SQL合并；空结果、失败、历史驱逐、工具截断和分析样本分别显示，查看数据复用ToolInspector。未记录的历史模型版本/源更新时间不从当前状态回填，不认证业务结论。`QuestionRecovery`仅回填对应失败/中断回答前的用户问题，保护不同草稿，不自动发送或替换知识库；原CSV/反馈/图表入口保持。
+spec138取代spec134的查询记录面板与失败/中断问题回填入口，避免重复展示和不区分原因的重问引导。SQL与数据仍通过原工具执行记录查看，知识库标签、错误说明、下载、图表和反馈保持。`WrenScopedMcpClient#callTool`保留成功查询完整回执及文件引用的同轮缓存修正，命中前仍逐次授权、失败不缓存；不再生成仅供记录面板使用的queryId/queriedAt，旧历史额外字段保持兼容，不迁移会话数据。
 
 `ScheduledTasksPage` 通过占据标题下方可用空间的白色面板展示未开放说明、日历插画及既有对话与知识库入口。空间不足时页面随内容滚动。页面不调用任务 API。
 

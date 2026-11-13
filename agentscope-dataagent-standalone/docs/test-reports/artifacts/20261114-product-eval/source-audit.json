@@ -1,0 +1,341 @@
+[
+  {
+    "scenario": "01-电商销售",
+    "files": [
+      {
+        "file": "商品.xlsx",
+        "rows": 100,
+        "sha256": "0ed4725be047b08f74fb4dd1049ac26721f95e22a345633ee263bdac0d9f1d24",
+        "array_string_columns": {}
+      },
+      {
+        "file": "客户.xlsx",
+        "rows": 200,
+        "sha256": "623cdde159b7f9c6a10d29c824c830293b9adbe8ff8c96d9b74c1df23d8cabb1",
+        "array_string_columns": {}
+      },
+      {
+        "file": "订单.xlsx",
+        "rows": 1500,
+        "sha256": "68c8d11a402c531ba9c87d549e23ca28b7df2a58b992a87adbdf8a8d5b959ee1",
+        "array_string_columns": {}
+      },
+      {
+        "file": "订单明细.xlsx",
+        "rows": 4339,
+        "sha256": "4cf5c43d33d8b1da11954efdd77c8d327a330f5753148995d530e1a453963a66",
+        "array_string_columns": {}
+      }
+    ]
+  },
+  {
+    "scenario": "02-音乐平台",
+    "files": [
+      {
+        "file": "播放记录.xlsx",
+        "rows": 10000,
+        "sha256": "46ec6edc6c0cb38328dcfde1e530e38f3e35ab6fe1cb7c4c6f3f1b618038d896",
+        "array_string_columns": {}
+      },
+      {
+        "file": "歌单.xlsx",
+        "rows": 200,
+        "sha256": "98dd074d768f9502bde52832ce9a56fcfcda406e94b7af56b4b745dd8ad045c6",
+        "array_string_columns": {}
+      },
+      {
+        "file": "歌曲.xlsx",
+        "rows": 500,
+        "sha256": "59901fa3a7b3d588fb780e7b394bdb82b84fb9c03f9c5e3e966eaa7071a214e0",
+        "array_string_columns": {}
+      },
+      {
+        "file": "用户.xlsx",
+        "rows": 1000,
+        "sha256": "c3fcbc275a13488c75c9db4181fceaa734d0670deeb407f42730d30d169bf526",
+        "array_string_columns": {}
+      }
+    ]
+  },
+  {
+    "scenario": "03-视频平台",
+    "files": [
+      {
+        "file": "用户.xlsx",
+        "rows": 2000,
+        "sha256": "a387c6aff2ab15f77528fd27f26121f8e6343ce3ba20ab370f97d1d981953b8e",
+        "array_string_columns": {}
+      },
+      {
+        "file": "观看记录.xlsx",
+        "rows": 20000,
+        "sha256": "166deb981bad8a1742c71ae812be481feb173111204f3b8a1d268ca8508e9df2",
+        "array_string_columns": {}
+      },
+      {
+        "file": "视频.xlsx",
+        "rows": 1000,
+        "sha256": "9ada34eb25d45407ac4628165943f94e4776937bdb67ac162695e9a2b8f3daf1",
+        "array_string_columns": {}
+      },
+      {
+        "file": "订阅关系.xlsx",
+        "rows": 3000,
+        "sha256": "f32e2b58ad91ae157d0f36bac0fa768e7cf33632b531440a48cd4cfc0e5c156c",
+        "array_string_columns": {}
+      }
+    ]
+  },
+  {
+    "scenario": "04-彩铃业务",
+    "files": [
+      {
+        "file": "彩铃内容.xlsx",
+        "rows": 500,
+        "sha256": "216cfc1b9ac2dad0ae72835e345442117330089fa6451085fa8069febb8e0b3f",
+        "array_string_columns": {}
+      },
+      {
+        "file": "用户.xlsx",
+        "rows": 3000,
+        "sha256": "f7415f739294ff21c96cdc1c42d839ae23e54bc01d739d9836776df18313b1ef",
+        "array_string_columns": {}
+      },
+      {
+        "file": "订购记录.xlsx",
+        "rows": 8000,
+        "sha256": "c0eb69f7dbb9cd30a613bce30a7bc24d067afee963beaf3238802d097d21c548",
+        "array_string_columns": {}
+      },
+      {
+        "file": "设置记录.xlsx",
+        "rows": 10000,
+        "sha256": "c6cc6043702e94144163e173d03d2fa524a3269d0954ec2084e8a708c52f602e",
+        "array_string_columns": {}
+      }
+    ]
+  },
+  {
+    "scenario": "05-阅读平台",
+    "files": [
+      {
+        "file": "书籍.xlsx",
+        "rows": 800,
+        "sha256": "d521d7d3df97a2c42ae553e39d16b19bc32d0e00224256dae958caff4881502c",
+        "array_string_columns": {}
+      },
+      {
+        "file": "用户.xlsx",
+        "rows": 1500,
+        "sha256": "70381a3fa4ef48d95891dad3a6f53aeddb3860f10944154edc0284f04092ed7a",
+        "array_string_columns": {}
+      },
+      {
+        "file": "章节.xlsx",
+        "rows": 20000,
+        "sha256": "9355d30dc87f9c33d32d43f40ce3290a3f4742d8e2c67dd58a605d3517f05d99",
+        "array_string_columns": {}
+      },
+      {
+        "file": "阅读记录.xlsx",
+        "rows": 15000,
+        "sha256": "6ffc0267f2c1d8515e557dbe417d9530b87d67d9d28fd4641a813237e64d40fa",
+        "array_string_columns": {}
+      }
+    ]
+  },
+  {
+    "scenario": "06-互娱游戏",
+    "files": [
+      {
+        "file": "充值记录.xlsx",
+        "rows": 5000,
+        "sha256": "5ce1f2a4c81da2bb75a27c2f54c403975efa191e13f83d4e75679f22d3e03128",
+        "array_string_columns": {}
+      },
+      {
+        "file": "游戏.xlsx",
+        "rows": 50,
+        "sha256": "2b15dcb3aba66d95e8de9774877c28a8a3197667c9199eec578d32a03a194b32",
+        "array_string_columns": {}
+      },
+      {
+        "file": "游戏行为.xlsx",
+        "rows": 30000,
+        "sha256": "5b7c3ba9549b89f2e6960cba3991cb88d8dc167f863caba06411bb23ba04f0ba",
+        "array_string_columns": {}
+      },
+      {
+        "file": "玩家.xlsx",
+        "rows": 2000,
+        "sha256": "b6f845042a023957ac7959f99014924eb350c701c1b7af15bd154fe3315b8d3e",
+        "array_string_columns": {}
+      }
+    ]
+  },
+  {
+    "scenario": "07-文化传媒",
+    "files": [
+      {
+        "file": "演出.xlsx",
+        "rows": 300,
+        "sha256": "91fad303c5872329478a1027c94a14c309da026a5405070bb7dd982326c14e36",
+        "array_string_columns": {}
+      },
+      {
+        "file": "票务.xlsx",
+        "rows": 10000,
+        "sha256": "f5fcfc2270afe922f08120f8d40cf12a81b350b57e1d7fc9ddfc1e9faba933f7",
+        "array_string_columns": {}
+      },
+      {
+        "file": "观众.xlsx",
+        "rows": 1500,
+        "sha256": "7745c7fc3c7aa54d17796d3771116083d3eb742ffb5f04491c2f4f03a6c75baf",
+        "array_string_columns": {}
+      },
+      {
+        "file": "评价.xlsx",
+        "rows": 5000,
+        "sha256": "ca21bec308d48d06b46d82d87a5efff9d10f6549b3004012f67a1452d400b79a",
+        "array_string_columns": {}
+      }
+    ]
+  },
+  {
+    "scenario": "08-人力管理",
+    "files": [
+      {
+        "file": "员工.xlsx",
+        "rows": 500,
+        "sha256": "a8c3a7cae45ec621200972dc01eb6850a323286b4da8462c2721e065b73142e1",
+        "array_string_columns": {}
+      },
+      {
+        "file": "绩效.xlsx",
+        "rows": 2000,
+        "sha256": "4878e207e32e988b775c65baef9dd3583cdb35f37fd42c431c776177c5ef7729",
+        "array_string_columns": {}
+      },
+      {
+        "file": "考勤.xlsx",
+        "rows": 15000,
+        "sha256": "edbf6eba736d1f821197c57c5570c7063cb14e078ed8281d2210450e4cc93850",
+        "array_string_columns": {}
+      },
+      {
+        "file": "部门.xlsx",
+        "rows": 20,
+        "sha256": "73ab4eadf52c7f0174a694079d17f661fbcc5c246578ee52ff9f14387999e39a",
+        "array_string_columns": {}
+      }
+    ]
+  },
+  {
+    "scenario": "09-财务管理",
+    "files": [
+      {
+        "file": "合同.xlsx",
+        "rows": 300,
+        "sha256": "5e9dbaeef6ebccb58a0b420f0eac7b9449fe70e862ff31caa06e593654cc2dd2",
+        "array_string_columns": {}
+      },
+      {
+        "file": "报销.xlsx",
+        "rows": 8000,
+        "sha256": "78d1036602c1f6c19c71c3d167aaf62e70468f23f9e85dbcdcc15e6c2458e5d2",
+        "array_string_columns": {
+          "category": 8000,
+          "status": 8000,
+          "invoice_type": 8000
+        }
+      },
+      {
+        "file": "项目.xlsx",
+        "rows": 100,
+        "sha256": "cfb1eb6aaadc2121368cd1f84c86c85769ca3f16fde462661176cdee2187848d",
+        "array_string_columns": {}
+      },
+      {
+        "file": "预算.xlsx",
+        "rows": 500,
+        "sha256": "92d243d9f9fa1c8fc2a459d04d8a39d6f4d0eac7feefbce4f6ffb1bf289980c5",
+        "array_string_columns": {}
+      }
+    ]
+  },
+  {
+    "scenario": "10-IT 运维",
+    "files": [
+      {
+        "file": "工单.xlsx",
+        "rows": 5000,
+        "sha256": "e27947a3a3f39505d33466d1442e8ecfbe8fdbc60679304084054ecbcbf11621",
+        "array_string_columns": {
+          "category": 5000,
+          "priority": 5000,
+          "status": 5000
+        }
+      },
+      {
+        "file": "监控告警.xlsx",
+        "rows": 10000,
+        "sha256": "a0936cdcc340f39e9c747b11910392f6a23d50eeb3a618d1b0d4d2203aa736e5",
+        "array_string_columns": {}
+      },
+      {
+        "file": "维护记录.xlsx",
+        "rows": 3000,
+        "sha256": "fd1ca2c5d0ba68f24862d5c16d64da73b68c7b0e7076fc44f8adc2ecbfcc3677",
+        "array_string_columns": {}
+      },
+      {
+        "file": "资产.xlsx",
+        "rows": 1000,
+        "sha256": "a838595cbe3defc1b5059a8f83339bfabe3ab3b839536cf6577080825326ae69",
+        "array_string_columns": {}
+      }
+    ]
+  },
+  {
+    "scenario": "11-边界测试",
+    "files": [
+      {
+        "file": "单行表.xlsx",
+        "rows": 1,
+        "sha256": "9026c10625a88e9ee6a20e8326b322937fc8d0703be866d836397544689c693b",
+        "array_string_columns": {}
+      },
+      {
+        "file": "商品.xlsx",
+        "rows": 30,
+        "sha256": "660a80cfe1097f1081a74abb66fd280628876727620409cc78a55efd34c9e215",
+        "array_string_columns": {}
+      },
+      {
+        "file": "极小表.xlsx",
+        "rows": 3,
+        "sha256": "cbeae5917f31cfa00fa70223a64208adfab2ce0e7e48375ed34a79802aa4f9c7",
+        "array_string_columns": {}
+      },
+      {
+        "file": "特殊列名与类型.xlsx",
+        "rows": 100,
+        "sha256": "f6abd49e8117c3a2f5757c5e29717bcae533a4364364a0280db11f4b28279111",
+        "array_string_columns": {}
+      },
+      {
+        "file": "用户.xlsx",
+        "rows": 50,
+        "sha256": "9ee3aa335823824c52d7128a7f39c941c9ae08f6c7e0454f766708b5bd98ded7",
+        "array_string_columns": {}
+      },
+      {
+        "file": "订单.xlsx",
+        "rows": 200,
+        "sha256": "44e9232d2f016d1ef34c6a9c2cc7a909f5e0525710ec612ee258ba70468dbda5",
+        "array_string_columns": {}
+      }
+    ]
+  }
+]

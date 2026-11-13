@@ -240,7 +240,6 @@ public final class WrenScopedMcpClient extends McpClientWrapper {
                                 var result =
                                         gateway.callAuthorized(
                                                 groupId, tool, args, this::authorize);
-                                String queriedAt = java.time.Instant.now().toString();
                                 io.agentscope.dataagent.runtime.observability
                                         .ExecutionTimingMiddleware.record(
                                         context,
@@ -272,8 +271,6 @@ public final class WrenScopedMcpClient extends McpClientWrapper {
                                                     String.valueOf(args.getOrDefault("sql", "")));
                                 if (result.ok() && query) {
                                     Map<String, Object> receipt = new java.util.LinkedHashMap<>();
-                                    receipt.put("queryId", java.util.UUID.randomUUID().toString());
-                                    receipt.put("queriedAt", queriedAt);
                                     receipt.put("groupId", groupId);
                                     receipt.put("tool", tool);
                                     receipt.put("sql", args.getOrDefault("sql", ""));
@@ -294,8 +291,7 @@ public final class WrenScopedMcpClient extends McpClientWrapper {
                                                         List.of(new McpSchema.TextContent(payload)))
                                                 .isError(!result.ok())
                                                 .build();
-                                // Reuse the same execution record, including its identity and
-                                // files.
+                                // Preserve the execution receipt and file references on cache hits.
                                 if (query && result.ok()) successfulQueries.put(cacheKey, response);
                                 return response;
                             }

@@ -83,23 +83,34 @@ html[data-theme="dark"] .rail-logo{background:#6A58E0}
 .crumb{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-3);min-width:0}
 .crumb i{font-style:normal;color:var(--ink-4)}
 .crumb strong{color:var(--ink);font-weight:600;letter-spacing:-.15px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-/* 头部进度条：5 段，完成实紫 / 当前段内填充 / 未做留灰 */
-.hbar-sep{width:.5px;height:16px;background:rgba(60,60,67,.20);margin:0 6px 0 3px;flex:none}
-.prog{display:flex;align-items:center;gap:4px;height:8px;width:168px;flex:none;position:relative}
-.prog .seg{
-  flex:1;height:8px;border-radius:2.5px;background:color-mix(in srgb,var(--ink) 10%,var(--surface));position:relative;overflow:hidden;
-  box-shadow:inset 0 0 0 .5px rgba(60,60,67,.05);transition:background .3s var(--spring);
+/* 头部步骤条：三段箭头（chevron），文字在条内 */
+.hbar-sep{width:.5px;height:14px;background:rgba(60,60,67,.16);margin:0 9px 0 4px;flex:none}
+.steps{display:flex;align-items:center;gap:2px;height:26px;flex:none;position:relative}
+.st{
+  position:relative;height:26px;display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  padding:0 16px;min-width:90px;font-size:12px;font-weight:600;letter-spacing:-.05px;white-space:nowrap;
+  clip-path:polygon(0 0,calc(100% - 12px) 0,100% 50%,calc(100% - 12px) 100%,0 100%,12px 50%);
+  transition:background .3s var(--spring),color .3s;
 }
-html[data-theme="dark"] .prog .seg{box-shadow:inset 0 0 0 .5px rgba(255,255,255,.05)}
-.prog .seg.done{background:var(--ok);box-shadow:inset 0 .5px 0 rgba(255,255,255,.34)}
-html[data-theme="dark"] .prog .seg.done{background:#3FB57C}
-.prog .seg.cur{background:color-mix(in srgb,var(--tint) 13%,var(--surface-3))}
-.prog .seg.cur::after{
-  content:"";position:absolute;left:0;top:0;bottom:0;width:58%;border-radius:2.5px;
-  background:var(--tint);box-shadow:inset 0 .5px 0 rgba(255,255,255,.34),0 0 7px rgba(95,75,200,.42);
+.st:first-child{clip-path:polygon(0 4px,4px 0,calc(100% - 12px) 0,100% 50%,calc(100% - 12px) 100%,4px 100%,0 calc(100% - 4px));padding-left:15px}
+.st + .st{padding-left:24px}
+.st:last-child{padding-right:12px}
+.st b{
+  font-size:10px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:0;
+  opacity:.42;transform:translateY(-.3px);
 }
-html[data-theme="dark"] .prog .seg.cur::after{background:#7A66E8}
-.prog .seg.cur.full::after{width:100%}
+.st.done{background:color-mix(in srgb,var(--ok) 14%,var(--surface));color:color-mix(in srgb,var(--ok) 74%,var(--ink));
+  box-shadow:inset 0 .5px 0 rgba(255,255,255,.5)}
+.st.done b{opacity:.55}
+.st.cur{
+  background:linear-gradient(180deg,color-mix(in srgb,var(--tint) 88%,#fff) 0,var(--tint) 100%);
+  color:#fff;box-shadow:inset 0 .5px 0 rgba(255,255,255,.22);
+}
+.st.cur b{opacity:.66}
+.st.todo{background:color-mix(in srgb,var(--ink) 6.5%,var(--surface));color:var(--ink-3)}
+html[data-theme="dark"] .st.done{background:color-mix(in srgb,var(--ok) 21%,var(--surface));color:color-mix(in srgb,var(--ok) 42%,#fff)}
+html[data-theme="dark"] .st.cur{background:linear-gradient(180deg,#7A66E8 0,#6A56DA 100%);color:#fff}
+html[data-theme="dark"] .st.todo{background:rgba(255,255,255,.085);color:var(--ink-3)}
 .prog-t{display:flex;align-items:baseline;gap:6px;margin-left:3px;font-size:11.5px;color:var(--ink-2);font-weight:600;letter-spacing:-.1px;white-space:nowrap}
 .prog-t em{font-style:normal;color:var(--ink-4);font-weight:500;font-variant-numeric:tabular-nums;font-size:11px}
 .quiet{font-size:11.5px;color:var(--ink-4)}
@@ -427,7 +438,7 @@ table.plan tr.now td{background:color-mix(in srgb,var(--tint-soft) 55%,var(--sur
   <p>
     这一版按代码核实后的结论重做：<strong>字段整理是一个独立的聚焦步骤</strong>，此刻页签、布局切换、助手都不该出现在屏幕上；
     <strong>业务说明全程可编辑</strong>，不藏按钮；<strong>AI 建议勾选</strong>与<strong>只看待确认</strong>并存；
-    <strong>进度条保留</strong>，但从原来那条独立横栏搬进 52px 头部；准备阶段<strong>按真实条件决定要不要出现时间范围</strong>，出现时就地展开配置，不弹窗。
+    <strong>进度条保留</strong>，但改成 3 段带文字的箭头条并进 52px 头部（左凹右凸、一节咬一节）；准备阶段<strong>按真实条件决定要不要出现时间范围</strong>，出现时就地展开配置，不弹窗。
   </p>
   <div class="docbar">
     <button class="sbtn on" data-s="1">① 字段整理</button>
@@ -459,8 +470,7 @@ table.plan tr.now td{background:color-mix(in srgb,var(--tint-soft) 55%,var(--sur
             <button class="icon-back">‹</button>
             <div class="crumb"><span>语义建模</span><i>/</i><strong>我的第一个知识库</strong></div>
             <span class="hbar-sep"></span>
-            <span class="prog"><span class="seg cur"></span><span class="seg"></span><span class="seg"></span><i class="pin" style="left:50%;top:-21px;transform:translateX(-50%)">1</i></span>
-            <span class="prog-t">整理字段 <em>1 / 3</em></span>
+            <span class="cap"><nav class="steps"><span class="st cur"><b>1</b>整理字段</span><span class="st todo"><b>2</b>准备</span><span class="st todo"><b>3</b>自动建模</span></nav><i class="pin" style="left:calc(100% + 3px);top:0">1</i></span>
             <span class="grow"></span>
             <span class="quiet">整理完成后自动进入准备</span>
             <button class="ghost-btn">退出整理</button>
@@ -611,8 +621,7 @@ table.plan tr.now td{background:color-mix(in srgb,var(--tint-soft) 55%,var(--sur
             <button class="icon-back">‹</button>
             <div class="crumb"><span>语义建模</span><i>/</i><strong>我的第一个知识库</strong></div>
             <span class="hbar-sep"></span>
-            <span class="prog"><span class="seg cur"></span><span class="seg"></span><span class="seg"></span></span>
-            <span class="prog-t">整理字段 <em>1 / 3</em></span>
+            <nav class="steps"><span class="st cur"><b>1</b>整理字段</span><span class="st todo"><b>2</b>准备</span><span class="st todo"><b>3</b>自动建模</span></nav>
             <span class="grow"></span>
             <span class="quiet">1 条说明正在编辑 · 失焦即保存</span>
             <button class="ghost-btn">退出整理</button>
@@ -765,8 +774,7 @@ table.plan tr.now td{background:color-mix(in srgb,var(--tint-soft) 55%,var(--sur
           <header class="focusbar">
             <button class="icon-back">‹</button>
             <div class="crumb"><span>语义建模</span><i>/</i><strong>我的第一个知识库</strong></div>
-            <span class="hbar-sep"></span><span class="prog"><span class="seg done"></span><span class="seg cur"></span><span class="seg"></span></span>
-            <span class="prog-t">准备 <em>2 / 3</em></span>
+            <span class="hbar-sep"></span><nav class="steps"><span class="st done"><b>1</b>整理字段</span><span class="st cur"><b>2</b>准备</span><span class="st todo"><b>3</b>自动建模</span></nav>
             <span class="grow"></span>
             <span class="quiet">这一步随时可以回来改</span>
             <button class="ghost-btn">退出整理</button>
@@ -866,8 +874,7 @@ table.plan tr.now td{background:color-mix(in srgb,var(--tint-soft) 55%,var(--sur
           <header class="focusbar">
             <button class="icon-back">‹</button>
             <div class="crumb"><span>语义建模</span><i>/</i><strong>销售明细知识库</strong></div>
-            <span class="hbar-sep"></span><span class="prog"><span class="seg done"></span><span class="seg cur"></span><span class="seg"></span></span>
-            <span class="prog-t">准备 <em>2 / 3</em></span>
+            <span class="hbar-sep"></span><nav class="steps"><span class="st done"><b>1</b>整理字段</span><span class="st cur"><b>2</b>准备</span><span class="st todo"><b>3</b>自动建模</span></nav>
             <span class="grow"></span>
             <span class="quiet">这一步随时可以回来改</span>
             <button class="ghost-btn">退出整理</button>
@@ -913,7 +920,7 @@ table.plan tr.now td{background:color-mix(in srgb,var(--tint-soft) 55%,var(--sur
 
               <div class="branch" style="width:700px">
                 <b>最常见的形态其实是这一屏：</b>用户传一个 CSV，字段整理完只剩「业务文档」可选。
-                进度条照样是 3 格，只是「准备」这一格<em>少了一块内容</em> —— 不因为分支改形状，位置感才不会每次都不一样。
+                进度条照样是 3 段，只是「准备」这一段<em>少了一块内容</em> —— 不因为分支改形状，位置感才不会每次都不一样。
               </div>
             </div>
           </div>
@@ -926,7 +933,7 @@ table.plan tr.now td{background:color-mix(in srgb,var(--tint-soft) 55%,var(--sur
 
 <div class="legend" id="legend">
   <div class="on" data-s="1">
-    <span><i>1</i>进度条回到头部：3 段（整理 / 准备 / 建模），紫=进行中、绿=已完成（见 ③）、灰=未做</span>
+    <span><i>1</i>三段箭头带文字：淡绿底=已完成、实紫底白字=进行中、浅灰=未做</span>
     <span><i>2</i>原来那条 5 步横栏整条并进 52px 头部，省下一整行高度</span>
     <span><i>3</i>两张表分别确认，每张单独保存</span>
     <span><i>4</i>筛选：全部 / 待确认 / 技术（业务是默认态，不必单列）</span>
@@ -945,12 +952,12 @@ table.plan tr.now td{background:color-mix(in srgb,var(--tint-soft) 55%,var(--sur
     <span><i>3</i>配置就地展开：时间字段 + 7 / 14 / 31 / 90 天 / 不限制，与弹窗内容一致</span>
     <span><i>4</i>业务文档标「可选」，不填也能开始</span>
     <span><i>5</i>全页唯一主按钮，旁边一句「不传文档也能开始」</span>
-    <span><i>·</i>时间范围和业务文档都归在「准备」这一段，所以进度条只有 3 格</span>
+    <span><i>·</i>时间范围和业务文档都归在「准备」这一段，所以只有 3 段</span>
   </div>
   <div data-s="4">
     <span><i>1</i>上传文件没有时间范围，直接在副标题交代原因，不留空行</span>
     <span><i>2</i>清单只剩字段 + 业务文档，后者正是当前步</span>
-    <span><i>3</i>上传文件也走「准备」，只是少一块 —— 进度条不用变形状</span>
+    <span><i>3</i>上传文件也走「准备」，只是少一块 —— 箭头条不用变形状</span>
   </div>
 </div>
 
@@ -975,7 +982,7 @@ table.plan tr.now td{background:color-mix(in srgb,var(--tint-soft) 55%,var(--sur
       </tbody>
     </table>
     <p style="margin-top:12px">
-      所以不是「删掉功能」，而是<strong>按状态切换头部</strong>：整理中 = 聚焦态，只留「返回 · 知识库 · 进度条 · 退出」；
+      所以不是「删掉功能」，而是<strong>按状态切换头部</strong>：整理中 = 聚焦态，只留「返回 · 知识库 · 步骤条 · 退出」；
       整理完成立刻恢复完整头部。这样既不丢功能，也不会出现点了没反应。
     </p>
   </section>
@@ -1079,39 +1086,71 @@ accept = <i>".md,.txt,.docx"</i>   status = ADDED | MODIFIED | UNCHANGED | DELET
   </section>
 
   <section class="sec">
-    <h2>落地：3 段进度条塞进 52px 头部</h2>
+    <h2>落地：3 段箭头步骤条塞进 52px 头部</h2>
     <p>
-      原产品是 5 步（采样 / 字段整理 / 时间范围 / 业务文档 / 开始建模），但其中采样是后台自动跑的，
-      时间范围和业务文档又都在同一页里连续做完 —— 这 5 个节点里有 4 个不需要用户<em>停下来做决定</em>。
-      所以进度条只留 3 格：<strong>整理字段 / 准备 / 自动建模</strong>。
-      分段该对应用户要做的决定数，而不是系统内部的步骤数。
+      原产品是 5 步（采样 / 字段整理 / 时间范围 / 业务文档 / 开始建模），但采样是后台自动跑的，
+      时间范围和业务文档又在同一页连续做完 —— 这 5 个节点里只有 3 个需要用户<em>停下来做决定</em>。
+      所以收成 3 段：<strong>整理字段 / 准备 / 自动建模</strong>。段数该对应用户的决定数，而不是系统内部的步骤数。
     </p>
     <p>
-      位置仍然按你说的搬回头部：原来那条独立横栏（5 个带数字的节点，约 40px）整条并进 52px，
-      用 168 × 8px 的分段条表达，<strong>已完成绿、进行中紫、未做灰</strong>。
-      头部总高从「页签 56 + 步骤条 40」的 96px 降到 52px，进度感反而更清楚。
+      位置搬回头部：原来那条独立横栏（5 个带数字的节点，约 40px）整条并进 52px，
+      替掉 56px 的页签行，头部总高从 96px 降到 52px。
     </p>
-    <div class="codebox"><pre><em>/* 头部：一条 52px 的行，进度条跟面包屑同排 */</em>
+    <p>
+      形状上，5px 细条的问题不是不好看，而是<strong>装不下名字</strong>——用户得先读右侧「准备 2/3」才知道在第几步。
+      改成 <strong>26px 高的箭头条（chevron）</strong>，名字直接坐进色块里，状态、名称、顺序三件事一次说完。
+      箭头本身还带着方向：流程往哪走，形状就在往哪指。
+    </p>
+    <p>
+      咬合方式按你说的：<strong>每段左端凹进一个三角、右端凸出一个三角</strong>，一节咬着一节；
+      首段左端平直（左边没有东西可咬，开口反而像缺角）。凹和凸都取半高、12px 深（近似 45°），
+      所以相邻两段的斜边完全平行，2px 缝就是一条等宽的斜线，看着才像同一条链。
+    </p>
+    <p>
+      配色沿用同一条原则：<strong>已完成的绿要淡，当前的紫要实</strong>。
+      三段都实心等于三个焦点；已完成混到 14% 淡绿、文字用深绿，它退成「走过的痕迹」，
+      未做的是 6.5% 灰 —— 屏幕上只有一处实色，眼睛自然落在「现在在做什么」。
+    </p>
+    <div class="codebox"><pre><em>/* 头部：一条 52px 的行，步骤条跟面包屑同排 */</em>
 .mw-focus-bar { height: <b>52px</b>; display:flex; align-items:center; gap:10px;
   background: color-mix(in srgb, var(--da-surface) 84%, transparent);
   backdrop-filter: <i>blur(24px) saturate(180%)</i>;
   border-bottom: .5px solid var(--da-hairline); }
 
-<em>/* 3 段等宽，gap 4px 形成分段；已完成绿、进行中紫、未做灰 */</em>
-.mw-progress            { display:flex; gap:4px; height:<b>8px</b>; width:<b>168px</b>; }
-.mw-progress .seg       { flex:1; position:relative; border-radius:2.5px; overflow:hidden;
-                          background: color-mix(in srgb, var(--da-text) 10%, var(--da-surface)); }
-.mw-progress .seg.done  { background: var(--da-success);        <em>/* 已完成：绿 */</em>
-                          box-shadow: inset 0 .5px 0 rgba(255,255,255,.34); }
-.mw-progress .seg.cur   { background: color-mix(in srgb, var(--da-primary) 13%, var(--da-surface-sunken)); }
-.mw-progress .seg.cur::after {
-  content:''; position:absolute; left:0; top:0; bottom:0; width:<b>58%</b>; border-radius:2.5px;
-  background: var(--da-primary); box-shadow: inset 0 .5px 0 rgba(255,255,255,.34),
-                                                 0 0 7px rgba(95,75,200,.42); }
+<em>/* 三段等距；gap 2px 让凹凸之间留一条等宽斜缝 */</em>
+.mw-steps { display:flex; gap:<b>2px</b>; height:<b>26px</b>; }
+
+<em>/* 核心：左凹右凸。半高 13px、深 12px → 斜边约 45° */</em>
+.mw-steps .st {
+  display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  min-width:90px; padding:0 16px; height:26px;
+  font-size:12px; font-weight:600; white-space:nowrap;
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%,
+                     0 100%, 12px 50%);
+}
+<em>/* 首段左端没有可咬的东西：平边 + 4px 切角当圆角 */</em>
+.mw-steps .st:first-child {
+  padding-left:15px;
+  clip-path: polygon(0 4px, 4px 0, calc(100% - 12px) 0, 100% 50%,
+                     calc(100% - 12px) 100%, 4px 100%, 0 calc(100% - 4px));
+}
+<em>/* 凹口占掉 12px，文字重心会偏左，左内边距补 4px */</em>
+.mw-steps .st + .st { padding-left:24px; }
+
+.mw-steps .st.done { background: color-mix(in srgb, var(--da-success) 14%, var(--da-surface));
+  color: color-mix(in srgb, var(--da-success) 74%, var(--da-text));
+  box-shadow: inset 0 .5px 0 rgba(255,255,255,.5); }
+.mw-steps .st.cur  { background: linear-gradient(180deg,
+  color-mix(in srgb, var(--da-primary) 88%, #fff) 0, var(--da-primary) 100%);
+  color:#fff; box-shadow: inset 0 .5px 0 rgba(255,255,255,.22); }
+.mw-steps .st.todo { background: color-mix(in srgb, var(--da-text) 6.5%, var(--da-surface));
+  color: var(--da-text-tertiary); }
+<em>/* 序号小一号、降透明度：它是辅助，不该和名字抢读 */</em>
+.mw-steps .st b { font-size:10px; font-weight:700; opacity:.42; }
 
 <em>/* 三段固定：采样并进第 1 段的后台过程，时间范围+文档并进第 2 段 */</em>
 const steps = ['整理字段', '准备', '自动建模'];
-const index = { screening: 0, preparing: 1, modeling: 2 };
+<em>// done = 已完成段数；cur = 当前段（实测 2 段完成时：绿 + 紫 + 灰）</em>
 
 <em>/* 时间范围：跟着行就地展开，不是模态 */</em>
 .ready-row + .window-inline { margin:0 24px 12px 61px; padding:13px 15px; border-radius:11px;
@@ -1175,7 +1214,7 @@ const DAYS = [7, 14, 31, 90];</pre></div>
       </div>
     </div>
     <p class="foot">
-      画布 1360 × 700 · 主色 <code>#5F4BC8</code>（深色 <code>#6A58E0</code> 承载白字）· 行高 50 / 卡圆角 14 / 进度条 168 × 8 三段 · 发丝线 <code>.5px rgba(60,60,67,.11)</code><br>
+      画布 1360 × 700 · 主色 <code>#5F4BC8</code>（深色 <code>#6A58E0</code> 承载白字）· 行高 50 / 卡圆角 14 / 步骤条 26 高 × 3 段箭头 · 发丝线 <code>.5px rgba(60,60,67,.11)</code><br>
       依据文件：<code>SemanticModelingPage.tsx</code>（main 的 display 条件、SetupSteps、startOffer 卡片）、<code>FieldScreeningPanel.tsx</code>（4 列 grid、常驻 textarea、fs-actions）、<code>FactQueryWindowSettings.tsx</code>（DAYS 常量、时间字段、保存策略）、<code>FactTableWindowService.java</code>（三个必要条件）、<code>factWindowSetup.ts</code>（ready / unknown 分流）、<code>BusinessDocumentsPanel.tsx</code>（可选多份）
     </p>
   </section>

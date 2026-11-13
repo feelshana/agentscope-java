@@ -73,8 +73,8 @@ class WrenScopedMcpClientTest {
                         .readTree(
                                 firstText.substring(
                                         "[WREN_QUERY_RECEIPT]".length(), firstText.indexOf('\n')));
-        assertThat(java.util.UUID.fromString(receipt.path("queryId").asText())).isNotNull();
-        assertThat(java.time.Instant.parse(receipt.path("queriedAt").asText())).isNotNull();
+        assertThat(receipt.path("groupId").asText()).isEqualTo("a");
+        assertThat(receipt.path("tool").asText()).isEqualTo("run_sql");
         assertThat(receipt.path("sql").asText()).isEqualTo("SELECT 1");
         assertThat(receipt.has("modelVersion")).isFalse();
         verify(gateway, org.mockito.Mockito.times(1)).call("a", "run_sql", args);
