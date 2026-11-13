@@ -16,6 +16,8 @@ import TaskTrace from './TaskTrace';
 import ChartBlock from './ChartBlock';
 import EChartsBlock, { ChartPayload } from './EChartsBlock';
 import CitationPanel from './CitationPanel';
+import QuestionRecovery from './QuestionRecovery';
+import { userMessageBefore } from '../utils/answerQueryRecords';
 import EmptyIllustration from './EmptyIllustration';
 import LandingExamples from './LandingExamples';
 import { NoKnowledgeBaseNotice, OnboardingChecklist, OnboardingTip, StarterQuestions } from './Onboarding';
@@ -1448,7 +1450,8 @@ export default function ChatPanel({
             caption="开始一段新对话；输入 /reset 可清空当前会话"
           />
         )}
-        {messages.map(m => {
+        {messages.map((m, messageIndex) => {
+          const originalQuestion = m.role === 'assistant' ? userMessageBefore(messages, messageIndex) : undefined;
           const { trace, answer: visuals, charts } = splitToolRender(m, onInspect);
           const failure = m.failed ? splitFailedAnswer(m.text) : null;
           const answerText = failure ? failure.answer : m.text;
@@ -1492,6 +1495,13 @@ export default function ChatPanel({
                           : <div className="da-typing"><span /><span /><span /></div>
                         : null}
                     {failure && <ErrorNotice error={failure.error} context="chat" />}
+                    {!m.pending && (m.failed || m.interrupted) && <QuestionRecovery
+                      question={originalQuestion?.text ?? ''} draft={input}
+                      disabled={busy || restoring || scopeRestoring}
+                      onEdit={question => {
+                        setInput(question); setSuggestionCaret(null);
+                        requestAnimationFrame(() => inputRef.current?.focus());
+                      }} />}
                     {m.webSearchRetry && !m.pending && !m.failed && m.id === messages[messages.length - 1]?.id
                       && webSearchAvailable === true && (
                       <button type="button" className="da-btn da-btn-sm" disabled={busy || scopeRestoring}
@@ -1540,7 +1550,7 @@ export default function ChatPanel({
                       <PythonArtifactsPanel tools={m.tools} onInspect={onInspect} />
                     )}
                     {m.tools.length > 0 && (
-                      <CitationPanel tools={m.tools} />
+                      <CitationPanel tools={m.tools} onInspect={onInspect} groupNames={originalQuestion?.knowledgeScope?.groupNames} />
                     )}
                   </div>
                 </div>

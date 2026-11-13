@@ -1,101 +1,40 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { answerQueryRecords, queryRecordStatus, type QueryToolEntry } from '../utils/answerQueryRecords';
+import type { ToolInspectPayload } from './ToolCallBlock';
+import Icon from './Icon';
+import './answer-query-records.css';
 
-export interface CitationToolEntry {
-  name: string;
-  input?: string;
-  result?: string;
-}
+const timeLabel = (value: string) => new Intl.DateTimeFormat('zh-CN', {
+  timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+}).format(new Date(value));
 
-interface Entry {
-  chart?: boolean;
-  query?: { purpose: string; sql?: string; source?: string };
-}
-
-export default function CitationPanel({
-  tools,
-}: {
-  tools: CitationToolEntry[];
+export default function CitationPanel({ tools, groupNames = {}, onInspect }: {
+  tools: QueryToolEntry[];
+  groupNames?: Record<string, string>;
+  onInspect?: (tool: ToolInspectPayload) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const entries: Entry[] = [];
-  for (const t of tools) {
-    const n = (t.name ?? '').toLowerCase();
-
-    if ((n === 'wren_run_sql' || n === 'wren_query_cube') && t.result && !t.result.startsWith('error:')) {
-      const purpose =
-        t.result.match(/\*\*查询问题：\*\*\s*([^\n]+)/)?.[1]?.trim()
-        ?? t.result.match(/\*\*Cube：\*\*\s*([^\n]+)/)?.[1]?.trim()
-        ?? '语义查询';
-      const source = t.result.match(/\*\*知识库：\*\*\s*([^\n]+)/)?.[1]?.trim();
-      const sql = t.result.match(/```sql\s*\n([\s\S]*?)```/)?.[1]?.trim();
-      entries.push({ query: { purpose, sql, source } });
-    } else if (n === 'render_chart') {
-      entries.push({ chart: true });
-    }
-  }
-  if (entries.length === 0) return null;
-
-  return (
-    <div style={{ marginTop: 8 }}>
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        style={{
-          background: 'transparent',
-          border: '1px solid var(--da-border)',
-          borderRadius: 8,
-          padding: '4px 10px',
-          fontSize: '0.75rem',
-          color: 'var(--da-text-3)',
-          cursor: 'pointer',
-        }}
-      >
-        {open ? '▾' : '▸'} 来源 ({entries.length})
-      </button>
-      {open && (
-        <div
-          style={{
-            marginTop: 6,
-            border: '1px solid var(--da-border)',
-            borderRadius: 8,
-            padding: 8,
-            background: 'var(--da-app-bg)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 6,
-          }}
-        >
-          {entries.map((e, i) => (
-            <div key={i} style={{ fontSize: '0.75rem', color: 'var(--da-text-2)' }}>
-              {e.query ? (
-                <>
-                  <span style={{ fontWeight: 600 }}>{e.query.purpose || '数据查询'}</span>
-                  {e.query.source && (
-                    <span style={{ color: 'var(--da-text-muted)' }}>
-                      {' '}· {e.query.source}
-                    </span>
-                  )}
-                  {e.query.sql && (
-                    <div
-                      style={{
-                        fontFamily: 'ui-monospace, Menlo, monospace',
-                        fontSize: '0.7rem',
-                        color: 'var(--da-text-3)',
-                        whiteSpace: 'pre-wrap',
-                        marginTop: 2,
-                      }}
-                    >
-                      {e.query.sql.length > 220 ? e.query.sql.slice(0, 220) + '…' : e.query.sql}
-                    </div>
-                  )}
-                </>
-              ) : (
-                <span>图表</span>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+  const records = useMemo(() => answerQueryRecords(tools), [tools]);
+  if (!records.length) return null;
+  return <details className="da-query-records" open={open} onToggle={e => setOpen(e.currentTarget.open)}>
+    <summary><Icon name="database" size="sm" /><span>本轮查询记录</span><span className="da-query-count">{records.length}</span><Icon name="chevron" size="sm" /></summary>
+    {open && <div className="da-query-records-body">
+      <p className="da-query-context">记录本轮实际调用，不代表每条结论已经核验。请核对指标口径、日期和筛选条件。</p>
+      {records.map((item, index) => <section className="da-query-record" key={item.tool.id}>
+        <div className="da-query-record-heading"><strong>查询 {index + 1}</strong><span className={item.state === 'error' ? 'da-query-error' : ''}>{queryRecordStatus(item)}</span>
+          {onInspect && <button type="button" className="da-query-inspect" onClick={() => onInspect(item.tool)}>查看数据与 SQL<Icon name="chevron" size="sm" /></button>}</div>
+        {item.groupId && <p className="da-query-context">知识库：{groupNames[item.groupId] || item.groupId}</p>}
+        <dl className="da-query-metadata"><div><dt>查询完成时间</dt><dd>{item.queriedAt ? `${timeLabel(item.queriedAt)}（北京时间）` : '未记录'}</dd></div>
+          <div><dt>数据更新时间</dt><dd>未记录</dd></div><div><dt>当时模型版本</dt><dd>未记录</dd></div>
+          {item.queryId && <div><dt>查询记录编号</dt><dd><code>{item.queryId}</code></dd></div>}</dl>
+        {item.sql ? <details className="da-query-sql"><summary>{item.state === 'success' ? '查看本次 SQL' : '查看记录中的 SQL'}</summary><pre tabIndex={0} aria-label={`查询 ${index + 1} 的 SQL，可横向滚动`}>{item.sql}</pre></details>
+          : <p className="da-query-context">当前记录未保存 SQL，可查看原始调用详情。</p>}
+        {item.truncated && <p className="da-query-warning">工具返回已截断，不能据此当作完整查询结果。</p>}
+        {item.historyTruncated && <p className="da-query-warning">历史返回存在截断或驱逐标记，缺失内容无法从当前记录恢复。</p>}
+        {item.rows !== undefined && item.returnedRows !== item.rows && <p className="da-query-context">本查询返回 {item.returnedRows} 行，当前回执保留 {item.rows} 行样本；完整文件是否可用以下载入口为准。</p>}
+        {item.limit !== undefined && <p className="da-query-context">请求行数上限 {item.limit}；返回行数不等于业务表总行数，也不能据此判断源数据完整。</p>}
+      </section>)}
+    </div>}
+  </details>;
 }

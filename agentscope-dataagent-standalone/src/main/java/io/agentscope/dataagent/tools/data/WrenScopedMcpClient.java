@@ -240,6 +240,7 @@ public final class WrenScopedMcpClient extends McpClientWrapper {
                                 var result =
                                         gateway.callAuthorized(
                                                 groupId, tool, args, this::authorize);
+                                String queriedAt = java.time.Instant.now().toString();
                                 io.agentscope.dataagent.runtime.observability
                                         .ExecutionTimingMiddleware.record(
                                         context,
@@ -269,18 +270,10 @@ public final class WrenScopedMcpClient extends McpClientWrapper {
                                             columnTotals(
                                                     compactRows(result.payload()),
                                                     String.valueOf(args.getOrDefault("sql", "")));
-                                if (query && result.ok())
-                                    successfulQueries.put(
-                                            cacheKey,
-                                            McpSchema.CallToolResult.builder()
-                                                    .content(
-                                                            List.of(
-                                                                    new McpSchema.TextContent(
-                                                                            payload)))
-                                                    .isError(false)
-                                                    .build());
                                 if (result.ok() && query) {
                                     Map<String, Object> receipt = new java.util.LinkedHashMap<>();
+                                    receipt.put("queryId", java.util.UUID.randomUUID().toString());
+                                    receipt.put("queriedAt", queriedAt);
                                     receipt.put("groupId", groupId);
                                     receipt.put("tool", tool);
                                     receipt.put("sql", args.getOrDefault("sql", ""));
@@ -295,10 +288,16 @@ public final class WrenScopedMcpClient extends McpClientWrapper {
                                                     + "\n"
                                                     + payload;
                                 }
-                                return McpSchema.CallToolResult.builder()
-                                        .content(List.of(new McpSchema.TextContent(payload)))
-                                        .isError(!result.ok())
-                                        .build();
+                                var response =
+                                        McpSchema.CallToolResult.builder()
+                                                .content(
+                                                        List.of(new McpSchema.TextContent(payload)))
+                                                .isError(!result.ok())
+                                                .build();
+                                // Reuse the same execution record, including its identity and
+                                // files.
+                                if (query && result.ok()) successfulQueries.put(cacheKey, response);
+                                return response;
                             }
                         })
                 .subscribeOn(Schedulers.boundedElastic());

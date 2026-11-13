@@ -69,3 +69,5 @@ LLM 转录没有时间戳，需要单独分析一次运行时，先停服务把�
 2026-10-29当前主交付已改为GitHub源码构建（spec099/ADR0118）：66现有运行环境继续复用，构建容器内编译框架和应用、封装不可变应用镜像；生产conf/data外置。旧tar方式保留备选，不再要求用户每次本地打tar上传。构建阶段本地验证通过，66 builder/实际构建、Compose启停/回退与生产DB/入口验收仍待；本次仅本地提交，由用户本人push。
 
 2026-11-12 spec133当前工程边界：发布HTTP归MdlPublicationController，聊天Inbound/选库归ChatTurnPreparation；纯清单投影MdlManifestRenderer、文件安装/恢复MdlPublicationStore、单数据集提交后物理清理DatasetDeletionCleanup。会话范围与转录解析归runtime.session。journal需要随mdl-home持久化，适用单进程；实测与限制见[六阶段工程报告](../test-reports/20261112-architecture-six-stage-acceptance.md)，开发服务尚未重启加载。
+
+2026-11-13本机真实对照确认：IDEA选中DataAgentApp(1)/dev，实际模型由平台库激活配置覆盖启动默认；仅探测dev文件可能错误判断模型不可用。当前bb02f96d与个人5479d152主链路在隔离真实环境一致，但管理/用量等16个页面请求在两边均404，例行任务被SecurityConfig明确禁用；不能把旧页面可打开当作功能已实现。详见[运行对照报告](../test-reports/20261113-branch-runtime-parity-acceptance.md)。
