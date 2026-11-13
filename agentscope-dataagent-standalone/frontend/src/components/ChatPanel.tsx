@@ -375,6 +375,8 @@ export interface ChatPanelProps {
   inspectorId?: string | null;
   /** Called with the resolved tool payload whenever inspectorId's tool updates. */
   onToolResolved?: (t: ToolInspectPayload | null) => void;
+  onBrowseKnowledge?: (id: string | null) => void;
+  browsingKnowledgeId?: string | null;
 }
 
 export default function ChatPanel({
@@ -384,6 +386,8 @@ export default function ChatPanel({
   onInspect,
   inspectorId,
   onToolResolved,
+  onBrowseKnowledge,
+  browsingKnowledgeId,
 }: ChatPanelProps) {
   const token = getToken();
   const [greetingProfile, setGreetingProfile] = useState<{ token: string; displayName?: string } | null>(null);
@@ -459,6 +463,10 @@ export default function ChatPanel({
   const effectiveAgentId = selectedOntology ? `ontology-${selectedOntology}` : agentId;
   /** Whether each button is frozen (non-interactive for its own picker, but clickable to switch mode). */
   const kbFrozen = chatMode === 'ontology';
+  const browseGroupId = agentId === 'data-agent' && !kbFrozen && !scopeRestoring && !restoring && selectedGroups.length === 1 ? selectedGroups[0] : null;
+  useEffect(() => {
+    if (browsingKnowledgeId && browsingKnowledgeId !== browseGroupId) onBrowseKnowledge?.(browseGroupId);
+  }, [browseGroupId, browsingKnowledgeId, onBrowseKnowledge]);
   const ontologyFrozen = chatMode === 'kb';
 
   useEffect(() => {
@@ -1294,6 +1302,8 @@ export default function ChatPanel({
       )}
       <div className="da-chat-composer-bar" style={S.composerBar}>
         <div ref={groupPickerRef} style={{ position: 'relative' }}>
+          <div className={browseGroupId && onBrowseKnowledge ? 'da-kb-combo' : undefined}>
+          {browseGroupId && onBrowseKnowledge && <button type="button" className="da-kb-view" title="查看此知识库的数据" aria-label="查看此知识库的数据" aria-expanded={browsingKnowledgeId === browseGroupId} aria-controls="chat-knowledge-data" onClick={() => { setGroupPickerOpen(false); onBrowseKnowledge(browsingKnowledgeId === browseGroupId ? null : browseGroupId); }}><Icon name="book" size="sm" /></button>}
           <button
             type="button"
             className={`da-kb-select${!kbFrozen && (selectedGroups.length || selectAllGroups || selectedOntology) ? ' is-selected' : ''}${groupPickerOpen ? ' is-open' : ''}`}
@@ -1303,7 +1313,7 @@ export default function ChatPanel({
             aria-controls="chat-knowledge-picker"
             title={kbSelectionLocked ? '建模会话使用当前知识库' : busy ? '回答完成后可调整知识库' : kbFrozen ? '点击切换回知识库模式' : '最多选一个知识库；未选时仅普通聊天'}
           >
-            <span className="da-kb-select-icon"><Icon name="book" size="sm" /></span>
+            {!(browseGroupId && onBrowseKnowledge) && <span className="da-kb-select-icon"><Icon name="book" size="sm" /></span>}
             <span className="da-kb-select-label">
             {selectedOntology
               ? '知识库'
@@ -1315,8 +1325,9 @@ export default function ChatPanel({
             {selectAllGroups && <span className="da-kb-select-count">全选</span>}
             <span className="da-kb-select-chevron"><Icon name="chevron" size="sm" /></span>
           </button>
+          </div>
           {groupPickerOpen && createPortal(
-            <div ref={groupPopoverRef} id="chat-knowledge-picker" className="da-kb-picker" style={groupPickerPosition} role="dialog" aria-label="选择本轮知识库" onKeyDown={e => { if (e.key === 'Escape') { setGroupPickerOpen(false); groupPickerRef.current?.querySelector('button')?.focus(); } }}>
+            <div ref={groupPopoverRef} id="chat-knowledge-picker" className="da-kb-picker" style={groupPickerPosition} role="dialog" aria-label="选择本轮知识库" onKeyDown={e => { if (e.key === 'Escape') { setGroupPickerOpen(false); groupPickerRef.current?.querySelector<HTMLButtonElement>('[aria-controls="chat-knowledge-picker"]')?.focus(); } }}>
               {scopeNotice && <div className="da-small" role="alert" style={{ padding: 8, color: 'var(--da-danger)' }}>{scopeNotice}</div>}
               <div className="da-kb-picker-heading"><span>查询范围</span><small>单知识库</small></div>
               <div className="da-kb-picker-search"><Icon name="search" size="sm" /><input autoFocus aria-label="搜索可使用的知识库" placeholder="搜索知识库" value={groupSearch} onChange={e => { setGroupSearch(e.target.value); setGroupPage(0); }} /></div>

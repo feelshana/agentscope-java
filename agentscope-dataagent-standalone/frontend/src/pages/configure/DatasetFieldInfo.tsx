@@ -47,6 +47,7 @@ export default function DatasetFieldInfo({ column, anchor, close }: {
     };
   }, [anchor, close]);
   return createPortal(<div ref={panel} id="kd-field-help" className="kd-field-popover" role="dialog"
+    onKeyDown={event => { if (event.key === 'Escape' && !event.nativeEvent.isComposing) { event.preventDefault(); event.stopPropagation(); close(); } }}
     aria-labelledby="kd-field-help-title" tabIndex={-1}
     style={position ? { ...position, visibility: 'visible' } : { top: 0, left: 0, visibility: 'hidden' }}>
     <header><strong id="kd-field-help-title">{column.displayName?.trim() || column.originalName || column.name}</strong>

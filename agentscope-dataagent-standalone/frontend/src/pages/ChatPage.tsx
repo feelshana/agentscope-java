@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { ACTIVE_AGENT_ID } from '../api/activeAgent';
 import ChatHeader from '../components/ChatHeader';
@@ -6,6 +6,9 @@ import ChatPanel from '../components/ChatPanel';
 import ToolInspector from '../components/ToolInspector';
 import { ToolInspectPayload } from '../components/ToolCallBlock';
 import { ShellOutletContext } from '../components/EditTierGate';
+import '../components/KnowledgeDataPanel.css';
+
+const KnowledgeDataPanel = lazy(() => import('../components/KnowledgeDataPanel'));
 
 const PANEL_MIN = 300;
 
@@ -15,6 +18,7 @@ export default function ChatPage() {
   const [inspectorId, setInspectorId] = useState<string | null>(null);
   const [inspectorPayload, setInspectorPayload] = useState<ToolInspectPayload | null>(null);
   const [panelW, setPanelW] = useState(420);
+  const [knowledgeId, setKnowledgeId] = useState<string | null>(null);
   const dragging = useRef(false);
 
   const onMouseMove = useCallback((e: MouseEvent) => {
@@ -36,6 +40,7 @@ export default function ChatPage() {
   }, [onMouseMove, stopDrag]);
 
   const handleInspect = useCallback((t: ToolInspectPayload) => {
+    setKnowledgeId(null);
     setInspectorId(prev => {
       if (prev === t.id) {
         setInspectorPayload(null);
@@ -50,10 +55,19 @@ export default function ChatPage() {
     setInspectorPayload(t);
   }, []);
 
+  const browseKnowledge = useCallback((id: string | null) => {
+    setKnowledgeId(id);
+    if (id) { setInspectorId(null); setInspectorPayload(null); }
+  }, []);
+  const closeKnowledge = useCallback(() => {
+    setKnowledgeId(null);
+    requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.da-kb-view')?.focus({ preventScroll: true }));
+  }, []);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       <ChatHeader title={title} />
-      <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+      <div className="da-chat-page-body">
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           <ChatPanel
             agentId={ACTIVE_AGENT_ID}
@@ -62,8 +76,11 @@ export default function ChatPage() {
             onInspect={handleInspect}
             inspectorId={inspectorId}
             onToolResolved={handleToolResolved}
+            onBrowseKnowledge={browseKnowledge}
+            browsingKnowledgeId={knowledgeId}
           />
         </div>
+        {knowledgeId && <div className="da-knowledge-panel-host"><Suspense fallback={<div className="kdp-state" role="status">加载知识库面板…</div>}><KnowledgeDataPanel key={knowledgeId} groupId={knowledgeId} onClose={closeKnowledge} /></Suspense></div>}
         {inspectorPayload && (
           <>
             <div
