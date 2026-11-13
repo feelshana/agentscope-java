@@ -187,6 +187,7 @@ public class DataSourceIntrospector {
     }
 
     public Connection open(ExternalDataSourceEntity ds) throws SQLException {
+        ExternalDataSourceAccess.requireActive(ds);
         Connection c =
                 DriverManager.getConnection(validatedUrl(ds), ds.getUsername(), ds.getPassword());
         try {

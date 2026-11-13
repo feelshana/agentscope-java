@@ -1141,6 +1141,7 @@ public class MdlPublishService {
             return WrenSourceSelection.refused(
                     "数据集关联的外部数据源（" + sourceId + "）已被删除，无法发布，请移除相关数据集或重新配置数据源");
         }
+        if (!source.isEnabled()) return WrenSourceSelection.refused("数据源已停用，请联系创建人或全局管理员启用后再发布。");
         if (!"mysql".equalsIgnoreCase(source.getKind())) {
             return WrenSourceSelection.refused(
                     "外部数据源「"

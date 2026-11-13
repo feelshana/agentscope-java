@@ -8,6 +8,8 @@ ADR 记录"为什么这样做"。规则：
 
 ## 当前有效主线（按主题）
 
+[ADR0146](0146-shared-datasource-and-kb-bindings.md) 将数据源成员与已建立的知识库供数绑定分离，明确移除成员/停用的不同边界，创建人和全局管理员具有同等治理权。[ADR0147](0147-keep-datasource-password-storage.md) 按用户要求保留原数据源密码存储，不做转换或新增密钥。
+
 [ADR0143](0143-history-query-projection.md) 为管理员检索复用消息投影，后台分批补齐角色与用户正文，服务端统一分页和统计。
 
 [ADR0142](0142-bi-multisource-independent-sync.md) 为新增六表建立独立多源任务，按日原子替换保留真实重复，明确可用历史/缺失区间，不改变旧七表任务。
@@ -184,3 +186,6 @@ ADR 记录"为什么这样做"。规则：
 | [0138](0138-metrics-as-cubes-and-wren-0-17.md) | 升级 Wren 0.17.1，指标由 Cube 承担，取值与同义词写入 MDL | 提议，暂缓（2026-11-05 用户决定先不做）。实施 spec118；接受后取代 ADR0106、ADR0107 中资产轮次的 Cube 部分。 |  |
 | [0140](0140-per-turn-web-search.md) | 问数联网由用户逐轮授权 | 已接受，2026-11-06。实施 spec120，取代 ADR0115 的自动搜索授权行为。 | |
 | [0141](0141-admin-conversation-history-read-access.md) | 管理员通过独立接口查阅用户对话正文 | 已接受，2026-11-06。对应 spec121。 | |
+
+| [0146](0146-shared-datasource-and-kb-bindings.md) | 数据源成员授权与知识库绑定分离；创建人和全局管理员同等治理 | 已接受，2026-11-13。对应spec135；密码段由0147取代。 | |
+| [0147](0147-keep-datasource-password-storage.md) | 保留数据源密码存储方式；共享升级不转换密码、不新增密钥 | 已接受，2026-11-13。取代ADR0146密码段。 | |

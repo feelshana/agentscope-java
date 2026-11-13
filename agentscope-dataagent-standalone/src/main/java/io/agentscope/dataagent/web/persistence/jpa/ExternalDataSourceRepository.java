@@ -26,4 +26,19 @@ public interface ExternalDataSourceRepository
     List<ExternalDataSourceEntity> findByOwnerIdOrderByCreatedAtDesc(String ownerId);
 
     Optional<ExternalDataSourceEntity> findByOwnerIdAndName(String ownerId, String name);
+
+    @org.springframework.data.jpa.repository.Lock(
+            jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query(
+            "select s from ExternalDataSourceEntity s where s.id = :id")
+    Optional<ExternalDataSourceEntity> lockById(
+            @org.springframework.data.repository.query.Param("id") String id);
+
+    @org.springframework.data.jpa.repository.Query(
+            "select s from ExternalDataSourceEntity s where :admin = true or s.ownerId = :actor or"
+                + " exists (select g.id from ExternalDataSourceGrantEntity g where g.datasourceId ="
+                + " s.id and g.userId = :actor) order by s.createdAt desc, s.id")
+    List<ExternalDataSourceEntity> findVisible(
+            @org.springframework.data.repository.query.Param("actor") String actor,
+            @org.springframework.data.repository.query.Param("admin") boolean admin);
 }

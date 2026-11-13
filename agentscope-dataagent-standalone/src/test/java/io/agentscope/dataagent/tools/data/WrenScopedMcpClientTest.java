@@ -33,6 +33,44 @@ import org.junit.jupiter.api.Test;
 
 class WrenScopedMcpClientTest {
     @Test
+    void disabledSourceIsCheckedBeforeCachedQueryCanBeReturned() {
+        grant("alice", "a");
+        var client = client("alice", "a");
+        var args = Map.<String, Object>of("sql", "SELECT 1");
+        when(gateway.call("a", "run_sql", args))
+                .thenReturn(new WrenQueryGateway.WrenCallResult(true, "{\"rows\":[[1]]}"));
+        assertThat(client.callTool("run_sql", args).block().isError()).isFalse();
+        org.mockito.Mockito.doThrow(new DatasetException("数据源已停用", 409))
+                .when(sources)
+                .requireBindingsActive("a");
+        assertThatThrownBy(() -> client.callTool("run_sql", args).block())
+                .hasMessageContaining("停用");
+        verify(gateway, org.mockito.Mockito.times(1)).call("a", "run_sql", args);
+    }
+
+    @Test
+    void sourceDisabledWhileQueuedCannotReachSql() {
+        grant("alice", "a");
+        doAnswer(
+                        invocation -> {
+                            org.mockito.Mockito.doThrow(new DatasetException("数据源已停用", 409))
+                                    .when(sources)
+                                    .requireBindingsActive("a");
+                            invocation.<Runnable>getArgument(3).run();
+                            throw new AssertionError("SQL must not run after disable");
+                        })
+                .when(gateway)
+                .callAuthorized(eq("a"), eq("run_sql"), anyMap(), any());
+        assertThatThrownBy(
+                        () ->
+                                client("alice", "a")
+                                        .callTool("run_sql", Map.of("sql", "SELECT 1"))
+                                        .block())
+                .hasMessageContaining("停用");
+        verify(gateway, never()).call(anyString(), anyString(), anyMap());
+    }
+
+    @Test
     void databaseWindowRefusalPreventsMcpExecutionWithoutReadingMdl() {
         grant("alice", "a");
         var ctx =
@@ -91,8 +129,10 @@ class WrenScopedMcpClientTest {
     }
 
     private final DatasetGroupService groups = mock(DatasetGroupService.class);
+    private final io.agentscope.dataagent.dataset.ExternalDataSourceAccess sources =
+            mock(io.agentscope.dataagent.dataset.ExternalDataSourceAccess.class);
     private final WrenQueryAccess access =
-            new WrenQueryAccess(groups, new ConversationScopeRegistry());
+            new WrenQueryAccess(groups, new ConversationScopeRegistry(), sources);
     private final WrenQueryGateway gateway = mock(WrenQueryGateway.class, CALLS_REAL_METHODS);
     private final WrenPublishedProject projects = mock(WrenPublishedProject.class);
     private final McpSchema.Tool sqlTool =

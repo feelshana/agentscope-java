@@ -5,9 +5,9 @@ import { dataSourceConnection, dataSourceKind } from './dataSourceConnection';
 import Icon from './Icon';
 import ErrorNotice from './ErrorNotice';
 
-export default function DataSourceDetailModal({ dataSource, onClose }: { dataSource: ExternalDataSource; onClose: () => void }) {
+export default function DataSourceDetailModal({ dataSource, onClose, initialBrowse = false }: { dataSource: ExternalDataSource; onClose: () => void; initialBrowse?: boolean }) {
   const connection = dataSourceConnection(dataSource);
-  const [browse, setBrowse] = useState(false);
+  const [browse, setBrowse] = useState(initialBrowse);
   const [schemas, setSchemas] = useState<string[]>([]);
   const [schema, setSchema] = useState('');
   const [tables, setTables] = useState<SchemaTable[]>([]);
@@ -59,11 +59,12 @@ export default function DataSourceDetailModal({ dataSource, onClose }: { dataSou
     <div className="ds-dialog-body">
       <dl className="ds-overview">
         <div><dt>类型</dt><dd>{dataSourceKind(dataSource.kind)}</dd></div>
-        <div><dt>主机与端口</dt><dd>{connection ? `${connection.host}:${connection.port}` : '连接格式无法解析'}</dd></div>
+        {dataSource.canManage && <><div><dt>主机与端口</dt><dd>{connection ? `${connection.host}:${connection.port}` : '连接格式无法解析'}</dd></div>
         <div><dt>数据库</dt><dd>{connection?.database || '未指定数据库'}</dd></div>
-        <div><dt>用户名</dt><dd>{dataSource.username || '未指定'}</dd></div>
+        <div><dt>数据库账号</dt><dd>{dataSource.username || '未指定'}</dd></div></>}
+        <div><dt>创建人</dt><dd>{dataSource.creatorName || dataSource.creatorAccount || '系统'}</dd></div>
         <div><dt>数据采样</dt><dd>{dataSource.sampling ? '已开启，每表最多 1000 行' : '已关闭'}</dd></div>
-        <div><dt>凭据</dt><dd>不在详情中展示密码</dd></div>
+        <div><dt>凭据</dt><dd>由服务器安全使用，不展示已保存的密码</dd></div>
       </dl>
       <button type="button" className="ds-browse-toggle" aria-expanded={browse} onClick={() => setBrowse(value => !value)}><Icon name="table" size="sm" />{browse ? '收起库表结构' : '浏览库表结构'}<Icon name="chevron" size="sm" /></button>
       {browse && <section className="ds-schema-browser" aria-label="库表结构">

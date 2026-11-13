@@ -8,6 +8,8 @@ spec 是一页纸的需求与验收标准，写代码之前先写（模板：[00
 
 ## 进行中
 
+- [135 共享数据源与连接治理](135-shared-datasource-access.md)：本地实现与隔离验证完成；用户授权提交/推送/合入develop-2.0，待用户执行平台SQL及66部署验收。
+
 - [127 资料同步草稿与双同步任务观测](127-metadata-draft-and-bi-task-observation.md)：已授权本地实施，待用户运行验收；不提交、push或部署。
 
 - [126 全局管理员与帮助引导设计落地](126-admin-and-help-ios-design.md)：指定HTML已落地，本地构建/回归及隔离浏览器验证通过，待用户试用。

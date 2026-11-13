@@ -24,8 +24,7 @@ import java.time.Instant;
 /**
  * User-configured external database connection (TC "数据源管理" analogue): a local MySQL or
  * PostgreSQL instance whose existing tables can be associated into knowledge bases as read-only
- * datasets without copying data. Passwords are stored in plain text for now (production should
- * encrypt at rest).
+ * datasets without copying data. Stored credentials are used only on the server.
  */
 @Entity
 @Table(name = "dataagent_external_datasource")
@@ -53,6 +52,9 @@ public class ExternalDataSourceEntity {
 
     @Column(name = "password", length = 256)
     private String password;
+
+    @Column(name = "enabled", nullable = false)
+    private boolean enabled = true;
 
     /** When true, low-cardinality columns get sample values merged into their description. */
     @Column(name = "sampling", nullable = false)
@@ -89,6 +91,14 @@ public class ExternalDataSourceEntity {
 
     public String getId() {
         return id;
+    }
+
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
     }
 
     public void setId(String id) {

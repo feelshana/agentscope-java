@@ -22,6 +22,30 @@ import org.springframework.data.jpa.repository.JpaRepository;
 /** Spring Data repository for {@link DatasetEntity}. */
 public interface DatasetRepository extends JpaRepository<DatasetEntity, String> {
 
+    @org.springframework.data.jpa.repository.Query(
+            "select distinct d.groupId from DatasetEntity d where d.externalDataSourceId = :id")
+    List<String> findGroupIdsByExternalSource(
+            @org.springframework.data.repository.query.Param("id") String id);
+
+    @org.springframework.data.jpa.repository.Query(
+            "select distinct d.externalDataSourceId from DatasetEntity d where d.groupId = :groupId"
+                    + " and d.externalDataSourceId is not null")
+    List<String> findExternalSourceIdsByGroup(
+            @org.springframework.data.repository.query.Param("groupId") String groupId);
+
+    interface SourceBindingCount {
+        String getSourceId();
+
+        long getTotal();
+    }
+
+    @org.springframework.data.jpa.repository.Query(
+            "select d.externalDataSourceId as sourceId, count(distinct d.groupId) as total from"
+                    + " DatasetEntity d where d.externalDataSourceId in :ids group by"
+                    + " d.externalDataSourceId")
+    List<SourceBindingCount> countSourceBindings(
+            @org.springframework.data.repository.query.Param("ids") List<String> ids);
+
     @org.springframework.data.jpa.repository.Lock(
             jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
     @org.springframework.data.jpa.repository.Query("select d from DatasetEntity d where d.id = :id")

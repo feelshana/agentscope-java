@@ -230,6 +230,7 @@ CREATE TABLE `dataagent_doc_enhance_task` (
 
 CREATE TABLE `dataagent_external_datasource` (
   `datasource_id` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `enabled` bit(1) NOT NULL DEFAULT b'1',
   `created_at` datetime(6) DEFAULT NULL,
   `jdbc_url` varchar(512) COLLATE utf8mb4_unicode_ci NOT NULL,
   `kind` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -543,3 +544,28 @@ CREATE TABLE `usage_event` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS = @dataagent_previous_fk_checks;
+
+CREATE TABLE dataagent_datasource_grant (
+    id VARCHAR(64) NOT NULL,
+    datasource_id VARCHAR(64) NOT NULL,
+    user_id VARCHAR(128) NOT NULL,
+    role VARCHAR(16) NOT NULL,
+    granted_by VARCHAR(128) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY ix_ds_grant_source_user (datasource_id, user_id),
+    KEY ix_ds_grant_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE dataagent_datasource_audit (
+    id VARCHAR(64) NOT NULL,
+    datasource_id VARCHAR(64) NOT NULL,
+    actor_id VARCHAR(128) NOT NULL,
+    subject_id VARCHAR(128) NULL,
+    action VARCHAR(32) NOT NULL,
+    previous_role VARCHAR(16) NULL,
+    new_role VARCHAR(16) NULL,
+    created_at DATETIME(6) NOT NULL,
+    PRIMARY KEY (id),
+    KEY ix_ds_audit_source (datasource_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

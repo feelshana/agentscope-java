@@ -77,7 +77,7 @@ public class WrenProfileHome {
      * subprocess as {@code WREN_HOME}. The file is only rewritten when its content changes, so
      * an already-running instance is never surprised by a partial write.
      */
-    public Path ensure() {
+    public synchronized Path ensure() {
         return ensureAll(externalSources.findAll());
     }
 
@@ -86,7 +86,7 @@ public class WrenProfileHome {
      * publish path re-renders right after datasource edits so the file matches the database the
      * group is about to be bound to.
      */
-    public Path ensureAll(List<ExternalDataSourceEntity> externalSources) {
+    public synchronized Path ensureAll(List<ExternalDataSourceEntity> externalSources) {
         Path home = wrenProps.wrenHome();
         try {
             Files.createDirectories(home);
@@ -94,7 +94,22 @@ public class WrenProfileHome {
             String content = renderAll(externalSources);
             if (!Files.exists(file)
                     || !content.equals(Files.readString(file, StandardCharsets.UTF_8))) {
-                Files.writeString(file, content, StandardCharsets.UTF_8);
+                Path temporary = Files.createTempFile(home, ".profiles-", ".tmp");
+                try {
+                    Files.writeString(temporary, content, StandardCharsets.UTF_8);
+                    try {
+                        Files.move(
+                                temporary,
+                                file,
+                                java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    } catch (java.nio.file.AtomicMoveNotSupportedException ignored) {
+                        Files.move(
+                                temporary, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    }
+                } finally {
+                    Files.deleteIfExists(temporary);
+                }
                 log.info(
                         "Wren connection profiles written: {} ({} profile(s))",
                         file,
@@ -139,8 +154,8 @@ public class WrenProfileHome {
         for (ExternalDataSourceEntity ds : externalSources) {
             if (!isRenderableExternal(ds)) {
                 log.warn(
-                        "WrenProfileHome: skipping non-MySQL external datasource '{}' (kind={});"
-                                + " wren publish for it is not supported yet",
+                        "WrenProfileHome: skipping disabled or non-MySQL external datasource '{}'"
+                                + " (kind={}); wren publish for it is not supported yet",
                         ds.getId(),
                         ds.getKind());
                 continue;
@@ -169,7 +184,7 @@ public class WrenProfileHome {
     }
 
     private boolean isRenderableExternal(ExternalDataSourceEntity ds) {
-        return "mysql".equalsIgnoreCase(ds.getKind()) && ds.getJdbcUrl() != null;
+        return ds.isEnabled() && "mysql".equalsIgnoreCase(ds.getKind()) && ds.getJdbcUrl() != null;
     }
 
     /** Profile name for an external datasource entry: {@code ext-<datasourceId>}. */

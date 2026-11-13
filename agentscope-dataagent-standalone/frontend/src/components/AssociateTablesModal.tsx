@@ -88,10 +88,12 @@ export default function AssociateTablesModal({
   onAssociateStart,
   onProgress,
   preferBuiltin = false,
+  initialSourceId,
 }: {
   groupId: string;
   /** spec105: during the guided tour the demo source and its tables start out selected. */
   preferBuiltin?: boolean;
+  initialSourceId?: string;
   onClose: () => void;
   onAssociated: () => void;
   onError?: (message: string) => void;
@@ -137,12 +139,12 @@ export default function AssociateTablesModal({
       .then(list => {
         if (!active) return;
         setSources(list);
-        const demo = preferBuiltin ? list.find(s => s.builtin) : undefined;
-        if (demo) setSourceId(demo.id);
+        const selected = list.find(s => s.id === initialSourceId && s.enabled !== false) || (preferBuiltin ? list.find(s => s.builtin && s.enabled !== false) : undefined);
+        if (selected) setSourceId(selected.id);
       })
       .catch(e => { if (active) setError(e instanceof Error ? e.message : String(e)); });
     return () => { active = false; };
-  }, [preferBuiltin]);
+  }, [preferBuiltin, initialSourceId]);
 
   useEffect(() => {
     if (!sourceId) return;
@@ -316,8 +318,8 @@ export default function AssociateTablesModal({
             >
               <option value="">请选择数据源…</option>
               {sources.map(s => (
-                <option key={s.id} value={s.id}>
-                  {s.builtin ? `${s.name}（系统内置，只读）` : `${s.name} (${s.kind.toUpperCase()})`}
+                <option key={s.id} value={s.id} disabled={s.enabled === false}>
+                  {s.builtin ? `${s.name}（系统内置，只读）` : `${s.name} · ${s.creatorName || s.creatorAccount || s.kind.toUpperCase()} · ${s.role === 'USE' ? '可使用' : '可管理'}${s.enabled === false ? ' · 已停用' : ''}`}
                 </option>
               ))}
             </select>

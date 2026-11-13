@@ -586,3 +586,19 @@ Git 核对 8515fd28 到 68b5d7a5 期间 BI 登录链路无差异；Git 内主脚
 ## 2026-11-12 Asia/Shanghai｜Checkpoint：个人分支本地提交检查
 
 用户授权保存全部本地修改到liyufan_dev，包含spec127资料同步/建模入口/双BI观测及测试、构建产物、既有产品与架构评审文档。Spotless与本轮后端1150项（0失败/错误、33条件跳过）、前端三前缀各105项、TypeScript/Vite构建、Maven package均通过；测试统计排除target中旧日期遗留XML。无DDL、push、主线合并、66操作或服务重启；产品F01–F09及架构整改仍仅待讨论。提交结果以Git记录为准，用户真实环境验收仍待继续。
+
+## 2026-11-13 Asia/Shanghai｜Checkpoint：共享数据源实现中。liyufan_dev起点5479d152；已接集中授权服务、加密迁移与成员UI。前端构建通过，后端回归尚未完成。未提交或部署。
+
+## 2026-11-13 Asia/Shanghai｜Checkpoint：共享数据源本地验收完成
+
+liyufan_dev保留未提交：spec135/ADR0146实现独立连接共享与管理员治理、凭据迁移及停用门禁。Spotless/后端1160项（0失败/错误、33条件跳过）、前端三前缀各105项、TypeScript/Vite和package通过；真实隔离MySQL/HTTP关联撤权/旧明文启动迁移/profile启停、Chrome成员授权及门户iframe/390px/503重试通过。平台DDL0146未在用户库执行，后续重启本地前先迁移并备份独立密钥；不提交、不部署，不重启用户服务。详见test-reports/20261113-shared-datasources.md。
+
+
+## 2026-11-13 Asia/Shanghai｜Checkpoint：发布前简化密码存储
+
+用户明确取消数据源密码加密迁移。已移除转换器/启动迁移及相关测试装配，平台DDL改为只加enabled和授权/审计两表，ADR0147只取代原密码决策；模型服务加密不变。已授权提交/推送/主线合并，当前在复验最终方案，尚未操作66或用户数据库。
+
+
+## 2026-11-13 Asia/Shanghai｜Checkpoint：简化密码方案最终复验通过
+
+最终Spotless/clean后端1159项（0失败/错误，33条件跳过）、DocsConsistencyTest及package通过，前端三前缀测试与构建通过。隔离MySQL升级/初始DDL及validate完整启动、旧密码不变、空密码保留、真实JDBC共享、管理员治理、撤权既有KB及停用门禁通过；未改用户运行库、8080/5173或66。按授权进入Git提交/推送/合并，spec135仍待用户现场试用；正式操作见66升级指引。

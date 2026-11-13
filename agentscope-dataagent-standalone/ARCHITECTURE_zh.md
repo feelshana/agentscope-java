@@ -358,15 +358,13 @@ ADR 0078 / spec 067：`DatasetUploadProperties` 统一大小、文件数量、�
 
 ### 5.3 外部数据源关联
 
-`ExternalDataSourceController`（`/api/datasources`）管理用户级 JDBC 连接；测试连接、新建和修改时由 `DataSourceIntrospector#connectionError` 检查引擎，只接受 MySQL 8.0 及以上或 Doris（按 `@@version_comment` 识别），否则拒绝保存（ADR0113）；问数与建模提示要求 SQL 用 MySQL 8.0 语法、日期范围写成日期常量，以便时间门禁由规则判断；
-`DatasetService#associateTables` 把外部库已有表关联进知识库：`DataSourceIntrospector`
-读取列元数据/表注释，可选通过 `DatasetSampling#read` 每表一次 LIMIT 1000 有界读取，在内存提取每列最多20个观察值，再经
-`SchemaGenerationService` 生成字段说明与中文显示名，生成不可用时可从简短的中文列注释取名。`MdlSeeder` 给新入模列写入 `properties.displayName`，`KnowledgeBaseBrowseService` 从已发布 MDL 投影显示名。SQL 仍使用原字段名。`origin=datasource`，删除时不 drop 物理表。页面逐表调用 `DatasetGroupController#associate`（`publish=false`）以显示真实采样进度，全部完成后以空表列表、`publish=true` 统一生成一次基础 MDL。
+`ExternalDataSourceController`（`/api/datasources`）经`ExternalDataSourceService`管理独立 JDBC 连接（spec135/ADR0146），允许多个用户配置相同目标。列表在数据库筛可见源后批量查询创建人、权限及绑定库数，不逐源检测连接。USE可枚举库表并向自己可管理的知识库关联；MANAGE另可配置，创建人及全局管理员同等拥有授权、停用与删除权。内置示例始终不可治理，仅开放当前内置库表白名单。密码不返回HTTP，USE也不返回地址/账号。
 
-Wren 知识库当前只允许关联同一个 MySQL 外部数据源，拒绝与上传表混合、跨多个外部源或关联
-PostgreSQL。`DatasetService#prepareAssociatedTables` 在任何 repository/registry 写入前完成整批表名、
-重复项、已有关联、字段元数据与描述预检；结构准备失败时整批不写入，采样失败只记录 FAILED，不阻断结构关联。全部准备成功后再统一
-持久化并注册，Controller 最后只触发一次基础 MDL 发布。
+`DatasetService#associateTables`先获取连接行锁并用当前授权读复核USE，再检查操作者的KB MANAGE，数据归KB owner；成员/配置/删除使用相同行锁。撤销成员不破坏已提交KB绑定，后续刷新/发布/问数按KB权限读取；停用则由直连、发布选源及`WrenQueryAccess#resolve`阻断，官方工具缓存与排队后仍复核。有关联时禁止删除及切换目标/账号，保留密码轮换。连接变更提交后重建Wren profile并回收依赖实例，profile用临时文件替换，授权不依赖回收成功。单进程回收不承诺取消已提交数据库语句。
+
+平台表`dataagent_datasource_grant`存USE/MANAGE，`dataagent_datasource_audit`仅存操作者/对象/动作/角色，无凭据。按ADR0147，数据源密码沿用原字段存储，不做启动转换、不扩容密码列、不新增密钥；模型服务原有加密独立保留。已有环境先执行0146平台迁移，仅增加enabled和授权/审计表；密码仍不返回HTTP，Wren运行profile按原方式使用服务端凭据。
+
+`ExternalDataSourceController`（`/api/datasources`）管理用户级 JDBC 连接；测试连接、新建和修改时由 `DataSourceIntrospector#connectionError` 检查引擎，只接受 MySQL 8.0 及以上或 Doris（按 `@@version_comment` 识别），否则拒绝保存（ADR0113）；问数与建模提示要求 SQL 用 MySQL 8.0 语法、日期范围写成日期常量，以便时间门禁由规则判断； `DatasetService#associateTables` 把外部库已有表关联进知识库：`DataSourceIntrospector` 读取列元数据/表注释，可选通过 `DatasetSampling#read` 每表一次 LIMIT 1000 有界读取，在内存提取每列最多20个观察值，再经 `SchemaGenerationService` 生成字段说明与中文显示名，生成不可用时可从简短的中文列注释取名。`MdlSeeder` 给新入模列写入 `properties.displayName`，`KnowledgeBaseBrowseService` 从已发布 MDL 投影显示名。SQL 仍使用原字段名。`origin=datasource`，删除时不 drop 物理表。页面逐表调用 `DatasetGroupController#associate`（`publish=false`）以显示真实采样进度，全部完成后以空表列表、`publish=true` 统一生成一次基础 MDL。  Wren 知识库当前只允许关联同一个 MySQL 外部数据源，拒绝与上传表混合、跨多个外部源或关联 PostgreSQL。`DatasetService#prepareAssociatedTables` 在任何 repository/registry 写入前完成整批表名、 重复项、已有关联、字段元数据与描述预检；结构准备失败时整批不写入，采样失败只记录 FAILED，不阻断结构关联。全部准备成功后再统一 持久化并注册，Controller 最后只触发一次基础 MDL 发布。
 
 ADR 0080/spec 068：关联不再执行 COUNT(*) 或逐列 DISTINCT。外部表 API rowCount 为 null（包括历史外部记录），UI 显示总行数未统计；上传文件保留准确行数。摘要存入 DatasetEntity.sampleSummaryJson，对应可空 LONGTEXT 列 sample_summary_json，包含时间、范围、NULL 数、截断后的样本内不同值数和状态。MySQL 投影每值最多257字符，内存保留256字符并标记截断，二进制列不取内容。每次采样30秒语句超时、最多1000行，无失败全表回退。上传沿用导入中的每列最多10个非空样例，不新增数据库查询，未知NULL数/基数以-1表示。
 

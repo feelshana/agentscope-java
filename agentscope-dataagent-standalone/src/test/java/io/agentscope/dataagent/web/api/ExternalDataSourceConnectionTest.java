@@ -28,13 +28,45 @@ class ExternalDataSourceConnectionTest {
     private final ExternalDataSourceRepository sources = mock(ExternalDataSourceRepository.class);
     private final DataSourceIntrospector introspector = mock(DataSourceIntrospector.class);
     private final DemoDataService demo = mock(DemoDataService.class);
+    private final io.agentscope.dataagent.web.auth.UserStore userStore =
+            mock(io.agentscope.dataagent.web.auth.UserStore.class);
+    private final DatasetRepository datasets = mock(DatasetRepository.class);
+    private final io.agentscope.dataagent.web.persistence.jpa.ExternalDataSourceGrantRepository
+            grants =
+                    mock(
+                            io.agentscope.dataagent.web.persistence.jpa
+                                    .ExternalDataSourceGrantRepository.class);
+    private final io.agentscope.dataagent.dataset.ExternalDataSourceAccess access =
+            new io.agentscope.dataagent.dataset.ExternalDataSourceAccess(
+                    sources, grants, datasets, userStore, demo);
     private final ExternalDataSourceController controller =
             new ExternalDataSourceController(
-                    sources,
-                    mock(DatasetRepository.class),
-                    introspector,
-                    new ExternalDataSourcePolicy(""),
-                    demo);
+                    new io.agentscope.dataagent.dataset.ExternalDataSourceService(
+                            sources,
+                            grants,
+                            datasets,
+                            mock(
+                                    io.agentscope.dataagent.web.persistence.jpa.UserEntityRepository
+                                            .class),
+                            access,
+                            introspector,
+                            new ExternalDataSourcePolicy(""),
+                            demo,
+                            mock(jakarta.persistence.EntityManager.class),
+                            mock(org.springframework.context.ApplicationEventPublisher.class)),
+                    access,
+                    introspector);
+
+    @org.junit.jupiter.api.BeforeEach
+    void knownUsers() {
+        when(userStore.findById("alice"))
+                .thenReturn(
+                        Optional.of(
+                                new io.agentscope.dataagent.web.auth.UserStore.UserRecord(
+                                        "alice", "alice", "", List.of("user"))));
+        when(sources.lockById(any())).thenAnswer(inv -> sources.findById(inv.getArgument(0)));
+    }
+
     private final Authentication auth = new UsernamePasswordAuthenticationToken("alice", "unused");
 
     @Test

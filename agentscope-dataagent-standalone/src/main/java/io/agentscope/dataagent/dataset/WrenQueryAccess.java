@@ -11,10 +11,20 @@ import org.springframework.stereotype.Component;
 public final class WrenQueryAccess {
     private final DatasetGroupService groups;
     private final ConversationScopeRegistry scopes;
+    private final ExternalDataSourceAccess sources;
 
     public WrenQueryAccess(DatasetGroupService groups, ConversationScopeRegistry scopes) {
+        this(groups, scopes, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public WrenQueryAccess(
+            DatasetGroupService groups,
+            ConversationScopeRegistry scopes,
+            ExternalDataSourceAccess sources) {
         this.groups = groups;
         this.scopes = scopes;
+        this.sources = sources;
     }
 
     public List<DatasetGroupEntity> visible(RuntimeContext context) {
@@ -42,6 +52,7 @@ public final class WrenQueryAccess {
                         .toList();
         if (matching.size() != 1) throw new DatasetException("请选择当前已授权知识库的唯一名称或 ID", 400);
         DatasetGroupEntity group = matching.get(0);
+        if (sources != null) sources.requireBindingsActive(group.getId());
         if (group.isModelingPending())
             throw new DatasetException(
                     "该知识库的数据集或表结构已变更，当前已发布模型需重新检查，暂时无法问数。" + "请联系具有管理权限的同事，在“语义建模”中检查并发布后重试。", 409);

@@ -598,6 +598,20 @@ class MdlPublishServiceTest {
     // ------------------------------------------------------------------ source selection
 
     @Test
+    void disabledSourceCannotPublishButKeepsPreviousSnapshot() throws IOException {
+        registerGroup("g1");
+        registerExternalSource("cloud", "mysql", "jdbc:mysql://127.0.0.1:13306/cloud_shop");
+        registerExternalDataset("e1", "g1", "orders", "cloud", new String[][] {{"id", "bigint"}});
+        assertTrue(service.publishBaseline("g1").ok());
+        String snapshot = Files.readString(groupRoot.resolve("published/target/mdl.json"));
+        externalSourcesById.get("cloud").setEnabled(false);
+        var result = service.publish("g1");
+        assertFalse(result.ok());
+        assertTrue(result.issues().stream().anyMatch(i -> i.message().contains("停用")));
+        assertEquals(snapshot, Files.readString(groupRoot.resolve("published/target/mdl.json")));
+    }
+
+    @Test
     void externalViewValidationAndPublishUseSelectedConnection() throws IOException {
         registerGroup("g1");
         registerExternalSource(

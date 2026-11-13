@@ -65,6 +65,7 @@ public class DatasetService implements DatasetContextProvider {
     private KnowledgeBaseOperations operations;
 
     private DatasetMetadataDraftSync metadataDraftSync;
+    private ExternalDataSourceAccess sourceAccess;
 
     private static final Logger log = LoggerFactory.getLogger(DatasetService.class);
     private static final Pattern SAFE_IDENTIFIER = Pattern.compile("^[a-zA-Z0-9_]+$");
@@ -333,13 +334,16 @@ public class DatasetService implements DatasetContextProvider {
             List<String> tables,
             boolean sampling) {
         String actorId = ownerId;
+        if (sourceAccess != null)
+            sourceAccess.requireUseLocked(actorId, sourceAccess.lock(dataSourceId));
         DatasetGroupEntity group = access.requireManage(actorId, groupId);
         ExternalDataSourceEntity ds =
                 externalSources
                         .findById(dataSourceId)
                         .filter(
                                 d ->
-                                        d.getOwnerId().equals(actorId)
+                                        sourceAccess != null
+                                                || d.getOwnerId().equals(actorId)
                                                 || (DemoDataService.isCurrentBuiltin(d)
                                                         && DemoDataService.SCHEMA.equals(schema)
                                                         && DemoDataService.TABLE_NAMES.containsAll(
@@ -348,6 +352,11 @@ public class DatasetService implements DatasetContextProvider {
                                 () ->
                                         new DatasetException(
                                                 "Data source not found: " + dataSourceId, 404));
+        ExternalDataSourceAccess.requireActive(ds);
+        if (DemoDataService.isBuiltin(ds)
+                && (!DemoDataService.SCHEMA.equals(schema)
+                        || !DemoDataService.TABLE_NAMES.containsAll(tables)))
+            throw new DatasetException("演示数据源仅允许关联内置示例表", 404);
         ownerId = group.getOwnerId();
         validateExternalSourceCombination(groupId, ds);
         List<AssociatedTableMetadata> prepared =
@@ -640,6 +649,7 @@ public class DatasetService implements DatasetContextProvider {
                 externalSources
                         .findById(entity.getExternalDataSourceId())
                         .orElseThrow(() -> new DatasetException("数据源不存在", 404));
+        ExternalDataSourceAccess.requireActive(source);
         if (!source.isSampling()) throw new DatasetException("数据源已关闭采样，请先启用采样");
         var columns =
                 introspector.listColumns(source, entity.getSchemaName(), entity.getTableName());
@@ -873,7 +883,12 @@ public class DatasetService implements DatasetContextProvider {
         if (!"datasource".equals(e.getOrigin()) || e.getExternalDataSourceId() == null) {
             return null;
         }
-        return externalSources.findById(e.getExternalDataSourceId()).orElse(null);
+        var source =
+                externalSources
+                        .findById(e.getExternalDataSourceId())
+                        .orElseThrow(() -> new DatasetException("关联数据源不存在，请联系管理员检查", 409));
+        ExternalDataSourceAccess.requireActive(source);
+        return source;
     }
 
     /** Replaces the database segment of a jdbc url with the given schema. */
@@ -1263,7 +1278,8 @@ public class DatasetService implements DatasetContextProvider {
             MdlWorkspaceReader workspaceReader,
             KnowledgeBaseAccessService access,
             KnowledgeBaseOperations operations,
-            DatasetMetadataDraftSync metadataDraftSync) {
+            DatasetMetadataDraftSync metadataDraftSync,
+            ExternalDataSourceAccess sourceAccess) {
         this(
                 repository,
                 groupRepository,
@@ -1284,5 +1300,6 @@ public class DatasetService implements DatasetContextProvider {
         this.access = access;
         this.operations = operations;
         this.metadataDraftSync = metadataDraftSync;
+        this.sourceAccess = sourceAccess;
     }
 }

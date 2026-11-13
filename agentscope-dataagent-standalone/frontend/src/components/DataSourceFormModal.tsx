@@ -93,18 +93,19 @@ export default function DataSourceFormModal({ source, onClose, onSaved }: {
     <form onSubmit={save} noValidate>
       <div className="ds-dialog-body">
         <fieldset className="ds-form-fields" disabled={busy}>
+          {source?.targetLocked && <p className="ds-feedback ds-binding-note"><Icon name="shield" size="sm" />该连接正在被知识库使用，主机、数据库和账号保持不变；可更新名称、密码及连接选项。</p>}
           <section className="ds-form-section" aria-labelledby={`${id}-connection`}><h3 id={`${id}-connection`}>连接信息</h3><div className="ds-fields">
           <label className="ds-field ds-full">数据源名称<input autoFocus value={form.name} placeholder="例如：业务报表数据库" maxLength={64} required onChange={e => update({ name: e.target.value })} /></label>
-          <label className="ds-field ds-full">接入方式<select value={form.kind} onChange={e => update({ kind: e.target.value, port: e.target.value === 'mysql' ? '3306' : '5432', sslMode: e.target.value === 'mysql' ? 'DISABLED' : 'disable' })}>
+          <label className="ds-field ds-full">接入方式<select disabled={source?.targetLocked} value={form.kind} onChange={e => update({ kind: e.target.value, port: e.target.value === 'mysql' ? '3306' : '5432', sslMode: e.target.value === 'mysql' ? 'DISABLED' : 'disable' })}>
             <option value="mysql">MySQL（含 Doris MySQL 协议）</option><option value="postgresql">PostgreSQL</option>
           </select></label>
-          <div className="ds-hostport ds-full"><label className="ds-field">主机地址<input value={form.host} placeholder="mysql.example.internal" aria-describedby={`${id}-server-hint`} required onChange={e => update({ host: e.target.value })} /></label>
-          <label className="ds-field">端口<input value={form.port} inputMode="numeric" required onChange={e => update({ port: e.target.value })} /></label></div>
+          <div className="ds-hostport ds-full"><label className="ds-field">主机地址<input disabled={source?.targetLocked} value={form.host} placeholder="mysql.example.internal" aria-describedby={`${id}-server-hint`} required onChange={e => update({ host: e.target.value })} /></label>
+          <label className="ds-field">端口<input disabled={source?.targetLocked} value={form.port} inputMode="numeric" required onChange={e => update({ port: e.target.value })} /></label></div>
           <p id={`${id}-server-hint`} className="ds-host-hint ds-full"><Icon name="info" size="sm" /><span>由部署 DataAgent 的服务器发起连接，localhost 指服务器自身。</span></p>
-          <label className="ds-field ds-full">数据库<span className="ds-label-hint">可选</span><input value={form.database} placeholder="可不填，关联表时再选择" onChange={e => update({ database: e.target.value })} /></label>
+          <label className="ds-field ds-full">数据库<span className="ds-label-hint">可选</span><input disabled={source?.targetLocked} value={form.database} placeholder="可不填，关联表时再选择" onChange={e => update({ database: e.target.value })} /></label>
           </div></section>
           <section className="ds-form-section ds-credentials" aria-labelledby={`${id}-credentials`}><h3 id={`${id}-credentials`}>访问凭据</h3><div className="ds-fields">
-          <label className="ds-field">用户名<input value={form.username} aria-label="用户名" placeholder="例如：demo_reader" autoComplete="off" aria-describedby={`${id}-reader-hint`} onChange={e => update({ username: e.target.value })} /><small id={`${id}-reader-hint`}>建议使用仅有业务表读取权限的账号。</small></label>
+          <label className="ds-field">用户名<input disabled={source?.targetLocked} value={form.username} aria-label="用户名" placeholder="例如：demo_reader" autoComplete="off" aria-describedby={`${id}-reader-hint`} onChange={e => update({ username: e.target.value })} /><small id={`${id}-reader-hint`}>建议使用仅有业务表读取权限的账号。</small></label>
           <label className="ds-field">密码<input type="password" value={form.password} autoComplete="new-password" placeholder={source ? '留空保留原密码' : '请输入数据库密码'} onChange={e => update({ password: e.target.value })} /></label>
           </div></section>
           <details className="ds-advanced ds-full"><summary>更多连接选项<span>连接加密与数据采样</span></summary><div className="ds-fields">

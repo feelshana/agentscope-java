@@ -1,30 +1,11 @@
-/*
- * Copyright 2024-2026 the original author or authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package io.agentscope.dataagent.web.api;
 
 import io.agentscope.dataagent.dataset.DataSourceIntrospector;
 import io.agentscope.dataagent.dataset.DatasetException;
 import io.agentscope.dataagent.dataset.DemoDataService;
-import io.agentscope.dataagent.dataset.ExternalDataSourcePolicy;
-import io.agentscope.dataagent.web.persistence.jpa.DatasetRepository;
-import io.agentscope.dataagent.web.persistence.jpa.ExternalDataSourceEntity;
-import io.agentscope.dataagent.web.persistence.jpa.ExternalDataSourceRepository;
-import java.time.Instant;
+import io.agentscope.dataagent.dataset.ExternalDataSourceAccess;
+import io.agentscope.dataagent.dataset.ExternalDataSourceService;
 import java.util.List;
-import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -40,25 +21,10 @@ import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
-/**
- * User-configured external database connections (TC "数据源管理" analogue): CRUD plus read-only
- * introspection (schemas / tables / columns) and connectivity status. Tables of these sources can
- * be associated into knowledge bases via POST /api/dataset-groups/{id}/associate.
- */
+/** HTTP binding only; source and knowledge-base permissions remain separate service contracts. */
 @RestController
 @RequestMapping("/api/datasources")
 public class ExternalDataSourceController {
-
-    public record DataSourceVO(
-            String id,
-            String name,
-            String kind,
-            String jdbcUrl,
-            String username,
-            boolean sampling,
-            String createdAt,
-            boolean builtin) {}
-
     public record DataSourceRequest(
             String name,
             String kind,
@@ -69,213 +35,169 @@ public class ExternalDataSourceController {
             String host,
             Integer port,
             String database,
-            String sslMode) {}
+            String sslMode) {
+        ExternalDataSourceService.ConnectionRequest command() {
+            return new ExternalDataSourceService.ConnectionRequest(
+                    name, kind, jdbcUrl, username, password, sampling, host, port, database,
+                    sslMode);
+        }
+    }
 
-    public record StatusVO(boolean connected, String error) {}
+    public record GrantRequest(String role) {}
+
+    public record EnabledRequest(Boolean enabled) {}
 
     public record ColumnVO(String name, String type, String description) {}
 
     public record TableVO(String name, String type) {}
 
-    private final ExternalDataSourceRepository repository;
-    private final DatasetRepository datasetRepository;
+    private final ExternalDataSourceService service;
+    private final ExternalDataSourceAccess access;
     private final DataSourceIntrospector introspector;
-    private final ExternalDataSourcePolicy policy;
-    private final DemoDataService demo;
 
     public ExternalDataSourceController(
-            ExternalDataSourceRepository repository,
-            DatasetRepository datasetRepository,
-            DataSourceIntrospector introspector,
-            ExternalDataSourcePolicy policy,
-            DemoDataService demo) {
-        this.repository = repository;
-        this.datasetRepository = datasetRepository;
+            ExternalDataSourceService service,
+            ExternalDataSourceAccess access,
+            DataSourceIntrospector introspector) {
+        this.service = service;
+        this.access = access;
         this.introspector = introspector;
-        this.policy = policy;
-        this.demo = demo;
+    }
+
+    private static String actor(Authentication auth) {
+        return (String) auth.getPrincipal();
+    }
+
+    private static <T> Mono<T> read(java.util.concurrent.Callable<T> action) {
+        return Mono.fromCallable(action)
+                .subscribeOn(Schedulers.boundedElastic())
+                .onErrorMap(ExternalDataSourceController::status);
     }
 
     @GetMapping
-    public Mono<List<DataSourceVO>> list(Authentication auth) {
-        String userId = (String) auth.getPrincipal();
-        return Mono.fromCallable(
-                        () -> {
-                            List<DataSourceVO> owned =
-                                    repository.findByOwnerIdOrderByCreatedAtDesc(userId).stream()
-                                            .map(ExternalDataSourceController::toVO)
-                                            .toList();
-                            // spec105: everyone can pick the read-only demo source.
-                            if (!demo.sourceAvailable()) return owned;
-                            List<DataSourceVO> all = new java.util.ArrayList<>(owned);
-                            repository
-                                    .findById(DemoDataService.SOURCE_ID)
-                                    .ifPresent(s -> all.add(toVO(s)));
-                            return all;
-                        })
-                .subscribeOn(Schedulers.boundedElastic());
+    public Mono<List<ExternalDataSourceService.View>> list(Authentication auth) {
+        return read(() -> service.list(actor(auth)));
+    }
+
+    @GetMapping("/{id}")
+    public Mono<ExternalDataSourceService.View> get(@PathVariable String id, Authentication auth) {
+        return read(() -> service.get(actor(auth), id));
     }
 
     @PostMapping
-    public Mono<DataSourceVO> create(@RequestBody DataSourceRequest req, Authentication auth) {
-        String userId = (String) auth.getPrincipal();
-        return Mono.fromCallable(
-                        () -> {
-                            String url = validate(req);
-                            if (repository
-                                    .findByOwnerIdAndName(userId, req.name().trim())
-                                    .isPresent()) {
-                                throw new ResponseStatusException(
-                                        HttpStatus.CONFLICT,
-                                        "data source name already exists: " + req.name());
-                            }
-                            ExternalDataSourceEntity created =
-                                    new ExternalDataSourceEntity(
-                                            UUID.randomUUID().toString(),
-                                            userId,
-                                            req.name().trim(),
-                                            req.kind() == null || req.kind().isBlank()
-                                                    ? "mysql"
-                                                    : req.kind(),
-                                            url,
-                                            req.username(),
-                                            req.password(),
-                                            req.sampling() == null || req.sampling());
-                            requireSupported(created);
-                            return toVO(repository.save(created));
-                        })
-                .subscribeOn(Schedulers.boundedElastic());
-    }
-
-    /** A source is saved only when reachable and MySQL 8.0+ or Doris (queries use that SQL). */
-    private void requireSupported(ExternalDataSourceEntity source) {
-        String error = introspector.connectionError(source);
-        if (error != null)
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "数据源不可用：" + error);
-    }
-
-    @PostMapping("/test-connection")
-    public Mono<StatusVO> testConnection(
-            @RequestBody DataSourceRequest req,
-            @RequestParam(required = false) String sourceId,
-            Authentication auth) {
-        String userId = (String) auth.getPrincipal();
-        return Mono.fromCallable(
-                        () -> {
-                            String url = validate(req);
-                            String password = req.password();
-                            if (sourceId != null && !sourceId.isBlank()) {
-                                ExternalDataSourceEntity saved = owned(userId, sourceId);
-                                if (password == null || password.isBlank()) {
-                                    password = saved.getPassword();
-                                }
-                            }
-                            ExternalDataSourceEntity candidate =
-                                    new ExternalDataSourceEntity(
-                                            UUID.randomUUID().toString(),
-                                            userId,
-                                            req.name().trim(),
-                                            req.kind() == null || req.kind().isBlank()
-                                                    ? "mysql"
-                                                    : req.kind(),
-                                            url,
-                                            req.username(),
-                                            password,
-                                            req.sampling() == null || req.sampling());
-                            String error = introspector.connectionError(candidate);
-                            return new StatusVO(error == null, error);
-                        })
-                .subscribeOn(Schedulers.boundedElastic())
-                .onErrorMap(ExternalDataSourceController::toStatus);
+    public Mono<ExternalDataSourceService.View> create(
+            @RequestBody DataSourceRequest req, Authentication auth) {
+        return read(() -> service.create(actor(auth), req.command()));
     }
 
     @PutMapping("/{id}")
-    public Mono<DataSourceVO> update(
+    public Mono<ExternalDataSourceService.View> update(
             @PathVariable String id, @RequestBody DataSourceRequest req, Authentication auth) {
-        String userId = (String) auth.getPrincipal();
-        return Mono.fromCallable(
-                        () -> {
-                            String url = validate(req);
-                            ExternalDataSourceEntity e = owned(userId, id);
-                            e.setName(req.name().trim());
-                            if (req.kind() != null && !req.kind().isBlank()) {
-                                e.setKind(req.kind());
-                            }
-                            e.setJdbcUrl(url);
-                            e.setUsername(req.username());
-                            if (req.password() != null && !req.password().isBlank()) {
-                                e.setPassword(req.password());
-                            }
-                            if (req.sampling() != null) {
-                                e.setSampling(req.sampling());
-                            }
-                            e.setUpdatedAt(Instant.now());
-                            requireSupported(e);
-                            return toVO(repository.save(e));
-                        })
-                .subscribeOn(Schedulers.boundedElastic());
+        return read(() -> service.update(actor(auth), id, req.command()));
     }
 
     @DeleteMapping("/{id}")
     public Mono<Void> delete(@PathVariable String id, Authentication auth) {
-        String userId = (String) auth.getPrincipal();
-        return Mono.fromRunnable(
-                        () -> {
-                            owned(userId, id);
-                            boolean associated =
-                                    datasetRepository.findAll().stream()
-                                            .anyMatch(d -> id.equals(d.getExternalDataSourceId()));
-                            if (associated) {
-                                throw new ResponseStatusException(
-                                        HttpStatus.CONFLICT,
-                                        "data source still has associated tables; remove them"
-                                                + " from the knowledge base first");
-                            }
-                            repository.deleteById(id);
-                        })
-                .subscribeOn(Schedulers.boundedElastic())
-                .then(Mono.empty());
+        return read(() -> {
+                    service.delete(actor(auth), id);
+                    return true;
+                })
+                .then();
+    }
+
+    @PostMapping("/test-connection")
+    public Mono<ExternalDataSourceService.Status> testConnection(
+            @RequestBody DataSourceRequest req,
+            @RequestParam(required = false) String sourceId,
+            Authentication auth) {
+        return read(() -> service.test(actor(auth), req.command(), sourceId));
     }
 
     @GetMapping("/{id}/status")
-    public Mono<StatusVO> status(@PathVariable String id, Authentication auth) {
-        String userId = (String) auth.getPrincipal();
-        return Mono.fromCallable(
-                        () -> {
-                            ExternalDataSourceEntity e = owned(userId, id);
-                            String err = introspector.connectionError(e);
-                            return new StatusVO(err == null, err);
-                        })
-                .subscribeOn(Schedulers.boundedElastic())
-                .onErrorMap(ExternalDataSourceController::toStatus);
+    public Mono<ExternalDataSourceService.Status> status(
+            @PathVariable String id, Authentication auth) {
+        return read(() -> service.status(actor(auth), id));
+    }
+
+    @PutMapping("/{id}/enabled")
+    public Mono<ExternalDataSourceService.View> enabled(
+            @PathVariable String id, @RequestBody EnabledRequest req, Authentication auth) {
+        return read(
+                () -> {
+                    if (req.enabled() == null) throw new DatasetException("请选择启用或停用", 400);
+                    return service.setEnabled(actor(auth), id, req.enabled());
+                });
+    }
+
+    @GetMapping("/{id}/members")
+    public Mono<ExternalDataSourceService.Members> members(
+            @PathVariable String id,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            Authentication auth) {
+        return read(() -> service.members(actor(auth), id, page, size));
+    }
+
+    @GetMapping("/{id}/member-users")
+    public Mono<ExternalDataSourceService.Members> directory(
+            @PathVariable String id,
+            @RequestParam(defaultValue = "") String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            Authentication auth) {
+        return read(() -> service.directory(actor(auth), id, search, page, size));
+    }
+
+    @PutMapping("/{id}/members/{userId}")
+    public Mono<Void> grant(
+            @PathVariable String id,
+            @PathVariable String userId,
+            @RequestBody GrantRequest req,
+            Authentication auth) {
+        return read(() -> {
+                    service.grant(actor(auth), id, userId, req.role());
+                    return true;
+                })
+                .then();
+    }
+
+    @DeleteMapping("/{id}/members/{userId}")
+    public Mono<Void> revoke(
+            @PathVariable String id, @PathVariable String userId, Authentication auth) {
+        return read(() -> {
+                    service.revoke(actor(auth), id, userId);
+                    return true;
+                })
+                .then();
     }
 
     @GetMapping("/{id}/schemas")
     public Mono<List<String>> schemas(@PathVariable String id, Authentication auth) {
-        String userId = (String) auth.getPrincipal();
-        return Mono.fromCallable(() -> schemasOf(userId, id))
-                .subscribeOn(Schedulers.boundedElastic())
-                .onErrorMap(ExternalDataSourceController::toStatus);
+        return read(
+                () -> {
+                    var s = access.requireUse(actor(auth), id);
+                    return DemoDataService.isBuiltin(s)
+                            ? List.of(DemoDataService.SCHEMA)
+                            : introspector.listSchemas(s);
+                });
     }
 
     @GetMapping("/{id}/schemas/{schema}/tables")
     public Mono<List<TableVO>> tables(
             @PathVariable String id, @PathVariable String schema, Authentication auth) {
-        String userId = (String) auth.getPrincipal();
-        return Mono.fromCallable(
-                        () ->
-                                introspector
-                                        .listTables(readable(userId, id, schema), schema)
-                                        .stream()
-                                        .filter(
-                                                t ->
-                                                        !DemoDataService.SOURCE_ID.equals(id)
-                                                                || DemoDataService.TABLE_NAMES
-                                                                        .contains(t.name()))
-                                        .map(t -> new TableVO(t.name(), t.type()))
-                                        .toList())
-                .subscribeOn(Schedulers.boundedElastic())
-                .onErrorMap(ExternalDataSourceController::toStatus);
+        return read(
+                () -> {
+                    var s = access.requireUse(actor(auth), id);
+                    builtinSchema(s, schema);
+                    return introspector.listTables(s, schema).stream()
+                            .filter(
+                                    t ->
+                                            !DemoDataService.isBuiltin(s)
+                                                    || DemoDataService.TABLE_NAMES.contains(
+                                                            t.name()))
+                            .map(t -> new TableVO(t.name(), t.type()))
+                            .toList();
+                });
     }
 
     @GetMapping("/{id}/schemas/{schema}/tables/{table}/columns")
@@ -284,97 +206,29 @@ public class ExternalDataSourceController {
             @PathVariable String schema,
             @PathVariable String table,
             Authentication auth) {
-        String userId = (String) auth.getPrincipal();
-        if (DemoDataService.SOURCE_ID.equals(id) && !DemoDataService.TABLE_NAMES.contains(table)) {
-            return Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "table not found"));
-        }
-        return Mono.fromCallable(
-                        () ->
-                                introspector
-                                        .listColumns(readable(userId, id, schema), schema, table)
-                                        .stream()
-                                        .map(c -> new ColumnVO(c.name(), c.type(), c.description()))
-                                        .toList())
-                .subscribeOn(Schedulers.boundedElastic())
-                .onErrorMap(ExternalDataSourceController::toStatus);
+        return read(
+                () -> {
+                    var s = access.requireUse(actor(auth), id);
+                    builtinSchema(s, schema);
+                    if (DemoDataService.isBuiltin(s)
+                            && !DemoDataService.TABLE_NAMES.contains(table))
+                        throw new DatasetException("表不存在", 404);
+                    return introspector.listColumns(s, schema, table).stream()
+                            .map(c -> new ColumnVO(c.name(), c.type(), c.description()))
+                            .toList();
+                });
     }
 
-    private ExternalDataSourceEntity owned(String userId, String id) {
-        return repository
-                .findById(id)
-                .filter(e -> e.getOwnerId().equals(userId))
-                .orElseThrow(
-                        () ->
-                                new ResponseStatusException(
-                                        HttpStatus.NOT_FOUND, "data source not found: " + id));
+    private static void builtinSchema(
+            io.agentscope.dataagent.web.persistence.jpa.ExternalDataSourceEntity source,
+            String schema) {
+        if (DemoDataService.isBuiltin(source) && !DemoDataService.SCHEMA.equals(schema))
+            throw new DatasetException("数据库不存在", 404);
     }
 
-    private List<String> schemasOf(String userId, String id) {
-        ExternalDataSourceEntity source = readable(userId, id);
-        return DemoDataService.isBuiltin(source)
-                ? List.of(DemoDataService.SCHEMA)
-                : introspector.listSchemas(source);
-    }
-
-    /** Browsing also accepts the built-in source; editing and deleting still use {@link #owned}. */
-    private ExternalDataSourceEntity readable(String userId, String id) {
-        if (DemoDataService.SOURCE_ID.equals(id) && demo.sourceAvailable()) {
-            return repository
-                    .findById(id)
-                    .orElseThrow(
-                            () ->
-                                    new ResponseStatusException(
-                                            HttpStatus.NOT_FOUND, "data source not found: " + id));
-        }
-        return owned(userId, id);
-    }
-
-    private ExternalDataSourceEntity readable(String userId, String id, String schema) {
-        ExternalDataSourceEntity source = readable(userId, id);
-        if (DemoDataService.isBuiltin(source) && !DemoDataService.SCHEMA.equals(schema)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "schema not found: " + schema);
-        }
-        return source;
-    }
-
-    private String validate(DataSourceRequest req) {
-        String name = req.name() == null ? "" : req.name().trim();
-        if (name.isEmpty() || name.length() > 64) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, "name must be 1-64 characters");
-        }
-        String kind = req.kind() == null || req.kind().isBlank() ? "mysql" : req.kind();
-        try {
-            if (req.host() != null) {
-                if (req.jdbcUrl() != null && !req.jdbcUrl().isBlank()) {
-                    throw new DatasetException("不能同时提交连接地址和主机字段", 400);
-                }
-                return policy.build(kind, req.host(), req.port(), req.database(), req.sslMode());
-            }
-            return policy.normalize(kind, req.jdbcUrl());
-        } catch (DatasetException e) {
-            throw new ResponseStatusException(HttpStatus.valueOf(e.status()), e.getMessage(), e);
-        }
-    }
-
-    private static Throwable toStatus(Throwable t) {
-        if (t instanceof DatasetException de) {
-            return new ResponseStatusException(
-                    HttpStatus.valueOf(de.status()), de.getMessage(), de);
-        }
-        return t;
-    }
-
-    private static DataSourceVO toVO(ExternalDataSourceEntity e) {
-        boolean builtin = DemoDataService.isBuiltin(e);
-        return new DataSourceVO(
-                e.getId(),
-                e.getName(),
-                e.getKind(),
-                builtin ? null : e.getJdbcUrl(),
-                builtin ? null : e.getUsername(),
-                e.isSampling(),
-                e.getCreatedAt() == null ? null : e.getCreatedAt().toString(),
-                builtin);
+    private static Throwable status(Throwable t) {
+        return t instanceof DatasetException d
+                ? new ResponseStatusException(HttpStatus.valueOf(d.status()), d.getMessage(), d)
+                : t;
     }
 }

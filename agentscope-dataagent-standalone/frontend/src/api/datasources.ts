@@ -4,12 +4,49 @@ export interface ExternalDataSource {
   id: string;
   name: string;
   kind: string;
-  jdbcUrl: string;
+  jdbcUrl: string | null;
   username: string | null;
   sampling: boolean;
   /** spec105: the shared read-only demo source; no connection details are returned for it. */
   builtin?: boolean;
   createdAt: string | null;
+  ownerId?: string;
+  creatorName?: string;
+  creatorAccount?: string;
+  role?: 'OWNER' | 'USE' | 'MANAGE';
+  canManage?: boolean;
+  canGovern?: boolean;
+  enabled?: boolean;
+  shared?: boolean;
+  knowledgeBaseCount?: number;
+  targetLocked?: boolean;
+}
+
+export type DataSourceRole = 'USE' | 'MANAGE';
+export interface DataSourceMember { userId: string; username: string; displayName: string | null; department: string | null; role: DataSourceRole | 'OWNER' | null; fixed: boolean }
+export interface DataSourceMembers { items: DataSourceMember[]; total: number; page: number; size: number; creator: DataSourceMember | null }
+export const dataSourceRoleLabel = (role?: string | null) => role === 'OWNER' ? '创建人' : role === 'MANAGE' ? '可管理' : role === 'USE' ? '可使用' : '未授权';
+
+export async function dataSourceMembers(id: string, page = 0, signal?: AbortSignal): Promise<DataSourceMembers> {
+  const res = await apiFetch(`/api/datasources/${encodeURIComponent(id)}/members?page=${page}`, { headers: jsonHeaders(), signal });
+  if (!res.ok) throw new Error(await errorMessage(res, '无法读取数据源成员'));
+  return res.json();
+}
+export async function dataSourceMemberUsers(id: string, search: string, page = 0, signal?: AbortSignal): Promise<DataSourceMembers> {
+  const res = await apiFetch(`/api/datasources/${encodeURIComponent(id)}/member-users?${new URLSearchParams({ search, page: String(page) })}`, { headers: jsonHeaders(), signal });
+  if (!res.ok) throw new Error(await errorMessage(res, '无法搜索用户'));
+  return res.json();
+}
+export async function grantDataSourceMember(id: string, userId: string, role: DataSourceRole | null): Promise<void> {
+  const res = await apiFetch(`/api/datasources/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`, {
+    method: role ? 'PUT' : 'DELETE', headers: jsonHeaders(), ...(role ? { body: JSON.stringify({ role }) } : {}),
+  });
+  if (!res.ok) throw new Error(await errorMessage(res, '数据源权限修改失败'));
+}
+export async function setDataSourceEnabled(id: string, enabled: boolean): Promise<ExternalDataSource> {
+  const res = await apiFetch(`/api/datasources/${encodeURIComponent(id)}/enabled`, { method: 'PUT', headers: jsonHeaders(), body: JSON.stringify({ enabled }) });
+  if (!res.ok) throw new Error(await errorMessage(res, '数据源状态修改失败'));
+  return res.json();
 }
 
 export interface DataSourceRequest {
