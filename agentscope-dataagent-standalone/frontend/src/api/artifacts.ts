@@ -13,7 +13,8 @@ export function fileUrl(path: string): string | null {
     ? url.pathname.slice(APP_BASE.length)
     : url.pathname;
   if (!/^\/api\/artifacts\/[0-9a-f-]{36}\/content$/.test(pathname)
-      && !/^\/api\/agents\/[^/]+\/workspace\/file\/binary$/.test(pathname)) return null;
+      && !/^\/api\/agents\/[^/]+\/workspace\/file\/binary$/.test(pathname)
+      && !/^\/api\/admin\/conversation-history\/[^/]+\/artifacts\/[0-9a-f-]{36}$/.test(pathname)) return null;
   url.searchParams.delete('token');
   return pathname + url.search;
 }

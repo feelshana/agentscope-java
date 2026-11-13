@@ -22,6 +22,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
 public interface SessionMessageRepository extends JpaRepository<SessionMessageEntity, String> {
+    java.util.Optional<SessionMessageEntity> findBySessionKeyAndPosition(String key, int position);
+
     List<SessionMessageEntity> findBySessionKeyOrderByPositionAsc(String key);
 
     List<SessionMessageEntity> findBySessionKeyAndPositionLessThanOrderByPositionDesc(

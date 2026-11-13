@@ -12,7 +12,8 @@ export interface ChartPayload {
 }
 
 /** Load saved charts without re-executing queries; retain a useful fallback on render failures. */
-export default function EChartsBlock({ payload, onViewData, onInspect }: {
+export default function EChartsBlock({ payload, onViewData, onInspect, sourceUrl }: {
+  sourceUrl?: string;
   payload: ChartPayload; onViewData?: () => void; onInspect?: () => void;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
@@ -34,14 +35,18 @@ export default function EChartsBlock({ payload, onViewData, onInspect }: {
       setLoading(false);
       return;
     }
-    if (!payload.chartId) {
+    if (!payload.chartId && !sourceUrl) {
       setFailure({ message: '图表记录缺少标识或配置', stage: 'render' });
       setLoading(false);
       return;
     }
     setLoading(true);
     const token = getToken();
-    void apiFetch(`/api/charts/${encodeURIComponent(payload.chartId)}`, {
+    const url = sourceUrl ?? `/api/charts/${encodeURIComponent(payload.chartId!)}`;
+    if (sourceUrl && !/^\/api\/admin\/conversation-history\/[^/]+\/charts\/\d+\?sessionKey=/.test(sourceUrl)) {
+      setLoading(false); setFailure({ message: '图表地址无效', stage: 'load' }); return;
+    }
+    void apiFetch(url, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     }).then(async response => {
       if (!response.ok) throw new Error(`图表读取失败，HTTP ${response.status}`);
@@ -54,7 +59,7 @@ export default function EChartsBlock({ payload, onViewData, onInspect }: {
       if (active) setFailure({ message: error instanceof Error ? error.message : String(error), stage: 'load' });
     }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [optionJson, payload.chartId, attempt]);
+  }, [optionJson, payload.chartId, sourceUrl, attempt]);
 
   useEffect(() => {
     if (!ref.current || !option) return;
@@ -81,7 +86,7 @@ export default function EChartsBlock({ payload, onViewData, onInspect }: {
     {failure && <ErrorNotice error={failure.message} context="chart">
       {onViewData && <button type="button" className="da-btn da-btn-sm" onClick={onViewData}>查看已有数据</button>}
       {onInspect && <button type="button" className="da-btn da-btn-sm" onClick={onInspect}>查看图表详情</button>}
-      {failure.stage === 'load' && payload.chartId && !optionJson && <button type="button" className="da-btn da-btn-sm" onClick={() => setAttempt(value => value + 1)}>重新加载图表</button>}
+      {failure.stage === 'load' && (payload.chartId || sourceUrl) && !optionJson && <button type="button" className="da-btn da-btn-sm" onClick={() => setAttempt(value => value + 1)}>重新加载图表</button>}
     </ErrorNotice>}
     <div ref={ref} style={{ display: failure || loading || !option ? 'none' : 'block', width: '100%', height: 360,
       background: 'var(--da-surface)', border: '1px solid var(--da-border)', borderRadius: 10 }} />

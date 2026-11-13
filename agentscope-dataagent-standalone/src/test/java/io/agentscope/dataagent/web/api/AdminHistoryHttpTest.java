@@ -71,6 +71,8 @@ class AdminHistoryHttpTest {
         AuthSettings.class,
         JwtService.class,
         AdminConversationController.class,
+        io.agentscope.dataagent.web.session.AdminHistoryPresentation.class,
+        io.agentscope.dataagent.web.session.ConversationScopeRegistry.class,
         AdminHistoryOverviewController.class,
         io.agentscope.dataagent.web.session.AdminHistoryQueryService.class,
         GlobalAdministratorController.class,
@@ -78,6 +80,12 @@ class AdminHistoryHttpTest {
         ArtifactStore.class
     })
     static class App {
+        @Bean
+        io.agentscope.dataagent.dataset.AnswerQueryMemory feedback() {
+            return org.mockito.Mockito.mock(
+                    io.agentscope.dataagent.dataset.AnswerQueryMemory.class);
+        }
+
         @Bean
         UserStore userStore(UserEntityRepository repository) {
             return new JpaUserStore(repository, false);
@@ -93,12 +101,21 @@ class AdminHistoryHttpTest {
     @Autowired SessionMessageRepository messages;
     @Autowired ArtifactRepository artifacts;
     @Autowired JwtService jwt;
+    @Autowired io.agentscope.dataagent.web.persistence.jpa.ChartOptionRepository charts;
+
+    @Autowired
+    io.agentscope.dataagent.web.persistence.jpa.ConversationDatasetScopeRepository scopes;
+
+    @Autowired io.agentscope.dataagent.dataset.AnswerQueryMemory feedback;
     @Autowired org.springframework.transaction.PlatformTransactionManager transactionManager;
     final HttpClient client = HttpClient.newHttpClient();
     final ObjectMapper json = new ObjectMapper();
 
     @org.junit.jupiter.api.BeforeEach
     void clearRecords() {
+        org.mockito.Mockito.reset(feedback);
+        scopes.deleteAll();
+        charts.deleteAll();
         messages.deleteAll();
         history.deleteAll();
         registry.deleteAll();
@@ -392,6 +409,130 @@ class AdminHistoryHttpTest {
         assertThat(users.findById("analyst").orElseThrow().getRolesCsv()).isEqualTo("user,analyst");
         assertThat(request("GET", detail, newAdmin).statusCode()).isEqualTo(403);
         assertThat(request("PUT", roles + "/analyst", newAdmin).statusCode()).isEqualTo(403);
+    }
+
+    @Test
+    void replayProjectsSnapshotsVotesAndOnlyConversationBoundVisuals() throws Exception {
+        addUser("reader-admin", "管理员", "user,admin");
+        addUser("analyst", "提问人", "user");
+        addUser("other", "另一人", "user");
+        long time = System.currentTimeMillis();
+        addSession("s1", "analyst", "main", time);
+        addSession("other-session", "analyst", "main", time);
+        addSession("foreign", "other", "main", time);
+        String admin = jwt.generate("reader-admin", "reader-admin", List.of("user", "admin"));
+        String ordinary = jwt.generate("analyst", "analyst", List.of("user"));
+        var q = message(0, "USER", "销售趋势", time);
+        var question = (com.fasterxml.jackson.databind.node.ObjectNode) json.readTree(q.payload);
+        question.put("id", "question-0");
+        q.payload = json.writeValueAsString(question);
+        var snapshot =
+                new io.agentscope.dataagent.web.persistence.jpa.ConversationDatasetScopeEntity(
+                        "analyst", "turn:question-0", "[\"kb-old\"]");
+        snapshot.setSelectionJson(
+                "{\"groupIds\":[\"kb-old\"],\"allGroups\":false,\"groupNames\":{\"kb-old\":\"当时的销售知识库\"}}");
+        scopes.save(snapshot);
+        var chart = message(1, "TOOL", "", time);
+        var tool = (com.fasterxml.jackson.databind.node.ObjectNode) json.readTree(chart.payload);
+        tool.put("toolName", "render_chart");
+        tool.put("toolInput", "SELECT secret FROM internal_table");
+        tool.put(
+                "toolResult",
+                "{\"chart\":\"echarts\",\"chartId\":\"owned-chart\",\"title\":\"销售趋势\"}");
+        chart.payload = json.writeValueAsString(tool);
+        charts.save(
+                new io.agentscope.dataagent.web.persistence.jpa.ChartOptionEntity(
+                        "owned-chart",
+                        "analyst",
+                        "{\"series\":[{\"type\":\"line\",\"data\":[1,2]}]}"));
+        var image = new ArtifactEntity();
+        image.id = "887c2cc1-84d5-49fc-b9a8-07de522ce001";
+        image.ownerId = "analyst";
+        image.sessionId = "s1";
+        image.runId = "run";
+        image.filename = "trend.png";
+        image.sourcePath = "/workspace/outputs/trend.png";
+        artifacts.save(image);
+        java.nio.file.Files.write(
+                files.resolve(image.id),
+                java.util.Base64.getDecoder()
+                        .decode(
+                                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWQAAAABJRU5ErkJggg=="));
+        var python = message(2, "TOOL", "", time);
+        var py = (com.fasterxml.jackson.databind.node.ObjectNode) json.readTree(python.payload);
+        py.put("toolName", "run_python");
+        py.put(
+                "toolResult",
+                "### artifact:trend.png\n- type: image\n- size: 68\n- path: /api/artifacts/"
+                        + image.id
+                        + "/content\n");
+        python.payload = json.writeValueAsString(py);
+        var a = message(3, "ASSISTANT", "销售增长。 ![趋势](chart://owned-chart) ![图片](trend.png)", time);
+        var answer = (com.fasterxml.jackson.databind.node.ObjectNode) json.readTree(a.payload);
+        answer.put("id", "answer-3");
+        a.payload = json.writeValueAsString(answer);
+        messages.saveAll(List.of(q, chart, python, a));
+        org.mockito.Mockito.when(feedback.votes("analyst", "s1", List.of("answer-3")))
+                .thenReturn(Map.of("answer-3", "UP"));
+        String base = "/api/admin/conversation-history/analyst/";
+        var page = request("GET", base + "messages?sessionKey=s1", admin);
+        assertThat(page.statusCode()).isEqualTo(200);
+        assertThat(page.body())
+                .contains("当时的销售知识库", "\"feedbackVote\":\"UP\"", "trend.png")
+                .doesNotContain("internal_table", "SELECT secret", "toolInput", "/workspace/");
+        assertThat(
+                        json.readTree(page.body())
+                                .path("items")
+                                .get(0)
+                                .path("visuals")
+                                .path("charts")
+                                .size())
+                .isEqualTo(1);
+        String chartUrl = base + "charts/1?sessionKey=s1";
+        assertThat(request("GET", chartUrl, admin).body()).contains("series");
+        assertThat(request("GET", chartUrl, ordinary).statusCode()).isEqualTo(403);
+        assertThat(request("GET", chartUrl, null).statusCode()).isEqualTo(401);
+        assertThat(request("GET", base + "charts/1?sessionKey=other-session", admin).statusCode())
+                .isEqualTo(404);
+        assertThat(request("GET", base + "charts/0?sessionKey=s1", admin).statusCode())
+                .isEqualTo(404);
+        charts.findById("owned-chart")
+                .ifPresent(
+                        c -> {
+                            c.setOwnerId("other");
+                            charts.save(c);
+                        });
+        assertThat(request("GET", chartUrl, admin).statusCode()).isEqualTo(404);
+        String imageUrl = base + "artifacts/" + image.id + "?sessionKey=s1";
+        assertThat(request("GET", imageUrl, admin).statusCode()).isEqualTo(200);
+        assertThat(request("GET", imageUrl, admin).headers().firstValue("cache-control"))
+                .hasValue("no-store, private");
+        assertThat(request("GET", imageUrl, ordinary).statusCode()).isEqualTo(403);
+        assertThat(
+                        request(
+                                        "GET",
+                                        base
+                                                + "artifacts/"
+                                                + image.id
+                                                + "?sessionKey=other-session",
+                                        admin)
+                                .statusCode())
+                .isEqualTo(404);
+        assertThat(request("GET", "/api/artifacts/" + image.id + "/content", admin).statusCode())
+                .isEqualTo(404);
+        java.nio.file.Files.delete(files.resolve(image.id));
+        assertThat(request("GET", imageUrl, admin).statusCode()).isEqualTo(410);
+        org.mockito.Mockito.when(feedback.votes("analyst", "s1", List.of("answer-3")))
+                .thenThrow(new IllegalStateException("corrupt file"));
+        assertThat(request("GET", base + "messages?sessionKey=s1", admin).body())
+                .contains("\"feedbackAvailable\":false", "销售增长");
+        org.mockito.Mockito.verify(feedback, org.mockito.Mockito.never())
+                .feedback(
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any());
     }
 
     private void addUser(String id, String name, String roles) {

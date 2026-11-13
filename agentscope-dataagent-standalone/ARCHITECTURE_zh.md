@@ -658,7 +658,7 @@ system prompt（空记忆时为空标签）。排查助手"重复犯错"先看�
 ### 7.5 会话历史、附件与沙箱生命周期（ADR 0060、spec 052）
 
 - 展示：数据库 `session_history/session_message` 提供列表与消息分页；索引器从本地引擎日志补齐，列表不访问 Docker。
-- 管理查阅（spec121、ADR0141）：`AdminConversationController` 默认分页展示全体用户的主会话，可按用户、标题和活动日期筛选。详情按轮返回已保存的提问与最终正文。管理响应不提供工具原始记录或附件访问，查阅不改变已读状态。管理员维护（spec122）经 `GlobalAdministratorController` 单独增减角色，`JpaUserStore` 在事务中保护最后一位管理员。带管理员声明的 API 凭证需通过当前数据库角色校验，撤权后旧凭证不再有管理员权限。
+- 管理查阅（spec121、ADR0141）：`AdminConversationController` 默认分页展示全体用户的主会话，可按用户、标题和活动日期筛选。详情按轮返回已保存的提问、最终正文和当时知识库快照；spec136/ADR0148增加已有反馈及视觉回看。AdminHistoryPresentation仅投影图表/持久图片引用，图表接口校验同会话工具位置和图表owner，图片校验owner/session且仅允许图片类型；普通资源接口所有者边界不变。反馈一页批量只读，失败不阻断正文；不返回原始工具记录、不重新执行、不改变已读状态。管理员维护（spec122）经 `GlobalAdministratorController` 单独增减角色，`JpaUserStore` 在事务中保护最后一位管理员。带管理员声明的 API 凭证需通过当前数据库角色校验，撤权后旧凭证不再有管理员权限。
 - 管理检索（spec125、ADR0143）：`SessionHistoryService#indexBatch` 按有界批次补齐 `session_message.message_role/user_text`；正常投影写入时同步更新，仅 USER 保存检索正文。条件更新保护并发改写与删除。`AdminHistoryQueryService#page/users/export` 在数据库统一筛选标题/用户正文、所属用户与会话活动日期，聚合 USER 计数、稳定排序和分页；列表和摘要使用同一只读快照。正文整理尚未完成时返回 indexing 提示。CSV 超限拒绝并要求缩小条件，导出不包含对话正文。新接口仍校验当前全局管理员角色，旧列表 API 保持兼容。
 - 续聊：引擎日志及工作区持久状态继续保留，数据库展示投影不替代引擎上下文。
 - 附件：`session_artifact` 元数据加持久目录，所有者通过请求头认证读取；沙箱回收不影响已保存文件，删除或重置会话会清理附件。

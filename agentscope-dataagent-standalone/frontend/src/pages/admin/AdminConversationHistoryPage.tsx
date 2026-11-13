@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import KnowledgeScopeLabel from '../../components/KnowledgeScopeLabel';
+import ReadOnlyAnswer from './ReadOnlyAnswer';
+import Brand from '../../components/Brand';
 import {
   AdminConversationTurn, AdminDirectoryUser, AdminHistorySession,
   getAdminConversation, getHistoryOverview, historyUsers, exportHistory, HistoryQuery, HistoryOverview,
@@ -24,14 +25,6 @@ function ActivityTime({ value }: { value: number }) {
   return <time dateTime={new Date(value).toISOString()}><span>{date}</span><span>{time}</span></time>;
 }
 
-function MessageText({ value }: { value: string }) {
-  return <div className="admin-history-message"><ReactMarkdown skipHtml remarkPlugins={[remarkGfm]}
-    urlTransform={() => ''}
-    components={{ a: ({ children }) => <span>{children}</span>, img: () => <span>［附件或图片不可查看］</span> }}>
-    {value}
-  </ReactMarkdown></div>;
-}
-
 function ConversationDetails({ session, close }: {
   session: AdminHistorySession;
   close: () => void;
@@ -44,6 +37,9 @@ function ConversationDetails({ session, close }: {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const [find, setFind] = useState('');
+  const [expanded, setExpanded] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -53,6 +49,7 @@ function ConversationDetails({ session, close }: {
 
   useEffect(() => {
     const controller = new AbortController();
+    setError(''); setLoading(true);
     getAdminConversation(userId, session.sessionKey, undefined, controller.signal).then(page => {
       if (controller.signal.aborted) return;
       setTurns(page.items);
@@ -61,7 +58,7 @@ function ConversationDetails({ session, close }: {
       if (!controller.signal.aborted) setError((e as Error).message);
     }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [userId, session.sessionKey]);
+  }, [userId, session.sessionKey, retry]);
 
   async function loadEarlier() {
     if (before === null) return;
@@ -69,7 +66,11 @@ function ConversationDetails({ session, close }: {
     setError('');
     try {
       const page = await getAdminConversation(userId, session.sessionKey, before);
+      const body = bodyRef.current;
+      const height = body?.scrollHeight ?? 0;
+      const top = body?.scrollTop ?? 0;
       setTurns(previous => [...page.items, ...previous]);
+      requestAnimationFrame(() => { if (body) body.scrollTop = top + body.scrollHeight - height; });
       setBefore(page.nextBefore);
     } catch (e) { setError((e as Error).message); }
     finally { setLoading(false); }
@@ -80,29 +81,28 @@ function ConversationDetails({ session, close }: {
     close();
   }
 
-  return <dialog className="admin-history-drawer" ref={dialogRef} aria-labelledby={titleId}
+  return <dialog className={`admin-history-drawer ah-replay${expanded ? " is-expanded" : ""}`} ref={dialogRef} aria-labelledby={titleId}
     onCancel={event => { event.preventDefault(); closeDrawer(); }}>
     <header className="admin-drawer-header">
       <div>
         <h2 id={titleId}>{session.title || '未命名会话'}</h2>
-        <p>{adminUserLabel(session.owner)}</p>
+        <p>{adminUserLabel(session.owner)}<span className="ah-readonly-label">只读回看</span></p>
       </div>
+      <button className="da-btn da-btn-sm ah-expand" type="button" onClick={() => setExpanded(v => !v)} aria-pressed={expanded}><Icon name={expanded ? 'zoomOut' : 'fit'} size="sm" />{expanded ? '收起阅读' : '展开阅读'}</button>
       <button className="da-btn admin-icon-button" type="button" aria-label="关闭详情" onClick={closeDrawer}>
         <Icon name="close" size="sm" />
       </button>
     </header>
     <div className="ah-detail-search"><Icon name="search" size="sm" /><input className="da-input" aria-label="在已加载对话中查找" placeholder="在已加载对话中查找" value={find} onChange={e => setFind(e.target.value)} /></div>
-    <div className="admin-drawer-body">
+    <div className="admin-drawer-body" ref={bodyRef}>
       {loading && <p className="admin-list-feedback" role="status">正在加载正文…</p>}
-      {error && <p className="admin-list-feedback admin-error" role="alert">{error}</p>}
+      {error && <div className="admin-list-feedback admin-error" role="alert">{error}<button className="da-btn da-btn-sm" onClick={() => before !== null ? void loadEarlier() : setRetry(n => n + 1)}>重新加载</button></div>}
       {!loading && !error && !turns.length && <p className="admin-list-feedback">正文暂不可用。</p>}
       {before !== null && <button className="da-btn da-btn-sm" type="button" disabled={loading}
         onClick={() => void loadEarlier()}>加载更早对话</button>}
       <ol className="admin-history-list">{turns.filter(turn => [turn.question, turn.answer].join(' ').toLowerCase().includes(find.trim().toLowerCase())).map(turn => <li key={turn.position} className="admin-history-turn">
-        <h3>提问 <span>{formatTime(turn.askedAtMs)}</span></h3>
-        <MessageText value={turn.question || '（无文字）'} />
-        <h3>回复{turn.answeredAtMs ? <span>{formatTime(turn.answeredAtMs)}</span> : null}</h3>
-        {turn.answer ? <MessageText value={turn.answer} /> : <p className="da-small">暂无已保存的回复正文。</p>}
+        <div className="ah-replay-question"><time>{formatTime(turn.askedAtMs)}</time><p>{turn.question || '（无文字）'}</p><KnowledgeScopeLabel scope={turn.knowledgeScope} showUnknown /></div>
+        <div className="ah-replay-response"><div className="ah-replay-brand"><Brand /> {turn.answeredAtMs ? <time>{formatTime(turn.answeredAtMs)}</time> : null}</div><ReadOnlyAnswer turn={turn} portalRoot={dialogRef.current} /></div>
       </li>)}</ol>
     </div>
   </dialog>;
@@ -214,6 +214,6 @@ export default function AdminConversationHistoryPage() {
     </div>
     {selected && <ConversationDetails key={selected.sessionKey} session={selected} close={() => setSelected(null)} />}
     {statistics && <UserStatistics query={query} close={() => setStatistics(false)} select={select} />}
-    {info && <dialog ref={infoDialog} className="ah-info-dialog" aria-labelledby="ah-info-title" onCancel={() => setInfo(false)}><header><h2 id="ah-info-title">统计口径</h2><button className="ah-icon" aria-label="关闭统计说明" onClick={() => { infoDialog.current?.close(); setInfo(false); }}><Icon name="close" size="sm" /></button></header><p>时间范围按会话最后活动时间筛选。提问数统计这些会话中的全部用户提问，不计 AI 回复或工具消息，并非仅统计日期范围内新增的提问。</p><p>问题搜索匹配会话标题或用户提问正文；用户筛选独立生效。列表、用户统计和导出使用相同筛选条件。</p><p>对话正文只读，附件与工具原始结果不可查看。</p></dialog>}
+    {info && <dialog ref={infoDialog} className="ah-info-dialog" aria-labelledby="ah-info-title" onCancel={() => setInfo(false)}><header><h2 id="ah-info-title">统计口径</h2><button className="ah-icon" aria-label="关闭统计说明" onClick={() => { infoDialog.current?.close(); setInfo(false); }}><Icon name="close" size="sm" /></button></header><p>时间范围按会话最后活动时间筛选。提问数统计这些会话中的全部用户提问，不计 AI 回复或工具消息，并非仅统计日期范围内新增的提问。</p><p>问题搜索匹配会话标题或用户提问正文；用户筛选独立生效。列表、用户统计和导出使用相同筛选条件。</p><p>对话与用户反馈只读，可查看当时保存的图表和图片；不重新执行查询，不展示工具原始结果。</p></dialog>}
   </div>;
 }

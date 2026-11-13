@@ -1,3 +1,6 @@
+import { normalizeChartReferences } from './answerRefs';
+import AnswerContent from './AnswerContent';
+import KnowledgeScopeLabel from './KnowledgeScopeLabel';
 import { publishedSnapshot } from './modeling/semanticSnapshot';
 import { roleOf } from './modeling/workbenchLayout';
 import { getKnowledgeBaseBrowse, type KnowledgeBaseBrowse } from '../api/semanticModeling';
@@ -1454,7 +1457,7 @@ export default function ChatPanel({
           const answerText = failure ? failure.answer : m.text;
           const webSources = m.pending || m.failed ? [] : citedWebSources(answerText, m.tools);
           // A chart the text cites is drawn where it is cited, not again below the answer.
-          const cited = citedChartIds(answerText ?? '');
+          const cited = citedChartIds(normalizeChartReferences(answerText ?? '', charts.keys()));
           const inlineCharts = new Map([...charts].filter(([id]) => cited.has(id)));
           const inline = new Set(inlineCharts.values());
           const answer = visuals.filter(v => !inline.has(v));
@@ -1464,7 +1467,7 @@ export default function ChatPanel({
               className={`da-bubble-row ${m.role === 'user' ? 'user' : 'agent'} da-enter`}
             >
               {m.role === 'user' ? (
-                <div className="da-user-turn"><div className="da-bubble user">{m.text}</div>{m.knowledgeScope && <div className="da-turn-scope" title={m.knowledgeScope.groupIds.map(id => m.knowledgeScope!.groupNames[id] || id).join('、')}><Icon name={m.knowledgeScope.groupIds.length ? 'book' : 'chat'} size="sm" />{m.knowledgeScope.allGroups ? `全部可用 · ${m.knowledgeScope.groupIds.length} 个知识库` : m.knowledgeScope.groupIds.length > 1 ? `${m.knowledgeScope.groupIds.length} 个知识库` : m.knowledgeScope.groupIds.length ? m.knowledgeScope.groupNames[m.knowledgeScope.groupIds[0]] || '指定知识库' : '普通聊天'}</div>}</div>
+                <div className="da-user-turn"><div className="da-bubble user">{m.text}</div><KnowledgeScopeLabel scope={m.knowledgeScope} /></div>
               ) : (
                 <div className="da-agent-turn">
                   <div className="da-agent-header">
@@ -1482,10 +1485,10 @@ export default function ChatPanel({
                   </TaskTrace>
                   <div className="da-answer">
                     {answerText
-                      ? <Markdown
+                      ? <AnswerContent
                           charts={inlineCharts}
                           resolveImage={answerText.includes('![') ? pythonImageResolver(m.tools) : undefined}
-                        >{answerText}</Markdown>
+                        >{answerText}</AnswerContent>
                       : m.pending
                         ? m.capacityMessage || m.preparingMessage
                           ? <div role="status" style={{ color: 'var(--da-text-muted)', fontSize: 14 }}>{m.capacityMessage || m.preparingMessage}</div>

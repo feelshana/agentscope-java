@@ -195,6 +195,19 @@ public class AnswerQueryMemory {
         }
     }
 
+    /** Reads existing votes in one snapshot without executing queries or updating memory. */
+    public Map<String, String> votes(String owner, String session, List<String> answerIds) {
+        synchronized (lock(owner)) {
+            var answers = read(owner).answers();
+            Map<String, String> votes = new LinkedHashMap<>();
+            for (String id : answerIds) {
+                var feedback = answers.get(queryId(session, id, "answer"));
+                if (feedback != null) votes.put(id, feedback.vote());
+            }
+            return Map.copyOf(votes);
+        }
+    }
+
     public String recall(String owner, String group, String question) {
         return recall(owner, group, question, List.of());
     }

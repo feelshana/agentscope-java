@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import ReactMarkdown, { Components, defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -109,6 +109,7 @@ const MD_STYLE = `
 const keepChartUrls = (url: string) => (CHART_REF.test(url) ? url : defaultUrlTransform(url));
 
 interface MarkdownDisplay {
+  readOnly?: boolean;
   charts?: ReadonlyMap<string, React.ReactNode>;
   resolveImage?: (src: string) => string | null;
   setLightbox: (url: string) => void;
@@ -122,7 +123,8 @@ const components: Components = {
   table: ({ children }) => <div className="claw-md-table-wrap" tabIndex={0} role="region" aria-label="回答表格，可横向滚动"><table>{children}</table></div>,
   th: ({ children }) => <th scope="col">{children}</th>,
   a: function MarkdownLink({ href, children, title }) {
-    const { setDownloadError } = useContext(MarkdownDisplayContext)!;
+    const { setDownloadError, readOnly } = useContext(MarkdownDisplayContext)!;
+    if (readOnly) return <span title="历史只读内容">{children}</span>;
     const attachment = fileUrl(href ?? '');
     return <a title={title} href={attachment ?? href} rel="noopener noreferrer" onClick={attachment ? e => {
       e.preventDefault();
@@ -132,17 +134,18 @@ const components: Components = {
   },
   // A paragraph holding only a chart becomes a block, so the chart is not nested in a <p>.
   p: ({ node, children }) => {
-    const only = node?.children.length === 1 ? node.children[0] : undefined;
-    const src = only && only.type === 'element' && only.tagName === 'img' ? String(only.properties?.src ?? '') : '';
-    return CHART_REF.test(src) ? <div className="claw-md-chart">{children}</div> : <p>{children}</p>;
+    const hasChart = node?.children.some(child => child.type === 'element' && child.tagName === 'img' && CHART_REF.test(String(child.properties?.src ?? '')));
+    return hasChart ? <div className="claw-md-chart">{children}</div> : <p>{children}</p>;
   },
   img: function MarkdownImage({ src, alt }) {
-    const { charts, resolveImage, setLightbox } = useContext(MarkdownDisplayContext)!;
+    const { charts, resolveImage, setLightbox, readOnly } = useContext(MarkdownDisplayContext)!;
     const reference = src ?? '';
     const chart = CHART_REF.exec(reference);
     // Never show a broken "loading" image for a chart; it is drawn here or, if not yet ready, below.
-    if (chart) return <>{charts?.get(chart[1]) ?? null}</>;
-    const url = resolveImage?.(reference) ?? fileUrl(reference) ?? reference;
+    if (chart) return <>{charts?.get(chart[1]) ?? (readOnly ? <span role="status">历史图表未保存或暂不可查看</span> : null)}</>;
+    const resolved = resolveImage?.(reference);
+    if (readOnly && !resolved) return <span role="status">{alt || '历史图片'}：未保存或暂不可查看</span>;
+    const url = resolved ?? fileUrl(reference) ?? reference;
     return (
       <AttachmentImage
         src={url}
@@ -162,7 +165,9 @@ const components: Components = {
 };
 
 /** Render answers with stable image components while text continues streaming. */
-export default function Markdown({ children, fontSize, charts, resolveImage }: {
+export default function Markdown({ children, fontSize, charts, resolveImage, readOnly, portalRoot }: {
+  readOnly?: boolean;
+  portalRoot?: Element | null;
   children: string;
   fontSize?: number | string;
   /** Rendered charts by id; a cited id is drawn in place, an unknown one is left out. */
@@ -171,9 +176,15 @@ export default function Markdown({ children, fontSize, charts, resolveImage }: {
 }) {
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!lightbox) return;
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setLightbox(null); } };
+    window.addEventListener('keydown', close, true);
+    return () => window.removeEventListener('keydown', close, true);
+  }, [lightbox]);
 
   return (
-    <MarkdownDisplayContext.Provider value={{ charts, resolveImage, setLightbox, setDownloadError }}>
+    <MarkdownDisplayContext.Provider value={{ charts, resolveImage, setLightbox, setDownloadError, readOnly }}>
       <style>{MD_STYLE}</style>
       <div className="claw-md" style={fontSize != null ? { fontSize } : undefined}>
         <ReactMarkdown remarkPlugins={[remarkGfm]} components={components} urlTransform={keepChartUrls}>{children}</ReactMarkdown>
@@ -195,7 +206,7 @@ export default function Markdown({ children, fontSize, charts, resolveImage }: {
             style={{ maxWidth: '92vw', maxHeight: '92vh', borderRadius: 8, boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}
           />
         </div>,
-        document.body,
+        portalRoot ?? document.body,
       )}
     </MarkdownDisplayContext.Provider>
   );

@@ -8,6 +8,8 @@ ADR 记录"为什么这样做"。规则：
 
 ## 当前有效主线（按主题）
 
+[ADR0148](0148-admin-readonly-conversation-visuals.md) 将管理员会话回看扩展到逐轮知识库、原用户反馈与已保存图表/图片，通过专用只读资源接口校验用户及会话归属；不开放普通所有者接口或任意工作区文件。
+
 [ADR0146](0146-shared-datasource-and-kb-bindings.md) 将数据源成员与已建立的知识库供数绑定分离，明确移除成员/停用的不同边界，创建人和全局管理员具有同等治理权。[ADR0147](0147-keep-datasource-password-storage.md) 按用户要求保留原数据源密码存储，不做转换或新增密钥。
 
 [ADR0143](0143-history-query-projection.md) 为管理员检索复用消息投影，后台分批补齐角色与用户正文，服务端统一分页和统计。
@@ -189,3 +191,5 @@ ADR 记录"为什么这样做"。规则：
 
 | [0146](0146-shared-datasource-and-kb-bindings.md) | 数据源成员授权与知识库绑定分离；创建人和全局管理员同等治理 | 已接受，2026-11-13。对应spec135；密码段由0147取代。 | |
 | [0147](0147-keep-datasource-password-storage.md) | 保留数据源密码存储方式；共享升级不转换密码、不新增密钥 | 已接受，2026-11-13。取代ADR0146密码段。 | |
+
+| [0148](0148-admin-readonly-conversation-visuals.md) | 管理员只读会话回看：知识库、反馈与已保存图表图片 | 已接受，2026-11-13；取代0141仅正文限制 | |

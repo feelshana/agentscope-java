@@ -602,3 +602,11 @@ liyufan_dev保留未提交：spec135/ADR0146实现独立连接共享与管理员
 ## 2026-11-13 Asia/Shanghai｜Checkpoint：简化密码方案最终复验通过
 
 最终Spotless/clean后端1159项（0失败/错误，33条件跳过）、DocsConsistencyTest及package通过，前端三前缀测试与构建通过。隔离MySQL升级/初始DDL及validate完整启动、旧密码不变、空密码保留、真实JDBC共享、管理员治理、撤权既有KB及停用门禁通过；未改用户运行库、8080/5173或66。按授权进入Git提交/推送/合并，spec135仍待用户现场试用；正式操作见66升级指引。
+
+## 2026-11-13 Asia/Shanghai｜Checkpoint：管理员只读会话回看本地完成
+
+liyufan_dev起点52796b6d，实施spec136/ADR0148：逐轮知识库快照、共用正常会话正文/表格/ECharts/Python图片、原反馈只读、展开阅读，专用管理员资源接口不扩大普通资源权限，无DDL。完整后端1160项（0失败/错误，33条件跳过）、前端三前缀各110项、Spotless/DocsConsistencyTest/TypeScript/Vite/package通过。本轮启动8080后端，保留既有5173；实际四轮SQL图表/Python/换库表格/普通聊天及原UP反馈，Chrome搜索、390px、展开保位、图片Esc、503重试、回看零执行POST通过。详情及截图见test-reports/20261113-admin-conversation-replay.md；本地已留验收会话与打开的Chrome供用户查看。不提交/push/合并/部署66，待用户现场审阅。
+
+## 2026-11-13 Asia/Shanghai｜Checkpoint：授权本地提交
+
+用户接受暂缓容量专项优化，并授权提交当前修改。本次只提交liyufan_dev现有spec136代码、文档、测试与前端构建产物，沿用上段同一代码的完整测试和真实问答结果；仅补共享记忆，不重复大规模测试。提交前再验文档门禁和diff格式。未授权push/主线合并/66部署，提交号以Git记录为准。

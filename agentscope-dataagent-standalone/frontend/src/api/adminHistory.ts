@@ -18,6 +18,10 @@ export interface AdminHistorySession {
 }
 
 export interface AdminConversationTurn {
+  knowledgeScope?: import('./chat').KnowledgeScope | null;
+  feedbackVote?: 'UP' | 'DOWN' | null;
+  feedbackAvailable?: boolean;
+  visuals?: { charts: { id: string; title: string; url: string }[]; images: { name: string; reference: string; url: string }[] };
   position: number;
   askedAtMs: number;
   question: string | null;

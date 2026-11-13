@@ -8,6 +8,14 @@ export function citedChartIds(text: string): Set<string> {
   return new Set([...text.matchAll(/\]\(chart:\/\/([^\s/?#)]+)\)/g)].map(m => m[1]));
 }
 
+/** Some saved answers use a bare chart address on its own line; only resolve known charts. */
+export function normalizeChartReferences(text: string, ids: Iterable<string>): string {
+  const known = new Set(ids);
+  return text.split(/(```[\s\S]*?```)/g).map((part, index) => index % 2 ? part :
+    part.replace(/^[ \t]*chart:\/\/([^\s/?#)]+)[ \t]*$/gm, (line, id: string) =>
+      known.has(id) ? `![图表](chart://${id})` : line)).join('');
+}
+
 /** spec101: one saved query result, as its tool result announces it. */
 export interface QueryDataFile { href: string; rows: string | null }
 
