@@ -15,6 +15,8 @@ import SemanticReadOnlyWorkspace from '../../components/modeling/SemanticReadOnl
 import { draftSnapshot, publishedSnapshot } from '../../components/modeling/semanticSnapshot';
 import BusinessDocumentsPanel from '../../components/modeling/BusinessDocumentsPanel';
 import FieldScreeningPanel from '../../components/modeling/FieldScreeningPanel';
+import ModelingPreparation from '../../components/modeling/ModelingPreparation';
+import Icon from '../../components/Icon';
 import type { FieldAdjustment } from '../../components/modeling/FieldScreeningPanel';
 import { getScreeningStatus } from '../../api/fieldScreening';
 import type { ScreeningStatus } from '../../api/fieldScreening';
@@ -45,6 +47,7 @@ import type { TurnPurpose } from '../../api/chat';
 import { useQueryReadiness } from '../../components/useQueryReadiness';
 import SemanticAssetsPanel from '../../components/modeling/SemanticAssetsPanel';
 import './SemanticModelingPage.css';
+import '../../components/modeling/ModelingSetup.css';
 
 type Tab = 'semantic' | 'coach' | 'assets' | 'overview';
 /** spec117 §3c: the right panel the icon bar switches; null when folded away. */
@@ -152,12 +155,17 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   const idle = assistantState === 'idle' && !head;
   const [readyGroup, setReadyGroup] = useState<string | null>(null);
   const windowReady = readyGroup === groupId;
-  const updateWindowReady = useCallback((ready: boolean) => setReadyGroup(ready ? groupId : null), [groupId]);
+  const windowReadyRef = useRef(false);
+  const updateWindowReady = useCallback((ready: boolean) => { windowReadyRef.current = ready; setReadyGroup(ready ? groupId : null); }, [groupId]);
   // spec092 §7: with ?start=1 the page offers documents first and starts only on the user's click.
   const [startOffer, setStartOffer] = useState<string | null>(null);
   // spec093: tables waiting for field screening; null until loaded.
   const [screening, setScreening] = useState<ScreeningStatus[] | null>(null);
   const screeningPending = !!screening?.some(t => !t.confirmed);
+  const [setupPhase, setSetupPhase] = useState<'fields' | 'prepare' | null>(params.get('start') === '1' ? 'prepare' : null);
+  const setupActive = screeningPending || setupPhase !== null || startOffer === groupId;
+  const setupFields = screeningPending || setupPhase === 'fields';
+  const setupLeaveGuard = useRef<(() => Promise<boolean>) | null>(null);
   const [adjusting, setAdjusting] = useState<string | null>(null);
   const [windowSignal, setWindowSignal] = useState(0);
   const startOffered = useRef<string | null>(null);
@@ -206,7 +214,7 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   };
   /** {@code label} is what the conversation shows for a request the platform wrote. */
   const request = (text: string, purpose?: TurnPurpose, label?: string) => {
-    if (!windowReady) { setError('请先完成事实表时间配置，再开始建模。'); return false; }
+    if (!windowReadyRef.current) { setError('请先完成事实表时间配置，再开始建模。'); return false; }
     setQueue(previous => ({ groupId, items: [...(previous.groupId === groupId ? previous.items : []), { id: ++sequence.current, text, purpose, label }] }));
     return true;
   };
@@ -214,7 +222,7 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   const documentsChanged = (change: string) => {
     window.dispatchEvent(new CustomEvent('modeling:updated', { detail: { groupId } }));
     // Before modeling starts, the automatic modeling turn reads every document anyway.
-    if (!windowReady || startOffer === groupId || (startIntent.current === groupId && startOffered.current !== groupId)) return;
+    if (setupActive || !windowReady || startOffer === groupId || (startIntent.current === groupId && startOffered.current !== groupId)) return;
     setQueue(previous => {
       const items = previous.groupId === groupId ? previous.items : [];
       const waiting = items.findIndex(r => r.purpose === 'document');
@@ -265,7 +273,7 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
     await Promise.all(checks);
   }, [groupId]);
   useEffect(() => {
-    setReadyGroup(null); setStartOffer(null); startOffered.current = null;
+    setReadyGroup(null); windowReadyRef.current = false; setStartOffer(null); startOffered.current = null;
     if (startIntent.current !== groupId) startIntent.current = null; setTrialOpen(false); setExamples(0); setUnconfirmedTrials(0);
     setView(null); setPreview(null); setWorkflow(null); setConfirmations([]); setScreening(null); setAdjusting(null);
     setPrefill(null); setFocusRelation(null); setChangeMark(null); setPanelChoice(undefined); setDockWide(false); setMarked([]); setReveal(null);
@@ -311,7 +319,9 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
     return () => window.clearTimeout(timer);
   }, [tourStep, idle, draftSummary.changes, workflow?.queryAvailable, groupId]);
   const startModeling = () => {
+    if (!windowReadyRef.current) return;
     tourSignal('model-started', { groupId });
+    startOffered.current = groupId; startIntent.current = null; setSetupPhase(null);
     setStartOffer(null);
     setParams({ asset: 'semantic' }, { replace: true });
     openAssistant();
@@ -422,9 +432,25 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   };
   const locateConfirmations = () => { if (canLeaveField()) setPanelChoice('pending'); };
 
-  return <div className="modeling-workbench mw">
+  const exitSetup = async () => {
+    if (setupLeaveGuard.current && !await setupLeaveGuard.current()) return;
+    navigate(`/configure/datasets/${groupId}`);
+  };
+  const finishScreening = () => {
+    startIntent.current = groupId;
+    setSetupPhase('prepare'); setStartOffer(groupId);
+    void refresh();
+  };
+
+  return <div className={`modeling-workbench mw${setupActive ? ' mw-setup' : ''}`}>
     <div className="mw-top">
-    <header className="mw-head">
+    {setupActive ? <header className="ms-focusbar">
+      <button type="button" className="ms-back" aria-label="返回知识库" onClick={() => void exitSetup()}><Icon name="back" size="sm" /></button>
+      <div className="ms-crumb"><span>语义建模</span><i>/</i><strong title={group.name}>{group.name}</strong></div>
+      <SetupSteps current={setupFields ? 0 : 1} />
+      <span className="ms-header-note">{setupFields ? '整理完成后自动进入准备' : '这一步随时可以回来改'}</span>
+      <button type="button" className="mp-button" onClick={() => void exitSetup()}>退出整理</button>
+    </header> : <><header className="mw-head">
       <div className="mw-crumb">
         <button type="button" className="mw-crumb-link" onClick={() => { if (canLeaveField()) navigate('/configure/modeling'); }}>语义建模</button>
         <span className="mw-crumb-sep">/</span>
@@ -458,21 +484,16 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
     <nav aria-label="语义建模页面" className="mw-tabs">
       {tabs.map(item => <button key={item.key} type="button" aria-current={tab === item.key ? 'page' : undefined} className={`mw-tab ${tab === item.key ? 'mw-tab-on' : ''}`} onClick={() => selectTab(item.key)}>{item.label}</button>)}
     </nav>
+    </>}
     </div>
     <div className="mw-content">
     {error && <div role="alert" className="da-alert da-alert-error">{error}<button className="da-btn" onClick={() => void refresh()}>刷新</button></div>}
-    {(screeningPending || !windowReady || startOffer === groupId) && screening !== null && <SetupSteps steps={[
-      { label: '采样', done: true },
-      { label: '字段整理', done: !screeningPending },
-      { label: '时间范围', done: !screeningPending && windowReady },
-      { label: '业务文档', done: !screeningPending && windowReady && startOffer !== groupId },
-      { label: '开始建模', done: false },
-    ]} />}
-    {screening !== null && !screeningPending && <FactQueryWindowSettings key={groupId} groupId={groupId} automatic onReady={updateWindowReady} hideButton openSignal={windowSignal} />}
-    {screeningPending && <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-      <FieldScreeningPanel groupId={groupId} mode="setup" onDone={() => void refresh()} />
+    {screening !== null && !setupActive && <FactQueryWindowSettings key={groupId} groupId={groupId} automatic initiallyReady={windowReadyRef.current} onReady={updateWindowReady} hideButton openSignal={windowSignal} />}
+    {setupActive && setupFields && <div className="ms-screening">
+      <FieldScreeningPanel groupId={groupId} mode="setup" leaveGuard={setupLeaveGuard} onDone={finishScreening} />
     </div>}
-    {!screeningPending && screening !== null && !windowReady && <div className="mw-notice">正在确认事实表的查询时间范围，完成后可以开始建模。关闭弹窗后，可从右上角更多菜单重新配置。</div>}
+    {setupActive && !setupFields && (screening === null ? <GraphLoading /> : <ModelingPreparation key={groupId} groupId={groupId} tables={screening}
+      onReady={updateWindowReady} onEditFields={() => setSetupPhase('fields')} onDocumentsChanged={documentsChanged} onStart={startModeling} confirmWindow={tourStep === 'window' && !tour?.paused} />)}
     {adjusting && <div className="da-modal-overlay" onClick={() => setAdjusting(null)}>
       <div className="da-modal-shell" style={{ width: 'min(1100px, 96vw)', height: '82vh', display: 'flex' }} onClick={e => e.stopPropagation()}>
         <FieldScreeningPanel groupId={groupId} mode="adjust" datasetId={adjusting} onClose={() => setAdjusting(null)}
@@ -483,16 +504,7 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
           }} />
       </div>
     </div>}
-    {startOffer === groupId && <div className="da-card" style={{ border: '1px solid var(--da-primary)', display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <strong>开始建模前，可以先上传业务文档</strong>
-      <span className="da-small">指标口径、过滤条件、术语说明等文档能让助手写出更准的业务语义；没有也可以直接开始，之后随时在"资料"中补充。</span>
-      <BusinessDocumentsPanel groupId={groupId} onChanged={documentsChanged} />
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button className="da-btn da-btn-primary" onClick={startModeling}>开始自动建模</button>
-        <button className="da-btn" data-tour="model-start" onClick={startModeling}>没有文档，直接开始</button>
-      </div>
-    </div>}
-    <main className="modeling-workbench-body mw-body" style={{ flex: 1, minHeight: 0, display: screeningPending ? 'none' : 'flex' }}>
+    {!setupActive && <main className="modeling-workbench-body mw-body" style={{ flex: 1, minHeight: 0, display: 'flex' }}>
       <div className="mw-main" style={{ display: (panel === 'assistant' || panel === 'pending') && dockWide ? 'none' : 'flex' }}>
       {tab === 'overview' && <section style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div className="da-card"><h3 style={{ marginTop: 0 }}>数据</h3>
@@ -602,26 +614,19 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
           <span className="mw-rail-ico">✓</span><span>待确认</span>
           {pendingCount > 0 && <em className="mw-rail-badge mw-rail-badge-red">{pendingCount}</em>}</button>
       </nav>
-    </main>
-    <div className="mw-publish-row">
+    </main>}
+    {!setupActive && <div className="mw-publish-row">
       {!screeningPending && workflow && <DraftBar groupId={groupId} workflow={workflow} assistantActive={!idle} pendingConfirmations={confirmations.length} checksPending={!confirmationsReady || screening === null}
       onLocate={locateConfirmations}
       publishSignal={publishSignal} onSummary={setDraftSummary} />}
       {toQuery && <button className="da-btn da-btn-primary da-btn-sm" disabled={!!preparing || queryHeld}
         title={queryHeld ? TOUR_QUERY_HINT : undefined} onClick={toQuery}>{preparing ? '问数准备中…' : '去问数 →'}</button>}
-    </div>
+    </div>}
     </div>
   </div>;
 }
 
 /** spec093: where the knowledge base is on its way to the first modeling turn. */
-function SetupSteps({ steps }: { steps: { label: string; done: boolean }[] }) {
-  const current = steps.findIndex(s => !s.done);
-  return <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 13 }} aria-label="建模准备步骤">
-    {steps.map((s, i) => <span key={s.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
-      color: s.done ? 'var(--da-success)' : i === current ? 'var(--da-primary)' : 'var(--da-text-muted)', fontWeight: i === current ? 600 : 400 }}>
-      {i > 0 && <span style={{ color: 'var(--da-border)' }}>—</span>}
-      {s.done ? '✓' : `${i + 1}`} {s.label}
-    </span>)}
-  </div>;
+function SetupSteps({ current }: { current: number }) {
+  return <nav className="ms-steps" aria-label="建模准备步骤">{['整理字段', '准备', '自动建模'].map((label, index) => <span key={label} className={`ms-step ${index < current ? 'is-done' : index === current ? 'is-current' : ''}`} aria-current={index === current ? 'step' : undefined}><b>{index + 1}</b>{label}</span>)}</nav>;
 }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import './modeling/modeling-chat.css';
 import type { CSSProperties, ReactNode } from 'react';
 import Icon from './Icon';
 import Markdown from './Markdown';
@@ -243,8 +244,8 @@ function ReplyBody({ segments, pending, startedAt }: { segments: Segment[]; pend
   return <>
     {pending && <ProgressCard stages={stages} reached={reached} latest={latest || '正在理解你的数据'} steps={frames.length} failed={failed} startedAt={startedAt} />}
     {hasProcess && <div style={{ margin: '2px 0 6px' }}>
-      <button type="button" onClick={() => setOpen(v => !v)}
-        style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', background: 'none', border: 'none', padding: '2px 0',
+      <button type="button" onClick={() => setOpen(v => !v)} className="mc-fold"
+        style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%',
           cursor: 'pointer', fontSize: 12, color: 'var(--da-text-muted)', textAlign: 'left' }}>
         <span>{open ? '▾' : '▸'}</span>
         <span style={{ whiteSpace: 'nowrap' }}>{pending ? (open ? '收起过程明细' : '查看过程明细') : '建模过程'}</span>
@@ -275,7 +276,7 @@ function ProgressCard({ stages, reached, latest, steps, failed, startedAt }: {
   const seconds = startedAt ? Math.max(0, Math.round((now - Date.parse(startedAt)) / 1000) - 2) : 0;
   const elapsed = seconds >= 60 ? `${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒` : `${seconds} 秒`;
   const current = Math.max(reached - 1, 0);
-  return <div aria-live="polite" style={{ margin: '2px 0 8px' }}>
+  return <div aria-live="polite" style={{ margin: '0 0 10px', padding: '13px 14px 11px', borderRadius: 12, background: 'var(--da-surface-sunken)', border: '1px solid var(--da-border)' }}>
     <ol style={{ display: 'flex', listStyle: 'none', margin: 0, padding: 0 }}>
       {stages.map((stage, i) => {
         const state = i < current ? 'done' : i === current ? 'current' : 'todo';
@@ -295,8 +296,8 @@ function ProgressCard({ stages, reached, latest, steps, failed, startedAt }: {
         </li>;
       })}
     </ol>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, padding: '10px 12px', borderRadius: 8,
-      background: 'color-mix(in srgb, var(--da-primary) 6%, var(--da-surface))' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 13, padding: '10px 12px', borderRadius: 10,
+      background: 'var(--da-surface)', border: '1px solid var(--da-border)' }}>
       <span className="da-spinner da-spinner-sm" style={{ flex: 'none', borderColor: 'var(--da-border)', borderTopColor: 'var(--da-primary)' }} />
       <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 500, color: 'var(--da-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{latest}</span>
       <span style={{ flex: 'none', fontSize: 12, color: 'var(--da-text-muted)' }}>
@@ -341,6 +342,7 @@ function TaskRow({ frame }: { frame: ToolFrame }) {
   return (
     <div style={S.task}>
       <button
+        className="mc-task"
         style={S.taskRow}
         onClick={() => setOpen(v => !v)}
         title={open ? '收起详情' : '查看详情'}
@@ -835,7 +837,7 @@ export default function ModelingChatPanel({
         </div>}
 
         <div style={variant === 'dock' ? S.dockThread : S.thread} ref={threadRef}>
-          {sessionError && <p role="alert">{sessionError}</p>}
+          {sessionError && <p role="alert" style={{ margin: '0 0 12px', padding: '10px 12px', borderRadius: 10, background: 'color-mix(in srgb, var(--da-danger) 5%, var(--da-surface))', border: '1px solid color-mix(in srgb, var(--da-danger) 22%, transparent)', color: 'var(--da-danger)', fontSize: 12.5, lineHeight: 1.6 }}>{sessionError}</p>}
           {messages.length === 0 && (
             <div style={S.welcome}>
               <div style={S.welcomeTitle}>
@@ -847,10 +849,10 @@ export default function ModelingChatPanel({
                 ['增加规则', '统计有效订单时，默认排除已取消的订单'],
                 ['补充字段说明', '给订单表的金额字段补充说明和单位'],
                 ['新增关系', '订单表按客户编号关联客户表，每笔订单对应一个客户'],
-              ].map(([title, text]) => <button key={title} type="button" style={S.welcomeExample}
+              ].map(([title, text]) => <button key={title} type="button" className="mc-ex" style={S.welcomeExample}
                 title="填入输入框，可修改后发送" onClick={() => setInput(`${title}：${text}`)}>
-                <strong style={{ color: 'var(--da-text)' }}>{title}</strong>
-                <span>{text}</span>
+                <strong style={{ color: 'var(--da-text)', fontSize: 13.5, fontWeight: 650, letterSpacing: '-.01em' }}>{title}</strong>
+                <span style={{ fontSize: 12.5, lineHeight: 1.5 }}>{text}</span>
               </button>)}
               <div style={S.welcomeDesc}>只在会影响统计结果的地方我才会问你；改动都进草稿，确认无误后在底部统一发布。</div>
             </div>
@@ -862,16 +864,16 @@ export default function ModelingChatPanel({
                 {m.role === 'assistant' ? (
                   <>
                     <ReplyBody segments={m.segments} pending={!!m.pending} startedAt={m.startedAt} />
-                    {m.hitl && m.hitl.toolCalls.length > 1 && <div style={{ padding: '12px', border: '1px solid #cbd5e1', borderRadius: 8 }}>
-                      <strong>本次工程变更：{m.hitl.toolCalls.length} 项</strong>
-                      <p>下面列出本次全部变更，可以一次授权。相同文件的多条变更会按列表顺序依次应用，全部授权会全部执行，不会自动在两条内容中择一；写入后助手继续官方检查，发布仍需单独操作。</p>
-                      <button disabled={busy} onClick={() => void submitDecision(m.id, m.hitl as PendingHitl, m.hitl!.toolCalls[0], true, undefined, undefined, true)}>一次授权全部变更</button>
+                    {m.hitl && m.hitl.toolCalls.length > 1 && <div style={{ marginTop: 10, padding: '13px 14px', border: '1px solid color-mix(in srgb, var(--da-primary) 16%, var(--da-border))', borderRadius: 12, background: 'var(--da-surface)' }}>
+                      <strong style={{ fontSize: 13.5, fontWeight: 650 }}>本次工程变更：{m.hitl.toolCalls.length} 项</strong>
+                      <p style={{ margin: '6px 0 10px', fontSize: 12.5, lineHeight: 1.75, color: 'var(--da-text-3)' }}>下面列出本次全部变更，可以一次授权。相同文件的多条变更会按列表顺序依次应用，全部授权会全部执行，不会自动在两条内容中择一；写入后助手继续官方检查，发布仍需单独操作。</p>
+                      <button className="da-btn da-btn-primary da-btn-sm" disabled={busy} onClick={() => void submitDecision(m.id, m.hitl as PendingHitl, m.hitl!.toolCalls[0], true, undefined, undefined, true)}>一次授权全部变更</button>
                     </div>}
                     {m.hitl?.toolCalls.map((call, index, calls) => {
                       const path = typeof call.input.path === 'string' ? call.input.path : '';
                       const samePath = path ? calls.filter(other => other.input.path === path).length : 0;
                       return <div key={call.id}>
-                        {calls.length > 1 && <div style={{ margin: '8px 0 4px', color: '#475569', fontSize: 12 }}>
+                        {calls.length > 1 && <div style={{ margin: '10px 0 4px', color: 'var(--da-text-muted)', fontSize: 11.5, fontWeight: 600, letterSpacing: '.01em' }}>
                           变更 {index + 1}/{calls.length}{samePath > 1 ? ` · 同一文件还有 ${samePath - 1} 条待处理变更` : ''}
                         </div>}
                         <ModelingHitlCard
@@ -907,11 +909,12 @@ export default function ModelingChatPanel({
 
         <div style={S.composer}>
           <div style={S.chips}>
-            {onAttachDocument && <button style={S.chip} onClick={onAttachDocument} disabled={busy || awaitingDecision}>＋ 添加业务文档（可选）</button>}
+            {onAttachDocument && <button className="mc-chip" style={S.chip} onClick={onAttachDocument} disabled={busy || awaitingDecision}>＋ 添加业务文档（可选）</button>}
           </div>
           <div style={S.composerRow}>
             <textarea
               ref={inputRef}
+              className="mc-input"
               style={S.textarea}
               value={input}
               onChange={e => setInput(e.target.value)}
@@ -929,6 +932,7 @@ export default function ModelingChatPanel({
               disabled={busy || awaitingDecision}
             />
             <button
+              className="mc-send"
               style={{
                 ...S.send,
                 ...(busy || awaitingDecision || !input.trim() ? S.sendDisabled : {}),
@@ -1029,17 +1033,15 @@ const S: Record<string, CSSProperties> = {
     display: 'inline-flex',
   },
   // Messages keep a comfortable reading width and stay centered on wide screens.
-  thread: { flex: 1, overflowY: 'auto', padding: '20px max(20px, calc((100% - 1100px) / 2)) 12px', display: 'flex', flexDirection: 'column', gap: 18 },
-  dockThread: { flex: 1, overflowY: 'auto', padding: '12px 10px 8px', display: 'flex', flexDirection: 'column', gap: 14 },
+  thread: { flex: 1, overflowY: 'auto', padding: '22px max(20px, calc((100% - 780px) / 2)) 6px', display: 'flex', flexDirection: 'column', gap: 20, maskImage: 'linear-gradient(to bottom, #000 calc(100% - 14px), transparent 100%)', WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 14px), transparent 100%)' },
+  dockThread: { flex: 1, overflowY: 'auto', padding: '14px 12px 4px', display: 'flex', flexDirection: 'column', gap: 15, maskImage: 'linear-gradient(to bottom, #000 calc(100% - 10px), transparent 100%)', WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 10px), transparent 100%)' },
   welcome: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 12,
+    display: 'flex', flexDirection: 'column', gap: 12,
     background: 'var(--da-surface)',
-    border: '1px solid var(--da-border)',
-    borderRadius: 12,
-    padding: '18px 20px',
-    boxShadow: 'var(--da-shadow-card)',
+    border: '1px solid color-mix(in srgb, var(--da-primary) 8%, var(--da-border))',
+    borderRadius: 16,
+    padding: '20px 22px',
+    boxShadow: '0 1px 2px rgba(16,24,42,.04), 0 20px 44px -38px rgba(16,24,42,.55)',
   },
   welcomeTitle: {
     fontSize: 15,
@@ -1050,10 +1052,10 @@ const S: Record<string, CSSProperties> = {
   },
   welcomeDesc: { fontSize: 13, color: 'var(--da-text-3)', lineHeight: 1.7 },
   welcomeStep: { display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 13, color: 'var(--da-text-2)', lineHeight: 1.6 },
-  welcomeExample: { display: 'flex', flexDirection: 'column', gap: 2, width: '100%', textAlign: 'left', padding: '8px 12px', border: '1px solid var(--da-border)', borderRadius: 10, background: 'var(--da-surface)', color: 'var(--da-text-2)', fontSize: 13, lineHeight: 1.5, cursor: 'pointer' },
+  welcomeExample: { display: 'flex', flexDirection: 'column', gap: 3, width: '100%', textAlign: 'left', padding: '10px 13px', border: '1px solid var(--da-border)', borderRadius: 11, background: 'var(--da-surface)', color: 'var(--da-text-2)', fontSize: 13, lineHeight: 1.55, cursor: 'pointer' },
   welcomeNum: { flex: '0 0 20px', height: 20, borderRadius: 8, background: 'var(--da-primary-subtle)', color: 'var(--da-primary)', fontSize: 12, fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' },
   botRow: { display: 'flex', gap: 10, alignItems: 'flex-start' },
-  avatar: { flex: '0 0 28px', height: 28, borderRadius: 8, background: 'var(--da-primary-subtle)', color: 'var(--da-primary)', fontSize: 12, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginTop: 2 },
+  avatar: { flex: '0 0 30px', width: 30, height: 30, borderRadius: 10, background: 'linear-gradient(150deg, #7A66DC, #5B47C0)', color: '#fff', fontSize: 11.5, fontWeight: 700, letterSpacing: '.02em', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginTop: 1, boxShadow: '0 2px 6px -1px color-mix(in srgb, var(--da-primary) 45%, transparent), inset 0 1px 0 rgba(255,255,255,.22)' },
   steps: { margin: 0, paddingLeft: 18, fontSize: 12.5, color: 'var(--da-text)', lineHeight: 1.9 },
   quickCol: { display: 'flex', flexDirection: 'column', gap: 8 },
   quickPrimary: {
@@ -1088,72 +1090,49 @@ const S: Record<string, CSSProperties> = {
   quickHint: { fontSize: 12, fontWeight: 400, opacity: 0.75 },
   chips: { display: 'flex', gap: 6, flexWrap: 'wrap' },
   chip: {
-    border: '1px solid var(--da-border)',
-    background: 'var(--da-surface)',
-    color: 'var(--da-text)',
+    border: '1px dashed color-mix(in srgb, var(--da-primary) 28%, var(--da-border))',
+    background: 'transparent',
+    color: 'var(--da-text-3)',
     borderRadius: 999,
-    padding: '4px 10px',
+    padding: '5px 11px',
     fontSize: 12,
     cursor: 'pointer',
   },
   row: { display: 'flex', flexDirection: 'column' },
   userBubble: {
-    alignSelf: 'flex-end',
-    maxWidth: '70%',
-    background: 'color-mix(in srgb, var(--da-primary) 9%, var(--da-surface))',
-    border: '1px solid color-mix(in srgb, var(--da-primary) 18%, transparent)',
+    alignSelf: 'flex-end', maxWidth: '78%',
+    background: 'color-mix(in srgb, var(--da-primary) 7%, var(--da-surface))',
+    border: '1px solid color-mix(in srgb, var(--da-primary) 14%, transparent)',
     color: 'var(--da-text)',
-    borderRadius: 12,
-    borderBottomRightRadius: 4,
+    borderRadius: 16,
+    borderBottomRightRadius: 6,
     padding: '9px 14px',
     fontSize: 13.5,
-    lineHeight: 1.6,
+    lineHeight: 1.65,
     whiteSpace: 'pre-wrap',
+    boxShadow: '0 1px 2px rgba(16,24,42,.03)',
   },
   botBubble: {
-    alignSelf: 'flex-start',
-    maxWidth: '100%',
-    width: '100%',
-    boxSizing: 'border-box',
-    minWidth: 0,
+    alignSelf: 'flex-start', maxWidth: '100%', width: '100%', boxSizing: 'border-box', minWidth: 0,
     background: 'var(--da-surface)',
-    border: '1px solid var(--da-border)',
-    borderRadius: 12,
-    borderTopLeftRadius: 4,
-    padding: '12px 16px',
+    border: '1px solid color-mix(in srgb, var(--da-primary) 8%, var(--da-border))',
+    borderRadius: 14,
+    padding: '14px 16px',
     fontSize: 13.5,
+    lineHeight: 1.72,
     color: 'var(--da-text)',
-    boxShadow: 'var(--da-shadow-card)',
+    boxShadow: '0 1px 2px rgba(16,24,42,.04), 0 12px 30px -26px rgba(16,24,42,.5)',
   },
   tools: { display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 },
-  task: { display: 'flex', flexDirection: 'column', gap: 0, marginBottom: 4 },
+  task: { display: 'flex', flexDirection: 'column', gap: 0, marginBottom: 2 },
   taskRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    border: 'none',
-    background: 'transparent',
-    padding: '3px 0',
-    cursor: 'pointer',
-    textAlign: 'left',
-    fontSize: 12,
-    color: 'var(--da-text)',
+    display: 'flex', alignItems: 'center', gap: 8, border: 'none', background: 'transparent',
+    padding: '4px 6px', margin: '0 -6px', borderRadius: 7, cursor: 'pointer', textAlign: 'left',
+    fontSize: 12, color: 'var(--da-text)',
   },
-  taskStatus: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 4,
-    fontSize: 12,
-    flexShrink: 0,
-    minWidth: 52,
-  },
+  taskStatus: { display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 600, flexShrink: 0, minWidth: 52, opacity: .85 },
   taskState: { fontSize: 12 },
-  taskLabelText: {
-    color: 'var(--da-text)',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
+  taskLabelText: { color: 'var(--da-text-2)', fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   taskDetail: {
     margin: '2px 0 6px 4px',
     padding: '6px 8px',
@@ -1178,42 +1157,20 @@ const S: Record<string, CSSProperties> = {
     maxHeight: 240,
     overflowY: 'auto',
   },
-  composer: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 8,
-    padding: '10px max(20px, calc((100% - 1100px) / 2)) 16px',
-    background: 'transparent',
-    flexShrink: 0,
-  },
+  composer: { display: 'flex', flexDirection: 'column', gap: 8, padding: '8px max(20px, calc((100% - 780px) / 2)) 14px', background: 'var(--da-canvas-bg)', flexShrink: 0 },
   composerRow: { display: 'flex', alignItems: 'flex-end', gap: 8 },
   textarea: {
-    flex: 1,
-    resize: 'none',
-    border: '1px solid var(--da-border)',
-    borderRadius: 12,
-    padding: '12px 14px',
-    fontSize: 13.5,
-    minHeight: 56,
-    maxHeight: 160,
-    outline: 'none',
-    fontFamily: 'inherit',
-    color: 'var(--da-text)',
-    background: 'var(--da-surface)',
-    boxShadow: 'var(--da-shadow-card)',
+    flex: 1, resize: 'none', border: '1px solid var(--da-border)', borderRadius: 16,
+    padding: '13px 15px', fontSize: 13.5, lineHeight: 1.6, minHeight: 54, maxHeight: 160, outline: 'none',
+    fontFamily: 'inherit', color: 'var(--da-text)', background: 'var(--da-surface)',
+    boxShadow: '0 1px 2px rgba(16,24,42,.04), 0 10px 26px -24px rgba(16,24,42,.55)',
+    transition: 'border-color .18s ease, box-shadow .18s ease',
   },
   send: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    border: 'none',
-    background: 'var(--da-primary)',
-    color: '#fff',
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
+    width: 40, height: 40, borderRadius: 999, border: 'none', background: 'var(--da-primary)',
+    color: '#fff', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    boxShadow: '0 2px 8px -2px color-mix(in srgb, var(--da-primary) 55%, transparent), inset 0 1px 0 rgba(255,255,255,.18)',
+    transition: 'background .16s ease, transform .16s ease',
   },
   sendDisabled: {
     background: 'var(--da-surface-sunken)',

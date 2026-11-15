@@ -8,13 +8,15 @@ type Draft = { mode: 'LIMITED' | 'UNLIMITED'; days: number; timeColumn: string }
 const message = (error: unknown) => error instanceof Error ? error.message : '时间范围配置失败';
 const DAYS = [7, 14, 31, 90];
 
-export function FactQueryWindowSettings({ groupId, automatic = false, onReady, hideButton = false, openSignal = 0 }: {
+export function FactQueryWindowSettings({ groupId, automatic = false, onReady, hideButton = false, openSignal = 0, initiallyReady = false }: {
   groupId: string;
   automatic?: boolean;
   onReady?: (ready: boolean) => void;
   /** The page shows its own trigger (e.g. in its header) and bumps {@code openSignal}. */
   hideButton?: boolean;
   openSignal?: number;
+  /** Preparation has already persisted and checked policies before mounting the workbench. */
+  initiallyReady?: boolean;
 }) {
   const [tables, setTables] = useState<FactQueryWindowCandidate[]>([]);
   const [unknown, setUnknown] = useState<FactQueryWindowCandidate[]>([]);
@@ -23,11 +25,12 @@ export function FactQueryWindowSettings({ groupId, automatic = false, onReady, h
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const generation = useRef(0);
+  const readyAtMount = useRef(initiallyReady);
 
   useEffect(() => {
     generation.current++;
     setTables([]); setUnknown([]); setOpen(false); setError(''); setBusy(false);
-    if (automatic) { onReady?.(false); void load(true); }
+    if (automatic) { if (!readyAtMount.current) onReady?.(false); void load(true); }
     return () => { generation.current++; };
   }, [groupId, automatic]);
 

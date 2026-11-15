@@ -680,3 +680,25 @@ Git 核对 8515fd28 到 68b5d7a5 期间 BI 登录链路无差异；Git 内主脚
 用户授权选择test_data测试。读取46个Excel共202293行，原始哈希留存，选01电商/11边界导入6139+280行；09财务/10IT类别数组字符串及文档枚举差异作为数据问题另列，原文件不改。独立Decimal标准值；最新工作区打包，临时MySQL/Java17/Docker沙箱，通过上传API、人工草稿关系/规则、Wren校验发布v1，9轮真实LLM任务及Playwright历史/下载。6通过、2部分通过、1失败：基础/追问/多维SQL和空关联正确；HTML未收集却用PNG链接声称成功，贡献率及口径更正客单价正文混用/错算。报告含输入哈希、基准、原问题/回复、真实SQL与下载类型，不含凭据。建议先可靠交付再数值一致性，未授权修代码。
 
 仅新增验收记录/更新共享记忆与讨论，保留spec138未提交修改及独立建模设计稿。按PID/命令行/任务标签清理本批Chrome、Java、MySQL及沙箱，用户5173仍PID44676，原IDEA数据库/模型配置不改。DocsConsistencyTest通过；git diff --check及全部原始Excel/既有p1设计稿哈希核对通过。未提交/push/合并/部署，不当作全量回归、自动建模或生产规模验证。
+
+## 2026-11-14 Asia/Shanghai｜Checkpoint：建模字段整理与准备设计 p1
+
+先提交115418d9保存旧工作，随后按指定p1四屏实施spec139：聚焦步骤头、独立导航与紧凑字段表、说明失焦保存/并发输入保护、全表确认进准备、事实表内联策略与可选多文档、一次原auto请求。保留QUERY只读、引用检查、adjust保存边界、发布/问数与原工作台；无后端/数据库改造。
+
+相关后端20项、前端3文件×3前缀42项、TS/Vite通过；Playwright真实React+明确接口夹具覆盖失败/连续编辑/切表/默认先保存/上传不抢跑/引导/QUERY只读，策略复查延迟750ms仍只挂载助手一次，无pageerror；同尺寸截图与窄屏核对。报告docs/test-reports/20261114-modeling-setup-p1.md，真实后端LLM/Wren/发布未跑，不等同生产验收。新修改未提交/push/合并/部署，用户5173保留，未启动8080后端；任务浏览器与临时QA文件按身份清理，后续用户启动IDEA复核。
+
+## 2026-11-14 Asia/Shanghai｜Checkpoint：建模助手交互设计预览
+
+读取 full HTML 与现有 ModelingChatPanel/TurnResultCard/ConfirmationCards，新增独立 assistant HTML 和评审说明，全屏/并排、过程折叠、结果、口径、长内容阅读与四个状态可预览。仅前端设计夹具，不改产品实现/服务/数据库，原稿哈希一致。Node 语法与 21 项最小 DOM stub 检查通过；浏览器 file: 被策略明确拒绝，未绕过，因此视觉/实际焦点/滚动验收未完成。p1 代码与检查点保留为待续，不提交/push。DocsConsistencyTest 5 项通过。全工作区 diff --check 发现用户 full 原稿已有一处行尾空白；原稿保留不改，本次新稿与记忆文件无行尾空白。
+
+## 2026-11-14 Asia/Shanghai｜Checkpoint：收窄为建模对话 UI 评审
+
+按用户最新意见复读现有聊天/结果/确认/提案/代码/错误组件，新增 semantic-modeling-assistant-ui-20261114.html 和说明；保留文案及交互，只做排版、层级和全屏/并排样式，十种场景可选。36项离线逻辑、语法、静态ID/资源/模板检查通过；浏览器本地文件受策略限制，未绕过，未做视觉/实际焦点/滚动验收。无产品/数据库/服务改动，上一轮p1仍未提交。DocsConsistencyTest 5项通过，本次文件空白/记忆篇幅检查通过。另见本地新出现 modeling-chat-ui.html（来源未确认），本轮未读取或修改。
+
+## 2026-11-15 Asia/Shanghai｜Checkpoint：三页 HTML 设计评审
+
+新增 semantic-modeling-optimization-20261115.html 和说明，三页切换、五种预览模式、按题确认/方案/SQL、视图核查验证与文档操作可模拟。Node/PostCSS通过，48项离线逻辑及33静态ID/38模板检查通过；未浏览器视觉验收，不绕过前次file拒绝。无真实接口/DB/服务/产品变动。原full参考在本轮期间由其他工作改为F8DD...DCF9，本任务仅只读且保留更新。开工已有对话React/CSS修改不归本轮，不提交/回退。DocsConsistencyTest 5项通过，本次新增文件空白/记忆篇幅检查通过；临时离线检查脚本清理，交付HTML为自包含文件（仅品牌图标相对引用）。
+
+## 2026-11-15 Asia/Shanghai｜Checkpoint：流程说明与文档阅读设计增量
+
+原HTML内补两个四步流程（公共视图规划默认展开，可收起），文档名称/阅读入口及右侧只读侧栏，目录/搜索/字号/原始文本；预置Word提取正文，本地md/txt可读，替换失败保留内容，过期读取忽略，新Word诚实显示未接正文。49项离线逻辑、Node/PostCSS、43静态ID/22模板检查通过，无网络/产品/DB变动。复核现有getDocumentContent接口可供后续MANAGE阅读复用，不开发另一套DOCX链路。仍未浏览器视觉验收。DocsConsistencyTest本次5项通过；交付与受检candidate一致，空白/记忆篇幅通过。临时检查文件清理，无提交/push。

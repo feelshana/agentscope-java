@@ -1,23 +1,28 @@
-# 当前任务：合成业务数据的真实 Agent 能力验收
+# 当前任务：问数优化、公共视图、资料 HTML 设计
 
-2026-11-14 Asia/Shanghai；codex/architecture-phase1，HEAD bfb202b8。用户提供test_data的11场景，授权选择、必要时改造数据并测试现有能力，再讨论优先功能。不自动实施新功能、不提交/push/合并/部署。
+2026-11-15 Asia/Shanghai；codex/architecture-phase1。用户暂缓对话框，要求先给这三个页面的 HTML 效果。只做设计稿，不改产品、不提交/push/部署；无新spec/ADR/ARCHITECTURE要求。
 
-## 已有工作与边界
+## 已完成
 
-spec138撤回重复入口已完成选测/构建，保持未提交，见[归档](archive/CURRENT_TASK-before-product-eval-20261114.md)。既有semantic-modeling-20261113-p1/p2/full等独立设计稿保留。本任务不改产品代码和原始Excel，不新增spec/ADR，只维护验收报告。
+- 新增 docs/design/semantic-modeling-optimization-20261115.html 和同名 .md；顶部三页可切换，支持有内容/空态/助手忙/首次发布前/加载失败。
+- 问数优化：收紧说明，左侧问题列表/筛选/勾选，右侧原四步；保留口径、方案、SQL、确认待发布、推荐问题、MDL/规则查看；只核对SQL不查询数据。
+- 公共视图：自动整理仍建设中，规划折叠，手动起草与已有资产为主；详情分用途核查/文件/问题验证，人工判定，不自动发布。保存文件重置核查验证。
+- 资料：数据表字段纳入范围与业务文档分区；字段入口保留p1，文档状态/历史版本/替换删除进草稿，不虚构读入规则统计。
+- 用户追加的两个四步流程已保留：问数优化在页头下，公共视图在规划区域全宽展开，默认展开可收起；均不是实时进度。
+- 文档名称/阅读按钮打开右侧只读阅读层，目录/查找/字号/原文。预置Word为提取正文示例；新选.md/.txt读取本地真实文本，新.docx不解析且明确正文尚未载入，不伪造内容。
+- 除本地文本读取外均为页面内存夹具，无网络请求，不调用真实助手/上传/SQL/发布。对话框本轮不改。
 
-## 当前进度
+## 验证与限制
 
-- 读取46个Excel，约20万行；选择01电商销售和11边界测试。09财务/10IT部分字段整列为数组字符串，先排除；规则与实际枚举差异另记。原文件SHA256留存。
-- openpyxl/Decimal独立计算基准；独立临时MySQL/平台库/上传库，随机端口Java17最新JAR，正常API上传电商4表及边界3表，通过草稿编辑关系/规则后Wren校验发布v1；本轮不评估自动建模。
-- 实际9轮：Q1/Q2基础汇总和追问、Q3两期多维金额、Q6/Q7空关联/地区加总正确；Q4拒绝无投放数据的因果断言。Q8新会话简短问法正确分析渠道，Q9更正过滤后的金额/订单数正确。
-- Q3正文三分类贡献占比写约86%，独立计算应约87.4%；SQL和图的金额正确。
-- Q5声称生成HTML报告，但实际链接下载为PNG。代码核对run_python不收集.html，临时run目录随后清理；模型将图链接冒充报告链接。浏览器真实点击和内容签名已复现，不能判报告交付通过。
-- Q9新旧客单价正文混用区间/数值，差额及趋势解释错误。整体6项通过、2项部分通过、1项失败；不把SQL正确等同回答全部正确。
-- 图片历史重开显示正常，实际点击HTML标签下载PNG。报告/输入清单/基准/脱敏SQL与回复证据已保存，见[本轮报告](../test-reports/20261114-product-capability-evaluation.md)。
+- 基础稿Node/PostCSS和48项离线检查已通过；本次增量Node/PostCSS、49项离线逻辑通过，43静态ID/22模板检查通过，无远程依赖。
+- 正文接口getDocumentContent已存在（MANAGE），正式落地可复用，本轮未接真实API，不新增DOCX解析器。
+- 先前浏览器明确拒绝此设计任务的file:预览并禁止绕过，本轮未绕过；未做真实浏览器视觉、焦点、滚动、窄屏验收。CSS适配不当作已渲染验收。
+- full参考本轮只读。开工91D2C0...972257，途中由其他本地工作更新为F8DDDECFA096CB481EC0CE93F7144C28AEAC07D4555CA7393AFA65894226DCF9，保留，不覆盖。
+- 基础稿DocsConsistencyTest5项通过；本次增量DocsConsistencyTest5项、空白与篇幅检查也通过。未做产品构建/真实LLM/Wren，不冒充生产验收。
 
-## 环境与下一步
+## 待续与既有修改
 
-私有脚本/原始结果在根.runtime/product-eval-20261113，state/auth含秘密禁止提交/输出。临时Chrome/Java应用及任务标签的MySQL/沙箱容器已按身份复核关闭/删除，用户5173仍为PID44676，未启动或停止IDEA后端。
-
-建议先完善报告真实交付，再完善派生数值与口径比较一致性；等待用户选择，不自动修产品缺陷。DocsConsistencyTest通过，git diff --check通过，全部原始Excel与既有p1设计稿哈希核对未变。候选功能不是已接受决策。
+- 用户评审新HTML后再定实施范围。真实接口、权限与确认协议仍复用当前实现，原型模拟逻辑不得替代后端。
+- 对话UI仍待续，先前检查点归档 archive/CURRENT_TASK-before-modeling-tabs-design-20261115.md；更早p1代码/真实后端验证见 archive/CURRENT_TASK-before-assistant-design-20261114.md、spec139及其测试报告。
+- 开工即有 ModelingChatPanel/ModelingHitlCard/ConfirmationCards/NextStepCard/TurnResultCard 和 modeling-chat.css 等本地修改，以及未跟踪modeling-chat-ui.html；均非本轮成果，不回滚、不提交。
+- 本次仅新设计稿/说明/共享记忆，保留其他工作，未启停服务。
