@@ -881,10 +881,10 @@ function ModelDrawer({ groupId, model, snapshot, files, rules, editable, canEdit
           {times.map(c => <FieldItem key={c.name} c={c} />)}
           {!times.length && <p className="sw-hint">没有识别到日期列。</p>}
         </FieldGroup>
-        {editable && <button type="button" className="sw-link sw-add-calc" aria-label="新增衍生列"
-          disabled={!canEdit} title={blocked ?? undefined} onClick={onAddCalculated}>＋ 新增衍生列</button>}
         {feedback}
-        <FieldGroup {...groupProps('calculated')} label="衍生列" count={calc.length}>
+        <FieldGroup {...groupProps('calculated')} label="衍生列" count={calc.length}
+          action={editable && <button type="button" className="sw-link sw-add-calc" aria-label="新增衍生列"
+            disabled={!canEdit} title={blocked ?? undefined} onClick={onAddCalculated}>＋ 新增衍生列</button>}>
           {calc.map(c => <FieldItem key={c.name} c={c} />)}
           {!calc.length && <p className="sw-hint">暂无衍生列。</p>}
         </FieldGroup>
@@ -972,15 +972,18 @@ function fieldValues(column: SemanticColumn) {
   };
 }
 
-function FieldGroup({ label, count, open, onToggle, children }: {
-  label: string; count: number; open: boolean; onToggle: (open: boolean) => void; children: ReactNode;
+function FieldGroup({ label, count, open, onToggle, action, children }: {
+  label: string; count: number; open: boolean; onToggle: (open: boolean) => void; action?: ReactNode; children: ReactNode;
 }) {
-  return <details className="sw-field-group" open={open} onToggle={event => {
-    if (event.currentTarget.open !== open) onToggle(event.currentTarget.open);
-  }}>
-    <summary>{label} <span className="sw-muted">{count}</span></summary>
-    {children}
-  </details>;
+  return <div className={`sw-field-group-wrap${action ? ' sw-field-group-with-action' : ''}`}>
+    <details className="sw-field-group" open={open} onToggle={event => {
+      if (event.currentTarget.open !== open) onToggle(event.currentTarget.open);
+    }}>
+      <summary>{label} <span className="sw-muted">{count}</span></summary>
+      {children}
+    </details>
+    {action && <div className="sw-field-group-action">{action}</div>}
+  </div>;
 }
 
 type FieldValues = ReturnType<typeof fieldValues>;

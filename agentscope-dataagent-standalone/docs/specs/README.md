@@ -80,6 +80,7 @@ spec 是一页纸的需求与验收标准，写代码之前先写（模板：[00
 
 | 编号 | 标题 | 文件中记录的状态 |
 |---|---|---|
+| [140](done/140-modeling-optimization-pages.md) | 建模各页布局、资料阅读、工程快照与共享AI图标优化 | 本阶段UI优化完成，用户确认收尾并授权本地提交；真实服务只读与隔离夹具验证，未跑真实LLM/写入/发布全链路 |
 | [001](done/001-join-first-and-batch-prepare.md) | spec 001: 跨表查询 JOIN 优先 + prepare_data_context 批量取表 | — |
 | [002](done/002-anti-probe-and-count-consistency.md) | spec 002: 禁「摸底查询」硬门上移 + 回答计数一致性自检 | — |
 | [003](done/003-subagent-orchestration-off-by-default.md) | spec 003: 子代理编排默认关闭（`dataagent.agent.subagents-enabled`） | — |

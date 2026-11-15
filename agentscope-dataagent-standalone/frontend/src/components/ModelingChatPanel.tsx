@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import './modeling/modeling-chat.css';
 import type { CSSProperties, ReactNode } from 'react';
 import Icon from './Icon';
+import ModelingAssistantIcon from './modeling/ModelingAssistantIcon';
 import Markdown from './Markdown';
 import CopyAnswerButton from './CopyAnswerButton';
 import { isSendKey, splitFailedAnswer } from '../utils/chatInteraction';
@@ -828,7 +829,7 @@ export default function ModelingChatPanel({
       >
         {variant !== 'dock' && <div style={S.header}>
           <span style={S.title}>
-            <Icon name="model" size="sm" /> 对话建模
+            <ModelingAssistantIcon /> 对话建模
           </span>
           <span style={S.headerHint}>完善草稿 → 助手检查 → 发布</span>
           <button style={S.close} onClick={handleClose} title="关闭">
@@ -841,7 +842,7 @@ export default function ModelingChatPanel({
           {messages.length === 0 && (
             <div style={S.welcome}>
               <div style={S.welcomeTitle}>
-                <Icon name="model" size="sm" /> 建模助手
+                <ModelingAssistantIcon /> 建模助手
               </div>
               <div style={S.welcomeDesc}>用业务语言告诉我要改什么，我会改到语义模型里；改过的地方在图上标红，也会列进"待确认"。比如：</div>
               {[
@@ -859,7 +860,7 @@ export default function ModelingChatPanel({
           )}
           {messages.map(m => (
             <div key={m.id} style={m.role === 'user' ? S.row : S.botRow}>
-              {m.role === 'assistant' && <span style={S.avatar} aria-hidden="true">AI</span>}
+              {m.role === 'assistant' && <ModelingAssistantIcon message />}
               <div style={m.role === 'user' ? S.userBubble : S.botBubble}>
                 {m.role === 'assistant' ? (
                   <>
@@ -1055,7 +1056,6 @@ const S: Record<string, CSSProperties> = {
   welcomeExample: { display: 'flex', flexDirection: 'column', gap: 3, width: '100%', textAlign: 'left', padding: '10px 13px', border: '1px solid var(--da-border)', borderRadius: 11, background: 'var(--da-surface)', color: 'var(--da-text-2)', fontSize: 13, lineHeight: 1.55, cursor: 'pointer' },
   welcomeNum: { flex: '0 0 20px', height: 20, borderRadius: 8, background: 'var(--da-primary-subtle)', color: 'var(--da-primary)', fontSize: 12, fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' },
   botRow: { display: 'flex', gap: 10, alignItems: 'flex-start' },
-  avatar: { flex: '0 0 30px', width: 30, height: 30, borderRadius: 10, background: 'linear-gradient(150deg, #7A66DC, #5B47C0)', color: '#fff', fontSize: 11.5, fontWeight: 700, letterSpacing: '.02em', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginTop: 1, boxShadow: '0 2px 6px -1px color-mix(in srgb, var(--da-primary) 45%, transparent), inset 0 1px 0 rgba(255,255,255,.22)' },
   steps: { margin: 0, paddingLeft: 18, fontSize: 12.5, color: 'var(--da-text)', lineHeight: 1.9 },
   quickCol: { display: 'flex', flexDirection: 'column', gap: 8 },
   quickPrimary: {
@@ -1158,7 +1158,7 @@ const S: Record<string, CSSProperties> = {
     overflowY: 'auto',
   },
   composer: { display: 'flex', flexDirection: 'column', gap: 8, padding: '8px max(20px, calc((100% - 780px) / 2)) 14px', background: 'var(--da-canvas-bg)', flexShrink: 0 },
-  composerRow: { display: 'flex', alignItems: 'flex-end', gap: 8 },
+  composerRow: { display: 'flex', alignItems: 'center', gap: 8 },
   textarea: {
     flex: 1, resize: 'none', border: '1px solid var(--da-border)', borderRadius: 16,
     padding: '13px 15px', fontSize: 13.5, lineHeight: 1.6, minHeight: 54, maxHeight: 160, outline: 'none',

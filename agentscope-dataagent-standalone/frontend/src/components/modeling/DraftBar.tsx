@@ -148,7 +148,7 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
       <button className="da-btn da-btn-sm" onClick={() => setResult(r => r && { ...r, issues: r.issues.filter(i => i.source !== 'questions-review') })}>知道了</button>
     </div>}
   </>;
-  return <footer aria-label="草稿栏" style={{ position: 'relative', flex: '0 0 auto' }}>
+  return <footer className="modeling-draft-bar" aria-label="草稿栏" style={{ position: 'relative' }}>
     {drawerOpen && <div role="dialog" aria-label="草稿修改" style={{ position: 'absolute', left: 0, right: 0, bottom: '100%', marginBottom: 6, maxHeight: '60vh', overflowY: 'auto', zIndex: 20,
       background: 'var(--da-surface)', border: '1px solid var(--da-border)', borderRadius: 8, boxShadow: '0 -8px 24px rgba(15,23,42,.12)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--da-border)', position: 'sticky', top: 0, background: 'inherit' }}>
@@ -184,16 +184,16 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
           {busy === 'publish' ? '检查并发布中…' : republish ? '重新发布知识库' : '发布知识库'}
         </button>
       </div>
-    </div> : <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px', border: '1px solid var(--da-border)', borderRadius: 12, background: 'var(--da-surface, #fff)', fontSize: 13, boxShadow: 'var(--da-shadow-card)' }}>
-      <strong>草稿</strong>
-      <span style={{ fontSize: 12, color: 'var(--da-text-muted)' }}>建模结果 {items.length} · 待你确定 {pendingConfirmations} · 已确认问答 {examples}</span>
-      <button className="da-btn da-btn-sm" aria-label={drawerOpen ? '收起全部草稿' : '查看全部草稿'} aria-expanded={drawerOpen} disabled={drawerLocked} title={drawerHint} onClick={() => setOpen(!open)}>{drawerOpen ? '收起' : '查看全部 ↑'}</button>
-      <span style={{ flex: 1 }} />
-      {result?.ok && <span role="status" style={{ fontSize: 12, color: 'var(--da-success)' }}>已发布 v{result.mdlVersion}</span>}
-      {blocked && <span style={{ fontSize: 12, color: 'var(--da-text-muted)' }}>{blocked}</span>}
-      {republish && !running && <span style={{ fontSize: 12, color: 'var(--da-warn)' }}>有修改尚未生效，重新发布后才能问数</span>}
-      {ready && <span style={{ fontSize: 12, padding: '1px 6px', borderRadius: 4, background: 'rgba(22,163,74,.12)', color: 'var(--da-success)' }}>可发布</span>}
-      <button className={`da-btn ${ready ? 'da-btn-primary' : ''} da-btn-sm`} data-tour="draft-publish" disabled={busy !== null || !!blocked} onClick={() => void publish()}>{label}</button>
+    </div> : <div className="modeling-draft-status">
+      <span className="modeling-draft-title"><Icon name="file" size="sm" /><strong>草稿</strong></span>
+      <span className="modeling-draft-counts"><span>建模结果 <b>{items.length}</b></span><span>待你确定 <b>{pendingConfirmations}</b></span><span>已确认问答 <b>{examples}</b></span></span>
+      <button className="da-btn modeling-draft-toggle" aria-label={drawerOpen ? '收起全部草稿' : '查看全部草稿'} aria-expanded={drawerOpen} disabled={drawerLocked} title={drawerHint} onClick={() => setOpen(!open)}>{drawerOpen ? '收起' : '查看全部'}<Icon name={drawerOpen ? 'arrowDown' : 'arrowUp'} size="sm" /></button>
+      <span className="modeling-draft-spacer" />
+      {result?.ok && <span role="status" className="modeling-draft-success">已发布 v{result.mdlVersion}</span>}
+      {blocked && <span className="modeling-draft-hint">{blocked}</span>}
+      {republish && !running && <span className="modeling-draft-warning">有修改尚未生效，重新发布后才能问数</span>}
+      {ready && <span className="modeling-draft-ready"><Icon name="check" size="sm" />可发布</span>}
+      <button className={`da-btn ${ready ? 'da-btn-primary' : ''}`} data-tour="draft-publish" disabled={busy !== null || !!blocked} onClick={() => void publish()}>{label}</button>
     </div>}
   </footer>;
 }
