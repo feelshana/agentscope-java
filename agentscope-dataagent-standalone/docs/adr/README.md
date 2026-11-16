@@ -8,6 +8,8 @@ ADR 记录"为什么这样做"。规则：
 
 ## 当前有效主线（按主题）
 
+[ADR0149](0149-internal-genbi-dashboard-workbench.md) 明确官方GenBI技能/CLI、内部live查询桥、隔离HTML预览与不可变版本发布边界。
+
 [ADR0145](0145-local-resource-recovery-journals.md) 明确发布快照与单数据集删除的持久意图、提交判定、重启恢复和失败阻断。
 
 [ADR0144](0144-incremental-package-dependency-contracts.md) 以生产字节码约束新增反向依赖，精确登记历史类对，逐次抽取职责；通用计时和上下文键归runtime。

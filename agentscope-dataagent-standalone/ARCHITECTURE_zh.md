@@ -852,6 +852,7 @@ spec 045 / ADR 0055：无已登记问题、无待确认原生 HITL 时，页面�
 | `dataagent.openai.stream` | `true` | `DATAAGENT_OPENAI_STREAM` 可切换模型流式/非流式请求以定位上游 EOF；前端 SSE 协议不变，关闭流式不表示连接问题已解决 |
 | `dataagent.dashscope.*` | Key 为空 | 没有 OpenAI 启动 Key 时的启动配置源；不是运行时故障回退 |
 | `dataagent.model-services.encryption-key` | 空 | `DATAAGENT_MODEL_ENCRYPTION_KEY`：独立 32 字节 Base64 主密钥；未提供时在实际 HOME 自动生成 model-services.key，必须与库匹配备份 |
+| `dataagent.dashboard.max-output-tokens` | 32768 | `DATAAGENT_DASHBOARD_MAX_OUTPUT_TOKENS`：看板单次输出上限，允许1024至65536且须符合模型服务限制；不影响问数/建模的连接配置或上下文窗口 |
 | `dataagent.auth.password-login-enabled` / `auth.bi.enabled` / `auth.bi.shared-key` | true / false / 空 | `DATAAGENT_PASSWORD_LOGIN_ENABLED`、`DATAAGENT_BI_LOGIN_ENABLED`、`DATAAGENT_BI_SHARED_KEY`；prod 强制关闭密码、启用 BI，BI 与 JWT 采用独立密钥 |
 | `dataagent.web-search.*` | Key 为空即关闭 | 问数逐轮授权搜索（spec120、ADR0140）：`api-key` 只读 `DEEPSEEK_API_KEY`，另有 `enabled`、`base-url`、`timeout-seconds`、`max-results` |
 | `dataagent.dashscope.*` | — | 兜底模型 |
@@ -1058,3 +1059,19 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 - 发布成功后，`WrenQueryPreparation` 在事务提交后后台准备索引并做一次只读召回预热；`QueryPreparationController#status` 返回准备状态（进程内建议值）：建模页"已发布"卡片、建模页顶部与知识库详情页轮询显示"问数准备中"直至就绪（`useQueryReadiness`），准备期间"去问数/基于此库提问"置灰；问数页在所选知识库仍在准备时于回答处显示加载提示（`ChatPanel#watchPreparation`），不影响对话流。
 - `logs/execution-timing.log` 记录工具、索引、Wren 队列、门禁与 `wren_cli.*` 分段耗时；嵌套耗时不可相加。
 - 回答收尾观测：`ExecutionTimingMiddleware#onAgent`安装框架`CallTiming.Observer`，`ReActAgent#saveStateToSession`、`SessionTranscriptWriter#appendMessages`、`SandboxLifecycleMiddleware#releaseForCall`记录状态保存、会话回读/追加及沙箱收尾；`SessionTree#syncFromTranscriptStore`补充枚举分段、读取失败、唯一读入与实际合并数量。网关历史投影和`ChatController#streamAdmitted`的最后token至done组帧按requestId关联，普通问答done回传该ID。`completion.model.tail`区分最后正文与模型流结束。Observer异常不改变执行，计时仅记录阶段、耗时与计数。
+
+### 14.6 GenBI 对话仪表盘试用版
+
+- `DataAgentConfig#builderBootstrap` 注册独立、无Docker的 `dashboard-agent`，挂载同安装版本官方 genbi/usage 技能；`DashboardToolkitRegistrar#register` 安装原生文件工具、GenBI命令适配和调用级官方MCP转发。`ChatTurnPreparation#resolveGroupScope` 从服务器资产记录固定创建者/管理者和单库，排队入场重新检查，`DashboardTurn` 不接受模型或请求提供的任意工程路径。
+- `DashboardService#create` 复制已发布语义上下文到平台MDL持久目录下 `dashboards/<id>/project`，不改知识库模型。`wren_genbi build` 调用官方 live 构建说明，Agent仅编辑 `apps/dashboard/index.html`，`verify` 经官方 register/verify 后标记内容摘要。禁止shell、profile、外部部署和编辑索引。缺少GenBI或校验失败时显式报错，不生成假成功结果。
+- `DashboardQueryService#query` 以当前查看用户身份，经 `WrenQueryAccess`、只读校验、`FactQueryWindowPolicy` 和官方 `run_sql` 查询；Wren队列开始执行前重新检查看板修订与权限。单次最多1000行，截断拒绝展示为完整统计。内部live协议 `dataagent.query(sql)` 返回表格JSON，无用户/数据库凭证传入生成代码；这是官方GenBI通用网页流程的内部托管适配，不要求浏览器WASM。
+- `/dashboards` 列表与 `/dashboards/:dashboardId` 工作台按路由延迟加载；左侧复用现有SSE与持久会话，右侧 `DashboardPreview` 的可信外层限制子框架导航，内层HTML为只有脚本能力的opaque-origin srcdoc，CSP关闭外联、嵌套框架和表单；宿主核对消息来源/通道并限制并行查询，所有业务查询仍由服务端授权。ECharts运行库仅在实际预览时载入。生成代码和官方verify均不等于浏览器验收。
+- `DashboardService#publish` 仅MANAGE显式操作，使用期望内容摘要防止误发布；在锁内重做官方校验并复核权限，写入不可变HTML修订后原子替换资产指针。成员需QUERY且仅可读已发布修订；作者与管理者可访问草稿。元数据与版本位于平台持久卷，不依赖浏览器。单进程资产锁，不声称支持多实例并发写；旧版本暂不自动清理，删除知识库后的资产不能再通过ACL查看。
+- `SessionHistoryService#transcript` 由原生会话的conversationId恢复持久选库，使用与执行时相同的KB命名空间读取本地transcript；不另建仪表盘对话存储。
+- `DashboardLibrary` 采用知识库共用视觉令牌与真实列表筛选；`DashboardService.View#owned` 仅投影当前用户是否创建，不暴露其他用户标识。创建只填写知识库和名称，进入工作台后由用户手动发送需求，不通过路由状态自动触发Agent；发布确认仍提交当前修订并由原服务复核。生成文档自身的主题/响应式保留，不强行套入示例模板。
+- 预览桥只增加PNG缩略图消息：限定同一窗口/通道、大小/类型，通过ECharts本地Canvas导出，不放宽CSP。封面缓存只在当前登录内存、按资产及修订隔离且有数量上限；列表不执行生成页面或批量查询，没有缓存时展示明确封面提示。查询状态仅记录本次查询完成时间，不冒称源数据更新时间。
+- 列表复用知识库公共容器；新建仅选库和命名，需求留在编辑页手动对话。`DashboardPermissions` 展示继承的QUERY/MANAGE及全局管理员规则，管理入口复用知识库成员管理，权限变更同时影响知识库问数与该库所有看板，不另建看板ACL。
+- `DashboardDeletionService#delete` 经RUN与创建者/管理者校验，调用 `DashboardService#delete` 的资产锁、路径检查及持久删除标记；新入场/工具/查询/发布在标记期间拒绝。复用原生空闲会话门禁和 `SessionDeletionService#delete` 清理专属上下文/双转录/展示历史/附件/已读与选库记录，再清除独立工程和所有发布修订。`deletion-plan.json` 保存会话身份/消息快照键，部分失败/重启后仍可重试；元数据最后删除，待清理卡片只对可编辑者保留重试入口。知识库数据/模型、共享记忆及审计不随看板删除。
+- 会话清理先处理附件/已读/转录/关联记录，再注销原生状态与路由；`SessionAgentManager#removeSession` 在持久登记删除成功前保留内存项，防止存储失败后失去重试身份。与其他Agent恰好共享同一conversationId时，不清除其共享会话选库键；只按精确Agent/会话过滤清理看板参与者。
+- 看板Agent默认申请32768输出tokens，可通过上述配置调整，不依赖上游可能为8192的默认值；`SwitchingModel`仍固定本轮服务与连接配置。框架`ReasoningContext#processChunk`识别工具输出的length截断，正常结束时`validateCompleteArguments`拒绝残缺JSON，停止该轮而不执行空参数或重复调用；中断保存仍允许记录非执行的部分上下文。`model.output`/`model.tool_arguments`记录结束原因、参数字符/分片/调用计数，`model.start`记录输出预算，不记录参数内容或凭证。
+- 看板进度消费工具调用和结果，失败不再显示为页面已更新；真实写入、校验与发布仍分别确认。`ChatCapacity#execute`的绝对执行期限先正常触发截止信号以取消原生模型订阅，再向HTTP报告超时；工具事件收尾计时也用正常截止信号关闭订阅，避免只报错但后台继续运行。

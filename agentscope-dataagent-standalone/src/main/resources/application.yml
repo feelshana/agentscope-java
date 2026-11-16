@@ -298,6 +298,10 @@ dataagent:
     # package layout is non-standard. Missing directory → warn + CLI fallback, startup unaffected.
     skills-dir: ${DATAAGENT_WREN_SKILLS_DIR:}
 
+  dashboard:
+    # Output ceiling, not a minimum; independent of the model context window.
+    max-output-tokens: ${DATAAGENT_DASHBOARD_MAX_OUTPUT_TOKENS:32768}
+
   # ---- Expose the platform metadata DB as a queryable source? Off by default. ----
   expose-app-db: ${DATAAGENT_EXPOSE_APP_DB:false}
 

@@ -77,6 +77,29 @@ class SessionStateLifecycleTest {
     }
 
     @Test
+    void failedMetadataDeleteKeepsTheRoutingEntryForRetry() {
+        var metadata = mock(SessionStore.class);
+        when(metadata.listAll()).thenReturn(java.util.List.of());
+        var manager =
+                new SessionAgentManager(
+                        mock(DefaultAgentManager.class),
+                        AgentManagerConfig.defaults(),
+                        new SubagentRunRegistry(),
+                        metadata,
+                        new InMemoryAgentStateStore());
+        var entry = manager.registerMainSession("dashboard-agent", null, "gate", "alice");
+        doThrow(new IllegalStateException("metadata offline"))
+                .doNothing()
+                .when(metadata)
+                .remove(entry.sessionKey());
+        assertThatThrownBy(() -> manager.removeSession(entry.sessionKey()))
+                .hasMessageContaining("metadata offline");
+        assertThat(manager.getSession(entry.sessionKey())).isPresent();
+        manager.removeSession(entry.sessionKey());
+        assertThat(manager.getSession(entry.sessionKey())).isEmpty();
+    }
+
+    @Test
     void maintenanceUsesTheSameCheckpointCleanupPath() {
         var store = new InMemoryAgentStateStore();
         var metadata = mock(SessionStore.class);

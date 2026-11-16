@@ -119,7 +119,19 @@ public final class ExecutionTimingMiddleware implements MiddlewareBase {
                     long start = System.nanoTime();
                     var first = new java.util.concurrent.atomic.AtomicBoolean();
                     var lastOutput = new java.util.concurrent.atomic.AtomicLong();
-                    record(ctx, "model.start", id, start, "START");
+                    record(
+                            ctx,
+                            "model.start",
+                            id,
+                            start,
+                            "START",
+                            Map.of(
+                                    "maxOutputTokens",
+                                    input == null
+                                                    || input.options() == null
+                                                    || input.options().getMaxTokens() == null
+                                            ? 0
+                                            : input.options().getMaxTokens()));
                     return next.apply(input)
                             .doOnNext(
                                     e -> {

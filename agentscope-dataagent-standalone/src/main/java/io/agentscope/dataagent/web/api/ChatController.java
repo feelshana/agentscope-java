@@ -120,6 +120,11 @@ public class ChatController {
     private final DatasetGroupService datasetGroupService;
     private final io.agentscope.dataagent.web.chat.ChatTurnPreparation turnPreparation;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    void configureDashboards(io.agentscope.dataagent.dataset.DashboardService dashboards) {
+        turnPreparation.setDashboards(dashboards);
+    }
+
     private io.agentscope.dataagent.dataset.KnowledgeBaseOperations knowledgeBaseOperations;
 
     private ChatCapacity chatCapacity;
@@ -458,7 +463,8 @@ public class ChatController {
         Flux<ServerSentEvent<String>> toolEvents =
                 toolEventBus
                         .subscribeRequest(requestId)
-                        .takeUntilOther(done.asMono().timeout(Duration.ofMinutes(10)))
+                        .takeUntilOther(
+                                done.asMono().timeout(Duration.ofMinutes(10)).onErrorReturn(false))
                         .map(this::toToolFrame)
                         .onErrorResume(ex -> Flux.empty());
 
@@ -690,7 +696,8 @@ public class ChatController {
         Flux<ServerSentEvent<String>> toolEvents =
                 toolEventBus
                         .subscribeRequest(requestId)
-                        .takeUntilOther(done.asMono().timeout(Duration.ofMinutes(10)))
+                        .takeUntilOther(
+                                done.asMono().timeout(Duration.ofMinutes(10)).onErrorReturn(false))
                         .map(this::toToolFrame)
                         .onErrorResume(ex -> Flux.empty());
         Map<String, Object> doneFrame = new LinkedHashMap<>();

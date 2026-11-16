@@ -291,6 +291,16 @@ public class SessionHistoryService {
         var agent = gateway == null ? null : bootstrap.gateway().findAgent(gateway);
         if (agent != null && agent.getWorkspaceManager() != null) {
             RuntimeContext rc = RuntimeContext.builder().userId(entry.userId()).build();
+            if (conversationScopes != null) {
+                String conversation = segment(entry.gateKey(), "|g:");
+                if (conversation == null) conversation = segment(entry.gateKey(), "|t:");
+                var selected = conversationScopes.get(entry.userId(), conversation);
+                if (selected != null)
+                    rc.put(
+                            io.agentscope.dataagent.dataset.DatasetScope.class,
+                            new io.agentscope.dataagent.dataset.DatasetScope(
+                                    entry.userId(), selected));
+            }
             var wm = agent.getWorkspaceManager();
             Path log = wm.resolveSessionLogFile(rc, agent.getName(), entry.sessionId());
             if (Files.isRegularFile(log)) return log;

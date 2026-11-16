@@ -202,4 +202,20 @@ public class ConversationScopeRegistry {
         this();
         this.repository = repository;
     }
+
+    /** Delete only the supplied conversation and its captured message snapshots. */
+    public void remove(
+            String userId, String conversationId, List<String> turnIds, boolean conversation) {
+        var keys = new java.util.ArrayList<String>();
+        if (conversation) keys.add(ConversationDatasetScopeEntity.key(userId, conversationId));
+        for (String id : turnIds)
+            if (id != null && !id.isBlank())
+                keys.add(ConversationDatasetScopeEntity.key(userId, "turn:" + id));
+        if (repository != null && !keys.isEmpty()) repository.deleteAllByIdInBatch(keys);
+        for (String key : keys) {
+            scopes.remove(key);
+            modelingPurposes.remove(key);
+            analysisTurns.remove(key);
+        }
+    }
 }

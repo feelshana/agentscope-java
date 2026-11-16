@@ -24,6 +24,7 @@ import io.agentscope.core.message.ThinkingBlock;
 import io.agentscope.core.message.ToolUseBlock;
 import io.agentscope.core.model.ChatResponse;
 import io.agentscope.core.model.ChatUsage;
+import io.agentscope.core.model.ModelException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -57,6 +58,7 @@ public class ReasoningContext {
     private int outputTokens = 0;
     private int cachedTokens = 0;
     private double time = 0;
+    private String finishReason;
 
     // Provider-specific response metadata to propagate to the final message
     // (e.g. openai.reasoning.encrypted_content for reasoning replay)
@@ -82,6 +84,7 @@ public class ReasoningContext {
      */
     public List<Msg> processChunk(ChatResponse chunk) {
         this.messageId = chunk.getId();
+        if (chunk.getFinishReason() != null) finishReason = chunk.getFinishReason();
 
         // Accumulate ChatUsage
         ChatUsage usage = chunk.getUsage();
@@ -132,6 +135,9 @@ public class ReasoningContext {
             }
         }
 
+        if ("length".equals(finishReason) && toolCallsAcc.hasContent()) {
+            throw new ModelException("模型输出达到长度上限，工具参数被截断，本轮已停止，未执行不完整的工具调用。");
+        }
         return streamingMsgs;
     }
 
@@ -196,6 +202,19 @@ public class ReasoningContext {
                 .metadata(metadata)
                 .usage(chatUsage)
                 .build();
+    }
+
+    /** Safe output counters; never include argument values, prompts or credentials. */
+    public Map<String, Integer> outputDiagnostics() {
+        Map<String, Integer> counts = new HashMap<>(toolCallsAcc.diagnostics());
+        counts.put("inputTokens", inputTokens);
+        counts.put("outputTokens", outputTokens);
+        return counts;
+    }
+
+    /** Validate completed model output only; interrupted partial messages are not executable. */
+    public void validateCompleteArguments() {
+        toolCallsAcc.validateComplete();
     }
 
     /**

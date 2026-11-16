@@ -463,6 +463,7 @@ Operational guides (deployment, single-host release, concurrency) live in [docs/
 | 配置 | 默认与用途 |
 | --- | --- |
 | `dataagent.model-services.encryption-key` | `DATAAGENT_MODEL_ENCRYPTION_KEY`，空值时在实际 HOME 生成独立主密钥文件；需与平台库配套备份 |
+| `dataagent.dashboard.max-output-tokens` | `DATAAGENT_DASHBOARD_MAX_OUTPUT_TOKENS=32768`：看板单次模型输出上限，可设1024–65536并满足所选模型限制；不是上下文窗口或最低输出量，增大上限不要求生成更多内容 |
 | `dataagent.auth.password-login-enabled` | `DATAAGENT_PASSWORD_LOGIN_ENABLED=true`；prod 强制关闭密码入口 |
 | `dataagent.auth.bi.enabled` / `shared-key` | `DATAAGENT_BI_LOGIN_ENABLED=false`、`DATAAGENT_BI_SHARED_KEY`；prod 启用 BI，独立于 JWT 密钥 |
 

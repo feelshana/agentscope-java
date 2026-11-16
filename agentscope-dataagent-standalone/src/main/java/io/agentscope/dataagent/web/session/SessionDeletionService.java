@@ -54,6 +54,11 @@ public class SessionDeletionService {
      * orphan artifact cleanup remains the final compensation for a process crash between steps.
      */
     public void delete(SessionEntry entry) throws IOException {
+        delete(entry, () -> {});
+    }
+
+    /** Additional domain records are removed while the native idle-session gate is held. */
+    public void delete(SessionEntry entry, Runnable relatedCleanup) throws IOException {
         if (bootstrap.gateway().isSessionActive(entry.sessionKey())) {
             throw new SessionBusyException(entry.sessionKey());
         }
@@ -66,20 +71,26 @@ public class SessionDeletionService {
                                     history.clear(
                                             entry.sessionKey(),
                                             () -> {
+                                                try {
+                                                    artifacts.deleteSession(
+                                                            entry.userId(), entry.sessionId());
+                                                } catch (IOException e) {
+                                                    throw new java.io.UncheckedIOException(e);
+                                                }
+                                                readStates.deleteByUserIdAndSessionKey(
+                                                        entry.userId(), entry.sessionKey());
                                                 deleteTranscriptFiles(entry);
+                                                relatedCleanup.run();
                                                 sessions.removeSession(entry.sessionKey());
                                             }));
+        } catch (java.io.UncheckedIOException e) {
+            throw e.getCause();
         } catch (IllegalStateException e) {
             if (bootstrap.gateway().isSessionActive(entry.sessionKey())
                     || "请先停止当前回答".equals(e.getMessage())) {
                 throw new SessionBusyException(entry.sessionKey());
             }
             throw e;
-        }
-        try {
-            artifacts.deleteSession(entry.userId(), entry.sessionId());
-        } finally {
-            readStates.deleteByUserIdAndSessionKey(entry.userId(), entry.sessionKey());
         }
     }
 

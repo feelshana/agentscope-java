@@ -120,6 +120,49 @@ class ChatCapacityTest {
     }
 
     @Test
+    void deadlineCancelsTheNativeAgentModelSubscription() throws Exception {
+        var cancelled = new java.util.concurrent.atomic.AtomicBoolean();
+        var cancellation = new java.util.concurrent.CountDownLatch(1);
+        var subscribed = new java.util.concurrent.CountDownLatch(1);
+        var model =
+                new io.agentscope.core.model.Model() {
+                    public String getModelName() {
+                        return "cancel-fixture";
+                    }
+
+                    public Flux<io.agentscope.core.model.ChatResponse> stream(
+                            java.util.List<io.agentscope.core.message.Msg> messages,
+                            java.util.List<io.agentscope.core.model.ToolSchema> tools,
+                            io.agentscope.core.model.GenerateOptions options) {
+                        return Flux.<io.agentscope.core.model.ChatResponse>never()
+                                .doOnSubscribe(ignored -> subscribed.countDown())
+                                .doOnCancel(
+                                        () -> {
+                                            cancelled.set(true);
+                                            cancellation.countDown();
+                                        });
+                    }
+                };
+        var agent =
+                io.agentscope.core.ReActAgent.builder().name("cancel-fixture").model(model).build();
+        ChatCapacity capacity = new ChatCapacity();
+        ReflectionTestUtils.setField(capacity, "executionSeconds", 1);
+        StepVerifier.create(
+                        capacity.execute(
+                                "a",
+                                "one",
+                                () -> agent.streamEvents("generate").map(event -> "event"),
+                                state -> state))
+                .thenConsumeWhile(event -> true)
+                .expectErrorMessage("本次问答执行超时，请缩小问题范围后重试")
+                .verify(Duration.ofSeconds(5));
+        assertThat(subscribed.getCount()).isZero();
+        assertThat(cancellation.await(2, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+        assertThat(cancelled).isTrue();
+        assertThat(capacity.activeCount()).isZero();
+    }
+
+    @Test
     void racingSubscriptionAndCancelLeaveNoSlotsOrConversationKeys() throws Exception {
         ChatCapacity capacity = new ChatCapacity();
         var executor = java.util.concurrent.Executors.newFixedThreadPool(8);

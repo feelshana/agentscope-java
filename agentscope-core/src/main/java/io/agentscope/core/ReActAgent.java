@@ -2547,8 +2547,22 @@ public class ReActAgent extends AgentBase implements AutoCloseable {
                                     chunk ->
                                             Flux.deferContextual(
                                                     parentCtx -> {
-                                                        List<Msg> chunkMsgs =
-                                                                context.processChunk(chunk);
+                                                        List<Msg> chunkMsgs;
+                                                        try {
+                                                            chunkMsgs = context.processChunk(chunk);
+                                                        } finally {
+                                                            if (chunk.getFinishReason() != null) {
+                                                                io.agentscope.core.util.CallTiming
+                                                                        .record(
+                                                                                rc,
+                                                                                "model.output",
+                                                                                System.nanoTime(),
+                                                                                chunk
+                                                                                        .getFinishReason(),
+                                                                                context
+                                                                                        .outputDiagnostics());
+                                                            }
+                                                        }
                                                         for (Msg msg : chunkMsgs) {
                                                             hookDispatcher
                                                                     .fireReasoningChunk(
@@ -2579,6 +2593,21 @@ public class ReActAgent extends AgentBase implements AutoCloseable {
             Flux<AgentEvent> endEvents =
                     Flux.defer(
                             () -> {
+                                long validationStart = System.nanoTime();
+                                String validationStatus = "SUCCESS";
+                                try {
+                                    context.validateCompleteArguments();
+                                } catch (RuntimeException e) {
+                                    validationStatus = "ERROR";
+                                    throw e;
+                                } finally {
+                                    io.agentscope.core.util.CallTiming.record(
+                                            rc,
+                                            "model.tool_arguments",
+                                            validationStart,
+                                            validationStatus,
+                                            context.outputDiagnostics());
+                                }
                                 List<AgentEvent> events = new ArrayList<>();
                                 blockLifecycle.flushAll(events);
                                 events.add(new ModelCallEndEvent(replyId, context.getChatUsage()));

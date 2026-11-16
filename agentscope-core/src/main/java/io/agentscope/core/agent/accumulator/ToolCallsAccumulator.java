@@ -17,6 +17,7 @@ package io.agentscope.core.agent.accumulator;
 
 import io.agentscope.core.message.ContentBlock;
 import io.agentscope.core.message.ToolUseBlock;
+import io.agentscope.core.model.ModelException;
 import io.agentscope.core.util.JsonUtils;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -54,9 +55,11 @@ public class ToolCallsAccumulator implements ContentAccumulator<ToolUseBlock> {
         String name;
         Map<String, Object> args = new HashMap<>();
         StringBuilder rawContent = new StringBuilder();
+        int fragments;
         Map<String, Object> metadata = new HashMap<>();
 
         void merge(ToolUseBlock block) {
+            fragments++;
             // Update ID if present
             if (this.toolId == null && block.getId() != null && !block.getId().isEmpty()) {
                 this.toolId = block.getId();
@@ -247,6 +250,30 @@ public class ToolCallsAccumulator implements ContentAccumulator<ToolUseBlock> {
      */
     public List<ToolUseBlock> buildAllToolCalls() {
         return builders.values().stream().map(ToolCallBuilder::build).collect(Collectors.toList());
+    }
+
+    /** Reject malformed final arguments instead of executing an empty substitute. */
+    public void validateComplete() {
+        for (ToolCallBuilder builder : builders.values()) {
+            String raw = builder.rawContent.toString();
+            if (!raw.isEmpty() && !JsonUtils.isValidJsonObject(raw)) {
+                throw new ModelException("模型返回的工具参数不是完整的JSON，本轮已停止，未执行不完整的工具调用。");
+            }
+        }
+    }
+
+    /** Payload-free counters for model output diagnostics. */
+    public Map<String, Integer> diagnostics() {
+        int chars = 0;
+        int fragments = 0;
+        for (ToolCallBuilder builder : builders.values()) {
+            chars += builder.rawContent.length();
+            fragments += builder.fragments;
+        }
+        return Map.of(
+                "argumentChars", chars,
+                "argumentFragments", fragments,
+                "argumentCalls", builders.size());
     }
 
     /**

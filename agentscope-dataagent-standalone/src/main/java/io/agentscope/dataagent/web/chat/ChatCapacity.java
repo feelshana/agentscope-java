@@ -96,6 +96,9 @@ public final class ChatCapacity {
                                             .publishOn(Schedulers.boundedElastic())
                                             .flatMapMany(
                                                     acquired -> {
+                                                        var expired =
+                                                                new java.util.concurrent.atomic
+                                                                        .AtomicBoolean();
                                                         Flux<T> started =
                                                                 status == null
                                                                         ? Flux.empty()
@@ -109,12 +112,27 @@ public final class ChatCapacity {
                                                                                                 Duration
                                                                                                         .ofSeconds(
                                                                                                                 executionSeconds))
-                                                                                        .flatMap(
+                                                                                        // Complete
+                                                                                        // the
+                                                                                        // cutoff
+                                                                                        // first so
+                                                                                        // takeUntilOther cancels its source.
+                                                                                        .doOnNext(
                                                                                                 ignored ->
-                                                                                                        Mono
+                                                                                                        expired
+                                                                                                                .set(
+                                                                                                                        true)))
+                                                                        .concatWith(
+                                                                                Flux.defer(
+                                                                                        () ->
+                                                                                                expired
+                                                                                                                .get()
+                                                                                                        ? Flux
                                                                                                                 .error(
                                                                                                                         new TimeoutException(
-                                                                                                                                "本次问答执行超时，请缩小问题范围后重试"))))
+                                                                                                                                "本次问答执行超时，请缩小问题范围后重试"))
+                                                                                                        : Flux
+                                                                                                                .empty()))
                                                                         .contextWrite(
                                                                                 context ->
                                                                                         context.put(

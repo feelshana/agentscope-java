@@ -16,7 +16,7 @@ import './AppShell.css';
 export default function AppShell() {
   const location = useLocation();
   const [sidebarPreference, setSidebarPreference] = useState<boolean | null>(null);
-  const defaultCollapsed = isModelingWorkbench(location.pathname);
+  const defaultCollapsed = isModelingWorkbench(location.pathname) || location.pathname.startsWith('/dashboards');
   const collapsed = sidebarPreference ?? defaultCollapsed;
   const sidebarAction = collapsed ? '展开侧边栏' : '收起侧边栏';
   const [navigationOpen, setNavigationOpen] = useState(false);

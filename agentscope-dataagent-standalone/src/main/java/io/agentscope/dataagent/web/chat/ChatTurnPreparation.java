@@ -20,6 +20,11 @@ public final class ChatTurnPreparation {
     private final ConversationScopeRegistry conversationScopes;
     private final DatasetGroupService datasetGroupService;
     private final AgentCatalogService catalogService;
+    private io.agentscope.dataagent.dataset.DashboardService dashboards;
+
+    public void setDashboards(io.agentscope.dataagent.dataset.DashboardService dashboards) {
+        this.dashboards = dashboards;
+    }
 
     public ChatTurnPreparation(
             ConversationScopeRegistry scopes,
@@ -91,6 +96,10 @@ public final class ChatTurnPreparation {
                     io.agentscope.dataagent.tools.data.AnalysisTurn.class, analysis);
         }
         RuntimeContext runtimeContext = runtimeContextBuilder.build();
+        if (io.agentscope.dataagent.dataset.DashboardService.AGENT_ID.equals(agentId))
+            runtimeContext.put(
+                    io.agentscope.dataagent.dataset.DashboardTurn.class,
+                    new io.agentscope.dataagent.dataset.DashboardTurn(conversationId));
         if (agentId == null || agentId.isBlank()) {
             return InboundMessage.dm(ChatUiChannel.CHANNEL_ID, userId, List.copyOf(msgs))
                     .withRuntimeContext(runtimeContext);
@@ -111,6 +120,15 @@ public final class ChatTurnPreparation {
             List<String> groupIds,
             boolean allGroups) {
         boolean modeling = ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId);
+        boolean dashboard =
+                io.agentscope.dataagent.dataset.DashboardService.AGENT_ID.equals(agentId);
+        if (dashboard) {
+            if (dashboards == null) throw new DatasetException("仪表盘服务未就绪", 503);
+            var asset = dashboards.requireDraft(userId, conversationId);
+            if (allGroups || (groupIds != null && !List.of(asset.groupId()).equals(groupIds)))
+                throw new DatasetException("此看板已绑定知识库，请新建看板切换", 400);
+            return List.of(asset.groupId());
+        }
         if (allGroups || (groupIds != null && groupIds.stream().distinct().count() > 1))
             throw new DatasetException("本次只支持单知识库问数，请重新选择一个知识库", 400);
         if (allGroups && modeling) throw new DatasetException("建模会话必须选择一个知识库", 400);

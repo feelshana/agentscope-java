@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>对话首页改版设计稿 · 2026-11-15</title>
+<style>
+/* ================= tokens（与主设计稿同源，落地时映射 --da-*） ================= */
+:root{
+  --bg:#EFEFF4;--canvas:#F2F2F7;--surface:#FFFFFF;--surface-2:#F7F7FA;--surface-3:#EFEFF5;
+  --ink:#16171D;--ink-2:#4A4E5C;--ink-3:#7A7F8E;--ink-4:#A8ADBB;
+  --hair:rgba(60,60,67,.11);--hair-2:rgba(60,60,67,.16);
+  --tint:#5F4BC8;--tint-2:#7A66E8;--tint-soft:#EEEAFC;--tint-line:rgba(95,75,200,.24);--tint-solid:#5F4BC8;
+  --ok:#1E9E63;--ok-soft:#E6F5EC;
+  --shadow-1:0 1px 2px rgba(16,24,40,.05),0 6px 18px rgba(16,24,40,.055);
+  --shadow-2:0 2px 4px rgba(16,24,40,.05),0 14px 38px rgba(16,24,40,.10);
+  --ease:cubic-bezier(.32,.72,0,1);
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+}
+html[data-theme="dark"]{
+  --bg:#0A0A0D;--canvas:#0C0C10;--surface:#17171D;--surface-2:#1E1E26;--surface-3:#26262F;
+  --ink:#F0F0F4;--ink-2:#B4B8C6;--ink-3:#858A9A;--ink-4:#5F6474;
+  --hair:rgba(255,255,255,.09);--hair-2:rgba(255,255,255,.14);
+  --tint:#A99DFF;--tint-2:#C0B6FF;--tint-soft:rgba(120,102,235,.16);--tint-line:rgba(169,157,255,.30);--tint-solid:#6A55E0;
+  --ok:#4FC98A;--ok-soft:rgba(52,199,123,.14);
+  --shadow-1:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.32);
+  --shadow-2:0 4px 10px rgba(0,0,0,.42),0 20px 50px rgba(0,0,0,.42);
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font:400 13px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  transition:background .3s,color .3s;
+}
+.i{width:16px;height:16px;flex:none;display:block;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+
+/* ================= 文档头 ================= */
+.dochead{max-width:1440px;margin:0 auto;padding:36px 40px 14px}
+.kicker{font-size:11px;font-weight:650;letter-spacing:.09em;text-transform:uppercase;color:var(--tint)}
+.dochead h1{font-size:26px;letter-spacing:-.8px;margin:8px 0 0;font-weight:700}
+.dochead p{font-size:13px;line-height:1.85;color:var(--ink-3);max-width:880px;margin:10px 0 0}
+.dochead p strong{color:var(--ink-2)}
+.docbar{display:flex;align-items:center;gap:8px;margin-top:18px;flex-wrap:wrap}
+.sbtn{height:30px;padding:0 13px;border-radius:8px;border:1px solid var(--hair-2);background:var(--surface);
+  color:var(--ink-2);font:inherit;font-size:12.5px;font-weight:550;cursor:pointer;transition:all .18s}
+.sbtn:hover{border-color:var(--tint-line);color:var(--ink)}
+.sbtn.on{background:var(--tint-soft);border-color:var(--tint-line);color:var(--tint);font-weight:650}
+.sp{flex:1}
+
+/* ================= 舞台 ================= */
+.stage{padding:8px 40px 0;overflow:hidden}
+.stage-inner{max-width:1440px;margin:0 auto}
+.fit{position:relative;transition:height .25s var(--ease)}
+.mock{
+  width:1360px;height:720px;display:flex;background:var(--canvas);
+  border:.5px solid var(--hair-2);border-radius:16px;overflow:hidden;
+  box-shadow:0 24px 60px rgba(16,24,40,.11),0 2px 8px rgba(16,24,40,.05);
+  transform-origin:top left;position:absolute;top:0;left:0;
+}
+
+/* ---- 左应用栏 ---- */
+.rail{width:56px;flex:none;background:color-mix(in srgb,var(--surface) 72%,transparent);
+  border-right:.5px solid var(--hair);display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 0}
+.rail-logo{width:28px;height:28px;border-radius:8px;background:var(--tint-solid);color:#fff;font-size:10.5px;font-weight:700;
+  display:grid;place-items:center;margin-bottom:8px}
+.rail-b{width:36px;height:36px;border-radius:10px;border:0;background:none;color:var(--ink-3);display:grid;place-items:center;cursor:pointer}
+.rail-b.on{background:var(--tint-soft);color:var(--tint)}
+.rail .grow{flex:1}
+
+/* ---- 会话侧栏 ---- */
+.side{width:232px;flex:none;background:var(--surface);border-right:.5px solid var(--hair);display:flex;flex-direction:column}
+.side-brand{display:flex;align-items:center;gap:8px;padding:14px 14px 10px;font-size:13px;font-weight:700;letter-spacing:-.2px}
+.side-brand .dot{width:8px;height:8px;border-radius:3px;background:var(--tint)}
+.newchat{margin:2px 12px 10px;height:32px;border-radius:9px;border:.5px solid var(--tint-line);background:var(--tint-soft);
+  color:var(--tint);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
+.side-list{flex:1;overflow:hidden;padding:0 8px}
+.side-label{font-size:10.5px;font-weight:600;color:var(--ink-4);padding:8px 8px 4px;letter-spacing:.04em}
+.side-item{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:8px;font-size:12.5px;color:var(--ink-2);cursor:pointer}
+.side-item:hover{background:var(--surface-2)}
+.side-item.on{background:var(--surface-2);color:var(--ink);font-weight:600}
+.side-item span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.side-item time{font-size:10px;color:var(--ink-4);font-variant-numeric:tabular-nums}
+.side-user{display:flex;align-items:center;gap:8px;padding:12px 14px;border-top:.5px solid var(--hair);font-size:12.5px;color:var(--ink-2)}
+.avatar{width:24px;height:24px;border-radius:8px;background:var(--tint-soft);color:var(--tint);display:grid;place-items:center;font-size:11px;font-weight:700}
+
+/* ---- 主区 ---- */
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.topbar{height:44px;flex:none;display:flex;align-items:center;gap:8px;padding:0 20px;border-bottom:.5px solid var(--hair);
+  font-size:12.5px;color:var(--ink-3)}
+.topbar strong{color:var(--ink);font-weight:600}
+
+/* ---- 首屏：垂直弹性策略 ---- */
+.landing{flex:1;min-height:0;overflow:auto;display:flex;scrollbar-width:none}
+.landing::-webkit-scrollbar{width:0;height:0}
+.landing-col{
+  margin:auto;width:min(720px,100% - 64px);padding:18px 0 40px;  /* margin:auto 垂直居中 + 底部多 22px 做视觉上移 */
+  display:flex;flex-direction:column;gap:22px;
+}
+.date{font-size:11.5px;color:var(--ink-4);font-weight:550;letter-spacing:.02em}
+.greet{font-size:27px;font-weight:700;letter-spacing:-.6px;margin:4px 0 0}
+
+/* ---- 输入区 ---- */
+.composer{background:var(--surface);border:.5px solid var(--hair-2);border-radius:18px;box-shadow:var(--shadow-1);
+  padding:14px 16px 10px;transition:border-color .18s,box-shadow .18s}
+.composer:focus-within{border-color:var(--tint-line);box-shadow:0 0 0 3px var(--tint-soft),var(--shadow-1)}
+.ph{font-size:14px;color:var(--ink-4);min-height:44px;line-height:22px}   /* 空态 2 行高，不再 90px */
+.tools{display:flex;align-items:center;gap:8px;margin-top:8px}
+/* 统一控件语言：30px 高 / 8px 圆角
+   可选项=软底+值+chevron · 开关=开关态+圆点 · 菜单=软底+chevron */
+.chip{height:30px;padding:0 10px;border-radius:8px;background:var(--surface-2);border:.5px solid transparent;
+  display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:550;color:var(--ink-2);cursor:pointer;transition:all .15s}
+.chip:hover{background:var(--surface-3)}
+.chip b{font-weight:600;color:var(--ink)}
+.chip .cv{width:12px;height:12px;color:var(--ink-4)}
+.chip.sw-on{background:var(--tint-soft);color:var(--tint)}
+.chip.sw-on .swdot{width:6px;height:6px;border-radius:50%;background:var(--tint)}
+.tools .grow{flex:1}
+.send{width:36px;height:36px;border-radius:50%;border:0;background:var(--tint-solid);color:#fff;display:grid;place-items:center;cursor:pointer;
+  transition:transform .15s var(--ease),background .15s}
+.send:hover{transform:scale(1.05)}
+.send.dis{background:var(--surface-3);color:var(--ink-3);cursor:default}  /* 禁用态：箭头仍清晰可读 */
+.send.dis:hover{transform:none}
+
+/* ---- 新手引导：轨道步骤条（与 .mflow 同族） ---- */
+.onboard{background:var(--surface);border:.5px solid var(--hair-2);border-radius:14px;box-shadow:var(--shadow-1);padding:15px 18px 16px}
+.ob-head{display:flex;align-items:baseline;gap:10px}
+.ob-head h2{font-size:13.5px;font-weight:650;margin:0;letter-spacing:-.2px}
+.ob-head .sub{font-size:11.5px;color:var(--ink-4)}
+.prog{margin-left:auto;height:22px;padding:0 9px;border-radius:11px;background:var(--tint-soft);color:var(--tint);
+  font-size:11px;font-weight:650;display:inline-flex;align-items:center;font-variant-numeric:tabular-nums}
+.ob-track{position:relative;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin-top:14px}
+.ob-step{position:relative;padding:0 14px 0 0;min-width:0;display:flex;flex-direction:column}
+.ob-step::before{content:'';position:absolute;top:11px;left:27px;right:-5px;height:1px;background:var(--hair-2)}
+.ob-step:last-child::before{display:none}
+.ob-dot{position:relative;width:22px;height:22px;border-radius:50%;background:var(--surface);
+  box-shadow:inset 0 0 0 1.5px var(--tint-line);display:grid;place-items:center;
+  font:700 9.5px/1 var(--mono);color:var(--tint)}
+.ob-step.done .ob-dot{background:var(--ok-soft);box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--ok) 40%,transparent);color:var(--ok)}
+.ob-step.cur .ob-dot{background:var(--tint-solid);box-shadow:none;color:#fff}
+.ob-step h4{margin:9px 0 3px;font-size:12.5px;font-weight:600;letter-spacing:-.1px}
+.ob-step p{margin:0;font-size:11.5px;line-height:1.6;color:var(--ink-3);flex:1}
+/* 只有当前步有主按钮，其余步骤 hover 才出现文字链 */
+.ob-act{margin-top:auto;padding-top:9px;min-height:26px;display:flex;align-items:center}
+.ob-go{font-size:11.5px;font-weight:600;color:var(--tint);opacity:0;transition:opacity .15s;cursor:pointer}
+.ob-step:hover .ob-go{opacity:1}
+.ob-btn{height:26px;padding:0 12px;border-radius:7px;border:0;background:var(--tint-solid);color:#fff;
+  font:inherit;font-size:11.5px;font-weight:600;cursor:pointer;transition:filter .15s}
+.ob-btn:hover{filter:brightness(1.08)}
+
+/* ---- 推荐问题：意图图标 + 自然语言 ---- */
+.recs h3{font-size:12px;font-weight:600;color:var(--ink-3);margin:0 0 10px;display:flex;align-items:center;gap:8px}
+.recs h3 .lib{font-weight:550;color:var(--ink-4)}
+.rec-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.rec{background:var(--surface);border:.5px solid var(--hair);border-radius:14px;padding:13px 14px;cursor:pointer;
+  transition:background .18s,border-color .18s}   /* hover 不上浮、不加阴影 */
+.rec:hover{background:var(--surface-2);border-color:var(--tint-line)}
+.rec .ic{width:28px;height:28px;border-radius:8px;background:var(--tint-soft);color:var(--tint);display:grid;place-items:center}
+.rec .ic .i{width:15px;height:15px}
+.rec b{display:block;margin:10px 0 5px;font-size:13px;font-weight:600;line-height:1.5;letter-spacing:-.1px;text-wrap:balance}
+.rec .meta{font-size:11px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+
+/* 无引导卡状态 */
+body[data-ob="off"] .onboard{display:none}
+
+/* ================= 文档说明区 ================= */
+.doc{max-width:1440px;margin:0 auto;padding:30px 40px 60px}
+.sec>h2{font-size:17px;font-weight:700;letter-spacing:-.4px;margin:0 0 6px}
+.sec>p{font-size:12.5px;line-height:1.85;color:var(--ink-3);max-width:880px;margin:0}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:14px}
+.box{background:var(--surface);border:.5px solid var(--hair);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow-1)}
+.box h3{margin:0 0 6px;font-size:13px;font-weight:650}
+.box p,.box li{font-size:12px;line-height:1.8;color:var(--ink-3);margin:0}
+.box ul{margin:4px 0 0;padding-left:16px}
+.box code{font-family:var(--mono);font-size:11px;background:var(--surface-2);border-radius:4px;padding:0 4px;color:var(--ink-2)}
+table.spec{width:100%;border-collapse:collapse;margin-top:12px;font-size:12px;background:var(--surface);
+  border-radius:14px;overflow:hidden;box-shadow:var(--shadow-1)}
+table.spec th{font-size:11px;font-weight:650;color:var(--ink-3);text-align:left;padding:9px 14px;background:var(--surface-2)}
+table.spec td{padding:9px 14px;border-top:.5px solid var(--hair);color:var(--ink-2);vertical-align:top}
+table.spec td:first-child{font-weight:600;color:var(--ink);white-space:nowrap}
+table.spec code{font-family:var(--mono);font-size:11px;background:var(--surface-2);border-radius:4px;padding:0 4px}
+footer{max-width:1440px;margin:0 auto;padding:0 40px 30px;font-size:11.5px;color:var(--ink-4)}
+</style>
+</head>
+<body data-ob="on">
+
+<header class="dochead">
+  <span class="kicker">Chat Landing · Redesign</span>
+  <h1>对话首页 · 改版设计稿</h1>
+  <p>针对现状四个问题的整体改版：<strong>垂直空间策略</strong>（有无引导卡都平衡）、<strong>新手卡压缩为轨道步骤条</strong>（260px → 约 185px，与问数优化/公共视图的 .mflow 同一组件族）、<strong>推荐问题自然语言化 + 意图图标</strong>、<strong>输入区控件语言统一</strong>。圆角收敛为 18 / 14 / 8 三档，全部走 token，无装饰渐变。</p>
+  <div class="docbar">
+    <button class="sbtn on" data-ob="on">含引导卡</button>
+    <button class="sbtn" data-ob="off">无引导卡（已完成）</button>
+    <span class="sp"></span>
+    <button class="sbtn" id="themeBtn">深色预览</button>
+  </div>
+</header>
+
+<div class="stage">
+  <div class="stage-inner">
+    <div class="fit" id="fit">
+      <div class="mock" id="mock">
+
+        <!-- 左应用栏 -->
+        <aside class="rail">
+          <div class="rail-logo">DA</div>
+          <button class="rail-b on" title="问数"><svg class="i" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8z"/></svg></button>
+          <button class="rail-b" title="知识库"><svg class="i" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></svg></button>
+          <button class="rail-b" title="语义建模"><svg class="i" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8 7.5l3 8M16 7.5l-3 8M8.5 6h7"/></svg></button>
+          <span class="grow"></span>
+          <button class="rail-b" title="设置"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z"/></svg></button>
+        </aside>
+
+        <!-- 会话侧栏（品牌只出现一次） -->
+        <aside class="side">
+          <div class="side-brand"><span class="dot"></span>红海 DataAgent</div>
+          <button class="newchat"><svg class="i" style="width:13px;height:13px" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>新对话</button>
+          <div class="side-list">
+            <div class="side-label">今天</div>
+            <div class="side-item"><span>华东 vs 华南毛利率</span><time>21:40</time></div>
+            <div class="side-item"><span>库存周转异常排查</span><time>18:02</time></div>
+            <div class="side-label">更早</div>
+            <div class="side-item"><span>TOP10 客户贡献度</span><time>周五</time></div>
+            <div class="side-item"><span>新品动销率月报</span><time>周四</time></div>
+          </div>
+          <div class="side-user"><span class="avatar">李</span>李雨繁</div>
+        </aside>
+
+        <!-- 主区 -->
+        <main class="main">
+          <div class="topbar">问数<i style="font-style:normal;color:var(--ink-4)">/</i><strong>新对话</strong></div>
+
+          <div class="landing">
+            <div class="landing-col">
+
+              <!-- 问候（品牌行已删，日期作为小 kicker） -->
+              <div>
+                <div class="date">11月15日 · 周日</div>
+                <h1 class="greet">晚上好，李雨繁</h1>
+              </div>
+
+              <!-- 输入区 -->
+              <div class="composer">
+                <div class="ph">输入查询、分析、预测数据问题…</div>
+                <div class="tools">
+                  <span class="chip"><svg class="i" style="width:13px;height:13px" viewBox="0 0 24 24"><path d="M4 19V5a1 1 0 0 1 1-1h13a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H6"/><path d="M4 19a2 2 0 0 0 2 2h13"/></svg><b>我的第一个知识库</b><svg class="cv" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span>
+                  <span class="chip sw-on"><span class="swdot"></span>联网搜索</span>
+                  <span class="chip">分析<svg class="cv" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span>
+                  <span class="grow"></span>
+                  <button class="send dis" title="发送"><svg class="i" style="width:16px;height:16px" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+                </div>
+              </div>
+
+              <!-- 新手引导：轨道步骤条 -->
+              <div class="onboard">
+                <div class="ob-head">
+                  <h2>开始使用 DataAgent</h2>
+                  <span class="sub">四步上手，约 5 分钟</span>
+                  <span class="prog">1 / 4</span>
+                </div>
+                <div class="ob-track">
+                  <div class="ob-step cur">
+                    <span class="ob-dot">1</span>
+                    <h4>准备数据</h4>
+                    <p>上传文件或连接数据源，<br>建成第一个知识库</p>
+                    <div class="ob-act"><button class="ob-btn">去准备数据</button></div>
+                  </div>
+                  <div class="ob-step">
+                    <span class="ob-dot">2</span>
+                    <h4>问第一个问题</h4>
+                    <p>用日常语言提问，<br>马上拿到答案</p>
+                    <div class="ob-act"><span class="ob-go">去看看 →</span></div>
+                  </div>
+                  <div class="ob-step">
+                    <span class="ob-dot">3</span>
+                    <h4>优化问数效果</h4>
+                    <p>补充业务语义，<br>确认问答结果</p>
+                    <div class="ob-act"><span class="ob-go">去看看 →</span></div>
+                  </div>
+                  <div class="ob-step">
+                    <span class="ob-dot">4</span>
+                    <h4>邀请同事</h4>
+                    <p>共享知识库与问数结果</p>
+                    <div class="ob-act"><span class="ob-go">去看看 →</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 推荐问题 -->
+              <section class="recs">
+                <h3>从这些问题开始<span class="lib">· 来自「我的第一个知识库」</span></h3>
+                <div class="rec-grid">
+                  <div class="rec">
+                    <span class="ic"><svg class="i" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg></span>
+                    <b>最近半年，每天的净销售额怎么走？</b>
+                    <div class="meta">趋势 · 2026-05-01 至 2026-10-31</div>
+                  </div>
+                  <div class="rec">
+                    <span class="ic"><svg class="i" viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></svg></span>
+                    <b>华东和华南，哪个大区的毛利率更高？</b>
+                    <div class="meta">对比 · 本季度</div>
+                  </div>
+                  <div class="rec">
+                    <span class="ic"><svg class="i" viewBox="0 0 24 24"><path d="M8 4h8v5a4 4 0 0 1-8 0V4z"/><path d="M8 5H5.5v2A3.5 3.5 0 0 0 9 10.5M16 5h2.5v2A3.5 3.5 0 0 1 15 10.5"/><path d="M12 13v4M9 20h6M10.5 17h3"/></svg></span>
+                    <b>销售额前十的客户都是谁？</b>
+                    <div class="meta">排名 · 今年累计</div>
+                  </div>
+                </div>
+              </section>
+
+            </div>
+          </div>
+        </main>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="doc">
+  <section class="sec">
+    <h2>改动要点</h2>
+    <div class="cols">
+      <div class="box">
+        <h3>① 垂直空间策略</h3>
+        <p>内容列 <code>margin:auto</code> 垂直居中 + 底部多留 28px 做视觉上移。有引导卡约 640px、无引导卡约 480px，两种状态都平衡，不再出现「溢出切卡」或「下半屏全空」。右上可切换两种状态预览。</p>
+      </div>
+      <div class="box">
+        <h3>② 新手卡 → 轨道步骤条</h3>
+        <p>高度 260px → 约 185px。与问数优化 / 公共视图的 <code>.mflow</code> 同一组件族：22px 空心环 + 1px 轨道，<strong>只有当前步实心</strong>。只有当前步有主按钮，其余步骤的入口收成 hover 才出现的文字链。完成态环变绿勾。删掉卡中卡、四条「第 N 步」重复标签和装饰渐变。</p>
+      </div>
+      <div class="box">
+        <h3>③ 状态对齐（逻辑建议）</h3>
+        <p>现状按注册时间推进 onboarding stage。建议叠加一条状态判断：用户已有可问数知识库时，「准备数据」直接计为完成——不教已经会的人。对应截图里已选知识库却显示 0/4 的矛盾。</p>
+      </div>
+      <div class="box">
+        <h3>④ 推荐问题自然语言化</h3>
+        <p>标题从数据原文（<code>2026-05-01 至 2026-10-31…</code>）改为人话；日期区间降级为 meta 小字。三张卡按<strong>意图</strong>区分并配图标：趋势 / 对比 / 排名。知识库名提升到分区标题一行，不再每张卡重复。hover 改底色 + 描边，不上浮。</p>
+      </div>
+      <div class="box">
+        <h3>⑤ 输入区控件统一</h3>
+        <p>三个 chip 统一 30px / 8px / 软底：<strong>可选项</strong>=软底+值+chevron（知识库）、<strong>开关</strong>=开关态+圆点（联网搜索）、<strong>菜单</strong>=软底+chevron（分析）。空态输入区从约 90px 收到 2 行（44px），有内容再长高。发送按钮禁用态改 <code>--surface-3</code> 底 + <code>--ink-3</code> 箭头，不再几乎隐形。</p>
+      </div>
+      <div class="box">
+        <h3>⑥ 圆角与 token 清理</h3>
+        <p>圆角收敛三档：大容器 18（composer）、卡片 14（引导卡 / 推荐卡）、控件 8。品牌行「红海 DataAgent | 你的大数据智囊团」从主区删除（侧栏已有），问候成为第一落点。全部色值走 token，暗色自动跟随。</p>
+      </div>
+    </div>
+
+    <table class="spec">
+      <tr><th>元素</th><th>规格</th><th>落地映射</th></tr>
+      <tr><td>引导步骤环</td><td>22px · inset 1.5px <code>--tint-line</code> · 数字 9.5px mono 700；当前步实心 <code>--tint</code>，完成步 <code>--ok</code> 勾</td><td><code>Onboarding.tsx</code> 重写为轨道结构，复用 <code>.mflow</code> 思路；<code>--tint</code>→<code>--da-primary</code></td></tr>
+      <tr><td>轨道线</td><td>1px <code>--hair-2</code> · top 11px · left 27px → right -5px，末步无</td><td>同 <code>.mflow-step::before</code></td></tr>
+      <tr><td>引导卡</td><td>r14 · 0.5px <code>--hair-2</code> · <code>--shadow-1</code> · padding 15/18/16</td><td>替换现 18px 渐变描边卡</td></tr>
+      <tr><td>推荐卡</td><td>r14 · hover 仅 <code>--surface-2</code> 底 + <code>--tint-line</code> 边；图标 28px r8 <code>--tint-soft</code></td><td><code>LandingExamples</code>；删除 translateY 与投影 hover</td></tr>
+      <tr><td>composer</td><td>r18 · 空态 min-height 44px · focus <code>--tint-line</code> + 3px <code>--tint-soft</code> 环</td><td><code>.da-composer-shell</code></td></tr>
+      <tr><td>chip / 发送钮</td><td>chip 30px r8；send 36px 圆，禁用 <code>--surface-3</code>+<code>--ink-3</code></td><td><code>.da-composer-chip</code> / <code>.da-composer-submit</code></td></tr>
+      <tr><td>垂直布局</td><td>内容列 max 720px · <code>margin:auto</code> · 底部补偿 28px</td><td><code>.da-landing-wrap</code> 去掉 8.5dvh 顶推</td></tr>
+    </table>
+  </section>
+</div>
+
+<footer>对话首页改版设计稿 · 2026-11-15 · 组件族与 semantic-modeling-20261113-full.html 同源 · 用右上按钮切换状态与深色</footer>
+
+<script>
+// 状态切换：含 / 无引导卡
+document.querySelectorAll('[data-ob]').forEach(function(b){
+  b.addEventListener('click',function(){
+    document.body.dataset.ob=b.dataset.ob;
+    document.querySelectorAll('[data-ob]').forEach(function(x){x.classList.toggle('on',x===b);});
+    fit();
+  });
+});
+// 主题
+var themeBtn=document.getElementById('themeBtn');
+function applyTheme(t){document.documentElement.dataset.theme=t;themeBtn.textContent=t==='dark'?'浅色预览':'深色预览';}
+themeBtn.addEventListener('click',function(){applyTheme(document.documentElement.dataset.theme==='dark'?'':'dark');});
+if(new URLSearchParams(location.search).get('theme')==='dark')applyTheme('dark');
+// mock 适配缩放
+function fit(){
+  var m=document.getElementById('mock'),f=document.getElementById('fit');
+  var w=f.clientWidth,s=Math.min(1,w/1360);
+  m.style.transform='scale('+s+')';
+  f.style.height=720*s+'px';
+}
+window.addEventListener('resize',fit);fit();
+</script>
+</body>
+</html>
