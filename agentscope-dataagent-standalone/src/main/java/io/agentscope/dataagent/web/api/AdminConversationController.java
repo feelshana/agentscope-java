@@ -1,10 +1,10 @@
 package io.agentscope.dataagent.web.api;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.agentscope.dataagent.runtime.session.SessionTurnParser.TurnEntry;
 import io.agentscope.dataagent.web.persistence.jpa.SessionHistoryRepository;
 import io.agentscope.dataagent.web.persistence.jpa.SessionMessageRepository;
 import io.agentscope.dataagent.web.persistence.jpa.SessionRegistryRepository;
-import io.agentscope.dataagent.web.session.SessionTurnParser.TurnEntry;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -43,7 +43,7 @@ public class AdminConversationController {
     private final SessionMessageRepository messages;
     private final io.agentscope.dataagent.web.session.AdminHistoryPresentation presentation;
     private final io.agentscope.dataagent.web.artifact.ArtifactStore artifacts;
-    private final io.agentscope.dataagent.web.session.ConversationScopeRegistry scopes;
+    private final io.agentscope.dataagent.runtime.session.ConversationScopeRegistry scopes;
     private final ObjectMapper mapper = new ObjectMapper();
 
     public AdminConversationController(
@@ -52,7 +52,7 @@ public class AdminConversationController {
             SessionMessageRepository messages,
             io.agentscope.dataagent.web.session.AdminHistoryPresentation presentation,
             io.agentscope.dataagent.web.artifact.ArtifactStore artifacts,
-            io.agentscope.dataagent.web.session.ConversationScopeRegistry scopes) {
+            io.agentscope.dataagent.runtime.session.ConversationScopeRegistry scopes) {
         this.histories = histories;
         this.sessions = sessions;
         this.messages = messages;
@@ -335,7 +335,8 @@ public class AdminConversationController {
             Long answeredAtMs,
             String questionId,
             String answerId,
-            io.agentscope.dataagent.web.session.ConversationScopeRegistry.Selection knowledgeScope,
+            io.agentscope.dataagent.runtime.session.ConversationScopeRegistry.Selection
+                    knowledgeScope,
             io.agentscope.dataagent.web.session.AdminHistoryPresentation.Visuals visuals,
             String feedbackVote,
             boolean feedbackAvailable) {}

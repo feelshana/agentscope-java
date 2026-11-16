@@ -29,6 +29,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.List;
 import java.util.UUID;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -53,6 +54,7 @@ import org.springframework.test.context.ActiveProfiles;
             "dataagent.auth.jwt-secret=account-knowledge-test-secret-at-least-32-bytes"
         })
 @ActiveProfiles("h2")
+@Tag("integration")
 class BiAccountKnowledgeHttpTest {
     @Configuration
     @EnableAutoConfiguration

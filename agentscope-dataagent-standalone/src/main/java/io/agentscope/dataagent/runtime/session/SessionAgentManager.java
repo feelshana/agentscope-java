@@ -751,6 +751,9 @@ public class SessionAgentManager {
         }
         // Keep the routing/ownership record available for a retry if storage is unavailable.
         deleteAgentState(entry);
+        if (sessionStore != null) {
+            sessionStore.remove(sessionKey);
+        }
         sessionsByKey.remove(sessionKey);
         if (entry.label() != null) {
             labelToSessionKey.remove(entry.label().toLowerCase());
@@ -765,9 +768,6 @@ public class SessionAgentManager {
             }
         }
         childrenByParent.remove(sessionKey);
-        if (sessionStore != null) {
-            sessionStore.remove(sessionKey);
-        }
     }
 
     private void deleteAgentState(SessionEntry entry) {

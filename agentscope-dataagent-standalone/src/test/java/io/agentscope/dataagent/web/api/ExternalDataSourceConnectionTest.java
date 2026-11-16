@@ -29,7 +29,9 @@ class ExternalDataSourceConnectionTest {
     private final DataSourceIntrospector introspector = mock(DataSourceIntrospector.class);
     private final DemoDataService demo = mock(DemoDataService.class);
     private final io.agentscope.dataagent.web.auth.UserStore userStore =
-            mock(io.agentscope.dataagent.web.auth.UserStore.class);
+            mock(
+                    io.agentscope.dataagent.web.auth.UserStore.class,
+                    org.mockito.Mockito.CALLS_REAL_METHODS);
     private final DatasetRepository datasets = mock(DatasetRepository.class);
     private final io.agentscope.dataagent.web.persistence.jpa.ExternalDataSourceGrantRepository
             grants =

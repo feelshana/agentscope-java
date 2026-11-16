@@ -16,6 +16,7 @@ interface UtilityItem {
 /** Primary nav (新建对话 and 更多 are rendered separately). */
 const NAV_ITEMS: UtilityItem[] = [
   { label: '知识库', path: '/configure/datasets', icon: 'book' },
+  { label: '仪表盘', path: '/dashboards', icon: 'chart' },
   // spec092: modeling is reviewed and published per knowledge base; give it its own entry.
   { label: '语义建模', path: '/configure/modeling', icon: 'model' },
   { label: '例行任务', path: '/configure/scheduled-tasks', icon: 'calendar' },

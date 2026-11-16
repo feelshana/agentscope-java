@@ -57,6 +57,9 @@ import AdminAgentsPage from './pages/admin/AgentsPage';
 import AdminAgentDetailPage from './pages/admin/AgentDetailPage';
 import AdminChannelDetailPage from './pages/admin/ChannelDetailPage';
 
+const DashboardsPage = React.lazy(() => import('./pages/DashboardsPage'));
+const dashboardPage = <React.Suspense fallback={<div role="status" style={{ padding: 32 }}>正在打开仪表盘…</div>}><DashboardsPage /></React.Suspense>;
+
 function PrivateRoute({ children }: { children: React.ReactElement }) {
   return <SessionGate>{children}</SessionGate>;
 }
@@ -79,6 +82,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 
           {/* Primary chat surface */}
           <Route path="/chat" element={<ChatPage />} />
+          <Route path="/dashboards" element={dashboardPage} />
+          <Route path="/dashboards/:dashboardId" element={dashboardPage} />
 
           {/* Isolated ontology MCP agent page */}
           <Route path="/ontology" element={<OntologyChatPage />} />

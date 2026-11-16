@@ -124,11 +124,11 @@ public final class WrenScopedMcpClient extends McpClientWrapper {
         long started = System.nanoTime();
         try {
             T result = action.get();
-            io.agentscope.dataagent.web.middleware.ExecutionTimingMiddleware.record(
+            io.agentscope.dataagent.runtime.observability.ExecutionTimingMiddleware.record(
                     context, phase, "", started, "SUCCESS");
             return result;
         } catch (RuntimeException failure) {
-            io.agentscope.dataagent.web.middleware.ExecutionTimingMiddleware.record(
+            io.agentscope.dataagent.runtime.observability.ExecutionTimingMiddleware.record(
                     context, phase, "", started, "ERROR");
             throw failure;
         }
@@ -240,13 +240,13 @@ public final class WrenScopedMcpClient extends McpClientWrapper {
                                 var result =
                                         gateway.callAuthorized(
                                                 groupId, tool, args, this::authorize);
-                                io.agentscope.dataagent.web.middleware.ExecutionTimingMiddleware
-                                        .record(
-                                                context,
-                                                "wren." + tool,
-                                                "",
-                                                started,
-                                                result.ok() ? "SUCCESS" : "ERROR");
+                                io.agentscope.dataagent.runtime.observability
+                                        .ExecutionTimingMiddleware.record(
+                                        context,
+                                        "wren." + tool,
+                                        "",
+                                        started,
+                                        result.ok() ? "SUCCESS" : "ERROR");
                                 String payload =
                                         query && result.ok()
                                                 ? compactRows(result.payload())
@@ -269,16 +269,6 @@ public final class WrenScopedMcpClient extends McpClientWrapper {
                                             columnTotals(
                                                     compactRows(result.payload()),
                                                     String.valueOf(args.getOrDefault("sql", "")));
-                                if (query && result.ok())
-                                    successfulQueries.put(
-                                            cacheKey,
-                                            McpSchema.CallToolResult.builder()
-                                                    .content(
-                                                            List.of(
-                                                                    new McpSchema.TextContent(
-                                                                            payload)))
-                                                    .isError(false)
-                                                    .build());
                                 if (result.ok() && query) {
                                     Map<String, Object> receipt = new java.util.LinkedHashMap<>();
                                     receipt.put("groupId", groupId);
@@ -295,10 +285,15 @@ public final class WrenScopedMcpClient extends McpClientWrapper {
                                                     + "\n"
                                                     + payload;
                                 }
-                                return McpSchema.CallToolResult.builder()
-                                        .content(List.of(new McpSchema.TextContent(payload)))
-                                        .isError(!result.ok())
-                                        .build();
+                                var response =
+                                        McpSchema.CallToolResult.builder()
+                                                .content(
+                                                        List.of(new McpSchema.TextContent(payload)))
+                                                .isError(!result.ok())
+                                                .build();
+                                // Preserve the execution receipt and file references on cache hits.
+                                if (query && result.ok()) successfulQueries.put(cacheKey, response);
+                                return response;
                             }
                         })
                 .subscribeOn(Schedulers.boundedElastic());

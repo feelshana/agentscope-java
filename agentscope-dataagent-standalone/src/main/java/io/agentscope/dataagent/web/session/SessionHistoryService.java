@@ -18,7 +18,9 @@ package io.agentscope.dataagent.web.session;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.dataagent.runtime.DataAgentBootstrap;
+import io.agentscope.dataagent.runtime.session.ConversationScopeRegistry;
 import io.agentscope.dataagent.runtime.session.SessionEntry;
+import io.agentscope.dataagent.runtime.session.SessionTurnParser;
 import io.agentscope.dataagent.web.persistence.jpa.SessionHistoryEntity;
 import io.agentscope.dataagent.web.persistence.jpa.SessionHistoryRepository;
 import io.agentscope.dataagent.web.persistence.jpa.SessionMessageEntity;
@@ -289,6 +291,16 @@ public class SessionHistoryService {
         var agent = gateway == null ? null : bootstrap.gateway().findAgent(gateway);
         if (agent != null && agent.getWorkspaceManager() != null) {
             RuntimeContext rc = RuntimeContext.builder().userId(entry.userId()).build();
+            if (conversationScopes != null) {
+                String conversation = segment(entry.gateKey(), "|g:");
+                if (conversation == null) conversation = segment(entry.gateKey(), "|t:");
+                var selected = conversationScopes.get(entry.userId(), conversation);
+                if (selected != null)
+                    rc.put(
+                            io.agentscope.dataagent.dataset.DatasetScope.class,
+                            new io.agentscope.dataagent.dataset.DatasetScope(
+                                    entry.userId(), selected));
+            }
             var wm = agent.getWorkspaceManager();
             Path log = wm.resolveSessionLogFile(rc, agent.getName(), entry.sessionId());
             if (Files.isRegularFile(log)) return log;

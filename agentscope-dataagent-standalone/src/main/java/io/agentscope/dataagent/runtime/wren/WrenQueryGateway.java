@@ -19,7 +19,7 @@ import java.util.Map;
 
 /**
  * Runtime gateway to a knowledge base's live wren semantic engine (specs/010 M3). Implemented by
- * {@link WrenInstanceRegistry}; the agent-facing {@code WrenToolkit} depends on this interface so
+ * {@link WrenInstanceRegistry}; the invocation-scoped MCP client depends on this interface so
  * the tool logic (scope checks, guided errors, rendering) is testable without spawning a real
  * {@code wren serve mcp} subprocess.
  *

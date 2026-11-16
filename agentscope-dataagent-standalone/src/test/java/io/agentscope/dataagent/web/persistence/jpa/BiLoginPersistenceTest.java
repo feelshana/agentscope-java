@@ -16,6 +16,7 @@ import java.util.concurrent.Executors;
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -41,6 +42,7 @@ import org.springframework.transaction.annotation.Transactional;
     BiLoginPersistenceTest.Config.class
 })
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
+@Tag("integration")
 class BiLoginPersistenceTest {
     @TestConfiguration
     static class Config {

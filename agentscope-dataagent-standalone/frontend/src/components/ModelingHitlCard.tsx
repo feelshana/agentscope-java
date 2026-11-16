@@ -633,11 +633,12 @@ function BatchRelationCard({
 
 const S: Record<string, CSSProperties> = {
   card: {
-    marginTop: 8,
-    padding: 12,
-    border: '1px solid color-mix(in srgb, var(--da-primary) 40%, var(--da-border))',
-    borderRadius: 8,
-    background: 'color-mix(in srgb, var(--da-primary) 4%, var(--da-surface))',
+    marginTop: 10,
+    padding: '13px 14px',
+    border: '1px solid color-mix(in srgb, var(--da-primary) 20%, var(--da-border))',
+    borderLeft: '3px solid var(--da-primary)',
+    borderRadius: 12,
+    background: 'color-mix(in srgb, var(--da-primary) 3%, var(--da-surface))',
   },
   header: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 },
   badge: {

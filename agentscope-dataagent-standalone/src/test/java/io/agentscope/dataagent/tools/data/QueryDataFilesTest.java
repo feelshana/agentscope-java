@@ -48,6 +48,37 @@ class QueryDataFilesTest {
     }
 
     @Test
+    void csvPreservesQuotesNewlinesLeadingZeroIdentifiersAndFalsyValues() throws Exception {
+        var file = new ArtifactEntity();
+        var bytes = ArgumentCaptor.forClass(byte[].class);
+        when(store.save(
+                        eq(context),
+                        anyString(),
+                        anyString(),
+                        anyString(),
+                        bytes.capture(),
+                        eq(true)))
+                .thenReturn(file);
+        when(store.reference(file)).thenReturn("/api/artifacts/test-id");
+        String payload =
+                new com.fasterxml.jackson.databind.ObjectMapper()
+                        .writeValueAsString(
+                                java.util.Map.of(
+                                        "columns",
+                                        java.util.List.of("值"),
+                                        "rows",
+                                        java.util.List.of(
+                                                java.util.List.of("a\"b\nc"),
+                                                        java.util.List.of("001"),
+                                                java.util.List.of(false), java.util.List.of(0))));
+        assertThat(new QueryDataFiles(filesystem, store).note(context, payload))
+                .contains("4 行 × 1 列");
+        assertThat(new String(bytes.getValue(), StandardCharsets.UTF_8))
+                .isEqualTo("值\n\"a\"\"b\nc\"\n001\nfalse\n0\n");
+        verifyNoInteractions(filesystem);
+    }
+
+    @Test
     void oversizedResultsNeverWriteAFileOrStartDocker() {
         String payload =
                 "{\"columns\":[\"value\"],\"rows\":[[\""

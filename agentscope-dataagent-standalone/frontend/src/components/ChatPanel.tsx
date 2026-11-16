@@ -18,7 +18,6 @@ import ToolCallBlock, { ToolInspectPayload } from './ToolCallBlock';
 import TaskTrace from './TaskTrace';
 import ChartBlock from './ChartBlock';
 import EChartsBlock, { ChartPayload } from './EChartsBlock';
-import CitationPanel from './CitationPanel';
 import EmptyIllustration from './EmptyIllustration';
 import LandingExamples from './LandingExamples';
 import { NoKnowledgeBaseNotice, OnboardingChecklist, OnboardingTip, StarterQuestions } from './Onboarding';
@@ -1552,9 +1551,6 @@ export default function ChatPanel({
                     )}
                     {!m.pending && m.tools.some(t => t.name === 'run_python' && t.result) && (
                       <PythonArtifactsPanel tools={m.tools} onInspect={onInspect} />
-                    )}
-                    {m.tools.length > 0 && (
-                      <CitationPanel tools={m.tools} />
                     )}
                   </div>
                 </div>

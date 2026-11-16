@@ -129,6 +129,30 @@ class KnowledgeBaseAccessServiceTest {
     }
 
     @Test
+    void publicationRecoveryBlocksQueryButLeavesAuthorizedRepairAvailable() throws Exception {
+        var home = java.nio.file.Files.createTempDirectory("publication-access-");
+        try {
+            var props = new WrenProperties("wren", home.toString(), "dataagent", "mysql", 10);
+            var realOperations = new KnowledgeBaseOperations(props);
+            var service = new KnowledgeBaseAccessService(groups, grants, users, realOperations);
+            java.nio.file.Files.createDirectories(props.groupRoot("g1"));
+            var journal = props.groupRoot("g1").resolve(MdlPublicationStore.JOURNAL);
+            java.nio.file.Files.writeString(journal, "pending");
+            assertThatThrownBy(() -> service.requireQuery("owner", "g1"))
+                    .isInstanceOfSatisfying(
+                            DatasetException.class, e -> assertThat(e.status()).isEqualTo(503));
+            assertThat(service.requireManage("owner", "g1")).isSameAs(group);
+            java.nio.file.Files.delete(journal);
+            assertThat(service.requireQuery("owner", "g1")).isSameAs(group);
+        } finally {
+            try (var paths = java.nio.file.Files.walk(home)) {
+                for (var path : paths.sorted(java.util.Comparator.reverseOrder()).toList())
+                    java.nio.file.Files.deleteIfExists(path);
+            }
+        }
+    }
+
+    @Test
     void emptySelectionCannotExpandToAllAndPaginationCarriesAcl() {
         assertThat(access.visible("reader", List.of())).isEmpty();
         access.page("reader", 1, 20, " SaleS ", "name", true);

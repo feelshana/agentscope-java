@@ -1,0 +1,60 @@
+/* 对话建模区视觉层：只补齐内联样式表达不了的状态（hover / focus / active）。
+   布局与主视觉仍由 ModelingChatPanel 的 S 决定，避免两套来源互相打架。 */
+
+/* 输入框：聚焦时轻微上浮的紫环，靠内联 transition 平滑 */
+.mc-input:hover { border-color: color-mix(in srgb, var(--da-primary) 24%, var(--da-border)); }
+.mc-input:focus {
+  border-color: color-mix(in srgb, var(--da-primary) 52%, var(--da-border));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--da-primary) 9%, transparent),
+    0 1px 2px rgba(16, 24, 42, 0.04);
+}
+
+/* 发送按钮 */
+.mc-send:hover:not(:disabled) { background: var(--da-primary-hover); }
+.mc-send:active:not(:disabled) { transform: scale(0.94); }
+
+/* 过程折叠（▸ 建模过程 · 12 步）做成可点的胶囊，暗示可以展开 */
+.mc-fold {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 3px 9px 3px 6px;
+  margin-left: -6px;
+  background: transparent;
+  transition: background 0.14s ease, border-color 0.14s ease;
+}
+.mc-fold:hover {
+  background: var(--da-surface-sunken);
+  border-color: var(--da-border);
+}
+
+/* 步骤行：hover 才浮出底色，平时保持安静 */
+.mc-task { transition: background 0.14s ease; }
+.mc-task:hover { background: var(--da-surface-sunken); }
+
+/* 空态示例：点之前先亮起来 */
+.mc-ex { transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease; }
+.mc-ex:hover {
+  border-color: color-mix(in srgb, var(--da-primary) 35%, var(--da-border));
+  background: color-mix(in srgb, var(--da-primary) 3%, var(--da-surface));
+  transform: translateY(-1px);
+}
+
+/* 附件胶囊 */
+.mc-chip { transition: border-color 0.16s ease, color 0.16s ease, background 0.16s ease; }
+.mc-chip:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--da-primary) 40%, var(--da-border));
+  color: var(--da-primary);
+  background: color-mix(in srgb, var(--da-primary) 4%, transparent);
+}
+
+/* 结论卡里的「在语义模型中查看」 */
+.mc-link { transition: background 0.14s ease, color 0.14s ease; }
+.mc-link:hover { background: var(--da-primary-subtle); }
+
+/* 确认卡选项行 */
+.mc-opt { transition: background 0.14s ease, box-shadow 0.14s ease; }
+.mc-opt:hover { background: var(--da-surface-sunken); }
+.mc-opt[data-on='true'] {
+  background: color-mix(in srgb, var(--da-primary) 6%, var(--da-surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--da-primary) 26%, transparent);
+}

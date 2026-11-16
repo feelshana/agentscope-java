@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agentscope.dataagent.web.binding.UserBinding;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -28,6 +29,7 @@ import org.springframework.test.context.TestPropertySource;
 
 @DataJpaTest
 @TestPropertySource(properties = {"spring.sql.init.mode=never"})
+@Tag("integration")
 class JpaUserBindingStoreTest {
 
     @Autowired private UserEntityRepository repository;

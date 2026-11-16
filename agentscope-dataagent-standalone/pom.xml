@@ -44,6 +44,7 @@
         <agentscope.version>2.0.3-SNAPSHOT</agentscope.version>
         <spring.boot.version>4.0.4</spring.boot.version>
 
+        <archunit.version>1.5.1</archunit.version>
         <spotless.version>3.4.0</spotless.version>
         <google-java-format.version>1.28.0</google-java-format.version>
         <maven-compiler-plugin.version>3.15.0</maven-compiler-plugin.version>
@@ -257,6 +258,14 @@
             <artifactId>spring-boot-starter-logging</artifactId>
         </dependency>
 
+        <!-- Architecture checks use the core API with the existing JUnit engine. -->
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit</artifactId>
+            <version>${archunit.version}</version>
+            <scope>test</scope>
+        </dependency>
+
         <!-- Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -346,7 +355,8 @@
                     <trimStackTrace>false</trimStackTrace>
                     <reportFormat>plain</reportFormat>
                     <redirectTestOutputToFile>false</redirectTestOutputToFile>
-                    <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
+                    <failIfNoSpecifiedTests>true</failIfNoSpecifiedTests>
+                    <failIfNoTests>true</failIfNoTests>
                     <!--
                         Redirect HarnessAgent's default JsonSession root into the
                         build directory so test runs don't pollute (or get polluted by)
@@ -354,6 +364,8 @@
                     -->
                     <systemPropertyVariables>
                         <agentscope.state.home>${project.build.directory}/test-state-home</agentscope.state.home>
+                        <!-- Bootstrap defaults must never read or seed the developer's HOME. -->
+                        <user.home>${project.build.directory}/test-home</user.home>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>

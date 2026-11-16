@@ -78,10 +78,10 @@ import reactor.core.scheduler.Schedulers;
  * {@code HarnessAgent.call} runs at a time for that key.
  */
 public final class HarnessGateway implements Gateway {
-    private io.agentscope.dataagent.web.session.ConversationScopeRegistry conversationScopes;
+    private io.agentscope.dataagent.runtime.session.ConversationScopeRegistry conversationScopes;
 
     public void setConversationScopes(
-            io.agentscope.dataagent.web.session.ConversationScopeRegistry scopes) {
+            io.agentscope.dataagent.runtime.session.ConversationScopeRegistry scopes) {
         this.conversationScopes = scopes;
     }
 
@@ -529,7 +529,7 @@ public final class HarnessGateway implements Gateway {
                                             try {
                                                 flushHistory(sessionKey);
                                             } finally {
-                                                io.agentscope.dataagent.web.middleware
+                                                io.agentscope.dataagent.runtime.observability
                                                         .ExecutionTimingMiddleware.record(
                                                         runtimeContext,
                                                         "completion.history.projection",

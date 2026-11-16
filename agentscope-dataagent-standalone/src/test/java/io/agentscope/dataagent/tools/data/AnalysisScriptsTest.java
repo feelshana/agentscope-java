@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.io.TempDir;
  * spec102: runs the shipped analysis scripts with a local Python. Conditional: skipped when no
  * {@code python} with numpy and matplotlib is on the PATH (the sandbox image always has them).
  */
+@Tag("external")
 class AnalysisScriptsTest {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final int[] DAILY = {

@@ -480,7 +480,7 @@ public class WrenInstanceRegistry implements WrenQueryGateway {
 
     private static void phase(
             String group, String tool, String phase, long started, String status) {
-        io.agentscope.dataagent.web.middleware.ExecutionTimingMiddleware.record(
+        io.agentscope.dataagent.runtime.observability.ExecutionTimingMiddleware.record(
                 null, phase, group + ":" + tool, started, status);
     }
 

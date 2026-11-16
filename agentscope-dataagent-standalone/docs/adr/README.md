@@ -11,6 +11,11 @@ ADR 记录"为什么这样做"。规则：
 [ADR0148](0148-admin-readonly-conversation-visuals.md) 将管理员会话回看扩展到逐轮知识库、原用户反馈与已保存图表/图片，通过专用只读资源接口校验用户及会话归属；不开放普通所有者接口或任意工作区文件。
 
 [ADR0146](0146-shared-datasource-and-kb-bindings.md) 将数据源成员与已建立的知识库供数绑定分离，明确移除成员/停用的不同边界，创建人和全局管理员具有同等治理权。[ADR0147](0147-keep-datasource-password-storage.md) 按用户要求保留原数据源密码存储，不做转换或新增密钥。
+[ADR0149](0149-internal-genbi-dashboard-workbench.md) 明确官方GenBI技能/CLI、内部live查询桥、隔离HTML预览与不可变版本发布边界。
+
+[ADR0145](0145-local-resource-recovery-journals.md) 明确发布快照与单数据集删除的持久意图、提交判定、重启恢复和失败阻断。
+
+[ADR0144](0144-incremental-package-dependency-contracts.md) 以生产字节码约束新增反向依赖，精确登记历史类对，逐次抽取职责；通用计时和上下文键归runtime。
 
 [ADR0143](0143-history-query-projection.md) 为管理员检索复用消息投影，后台分批补齐角色与用户正文，服务端统一分页和统计。
 

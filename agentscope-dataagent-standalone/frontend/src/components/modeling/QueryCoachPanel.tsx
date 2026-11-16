@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { decideModelingQuestion, editRecommendedQuestion, getModelingQuestions, getRecommendedTrialQuestion, planModelingQuestion, regenerateRecommendedQuestion } from '../../api/modelingQuestions';
 import type { DraftPlan, QuestionReview, RecommendedQuestion } from '../../api/modelingQuestions';
 import { decideAssetProposal, listAssetProposals } from '../../api/semanticAssets';
@@ -12,6 +12,11 @@ import ConfirmationCards from './ConfirmationCards';
 import { listDocuments, resolveConfirmations } from '../../api/draftReview';
 import type { Confirmation, ConfirmationAnswer } from '../../api/draftReview';
 import ReadableCode from '../ReadableCode';
+import Icon from '../Icon';
+import type { IconName } from '../Icon';
+import type { ReactNode } from 'react';
+import ModelingMethodFlow from './ModelingMethodFlow';
+import './ModelingOptimization.css';
 
 /** Coach questions keep this id prefix, so the list survives reloads without extra storage. */
 const PREFIX = 'q-coach-';
@@ -20,9 +25,9 @@ const KIND: Record<string, string> = { rule: '规则', relationship: '关系', c
 const STEPS = ['分析', '口径/方案', 'SQL', '保存问答'] as const;
 type Step = 0 | 1 | 2 | 3;
 type Group = 'analyse' | 'meaning' | 'plan' | 'sql' | 'review' | 'done';
-const GROUPS: { key: Group; label: string }[] = [
-  { key: 'analyse', label: '待分析' }, { key: 'meaning', label: '待确认口径' }, { key: 'plan', label: '待批准方案' },
-  { key: 'sql', label: '待核对 SQL' }, { key: 'review', label: '待复核' }, { key: 'done', label: '已确认' },
+const GROUPS: { key: Group; label: string; icon: IconName }[] = [
+  { key: 'analyse', label: '待分析', icon: 'search' }, { key: 'meaning', label: '待确认口径', icon: 'chat' }, { key: 'plan', label: '待批准方案', icon: 'list' },
+  { key: 'sql', label: '待核对 SQL', icon: 'code' }, { key: 'review', label: '待复核', icon: 'refresh' }, { key: 'done', label: '已确认', icon: 'check' },
 ];
 const message = (e: unknown) => e instanceof Error ? e.message : String(e);
 
@@ -72,7 +77,7 @@ export function questionState(r: QuestionReview | undefined, cards: number, link
  * query templates; approved items are drafted and each question's SQL is read and confirmed — nothing
  * is executed. One question at a time on the right, publishing stays in the draft bar.
  */
-export default function QueryCoachPanel({ groupId, assistantIdle, available, onRequest, confirmations = [], onAnswer, onOpenDocuments }: {
+export default function QueryCoachPanel({ groupId, assistantIdle, available, onRequest, confirmations = [], onAnswer, onOpenDocuments, trial }: {
   groupId: string;
   assistantIdle: boolean;
   /** The knowledge base has been published once; the coach builds on the basic model. */
@@ -83,6 +88,7 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
   onAnswer?: (answers: ConfirmationAnswer[]) => void;
   /** Business documents live on the "资料" tab; the coach only links to it. */
   onOpenDocuments?: () => void;
+  trial?: ReactNode;
 }) {
   const [reviews, setReviews] = useState<QuestionReview[]>([]);
   const [proposals, setProposals] = useState<AssetProposal[]>([]);
@@ -96,9 +102,18 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
   const [plans, setPlans] = useState<Record<string, DraftPlan>>({});
   const [reason, setReason] = useState('');
   const [showContext, setShowContext] = useState(false);
+  const [intakeOpen, setIntakeOpen] = useState(false);
+  const intake = useRef<HTMLDialogElement>(null);
+  const intakeInput = useRef<HTMLTextAreaElement>(null);
+  const contextDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => { if (!intake.current) return; if (intakeOpen && !intake.current.open) { intake.current.showModal(); intakeInput.current?.focus(); } else if (!intakeOpen && intake.current.open) intake.current.close(); }, [intakeOpen]);
+  useEffect(() => { if (showContext && contextDialog.current && !contextDialog.current.open) contextDialog.current.showModal(); }, [showContext]);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [documents, setDocuments] = useState<string[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const loadGeneration = useRef(0);
   /** Questions already asked elsewhere (trial questions, the recommended one) to start from. */
   const [suggestions, setSuggestions] = useState<string[]>([]);
   /** spec103: the knowledge base's one recommended question (prefilled on the query page). */
@@ -107,18 +122,23 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
   const waitingFor = (id: string) => confirmations.filter(c => (c.questionIds ?? []).includes(id));
 
   const load = useCallback(() => {
-    void getRecommendedTrialQuestion(groupId).then(setRecommended).catch(() => undefined);
-    void getModelingQuestions(groupId).then(list => {
-      setReviews(list.filter(r => r.question.id.startsWith(PREFIX)));
+    const generation = ++loadGeneration.current;
+    const active = () => generation === loadGeneration.current;
+    setLoading(true); setLoadError('');
+    void getRecommendedTrialQuestion(groupId).then(value => { if (active()) setRecommended(value); }).catch(() => undefined);
+    void Promise.all([getModelingQuestions(groupId), listAssetProposals(groupId)]).then(([list, proposed]) => {
+      if (!active()) return;
+      const coach = list.filter(r => r.question.id.startsWith(PREFIX));
+      setReviews(coach); setProposals(proposed.filter(p => !p.explicit));
       const asked = list.filter(r => !r.question.id.startsWith(PREFIX)).map(r => r.question.question);
-      void recommendedQuestion(groupId).catch(() => null).then(recommended => {
-        const coach = new Set(list.filter(r => r.question.id.startsWith(PREFIX)).map(r => r.question.question));
-        setSuggestions([...new Set([...(recommended ? [recommended] : []), ...asked])].filter(q => !coach.has(q)).slice(0, 6));
+      void recommendedQuestion(groupId).catch(() => null).then(value => {
+        if (!active()) return;
+        const known = new Set(coach.map(r => r.question.question));
+        setSuggestions([...new Set([...(value ? [value] : []), ...asked])].filter(q => !known.has(q)).slice(0, 6));
       });
-    }).catch(() => undefined);
-    void listAssetProposals(groupId).then(list => setProposals(list.filter(p => !p.explicit))).catch(() => undefined);
+    }).catch(e => { if (active()) setLoadError(message(e)); }).finally(() => { if (active()) setLoading(false); });
   }, [groupId]);
-  useEffect(() => { load(); }, [load, assistantIdle]);
+  useEffect(() => { load(); return () => { loadGeneration.current++; }; }, [load, assistantIdle]);
   useEffect(() => {
     const update = (event: Event) => {
       if ((event as CustomEvent<{ groupId: string }>).detail?.groupId === groupId) load();
@@ -159,7 +179,7 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
     const ids = lines.map((_, i) => `${PREFIX}${stamp}-${i + 1}`);
     if (onRequest(coachRequest(lines, ids, documents ?? []), 'coach', `问数优化：分析 ${lines.length} 个常用问题`)) {
       setSubmitted(all => [...all, ...ids.map((id, i) => ({ id, question: lines[i] }))]);
-      setInput('');
+      setInput(''); setIntakeOpen(false); select(ids[0]);
     }
   };
   const reanalyse = (list: { id: string; question: string }[]) => {
@@ -204,7 +224,7 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
       'question', `问数优化：修正 ${q.question}`)) setReason('');
   };
 
-  if (!available) return <section className="sm-pane qc-pane"><div className="da-card sm-empty">
+  if (!available) return <section className="sm-pane qc-pane mo-optimization"><div className="da-card sm-empty">
     完成首次建模并发布后，可以在这里列出业务常问的问题，由助手分析缺少的口径并提议，你批准后再起草。</div></section>;
 
   const proposalCards = (list: AssetProposal[]) => <div className="qc-proposals">
@@ -315,37 +335,39 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
       </div>}
     </>;
   };
-  const fixBox = (r: QuestionReview) => <div className="qc-fix">
+  const fixBox = (r: QuestionReview) => <details className="qc-fix"><summary>不正确？说明原因，让助手修正口径并重写 SQL</summary>
     <textarea className="da-input" rows={2} value={reason} onChange={e => setReason(e.target.value)} placeholder="不正确？说明原因，让助手修正口径并重写 SQL" />
     <button className="da-btn da-btn-sm" disabled={!reason.trim() || !assistantIdle} onClick={() => void fix(r)}>交给助手修正</button>
-  </div>;
+  </details>;
 
   const pickable = (id: string) => states.get(id)?.group !== 'done' && byId.has(id);
   const addSuggestion = (q: string) => setInput(text => {
     const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
     return lines.includes(q) ? text : [...lines, q].join('\n');
   });
-  const overview = questions.length === 0 ? <div className="qc-empty">
+  const emptyGuidance = <div className="qc-empty">
     <strong className="qc-empty-title">从业务最常问的问题开始</strong>
     <p>挑业务同事经常问、你又担心答不准的问题。比如带"活跃""流失""有效"这类口径词的，要跨表统计的，或者要排名、算占比的。</p>
     {suggestions.length > 0 && <>
       <div className="da-small">这些问题已经有人问过或试问过，点一下加入左侧：</div>
       <div className="qc-chips">{suggestions.map(q => <button key={q} type="button" className="qc-chip"
-        disabled={input.split('\n').map(l => l.trim()).includes(q)} onClick={() => addSuggestion(q)}>＋ {q}</button>)}</div>
+        disabled={input.split('\n').map(l => l.trim()).includes(q)} onClick={() => { addSuggestion(q); setIntakeOpen(true); }}>＋ {q}</button>)}</div>
     </>}
     <ul className="qc-empty-tips">
       <li><b>能答对的题</b>：直接给出 SQL，你确认后存为问答样例，以后同类问题照着答。</li>
       <li><b>答不对的题</b>：助手会说明缺什么（某个口径没定义、两张表没关联上），请你回答或批准补充。</li>
       <li><b>不会乱改模型</b>：没有你的批准不会写规则；这里不建视图，多道题反复用到的取数逻辑以后在"公共视图"统一整理。</li>
     </ul>
-  </div> : <>
-    <strong>处理进度</strong>
+  </div>;
+  const overview = <section className="qc-overview" aria-label="处理进度">
+    <header><h3>处理进度</h3><span>共 {questions.length} 个业务问题</span></header>
     <div className="qc-counts">{GROUPS.map(g => {
       const n = questions.filter(q => states.get(q.id)?.group === g.key).length;
-      return <button key={g.key} type="button" className={`qc-count ${filter === g.key ? 'qc-count-on' : ''}`} disabled={!n}
-        title={n ? `只看${g.label}的题` : undefined} onClick={() => setFilter(filter === g.key ? '' : g.key)}><b>{n}</b><span>{g.label}</span></button>;
+      return <button key={g.key} type="button" className={`qc-count qc-count-${g.key} ${filter === g.key ? 'qc-count-on' : ''}`} disabled={!n}
+        aria-label={`${g.label} ${n} 个`} title={n ? `只看${g.label}的题` : undefined} onClick={() => setFilter(filter === g.key ? '' : g.key)}><span className="qc-count-icon"><Icon name={g.icon} size="sm" /></span><b>{n}</b><span>{g.label}</span></button>;
     })}</div>
     <div className="da-small">点左侧任意一道题开始处理；点上面的数字可以只看某一类题。</div>
+    {questions.length === 0 && emptyGuidance}
     {(picked.size > 0 || questions.some(q => ['sql', 'review'].includes(states.get(q.id)?.group ?? ''))) && <div className="sa-actions">
       {picked.size > 0 && <button className="da-btn da-btn-primary da-btn-sm" disabled={!assistantIdle}
         onClick={() => reanalyse(questions.filter(q => picked.has(q.id)))}>重新分析勾选的 {picked.size} 道题</button>}
@@ -354,45 +376,37 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
         onClick={() => generate(questions.filter(q => ['sql', 'review'].includes(states.get(q.id)?.group ?? '')), '问数优化：按新口径重新生成 SQL')}>按最新口径重写待核对的 SQL</button>}
     </div>}
     {unlinked.length > 0 && <><strong>还没有对应问题的提议</strong>{proposalCards(unlinked)}</>}
-  </>;
+  </section>;
 
-  return <section className="sm-pane qc-pane" aria-label="问数优化">
-    <div className="da-card qc-intro">
-      <div className="qc-intro-head">
-        <div>
-          <strong className="qc-intro-title">问数优化</strong>
-          <div className="qc-intro-lead">把业务同事最常问的问题拿来"考一考"模型：答得对的存成问答样例，答不对的找出缺了什么，补上后问数会更准。</div>
-        </div>
-        <button type="button" className="da-btn da-btn-sm" aria-expanded={showContext} onClick={() => setShowContext(!showContext)}>
-          {showContext ? '收起 MDL 与规则' : '查看 MDL 与规则'}</button>
-      </div>
-      <ol className="qc-flow">
-        <li><b>1</b><div><strong>写下常问的问题</strong><span>每行一个，一次最多 10 个</span></div></li>
-        <li><b>2</b><div><strong>助手逐题检查</strong><span>能答对就写好 SQL；答不对会说明缺什么口径</span></div></li>
-        <li><b>3</b><div><strong>你来拍板</strong><span>回答口径问题、批准要补的规则或关系</span></div></li>
-        <li><b>4</b><div><strong>核对并保存</strong><span>SQL 看着没问题就确认，存为问答样例</span></div></li>
-      </ol>
-      <div className="da-small qc-intro-note">
-        只检查 SQL 怎么写，不查询数据；所有改动先进草稿，在底部草稿栏发布后问数才会用到。
-        {documents !== null && (documents.length
-          ? `已有 ${documents.length} 份业务文档（${documents.join('、')}），文档里写明的口径会直接采用。`
-          : '还没有业务文档：口径写在文档里时助手会直接采用，不用逐条问你。')}
-        {onOpenDocuments && <button type="button" className="sm-text-link" onClick={onOpenDocuments}>{documents?.length ? '管理文档' : '上传文档'}</button>}
-      </div>
+  return <section className="sm-pane qc-pane mo-optimization" aria-label="问数优化">
+    <header className="mo-page-head"><div><h2>问数优化</h2><p>用业务最常问的问题检查模型：补齐口径、核对 SQL，再把正确的问答保存为示例。</p></div>
+      <div className="mo-head-actions"><button type="button" className="da-btn" onClick={() => setShowContext(true)}><Icon name="book" size="sm" />MDL 与规则</button>
+        <button type="button" className="da-btn da-btn-primary" onClick={() => setIntakeOpen(true)}><Icon name="plus" size="sm" />新增业务问题</button></div>
+    </header>
+    <div className={`qc-introduction ${trial ? '' : 'qc-introduction-only'}`}><ModelingMethodFlow kind="coach" compact onAdd={() => setIntakeOpen(true)} />{trial}</div>
+    <div className="mo-notice"><Icon name="info" size="sm" /><span>只检查 SQL 怎么写，不查询数据；所有改动先进草稿，在底部草稿栏发布后问数才会用到。
+      {documents !== null && (documents.length ? `已有 ${documents.length} 份业务文档，文档里写明的口径会直接采用。` : '还没有业务文档：口径写在文档里时助手会直接采用，不用逐条问你。')}</span>
+      {onOpenDocuments && <button type="button" className="sm-text-link" onClick={onOpenDocuments}>{documents?.length ? '管理文档' : '上传文档'}</button>}
     </div>
     {error && <div role="alert" className="da-alert da-alert-error">{error}</div>}
-    {showContext && <SemanticContextPanel groupId={groupId} />}
+    {loadError && <div role="alert" className="mo-notice mo-error"><span>问题列表读取失败：{loadError}</span><button type="button" className="da-btn" onClick={load}>重试</button></div>}
+    {showContext && <dialog ref={contextDialog} className="mo-form-dialog" aria-label="问数助手依据的内容" onClose={() => setShowContext(false)}>
+      <header className="mo-dialog-head"><strong>问数助手依据的内容</strong><button type="button" className="da-btn" onClick={() => { contextDialog.current?.close(); setShowContext(false); }}>关闭</button></header><SemanticContextPanel groupId={groupId} />
+    </dialog>}
+    <dialog ref={intake} className="mo-form-dialog" aria-labelledby="mo-coach-intake-title" onClose={() => setIntakeOpen(false)}>
+      <header className="mo-dialog-head"><strong id="mo-coach-intake-title">写下业务常问的问题</strong><button type="button" className="da-btn" onClick={() => { intake.current?.close(); setIntakeOpen(false); }}>关闭</button></header>
+      <div className="mo-dialog-body"><p className="da-small">像业务同事那样提问，每行一个，一次最多 10 个。</p>
+        <textarea ref={intakeInput} className="da-input" rows={6} value={input} onChange={e => setInput(e.target.value)} aria-label="添加业务问题" placeholder={'上个月各品类的净销售额是多少？\n最近 30 天的流失用户有哪些'} />
+        {error && <p className="mo-error" role="alert">{error}</p>}
+        {suggestions.length > 0 && <div className="qc-chips">{suggestions.map(q => <button key={q} type="button" className="qc-chip" disabled={input.split('\n').map(l => l.trim()).includes(q)} onClick={() => addSuggestion(q)}>＋ {q}</button>)}</div>}
+      </div><footer className="mo-dialog-footer"><button type="button" className="da-btn" onClick={() => { intake.current?.close(); setIntakeOpen(false); }}>取消</button><button type="button" className="da-btn da-btn-primary" disabled={!input.trim() || !assistantIdle} onClick={analyse}>{assistantIdle ? '让助手逐题检查' : '助手正在处理…'}</button></footer>
+    </dialog>
     <div className="qc-layout">
       <div className="da-card qc-questions">
-        <div className="qc-list-head"><strong>业务问题</strong><span className="da-small">{questions.length} 个</span>
+        <div className="qc-list-head">{current ? <button type="button" className="qc-back-overview" onClick={() => select(null)}><Icon name="back" size="sm" />返回处理概况</button> : <strong>业务问题</strong>}<span className="da-small">{loading && !questions.length ? '读取中…' : `${questions.length} 个`}</span>
           <select className="da-input qc-filter" aria-label="按状态筛选" value={filter} onChange={e => setFilter(e.target.value as Group | '')}>
             <option value="">全部状态</option>{GROUPS.map(g => <option key={g.key} value={g.key}>{g.label}</option>)}
-          </select></div>
-        <textarea className="da-input" rows={3} value={input} onChange={e => setInput(e.target.value)} aria-label="添加业务问题"
-          placeholder={'像业务同事那样提问，每行一个，例如：\n各部门上周的报表访问次数\n最近 30 天的流失用户有哪些'} />
-        <button className="da-btn da-btn-primary da-btn-sm" disabled={!input.trim() || !assistantIdle}
-          title={assistantIdle ? undefined : '助手空闲后可分析'} onClick={analyse}>
-          {assistantIdle ? '让助手逐题检查' : '助手正在处理…'}</button>
+          </select><button type="button" className="da-btn da-btn-primary qc-add-question" onClick={() => setIntakeOpen(true)}><Icon name="plus" size="sm" />添加问题</button></div>
         <ul className="qc-question-list">
           {shown.map(q => <li key={q.id} className={`qc-item ${selected === q.id ? 'qc-item-on' : ''}`}>
             <input type="checkbox" aria-label={`选中 ${q.question}`} disabled={!pickable(q.id)} checked={picked.has(q.id)}
@@ -408,9 +422,9 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
                 title={recommended?.question ? `替换当前推荐问题「${recommended.question}」` : '问数页选中这个知识库时预填这道题'}
                 onClick={() => void setAsRecommended(q.question)}>设为推荐问题</button>)}</li>)}
         </ul>
-        {selected && <button type="button" className="sm-text-link" onClick={() => select(null)}>返回处理概况</button>}
+        {!shown.length && !loading && !loadError && <p className="qc-list-empty">{questions.length ? '当前状态下没有业务问题' : '添加业务问题，开始检查口径'}</p>}
       </div>
-      <div className="da-card qc-bench">{current ? workbench() : overview}</div>
+      <div className="da-card qc-bench">{current ? workbench() : loadError && !questions.length ? <p className="da-small">问题列表暂时未能加载，请重试。</p> : loading && !questions.length ? <p className="da-small" role="status">正在读取业务问题…</p> : overview}</div>
     </div>
   </section>;
 }

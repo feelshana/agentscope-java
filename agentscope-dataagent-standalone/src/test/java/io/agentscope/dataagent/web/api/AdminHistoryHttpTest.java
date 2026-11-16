@@ -28,6 +28,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,6 +55,7 @@ import org.springframework.test.context.DynamicPropertySource;
             "spring.sql.init.mode=never",
             "dataagent.jwt.secret=local-test-secret-at-least-thirty-two-bytes"
         })
+@Tag("integration")
 class AdminHistoryHttpTest {
     @TempDir static Path files;
 
@@ -72,7 +74,7 @@ class AdminHistoryHttpTest {
         JwtService.class,
         AdminConversationController.class,
         io.agentscope.dataagent.web.session.AdminHistoryPresentation.class,
-        io.agentscope.dataagent.web.session.ConversationScopeRegistry.class,
+        io.agentscope.dataagent.runtime.session.ConversationScopeRegistry.class,
         AdminHistoryOverviewController.class,
         io.agentscope.dataagent.web.session.AdminHistoryQueryService.class,
         GlobalAdministratorController.class,

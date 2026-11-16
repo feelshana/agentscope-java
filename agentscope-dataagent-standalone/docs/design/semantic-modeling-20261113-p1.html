@@ -1,0 +1,1265 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>语义建模重构 · 第 1 部分：工作台骨架与字段整理</title>
+<style>
+:root{
+  --bg:#EFEFF4;--canvas:#F2F2F7;--surface:#FFFFFF;--surface-2:#F7F7FA;--surface-3:#EFEFF5;
+  --ink:#16171D;--ink-2:#4A4E5C;--ink-3:#7A7F8E;--ink-4:#A8ADBB;
+  --hair:rgba(60,60,67,.11);--hair-2:rgba(60,60,67,.16);
+  --tint:#5F4BC8;--tint-2:#7A66E8;--tint-soft:#EEEAFC;--tint-line:rgba(95,75,200,.24);
+  --ok:#1E9E63;--ok-soft:#E6F5EC;--warn:#B0761B;--warn-soft:#FBF1DF;--bad:#C0394D;
+  --shadow-1:0 1px 2px rgba(16,24,40,.05),0 6px 18px rgba(16,24,40,.055);
+  --shadow-2:0 2px 4px rgba(16,24,40,.05),0 14px 38px rgba(16,24,40,.10);
+  --spring:cubic-bezier(.32,1.12,.42,1);
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+}
+html[data-theme="dark"]{
+  --bg:#0A0A0D;--canvas:#0C0C10;--surface:#17171D;--surface-2:#1E1E26;--surface-3:#26262F;
+  --ink:#F0F0F4;--ink-2:#B4B8C6;--ink-3:#858A9A;--ink-4:#5F6474;
+  --hair:rgba(255,255,255,.09);--hair-2:rgba(255,255,255,.14);
+  --tint:#A99DFF;--tint-2:#C0B6FF;--tint-soft:rgba(120,102,235,.16);--tint-line:rgba(169,157,255,.30);
+  --ok:#4FC98A;--ok-soft:rgba(52,199,123,.14);--warn:#E0AC46;--warn-soft:rgba(224,172,70,.14);--bad:#F07284;
+  --shadow-1:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.32);
+  --shadow-2:0 4px 10px rgba(0,0,0,.42),0 20px 50px rgba(0,0,0,.42);
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font:400 13px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;letter-spacing:0;
+  transition:background .4s,color .4s;
+}
+.i{width:16px;height:16px;flex:none;display:block;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.grow{flex:1}
+
+/* ---------------- doc head ---------------- */
+.dochead{max-width:1440px;margin:0 auto;padding:40px 40px 18px}
+.kicker{font-size:11px;font-weight:650;letter-spacing:.09em;text-transform:uppercase;color:var(--tint)}
+.dochead h1{font-size:30px;line-height:1.2;letter-spacing:-1.1px;margin:9px 0 0;font-weight:700}
+.dochead p{font-size:13px;line-height:1.85;color:var(--ink-3);max-width:820px;margin:12px 0 0}
+.docbar{display:flex;align-items:center;gap:8px;margin-top:20px;flex-wrap:wrap}
+.sbtn{
+  height:30px;padding:0 13px;border-radius:9px;border:1px solid var(--hair-2);background:var(--surface);
+  color:var(--ink-2);font:inherit;font-size:12.5px;font-weight:550;cursor:pointer;
+  transition:background .18s,color .18s,border-color .18s,box-shadow .18s;
+}
+.sbtn:hover{border-color:var(--tint-line);color:var(--ink)}
+.sbtn.on{background:var(--tint-soft);border-color:var(--tint-line);color:var(--tint);font-weight:650}
+.sp{flex:1}
+
+/* ---------------- stage ---------------- */
+.stage{padding:10px 40px 0;overflow:hidden}
+.stage-inner{max-width:1440px;margin:0 auto}
+.mock{
+  width:1360px;height:700px;display:flex;background:var(--canvas);
+  border:.5px solid var(--hair-2);border-radius:16px;overflow:hidden;
+  box-shadow:0 24px 60px rgba(16,24,40,.11),0 2px 8px rgba(16,24,40,.05);
+  transform-origin:top left;position:relative;
+}
+
+/* ---------------- rail ---------------- */
+.rail{
+  width:56px;flex:none;background:color-mix(in srgb,var(--surface) 72%,transparent);
+  border-right:.5px solid var(--hair);display:flex;flex-direction:column;align-items:center;
+  gap:6px;padding:12px 0;backdrop-filter:blur(24px) saturate(180%);
+}
+.rail-logo{width:28px;height:28px;border-radius:8px;background:var(--tint);color:#fff;font-size:10.5px;font-weight:700;
+  display:grid;place-items:center;margin-bottom:8px;letter-spacing:-.3px}
+html[data-theme="dark"] .rail-logo{background:#6A58E0}
+.rail-b{width:34px;height:34px;border-radius:9px;border:0;background:none;color:var(--ink-3);display:grid;place-items:center;cursor:pointer}
+.rail-b.on{background:var(--tint-soft);color:var(--tint)}
+.app{flex:1;min-width:0;display:flex;flex-direction:column}
+
+/* ---------------- focus bar（聚焦态头部） ---------------- */
+.focusbar{
+  height:52px;flex:none;display:flex;align-items:center;gap:10px;padding:0 16px 0 12px;
+  background:color-mix(in srgb,var(--surface) 84%,transparent);border-bottom:.5px solid var(--hair);
+  backdrop-filter:blur(24px) saturate(180%);position:relative;z-index:20;
+}
+.icon-back{width:26px;height:26px;border-radius:7px;border:0;background:none;color:var(--ink-2);font-size:17px;line-height:1;cursor:pointer;display:grid;place-items:center}
+.crumb{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-3);min-width:0}
+.crumb i{font-style:normal;color:var(--ink-4)}
+.crumb strong{color:var(--ink);font-weight:600;letter-spacing:-.15px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 头部步骤条：三段箭头（chevron），文字在条内 */
+.hbar-sep{width:.5px;height:14px;background:rgba(60,60,67,.16);margin:0 9px 0 4px;flex:none}
+.steps{display:flex;align-items:center;gap:2px;height:26px;flex:none;position:relative}
+.st{
+  position:relative;height:26px;display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  padding:0 16px;min-width:90px;font-size:12px;font-weight:600;letter-spacing:-.05px;white-space:nowrap;
+  clip-path:polygon(0 0,calc(100% - 12px) 0,100% 50%,calc(100% - 12px) 100%,0 100%,12px 50%);
+  transition:background .3s var(--spring),color .3s;
+}
+.st:first-child{clip-path:polygon(0 4px,4px 0,calc(100% - 12px) 0,100% 50%,calc(100% - 12px) 100%,4px 100%,0 calc(100% - 4px));padding-left:15px}
+.st + .st{padding-left:24px}
+.st:last-child{padding-right:12px}
+.st b{
+  font-size:10px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:0;
+  opacity:.42;transform:translateY(-.3px);
+}
+.st.done{background:color-mix(in srgb,var(--ok) 14%,var(--surface));color:color-mix(in srgb,var(--ok) 74%,var(--ink));
+  box-shadow:inset 0 .5px 0 rgba(255,255,255,.5)}
+.st.done b{opacity:.55}
+.st.cur{
+  background:linear-gradient(180deg,color-mix(in srgb,var(--tint) 88%,#fff) 0,var(--tint) 100%);
+  color:#fff;box-shadow:inset 0 .5px 0 rgba(255,255,255,.22);
+}
+.st.cur b{opacity:.66}
+.st.todo{background:color-mix(in srgb,var(--ink) 6.5%,var(--surface));color:var(--ink-3)}
+html[data-theme="dark"] .st.done{background:color-mix(in srgb,var(--ok) 21%,var(--surface));color:color-mix(in srgb,var(--ok) 42%,#fff)}
+html[data-theme="dark"] .st.cur{background:linear-gradient(180deg,#7A66E8 0,#6A56DA 100%);color:#fff}
+html[data-theme="dark"] .st.todo{background:rgba(255,255,255,.085);color:var(--ink-3)}
+.prog-t{display:flex;align-items:baseline;gap:6px;margin-left:3px;font-size:11.5px;color:var(--ink-2);font-weight:600;letter-spacing:-.1px;white-space:nowrap}
+.prog-t em{font-style:normal;color:var(--ink-4);font-weight:500;font-variant-numeric:tabular-nums;font-size:11px}
+.quiet{font-size:11.5px;color:var(--ink-4)}
+.ghost-btn{
+  height:27px;padding:0 11px;border-radius:8px;border:.5px solid var(--hair-2);background:var(--surface);
+  color:var(--ink-2);font:inherit;font-size:12px;font-weight:550;cursor:pointer;display:inline-flex;align-items:center;gap:6px;
+  box-shadow:0 1px 1.5px rgba(16,24,40,.04);
+}
+.ghost-btn.ico{width:27px;padding:0;justify-content:center;color:var(--ink-3)}
+
+/* ---------------- body ---------------- */
+.body{flex:1;min-height:0;display:flex;gap:12px;padding:12px 16px 0}
+.fs{flex:1;min-width:0;display:flex;gap:12px}
+
+/* 左：数据表 */
+.fs-nav{
+  width:208px;flex:none;background:var(--surface);border:.5px solid var(--hair);border-radius:14px;
+  box-shadow:var(--shadow-1);padding:11px 9px;display:flex;flex-direction:column;gap:3px;position:relative;
+}
+.nav-head{display:flex;align-items:center;justify-content:space-between;padding:2px 7px 8px;font-size:11px;color:var(--ink-3);font-weight:600}
+.nav-head .tnum{font-variant-numeric:tabular-nums;color:var(--ink-4);font-weight:500}
+.nav-bar{height:3px;border-radius:2px;background:var(--surface-3);margin:0 7px 9px;overflow:hidden}
+.nav-bar span{display:block;height:100%;width:50%;background:var(--tint);border-radius:2px}
+.ds{display:flex;align-items:center;gap:9px;padding:8px 7px;border-radius:9px;position:relative;cursor:default}
+.ds.on{background:var(--tint-soft)}
+.ds-ico{
+  width:26px;height:26px;flex:none;border-radius:7px;display:grid;place-items:center;
+  font-size:11px;font-weight:650;background:var(--surface-3);color:var(--ink-3);
+}
+.ds.on .ds-ico{background:var(--tint);color:#fff}
+.ds-ico.dim{background:var(--surface-3);color:var(--ink-3)}
+.ds-t{min-width:0;flex:1}
+.ds-t b{display:block;font-size:12.5px;font-weight:600;letter-spacing:-.1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ds.on .ds-t b{color:var(--tint)}
+.ds-t small{display:block;margin-top:1px;font-size:10.5px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.ds-st{font-size:9px;color:var(--hair-2);flex:none}
+.ds-st.now{color:var(--warn)}
+.ds-st.ok{color:var(--ok)}
+.nav-tip{
+  margin:9px 6px 1px;padding-top:9px;border-top:.5px solid var(--hair);
+  font-size:10.5px;line-height:1.65;color:var(--ink-4);
+}
+
+/* 右：字段卡 */
+.fs-main{
+  flex:1;min-width:0;background:var(--surface);border:.5px solid var(--hair);border-radius:14px;
+  box-shadow:var(--shadow-1);display:flex;flex-direction:column;overflow:hidden;
+}
+.fs-head{height:50px;flex:none;display:flex;align-items:center;gap:9px;padding:0 16px;border-bottom:.5px solid var(--hair)}
+.fs-title{display:flex;align-items:baseline;gap:8px;min-width:0}
+.fs-title b{font-size:14px;font-weight:650;letter-spacing:-.25px}
+.tag{font-size:10px;font-weight:600;padding:1.5px 6px;border-radius:5px;letter-spacing:0;white-space:nowrap}
+.tag.fact{background:var(--tint-soft);color:var(--tint)}
+.tag.src{background:var(--surface-3);color:var(--ink-3)}
+.meta{font-size:11px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+
+.seg{display:inline-flex;background:var(--surface-2);border-radius:8px;padding:2px;gap:1px;position:relative}
+.seg button{
+  height:25px;padding:0 10px;border:0;border-radius:6px;background:none;color:var(--ink-2);
+  font:inherit;font-size:11.5px;font-weight:550;cursor:pointer;display:inline-flex;align-items:center;gap:5px;
+}
+.seg button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(16,24,40,.10),0 0 0 .5px rgba(60,60,67,.08)}
+.seg em{font-style:normal;font-size:10.5px;color:var(--ink-4);font-variant-numeric:tabular-nums}
+.seg button.on em{color:var(--ink-3)}
+.seg em.w{color:var(--warn)}
+
+/* AI 建议条 */
+.aibar{
+  height:44px;flex:none;display:flex;align-items:center;gap:7px;padding:0 16px;
+  border-bottom:.5px solid var(--hair);background:color-mix(in srgb,var(--tint-soft) 40%,var(--surface));position:relative;
+}
+.aibar .spark{color:var(--tint)}
+.qbtn{
+  height:26px;padding:0 9px;border-radius:7px;border:.5px solid var(--hair-2);background:var(--surface);
+  color:var(--ink-2);font:inherit;font-size:11.5px;font-weight:550;cursor:pointer;white-space:nowrap;
+  box-shadow:0 1px 1.5px rgba(16,24,40,.04);
+}
+.qbtn.pri{background:var(--tint-soft);border-color:var(--tint-line);color:var(--tint);font-weight:650}
+.aibar .hint{font-size:11px;color:var(--ink-3);margin-left:2px;white-space:nowrap}
+.vsep{width:.5px;height:15px;background:var(--hair-2);margin:0 3px}
+
+/* 表格 */
+.tbody{flex:1;min-height:0;overflow:hidden}
+.tr{
+  display:grid;grid-template-columns:32px minmax(0,.96fr) minmax(0,.8fr) minmax(0,1.62fr);
+  align-items:center;gap:10px;padding:0 16px;min-height:50px;
+  border-bottom:.5px solid var(--hair);
+}
+.tr.th{min-height:32px;background:var(--surface-2);border-bottom:.5px solid var(--hair)}
+.tr.th span{font-size:10.5px;font-weight:650;letter-spacing:.04em;color:var(--ink-4)}
+.tr:not(.th):last-child{border-bottom:0}
+.tr:has(.desc.focus){min-height:auto;padding-top:7px;padding-bottom:7px}
+.tr.hov{background:rgba(95,75,200,.028)}
+html[data-theme="dark"] .tr.hov{background:rgba(169,157,255,.085)}
+.tr.off .fn b{color:var(--ink-4);text-decoration:line-through;text-decoration-color:var(--ink-4)}
+.tr.off .fn small{color:var(--ink-4)}
+
+.ck{
+  width:17px;height:17px;border-radius:5px;border:1.2px solid var(--hair-2);background:var(--surface);
+  display:grid;place-items:center;color:transparent;
+}
+.ck.on{background:var(--tint);border-color:var(--tint);color:#fff}
+html[data-theme="dark"] .ck.on{background:#6A58E0;border-color:#6A58E0}
+.ck .i{width:11px;height:11px;stroke-width:2.6}
+.ck.dis{border-style:dashed;border-color:var(--tint-line);background:var(--tint-soft);color:var(--tint)}
+
+.fn{min-width:0}
+.fn-row{display:flex;align-items:center;gap:5px;min-width:0}
+.fn b{font-size:12.5px;font-weight:600;letter-spacing:-.1px;font-family:var(--mono);font-weight:500;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.k{font-size:9.5px;font-weight:650;padding:1px 5px;border-radius:4px;white-space:nowrap;flex:none}
+.k.pk{background:var(--tint-soft);color:var(--tint)}
+.k.rel{background:rgba(46,140,168,.11);color:#2E7E96}
+html[data-theme="dark"] .k.rel{background:rgba(96,190,214,.14);color:#7FD0E6}
+.k.time{background:var(--warn-soft);color:var(--warn)}
+.fn small{display:block;margin-top:3px;font-size:10.5px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.sp{display:flex;align-items:center;gap:4px;min-width:0;overflow:hidden}
+.sp em{
+  font-style:normal;font-size:10.5px;font-family:var(--mono);color:var(--ink-2);
+  background:var(--surface-2);border-radius:4px;padding:1.5px 5px;white-space:nowrap;
+  max-width:96px;overflow:hidden;text-overflow:ellipsis;
+}
+.sp em.more{color:var(--ink-4);background:none;padding-left:1px}
+
+/* 说明：常驻可编辑，长得像文字 */
+.desc{position:relative;min-width:0}
+.desc p{
+  margin:0;font-size:12px;line-height:1.56;color:var(--ink);
+  padding:5px 20px 5px 7px;margin-left:-7px;border-radius:7px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  border:1px solid transparent;transition:background .16s,border-color .16s,box-shadow .16s;
+}
+.desc.focus p{
+  background:var(--surface);border-color:var(--tint);box-shadow:0 0 0 3px var(--tint-soft);
+  -webkit-line-clamp:unset;padding-right:7px;
+}
+.desc .pen{position:absolute;right:4px;top:8px;width:11px;height:11px;color:var(--ink-4);opacity:.75}
+.desc.focus .pen{opacity:0}
+.desc.pending p{padding-left:16px}
+.desc.pending p::before{content:"";position:absolute;left:0;top:12px;width:5px;height:5px;border-radius:50%;background:var(--warn)}
+.desc.focus.pending p::before{display:none}
+.desc.off p{color:var(--ink-4)}
+.desc .caret{display:none}
+.desc.focus .caret{
+  display:inline-block;width:1.5px;height:12px;background:var(--tint);vertical-align:-2px;
+  margin-left:1px;animation:blink 1.1s steps(1) infinite;
+}
+@keyframes blink{50%{opacity:0}}
+.desc .count{display:none;font-size:9.5px;color:var(--ink-4);font-variant-numeric:tabular-nums;float:right;margin:5px 2px 0 8px}
+.desc.focus .count{display:block}
+
+/* 行内确认（取消关联键） */
+.askrow{
+  display:flex;align-items:center;gap:9px;margin:0 16px 8px;padding:8px 11px;border-radius:9px;
+  background:var(--warn-soft);box-shadow:inset 0 0 0 .5px rgba(176,118,27,.22);margin-top:auto;
+}
+.askrow p{margin:0;font-size:11px;line-height:1.55;color:var(--ink-2);flex:1}
+.askrow p b{color:var(--ink);font-weight:600}
+.askrow .qbtn{height:23px;font-size:11px}
+
+/* 底部 */
+.fs-foot{
+  height:50px;flex:none;display:flex;align-items:center;gap:10px;padding:0 16px;
+  border-top:.5px solid var(--hair);background:var(--surface-2);
+}
+.fs-foot .stat{font-size:11.5px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.fs-foot .stat b{color:var(--ink);font-weight:650}
+.fs-foot .stat em{font-style:normal;color:var(--warn);font-weight:600}
+.dsep{width:.5px;height:12px;background:var(--hair-2)}
+.btn{
+  height:30px;padding:0 13px;border-radius:8px;border:.5px solid var(--hair-2);background:var(--surface);
+  color:var(--ink);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;
+  box-shadow:0 1px 1.5px rgba(16,24,40,.05);
+}
+.btn.primary{
+  background:var(--tint);border-color:transparent;color:#fff;
+  box-shadow:0 1px 2px rgba(16,24,40,.10),0 5px 14px rgba(95,75,200,.28),inset 0 1px 0 rgba(255,255,255,.18);
+}
+html[data-theme="dark"] .btn.primary{background:#6A58E0}
+.btn.dis{background:var(--surface-3);color:var(--ink-4);border-color:transparent;box-shadow:none;cursor:default}
+.btn.tiny{height:25px;font-size:11.5px;padding:0 9px;border-radius:7px}
+.btn.soft{background:var(--tint-soft);border-color:var(--tint-line);color:var(--tint)}
+
+/* ---------------- 屏 3：准备清单 ---------------- */
+.readywrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:16px 16px 20px}
+.ready{width:784px;background:var(--surface);border:.5px solid var(--hair);border-radius:18px;box-shadow:var(--shadow-2)}
+.ready-head{position:relative;display:flex;align-items:flex-start;gap:13px;padding:22px 24px 18px;border-radius:18px 18px 0 0}
+.okring{width:36px;height:36px;border-radius:50%;background:var(--ok-soft);color:var(--ok);display:grid;place-items:center;flex:none;margin-top:1px}
+.okring .i{width:17px;height:17px;stroke-width:2.2}
+.ready-head b{display:block;font-size:16.5px;font-weight:650;letter-spacing:-.35px}
+.ready-head small{display:block;margin-top:4px;font-size:12px;line-height:1.6;color:var(--ink-3)}
+.rrow{display:flex;align-items:center;gap:11px;padding:13px 24px;border-top:.5px solid var(--hair);position:relative}
+.rrow .ri{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;flex:none;background:var(--surface-2);color:var(--ink-3)}
+.rrow .ri.ok{background:var(--ok-soft);color:var(--ok)}
+.rrow .ri.opt{background:var(--surface-2);color:var(--ink-4)}
+.rt{flex:1;min-width:0}
+.rt b{display:block;font-size:12.5px;font-weight:620;letter-spacing:-.1px}
+.rt b .opt{font-weight:500;color:var(--ink-4);margin-left:5px;font-size:11px}
+.rt small{display:block;margin-top:2px;font-size:11.5px;color:var(--ink-3);font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rt small code{font-family:var(--mono);font-size:10.5px;background:var(--surface-2);border-radius:3px;padding:0 3px;color:var(--ink-2)}
+.ready-foot{display:flex;align-items:center;gap:12px;padding:15px 24px 17px;border-top:.5px solid var(--hair);background:var(--surface-2);border-radius:0 0 18px 18px}
+.ready-foot p{margin:0;font-size:11.5px;line-height:1.6;color:var(--ink-3);max-width:470px}
+
+/* 内嵌时间范围配置：不弹窗，就地展开在「查询时间范围」这一行下面 */
+.rin{
+  margin:0 24px 12px 61px;padding:13px 15px 12px;border-radius:11px;
+  background:var(--surface-2);box-shadow:inset 0 0 0 .5px var(--hair);
+  display:grid;grid-template-columns:auto minmax(0,1fr);gap:11px 22px;align-items:start;
+}
+.rin .fl{display:block;font-size:10.5px;color:var(--ink-4);font-weight:600;margin-bottom:6px;white-space:nowrap}
+.sel{
+  display:flex;align-items:center;gap:8px;height:29px;padding:0 9px 0 10px;border-radius:7px;
+  background:var(--surface);box-shadow:inset 0 0 0 .5px var(--hair-2);
+  font-family:var(--mono);font-size:11.5px;color:var(--ink);cursor:pointer;min-width:158px;
+}
+.sel .i{width:12px;height:12px;color:var(--ink-4);stroke-width:2;margin-left:auto}
+.chips{display:flex;gap:5px;flex-wrap:wrap}
+.chip{
+  height:29px;padding:0 12px;border-radius:999px;border:0;background:var(--surface);
+  box-shadow:inset 0 0 0 .5px var(--hair-2);font:inherit;font-size:11.5px;font-weight:550;color:var(--ink-2);
+  display:inline-flex;align-items:center;cursor:pointer;transition:all .16s var(--spring);
+}
+.chip.on{background:var(--tint-soft);box-shadow:inset 0 0 0 1px var(--tint-line);color:var(--tint);font-weight:650}
+.chip.mute{color:var(--ink-4)}
+.rin-note{
+  grid-column:1/-1;display:flex;align-items:center;gap:8px;margin:0;
+  font-size:11px;line-height:1.55;color:var(--ink-3);padding-top:3px;
+}
+.rin-note b{color:var(--ink-2);font-weight:600}
+.rin-note .lnk{margin-left:auto;color:var(--ink-3);font-size:11px;text-decoration:underline;text-decoration-color:var(--hair-2);text-underline-offset:2.5px;cursor:pointer;white-space:nowrap}
+.rin-note .lnk:hover{color:var(--ink)}
+
+/* 屏 4：无事实表时的清单 */
+.rrow.cur .ri{background:var(--tint-soft);color:var(--tint)}
+.branch{
+  width:784px;margin-top:12px;padding:11px 16px;border-radius:12px;background:var(--surface);
+  border:.5px dashed var(--hair-2);font-size:11.5px;line-height:1.7;color:var(--ink-3);
+}
+.branch b{color:var(--ink-2);font-weight:620}
+.branch{line-height:1.8}
+.branch em{font-style:normal;color:var(--tint);font-weight:600}
+
+/* ---------------- annotation pins ---------------- */
+.cap{position:relative;display:inline-flex;align-items:center}
+.pin{
+  position:absolute;width:19px;height:19px;border-radius:50%;background:#17181F;color:#fff;
+  font-size:10px;font-weight:650;display:grid;place-items:center;font-style:normal;z-index:30;
+  box-shadow:0 2px 6px rgba(0,0,0,.24),0 0 0 2.5px rgba(255,255,255,.92);
+}
+html[data-theme="dark"] .pin{background:#EDEDF2;color:#0C0C10;box-shadow:0 2px 6px rgba(0,0,0,.5),0 0 0 2.5px rgba(12,12,16,.92)}
+
+.scr{display:none}
+.scr.on{display:flex;flex:1;min-width:0}
+.legend{max-width:1440px;margin:14px auto 0;padding:0 40px}
+.legend>div{display:none;flex-wrap:wrap;gap:8px 22px}
+.legend>div.on{display:flex}
+.legend span{display:inline-flex;align-items:center;gap:7px;font-size:11.5px;color:var(--ink-3);line-height:1.6}
+.legend i{
+  width:18px;height:18px;border-radius:50%;background:#17181F;color:#fff;font-size:9.5px;font-weight:650;
+  display:grid;place-items:center;font-style:normal;flex:none;
+}
+html[data-theme="dark"] .legend i{background:#EDEDF2;color:#0C0C10}
+
+/* ---------------- doc ---------------- */
+.doc{max-width:1440px;margin:0 auto;padding:34px 40px 60px}
+.sec{margin-top:32px}
+.sec>h2{font-size:19px;font-weight:700;letter-spacing:-.45px;margin:0 0 6px}
+.sec>p{font-size:13px;line-height:1.85;color:var(--ink-3);max-width:880px;margin:0}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:12px;margin-top:16px}
+.box{background:var(--surface);border:.5px solid var(--hair);border-radius:14px;padding:15px 16px;box-shadow:0 1px 2px rgba(16,24,40,.03)}
+.box h3{font-size:13px;font-weight:650;display:flex;align-items:flex-start;gap:8px;letter-spacing:-.15px;line-height:1.55;margin:0}
+.box h3 .n{width:19px;height:19px;border-radius:6px;flex:none;display:grid;place-items:center;font-size:10.5px;font-weight:700;background:var(--tint-soft);color:var(--tint);margin-top:1px}
+.box h3 .n.bad{background:rgba(192,57,77,.10);color:var(--bad)}
+.box h3 .n.new{background:var(--ok-soft);color:var(--ok)}
+.box p{font-size:12px;line-height:1.8;color:var(--ink-3);margin:7px 0 0}
+.box code{font-family:var(--mono);font-size:11px;background:var(--surface-2);border-radius:4px;padding:0 4px;color:var(--ink-2)}
+.box em{font-style:normal;color:var(--ink);font-weight:600}
+table.plan{width:100%;border-collapse:collapse;margin-top:16px;font-size:12.5px;background:var(--surface);border-radius:14px;overflow:hidden;border:.5px solid var(--hair)}
+table.plan th{text-align:left;font-weight:600;font-size:11px;letter-spacing:.03em;color:var(--ink-4);padding:11px 14px;background:var(--surface-2);border-bottom:.5px solid var(--hair)}
+table.plan td{padding:12px 14px;border-bottom:.5px solid var(--hair);color:var(--ink-3);vertical-align:top;line-height:1.7}
+table.plan tr:last-child td{border-bottom:0}
+table.plan td:first-child{font-weight:650;color:var(--ink);white-space:nowrap}
+table.plan tr.now td{background:color-mix(in srgb,var(--tint-soft) 55%,var(--surface))}
+.ba{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
+@media (max-width:900px){.ba{grid-template-columns:1fr}}
+.bac{background:var(--surface);border:.5px solid var(--hair);border-radius:14px;padding:15px 16px}
+.bac h4{font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--ink-4);margin:0 0 10px;text-transform:uppercase}
+.bac ul{margin:0;padding:0;list-style:none}
+.bac li{font-size:12px;line-height:1.85;color:var(--ink-3);padding-left:16px;position:relative}
+.bac li::before{content:"";position:absolute;left:2px;top:8px;width:5px;height:5px;border-radius:50%;background:var(--hair-2)}
+.bac.now li::before{background:rgba(192,57,77,.45)}
+.bac.next li::before{background:rgba(30,158,99,.55)}
+.codebox{margin-top:14px;background:#101018;border-radius:14px;padding:18px 20px;overflow:auto;box-shadow:0 10px 30px rgba(16,24,40,.16)}
+.codebox pre{margin:0;font-family:var(--mono);font-size:11.5px;line-height:1.95;color:#CDD3E4}
+.codebox em{color:#6B7185;font-style:normal}
+.codebox b{color:#A99DFF;font-weight:500}
+.codebox i{color:#7FD0E6;font-style:normal}
+.foot{margin-top:34px;padding-top:16px;border-top:.5px solid var(--hair);font-size:11.5px;color:var(--ink-4);line-height:1.95}
+.foot code{font-family:var(--mono);font-size:11px;background:var(--surface-2);border-radius:4px;padding:0 4px;color:var(--ink-2)}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20h4L19 9a2.5 2.5 0 0 0-3.5-3.5L4.5 16.5 4 20z"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z"/></symbol>
+  <symbol id="i-table" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M9 9.5V20"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 1.8"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z"/><path d="M14 3v5h5"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M20 12a7.5 7.5 0 0 1-10.9 6.7L4.5 20l1.3-4.4A7.5 7.5 0 1 1 20 12z"/></symbol>
+  <symbol id="i-db" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.8"/><rect x="13" y="4" width="7" height="7" rx="1.8"/><rect x="4" y="13" width="7" height="7" rx="1.8"/><rect x="13" y="13" width="7" height="7" rx="1.8"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H19v16H6.5A2.5 2.5 0 0 0 4 21.5V5.5z"/><path d="M4 18.5A2.5 2.5 0 0 1 6.5 16H19"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2 2 2 0 1 1-4 0 1.7 1.7 0 0 0-2.9-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3 15a2 2 0 1 1 0-4 1.7 1.7 0 0 0 1.2-2.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 10 4.6a2 2 0 1 1 4 0 1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A1.7 1.7 0 0 0 21 11a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 8.5v4.5M12 16.2v.3"/><circle cx="12" cy="12" r="8.5"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3.2l2 2.5h7.8A2.5 2.5 0 0 1 21 10v6.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 16.5v-9z"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9.5l6 6 6-6"/></symbol>
+</svg>
+
+<header class="dochead">
+  <div class="kicker">Semantic Modeling · 界面重构（共 5 部分）</div>
+  <h1>第 1 部分：工作台骨架与字段整理</h1>
+  <p>
+    这一版按代码核实后的结论重做：<strong>字段整理是一个独立的聚焦步骤</strong>，此刻页签、布局切换、助手都不该出现在屏幕上；
+    <strong>业务说明全程可编辑</strong>，不藏按钮；<strong>AI 建议勾选</strong>与<strong>只看待确认</strong>并存；
+    <strong>进度条保留</strong>，但改成 3 段带文字的箭头条并进 52px 头部（左凹右凸、一节咬一节）；准备阶段<strong>按真实条件决定要不要出现时间范围</strong>，出现时就地展开配置，不弹窗。
+  </p>
+  <div class="docbar">
+    <button class="sbtn on" data-s="1">① 字段整理</button>
+    <button class="sbtn" data-s="2">② 行状态全览</button>
+    <button class="sbtn" data-s="3">③ 准备 · 数据源表</button>
+    <button class="sbtn" data-s="4">④ 准备 · 上传文件</button>
+    <span class="sp"></span>
+    <button class="sbtn" id="theme">切换深色</button>
+  </div>
+</header>
+
+<div class="stage">
+  <div class="stage-inner">
+    <div class="mock" id="mock">
+
+      <!-- ========================= SCREEN 1 ========================= -->
+      <section class="scr on" data-s="1">
+        <div class="rail">
+          <div class="rail-logo">DA</div>
+          <button class="rail-b"><svg class="i"><use href="#i-chat"/></svg></button>
+          <button class="rail-b"><svg class="i"><use href="#i-db"/></svg></button>
+          <button class="rail-b on"><svg class="i"><use href="#i-grid"/></svg></button>
+          <button class="rail-b"><svg class="i"><use href="#i-book"/></svg></button>
+          <button class="rail-b"><svg class="i"><use href="#i-gear"/></svg></button>
+        </div>
+        <div class="app">
+
+          <header class="focusbar">
+            <button class="icon-back">‹</button>
+            <div class="crumb"><span>语义建模</span><i>/</i><strong>我的第一个知识库</strong></div>
+            <span class="hbar-sep"></span>
+            <span class="cap"><nav class="steps"><span class="st cur"><b>1</b>整理字段</span><span class="st todo"><b>2</b>准备</span><span class="st todo"><b>3</b>自动建模</span></nav><i class="pin" style="left:calc(100% + 3px);top:0">1</i></span>
+            <span class="grow"></span>
+            <span class="quiet">整理完成后自动进入准备</span>
+            <button class="ghost-btn">退出整理</button>
+          </header>
+
+          <main class="body">
+            <div class="fs">
+
+              <aside class="fs-nav">
+                <div class="nav-head"><span>数据表</span><span class="tnum">1 / 2 已确认</span></div>
+                <div class="nav-bar"><span></span></div>
+
+                <div class="ds on">
+                  <span class="ds-ico">事</span>
+                  <div class="ds-t"><b>示例订单</b><small>19 个字段 · 整理中</small></div>
+                  <span class="ds-st now">●</span>
+                </div>
+                <div class="ds">
+                  <span class="ds-ico dim">维</span>
+                  <div class="ds-t"><b>示例客户</b><small>6 个字段 · 待整理</small></div>
+                  <span class="ds-st">○</span>
+                </div>
+                <i class="pin" style="left:-9px;top:44px">3</i>
+
+                <p class="nav-tip">两张表都要确认，助手才会开始建模。每张表单独保存，随时可以回来改。</p>
+              </aside>
+
+              <section class="fs-main">
+
+                <header class="fs-head">
+                  <div class="fs-title">
+                    <b>示例订单</b>
+                    <span class="tag fact">事实表</span>
+                    <span class="meta">采样 1,000 行</span>
+                  </div>
+                  <span class="grow"></span>
+                  <div class="seg">
+                    <button class="on">全部 <em>19</em></button>
+                    <button>待确认 <em class="w">3</em></button>
+                    <button>技术 <em>0</em></button>
+                  </div>
+                  <i class="pin" style="left:-14px;top:0">4</i>
+                </header>
+
+                <div class="aibar">
+                  <svg class="i spark"><use href="#i-spark"/></svg>
+                  <button class="qbtn pri">按 AI 建议勾选</button>
+                  <button class="qbtn">全选</button>
+                  <button class="qbtn">全不选</button>
+                  <span class="vsep"></span>
+                  <span class="hint">AI 只依据字段名、样例值和空值判断，仅供参考。</span>
+                  <span class="grow"></span>
+                  <span class="cap"><button class="qbtn">只看待确认</button><i class="pin" style="left:-12px;top:0">5</i></span>
+                </div>
+
+                <div class="tbody">
+                  <div class="tr th"><span></span><span>字段</span><span>样例值</span><span>业务说明 · 点开即可改</span></div>
+
+                  <div class="tr">
+                    <span class="ck on"><svg class="i"><use href="#i-check"/></svg></span>
+                    <div class="fn"><div class="fn-row"><b>order_id</b><span class="k pk">主键</span></div><small>订单编号 · varchar</small></div>
+                    <div class="sp"><em>D0000002</em><em>D0000004</em><em class="more">+2</em></div>
+                    <div class="desc"><p>每笔订单一行，编号唯一。</p><svg class="i pen"><use href="#i-pen"/></svg></div>
+                  </div>
+
+                  <div class="tr">
+                    <span class="ck on"><svg class="i"><use href="#i-check"/></svg></span>
+                    <div class="fn"><div class="fn-row"><b>customer_id</b><span class="k rel">关联</span></div><small>下单客户 · varchar</small></div>
+                    <div class="sp"><em>C01726</em><em>C00166</em><em class="more">+2</em></div>
+                    <div class="desc"><p>下单客户，对应客户表的 customer_id。</p><svg class="i pen"><use href="#i-pen"/></svg></div>
+                  </div>
+
+                  <div class="tr hov">
+                    <span class="ck on"><svg class="i"><use href="#i-check"/></svg></span>
+                    <div class="fn"><div class="fn-row"><b>order_time</b><span class="k time">时间</span></div><small>下单时间 · datetime</small></div>
+                    <div class="sp"><em>05-01 08:05</em><em>05-01 08:53</em></div>
+                    <div class="desc pending"><p>订单创建时间（不是支付时间）。</p><svg class="i pen"><use href="#i-pen"/></svg></div>
+                  </div>
+
+                  <div class="tr">
+                    <span class="ck on"><svg class="i"><use href="#i-check"/></svg></span>
+                    <div class="fn"><div class="fn-row"><b>product_id</b><span class="k rel">关联</span></div><small>商品编号 · varchar</small></div>
+                    <div class="sp"><em>P003</em><em>P001</em><em class="more">+2</em></div>
+                    <div class="desc"><p>商品编号，对应商品维度。</p><svg class="i pen"><use href="#i-pen"/></svg></div>
+                  </div>
+
+                  <div class="tr">
+                    <span class="ck on"><svg class="i"><use href="#i-check"/></svg></span>
+                    <div class="fn"><div class="fn-row"><b>product_name</b></div><small>商品名称 · varchar</small></div>
+                    <div class="sp"><em>轻柔毛衫</em><em>收纳组合</em></div>
+                    <div class="desc"><p>下单时的商品名称快照，改名不影响历史订单。</p><svg class="i pen"><use href="#i-pen"/></svg></div>
+                  </div>
+
+                  <div class="tr">
+                    <span class="ck on"><svg class="i"><use href="#i-check"/></svg></span>
+                    <div class="fn"><div class="fn-row"><b>category</b></div><small>商品品类 · varchar</small></div>
+                    <div class="sp"><em>居家生活</em><em>食品饮料</em></div>
+                    <div class="desc"><p>商品一级品类，用于按品类汇总。</p><svg class="i pen"><use href="#i-pen"/></svg></div>
+                  </div>
+
+                  <div class="tr">
+                    <span class="ck on"><svg class="i"><use href="#i-check"/></svg></span>
+                    <div class="fn"><div class="fn-row"><b>sales_channel</b></div><small>销售渠道 · varchar</small></div>
+                    <div class="sp"><em>微信小程序</em><em>自营App</em></div>
+                    <div class="desc pending"><p>成交渠道。</p><svg class="i pen"><use href="#i-pen"/></svg></div>
+                  </div>
+
+                  <div class="tr">
+                    <span class="ck on"><svg class="i"><use href="#i-check"/></svg></span>
+                    <div class="fn"><div class="fn-row"><b>payment_status</b></div><small>支付状态 · varchar</small></div>
+                    <div class="sp"><em>已支付</em><em>已退款</em><em class="more">+1</em></div>
+                    <div class="desc"><p>订单支付状态；退款订单标记为「已退款」，统计净销售额时要排除。</p><svg class="i pen"><use href="#i-pen"/></svg></div>
+                  </div>
+                  <div class="tr">
+                    <span class="ck on"><svg class="i"><use href="#i-check"/></svg></span>
+                    <div class="fn"><div class="fn-row"><b>amount</b></div><small>订单金额 · decimal</small></div>
+                    <div class="sp"><em>128.00</em><em>59.90</em><em class="more">+2</em></div>
+                    <div class="desc pending"><p>订单应付金额，含运费、未扣优惠。</p><svg class="i pen"><use href="#i-pen"/></svg></div>
+                  </div>
+                </div>
+
+                <footer class="fs-foot">
+                  <span class="stat">纳入 <b>19</b> / 19</span>
+                  <span class="dsep"></span>
+                  <span class="stat">说明 16 已确认 · <em>3 待确认</em></span>
+                  <span class="grow"></span>
+                  <span class="cap"><button class="btn primary">确认，下一张表</button><i class="pin" style="left:-31px;top:4px">6</i></span>
+                </footer>
+              </section>
+            </div>
+          </main>
+        </div>
+      </section>
+
+      <!-- ========================= SCREEN 2 ========================= -->
+      <section class="scr" data-s="2">
+        <div class="rail">
+          <div class="rail-logo">DA</div>
+          <button class="rail-b"><svg class="i"><use href="#i-chat"/></svg></button>
+          <button class="rail-b"><svg class="i"><use href="#i-db"/></svg></button>
+          <button class="rail-b on"><svg class="i"><use href="#i-grid"/></svg></button>
+          <button class="rail-b"><svg class="i"><use href="#i-book"/></svg></button>
+          <button class="rail-b"><svg class="i"><use href="#i-gear"/></svg></button>
+        </div>
+        <div class="app">
+
+          <header class="focusbar">
+            <button class="icon-back">‹</button>
+            <div class="crumb"><span>语义建模</span><i>/</i><strong>我的第一个知识库</strong></div>
+            <span class="hbar-sep"></span>
+            <nav class="steps"><span class="st cur"><b>1</b>整理字段</span><span class="st todo"><b>2</b>准备</span><span class="st todo"><b>3</b>自动建模</span></nav>
+            <span class="grow"></span>
+            <span class="quiet">1 条说明正在编辑 · 失焦即保存</span>
+            <button class="ghost-btn">退出整理</button>
+          </header>
+
+          <main class="body">
+            <div class="fs">
+
+              <aside class="fs-nav">
+                <div class="nav-head"><span>数据表</span><span class="tnum">2 / 2 已确认</span></div>
+                <div class="nav-bar"><span style="width:100%"></span></div>
+
+                <div class="ds on">
+                  <span class="ds-ico">事</span>
+                  <div class="ds-t"><b>示例订单</b><small>19 个字段 · 已确认</small></div>
+                  <span class="ds-st ok">✓</span>
+                </div>
+                <div class="ds">
+                  <span class="ds-ico dim">维</span>
+                  <div class="ds-t"><b>示例客户</b><small>6 个字段 · 已确认</small></div>
+                  <span class="ds-st ok">✓</span>
+                </div>
+
+                <p class="nav-tip">说明随时可改：改完不用重新建模，发布前助手会按最新说明重写字段描述。</p>
+              </aside>
+
+              <section class="fs-main">
+
+                <header class="fs-head">
+                  <div class="fs-title">
+                    <b>示例订单</b>
+                    <span class="tag fact">事实表</span>
+                    <span class="meta">4 种行状态</span>
+                  </div>
+                  <span class="grow"></span>
+                  <div class="seg">
+                    <button class="on">全部 <em>19</em></button>
+                    <button>待确认 <em class="w">3</em></button>
+                    <button>技术 <em>0</em></button>
+                  </div>
+                </header>
+
+                <div class="aibar">
+                  <svg class="i spark"><use href="#i-spark"/></svg>
+                  <button class="qbtn pri">按 AI 建议勾选</button>
+                  <button class="qbtn">全选</button>
+                  <button class="qbtn">全不选</button>
+                  <span class="vsep"></span>
+                  <span class="hint">AI 只依据字段名、样例值和空值判断，仅供参考。</span>
+                  <span class="grow"></span>
+                  <button class="qbtn">只看待确认</button>
+                </div>
+
+                <div class="tbody">
+                  <div class="tr th"><span></span><span>字段</span><span>样例值</span><span>业务说明</span></div>
+
+                  <!-- A 默认 -->
+                  <div class="tr">
+                    <span class="ck on"><svg class="i"><use href="#i-check"/></svg></span>
+                    <div class="fn"><div class="fn-row"><b>order_id</b><span class="k pk">主键</span></div><small>订单编号 · varchar</small></div>
+                    <div class="sp"><em>D0000002</em><em>D0000004</em><em class="more">+2</em></div>
+                    <div class="desc"><p>每笔订单一行，编号唯一。</p><svg class="i pen"><use href="#i-pen"/></svg></div>
+                  </div>
+
+                  <!-- B 悬停 -->
+                  <div class="tr hov">
+                    <span class="ck on"><svg class="i"><use href="#i-check"/></svg></span>
+                    <div class="fn"><div class="fn-row"><b>customer_id</b><span class="k rel">关联</span></div><small>下单客户 · varchar</small></div>
+                    <div class="sp"><em>C01726</em><em>C00166</em><em class="more">+2</em></div>
+                    <div class="desc"><p>下单客户，对应客户表的 customer_id。</p><svg class="i pen"><use href="#i-pen"/></svg></div>
+                  </div>
+
+                  <!-- C 聚焦编辑 -->
+                  <div class="tr" style="min-height:60px">
+                    <span class="ck on"><svg class="i"><use href="#i-check"/></svg></span>
+                    <div class="fn"><div class="fn-row"><b>order_time</b><span class="k time">时间</span></div><small>下单时间 · datetime</small></div>
+                    <div class="sp"><em>05-01 08:05</em><em>05-01 08:53</em></div>
+                    <div class="desc focus pending">
+                      <p>订单创建时间（不是支付时间）。含时分秒，问「5 月 1 日」时按 00:00–23:59 取全天。<span class="caret"></span></p>
+                      <span class="count">46 / 500</span>
+                      <i class="pin" style="left:-21px;top:-3px">1</i>
+                    </div>
+                  </div>
+
+                  <!-- D 未纳入 -->
+                  <div class="tr off">
+                    <span class="ck"></span>
+                    <div class="fn"><div class="fn-row"><b>internal_remark</b></div><small>内部备注 · varchar</small></div>
+                    <div class="sp"><em>—</em></div>
+                    <div class="desc off"><p>客服内部备注，不对外展示。未纳入，说明不会进入模型。</p><i class="pin" style="left:-21px;top:-4px">2</i></div>
+                  </div>
+
+                  <div class="tr">
+                    <span class="ck on"><svg class="i"><use href="#i-check"/></svg></span>
+                    <div class="fn"><div class="fn-row"><b>product_id</b><span class="k rel">关联</span></div><small>商品编号 · varchar</small></div>
+                    <div class="sp"><em>P003</em><em>P001</em><em class="more">+2</em></div>
+                    <div class="desc"><p>商品编号，对应商品维度。</p><svg class="i pen"><use href="#i-pen"/></svg></div>
+                  </div>
+
+                  <div class="tr">
+                    <span class="ck on"><svg class="i"><use href="#i-check"/></svg></span>
+                    <div class="fn"><div class="fn-row"><b>freight</b></div><small>运费 · decimal</small></div>
+                    <div class="sp"><em>0.00</em><em>8.00</em><em class="more">+1</em></div>
+                    <div class="desc"><p>订单运费，已包含在 amount 里。</p><svg class="i pen"><use href="#i-pen"/></svg></div>
+                  </div>
+
+                  <div class="tr">
+                    <span class="ck on"><svg class="i"><use href="#i-check"/></svg></span>
+                    <div class="fn"><div class="fn-row"><b>amount</b></div><small>订单金额 · decimal</small></div>
+                    <div class="sp"><em>128.00</em><em>59.90</em><em class="more">+2</em></div>
+                    <div class="desc pending"><p>订单应付金额，含运费、未扣优惠。</p><svg class="i pen"><use href="#i-pen"/></svg></div>
+                  </div>
+                </div>
+
+                <!-- E 关联键取消确认 -->
+                <div class="askrow">
+                  <svg class="i" style="color:var(--warn)"><use href="#i-alert"/></svg>
+                  <p><b>customer_id 是同名字段，可能是关联键。</b>取消后这张表无法与客户表关联，问数时不能按客户维度分析。</p>
+                  <button class="qbtn">保留</button>
+                  <button class="qbtn">仍然取消</button>
+                  <i class="pin" style="left:-9px;top:-9px">3</i>
+                </div>
+
+                <footer class="fs-foot">
+                  <span class="stat">纳入 <b>18</b> / 19</span>
+                  <span class="dsep"></span>
+                  <span class="stat">说明 16 已确认 · <em>2 待确认</em></span>
+                  <span class="grow"></span>
+                  <span class="stat" style="color:var(--ink-4)">修改会自动保存</span>
+                  <button class="btn primary">确认，下一张表</button>
+                </footer>
+              </section>
+            </div>
+          </main>
+        </div>
+      </section>
+
+      <!-- ========================= SCREEN 3 ========================= -->
+      <section class="scr" data-s="3">
+        <div class="rail">
+          <div class="rail-logo">DA</div>
+          <button class="rail-b"><svg class="i"><use href="#i-chat"/></svg></button>
+          <button class="rail-b"><svg class="i"><use href="#i-db"/></svg></button>
+          <button class="rail-b on"><svg class="i"><use href="#i-grid"/></svg></button>
+          <button class="rail-b"><svg class="i"><use href="#i-book"/></svg></button>
+          <button class="rail-b"><svg class="i"><use href="#i-gear"/></svg></button>
+        </div>
+        <div class="app">
+
+          <header class="focusbar">
+            <button class="icon-back">‹</button>
+            <div class="crumb"><span>语义建模</span><i>/</i><strong>我的第一个知识库</strong></div>
+            <span class="hbar-sep"></span><nav class="steps"><span class="st done"><b>1</b>整理字段</span><span class="st cur"><b>2</b>准备</span><span class="st todo"><b>3</b>自动建模</span></nav>
+            <span class="grow"></span>
+            <span class="quiet">这一步随时可以回来改</span>
+            <button class="ghost-btn">退出整理</button>
+          </header>
+
+          <div class="readywrap">
+            <div>
+              <div class="ready">
+                <div class="ready-head">
+                  <div class="okring"><svg class="i"><use href="#i-check"/></svg></div>
+                  <div>
+                    <b>字段整理完成，还有两项要确认</b>
+                    <small>2 张表 · 25 个字段已确认。下面两项已按默认填好，不改也能直接开始。</small>
+                  </div>
+                  <i class="pin" style="left:-10px;top:16px">1</i>
+                </div>
+
+                <div class="rrow">
+                  <span class="ri ok"><svg class="i"><use href="#i-table"/></svg></span>
+                  <div class="rt">
+                    <b>字段</b>
+                    <small>示例订单 19 纳入 · 示例客户 6 纳入 <code>4 个关联键</code></small>
+                  </div>
+                  <button class="btn tiny">修改</button>
+                </div>
+
+                <div class="rrow">
+                  <span class="ri ok"><svg class="i"><use href="#i-clock"/></svg></span>
+                  <div class="rt">
+                    <b>查询时间范围</b>
+                    <small>示例订单 · 事实表 · 单次最多 31 天，按 <code>order_time</code></small>
+                  </div>
+                  <span class="quiet">改动即生效</span>
+                  <i class="pin" style="left:-10px;top:12px">2</i>
+                </div>
+
+                <div class="rin">
+                  <div>
+                    <span class="fl">按哪个时间字段限定</span>
+                    <span class="sel">order_time<svg class="i"><use href="#i-chev"/></svg></span>
+                  </div>
+                  <div>
+                    <span class="fl">单次查询最多覆盖</span>
+                    <div class="chips">
+                      <button class="chip">7 天</button>
+                      <button class="chip">14 天</button>
+                      <button class="chip on">31 天</button>
+                      <button class="chip">90 天</button>
+                      <button class="chip mute">不限制</button>
+                    </div>
+                  </div>
+                  <p class="rin-note">
+                    问数时 <b>order_time</b> 的范围不能超过 31 天，超出时会请用户缩小范围。
+                    <span class="lnk">不是事实表？标为维度表</span>
+                  </p>
+                  <i class="pin" style="left:-10px;top:-9px">3</i>
+                </div>
+
+                <div class="rrow">
+                  <span class="ri opt"><svg class="i"><use href="#i-doc"/></svg></span>
+                  <div class="rt">
+                    <b>业务文档<span class="opt">可选</span></b>
+                    <small>未上传 · .md / .txt / .docx，写了指标口径会更准</small>
+                  </div>
+                  <button class="btn tiny">上传</button>
+                  <i class="pin" style="left:-10px;top:12px">4</i>
+                </div>
+
+                <div class="ready-foot">
+                  <p><b>不传文档也能开始</b>。助手会读取资料、建模、写草稿并校验。</p>
+                  <span class="grow"></span>
+                  <span class="cap"><button class="btn primary">开始自动建模</button><i class="pin" style="left:-30px;top:1px">5</i></span>
+                </div>
+              </div>
+
+              <div class="branch">
+                <b>这一整块只在三个条件同时成立时才渲染：</b>表来自数据源关联（<code>origin === 'datasource'</code>）、角色不是维度表、且有日期列。
+                任一不满足就<em>不出现</em>，也不留空行 —— 上传的 CSV / Excel 永远不会走到这里，见第 4 屏。
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================= SCREEN 4 ========================= -->
+      <section class="scr" data-s="4">
+        <div class="rail">
+          <div class="rail-logo">DA</div>
+          <button class="rail-b"><svg class="i"><use href="#i-chat"/></svg></button>
+          <button class="rail-b"><svg class="i"><use href="#i-db"/></svg></button>
+          <button class="rail-b on"><svg class="i"><use href="#i-grid"/></svg></button>
+          <button class="rail-b"><svg class="i"><use href="#i-book"/></svg></button>
+          <button class="rail-b"><svg class="i"><use href="#i-gear"/></svg></button>
+        </div>
+        <div class="app">
+
+          <header class="focusbar">
+            <button class="icon-back">‹</button>
+            <div class="crumb"><span>语义建模</span><i>/</i><strong>销售明细知识库</strong></div>
+            <span class="hbar-sep"></span><nav class="steps"><span class="st done"><b>1</b>整理字段</span><span class="st cur"><b>2</b>准备</span><span class="st todo"><b>3</b>自动建模</span></nav>
+            <span class="grow"></span>
+            <span class="quiet">这一步随时可以回来改</span>
+            <button class="ghost-btn">退出整理</button>
+          </header>
+
+          <div class="readywrap">
+            <div>
+              <div class="ready" style="width:700px">
+                <div class="ready-head">
+                  <div class="okring"><svg class="i"><use href="#i-check"/></svg></div>
+                  <div>
+                    <b>字段整理完成，可以开始了</b>
+                    <small>1 张表 · 8 个字段已确认。这张表来自上传文件，没有需要配置的查询范围。</small>
+                  </div>
+                  <i class="pin" style="left:-10px;top:16px">1</i>
+                </div>
+
+                <div class="rrow">
+                  <span class="ri ok"><svg class="i"><use href="#i-table"/></svg></span>
+                  <div class="rt">
+                    <b>字段</b>
+                    <small>销售明细 8 纳入 · 来自 <code>sales_2026.csv</code></small>
+                  </div>
+                  <button class="btn tiny">修改</button>
+                </div>
+
+                <div class="rrow cur">
+                  <span class="ri"><svg class="i"><use href="#i-doc"/></svg></span>
+                  <div class="rt">
+                    <b>业务文档<span class="opt">可选</span></b>
+                    <small>未上传 · 写了指标口径会更准，不传也能开始</small>
+                  </div>
+                  <button class="btn tiny">上传</button>
+                  <i class="pin" style="left:-10px;top:12px">2</i>
+                </div>
+
+                <div class="ready-foot">
+                  <p>上传文件不会配置查询时间范围，所以清单里没有这一项 —— 不是漏了。</p>
+                  <span class="grow"></span>
+                  <span class="cap"><button class="btn primary">开始自动建模</button><i class="pin" style="left:-30px;top:1px">3</i></span>
+                </div>
+              </div>
+
+              <div class="branch" style="width:700px">
+                <b>最常见的形态其实是这一屏：</b>用户传一个 CSV，字段整理完只剩「业务文档」可选。
+                进度条照样是 3 段，只是「准备」这一段<em>少了一块内容</em> —— 不因为分支改形状，位置感才不会每次都不一样。
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<div class="legend" id="legend">
+  <div class="on" data-s="1">
+    <span><i>1</i>三段箭头带文字：淡绿底=已完成、实紫底白字=进行中、浅灰=未做</span>
+    <span><i>2</i>原来那条 5 步横栏整条并进 52px 头部，省下一整行高度</span>
+    <span><i>3</i>两张表分别确认，每张单独保存</span>
+    <span><i>4</i>筛选：全部 / 待确认 / 技术（业务是默认态，不必单列）</span>
+    <span><i>5</i>AI 建议勾选 + 只看待确认，两件事同一行做完</span>
+    <span><i>6</i>底部只有一个主按钮</span>
+  </div>
+  <div data-s="2">
+    <span><i>1</i>聚焦：出边框和光标，随内容增高，右下角是字数</span>
+    <span><i>2</i>未纳入：勾选框空着、字段名带删除线，说明仍可读可改</span>
+    <span><i>3</i>取消关联键：就地展开，不弹窗</span>
+    <span><i>·</i>第 2 行是悬停态：浅底浮起，提示这一块可点</span>
+  </div>
+  <div data-s="3">
+    <span><i>1</i>副标题一次说清「还剩什么、不改也能开始」</span>
+    <span><i>2</i>这一行只在「数据源表 + 非维度 + 有日期列」时渲染，否则整行不出现</span>
+    <span><i>3</i>配置就地展开：时间字段 + 7 / 14 / 31 / 90 天 / 不限制，与弹窗内容一致</span>
+    <span><i>4</i>业务文档标「可选」，不填也能开始</span>
+    <span><i>5</i>全页唯一主按钮，旁边一句「不传文档也能开始」</span>
+    <span><i>·</i>时间范围和业务文档都归在「准备」这一段，所以只有 3 段</span>
+  </div>
+  <div data-s="4">
+    <span><i>1</i>上传文件没有时间范围，直接在副标题交代原因，不留空行</span>
+    <span><i>2</i>清单只剩字段 + 业务文档，后者正是当前步</span>
+    <span><i>3</i>上传文件也走「准备」，只是少一块 —— 箭头条不用变形状</span>
+  </div>
+</div>
+
+<div class="doc">
+
+  <section class="sec">
+    <h2>先说核实结果：那些入口在这个状态下确实是死的</h2>
+    <p>
+      <code>SemanticModelingPage.tsx</code> 里，<code>&lt;main className="modeling-workbench-body mw-body"&gt;</code> 的
+      <code>display</code> 由 <code>screeningPending</code> 控制。字段整理进行时整块主工作台是 <code>none</code>，
+      而 4 个页签、布局切换、右侧栏、助手全在这个 <code>&lt;main&gt;</code> 里。
+    </p>
+    <table class="plan">
+      <thead><tr><th>控件</th><th>点下去发生什么</th><th>结论</th></tr></thead>
+      <tbody>
+        <tr><td>语义模型 / 问数优化 / 公共视图 / 资料</td><td><code>selectTab()</code> 改 state，内容区被 <code>display:none</code> 隐藏</td><td>无任何可见变化</td></tr>
+        <tr><td>专注对话 / 并排查看 / 专注模型</td><td><code>setPanelChoice()</code> + 尝试聚焦对话输入框，但 dock 不可见</td><td>无反应</td></tr>
+        <tr><td>更多 → 事实表时间范围</td><td>被 <code>!screeningPending</code> 条件排除</td><td>此刻根本不渲染</td></tr>
+        <tr><td>更多 → 知识库</td><td><code>navigate('/configure/datasets/…')</code></td><td>唯一可用</td></tr>
+        <tr><td>版本胶囊</td><td>未发布时是纯文本「尚未发布」，无菜单</td><td>不可点</td></tr>
+        <tr class="now"><td>关系图 / 业务规则</td><td><code>WorkbenchView = 'graph' | 'rules'</code>，真实存在</td><td>属于建模完成后的语义模型页，与字段整理无关</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:12px">
+      所以不是「删掉功能」，而是<strong>按状态切换头部</strong>：整理中 = 聚焦态，只留「返回 · 知识库 · 步骤条 · 退出」；
+      整理完成立刻恢复完整头部。这样既不丢功能，也不会出现点了没反应。
+    </p>
+  </section>
+
+  <section class="sec">
+    <h2>字段整理：四个决定</h2>
+    <div class="cols">
+      <div class="box">
+        <h3><span class="n">1</span>说明全程可编辑，藏在输入框里反而不好用</h3>
+        <p>代码里本来就是常驻 <code>textarea rows={2}</code>（第 205 行），已纳入字段一直能直接改 —— 是我上一版画错了。问题在<em>长得像表单</em>：19 个带边框的输入框并排，把每行撑到 76px。改成文字块（hover 浮浅底、聚焦出环、失焦保存），一行读完，需要时才变输入态。</p>
+      </div>
+      <div class="box">
+        <h3><span class="n">2</span>AI 建议这组按钮保留，并和「只看待确认」同排</h3>
+        <p><code>按 AI 建议勾选 / 全选 / 全不选</code> 与「AI 只依据字段名、样例值和空值判断，仅供参考。」在 <code>fs-actions</code> 里本来就成对存在（第 165–170 行）。上一版我没画，这次放回同一条 bar，右边接「只看待确认」，两件事一次做完。</p>
+      </div>
+      <div class="box">
+        <h3><span class="n">3</span>行的状态比功能更重要</h3>
+        <p>四种状态：默认、悬停、聚焦编辑、未纳入。其中「未纳入」过去是整行变灰 + <code>disabled</code> 输入框，用户看不出说明还能不能写。现在说明保持可读<em>并且照样能改</em>（真实代码里它是 <code>disabled</code>，要去掉）、勾选框空着、字段名删除线，一行小字说清「说明不会进入模型」。</p>
+      </div>
+      <div class="box">
+        <h3><span class="n">4</span>筛选收敛成三档</h3>
+        <p>原来是 <code>全部 / 业务 / 技术 / 不确定</code>。业务是默认态（19 个里 16 个），点它等于没筛；「不确定」才是用户要看的。      改成 <code>全部 19 / 待确认 3 / 技术 0</code>，三档都有人会点。若更想保留四档，把「业务」加回即可，只是多一档空筛选。</p>
+      </div>
+    </div>
+    <div class="codebox"><pre><em>/* 说明：文字态 → 聚焦才出边框，不再像一排表单 */</em>
+.fs-desc { padding:5px 24px 5px 7px; margin-left:-7px; border-radius:7px;
+  border:1px solid transparent; transition: background .16s, box-shadow .16s; }
+.fs-desc:hover        { background: var(--da-surface-sunken); }
+.fs-desc:focus-within { background:#fff; border-color:var(--da-primary);
+  box-shadow: <i>0 0 0 3px</i> var(--da-primary-subtle); }
+
+<em>/* 未纳入也要能写：去掉 disabled，只降透明度 */</em>
+&lt;textarea className="fs-desc" rows={2} disabled={false} /&gt;   <em>// 原为 true</em>
+
+<em>/* 行高：76 → 50，一屏 6 行 → 10 行 */</em>
+.fs-row { min-height: <b>50px</b>; grid-template-columns: 34px minmax(0,1.05fr) minmax(0,.92fr) minmax(0,1.42fr); }</pre></div>
+  </section>
+
+  <section class="sec">
+    <h2>准备这一步：先判断要不要，再决定怎么问</h2>
+    <div class="ba">
+      <div class="bac now">
+        <h4>现状</h4>
+        <ul>
+          <li>时间范围是独立模态，<code>automatic</code> 模式下自动弹出；但只有数据源表 + 非维度 + 有日期列时才进候选，上传文件永远不出现</li>
+          <li>业务文档是页面里另一张卡，与「开始建模」的卡片分开</li>
+          <li>两个按钮「开始自动建模」「没有文档，直接开始」调同一个 <code>startModeling</code></li>
+          <li>没有事实表时整步跳过，但界面上没有任何交代，用户会以为漏了</li>
+        </ul>
+      </div>
+      <div class="bac next">
+        <h4>方案</h4>
+        <ul>
+          <li>合成一张清单卡；时间范围一旦出现，<em>配置就地展开在它下面</em>，不再点「修改」弹窗</li>
+          <li>条件不满足时整块（行 + 配置）都不渲染，也不留占位 —— 副标题里一句话交代原因</li>
+          <li>只有一个主按钮「开始自动建模」，文档既然是可选的就不需要第二个入口</li>
+          <li>「不是事实表？标为维度表」这个出口保留在内嵌区右下角，标完这一行立刻消失</li>
+          <li>点开始后这张卡原地换成助手四阶段，不跳页 —— 衔接第 3 部分</li>
+        </ul>
+      </div>
+    </div>
+    <div class="codebox"><pre><em>/* 候选表的三个必要条件（FactTableWindowService.candidates） */</em>
+for (dataset : datasets) {
+  if (!<i>"datasource"</i>.equalsIgnoreCase(dataset.getOrigin())) continue;   <em>// 上传文件排除</em>
+  if (<i>"DIMENSION"</i>.equals(role)) continue;                          <em>// 维度表排除</em>
+  if (temporalColumns(dataset).isEmpty()) continue;                  <em>// 无日期列排除</em>
+}
+
+<em>/* 前端再按 pendingOnly 收窄，全空则直接 ready */</em>
+<b>factWindowSetup</b>(candidates, pendingOnly)  →  ready = facts.length === 0 &amp;&amp; unknown.length === 0
+
+<em>/* 三个条件一个都不满足 → 这一行连「空状态」都不渲染 */</em>
+{tables.length &gt; 0 &amp;&amp; &lt;WindowRow tables={tables} /&gt;}
+
+<em>/* 业务文档：可选、可多份、改完只进草稿 */</em>
+accept = <i>".md,.txt,.docx"</i>   status = ADDED | MODIFIED | UNCHANGED | DELETED
+
+<em>/* 现状冗余：两个按钮同一个 handler */</em>
+&lt;button onClick={startModeling}&gt;开始自动建模&lt;/button&gt;
+&lt;button onClick={startModeling}&gt;没有文档，直接开始&lt;/button&gt;   <em>// 语义重复</em></pre></div>
+
+    <p style="margin-top:16px">
+      判断只做一次，结果决定这一块渲不渲染。<code>windowTables</code> 来自
+      <code>FactQueryWindowService.candidates()</code>，三个条件在服务端就过滤完了，前端不需要再猜：
+    </p>
+    <table class="plan">
+      <thead><tr><th>知识库形态</th><th>候选事实表</th><th>准备清单里怎么表现</th></tr></thead>
+      <tbody>
+        <tr class="now"><td>数据源关联 + 事实表 + 有日期列</td><td>有</td><td>出现，配置就地展开（第 3 屏）</td></tr>
+        <tr><td>数据源关联，但全是维度表</td><td>空</td><td>整块不渲染，副标题一句「没有需要配置的查询范围」</td></tr>
+        <tr><td>数据源关联，但表里没有日期列</td><td>空</td><td>同上 —— 卡点了也没法限定，不如不显示</td></tr>
+        <tr><td>上传 CSV / Excel</td><td>永不进候选</td><td>不渲染（第 4 屏），步骤条也少一段</td></tr>
+        <tr><td>角色还没确认（<code>unknown</code>）</td><td>待定</td><td>这一块改成一行提问：「示例订单 是事实表还是维度表？」选完才展开配置</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:12px">
+      最后一行容易被忽略：<code>factWindowSetup</code> 会把角色未定的表放进 <code>unknown</code>，
+      这时候不该装作「没有时间范围」，也不该直接弹窗 —— 它是用户做判断的时刻，只问一句、点了就继续。
+      多张候选表时每张各占一行、各自展开，不做「一张表一个弹窗」的串联。
+    </p>
+  </section>
+
+  <section class="sec">
+    <h2>落地：3 段箭头步骤条塞进 52px 头部</h2>
+    <p>
+      原产品是 5 步（采样 / 字段整理 / 时间范围 / 业务文档 / 开始建模），但采样是后台自动跑的，
+      时间范围和业务文档又在同一页连续做完 —— 这 5 个节点里只有 3 个需要用户<em>停下来做决定</em>。
+      所以收成 3 段：<strong>整理字段 / 准备 / 自动建模</strong>。段数该对应用户的决定数，而不是系统内部的步骤数。
+    </p>
+    <p>
+      位置搬回头部：原来那条独立横栏（5 个带数字的节点，约 40px）整条并进 52px，
+      替掉 56px 的页签行，头部总高从 96px 降到 52px。
+    </p>
+    <p>
+      形状上，5px 细条的问题不是不好看，而是<strong>装不下名字</strong>——用户得先读右侧「准备 2/3」才知道在第几步。
+      改成 <strong>26px 高的箭头条（chevron）</strong>，名字直接坐进色块里，状态、名称、顺序三件事一次说完。
+      箭头本身还带着方向：流程往哪走，形状就在往哪指。
+    </p>
+    <p>
+      咬合方式按你说的：<strong>每段左端凹进一个三角、右端凸出一个三角</strong>，一节咬着一节；
+      首段左端平直（左边没有东西可咬，开口反而像缺角）。凹和凸都取半高、12px 深（近似 45°），
+      所以相邻两段的斜边完全平行，2px 缝就是一条等宽的斜线，看着才像同一条链。
+    </p>
+    <p>
+      配色沿用同一条原则：<strong>已完成的绿要淡，当前的紫要实</strong>。
+      三段都实心等于三个焦点；已完成混到 14% 淡绿、文字用深绿，它退成「走过的痕迹」，
+      未做的是 6.5% 灰 —— 屏幕上只有一处实色，眼睛自然落在「现在在做什么」。
+    </p>
+    <div class="codebox"><pre><em>/* 头部：一条 52px 的行，步骤条跟面包屑同排 */</em>
+.mw-focus-bar { height: <b>52px</b>; display:flex; align-items:center; gap:10px;
+  background: color-mix(in srgb, var(--da-surface) 84%, transparent);
+  backdrop-filter: <i>blur(24px) saturate(180%)</i>;
+  border-bottom: .5px solid var(--da-hairline); }
+
+<em>/* 三段等距；gap 2px 让凹凸之间留一条等宽斜缝 */</em>
+.mw-steps { display:flex; gap:<b>2px</b>; height:<b>26px</b>; }
+
+<em>/* 核心：左凹右凸。半高 13px、深 12px → 斜边约 45° */</em>
+.mw-steps .st {
+  display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  min-width:90px; padding:0 16px; height:26px;
+  font-size:12px; font-weight:600; white-space:nowrap;
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%,
+                     0 100%, 12px 50%);
+}
+<em>/* 首段左端没有可咬的东西：平边 + 4px 切角当圆角 */</em>
+.mw-steps .st:first-child {
+  padding-left:15px;
+  clip-path: polygon(0 4px, 4px 0, calc(100% - 12px) 0, 100% 50%,
+                     calc(100% - 12px) 100%, 4px 100%, 0 calc(100% - 4px));
+}
+<em>/* 凹口占掉 12px，文字重心会偏左，左内边距补 4px */</em>
+.mw-steps .st + .st { padding-left:24px; }
+
+.mw-steps .st.done { background: color-mix(in srgb, var(--da-success) 14%, var(--da-surface));
+  color: color-mix(in srgb, var(--da-success) 74%, var(--da-text));
+  box-shadow: inset 0 .5px 0 rgba(255,255,255,.5); }
+.mw-steps .st.cur  { background: linear-gradient(180deg,
+  color-mix(in srgb, var(--da-primary) 88%, #fff) 0, var(--da-primary) 100%);
+  color:#fff; box-shadow: inset 0 .5px 0 rgba(255,255,255,.22); }
+.mw-steps .st.todo { background: color-mix(in srgb, var(--da-text) 6.5%, var(--da-surface));
+  color: var(--da-text-tertiary); }
+<em>/* 序号小一号、降透明度：它是辅助，不该和名字抢读 */</em>
+.mw-steps .st b { font-size:10px; font-weight:700; opacity:.42; }
+
+<em>/* 三段固定：采样并进第 1 段的后台过程，时间范围+文档并进第 2 段 */</em>
+const steps = ['整理字段', '准备', '自动建模'];
+<em>// done = 已完成段数；cur = 当前段（实测 2 段完成时：绿 + 紫 + 灰）</em>
+
+<em>/* 时间范围：跟着行就地展开，不是模态 */</em>
+.ready-row + .window-inline { margin:0 24px 12px 61px; padding:13px 15px; border-radius:11px;
+  background: var(--da-surface-sunken); box-shadow: inset 0 0 0 .5px var(--da-hairline); }
+
+<em>/* 天数与弹窗同一份常量：7 / 14 / 31 / 90 + 不限制 */</em>
+const DAYS = [7, 14, 31, 90];</pre></div>
+  </section>
+
+  <section class="sec">
+    <h2>「没有文档，直接开始」在准备环节还要不要</h2>
+    <p>
+      你截图里那个按钮，和新手引导最后一步是同一个东西。代码里它确实是两个按钮干一件事：
+      <code>startOffer</code> 卡上「开始自动建模」和「没有文档，直接开始」的 <code>onClick</code> 都是
+      <code>startModeling</code>（<code>SemanticModelingPage.tsx:488–493</code>），区别只在文案。
+      同一动作给两个名字，反而让用户以为前者要求先传文档。
+    </p>
+    <div class="ba">
+      <div class="bac now">
+        <h4>保留第二个按钮的代价</h4>
+        <ul>
+          <li>两个都等价于「现在开始」，用户要花一秒判断"我算不算有文档"</li>
+          <li>并排两个按钮，主按钮会被分走点击</li>
+          <li>「业务文档」行既然标了「可选」，就已经说过"可以跳过"了</li>
+        </ul>
+      </div>
+      <div class="bac next">
+        <h4>改用三层表达，不占第二个按钮</h4>
+        <ul>
+          <li>行标题后挂一个「可选」小标</li>
+          <li>副文案：未上传 · 写了指标口径会更准，<em>不传也能开始</em></li>
+          <li>主按钮左侧一行小字：不传文档也能开始</li>
+        </ul>
+      </div>
+    </div>
+    <p style="margin-top:12px">
+      但<strong>新手引导里那个按钮要留着</strong>。引导语境下用户是第一次遇到"上传资料"这一步，
+      最怕被卡住，一个明确的出口比一排小字有用；它承担的是「别让人停在第一步」。
+      进了准备页之后这个职责已经完成 —— 所以答案是：<em>过程要体现，按钮不要复制</em>。
+    </p>
+  </section>
+
+  <section class="sec">
+    <h2>这一步不做的四件事</h2>
+    <div class="cols">
+      <div class="box">
+        <h3><span class="n bad">×</span>不在字段整理里放关系图</h3>
+        <p>关系图属于语义模型页的 <code>WorkbenchView</code>，字段还没确认时模型还不存在，画出来是空的。等第 2 部分处理画布时再说。</p>
+      </div>
+      <div class="box">
+        <h3><span class="n bad">×</span>不做「点开才编辑」</h3>
+        <p>你截图里就是每行都能直接写，这个方向是对的。省一次点击的代价只是视觉上要更像文字、不像表单，不该退回到「先点铅笔」。</p>
+      </div>
+      <div class="box">
+        <h3><span class="n bad">×</span>不为一个 31 天再开弹窗</h3>
+        <p>点「修改」→ 遮罩升起 → 选天数 → 保存 → 关闭，五步换一个值。字段整理刚结束，用户在这一页只有两三件事要做，就地展开、改完即存才是对的粒度。</p>
+      </div>
+      <div class="box">
+        <h3><span class="n new">✓</span>预留与第 3 部分的接口</h3>
+        <p>点击「开始自动建模」后，准备清单原地替换为助手四阶段（读取资料 / 建立模型 / 写入草稿 / 校验编译），不跳页、不换头部。第 3 部分直接往这个容器里画。</p>
+      </div>
+    </div>
+    <p class="foot">
+      画布 1360 × 700 · 主色 <code>#5F4BC8</code>（深色 <code>#6A58E0</code> 承载白字）· 行高 50 / 卡圆角 14 / 步骤条 26 高 × 3 段箭头 · 发丝线 <code>.5px rgba(60,60,67,.11)</code><br>
+      依据文件：<code>SemanticModelingPage.tsx</code>（main 的 display 条件、SetupSteps、startOffer 卡片）、<code>FieldScreeningPanel.tsx</code>（4 列 grid、常驻 textarea、fs-actions）、<code>FactQueryWindowSettings.tsx</code>（DAYS 常量、时间字段、保存策略）、<code>FactTableWindowService.java</code>（三个必要条件）、<code>factWindowSetup.ts</code>（ready / unknown 分流）、<code>BusinessDocumentsPanel.tsx</code>（可选多份）
+    </p>
+  </section>
+</div>
+
+<script>
+(function () {
+  const mock = document.getElementById('mock');
+  const inner = document.querySelector('.stage-inner');
+  const params = new URLSearchParams(location.search);
+  if (params.get('theme') === 'dark') document.documentElement.dataset.theme = 'dark';
+
+  let cur = Math.min(4, Math.max(1, +(params.get('s') || 1)));
+
+  function fit() {
+    const w = inner.clientWidth;
+    const scale = Math.min(1, w / 1360);
+    mock.style.transform = 'scale(' + scale + ')';
+    mock.style.marginBottom = (scale < 1 ? -(700 * (1 - scale)) : 0) + 'px';
+  }
+
+  function render() {
+    document.querySelectorAll('.scr').forEach(s => s.classList.toggle('on', +s.dataset.s === cur));
+    document.querySelectorAll('.sbtn[data-s]').forEach(b => b.classList.toggle('on', +b.dataset.s === cur));
+    document.querySelectorAll('#legend > div').forEach(d => d.classList.toggle('on', +d.dataset.s === cur));
+  }
+
+  document.querySelectorAll('.sbtn[data-s]').forEach(b => {
+    b.addEventListener('click', () => { cur = +b.dataset.s; render(); });
+  });
+
+  const themeBtn = document.getElementById('theme');
+  const syncTheme = () => {
+    themeBtn.textContent = document.documentElement.dataset.theme === 'dark' ? '切换浅色' : '切换深色';
+  };
+  themeBtn.addEventListener('click', () => {
+    document.documentElement.dataset.theme =
+      document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    syncTheme();
+  });
+  syncTheme();
+
+  window.addEventListener('resize', fit);
+  fit(); render();
+})();
+</script>
+</body>
+</html>

@@ -13,6 +13,28 @@ spec 是一页纸的需求与验收标准，写代码之前先写（模板：[00
 - [136 管理员只读对话回看](136-admin-conversation-replay.md)：代码与本地真实问答验收完成，本批授权推送并合入主线；无DDL，待66现场验收。
 
 - [135 共享数据源与连接治理](135-shared-datasource-access.md)：本地实现与隔离验证完成；用户授权提交/推送/合入develop-2.0，待用户执行平台SQL及66部署验收。
+- [142 零售旗舰仪表盘样板间](142-retail-dashboard-showroom.md)：合成数据、视觉概念、建库建模、真实生成修改发布及浏览器核验完成，待体验。
+
+- [141 对话生成GenBI仪表盘](141-conversational-genbi-dashboards.md)：整张生成、内部live预览、对话修改与管理者发布，已完成本地实现及真实Agent/浏览器验收，待用户试用。
+
+- [139 建模准备与字段整理设计落地](139-modeling-setup-design-p1.md)：用户指定p1 HTML；四屏、聚焦步骤、说明失焦保存及内嵌时间配置，本地实现与UI夹具验收完成，真实后端待复核。
+
+- [138 撤回重复回答入口](138-remove-redundant-answer-actions.md)：用户复核后撤回spec134的查询记录与问题回填；保留完整回执缓存修正，相关回归与前端构建通过，本地未提交。
+
+- [134 问答查询记录与失败后问题修改](134-answer-query-records-and-recovery.md)：展示方案已被spec138取代，原验收留作历史记录。
+
+
+- [132 构建校验执行与发布协调分离](132-mdl-build-checks-extraction.md)：本地抽取及完整后端1100项（21条件跳过）通过；独立检查组件与边界门禁，保留锁/状态/快照写入，远端待后续。
+
+截至spec131的本地成果已统一纳入[架构治理检查点](../test-reports/20261112-architecture-checkpoint.md)，当前完整验证通过；首次远端CI、真实环境/服务验收尚待后续。各spec中的阶段记录保留当时状态。
+
+- [131 发布服务只读预览职责抽取](131-mdl-read-projection-extraction.md)：本地抽取完成，重点83项/干净单元1029项及旧JSON兼容通过，HTTP与发布写链路保留；首次远端CI待后续。
+
+- [130 模块依赖契约与首批反向依赖消减](130-architecture-dependency-contracts.md)：本地实现与重点/单元/架构验证通过；生产字节码门禁、9组计时反向依赖消减与调用边界清单，首次远端CI待推送。
+
+- [129 测试分层、上下文提速与旧链路清理](129-test-lanes-and-legacy-cleanup.md)：本地实现及clean verify通过；日常选测/完整门禁、两个JPA切片和无调用链路清理，首次远端CI待推送。
+
+- [128 架构优化第一阶段：独立应用CI与集成测试恢复](128-architecture-phase1-ci-and-integration-tests.md)：本地实施、clean verify及Java17回归通过，首次GitHub触发待推送后验收；见[报告](../test-reports/20261112-architecture-phase1-ci-and-tests.md)。
 
 - [127 资料同步草稿与双同步任务观测](127-metadata-draft-and-bi-task-observation.md)：已授权本地实施，待用户运行验收；不提交、push或部署。
 
@@ -67,6 +89,7 @@ spec 是一页纸的需求与验收标准，写代码之前先写（模板：[00
 
 | 编号 | 标题 | 文件中记录的状态 |
 |---|---|---|
+| [140](done/140-modeling-optimization-pages.md) | 建模各页布局、资料阅读、工程快照与共享AI图标优化 | 本阶段UI优化完成，用户确认收尾并授权本地提交；真实服务只读与隔离夹具验证，未跑真实LLM/写入/发布全链路 |
 | [001](done/001-join-first-and-batch-prepare.md) | spec 001: 跨表查询 JOIN 优先 + prepare_data_context 批量取表 | — |
 | [002](done/002-anti-probe-and-count-consistency.md) | spec 002: 禁「摸底查询」硬门上移 + 回答计数一致性自检 | — |
 | [003](done/003-subagent-orchestration-off-by-default.md) | spec 003: 子代理编排默认关闭（`dataagent.agent.subagents-enabled`） | — |
@@ -165,3 +188,5 @@ spec 是一页纸的需求与验收标准，写代码之前先写（模板：[00
 - [097 同一知识库详情](done/097-unified-knowledge-detail.md)（本地回归及浏览器对照完成）
 
 - [116 活跃会话续期](done/116-active-session-renewal.md)（已由固定 24 小时重新认证方案取代）
+
+- [133 六阶段连续架构治理与统一验收](done/133-architecture-six-stage-completion.md)（本地完整验收与隔离MySQL演练完成，2026-11-12；一次本地提交，生产/远端待验）

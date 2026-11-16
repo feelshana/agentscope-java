@@ -148,6 +148,51 @@ class MdlPublishServiceTest {
     // ------------------------------------------------------------------ fixtures
 
     @Test
+    void startupRetainsAnUnrecoverableGroupFenceAndContinuesRecoveringHealthyGroups()
+            throws IOException {
+        registerGroup("g1");
+        registerGroup("g2");
+        Files.createDirectories(groupRoot);
+        Files.writeString(groupRoot.resolve(MdlPublicationStore.JOURNAL), "corrupt intent");
+        var other = mdlHome.resolve("g2");
+        Files.createDirectories(other.resolve("published"));
+        Files.writeString(other.resolve("published/old"), "old snapshot");
+        Files.writeString(other.resolve("mdl.json"), "{\"version\":0}");
+        Files.writeString(
+                other.resolve(MdlPublicationStore.JOURNAL),
+                "{\"format\":1,\"previousVersion\":0,\"nextVersion\":1,\"directory\":true,\"manifest\":true}");
+        service.recoverPublications();
+        assertTrue(MdlPublicationStore.pending(groupRoot));
+        assertFalse(MdlPublicationStore.pending(other));
+        assertEquals("old snapshot", Files.readString(other.resolve("published/old")));
+        var operations =
+                new KnowledgeBaseOperations(
+                        new WrenProperties("wren", mdlHome.toString(), "dataagent", "mysql", 10));
+        org.junit.jupiter.api.Assertions.assertThrows(
+                DatasetException.class, () -> operations.requireQueryReady("g1"));
+        operations.requireQueryReady("g2");
+    }
+
+    @Test
+    void annotationCleanupFailureCannotUndoCommittedPublicationOrSuppressItsEvent()
+            throws IOException {
+        registerGroup("g1");
+        registerDataset("a", "g1", "orders", new String[][] {{"id", "bigint"}});
+        assertTrue(service.prepareModeling("g1").ok());
+        var logDirectory = ws.resolve(".platform/draft-changes.jsonl");
+        Files.createDirectories(logDirectory);
+        Files.writeString(logDirectory.resolve("locked-fixture"), "prevent directory deletion");
+        var result = service.publish("g1");
+        assertTrue(result.ok());
+        assertEquals(1, result.mdlVersion());
+        assertEquals(1, groupsById.get("g1").getMdlVersion());
+        assertEquals(1, publicationEvents.size());
+        assertTrue(result.issues().stream().anyMatch(issue -> "cleanup".equals(issue.source())));
+        assertFalse(Files.exists(groupRoot.resolve(MdlPublicationStore.JOURNAL)));
+        assertTrue(Files.exists(groupRoot.resolve("published/target/mdl.json")));
+    }
+
+    @Test
     void onlySuccessfulPublicationEmitsQueryPreparationEvent() throws IOException {
         registerGroup("g1");
         registerDataset("a", "g1", "orders", new String[][] {{"id", "bigint"}});
@@ -401,7 +446,7 @@ class MdlPublishServiceTest {
                 "customers",
                 new String[][] {{"id", "bigint", "客户ID"}, {"name", "varchar", null}});
 
-        MdlPublishService.MdlPublishResult first = service.publishBaseline("g1");
+        MdlTypes.MdlPublishResult first = service.publishBaseline("g1");
         assertTrue(first.ok(), String.valueOf(first.issues()));
         assertEquals("PUBLISHED", first.mdlState());
         assertEquals(1, first.mdlVersion());
@@ -437,7 +482,7 @@ class MdlPublishServiceTest {
         write("views/monthly/metadata.yml", "name: monthly\nproperties:\n  description: 月度销售额\n");
         write("views/monthly/sql.yml", "statement: >-\n  SELECT 1\n");
 
-        MdlPublishService.MdlPublishResult second = service.publish("g1");
+        MdlTypes.MdlPublishResult second = service.publish("g1");
         assertTrue(second.ok(), String.valueOf(second.issues()));
         assertEquals(2, second.mdlVersion());
 
@@ -491,7 +536,7 @@ class MdlPublishServiceTest {
         assertEquals(1, mdl.get("views").size());
 
         // The diff card converges after publishing.
-        MdlPublishService.MdlPreview preview = service.preview("g1");
+        MdlTypes.MdlPreview preview = service.preview("g1");
         assertFalse(preview.changed());
         assertTrue(
                 preview.publishedFiles().stream().noneMatch(f -> f.path().startsWith("target/")));
@@ -523,7 +568,7 @@ class MdlPublishServiceTest {
                 """);
         wren.failCubeQuery = true;
 
-        MdlPublishService.MdlPublishResult result = service.publishBaseline("g1");
+        MdlTypes.MdlPublishResult result = service.publishBaseline("g1");
 
         assertFalse(result.ok());
         assertTrue(
@@ -556,7 +601,7 @@ class MdlPublishServiceTest {
                 """);
         wren.failCubeQuery = true;
 
-        MdlPublishService.MdlPublishResult result = service.publish("g1");
+        MdlTypes.MdlPublishResult result = service.publish("g1");
 
         assertFalse(result.ok());
         // Workspace-as-truth (ADR 0033 D3): the old snapshot keeps serving, state stays
@@ -584,7 +629,7 @@ class MdlPublishServiceTest {
         assertTrue(service.publishBaseline("g1", tick).ok());
         int callsAfterFirst = wren.calls.size();
 
-        MdlPublishService.MdlPublishResult skipped = service.publishBaseline("g1", tick - 1);
+        MdlTypes.MdlPublishResult skipped = service.publishBaseline("g1", tick - 1);
         assertTrue(skipped.ok());
         assertEquals("PUBLISHED", skipped.mdlState());
         assertEquals(1, skipped.mdlVersion());
@@ -704,7 +749,7 @@ class MdlPublishServiceTest {
         registerExternalDataset(
                 "e1", "g1", "ext_orders", "src1", new String[][] {{"id", "bigint", null}});
 
-        MdlPublishService.MdlPublishResult result = service.publishBaseline("g1");
+        MdlTypes.MdlPublishResult result = service.publishBaseline("g1");
 
         assertFalse(result.ok());
         assertTrue(
@@ -720,7 +765,7 @@ class MdlPublishServiceTest {
     void emptyKnowledgeBaseFailsFast() {
         registerGroup("g1");
 
-        MdlPublishService.MdlPublishResult result = service.publishBaseline("g1");
+        MdlTypes.MdlPublishResult result = service.publishBaseline("g1");
 
         assertFalse(result.ok());
         assertTrue(
@@ -743,7 +788,7 @@ class MdlPublishServiceTest {
         // Seed the workspace without publishing: the funnel shows a pending diff.
         assertTrue(seeder.reconcile("g1").issues().isEmpty());
 
-        MdlPublishService.MdlPreview before = service.preview("g1");
+        MdlTypes.MdlPreview before = service.preview("g1");
         assertTrue(before.changed());
         assertTrue(before.publishedFiles().isEmpty());
         assertTrue(
@@ -753,14 +798,11 @@ class MdlPublishServiceTest {
 
         assertTrue(service.publishBaseline("g1").ok());
 
-        MdlPublishService.MdlPreview after = service.preview("g1");
+        MdlTypes.MdlPreview after = service.preview("g1");
         assertFalse(after.changed());
         assertEquals(
-                after.files().stream().map(MdlPublishService.MdlFile::path).sorted().toList(),
-                after.publishedFiles().stream()
-                        .map(MdlPublishService.MdlFile::path)
-                        .sorted()
-                        .toList());
+                after.files().stream().map(MdlTypes.MdlFile::path).sorted().toList(),
+                after.publishedFiles().stream().map(MdlTypes.MdlFile::path).sorted().toList());
     }
 
     @Test
@@ -812,18 +854,18 @@ class MdlPublishServiceTest {
         write("views/monthly/metadata.yml", "name: monthly\nproperties:\n  description: 月度销售额\n");
         write("views/monthly/sql.yml", "statement: >-\n  SELECT 1\n");
 
-        MdlPublishService.MdlView view = service.view("g1");
+        MdlTypes.MdlView view = service.view("g1");
 
         assertTrue(view.issues().isEmpty(), String.valueOf(view.issues()));
         assertEquals("PUBLISHED", view.state());
         assertEquals(1, view.version());
         assertEquals(2, view.models().size());
         assertEquals(1, view.relations().size());
-        MdlPublishService.MdlRelationView relation = view.relations().get(0);
+        MdlTypes.MdlRelationView relation = view.relations().get(0);
         assertEquals(List.of("customer_id", "tenant"), relation.sourceColumns());
         assertEquals(List.of("id", "tenant"), relation.targetColumns());
         assertEquals(1, view.cubes().size());
-        MdlPublishService.MdlCubeView cube = view.cubes().get(0);
+        MdlTypes.MdlCubeView cube = view.cubes().get(0);
         assertEquals("orders", cube.baseModel());
         assertEquals("total_valid_revenue", cube.measures().get(0).name());
         assertEquals(1, view.views().size());
@@ -856,14 +898,14 @@ class MdlPublishServiceTest {
                 "models/monthly_active/ref_sql.sql",
                 "SELECT DATE_FORMAT(created_at, '%Y-%m') AS month FROM orders GROUP BY 1\n");
 
-        MdlPublishService.MdlView view = service.view("g1");
+        MdlTypes.MdlView view = service.view("g1");
 
         assertTrue(view.issues().isEmpty(), String.valueOf(view.issues()));
         assertEquals(1, view.models().size());
         assertEquals("orders", view.models().get(0).modelName());
         assertNull(view.models().get(0).refSqlPath());
         assertEquals(1, view.derivedModels().size());
-        MdlPublishService.MdlModelView derived = view.derivedModels().get(0);
+        MdlTypes.MdlModelView derived = view.derivedModels().get(0);
         assertEquals("monthly_active", derived.modelName());
         assertEquals("月活用户口径", derived.description());
         assertEquals("models/monthly_active/ref_sql.sql", derived.refSqlPath());
@@ -890,7 +932,7 @@ class MdlPublishServiceTest {
                 """);
         write("models/monthly_active/ref_sql.sql", "SELECT '2026-10' AS month\n");
 
-        MdlPublishService.MdlPublishResult result = service.publishBaseline("g1");
+        MdlTypes.MdlPublishResult result = service.publishBaseline("g1");
 
         assertTrue(result.ok(), String.valueOf(result.issues()));
         assertTrue(
@@ -941,7 +983,7 @@ class MdlPublishServiceTest {
                 "SELECT DATE_SUB(CURRENT_DATE, INTERVAL 30 DAY) AS d\n");
         wren.failDryRunFor = "monthly_active";
 
-        MdlPublishService.MdlPublishResult result = service.publishBaseline("g1");
+        MdlTypes.MdlPublishResult result = service.publishBaseline("g1");
 
         assertFalse(result.ok());
         assertEquals("FAILED", result.mdlState());
@@ -982,7 +1024,7 @@ class MdlPublishServiceTest {
                 ]}
                 """;
 
-        MdlPublishService.MdlPublishResult result = service.publishBaseline("g1");
+        MdlTypes.MdlPublishResult result = service.publishBaseline("g1");
 
         assertTrue(result.ok(), String.valueOf(result.issues()));
         // The published snapshot carries the physically-qualified manifest the runtime loads.
@@ -1025,7 +1067,7 @@ class MdlPublishServiceTest {
                 """;
 
         wren.failDryRunFor = "broken";
-        MdlPublishService.MdlPublishResult result = service.publishBaseline("g1");
+        MdlTypes.MdlPublishResult result = service.publishBaseline("g1");
 
         assertFalse(result.ok());
         assertTrue(
@@ -1070,7 +1112,7 @@ class MdlPublishServiceTest {
                 """;
 
         wren.failDryRunFor = "first_stage";
-        MdlPublishService.MdlPublishResult result = service.publishBaseline("g1");
+        MdlTypes.MdlPublishResult result = service.publishBaseline("g1");
 
         assertFalse(result.ok());
         assertTrue(
@@ -1104,7 +1146,7 @@ class MdlPublishServiceTest {
                 """;
 
         wren.failDryRunFor = "broken";
-        MdlPublishService.MdlPublishResult result = service.publishBaseline("g1");
+        MdlTypes.MdlPublishResult result = service.publishBaseline("g1");
 
         assertFalse(result.ok());
         assertTrue(

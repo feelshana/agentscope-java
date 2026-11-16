@@ -41,7 +41,7 @@ class DraftReviewServiceTest {
         when(publisher.preview("g1"))
                 .thenAnswer(
                         i ->
-                                new MdlPublishService.MdlPreview(
+                                new MdlTypes.MdlPreview(
                                         files(root),
                                         files(published),
                                         List.of(),
@@ -70,14 +70,14 @@ class DraftReviewServiceTest {
         Files.writeString(file, content, StandardCharsets.UTF_8);
     }
 
-    private static List<MdlPublishService.MdlFile> files(Path base) throws IOException {
+    private static List<MdlTypes.MdlFile> files(Path base) throws IOException {
         if (!Files.isDirectory(base)) return List.of();
-        List<MdlPublishService.MdlFile> out = new ArrayList<>();
+        List<MdlTypes.MdlFile> out = new ArrayList<>();
         try (Stream<Path> walk = Files.walk(base)) {
             for (Path p : walk.filter(Files::isRegularFile).sorted().toList()) {
                 String rel = base.relativize(p).toString().replace('\\', '/');
                 if (rel.startsWith(".platform/")) continue;
-                out.add(new MdlPublishService.MdlFile(rel, Files.readString(p)));
+                out.add(new MdlTypes.MdlFile(rel, Files.readString(p)));
             }
         }
         return out;

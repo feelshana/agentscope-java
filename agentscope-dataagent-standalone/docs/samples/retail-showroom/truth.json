@@ -1,0 +1,39 @@
+{
+  "seed": 20261116,
+  "counts": {
+    "orders": 51946,
+    "stores": 12,
+    "products": 16,
+    "targets": 648
+  },
+  "q3_2026": {
+    "orders": 10097,
+    "net_sales_cents": 474712680,
+    "net_profit_cents": 204974478,
+    "refund_cents": 17037928,
+    "gross_cents": 543647000,
+    "paid_orders": 9740
+  },
+  "q3_2025": {
+    "orders": 8183,
+    "net_sales_cents": 388913544,
+    "net_profit_cents": 169274117,
+    "refund_cents": 13912662,
+    "gross_cents": 442411000,
+    "paid_orders": 7924
+  },
+  "east_q3": {
+    "orders": 2598,
+    "net_sales_cents": 126203994,
+    "net_profit_cents": 55069240,
+    "refund_cents": 3839886,
+    "gross_cents": 142704100
+  },
+  "online_q3": {
+    "orders": 3300,
+    "net_sales_cents": 157916436,
+    "net_profit_cents": 69870000,
+    "refund_cents": 3671918,
+    "gross_cents": 175103300
+  }
+}

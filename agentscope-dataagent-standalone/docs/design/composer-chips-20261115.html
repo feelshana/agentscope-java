@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Composer 控件 · v2 重制 — 知识库 / 联网 / 分析</title>
+<style>
+:root{
+  --bg:#F4F4F7;--canvas:#ECECF1;--surface:#FFFFFF;--surface-2:#F6F6F9;--surface-3:#EBEBF0;
+  --ink:#17181D;--ink-2:#4B4F5A;--ink-3:#7C8190;--ink-4:#A9AEBC;
+  --hair:rgba(60,60,67,.10);--hair-2:rgba(60,60,67,.15);
+  --tint:#5B49D6;--tint-solid:#5B49D6;--tint-soft:#EFEBFD;--tint-line:rgba(91,73,214,.28);
+  --inset-hi:rgba(255,255,255,.8);
+  --sh-1:0 1px 2px rgba(16,24,40,.05);
+  --sh-pop:0 1px 2px rgba(16,24,40,.05),0 16px 40px -12px rgba(16,24,40,.18),0 4px 12px -4px rgba(16,24,40,.10);
+  --sh-panel:-16px 0 40px -20px rgba(16,24,40,.16);
+  --spring:cubic-bezier(.32,1.2,.4,1);
+  --ease:cubic-bezier(.32,.72,0,1);
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+}
+html[data-theme="dark"]{
+  --bg:#0A0A0E;--canvas:#0F0F14;--surface:#1A1A21;--surface-2:#222229;--surface-3:#2B2B34;
+  --ink:#F2F2F6;--ink-2:#B9BDC9;--ink-3:#878C9C;--ink-4:#61677A;
+  --hair:rgba(255,255,255,.08);--hair-2:rgba(255,255,255,.13);
+  --tint:#A99DFF;--tint-solid:#6A55E0;--tint-soft:rgba(120,102,235,.16);--tint-line:rgba(169,157,255,.34);
+  --inset-hi:rgba(255,255,255,.05);
+  --sh-1:0 1px 2px rgba(0,0,0,.35);
+  --sh-pop:0 1px 2px rgba(0,0,0,.4),0 20px 48px -12px rgba(0,0,0,.55),0 4px 12px -4px rgba(0,0,0,.4);
+  --sh-panel:-16px 0 40px -20px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font:400 13px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;transition:background .35s,color .35s;
+}
+.i{width:15px;height:15px;flex:none;display:block;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.wrap{max-width:1120px;margin:0 auto;padding:44px 32px 80px}
+.kicker{font-size:10.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:var(--tint)}
+h1{font-size:27px;font-weight:700;letter-spacing:-.8px;margin:8px 0 6px}
+.lede{font-size:13px;color:var(--ink-3);max-width:760px;line-height:1.8;margin:0}
+.lede b{color:var(--ink-2);font-weight:600}
+.tgl{margin-left:auto;height:30px;padding:0 13px;border-radius:8px;border:.5px solid var(--hair-2);background:var(--surface);color:var(--ink-2);font:inherit;font-size:12px;font-weight:550;cursor:pointer;box-shadow:var(--sh-1)}
+.bench{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px}
+.bench span{font-size:11px;color:var(--ink-3);border:.5px solid var(--hair-2);background:var(--surface);border-radius:99px;padding:4px 11px}
+.bench b{color:var(--ink-2);font-weight:600}
+
+/* ============ 章节 ============ */
+.chapter{margin-top:52px}
+.chapter>h2{font-size:16.5px;font-weight:700;letter-spacing:-.3px;margin:0 0 5px}
+.chapter>p{font-size:12.5px;color:var(--ink-3);margin:0 0 16px;max-width:780px;line-height:1.75}
+.chapter>p code{font-family:var(--mono);font-size:11px;background:var(--surface-2);border-radius:4px;padding:0 4px}
+
+/* ============ 1. 活 demo 舞台 ============ */
+.demo{
+  position:relative;height:584px;border-radius:18px;overflow:hidden;
+  background:var(--canvas);border:.5px solid var(--hair-2);
+}
+.demo-top{height:46px;display:flex;align-items:center;gap:9px;padding:0 16px;border-bottom:.5px solid var(--hair);color:var(--ink-3);font-size:12px}
+.demo-top .dt-ic{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;color:var(--ink-3)}
+.demo-top b{color:var(--ink);font-weight:600;font-size:12.5px}
+.demo-body{position:absolute;inset:46px 0 0;display:flex;flex-direction:column;align-items:center;padding:30px 32px 24px;transition:padding-right .3s var(--ease)}
+.demo.with-panel .demo-body{padding-right:350px}
+.thread{width:min(680px,100%);display:flex;flex-direction:column;gap:14px;flex:1;min-height:0}
+.mrow{display:flex;gap:10px;align-items:flex-start}
+.mrow.user{flex-direction:row-reverse}
+.av{width:26px;height:26px;border-radius:8px;flex:none;display:grid;place-items:center;font-size:10px;font-weight:700}
+.av.u{background:var(--surface-3);color:var(--ink-2);font-size:10.5px}
+.av.a{background:var(--tint-soft);color:var(--tint)}
+.mbub{max-width:78%;font-size:12.5px;line-height:1.7}
+.mrow.user .mbub{background:var(--tint-soft);border-radius:14px 14px 4px 14px;padding:9px 13px;color:var(--ink)}
+.mrow .mbub.card{background:var(--surface);border:.5px solid var(--hair-2);border-radius:4px 14px 14px 14px;padding:12px 14px;box-shadow:var(--sh-1)}
+/* 卡片内迷你对比条 */
+.hbars{margin-top:11px;display:flex;flex-direction:column;gap:7px}
+.hbars .hr{display:grid;grid-template-columns:58px 1fr 48px;align-items:center;gap:9px;font-size:11px}
+.hbars .hr>span:first-child{color:var(--ink-3);white-space:nowrap}
+.hbars .track{display:block;height:5px;border-radius:3px;background:var(--surface-2)}
+.hbars .fill{display:block;height:100%;border-radius:3px;background:var(--tint)}
+.hbars .hr:nth-child(2) .fill{background:color-mix(in srgb,var(--tint) 60%,var(--surface))}
+.hbars .hr:nth-child(3) .fill{background:color-mix(in srgb,var(--tint) 40%,var(--surface))}
+.hbars .hr:nth-child(4) .fill{background:color-mix(in srgb,var(--tint) 24%,var(--surface))}
+.hbars em{font-style:normal;font-family:var(--mono);font-size:10.5px;color:var(--ink-3);text-align:right}
+
+.mbub.card p{margin:0;color:var(--ink-3);font-size:11.5px}
+
+/* ---- composer ---- */
+.composer{
+  width:min(680px,100%);background:var(--surface);border:.5px solid var(--hair-2);border-radius:16px;
+  box-shadow:var(--sh-1),inset 0 1px 0 var(--inset-hi);padding:12px 12px 10px;position:relative;z-index:5;
+}
+.composer textarea{
+  display:block;width:100%;border:0;outline:0;resize:none;background:none;color:var(--ink);
+  font:inherit;font-size:13.5px;line-height:1.6;height:44px;padding:2px 4px;
+}
+.composer textarea::placeholder{color:var(--ink-4)}
+.bar{display:flex;align-items:center;gap:8px;padding:2px 2px 0}
+
+/* ============ 胶囊控件 ============ */
+.chip{
+  position:relative;display:inline-flex;align-items:stretch;height:32px;
+  background:var(--surface);border:.5px solid var(--hair-2);border-radius:9px;
+  box-shadow:var(--sh-1),inset 0 1px 0 var(--inset-hi);
+  font-size:12.5px;color:var(--ink-2);
+  transition:border-color .15s var(--ease),box-shadow .15s var(--ease),background .15s var(--ease);
+}
+.chip:hover{border-color:rgba(60,60,67,.26);box-shadow:var(--sh-1),0 6px 16px -8px rgba(16,24,40,.14),inset 0 1px 0 var(--inset-hi)}
+html[data-theme="dark"] .chip:hover{border-color:rgba(255,255,255,.24)}
+.chip.disabled{opacity:.45;pointer-events:none}
+.zone{
+  position:relative;display:inline-flex;align-items:center;gap:6px;border:0;background:none;
+  font:inherit;color:inherit;cursor:pointer;padding:0 10px;border-radius:8px;margin:1px;
+  transition:background .13s var(--ease),color .13s var(--ease),transform .09s var(--ease);
+  outline:none;
+}
+.zone:active{transform:scale(.96)}
+.zone:focus-visible{box-shadow:inset 0 0 0 1.5px var(--tint)}
+.zone.hov,.zone:hover{background:rgba(118,118,128,.08)}
+html[data-theme="dark"] .zone.hov,html[data-theme="dark"] .zone:hover{background:rgba(255,255,255,.07)}
+.zone .ic{color:var(--ink-3);transition:color .13s}
+.zone.hov .ic,.zone:hover .ic{color:var(--ink-2)}
+/* 分段胶囊 */
+.z-icon{padding:0 8px 0 9px}
+.z-value{padding:0 9px 0 10px;font-weight:600;color:var(--ink)}
+.divider{width:1px;height:13px;background:rgba(60,60,67,.20);align-self:center;transition:opacity .13s}
+html[data-theme="dark"] .divider{background:rgba(255,255,255,.20)}
+.chip:has(.zone:hover) .divider,.chip.hovany .divider{opacity:0}
+/* 区段激活态 */
+.zone.seg-on{background:var(--tint-soft)}
+.zone.seg-on .ic{color:var(--tint)}
+.chip.open{border-color:var(--tint-line)}
+.chip.open .z-value{background:var(--tint-soft)}
+.chip.open .z-value .val{color:var(--tint)}
+.chip.open .chev{transform:rotate(180deg);color:var(--tint)}
+.chev{width:12px;height:12px;color:var(--ink-4);transition:transform .2s var(--spring),color .15s}
+/* 值切换动画 */
+.val{position:relative;display:inline-block;overflow:hidden;height:17px;line-height:17px;vertical-align:middle}
+.val .v-cur,.val .v-next{display:block;white-space:nowrap;max-width:160px;overflow:hidden;text-overflow:ellipsis;transition:transform .18s var(--ease),opacity .18s var(--ease)}
+.val .v-cur.out{transform:translateY(-9px);opacity:0}
+.val .v-next{position:absolute;left:0;top:0;transform:translateY(9px);opacity:0}
+.val .v-next.in{transform:none;opacity:1}
+/* 开关 */
+.sw{
+  width:22px;height:13px;border-radius:99px;background:var(--surface-3);position:relative;flex:none;
+  box-shadow:inset 0 0 0 .5px rgba(60,60,67,.12);transition:background .2s var(--ease);
+}
+.sw::after{
+  content:"";position:absolute;top:2px;left:2px;width:9px;height:9px;border-radius:50%;background:#fff;
+  box-shadow:0 1px 2px rgba(16,24,40,.24),0 0 0 .5px rgba(60,60,67,.05);
+  transition:transform .22s cubic-bezier(.34,1.5,.64,1);
+}
+/* 开态：胶囊只带一层极淡的紫调，重量交给拨杆本身 */
+.chip.on{background:color-mix(in srgb,var(--tint) 6%,var(--surface));border-color:color-mix(in srgb,var(--tint) 32%,var(--hair-2))}
+.chip.on .zone{color:var(--ink)}
+.chip.on .zone .ic{color:var(--tint)}
+.chip.on .sw{background:var(--tint-solid);box-shadow:none}
+.chip.on .sw::after{transform:translateX(9px)}
+/* tooltip */
+.tip{
+  position:absolute;bottom:calc(100% + 9px);left:50%;transform:translateX(-50%);
+  display:flex;align-items:center;gap:6px;white-space:nowrap;
+  background:var(--ink);color:var(--surface);font-size:11px;font-weight:550;
+  border-radius:7px;padding:5px 9px;opacity:0;pointer-events:none;
+  transition:opacity .12s var(--ease) .45s;z-index:20;
+}
+.tip kbd{background:rgba(255,255,255,.16);color:inherit;border:0;margin-left:0}
+html[data-theme="dark"] .tip{background:#E8E8EE;color:#17181D}
+html[data-theme="dark"] .tip kbd{background:rgba(0,0,0,.12)}
+.zone:hover .tip{opacity:1}
+/* 发送 */
+.send{
+  margin-left:auto;width:32px;height:32px;border-radius:50%;border:0;cursor:pointer;flex:none;
+  background:var(--tint-solid);color:#fff;display:grid;place-items:center;
+  box-shadow:0 1px 2px rgba(91,73,214,.35);
+  transition:transform .12s var(--spring),opacity .15s;
+}
+.send:hover{transform:scale(1.06)}
+.send:active{transform:scale(.94)}
+.send.off{background:var(--surface-3);color:var(--ink-4);box-shadow:none;pointer-events:none}
+
+/* ============ 浮层 ============ */
+.chipwrap{position:relative}
+.pop{
+  position:absolute;bottom:calc(100% + 8px);left:0;width:300px;z-index:30;
+  background:var(--surface);border:.5px solid var(--hair-2);border-radius:12px;
+  box-shadow:var(--sh-pop);padding:5px;transform-origin:bottom left;
+  opacity:0;transform:translateY(5px) scale(.97);pointer-events:none;
+  transition:opacity .16s var(--ease),transform .18s var(--spring);
+}
+.pop.show{opacity:1;transform:none;pointer-events:auto}
+.pop .search{
+  display:flex;align-items:center;gap:7px;height:32px;margin:0 1px 4px;padding:0 9px;
+  background:var(--surface-2);border-radius:8px;color:var(--ink-4);font-size:12px;
+}
+.pop .search input{border:0;outline:0;background:none;font:inherit;font-size:12.5px;color:var(--ink);width:100%}
+.pop .search input::placeholder{color:var(--ink-4)}
+.psec{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-4);padding:8px 9px 4px}
+.opt{
+  display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:8px;cursor:pointer;
+  transition:background .1s;
+}
+.opt:hover{background:rgba(118,118,128,.08)}
+html[data-theme="dark"] .opt:hover{background:rgba(255,255,255,.06)}
+.oic{
+  width:26px;height:26px;border-radius:7px;flex:none;display:grid;place-items:center;
+  background:var(--tint-soft);color:var(--tint);font-size:11px;font-weight:700;
+}
+.ot{flex:1;min-width:0}
+.ot b{display:block;font-size:12.5px;font-weight:550;color:var(--ink);letter-spacing:-.1px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ot span{display:block;font-size:11px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.opt .ck{width:15px;height:15px;color:var(--tint);flex:none;opacity:0}
+.opt.sel .ck{opacity:1}
+.opt.sel .oic{background:var(--tint-solid);color:#fff}
+.pfoot{
+  margin-top:4px;border-top:.5px solid var(--hair);padding:8px 9px;
+  display:flex;align-items:center;gap:8px;border-radius:8px;cursor:pointer;color:var(--ink-2);font-size:12px;font-weight:550;
+  transition:background .1s;
+}
+.pfoot:hover{background:rgba(118,118,128,.08)}
+.pfoot .ic{color:var(--ink-3)}
+kbd{
+  margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--ink-3);
+  background:var(--surface-2);border:.5px solid var(--hair-2);border-radius:5px;padding:1.5px 6px;
+}
+/* 分析浮层 */
+.pop.an{width:288px}
+.an-opt{display:flex;gap:9px;align-items:flex-start;padding:7px 8px;border-radius:8px;cursor:pointer;transition:background .1s}
+.an-opt:hover{background:rgba(118,118,128,.08)}
+html[data-theme="dark"] .an-opt:hover{background:rgba(255,255,255,.06)}
+.an-opt .oic{margin-top:1px}
+.an-opt .ck{width:15px;height:15px;color:var(--tint);flex:none;opacity:0;margin-top:4px}
+.an-opt.sel .ck{opacity:1}
+.an-opt .ot span{white-space:normal;line-height:1.5;margin-top:1px}
+.rec-tag{font-size:10px;font-weight:650;color:var(--tint);background:var(--tint-soft);border-radius:4px;padding:1px 5px;margin-left:6px;vertical-align:1px}
+
+/* ============ 右侧数据集面板 ============ */
+.panel{
+  position:absolute;top:46px;right:0;bottom:0;width:322px;z-index:10;
+  background:var(--surface);border-left:.5px solid var(--hair-2);
+  box-shadow:var(--sh-panel);transform:translateX(102%);
+  transition:transform .28s var(--ease);
+  display:flex;flex-direction:column;
+}
+.panel.show{transform:none}
+.panel .ph{padding:16px 18px 12px;border-bottom:.5px solid var(--hair)}
+.panel .ph .lab{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-4)}
+.panel .ph h3{margin:5px 0 2px;font-size:14.5px;font-weight:650;letter-spacing:-.2px;display:flex;align-items:center;gap:8px}
+.panel .ph h3 .oic{width:22px;height:22px;border-radius:6px;font-size:10px}
+.panel .ph .meta{font-size:11px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.panel .pb{flex:1;overflow:auto;padding:12px 18px}
+.panel .pb h4{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-4);margin:12px 0 7px}
+.panel .pb h4:first-child{margin-top:0}
+.trow{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:8px;font-size:12px;transition:background .1s;cursor:pointer}
+.trow:hover{background:rgba(118,118,128,.07)}
+.trow .i{color:var(--ink-4)}
+.trow b{font-weight:550;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trow span{font-size:10.5px;color:var(--ink-4);font-family:var(--mono)}
+.tags{display:flex;flex-wrap:wrap;gap:6px}
+.tags em{font-style:normal;font-size:11px;color:var(--ink-2);background:var(--surface-2);border:.5px solid var(--hair);border-radius:99px;padding:3px 9px}
+
+/* 消息内的次级动作行 */
+.mact{display:flex;gap:2px;margin-top:10px;padding-top:8px;border-top:.5px solid var(--hair)}
+.mact button{
+  border:0;background:none;font:inherit;font-size:11.5px;font-weight:550;color:var(--ink-3);
+  padding:3px 8px;border-radius:6px;cursor:pointer;transition:background .12s,color .12s;
+}
+.mact button:hover{background:var(--surface-2);color:var(--ink)}
+.mact button:first-child{margin-left:-8px}
+/* 追问建议 */
+.fups{display:flex;gap:7px;align-items:center;flex-wrap:wrap;padding-left:36px;margin-top:-2px}
+.fups>.fu-lab{font-size:10.5px;color:var(--ink-3);letter-spacing:.02em}
+.fups button{
+  height:26px;padding:0 10px;border-radius:8px;border:.5px solid var(--hair-2);background:var(--surface);
+  color:var(--ink-2);font:inherit;font-size:11.5px;font-weight:550;cursor:pointer;
+  transition:background .12s,border-color .12s,color .12s;
+}
+.fups button:hover{background:var(--surface-2);border-color:var(--tint-line);color:var(--ink)}
+/* demo 角标 */
+.demo-badge{
+  position:absolute;top:11px;right:14px;z-index:6;display:flex;align-items:center;gap:6px;
+  font-size:10.5px;font-weight:600;color:var(--ink-3);background:var(--surface);
+  border:.5px solid var(--hair-2);border-radius:99px;padding:3px 9px;box-shadow:var(--sh-1);
+}
+.demo-badge i{width:5px;height:5px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px rgba(30,158,99,.14)}
+
+/* ============ 2. 原则 ============ */
+.prin{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.prin .pc{background:var(--surface);border:.5px solid var(--hair-2);border-radius:14px;padding:16px 18px;box-shadow:var(--sh-1)}
+.prin .pc .n{font-family:var(--mono);font-size:10.5px;color:var(--tint);font-weight:700}
+.prin .pc h3{font-size:13.5px;font-weight:650;margin:7px 0 5px}
+.prin .pc p{font-size:12px;line-height:1.75;color:var(--ink-3);margin:0}
+.prin .pc p b{color:var(--ink-2);font-weight:600}
+
+/* ============ 3. 状态矩阵 ============ */
+.matrix{display:flex;flex-direction:column;gap:2px}
+.mrow-line{display:grid;grid-template-columns:92px 1fr;gap:14px;align-items:start;padding:14px 0;border-top:.5px solid var(--hair)}
+.mrow-line:first-child{border-top:0}
+.mrow-line .ml{font-size:11px;font-weight:650;color:var(--ink-3);padding-top:9px}
+.mrow-line .ml span{display:block;font-weight:400;font-size:10.5px;color:var(--ink-4);margin-top:2px}
+.mstates{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}
+.mcell{display:flex;flex-direction:column;align-items:flex-start;gap:7px}
+.mcell>span{font-family:var(--mono);font-size:10px;color:var(--ink-4);padding-left:2px;letter-spacing:.01em}
+
+/* ============ 被否掉的方向 ============ */
+.rej{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.rej .rc{display:flex;gap:10px;padding:13px 15px;background:var(--surface);border:.5px solid var(--hair-2);border-radius:12px}
+.rej .rc .x{width:18px;height:18px;border-radius:50%;flex:none;display:grid;place-items:center;background:var(--surface-2);color:var(--ink-4);margin-top:1px}
+.rej .rc h4{margin:0 0 3px;font-size:12.5px;font-weight:650;color:var(--ink-2);text-decoration:line-through;text-decoration-color:rgba(192,57,77,.45);text-decoration-thickness:1px}
+.rej .rc p{margin:0;font-size:11.5px;line-height:1.65;color:var(--ink-3)}
+
+/* ============ 4. 解剖 ============ */
+.anat{display:grid;grid-template-columns:1.15fr .85fr;gap:16px;align-items:start}
+.anat .acard{background:var(--surface);border:.5px solid var(--hair-2);border-radius:14px;padding:26px;box-shadow:var(--sh-1);position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:center;align-items:flex-start}
+.zs{position:relative;display:inline-block;padding-top:24px;margin:8px 0 6px}
+.zoom2{zoom:2.1;display:inline-block}
+.dim{position:absolute;left:0;right:0;top:14px;height:1px;background:var(--ink-4);opacity:.45}
+.dim::before,.dim::after{content://;position:absolute;top:0;width:1px;height:6px;background:var(--ink-4);opacity:.7}
+.dim::before{left:0}.dim::after{right:0}
+.dim span{position:absolute;left:50%;top:-17px;transform:translateX(-50%);font-family:var(--mono);font-size:10px;color:var(--ink-3);background:var(--surface);padding:0 7px;white-space:nowrap;letter-spacing:.02em}
+.dim-note{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px;width:100%}
+.zone-legend{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
+.zone-legend span{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--ink-3)}
+.zone-legend i{width:16px;height:16px;border-radius:5px;background:var(--tint-soft);color:var(--tint);font-style:normal;font-family:var(--mono);font-size:9.5px;font-weight:700;display:grid;place-items:center;flex:none}
+.dim-note span{font-family:var(--mono);font-size:10px;color:var(--ink-4);border:.5px solid var(--hair-2);border-radius:5px;padding:2px 7px;background:var(--surface-2)}
+.spec-list{display:flex;flex-direction:column;gap:0}
+.spec-list .sr{display:grid;grid-template-columns:118px 1fr;gap:10px;padding:9px 0;border-top:.5px solid var(--hair);font-size:12px}
+.spec-list .sr:first-child{border-top:0}
+.spec-list .sr>b{font-family:var(--mono);font-size:11px;color:var(--tint);font-weight:600}
+.spec-list .sr span{color:var(--ink-3);line-height:1.6}
+.spec-list .sr span b{color:var(--ink-2)}
+.spec-list .sr code{font-family:var(--mono);font-size:10.5px;background:var(--surface-2);border-radius:4px;padding:0 4px;color:var(--ink-2)}
+
+/* ============ 5. 规格表 ============ */
+table.spec{width:100%;border-collapse:collapse;background:var(--surface);border:.5px solid var(--hair-2);border-radius:14px;overflow:hidden;box-shadow:var(--sh-1);font-size:12px}
+table.spec th{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-4);text-align:left;padding:11px 16px;border-bottom:.5px solid var(--hair);background:var(--surface-2)}
+table.spec td{padding:10px 16px;border-bottom:.5px solid var(--hair);color:var(--ink-3);line-height:1.65;vertical-align:top}
+table.spec tr:last-child td{border-bottom:0}
+table.spec td:first-child{font-weight:600;color:var(--ink);white-space:nowrap}
+table.spec code{font-family:var(--mono);font-size:10.5px;background:var(--surface-2);border-radius:4px;padding:1px 5px;color:var(--ink-2)}
+
+.foot{margin-top:56px;padding-top:18px;border-top:.5px solid var(--hair);font-size:11.5px;color:var(--ink-4);line-height:1.9}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div style="display:flex;align-items:flex-start">
+    <div>
+      <div class="kicker">Composer Controls · v2 重制</div>
+      <h1>输入区三控件：知识库 · 联网 · 分析</h1>
+      <p class="lede">对标 <b>Raycast</b> 命令菜单的密度与快捷键、<b>Linear</b> 浮层的排版克制、<b>Cursor</b> 选择器的「值可见」语义、<b>Apple HIG</b> 拨杆的物理感。下方第一节是<b>可以直接操作的活 demo</b>：点图标开面板、点名字换库、点拨杆开关联网、点分析换方式。</p>
+    </div>
+    <button class="tgl" onclick="document.documentElement.dataset.theme=document.documentElement.dataset.theme==='dark'?'':'dark'">切换深色</button>
+  </div>
+  <div class="bench">
+    <span><b>Raycast</b> · kbd 脚注 + 搜索优先</span>
+    <span><b>Linear</b> · 浮层 8px 行圆角 / 10px 分组标签</span>
+    <span><b>Cursor</b> · 选择器永远显示当前值</span>
+    <span><b>Apple HIG</b> · 开关物理 + 焦点环</span>
+    <span><b>Vercel</b> · 0.5px 发丝线 + 单层阴影</span>
+  </div>
+
+  <!-- ================= 1. 活 DEMO ================= -->
+  <div class="chapter">
+    <h2>1 · 活 demo（可点击）</h2>
+    <p>完整语境下的真实交互。试试：知识库胶囊<b>左段图标</b>（开/关右侧面板）与<b>右段名称</b>（下拉换库）是两个独立热区；联网是拨杆；分析显示当前值。Esc 或点空白处关闭浮层。</p>
+    <div class="demo" id="demo">
+      <div class="demo-top">
+        <span class="dt-ic"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M9 9.5h6M9 13h4"/></svg></span>
+        <b>新对话</b><span>·</span><span>DataAgent</span>
+        <span class="demo-badge"><i></i>可交互</span>
+      </div>
+      <div class="demo-body">
+        <div class="thread">
+          <div class="mrow user">
+            <span class="av u">李</span>
+            <div class="mbub">上个季度各赛道销售额对比一下</div>
+          </div>
+          <div class="mrow">
+            <span class="av a">AI</span>
+            <div class="mbub card">
+              三个赛道里「智能家电」增速最快，环比 +18.4%。
+              <div class="hbars">
+                <div class="hr"><span>智能家电</span><span class="track"><span class="fill" style="width:100%"></span></span><em>+18.4%</em></div>
+                <div class="hr"><span>生活电器</span><span class="track"><span class="fill" style="width:66%"></span></span><em>+9.2%</em></div>
+                <div class="hr"><span>个护健康</span><span class="track"><span class="fill" style="width:44%"></span></span><em>+4.1%</em></div>
+                <div class="hr"><span>厨房小电</span><span class="track"><span class="fill" style="width:27%"></span></span><em>-2.6%</em></div>
+              </div>
+              <p>数据来源：精选运营赛道流水 · 2026-07-01 至 2026-09-30</p>
+              <div class="mact"><button>查看 SQL</button><button>导出</button><button>收藏到看板</button></div>
+            </div>
+          </div>
+          <div class="fups">
+            <span class="fu-lab">接着问</span>
+            <button>按渠道拆开看</button>
+            <button>和去年同期比</button>
+            <button>毛利率怎么样</button>
+          </div>
+        </div>
+
+        <div class="composer">
+          <textarea placeholder="输入查询、分析、预测数据问题…"></textarea>
+          <div class="bar">
+
+            <!-- 知识库：分段胶囊 -->
+            <div class="chipwrap">
+              <div class="chip kb" id="kbChip">
+                <button class="zone z-icon" id="kbPanelBtn" aria-label="数据集详情">
+                  <svg class="i ic" viewBox="0 0 24 24"><ellipse cx="12" cy="5.5" rx="7" ry="2.8"/><path d="M5 5.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/><path d="M5 11.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/></svg>
+                  <span class="tip">数据集详情<kbd>⌘D</kbd></span>
+                </button>
+                <span class="divider"></span>
+                <button class="zone z-value" id="kbMenuBtn">
+                  <span class="val" id="kbVal"><span class="v-cur">精选运营赛道流水</span></span>
+                  <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5l6 6 6-6"/></svg>
+                </button>
+              </div>
+              <!-- 知识库浮层（向上展开） -->
+              <div class="pop" id="kbPop">
+                <div class="search">
+                  <svg class="i" viewBox="0 0 24 24" style="width:13px;height:13px"><circle cx="11" cy="11" r="6.5"/><path d="M15.8 15.8L20 20"/></svg>
+                  <input placeholder="搜索知识库…"><kbd style="margin-left:0">⌘K</kbd>
+                </div>
+                <div class="psec">当前</div>
+                <div class="opt sel" data-kb="精选运营赛道流水">
+                  <span class="oic">精</span>
+                  <span class="ot"><b>精选运营赛道流水</b><span>12 张表 · 同事共享</span></span>
+                  <svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+                </div>
+                <div class="psec">全部知识库</div>
+                <div class="opt" data-kb="订单域模型">
+                  <span class="oic">订</span>
+                  <span class="ot"><b>订单域模型</b><span>8 张表 · 我创建</span></span>
+                  <svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+                </div>
+                <div class="opt" data-kb="客户主数据">
+                  <span class="oic">客</span>
+                  <span class="ot"><b>客户主数据</b><span>5 张表 · 同事共享</span></span>
+                  <svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+                </div>
+                <div class="opt" data-kb="供应链宽表">
+                  <span class="oic">供</span>
+                  <span class="ot"><b>供应链宽表</b><span>21 张表 · 我创建</span></span>
+                  <svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+                </div>
+                <div class="pfoot" id="kbFoot">
+                  <svg class="i ic" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M14.5 4.5v15"/></svg>
+                  在侧栏查看数据集详情<kbd>⌘D</kbd>
+                </div>
+              </div>
+            </div>
+
+            <!-- 联网搜索：拨杆 -->
+            <div class="chipwrap">
+              <div class="chip on" id="webChip">
+                <button class="zone" style="gap:8px" id="webBtn">
+                  <svg class="i ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c2.3 2.2 3.5 5 3.5 8s-1.2 5.8-3.5 8c-2.3-2.2-3.5-5-3.5-8s1.2-5.8 3.5-8z"/></svg>
+                  联网搜索
+                  <span class="sw"></span>
+                </button>
+              </div>
+            </div>
+
+            <!-- 分析方式：值可见 -->
+            <div class="chipwrap">
+              <div class="chip" id="anChip">
+                <button class="zone" id="anBtn">
+                  <svg class="i ic" viewBox="0 0 24 24"><path d="M4 8h9M17.5 8H20M4 16h3M11.5 16H20"/><circle cx="15" cy="8" r="2.2"/><circle cx="9" cy="16" r="2.2"/></svg>
+                  <span class="val" id="anVal"><span class="v-cur">自动</span></span>
+                  <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5l6 6 6-6"/></svg>
+                </button>
+              </div>
+              <div class="pop an" id="anPop">
+                <div class="psec">分析方式</div>
+                <div class="an-opt sel" data-an="自动">
+                  <span class="oic"><svg class="i" viewBox="0 0 24 24" style="width:13px;height:13px"><path d="M12 4l1.8 4.6L18.5 10l-4.7 1.4L12 16l-1.8-4.6L5.5 10l4.7-1.4z"/></svg></span>
+                  <span class="ot"><b>自动<span class="rec-tag">推荐</span></b><span>根据问题自动判断趋势、对比或归因</span></span>
+                  <svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+                </div>
+                <div class="an-opt" data-an="趋势分析">
+                  <span class="oic"><svg class="i" viewBox="0 0 24 24" style="width:13px;height:13px"><path d="M4 16.5l5-5 3.5 3.5L19 8.5"/><path d="M14.5 8.5H19V13"/></svg></span>
+                  <span class="ot"><b>趋势分析</b><span>按时间看指标的走向与拐点</span></span>
+                  <svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+                </div>
+                <div class="an-opt" data-an="对比分析">
+                  <span class="oic"><svg class="i" viewBox="0 0 24 24" style="width:13px;height:13px"><path d="M6 20V10M12 20V4M18 20v-7"/></svg></span>
+                  <span class="ot"><b>对比分析</b><span>多对象、多周期之间的并排比较</span></span>
+                  <svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+                </div>
+                <div class="an-opt" data-an="归因分析">
+                  <span class="oic"><svg class="i" viewBox="0 0 24 24" style="width:13px;height:13px"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="6" r="2.4"/><circle cx="12" cy="17" r="2.4"/><path d="M8 7.5l2.8 7M16 7.5l-2.8 7M8.4 6h7.2"/></svg></span>
+                  <span class="ot"><b>归因分析</b><span>拆解指标变化的主要来源</span></span>
+                  <svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+                </div>
+                <div class="an-opt" data-an="预测分析">
+                  <span class="oic"><svg class="i" viewBox="0 0 24 24" style="width:13px;height:13px"><path d="M4 17l4.5-4.5 3 3L16 10"/><path d="M16 15.5c1.4 1.2 2.5 2.7 3 4.5" stroke-dasharray="2 2.4"/></svg></span>
+                  <span class="ot"><b>预测分析</b><span>基于历史数据估计未来走势</span></span>
+                  <svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+                </div>
+              </div>
+            </div>
+
+            <button class="send off" aria-label="发送"><svg class="i" viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M12 19V5M5.5 11.5L12 5l6.5 6.5"/></svg></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右侧数据集详情面板 -->
+      <div class="panel" id="panel">
+        <div class="ph">
+          <div class="lab">数据集详情</div>
+          <h3><span class="oic">精</span><span id="panelName">精选运营赛道流水</span></h3>
+          <div class="meta" id="panelMeta">12 张表 · 46 个字段 · 同事共享 · 2 小时前更新</div>
+        </div>
+        <div class="pb">
+          <h4>包含数据表</h4>
+          <div class="trow"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 10h16M10 10v10"/></svg><b>fact_operation_flow</b><span>流水</span></div>
+          <div class="trow"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 10h16M10 10v10"/></svg><b>dim_channel</b><span>维表</span></div>
+          <div class="trow"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 10h16M10 10v10"/></svg><b>dim_region</b><span>维表</span></div>
+          <div class="trow"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 10h16M10 10v10"/></svg><b>dim_category</b><span>维表</span></div>
+          <h4>常用指标</h4>
+          <div class="tags"><em>净销售额</em><em>订单量</em><em>客单价</em><em>毛利率</em><em>退款率</em></div>
+          <h4>业务标签</h4>
+          <div class="tags"><em>销售额</em><em>赛道</em><em>渠道</em><em>区域</em></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 2. 三原则 ================= -->
+  <div class="chapter">
+    <h2>2 · 三条设计原则</h2>
+    <div class="prin">
+      <div class="pc">
+        <div class="n">01</div>
+        <h3>一个区域只做一件事</h3>
+        <p>知识库胶囊拆成<b>两个热区</b>：图标位开关数据集面板，名称位换库。中间 0.5px 竖线是唯一的分家暗示——任一热区 hover 时它<b>淡出</b>，让位给各自独立的高亮块。线在，廉价；线让位，高级。</p>
+      </div>
+      <div class="pc">
+        <div class="n">02</div>
+        <h3>状态必须看得见</h3>
+        <p>联网从「变色点亮」改成<b>物理拨杆</b>，开/关不需要记忆成本；分析从「动作词」改成<b>当前值</b>（自动 / 对比分析…）；面板打开时图标位<b>常亮</b>。用户永远不用猜自己处在哪个状态。</p>
+      </div>
+      <div class="pc">
+        <div class="n">03</div>
+        <h3>动效只回答三个问题</h3>
+        <p>点了没有（按压 90ms）、变成什么（值切换 180ms 纵向滚动）、东西去哪了（浮层 180ms 从锚点生长）。<b>没有</b>光晕、呼吸、渐变——高频控件上一切装饰性动效都是减速带。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 3. 状态矩阵 ================= -->
+  <div class="chapter">
+    <h2>3 · 状态矩阵</h2>
+    <p>每个控件的全部状态。静态陈列用强制 class 实现（<code>.hov</code> / <code>.seg-on</code> / <code>.open</code> / <code>.on</code>），与 demo 中的动态效果一致。</p>
+    <div class="matrix">
+      <div class="mrow-line">
+        <div class="ml">知识库<span>分段胶囊</span></div>
+        <div class="mstates">
+          <div class="mcell">
+            <div class="chip"><button class="zone z-icon"><svg class="i ic" viewBox="0 0 24 24"><ellipse cx="12" cy="5.5" rx="7" ry="2.8"/><path d="M5 5.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/><path d="M5 11.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/></svg></button><span class="divider"></span><button class="zone z-value"><span class="val"><span class="v-cur">精选运营赛道流水</span></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5l6 6 6-6"/></svg></button></div>
+            <span>默认</span>
+          </div>
+          <div class="mcell">
+            <div class="chip hovany"><button class="zone z-icon hov"><svg class="i ic" viewBox="0 0 24 24"><ellipse cx="12" cy="5.5" rx="7" ry="2.8"/><path d="M5 5.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/><path d="M5 11.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/></svg></button><span class="divider"></span><button class="zone z-value"><span class="val"><span class="v-cur">精选运营赛道流水</span></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5l6 6 6-6"/></svg></button></div>
+            <span>hover 图标位</span>
+          </div>
+          <div class="mcell">
+            <div class="chip hovany"><button class="zone z-icon seg-on"><svg class="i ic" viewBox="0 0 24 24"><ellipse cx="12" cy="5.5" rx="7" ry="2.8"/><path d="M5 5.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/><path d="M5 11.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/></svg></button><span class="divider"></span><button class="zone z-value"><span class="val"><span class="v-cur">精选运营赛道流水</span></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5l6 6 6-6"/></svg></button></div>
+            <span>面板已开</span>
+          </div>
+          <div class="mcell">
+            <div class="chip open hovany"><button class="zone z-icon"><svg class="i ic" viewBox="0 0 24 24"><ellipse cx="12" cy="5.5" rx="7" ry="2.8"/><path d="M5 5.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/><path d="M5 11.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/></svg></button><span class="divider"></span><button class="zone z-value"><span class="val"><span class="v-cur">精选运营赛道流水</span></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5l6 6 6-6"/></svg></button></div>
+            <span>下拉展开</span>
+          </div>
+          <div class="mcell">
+            <div class="chip"><button class="zone z-icon"><svg class="i ic" viewBox="0 0 24 24"><ellipse cx="12" cy="5.5" rx="7" ry="2.8"/><path d="M5 5.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/><path d="M5 11.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/></svg></button><span class="divider"></span><button class="zone z-value"><span class="val"><span class="v-cur">供应链履约与库存周转指标宽表</span></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5l6 6 6-6"/></svg></button></div>
+            <span>超长省略</span>
+          </div>
+          <div class="mcell">
+            <div class="chip disabled"><button class="zone z-icon"><svg class="i ic" viewBox="0 0 24 24"><ellipse cx="12" cy="5.5" rx="7" ry="2.8"/><path d="M5 5.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/><path d="M5 11.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/></svg></button><span class="divider"></span><button class="zone z-value"><span class="val"><span class="v-cur">选择知识库</span></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5l6 6 6-6"/></svg></button></div>
+            <span>禁用</span>
+          </div>
+        </div>
+      </div>
+      <div class="mrow-line">
+        <div class="ml">联网搜索<span>拨杆开关</span></div>
+        <div class="mstates">
+          <div class="mcell">
+            <div class="chip on"><button class="zone" style="gap:8px"><svg class="i ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c2.3 2.2 3.5 5 3.5 8s-1.2 5.8-3.5 8c-2.3-2.2-3.5-5-3.5-8s1.2-5.8 3.5-8z"/></svg>联网搜索<span class="sw"></span></button></div>
+            <span>开</span>
+          </div>
+          <div class="mcell">
+            <div class="chip"><button class="zone" style="gap:8px"><svg class="i ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c2.3 2.2 3.5 5 3.5 8s-1.2 5.8-3.5 8c-2.3-2.2-3.5-5-3.5-8s1.2-5.8 3.5-8z"/></svg>联网搜索<span class="sw"></span></button></div>
+            <span>关</span>
+          </div>
+          <div class="mcell">
+            <div class="chip disabled"><button class="zone" style="gap:8px"><svg class="i ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c2.3 2.2 3.5 5 3.5 8s-1.2 5.8-3.5 8c-2.3-2.2-3.5-5-3.5-8s1.2-5.8 3.5-8z"/></svg>联网搜索<span class="sw"></span></button></div>
+            <span>禁用</span>
+          </div>
+        </div>
+      </div>
+      <div class="mrow-line">
+        <div class="ml">分析方式<span>值可见选择器</span></div>
+        <div class="mstates">
+          <div class="mcell">
+            <div class="chip"><button class="zone"><svg class="i ic" viewBox="0 0 24 24"><path d="M4 8h9M17.5 8H20M4 16h3M11.5 16H20"/><circle cx="15" cy="8" r="2.2"/><circle cx="9" cy="16" r="2.2"/></svg><span class="val"><span class="v-cur">自动</span></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5l6 6 6-6"/></svg></button></div>
+            <span>默认</span>
+          </div>
+          <div class="mcell">
+            <div class="chip"><button class="zone hov"><svg class="i ic" viewBox="0 0 24 24"><path d="M4 8h9M17.5 8H20M4 16h3M11.5 16H20"/><circle cx="15" cy="8" r="2.2"/><circle cx="9" cy="16" r="2.2"/></svg><span class="val"><span class="v-cur">自动</span></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5l6 6 6-6"/></svg></button></div>
+            <span>hover</span>
+          </div>
+          <div class="mcell">
+            <div class="chip open"><button class="zone"><svg class="i ic" viewBox="0 0 24 24"><path d="M4 8h9M17.5 8H20M4 16h3M11.5 16H20"/><circle cx="15" cy="8" r="2.2"/><circle cx="9" cy="16" r="2.2"/></svg><span class="val"><span class="v-cur">对比分析</span></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5l6 6 6-6"/></svg></button></div>
+            <span>展开</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 4. 被否掉的方向 ================= -->
+  <div class="chapter">
+    <h2>4 · 被否掉的方向</h2>
+    <p>设计是排除法。下面这些是更容易想到、但会让界面显得廉价的方案，以及否掉它们的具体理由。</p>
+    <div class="rej">
+      <div class="rc"><span class="x"><svg class="i" viewBox="0 0 24 24" style="width:11px;height:11px"><path d="M6 6l12 12M18 6L6 18"/></svg></span><div><h4>整颗胶囊变色表示"面板已开"</h4><p>会把「看详情」和「换库」压成同一个状态，用户无法判断自己点的是哪一半。</p></div></div>
+      <div class="rc"><span class="x"><svg class="i" viewBox="0 0 24 24" style="width:11px;height:11px"><path d="M6 6l12 12M18 6L6 18"/></svg></span><div><h4>用品牌紫文字当选中态</h4><p>紫色小字在浅底上对比不足、显轻；同屏还有其他紫色文字，语义会打架。</p></div></div>
+      <div class="rc"><span class="x"><svg class="i" viewBox="0 0 24 24" style="width:11px;height:11px"><path d="M6 6l12 12M18 6L6 18"/></svg></span><div><h4>三个控件都做成主按钮</h4><p>动作权重全等 → 用户的下一步反而模糊；主按钮只应该有一个（发送）。</p></div></div>
+      <div class="rc"><span class="x"><svg class="i" viewBox="0 0 24 24" style="width:11px;height:11px"><path d="M6 6l12 12M18 6L6 18"/></svg></span><div><h4>开关做成红/绿彩色胶囊</h4><p>红绿在我们的体系里是「坏/好」语义，与「开启」不是一回事，且深色下刺眼。</p></div></div>
+      <div class="rc"><span class="x"><svg class="i" viewBox="0 0 24 24" style="width:11px;height:11px"><path d="M6 6l12 12M18 6L6 18"/></svg></span><div><h4>浮层做毛玻璃 + 大圆角</h4><p>数据工具里背后是表格和数字，模糊底会降低浮层自身的文字可读性，也拉低信息密度感。</p></div></div>
+      <div class="rc"><span class="x"><svg class="i" viewBox="0 0 24 24" style="width:11px;height:11px"><path d="M6 6l12 12M18 6L6 18"/></svg></span><div><h4>给控件加光晕 / 呼吸动画</h4><p>高频操作上任何循环动画都会变成视觉噪音，而且不利于截屏分享与录屏讲解。</p></div></div>
+    </div>
+  </div>
+
+  <!-- ================= 4. 解剖 ================= -->
+  <div class="chapter">
+    <h2>5 · 知识库胶囊解剖</h2>
+    <p>2.1 倍放大下的构造。所有尺寸为 8 的倍数或 0.5px 发丝线，没有任意值。</p>
+    <div class="anat">
+      <div class="acard">
+        <div class="zone-legend">
+          <span><i>1</i>图标位 — 开关右侧数据集面板</span>
+          <span><i>2</i>名称位 — 下拉切换知识库</span>
+        </div>
+        <div class="zs">
+          <div class="dim"><span>175 × 32 · r9</span></div>
+          <div class="zoom2">
+          <div class="chip"><button class="zone z-icon"><svg class="i ic" viewBox="0 0 24 24"><ellipse cx="12" cy="5.5" rx="7" ry="2.8"/><path d="M5 5.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/><path d="M5 11.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/></svg></button><span class="divider"></span><button class="zone z-value"><span class="val"><span class="v-cur">精选运营赛道流水</span></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5l6 6 6-6"/></svg></button></div>
+          </div>
+        </div>
+        <div class="dim-note"><span>图标热区 33×30</span><span>分隔线 0.5×13</span><span>chevron 12</span><span>名称 12.5 / 600</span></div>
+      </div>
+      <div class="acard">
+        <div class="spec-list">
+          <div class="sr"><b>height / radius</b><span><b>32px</b> 高 · <b>9px</b> 圆角 · 热区 8px 圆角、四周留 1px 呼吸 · 最小值宽 33px</span></div>
+          <div class="sr"><b>material</b><span>白底 + <b>0.5px</b> 发丝描边 + <code>inset 0 1px 0</code> 顶部高光 + 单层 1px 阴影；hover 只加深描边与微弱浮起</span></div>
+          <div class="sr"><b>divider</b><span>1×13px，<code>rgba(60,60,67,.20)</code>；<code>:has(.zone:hover)</code> 时 opacity→0，130ms</span></div>
+          <div class="sr"><b>typography</b><span>库名 <b>12.5px / 600</b>，超 158px 省略号；tooltip 11px + <code>kbd</code></span></div>
+          <div class="sr"><b>focus</b><span>键盘焦点 <code>inset 0 0 0 1.5px --tint</code>，只给当前热区，不框整颗</span></div>
+          <div class="sr"><b>pressed</b><span><code>scale(.96)</code> · 90ms · 仅作用于按下的那个热区</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 5. 动效与落地规格 ================= -->
+  <div class="chapter">
+    <h2>6 · 动效与落地规格</h2>
+    <table class="spec">
+      <tr><th style="width:140px">交互</th><th style="width:210px">参数</th><th>说明</th></tr>
+      <tr><td>热区 hover</td><td><code>130ms ease</code></td><td>底色 <code>rgba(118,118,128,.08)</code> 与分隔线淡出同帧完成，图标墨色加深</td></tr>
+      <tr><td>按下</td><td><code>scale(.96) · 90ms</code></td><td>只作用于当前热区；松手回弹用 <code>--spring</code></td></tr>
+      <tr><td>chevron 翻转</td><td><code>200ms spring</code></td><td>与浮层展开同帧开始；颜色同步转 <code>--tint</code></td></tr>
+      <tr><td>值切换</td><td><code>180ms ease</code></td><td>旧值上移 9px 淡出，新值自下而上；不换行、不打字机</td></tr>
+      <tr><td>浮层入场</td><td><code>180ms spring · y+5 / .97</code></td><td><code>transform-origin</code> 对准锚点（底部锚点=向上生长）；关闭 130ms 纯淡出</td></tr>
+      <tr><td>拨杆切换</td><td><code>220ms overshoot</code></td><td><code>cubic-bezier(.34,1.5,.64,1)</code>，knob 带一点过冲；轨道换色 200ms</td></tr>
+      <tr><td>右侧面板</td><td><code>280ms ease</code></td><td><code>translateX(102%)→0</code>；胶囊图标位高亮同步点亮——两个 UI 是一件事</td></tr>
+      <tr><td>tooltip</td><td><code>120ms · 延迟 450ms</code></td><td>只给图标热区（用户不熟的那个）；名称热区不需要</td></tr>
+    </table>
+    <table class="spec" style="margin-top:14px">
+      <tr><th style="width:140px">落地映射</th><th>说明</th></tr>
+      <tr><td>组件拆分</td><td>新建 <code>ComposerChips.tsx</code>：共用 <code>&lt;Chip&gt;</code> 外壳（材质/阴影/焦点环）+ <code>KbChip</code>（分段）/ <code>WebChip</code>（拨杆）/ <code>AnalysisChip</code>（值选择器）三个子组件；浮层共用 <code>&lt;PopLayer&gt;</code>（锚点定位 + 入场动画 + Esc/外点关闭）</td></tr>
+      <tr><td>token</td><td><code>--tint* → --da-primary*</code> · <code>--hair* → --da-border*</code> · <code>--surface* → --da-bg*</code> · 新增 <code>--da-primary-solid</code>（暗色实心紫：拨杆轨道 / 发送键 / 勾选块）</td></tr>
+      <tr><td>keyboard</td><td><code>⌘D</code> 开关数据集面板 · <code>Esc</code> 关浮层 · Tab 焦点只给热区，不框整颗胶囊</td></tr>
+      <tr><td>不做什么</td><td>无光晕 / 无渐变 / 无呼吸灯 / 无彩色阴影；hover 不位移；浮层不做玻璃拟态（数据工具里模糊层拖慢阅读）</td></tr>
+    </table>
+  </div>
+
+  <div class="foot">Composer 控件 v2 · 2026-11-15 · 对标 Raycast / Linear / Cursor / Apple HIG / Vercel · 第一节为可操作 demo · 用右上角按钮查看深色</div>
+</div>
+
+<script>
+(function(){
+  var $=function(id){return document.getElementById(id)};
+  var kbChip=$('kbChip'),kbPop=$('kbPop'),anChip=$('anChip'),anPop=$('anPop'),
+      webChip=$('webChip'),panel=$('panel');
+  function closePops(){kbPop.classList.remove('show');anPop.classList.remove('show');kbChip.classList.remove('open');anChip.classList.remove('open');}
+  /* 知识库：右段开浮层 */
+  $('kbMenuBtn').addEventListener('click',function(e){
+    e.stopPropagation();
+    var willOpen=!kbPop.classList.contains('show');
+    closePops();
+    if(willOpen){kbPop.classList.add('show');kbChip.classList.add('open');}
+  });
+  /* 知识库：左段开/关面板 */
+  $('kbPanelBtn').addEventListener('click',function(e){
+    e.stopPropagation();togglePanel();
+  });
+  function togglePanel(force){
+    var show=typeof force==='boolean'?force:!panel.classList.contains('show');
+    panel.classList.toggle('show',show);
+    $('demo').classList.toggle('with-panel',show);
+    $('kbPanelBtn').classList.toggle('seg-on',show);
+  }
+  $('kbFoot').addEventListener('click',function(e){e.stopPropagation();closePops();togglePanel(true);});
+  /* 值切换动画 */
+  function swapVal(holder,text){
+    var cur=holder.querySelector('.v-cur');
+    if(!cur||cur.textContent===text)return;
+    var next=document.createElement('span');
+    next.className='v-next';next.textContent=text;
+    holder.appendChild(next);
+    requestAnimationFrame(function(){requestAnimationFrame(function(){
+      cur.classList.add('out');next.classList.add('in');
+    });});
+    setTimeout(function(){cur.remove();next.className='v-cur';},220);
+  }
+  /* 选库 */
+  Array.prototype.forEach.call(kbPop.querySelectorAll('.opt'),function(opt){
+    opt.addEventListener('click',function(e){
+      e.stopPropagation();
+      kbPop.querySelectorAll('.opt').forEach(function(o){o.classList.remove('sel')});
+      opt.classList.add('sel');
+      var name=opt.getAttribute('data-kb');
+      swapVal($('kbVal'),name);
+      $('panelName').textContent=name;
+      closePops();
+    });
+  });
+  /* 联网拨杆 */
+  $('webBtn').addEventListener('click',function(e){
+    e.stopPropagation();webChip.classList.toggle('on');
+  });
+  /* 分析浮层 */
+  $('anBtn').addEventListener('click',function(e){
+    e.stopPropagation();
+    var willOpen=!anPop.classList.contains('show');
+    closePops();
+    if(willOpen){anPop.classList.add('show');anChip.classList.add('open');}
+  });
+  Array.prototype.forEach.call(anPop.querySelectorAll('.an-opt'),function(opt){
+    opt.addEventListener('click',function(e){
+      e.stopPropagation();
+      anPop.querySelectorAll('.an-opt').forEach(function(o){o.classList.remove('sel')});
+      opt.classList.add('sel');
+      swapVal($('anVal'),opt.getAttribute('data-an'));
+      closePops();
+    });
+  });
+  /* 外点 / Esc 关闭 */
+  document.addEventListener('click',function(e){
+    if(!e.target.closest('.chipwrap'))closePops();
+  });
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape')closePops();
+    if((e.metaKey||e.ctrlKey)&&String(e.key).toLowerCase()==='d'){e.preventDefault();closePops();togglePanel();}
+    if((e.metaKey||e.ctrlKey)&&String(e.key).toLowerCase()==='k'){e.preventDefault();closePops();kbPop.classList.add('show');kbChip.classList.add('open');}
+  });
+  /* 截图/演示用 URL 参数：?s=kb | an | panel | off */
+  var q=new URLSearchParams(location.search);
+  if(q.get('theme')==='dark')document.documentElement.dataset.theme='dark';
+  var s=q.get('s');
+  if(s==='kb'){kbPop.classList.add('show');kbChip.classList.add('open');}
+  if(s==='an'){anPop.classList.add('show');anChip.classList.add('open');}
+  if(s==='panel'){togglePanel(true);}
+  if(s==='off'){webChip.classList.remove('on');}
+})();
+</script>
+</body>
+</html>

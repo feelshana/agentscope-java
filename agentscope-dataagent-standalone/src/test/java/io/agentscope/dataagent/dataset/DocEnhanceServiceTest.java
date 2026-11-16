@@ -241,12 +241,9 @@ class DocEnhanceServiceTest {
                         "{\"sourceDatasetId\":\"ds_order\",\"sourceColumns\":[\"customer_id\"],"
                             + "\"targetDatasetId\":\"ds_customer\",\"targetColumns\":[\"customer_id\"],"
                             + "\"joinType\":\"MANY_TO_ONE\"}");
-        MdlPublishService.MdlIssue issue =
-                new MdlPublishService.MdlIssue("error", "关系列不存在", "local");
+        MdlTypes.MdlIssue issue = new MdlTypes.MdlIssue("error", "关系列不存在", "local");
         when(mdlPublishService.validate("g1"))
-                .thenReturn(
-                        new MdlPublishService.MdlValidation(
-                                false, List.of(issue), "failed", List.of()));
+                .thenReturn(new MdlTypes.MdlValidation(false, List.of(issue), "failed", List.of()));
 
         assertThatThrownBy(() -> service.adopt("alice", "g1", proposal.getId()))
                 .isInstanceOf(DatasetException.class)

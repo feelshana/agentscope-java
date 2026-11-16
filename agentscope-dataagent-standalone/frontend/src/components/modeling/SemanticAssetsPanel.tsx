@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { assetExamples, assetImpact, deleteAsset, generateAssetSql, getAsset, judgeAsset, listAssets, reviewAsset, saveAsset, verifyAsset } from '../../api/semanticAssets';
 import ReadableCode from '../ReadableCode';
+import Icon from '../Icon';
+import ModelingMethodFlow from './ModelingMethodFlow';
+import './ModelingOptimization.css';
 import type { AssetCheck, AssetDetail, AssetExample, AssetStatus, SemanticAsset, Verdict, VerifyCase } from '../../api/semanticAssets';
 import { getModelingQuestions } from '../../api/modelingQuestions';
 import type { QuestionReview } from '../../api/modelingQuestions';
@@ -28,6 +31,12 @@ export default function SemanticAssetsPanel({ groupId, assistantIdle, onDraft }:
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<AssetDetail | null>(null);
   const [need, setNeed] = useState('');
+  const [planningOpen, setPlanningOpen] = useState(true);
+  const [draftOpen, setDraftOpen] = useState(false);
+  const [detailTab, setDetailTab] = useState(0);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const draftDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => { if (!draftDialog.current) return; if (draftOpen && !draftDialog.current.open) draftDialog.current.showModal(); else if (!draftOpen && draftDialog.current.open) draftDialog.current.close(); }, [draftOpen]);
   const [examples, setExamples] = useState<AssetExample[] | null>(null);
   const [file, setFile] = useState('');
   const [content, setContent] = useState('');
@@ -52,6 +61,7 @@ export default function SemanticAssetsPanel({ groupId, assistantIdle, onDraft }:
   const refresh = useCallback(async () => {
     const list = await listAssets(groupId);
     setAssets(list);
+    setSelected(current => current ?? (list[0] ? `${list[0].kind}:${list[0].name}` : null));
     return list;
   }, [groupId]);
   useEffect(() => {
@@ -70,8 +80,8 @@ export default function SemanticAssetsPanel({ groupId, assistantIdle, onDraft }:
     const asset = assets?.find(a => `${a.kind}:${a.name}` === selected);
     if (!asset) { setDetail(null); return; }
     let cancelled = false;
-    setChecks([]); setVerdicts({}); setSkipSave({}); setCases([]); setQuestion('');
-    void getAsset(groupId, asset).then(next => { if (!cancelled) show(next); }).catch(e => setError(message(e)));
+    setChecks([]); setVerdicts({}); setSkipSave({}); setCases([]); setQuestion(''); setDetailTab(0); setDetail(null); setDetailLoading(true);
+    void getAsset(groupId, asset).then(next => { if (!cancelled) show(next); }).catch(e => { if (!cancelled) setError(message(e)); }).finally(() => { if (!cancelled) setDetailLoading(false); });
     return () => { cancelled = true; };
     // Reload only when the selection changes; actions below update the detail themselves.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -83,9 +93,9 @@ export default function SemanticAssetsPanel({ groupId, assistantIdle, onDraft }:
     try { await action(); } catch (e) { setError(message(e)); } finally { setBusy(''); }
   };
   const apply = async (next: AssetDetail) => { show(next); await refresh(); };
-  const asset = detail?.asset;
+  const asset = detail && selected === `${detail.asset.kind}:${detail.asset.name}` ? detail.asset : undefined;
   const fileName = file.slice(file.lastIndexOf('/') + 1);
-  const edited = detail?.files.find(f => f.path === file)?.content !== content;
+  const edited = !!detail && detail.files.find(f => f.path === file)?.content !== content;
   const reviewed = !!asset?.review;
   const changeCases = (next: VerifyCase[]) => { setCases(next); setChecks([]); setVerdicts({}); setSkipSave({}); };
   const allJudged = checks.length > 0 && checks.every(c => !c.error && verdicts[c.key]);
@@ -93,20 +103,16 @@ export default function SemanticAssetsPanel({ groupId, assistantIdle, onDraft }:
   const toSave = checks.filter(c => verdicts[c.key] === 'EXPECTED' && !skipSave[c.key] && caseQuestion(c))
     .map(c => ({ question: caseQuestion(c), sql: c.sql }));
 
-  return <section className="sm-pane sa-pane" aria-label="公共视图">
-    <div className="da-card sa-draft">
-      <div className="sa-title"><strong>公共视图</strong><span className="sm-tag sa-building">建设中</span></div>
-      <div className="sa-lead">把大家反复在问、反复要拼的取数逻辑整理成一份共用的"公共视图"。以后问到这类问题，问数助手直接从公共视图取数：口径统一，不用每次重新拼表、重新算。</div>
-      <ol className="sa-plan">
-        <li><b>1</b><div><strong>收集已确认的问答</strong><span>试问、问数优化、问数点赞中确认过的问题和 SQL</span></div></li>
-        <li><b>2</b><div><strong>找出反复出现的逻辑</strong><span>比如很多题都先算"每人首次访问"，或都把访问记录和人员部门拼在一起</span></div></li>
-        <li><b>3</b><div><strong>你来决定建不建</strong><span>每条建议都写明来自哪几道题、出现了几次，批准后才起草</span></div></li>
-        <li><b>4</b><div><strong>用原来的问题核对</strong><span>这些问题改用公共视图后重新写 SQL，新旧对照确认后再发布</span></div></li>
-      </ol>
-      <div className="da-small">自动整理功能正在建设中。在此之前，规则、关系、字段含义照常在"建模对话"和"问数优化"里补充；确实需要建视图时，在建模对话里直接说"建一个视图……"，也可以用下面的快捷入口。</div>
-      {/* spec113: every need can be said in the modeling chat; this page drafts on request and reviews. */}
-      <details className="sa-where da-small">
-        <summary>现在就要建一个视图</summary>
+  return <section className="sm-pane sa-pane mo-optimization" aria-label="公共视图">
+    <header className="mo-page-head"><div><h2>公共视图</h2><p>把需要固定复用的取数逻辑整理成公共视图，经核查和问题验证后用于问数。</p></div><button type="button" className="da-btn da-btn-primary" onClick={() => setDraftOpen(true)}><Icon name="plus" size="sm" />起草公共视图</button></header>
+    <section className="mo-planning-panel"><details open={planningOpen} onToggle={event => setPlanningOpen(event.currentTarget.open)}>
+      <summary><Icon name="model" size="sm" /><span className="mo-grow"><strong>自动整理功能正在建设中</strong><small>当前可明确提出需求，由助手起草，经过人工核查和问题验证后发布。</small></span><span className="mo-planning-toggle">{planningOpen ? '收起规划' : '了解规划'}<Icon name="chevron" size="sm" /></span></summary>
+      <div className="mo-planning-body"><ModelingMethodFlow kind="views" compact /></div>
+    </details></section>
+    <dialog ref={draftDialog} className="mo-form-dialog" aria-labelledby="mo-asset-draft-title" onClose={() => setDraftOpen(false)}>
+      <header className="mo-dialog-head"><strong id="mo-asset-draft-title">交给助手起草公共视图</strong><button type="button" className="da-btn" onClick={() => { draftDialog.current?.close(); setDraftOpen(false); }}>关闭</button></header>
+      <div className="mo-dialog-body"><p className="da-small">用业务语言描述要建的视图，或粘贴已有 SQL；起草后在本页核查并用问题验证。</p>
+      <details className="sa-where da-small"><summary>什么情况下需要建视图？</summary>
         <table className="da-table">
           <thead><tr><th>需求</th><th>助手怎么处理</th></tr></thead>
           <tbody>
@@ -115,7 +121,7 @@ export default function SemanticAssetsPanel({ groupId, assistantIdle, onDraft }:
             <tr><td>一列按规则换个说法，如"账号以 wx 结尾的算外协"</td><td>加计算字段，不需要建视图</td></tr>
             <tr><td>明确要把几张表固定拼好，或先用多步计算算好结果</td><td>起草视图，再在本页下方核查和验证</td></tr>
           </tbody>
-        </table>
+        </table></details>
         <div className="sa-examples" aria-label="需求示例">{examples === null
           ? <span className="da-small">正在根据当前模型生成示例…</span>
           : examples.map(e => <button key={e.kind} type="button" className="da-btn da-btn-sm"
@@ -124,25 +130,24 @@ export default function SemanticAssetsPanel({ groupId, assistantIdle, onDraft }:
           placeholder="用业务语言描述要建的视图，或粘贴已有 SQL；也可以点上面的示例" />
         <div><button className="da-btn da-btn-primary da-btn-sm" disabled={!need.trim() || !assistantIdle}
           title={assistantIdle ? undefined : '助手空闲后可发送'}
-          onClick={() => { if (onDraft(assetRequest(need.trim()), `建设语义资产：${need.trim()}`)) setNeed(''); }}>交给助手起草</button></div>
-      </details>
-    </div>
+          onClick={() => { if (onDraft(assetRequest(need.trim()), `建设语义资产：${need.trim()}`)) { setNeed(''); setDraftOpen(false); } }}>交给助手起草</button></div>
+      </div>
+    </dialog>
     {error && <div role="alert" className="da-alert da-alert-error">{error}</div>}
     {assets !== null && assets.length === 0 ? <div className="da-card sm-empty">还没有已建的视图。建好后会出现在这里，核查并用问题验证通过后才能发布。</div> : <>
-    <strong className="sa-list-title">已建的视图与加工表<span className="da-small">　核查并用问题验证通过后才能发布</span></strong>
     <div className="sa-layout">
-      <nav className="sa-list" aria-label="资产列表">
-        {assets === null ? <div className="da-small">加载中…</div>
+      <nav className="sa-list" aria-label="资产列表"><header className="mo-asset-list-head"><strong>已建视图与加工表</strong><span className="da-small">{assets?.length ?? '…'} 项</span></header>
+        {assets === null ? <div className="da-small">{error ? '读取失败' : '加载中…'}{error && <button type="button" className="da-btn" onClick={() => { setError(''); void refresh().catch(e => setError(message(e))); }}>重试</button>}</div>
           : assets.map(a => { const key = `${a.kind}:${a.name}`; return <button key={key} type="button"
-            className={`sa-item ${selected === key ? 'sa-item-on' : ''}`} aria-current={selected === key ? 'true' : undefined} onClick={() => setSelected(key)}>
+            className={`sa-item ${selected === key ? 'sa-item-on' : ''}`} aria-current={selected === key ? 'true' : undefined} disabled={!!busy} onClick={() => { if (!edited || window.confirm('有尚未保存的文件修改，是否放弃并切换？')) setSelected(key); }}>
             <span className="sa-item-name">{a.name}</span>
             <span className="sm-tag sm-tag-plain">{KIND_LABEL[a.kind]}</span>
             <span className={`sm-tag ${STATUS[a.status].tone}`}>{STATUS[a.status].label}</span>
           </button>; })}
       </nav>
       <div className="sa-detail">
-        {!asset ? <div className="sm-empty">选择一个资产进行核查和验证</div> : <>
-          <div className="da-card sa-section">
+        {!asset || !detail ? <div className="sm-empty">{detailLoading ? '正在读取视图详情…' : '选择一个资产进行核查和验证'}</div> : <>
+          <header className="mo-asset-head">
             <h3>{asset.name} <span className={`sm-tag ${STATUS[asset.status].tone}`}>{STATUS[asset.status].label}</span>
               <button type="button" className="da-btn da-btn-sm sa-delete" disabled={!!busy} onClick={() => void run('delete', async () => {
                 // spec113: rule entries naming the asset go with it; questions using it need review.
@@ -158,13 +163,15 @@ export default function SemanticAssetsPanel({ groupId, assistantIdle, onDraft }:
                 await refresh();
                 window.dispatchEvent(new CustomEvent('modeling:updated', { detail: { groupId } }));
               })}>{busy === 'delete' ? '删除中…' : '删除'}</button></h3>
+          </header><nav className="mo-asset-tabs" aria-label="视图详情">{['用途与核查', '工程文件', '问题验证'].map((label, index) => <button key={label} type="button" aria-current={detailTab === index ? 'page' : undefined} onClick={() => setDetailTab(index)}>{label}</button>)}</nav>
+          <div className="da-card sa-section" hidden={detailTab !== 0}>
             <div className="sa-description">{asset.description?.trim() || '助手尚未写说明，请核查用途、粒度和口径。'}</div>
-            <pre className="sa-sql sm-code">{asset.sql}</pre>
+            <ReadableCode text={asset.sql} language="sql" title="视图 SQL" />
             {detail.warnings?.map(w => <div key={w} role="alert" className="sm-warn">{w}</div>)}
             {detail.fixedDates.length > 0 && <div role="alert" className="sm-warn">资产里写了固定日期 {detail.fixedDates.join('、')}，所有查询都只能看到这段时间。除非这是业务口径，否则请去掉。</div>}
           </div>
-          <div className="da-card sa-section">
-            <h3>文件</h3>
+          <div className="da-card sa-section" hidden={detailTab !== 1}>
+            <h3>工程文件</h3>
             <div className="sa-files">{detail.files.map(f => <button key={f.path} type="button" className={`da-btn da-btn-sm ${f.path === file ? 'da-btn-primary' : ''}`}
               onClick={() => setFile(f.path)}>{f.path.slice(f.path.lastIndexOf('/') + 1)}</button>)}</div>
             <textarea className="da-input sa-editor sm-code" rows={12} aria-label={`编辑 ${fileName}`} spellCheck={false}
@@ -175,8 +182,8 @@ export default function SemanticAssetsPanel({ groupId, assistantIdle, onDraft }:
               <span className="da-small">保存后需要重新核查和验证。</span>
             </div>
           </div>
-          <div className="da-card sa-section">
-            <h3>1. 核查</h3>
+          <div className="da-card sa-section" hidden={detailTab !== 0}>
+            <h3>核查用途、粒度、JOIN 与口径</h3>
             {asset.review && <div className="da-small">已由 {asset.review.reviewedBy} 核查。</div>}
             <div className="da-small">确认上面的用途、粒度、JOIN 和口径是否正确，通过后才能用问题验证。</div>
             {detail.needsTimeColumn && <>
@@ -188,13 +195,13 @@ export default function SemanticAssetsPanel({ groupId, assistantIdle, onDraft }:
                 </select>
                 : <input id="sa-time" className="da-input" value={timeColumns} onChange={e => setTimeColumns(e.target.value)} placeholder="资产输出的时间列" />}
             </>}
-            <div className="sa-actions"><button className="da-btn da-btn-primary da-btn-sm" disabled={!!busy || edited || asset.status === 'PUBLISHED'}
-              title={edited ? '请先保存修改' : undefined}
-              onClick={() => void run('review', async () => { await apply(await reviewAsset(groupId, asset, detail.needsTimeColumn && timeColumns.trim() ? [timeColumns.trim()] : [])); })}>
+            <div className="sa-actions"><button className="da-btn da-btn-primary da-btn-sm" disabled={!!busy || edited || asset.status === 'PUBLISHED' || (detail.needsTimeColumn && !timeColumns.trim())}
+              title={edited ? '请先保存修改' : detail.needsTimeColumn && !timeColumns.trim() ? '请先选择时间列' : undefined}
+              onClick={() => void run('review', async () => { await apply(await reviewAsset(groupId, asset, detail.needsTimeColumn && timeColumns.trim() ? [timeColumns.trim()] : [])); setDetailTab(2); })}>
               {busy === 'review' ? '提交中…' : '核查通过'}</button></div>
           </div>
-          <div className="da-card sa-section">
-            <h3>2. 用问题验证</h3>
+          <div className="da-card sa-section" hidden={detailTab !== 2}>
+            <h3>用业务问题验证</h3>
             {!reviewed ? <div className="da-small">{asset.status === 'PUBLISHED' ? '这个资产已发布且没有修改，不需要验证。' : '核查通过后才能验证。'}</div> : <>
               <div className="da-small">输入业务问题，助手只用这个资产写 SQL；平台在草稿上展开 SQL 给你核对，不执行查询，不影响线上。</div>
               <div className="sa-ask">

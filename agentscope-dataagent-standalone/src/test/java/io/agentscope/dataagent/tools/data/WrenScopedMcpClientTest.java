@@ -23,9 +23,9 @@ import io.agentscope.dataagent.dataset.DatasetGroupService;
 import io.agentscope.dataagent.dataset.DatasetScope;
 import io.agentscope.dataagent.dataset.WrenPublishedProject;
 import io.agentscope.dataagent.dataset.WrenQueryAccess;
+import io.agentscope.dataagent.runtime.session.ConversationScopeRegistry;
 import io.agentscope.dataagent.runtime.wren.WrenQueryGateway;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity;
-import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
 import io.modelcontextprotocol.spec.McpSchema;
 import java.util.List;
 import java.util.Map;
@@ -96,7 +96,7 @@ class WrenScopedMcpClientTest {
     }
 
     @Test
-    void duplicateSuccessfulQueryReusesPayloadWithoutAnotherReceiptAndStillChecksAccess() {
+    void duplicateSuccessfulQueryPreservesExecutionReceiptAndStillChecksAccess() throws Exception {
         grant("alice", "a");
         var client = client("alice", "a");
         var args = Map.<String, Object>of("sql", "SELECT 1");
@@ -104,10 +104,17 @@ class WrenScopedMcpClientTest {
                 .thenReturn(new WrenQueryGateway.WrenCallResult(true, "{\"rows\":[[1]]}"));
         var first = client.callTool("run_sql", args).block();
         var second = client.callTool("run_sql", args).block();
-        assertThat(((McpSchema.TextContent) first.content().get(0)).text())
-                .contains("WREN_QUERY_RECEIPT");
-        assertThat(((McpSchema.TextContent) second.content().get(0)).text())
-                .isEqualTo("{\"rows\":[[1]]}");
+        String firstText = ((McpSchema.TextContent) first.content().get(0)).text();
+        assertThat(((McpSchema.TextContent) second.content().get(0)).text()).isEqualTo(firstText);
+        var receipt =
+                new com.fasterxml.jackson.databind.ObjectMapper()
+                        .readTree(
+                                firstText.substring(
+                                        "[WREN_QUERY_RECEIPT]".length(), firstText.indexOf('\n')));
+        assertThat(receipt.path("groupId").asText()).isEqualTo("a");
+        assertThat(receipt.path("tool").asText()).isEqualTo("run_sql");
+        assertThat(receipt.path("sql").asText()).isEqualTo("SELECT 1");
+        assertThat(receipt.has("modelVersion")).isFalse();
         verify(gateway, org.mockito.Mockito.times(1)).call("a", "run_sql", args);
         when(groups.queryGroups("alice", List.of("a"))).thenReturn(List.of());
         assertThatThrownBy(() -> client.callTool("run_sql", args).block())
@@ -510,7 +517,7 @@ class WrenScopedMcpClientTest {
         String second =
                 ((McpSchema.TextContent) client.callTool("run_sql", args).block().content().get(0))
                         .text();
-        assertThat(second).contains("**数据文件：** data/").doesNotContain("WREN_QUERY_RECEIPT");
+        assertThat(second).isEqualTo(first).contains("**数据文件：** data/");
 
         var failed = Map.<String, Object>of("sql", "SELECT 2");
         when(gateway.call("a", "run_sql", failed))

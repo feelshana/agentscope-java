@@ -6,8 +6,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import io.agentscope.core.agent.RuntimeContext;
+import io.agentscope.dataagent.runtime.session.ConversationScopeRegistry;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity;
-import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 

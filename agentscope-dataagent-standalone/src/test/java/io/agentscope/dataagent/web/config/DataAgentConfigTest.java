@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.agentscope.core.tool.Tool;
 import io.agentscope.dataagent.runtime.session.ModelingTurnRules;
 import io.agentscope.dataagent.tools.data.DataAgentToolkit;
-import io.agentscope.dataagent.tools.data.WrenMcpToolkit;
+import io.agentscope.dataagent.tools.data.WrenScopedMcpClient;
 import io.agentscope.harness.agent.gateway.channel.ChannelConfig;
 import io.agentscope.harness.agent.gateway.channel.DmScope;
 import java.lang.reflect.Method;
@@ -51,6 +51,22 @@ import org.junit.jupiter.api.Test;
 class DataAgentConfigTest {
 
     @Test
+    void dashboardOutputBudgetIsConfigurableWithoutOverridingConnectionSettings() {
+        for (int budget : List.of(16384, 32768, 65536)) {
+            var options = DataAgentConfig.dashboardGenerateOptions(budget);
+            assertThat(options.getMaxTokens()).isEqualTo(budget);
+            assertThat(options.getApiKey()).isNull();
+            assertThat(options.getBaseUrl()).isNull();
+            assertThat(options.getStream()).isNull();
+        }
+        for (int invalid : List.of(0, 1023, 65537)) {
+            org.assertj.core.api.Assertions.assertThatThrownBy(
+                            () -> DataAgentConfig.dashboardGenerateOptions(invalid))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+    }
+
+    @Test
     void builtInWrenAgentsCannotInheritUnscopedWorkspaceMcpServers() {
         var source = new io.agentscope.harness.agent.tools.ToolsConfig();
         source.setDeny(List.of("execute_shell_command"));
@@ -59,7 +75,7 @@ class DataAgentConfigTest {
                         "legacy-wren",
                         org.mockito.Mockito.mock(
                                 io.agentscope.harness.agent.tools.McpServerConfig.class)));
-        for (String agent : List.of("data-agent", "modeling-agent")) {
+        for (String agent : List.of("data-agent", "modeling-agent", "dashboard-agent")) {
             var actual = DataAgentConfig.scopedWrenToolsConfig(agent, source);
             assertThat(actual.getMcpServers()).isEmpty();
             assertThat(actual.getDeny()).containsExactly("execute_shell_command");
@@ -124,9 +140,10 @@ class DataAgentConfigTest {
     }
 
     @Test
-    void wrenToolDescriptionsRequirePublishedLogicalModels() {
-        assertThat(toolDescription(WrenMcpToolkit.class, "wren_call_tool"))
-                .contains("官方 MCP", "run_sql", "LIMIT/OFFSET");
+    void nativeWrenToolsUseReadOnlyOfficialNames() {
+        assertThat(WrenScopedMcpClient.READ_TOOLS)
+                .contains("run_sql", "recall_queries", "get_instructions")
+                .doesNotContain("wren_call_tool", "wren_run_sql", "write_file", "execute");
     }
 
     @Test
@@ -284,14 +301,13 @@ class DataAgentConfigTest {
 
     @Test
     void physicalQueryToolsAreAbsentFromAgentToolkits() {
-        List<String> toolNames =
-                java.util.stream.Stream.concat(
-                                Arrays.stream(DataAgentToolkit.class.getDeclaredMethods()),
-                                Arrays.stream(WrenMcpToolkit.class.getDeclaredMethods()))
+        List<String> toolNames = new java.util.ArrayList<>(WrenScopedMcpClient.READ_TOOLS);
+        toolNames.addAll(
+                Arrays.stream(DataAgentToolkit.class.getDeclaredMethods())
                         .map(method -> method.getAnnotation(Tool.class))
                         .filter(java.util.Objects::nonNull)
                         .map(Tool::name)
-                        .toList();
+                        .toList());
 
         assertThat(toolNames)
                 .doesNotContain(

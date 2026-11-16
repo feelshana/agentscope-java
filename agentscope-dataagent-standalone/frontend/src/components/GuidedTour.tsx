@@ -26,7 +26,7 @@ const COPY: Record<TourStepId, Copy> = {
   sample: { no: 4, target: 'sample-use', head: '点一下，直接用内置示例', text: '示例是完全虚构的订单和客户，共5万行，通过客户编号关联，可分析销售趋势、地区贡献和会员复购。', waiting: '点击“上传文件”，就能使用内置示例' },
   importing: { no: 4, head: '正在准备数据', text: '可以继续看看其他页面，完成后这里会带你进入下一步。' },
   screening: { no: 5, target: 'screening-confirm', head: '确认字段，告诉助手该看什么', text: '系统已给出建议，示例数据直接确认即可。真实数据可以在这里去掉敏感或无关的字段。', waiting: '正在读取字段' },
-  window: { no: 6, target: 'window-modal', head: '确认事实表的时间范围', text: '为大表限定单次查询的天数，避免全表扫描。选一个范围后保存；这一步只有外部表才有。', waiting: '正在确认事实表的时间范围' },
+  window: { no: 6, target: 'window-modal', head: '确认事实表的时间范围', text: '为大表限定单次查询的天数，避免全表扫描。改动会直接保存；核对后点击“确认范围，继续”。这一步只有外部表才有。', waiting: '正在确认事实表的时间范围' },
   start: { no: 7, target: 'model-start', head: '让建模助手开始工作', text: '示例数据没有业务文档，直接开始。助手会在对话里边做边说明，你随时可以补充或纠正。', waiting: '正在准备建模' },
   modeling: { no: 7, head: '建模助手正在工作', text: '你可以看着它一步步整理模型，也可以在对话里补充。完成后继续下一步。' },
   review: { no: 8, target: 'turn-result', head: '看看助手改了什么', text: '每一条都能打开查看和编辑。觉得不对，就在对话里告诉助手。这些修改都在草稿里，发布前不影响问数。', next: true, waiting: '建模结果会显示在回复下方' },
@@ -101,7 +101,7 @@ const CARD_HEIGHT = 200;
 /** Where the user should really click: a highlighted area may hold its button deep inside. */
 function clickPoint(el: HTMLElement): Point {
   const control = el.matches('button,a,input,textarea,select') ? el
-    : el.querySelector<HTMLElement>('button.da-btn-primary:not(:disabled)') ?? el.querySelector<HTMLElement>('button:not(:disabled),input,textarea,select') ?? el;
+    : el.querySelector<HTMLElement>('button.da-btn-primary:not(:disabled),button.mp-primary:not(:disabled)') ?? el.querySelector<HTMLElement>('button:not(:disabled),input,textarea,select') ?? el;
   const r = control.getBoundingClientRect();
   // The lower edge, so the hand never covers the label it is pointing at.
   return { x: r.left + r.width / 2, y: r.bottom - 3, top: r.top + 3 };

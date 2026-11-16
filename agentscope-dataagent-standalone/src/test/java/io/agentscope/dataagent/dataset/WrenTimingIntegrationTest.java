@@ -10,10 +10,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /** Opt-in real CLI probe against an isolated copy; no source database query is executed. */
+@Tag("external")
 class WrenTimingIntegrationTest {
     @TempDir Path home;
 

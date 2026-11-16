@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Composer 控件 · v3 iOS 语言重制 — 知识库 / 联网 / 分析</title>
+<style>
+/* ================================================================
+   iOS 设计语言 token：全部取自 Apple HIG 公开规格
+   System Colors / Materials / Typographic Scale / UISwitch 51×31
+   桌面密度按 0.82 缩放（44pt 触控目标 → 32~36px 指针热区）
+================================================================ */
+:root{
+  /* 底色：systemGroupedBackground 体系 */
+  --bg:#F2F2F7;            /* systemGroupedBackground */
+  --surface:#FFFFFF;       /* secondarySystemGroupedBackground */
+  --surface-2:#FFFFFF;     /* grouped card */
+  --canvas:#E9E9EE;
+  /* Label 四级 */
+  --label:#000000;
+  --label-2:rgba(60,60,67,.60);
+  --label-3:rgba(60,60,67,.30);
+  --label-4:rgba(60,60,67,.18);
+  /* Fill 三级（iOS 按钮/开关轨道材质） */
+  --fill:rgba(120,120,128,.16);
+  --fill-2:rgba(120,120,128,.12);
+  --fill-3:rgba(118,118,118,.08);
+  /* Separator */
+  --sep:rgba(60,60,67,.12);
+  --sep-2:rgba(60,60,67,.29);
+  /* Tint = 品牌紫（iOS 允许 App 自定义 tintColor，如 Spotify 绿） */
+  --tint:#6A55E0;
+  --tint-press:#5843C9;
+  --tint-soft:rgba(106,85,224,.12);
+  --green:#34C759;         /* systemGreen —— UISwitch 默认色备选 */
+  /* 超薄膜材质（context menu / popover） */
+  --material:rgba(250,250,252,.82);
+  --material-border:rgba(0,0,0,.06);
+  /* iOS 阴影语法：低 Y 偏移 + 大模糊 + 低透明度，可多层 */
+  --sh-card:0 0.5px 1px rgba(0,0,0,.04),0 1px 3px rgba(0,0,0,.05);
+  --sh-menu:0 0 0 .5px rgba(0,0,0,.04),0 12px 32px rgba(0,0,0,.16),0 4px 8px rgba(0,0,0,.06);
+  --sh-knob:0 3px 8px rgba(0,0,0,.15),0 3px 1px rgba(0,0,0,.06),0 0 0 .5px rgba(0,0,0,.04);
+  --sh-panel:-12px 0 32px -16px rgba(0,0,0,.14);
+  /* 动效：iOS 弹簧 */
+  --spring:cubic-bezier(.5,1.25,.4,1);       /* 菜单生长/拨杆 */
+  --ease:cubic-bezier(.32,.72,0,1);          /* 系统标准 easeOut */
+  --press:cubic-bezier(.25,.46,.45,.94);
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+}
+html[data-theme="dark"]{
+  --bg:#000000;
+  --surface:#1C1C1E;       /* secondarySystemGroupedBackground dark */
+  --surface-2:#1C1C1E;
+  --canvas:#0C0C0E;
+  --label:#FFFFFF;
+  --label-2:rgba(235,235,245,.60);
+  --label-3:rgba(235,235,245,.30);
+  --label-4:rgba(235,235,245,.16);
+  --fill:rgba(120,120,128,.24);
+  --fill-2:rgba(120,120,128,.18);
+  --fill-3:rgba(118,118,118,.12);
+  --sep:rgba(84,84,88,.36);
+  --sep-2:rgba(84,84,88,.60);
+  --tint:#8B7CF6;          /* 深色下提亮一档，保证 4.5:1 */
+  --tint-press:#7A6BF0;
+  --tint-soft:rgba(139,124,246,.18);
+  --material:rgba(30,30,32,.78);
+  --material-border:rgba(255,255,255,.08);
+  --sh-card:0 0.5px 1px rgba(0,0,0,.4),0 1px 3px rgba(0,0,0,.35);
+  --sh-menu:0 0 0 .5px rgba(255,255,255,.08),0 16px 40px rgba(0,0,0,.5),0 4px 10px rgba(0,0,0,.4);
+  --sh-knob:0 3px 8px rgba(0,0,0,.35),0 3px 1px rgba(0,0,0,.2);
+  --sh-panel:-12px 0 32px -16px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--bg);color:var(--label);
+  font:400 13px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;transition:background .35s,color .35s;
+}
+.i{width:15px;height:15px;flex:none;display:block;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.wrap{max-width:1120px;margin:0 auto;padding:40px 32px 80px}
+.kicker{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--tint)}
+h1{font-size:30px;font-weight:700;letter-spacing:.36px;margin:8px 0 6px}   /* iOS Large Title 34 的桌面等比 */
+.lede{font-size:13px;color:var(--label-2);max-width:780px;line-height:1.8;margin:0}
+.lede b{color:var(--label);font-weight:600}
+.tgl{margin-left:auto;height:30px;padding:0 14px;border-radius:15px;border:0;background:var(--fill-2);color:var(--label);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;transition:background .15s}
+.tgl:active{background:var(--fill)}
+.bench{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
+.bench span{font-size:11.5px;color:var(--label-2);background:var(--fill-3);border-radius:99px;padding:4px 11px}
+.bench b{color:var(--label);font-weight:600}
+
+/* ============ 章节 ============ */
+.chapter{margin-top:52px}
+.chapter>h2{font-size:19px;font-weight:700;letter-spacing:.2px;margin:0 0 5px}  /* iOS Title2 */
+.chapter>p{font-size:12.5px;color:var(--label-2);margin:0 0 16px;max-width:800px;line-height:1.75}
+.chapter>p code{font-family:var(--mono);font-size:11px;background:var(--fill-3);border-radius:4px;padding:0 4px}
+
+/* ============ 1. 活 demo 舞台 ============ */
+.demo{position:relative;height:584px;border-radius:20px;overflow:hidden;background:var(--canvas);border:.5px solid var(--sep)}
+.demo-top{height:46px;display:flex;align-items:center;gap:9px;padding:0 16px;border-bottom:.5px solid var(--sep);color:var(--label-3);font-size:12px;background:var(--surface)}
+.demo-top .dt-ic{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;color:var(--label-3)}
+.demo-top b{color:var(--label);font-weight:600;font-size:13px}
+.demo-body{position:absolute;inset:46px 0 0;display:flex;flex-direction:column;align-items:center;padding:30px 32px 24px;transition:padding-right .32s var(--ease)}
+.demo.with-panel .demo-body{padding-right:352px}
+.thread{width:min(680px,100%);display:flex;flex-direction:column;gap:14px;flex:1;min-height:0}
+.mrow{display:flex;gap:10px;align-items:flex-start}
+.mrow.user{flex-direction:row-reverse}
+.av{width:26px;height:26px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:10px;font-weight:700}
+.av.u{background:var(--fill);color:var(--label-2);font-size:10.5px}
+.av.a{background:var(--tint-soft);color:var(--tint)}
+.mbub{max-width:78%;font-size:13px;line-height:1.7}
+.mrow.user .mbub{background:var(--tint);border-radius:18px 18px 4px 18px;padding:9px 14px;color:#fff}  /* iMessage 气泡 */
+.mrow .mbub.card{background:var(--surface);border-radius:4px 18px 18px 18px;padding:12px 14px;box-shadow:var(--sh-card)}
+.hbars{margin-top:11px;display:flex;flex-direction:column;gap:7px}
+.hbars .hr{display:grid;grid-template-columns:58px 1fr 48px;align-items:center;gap:9px;font-size:11px}
+.hbars .hr>span:first-child{color:var(--label-2);white-space:nowrap}
+.hbars .track{display:block;height:5px;border-radius:2.5px;background:var(--fill-3)}
+.hbars .fill{display:block;height:100%;border-radius:2.5px;background:var(--tint)}
+.hbars .hr:nth-child(2) .fill{opacity:.72}
+.hbars .hr:nth-child(3) .fill{opacity:.5}
+.hbars .hr:nth-child(4) .fill{opacity:.3}
+.hbars em{font-style:normal;font-family:var(--mono);font-size:10.5px;color:var(--label-3);text-align:right}
+.mbub.card p{margin:0;color:var(--label-3);font-size:11.5px}
+
+/* ---- composer：iOS 浮动输入卡 ---- */
+.composer{
+  width:min(680px,100%);background:var(--surface);border-radius:22px;
+  box-shadow:var(--sh-card);padding:12px 12px 10px;position:relative;z-index:5;
+}
+.composer textarea{
+  display:block;width:100%;border:0;outline:0;resize:none;background:var(--fill-3);border-radius:14px;
+  font:inherit;font-size:13.5px;line-height:1.55;height:46px;padding:8px 12px;color:var(--label);
+  transition:background .15s;
+}
+.composer textarea:focus{background:var(--fill-2)}
+.composer textarea::placeholder{color:var(--label-3)}
+.bar{display:flex;align-items:center;gap:8px;padding:10px 2px 0}
+
+/* ============ iOS 胶囊控件（UIButton.Configuration 风格） ============ */
+.chip{
+  position:relative;display:inline-flex;align-items:stretch;height:32px;
+  background:var(--fill-2);border:0;border-radius:16px;                 /* 全圆角连续曲线 */
+  font-size:13px;font-weight:500;color:var(--label);
+  transition:background .15s var(--ease);
+}
+.chip:hover{background:var(--fill)}
+.chip.disabled{opacity:.4;pointer-events:none}
+.zone{
+  position:relative;display:inline-flex;align-items:center;gap:5px;border:0;background:none;
+  font:inherit;font-weight:inherit;color:inherit;cursor:pointer;padding:0 11px;
+  border-radius:16px;outline:none;
+  transition:opacity .1s var(--press),transform .1s var(--press);
+}
+.zone:active{opacity:.55}                                               /* iOS 按压变暗，不用 scale */
+.zone:focus-visible{box-shadow:inset 0 0 0 2px var(--tint)}
+.zone .ic{color:var(--tint)}                                            /* iOS：图标吃 tint 色 */
+/* 分段胶囊：图标位 + 名称位 */
+.z-icon{padding:0 9px 0 11px}
+.z-value{padding:0 10px 0 8px;font-weight:600}
+.divider{width:.5px;height:14px;background:var(--sep-2);align-self:center;transition:opacity .12s}
+.chip:has(.zone:active) .divider,.chip:has(.zone:hover) .divider,.chip.hovany .divider{opacity:0}
+.zone.hov,.zone:hover{background:var(--fill-3)}
+/* 面板已开：图标位常亮（tint 软底） */
+.zone.seg-on{background:var(--tint-soft)}
+/* 下拉展开态 */
+.chip.open{background:var(--fill)}
+.chip.open .chev{transform:rotate(180deg)}
+.chev{width:11px;height:11px;color:var(--label-3);transition:transform .22s var(--spring),color .15s}
+/* 值切换动画 */
+.val{position:relative;display:inline-block;overflow:hidden;height:18px;line-height:18px;vertical-align:middle}
+.val .v-cur,.val .v-next{display:block;white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis;transition:transform .2s var(--ease),opacity .2s var(--ease)}
+.val .v-cur.out{transform:translateY(-9px);opacity:0}
+.val .v-next{position:absolute;left:0;top:0;transform:translateY(9px);opacity:0}
+.val .v-next.in{transform:none;opacity:1}
+
+/* ---- UISwitch：51×31 按 0.78 缩放 → 40×24 ---- */
+.sw{
+  width:40px;height:24px;border-radius:12px;background:var(--fill);position:relative;flex:none;
+  transition:background .25s var(--ease);
+}
+.sw::after{
+  content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;
+  box-shadow:var(--sh-knob);
+  transition:transform .28s var(--spring),width .15s var(--ease);
+}
+.zone:active .sw::after{width:23px}                                     /* 按住时 knob 拉长——原生手感 */
+.chip.on .sw{background:var(--tint)}
+.chip.on .sw::after{transform:translateX(16px)}
+.chip.on .zone:active .sw::after{transform:translateX(13px)}
+/* tooltip */
+.tip{
+  position:absolute;bottom:calc(100% + 10px);left:50%;transform:translateX(-50%);
+  display:flex;align-items:center;gap:6px;white-space:nowrap;
+  background:var(--material);backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);
+  color:var(--label);font-size:11px;font-weight:600;
+  border:.5px solid var(--material-border);border-radius:8px;padding:5px 10px;
+  box-shadow:var(--sh-menu);opacity:0;pointer-events:none;
+  transition:opacity .12s var(--ease) .45s;z-index:20;
+}
+.zone:hover .tip{opacity:1}
+kbd{font-family:var(--mono);font-size:10px;color:var(--label-3);background:var(--fill-3);border-radius:5px;padding:1.5px 6px;margin-left:auto}
+.tip kbd{margin-left:0}
+/* 发送键：iOS 实心圆 */
+.send{
+  margin-left:auto;width:32px;height:32px;border-radius:50%;border:0;cursor:pointer;flex:none;
+  background:var(--tint);color:#fff;display:grid;place-items:center;
+  transition:transform .15s var(--spring),background .15s,opacity .15s;
+}
+.send:active{transform:scale(.9);background:var(--tint-press)}
+.send.off{background:var(--fill);color:var(--label-3);pointer-events:none}
+
+/* ============ 上下文菜单浮层（UIContextMenu 超薄膜） ============ */
+.chipwrap{position:relative}
+.pop{
+  position:absolute;bottom:calc(100% + 10px);left:0;width:272px;z-index:30;
+  background:var(--material);
+  backdrop-filter:blur(40px) saturate(180%);-webkit-backdrop-filter:blur(40px) saturate(180%);
+  border:.5px solid var(--material-border);border-radius:14px;
+  box-shadow:var(--sh-menu);padding:6px;transform-origin:bottom left;
+  opacity:0;transform:scale(.86) translateY(6px);pointer-events:none;
+  transition:opacity .15s var(--ease),transform .24s var(--spring);
+}
+.pop.show{opacity:1;transform:none;pointer-events:auto}
+.pop .search{
+  display:flex;align-items:center;gap:7px;height:32px;margin:0 0 4px;padding:0 10px;
+  background:var(--fill-3);border-radius:9px;color:var(--label-3);font-size:12.5px;
+}
+.pop .search input{border:0;outline:0;background:none;font:inherit;font-size:13px;color:var(--label);width:100%}
+.pop .search input::placeholder{color:var(--label-3)}
+.psec{font-size:11px;font-weight:400;letter-spacing:.02em;color:var(--label-3);padding:8px 12px 4px}
+/* 菜单行：iOS 无 hover 态，桌面化后 hover 吃 tint 反白（macOS 菜单语言） */
+.opt{
+  display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:9px;cursor:pointer;
+  transition:background .08s;
+}
+.opt:hover{background:var(--tint)}
+.opt:hover b,.opt:hover span{color:#fff!important}
+.opt:hover .oic{background:rgba(255,255,255,.22);color:#fff}
+.opt:hover .ck{color:#fff}
+.opt:hover kbd{background:rgba(255,255,255,.2);color:rgba(255,255,255,.8)}
+.oic{
+  width:26px;height:26px;border-radius:13px;flex:none;display:grid;place-items:center;
+  background:var(--tint-soft);color:var(--tint);font-size:11px;font-weight:700;
+}
+.ot{flex:1;min-width:0}
+.ot b{display:block;font-size:13px;font-weight:500;color:var(--label);letter-spacing:.1px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ot span{display:block;font-size:11px;color:var(--label-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.opt .ck{width:14px;height:14px;color:var(--tint);flex:none;opacity:0}
+.opt.sel .ck{opacity:1}
+.pfoot{
+  margin-top:4px;border-top:.5px solid var(--sep);padding:9px 10px 7px;
+  display:flex;align-items:center;gap:10px;border-radius:9px;cursor:pointer;color:var(--tint);font-size:13px;font-weight:500;
+  transition:background .08s;
+}
+.pfoot:hover{background:var(--tint);color:#fff}
+.pfoot:hover kbd{background:rgba(255,255,255,.2);color:rgba(255,255,255,.8)}
+/* 分析浮层 */
+.pop.an{width:264px}
+.an-opt{display:flex;gap:10px;align-items:center;padding:7px 10px;border-radius:9px;cursor:pointer;transition:background .08s}
+.an-opt:hover{background:var(--tint)}
+.an-opt:hover b,.an-opt:hover span{color:#fff!important}
+.an-opt:hover .oic{background:rgba(255,255,255,.22);color:#fff}
+.an-opt:hover .ck{color:#fff}
+.an-opt .oic{border-radius:8px;width:28px;height:28px}
+.an-opt .ck{width:14px;height:14px;color:var(--tint);flex:none;opacity:0}
+.an-opt.sel .ck{opacity:1}
+.rec-tag{font-size:10px;font-weight:600;color:var(--tint);background:var(--tint-soft);border-radius:4px;padding:1px 5px;margin-left:6px;vertical-align:1px}
+.an-opt:hover .rec-tag{background:rgba(255,255,255,.22);color:#fff}
+
+/* ============ 右侧面板：Inset-Grouped List（iOS 设置语言） ============ */
+.panel{
+  position:absolute;top:46px;right:0;bottom:0;width:324px;z-index:10;
+  background:var(--bg);border-left:.5px solid var(--sep);
+  box-shadow:var(--sh-panel);transform:translateX(102%);
+  transition:transform .34s var(--ease);
+  display:flex;flex-direction:column;overflow:auto;
+}
+.panel.show{transform:none}
+.panel .ph{padding:18px 20px 4px}
+.panel .ph .lab{font-size:11px;font-weight:400;letter-spacing:.04em;text-transform:uppercase;color:var(--label-3)}
+.panel .ph h3{margin:6px 0 3px;font-size:19px;font-weight:700;letter-spacing:.2px}   /* Title2 */
+.panel .ph .meta{font-size:12px;color:var(--label-3);font-variant-numeric:tabular-nums}
+.pgrp{margin:16px 16px 0}
+.pgrp>h4{font-size:11px;font-weight:400;letter-spacing:.04em;text-transform:uppercase;color:var(--label-3);margin:0 0 6px 16px}
+.pgrp .card{background:var(--surface);border-radius:12px;overflow:hidden;box-shadow:var(--sh-card)}
+.prow{position:relative;display:flex;align-items:center;gap:12px;min-height:42px;padding:6px 14px;font-size:13px;cursor:pointer;transition:background .1s}
+.prow:hover{background:var(--fill-3)}
+.prow+.prow::before{content:"";position:absolute;left:40px;right:0;top:0;height:.5px;background:var(--sep)}  /* inset 分隔线 */
+.prow .i{color:var(--label-3);width:14px;height:14px}
+.prow b{font-weight:400;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prow span{font-size:11px;color:var(--label-3)}
+.prow .chev-r{width:7px;height:12px;color:var(--label-4);flex:none}
+.ptags{display:flex;flex-wrap:wrap;gap:6px;padding:10px 14px 12px}
+.ptags em{font-style:normal;font-size:12px;color:var(--tint);background:var(--tint-soft);border-radius:99px;padding:4px 10px;font-weight:500}
+
+/* 消息次级动作 + 追问 */
+.mact{display:flex;gap:2px;margin-top:10px;padding-top:8px;border-top:.5px solid var(--sep)}
+.mact button{border:0;background:none;font:inherit;font-size:12px;font-weight:500;color:var(--tint);padding:3px 8px;border-radius:7px;cursor:pointer;transition:opacity .1s}
+.mact button:active{opacity:.5}
+.mact button:first-child{margin-left:-8px}
+.fups{display:flex;gap:7px;align-items:center;flex-wrap:wrap;padding-left:36px;margin-top:-2px}
+.fups>.fu-lab{font-size:10.5px;color:var(--label-3)}
+.fups button{
+  height:28px;padding:0 12px;border-radius:14px;border:0;background:var(--fill-2);
+  color:var(--tint);font:inherit;font-size:12px;font-weight:500;cursor:pointer;
+  transition:background .12s,opacity .1s;
+}
+.fups button:hover{background:var(--fill)}
+.fups button:active{opacity:.55}
+.demo-badge{
+  position:absolute;top:10px;right:14px;z-index:6;display:flex;align-items:center;gap:6px;
+  font-size:10.5px;font-weight:600;color:var(--label-2);background:var(--material);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border:.5px solid var(--material-border);border-radius:99px;padding:3px 10px;box-shadow:var(--sh-card);
+}
+.demo-badge i{width:6px;height:6px;border-radius:50%;background:var(--green)}
+
+/* ============ 2. iOS 元素对照 ============ */
+.iosmap{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.iosmap .pc{background:var(--surface);border-radius:14px;padding:16px 18px;box-shadow:var(--sh-card)}
+.iosmap .pc .n{font-family:var(--mono);font-size:10.5px;color:var(--tint);font-weight:700}
+.iosmap .pc h3{font-size:14px;font-weight:600;margin:7px 0 5px;letter-spacing:.1px}
+.iosmap .pc h3 span{font-weight:400;font-size:11px;color:var(--label-3);margin-left:6px;font-family:var(--mono)}
+.iosmap .pc p{font-size:12px;line-height:1.75;color:var(--label-2);margin:0}
+.iosmap .pc p b{color:var(--label);font-weight:600}
+
+/* ============ 3. 状态矩阵 ============ */
+.matrix{display:flex;flex-direction:column;gap:2px}
+.mrow-line{display:grid;grid-template-columns:92px 1fr;gap:14px;align-items:start;padding:14px 0;border-top:.5px solid var(--sep)}
+.mrow-line:first-child{border-top:0}
+.mrow-line .ml{font-size:11px;font-weight:600;color:var(--label-2);padding-top:9px}
+.mrow-line .ml span{display:block;font-weight:400;font-size:10.5px;color:var(--label-3);margin-top:2px}
+.mstates{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}
+.mcell{display:flex;flex-direction:column;align-items:flex-start;gap:7px}
+.mcell>span{font-family:var(--mono);font-size:10px;color:var(--label-3);padding-left:2px}
+
+/* ============ 4. 翻盘决定 ============ */
+.rej{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.rej .rc{display:flex;gap:10px;padding:14px 16px;background:var(--surface);border-radius:14px;box-shadow:var(--sh-card)}
+.rej .rc .x{width:20px;height:20px;border-radius:50%;flex:none;display:grid;place-items:center;background:var(--tint-soft);color:var(--tint);margin-top:1px}
+.rej .rc h4{margin:0 0 3px;font-size:13px;font-weight:600}
+.rej .rc h4 s{color:var(--label-3);font-weight:500}
+.rej .rc p{margin:0;font-size:11.5px;line-height:1.65;color:var(--label-2)}
+
+/* ============ 5. 解剖 ============ */
+.anat{display:grid;grid-template-columns:1.15fr .85fr;gap:16px;align-items:start}
+.anat .acard{background:var(--surface);border-radius:14px;padding:26px;box-shadow:var(--sh-card);position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:center;align-items:flex-start}
+.zs{position:relative;display:inline-block;padding-top:24px;margin:8px 0 6px}
+.zoom2{zoom:2.1;display:inline-block}
+.dim{position:absolute;left:0;right:0;top:14px;height:.5px;background:var(--label-3);opacity:.5}
+.dim::before,.dim::after{content:"";position:absolute;top:0;width:.5px;height:6px;background:var(--label-3);opacity:.8}
+.dim::before{left:0}.dim::after{right:0}
+.dim span{position:absolute;left:50%;top:-17px;transform:translateX(-50%);font-family:var(--mono);font-size:10px;color:var(--label-2);background:var(--surface);padding:0 7px;white-space:nowrap}
+.dim-note{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px;width:100%}
+.zone-legend{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
+.zone-legend span{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--label-2)}
+.zone-legend i{width:16px;height:16px;border-radius:50%;background:var(--tint-soft);color:var(--tint);font-style:normal;font-family:var(--mono);font-size:9.5px;font-weight:700;display:grid;place-items:center;flex:none}
+.dim-note span{font-family:var(--mono);font-size:10px;color:var(--label-3);border-radius:6px;padding:3px 8px;background:var(--fill-3)}
+.spec-list{display:flex;flex-direction:column}
+.spec-list .sr{display:grid;grid-template-columns:118px 1fr;gap:10px;padding:9px 0;border-top:.5px solid var(--sep);font-size:12px}
+.spec-list .sr:first-child{border-top:0}
+.spec-list .sr>b{font-family:var(--mono);font-size:11px;color:var(--tint);font-weight:600}
+.spec-list .sr span{color:var(--label-2);line-height:1.6}
+.spec-list .sr span b{color:var(--label)}
+.spec-list .sr code{font-family:var(--mono);font-size:10.5px;background:var(--fill-3);border-radius:4px;padding:0 4px;color:var(--label)}
+
+/* ============ 6. 规格表 ============ */
+table.spec{width:100%;border-collapse:collapse;background:var(--surface);border-radius:14px;overflow:hidden;box-shadow:var(--sh-card);font-size:12px}
+table.spec th{font-size:11px;font-weight:400;letter-spacing:.04em;text-transform:uppercase;color:var(--label-3);text-align:left;padding:10px 16px;border-bottom:.5px solid var(--sep);background:var(--fill-3)}
+table.spec td{padding:10px 16px;border-bottom:.5px solid var(--sep);color:var(--label-2);line-height:1.65;vertical-align:top}
+table.spec tr:last-child td{border-bottom:0}
+table.spec td:first-child{font-weight:600;color:var(--label);white-space:nowrap}
+table.spec code{font-family:var(--mono);font-size:10.5px;background:var(--fill-3);border-radius:4px;padding:1px 5px;color:var(--label)}
+
+.foot{margin-top:56px;padding-top:18px;border-top:.5px solid var(--sep);font-size:11.5px;color:var(--label-3);line-height:1.9}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div style="display:flex;align-items:flex-start">
+    <div>
+      <div class="kicker">Composer Controls · v3 · iOS 语言重制</div>
+      <h1>输入区三控件：知识库 · 联网 · 分析</h1>
+      <p class="lede">上一版是 Raycast/Linear 的桌面工具语言，这一版整体换成 <b>Apple HIG</b> 语法：浮层用<b>超薄膜材质</b>（blur 40px + saturate 180%）、联网换成原生 <b>UISwitch</b> 比例与手感、侧栏换成 <b>Inset-Grouped List</b>（iOS 设置页语言）、下拉换成 <b>UIContextMenu</b> 生长动画、按压反馈从 scale 改成 iOS 的<b>不透明度变暗</b>。下方第一节仍是可操作的活 demo。</p>
+    </div>
+    <button class="tgl" onclick="document.documentElement.dataset.theme=document.documentElement.dataset.theme==='dark'?'':'dark'">切换深色</button>
+  </div>
+  <div class="bench">
+    <span><b>UISwitch</b> · 51×31 原生比例</span>
+    <span><b>UIContextMenu</b> · 超薄膜 + 锚点生长</span>
+    <span><b>Inset-Grouped List</b> · 设置页侧栏</span>
+    <span><b>UIButton.Config</b> · 全圆角填充按钮</span>
+    <span><b>SF Type Scale</b> · Large Title / Title2</span>
+    <span><b>Continuous Corner</b> · 连续曲率圆角</span>
+  </div>
+
+  <!-- ================= 1. 活 DEMO ================= -->
+  <div class="chapter">
+    <h2>1 · 活 demo（可点击）</h2>
+    <p>交互逻辑与 v2 完全一致：知识库胶囊<b>左段图标</b>开关右侧数据集面板、<b>右段名称</b>下拉换库；联网是拨杆；分析显示当前值。变化的是材质与手感——点拨杆时注意 knob 按住会拉长，这是原生 UISwitch 的细节。Esc 或点空白关闭浮层。</p>
+    <div class="demo" id="demo">
+      <div class="demo-top">
+        <span class="dt-ic"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M9 9.5h6M9 13h4"/></svg></span>
+        <b>新对话</b><span>·</span><span>DataAgent</span>
+        <span class="demo-badge"><i></i>可交互</span>
+      </div>
+      <div class="demo-body">
+        <div class="thread">
+          <div class="mrow user">
+            <span class="av u">李</span>
+            <div class="mbub">上个季度各赛道销售额对比一下</div>
+          </div>
+          <div class="mrow">
+            <span class="av a">AI</span>
+            <div class="mbub card">
+              三个赛道里「智能家电」增速最快，环比 +18.4%。
+              <div class="hbars">
+                <div class="hr"><span>智能家电</span><span class="track"><span class="fill" style="width:100%"></span></span><em>+18.4%</em></div>
+                <div class="hr"><span>生活电器</span><span class="track"><span class="fill" style="width:66%"></span></span><em>+9.2%</em></div>
+                <div class="hr"><span>个护健康</span><span class="track"><span class="fill" style="width:44%"></span></span><em>+4.1%</em></div>
+                <div class="hr"><span>厨房小电</span><span class="track"><span class="fill" style="width:27%"></span></span><em>-2.6%</em></div>
+              </div>
+              <p>数据来源：精选运营赛道流水 · 2026-07-01 至 2026-09-30</p>
+              <div class="mact"><button>查看 SQL</button><button>导出</button><button>收藏到看板</button></div>
+            </div>
+          </div>
+          <div class="fups">
+            <span class="fu-lab">接着问</span>
+            <button>按渠道拆开看</button>
+            <button>和去年同期比</button>
+            <button>毛利率怎么样</button>
+          </div>
+        </div>
+
+        <div class="composer">
+          <textarea placeholder="输入查询、分析、预测数据问题…"></textarea>
+          <div class="bar">
+
+            <!-- 知识库：分段胶囊 -->
+            <div class="chipwrap">
+              <div class="chip kb" id="kbChip">
+                <button class="zone z-icon" id="kbPanelBtn" aria-label="数据集详情">
+                  <svg class="i ic" viewBox="0 0 24 24"><ellipse cx="12" cy="5.5" rx="7" ry="2.8"/><path d="M5 5.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/><path d="M5 11.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/></svg>
+                  <span class="tip">数据集详情<kbd>⌘D</kbd></span>
+                </button>
+                <span class="divider"></span>
+                <button class="zone z-value" id="kbMenuBtn">
+                  <span class="val" id="kbVal"><span class="v-cur">精选运营赛道流水</span></span>
+                  <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14.5l5-5 5 5"/><path d="M7 9.5l5 5 5-5" opacity=".45"/></svg>
+                </button>
+              </div>
+              <div class="pop" id="kbPop">
+                <div class="search">
+                  <svg class="i" viewBox="0 0 24 24" style="width:13px;height:13px"><circle cx="11" cy="11" r="6.5"/><path d="M15.8 15.8L20 20"/></svg>
+                  <input placeholder="搜索知识库…"><kbd style="margin-left:0">⌘K</kbd>
+                </div>
+                <div class="psec">当前</div>
+                <div class="opt sel" data-kb="精选运营赛道流水">
+                  <span class="oic">精</span>
+                  <span class="ot"><b>精选运营赛道流水</b><span>12 张表 · 同事共享</span></span>
+                  <svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+                </div>
+                <div class="psec">全部知识库</div>
+                <div class="opt" data-kb="订单域模型">
+                  <span class="oic">订</span>
+                  <span class="ot"><b>订单域模型</b><span>8 张表 · 我创建</span></span>
+                  <svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+                </div>
+                <div class="opt" data-kb="客户主数据">
+                  <span class="oic">客</span>
+                  <span class="ot"><b>客户主数据</b><span>5 张表 · 同事共享</span></span>
+                  <svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+                </div>
+                <div class="opt" data-kb="供应链宽表">
+                  <span class="oic">供</span>
+                  <span class="ot"><b>供应链宽表</b><span>21 张表 · 我创建</span></span>
+                  <svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+                </div>
+                <div class="pfoot" id="kbFoot">
+                  <svg class="i ic" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M14.5 4.5v15"/></svg>
+                  在侧栏查看数据集详情<kbd>⌘D</kbd>
+                </div>
+              </div>
+            </div>
+
+            <!-- 联网搜索：UISwitch -->
+            <div class="chipwrap">
+              <div class="chip on" id="webChip">
+                <button class="zone" style="gap:8px" id="webBtn">
+                  <svg class="i ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c2.3 2.2 3.5 5 3.5 8s-1.2 5.8-3.5 8c-2.3-2.2-3.5-5-3.5-8s1.2-5.8 3.5-8z"/></svg>
+                  联网搜索
+                  <span class="sw"></span>
+                </button>
+              </div>
+            </div>
+
+            <!-- 分析方式 -->
+            <div class="chipwrap">
+              <div class="chip" id="anChip">
+                <button class="zone" id="anBtn">
+                  <svg class="i ic" viewBox="0 0 24 24"><path d="M4 8h9M17.5 8H20M4 16h3M11.5 16H20"/><circle cx="15" cy="8" r="2.2"/><circle cx="9" cy="16" r="2.2"/></svg>
+                  <span class="val" id="anVal"><span class="v-cur">自动</span></span>
+                  <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14.5l5-5 5 5"/><path d="M7 9.5l5 5 5-5" opacity=".45"/></svg>
+                </button>
+              </div>
+              <div class="pop an" id="anPop">
+                <div class="psec">分析方式</div>
+                <div class="an-opt sel" data-an="自动">
+                  <span class="oic"><svg class="i" viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M12 4l1.8 4.6L18.5 10l-4.7 1.4L12 16l-1.8-4.6L5.5 10l4.7-1.4z"/></svg></span>
+                  <span class="ot"><b>自动<span class="rec-tag">推荐</span></b><span>根据问题自动判断趋势、对比或归因</span></span>
+                  <svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+                </div>
+                <div class="an-opt" data-an="趋势分析">
+                  <span class="oic"><svg class="i" viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M4 16.5l5-5 3.5 3.5L19 8.5"/><path d="M14.5 8.5H19V13"/></svg></span>
+                  <span class="ot"><b>趋势分析</b><span>按时间看指标的走向与拐点</span></span>
+                  <svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+                </div>
+                <div class="an-opt" data-an="对比分析">
+                  <span class="oic"><svg class="i" viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M6 20V10M12 20V4M18 20v-7"/></svg></span>
+                  <span class="ot"><b>对比分析</b><span>多对象、多周期之间的并排比较</span></span>
+                  <svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+                </div>
+                <div class="an-opt" data-an="归因分析">
+                  <span class="oic"><svg class="i" viewBox="0 0 24 24" style="width:14px;height:14px"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="6" r="2.4"/><circle cx="12" cy="17" r="2.4"/><path d="M8 7.5l2.8 7M16 7.5l-2.8 7M8.4 6h7.2"/></svg></span>
+                  <span class="ot"><b>归因分析</b><span>拆解指标变化的主要来源</span></span>
+                  <svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+                </div>
+                <div class="an-opt" data-an="预测分析">
+                  <span class="oic"><svg class="i" viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M4 17l4.5-4.5 3 3L16 10"/><path d="M16 15.5c1.4 1.2 2.5 2.7 3 4.5" stroke-dasharray="2 2.4"/></svg></span>
+                  <span class="ot"><b>预测分析</b><span>基于历史数据估计未来走势</span></span>
+                  <svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+                </div>
+              </div>
+            </div>
+
+            <button class="send off" aria-label="发送"><svg class="i" viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M12 19V5M5.5 11.5L12 5l6.5 6.5"/></svg></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右侧数据集详情面板：Inset-Grouped List -->
+      <div class="panel" id="panel">
+        <div class="ph">
+          <div class="lab">数据集详情</div>
+          <h3 id="panelName">精选运营赛道流水</h3>
+          <div class="meta" id="panelMeta">12 张表 · 46 个字段 · 同事共享 · 2 小时前更新</div>
+        </div>
+        <div class="pgrp">
+          <h4>包含数据表</h4>
+          <div class="card">
+            <div class="prow"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 10h16M10 10v10"/></svg><b>fact_operation_flow</b><span>流水</span><svg class="chev-r" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 6l6 6-6 6"/></svg></div>
+            <div class="prow"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 10h16M10 10v10"/></svg><b>dim_channel</b><span>维表</span><svg class="chev-r" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 6l6 6-6 6"/></svg></div>
+            <div class="prow"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 10h16M10 10v10"/></svg><b>dim_region</b><span>维表</span><svg class="chev-r" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 6l6 6-6 6"/></svg></div>
+            <div class="prow"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 10h16M10 10v10"/></svg><b>dim_category</b><span>维表</span><svg class="chev-r" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 6l6 6-6 6"/></svg></div>
+          </div>
+        </div>
+        <div class="pgrp">
+          <h4>常用指标</h4>
+          <div class="card"><div class="ptags"><em>净销售额</em><em>订单量</em><em>客单价</em><em>毛利率</em><em>退款率</em></div></div>
+        </div>
+        <div class="pgrp" style="margin-bottom:20px">
+          <h4>业务标签</h4>
+          <div class="card"><div class="ptags"><em>销售额</em><em>赛道</em><em>渠道</em><em>区域</em></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 2. iOS 元素对照 ================= -->
+  <div class="chapter">
+    <h2>2 · 用到了哪些 iOS 语法</h2>
+    <p>每一处材质、比例、动效都能对应到 HIG 里的具体组件，不是「看起来像」，是规格对齐。</p>
+    <div class="iosmap">
+      <div class="pc">
+        <div class="n">UISwitch</div>
+        <h3>联网拨杆 <span>51×31 → 40×24</span></h3>
+        <p>原生比例按桌面密度 0.82 缩放。knob 纯白 + <b>三段式投影</b>（环境/直射/描边），按住时 knob 拉长 15%——这是 UISwitch 鲜有人做、但一上手就「对味」的细节。轨道色用品牌 tint，HIG 允许 App 自定义。</p>
+      </div>
+      <div class="pc">
+        <div class="n">UIContextMenuInteraction</div>
+        <h3>下拉浮层 <span>blur 40 + sat 180%</span></h3>
+        <p>超薄膜材质：<code>backdrop-filter: blur(40px) saturate(180%)</code>，82% 不透明度让背后的内容「在，但不抢」。入场 <b>scale .86 → 1</b> + 240ms 弹簧，transform-origin 钉在锚点——菜单从按钮里长出来。</p>
+      </div>
+      <div class="pc">
+        <div class="n">UITableView · insetGrouped</div>
+        <h3>右侧数据集面板 <span>设置页语言</span></h3>
+        <p>灰底 <code>#F2F2F7</code> + 白色圆角分组卡，组间分隔线 <b>inset 40px</b>（对齐图标后的文字基线），组标题 11px 灰色大写、缩进 16px。任何人扫一眼都知道这是「详情页」。</p>
+      </div>
+      <div class="pc">
+        <div class="n">UIButton.Configuration</div>
+        <h3>胶囊按钮 <span>fill 材质</span></h3>
+        <p>iOS 15 之后的按钮语言：没有描边，<code>rgba(120,120,128,.12)</code> 填充 + 全圆角连续曲线，hover 加深到 .16，按压<b>不透明度降到 .55</b>——iOS 不用 scale 做按压，用变暗。</p>
+      </div>
+      <div class="pc">
+        <div class="n">SF Typographic Scale</div>
+        <h3>字号阶梯 <span>30 / 19 / 13 / 11</span></h3>
+        <p>页面标题 30（Large Title 等比）、章节与面板标题 19（Title2）、正文 13、组标题与 meta 11。字重只用 <b>400/500/600/700</b> 四档，字母间距跟随字号走（大标题 +0.36px，小字 +0.04em）。</p>
+      </div>
+      <div class="pc">
+        <div class="n">Continuous Corners</div>
+        <h3>连续曲率 <span>r16 / r14 / r12</span></h3>
+        <p>圆角分级与控件尺寸挂钩：32px 胶囊 → r16 全圆角；浮层 → r14；分组卡与列表 → r12；图标块 → r13 圆。Web 端用 <code>border-radius</code> 近似 squircle，配合 0.5px 分隔线保持边缘锐利。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 3. 状态矩阵 ================= -->
+  <div class="chapter">
+    <h2>3 · 状态矩阵</h2>
+    <p>每个控件的全部状态。静态陈列用强制 class 实现（<code>.hov</code> / <code>.seg-on</code> / <code>.open</code> / <code>.on</code>），与 demo 中的动态效果一致。</p>
+    <div class="matrix">
+      <div class="mrow-line">
+        <div class="ml">知识库<span>分段胶囊</span></div>
+        <div class="mstates">
+          <div class="mcell">
+            <div class="chip"><button class="zone z-icon"><svg class="i ic" viewBox="0 0 24 24"><ellipse cx="12" cy="5.5" rx="7" ry="2.8"/><path d="M5 5.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/><path d="M5 11.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/></svg></button><span class="divider"></span><button class="zone z-value"><span class="val"><span class="v-cur">精选运营赛道流水</span></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14.5l5-5 5 5"/><path d="M7 9.5l5 5 5-5" opacity=".45"/></svg></button></div>
+            <span>默认</span>
+          </div>
+          <div class="mcell">
+            <div class="chip hovany"><button class="zone z-icon hov"><svg class="i ic" viewBox="0 0 24 24"><ellipse cx="12" cy="5.5" rx="7" ry="2.8"/><path d="M5 5.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/><path d="M5 11.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/></svg></button><span class="divider"></span><button class="zone z-value"><span class="val"><span class="v-cur">精选运营赛道流水</span></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14.5l5-5 5 5"/><path d="M7 9.5l5 5 5-5" opacity=".45"/></svg></button></div>
+            <span>hover 图标位</span>
+          </div>
+          <div class="mcell">
+            <div class="chip hovany"><button class="zone z-icon seg-on"><svg class="i ic" viewBox="0 0 24 24"><ellipse cx="12" cy="5.5" rx="7" ry="2.8"/><path d="M5 5.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/><path d="M5 11.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/></svg></button><span class="divider"></span><button class="zone z-value"><span class="val"><span class="v-cur">精选运营赛道流水</span></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14.5l5-5 5 5"/><path d="M7 9.5l5 5 5-5" opacity=".45"/></svg></button></div>
+            <span>面板已开</span>
+          </div>
+          <div class="mcell">
+            <div class="chip open hovany"><button class="zone z-icon"><svg class="i ic" viewBox="0 0 24 24"><ellipse cx="12" cy="5.5" rx="7" ry="2.8"/><path d="M5 5.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/><path d="M5 11.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/></svg></button><span class="divider"></span><button class="zone z-value"><span class="val"><span class="v-cur">精选运营赛道流水</span></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14.5l5-5 5 5"/><path d="M7 9.5l5 5 5-5" opacity=".45"/></svg></button></div>
+            <span>下拉展开</span>
+          </div>
+          <div class="mcell">
+            <div class="chip"><button class="zone z-icon"><svg class="i ic" viewBox="0 0 24 24"><ellipse cx="12" cy="5.5" rx="7" ry="2.8"/><path d="M5 5.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/><path d="M5 11.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/></svg></button><span class="divider"></span><button class="zone z-value"><span class="val"><span class="v-cur">供应链履约与库存周转指标宽表</span></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14.5l5-5 5 5"/><path d="M7 9.5l5 5 5-5" opacity=".45"/></svg></button></div>
+            <span>超长省略</span>
+          </div>
+          <div class="mcell">
+            <div class="chip disabled"><button class="zone z-icon"><svg class="i ic" viewBox="0 0 24 24"><ellipse cx="12" cy="5.5" rx="7" ry="2.8"/><path d="M5 5.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/><path d="M5 11.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/></svg></button><span class="divider"></span><button class="zone z-value"><span class="val"><span class="v-cur">选择知识库</span></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14.5l5-5 5 5"/><path d="M7 9.5l5 5 5-5" opacity=".45"/></svg></button></div>
+            <span>禁用</span>
+          </div>
+        </div>
+      </div>
+      <div class="mrow-line">
+        <div class="ml">联网搜索<span>UISwitch</span></div>
+        <div class="mstates">
+          <div class="mcell">
+            <div class="chip on"><button class="zone" style="gap:8px"><svg class="i ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c2.3 2.2 3.5 5 3.5 8s-1.2 5.8-3.5 8c-2.3-2.2-3.5-5-3.5-8s1.2-5.8 3.5-8z"/></svg>联网搜索<span class="sw"></span></button></div>
+            <span>开</span>
+          </div>
+          <div class="mcell">
+            <div class="chip"><button class="zone" style="gap:8px"><svg class="i ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c2.3 2.2 3.5 5 3.5 8s-1.2 5.8-3.5 8c-2.3-2.2-3.5-5-3.5-8s1.2-5.8 3.5-8z"/></svg>联网搜索<span class="sw"></span></button></div>
+            <span>关</span>
+          </div>
+          <div class="mcell">
+            <div class="chip disabled"><button class="zone" style="gap:8px"><svg class="i ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c2.3 2.2 3.5 5 3.5 8s-1.2 5.8-3.5 8c-2.3-2.2-3.5-5-3.5-8s1.2-5.8 3.5-8z"/></svg>联网搜索<span class="sw"></span></button></div>
+            <span>禁用</span>
+          </div>
+        </div>
+      </div>
+      <div class="mrow-line">
+        <div class="ml">分析方式<span>值可见选择器</span></div>
+        <div class="mstates">
+          <div class="mcell">
+            <div class="chip"><button class="zone"><svg class="i ic" viewBox="0 0 24 24"><path d="M4 8h9M17.5 8H20M4 16h3M11.5 16H20"/><circle cx="15" cy="8" r="2.2"/><circle cx="9" cy="16" r="2.2"/></svg><span class="val"><span class="v-cur">自动</span></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14.5l5-5 5 5"/><path d="M7 9.5l5 5 5-5" opacity=".45"/></svg></button></div>
+            <span>默认</span>
+          </div>
+          <div class="mcell">
+            <div class="chip"><button class="zone hov"><svg class="i ic" viewBox="0 0 24 24"><path d="M4 8h9M17.5 8H20M4 16h3M11.5 16H20"/><circle cx="15" cy="8" r="2.2"/><circle cx="9" cy="16" r="2.2"/></svg><span class="val"><span class="v-cur">自动</span></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14.5l5-5 5 5"/><path d="M7 9.5l5 5 5-5" opacity=".45"/></svg></button></div>
+            <span>hover</span>
+          </div>
+          <div class="mcell">
+            <div class="chip open"><button class="zone"><svg class="i ic" viewBox="0 0 24 24"><path d="M4 8h9M17.5 8H20M4 16h3M11.5 16H20"/><circle cx="15" cy="8" r="2.2"/><circle cx="9" cy="16" r="2.2"/></svg><span class="val"><span class="v-cur">对比分析</span></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14.5l5-5 5 5"/><path d="M7 9.5l5 5 5-5" opacity=".45"/></svg></button></div>
+            <span>展开</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 4. 相对 v2 的翻盘决定 ================= -->
+  <div class="chapter">
+    <h2>4 · 相对 v2 翻盘了哪些决定</h2>
+    <p>v2 的白底描边 + 禁玻璃拟态是按「桌面数据工具」做的取舍。既然方向定为 iOS 语言，这几条必须翻过来——同时标注代价，落地时自己权衡。</p>
+    <div class="rej">
+      <div class="rc"><span class="x"><svg class="i" viewBox="0 0 24 24" style="width:11px;height:11px"><path d="M12 5v14M5 12h14"/></svg></span><div><h4><s>v2：浮层禁毛玻璃</s> → v3：超薄膜回归</h4><p>iOS 语境下模糊层是身份符号。代价：backdrop-filter 在大面积表格背景上有 GPU 开销，低端机需降级为不透明底（prefers-reduced-transparency 也要兜）。</p></div></div>
+      <div class="rc"><span class="x"><svg class="i" viewBox="0 0 24 24" style="width:11px;height:11px"><path d="M12 5v14M5 12h14"/></svg></span><div><h4><s>v2：按压 scale(.96)</s> → v3：opacity .55</h4><p>iOS 的按压语言是「变暗」不是「缩小」。缩放保留给拨杆 knob 和发送键这类拟物件，文字按钮一律变暗。</p></div></div>
+      <div class="rc"><span class="x"><svg class="i" viewBox="0 0 24 24" style="width:11px;height:11px"><path d="M12 5v14M5 12h14"/></svg></span><div><h4><s>v2：0.5px 描边胶囊</s> → v3：fill 填充无描边</h4><p>UIButton.Configuration 的灰色填充比描边更「原生」。描边只留给分隔线（0.5px inset separator），这是 iOS 的层级分工。</p></div></div>
+      <div class="rc"><span class="x"><svg class="i" viewBox="0 0 24 24" style="width:11px;height:11px"><path d="M12 5v14M5 12h14"/></svg></span><div><h4><s>v2：菜单行灰底 hover</s> → v3：tint 反白</h4><p>macOS 菜单语言：hover 行整行吃 tint 色、文字图标全部反白。选中标记从「图标块变实心」改为左侧 checkmark 染色，与菜单语法一致。</p></div></div>
+      <div class="rc"><span class="x"><svg class="i" viewBox="0 0 24 24" style="width:11px;height:11px"><path d="M12 5v14M5 12h14"/></svg></span><div><h4><s>v2：图标墨色</s> → v3：图标吃 tint</h4><p>iOS 里图标颜色 = 可交互的信号。三颗胶囊的图标统一 tint 色，文字保持 label 黑，一眼分出「图形是按钮、文字是状态」。</p></div></div>
+      <div class="rc"><span class="x"><svg class="i" viewBox="0 0 24 24" style="width:11px;height:11px"><path d="M12 5v14M5 12h14"/></svg></span><div><h4>拨杆轨道：品牌紫 vs systemGreen</h4><p>当前用品牌 tint（HIG 允许）。若要更「原生 iOS」可换 <code>#34C759</code>，代价是与产品内红涨绿跌的金融语义潜在冲突——建议保持紫色。</p></div></div>
+    </div>
+  </div>
+
+  <!-- ================= 5. 解剖 ================= -->
+  <div class="chapter">
+    <h2>5 · 知识库胶囊解剖</h2>
+    <p>2.1 倍放大下的构造。fill 材质、0.5px 分隔线、全圆角连续曲线。</p>
+    <div class="anat">
+      <div class="acard">
+        <div class="zone-legend">
+          <span><i>1</i>图标位 — 开关右侧数据集面板</span>
+          <span><i>2</i>名称位 — 下拉切换知识库</span>
+        </div>
+        <div class="zs">
+          <div class="dim"><span>175 × 32 · r16</span></div>
+          <div class="zoom2">
+          <div class="chip"><button class="zone z-icon"><svg class="i ic" viewBox="0 0 24 24"><ellipse cx="12" cy="5.5" rx="7" ry="2.8"/><path d="M5 5.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/><path d="M5 11.5v6c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-6"/></svg></button><span class="divider"></span><button class="zone z-value"><span class="val"><span class="v-cur">精选运营赛道流水</span></span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14.5l5-5 5 5"/><path d="M7 9.5l5 5 5-5" opacity=".45"/></svg></button></div>
+          </div>
+        </div>
+        <div class="dim-note"><span>fill rgba(120,120,128,.12)</span><span>分隔线 0.5×14</span><span>chevron 11 双线</span><span>名称 13 / 600</span></div>
+      </div>
+      <div class="acard">
+        <div class="spec-list">
+          <div class="sr"><b>height / radius</b><span><b>32px</b> 高 · <b>r16 全圆角</b>（连续曲线近似）· 热区通高，无内缩</span></div>
+          <div class="sr"><b>material</b><span>无描边 · <code>fill-2</code> 灰填充 → hover <code>fill</code> 加深 · 按压 opacity .55（100ms）</span></div>
+          <div class="sr"><b>divider</b><span>0.5×14px，<code>--sep-2</code>；任一区 hover/active 时淡出 120ms</span></div>
+          <div class="sr"><b>iconography</b><span>图标 15px / 1.7pt 描边，吃 <code>--tint</code>；chevron 用 iOS 上下双线款（下层 45% 透明度）</span></div>
+          <div class="sr"><b>typography</b><span>库名 <b>13px / 600</b>，超 150px 省略号；tooltip 超薄膜材质</span></div>
+          <div class="sr"><b>focus</b><span>键盘焦点 <code>inset 0 0 0 2px --tint</code>，只给当前热区</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 6. 动效与落地规格 ================= -->
+  <div class="chapter">
+    <h2>6 · 动效与落地规格</h2>
+    <table class="spec">
+      <tr><th style="width:140px">交互</th><th style="width:230px">参数</th><th>说明</th></tr>
+      <tr><td>热区 hover</td><td><code>150ms ease</code></td><td>fill-2 → fill，分隔线同帧淡出</td></tr>
+      <tr><td>按压</td><td><code>opacity .55 · 100ms</code></td><td>iOS 变暗语言；拨杆 knob 额外拉长 15%（20→23px）</td></tr>
+      <tr><td>拨杆切换</td><td><code>280ms spring</code></td><td><code>cubic-bezier(.5,1.25,.4,1)</code> 带轻微过冲；轨道换色 250ms ease</td></tr>
+      <tr><td>浮层入场</td><td><code>240ms spring · scale .86→1</code></td><td>UIContextMenu 生长动画，origin 钉锚点；关闭 130ms 淡出</td></tr>
+      <tr><td>菜单行 hover</td><td><code>80ms</code></td><td>整行 tint 反白（macOS 菜单语言），含图标块与 kbd</td></tr>
+      <tr><td>值切换</td><td><code>200ms ease</code></td><td>旧值上移 9px 淡出，新值自下而上</td></tr>
+      <tr><td>chevron 翻转</td><td><code>220ms spring</code></td><td>上下双线款，翻转 180°，与浮层同帧</td></tr>
+      <tr><td>右侧面板</td><td><code>340ms ease</code></td><td><code>translateX(102%)→0</code>，图标位 tint 软底同步点亮</td></tr>
+    </table>
+    <table class="spec" style="margin-top:14px">
+      <tr><th style="width:140px">落地映射</th><th>说明</th></tr>
+      <tr><td>组件拆分</td><td>与 v2 相同：<code>ComposerChips.tsx</code>（<code>&lt;Chip&gt;</code> 外壳 + <code>KbChip</code> / <code>WebChip</code> / <code>AnalysisChip</code> + 共用 <code>&lt;PopLayer&gt;</code>）——交互结构没变，只换材质与动效</td></tr>
+      <tr><td>token</td><td><code>--fill* → --da-fill*</code>（新增）· <code>--sep* → --da-border*</code> · <code>--label* → --da-text*</code> · <code>--material</code> 需声明 blur 降级方案</td></tr>
+      <tr><td>材质降级</td><td><code>@supports not (backdrop-filter)</code> 或 <code>prefers-reduced-transparency</code>：浮层/角标/tooltip 退回不透明 <code>--surface</code> + 描边</td></tr>
+      <tr><td>keyboard</td><td><code>⌘D</code> 面板 · <code>⌘K</code> 知识库浮层 · <code>Esc</code> 关闭 · Tab 焦点 2px tint 内环</td></tr>
+      <tr><td>不做什么</td><td>无光晕 / 无呼吸 / 无渐变文字；按压不用 scale（拟物件除外）；拨杆不用 systemGreen（与金融红绿语义冲突）</td></tr>
+    </table>
+  </div>
+
+  <div class="foot">Composer 控件 v3 · iOS 语言 · 2026-11-16 · 规格对齐 Apple HIG（UISwitch / UIContextMenu / Inset-Grouped / UIButton.Configuration / Materials）· 第一节为可操作 demo · 右上角查看深色</div>
+</div>
+
+<script>
+(function(){
+  var $=function(id){return document.getElementById(id)};
+  var kbChip=$('kbChip'),kbPop=$('kbPop'),anChip=$('anChip'),anPop=$('anPop'),
+      webChip=$('webChip'),panel=$('panel');
+  function closePops(){kbPop.classList.remove('show');anPop.classList.remove('show');kbChip.classList.remove('open');anChip.classList.remove('open');}
+  $('kbMenuBtn').addEventListener('click',function(e){
+    e.stopPropagation();
+    var willOpen=!kbPop.classList.contains('show');
+    closePops();
+    if(willOpen){kbPop.classList.add('show');kbChip.classList.add('open');}
+  });
+  $('kbPanelBtn').addEventListener('click',function(e){
+    e.stopPropagation();togglePanel();
+  });
+  function togglePanel(force){
+    var show=typeof force==='boolean'?force:!panel.classList.contains('show');
+    panel.classList.toggle('show',show);
+    $('demo').classList.toggle('with-panel',show);
+    $('kbPanelBtn').classList.toggle('seg-on',show);
+  }
+  $('kbFoot').addEventListener('click',function(e){e.stopPropagation();closePops();togglePanel(true);});
+  function swapVal(holder,text){
+    var cur=holder.querySelector('.v-cur');
+    if(!cur||cur.textContent===text)return;
+    var next=document.createElement('span');
+    next.className='v-next';next.textContent=text;
+    holder.appendChild(next);
+    requestAnimationFrame(function(){requestAnimationFrame(function(){
+      cur.classList.add('out');next.classList.add('in');
+    });});
+    setTimeout(function(){cur.remove();next.className='v-cur';},240);
+  }
+  Array.prototype.forEach.call(kbPop.querySelectorAll('.opt'),function(opt){
+    opt.addEventListener('click',function(e){
+      e.stopPropagation();
+      kbPop.querySelectorAll('.opt').forEach(function(o){o.classList.remove('sel')});
+      opt.classList.add('sel');
+      var name=opt.getAttribute('data-kb');
+      swapVal($('kbVal'),name);
+      $('panelName').textContent=name;
+      closePops();
+    });
+  });
+  $('webBtn').addEventListener('click',function(e){
+    e.stopPropagation();webChip.classList.toggle('on');
+  });
+  $('anBtn').addEventListener('click',function(e){
+    e.stopPropagation();
+    var willOpen=!anPop.classList.contains('show');
+    closePops();
+    if(willOpen){anPop.classList.add('show');anChip.classList.add('open');}
+  });
+  Array.prototype.forEach.call(anPop.querySelectorAll('.an-opt'),function(opt){
+    opt.addEventListener('click',function(e){
+      e.stopPropagation();
+      anPop.querySelectorAll('.an-opt').forEach(function(o){o.classList.remove('sel')});
+      opt.classList.add('sel');
+      swapVal($('anVal'),opt.getAttribute('data-an'));
+      closePops();
+    });
+  });
+  document.addEventListener('click',function(e){
+    if(!e.target.closest('.chipwrap'))closePops();
+  });
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape')closePops();
+    if((e.metaKey||e.ctrlKey)&&String(e.key).toLowerCase()==='d'){e.preventDefault();closePops();togglePanel();}
+    if((e.metaKey||e.ctrlKey)&&String(e.key).toLowerCase()==='k'){e.preventDefault();closePops();kbPop.classList.add('show');kbChip.classList.add('open');}
+  });
+  var q=new URLSearchParams(location.search);
+  if(q.get('theme')==='dark')document.documentElement.dataset.theme='dark';
+  var s=q.get('s');
+  if(s==='kb'){kbPop.classList.add('show');kbChip.classList.add('open');}
+  if(s==='an'){anPop.classList.add('show');anChip.classList.add('open');}
+  if(s==='panel'){togglePanel(true);}
+  if(s==='off'){webChip.classList.remove('on');}
+})();
+</script>
+</body>
+</html>

@@ -2,6 +2,7 @@ package io.agentscope.dataagent.web.persistence.jpa;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -9,6 +10,7 @@ import org.springframework.test.context.TestPropertySource;
 
 @DataJpaTest
 @TestPropertySource(properties = {"spring.sql.init.mode=never"})
+@Tag("integration")
 class AgentVisibilityQueryTest {
     @Autowired AgentEntityRepository agents;
     @Autowired UserEntityRepository users;

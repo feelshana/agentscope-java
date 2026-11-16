@@ -1,5 +1,7 @@
 # agentscope-dataagent
 
+开发验证：[独立应用 CI](docs/guides/dataagent-ci.md)覆盖同版框架依赖、前后端测试与打包；CI 不自动部署，实际运行结果以 GitHub Actions 为准。
+
 当前问数由 Agent 按原生会话历史理解日期；平台不解析自然语言日期、不生成或注入日期范围。官方 Wren MCP 执行前会依据已发布 MDL 拦截带日期字段的事实/指标查询中缺少日期条件的聚合或去重 SQL，避免触达数据源。基础建模不自动创建视图，用户明确要求并确认结构后才通过原生文件确认创建；历史视图不处理。逐步耗时见 `logs/archive-20261020/execution-timing.log`。
 
 
@@ -338,6 +340,7 @@ mvn spotless:check
 | 配置 | 默认与用途 |
 | --- | --- |
 | `dataagent.model-services.encryption-key` | `DATAAGENT_MODEL_ENCRYPTION_KEY`，空值时在实际 HOME 生成独立主密钥文件；需与平台库配套备份 |
+| `dataagent.dashboard.max-output-tokens` | `DATAAGENT_DASHBOARD_MAX_OUTPUT_TOKENS=32768`：看板单次模型输出上限，可设1024–65536并满足所选模型限制；不是上下文窗口或最低输出量，增大上限不要求生成更多内容 |
 | `dataagent.auth.password-login-enabled` | `DATAAGENT_PASSWORD_LOGIN_ENABLED=true`；prod 强制关闭密码入口 |
 | `dataagent.auth.bi.enabled` / `shared-key` | `DATAAGENT_BI_LOGIN_ENABLED=false`、`DATAAGENT_BI_SHARED_KEY`；prod 启用 BI，独立于 JWT 密钥 |
 
@@ -350,3 +353,5 @@ Spring Boot 4 使用 `spring.web.error.include-message=always` 保留业务校�
 `DATAAGENT_BI_ACCOUNT_LOGIN_ENABLED=false`：默认关闭，显式开启后从同源BI Local Storage读取username/account，关闭旧票据入口；这是已接受客户端身份信任前提的接入，不是可信SSO。平台角色只取数据库。浏览器路径计划 `/dify/dataagent/`，打包前设置 `DATAAGENT_BASE_PATH`。人员导入、公共库、首次DDL/已有库升级及部署验收见[BI生产接入指引](docs/integration/bi-account-production.md)。
 
 Boot 4的JSON缓冲使用`spring.http.codecs.max-in-memory-size=50MB`，替代旧`spring.codec`名称；导入请求仍受5000条和字段长度校验。
+
+日常按改动选测、合并前完整验证的命令见[测试与CI指引](docs/guides/dataagent-ci.md#日常检查与完整检查)。原启动和部署方式保持不变。

@@ -1,6 +1,6 @@
 package io.agentscope.dataagent.dataset;
 
-import io.agentscope.dataagent.web.auth.UserStore;
+import io.agentscope.dataagent.runtime.auth.UserIdentity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetRepository;
 import io.agentscope.dataagent.web.persistence.jpa.ExternalDataSourceEntity;
 import io.agentscope.dataagent.web.persistence.jpa.ExternalDataSourceGrantRepository;
@@ -18,14 +18,14 @@ public class ExternalDataSourceAccess {
     private final ExternalDataSourceRepository sources;
     private final ExternalDataSourceGrantRepository grants;
     private final DatasetRepository datasets;
-    private final UserStore users;
+    private final UserIdentity users;
     private final DemoDataService demo;
 
     public ExternalDataSourceAccess(
             ExternalDataSourceRepository sources,
             ExternalDataSourceGrantRepository grants,
             DatasetRepository datasets,
-            UserStore users,
+            UserIdentity users,
             DemoDataService demo) {
         this.sources = sources;
         this.grants = grants;
@@ -35,12 +35,11 @@ public class ExternalDataSourceAccess {
     }
 
     public boolean isAdmin(String actor) {
-        return actor != null && users.findById(actor).map(u -> u.hasRole("admin")).orElse(false);
+        return users.isAdministrator(actor);
     }
 
     public void requireUser(String actor) {
-        if (actor == null || users.findById(actor).isEmpty())
-            throw new DatasetException("请重新登录后操作", 401);
+        if (!users.exists(actor)) throw new DatasetException("请重新登录后操作", 401);
     }
 
     public boolean canGovern(String actor, ExternalDataSourceEntity source) {

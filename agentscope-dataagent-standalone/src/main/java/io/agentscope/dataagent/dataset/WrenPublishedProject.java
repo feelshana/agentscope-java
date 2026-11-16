@@ -173,7 +173,7 @@ public final class WrenPublishedProject {
             String phase,
             long start,
             String status) {
-        io.agentscope.dataagent.web.middleware.ExecutionTimingMiddleware.record(
+        io.agentscope.dataagent.runtime.observability.ExecutionTimingMiddleware.record(
                 context, phase, "", start, status);
     }
 

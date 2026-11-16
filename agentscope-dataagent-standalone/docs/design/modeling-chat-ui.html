@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>对话建模 · UI 精修稿</title>
+<style>
+:root{
+  --primary:#6654ce; --primary-hover:#5542b7; --primary-subtle:#f3f0fc; --primary-soft:#eeebfa;
+  --surface:#fff; --sunken:#f2f3f6; --canvas:#fbfbfd; --sidebar:#f6f7fa;
+  --border:#e5e7ef; --border-strong:#dddfe7;
+  --text:#303442; --text-2:#4f5563; --text-3:#667085; --muted:#737887;
+  --success:#15803d; --warn:#b45309; --danger:#dc2626;
+  --font:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif;
+  --mono:'Geist Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#f4f5f8;color:var(--text);font-family:var(--font);-webkit-font-smoothing:antialiased}
+.page{max-width:1180px;margin:0 auto;padding:38px 28px 80px}
+.eyebrow{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--primary)}
+h1{font-size:27px;line-height:1.25;letter-spacing:-.02em;margin:8px 0 10px}
+.lede{font-size:13.5px;line-height:1.85;color:var(--text-3);max-width:760px;margin:0 0 30px}
+.lede b{color:var(--text-2);font-weight:650}
+
+.row{display:flex;gap:28px;align-items:flex-start;margin:0 0 46px}
+.stage{width:800px;flex:none;background:var(--surface);border:1px solid var(--border);border-radius:18px;overflow:hidden;box-shadow:0 1px 2px rgba(16,24,42,.04),0 30px 60px -50px rgba(16,24,42,.6)}
+.notes{flex:1;min-width:0;padding-top:4px}
+.notes h3{font-size:13px;font-weight:700;letter-spacing:-.01em;margin:0 0 10px;display:flex;align-items:center;gap:7px}
+.notes h3 i{width:18px;height:18px;border-radius:6px;background:var(--primary-subtle);color:var(--primary);display:grid;place-items:center;font-style:normal;font-size:10px;font-weight:700}
+.notes ul{margin:0 0 18px;padding:0 0 0 2px;list-style:none}
+.notes li{position:relative;padding-left:13px;font-size:12.5px;line-height:1.75;color:var(--text-3);margin-bottom:7px}
+.notes li::before{content:'';position:absolute;left:2px;top:8px;width:3px;height:3px;border-radius:50%;background:#c9ccd6}
+.notes li b{color:var(--text-2);font-weight:650}
+.notes .kv{font-family:var(--mono);font-size:11px;color:var(--muted);background:var(--sunken);border-radius:5px;padding:1px 5px}
+
+/* ============ 对话面板（1:1 复刻产品组件） ============ */
+.panel{display:flex;flex-direction:column;height:100%;background:var(--canvas)}
+.phead{height:44px;flex:none;display:flex;align-items:center;gap:9px;padding:0 14px;border-bottom:1px solid var(--border);background:var(--surface)}
+.phead b{font-size:13px;font-weight:650}
+.phead .sp{flex:1}
+.pill{display:inline-flex;align-items:center;gap:5px;height:21px;padding:0 8px;border-radius:999px;background:var(--sunken);font-size:11px;font-weight:600;color:var(--muted)}
+.pill .dot{width:5px;height:5px;border-radius:50%;background:currentColor}
+.pill.live{background:var(--primary-subtle);color:var(--primary)}
+.mini{border:1px solid var(--border);background:var(--surface);color:var(--text-3);border-radius:7px;height:24px;padding:0 9px;font:inherit;font-size:11.5px;cursor:pointer}
+
+.thread{flex:1;display:flex;flex-direction:column;gap:20px;padding:22px 34px 6px;overflow:hidden}
+.bot{display:flex;gap:10px;align-items:flex-start}
+.avatar{flex:0 0 30px;width:30px;height:30px;border-radius:10px;background:linear-gradient(150deg,#7A66DC,#5B47C0);color:#fff;font-size:11.5px;font-weight:700;letter-spacing:.02em;display:inline-flex;align-items:center;justify-content:center;margin-top:1px;box-shadow:0 2px 6px -1px rgba(102,84,206,.45),inset 0 1px 0 rgba(255,255,255,.22)}
+.bubble{flex:1;min-width:0;background:var(--surface);border:1px solid color-mix(in srgb,var(--primary) 8%,var(--border));border-radius:14px;padding:14px 16px;font-size:13.5px;line-height:1.72;color:var(--text);box-shadow:0 1px 2px rgba(16,24,42,.04),0 12px 30px -26px rgba(16,24,42,.5)}
+.bubble p{margin:0 0 9px}
+.bubble p:last-child{margin-bottom:0}
+.user{align-self:flex-end;max-width:78%;background:color-mix(in srgb,var(--primary) 7%,var(--surface));border:1px solid color-mix(in srgb,var(--primary) 14%,transparent);border-radius:16px 16px 6px 16px;padding:9px 14px;font-size:13.5px;line-height:1.65;box-shadow:0 1px 2px rgba(16,24,42,.03)}
+
+/* 过程折叠：小胶囊，hover 才亮 */
+.fold{display:inline-flex;align-items:center;gap:6px;border:1px solid transparent;border-radius:999px;padding:3px 10px 3px 7px;margin:-3px 0 6px -7px;background:none;font:inherit;font-size:12px;color:var(--muted);cursor:pointer;transition:background .14s,border-color .14s}
+.fold:hover{background:var(--sunken);border-color:var(--border)}
+.fold .car{font-size:9px;color:#a6aab6}
+
+/* 步骤行 */
+.steps{margin:8px 0 2px;padding-left:0;display:flex;flex-direction:column;gap:1px}
+.step{display:flex;align-items:center;gap:8px;padding:4px 6px;margin:0 -6px;border-radius:7px;font-size:12px}
+.step:hover{background:var(--sunken)}
+.step .st{display:inline-flex;align-items:center;gap:4px;min-width:52px;flex:none;font-size:11.5px;font-weight:600;opacity:.85}
+.step .st.ok{color:var(--success)}
+.step .st.wait{color:var(--warn)}
+.step .st.fail{color:var(--danger)}
+.step .lb{color:var(--text-2);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.step .lb em{font-style:normal;color:#a6aab6}
+
+/* 结论卡 */
+.reso{margin-top:12px;border:1px solid color-mix(in srgb,var(--primary) 8%,var(--border));border-radius:12px;overflow:hidden;background:var(--surface)}
+.reso-h{display:flex;align-items:center;gap:10px;padding:7px 10px 7px 12px;border-bottom:1px solid var(--border)}
+.reso-ic{width:20px;height:20px;border-radius:6px;background:var(--primary-subtle);color:var(--primary);font-size:11px;font-weight:700;display:grid;place-items:center;flex:none}
+.reso-t{font-size:13px;font-weight:650;white-space:nowrap}
+.chips{display:inline-flex;gap:5px;min-width:0;overflow:hidden;flex:none}
+.chip{padding:1px 7px;border-radius:999px;background:var(--sunken);font-size:11.5px;line-height:1.6;color:var(--text-2);white-space:nowrap}
+.reso-t2{flex:1;min-width:4px}
+.reso-note{flex:none;font-size:11.5px;color:var(--muted);white-space:nowrap}
+.reso-car{font-size:9px;color:var(--muted);transform:rotate(90deg);margin-left:-3px}
+.reso-link{flex:none;border:0;border-radius:7px;background:none;color:var(--primary);padding:5px 8px;font:inherit;font-size:11.5px;font-weight:600;white-space:nowrap;cursor:pointer}
+.reso-link:hover{background:var(--primary-subtle)}
+.reso-body{padding:9px 12px 10px}
+.item{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed color-mix(in srgb,var(--border) 70%,transparent)}
+.item:last-child{border-bottom:0}
+.item .ic{width:18px;height:18px;border-radius:5px;background:var(--sunken);color:var(--text-3);font-size:10px;font-weight:700;display:grid;place-items:center;flex:none}
+.item .nm{font-family:var(--mono);font-size:12px;color:var(--text)}
+.item .tag{margin-left:auto;font-size:10.5px;color:var(--muted)}
+.item .up{color:var(--success);font-size:10.5px;font-weight:600}
+
+/* 拍板卡 */
+.ask{margin-top:12px;border:1px solid color-mix(in srgb,var(--primary) 20%,var(--border));border-left:3px solid var(--primary);border-radius:12px;padding:12px 14px 13px;background:color-mix(in srgb,var(--primary) 3%,var(--surface))}
+.ask-h{display:flex;align-items:center;gap:8px}
+.ask-h strong{font-size:13px;font-weight:650}
+.ask-c{padding:1px 8px;border-radius:999px;background:var(--primary-subtle);color:var(--primary);font-size:11.5px;font-weight:600;font-variant-numeric:tabular-nums}
+.ask-h span.mut{font-size:11.5px;color:var(--muted)}
+.ask-q{margin:8px 0 3px;font-size:14px;font-weight:550;line-height:1.55}
+.ask-basis{font-size:12px;color:var(--muted);line-height:1.55;margin-bottom:4px}
+.opt{display:flex;gap:9px;align-items:flex-start;padding:7px 10px;border-radius:9px;cursor:pointer;margin-top:3px;font-size:13px;transition:background .14s,box-shadow .14s}
+.opt:hover{background:var(--sunken)}
+.opt.on{background:color-mix(in srgb,var(--primary) 6%,var(--surface));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--primary) 26%,transparent)}
+.radio{width:14px;height:14px;border-radius:50%;border:1.5px solid #b9bccb;background:var(--surface);flex:none;margin-top:3px;position:relative}
+.opt.on .radio{border-color:var(--primary);background:var(--primary);box-shadow:inset 0 0 0 2.5px var(--surface)}
+.opt .tx{flex:1;min-width:0}
+.opt .rule{display:block;margin-top:1px;font-size:12px;color:var(--muted)}
+.badge{display:inline-block;margin-left:6px;padding:0 6px;border-radius:999px;background:var(--primary-subtle);color:var(--primary);font-size:10.5px;font-weight:600;vertical-align:1px}
+.ask-a{display:flex;gap:8px;align-items:center;margin-top:10px}
+.btn{height:29px;padding:0 13px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text-2);font:inherit;font-size:12.5px;font-weight:550;cursor:pointer}
+.btn.pri{border-color:var(--primary);background:var(--primary);color:#fff;font-weight:600;box-shadow:0 1px 2px rgba(102,84,206,.3)}
+.btn.pri:hover{background:var(--primary-hover)}
+
+/* 输入区 */
+.composer{flex:none;display:flex;flex-direction:column;gap:8px;padding:8px 34px 14px;background:var(--canvas)}
+.composer .chips-line{display:flex;gap:6px}
+.attach{border:1px dashed color-mix(in srgb,var(--primary) 28%,var(--border));background:transparent;color:var(--text-3);border-radius:999px;padding:5px 11px;font:inherit;font-size:12px;cursor:pointer}
+.attach:hover{border-color:color-mix(in srgb,var(--primary) 40%,var(--border));color:var(--primary);background:color-mix(in srgb,var(--primary) 4%,transparent)}
+.crow{display:flex;align-items:flex-end;gap:8px}
+.input{flex:1;min-height:54px;border:1px solid var(--border);border-radius:16px;padding:13px 15px;font-size:13.5px;line-height:1.6;color:var(--text);background:var(--surface);box-shadow:0 1px 2px rgba(16,24,42,.04),0 10px 26px -24px rgba(16,24,42,.55)}
+.input.ph{color:#9ea1ad}
+.input.off{background:var(--sunken);border-color:color-mix(in srgb,var(--border) 70%,transparent);box-shadow:none;color:#a6aab6}
+.input.focus{border-color:color-mix(in srgb,var(--primary) 52%,var(--border));box-shadow:0 0 0 4px color-mix(in srgb,var(--primary) 9%,transparent),0 1px 2px rgba(16,24,42,.04)}
+.send{width:40px;height:40px;border-radius:999px;border:0;background:var(--primary);color:#fff;display:grid;place-items:center;font-size:15px;flex:none;box-shadow:0 2px 8px -2px rgba(102,84,206,.55),inset 0 1px 0 rgba(255,255,255,.18);cursor:pointer}
+.send.off{background:var(--sunken);color:var(--muted);box-shadow:none;cursor:not-allowed}
+
+/* 空态 */
+.welcome{background:var(--surface);border:1px solid color-mix(in srgb,var(--primary) 8%,var(--border));border-radius:16px;padding:20px 22px;box-shadow:0 1px 2px rgba(16,24,42,.04),0 20px 44px -38px rgba(16,24,42,.55)}
+.welcome .wt{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:650}
+.welcome .wd{font-size:13px;color:var(--text-3);line-height:1.75;margin:8px 0 12px}
+.ex{display:flex;flex-direction:column;gap:3px;width:100%;text-align:left;padding:10px 13px;border:1px solid var(--border);border-radius:11px;background:var(--surface);color:var(--text-2);font:inherit;font-size:13px;line-height:1.55;cursor:pointer;margin-bottom:7px;transition:border-color .16s,background .16s,transform .16s}
+.ex:hover{border-color:color-mix(in srgb,var(--primary) 35%,var(--border));background:color-mix(in srgb,var(--primary) 3%,var(--surface));transform:translateY(-1px)}
+.ex b{color:var(--text);font-weight:650;font-size:13.5px;letter-spacing:-.01em}
+.ex span{font-size:12.5px;color:var(--text-3);line-height:1.5}
+
+/* 进度卡 */
+.prog{margin-bottom:10px;padding:13px 14px 11px;border-radius:12px;background:var(--sunken);border:1px solid var(--border)}
+.track{display:flex;list-style:none;margin:0;padding:0}
+.track li{flex:1;display:flex;flex-direction:column;gap:6px;min-width:0}
+.tt{display:flex;align-items:center}
+.tdot{width:22px;height:22px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:11px;font-weight:700;background:var(--surface);border:1.5px solid var(--border-strong);color:#a6aab6}
+.track li.done .tdot{background:var(--success);border-color:var(--success);color:#fff}
+.track li.cur .tdot{background:var(--primary);border-color:var(--primary);color:#fff;box-shadow:0 0 0 3.5px var(--primary-subtle)}
+.tline{flex:1;height:2px;margin:0 7px;border-radius:1px;background:var(--border)}
+.track li.done .tline{background:var(--success)}
+.tlb{font-size:11.5px;color:var(--muted);font-weight:550;white-space:nowrap}
+.track li.done .tlb{color:var(--success)}
+.track li.cur .tlb{color:var(--primary);font-weight:650}
+.now{display:flex;align-items:center;gap:10px;margin-top:13px;padding:10px 12px;border-radius:10px;background:var(--surface);border:1px solid var(--border)}
+.spinner{width:14px;height:14px;border-radius:50%;border:2px solid var(--border);border-top-color:var(--primary);flex:none;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.now .what{flex:1;min-width:0;font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.now .meta{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+.slabel{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#9a9eac;margin:0 0 12px;padding-left:2px}
+.spec{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:0 0 44px}
+.specc{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px}
+.specc h4{margin:0 0 8px;font-size:12.5px;font-weight:700}
+.specc p{margin:0 0 6px;font-size:12px;line-height:1.7;color:var(--text-3)}
+.specc .sw{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--muted);margin-top:5px}
+.specc .sw i{width:16px;height:16px;border-radius:5px;display:block;border:1px solid rgba(0,0,0,.06)}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="eyebrow">Semantic Modeling · Chat UI</div>
+  <h1>对话建模：把「过程」收起来，把「结论」端出来</h1>
+  <p class="lede">
+    功能、话术、状态全部不变，只重做视觉。核心是<b>三段式节奏</b>：过程（可折叠、可忽略）→ 正文（可读的宽 780）→ 卡片（要你动手的东西，用左侧色轨 + 底色区分口径与授权）。
+    对照 <span class="kv">ModelingChatPanel.tsx</span> 的 <span class="kv">S</span> 与本次新增的 <span class="kv">modeling-chat.css</span>。
+  </p>
+
+  <!-- ============ A · 一轮完整回复 ============ -->
+  <p class="slabel">A · 一轮完成的回复</p>
+  <div class="row">
+    <div class="stage">
+      <div class="panel">
+        <div class="phead">
+          <b>建模助手</b><span class="pill"><span class="dot"></span>空闲</span>
+          <span class="sp"></span>
+          <button class="mini">加宽</button><button class="mini">收起</button>
+        </div>
+        <div class="thread">
+          <div class="user">订单表按顾客编号关联顾客表，每笔订单对应一个顾客；有效订单默认排除已取消的。</div>
+          <div class="bot">
+            <span class="avatar">AI</span>
+            <div class="bubble">
+              <button class="fold"><span class="car">▸</span>建模过程 · 14 步（读取 6 · 检查 3 · 写入 3 · 提问 2）</button>
+              <p>已核对两件事：顾客表<b>一行一个顾客</b>，订单表一行一个订单，所以按顾客编号连是 N:1；已售金额取 <span class="kv">amount_paid</span>，退款与运费不动。<br>这两处口径会影响统计结果，你确认后我才发布。</p>
+              <section class="reso">
+                <div class="reso-h">
+                  <span class="reso-ic">写</span>
+                  <span class="reso-t">AI建模结果</span>
+                  <span class="chips"><span class="chip">模型 4</span><span class="chip">关系 5</span><span class="chip">业务语义 3</span></span>
+                  <span class="reso-t2"></span>
+                  <span class="reso-note">草稿 · 发布后生效</span>
+                  <span class="reso-car">▶</span>
+                  <button class="reso-link">在语义模型中查看 →</button>
+                </div>
+                <div class="reso-body">
+                  <div class="item"><span class="ic">模</span><span class="nm">orders</span><span class="tag">18 列</span><span class="up">+2 列</span></div>
+                  <div class="item"><span class="ic">关</span><span class="nm">orders → users</span><span class="tag">N:1 · user_id</span><span class="up">新增</span></div>
+                  <div class="item"><span class="ic">规</span><span class="nm">有效订单</span><span class="tag">排除已取消</span><span class="up">新增</span></div>
+                </div>
+              </section>
+              <section class="ask">
+                <div class="ask-h">
+                  <strong>需要你确定</strong>
+                  <span class="ask-c">1/3</span>
+                  <span class="mut">会影响统计结果</span>
+                </div>
+                <div class="ask-q">订单金额按「支付金额」还是「下单金额」统计？</div>
+                <div class="ask-basis">依据：业务文档《订单口径_v3.md》写明 GMV 不含运费、不含退款。</div>
+                <label class="opt on">
+                  <span class="radio"></span>
+                  <span class="tx">按支付金额<span class="badge">推荐</span><span class="rule">已扣退款和运费，与财务月报一致</span></span>
+                </label>
+                <label class="opt">
+                  <span class="radio"></span>
+                  <span class="tx">按下单金额<span class="rule">未扣退款，与销售业绩表一致</span></span>
+                </label>
+                <label class="opt">
+                  <span class="radio"></span>
+                  <span class="tx">自己写</span>
+                </label>
+                <div class="ask-a">
+                  <button class="btn pri">确定</button>
+                  <button class="btn">稍后</button>
+                  <span style="font-size:11.5px;color:var(--muted)">3 题一起交给我，改口径不用重来</span>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+        <div class="composer">
+          <div class="chips-line"><button class="attach">＋ 添加业务文档（可选）</button></div>
+          <div class="crow">
+            <div class="input ph off">回答助手的口径问题，或反馈需要修正的内容…</div>
+            <button class="send off">↑</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <h3><i>A</i>改了什么</h3>
+      <ul>
+        <li><b>阅读宽 780 居中</b>：原来气泡铺满 1100px，一行 90 多字根本读不动；现在左右留白，正文一眼能扫。</li>
+        <li><b>过程降级成一颗胶囊</b>：14 步默认折叠，`▸ 建模过程 · 14 步（读取 6 · 检查 3…）`，hover 才亮起可点。原来一眼 14 行「完成 …」把结论压到看不见。</li>
+        <li><b>结论卡从「表格头」变「成果条」</b>：加「写」图标块，统计从 `模型 4 · 关系 5` 一行小字改成三颗胶囊，右侧箭头随展开旋转。</li>
+        <li><b>拍板卡用左侧 3px 紫轨 + 3% 紫底</b>：和写入授权卡（同款紫轨）形成一组，一眼知道「这里要我动手」；口径卡与授权卡不再靠边框颜色硬区分。</li>
+        <li><b>选项行整行可点</b>：hover 浮灰底、选中 `6% 紫底 + 1px 内描边`，自绘圆点比原生 radio 更整齐。</li>
+      </ul>
+      <h3><i>1</i>尺寸</h3>
+      <ul>
+        <li>气泡：圆角 <span class="kv">14</span>、内距 <span class="kv">14/16</span>、字号 <span class="kv">13.5/1.72</span></li>
+        <li>头像：<span class="kv">30×30 r10</span>，`#7A66DC→#5B47C0` 渐变 + 内高光</li>
+        <li>卡片间距：消息 <span class="kv">20</span>，卡内 <span class="kv">12</span>，卡与正文 <span class="kv">12</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ============ B · 运行中 ============ -->
+  <p class="slabel">B · 助手正在干活</p>
+  <div class="row">
+    <div class="stage">
+      <div class="panel">
+        <div class="phead"><b>建模助手</b><span class="pill live"><span class="dot"></span>运行中</span><span class="sp"></span><button class="mini">停止</button></div>
+        <div class="thread">
+          <div class="user">把 GMV、复购率的口径写进模型</div>
+          <div class="bot">
+            <span class="avatar">AI</span>
+            <div class="bubble">
+              <div class="prog">
+                <ol class="track">
+                  <li class="done"><div class="tt"><span class="tdot">✓</span><span class="tline"></span></div><span class="tlb">读取资料</span></li>
+                  <li class="done"><div class="tt"><span class="tdot">✓</span><span class="tline"></span></div><span class="tlb">确定口径</span></li>
+                  <li class="cur"><div class="tt"><span class="tdot">3</span><span class="tline"></span></div><span class="tlb">写入草稿</span></li>
+                  <li><div class="tt"><span class="tdot">4</span></div><span class="tlb">校验编译</span></li>
+                </ol>
+                <div class="now">
+                  <span class="spinner"></span>
+                  <span class="what">写入 metrics.yml（GMV、复购率）</span>
+                  <span class="meta">已用 42 秒 · 9 步</span>
+                </div>
+              </div>
+              <p>前两步已经跑完：读了 16 天、10 张表的采样，口径按你刚才选的三项定下来了。现在在写草稿。</p>
+            </div>
+          </div>
+        </div>
+        <div class="composer">
+          <div class="crow">
+            <div class="input ph off">建模助手思考中…</div>
+            <button class="send off">↑</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <h3><i>B</i>改了什么</h3>
+      <ul>
+        <li><b>进度卡有了边界</b>：`sunken` 底 + 1px 描边 + r12，四段轨道从「飘在白卡上」变成一组信息。</li>
+        <li><b>当前动作用白底条</b>，浮在灰底上，视觉焦点落在「正在写什么」，而不是四个圆点。</li>
+        <li><b>时间与步数用等宽数字</b>（tabular-nums），跳秒时不会左右抖。</li>
+        <li><b>输入框变灰提示</b>「思考中…」+ 发送键禁用，避免用户以为能插话。</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ============ C · 空态 + 输入态 ============ -->
+  <p class="slabel">C · 空态与输入区状态</p>
+  <div class="row">
+    <div class="stage">
+      <div class="panel">
+        <div class="phead"><b>建模助手</b><span class="pill"><span class="dot"></span>空闲</span><span class="sp"></span><button class="mini">收起</button></div>
+        <div class="thread">
+          <div class="welcome">
+            <div class="wt"><span class="avatar" style="margin:0">AI</span>建模助手</div>
+            <div class="wd">用业务语言告诉我要改什么，我会改到语义模型里；改过的地方在图上标红，也会列进「待确认」。比如：</div>
+            <button class="ex"><b>增加术语</b><span>「金卡客户」指会员等级为金卡会员的客户</span></button>
+            <button class="ex"><b>增加规则</b><span>统计有效订单时，默认排除已取消的订单</span></button>
+            <button class="ex"><b>补充字段说明</b><span>给订单表的金额字段补充说明和单位</span></button>
+            <button class="ex"><b>新增关系</b><span>订单表按客户编号关联客户表，每笔订单对应一个客户</span></button>
+            <div class="wd" style="margin:12px 0 0">只在会影响统计结果的地方我才会问你；改动都进草稿，确认无误后在底部统一发布。</div>
+          </div>
+        </div>
+        <div class="composer">
+          <div class="chips-line"><button class="attach">＋ 添加业务文档（可选）</button></div>
+          <div class="crow">
+            <div class="input focus">把「复购率」定义成 90 天内下单 ≥2 次的客户占比，分母用有效订单</div>
+            <button class="send">↑</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <h3><i>C</i>改了什么</h3>
+      <ul>
+        <li><b>欢迎卡</b>：`16` 圆角、`20/22` 内距，示例按钮 hover 上浮 1px + 淡紫底，像可点的东西。</li>
+        <li><b>输入框 16 圆角</b>，聚焦时外扩 4px 紫环（`9%` 透明），不再是生硬的深色描边。</li>
+        <li><b>发送键改圆形 40</b>：有内容是主色实心，空/禁用是灰底——状态一眼可辨。</li>
+        <li><b>附件用虚线胶囊</b>：明确的「可选」，不会和正文按钮抢视线。</li>
+      </ul>
+      <h3><i>2</i>两个可选项</h3>
+      <ul>
+        <li>要不要给对话顶部加<b>毛玻璃渐隐</b>（滚动时文字从顶部淡出）？我已加到 <span class="kv">thread</span> 的 mask 里。</li>
+        <li>用户气泡目前是<b>淡紫</b>（7%），如果想要更实，改 <span class="kv">18%</span> 更跳。</li>
+      </ul>
+    </div>
+  </div>
+
+  <p class="slabel">落地参数</p>
+  <div class="spec">
+    <div class="specc">
+      <h4>颜色</h4>
+      <div class="sw"><i style="background:#6654ce"></i>主色 #6654ce · 胶囊/发送键/左轨</div>
+      <div class="sw"><i style="background:#f3f0fc"></i>主色淡 #f3f0fc · 图标块/计数/推荐</div>
+      <div class="sw"><i style="background:#e5e7ef"></i>描边 #e5e7ef · 与主色 8% 混合用于卡片</div>
+      <div class="sw"><i style="background:#f2f3f6"></i>沉底 #f2f3f6 · 统计胶囊/进度卡</div>
+    </div>
+    <div class="specc">
+      <h4>字号</h4>
+      <p>正文 13.5 / 行高 1.72；步骤 12.5；元信息 11.5；问题 14 / 550。</p>
+      <h4 style="margin-top:10px">圆角</h4>
+      <p>气泡 14、输入框 16、卡片 12、胶囊 999。</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -34,17 +34,18 @@ import io.agentscope.dataagent.dataset.DatasetGroupService;
 import io.agentscope.dataagent.dataset.DatasetScope;
 import io.agentscope.dataagent.dataset.MdlPublishService;
 import io.agentscope.dataagent.dataset.MdlSuggestionService;
+import io.agentscope.dataagent.dataset.MdlTypes;
 import io.agentscope.dataagent.dataset.MdlWorkspaceReader;
 import io.agentscope.dataagent.dataset.MdlWorkspaceService;
 import io.agentscope.dataagent.dataset.ModelingWorkflowService;
 import io.agentscope.dataagent.dataset.WrenCli;
 import io.agentscope.dataagent.dataset.WrenProperties;
+import io.agentscope.dataagent.runtime.session.ConversationScopeRegistry;
 import io.agentscope.dataagent.web.config.DataAgentConfig;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetRelationEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetRepository;
-import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
@@ -414,7 +415,7 @@ class ModelingToolkitTest {
                         null,
                         workflow);
         when(mdlPublish.validate(GROUP))
-                .thenReturn(new MdlPublishService.MdlValidation(true, List.of(), "", List.of()));
+                .thenReturn(new MdlTypes.MdlValidation(true, List.of(), "", List.of()));
         String inventory = guided.listModelingState(singleGroupScope(), null, null);
         String validation = guided.validateMdl(singleGroupScope(), null, null);
         assertTrue(inventory.contains("CONFIRMATION"));
@@ -1443,11 +1444,9 @@ class ModelingToolkitTest {
     void validateMdlRendersIssues() {
         when(mdlPublish.validate(GROUP))
                 .thenReturn(
-                        new MdlPublishService.MdlValidation(
+                        new MdlTypes.MdlValidation(
                                 false,
-                                List.of(
-                                        new MdlPublishService.MdlIssue(
-                                                "error", "关系引用了不存在的列", "local")),
+                                List.of(new MdlTypes.MdlIssue("error", "关系引用了不存在的列", "local")),
                                 "",
                                 List.of()));
 

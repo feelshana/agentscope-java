@@ -22,6 +22,7 @@ import io.agentscope.core.tool.ToolParam;
 import io.agentscope.dataagent.dataset.DatasetException;
 import io.agentscope.dataagent.dataset.FactQueryWindowPolicy;
 import io.agentscope.dataagent.dataset.MdlPublishService;
+import io.agentscope.dataagent.dataset.MdlTypes;
 import io.agentscope.dataagent.dataset.ModelingWorkflowStore;
 import io.agentscope.dataagent.dataset.WrenCli;
 import io.agentscope.dataagent.dataset.WrenProjectAccess;
@@ -274,7 +275,7 @@ public final class OfficialWrenToolkit {
     /** Splits a wren_cli call into lock wait, profile binding and CLI execution in timing logs. */
     private static void timed(
             RuntimeContext context, String phase, String op, long started, String status) {
-        io.agentscope.dataagent.web.middleware.ExecutionTimingMiddleware.record(
+        io.agentscope.dataagent.runtime.observability.ExecutionTimingMiddleware.record(
                 context, phase, op, started, status);
     }
 
@@ -316,12 +317,12 @@ public final class OfficialWrenToolkit {
         try {
             checks.record(
                     project.groupId(),
-                    new MdlPublishService.MdlValidation(
+                    new MdlTypes.MdlValidation(
                             result.ok(),
                             result.ok()
                                     ? List.of()
                                     : List.of(
-                                            new MdlPublishService.MdlIssue(
+                                            new MdlTypes.MdlIssue(
                                                     "error",
                                                     result.output(),
                                                     "wren_cli " + args.get(1))),

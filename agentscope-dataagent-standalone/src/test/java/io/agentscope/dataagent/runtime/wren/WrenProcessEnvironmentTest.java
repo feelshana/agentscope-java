@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -26,6 +27,7 @@ class WrenProcessEnvironmentTest {
     }
 
     @Test
+    @Tag("external")
     void installedWrenRunsCompatibilityRegressionSuite() throws Exception {
         String python = System.getProperty("dataagent.test.wren.python", "");
         assumeTrue(

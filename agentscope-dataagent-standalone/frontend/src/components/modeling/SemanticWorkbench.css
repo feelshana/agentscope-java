@@ -356,10 +356,13 @@
 .sw-rule-use { flex: none; display: inline-flex; align-items: center; gap: 3px; height: 20px; padding: 0 8px; border-radius: 999px; background: #f59e0b; color: #fff; font-size: 11px; font-weight: 600; white-space: nowrap; box-shadow: 0 1px 2px rgba(245, 158, 11, .35); }
 .sw-rule-use::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #fff; }
 
-.sw-field-group { margin: 10px 0; border-bottom: 1px solid var(--da-border); }
+.sw-field-group-wrap { position: relative; margin: 10px 0; }
+.sw-field-group { margin: 0; border-bottom: 1px solid var(--da-border); }
 .sw-field-group summary { cursor: pointer; padding: 9px 0; font-size: 13px; font-weight: 600; }
 .sw-field-group summary .sw-muted { margin-left: 5px; font-weight: 400; }
-.sw-add-calc { float: right; margin-top: 8px; position: relative; z-index: 1; }
+.sw-field-group-with-action summary { padding-right: 128px; min-height: 40px; box-sizing: border-box; }
+.sw-field-group-action { position: absolute; top: 0; right: 0; height: 40px; display: flex; align-items: center; }
+.sw-add-calc { min-height: 32px; padding: 0 8px; border-radius: 6px; white-space: nowrap; }
 .sw-code.sw-expression { background: var(--da-surface-sunken, #f3f5f8); color: var(--da-text); border: 1px solid var(--da-border); font-size: 13px; overflow-x: auto; white-space: pre; word-break: normal; }
 .sw-rules, .sw-rules .sw-rt { font-size: 13px; }
 .sw-rules .sw-lead, .sw-rules .sw-rt td { line-height: 1.65; overflow-wrap: anywhere; }

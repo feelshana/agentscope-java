@@ -1,21 +1,22 @@
-# 当前任务：对话中的只读知识库浏览（spec137）
+# 当前任务：仪表盘额度与发布整合
 
-2026-11-13 Asia/Shanghai，liyufan_dev起点7173edfb，工作区起点干净。用户已浏览本地效果，最新授权停止本轮后端、提交/push个人分支并合入远程develop-2.0；66由用户更新部署。
+2026-11-17 Asia/Shanghai。用户授权提交全部本地修改，验证后整合liyufan_dev和实际主线develop-2.0并推送，由用户部署66。整合工作区D:/da-r1117；原开发目录codex/architecture-phase1。本轮沿用spec141/142、ADR0149及架构ADR0144，不新增spec/ADR。
 
-## 范围
+## 已完成
 
-知识库选择按钮拆分书本查看/名称切换；右侧只读库概览→数据集预览/字段，复用当前QUERY接口与详情展示件，不扩大权限、不新增DDL/Agent执行/持久副本。工具详情互斥，保留输入/会话，按需加载和取消过期请求。
+- 本地功能提交7866772a，包含仪表盘、权限/完整删除、样板、长输出与取消修复；原主线876d899d的3个独立提交保留。
+- 看板默认输出上限32768，独立环境变量可调，不覆盖全局模型连接；16384实际输出14180/13817余量偏小，32768当前模型探针200、40405ms、12468tokens，HTML逐字一致。
+- 合并修正DatasetService构造器同时注入共享源授权和删除清理，补Spring装配行为测试；管理员回看改用迁移后的runtime.session。
+- 共享源身份判断依赖runtime.auth.UserIdentity，由原UserStore默认方法适配，保持原角色/用户数据；架构例外清单未放宽，旧纯mock夹具改执行真实默认方法。
+- Java17完整clean verify成功04:46：后端1164项，失败/错误0，条件跳过23；前端27文件三个前缀各129项；格式、TypeScript/Vite和JAR/tar.gz打包通过。
+- 报告校验成功：必需JPA/H2/市场集成4/1/7项无跳过。core Java17专项43、Python工具15及报告脚本6项通过。
+- 23条件跳过包含真实外部环境未启用及Windows不能创建symlink，不冒充全通过；此前真实Agent/浏览器范围见原报告。
+- 最终报告docs/test-reports/20261117-dashboard-release-integration.md；部署指引docs/guides/66-dashboard-upgrade.md。
 
-## 进度
+## 当前进度与下一步
 
-已完成ChatPanel独立图标、ChatPage互斥懒加载侧栏、KnowledgeDataPanel与共用DatasetReadOnlyTables。原详情页继续显式注入编辑回调，侧栏只读。spec137/ARCHITECTURE第11章已同步，无新ADR/DDL/接口。React规范/shared-memory/Playwright用于本轮。
-
-完整后端1160项0失败/错误、33条件跳过；前端三前缀各114项及build通过；最终Spotless/DocsConsistencyTest/package通过。真实本地样例、字段、原详情编辑取消、输入保留、侧栏互斥、切库、390px及模拟门户iframe通过；403/503/空库/挂起取消为故障注入。详见[验收报告](../test-reports/20261113-chat-knowledge-browser.md)。
-
-5173既有Vite保留；本轮8080服务重启后样例读取恢复，运行忽略目录稳定JAR副本，后端类无变更。浏览器已留只读面板供审阅，无本轮新Agent问答、字段写入或66操作。
-
-同日按用户反馈压紧数据集布局：库名单行、返回并入标题、说明默认一行可展开、页签/搜索同一行、表格自适应剩余高度和固定表头。真实商品预览在868px侧栏中表格约581px；390×700与模拟iframe通过。前端三前缀114项/build、后端门禁与package复验通过；服务未再重启，未增加接口/DDL。截图output/playwright/kb137-compact-*.png。
-
-## 下一步
-
-已停止本轮8080 Java进程36792，供用户在IDEA自行启动；保留既有5173。当前进行授权Git提交/推送/主线快进合并，实际提交号与结果以Git为准。此次spec136/137无新增DDL；共享数据源spec135若66尚未升级，仍需按既有升级指引补0146结构。流式生成期间交互、生产门户真人环境未实测。上一任务回看实现7173edfb一并推送，档案见archive/CURRENT_TASK-before-chat-kb-browser-20261113.md。
+- 本地整合验证完成，最后文档门禁后提交合并、快进主线并推送，实际远端状态须读Git确认，不把本条当成已推送记录。
+- 66共享数据源旧迁移是否执行未知；仪表盘本身不新增DDL，不改七表/六表cron，不初始化用户或替换密钥。
+- 本地样板的知识库/用户/已发布资产不随Git迁移，线上需单独导入建模生成发布，勿直接复制含本机ID的asset.json。
+- 本轮未操作66、未停止或接管用户IDEA/Vite。代码变更需重启服务才能加载；部署由用户执行deploy-formal.sh并现场验收。
+- GitHub Actions实际运行结果未核实，不以本地通过声称远端CI已绿。

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import type { CSSProperties } from 'react';
-import YamlContent from './YamlContent';
+import Icon from '../Icon';
+import ReadableCode from '../ReadableCode';
 import { readWorkspaceFile } from '../../api/semanticModeling';
 
 /**
@@ -28,67 +28,6 @@ interface Props {
   /** Shown when the selected entry has no backing file (e.g. unsynced workspace). */
   fallbackText?: string;
 }
-
-const S: Record<string, CSSProperties> = {
-  wrap: { display: 'flex', gap: 12, alignItems: 'stretch', minHeight: 260 },
-  list: {
-    width: 236,
-    flexShrink: 0,
-    border: '1px solid var(--da-border)',
-    borderRadius: 8,
-    background: 'var(--da-surface-sunken)',
-    padding: 6,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 2,
-    overflowY: 'auto',
-    maxHeight: 480,
-  },
-  item: {
-    border: 'none',
-    background: 'transparent',
-    textAlign: 'left',
-    cursor: 'pointer',
-    borderRadius: 8,
-    padding: '7px 9px',
-    display: 'block',
-    width: '100%',
-  },
-  itemOn: { background: 'var(--da-primary-subtle)' },
-  title: { fontWeight: 600, fontSize: '0.85rem', color: 'var(--da-text)', display: 'flex', alignItems: 'center', gap: 6 },
-  subtitle: { fontSize: '0.72rem', color: 'var(--da-text-3)', marginTop: 1 },
-  dirtyDot: {
-    width: 6,
-    height: 6,
-    borderRadius: '50%',
-    background: 'var(--da-warn)',
-    flexShrink: 0,
-  },
-  dirtyBadge: {
-    fontSize: '0.66rem',
-    color: 'var(--da-warn)',
-    border: '1px solid var(--da-warn)',
-    borderRadius: 8,
-    padding: '0 5px',
-    fontWeight: 400,
-  },
-  viewer: {
-    flex: 1,
-    minWidth: 0,
-    border: '1px solid var(--da-border)',
-    borderRadius: 8,
-    background: 'var(--da-surface)',
-    padding: 14,
-    overflow: 'auto',
-    maxHeight: 480,
-  },
-  filePath: {
-    fontFamily: 'var(--da-mono, monospace)',
-    fontSize: '0.72rem',
-    color: 'var(--da-text-3)',
-    marginBottom: 8,
-  },
-};
 
 export default function AssetYamlBrowser({
   groupId,
@@ -123,6 +62,7 @@ export default function AssetYamlBrowser({
     }
     let alive = true;
     setContent(null);
+    setError(null);
     readWorkspaceFile(groupId, file)
       .then(f => {
         if (!alive) return;
@@ -139,63 +79,47 @@ export default function AssetYamlBrowser({
   }, [groupId, selected?.file, bust]);
 
   if (entries.length === 0) {
-    return <div className="da-small">{emptyText}</div>;
+    return <p className="am-empty">{emptyText}</p>;
   }
 
   return (
-    <div style={S.wrap}>
-      <div style={S.list}>
+    <div className="am-browser">
+      <nav className="am-file-list" aria-label="资产文件"><div className="am-list-caption">{entries.length} 个条目 · 点击已选条目可刷新</div>
         {entries.map(e => {
           const on = e.key === selectedKey;
           return (
             <button
               key={e.key}
-              style={on ? { ...S.item, ...S.itemOn } : S.item}
+              type="button" aria-current={on ? 'true' : undefined}
               onClick={() => {
                 if (on) setBust(b => b + 1); // re-click refreshes from the workspace
                 onSelect(e.key);
               }}
             >
-              <span style={S.title}>
-                {e.dirty && <span style={S.dirtyDot} title="工作区有未发布变更" />}
-                <span
-                  style={{
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {e.title}
-                </span>
-                {e.dirty && <span style={S.dirtyBadge}>未发布</span>}
-              </span>
-              {e.subtitle && <div style={S.subtitle}>{e.subtitle}</div>}
+              <Icon name="file" size="sm" /><span><strong>{e.title}</strong>{e.subtitle && <small title={e.subtitle}>{e.subtitle}</small>}{e.dirty && <em className="am-dirty">未发布</em>}</span>
             </button>
           );
         })}
-      </div>
-      <div style={S.viewer}>
+      </nav>
+      <div className="am-viewer">
         {!selected ? (
-          <div className="da-small" style={{ color: 'var(--da-text-3)' }}>
+          <div className="am-empty">
             {emptyText}
           </div>
         ) : !selected.file ? (
-          <div className="da-small" style={{ color: 'var(--da-text-3)' }}>
+          <div className="am-empty">
             {fallbackText}
           </div>
         ) : error ? (
-          <div className="da-small" style={{ color: 'var(--da-danger)' }}>
-            {error}
+          <div className="am-error" role="alert">
+            <span>{error}</span><button type="button" className="da-btn" onClick={() => setBust(b => b + 1)}>重试</button>
           </div>
         ) : content === null ? (
-          <div className="da-small" style={{ color: 'var(--da-text-3)' }}>
+          <div className="am-empty" role="status">
             加载中…
           </div>
-        ) : (
-          <>
-            <div style={S.filePath}>{selected.file}</div>
-            <YamlContent text={content} />
-          </>
+        ) : !content.trim() ? <p className="am-empty">（空文件）</p> : (
+          <ReadableCode key={selected.file} text={content} language={selected.file.endsWith('.sql') ? 'sql' : selected.file.endsWith('.json') ? 'json' : 'yaml'} title={selected.file} />
         )}
       </div>
     </div>

@@ -31,16 +31,18 @@ import io.agentscope.dataagent.dataset.ModelingWorkflowStore;
 import io.agentscope.dataagent.dataset.ProcessWrenCli;
 import io.agentscope.dataagent.dataset.WrenProjectAccess;
 import io.agentscope.dataagent.dataset.WrenProperties;
+import io.agentscope.dataagent.runtime.session.ConversationScopeRegistry;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetKnowledgeRepository;
-import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /** Opt-in real installed CLI comparison; no production project or database is touched. */
+@Tag("external")
 class OfficialWrenCliIntegrationTest {
     @TempDir Path home;
 
@@ -187,29 +189,27 @@ class OfficialWrenCliIntegrationTest {
                     .extracting(io.modelcontextprotocol.spec.McpSchema.Tool::name)
                     .contains("run_sql", "get_instructions", "recall_queries", "get_context")
                     .doesNotContain("store_query");
-            var toolkit =
-                    new WrenMcpToolkit(
-                            registry,
+            var client =
+                    new WrenScopedMcpClient(
+                            context,
+                            "fixture",
                             new io.agentscope.dataagent.dataset.WrenQueryAccess(
                                     groups, new ConversationScopeRegistry()),
-                            deployed,
-                            null);
-            assertThat(
-                            toolkit.callTool(
-                                    context,
-                                    "fixture",
-                                    "run_sql",
-                                    java.util.Map.of("sql", "SELECT total FROM revenue"),
-                                    "全年营收是多少"))
-                    .contains("3089", "WREN_QUERY_RECEIPT");
-            assertThat(
-                            toolkit.callTool(
-                                    context,
-                                    "fixture",
-                                    "recall_queries",
-                                    java.util.Map.of("question", "全年营收是多少"),
-                                    null))
-                    .contains("matches", "全年营收是多少");
+                            registry,
+                            deployed);
+            var answer =
+                    client.callTool("run_sql", java.util.Map.of("sql", "SELECT total FROM revenue"))
+                            .block();
+            assertThat(answer).isNotNull();
+            assertThat(answer.isError()).isFalse();
+            assertThat(answer.content().toString()).contains("3089", "WREN_QUERY_RECEIPT");
+            var nativeRecall =
+                    client.callTool("recall_queries", java.util.Map.of("question", "全年营收是多少"))
+                            .block();
+            assertThat(nativeRecall).isNotNull();
+            assertThat(nativeRecall.isError()).isFalse();
+            assertThat(nativeRecall.content().toString()).contains("matches", "全年营收是多少");
+            client.close();
         } finally {
             registry.close();
         }

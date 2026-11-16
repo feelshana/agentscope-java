@@ -2,6 +2,8 @@
 
 > 🇨🇳 中文版：[README_zh.md](README_zh.md)
 
+Development checks: [standalone CI guide](docs/guides/dataagent-ci.md) covers matching framework dependencies, backend/frontend tests and packaging. Deployment remains a separate operation.
+
 ## Overview
 
 Current behavior ([ADR 0089](docs/adr/0089-lightweight-date-gate-and-native-history.md)): modeling creates views only after an explicit user request and confirmation of the structure. Historical views are left untouched. Before Wren tool discovery, a lightweight question gate asks for missing or ambiguous date ranges without rewriting the question or inventing dates. Clarifications use native conversation history; there is no separate persistent date state. This is a question-level policy, not SQL-plan enforcement. Per-turn model, tool and gate durations are written to `logs/archive-20261020/execution-timing.log`.
@@ -461,6 +463,7 @@ Operational guides (deployment, single-host release, concurrency) live in [docs/
 | 配置 | 默认与用途 |
 | --- | --- |
 | `dataagent.model-services.encryption-key` | `DATAAGENT_MODEL_ENCRYPTION_KEY`，空值时在实际 HOME 生成独立主密钥文件；需与平台库配套备份 |
+| `dataagent.dashboard.max-output-tokens` | `DATAAGENT_DASHBOARD_MAX_OUTPUT_TOKENS=32768`：看板单次模型输出上限，可设1024–65536并满足所选模型限制；不是上下文窗口或最低输出量，增大上限不要求生成更多内容 |
 | `dataagent.auth.password-login-enabled` | `DATAAGENT_PASSWORD_LOGIN_ENABLED=true`；prod 强制关闭密码入口 |
 | `dataagent.auth.bi.enabled` / `shared-key` | `DATAAGENT_BI_LOGIN_ENABLED=false`、`DATAAGENT_BI_SHARED_KEY`；prod 启用 BI，独立于 JWT 密钥 |
 
@@ -473,3 +476,5 @@ Spring Boot 4 uses `spring.web.error.include-message=always` to retain actionabl
 `DATAAGENT_BI_ACCOUNT_LOGIN_ENABLED=false`：默认关闭，显式开启后从同源BI Local Storage读取username/account，关闭旧票据入口；这是已接受客户端身份信任前提的接入，不是可信SSO。平台角色只取数据库。浏览器路径计划 `/dify/dataagent/`，打包前设置 `DATAAGENT_BASE_PATH`。人员导入、公共库、首次DDL/已有库升级及部署验收见[BI生产接入指引](docs/integration/bi-account-production.md)。
 
 Boot 4的JSON缓冲使用`spring.http.codecs.max-in-memory-size=50MB`，替代旧`spring.codec`名称；导入请求仍受5000条和字段长度校验。
+
+See the [test and CI guide](docs/guides/dataagent-ci.md#日常检查与完整检查) for focused daily checks and full pre-merge verification. Application startup and deployment commands remain unchanged.

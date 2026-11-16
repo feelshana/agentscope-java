@@ -6,16 +6,18 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import io.agentscope.core.agent.RuntimeContext;
+import io.agentscope.dataagent.runtime.session.ConversationScopeRegistry;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupRepository;
 import io.agentscope.dataagent.web.persistence.jpa.KnowledgeBaseGrantEntity;
-import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
 import java.util.List;
 import org.hibernate.cfg.Configuration;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.jpa.repository.support.JpaRepositoryFactory;
 
+@Tag("integration")
 class ModelingRevisionTest {
     @Test
     void oldPublicationCannotCoverNewMutationAndStaleMergeCannotResetRevision() {

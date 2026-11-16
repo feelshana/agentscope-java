@@ -8,21 +8,23 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agentscope.core.agent.RuntimeContext;
+import io.agentscope.dataagent.runtime.session.ConversationScopeRegistry;
+import io.agentscope.dataagent.runtime.session.SessionTurnParser.TurnEntry;
 import io.agentscope.dataagent.runtime.wren.WrenInstanceRegistry;
-import io.agentscope.dataagent.tools.data.WrenMcpToolkit;
+import io.agentscope.dataagent.tools.data.WrenScopedMcpClient;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupRepository;
-import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
-import io.agentscope.dataagent.web.session.SessionTurnParser.TurnEntry;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /** Exercises real official Markdown storage and vector recall in an isolated project. */
+@Tag("external")
 class WrenQueryMemoryIntegrationTest {
     @TempDir Path home;
 
@@ -98,17 +100,12 @@ class WrenQueryMemoryIntegrationTest {
         var context = mock(RuntimeContext.class);
         when(context.getUserId()).thenReturn("alice");
         when(context.get(DatasetScope.class)).thenReturn(new DatasetScope("alice", List.of("g")));
-        var toolkit =
-                new WrenMcpToolkit(
-                        registry,
-                        new WrenQueryAccess(groups, new ConversationScopeRegistry()),
-                        projects,
-                        null);
+        var access = new WrenQueryAccess(groups, new ConversationScopeRegistry());
+        var toolkit = new WrenScopedMcpClient(context, "g", access, registry, projects);
         var memory = new AnswerQueryMemory(props, cli, groups, projects);
         var json = new ObjectMapper();
         try {
-            String instructions =
-                    toolkit.callTool(context, "g", "get_instructions", Map.of(), null);
+            String instructions = call(toolkit, "get_instructions", Map.of());
             assertThat(instructions).contains("不为补齐枚举", "不能用样本代替");
             java.util.Map<String, Object> timings = new java.util.LinkedHashMap<>();
             long indexStart = System.nanoTime();
@@ -119,13 +116,7 @@ class WrenQueryMemoryIntegrationTest {
             timings.put("warmRecallMs", (System.nanoTime() - warmStart) / 1_000_000);
             assertThat(registry.recallWarm("g")).isTrue();
             long firstStart = System.nanoTime();
-            String recalled =
-                    toolkit.callTool(
-                            context,
-                            "g",
-                            "recall_queries",
-                            Map.of("question", "一年的营业收入合计是多少"),
-                            null);
+            String recalled = call(toolkit, "recall_queries", Map.of("question", "一年的营业收入合计是多少"));
             assertThat(recalled).contains(modelingQuestion, modelingSql).doesNotContain("未发布的秘密问题");
             timings.put("firstUserRecallMs", (System.nanoTime() - firstStart) / 1_000_000);
             var workers = java.util.concurrent.Executors.newFixedThreadPool(10);
@@ -155,34 +146,15 @@ class WrenQueryMemoryIntegrationTest {
                 workers.shutdownNow();
             }
 
-            String result =
-                    toolkit.callTool(
-                            context, "g", "run_sql", Map.of("sql", likedSql), likedQuestion);
+            String result = call(toolkit, "run_sql", Map.of("sql", likedSql));
             assertThat(result).contains("WREN_QUERY_RECEIPT").doesNotStartWith("error:");
-            String input =
-                    json.writeValueAsString(
-                            Map.of(
-                                    "tool_name",
-                                    "run_sql",
-                                    "arguments",
-                                    Map.of("sql", likedSql),
-                                    "answer_question",
-                                    likedQuestion));
+            String input = json.writeValueAsString(Map.of("sql", likedSql));
             List<TurnEntry> turns =
                     List.of(
                             new TurnEntry("u", null, "USER", likedQuestion, 1, null, null, null),
                             new TurnEntry(
-                                    "c",
-                                    null,
-                                    "TOOL",
-                                    null,
-                                    1,
-                                    "wren_call_tool",
-                                    input,
-                                    null,
-                                    "call"),
-                            new TurnEntry(
-                                    "r", null, "TOOL", null, 1, "wren_call_tool", null, result),
+                                    "c", null, "TOOL", null, 1, "run_sql", input, null, "call"),
+                            new TurnEntry("r", null, "TOOL", null, 1, "run_sql", null, result),
                             new TurnEntry("a", null, "ASSISTANT", "共两笔订单", 1, null, null, null));
             assertThat(memory.feedback("alice", "s", "a", "UP", turns).savedPairs()).isEqualTo(1);
             Path runtime = projects.indexed("alice", "g");
@@ -201,12 +173,7 @@ class WrenQueryMemoryIntegrationTest {
             long afterRecycleStart = System.nanoTime();
 
             String both =
-                    toolkit.callTool(
-                            context,
-                            "g",
-                            "recall_queries",
-                            Map.of("question", "营收和订单数量", "limit", 5),
-                            null);
+                    call(toolkit, "recall_queries", Map.of("question", "营收和订单数量", "limit", 5));
             assertThat(both)
                     .contains(modelingQuestion, modelingSql, likedQuestion, likedSql)
                     .doesNotContain("未发布的秘密问题");
@@ -219,18 +186,31 @@ class WrenQueryMemoryIntegrationTest {
 
             assertThatThrownBy(() -> projects.indexed("bob", "g"))
                     .isInstanceOf(DatasetException.class);
-            assertThat(
-                            toolkit.callTool(
-                                    context,
-                                    "other",
-                                    "recall_queries",
-                                    Map.of("question", modelingQuestion),
-                                    null))
-                    .startsWith("error:");
+            var foreign = new WrenScopedMcpClient(context, "other", access, registry, projects);
+            assertThatThrownBy(
+                            () ->
+                                    call(
+                                            foreign,
+                                            "recall_queries",
+                                            Map.of("question", modelingQuestion)))
+                    .isInstanceOf(DatasetException.class);
+            foreign.close();
             run(cli, props, runtime, "memory", "status");
         } finally {
+            toolkit.close();
             registry.close();
         }
+    }
+
+    private static String call(WrenScopedMcpClient client, String tool, Map<String, Object> args) {
+        var result = client.callTool(tool, args).block();
+        assertThat(result).isNotNull();
+        assertThat(result.isError()).isFalse();
+        return result.content().stream()
+                .filter(io.modelcontextprotocol.spec.McpSchema.TextContent.class::isInstance)
+                .map(io.modelcontextprotocol.spec.McpSchema.TextContent.class::cast)
+                .map(io.modelcontextprotocol.spec.McpSchema.TextContent::text)
+                .collect(java.util.stream.Collectors.joining("\n"));
     }
 
     private static void run(

@@ -44,7 +44,7 @@ dataagent 为每位数据分析师提供专属的数据 Agent，核心流程是*
 │  ToolEventBus(SSE) / 审计 / 用量 / AgentCatalog(内置agent目录)        │
 ├─────────────────────────────────────────────────────────────────────┤
 │  Agent 工具层（tools/data/ 包）                                    │
-│  WrenMcpToolkit(官方 MCP 发现与透传) + 原生文件工具                  │
+│  WrenScopedMcpClient(受限官方 MCP) + 原生文件工具                  │
 │  OfficialWrenToolkit(建模) + DataAgentToolkit(render_chart)          │
 │  RunPythonTool(run_python)                                           │
 ├─────────────────────────────────────────────────────────────────────┤
@@ -72,6 +72,10 @@ dataagent 为每位数据分析师提供专属的数据 Agent，核心流程是*
 知识库通过 QUERY/MANAGE 显式共享，创建者与全局管理员天然管理；`DatasetScope` 注入请求用户和本轮授权范围，库 owner 仅用于资源路径。私有会话、沙箱、附件与反馈不随知识库共享扩大，见 ADR 0077。
 
 ---
+
+当前web还承载持久化与公共会话/沙箱能力，四根包存在双向引用；允许方向、历史类对及聊天/发布/导入/撤权/删除边界见[模块依赖契约](docs/reference/architecture-boundaries.md)（ADR0144）。`ArchitectureDependencyTest`按生产字节码阻止新增下层→HTTP/装配依赖及JPA数据叶节点反向依赖。通用`ExecutionTimingMiddleware`已归runtime.observability，上下文关联键归runtime.context；日志与SSE键值不变。
+
+spec133将发布入口归MdlPublicationController，聊天选库/Inbound准备归ChatTurnPreparation；发布快照/恢复归MdlPublicationStore，纯平台清单投影归MdlManifestRenderer。单数据集删除由DatasetDeletionCleanup在平台提交后清理物理表，文件意图支持失败/重启重试。运行会话范围和转录解析归runtime.session。具体契约、故障矩阵及单进程限制见[工程验收](docs/test-reports/20261112-architecture-six-stage-acceptance.md)。
 
 ## 2. 启动装配流程
 
@@ -169,8 +173,7 @@ dataagent 为每位数据分析师提供专属的数据 Agent，核心流程是*
 向主 agent 的 Toolkit 注册（建模助手挂载走同款 `ModelingToolkitRegistrar`，见末条）：
 
 - `DataAgentToolkit` — 仅提供服务端图表工具（`render_chart`）；
-- `WrenMcpToolkit` — 官方 MCP schema 发现与原始调用透传（`wren_list_tools` / `wren_call_tool`），
-  依赖 `WrenQueryGateway`（`WrenInstanceRegistry` 的接口）与当前发布工程；
+- `WrenScopedToolkitMiddleware` — 每轮按授权工程注册 `WrenScopedMcpClient`，保留官方MCP名称与schema；依赖 `WrenQueryGateway` 和当前发布工程，不再注册旧包装工具；
 - `RunPythonTool(new SandboxBackedFilesystem())` — 沙箱 Python 执行工具。
   此处用独立代理实例即可：每轮调用的真实沙箱由 SandboxLifecycleMiddleware 绑定在
   RuntimeContext 上，工具调用拿到的就是同一个上下文。
@@ -251,7 +254,7 @@ write_file/edit_file/delete_file 与会生成种子样例的 memory index 需写
 ### 3.3 发布与 MDL
 
 `MdlPublishService#publish` 从工程 YAML 组装官方输入，执行官方 strict validate/build 与 view/ref_sql/Cube 查询检查，再复制快照并提升版本。
-官方 target/mdl.json 是引擎事实；不调用 RefSqlMaterializer，不物理化 ref_sql，不禁止官方允许的资产依赖。
+官方 target/mdl.json 是引擎事实；不物理化 ref_sql，不禁止官方允许的资产依赖。
 ref_sql 的内容和依赖是否可执行由官方引擎判断，须写物理全限定名。任何检查失败保留旧发布快照，官方 build 不自动替换在线版本。
 新增或修改的 View、ref_sql 模型未通过人工核查和问题验证时，`AssetReviewStore#publishIssues` 拒绝发布；发布时 `AssetReviewStore#writeWindows` 在快照旁写入确认的时间列。
 模型目录与 MDL 可视化属于只读投影，元数据旧实体与旧 HTTP 为兼容保留，不参与主 Agent 的语义决策。
@@ -311,11 +314,15 @@ ADR0087/spec075：前端 `isWrenTool` 同时识别官方原生名称与兼容网
 
 DataAgentToolkit 的 render_chart 与沙箱 run_python 继续复用现有 ArtifactStore、SandboxManager 和 AgentScope 执行。
 MCP 返回的 columns/rows 与截断信息保持原样；CSV 是通用传输，不引入 SQL 编译、指标口径或领域规划。
-历史 WrenToolkit/SqlExampleRecall 源码保留迁移期兼容测试，主 data-agent 不注册这些领域工具；随后的问数技能只引用官方 Wren 工具名。
+spec129已移除无生产装配的旧WrenToolkit/WrenMcpToolkit及证据物化链路，条件集成测试迁到WrenScopedMcpClient；问数技能只引用官方Wren工具名。SqlExampleRecall与KG历史兼容链路本轮保留。
 
 ---
 
 ## 5. 数据集与知识库
+
+只读MDL职责按spec131拆分：`MdlReadService#preview/compiled/view`独立完成文件差异、编译文本与结构投影；`MdlPublishService`保留同名委托入口及原构造器，写链路/锁顺序不变。13个共享结果record归`MdlTypes`，工作区解析器不再依赖发布服务类型，HTTP JSON字段保持。架构检查禁止读组件进入发布/播种及工作区、文件、仓库写入；读取错误、缺失和限额行为沿用原实现。
+
+构建后校验按spec132由包级`MdlBuildChecks`执行View/ref_sql、Cube检查及CLI诊断；只接收原协调器选定的目录、Snapshot与外部源，不选源、不授权或拿锁。`MdlPublishService`仍按原次序validate/build → SQL资产 → Cube → 已确认问答计划检查 → 快照/版本/事件，临时连接文件沿用finally清理；dry-plan问题状态修改与scratch生命周期保留在原协调流程。
 
 > 当前语义事实为 workspace 工程 YAML 与 published 官方快照。运行问数工程合并发布 knowledge 和点赞 knowledge/sql；不从平台关系/Cube/术语实体重新构造线上语义。业务文档上传只保存资料，不触发旧 DocEnhanceService；增强在官方对话中进行。历史服务/API 保留兼容，不是主 Agent 流程。
 
@@ -440,8 +447,8 @@ MDL 三端点 `GET /mdl` / `POST /mdl/validate` / `POST /mdl/publish`、前端
 `DatasetGroupRepository#backfillMdlDefaults`（原生 SQL 回填 `mdl_version=0`、
 `mdl_state='NONE'`）再加载任何组实体；守卫 `DatasetGroupMdlBackfillTest`（先证明 NULL
 行必炸，再证明回填后可加载）。
-**M3 + Wren-only 收敛已落地**（ADR 0020、0029）——`WrenToolkit` 提供
-`官方 describe_model` / `官方 run_sql` / `官方 recall_queries`；`WrenInstanceRegistry` 管理 per-group
+**M3 + Wren-only 收敛已落地**（ADR 0020、0029；当前原生MCP见第14章）——`WrenScopedMcpClient` 提供
+官方 `describe_model` / `run_sql` / `recall_queries`；`WrenInstanceRegistry` 管理 per-group
 `wren serve mcp` 实例池（按需 spawn、空闲回收、发布后 invalidate、传输失败重建）；
 `WrenProfileHome` 托管连接档案；`MdlCatalog` + `DataDynamicContextMiddleware` 仅渲染轻量逻辑目录；
 旧物理直查工具与 JDBC connector 已删除。
@@ -455,8 +462,7 @@ spawn 读取（缺失回落默认，M3 存量组零迁移）、`官方 run_sql` 
 （wrenai `_apply_limit` 无条件尾部叠加的 1064 坑，工具描述同步禁止）；守卫：
 `MdlPublishServiceTest`（混合组拒绝/多源拒绝/源删拒绝/非 MySQL 拒绝/预检失败不落快照/
 ext marker 钉入）、`WrenProfileHomeTest`（多条目渲染/无库名空串/非 MySQL 跳过/DB 收敛）、
-`WrenInstanceRegistryTest`（marker 读取/缺失回落/畸形回落）、`WrenToolkitTest`
-（显式 LIMIT 拒绝）。PostgreSQL 外部源发布与跨实例 JOIN 明确不做（ADR 0021）。
+`WrenInstanceRegistryTest`（marker读取/缺失回落/畸形回落）；当前只读SQL与权限由`OfficialWrenToolkitTest`、`WrenScopedMcpClientTest`守卫。PostgreSQL 外部源发布与跨实例 JOIN 明确不做（ADR 0021）。
 
 **specs/019 读面切换已落地（YAML-first，ADR 0033 M4）**——关系确认写面改写工程
 `relationships.yml`：`MdlSuggestionService#persistConfirmedRelation` 按「无序模型对 +
@@ -494,18 +500,7 @@ DocEnhance 规则采纳双写（见 5.7）。守卫：`MdlSuggestionServiceTest`
 绝不单边写，ADR 0045））；
 语义建模页视图卡片不变；业务术语不再是平台实体，见 14.1"业务术语"。
 
-**派生模型（ref_sql 模型，specs/034 → specs/035 降级人工载体，ADR 0043；下述物化是历史实现，ADR0069 起发布链不再调用，当前规则见 3.3）**：手工精修载体——
-`models/<name>/{metadata.yml, ref_sql.sql}` 双文件（文件优先于 metadata.yml 内联 `ref_sql` 键），
-模型不指物理表而是一段 SQL，走 sqlglot 直查路径、无视图那种 DuckDB 规划期函数绑定，用于承载
-view 函数表达力覆盖不到的极端口径；官方实验证伪「引擎自解析内层逻辑名」假设——ref_sql 体内
-裸名按连接默认库直通解析（MySQL 1146），故发布链在 `context build` 后把 staging
-`target/mdl.json` 的 `refSql` 物化为物理全限定名（`RefSqlMaterializer`：词法提取 FROM/JOIN
-引用、CTE/字符串/注释掩码、已限定名跳过；未解析引用报 error 中止发布），工作区文件保持逻辑名。
-当前 Agent 可按官方技能生成 SQL 定义模型，使用原生文件工具维护；不再强制 create_view 路由。旧 propose_derived_model/create_view 领域工具不注册。读取器 `MdlWorkspaceReader` 解析
-refSql/refSqlPath（models/、views/ 缺 metadata.yml 的静默跳过已改 error issue）；`MdlView`
-单列 `derivedModels`（`MdlModelView.refSqlPath` 指向 ref_sql.sql）；发布链逐派生模型
-`dry-run -s 'SELECT * FROM "<name>"'` 兜底；`mdl.json` 带 `derived` 标记。语义建模页「表与
-关系」后保留「派生模型」tab 作为手工资产只读展示面（AssetYamlBrowser 右栏渲染 ref_sql.sql）。
+**派生模型（ref_sql 模型）**：`models/<name>/{metadata.yml, ref_sql.sql}`由官方工程解析；平台读取器解析refSql/refSqlPath，页面展示对应资产。当前发布规则以3.3和14章为准，平台不改写官方`target/mdl.json`，不把逻辑引用物化为物理表。spec129删除已退出发布链的RefSqlMaterializer及其测试；历史方案见specs/034、035和ADR0043，已由ADR0069取代。
 
 **发布语义与状态机（specs/019 M2，发布链 v2）**：
 
@@ -513,12 +508,7 @@ refSql/refSqlPath（models/、views/ 缺 metadata.yml 的静默跳过已改 erro
   BASELINE/SEMANTIC 双模式与 DRAFT 草稿已退役（DB 语义实体停止作为事实源）；specs/037 起读侧同源
   （模型/视图页签同读工作区）且 REST 写侧（视图 CRUD）同步镜像工作区文件，
   文件写先于 DB 落库，DB 与工作区不再分叉（ADR 0045）。
-- 发布链（`MdlPublishService#doPublish`）：`MdlSeeder#reconcile` 播种对账 → staging 拷贝（排除
-  `.platform/`、`target/`）→ `context validate --strict` → `context build` → ref_sql 物化（staging
-  `target/mdl.json` 改写物理全限定名，specs/035/ADR 0043）→ 逐视图 `dry-run`（ADR 0032）
-  → 逐派生模型 `dry-run`（ref_sql 模型全链路解析兜底，ADR 0042）→ 逐 cube `cube query --sql-only`
-  → 原子快照；任一环节失败产生 error issue、中止发布并保留旧快照
-  （`mdlLastError` 记录原因）。
+- 发布链（`MdlPublishService#doPublish`）：工作区对账与资产核查 → 连接选择/预检 → staging → 官方validate/build → SQL资产计划检查 → 存量Cube的SQL转换检查 → 已确认问题dry-plan → 原子快照。工程校验失败保留旧发布版本；失效问题暂不进入问答示例，不阻断模型发布。无平台ref_sql物化步骤；基础建模不生成Cube，存量兼容分支仍保留。
 - 状态为 `NONE → INITIALIZING → PUBLISHED`；首版失败进入 `FAILED`。已有成功快照的重建失败进入
   `DIRTY`（工作区与快照存在待发布差异），保留旧快照、版本和可查询能力。空知识库删除全部工件并回到 `NONE`。
 - 发布使用 `published.next` / `mdl.json.next` 预构建和原子替换；替换异常时恢复 previous 备份。
@@ -658,6 +648,7 @@ system prompt（空记忆时为空标签）。排查助手"重复犯错"先看�
 ### 7.5 会话历史、附件与沙箱生命周期（ADR 0060、spec 052）
 
 - 展示：数据库 `session_history/session_message` 提供列表与消息分页；索引器从本地引擎日志补齐，列表不访问 Docker。
+- 共享数据源授权的用户存在/管理员判断依赖 `runtime.auth.UserIdentity` 只读契约，由 `UserStore#exists/isAdministrator` 映射现有用户存储；每次读取当前角色，不新增身份缓存、账号副本或权限来源。
 - 管理查阅（spec121、ADR0141）：`AdminConversationController` 默认分页展示全体用户的主会话，可按用户、标题和活动日期筛选。详情按轮返回已保存的提问、最终正文和当时知识库快照；spec136/ADR0148增加已有反馈及视觉回看。AdminHistoryPresentation仅投影图表/持久图片引用，图表接口校验同会话工具位置和图表owner，图片校验owner/session且仅允许图片类型；普通资源接口所有者边界不变。反馈一页批量只读，失败不阻断正文；不返回原始工具记录、不重新执行、不改变已读状态。管理员维护（spec122）经 `GlobalAdministratorController` 单独增减角色，`JpaUserStore` 在事务中保护最后一位管理员。带管理员声明的 API 凭证需通过当前数据库角色校验，撤权后旧凭证不再有管理员权限。
 - 管理检索（spec125、ADR0143）：`SessionHistoryService#indexBatch` 按有界批次补齐 `session_message.message_role/user_text`；正常投影写入时同步更新，仅 USER 保存检索正文。条件更新保护并发改写与删除。`AdminHistoryQueryService#page/users/export` 在数据库统一筛选标题/用户正文、所属用户与会话活动日期，聚合 USER 计数、稳定排序和分页；列表和摘要使用同一只读快照。正文整理尚未完成时返回 indexing 提示。CSV 超限拒绝并要求缩小条件，导出不包含对话正文。新接口仍校验当前全局管理员角色，旧列表 API 保持兼容。
 - 续聊：引擎日志及工作区持久状态继续保留，数据库展示投影不替代引擎上下文。
@@ -755,6 +746,8 @@ spec126：`GlobalAdministratorsPage`用现有管理员/目录接口提供本地�
 
 `DataSourcesPage`保留原列表与逐连接检测，增加名称本地筛选，主行固定密度，失败原因按单行展开并复用`ErrorNotice`技术详情；配置/删除收于更多菜单。`DataSourceFormModal`按连接信息/访问凭据分组，在主机旁说明服务器连接，保留检测修订、SSL/采样、编辑留空密码及成功后保存规则。`SessionsSidebar`不再展示未可靠跟随主聊天已读状态的圆点；当前会话选中、批量管理和后端既有已读接口保持。
 
+spec138取代spec134的查询记录面板与失败/中断问题回填入口，避免重复展示和不区分原因的重问引导。SQL与数据仍通过原工具执行记录查看，知识库标签、错误说明、下载、图表和反馈保持。`WrenScopedMcpClient#callTool`保留成功查询完整回执及文件引用的同轮缓存修正，命中前仍逐次授权、失败不缓存；不再生成仅供记录面板使用的queryId/queriedAt，旧历史额外字段保持兼容，不迁移会话数据。
+
 `ScheduledTasksPage` 通过占据标题下方可用空间的白色面板展示未开放说明、日历插画及既有对话与知识库入口。空间不足时页面随内容滚动。页面不调用任务 API。
 
 品牌由`Brand`/`BrandMark`复用同一SVG，侧栏（含收起态）、助手回答、登录入口与浏览器favicon一致；favicon由Vite处理部署前缀和内容哈希。`SessionsSidebar`历史列表独立滚动，批量模式的全选仅作用于已加载会话，底部删除栏固定并保留原确认/部分失败处理。业务术语按spec117并入语义建模“语义模型”页签的业务规则视图（`## Naming conventions`小节）；`BusinessTermsPanel`与`/terms`接口保留但页面不再挂载；旧`SemanticConfigPage`仅跳转，侧栏不再保留独立术语项。QUERY只读线上版本，MANAGE改草稿并经整个知识库草稿栏发布；编辑状态通过onEditingChange传给共享`DraftBar`的editingBlocked，保存/取消或离开编辑页后解除，不拆成独立发布流程。功能图标由`Icon`/`ProductIconPaths`统一，导航默认线性、选中实心，使用`currentColor`和24px网格；任务用calendar，设置和耗时图标含义保持。
@@ -810,6 +803,8 @@ spec124 在建模页头提供专注对话、并排查看和专注模型。采样
 
 `SemanticModelingPage` 通过知识库卡片接口一次获取访问权限、库名和发布版本，工作台关系图收到结构化模型即显示。工作流、待确认项及字段状态独立加载，发布仍需这些状态和草稿检查就绪。原始模型文件和线上对比数据在图加载后补齐，高级内容在展开时挂载并复用已取到的工程快照。
 
+问数优化、公共视图与资料按 spec140 采用紧凑页头和对象详情分区。`ModelingMethodFlow` 的四步是说明，不代表实时进度；`QueryCoachPanel` 保留逐题和批量处理、口径确认与SQL核对，新增问题和MDL/规则以对话层展示。`SemanticAssetsPanel` 分用途核查、工程文件与问题验证，手动起草仍交给原助手；自动整理仍未开放。`ModelingMaterials` 复用字段范围与多文档接口，宽屏数据表/文档并列、窄屏堆叠，展示真实字段范围和文档状态/字符数，说明收为简短提示；替换/删除沿用原接口，setup布局保留。`BusinessDocumentReader` 点击后才通过现有 `getDocumentContent` 读取当前草稿正文（MANAGE），支持Markdown、Word提取正文、目录和查找；关闭/切库忽略旧响应，不复制持久存储、不改变发布或查询链路。
+
 `MdlQuestionService#decide` 在发布锁内完成确认，发布会等确认结束，确认的问答一定进入这次发布。
 
 `SqlQaExampleService` 保留独立 SQL 示例的结构化编辑和点赞索引失败回滚；草稿修改/删除在工作区锁内递增修订号。已有 `knowledge/questions/<id>.yml` 的 SQL 是确认结果投影，只读展示并提示回到问题列表修正/移除，禁止旧接口绕过版本检查与重新确认。
@@ -858,6 +853,7 @@ spec 045 / ADR 0055：无已登记问题、无待确认原生 HITL 时，页面�
 | `dataagent.openai.stream` | `true` | `DATAAGENT_OPENAI_STREAM` 可切换模型流式/非流式请求以定位上游 EOF；前端 SSE 协议不变，关闭流式不表示连接问题已解决 |
 | `dataagent.dashscope.*` | Key 为空 | 没有 OpenAI 启动 Key 时的启动配置源；不是运行时故障回退 |
 | `dataagent.model-services.encryption-key` | 空 | `DATAAGENT_MODEL_ENCRYPTION_KEY`：独立 32 字节 Base64 主密钥；未提供时在实际 HOME 自动生成 model-services.key，必须与库匹配备份 |
+| `dataagent.dashboard.max-output-tokens` | 32768 | `DATAAGENT_DASHBOARD_MAX_OUTPUT_TOKENS`：看板单次输出上限，允许1024至65536且须符合模型服务限制；不影响问数/建模的连接配置或上下文窗口 |
 | `dataagent.auth.password-login-enabled` / `auth.bi.enabled` / `auth.bi.shared-key` | true / false / 空 | `DATAAGENT_PASSWORD_LOGIN_ENABLED`、`DATAAGENT_BI_LOGIN_ENABLED`、`DATAAGENT_BI_SHARED_KEY`；prod 强制关闭密码、启用 BI，BI 与 JWT 采用独立密钥 |
 | `dataagent.web-search.*` | Key 为空即关闭 | 问数逐轮授权搜索（spec120、ADR0140）：`api-key` 只读 `DEEPSEEK_API_KEY`，另有 `enabled`、`base-url`、`timeout-seconds`、`max-results` |
 | `dataagent.dashscope.*` | — | 兜底模型 |
@@ -888,6 +884,10 @@ Boot 4 HTTP JSON缓冲使用`spring.http.codecs.max-in-memory-size=50MB`；人�
 `requirements-wren.txt` 固定官方 CLI 与 memory-onnx 依赖。在配置的 Wren Python 环境安装该文件；Wren 默认自动选择多语言 ONNX/lancedb，首次使用需要下载模型。可由进程环境设置 WREN_MEMORY_BACKEND=lancedb、WREN_EMBEDDING_BACKEND=onnx、WREN_EMBEDDING_MODEL=paraphrase-multilingual-MiniLM-L12-v2；实际后端以 memory status 为准，依赖缺失时即使设置 lancedb 也会降级。应用不修改外部 Python 环境，不自动安装依赖。
 
 ### 12.2 构建与运行
+
+日常用 `python scripts/check.py backend --tests 类名`、`backend --unit` 或 `frontend --files 文件名` 选测；合并/发布前 `python scripts/check.py full` 保留完整验证。13个integration类独立标记，真实环境方法标记external；CI不按标签过滤。三个恢复类现为一个完整应用测试和两个真实JPA切片，原12项仍执行，详见[spec129](docs/specs/129-test-lanes-and-legacy-cleanup.md)。
+
+独立应用自动验证由仓库 `.github/workflows/dataagent-ci.yml` 定义：同一次 checkout 先安装直接使用的框架模块及 BOM，再对 standalone 执行 `clean verify`，使用 npm ci 并保留测试结果。汇总门禁要求三个恢复的集成类实际执行，区分条件跳过与显式禁用。测试 JVM 的 user.home 隔离至 target/test-home；完整装配集成测试使用临时工作区、H2和外部沙箱客户端替身，不操作开发者容器。触发分支、结果查看及本地复现见[CI指引](docs/guides/dataagent-ci.md)。实际 GitHub 触发和远端必需检查以仓库设置及运行记录为准，不等于自动部署。
 
 ADR0142/spec123新增独立六表离线镜像：deploy/bi-sync/extra_schema.py维护79列DDL及固定SQL，extra_sync.py按源读取当前快照/完整业务日，私有暂存、前后计数和多重集内容校验后事务替换业务数据及账本。独立源指纹、锁、控制表和02:15调度不改旧七表；Doris缺分区或监控空快照保留目标，状态明确源可用下界与缺失区间。新任务通过docker/bi-extra-sync.sh运维，不加入Wren问数链路，不自动建知识库/安装调度。spec127新增独立只读观测：`AdminBiSyncController#extra`在boundedElastic上调用`BiSyncStatusService#extraView`，`BiExtraSyncStatus#read`只读bi_extra_sync_control固定键及独立运行锁，校验owner并投影逐表水位/缺口/快照和最近操作，不读取源或业务数据。BI页面按基础7表、扩展6表切换；核验、部分补跑、带缺口成功不视为六表全量完成。加列须显式迁移，源只读；配置及现场步骤见[新增六表同步](docs/guides/66-bi-extra-sync.md)。
 
@@ -968,7 +968,7 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 | 网关/沙箱注入/并发门/announce | `runtime/gateway/HarnessGateway`（`runStream`、`attachUserSandboxContext`、`setSandboxlessAgents`、`withGatedStream`、`tryDispatchAnnounce`） |
 | 聊天端点/SSE/HITL 恢复 | `web/api/ChatController`（`stream`、`confirmModeling`、`currentSession`、`buildInbound`、`toAgentFrame`、`toToolFrame`） |
 | 动态上下文注入 | `runtime/session/DataDynamicContextMiddleware`（`onSystemPrompt`；M3 按组分流读 `MdlCatalog`） |
-| Wren 问数工具 | `tools/data/WrenToolkit`（`wrenDescribeModel`、`wrenRunSql`）与 `tools/data/DataAgentToolkit`（`retrieveEvidence`、`renderChart`） |
+| Wren 问数工具 | `tools/data/WrenScopedMcpClient`（官方MCP只读工具）与 `tools/data/DataAgentToolkit`（`renderChart`） |
 | Python 沙箱工具 | `tools/data/RunPythonTool`（`runPython`） |
 | 图表生成 | `tools/data/ChartBuilder`（`build`、`applyMarkLine`） |
 | 工具注册 | `tools/data/DataToolkitRegistrar` |
@@ -981,17 +981,17 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 | 当前建模与通用 HITL | `ModelingToolkitRegistrar#registerOfficialTools`、`OfficialWrenToolkit#execute`、`WrenProjectAccess#resolve`、`WrenProjectFilesystem`、`ModelingHitlMiddleware`；前端 ModelingChatPanel/ModelingHitlCard。旧 ModelingToolkit 仅兼容源码，不是当前注册工具链 |
 | 文档语义增强（specs/014） | `dataset/DocEnhanceService`（`triggerAnalyzeQuietly`、`adopt`）、`web/api/SemanticModelingController`（enhance 端点）、`web/persistence/jpa/{DocEnhanceTaskEntity,DocEnhanceProposalEntity,SemanticBusinessRuleEntity}`、前端 `pages/configure/SemanticModelingPage` |
 | MDL 拼装/发布（M2 → specs/019 v2） | `dataset/MdlPublishService`（`preview`、`validate`、`publish`、`deleteArtifacts`、`view` 只读视图）、`dataset/{MdlSeeder,MdlWorkspaceService,MdlWorkspaceReader,WrenTypeNormalizer}`（播种/工作区/读面）、`dataset/{WrenCli,WrenProperties}`、前端 `components/MdlPublishPanel`、`components/modeling/{SemanticWorkbench,workbenchLayout,ruleText,semanticSnapshot}`（`ModelsPanel`、`RelationsPanel` 已不挂载） |
-| Wren 运行期（M3） | `tools/data/WrenToolkit`（`wrenRunSql`）、`runtime/wren/{WrenQueryGateway,WrenInstanceRegistry}`（`call`、`invalidate`、`resolveSnapshotProfile`）、`dataset/{WrenProfileHome,MdlCatalog}` |
+| Wren 运行期（M3） | `tools/data/WrenScopedMcpClient`（`callTool`）、`runtime/wren/{WrenQueryGateway,WrenInstanceRegistry}`（`call`、`invalidate`、`resolveSnapshotProfile`）、`dataset/{WrenProfileHome,MdlCatalog}` |
 | 外部源发布链（M4） | `dataset/MdlPublishService`（`selectWrenSource`、`writeWrenSourceProperties`）、`dataset/{WrenSourceProber,JdbcWrenSourceProber}` |
 | 知识图谱（已停用） | `dataset/KnowledgeGraphService`、`dataset/SchemaTripleExtractor`（链路停用，见第 6 章） |
 | 会话管理 | `runtime/session/SessionAgentManager`、`SessionStore`、`SessionEntry` |
-| 会话作用域(知识库) | `web/session/ConversationScopeRegistry` |
+| 会话作用域(知识库) | `runtime/session/ConversationScopeRegistry` |
 | 每用户沙箱 | `web/workspace/UserSandboxRegistry`（`borrow`、`invalidate`）、`DataAgentWorkspaceConfig` |
 | 工作区种子 | `web/scaffold/WorkspaceScaffolder`、`web/workspace/SharedWorkspaceSeeder` |
 | ACL 鉴权 | `web/share/{AgentAclService,AgentAccessGuard}` |
 | Webhook 通道 | `runtime/channel/webhook/WebhookChannel`、`WebhookCallbackController`、`WebhookSignature` |
 | 主动外发 | `runtime/outbound/{OutboundTool,OutboundService,OutboundController}` |
-| 会话/工具事件历史 | `web/session/SessionTurnParser`、`web/toolbus/{ToolEventBus,ToolNotificationMiddleware}` |
+| 会话/工具事件历史 | `runtime/session/SessionTurnParser`、`web/toolbus/{ToolEventBus,ToolNotificationMiddleware}` |
 
 ---
 
@@ -1015,13 +1015,19 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 | 需要你确定的部分 | 能确定的直接写入；只有会改变统计结果的歧义才经 `request_user_confirmation` 提问（2–4 个选项、首项推荐，每轮最多 3 题，待确定上限 10）。问题存于 `.platform/confirmations/`，不发布、问数不可见；助手空闲时以对话内卡片逐题展示（选项、自己写、不采用、稍后），最后一题后一起交还，不弹窗；去掉括号说明、空白与标点后相同的问题视为重复；只有实际创建的问题计入每轮上限，选项名多于规则原文时多出的（如"其他"）被忽略；外部表的候选关系也经此由用户确定后写入 `relationships.yml`，关系问题（`topic=relationship`）另有每轮 3 个名额；答复以 `purpose=confirm` 交还助手写入规则或列描述；未确定不生效、不阻止发布 | `ModelingConfirmationTool`、`ModelingConfirmationService`、前端 `ConfirmationCards` |
 | 轮次用途 | 页面随请求发送 `purpose`：`auto` 自动建模、`document` 文档更新、`question` 问题处理、`confirm` 确认答复，无用途为用户对话；`ChatController#stream` 写入 `ConversationScopeRegistry#putModelingPurpose`，`buildInbound` 放入 `ModelingTurnPurpose`，用于修改来源、外部表查询许可、规则写入约束与本轮提示词分段（`ModelingTurnRules`） | `ModelingTurnPurpose`、`ChatController#trackModeling` |
 | 业务文档 | 每库多份，存于草稿 `raw/docs/<名称>.md`，随快照发布；新增、替换（旧版本存 `.platform/docs-history/`）、删除均为草稿修改；只能由用户上传，助手只读；修改后页面自动排队一条 `document` 请求，连续修改合并为一条；问数不直接读取文档 | `BusinessDocumentService`、前端 `BusinessDocumentsPanel` |
-| 入口与增量建模 | 采样与时间配置完成后（`?start=1`）先提示上传业务文档，用户点"开始自动建模"才发送 `purpose=auto` 请求；上传数据弹窗不再附文档；已发布过的库新增表时，运行上下文列出"本次新增的表"，助手只处理新表 | `SemanticModelingPage#startModeling`、`WrenProjectContextMiddleware#newTables` |
+| 入口与增量建模 | spec139：新表先在聚焦态逐表整理字段；setup说明失焦经现有confirm=false保存，纳入选择仍显式确认，保存失败保留输入并阻止前进，adjust沿用原保存/重建边界。全部确认后进入字段/内联时间范围/可选多文档准备清单（`?start=1`），隐藏完整工作台与发布栏；仅用户点"开始自动建模"才发送 `purpose=auto`。已有时间策略复用；默认策略先保存成功再启动，上传表/维度/无日期不显示时间区块，逐步引导保留单独确认范围动作避免遮罩阻断。准备时文档CRUD不排队助手请求；开始后接回原工作台。上传数据弹窗不再附文档；已发布过的库新增表时，运行上下文列出"本次新增的表"，助手只处理新表 | `SemanticModelingPage#startModeling`、`WrenProjectContextMiddleware#newTables` |
 | 业务术语 | spec100/ADR0119：每库术语即工程 `knowledge/rules/naming.md` 的官方 `## Naming conventions`，约定写法 `- "术语"（同义词："甲"、"乙"）= 解释`。`BusinessTermService` 解析并经 `DraftItemService#appendBullet`/`#updateBullet` 写草稿（运行中拒绝、锁内复核 MANAGE），`BusinessTermController` 提供 `/api/dataset-groups/{id}/terms`；页面在语义建模“语义模型”页签的业务规则视图（spec117，与其他规则同一套条目编辑）；QUERY 只读已发布版本，MANAGE 看草稿对照并经同一草稿栏发布。问数随官方 `get_instructions` 读取，平台不注入；建模提示词要求 Naming conventions 写入同一文件且不改写已有条目。来自采样或业务文档的单列名称、别称、含义、单位和示例均留在列元数据，只有会改变查询行为的独立术语或约束才写规则。平台术语表的业务读写已退役，旧物理表及数据保留，测试术语暂不迁移（`docs/migrations/0096`）。 | `BusinessTermService` |
 | 字段整理 | spec093：采样后、时间范围之前每张新表必须完成字段整理（`DatasetEntity.fieldScreeningConfirmed=false`，历史数据为 null 视为已确认）。`FieldScreeningService#fields` 首次打开时用一次模型调用按字段名、类型、采样值把字段判为业务、技术或不确定（模型不可用时全部为不确定并纳入）；纳入状态、判断理由与用户说明存于 `column_schema_json`（`ColumnSchema.included/role/roleReason/descriptionSource`）。事实表时间字段锁定纳入，多表同名字段提示为关联键，每表至少纳入 1 个字段。未确认时 `ChatController` 拒绝 `purpose=auto`。`MdlSeeder#reconcile` 只写入、只补回纳入字段；用户说明写为列 `description_source: user`，提示词要求原样保留。建模后在"资料"中按表调整：草稿模型即时删列、写说明，新纳入字段由 seeder 追加，记入 `DraftChangeLog`；删除前列出引用该字段的规则、关系与问题，保存后排队一条只重建该表的请求 | `FieldScreeningService`、`FieldScreeningController`、`MdlSeeder#reconcile`、前端 `FieldScreeningPanel` |
 | SQL 词法 | 单条只读 SELECT/WITH，拒绝笛卡尔积写法，允许官方 LIMIT/OFFSET；建模、问数、问题验证共用 | `OfficialWrenToolkit#requireReadOnly` |
 | 运行上下文 | 授权工程、服务时间、编译状态、工程文件清单（免逐级列目录）、按表来源的查询边界（上传表与外部表都不查询，上传表附总行数，ADR0135）、外部受限表时间策略 | `WrenProjectContextMiddleware#onSystemPrompt` |
 | 建模查询硬约束 | 建模的任何轮次都不执行 query，上传表与外部表相同（ADR0135）；上传表时间列的起止日期由 `DatasetService#withDateRanges` 在上传时直连数据集库统计一次并写入字段描述，总行数由上下文列出；试问轮次只用 `dry-plan` 检查 SQL 能否生成，由用户在试问面板核对 SQL 后确认；该检查在时间门禁之前，被拒的查询不调用门禁模型；`dry-plan` 只编译不读数据，不过时间门禁。受限事实表的时间条件写法由平台按采样识别的列格式（`temporal_columns.format`）与数据源生成并注入建模、问数上下文：不补零文本用 `STR_TO_DATE`/`TO_TIMESTAMP` 转换后 `>=`/`<`，补零文本、原生类型与数字日期键直接比较，不用 LIKE；门禁放行结果在进程内按知识库、规则与 SQL 复用（1 小时、500 条），同一 SQL 在试运行、确认正确与问数间判断一致 | `OfficialWrenToolkit#refuseModelingQuery`、`OfficialWrenToolkit#refuseQueryInQuestionTurn` |
 | 建模页与入口 | 左侧导航"语义建模"打开知识库列表，进入建模页后左侧导航保留；建模助手回复面向业务人员：只用中文、过程说明一句话、最终回复按轮次控制篇幅且不列文件路径与命令（`DataAgentConfig.MODELING_SCRIPT` 回复写法）；页头一行（返回、版本、助手状态、标签语义模型/问数优化/公共视图/资料、去问数）。建模对话页以对话为主，连续工具步骤完成后折叠为一行；"试问"在问数优化页签按需打开（只在用户点击时打开）；底部草稿栏为一行，"查看全部"向上展开抽屉，可发布时按钮高亮；对话在用户位于底部时随内容（含异步加载的结果卡）自动跟随；每轮回复的叙述与工具步骤折叠为一行"建模过程"（运行中显示读取资料、确定口径、写入草稿、校验编译四个阶段与最新步骤），AI 建模结果在写入时即出现，最终说明完整展示；助手空闲且无待确定问题时，对话末尾显示"下一步"卡（推荐问题、检查并发布，发布后去问数）；页面请求按序排队，助手忙时提示排队数；提交问题不跳页。试问：推荐 3 个问题（`QuestionSuggestionService#MAX_SUGGESTIONS`）或自由提问，以 `purpose=question` 让助手写 `knowledge/questions/<ID>.yml`，助手空闲后平台自动试运行；"确认正确"写入草稿 `knowledge/sql/<ID>.md`（source: user-confirmed），发布后可召回；"不正确"时可填写原因交给助手（以 `purpose=question` 发送，允许查询外部表，助手修正口径并重写、执行本题 SQL），或自行修改本题 SQL（`MdlQuestionService#correctSql`）；SQL 变化后题目为 STALE，平台自动重新试运行并隐藏旧结果。试运行与确认正确都过时间门禁；推荐问题在用户打开试问时才生成，要求单指标、至多一个维度的简单问题 | `ModelingHubPage`、`SemanticModelingPage`、`TrialPanel`、`MdlQuestionService#validate/decide` |
+
+问数优化/公共视图/资料的展示见 spec140：四步为流程说明，问题逐题确认、资产人工核查与SQL展开仍沿用既有协议；问数优化默认处理概况，主动选题才进详情，列表头可返回概况，原试问入口与紧凑四步并排。六类进度仍来自原问题状态。已确认问答首次展开才挂载，折叠保留编辑；只读样例以ReadableCode阅读，可编辑样例沿用原保存/删除接口并提示未保存切换。资料的只读正文按点击调用现有MANAGE接口，不增加复制存储或自动发布。
+
+工作台主区随可用宽度伸展，表单/代码放大层显式居中；顶部为返回/知识库状态、居中下划线页签和右侧分段布局控件，窄屏分行；右侧工具栏保留“详 / AI / ✓”原图标。底部草稿栏与问数按钮统一对齐，窄屏由主区滚动而不把底栏挤出视口。问数优化首步、列表头与页头均进入原新增问题弹窗，已确认问答用浅紫图标及小尺寸展开动作提示；公共视图流程为圆环和细轨道。`ReadableCode` 使用现有sql-formatter按需格式化SQL展示，保留原文切换、行号与局部滚动；复制/编辑/请求使用原始内容，不修改SQL语义或验证协议。
+
+语义模型下的`AdvancedModelingPanel`仍为只读工程查看，外层折叠、内部分工程快照/编译MDL/已有资产文件页签；首访才挂载，展开期间保留已访问页签的文件与版本选择，关闭折叠卸载内容。`ModelSnapshotPanel`复用preview中的草稿/发布文件和差异；`CompiledMdlPanel`仍读原编译结果接口，明确草稿可能滞后，失败可重试；`AssetYamlBrowser`保留原工作区文件读取、内存缓存、重选刷新和URL定位。JSON/YAML/SQL共用ReadableCode行号/复制/放大，长行局部滚动。不新增编译、写入或Cube建模能力，不改变授权和发布。
 
 ### 14.2 用户问题验证与问答召回
 
@@ -1054,3 +1060,19 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 - 发布成功后，`WrenQueryPreparation` 在事务提交后后台准备索引并做一次只读召回预热；`QueryPreparationController#status` 返回准备状态（进程内建议值）：建模页"已发布"卡片、建模页顶部与知识库详情页轮询显示"问数准备中"直至就绪（`useQueryReadiness`），准备期间"去问数/基于此库提问"置灰；问数页在所选知识库仍在准备时于回答处显示加载提示（`ChatPanel#watchPreparation`），不影响对话流。
 - `logs/execution-timing.log` 记录工具、索引、Wren 队列、门禁与 `wren_cli.*` 分段耗时；嵌套耗时不可相加。
 - 回答收尾观测：`ExecutionTimingMiddleware#onAgent`安装框架`CallTiming.Observer`，`ReActAgent#saveStateToSession`、`SessionTranscriptWriter#appendMessages`、`SandboxLifecycleMiddleware#releaseForCall`记录状态保存、会话回读/追加及沙箱收尾；`SessionTree#syncFromTranscriptStore`补充枚举分段、读取失败、唯一读入与实际合并数量。网关历史投影和`ChatController#streamAdmitted`的最后token至done组帧按requestId关联，普通问答done回传该ID。`completion.model.tail`区分最后正文与模型流结束。Observer异常不改变执行，计时仅记录阶段、耗时与计数。
+
+### 14.6 GenBI 对话仪表盘试用版
+
+- `DataAgentConfig#builderBootstrap` 注册独立、无Docker的 `dashboard-agent`，挂载同安装版本官方 genbi/usage 技能；`DashboardToolkitRegistrar#register` 安装原生文件工具、GenBI命令适配和调用级官方MCP转发。`ChatTurnPreparation#resolveGroupScope` 从服务器资产记录固定创建者/管理者和单库，排队入场重新检查，`DashboardTurn` 不接受模型或请求提供的任意工程路径。
+- `DashboardService#create` 复制已发布语义上下文到平台MDL持久目录下 `dashboards/<id>/project`，不改知识库模型。`wren_genbi build` 调用官方 live 构建说明，Agent仅编辑 `apps/dashboard/index.html`，`verify` 经官方 register/verify 后标记内容摘要。禁止shell、profile、外部部署和编辑索引。缺少GenBI或校验失败时显式报错，不生成假成功结果。
+- `DashboardQueryService#query` 以当前查看用户身份，经 `WrenQueryAccess`、只读校验、`FactQueryWindowPolicy` 和官方 `run_sql` 查询；Wren队列开始执行前重新检查看板修订与权限。单次最多1000行，截断拒绝展示为完整统计。内部live协议 `dataagent.query(sql)` 返回表格JSON，无用户/数据库凭证传入生成代码；这是官方GenBI通用网页流程的内部托管适配，不要求浏览器WASM。
+- `/dashboards` 列表与 `/dashboards/:dashboardId` 工作台按路由延迟加载；左侧复用现有SSE与持久会话，右侧 `DashboardPreview` 的可信外层限制子框架导航，内层HTML为只有脚本能力的opaque-origin srcdoc，CSP关闭外联、嵌套框架和表单；宿主核对消息来源/通道并限制并行查询，所有业务查询仍由服务端授权。ECharts运行库仅在实际预览时载入。生成代码和官方verify均不等于浏览器验收。
+- `DashboardService#publish` 仅MANAGE显式操作，使用期望内容摘要防止误发布；在锁内重做官方校验并复核权限，写入不可变HTML修订后原子替换资产指针。成员需QUERY且仅可读已发布修订；作者与管理者可访问草稿。元数据与版本位于平台持久卷，不依赖浏览器。单进程资产锁，不声称支持多实例并发写；旧版本暂不自动清理，删除知识库后的资产不能再通过ACL查看。
+- `SessionHistoryService#transcript` 由原生会话的conversationId恢复持久选库，使用与执行时相同的KB命名空间读取本地transcript；不另建仪表盘对话存储。
+- `DashboardLibrary` 采用知识库共用视觉令牌与真实列表筛选；`DashboardService.View#owned` 仅投影当前用户是否创建，不暴露其他用户标识。创建只填写知识库和名称，进入工作台后由用户手动发送需求，不通过路由状态自动触发Agent；发布确认仍提交当前修订并由原服务复核。生成文档自身的主题/响应式保留，不强行套入示例模板。
+- 预览桥只增加PNG缩略图消息：限定同一窗口/通道、大小/类型，通过ECharts本地Canvas导出，不放宽CSP。封面缓存只在当前登录内存、按资产及修订隔离且有数量上限；列表不执行生成页面或批量查询，没有缓存时展示明确封面提示。查询状态仅记录本次查询完成时间，不冒称源数据更新时间。
+- 列表复用知识库公共容器；新建仅选库和命名，需求留在编辑页手动对话。`DashboardPermissions` 展示继承的QUERY/MANAGE及全局管理员规则，管理入口复用知识库成员管理，权限变更同时影响知识库问数与该库所有看板，不另建看板ACL。
+- `DashboardDeletionService#delete` 经RUN与创建者/管理者校验，调用 `DashboardService#delete` 的资产锁、路径检查及持久删除标记；新入场/工具/查询/发布在标记期间拒绝。复用原生空闲会话门禁和 `SessionDeletionService#delete` 清理专属上下文/双转录/展示历史/附件/已读与选库记录，再清除独立工程和所有发布修订。`deletion-plan.json` 保存会话身份/消息快照键，部分失败/重启后仍可重试；元数据最后删除，待清理卡片只对可编辑者保留重试入口。知识库数据/模型、共享记忆及审计不随看板删除。
+- 会话清理先处理附件/已读/转录/关联记录，再注销原生状态与路由；`SessionAgentManager#removeSession` 在持久登记删除成功前保留内存项，防止存储失败后失去重试身份。与其他Agent恰好共享同一conversationId时，不清除其共享会话选库键；只按精确Agent/会话过滤清理看板参与者。
+- 看板Agent默认申请32768输出tokens，可通过上述配置调整，不依赖上游可能为8192的默认值；`SwitchingModel`仍固定本轮服务与连接配置。框架`ReasoningContext#processChunk`识别工具输出的length截断，正常结束时`validateCompleteArguments`拒绝残缺JSON，停止该轮而不执行空参数或重复调用；中断保存仍允许记录非执行的部分上下文。`model.output`/`model.tool_arguments`记录结束原因、参数字符/分片/调用计数，`model.start`记录输出预算，不记录参数内容或凭证。
+- 看板进度消费工具调用和结果，失败不再显示为页面已更新；真实写入、校验与发布仍分别确认。`ChatCapacity#execute`的绝对执行期限先正常触发截止信号以取消原生模型订阅，再向HTTP报告超时；工具事件收尾计时也用正常截止信号关闭订阅，避免只报错但后台继续运行。

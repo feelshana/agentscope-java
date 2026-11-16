@@ -25,13 +25,13 @@ import io.agentscope.dataagent.dataset.ModelingWorkflowStore;
 import io.agentscope.dataagent.dataset.ProcessWrenCli;
 import io.agentscope.dataagent.dataset.WrenProjectAccess;
 import io.agentscope.dataagent.dataset.WrenProperties;
+import io.agentscope.dataagent.runtime.session.ConversationScopeRegistry;
 import io.agentscope.dataagent.tools.data.OfficialWrenToolkit;
 import io.agentscope.dataagent.tools.data.WrenProjectFilesystem;
 import io.agentscope.dataagent.web.middleware.ModelingHitlMiddleware;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetKnowledgeEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetKnowledgeRepository;
-import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
 import io.agentscope.harness.agent.tool.FilesystemTool;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -40,12 +40,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;
 
 /** Real model + native HITL against a synthetic, unpublished project only. */
 @EnabledIfSystemProperty(named = "dataagent.test.liveModeling", matches = "true")
+@Tag("external")
 class WrenLiveModelingEvaluationTest {
     @TempDir Path home;
 

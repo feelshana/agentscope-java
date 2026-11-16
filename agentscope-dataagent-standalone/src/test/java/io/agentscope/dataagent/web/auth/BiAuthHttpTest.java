@@ -12,6 +12,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.List;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -41,6 +42,7 @@ import org.springframework.test.context.TestPropertySource;
             "dataagent.jwt.ttl-seconds=1800",
             "dataagent.auth.bi.shared-key=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
         })
+@Tag("integration")
 class BiAuthHttpTest {
     @Configuration
     @EnableAutoConfiguration

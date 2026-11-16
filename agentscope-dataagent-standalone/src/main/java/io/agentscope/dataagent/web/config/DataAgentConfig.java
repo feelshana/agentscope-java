@@ -293,6 +293,9 @@ public class DataAgentConfig {
     private io.agentscope.core.model.transport.HttpVersion openaiHttpVersion =
             io.agentscope.core.model.transport.HttpVersion.HTTP_1_1;
 
+    @Value("${dataagent.dashboard.max-output-tokens:32768}")
+    private int dashboardMaxOutputTokens = 32768;
+
     @Value("${dataagent.dashscope.api-key:}")
     private String dashscopeApiKey;
 
@@ -464,7 +467,7 @@ public class DataAgentConfig {
             Optional<DatasetContextProvider> contextProviderOpt,
             MdlCatalog mdlCatalog,
             DatasetGroupRepository datasetGroupRepository,
-            io.agentscope.dataagent.web.session.ConversationScopeRegistry conversationScopes,
+            io.agentscope.dataagent.runtime.session.ConversationScopeRegistry conversationScopes,
             SessionRegistryRepository sessionRegistryRepository,
             org.springframework.beans.factory.ObjectProvider<ModelingToolkitRegistrar>
                     modelingToolkitProvider,
@@ -499,7 +502,10 @@ public class DataAgentConfig {
         // conversational modeling works even when Docker is unavailable. Its dedicated, empty
         // local workspace keeps the harness on the default local filesystem without pulling in
         // the main agent's workspace content (AGENTS.md etc.).
-        Set<String> sandboxlessAgents = Set.of(ModelingToolkitRegistrar.MODELING_AGENT_ID);
+        Set<String> sandboxlessAgents =
+                Set.of(
+                        ModelingToolkitRegistrar.MODELING_AGENT_ID,
+                        io.agentscope.dataagent.dataset.DashboardService.AGENT_ID);
         Path modelingWorkspace =
                 DataAgentBootstrap.DEFAULT_WORKSPACE_ROOT.resolveSibling(
                         "workspace-modeling-agent");
@@ -527,7 +533,8 @@ public class DataAgentConfig {
                     }
                     b.middleware(new ToolNotificationMiddleware(toolEventBus));
                     b.middleware(
-                            new io.agentscope.dataagent.web.middleware.ExecutionTimingMiddleware());
+                            new io.agentscope.dataagent.runtime.observability
+                                    .ExecutionTimingMiddleware());
                     // The modeling assistant's transcript goes to its own file
                     // (logs/LLM-modeling.log) so semantic-modeling sessions stay separate from
                     // data-agent chat traffic; every other agent keeps the shared logs/LLM.log.
@@ -622,6 +629,22 @@ public class DataAgentConfig {
                                 new io.agentscope.dataagent.runtime.session
                                         .WrenProjectContextMiddleware(
                                         wrenProjectAccess, windowPolicy, datasetRepository));
+                    } else if (io.agentscope.dataagent.dataset.DashboardService.AGENT_ID.equals(
+                            agentId)) {
+                        b.middleware(
+                                new WrenScopedToolkitMiddleware(
+                                        wrenQueryAccess,
+                                        wrenQueryGateway,
+                                        wrenPublishedProject,
+                                        mdlCatalog,
+                                        windowPolicy));
+                        b.middleware(
+                                new io.agentscope.dataagent.runtime.session
+                                        .WrenQueryContextMiddleware(
+                                        wrenQueryAccess,
+                                        windowPolicy,
+                                        wrenPublishedProject::publishedRoot,
+                                        wrenQueryGateway));
                     } else if ("data-agent".equals(agentId)) {
                         b.middleware(
                                 new WrenScopedToolkitMiddleware(
@@ -697,6 +720,25 @@ public class DataAgentConfig {
                     mountWrenSkills(b, wrenSkillsLocator, MODELING_SKILLS);
                 });
 
+        Path dashboardWorkspace =
+                DataAgentBootstrap.DEFAULT_WORKSPACE_ROOT.resolveSibling(
+                        "workspace-dashboard-agent");
+        Files.createDirectories(dashboardWorkspace);
+        builder.configureAgent(
+                io.agentscope.dataagent.dataset.DashboardService.AGENT_ID,
+                b -> {
+                    b.name("仪表盘助手")
+                            .description("通过官方GenBI技能生成和修改整张看板草稿")
+                            .sysPrompt(io.agentscope.dataagent.tools.data.DashboardToolkit.PROMPT)
+                            .generateOptions(dashboardGenerateOptions(dashboardMaxOutputTokens))
+                            .disableWorkspaceContext()
+                            .maxIters(35)
+                            .enablePendingToolRecovery(true)
+                            .disableSubagents()
+                            .workspace(dashboardWorkspace);
+                    mountWrenSkills(b, wrenSkillsLocator, List.of("genbi", "usage"));
+                });
+
         DataAgentBootstrap bootstrap = builder.agentStateStore(stateStore).build();
 
         // Hand the gateway a reference to the per-user sandbox registry so every run(...) turn
@@ -735,9 +777,18 @@ public class DataAgentConfig {
         return bootstrap;
     }
 
+    static GenerateOptions dashboardGenerateOptions(int maxOutputTokens) {
+        if (maxOutputTokens < 1024 || maxOutputTokens > 65536) {
+            throw new IllegalArgumentException("看板输出额度须在1024至65536之间，并符合当前模型服务的限制");
+        }
+        return GenerateOptions.builder().maxTokens(maxOutputTokens).build();
+    }
+
     static ToolsConfig scopedWrenToolsConfig(String agentId, ToolsConfig source) {
         if (!"data-agent".equals(agentId)
-                && !ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId)) return source;
+                && !ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId)
+                && !io.agentscope.dataagent.dataset.DashboardService.AGENT_ID.equals(agentId))
+            return source;
         ToolsConfig scoped = new ToolsConfig();
         if (source != null) {
             scoped.setAllow(source.getAllow());

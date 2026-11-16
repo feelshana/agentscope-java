@@ -13,6 +13,40 @@ import reactor.core.publisher.Flux;
 
 class SwitchingModelTest {
     @Test
+    void dashboardOutputBudgetSurvivesPinnedConnectionSettings() {
+        var registry = mock(ModelServiceRegistry.class);
+        Model model = mock(Model.class);
+        var connection =
+                io.agentscope.core.model.GenerateOptions.builder()
+                        .modelName("configured-model")
+                        .apiKey("fixture-key")
+                        .stream(true)
+                        .build();
+        when(registry.capture(any()))
+                .thenReturn(new ModelServiceRegistry.Snapshot("a", 1, "first", model, connection));
+        var observed =
+                new java.util.concurrent.atomic.AtomicReference<
+                        io.agentscope.core.model.GenerateOptions>();
+        when(model.stream(any(), any(), any()))
+                .thenAnswer(
+                        call -> {
+                            observed.set(call.getArgument(2));
+                            return Flux.empty();
+                        });
+        new SwitchingModel(registry, model)
+                .stream(
+                                java.util.List.of(),
+                                java.util.List.of(),
+                                io.agentscope.core.model.GenerateOptions.builder()
+                                        .maxTokens(16384)
+                                        .build())
+                        .blockLast();
+        assertThat(observed.get().getMaxTokens()).isEqualTo(16384);
+        assertThat(observed.get().getModelName()).isEqualTo("configured-model");
+        assertThat(observed.get().getApiKey()).isEqualTo("fixture-key");
+    }
+
+    @Test
     void independentSubscriptionsKeepTheParentTurnWhileNewOperationsSeeTheSwitch() {
         var registry = mock(ModelServiceRegistry.class);
         Model startup = mock(Model.class);

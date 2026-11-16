@@ -1,0 +1,247 @@
+{
+  "CompiledMdl" : {
+    "published" : "published",
+    "publishedBuiltAt" : "publishedBuiltAt",
+    "draft" : "draft",
+    "draftBuiltAt" : "draftBuiltAt"
+  },
+  "MdlColumnView" : {
+    "name" : "name",
+    "type" : "type",
+    "description" : "description",
+    "relationship" : true,
+    "calculated" : true,
+    "expression" : "expression",
+    "primaryKey" : true,
+    "displayName" : "displayName",
+    "semanticType" : "semanticType",
+    "synonyms" : [ "synonyms" ],
+    "values" : [ "values" ],
+    "userDescribed" : true
+  },
+  "MdlCubeMemberView" : {
+    "name" : "name",
+    "expression" : "expression",
+    "type" : "type",
+    "description" : "description"
+  },
+  "MdlCubeView" : {
+    "name" : "name",
+    "baseModel" : "baseModel",
+    "description" : "description",
+    "measures" : [ {
+      "name" : "name",
+      "expression" : "expression",
+      "type" : "type",
+      "description" : "description"
+    } ],
+    "dimensions" : [ {
+      "name" : "name",
+      "expression" : "expression",
+      "type" : "type",
+      "description" : "description"
+    } ],
+    "timeDimensions" : [ {
+      "name" : "name",
+      "expression" : "expression",
+      "type" : "type",
+      "description" : "description"
+    } ],
+    "path" : "path"
+  },
+  "MdlFile" : {
+    "path" : "path",
+    "content" : "content"
+  },
+  "MdlIssue" : {
+    "severity" : "severity",
+    "message" : "message",
+    "source" : "source"
+  },
+  "MdlModelView" : {
+    "datasetId" : "datasetId",
+    "datasetName" : "datasetName",
+    "tableName" : "tableName",
+    "modelName" : "modelName",
+    "description" : "description",
+    "columns" : [ {
+      "name" : "name",
+      "type" : "type",
+      "description" : "description",
+      "relationship" : true,
+      "calculated" : true,
+      "expression" : "expression",
+      "primaryKey" : true,
+      "displayName" : "displayName",
+      "semanticType" : "semanticType",
+      "synonyms" : [ "synonyms" ],
+      "values" : [ "values" ],
+      "userDescribed" : true
+    } ],
+    "path" : "path",
+    "refSqlPath" : "refSqlPath",
+    "primaryKey" : "primaryKey",
+    "tableRole" : "tableRole"
+  },
+  "MdlPreview" : {
+    "files" : [ {
+      "path" : "path",
+      "content" : "content"
+    } ],
+    "publishedFiles" : [ {
+      "path" : "path",
+      "content" : "content"
+    } ],
+    "issues" : [ {
+      "severity" : "severity",
+      "message" : "message",
+      "source" : "source"
+    } ],
+    "mdlState" : "mdlState",
+    "mdlVersion" : 7,
+    "mdlPublishedAt" : "mdlPublishedAt",
+    "changed" : true
+  },
+  "MdlPublishResult" : {
+    "ok" : true,
+    "issues" : [ {
+      "severity" : "severity",
+      "message" : "message",
+      "source" : "source"
+    } ],
+    "output" : "output",
+    "mdlState" : "mdlState",
+    "mdlVersion" : 7,
+    "mdlPublishedAt" : "mdlPublishedAt"
+  },
+  "MdlRelationView" : {
+    "name" : "name",
+    "leftModel" : "leftModel",
+    "rightModel" : "rightModel",
+    "joinType" : "joinType",
+    "condition" : "condition",
+    "sourceColumns" : [ "sourceColumns" ],
+    "targetColumns" : [ "targetColumns" ],
+    "description" : "description"
+  },
+  "MdlValidation" : {
+    "ok" : true,
+    "issues" : [ {
+      "severity" : "severity",
+      "message" : "message",
+      "source" : "source"
+    } ],
+    "output" : "output",
+    "files" : [ {
+      "path" : "path",
+      "content" : "content"
+    } ]
+  },
+  "MdlView" : {
+    "state" : "state",
+    "version" : 7,
+    "publishedAt" : "publishedAt",
+    "changed" : true,
+    "models" : [ {
+      "datasetId" : "datasetId",
+      "datasetName" : "datasetName",
+      "tableName" : "tableName",
+      "modelName" : "modelName",
+      "description" : "description",
+      "columns" : [ {
+        "name" : "name",
+        "type" : "type",
+        "description" : "description",
+        "relationship" : true,
+        "calculated" : true,
+        "expression" : "expression",
+        "primaryKey" : true,
+        "displayName" : "displayName",
+        "semanticType" : "semanticType",
+        "synonyms" : [ "synonyms" ],
+        "values" : [ "values" ],
+        "userDescribed" : true
+      } ],
+      "path" : "path",
+      "refSqlPath" : "refSqlPath",
+      "primaryKey" : "primaryKey",
+      "tableRole" : "tableRole"
+    } ],
+    "relations" : [ {
+      "name" : "name",
+      "leftModel" : "leftModel",
+      "rightModel" : "rightModel",
+      "joinType" : "joinType",
+      "condition" : "condition",
+      "sourceColumns" : [ "sourceColumns" ],
+      "targetColumns" : [ "targetColumns" ],
+      "description" : "description"
+    } ],
+    "cubes" : [ {
+      "name" : "name",
+      "baseModel" : "baseModel",
+      "description" : "description",
+      "measures" : [ {
+        "name" : "name",
+        "expression" : "expression",
+        "type" : "type",
+        "description" : "description"
+      } ],
+      "dimensions" : [ {
+        "name" : "name",
+        "expression" : "expression",
+        "type" : "type",
+        "description" : "description"
+      } ],
+      "timeDimensions" : [ {
+        "name" : "name",
+        "expression" : "expression",
+        "type" : "type",
+        "description" : "description"
+      } ],
+      "path" : "path"
+    } ],
+    "views" : [ {
+      "name" : "name",
+      "sql" : "sql",
+      "description" : "description",
+      "path" : "path"
+    } ],
+    "issues" : [ {
+      "severity" : "severity",
+      "message" : "message",
+      "source" : "source"
+    } ],
+    "derivedModels" : [ {
+      "datasetId" : "datasetId",
+      "datasetName" : "datasetName",
+      "tableName" : "tableName",
+      "modelName" : "modelName",
+      "description" : "description",
+      "columns" : [ {
+        "name" : "name",
+        "type" : "type",
+        "description" : "description",
+        "relationship" : true,
+        "calculated" : true,
+        "expression" : "expression",
+        "primaryKey" : true,
+        "displayName" : "displayName",
+        "semanticType" : "semanticType",
+        "synonyms" : [ "synonyms" ],
+        "values" : [ "values" ],
+        "userDescribed" : true
+      } ],
+      "path" : "path",
+      "refSqlPath" : "refSqlPath",
+      "primaryKey" : "primaryKey",
+      "tableRole" : "tableRole"
+    } ]
+  },
+  "MdlViewSummary" : {
+    "name" : "name",
+    "sql" : "sql",
+    "description" : "description",
+    "path" : "path"
+  }
+}

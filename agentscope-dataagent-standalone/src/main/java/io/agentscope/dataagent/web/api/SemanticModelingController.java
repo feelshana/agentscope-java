@@ -76,17 +76,36 @@ public class SemanticModelingController {
     private final DatasetGroupService groupService;
     private final DatasetService datasetService;
     private final MdlSuggestionService modelingService;
-    private final MdlPublishService mdlPublishService;
     private final DocEnhanceService docEnhanceService;
     private final WrenQueryGateway wrenGateway;
-    private final BaselineMdlService baselineMdlService;
     private final MdlWorkspaceService workspace;
     private final ModelingToolkitRegistrar modelingToolkitRegistrar;
     private final ObjectMapper mapper;
     private final SqlQaExampleService sqlQaExamples;
-    private final io.agentscope.dataagent.dataset.ModelingActivity modelingActivity;
 
     @org.springframework.beans.factory.annotation.Autowired
+    public SemanticModelingController(
+            DatasetGroupService groupService,
+            DatasetService datasetService,
+            MdlSuggestionService modelingService,
+            DocEnhanceService docEnhanceService,
+            WrenQueryGateway wrenGateway,
+            MdlWorkspaceService workspace,
+            ModelingToolkitRegistrar modelingToolkitRegistrar,
+            ObjectMapper mapper,
+            SqlQaExampleService sqlQaExamples) {
+        this.groupService = groupService;
+        this.datasetService = datasetService;
+        this.modelingService = modelingService;
+        this.docEnhanceService = docEnhanceService;
+        this.wrenGateway = wrenGateway;
+        this.workspace = workspace;
+        this.modelingToolkitRegistrar = modelingToolkitRegistrar;
+        this.mapper = mapper;
+        this.sqlQaExamples = sqlQaExamples;
+    }
+
+    /** Source-compatible constructor; publication endpoints now have their own controller. */
     public SemanticModelingController(
             DatasetGroupService groupService,
             DatasetService datasetService,
@@ -100,18 +119,16 @@ public class SemanticModelingController {
             ObjectMapper mapper,
             SqlQaExampleService sqlQaExamples,
             io.agentscope.dataagent.dataset.ModelingActivity modelingActivity) {
-        this.groupService = groupService;
-        this.datasetService = datasetService;
-        this.modelingService = modelingService;
-        this.mdlPublishService = mdlPublishService;
-        this.docEnhanceService = docEnhanceService;
-        this.wrenGateway = wrenGateway;
-        this.baselineMdlService = baselineMdlService;
-        this.workspace = workspace;
-        this.modelingToolkitRegistrar = modelingToolkitRegistrar;
-        this.mapper = mapper;
-        this.sqlQaExamples = sqlQaExamples;
-        this.modelingActivity = modelingActivity;
+        this(
+                groupService,
+                datasetService,
+                modelingService,
+                docEnhanceService,
+                wrenGateway,
+                workspace,
+                modelingToolkitRegistrar,
+                mapper,
+                sqlQaExamples);
     }
 
     public SemanticModelingController(
@@ -747,98 +764,6 @@ public class SemanticModelingController {
     }
 
     // ------------------------------------------------------------------ mdl
-
-    /** YAML preview: freshly assembled files, published snapshot, issues and MDL state. */
-    @GetMapping("/mdl")
-    public Mono<MdlPublishService.MdlPreview> mdlPreview(
-            @PathVariable String groupId, Authentication auth) {
-        String userId = (String) auth.getPrincipal();
-        return Mono.fromCallable(
-                        () -> {
-                            groupService.getGroup(userId, groupId);
-                            return mdlPublishService.preview(groupId);
-                        })
-                .subscribeOn(Schedulers.boundedElastic())
-                .onErrorMap(this::toStatus);
-    }
-
-    /** The official compiled MDL of the published version and of the draft's last build. */
-    @GetMapping("/mdl/compiled")
-    public Mono<MdlPublishService.CompiledMdl> mdlCompiled(
-            @PathVariable String groupId, Authentication auth) {
-        String userId = (String) auth.getPrincipal();
-        return Mono.fromCallable(
-                        () -> {
-                            groupService.getGroup(userId, groupId);
-                            return mdlPublishService.compiled(groupId);
-                        })
-                .subscribeOn(Schedulers.boundedElastic())
-                .onErrorMap(this::toStatus);
-    }
-
-    /** Read-only structured MDL view for visualization (specs/013 M2): draft + publish state. */
-    @GetMapping("/mdl/view")
-    public Mono<MdlPublishService.MdlView> mdlView(
-            @PathVariable String groupId, Authentication auth) {
-        String userId = (String) auth.getPrincipal();
-        return Mono.fromCallable(
-                        () -> {
-                            groupService.getGroup(userId, groupId);
-                            return mdlPublishService.view(groupId);
-                        })
-                .subscribeOn(Schedulers.boundedElastic())
-                .onErrorMap(this::toStatus);
-    }
-
-    /** Runs assemble + wren context validate --strict; local issues short-circuit the subprocess. */
-    @PostMapping("/mdl/validate")
-    public Mono<MdlPublishService.MdlValidation> mdlValidate(
-            @PathVariable String groupId, Authentication auth) {
-        String userId = (String) auth.getPrincipal();
-        return Mono.fromCallable(
-                        () -> {
-                            groupService.getGroup(userId, groupId);
-                            return mdlPublishService.validate(groupId);
-                        })
-                .subscribeOn(Schedulers.boundedElastic())
-                .onErrorMap(this::toStatus);
-    }
-
-    /** Rebuilds the table/column baseline without publishing semantic drafts. */
-    @PostMapping("/mdl/initialize")
-    public Mono<MdlPublishService.MdlPublishResult> mdlInitialize(
-            @PathVariable String groupId, Authentication auth) {
-        String userId = (String) auth.getPrincipal();
-        return Mono.fromCallable(
-                        () -> {
-                            groupService.getGroup(userId, groupId);
-                            return baselineMdlService.publishAfterDatasetChange(userId, groupId);
-                        })
-                .subscribeOn(Schedulers.boundedElastic())
-                .onErrorMap(this::toStatus);
-    }
-
-    /** validate -> build -> snapshot -> version+1; any failure keeps the previous snapshot. */
-    @PostMapping("/mdl/publish")
-    public Mono<MdlPublishService.MdlPublishResult> mdlPublish(
-            @PathVariable String groupId, Authentication auth) {
-        String userId = (String) auth.getPrincipal();
-        return Mono.fromCallable(
-                        () -> {
-                            groupService.getGroup(userId, groupId);
-                            // ADR0111: never publish a draft the assistant is still changing.
-                            if (modelingActivity != null) modelingActivity.requireIdle(groupId);
-                            MdlPublishService.MdlPublishResult result =
-                                    mdlPublishService.publish(groupId);
-                            // Publish = rebuild the instance (ADR 0018 D8): the running wren engine
-                            // froze the previous manifest at startup, so it is closed here — the
-                            // next query respawns against the fresh snapshot.
-                            // Publication events invalidate before scheduling retrieval warmup.
-                            return result;
-                        })
-                .subscribeOn(Schedulers.boundedElastic())
-                .onErrorMap(this::toStatus);
-    }
 
     // ------------------------------------------------------------------ helpers
 

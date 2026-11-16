@@ -27,12 +27,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
 /** Paid native-agent behavior evaluation with synthetic metadata and an isolated empty database. */
 @EnabledIfSystemProperty(named = "dataagent.test.liveQueryDate", matches = "true")
+@Tag("external")
 class QueryDateBehaviorLiveTest {
     record Scenario(
             String name,

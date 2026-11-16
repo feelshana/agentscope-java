@@ -33,7 +33,7 @@ LLM 转录没有时间戳，需要单独分析一次运行时，先停服务把�
 
 ## 验证方式
 
-自动化：`mvn spotless:check`、`mvn test`、`mvn package -DskipTests`、`cd frontend && npm run build`。真实 LLM、Docker、Wren 相关测试为条件启用。Agent 的实际行为只能通过重启加载新包后的日志确认，提示词或单测断言不能代替。
+自动化：日常按改动用`python scripts/check.py backend --tests 类名`、`backend --unit`或`frontend --files 文件名`；合并/发布前完整`clean verify`，详见[CI指引](../guides/dataagent-ci.md)。真实 LLM、Docker、Wren 相关测试为条件启用。Agent 的实际行为只能通过重启加载新包后的日志确认，提示词或单测断言不能代替。
 
 
 ## 当前工程补充（2026-10-26）
@@ -67,3 +67,7 @@ LLM 转录没有时间戳，需要单独分析一次运行时，先停服务把�
 2026-10-29本次环境任务已完成，用户明确暂不处理数据库、打包上传和启动。环境镜像可用不等于常驻业务容器已运行；第三种同运行环境保留Java/Wren本地子进程方式，性能与效果的正式回归留待后续发布，不借本地历史测试替代。
 
 2026-10-29当前主交付已改为GitHub源码构建（spec099/ADR0118）：66现有运行环境继续复用，构建容器内编译框架和应用、封装不可变应用镜像；生产conf/data外置。旧tar方式保留备选，不再要求用户每次本地打tar上传。构建阶段本地验证通过，66 builder/实际构建、Compose启停/回退与生产DB/入口验收仍待；本次仅本地提交，由用户本人push。
+
+2026-11-12 spec133当前工程边界：发布HTTP归MdlPublicationController，聊天Inbound/选库归ChatTurnPreparation；纯清单投影MdlManifestRenderer、文件安装/恢复MdlPublicationStore、单数据集提交后物理清理DatasetDeletionCleanup。会话范围与转录解析归runtime.session。journal需要随mdl-home持久化，适用单进程；实测与限制见[六阶段工程报告](../test-reports/20261112-architecture-six-stage-acceptance.md)，开发服务尚未重启加载。
+
+2026-11-13本机真实对照确认：IDEA选中DataAgentApp(1)/dev，实际模型由平台库激活配置覆盖启动默认；仅探测dev文件可能错误判断模型不可用。当前bb02f96d与个人5479d152主链路在隔离真实环境一致，但管理/用量等16个页面请求在两边均404，例行任务被SecurityConfig明确禁用；不能把旧页面可打开当作功能已实现。详见[运行对照报告](../test-reports/20261113-branch-runtime-parity-acceptance.md)。

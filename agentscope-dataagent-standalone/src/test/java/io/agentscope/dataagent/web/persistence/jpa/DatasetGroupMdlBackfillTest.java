@@ -19,6 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -38,6 +39,7 @@ import org.springframework.test.context.TestPropertySource;
  */
 @DataJpaTest
 @TestPropertySource(properties = {"spring.sql.init.mode=never"})
+@Tag("integration")
 class DatasetGroupMdlBackfillTest {
 
     @Autowired private DatasetGroupRepository repository;

@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;
@@ -178,6 +179,7 @@ class UserSandboxDockerReadinessTest {
 
     @Test
     @EnabledIfSystemProperty(named = "dataagent.test.docker-readiness-timeout", matches = "true")
+    @Tag("external")
     void realHangingProcessReachesTheActualThirtySecondTimeout() {
         long start = System.nanoTime();
         assertThatThrownBy(() -> command(child("hang")))

@@ -6,8 +6,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.agentscope.dataagent.runtime.session.SessionTurnParser.TurnEntry;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity;
-import io.agentscope.dataagent.web.session.SessionTurnParser.TurnEntry;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;

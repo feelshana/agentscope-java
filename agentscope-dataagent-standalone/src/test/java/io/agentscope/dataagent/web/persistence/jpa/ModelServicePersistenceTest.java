@@ -8,6 +8,7 @@ import io.agentscope.dataagent.runtime.model.ModelServiceCipher;
 import io.agentscope.dataagent.runtime.model.ModelServiceRegistry;
 import java.nio.file.Path;
 import java.util.Base64;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 @DataJpaTest
 @TestPropertySource(properties = {"spring.sql.init.mode=never", "spring.jpa.show-sql=false"})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
+@Tag("integration")
 class ModelServicePersistenceTest {
     @Autowired ModelServiceConfigurationRepository repository;
     @TempDir Path home;

@@ -1,0 +1,37 @@
+.sqa { min-width: 0; padding-top: 2px; container: examples / inline-size; }
+.sqa-head { display: flex; align-items: center; gap: 12px; padding: 12px 0 15px; border-top: .5px solid var(--da-border); }
+.sqa-head p { margin: 0; color: var(--da-text-muted); font-size: 11px; line-height: 1.7; }
+.sqa-total { flex: none; color: var(--da-text-2); font-size: 12px; font-weight: 600; }
+.sqa-layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 22px; align-items: start; }
+.sqa-list { min-width: 0; display: flex; flex-direction: column; gap: 6px; max-height: 500px; overflow: auto; padding: 0 2px 2px 0; }
+.sqa-item { display: flex; align-items: flex-start; gap: 9px; min-width: 0; border: .5px solid transparent; border-radius: 9px; background: none; padding: 12px 10px; text-align: left; color: var(--da-text-2); font: inherit; cursor: pointer; }
+.sqa-item:hover { background: var(--da-surface-sunken); }
+.sqa-item.is-selected { background: var(--da-primary-soft); border-color: var(--da-primary-line); color: var(--da-text); }
+.sqa-item:disabled { cursor: default; opacity: .6; }
+.sqa-item-copy { flex: 1; min-width: 0; }
+.sqa-item-copy strong { display: block; font-size: 12px; font-weight: 550; line-height: 1.8; overflow-wrap: anywhere; }
+.sqa-item-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 7px; font-size: 10px; color: var(--da-text-muted); }
+.sqa-item-meta > span + span { padding-left: 7px; border-left: .5px solid var(--da-border-strong); }
+.sqa-source-icon { display: grid; place-items: center; flex: none; width: 25px; height: 27px; border-radius: 7px; }
+.sqa-source-modeling { background: color-mix(in srgb, var(--da-success) 9%, var(--da-surface)); color: var(--da-success); }
+.sqa-source-liked { background: var(--da-primary-soft); color: var(--da-primary); }
+.sqa-review { color: var(--da-warn); }
+.sqa-detail { min-width: 0; display: flex; flex-direction: column; gap: 13px; border-left: .5px solid var(--da-border); padding-left: 22px; }
+.sqa-detail-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.sqa-source-label { font-size: 11px; color: var(--da-text-muted); }
+.sqa-permission { display: inline-flex; align-items: center; gap: 5px; padding: 3px 6px; border-radius: 5px; font-size: 10px; color: var(--da-text-muted); background: var(--da-surface-sunken); }
+.sqa-question { font-size: 15px; font-weight: 600; line-height: 1.8; margin: 0; color: var(--da-text); overflow-wrap: anywhere; }
+.sqa-note { display: flex; align-items: flex-start; gap: 7px; background: var(--da-surface-sunken); border-radius: 8px; padding: 10px 12px; font-size: 11px; line-height: 1.85; color: var(--da-text-muted); }
+.sqa-note > svg { flex: none; margin-top: 3px; }
+.sqa-review-note { color: var(--da-warn); background: color-mix(in srgb, var(--da-warn) 8%, var(--da-surface)); }
+.sqa-question-label { display: flex; flex-direction: column; gap: 7px; font-size: 12px; font-weight: 550; }
+.sqa-question-label input { font-size: 12px; font-weight: 400; width: 100%; box-sizing: border-box; }
+.sqa-editor { min-width: 0; }
+.sqa-editor pre code { font: inherit; line-height: inherit; }
+.sqa-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; padding-top: 3px; }
+.sqa-actions > span { margin-right: auto; font-size: 10px; color: var(--da-text-muted); }
+.sqa-actions .da-btn { display: inline-flex; align-items: center; gap: 5px; padding: 6px 10px; font-size: 11px; border-radius: 7px; box-shadow: none; }
+.sqa-actions .sqa-delete { color: var(--da-danger); border-color: transparent; background: none; }
+.sqa-empty { padding: 30px 15px; font-size: 12px; text-align: center; color: var(--da-text-muted); }
+@container examples (max-width: 900px) { .sqa-layout { grid-template-columns: 230px minmax(0, 1fr); gap: 15px; }.sqa-detail { padding-left: 15px; } }
+@container examples (max-width: 650px) { .sqa-layout { grid-template-columns: minmax(0, 1fr); }.sqa-list { max-height: 240px; }.sqa-detail { border-left: 0; border-top: .5px solid var(--da-border); padding: 16px 0 0; }.sqa-head { flex-wrap: wrap; gap: 6px; } }

@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>曜境零售｜全渠道经营驾驶舱</title>
+<style>
+:root{
+  --navy:#132441; --canvas:#f5f7fa; --ink:#172b46; --muted:#7f8b9e;
+  --teal:#0b9488; --cobalt:#4c72df; --amber:#d99838;
+  --line:#e3e8ef; --panel:#ffffff; --radius:12px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--canvas); color:var(--ink);
+  font-family:"PingFang SC","Microsoft YaHei","Hiragino Sans GB",system-ui,sans-serif;
+  font-size:13px; line-height:1.5; -webkit-font-smoothing:antialiased;
+}
+.topbar{
+  background:var(--navy); color:#fff; padding:14px 20px;
+  display:flex; flex-wrap:wrap; gap:12px 20px; align-items:center; justify-content:space-between;
+}
+.brand{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap}
+.logo{font-size:17px; font-weight:600; letter-spacing:.5px}
+.sub{font-size:12px; color:#a9b8cf}
+.filters{display:flex; flex-wrap:wrap; gap:10px; align-items:center}
+.filters label{display:flex; align-items:center; gap:6px; font-size:12px; color:#c3cfe0}
+.filters select{
+  background:#1d3357; color:#fff; border:1px solid #2c4570; border-radius:8px;
+  padding:6px 8px; font-size:12px; font-family:inherit; min-width:96px;
+}
+.filters select:focus{outline:2px solid var(--teal); outline-offset:1px}
+#btnRefresh{
+  background:var(--teal); color:#fff; border:0; border-radius:8px;
+  padding:7px 14px; font-size:12px; font-family:inherit; cursor:pointer;
+}
+#btnRefresh:hover{background:#0a7f75}
+#btnRefresh:disabled{opacity:.6; cursor:progress}
+.canvas{padding:16px 20px 8px; display:flex; flex-direction:column; gap:16px}
+.kpis{display:grid; grid-template-columns:repeat(2,1fr); gap:16px}
+@media (min-width:1050px){
+  .kpis{grid-template-columns:repeat(4,1fr)}
+}
+.kpi{
+  background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+  padding:14px 16px; box-shadow:0 1px 2px rgba(19,36,65,.05);
+  height:110px; display:flex; flex-direction:column; justify-content:center;
+}
+.kpi .k-label{font-size:12px; color:var(--muted)}
+.kpi .k-value{
+  font-size:28px; font-weight:600; letter-spacing:-.5px; margin-top:4px;
+  font-variant-numeric:tabular-nums; font-feature-settings:"tnum";
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.kpi .k-value .unit{font-size:13px; font-weight:500; color:var(--muted); margin-left:4px}
+.kpi .k-foot{font-size:12px; color:var(--muted); margin-top:4px; font-variant-numeric:tabular-nums;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.up{color:var(--teal)} .down{color:#c0504d} .warn{color:var(--amber)}
+.grid-main{display:grid; grid-template-columns:1.55fr 1fr; gap:16px}
+.panel{
+  background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+  padding:16px 18px 12px; box-shadow:0 1px 2px rgba(19,36,65,.05); min-width:0;
+}
+.panel h3{margin:0 0 10px; font-size:15px; font-weight:600; display:flex; align-items:center; gap:8px}
+.panel h3 .hint{font-size:12px; font-weight:400; color:var(--muted)}
+.seg{margin-left:auto; display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden}
+.seg button{
+  background:#fff; color:var(--muted); border:0; padding:4px 10px;
+  font-size:12px; font-family:inherit; cursor:pointer;
+}
+.seg button + button{border-left:1px solid var(--line)}
+.seg button.on{background:#e8f4f3; color:var(--teal); font-weight:600}
+.region-note{font-size:12px; color:var(--muted); margin:8px 2px 0; min-height:18px}
+.region-note .warn{color:var(--amber); font-weight:600}
+.region-note .ok{color:var(--teal); font-weight:600}
+.chart{width:100%; height:300px}
+.chart-sm{height:260px}
+.channel-body{display:flex; align-items:center; gap:14px}
+.channel-body .chart{flex:1 1 auto; min-width:0}
+.channel-list{flex:0 0 168px; display:flex; flex-direction:column; gap:8px}
+.channel-list .row{display:flex; flex-direction:column; gap:1px}
+.channel-list .nm{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--ink)}
+.channel-list .dot{width:8px; height:8px; border-radius:2px; flex:0 0 auto}
+.channel-list .amt{font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums}
+.channel-list .amt b{color:var(--ink); font-weight:600}
+@media (max-width:1049px){
+  .channel-body{flex-direction:column; align-items:stretch}
+  .channel-list{flex:0 0 auto; flex-direction:row; flex-wrap:wrap; gap:6px 16px}
+  .channel-list .row{flex:1 1 40%}
+}
+.state{
+  display:flex; align-items:center; justify-content:center; height:100%;
+  font-size:12px; color:var(--muted); text-align:center; padding:12px;
+}
+.state.err{color:#c0504d}
+.table-wrap{overflow-x:auto}
+table{border-collapse:collapse; width:100%; font-size:12px; min-width:720px}
+th,td{padding:9px 10px; text-align:right; border-bottom:1px solid var(--line); white-space:nowrap}
+th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}
+th{
+  color:var(--muted); font-weight:500; cursor:pointer; user-select:none;
+  background:#fafbfd; position:sticky; top:0;
+}
+th:hover{color:var(--ink)}
+th .arrow{font-size:10px; margin-left:3px; color:var(--teal)}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:#f2f7f7}
+tbody tr.active{background:#e8f4f3}
+td.num{font-variant-numeric:tabular-nums}
+.foot{
+  padding:14px 20px 22px; font-size:12px; color:var(--muted);
+  display:flex; flex-wrap:wrap; gap:8px 18px; align-items:flex-start;
+}
+.foot details{max-width:760px}
+.foot summary{cursor:pointer; color:var(--ink)}
+.foot #metricNote{margin-top:6px; line-height:1.7}
+@media (max-width:1100px){
+  .grid-main{grid-template-columns:1fr}
+}
+@media (max-width:600px){
+  .canvas{padding:12px}
+  .kpis{grid-template-columns:1fr; gap:12px}
+  .kpi{height:auto; min-height:96px; padding:12px 14px}
+  .kpi .k-value{font-size:26px}
+  .chart{height:260px}
+  .chart-sm{height:240px}
+  .filters select{min-width:84px}
+  .seg button{padding:4px 8px}
+}
+@media (prefers-reduced-motion:reduce){
+  *{transition:none !important; animation:none !important}
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">曜境零售</span>
+    <span class="sub">全渠道经营驾驶舱</span>
+  </div>
+  <div class="filters">
+    <label>时间<select id="fPeriod"></select></label>
+    <label>区域<select id="fRegion"></select></label>
+    <label>渠道<select id="fChannel"></select></label>
+    <button id="btnRefresh" type="button">刷新数据</button>
+  </div>
+</header>
+<main class="canvas">
+  <section class="kpis" id="kpis"><div class="kpi" id="kpiSales">
+  <div class="k-label">净销售额</div>
+  <div class="k-value" data-v>—</div>
+  <div class="k-foot" data-f>加载中…</div>
+</div>
+<div class="kpi" id="kpiMargin">
+  <div class="k-label">商品毛利率</div>
+  <div class="k-value" data-v>—</div>
+  <div class="k-foot" data-f>加载中…</div>
+</div>
+<div class="kpi" id="kpiOrders">
+  <div class="k-label">成交订单</div>
+  <div class="k-value" data-v>—</div>
+  <div class="k-foot" data-f>加载中…</div>
+</div>
+<div class="kpi" id="kpiTarget">
+  <div class="k-label">目标达成</div>
+  <div class="k-value" data-v>—</div>
+  <div class="k-foot" data-f>加载中…</div>
+</div></section>
+  <section class="grid-main">
+    <div class="panel" id="panelTrend"><h3>收入趋势<span class="hint" id="trendHint"></span><span class="seg" id="trendSeg"><button type="button" data-grain="week">按周</button><button type="button" data-grain="month">按月</button></span></h3><div class="chart" id="chartTrend"></div></div>
+    <div class="panel" id="panelChannel"><h3>渠道结构<span class="hint">净销售额 · 万元</span></h3><div class="channel-body"><div class="chart chart-sm" id="chartChannel"></div><div class="channel-list" id="channelList"></div></div></div>
+  </section>
+  <section class="grid-main">
+    <div class="panel" id="panelRegion"><h3>区域经营表现<span class="hint">实际 vs 目标 · 万元</span></h3><div class="chart chart-sm" id="chartRegion"></div><div class="region-note" id="regionNote"></div></div>
+    <div class="panel" id="panelCategory"><h3>商品增长引擎<span class="hint">净销售额 · 万元</span></h3><div class="chart chart-sm" id="chartCategory"></div></div>
+  </section>
+  <section class="panel" id="panelStore"><h3>门店经营明细</h3><div class="table-wrap" id="storeTable"></div></section>
+</main>
+<footer class="foot">
+  <span>合成演示数据 · 2025.04—2026.09 · 数据与品牌均为虚构</span>
+  <details><summary>指标口径</summary><div id="metricNote"></div></details>
+</footer>
+<script>
+'use strict';
+/* ---------- 基础工具 ---------- */
+var PERIODS = [
+  { id: '2026Q3', label: '2026年第三季度', start: '2026-07-01', end: '2026-09-30', prevStart: '2025-07-01', prevEnd: '2025-09-30' },
+  { id: '2026Q2', label: '2026年第二季度', start: '2026-04-01', end: '2026-06-30', prevStart: '2025-04-01', prevEnd: '2025-06-30' },
+  { id: '2025Q3', label: '2025年第三季度', start: '2025-07-01', end: '2025-09-30', prevStart: '2024-07-01', prevEnd: '2024-09-30' }
+];
+var REGIONS = ['全部', '华东', '华中', '华北', '华南', '西北', '西南'];
+var CHANNELS = ['全部', '线下门店', '官方商城', '内容电商'];
+
+var state = { period: '2026Q3', region: '全部', channel: '全部', storeId: null, trendGrain: 'week', sortKey: 'net_sales', sortDir: 'desc' };
+var charts = {};
+var runSeq = 0;
+
+function $(id) { return document.getElementById(id); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); }
+function num(v) { var n = Number(v); return isFinite(n) ? n : null; }
+function fmtMoney(v) {
+  var n = num(v); if (n === null) return '—';
+  var a = Math.abs(n);
+  if (a >= 1000000) return (n / 1000000).toFixed(2) + ' 百万';
+  if (a >= 10000) return (n / 10000).toFixed(1) + ' 万';
+  return n.toFixed(0);
+}
+function fmtYuan(v) { var n = num(v); return n === null ? '—' : n.toLocaleString('zh-CN', { maximumFractionDigits: 2 }); }
+function fmtPct(v, d) { var n = num(v); return n === null ? '—' : (n * 100).toFixed(d == null ? 1 : d) + '%'; }
+function fmtInt(v) { var n = num(v); return n === null ? '—' : Math.round(n).toLocaleString('zh-CN'); }
+function fmtDelta(v) {
+  var n = num(v); if (n === null) return { text: '—', cls: '' };
+  var s = (n >= 0 ? '+' : '') + (n * 100).toFixed(1) + '%';
+  return { text: s, cls: n >= 0 ? 'up' : 'down' };
+}
+function period() { for (var i = 0; i < PERIODS.length; i++) if (PERIODS[i].id === state.period) return PERIODS[i]; return PERIODS[0]; }
+function sqlStr(s) { return "'" + String(s).replace(/'/g, "''") + "'"; }
+
+/* 统一取数：返回 {columns:[名称], rows:[[...]]} */
+async function query(sql) {
+  var res = await dataagent.query(sql);
+  if (!res) throw new Error('查询未返回结果');
+  var cols = (res.columns || []).map(function (c) { return typeof c === 'string' ? c : (c && c.name) || ''; });
+  var rows = res.rows || [];
+  return { columns: cols, rows: rows };
+}
+function cell(row, cols, name) {
+  var i = cols.indexOf(name);
+  return i < 0 ? null : row[i];
+}
+/* 并发上限 4 的批量执行 */
+async function runAll(tasks) {
+  var out = new Array(tasks.length), idx = 0;
+  async function worker() {
+    while (idx < tasks.length) {
+      var i = idx++;
+      out[i] = await tasks[i]();
+    }
+  }
+  var ws = [];
+  for (var k = 0; k < Math.min(4, tasks.length); k++) ws.push(worker());
+  await Promise.all(ws);
+  return out;
+}
+/* ---------- SQL 构造 ---------- */
+function whereOrders(p, alias) {
+  var a = alias || 'o';
+  var w = [a + '.order_date >= ' + sqlStr(p.start), a + '.order_date <= ' + sqlStr(p.end)];
+  if (state.region !== '全部') w.push('s.region = ' + sqlStr(state.region));
+  if (state.channel !== '全部') w.push(a + '.channel = ' + sqlStr(state.channel));
+  return w.join(' AND ');
+}
+function whereTargets(p) {
+  var w = ['t.target_month >= ' + sqlStr(p.start), 't.target_month <= ' + sqlStr(p.end)];
+  if (state.region !== '全部') w.push('s.region = ' + sqlStr(state.region));
+  if (state.channel !== '全部') w.push('t.channel = ' + sqlStr(state.channel));
+  return w.join(' AND ');
+}
+var FROM_ORDERS = ' FROM retail_orders o LEFT JOIN retail_stores s ON o.store_id = s.store_id LEFT JOIN retail_products p ON o.product_id = p.product_id ';
+var FROM_TARGETS = ' FROM retail_targets t LEFT JOIN retail_stores s ON t.store_id = s.store_id ';
+
+function sqlKpi(p) {
+  return 'SELECT SUM(o.net_sales) AS net_sales, SUM(o.net_profit) AS gross_profit, ' +
+    'SUM(CASE WHEN o.net_sales > 0 THEN 1 ELSE 0 END) AS orders ' +
+    FROM_ORDERS + 'WHERE ' + whereOrders(p);
+}
+function sqlKpiPrev(p) {
+  return 'SELECT SUM(o.net_sales) AS net_sales, SUM(o.net_profit) AS gross_profit, ' +
+    'SUM(CASE WHEN o.net_sales > 0 THEN 1 ELSE 0 END) AS orders ' +
+    FROM_ORDERS + 'WHERE ' + whereOrders({ start: p.prevStart, end: p.prevEnd });
+}
+function sqlTarget(p) {
+  return 'SELECT SUM(t.sales_target) AS target ' + FROM_TARGETS + 'WHERE ' + whereTargets(p);
+}
+function sqlTrend(p, grain) {
+  var bucket = grain === 'week'
+    ? 'DATE_SUB(o.order_date, INTERVAL WEEKDAY(o.order_date) DAY)'
+    : "DATE_FORMAT(o.order_date, '%Y-%m-01')";
+  return 'SELECT ' + bucket + ' AS bucket, SUM(o.net_sales) AS net_sales ' +
+    FROM_ORDERS + 'WHERE ' + whereOrders(p) + ' GROUP BY ' + bucket + ' ORDER BY bucket';
+}
+function sqlTrendPrev(p, grain) {
+  var bucket = grain === 'week'
+    ? 'DATE_SUB(o.order_date, INTERVAL WEEKDAY(o.order_date) DAY)'
+    : "DATE_FORMAT(o.order_date, '%Y-%m-01')";
+  return 'SELECT ' + bucket + ' AS bucket, SUM(o.net_sales) AS net_sales ' +
+    FROM_ORDERS + 'WHERE ' + whereOrders({ start: p.prevStart, end: p.prevEnd }) +
+    ' GROUP BY ' + bucket + ' ORDER BY bucket';
+}
+function sqlChannel(p) {
+  return 'SELECT o.channel AS channel, SUM(o.net_sales) AS net_sales ' +
+    FROM_ORDERS + 'WHERE ' + whereOrders(p) + ' GROUP BY o.channel ORDER BY net_sales DESC';
+}
+function sqlRegion(p) {
+  return 'SELECT s.region AS region, SUM(o.net_sales) AS net_sales, SUM(o.net_profit) AS gross_profit ' +
+    FROM_ORDERS + 'WHERE ' + whereOrders(p) + ' GROUP BY s.region ORDER BY net_sales DESC';
+}
+function sqlRegionTarget(p) {
+  return 'SELECT s.region AS region, SUM(t.sales_target) AS target ' +
+    FROM_TARGETS + 'WHERE ' + whereTargets(p) + ' GROUP BY s.region';
+}
+function sqlCategory(p) {
+  return 'SELECT p.category AS category, SUM(o.net_sales) AS net_sales, SUM(o.net_profit) AS gross_profit ' +
+    FROM_ORDERS + 'WHERE ' + whereOrders(p) + ' GROUP BY p.category ORDER BY net_sales DESC';
+}
+function sqlStore(p) {
+  return 'SELECT o.store_id AS store_id, s.store_name AS store_name, s.region AS region, ' +
+    'SUM(o.net_sales) AS net_sales, SUM(o.net_profit) AS gross_profit, ' +
+    'SUM(CASE WHEN o.net_sales > 0 THEN 1 ELSE 0 END) AS orders ' +
+    FROM_ORDERS + 'WHERE ' + whereOrders(p) + ' GROUP BY o.store_id, s.store_name, s.region ORDER BY net_sales DESC';
+}
+function sqlStorePrev(p) {
+  return 'SELECT o.store_id AS store_id, SUM(o.net_sales) AS net_sales ' +
+    FROM_ORDERS + 'WHERE ' + whereOrders({ start: p.prevStart, end: p.prevEnd }) +
+    ' GROUP BY o.store_id';
+}
+function sqlStoreTarget(p) {
+  return 'SELECT t.store_id AS store_id, SUM(t.sales_target) AS target ' +
+    FROM_TARGETS + 'WHERE ' + whereTargets(p) + ' GROUP BY t.store_id';
+}
+/* ---------- 状态与渲染 ---------- */
+function disposeChart(id) {
+  var c = charts[id];
+  if (c) {
+    try { c.dispose(); } catch (e) {}
+    delete charts[id];
+  }
+}
+function setState(el, kind, msg) {
+  if (!el) return;
+  /* 覆盖容器会移除 canvas，必须先销毁缓存实例，否则后续复用失效实例导致空白 */
+  disposeChart(el.id);
+  el.innerHTML = '<div class="state' + (kind === 'err' ? ' err' : '') + '">' + esc(msg) + '</div>';
+}
+function clearState(el) {
+  var s = el.querySelector('.state');
+  if (s) s.remove();
+}
+function kpiSet(id, value, foot, footCls) {
+  var box = $(id); if (!box) return;
+  box.querySelector('[data-v]').innerHTML = value;
+  var f = box.querySelector('[data-f]');
+  f.innerHTML = foot;
+  f.className = 'k-foot' + (footCls ? ' ' + footCls : '');
+}
+function kpiError(id, msg) {
+  var box = $(id); if (!box) return;
+  box.querySelector('[data-v]').textContent = '—';
+  var f = box.querySelector('[data-f]');
+  f.textContent = msg;
+  f.className = 'k-foot down';
+}
+function chartOf(id) {
+  var el = $(id); if (!el) return null;
+  var c = charts[id];
+  /* 容器被重建或 canvas 丢失时，旧实例已失效，需销毁后重新初始化 */
+  if (c && (c.isDisposed && c.isDisposed() || !el.querySelector('canvas'))) {
+    disposeChart(id);
+    c = null;
+  }
+  if (!c) charts[id] = echarts.init(el, null, { renderer: 'canvas' });
+  return charts[id];
+}
+function showChart(id, option) {
+  var c = chartOf(id); if (!c) return;
+  clearState($(id));
+  c.setOption(option, true);
+  c.resize();
+}
+function chartEmpty(id, msg) {
+  var c = charts[id];
+  if (c) c.clear();
+  setState($(id), 'empty', msg || '当前筛选条件下暂无数据');
+}
+function chartError(id, msg) {
+  var c = charts[id];
+  if (c) c.clear();
+  setState($(id), 'err', '数据加载失败：' + msg);
+}
+var AXIS_STYLE = {
+  axisLine: { lineStyle: { color: '#e3e8ef' } },
+  axisTick: { show: false },
+  axisLabel: { color: '#7f8b9e', fontSize: 11 },
+  splitLine: { lineStyle: { color: '#eef1f6' } }
+};
+var TOOLTIP = {
+  backgroundColor: 'rgba(19,36,65,.94)', borderWidth: 0,
+  textStyle: { color: '#fff', fontSize: 12 }, padding: [8, 10]
+};
+/* ---------- 图表渲染 ---------- */
+function renderTrend(cur, prev, grain) {
+  var id = 'chartTrend';
+  if (!cur.rows.length) { chartEmpty(id, '所选区间内没有销售记录'); return; }
+  var labels = [], vals = [], prevVals = [];
+  if (grain === 'week') {
+    /* 按相对周序号对齐：本期第 n 周对应上年同期第 n 周 */
+    var prevList = prev.rows.map(function (r) { return num(cell(r, prev.columns, 'net_sales')); });
+    cur.rows.forEach(function (r, i) {
+      var b = String(cell(r, cur.columns, 'bucket')).slice(0, 10);
+      labels.push('第' + (i + 1) + '周 ' + b.slice(5));
+      vals.push(num(cell(r, cur.columns, 'net_sales')));
+      prevVals.push(i < prevList.length ? prevList[i] : null);
+    });
+  } else {
+    var prevMap = {};
+    prev.rows.forEach(function (r) { prevMap[String(cell(r, prev.columns, 'bucket')).slice(0, 7)] = num(cell(r, prev.columns, 'net_sales')); });
+    cur.rows.forEach(function (r) {
+      var b = String(cell(r, cur.columns, 'bucket')).slice(0, 7);
+      /* 上年同期按同月对齐：本期 2026-07 对应上年 2025-07 */
+      var pb = (parseInt(b.slice(0, 4), 10) - 1) + b.slice(4);
+      labels.push(b);
+      vals.push(num(cell(r, cur.columns, 'net_sales')));
+      prevVals.push(prevMap[pb] == null ? null : prevMap[pb]);
+    });
+  }
+  showChart(id, {
+    tooltip: Object.assign({ trigger: 'axis', valueFormatter: function (v) { return v == null ? '—' : fmtYuan(v) + ' 元'; } }, TOOLTIP),
+    legend: { data: ['本期净销售额', '上年同期'], right: 0, top: 0, itemWidth: 10, itemHeight: 10, textStyle: { color: '#7f8b9e', fontSize: 11 } },
+    grid: { left: 8, right: 12, top: 34, bottom: 4, containLabel: true },
+    xAxis: Object.assign({ type: 'category', boundaryGap: false, data: labels }, AXIS_STYLE),
+    yAxis: Object.assign({}, AXIS_STYLE, {
+      type: 'value', name: '万元', nameTextStyle: { color: '#7f8b9e', fontSize: 11, padding: [0, 0, 0, 4] },
+      axisLabel: Object.assign({}, AXIS_STYLE.axisLabel, { formatter: function (v) { return (v / 10000).toFixed(0); } })
+    }),
+    series: [
+      {
+        name: '本期净销售额', type: 'line', smooth: true, symbol: 'circle', symbolSize: 5,
+        data: vals, itemStyle: { color: '#0b9488' }, lineStyle: { width: 2.4, color: '#0b9488' },
+        areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(11,148,136,.26)' }, { offset: 1, color: 'rgba(11,148,136,.02)' }] } }
+      },
+      {
+        name: '上年同期', type: 'line', smooth: true, symbol: 'none',
+        data: prevVals, lineStyle: { width: 1.6, type: 'dashed', color: '#9aa7ba' }, itemStyle: { color: '#9aa7ba' }
+      }
+    ]
+  });
+}
+function renderChannel(res) {
+  var id = 'chartChannel';
+  var listEl = $('channelList');
+  if (!res.rows.length) {
+    chartEmpty(id, '所选区间内没有渠道销售记录');
+    if (listEl) listEl.innerHTML = '';
+    return;
+  }
+  var data = res.rows.map(function (r) {
+    return { name: String(cell(r, res.columns, 'channel')), value: num(cell(r, res.columns, 'net_sales')) };
+  }).filter(function (d) { return d.value != null; });
+  var total = data.reduce(function (a, b) { return a + b.value; }, 0);
+  if (!total) {
+    chartEmpty(id, '所选区间内净销售额为 0');
+    if (listEl) listEl.innerHTML = '';
+    return;
+  }
+  var palette = ['#0b9488', '#4c72df', '#7fb8b2', '#a9b8cf'];
+  var totalM = (total / 1000000).toFixed(2);
+  showChart(id, {
+    tooltip: Object.assign({ trigger: 'item', formatter: function (p) { return p.name + '<br/>净销售额 ' + fmtYuan(p.value) + ' 元（' + p.percent + '%）'; } }, TOOLTIP),
+    graphic: [
+      { type: 'text', left: 'center', top: '43%', style: { text: totalM, fill: '#172b46', fontSize: 20, fontWeight: 600, textAlign: 'center' } },
+      { type: 'text', left: 'center', top: '56%', style: { text: '百万元 · 合计', fill: '#7f8b9e', fontSize: 11, textAlign: 'center' } }
+    ],
+    series: [{
+      type: 'pie', radius: ['58%', '80%'], center: ['50%', '50%'], avoidLabelOverlap: true,
+      itemStyle: { borderColor: '#fff', borderWidth: 2 },
+      label: { show: false },
+      labelLine: { show: false },
+      data: data.map(function (d, i) { return Object.assign({ itemStyle: { color: palette[i % palette.length] } }, d); })
+    }]
+  });
+  if (listEl) {
+    listEl.innerHTML = data.map(function (d, i) {
+      var share = total ? d.value / total : null;
+      return '<div class="row">' +
+        '<span class="nm"><i class="dot" style="background:' + palette[i % palette.length] + '"></i>' + esc(d.name) + '</span>' +
+        '<span class="amt"><b>' + (d.value / 10000).toFixed(1) + '</b> 万元 · ' + fmtPct(share) + '</span>' +
+        '</div>';
+    }).join('');
+  }
+}
+function renderRegionNote(rows) {
+  var el = $('regionNote'); if (!el) return;
+  var withTarget = rows.filter(function (r) { return r.target && r.target > 0; });
+  if (!withTarget.length) { el.textContent = '当前筛选条件下没有可用的区域销售目标，无法计算达成率。'; return; }
+  var lowest = withTarget[0];
+  var rate = lowest.sales / lowest.target;
+  var cls = rate < 1 ? 'warn' : 'ok';
+  el.innerHTML = '当前最低达成区域为 <strong>' + esc(lowest.region) + '</strong>，达成率 <span class="' + cls + '">' +
+    fmtPct(rate) + '</span>（实际 ' + fmtMoney(lowest.sales) + ' / 目标 ' + fmtMoney(lowest.target) + ' 元）。';
+}
+function renderRegion(act, tgt) {
+  var id = 'chartRegion';
+  if (!act.rows.length) { chartEmpty(id, '所选区间内没有区域销售记录'); var n0 = $('regionNote'); if (n0) n0.textContent = ''; return; }
+  var tMap = {};
+  tgt.rows.forEach(function (r) { tMap[String(cell(r, tgt.columns, 'region'))] = num(cell(r, tgt.columns, 'target')); });
+  var rows = act.rows.map(function (r) {
+    var region = String(cell(r, act.columns, 'region'));
+    var sales = num(cell(r, act.columns, 'net_sales')) || 0;
+    var target = tMap[region];
+    return { region: region, sales: sales, target: target == null ? null : target };
+  });
+  rows.sort(function (a, b) { return (a.target ? a.sales / a.target : 0) - (b.target ? b.sales / b.target : 0); });
+  renderRegionNote(rows);
+  var names = rows.map(function (r) { return r.region; });
+  var actual = rows.map(function (r) { return r.sales; });
+  var targets = rows.map(function (r) { return r.target; });
+  var rates = rows.map(function (r) { return r.target ? r.sales / r.target : null; });
+  showChart(id, {
+    tooltip: Object.assign({
+      trigger: 'axis', axisPointer: { type: 'shadow' },
+      formatter: function (ps) {
+        var i = ps[0].dataIndex, r = rows[i];
+        var lines = [r.region, '净销售额 ' + fmtYuan(r.sales) + ' 元'];
+        lines.push('销售目标 ' + (r.target == null ? '未设定' : fmtYuan(r.target) + ' 元'));
+        lines.push('目标达成 ' + (rates[i] == null ? '—' : fmtPct(rates[i])));
+        return lines.join('<br/>');
+      }
+    }, TOOLTIP),
+    legend: { data: ['净销售额', '销售目标'], right: 0, top: 0, itemWidth: 10, itemHeight: 10, textStyle: { color: '#7f8b9e', fontSize: 11 } },
+    grid: { left: 8, right: 46, top: 34, bottom: 4, containLabel: true },
+    xAxis: Object.assign({}, AXIS_STYLE, { type: 'value', axisLabel: Object.assign({}, AXIS_STYLE.axisLabel, { formatter: function (v) { return (v / 10000).toFixed(0); } }) }),
+    yAxis: Object.assign({ type: 'category', data: names, axisLabel: { color: '#172b46', fontSize: 12 } }, AXIS_STYLE),
+    series: [
+      {
+        name: '净销售额', type: 'bar', barWidth: 12, data: actual,
+        itemStyle: {
+          borderRadius: [0, 6, 6, 0],
+          color: function (p) { var r = rates[p.dataIndex]; return r != null && r < 1 ? '#d99838' : '#0b9488'; }
+        },
+        label: {
+          show: true, position: 'right', fontSize: 11, color: '#7f8b9e',
+          formatter: function (p) { var r = rates[p.dataIndex]; return r == null ? '无目标' : fmtPct(r, 0); }
+        }
+      },
+      {
+        name: '销售目标', type: 'bar', barWidth: 12, barGap: '-100%', data: targets,
+        itemStyle: { color: 'rgba(76,114,223,.16)', borderRadius: [0, 6, 6, 0] },
+        silent: true, z: 0
+      }
+    ]
+  });
+}
+function renderCategory(res) {
+  var id = 'chartCategory';
+  if (!res.rows.length) { chartEmpty(id, '所选区间内没有品类销售记录'); return; }
+  var rows = res.rows.map(function (r) {
+    var sales = num(cell(r, res.columns, 'net_sales')) || 0;
+    var profit = num(cell(r, res.columns, 'gross_profit'));
+    return { name: String(cell(r, res.columns, 'category')), sales: sales, rate: sales ? (profit || 0) / sales : null };
+  }).sort(function (a, b) { return a.sales - b.sales; });
+  showChart(id, {
+    tooltip: Object.assign({
+      trigger: 'axis', axisPointer: { type: 'shadow' },
+      formatter: function (ps) {
+        var r = rows[ps[0].dataIndex];
+        return r.name + '<br/>净销售额 ' + fmtYuan(r.sales) + ' 元<br/>商品毛利率 ' + (r.rate == null ? '—' : fmtPct(r.rate));
+      }
+    }, TOOLTIP),
+    grid: { left: 8, right: 58, top: 12, bottom: 4, containLabel: true },
+    xAxis: Object.assign({}, AXIS_STYLE, { type: 'value', axisLabel: Object.assign({}, AXIS_STYLE.axisLabel, { formatter: function (v) { return (v / 10000).toFixed(0); } }) }),
+    yAxis: Object.assign({ type: 'category', data: rows.map(function (r) { return r.name; }), axisLabel: { color: '#172b46', fontSize: 12 } }, AXIS_STYLE),
+    series: [{
+      type: 'bar', barWidth: 14, data: rows.map(function (r) { return r.sales; }),
+      itemStyle: { color: '#4c72df', borderRadius: [0, 6, 6, 0] },
+      label: {
+        show: true, position: 'right', fontSize: 11, color: '#7f8b9e',
+        formatter: function (p) { var r = rows[p.dataIndex]; return (r.sales / 10000).toFixed(1) + ' 万 · ' + (r.rate == null ? '—' : fmtPct(r.rate, 0)); }
+      }
+    }]
+  });
+}
+/* ---------- 门店明细表 ---------- */
+var STORE_COLS = [
+  { key: 'store_name', label: '门店', align: 'left' },
+  { key: 'region', label: '区域', align: 'left' },
+  { key: 'net_sales', label: '净销售额（元）', align: 'right' },
+  { key: 'yoy', label: '同比', align: 'right' },
+  { key: 'margin', label: '商品毛利率', align: 'right' },
+  { key: 'achieve', label: '目标达成', align: 'right' }
+];
+function buildStoreRows(cur, prev, tgt) {
+  var pMap = {}, tMap = {};
+  prev.rows.forEach(function (r) { pMap[String(cell(r, prev.columns, 'store_id'))] = num(cell(r, prev.columns, 'net_sales')); });
+  tgt.rows.forEach(function (r) { tMap[String(cell(r, tgt.columns, 'store_id'))] = num(cell(r, tgt.columns, 'target')); });
+  return cur.rows.map(function (r) {
+    var sid = String(cell(r, cur.columns, 'store_id'));
+    var sales = num(cell(r, cur.columns, 'net_sales'));
+    var profit = num(cell(r, cur.columns, 'gross_profit'));
+    var pv = pMap[sid], tv = tMap[sid];
+    return {
+      store_id: sid,
+      store_name: String(cell(r, cur.columns, 'store_name') || sid),
+      region: String(cell(r, cur.columns, 'region') || ''),
+      net_sales: sales,
+      yoy: (pv && sales != null) ? (sales - pv) / pv : null,
+      margin: (sales && profit != null) ? profit / sales : null,
+      achieve: (tv && sales != null) ? sales / tv : null,
+      target: tv == null ? null : tv
+    };
+  });
+}
+function renderStoreTable(rows) {
+  var wrap = $('storeTable');
+  if (!rows.length) { setState(wrap, 'empty', '当前筛选条件下暂无门店数据'); return; }
+  var sorted = rows.slice().sort(function (a, b) {
+    var k = state.sortKey, x = a[k], y = b[k];
+    if (typeof x === 'string' || typeof y === 'string') {
+      var r = String(x || '').localeCompare(String(y || ''), 'zh-CN');
+      return state.sortDir === 'asc' ? r : -r;
+    }
+    if (x == null && y == null) return 0;
+    if (x == null) return 1;
+    if (y == null) return -1;
+    return state.sortDir === 'asc' ? x - y : y - x;
+  });
+  var head = STORE_COLS.map(function (c) {
+    var arrow = state.sortKey === c.key ? '<span class="arrow">' + (state.sortDir === 'asc' ? '▲' : '▼') + '</span>' : '';
+    return '<th data-key="' + c.key + '" style="text-align:' + c.align + '">' + esc(c.label) + arrow + '</th>';
+  }).join('');
+  var body = sorted.map(function (r) {
+    var yoy = fmtDelta(r.yoy);
+    var ach = r.achieve == null ? '—' : fmtPct(r.achieve);
+    var achCls = r.achieve != null && r.achieve < 1 ? 'warn' : '';
+    return '<tr data-store="' + esc(r.store_id) + '"' + (state.storeId === r.store_id ? ' class="active"' : '') + '>' +
+      '<td>' + esc(r.store_name) + '</td>' +
+      '<td>' + esc(r.region) + '</td>' +
+      '<td class="num">' + fmtYuan(r.net_sales) + '</td>' +
+      '<td class="num ' + yoy.cls + '">' + yoy.text + '</td>' +
+      '<td class="num">' + fmtPct(r.margin) + '</td>' +
+      '<td class="num ' + achCls + '">' + ach + '</td>' +
+      '</tr>';
+  }).join('');
+  wrap.innerHTML = '<table><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table>';
+  wrap.querySelectorAll('th').forEach(function (th) {
+    th.addEventListener('click', function () {
+      var k = th.getAttribute('data-key');
+      if (state.sortKey === k) state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+      else { state.sortKey = k; state.sortDir = k === 'store_name' || k === 'region' ? 'asc' : 'desc'; }
+      renderStoreTable(rows);
+    });
+  });
+  wrap.querySelectorAll('tbody tr').forEach(function (tr) {
+    tr.addEventListener('click', function () {
+      var sid = tr.getAttribute('data-store');
+      state.storeId = state.storeId === sid ? null : sid;
+      renderStoreTable(rows);
+    });
+  });
+}
+/* ---------- 主流程 ---------- */
+function setBusy(b) {
+  var btn = $('btnRefresh');
+  if (btn) { btn.disabled = b; btn.textContent = b ? '加载中…' : '刷新数据'; }
+}
+function kpiLoading() {
+  ['kpiSales', 'kpiMargin', 'kpiOrders', 'kpiTarget'].forEach(function (id) {
+    var box = $(id); if (!box) return;
+    box.querySelector('[data-v]').textContent = '—';
+    var f = box.querySelector('[data-f]');
+    f.textContent = '加载中…';
+    f.className = 'k-foot';
+  });
+}
+async function refresh() {
+  var seq = ++runSeq;
+  var p = period();
+  setBusy(true);
+  kpiLoading();
+  ['chartTrend', 'chartChannel', 'chartRegion', 'chartCategory'].forEach(function (id) {
+    var c = charts[id]; if (c) c.clear();
+    setState($(id), 'empty', '加载中…');
+  });
+  setState($('storeTable'), 'empty', '加载中…');
+
+  var tasks = [
+    function () { return query(sqlKpi(p)); },
+    function () { return query(sqlKpiPrev(p)); },
+    function () { return query(sqlTarget(p)); },
+    function () { return query(sqlTrend(p, state.trendGrain)); },
+    function () { return query(sqlTrendPrev(p, state.trendGrain)); },
+    function () { return query(sqlChannel(p)); },
+    function () { return query(sqlRegion(p)); },
+    function () { return query(sqlRegionTarget(p)); },
+    function () { return query(sqlCategory(p)); },
+    function () { return query(sqlStore(p)); },
+    function () { return query(sqlStorePrev(p)); },
+    function () { return query(sqlStoreTarget(p)); }
+  ];
+  var res;
+  try {
+    res = await runAll(tasks);
+  } catch (e) {
+    if (seq !== runSeq) return;
+    var msg = (e && e.message) ? e.message : String(e);
+    ['kpiSales', 'kpiMargin', 'kpiOrders', 'kpiTarget'].forEach(function (id) { kpiError(id, '查询失败'); });
+    ['chartTrend', 'chartChannel', 'chartRegion', 'chartCategory'].forEach(function (id) { chartError(id, msg); });
+    setState($('storeTable'), 'err', '数据加载失败：' + msg);
+    setBusy(false);
+    return;
+  }
+  if (seq !== runSeq) return;
+
+  var kCur = res[0], kPrev = res[1], tgt = res[2];
+  var trendCur = res[3], trendPrev = res[4], ch = res[5];
+  var rg = res[6], rgT = res[7], cat = res[8];
+  var st = res[9], stPrev = res[10], stT = res[11];
+
+  /* KPI */
+  var curRow = kCur.rows[0] || [], prevRow = kPrev.rows[0] || [];
+  var sales = num(cell(curRow, kCur.columns, 'net_sales'));
+  var profit = num(cell(curRow, kCur.columns, 'gross_profit'));
+  var orders = num(cell(curRow, kCur.columns, 'orders'));
+  var pSales = num(cell(prevRow, kPrev.columns, 'net_sales'));
+  var pProfit = num(cell(prevRow, kPrev.columns, 'gross_profit'));
+  var pOrders = num(cell(prevRow, kPrev.columns, 'orders'));
+  var target = num((tgt.rows[0] || [])[tgt.columns.indexOf('target')]);
+
+  var dSales = (pSales && sales != null) ? (sales - pSales) / pSales : null;
+  var dOrders = (pOrders && orders != null) ? (orders - pOrders) / pOrders : null;
+  var mCur = (sales && profit != null) ? profit / sales : null;
+  var mPrev = (pSales && pProfit != null) ? pProfit / pSales : null;
+  var dMargin = (mCur != null && mPrev != null) ? mCur - mPrev : null;
+
+  var ds = fmtDelta(dSales);
+  kpiSet('kpiSales', fmtMoney(sales) + '<span class="unit">元</span>',
+    '同比 <span class="' + ds.cls + '">' + ds.text + '</span> · 上年同期 ' + fmtMoney(pSales), '');
+  kpiSet('kpiMargin', mCur == null ? '—' : fmtPct(mCur),
+    dMargin == null ? '上年同期无数据' : '同比 <span class="' + (dMargin >= 0 ? 'up' : 'down') + '">' +
+      (dMargin >= 0 ? '+' : '') + (dMargin * 100).toFixed(1) + ' 个百分点</span>', '');
+  var do2 = fmtDelta(dOrders);
+  kpiSet('kpiOrders', fmtInt(orders) + '<span class="unit">笔</span>',
+    '同比 <span class="' + do2.cls + '">' + do2.text + '</span> · 上年同期 ' + fmtInt(pOrders), '');
+  var ach = (target && sales != null) ? sales / target : null;
+  kpiSet('kpiTarget', ach == null ? '—' : fmtPct(ach),
+    target == null ? '该区间未设定销售目标' : '实际 ' + fmtMoney(sales) + ' / 目标 ' + fmtMoney(target) + ' 元',
+    ach != null && ach < 1 ? 'warn' : '');
+
+  /* 图表 */
+  try { renderTrend(trendCur, trendPrev, state.trendGrain); } catch (e) { chartError('chartTrend', e.message); }
+  try { renderChannel(ch); } catch (e) { chartError('chartChannel', e.message); }
+  try { renderRegion(rg, rgT); } catch (e) { chartError('chartRegion', e.message); }
+  try { renderCategory(cat); } catch (e) { chartError('chartCategory', e.message); }
+  try { renderStoreTable(buildStoreRows(st, stPrev, stT)); } catch (e) { setState($('storeTable'), 'err', '门店明细渲染失败：' + e.message); }
+
+  setBusy(false);
+}
+/* ---------- 初始化 ---------- */
+function fillSelect(el, items, value) {
+  el.innerHTML = items.map(function (it) {
+    var v = typeof it === 'string' ? it : it.id;
+    var t = typeof it === 'string' ? it : it.label;
+    return '<option value="' + esc(v) + '"' + (v === value ? ' selected' : '') + '>' + esc(t) + '</option>';
+  }).join('');
+}
+function initTrendSeg() {
+  var seg = $('trendSeg'); if (!seg) return;
+  function paint() {
+    seg.querySelectorAll('button').forEach(function (b) {
+      b.classList.toggle('on', b.getAttribute('data-grain') === state.trendGrain);
+    });
+    var hint = $('trendHint');
+    if (hint) hint.textContent = state.trendGrain === 'week' ? '按自然周 · 上年同期按相对周序号对齐' : '按自然月 · 上年同期按同月对齐';
+  }
+  seg.querySelectorAll('button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var g = b.getAttribute('data-grain');
+      if (g === state.trendGrain) return;
+      state.trendGrain = g;
+      paint();
+      refresh();
+    });
+  });
+  paint();
+}
+function initFilters() {
+  fillSelect($('fPeriod'), PERIODS, state.period);
+  fillSelect($('fRegion'), REGIONS, state.region);
+  fillSelect($('fChannel'), CHANNELS, state.channel);
+  $('fPeriod').addEventListener('change', function (e) { state.period = e.target.value; state.storeId = null; refresh(); });
+  $('fRegion').addEventListener('change', function (e) { state.region = e.target.value; state.storeId = null; refresh(); });
+  $('fChannel').addEventListener('change', function (e) { state.channel = e.target.value; state.storeId = null; refresh(); });
+  $('btnRefresh').addEventListener('click', function () { refresh(); });
+}
+function initMetricNote() {
+  $('metricNote').innerHTML =
+    '<div>净销售额：SUM(net_sales)，已扣优惠与退款。</div>' +
+    '<div>商品毛利：SUM(net_profit)，为商品毛利，不含人工、租金、营销等费用，不等同于净利润。</div>' +
+    '<div>商品毛利率：SUM(net_profit) / SUM(net_sales)，分母为 0 时无值。</div>' +
+    '<div>成交订单：COUNT(order_id) 且 net_sales &gt; 0 的订单笔数。</div>' +
+    '<div>目标达成：区间净销售额 / 区间销售目标；目标与交易分别聚合后比较，未达 100% 以琥珀色标示。</div>' +
+    '<div>同比：与上年同季度对比；数据覆盖 2025.04—2026.09，2025Q3 的上年同期不在数据范围内，同比显示为无值。</div>';
+}
+function bindResize() {
+  var t = null;
+  window.addEventListener('resize', function () {
+    if (t) clearTimeout(t);
+    t = setTimeout(function () {
+      Object.keys(charts).forEach(function (k) { if (charts[k]) charts[k].resize(); });
+    }, 120);
+  });
+}
+function boot() {
+  initFilters();
+  initTrendSeg();
+  initMetricNote();
+  bindResize();
+  refresh();
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+else boot();
+</script>
+</body>
+</html>

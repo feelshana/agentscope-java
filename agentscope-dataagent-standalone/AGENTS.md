@@ -38,6 +38,8 @@
 2. ReAct 循环、沙箱生命周期、会话路由、工具反射执行一律复用 `agentscope-core` / `agentscope-harness`，**禁止在业务层重新实现**。
 3. 不确定框架内部行为时先查 harness/core 源码，禁止臆测框架 API。
 
+新增依赖须通过`ArchitectureDependencyTest`；下层不得回调HTTP/应用装配，历史非JPA反向依赖按精确类对管理，不为过门禁批量放宽。职责与五条主线边界见[依赖契约](docs/reference/architecture-boundaries.md)及ADR0144。
+
 ## 5. 硬性规则
 
 ### 后端
@@ -93,16 +95,20 @@
 - **完成时**：运行第 8 节验证命令（含文档一致性测试 `DocsConsistencyTest`），执行共享记忆 Checkpoint，在最终回复中说明改了什么、验证结果、未验证的部分。
 - **定期清理**：用户说"整理文档"或一个里程碑结束时，按 [doc-maintenance](.agents/skills/doc-maintenance/SKILL.md) 清理。
 
-## 8. 验证命令（提交前必须全绿）
+## 8. 验证范围（日常选测，合并/发布前完整验证）
+
+在应用根目录执行，Windows 的 Python 命令为 `python`：
 
 ```bash
-mvn spotless:check
-mvn test
-mvn package -DskipTests
-cd frontend && npm run build
+python scripts/check.py backend --tests QueryDataFilesTest
+python scripts/check.py backend --unit
+python scripts/check.py frontend --files auth-session.test.mjs
+python scripts/check.py full
 ```
 
-真实 LLM / Docker / Wren 相关测试为条件启用，跳过时须在报告中注明；真实 Agent 行为以重启后的日志验收为准，不能以提示词断言代替。
+- 日常按改动运行相关类/方法；跨模块后端改动运行单元通道，涉及持久化、HTTP或装配时追加相关integration类。前端改动运行相关文件及`npm run build`；纯文档运行DocsConsistencyTest。无需每次重复全量、打包和三个前缀。
+- 合并/发布前和CI必须完整`clean verify`，包含格式、全部后端、前端三个前缀、TypeScript/Vite构建及打包；日常选测不替代此检查。命令与标签见[CI指引](docs/guides/dataagent-ci.md)。
+- 真实 LLM / Docker / Wren 条件测试的跳过须注明；真实Agent行为以重启后的日志验收为准，不能以提示词断言代替。
 
 ## 9. 测试约定
 

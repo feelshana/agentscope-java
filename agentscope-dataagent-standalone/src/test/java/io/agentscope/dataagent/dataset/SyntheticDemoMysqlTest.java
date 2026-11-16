@@ -11,6 +11,7 @@ import io.agentscope.dataagent.web.persistence.jpa.ExternalDataSourceRepository;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Optional;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 @EnabledIfEnvironmentVariable(
         named = "DATAAGENT_SYNTHETIC_TEST_URL",
         matches = "jdbc:mysql://127\\.0\\.0\\.1:.*")
+@Tag("external")
 class SyntheticDemoMysqlTest {
     @Test
     void seedsOnceKeepsLegacyDataAndReaderCannotQueryOtherSchemas() throws Exception {

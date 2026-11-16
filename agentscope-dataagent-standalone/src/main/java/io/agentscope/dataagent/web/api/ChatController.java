@@ -29,11 +29,11 @@ import io.agentscope.core.message.ToolCallState;
 import io.agentscope.core.message.ToolUseBlock;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.state.AgentState;
-import io.agentscope.dataagent.dataset.DatasetException;
 import io.agentscope.dataagent.dataset.DatasetGroupService;
 import io.agentscope.dataagent.dataset.DatasetScope;
 import io.agentscope.dataagent.runtime.DataAgentBootstrap;
 import io.agentscope.dataagent.runtime.gateway.HarnessGateway;
+import io.agentscope.dataagent.runtime.session.ConversationScopeRegistry;
 import io.agentscope.dataagent.runtime.session.SessionAgentManager;
 import io.agentscope.dataagent.runtime.session.SessionEntry;
 import io.agentscope.dataagent.runtime.session.WrenQueryToolRegistrar;
@@ -46,7 +46,6 @@ import io.agentscope.dataagent.web.catalog.AgentDefinition;
 import io.agentscope.dataagent.web.chat.ChatCapacity;
 import io.agentscope.dataagent.web.identity.IdentityLinkStore;
 import io.agentscope.dataagent.web.middleware.ModelingHitlMiddleware;
-import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
 import io.agentscope.dataagent.web.share.AgentAccessGuard;
 import io.agentscope.dataagent.web.share.AgentAclService.Tier;
 import io.agentscope.dataagent.web.toolbus.ToolEventBus;
@@ -119,6 +118,12 @@ public class ChatController {
     private final ObjectProvider<Model> modelProvider;
     private final ConversationScopeRegistry conversationScopes;
     private final DatasetGroupService datasetGroupService;
+    private final io.agentscope.dataagent.web.chat.ChatTurnPreparation turnPreparation;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void configureDashboards(io.agentscope.dataagent.dataset.DashboardService dashboards) {
+        turnPreparation.setDashboards(dashboards);
+    }
 
     private io.agentscope.dataagent.dataset.KnowledgeBaseOperations knowledgeBaseOperations;
 
@@ -161,6 +166,9 @@ public class ChatController {
         this.conversationScopes = conversationScopes;
         this.gateway.setConversationScopes(conversationScopes);
         this.datasetGroupService = datasetGroupService;
+        this.turnPreparation =
+                new io.agentscope.dataagent.web.chat.ChatTurnPreparation(
+                        conversationScopes, datasetGroupService, catalogService);
         this.chatCapacity = new ChatCapacity();
     }
 
@@ -455,7 +463,8 @@ public class ChatController {
         Flux<ServerSentEvent<String>> toolEvents =
                 toolEventBus
                         .subscribeRequest(requestId)
-                        .takeUntilOther(done.asMono().timeout(Duration.ofMinutes(10)))
+                        .takeUntilOther(
+                                done.asMono().timeout(Duration.ofMinutes(10)).onErrorReturn(false))
                         .map(this::toToolFrame)
                         .onErrorResume(ex -> Flux.empty());
 
@@ -521,7 +530,7 @@ public class ChatController {
                                                             .build();
                                             long lastToken = lastTokenAt.get();
                                             var frame = sse("done", doneFrame);
-                                            io.agentscope.dataagent.web.middleware
+                                            io.agentscope.dataagent.runtime.observability
                                                     .ExecutionTimingMiddleware.record(
                                                     timingContext,
                                                     "completion.sse.done",
@@ -687,7 +696,8 @@ public class ChatController {
         Flux<ServerSentEvent<String>> toolEvents =
                 toolEventBus
                         .subscribeRequest(requestId)
-                        .takeUntilOther(done.asMono().timeout(Duration.ofMinutes(10)))
+                        .takeUntilOther(
+                                done.asMono().timeout(Duration.ofMinutes(10)).onErrorReturn(false))
                         .map(this::toToolFrame)
                         .onErrorResume(ex -> Flux.empty());
         Map<String, Object> doneFrame = new LinkedHashMap<>();
@@ -1222,68 +1232,11 @@ public class ChatController {
             boolean allGroups,
             String requestId,
             java.util.function.Consumer<
-                            io.agentscope.dataagent.web.session.ConversationScopeRegistry.Selection>
+                            io.agentscope.dataagent.runtime.session.ConversationScopeRegistry
+                                    .Selection>
                     onAccepted) {
-        List<String> authorized =
-                resolveGroupScope(userId, agentId, conversationId, groupIds, allGroups);
-        var groupNames = new java.util.LinkedHashMap<String, String>();
-        for (var group : datasetGroupService.queryGroups(userId, authorized))
-            groupNames.put(group.getId(), group.getName());
-        var selection =
-                new io.agentscope.dataagent.web.session.ConversationScopeRegistry.Selection(
-                        authorized, allGroups, groupNames);
-        RuntimeContext.Builder runtimeContextBuilder =
-                RuntimeContext.builder()
-                        .userId(userId)
-                        .put(DatasetScope.class, new DatasetScope(userId, authorized))
-                        .put(
-                                io.agentscope.dataagent.dataset.ChatTurnScope.class,
-                                new io.agentscope.dataagent.dataset.ChatTurnScope(
-                                        () -> {
-                                            // Runs inside the gateway gate: queued turns cannot
-                                            // overwrite active tool scope.
-                                            resolveGroupScope(
-                                                    userId,
-                                                    agentId,
-                                                    conversationId,
-                                                    authorized,
-                                                    false);
-                                            conversationScopes.putSelection(
-                                                    userId, conversationId, selection);
-                                            for (Msg msg : msgs)
-                                                if (msg.getRole() == MsgRole.USER)
-                                                    conversationScopes.putSelection(
-                                                            userId,
-                                                            "turn:" + msg.getId(),
-                                                            selection);
-                                            onAccepted.accept(selection);
-                                        }));
-        if (requestId != null) {
-            runtimeContextBuilder.put(ToolEventBus.REQUEST_ID_CONTEXT_KEY, requestId);
-        }
-        String purpose = conversationScopes.modelingPurpose(userId, conversationId);
-        if (purpose != null && ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId)) {
-            runtimeContextBuilder.put(
-                    io.agentscope.dataagent.dataset.ModelingTurnPurpose.class,
-                    new io.agentscope.dataagent.dataset.ModelingTurnPurpose(purpose));
-        }
-        var analysis = conversationScopes.analysis(userId, conversationId);
-        if (analysis != null && !ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId)) {
-            runtimeContextBuilder.put(
-                    io.agentscope.dataagent.tools.data.AnalysisTurn.class, analysis);
-        }
-        RuntimeContext runtimeContext = runtimeContextBuilder.build();
-        if (agentId == null || agentId.isBlank()) {
-            return InboundMessage.dm(ChatUiChannel.CHANNEL_ID, userId, List.copyOf(msgs))
-                    .withRuntimeContext(runtimeContext);
-        }
-        String gatewayAgentId = catalogService.resolveGatewayAgentId(userId, agentId);
-        return InboundMessage.builder(
-                        ChatUiChannel.CHANNEL_ID, Peer.direct(userId), List.copyOf(msgs))
-                .preferredAgentId(gatewayAgentId)
-                .accountId(conversationId)
-                .runtimeContext(runtimeContext)
-                .build();
+        return turnPreparation.buildInbound(
+                userId, agentId, msgs, conversationId, groupIds, allGroups, requestId, onAccepted);
     }
 
     /** Resolve UI selection only; the existing per-group context, Wren routing and ACL remain. */
@@ -1293,42 +1246,8 @@ public class ChatController {
             String conversationId,
             List<String> groupIds,
             boolean allGroups) {
-        boolean modeling = ModelingToolkitRegistrar.MODELING_AGENT_ID.equals(agentId);
-        if (allGroups || (groupIds != null && groupIds.stream().distinct().count() > 1))
-            throw new DatasetException("本次只支持单知识库问数，请重新选择一个知识库", 400);
-        if (allGroups && modeling) throw new DatasetException("建模会话必须选择一个知识库", 400);
-        if (allGroups && groupIds != null && !groupIds.isEmpty())
-            throw new DatasetException("全选不能同时指定知识库列表", 400);
-        List<String> previous = conversationScopes.get(userId, conversationId);
-        List<String> requested =
-                allGroups
-                        ? datasetGroupService.listGroups(userId).stream()
-                                .map(
-                                        io.agentscope.dataagent.web.persistence.jpa
-                                                        .DatasetGroupEntity
-                                                ::getId)
-                                .toList()
-                        : groupIds != null ? groupIds : previous == null ? List.of() : previous;
-        if (requested.stream().anyMatch(id -> id == null || id.isBlank()))
-            throw new DatasetException("知识库 ID 不能为空", 400);
-        List<String> normalized = requested.stream().distinct().sorted().toList();
-        if (normalized.size() > 1) throw new DatasetException("此会话原先选择了多个知识库，请重新选择一个知识库", 400);
-        if (modeling
-                && previous != null
-                && !new java.util.HashSet<>(previous).equals(new java.util.HashSet<>(normalized)))
-            throw new DatasetException("当前会话已绑定知识库范围，请新建对话切换", 400);
-        if (modeling && normalized.size() != 1) throw new DatasetException("建模会话必须选择一个知识库", 400);
-        List<String> authorized =
-                datasetGroupService.queryGroups(userId, normalized).stream()
-                        .map(io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity::getId)
-                        .distinct()
-                        .sorted()
-                        .toList();
-        if (modeling) {
-            if (authorized.size() != 1) throw new DatasetException("建模会话必须选择一个知识库", 400);
-            datasetGroupService.getGroup(userId, authorized.get(0));
-        }
-        return authorized;
+        return turnPreparation.resolveGroupScope(
+                userId, agentId, conversationId, groupIds, allGroups);
     }
 
     /**
@@ -1399,7 +1318,8 @@ public class ChatController {
             boolean allGroups,
             String requestId,
             java.util.function.Consumer<
-                            io.agentscope.dataagent.web.session.ConversationScopeRegistry.Selection>
+                            io.agentscope.dataagent.runtime.session.ConversationScopeRegistry
+                                    .Selection>
                     onAccepted) {
         return executeChatStream(
                 userId,
@@ -1440,7 +1360,8 @@ public class ChatController {
             boolean allGroups,
             String requestId,
             java.util.function.Consumer<
-                            io.agentscope.dataagent.web.session.ConversationScopeRegistry.Selection>
+                            io.agentscope.dataagent.runtime.session.ConversationScopeRegistry
+                                    .Selection>
                     onAccepted) {
         long startMs = System.currentTimeMillis();
 

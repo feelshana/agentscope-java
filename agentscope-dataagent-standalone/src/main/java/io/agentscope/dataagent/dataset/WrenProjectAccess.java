@@ -16,9 +16,9 @@
 package io.agentscope.dataagent.dataset;
 
 import io.agentscope.core.agent.RuntimeContext;
+import io.agentscope.dataagent.runtime.session.ConversationScopeRegistry;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetKnowledgeRepository;
-import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;

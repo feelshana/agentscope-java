@@ -29,15 +29,16 @@ import io.agentscope.dataagent.dataset.MdlPublishService;
 import io.agentscope.dataagent.dataset.MdlQuestionService;
 import io.agentscope.dataagent.dataset.MdlQuestionStore;
 import io.agentscope.dataagent.dataset.MdlSuggestionService;
+import io.agentscope.dataagent.dataset.MdlTypes;
 import io.agentscope.dataagent.dataset.MdlWorkspaceReader;
 import io.agentscope.dataagent.dataset.MdlWorkspaceService;
 import io.agentscope.dataagent.dataset.WrenCli;
 import io.agentscope.dataagent.dataset.WrenProperties;
 import io.agentscope.dataagent.dataset.parser.ColumnSchema;
+import io.agentscope.dataagent.runtime.session.ConversationScopeRegistry;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity;
 import io.agentscope.dataagent.web.persistence.jpa.DatasetRelationEntity;
-import io.agentscope.dataagent.web.session.ConversationScopeRegistry;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -73,7 +74,7 @@ import org.slf4j.LoggerFactory;
  * workspace. Writes and the per-group workspace lock are serialized via
  * {@link MdlWorkspaceService#withWorkspaceLock}.
  *
- * <p>Tenant isolation mirrors {@link WrenToolkit}: the typed {@link DatasetScope} (with the
+ * <p>Tenant isolation uses the current request scope: the typed {@link DatasetScope} (with the
  * conversation-level group narrowing fallback) must cover the group; both visibility and
  * existence failures collapse into one indistinguishable error so probing cannot reveal other
  * users' knowledge bases. Relation proposals keep the DB candidate queue (suggest/decide/confirm/
@@ -335,14 +336,14 @@ public final class ModelingToolkit {
         if (c.error() != null) {
             return c.error();
         }
-        List<MdlPublishService.MdlFile> files = reader.listFiles(c.gid());
+        List<MdlTypes.MdlFile> files = reader.listFiles(c.gid());
         if (files.isEmpty()) {
             return "工作区为空或尚未初始化。上传数据集并在「语义建模」页发布一次后，平台会按物理结构播种 models/；"
                     + "首次 write_file 也会自动初始化官方工程骨架。";
         }
         StringBuilder sb = new StringBuilder("## 工作区文件（").append(files.size()).append(" 个）\n\n");
         sb.append("base_revision: ").append(planWriter.revision(c.gid())).append("\n\n");
-        for (MdlPublishService.MdlFile f : files) {
+        for (MdlTypes.MdlFile f : files) {
             sb.append("- ")
                     .append(f.path())
                     .append("（")
@@ -1004,14 +1005,14 @@ public final class ModelingToolkit {
             return c.error();
         }
         try {
-            MdlPublishService.MdlValidation result = mdlPublish.validate(c.gid());
+            MdlTypes.MdlValidation result = mdlPublish.validate(c.gid());
             StringBuilder sb = new StringBuilder();
             sb.append("## MDL 校验结果：").append(result.ok() ? "通过" : "未通过").append("\n\n");
             if (result.issues().isEmpty()) {
                 sb.append("工程校验通过，仅证明模型结构可用，不代表业务结果已确认。\n");
             } else {
                 sb.append("| 级别 | 来源 | 问题 |\n|---|---|---|\n");
-                for (MdlPublishService.MdlIssue i : result.issues()) {
+                for (MdlTypes.MdlIssue i : result.issues()) {
                     sb.append("| ")
                             .append(i.severity())
                             .append(" | ")
@@ -1961,7 +1962,7 @@ public final class ModelingToolkit {
 
         if (!snap.issues().isEmpty()) {
             sb.append("\n### 工作区解析问题（需修复后再发布）\n\n");
-            for (MdlPublishService.MdlIssue i : snap.issues()) {
+            for (MdlTypes.MdlIssue i : snap.issues()) {
                 sb.append("- [").append(i.severity()).append("] ").append(i.message()).append('\n');
             }
         }
@@ -2047,7 +2048,7 @@ public final class ModelingToolkit {
     }
 
     /**
-     * Resolves the tenant scope; mirrors {@code WrenToolkit#effectiveScope} — typed {@link
+     * Resolves the tenant scope; uses the current request — typed {@link
      * DatasetScope} preferred, otherwise the baked {@link RuntimeContext} userId, then narrowed
      * by the conversation-level group selection.
      */

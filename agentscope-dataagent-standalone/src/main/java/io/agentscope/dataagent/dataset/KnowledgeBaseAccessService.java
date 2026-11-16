@@ -77,6 +77,7 @@ public class KnowledgeBaseAccessService {
         if (role == null) throw new DatasetException("知识库不存在或未授权", 404);
         if (manage && role != Role.MANAGE) throw new DatasetException("需要知识库管理权限", 403);
         if (active) operations.requireActive(groupId);
+        if (active && !manage) operations.requireQueryReady(groupId);
         return group;
     }
 

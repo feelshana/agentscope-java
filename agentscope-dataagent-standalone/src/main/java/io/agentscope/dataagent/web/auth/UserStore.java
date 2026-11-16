@@ -33,7 +33,17 @@ import org.springframework.security.crypto.password.PasswordEncoder;
  * <p>Implementations are expected to be thread-safe and seed a default {@code admin} user on
  * first start when the store is empty.
  */
-public interface UserStore {
+public interface UserStore extends io.agentscope.dataagent.runtime.auth.UserIdentity {
+
+    @Override
+    default boolean exists(String userId) {
+        return userId != null && findById(userId).isPresent();
+    }
+
+    @Override
+    default boolean isAdministrator(String userId) {
+        return userId != null && findById(userId).map(u -> u.hasRole("admin")).orElse(false);
+    }
 
     /** Returns the password encoder used for hashing and verification. */
     PasswordEncoder passwordEncoder();

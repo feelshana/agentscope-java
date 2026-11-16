@@ -66,6 +66,7 @@ public class DatasetService implements DatasetContextProvider {
 
     private DatasetMetadataDraftSync metadataDraftSync;
     private ExternalDataSourceAccess sourceAccess;
+    private DatasetDeletionCleanup deletionCleanup;
 
     private static final Logger log = LoggerFactory.getLogger(DatasetService.class);
     private static final Pattern SAFE_IDENTIFIER = Pattern.compile("^[a-zA-Z0-9_]+$");
@@ -311,12 +312,30 @@ public class DatasetService implements DatasetContextProvider {
     /** Removes a dataset; drops the physical table only for uploaded (copied) datasets. */
     @Transactional
     public void deleteEntity(DatasetEntity entity) {
-        if (!"datasource".equals(entity.getOrigin())) {
-            provisioner.dropTable(entity.getTableName());
+        boolean transactional = TransactionSynchronizationManager.isSynchronizationActive();
+        if (transactional) {
+            if (deletionCleanup == null) throw new DatasetException("删除清理服务未就绪", 503);
+            var intent = deletionCleanup.prepare(entity);
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            deletionCleanup.complete(intent);
+                        }
+
+                        @Override
+                        public void afterCompletion(int status) {
+                            if (status != STATUS_COMMITTED) deletionCleanup.cancel(intent);
+                        }
+                    });
         }
-        registry.remove(entity.getId());
         repository.delete(entity);
         markMdlDirty(entity.getGroupId());
+        if (!transactional) {
+            registry.remove(entity.getId());
+            if (!"datasource".equals(entity.getOrigin()))
+                provisioner.dropTableStrict(entity.getTableName());
+        }
     }
 
     /**
@@ -1201,63 +1220,6 @@ public class DatasetService implements DatasetContextProvider {
         return sb.toString();
     }
 
-    /**
-     * Keyword evidence retrieval ({@link KnowledgeEvidence}): chunks each visible knowledge
-     * document, scores every chunk against the query terms and renders the top {@code limit}
-     * passages with a【知识库「name」› section】citation prefix. Documents short enough for
-     * {@link KnowledgeEvidence#isShortDoc} are injected whole regardless of term overlap (a
-     * compact KPI note beats a keyword miss). {@code null} when the owner has no visible document
-     * or no long document yields a matching chunk, so {@code retrieve_evidence} keeps its stable
-     * "not found" wording.
-     */
-    @Override
-    public String evidenceFor(String ownerId, List<String> onlyGroups, String query, int limit) {
-        if (ownerId == null || query == null || query.isBlank() || limit <= 0) {
-            return null;
-        }
-        Set<String> terms = KnowledgeEvidence.terms(query);
-        Set<String> want =
-                onlyGroups == null || onlyGroups.isEmpty() ? null : new HashSet<>(onlyGroups);
-        record Scored(String group, String title, String text, int score) {}
-        List<Scored> scored = new ArrayList<>();
-        for (DatasetGroupEntity g :
-                access.visible(ownerId, onlyGroups == null ? List.of() : onlyGroups)) {
-            if (!activeGroup(g.getId())) continue;
-            if (want != null && !want.contains(g.getId())) {
-                continue;
-            }
-            String content = knowledgeText(g.getId());
-            if (content == null || content.isBlank()) {
-                continue;
-            }
-            boolean wholeDoc = KnowledgeEvidence.isShortDoc(content);
-            for (KnowledgeEvidence.Chunk c : KnowledgeEvidence.chunks(content)) {
-                int score = KnowledgeEvidence.score(c, terms);
-                if (score > 0 || wholeDoc) {
-                    scored.add(new Scored(g.getName(), c.title(), c.text(), score));
-                }
-            }
-        }
-        if (scored.isEmpty()) {
-            return null;
-        }
-        scored.sort(java.util.Comparator.comparingInt((Scored s) -> s.score()).reversed());
-        StringBuilder sb = new StringBuilder();
-        int take = Math.min(limit, scored.size());
-        for (int i = 0; i < take; i++) {
-            Scored s = scored.get(i);
-            if (sb.length() > 0) {
-                sb.append("\n\n");
-            }
-            sb.append("【知识库「").append(s.group()).append("」");
-            if (s.title() != null && !s.title().isBlank()) {
-                sb.append(" › ").append(s.title());
-            }
-            sb.append("】\n").append(s.text().strip());
-        }
-        return sb.toString();
-    }
-
     @org.springframework.beans.factory.annotation.Autowired
     public DatasetService(
             DatasetRepository repository,
@@ -1279,7 +1241,8 @@ public class DatasetService implements DatasetContextProvider {
             KnowledgeBaseAccessService access,
             KnowledgeBaseOperations operations,
             DatasetMetadataDraftSync metadataDraftSync,
-            ExternalDataSourceAccess sourceAccess) {
+            ExternalDataSourceAccess sourceAccess,
+            DatasetDeletionCleanup deletionCleanup) {
         this(
                 repository,
                 groupRepository,
@@ -1301,5 +1264,50 @@ public class DatasetService implements DatasetContextProvider {
         this.operations = operations;
         this.metadataDraftSync = metadataDraftSync;
         this.sourceAccess = sourceAccess;
+        this.deletionCleanup = deletionCleanup;
+    }
+
+    public DatasetService(
+            DatasetRepository repository,
+            DatasetGroupRepository groupRepository,
+            DatasetKnowledgeRepository knowledgeRepository,
+            SemanticViewRepository semanticViews,
+            SemanticBusinessRuleRepository semanticBusinessRules,
+            ExternalDataSourceRepository externalSources,
+            DataSourceIntrospector introspector,
+            DatasetRelationRepository relationRepository,
+            InMemoryDataSourceRegistry registry,
+            TableProvisioner provisioner,
+            List<FileParser> parsers,
+            DatasetStoreProperties props,
+            ObjectMapper mapper,
+            DatasetImportService importService,
+            SchemaGenerationService schemaGeneration,
+            MdlWorkspaceReader workspaceReader,
+            KnowledgeBaseAccessService access,
+            KnowledgeBaseOperations operations,
+            DatasetMetadataDraftSync metadataDraftSync) {
+        this(
+                repository,
+                groupRepository,
+                knowledgeRepository,
+                semanticViews,
+                semanticBusinessRules,
+                externalSources,
+                introspector,
+                relationRepository,
+                registry,
+                provisioner,
+                parsers,
+                props,
+                mapper,
+                importService,
+                schemaGeneration,
+                workspaceReader,
+                access,
+                operations,
+                metadataDraftSync,
+                null,
+                null);
     }
 }

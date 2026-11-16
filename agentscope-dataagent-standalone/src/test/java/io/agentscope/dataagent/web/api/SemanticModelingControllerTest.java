@@ -31,6 +31,7 @@ import io.agentscope.dataagent.dataset.DatasetService;
 import io.agentscope.dataagent.dataset.DocEnhanceService;
 import io.agentscope.dataagent.dataset.MdlPublishService;
 import io.agentscope.dataagent.dataset.MdlSuggestionService;
+import io.agentscope.dataagent.dataset.MdlTypes;
 import io.agentscope.dataagent.dataset.MdlWorkspaceService;
 import io.agentscope.dataagent.dataset.parser.ColumnSchema;
 import io.agentscope.dataagent.runtime.wren.WrenQueryGateway;
@@ -80,6 +81,11 @@ class SemanticModelingControllerTest {
     private SemanticModelingController controller;
 
     private final TestingAuthenticationToken alice = new TestingAuthenticationToken("alice", "n/a");
+
+    private MdlPublicationController publicationController() {
+        return new MdlPublicationController(
+                groupService, mdlPublishService, baselineMdlService, null);
+    }
 
     @BeforeEach
     void setUp() {
@@ -138,11 +144,11 @@ class SemanticModelingControllerTest {
                         controller.enhanceOverview("gA", bob),
                         controller.adoptEnhanceProposal("gA", "p1", bob),
                         controller.ignoreEnhanceProposal("gA", "p1", bob),
-                        controller.mdlPreview("gA", bob),
-                        controller.mdlView("gA", bob),
-                        controller.mdlValidate("gA", bob),
-                        controller.mdlInitialize("gA", bob),
-                        controller.mdlPublish("gA", bob),
+                        publicationController().mdlPreview("gA", bob),
+                        publicationController().mdlView("gA", bob),
+                        publicationController().mdlValidate("gA", bob),
+                        publicationController().mdlInitialize("gA", bob),
+                        publicationController().mdlPublish("gA", bob),
                         controller.workspaceFile("gA", "models/orders.yml", bob),
                         controller.workspacePreview(
                                 "gA",
@@ -433,32 +439,31 @@ class SemanticModelingControllerTest {
         group.setOwnerId("alice");
         when(groupService.getGroup("alice", "gA")).thenReturn(group);
 
-        MdlPublishService.MdlIssue issue =
-                new MdlPublishService.MdlIssue("warning", "models > 订单表: 缺少描述", "wren");
-        MdlPublishService.MdlPreview preview =
-                new MdlPublishService.MdlPreview(
-                        List.of(
-                                new MdlPublishService.MdlFile(
-                                        "wren_project.yml", "schema_version: 5\n")),
+        MdlTypes.MdlIssue issue = new MdlTypes.MdlIssue("warning", "models > 订单表: 缺少描述", "wren");
+        MdlTypes.MdlPreview preview =
+                new MdlTypes.MdlPreview(
+                        List.of(new MdlTypes.MdlFile("wren_project.yml", "schema_version: 5\n")),
                         List.of(),
                         List.of(issue),
                         "PUBLISHED",
                         2,
                         "2026-09-25T10:00:00Z",
                         true);
-        MdlPublishService.MdlValidation validation =
-                new MdlPublishService.MdlValidation(
+        MdlTypes.MdlValidation validation =
+                new MdlTypes.MdlValidation(
                         true, List.of(), "0 warning(s), 0 error(s)", preview.files());
-        MdlPublishService.MdlPublishResult result =
-                new MdlPublishService.MdlPublishResult(
+        MdlTypes.MdlPublishResult result =
+                new MdlTypes.MdlPublishResult(
                         true, List.of(), "build ok", "PUBLISHED", 3, "2026-09-26T10:00:00Z");
         when(mdlPublishService.preview("gA")).thenReturn(preview);
         when(mdlPublishService.validate("gA")).thenReturn(validation);
         when(mdlPublishService.publish("gA")).thenReturn(result);
 
-        MdlPublishService.MdlPreview gotPreview = controller.mdlPreview("gA", alice).block();
-        MdlPublishService.MdlValidation gotValidation = controller.mdlValidate("gA", alice).block();
-        MdlPublishService.MdlPublishResult gotPublish = controller.mdlPublish("gA", alice).block();
+        MdlTypes.MdlPreview gotPreview = publicationController().mdlPreview("gA", alice).block();
+        MdlTypes.MdlValidation gotValidation =
+                publicationController().mdlValidate("gA", alice).block();
+        MdlTypes.MdlPublishResult gotPublish =
+                publicationController().mdlPublish("gA", alice).block();
 
         assertThat(gotPreview).isEqualTo(preview);
         assertThat(gotPreview.files()).hasSize(1);
@@ -480,14 +485,14 @@ class SemanticModelingControllerTest {
         group.setMdlPublishedAt(Instant.parse("2026-09-25T10:00:00Z"));
         when(groupService.getGroup("alice", "gA")).thenReturn(group);
 
-        MdlPublishService.MdlView view =
-                new MdlPublishService.MdlView(
+        MdlTypes.MdlView view =
+                new MdlTypes.MdlView(
                         "DIRTY",
                         1,
                         "2026-09-25T10:00:00Z",
                         true,
                         List.of(
-                                new MdlPublishService.MdlModelView(
+                                new MdlTypes.MdlModelView(
                                         "ds_a",
                                         "订单表",
                                         "t_order",
@@ -505,7 +510,7 @@ class SemanticModelingControllerTest {
                         List.of());
         when(mdlPublishService.view("gA")).thenReturn(view);
 
-        MdlPublishService.MdlView got = controller.mdlView("gA", alice).block();
+        MdlTypes.MdlView got = publicationController().mdlView("gA", alice).block();
 
         assertThat(got).isNotNull();
         assertThat(got.state()).isEqualTo("DIRTY");

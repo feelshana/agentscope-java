@@ -43,6 +43,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;
@@ -51,6 +52,7 @@ import org.springframework.beans.factory.ObjectProvider;
 
 /** Paid model verification through real adapters with synthetic policies and no database execution. */
 @EnabledIfSystemProperty(named = "dataagent.test.liveSqlWindowGate", matches = "true")
+@Tag("external")
 class SqlWindowLiveBoundaryTest {
     @TempDir Path root;
     private static final ObjectMapper JSON = new ObjectMapper();

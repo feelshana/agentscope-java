@@ -60,13 +60,13 @@ class ModelingWorkflowServiceTest {
     }
 
     private void preview(boolean changed) {
-        var current = new MdlPublishService.MdlFile("models/order/metadata.yml", "name: order");
+        var current = new MdlTypes.MdlFile("models/order/metadata.yml", "name: order");
         var old =
-                new MdlPublishService.MdlFile(
+                new MdlTypes.MdlFile(
                         "models/order/metadata.yml", changed ? "name: previous" : "name: order");
         when(publisher.preview("g"))
                 .thenReturn(
-                        new MdlPublishService.MdlPreview(
+                        new MdlTypes.MdlPreview(
                                 List.of(current),
                                 List.of(old),
                                 List.of(),
@@ -92,13 +92,11 @@ class ModelingWorkflowServiceTest {
     private void engineering(boolean ok) {
         checks.record(
                 "g",
-                new MdlPublishService.MdlValidation(
+                new MdlTypes.MdlValidation(
                         ok,
                         ok
                                 ? List.of()
-                                : List.of(
-                                        new MdlPublishService.MdlIssue(
-                                                "error", "invalid model", "wren")),
+                                : List.of(new MdlTypes.MdlIssue("error", "invalid model", "wren")),
                         "",
                         List.of()));
     }
