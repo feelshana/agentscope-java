@@ -1,6 +1,6 @@
 # 仪表盘发布整合验收（2026-11-17）
 
-状态：整合后的Java17完整验证通过，适合受现有权限约束的线上体验；提交/推送状态由最终共享检查点记录，66仍由用户部署。
+状态：整合后的Java17完整验证通过，适合受现有权限约束的线上体验；整合提交bcc3d26af909534c935c8f9caa08c7446adb2ce6已原子推送到远端liyufan_dev与develop-2.0，ls-remote确认一致；66仍由用户部署。
 
 用户授权评估额度、提交本地修改，并在验证适合后合入个人分支和部署主线。本地功能提交7866772a，整合基线origin/liyufan_dev与origin/develop-2.0均876d899d；保留主线3项独立提交及功能分支8项提交。
 
@@ -17,11 +17,11 @@ Java17首轮：架构/新增装配/管理员回看/真实共享源HTTP回归通�
 ## 最终验证结果
 
 - Java17.0.14：`mvn -B -ntp clean verify -Dfrontend.npm.install.arguments=ci`成功，04:46；后端1164项，失败0、错误0、条件跳过23。1141项实际通过，不把跳过计为通过。
-- 前端27文件，根路径、`/dify/dataagent/`和另一个部署前缀均各129项通过；TypeScript/Vite、Spotless、JAR及tar.gz打包通过，保留现有大包体积提示。
+- 前端27文件，`/`、`/dataagent/`和`/dify/dataagent/`均各129项通过；TypeScript/Vite、Spotless、JAR及tar.gz打包通过，保留现有大包体积提示。
 - `dataagent_test_report.py`成功，必需集成JpaPersistenceIntegration/H2DemoSeed/MarketContribution分别4/1/7项且无跳过；没有显式禁用或未分类跳过。
 - core六类43项在Java17通过；同checkout SDK依赖安装成功。Python工具15项和报告脚本6项通过；身份/来源/架构专项17项通过。
 - 条件跳过包括未显式配置的真实模型/Wren/MySQL/Docker/Python场景及本机无法创建symlink的1项；完整列表在本次隔离target/surefire-reports和.runtime/release-test-summary.md。此前真实GenBI/浏览器证据与此次整合检查分开记录，未在66重跑。
-- 最终文档更新后追加DocsConsistencyTest；Git空白、冲突标记、暂存路径及疑似凭据模式检查无问题。未加入.runtime、日志、私有配置或运行数据。
+- 最终文档更新后DocsConsistencyTest 5项通过；Git空白、冲突标记、暂存路径及疑似凭据模式检查无问题。未加入.runtime、日志、私有配置或运行数据。
 
 ## 结论与范围
 

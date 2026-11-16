@@ -465,3 +465,7 @@ IDEA对照最终补记：DocsConsistencyTest 5项通过，失败/错误/跳过0�
 ## 2026-11-17 Asia/Shanghai｜Checkpoint：主线整合验证通过
 
 基于876d899d整合7866772a及前序架构/建模成果，修正共享源授权与删除依赖同时装配、管理员回看旧包引用；新增UserIdentity只读契约，未放宽架构门禁。旧mock默认方法夹具修正，真实共享源HTTP保持通过。最终Java17 clean verify 04:46成功，1164项零失败错误、23条件跳过；前端三个前缀各129项，格式/构建/打包通过。必需集成4/1/7无跳过，core43、Python15+6通过。升级说明和报告已保存；最后文档门禁、合并提交和推送待后续记录，66未操作，样板不自动迁移。
+
+## 2026-11-17 Asia/Shanghai｜Checkpoint：个人分支与主线已推送
+
+整合提交bcc3d26af909534c935c8f9caa08c7446adb2ce6（父876d899d与7866772a）已在liyufan_dev提交，develop-2.0快进后git push --atomic成功；ls-remote确认两远端分支一致。最终文档门禁5项及空白检查通过。此次补记仅文档，将随个人/主线同步；原开发目录会快进到同一结果以免共享任务记录停留在验证中。66未部署，用户按66-dashboard-upgrade执行旧结构核对和deploy-formal；GitHub远端CI未冒充通过。
