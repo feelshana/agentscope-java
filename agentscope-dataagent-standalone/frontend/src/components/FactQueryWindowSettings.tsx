@@ -1,4 +1,4 @@
-import { factWindowSetup } from '../utils/factWindowSetup';
+import { factWindowDraft, factWindowSetup } from '../utils/factWindowSetup';
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { getFactQueryWindowCandidates, saveFactQueryWindow, confirmTableRole } from '../api/modelingWorkflow';
@@ -46,10 +46,7 @@ export function FactQueryWindowSettings({ groupId, automatic = false, onReady, h
       if (current !== generation.current) return;
       setTables(candidates);
       setUnknown(setup.unknown);
-      setDraft(Object.fromEntries(candidates.map(table => [table.datasetId, {
-        mode: table.mode || 'LIMITED', days: table.windowDays || 31,
-        timeColumn: table.timeColumn || table.temporalColumns[0] || '',
-      }])));
+      setDraft(Object.fromEntries(candidates.map(table => [table.datasetId, factWindowDraft(table)])));
       setOpen(candidates.length > 0);
       if (pendingOnly) onReady?.(setup.ready);
     } catch (e) { if (current === generation.current) setError(message(e)); }
@@ -141,9 +138,9 @@ export function FactQueryWindowSettings({ groupId, automatic = false, onReady, h
                 <div>
                   <div style={label}>单次查询最多覆盖</div>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {DAYS.map(d => <button key={d} type="button" disabled={busy} style={chip(value.mode === 'LIMITED' && value.days === d)}
+                    {DAYS.map(d => <button key={d} type="button" disabled={busy} aria-pressed={value.mode === 'LIMITED' && value.days === d} style={chip(value.mode === 'LIMITED' && value.days === d)}
                       onClick={() => update({ mode: 'LIMITED', days: d })}>{d} 天</button>)}
-                    <button type="button" disabled={busy} style={chip(value.mode === 'UNLIMITED')}
+                    <button type="button" disabled={busy} aria-pressed={value.mode === 'UNLIMITED'} style={chip(value.mode === 'UNLIMITED')}
                       onClick={() => update({ mode: 'UNLIMITED' })}>不限制</button>
                   </div>
                 </div>

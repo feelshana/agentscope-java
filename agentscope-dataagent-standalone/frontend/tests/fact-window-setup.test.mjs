@@ -1,7 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { factWindowSetup } from '../src/utils/factWindowSetup.ts';
+import { factWindowDraft, factWindowSetup } from '../src/utils/factWindowSetup.ts';
 const table = (id, tableRole, mode = null, timeColumn = 'date') => ({ datasetId: id, tableRole, mode, timeColumn, temporalColumns: ['date'] });
+test('new fact defaults to unlimited while saved limits and time fields survive reopening', () => {
+  assert.deepEqual(factWindowDraft(table('fresh', 'FACT')), { mode: 'UNLIMITED', days: 31, timeColumn: 'date' });
+  const saved = { ...table('saved', 'FACT', 'LIMITED'), windowDays: 90, timeColumn: 'created_at' };
+  assert.deepEqual(factWindowDraft(saved), { mode: 'LIMITED', days: 90, timeColumn: 'created_at' });
+  assert.equal(factWindowDraft(table('all', 'FACT', 'UNLIMITED')).mode, 'UNLIMITED');
+});
 test('dated dimensions never open the time window dialog', () => {
   assert.deepEqual(factWindowSetup([table('customer', 'DIMENSION')], true), { facts: [], unknown: [], ready: true });
 });

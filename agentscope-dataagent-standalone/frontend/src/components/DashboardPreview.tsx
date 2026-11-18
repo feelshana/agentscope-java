@@ -4,6 +4,8 @@ import { Dashboard, queryDashboard } from '../api/dashboards';
 import { dashboardBridgeMessage } from './dashboardState';
 import { rememberDashboardThumbnail } from './dashboardThumbnails';
 import { getToken } from '../api/auth';
+import { dashboardBridgeRuntime } from './dashboardBridgeRuntime';
+import { DashboardQueryQueue, previewSummary, PanelProgress, PanelReference, PreviewIssue, PreviewReport, QueryProgress } from './dashboardRuntime';
 
 /** Trusted outer frame restricts navigation of the opaque-origin generated inner frame. */
 export const DASHBOARD_HOST = `<!doctype html><html><head><meta charset="utf-8">
@@ -19,137 +21,107 @@ addEventListener('message',function(event){
   policy.content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src 'none'; connect-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'; worker-src 'none'";
   doc.head.prepend(policy);
   const runtime=doc.createElement('script');runtime.textContent=event.data.runtime;
-  const bridge=doc.createElement('script');bridge.textContent='('+${JSON.stringify(bridgeRuntime.toString())}+')('+JSON.stringify(channel)+')';
+  const bridge=doc.createElement('script');bridge.textContent='('+${JSON.stringify(dashboardBridgeRuntime.toString())}+')('+JSON.stringify(channel)+','+JSON.stringify(!!event.data.editable)+')';
   policy.after(bridge,runtime);
   frame=document.createElement('iframe');frame.sandbox='allow-scripts';frame.title='生成的仪表盘';
   frame.srcdoc='<!doctype html>'+doc.documentElement.outerHTML;
   document.body.append(frame);
  }else if(frame&&event.source===frame.contentWindow&&event.data&&event.data.channel===channel){
-  if(event.data.kind==='query'||event.data.kind==='runtime-error'||event.data.kind==='thumbnail')parent.postMessage(event.data,'*');
+  if(event.data.kind==='query'||event.data.kind==='runtime-error'||event.data.kind==='thumbnail'||event.data.kind==='panel-state'||event.data.kind==='panel-select')parent.postMessage(event.data,'*');
  }else if(frame&&event.source===parent&&event.data&&event.data.channel===channel&&(event.data.kind==='result'||event.data.kind==='capture')){
   frame.contentWindow.postMessage(event.data,'*');
  }
 });parent.postMessage({kind:'host-ready'},'*');
 })();</script></body></html>`;
 
-function bridgeRuntime(channel: string) {
-  let sequence = 0;
-  const pending = new Map<number, { resolve: (data: unknown) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
-  Object.defineProperty(window, 'dataagent', { value: Object.freeze({
-    query(sql: string): Promise<unknown> {
-      if (typeof sql !== 'string' || !sql.trim() || sql.length > 20000) return Promise.reject(new Error('查询SQL无效'));
-      const id = ++sequence;
-      return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => { pending.delete(id); reject(new Error('查询超时，请刷新重试')); }, 180000);
-        pending.set(id, { resolve, reject, timer });
-        parent.postMessage({ kind: 'query', channel, id, sql }, '*');
-      });
-    },
-  }), writable: false, configurable: false });
-  addEventListener('message', event => {
-    if (event.source !== parent || event.data?.channel !== channel) return;
-    if (event.data.kind === 'capture') { void capture(); return; }
-    if (event.data.kind !== 'result') return;
-    const task = pending.get(event.data.id as number);
-    if (!task) return;
-    pending.delete(event.data.id as number); clearTimeout(task.timer);
-    if (event.data.error) task.reject(new Error(String(event.data.error)));
-    else task.resolve(event.data.data);
-  });
-  let captured = false;
-  async function capture() {
-    if (captured || pending.size) return;
-    const engine = (window as unknown as { echarts?: { getInstanceByDom: (element: Element) => { renderToCanvas: (options: object) => HTMLCanvasElement } | undefined } }).echarts;
-    if (!engine) return;
-    const elements = Array.from(document.querySelectorAll('[_echarts_instance_]')).filter(el => el.clientWidth && el.clientHeight).slice(0, 3);
-    if (!elements.length) return;
-    captured = true;
-    try {
-      const images = elements.map(el => engine.getInstanceByDom(el)?.renderToCanvas({ pixelRatio: .8, backgroundColor: '#ffffff' })).filter((image): image is HTMLCanvasElement => Boolean(image));
-      if (!images.length) return;
-      const canvas = document.createElement('canvas'); canvas.width = 760; canvas.height = 430;
-      const context = canvas.getContext('2d'); if (!context) return;
-      context.fillStyle = '#f5f7fa'; context.fillRect(0, 0, 760, 430);
-      images.forEach((image, index) => {
-        const box = images.length === 1 ? [12, 12, 736, 406] : index === 0 ? [12, 12, 736, 226] : images.length === 2 ? [12, 250, 736, 168] : [12 + (index - 1) * 374, 250, 362, 168];
-        const scale = Math.min(box[2] / image.width, box[3] / image.height);
-        context.fillStyle = '#ffffff'; context.fillRect(...box as [number, number, number, number]);
-        context.drawImage(image, box[0] + (box[2] - image.width * scale) / 2, box[1] + (box[3] - image.height * scale) / 2, image.width * scale, image.height * scale);
-      });
-      parent.postMessage({ kind: 'thumbnail', channel, image: canvas.toDataURL('image/png') }, '*');
-    } catch { /* A chart without an exportable canvas simply has no cover. */ }
-  }
-  const fail = (error: unknown) => parent.postMessage({ kind: 'runtime-error', channel, error: String(error).slice(0, 300) }, '*');
-  addEventListener('error', event => fail(event.message));
-  addEventListener('unhandledrejection', event => fail(event.reason));
-}
-
-export default function DashboardPreview({ dashboard, draft }: { dashboard: Dashboard; draft: boolean }) {
+export default function DashboardPreview({ dashboard, draft, onReport, onSelect, onRepair, repairDisabled = false }: {
+  dashboard: Dashboard; draft: boolean; onReport?: (report: PreviewReport) => void;
+  onSelect?: (panel: PanelReference, revision: string) => void; onRepair?: (report: PreviewReport) => void; repairDisabled?: boolean;
+}) {
   const frame = useRef<HTMLIFrameElement>(null);
   const channel = useMemo(() => crypto.randomUUID(), [dashboard.id, dashboard.revision, draft]);
-  const [error, setError] = useState('');
-  const [queries, setQueries] = useState(0);
-  const [completedAt, setCompletedAt] = useState('');
+  const [report, setReport] = useState<PreviewReport>({ revision: dashboard.revision, initialized: false, settled: false, queries: { active: 0, queued: 0, succeeded: 0, failed: 0, total: 0 }, panels: [], issues: [] });
+  const callbacks = useRef({ onReport, onSelect }); callbacks.current = { onReport, onSelect };
   useEffect(() => {
     const controller = new AbortController();
     const handled = new Set<number>();
-    let active = 0;
-    let initialized = false;
-    let successful = 0;
-    let failed = false;
-    let thumbnailSaved = false;
+    const panels = new Map<string, PanelProgress>();
+    const issues = new Map<string, PreviewIssue>();
+    const epochs = new Map<string, number>();
+    let queries: QueryProgress = { active: 0, queued: 0, succeeded: 0, failed: 0, total: 0 };
+    let initialized = false, thumbnailSaved = false;
+    let settleTimer: ReturnType<typeof setTimeout> | undefined;
     let captureTimer: ReturnType<typeof setTimeout> | undefined;
     const credential = getToken();
-    setError(''); setQueries(0); setCompletedAt('');
-    const onMessage = async (event: MessageEvent) => {
+    const publish = (settled = false) => {
+      if (controller.signal.aborted) return;
+      const next: PreviewReport = { revision: dashboard.revision, initialized, settled, queries: { ...queries }, panels: [...panels.values()], issues: [...issues.values()] };
+      setReport(next); callbacks.current.onReport?.(next);
+    };
+    const changed = () => {
+      clearTimeout(settleTimer); clearTimeout(captureTimer); publish(false);
+      settleTimer = setTimeout(() => {
+        const idle = !queries.active && !queries.queued;
+        const settled = initialized && idle && (!panels.size || [...panels.values()].every(p => !['pending', 'loading'].includes(p.state)) || [...issues.values()].some(issue => issue.kind === 'runtime'));
+        publish(settled);
+        if (settled && queries.succeeded && !issues.size && !thumbnailSaved) captureTimer = setTimeout(() => frame.current?.contentWindow?.postMessage({ kind: 'capture', channel }, '*'), 500);
+      }, 500);
+    };
+    const issue = (key: string, value: PreviewIssue) => { if (issues.size >= 12 && !issues.has(key)) issues.delete(issues.keys().next().value!); issues.set(key, value); changed(); };
+    const queue = new DashboardQueryQueue(next => { queries = next; changed(); });
+    publish();
+    const onMessage = (event: MessageEvent) => {
       const source = frame.current?.contentWindow;
       const data = dashboardBridgeMessage(event, source, channel);
-      if (!source || !data) return;
+      if (!source || !data || controller.signal.aborted) return;
       if (data.kind === 'host-ready' && !initialized) {
         initialized = true;
-        source.postMessage({ kind: 'init', channel, html: dashboard.html, runtime: chartRuntime.replace(/<\/script/gi, '<\\/script') }, '*');
+        source.postMessage({ kind: 'init', channel, html: dashboard.html, editable: draft && dashboard.canEdit, runtime: chartRuntime.replace(/<\/script/gi, '<\\/script') }, '*');
+        changed(); return;
+      }
+      if (data.kind === 'runtime-error') { issue('runtime', { kind: 'runtime', message: data.error || '页面运行错误' }); return; }
+      if (data.kind === 'panel-select') { if (draft && dashboard.canEdit) callbacks.current.onSelect?.({ id: data.panelId!, title: data.title! }, dashboard.revision); return; }
+      if (data.kind === 'panel-state') {
+        if (!panels.has(data.panelId!) && panels.size >= 40) return;
+        if (data.state === 'loading') {
+          epochs.set(data.panelId!, (epochs.get(data.panelId!) || 0) + 1);
+          for (const [key, value] of issues) if (value.panelId === data.panelId) issues.delete(key);
+        }
+        panels.set(data.panelId!, { id: data.panelId!, title: data.title!, state: data.state as PanelProgress['state'], error: data.error || undefined });
+        if (data.state === 'error') issue('panel:' + data.panelId, { kind: 'panel', panelId: data.panelId, message: data.error || '面板未完成' }); else changed();
         return;
       }
-      if (data.kind === 'runtime-error') { failed = true; setError(String(data.error || '页面运行错误').slice(0, 300)); return; }
       if (data.kind === 'thumbnail') {
-        if (!thumbnailSaved && successful && !active && !failed && data.image && getToken() === credential) {
-          thumbnailSaved = true; rememberDashboardThumbnail(dashboard.id, dashboard.revision, data.image);
-        }
+        if (!thumbnailSaved && queries.succeeded && !queries.active && !queries.queued && !issues.size && data.image && getToken() === credential) { thumbnailSaved = true; rememberDashboardThumbnail(dashboard.id, dashboard.revision, data.image); }
         return;
       }
-      if (data.kind !== 'query' || !Number.isSafeInteger(data.id) || typeof data.sql !== 'string') return;
-      const id = data.id as number;
-      if (handled.has(id)) return;
-      handled.add(id);
-      const reply = (result: object) => { if (!controller.signal.aborted) source.postMessage({ kind: 'result', channel, id, ...result }, '*'); };
-      if (active >= 6 || handled.size > 120) { reply({ error: '查询过于频繁，请刷新或减少图表' }); return; }
-      clearTimeout(captureTimer); active++; setQueries(active);
-      try {
-        const result = await queryDashboard(dashboard.id, draft, dashboard.revision, data.sql, controller.signal);
-        successful++;
-        reply({ data: result });
-      } catch (e) {
-        if (!controller.signal.aborted) {
-          const message = e instanceof Error ? e.message : '查询失败';
-          failed = true; setError(message); reply({ error: message });
-        }
-      } finally {
-        active--;
-        if (!controller.signal.aborted) {
-          setQueries(active);
-          if (!active && successful && !failed) {
-            setCompletedAt(new Date().toLocaleTimeString('zh-CN', { hour12: false }));
-            if (!thumbnailSaved) captureTimer = setTimeout(() => source.postMessage({ kind: 'capture', channel }, '*'), 1400);
-          }
-        }
+      if (data.kind !== 'query' || handled.has(data.id!)) return;
+      if (handled.size >= 120) {
+        const message = '本次预览查询次数超过120次，请刷新或减少重复查询';
+        issue('budget', { kind: 'query', message });
+        source.postMessage({ kind: 'result', channel, id: data.id, error: message }, '*');
+        return;
       }
+      handled.add(data.id!);
+      const id = data.id!, epoch = data.panelId ? epochs.get(data.panelId) : undefined;
+      const reply = (result: object) => { if (!controller.signal.aborted && getToken() === credential) source.postMessage({ kind: 'result', channel, id, ...result }, '*'); };
+      void queue.enqueue(() => {
+        if (getToken() !== credential) throw new Error('登录状态已变化，请重新进入看板');
+        return queryDashboard(dashboard.id, draft, dashboard.revision, data.sql!, controller.signal);
+      }).then(result => reply({ data: result })).catch(error => {
+        if (controller.signal.aborted) return;
+        const message = error instanceof Error ? error.message : '查询失败';
+        if (!data.panelId || epochs.get(data.panelId) === epoch) issue('query:' + id, { kind: 'query', message, panelId: data.panelId, sql: data.sql?.slice(0, 4000) });
+        reply({ error: message });
+      });
     };
     window.addEventListener('message', onMessage);
-    return () => { controller.abort(); clearTimeout(captureTimer); window.removeEventListener('message', onMessage); };
-  }, [channel, dashboard.id, dashboard.revision, dashboard.html, draft]);
+    return () => { controller.abort(); queue.close(); clearTimeout(settleTimer); clearTimeout(captureTimer); window.removeEventListener('message', onMessage); };
+  }, [channel, dashboard.id, dashboard.revision, dashboard.html, draft, dashboard.canEdit]);
+  const bad = report.issues.length > 0 || report.panels.some(panel => panel.state === 'error');
   return <div className="dashboard-preview">
-    {error && <div className="dashboard-runtime-error" role="alert">{error}{draft && ' · 可在左侧告诉助手修正。'}</div>}
+    {bad && <div className="dashboard-runtime-error" role="alert"><strong>预览发现问题</strong><span>{report.issues[0]?.message || '部分面板未完成'}</span>{draft && onRepair && <button type="button" disabled={repairDisabled || !report.settled} onClick={() => onRepair(report)}>让助手修复失败项</button>}</div>}
     <iframe key={channel} ref={frame} title={`${dashboard.title}预览`} sandbox="allow-scripts allow-same-origin" srcDoc={DASHBOARD_HOST} referrerPolicy="no-referrer" />
-    <div className="dashboard-live-status" role="status"><span className={error ? 'dot error' : 'dot'} />{queries ? `正在查询 ${queries} 项数据…` : error ? '部分内容需要调整' : completedAt ? `按知识库权限查询 · 本次查询完成于 ${completedAt}` : '等待数据加载 · 按知识库权限查询'}</div>
+    <div className="dashboard-live-status" role="status"><span className={bad ? 'dot error' : 'dot'} />{previewSummary(report)}<details><summary>运行检查</summary><div><p>文件检查与页面自检分开；业务口径仍需核对。</p>{report.panels.map(panel => <p key={panel.id}>{panel.title} · {{ pending: '等待开始', loading: '加载中', ready: '已显示', empty: '暂无数据', error: '失败' }[panel.state]}{panel.error ? `：${panel.error}` : ''}</p>)}{report.issues.map((value, index) => <p key={index}>{value.panelId ? `${value.panelId}：` : ''}{value.message}</p>)}</div></details></div>
   </div>;
 }

@@ -323,6 +323,7 @@ export default function AssociateTablesModal({
                 </option>
               ))}
             </select>
+            {sources.length > 0 && sources.every(source => source.enabled === false) && <p className="da-small" role="status">当前可见数据源均已停用，请在数据源管理中启用后重试。</p>}
           </div>
           <div className="associate-tables-layout">
             <div className="associate-tables-pane associate-tables-schemas">

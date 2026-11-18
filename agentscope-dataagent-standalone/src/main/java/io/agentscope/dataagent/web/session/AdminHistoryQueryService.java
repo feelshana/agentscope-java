@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AdminHistoryQueryService {
     private static final String ACTIVITY = "coalesce(h.activity_ms,s.last_activity_ms)";
     private static final String TITLE = "coalesce(h.title,s.label,'')";
+    private static final String ASSISTANT = HistoryAssistant.sql("s");
     private static final String FROM =
             """
             from session_registry s
@@ -31,7 +32,9 @@ public class AdminHistoryQueryService {
                     + ACTIVITY
                     + " activity,coalesce(q.question_count,0)"
                     + " question_count,s.user_id,coalesce(u.username,s.user_id)"
-                    + " username,u.display_name,u.department ";
+                    + " username,u.display_name,u.department,"
+                    + ASSISTANT
+                    + " assistant_type ";
     private final JdbcTemplate jdbc;
 
     public AdminHistoryQueryService(JdbcTemplate jdbc) {
@@ -39,7 +42,13 @@ public class AdminHistoryQueryService {
     }
 
     public record Filter(
-            String userId, String query, long start, long end, String sort, boolean ascending) {}
+            String userId,
+            String query,
+            long start,
+            long end,
+            String sort,
+            boolean ascending,
+            String assistantType) {}
 
     public record Session(
             String sessionKey,
@@ -47,7 +56,8 @@ public class AdminHistoryQueryService {
             String title,
             long lastActivityMs,
             long questionCount,
-            HistoryOwner owner) {}
+            HistoryOwner owner,
+            String assistantType) {}
 
     public record Totals(long sessions, long questions, long users) {}
 
@@ -81,6 +91,10 @@ public class AdminHistoryQueryService {
                         + "<?";
         args.add(f.start());
         args.add(f.end());
+        if (!"all".equals(f.assistantType())) {
+            sql += " and (" + ASSISTANT + ")=?";
+            args.add(f.assistantType());
+        }
         if (f.userId() != null && !f.userId().isBlank()) {
             sql += " and s.user_id=?";
             args.add(f.userId());
@@ -195,5 +209,6 @@ public class AdminHistoryQueryService {
                                     rs.getString("title")),
                             rs.getLong("activity"),
                             rs.getLong("question_count"),
-                            owner(rs));
+                            owner(rs),
+                            rs.getString("assistant_type"));
 }

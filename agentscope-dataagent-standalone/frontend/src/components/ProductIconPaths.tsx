@@ -2,6 +2,10 @@ import React from 'react';
 
 /** Approved product glyphs: outline at rest, solid for selected navigation. */
 export const PRODUCT_ICONS = {
+  chart: {
+    outline: <><path d="M3 3v18h18"/><path d="M7 15v3M12 10v8M17 6v12"/></>,
+    solid: <><path d="M3 3v18h18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><rect x="5.5" y="13" width="3" height="5" rx="1"/><rect x="10.5" y="9" width="3" height="9" rx="1"/><rect x="15.5" y="5" width="3" height="13" rx="1"/></>,
+  },
   book: {
     outline: <><rect x="3.5" y="4" width="6" height="16" rx="1.5"/><path d="M6.5 7.5v5"/><rect x="13" y="4" width="6" height="16" rx="1.5" transform="rotate(-12 16 12)"/></>,
     solid: <><path fillRule="evenodd" d="M4.8 3.5h3.4A1.8 1.8 0 0 1 10 5.3v13.4a1.8 1.8 0 0 1-1.8 1.8H4.8A1.8 1.8 0 0 1 3 18.7V5.3a1.8 1.8 0 0 1 1.8-1.8Zm1 3.5v5.5h1.4V7Z"/><path fillRule="evenodd" d="M14.3 3.5h3.4a1.8 1.8 0 0 1 1.8 1.8v13.4a1.8 1.8 0 0 1-1.8 1.8h-3.4a1.8 1.8 0 0 1-1.8-1.8V5.3a1.8 1.8 0 0 1 1.8-1.8Zm1 3.5v5.5h1.4V7Z" transform="rotate(-12 16 12)"/></>,

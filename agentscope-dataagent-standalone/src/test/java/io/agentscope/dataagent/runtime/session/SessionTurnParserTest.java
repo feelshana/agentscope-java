@@ -6,6 +6,21 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 class SessionTurnParserTest {
+    @org.junit.jupiter.api.Test
+    void frameworkSummaryIsNotAUserTurnButOrdinarySummaryWordingIsPreserved() {
+        String jsonl =
+                """
+                {"type":"message","id":"human","role":"USER","content":"You are in the middle of a conversation that has been summarized."}
+                {"type":"message","id":"__compaction_summary__:generated","role":"USER","content":"private context"}
+                {"type":"message","id":"reserved-name","name":"__compaction_summary__","role":"USER","content":"private context"}
+                {"type":"message","id":"reply","role":"ASSISTANT","content":"已完成"}
+                """;
+        var turns = SessionTurnParser.parse(jsonl);
+        org.assertj.core.api.Assertions.assertThat(turns).hasSize(2);
+        org.assertj.core.api.Assertions.assertThat(turns.get(0).id()).isEqualTo("human");
+        org.assertj.core.api.Assertions.assertThat(turns.get(1).id()).isEqualTo("reply");
+    }
+
     @Test
     void unwrapsJsonStringEnvelopeFromPersistedToolResult() throws Exception {
         String receipt =

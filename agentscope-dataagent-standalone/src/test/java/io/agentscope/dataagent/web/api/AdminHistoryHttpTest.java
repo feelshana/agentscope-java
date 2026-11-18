@@ -98,6 +98,7 @@ class AdminHistoryHttpTest {
     int port;
 
     @Autowired UserEntityRepository users;
+    @Autowired io.agentscope.dataagent.web.persistence.jpa.DatasetGroupRepository groups;
     @Autowired SessionRegistryRepository registry;
     @Autowired SessionHistoryRepository history;
     @Autowired SessionMessageRepository messages;
@@ -122,6 +123,7 @@ class AdminHistoryHttpTest {
         history.deleteAll();
         registry.deleteAll();
         artifacts.deleteAll();
+        groups.deleteAll();
         users.deleteAll();
     }
 
@@ -232,6 +234,178 @@ class AdminHistoryHttpTest {
         users.save(account);
         for (String path : List.of("overview", "users", "directory", "export"))
             assertThat(request("GET", base + path, admin).statusCode()).isEqualTo(403);
+    }
+
+    @Test
+    void assistantTypesUseExactRoutingAndShareFilterAcrossPagesStatisticsAndCsv() throws Exception {
+        addUser("types-admin", "管理员", "user,admin");
+        addUser("types-a", "同事甲", "user");
+        addUser("types-b", "同事乙", "user");
+        long now = System.currentTimeMillis();
+        String[] keys = {
+            "typed-query", "typed-modeling", "typed-dashboard", "typed-custom", "typed-unknown"
+        };
+        String[] routes = {
+            "data-agent", "modeling-agent", "dashboard-agent", "uca-types-b-data-agent", null
+        };
+        int[] counts = {2, 3, 2, 1, 0};
+        for (int i = 0; i < keys.length; i++) {
+            addSession(keys[i], i < 2 ? "types-a" : "types-b", "main", now + i);
+            var s = registry.findById(keys[i]).orElseThrow();
+            s.setAgentId(i == 2 || i == 3 ? "data-agent" : "opaque-framework-uuid");
+            s.setGateKey(
+                    routes[i] == null
+                            ? null
+                            : "chatui|u:"
+                                    + s.getUserId()
+                                    + "|g:conversation|x:agentId="
+                                    + routes[i]);
+            registry.save(s);
+            for (int j = 0; j < counts[i]; j++) {
+                var m = message(j, "USER", i == 1 ? "自动建模指令" : "调整需求", now);
+                m.id = keys[i] + "-" + j;
+                m.sessionKey = keys[i];
+                m.project("USER", i == 1 ? "自动建模指令" : "调整需求");
+                messages.save(m);
+            }
+        }
+        addSession("typed-subagent", "types-a", "subagent", now);
+        String token = jwt.generate("types-admin", "types-admin", List.of("user", "admin"));
+        String base = "/api/admin/conversation-history/";
+        var defaultPage = json.readTree(request("GET", base + "overview", token).body());
+        assertThat(defaultPage.path("totals").path("sessions").asInt()).isEqualTo(1);
+        assertThat(defaultPage.path("totals").path("questions").asInt()).isEqualTo(2);
+        assertThat(defaultPage.path("items").get(0).path("sessionKey").asText())
+                .isEqualTo("typed-query");
+        for (String type : List.of("query", "modeling", "dashboard", "all")) {
+            String filter = "?assistantType=" + type;
+            var page = json.readTree(request("GET", base + "overview" + filter, token).body());
+            assertThat(page.path("totals").path("sessions").asInt())
+                    .isEqualTo("all".equals(type) ? 5 : 1);
+            assertThat(page.path("totals").path("questions").asInt())
+                    .isEqualTo("all".equals(type) ? 8 : "modeling".equals(type) ? 3 : 2);
+            assertThat(page.path("totals").path("users").asInt())
+                    .isEqualTo("all".equals(type) ? 2 : 1);
+            if (!"all".equals(type))
+                assertThat(page.path("items").get(0).path("assistantType").asText())
+                        .isEqualTo(type);
+            var perUser = json.readTree(request("GET", base + "users" + filter, token).body());
+            long sum = 0;
+            for (var row : perUser.path("items")) sum += row.path("questions").asLong();
+            assertThat(sum).isEqualTo(page.path("totals").path("questions").asLong());
+            var csv = request("GET", base + "export" + filter, token);
+            assertThat(csv.statusCode()).isEqualTo(200);
+            assertThat(csv.body()).contains("助手类型");
+            if ("all".equals(type))
+                assertThat(csv.body()).contains("问数助手", "建模助手", "仪表盘助手", "其他助手", "用户消息数");
+            else {
+                assertThat(csv.body().split("\r\n")).hasSize(2);
+                assertThat(csv.body()).contains("query".equals(type) ? "提问数" : "对话轮次");
+            }
+        }
+        assertThat(
+                        request(
+                                        "GET",
+                                        base + "overview?assistantType=dashboard&userId=types-a",
+                                        token)
+                                .body())
+                .contains("\"sessions\":0");
+        groups.save(
+                new io.agentscope.dataagent.web.persistence.jpa.DatasetGroupEntity(
+                        "typed-group", "types-a", "商品经营", null));
+        String dashboardId = "27986791-b152-4ff0-b137-35e4686efbb8";
+        Path mdlHome = files.resolve("mdl");
+        Path metadata = mdlHome.resolve("dashboards").resolve(dashboardId).resolve("asset.json");
+        java.nio.file.Files.createDirectories(metadata.getParent());
+        java.nio.file.Files.writeString(
+                metadata, "{\"id\":\"" + dashboardId + "\",\"title\":\"曜境经营驾驶舱\"}");
+        var titleProjection =
+                new io.agentscope.dataagent.web.session.ConversationHistoryTitles(
+                        groups,
+                        new io.agentscope.dataagent.runtime.session.ConversationScopeRegistry(),
+                        new io.agentscope.dataagent.dataset.WrenProperties(
+                                "wren", mdlHome.toString(), "test", "mysql", 10));
+        var bootstrap =
+                org.mockito.Mockito.mock(io.agentscope.dataagent.runtime.DataAgentBootstrap.class);
+        org.mockito.Mockito.when(bootstrap.gateway())
+                .thenReturn(
+                        org.mockito.Mockito.mock(
+                                io.agentscope.dataagent.runtime.gateway.HarnessGateway.class));
+        var worker =
+                new io.agentscope.dataagent.web.session.SessionHistoryService(
+                        bootstrap,
+                        registry,
+                        history,
+                        messages,
+                        transactionManager,
+                        new io.agentscope.dataagent.runtime.session.ConversationScopeRegistry(),
+                        java.util.Optional.of(titleProjection));
+        try {
+            for (String key : List.of("typed-modeling", "typed-dashboard")) {
+                var s = registry.findById(key).orElseThrow();
+                s.setGateKey(
+                        "chatui|u:"
+                                + s.getUserId()
+                                + "|g:"
+                                + (key.endsWith("modeling") ? "modeling-typed-group" : dashboardId)
+                                + "|x:agentId="
+                                + (key.endsWith("modeling")
+                                        ? "modeling-agent"
+                                        : "dashboard-agent"));
+                registry.save(s);
+                var h = new SessionHistoryEntity();
+                h.sessionKey = key;
+                h.sessionId = key;
+                h.activityMs = now;
+                h.title = "旧平台生成指令";
+                history.save(h);
+                worker.refresh(key);
+            }
+            String term =
+                    java.net.URLEncoder.encode("曜境经营驾驶舱", java.nio.charset.StandardCharsets.UTF_8);
+            var named =
+                    json.readTree(
+                            request(
+                                            "GET",
+                                            base + "overview?assistantType=dashboard&query=" + term,
+                                            token)
+                                    .body());
+            assertThat(named.path("totals").path("sessions").asInt()).isEqualTo(1);
+            assertThat(named.path("items").get(0).path("title").asText())
+                    .isEqualTo("曜境经营驾驶舱 · 看板对话");
+            assertThat(
+                            request(
+                                            "GET",
+                                            base + "export?assistantType=dashboard&query=" + term,
+                                            token)
+                                    .body())
+                    .contains("曜境经营驾驶舱 · 看板对话");
+            String groupTerm =
+                    java.net.URLEncoder.encode("商品经营", java.nio.charset.StandardCharsets.UTF_8);
+            assertThat(
+                            request(
+                                            "GET",
+                                            base
+                                                    + "overview?assistantType=modeling&query="
+                                                    + groupTerm,
+                                            token)
+                                    .body())
+                    .contains("商品经营 · 建模对话");
+        } finally {
+            worker.stop();
+        }
+        for (String path : List.of("overview", "users", "export")) {
+            assertThat(request("GET", base + path + "?assistantType=invalid", token).statusCode())
+                    .isEqualTo(400);
+            String ordinary = jwt.generate("types-a", "types-a", List.of("user"));
+            assertThat(request("GET", base + path + "?assistantType=all", ordinary).statusCode())
+                    .isEqualTo(403);
+        }
+        var admin = users.findById("types-admin").orElseThrow();
+        admin.setRolesCsv("user");
+        users.save(admin);
+        assertThat(request("GET", base + "overview?assistantType=all", token).statusCode())
+                .isEqualTo(403);
     }
 
     @Test
@@ -535,6 +709,79 @@ class AdminHistoryHttpTest {
                         org.mockito.ArgumentMatchers.any(),
                         org.mockito.ArgumentMatchers.any(),
                         org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void reindexesUnchangedTranscriptsToRemovePreviouslyCachedFrameworkSummaries()
+            throws Exception {
+        String key = "cached-framework-summary";
+        String content =
+                """
+                {"type":"message","id":"human","role":"USER","content":"调整销售趋势","timestamp":123}
+                {"type":"message","id":"__compaction_summary__:old","role":"USER","content":"private context","timestamp":124}
+                """;
+        Path transcript = files.resolve("cached-framework-summary.log.jsonl");
+        java.nio.file.Files.writeString(transcript, content);
+        addSession(key, "summary-owner", "main", 123000);
+        var source = registry.findById(key).orElseThrow();
+        source.setSessionFilePath(transcript.toString());
+        registry.save(source);
+        var cached = new SessionHistoryEntity();
+        cached.sessionKey = key;
+        cached.sessionId = key;
+        cached.sourcePath = transcript.toString();
+        cached.fileStamp = java.nio.file.Files.getLastModifiedTime(transcript).toMillis();
+        cached.fileSize = java.nio.file.Files.size(transcript);
+        cached.messageCount = 1;
+        cached.title = "private context";
+        cached.preview = "private context";
+        history.save(cached);
+        var internal = new SessionMessageEntity();
+        internal.id = "cached-summary-projection";
+        internal.sessionKey = key;
+        internal.position = 0;
+        internal.payload =
+                json.writeValueAsString(
+                        Map.of(
+                                "id",
+                                "__compaction_summary__:old",
+                                "role",
+                                "USER",
+                                "content",
+                                "private context"));
+        internal.project("USER", "private context");
+        messages.save(internal);
+        var bootstrap =
+                org.mockito.Mockito.mock(io.agentscope.dataagent.runtime.DataAgentBootstrap.class);
+        org.mockito.Mockito.when(bootstrap.gateway())
+                .thenReturn(
+                        org.mockito.Mockito.mock(
+                                io.agentscope.dataagent.runtime.gateway.HarnessGateway.class));
+        var worker =
+                new io.agentscope.dataagent.web.session.SessionHistoryService(
+                        bootstrap,
+                        registry,
+                        history,
+                        messages,
+                        transactionManager,
+                        new io.agentscope.dataagent.runtime.session.ConversationScopeRegistry(),
+                        java.util.Optional.empty());
+        try {
+            assertThat(worker.page(key, null, 100).items()).isEmpty();
+            worker.refresh(key);
+            worker.refresh(key);
+            var visible = worker.page(key, null, 100).items();
+            assertThat(visible).hasSize(1);
+            assertThat(visible.get(0).content()).isEqualTo("调整销售趋势");
+            assertThat(messages.findBySessionKeyOrderByPositionAsc(key)).hasSize(1);
+            var refreshed = history.findById(key).orElseThrow();
+            assertThat(refreshed.messageCount).isEqualTo(1);
+            assertThat(refreshed.title).isEqualTo("调整销售趋势");
+            assertThat(refreshed.preview).isEqualTo("调整销售趋势");
+            assertThat(java.nio.file.Files.readString(transcript)).isEqualTo(content);
+        } finally {
+            worker.stop();
+        }
     }
 
     private void addUser(String id, String name, String roles) {

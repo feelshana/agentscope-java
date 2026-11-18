@@ -2,6 +2,7 @@ package io.agentscope.dataagent.web.api;
 
 import io.agentscope.dataagent.web.session.AdminHistoryQueryService;
 import io.agentscope.dataagent.web.session.AdminHistoryQueryService.Filter;
+import io.agentscope.dataagent.web.session.HistoryAssistant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -38,6 +39,7 @@ public class AdminHistoryOverviewController {
 
     @GetMapping("/overview")
     public Mono<AdminHistoryQueryService.Page> overview(
+            @RequestParam(defaultValue = "query") String assistantType,
             @RequestParam(defaultValue = "") String userId,
             @RequestParam(defaultValue = "") String query,
             @RequestParam(defaultValue = "") String from,
@@ -50,13 +52,14 @@ public class AdminHistoryOverviewController {
         AdminUserController.requireAdmin(auth);
         if (page < 0 || page > 1000000 || !(pageSize == 10 || pageSize == 20 || pageSize == 50))
             throw badRequest();
-        Filter filter = filter(userId, query, from, to, sort, direction);
+        Filter filter = filter(userId, query, from, to, sort, direction, assistantType);
         return Mono.fromCallable(() -> queries.page(filter, page, pageSize))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
     @GetMapping("/users")
     public Mono<AdminHistoryQueryService.Users> users(
+            @RequestParam(defaultValue = "query") String assistantType,
             @RequestParam(defaultValue = "") String userId,
             @RequestParam(defaultValue = "") String query,
             @RequestParam(defaultValue = "") String from,
@@ -65,13 +68,14 @@ public class AdminHistoryOverviewController {
             Authentication auth) {
         AdminUserController.requireAdmin(auth);
         if (page < 0 || page > 1000000) throw badRequest();
-        Filter filter = filter(userId, query, from, to, "activity", "desc");
+        Filter filter = filter(userId, query, from, to, "activity", "desc", assistantType);
         return Mono.fromCallable(() -> queries.users(filter, page))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
     @GetMapping(value = "/export", produces = "text/csv;charset=UTF-8")
     public Mono<ResponseEntity<String>> export(
+            @RequestParam(defaultValue = "query") String assistantType,
             @RequestParam(defaultValue = "") String userId,
             @RequestParam(defaultValue = "") String query,
             @RequestParam(defaultValue = "") String from,
@@ -80,7 +84,7 @@ public class AdminHistoryOverviewController {
             @RequestParam(defaultValue = "desc") String direction,
             Authentication auth) {
         AdminUserController.requireAdmin(auth);
-        Filter filter = filter(userId, query, from, to, sort, direction);
+        Filter filter = filter(userId, query, from, to, sort, direction, assistantType);
         return Mono.fromCallable(
                         () -> {
                             var rows = queries.export(filter);
@@ -89,12 +93,16 @@ public class AdminHistoryOverviewController {
                                         HttpStatus.BAD_REQUEST, "匹配会话超过 5000 条，请缩小日期或用户范围后导出。");
                             StringBuilder csv =
                                     new StringBuilder(
-                                            "\uFEFF会话标题,用户姓名,用户账号,本会话提问,最近活动时间（北京时间）\r\n");
+                                            "\uFEFF助手类型,会话标题,用户姓名,用户账号,"
+                                                    + countLabel(assistantType)
+                                                    + ",最近活动时间（北京时间）\r\n");
                             var format =
                                     DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
                                             .withZone(ZONE);
                             for (var s : rows)
-                                csv.append(cell(s.title()))
+                                csv.append(cell(HistoryAssistant.label(s.assistantType())))
+                                        .append(',')
+                                        .append(cell(s.title()))
                                         .append(',')
                                         .append(cell(s.owner().displayName()))
                                         .append(',')
@@ -118,6 +126,14 @@ public class AdminHistoryOverviewController {
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
+    private static String countLabel(String type) {
+        return switch (type) {
+            case "query" -> "本会话提问数";
+            case "modeling", "dashboard" -> "本会话对话轮次";
+            default -> "本会话用户消息数";
+        };
+    }
+
     static String cell(String value) {
         String text = value == null ? "" : value;
         String significant = text.stripLeading();
@@ -127,9 +143,16 @@ public class AdminHistoryOverviewController {
     }
 
     private static Filter filter(
-            String user, String query, String from, String to, String sort, String direction) {
+            String user,
+            String query,
+            String from,
+            String to,
+            String sort,
+            String direction,
+            String assistantType) {
         try {
-            if (user.length() > 128
+            if (!HistoryAssistant.validFilter(assistantType)
+                    || user.length() > 128
                     || query.length() > 160
                     || !("activity".equals(sort) || "questions".equals(sort))
                     || !("asc".equals(direction) || "desc".equals(direction))) throw badRequest();
@@ -152,7 +175,8 @@ public class AdminHistoryOverviewController {
                     start,
                     end,
                     sort,
-                    "asc".equals(direction));
+                    "asc".equals(direction),
+                    assistantType);
         } catch (java.time.DateTimeException invalid) {
             throw badRequest();
         }

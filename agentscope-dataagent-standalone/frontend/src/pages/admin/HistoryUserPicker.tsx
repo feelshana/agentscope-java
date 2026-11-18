@@ -1,13 +1,13 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AdminDirectoryUser, historyDirectory, historyUsers } from '../../api/adminHistory';
+import { AdminDirectoryUser, historyDirectory, historyUsers, HistoryQuery } from '../../api/adminHistory';
 import Icon from '../../components/Icon';
 
 const text = (u: AdminDirectoryUser | null) => u ? (u.displayName ? `${u.displayName} · ${u.username}` : u.username) : '';
 export function HistoryUserButton({ user, onClick }: { user: AdminDirectoryUser; onClick: () => void }) {
   return <button type="button" className="ah-user" onClick={onClick} title={`筛选 ${text(user)} 的会话`}><span className="ah-avatar">{(user.displayName || user.username).slice(0, 1)}</span><span><strong>{user.displayName || user.username}</strong><small>{user.username}</small></span></button>;
 }
-export default function HistoryUserPicker({ user, select, from, to }: { user: AdminDirectoryUser | null; select: (u: AdminDirectoryUser | null) => void; from: string; to: string }) {
+export default function HistoryUserPicker({ user, select, from, to, assistantType }: { user: AdminDirectoryUser | null; select: (u: AdminDirectoryUser | null) => void; from: string; to: string; assistantType: HistoryQuery['assistantType'] }) {
   const [draft, setDraft] = useState(text(user));
   const [term, setTerm] = useState('');
   const [open, setOpen] = useState(false);
@@ -29,13 +29,13 @@ export default function HistoryUserPicker({ user, select, from, to }: { user: Ad
     setLoading(true); setError(''); setOptions([]); setActive(0); setHasMore(false);
     const timer = window.setTimeout(() => (term.trim()
       ? historyDirectory(term.trim(), controller.signal).then(items => ({ items, hasMore: items.length >= 20 }))
-      : historyUsers({ userId: '', query: '', from, to, sort: 'activity', direction: 'desc', page: 0, pageSize: 20 }, 0, controller.signal)
+      : historyUsers({ assistantType, userId: '', query: '', from, to, sort: 'activity', direction: 'desc', page: 0, pageSize: 20 }, 0, controller.signal)
         .then(page => ({ items: page.items.map(row => row.owner), hasMore: page.hasMore }))).then(page => {
       if (!controller.signal.aborted) { setOptions(page.items); setHasMore(page.hasMore); setActive(0); }
     }).catch(e => { if (!controller.signal.aborted) setError((e as Error).message); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); }), 200);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [open, term, from, to]);
+  }, [open, term, from, to, assistantType]);
   useEffect(() => {
     if (!open) return;
     const place = () => {

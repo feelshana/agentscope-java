@@ -371,6 +371,8 @@ ADR 0078 / spec 067：`DatasetUploadProperties` 统一大小、文件数量、�
 
 平台表`dataagent_datasource_grant`存USE/MANAGE，`dataagent_datasource_audit`仅存操作者/对象/动作/角色，无凭据。按ADR0147，数据源密码沿用原字段存储，不做启动转换、不扩容密码列、不新增密钥；模型服务原有加密独立保留。已有环境先执行0146平台迁移，仅增加enabled和授权/审计表；密码仍不返回HTTP，Wren运行profile按原方式使用服务端凭据。
 
+`ExternalDataSourceEntity#enabled`同时声明Java初值与SQL ColumnDefault(true)，防止开发环境自动补非空布尔列时旧连接被初始化停用；不自动改写已有停用状态，正式环境仍执行0146迁移。关联弹窗保留停用选项禁用，全部停用时明确提示启用位置；异常旧数据须核对默认值/历史审计后定向修复，不以绕过requireActive恢复可用。
+
 `ExternalDataSourceController`（`/api/datasources`）管理用户级 JDBC 连接；测试连接、新建和修改时由 `DataSourceIntrospector#connectionError` 检查引擎，只接受 MySQL 8.0 及以上或 Doris（按 `@@version_comment` 识别），否则拒绝保存（ADR0113）；问数与建模提示要求 SQL 用 MySQL 8.0 语法、日期范围写成日期常量，以便时间门禁由规则判断； `DatasetService#associateTables` 把外部库已有表关联进知识库：`DataSourceIntrospector` 读取列元数据/表注释，可选通过 `DatasetSampling#read` 每表一次 LIMIT 1000 有界读取，在内存提取每列最多20个观察值，再经 `SchemaGenerationService` 生成字段说明与中文显示名，生成不可用时可从简短的中文列注释取名。`MdlSeeder` 给新入模列写入 `properties.displayName`，`KnowledgeBaseBrowseService` 从已发布 MDL 投影显示名。SQL 仍使用原字段名。`origin=datasource`，删除时不 drop 物理表。页面逐表调用 `DatasetGroupController#associate`（`publish=false`）以显示真实采样进度，全部完成后以空表列表、`publish=true` 统一生成一次基础 MDL。  Wren 知识库当前只允许关联同一个 MySQL 外部数据源，拒绝与上传表混合、跨多个外部源或关联 PostgreSQL。`DatasetService#prepareAssociatedTables` 在任何 repository/registry 写入前完成整批表名、 重复项、已有关联、字段元数据与描述预检；结构准备失败时整批不写入，采样失败只记录 FAILED，不阻断结构关联。全部准备成功后再统一 持久化并注册，Controller 最后只触发一次基础 MDL 发布。
 
 ADR 0080/spec 068：关联不再执行 COUNT(*) 或逐列 DISTINCT。外部表 API rowCount 为 null（包括历史外部记录），UI 显示总行数未统计；上传文件保留准确行数。摘要存入 DatasetEntity.sampleSummaryJson，对应可空 LONGTEXT 列 sample_summary_json，包含时间、范围、NULL 数、截断后的样本内不同值数和状态。MySQL 投影每值最多257字符，内存保留256字符并标记截断，二进制列不取内容。每次采样30秒语句超时、最多1000行，无失败全表回退。上传沿用导入中的每列最多10个非空样例，不新增数据库查询，未知NULL数/基数以-1表示。
@@ -650,6 +652,8 @@ system prompt（空记忆时为空标签）。排查助手"重复犯错"先看�
 - 展示：数据库 `session_history/session_message` 提供列表与消息分页；索引器从本地引擎日志补齐，列表不访问 Docker。
 - 共享数据源授权的用户存在/管理员判断依赖 `runtime.auth.UserIdentity` 只读契约，由 `UserStore#exists/isAdministrator` 映射现有用户存储；每次读取当前角色，不新增身份缓存、账号副本或权限来源。
 - 管理查阅（spec121、ADR0141）：`AdminConversationController` 默认分页展示全体用户的主会话，可按用户、标题和活动日期筛选。详情按轮返回已保存的提问、最终正文和当时知识库快照；spec136/ADR0148增加已有反馈及视觉回看。AdminHistoryPresentation仅投影图表/持久图片引用，图表接口校验同会话工具位置和图表owner，图片校验owner/session且仅允许图片类型；普通资源接口所有者边界不变。反馈一页批量只读，失败不阻断正文；不返回原始工具记录、不重新执行、不改变已读状态。管理员维护（spec122）经 `GlobalAdministratorController` 单独增减角色，`JpaUserStore` 在事务中保护最后一位管理员。带管理员声明的 API 凭证需通过当前数据库角色校验，撤权后旧凭证不再有管理员权限。
+- 管理历史分类（spec143）：`HistoryAssistant`优先按会话gateKey中的明确路由标识分类，缺路由时仅对旧公开agentId回退；内部UUID、未知/自定义助手归其他。`AdminHistoryOverviewController`与`AdminHistoryQueryService`的overview/users/export共用assistantType筛选，默认query，支持modeling/dashboard/all；USER计数用语随类型变化，全部用户去重，统计仍按会话最后活动而非单条消息时间筛选。
+- `ConversationHistoryTitles`优先用会话选库快照中的知识库名，仅知识库所有者可回退当前名称；看板只读单个小型asset元数据。`SessionHistoryService#refresh`在现有有界后台索引中更新展示title；转录未变化或缺失也可更新标题，消息正文、原生上下文和活动时间不变。对象删除/缺失显示明确回退，管理列表请求不扫描文件。长用户源码默认折叠、始终纯文本；普通问数侧栏、授权、发布和会话保留策略不变。
 - 管理检索（spec125、ADR0143）：`SessionHistoryService#indexBatch` 按有界批次补齐 `session_message.message_role/user_text`；正常投影写入时同步更新，仅 USER 保存检索正文。条件更新保护并发改写与删除。`AdminHistoryQueryService#page/users/export` 在数据库统一筛选标题/用户正文、所属用户与会话活动日期，聚合 USER 计数、稳定排序和分页；列表和摘要使用同一只读快照。正文整理尚未完成时返回 indexing 提示。CSV 超限拒绝并要求缩小条件，导出不包含对话正文。新接口仍校验当前全局管理员角色，旧列表 API 保持兼容。
 - 续聊：引擎日志及工作区持久状态继续保留，数据库展示投影不替代引擎上下文。
 - 附件：`session_artifact` 元数据加持久目录，所有者通过请求头认证读取；沙箱回收不影响已保存文件，删除或重置会话会清理附件。
@@ -725,6 +729,8 @@ manifest 尚不存在时（首次升级到该策略）执行一次性「采纳�
 ---
 
 ## 11. 前端结构
+
+设计基准候选、独立样板源码和评审截图仅保留本地并由.gitignore排除，不进入产品路由、正式构建命令或发布源码；正式设计说明、spec/ADR和验证报告继续版本管理，不能把候选样板视为已批准的整站主题。
 
 spec137：`ChatPanel`将已选库的查看与切换按钮分开，`ChatPage`懒加载`KnowledgeDataPanel`并与工具详情互斥；宽容器并排、窄容器覆盖，浏览不改对话/选库或触发Agent。面板仅调用现有`getGroupDetail/getPreview`（QUERY），库详情按需取一次，样例只在进入指定数据集时取20行；字段复用详情，不预查其他表。切库/关闭取消请求并丢弃面板缓存，管理员也只有只读操作。`DatasetReadOnlyTables`与原数据集详情共用表格，编辑行为仅由原详情页显式注入；未新增后端接口、存储或权限。
 
@@ -1045,6 +1051,7 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 ### 14.3 SQL 时间门禁
 
 - 外部数据源事实表的时间窗口保存在平台数据库，不属于 MDL，保存即生效；上传表不设门禁（`FactTableWindowService`、`FactQueryWindowPolicy#rules`）。
+- `factWindowDraft`统一准备清单和独立设置弹窗：未配置事实表默认UNLIMITED，仍在用户保存/开始建模前写入原策略接口；已保存LIMITED及原天数/时间列保持，不批量改写既有策略。
 - `SqlWindowGate#check` 先由 `SqlWindowRules#evaluate` 判断普通写法（单个 SELECT、登记表各出现一次、时间条件为 WHERE 顶层 AND 中的字面量比较/BETWEEN/平台日期解析包装），口径与模型门禁一致；规则无法确定的 SQL（OR、NOT、子查询、CTE、相对日期、ON 中的时间条件等）才把原始 SQL 与登记配置交给无工具 LLM 逐表判断，`parse` 按逐表明细重算结论；未登记表与 `query_cube` 不覆盖（ADR0112）。已发布 View、ref_sql 模型由 `PublishedAssetWindows#derive` 按已发布 `target/mdl.json` 的依赖派生规则，窗口取依赖表最小值并实时读取配置，时间列来自核查记录；依赖受限表却没有时间列的资产直接拒绝查询，不交给模型猜测（ADR0128）。
 - 建模 CLI、问数 MCP（`WrenScopedMcpClient#callTool`）、问题验证共用 `FactQueryWindowPolicy#requireAllowed`；拒绝后本轮阻止后续 SQL；判断写入 `logs/sql-window-gate.log`。
 
@@ -1066,12 +1073,24 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 - `DataAgentConfig#builderBootstrap` 注册独立、无Docker的 `dashboard-agent`，挂载同安装版本官方 genbi/usage 技能；`DashboardToolkitRegistrar#register` 安装原生文件工具、GenBI命令适配和调用级官方MCP转发。`ChatTurnPreparation#resolveGroupScope` 从服务器资产记录固定创建者/管理者和单库，排队入场重新检查，`DashboardTurn` 不接受模型或请求提供的任意工程路径。
 - `DashboardService#create` 复制已发布语义上下文到平台MDL持久目录下 `dashboards/<id>/project`，不改知识库模型。`wren_genbi build` 调用官方 live 构建说明，Agent仅编辑 `apps/dashboard/index.html`，`verify` 经官方 register/verify 后标记内容摘要。禁止shell、profile、外部部署和编辑索引。缺少GenBI或校验失败时显式报错，不生成假成功结果。
 - `DashboardQueryService#query` 以当前查看用户身份，经 `WrenQueryAccess`、只读校验、`FactQueryWindowPolicy` 和官方 `run_sql` 查询；Wren队列开始执行前重新检查看板修订与权限。单次最多1000行，截断拒绝展示为完整统计。内部live协议 `dataagent.query(sql)` 返回表格JSON，无用户/数据库凭证传入生成代码；这是官方GenBI通用网页流程的内部托管适配，不要求浏览器WASM。
-- `/dashboards` 列表与 `/dashboards/:dashboardId` 工作台按路由延迟加载；左侧复用现有SSE与持久会话，右侧 `DashboardPreview` 的可信外层限制子框架导航，内层HTML为只有脚本能力的opaque-origin srcdoc，CSP关闭外联、嵌套框架和表单；宿主核对消息来源/通道并限制并行查询，所有业务查询仍由服务端授权。ECharts运行库仅在实际预览时载入。生成代码和官方verify均不等于浏览器验收。
+- `/dashboards` 列表与 `/dashboards/:dashboardId` 工作台按路由延迟加载；左侧通过任务状态恢复原生持久会话，右侧 `DashboardPreview` 的可信外层限制子框架导航，内层HTML为只有脚本能力的opaque-origin srcdoc，CSP关闭外联、嵌套框架和表单；宿主核对消息来源/通道并限制并行查询，所有业务查询仍由服务端授权。ECharts运行库仅在实际预览时载入。生成代码和官方verify均不等于浏览器验收。
+- spec146/ADR0151：`DashboardGenerationController#start` 经RUN和资产草稿授权，由 `DashboardGenerationService#start` 在资产锁内校验请求ID/修订与单个活跃任务，服务端持有既有 `ChatController#stream` 的订阅，复用选库、原生执行、容量与绝对超时；异步进度及文件持久化经publishOn切换到boundedElastic，不阻塞网络事件线程。浏览器离开只停轮询，GET不启动模型；显式stop才取消。手动任务建检查点，自动子任务仅一次且继承检查点；恢复旧任务不自动修复。
+- 当前任务 `generation.json` 和按用户哈希命名的最近终态记录在资产目录原子保存，有限回复仅为恢复视图，完整对话以原生转录为准；当前用户不可读另一管理者的需求/回复。任务活跃时禁止删除/恢复/发布/新检查点；删除包含任务文件，不允许状态写入复活已删除目录。进程身份变化的遗留非终态标INTERRUPTED，单进程预算，不承诺重启续跑或多实例调度。
+- spec145/ADR0150：`DashboardQueryQueue`将同页查询按FIFO排队，仍限制并发与修订预算，换页/修订取消旧队列，派发前复核当前凭证；服务端原修订/QUERY/只读/时间门禁保持。`dashboardBridgeRuntime`兼容query(sql)，新增registerPanels及panel(load/render)运行约定，提供面板加载/空/错/独立重试、渲染容器检查及定向修改；旧HTML不冒称通过面板自检。宿主按窗口/通道/修订及字段白名单汇总查询和运行错误，源码中catch也不抹除宿主查询失败记录；自报面板状态不是业务口径证明。
+- `DashboardWorkbench`保留左对话右预览，支持拖拽/键盘调整宽度、真实事件阶段、停止和带面板目标/有界不可信诊断的原生Agent修复。仅用户轮次产生新HTML且预览稳定报错后自动修复一次，首次打开/查看发布版/停止/权限或明显网络错误不触发；不新增ReAct循环或整页局部热更新。官方verify标为文件检查，客户端运行检查另列，发布仍须人工确认。
+- 工作台紧凑顶栏只列返回/名称/状态及主操作，`DashboardMoreMenu`将信息与权限入口收拢，成员可读描述/知识库而不能编辑；窄屏版本查看移入同菜单。独立看板SVG标识、右侧真实进度及`DashboardConversationStarters`代替重复范围/进度栏，六种通用方向只填入输入框，不自动发送。回复按原Markdown排版，技术说明可展开，实际草稿变化才显示运行结果及原撤销；阅读旧回复时不强拉到底，提供回到最新。未改变SSE、模型提示或资产授权。
+- 顶栏导航采用“仪表盘 › 当前名称”的Link面包屑，普通用户气泡不重复身份文字，自动修复仍明确标识；产品chart图标与其他主导航同用outline/solid切换。编辑历史继续按当前用户/Agent/看板conversationId恢复，不额外创建或清空会话；返回历史不自动触发模型。
+- `DashboardService#checkpoint`与`DashboardService#restore`在原资产锁、RUN入口后的创建者/MANAGE/QUERY及原生空闲会话门禁下保存有界内容哈希检查点；expectedRevision拒绝覆盖其他修改，路径/内容哈希/当前模型复核，撤销仅恢复草稿HTML及原校验标记，不改元数据、已发布指针或原生对话。快照位于资产目录随看板删除清理，不新建数据库表。
 - `DashboardService#publish` 仅MANAGE显式操作，使用期望内容摘要防止误发布；在锁内重做官方校验并复核权限，写入不可变HTML修订后原子替换资产指针。成员需QUERY且仅可读已发布修订；作者与管理者可访问草稿。元数据与版本位于平台持久卷，不依赖浏览器。单进程资产锁，不声称支持多实例并发写；旧版本暂不自动清理，删除知识库后的资产不能再通过ACL查看。
-- `SessionHistoryService#transcript` 由原生会话的conversationId恢复持久选库，使用与执行时相同的KB命名空间读取本地transcript；不另建仪表盘对话存储。
-- `DashboardLibrary` 采用知识库共用视觉令牌与真实列表筛选；`DashboardService.View#owned` 仅投影当前用户是否创建，不暴露其他用户标识。创建只填写知识库和名称，进入工作台后由用户手动发送需求，不通过路由状态自动触发Agent；发布确认仍提交当前修订并由原服务复核。生成文档自身的主题/响应式保留，不强行套入示例模板。
+- `SessionHistoryService#transcript` 由原生会话的conversationId恢复持久选库，使用与执行时相同的KB命名空间读取本地transcript；不另建仪表盘对话存储。`SessionTurnParser#isInternalMessage` 按框架保留名/ID排除compaction摘要，历史索引每进程首读重新检查未变转录并移除已有内部投影，分页与看板展示再防御过滤；原生上下文不改，真实用户提到summary仍显示。
+- `DashboardLibrary` 采用知识库共用视觉令牌与真实列表筛选；`DashboardService.View#owned` 仅投影当前用户是否创建，不暴露其他用户标识。创建知识库/名称必填、描述选填；`DashboardKnowledgePicker`在原生模态框内搜索有QUERY且已发布未清理的库，支持键盘及空态；名称按钮显式填库名、超80字截断提示，不随换库覆盖输入。资产UUID允许同名，可见同名仅提示；描述由创建请求校验后原子保存。进入工作台后由用户手动发送需求，不通过路由状态自动触发Agent；发布确认仍提交当前修订并由原服务复核。生成文档自身的主题/响应式保留，不强行套入示例模板。
+- spec144：`DashboardService#updateMetadata`在资产锁内校验RUN入口后的QUERY/创建者或MANAGE、清理状态及expectedUpdatedAt，再复核授权并原子保存名称/描述；无变化不更新时间，不调用CLI/模型、不改HTML/校验/发布修订。Asset/View持久description与createdAt，新建固定创建时间，旧JSON为空/未知，后续校验发布保留；元数据即时生效，生成页面内部标题仍需对话修改并发布。
+- `DashboardLibrary`对已授权列表共用搜索（名称/描述/知识库）、归属、真实状态及排序，默认最近更新，支持最近创建/名称，未知时间排末；顺序同知识库。卡片与紧凑列表共用操作/条件，视图偏好按当前用户subject隔离存本地，不参与授权；`DashboardMetadataDialog`复用原生模态框，冲突不覆盖，提供显式重新读取，卡片/列表及工作台入口仅对可编辑者开放。
+- spec144追加：范围统一全部/我创建的/可管理/可使用，后两项按知识库MANAGE（canPublish）区分，与创建者仍可编辑自身草稿的canEdit独立。状态旁显示权限标签；卡片左侧知识库/真实创建人、右侧更新/创建两行日期。`DashboardController#list`只为已授权资产批量查询显示名（缺省用账号/已移除用户），`View#creatorId`仅内部投影且JSON忽略，不暴露用户凭证或全员目录；元数据保存保留列表显示名。
+- `DashboardKnowledgeDrawer`通过知识库名按钮按需加载既有只读`KnowledgeDataPanel`，原资料/样例接口授权不变，无预取或新数据API；原生右侧dialog限制焦点、关闭返回触发按钮，`DatasetFieldInfo`在所属dialog内挂载/定位，兼容原普通页面。搜索仅外层圆角显示焦点，去掉内层紫框。
+- `SecurityConfig#corsConfigurationSource`允许PATCH用于元数据更新，原允许来源、JWT/RUN与资源权限保持；跨源预检遗漏方法产生的403不能通过放宽资产授权绕过。
 - 预览桥只增加PNG缩略图消息：限定同一窗口/通道、大小/类型，通过ECharts本地Canvas导出，不放宽CSP。封面缓存只在当前登录内存、按资产及修订隔离且有数量上限；列表不执行生成页面或批量查询，没有缓存时展示明确封面提示。查询状态仅记录本次查询完成时间，不冒称源数据更新时间。
-- 列表复用知识库公共容器；新建仅选库和命名，需求留在编辑页手动对话。`DashboardPermissions` 展示继承的QUERY/MANAGE及全局管理员规则，管理入口复用知识库成员管理，权限变更同时影响知识库问数与该库所有看板，不另建看板ACL。
+- 列表复用知识库公共容器；新建必填选库/名称并可补描述，需求留在编辑页手动对话。`DashboardPermissions` 展示继承的QUERY/MANAGE及全局管理员规则，管理入口复用知识库成员管理，权限变更同时影响知识库问数与该库所有看板，不另建看板ACL。
 - `DashboardDeletionService#delete` 经RUN与创建者/管理者校验，调用 `DashboardService#delete` 的资产锁、路径检查及持久删除标记；新入场/工具/查询/发布在标记期间拒绝。复用原生空闲会话门禁和 `SessionDeletionService#delete` 清理专属上下文/双转录/展示历史/附件/已读与选库记录，再清除独立工程和所有发布修订。`deletion-plan.json` 保存会话身份/消息快照键，部分失败/重启后仍可重试；元数据最后删除，待清理卡片只对可编辑者保留重试入口。知识库数据/模型、共享记忆及审计不随看板删除。
 - 会话清理先处理附件/已读/转录/关联记录，再注销原生状态与路由；`SessionAgentManager#removeSession` 在持久登记删除成功前保留内存项，防止存储失败后失去重试身份。与其他Agent恰好共享同一conversationId时，不清除其共享会话选库键；只按精确Agent/会话过滤清理看板参与者。
 - 看板Agent默认申请32768输出tokens，可通过上述配置调整，不依赖上游可能为8192的默认值；`SwitchingModel`仍固定本轮服务与连接配置。框架`ReasoningContext#processChunk`识别工具输出的length截断，正常结束时`validateCompleteArguments`拒绝残缺JSON，停止该轮而不执行空参数或重复调用；中断保存仍允许记录非执行的部分上下文。`model.output`/`model.tool_arguments`记录结束原因、参数字符/分片/调用计数，`model.start`记录输出预算，不记录参数内容或凭证。

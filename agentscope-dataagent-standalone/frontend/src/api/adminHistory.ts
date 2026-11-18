@@ -14,6 +14,7 @@ export interface AdminHistorySession {
   lastActivityMs: number;
   hasMessages?: boolean;
   questionCount?: number;
+  assistantType?: 'query' | 'modeling' | 'dashboard' | 'other';
   owner: AdminDirectoryUser;
 }
 
@@ -36,6 +37,7 @@ export interface AdminHistoryFilters {
 }
 
 export interface HistoryQuery {
+  assistantType: 'query' | 'modeling' | 'dashboard' | 'all';
   userId: string; query: string; from: string; to: string;
   sort: 'activity' | 'questions'; direction: 'asc' | 'desc'; page: number; pageSize: number;
 }

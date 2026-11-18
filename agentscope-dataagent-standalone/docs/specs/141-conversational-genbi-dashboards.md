@@ -53,4 +53,6 @@
 
 ## 关联
 
+2026-11-17列表体验补充：筛选行与知识库统一，搜索在前、范围在后；名称编辑、描述、状态筛选、排序与列表视图已经用户批准，见[spec144](144-dashboard-library-management.md)与[评估依据](../design/dashboard-library-metadata-20261117.md)。
+
 - [ADR0149](../adr/0149-internal-genbi-dashboard-workbench.md)。

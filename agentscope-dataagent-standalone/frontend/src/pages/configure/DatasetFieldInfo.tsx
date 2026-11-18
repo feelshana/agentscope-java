@@ -17,7 +17,7 @@ export default function DatasetFieldInfo({ column, anchor, close }: {
     const width = popup.getBoundingClientRect().width;
     const below = window.innerHeight - r.bottom - 12;
     const top = below >= height ? r.bottom + 8 : r.top - height - 8;
-    const canvasLeft = anchor.closest('.kd-page')?.getBoundingClientRect().left ?? 0;
+    const canvasLeft = anchor.closest('dialog, .kd-page')?.getBoundingClientRect().left ?? 0;
     const minLeft = Math.min(window.innerWidth - width - 12, Math.max(12, canvasLeft + 12));
     setPosition({ top: Math.max(12, Math.min(top, window.innerHeight - height - 12)),
       left: Math.max(minLeft, Math.min(r.right - width, window.innerWidth - width - 12)) });
@@ -53,5 +53,5 @@ export default function DatasetFieldInfo({ column, anchor, close }: {
     <header><strong id="kd-field-help-title">{column.displayName?.trim() || column.originalName || column.name}</strong>
       <button className="kd-info" aria-label="关闭字段说明" onClick={close}><Icon name="close" size="sm" /></button></header>
     <code>{column.name} · {column.sqlType}</code><p>{column.description || '暂无字段说明'}</p>
-  </div>, document.body);
+  </div>, anchor.closest('dialog') || document.body);
 }

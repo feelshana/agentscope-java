@@ -208,6 +208,35 @@ class SharedDataSourceHttpTest {
     }
 
     @Test
+    void databaseDefaultEnablesLegacyInsertsWithoutChangingExplicitlyDisabledSources() {
+        jdbc.update(
+                "INSERT INTO dataagent_external_datasource (datasource_id, owner_id, name, kind,"
+                        + " jdbc_url, sampling) VALUES (?, ?, ?, ?, ?, ?)",
+                "legacy-default",
+                "owner",
+                "旧连接",
+                "mysql",
+                "jdbc:mysql://db.internal/test",
+                true);
+        jdbc.update(
+                "INSERT INTO dataagent_external_datasource (datasource_id, owner_id, name, kind,"
+                        + " jdbc_url, sampling, enabled) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "explicit-disabled",
+                "owner",
+                "已停用连接",
+                "mysql",
+                "jdbc:mysql://db.internal/test",
+                true,
+                false);
+        assertThat(sources.findById("legacy-default").orElseThrow().isEnabled()).isTrue();
+        assertThat(sources.findById("explicit-disabled").orElseThrow().isEnabled()).isFalse();
+        assertThat(access.requireUse("owner", "legacy-default").isEnabled()).isTrue();
+        assertThatThrownBy(() -> access.requireUse("owner", "explicit-disabled"))
+                .isInstanceOf(DatasetException.class)
+                .hasMessageContaining("已停用");
+    }
+
+    @Test
     void independentDuplicateEndpointsAndUseRoleNeverExposeConfiguration() throws Exception {
         String id = create("owner");
         String other = create("outsider");

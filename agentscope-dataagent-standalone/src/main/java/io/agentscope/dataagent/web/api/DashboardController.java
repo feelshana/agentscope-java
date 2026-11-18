@@ -13,6 +13,7 @@ import java.util.concurrent.Callable;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -31,22 +32,29 @@ public class DashboardController {
     private final DashboardQueryService queries;
     private final AgentAccessGuard guard;
     private final DashboardDeletionService deletion;
+    private final io.agentscope.dataagent.web.persistence.jpa.UserEntityRepository users;
     private static final ObjectMapper JSON = new ObjectMapper();
 
     public DashboardController(
             DashboardService dashboards,
             DashboardQueryService queries,
             AgentAccessGuard guard,
-            DashboardDeletionService deletion) {
+            DashboardDeletionService deletion,
+            io.agentscope.dataagent.web.persistence.jpa.UserEntityRepository users) {
         this.dashboards = dashboards;
         this.queries = queries;
         this.guard = guard;
         this.deletion = deletion;
+        this.users = users;
     }
 
-    public record Create(String groupId, String title) {}
+    public record Create(String groupId, String title, String description) {}
 
     public record Publish(String revision) {}
+
+    public record Restore(String revision, String targetRevision) {}
+
+    public record Metadata(String title, String description, String expectedUpdatedAt) {}
 
     public record Query(boolean draft, String revision, String sql) {}
 
@@ -69,9 +77,40 @@ public class DashboardController {
                                         e));
     }
 
+    public record LibraryItem(
+            @com.fasterxml.jackson.annotation.JsonUnwrapped DashboardService.View dashboard,
+            String creatorName) {}
+
     @GetMapping
-    public Mono<List<DashboardService.View>> list(Authentication auth) {
-        return authorized(auth, () -> dashboards.list((String) auth.getPrincipal()));
+    public Mono<List<LibraryItem>> list(Authentication auth) {
+        return authorized(
+                auth,
+                () -> {
+                    var visible = dashboards.list((String) auth.getPrincipal());
+                    var names = new java.util.HashMap<String, String>();
+                    users.findAllById(
+                                    visible.stream()
+                                            .map(DashboardService.View::creatorId)
+                                            .filter(java.util.Objects::nonNull)
+                                            .distinct()
+                                            .toList())
+                            .forEach(
+                                    user ->
+                                            names.put(
+                                                    user.getUserId(),
+                                                    user.getDisplayName() == null
+                                                                    || user.getDisplayName()
+                                                                            .isBlank()
+                                                            ? user.getUsername()
+                                                            : user.getDisplayName()));
+                    return visible.stream()
+                            .map(
+                                    item ->
+                                            new LibraryItem(
+                                                    item,
+                                                    names.getOrDefault(item.creatorId(), "已移除用户")))
+                            .toList();
+                });
     }
 
     @PostMapping
@@ -80,7 +119,10 @@ public class DashboardController {
                 auth,
                 () ->
                         dashboards.create(
-                                (String) auth.getPrincipal(), body.groupId(), body.title()));
+                                (String) auth.getPrincipal(),
+                                body.groupId(),
+                                body.title(),
+                                body.description()));
     }
 
     @GetMapping("/{id}")
@@ -89,6 +131,20 @@ public class DashboardController {
             @PathVariable String id,
             @RequestParam(defaultValue = "false") boolean draft) {
         return authorized(auth, () -> dashboards.get((String) auth.getPrincipal(), id, draft));
+    }
+
+    @PatchMapping("/{id}")
+    public Mono<DashboardService.View> updateMetadata(
+            Authentication auth, @PathVariable String id, @RequestBody Metadata body) {
+        return authorized(
+                auth,
+                () ->
+                        dashboards.updateMetadata(
+                                (String) auth.getPrincipal(),
+                                id,
+                                body.title(),
+                                body.description(),
+                                body.expectedUpdatedAt()));
     }
 
     @DeleteMapping("/{id}")
@@ -100,6 +156,33 @@ public class DashboardController {
                     deletion.delete((String) auth.getPrincipal(), id);
                     return null;
                 });
+    }
+
+    @PostMapping("/{id}/checkpoint")
+    public Mono<DashboardService.Checkpoint> checkpoint(
+            Authentication auth, @PathVariable String id, @RequestBody Publish body) {
+        return authorized(
+                auth,
+                () ->
+                        dashboards.checkpoint(
+                                (String) auth.getPrincipal(),
+                                id,
+                                body.revision(),
+                                () -> deletion.requireIdle(id)));
+    }
+
+    @PostMapping("/{id}/restore")
+    public Mono<DashboardService.View> restore(
+            Authentication auth, @PathVariable String id, @RequestBody Restore body) {
+        return authorized(
+                auth,
+                () ->
+                        dashboards.restore(
+                                (String) auth.getPrincipal(),
+                                id,
+                                body.revision(),
+                                body.targetRevision(),
+                                () -> deletion.requireIdle(id)));
     }
 
     @PostMapping("/{id}/publish")

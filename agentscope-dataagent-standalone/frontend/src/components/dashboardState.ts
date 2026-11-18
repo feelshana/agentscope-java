@@ -29,7 +29,7 @@ export function dashboardReplyParts(text: string): { main: string; details: stri
   return { main: text, details: '' };
 }
 
-export type DashboardMessage = { id: string; role: 'user' | 'assistant'; text: string };
+export type DashboardMessage = { id: string; role: 'user' | 'assistant'; text: string; timestampMs?: number };
 
 /** Tool completion is not the same as successful page generation. */
 export function dashboardToolProgress(type: string, tool?: string, result?: string): string | null {
@@ -51,10 +51,11 @@ export function dashboardMessages(history: TurnEntry[]): DashboardMessage[] {
   const result: DashboardMessage[] = [];
   let answer = -1;
   for (const turn of history) {
+    if (turn.id?.startsWith('__compaction_summary__:') || turn.id === '__compaction_summary__') continue;
     if (turn.role.toUpperCase() === 'USER') {
-      result.push({ id: turn.id, role: 'user', text: turn.content || '' }); answer = -1;
+      result.push({ id: turn.id, role: 'user', text: turn.content || '', ...(turn.timestampMs ? { timestampMs: turn.timestampMs } : {}) }); answer = -1;
     } else if (turn.role.toUpperCase() === 'ASSISTANT' && turn.content?.trim()) {
-      const message: DashboardMessage = { id: turn.id, role: 'assistant', text: dashboardErrorText(turn.content) };
+      const message: DashboardMessage = { id: turn.id, role: 'assistant', text: dashboardErrorText(turn.content), ...(turn.timestampMs ? { timestampMs: turn.timestampMs } : {}) };
       if (answer < 0) { answer = result.length; result.push(message); }
       else result[answer] = message;
     }
@@ -62,7 +63,7 @@ export function dashboardMessages(history: TurnEntry[]): DashboardMessage[] {
   return result;
 }
 
-export interface DashboardBridgeMessage { kind: 'host-ready' | 'runtime-error' | 'query' | 'thumbnail'; channel?: string; id?: number; sql?: string; error?: string; image?: string }
+export interface DashboardBridgeMessage { kind: 'host-ready' | 'runtime-error' | 'query' | 'thumbnail' | 'panel-state' | 'panel-select'; channel?: string; id?: number; sql?: string; error?: string; image?: string; panelId?: string; title?: string; state?: string }
 
 export function dashboardThumbnailValid(image: unknown): image is string {
   return typeof image === 'string' && image.length < 450000 && /^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(image);
@@ -76,8 +77,16 @@ export function dashboardBridgeMessage(event: Pick<MessageEvent, 'source' | 'dat
   if (data.kind === 'host-ready') return { kind: 'host-ready' };
   if (data.channel !== channel) return null;
   if (data.kind === 'thumbnail') return dashboardThumbnailValid(data.image) ? { kind: 'thumbnail', image: data.image } : null;
+  const panelId = typeof data.panelId === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(data.panelId) ? data.panelId : undefined;
+  if (data.kind === 'panel-state' || data.kind === 'panel-select') {
+    if (!panelId || typeof data.title !== 'string' || data.title.length > 120) return null;
+    if (data.kind === 'panel-select') return { kind: 'panel-select', panelId, title: data.title };
+    if (!['pending', 'loading', 'ready', 'empty', 'error'].includes(String(data.state))) return null;
+    return { kind: 'panel-state', panelId, title: data.title, state: String(data.state), error: String(data.error || '').slice(0, 300) };
+  }
   if (data.kind === 'runtime-error') return { kind: 'runtime-error', error: String(data.error || '页面运行错误').slice(0, 300) };
   if (data.kind !== 'query' || !Number.isSafeInteger(data.id) || (data.id as number) < 1
     || typeof data.sql !== 'string' || !data.sql.trim() || data.sql.length > 20000) return null;
-  return { kind: 'query', id: data.id as number, sql: data.sql };
+  if (data.panelId !== undefined && !panelId) return null;
+  return { kind: 'query', id: data.id as number, sql: data.sql, ...(panelId ? { panelId } : {}) };
 }

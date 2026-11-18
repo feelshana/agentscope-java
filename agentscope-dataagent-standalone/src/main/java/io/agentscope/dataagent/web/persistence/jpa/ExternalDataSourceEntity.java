@@ -54,6 +54,7 @@ public class ExternalDataSourceEntity {
     private String password;
 
     @Column(name = "enabled", nullable = false)
+    @org.hibernate.annotations.ColumnDefault("true")
     private boolean enabled = true;
 
     /** When true, low-cardinality columns get sample values merged into their description. */

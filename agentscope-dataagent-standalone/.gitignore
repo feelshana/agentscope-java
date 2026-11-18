@@ -43,3 +43,15 @@ logs/
 /.playwright-cli/
 /output/
 /outputs/*.zip
+
+# Local design candidates and review captures; keep them outside release source.
+/docs/design/product-baseline/
+/frontend/src/design-baseline/
+/frontend/design-baseline.html
+/frontend/vite.baseline.config.ts
+/frontend/scripts/build-baseline.mjs
+/docs/design/_*.png
+/docs/design/dashboard-card-actions-20261118.html
+/docs/design/dashboard-card-btns-ios-20261118.html
+/docs/design/dashboard-card-cover-20261118.html
+/docs/design/dashboard-workbench-20261117.html

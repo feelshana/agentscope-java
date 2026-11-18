@@ -81,6 +81,149 @@ class DashboardServiceTest {
     }
 
     @Test
+    void undoRestoresVerifiedPageAfterRestartWithoutChangingPublishedVersionOrMetadata() {
+        var board = service.create("alice", "group", "销售");
+        write(board.id(), FIRST);
+        service.genbi(context("alice", board.id()), "verify", null);
+        var before = service.get("alice", board.id(), true);
+        service.publish("alice", board.id(), before.revision());
+        var saved = service.checkpoint("alice", board.id(), before.revision(), () -> {});
+        write(board.id(), FIRST.replace("第一版", "改动后"));
+        var changed = service.get("alice", board.id(), true);
+        service.updateMetadata("alice", board.id(), "修改后的名称", "说明", changed.updatedAt());
+        var restarted = new DashboardService(props, access, query, projects, cli);
+        var restored =
+                restarted.restore(
+                        "alice", board.id(), changed.revision(), saved.revision(), () -> {});
+        assertThat(restored.html()).isEqualTo(FIRST);
+        assertThat(restored.verified()).isTrue();
+        assertThat(restored.title()).isEqualTo("修改后的名称");
+        assertThat(restored.description()).isEqualTo("说明");
+        assertThat(restored.publishedRevision()).isEqualTo(before.revision());
+        assertThat(restarted.get("bob", board.id(), false).html()).isEqualTo(FIRST);
+    }
+
+    @Test
+    void undoRejectsStaleWritersUnauthorizedUsersAndActiveAgentBeforeTouchingFiles() {
+        var board = service.create("alice", "group", "销售");
+        var empty = service.checkpoint("alice", board.id(), board.revision(), () -> {});
+        write(board.id(), FIRST);
+        var changed = service.get("alice", board.id(), true);
+        assertThatThrownBy(
+                        () -> service.checkpoint("alice", board.id(), empty.revision(), () -> {}))
+                .hasMessageContaining("已变化");
+        assertThatThrownBy(
+                        () ->
+                                service.restore(
+                                        "alice",
+                                        board.id(),
+                                        empty.revision(),
+                                        empty.revision(),
+                                        () -> {}))
+                .hasMessageContaining("已变化");
+        assertThatThrownBy(
+                        () ->
+                                service.restore(
+                                        "bob",
+                                        board.id(),
+                                        changed.revision(),
+                                        empty.revision(),
+                                        () -> {}))
+                .hasMessageContaining("草稿");
+        assertThatThrownBy(
+                        () ->
+                                service.restore(
+                                        "alice",
+                                        board.id(),
+                                        changed.revision(),
+                                        empty.revision(),
+                                        () -> {
+                                            throw new DatasetException("仍在生成", 409);
+                                        }))
+                .hasMessageContaining("仍在生成");
+        when(query.resolve(any(), eq("group"))).thenThrow(new DatasetException("权限已撤销", 403));
+        assertThatThrownBy(
+                        () ->
+                                service.restore(
+                                        "alice",
+                                        board.id(),
+                                        changed.revision(),
+                                        empty.revision(),
+                                        () -> {}))
+                .hasMessageContaining("权限已撤销");
+        when(query.resolve(any(), eq("group"))).thenReturn(group);
+        assertThat(service.get("alice", board.id(), true).html()).isEqualTo(FIRST);
+        var restored =
+                service.restore(
+                        "alice", board.id(), changed.revision(), empty.revision(), () -> {});
+        assertThat(restored.html()).isEmpty();
+        assertThat(restored.verified()).isFalse();
+    }
+
+    @Test
+    void undoHistoryIsBoundedAndRejectsCorruptOrIncompatibleSnapshots() throws Exception {
+        var board = service.create("alice", "group", "销售");
+        for (int i = 0; i < 12; i++) {
+            write(board.id(), FIRST + i);
+            service.checkpoint(
+                    "alice",
+                    board.id(),
+                    service.get("alice", board.id(), true).revision(),
+                    () -> {});
+        }
+        Path history =
+                props.mdlRoot().resolve("dashboards").resolve(board.id()).resolve("draft-history");
+        try (var files = Files.list(history)) {
+            assertThat(files.filter(p -> p.toString().endsWith(".html")).count()).isEqualTo(10);
+        }
+        var current = service.get("alice", board.id(), true);
+        Files.writeString(history.resolve(current.revision() + ".html"), "corrupt");
+        assertThatThrownBy(
+                        () ->
+                                service.restore(
+                                        "alice",
+                                        board.id(),
+                                        current.revision(),
+                                        current.revision(),
+                                        () -> {}))
+                .hasMessageContaining("不一致");
+        service.checkpoint("alice", board.id(), current.revision(), () -> {});
+        group.setMdlVersion(2);
+        assertThatThrownBy(
+                        () ->
+                                service.restore(
+                                        "alice",
+                                        board.id(),
+                                        current.revision(),
+                                        current.revision(),
+                                        () -> {}))
+                .hasMessageContaining("新模型");
+        assertThat(service.get("alice", board.id(), true).html()).isEqualTo(current.html());
+        assertThatThrownBy(
+                        () ->
+                                service.restore(
+                                        "alice",
+                                        board.id(),
+                                        current.revision(),
+                                        "../../secret",
+                                        () -> {}))
+                .hasMessageContaining("不存在");
+        service.delete("alice", board.id(), () -> {}, path -> {});
+        assertThat(Files.exists(history)).isFalse();
+    }
+
+    @Test
+    void helperBasedPageCanUseScopedQueriesWithoutTheLegacyQueryLiteral() {
+        var board = service.create("alice", "group", "销售");
+        write(
+                board.id(),
+                "<html><script>dataagent.panel({load:({query})=>query('SELECT"
+                        + " 1')})</script></html>");
+        assertThat(service.genbi(context("alice", board.id()), "verify", null)).contains("文件检查");
+        assertThat(service.get("alice", board.id(), true).verified()).isTrue();
+    }
+
+    @Test
     void privateDraftPublishesAnImmutableRevisionAndSurvivesRestart() {
         var draft = service.create("alice", "group", "销售概览");
         assertThat(service.list("bob")).isEmpty();
@@ -298,5 +441,177 @@ class DashboardServiceTest {
         group.setMdlVersion(2);
         assertThatThrownBy(() -> service.genbi(context("alice", draft.id()), "verify", null))
                 .hasMessageContaining("新模型");
+    }
+
+    @Test
+    void metadataPersistsIndependentlyAndSurvivesPublishingAndRestart() throws Exception {
+        var board = service.create("alice", "group", "经营");
+        assertThat(board.createdAt()).isEqualTo(board.updatedAt());
+        write(board.id(), FIRST);
+        service.genbi(context("alice", board.id()), "verify", null);
+        var published =
+                service.publish(
+                        "alice", board.id(), service.get("alice", board.id(), true).revision());
+        byte[] html =
+                Files.readAllBytes(
+                        props.mdlRoot()
+                                .resolve("dashboards")
+                                .resolve(board.id())
+                                .resolve("project/apps/dashboard/index.html"));
+        int calls = commands.size();
+        var edited =
+                service.updateMetadata(
+                        "alice", board.id(), " 区域经营 ", "  给区域负责人每周查看  ", published.updatedAt());
+        assertThat(edited.title()).isEqualTo("区域经营");
+        assertThat(edited.description()).isEqualTo("给区域负责人每周查看");
+        assertThat(edited.createdAt()).isEqualTo(board.createdAt());
+        assertThat(edited.revision()).isEqualTo(published.revision());
+        assertThat(edited.publishedRevision()).isEqualTo(published.publishedRevision());
+        assertThat(edited.verified()).isTrue();
+        assertThat(commands).hasSize(calls);
+        assertThat(
+                        Files.readAllBytes(
+                                props.mdlRoot()
+                                        .resolve("dashboards")
+                                        .resolve(board.id())
+                                        .resolve("project/apps/dashboard/index.html")))
+                .isEqualTo(html);
+        var restart = new DashboardService(props, access, query, projects, cli);
+        assertThat(restart.get("bob", board.id(), false).title()).isEqualTo("区域经营");
+        assertThat(restart.get("bob", board.id(), false).description()).isEqualTo("给区域负责人每周查看");
+        assertThat(restart.get("alice", board.id(), true).updatedAt())
+                .isEqualTo(edited.updatedAt());
+        var noop =
+                restart.updateMetadata(
+                        "alice",
+                        board.id(),
+                        edited.title(),
+                        edited.description(),
+                        edited.updatedAt());
+        assertThat(noop.updatedAt()).isEqualTo(edited.updatedAt());
+        write(board.id(), FIRST.replace("第一版", "第二版"));
+        var next =
+                restart.publish(
+                        "alice", board.id(), restart.get("alice", board.id(), true).revision());
+        assertThat(next.description()).isEqualTo(edited.description());
+        assertThat(next.createdAt()).isEqualTo(board.createdAt());
+    }
+
+    @Test
+    void legacyMetadataHasUnknownCreationTimeAndRemainsCompatible() throws Exception {
+        var board = service.create("alice", "group", "旧看板");
+        Path file = props.mdlRoot().resolve("dashboards").resolve(board.id()).resolve("asset.json");
+        var json = new com.fasterxml.jackson.databind.ObjectMapper();
+        var tree =
+                (com.fasterxml.jackson.databind.node.ObjectNode)
+                        json.readTree(Files.readString(file));
+        tree.remove("description");
+        tree.remove("createdAt");
+        Files.writeString(file, tree.toString());
+        var legacy = service.get("alice", board.id(), true);
+        assertThat(legacy.createdAt()).isNull();
+        var edited =
+                service.updateMetadata("alice", board.id(), "旧看板新名称", null, legacy.updatedAt());
+        assertThat(edited.createdAt()).isNull();
+        assertThat(edited.description()).isEmpty();
+        assertThat(service.list("alice").get(0).title()).isEqualTo("旧看板新名称");
+    }
+
+    @Test
+    void metadataRejectsStaleWritesInvalidFieldsAndReadOnlyOrRevokedAccess() {
+        var board = service.create("alice", "group", "原名称");
+        assertThatThrownBy(
+                        () ->
+                                service.updateMetadata(
+                                        "bob", board.id(), "盗改", "", board.updatedAt()))
+                .hasMessageContaining("无法编辑");
+        assertThatThrownBy(
+                        () ->
+                                service.updateMetadata(
+                                        "alice", board.id(), "", "", board.updatedAt()))
+                .hasMessageContaining("名称");
+        assertThatThrownBy(
+                        () ->
+                                service.updateMetadata(
+                                        "alice", board.id(), "x".repeat(81), "", board.updatedAt()))
+                .hasMessageContaining("80");
+        assertThatThrownBy(
+                        () ->
+                                service.updateMetadata(
+                                        "alice", board.id(), "多行\n名称", "", board.updatedAt()))
+                .hasMessageContaining("控制字符");
+        assertThatThrownBy(
+                        () ->
+                                service.updateMetadata(
+                                        "alice",
+                                        board.id(),
+                                        "名称",
+                                        "x".repeat(501),
+                                        board.updatedAt()))
+                .hasMessageContaining("500");
+        var next = service.updateMetadata("alice", board.id(), "新名称", "说明", board.updatedAt());
+        assertThatThrownBy(
+                        () ->
+                                service.updateMetadata(
+                                        "alice", board.id(), "覆盖", "", board.updatedAt()))
+                .hasMessageContaining("已变化");
+        assertThatThrownBy(() -> service.updateMetadata("alice", board.id(), "覆盖", "", null))
+                .hasMessageContaining("已变化");
+        when(access.requireQuery("alice", "group")).thenThrow(new DatasetException("权限撤销", 404));
+        assertThatThrownBy(
+                        () ->
+                                service.updateMetadata(
+                                        "alice", board.id(), "覆盖", "", next.updatedAt()))
+                .hasMessageContaining("撤销");
+    }
+
+    @Test
+    void sharedCreatorAndManagerMayEditButRecheckBeforeCommit() throws Exception {
+        var board = service.create("bob", "group", "成员创建");
+        var owned = service.updateMetadata("bob", board.id(), "成员改名", "说明", board.updatedAt());
+        var managed = service.updateMetadata("alice", board.id(), "管理者改名", "说明", owned.updatedAt());
+        when(access.requireQuery("alice", "group"))
+                .thenReturn(group)
+                .thenThrow(new DatasetException("权限撤销", 404));
+        assertThatThrownBy(
+                        () ->
+                                service.updateMetadata(
+                                        "alice", board.id(), "不应保存", "", managed.updatedAt()))
+                .hasMessageContaining("撤销");
+        assertThat(service.get("bob", board.id(), true).title()).isEqualTo("管理者改名");
+        Files.writeString(
+                props.mdlRoot().resolve("dashboards").resolve(board.id()).resolve("deleting.flag"),
+                "pending");
+        assertThatThrownBy(
+                        () ->
+                                service.updateMetadata(
+                                        "bob", board.id(), "清理中改名", "", managed.updatedAt()))
+                .hasMessageContaining("清理");
+    }
+
+    @Test
+    void creationStoresDescriptionAndAllowsIndependentSameNamedAssets() {
+        var first = service.create("alice", "group", "销售概览", " 每周区域分析 ");
+        var second = service.create("alice", "group", "销售概览", null);
+        assertThat(first.id()).isNotEqualTo(second.id());
+        assertThat(first.title()).isEqualTo(second.title());
+        assertThat(first.description()).isEqualTo("每周区域分析");
+        assertThat(second.description()).isEmpty();
+        var restart = new DashboardService(props, access, query, projects, cli);
+        assertThat(restart.get("alice", first.id(), true).description()).isEqualTo("每周区域分析");
+        assertThat(restart.list("alice")).hasSize(2);
+    }
+
+    @Test
+    void invalidCreationFieldsNeverLeaveAnAssetDirectory() {
+        assertThatThrownBy(() -> service.create("alice", "group", "名称", "x".repeat(501)))
+                .hasMessageContaining("500");
+        assertThatThrownBy(() -> service.create("alice", "group", " ", ""))
+                .hasMessageContaining("名称");
+        assertThatThrownBy(() -> service.create("alice", "group", "x".repeat(81), ""))
+                .hasMessageContaining("80");
+        assertThatThrownBy(() -> service.create("alice", "group", "多行\n名称", ""))
+                .hasMessageContaining("控制字符");
+        assertThat(Files.exists(props.mdlRoot().resolve("dashboards"))).isFalse();
     }
 }

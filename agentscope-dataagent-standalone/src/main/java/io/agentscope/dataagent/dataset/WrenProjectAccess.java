@@ -239,7 +239,7 @@ public final class WrenProjectAccess {
         }
     }
 
-    static void assertNoLinks(Path path) {
+    public static void assertNoLinks(Path path) {
         for (Path current = path; current != null; current = current.getParent()) {
             if (Files.isSymbolicLink(current)) throw new DatasetException("不允许通过符号链接访问工程", 403);
         }

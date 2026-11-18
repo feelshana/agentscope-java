@@ -43,6 +43,13 @@ public final class SessionTurnParser {
 
     private SessionTurnParser() {}
 
+    /** Framework-generated context is retained for inference, never shown as user input. */
+    public static boolean isInternalMessage(String id) {
+        return id != null
+                && (id.equals("__compaction_summary__")
+                        || id.startsWith("__compaction_summary__:"));
+    }
+
     /**
      * Parses a JSONL string into a list of {@link TurnEntry} objects.
      *
@@ -101,6 +108,8 @@ public final class SessionTurnParser {
 
                 String role = text(node, "role");
                 String content = text(node, "content");
+                if (isInternalMessage(id) || "__compaction_summary__".equals(text(node, "name")))
+                    continue;
 
                 String toolName = text(node, "toolName");
                 String toolInput = node.has("toolInput") ? node.get("toolInput").toString() : null;

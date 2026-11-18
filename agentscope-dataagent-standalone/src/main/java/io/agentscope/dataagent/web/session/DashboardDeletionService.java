@@ -68,10 +68,10 @@ public class DashboardDeletionService {
                 .toList();
     }
 
-    private void requireIdle(String id) {
+    public void requireIdle(String id) {
         if (sessions(id).stream()
                 .anyMatch(e -> bootstrap.gateway().isSessionActive(e.sessionKey())))
-            throw new DatasetException("看板仍在生成，请等待本轮结束后再删除", 409);
+            throw new DatasetException("看板仍在生成，请等待本轮结束后再操作", 409);
     }
 
     private void cleanup(String id, Path directory) {

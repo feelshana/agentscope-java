@@ -4,11 +4,11 @@ import BusinessDocumentsPanel from './BusinessDocumentsPanel';
 import { confirmTableRole, getFactQueryWindowCandidates, saveFactQueryWindow } from '../../api/modelingWorkflow';
 import type { FactQueryWindowCandidate } from '../../api/modelingWorkflow';
 import type { ScreeningStatus } from '../../api/fieldScreening';
-import { factWindowSetup } from '../../utils/factWindowSetup';
+import { factWindowDraft, factWindowSetup } from '../../utils/factWindowSetup';
 
 const DAYS = [7, 14, 31, 90];
 type WindowDraft = { mode: 'LIMITED' | 'UNLIMITED'; days: number; timeColumn: string };
-const draftOf = (table: FactQueryWindowCandidate): WindowDraft => ({ mode: table.mode ?? 'LIMITED', days: table.windowDays ?? 31, timeColumn: table.timeColumn ?? table.temporalColumns[0] ?? '' });
+const draftOf = factWindowDraft;
 const message = (e: unknown) => e instanceof Error ? e.message : '准备信息保存失败';
 
 /** The preparation checklist reuses existing policies and persists defaults before starting. */
@@ -114,7 +114,7 @@ export default function ModelingPreparation({ groupId, tables, onEditFields, onR
       return <section key={table.datasetId} className="mp-window" aria-label={`${table.tableName} 查询时间范围`}>
         <div className="mp-row"><span className="mp-row-icon mp-row-icon-ok"><Icon name="clock" size="sm" /></span>
           <div className="mp-row-text"><strong>查询时间范围</strong><small>{table.tableName} · 事实表 · {value.mode === 'LIMITED' ? `单次最多 ${value.days} 天` : '不限制'}，按 <code>{value.timeColumn}</code></small></div>
-          <span className="mp-quiet">{busy ? '保存中…' : unsaved ? !table.mode && value.days === 31 ? '默认 31 天，开始前保存' : '改动未保存，开始前重试' : '改动即生效'}</span>
+          <span className="mp-quiet">{busy ? '保存中…' : unsaved ? !table.mode && value.mode === 'UNLIMITED' ? '默认不限制，开始前保存' : '改动未保存，开始前重试' : '改动即生效'}</span>
         </div>
         <div className="mp-window-fields"><label><span>按哪个时间字段限定</span><select aria-label={`${table.tableName} 时间字段`} disabled={busy} value={value.timeColumn} onChange={e => void changeWindow(table, { timeColumn: e.target.value })}>{table.temporalColumns.map(column => <option key={column} value={column}>{column}</option>)}</select></label>
           <div><span className="mp-field-label">单次查询最多覆盖</span><div className="mp-chips" role="group" aria-label={`${table.tableName} 查询天数`}>{DAYS.map(days => <button type="button" key={days} disabled={busy} aria-pressed={value.mode === 'LIMITED' && value.days === days} onClick={() => void changeWindow(table, { mode: 'LIMITED', days })}>{days} 天</button>)}<button type="button" disabled={busy} aria-pressed={value.mode === 'UNLIMITED'} onClick={() => void changeWindow(table, { mode: 'UNLIMITED' })}>不限制</button></div></div>

@@ -59,7 +59,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Service
 public class SessionHistoryService {
     private ConversationScopeRegistry conversationScopes;
+    private ConversationHistoryTitles businessTitles;
 
+    private final Set<String> reindexedInternalMessages = ConcurrentHashMap.newKeySet();
     private static final Logger log = LoggerFactory.getLogger(SessionHistoryService.class);
     private final DataAgentBootstrap bootstrap;
     private final SessionRegistryRepository registry;
@@ -154,6 +156,18 @@ public class SessionHistoryService {
         SessionEntry entry =
                 io.agentscope.dataagent.runtime.session.SessionStore.StoredEntry.fromEntity(source)
                         .toSessionEntry();
+        String businessTitle = businessTitles == null ? null : businessTitles.title(entry);
+        if (businessTitle != null) {
+            tx.executeWithoutResult(
+                    status -> {
+                        if (!registry.existsById(key)) return;
+                        var saved = histories.findById(key).orElse(null);
+                        if (saved != null && !Objects.equals(saved.title, businessTitle)) {
+                            saved.title = businessTitle;
+                            histories.save(saved);
+                        }
+                    });
+        }
         Path path = transcript(entry);
         if (path == null)
             return; // A lost runtime file must never erase already saved display history.
@@ -165,7 +179,8 @@ public class SessionHistoryService {
                     && Objects.equals(previous.sessionId, entry.sessionId())
                     && previous.fileStamp == stamp
                     && previous.fileSize == size
-                    && path.toString().equals(previous.sourcePath)) return;
+                    && path.toString().equals(previous.sourcePath)
+                    && reindexedInternalMessages.contains(key)) return;
             if (previous != null
                     && Objects.equals(previous.sessionId, entry.sessionId())
                     && previous.sourcePath != null
@@ -196,7 +211,14 @@ public class SessionHistoryService {
                             h.preview = null;
                             h.messageCount = 0;
                         }
-                        var old = messages.findBySessionKeyOrderByPositionAsc(key);
+                        var old = new ArrayList<>(messages.findBySessionKeyOrderByPositionAsc(key));
+                        var internal =
+                                old.stream().filter(row -> internalPayload(row.payload)).toList();
+                        if (!internal.isEmpty()) {
+                            messages.deleteAll(internal);
+                            messages.flush();
+                            old.removeAll(internal);
+                        }
                         Map<String, SessionMessageEntity> byId = new HashMap<>();
                         int nextPosition = 0;
                         for (var m : old) {
@@ -271,15 +293,17 @@ public class SessionHistoryService {
                                 previewPosition = m.position;
                             }
                         }
+                        if (businessTitle != null) h.title = businessTitle;
                         h.sessionKey = key;
                         h.sessionId = entry.sessionId();
                         h.activityMs = Math.max(h.activityMs, activity);
                         h.fileStamp = stamp;
                         h.fileSize = size;
                         h.sourcePath = path.toString();
-                        h.messageCount = nextPosition;
+                        h.messageCount = byId.size();
                         histories.save(h);
                     });
+            reindexedInternalMessages.add(key);
         } catch (java.io.IOException e) {
             throw new IllegalStateException("Cannot read local transcript", e);
         }
@@ -313,6 +337,15 @@ public class SessionHistoryService {
         return null;
     }
 
+    private boolean internalPayload(String payload) {
+        try {
+            return SessionTurnParser.isInternalMessage(
+                    mapper.readTree(payload).path("id").asText());
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
     public record MessagePage(
             List<SessionTurnParser.TurnEntry> items, Integer nextBefore, boolean hasMore) {}
 
@@ -329,7 +362,8 @@ public class SessionHistoryService {
         List<SessionTurnParser.TurnEntry> result = new ArrayList<>();
         for (var row : rows) {
             try {
-                result.add(mapper.readValue(row.payload, SessionTurnParser.TurnEntry.class));
+                if (!internalPayload(row.payload))
+                    result.add(mapper.readValue(row.payload, SessionTurnParser.TurnEntry.class));
             } catch (Exception e) {
                 throw new IllegalStateException("Invalid stored message", e);
             }
@@ -342,7 +376,8 @@ public class SessionHistoryService {
         List<SessionTurnParser.TurnEntry> result = new ArrayList<>();
         for (var row : messages.findBySessionKeyOrderByPositionAsc(key)) {
             try {
-                result.add(mapper.readValue(row.payload, SessionTurnParser.TurnEntry.class));
+                if (!internalPayload(row.payload))
+                    result.add(mapper.readValue(row.payload, SessionTurnParser.TurnEntry.class));
             } catch (Exception e) {
                 throw new IllegalStateException("Invalid stored message", e);
             }
@@ -385,7 +420,6 @@ public class SessionHistoryService {
         worker.shutdownNow();
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
     public SessionHistoryService(
             DataAgentBootstrap bootstrap,
             SessionRegistryRepository registry,
@@ -395,5 +429,18 @@ public class SessionHistoryService {
             ConversationScopeRegistry conversationScopes) {
         this(bootstrap, registry, histories, messages, transactionManager);
         this.conversationScopes = conversationScopes;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public SessionHistoryService(
+            DataAgentBootstrap bootstrap,
+            SessionRegistryRepository registry,
+            SessionHistoryRepository histories,
+            SessionMessageRepository messages,
+            PlatformTransactionManager transactionManager,
+            ConversationScopeRegistry conversationScopes,
+            java.util.Optional<ConversationHistoryTitles> businessTitles) {
+        this(bootstrap, registry, histories, messages, transactionManager, conversationScopes);
+        this.businessTitles = businessTitles.orElse(null);
     }
 }

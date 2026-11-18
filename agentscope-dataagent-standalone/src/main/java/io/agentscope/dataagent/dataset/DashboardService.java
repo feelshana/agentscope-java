@@ -30,6 +30,37 @@ public class DashboardService {
     private final WrenPublishedProject published;
     private final WrenCli cli;
     private final ConcurrentHashMap<String, Object> locks = new ConcurrentHashMap<>();
+    private final String generationProcess = UUID.randomUUID().toString();
+
+    public String generationProcess() {
+        return generationProcess;
+    }
+
+    public record GenerationWorkspace(Asset asset, Path file) {}
+
+    /** Host-only task journal access; generated file tools never receive this path. */
+    public <T> T withGeneration(String user, String id, Function<GenerationWorkspace, T> action) {
+        synchronized (lock(id)) {
+            Asset asset = requireDraft(user, id);
+            Path file = root(id).resolve(DashboardGeneration.FILE_NAME);
+            WrenProjectAccess.assertNoLinks(file);
+            return action.apply(new GenerationWorkspace(asset, file));
+        }
+    }
+
+    private void requireNoGeneration(String id) {
+        Path file = root(id).resolve(DashboardGeneration.FILE_NAME);
+        WrenProjectAccess.assertNoLinks(file);
+        if (!Files.isRegularFile(file)) return;
+        try {
+            if (Files.size(file) > MAX_HTML_BYTES) throw new DatasetException("生成任务记录异常", 409);
+            var run = JSON.readValue(Files.readString(file), DashboardGeneration.class);
+            if (run.active() && generationProcess.equals(run.processId()))
+                throw new DatasetException("看板仍在生成，请先停止任务或等待完成", 409);
+        } catch (IOException e) {
+            throw new DatasetException("读取生成任务失败", e);
+        }
+    }
 
     public record Asset(
             String id,
@@ -38,7 +69,20 @@ public class DashboardService {
             String title,
             String publishedRevision,
             String updatedAt,
-            int mdlVersion) {}
+            int mdlVersion,
+            String description,
+            String createdAt) {
+        public Asset(
+                String id,
+                String ownerId,
+                String groupId,
+                String title,
+                String publishedRevision,
+                String updatedAt,
+                int mdlVersion) {
+            this(id, ownerId, groupId, title, publishedRevision, updatedAt, mdlVersion, "", null);
+        }
+    }
 
     public record View(
             String id,
@@ -52,7 +96,10 @@ public class DashboardService {
             String html,
             String updatedAt,
             boolean owned,
-            boolean deletionPending) {}
+            boolean deletionPending,
+            String description,
+            String createdAt,
+            @com.fasterxml.jackson.annotation.JsonIgnore String creatorId) {}
 
     public record Workspace(Asset asset, Path root) {}
 
@@ -70,12 +117,30 @@ public class DashboardService {
     }
 
     public View create(String user, String groupId, String title) {
+        return create(user, groupId, title == null || title.isBlank() ? "未命名仪表盘" : title, "");
+    }
+
+    public View create(String user, String groupId, String title, String description) {
         var group = queryAccess.resolve(context(user, groupId), groupId);
-        String name = title == null || title.isBlank() ? "未命名仪表盘" : title.strip();
-        if (name.length() > 80) throw new DatasetException("标题最多80字", 400);
+        String name = title == null ? "" : title.strip();
+        String summary = description == null ? "" : description.strip();
+        if (name.isBlank() || name.length() > 80 || name.chars().anyMatch(Character::isISOControl))
+            throw new DatasetException("看板名称不能为空，最多80字且不能包含换行或控制字符", 400);
+        if (summary.length() > 500) throw new DatasetException("描述最多500字", 400);
         String id = UUID.randomUUID().toString();
         synchronized (lock(id)) {
-            Asset asset = new Asset(id, user, groupId, name, null, now(), group.getMdlVersion());
+            String created = now();
+            Asset asset =
+                    new Asset(
+                            id,
+                            user,
+                            groupId,
+                            name,
+                            null,
+                            created,
+                            group.getMdlVersion(),
+                            summary,
+                            created);
             Path project = root(id).resolve("project");
             try {
                 Files.createDirectories(project.resolve("apps/" + APP_NAME));
@@ -133,7 +198,10 @@ public class DashboardService {
                                                     null,
                                                     asset.updatedAt(),
                                                     user.equals(asset.ownerId()),
-                                                    true)
+                                                    true,
+                                                    asset.description(),
+                                                    asset.createdAt(),
+                                                    asset.ownerId())
                                             : view(user, asset, edit);
                             result.add(
                                     new View(
@@ -148,7 +216,10 @@ public class DashboardService {
                                             null,
                                             view.updatedAt(),
                                             view.owned(),
-                                            view.deletionPending()));
+                                            view.deletionPending(),
+                                            view.description(),
+                                            view.createdAt(),
+                                            view.creatorId()));
                         }
                     } catch (DatasetException denied) {
                         if (denied.status() != 403
@@ -162,6 +233,161 @@ public class DashboardService {
         }
         result.sort(java.util.Comparator.comparing(View::updatedAt).reversed());
         return result;
+    }
+
+    /** Asset labels are independent from generated HTML and immutable content revisions. */
+    public View updateMetadata(
+            String user, String id, String title, String description, String expectedUpdatedAt) {
+        synchronized (lock(id)) {
+            Asset asset = load(id);
+            requireMetadataEditor(user, asset);
+            String name = title == null ? "" : title.strip();
+            String summary = description == null ? "" : description.strip();
+            if (name.isBlank()
+                    || name.length() > 80
+                    || name.chars().anyMatch(Character::isISOControl))
+                throw new DatasetException("看板名称不能为空，最多80字且不能包含换行或控制字符", 400);
+            if (summary.length() > 500) throw new DatasetException("描述最多500字", 400);
+            if (expectedUpdatedAt == null || !expectedUpdatedAt.equals(asset.updatedAt()))
+                throw new DatasetException("看板信息已变化，请关闭弹窗并刷新后重试", 409);
+            if (name.equals(asset.title())
+                    && summary.equals(asset.description() == null ? "" : asset.description()))
+                return view(user, asset, true);
+            requireMetadataEditor(user, asset);
+            String updated = now();
+            if (updated.equals(asset.updatedAt()))
+                updated = Instant.parse(updated).plusNanos(1).toString();
+            Asset next =
+                    new Asset(
+                            asset.id(),
+                            asset.ownerId(),
+                            asset.groupId(),
+                            name,
+                            asset.publishedRevision(),
+                            updated,
+                            asset.mdlVersion(),
+                            summary,
+                            asset.createdAt());
+            save(next);
+            return view(user, next, true);
+        }
+    }
+
+    private void requireMetadataEditor(String user, Asset asset) {
+        var group = access.requireQuery(user, asset.groupId());
+        if (!user.equals(asset.ownerId())
+                && access.role(user, group) != KnowledgeBaseAccessService.Role.MANAGE)
+            throw new DatasetException("无法编辑此仪表盘", 404);
+    }
+
+    public record Checkpoint(String revision) {}
+
+    /** Bounded page-only undo; native conversation state and published pointers are untouched. */
+    public Checkpoint checkpoint(
+            String user, String id, String expectedRevision, Runnable requireIdle) {
+        synchronized (lock(id)) {
+            requireDraft(user, id);
+            requireNoGeneration(id);
+            requireIdle.run();
+            String content = html(root(id).resolve("project/apps/" + APP_NAME + "/index.html"));
+            String current = revision(content);
+            if (!current.equals(expectedRevision)) throw new DatasetException("草稿已变化，请刷新后再开始", 409);
+            Path directory = root(id).resolve("draft-history");
+            WrenProjectAccess.assertNoLinks(directory);
+            requireDraft(user, id);
+            writeAtomic(directory.resolve(current + ".html"), content);
+            if (current.equals(html(root(id).resolve("verified.txt"))))
+                writeAtomic(directory.resolve(current + ".verified"), current);
+            else
+                try {
+                    WrenProjectAccess.assertNoLinks(directory.resolve(current + ".verified"));
+                    Files.deleteIfExists(directory.resolve(current + ".verified"));
+                } catch (IOException e) {
+                    throw new DatasetException("保存草稿检查点失败", e);
+                }
+            try (var files = Files.list(directory)) {
+                var snapshots =
+                        files.filter(p -> p.getFileName().toString().matches("[a-f0-9]{64}\\.html"))
+                                .filter(p -> !p.getFileName().toString().equals(current + ".html"))
+                                .sorted(
+                                        java.util.Comparator.comparingLong(
+                                                        (Path p) -> {
+                                                            WrenProjectAccess.assertNoLinks(p);
+                                                            try {
+                                                                return Files.getLastModifiedTime(p)
+                                                                        .toMillis();
+                                                            } catch (IOException e) {
+                                                                throw new DatasetException(
+                                                                        "读取草稿检查点失败", e);
+                                                            }
+                                                        })
+                                                .reversed())
+                                .toList();
+                for (Path old : snapshots.stream().skip(9).toList()) {
+                    WrenProjectAccess.assertNoLinks(old);
+                    Path marker =
+                            old.resolveSibling(
+                                    old.getFileName().toString().replace(".html", ".verified"));
+                    WrenProjectAccess.assertNoLinks(marker);
+                    Files.deleteIfExists(marker);
+                    Files.delete(old);
+                }
+            } catch (IOException e) {
+                throw new DatasetException("整理草稿检查点失败", e);
+            }
+            return new Checkpoint(current);
+        }
+    }
+
+    public View restore(
+            String user,
+            String id,
+            String expectedRevision,
+            String targetRevision,
+            Runnable requireIdle) {
+        synchronized (lock(id)) {
+            Asset asset = requireDraft(user, id);
+            requireNoGeneration(id);
+            requireIdle.run();
+            if (targetRevision == null || !targetRevision.matches("[a-f0-9]{64}"))
+                throw new DatasetException("草稿检查点不存在", 404);
+            Path draft = root(id).resolve("project/apps/" + APP_NAME + "/index.html");
+            if (!revision(html(draft)).equals(expectedRevision))
+                throw new DatasetException("草稿已变化，不能覆盖其他修改，请刷新", 409);
+            Path saved = root(id).resolve("draft-history").resolve(targetRevision + ".html");
+            WrenProjectAccess.assertNoLinks(saved);
+            if (!Files.isRegularFile(saved)) throw new DatasetException("草稿检查点不存在", 404);
+            String content = html(saved);
+            if (!revision(content).equals(targetRevision))
+                throw new DatasetException("草稿检查点内容不一致", 409);
+            requireDraft(user, id);
+            if (queryAccess.resolve(context(user, asset.groupId()), asset.groupId()).getMdlVersion()
+                    != asset.mdlVersion()) throw new DatasetException("知识库已发布新模型，请重新生成看板后再检查", 409);
+            writeAtomic(draft, content);
+            Path verified = root(id).resolve("verified.txt");
+            if (targetRevision.equals(html(saved.resolveSibling(targetRevision + ".verified"))))
+                writeAtomic(verified, targetRevision);
+            else
+                try {
+                    WrenProjectAccess.assertNoLinks(verified);
+                    Files.deleteIfExists(verified);
+                } catch (IOException e) {
+                    throw new DatasetException("恢复草稿检查状态失败", e);
+                }
+            Asset next =
+                    new Asset(
+                            asset.id(),
+                            asset.ownerId(),
+                            asset.groupId(),
+                            asset.title(),
+                            asset.publishedRevision(),
+                            now(),
+                            asset.mdlVersion(),
+                            asset.description(),
+                            asset.createdAt());
+            save(next);
+            return view(user, next, true);
+        }
     }
 
     public View get(String user, String id, boolean draft) {
@@ -190,6 +416,7 @@ public class DashboardService {
             } catch (IOException e) {
                 throw new DatasetException("检查清理目录失败，请重试", e);
             }
+            requireNoGeneration(id);
             requireIdle.run();
             var current = access.requireQuery(user, asset.groupId());
             if (!user.equals(asset.ownerId())
@@ -293,6 +520,7 @@ public class DashboardService {
     public View publish(String user, String id, String expectedRevision) {
         synchronized (lock(id)) {
             Asset asset = requireDraft(user, id);
+            requireNoGeneration(id);
             access.requireManage(user, asset.groupId());
             Path html = root(id).resolve("project/apps/" + APP_NAME + "/index.html");
             String content = html(html);
@@ -311,7 +539,9 @@ public class DashboardService {
                             asset.title(),
                             revision,
                             now(),
-                            asset.mdlVersion()));
+                            asset.mdlVersion(),
+                            asset.description(),
+                            asset.createdAt()));
             return view(user, load(id), true);
         }
     }
@@ -331,7 +561,7 @@ public class DashboardService {
         Path project = root(asset.id()).resolve("project");
         String content = html(project.resolve("apps/" + APP_NAME + "/index.html"));
         if (!content.toLowerCase(java.util.Locale.ROOT).contains("<html")
-                || !content.contains("dataagent.query"))
+                || (!content.contains("dataagent.query") && !content.contains("dataagent.panel")))
             throw new DatasetException("请生成完整 HTML 并使用 dataagent.query 获取真实数据", 422);
         if (queryAccess.resolve(context(user, asset.groupId()), asset.groupId()).getMdlVersion()
                 != asset.mdlVersion()) throw new DatasetException("知识库已发布新模型，请新建看板工程，以新模型生成", 409);
@@ -346,8 +576,10 @@ public class DashboardService {
                         asset.title(),
                         asset.publishedRevision(),
                         now(),
-                        asset.mdlVersion()));
-        return report + "\n内部预览已就绪；仅用户在页面显式点击发布才会更新正式版本。";
+                        asset.mdlVersion(),
+                        asset.description(),
+                        asset.createdAt()));
+        return report + "\n文件检查通过，页面运行状态以预览自检为准；仅用户在页面显式点击发布才会更新正式版本。";
     }
 
     private View view(String user, Asset asset, boolean draft) {
@@ -377,7 +609,10 @@ public class DashboardService {
                 html,
                 asset.updatedAt(),
                 user.equals(asset.ownerId()),
-                false);
+                false,
+                asset.description(),
+                asset.createdAt(),
+                asset.ownerId());
     }
 
     private String command(Path root, List<String> args) {

@@ -8,6 +8,10 @@ ADR 记录"为什么这样做"。规则：
 
 ## 当前有效主线（按主题）
 
+[ADR0151](0151-dashboard-generation-subscription-ownership.md) 看板任务由服务端持有原ChatController/Harness订阅，任务状态恢复与显式停止分离；不新造Agent运行器。
+
+[ADR0150](0150-dashboard-runtime-reports-and-repair.md) 补充GenBI有界查询队列、面板运行报告与单次原生修复、草稿检查点撤销；保留ADR0149的HTML/隔离/授权/显式发布边界。
+
 [ADR0148](0148-admin-readonly-conversation-visuals.md) 将管理员会话回看扩展到逐轮知识库、原用户反馈与已保存图表/图片，通过专用只读资源接口校验用户及会话归属；不开放普通所有者接口或任意工作区文件。
 
 [ADR0146](0146-shared-datasource-and-kb-bindings.md) 将数据源成员与已建立的知识库供数绑定分离，明确移除成员/停用的不同边界，创建人和全局管理员具有同等治理权。[ADR0147](0147-keep-datasource-password-storage.md) 按用户要求保留原数据源密码存储，不做转换或新增密钥。

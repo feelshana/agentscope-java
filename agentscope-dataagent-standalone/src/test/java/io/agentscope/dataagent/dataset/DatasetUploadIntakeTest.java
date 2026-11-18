@@ -61,7 +61,7 @@ class DatasetUploadIntakeTest {
     }
 
     @Test
-    void actualBytesAreLimitedAndSlotIsReleased() {
+    void actualBytesAreLimitedAndSlotIsReleased() throws Exception {
         var p = new DatasetUploadProperties();
         p.setMaxFileSize(DataSize.ofBytes(4));
         var gate = new DatasetUploadAdmission(p);
@@ -81,6 +81,8 @@ class DatasetUploadIntakeTest {
                                         .block())
                 .isInstanceOf(DatasetException.class)
                 .hasMessageContaining("大小");
+        // Reactor doFinally cleanup may follow the subscriber's terminal signal.
+        for (int i = 0; i < 100 && gate.activeCount() != 0; i++) Thread.sleep(10);
         assertThat(gate.activeCount()).isZero();
         assertThat(gate.statuses("u", "g").get(0).phase()).isEqualTo("FAILED");
     }
@@ -112,7 +114,7 @@ class DatasetUploadIntakeTest {
     }
 
     @Test
-    void descriptionAndFileShareRequestBudget() {
+    void descriptionAndFileShareRequestBudget() throws Exception {
         var p = new DatasetUploadProperties();
         p.setMaxSelectionSize(DataSize.ofBytes(6));
         var gate = new DatasetUploadAdmission(p);
@@ -130,11 +132,12 @@ class DatasetUploadIntakeTest {
                                         .block())
                 .isInstanceOf(DatasetException.class)
                 .hasMessageContaining("总大小");
+        for (int i = 0; i < 100 && gate.activeCount() != 0; i++) Thread.sleep(10);
         assertThat(gate.activeCount()).isZero();
     }
 
     @Test
-    void batchTotalFailsBeforeImportAndReleasesReadSlot() {
+    void batchTotalFailsBeforeImportAndReleasesReadSlot() throws Exception {
         var p = new DatasetUploadProperties();
         p.setMaxSelectionSize(DataSize.ofBytes(6));
         var gate = new DatasetUploadAdmission(p);
@@ -149,6 +152,7 @@ class DatasetUploadIntakeTest {
                                         .block())
                 .isInstanceOf(DatasetException.class)
                 .hasMessageContaining("总大小");
+        for (int i = 0; i < 100 && gate.activeCount() != 0; i++) Thread.sleep(10);
         assertThat(gate.activeCount()).isZero();
     }
 

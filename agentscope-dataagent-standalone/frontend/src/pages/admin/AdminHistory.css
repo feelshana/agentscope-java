@@ -304,3 +304,20 @@ span.admin-username { display: block; }
 .ah-replay .admin-history-turn { min-width:0; }
 .ah-replay .ah-replay-brand time { font-weight:400; }
 .ah-readonly-answer .claw-md img { max-height:560px; object-fit:contain; }
+
+/* Assistant types share the library's segmented controls and preserve the current page density. */
+.ah-type-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; min-width:0; max-width:100%; }
+.ah-type-switch { display:flex; box-sizing:border-box; height:36px; max-width:100%; overflow-x:auto; padding:3px; gap:2px; border:1px solid var(--da-border); border-radius:10px; background:color-mix(in srgb,var(--da-text-3) 7%,transparent); }
+.ah-type-switch button { flex:0 0 auto; min-width:60px; padding:3px 12px; border:0; border-radius:7px; background:transparent; color:var(--da-text-2); font:inherit; font-size:12.5px; cursor:pointer; transition:background .16s,color .16s,box-shadow .16s; }
+.ah-type-switch button[aria-pressed=true] { background:var(--da-surface); color:var(--da-primary); font-weight:650; box-shadow:0 1px 4px #24243e16; }
+.ah-type-switch button:focus-visible { outline:2px solid var(--da-primary); outline-offset:-2px; }
+.ah-type-note { color:var(--da-text-3); font-size:12px; }
+.ah-assistant-badge { flex:none; display:inline-flex; align-items:center; padding:3px 7px; border-radius:6px; color:#5c6577; background:#f0f1f5; font-size:10.5px; font-weight:550; line-height:1.5; }
+.ah-assistant-badge[data-assistant-type=query] { color:#4965a4; background:#eef3ff; }
+.ah-assistant-badge[data-assistant-type=modeling] { color:#7960ad; background:#f2edfb; }
+.ah-assistant-badge[data-assistant-type=dashboard] { color:#327b72; background:#eaf5f1; }
+.ah-long-message { max-width:95%; margin:0 0 12px; color:var(--da-text-2); font-size:12px; }
+.ah-long-message summary { cursor:pointer; color:var(--da-primary); padding:5px 0; }
+.ah-long-message p { max-height:480px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; padding:12px; border:1px solid var(--da-border); border-radius:10px; background:var(--da-surface-sunken); line-height:1.7; }
+@media(max-width:760px) { .ah-type-toolbar { flex:1 1 100%; gap:8px; }.ah-type-switch button { min-width:60px; }.ah-type-note { font-size:11px; }.ah-assistant-badge { padding:2px 5px; } }
+@media(prefers-reduced-motion:reduce) { .ah-type-switch button { transition:none; } }
