@@ -16,4 +16,8 @@
 
 ## 双分支交付
 
-业务提交 `e7cd3540` 包含看板快捷提示与管理员表同步，父提交含看板草稿检查与发布修复。独立源码完整验证通过，详情见[合并前验证](../test-reports/20261118-configurable-table-sync.md)。交付路径为 `codex/architecture-phase1` → `liyufan_dev` → `develop-2.0`。66 由用户执行新版 0152 和部署，真实环境权限与负载待试运行。
+业务提交 `e7cd3540` 包含看板快捷提示与管理员表同步，父提交含看板草稿检查与发布修复。独立源码完整验证通过，详情见[合并前验证](../test-reports/20261118-configurable-table-sync.md)。用户已手工执行 0152 并在 66 上验证两张月表的首次同步和行数。交付路径为 `codex/architecture-phase1` → `liyufan_dev` → `develop-2.0`。
+
+## 无源索引日期列
+
+生产报表的 `period_id` 在日期下拉框被过滤。改为手工选择日期列，整表处于行数和字节限额内时，用一次源端只读扫描获取匹配周期，随后沿用原有按期写入流程。MySQL 5.7/8 夹具及合并前完整 `clean verify` 通过，见[验证报告](../test-reports/20261118-configurable-table-sync.md)。用户授权提交并推送至个人分支和主线。部署由用户在 66 执行，复用已有 0152 四张表和现有配置。

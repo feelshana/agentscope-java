@@ -66,6 +66,34 @@ class DateFormatsTest(unittest.TestCase):
         self.assertEqual(len(batches), 2)
         self.assertTrue(all(size <= worker.BATCH_BYTES for _, size in batches))
 
+    def test_unindexed_periods_use_one_bounded_query_and_group_matches(self):
+        config = {"table": "report", "columns": [{"name": "period_id"}, {"name": "id"}],
+                  "grain": "MONTH", "dateField": "period_id", "dateKind": "varchar",
+                  "dateFormat": "YYYYMM"}
+        jan, feb = dt.date(2026, 1, 1), dt.date(2026, 2, 1)
+        con = Mock()
+        cursor = con.cursor.return_value
+        cursor.fetchone.side_effect = [
+            ("202602", 4, 1), ("202512", 1, None), ("202601", 2, 0),
+            ("202603", 5, None), ("202602", 6, 1), None,
+        ]
+        rows = worker.scan_unindexed(con, "books", config, [jan, feb])
+        self.assertEqual(rows, {jan: [("202601", 2)], feb: [("202602", 4), ("202602", 6)]})
+        cursor.execute.assert_called_once()
+        sql, params = cursor.execute.call_args.args
+        self.assertIn("FROM `books`.`report` LIMIT 100001", sql)
+        self.assertNotIn("ORDER BY", sql)
+        self.assertEqual(params, ("202602", "202601", "202602"))
+
+    def test_unindexed_scan_cap_counts_rows_outside_the_requested_period(self):
+        config = {"table": "report", "columns": [{"name": "period_id"}], "grain": "MONTH",
+                  "dateField": "period_id", "dateKind": "varchar", "dateFormat": "YYYYMM"}
+        con = Mock()
+        con.cursor.return_value.fetchone.side_effect = [("202512", None), ("202512", None), ("202512", None)]
+        with patch.object(worker, "FULL_LIMIT", 2):
+            with self.assertRaisesRegex(worker.SyncError, "UNINDEXED_SCAN_LIMIT"):
+                worker.scan_unindexed(con, "books", config, [dt.date(2026, 1, 1)])
+
     def test_failed_write_rolls_back_the_period(self):
         dst = Mock()
         with patch.object(worker, "update_phase"), patch.object(
@@ -184,6 +212,21 @@ class LiveMySqlTest(unittest.TestCase):
         self.call("schedule", {"id": task_id, "time": "02:00"})
         self.assertEqual(self.call("detail", {"id": task_id})["scheduleTime"], "02:00")
         self.call("schedule", {"id": task_id, "time": None})
+
+    def test_unindexed_month_range_sample_and_rerun(self):
+        task_id, target, payload = self.setup_task(
+            "noidx_month", ["id", "month_key"], "MONTH", "month_key", "YYYYMM", "2026-09-01", "2026-10-01")
+        sample = self.call("test-date", {**payload, "sampleDate": "2026-10-01"})
+        self.assertEqual(sample, {"matches": 2, "sampleValues": ["202610", "202610"]})
+        detail = self.process(task_id)
+        self.assertEqual(detail["lastRun"]["state"], "SUCCESS", detail)
+        self.assertEqual(detail["lastRun"]["rows_committed"], 3)
+        self.assertEqual(self.count(target), 3)
+        self.call("rerun", {"id": task_id, "from": "2026-10-01", "through": "2026-10-01"})
+        detail = self.process(task_id)
+        self.assertEqual(detail["lastRun"]["state"], "SUCCESS", detail)
+        self.assertEqual(detail["lastRun"]["rows_committed"], 2)
+        self.assertEqual(self.count(target), 3)
 
     def test_numeric_month_in_batches_then_empty_rerun(self):
         table = "fixture_month_" + worker.uuid.uuid4().hex[:8]

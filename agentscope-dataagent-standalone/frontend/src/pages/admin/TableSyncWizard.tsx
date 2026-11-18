@@ -27,6 +27,7 @@ const formats = {
   DAY: ['YYYYMMDD', 'YYYY-MM-DD', 'YYYY/MM/DD', 'NATIVE'],
   MONTH: ['YYYYMM', 'YYYY-MM', 'NATIVE'],
 };
+const dateColumnKinds = new Set(['date', 'datetime', 'timestamp', 'char', 'varchar', 'int', 'mediumint', 'bigint']);
 
 export function toStoragePeriod(value: string, grain: SyncGrain) {
   return grain === 'MONTH' && value ? value + '-01' : value;
@@ -213,9 +214,11 @@ export default function TableSyncWizard({ today, target: initialTarget, onTarget
           </div>
           {grain !== 'FULL' && <div className="table-sync-form-grid">
             <label>日期字段<select className="da-input" value={field} onChange={e => { setField(e.target.value); invalidate(); }}>
-              <option value="">请选择有索引的字段</option>
-              {columns.filter(col => col.indexed && selected.includes(col.name)).map(col => <option key={col.name}>{col.name}</option>)}
-            </select></label>
+              <option value="">请选择业务日期字段</option>
+              {columns.filter(col => dateColumnKinds.has(col.kind) && selected.includes(col.name)).map(col =>
+                <option key={col.name} value={col.name}>{col.name}{col.indexed ? '' : '（无源索引）'}</option>
+              )}
+            </select>{dateField && !dateField.indexed && <small>每次同步扫描一次源表，整表最多 10 万行。</small>}</label>
             <label>存储格式<select className="da-input" value={format} onChange={e => { setFormat(e.target.value); invalidate(); }}>
               {formats[grain].map(item => <option key={item} value={item}>{item === 'NATIVE' ? 'MySQL 日期／时间类型' : item}</option>)}
             </select></label>

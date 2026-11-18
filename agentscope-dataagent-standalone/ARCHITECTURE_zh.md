@@ -556,7 +556,7 @@ ADOPTED 状态）；文件写入失败则整个采纳中止，DB 不留已采纳
 
 ### 管理员表同步
 
-全局管理员经 `AdminTableSyncController` 配置单表同步。`TableSyncWorker` 调度任务，`TableSyncTargetStore` 保存目标连接。目标表由人工建表，Python 执行器只向源发送固定 SELECT，在同一目标事务内分批写入全量或指定日／月，并记录进度。目标表按照既有授权流程关联到知识库。执行边界见 [ADR0154](docs/adr/0154-table-sync-manual-ddl.md)。
+全局管理员经 `AdminTableSyncController` 配置单表同步。`TableSyncWorker` 调度任务，`TableSyncTargetStore` 保存目标连接。目标表由人工建表，Python 执行器只向源发送固定 SELECT。日期列无索引时先在行数和体积限额内扫描一次源表，按同一日期条件分组。目标行和进度按全量或单个日／月分别事务提交。目标表按照既有授权流程关联到知识库。执行边界见 [ADR0154](docs/adr/0154-table-sync-manual-ddl.md)。
 
 ## 6. 知识图谱（已停用）
 

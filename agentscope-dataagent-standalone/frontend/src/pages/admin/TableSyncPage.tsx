@@ -11,7 +11,7 @@ import './table-sync.css';
 const grains = { FULL: '全量刷新', DAY: '按业务日', MONTH: '按业务月' };
 const states = { QUEUED: '排队中', RUNNING: '同步中', SUCCESS: '成功', FAILED: '失败' };
 const kinds: Record<string, string> = { INITIAL: '首次同步', DAILY: '每日计划', MONTHLY: '每月计划', MANUAL: '手动执行' };
-const phases: Record<string, string> = { CHECKING: '核对源表和目标表', READING: '分批读取并写入目标' };
+const phases: Record<string, string> = { CHECKING: '核对源表和目标表', SCANNING: '扫描源表并匹配日期', READING: '分批写入目标' };
 const runErrors: Record<string, string> = {
   EMPTY_RESULT: '源端本次返回零行，已保留原数据。',
   SOURCE_QUERY: '源库连接或读取失败。',
@@ -19,6 +19,7 @@ const runErrors: Record<string, string> = {
   SOURCE_TIME_ZONE: '源端 TIMESTAMP 会话时区不受支持。',
   SCHEMA_CHANGED: '源字段结构有变化，请先核对源表。',
   DATE_INDEX_REQUIRED: '源表日期字段已失去可用索引。',
+  DATE_FIELD_REQUIRED: '请从已选列中选择业务日期字段。',
   NULL_DATE: '源表日期字段含空值。',
   UNSUPPORTED_TABLE: '源表类型或存储引擎已变更。',
   UNSUPPORTED_COLUMN: '源表列定义变更为不支持的类型。',
@@ -27,6 +28,8 @@ const runErrors: Record<string, string> = {
   TARGET_OWNERSHIP: '目标表归属或结构与任务不符。',
   CREDENTIAL_ERROR: '无法读取旧任务的同步凭证。',
   ROW_LIMIT: '超过单次事务的行数或体积限制，本期写入已回滚。',
+  UNINDEXED_SCAN_LIMIT: '无源索引时，整张源表最多扫描 10 万行或估算 128 MiB。本次扫描超限。',
+  UNINDEXED_BUFFER_LIMIT: '选定日期范围匹配的数据超过 64 MiB 缓冲上限，请缩小同步范围。',
   TARGET_NOT_EMPTY: '首次同步需要空目标表或空周期。',
   ROW_TOO_LARGE: '源表单行数据超过 4 MiB 的写入限制。',
   TRANSFER_ERROR: '数据读取或目标写入失败，请检查连接和字段内容。',
