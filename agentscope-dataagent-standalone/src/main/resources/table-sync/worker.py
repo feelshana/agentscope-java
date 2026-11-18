@@ -23,7 +23,6 @@ PERIOD_LIMIT = 100_000
 BATCH = 500
 BATCH_BYTES = 4 * 1024 * 1024
 TRANSACTION_BYTES = 64 * 1024 * 1024
-UNINDEXED_SCAN_BYTES = 128 * 1024 * 1024
 BATCH_PAUSE_SECONDS = 0.05
 WORKER_LOCK = "dataagent:table-sync:worker"
 MAX_DAYS = 3660
@@ -249,7 +248,7 @@ def timestamp_zone(con, columns):
     return value
 
 
-def inspect(con, source, data):
+def inspect(con, source, data, sample_only=False):
     version = table_version(con)
     table = data.get("table")
     identifier(table)
@@ -259,13 +258,14 @@ def inspect(con, source, data):
             and len(set(selected)) == len(selected), "INVALID_INPUT")
     available = {column["name"] for column in columns}
     require(set(selected) <= available, "SCHEMA_CHANGED")
-    columns = [c for c in columns if c["name"] in selected]
-    require(columns, "INVALID_INPUT")
+    date_field = data.get("dateField")
+    columns = [c for c in columns if c["name"] in selected and (not sample_only or c["name"] == date_field)]
+    require(columns, "DATE_FIELD_REQUIRED" if sample_only else "INVALID_INPUT")
     validated_columns(columns)
     primary = primary if set(primary) <= set(selected) else []
     grain = data.get("grain")
     require(grain in ("FULL", "DAY", "MONTH"), "INVALID_INPUT")
-    field = next((c for c in columns if c["name"] == data.get("dateField")), None)
+    field = next((c for c in columns if c["name"] == date_field), None)
     fmt, storage_zone = data.get("dateFormat"), data.get("storageZone", "+08:00")
     zone = timestamp_zone(con, columns)
     if grain != "FULL":
@@ -281,7 +281,7 @@ def inspect(con, source, data):
             is_compact = fmt in ("YYYYMMDD", "YYYYMM")
             require(field["kind"] in TEXT_TYPES or (is_compact and field["kind"] in INT_TYPES),
                     "INVALID_FORMAT")
-        if field["indexed"]:
+        if field["indexed"] and not sample_only:
             src = qualified(source["database"], table)
             require(not scalar(con, f"SELECT 1 FROM {src} WHERE {identifier(field['name'])} IS NULL LIMIT 1"),
                     "NULL_DATE")
@@ -317,55 +317,6 @@ def bounds(config, day):
     return f" WHERE {field}>=%s AND {field}<%s", (day, end)
 
 
-def date_has_index(config):
-    return any(col["name"] == config["dateField"] and col["indexed"] for col in config["columns"])
-
-
-def period_lookup(config, days):
-    """Use the existing period predicates, with a balanced set of comparisons per row."""
-    predicates = [bounds(config, day) for day in days]
-    field = identifier(config["dateField"])
-
-    def expression(start, end):
-        if end - start == 1:
-            where, values = predicates[start]
-            return f"CASE WHEN {where.removeprefix(' WHERE ')} THEN {start} END", values
-        middle = (start + end) // 2
-        left, left_args = expression(start, middle)
-        right, right_args = expression(middle, end)
-        return (f"CASE WHEN {field}<%s THEN {left} ELSE {right} END",
-                (predicates[middle][1][0], *left_args, *right_args))
-
-    return expression(0, len(days))
-
-
-def scan_unindexed(con, database, config, days, sample=False):
-    names = [config["dateField"]] if sample else [col["name"] for col in config["columns"]]
-    date_position = names.index(config["dateField"])
-    cols = ", ".join(map(identifier, names))
-    table = qualified(database, config["table"])
-    period_sql, args = period_lookup(config, days)
-    stream = con.cursor(MySQLdb.cursors.SSCursor)
-    groups = [[] for _ in days]
-    scanned_bytes = retained_bytes = 0
-    stream.execute(f"SELECT /*+ MAX_EXECUTION_TIME(60000) */ {cols}, {period_sql} "
-                   f"FROM {table} LIMIT {FULL_LIMIT + 1}", args)
-    # The caller closes the connection on failure to avoid draining an unfinished stream.
-    for number, matched in enumerate(iter(stream.fetchone, None), 1):
-        require(number <= FULL_LIMIT, "UNINDEXED_SCAN_LIMIT")
-        require(matched[date_position] is not None, "NULL_DATE")
-        row, position = matched[:-1], matched[-1]
-        scanned_bytes += row_wire_size(row)
-        require(scanned_bytes <= UNINDEXED_SCAN_BYTES, "UNINDEXED_SCAN_LIMIT")
-        if position is None or (sample and len(groups[position]) == 3):
-            continue
-        retained_bytes += sys.getsizeof(row) + sum(sys.getsizeof(value) for value in row) + 16
-        require(retained_bytes <= TRANSACTION_BYTES, "UNINDEXED_BUFFER_LIMIT")
-        groups[position].append(row)
-    stream.close()
-    return dict(zip(days, groups))
-
-
 def input_source(data):
     source = {key: data.get(key) for key in ("host", "port", "database", "username", "sslMode")}
     return source, data.get("password")
@@ -388,18 +339,15 @@ def explore(action, data, target_config):
                 version = table_version(con)
                 columns, _ = source_metadata(con, database, data.get("table"), version)
                 return {"columns": columns}
-            config = inspect(con, source, data)
+            config = inspect(con, source, data, sample_only=action == "test-date")
             if action == "test-date":
                 require(config["grain"] != "FULL", "INVALID_PERIOD")
                 day = date_value(data.get("sampleDate"))
                 require(config["grain"] != "MONTH" or day.day == 1, "INVALID_PERIOD")
-                if not date_has_index(config):
-                    sample_rows = scan_unindexed(con, database, config, [day], sample=True)[day]
-                    return {"matches": len(sample_rows), "sampleValues": [str(row[0]) for row in sample_rows]}
                 clause, args = bounds(config, day)
-                projection = ", ".join(identifier(col["name"]) for col in config["columns"])
+                field = identifier(config["dateField"])
                 table = qualified(database, config["table"])
-                rows = query(con, f"SELECT {projection} FROM {table}{clause} LIMIT 3", args)
+                rows = query(con, f"SELECT /*+ MAX_EXECUTION_TIME(30000) */ {field} FROM {table}{clause} LIMIT 3", args)
                 return {"matches": len(rows), "sampleValues": [str(row[config["dateField"]]) for row in rows]}
     except MySQLdb.Error:
         raise SyncError("SOURCE_QUERY") from None
@@ -644,20 +592,12 @@ def update_phase(con, run_id, phase, day=None):
     execute(con, "UPDATE dataagent_table_sync_run SET phase=%s,progress_date=%s WHERE id=%s", (phase, day, run_id))
 
 
-def row_wire_size(row):
-    # Account for UTF-8 and SQL escaping with a conservative byte estimate.
-    return sum(8 * len(value) + 4 if isinstance(value, str)
-               else 2 * len(value) + 8 if isinstance(value, bytes) else 64 for value in row)
-
-
 def batches(stream):
-    return batch_rows(iter(stream.fetchone, None))
-
-
-def batch_rows(rows):
     batch, size = [], 0
-    for row in rows:
-        row_size = row_wire_size(row)
+    while (row := stream.fetchone()) is not None:
+        # Account for UTF-8 and SQL escaping with a conservative byte estimate.
+        row_size = sum(8 * len(v) + 4 if isinstance(v, str)
+                       else 2 * len(v) + 8 if isinstance(v, bytes) else 64 for v in row)
         require(row_size <= BATCH_BYTES, "ROW_TOO_LARGE")
         if batch and (len(batch) >= BATCH or size + row_size > BATCH_BYTES):
             yield batch, size
@@ -668,38 +608,32 @@ def batch_rows(rows):
         yield batch, size
 
 
-def write_batches(dst, config, mirror, clause, args, run, pending):
-    cols = ", ".join(identifier(col["name"]) for col in config["columns"])
-    placeholders = ", ".join(["%s"] * len(config["columns"]))
-    limit = FULL_LIMIT if config["grain"] == "FULL" else PERIOD_LIMIT
-    first = next(pending, None)
-    existing = scalar(dst, f"SELECT 1 FROM {mirror}{clause} LIMIT 1", args)
-    if run["kind"] == "INITIAL":
-        require(not existing, "TARGET_NOT_EMPTY")
-    elif existing:
-        require(first is not None or run["accept_empty"], "EMPTY_RESULT")
-        deleted = execute(dst, f"DELETE FROM {mirror}{clause} LIMIT {limit + 1}", args)
-        require(deleted <= limit, "ROW_LIMIT")
-    count, total_bytes = 0, 0
-    with dst.cursor() as writer:
-        for batch, size in itertools.chain(() if first is None else (first,), pending):
-            count += len(batch)
-            total_bytes += size
-            require(count <= limit and total_bytes <= TRANSACTION_BYTES, "ROW_LIMIT")
-            written = writer.executemany(f"INSERT INTO {mirror} ({cols}) VALUES ({placeholders})", batch)
-            require(written == len(batch), "COUNT_MISMATCH")
-            time.sleep(BATCH_PAUSE_SECONDS)
-    return count
-
-
 def transfer(src, dst, source_db, config, mirror, clause, args, run):
     cols = ", ".join(identifier(col["name"]) for col in config["columns"])
+    placeholders = ", ".join(["%s"] * len(config["columns"]))
     source = qualified(source_db, config["table"])
     limit = FULL_LIMIT if config["grain"] == "FULL" else PERIOD_LIMIT
     stream = src.cursor(MySQLdb.cursors.SSCursor)
+    count, total_bytes = 0, 0
     try:
         stream.execute(f"SELECT /*+ MAX_EXECUTION_TIME(60000) */ {cols} FROM {source}{clause} LIMIT {limit + 1}", args)
-        count = write_batches(dst, config, mirror, clause, args, run, batches(stream))
+        pending = batches(stream)
+        first = next(pending, None)
+        existing = scalar(dst, f"SELECT 1 FROM {mirror}{clause} LIMIT 1", args)
+        if run["kind"] == "INITIAL":
+            require(not existing, "TARGET_NOT_EMPTY")
+        elif existing:
+            require(first is not None or run["accept_empty"], "EMPTY_RESULT")
+            deleted = execute(dst, f"DELETE FROM {mirror}{clause} LIMIT {limit + 1}", args)
+            require(deleted <= limit, "ROW_LIMIT")
+        with dst.cursor() as writer:
+            for batch, size in itertools.chain(() if first is None else (first,), pending):
+                count += len(batch)
+                total_bytes += size
+                require(count <= limit and total_bytes <= TRANSACTION_BYTES, "ROW_LIMIT")
+                written = writer.executemany(f"INSERT INTO {mirror} ({cols}) VALUES ({placeholders})", batch)
+                require(written == len(batch), "COUNT_MISMATCH")
+                time.sleep(BATCH_PAUSE_SECONDS)
     except MySQLdb.Error:
         src.close()
         raise SyncError("TRANSFER_ERROR") from None
@@ -711,15 +645,12 @@ def transfer(src, dst, source_db, config, mirror, clause, args, run):
     return count
 
 
-def copy_period(src, dst, task, run, config, mirror, day, rows=None):
+def copy_period(src, dst, task, run, config, mirror, day):
     clause, args = bounds(config, day) if day is not None else ("", ())
     update_phase(dst, run["id"], "READING", day)
     dst.autocommit(False)
     try:
-        if rows is None:
-            count = transfer(src, dst, config["source"]["database"], config, mirror, clause, args, run)
-        else:
-            count = write_batches(dst, config, mirror, clause, args, run, batch_rows(rows))
+        count = transfer(src, dst, config["source"]["database"], config, mirror, clause, args, run)
         if day is not None:
             execute(dst, "INSERT INTO dataagent_table_sync_coverage(task_id,business_date,run_id,row_count) VALUES(%s,%s,%s,%s) "
                     "ON DUPLICATE KEY UPDATE run_id=%s,row_count=%s",
@@ -772,19 +703,10 @@ def publish_run(dst, task, run, password):
             return
         done = {r["business_date"]: r["run_id"] for r in query(
             dst, "SELECT business_date,run_id FROM dataagent_table_sync_coverage WHERE task_id=%s", (task["id"],))}
-        pending = [
-            day for day in periods(run["date_from"], run["date_through"], grain)
-            if not (day in done if run["kind"] == "INITIAL" else done.get(day) == run["id"])
-        ]
-        rows_by_period = {}
-        if pending and not date_has_index(config):
-            update_phase(dst, run["id"], "SCANNING")
-            try:
-                rows_by_period = scan_unindexed(src, source["database"], config, pending)
-            except MySQLdb.Error:
-                raise SyncError("SOURCE_QUERY") from None
-        for day in pending:
-            copy_period(src, dst, task, run, config, mirror, day, rows_by_period.pop(day, None))
+        for day in periods(run["date_from"], run["date_through"], grain):
+            committed = day in done if run["kind"] == "INITIAL" else done.get(day) == run["id"]
+            if not committed:
+                copy_period(src, dst, task, run, config, mirror, day)
         dst.autocommit(False)
         try:
             finish_run(dst, task, run)

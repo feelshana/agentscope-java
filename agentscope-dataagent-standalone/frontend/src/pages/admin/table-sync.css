@@ -68,6 +68,7 @@
 .table-sync-field-list label small { color: var(--da-text-muted); }
 .table-sync-sample { align-items: end; }
 .table-sync-sample span { font-size: 13px; }
+.table-sync-sample-error { flex: 1 0 100%; margin: 0; }
 .table-sync-ddl { overflow: auto; margin: 0; max-height: 160px; padding: 10px; border: 1px solid var(--da-border); border-radius: 7px; font-size: 12px; }
 @media (max-width: 720px) {
   .table-sync-page .kw-pagehead { align-items: flex-start; flex-direction: column; }

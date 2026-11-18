@@ -28,6 +28,8 @@ const formats = {
   MONTH: ['YYYYMM', 'YYYY-MM', 'NATIVE'],
 };
 const dateColumnKinds = new Set(['date', 'datetime', 'timestamp', 'char', 'varchar', 'int', 'mediumint', 'bigint']);
+const sampleQueryLabel = '查询样本';
+type SampleFeedback = { matches: number; sampleValues: string[] } | { error: string };
 
 export function toStoragePeriod(value: string, grain: SyncGrain) {
   return grain === 'MONTH' && value ? value + '-01' : value;
@@ -65,10 +67,11 @@ export default function TableSyncWizard({ today, target: initialTarget, onTarget
   const [zone, setZone] = useState('+08:00');
   const [from, setFrom] = useState('');
   const [sample, setSample] = useState('');
-  const [sampleResult, setSampleResult] = useState<{ matches: number; sampleValues: string[] }>();
+  const [sampleResult, setSampleResult] = useState<SampleFeedback>();
   const [preview, setPreview] = useState<SyncPreview>();
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
+  const sampling = busy === sampleQueryLabel;
   const through = previousPeriod(today, grain);
   const dateField = columns.find(column => column.name === field);
   const selection: SyncSelection = {
@@ -84,10 +87,10 @@ export default function TableSyncWizard({ today, target: initialTarget, onTarget
     setDiscovery(undefined); setTable(''); setSelected([]); setColumns([]); invalidate();
   }
 
-  async function perform(label: string, action: () => Promise<void>) {
+  async function perform(label: string, action: () => Promise<void>, onError: (message: string) => void = setError) {
     setError(''); setBusy(label);
     try { await action(); } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '操作失败，请重试。');
+      onError(reason instanceof Error ? reason.message : '操作失败，请重试。');
     } finally { setBusy(''); }
   }
 
@@ -218,7 +221,7 @@ export default function TableSyncWizard({ today, target: initialTarget, onTarget
               {columns.filter(col => dateColumnKinds.has(col.kind) && selected.includes(col.name)).map(col =>
                 <option key={col.name} value={col.name}>{col.name}{col.indexed ? '' : '（无源索引）'}</option>
               )}
-            </select>{dateField && !dateField.indexed && <small>每次同步扫描一次源表，整表最多 10 万行。</small>}</label>
+            </select>{dateField && !dateField.indexed && <small>源库可能逐期扫描整表，每{grain === 'MONTH' ? '月' : '日'}最多读取 10 万条匹配数据。</small>}</label>
             <label>存储格式<select className="da-input" value={format} onChange={e => { setFormat(e.target.value); invalidate(); }}>
               {formats[grain].map(item => <option key={item} value={item}>{item === 'NATIVE' ? 'MySQL 日期／时间类型' : item}</option>)}
             </select></label>
@@ -232,11 +235,14 @@ export default function TableSyncWizard({ today, target: initialTarget, onTarget
             <label>测试{grain === 'MONTH' ? '月份' : '日期'}<input className="da-input" type={grain === 'MONTH' ? 'month' : 'date'} value={sample} onChange={e => { setSample(e.target.value); setSampleResult(undefined); }} /></label>
             <button className="da-btn" type="button" disabled={!field || !sample} onClick={() => {
               setSampleResult(undefined);
-              void perform('查询样本', async () => {
+              void perform(sampleQueryLabel, async () => {
                 setSampleResult(await syncAction('test-date', { ...selection, sampleDate: toStoragePeriod(sample, grain) }));
-              });
+              }, message => setSampleResult({ error: message }));
             }}>测试日期查询</button>
-            {sampleResult && <span role="status">{sampleResult.matches ? `命中 ${sampleResult.matches} 条样本 · ${sampleResult.sampleValues.join('、')}` : '查询成功，该期未查到数据。'}</span>}
+            {sampling && <span role="status">正在查询样本…</span>}
+            {sampleResult && ('error' in sampleResult
+              ? <p className="secondary-alert table-sync-sample-error" role="alert">{sampleResult.error}</p>
+              : <span role="status">{sampleResult.matches ? `命中 ${sampleResult.matches} 条样本 · ${sampleResult.sampleValues.join('、')}` : '查询成功，该期未查到数据。'}</span>)}
           </div>}
           <button className="da-btn" type="button" disabled={!savedTarget || editingTarget || !target || !selected.length || (grain !== 'FULL' && !field)}
             onClick={() => void perform('核对表结构', async () => { setPreview(await syncAction('preview', selection)); })}>{preview ? '重新核对目标表' : '生成目标建表 SQL'}</button>
@@ -246,7 +252,7 @@ export default function TableSyncWizard({ today, target: initialTarget, onTarget
           </>}
         </fieldset>}
       </div>
-      <footer><span aria-live="polite">{busy ? `正在${busy}…` : ''}</span>
+      <footer><span aria-live="polite">{busy && !sampling ? `正在${busy}…` : ''}</span>
         <button className="da-btn" type="button" onClick={onClose} disabled={!!busy}>取消</button>
         <button className="da-btn da-btn-primary" type="submit" disabled={!preview?.targetReady || !!busy || editingTarget || !name.trim() || (grain !== 'FULL' && !from)}>创建并首次同步</button>
       </footer>
