@@ -30,6 +30,7 @@ public class DashboardService {
     private final WrenPublishedProject published;
     private final WrenCli cli;
     private final ConcurrentHashMap<String, Object> locks = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, String> checking = new ConcurrentHashMap<>();
     private final String generationProcess = UUID.randomUUID().toString();
 
     public String generationProcess() {
@@ -49,14 +50,18 @@ public class DashboardService {
     }
 
     private void requireNoGeneration(String id) {
+        requireCheckIdle(id);
+        if (activeGeneration(id) != null) throw new DatasetException("看板仍在生成，请先停止任务或等待完成", 409);
+    }
+
+    private DashboardGeneration activeGeneration(String id) {
         Path file = root(id).resolve(DashboardGeneration.FILE_NAME);
         WrenProjectAccess.assertNoLinks(file);
-        if (!Files.isRegularFile(file)) return;
+        if (!Files.isRegularFile(file)) return null;
         try {
             if (Files.size(file) > MAX_HTML_BYTES) throw new DatasetException("生成任务记录异常", 409);
             var run = JSON.readValue(Files.readString(file), DashboardGeneration.class);
-            if (run.active() && generationProcess.equals(run.processId()))
-                throw new DatasetException("看板仍在生成，请先停止任务或等待完成", 409);
+            return run.active() && generationProcess.equals(run.processId()) ? run : null;
         } catch (IOException e) {
             throw new DatasetException("读取生成任务失败", e);
         }
@@ -84,6 +89,8 @@ public class DashboardService {
         }
     }
 
+    public record FileCheck(String status, String error) {}
+
     public record View(
             String id,
             String groupId,
@@ -99,7 +106,8 @@ public class DashboardService {
             boolean deletionPending,
             String description,
             String createdAt,
-            @com.fasterxml.jackson.annotation.JsonIgnore String creatorId) {}
+            @com.fasterxml.jackson.annotation.JsonIgnore String creatorId,
+            FileCheck fileCheck) {}
 
     public record Workspace(Asset asset, Path root) {}
 
@@ -201,7 +209,8 @@ public class DashboardService {
                                                     true,
                                                     asset.description(),
                                                     asset.createdAt(),
-                                                    asset.ownerId())
+                                                    asset.ownerId(),
+                                                    null)
                                             : view(user, asset, edit);
                             result.add(
                                     new View(
@@ -219,7 +228,8 @@ public class DashboardService {
                                             view.deletionPending(),
                                             view.description(),
                                             view.createdAt(),
-                                            view.creatorId()));
+                                            view.creatorId(),
+                                            null));
                         }
                     } catch (DatasetException denied) {
                         if (denied.status() != 403
@@ -460,6 +470,7 @@ public class DashboardService {
         if (turn == null) throw new DatasetException("请从仪表盘工作台发起对话", 403);
         synchronized (lock(turn.dashboardId())) {
             Asset asset = requireDraft(context.getUserId(), turn.dashboardId());
+            requireCheckIdle(asset.id());
             DatasetScope scope = context.get(DatasetScope.class);
             if (scope == null
                     || !context.getUserId().equals(scope.ownerId())
@@ -494,26 +505,39 @@ public class DashboardService {
     }
 
     public String genbi(RuntimeContext context, String action, String prompt) {
+        if ("verify".equals(action)) {
+            var check =
+                    withWorkspace(
+                            context,
+                            workspace ->
+                                    reserveCheck(
+                                            workspace.asset(),
+                                            html(
+                                                    workspace
+                                                            .root()
+                                                            .resolve(
+                                                                    "apps/"
+                                                                            + APP_NAME
+                                                                            + "/index.html"))));
+            return runReservedCheck(check, context.getUserId());
+        }
         return withWorkspace(
                 context,
                 workspace -> {
-                    if (!List.of("build", "verify").contains(action))
+                    if (!"build".equals(action))
                         throw new DatasetException("仅开放 GenBI build 和 verify", 403);
-                    if ("build".equals(action)) {
-                        if (prompt == null || prompt.isBlank() || prompt.length() > 16000)
-                            throw new DatasetException("请传入本轮看板需求，最多16000字", 400);
-                        return command(
-                                workspace.root(),
-                                List.of(
-                                        "genbi",
-                                        "build",
-                                        APP_NAME,
-                                        "--prompt",
-                                        prompt,
-                                        "--data-mode",
-                                        "live"));
-                    }
-                    return verify(workspace.asset(), context.getUserId());
+                    if (prompt == null || prompt.isBlank() || prompt.length() > 16000)
+                        throw new DatasetException("请传入本轮看板需求，最多16000字", 400);
+                    return command(
+                            workspace.root(),
+                            List.of(
+                                    "genbi",
+                                    "build",
+                                    APP_NAME,
+                                    "--prompt",
+                                    prompt,
+                                    "--data-mode",
+                                    "live"));
                 });
     }
 
@@ -557,29 +581,124 @@ public class DashboardService {
         }
     }
 
+    public void requireCheckIdle(String id) {
+        if (checking.containsKey(id)) throw new DatasetException("正在检查草稿文件，请稍后再试", 409);
+    }
+
+    public boolean checkingDraft(String id) {
+        return checking.containsKey(id);
+    }
+
+    private record ReservedCheck(Asset asset, String content) {}
+
+    private ReservedCheck reserveCheck(Asset asset, String content) {
+        checking.put(asset.id(), revision(content));
+        return new ReservedCheck(asset, content);
+    }
+
+    private String runReservedCheck(ReservedCheck check, String user) {
+        try {
+            return verifyContent(check.asset(), user, check.content());
+        } finally {
+            checking.remove(check.asset().id());
+        }
+    }
+
+    /** Reserve the project while the CLI runs, leaving progress and previews readable. */
+    private View checkDraft(String user, String id, String expectedRevision, Runnable admission) {
+        ReservedCheck check;
+        synchronized (lock(id)) {
+            Asset asset = requireDraft(user, id);
+            View current = view(user, asset, true);
+            if (!current.revision().equals(expectedRevision))
+                throw new DatasetException("草稿已变化，请刷新后检查", 409);
+            if (current.html().isBlank()) throw new DatasetException("请先生成看板页面", 422);
+            if (checking.containsKey(id)) return current;
+            admission.run();
+            if (current.verified()) return current;
+            check = reserveCheck(asset, current.html());
+        }
+        runReservedCheck(check, user);
+        return get(user, id, true);
+    }
+
+    public View checkIdleDraft(String user, String id, String revision, Runnable requireIdle) {
+        return checkDraft(
+                user,
+                id,
+                revision,
+                () -> {
+                    requireNoGeneration(id);
+                    requireIdle.run();
+                });
+    }
+
+    public View checkGeneratedDraft(String user, String id, String revision, String taskId) {
+        return checkDraft(
+                user,
+                id,
+                revision,
+                () -> {
+                    var task = activeGeneration(id);
+                    if (task == null
+                            || !task.id().equals(taskId)
+                            || !task.userId().equals(user)
+                            || !"CHECKING".equals(task.status()))
+                        throw new DatasetException("生成任务已变化，请重新读取草稿", 409);
+                });
+    }
+
     private String verify(Asset asset, String user) {
         Path project = root(asset.id()).resolve("project");
         String content = html(project.resolve("apps/" + APP_NAME + "/index.html"));
-        if (!content.toLowerCase(java.util.Locale.ROOT).contains("<html")
-                || (!content.contains("dataagent.query") && !content.contains("dataagent.panel")))
-            throw new DatasetException("请生成完整 HTML 并使用 dataagent.query 获取真实数据", 422);
-        if (queryAccess.resolve(context(user, asset.groupId()), asset.groupId()).getMdlVersion()
-                != asset.mdlVersion()) throw new DatasetException("知识库已发布新模型，请新建看板工程，以新模型生成", 409);
-        command(project, List.of("genbi", "register", APP_NAME, "--data-mode", "live"));
-        String report = command(project, List.of("genbi", "verify", APP_NAME));
-        writeAtomic(root(asset.id()).resolve("verified.txt"), revision(content));
-        save(
-                new Asset(
-                        asset.id(),
-                        asset.ownerId(),
-                        asset.groupId(),
-                        asset.title(),
-                        asset.publishedRevision(),
-                        now(),
-                        asset.mdlVersion(),
-                        asset.description(),
-                        asset.createdAt()));
-        return report + "\n文件检查通过，页面运行状态以预览自检为准；仅用户在页面显式点击发布才会更新正式版本。";
+        return verifyContent(asset, user, content);
+    }
+
+    private String verifyContent(Asset asset, String user, String content) {
+        Path project = root(asset.id()).resolve("project");
+        Path receipt = root(asset.id()).resolve("verified.txt");
+        String revision = revision(content);
+        try {
+            if (!content.toLowerCase(java.util.Locale.ROOT).contains("<html")
+                    || (!content.contains("dataagent.query")
+                            && !content.contains("dataagent.panel")))
+                throw new DatasetException("请生成完整 HTML 并使用 dataagent.query 获取真实数据", 422);
+            if (queryAccess.resolve(context(user, asset.groupId()), asset.groupId()).getMdlVersion()
+                    != asset.mdlVersion())
+                throw new DatasetException("知识库已发布新模型，请新建看板工程，以新模型生成", 409);
+            command(project, List.of("genbi", "register", APP_NAME, "--data-mode", "live"));
+            String report = command(project, List.of("genbi", "verify", APP_NAME));
+            synchronized (lock(asset.id())) {
+                asset = requireDraft(user, asset.id());
+                if (!content.equals(html(project.resolve("apps/" + APP_NAME + "/index.html"))))
+                    throw new DatasetException("检查期间草稿已变化，请检查最新版本", 409);
+                if (access.requireQuery(user, asset.groupId()).getMdlVersion()
+                        != asset.mdlVersion())
+                    throw new DatasetException("知识库已发布新模型，请新建看板工程，以新模型生成", 409);
+                writeAtomic(receipt, revision);
+                save(
+                        new Asset(
+                                asset.id(),
+                                asset.ownerId(),
+                                asset.groupId(),
+                                asset.title(),
+                                asset.publishedRevision(),
+                                now(),
+                                asset.mdlVersion(),
+                                asset.description(),
+                                asset.createdAt()));
+            }
+            return report + "\n文件检查通过，页面运行状态以预览自检为准；仅用户在页面显式点击发布才会更新正式版本。";
+        } catch (RuntimeException failed) {
+            String detail = failed.getMessage() == null ? "文件检查未完成，请重试" : failed.getMessage();
+            writeAtomic(
+                    receipt,
+                    "FAILED "
+                            + revision
+                            + "\n"
+                            + detail.substring(0, Math.min(500, detail.length())));
+            throw failed;
+        }
     }
 
     private View view(String user, Asset asset, boolean draft) {
@@ -596,7 +715,16 @@ public class DashboardService {
                                 .resolve("revisions/" + asset.publishedRevision() + ".html");
         String html = html(file);
         String revision = draft ? revision(html) : asset.publishedRevision();
-        String verified = html(root(asset.id()).resolve("verified.txt"));
+        String receipt = draft ? html(root(asset.id()).resolve("verified.txt")) : revision;
+        FileCheck check;
+        if (draft && revision.equals(checking.get(asset.id())))
+            check = new FileCheck("CHECKING", null);
+        else if (draft && group.getMdlVersion() != asset.mdlVersion())
+            check = new FileCheck("MODEL_CHANGED", "知识库已发布新模型，请基于该知识库新建看板");
+        else if (revision.equals(receipt)) check = new FileCheck("PASSED", null);
+        else if (receipt.startsWith("FAILED " + revision + "\n"))
+            check = new FileCheck("FAILED", receipt.substring(receipt.indexOf('\n') + 1));
+        else check = new FileCheck(receipt.isEmpty() ? "UNCHECKED" : "STALE", null);
         return new View(
                 asset.id(),
                 asset.groupId(),
@@ -605,14 +733,15 @@ public class DashboardService {
                 asset.publishedRevision(),
                 edit,
                 manage,
-                revision.equals(verified),
+                "PASSED".equals(check.status()),
                 html,
                 asset.updatedAt(),
                 user.equals(asset.ownerId()),
                 false,
                 asset.description(),
                 asset.createdAt(),
-                asset.ownerId());
+                asset.ownerId(),
+                draft ? check : null);
     }
 
     private String command(Path root, List<String> args) {

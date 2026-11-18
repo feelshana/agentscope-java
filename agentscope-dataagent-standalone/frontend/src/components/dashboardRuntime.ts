@@ -4,7 +4,7 @@ export interface PanelProgress extends PanelReference { state: 'pending' | 'load
 export interface PreviewIssue { kind: 'query' | 'runtime' | 'panel'; message: string; panelId?: string; sql?: string }
 export interface PreviewReport { revision: string; initialized: boolean; settled: boolean; queries: QueryProgress; panels: PanelProgress[]; issues: PreviewIssue[] }
 
-export function generationActive(task: import('../api/dashboards').DashboardGeneration | null): boolean { return task?.status === 'QUEUED' || task?.status === 'RUNNING'; }
+export function generationActive(task: import('../api/dashboards').DashboardGeneration | null): boolean { return task?.status === 'QUEUED' || task?.status === 'RUNNING' || task?.status === 'CHECKING'; }
 /** Restored native turns take precedence over the bounded live reply snapshot. */
 export function generationMessages(history: import('./dashboardState').DashboardMessage[], task: import('../api/dashboards').DashboardGeneration | null): import('./dashboardState').DashboardMessage[] {
   if (!task) return history;
@@ -54,14 +54,15 @@ export class DashboardQueryQueue {
 }
 
 export function previewSummary(report: PreviewReport): string {
+  if (report.issues.length || report.panels.some(panel => panel.state === 'error')) return '预览发现问题，需要调整';
   if (!report.initialized) return '正在启动预览…';
   if (report.queries.active || report.queries.queued) return `正在取数 ${report.queries.active} 项${report.queries.queued ? ` · 排队 ${report.queries.queued} 项` : ''}`;
-  if (report.issues.length || report.panels.some(panel => panel.state === 'error')) return '预览发现问题，需要调整';
   if (report.panels.length) {
     const done = report.panels.filter(panel => panel.state === 'ready' || panel.state === 'empty').length;
     return done === report.panels.length ? `面板自检 ${done}/${report.panels.length} · ${report.panels.filter(panel => panel.state === 'empty').length} 项暂无数据` : `面板自检 ${done}/${report.panels.length} · 正在加载`;
   }
-  return report.queries.succeeded ? `已完成 ${report.queries.succeeded} 项查询 · 图表显示待核对` : '等待页面取数 · 尚无面板自检';
+  if (report.queries.succeeded) return `已完成 ${report.queries.succeeded} 项查询 · 图表显示待核对`;
+  return report.settled ? '页面未上报面板或查询，请核对预览内容' : '等待页面取数 · 尚无面板自检';
 }
 
 const CONTEXT = '\n\n[DataAgent看板诊断v1]\n';
@@ -84,5 +85,5 @@ export function dashboardUserText(text: string): string {
   catch { return text; }
 }
 export function canAutomaticallyRepair(report: PreviewReport): boolean {
-  return report.settled && report.issues.length > 0 && !report.issues.some(issue => /权限|未授权|登录|401|403|版本已变化|新模型|超时|5\d\d|不可用|连接|网络|次数超过|network|fetch|timeout|unauthor|forbidden/i.test(issue.message));
+  return report.settled && report.issues.length > 0 && !report.issues.some(issue => /权限|未授权|登录|401|403|版本已变化|新模型|超时|没有新进度|5\d\d|不可用|连接|网络|次数超过|network|fetch|timeout|unauthor|forbidden/i.test(issue.message));
 }

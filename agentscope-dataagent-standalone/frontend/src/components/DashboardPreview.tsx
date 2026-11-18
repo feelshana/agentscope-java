@@ -51,6 +51,7 @@ export default function DashboardPreview({ dashboard, draft, onReport, onSelect,
     let queries: QueryProgress = { active: 0, queued: 0, succeeded: 0, failed: 0, total: 0 };
     let initialized = false, thumbnailSaved = false;
     let settleTimer: ReturnType<typeof setTimeout> | undefined;
+    let stalledTimer: ReturnType<typeof setTimeout> | undefined;
     let captureTimer: ReturnType<typeof setTimeout> | undefined;
     const credential = getToken();
     const publish = (settled = false) => {
@@ -59,17 +60,23 @@ export default function DashboardPreview({ dashboard, draft, onReport, onSelect,
       setReport(next); callbacks.current.onReport?.(next);
     };
     const changed = () => {
+      clearTimeout(stalledTimer);
+      issues.delete('stalled');
       clearTimeout(settleTimer); clearTimeout(captureTimer); publish(false);
       settleTimer = setTimeout(() => {
         const idle = !queries.active && !queries.queued;
         const settled = initialized && idle && (!panels.size || [...panels.values()].every(p => !['pending', 'loading'].includes(p.state)) || [...issues.values()].some(issue => issue.kind === 'runtime'));
         publish(settled);
+        if (!settled) stalledTimer = setTimeout(() => {
+          issues.set('stalled', { kind: 'runtime', message: '预览长时间没有新进度，请刷新预览重试。' });
+          publish(true);
+        }, 90000);
         if (settled && queries.succeeded && !issues.size && !thumbnailSaved) captureTimer = setTimeout(() => frame.current?.contentWindow?.postMessage({ kind: 'capture', channel }, '*'), 500);
       }, 500);
     };
     const issue = (key: string, value: PreviewIssue) => { if (issues.size >= 12 && !issues.has(key)) issues.delete(issues.keys().next().value!); issues.set(key, value); changed(); };
     const queue = new DashboardQueryQueue(next => { queries = next; changed(); });
-    publish();
+    changed();
     const onMessage = (event: MessageEvent) => {
       const source = frame.current?.contentWindow;
       const data = dashboardBridgeMessage(event, source, channel);
@@ -116,7 +123,7 @@ export default function DashboardPreview({ dashboard, draft, onReport, onSelect,
       });
     };
     window.addEventListener('message', onMessage);
-    return () => { controller.abort(); queue.close(); clearTimeout(settleTimer); clearTimeout(captureTimer); window.removeEventListener('message', onMessage); };
+    return () => { controller.abort(); queue.close(); clearTimeout(settleTimer); clearTimeout(stalledTimer); clearTimeout(captureTimer); window.removeEventListener('message', onMessage); };
   }, [channel, dashboard.id, dashboard.revision, dashboard.html, draft, dashboard.canEdit]);
   const bad = report.issues.length > 0 || report.panels.some(panel => panel.state === 'error');
   return <div className="dashboard-preview">

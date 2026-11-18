@@ -213,6 +213,36 @@ class DashboardServiceTest {
     }
 
     @Test
+    void standaloneCheckRequiresDraftAccessAndCannotApproveAChangedPage() throws Exception {
+        var board = service.create("alice", "group", "销售");
+        write(board.id(), FIRST);
+        var before = service.get("alice", board.id(), true);
+        assertThatThrownBy(
+                        () ->
+                                service.checkIdleDraft(
+                                        "bob", board.id(), before.revision(), () -> {}))
+                .hasMessageContaining("草稿");
+        when(cli.run(any(), any(), eq(List.of("genbi", "verify", "dashboard"))))
+                .thenAnswer(
+                        call -> {
+                            Path project = call.getArgument(0);
+                            Files.writeString(
+                                    project.resolve("apps/dashboard/index.html"),
+                                    FIRST.replace("第一版", "并发改动"));
+                            return new WrenCli.Result(0, "ok");
+                        });
+        assertThatThrownBy(
+                        () ->
+                                service.checkIdleDraft(
+                                        "alice", board.id(), before.revision(), () -> {}))
+                .hasMessageContaining("检查期间草稿已变化");
+        var latest = service.get("alice", board.id(), true);
+        assertThat(latest.fileCheck().status()).isEqualTo("STALE");
+        assertThat(latest.verified()).isFalse();
+        assertThat(latest.publishedRevision()).isNull();
+    }
+
+    @Test
     void helperBasedPageCanUseScopedQueriesWithoutTheLegacyQueryLiteral() {
         var board = service.create("alice", "group", "销售");
         write(

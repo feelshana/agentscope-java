@@ -19,7 +19,7 @@ public record DashboardGeneration(
     public static final String FILE_NAME = "generation.json";
 
     public boolean active() {
-        return "QUEUED".equals(status) || "RUNNING".equals(status);
+        return "QUEUED".equals(status) || "RUNNING".equals(status) || "CHECKING".equals(status);
     }
 
     public DashboardGeneration progress(

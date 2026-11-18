@@ -581,3 +581,7 @@ Java17选测20项、前端三前缀各25项、TS/样板构建与正式前端隔�
 ## 2026-11-18 Asia/Shanghai｜Checkpoint：提交与双分支整合交付
 
 功能f5b3e7ed已提交，独立worktree中liyufan_dev/develop-2.0均从590d3e4e无冲突快进。最终纯文档提交与两目标统一原子推送、远端refs核验后交付，工作分支保留codex/architecture-phase1；未部署66。Windows长路径限制使用单次core.longpaths恢复流程，不改全局配置。全量1197/0/0/23、前端3×146、打包与CI分类通过，最终文档5项/空白检查通过；基准忽略本地保留，回退/外部条件边界见release-integration报告。
+
+## 2026-11-18 Asia/Shanghai · 看板草稿检查与发布
+
+已实现 spec147，并在独立浏览器检查旧草稿补检、失败重试、刷新恢复、多人占用和发布。官方 CLI 另以临时项目实测，验证范围见报告。

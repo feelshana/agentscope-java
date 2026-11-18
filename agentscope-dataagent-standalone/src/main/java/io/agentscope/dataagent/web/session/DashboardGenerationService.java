@@ -65,19 +65,28 @@ public class DashboardGenerationService {
     }
 
     public View current(String user, String id) {
+        return snapshot(user, id).task();
+    }
+
+    public record Snapshot(View task, boolean busyElsewhere, boolean checkingFile) {}
+
+    public Snapshot snapshot(String user, String id) {
         return dashboards.withGeneration(
                 user,
                 id,
                 workspace -> {
                     Live running = live.get(id);
                     DashboardGeneration record = null;
+                    boolean busyElsewhere = false;
                     if (running != null)
                         synchronized (running) {
                             if (user.equals(running.record.userId())) record = running.record;
+                            else busyElsewhere = running.record.active();
                         }
                     if (record == null) record = ownRecord(workspace.file(), user);
-                    if (record == null || !user.equals(record.userId())) return null;
-                    record = reconcile(workspace.file(), record);
+                    if (record == null || !user.equals(record.userId()))
+                        return new Snapshot(null, busyElsewhere, dashboards.checkingDraft(id));
+                    record = reconcile(workspace.file(), record, user, id);
                     if (running != null
                             && user.equals(running.record.userId())
                             && running.record.id().equals(record.id())
@@ -90,7 +99,7 @@ public class DashboardGenerationService {
                                 /* Keep terminal status visible until persistence recovers. */
                             }
                         }
-                    return view(record);
+                    return new Snapshot(view(record), busyElsewhere, dashboards.checkingDraft(id));
                 });
     }
 
@@ -115,7 +124,8 @@ public class DashboardGenerationService {
                         id,
                         workspace -> {
                             var previous = read(workspace.file());
-                            if (previous != null) previous = reconcile(workspace.file(), previous);
+                            if (previous != null)
+                                previous = reconcile(workspace.file(), previous, user, id);
                             var own = ownRecord(workspace.file(), user);
                             if (own != null && own.id().equals(request.requestId()))
                                 return view(own);
@@ -124,6 +134,7 @@ public class DashboardGenerationService {
                                     && previous.userId().equals(user)) return view(previous);
                             if (previous != null && previous.active())
                                 throw new DatasetException("此看板正在生成，请等待当前任务完成", 409);
+                            dashboards.requireCheckIdle(id);
                             deletion.requireIdle(id);
                             var current = dashboards.get(user, id, true);
                             if (!current.revision().equals(request.revision()))
@@ -201,6 +212,8 @@ public class DashboardGenerationService {
                         });
         if (running != null) {
             synchronized (running) {
+                if ("CHECKING".equals(running.record.status()))
+                    throw new DatasetException("生成已结束，正在完成草稿文件检查", 409);
                 running.stopped = true;
             }
             running.stop.tryEmitValue(true);
@@ -232,7 +245,7 @@ public class DashboardGenerationService {
                     phase =
                             tool.equals("write_file") || tool.equals("edit_file")
                                     ? "编写或修改页面"
-                                    : tool.equals("wren_genbi") ? "构建与文件检查" : "检查数据与查询";
+                                    : tool.equals("wren_genbi") ? "处理看板工程" : "检查数据与查询";
                 } else if ("error".equals(type))
                     error = limit(event.path("error").asText("生成失败，请重试"), 500);
                 else if ("done".equals(type)) running.doneFrame = true;
@@ -250,10 +263,34 @@ public class DashboardGenerationService {
 
     private void finish(String user, String id, Live running, Throwable failure) {
         String revision = null;
+        boolean checking = false;
         try {
-            revision = dashboards.get(user, id, true).revision();
-        } catch (RuntimeException ignored) {
-            /* Revocation must not prevent terminal audit state. */
+            var draft = dashboards.get(user, id, true);
+            revision = draft.revision();
+            synchronized (running) {
+                var task = running.record;
+                if (!task.active()) return;
+                checking =
+                        failure == null
+                                && task.error() == null
+                                && running.doneFrame
+                                && !running.stopped
+                                && !shuttingDown
+                                && !draft.verified()
+                                && !revision.equals(task.baseRevision());
+                if (checking) {
+                    running.record =
+                            task.progress(
+                                    "CHECKING", "正在检查草稿文件", task.answer(), null, null, revision);
+                    saveCurrent(running.file, running.record);
+                }
+            }
+            if (checking
+                    && !dashboards
+                            .checkGeneratedDraft(user, id, revision, running.record.id())
+                            .verified()) throw new DatasetException("当前草稿尚未通过文件检查，请查看草稿状态", 409);
+        } catch (RuntimeException e) {
+            if (failure == null) failure = e;
         }
         synchronized (running) {
             if (!running.record.active()) return;
@@ -264,14 +301,20 @@ public class DashboardGenerationService {
                             ? "INTERRUPTED"
                             : running.stopped
                                     ? "CANCELLED"
-                                    : error != null || !running.doneFrame ? "FAILED" : "SUCCEEDED";
+                                    : error != null || !running.doneFrame
+                                            ? (checking ? "CHECK_FAILED" : "FAILED")
+                                            : "SUCCEEDED";
             if ("FAILED".equals(status) && error == null) error = "执行连接结束，本轮未完成，请查看草稿后重试";
             if ("INTERRUPTED".equals(status)) error = "服务已停止，本轮生成中断，请查看当前草稿后重试。";
             String phase =
                     switch (status) {
                         case "INTERRUPTED" -> "服务重启，本轮已中断";
                         case "CANCELLED" -> "本轮已停止";
-                        case "SUCCEEDED" -> "本轮已完成";
+                        case "CHECK_FAILED" -> "草稿文件检查未通过";
+                        case "SUCCEEDED" ->
+                                !running.record.baseRevision().equals(revision)
+                                        ? "草稿已通过文件检查"
+                                        : "本轮对话已结束";
                         default -> "本轮生成失败";
                     };
             running.record =
@@ -298,8 +341,15 @@ public class DashboardGenerationService {
         }
     }
 
-    private DashboardGeneration reconcile(Path file, DashboardGeneration record) {
+    private DashboardGeneration reconcile(
+            Path file, DashboardGeneration record, String user, String id) {
         if (record.active() && !dashboards.generationProcess().equals(record.processId())) {
+            String revision = null;
+            try {
+                revision = dashboards.get(user, id, true).revision();
+            } catch (DatasetException ignored) {
+                // An unreadable draft must not keep an abandoned task active.
+            }
             record =
                     record.progress(
                             "INTERRUPTED",
@@ -307,7 +357,7 @@ public class DashboardGenerationService {
                             record.answer(),
                             "服务已重启，请查看当前草稿后重试。",
                             Instant.now().toString(),
-                            null);
+                            revision);
             saveCurrent(file, record);
         }
         return record;

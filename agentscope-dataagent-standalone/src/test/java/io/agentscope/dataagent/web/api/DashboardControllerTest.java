@@ -36,10 +36,10 @@ class DashboardControllerTest {
                         java.util.List.of(
                                 new DashboardService.View(
                                         "asset", "g", "销售", "r", "p", true, false, true, null,
-                                        "now", true, false, "说明", "created", "creator"),
+                                        "now", true, false, "说明", "created", "creator", null),
                                 new DashboardService.View(
                                         "removed", "g", "渠道", "r", "p", true, true, true, null,
-                                        "now", false, false, "", null, "gone")));
+                                        "now", false, false, "", null, "gone", null)));
         var owner =
                 new io.agentscope.dataagent.web.persistence.jpa.UserEntity(
                         "creator", "owner-account", "private-hash", "user");
@@ -236,6 +236,14 @@ class DashboardControllerTest {
                 .require(anyString(), eq(DashboardService.AGENT_ID), eq(Tier.RUN));
         assertThatThrownBy(() -> api.list(new TestingAuthenticationToken("bob", "unused")).block())
                 .hasMessageContaining("未授权");
+        assertThatThrownBy(
+                        () ->
+                                api.check(
+                                                new TestingAuthenticationToken("bob", "unused"),
+                                                "board",
+                                                new DashboardController.Publish("r"))
+                                        .block())
+                .hasMessageContaining("未授权");
         verifyNoInteractions(service, queries);
     }
 
@@ -257,7 +265,7 @@ class DashboardControllerTest {
                 .thenReturn(
                         new DashboardService.View(
                                 "asset", "g", "新名称", "r", "p", true, true, true, null, "next", true,
-                                false, "说明", "created", "creator"));
+                                false, "说明", "created", "creator", null));
         var client =
                 org.springframework.test.web.reactive.server.WebTestClient.bindToController(api)
                         .webFilter(
@@ -327,7 +335,7 @@ class DashboardControllerTest {
                 .thenReturn(
                         new DashboardService.View(
                                 "asset", "g", "新看板", "", null, true, true, false, null, "now", true,
-                                false, "用途说明", "now", "creator"));
+                                false, "用途说明", "now", "creator", null));
         var client =
                 org.springframework.test.web.reactive.server.WebTestClient.bindToController(api)
                         .webFilter(

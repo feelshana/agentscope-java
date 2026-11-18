@@ -51,7 +51,15 @@ test('draft, viewer and publish states come from revisions and actual permission
   assert.match(dashboardPublishHint({ ...board, canPublish: false }, false), /管理权限/);
   assert.match(dashboardPublishHint(board, true), /等待/);
   assert.match(dashboardPublishHint({ ...board, html: null }, false), /先生成/);
-  assert.match(dashboardPublishHint({ ...board, verified: false }, false), /构建检查/);
+  assert.match(dashboardPublishHint({ ...board, verified: false }, false), /尚未检查/);
+  const preview = { revision: 'draft', issues: [], settled: true };
+  assert.equal(dashboardPublishHint(board, false, preview), '');
+  assert.match(dashboardPublishHint(board, false, { ...preview, revision: 'old' }), /正在检查预览/);
+  assert.match(dashboardPublishHint(board, false, { ...preview, settled: false }), /正在检查预览/);
+  assert.match(dashboardPublishHint(board, false, { ...preview, issues: [{}] }), /预览有错误/);
+  for (const [status, text] of [['FAILED', /未通过/], ['STALE', /重新检查/], ['CHECKING', /正在检查草稿/], ['MODEL_CHANGED', /新建看板/]]) {
+    assert.match(dashboardPublishHint({ ...board, verified: false, fileCheck: { status } }, false, preview), text);
+  }
   assert.match(dashboardPublishHint({ ...board, revision: 'live' }, false), /一致/);
 });
 

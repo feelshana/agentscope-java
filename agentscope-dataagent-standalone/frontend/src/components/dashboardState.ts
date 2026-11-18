@@ -1,5 +1,6 @@
 import type { TurnEntry } from '../api/sessions';
 import type { Dashboard } from '../api/dashboards';
+import type { PreviewReport } from './dashboardRuntime';
 
 export function dashboardStatus(dashboard: Pick<Dashboard, 'revision' | 'publishedRevision' | 'canEdit'> & { deletionPending?: boolean }) {
   if (dashboard.deletionPending) return { kind: 'deleting', label: '清理待重试' };
@@ -8,13 +9,29 @@ export function dashboardStatus(dashboard: Pick<Dashboard, 'revision' | 'publish
     ? { kind: 'changed', label: '有未发布修改' } : { kind: 'published', label: '已发布' };
 }
 
-export function dashboardPublishHint(dashboard: Dashboard, busy: boolean): string {
+export function fileCheckLabel(dashboard: Dashboard, checking: boolean): string {
+  if (checking) return '正在检查草稿文件';
+  switch (dashboard.fileCheck?.status) {
+    case 'CHECKING': return '正在检查草稿文件';
+    case 'FAILED': return '文件检查未通过';
+    case 'MODEL_CHANGED': return '知识库模型已更新';
+    case 'STALE': return '草稿已变化，需重新检查';
+    default: return dashboard.verified ? '文件检查通过' : '草稿尚未检查';
+  }
+}
+
+export function dashboardPublishHint(dashboard: Dashboard, busy: boolean, preview?: PreviewReport | null): string {
   if (dashboard.deletionPending) return '请先完成看板清理';
   if (!dashboard.canPublish) return '需要知识库管理权限才能发布';
   if (busy) return '请等待本轮生成完成';
   if (!dashboard.html) return '先生成看板，再进行发布';
-  if (!dashboard.verified) return '请让助手完成构建检查后再发布';
   if (dashboard.revision === dashboard.publishedRevision) return '与已发布版一致，没有需要发布的修改';
+  if (dashboard.fileCheck?.status === 'MODEL_CHANGED') return '知识库模型已更新，请新建看板';
+  if (!dashboard.verified) return fileCheckLabel(dashboard, false);
+  if (preview !== undefined) {
+    if (preview?.revision === dashboard.revision && preview.issues.length) return '预览有错误，请修复后发布';
+    if (preview?.revision !== dashboard.revision || !preview.settled) return '正在检查预览';
+  }
   return '';
 }
 

@@ -31,6 +31,8 @@ class DashboardGenerationControllerTest {
         var guard = mock(AgentAccessGuard.class);
         var auth = new TestingAuthenticationToken("alice", "unused");
         var api = new DashboardGenerationController(generations, chat, guard);
+        when(generations.snapshot("alice", "d"))
+                .thenReturn(new DashboardGenerationService.Snapshot(null, false, false));
         var client =
                 WebTestClient.bindToController(api)
                         .webFilter(

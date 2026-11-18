@@ -4,6 +4,7 @@ export interface Dashboard {
   id: string; groupId: string; title: string; revision: string;
   publishedRevision: string | null; canEdit: boolean; canPublish: boolean;
   verified: boolean; html: string | null; updatedAt: string;
+  fileCheck?: { status: 'UNCHECKED' | 'CHECKING' | 'PASSED' | 'FAILED' | 'STALE' | 'MODEL_CHANGED'; error: string | null } | null;
   owned: boolean;
   deletionPending: boolean;
   description?: string | null;
@@ -12,11 +13,11 @@ export interface Dashboard {
 }
 
 export interface DashboardGeneration {
-  id: string; status: 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'INTERRUPTED';
+  id: string; status: 'QUEUED' | 'RUNNING' | 'CHECKING' | 'SUCCEEDED' | 'FAILED' | 'CHECK_FAILED' | 'CANCELLED' | 'INTERRUPTED';
   phase: string; startedAt: string; finishedAt: string | null; baseRevision: string; checkpointRevision: string;
   resultRevision: string | null; autoAttempt: number; message: string; answer: string; error: string | null;
 }
-export const getDashboardGeneration = async (id: string, signal?: AbortSignal) => (await request<{ task: DashboardGeneration | null }>(`/${encodeURIComponent(id)}/generation`, { signal })).task;
+export const getDashboardGeneration = (id: string, signal?: AbortSignal) => request<{ task: DashboardGeneration | null; busyElsewhere: boolean; checkingFile: boolean }>(`/${encodeURIComponent(id)}/generation`, { signal });
 export const startDashboardGeneration = (id: string, requestId: string, revision: string, message: string, parentRunId?: string) => request<DashboardGeneration>(`/${encodeURIComponent(id)}/generation`, { method: 'POST', body: JSON.stringify({ requestId, revision, message, parentRunId }) });
 export const stopDashboardGeneration = (id: string, requestId: string) => request<DashboardGeneration>(`/${encodeURIComponent(id)}/generation/stop`, { method: 'POST', body: JSON.stringify({ requestId }) });
 
@@ -40,6 +41,7 @@ export const createDashboard = (groupId: string, title: string, description = ''
   method: 'POST', body: JSON.stringify({ groupId, title, description }),
 });
 export const getDashboard = (id: string, draft: boolean) => request<Dashboard>(`/${encodeURIComponent(id)}?draft=${draft}`);
+export const checkDashboard = (dashboard: Dashboard) => request<Dashboard>(`/${encodeURIComponent(dashboard.id)}/check`, { method: 'POST', body: JSON.stringify({ revision: dashboard.revision }) });
 export const checkpointDashboard = (dashboard: Dashboard) => request<{ revision: string }>(`/${encodeURIComponent(dashboard.id)}/checkpoint`, { method: 'POST', body: JSON.stringify({ revision: dashboard.revision }) });
 export const restoreDashboard = (dashboard: Dashboard, targetRevision: string) => request<Dashboard>(`/${encodeURIComponent(dashboard.id)}/restore`, { method: 'POST', body: JSON.stringify({ revision: dashboard.revision, targetRevision }) });
 export const publishDashboard = (id: string, revision: string) => request<Dashboard>(`/${encodeURIComponent(id)}/publish`, {

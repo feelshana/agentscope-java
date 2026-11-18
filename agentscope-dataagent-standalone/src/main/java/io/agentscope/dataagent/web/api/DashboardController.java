@@ -192,6 +192,19 @@ public class DashboardController {
                 auth, () -> dashboards.publish((String) auth.getPrincipal(), id, body.revision()));
     }
 
+    @PostMapping("/{id}/check")
+    public Mono<DashboardService.View> check(
+            Authentication auth, @PathVariable String id, @RequestBody Publish body) {
+        return authorized(
+                auth,
+                () ->
+                        dashboards.checkIdleDraft(
+                                (String) auth.getPrincipal(),
+                                id,
+                                body.revision(),
+                                () -> deletion.requireIdle(id)));
+    }
+
     @PostMapping("/{id}/query")
     public Mono<java.util.Map<String, Object>> query(
             Authentication auth, @PathVariable String id, @RequestBody Query body) {

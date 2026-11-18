@@ -85,6 +85,7 @@ class DashboardGenerationServiceTest {
     DashboardService dashboards;
     DashboardGenerationService service;
     DashboardDeletionService deletion = mock(DashboardDeletionService.class);
+    WrenCli cli = mock(WrenCli.class);
     String board;
 
     @BeforeEach
@@ -92,7 +93,6 @@ class DashboardGenerationServiceTest {
         var access = mock(KnowledgeBaseAccessService.class);
         var query = mock(WrenQueryAccess.class);
         var projects = mock(WrenPublishedProject.class);
-        var cli = mock(WrenCli.class);
         var group = new DatasetGroupEntity("g", "alice", "销售", "");
         group.setMdlVersion(1);
         when(access.requireQuery(any(), eq("g"))).thenReturn(group);
@@ -134,11 +134,116 @@ class DashboardGenerationServiceTest {
     DashboardGenerationService.View awaitTerminal() throws Exception {
         for (int i = 0; i < 200; i++) {
             var view = service.current("alice", board);
-            if (view != null && !java.util.List.of("RUNNING", "QUEUED").contains(view.status()))
+            if (view != null
+                    && !java.util.List.of("RUNNING", "QUEUED", "CHECKING").contains(view.status()))
                 return view;
             Thread.sleep(10);
         }
         throw new AssertionError("task did not terminate");
+    }
+
+    @Test
+    void changedPageWithoutToolVerificationIsCheckedAfterDoneAndProgressRemainsReadable()
+            throws Exception {
+        var entered = new java.util.concurrent.CountDownLatch(1);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        when(cli.run(any(), any(), eq(java.util.List.of("genbi", "verify", "dashboard"))))
+                .thenAnswer(
+                        call -> {
+                            entered.countDown();
+                            if (!release.await(5, java.util.concurrent.TimeUnit.SECONDS))
+                                throw new AssertionError("check timed out");
+                            return new WrenCli.Result(0, "ok");
+                        });
+        var source = Sinks.many().unicast().<String>onBackpressureBuffer();
+        var task = service.start("alice", board, request(null), (g, m) -> source.asFlux());
+        Files.writeString(
+                home.resolve("mdl/dashboards")
+                        .resolve(board)
+                        .resolve("project/apps/dashboard/index.html"),
+                "<html>dataagent.query()</html>");
+        source.tryEmitNext("{\"type\":\"done\"}");
+        source.tryEmitComplete();
+        try {
+            assertThat(entered.await(2, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            assertThat(service.current("alice", board).status()).isEqualTo("CHECKING");
+            var draft = dashboards.get("alice", board, true);
+            assertThat(draft.fileCheck().status()).isEqualTo("CHECKING");
+            assertThat(
+                            dashboards
+                                    .checkIdleDraft("alice", board, draft.revision(), () -> {})
+                                    .fileCheck()
+                                    .status())
+                    .isEqualTo("CHECKING");
+            assertThatThrownBy(() -> service.stop("alice", board, task.id()))
+                    .hasMessageContaining("文件检查");
+            assertThatThrownBy(() -> dashboards.publish("alice", board, draft.revision()))
+                    .hasMessageContaining("检查");
+        } finally {
+            release.countDown();
+        }
+        assertThat(awaitTerminal().status()).isEqualTo("SUCCEEDED");
+        var draft = dashboards.get("alice", board, true);
+        assertThat(draft.verified()).isTrue();
+        assertThat(draft.publishedRevision()).isNull();
+        org.mockito.Mockito.verify(cli)
+                .run(any(), any(), eq(java.util.List.of("genbi", "verify", "dashboard")));
+    }
+
+    @Test
+    void failedCheckPreservesDraftAndCanBeRetriedWithoutGeneratingOrPublishing() throws Exception {
+        var verifyArgs = java.util.List.of("genbi", "verify", "dashboard");
+        when(cli.run(any(), any(), eq(verifyArgs)))
+                .thenReturn(new WrenCli.Result(1, "文件格式错误"), new WrenCli.Result(0, "ok"));
+        var source = Sinks.many().unicast().<String>onBackpressureBuffer();
+        var initial = request(null);
+        service.start("alice", board, initial, (g, m) -> source.asFlux());
+        Path page =
+                home.resolve("mdl/dashboards")
+                        .resolve(board)
+                        .resolve("project/apps/dashboard/index.html");
+        Files.writeString(page, "<html>dataagent.query()</html>");
+        source.tryEmitNext("{\"type\":\"done\"}");
+        source.tryEmitComplete();
+        assertThat(awaitTerminal().status()).isEqualTo("CHECK_FAILED");
+        var draft = dashboards.get("alice", board, true);
+        assertThat(draft.fileCheck().error()).contains("文件格式错误");
+        assertThatThrownBy(
+                        () ->
+                                dashboards.checkIdleDraft(
+                                        "alice", board, initial.revision(), () -> {}))
+                .hasMessageContaining("已变化");
+        assertThat(dashboards.checkIdleDraft("alice", board, draft.revision(), () -> {}).verified())
+                .isTrue();
+        assertThat(dashboards.get("alice", board, true).publishedRevision()).isNull();
+        Files.writeString(page, "<html>dataagent.query() updated</html>");
+        assertThat(dashboards.get("alice", board, true).fileCheck().status()).isEqualTo("STALE");
+    }
+
+    @Test
+    void onlyTheFinalHtmlRevisionCanSatisfyTheCompletionCheck() throws Exception {
+        var path =
+                home.resolve("mdl/dashboards")
+                        .resolve(board)
+                        .resolve("project/apps/dashboard/index.html");
+        var context = DashboardService.context("alice", "g");
+        context.put(
+                io.agentscope.dataagent.dataset.DashboardTurn.class,
+                new io.agentscope.dataagent.dataset.DashboardTurn(board));
+        var verifyArgs = java.util.List.of("genbi", "verify", "dashboard");
+        for (int round = 1; round <= 2; round++) {
+            var source = Sinks.many().unicast().<String>onBackpressureBuffer();
+            service.start("alice", board, request(null), (g, m) -> source.asFlux());
+            Files.writeString(path, "<html>dataagent.query() " + round + "</html>");
+            dashboards.genbi(context, "verify", null);
+            if (round == 2) Files.writeString(path, "<html>dataagent.query() final</html>");
+            source.tryEmitNext("{\"type\":\"done\"}");
+            source.tryEmitComplete();
+            assertThat(awaitTerminal().status()).isEqualTo("SUCCEEDED");
+            assertThat(dashboards.get("alice", board, true).verified()).isTrue();
+            org.mockito.Mockito.verify(cli, org.mockito.Mockito.times(round == 1 ? 1 : 3))
+                    .run(any(), any(), eq(verifyArgs));
+        }
     }
 
     @Test
@@ -169,6 +274,7 @@ class DashboardGenerationServiceTest {
         for (int i = 0; i < 3; i++)
             assertThat(service.current("alice", board).id()).isEqualTo(body.requestId());
         assertThat(service.current("bob", board)).isNull();
+        assertThat(service.snapshot("bob", board).busyElsewhere()).isTrue();
         assertThatThrownBy(() -> service.stop("bob", board, body.requestId()))
                 .hasMessageContaining("不存在");
         assertThatThrownBy(() -> service.start("bob", board, request(null), (g, m) -> Flux.empty()))
@@ -179,6 +285,8 @@ class DashboardGenerationServiceTest {
         source.tryEmitComplete();
         assertThat(awaitTerminal().status()).isEqualTo("SUCCEEDED");
         assertThat(service.current("alice", board).answer()).isEqualTo("已完成");
+        assertThat(service.snapshot("bob", board).busyElsewhere()).isFalse();
+        org.mockito.Mockito.verifyNoInteractions(cli);
     }
 
     @Test
@@ -266,7 +374,10 @@ class DashboardGenerationServiceTest {
                     }
                     return null;
                 });
-        assertThat(service.current("alice", board).status()).isEqualTo("INTERRUPTED");
+        var recovered = service.current("alice", board);
+        assertThat(recovered.status()).isEqualTo("INTERRUPTED");
+        assertThat(recovered.resultRevision())
+                .isEqualTo(dashboards.get("alice", board, true).revision());
         assertThat(service.current("alice", board).answer()).isEqualTo("部分回复");
     }
 

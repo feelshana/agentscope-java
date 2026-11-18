@@ -34,8 +34,6 @@ public class DashboardGenerationController {
 
     public record Stop(String requestId) {}
 
-    public record Current(DashboardGenerationService.View task) {}
-
     private <T> Mono<T> authorized(Authentication auth, Callable<T> action) {
         return Mono.fromCallable(
                         () -> {
@@ -56,9 +54,9 @@ public class DashboardGenerationController {
     }
 
     @GetMapping
-    public Mono<Current> current(Authentication auth, @PathVariable String id) {
-        return authorized(
-                auth, () -> new Current(generations.current((String) auth.getPrincipal(), id)));
+    public Mono<DashboardGenerationService.Snapshot> current(
+            Authentication auth, @PathVariable String id) {
+        return authorized(auth, () -> generations.snapshot((String) auth.getPrincipal(), id));
     }
 
     @PostMapping
