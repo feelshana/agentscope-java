@@ -271,6 +271,28 @@
 .dashboard-workbench .dashboard-composer:focus-within{border-color:#c2b4e4;box-shadow:0 0 0 3px #7459c308}
 .dashboard-workbench .dashboard-composer textarea,.dashboard-workbench .dashboard-composer textarea:focus,.dashboard-workbench .dashboard-composer textarea:focus-visible{display:block;box-sizing:border-box;width:100%;height:78px;min-height:72px;padding:0!important;margin:0;border:0!important;border-radius:0;background:transparent!important;outline:0!important;box-shadow:none!important;resize:none;appearance:none;font-size:12px;line-height:1.8}
 .dashboard-workbench .dashboard-composer>div{margin-top:8px;font-size:9px;color:#aaa1b5}.dashboard-workbench .dashboard-composer textarea::placeholder{color:#b0a7bc}
+.dashboard-composer{position:relative;flex:none}
+.dashboard-composer-note{flex:1;min-width:0;line-height:1.45}
+.dashboard-prompt-control{flex:none}
+.dashboard-prompt-trigger{display:inline-flex;align-items:center;gap:5px;min-height:31px;padding:0 8px;border:1px solid #e7dfef;border-radius:8px;background:#fff;color:var(--db-accent);font-size:11px;white-space:nowrap}
+.dashboard-prompt-mark{font-family:"Segoe UI Symbol",system-ui,sans-serif;font-size:15px;line-height:1}
+.dashboard-prompt-trigger:hover:not(:disabled),.dashboard-prompt-trigger[aria-expanded=true]{background:#f2edfb;border-color:#e6dcf6}
+.dashboard-prompt-control button:focus-visible{outline:2px solid #9379d8;outline-offset:2px}
+.dashboard-prompt-popover{position:absolute;z-index:2;inset-inline:0;bottom:calc(100% + 7px);box-sizing:border-box;max-height:min(254px,38dvh);overflow:auto;overscroll-behavior:contain;padding:11px;border:1px solid #e5def0;border-radius:13px;background:#fff;box-shadow:0 5px 16px #27213d14;color:var(--db-ink);font-size:12px;line-height:1.65}
+.dashboard-prompt-popover header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.dashboard-prompt-popover header strong{font-weight:650}
+.dashboard-prompt-close{display:grid;place-items:center;width:28px;height:28px;border:0;border-radius:6px;background:none;color:var(--db-muted)}
+.dashboard-prompt-close:hover{background:var(--db-soft)}
+.dashboard-prompt-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.dashboard-prompt-choices button,.dashboard-prompt-actions button{display:flex;align-items:center;gap:6px;min-height:34px;padding:6px 8px;border:1px solid #ece5f4;border-radius:8px;background:#fcfaff;color:var(--db-ink);text-align:left;font-size:11px}
+.dashboard-prompt-choices .da-icon{flex:none;color:#8064bb}
+.dashboard-prompt-choices button:hover,.dashboard-prompt-actions button:hover:not(:disabled){background:#f2edfb;border-color:#ded1f4;color:var(--db-accent)}
+.dashboard-prompt-text{margin:0 0 10px;overflow-wrap:anywhere}
+.dashboard-prompt-limit{margin:0 0 8px;color:var(--db-muted);font-size:11px}
+.dashboard-prompt-actions{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+.dashboard-prompt-actions button:last-child:not(:disabled){background:#f2edfb;color:var(--db-accent)}
+@media(pointer:coarse){.dashboard-prompt-trigger,.dashboard-prompt-close,.dashboard-prompt-choices button,.dashboard-prompt-actions button{min-height:44px}.dashboard-prompt-close{width:44px}}
+@media(max-height:500px){.dashboard-prompt-popover{bottom:0}}
 @keyframes dashboard-status-breathe{50%{opacity:.4}}@keyframes dashboard-menu-in{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
 @media(max-width:760px){.dashboard-workbench .dashboard-compact-header{padding:10px 12px;min-height:58px}.dashboard-compact-header .dashboard-header-frame{flex-wrap:nowrap;gap:8px}.dashboard-compact-header .dashboard-header-main{flex:1;gap:6px;align-items:center}.dashboard-compact-header .dashboard-title-line h1{font-size:14px}.dashboard-compact-header .dashboard-title-line{gap:5px;flex-wrap:nowrap}.dashboard-compact-header .dashboard-title-line .dashboard-badge{font-size:8px;padding:3px 5px}.dashboard-compact-header .dashboard-header-actions{gap:3px;width:auto;flex-wrap:nowrap}.dashboard-compact-header .dashboard-header-actions .dashboard-primary,.dashboard-compact-header .dashboard-header-actions .dashboard-secondary{padding:0 8px;font-size:10px!important;min-height:30px}.dashboard-compact-header .dashboard-header-actions>.dashboard-secondary{display:none}.dashboard-more-trigger{width:27px!important;height:29px!important}.dashboard-workbench>.dashboard-mobile-panels{margin:6px 12px 0;flex-shrink:0}.dashboard-conversation-heading{min-height:57px}.dashboard-chat-welcome{padding-top:10px}.dashboard-chat-welcome h2{font-size:17px}.dashboard-workbench .dashboard-composer{margin-top:8px}.dashboard-workbench .dashboard-composer textarea{height:70px}}
 @media(prefers-reduced-motion:reduce){.dashboard-starter-grid button,.dashboard-workbench .dashboard-composer{transition:none}.dashboard-starter-grid button:hover{transform:none}.dashboard-more-menu,.dashboard-assistant-progress.is-busy i{animation:none}}

@@ -554,6 +554,10 @@ ADOPTED 状态）；文件写入失败则整个采纳中止，DB 不留已采纳
 
 `ModelingWorkflowController#snapshot` 提供 `GET /api/dataset-groups/{groupId}/modeling/workflow`：principal → modeling-agent RUN 鉴权 → DatasetScope → ownerId 校验，文件/JPA 调用位于 boundedElastic。scope 缺失、会话范围之外或他人知识库均拒绝。工程校验状态是平台文件，agent 不能通过 write_file/patch_file 写入。
 
+### 管理员表同步
+
+全局管理员经 `AdminTableSyncController` 配置单表同步。`TableSyncWorker` 调度任务，`TableSyncTargetStore` 保存目标连接。目标表由人工建表，Python 执行器只向源发送固定 SELECT，在同一目标事务内分批写入全量或指定日／月，并记录进度。目标表按照既有授权流程关联到知识库。执行边界见 [ADR0154](docs/adr/0154-table-sync-manual-ddl.md)。
+
 ## 6. 知识图谱（已停用）
 
 知识图谱构建链路已停用：平台不再从知识文档与数据集 schema 中提炼实体/关系三元组，跨表关系与
@@ -961,6 +965,10 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 
 ---
 
+### 12.4 表同步执行配置
+
+管理员先在 BI 数据开发手工应用 0152，在现有平台库创建四张同步元数据表。页面保存时验证目标连接及既有同步表。目标和源凭证存平台库，API 省略密码。Java 经子进程输入管道传递连接信息，Python 环境需包含 mysqlclient。授权和试运行见[表同步运维指引](docs/guides/configurable-table-sync.md)。
+
 ## 13. 关键类与文件索引
 
 > ADR 0081 新入口：WrenQueryAccess（权限选择）、WrenPublishedProject（发布部署/官方索引）、WrenQueryContextMiddleware（项目目录）、WrenScopedToolkitMiddleware（调用作用域 Toolkit，经 WrenToolForwarder 执行）、WrenScopedMcpClient（原始 MCP 透传）、WrenInstanceRegistry#listTools（原生发现）。验收 fixtures 位于 docs/fixtures/wren-native/，30 个固定 SQL/标准结果用于执行对照，不能等同真实 LLM 准确率。
@@ -1080,6 +1088,7 @@ ${cwd}/shared/               ← 运行态共享层（SharedWorkspaceSeeder 物�
 - 当前任务 `generation.json` 和按用户哈希命名的最近终态记录在资产目录原子保存，有限回复仅为恢复视图，完整对话以原生转录为准；当前用户不可读另一管理者的需求/回复。任务活跃时禁止删除/恢复/发布/新检查点；删除包含任务文件，不允许状态写入复活已删除目录。进程身份变化的遗留非终态标INTERRUPTED，单进程预算，不承诺重启续跑或多实例调度。
 - spec145/ADR0150：`DashboardQueryQueue`将同页查询按FIFO排队，仍限制并发与修订预算，换页/修订取消旧队列，派发前复核当前凭证；服务端原修订/QUERY/只读/时间门禁保持。`dashboardBridgeRuntime`兼容query(sql)，新增registerPanels及panel(load/render)运行约定，提供面板加载/空/错/独立重试、渲染容器检查及定向修改；旧HTML不冒称通过面板自检。宿主按窗口/通道/修订及字段白名单汇总查询和运行错误，源码中catch也不抹除宿主查询失败记录；自报面板状态不是业务口径证明。
 - `DashboardWorkbench`保留左对话右预览，支持拖拽/键盘调整宽度、真实事件阶段、停止和带面板目标/有界不可信诊断的原生Agent修复。仅用户轮次产生新HTML且预览稳定报错后自动修复一次，首次打开/查看发布版/停止/权限或明显网络错误不触发；不新增ReAct循环或整页局部热更新。官方verify标为文件检查，客户端运行检查另列，发布仍须人工确认。
+- 看板输入框提供可反复打开的快捷提示，按空看板、已有看板和当前选中面板提供话术。空看板且没有历史消息时显示首轮卡片。提示只填入输入框，已有自写内容时由用户选择追加或替换，发送沿用现有对话入口。
 - 工作台紧凑顶栏只列返回/名称/状态及主操作，`DashboardMoreMenu`将信息与权限入口收拢，成员可读描述/知识库而不能编辑；窄屏版本查看移入同菜单。独立看板SVG标识、右侧真实进度及`DashboardConversationStarters`代替重复范围/进度栏，六种通用方向只填入输入框，不自动发送。回复按原Markdown排版，技术说明可展开，实际草稿变化才显示运行结果及原撤销；阅读旧回复时不强拉到底，提供回到最新。未改变SSE、模型提示或资产授权。
 - 顶栏导航采用“仪表盘 › 当前名称”的Link面包屑，普通用户气泡不重复身份文字，自动修复仍明确标识；产品chart图标与其他主导航同用outline/solid切换。编辑历史继续按当前用户/Agent/看板conversationId恢复，不额外创建或清空会话；返回历史不自动触发模型。
 - `DashboardService#checkpoint`与`DashboardService#restore`在原资产锁、RUN入口后的创建者/MANAGE/QUERY及原生空闲会话门禁下保存有界内容哈希检查点；expectedRevision拒绝覆盖其他修改，路径/内容哈希/当前模型复核，撤销仅恢复草稿HTML及原校验标记，不改元数据、已发布指针或原生对话。快照位于资产目录随看板删除清理，不新建数据库表。

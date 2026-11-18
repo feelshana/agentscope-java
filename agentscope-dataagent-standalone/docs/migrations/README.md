@@ -1,6 +1,6 @@
 # 平台数据库初始化与升级
 
-平台元数据库和上传数据集库应分别配置。上传库先建空库，由程序按上传文件动态创建 `ds_` 表；这里的 SQL 只针对平台元数据库。
+平台元数据库和上传数据集库应分别配置。上传库先建空库，由程序按上传文件动态创建 `ds_` 表。按需启用的同步控制库使用独立迁移。
 
 本次首次上线采用SQL人员导入，按[数据库准备指引](../guides/production-database-setup.md)执行。默认库名为dataagent_platform/data_agent；通用[建库](0000-create-databases-mysql.sql)、[管理员赋权](0000-set-global-admin-mysql.sql)、[核对](0000-verify-platform-mysql.sql)SQL与完整DDL配套使用，不属于需要依次叠加的升级迁移。真实人员导入SQL单独本地交付，不入Git。
 
@@ -14,6 +14,8 @@
 首次安装完成后**不要再执行本目录旧增量 ALTER**，完整结构已包含这些字段和表。不要将开发库数据、示例账号或模型凭据导入生产。
 
 ## 已有环境升级
+
+管理员在 BI 数据开发手工执行 [0152 同步元数据建表 SQL](0152-table-sync-mysql.sql)，在现有 `data_agent_platform` 新增四张表。权限和目标表的人工建表步骤见[表同步运维指引](../guides/configurable-table-sync.md)。
 
 共享数据源（spec135/ADR0147）在升级应用前执行[0146迁移](0146-shared-datasources-mysql.sql)：仅新增enabled和授权/审计两张表。已有连接默认启用且私有，密码存储保持原状，不做密码转换、列扩容或新增密钥。模型服务原有加密不变。只执行缺失结构，已存在enabled时不要重复ALTER；空库使用最新完整DDL，不叠加此迁移。
 

@@ -8,6 +8,12 @@ ADR 记录"为什么这样做"。规则：
 
 ## 当前有效主线（按主题）
 
+[ADR0154](0154-table-sync-manual-ddl.md) 同步控制表和目标表由 BI 数据开发手工建表，运行时仅对绑定的数据执行事务化读写。
+
+[ADR0153](0153-table-sync-ui-connection-settings.md) 管理员直接在页面配置同步连接。
+
+[ADR0152](0152-configurable-table-sync-boundary.md) 管理员配置单表镜像，固定源查询与独立目标写入账号，支持日、月回填及失败恢复。
+
 [ADR0151](0151-dashboard-generation-subscription-ownership.md) 看板任务由服务端持有原ChatController/Harness订阅，任务状态恢复与显式停止分离；不新造Agent运行器。
 
 [ADR0150](0150-dashboard-runtime-reports-and-repair.md) 补充GenBI有界查询队列、面板运行报告与单次原生修复、草稿检查点撤销；保留ADR0149的HTML/隔离/授权/显式发布边界。
@@ -202,3 +208,6 @@ ADR 记录"为什么这样做"。规则：
 | [0147](0147-keep-datasource-password-storage.md) | 保留数据源密码存储方式；共享升级不转换密码、不新增密钥 | 已接受，2026-11-13。取代ADR0146密码段。 | |
 
 | [0148](0148-admin-readonly-conversation-visuals.md) | 管理员只读会话回看：知识库、反馈与已保存图表图片 | 已接受，2026-11-13；取代0141仅正文限制 | |
+| [0152](0152-configurable-table-sync-boundary.md) | 管理员单表同步的执行与权限边界 | 已接受，2026-11-18；对应 spec148 | |
+| [0153](0153-table-sync-ui-connection-settings.md) | 管理员在页面填写表同步连接 | 已接受，2026-11-18；部分取代 ADR0152 | |
+| [0154](0154-table-sync-manual-ddl.md) | 表同步 DDL 由 BI 数据开发执行 | 已接受，2026-11-18；部分取代 ADR0152、ADR0153 | |

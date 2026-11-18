@@ -27,7 +27,7 @@ export default function BiSyncPage() {
     return () => abort.abort();
   }, [revision, task]);
   return <div className="kw-page kw-secondary-page bi-sync-page">
-    <KnowledgeBreadcrumb items={[{ label: '更多', to: '/more' }, { label: 'BI数据同步' }]} />
+    <KnowledgeBreadcrumb items={[{ label: '更多', to: '/more' }, { label: '数据同步', to: '/admin/bi-sync' }, { label: '已有 BI 同步监控' }]} />
     <div className="kw-scroll"><div className="kw-content bi-sync-content">
       <div className="kw-pagehead"><div className="kw-heading"><h1>BI数据同步</h1><p>查看公共知识库的数据更新情况，仅全局管理员可见。</p></div>
         <button className="da-btn" type="button" disabled={loading} onClick={() => setRevision(value => value + 1)}>

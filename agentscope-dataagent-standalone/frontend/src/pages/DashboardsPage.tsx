@@ -11,7 +11,7 @@ import DashboardMetadataDialog from '../components/DashboardMetadataDialog';
 import { canAutomaticallyRepair, dashboardPrompt, dashboardUserText, generationActive, generationMessages, previewSummary, PreviewReport, PanelReference } from '../components/dashboardRuntime';
 import DataSourceDialog from '../components/DataSourceDialog';
 import DashboardPermissions from '../components/DashboardPermissions';
-import { DashboardAssistantMark, DashboardMoreMenu, DashboardConversationStarters } from '../components/DashboardWorkbenchUi';
+import { DashboardAssistantMark, DashboardMoreMenu, DashboardConversationStarters, DashboardPromptPicker } from '../components/DashboardWorkbenchUi';
 import Icon from '../components/Icon';
 import Markdown from '../components/Markdown';
 import './dashboards.css';
@@ -19,6 +19,7 @@ import './dashboards.css';
 const AGENT = 'dashboard-agent';
 const DashboardPreview = React.lazy(() => import('../components/DashboardPreview'));
 const errorText = dashboardErrorText;
+const MAX_COMPOSER_LENGTH = 12000;
 
 function AssistantMessage({ text }: { text: string }) {
   const parts = dashboardReplyParts(text);
@@ -32,6 +33,9 @@ function DashboardWorkbench({ id }: { id: string }) {
   const [groupName, setGroupName] = useState('');
   const [messages, setMessages] = useState<DashboardMessage[]>([]);
   const [input, setInput] = useState('');
+  const pristineTemplate = useRef<string | null>(null);
+  const [promptPicker, setPromptPicker] = useState<{ pending?: string } | null>(null);
+  const dismissPromptPicker = useCallback(() => setPromptPicker(null), []);
   const [permissionsOpen, setPermissionsOpen] = useState(false);
   const [metadataOpen, setMetadataOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
@@ -150,6 +154,10 @@ function DashboardWorkbench({ id }: { id: string }) {
   const taskActive = generationActive(generation);
   const checking = checkingFile || checkingManually || dashboard?.fileCheck?.status === 'CHECKING' || generation?.status === 'CHECKING';
   const operationPending = checking || busyElsewhere || syncingDraft || publishing || undoing || generationLoading || !!pollError;
+  const composerDisabled = busy || restoring || operationPending || !dashboard?.canEdit;
+  useEffect(() => {
+    setPromptPicker(null);
+  }, [composerDisabled, dashboard?.revision, selected?.id]);
   useEffect(() => {
     if (!dashboard?.canEdit || published) return;
     let disposed = false; let timer: ReturnType<typeof setTimeout>;
@@ -183,7 +191,7 @@ function DashboardWorkbench({ id }: { id: string }) {
     const requestId = pendingSubmission.current?.key === key ? pendingSubmission.current.id : crypto.randomUUID();
     pendingSubmission.current = { key, id: requestId };
     const controller = new AbortController(); active.current = controller;
-    if (!auto) { automatic.current = null; setInput(''); followMessages.current = true; setShowLatest(false); }
+    if (!auto) { automatic.current = null; pristineTemplate.current = null; setInput(''); followMessages.current = true; setShowLatest(false); }
     setBusy(true); setPhase('正在提交生成任务'); setActivity('正在提交生成任务…'); setError(''); setNotice('');
     try {
       const next = await startDashboardGeneration(id, requestId, dashboard.revision, request, parent);
@@ -248,6 +256,19 @@ function DashboardWorkbench({ id }: { id: string }) {
     }
   }, [confirming, publishing, dashboard?.revision]);
   const visibleMessages = useMemo(() => generationMessages(messages, generation), [messages, generation]);
+  const setPromptDraft = (draft: string, fromTemplate: boolean) => {
+    pristineTemplate.current = fromTemplate ? draft : null;
+    setInput(draft);
+    dismissPromptPicker();
+    composerInput.current?.focus();
+  };
+  const pickPrompt = (text: string) => {
+    if (input.trim() && input !== pristineTemplate.current) setPromptPicker({ pending: text });
+    else setPromptDraft(text, true);
+  };
+  const pendingPrompt = promptPicker?.pending;
+  const appendedPrompt = pendingPrompt ? `${input}\n\n${pendingPrompt}` : null;
+  const canAppendPrompt = appendedPrompt !== null && appendedPrompt.length <= MAX_COMPOSER_LENGTH;
   if (loading) return <div className="dashboard-loading" role="status">正在打开看板…</div>;
   if (!dashboard) return <div className="dashboard-loading"><p role="alert">{error || '看板不存在'}</p><Link to="/dashboards">返回仪表盘</Link></div>;
   const status = published ? { kind: 'published', label: '已发布' } : dashboardStatus(dashboard);
@@ -282,6 +303,7 @@ function DashboardWorkbench({ id }: { id: string }) {
       </div>
       {canCheck && !busy && !checking && dashboard.fileCheck?.status === 'FAILED' && <button type="button" disabled={operationPending} onClick={() => {
         const prompt = `请修复当前草稿的文件检查错误，保留其他面板和统计口径。\n检查结果：${dashboard.fileCheck?.error || '文件检查未通过'}`;
+        pristineTemplate.current = null;
         setInput(value => value.includes(prompt) ? value : [value.trimEnd(), prompt].filter(Boolean).join('\n\n'));
         setCollapsed(false); setExpanded(false); setMobilePanel('chat');
         requestAnimationFrame(() => composerInput.current?.focus());
@@ -292,14 +314,36 @@ function DashboardWorkbench({ id }: { id: string }) {
     {error && <div className="dashboard-notice error" role="alert">{error}</div>}{notice && <div className="dashboard-notice success" role="status">{notice}</div>}
     <div className="dashboard-workbench-body">
       {!published && <section ref={conversation} className="dashboard-conversation" aria-label="看板对话"><header className="dashboard-conversation-heading"><DashboardAssistantMark /><h2>看板助手</h2><span className={`dashboard-assistant-progress${busy || checking || syncingDraft ? ' is-busy' : ''}`} role="status"><i aria-hidden="true" />{progress}</span></header><div className="dashboard-messages" ref={messageList} onScroll={event => { const node = event.currentTarget; followMessages.current = node.scrollHeight - node.clientHeight - node.scrollTop < 64; setShowLatest(!followMessages.current); }}>
-        {!visibleMessages.length && !restoring && !generationLoading && <DashboardConversationStarters disabled={busy || publishing || undoing} onPick={text => { setInput(text); composerInput.current?.focus(); }} />}
+        {!dashboard.html && !visibleMessages.length && !restoring && !generationLoading && <DashboardConversationStarters disabled={composerDisabled} onPick={pickPrompt} />}
         {latestOutcome && <div className="dashboard-generation-outcome" role="status"><strong>{latestOutcome.phase}</strong><p>{latestOutcome.error || '任务已停止，可查看当前草稿后继续修改。'}</p></div>}
         {restoring && <p className="dashboard-muted" role="status">正在恢复对话…</p>}
         {visibleMessages.filter(message => message.text.trim()).map(message => <article className={`dashboard-message ${message.role}`} key={message.id} aria-label={message.role === 'user' ? '用户消息' : '看板助手回复'}>{(message.role === 'assistant' || message.text.startsWith('【自动修复一次】')) && <div className="dashboard-message-label">{message.role === 'assistant' && <DashboardAssistantMark small />}<span>{message.role === 'assistant' ? '看板助手' : '自动修复 · 1次上限'}</span></div>}{message.role === 'assistant' ? <AssistantMessage text={message.text} /> : <><p>{dashboardUserText(message.text).replace('【自动修复一次】', '')}</p>{dashboardUserText(message.text) !== message.text && <small className="dashboard-diagnostic-attached">已附带修改目标与运行检查</small>}</>}</article>)}
         {!busy && !syncingDraft && checkpoint && generation?.resultRevision === dashboard.revision && checkpoint !== dashboard.revision && <section className={`dashboard-turn-result${needsAttention ? ' needs-attention' : ''}`} aria-label="本轮页面结果"><div><Icon name={needsAttention ? 'warn' : 'check'} size="sm" /><strong>草稿已保存</strong><span>{checkLabel}</span></div><p>{report?.revision === dashboard.revision ? previewSummary(report) : '正在准备预览自检'}</p><footer><span>{dashboard.revision === dashboard.publishedRevision ? '当前版本已发布' : '发布前仅影响草稿'}</span><button type="button" disabled={operationPending || restoring} title="只恢复页面文件，聊天记录保留" onClick={() => void undo()}>{undoing ? '正在恢复…' : '撤销本轮修改'}</button></footer></section>}
         {busy && <div className="dashboard-generation-state" role="status"><span className="dashboard-spinner" />{activity || '正在处理…'}</div>}
       </div>{showLatest && <button type="button" className="dashboard-jump-latest" onClick={() => { followMessages.current = true; setShowLatest(false); const node = messageList.current; if (node) node.scrollTop = node.scrollHeight; }}><Icon name="arrowDown" size="sm" />回到最新</button>}{selected?.revision === dashboard.revision && <div className="dashboard-target"><span>修改范围：{selected.title}</span><button type="button" aria-label="清除面板选择" onClick={() => setSelected(null)}><Icon name="close" size="sm" /></button></div>}
-        <form className="dashboard-composer" onSubmit={event => { event.preventDefault(); void send(); }}><textarea ref={composerInput} name="dashboardMessage" autoComplete="off" value={input} maxLength={12000} disabled={busy || restoring || operationPending} placeholder={dashboard.html ? '例如：把趋势改为按月，再突出华东表现…' : '描述你想生成的仪表盘…'} aria-label="看板需求" onChange={event => setInput(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} /><div><span>{dashboard.canPublish ? '仅修改草稿 · 发布由管理者确认' : '仅修改草稿 · 需知识库管理者发布'}</span>{busy ? <button type="button" className="dashboard-stop" disabled={stopping || checking || !generationActive(generation)} onClick={() => void stop()} aria-label="停止生成">{checking ? '检查中' : stopping ? '正在停止' : '停止'}</button> : <button type="submit" className="dashboard-send" disabled={!input.trim() || busy || restoring || operationPending} aria-label="发送看板需求"><Icon name="arrowUp" size="sm" /></button>}</div></form></section>}
+        <form className="dashboard-composer" onSubmit={event => { event.preventDefault(); void send(); }}>
+          <textarea ref={composerInput} name="dashboardMessage" autoComplete="off" value={input}
+            maxLength={MAX_COMPOSER_LENGTH} disabled={composerDisabled}
+            placeholder={dashboard.html ? '例如：把趋势改为按月，再突出华东表现…' : '描述你想生成的仪表盘…'} aria-label="看板需求"
+            onChange={event => { pristineTemplate.current = null; setInput(event.target.value); }}
+            onKeyDown={event => {
+              if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); }
+            }} />
+          <div>
+            <DashboardPromptPicker
+              scope={!dashboard.html ? 'create' : selected?.revision === dashboard.revision ? 'panel' : 'board'}
+              disabled={composerDisabled} open={promptPicker !== null} pending={pendingPrompt} canAppend={canAppendPrompt}
+              onToggle={() => setPromptPicker(current => current ? null : {})} onDismiss={dismissPromptPicker}
+              onPick={pickPrompt} onApply={mode => {
+                if (mode === 'replace' && pendingPrompt) setPromptDraft(pendingPrompt, true);
+                if (mode === 'append' && canAppendPrompt && appendedPrompt !== null) setPromptDraft(appendedPrompt, false);
+              }} />
+            <span className="dashboard-composer-note">{dashboard.canPublish ? '仅修改草稿 · 发布由管理者确认' : '仅修改草稿 · 需知识库管理者发布'}</span>
+            {busy ? <button type="button" className="dashboard-stop" disabled={stopping || checking || !generationActive(generation)} onClick={() => void stop()} aria-label="停止生成">{checking ? '检查中' : stopping ? '正在停止' : '停止'}</button>
+              : <button type="submit" className="dashboard-send" disabled={!input.trim() || composerDisabled} aria-label="发送看板需求"><Icon name="arrowUp" size="sm" /></button>}
+          </div>
+        </form>
+      </section>}
       {!published && !collapsed && !expanded && <div className="dashboard-chat-resizer" role="separator" tabIndex={0} aria-label="调整对话宽度" aria-orientation="vertical" aria-valuemin={300} aria-valuemax={560} aria-valuenow={chatWidth} onPointerDown={event => { event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (event.currentTarget.hasPointerCapture(event.pointerId) && conversation.current) sizeChat(event.clientX - conversation.current.getBoundingClientRect().left); }} onPointerUp={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }} onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); sizeChat(chatWidth + (event.key === 'ArrowRight' ? 20 : -20)); } }} />}
       <section className="dashboard-canvas" aria-label="看板预览"><div className="dashboard-canvas-toolbar"><span><Icon name="chart" size="sm" />{published ? '已发布看板' : '看板预览'}</span><div>{!published && dashboard.html && <span className={`dashboard-verify-status${dashboard.verified ? ' is-verified' : ''}`}>{busy && !checking ? '生成中…' : checkLabel}</span>}
         {!published && <button className="dashboard-icon-button" title={collapsed ? '展开对话' : '收起对话'} aria-label={collapsed ? '展开对话' : '收起对话'} aria-expanded={!collapsed} onClick={() => setCollapsed(value => !value)}><Icon name="list" size="sm" /></button>}

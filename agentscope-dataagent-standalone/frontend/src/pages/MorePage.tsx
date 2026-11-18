@@ -8,7 +8,7 @@ import { setHelpOpen } from '../api/onboarding';
 import './MorePage.css';
 
 const ADMIN_LINKS: { to: string; label: string; description: string; icon: IconName }[] = [
-  { to: '/admin/bi-sync', label: 'BI数据同步', description: '查看数据截止日期、最近执行结果与异常提示。', icon: 'database' },
+  { to: '/admin/bi-sync', label: '数据同步', description: '配置单表同步、定时更新和历史补跑，查看已有 BI 同步。', icon: 'database' },
   { to: '/admin/models', label: '大模型服务', description: '管理服务连接，手动切换当前使用的模型。', icon: 'sliders' },
   { to: '/admin/public-knowledge-bases', label: '公共知识库', description: '设置全体已登录用户可使用的知识库。', icon: 'book' },
   { to: '/admin/conversation-history', label: '用户对话历史', description: '按用户查看问题和回复正文。', icon: 'list' },

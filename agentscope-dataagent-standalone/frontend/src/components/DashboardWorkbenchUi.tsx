@@ -37,7 +37,9 @@ export function DashboardMoreMenu({ canEdit, disabled, onInfo, onPermissions, ve
   </div>;
 }
 
-const STARTERS: { title: string; detail: string; icon: IconName; prompt: string }[] = [
+type WorkbenchPrompt = { title: string; icon: IconName; prompt: string };
+
+const STARTERS: (WorkbenchPrompt & { detail: string })[] = [
   { title: '业务总览', detail: '核心指标 · 趋势 · 排名', icon: 'chart', prompt: '基于当前知识库，生成一张业务总览看板，包含可用的核心指标、趋势和排名。先核实数据范围和指标口径，再选择合适的图表。' },
   { title: '趋势变化', detail: '按日、周或月看变化', icon: 'graph', prompt: '帮我生成一张趋势分析看板，先查看当前知识库有哪些可分析的时间字段和指标，再选择合适的日、周或月粒度，展示趋势与关键变化。' },
   { title: '结构对比', detail: '区域 · 渠道 · 类别', icon: 'sliders', prompt: '基于当前知识库可用的分类维度，生成一张结构对比看板。选择适合的区域、渠道或类别，对比核心指标的分布与占比；只使用已有数据。' },
@@ -48,4 +50,74 @@ const STARTERS: { title: string; detail: string; icon: IconName; prompt: string 
 
 export function DashboardConversationStarters({ onPick, disabled }: { onPick: (text: string) => void; disabled: boolean }) {
   return <div className="dashboard-chat-welcome"><h2>从一个问题，开始一张看板</h2><p>选个方向，补充你的想法。</p><div className="dashboard-starter-grid">{STARTERS.map(item => <button type="button" key={item.title} disabled={disabled} onClick={() => onPick(item.prompt)}><span className="dashboard-starter-icon"><Icon name={item.icon} size="sm" /></span><strong>{item.title}</strong><small>{item.detail}</small></button>)}</div><span className="dashboard-starter-hint">点选填入输入框，修改后即可发送</span></div>;
+}
+
+const EDIT_PROMPTS: WorkbenchPrompt[] = [
+  { title: '下一个分析方向', icon: 'search', prompt: '基于当前看板和知识库，推荐三个值得延伸的分析方向，说明各自能回答什么业务问题、需要哪些数据。先给建议，暂不修改看板。' },
+  { title: '改成趋势看板', icon: 'graph', prompt: '把当前看板改成以趋势为主，突出核心指标随时间的变化。沿用已确认的统计口径，根据数据覆盖选择日、周或月粒度。' },
+  { title: '优化布局和配色', icon: 'sliders', prompt: '优化当前看板的布局、配色和图表可读性，优先突出核心指标，保留现有数据来源、查询和统计口径。' },
+  { title: '补充对比分析', icon: 'chart', prompt: '检查现有指标和维度，给当前看板补充一项最有价值的对比分析。先核实对比对象、统计范围和数据覆盖，再添加合适的图表，保留现有面板。' },
+];
+
+const PANEL_PROMPTS: WorkbenchPrompt[] = [
+  { title: '优化图表样式', icon: 'sliders', prompt: '只优化选中面板的样式和标签可读性，保留现有数据、指标口径和其他面板。' },
+  { title: '改进图表表达', icon: 'chart', prompt: '核对选中面板的数据及分析目标，选择更合适的图表类型或排序方式，只调整这个面板，保留统计口径。' },
+];
+
+export function DashboardPromptPicker({ scope, disabled, open, pending, canAppend, onToggle, onDismiss, onPick, onApply }: {
+  scope: 'create' | 'board' | 'panel';
+  disabled: boolean;
+  open: boolean;
+  pending?: string;
+  canAppend: boolean;
+  onToggle: () => void;
+  onDismiss: () => void;
+  onPick: (text: string) => void;
+  onApply: (mode: 'append' | 'replace') => void;
+}) {
+  const id = useId();
+  const root = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const content = useRef<HTMLElement>(null);
+  const visible = open && !disabled;
+  const prompts = scope === 'board' ? EDIT_PROMPTS : scope === 'panel' ? PANEL_PROMPTS : STARTERS;
+
+  useEffect(() => {
+    if (!visible) return;
+    const outside = (event: PointerEvent) => {
+      if (!root.current?.contains(event.target as Node)) onDismiss();
+    };
+    document.addEventListener('pointerdown', outside);
+    return () => document.removeEventListener('pointerdown', outside);
+  }, [visible, onDismiss]);
+
+  useEffect(() => {
+    if (visible) content.current?.querySelector<HTMLButtonElement>('[data-prompt-focus]:not(:disabled)')?.focus();
+  }, [visible, pending]);
+
+  const close = () => { onDismiss(); trigger.current?.focus(); };
+  return <div className="dashboard-prompt-control" ref={root}
+    onBlur={event => { if (visible && event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) onDismiss(); }}
+    onKeyDown={event => { if (visible && event.key === 'Escape') { event.stopPropagation(); close(); } }}>
+    <button ref={trigger} type="button" className="dashboard-prompt-trigger" disabled={disabled}
+      aria-expanded={visible} aria-controls={visible ? id : undefined} onClick={onToggle}>
+      <span className="dashboard-prompt-mark" aria-hidden="true">✧</span>快捷提示
+    </button>
+    {visible && <section ref={content} id={id} className="dashboard-prompt-popover" aria-label="快捷提示">
+      <header><strong>{pending ? '使用这条提示' : scope === 'panel' ? '当前面板的提示' : '快捷提示'}</strong>
+        <button type="button" className="dashboard-prompt-close" aria-label="关闭快捷提示" onClick={close}><Icon name="close" size="sm" /></button>
+      </header>
+      {pending ? <>
+        <p className="dashboard-prompt-text">{pending}</p>
+        {!canAppend && <p className="dashboard-prompt-limit">追加后将超过 12,000 字，请缩短输入后再追加。</p>}
+        <div className="dashboard-prompt-actions">
+          <button type="button" data-prompt-focus={!canAppend ? '' : undefined} onClick={() => onApply('replace')}>替换草稿</button>
+          <button type="button" data-prompt-focus={canAppend ? '' : undefined} disabled={!canAppend} onClick={() => onApply('append')}>追加到末尾</button>
+        </div>
+      </> : <div className="dashboard-prompt-choices">{prompts.map((item, index) =>
+        <button key={item.title} type="button" data-prompt-focus={index === 0 ? '' : undefined} onClick={() => onPick(item.prompt)}>
+          <Icon name={item.icon} size="sm" />{item.title}
+        </button>)}</div>}
+    </section>}
+  </div>;
 }
