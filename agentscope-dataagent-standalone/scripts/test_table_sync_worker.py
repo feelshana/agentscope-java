@@ -66,6 +66,23 @@ class DateFormatsTest(unittest.TestCase):
         self.assertEqual(len(batches), 2)
         self.assertTrue(all(size <= worker.BATCH_BYTES for _, size in batches))
 
+    def test_transfer_allows_up_to_128_mib_for_each_grain(self):
+        batch = ([("value",)], 4 * 1024 * 1024)
+        for grain in ("MONTH", "DAY", "FULL"):
+            with self.subTest(grain=grain):
+                src, dst = Mock(), MagicMock()
+                writer = dst.cursor.return_value.__enter__.return_value
+                writer.executemany.return_value = 1
+                config = {"table": "report", "grain": grain, "columns": [{"name": "index_cal"}]}
+                with (patch.object(worker, "batches", side_effect=[iter([batch] * 32), iter([batch] * 33)]),
+                      patch.object(worker, "scalar", return_value=None), patch.object(worker.time, "sleep")):
+                    args = (src, dst, "books", config, "mirror", "", (), {"kind": "INITIAL"})
+                    self.assertEqual(worker.transfer(*args), 32)
+                    writer.executemany.reset_mock()
+                    with self.assertRaisesRegex(worker.SyncError, "ROW_LIMIT"):
+                        worker.transfer(*args)
+                    self.assertEqual(writer.executemany.call_count, 32)
+
     def test_unindexed_period_uses_date_filter_and_rolls_back_on_limit(self):
         config = {"source": {"database": "books"}, "table": "report", "grain": "MONTH",
                   "columns": [{"name": "period_id", "indexed": False}],
