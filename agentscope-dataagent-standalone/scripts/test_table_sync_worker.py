@@ -51,11 +51,21 @@ class DateFormatsTest(unittest.TestCase):
 
     def test_due_only_for_the_expected_slot(self):
         task = {"schedule_time": dt.timedelta(hours=2), "schedule_enabled_at": dt.datetime(2026, 10, 19)}
-        self.assertTrue(worker.scheduled_due(task, dt.datetime(2026, 11, 1, 2), "MONTH"))
-        self.assertFalse(worker.scheduled_due(task, dt.datetime(2026, 11, 2, 2), "MONTH"))
-        self.assertTrue(worker.scheduled_due(task, dt.datetime(2026, 11, 2, 2), "DAY"))
+        self.assertTrue(worker.scheduled_due(task, dt.datetime(2026, 11, 1, 2), {"grain": "MONTH"}))
+        self.assertFalse(worker.scheduled_due(task, dt.datetime(2026, 11, 2, 2), {"grain": "MONTH"}))
+        self.assertTrue(worker.scheduled_due(task, dt.datetime(2026, 11, 2, 2), {"grain": "MONTH", "monthlyPlan": "DAILY"}))
+        self.assertTrue(worker.scheduled_due(task, dt.datetime(2026, 11, 2, 2), {"grain": "DAY"}))
         task["schedule_enabled_at"] = dt.datetime(2026, 11, 2, 3)
-        self.assertFalse(worker.scheduled_due(task, dt.datetime(2026, 11, 2, 4), "DAY"))
+        self.assertFalse(worker.scheduled_due(task, dt.datetime(2026, 11, 2, 4), {"grain": "DAY"}))
+
+    def test_rolling_periods_across_year_boundary(self):
+        slot, initial = dt.date(2027, 1, 1), dt.date(2026, 1, 1)
+        self.assertEqual(worker.scheduled_periods({"grain": "DAY"}, slot, initial),
+                         (dt.date(2026, 12, 30), dt.date(2026, 12, 31)))
+        self.assertEqual(worker.scheduled_periods({"grain": "DAY"}, slot, dt.date(2026, 12, 31)),
+                         (dt.date(2026, 12, 31), dt.date(2026, 12, 31)))
+        self.assertEqual(worker.scheduled_periods({"grain": "MONTH", "monthlyPlan": "DAILY"}, slot, initial),
+                         (dt.date(2026, 12, 1), dt.date(2027, 1, 1)))
 
     def test_batches_respect_row_and_byte_limits(self):
         stream = Mock()
@@ -141,7 +151,7 @@ class DateFormatsTest(unittest.TestCase):
     def test_ten_due_schedules_are_queued_even_while_worker_is_busy(self):
         at = dt.datetime(2026, 11, 18, 3)
         ids = [f"task-{i}" for i in range(10)]
-        schedule = {"config": '{"grain":"DAY"}', "schedule_time": dt.timedelta(hours=2),
+        schedule = {"config": '{"grain":"DAY"}', "schedule_time": dt.timedelta(hours=2), "initial_from": dt.date(2026, 1, 1),
                     "schedule_enabled_at": at - dt.timedelta(days=1)}
         with patch.object(worker, "now", return_value=at), patch.object(
                 worker, "query", return_value=[{"id": task_id} for task_id in ids]), patch.object(
@@ -150,6 +160,8 @@ class DateFormatsTest(unittest.TestCase):
                 worker, "one") as load_job, patch.object(worker, "enqueue") as enqueue:
             self.assertEqual(worker.next_job(Mock(), dispatch=False), {})
             self.assertEqual([item.args[1] for item in enqueue.call_args_list], ids)
+            self.assertTrue(all(item.args[3:5] == (dt.date(2026, 11, 16), dt.date(2026, 11, 17))
+                                for item in enqueue.call_args_list))
             self.assertTrue(all(item.args[-1] == at.date() for item in enqueue.call_args_list))
             load_job.assert_not_called()
 
@@ -290,6 +302,44 @@ class LiveMySqlTest(unittest.TestCase):
         detail = self.process(task_id)
         self.assertEqual(detail["lastRun"]["state"], "SUCCESS", detail)
         self.assertEqual(self.count(target), 1)
+
+    def test_rolling_month_refresh_allows_source_index_change_and_protects_empty_period(self):
+        table = "fixture_roll_" + worker.uuid.uuid4().hex[:8]
+        self.source_sql(f"CREATE TABLE {table} (id INT PRIMARY KEY, month_key VARCHAR(20)) ENGINE=InnoDB; "
+                        f"INSERT INTO {table} VALUES(1,'202610'),(2,NULL);")
+        self.addCleanup(self.source_sql, f"DROP TABLE {table}")
+        with patch.object(worker, "now", return_value=dt.datetime(2026, 11, 19, 19)) as clock:
+            task_id, target, _ = self.setup_task(
+                table, ["id", "month_key"], "MONTH", "month_key", "YYYYMM", "2026-10-01", "2026-10-01")
+            self.assertEqual(self.process(task_id)["lastRun"]["state"], "SUCCESS")
+            self.source_sql(f"ALTER TABLE {table} ADD INDEX idx_month (month_key);")
+            self.call("schedule", {"id": task_id, "time": "20:00"})
+            detail = self.call("detail", {"id": task_id})
+            self.assertEqual(detail["nextRunAt"], dt.datetime(2026, 12, 1, 20))
+            self.call("schedule", {"id": task_id, "time": "20:00", "monthlyPlan": "DAILY"})
+            detail = self.call("detail", {"id": task_id})
+            self.assertEqual(detail["nextPeriodFrom"], dt.date(2026, 10, 1))
+            self.assertEqual(detail["nextPeriod"], dt.date(2026, 11, 1))
+            clock.return_value = dt.datetime(2026, 11, 19, 20)
+            detail = self.process(task_id)
+            self.assertEqual(detail["lastRun"]["state"], "SUCCESS", detail)
+            self.assertEqual(detail["currentMonthRows"], 0)
+            self.source_sql(f"DELETE FROM {table} WHERE id=1; INSERT INTO {table} VALUES(3,'202611');")
+            clock.return_value = dt.datetime(2026, 11, 20, 20)
+            detail = self.process(task_id)
+            self.assertEqual(detail["lastRun"]["error_code"], "EMPTY_RESULT", detail)
+            self.assertEqual(detail["lastRun"]["progress_date"], dt.date(2026, 10, 1))
+            self.assertEqual(detail["currentMonthRows"], 1)
+            self.assertEqual(detail["continuousThrough"], dt.date(2026, 10, 1))
+            self.assertEqual(self.count(target), 2)
+            self.call("schedule", {"id": task_id, "time": "20:00", "monthlyPlan": "MONTHLY"})
+            self.assertEqual(self.call("detail", {"id": task_id})["nextRunAt"], dt.datetime(2026, 12, 1, 20))
+            self.source_sql(f"ALTER TABLE {table} MODIFY month_key VARCHAR(30);")
+            clock.return_value = dt.datetime(2026, 11, 20, 20, 1)
+            self.call("run-now", {"id": task_id})
+            self.assertEqual(self.process(task_id)["lastRun"]["error_code"], "SCHEMA_CHANGED")
+            self.assertEqual(self.count(target), 2)
+            self.call("schedule", {"id": task_id, "time": None})
 
     def test_unindexed_daily_resume_after_oversized_period(self):
         table = "fixture_day_" + worker.uuid.uuid4().hex[:8]

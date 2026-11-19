@@ -248,7 +248,7 @@ def timestamp_zone(con, columns):
     return value
 
 
-def inspect(con, source, data, sample_only=False):
+def inspect(con, source, data, sample_only=False, check_indexed_nulls=True):
     version = table_version(con)
     table = data.get("table")
     identifier(table)
@@ -281,7 +281,7 @@ def inspect(con, source, data, sample_only=False):
             is_compact = fmt in ("YYYYMMDD", "YYYYMM")
             require(field["kind"] in TEXT_TYPES or (is_compact and field["kind"] in INT_TYPES),
                     "INVALID_FORMAT")
-        if field["indexed"] and not sample_only:
+        if field["indexed"] and not sample_only and check_indexed_nulls:
             src = qualified(source["database"], table)
             require(not scalar(con, f"SELECT 1 FROM {src} WHERE {identifier(field['name'])} IS NULL LIMIT 1"),
                     "NULL_DATE")
@@ -458,8 +458,15 @@ def task_action(con, action, data, actor):
         require(time is None or (isinstance(time, str) and re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", time)),
                 "INVALID_INPUT")
         require(time is None or initialized, "INITIAL_REQUIRED")
-        execute(con, "UPDATE dataagent_table_sync_task SET schedule_time=%s,schedule_enabled_at=%s WHERE id=%s",
-                (time, now() if time else None, task_id))
+        mode = data.get("monthlyPlan")
+        if mode is not None:
+            require(grain == "MONTH" and mode in ("MONTHLY", "DAILY"), "INVALID_INPUT")
+            if mode == "DAILY":
+                config["monthlyPlan"] = mode
+            else:
+                config.pop("monthlyPlan", None)
+        execute(con, "UPDATE dataagent_table_sync_task SET schedule_time=%s,schedule_enabled_at=%s,config=%s WHERE id=%s",
+                (time, now() if time else None, json.dumps(config, ensure_ascii=False), task_id))
     else:
         require(not scalar(con, "SELECT 1 FROM dataagent_table_sync_run WHERE task_id=%s AND state IN ('QUEUED','RUNNING') LIMIT 1",
                            (task_id,)), "ALREADY_QUEUED")
@@ -477,8 +484,23 @@ def task_action(con, action, data, actor):
     return {}
 
 
-def scheduled_due(task, when, grain):
-    if grain == "MONTH" and when.day != 1:
+def monthly_slot(config):
+    return config["grain"] == "MONTH" and config.get("monthlyPlan") != "DAILY"
+
+
+def scheduled_periods(config, slot, initial_from):
+    grain = config["grain"]
+    if grain == "FULL":
+        return None, None
+    through = previous_period(slot, grain)
+    if grain == "DAY":
+        return max(through - dt.timedelta(days=1), initial_from), through
+    end = through if monthly_slot(config) else slot.replace(day=1)
+    return through, end
+
+
+def scheduled_due(task, when, config):
+    if monthly_slot(config) and when.day != 1:
         return False
     planned = dt.datetime.combine(when.date(), dt.time()) + task["schedule_time"]
     return task["schedule_enabled_at"] <= planned <= when
@@ -491,19 +513,20 @@ def next_job(con, dispatch=True):
         con, "SELECT t.id FROM dataagent_table_sync_task t "
         "WHERE t.initialized=TRUE AND t.schedule_time IS NOT NULL "
         "AND TIMESTAMP(%s,t.schedule_time) BETWEEN t.schedule_enabled_at AND %s "
-        "AND (%s=1 OR JSON_UNQUOTE(JSON_EXTRACT(t.config,'$.grain'))<>'MONTH') "
+        "AND (%s=1 OR JSON_UNQUOTE(JSON_EXTRACT(t.config,'$.grain'))<>'MONTH' "
+        "OR JSON_UNQUOTE(JSON_EXTRACT(t.config,'$.monthlyPlan'))='DAILY') "
         "AND NOT EXISTS (SELECT 1 FROM dataagent_table_sync_run r WHERE r.task_id=t.id AND r.slot=%s) "
         "ORDER BY t.schedule_time,t.created_at,t.id", (slot, when, slot.day, slot))
     for item in due:
         con.autocommit(False)
         task = find_task(con, item["id"], lock=True)
-        grain = json.loads(task["config"])["grain"]
-        if task["schedule_time"] is not None and scheduled_due(task, when, grain):
+        config = json.loads(task["config"])
+        if task["schedule_time"] is not None and scheduled_due(task, when, config):
             existing = scalar(con, "SELECT 1 FROM dataagent_table_sync_run WHERE task_id=%s AND slot=%s", (task["id"], slot))
             if not existing:
-                day = None if grain == "FULL" else previous_period(slot, grain)
-                enqueue(con, task["id"], "DAILY" if grain != "MONTH" else "MONTHLY",
-                        day, day, "scheduler", slot)
+                start, through = scheduled_periods(config, slot, task.get("initial_from"))
+                enqueue(con, task["id"], "MONTHLY" if monthly_slot(config) else "DAILY",
+                        start, through, "scheduler", slot)
         con.commit()
         con.autocommit(True)
     if not dispatch or scalar(con, "SELECT IS_FREE_LOCK(%s)", (WORKER_LOCK,)) != 1:
@@ -532,15 +555,18 @@ def task_view(con, task):
         "lastRun": one(con, f"SELECT {RUN_FIELDS} FROM dataagent_table_sync_run WHERE task_id=%s ORDER BY queued_at DESC LIMIT 1",
                        (task["id"],)),
     }
+    if grain == "MONTH":
+        result["monthlyPlan"] = config.get("monthlyPlan", "MONTHLY")
     if schedule is not None:
         when = now()
-        day = when.date().replace(day=1) if grain == "MONTH" else when.date()
+        monthly = monthly_slot(config)
+        day = when.date().replace(day=1) if monthly else when.date()
         planned = dt.datetime.combine(day, dt.time()) + schedule
         if planned <= when:
-            day = next_period(day, "MONTH" if grain == "MONTH" else "DAY")
+            day = next_period(day, "MONTH" if monthly else "DAY")
             planned = dt.datetime.combine(day, dt.time()) + schedule
         result["nextRunAt"] = planned
-        result["nextPeriod"] = previous_period(day, grain) if grain != "FULL" else None
+        result["nextPeriodFrom"], result["nextPeriod"] = scheduled_periods(config, day, task["initial_from"])
     return result
 
 
@@ -554,6 +580,8 @@ def detail(con, task):
     known = {row["business_date"]: row["row_count"] for row in
              query(con, "SELECT business_date,row_count FROM dataagent_table_sync_coverage WHERE task_id=%s", (task["id"],))}
     upper = previous_period(now().date(), grain) if task["initialized"] else task["initial_through"]
+    if grain == "MONTH":
+        result["currentMonthRows"] = known.get(next_period(upper, grain)) if task["initialized"] else None
     gaps, continuous = [], None
     for day in periods(task["initial_from"], upper, grain):
         if day not in known:
@@ -564,7 +592,7 @@ def detail(con, task):
         elif not gaps and task["initialized"]:
             continuous = day
     result.update(gaps=gaps, continuousThrough=continuous,
-                  emptyPeriods=sum(1 for count in known.values() if count == 0))
+                  emptyPeriods=sum(1 for day, count in known.items() if day <= upper and count == 0))
     return result
 
 
@@ -623,7 +651,11 @@ def transfer(src, dst, source_db, config, mirror, clause, args, run):
         if run["kind"] == "INITIAL":
             require(not existing, "TARGET_NOT_EMPTY")
         elif existing:
-            require(first is not None or run["accept_empty"], "EMPTY_RESULT")
+            if first is None and not run["accept_empty"]:
+                if run["kind"] == "DAILY" and run.get("date_from") != run.get("date_through"):
+                    stream.close()
+                    return None
+                raise SyncError("EMPTY_RESULT")
             deleted = execute(dst, f"DELETE FROM {mirror}{clause} LIMIT {limit + 1}", args)
             require(deleted <= limit, "ROW_LIMIT")
         with dst.cursor() as writer:
@@ -651,6 +683,10 @@ def copy_period(src, dst, task, run, config, mirror, day):
     dst.autocommit(False)
     try:
         count = transfer(src, dst, config["source"]["database"], config, mirror, clause, args, run)
+        if count is None:
+            dst.rollback()
+            dst.autocommit(True)
+            return False
         if day is not None:
             execute(dst, "INSERT INTO dataagent_table_sync_coverage(task_id,business_date,run_id,row_count) VALUES(%s,%s,%s,%s) "
                     "ON DUPLICATE KEY UPDATE run_id=%s,row_count=%s",
@@ -665,12 +701,21 @@ def copy_period(src, dst, task, run, config, mirror, day):
         dst.autocommit(True)
         raise
     dst.autocommit(True)
+    return True
 
 
 def finish_run(dst, task, run):
     if run["kind"] == "INITIAL":
         execute(dst, "UPDATE dataagent_table_sync_task SET initialized=TRUE WHERE id=%s", (task["id"],))
     execute(dst, "UPDATE dataagent_table_sync_run SET state='SUCCESS',finished_at=%s WHERE id=%s", (now(), run["id"]))
+
+
+def source_layout(config):
+    layout = {key: value for key, value in config.items()
+              if key not in ("source", "credentialFormat", "marker", "monthlyPlan")}
+    layout["columns"] = [{key: value for key, value in col.items() if key != "indexed"}
+                         for col in config["columns"]]
+    return layout
 
 
 def publish_run(dst, task, run, password):
@@ -691,22 +736,26 @@ def publish_run(dst, task, run, password):
         raise SyncError("SOURCE_QUERY") from None
     try:
         selection = {**config, "columns": [col["name"] for col in config["columns"]]}
+        had_date_index = any(col["name"] == config["dateField"] and col["indexed"] for col in config["columns"])
         try:
-            current = inspect(src, source, selection)
+            current = inspect(src, source, selection, check_indexed_nulls=had_date_index)
         except MySQLdb.Error:
             raise SyncError("SOURCE_QUERY") from None
-        require(current == {key: value for key, value in config.items()
-                            if key not in ("source", "credentialFormat", "marker")}, "SCHEMA_CHANGED")
+        require(source_layout(current) == source_layout(config), "SCHEMA_CHANGED")
         grain = config["grain"]
         if grain == "FULL":
             copy_period(src, dst, task, run, config, mirror, None)
             return
         done = {r["business_date"]: r["run_id"] for r in query(
             dst, "SELECT business_date,run_id FROM dataagent_table_sync_coverage WHERE task_id=%s", (task["id"],))}
+        empty_conflict = None
         for day in periods(run["date_from"], run["date_through"], grain):
             committed = day in done if run["kind"] == "INITIAL" else done.get(day) == run["id"]
-            if not committed:
-                copy_period(src, dst, task, run, config, mirror, day)
+            if not committed and not copy_period(src, dst, task, run, config, mirror, day):
+                empty_conflict = empty_conflict or day
+        if empty_conflict:
+            update_phase(dst, run["id"], "READING", empty_conflict)
+            raise SyncError("EMPTY_RESULT")
         dst.autocommit(False)
         try:
             finish_run(dst, task, run)

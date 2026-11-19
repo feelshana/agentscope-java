@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { getSyncTask, listSyncTasks, syncAction } from '../../api/tableSync';
-import type { SyncDetail, SyncGrain, SyncList, SyncRun } from '../../api/tableSync';
+import type { SyncDetail, SyncGrain, SyncList, SyncMonthlyPlan, SyncRun } from '../../api/tableSync';
 import Icon from '../../components/Icon';
 import { KnowledgeBreadcrumb } from '../../components/KnowledgeWorkspace';
 import TableSyncWizard, { displayPeriod, previousPeriod, toStoragePeriod } from './TableSyncWizard';
@@ -127,6 +127,7 @@ function RunStatus({ run }: { run: SyncRun }) {
 
 function TaskDetail({ task, today, onChange }: { task: SyncDetail; today: string; onChange: () => void }) {
   const [time, setTime] = useState(task.scheduleTime ?? '02:00');
+  const [monthlyPlan, setMonthlyPlan] = useState<SyncMonthlyPlan>(task.monthlyPlan ?? 'MONTHLY');
   const [from, setFrom] = useState('');
   const [through, setThrough] = useState('');
   const [acceptEmpty, setAcceptEmpty] = useState(false);
@@ -161,6 +162,8 @@ function TaskDetail({ task, today, onChange }: { task: SyncDetail; today: string
           <div><dt>首次导入范围</dt><dd>{range(task.from, task.through, task.grain)}</dd></div>
           <div><dt>连续覆盖至</dt><dd>{displayPeriod(task.continuousThrough, task.grain)}</dd></div>
           <div><dt>已同步的空期</dt><dd>{task.emptyPeriods ?? 0}</dd></div>
+          {task.grain === 'MONTH' && task.currentMonthRows != null &&
+            <div><dt>{today.slice(0, 7)} 当月累计</dt><dd>{task.currentMonthRows.toLocaleString()} 行</dd></div>}
         </>}
       </dl>
       {!!task.gaps?.length && <details className="table-sync-gaps"><summary>尚未同步 · {task.gaps.length} 段</summary>
@@ -168,13 +171,18 @@ function TaskDetail({ task, today, onChange }: { task: SyncDetail; today: string
     </section>
 
     <section className="table-sync-card"><h2>运行计划</h2>
-      <p>{task.grain === 'MONTH' ? '每月 1 日同步上一个完整月。' : task.grain === 'DAY' ? '每天只同步上一个完整业务日。' : '每天刷新整张表。'}计划时间采用东八区。到点后任务进入队列，请安排在上游落数之后。</p>
+      <p>{task.grain === 'MONTH' ? '可按月同步上月，或每天刷新上月与当月。' : task.grain === 'DAY' ? '每天刷新前两个完整业务日。' : '每天刷新整张表。'}计划时间采用东八区。到点后任务进入队列，请安排在上游落数之后。</p>
       {!task.initialized && <p>首次同步完成后可以启用计划。</p>}
-      {task.nextRunAt && <p>下次 {formatTime(task.nextRunAt)}{task.nextPeriod ? ` · 同步 ${displayPeriod(task.nextPeriod, task.grain)}` : ''}</p>}
+      {task.nextRunAt && <p>下次 {formatTime(task.nextRunAt)}{task.nextPeriod ? ` · 同步 ${range(task.nextPeriodFrom ?? task.nextPeriod, task.nextPeriod, task.grain)}` : ''}</p>}
       <div className="table-sync-inline">
+        {task.grain === 'MONTH' && <label>计划频率<select className="da-input" value={monthlyPlan}
+          onChange={event => setMonthlyPlan(event.target.value as SyncMonthlyPlan)} disabled={!task.initialized || busy}>
+          <option value="MONTHLY">每月 1 日同步上月</option>
+          <option value="DAILY">每天刷新上月和当月</option>
+        </select></label>}
         <label>计划时间<input className="da-input" type="time" value={time} onChange={event => setTime(event.target.value)} disabled={!task.initialized || busy} /></label>
         <button className="da-btn" type="button" disabled={!task.initialized || !time || busy}
-          onClick={() => void change('schedule', { time }, '运行计划已保存。')}>{task.scheduleTime ? '更新计划' : '启用计划'}</button>
+          onClick={() => void change('schedule', { time, monthlyPlan: task.grain === 'MONTH' ? monthlyPlan : undefined }, '运行计划已保存。')}>{task.scheduleTime ? '更新计划' : '启用计划'}</button>
         {task.scheduleTime && <button className="da-btn" type="button" disabled={busy}
           onClick={() => void change('schedule', { time: null }, '已暂停后续计划。')}>暂停计划</button>}
       </div>
@@ -202,7 +210,7 @@ function TaskDetail({ task, today, onChange }: { task: SyncDetail; today: string
         <thead><tr><th>任务</th><th>业务范围</th><th>状态与进度</th><th>读取／写入</th><th>开始／结束</th></tr></thead>
         <tbody>{task.runs.map(run => <tr key={run.id}><td>{kinds[run.kind] ?? run.kind}<small>{run.actor}</small></td>
           <td>{run.date_from ? range(run.date_from, run.date_through, task.grain) : '整表'}</td>
-          <td><RunStatus run={run} />{run.error_code ? <small>{runErrors[run.error_code] ?? '任务异常，请重试。'}</small> :
+          <td><RunStatus run={run} />{run.error_code ? <small>{run.progress_date && `${displayPeriod(run.progress_date, task.grain)} · `}{runErrors[run.error_code] ?? '任务异常，请重试。'}</small> :
             active(run) && run.phase && <small>{phases[run.phase]} {run.progress_date ? displayPeriod(run.progress_date, task.grain) : ''}</small>}</td>
           <td>{run.rows_read.toLocaleString()} / {run.rows_committed.toLocaleString()}</td>
           <td>{formatTime(run.started_at ?? run.queued_at)}<small>{formatTime(run.finished_at)}</small></td></tr>)}</tbody>

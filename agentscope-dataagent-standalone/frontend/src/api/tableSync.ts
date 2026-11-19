@@ -1,6 +1,7 @@
 import { knowledgeRequest } from './knowledgeWorkspace';
 
 export type SyncGrain = 'FULL' | 'DAY' | 'MONTH';
+export type SyncMonthlyPlan = 'MONTHLY' | 'DAILY';
 export type SyncTlsMode = 'VERIFY_IDENTITY' | 'VERIFY_CA' | 'REQUIRED' | 'DISABLED';
 export type SyncTarget = { host: string; port: number; username: string; sslMode: SyncTlsMode };
 export type SyncConnection = SyncTarget & { database: string; password: string };
@@ -19,11 +20,13 @@ export type SyncTask = {
   id: string; name: string; sourceTable: string; targetTable: string; grain: SyncGrain;
   dateField: string | null; dateFormat: string | null; initialized: boolean; from: string | null;
   through: string | null; scheduleTime: string | null; nextRunAt?: string; nextPeriod?: string;
+  nextPeriodFrom?: string | null; monthlyPlan?: SyncMonthlyPlan;
   lastRun: SyncRun | null;
 };
 export type SyncDetail = SyncTask & {
   runs: SyncRun[]; gaps?: { from: string; through: string }[];
   continuousThrough?: string | null; emptyPeriods?: number;
+  currentMonthRows?: number | null;
 };
 export type SyncList = { tasks: SyncTask[]; today: string; target?: SyncTarget; targetError?: boolean };
 export type SyncPreview = { fingerprint: string; ddl: string; targetReady: boolean };
