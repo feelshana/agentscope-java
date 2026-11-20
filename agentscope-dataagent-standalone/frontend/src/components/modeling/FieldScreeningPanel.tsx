@@ -3,6 +3,7 @@ import type { MutableRefObject } from 'react';
 import Icon from '../Icon';
 import { getScreeningStatus, getScreeningTable, saveScreening } from '../../api/fieldScreening';
 import type { FieldUpdate, ScreeningField, ScreeningReference, ScreeningStatus, ScreeningTable } from '../../api/fieldScreening';
+import { needsFieldReview } from './fieldScreeningActions';
 
 type Draft = { included: boolean; description: string };
 type Filter = 'ALL' | 'TECHNICAL' | 'UNKNOWN';
@@ -15,13 +16,14 @@ const message = (e: unknown) => e instanceof Error ? e.message : String(e);
  * in adjust mode one table is changed after modeling and the page re-models it. Excluded columns
  * never enter the semantic model; descriptions written here are kept by the assistant.
  */
-export default function FieldScreeningPanel({ groupId, mode, datasetId, onDone, onAdjusted, onClose, leaveGuard }: {
+export default function FieldScreeningPanel({ groupId, mode, datasetId, pendingOnly = false, onDone, onAdjusted, onClose, leaveGuard }: {
   groupId: string;
   mode: 'setup' | 'adjust';
-  /** Adjust mode: the one table to change. */
+  /** Table to open first, or the one table to change in adjust mode. */
   datasetId?: string;
+  pendingOnly?: boolean;
   /** Setup mode: every table confirmed. */
-  onDone?: () => void;
+  onDone?: (tables: ScreeningStatus[]) => void;
   onAdjusted?: (change: FieldAdjustment, remodel: boolean) => void;
   onClose?: () => void;
   leaveGuard?: MutableRefObject<(() => Promise<boolean>) | null>;
@@ -30,7 +32,7 @@ export default function FieldScreeningPanel({ groupId, mode, datasetId, onDone, 
   const [selected, setSelected] = useState<string | null>(datasetId ?? null);
   const [table, setTable] = useState<ScreeningTable | null>(null);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
-  const [filter, setFilter] = useState<Filter>('ALL');
+  const [filter, setFilter] = useState<Filter>(pendingOnly ? 'UNKNOWN' : 'ALL');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [references, setReferences] = useState<ScreeningReference[] | null>(null);
@@ -50,7 +52,7 @@ export default function FieldScreeningPanel({ groupId, mode, datasetId, onDone, 
     const list = await getScreeningStatus(groupId);
     if (active.current !== groupId) return list;
     setStatus(list);
-    setSelected(previous => previous ?? (list.find(t => !t.confirmed) ?? list[0])?.datasetId ?? null);
+    setSelected(previous => previous && list.some(t => t.datasetId === previous) ? previous : list[0]?.datasetId ?? null);
     return list;
   }, [groupId]);
   useEffect(() => { void loadStatus().catch(e => setError(message(e))); }, [loadStatus]);
@@ -71,7 +73,7 @@ export default function FieldScreeningPanel({ groupId, mode, datasetId, onDone, 
   const counts = useMemo(() => ({
     BUSINESS: fields.filter(f => f.role === 'BUSINESS').length,
     TECHNICAL: fields.filter(f => f.role === 'TECHNICAL').length,
-    UNKNOWN: fields.filter(f => f.role === 'UNKNOWN' && !f.userDescribed).length,
+    UNKNOWN: fields.filter(needsFieldReview).length,
   }), [fields]);
   const included = fields.filter(f => drafts[f.name]?.included).length;
   const update = (name: string, change: Partial<Draft>) => setDrafts(p => ({ ...p, [name]: { ...p[name], ...change } }));
@@ -171,21 +173,21 @@ export default function FieldScreeningPanel({ groupId, mode, datasetId, onDone, 
         return;
       }
       const list = await loadStatus();
+      if (!mounted.current || active.current !== groupId) return;
       const next = list.find(t => !t.confirmed);
-      if (next) setSelected(next.datasetId);
-      else { setTable(result.table); onDone?.(); }
+      setTable(result.table);
+      if (!next) onDone?.(list);
+      else if (!currentTable.confirmed) {
+        setFilter('ALL');
+        setSelected(next.datasetId);
+      }
     } catch (e) { if (active.current === groupId) setError(message(e)); }
     finally { confirmFlight.current = false; if (mounted.current && active.current === groupId) setBusy(null); }
   };
 
-  const shown = fields.filter(f => filter === 'ALL' || (f.role === filter && (filter !== 'UNKNOWN' || !f.userDescribed)));
+  const shown = fields.filter(f => filter === 'ALL' || (filter === 'UNKNOWN' ? needsFieldReview(f) : f.role === filter));
   const confirmedCount = status.filter(t => t.confirmed).length;
-  const allConfirmed = status.length > 0 && confirmedCount === status.length;
   const othersPending = status.some(t => !t.confirmed && t.datasetId !== table?.datasetId);
-  const dirty = fields.some(f => {
-    const d = drafts[f.name];
-    return d && (d.included !== f.included || (d.description ?? '').trim() !== (f.description ?? '').trim());
-  });
   const toggle = (f: ScreeningField, include: boolean) => {
     if (!include && f.joinKey) { setAsking(f.name); return; }
     update(f.name, { included: include });
@@ -267,10 +269,8 @@ export default function FieldScreeningPanel({ groupId, mode, datasetId, onDone, 
           <span className="fs-foot-divider" />
           <span className="fs-foot-status" title="用户说明为已保存的人工补充；待确认表示 AI 尚不能明确判断的字段。">{table && included === 0 ? '每张表至少纳入 1 个字段' : mode === 'setup' ? `用户说明 ${fields.filter(f => f.userDescribed).length} 条 · ${counts.UNKNOWN} 待确认` : '保存后会让助手按新字段重新建模这张表'}</span>
           <span className="fs-autosave" role="status">{descriptionState}</span>
-          {table && <button type="button" data-tour="screening-confirm" className="mp-button mp-primary" disabled={busy !== null || included === 0} onClick={() => {
-            if (mode === 'setup' && allConfirmed && !dirty) void flushDescriptions().then(ok => { if (ok) onDone?.(); });
-            else void save();
-          }}>{mode === 'setup' && allConfirmed && !dirty ? '完成整理，继续' : saveLabel}<Icon name="chevron" size="sm" /></button>}
+          {table && <button type="button" data-tour="screening-confirm" className="mp-button mp-primary" disabled={busy !== null || included === 0} onClick={() => void save()}>
+            {saveLabel}<Icon name="chevron" size="sm" /></button>}
         </footer>
       </div>
     </div>

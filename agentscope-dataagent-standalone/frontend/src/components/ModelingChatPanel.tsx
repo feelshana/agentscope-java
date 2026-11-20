@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import './ConversationPolish.css';
 import './modeling/modeling-chat.css';
 import type { CSSProperties, ReactNode } from 'react';
 import Icon from './Icon';
@@ -11,6 +12,10 @@ import ModelingHitlCard from './ModelingHitlCard';
 import ReadableCode from './ReadableCode';
 import { confirmModeling, currentSession, stream } from '../api/chat';
 import type { ChatEvent, HitlToolCall, TurnPurpose } from '../api/chat';
+import { messagePage } from '../api/sessions';
+import { confirmationReceipt, restoreModelingHistory } from './modeling/modelingHistory';
+import type { PanelMessage, PendingHitl, Segment, ToolFrame } from './modeling/modelingHistory';
+import type { ModelingPrompt } from './modeling/modelingPrompts';
 import { getModelingOverview } from '../api/semanticModeling';
 import type { ModelingOverview } from '../api/semanticModeling';
 
@@ -29,33 +34,6 @@ const MODELING_AGENT_ID = 'modeling-agent';
 
 /** 快捷引导：一条预设消息 = 一个建模动作，与 MODELING_SCRIPT 剧本对齐。 */
 
-
-interface ToolFrame {
-  id: string;
-  name: string;
-  callId?: string;
-  input?: string;
-  result?: string;
-  state: 'running' | 'waiting' | 'done' | 'failed' | 'rejected';
-}
-
-/** 有序渲染段：叙述文本与工具任务行按到达顺序交替（specs/021 时序修正）。 */
-type Segment = { kind: 'text'; text: string } | { kind: 'tool'; frame: ToolFrame };
-
-interface PendingHitl {
-  replyId: string;
-  toolCalls: HitlToolCall[];
-}
-
-interface PanelMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  segments: Segment[];
-  pending?: boolean;
-  hitl?: PendingHitl;
-  /** spec092 §7: when this turn was sent, so its draft changes can be listed under the reply. */
-  startedAt?: string;
-}
 
 let seq = 0;
 const nextId = () => `mc${Date.now().toString(36)}-${seq++}`;
@@ -245,7 +223,7 @@ function ReplyBody({ segments, pending, startedAt }: { segments: Segment[]; pend
   return <>
     {pending && <ProgressCard stages={stages} reached={reached} latest={latest || '正在理解你的数据'} steps={frames.length} failed={failed} startedAt={startedAt} />}
     {hasProcess && <div style={{ margin: '2px 0 6px' }}>
-      <button type="button" onClick={() => setOpen(v => !v)} className="mc-fold"
+      <button type="button" aria-expanded={open} onClick={() => setOpen(v => !v)} className="mc-fold"
         style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%',
           cursor: 'pointer', fontSize: 12, color: 'var(--da-text-muted)', textAlign: 'left' }}>
         <span>{open ? '▾' : '▸'}</span>
@@ -339,7 +317,7 @@ function TaskRow({ frame }: { frame: ToolFrame }) {
           ? '失败'
           : frame.state === 'rejected'
             ? '已拒绝'
-            : '完成';
+            : frame.state === 'unrecorded' ? '无结果记录' : '完成';
   return (
     <div style={S.task}>
       <button
@@ -360,7 +338,7 @@ function TaskRow({ frame }: { frame: ToolFrame }) {
                     ? 'warn'
                     : frame.state === 'rejected'
                       ? 'close'
-                      : 'check'
+                      : frame.state === 'unrecorded' ? 'info' : 'check'
               }
               size="sm"
             />
@@ -407,6 +385,13 @@ export default function ModelingChatPanel({
   draftLabel,
   onActivityChange,
   renderTurnResult,
+  intro,
+  quickPrompts,
+  composerNotice,
+  composerHint,
+  composerSuggestion,
+  composerLocked = false,
+  onCompose,
   footer,
 }: {
   groupId: string;
@@ -431,18 +416,34 @@ export default function ModelingChatPanel({
   onActivityChange?: (state: AssistantState) => void;
   /** spec092 §7: "AI 建模结果" under a finished reply, given the turn's start time. */
   renderTurnResult?: (startedAt: string) => ReactNode;
+  intro?: ReactNode;
+  quickPrompts?: ModelingPrompt[];
+  composerNotice?: ReactNode;
+  composerHint?: string;
+  composerSuggestion?: string;
+  composerLocked?: boolean;
+  /** Handle a preparation command before sending anything to the agent. */
+  onCompose?: (text: string) => boolean;
   /** spec092 §7: inline cards after the conversation, e.g. "需要你确定的部分". */
   footer?: ReactNode;
 }) {
   const [messages, setMessages] = useState<PanelMessage[]>([]);
   const [input, setInput] = useState('');
+  const [promptsOpen, setPromptsOpen] = useState(false);
+  const [selectedPrompt, setSelectedPrompt] = useState<ModelingPrompt | null>(null);
+  const promptTrigger = useRef<HTMLButtonElement>(null);
+  const promptPanel = useRef<HTMLElement>(null);
+  const promptPanelId = useId();
+  const insertedPrompt = useRef<string | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
   const [sessionError, setSessionError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState(false);
   const [busy, setBusy] = useState(false);
   const decisionInFlight = useRef(false);
   const [overview, setOverview] = useState<ModelingOverview | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const suggestionId = useId();
   const composing = useRef(false);
   const consumedDraft = useRef<string | null>(null);
   const turnDone = useRef(onTurnDone);
@@ -470,38 +471,42 @@ export default function ModelingChatPanel({
   }, [groupId]);
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     sessionKeyRef.current = `modeling-${groupId}`;
     setMessages([]);
     setOverview(null);
-    setSessionReady(false); setSessionError(null);
+    setSessionReady(false); setSessionError(null); setHistoryError(false);
     void loadOverview();
-    currentSession(MODELING_AGENT_ID, sessionKeyRef.current)
-      .then(session => {
-        if (cancelled) return;
-        const hasPending = !!session.pendingReplyId && !!session.pendingToolCalls?.length;
+    currentSession(MODELING_AGENT_ID, sessionKeyRef.current, controller.signal)
+      .then(async session => {
+        if (controller.signal.aborted) return;
+        let entries: Awaited<ReturnType<typeof messagePage>>['items'] = [];
+        if (session.exists && session.sessionKey) {
+          try {
+            const history = await messagePage(MODELING_AGENT_ID, session.sessionKey, undefined, controller.signal);
+            entries = history.items;
+            let before = history.nextBefore;
+            // A long tool run may fill the latest page without its initiating user message.
+            while (before != null && !entries.some(entry => entry.role === 'USER')) {
+              const previous = await messagePage(MODELING_AGENT_ID, session.sessionKey, before, controller.signal);
+              entries = [...previous.items, ...entries];
+              before = previous.nextBefore;
+            }
+          } catch { if (!controller.signal.aborted) setHistoryError(true); }
+        }
+        if (controller.signal.aborted) return;
+        const hitl = session.pendingReplyId && session.pendingToolCalls?.length
+          ? { replyId: session.pendingReplyId, toolCalls: session.pendingToolCalls } : undefined;
+        pinned.current = true;
+        setMessages(restoreModelingHistory(entries, hitl));
         setSessionReady(true);
-        onSessionReady?.(hasPending);
-        if (!hasPending) return;
-        setMessages([
-          {
-            id: nextId(),
-            role: 'assistant',
-            segments: [{ kind: 'text', text: '已恢复上次尚未处理的建模提案。' }],
-            hitl: {
-              replyId: session.pendingReplyId as string,
-              toolCalls: session.pendingToolCalls as HitlToolCall[],
-            },
-          },
-        ]);
+        onSessionReady?.(!!hitl);
       })
-      .catch(error => { if (!cancelled) {
+      .catch(error => { if (!controller.signal.aborted) {
         const detail = `建模会话加载失败，请刷新重试。${error instanceof Error ? error.message : ''}`;
         setSessionError(detail); onSessionReady?.(false, detail);
       } });
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, [groupId, onSessionReady]);
 
   // spec092 §7: follow the conversation while the user is at the bottom. Result cards and
@@ -511,13 +516,15 @@ export default function ModelingChatPanel({
   useEffect(() => {
     const thread = threadRef.current;
     if (!thread) return;
-    const follow = () => { if (pinned.current) thread.scrollTo({ top: thread.scrollHeight }); };
+    const follow = () => { if (pinned.current && thread.clientHeight > 0) thread.scrollTo({ top: thread.scrollHeight }); };
     const onScroll = () => { pinned.current = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 80; };
     const observer = new MutationObserver(follow);
     observer.observe(thread, { childList: true, subtree: true, characterData: true });
+    const resize = new ResizeObserver(follow);
+    resize.observe(thread);
     thread.addEventListener('scroll', onScroll, { passive: true });
     follow();
-    return () => { observer.disconnect(); thread.removeEventListener('scroll', onScroll); };
+    return () => { observer.disconnect(); resize.disconnect(); thread.removeEventListener('scroll', onScroll); };
   }, []);
   useEffect(() => {
     if (pinned.current) threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight });
@@ -673,10 +680,14 @@ export default function ModelingChatPanel({
     const text = raw.trim();
     if (!text || busy || awaitingDecision) return;
     setInput('');
+    setPromptsOpen(false);
+    setSelectedPrompt(null);
+    insertedPrompt.current = null;
     setBusy(true);
     pinned.current = true;
     turnCompleted.current = false;
-    const userMsg: PanelMessage = { id: nextId(), role: 'user', segments: [{ kind: 'text', text: label?.trim() || text }] };
+    const userMsg: PanelMessage = { id: nextId(), role: 'user', confirmation: purpose === 'confirm' ? confirmationReceipt(text) : undefined,
+      segments: [{ kind: 'text', text: label?.trim() || text }] };
     const replyMsg: PanelMessage = {
       id: nextId(),
       role: 'assistant',
@@ -785,17 +796,22 @@ export default function ModelingChatPanel({
   }
 
   function handleSend() {
+    if (input.trim() && onCompose?.(input.trim())) {
+      setInput('');
+      return;
+    }
+    if (composerLocked || !sessionReady) return;
     void sendText(input);
   }
 
   useEffect(() => {
     const key = `${groupId}:${draftPromptId ?? draftPrompt}`;
-    if (submitDraft && draftPrompt && sessionReady && !busy && !awaitingDecision && consumedSubmission.current !== key) {
+    if (submitDraft && draftPrompt && !composerLocked && sessionReady && !busy && !awaitingDecision && consumedSubmission.current !== key) {
       consumedSubmission.current = key;
       onDraftSubmitted?.();
       void sendText(draftPrompt, draftPurpose, draftLabel);
     }
-  }, [submitDraft, draftPrompt, draftPromptId, draftPurpose, draftLabel, sessionReady, busy, awaitingDecision, groupId]);
+  }, [submitDraft, draftPrompt, draftPromptId, draftPurpose, draftLabel, sessionReady, busy, awaitingDecision, groupId, composerLocked]);
 
   // Lets the page show that a request will queue behind the running turn or pending cards.
   const activity = useRef(onActivityChange);
@@ -803,7 +819,52 @@ export default function ModelingChatPanel({
   const state: AssistantState = awaitingDecision ? 'awaiting' : busy ? 'running' : 'idle';
   useEffect(() => { activity.current?.(state); }, [state]);
 
+  const inputDisabled = busy || awaitingDecision || (!onCompose && (composerLocked || !sessionReady));
+  const showPrompts = !!quickPrompts?.length && promptsOpen && !inputDisabled;
+  useLayoutEffect(() => {
+    if (showPrompts) promptPanel.current?.querySelector<HTMLButtonElement>('[data-quick-focus]')?.focus();
+  }, [showPrompts, selectedPrompt]);
+
+  function closePrompts(restoreFocus = false) {
+    setPromptsOpen(false);
+    setSelectedPrompt(null);
+    if (restoreFocus) promptTrigger.current?.focus();
+  }
+
+  function fillPrompt(prompt: ModelingPrompt, append = false) {
+    insertedPrompt.current = append ? null : prompt.text;
+    setInput(previous => append && previous.trim() ? `${previous.trimEnd()}\n\n${prompt.text}` : prompt.text);
+    closePrompts();
+    inputRef.current?.focus();
+  }
+
+  function choosePrompt(prompt: ModelingPrompt) {
+    if (input.trim() && input !== insertedPrompt.current && input !== prompt.text) {
+      setSelectedPrompt(prompt);
+    } else {
+      fillPrompt(prompt);
+    }
+  }
+
+  const suggestion = !inputDisabled && input === '' ? composerSuggestion : undefined;
+  const placeholder = awaitingDecision ? '请先处理上方待确认提案…'
+    : busy ? '建模助手思考中…'
+    : composerHint ?? '描述要完善的字段、关系或业务口径…';
+  const resizeInput = useCallback(() => {
+    const textarea = inputRef.current;
+    if (!textarea?.clientWidth) return;
+    textarea.style.removeProperty('--mc-input-height');
+    textarea.style.setProperty('--mc-input-height', `${Math.min(160, Math.max(48, textarea.scrollHeight))}px`);
+  }, []);
+  useLayoutEffect(resizeInput, [input, resizeInput]);
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (suggestion && e.key === 'Tab' && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey &&
+        !composing.current && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) {
+      e.preventDefault();
+      setInput(suggestion);
+      return;
+    }
     if (isSendKey({ key: e.key, shiftKey: e.shiftKey, isComposing: e.nativeEvent.isComposing, keyCode: e.nativeEvent.keyCode }, composing.current)) {
       e.preventDefault();
       handleSend();
@@ -826,6 +887,12 @@ export default function ModelingChatPanel({
           variant === 'dock' ? S.dockShell : variant === 'drawer' ? S.panel : S.panelModal
         }
         onClick={e => e.stopPropagation()}
+        onKeyDown={event => {
+          if (showPrompts && event.key === 'Escape' && !event.nativeEvent.isComposing) {
+            event.stopPropagation();
+            closePrompts(true);
+          }
+        }}
       >
         {variant !== 'dock' && <div style={S.header}>
           <span style={S.title}>
@@ -837,15 +904,17 @@ export default function ModelingChatPanel({
           </button>
         </div>}
 
-        <div style={variant === 'dock' ? S.dockThread : S.thread} ref={threadRef}>
+        <div className="mc-thread" style={variant === 'dock' ? S.dockThread : S.thread} ref={threadRef}>
           {sessionError && <p role="alert" style={{ margin: '0 0 12px', padding: '10px 12px', borderRadius: 10, background: 'color-mix(in srgb, var(--da-danger) 5%, var(--da-surface))', border: '1px solid color-mix(in srgb, var(--da-danger) 22%, transparent)', color: 'var(--da-danger)', fontSize: 12.5, lineHeight: 1.6 }}>{sessionError}</p>}
-          {messages.length === 0 && (
-            <div style={S.welcome}>
+          {historyError && <p role="status" className="da-small">最近的建模记录加载失败。刷新后可重试。</p>}
+          {intro}
+          {!intro && messages.length === 0 && (
+            <div className="mc-welcome" style={S.welcome}>
               <div style={S.welcomeTitle}>
                 <ModelingAssistantIcon /> 建模助手
               </div>
-              <div style={S.welcomeDesc}>用业务语言告诉我要改什么，我会改到语义模型里；改过的地方在图上标红，也会列进"待确认"。比如：</div>
-              {[
+              <div style={S.welcomeDesc}>告诉助手要完善的字段、关系或业务口径。你可以在模型中检查改动，准备好后发布。</div>
+              {!quickPrompts && <div className="mc-welcome-examples">{[
                 ['增加术语', '"金卡客户"指会员等级为金卡会员的客户'],
                 ['增加规则', '统计有效订单时，默认排除已取消的订单'],
                 ['补充字段说明', '给订单表的金额字段补充说明和单位'],
@@ -854,16 +923,16 @@ export default function ModelingChatPanel({
                 title="填入输入框，可修改后发送" onClick={() => setInput(`${title}：${text}`)}>
                 <strong style={{ color: 'var(--da-text)', fontSize: 13.5, fontWeight: 650, letterSpacing: '-.01em' }}>{title}</strong>
                 <span style={{ fontSize: 12.5, lineHeight: 1.5 }}>{text}</span>
-              </button>)}
-              <div style={S.welcomeDesc}>只在会影响统计结果的地方我才会问你；改动都进草稿，确认无误后在底部统一发布。</div>
+              </button>)}</div>}
             </div>
           )}
           {messages.map(m => (
-            <div key={m.id} style={m.role === 'user' ? S.row : S.botRow}>
-              {m.role === 'assistant' && <ModelingAssistantIcon message />}
+            <div key={m.id} className={m.role === 'assistant' && variant === 'dock' ? 'mc-assistant-row' : undefined} style={m.role === 'user' ? S.row : S.botRow}>
+              {m.role === 'assistant' && variant !== 'dock' && <ModelingAssistantIcon message />}
               <div style={m.role === 'user' ? S.userBubble : S.botBubble}>
                 {m.role === 'assistant' ? (
                   <>
+                    {variant === 'dock' && <ModelingAssistantIcon message />}
                     <ReplyBody segments={m.segments} pending={!!m.pending} startedAt={m.startedAt} />
                     {m.hitl && m.hitl.toolCalls.length > 1 && <div style={{ marginTop: 10, padding: '13px 14px', border: '1px solid color-mix(in srgb, var(--da-primary) 16%, var(--da-border))', borderRadius: 12, background: 'var(--da-surface)' }}>
                       <strong style={{ fontSize: 13.5, fontWeight: 650 }}>本次工程变更：{m.hitl.toolCalls.length} 项</strong>
@@ -888,7 +957,7 @@ export default function ModelingChatPanel({
                         />
                       </div>;
                     })}
-                    {m.startedAt && renderTurnResult?.(m.startedAt)}
+                    {m === messages[messages.length - 1] && m.startedAt && !m.pending && !m.hitl && renderTurnResult?.(m.startedAt)}
                     {m.pending && m.segments.length === 0 && !m.hitl && (
                       <span className="da-typing">
                         <span />
@@ -897,6 +966,11 @@ export default function ModelingChatPanel({
                       </span>
                     )}
                   </>
+                ) : m.confirmation ? (
+                  <details className="mc-confirmation-receipt">
+                    <summary>已确认 {m.confirmation.length} 项口径</summary>
+                    <dl>{m.confirmation.map((decision, index) => <div key={index}><dt>{decision.question}</dt><dd>{decision.answer}</dd></div>)}</dl>
+                  </details>
                 ) : (
                   <div style={{ whiteSpace: 'pre-wrap' }}>
                     {m.segments.map(seg => (seg.kind === 'text' ? seg.text : '')).join('')}
@@ -906,44 +980,72 @@ export default function ModelingChatPanel({
             </div>
           ))}
           {footer}
+          {showPrompts && <section className="mc-quick-panel" ref={promptPanel} id={promptPanelId} aria-labelledby={`${promptPanelId}-title`}>
+            <header className="mc-quick-header">
+              <div><h2 id={`${promptPanelId}-title`}>{selectedPrompt ? '使用这条提示' : '快捷提示'}</h2>
+                <p>{selectedPrompt ? '输入框已有内容，可追加这条提示或替换。' : '选一个想完善的方向，填入后可以继续编辑。'}</p>
+              </div>
+              <button type="button" className="mc-quick-close" aria-label="关闭快捷提示" onClick={() => closePrompts(true)}><Icon name="close" size="sm" /></button>
+            </header>
+            {selectedPrompt ? <>
+              <p className="mc-quick-preview">{selectedPrompt.text}</p>
+              <div className="mc-quick-actions">
+                <button type="button" className="da-btn da-btn-sm mc-quick-back" onClick={() => setSelectedPrompt(null)}>返回建议</button>
+                <button type="button" className="da-btn da-btn-sm" onClick={() => fillPrompt(selectedPrompt)}>替换输入</button>
+                <button type="button" className="da-btn da-btn-primary da-btn-sm" data-quick-focus onClick={() => fillPrompt(selectedPrompt, true)}>追加到末尾</button>
+              </div>
+            </> : <div className="mc-quick-choices">
+              {quickPrompts?.map((prompt, index) => <button type="button" className="mc-quick-choice" key={prompt.title}
+                data-quick-focus={index === 0 ? '' : undefined} onClick={() => choosePrompt(prompt)}>
+                <span className="mc-quick-choice-icon"><Icon name={prompt.icon} size="sm" /></span>
+                <span><strong>{prompt.title}</strong><small>{prompt.detail}</small></span>
+                <span className="mc-quick-insert" aria-hidden="true"><Icon name="plus" size="sm" /></span>
+              </button>)}
+            </div>}
+          </section>}
         </div>
 
-        <div style={S.composer}>
-          <div style={S.chips}>
-            {onAttachDocument && <button className="mc-chip" style={S.chip} onClick={onAttachDocument} disabled={busy || awaitingDecision}>＋ 添加业务文档（可选）</button>}
-          </div>
-          <div style={S.composerRow}>
-            <textarea
-              ref={inputRef}
-              className="mc-input"
-              style={S.textarea}
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onCompositionStart={() => { composing.current = true; }}
-              onCompositionEnd={() => { composing.current = false; }}
-              onBlur={() => { composing.current = false; }}
-              placeholder={
-                messages.some(message => message.hitl)
-                  ? '请先处理上方待确认提案…'
-                  : busy
-                    ? '建模助手思考中…'
-                    : '回答助手的口径问题，或反馈需要修正的内容…'
-              }
-              disabled={busy || awaitingDecision}
-            />
-            <button
-              className="mc-send"
-              style={{
-                ...S.send,
-                ...(busy || awaitingDecision || !input.trim() ? S.sendDisabled : {}),
-              }}
-              aria-label="发送建模消息"
-              onClick={handleSend}
-              disabled={busy || awaitingDecision || !input.trim()}
-            >
-              <Icon name="send" size="sm" />
-            </button>
+        <div className="mc-composer" style={S.composer}>
+          {composerNotice}
+          <div className="da-composer-glow">
+            <div className={`da-composer-shell da-composer${quickPrompts?.length ? ' mc-composer-with-prompts' : ''}`}>
+              {!!quickPrompts?.length && <button type="button" ref={promptTrigger} className="mc-quick-trigger" aria-label="快捷提示"
+                title="快捷提示" aria-expanded={showPrompts} aria-controls={showPrompts ? promptPanelId : undefined} disabled={inputDisabled}
+                onMouseDown={event => { if (event.button === 0) event.preventDefault(); }}
+                onClick={() => showPrompts ? closePrompts(true) : setPromptsOpen(true)}>
+                <span className="mc-quick-mark" aria-hidden="true">✧</span><span className="mc-quick-label">快捷提示</span>
+              </button>}
+              <div className="mc-composer-field">
+                <textarea
+                  ref={inputRef}
+                  className={suggestion ? 'mc-input mc-input-with-key-hint' : 'mc-input'}
+                  aria-label="建模消息"
+                  aria-describedby={suggestion ? suggestionId : undefined}
+                  rows={2}
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onFocus={resizeInput}
+                  onKeyDown={handleKeyDown}
+                  onCompositionStart={() => { composing.current = true; }}
+                  onCompositionEnd={() => { composing.current = false; }}
+                  onBlur={() => { composing.current = false; }}
+                  placeholder={placeholder}
+                  disabled={inputDisabled}
+                />
+                {suggestion && <div className="mc-composer-inline-hint" aria-hidden="true">
+                  {placeholder}<span id={suggestionId}>Tab 填入</span>
+                </div>}
+              </div>
+              <div className="da-chat-composer-bar mc-composer-bar">
+                {onAttachDocument && <button type="button" className="mc-chip" style={S.chip} onClick={onAttachDocument} disabled={busy || awaitingDecision}>＋ 添加业务文档（可选）</button>}
+                {/* Keep the send target still when a mouse click would change composer focus. */}
+                <button type="button" className="da-composer-submit" data-tooltip="发送" aria-label="发送建模消息"
+                  onMouseDown={variant === 'dock' ? event => { if (event.button === 0) event.preventDefault(); } : undefined}
+                  onClick={handleSend} disabled={inputDisabled || !input.trim()}>
+                  <span className="da-composer-submit-face"><Icon name="arrowUp" /></span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1088,7 +1190,6 @@ const S: Record<string, CSSProperties> = {
     textAlign: 'left',
   },
   quickHint: { fontSize: 12, fontWeight: 400, opacity: 0.75 },
-  chips: { display: 'flex', gap: 6, flexWrap: 'wrap' },
   chip: {
     border: '1px dashed color-mix(in srgb, var(--da-primary) 28%, var(--da-border))',
     background: 'transparent',
@@ -1158,23 +1259,4 @@ const S: Record<string, CSSProperties> = {
     overflowY: 'auto',
   },
   composer: { display: 'flex', flexDirection: 'column', gap: 8, padding: '8px max(20px, calc((100% - 780px) / 2)) 14px', background: 'var(--da-canvas-bg)', flexShrink: 0 },
-  composerRow: { display: 'flex', alignItems: 'center', gap: 8 },
-  textarea: {
-    flex: 1, resize: 'none', border: '1px solid var(--da-border)', borderRadius: 16,
-    padding: '13px 15px', fontSize: 13.5, lineHeight: 1.6, minHeight: 54, maxHeight: 160, outline: 'none',
-    fontFamily: 'inherit', color: 'var(--da-text)', background: 'var(--da-surface)',
-    boxShadow: '0 1px 2px rgba(16,24,42,.04), 0 10px 26px -24px rgba(16,24,42,.55)',
-    transition: 'border-color .18s ease, box-shadow .18s ease',
-  },
-  send: {
-    width: 40, height: 40, borderRadius: 999, border: 'none', background: 'var(--da-primary)',
-    color: '#fff', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-    boxShadow: '0 2px 8px -2px color-mix(in srgb, var(--da-primary) 55%, transparent), inset 0 1px 0 rgba(255,255,255,.18)',
-    transition: 'background .16s ease, transform .16s ease',
-  },
-  sendDisabled: {
-    background: 'var(--da-surface-sunken)',
-    color: 'var(--da-text-muted)',
-    cursor: 'not-allowed',
-  },
 };

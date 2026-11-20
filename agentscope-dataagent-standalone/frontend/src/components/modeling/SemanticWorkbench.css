@@ -339,10 +339,25 @@
 .sw-rail-closed .sw-node { position: relative; }
 
 /* spec117: first build summary and the quieter "new" mark */
-.sw-summary { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 8px 12px 0; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--da-primary-line, rgba(79, 70, 229, .3)); background: var(--da-primary-subtle, rgba(79, 70, 229, .05)); font-size: 13px; }
-.sw-summary-main { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
-.sw-summary-main strong { font-size: 14px; }
-.sw-ok-text { color: var(--da-success); }
+.sw-publication {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin: 8px 12px 2px;
+  padding: 9px 12px; border: 1px solid var(--da-primary-line); border-radius: 10px; background: var(--da-primary-subtle);
+}
+.sw-publication-icon {
+  width: 30px; height: 30px; flex: none; display: grid; place-items: center;
+  border-radius: 8px; background: var(--da-primary-soft); color: var(--da-primary);
+}
+.sw-publication.is-published .sw-publication-icon {
+  color: var(--da-success); background: color-mix(in srgb, var(--da-success) 12%, var(--da-surface));
+}
+.sw-publication-copy { flex: 1 1 160px; }
+.sw-publication-copy strong { font-size: 13px; }
+.sw-publication-copy small { font-size: 11px; margin-inline-start: 4px; color: var(--da-text-muted); }
+.sw-publication-copy p { margin: 2px 0 0; color: var(--da-text-2); font-size: 12px; }
+.sw-publication-actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-inline-start: auto; }
+.sw-publication-actions button { white-space: nowrap; }
+.sw-publication-actions .sw-publication-pending { color: var(--da-warn); }
+.sw-publication-error { flex-basis: 100%; margin: 0; font-size: 12px; color: var(--da-danger); }
 .sw-badge-new { position: absolute; top: -8px; right: -8px; height: 18px; padding: 0 6px; border-radius: 999px; background: var(--da-primary); color: #fff; font-size: 11px; font-weight: 600; display: inline-grid; place-items: center; box-shadow: 0 0 0 2px var(--da-surface); }
 .sw-onode-added { border-color: var(--da-primary-line, rgba(79, 70, 229, .45)); }
 .sw-line-added { stroke: var(--da-primary); stroke-dasharray: 6 3; }

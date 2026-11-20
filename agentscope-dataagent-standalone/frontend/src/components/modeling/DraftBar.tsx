@@ -15,9 +15,9 @@ const message = (e: unknown) => e instanceof Error ? e.message : String(e);
  * draft is checked automatically before publishing; open questions only warn, they never block.
  */
 /** What the page needs to guide the next step (spec092 §7). */
-export type DraftSummary = { changes: number; examples: number; publishing: boolean; publishedVersion: number | null; error: string | null };
+export type DraftSummary = { changes: number; examples: number; publishing: boolean; publishedVersion: number | null; error: string | null; blocked?: string | null };
 
-export default function DraftBar({ groupId, workflow, assistantActive, pendingConfirmations, onLocate, publishSignal = 0, onSummary, terms, editingBlocked = false, checksPending = false }: {
+export default function DraftBar({ groupId, workflow, assistantActive, pendingConfirmations, onLocate, publishSignal = 0, onSummary, terms, compact = false, editingBlocked = false, checksPending = false }: {
   groupId: string;
   workflow: ModelingWorkflow | null;
   assistantActive: boolean;
@@ -29,6 +29,7 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
   onSummary?: (summary: DraftSummary) => void;
   /** A quieter presentation for the terms page; all publish checks remain shared. */
   terms?: { pending: number; editing: boolean };
+  compact?: boolean;
   editingBlocked?: boolean;
   checksPending?: boolean;
 }) {
@@ -39,6 +40,7 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
   const [error, setError] = useState<string | null>(null);
   const [issues, setIssues] = useState<MdlIssue[]>([]);
   const [result, setResult] = useState<MdlPublishResult | null>(null);
+  const [publishFromPage, setPublishFromPage] = useState(false);
   const [confirming, setConfirming] = useState<'pending' | 'others' | 'discard' | null>(null);
   const active = useRef(groupId); active.current = groupId;
   const tour = useTour();
@@ -60,7 +62,7 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
     } catch (e) { if (active.current === groupId) setError(message(e)); }
   }, [groupId]);
   useEffect(() => {
-    setItems([]); setReview(null); setOpen(false); setIssues([]); setResult(null); setConfirming(null); setError(null);
+    setItems([]); setReview(null); setOpen(false); setIssues([]); setResult(null); setConfirming(null); setError(null); setPublishFromPage(false);
     void load();
     const update = (event: Event) => {
       if ((event as CustomEvent<{ groupId: string }>).detail?.groupId === groupId) void load();
@@ -82,13 +84,16 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
   const summary = useRef(onSummary); summary.current = onSummary;
   useEffect(() => {
     summary.current?.({ changes: changes.length, examples, publishing: busy === 'publish',
-      publishedVersion: result?.ok ? result.mdlVersion : null, error: error ?? (issues.length ? issues[0].message : null) });
-  }, [changes.length, examples, busy, result, error, issues]);
+      publishedVersion: result?.ok ? result.mdlVersion : null, error: error ?? (issues.length ? issues[0].message : null), blocked });
+  }, [changes.length, examples, busy, result, error, issues, blocked]);
   const lastSignal = useRef(publishSignal);
   useEffect(() => {
     if (publishSignal === lastSignal.current) return;
     lastSignal.current = publishSignal;
-    if (!blocked && busy === null) void publish();
+    if (!blocked && busy === null) {
+      setPublishFromPage(true);
+      void publish();
+    }
   }, [publishSignal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const publish = async (skipPending = false, includeOthers = false) => {
@@ -102,7 +107,13 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
       const published = await publishMdl(groupId);
       if (active.current !== groupId) return;
       setResult(published);
-      if (published.ok) tourSignal('published', { groupId });
+      if (published.ok) {
+        setOpen(false);
+        tourSignal('published', { groupId });
+        // Keep the completion card in progress until the displayed draft count is refreshed.
+        await load();
+        if (active.current !== groupId) return;
+      }
       setIssues(published.issues.filter(i => i.severity === 'error'));
       window.dispatchEvent(new CustomEvent('modeling:updated', { detail: { groupId } }));
     } catch (e) { if (active.current === groupId) setError(message(e)); }
@@ -123,11 +134,21 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
   const heldQuestions = result?.ok ? result.issues.filter(i => i.source === 'questions-review') : [];
   const label = busy === 'publish' ? '检查并发布中…' : republish ? '重新发布' : `发布 v${(workflow?.publishedVersion ?? 0) + 1}`;
   const notices = <>
-    {confirming === 'pending' && <div role="alert" data-tour="draft-confirm" style={{ ...note, background: 'rgba(234,179,8,.14)', color: 'var(--da-warn)' }}>
+    {confirming === 'pending' && (compact ? <section className="modeling-publish-pending" data-tour="draft-confirm" aria-label="发布前确认">
+      <span className="modeling-publish-pending-icon"><Icon name="circleAlert" size="sm" /></span>
+      <div role="status" className="modeling-publish-pending-copy">
+        <strong>还有 {pendingConfirmations} 项口径待确认</strong>
+        <p>跳过后，本次只发布已写入草稿的内容。待确认口径可稍后处理。</p>
+      </div>
+      <div className="modeling-publish-pending-actions">
+        <button type="button" autoFocus className="da-btn da-btn-primary da-btn-sm" onClick={() => { setConfirming(null); setOpen(false); onLocate(); }}>去处理</button>
+        {!tourActive() && <button type="button" className="da-btn da-btn-sm" disabled={busy !== null || !!blocked} onClick={() => void publish(true)}>跳过并发布</button>}
+      </div>
+    </section> : <div role="alert" data-tour="draft-confirm" style={{ ...note, background: 'rgba(234,179,8,.14)', color: 'var(--da-warn)' }}>
       还有 {pendingConfirmations} 项需要你确定，未确定的口径不会生效。
       <button className="da-btn da-btn-sm" onClick={() => { setConfirming(null); setOpen(false); onLocate(); }}>去处理</button>
       {!tourActive() && <button className="da-btn da-btn-sm" onClick={() => void publish(true)}>跳过并发布</button>}
-    </div>}
+    </div>)}
     {confirming === 'others' && <div role="alert" data-tour="draft-confirm" style={note}>
       本次发布包含其他成员的 {review?.changesByOthers} 项修改，确认一起发布？
       <button className="da-btn da-btn-primary da-btn-sm" onClick={() => void publish(true, true)}>确认发布</button>
@@ -148,15 +169,36 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
       <button className="da-btn da-btn-sm" onClick={() => setResult(r => r && { ...r, issues: r.issues.filter(i => i.source !== 'questions-review') })}>知道了</button>
     </div>}
   </>;
-  return <footer className="modeling-draft-bar" aria-label="草稿栏" style={{ position: 'relative' }}>
-    {drawerOpen && <div role="dialog" aria-label="草稿修改" style={{ position: 'absolute', left: 0, right: 0, bottom: '100%', marginBottom: 6, maxHeight: '60vh', overflowY: 'auto', zIndex: 20,
+  const hasNotices = confirming === 'pending' || confirming === 'others' || droppedQuestions.length > 0 || heldQuestions.length > 0;
+  const compactOpen = compact && (drawerOpen || hasNotices || (!publishFromPage && (!!error || issues.length > 0 || busy === 'publish')));
+  const dismiss = () => {
+    setOpen(false);
+    setConfirming(null);
+    setError(null);
+    setIssues([]);
+    setResult(previous => previous?.ok ? { ...previous, issues: [] } : null);
+  };
+  const publishButton = <button type="button" className={`da-btn ${ready ? 'da-btn-primary' : ''}`} data-tour="draft-publish"
+    disabled={busy !== null || !!blocked} onClick={() => { setPublishFromPage(false); void publish(); }}>{label}</button>;
+  if (compact && !compactOpen && !changes.length && !republish) return null;
+  return <div className={`modeling-draft-bar${compact ? ' modeling-draft-compact' : ''}`} aria-label="草稿栏" style={{ position: 'relative' }}>
+    {compact && (drawerLocked ? publishButton : <button type="button" className="da-btn da-btn-sm modeling-draft-trigger"
+      aria-expanded={compactOpen} aria-label={`查看草稿，${changes.length} 项待发布修改`}
+      onClick={() => { if (compactOpen) dismiss(); else setOpen(true); }}>
+      <Icon name="file" size="sm" /><span>草稿</span>{changes.length > 0 && <b>{changes.length}</b>}
+    </button>)}
+    {(compact ? compactOpen : drawerOpen) && <div role="dialog" aria-label="草稿修改" className="modeling-draft-drawer" style={{ position: 'absolute', left: 0, right: 0, bottom: '100%', marginBottom: 6, maxHeight: '60vh', overflowY: 'auto', zIndex: 20,
       background: 'var(--da-surface)', border: '1px solid var(--da-border)', borderRadius: 8, boxShadow: '0 -8px 24px rgba(15,23,42,.12)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--da-border)', position: 'sticky', top: 0, background: 'inherit' }}>
         <strong>相对{workflow?.queryAvailable ? `线上 v${workflow.publishedVersion}` : '空白工程'}的修改</strong>
         <span style={{ fontSize: 12, color: 'var(--da-text-muted)' }}>业务文档 {changes.filter(c => c.category === 'DOCUMENT').length} · 已确认问答 {examples}</span>
         <span style={{ flex: 1 }} />
-        <button className="da-btn da-btn-sm" aria-label="收起" onClick={() => setOpen(false)}>×</button>
+        <button className="da-btn da-btn-sm" aria-label="收起" onClick={compact ? dismiss : () => setOpen(false)}>×</button>
       </div>
+      {compact && <div className="modeling-draft-review">
+        {notices}{blocked && <p className="modeling-draft-hint">{blocked}</p>}
+        {!drawerLocked && confirming !== 'pending' && confirming !== 'others' && publishButton}
+      </div>}
       {items.length ? <DraftItemsList groupId={groupId} items={items} grouped disabled={running} onChanged={() => void load()} />
         : <div style={{ padding: 12, fontSize: 12, color: 'var(--da-text-muted)' }}>没有待发布的模型、关系或业务语义修改。</div>}
       <div style={{ padding: '8px 12px', borderTop: '1px solid var(--da-border)' }}>
@@ -167,8 +209,8 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
           : <button className="da-btn da-btn-sm" disabled={busy !== null || running} onClick={() => setConfirming('discard')}>放弃全部草稿</button>)}
       </div>
     </div>}
-    {notices}
-    {terms ? <div className="terms-publish-bar">
+    {!compact && notices}
+    {compact ? null : terms ? <div className="terms-publish-bar">
       <span className="terms-publish-icon"><Icon name="file" /></span>
       <div className="terms-publish-copy">
         <strong>{terms.pending > 0 ? `有 ${terms.pending} 项术语修改待发布` : changes.length > 0 || republish ? '知识库有修改待发布' : review ? (workflow?.publishedVersion ? '术语已与线上版本同步' : '暂无待发布修改') : error ? '暂时无法读取草稿状态' : '正在检查知识库草稿…'}</strong>
@@ -193,9 +235,9 @@ export default function DraftBar({ groupId, workflow, assistantActive, pendingCo
       {blocked && <span className="modeling-draft-hint">{blocked}</span>}
       {republish && !running && <span className="modeling-draft-warning">有修改尚未生效，重新发布后才能问数</span>}
       {ready && <span className="modeling-draft-ready"><Icon name="check" size="sm" />可发布</span>}
-      <button className={`da-btn ${ready ? 'da-btn-primary' : ''}`} data-tour="draft-publish" disabled={busy !== null || !!blocked} onClick={() => void publish()}>{label}</button>
+      {publishButton}
     </div>}
-  </footer>;
+  </div>;
 }
 
 const note = { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' as const, fontSize: 12, padding: '6px 10px', marginBottom: 6, borderRadius: 8, border: '1px solid var(--da-border)', background: 'var(--da-surface)' };

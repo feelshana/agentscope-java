@@ -89,15 +89,16 @@ export default function BusinessDocumentsPanel({ groupId, onChanged, variant = '
     {!setup && loaded && !documents.length && <div className="mo-documents-empty"><Icon name="file" /><strong>还没有业务文档</strong><p>可补充字段含义、指标口径和过滤规则，也可以稍后添加。</p></div>}
     <div className={setup ? undefined : 'mo-document-list'}>{documents.map(doc => <div key={doc.name} className={setup ? 'mp-document' : `mo-document-row ${doc.status === 'DELETED' ? 'is-deleted' : ''}`}>
       {!setup && <span className="mo-document-icon"><Icon name="file" size="sm" /></span>}
-      <div className={setup ? undefined : 'mo-grow'}>
-        {setup || doc.status === 'DELETED' ? <span style={{ textDecoration: doc.status === 'DELETED' ? 'line-through' : undefined }}>{doc.name}</span>
-          : <button type="button" className="mo-document-title" onClick={() => setReading(doc)} title="阅读文档内容">{doc.name}</button>}
+      <div className="mo-grow">
+        {doc.status === 'DELETED' ? <del>{doc.name}</del>
+          : <button type="button" className="mo-document-title" disabled={busy !== null} onClick={() => setReading(doc)} title="阅读文档内容">{doc.name}</button>}
         <div className={setup ? undefined : 'mo-document-meta'}><span className={`da-badge${setup ? '' : ` mo-document-status mo-document-status-${doc.status.toLowerCase()}`}`} style={{ color: STATUS[doc.status].color }}>{STATUS[doc.status].label}</span>
         {!setup && <span className="mo-document-size">{doc.chars.toLocaleString('zh-CN')} 字符</span>}
         {doc.previousVersions > 0 && <span className="da-small">历史版本 {doc.previousVersions}</span>}</div>
       </div>
       {doc.status !== 'DELETED' && <span className={setup ? 'mo-setup-document-actions' : 'mo-document-actions'}>
-        {!setup && <button type="button" className="da-btn mo-document-read" onClick={() => setReading(doc)}><Icon name="book" size="sm" />阅读</button>}
+        <button type="button" className={setup ? 'da-btn da-btn-sm mo-setup-document-read' : 'da-btn mo-document-read'}
+          disabled={busy !== null} aria-label={`阅读业务文档 ${doc.name}`} onClick={() => setReading(doc)}><Icon name="book" size="sm" />阅读</button>
         <button type="button" className={setup ? 'da-btn da-btn-sm' : 'mo-document-tool'} disabled={busy !== null} aria-label={setup ? undefined : `替换文档：${doc.name}`} title={setup ? undefined : busy === doc.name ? '处理中…' : '替换文档'} onClick={() => pick(doc.name)}>{setup ? busy === doc.name ? '处理中…' : '替换' : <Icon name="refresh" size="sm" />}</button>
         <button type="button" className={setup ? 'da-btn da-btn-sm' : 'mo-document-tool mo-document-delete'} disabled={busy !== null} aria-label={setup ? undefined : `删除文档：${doc.name}`} title={setup ? undefined : '删除文档'} onClick={() => void remove(doc.name)}>{setup ? '删除' : <Icon name="trash" size="sm" />}</button>
       </span>}

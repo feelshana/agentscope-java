@@ -3,8 +3,9 @@ import { FactQueryWindowSettings } from '../../components/FactQueryWindowSetting
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import ModelingChatPanel from '../../components/ModelingChatPanel';
-import ModelingAssistantIcon from '../../components/modeling/ModelingAssistantIcon';
 import type { AssistantState } from '../../components/ModelingChatPanel';
+import { confirmationRequest } from '../../components/modeling/modelingHistory';
+import { getModelingPrompts } from '../../components/modeling/modelingPrompts';
 import SemanticWorkbench from '../../components/modeling/SemanticWorkbench';
 import { WorkspaceMenu } from '../../components/KnowledgeWorkspace';
 import { changeKey } from '../../components/modeling/SemanticWorkbench';
@@ -16,6 +17,8 @@ import SemanticReadOnlyWorkspace from '../../components/modeling/SemanticReadOnl
 import { draftSnapshot, publishedSnapshot } from '../../components/modeling/semanticSnapshot';
 import ModelingMaterials from '../../components/modeling/ModelingMaterials';
 import FieldScreeningPanel from '../../components/modeling/FieldScreeningPanel';
+import FieldScreeningReview from '../../components/modeling/FieldScreeningReview';
+import type { ScreeningSelection } from '../../components/modeling/FieldScreeningReview';
 import ModelingPreparation from '../../components/modeling/ModelingPreparation';
 import Icon from '../../components/Icon';
 import type { FieldAdjustment } from '../../components/modeling/FieldScreeningPanel';
@@ -41,7 +44,7 @@ import type { KnowledgeBaseBrowse, MdlView, MdlPreview } from '../../api/semanti
 import { getModelingWorkflow } from '../../api/modelingWorkflow';
 import type { ModelingWorkflow } from '../../api/modelingWorkflow';
 import { listConfirmations, resolveConfirmations } from '../../api/draftReview';
-import type { Confirmation, ConfirmationAnswer, ConfirmationDecision } from '../../api/draftReview';
+import type { Confirmation, ConfirmationAnswer } from '../../api/draftReview';
 import type { TurnPurpose } from '../../api/chat';
 import { useQueryReadiness } from '../../components/useQueryReadiness';
 import SemanticAssetsPanel from '../../components/modeling/SemanticAssetsPanel';
@@ -49,8 +52,6 @@ import './SemanticModelingPage.css';
 import '../../components/modeling/ModelingSetup.css';
 
 type Tab = 'semantic' | 'coach' | 'assets' | 'overview';
-/** spec117 §3c: the right panel the icon bar switches; null when folded away. */
-type Panel = 'detail' | 'assistant' | 'pending' | null;
 // spec092 §7: the conversation is the workspace; review happens inline, publishing in the draft bar.
 // spec117: models, relations and business knowledge are one 语义模型 tab; older addresses still work.
 const LEGACY_TABS: Record<string, Tab> = {
@@ -79,10 +80,6 @@ const documentRequest = (changes: string[]) => `业务文档有变化：${change
   + '文档被删除时，不要自行删除规则，在回复中列出可能来自该文档的规则，由我决定是否删除。不要重新生成模型，不要重新加载已加载的技能，不要写 Cube/View。'
   + '只修改与文档有差异的内容，完成后执行校验，按回复写法简短说明。';
 /** spec092: hands the user's answers to the assistant to write where queries read them. */
-const confirmRequest = (decisions: ConfirmationDecision[]) => '我确定了以下口径，请整理后写入草稿：指标定义、默认过滤、术语写入 knowledge/rules/，'
-  + '字段含义写入对应模型的列描述，确定建立的关系写入 relationships.yml；不要再次向我确认这些内容，完成后用一两行说明更新了哪些口径。\n'
-  + decisions.map((d, i) => `${i + 1}. 问题：${d.question}\n   我的确定：${d.answer}`).join('\n');
-
 /** spec093: after the modeler changed one table's fields, only that table is re-modeled. */
 const remodelRequest = (c: FieldAdjustment) => `建模人员调整了表 ${c.table} 的字段：`
   + (c.added.length ? `新纳入 ${c.added.join('、')}；` : '') + (c.removed.length ? `取消纳入 ${c.removed.join('、')}；` : '')
@@ -92,8 +89,6 @@ const remodelRequest = (c: FieldAdjustment) => `建模人员调整了表 ${c.tab
 
 /** Short texts the conversation shows for the requests above. */
 const documentLabel = (changes: string[]) => `业务文档有变化，请同步到模型：${changes.join('；')}`;
-const confirmLabel = (decisions: ConfirmationDecision[]) => `我确定了 ${decisions.length} 项口径：\n`
-  + decisions.map(d => `· ${d.question} → ${d.answer}`).join('\n');
 const remodelLabel = (c: FieldAdjustment) => {
   const parts = [c.added.length ? `新纳入 ${c.added.join('、')}` : '', c.removed.length ? `取消 ${c.removed.join('、')}` : ''].filter(Boolean);
   return `我调整了 ${c.table} 的字段，请按新字段重新建模这张表${parts.length ? `（${parts.join('；')}）` : ''}`;
@@ -156,27 +151,25 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   const windowReady = readyGroup === groupId;
   const windowReadyRef = useRef(false);
   const updateWindowReady = useCallback((ready: boolean) => { windowReadyRef.current = ready; setReadyGroup(ready ? groupId : null); }, [groupId]);
-  // spec092 §7: with ?start=1 the page offers documents first and starts only on the user's click.
-  const [startOffer, setStartOffer] = useState<string | null>(null);
   // spec093: tables waiting for field screening; null until loaded.
   const [screening, setScreening] = useState<ScreeningStatus[] | null>(null);
   const screeningPending = !!screening?.some(t => !t.confirmed);
-  const [setupPhase, setSetupPhase] = useState<'fields' | 'prepare' | null>(params.get('start') === '1' ? 'prepare' : null);
-  const setupActive = screeningPending || setupPhase !== null || startOffer === groupId;
-  const setupFields = screeningPending || setupPhase === 'fields';
+  const preparationKey = `modeling-prepare:${groupId}`;
+  const [setupPhase, setSetupPhase] = useState<'fields' | 'prepare' | null>(() => {
+    if (params.get('start') === '1') return 'prepare';
+    try { return sessionStorage.getItem(preparationKey) === '1' ? 'prepare' : null; } catch { return null; }
+  });
+  const [fieldEditor, setFieldEditor] = useState<ScreeningSelection | null>(null);
+  const [confirmingScreening, setConfirmingScreening] = useState(false);
+  const [startSignal, setStartSignal] = useState(0);
+  const setupFields = screeningPending || (screening === null && setupPhase !== null) || setupPhase === 'fields' || fieldEditor !== null;
+  const setupActive = setupFields || setupPhase !== null;
   const setupLeaveGuard = useRef<(() => Promise<boolean>) | null>(null);
   const [adjusting, setAdjusting] = useState<string | null>(null);
   const [windowSignal, setWindowSignal] = useState(0);
-  const startOffered = useRef<string | null>(null);
-  // The ?start=1 intent is remembered: switching tabs rewrites the URL, and the 2026-10-22 test
-  // lost automatic modeling that way (only the document update ran on a new knowledge base).
-  const startIntent = useRef<string | null>(null);
-  if (params.get('start') === '1' && startOffered.current !== groupId) startIntent.current = groupId;
-  const confirmAnchor = useRef<HTMLDivElement>(null);
   // spec092 §7: 试问 opens only when the user asks for it.
   const [trialOpen, setTrialOpen] = useState(false);
   const [examples, setExamples] = useState(0);
-  const [unconfirmedTrials, setUnconfirmedTrials] = useState(0);
   const [draftSummary, setDraftSummary] = useState<DraftSummary>({ changes: 0, examples: 0, publishing: false, publishedVersion: null, error: null });
   const [publishSignal, setPublishSignal] = useState(0);
   const [prefill, setPrefill] = useState<{ id: number; text: string } | null>(null);
@@ -189,18 +182,30 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   const [advancedOpen, setAdvancedOpen] = useState(() => ADVANCED.has(legacyAsset ?? ''));
   useEffect(() => { if (ADVANCED.has(legacyAsset ?? '')) setAdvancedOpen(true); }, [legacyAsset]);
   const publishedVersion = workflow?.publishedVersion ?? group.publishedVersion ?? 0;
-  // Published knowledge bases open on what they contain; anything unfinished opens the conversation.
   const tab: Tab = explicitTab ?? 'semantic';
-  // spec117 §3c: unfinished knowledge bases open with the assistant; published ones with details.
-  const [panelChoice, setPanelChoice] = useState<Panel | undefined>(undefined);
-  const defaultPanel: Panel = asset === 'modeling' || params.get('start') === '1' || !publishedVersion ? 'assistant' : 'detail';
-  const panel: Panel = panelChoice === undefined ? defaultPanel : panelChoice;
-  const openAssistant = () => { if (canLeaveField()) setPanelChoice('assistant'); };
-  const togglePanel = (next: Exclude<Panel, null>) => {
-    if (canLeaveField()) setPanelChoice(panel === next ? null : next);
+  const mode = params.get('mode');
+  const inChat = setupActive || mode === 'chat' || (mode !== 'board' && (!explicitTab || asset === 'modeling'));
+  const [comparisonOpen, setComparisonOpen] = useState(false);
+  const [pendingOpen, setPendingOpen] = useState(false);
+  const pendingDialog = useRef<HTMLDialogElement>(null);
+  const conversationConfirmation = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const dialog = pendingDialog.current;
+    if (!dialog) return;
+    if (pendingOpen && !dialog.open) dialog.showModal();
+    else if (!pendingOpen && dialog.open) dialog.close();
+  }, [pendingOpen]);
+  const showBoard = () => {
+    if (!canLeaveField()) return;
+    setComparisonOpen(false);
+    setParams(previous => { const next = new URLSearchParams(previous); next.set('mode', 'board'); return next; });
   };
-  const [dockWide, setDockWide] = useState(false);
-  const chatPane = useRef<HTMLElement>(null);
+  const openAssistant = () => {
+    if (!canLeaveField()) return;
+    setPendingOpen(false);
+    setComparisonOpen(false);
+    setParams(previous => { const next = new URLSearchParams(previous); next.set('mode', 'chat'); return next; });
+  };
   const [marked, setMarked] = useState<DraftItem[]>([]);
   const [seen, setSeen] = useState<Set<string>>(new Set());
   const [reveal, setReveal] = useState<{ id: number; item: DraftItem } | null>(null);
@@ -209,19 +214,23 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   const generation = useRef(0);
   const sequence = useRef(0);
   const selectTab = (key: Tab) => {
-    if (key !== tab && canLeaveField()) setParams({ asset: key }, { replace: true });
+    if (canLeaveField()) {
+      setComparisonOpen(false);
+      setParams({ asset: key, mode: 'board' });
+    }
   };
   /** {@code label} is what the conversation shows for a request the platform wrote. */
   const request = (text: string, purpose?: TurnPurpose, label?: string) => {
     if (!windowReadyRef.current) { setError('请先完成事实表时间配置，再开始建模。'); return false; }
-    setQueue(previous => ({ groupId, items: [...(previous.groupId === groupId ? previous.items : []), { id: ++sequence.current, text, purpose, label }] }));
+    const item = { id: ++sequence.current, text, purpose, label };
+    setQueue(previous => ({ groupId, items: [...previous.items, item] }));
     return true;
   };
   // Several quick document changes merge into one queued request instead of one turn each.
   const documentsChanged = (change: string) => {
     window.dispatchEvent(new CustomEvent('modeling:updated', { detail: { groupId } }));
     // Before modeling starts, the automatic modeling turn reads every document anyway.
-    if (setupActive || !windowReady || startOffer === groupId || (startIntent.current === groupId && startOffered.current !== groupId)) return;
+    if (setupActive || !windowReady) return;
     setQueue(previous => {
       const items = previous.groupId === groupId ? previous.items : [];
       const waiting = items.findIndex(r => r.purpose === 'document');
@@ -238,7 +247,7 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
     try {
       const decisions = await resolveConfirmations(groupId, answers);
       if (activeGroup.current !== groupId) return;
-      if (decisions.length) request(confirmRequest(decisions), 'confirm', confirmLabel(decisions));
+      if (decisions.length) request(confirmationRequest(decisions), 'confirm');
       // spec114: once the rule is written, the questions that waited for it get their SQL.
       const linked = [...new Set(decisions.flatMap(d => d.questionIds ?? []))];
       if (linked.length) {
@@ -272,10 +281,10 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
     await Promise.all(checks);
   }, [groupId]);
   useEffect(() => {
-    setReadyGroup(null); windowReadyRef.current = false; setStartOffer(null); startOffered.current = null;
-    if (startIntent.current !== groupId) startIntent.current = null; setTrialOpen(false); setExamples(0); setUnconfirmedTrials(0);
+    setReadyGroup(null); windowReadyRef.current = false;
+    setTrialOpen(false); setExamples(0);
     setView(null); setPreview(null); setWorkflow(null); setConfirmations([]); setScreening(null); setAdjusting(null);
-    setPrefill(null); setFocusRelation(null); setChangeMark(null); setPanelChoice(undefined); setDockWide(false); setMarked([]); setReveal(null);
+    setPrefill(null); setFocusRelation(null); setChangeMark(null); setMarked([]); setReveal(null);
     try { setSeen(new Set(JSON.parse(localStorage.getItem(`sw-seen:${groupId}`) ?? '[]') as string[])); } catch { setSeen(new Set()); } setVersionChoice('draft'); setBrowse(null);
     void refresh();
     const update = (event: Event) => {
@@ -285,12 +294,8 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
     return () => { generation.current++; window.removeEventListener('modeling:updated', update); };
   }, [groupId, refresh]);
   useEffect(() => {
-    if (!windowReady || startIntent.current !== groupId || startOffered.current === groupId) return;
-    startOffered.current = groupId;
-    setStartOffer(groupId);
-    setPanelChoice('assistant');
-    setDockWide(true);
-  }, [windowReady, groupId, params]);
+    if (params.get('start') === '1') setSetupPhase('prepare');
+  }, [params]);
   // spec105: the guided tour follows what this page really reports.
   useEffect(() => { tourSignal('data-ready', { groupId }); }, [groupId]);
   useEffect(() => { if (screening !== null && !screeningPending) tourSignal('screening-done', { groupId }); }, [screening, screeningPending, groupId]);
@@ -318,13 +323,11 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
     return () => window.clearTimeout(timer);
   }, [tourStep, idle, draftSummary.changes, workflow?.queryAvailable, groupId]);
   const startModeling = () => {
-    if (!windowReadyRef.current) return;
+    if (!request(AUTO_MODELING_REQUEST, 'auto', '开始自动建模')) return;
     tourSignal('model-started', { groupId });
-    startOffered.current = groupId; startIntent.current = null; setSetupPhase(null);
-    setStartOffer(null);
-    setParams({ asset: 'semantic' }, { replace: true });
-    openAssistant();
-    request(AUTO_MODELING_REQUEST, 'auto', '开始建模');
+    setSetupPhase(null);
+    try { sessionStorage.removeItem(preparationKey); } catch { /* Resume is optional. */ }
+    setParams({ asset: 'semantic', mode: 'chat' }, { replace: true });
   };
 
   const files = preview?.files || [];
@@ -337,9 +340,9 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
     .map(f => ({ key: f.path, title: f.path, file: f.path, dirty: dirty(f.path) }));
   const selected = params.get('selected');
   const hasPublished = publishedVersion > 0;
+  const quickPrompts = useMemo(() => hasPublished && !setupActive ? getModelingPrompts(view) : undefined, [hasPublished, setupActive, view]);
   const version = hasPublished && versionChoice === 'published' ? 'published' : 'draft';
   const comparing = hasPublished && versionChoice === 'compare';
-  const draftChanged = view?.changed ?? workflow?.draftChanged;
   const graphReady = view !== null;
   useEffect(() => {
     // The published version is shown, or compared against while viewing the draft (spec117).
@@ -357,7 +360,7 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   const baselineFiles = useMemo(() => version === 'draft' && hasPublished && preview ? new Map(preview.publishedFiles.map(f => [f.path, f.content])) : null, [version, hasPublished, preview]);
   const workbenchView = workbenchViewOf(asset, params.get('view'));
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'semantic', label: '语义模型' }, { key: 'coach', label: '问数优化' }, { key: 'assets', label: '公共视图' }, { key: 'overview', label: '资料' },
+    { key: 'semantic', label: '语义建模' }, { key: 'coach', label: '问数优化' }, { key: 'assets', label: '公共视图' }, { key: 'overview', label: '资料' },
   ];
   // A turn's changes are marked when it ends; marks accumulate from the earliest unmarked turn.
   const turnStart = useRef<string | null>(null);
@@ -386,19 +389,19 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   const pendingCount = confirmations.length + unseenCount;
   const revealChange = (item: DraftItem) => {
     if (!canLeaveField()) return;
+    setPendingOpen(false);
+    setComparisonOpen(false);
     setVersionChoice('draft');
-    setParams({ asset: 'semantic', view: item.category === 'MODEL' || item.category === 'RELATIONSHIP' ? 'graph' : 'rules' }, { replace: true });
+    setParams({ mode: 'board', asset: 'semantic', view: item.category === 'MODEL' || item.category === 'RELATIONSHIP' ? 'graph' : 'rules' });
     setReveal({ id: ++sequence.current, item });
   };
-  // The guided tour works in the conversation; it opens the assistant while it does.
-  useEffect(() => { if (queryHeld) setPanelChoice('assistant'); }, [queryHeld]);
   /** Fills the conversation's input; the user reads it and decides whether to send. */
   const askAssistant = (text: string) => {
     if (!canLeaveField()) return;
     setPrefill({ id: ++sequence.current, text });
-    setPanelChoice('assistant');
+    if (!comparisonOpen) openAssistant();
   };
-  const setWorkbenchView = (next: WorkbenchView) => setParams({ asset: 'semantic', view: next }, { replace: true });
+  const setWorkbenchView = (next: WorkbenchView) => setParams({ asset: 'semantic', view: next, mode: comparisonOpen ? 'chat' : 'board' }, { replace: true });
   const showVersion = (next: typeof versionChoice) => {
     if (next !== versionChoice && canLeaveField()) setVersionChoice(next);
   };
@@ -415,10 +418,13 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
     </>}
   </div>;
   const waiting = pending.length;
-  const assistantLabel = assistantState !== 'idle' ? (waiting ? `助手运行中 · ${waiting} 个请求排队` : '助手运行中')
+  const assistantLabel = assistantState === 'awaiting' ? '助手有待确认提案'
+    : assistantState === 'running' ? (waiting ? `助手运行中 · ${waiting} 个请求排队` : '助手运行中')
     : waiting ? '请求排队中' : '助手空闲';
   const toQuery = workflow?.queryAvailable ? () => { if (canLeaveField()) navigate(`/chat?groups=${encodeURIComponent(groupId)}`); } : undefined;
-  const preparing = useQueryReadiness(groupId, workflow?.publishedVersion);
+  const preparationVersion = Math.max(workflow?.publishedVersion ?? 0, draftSummary.publishedVersion ?? 0);
+  const preparing = useQueryReadiness(groupId, preparationVersion);
+  const publishDraft = () => { if (canLeaveField()) setPublishSignal(n => n + 1); };
   // Indexing and warm-up run right after publishing; the first question should not wait for them.
   useEffect(() => {
     if (tourStep !== 'preparing' || preparing !== null) return;
@@ -429,72 +435,130 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
   const turnDone = () => {
     window.dispatchEvent(new CustomEvent('modeling:updated', { detail: { groupId } }));
   };
-  const locateConfirmations = () => { if (canLeaveField()) setPanelChoice('pending'); };
+  const locateConfirmations = () => { if (canLeaveField()) setPendingOpen(true); };
 
-  const exitSetup = async () => {
+  const exitSetup = async (destination: string) => {
+    if (confirmingScreening) return;
     if (setupLeaveGuard.current && !await setupLeaveGuard.current()) return;
-    navigate(`/configure/datasets/${groupId}`);
+    try { sessionStorage.setItem(preparationKey, '1'); } catch { /* Resume is optional. */ }
+    navigate(destination);
   };
-  const finishScreening = () => {
-    startIntent.current = groupId;
-    setSetupPhase('prepare'); setStartOffer(groupId);
+  const returnToModeling = () => {
+    if (setupActive) void exitSetup('/configure/modeling');
+    else if (canLeaveField()) navigate('/configure/modeling');
+  };
+  const finishScreening = (tables: ScreeningStatus[]) => {
+    setFieldEditor(null);
+    setScreening(tables);
+    setConfirmingScreening(false);
+    setSetupPhase('prepare');
+    try { sessionStorage.setItem(preparationKey, '1'); } catch { /* Resume is optional. */ }
     void refresh();
   };
 
-  return <div className={`modeling-workbench mw${setupActive ? ' mw-setup' : ''}`}>
+  const comparingConversation = inChat && comparisonOpen && !setupActive;
+  const visibleBoard = !inChat || comparingConversation;
+  const pairWithConversation = () => {
+    if (!canLeaveField()) return;
+    setComparisonOpen(true);
+    setParams(previous => { const next = new URLSearchParams(previous); next.set('mode', 'chat'); return next; });
+  };
+  const inspectTurn = (turn: string, sideBySide = false) => {
+    if (!canLeaveField()) return;
+    setComparisonOpen(sideBySide);
+    setChangeMark(previous => previous && (!previous.since || previous.since < turn) ? previous : { since: turn });
+    setVersionChoice('draft');
+    setParams({ asset: 'semantic', view: 'graph', mode: sideBySide ? 'chat' : 'board' });
+  };
+  const guidedScreening = setupFields && tourStep === 'screening' && !tour?.paused;
+  const editingScreening = setupFields && (fieldEditor !== null || guidedScreening);
+  const preparation = setupActive ? <div className="mw-setup-intro">
+    <ol className="mw-setup-progress" aria-label="首次建模步骤">
+      <li aria-current={setupFields ? 'step' : undefined} className={setupFields ? undefined : 'is-complete'}>
+        <span>{setupFields ? '1' : <Icon name="check" size="sm" />}</span>整理字段
+      </li>
+      <li aria-current={setupFields ? undefined : 'step'}><span>2</span>准备</li>
+      <li><span>3</span>自动建模</li>
+    </ol>
+    <div key={setupFields ? 'field-review' : 'model-preparation'} className="mw-setup-stage">
+      {setupFields ? <FieldScreeningReview groupId={groupId} tables={screening} editorOpen={editingScreening}
+        onOpen={setFieldEditor} onStatus={setScreening} onBusy={setConfirmingScreening} onDone={finishScreening} />
+        : screening === null ? <GraphLoading /> : <ModelingPreparation groupId={groupId} tables={screening} startSignal={startSignal} onReady={updateWindowReady}
+          onEditFields={() => { setSetupPhase('fields'); setFieldEditor({}); }} onDocumentsChanged={documentsChanged}
+          onStart={startModeling} confirmWindow={tourStep === 'window' && !tour?.paused} />}
+    </div>
+  </div> : null;
+  const setupCommand = (text: string) => {
+    if (confirmingScreening) return true;
+    const command = text.replace(/[。！!，,\s]+$/u, '');
+    if (setupFields && /^(?:请)?(?:查看|整理|确认)(?:建模)?字段$/u.test(command) && screening?.length) {
+      setFieldEditor({});
+    } else if (!setupFields && screening !== null && /^(?:请)?开始(?:自动)?建模$/u.test(command)) {
+      setStartSignal(n => n + 1);
+    } else {
+      setError(setupFields ? '请先在字段卡片中核对并确认数据表。' : '准备完成后可输入「开始自动建模」，或点击卡片上的按钮。');
+      return true;
+    }
+    setError('');
+    return true;
+  };
+  const openFirstBuild = () => {
+    if (!canLeaveField()) return;
+    setSetupPhase('prepare');
+    setComparisonOpen(false);
+  };
+
+  return <div className={`modeling-workbench mw mw-conversation-workspace ${inChat ? 'mw-conversation' : 'mw-board'}${comparingConversation ? ' mw-comparing' : ''}${setupActive ? ' mw-preparation' : ''}`}>
     <div className="mw-top">
-    {setupActive ? <header className="ms-focusbar">
-      <button type="button" className="ms-back" aria-label="返回知识库" onClick={() => void exitSetup()}><Icon name="back" size="sm" /></button>
-      <div className="ms-crumb"><span>语义建模</span><i>/</i><strong title={group.name}>{group.name}</strong></div>
-      <SetupSteps current={setupFields ? 0 : 1} />
-      <span className="ms-header-note">{setupFields ? '整理完成后自动进入准备' : '这一步随时可以回来改'}</span>
-      <button type="button" className="mp-button" onClick={() => void exitSetup()}>退出整理</button>
-    </header> : <><header className="mw-head">
-      <div className="mw-crumb">
-        <button type="button" className="mw-back" aria-label="返回语义建模" title="返回语义建模" onClick={() => { if (canLeaveField()) navigate('/configure/modeling'); }}><Icon name="back" size="sm" /></button>
-        <button type="button" className="mw-crumb-link" onClick={() => { if (canLeaveField()) navigate('/configure/modeling'); }}>语义建模</button>
-        <span className="mw-crumb-sep">/</span>
-        <h1 className="mw-title" title={group.name}>{group.name}</h1>
-        <span className="mw-header-divider" aria-hidden="true" />
-        <span className={`mw-pill ${workflow?.queryAvailable ? 'mw-pill-ok' : ''}`}
-          title={hasPublished && workflow && !workflow.queryAvailable ? '当前不可问数' : undefined}>{workflow?.queryAvailable && <span className="mw-dot" />}{hasPublished ? `线上 v${publishedVersion}${workflow?.queryAvailable ? ' · 可问数' : ''}` : '尚未发布'}</span>
-        {draftChanged && <span className="mw-pill sm-version-status">草稿待发布</span>}
-        <span className={`mw-pill ${idle ? '' : 'mw-pill-live'}`}><span className="mw-dot" />{assistantLabel}</span>
-      </div>
-      <div className="mw-actions">
-        <div className="mw-layout-switch" role="group" aria-label="工作区布局">
-          {(['chat', 'split', 'model'] as const).map((mode, index) => <button key={mode} type="button"
-            className="da-btn da-btn-sm" aria-pressed={mode === (panel === 'assistant' ? dockWide ? 'chat' : 'split' : 'model')}
-            onClick={() => {
-              if (!canLeaveField()) return;
-              setDockWide(mode === 'chat');
-              setPanelChoice(mode === 'model' ? 'detail' : 'assistant');
-              if (mode !== 'chat' && tab !== 'semantic') selectTab('semantic');
-              if (mode === 'chat') requestAnimationFrame(() => chatPane.current?.querySelector('textarea')?.focus());
-            }}>{['专注对话', '并排查看', '专注模型'][index]}</button>)}
+      <header className="mw-head">
+        <div className="mw-crumb">
+          <button type="button" className="mw-crumb-link" title="返回语义建模列表" disabled={confirmingScreening} onClick={returnToModeling}>语义建模</button><span className="mw-crumb-sep">/</span>
+          <h1 className="mw-title" title={group.name}>{group.name}</h1>
+          <span className={`mw-pill ${hasPublished ? 'mw-pill-ok' : ''}`}
+            title={hasPublished && workflow && !workflow.queryAvailable ? '当前不可问数' : undefined}>{hasPublished && <span className="mw-dot" />}{hasPublished ? `线上 v${publishedVersion}` : '尚未发布'}</span>
         </div>
-        <details className="mw-more">
-          <summary className="da-btn da-btn-sm">更多</summary>
-          <div>
-            {!screeningPending && screening !== null && <button className="da-btn da-btn-sm" onClick={() => setWindowSignal(n => n + 1)}>事实表时间范围</button>}
-            <button className="da-btn da-btn-sm" onClick={() => { if (canLeaveField()) navigate(`/configure/datasets/${groupId}`); }}>知识库</button>
-          </div>
-        </details>
-      </div>
-    </header>
-    <nav aria-label="语义建模页面" className="mw-tabs">
-      {tabs.map(item => <button key={item.key} type="button" aria-current={tab === item.key ? 'page' : undefined} className={`mw-tab ${tab === item.key ? 'mw-tab-on' : ''}`} onClick={() => selectTab(item.key)}>{item.label}</button>)}
-    </nav>
-    </>}
+        <div className="mw-actions">
+          {!setupActive && <>
+            {workflow && <DraftBar groupId={groupId} workflow={workflow} assistantActive={!idle} pendingConfirmations={confirmations.length}
+              checksPending={!confirmationsReady || screening === null} compact onLocate={locateConfirmations}
+              publishSignal={publishSignal} onSummary={setDraftSummary} />}
+            {pendingCount > 0 && <button type="button" className="da-btn da-btn-sm mw-pending-action" onClick={locateConfirmations}
+              aria-haspopup="dialog" aria-label={`查看 ${pendingCount} 项待处理`} title={`查看 ${pendingCount} 项待处理`}>
+              <Icon name="clock" size="sm" /><span>待处理</span><b>{pendingCount}</b>
+            </button>}
+            {comparingConversation && <button type="button" className="da-btn da-btn-sm mw-view-switch" onClick={() => { if (canLeaveField()) setComparisonOpen(false); }}>结束对照</button>}
+            <button type="button" className="da-btn da-btn-sm mw-view-switch" onClick={inChat ? showBoard : openAssistant}
+              aria-label={inChat ? '查看模型' : '建模对话'} title={inChat ? '查看模型' : assistantLabel}>
+              <Icon name={inChat ? 'model' : 'chat'} size="sm" /><span>{inChat ? '查看模型' : '建模对话'}</span>
+              {!idle && !inChat && <i className="mw-dot" aria-label={assistantLabel} />}
+            </button>
+          </>}
+          {setupActive ? <button type="button" className="mw-back-to-library" disabled={confirmingScreening} onClick={() => void exitSetup(`/configure/datasets/${groupId}`)}>
+            <Icon name="book" size="sm" />回到知识库
+          </button> : <WorkspaceMenu label="更多操作" items={[
+            ...(!hasPublished && screening?.length ? [{ label: '准备自动建模', icon: 'model' as const, disabled: !idle || draftSummary.publishing, onClick: openFirstBuild }] : []),
+            ...(screening !== null ? [{ label: '事实表时间范围', icon: 'clock' as const, disabled: !idle, onClick: () => setWindowSignal(n => n + 1) }] : []),
+            { label: '工程与快照', icon: 'file', onClick: () => { if (canLeaveField()) { setAdvancedOpen(true); selectTab('semantic'); } } },
+            ...(toQuery ? [{ label: '去问数', icon: 'chat' as const, disabled: !!preparing || queryHeld, onClick: toQuery }] : []),
+            { label: '回到知识库', icon: 'book', onClick: () => { if (canLeaveField()) navigate(`/configure/datasets/${groupId}`); } },
+          ]} />}
+        </div>
+      </header>
+      {visibleBoard && <nav aria-label="语义建模页面" className="mw-tabs">
+        {tabs.map(item => <button key={item.key} type="button" aria-current={tab === item.key ? 'page' : undefined} className={`mw-tab ${tab === item.key ? 'mw-tab-on' : ''}`} onClick={() => selectTab(item.key)}>{item.label}</button>)}
+      </nav>}
     </div>
     <div className="mw-content">
-    {error && <div role="alert" className="da-alert da-alert-error">{error}<button className="da-btn" onClick={() => void refresh()}>刷新</button></div>}
+    {error && <div role="alert" className="da-alert da-alert-error">{error}<button className="da-btn da-btn-sm" onClick={() => void refresh()}>刷新</button></div>}
     {screening !== null && !setupActive && <FactQueryWindowSettings key={groupId} groupId={groupId} automatic initiallyReady={windowReadyRef.current} onReady={updateWindowReady} hideButton openSignal={windowSignal} />}
-    {setupActive && setupFields && <div className="ms-screening">
-      <FieldScreeningPanel groupId={groupId} mode="setup" leaveGuard={setupLeaveGuard} onDone={finishScreening} />
+    {editingScreening && <div className="mw-field-overlay" role="dialog" aria-modal="true" aria-label="整理字段">
+      <div className="mw-field-editor">
+        <header><strong>整理字段</strong><button type="button" className="da-btn da-btn-sm" autoFocus={fieldEditor !== null} disabled={guidedScreening}
+          onClick={async () => { if (!setupLeaveGuard.current || await setupLeaveGuard.current()) setFieldEditor(null); }}>返回对话</button></header>
+        <FieldScreeningPanel groupId={groupId} mode="setup" datasetId={fieldEditor?.datasetId ?? (guidedScreening ? screening?.find(table => !table.confirmed)?.datasetId : undefined)}
+          pendingOnly={fieldEditor?.pendingOnly} leaveGuard={setupLeaveGuard} onDone={finishScreening} />
+      </div>
     </div>}
-    {setupActive && !setupFields && (screening === null ? <GraphLoading /> : <ModelingPreparation key={groupId} groupId={groupId} tables={screening}
-      onReady={updateWindowReady} onEditFields={() => setSetupPhase('fields')} onDocumentsChanged={documentsChanged} onStart={startModeling} confirmWindow={tourStep === 'window' && !tour?.paused} />)}
     {adjusting && <div className="da-modal-overlay" onClick={() => setAdjusting(null)}>
       <div className="da-modal-shell" style={{ width: 'min(1100px, 96vw)', height: '82vh', display: 'flex' }} onClick={e => e.stopPropagation()}>
         <FieldScreeningPanel groupId={groupId} mode="adjust" datasetId={adjusting} onClose={() => setAdjusting(null)}
@@ -505,9 +569,9 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
           }} />
       </div>
     </div>}
-    {!setupActive && <main className="modeling-workbench-body mw-body" style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-      <div className="mw-main" style={{ display: (panel === 'assistant' || panel === 'pending') && dockWide ? 'none' : 'flex' }}>
-      {tab === 'overview' && <ModelingMaterials key={groupId} groupId={groupId} tables={screening} idle={idle} showDocuments={startOffer !== groupId}
+    <div className="modeling-workbench-body mw-body">
+      <div className="mw-main" hidden={!visibleBoard}>
+      {tab === 'overview' && <ModelingMaterials key={groupId} groupId={groupId} tables={screening} idle={idle} showDocuments
         onManageData={() => navigate(`/configure/datasets/${groupId}`)} onAdjust={setAdjusting} onDocumentsChanged={documentsChanged} onCoach={() => selectTab('coach')} />}
       {tab === 'semantic' && <section className="sm-pane">
         {!snapshot ? <GraphLoading /> : <SemanticWorkbench key={groupId} groupId={groupId} snapshot={snapshot}
@@ -517,17 +581,20 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
           editable={version === 'draft'} blocked={!idle ? '建模助手正在运行，完成后才能在页面上修改。' : screening === null ? '正在读取字段状态…' : null}
           view={workbenchView} onViewChange={setWorkbenchView} focusRelation={focusRelation} focusModel={selected}
           onChanged={turnDone} onAsk={askAssistant} toolbar={versionBar} changes={version === 'draft' ? changeMark : null} onChanges={setChangeMark}
-          marked={marked} isSeen={isSeen} onSeen={item => markSeen([item])} onOpenPending={locateConfirmations} reveal={reveal} showDetail={panel === 'detail' || (panel === 'assistant' && !dockWide)}
-          firstBuild={!hasPublished && version === 'draft' && confirmationsReady && !!workflow && screening !== null ? { onPublish: () => setPublishSignal(n => n + 1) } : null} />}
-        <AdvancedModelingPanel key={groupId} groupId={groupId} open={advancedOpen} onOpenChange={setAdvancedOpen} version={version} preview={preview}
+          marked={marked} isSeen={isSeen} onSeen={item => markSeen([item])} onOpenPending={locateConfirmations} reveal={reveal} showDetail={!comparingConversation}
+          publication={version === 'draft' && (draftSummary.changes > 0 || draftSummary.publishing || draftSummary.publishedVersion !== null)
+            ? { summary: draftSummary, nextVersion: publishedVersion + 1, pending: confirmations.length, onPublish: publishDraft,
+                onQuery: toQuery, queryReady: preparing === null && !queryHeld, preparing } : null} />}
+        {advancedOpen && <AdvancedModelingPanel key={groupId} groupId={groupId} open={advancedOpen} onOpenChange={setAdvancedOpen} version={version} preview={preview}
           views={legacyAsset === 'cubes' ? [] : viewEntries} cubes={legacyAsset === 'views' ? [] : cubeEntries} knowledge={otherKnowledge} selected={selected} initialTab={legacyAsset === 'mdl' ? 'compiled' : legacyAsset === 'views' ? 'views' : legacyAsset === 'cubes' ? 'cubes' : 'files'}
-          onSelect={key => setParams({ asset: 'semantic', selected: key }, { replace: true })} onSelectKnowledge={key => setParams({ asset: 'semantic', view: 'rules', selected: key }, { replace: true })} />
+          onSelect={key => setParams({ asset: 'semantic', mode: 'board', selected: key }, { replace: true })} onSelectKnowledge={key => setParams({ asset: 'semantic', mode: 'board', view: 'rules', selected: key }, { replace: true })} />}
       </section>}
       {tab === 'assets' && <SemanticAssetsPanel key={groupId} groupId={groupId} assistantIdle={idle}
         onDraft={(text, label) => { const sent = request(text, 'asset', label); if (sent) openAssistant(); return sent; }} />}
       {tab === 'coach' && <div className="mw-coach-wrap">
       <div className="mw-coach">
-        <QueryCoachPanel key={groupId} groupId={groupId} assistantIdle={idle} available={hasPublished} onRequest={(text, purpose, label) => { const sent = request(text, purpose, label); if (sent) openAssistant(); return sent; }}
+        <QueryCoachPanel key={groupId} groupId={groupId} assistantIdle={idle} available={hasPublished} onRequest={request}
+          onCompare={comparingConversation ? undefined : pairWithConversation}
           confirmations={confirmations} onAnswer={answers => void answered(answers)} onOpenDocuments={() => selectTab('overview')}
           trial={<aside className="mw-coach-bar qc-trial-entry" aria-label="试问一个问题">
           <span className="mw-coach-bar-icon"><Icon name="chat" /></span><div className="mw-coach-bar-copy"><strong>试问一个问题</strong><p>助手按草稿写出 SQL，你确认正确的问答发布后才会在问数中被召回。</p></div>
@@ -537,73 +604,48 @@ function ModelingWorkbench({ group }: { group: DatasetGroup }) {
         <ConfirmedExamplesSection key={groupId} groupId={groupId} initialOpen={asset === 'qa' || asset === 'sql'} />
       </div>
       {trialOpen && windowReady && <div className="mw-trial">
-        <TrialPanel groupId={groupId} assistantIdle={idle} open={trialOpen} onClose={() => setTrialOpen(false)} onExamples={(count, unconfirmed) => { setExamples(count); setUnconfirmedTrials(unconfirmed); }}
+        <TrialPanel groupId={groupId} assistantIdle={idle} open={trialOpen} onClose={() => setTrialOpen(false)} onExamples={setExamples}
           onAsk={text => request(text, 'question')} onWrong={text => request(text, 'question')} />
       </div>}
       </div>}
       </div>
-      <aside className={`mw-dock ${dockWide ? 'mw-dock-wide' : ''}`} aria-label={panel === 'pending' ? '待确认' : '建模助手'}
-        style={{ display: panel === 'assistant' || panel === 'pending' ? 'flex' : 'none' }}>
-        <div className="mw-dock-head">
-          <strong>{panel === 'pending' ? '待确认' : '建模助手'}</strong>
-          {panel === 'assistant' && <span className={`mw-pill ${idle ? '' : 'mw-pill-live'}`}><span className="mw-dot" />{assistantLabel}</span>}
-          <span style={{ flex: 1 }} />
-          <button type="button" className="da-btn da-btn-sm" onClick={() => setDockWide(!dockWide)} title={dockWide ? '还原宽度' : '占满中间区域'}>{dockWide ? '还原' : '加宽'}</button>
-          <button type="button" className="da-btn da-btn-sm" aria-label="收起" onClick={() => setPanelChoice(null)}>收起</button>
-        </div>
-      <section ref={chatPane} aria-label="建模助手" style={{ display: panel === 'assistant' ? 'flex' : 'none', flex: 1, minWidth: 0, minHeight: 0, flexDirection: 'column', gap: 8 }}>
-        <div className="modeling-chat-row" style={{ flex: 1, minHeight: 0, display: 'flex', gap: 12 }}>
-          <div className="modeling-chat-main" style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex' }}>{windowReady ? <ModelingChatPanel key={groupId} groupId={groupId} variant="dock"
-            draftPrompt={head?.text ?? prefill?.text} draftPromptId={head?.id ?? prefill?.id} submitDraft={!!head && startOffer !== groupId}
-            onClose={() => setPanelChoice(null)}
-            onDraftSubmitted={() => {
-              setQueue(previous => ({ groupId, items: (previous.groupId === groupId ? previous.items : []).slice(1) }));
-            }}
-            onTurnDone={turnDone} draftPurpose={head?.purpose} draftLabel={head?.label}
-            onActivityChange={setAssistantState}
-            renderTurnResult={since => <TurnResultCard groupId={groupId} since={since} disabled={!idle}
-              onView={turn => { setDockWide(false); setPanelChoice('detail'); setChangeMark(previous => previous && (!previous.since || previous.since < turn) ? previous : { since: turn }); setVersionChoice('draft'); setParams({ asset: 'semantic', view: 'graph' }, { replace: true }); }} />}
-            // Before modeling starts there is nothing to try or publish yet.
-            footer={!idle || startOffer === groupId ? null : <>
-              {/* spec113: assets proposed in this conversation start drafting only when the user agrees. */}
-              <AssetProposalCards groupId={groupId} disabled={!idle} refreshKey={assistantState}
-                onDraft={(text, label) => request(text, 'asset', label)} />
-              {confirmations.length > 0 ? <div ref={confirmAnchor} data-tour="confirm-cards">
+      <section className="mw-conversation-pane" aria-label="建模对话" hidden={!inChat}>
+        <ModelingChatPanel key={groupId} groupId={groupId} variant="dock" intro={preparation}
+          onClose={showBoard} composerLocked={setupActive || !windowReady} onCompose={setupActive ? setupCommand : undefined}
+          composerHint={setupActive ? (setupFields ? '输入「查看字段」' : '输入「开始自动建模」') : undefined}
+          composerSuggestion={setupActive && screening?.length ? (setupFields ? '查看字段' : '开始自动建模') : undefined}
+          composerNotice={idle && !setupActive && confirmations.length > 0 ? <button type="button" className="mw-conversation-pending" onClick={() => {
+            const target = conversationConfirmation.current;
+            target?.scrollIntoView({ block: 'start' });
+            target?.focus({ preventScroll: true });
+          }}><span className="mw-conversation-pending-icon"><Icon name="circleAlert" size="sm" /></span><span className="mw-conversation-pending-label">有 {confirmations.length} 项口径待确认</span><strong>去确认</strong><Icon name="chevron" size="sm" /></button> : undefined}
+          quickPrompts={quickPrompts}
+          draftPrompt={head?.text ?? prefill?.text} draftPromptId={head?.id ?? prefill?.id} submitDraft={!!head}
+          onDraftSubmitted={() => setQueue(previous => ({ groupId, items: previous.items.slice(1) }))}
+          onTurnDone={turnDone} draftPurpose={head?.purpose} draftLabel={head?.label} onActivityChange={setAssistantState}
+          renderTurnResult={((hasPublished && draftSummary.changes > 0) || tourStep === 'review') ? since => <TurnResultCard groupId={groupId} since={since} disabled={!idle}
+            onView={turn => inspectTurn(turn)} onCompare={turn => inspectTurn(turn, true)} /> : undefined}
+          footer={!idle || setupActive ? null : <>
+            <AssetProposalCards groupId={groupId} disabled={!idle} refreshKey={assistantState}
+              onDraft={(text, label) => request(text, 'asset', label)} />
+            {confirmations.length ? <div ref={conversationConfirmation} className="mw-conversation-confirmation" data-tour="confirm-cards" tabIndex={-1}>
               <ConfirmationCards key={confirmations.map(c => c.id).join(',')} questions={confirmations} onSubmit={answers => void answered(answers)} />
-            </div> : <NextStepCard groupId={groupId} summary={draftSummary} unconfirmedTrials={unconfirmedTrials} nextVersion={(workflow?.publishedVersion ?? 0) + 1}
-              onTrial={() => { selectTab('coach'); setTrialOpen(true); }} onPublish={() => setPublishSignal(n => n + 1)} onQuery={toQuery} queryHeldHint={queryHeld ? TOUR_QUERY_HINT : undefined} />}</>} /> : <div className="da-card">事实表时间配置完成后，建模助手会在此继续。</div>}</div>
-        </div>
+            </div> : <NextStepCard summary={draftSummary} nextVersion={publishedVersion + 1}
+              firstPublishedVersion={workflow?.publishedVersion === 1 && !workflow.draftChanged ? 1 : null} preparing={preparing}
+              onView={showBoard}
+              onPublish={publishDraft} onQuery={toQuery} queryHeldHint={queryHeld ? TOUR_QUERY_HINT : undefined} />}
+          </>} />
       </section>
-        {panel === 'pending' && <div className="mw-dock-body">
-          <PendingPanel groupId={groupId} confirmations={confirmations} onAnswer={answers => void answered(answers)}
-            items={changeMark ? marked : []} isSeen={isSeen} onSeen={item => markSeen([item])} onSeenAll={() => markSeen(marked)}
-            onLocate={revealChange} onChanged={turnDone} disabled={idle ? null : '建模助手正在运行，完成后才能撤销。'} />
-        </div>}
-      </aside>
-      <nav className="mw-rail" aria-label="右侧面板">
-        <button type="button" className={`mw-rail-btn ${panel === 'detail' && tab === 'semantic' ? 'is-on' : ''}`} disabled={tab !== 'semantic'}
-          title={tab === 'semantic' ? '对象详情' : '在语义模型页签中可用'} aria-pressed={panel === 'detail'} onClick={() => togglePanel('detail')}>
-          <span className="mw-rail-ico" aria-hidden="true">详</span><span>详情</span></button>
-        <button type="button" className={`mw-rail-btn ${panel === 'assistant' ? 'is-on' : ''}`} aria-pressed={panel === 'assistant'} title={assistantLabel} onClick={() => togglePanel('assistant')}>
-          <ModelingAssistantIcon className="mw-rail-ico-ai">{!idle && <i className="mw-rail-live" />}</ModelingAssistantIcon><span>助手</span>
-          {waiting > 0 && <em className="mw-rail-badge">{waiting}</em>}</button>
-        <button type="button" className={`mw-rail-btn ${panel === 'pending' ? 'is-on' : ''}`} aria-pressed={panel === 'pending'} title="助手的问题和你还没看的改动" onClick={() => togglePanel('pending')}>
-          <span className="mw-rail-ico" aria-hidden="true">✓</span><span>待确认</span>
-          {pendingCount > 0 && <em className="mw-rail-badge mw-rail-badge-red">{pendingCount}</em>}</button>
-      </nav>
-    </main>}
-    {!setupActive && <div className="mw-publish-row">
-      {!screeningPending && workflow && <DraftBar groupId={groupId} workflow={workflow} assistantActive={!idle} pendingConfirmations={confirmations.length} checksPending={!confirmationsReady || screening === null}
-      onLocate={locateConfirmations}
-      publishSignal={publishSignal} onSummary={setDraftSummary} />}
-      {toQuery && <button className="da-btn da-btn-primary mw-query-button" disabled={!!preparing || queryHeld}
-        title={queryHeld ? TOUR_QUERY_HINT : undefined} onClick={toQuery}>{preparing ? '问数准备中…' : <>去问数<Icon name="chevron" size="sm" /></>}</button>}
-    </div>}
+    </div>
+    <dialog className="mw-pending-dialog" aria-labelledby="mw-pending-title" ref={pendingDialog}
+      onClick={event => { if (event.target === event.currentTarget) setPendingOpen(false); }}
+      onClose={() => setPendingOpen(false)}>
+      {pendingOpen && <><header><h2 id="mw-pending-title">待处理</h2><button type="button" aria-label="关闭待处理" className="da-btn da-btn-sm mw-pending-close" onClick={() => setPendingOpen(false)}><Icon name="close" size="sm" /></button></header>
+        <PendingPanel groupId={groupId} confirmations={confirmations} onAnswer={answers => void answered(answers)}
+          items={changeMark ? marked : []} isSeen={isSeen} onSeen={item => markSeen([item])} onSeenAll={() => markSeen(marked)}
+          onLocate={revealChange} onChanged={turnDone} disabled={idle ? null : '建模助手正在运行，完成后才能撤销。'} />
+      </>}
+    </dialog>
     </div>
   </div>;
-}
-
-/** spec093: where the knowledge base is on its way to the first modeling turn. */
-function SetupSteps({ current }: { current: number }) {
-  return <nav className="ms-steps" aria-label="建模准备步骤">{['整理字段', '准备', '自动建模'].map((label, index) => <span key={label} className={`ms-step ${index < current ? 'is-done' : index === current ? 'is-current' : ''}`} aria-current={index === current ? 'step' : undefined}><b>{index + 1}</b>{label}</span>)}</nav>;
 }

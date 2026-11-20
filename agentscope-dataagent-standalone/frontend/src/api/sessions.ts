@@ -42,6 +42,7 @@ export interface TurnEntry {
   toolName: string | null;
   toolInput: string | null;
   toolResult: string | null;
+  toolCallId?: string | null;
 }
 
 export interface ResetResult {

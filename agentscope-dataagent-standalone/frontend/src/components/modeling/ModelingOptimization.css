@@ -223,6 +223,8 @@
 .mo-document-status-unchanged { background: color-mix(in srgb, var(--da-success) 8%, var(--da-surface)); }
 .mo-document-status-added, .mo-document-status-modified, .mo-document-status-deleted { background: color-mix(in srgb, var(--da-warn) 9%, var(--da-surface)); }
 .mo-document-actions, .mo-setup-document-actions { display: inline-flex; align-items: center; gap: 7px; margin-left: auto; flex: none; }
+.mo-setup-document-read { display: inline-flex; align-items: center; gap: 4px; }
+.mp-document .mo-grow { min-width: min(100%, 140px); }
 .mo-documents .mo-document-read { gap: 4px; padding: 4px 8px; font-size: 11px; border-radius: 6px; color: var(--da-primary); border-color: var(--da-primary-line); background: var(--da-primary-soft); }
 .mo-document-tool { display: grid; place-items: center; width: 28px; height: 28px; border: .5px solid transparent; border-radius: 6px; background: transparent; color: var(--da-text-muted); cursor: pointer; }
 .mo-document-tool:hover:not(:disabled) { border-color: var(--da-border); background: var(--da-surface-sunken); color: var(--da-text); }

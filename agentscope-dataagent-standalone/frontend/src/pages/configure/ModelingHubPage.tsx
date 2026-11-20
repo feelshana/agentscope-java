@@ -75,7 +75,8 @@ export default function ModelingHubPage() {
   const rows = data?.items.filter(group => !group.deletionPending);
   const currentSummaries = summaries?.data === data ? summaries : null;
   const pages = Math.ceil((data?.total ?? 0) / PAGE_SIZE);
-  const open = (group: DatasetGroup) => navigate(`/configure/modeling/${group.id}`);
+  const open = (group: DatasetGroup, mode = group.canManage ? 'chat' : 'board') =>
+    navigate(`/configure/modeling/${encodeURIComponent(group.id)}?mode=${mode}`);
 
   return <div className="kw-page workspace-overview modeling-hub">
     <KnowledgeBreadcrumb items={[{ label: '返回对话', to: '/chat' }, { label: '语义建模' }]} />
@@ -120,12 +121,11 @@ export default function ModelingHubPage() {
             <td className="numeric">{summary?.published?.relations ?? '—'}</td>
             <td>{summary?.published?.unrelated ? <span className="mh-attention">{summary.published.unrelated} 个模型未关联</span> : '—'}</td>
             <td>{group.createdAt ? <time dateTime={group.createdAt}>{new Date(group.createdAt).toLocaleDateString('zh-CN')}</time> : '—'}</td>
-            <td className="end">
-              <button type="button" className={`da-btn overview-action${group.canManage ? ' is-soft' : ''}`}
-                onClick={e => { e.stopPropagation(); open(group); }}>
-                {group.canManage ? '进入建模' : '查看模型'}<Icon name="chevron" size="sm" />
-              </button>
-            </td>
+            <td className="end"><div className="mh-row-actions">
+              <button type="button" className="da-btn overview-action" onClick={e => { e.stopPropagation(); open(group, 'board'); }}>查看模型</button>
+              {group.canManage && <button type="button" className="da-btn overview-action is-soft"
+                onClick={e => { e.stopPropagation(); open(group, 'chat'); }}>对话建模<Icon name="chevron" size="sm" /></button>}
+            </div></td>
           </tr>;
         })}</tbody></table></div>
       </>}

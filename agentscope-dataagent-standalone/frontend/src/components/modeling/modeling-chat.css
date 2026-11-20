@@ -1,17 +1,108 @@
-/* 对话建模区视觉层：只补齐内联样式表达不了的状态（hover / focus / active）。
-   布局与主视觉仍由 ModelingChatPanel 的 S 决定，避免两套来源互相打架。 */
+/* Modeling conversation controls and their interaction styles. */
 
-/* 输入框：聚焦时轻微上浮的紫环，靠内联 transition 平滑 */
-.mc-input:hover { border-color: color-mix(in srgb, var(--da-primary) 24%, var(--da-border)); }
-.mc-input:focus {
-  border-color: color-mix(in srgb, var(--da-primary) 52%, var(--da-border));
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--da-primary) 9%, transparent),
-    0 1px 2px rgba(16, 24, 42, 0.04);
+.mc-composer .da-composer-shell { padding: 11px 14px 7px; }
+.mc-composer .mc-composer-with-prompts {
+  display: grid; grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "field field" "prompt tools"; align-items: center;
 }
+.mc-composer-with-prompts .mc-composer-field { grid-area: field; min-width: 0; }
+.mc-composer-with-prompts .mc-composer-bar { grid-area: tools; }
+.mc-quick-trigger {
+  grid-area: prompt; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  min-height: 30px; width: fit-content; padding: 0 9px; border: 1px solid var(--da-border);
+  border-radius: 8px; background: var(--da-surface); color: var(--da-text-2); font: inherit; font-size: 12px;
+  white-space: nowrap; cursor: pointer;
+}
+.mc-quick-mark { color: var(--da-primary); font-size: 19px; line-height: 1; }
+.mc-quick-trigger:is(:hover:not(:disabled), [aria-expanded="true"]) {
+  border-color: var(--da-primary-line); background: var(--da-primary-subtle); color: var(--da-primary);
+}
+.mc-quick-trigger:disabled { opacity: .5; cursor: not-allowed; }
+.mc-quick-trigger:focus-visible, .mc-quick-choice:focus-visible, .mc-quick-close:focus-visible {
+  outline: 2px solid var(--da-primary); outline-offset: 2px;
+}
+.mc-input {
+  box-sizing: border-box; width: 100%; min-height: 48px; max-height: 160px; padding: 4px 2px;
+  height: var(--mc-input-height, auto);
+  background: transparent; border: 0; outline: none; resize: none; color: var(--da-text);
+  font: inherit; font-size: 14px; line-height: 1.6;
+}
+.mc-composer-bar { display: flex; flex-wrap: wrap; align-items: center; }
+.mc-composer-field { position: relative; display: grid; }
+.mc-input-with-key-hint::placeholder { color: transparent; }
+.mc-composer-inline-hint {
+  position: absolute; inset: 4px 2px auto; pointer-events: none;
+  color: var(--da-text-muted); font-size: 14px; line-height: 1.6;
+}
+.mc-composer-inline-hint span { margin-inline-start: 7px; font-size: 12px; white-space: nowrap; }
 
-/* 发送按钮 */
-.mc-send:hover:not(:disabled) { background: var(--da-primary-hover); }
-.mc-send:active:not(:disabled) { transform: scale(0.94); }
+.mc-confirmation-receipt { max-width: 100%; }
+.mc-confirmation-receipt summary { cursor: pointer; font-weight: 600; }
+.mc-confirmation-receipt dl { display: grid; gap: 8px; max-width: min(520px, 100%); margin: 9px 0 0; overflow-wrap: anywhere; }
+.mc-confirmation-receipt dt { font-weight: 550; }
+.mc-confirmation-receipt dd { margin: 2px 0 0; color: var(--da-text-2); white-space: pre-wrap; }
+
+.mw-conversation-pane .mc-composer .da-composer-glow:is(:not(:focus-within), :has(.mc-quick-trigger:focus)) {
+  border-radius: 12px; background: var(--da-border); box-shadow: none;
+}
+.mw-conversation-pane .mc-composer .da-composer-glow:is(:not(:focus-within), :has(.mc-quick-trigger:focus)) .da-composer-shell {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
+  gap: 6px; padding: 4px 6px 4px 12px; border-radius: 11px;
+}
+.mw-conversation-pane .mc-composer .da-composer-glow:is(:not(:focus-within), :has(.mc-quick-trigger:focus)) .mc-composer-with-prompts {
+  grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "prompt field tools"; padding-inline-start: 6px;
+}
+.mw-conversation-pane .mc-composer .da-composer-glow:is(:not(:focus-within), :has(.mc-quick-trigger:focus)) .mc-quick-trigger { width: 34px; padding: 0; }
+.mw-conversation-pane .mc-composer .da-composer-glow:is(:not(:focus-within), :has(.mc-quick-trigger:focus)) .mc-quick-label { display: none; }
+.mw-conversation-pane .mc-composer .da-composer-glow:is(:not(:focus-within), :has(.mc-quick-trigger:focus)) .mc-input {
+  height: 36px; min-height: 0; padding-block: 7px; white-space: nowrap; overflow: hidden;
+}
+.mw-conversation-pane .mc-composer .da-composer-glow:is(:not(:focus-within), :has(.mc-quick-trigger:focus)) .mc-composer-inline-hint {
+  inset-block-start: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.mw-conversation-pane .mc-composer .da-composer-glow:is(:not(:focus-within), :has(.mc-quick-trigger:focus)) .mc-composer-bar > :not(.da-composer-submit) {
+  display: none;
+}
+.mw-conversation-pane .mc-composer .da-composer-glow:is(:not(:focus-within), :has(.mc-quick-trigger:focus)) .da-composer-submit { width: 36px; height: 36px; }
+.mw-conversation-pane .mc-composer .da-composer-glow:is(:not(:focus-within), :has(.mc-quick-trigger:focus)) .da-composer-submit-face { width: 30px; height: 30px; }
+.mw-conversation-pane .mc-composer .da-composer-glow:is(:not(:focus-within), :has(.mc-quick-trigger:focus)) .da-composer-submit .da-icon { width: 17px; height: 17px; }
+
+.mc-quick-panel {
+  max-height: min(335px, 50dvh); overflow: auto; padding: 14px; border: 1px solid var(--da-primary-line);
+  border-radius: 13px; background: linear-gradient(145deg, var(--da-primary-subtle), var(--da-surface) 56%);
+}
+.mc-quick-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
+.mc-quick-header h2 { margin: 0; font-size: 15px; color: var(--da-text); }
+.mc-quick-header p { margin: 3px 0 0; color: var(--da-text-2); font-size: 12px; }
+.mc-quick-close {
+  flex: none; display: grid; place-items: center; width: 28px; height: 28px; padding: 0;
+  border: 0; border-radius: 7px; color: var(--da-text-3); background: transparent; cursor: pointer;
+}
+.mc-quick-close:hover { background: var(--da-surface-sunken); color: var(--da-text); }
+.mc-quick-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.mc-quick-choice {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 9px;
+  padding: 9px 10px; border: 1px solid var(--da-border); border-radius: 9px;
+  background: var(--da-surface); color: var(--da-text); font: inherit; text-align: left; cursor: pointer;
+}
+.mc-quick-choice:hover { border-color: var(--da-primary-line); background: var(--da-primary-subtle); }
+.mc-quick-choice-icon {
+  display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px;
+  background: var(--da-primary-subtle); color: var(--da-primary);
+}
+.mc-quick-choice strong, .mc-quick-choice small { display: block; overflow-wrap: anywhere; }
+.mc-quick-choice strong { font-size: 13px; font-weight: 650; }
+.mc-quick-choice small { margin-top: 2px; font-size: 11.5px; color: var(--da-text-2); }
+.mc-quick-insert { display: flex; color: var(--da-primary); }
+.mc-quick-preview {
+  margin: 0; padding: 9px 10px; border: 1px solid var(--da-border); border-radius: 8px;
+  background: var(--da-surface); color: var(--da-text-2); font-size: 13px; overflow-wrap: anywhere;
+}
+.mc-quick-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; margin-top: 9px; }
+.mc-quick-actions .mc-quick-back { margin-inline-end: auto; }
+@container modeling-conversation (max-width: 610px) {
+  .mc-quick-choices { grid-template-columns: 1fr; }
+}
 
 /* 过程折叠（▸ 建模过程 · 12 步）做成可点的胶囊，暗示可以展开 */
 .mc-fold {
@@ -25,6 +116,28 @@
 .mc-fold:hover {
   background: var(--da-surface-sunken);
   border-color: var(--da-border);
+}
+
+.mc-result {
+  margin-top: 12px; border: 1px solid var(--da-border); border-radius: 10px;
+  background: var(--da-surface); overflow: hidden;
+}
+.mc-result-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 9px 10px; background: var(--da-surface-sunken); }
+.mc-result-icon {
+  display: grid; place-items: center; flex: none; width: 30px; height: 30px; border-radius: 8px;
+  color: var(--da-primary); background: var(--da-primary-subtle);
+}
+.mc-result-summary { flex: 1 1 140px; min-width: 0; font-size: 13px; }
+.mc-result-summary strong { font-weight: 650; }
+.mc-result-state { margin-inline-start: 8px; color: var(--da-text-muted); font-size: 11px; white-space: nowrap; }
+.mc-result-summary p { color: var(--da-text-2); font-size: 12px; margin-top: 2px; }
+.mc-result-toggle { display: inline-flex; align-items: center; gap: 4px; margin-inline-start: auto; white-space: nowrap; }
+.mc-result-toggle svg { transform: rotate(90deg); }
+.mc-result-toggle[aria-expanded="true"] svg { transform: rotate(-90deg); }
+.mc-result-details { border-top: 1px solid var(--da-border); }
+.mc-result-actions {
+  display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px;
+  padding: 8px 10px; border-top: 1px solid var(--da-border);
 }
 
 /* 步骤行：hover 才浮出底色，平时保持安静 */

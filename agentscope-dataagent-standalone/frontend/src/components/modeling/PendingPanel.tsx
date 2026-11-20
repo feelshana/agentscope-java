@@ -40,23 +40,22 @@ export default function PendingPanel({ groupId, confirmations, onAnswer, items, 
     try { await revertDraftFile(groupId, item.path); onChanged(); } catch (e) { setError(message(e)); } finally { setBusy(null); }
   };
   return <div className="pp">
-    <section className="pp-sec">
-      <h4>助手在问你的 <span className="pp-count">{confirmations.length}</span></h4>
-      {confirmations.length ? <ConfirmationCards key={confirmations.map(c => c.id).join(',')} questions={confirmations} onSubmit={onAnswer} />
-        : <p className="pp-empty">没有等你决定的口径。</p>}
-    </section>
-    <section className="pp-sec">
-      <h4>助手改了、你还没看的 <span className="pp-count pp-count-red">{unseen.length}</span>
+    {confirmations.length > 0 && <section className="pp-sec">
+      <ConfirmationCards key={confirmations.map(c => c.id).join(',')} questions={confirmations} onSubmit={onAnswer} />
+    </section>}
+    {items.length > 0 && <section className="pp-sec">
+      <h4>草稿改动 <span className="pp-count pp-count-red">{unseen.length} 未查看</span>
         <span className="pp-grow" />
         {items.length > unseen.length && <button type="button" className="pp-link" onClick={() => setShowSeen(!showSeen)}>{showSeen ? '只看未看' : `含已看 ${items.length - unseen.length}`}</button>}
         {unseen.length > 1 && <button type="button" className="pp-link" onClick={onSeenAll}>全部标为已看</button>}
       </h4>
       <p className="pp-hint">改动已经在草稿里，发布时一起生效；这里帮你逐条过一遍，看过的会从红色变成灰色。</p>
       {error && <div role="alert" className="pp-error">{error}</div>}
-      {shown.length === 0 && <p className="pp-empty">{items.length ? '都看过了。' : '还没有标出的改动。助手每轮结束后，改动会自动列在这里。'}</p>}
+      {shown.length === 0 && <p className="pp-empty">都看过了。</p>}
       {shown.map(item => <ChangeItem key={item.id} item={item} seen={isSeen(item)} open={opened === item.id} busy={busy === item.id} disabled={disabled}
         onToggle={() => setOpened(opened === item.id ? null : item.id)} onLocate={() => { onLocate(item); onSeen(item); }} onSeen={() => onSeen(item)} onUndo={() => void undo(item)} />)}
-    </section>
+    </section>}
+    {!confirmations.length && !items.length && <p className="pp-empty">暂无待处理事项。</p>}
   </div>;
 }
 

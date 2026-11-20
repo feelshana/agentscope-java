@@ -2,6 +2,8 @@ import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import type { MutableRefObject, PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import { editDraftFile, editDraftItem, getDocumentContent, getDraftItems, listDocuments } from '../../api/draftReview';
 import type { DraftItem, DraftItemEdit } from '../../api/draftReview';
+import type { DraftSummary } from './DraftBar';
+import Icon from '../Icon';
 import YamlContent from './YamlContent';
 import { joinLabel, modelTag, relationsOf, unrelatedModels } from './semanticSnapshot';
 import type { SemanticColumn, SemanticModel, SemanticRelation, SemanticSnapshot } from './semanticSnapshot';
@@ -90,7 +92,7 @@ function savePositions(groupId: string, positions: Positions) {
 export default function SemanticWorkbench({
   groupId, snapshot, baseline, files, baselineFiles, views, issues, editable, blocked, view, onViewChange,
   focusRelation, focusModel, onChanged, onAsk, toolbar, changes, onChanges,
-  marked, isSeen, onSeen, onOpenPending, reveal, showDetail = true, firstBuild, compareWithBaseline = false, fieldEditGuard,
+  marked, isSeen, onSeen, onOpenPending, reveal, showDetail = true, publication, compareWithBaseline = false, fieldEditGuard,
 }: {
   groupId: string;
   snapshot: SemanticSnapshot;
@@ -126,7 +128,10 @@ export default function SemanticWorkbench({
   /** The detail drawer shares the right panel with the assistant and 待确认. */
   showDetail?: boolean;
   /** Before the first publish: a summary of what was built and what needs a look, not marks. */
-  firstBuild?: { onPublish: () => void } | null;
+  publication?: {
+    summary: DraftSummary; nextVersion: number; pending: number; onPublish: () => void;
+    onQuery?: () => void; queryReady: boolean; preparing?: string | null;
+  } | null;
 }) {
   const [selection, setSelectedObject] = useState<Selection>(focusRelation ? { kind: 'relation', name: focusRelation } : focusModel ? { kind: 'model', model: focusModel } : null);
   const localFieldEditGuard = useRef<(() => boolean) | null>(null);
@@ -142,9 +147,11 @@ export default function SemanticWorkbench({
   // 聚焦: double-clicking a model shows it with its direct neighbours (spec117).
   const [focus, setFocus] = useState<string | null>(null);
   const [positions, setPositions] = useState<Positions>(() => readPositions(groupId));
+  const released = publication && !publication.summary.changes && !publication.summary.publishing ? publication.summary.publishedVersion : null;
+  const publishing = !!publication && (publication.summary.publishing || (!!released && (publication.preparing !== null || !publication.onQuery)));
+  const published = !!released && !publishing;
   const [query, setQuery] = useState('');
   const [full, setFull] = useState(false);
-  const [summaryClosed, setSummaryClosed] = useState(false);
   // The object bar folds to icons; remembered per browser.
   const [railOpen, setRailOpen] = useState(() => { try { return localStorage.getItem('sw-rail') !== 'closed'; } catch { return true; } });
   const toggleRail = () => setRailOpen(open => { try { localStorage.setItem('sw-rail', open ? 'closed' : 'open'); } catch { /* convenience only */ } return !open; });
@@ -202,6 +209,7 @@ export default function SemanticWorkbench({
 
   // ----- canvas: pan the scroll box, drag cards by their header, zoom with buttons or Ctrl+wheel
   const canvas = useRef<HTMLDivElement>(null);
+  const autoFit = useRef(true);
   const pan = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
   const grab = useRef<{ model: string; x: number; y: number; ox: number; oy: number; moved: boolean } | null>(null);
   const suppressClick = useRef(false);
@@ -211,19 +219,32 @@ export default function SemanticWorkbench({
     const wheel = (event: WheelEvent) => {
       if (!event.ctrlKey && !event.metaKey) return;
       event.preventDefault();
+      autoFit.current = false;
       setZoom(z => clampZoom(z - event.deltaY * 0.001));
     };
     box.addEventListener('wheel', wheel, { passive: false });
     return () => box.removeEventListener('wheel', wheel);
   }, [view]);
+  const modelCount = snapshot.models.length;
   const fit = useCallback(() => {
     const box = canvas.current;
-    if (!box || !layout.width) return;
-    setZoom(clampZoom(Math.max(FIT_FLOOR, Math.min(1, (box.clientWidth - 24) / layout.width, (box.clientHeight - 24) / layout.height))));
+    if (!box?.clientWidth || !box.clientHeight || !layout.width) return;
+    const floor = modelCount <= 3 ? MIN_ZOOM : FIT_FLOOR;
+    setZoom(clampZoom(Math.max(floor, Math.min(1, (box.clientWidth - 24) / layout.width, (box.clientHeight - 24) / layout.height))));
     box.scrollTo(0, 0);
-  }, [layout.width, layout.height]);
-  const modelCount = snapshot.models.length;
-  useEffect(() => { if (view === 'graph' && !focus) fit(); }, [modelCount, view, full, focus]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [layout.width, layout.height, modelCount]);
+  useEffect(() => {
+    const box = canvas.current;
+    if (!box || view !== 'graph' || focus) return;
+    const observer = new ResizeObserver(() => { if (autoFit.current) fit(); });
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, [view, focus, fit]);
+  const zoomBy = (amount: number) => {
+    autoFit.current = false;
+    setZoom(z => clampZoom(z + amount));
+  };
+  const fitCanvas = () => { autoFit.current = true; fit(); };
 
   const pointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
@@ -239,6 +260,7 @@ export default function SemanticWorkbench({
       return;
     }
     if (target.closest('button')) return;
+    autoFit.current = false;
     pan.current = { x: event.clientX, y: event.clientY, left: box.scrollLeft, top: box.scrollTop };
     box.setPointerCapture(event.pointerId);
   };
@@ -251,6 +273,7 @@ export default function SemanticWorkbench({
       const dy = (event.clientY - g.y) / zoom;
       if (!g.moved && Math.abs(dx) + Math.abs(dy) < 4) return;
       g.moved = true;
+      autoFit.current = false;
       setPositions(p => ({ ...p, [g.model]: { x: Math.max(0, Math.round(g.ox + dx)), y: Math.max(0, Math.round(g.oy + dy)) } }));
       return;
     }
@@ -265,7 +288,7 @@ export default function SemanticWorkbench({
     pan.current = null;
   };
   useEffect(() => { savePositions(groupId, positions); }, [groupId, positions]);
-  const resetLayout = () => { setPositions({}); savePositions(groupId, {}); setTimeout(fit, 0); };
+  const resetLayout = () => { autoFit.current = true; setPositions({}); savePositions(groupId, {}); setTimeout(fit, 0); };
   const locate = (name: string) => {
     const card = layout.nodes.find(c => c.model.name === name);
     const box = canvas.current;
@@ -381,26 +404,40 @@ export default function SemanticWorkbench({
         {toolbar}
         <span className="sw-grow" />
         {view === 'graph' && !focus && <div className="sw-float">
-          <button type="button" className="sw-icon-btn" aria-label="缩小" onClick={() => setZoom(z => clampZoom(z - 0.1))}>−</button>
+          <button type="button" className="sw-icon-btn" aria-label="缩小" onClick={() => zoomBy(-0.1)}>−</button>
           <span className="sw-zoom">{Math.round(zoom * 100)}%</span>
-          <button type="button" className="sw-icon-btn" aria-label="放大" onClick={() => setZoom(z => clampZoom(z + 0.1))}>+</button>
-          <button type="button" className="sw-icon-btn" onClick={fit}>适应</button>
+          <button type="button" className="sw-icon-btn" aria-label="放大" onClick={() => zoomBy(0.1)}>+</button>
+          <button type="button" className="sw-icon-btn" onClick={fitCanvas}>适应</button>
           <button type="button" className="sw-icon-btn" onClick={resetLayout}>自动布局</button>
         </div>}
         <button type="button" className="da-btn da-btn-sm" aria-pressed={full} onClick={() => setFull(!full)} title={full ? '按 Esc 退出' : '占满整个窗口'}>{full ? '退出全屏' : '全屏'}</button>
       </div>
-      {firstBuild && editable && !changes && !summaryClosed && <div className="sw-summary">
-        <div className="sw-summary-main">
-          <strong>建模结果</strong>
-          <span>生成 {snapshot.models.length} 个模型、{snapshot.relations.length} 条关系、{rules.length} 条业务规则。</span>
-          {problems.length ? <span>需要你看：<button type="button" className="sw-link" onClick={() => setSelection({ kind: 'problems' })}>{problems.length} 处</button>（{[...new Set(problems.map(p => p.tag))].join('、')}）</span>
-            : <span className="sw-ok-text">没有需要处理的问题。</span>}
+      {publication && editable && <section className={`sw-publication${published ? ' is-published' : ''}`} aria-label="模型发布">
+        <span className="sw-publication-icon">
+          {publishing ? <span className="da-spinner mw-publication-spinner" aria-hidden="true" /> : <Icon name={published ? 'check' : 'file'} size="sm" />}
+        </span>
+        <div className="sw-publication-copy">
+          <strong>{publishing ? '模型正在发布' : published ? '模型已发布' : '草稿待发布'} <small>v{released ?? publication.nextVersion}</small></strong>
+          {publishing ? <p role="status">{publication.summary.publishing ? '正在校验草稿并生成线上版本…' : `${publication.preparing ?? '正在确认问数服务是否就绪'}…`}</p>
+            : published ? <p role="status">可以使用新版本问数。</p>
+            : <p>{snapshot.models.length} 个模型 · {snapshot.relations.length} 条关系 · {rules.length} 条业务规则</p>}
         </div>
-        <span className="sw-muted sw-xs">下一步：看一眼关系图和业务规则，口径没问题就发布；试问是可选的。</span>
-        <span className="sw-grow" />
-        <button type="button" className="da-btn da-btn-primary da-btn-sm" onClick={firstBuild.onPublish}>检查并发布</button>
-        <button type="button" className="sw-link" aria-label="关闭" onClick={() => setSummaryClosed(true)}>关闭</button>
-      </div>}
+        <div className="sw-publication-actions">
+          {!released && problems.length > 0 && <button type="button" className="sw-link" onClick={() => setSelection({ kind: 'problems' })}>
+            {problems.length} 处需检查
+          </button>}
+          {!released && publication.pending > 0 && onOpenPending && <button type="button" className="sw-link sw-publication-pending" onClick={onOpenPending}>
+            {publication.pending} 项口径待确认
+          </button>}
+          {published
+            ? <button type="button" className="da-btn da-btn-primary" disabled={!publication.queryReady} onClick={publication.onQuery}>去问数</button>
+            : <button type="button" className={`da-btn da-btn-primary${publishing ? ' mw-publication-in-progress' : ''}`}
+                disabled={publishing || !!publication.summary.blocked} title={publishing ? undefined : publication.summary.blocked ?? undefined} onClick={publication.onPublish}>
+                检查并发布{publishing && <span className="da-spinner da-spinner-sm mw-publication-spinner" aria-hidden="true" />}
+              </button>}
+        </div>
+        {publication.summary.error && <p className="sw-publication-error" role="alert">{publication.summary.error}</p>}
+      </section>}
       {changes && editable && <div className="sw-marks">
         <strong>{changes.since ? '助手改动' : '草稿全部改动'}</strong>
         {items.length === 0 ? <span className="sw-muted">没有未发布的改动</span> : <>

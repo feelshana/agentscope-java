@@ -97,12 +97,12 @@ export default function BusinessDocumentReader({ groupId, document, onClose }: {
         <div className="mo-reader-font" role="group" aria-label="阅读字号"><button type="button" disabled={fontSize <= 12} onClick={() => setFontSize(n => n - 1)} aria-label="减小字号">A−</button><button type="button" disabled={fontSize >= 18} onClick={() => setFontSize(n => n + 1)} aria-label="增大字号">A＋</button></div>
       </div>
       <div ref={body} className="mo-reader-body" tabIndex={0} aria-label="文档正文" style={{ '--mo-reading-size': `${fontSize}px` } as CSSProperties}>
-        {error ? <><ErrorNotice error={error} context="file" /><button className="da-btn" onClick={() => setRetry(n => n + 1)}>重试</button></> : content === null ? <p className="da-small" role="status">正在读取文档正文…</p> : !content.trim() ? <div className="mo-empty"><h3>这份文档没有正文</h3><p>可以在资料页替换为包含业务说明的文档。</p></div> : <>
+        {error ? <><ErrorNotice error={error} context="file" /><button className="da-btn" onClick={() => setRetry(n => n + 1)}>重试</button></> : content === null ? <p className="da-small" role="status">正在读取文档正文…</p> : !content.trim() ? <div className="mo-empty"><h3>这份文档没有正文</h3><p>可以替换为包含业务说明的文档。</p></div> : <>
           {!raw && headings.length > 2 && <nav className="mo-doc-outline" aria-label="文档目录"><strong>文档目录</strong>{headings.filter(h => h.level > 1).map(h => <button key={h.line} type="button" onClick={() => globalThis.document.getElementById(`${prefix}-${h.line}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' })}>{h.text}</button>)}</nav>}
           <article className="mo-doc-prose">{raw ? <pre className="mo-doc-raw">{highlighted(content, deferredQuery)}</pre> : <BusinessDocumentArticle content={content} query={deferredQuery} prefix={prefix} />}</article>
         </>}
       </div>
-      <footer className="mo-reader-footer"><Icon name="info" size="sm" /><span>只读查看当前草稿正文。文档替换和删除在资料页操作，发布后才对问数生效。</span></footer>
+      <footer className="mo-reader-footer"><Icon name="info" size="sm" /><span>只读查看当前草稿正文。文档发布后用于问数。</span></footer>
     </div>
   </dialog>;
 }

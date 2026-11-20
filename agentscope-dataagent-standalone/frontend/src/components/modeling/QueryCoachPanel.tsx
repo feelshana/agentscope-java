@@ -77,12 +77,13 @@ export function questionState(r: QuestionReview | undefined, cards: number, link
  * query templates; approved items are drafted and each question's SQL is read and confirmed — nothing
  * is executed. One question at a time on the right, publishing stays in the draft bar.
  */
-export default function QueryCoachPanel({ groupId, assistantIdle, available, onRequest, confirmations = [], onAnswer, onOpenDocuments, trial }: {
+export default function QueryCoachPanel({ groupId, assistantIdle, available, onRequest, confirmations = [], onAnswer, onOpenDocuments, onCompare, trial }: {
   groupId: string;
   assistantIdle: boolean;
   /** The knowledge base has been published once; the coach builds on the basic model. */
   available: boolean;
   onRequest: (text: string, purpose?: TurnPurpose, label?: string) => boolean;
+  onCompare?: () => void;
   /** spec114: open confirmation cards; those linked to a coach question are answered here too. */
   confirmations?: Confirmation[];
   onAnswer?: (answers: ConfirmationAnswer[]) => void;
@@ -99,7 +100,9 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
   const [filter, setFilter] = useState<Group | ''>('');
   const [selected, setSelected] = useState<string | null>(null);
   const [view, setView] = useState<Step | null>(null);
-  const [plans, setPlans] = useState<Record<string, DraftPlan>>({});
+  const [plans, setPlans] = useState<Record<string, { revision: string; plan: DraftPlan }>>({});
+  const latestReviews = useRef<QuestionReview[]>([]);
+  const [previousSql, setPreviousSql] = useState<Record<string, string>>({});
   const [reason, setReason] = useState('');
   const [showContext, setShowContext] = useState(false);
   const [intakeOpen, setIntakeOpen] = useState(false);
@@ -129,6 +132,15 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
     void Promise.all([getModelingQuestions(groupId), listAssetProposals(groupId)]).then(([list, proposed]) => {
       if (!active()) return;
       const coach = list.filter(r => r.question.id.startsWith(PREFIX));
+      const currentById = new Map(coach.map(row => [row.question.id, row.question.sql]));
+      const changedSql = latestReviews.current.filter(({ question }) => {
+        const sql = currentById.get(question.id);
+        return sql && question.sql && sql !== question.sql;
+      });
+      latestReviews.current = coach;
+      if (changedSql.length) setPreviousSql(previous => ({
+        ...previous, ...Object.fromEntries(changedSql.map(({ question }) => [question.id, question.sql])),
+      }));
       setReviews(coach); setProposals(proposed.filter(p => !p.explicit));
       const asked = list.filter(r => !r.question.id.startsWith(PREFIX)).map(r => r.question.question);
       void recommendedQuestion(groupId).catch(() => null).then(value => {
@@ -203,7 +215,11 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
   const generate = (list: { id: string; question: string }[], label: string) => {
     if (list.length) onRequest(questionRequest(list.map(q => q.question), list.map(q => q.id)), 'question', label);
   };
-  const expand = (id: string) => run('plan', async () => { const plan = await planModelingQuestion(groupId, id); setPlans(all => ({ ...all, [id]: plan })); });
+  const expand = (review: QuestionReview) => run('plan', async () => {
+    const id = review.question.id;
+    const plan = await planModelingQuestion(groupId, id);
+    setPlans(all => ({ ...all, [id]: { revision: review.revision, plan } }));
+  });
   const confirm = (id: string) => run('confirm', async () => {
     await decideModelingQuestion(groupId, id, true);
     load();
@@ -305,20 +321,24 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
           <span className="da-small">批准的方案已起草，按新口径生成这道题的 SQL。</span>
           <button className="da-btn da-btn-primary da-btn-sm" disabled={!assistantIdle} onClick={() => generate([current], `问数优化：生成 ${current.question} 的 SQL`)}>生成 SQL</button>
         </div> : <>
+          {onCompare && <div className="sa-actions"><button type="button" className="da-btn da-btn-sm" onClick={onCompare}>对照建模对话</button></div>}
           <ReadableCode text={r.question.sql} language="sql" title="问数助手写的 SQL" />
           <div className="sa-actions">
-            <button className="da-btn da-btn-sm" disabled={!!busy} onClick={() => expand(current.id)}>{busy === 'plan' ? '展开中…' : '查看展开后的 SQL'}</button>
+            <button className="da-btn da-btn-sm" disabled={!!busy || !assistantIdle} onClick={() => expand(r)}>{busy === 'plan' ? '展开中…' : '查看展开后的 SQL'}</button>
             {r.status !== 'CONFIRMED' && <button className="da-btn da-btn-primary da-btn-sm" disabled={!!busy} onClick={() => confirm(current.id)}>确认 SQL 正确</button>}
           </div>
         </>}
-        {plans[current.id] && (plans[current.id].error
-          ? <div role="alert" className="sm-issue">{plans[current.id].error}</div>
-          : <ReadableCode text={plans[current.id].expanded ?? ''} language="sql" title="展开后的 SQL（Wren 实际发给数据库的语句，未执行）" />)}
+        {previousSql[current.id] && <details className="qc-previous-sql"><summary>查看上一次 SQL</summary>
+          <ReadableCode text={previousSql[current.id]} language="sql" title="上一次 SQL" />
+        </details>}
+        {plans[current.id]?.revision === r.revision && (plans[current.id].plan.error
+          ? <div role="alert" className="sm-issue">{plans[current.id].plan.error}</div>
+          : <ReadableCode text={plans[current.id].plan.expanded ?? ''} language="sql" title="展开后的 SQL（Wren 实际发给数据库的语句，未执行）" />)}
         {fixBox(r)}
       </div>}
       {step === 3 && r && <div className="qc-step-body">
         <div className="qc-conclusion">已确认，保存为问答{r.validation?.confirmedAt ? `（${r.validation.confirmedBy ?? ''} ${new Date(r.validation.confirmedAt).toLocaleString()}）` : ''}。</div>
-        <div className="da-small">{r.published?.current ? '已发布，问数时可以被召回。' : '待发布：在页面底部草稿栏统一发布后，问数时才会召回。'}</div>
+        <div className="da-small">{r.published?.current ? '已发布，问数时可以被召回。' : '确认后进入草稿，发布后可被问数召回。'}</div>
         <div className="qc-recommend">
           {isRecommended(r.question.question)
             ? <><span className="sm-tag qc-recommend-tag">推荐问题</span>
@@ -384,7 +404,7 @@ export default function QueryCoachPanel({ groupId, assistantIdle, available, onR
         <button type="button" className="da-btn da-btn-primary" onClick={() => setIntakeOpen(true)}><Icon name="plus" size="sm" />新增业务问题</button></div>
     </header>
     <div className={`qc-introduction ${trial ? '' : 'qc-introduction-only'}`}><ModelingMethodFlow kind="coach" compact onAdd={() => setIntakeOpen(true)} />{trial}</div>
-    <div className="mo-notice"><Icon name="info" size="sm" /><span>只检查 SQL 怎么写，不查询数据；所有改动先进草稿，在底部草稿栏发布后问数才会用到。
+    <div className="mo-notice"><Icon name="info" size="sm" /><span>只核对 SQL。改动先进入草稿，发布后用于问数。
       {documents !== null && (documents.length ? `已有 ${documents.length} 份业务文档，文档里写明的口径会直接采用。` : '还没有业务文档：口径写在文档里时助手会直接采用，不用逐条问你。')}</span>
       {onOpenDocuments && <button type="button" className="sm-text-link" onClick={onOpenDocuments}>{documents?.length ? '管理文档' : '上传文档'}</button>}
     </div>
